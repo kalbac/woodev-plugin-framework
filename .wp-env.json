@@ -1,0 +1,39 @@
+{
+  "$schema": "https://raw.githubusercontent.com/WordPress/gutenberg/trunk/schemas/json/wp-env.json",
+  "core": null,
+  "phpVersion": "7.4",
+  "plugins": [
+    ".",
+    "https://downloads.wordpress.org/plugin/woocommerce.latest-stable.zip"
+  ],
+  "mappings": {
+    "wp-content/plugins/woodev-test-plugin":          "./tests/_fixtures/woodev-test-plugin",
+    "wp-content/plugins/woodev-test-payment-gateway": "./tests/_fixtures/woodev-test-payment-gateway",
+    "wp-content/plugins/woodev-test-shipping-method": "./tests/_fixtures/woodev-test-shipping-method"
+  },
+  "env": {
+    "tests": {
+      "phpVersion": "8.1",
+      "config": {
+        "WP_DEBUG": true,
+        "WP_DEBUG_LOG": true,
+        "SCRIPT_DEBUG": true,
+        "WP_TESTS_DOMAIN": "example.org",
+        "WP_TESTS_EMAIL": "admin@example.org",
+        "WP_TESTS_TITLE": "Woodev Framework Tests",
+        "WP_PHP_BINARY": "php"
+      },
+      "mappings": {
+        "wp-content/plugins/woodev-test-plugin":          "./tests/_fixtures/woodev-test-plugin",
+        "wp-content/plugins/woodev-test-payment-gateway": "./tests/_fixtures/woodev-test-payment-gateway",
+        "wp-content/plugins/woodev-test-shipping-method": "./tests/_fixtures/woodev-test-shipping-method"
+      }
+    },
+    "development": {
+      "config": {
+        "WP_DEBUG": true,
+        "SCRIPT_DEBUG": true
+      }
+    }
+  }
+}

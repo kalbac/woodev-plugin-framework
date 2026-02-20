@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+		 xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/10.5/phpunit.xsd"
+		 bootstrap="tests/bootstrap.php"
+		 colors="true"
+		 cacheDirectory=".phpunit.cache"
+		 executionOrder="depends,defects"
+		 beStrictAboutOutputDuringTests="true"
+		 beStrictAboutTodoAnnotatedTests="true"
+		 failOnRisky="true"
+		 failOnWarning="true">
+
+	<!-- =====================================================
+		 Test Suites
+	====================================================== -->
+	<testsuites>
+
+		<!-- Юнит тесты: без WordPress, с Brain Monkey -->
+		<testsuite name="Unit">
+			<directory suffix="Test.php">./tests/unit</directory>
+		</testsuite>
+
+		<!-- Интеграционные тесты: внутри wp-env с реальным WordPress -->
+		<testsuite name="Integration">
+			<directory suffix="Test.php">./tests/integration</directory>
+		</testsuite>
+
+	</testsuites>
+
+	<!-- =====================================================
+		 Coverage: какой код измеряем
+		 Указываем папку фреймворка ./woodev
+	====================================================== -->
+	<coverage>
+		<include>
+			<directory suffix=".php">./woodev</directory>
+		</include>
+		<exclude>
+			<!-- Исключаем файлы которые не нужно покрывать тестами -->
+			<directory>./woodev/assets</directory>
+			<directory>./woodev/languages</directory>
+		</exclude>
+	</coverage>
+
+	<!-- =====================================================
+		 PHP INI настройки для тестов
+	====================================================== -->
+	<php>
+		<ini name="display_errors" value="1"/>
+		<ini name="error_reporting" value="-1"/>
+	</php>
+
+</phpunit>

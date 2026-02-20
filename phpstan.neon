@@ -1,0 +1,78 @@
+includes:
+    # WordPress stubs — PHPStan знает о функциях WP и WC
+    - vendor/szepeviktor/phpstan-wordpress/extension.neon
+
+parameters:
+
+    # =================================================
+    # Что анализируем
+    # =================================================
+    paths:
+        - woodev
+
+    # =================================================
+    # Уровень строгости: 0 (минимум) — 9 (максимум)
+    #
+    # Стратегия: начинаем с уровня 3, постепенно
+    # повышаем по мере исправления ошибок.
+    #
+    # Уровень 3 — хороший старт для легаси кода:
+    # ловит реальные баги но не требует полной
+    # аннотации типов везде.
+    # =================================================
+    level: 3
+
+    # =================================================
+    # PHP версия (соответствует composer.json)
+    # =================================================
+    phpVersion: 70400
+
+    # =================================================
+    # Исключения — что не анализируем
+    # =================================================
+    excludePaths:
+        - woodev/assets
+        - vendor
+
+    # =================================================
+    # Bootstrap файлы — загружаются перед анализом.
+    # Здесь PHPStan узнаёт о легаси классах
+    # которые не имеют неймспейсов.
+    # =================================================
+    bootstrapFiles:
+        - woodev/bootstrap.php
+        - woodev/class-plugin.php
+        - woodev/class-helper.php
+        - woodev/class-lifecycle.php
+        - woodev/class-admin-notice-handler.php
+        - woodev/class-admin-message-handler.php
+		- woodev/class-plugin-compatibility.php
+        - woodev/class-plugin-exception.php
+        - woodev/class-string-conversation.php
+        - woodev/class-woodev-hook-deprecator.php
+        - woodev/class-woodev-plugin-dependencies.php
+
+    # =================================================
+    # Параметры совместимые с легаси кодом
+    # =================================================
+
+    # Разрешает использование dynamic properties ($this->something
+    # без объявления в классе) — нужно для легаси
+    checkDynamicProperties: false
+
+    # Не требует строгого return type везде — нужно для легаси
+    treatPhpDocTypesAsCertain: false
+
+    # =================================================
+    # Игнорируемые ошибки
+    #
+    # По мере рефакторинга легаси кода — убирай
+    # строки отсюда и повышай уровень анализа
+    # =================================================
+    ignoreErrors:
+        # Легаси код часто использует mixed типы
+        - '#Parameter .* of function .* has no typehint#'
+
+        # WordPress глобальные переменные
+        - '#Variable \$wpdb is not in scope#'
+        - '#Variable \$pagenow is not in scope#'

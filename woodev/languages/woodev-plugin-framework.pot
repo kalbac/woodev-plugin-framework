@@ -1,0 +1,1977 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: Woodev Framework\n"
+"POT-Creation-Date: 2023-12-07 22:54+0300\n"
+"PO-Revision-Date: \n"
+"Last-Translator: Maksim <maksim@martirosoff.ru>\n"
+"Language-Team: Woodev <info@woodev.ru>\n"
+"Language: ru\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n"
+"%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
+"X-Poedit-SourceCharset: UTF-8\n"
+"X-Poedit-KeywordsList: __;_e;_x:1,2c;_ex:1,2c;_n:1,2;_nx:1,2,4c;_n_noop:1,2;"
+"_nx_noop:1,2,3c;esc_attr__;esc_attr_e;esc_html__;esc_html_e\n"
+"X-Poedit-Basepath: ..\n"
+"X-Generator: Poedit 1.6.10\n"
+"X-Poedit-SearchPath-0: .\n"
+
+#. translators: Placeholders: %1$s - plugin name, %2$s - <a> tag, %3$s - </a> tag
+#: admin/abstract-plugin-admin-setup-wizard.php:147
+#, php-format
+msgid ""
+"Thanks for installing %1$s! To get started, take a minute to %2$sread the "
+"documentation%3$s :)"
+msgstr ""
+
+#. translators: Placeholders: %1$s - plugin name, %2$s - <a> tag, %3$s - </a> tag
+#: admin/abstract-plugin-admin-setup-wizard.php:173
+#, php-format
+msgid ""
+"Thanks for installing %1$s! To get started, take a minute to complete these "
+"%2$squick and easy setup steps%3$s :)"
+msgstr ""
+
+#: admin/abstract-plugin-admin-setup-wizard.php:197
+msgid "Setup"
+msgstr ""
+
+#. translators: Placeholders: %s - plugin name
+#: admin/abstract-plugin-admin-setup-wizard.php:259
+#, php-format
+msgid "%s &rsaquo; Setup"
+msgstr ""
+
+#: admin/abstract-plugin-admin-setup-wizard.php:306
+msgid "Oops! An error occurred, please try again."
+msgstr ""
+
+#: admin/abstract-plugin-admin-setup-wizard.php:352
+msgctxt "enhanced select"
+msgid "No matches found"
+msgstr ""
+
+#: admin/abstract-plugin-admin-setup-wizard.php:353
+msgctxt "enhanced select"
+msgid "Loading failed"
+msgstr ""
+
+#: admin/abstract-plugin-admin-setup-wizard.php:354
+msgctxt "enhanced select"
+msgid "Please enter 1 or more characters"
+msgstr ""
+
+#: admin/abstract-plugin-admin-setup-wizard.php:355
+msgctxt "enhanced select"
+msgid "Please enter %qty% or more characters"
+msgstr ""
+
+#: admin/abstract-plugin-admin-setup-wizard.php:356
+msgctxt "enhanced select"
+msgid "Please delete 1 character"
+msgstr ""
+
+#: admin/abstract-plugin-admin-setup-wizard.php:357
+msgctxt "enhanced select"
+msgid "Please delete %qty% characters"
+msgstr ""
+
+#: admin/abstract-plugin-admin-setup-wizard.php:358
+msgctxt "enhanced select"
+msgid "You can only select 1 item"
+msgstr ""
+
+#: admin/abstract-plugin-admin-setup-wizard.php:359
+msgctxt "enhanced select"
+msgid "You can only select %qty% items"
+msgstr ""
+
+#: admin/abstract-plugin-admin-setup-wizard.php:360
+msgctxt "enhanced select"
+msgid "Loading more results&hellip;"
+msgstr ""
+
+#: admin/abstract-plugin-admin-setup-wizard.php:361
+msgctxt "enhanced select"
+msgid "Searching&hellip;"
+msgstr ""
+
+#: admin/abstract-plugin-admin-setup-wizard.php:451
+msgid "Ready!"
+msgstr ""
+
+#. translators: Placeholder: %s - plugin name
+#: admin/abstract-plugin-admin-setup-wizard.php:538
+#, php-format
+msgid "Welcome to %s!"
+msgstr ""
+
+#: admin/abstract-plugin-admin-setup-wizard.php:549
+msgid ""
+"This quick setup wizard will help you configure the basic settings and get "
+"you started."
+msgstr ""
+
+#: admin/abstract-plugin-admin-setup-wizard.php:561
+#, php-format
+msgid "%s is ready!"
+msgstr ""
+
+#: admin/abstract-plugin-admin-setup-wizard.php:607
+msgid "Next step"
+msgstr ""
+
+#: admin/abstract-plugin-admin-setup-wizard.php:634
+msgid "You can also:"
+msgstr ""
+
+#: admin/abstract-plugin-admin-setup-wizard.php:677
+#: admin/abstract-plugin-admin-setup-wizard.php:706
+msgid "View the Docs"
+msgstr ""
+
+#: admin/abstract-plugin-admin-setup-wizard.php:678
+msgid "See more setup options"
+msgstr ""
+
+#: admin/abstract-plugin-admin-setup-wizard.php:679
+msgid "Learn more about customizing the plugin"
+msgstr ""
+
+#: admin/abstract-plugin-admin-setup-wizard.php:702
+msgid "Review Your Settings"
+msgstr ""
+
+#: admin/abstract-plugin-admin-setup-wizard.php:710
+msgid "Leave a Review"
+msgstr ""
+
+#: admin/abstract-plugin-admin-setup-wizard.php:733
+msgid "Continue"
+msgstr ""
+
+#: admin/abstract-plugin-admin-setup-wizard.php:830
+msgid "required"
+msgstr ""
+
+#: admin/abstract-plugin-admin-setup-wizard.php:832
+msgid "optional"
+msgstr ""
+
+#: admin/abstract-plugin-admin-setup-wizard.php:858
+msgid "Choose an option"
+msgstr ""
+
+#: admin/abstract-plugin-admin-setup-wizard.php:983
+msgid "Return to the WordPress Dashboard"
+msgstr ""
+
+#: admin/abstract-plugin-admin-setup-wizard.php:986
+msgid "Not right now"
+msgstr ""
+
+#: admin/abstract-plugin-admin-setup-wizard.php:989
+msgid "Skip this step"
+msgstr ""
+
+#: admin/class-admin-pages.php:54 admin/class-admin-pages.php:55
+msgid "Woodev"
+msgstr ""
+
+#: admin/class-admin-pages.php:68
+msgid "Woodev license keys"
+msgstr ""
+
+#: admin/class-admin-pages.php:69
+msgid "Licenses"
+msgstr ""
+
+#: admin/class-admin-pages.php:118
+#, php-format
+msgid ""
+"To use Woodev plugins, please provide your valid license key and activate it "
+"below. License key was sending to your email after purchase. Also, you can "
+"get key on <a href=\"%s\" target=\"_blank\">your account page</a>."
+msgstr ""
+
+#: admin/class-admin-pages.php:133
+msgid "Save changes"
+msgstr ""
+
+#: admin/class-admin-pages.php:149
+msgid "Woodev all plugins"
+msgstr ""
+
+#: admin/class-admin-pages.php:150
+msgid "Plugins"
+msgstr ""
+
+#: admin/pages/views/html-admin-page-plugins.php:17
+msgid "Woodev Plugins"
+msgstr ""
+
+#: admin/pages/views/html-admin-page-plugins.php:18
+msgid "Improve your Wordpress website with our extensions."
+msgstr ""
+
+#: admin/pages/views/html-admin-page-plugins.php:24
+msgid "Search for extensions"
+msgstr ""
+
+#: admin/pages/views/html-admin-page-plugins.php:41
+msgid "All"
+msgstr ""
+
+#: admin/pages/views/html-admin-page-plugins.php:86
+#, php-format
+msgid "Buy by %d RUB"
+msgstr ""
+
+#: admin/pages/views/html-admin-page-plugins.php:86
+msgid "Free download"
+msgstr ""
+
+#: bootstrap.php:167
+#, php-format
+msgid "Deactivated %d plugin"
+msgid_plural "Deactivated %d plugins"
+msgstr[0] ""
+msgstr[1] ""
+msgstr[2] ""
+
+#: bootstrap.php:168
+msgid "Deactivated one plugin"
+msgstr ""
+
+#: bootstrap.php:190
+#, php-format
+msgid ""
+"%1$sAttention!%2$s The plugin %3$s was disabled because it is out of date "
+"and incompatible with the"
+msgid_plural ""
+"%1$sAttention!%2$s The plugins %3$s were disabled because they are out of "
+"date and incompatible with the"
+msgstr[0] ""
+msgstr[1] ""
+msgstr[2] ""
+
+#: bootstrap.php:198
+#, php-format
+msgid " newer plugin %s."
+msgid_plural " newer plugins %s."
+msgstr[0] ""
+msgstr[1] ""
+msgstr[2] ""
+
+#: bootstrap.php:209
+#, php-format
+msgid ""
+"To resolve this, please %1$supdate%2$s (recommended) or %1$sdeactivate%2$s"
+msgstr ""
+
+#: bootstrap.php:214
+#, php-format
+msgid " the plugin %1$s, or %2$sdeactivate%3$s"
+msgid_plural " the plugins %1$s, or %2$sdeactivate%3$s"
+msgstr[0] ""
+msgstr[1] ""
+msgstr[2] ""
+
+#: bootstrap.php:222
+#, php-format
+msgid " the plugin %s."
+msgid_plural " the plugins %s."
+msgstr[0] ""
+msgstr[1] ""
+msgstr[2] ""
+
+#: bootstrap.php:240
+msgid ""
+"The following plugins are inactive because they require a newer version of "
+"WooCommerce:"
+msgstr ""
+
+#: bootstrap.php:240
+msgid ""
+"The following plugin is inactive because it requires a newer version of "
+"WooCommerce:"
+msgstr ""
+
+#. translators: Placeholders: %1$s - plugin name, %2$s - WooCommerce version number
+#: bootstrap.php:245
+#, php-format
+msgid "%1$s requires WooCommerce %2$s or newer"
+msgstr ""
+
+#. translators: Placeholders: %1$s - <a> tag, %2$s - </a> tag
+#: bootstrap.php:249
+#, php-format
+msgid "Please %1$supdate WooCommerce%2$s"
+msgstr ""
+
+#: bootstrap.php:255
+msgid ""
+"The following plugins are inactive because they require a newer version of "
+"WordPress:"
+msgstr ""
+
+#: bootstrap.php:255
+msgid ""
+"The following plugin is inactive because it requires a newer version of "
+"WordPress:"
+msgstr ""
+
+#: bootstrap.php:260
+#, php-format
+msgid "%1$s requires WordPress %2$s or newer"
+msgstr ""
+
+#: bootstrap.php:265
+#, php-format
+msgid "Please %1$supdate WordPress%2$s"
+msgstr ""
+
+#: box-packer/class-packer-boxes.php:17
+#: box-packer/class-packer-separatly.php:31
+#: box-packer/class-packer-single-box.php:31
+msgid "No items to pack!"
+msgstr ""
+
+#: class-helper.php:384
+msgctxt "coordinating conjunction for a list of items: a, b, and c"
+msgid "and"
+msgstr ""
+
+#: class-helper.php:426
+#, php-format
+msgid "%1$s or %2$s"
+msgid_plural "%1$s, or %2$s"
+msgstr[0] ""
+msgstr[1] ""
+msgstr[2] ""
+
+#: class-helper.php:431
+#, php-format
+msgid "%1$s and %2$s"
+msgid_plural "%1$s, and %2$s"
+msgstr[0] ""
+msgstr[1] ""
+msgstr[2] ""
+
+#: class-lifecycle.php:332
+msgid "Awesome"
+msgstr ""
+
+#: class-lifecycle.php:333
+msgid "Fantastic"
+msgstr ""
+
+#: class-lifecycle.php:334
+msgid "Amazing"
+msgstr ""
+
+#: class-lifecycle.php:335
+msgid "Wow"
+msgstr ""
+
+#: class-lifecycle.php:336
+msgid "Wonderful"
+msgstr ""
+
+#: class-lifecycle.php:337
+msgid "Perfect"
+msgstr ""
+
+#: class-lifecycle.php:338
+msgid "Congratulations"
+msgstr ""
+
+#. translators: Placeholders: %1$s - plugin name, %2$s - <a> tag, %3$s - </a> tag, %4$s - <a> tag, %5$s - </a> tag
+#: class-lifecycle.php:345
+#, php-format
+msgid ""
+"Are you having a great experience with %1$s so far? Please consider "
+"%2$sleaving a review%3$s! If things aren't going quite as expected, we're "
+"happy to help -- please %4$sreach out to our support team%5$s."
+msgstr ""
+
+#: class-plugin-compatibility.php:176
+msgid "WooCommerce"
+msgstr ""
+
+#: class-plugin.php:462
+msgid "Указать лицензию"
+msgstr ""
+
+#: class-plugin.php:463
+msgid "Закрыть"
+msgstr ""
+
+#: class-plugin.php:465
+msgid ""
+"Во время загрузки данных о лицензии произошла ошибка. Закройте это окно и "
+"попробуйте снова."
+msgstr ""
+
+#: class-plugin.php:482
+msgid "Once Weekly"
+msgstr ""
+
+#: class-plugin.php:871
+#, php-format
+msgid "%1$s - A minimum of %2$s is required."
+msgstr ""
+
+#: class-plugin.php:880
+#, php-format
+msgid "Set as %1$s - %2$s is required."
+msgstr ""
+
+#: class-woodev-plugin-dependencies.php:117
+#, php-format
+msgid ""
+"%1$s requires the %2$s PHP extension to function. Contact your host or "
+"server administrator to install and configure the missing extension."
+msgid_plural ""
+"%1$s requires the following PHP extensions to function: %2$s. Contact your "
+"host or server administrator to install and configure the missing extensions."
+msgstr[0] ""
+msgstr[1] ""
+msgstr[2] ""
+
+#: class-woodev-plugin-dependencies.php:143
+#, php-format
+msgid ""
+"%1$s requires the %2$s PHP function to exist.  Contact your host or server "
+"administrator to install and configure the missing function."
+msgid_plural ""
+"%1$s requires the following PHP functions to exist: %2$s.  Contact your host "
+"or server administrator to install and configure the missing functions."
+msgstr[0] ""
+msgstr[1] ""
+msgstr[2] ""
+
+#. translators: Placeholders: %s - plugin name
+#: class-woodev-plugin-dependencies.php:170
+#, php-format
+msgid ""
+"%s may behave unexpectedly because the following PHP configuration settings "
+"are required:"
+msgstr ""
+
+#. translators: Placeholders: %s - a PHP setting value
+#: class-woodev-plugin-dependencies.php:184
+#, php-format
+msgid "%s or higher"
+msgstr ""
+
+#: class-woodev-plugin-dependencies.php:194
+msgid ""
+"Please contact your hosting provider or server administrator to configure "
+"these settings."
+msgstr ""
+
+#. translators: Placeholders: %1$s - <strong>, %2$s - </strong>
+#: class-woodev-plugin-dependencies.php:214
+#, php-format
+msgid ""
+"Hey there! We've noticed that your server is running %1$san outdated version "
+"of PHP%2$s, which is the programming language that WooCommerce and its "
+"extensions are built on.\n"
+"\t\t\t\t\tThe PHP version that is currently used for your site is no longer "
+"maintained, nor %1$sreceives security updates%2$s; newer versions are faster "
+"and more secure.\n"
+"\t\t\t\t\tAs a result, %3$s no longer supports this version and you should "
+"upgrade PHP as soon as possible.\n"
+"\t\t\t\t\tYour hosting provider can do this for you. %4$sHere are some "
+"resources to help you upgrade%5$s and to explain PHP versions further."
+msgstr ""
+
+#: handlers/blocks-handler.php:122
+msgctxt "Button label"
+msgid "Edit the Checkout Page"
+msgstr ""
+
+#. translators: Context: WordPress blocks and shortcodes. Placeholders: %1$s - Plugin name, %2$s - opening HTML <a> tag, %3$s - closing HTML </a> tag, %4$s - opening HTML <a> tag, %5$s - `[woocommerce_checkout]` shortcode tag, %6$s - closing HTML </a> tag
+#: handlers/blocks-handler.php:127
+#, php-format
+msgid ""
+"%1$s is not yet compatible with the Checkout block. We recommend "
+"%2$sfollowing this guide%3$s to revert to the %4$s%5$s shortcode%6$s."
+msgstr ""
+
+#: handlers/blocks-handler.php:153
+msgctxt "Button label"
+msgid "Edit the Cart Page"
+msgstr ""
+
+#. translators: Context: WordPress blocks and shortcodes. Placeholders: %1$s - Plugin name, %2$s - opening HTML <a> tag, %3$s - closing HTML </a> tag, %4$s - opening HTML <a> tag, %5$s - `[woocommerce_cart]` shortcode tag, %6$s - closing HTML </a> tag
+#: handlers/blocks-handler.php:158
+#, php-format
+msgid ""
+"%1$s is not yet compatible with the Cart block. We recommend %2$sfollowing "
+"this guide%3$s to revert to the %4$s%5$s shortcode%6$s."
+msgstr ""
+
+#: licensing/api/class-licensing-api.php:134
+#: licensing/class-plugin-license.php:177
+msgid "Cannot get license data"
+msgstr ""
+
+#: licensing/class-license-messages.php:64
+msgid "plugin"
+msgstr ""
+
+#: licensing/class-license-messages.php:146
+#, php-format
+msgid "This appears to be an invalid license key for %s."
+msgstr ""
+
+#: licensing/class-license-messages.php:154
+msgid ""
+"The key you entered belongs to a bundle, please use the product specific "
+"license key."
+msgstr ""
+
+#: licensing/class-license-messages.php:158
+msgid "Your license key has been deactivated."
+msgstr ""
+
+#: licensing/class-license-messages.php:166
+msgid "Unlicensed: currently not receiving updates."
+msgstr ""
+
+#: licensing/class-license-messages.php:181
+msgid "License key never expires."
+msgstr ""
+
+#: licensing/class-license-messages.php:186
+#, php-format
+msgid ""
+"Your license key expires soon! It expires on %1$s. %2$sRenew your key%3$s "
+"before it expires."
+msgstr ""
+
+#: licensing/class-license-messages.php:193
+#, php-format
+msgid "Your license key expires on %s."
+msgstr ""
+
+#. translators: 1. license expiration date; 2. opening link tag; 3. closing link tag.
+#: licensing/class-license-messages.php:206
+#, php-format
+msgid ""
+"Your license key expired on %1$s. Please %2$srenew your license key%3$s."
+msgstr ""
+
+#. translators: 1. opening link tag; 2. closing link tag.
+#: licensing/class-license-messages.php:215
+#, php-format
+msgid "Your license key has expired. Please %1$srenew your license key%2$s."
+msgstr ""
+
+#. translators: 1. opening link tag; 2. closing link tag.
+#: licensing/class-license-messages.php:238
+#, php-format
+msgid ""
+"Your license key has been disabled. Please %1$scontact support%2$s for more "
+"information."
+msgstr ""
+
+#. translators: 1. opening link tag; 2 closing link tag.
+#: licensing/class-license-messages.php:260
+#, php-format
+msgid ""
+"Your license key has reached its activation limit. %1$sView possible upgrades"
+"%2$s now."
+msgstr ""
+
+#. translators: 1. the plugin name; 2. opening link tag; 3. closing link tag.
+#: licensing/class-license-messages.php:281
+#, php-format
+msgid ""
+"Your %1$s license key is not active for this URL. Please %2$svisit your "
+"account page%3$s to manage your license keys."
+msgstr ""
+
+#. translators: 1. opening link tag; 2. closing link tag.
+#: licensing/class-license-messages.php:296
+#, php-format
+msgid "Invalid license. Please %1$svisit your account page%2$s and verify it."
+msgstr ""
+
+#: licensing/class-plugin-license-settings.php:73
+msgid "Enter your valid license key"
+msgstr ""
+
+#: licensing/class-plugin-license-settings.php:76
+msgid "Before change your license key you have to deactivate current license"
+msgstr ""
+
+#: licensing/class-plugin-license-settings.php:84
+msgid "Verify"
+msgstr ""
+
+#: licensing/class-plugin-license-settings.php:108
+#, php-format
+msgid ""
+"To receive updates and support, please enter your valid license key for "
+"<strong>%s</strong>"
+msgstr ""
+
+#: licensing/class-plugin-license-settings.php:123
+msgid "Deactivate"
+msgstr ""
+
+#: licensing/class-plugin-license-settings.php:137
+msgid "Allow to upload a beta version"
+msgstr ""
+
+#: licensing/class-plugin-license.php:123
+msgid "License does not exist"
+msgstr ""
+
+#: licensing/class-plugin-license.php:124
+msgid "Site URL is not provided"
+msgstr ""
+
+#: licensing/class-plugin-license.php:125
+msgid "Attempting to activate a bundles parent license"
+msgstr ""
+
+#: licensing/class-plugin-license.php:126
+msgid "License key revoked"
+msgstr ""
+
+#: licensing/class-plugin-license.php:127
+msgid "No activations left"
+msgstr ""
+
+#: licensing/class-plugin-license.php:128
+msgid "License has expired"
+msgstr ""
+
+#: licensing/class-plugin-license.php:129
+#: licensing/class-plugin-license.php:131
+msgid "License is not valid for this plugin"
+msgstr ""
+
+#: licensing/class-plugin-license.php:130
+msgid "Invalid plugin ID"
+msgstr ""
+
+#: licensing/class-plugin-license.php:132
+msgid "Site is not active for this license"
+msgstr ""
+
+#: licensing/class-plugin-license.php:133
+msgid "License key does not match"
+msgstr ""
+
+#: licensing/class-plugin-license.php:134
+msgid "License is valid"
+msgstr ""
+
+#: licensing/class-plugin-license.php:137
+msgid "Unknown license status"
+msgstr ""
+
+#: licensing/class-plugin-license.php:267
+msgid "Nonce verification failed"
+msgstr ""
+
+#: licensing/class-plugin-license.php:267
+#: licensing/class-plugin-license.php:290
+#: plugin-updater/class-plugin-updater.php:473
+msgid "Error"
+msgstr ""
+
+#: licensing/class-plugin-license.php:309
+msgid "License key was not provided."
+msgstr ""
+
+#: licensing/class-plugin-license.php:316
+#: licensing/class-plugin-license.php:386
+msgid "Cannot get license data. Please try again."
+msgstr ""
+
+#: licensing/class-plugin-license.php:349
+#, php-format
+msgid ""
+"Your license key for %s is not valid. The key is not existing, or linked "
+"customer was deleted. Please provide another license key to continue to get "
+"support and updates."
+msgstr ""
+
+#: licensing/class-plugin-license.php:352
+msgid "Cannot verify license key. Please try again."
+msgstr ""
+
+#: licensing/class-plugin-license.php:397
+#, php-format
+msgid ""
+"Your license key for %s is not valid. The key is not existing, or linked "
+"customer was deleted. Please provide another key to continue to get support "
+"and updates."
+msgstr ""
+
+#: licensing/class-plugin-license.php:437
+#, php-format
+msgid ""
+"You have invalid or expired license keys for %1$s. %2$sActivate License%3$s"
+msgstr ""
+
+#: licensing/class-plugin-license.php:461
+msgid "Enter valid license key for automatic updates."
+msgstr ""
+
+#: licensing/class-plugin-license.php:494
+msgid "Attention! Please Backup your site before updating."
+msgstr ""
+
+#: licensing/class-plugin-license.php:496
+#, php-format
+msgid ""
+"The latest version of %1$s%2$s %3$s%4$s includes massive changes across "
+"different areas of the plugin with revamped code structure for optimized "
+"performance. We would highly recommend you to backup your entire site before "
+"updating the plugin & test it on your staging website. %5$sContact our "
+"Support%6$s if you encounter any kind of errors or if you need any kind of "
+"assistance."
+msgstr ""
+
+#: licensing/class-plugin-license.php:507
+#, php-format
+msgid ""
+"We also recommend that you %1$sread the documentation%2$s after updating the "
+"plugin."
+msgstr ""
+
+#: payment-gateway/admin/class-payment-gateway-admin-order.php:92
+msgid ""
+"Are you sure you wish to process this capture? The action cannot be undone."
+msgstr ""
+
+#: payment-gateway/admin/class-payment-gateway-admin-order.php:95
+msgid ""
+"Something went wrong, and the capture could no be completed. Please try "
+"again."
+msgstr ""
+
+#. translators: verb, as in "Capture credit card charge".
+#. Used when an amount has been pre-authorized before, but funds have not yet been captured (taken) from the card.
+#. Capturing the charge will take the money from the credit card and put it in the merchant's pockets.
+#: payment-gateway/admin/class-payment-gateway-admin-order.php:133
+#: payment-gateway/admin/class-payment-gateway-admin-order.php:205
+#: payment-gateway/admin/class-payment-gateway-admin-order.php:268
+msgid "Capture Charge"
+msgstr ""
+
+#: payment-gateway/admin/class-payment-gateway-admin-order.php:257
+msgid "This charge has been fully captured."
+msgstr ""
+
+#: payment-gateway/admin/class-payment-gateway-admin-order.php:259
+msgid "This charge can no longer be captured."
+msgstr ""
+
+#: payment-gateway/admin/class-payment-gateway-admin-order.php:261
+msgid "This charge cannot be captured."
+msgstr ""
+
+#: payment-gateway/admin/class-payment-gateway-admin-payment-token-editor.php:72
+msgid "Are you sure you want to remove this token?"
+msgstr ""
+
+#: payment-gateway/admin/class-payment-gateway-admin-payment-token-editor.php:82
+msgid "Invalid token data"
+msgstr ""
+
+#: payment-gateway/admin/class-payment-gateway-admin-payment-token-editor.php:86
+msgid "An error occurred. Please try again."
+msgstr ""
+
+#: payment-gateway/admin/class-payment-gateway-admin-payment-token-editor.php:424
+#: payment-gateway/admin/class-payment-gateway-admin-user-handler.php:264
+#, php-format
+msgid "(%s)"
+msgstr ""
+
+#: payment-gateway/admin/class-payment-gateway-admin-payment-token-editor.php:451
+#: payment-gateway/class-payment-gateway-my-payment-methods.php:801
+msgid "Default"
+msgstr ""
+
+#: payment-gateway/admin/class-payment-gateway-admin-payment-token-editor.php:482
+#: payment-gateway/admin/class-payment-gateway-admin-payment-token-editor.php:515
+msgid "Token ID"
+msgstr ""
+
+#: payment-gateway/admin/class-payment-gateway-admin-payment-token-editor.php:487
+msgid "Card Type"
+msgstr ""
+
+#: payment-gateway/admin/class-payment-gateway-admin-payment-token-editor.php:492
+#: payment-gateway/admin/class-payment-gateway-admin-payment-token-editor.php:528
+msgid "Last Four"
+msgstr ""
+
+#: payment-gateway/admin/class-payment-gateway-admin-payment-token-editor.php:499
+#: payment-gateway/class-payment-gateway-payment-form.php:308
+msgid "Expiration (MM/YY)"
+msgstr ""
+
+#: payment-gateway/admin/class-payment-gateway-admin-payment-token-editor.php:520
+#: payment-gateway/class-payment-gateway-payment-form.php:410
+msgid "Account Type"
+msgstr ""
+
+#: payment-gateway/admin/class-payment-gateway-admin-payment-token-editor.php:523
+msgid "Checking"
+msgstr ""
+
+#: payment-gateway/admin/class-payment-gateway-admin-payment-token-editor.php:524
+msgid "Savings"
+msgstr ""
+
+#: payment-gateway/admin/class-payment-gateway-admin-payment-token-editor.php:615
+msgid "Refresh"
+msgstr ""
+
+#: payment-gateway/admin/class-payment-gateway-admin-payment-token-editor.php:617
+msgid "Add New"
+msgstr ""
+
+#: payment-gateway/admin/class-payment-gateway-admin-payment-token-editor.php:620
+#: payment-gateway/class-payment-gateway-my-payment-methods.php:269
+msgid "Save"
+msgstr ""
+
+#: payment-gateway/admin/class-payment-gateway-admin-payment-token-editor.php:640
+msgid "Remove"
+msgstr ""
+
+#: payment-gateway/admin/class-payment-gateway-admin-user-handler.php:189
+#, php-format
+msgid "%s Payment Tokens"
+msgstr ""
+
+#: payment-gateway/admin/class-payment-gateway-admin-user-handler.php:261
+msgid "Customer ID"
+msgstr ""
+
+#: payment-gateway/admin/views/html-admin-gateway-status.php:15
+msgid "This section contains configuration settings for this gateway."
+msgstr ""
+
+#. translators: environment as in a software environment (test/production)
+#: payment-gateway/admin/views/html-admin-gateway-status.php:34
+#: payment-gateway/class-payment-gateway.php:973
+msgid "Environment"
+msgstr ""
+
+#: payment-gateway/admin/views/html-admin-gateway-status.php:35
+msgid "The transaction environment for this gateway."
+msgstr ""
+
+#: payment-gateway/admin/views/html-admin-gateway-status.php:42
+msgid "Tokenization Enabled"
+msgstr ""
+
+#: payment-gateway/admin/views/html-admin-gateway-status.php:43
+msgid "Displays whether or not tokenization is enabled for this gateway."
+msgstr ""
+
+#: payment-gateway/admin/views/html-admin-gateway-status.php:56
+#: payment-gateway/class-payment-gateway.php:905
+msgid "Debug Mode"
+msgstr ""
+
+#: payment-gateway/admin/views/html-admin-gateway-status.php:57
+msgid "Displays whether or not debug logging is enabled for this gateway."
+msgstr ""
+
+#: payment-gateway/admin/views/html-admin-gateway-status.php:60
+msgid "Display at Checkout & Log"
+msgstr ""
+
+#: payment-gateway/admin/views/html-admin-gateway-status.php:62
+msgid "Display at Checkout"
+msgstr ""
+
+#: payment-gateway/admin/views/html-admin-gateway-status.php:64
+#: payment-gateway/class-payment-gateway.php:913
+msgid "Save to Log"
+msgstr ""
+
+#: payment-gateway/admin/views/html-admin-gateway-status.php:66
+#: payment-gateway/class-payment-gateway.php:911
+msgid "Off"
+msgstr ""
+
+#: payment-gateway/admin/views/html-order-partial-capture.php:16
+msgid "Authorization total"
+msgstr ""
+
+#: payment-gateway/admin/views/html-order-partial-capture.php:20
+msgid "Amount already captured"
+msgstr ""
+
+#: payment-gateway/admin/views/html-order-partial-capture.php:26
+msgid "Remaining order total"
+msgstr ""
+
+#: payment-gateway/admin/views/html-order-partial-capture.php:32
+msgid "Capture amount"
+msgstr ""
+
+#: payment-gateway/admin/views/html-order-partial-capture.php:39
+msgid "Comment (optional):"
+msgstr ""
+
+#: payment-gateway/admin/views/html-order-partial-capture.php:51
+#, php-format
+msgid "Capture %s"
+msgstr ""
+
+#: payment-gateway/admin/views/html-order-partial-capture.php:52
+#: payment-gateway/class-payment-gateway-my-payment-methods.php:553
+msgid "Cancel"
+msgstr ""
+
+#: payment-gateway/admin/views/html-user-payment-token-editor-token.php:36
+msgid "-- Select an option --"
+msgstr ""
+
+#: payment-gateway/admin/views/html-user-payment-token-editor.php:42
+msgid "No saved payment tokens"
+msgstr ""
+
+#: payment-gateway/admin/views/html-user-profile-field-customer-id.php:14
+msgid "The gateway customer ID for the user. Only edit this if necessary."
+msgstr ""
+
+#: payment-gateway/class-payment-gateway-direct.php:32
+msgid ""
+"Payment error, please try another payment method or contact us to complete "
+"your transaction."
+msgstr ""
+
+#: payment-gateway/class-payment-gateway-direct.php:132
+#: payment-gateway/class-payment-gateway.php:444
+msgid "Card expiration date is invalid"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway-direct.php:156
+#: payment-gateway/class-payment-gateway.php:437
+msgid "Card number is missing"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway-direct.php:162
+#: payment-gateway/class-payment-gateway.php:440
+msgid "Card number is invalid (wrong length)"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway-direct.php:167
+#: payment-gateway/class-payment-gateway.php:439
+msgid "Card number is invalid (only digits allowed)"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway-direct.php:172
+#: payment-gateway/class-payment-gateway.php:438
+msgid "Card number is invalid"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway-direct.php:199
+#: payment-gateway/class-payment-gateway.php:442
+msgid "Card security code is invalid (only digits are allowed)"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway-direct.php:205
+#: payment-gateway/class-payment-gateway.php:443
+msgid "Card security code is invalid (must be 3 or 4 digits)"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway-direct.php:211
+#: payment-gateway/class-payment-gateway.php:441
+msgid "Card security code is missing"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway-direct.php:239
+#: payment-gateway/class-payment-gateway.php:453
+msgid "Routing Number is missing"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway-direct.php:246
+#: payment-gateway/class-payment-gateway.php:454
+msgid "Routing Number is invalid (only digits are allowed)"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway-direct.php:252
+#: payment-gateway/class-payment-gateway.php:455
+msgid "Routing number is invalid (must be 9 digits)"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway-direct.php:261
+#: payment-gateway/class-payment-gateway.php:450
+msgid "Account Number is missing"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway-direct.php:268
+#: payment-gateway/class-payment-gateway.php:451
+msgid "Account Number is invalid (only digits are allowed)"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway-direct.php:274
+#: payment-gateway/class-payment-gateway.php:452
+msgid "Account number is invalid (must be between 5 and 17 digits)"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway-direct.php:281
+#: payment-gateway/class-payment-gateway.php:449
+msgid "Drivers license number is invalid"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway-direct.php:287
+#: payment-gateway/class-payment-gateway.php:445
+msgid "Check Number is invalid (only digits are allowed)"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway-direct.php:464
+msgid "Unknown error"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway-direct.php:473
+#, php-format
+msgid "Payment method address could not be updated. %s"
+msgstr ""
+
+#. translators: Placeholders: %1$s - payment method title, %2$s - payment account type (savings/checking) (may or may not be available), %3$s - last four digits of the account
+#: payment-gateway/class-payment-gateway-direct.php:646
+#: payment-gateway/class-payment-gateway.php:2237
+#, php-format
+msgid "%1$s Check Transaction Approved: %2$s account ending in %3$s"
+msgstr ""
+
+#. translators: Placeholders: %s - check number
+#: payment-gateway/class-payment-gateway-direct.php:651
+#: payment-gateway/class-payment-gateway.php:2242
+#, php-format
+msgid "Check number %s"
+msgstr ""
+
+#. translators: Placeholders: %s - transaction ID
+#: payment-gateway/class-payment-gateway-direct.php:656
+#: payment-gateway/class-payment-gateway-direct.php:739
+#: payment-gateway/class-payment-gateway.php:1699
+#: payment-gateway/class-payment-gateway.php:1904
+#: payment-gateway/class-payment-gateway.php:2207
+#: payment-gateway/class-payment-gateway.php:2247
+#: payment-gateway/class-payment-gateway.php:2293
+#: payment-gateway/handlers/capture.php:162
+#, php-format
+msgid "(Transaction ID %s)"
+msgstr ""
+
+#. translators: Placeholders: %1$s - payment method title, %2$s - environment ("Test"), %3$s - transaction type (authorization/charge), %4$s - card type (mastercard, visa, ...), %5$s - last four digits of the card
+#: payment-gateway/class-payment-gateway-direct.php:718
+#, php-format
+msgid "%1$s %2$s %3$s Approved: %4$s ending in %5$s"
+msgstr ""
+
+#. translators: Placeholders: %s - credit card expiry date
+#. translators: Placeholders: %s - expiry date
+#. translators: Placeholders: %s - credit card expiry date
+#: payment-gateway/class-payment-gateway-direct.php:731
+#: payment-gateway/class-payment-gateway-payment-form.php:636
+#: payment-gateway/class-payment-gateway.php:2199
+#, php-format
+msgid "(expires %s)"
+msgstr ""
+
+#. translators: Placeholders: %s - failure message
+#: payment-gateway/class-payment-gateway-direct.php:801
+#, php-format
+msgid "Tokenization Request Failed: %s"
+msgstr ""
+
+#. translators: Placeholders: %1$s - payment method title, %2$s - failure message
+#: payment-gateway/class-payment-gateway-direct.php:812
+#, php-format
+msgid "%1$s Tokenization Request Failed: %2$s"
+msgstr ""
+
+#. translators: This is a message describing that the transaction in question only performed a credit card authorization and did not capture any funds.
+#: payment-gateway/class-payment-gateway-direct.php:833
+#: payment-gateway/class-payment-gateway.php:1439
+#: payment-gateway/handlers/abstract-payment-handler.php:237
+msgid "Authorization only transaction"
+msgstr ""
+
+#. translators: Placeholders: %s - failure message. Payment method as in a specific credit card, e-check or bank account
+#: payment-gateway/class-payment-gateway-direct.php:863
+#, php-format
+msgid "Oops, adding your new payment method failed: %s"
+msgstr ""
+
+#. translators: Payment method as in a specific credit card. Placeholders: %1$s - card type (visa, mastercard, ...), %2$s - last four digits of the card, %3$s - card expiry date
+#: payment-gateway/class-payment-gateway-direct.php:905
+#, php-format
+msgid "Nice! New payment method added: %1$s ending in %2$s (expires %3$s)"
+msgstr ""
+
+#. translators: Payment method as in a specific e-check account. Placeholders: %1$s - account type (checking/savings), %2$s - last four digits of the account
+#: payment-gateway/class-payment-gateway-direct.php:915
+#, php-format
+msgid "Nice! New payment method added: %1$s account ending in %2$s"
+msgstr ""
+
+#. translators: Payment method as in a specific credit card, e-check or bank account
+#: payment-gateway/class-payment-gateway-direct.php:922
+msgid "Nice! New payment method added."
+msgstr ""
+
+#. translators: Placeholders: %1$s - site title, %2$s - customer email. Payment method as in a specific credit card, e-check or bank account
+#: payment-gateway/class-payment-gateway-direct.php:1042
+#, php-format
+msgid "%1$s - Add Payment Method for %2$s"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway-helper.php:150
+#: payment-gateway/class-payment-gateway-helper.php:180
+msgid "Loan"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway-helper.php:151
+msgid "Installment"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway-helper.php:175
+msgid "PayPal"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway-helper.php:176
+msgid "Checking Account"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway-helper.php:177
+msgid "Savings Account"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway-helper.php:178
+msgid "Credit / Debit Card"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway-helper.php:179
+msgid "Bank Account"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway-hosted.php:278
+msgid "Thank you for your order, please click the button below to pay."
+msgstr ""
+
+#: payment-gateway/class-payment-gateway-hosted.php:279
+msgid ""
+"Thank you for your order. We are now redirecting you to complete payment."
+msgstr ""
+
+#: payment-gateway/class-payment-gateway-hosted.php:280
+msgid "Pay Now"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway-hosted.php:281
+msgid "Cancel Order"
+msgstr ""
+
+#. translators: Placeholders: %s - a WooCommerce order ID
+#: payment-gateway/class-payment-gateway-hosted.php:421
+#: payment-gateway/handlers/abstract-hosted-payment-handler.php:270
+#, php-format
+msgid "Could not find order %s"
+msgstr ""
+
+#. translators: Placeholders: %s - payment gateway title (such as Authorize.net, Braintree, etc)
+#: payment-gateway/class-payment-gateway-hosted.php:490
+#: payment-gateway/handlers/abstract-payment-handler.php:171
+#, php-format
+msgid "%s duplicate transaction received"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway-hosted.php:493
+#: payment-gateway/handlers/abstract-payment-handler.php:174
+#, php-format
+msgid "Order %s is already paid for."
+msgstr ""
+
+#. translators: Placeholders: %1$s - payment gateway title (such as Authorize.net, Braintree, etc), %2$s - payment method name (mastercard, bank account, etc), %3$s - last four digits of the card/account, %4$s - card/account expiry date
+#: payment-gateway/class-payment-gateway-hosted.php:576
+#: payment-gateway/payment-tokens/class-payment-gateway-payment-tokens-handler.php:760
+#, php-format
+msgid "%1$s Payment Method Saved: %2$s ending in %3$s (expires %4$s)"
+msgstr ""
+
+#. translators: Placeholders: %1$s - payment gateway title (such as CyberSouce, NETbilling, etc), %2$s - account type (checking/savings - may or may not be available), %3$s - last four digits of the account
+#: payment-gateway/class-payment-gateway-hosted.php:587
+#: payment-gateway/payment-tokens/class-payment-gateway-payment-tokens-handler.php:771
+#, php-format
+msgid "%1$s eCheck Payment Method Saved: %2$s account ending in %3$s"
+msgstr ""
+
+#. translators: Placeholders: %s - payment gateway title (such as CyberSouce, NETbilling, etc)
+#: payment-gateway/class-payment-gateway-hosted.php:596
+#, php-format
+msgid "%s Payment Method Saved"
+msgstr ""
+
+#. translators: Placeholders: %s - a failed tokenization API error
+#: payment-gateway/class-payment-gateway-hosted.php:605
+#, php-format
+msgid "Tokenization failed. %s"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway-my-payment-methods.php:265
+#: payment-gateway/class-payment-gateway-my-payment-methods.php:552
+msgid "Edit"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway-my-payment-methods.php:307
+#: payment-gateway/class-payment-gateway.php:858
+msgid "Title"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway-my-payment-methods.php:310
+msgid "Details"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway-my-payment-methods.php:313
+msgid "Default?"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway-my-payment-methods.php:554
+msgid ""
+"Oops, there was an error updating your payment method. Please try again."
+msgstr ""
+
+#: payment-gateway/class-payment-gateway-my-payment-methods.php:555
+msgid "Are you sure you want to delete this payment method?"
+msgstr ""
+
+#. translators: Payment method as in a specific credit card, eCheck or bank account
+#: payment-gateway/class-payment-gateway-my-payment-methods.php:630
+msgid "You do not have any saved payment methods."
+msgstr ""
+
+#: payment-gateway/class-payment-gateway-my-payment-methods.php:776
+msgid "Nickname"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway-my-payment-methods.php:997
+msgid "Oops, you took too long, please try again."
+msgstr ""
+
+#: payment-gateway/class-payment-gateway-my-payment-methods.php:1008
+msgid "There was an error with your request, please try again."
+msgstr ""
+
+#: payment-gateway/class-payment-gateway-payment-form.php:290
+msgid "Card Number"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway-payment-form.php:311
+msgid "MM / YY"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway-payment-form.php:330
+msgid "Card Security Code"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway-payment-form.php:333
+msgid "CSC"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway-payment-form.php:370
+msgid "Where do I find this?"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway-payment-form.php:375
+msgid "Routing Number"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway-payment-form.php:393
+msgid "Account Number"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway-payment-form.php:452
+msgid "TEST MODE ENABLED"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway-payment-form.php:476
+msgid "Sample Check"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway-payment-form.php:542
+msgid "Manage Payment Methods"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway-payment-form.php:673
+msgid "Use a new card"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway-payment-form.php:673
+msgid "Use a new bank account"
+msgstr ""
+
+#. translators: account as in customer's account on the eCommerce site
+#: payment-gateway/class-payment-gateway-payment-form.php:730
+msgid "Securely Save to Account"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway-payment-form.php:842
+msgid "Payment Info"
+msgstr ""
+
+#. translators: Placeholders: %1$s - plugin name, %2$s - <a> tag, %3$s - </a> tag
+#: payment-gateway/class-payment-gateway-plugin.php:415
+#, php-format
+msgid ""
+"%1$s: WooCommerce is not being forced over SSL; your customers' payment data "
+"may be at risk. %2$sVerify your site URLs here%3$s"
+msgstr ""
+
+#. translators: Placeholders: %s - payment gateway name
+#: payment-gateway/class-payment-gateway-plugin.php:432
+#, php-format
+msgid ""
+"%s will soon require TLS 1.2 support to process transactions and your server "
+"environment may need to be updated. Please contact your hosting provider to "
+"confirm that your site can send and receive TLS 1.2 connections and request "
+"they make any necessary updates."
+msgstr ""
+
+#: payment-gateway/class-payment-gateway-plugin.php:486
+#, php-format
+msgid ""
+"%1$s accepts payment in %2$s only. %3$sConfigure%4$s WooCommerce to accept "
+"%2$s to enable this gateway for checkout."
+msgid_plural ""
+"%1$s accepts payment in one of %2$s only. %3$sConfigure%4$s WooCommerce to "
+"accept one of %2$s to enable this gateway for checkout."
+msgstr[0] ""
+msgstr[1] ""
+msgstr[2] ""
+
+#. translators: Placeholders: %1$s - payment gateway name, %2$s - opening <a> tag, %3$s - closing </a> tag
+#: payment-gateway/class-payment-gateway-plugin.php:517
+#, php-format
+msgid ""
+"Heads up! %1$s is currently configured to log transaction data for debugging "
+"purposes. If you are not experiencing any problems with payment processing, "
+"we recommend %2$sturning off Debug Mode%3$s"
+msgstr ""
+
+#. translators: Placeholders: %s - gateway name
+#: payment-gateway/class-payment-gateway-plugin.php:566
+#, php-format
+msgid "%s is not configured"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway-plugin.php:577
+msgid "Configure"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway-plugin.php:578
+msgid "Dismiss"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway.php:315
+msgid "you successfully processed a payment!"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway.php:320
+msgid "you successfully processed a refund!"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway.php:446
+msgid "Check Number is missing"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway.php:447
+msgid "Drivers license state is missing"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway.php:448
+msgid "Drivers license number is missing"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway.php:642
+msgid "Continue to Payment"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway.php:642
+msgid "Place order"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway.php:670
+msgid "Thank you for your order."
+msgstr ""
+
+#: payment-gateway/class-payment-gateway.php:813
+msgid "Credit Card"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway.php:815
+msgid "eCheck"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway.php:831
+msgid "Pay securely using your credit card."
+msgstr ""
+
+#: payment-gateway/class-payment-gateway.php:833
+msgid "Pay securely using your checking account."
+msgstr ""
+
+#: payment-gateway/class-payment-gateway.php:851
+msgid "Enable / Disable"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway.php:852
+msgid "Enable this gateway"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway.php:860
+msgid "Payment method title that the customer will see during checkout."
+msgstr ""
+
+#: payment-gateway/class-payment-gateway.php:865
+msgid "Description"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway.php:867
+msgid "Payment method description that the customer will see during checkout."
+msgstr ""
+
+#: payment-gateway/class-payment-gateway.php:896
+msgid "Detailed Decline Messages"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway.php:898
+msgid ""
+"Check to enable detailed decline messages to the customer during checkout "
+"when possible, rather than a generic decline message."
+msgstr ""
+
+#. translators: Placeholders: %1$s - <a> tag, %2$s - </a> tag
+#: payment-gateway/class-payment-gateway.php:908
+#, php-format
+msgid ""
+"Show Detailed Error Messages and API requests/responses on the checkout page "
+"and/or save them to the %1$sdebug log%2$s"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway.php:912
+msgid "Show on Checkout Page"
+msgstr ""
+
+#. translators: show debugging information on both checkout page and in the log
+#: payment-gateway/class-payment-gateway.php:915
+msgid "Both"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway.php:976
+msgid "Select the gateway environment to use for transactions."
+msgstr ""
+
+#: payment-gateway/class-payment-gateway.php:1024
+msgid "Connection Settings"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway.php:1030
+msgid "Share connection settings"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway.php:1032
+msgid "Use connection/authentication settings from other gateway"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway.php:1035
+msgid "Disabled because the other gateway is using these settings"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway.php:1052
+msgid "Card Verification (CSC)"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway.php:1053
+msgid "Display the Card Security Code (CV2) field on checkout"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway.php:1061
+msgid "Saved Card Verification"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway.php:1062
+msgid "Display the Card Security Code field when paying with a saved card"
+msgstr ""
+
+#. translators: Placeholders: %1$s - site title, %2$s - order number
+#: payment-gateway/class-payment-gateway.php:1394
+#, php-format
+msgid "%1$s - Order %2$s"
+msgstr ""
+
+#. translators: Placeholders: %1$s - site title, %2$s - order number. Definitions: Capture as in capture funds from a credit card.
+#: payment-gateway/class-payment-gateway.php:1506
+#, php-format
+msgid "%1$s - Capture for Order %2$s"
+msgstr ""
+
+#. translators: Placeholders: %1$s - site title, %2$s - order number
+#: payment-gateway/class-payment-gateway.php:1635
+#, php-format
+msgid "%1$s - Refund for Order %2$s"
+msgstr ""
+
+#. translators: Placeholders: %1$s - payment gateway title (such as Tinkoff, Robokassa etc), %2$s - a monetary amount
+#: payment-gateway/class-payment-gateway.php:1690
+#, php-format
+msgid "%1$s Refund in the amount of %2$s approved."
+msgstr ""
+
+#. translators: Placeholders: %1$s - payment gateway title (such as Tinkoff, Robokassa etc), %2$s - error code, %3$s - error message
+#: payment-gateway/class-payment-gateway.php:1718
+#, php-format
+msgid "%1$s Refund Failed: %2$s - %3$s"
+msgstr ""
+
+#. translators: Placeholders: %1$s - payment gateway title (such as Tinkoff, Robokassa etc), %2$s - error message
+#: payment-gateway/class-payment-gateway.php:1726
+#, php-format
+msgid "%1$s Refund Failed: %2$s"
+msgstr ""
+
+#. translators: Placeholders: %s - payment gateway title (such as Tinkoff, Robokassa etc)
+#: payment-gateway/class-payment-gateway.php:1744
+#, php-format
+msgid "%s Order completely refunded."
+msgstr ""
+
+#: payment-gateway/class-payment-gateway.php:1788
+msgid ""
+"Oops, you cannot partially void this order. Please use the full order amount."
+msgstr ""
+
+#. translators: Placeholders: %1$s - payment gateway title, %2$s - error code, %3$s - error message. Void as in to void an order.
+#: payment-gateway/class-payment-gateway.php:1866
+#, php-format
+msgid "%1$s Void Failed: %2$s - %3$s"
+msgstr ""
+
+#. translators: Placeholders: %1$s - payment gateway title, %2$s - error message. Void as in to void an order.
+#: payment-gateway/class-payment-gateway.php:1874
+#, php-format
+msgid "%1$s Void Failed: %2$s"
+msgstr ""
+
+#. translators: Placeholders: %1$s - payment gateway title, %2$s - a monetary amount. Void as in to void an order.
+#: payment-gateway/class-payment-gateway.php:1895
+#, php-format
+msgid "%1$s Void in the amount of %2$s approved."
+msgstr ""
+
+#. translators: Placeholders: %1$s - status code, %2$s - status message
+#. translators: Placeholders: %1$s - payment request response status code, %2$s - payment request response status message
+#: payment-gateway/class-payment-gateway.php:1992
+#: payment-gateway/handlers/abstract-payment-handler.php:120
+#: payment-gateway/payment-tokens/class-payment-gateway-payment-tokens-handler.php:136
+#, php-format
+msgid "Status code %1$s: %2$s"
+msgstr ""
+
+#. translators: Placeholders: %s - status code
+#. translators: Placeholders: %s - payment request response status code
+#: payment-gateway/class-payment-gateway.php:1995
+#: payment-gateway/handlers/abstract-payment-handler.php:123
+#: payment-gateway/payment-tokens/class-payment-gateway-payment-tokens-handler.php:139
+#, php-format
+msgid "Status code: %s"
+msgstr ""
+
+#. translators: Placeholders; %s - status message
+#. translators: Placeholders: %s - payment request response status message
+#: payment-gateway/class-payment-gateway.php:1998
+#: payment-gateway/handlers/abstract-payment-handler.php:126
+#: payment-gateway/payment-tokens/class-payment-gateway-payment-tokens-handler.php:142
+#, php-format
+msgid "Status message: %s"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway.php:2003
+#: payment-gateway/handlers/abstract-payment-handler.php:131
+#: payment-gateway/payment-tokens/class-payment-gateway-payment-tokens-handler.php:149
+#, php-format
+msgid "Transaction ID %s"
+msgstr ""
+
+#. translators: Placeholders: %1$s - payment method title, %2$s - environment ("Test"), %3$s - transaction type (authorization/charge)
+#: payment-gateway/class-payment-gateway.php:2178
+#, php-format
+msgid "%1$s %2$s %3$s Approved"
+msgstr ""
+
+#. translators: Placeholders: %1$s - credit card type (MasterCard, Visa, etc...), %2$s - last four digits of the card
+#: payment-gateway/class-payment-gateway.php:2188
+#, php-format
+msgid "%1$s ending in %2$s"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway.php:2273
+#, php-format
+msgid "%s the loan was successfully Approved"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway.php:2276
+#, php-format
+msgid "The loan type: %s"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway.php:2280
+#, php-format
+msgid "Total amount: %s"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway.php:2286
+#, php-format
+msgid "Down payment: %s"
+msgstr ""
+
+#. translators: Placeholders: %1$s - payment gateway title, %2$s - message (probably reason for the transaction being held for review)
+#: payment-gateway/class-payment-gateway.php:2325
+#, php-format
+msgid "%1$s Transaction Held for Review (%2$s)"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway.php:2362
+#: payment-gateway/handlers/abstract-payment-handler.php:230
+msgid ""
+"Your order has been received and is being reviewed. Thank you for your "
+"business."
+msgstr ""
+
+#. translators: Placeholders: %1$s - payment gateway title, %2$s - error message; e.g. Order Note: [Payment method] Payment failed [error]
+#: payment-gateway/class-payment-gateway.php:2406
+#, php-format
+msgid "%1$s Payment Failed (%2$s)"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway.php:2423
+#: payment-gateway/handlers/abstract-hosted-payment-handler.php:175
+msgid ""
+"An error occurred, please try again or try an alternate form of payment."
+msgstr ""
+
+#. translators: Placeholders: %1$s - payment gateway title, %2$s - message/error
+#: payment-gateway/class-payment-gateway.php:2439
+#, php-format
+msgid "%1$s Transaction Cancelled (%2$s)"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway.php:2666
+msgid "Transaction Type"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway.php:2668
+msgid ""
+"Select how transactions should be processed. Charge submits all transactions "
+"for settlement, Authorization simply authorizes the order total for capture "
+"later."
+msgstr ""
+
+#: payment-gateway/class-payment-gateway.php:2679
+msgid "Charge Virtual-Only Orders"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway.php:2681
+msgid ""
+"If the order contains exclusively virtual items, enable this to immediately "
+"charge, rather than authorize, the transaction."
+msgstr ""
+
+#: payment-gateway/class-payment-gateway.php:2689
+msgid "Enable Partial Capture"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway.php:2691
+msgid "Allow orders to be partially captured multiple times."
+msgstr ""
+
+#: payment-gateway/class-payment-gateway.php:2700
+msgctxt ""
+"coordinating conjunction for a list of order statuses: on-hold, processing, "
+"or completed"
+msgid "or"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway.php:2703
+msgid "Capture Paid Orders"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway.php:2706
+#, php-format
+msgid "Automatically capture orders when they are changed to %s."
+msgstr ""
+
+#: payment-gateway/class-payment-gateway.php:2707
+msgid "a paid status"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway.php:2863
+msgid "Accepted Card Logos"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway.php:2865
+msgid ""
+"These are the card logos that are displayed to customers as accepted during "
+"checkout."
+msgstr ""
+
+#. translators: Placeholders: %1$s - <strong> tag, %2$s - </strong> tag
+#: payment-gateway/class-payment-gateway.php:2868
+#, php-format
+msgid ""
+"This setting %1$sdoes not%2$s change which card types the gateway will "
+"accept. Accepted cards are configured from your payment processor account."
+msgstr ""
+
+#. translators: http://www.cybersource.com/products/payment_security/payment_tokenization/ and https://en.wikipedia.org/wiki/Tokenization_(data_security)
+#: payment-gateway/class-payment-gateway.php:2955
+msgid "Tokenization"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway.php:2956
+msgid ""
+"Allow customers to securely save their payment details for future checkout."
+msgstr ""
+
+#. translators: %1$s - gateway name, %2$s - <a> tag, %3$s - </a> tag, %4$s - <a> tag, %5$s - </a> tag
+#: payment-gateway/class-payment-gateway.php:3730
+#, php-format
+msgid ""
+"Heads up! %1$s is not fully configured and cannot accept payments. Please "
+"%2$sreview the documentation%3$s and configure the %4$sgateway settings%5$s."
+msgstr ""
+
+#: payment-gateway/handlers/abstract-hosted-payment-handler.php:141
+msgid ""
+"There was a problem processing your order and it is being placed on hold for "
+"review. Please contact us to complete the transaction."
+msgstr ""
+
+#. translators: Placeholders: %s - payment gateway title
+#: payment-gateway/handlers/abstract-payment-handler.php:313
+#, php-format
+msgid "%s Transaction Held for Review"
+msgstr ""
+
+#. translators: Placeholders: %s - payment gateway title
+#: payment-gateway/handlers/abstract-payment-handler.php:378
+#, php-format
+msgid "%s Payment Failed"
+msgstr ""
+
+#. translators: Placeholders: %s - payment gateway title
+#: payment-gateway/handlers/abstract-payment-handler.php:403
+#, php-format
+msgid "%s Transaction Cancelled"
+msgstr ""
+
+#: payment-gateway/handlers/capture.php:122
+msgid "Order cannot be captured"
+msgstr ""
+
+#: payment-gateway/handlers/capture.php:127
+msgid "Transaction authorization has expired"
+msgstr ""
+
+#: payment-gateway/handlers/capture.php:132
+msgid "Transaction has already been fully captured"
+msgstr ""
+
+#: payment-gateway/handlers/capture.php:137
+msgid "Transaction cannot be captured"
+msgstr ""
+
+#. translators: Placeholders: %1$s - payment gateway title (such as Tinkoff, Yandex PAY etc), %2$s - transaction amount. Definitions: Capture, as in capture funds from a credit card.
+#: payment-gateway/handlers/capture.php:153
+#, php-format
+msgid "%1$s Capture of %2$s Approved"
+msgstr ""
+
+#. translators: Placeholders: %1$s - payment gateway title (such as Authorize.net, Braintree, etc), %2$s - failure message. Definitions: "capture" as in capturing funds from a credit card.
+#: payment-gateway/handlers/capture.php:193
+#, php-format
+msgid "%1$s Capture Failed: %2$s"
+msgstr ""
+
+#: payment-gateway/payment-tokens/class-payment-gateway-payment-tokens-handler.php:144
+msgid "Unknown Error"
+msgstr ""
+
+#. translators: the plugin name.
+#: plugin-updater/class-plugin-updater.php:249
+#, php-format
+msgid "There is a new version of %1$s available."
+msgstr ""
+
+#: plugin-updater/class-plugin-updater.php:255
+msgid "Contact your network administrator to install the update."
+msgstr ""
+
+#. translators: 1. opening anchor tag, do not translate 2. the new plugin version 3. closing anchor tag, do not translate.
+#: plugin-updater/class-plugin-updater.php:260
+#, php-format
+msgid "%1$sView version %2$s details%3$s."
+msgstr ""
+
+#: plugin-updater/class-plugin-updater.php:268
+#, php-format
+msgid "%1$sView version %2$s details%3$s or %4$supdate now%5$s."
+msgstr ""
+
+#: plugin-updater/class-plugin-updater.php:279
+msgid "Update now."
+msgstr ""
+
+#: plugin-updater/class-plugin-updater.php:473
+msgid "You do not have permission to install plugin updates"
+msgstr ""
+
+#: rest-api/controllers/class-plugin-rest-api-settings.php:48
+msgid "Unique identifier for the resource."
+msgstr ""
+
+#: rest-api/controllers/class-plugin-rest-api-settings.php:77
+msgid "Sorry, you cannot list resources."
+msgstr ""
+
+#: rest-api/controllers/class-plugin-rest-api-settings.php:119
+#, php-format
+msgid "Setting %s does not exist"
+msgstr ""
+
+#: rest-api/controllers/class-plugin-rest-api-settings.php:136
+msgid "Sorry, you cannot edit this resource."
+msgstr ""
+
+#: rest-api/controllers/class-plugin-rest-api-settings.php:163
+#, php-format
+msgid "Could not update setting: %s"
+msgstr ""
+
+#: rest-api/controllers/class-plugin-rest-api-settings.php:224
+msgid "Unique identifier of the setting."
+msgstr ""
+
+#: rest-api/controllers/class-plugin-rest-api-settings.php:230
+msgid "The type of the setting."
+msgstr ""
+
+#: rest-api/controllers/class-plugin-rest-api-settings.php:237
+msgid "The name of the setting."
+msgstr ""
+
+#: rest-api/controllers/class-plugin-rest-api-settings.php:243
+msgid "The description of the setting. It may or may not be used for display."
+msgstr ""
+
+#: rest-api/controllers/class-plugin-rest-api-settings.php:249
+msgid "Whether the setting stores an array of values or a single value."
+msgstr ""
+
+#: rest-api/controllers/class-plugin-rest-api-settings.php:255
+msgid "A list of valid options, used for validation before storing the value."
+msgstr ""
+
+#: rest-api/controllers/class-plugin-rest-api-settings.php:261
+msgid "Optional default value for the setting."
+msgstr ""
+
+#: rest-api/controllers/class-plugin-rest-api-settings.php:267
+msgid "The value of the setting."
+msgstr ""
+
+#: rest-api/controllers/class-plugin-rest-api-settings.php:272
+msgid ""
+"Optional object that defines how the user will interact with and update the "
+"setting."
+msgstr ""
+
+#: rest-api/controllers/class-plugin-rest-api-settings.php:276
+msgid "The type of the control."
+msgstr ""
+
+#: rest-api/controllers/class-plugin-rest-api-settings.php:283
+msgid "The name of the control. Inherits the setting's name."
+msgstr ""
+
+#: rest-api/controllers/class-plugin-rest-api-settings.php:289
+msgid "The description of the control. Inherits the setting's description."
+msgstr ""
+
+#: rest-api/controllers/class-plugin-rest-api-settings.php:295
+msgid ""
+"A list of key/value pairs defining the display value of each setting option. "
+"The keys should match the options defined in the base setting for validation."
+msgstr ""
+
+#: settings-api/register-settings/class-register-settings-fields.php:71
+msgid "Admin note: Option attributes are not set for all select controls."
+msgstr ""
+
+#: utilities/class-woodev-background-job-handler.php:592
+#, php-format
+msgid "Job data key \"%s\" not set"
+msgstr ""
+
+#: utilities/class-woodev-background-job-handler.php:596
+#, php-format
+msgid "Job data key \"%s\" is not an array"
+msgstr ""
+
+#: utilities/class-woodev-background-job-handler.php:816
+#, php-format
+msgid "Every %d Minute"
+msgid_plural "Every %d Minutes"
+msgstr[0] ""
+msgstr[1] ""
+msgstr[2] ""
+
+#: utilities/class-woodev-background-job-handler.php:961
+msgid "Background Processing Test"
+msgstr ""
+
+#: utilities/class-woodev-background-job-handler.php:962
+msgid "Run Test"
+msgstr ""
+
+#: utilities/class-woodev-background-job-handler.php:963
+msgid ""
+"This tool will test whether your server is capable of processing background "
+"jobs."
+msgstr ""
+
+#: utilities/class-woodev-background-job-handler.php:979
+msgid "Success! You should be able to process background jobs."
+msgstr ""
+
+#: utilities/class-woodev-background-job-handler.php:982
+msgid ""
+"Could not connect. Please ask your hosting company to ensure your server has "
+"loopback connections enabled."
+msgstr ""
+
+#: utilities/class-woodev-job-batch-handler.php:200
+msgid "Invalid job ID"
+msgstr ""

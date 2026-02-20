@@ -1,0 +1,16 @@
+.plugin-update .notice p.dummy {
+    display: none !important;
+}
+
+.plugin-update .notice .woodev-plugin-upgrade-notice {
+    margin-top: 15px;
+    margin-bottom: 10px;
+}
+
+.plugin-update .notice .woodev-plugin-upgrade-notice p {
+
+}
+
+.plugin-update .notice .woodev-plugin-upgrade-notice p:before {
+    content: none;
+}

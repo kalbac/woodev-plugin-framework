@@ -1,0 +1,371 @@
+.wrap-licenses .form-table,
+.wrap-licenses thead,
+.wrap-licenses tbody,
+.wrap-licenses tfoot,
+.wrap-licenses tr,
+.wrap-licenses td,
+.wrap-licenses th,
+.wrap-licenses caption {
+    display: block;
+}
+
+.wrap-licenses .form-table tbody {
+    display: flex;
+    flex-wrap: wrap;
+}
+
+.wrap-licenses .form-table tr {
+    float: left;
+    margin: 0 8px 16px;
+    width: 48.5%;
+    width: calc(50% - 8px);
+    background-color: #fff;
+    border: 1px solid #dcdcde;
+    box-sizing: border-box
+}
+
+.wrap-licenses .form-table th {
+    background: #f9f9f9;
+    padding: 0;
+    border-bottom: 1px solid #ccc;
+    margin: 0;
+    width: 100%;
+    max-height: 47px;
+}
+
+.wrap-licenses .form-table th > span {
+    padding: 14px;
+    display: block;
+}
+
+.wrap-licenses .form-table td {
+    margin: 0;
+    padding: 0;
+    height: calc( 100% - 47px );
+}
+
+.wrap-licenses .form-table .license-item {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    height: 100%;
+}
+
+.wrap-licenses .form-table .license-item .details {
+    position: relative;
+    padding: 20px 20px 10px;
+    min-height: 100px;
+}
+
+.wrap-licenses .form-table .license-item .details input[type=text],
+.wrap-licenses .form-table .license-item .details input[type=password] {
+    position: relative;
+    width: 100%;
+    padding-top: 3px;
+    padding-bottom: 3px;
+    padding-left: 30px;
+    padding-right: 92px;
+}
+
+.wrap-licenses .form-table .license-item .details .dashicons {
+    position: absolute;
+    top: 26px;
+    left: 26px;
+    color: var(--wc-highlight);
+    font-size: 24px;
+}
+
+.wrap-licenses .form-table .license-item .details input[type=submit] {
+    position: absolute;
+    right: 21px;
+    top: 23px;
+    background-color: var(--wc-primary);
+    color: var(--wc-secondary);
+}
+
+.wrap-licenses .woodev-licenses-data {
+    margin-top: 14px;
+    margin-bottom: 10px;
+    background-color: #f6f7f7;
+    border: #dcdcde solid 1px;
+    border-radius: 3px;
+    padding: 9px 8px;
+    font-size: 1em;
+    line-height: 1.2;
+    color: #2D2D2D;
+}
+
+.wrap-licenses .woodev-licenses-data.woodev-licenses-status-error,
+.wrap-licenses .woodev-licenses-data.woodev-licenses-status-missing,
+.wrap-licenses .woodev-licenses-data.woodev-licenses-status-invalid,
+.wrap-licenses .woodev-licenses-data.woodev-licenses-status-site_inactive,
+.wrap-licenses .woodev-licenses-data.woodev-licenses-status-item_name_mismatch {
+    background-color: #ffebcd;
+    border-color: #ffdfb0;
+}
+
+.wrap-licenses .woodev-licenses-data.woodev-licenses-status-info {
+    background-color: #f0f6fc;
+    border-color: #72aee6;
+}
+
+.wrap-licenses .woodev-licenses-data.woodev-licenses-status-expires-soon {
+    background-color: #2ea2ccc9;
+    color: var(--wc-highligh-text);
+    border-color: var(--wc-blue);
+}
+
+.wrap-licenses .woodev-licenses-data.woodev-licenses-status-expired {
+    background-color: #df7c7c;
+    color: #f5f5f5;
+    border-color: #e24e4e;
+}
+
+.wrap-licenses .woodev-licenses-data.woodev-licenses-status-expires-soon a,
+.wrap-licenses .woodev-licenses-data.woodev-licenses-status-expired a {
+    color: #f5f5f5;
+}
+
+.wrap-licenses .woodev-licenses-data > a:hover {
+    text-decoration: none;
+}
+
+.wrap-licenses .form-table .license-item .actions {
+    clear: both;
+    padding: 12px 20px;
+    background-color: #f6f7f7;
+    border-top: 1px solid #dcdcde;
+    overflow: hidden;
+}
+
+.wrap-licenses .form-table .license-item .actions .actions-buttons {
+    float: left;
+    width: calc( 100% - 42px );
+}
+
+.wrap-licenses .form-table .license-item .actions .actions-buttons > p {
+    margin-top: 0;
+}
+
+.wrap-licenses .form-table .license-item .actions .actions-buttons .status {
+    color: var(--wc-red);
+    font-weight: 700;
+    position: relative;
+    padding-left: 16px;
+    line-height: 1.6;
+}
+
+.wrap-licenses .form-table .license-item .actions .actions-buttons .status:before,
+.wrap-licenses .form-table .license-item .actions .actions-buttons .status::before {
+    position: absolute;
+    content: "";
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background-color: var(--wc-red);
+    left: 0;
+    top: 5px;
+}
+
+.wrap-licenses .form-table .license-item .actions .actions-buttons > input[type=submit] {
+    background-color: var(--wc-red);
+    color: var(--wc-secondary);
+}
+
+.wrap-licenses .form-table .license-item .actions .actions-beta {
+    float: right;
+    width: 42px;
+}
+
+.wrap-licenses .form-table .license-item .actions .actions-beta .toggle-control {
+    display: flex;
+    align-items: center;
+    margin: 0 1px;
+    line-height: 1;
+    padding-top: 2px;
+}
+
+.wrap-licenses .form-table .license-item .actions .actions-beta .toggle-control label {
+    background-color: #8c8f94;
+    border-radius: 12px;
+    cursor: pointer;
+    display: inline-block;
+    height: 24px;
+    position: relative;
+    text-indent: -9999px;
+    width: 42px;
+}
+
+.wrap-licenses .form-table .license-item .actions .actions-beta .toggle-control label::after {
+    background: #ffffff;
+    border-radius: 50%;
+    content: "";
+    height: 20px;
+    left: 2px;
+    position: absolute;
+    top: 2px;
+    width: 20px;
+    transition: all 0.25s ease-out;
+}
+
+.wrap-licenses .form-table .license-item .actions .actions-beta .toggle-control input[type="checkbox"] {
+    position: absolute;
+    overflow: hidden;
+    height: 0;
+    width: 0;
+    border: none !important;
+    box-shadow: none !important;
+    margin: 0;
+    min-width: 0;
+}
+
+.wrap-licenses .form-table .license-item .actions .actions-beta .toggle-control input[type="checkbox"]:checked+label {
+    background-color: var( --wc-highlight );
+}
+
+.wrap-licenses .form-table .license-item .actions .actions-beta .toggle-control input[type="checkbox"]:checked+label:after {
+    left: calc( 100% - 2px);
+    transform: translateX(-100%);
+}
+
+.wrap-licenses .form-table tr:nth-child(odd) {
+    clear: both;
+    margin-left: 0
+}
+
+.wrap-licenses .form-table tr:nth-child(even) {
+    margin-right: 0
+}
+
+.woodev-settings-documentation {
+    background: #fff;
+    margin-top: 20px;
+    padding: 20px;
+}
+
+.woodev-settings-documentation .woodev-settings-row {
+    display: flex;
+    margin-left: -12px;
+    margin-right: -12px;
+}
+
+.woodev-settings-documentation .woodev-settings-row .woodev-admin-block {
+    border-radius: 5px;
+    box-shadow: 0 0 20px 0 #f2f2f2;
+    display: flex;
+    flex-basis: 25%;
+    flex-direction: column;
+    margin-left: 12px;
+    margin-right: 12px;
+    padding: 25px;
+}
+
+.woodev-settings-documentation .woodev-settings-row .woodev-admin-block .header {
+    align-items: center;
+    display: flex;
+    color: #222;
+}
+
+.woodev-settings-documentation .woodev-settings-row .woodev-admin-block .header .dashicons {
+    font-size: 1.6em;
+    color: #00c9fd;
+}
+
+.woodev-settings-documentation .woodev-settings-row .woodev-admin-block .header h4 {
+    font-size: 1.4em;
+    margin: 0 10px;
+}
+
+.woodev-settings-documentation .woodev-settings-row .woodev-admin-block .content {
+    flex: 1;
+    color: #222;
+    font-size: 1em;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+.woodev-settings-documentation .woodev-settings-row .woodev-admin-block .content .button-link {
+    margin-top: 10px;
+}
+
+.woodev-settings-documentation .woodev-settings-row .woodev-admin-block .content .button-link > a {
+    background-color: #fff;
+    border: 1px solid #00c9fd;
+    border-image: rgba(0, 0, 0, 0) -webkit-linear-gradient(left, #00c9fd 0%, #81ee8e 100%) repeat scroll 0 0;
+    border-image: rgba(0, 0, 0, 0) linear-gradient(to right, #00c9fd 0%, #81ee8e 100%) repeat scroll 0 0;
+    border-image-slice: 1;
+    color: #00c9fd;
+    display: inline-block;
+    padding: 10px 20px;
+    text-decoration: none;
+    border-radius: 3px;
+    font-weight: 500;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+    transition: all .3s ease 0s;
+}
+
+.woodev-settings-documentation .woodev-settings-row .woodev-admin-block .content .button-link > a:hover {
+    background: rgba(0, 0, 0, 0) -webkit-linear-gradient(left, #00c9fd 0%, #81ee8e 100%) repeat scroll 0 0;
+    background: rgba(0, 0, 0, 0) linear-gradient(to right, #00c9fd 0%, #81ee8e 100%) repeat scroll 0 0;
+    color: #fff;
+}
+
+@media only screen and (min-width: 1600px) and (max-width:2299px) {
+    .wrap-licenses .form-table tr {
+        width:30%;
+        width: calc(33.1% - 8px)
+    }
+
+    .wrap-licenses .form-table tr:nth-child(odd) {
+        clear: none;
+        margin-left: 8px
+    }
+
+    .wrap-licenses .form-table tr:nth-child(even) {
+        margin-right: 8px
+    }
+
+    .wrap-licenses .form-table tr:nth-child(3n+1) {
+        clear: both;
+        margin-left: 0
+    }
+
+    .wrap-licenses .form-table tr:nth-child(3n) {
+        margin-right: 0
+    }
+}
+
+@media only screen and (min-width: 2300px) {
+    .wrap-licenses .form-table tr {
+        width:25%;
+        width: calc(25% - 12px)
+    }
+
+    .wrap-licenses .form-table tr:nth-child(odd) {
+        clear: none;
+        margin-left: 8px
+    }
+
+    .wrap-licenses .form-table tr:nth-child(even) {
+        margin-right: 8px
+    }
+
+    .wrap-licenses .form-table tr:nth-child(4n+1) {
+        clear: both;
+        margin-left: 0
+    }
+
+    .wrap-licenses .form-table tr:nth-child(4n) {
+        margin-right: 0
+    }
+}
+
+@media only screen and (max-width: 782px) {
+    .wrap-licenses .form-table tr {
+        margin-left: 0;
+        margin-right: 0;
+        width: 100%;
+    }
+}

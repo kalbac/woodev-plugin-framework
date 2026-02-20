@@ -1,0 +1,19 @@
+.woodev-external-checkout {
+	max-width: 510px;
+	margin: 0 auto 2em;
+	text-align: center;
+}
+
+.woodev-external-checkout .terms-notice {
+	margin-top: 1em;
+}
+
+.woodev-external-checkout .divider {
+	font-size: 1.15em;
+	font-style: italic;
+	text-transform: uppercase;
+}
+.woodev-external-checkout .divider::before,
+.woodev-external-checkout .divider::after {
+	content: "\2014";
+}
