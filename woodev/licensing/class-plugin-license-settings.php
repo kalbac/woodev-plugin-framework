@@ -1,6 +1,6 @@
 <?php
 
-defined( 'ABSPATH' ) or exit;
+defined( 'ABSPATH' ) || exit;
 
 if ( ! class_exists( 'Woodev_License_Settings' ) ) :
 
@@ -12,7 +12,7 @@ if ( ! class_exists( 'Woodev_License_Settings' ) ) :
 
 			$this->plugin = $plugin;
 
-			//Register license settings page
+			// Register license settings page
 			add_action( 'admin_init', [ $this, 'register_license_settings' ] );
 			add_filter( 'woocommerce_screen_ids', [ $this, 'set_wc_screen_ids' ] );
 		}
@@ -21,7 +21,7 @@ if ( ! class_exists( 'Woodev_License_Settings' ) ) :
 
 			$current_screen = Woodev_Helper::get_current_screen();
 
-			if( $current_screen && ! empty( $current_screen->id ) ) {
+			if ( $current_screen && ! empty( $current_screen->id ) ) {
 				return array_merge( $screen, [ $current_screen->id ] );
 			}
 
@@ -46,24 +46,28 @@ if ( ! class_exists( 'Woodev_License_Settings' ) ) :
 				[ 'class' => 'license-container' ]
 			);
 
-			register_setting( 'woodev_license_fields_group', $license_key_option_name, function ( $input ) {
+			register_setting(
+				'woodev_license_fields_group',
+				$license_key_option_name,
+				function ( $input ) {
 
-				$beta_version = $this->plugin->get_plugin_option_name( 'beta_version' );
-				$verify       = $this->plugin->get_plugin_option_name( 'verify' );
-				$license_key  = sanitize_text_field( $input );
+					$beta_version = $this->plugin->get_plugin_option_name( 'beta_version' );
+					$verify       = $this->plugin->get_plugin_option_name( 'verify' );
+					$license_key  = sanitize_text_field( $input );
 
-				if ( isset( $_REQUEST[ $beta_version ] ) && 'yes' === sanitize_text_field( $_REQUEST[ $beta_version ] ) ) {
-					update_option( $beta_version, 'yes' );
-				} else {
-					delete_option( $beta_version );
+					if ( isset( $_REQUEST[ $beta_version ] ) && 'yes' === sanitize_text_field( $_REQUEST[ $beta_version ] ) ) {
+						update_option( $beta_version, 'yes' );
+					} else {
+						delete_option( $beta_version );
+					}
+
+					if ( isset( $_REQUEST[ $verify ] ) && ! empty( $license_key ) ) {
+						$this->plugin->get_license_instance()->verify_license( $license_key );
+					}
+
+					return $license_key;
 				}
-
-				if ( isset( $_REQUEST[ $verify ] ) && ! empty( $license_key ) ) {
-					$this->plugin->get_license_instance()->verify_license( $license_key );
-				}
-
-				return $license_key;
-			} );
+			);
 		}
 
 		public function do_license_fields() {
@@ -95,7 +99,7 @@ if ( ! class_exists( 'Woodev_License_Settings' ) ) :
 			$message_classes = [ 'woodev-licenses-data' ];
 
 			if ( 'valid' == $woodev_license->license && ! empty( $woodev_license->expires ) && 'lifetime' !== $woodev_license->expires ) {
-				$now = current_time( 'timestamp' );
+				$now     = current_time( 'timestamp' );
 				$expires = is_numeric( $woodev_license->expires ) ?: strtotime( $woodev_license->expires, $now );
 				if ( ( $expires > $now ) && ( ( $expires - $now ) < MONTH_IN_SECONDS ) ) {
 					$message_classes[] = 'woodev-licenses-status-expires-soon';
@@ -104,14 +108,18 @@ if ( ! class_exists( 'Woodev_License_Settings' ) ) :
 				$message_classes[] = sprintf( 'woodev-licenses-status-%s', $woodev_license->license ?: 'info' );
 			}
 
-			echo sprintf( '<div class="%s">', implode( ' ', $message_classes ) );
+			printf( '<div class="%s">', implode( ' ', $message_classes ) );
 
 			echo wp_kses_post( ( new Woodev_License_Messages( $woodev_license ) )->get_message() );
 
-			if ( in_array( false, [
+			if ( in_array(
+				false,
+				[
 					$woodev_license->license,
-					$woodev_license->success
-				], true ) || $woodev_license->error ) {
+					$woodev_license->success,
+				],
+				true
+			) || $woodev_license->error ) {
 				printf( '<p>%s</p>', sprintf( __( 'To receive updates and support, please enter your valid license key for <strong>%s</strong>', 'woodev-plugin-framework' ), $this->plugin->get_plugin_name() ) );
 			}
 

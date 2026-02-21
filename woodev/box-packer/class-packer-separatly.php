@@ -1,6 +1,6 @@
 <?php
 
-defined( 'ABSPATH' ) or exit;
+defined( 'ABSPATH' ) || exit;
 
 if ( ! class_exists( 'Woodev_Packer_Separately' ) ) :
 
@@ -37,15 +37,18 @@ if ( ! class_exists( 'Woodev_Packer_Separately' ) ) :
 
 				$product = $item->get_product();
 
-				$packed_box = new Woodev_Box_Packer_Packed_Box( new Woodev_Packer_Box_Implementation(
-					$item->get_length(),
-					$item->get_width(),
-					$item->get_height(),
-					0,
-					null,
-					Woodev_Helper::str_convert( $this->get_box_name( $product ) ),
-					$this->get_box_name( $product )
-				), array( $item ) );
+				$packed_box = new Woodev_Box_Packer_Packed_Box(
+					new Woodev_Packer_Box_Implementation(
+						$item->get_length(),
+						$item->get_width(),
+						$item->get_height(),
+						0,
+						null,
+						Woodev_Helper::str_convert( $this->get_box_name( $product ) ),
+						$this->get_box_name( $product )
+					),
+					array( $item )
+				);
 
 				$packed_box->get_packed_items();
 				// Calculates weight!
@@ -62,15 +65,19 @@ if ( ! class_exists( 'Woodev_Packer_Separately' ) ) :
 		 */
 		private function get_box_name( WC_Product $product ): string {
 			if ( $product instanceof WC_Product ) {
-				return str_replace( array(
-					'{product_name}',
-					'{product_sku}',
-					'{product_id}'
-				), array(
-					$product->get_name(),
-					$product->get_sku(),
-					$product->get_id()
-				), $this->box_name );
+				return str_replace(
+					array(
+						'{product_name}',
+						'{product_sku}',
+						'{product_id}',
+					),
+					array(
+						$product->get_name(),
+						$product->get_sku(),
+						$product->get_id(),
+					),
+					$this->box_name
+				);
 			}
 
 			return $this->box_name;

@@ -1,6 +1,6 @@
 <?php
 
-defined( 'ABSPATH' ) or exit;
+defined( 'ABSPATH' ) || exit;
 
 if ( ! class_exists( 'Woodev_Licensing_API' ) ) :
 
@@ -29,7 +29,6 @@ if ( ! class_exists( 'Woodev_Licensing_API' ) ) :
 			$this->set_response_handler( 'Woodev_Licencing_API_Response' );
 			$this->plugin      = $plugin;
 			$this->request_uri = $this->get_url();
-
 		}
 
 		/**
@@ -102,10 +101,12 @@ if ( ! class_exists( 'Woodev_Licensing_API' ) ) :
 		 * @return array
 		 */
 		private function get_body( array $api_params ) {
-			return wp_parse_args( $api_params, array(
+			return wp_parse_args(
+				$api_params,
+				array(
 					'url'    => home_url(),
 					'author' => 'Woodev',
-					'email'  => get_option( 'admin_email' )
+					'email'  => get_option( 'admin_email' ),
 				)
 			);
 		}
@@ -121,12 +122,12 @@ if ( ! class_exists( 'Woodev_Licensing_API' ) ) :
 			/** @var Woodev_Licencing_API_Response $response */
 			$response = $this->get_response();
 
-			//If we got response code as 400, throw an exception
+			// If we got response code as 400, throw an exception
 			if ( intval( $this->get_response_code() ) >= 400 ) {
 				throw new Woodev_API_Exception( $this->get_response_message(), $this->get_response_code() );
 			}
 
-			//If response doesnt exist or response data is empty, also throw an exception
+			// If response doesnt exist or response data is empty, also throw an exception
 			if ( ! $response || ! $response->get_response_data() ) {
 				throw new Woodev_API_Exception( __( 'Cannot get license data', 'woodev-plugin-framework' ) );
 			}

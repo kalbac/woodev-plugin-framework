@@ -1,6 +1,6 @@
 <?php
 
-defined( 'ABSPATH' ) or exit;
+defined( 'ABSPATH' ) || exit;
 
 if ( ! class_exists( 'Woodev_License' ) ) :
 
@@ -197,7 +197,7 @@ if ( ! class_exists( 'Woodev_License' ) ) :
 		public function update( array $data ) {
 
 			/** @var stdClass $option */
-			$option = get_option( $this->option_name, new StdClass );
+			$option = get_option( $this->option_name, new StdClass() );
 			$update = false;
 
 			foreach ( $data as $key => $value ) {
@@ -239,9 +239,20 @@ if ( ! class_exists( 'Woodev_License' ) ) :
 			}
 
 			$allowed_keys = [
-				'license', 'item_id', 'item_name', 'license_limit', 'site_count',
-				'expires', 'activations_left', 'payment_id', 'price_id',
-				'error', 'key', 'success', 'subscription', 'data',
+				'license',
+				'item_id',
+				'item_name',
+				'license_limit',
+				'site_count',
+				'expires',
+				'activations_left',
+				'payment_id',
+				'price_id',
+				'error',
+				'key',
+				'success',
+				'subscription',
+				'data',
 			];
 
 			foreach ( (array) $option as $key => $value ) {
@@ -255,7 +266,6 @@ if ( ! class_exists( 'Woodev_License' ) ) :
 			}
 
 			return $this;
-
 		}
 
 		/**

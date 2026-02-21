@@ -1,6 +1,6 @@
 <?php
 
-defined( 'ABSPATH' ) or exit;
+defined( 'ABSPATH' ) || exit;
 
 if ( ! class_exists( 'Woodev_Box_Packer_Packed_Box' ) ) :
 
@@ -93,7 +93,7 @@ if ( ! class_exists( 'Woodev_Box_Packer_Packed_Box' ) ) :
 		 */
 		private function try_to_pack() {
 
-			if ( ! $this->items_to_pack || sizeof( $this->items_to_pack ) === 0 ) {
+			if ( ! $this->items_to_pack || count( $this->items_to_pack ) === 0 ) {
 				return;
 			}
 
@@ -106,7 +106,7 @@ if ( ! class_exists( 'Woodev_Box_Packer_Packed_Box' ) ) :
 			foreach ( $this->items_to_pack as $item ) {
 
 				if ( $this->can_be_packed( $item, $packed_weight, $packed_volume ) ) {
-					$packed[]      = $item;
+					$packed[]       = $item;
 					$packed_volume += $item->get_volume();
 					$packed_weight += $item->get_weight();
 					$packed_value  += $item->get_value();
@@ -188,7 +188,7 @@ if ( ! class_exists( 'Woodev_Box_Packer_Packed_Box' ) ) :
 
 			if ( is_null( $packed_weight_ratio ) && is_null( $packed_volume_ratio ) ) {
 				// Fallback to amount packed
-				$this->success_percent = sizeof( $this->packed_items ) / ( sizeof( $this->nofit_items ) + sizeof( $this->packed_items ) ) * 100;
+				$this->success_percent = count( $this->packed_items ) / ( count( $this->nofit_items ) + count( $this->packed_items ) ) * 100;
 			} elseif ( is_null( $packed_weight_ratio ) ) {
 				// Volume only
 				$this->success_percent = $packed_volume_ratio * 100;

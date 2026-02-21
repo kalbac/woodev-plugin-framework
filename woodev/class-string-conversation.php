@@ -1,11 +1,11 @@
 <?php
 
-defined( 'ABSPATH' ) or exit;
+defined( 'ABSPATH' ) || exit;
 
 if ( ! class_exists( 'Woodev_String_Conversion' ) ) :
 
 	class Woodev_String_Conversion {
-		
+
 		public static function sanitize_title( $title, $context = '' ) {
 
 			if ( 'query' === $context ) {
@@ -21,9 +21,9 @@ if ( ! class_exists( 'Woodev_String_Conversion' ) ) :
 
 			return $title;
 		}
-		
+
 		private static function get( $locale = '' ) {
-			
+
 			$table = array(
 				'А' => 'A',
 				'Б' => 'B',
@@ -100,7 +100,7 @@ if ( ! class_exists( 'Woodev_String_Conversion' ) ) :
 				'ѳ' => 'fh',
 				'ѵ' => 'yh',
 			);
-			
+
 			switch ( $locale ) {
 				// Belorussian.
 				case 'bel':
@@ -274,7 +274,7 @@ if ( ! class_exists( 'Woodev_String_Conversion' ) ) :
 					unset( $table['ю'] );
 					unset( $table['Я'] );
 					unset( $table['я'] );
-					
+
 					$table['Á'] = 'A';
 					$table['á'] = 'a';
 					$table['Ǵ'] = 'G';
@@ -320,13 +320,13 @@ if ( ! class_exists( 'Woodev_String_Conversion' ) ) :
 						'ש' => 'sh',
 						'ת' => 'th',
 					);
-					for ( $code = 0x0590; $code <= 0x05CF; $code ++ ) {
+					for ( $code = 0x0590; $code <= 0x05CF; $code++ ) {
 						$table[ self::mb_chr( $code ) ] = '';
 					}
-					for ( $code = 0x05F0; $code <= 0x05F5; $code ++ ) {
+					for ( $code = 0x05F0; $code <= 0x05F5; $code++ ) {
 						$table[ self::mb_chr( $code ) ] = '';
 					}
-					for ( $code = 0xFB1D; $code <= 0xFB4F; $code ++ ) {
+					for ( $code = 0xFB1D; $code <= 0xFB4F; $code++ ) {
 						$table[ self::mb_chr( $code ) ] = '';
 					}
 					break;
@@ -335,7 +335,7 @@ if ( ! class_exists( 'Woodev_String_Conversion' ) ) :
 
 			return $table;
 		}
-		
+
 		private static function mb_chr( $code ) {
 			$code = $code % 0x200000;
 			if ( 0x80 > $code ) {
@@ -351,5 +351,5 @@ if ( ! class_exists( 'Woodev_String_Conversion' ) ) :
 			return $s;
 		}
 	}
-	
-endif;	
+
+endif;

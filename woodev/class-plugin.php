@@ -1,6 +1,6 @@
 <?php
 
-defined( 'ABSPATH' ) or exit;
+defined( 'ABSPATH' ) || exit;
 
 if ( ! class_exists( 'Woodev_Plugin' ) ) :
 
@@ -108,17 +108,20 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 			$this->id      = $id;
 			$this->version = $version;
 
-			$args = wp_parse_args( $args, [
-				'text_domain'        => '',
-				'dependencies'       => [],
-				'supported_features' => [
-					'hpos'   => false,
-					'blocks' => [
-						'cart'     => false,
-						'checkout' => false,
+			$args = wp_parse_args(
+				$args,
+				[
+					'text_domain'        => '',
+					'dependencies'       => [],
+					'supported_features' => [
+						'hpos'   => false,
+						'blocks' => [
+							'cart'     => false,
+							'checkout' => false,
+						],
 					],
-				],
-			] );
+				]
+			);
 
 			$this->text_domain        = $args['text_domain'];
 			$this->supported_features = $args['supported_features'];
@@ -156,7 +159,7 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 			// load the admin settings pages
 			$this->load_admin_pages();
 
-			//load the plugin license settings fields
+			// load the plugin license settings fields
 			$this->load_license_settings_fields();
 
 			// add the action & filter hooks
@@ -182,7 +185,6 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		 * Builds the admin message handler instance.
 		 *
 		 * Plugins can override this with their own handler.
-		 *
 		 */
 		protected function init_admin_message_handler() {
 			$this->message_handler = new Woodev_Admin_Message_Handler( $this->get_id() );
@@ -204,7 +206,7 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		 * @return void
 		 */
 		private function load_admin_pages() {
-			if( is_admin() && ! class_exists( 'Woodev_Admin_Pages' ) ) {
+			if ( is_admin() && ! class_exists( 'Woodev_Admin_Pages' ) ) {
 				$admin_pages = $this->load_class( '/woodev/admin/class-admin-pages.php', 'Woodev_Admin_Pages' );
 				$admin_pages->instance( $this );
 			}
@@ -217,10 +219,10 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		 * @return void
 		 */
 		private function load_license_settings_fields() {
-			if( is_admin() ) {
+			if ( is_admin() ) {
 
-				if( ! class_exists( 'Woodev_License_Settings' ) ) {
-					require_once( $this->get_framework_path() . '/licensing/class-plugin-license-settings.php' );
+				if ( ! class_exists( 'Woodev_License_Settings' ) ) {
+					require_once $this->get_framework_path() . '/licensing/class-plugin-license-settings.php';
 				}
 
 				new Woodev_License_Settings( $this );
@@ -262,9 +264,9 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		 *
 		 * @return void
 		 */
-		protected function init_blocks_handler() : void {
+		protected function init_blocks_handler(): void {
 
-			require_once( $this->get_framework_path() . '/handlers/blocks-handler.php' );
+			require_once $this->get_framework_path() . '/handlers/blocks-handler.php';
 
 			// individual plugins should initialize their block integrations handler by overriding this method
 			$this->blocks_handler = new Woodev_Blocks_Handler( $this );
@@ -276,7 +278,7 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		 * Plugins can override and extend this method to add their own setup wizard.
 		 */
 		protected function init_setup_wizard_handler() {
-			require_once( $this->get_framework_path() . '/admin/abstract-plugin-admin-setup-wizard.php' );
+			require_once $this->get_framework_path() . '/admin/abstract-plugin-admin-setup-wizard.php';
 		}
 
 		/**
@@ -293,12 +295,12 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 			// hook for translations separately to ensure they're loaded
 			add_action( 'init', array( $this, 'load_translations' ) );
 
-			//Load plugin updater
+			// Load plugin updater
 			add_action( 'init', array( $this, 'load_updater' ) );
 
 			// handle WooCommerce features compatibility (such as HPOS, WC Cart & Checkout Blocks support...)
 			add_action( 'before_woocommerce_init', [ $this, 'handle_features_compatibility' ] );
-			
+
 			add_action( 'wp_enqueue_scripts', [ $this, 'frontend_enqueue_scripts' ] );
 			add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_scripts' ) );
 			add_action( 'wp_ajax_woodev_verify_license', array( $this, 'ajax_verify_license' ) );
@@ -313,21 +315,27 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 			add_action( 'admin_footer', array( $this, 'add_delayed_admin_notices' ) );
 
 			// add a 'Configure' link to the plugin action links
-			add_filter( 'plugin_action_links_' . plugin_basename( $this->get_plugin_file() ), array(
-				$this,
-				'plugin_action_links'
-			) );
+			add_filter(
+				'plugin_action_links_' . plugin_basename( $this->get_plugin_file() ),
+				array(
+					$this,
+					'plugin_action_links',
+				)
+			);
 
 			// automatically log HTTP requests from Woodev_API_Base
 			$this->add_api_request_logging();
 
 			// add any PHP incompatibilities to the system status report
-			add_filter( 'woocommerce_system_status_environment_rows', array(
-				$this,
-				'add_system_status_php_information'
-			) );
+			add_filter(
+				'woocommerce_system_status_environment_rows',
+				array(
+					$this,
+					'add_system_status_php_information',
+				)
+			);
 
-			//CRON actions
+			// CRON actions
 			add_filter( 'cron_schedules', array( $this, 'add_schedules' ) );
 			add_action( 'wp', array( $this, 'schedule_events' ) );
 			add_action( 'woodev_weekly_scheduled_events', array( $this, 'weekly_license_check' ) );
@@ -354,10 +362,9 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		 */
 		protected function init_license_handler() {
 
-			if( ! $this->license ) {
+			if ( ! $this->license ) {
 				$this->license = new Woodev_Plugins_License( $this );
 			}
-
 		}
 
 		/**
@@ -367,13 +374,13 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		 */
 		public function load_updater() {
 
-			if( ! is_admin() && ! ( defined( 'WP_CLI' ) && WP_CLI ) ) {
+			if ( ! is_admin() && ! ( defined( 'WP_CLI' ) && WP_CLI ) ) {
 				return;
 			}
 
 			$license_key = $this->get_license_instance()->get_license();
 
-			if( $license_key ) {
+			if ( $license_key ) {
 				new Woodev_Plugin_Updater( $this );
 			}
 
@@ -437,15 +444,14 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		 * Plugins can override this to set up any handlers after the WordPress admin is ready.
 		 */
 		public function init_admin() {}
-		
+
 		/**
 		 * Enqueue plugin scripts on frontend
 		 */
 		public function frontend_enqueue_scripts() {
-			
+
 			wp_register_script( 'jquery-suggestions', $this->get_framework_assets_url() . '/js/frontend/jquery.suggestions.js', [ 'jquery' ], '22.6.0' );
 			wp_register_script( 'woodev-dadata-suggestions', $this->get_framework_assets_url() . '/js/frontend/woodev-dadata-suggestions.js', [ 'jquery-suggestions' ], self::VERSION );
-			
 		}
 
 		/**
@@ -474,7 +480,7 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 				'close'            => esc_html__( 'Закрыть' ),
 				'admin_nonce'      => wp_create_nonce( 'woodev-admin' ),
 				'load_error_text'  => esc_html__( 'Во время загрузки данных о лицензии произошла ошибка. Закройте это окно и попробуйте снова.' ),
-				'license_page_url' => esc_url( $this->get_license_instance()->get_license_settings_url() )
+				'license_page_url' => esc_url( $this->get_license_instance()->get_license_settings_url() ),
 			);
 		}
 
@@ -487,10 +493,10 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		 */
 		public function add_schedules( $schedules = array() ) {
 
-			if( ! isset( $schedules['weekly'] ) ) {
+			if ( ! isset( $schedules['weekly'] ) ) {
 				$schedules['weekly'] = array(
 					'interval' => WEEK_IN_SECONDS,
-					'display'  => __( 'Once Weekly', 'woodev-plugin-framework' )
+					'display'  => __( 'Once Weekly', 'woodev-plugin-framework' ),
 				);
 			}
 
@@ -563,85 +569,85 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 			$framework_path = $this->get_framework_path();
 
 			// common exception class
-			require_once( $framework_path . '/class-plugin-exception.php' );
+			require_once $framework_path . '/class-plugin-exception.php';
 
 			// Settings API
-			require_once( $framework_path . '/settings-api/abstract-class-settings.php' );
-			require_once( $framework_path . '/settings-api/class-setting.php' );
-			require_once( $framework_path . '/settings-api/class-control.php' );
-			require_once( $framework_path . '/settings-api/register-settings/class-register-settings.php' );
-			require_once( $framework_path . '/settings-api/register-settings/class-register-settings-fields.php' );
+			require_once $framework_path . '/settings-api/abstract-class-settings.php';
+			require_once $framework_path . '/settings-api/class-setting.php';
+			require_once $framework_path . '/settings-api/class-control.php';
+			require_once $framework_path . '/settings-api/register-settings/class-register-settings.php';
+			require_once $framework_path . '/settings-api/register-settings/class-register-settings-fields.php';
 
 			// common utility methods
-			require_once( $framework_path . '/class-helper.php' );
-			require_once( $framework_path . '/admin/class-notes-helper.php' );
+			require_once $framework_path . '/class-helper.php';
+			require_once $framework_path . '/admin/class-notes-helper.php';
 
 			// backwards compatibility for older WC versions
-			require_once( $framework_path . '/class-plugin-compatibility.php' );
-			require_once( $framework_path . '/compatibility/abstract-data-compatibility.php' );
-			require_once( $framework_path . '/compatibility/class-order-compatibility.php' );
+			require_once $framework_path . '/class-plugin-compatibility.php';
+			require_once $framework_path . '/compatibility/abstract-data-compatibility.php';
+			require_once $framework_path . '/compatibility/class-order-compatibility.php';
 
 			// generic API base
-			require_once( $framework_path . '/api/class-api-exception.php' );
-			require_once( $framework_path . '/api/class-api-base.php' );
-			require_once( $framework_path . '/api/interface-api-request.php' );
-			require_once( $framework_path . '/api/interface-api-response.php' );
+			require_once $framework_path . '/api/class-api-exception.php';
+			require_once $framework_path . '/api/class-api-base.php';
+			require_once $framework_path . '/api/interface-api-request.php';
+			require_once $framework_path . '/api/interface-api-response.php';
 
 			// XML API base
-			require_once( $framework_path . '/api/abstract-api-xml-request.php' );
-			require_once( $framework_path . '/api/abstract-api-xml-response.php' );
+			require_once $framework_path . '/api/abstract-api-xml-request.php';
+			require_once $framework_path . '/api/abstract-api-xml-response.php';
 
 			// JSON API base
-			require_once( $framework_path . '/api/abstract-api-json-request.php' );
-			require_once( $framework_path . '/api/abstract-api-json-response.php' );
+			require_once $framework_path . '/api/abstract-api-json-request.php';
+			require_once $framework_path . '/api/abstract-api-json-response.php';
 
 			// Cacheable API
-			require_once( $framework_path . '/api/traits/cacheable-request-trait.php' );
-			require_once( $framework_path . '/api/abstract-cacheable-api-base.php' );
+			require_once $framework_path . '/api/traits/cacheable-request-trait.php';
+			require_once $framework_path . '/api/abstract-cacheable-api-base.php';
 
-			//Packer base
-			require_once( $framework_path . '/box-packer/class-packer-exception.php' );
-			require_once( $framework_path . '/box-packer/interfaces/interface-packer-item.php' );
-			require_once( $framework_path . '/box-packer/interfaces/interface-packer-box.php' );
-			require_once( $framework_path . '/box-packer/interfaces/interface-packer.php' );
+			// Packer base
+			require_once $framework_path . '/box-packer/class-packer-exception.php';
+			require_once $framework_path . '/box-packer/interfaces/interface-packer-item.php';
+			require_once $framework_path . '/box-packer/interfaces/interface-packer-box.php';
+			require_once $framework_path . '/box-packer/interfaces/interface-packer.php';
 
-			require_once( $framework_path . '/box-packer/abstract-class-packer.php' );
-			require_once( $framework_path . '/box-packer/class-item-implementation.php' );
-			require_once( $framework_path . '/box-packer/class-box-implementation.php' );
-			require_once( $framework_path . '/box-packer/class-packed-box.php' );
-			require_once( $framework_path . '/box-packer/class-packer-boxes.php' );
-			require_once( $framework_path . '/box-packer/class-packages-weight.php' );
-			require_once( $framework_path . '/box-packer/class-packer-separatly.php' );
-			require_once( $framework_path . '/box-packer/class-packer-single-box.php' );
-			require_once( $framework_path . '/box-packer/class-packer-virtual-box.php' );
+			require_once $framework_path . '/box-packer/abstract-class-packer.php';
+			require_once $framework_path . '/box-packer/class-item-implementation.php';
+			require_once $framework_path . '/box-packer/class-box-implementation.php';
+			require_once $framework_path . '/box-packer/class-packed-box.php';
+			require_once $framework_path . '/box-packer/class-packer-boxes.php';
+			require_once $framework_path . '/box-packer/class-packages-weight.php';
+			require_once $framework_path . '/box-packer/class-packer-separatly.php';
+			require_once $framework_path . '/box-packer/class-packer-single-box.php';
+			require_once $framework_path . '/box-packer/class-packer-virtual-box.php';
 
-			require_once( $framework_path . '/utilities/class-woodev-async-request.php' );
-			require_once( $framework_path . '/utilities/class-woodev-background-job-handler.php' );
-			require_once( $framework_path . '/utilities/class-woodev-job-batch-handler.php' );
+			require_once $framework_path . '/utilities/class-woodev-async-request.php';
+			require_once $framework_path . '/utilities/class-woodev-background-job-handler.php';
+			require_once $framework_path . '/utilities/class-woodev-job-batch-handler.php';
 
 			// REST API Controllers
-			require_once( $framework_path . '/rest-api/controllers/class-plugin-rest-api-settings.php' );
+			require_once $framework_path . '/rest-api/controllers/class-plugin-rest-api-settings.php';
 
 			// Handlers
-			require_once( $framework_path . '/handlers/script-handler.php' );
-			require_once( $framework_path . '/class-woodev-plugin-dependencies.php' );
-			require_once( $framework_path . '/class-woodev-hook-deprecator.php' );
-			require_once( $framework_path . '/class-admin-message-handler.php' );
-			require_once( $framework_path . '/class-admin-notice-handler.php' );
-			require_once( $framework_path . '/class-lifecycle.php' );
-			require_once( $framework_path . '/rest-api/class-plugin-rest-api.php' );
+			require_once $framework_path . '/handlers/script-handler.php';
+			require_once $framework_path . '/class-woodev-plugin-dependencies.php';
+			require_once $framework_path . '/class-woodev-hook-deprecator.php';
+			require_once $framework_path . '/class-admin-message-handler.php';
+			require_once $framework_path . '/class-admin-notice-handler.php';
+			require_once $framework_path . '/class-lifecycle.php';
+			require_once $framework_path . '/rest-api/class-plugin-rest-api.php';
 
-			//Load plugin license classes
-			require_once( $framework_path . '/licensing/api/class-licensing-api.php' );
-			require_once( $framework_path . '/licensing/api/class-licensing-api-request.php' );
-			require_once( $framework_path . '/licensing/api/class-licensing-api-response.php' );
-			require_once( $framework_path . '/licensing/class-license-messages.php' );
-			require_once( $framework_path . '/licensing/class-license-store.php' );
-			require_once( $framework_path . '/licensing/class-plugin-license.php' );
+			// Load plugin license classes
+			require_once $framework_path . '/licensing/api/class-licensing-api.php';
+			require_once $framework_path . '/licensing/api/class-licensing-api-request.php';
+			require_once $framework_path . '/licensing/api/class-licensing-api-response.php';
+			require_once $framework_path . '/licensing/class-license-messages.php';
+			require_once $framework_path . '/licensing/class-license-store.php';
+			require_once $framework_path . '/licensing/class-plugin-license.php';
 
-			//Load plugin updater class
-			if( is_admin() || ( defined( 'DOING_CRON' ) && DOING_CRON ) || ( defined( 'WP_CLI' ) && WP_CLI ) ) {
-				require_once( $framework_path . '/plugin-updater/class-plugin-updater.php' );
+			// Load plugin updater class
+			if ( is_admin() || ( defined( 'DOING_CRON' ) && DOING_CRON ) || ( defined( 'WP_CLI' ) && WP_CLI ) ) {
+				require_once $framework_path . '/plugin-updater/class-plugin-updater.php';
 			}
 		}
 
@@ -674,7 +680,7 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 				$deprecated_hooks[ $deprecated_filter ] = [
 					'removed'     => true,
 					'replacement' => false,
-					'version'     => '1.1.8'
+					'version'     => '1.1.8',
 				];
 			}
 
@@ -687,6 +693,7 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		 * Implementing classes should override this and return an array of deprecated/removed hooks in the following format:
 		 *
 		 * $old_hook_name = array {
+		 *
 		 * @type string $version version the hook was deprecated/removed in
 		 * @type bool $removed if present and true, the message will indicate the hook was removed instead of deprecated
 		 * @type string|bool $replacement if present and a string, the message will indicate the replacement hook to use,
@@ -724,7 +731,7 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		 */
 		public function get_license_instance() {
 
-			if( ! $this->license ) {
+			if ( ! $this->license ) {
 				$this->init_license_handler();
 			}
 
@@ -801,7 +808,7 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		 *
 		 * @since 1.3.2
 		 */
-		public function handle_features_compatibility() : void {
+		public function handle_features_compatibility(): void {
 
 			if ( ! class_exists( Automattic\WooCommerce\Utilities\FeaturesUtil::class ) ) {
 				return;
@@ -819,18 +826,23 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		public function add_api_request_logging() {
 
 			if ( ! has_action( 'woodev_' . $this->get_id() . '_api_request_performed' ) ) {
-				add_action( 'woodev_' . $this->get_id() . '_api_request_performed', array(
-					$this,
-					'log_api_request'
-				), 10, 2 );
+				add_action(
+					'woodev_' . $this->get_id() . '_api_request_performed',
+					array(
+						$this,
+						'log_api_request',
+					),
+					10,
+					2
+				);
 			}
 		}
 
 		/**
 		 * Log API requests/responses
 		 *
-		 * @param array $request request data, see Woodev_API_Base::broadcast_request() for format
-		 * @param array $response response data
+		 * @param array       $request request data, see Woodev_API_Base::broadcast_request() for format
+		 * @param array       $response response data
 		 * @param string|null $log_id log to write data to
 		 */
 		public function log_api_request( $request, $response, $log_id = null ) {
@@ -954,9 +966,9 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		 */
 		public function load_class( $local_path, $class_name ) {
 
-			require_once( $this->get_plugin_path() . $local_path );
+			require_once $this->get_plugin_path() . $local_path;
 
-			return new $class_name;
+			return new $class_name();
 		}
 
 		/**
@@ -998,7 +1010,7 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		 *
 		 * @return array{ hpos?: bool, blocks?: array{ cart?: bool, checkout?: bool }}
 		 */
-		public function get_supported_features() : array {
+		public function get_supported_features(): array {
 			return $this->supported_features ?? [];
 		}
 
@@ -1011,8 +1023,8 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		 */
 		public function is_hpos_compatible() {
 			return isset( $this->supported_features['hpos'] )
-			       && true === $this->supported_features['hpos']
-			       && Woodev_Plugin_Compatibility::is_wc_version_gte( '7.6' );
+					&& true === $this->supported_features['hpos']
+					&& Woodev_Plugin_Compatibility::is_wc_version_gte( '7.6' );
 		}
 
 		/**
@@ -1099,7 +1111,7 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		 *
 		 * @return Woodev_Blocks_Handler
 		 */
-		public function get_blocks_handler() : Woodev_Blocks_Handler {
+		public function get_blocks_handler(): Woodev_Blocks_Handler {
 			return $this->blocks_handler;
 		}
 
@@ -1187,7 +1199,7 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		 *
 		 * @return string
 		 */
-		public function get_assets_version() : string {
+		public function get_assets_version(): string {
 
 			if ( defined( 'SCRIPT_DEBUG' ) && true === SCRIPT_DEBUG || defined( 'WP_DEBUG' ) && true === WP_DEBUG ) {
 				return (string) time();
@@ -1204,7 +1216,7 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		 *
 		 * @return string
 		 */
-		public function get_textdomain() : string {
+		public function get_textdomain(): string {
 			return $this->text_domain;
 		}
 
@@ -1266,7 +1278,7 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		/**
 		 * Gets the plugin documentation url, used for the 'Docs' plugin action
 		 *
-		 * @return string documentation URL
+		 * @return string|null documentation URL
 		 */
 		public function get_documentation_url() {
 			return null;
@@ -1275,7 +1287,7 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		/**
 		 * Gets the support URL, used for the 'Support' plugin action link
 		 *
-		 * @return string support url
+		 * @return string|null support url
 		 */
 		public function get_support_url() {
 			return null;
@@ -1401,12 +1413,11 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		 * Loads and outputs a template file HTML.
 		 *
 		 * @param string $template template name/part
-		 * @param array $args associative array of optional template arguments
+		 * @param array  $args associative array of optional template arguments
 		 * @param string $path optional template path, can be empty, as themes can override this
 		 * @param string $default_path optional default template path, will normally use the plugin's own template path unless overridden
 		 *
 		 * @see wc_get_template() except we define automatically the default path
-		 *
 		 */
 		public function load_template( $template, array $args = [], $path = '', $default_path = '' ) {
 
@@ -1487,7 +1498,6 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		 * @param array $settings array of settings in format required by WC_Admin_Settings
 		 *
 		 * @deprecated 1.1.8
-		 *
 		 */
 		public function install_default_settings( array $settings ) {
 
@@ -1520,7 +1530,6 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		 *
 		 * @return array
 		 * @deprecated 1.1.8
-		 *
 		 */
 		public function get_missing_extension_dependencies() {
 
@@ -1534,7 +1543,6 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		 *
 		 * @return array
 		 * @deprecated 1.1.8
-		 *
 		 */
 		public function get_missing_function_dependencies() {
 
@@ -1545,9 +1553,9 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 
 		/**
 		 * Gets the string name of any required PHP extensions that are not loaded.
+		 *
 		 * @return array
 		 * @deprecated 1.1.8
-		 *
 		 */
 		public function get_incompatible_php_settings() {
 
@@ -1561,7 +1569,6 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		 *
 		 * @return array
 		 * @deprecated 1.1.8
-		 *
 		 */
 		protected function get_dependencies() {
 			wc_deprecated_function( __METHOD__, '1.1.8' );
@@ -1574,7 +1581,6 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		 *
 		 * @return array
 		 * @deprecated 1.1.8
-		 *
 		 */
 		protected function get_extension_dependencies() {
 
@@ -1589,7 +1595,6 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		 *
 		 * @return array
 		 * @deprecated 1.1.8
-		 *
 		 */
 		protected function get_function_dependencies() {
 
@@ -1604,7 +1609,6 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		 *
 		 * @return array
 		 * @deprecated 1.1.8
-		 *
 		 */
 		protected function get_php_settings_dependencies() {
 
@@ -1619,7 +1623,6 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		 * @param array $dependencies the environment dependencies
 		 *
 		 * @deprecated 1.1.8
-		 *
 		 */
 		protected function set_dependencies( $dependencies = array() ) {
 

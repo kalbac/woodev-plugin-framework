@@ -27,7 +27,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 		/** @var string JS handler base class name */
 		protected $js_handler_base_class_name = 'Woodev_Payment_Form_Handler';
 
-		/** @var bool memoization to account whether the payment JS has been rendered for a gateway */
+		/** @var array memoization of gateways for which the payment JS has been rendered */
 		protected $payment_form_js_rendered = array();
 
 
@@ -176,7 +176,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 					// on the pay page there is no way of creating an account, so disallow tokenization for guest customers
 					$tokenization_allowed = false;
 
-				} else if ( is_checkout() ) {
+				} elseif ( is_checkout() ) {
 
 					// on the checkout page, only allow if account creation during checkout is enabled
 					$tokenization_allowed = WC()->checkout()->is_registration_enabled();
@@ -190,7 +190,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 			 * Filters whether tokenization is allowed for the payment form.
 			 *
 			 * @param bool $tokenization_allowed
-			 * @param Woodev_Payment_Gateway_Payment_Form $this payment form instance
+			 * @param Woodev_Payment_Gateway_Payment_Form $instance payment form instance
 			 */
 			return apply_filters( 'wc_' . $this->get_gateway()->get_id() . '_payment_form_tokenization_allowed', $tokenization_allowed, $this );
 		}
@@ -219,7 +219,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 			 * Filters whether tokenization is forced for the payment form.
 			 *
 			 * @param bool $tokenization_forced
-			 * @param Woodev_Payment_Gateway_Payment_Form $this payment form instance
+			 * @param Woodev_Payment_Gateway_Payment_Form $instance payment form instance
 			 */
 			return apply_filters( 'wc_' . $this->get_gateway()->get_id() . '_payment_form_tokenization_forced', $tokenization_forced, $this );
 		}
@@ -267,7 +267,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 			 * for a non-standard payment type (like PayPal Express)
 			 *
 			 * @param array $fields in the format supported by woocommerce_form_fields()
-			 * @param Woodev_Payment_Gateway_Payment_Form $this payment form instance
+			 * @param Woodev_Payment_Gateway_Payment_Form $instance payment form instance
 			 */
 			return apply_filters( 'wc_' . $this->get_gateway()->get_id() . '_payment_form_default_payment_form_fields', $fields, $this );
 		}
@@ -276,7 +276,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 		/**
 		 * Get default credit card form fields, note this pulls default values
 		 * from the associated gateway
-		 *
 		 *
 		 * @return array credit card form fields
 		 */
@@ -351,7 +350,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 			 * Filters the default field data for credit card gateways.
 			 *
 			 * @param array $fields in the format supported by woocommerce_form_fields()
-			 * @param Woodev_Payment_Gateway_Payment_Form $this payment form instance
+			 * @param Woodev_Payment_Gateway_Payment_Form $instance payment form instance
 			 */
 			return apply_filters( 'wc_' . $this->get_gateway()->get_id() . '_payment_form_default_credit_card_fields', $fields, $this );
 		}
@@ -428,7 +427,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 			 * Filters the default field data for eCheck gateways.
 			 *
 			 * @param array $fields in the format supported by woocommerce_form_fields()
-			 * @param Woodev_Payment_Gateway_Payment_Form $this payment form instance
+			 * @param Woodev_Payment_Gateway_Payment_Form $instance payment form instance
 			 */
 			return apply_filters( 'wc_' . $this->get_gateway()->get_id() . '_payment_form_default_echeck_fields', $fields, $this );
 		}
@@ -458,7 +457,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 			 * Filters the HTML rendered for payment form description.
 			 *
 			 * @param string $html
-			 * @param woodev_Payment_Gateway_Payment_Form $this payment form instance
+			 * @param woodev_Payment_Gateway_Payment_Form $instance payment form instance
 			 */
 			return apply_filters( 'wc_' . $this->get_gateway()->get_id() . '_payment_form_description', $description, $this );
 		}
@@ -481,7 +480,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 			 * Filters the HTML rendered for the same eCheck image.
 			 *
 			 * @param string $html
-			 * @param Woodev_Payment_Gateway_Payment_Form $this payment form instance
+			 * @param Woodev_Payment_Gateway_Payment_Form $instance payment form instance
 			 */
 			return apply_filters( 'wc_' . $this->get_gateway()->get_id() . '_payment_form_sample_check_html', $html, $this );
 		}
@@ -515,7 +514,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 			 * Filters the HTML rendered for the entire saved payment methods section.
 			 *
 			 * @param string $html
-			 * @param Woodev_Payment_Gateway_Payment_Form $this payment form instance
+			 * @param Woodev_Payment_Gateway_Payment_Form $instance payment form instance
 			 */
 			return apply_filters( 'wc_' . $this->get_gateway()->get_id() . '_payment_form_saved_payment_methods_html', $html, $this );
 		}
@@ -537,7 +536,8 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 			 *
 			 * @param string $button_text button text
 			 */
-			$html = sprintf( '<a class="button woodev-payment-gateway-payment-form-manage-payment-methods" href="%s">%s</a>',
+			$html = sprintf(
+				'<a class="button woodev-payment-gateway-payment-form-manage-payment-methods" href="%s">%s</a>',
 				esc_url( $url ),
 				wp_kses_post( apply_filters( 'wc_' . $this->get_gateway()->get_id() . '_manage_payment_methods_text', esc_html__( 'Manage Payment Methods', 'woodev-plugin-framework' ) ) )
 			);
@@ -548,7 +548,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 			 * Filters the HTML rendered for the "Manage Payment Methods" button.
 			 *
 			 * @param string $html
-			 * @param Woodev_Payment_Gateway_Payment_Form $this payment form instance
+			 * @param Woodev_Payment_Gateway_Payment_Form $instance payment form instance
 			 */
 			return apply_filters( 'wc_' . $this->get_gateway()->get_id() . '_payment_form_manage_payment_methods_button_html', $html, $this );
 		}
@@ -566,7 +566,8 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 		protected function get_saved_payment_method_html( $token ) {
 
 			// input
-			$html = sprintf( '<input type="radio" id="wc-%1$s-payment-token-%2$s" name="wc-%1$s-payment-token" class="js-woodev-payment-gateway-payment-token js-wc-%1$s-payment-token" style="width:auto; margin-right:.5em;" value="%2$s" %3$s/>',
+			$html = sprintf(
+				'<input type="radio" id="wc-%1$s-payment-token-%2$s" name="wc-%1$s-payment-token" class="js-woodev-payment-gateway-payment-token js-wc-%1$s-payment-token" style="width:auto; margin-right:.5em;" value="%2$s" %3$s/>',
 				esc_attr( $this->get_gateway()->get_id_dasherized() ),
 				esc_attr( $token->get_id() ),
 				checked( $token->is_default(), true, false )
@@ -585,8 +586,9 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 			 *
 			 * Filters the HTML rendered for a saved payment method, like "Amex ending in 6666".
 			 *
-			 * @param string $html
-			 * @param Woodev_Payment_Gateway_Payment_Form $this payment form instance
+			 * @param string                                $html     rendered HTML
+			 * @param Woodev_Payment_Gateway_Payment_Token  $token    payment token object
+			 * @param Woodev_Payment_Gateway_Payment_Form   $instance payment form instance
 			 */
 			return apply_filters( 'wc_' . $this->get_gateway()->get_id() . '_payment_form_payment_method_html', $html, $token, $this );
 		}
@@ -643,10 +645,9 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 			 *
 			 * Filters the text/HTML rendered for a saved payment method, like "Amex ending in 6666".
 			 *
-			 *
 			 * @param string $title
 			 * @param Woodev_Payment_Gateway_Payment_Token $token
-			 * @param Woodev_Payment_Gateway_Payment_Form $this payment form instance
+			 * @param Woodev_Payment_Gateway_Payment_Form $instance payment form instance
 			 */
 			return apply_filters( 'wc_' . $this->get_gateway()->get_id() . '_payment_form_payment_method_title', $title, $token, $this );
 		}
@@ -662,13 +663,15 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 		protected function get_use_new_payment_method_input_html() {
 
 			// input
-			$html = sprintf( '<input type="radio" id="wc-%1$s-use-new-payment-method" name="wc-%1$s-payment-token" class="js-woodev-payment-token js-wc-%1$s-payment-token" style="width:auto; margin-right: .5em;" value="" %2$s />',
+			$html = sprintf(
+				'<input type="radio" id="wc-%1$s-use-new-payment-method" name="wc-%1$s-payment-token" class="js-woodev-payment-token js-wc-%1$s-payment-token" style="width:auto; margin-right: .5em;" value="" %2$s />',
 				esc_attr( $this->get_gateway()->get_id_dasherized() ),
 				checked( $this->default_new_payment_method(), true, false )
 			);
 
 			// label
-			$html .= sprintf( '<label style="display:inline;" for="wc-%s-use-new-payment-method">%s</label>',
+			$html .= sprintf(
+				'<label style="display:inline;" for="wc-%s-use-new-payment-method">%s</label>',
 				esc_attr( $this->get_gateway()->get_id_dasherized() ),
 				$this->get_gateway()->is_credit_card_gateway() ? esc_html__( 'Use a new card', 'woodev-plugin-framework' ) : esc_html__( 'Use a new bank account', 'woodev-plugin-framework' )
 			);
@@ -679,7 +682,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 			 * Filters the HTML rendered for the "Use a new card" radio button.
 			 *
 			 * @param string $html
-			 * @param Woodev_Payment_Gateway_Payment_Form $this payment form instance
+			 * @param Woodev_Payment_Gateway_Payment_Form $instance payment form instance
 			 */
 			return apply_filters( 'wc_' . $this->get_gateway()->get_id() . '_payment_form_new_payment_method_input_html', $html, $this );
 		}
@@ -712,7 +715,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 					 * Allow actors to default the tokenize payment method checkbox state to checked.
 					 *
 					 * @param bool $checked default false, set to true to change the checkbox state to checked
-					 * @param Woodev_Payment_Gateway_Payment_Form $this payment form instance
+					 * @param Woodev_Payment_Gateway_Payment_Form $instance payment form instance
 					 */
 					$checked = apply_filters( 'wc_' . $this->get_gateway()->get_id() . '_default_tokenize_payment_method_checkbox_to_checked', false, $this );
 
@@ -738,7 +741,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 			 * Filters the HTML rendered for the "save payment method" checkbox.
 			 *
 			 * @param string $html
-			 * @param Woodev_Payment_Gateway_Payment_Form $this payment form instance
+			 * @param Woodev_Payment_Gateway_Payment_Form $instance payment form instance
 			 */
 			return apply_filters( 'wc_' . $this->get_gateway()->get_id() . '_payment_form_save_payment_method_checkbox_html', $html, $this );
 		}
@@ -761,11 +764,9 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 			 * @hooked Woodev_Payment_Gateway_Payment_Form::render_sample_check() - 25 (outputs sample check div if eCheck gateway)
 			 * @hooked Woodev_Payment_Gateway_Payment_Form::render_fieldset_start() - 30 (outputs opening fieldset tag and starting payment fields div)
 			 *
-			 *
-			 * @param Woodev_Payment_Gateway_Payment_Form $this payment form instance
+			 * @param Woodev_Payment_Gateway_Payment_Form $instance payment form instance
 			 */
 			do_action( 'wc_' . $this->get_gateway()->get_id() . '_payment_form_start', $this );
-
 
 			/**
 			 * Payment Gateway Payment Form Action.
@@ -774,10 +775,9 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 			 *
 			 * @hooked Woodev_Payment_Gateway_Payment_Form::render_payment_fields() - 0 (outputs payment fields like account number, expiry, etc)
 			 *
-			 * @param Woodev_Payment_Gateway_Payment_Form $this payment form instance
+			 * @param Woodev_Payment_Gateway_Payment_Form $instance payment form instance
 			 */
 			do_action( 'wc_' . $this->get_gateway()->get_id() . '_payment_form', $this );
-
 
 			/**
 			 * Payment Gateway Payment Form End Action.
@@ -787,7 +787,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 			 * @hooked Woodev_Payment_Gateway_Payment_Form::render_fieldset_end() - 5 (outputs clear div, save payment method checkbox, and closing fieldset tag)
 			 * @hooked Woodev_Payment_Gateway_Payment_Form::render_js() - 5 (outputs JS for instantiating payment form JS class)
 			 *
-			 * @param Woodev_Payment_Gateway_Payment_Form $this payment form instance
+			 * @param Woodev_Payment_Gateway_Payment_Form $instance payment form instance
 			 */
 			do_action( 'wc_' . $this->get_gateway()->get_id() . '_payment_form_end', $this );
 		}
@@ -922,12 +922,13 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 			}
 
 			switch ( current_action() ) :
-				case 'wp_footer' :
+				case 'wp_footer':
 					$this->payment_form_js_rendered[] = $gateway_id;
 					?>
-                    <script type="text/javascript">jQuery(function ($) {<?php echo $this->get_safe_handler_js(); ?>});</script><?php
+					<script type="text/javascript">jQuery(function ($) {<?php echo $this->get_safe_handler_js(); ?>});</script>
+					<?php
 					break;
-				case "wc_{$gateway_id}_payment_form_end" :
+				case "wc_{$gateway_id}_payment_form_end":
 					$this->payment_form_js_rendered[] = $gateway_id;
 					wc_enqueue_js( $this->get_safe_handler_js() );
 					break;
@@ -938,7 +939,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 		/**
 		 * Gets the handler instantiation JS.
 		 *
-		 * @param array $additional_args additional handler arguments, if any
+		 * @param array  $additional_args additional handler arguments, if any
 		 * @param string $handler_name handler name, if different from self::get_js_handler_class_name()
 		 * @param string $object_name object name, if different from self::get_js_handler_object_name()
 		 *
@@ -979,10 +980,13 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 
 				if ( is_array( $card_types ) && ! empty( $card_types ) ) {
 
-					$args['enabled_card_types'] = array_map( array(
-						Woodev_Payment_Gateway_Helper::class,
-						'normalize_card_type'
-					), $card_types );
+					$args['enabled_card_types'] = array_map(
+						array(
+							Woodev_Payment_Gateway_Helper::class,
+							'normalize_card_type',
+						),
+						$card_types
+					);
 				}
 			}
 
@@ -1008,7 +1012,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 		protected function is_logging_enabled() {
 			return $this->get_gateway()->debug_log();
 		}
-
 	}
 
 endif;

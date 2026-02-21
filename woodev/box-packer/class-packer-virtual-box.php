@@ -1,6 +1,6 @@
 <?php
 
-defined( 'ABSPATH' ) or exit;
+defined( 'ABSPATH' ) || exit;
 
 if ( ! class_exists( 'Woodev_Packer_Virtual_Box' ) ) :
 
@@ -18,7 +18,7 @@ if ( ! class_exists( 'Woodev_Packer_Virtual_Box' ) ) :
 		 * @throws Woodev_Packer_Exception Если товары отсутствуют.
 		 */
 		public function pack() {
-			if ( ! $this->items || sizeof( $this->items ) === 0 ) {
+			if ( ! $this->items || count( $this->items ) === 0 ) {
 				throw new Woodev_Packer_Exception( __( 'Нет товаров для упаковки!' ) );
 			}
 
@@ -86,9 +86,12 @@ if ( ! class_exists( 'Woodev_Packer_Virtual_Box' ) ) :
 		 * @return Woodev_Box_Packer_Item[] Отсортированный массив товаров.
 		 */
 		private function order_items_by_volume_desc( array $items ): array {
-			usort( $items, function ( Woodev_Box_Packer_Item $a, Woodev_Box_Packer_Item $b ) {
-				return $b->get_volume() <=> $a->get_volume();
-			} );
+			usort(
+				$items,
+				function ( Woodev_Box_Packer_Item $a, Woodev_Box_Packer_Item $b ) {
+					return $b->get_volume() <=> $a->get_volume();
+				}
+			);
 
 			return $items;
 		}

@@ -20,7 +20,6 @@ if ( ! interface_exists( 'Woodev_Payment_Gateway_API_Authorization_Response' ) )
 		 *
 		 * @return string credit card authorization code
 		 * @since 1.0.0
-		 *
 		 */
 		public function get_authorization_code();
 
@@ -30,7 +29,6 @@ if ( ! interface_exists( 'Woodev_Payment_Gateway_API_Authorization_Response' ) )
 		 *
 		 * @return string result of the AVS check, if any
 		 * @since 1.0.0
-		 *
 		 */
 		public function get_avs_result();
 
@@ -40,7 +38,6 @@ if ( ! interface_exists( 'Woodev_Payment_Gateway_API_Authorization_Response' ) )
 		 *
 		 * @return string result of CSC check
 		 * @since 1.0.0
-		 *
 		 */
 		public function get_csc_result();
 
@@ -50,7 +47,6 @@ if ( ! interface_exists( 'Woodev_Payment_Gateway_API_Authorization_Response' ) )
 		 *
 		 * @return boolean true if the CSC check was successful
 		 * @since 1.0.0
-		 *
 		 */
 		public function csc_match();
 	}

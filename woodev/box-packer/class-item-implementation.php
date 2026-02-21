@@ -1,6 +1,6 @@
 <?php
 
-defined( 'ABSPATH' ) or exit;
+defined( 'ABSPATH' ) || exit;
 
 if ( ! class_exists( 'Woodev_Packer_Item_Implementation' ) ) :
 
@@ -38,12 +38,12 @@ if ( ! class_exists( 'Woodev_Packer_Item_Implementation' ) ) :
 		public function __construct( float $length, float $width, float $height, float $weight = 0.0, float $money_value = 0.0, $internal_data = null ) {
 			$dimensions = array( $length, $width, $height );
 			sort( $dimensions );
-			$this->length        = ( float ) $dimensions[2];
-			$this->width         = ( float ) $dimensions[1];
-			$this->height        = ( float ) $dimensions[0];
-			$this->volume        = ( float ) ( $width * $height * $length );
-			$this->weight        = ( float ) $weight;
-			$this->value         = ( float ) $money_value;
+			$this->length        = (float) $dimensions[2];
+			$this->width         = (float) $dimensions[1];
+			$this->height        = (float) $dimensions[0];
+			$this->volume        = (float) ( $width * $height * $length );
+			$this->weight        = (float) $weight;
+			$this->value         = (float) $money_value;
 			$this->internal_data = $internal_data;
 
 			if ( is_array( $this->internal_data ) && isset( $this->internal_data['name'] ) ) {

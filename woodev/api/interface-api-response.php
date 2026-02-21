@@ -1,14 +1,14 @@
 <?php
 
-defined( 'ABSPATH' ) or exit;
+defined( 'ABSPATH' ) || exit;
 
 if ( ! interface_exists( 'Woodev_API_Response' ) ) :
 
-interface Woodev_API_Response {
+	interface Woodev_API_Response {
 
-	public function to_string();
-	
-	public function to_string_safe();
-}
+		public function to_string();
+
+		public function to_string_safe();
+	}
 
 endif;

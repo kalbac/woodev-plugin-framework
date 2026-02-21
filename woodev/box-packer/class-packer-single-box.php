@@ -1,6 +1,6 @@
 <?php
 
-defined( 'ABSPATH' ) or exit;
+defined( 'ABSPATH' ) || exit;
 
 if ( ! class_exists( 'Woodev_Packer_Single_Box' ) ) :
 
@@ -32,15 +32,18 @@ if ( ! class_exists( 'Woodev_Packer_Single_Box' ) ) :
 			}
 
 			$this->packages = array(
-				new Woodev_Box_Packer_Packed_Box( new Woodev_Packer_Box_Implementation(
-					$this->get_package_dimension( 'length' ),
-					$this->get_package_dimension( 'width' ),
-					$this->get_package_dimension( 'height' ),
-					0,
-					null,
-					$this->box_name,
-					$this->box_name
-				), $this->items )
+				new Woodev_Box_Packer_Packed_Box(
+					new Woodev_Packer_Box_Implementation(
+						$this->get_package_dimension( 'length' ),
+						$this->get_package_dimension( 'width' ),
+						$this->get_package_dimension( 'height' ),
+						0,
+						null,
+						$this->box_name,
+						$this->box_name
+					),
+					$this->items
+				),
 			);
 
 			$this->items = array();
@@ -55,7 +58,7 @@ if ( ! class_exists( 'Woodev_Packer_Single_Box' ) ) :
 			return array(
 				'height' => wc_list_pluck( $this->items, 'get_height' ),
 				'length' => wc_list_pluck( $this->items, 'get_length' ),
-				'width'  => wc_list_pluck( $this->items, 'get_width' )
+				'width'  => wc_list_pluck( $this->items, 'get_width' ),
 			);
 		}
 

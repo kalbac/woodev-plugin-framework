@@ -1,6 +1,6 @@
 <?php
 
-defined( 'ABSPATH' ) or exit;
+defined( 'ABSPATH' ) || exit;
 
 if ( ! class_exists( 'Woodev_Helper' ) ) :
 
@@ -61,7 +61,6 @@ if ( ! class_exists( 'Woodev_Helper' ) ) :
 		 *
 		 * @return bool
 		 */
-
 		public static function str_ends_with( string $haystack, string $needle ): bool {
 
 			if ( '' === $needle ) {
@@ -91,7 +90,6 @@ if ( ! class_exists( 'Woodev_Helper' ) ) :
 		 *
 		 * @return bool
 		 */
-
 		public static function str_exists( string $haystack, string $needle ): bool {
 
 			if ( self::multibyte_loaded() ) {
@@ -125,7 +123,6 @@ if ( ! class_exists( 'Woodev_Helper' ) ) :
 		 *
 		 * @return string
 		 */
-
 		public static function str_truncate( string $string, int $length, string $omission = '...' ): string {
 
 			if ( self::multibyte_loaded() ) {
@@ -190,7 +187,6 @@ if ( ! class_exists( 'Woodev_Helper' ) ) :
 		 * p{Sc} - any currency sign
 		 *
 		 * pattern definitions from http://www.regular-expressions.info/unicode.html
-		 *
 		 *
 		 * @param string $string
 		 *
@@ -295,7 +291,6 @@ if ( ! class_exists( 'Woodev_Helper' ) ) :
 		 * @param string|array $element_key   name for element, e.g. <per_page>
 		 * @param string|array $element_value value for element, e.g. 100
 		 */
-
 		public static function array_to_xml( XMLWriter $xml_writer, $element_key, $element_value = array() ) {
 
 			if ( is_array( $element_value ) ) {
@@ -327,7 +322,6 @@ if ( ! class_exists( 'Woodev_Helper' ) ) :
 
 						$xml_writer->endElement();
 					}
-
 				} else {
 
 					// start root element
@@ -341,7 +335,6 @@ if ( ! class_exists( 'Woodev_Helper' ) ) :
 					// end root element
 					$xml_writer->endElement();
 				}
-
 			} else {
 
 				// handle single elements
@@ -412,11 +405,11 @@ if ( ! class_exists( 'Woodev_Helper' ) ) :
 		 * @since 1.3.0
 		 *
 		 * @param array<scalar> $array
-		 * @param string|null $conjunction one of 'and' or 'or'
-		 * @param string|null $pattern a custom sprintf pattern, with placeholders %1$s and %2$s
+		 * @param string|null   $conjunction one of 'and' or 'or'
+		 * @param string|null   $pattern a custom sprintf pattern, with placeholders %1$s and %2$s
 		 * @return string
 		 */
-		public static function array_join_natural( array $array, ?string $conjunction = 'and', ?string $pattern = '' ) : string {
+		public static function array_join_natural( array $array, ?string $conjunction = 'and', ?string $pattern = '' ): string {
 			$last = array_pop( $array );
 
 			if ( $array ) {
@@ -453,7 +446,7 @@ if ( ! class_exists( 'Woodev_Helper' ) ) :
 		 * @return string
 		 */
 		public static function number_format( float $number ): string {
-			return number_format( ( float ) $number, 2, '.', '' );
+			return number_format( (float) $number, 2, '.', '' );
 		}
 
 		/** WooCommerce helper functions **************************************/
@@ -565,13 +558,15 @@ if ( ! class_exists( 'Woodev_Helper' ) ) :
 		 */
 		public static function shop_has_virtual_products(): bool {
 
-			$virtual_products = wc_get_products( array(
-				'virtual' => true,
-				'status'  => 'publish',
-				'limit'   => 1,
-			) );
+			$virtual_products = wc_get_products(
+				array(
+					'virtual' => true,
+					'status'  => 'publish',
+					'limit'   => 1,
+				)
+			);
 
-			return sizeof( $virtual_products ) > 0;
+			return count( $virtual_products ) > 0;
 		}
 
 		/**
@@ -849,7 +844,6 @@ if ( ! class_exists( 'Woodev_Helper' ) ) :
 		 *
 		 * This can be safely used in SQL IN clauses.
 		 *
-		 *
 		 * @param string[] $values
 		 *
 		 * @return string
@@ -865,7 +859,6 @@ if ( ! class_exists( 'Woodev_Helper' ) ) :
 		 * Converts an array of numerical integers into a comma separated list of IDs.
 		 *
 		 * This can be safely used for SQL IN clauses.
-		 *
 		 *
 		 * @param int[] $ids
 		 *
@@ -887,7 +880,7 @@ if ( ! class_exists( 'Woodev_Helper' ) ) :
 		public static function str_convert( string $string, string $context = '' ): string {
 
 			if ( ! class_exists( 'Woodev_String_Conversion' ) ) {
-				require_once( 'class-string-conversation.php' );
+				require_once 'class-string-conversation.php';
 			}
 
 			return Woodev_String_Conversion::sanitize_title( $string, $context );
@@ -960,7 +953,7 @@ if ( ! class_exists( 'Woodev_Helper' ) ) :
 		 *    <input type="hidden" class="woodev-wc-enhanced-search" name="category_ids" data-multiple="true" style="min-width: 300px;"
 		 *       data-action="wc_cart_notices_json_search_product_categories"
 		 *       data-nonce="<?php echo wp_create_nonce( 'search-categories' ); ?>"
-		 *       data-request_data = "<?php echo esc_attr( json_encode( array( 'field_name' => 'something_exciting', 'default' => 'default_label' ) ) ) ?>"
+		 *       data-request_data = "<?php echo esc_attr( wp_json_encode( array( 'field_name' => 'something_exciting', 'default' => 'default_label' ) ) ) ?>"
 		 *       data-placeholder="<?php esc_attr_e( 'Search for a category&hellip;', 'wc-cart-notices' ) ?>"
 		 *       data-allow_clear="true"
 		 *       data-selected="<?php
@@ -970,7 +963,7 @@ if ( ! class_exists( 'Woodev_Helper' ) ) :
 		 *                $json_ids[ esc_attr( $value ) ] = esc_html( $title );
 		 *             }
 		 *          }
-		 *          echo esc_attr( json_encode( $json_ids ) );
+		 *          echo esc_attr( wp_json_encode( $json_ids ) );
 		 *       ?>"
 		 *       value="<?php echo implode( ',', array_keys( $json_ids ) ); ?>" />
 		 *
@@ -982,9 +975,9 @@ if ( ! class_exists( 'Woodev_Helper' ) ) :
 
 			if ( ! did_action( 'woodev_wc_select2_ajax_rendered' ) ) {
 
-				$javascript = "( function(){
+				$javascript = '( function(){
 				if ( ! $().select2 ) return;
-			";
+			';
 
 				$javascript .= "
 
@@ -1163,7 +1156,7 @@ if ( ! class_exists( 'Woodev_Helper' ) ) :
 				";
 				}
 
-				$javascript .= "} )();";
+				$javascript .= '} )();';
 
 				self::enqueue_js( $javascript );
 
@@ -1176,7 +1169,6 @@ if ( ! class_exists( 'Woodev_Helper' ) ) :
 		 *
 		 * @return WP_Screen|null
 		 * @see get_current_screen() replacement which is always available, unlike the WordPress core function
-		 *
 		 */
 		public static function get_current_screen(): ?WP_Screen {
 			global $current_screen;
@@ -1189,7 +1181,6 @@ if ( ! class_exists( 'Woodev_Helper' ) ) :
 		 *
 		 * This helps avoiding using the get_current_screen() function which is not always available,
 		 * or setting the substitute global $current_screen every time a check needs to be performed.
-		 *
 		 *
 		 * @param string $id   id (or property) to compare
 		 * @param string $prop optional property to compare, defaults to screen id
@@ -1220,19 +1211,24 @@ if ( ! class_exists( 'Woodev_Helper' ) ) :
 		 */
 		public static function is_wc_navigation_enabled(): bool {
 
-			return
-				is_callable( array(
+			return is_callable(
+				array(
 					\Automattic\WooCommerce\Admin\Features\Navigation\Screen::class,
-					'register_post_type'
-				) ) &&
-				is_callable( array(
-					\Automattic\WooCommerce\Admin\Features\Navigation\Menu::class,
-					'add_plugin_item'
-				) ) &&
-				is_callable( array(
-					\Automattic\WooCommerce\Admin\Features\Navigation\Menu::class,
-					'add_plugin_category'
-				) ) &&
+					'register_post_type',
+				)
+			) &&
+				is_callable(
+					array(
+						\Automattic\WooCommerce\Admin\Features\Navigation\Menu::class,
+						'add_plugin_item',
+					)
+				) &&
+				is_callable(
+					array(
+						\Automattic\WooCommerce\Admin\Features\Navigation\Menu::class,
+						'add_plugin_category',
+					)
+				) &&
 				is_callable( array( \Automattic\WooCommerce\Admin\Features\Features::class, 'is_enabled' ) ) &&
 				\Automattic\WooCommerce\Admin\Features\Features::is_enabled( 'navigation' );
 		}
@@ -1243,7 +1239,6 @@ if ( ! class_exists( 'Woodev_Helper' ) ) :
 		 *
 		 * @return bool
 		 * @see WooCommerce::is_rest_api_request()
-		 *
 		 */
 		public static function is_rest_api_request(): bool {
 
@@ -1536,4 +1531,3 @@ if ( ! class_exists( 'Woodev_Helper' ) ) :
 	}
 
 endif;
-?>

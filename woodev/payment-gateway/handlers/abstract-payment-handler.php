@@ -11,7 +11,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Payment_Handler' ) ) :
 	 * updating.
 	 *
 	 * @see Woodev_Payment_Gateway_Abstract_Hosted_Payment_Handler
-	 *
 	 */
 	abstract class Woodev_Payment_Gateway_Abstract_Payment_Handler {
 
@@ -41,21 +40,25 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Payment_Handler' ) ) :
 
 		/**
 		 * Adds any action and filter hooks required by the handler.
-		 *
 		 */
 		protected function add_hooks() {
 			// filter order received text for held orders
-			add_filter( 'woocommerce_thankyou_order_received_text', array(
-				$this,
-				'maybe_render_held_order_received_text'
-			), 10, 2 );
+			add_filter(
+				'woocommerce_thankyou_order_received_text',
+				array(
+					$this,
+					'maybe_render_held_order_received_text',
+				),
+				10,
+				2
+			);
 		}
 
 
 		/**
 		 * Renders a custom held order message if available.
 		 *
-		 * @param string $text default text
+		 * @param string   $text default text
 		 * @param WC_Order $order order object
 		 *
 		 * @return mixed
@@ -88,7 +91,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Payment_Handler' ) ) :
 		 * Processes a gateway API payment response and handles the order accordingly.
 		 *
 		 * @param Woodev_Payment_Gateway_API_Response $response
-		 * @param WC_Order $order
+		 * @param WC_Order                            $order
 		 *
 		 * @throws Woodev_Payment_Gateway_Exception for payment failures
 		 * @throws Woodev_Plugin_Exception for other validation errors
@@ -157,7 +160,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Payment_Handler' ) ) :
 		 * This ensures duplicate or fraudulent responses aren't processed. Implementations can add exceptions to this for
 		 * things like invalid hashes, etc...
 		 *
-		 * @param WC_Order $order order object
+		 * @param WC_Order                            $order order object
 		 * @param Woodev_Payment_Gateway_API_Response $response API response object
 		 *
 		 * @throws Woodev_API_Exception
@@ -170,10 +173,12 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Payment_Handler' ) ) :
 				/* translators: Placeholders: %s - payment gateway title (such as Authorize.net, Braintree, etc) */
 				$order->add_order_note( sprintf( esc_html__( '%s duplicate transaction received', 'woodev-plugin-framework' ), $this->get_gateway()->get_method_title() ) );
 
-				throw new Woodev_API_Exception( sprintf(
-					__( 'Order %s is already paid for.', 'woodev-plugin-framework' ),
-					$order->get_order_number()
-				) );
+				throw new Woodev_API_Exception(
+					sprintf(
+						__( 'Order %s is already paid for.', 'woodev-plugin-framework' ),
+						$order->get_order_number()
+					)
+				);
 			}
 		}
 
@@ -181,7 +186,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Payment_Handler' ) ) :
 		/**
 		 * Handles actions after an approved transaction.
 		 *
-		 * @param WC_Order $order order object
+		 * @param WC_Order                            $order order object
 		 * @param Woodev_Payment_Gateway_API_Response $response API response object
 		 */
 		protected function process_order_transaction_approved( WC_Order $order, Woodev_Payment_Gateway_API_Response $response ) {
@@ -210,10 +215,12 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Payment_Handler' ) ) :
 				$this->get_gateway()->get_plugin()->log( 'Error handling approved transaction: ' . $exception->getMessage() );
 
 				if ( $order instanceof WC_Order ) {
-					$order->add_order_note( sprintf(
-						__( 'Payment processing error: %s', 'woodev-plugin-framework' ),
-						$exception->getMessage()
-					) );
+					$order->add_order_note(
+						sprintf(
+							__( 'Payment processing error: %s', 'woodev-plugin-framework' ),
+							$exception->getMessage()
+						)
+					);
 				}
 			}
 		}
@@ -222,7 +229,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Payment_Handler' ) ) :
 		/**
 		 * Handles actions after a held transaction.
 		 *
-		 * @param WC_Order $order order object
+		 * @param WC_Order                            $order order object
 		 * @param Woodev_Payment_Gateway_API_Response $response API response object
 		 */
 		protected function process_order_transaction_held( WC_Order $order, Woodev_Payment_Gateway_API_Response $response ) {
@@ -250,8 +257,8 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Payment_Handler' ) ) :
 		/**
 		 * Handles actions after a failed transaction.
 		 *
-		 * @param WC_Order $order order object
-		 * @param string $message failure message
+		 * @param WC_Order                                 $order order object
+		 * @param string                                   $message failure message
 		 * @param Woodev_Payment_Gateway_API_Response|null $response response object
 		 */
 		protected function process_order_transaction_failed( WC_Order $order, $message = '', Woodev_Payment_Gateway_API_Response $response = null ) {
@@ -262,7 +269,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Payment_Handler' ) ) :
 		/**
 		 * Marks an order as paid.
 		 *
-		 * @param WC_Order $order order object
+		 * @param WC_Order                                                                              $order order object
 		 * @param Woodev_Payment_Gateway_API_Customer_Response|Woodev_Payment_Gateway_API_Response|null $response API response object
 		 */
 		public function mark_order_as_paid( WC_Order $order, Woodev_Payment_Gateway_API_Response $response = null ) {
@@ -286,7 +293,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Payment_Handler' ) ) :
 			 * Fired when a payment is processed for an order.
 			 *
 			 * @param WC_Order $order order object
-			 * @param Woodev_Payment_Gateway_Direct $this instance
+			 * @param Woodev_Payment_Gateway $instance gateway instance
 			 */
 			do_action( 'wc_payment_gateway_' . $this->get_gateway()->get_id() . '_payment_processed', $order, $this->get_gateway() );
 		}
@@ -295,8 +302,8 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Payment_Handler' ) ) :
 		/**
 		 * Marks an order as approved.
 		 *
-		 * @param WC_Order $order order object
-		 * @param string $message message for the order note
+		 * @param WC_Order                                 $order order object
+		 * @param string                                   $message message for the order note
 		 * @param Woodev_Payment_Gateway_API_Response|null $response API response object
 		 */
 		public function mark_order_as_approved( WC_Order $order, $message = '', Woodev_Payment_Gateway_API_Response $response = null ) {
@@ -310,8 +317,8 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Payment_Handler' ) ) :
 		 *
 		 * Adds an order note and transitions to a held status.
 		 *
-		 * @param WC_Order $order order object
-		 * @param string $message order note message
+		 * @param WC_Order                                 $order order object
+		 * @param string                                   $message order note message
 		 * @param Woodev_Payment_Gateway_API_Response|null $response
 		 */
 		public function mark_order_as_held( WC_Order $order, $message = '', Woodev_Payment_Gateway_API_Response $response = null ) {
@@ -337,7 +344,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Payment_Handler' ) ) :
 		/**
 		 * Gets the order status used for held orders.
 		 *
-		 * @param WC_Order $order order object
+		 * @param WC_Order                                 $order order object
 		 * @param Woodev_Payment_Gateway_API_Response|null $response API response object
 		 *
 		 * @return string
@@ -355,7 +362,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Payment_Handler' ) ) :
 			 * @param Woodev_Payment_Gateway $gateway gateway instance
 			 *
 			 * @deprecated 1.1.8
-			 *
 			 */
 			$status = apply_filters( 'wc_payment_gateway_' . $this->get_gateway()->get_id() . '_held_order_status', 'on-hold', $order, $response, $this->get_gateway() );
 
@@ -375,8 +381,8 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Payment_Handler' ) ) :
 		/**
 		 * Marks an order as failed.
 		 *
-		 * @param WC_Order $order order object
-		 * @param string $message order note message
+		 * @param WC_Order                                 $order order object
+		 * @param string                                   $message order note message
 		 * @param Woodev_Payment_Gateway_API_Response|null $response
 		 */
 		public function mark_order_as_failed( WC_Order $order, $message = '', Woodev_Payment_Gateway_API_Response $response = null ) {
@@ -400,8 +406,8 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Payment_Handler' ) ) :
 		/**
 		 * Marks an order as cancelled.
 		 *
-		 * @param WC_Order $order order object
-		 * @param string $message order note message
+		 * @param WC_Order                                 $order order object
+		 * @param string                                   $message order note message
 		 * @param Woodev_Payment_Gateway_API_Response|null $response
 		 */
 		public function mark_order_as_cancelled( \WC_Order $order, $message, Woodev_Payment_Gateway_API_Response $response = null ) {

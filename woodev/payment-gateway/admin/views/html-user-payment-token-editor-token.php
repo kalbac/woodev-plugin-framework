@@ -43,12 +43,14 @@
 
 			<?php else : ?>
 
-				<?php // Build the input attributes
+				<?php
+				// Build the input attributes
 				$attributes = array();
 
 				foreach ( $field['attributes'] as $name => $value ) {
 					$attributes[] = esc_attr( $name ) . '="' . esc_attr( $value ) . '"';
-				} ?>
+				}
+				?>
 
 				<input
 					name="<?php echo esc_attr( $token_input_name ); ?>[<?php echo esc_attr( $field_id ); ?>]"

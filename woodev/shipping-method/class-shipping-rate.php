@@ -198,7 +198,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Rate' ) ) :
 				'label'     => $this->label,
 				'cost'      => $this->cost,
 				'meta_data' => [
-					$this->method_id => $this->meta_data
+					$this->method_id => $this->meta_data,
 				],
 			];
 

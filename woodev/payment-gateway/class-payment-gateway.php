@@ -192,9 +192,9 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		 * + `countries` -  array of two-letter country codes this gateway is allowed for, defaults to all
 		 * + `shared_settings` - array of shared setting names, if any.  This can be used for instance when a single plugin supports both credit card and echeck payments, and the same credentials can be used for both gateways
 		 *
-		 * @param string $id the gateway id
+		 * @param string                        $id the gateway id
 		 * @param Woodev_Payment_Gateway_Plugin $plugin the parent plugin class
-		 * @param array $args gateway arguments
+		 * @param array                         $args gateway arguments
 		 *
 		 * @since 1.0.0
 		 */
@@ -213,8 +213,8 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 
 			$this->plugin = $plugin;
 			// kind of sucks, but we need to register back to the plugin because
-			//  there's no other way of grabbing existing gateways so as to avoid
-			//  double-instantiation errors (esp for shared settings)
+			// there's no other way of grabbing existing gateways so as to avoid
+			// double-instantiation errors (esp for shared settings)
 			$this->get_plugin()->set_gateway( $id, $this );
 
 			// optional parameters
@@ -279,18 +279,26 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 			$this->add_pay_page_handler();
 
 			// filter order received text for held orders
-			add_filter( 'woocommerce_thankyou_order_received_text', array(
-				$this,
-				'maybe_render_held_order_received_text'
-			), 10, 2 );
+			add_filter(
+				'woocommerce_thankyou_order_received_text',
+				array(
+					$this,
+					'maybe_render_held_order_received_text',
+				),
+				10,
+				2
+			);
 
 			// admin only
 			if ( is_admin() ) {
 				// save settings
-				add_action( 'woocommerce_update_options_payment_gateways_' . $this->get_id(), array(
-					$this,
-					'process_admin_options'
-				) );
+				add_action(
+					'woocommerce_update_options_payment_gateways_' . $this->get_id(),
+					array(
+						$this,
+						'process_admin_options',
+					)
+				);
 			}
 
 			// Enqueue the necessary scripts & styles
@@ -311,14 +319,20 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		protected function add_milestone_hooks() {
 
 			// first successful payment
-			add_action( 'wc_payment_gateway_' . $this->get_id() . '_payment_processed', function () {
-				$this->get_plugin()->get_lifecycle_handler()->trigger_milestone( 'payment-processed', __( 'you successfully processed a payment!', 'woodev-plugin-framework' ) );
-			} );
+			add_action(
+				'wc_payment_gateway_' . $this->get_id() . '_payment_processed',
+				function () {
+					$this->get_plugin()->get_lifecycle_handler()->trigger_milestone( 'payment-processed', __( 'you successfully processed a payment!', 'woodev-plugin-framework' ) );
+				}
+			);
 
 			// first successful refund
-			add_action( 'wc_payment_gateway_' . $this->get_id() . '_refund_processed', function () {
-				$this->get_plugin()->get_lifecycle_handler()->trigger_milestone( 'refund-processed', __( 'you successfully processed a refund!', 'woodev-plugin-framework' ) );
-			} );
+			add_action(
+				'wc_payment_gateway_' . $this->get_id() . '_refund_processed',
+				function () {
+					$this->get_plugin()->get_lifecycle_handler()->trigger_milestone( 'refund-processed', __( 'you successfully processed a refund!', 'woodev-plugin-framework' ) );
+				}
+			);
 		}
 
 		/**
@@ -433,27 +447,30 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 			 *
 			 * @return array
 			 */
-			return apply_filters( 'woodev_payment_gateway_payment_form_js_localized_script_params', array(
-				'card_number_missing'            => esc_html__( 'Card number is missing', 'woodev-plugin-framework' ),
-				'card_number_invalid'            => esc_html__( 'Card number is invalid', 'woodev-plugin-framework' ),
-				'card_number_digits_invalid'     => esc_html__( 'Card number is invalid (only digits allowed)', 'woodev-plugin-framework' ),
-				'card_number_length_invalid'     => esc_html__( 'Card number is invalid (wrong length)', 'woodev-plugin-framework' ),
-				'cvv_missing'                    => esc_html__( 'Card security code is missing', 'woodev-plugin-framework' ),
-				'cvv_digits_invalid'             => esc_html__( 'Card security code is invalid (only digits are allowed)', 'woodev-plugin-framework' ),
-				'cvv_length_invalid'             => esc_html__( 'Card security code is invalid (must be 3 or 4 digits)', 'woodev-plugin-framework' ),
-				'card_exp_date_invalid'          => esc_html__( 'Card expiration date is invalid', 'woodev-plugin-framework' ),
-				'check_number_digits_invalid'    => esc_html__( 'Check Number is invalid (only digits are allowed)', 'woodev-plugin-framework' ),
-				'check_number_missing'           => esc_html__( 'Check Number is missing', 'woodev-plugin-framework' ),
-				'drivers_license_state_missing'  => esc_html__( 'Drivers license state is missing', 'woodev-plugin-framework' ),
-				'drivers_license_number_missing' => esc_html__( 'Drivers license number is missing', 'woodev-plugin-framework' ),
-				'drivers_license_number_invalid' => esc_html__( 'Drivers license number is invalid', 'woodev-plugin-framework' ),
-				'account_number_missing'         => esc_html__( 'Account Number is missing', 'woodev-plugin-framework' ),
-				'account_number_invalid'         => esc_html__( 'Account Number is invalid (only digits are allowed)', 'woodev-plugin-framework' ),
-				'account_number_length_invalid'  => esc_html__( 'Account number is invalid (must be between 5 and 17 digits)', 'woodev-plugin-framework' ),
-				'routing_number_missing'         => esc_html__( 'Routing Number is missing', 'woodev-plugin-framework' ),
-				'routing_number_digits_invalid'  => esc_html__( 'Routing Number is invalid (only digits are allowed)', 'woodev-plugin-framework' ),
-				'routing_number_length_invalid'  => esc_html__( 'Routing number is invalid (must be 9 digits)', 'woodev-plugin-framework' ),
-			) );
+			return apply_filters(
+				'woodev_payment_gateway_payment_form_js_localized_script_params',
+				array(
+					'card_number_missing'            => esc_html__( 'Card number is missing', 'woodev-plugin-framework' ),
+					'card_number_invalid'            => esc_html__( 'Card number is invalid', 'woodev-plugin-framework' ),
+					'card_number_digits_invalid'     => esc_html__( 'Card number is invalid (only digits allowed)', 'woodev-plugin-framework' ),
+					'card_number_length_invalid'     => esc_html__( 'Card number is invalid (wrong length)', 'woodev-plugin-framework' ),
+					'cvv_missing'                    => esc_html__( 'Card security code is missing', 'woodev-plugin-framework' ),
+					'cvv_digits_invalid'             => esc_html__( 'Card security code is invalid (only digits are allowed)', 'woodev-plugin-framework' ),
+					'cvv_length_invalid'             => esc_html__( 'Card security code is invalid (must be 3 or 4 digits)', 'woodev-plugin-framework' ),
+					'card_exp_date_invalid'          => esc_html__( 'Card expiration date is invalid', 'woodev-plugin-framework' ),
+					'check_number_digits_invalid'    => esc_html__( 'Check Number is invalid (only digits are allowed)', 'woodev-plugin-framework' ),
+					'check_number_missing'           => esc_html__( 'Check Number is missing', 'woodev-plugin-framework' ),
+					'drivers_license_state_missing'  => esc_html__( 'Drivers license state is missing', 'woodev-plugin-framework' ),
+					'drivers_license_number_missing' => esc_html__( 'Drivers license number is missing', 'woodev-plugin-framework' ),
+					'drivers_license_number_invalid' => esc_html__( 'Drivers license number is invalid', 'woodev-plugin-framework' ),
+					'account_number_missing'         => esc_html__( 'Account Number is missing', 'woodev-plugin-framework' ),
+					'account_number_invalid'         => esc_html__( 'Account Number is invalid (only digits are allowed)', 'woodev-plugin-framework' ),
+					'account_number_length_invalid'  => esc_html__( 'Account number is invalid (must be between 5 and 17 digits)', 'woodev-plugin-framework' ),
+					'routing_number_missing'         => esc_html__( 'Routing Number is missing', 'woodev-plugin-framework' ),
+					'routing_number_digits_invalid'  => esc_html__( 'Routing Number is invalid (only digits are allowed)', 'woodev-plugin-framework' ),
+					'routing_number_length_invalid'  => esc_html__( 'Routing number is invalid (must be 9 digits)', 'woodev-plugin-framework' ),
+				)
+			);
 		}
 
 		/**
@@ -515,7 +532,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 				 * Allow actors to modify the localized script params passed to the
 				 * frontend for the concrete payment gateway's JS.
 				 *
-				 * @param $params array
+				 * @param array $params localized script parameters
 				 *
 				 * @return array
 				 */
@@ -545,7 +562,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		 * Returns an array of JS script params to localize for the gateway-specific
 		 * JS. Concrete classes must override this as needed.
 		 *
-		 * @return array
+		 * @return array|void
 		 */
 		protected function get_gateway_js_localized_script_params() {
 		}
@@ -556,7 +573,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		 * only have their params localized once.
 		 *
 		 * @param string $handle script handle to localize
-		 * @param array $params script params to localize
+		 * @param array  $params script params to localize
 		 * @param string $object_name the localized object name. Defaults to a snake-cased version of $handle
 		 */
 		protected function localize_script( $handle, $params, $object_name = '' ) {
@@ -614,7 +631,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		 *
 		 * @return null|bool true if on pay page and is currently selected gateways, false if on pay page and not the selected gateway, null otherwise
 		 * @since 1.0.0
-		 *
 		 */
 		public function is_pay_page_gateway() {
 
@@ -647,7 +663,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 			 * Allow actors to modify the "place order" button text.
 			 *
 			 * @param string $text button text
-			 * @param Woodev_Payment_Gateway $this instance
+			 * @param Woodev_Payment_Gateway $instance instance
 			 */
 			return apply_filters( 'wc_payment_gateway_' . $this->get_id() . '_order_button_text', $text, $this );
 		}
@@ -847,14 +863,14 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 			// common top form fields
 			$this->form_fields = array(
 
-				'enabled' => array(
+				'enabled'     => array(
 					'title'   => esc_html__( 'Enable / Disable', 'woodev-plugin-framework' ),
 					'label'   => esc_html__( 'Enable this gateway', 'woodev-plugin-framework' ),
 					'type'    => 'checkbox',
 					'default' => 'no',
 				),
 
-				'title' => array(
+				'title'       => array(
 					'title'    => esc_html__( 'Title', 'woodev-plugin-framework' ),
 					'type'     => 'text',
 					'desc_tip' => esc_html__( 'Payment method title that the customer will see during checkout.', 'woodev-plugin-framework' ),
@@ -941,7 +957,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 			 * Actors can use this to add, remove, or tweak gateway form fields
 			 *
 			 * @param array $form_fields array of form fields in format required by WC_Settings_API
-			 * @param Woodev_Payment_Gateway $this gateway instance
+			 * @param Woodev_Payment_Gateway $instance gateway instance
 			 */
 			$this->form_fields = apply_filters( 'wc_payment_gateway_' . $this->get_id() . '_form_fields', $this->form_fields, $this );
 		}
@@ -1080,9 +1096,9 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 			parent::admin_options();
 
 			?>
-            <style type="text/css">.nowrap {
-                    white-space: nowrap;
-                }</style>
+			<style type="text/css">.nowrap {
+					white-space: nowrap;
+				}</style>
 			<?php
 
 			if ( isset( $this->form_fields['enable_csc'] ) ) {
@@ -1090,17 +1106,17 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 				// add inline javascript to show/hide any shared settings fields as needed
 				ob_start();
 				?>
-                $( '#woocommerce_<?php echo $this->get_id(); ?>_enable_csc' ).change( function() {
+				$( '#woocommerce_<?php echo $this->get_id(); ?>_enable_csc' ).change( function() {
 
-                var enabled = $( this ).is( ':checked' );
+				var enabled = $( this ).is( ':checked' );
 
-                if ( enabled ) {
-                $( '#woocommerce_<?php echo $this->get_id(); ?>_enable_token_csc' ).closest( 'tr' ).show();
-                } else {
-                $( '#woocommerce_<?php echo $this->get_id(); ?>_enable_token_csc' ).closest( 'tr' ).hide();
-                }
+				if ( enabled ) {
+				$( '#woocommerce_<?php echo $this->get_id(); ?>_enable_token_csc' ).closest( 'tr' ).show();
+				} else {
+				$( '#woocommerce_<?php echo $this->get_id(); ?>_enable_token_csc' ).closest( 'tr' ).hide();
+				}
 
-                } ).change();
+				} ).change();
 				<?php
 
 				wc_enqueue_js( ob_get_clean() );
@@ -1113,18 +1129,18 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 				// add inline javascript
 				ob_start();
 				?>
-                $( '#woocommerce_<?php echo esc_js( $this->get_id() ); ?>_transaction_type' ).change( function() {
+				$( '#woocommerce_<?php echo esc_js( $this->get_id() ); ?>_transaction_type' ).change( function() {
 
-                var transaction_type = $( this ).val();
-                var hidden_settings   = $( '#woocommerce_<?php echo esc_js( $this->get_id() ); ?>_charge_virtual_orders, #woocommerce_<?php echo esc_js( $this->get_id() ); ?>_enable_partial_capture, #woocommerce_<?php echo esc_js( $this->get_id() ); ?>_enable_paid_capture' ).closest( 'tr' );
+				var transaction_type = $( this ).val();
+				var hidden_settings   = $( '#woocommerce_<?php echo esc_js( $this->get_id() ); ?>_charge_virtual_orders, #woocommerce_<?php echo esc_js( $this->get_id() ); ?>_enable_partial_capture, #woocommerce_<?php echo esc_js( $this->get_id() ); ?>_enable_paid_capture' ).closest( 'tr' );
 
-                if ( '<?php echo esc_js( self::TRANSACTION_TYPE_AUTHORIZATION ); ?>' === transaction_type ) {
-                $( hidden_settings ).show();
-                } else {
-                $( hidden_settings ).hide();
-                }
+				if ( '<?php echo esc_js( self::TRANSACTION_TYPE_AUTHORIZATION ); ?>' === transaction_type ) {
+				$( hidden_settings ).show();
+				} else {
+				$( hidden_settings ).hide();
+				}
 
-                } ).change();
+				} ).change();
 				<?php
 
 				wc_enqueue_js( ob_get_clean() );
@@ -1136,25 +1152,25 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 				// add inline javascript
 				ob_start();
 				?>
-                $( '#woocommerce_<?php echo esc_js( $this->get_id() ); ?>_environment' ).change( function() {
+				$( '#woocommerce_<?php echo esc_js( $this->get_id() ); ?>_environment' ).change( function() {
 
-                // inherit settings from other gateway?
-                var inheritSettings = $( '#woocommerce_<?php echo $this->get_id(); ?>_inherit_settings' ).is( ':checked' );
+				// inherit settings from other gateway?
+				var inheritSettings = $( '#woocommerce_<?php echo $this->get_id(); ?>_inherit_settings' ).is( ':checked' );
 
-                var environment = $( this ).val();
+				var environment = $( this ).val();
 
-                // hide all environment-dependant fields
-                $( '.environment-field' ).closest( 'tr' ).hide();
+				// hide all environment-dependant fields
+				$( '.environment-field' ).closest( 'tr' ).hide();
 
-                // show the currently configured environment fields that are not also being hidden as any shared settings
-                var $environmentFields = $( '.' + environment + '-field' );
-                if ( inheritSettings ) {
-                $environmentFields = $environmentFields.not( '.shared-settings-field' );
-                }
+				// show the currently configured environment fields that are not also being hidden as any shared settings
+				var $environmentFields = $( '.' + environment + '-field' );
+				if ( inheritSettings ) {
+				$environmentFields = $environmentFields.not( '.shared-settings-field' );
+				}
 
-                $environmentFields.not( '.hidden' ).closest( 'tr' ).show();
+				$environmentFields.not( '.hidden' ).closest( 'tr' ).show();
 
-                } ).change();
+				} ).change();
 				<?php
 
 				wc_enqueue_js( ob_get_clean() );
@@ -1166,21 +1182,21 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 				// add inline javascript to show/hide any shared settings fields as needed
 				ob_start();
 				?>
-                $( '#woocommerce_<?php echo $this->get_id(); ?>_inherit_settings' ).change( function() {
+				$( '#woocommerce_<?php echo $this->get_id(); ?>_inherit_settings' ).change( function() {
 
-                var enabled = $( this ).is( ':checked' );
+				var enabled = $( this ).is( ':checked' );
 
-                if ( enabled ) {
-                $( '.shared-settings-field' ).closest( 'tr' ).hide();
-                } else {
-                // show the fields
-                $( '.shared-settings-field' ).closest( 'tr' ).show();
+				if ( enabled ) {
+				$( '.shared-settings-field' ).closest( 'tr' ).hide();
+				} else {
+				// show the fields
+				$( '.shared-settings-field' ).closest( 'tr' ).show();
 
-                // hide any that may not be available for the currently selected environment
-                $( '#woocommerce_<?php echo $this->get_id(); ?>_environment' ).change();
-                }
+				// hide any that may not be available for the currently selected environment
+				$( '#woocommerce_<?php echo $this->get_id(); ?>_environment' ).change();
+				}
 
-                } ).change();
+				} ).change();
 				<?php
 
 				wc_enqueue_js( ob_get_clean() );
@@ -1249,7 +1265,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		 *
 		 * @return bool
 		 * @since 1.0.0
-		 *
 		 */
 		public function is_configured() {
 			// override this to check for gateway-specific required settings (user names, passwords, secret keys, etc)
@@ -1313,7 +1328,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		 *
 		 * @param string $type the payment method cc type or name
 		 *
-		 * @return string the image URL or null
+		 * @return string|null the image URL or null
 		 * @since 1.0.0
 		 */
 		public function get_payment_method_image_url( $type ) {
@@ -1402,7 +1417,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 			 * the order object that gateways use for processing transactions.
 			 *
 			 * @param WC_Order $order order object
-			 * @param Woodev_Payment_Gateway $this payment gateway instance
+			 * @param Woodev_Payment_Gateway $instance payment gateway instance
 			 */
 			return apply_filters( 'wc_payment_gateway_' . $this->get_id() . '_get_order_base', $order, $this );
 		}
@@ -1412,7 +1427,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		 *
 		 * This method marks the order with an appropriate status, and adds a relevant order note.
 		 *
-		 * @param WC_Order $order order object
+		 * @param WC_Order                            $order order object
 		 * @param Woodev_Payment_Gateway_API_Response $response response object
 		 *
 		 * @throws Exception
@@ -1480,7 +1495,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		 * set in the future, and plenty of gateways override it.
 		 *
 		 * @param WC_Order|int $order the order being processed
-		 * @param float|null $amount amount to capture or null for the full order amount
+		 * @param float|null   $amount amount to capture or null for the full order amount
 		 *
 		 * @return WC_Order
 		 */
@@ -1511,7 +1526,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 			 * Allow actors to modify the order object used for performing charge captures.
 			 *
 			 * @param WC_Order $order order object
-			 * @param Woodev_Payment_Gateway $this instance
+			 * @param Woodev_Payment_Gateway $instance instance
 			 */
 			return apply_filters( 'wc_payment_gateway_' . $this->get_id() . '_get_order_for_capture', $order, $this );
 		}
@@ -1528,8 +1543,8 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		/**
 		 * Processes a refund.
 		 *
-		 * @param int $order_id order being refunded
-		 * @param float $amount refund amount
+		 * @param int    $order_id order being refunded
+		 * @param float  $amount refund amount
 		 * @param string $reason user-entered reason text for refund
 		 *
 		 * @return bool|WP_Error true on success, or a WP_Error object on failure/error
@@ -1593,7 +1608,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 
 					return $error;
 				}
-
 			} catch ( Woodev_Plugin_Exception $e ) {
 
 				$error = $this->get_refund_failed_wp_error( $e->getCode(), $e->getMessage() );
@@ -1616,8 +1630,8 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		 * refund-specific data
 		 *
 		 * @param WC_Order|int $order order being processed
-		 * @param float $amount refund amount
-		 * @param string $reason optional refund reason text
+		 * @param float        $amount refund amount
+		 * @param string       $reason optional refund reason text
 		 *
 		 * @return WC_Order|WP_Error object with refund information attached
 		 */
@@ -1643,7 +1657,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 			 * Allow actors to modify the order object used for refund transactions.
 			 *
 			 * @param WC_Order|WP_Error $order order object
-			 * @param Woodev_Payment_Gateway $this instance
+			 * @param Woodev_Payment_Gateway $instance instance
 			 */
 			return apply_filters( 'wc_payment_gateway_' . $this->get_id() . '_get_order_for_refund', $order, $this );
 		}
@@ -1654,7 +1668,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		 * Note that refunds can be performed multiple times for a single order so
 		 * transaction IDs keys are not unique
 		 *
-		 * @param WC_Order $order the order object
+		 * @param WC_Order                            $order the order object
 		 * @param Woodev_Payment_Gateway_API_Response $response transaction response
 		 */
 		protected function add_refund_data( WC_Order $order, $response ) {
@@ -1671,7 +1685,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		/**
 		 * Adds any gateway-specific data to the order after a refund is performed.
 		 *
-		 * @param WC_Order $order the order object
+		 * @param WC_Order                            $order the order object
 		 * @param Woodev_Payment_Gateway_API_Response $response the transaction response
 		 */
 		protected function add_payment_gateway_refund_data( WC_Order $order, $response ) {
@@ -1680,7 +1694,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		/**
 		 * Adds an order note with the amount and (optional) refund transaction ID.
 		 *
-		 * @param WC_Order $order order object
+		 * @param WC_Order                            $order order object
 		 * @param Woodev_Payment_Gateway_API_Response $response transaction response
 		 */
 		protected function add_refund_order_note( WC_Order $order, $response ) {
@@ -1689,9 +1703,12 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 			/* translators: Placeholders: %1$s - payment gateway title (such as Tinkoff, Robokassa etc), %2$s - a monetary amount */
 				esc_html__( '%1$s Refund in the amount of %2$s approved.', 'woodev-plugin-framework' ),
 				$this->get_method_title(),
-				wc_price( $order->refund->amount, array(
-					'currency' => $order->get_currency()
-				) )
+				wc_price(
+					$order->refund->amount,
+					array(
+						'currency' => $order->get_currency(),
+					)
+				)
 			);
 
 			// adds the transaction id (if any) to the order note
@@ -1706,7 +1723,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		 * Builds the WP_Error object for a failed refund.
 		 *
 		 * @param int|string $error_code error code
-		 * @param string $error_message error message
+		 * @param string     $error_message error message
 		 *
 		 * @return WP_Error suitable for returning from the process_refund() method
 		 */
@@ -1765,7 +1782,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		 * particularly useful for gateways that can void an authorized & captured
 		 * charge that has not yet settled (e.g. Authorize.net AIM/CIM)
 		 *
-		 * @param WC_Order $order order
+		 * @param WC_Order                            $order order
 		 * @param Woodev_Payment_Gateway_API_Response $response refund response
 		 *
 		 * @return boolean true if a void should be performed for the given order/response
@@ -1813,7 +1830,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 
 					return $error;
 				}
-
 			} catch ( Woodev_Plugin_Exception $e ) {
 
 				$error = $this->get_void_failed_wp_error( $e->getCode(), $e->getMessage() );
@@ -1827,7 +1843,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		/**
 		 * Adds the standard void transaction data to the order.
 		 *
-		 * @param WC_Order $order the order object
+		 * @param WC_Order                            $order the order object
 		 * @param Woodev_Payment_Gateway_API_Response $response transaction response
 		 */
 		protected function add_void_data( WC_Order $order, $response ) {
@@ -1844,7 +1860,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		/**
 		 * Adds any gateway-specific data to the order after a void is performed.
 		 *
-		 * @param WC_Order $order the order object
+		 * @param WC_Order                            $order the order object
 		 * @param Woodev_Payment_Gateway_API_Response $response the transaction response
 		 */
 		protected function add_payment_gateway_void_data( WC_Order $order, $response ) {
@@ -1854,7 +1870,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		 * Builds the WP_Error object for a failed void.
 		 *
 		 * @param int|string $error_code error code
-		 * @param string $error_message error message
+		 * @param string     $error_message error message
 		 *
 		 * @return WP_Error suitable for returning from the process_refund() method
 		 */
@@ -1885,7 +1901,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		 *
 		 * Because WC has no status for "void", we use refunded.
 		 *
-		 * @param WC_Order $order order object
+		 * @param WC_Order                            $order order object
 		 * @param Woodev_Payment_Gateway_API_Response $response object
 		 */
 		public function mark_order_as_voided( $order, $response ) {
@@ -1894,9 +1910,12 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 			/* translators: Placeholders: %1$s - payment gateway title, %2$s - a monetary amount. Void as in to void an order. */
 				esc_html__( '%1$s Void in the amount of %2$s approved.', 'woodev-plugin-framework' ),
 				$this->get_method_title(),
-				wc_price( $order->refund->amount, [
-					'currency' => $order->get_currency()
-				] )
+				wc_price(
+					$order->refund->amount,
+					[
+						'currency' => $order->get_currency(),
+					]
+				)
 			);
 
 			// adds the transaction id (if any) to the order note
@@ -1909,10 +1928,15 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 
 				$this->voided_order_message = $message;
 
-				add_filter( 'woocommerce_order_fully_refunded_status', array(
-					$this,
-					'maybe_cancel_voided_order'
-				), 10, 2 );
+				add_filter(
+					'woocommerce_order_fully_refunded_status',
+					array(
+						$this,
+						'maybe_cancel_voided_order',
+					),
+					10,
+					2
+				);
 
 			} else {
 
@@ -1926,7 +1950,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		 * @hooked woocommerce_order_fully_refunded_status filter
 		 *
 		 * @param string $order_status default order status for fully refunded orders
-		 * @param int $order_id order ID
+		 * @param int    $order_id order ID
 		 *
 		 * @return string 'cancelled'
 		 * @see Woodev_Payment_Gateway::mark_order_as_voided()
@@ -1958,7 +1982,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 
 			// generate a unique retry count
 			if ( is_numeric( $retry_count ) ) {
-				$retry_count ++;
+				++$retry_count;
 			} else {
 				$retry_count = 0;
 			}
@@ -1975,12 +1999,11 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		/**
 		 * Called after an unsuccessful transaction attempt.
 		 *
-		 * @param WC_Order $order the order
+		 * @param WC_Order                            $order the order
 		 * @param Woodev_Payment_Gateway_API_Response $response the transaction response
 		 *
 		 * @return false
 		 * @since 1.0.0
-		 *
 		 */
 		protected function do_transaction_failed_result( WC_Order $order, Woodev_Payment_Gateway_API_Response $response ) {
 
@@ -2011,11 +2034,10 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		/**
 		 * Adds the standard transaction data to the order.
 		 *
-		 * @param WC_Order $order the order object
+		 * @param WC_Order                                 $order the order object
 		 * @param Woodev_Payment_Gateway_API_Response|null $response optional transaction response
 		 *
 		 * @since 1.0.0
-		 *
 		 */
 		public function add_transaction_data( $order, $response = null ) {
 
@@ -2080,7 +2102,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 				if ( isset( $order->payment->card_type ) && $order->payment->card_type ) {
 					$this->update_order_meta( $order, 'card_type', $order->payment->card_type );
 				}
-
 			} elseif ( $this->is_echeck_gateway() ) {
 
 				// checking gateway data
@@ -2104,7 +2125,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 			 *
 			 * @param WC_Order $order order object
 			 * @param Woodev_Payment_Gateway_API_Response|null $response transaction response
-			 * @param Woodev_Payment_Gateway $this instance
+			 * @param Woodev_Payment_Gateway $instance instance
 			 */
 			do_action( 'wc_payment_gateway_' . $this->get_id() . '_add_transaction_data', $order, $response, $this );
 		}
@@ -2112,11 +2133,10 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		/**
 		 * Adds any gateway-specific transaction data to the order.
 		 *
-		 * @param WC_Order $order the order object
+		 * @param WC_Order                                     $order the order object
 		 * @param Woodev_Payment_Gateway_API_Customer_Response $response the transaction response
 		 *
 		 * @since 1.0.0
-		 *
 		 */
 		public function add_payment_gateway_transaction_data( $order, $response ) {
 		}
@@ -2124,7 +2144,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		/**
 		 * Add customer data to an order/user if the gateway supports the customer ID response
 		 *
-		 * @param WC_Order $order order
+		 * @param WC_Order                                     $order order
 		 * @param Woodev_Payment_Gateway_API_Customer_Response $response
 		 */
 		protected function add_customer_data( $order, $response = null ) {
@@ -2154,7 +2174,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		/**
 		 * Gets the order note message for approved credit card transactions.
 		 *
-		 * @param WC_Order $order order object
+		 * @param WC_Order                            $order order object
 		 * @param Woodev_Payment_Gateway_API_Response $response response object
 		 *
 		 * @return string
@@ -2185,10 +2205,10 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 
 				$message .= ': ' . sprintf(
 					/* translators: Placeholders: %1$s - credit card type (MasterCard, Visa, etc...), %2$s - last four digits of the card */
-						__( '%1$s ending in %2$s', 'woocommerce-plugin-framework' ),
-						Woodev_Payment_Gateway_Helper::payment_type_to_name( $card_type ),
-						$last_four
-					);
+					__( '%1$s ending in %2$s', 'woocommerce-plugin-framework' ),
+					Woodev_Payment_Gateway_Helper::payment_type_to_name( $card_type ),
+					$last_four
+				);
 			}
 
 			// add the expiry date if it is available
@@ -2196,9 +2216,9 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 
 				$message .= ' ' . sprintf(
 					/** translators: Placeholders: %s - credit card expiry date */
-						__( '(expires %s)', 'woodev-plugin-framework' ),
-						$order->payment->exp_month . '/' . substr( $order->payment->exp_year, - 2 )
-					);
+					__( '(expires %s)', 'woodev-plugin-framework' ),
+					$order->payment->exp_month . '/' . substr( $order->payment->exp_year, - 2 )
+				);
 			}
 
 			// adds the transaction id (if any) to the order note
@@ -2215,7 +2235,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 			 * @param string $message order note
 			 * @param WC_Order $order order object
 			 * @param Woodev_Payment_Gateway_API_Response $response transaction response
-			 * @param Woodev_Payment_Gateway $this instance
+			 * @param Woodev_Payment_Gateway $instance instance
 			 */
 			return apply_filters( 'wc_payment_gateway_' . $this->get_id() . '_credit_card_transaction_approved_order_note', $message, $order, $response, $this );
 		}
@@ -2223,7 +2243,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		/**
 		 * Gets the order note message for approved eCheck transactions.
 		 *
-		 * @param WC_Order $order order object
+		 * @param WC_Order                            $order order object
 		 * @param Woodev_Payment_Gateway_API_Response $response response object
 		 *
 		 * @return string
@@ -2255,7 +2275,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 			 * @param string $message order note
 			 * @param WC_Order $order order object
 			 * @param Woodev_Payment_Gateway_API_Response $response transaction response
-			 * @param Woodev_Payment_Gateway $this instance
+			 * @param Woodev_Payment_Gateway $instance instance
 			 */
 			return apply_filters( 'wc_payment_gateway_' . $this->get_id() . '_check_transaction_approved_order_note', $message, $order, $response, $this );
 		}
@@ -2263,7 +2283,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		/**
 		 * Gets the order note message for approved loans transactions.
 		 *
-		 * @param WC_Order $order order object
+		 * @param WC_Order                            $order order object
 		 * @param Woodev_Payment_Gateway_API_Response $response response object
 		 *
 		 * @return string
@@ -2277,15 +2297,27 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 			}
 
 			if ( ! empty( $order->payment->credit_amount ) ) {
-				$message .= '. ' . sprintf( esc_html__( 'Total amount: %s', 'woodev-plugin-framework' ), wc_price( $order->payment->credit_amount, array(
-						'currency' => $order->get_currency()
-					) ) );
+				$message .= '. ' . sprintf(
+					esc_html__( 'Total amount: %s', 'woodev-plugin-framework' ),
+					wc_price(
+						$order->payment->credit_amount,
+						array(
+							'currency' => $order->get_currency(),
+						)
+					)
+				);
 			}
 
 			if ( ! empty( $order->payment->first_payment ) ) {
-				$message .= '. ' . sprintf( esc_html__( 'Down payment: %s', 'woodev-plugin-framework' ), wc_price( $order->payment->first_payment, array(
-						'currency' => $order->get_currency()
-					) ) );
+				$message .= '. ' . sprintf(
+					esc_html__( 'Down payment: %s', 'woodev-plugin-framework' ),
+					wc_price(
+						$order->payment->first_payment,
+						array(
+							'currency' => $order->get_currency(),
+						)
+					)
+				);
 			}
 
 			// adds the transaction id (if any) to the order note
@@ -2301,10 +2333,9 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 			 * @param string $message order note
 			 * @param WC_Order $order order object
 			 * @param Woodev_Payment_Gateway_API_Response $response transaction response
-			 * @param Woodev_Payment_Gateway $this instance
+			 * @param Woodev_Payment_Gateway $instance instance
 			 *
 			 * @since 1.2.0
-			 *
 			 */
 			return apply_filters( 'wc_payment_gateway_' . $this->get_id() . '_loans_transaction_approved_order_note', $message, $order, $response, $this );
 		}
@@ -2312,12 +2343,11 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		/**
 		 * Marks the given order as 'on-hold', set an order note and display a message to the customer.
 		 *
-		 * @param WC_Order $order the order
-		 * @param string $message a message to display within the order note
+		 * @param WC_Order                            $order the order
+		 * @param string                              $message a message to display within the order note
 		 * @param Woodev_Payment_Gateway_API_Response $response optional, the transaction response object
 		 *
 		 * @since 1.0.0
-		 *
 		 */
 		public function mark_order_as_held( $order, $message, $response = null ) {
 
@@ -2373,7 +2403,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		 * If detailed customer decline messages are enabled, this message may
 		 * additionally include more detailed information.
 		 *
-		 * @param string $text order received text
+		 * @param string        $text order received text
 		 * @param WC_Order|null $order order object
 		 *
 		 * @return string
@@ -2393,12 +2423,11 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		/**
 		 * Marks the given order as failed and set the order note.
 		 *
-		 * @param WC_Order $order the order
-		 * @param string $error_message a message to display inside the "Payment Failed" order note
+		 * @param WC_Order                            $order the order
+		 * @param string                              $error_message a message to display inside the "Payment Failed" order note
 		 * @param Woodev_Payment_Gateway_API_Response $response the transaction response object (optional)
 		 *
 		 * @since 1.0.0
-		 *
 		 */
 		public function mark_order_as_failed( $order, $error_message, $response = null ) {
 
@@ -2429,8 +2458,8 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		/**
 		 * Marks the given order as cancelled and set the order note.
 		 *
-		 * @param WC_Order $order the order
-		 * @param string $message a message to display inside the "Payment Cancelled" order note
+		 * @param WC_Order                            $order the order
+		 * @param string                              $message a message to display inside the "Payment Cancelled" order note
 		 * @param Woodev_Payment_Gateway_API_Response $response the transaction response object (optional)
 		 */
 		public function mark_order_as_cancelled( $order, $message, $response = null ) {
@@ -2463,14 +2492,13 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		 * This defaults to wc-{user id} and retrieves/stores to the user meta named by get_customer_id_user_meta_name()
 		 * This can be overridden for gateways that use some other value, or made to return false for gateways that don't support a customer id.
 		 *
-		 * @param int $user_id wordpress user identifier
+		 * @param int   $user_id WordPress user identifier
 		 * @param array $args optional additional arguments which can include: environment_id, autocreate (true/false), and order
 		 *
 		 * @return string payment gateway customer id
 		 * @since 1.0.0
 		 *
 		 * @see Woodev_Payment_Gateway::get_customer_id_user_meta_name()
-		 *
 		 */
 		public function get_customer_id( $user_id, $args = [] ) {
 
@@ -2509,7 +2537,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		/**
 		 * Updates the payment gateway customer id for the given $environment, or for the plugin current environment.
 		 *
-		 * @param int $user_id WP user ID
+		 * @param int    $user_id WP user ID
 		 * @param string $customer_id payment gateway customer id
 		 * @param string $environment_id optional environment id, defaults to current environment
 		 *
@@ -2517,7 +2545,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		 * @see Woodev_Payment_Gateway::get_customer_id()
 		 *
 		 * @since 1.0.0
-		 *
 		 */
 		public function update_customer_id( $user_id, $customer_id, $environment_id = null ) {
 
@@ -2532,7 +2559,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		/**
 		 * Removes the payment gateway customer id for the given $environment, or for the plugin current environment.
 		 *
-		 * @param int $user_id WP user ID
+		 * @param int    $user_id WP user ID
 		 * @param string $environment_id optional environment id, defaults to current environment
 		 *
 		 * @return bool success
@@ -2556,7 +2583,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		 *
 		 * @return string payment gateway guest customer id
 		 * @since 1.0.0
-		 *
 		 */
 		public function get_guest_customer_id( WC_Order $order ) {
 
@@ -2590,7 +2616,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		 *
 		 * @return string payment gateway customer id user meta name
 		 * @since 1.0.0
-		 *
 		 */
 		public function get_customer_id_user_meta_name( $environment_id = null ) {
 
@@ -2731,7 +2756,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		 *
 		 * @return bool
 		 * @since 1.0.0
-		 *
 		 */
 		public function perform_credit_card_charge( WC_Order $order = null ) {
 
@@ -2745,7 +2769,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 
 			/**
 			 * Filters whether a credit card transaction should result in a charge.
-			 *
 			 *
 			 * @param bool $perform whether the transaction should result in a charge
 			 * @param WC_Order|null $order the order being charged
@@ -2761,7 +2784,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		 *
 		 * @return bool
 		 * @since 1.0.0
-		 *
 		 */
 		public function perform_credit_card_authorization( WC_Order $order = null ) {
 
@@ -2969,7 +2991,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		 * @return string value from $_POST or blank string if $_POST[ $key ] is not set
 		 * @since 1.0.0
 		 * @deprecated 1.1.8
-		 *
 		 */
 		protected function get_post( $key ) {
 
@@ -2986,7 +3007,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		 * @return string value from $_REQUEST or blank string if $_REQUEST[ $key ] is not set
 		 * @since 1.0.0
 		 * @deprecated 1.1.8
-		 *
 		 */
 		protected function get_request( $key ) {
 
@@ -3005,10 +3025,15 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		public function add_api_request_logging() {
 
 			if ( ! has_action( 'woodev_' . $this->get_id() . '_api_request_performed' ) ) {
-				add_action( 'woodev_' . $this->get_id() . '_api_request_performed', array(
-					$this,
-					'log_api_request'
-				), 10, 2 );
+				add_action(
+					'woodev_' . $this->get_id() . '_api_request_performed',
+					array(
+						$this,
+						'log_api_request',
+					),
+					10,
+					2
+				);
 			}
 		}
 
@@ -3060,12 +3085,12 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 
 				if ( 'message' === $type ) {
 
-					Woodev_Helper::wc_add_notice( str_replace( "\n", "<br/>", htmlspecialchars( $message ) ), 'notice' );
+					Woodev_Helper::wc_add_notice( str_replace( "\n", '<br/>', htmlspecialchars( $message ) ), 'notice' );
 
 				} else {
 
 					// defaults to error message
-					Woodev_Helper::wc_add_notice( str_replace( "\n", "<br/>", htmlspecialchars( $message ) ), 'error' );
+					Woodev_Helper::wc_add_notice( str_replace( "\n", '<br/>', htmlspecialchars( $message ) ), 'error' );
 				}
 			}
 		}
@@ -3144,9 +3169,9 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		 * Adds order meta data.
 		 *
 		 * @param WC_Order|int $order the order to add meta to
-		 * @param string $key meta key (already prefixed with gateway ID)
-		 * @param mixed $value meta value
-		 * @param bool $unique whether the meta value should be unique
+		 * @param string       $key meta key (already prefixed with gateway ID)
+		 * @param mixed        $value meta value
+		 * @param bool         $unique whether the meta value should be unique
 		 *
 		 * @return bool success
 		 */
@@ -3168,7 +3193,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		 * Gets order meta data.
 		 *
 		 * @param WC_Order|int $order the order to get meta for
-		 * @param string $key meta key
+		 * @param string       $key meta key
 		 *
 		 * @return false|mixed
 		 */
@@ -3191,8 +3216,8 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		 * Updates order meta data.
 		 *
 		 * @param WC_Order|int $order the order to update meta for
-		 * @param string $key meta key
-		 * @param mixed $value meta value
+		 * @param string       $key meta key
+		 * @param mixed        $value meta value
 		 *
 		 * @return bool success
 		 */
@@ -3214,7 +3239,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		 * Delete order meta data.
 		 *
 		 * @param WC_Order|int $order the order to delete meta for
-		 * @param string $key meta key
+		 * @param string       $key meta key
 		 *
 		 * @return bool success
 		 */
@@ -3271,7 +3296,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		 *
 		 * @return Woodev_Payment_Gateway_Plugin the parent plugin object
 		 * @since 1.0.0
-		 *
 		 */
 		public function get_plugin() {
 			return $this->plugin;
@@ -3377,15 +3401,13 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 					 * Fired when declaring support for a specific gateway feature.
 					 * Allows other actors (including ourselves) to take action when support is declared.
 					 *
-					 * @param Woodev_Payment_Gateway $this instance
+					 * @param Woodev_Payment_Gateway $instance instance
 					 * @param string $name of supported feature being added
 					 *
 					 * @since 1.0.0
-					 *
 					 */
 					do_action( 'wc_payment_gateway_' . $this->get_id() . '_supports_' . str_replace( '-', '_', $name ), $this, $name );
 				}
-
 			}
 		}
 
@@ -3411,7 +3433,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 				 * Fired when removing support for a specific gateway feature.
 				 * Allows other actors (including ourselves) to take action when support is removed.
 				 *
-				 * @param Woodev_Payment_Gateway $this instance
+				 * @param Woodev_Payment_Gateway $instance instance
 				 * @param string $name of supported feature being removed
 				 */
 				do_action( 'wc_payment_gateway_' . $this->get_id() . '_removed_support_' . str_replace( '-', '_', $name ), $this, $name );
@@ -3444,7 +3466,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 			assert( $this->is_echeck_gateway() );
 
 			return is_array( $this->supported_check_fields ) && in_array( $field_name, $this->supported_check_fields );
-
 		}
 
 
@@ -3499,7 +3520,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		 *
 		 * @return bool
 		 * @since 1.0.0
-		 *
 		 */
 		public function is_environment( $environment_id ) {
 			return $environment_id == $this->get_environment();
@@ -3682,7 +3702,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		 *
 		 * This is a stub method which must be overridden if this gateway performs direct communication
 		 *
-		 * @return Woodev_Payment_Gateway_API the payment gateway API instance
+		 * @return Woodev_Payment_Gateway_API|void the payment gateway API instance
 		 * @since 1.0.0
 		 */
 		public function get_api() {
@@ -3743,7 +3763,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		 *
 		 * @return bool
 		 * @deprecated 1.1.8
-		 *
 		 */
 		public function authorization_valid_for_capture( $order ) {
 
@@ -3760,7 +3779,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		 *
 		 * @return bool
 		 * @deprecated 1.1.8
-		 *
 		 */
 		public function authorization_captured( $order ) {
 
@@ -3777,7 +3795,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		 *
 		 * @return bool
 		 * @deprecated 1.1.8
-		 *
 		 */
 		public function has_authorization_expired( $order ) {
 
@@ -3794,7 +3811,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		 *
 		 * @return bool
 		 * @deprecated 1.1.8
-		 *
 		 */
 		public function authorization_fully_captured( $order ) {
 
@@ -3807,12 +3823,11 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		/**
 		 * Perform a credit card capture for an order.
 		 *
-		 * @param WC_Order $order the order object
+		 * @param WC_Order   $order the order object
 		 * @param float|null $amount amount to capture
 		 *
 		 * @return array
 		 * @deprecated 1.1.8
-		 *
 		 */
 		public function do_credit_card_capture( $order, $amount = null ) {
 
@@ -3830,11 +3845,10 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		/**
 		 * Lets gateways handle any specific capture failure results for the order.
 		 *
-		 * @param WC_Order $order the order object
+		 * @param WC_Order                            $order the order object
 		 * @param Woodev_Payment_Gateway_API_Response $response API response object
 		 *
 		 * @deprecated 1.1.8
-		 *
 		 */
 		protected function do_credit_card_capture_failed( WC_Order $order, Woodev_Payment_Gateway_API_Response $response ) {
 
@@ -3855,7 +3869,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		 *
 		 * @return float
 		 * @deprecated 1.1.8
-		 *
 		 */
 		public function get_order_capture_maximum( WC_Order $order ) {
 
@@ -3872,7 +3885,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		 *
 		 * @return float
 		 * @deprecated 1.1.8
-		 *
 		 */
 		public function get_order_authorization_amount( WC_Order $order ) {
 
@@ -3885,11 +3897,10 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		/**
 		 * Adds the standard capture data to an order.
 		 *
-		 * @param WC_Order $order the order object
+		 * @param WC_Order                            $order the order object
 		 * @param Woodev_Payment_Gateway_API_Response $response the transaction response
 		 *
 		 * @deprecated 1.1.8
-		 *
 		 */
 		protected function add_capture_data( $order, $response ) {
 
@@ -3902,18 +3913,15 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		/**
 		 * Adds any gateway-specific data to the order after a capture is performed.
 		 *
-		 * @param WC_Order $order the order object
+		 * @param WC_Order                            $order the order object
 		 * @param Woodev_Payment_Gateway_API_Response $response the transaction response
 		 *
 		 * @deprecated 1.1.8
-		 *
 		 */
 		protected function add_payment_gateway_capture_data( $order, $response ) {
 
 			wc_deprecated_function( __METHOD__, '1.1.8' );
 		}
-
-
 	}
 
 endif;

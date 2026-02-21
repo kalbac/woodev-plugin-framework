@@ -28,9 +28,9 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 		 *
 		 * See parent constructor for full method documentation
 		 *
-		 * @param string $id the gateway id
+		 * @param string                        $id the gateway id
 		 * @param Woodev_Payment_Gateway_Plugin $plugin the parent plugin class
-		 * @param array $args gateway arguments
+		 * @param array                         $args gateway arguments
 		 *
 		 * @see Woodev_Payment_Gateway::__construct()
 		 */
@@ -40,14 +40,20 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 			parent::__construct( $id, $plugin, $args );
 
 			// payment notification listener hook
-			if ( ! has_action( 'woocommerce_api_' . strtolower( get_class( $this ) ), array(
-				$this,
-				'handle_transaction_response_request'
-			) ) ) {
-				add_action( 'woocommerce_api_' . strtolower( get_class( $this ) ), array(
+			if ( ! has_action(
+				'woocommerce_api_' . strtolower( get_class( $this ) ),
+				array(
 					$this,
-					'handle_transaction_response_request'
-				) );
+					'handle_transaction_response_request',
+				)
+			) ) {
+				add_action(
+					'woocommerce_api_' . strtolower( get_class( $this ) ),
+					array(
+						$this,
+						'handle_transaction_response_request',
+					)
+				);
 			}
 		}
 
@@ -62,9 +68,10 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 
 			parent::payment_fields();
 			?>
-            <style type="text/css">#payment ul.payment_methods li label[for='payment_method_<?php echo $this->get_id(); ?>'] img:nth-child(n+2) {
-                margin-left: 1px;
-            }</style><?php
+			<style type="text/css">#payment ul.payment_methods li label[for='payment_method_<?php echo $this->get_id(); ?>'] img:nth-child(n+2) {
+				margin-left: 1px;
+			}</style>
+			<?php
 		}
 
 
@@ -77,7 +84,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 		 * @see WC_Payment_Gateway::process_payment()
 		 *
 		 * @since 1.0.0
-		 *
 		 */
 		public function process_payment( $order_id ) {
 
@@ -105,7 +111,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 		 *
 		 * @param int $order_id the order id
 		 *
-		 * @return string the payment URL, or false if unavailable
+		 * @return string|false the payment URL, or false if unavailable
 		 */
 		protected function get_payment_url( $order_id ) {
 
@@ -201,10 +207,9 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 		 * entered information to a remote server for processing
 		 *
 		 * @param WC_Order $order the order object
-		 * @param array $request_params associative array of request parameters
+		 * @param array    $request_params associative array of request parameters
 		 *
 		 * @see Woodev_Payment_Gateway_Hosted::use_auto_form_post()
-		 *
 		 */
 		public function render_pay_page_form( $order, $request_params ) {
 			// implemented by concrete class
@@ -217,17 +222,17 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 		 * hosted payment page where payment information is entered.
 		 *
 		 * @param WC_Order $order the order object
-		 * @param array $request_params associative array of request parameters
+		 * @param array    $request_params associative array of request parameters
 		 *
 		 * @see Woodev_Payment_Gateway_Hosted::use_auto_form_post()
-		 *
 		 */
 		public function render_auto_post_form( WC_Order $order, $request_params ) {
 
 			$args = $this->get_auto_post_form_args( $order );
 
 			// attempt to automatically submit the form and redirect
-			wc_enqueue_js( '
+			wc_enqueue_js(
+				'
 			$( "body" ).block( {
 					message: "<img src=\"' . esc_url( $this->get_plugin()->get_framework_assets_url() . '/images/ajax-loader.gif' ) . '\" alt=\"Redirecting&hellip;\" style=\"float:left; margin-right: 10px;\" />' . esc_html( $args['thanks_message'] ) . '",
 					overlayCSS: {
@@ -246,7 +251,8 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 				} );
 
 			$( "#submit_' . $this->get_id() . '_payment_form" ).click();
-		' );
+		'
+			);
 
 			echo '<p>' . esc_html( $args['message'] ) . '</p>';
 			echo '<form action="' . esc_url( $args['submit_url'] ) . '" method="post">';
@@ -268,7 +274,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 		 *
 		 * @return array
 		 * @see Woodev_Payment_Gateway_Hosted::render_auto_post_form() for args
-		 *
 		 */
 		protected function get_auto_post_form_args( WC_Order $order ) {
 
@@ -389,10 +394,13 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 
 					$this->get_plugin()->log(
 					/* translators: Placeholders: %1$s - transaction request type such as IPN or Redirect-back, %2$s - the error message */
-						sprintf( '%1$s processing error: %2$s',
+						sprintf(
+							'%1$s processing error: %2$s',
 							( $response && $response->is_ipn() ) ? 'IPN' : 'Redirect-back',
 							$e->getMessage()
-						), $this->get_id() );
+						),
+						$this->get_id()
+					);
 				}
 
 				$this->do_invalid_transaction_response( $order, $response );
@@ -416,11 +424,13 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 			// If the order is invalid, bail
 			if ( ! $order ) {
 
-				throw new Woodev_Payment_Gateway_Exception( sprintf(
-				/* translators: Placeholders: %s - a WooCommerce order ID */
-					__( 'Could not find order %s', 'woodev-plugin-framework' ),
-					$response->get_order_id()
-				) );
+				throw new Woodev_Payment_Gateway_Exception(
+					sprintf(
+					/* translators: Placeholders: %s - a WooCommerce order ID */
+						__( 'Could not find order %s', 'woodev-plugin-framework' ),
+						$response->get_order_id()
+					)
+				);
 			}
 
 			$order = $this->get_order( $order );
@@ -428,18 +438,18 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 			$order->payment->account_number = $response->get_account_number();
 
 			switch ( $response->get_payment_type() ) {
-				case  self::PAYMENT_TYPE_CREDIT_CARD :
+				case self::PAYMENT_TYPE_CREDIT_CARD:
 					$order->payment->exp_month = $response->get_exp_month();
 					$order->payment->exp_year  = $response->get_exp_year();
 					$order->payment->card_type = $response->get_card_type();
 					break;
 
-				case self::PAYMENT_TYPE_ECHECK :
+				case self::PAYMENT_TYPE_ECHECK:
 					$order->payment->account_type = $response->get_account_type();
 					$order->payment->check_number = $response->get_check_number();
 					break;
 
-				case self::PAYMENT_TYPE_LOANS :
+				case self::PAYMENT_TYPE_LOANS:
 					$order->payment->loan_type     = $response->get_loan_type();
 					$order->payment->credit_amount = $response->get_credit_amount();
 					$order->payment->first_payment = $response->get_first_payment();
@@ -457,7 +467,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 		 *
 		 * @return WC_Order
 		 * @see Woodev_Payment_Gateway::get_order()
-		 *
 		 */
 		public function get_order( $order_id ) {
 
@@ -476,7 +485,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 		/**
 		 * Validate a transaction response.
 		 *
-		 * @param WC_Order $order the order object
+		 * @param WC_Order                                                 $order the order object
 		 * @param Woodev_Payment_Gateway_API_Payment_Notification_Response $response the response object
 		 *
 		 * @throws Woodev_Payment_Gateway_Exception
@@ -489,10 +498,12 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 				/* translators: Placeholders: %s - payment gateway title (such as Authorize.net, Braintree, etc) */
 				$order->add_order_note( sprintf( esc_html__( '%s duplicate transaction received', 'woodev-plugin-framework' ), $this->get_method_title() ) );
 
-				throw new Woodev_Payment_Gateway_Exception( sprintf(
-					__( 'Order %s is already paid for.', 'woodev-plugin-framework' ),
-					$order->get_order_number()
-				) );
+				throw new Woodev_Payment_Gateway_Exception(
+					sprintf(
+						__( 'Order %s is already paid for.', 'woodev-plugin-framework' ),
+						$order->get_order_number()
+					)
+				);
 			}
 		}
 
@@ -500,7 +511,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 		/**
 		 * Process the transaction response for the given order
 		 *
-		 * @param WC_Order $order the order
+		 * @param WC_Order                                                 $order the order
 		 * @param Woodev_Payment_Gateway_API_Payment_Notification_Response $response transaction response
 		 *
 		 * @throws Exception
@@ -529,7 +540,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 				} elseif ( $response->transaction_held() ) {
 					$this->do_transaction_held( $order, $response );
 				}
-
 			} elseif ( $response->transaction_cancelled() ) {
 
 				$this->mark_order_as_cancelled( $order, $response->get_status_message(), $response );
@@ -549,7 +559,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 		/**
 		 * Processes a transaction response's token data, if any.
 		 *
-		 * @param WC_Order $order order object
+		 * @param WC_Order                                                          $order order object
 		 * @param Woodev_Payment_Gateway_Payment_Notification_Tokenization_Response $response response object
 		 *
 		 * @return WC_Order order object
@@ -573,31 +583,39 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 						if ( $token->is_credit_card() ) {
 
 							/* translators: Placeholders: %1$s - payment gateway title (such as Authorize.net, Braintree, etc), %2$s - payment method name (mastercard, bank account, etc), %3$s - last four digits of the card/account, %4$s - card/account expiry date */
-							$order->add_order_note( sprintf( __( '%1$s Payment Method Saved: %2$s ending in %3$s (expires %4$s)', 'woodev-plugin-framework' ),
-								$this->get_method_title(),
-								$token->get_type_full(),
-								$token->get_last_four(),
-								$token->get_exp_date()
-							) );
+							$order->add_order_note(
+								sprintf(
+									__( '%1$s Payment Method Saved: %2$s ending in %3$s (expires %4$s)', 'woodev-plugin-framework' ),
+									$this->get_method_title(),
+									$token->get_type_full(),
+									$token->get_last_four(),
+									$token->get_exp_date()
+								)
+							);
 
 						} elseif ( $token->is_echeck() ) {
 
 							// account type (checking/savings) may or may not be available, which is fine
 							/* translators: Placeholders: %1$s - payment gateway title (such as CyberSouce, NETbilling, etc), %2$s - account type (checking/savings - may or may not be available), %3$s - last four digits of the account */
-							$order->add_order_note( sprintf( __( '%1$s eCheck Payment Method Saved: %2$s account ending in %3$s', 'woodev-plugin-framework' ),
-								$this->get_method_title(),
-								$token->get_account_type(),
-								$token->get_last_four()
-							) );
+							$order->add_order_note(
+								sprintf(
+									__( '%1$s eCheck Payment Method Saved: %2$s account ending in %3$s', 'woodev-plugin-framework' ),
+									$this->get_method_title(),
+									$token->get_account_type(),
+									$token->get_last_four()
+								)
+							);
 
 						} else {
 
 							/* translators: Placeholders: %s - payment gateway title (such as CyberSouce, NETbilling, etc) */
-							$order->add_order_note( sprintf( __( '%s Payment Method Saved', 'woodev-plugin-framework' ),
-								$this->get_method_title()
-							) );
+							$order->add_order_note(
+								sprintf(
+									__( '%s Payment Method Saved', 'woodev-plugin-framework' ),
+									$this->get_method_title()
+								)
+							);
 						}
-
 					} else {
 
 						$message = sprintf(
@@ -652,7 +670,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 		 * Adds an order note, along with anything else required after an approved transaction.
 		 * This is a generic, default approved handler.
 		 *
-		 * @param WC_Order $order the order object
+		 * @param WC_Order                                                 $order the order object
 		 * @param Woodev_Payment_Gateway_API_Payment_Notification_Response $response the response object
 		 */
 		protected function do_transaction_approved( WC_Order $order, $response ) {
@@ -665,7 +683,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 
 			} else {
 
-				wp_redirect( $this->get_return_url( $order ) );
+				wp_safe_redirect( $this->get_return_url( $order ) );
 				exit;
 			}
 		}
@@ -674,7 +692,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 		/**
 		 * Handle a held transaction response.
 		 *
-		 * @param WC_Order $order the order object
+		 * @param WC_Order                                                 $order the order object
 		 * @param Woodev_Payment_Gateway_API_Payment_Notification_Response $response the response object
 		 */
 		protected function do_transaction_held( WC_Order $order, $response ) {
@@ -686,7 +704,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 
 			} else {
 
-				wp_redirect( $this->get_return_url( $order ) );
+				wp_safe_redirect( $this->get_return_url( $order ) );
 				exit;
 			}
 		}
@@ -695,7 +713,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 		/**
 		 * Handles a cancelled transaction response.
 		 *
-		 * @param WC_Order $order the order object
+		 * @param WC_Order                                                 $order the order object
 		 * @param Woodev_Payment_Gateway_API_Payment_Notification_Response $response the response object
 		 */
 		protected function do_transaction_cancelled( WC_Order $order, $response ) {
@@ -707,7 +725,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 
 			} else {
 
-				wp_redirect( $order->get_cancel_order_url() );
+				wp_safe_redirect( $order->get_cancel_order_url() );
 				exit;
 			}
 		}
@@ -716,7 +734,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 		/**
 		 * Handles a failed transaction response.
 		 *
-		 * @param WC_Order $order the order object
+		 * @param WC_Order                                                 $order the order object
 		 * @param Woodev_Payment_Gateway_API_Payment_Notification_Response $response the response object
 		 */
 		protected function do_transaction_failed( WC_Order $order, $response ) {
@@ -728,7 +746,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 
 			} else {
 
-				wp_redirect( $order->get_checkout_payment_url( $this->use_form_post() && ! $this->use_auto_form_post() ) );
+				wp_safe_redirect( $order->get_checkout_payment_url( $this->use_form_post() && ! $this->use_auto_form_post() ) );
 				exit;
 			}
 		}
@@ -739,7 +757,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 		 *
 		 * i.e. the order has already been paid or was not found
 		 *
-		 * @param null|WC_Order $order Optional. The order object
+		 * @param null|WC_Order                                            $order Optional. The order object
 		 * @param Woodev_Payment_Gateway_API_Payment_Notification_Response $response the response object
 		 */
 		protected function do_invalid_transaction_response( $order, $response ) {
@@ -749,15 +767,13 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 				status_header( 200 );
 				die();
 
-			} else {
+			} elseif ( $order ) {
 
-				if ( $order ) {
-					wp_redirect( $this->get_return_url( $order ) );
+					wp_safe_redirect( $this->get_return_url( $order ) );
 					exit;
-				} else {
-					wp_redirect( get_home_url( null, '' ) );
-					exit;
-				}
+			} else {
+				wp_safe_redirect( get_home_url( null, '' ) );
+				exit;
 			}
 		}
 
@@ -812,7 +828,8 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 		public function log_hosted_pay_page_request( $request ) {
 
 			$this->add_debug_message(
-				sprintf( "Request Method: %s\nRequest URI: %s\nRequest Body: %s",
+				sprintf(
+					"Request Method: %s\nRequest URI: %s\nRequest Body: %s",
 					$request['method'],
 					$request['uri'],
 					$request['body']
@@ -826,7 +843,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 		 * Logs IPN/redirect-back transaction response request to the log file.
 		 *
 		 * @param array|string $response the request data
-		 * @param string $message optional message string with a %s to hold the response data.  Defaults to 'Request %s' $response
+		 * @param string       $message optional message string with a %s to hold the response data.  Defaults to 'Request %s' $response
 		 */
 		public function log_transaction_response_request( $response, $message = null ) {
 

@@ -1,6 +1,6 @@
 <?php
 
-defined( 'ABSPATH' ) or exit;
+defined( 'ABSPATH' ) || exit;
 
 if ( ! class_exists( 'Woodev_Control' ) ) :
 
@@ -137,10 +137,12 @@ if ( ! class_exists( 'Woodev_Control' ) ) :
 
 			if ( ! empty( $valid_types ) && ! in_array( $value, $valid_types, true ) ) {
 
-				throw new Woodev_Plugin_Exception( sprintf(
-					'Control type must be one of %s',
-					Woodev_Helper::list_array_items( $valid_types, 'or' )
-				) );
+				throw new Woodev_Plugin_Exception(
+					sprintf(
+						'Control type must be one of %s',
+						Woodev_Helper::list_array_items( $valid_types, 'or' )
+					)
+				);
 			}
 
 			$this->type = $value;
@@ -198,8 +200,6 @@ if ( ! class_exists( 'Woodev_Control' ) ) :
 
 			$this->options = $options;
 		}
-
-
 	}
 
 endif;

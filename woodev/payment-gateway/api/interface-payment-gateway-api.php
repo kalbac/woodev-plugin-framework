@@ -21,7 +21,6 @@ if ( ! interface_exists( 'Woodev_Payment_Gateway_API' ) ) :
 		 * @return Woodev_Payment_Gateway_API_Response credit card charge response
 		 * @throws Woodev_Payment_Gateway_Exception network timeouts, etc
 		 * @since 1.0.0
-		 *
 		 */
 		public function credit_card_authorization( WC_Order $order );
 
@@ -36,7 +35,6 @@ if ( ! interface_exists( 'Woodev_Payment_Gateway_API' ) ) :
 		 * @return Woodev_Payment_Gateway_API_Response credit card charge response
 		 * @throws Woodev_Payment_Gateway_Exception network timeouts, etc
 		 * @since 1.0.0
-		 *
 		 */
 		public function credit_card_charge( WC_Order $order );
 
@@ -51,7 +49,6 @@ if ( ! interface_exists( 'Woodev_Payment_Gateway_API' ) ) :
 		 * @return Woodev_Payment_Gateway_API_Response credit card capture response
 		 * @throws Woodev_Payment_Gateway_Exception network timeouts, etc
 		 * @since 1.0.0
-		 *
 		 */
 		public function credit_card_capture( WC_Order $order );
 
@@ -66,7 +63,6 @@ if ( ! interface_exists( 'Woodev_Payment_Gateway_API' ) ) :
 		 * @return Woodev_Payment_Gateway_API_Response check debit response
 		 * @throws Woodev_Payment_Gateway_Exception network timeouts, etc
 		 * @since 1.0.0
-		 *
 		 */
 		public function check_debit( WC_Order $order );
 
@@ -107,7 +103,6 @@ if ( ! interface_exists( 'Woodev_Payment_Gateway_API' ) ) :
 		 * @return Woodev_Payment_Gateway_API_Create_Payment_Token_Response payment method tokenization response
 		 * @throws Woodev_Payment_Gateway_Exception network timeouts, etc
 		 * @since 1.0.0
-		 *
 		 */
 		public function tokenize_payment_method( WC_Order $order );
 
@@ -128,7 +123,6 @@ if ( ! interface_exists( 'Woodev_Payment_Gateway_API' ) ) :
 		 *
 		 * @return bool
 		 * @see Woodev_Payment_Gateway_API::update_tokenized_payment_method()
-		 *
 		 */
 		public function supports_update_tokenized_payment_method();
 
@@ -144,7 +138,6 @@ if ( ! interface_exists( 'Woodev_Payment_Gateway_API' ) ) :
 		 * @throws Woodev_Payment_Gateway_Exception network timeouts, etc
 		 * @since 1.0.0
 		 * @see Woodev_Payment_Gateway_API::supports_remove_tokenized_payment_method()
-		 *
 		 */
 		public function remove_tokenized_payment_method( $token, $customer_id );
 
@@ -194,7 +187,6 @@ if ( ! interface_exists( 'Woodev_Payment_Gateway_API' ) ) :
 		 *
 		 * @return Woodev_Payment_Gateway_API_Request the most recent request object
 		 * @since 1.0.0
-		 *
 		 */
 		public function get_request();
 
@@ -204,7 +196,6 @@ if ( ! interface_exists( 'Woodev_Payment_Gateway_API' ) ) :
 		 *
 		 * @return Woodev_Payment_Gateway_API_Response the most recent response object
 		 * @since 1.0.0
-		 *
 		 */
 		public function get_response();
 
@@ -215,7 +206,6 @@ if ( ! interface_exists( 'Woodev_Payment_Gateway_API' ) ) :
 		 * @return WC_Order
 		 */
 		public function get_order();
-
 	}
 
 endif;

@@ -29,7 +29,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 	 * + `transaction_link`        - adds actions to render the merchant account transaction direct link on the Admin Order Edit page.  (Don't forget to override the Woodev_Payment_Gateway::get_transaction_url() method!)
 	 * + `capture_charge`          - adds actions to capture charge for authorization-only transactions
 	 * + `my_payment_methods`      - adds actions to show/handle a "My Payment Methods" area on the customer's My Account page. This will show saved payment methods for all plugin gateways that support tokenization.
-	 *
 	 */
 
 	abstract class Woodev_Payment_Gateway_Plugin extends Woodev_Plugin {
@@ -52,7 +51,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 		/** @var array named features that this gateway supports which require action from the parent plugin, including 'tokenization' */
 		private $supports = array();
 
-		/** @var boolean true if this gateway requires SSL for processing transactions, false otherwise */
+		/** @var array|bool gateway IDs that require SSL, or bool for all/none */
 		private $require_ssl;
 
 		/** @var Woodev_Payment_Gateway_Admin_Order order handler instance */
@@ -77,22 +76,24 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 		 *
 		 * @param string $id plugin id
 		 * @param string $version plugin version number
-		 * @param array $args plugin arguments
+		 * @param array  $args plugin arguments
 		 *
 		 * @see Woodev_Plugin::__construct()
 		 * @since 1.0.0
-		 *
 		 */
 		public function __construct( $id, $version, $args ) {
 
 			parent::__construct( $id, $version, $args );
 
-			$args = wp_parse_args( $args, array(
-				'gateways'    => array(),
-				'currencies'  => array(),
-				'supports'    => array(),
-				'require_ssl' => false,
-			) );
+			$args = wp_parse_args(
+				$args,
+				array(
+					'gateways'    => array(),
+					'currencies'  => array(),
+					'supports'    => array(),
+					'require_ssl' => false,
+				)
+			);
 
 			// add each gateway
 			foreach ( $args['gateways'] as $gateway_id => $gateway_class_name ) {
@@ -119,7 +120,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 		 */
 		protected function init_rest_api_handler() {
 
-			require_once( $this->get_payment_gateway_framework_path() . '/rest-api/class-payment-gateway-plugin-rest-api.php' );
+			require_once $this->get_payment_gateway_framework_path() . '/rest-api/class-payment-gateway-plugin-rest-api.php';
 
 			$this->rest_api_handler = new Woodev_Payment_Gateway_REST_API( $this );
 		}
@@ -165,7 +166,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 		 * @internal
 		 *
 		 * @since 1.0.0
-		 *
 		 */
 		public function load_gateways( $gateways ) {
 
@@ -207,46 +207,46 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 			$payment_gateway_framework_path = $this->get_payment_gateway_framework_path();
 
 			// interfaces
-			require_once( $payment_gateway_framework_path . '/api/interface-payment-gateway-api.php' );
-			require_once( $payment_gateway_framework_path . '/api/interface-payment-gateway-api-request.php' );
-			require_once( $payment_gateway_framework_path . '/api/interface-payment-gateway-api-response.php' );
-			require_once( $payment_gateway_framework_path . '/api/interface-payment-gateway-api-authorization-response.php' );
-			require_once( $payment_gateway_framework_path . '/api/interface-payment-gateway-api-create-payment-token-response.php' );
-			require_once( $payment_gateway_framework_path . '/api/interface-payment-gateway-api-get-tokenized-payment-methods-response.php' );
-			require_once( $payment_gateway_framework_path . '/api/interface-payment-gateway-api-payment-notification-response.php' );
-			require_once( $payment_gateway_framework_path . '/api/interface-payment-gateway-api-payment-notification-credit-card-response.php' );
-			require_once( $payment_gateway_framework_path . '/api/interface-payment-gateway-api-payment-notification-echeck-response.php' );
-			require_once( $payment_gateway_framework_path . '/api/interface-payment-gateway-api-payment-notification-loans-response.php' );
-			require_once( $payment_gateway_framework_path . '/api/interface-payment-gateway-api-payment-notification-tokenization-response.php' );
-			require_once( $payment_gateway_framework_path . '/api/interface-payment-gateway-api-customer-response.php' );
+			require_once $payment_gateway_framework_path . '/api/interface-payment-gateway-api.php';
+			require_once $payment_gateway_framework_path . '/api/interface-payment-gateway-api-request.php';
+			require_once $payment_gateway_framework_path . '/api/interface-payment-gateway-api-response.php';
+			require_once $payment_gateway_framework_path . '/api/interface-payment-gateway-api-authorization-response.php';
+			require_once $payment_gateway_framework_path . '/api/interface-payment-gateway-api-create-payment-token-response.php';
+			require_once $payment_gateway_framework_path . '/api/interface-payment-gateway-api-get-tokenized-payment-methods-response.php';
+			require_once $payment_gateway_framework_path . '/api/interface-payment-gateway-api-payment-notification-response.php';
+			require_once $payment_gateway_framework_path . '/api/interface-payment-gateway-api-payment-notification-credit-card-response.php';
+			require_once $payment_gateway_framework_path . '/api/interface-payment-gateway-api-payment-notification-echeck-response.php';
+			require_once $payment_gateway_framework_path . '/api/interface-payment-gateway-api-payment-notification-loans-response.php';
+			require_once $payment_gateway_framework_path . '/api/interface-payment-gateway-api-payment-notification-tokenization-response.php';
+			require_once $payment_gateway_framework_path . '/api/interface-payment-gateway-api-customer-response.php';
 
 			// exceptions
-			require_once( $payment_gateway_framework_path . '/exceptions/class-payment-gateway-exception.php' );
+			require_once $payment_gateway_framework_path . '/exceptions/class-payment-gateway-exception.php';
 
 			// gateway
-			require_once( $payment_gateway_framework_path . '/class-payment-gateway.php' );
-			require_once( $payment_gateway_framework_path . '/class-payment-gateway-direct.php' );
-			require_once( $payment_gateway_framework_path . '/class-payment-gateway-hosted.php' );
-			require_once( $payment_gateway_framework_path . '/class-payment-gateway-payment-form.php' );
-			require_once( $payment_gateway_framework_path . '/class-payment-gateway-my-payment-methods.php' );
+			require_once $payment_gateway_framework_path . '/class-payment-gateway.php';
+			require_once $payment_gateway_framework_path . '/class-payment-gateway-direct.php';
+			require_once $payment_gateway_framework_path . '/class-payment-gateway-hosted.php';
+			require_once $payment_gateway_framework_path . '/class-payment-gateway-payment-form.php';
+			require_once $payment_gateway_framework_path . '/class-payment-gateway-my-payment-methods.php';
 
 			// handlers
-			require_once( $payment_gateway_framework_path . '/handlers/abstract-payment-handler.php' );
-			require_once( $payment_gateway_framework_path . '/handlers/abstract-hosted-payment-handler.php' );
-			require_once( $payment_gateway_framework_path . '/handlers/capture.php' );
+			require_once $payment_gateway_framework_path . '/handlers/abstract-payment-handler.php';
+			require_once $payment_gateway_framework_path . '/handlers/abstract-hosted-payment-handler.php';
+			require_once $payment_gateway_framework_path . '/handlers/capture.php';
 
 			// payment tokens
-			require_once( $payment_gateway_framework_path . '/payment-tokens/class-payment-gateway-payment-token.php' );
-			require_once( $payment_gateway_framework_path . '/payment-tokens/class-payment-gateway-payment-tokens-handler.php' );
+			require_once $payment_gateway_framework_path . '/payment-tokens/class-payment-gateway-payment-token.php';
+			require_once $payment_gateway_framework_path . '/payment-tokens/class-payment-gateway-payment-tokens-handler.php';
 
 			// helpers
-			require_once( $payment_gateway_framework_path . '/api/class-payment-gateway-api-response-message-helper.php' );
-			require_once( $payment_gateway_framework_path . '/class-payment-gateway-helper.php' );
+			require_once $payment_gateway_framework_path . '/api/class-payment-gateway-api-response-message-helper.php';
+			require_once $payment_gateway_framework_path . '/class-payment-gateway-helper.php';
 
 			// admin
-			require_once( $payment_gateway_framework_path . '/admin/class-payment-gateway-admin-order.php' );
-			require_once( $payment_gateway_framework_path . '/admin/class-payment-gateway-admin-user-handler.php' );
-			require_once( $payment_gateway_framework_path . '/admin/class-payment-gateway-admin-payment-token-editor.php' );
+			require_once $payment_gateway_framework_path . '/admin/class-payment-gateway-admin-order.php';
+			require_once $payment_gateway_framework_path . '/admin/class-payment-gateway-admin-user-handler.php';
+			require_once $payment_gateway_framework_path . '/admin/class-payment-gateway-admin-payment-token-editor.php';
 		}
 
 		/**
@@ -315,7 +315,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 		 * @see Woodev_Plugin::plugin_action_links()
 		 *
 		 * @since 1.0.0
-		 *
 		 */
 		public function plugin_action_links( $actions ) {
 
@@ -412,29 +411,37 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 					if ( $gateway->is_production_environment() && $this->get_admin_notice_handler()->should_display_notice( 'ssl-required' ) ) {
 
 						/* translators: Placeholders: %1$s - plugin name, %2$s - <a> tag, %3$s - </a> tag */
-						$message = sprintf( esc_html__( '%1$s: WooCommerce is not being forced over SSL; your customers\' payment data may be at risk. %2$sVerify your site URLs here%3$s', 'woodev-plugin-framework' ),
+						$message = sprintf(
+							esc_html__( '%1$s: WooCommerce is not being forced over SSL; your customers\' payment data may be at risk. %2$sVerify your site URLs here%3$s', 'woodev-plugin-framework' ),
 							'<strong>' . $this->get_plugin_name() . '</strong>',
 							'<a href="' . admin_url( 'options-general.php' ) . '">',
 							' &raquo;</a>'
 						);
 
-						$this->get_admin_notice_handler()->add_admin_notice( $message, 'ssl-required', array(
-							'notice_class' => 'error',
-						) );
+						$this->get_admin_notice_handler()->add_admin_notice(
+							$message,
+							'ssl-required',
+							array(
+								'notice_class' => 'error',
+							)
+						);
 
 						// just show the message once for plugins with multiple gateway support
 						break;
 					}
-
 				} elseif ( $this->require_tls_1_2() && ! $this->is_tls_1_2_available() ) {
 
 					/* translators: Placeholders: %s - payment gateway name */
-					$message = sprintf( esc_html__( "%s will soon require TLS 1.2 support to process transactions and your server environment may need to be updated. Please contact your hosting provider to confirm that your site can send and receive TLS 1.2 connections and request they make any necessary updates.", 'woodev-plugin-framework' ), '<strong>' . $gateway->get_method_title() . '</strong>' );
+					$message = sprintf( esc_html__( '%s will soon require TLS 1.2 support to process transactions and your server environment may need to be updated. Please contact your hosting provider to confirm that your site can send and receive TLS 1.2 connections and request they make any necessary updates.', 'woodev-plugin-framework' ), '<strong>' . $gateway->get_method_title() . '</strong>' );
 
-					$this->get_admin_notice_handler()->add_admin_notice( $message, 'tls-1-2-required', array(
-						'notice_class'            => 'notice-warning',
-						'always_show_on_settings' => false,
-					) );
+					$this->get_admin_notice_handler()->add_admin_notice(
+						$message,
+						'tls-1-2-required',
+						array(
+							'notice_class'            => 'notice-warning',
+							'always_show_on_settings' => false,
+						)
+					);
 
 					// just show the message once for plugins with multiple gateway support
 					break;
@@ -494,9 +501,13 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 					'</a>'
 				);
 
-				$this->get_admin_notice_handler()->add_admin_notice( $message, 'accepted-currency' . $suffix, array(
-					'notice_class' => 'error',
-				) );
+				$this->get_admin_notice_handler()->add_admin_notice(
+					$message,
+					'accepted-currency' . $suffix,
+					array(
+						'notice_class' => 'error',
+					)
+				);
 
 			}
 		}
@@ -516,12 +527,17 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 					/* translators: Placeholders: %1$s - payment gateway name, %2$s - opening <a> tag, %3$s - closing </a> tag */
 						__( 'Heads up! %1$s is currently configured to log transaction data for debugging purposes. If you are not experiencing any problems with payment processing, we recommend %2$sturning off Debug Mode%3$s', 'woodev-plugin-framework' ),
 						$gateway->get_method_title(),
-						! $is_gateway_settings ? '<a href="' . esc_url( $this->get_payment_gateway_configuration_url( $gateway->get_id() ) ) . '">' : '', ! $is_gateway_settings ? ' &raquo;</a>' : ''
+						! $is_gateway_settings ? '<a href="' . esc_url( $this->get_payment_gateway_configuration_url( $gateway->get_id() ) ) . '">' : '',
+						! $is_gateway_settings ? ' &raquo;</a>' : ''
 					);
 
-					$this->get_admin_notice_handler()->add_admin_notice( $message, 'debug-in-production', array(
-						'notice_class' => 'notice-warning',
-					) );
+					$this->get_admin_notice_handler()->add_admin_notice(
+						$message,
+						'debug-in-production',
+						array(
+							'notice_class' => 'notice-warning',
+						)
+					);
 
 					break;
 				}
@@ -552,7 +568,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 								if ( Automattic\WooCommerce\Admin\Notes\Note::E_WC_ADMIN_NOTE_ACTIONED === $note->get_status() && $this->is_payment_gateway_configuration_page( $gateway->get_id() ) ) {
 									$note->set_status( Automattic\WooCommerce\Admin\Notes\Note::E_WC_ADMIN_NOTE_UNACTIONED );
 								}
-
 							} else {
 
 								$note = new Automattic\WooCommerce\Admin\Notes\Note();
@@ -561,11 +576,13 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 								$note->set_type( Automattic\WooCommerce\Admin\Notes\Note::E_WC_ADMIN_NOTE_ERROR );
 								$note->set_source( $gateway->get_id_dasherized() );
 
-								$note->set_title( sprintf(
-								/* translators: Placeholders: %s - gateway name */
-									__( '%s is not configured', 'woodev-plugin-framework' ),
-									$gateway->get_method_title()
-								) );
+								$note->set_title(
+									sprintf(
+									/* translators: Placeholders: %s - gateway name */
+										__( '%s is not configured', 'woodev-plugin-framework' ),
+										$gateway->get_method_title()
+									)
+								);
 
 								$note->set_content( $gateway->get_not_configured_error_message() );
 							}
@@ -587,9 +604,13 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 					// if not an enhanced admin screen, output the legacy style notice
 					if ( ! Woodev_Helper::is_enhanced_admin_screen() ) {
 
-						$this->get_admin_notice_handler()->add_admin_notice( $gateway->get_not_configured_error_message(), $gateway->get_id() . '-not-configured', array(
-							'notice_class' => 'error',
-						) );
+						$this->get_admin_notice_handler()->add_admin_notice(
+							$gateway->get_not_configured_error_message(),
+							$gateway->get_id() . '-not-configured',
+							array(
+								'notice_class' => 'error',
+							)
+						);
 					}
 
 					// if all's well with this gateway, make sure and delete any previously added notes
@@ -613,7 +634,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 
 				$environment = $gateway->get_environment_name();
 
-				include( $this->get_payment_gateway_framework_path() . '/admin/views/html-admin-gateway-status.php' );
+				include $this->get_payment_gateway_framework_path() . '/admin/views/html-admin-gateway-status.php';
 			}
 		}
 
@@ -667,7 +688,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 		 *
 		 * @return string the gateway settings option name
 		 * @since 1.0.0
-		 *
 		 */
 		protected function get_gateway_settings_name( $gateway_id ) {
 			return 'woocommerce_' . $gateway_id . '_settings';
@@ -691,7 +711,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 		 *
 		 * @return boolean true if this plugin requires ssl
 		 * @since 1.0.0
-		 *
 		 */
 		protected function requires_ssl() {
 			return $this->require_ssl;
@@ -726,13 +745,16 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 		 *
 		 * @return string admin configuration url for the gateway
 		 * @since 3.0.0
-		 *
 		 */
 		public function get_payment_gateway_configuration_url( $gateway_id ) {
-			return add_query_arg( array( 'page'    => 'wc-settings',
-			                             'tab'     => 'checkout',
-			                             'section' => $gateway_id
-			), admin_url( 'admin.php' ) );
+			return add_query_arg(
+				array(
+					'page'    => 'wc-settings',
+					'tab'     => 'checkout',
+					'section' => $gateway_id,
+				),
+				admin_url( 'admin.php' )
+			);
 		}
 
 
@@ -746,8 +768,8 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 		public function is_payment_gateway_configuration_page( $gateway_id ) {
 
 			return isset( $_GET['page'] ) && 'wc-settings' == $_GET['page'] &&
-			       isset( $_GET['tab'] ) && 'checkout' == $_GET['tab'] &&
-			       isset( $_GET['section'] ) && $gateway_id === $_GET['section'];
+					isset( $_GET['tab'] ) && 'checkout' == $_GET['tab'] &&
+					isset( $_GET['section'] ) && $gateway_id === $_GET['section'];
 		}
 
 		/**
@@ -758,10 +780,12 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 		 * @param string $gateway_class_name the corresponding gateway class name
 		 *
 		 * @since 1.0.0
-		 *
 		 */
 		public function add_gateway( $gateway_id, $gateway_class_name ) {
-			$this->gateways[ $gateway_id ] = array( 'gateway_class_name' => $gateway_class_name, 'gateway' => null );
+			$this->gateways[ $gateway_id ] = array(
+				'gateway_class_name' => $gateway_class_name,
+				'gateway'            => null,
+			);
 		}
 
 		/**
@@ -770,7 +794,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 		 *
 		 * @return array of string gateway class names
 		 * @since 1.0.0
-		 *
 		 */
 		public function get_gateway_class_names() {
 
@@ -793,7 +816,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 		 *
 		 * @return string gateway class name
 		 * @since 1.0.0
-		 *
 		 */
 		public function get_gateway_class_name( $gateway_id ) {
 
@@ -808,7 +830,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 		 *
 		 * @return Woodev_Payment_Gateway[]
 		 * @since 1.0.0
-		 *
 		 */
 		public function get_gateways() {
 
@@ -827,7 +848,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 		/**
 		 * Adds the given $gateway to the internal gateways store
 		 *
-		 * @param string $gateway_id the gateway identifier
+		 * @param string                 $gateway_id the gateway identifier
 		 * @param Woodev_Payment_Gateway $gateway the gateway object
 		 */
 		public function set_gateway( $gateway_id, $gateway ) {
@@ -841,7 +862,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 		 *
 		 * @return Woodev_Payment_Gateway the gateway object
 		 * @since 1.0.0
-		 *
 		 */
 		public function get_gateway( $gateway_id = null ) {
 
@@ -869,7 +889,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 		 *
 		 * @return boolean true if the plugin has this gateway available, false otherwise
 		 * @since 1.0.0
-		 *
 		 */
 		public function has_gateway( $gateway_id ) {
 			return isset( $this->gateways[ $gateway_id ] );
@@ -880,7 +899,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 		 *
 		 * @return array of gateway id strings
 		 * @since 1.0.0
-		 *
 		 */
 		public function get_gateway_ids() {
 
@@ -894,7 +912,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 		 * Returns the gateway for a given token
 		 *
 		 * @param string|int $user_id the user ID associated with the token
-		 * @param string $token the token string
+		 * @param string     $token the token string
 		 *
 		 * @return Woodev_Payment_Gateway|null gateway if found, null otherwise
 		 */
@@ -927,7 +945,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 		 *
 		 * @return array of accepted currencies
 		 * @since 1.0.0
-		 *
 		 */
 		public function get_accepted_currencies() {
 			return $this->currencies;
@@ -975,7 +992,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 		public function get_payment_gateway_framework_assets_url() {
 			return untrailingslashit( plugins_url( '/assets', $this->get_payment_gateway_framework_file() ) );
 		}
-
 	}
 
 endif;

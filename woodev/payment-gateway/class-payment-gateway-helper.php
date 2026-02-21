@@ -12,7 +12,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Helper' ) ) :
 	 *
 	 * The purpose of this class is to centralize common utility functions that
 	 * are commonly used in Woodev payment gateway plugins
-	 *
 	 */
 	class Woodev_Payment_Gateway_Helper {
 
@@ -61,10 +60,10 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Helper' ) ) :
 		 */
 		public static function luhn_check( $account_number ) {
 
-			for ( $sum = 0, $i = 0, $ix = strlen( $account_number ); $i < $ix - 1; $i ++ ) {
+			for ( $sum = 0, $i = 0, $ix = strlen( $account_number ); $i < $ix - 1; $i++ ) {
 
 				$weight = substr( $account_number, $ix - ( $i + 2 ), 1 ) * ( 2 - ( $i % 2 ) );
-				$sum    += $weight < 10 ? $weight : $weight - 9;
+				$sum   += $weight < 10 ? $weight : $weight - 9;
 
 			}
 
@@ -109,10 +108,9 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Helper' ) ) :
 		/**
 		 * Determines the credit card type from a given account number (only first 4 required).
 		 *
-		 *
 		 * @param string $account_number the credit card account number
 		 *
-		 * @return string the credit card type
+		 * @return string|null the credit card type, or null if not recognized
 		 */
 		public static function card_type_from_account_number( $account_number ) {
 
@@ -148,7 +146,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Helper' ) ) :
 
 			$types = array(
 				'credit'      => esc_html__( 'Loan', 'woodev-plugin-framework' ),
-				'installment' => esc_html__( 'Installment', 'woodev-plugin-framework' )
+				'installment' => esc_html__( 'Installment', 'woodev-plugin-framework' ),
 			);
 
 			$name = isset( $types[ $type ] ) ? $types[ $type ] : $type;
@@ -177,7 +175,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Helper' ) ) :
 				'savings'  => esc_html__( 'Savings Account', 'woodev-plugin-framework' ),
 				'card'     => esc_html__( 'Credit / Debit Card', 'woodev-plugin-framework' ),
 				'bank'     => esc_html__( 'Bank Account', 'woodev-plugin-framework' ),
-				'loan'     => esc_html__( 'Loan', 'woodev-plugin-framework' )
+				'loan'     => esc_html__( 'Loan', 'woodev-plugin-framework' ),
 			);
 
 			// add the credit card names
@@ -257,7 +255,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Helper' ) ) :
 				self::CARD_TYPE_MIR        => array(
 					'name'       => esc_html_x( 'MIR', 'credit card type', 'woodev-plugin-framework' ),
 					'variations' => array(),
-				)
+				),
 			);
 		}
 	}

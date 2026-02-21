@@ -1,6 +1,6 @@
 <?php
 
-defined( 'ABSPATH' ) or exit;
+defined( 'ABSPATH' ) || exit;
 
 if ( ! class_exists( 'Woodev_Payment_Gateway_REST_API' ) ) :
 
@@ -18,7 +18,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_REST_API' ) ) :
 		 *
 		 * @return array
 		 * @see Woodev_REST_API::get_system_status_data()
-		 *
 		 */
 		public function get_system_status_data() {
 

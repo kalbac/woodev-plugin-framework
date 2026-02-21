@@ -5,7 +5,7 @@
  * @since 1.2.1
  */
 
-defined( 'ABSPATH' ) or exit;
+defined( 'ABSPATH' ) || exit;
 
 /**
  * Woodev_Admin_Pages Class.
@@ -88,8 +88,8 @@ if ( ! class_exists( 'Woodev_Admin_Pages' ) ) :
 		/**
 		 * Generates license settings page HTML markup section
 		 * The fields must be added via main plugin class. @return void
-		 * @see Woodev_License_Settings::register_license_settings()
 		 *
+		 * @see Woodev_License_Settings::register_license_settings()
 		 */
 		public function license_page_init() {
 
@@ -101,7 +101,7 @@ if ( ! class_exists( 'Woodev_Admin_Pages' ) ) :
 				array(
 					'before_section' => '<div class="%s">',
 					'after_section'  => '</div><div class="clear"></div>',
-					'section_class'  => 'wrap wrap-licenses'
+					'section_class'  => 'wrap wrap-licenses',
 				)
 			);
 		}
@@ -135,11 +135,10 @@ if ( ! class_exists( 'Woodev_Admin_Pages' ) ) :
 			echo '</form><!-- end form#woodev-plugin-license-settings -->';
 
 			$this->get_settings_section();
-
 		}
 
 		private function get_settings_section() {
-			include_once( $this->woodev_plugin->get_framework_path() . '/admin/pages/views/html-settings-section.php' );
+			include_once $this->woodev_plugin->get_framework_path() . '/admin/pages/views/html-settings-section.php';
 		}
 
 		public function extensions_menu() {
@@ -168,7 +167,7 @@ if ( ! class_exists( 'Woodev_Admin_Pages' ) ) :
 		}
 
 		public function extensions_page_init() {
-			include_once( $this->woodev_plugin->get_framework_path() . '/admin/pages/class-admin-plugins.php' );
+			include_once $this->woodev_plugin->get_framework_path() . '/admin/pages/class-admin-plugins.php';
 		}
 
 		public function extensions_page() {

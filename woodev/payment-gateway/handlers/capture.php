@@ -1,6 +1,6 @@
 <?php
 
-defined( 'ABSPATH' ) or exit;
+defined( 'ABSPATH' ) || exit;
 
 if ( ! class_exists( 'Woodev_Payment_Gateway_Capture_Handler' ) ) :
 
@@ -32,12 +32,11 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Capture_Handler' ) ) :
 		/**
 		 * Captures an order on status change to a "paid" status.
 		 *
-		 * @param int $order_id order ID
+		 * @param int    $order_id order ID
 		 * @param string $old_status status being changed
 		 * @param string $new_status new order status
 		 *
 		 * @internal
-		 *
 		 */
 		public function maybe_capture_paid_order( $order_id, $old_status, $new_status ) {
 
@@ -69,7 +68,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Capture_Handler' ) ) :
 		 *
 		 * This acts as a wrapper for when the process should just bail without logging any errors or order notes, like when performing capture via bulk action.
 		 *
-		 * @param WC_Order $order order object
+		 * @param WC_Order   $order order object
 		 * @param float|null $amount amount to capture
 		 *
 		 * @return bool
@@ -90,7 +89,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Capture_Handler' ) ) :
 		/**
 		 * Performs a credit card capture for an order.
 		 *
-		 * @param WC_Order $order WooCommerce order object
+		 * @param WC_Order   $order WooCommerce order object
 		 * @param float|null $amount amount to capture
 		 *
 		 * @return array {
@@ -152,9 +151,12 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Capture_Handler' ) ) :
 				/* translators: Placeholders: %1$s - payment gateway title (such as Tinkoff, Yandex PAY etc), %2$s - transaction amount. Definitions: Capture, as in capture funds from a credit card. */
 					__( '%1$s Capture of %2$s Approved', 'woodev-plugin-framework' ),
 					$this->get_gateway()->get_method_title(),
-					wc_price( $order->capture->amount, [
-						'currency' => $order->get_currency()
-					] )
+					wc_price(
+						$order->capture->amount,
+						[
+							'currency' => $order->get_currency(),
+						]
+					)
 				);
 
 				// adds the transaction id (if any) to the order note
@@ -210,7 +212,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Capture_Handler' ) ) :
 		/**
 		 * Adds the standard capture data to an order.
 		 *
-		 * @param WC_Order $order the order object
+		 * @param WC_Order                            $order the order object
 		 * @param Woodev_Payment_Gateway_API_Response $response transaction response
 		 */
 		public function do_capture_success( WC_Order $order, Woodev_Payment_Gateway_API_Response $response ) {
@@ -230,7 +232,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Capture_Handler' ) ) :
 		/**
 		 * Lets gateways handle any specific capture failure results for the order.
 		 *
-		 * @param WC_Order $order WooCommerce order object
+		 * @param WC_Order                            $order WooCommerce order object
 		 * @param Woodev_Payment_Gateway_API_Response $response API response object
 		 */
 		public function do_capture_failed( WC_Order $order, Woodev_Payment_Gateway_API_Response $response ) {
@@ -270,11 +272,15 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Capture_Handler' ) ) :
 		 * @return bool
 		 */
 		public function is_order_ready_for_capture( WC_Order $order ) {
-			return ! in_array( $order->get_status(), array(
+			return ! in_array(
+				$order->get_status(),
+				array(
 					'cancelled',
 					'refunded',
-					'failed'
-				), true ) && $this->get_gateway()->get_order_meta( $order, 'trans_id' );
+					'failed',
+				),
+				true
+			) && $this->get_gateway()->get_order_meta( $order, 'trans_id' );
 		}
 
 
@@ -321,10 +327,14 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Capture_Handler' ) ) :
 		 * @return bool
 		 */
 		public function is_order_captured( WC_Order $order ) {
-			return in_array( $this->get_gateway()->get_order_meta( $order, 'charge_captured' ), array(
-				'yes',
-				'partial'
-			), true );
+			return in_array(
+				$this->get_gateway()->get_order_meta( $order, 'charge_captured' ),
+				array(
+					'yes',
+					'partial',
+				),
+				true
+			);
 		}
 
 
@@ -367,7 +377,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Capture_Handler' ) ) :
 		protected function get_gateway() {
 			return $this->gateway;
 		}
-
 	}
 
 

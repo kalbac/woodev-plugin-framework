@@ -1,6 +1,6 @@
 <?php
 
-defined( 'ABSPATH' ) or exit;
+defined( 'ABSPATH' ) || exit;
 
 if ( ! class_exists( 'Woodev_Plugin_Bootstrap' ) ) :
 
@@ -53,9 +53,9 @@ if ( ! class_exists( 'Woodev_Plugin_Bootstrap' ) ) :
 		/**
 		 * Register a frameworked plugin
 		 *
-		 * @param  string  $framework_version the framework version
-		 * @param  string  $plugin_name       the plugin name
-		 * @param  string  $path              the plugin path
+		 * @param  string   $framework_version the framework version
+		 * @param  string   $plugin_name       the plugin name
+		 * @param  string   $path              the plugin path
 		 * @param callable $callback          function to initialize the plugin
 		 * @param array    $args              optional plugin arguments
 		 */
@@ -71,7 +71,7 @@ if ( ! class_exists( 'Woodev_Plugin_Bootstrap' ) ) :
 				'plugin_name' => $plugin_name,
 				'path'        => $path,
 				'callback'    => $callback,
-				'args'        => $args
+				'args'        => $args,
 			];
 		}
 
@@ -84,7 +84,7 @@ if ( ! class_exists( 'Woodev_Plugin_Bootstrap' ) ) :
 			foreach ( $this->registered_plugins as $plugin ) {
 
 				if ( ! class_exists( 'Woodev_Plugin' ) ) {
-					require_once( $this->get_plugin_path( $plugin['path'] ) . '/woodev/class-plugin.php' );
+					require_once $this->get_plugin_path( $plugin['path'] ) . '/woodev/class-plugin.php';
 					$loaded_framework       = $plugin;
 					$this->active_plugins[] = $plugin;
 				}
@@ -112,20 +112,23 @@ if ( ! class_exists( 'Woodev_Plugin_Bootstrap' ) ) :
 				}
 
 				if ( isset( $plugin['args']['is_payment_gateway'] ) && ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) {
-					require_once( $this->get_plugin_path( $plugin['path'] ) . '/woodev/payment-gateway/class-payment-gateway-plugin.php' );
+					require_once $this->get_plugin_path( $plugin['path'] ) . '/woodev/payment-gateway/class-payment-gateway-plugin.php';
 				}
 
 				if ( isset( $plugin['args']['load_shipping_method'] ) && ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) {
-					require_once( $this->get_plugin_path( $plugin['path'] ) . '/woodev/shipping-method/class-shipping-plugin.php' );
+					require_once $this->get_plugin_path( $plugin['path'] ) . '/woodev/shipping-method/class-shipping-plugin.php';
 				}
 
 				$plugin['callback']();
 			}
 
-			if ( ( $this->incompatible_framework_plugins || $this->incompatible_wc_version_plugins || $this->incompatible_wp_version_plugins ) && is_admin() && ! defined( 'DOING_AJAX' ) && ! has_action( 'admin_notices', array(
+			if ( ( $this->incompatible_framework_plugins || $this->incompatible_wc_version_plugins || $this->incompatible_wp_version_plugins ) && is_admin() && ! defined( 'DOING_AJAX' ) && ! has_action(
+				'admin_notices',
+				array(
 					$this,
-					'render_update_notices'
-				) ) ) {
+					'render_update_notices',
+				)
+			) ) {
 
 				add_action( 'admin_notices', [ $this, 'render_update_notices' ] );
 			}
@@ -154,10 +157,15 @@ if ( ! class_exists( 'Woodev_Plugin_Bootstrap' ) ) :
 
 					deactivate_plugins( $plugins );
 
-					wp_redirect( add_query_arg( [
-						'plugin_status' => 'inactive',
-						'woodev_framework_deactivate_newer' => count( $plugins )
-					], admin_url( 'plugins.php' ) ) );
+					wp_safe_redirect(
+						add_query_arg(
+							[
+								'plugin_status' => 'inactive',
+								'woodev_framework_deactivate_newer' => count( $plugins ),
+							],
+							admin_url( 'plugins.php' )
+						)
+					);
 
 					exit;
 
@@ -205,17 +213,28 @@ if ( ! class_exists( 'Woodev_Plugin_Bootstrap' ) ) :
 
 				$message .= sprintf(
 					_n( '%1$sAttention!%2$s The plugin %3$s was disabled because it is out of date and incompatible with the', '%1$sAttention!%2$s The plugins %3$s were disabled because they are out of date and incompatible with the', $incompatible_plugin_count, 'woodev-plugin-framework' ),
-					'<strong>', '</strong>',
-					Woodev_Helper::list_array_items( array_map( function ( $plugin ) {
-						return sprintf( '<strong>%s</strong>', esc_html( $plugin['plugin_name'] ) );
-					}, $this->incompatible_framework_plugins ) )
+					'<strong>',
+					'</strong>',
+					Woodev_Helper::list_array_items(
+						array_map(
+							function ( $plugin ) {
+								return sprintf( '<strong>%s</strong>', esc_html( $plugin['plugin_name'] ) );
+							},
+							$this->incompatible_framework_plugins
+						)
+					)
 				);
 
 				$message .= sprintf(
 					_n( ' newer plugin %s.', ' newer plugins %s.', $active_plugin_count, 'woodev-plugin-framework' ),
-					Woodev_Helper::list_array_items( array_map( function ( $plugin ) {
-						return sprintf( '<strong>%s</strong>', esc_html( $plugin['plugin_name'] ) );
-					}, $this->active_plugins ) )
+					Woodev_Helper::list_array_items(
+						array_map(
+							function ( $plugin ) {
+								return sprintf( '<strong>%s</strong>', esc_html( $plugin['plugin_name'] ) );
+							},
+							$this->active_plugins
+						)
+					)
 				);
 
 				$message .= '</p>';
@@ -224,22 +243,34 @@ if ( ! class_exists( 'Woodev_Plugin_Bootstrap' ) ) :
 
 				$message .= sprintf(
 					__( 'To resolve this, please %1$supdate%2$s (recommended) or %1$sdeactivate%2$s', 'woodev-plugin-framework' ),
-					'<a href="' . esc_url( admin_url( 'update-core.php' ) ) . '">', '</a>'
+					'<a href="' . esc_url( admin_url( 'update-core.php' ) ) . '">',
+					'</a>'
 				);
 
 				$message .= sprintf(
 					_n( ' the plugin %1$s, or %2$sdeactivate%3$s', ' the plugins %1$s, or %2$sdeactivate%3$s', $incompatible_plugin_count, 'woodev-plugin-framework' ),
-					Woodev_Helper::list_array_items( array_map( function ( $plugin ) {
-						return sprintf( '<strong>%s</strong>', esc_html( $plugin['plugin_name'] ) );
-					}, $this->incompatible_framework_plugins ) ),
-					'<a href="' . esc_url( wp_nonce_url( admin_url( 'plugins.php?woodev_framework_deactivate_newer=yes' ), 'woodev_framework_deactivate' ) ) . '">', '</a>'
+					Woodev_Helper::list_array_items(
+						array_map(
+							function ( $plugin ) {
+								return sprintf( '<strong>%s</strong>', esc_html( $plugin['plugin_name'] ) );
+							},
+							$this->incompatible_framework_plugins
+						)
+					),
+					'<a href="' . esc_url( wp_nonce_url( admin_url( 'plugins.php?woodev_framework_deactivate_newer=yes' ), 'woodev_framework_deactivate' ) ) . '">',
+					'</a>'
 				);
 
 				$message .= sprintf(
 					_n( ' the plugin %s.', ' the plugins %s.', $active_plugin_count, 'woodev-plugin-framework' ),
-					Woodev_Helper::list_array_items( array_map( function ( $plugin ) {
-						return sprintf( '<strong>%s</strong>', esc_html( $plugin['plugin_name'] ) );
-					}, $this->active_plugins ) )
+					Woodev_Helper::list_array_items(
+						array_map(
+							function ( $plugin ) {
+								return sprintf( '<strong>%s</strong>', esc_html( $plugin['plugin_name'] ) );
+							},
+							$this->active_plugins
+						)
+					)
 				);
 
 				$message .= '</p>';
@@ -311,8 +342,8 @@ if ( ! class_exists( 'Woodev_Plugin_Bootstrap' ) ) :
 		 * Compare the two framework versions.  Returns -1 if $a is less than $b, 0 if
 		 * they're equal, and 1 if $a is greater than $b
 		 *
-		 * @param  array  $a first registered plugin to compare
-		 * @param  array  $b second registered plugin to compare
+		 * @param  array $a first registered plugin to compare
+		 * @param  array $b second registered plugin to compare
 		 *
 		 * @return int -1 if $a is less than $b, 0 if they're equal, and 1 if $a is greater than $b
 		 */
@@ -323,12 +354,24 @@ if ( ! class_exists( 'Woodev_Plugin_Bootstrap' ) ) :
 		/**
 		 * Returns the plugin path for the given $file
 		 *
-		 * @param  string  $file the file
+		 * @param  string $file the file
 		 *
 		 * @return string plugin path
 		 */
 		public function get_plugin_path( string $file ): string {
 			return untrailingslashit( plugin_dir_path( $file ) );
+		}
+
+		/**
+		 * Returns the currently loaded framework version.
+		 *
+		 * Delegates to Woodev_Plugin::VERSION which is the single source of truth
+		 * for the framework version number.
+		 *
+		 * @return string framework version, e.g. '1.4.0'
+		 */
+		public function get_framework_version(): string {
+			return class_exists( 'Woodev_Plugin' ) ? \Woodev_Plugin::VERSION : '';
 		}
 
 		/**

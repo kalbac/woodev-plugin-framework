@@ -1,6 +1,6 @@
 <?php
 
-defined( 'ABSPATH' ) or exit;
+defined( 'ABSPATH' ) || exit;
 
 if ( ! interface_exists( 'Woodev_Payment_Gateway_Payment_Notification_Tokenization_Response' ) ) :
 
@@ -109,8 +109,6 @@ if ( ! interface_exists( 'Woodev_Payment_Gateway_Payment_Notification_Tokenizati
 		 * @return array|Woodev_Payment_Gateway_Payment_Token[]
 		 */
 		public function get_deleted_payment_tokens();
-
-
 	}
 
 

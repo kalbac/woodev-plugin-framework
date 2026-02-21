@@ -1,12 +1,12 @@
 <?php
 
-use \Automattic\WooCommerce\Admin\Overrides\Order;
-use \Automattic\WooCommerce\Internal\Admin\Orders\PageController;
-use \Automattic\WooCommerce\Internal\DataStores\Orders\OrdersTableDataStore;
-use \Automattic\WooCommerce\Internal\Utilities\COTMigrationUtil;
-use \Automattic\WooCommerce\Utilities\OrderUtil;
+use Automattic\WooCommerce\Admin\Overrides\Order;
+use Automattic\WooCommerce\Internal\Admin\Orders\PageController;
+use Automattic\WooCommerce\Internal\DataStores\Orders\OrdersTableDataStore;
+use Automattic\WooCommerce\Internal\Utilities\COTMigrationUtil;
+use Automattic\WooCommerce\Utilities\OrderUtil;
 
-defined( 'ABSPATH' ) or exit;
+defined( 'ABSPATH' ) || exit;
 
 if ( ! class_exists( 'Woodev_Order_Compatibility' ) ) :
 
@@ -29,7 +29,6 @@ if ( ! class_exists( 'Woodev_Order_Compatibility' ) ) :
 		 * }
 		 *
 		 * @deprecated 1.3.0 prefer using {@see WC_Order_Item::get_formatted_meta_data()}
-		 *
 		 */
 		public static function get_item_formatted_meta_data( WC_Order_Item $item, string $hide_prefix = '_', bool $include_all = false ): array {
 
@@ -45,7 +44,6 @@ if ( ! class_exists( 'Woodev_Order_Compatibility' ) ) :
 						'value' => $meta->value,
 					);
 				}
-
 			} else {
 
 				$item_meta = new WC_Order_Item_Meta( $item );
@@ -61,7 +59,7 @@ if ( ! class_exists( 'Woodev_Order_Compatibility' ) ) :
 		 *
 		 * @return string
 		 */
-		public static function get_orders_screen_url() : string {
+		public static function get_orders_screen_url(): string {
 
 			if ( Woodev_Plugin_Compatibility::is_hpos_enabled() ) {
 				return add_query_arg( array( 'page' => 'wc-orders' ), admin_url( 'admin.php' ) );
@@ -82,15 +80,25 @@ if ( ! class_exists( 'Woodev_Order_Compatibility' ) ) :
 		 * @param WC_Order|int $order order object or ID
 		 * @return string
 		 */
-		public static function get_edit_order_url( $order ) : string {
+		public static function get_edit_order_url( $order ): string {
 
 			$order_id = $order instanceof WC_Order ? $order->get_id() : $order;
-			$order_id = max( ( int ) $order_id, 0);
+			$order_id = max( (int) $order_id, 0 );
 
 			if ( Woodev_Plugin_Compatibility::is_wc_version_gte( '3.3' ) ) {
 				$order_url = OrderUtil::get_order_admin_edit_url( $order_id );
 			} else {
-				$order_url = apply_filters( 'woocommerce_get_edit_order_url', add_query_arg( array( 'post' => absint( $order_id ), 'action' => 'edit' ), admin_url( 'post.php' ) ), $order );
+				$order_url = apply_filters(
+					'woocommerce_get_edit_order_url',
+					add_query_arg(
+						array(
+							'post'   => absint( $order_id ),
+							'action' => 'edit',
+						),
+						admin_url( 'post.php' )
+					),
+					$order
+				);
 			}
 
 			return $order_url;
@@ -102,7 +110,7 @@ if ( ! class_exists( 'Woodev_Order_Compatibility' ) ) :
 		 *
 		 * @return bool
 		 */
-		public static function is_orders_screen() : bool {
+		public static function is_orders_screen(): bool {
 
 			$current_screen = Woodev_Helper::get_current_screen();
 
@@ -115,9 +123,9 @@ if ( ! class_exists( 'Woodev_Order_Compatibility' ) ) :
 			}
 
 			return static::get_order_screen_id() === $current_screen->id
-			       && isset( $_GET['page'] )
-			       && $_GET['page'] === 'wc-orders'
-			       && ! static::is_order_edit_screen();
+					&& isset( $_GET['page'] )
+					&& $_GET['page'] === 'wc-orders'
+					&& ! static::is_order_edit_screen();
 		}
 
 
@@ -127,7 +135,7 @@ if ( ! class_exists( 'Woodev_Order_Compatibility' ) ) :
 		 * @param string|string[] $status one or more statuses to compare
 		 * @return bool
 		 */
-		public static function is_orders_screen_for_status( $status ) : bool {
+		public static function is_orders_screen_for_status( $status ): bool {
 			global $post_type, $post_status;
 
 			if ( ! Woodev_Plugin_Compatibility::is_hpos_enabled() ) {
@@ -152,7 +160,7 @@ if ( ! class_exists( 'Woodev_Order_Compatibility' ) ) :
 		 *
 		 * @return bool
 		 */
-		public static function is_order_edit_screen() : bool {
+		public static function is_order_edit_screen(): bool {
 
 			$current_screen = Woodev_Helper::get_current_screen();
 
@@ -165,9 +173,9 @@ if ( ! class_exists( 'Woodev_Order_Compatibility' ) ) :
 			}
 
 			return static::get_order_screen_id() === $current_screen->id
-			       && isset( $_GET['page'], $_GET['action'] )
-			       && $_GET['page'] === 'wc-orders'
-			       && in_array( $_GET['action'], [ 'new', 'edit' ], true );
+					&& isset( $_GET['page'], $_GET['action'] )
+					&& $_GET['page'] === 'wc-orders'
+					&& in_array( $_GET['action'], [ 'new', 'edit' ], true );
 		}
 
 
@@ -176,7 +184,7 @@ if ( ! class_exists( 'Woodev_Order_Compatibility' ) ) :
 		 *
 		 * @return bool
 		 */
-		public static function is_order_screen() : bool {
+		public static function is_order_screen(): bool {
 			return static::is_orders_screen() || static::is_order_edit_screen();
 		}
 
@@ -186,7 +194,7 @@ if ( ! class_exists( 'Woodev_Order_Compatibility' ) ) :
 		 *
 		 * @return int|null
 		 */
-		public static function get_order_id_for_order_edit_screen() : ?int {
+		public static function get_order_id_for_order_edit_screen(): ?int {
 			global $post, $theorder;
 
 			if ( Woodev_Plugin_Compatibility::is_hpos_enabled() ) {
@@ -208,7 +216,7 @@ if ( ! class_exists( 'Woodev_Order_Compatibility' ) ) :
 		 *
 		 * @return string
 		 */
-		public static function get_order_screen_id() : string {
+		public static function get_order_screen_id(): string {
 
 			if ( is_callable( OrderUtil::class . '::get_order_admin_screen' ) ) {
 				return OrderUtil::get_order_admin_screen();
@@ -225,7 +233,7 @@ if ( ! class_exists( 'Woodev_Order_Compatibility' ) ) :
 		 *
 		 * @return string
 		 */
-		public static function get_orders_table() : string {
+		public static function get_orders_table(): string {
 			global $wpdb;
 			return Woodev_Plugin_Compatibility::is_hpos_enabled() ? OrdersTableDataStore::get_orders_table_name() : $wpdb->posts;
 		}
@@ -236,7 +244,7 @@ if ( ! class_exists( 'Woodev_Order_Compatibility' ) ) :
 		 *
 		 * @return string
 		 */
-		public static function get_orders_meta_table() : string {
+		public static function get_orders_meta_table(): string {
 			global $wpdb;
 
 			return Woodev_Plugin_Compatibility::is_hpos_enabled() ? OrdersTableDataStore::get_meta_table_name() : $wpdb->postmeta;
@@ -249,10 +257,10 @@ if ( ! class_exists( 'Woodev_Order_Compatibility' ) ) :
 		 * @see OrderUtil::get_order_type()
 		 *
 		 * @param int|WP_Post|WC_Order|null $post_order_or_id identifier of a possible order
-		 * @param string|string[] $order_type the order type, defaults to shop_order, can specify multiple types
+		 * @param string|string[]           $order_type the order type, defaults to shop_order, can specify multiple types
 		 * @return bool
 		 */
-		public static function is_order( $post_order_or_id, $order_type = 'shop_order' ) : bool {
+		public static function is_order( $post_order_or_id, $order_type = 'shop_order' ): bool {
 
 			if ( ! $post_order_or_id ) {
 				return false;
@@ -281,7 +289,7 @@ if ( ! class_exists( 'Woodev_Order_Compatibility' ) ) :
 		 * @param int|WP_Post|WC_Order|null $order_post_or_id identifier of a possible order
 		 * @return bool
 		 */
-		public static function is_refund( $order_post_or_id ) : bool {
+		public static function is_refund( $order_post_or_id ): bool {
 			return static::is_order( $order_post_or_id, 'shop_order_refund' );
 		}
 
@@ -292,8 +300,8 @@ if ( ! class_exists( 'Woodev_Order_Compatibility' ) ) :
 		 * Uses {@see WC_Order::get_meta()} if HPOS is enabled, otherwise it uses the WordPress {@see get_post_meta()} function.
 		 *
 		 * @param int|WC_Order $order order ID or object
-		 * @param string $meta_key meta key
-		 * @param bool $single return the first found meta with key (true), or all meta sharing the same key (default true)
+		 * @param string       $meta_key meta key
+		 * @param bool         $single return the first found meta with key (true), or all meta sharing the same key (default true)
 		 * @return mixed
 		 */
 		public static function get_order_meta( $order, string $meta_key, bool $single = true ) {
@@ -306,7 +314,6 @@ if ( ! class_exists( 'Woodev_Order_Compatibility' ) ) :
 				if ( $order instanceof WC_Order ) {
 					$value = $order->get_meta( $meta_key, $single );
 				}
-
 			} else {
 
 				$order_id = $order instanceof WC_Order ? $order->get_id() : $order;
@@ -324,8 +331,8 @@ if ( ! class_exists( 'Woodev_Order_Compatibility' ) ) :
 		 * Uses {@see WC_Order::update_meta_data()} if HPOS is enabled, otherwise it uses the WordPress {@see update_meta_data()} function.
 		 *
 		 * @param int|WC_Order $order order ID or object
-		 * @param string $meta_key meta key
-		 * @param mixed $meta_value meta value
+		 * @param string       $meta_key meta key
+		 * @param mixed        $meta_value meta value
 		 */
 		public static function update_order_meta( $order, string $meta_key, $meta_value ) {
 
@@ -337,7 +344,6 @@ if ( ! class_exists( 'Woodev_Order_Compatibility' ) ) :
 					$order->update_meta_data( $meta_key, $meta_value );
 					$order->save_meta_data();
 				}
-
 			} else {
 
 				$order_id = $order instanceof WC_Order ? $order->get_id() : $order;
@@ -355,9 +361,9 @@ if ( ! class_exists( 'Woodev_Order_Compatibility' ) ) :
 		 * Uses {@see WC_Order::add_meta_data()} if HPOS is enabled, otherwise it uses the WordPress {@see add_meta_data()} function.
 		 *
 		 * @param int|WC_Order $order order ID or object
-		 * @param string $meta_key meta key
-		 * @param mixed $meta_value meta value
-		 * @param bool $unique optional - whether the same key should not be added (default false)
+		 * @param string       $meta_key meta key
+		 * @param mixed        $meta_value meta value
+		 * @param bool         $unique optional - whether the same key should not be added (default false)
 		 */
 		public static function add_order_meta( $order, string $meta_key, $meta_value, bool $unique = false ) {
 
@@ -369,7 +375,6 @@ if ( ! class_exists( 'Woodev_Order_Compatibility' ) ) :
 					$order->add_meta_data( $meta_key, $meta_value, $unique );
 					$order->save_meta_data();
 				}
-
 			} else {
 
 				$order_id = $order instanceof WC_Order ? $order->get_id() : $order;
@@ -387,8 +392,8 @@ if ( ! class_exists( 'Woodev_Order_Compatibility' ) ) :
 		 * Uses {@see WC_Order::delete_meta_data()} if HPOS is enabled, otherwise it uses the WordPress {@see delete_meta_data()} function.
 		 *
 		 * @param int|WC_Order $order order ID or object
-		 * @param string $meta_key meta key
-		 * @param mixed $meta_value optional (applicable if HPOS is inactive)
+		 * @param string       $meta_key meta key
+		 * @param mixed        $meta_value optional (applicable if HPOS is inactive)
 		 */
 		public static function delete_order_meta( $order, string $meta_key, $meta_value = '' ) {
 
@@ -397,10 +402,9 @@ if ( ! class_exists( 'Woodev_Order_Compatibility' ) ) :
 				$order = is_numeric( $order ) && $order > 0 ? wc_get_order( (int) $order ) : $order;
 
 				if ( $order instanceof WC_Order ) {
-					$order->delete_meta_data( $meta_key);
+					$order->delete_meta_data( $meta_key );
 					$order->save_meta_data();
 				}
-
 			} else {
 
 				$order_id = $order instanceof WC_Order ? $order->get_id() : $order;
@@ -418,10 +422,10 @@ if ( ! class_exists( 'Woodev_Order_Compatibility' ) ) :
 		 * Uses {@see WC_Order::meta_exists()} if HPOS is enabled, otherwise it uses the WordPress {@see metadata_exists()} function.
 		 *
 		 * @param int|WC_Order $order order ID or object
-		 * @param string $meta_key meta key
+		 * @param string       $meta_key meta key
 		 * @return bool
 		 */
-		public static function order_meta_exists( $order, string $meta_key ) : bool {
+		public static function order_meta_exists( $order, string $meta_key ): bool {
 
 			if ( Woodev_Plugin_Compatibility::is_hpos_enabled() ) {
 
@@ -430,7 +434,6 @@ if ( ! class_exists( 'Woodev_Order_Compatibility' ) ) :
 				if ( $order instanceof WC_Order ) {
 					return $order->meta_exists( $meta_key );
 				}
-
 			} else {
 
 				$order_id = $order instanceof WC_Order ? $order->get_id() : $order;
@@ -451,7 +454,7 @@ if ( ! class_exists( 'Woodev_Order_Compatibility' ) ) :
 		 */
 		public static function get_order_post_types(): array {
 
-			$order_post_types = ['shop_order'];
+			$order_post_types = [ 'shop_order' ];
 
 			/** @see \Automattic\WooCommerce\Internal\DataStores\Orders\DataSynchronizer */
 			if ( Woodev_Plugin_Compatibility::is_hpos_enabled() ) {
@@ -460,7 +463,6 @@ if ( ! class_exists( 'Woodev_Order_Compatibility' ) ) :
 
 			return $order_post_types;
 		}
-
 	}
 
 endif;

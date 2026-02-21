@@ -1,6 +1,6 @@
 <?php
 
-defined( 'ABSPATH' ) or exit;
+defined( 'ABSPATH' ) || exit;
 
 if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin_Setup_Wizard' ) ) :
 
@@ -9,7 +9,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin_Setup_Wizard' ) ) :
 	 * The payment gateway plugin Setup Wizard class.
 	 *
 	 * Extends the base plugin class to add common gateway functionality.
-	 *
 	 */
 	abstract class Woodev_Payment_Gateway_Plugin_Setup_Wizard extends Woodev_Plugin_Setup_Wizard {
 
@@ -24,7 +23,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin_Setup_Wizard' ) ) :
 		 *
 		 * @return array
 		 * @internal
-		 *
 		 */
 		public function add_setup_link( $action_links ) {
 
@@ -34,8 +32,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin_Setup_Wizard' ) ) :
 
 			return parent::add_setup_link( $action_links );
 		}
-
-
 	}
 
 

@@ -41,8 +41,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		 *
 		 * @param string $id plugin id
 		 * @param string $version plugin version
-		 * @param array $args {
-		 *     Plugin configuration arguments.
+		 * @param array  $args {
+		 *      Plugin configuration arguments.
 		 *
 		 *     @type string[] $supports          Feature flags (see FEATURE_* constants)
 		 *     @type string[] $currencies         Accepted currency codes
@@ -55,15 +55,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 
 			parent::__construct( $id, $version, $args );
 
-			$args = wp_parse_args( $args, [
-				'supports'          => [],
-				'currencies'        => [],
-				'countries'         => [],
-			] );
+			$args = wp_parse_args(
+				$args,
+				[
+					'supports'   => [],
+					'currencies' => [],
+					'countries'  => [],
+				]
+			);
 
-			$this->supports          = (array) $args['supports'];
-			$this->currencies        = (array) $args['currencies'];
-			$this->countries         = (array) $args['countries'];
+			$this->supports   = (array) $args['supports'];
+			$this->currencies = (array) $args['currencies'];
+			$this->countries  = (array) $args['countries'];
 
 			$this->includes();
 			$this->add_hooks();
@@ -81,9 +84,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		/**
 		 * Gets the carrier API instance.
 		 * This is a stub method which must be overridden
+		 *
 		 * @return null|Shipping_API
 		 * @since 1.5.0
-		 *
 		 */
 		abstract public function get_api(): ?Shipping_API;
 
@@ -114,7 +117,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 
 			// settings
 			require_once $path . '/settings/class-shipping-integration.php';
-
 		}
 
 		/**
@@ -233,8 +235,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		 *
 		 * @return Shipping_Integration|null
 		 */
-
-		 function get_integration_handler(): ?Shipping_Integration {
+		function get_integration_handler(): ?Shipping_Integration {
 			return null;
 		}
 
@@ -244,7 +245,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		 * @since 1.5.0
 		 *
 		 * @param string $key setting key
-		 * @param mixed $default default value
+		 * @param mixed  $default default value
 		 * @return mixed
 		 */
 		public function get_integration_option( string $key, $default = null ) {
@@ -293,7 +294,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			// Add methods from "Rest of the World" zone (zone_id = 0)
 			$worldwide_zone = new \WC_Shipping_Zone( 0 );
 			foreach ( $worldwide_zone->get_shipping_methods( true ) as $shipping_method ) {
-				if( $shipping_method instanceof Shipping_Method && $this->is_valid_shipping_method_class( get_class( $shipping_method ) ) ) {
+				if ( $shipping_method instanceof Shipping_Method && $this->is_valid_shipping_method_class( get_class( $shipping_method ) ) ) {
 					$instances[] = $shipping_method;
 				}
 			}
@@ -314,7 +315,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 					continue;
 				}
 
-				include( $this->get_shipping_framework_path() . '/admin/views/html-admin-shipping-method-status.php' );
+				include $this->get_shipping_framework_path() . '/admin/views/html-admin-shipping-method-status.php';
 			}
 		}
 
@@ -358,23 +359,27 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			// report any currency issues
 			if ( $this->get_accepted_currencies() ) {
 
-				//TODO: add logic
+				// TODO: add logic
 
 				$suffix              = '';
 				$name                = $this->get_plugin_name();
 				$accepted_currencies = $this->get_accepted_currencies();
 
 				$message = sprintf(
-					_n('%1$s accepts payment in %2$s only. %3$sConfigure%4$s WooCommerce to accept %2$s to enable this shipping method for checkout.', '%1$s accepts payment in one of %2$s only. %3$sConfigure%4$s WooCommerce to accept one of %2$s to enable this shipping method for checkout.', count( $accepted_currencies ), 'woodev-plugin-framework' ),
+					_n( '%1$s accepts payment in %2$s only. %3$sConfigure%4$s WooCommerce to accept %2$s to enable this shipping method for checkout.', '%1$s accepts payment in one of %2$s only. %3$sConfigure%4$s WooCommerce to accept one of %2$s to enable this shipping method for checkout.', count( $accepted_currencies ), 'woodev-plugin-framework' ),
 					$name,
 					'<strong>' . implode( ', ', $accepted_currencies ) . '</strong>',
 					'<a href="' . $this->get_general_configuration_url() . '">',
 					'</a>'
 				);
 
-				$this->get_admin_notice_handler()->add_admin_notice( $message, 'accepted-currency' . $suffix, [
-					'notice_class' => 'error',
-				] );
+				$this->get_admin_notice_handler()->add_admin_notice(
+					$message,
+					'accepted-currency' . $suffix,
+					[
+						'notice_class' => 'error',
+					]
+				);
 
 			}
 		}
@@ -382,8 +387,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		protected function add_countries_admin_notices() {
 
 			// report any countries issues
-			if( $this->get_accepted_countries() ) {
-				//TODO: показываем уведомление о том что магазин не поддерживает ни одну из доступных стран доставки для матодов доставки
+			if ( $this->get_accepted_countries() ) {
+				// TODO: показываем уведомление о том что магазин не поддерживает ни одну из доступных стран доставки для матодов доставки
 			}
 		}
 
@@ -395,7 +400,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		 */
 		protected function add_debug_setting_notices() {
 
-			//TODO: добавить логику проверки, включен ли режим логирования. Если да, сообщить пользователю что нужно отключить.
+			// TODO: добавить логику проверки, включен ли режим логирования. Если да, сообщить пользователю что нужно отключить.
 		}
 
 
@@ -406,7 +411,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		 */
 		protected function add_not_configured_notices() {
 
-			//TODO: добавить логику, если основные параметры плагина не скофигурированы то показываем уведомление
+			// TODO: добавить логику, если основные параметры плагина не скофигурированы то показываем уведомление
 		}
 
 		/**
@@ -430,11 +435,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		 * @return string
 		 */
 		public function get_settings_url( $plugin_id = null ): string {
-			return add_query_arg( [
-				'page'    => 'wc-settings',
-				'tab'     => 'integration',
-				'section' => $this->get_id(),
-			], admin_url( 'admin.php' ) );
+			return add_query_arg(
+				[
+					'page'    => 'wc-settings',
+					'tab'     => 'integration',
+					'section' => $this->get_id(),
+				],
+				admin_url( 'admin.php' )
+			);
 		}
 
 		/**
@@ -463,7 +471,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 
 			$this->methods[ $shipping_method_id ] = [
 				'class_name'      => $class_name,
-				'shipping_method' => null
+				'shipping_method' => null,
 			];
 		}
 
@@ -529,11 +537,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		/**
 		 * Adds the given $shipping_method to the internal shipping methods store
 		 *
-		 * @param string $shipping_method_id  the shipping method identifier
-		 * @param  Shipping_Method  $shipping_method the shipping method object instance
+		 * @param string          $shipping_method_id  the shipping method identifier
+		 * @param  Shipping_Method $shipping_method the shipping method object instance
 		 *
-		 *@since 1.5.0
-		 *
+		 * @since 1.5.0
 		 */
 		public function set_shipping_method( string $shipping_method_id, Shipping_Method $shipping_method ) {
 			$this->methods[ $shipping_method_id ]['shipping_method'] = $shipping_method;
@@ -546,8 +553,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		 * @param string|null $shipping_method_id  optional shipping_method identifier, defaults to first shipping method
 		 *
 		 * @return Shipping_Method the shipping method object
-		 *@since 1.5.0
-		 *
+		 * @since 1.5.0
 		 */
 		public function get_shipping_method( string $shipping_method_id = null ): Shipping_Method {
 
@@ -574,8 +580,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		 * @param string $shipping_method_id  the shipping method identifier
 		 *
 		 * @return boolean true if the plugin has this shipping method available, false otherwise
-		 *@since 1.5.0
-		 *
+		 * @since 1.5.0
 		 */
 		public function has_shipping_method( string $shipping_method_id ): bool {
 			return isset( $this->methods[ $shipping_method_id ] );
@@ -607,7 +612,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		 *
 		 * @return string
 		 */
-		public function get_assets_version() : string  {
+		public function get_assets_version(): string {
 			return $this->is_debug_enabled() ? time() : parent::get_assets_version();
 		}
 

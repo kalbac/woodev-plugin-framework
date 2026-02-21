@@ -1,8 +1,8 @@
 <?php
 
-defined( 'ABSPATH' ) or exit;
+defined( 'ABSPATH' ) || exit;
 
-if( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
+if ( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 
 	/**
 	 * Woodev Background Job Handler class
@@ -103,12 +103,12 @@ if( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 		 */
 		public function maybe_handle() {
 
-			if( $this->is_process_running() ) {
+			if ( $this->is_process_running() ) {
 				// background process already running
 				wp_die();
 			}
 
-			if( $this->is_queue_empty() ) {
+			if ( $this->is_queue_empty() ) {
 				// no data to process
 				wp_die();
 			}
@@ -128,7 +128,7 @@ if( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 			 * @see WC_Session_Handler::nonce_user_logged_out() WC < 5.3 callback
 			 * @see WC_Session_Handler::maybe_update_nonce_user_logged_out() WC >= 5.3 callback
 			 */
-			if( Woodev_Plugin_Compatibility::is_wc_version_gte( '5.3' ) ) {
+			if ( Woodev_Plugin_Compatibility::is_wc_version_gte( '5.3' ) ) {
 				$callback  = array( WC()->session, 'maybe_update_nonce_user_logged_out' );
 				$arguments = 2;
 			} else {
@@ -163,12 +163,19 @@ if( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 			$queued     = '%"status":"queued"%';
 			$processing = '%"status":"processing"%';
 
-			$count = $wpdb->get_var( $wpdb->prepare( "
+			$count = $wpdb->get_var(
+				$wpdb->prepare(
+					"
 			SELECT COUNT(*)
 			FROM {$wpdb->options}
 			WHERE option_name LIKE %s
 			AND ( option_value LIKE %s OR option_value LIKE %s )
-		", $key, $queued, $processing ) );
+		",
+					$key,
+					$queued,
+					$processing
+				)
+			);
 
 			return ( $count > 0 ) ? false : true;
 		}
@@ -248,7 +255,7 @@ if( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 			$current_memory = memory_get_usage( true );
 			$return         = false;
 
-			if( $current_memory >= $memory_limit ) {
+			if ( $current_memory >= $memory_limit ) {
 				$return = true;
 			}
 
@@ -268,14 +275,14 @@ if( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 		 */
 		protected function get_memory_limit() {
 
-			if( function_exists( 'ini_get' ) ) {
+			if ( function_exists( 'ini_get' ) ) {
 				$memory_limit = ini_get( 'memory_limit' );
 			} else {
 				// sensible default
 				$memory_limit = '128M';
 			}
 
-			if( ! $memory_limit || - 1 === (int) $memory_limit ) {
+			if ( ! $memory_limit || - 1 === (int) $memory_limit ) {
 				// unlimited, set to 32GB
 				$memory_limit = '32G';
 			}
@@ -303,7 +310,7 @@ if( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 			$finish = $this->start_time + apply_filters( "{$this->identifier}_default_time_limit", 20 );
 			$return = false;
 
-			if( time() >= $finish ) {
+			if ( time() >= $finish ) {
 				$return = true;
 			}
 
@@ -334,7 +341,7 @@ if( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 		public function create_job( $attrs ) {
 			global $wpdb;
 
-			if( empty( $attrs ) ) {
+			if ( empty( $attrs ) ) {
 				return null;
 			}
 
@@ -350,18 +357,24 @@ if( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 			$attrs = apply_filters( "{$this->identifier}_new_job_attrs", $attrs, $job_id );
 
 			// ensure a few must-have attributes
-			$attrs = wp_parse_args( array(
-				'id'         => $job_id,
-				'created_at' => current_time( 'mysql' ),
-				'created_by' => get_current_user_id(),
-				'status'     => 'queued',
-			), $attrs );
+			$attrs = wp_parse_args(
+				array(
+					'id'         => $job_id,
+					'created_at' => current_time( 'mysql' ),
+					'created_by' => get_current_user_id(),
+					'status'     => 'queued',
+				),
+				$attrs
+			);
 
-			$wpdb->insert( $wpdb->options, array(
-				'option_name'  => "{$this->identifier}_job_{$job_id}",
-				'option_value' => json_encode( $attrs ),
-				'autoload'     => 'no'
-			) );
+			$wpdb->insert(
+				$wpdb->options,
+				array(
+					'option_name'  => "{$this->identifier}_job_{$job_id}",
+					'option_value' => wp_json_encode( $attrs ),
+					'autoload'     => 'no',
+				)
+			);
 
 			$job = new stdClass();
 
@@ -391,39 +404,50 @@ if( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 		public function get_job( $id = null ) {
 			global $wpdb;
 
-			if( ! $id ) {
+			if ( ! $id ) {
 
 				$key        = $this->identifier . '_job_%';
 				$queued     = '%"status":"queued"%';
 				$processing = '%"status":"processing"%';
 
-				$results = $wpdb->get_var( $wpdb->prepare( "
+				$results = $wpdb->get_var(
+					$wpdb->prepare(
+						"
 				SELECT option_value
 				FROM {$wpdb->options}
 				WHERE option_name LIKE %s
 				AND ( option_value LIKE %s OR option_value LIKE %s )
 				ORDER BY option_id ASC
 				LIMIT 1
-			", $key, $queued, $processing ) );
+			",
+						$key,
+						$queued,
+						$processing
+					)
+				);
 
 			} else {
 
-				$results = $wpdb->get_var( $wpdb->prepare( "
+				$results = $wpdb->get_var(
+					$wpdb->prepare(
+						"
 				SELECT option_value
 				FROM {$wpdb->options}
 				WHERE option_name = %s
-			", "{$this->identifier}_job_{$id}" ) );
+			",
+						"{$this->identifier}_job_{$id}"
+					)
+				);
 
 			}
 
-			if( ! empty( $results ) ) {
+			if ( ! empty( $results ) ) {
 
 				$job = new stdClass();
 
 				foreach ( json_decode( $results, true ) as $key => $value ) {
 					$job->{$key} = $value;
 				}
-
 			} else {
 				return null;
 			}
@@ -453,16 +477,19 @@ if( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 		public function get_jobs( $args = array() ) {
 			global $wpdb;
 
-			$args = wp_parse_args( $args, array(
-				'order'   => 'DESC',
-				'orderby' => 'option_id',
-			) );
+			$args = wp_parse_args(
+				$args,
+				array(
+					'order'   => 'DESC',
+					'orderby' => 'option_id',
+				)
+			);
 
 			$replacements = array( $this->identifier . '_job_%' );
 			$status_query = '';
 
 			// prepare status query
-			if( ! empty( $args['status'] ) ) {
+			if ( ! empty( $args['status'] ) ) {
 
 				$statuses     = (array) $args['status'];
 				$placeholders = array();
@@ -481,17 +508,20 @@ if( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 			$orderby = sanitize_key( $args['orderby'] );
 
 			// put it all together now
-			$query = $wpdb->prepare( "
+			$query = $wpdb->prepare(
+				"
 			SELECT option_value
 			FROM {$wpdb->options}
 			WHERE option_name LIKE %s
 			{$status_query}
 			ORDER BY {$orderby} {$order}
-		", $replacements );
+		",
+				$replacements
+			);
 
 			$results = $wpdb->get_col( $query );
 
-			if( empty( $results ) ) {
+			if ( empty( $results ) ) {
 				return null;
 			}
 
@@ -542,7 +572,7 @@ if( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 			$this->unlock_process();
 
 			// Start next job or complete process
-			if( ! $this->is_queue_empty() ) {
+			if ( ! $this->is_queue_empty() ) {
 				$this->dispatch();
 			} else {
 				$this->complete();
@@ -566,19 +596,19 @@ if( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 		 * If no data is set, the job will completed right away.
 		 *
 		 * @param stdClass|object $job
-		 * @param int $items_per_batch number of items to process in a single request. Defaults to unlimited.
+		 * @param int             $items_per_batch number of items to process in a single request. Defaults to unlimited.
 		 *
 		 * @return stdClass $job
 		 * @throws Exception when job data is incorrect
 		 */
 		public function process_job( $job, $items_per_batch = null ) {
 
-			if( ! $this->start_time ) {
+			if ( ! $this->start_time ) {
 				$this->start_time = time();
 			}
 
 			// Indicate that the job has started processing
-			if( 'processing' !== $job->status ) {
+			if ( 'processing' !== $job->status ) {
 
 				$job->status                = 'processing';
 				$job->started_processing_at = current_time( 'mysql' );
@@ -588,11 +618,11 @@ if( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 
 			$data_key = $this->data_key;
 
-			if( ! isset( $job->{$data_key} ) ) {
+			if ( ! isset( $job->{$data_key} ) ) {
 				throw new Exception( sprintf( __( 'Job data key "%s" not set', 'woodev-plugin-framework' ), $data_key ) );
 			}
 
-			if( ! is_array( $job->{$data_key} ) ) {
+			if ( ! is_array( $job->{$data_key} ) ) {
 				throw new Exception( sprintf( __( 'Job data key "%s" is not an array', 'woodev-plugin-framework' ), $data_key ) );
 			}
 
@@ -602,17 +632,17 @@ if( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 
 			// progress indicates how many items have been processed, it
 			// does NOT indicate the processed item key in any way
-			if( ! isset( $job->progress ) ) {
+			if ( ! isset( $job->progress ) ) {
 				$job->progress = 0;
 			}
 
 			// skip already processed items
-			if( $job->progress && ! empty( $data ) ) {
+			if ( $job->progress && ! empty( $data ) ) {
 				$data = array_slice( $data, $job->progress, null, true );
 			}
 
 			// loop over unprocessed items and process them
-			if( ! empty( $data ) ) {
+			if ( ! empty( $data ) ) {
 
 				$processed       = 0;
 				$items_per_batch = (int) $items_per_batch;
@@ -622,21 +652,21 @@ if( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 					// process the item
 					$this->process_item( $item, $job );
 
-					$processed ++;
-					$job->progress ++;
+					++$processed;
+					++$job->progress;
 
 					// update job progress
 					$job = $this->update_job( $job );
 
 					// job limits reached
-					if( ( $items_per_batch && $processed >= $items_per_batch ) || $this->time_exceeded() || $this->memory_exceeded() ) {
+					if ( ( $items_per_batch && $processed >= $items_per_batch ) || $this->time_exceeded() || $this->memory_exceeded() ) {
 						break;
 					}
 				}
 			}
 
 			// complete current job
-			if( $job->progress >= count( $job->{$data_key} ) ) {
+			if ( $job->progress >= count( $job->{$data_key} ) ) {
 				$job = $this->complete_job( $job );
 			}
 
@@ -653,11 +683,11 @@ if( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 		 */
 		public function update_job( $job ) {
 
-			if( is_string( $job ) ) {
+			if ( is_string( $job ) ) {
 				$job = $this->get_job( $job );
 			}
 
-			if( ! $job ) {
+			if ( ! $job ) {
 				return false;
 			}
 
@@ -685,11 +715,11 @@ if( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 		 */
 		public function complete_job( $job ) {
 
-			if( is_string( $job ) ) {
+			if ( is_string( $job ) ) {
 				$job = $this->get_job( $job );
 			}
 
-			if( ! $job ) {
+			if ( ! $job ) {
 				return false;
 			}
 
@@ -717,24 +747,24 @@ if( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 		 * indicate that a particular job has failed for some reason.
 		 *
 		 * @param stdClass|object|string $job Job instance or ID
-		 * @param string $reason Optional. Reason for failure.
+		 * @param string                 $reason Optional. Reason for failure.
 		 *
 		 * @return stdClass|false on failure
 		 */
 		public function fail_job( $job, $reason = '' ) {
 
-			if( is_string( $job ) ) {
+			if ( is_string( $job ) ) {
 				$job = $this->get_job( $job );
 			}
 
-			if( ! $job ) {
+			if ( ! $job ) {
 				return false;
 			}
 
 			$job->status    = 'failed';
 			$job->failed_at = current_time( 'mysql' );
 
-			if( $reason ) {
+			if ( $reason ) {
 				$job->failure_reason = $reason;
 			}
 
@@ -761,11 +791,11 @@ if( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 		public function delete_job( $job ) {
 			global $wpdb;
 
-			if( is_string( $job ) ) {
+			if ( is_string( $job ) ) {
 				$job = $this->get_job( $job );
 			}
 
-			if( ! $job ) {
+			if ( ! $job ) {
 				return false;
 			}
 
@@ -828,12 +858,12 @@ if( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 		 */
 		public function handle_cron_healthcheck() {
 
-			if( $this->is_process_running() ) {
+			if ( $this->is_process_running() ) {
 				// background process already running
 				exit;
 			}
 
-			if( $this->is_queue_empty() ) {
+			if ( $this->is_queue_empty() ) {
 				// no data to process
 				$this->clear_scheduled_event();
 				exit;
@@ -848,7 +878,7 @@ if( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 		 */
 		protected function schedule_event() {
 
-			if( ! wp_next_scheduled( $this->cron_hook_identifier ) ) {
+			if ( ! wp_next_scheduled( $this->cron_hook_identifier ) ) {
 
 				// schedule the health check to fire after 30 seconds from now, as to not create a race condition
 				// with job process lock on servers that fire & handle cron events instantly
@@ -864,7 +894,7 @@ if( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 
 			$timestamp = wp_next_scheduled( $this->cron_hook_identifier );
 
-			if( $timestamp ) {
+			if ( $timestamp ) {
 				wp_unschedule_event( $timestamp, $this->cron_hook_identifier );
 			}
 		}
@@ -876,7 +906,7 @@ if( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 		 * Implement this method to perform any actions required on each
 		 * item in job data.
 		 *
-		 * @param mixed $item Job data item to iterate over
+		 * @param mixed           $item Job data item to iterate over
 		 * @param stdClass|object $job Job instance
 		 *
 		 * @return mixed
@@ -894,7 +924,7 @@ if( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 			$error = error_get_last();
 
 			// if shutting down because of a fatal error, fail the job
-			if( $error && E_ERROR === $error['type'] ) {
+			if ( $error && E_ERROR === $error['type'] ) {
 
 				$this->fail_job( $job, $error['message'] );
 
@@ -915,7 +945,7 @@ if( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 
 			return $wpdb->update(
 				$wpdb->options,
-				array( 'option_value' => json_encode( $job ) ),
+				array( 'option_value' => wp_json_encode( $job ) ),
 				array( 'option_name' => "{$this->identifier}_job_{$job->id}" )
 			);
 		}
@@ -975,7 +1005,7 @@ if( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 		 */
 		public function run_debug_tool() {
 
-			if( $this->test_connection() ) {
+			if ( $this->test_connection() ) {
 				$this->debug_message = esc_html__( 'Success! You should be able to process background jobs.', 'woodev-plugin-framework' );
 				$result              = true;
 			} else {
@@ -1001,7 +1031,7 @@ if( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 		 */
 		public function translate_success_message( $translated, $original, $domain ) {
 
-			if( 'woocommerce' === $domain && ( 'Tool ran.' === $original || 'There was an error calling %s' === $original ) ) {
+			if ( 'woocommerce' === $domain && ( 'Tool ran.' === $original || 'There was an error calling %s' === $original ) ) {
 				$translated = $this->debug_message;
 			}
 
@@ -1018,7 +1048,6 @@ if( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 
 			return $this->identifier;
 		}
-
 	}
 
 endif;

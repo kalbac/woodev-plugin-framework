@@ -1,6 +1,6 @@
 <?php
 
-defined( 'ABSPATH' ) or exit;
+defined( 'ABSPATH' ) || exit;
 
 if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Token' ) ) :
 
@@ -40,7 +40,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Token' ) ) :
 		 * account_type - string one of 'checking' or 'savings' (checking gateway only)
 		 *
 		 * @param string $id the payment gateway token ID
-		 * @param array $data associated data
+		 * @param array  $data associated data
 		 *
 		 * @since 1.0.0
 		 */
@@ -203,7 +203,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Token' ) ) :
 		 */
 		public static function type_from_account_number( $account_number ) {
 
-			wc_deprecated_function( __METHOD__, '1.1.8', __CLASS__, '::card_type_from_account_number()' );
+			wc_deprecated_function( __METHOD__, '1.1.8', __CLASS__ . '::card_type_from_account_number()' );
 
 			return Woodev_Payment_Gateway_Helper::card_type_from_account_number( $account_number );
 		}
@@ -402,7 +402,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Token' ) ) :
 		public function to_datastore_format() {
 			return $this->data;
 		}
-
 	}
 
 

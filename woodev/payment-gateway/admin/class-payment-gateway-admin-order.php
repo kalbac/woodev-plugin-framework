@@ -1,7 +1,7 @@
 <?php
 
 
-defined( 'ABSPATH' ) or exit;
+defined( 'ABSPATH' ) || exit;
 
 if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Order' ) ) :
 
@@ -31,10 +31,13 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Order' ) ) :
 
 				add_action( 'woocommerce_order_item_add_action_buttons', array( $this, 'add_capture_button' ) );
 
-				add_action( 'wp_ajax_wc_' . $this->get_plugin()->get_id() . '_capture_charge', array(
-					$this,
-					'ajax_process_capture'
-				) );
+				add_action(
+					'wp_ajax_wc_' . $this->get_plugin()->get_id() . '_capture_charge',
+					array(
+						$this,
+						'ajax_process_capture',
+					)
+				);
 
 				// bulk capture order action
 				add_action( 'admin_footer-edit.php', array( $this, 'maybe_add_capture_charge_bulk_order_action' ) );
@@ -49,7 +52,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Order' ) ) :
 		 * @param string $hook_suffix page hook suffix
 		 *
 		 * @internal
-		 *
 		 */
 		public function enqueue_scripts( $hook_suffix ) {
 
@@ -85,15 +87,19 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Order' ) ) :
 
 			wp_enqueue_script( 'woodev-payment-gateway-admin-order', $this->get_plugin()->get_payment_gateway_framework_assets_url() . '/js/admin/woodev-payment-gateway-admin-order.js', array( 'jquery' ), Woodev_Plugin::VERSION, true );
 
-			wp_localize_script( 'woodev-payment-gateway-admin-order', 'woodev_payment_gateway_admin_order', array(
-				'ajax_url'       => admin_url( 'admin-ajax.php' ),
-				'gateway_id'     => $order->get_payment_method( 'edit' ),
-				'order_id'       => $order->get_id(),
-				'capture_ays'    => __( 'Are you sure you wish to process this capture? The action cannot be undone.', 'woodev-plugin-framework' ),
-				'capture_action' => 'wc_' . $this->get_plugin()->get_id() . '_capture_charge',
-				'capture_nonce'  => wp_create_nonce( 'wc_' . $this->get_plugin()->get_id() . '_capture_charge' ),
-				'capture_error'  => __( 'Something went wrong, and the capture could no be completed. Please try again.', 'woodev-plugin-framework' ),
-			) );
+			wp_localize_script(
+				'woodev-payment-gateway-admin-order',
+				'woodev_payment_gateway_admin_order',
+				array(
+					'ajax_url'       => admin_url( 'admin-ajax.php' ),
+					'gateway_id'     => $order->get_payment_method( 'edit' ),
+					'order_id'       => $order->get_id(),
+					'capture_ays'    => __( 'Are you sure you wish to process this capture? The action cannot be undone.', 'woodev-plugin-framework' ),
+					'capture_action' => 'wc_' . $this->get_plugin()->get_id() . '_capture_charge',
+					'capture_nonce'  => wp_create_nonce( 'wc_' . $this->get_plugin()->get_id() . '_capture_charge' ),
+					'capture_error'  => __( 'Something went wrong, and the capture could no be completed. Please try again.', 'woodev-plugin-framework' ),
+				)
+			);
 
 			wp_enqueue_style( 'woodev-payment-gateway-admin-order', $this->get_plugin()->get_payment_gateway_framework_assets_url() . '/css/admin/woodev-payment-gateway-admin-order.css', Woodev_Plugin::VERSION );
 		}
@@ -126,15 +132,15 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Order' ) ) :
 				if ( $can_capture_charge ) {
 
 					?>
-                    <script type="text/javascript">
-                        jQuery(document).ready(function ($) {
-                            if (0 == $('select[name^=action] option[value=wc_capture_charge]').size()) {
-                                $('select[name^=action]').append(
-                                    $('<option>').val('<?php echo esc_js( 'wc_capture_charge' ); ?>').text('<?php _e( 'Capture Charge', 'woodev-plugin-framework' ); ?>')
-                                );
-                            }
-                        });
-                    </script>
+					<script type="text/javascript">
+						jQuery(document).ready(function ($) {
+							if (0 == $('select[name^=action] option[value=wc_capture_charge]').size()) {
+								$('select[name^=action]').append(
+									$('<option>').val('<?php echo esc_js( 'wc_capture_charge' ); ?>').text('<?php _e( 'Capture Charge', 'woodev-plugin-framework' ); ?>')
+								);
+							}
+						});
+					</script>
 					<?php
 				}
 			}
@@ -199,9 +205,10 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Order' ) ) :
 		 */
 		public function add_order_action_charge_action( $actions ) {
 
-			/* translators: verb, as in "Capture credit card charge".
-			 Used when an amount has been pre-authorized before, but funds have not yet been captured (taken) from the card.
-			 Capturing the charge will take the money from the credit card and put it in the merchant's pockets. */
+			/*
+			translators: verb, as in "Capture credit card charge".
+			Used when an amount has been pre-authorized before, but funds have not yet been captured (taken) from the card.
+			Capturing the charge will take the money from the credit card and put it in the merchant's pockets. */
 			$actions[ 'wc_' . $this->get_plugin()->get_id() . '_capture_charge' ] = esc_html__( 'Capture Charge', 'woodev-plugin-framework' );
 
 			return $actions;
@@ -214,7 +221,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Order' ) ) :
 		 * @param WC_Order $order order object
 		 *
 		 * @internal
-		 *
 		 */
 		public function add_capture_button( $order ) {
 
@@ -264,8 +270,8 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Order' ) ) :
 
 			?>
 
-            <button type="button"
-                    class="<?php echo esc_attr( implode( ' ', $classes ) ); ?>" <?php echo ( $tooltip ) ? 'data-tip="' . esc_html( $tooltip ) . '"' : ''; ?>><?php _e( 'Capture Charge', 'woodev-plugin-framework' ); ?></button>
+			<button type="button"
+					class="<?php echo esc_attr( implode( ' ', $classes ) ); ?>" <?php echo ( $tooltip ) ? 'data-tip="' . esc_html( $tooltip ) . '"' : ''; ?>><?php _e( 'Capture Charge', 'woodev-plugin-framework' ); ?></button>
 
 			<?php
 
@@ -279,7 +285,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Order' ) ) :
 		/**
 		 * Outputs the partial capture UI HTML.
 		 *
-		 * @param WC_Order $order order object
+		 * @param WC_Order               $order order object
 		 * @param Woodev_Payment_Gateway $gateway gateway instance
 		 */
 		protected function output_partial_capture_html( WC_Order $order, Woodev_Payment_Gateway $gateway ) {
@@ -288,7 +294,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Order' ) ) :
 			$total_captured      = $gateway->get_order_meta( $order, 'capture_total' );
 			$remaining_total     = Woodev_Helper::number_format( $order->get_total() - (float) $total_captured );
 
-			include( $this->get_plugin()->get_payment_gateway_framework_path() . '/admin/views/html-order-partial-capture.php' );
+			include $this->get_plugin()->get_payment_gateway_framework_path() . '/admin/views/html-order-partial-capture.php';
 		}
 
 
@@ -296,7 +302,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Order' ) ) :
 		 * Processes a capture via AJAX.
 		 *
 		 * @internal
-		 *
 		 */
 		public function ajax_process_capture() {
 
@@ -339,16 +344,20 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Order' ) ) :
 					throw new Woodev_Payment_Gateway_Exception( $result['message'] );
 				}
 
-				wp_send_json_success( [
-					'message' => html_entity_decode( wp_strip_all_tags( $result['message'] ) ),
+				wp_send_json_success(
+					[
+						'message' => html_entity_decode( wp_strip_all_tags( $result['message'] ) ),
 					// ensure any HTML tags are removed and the currency symbol entity is decoded
-				] );
+					]
+				);
 
 			} catch ( Woodev_Payment_Gateway_Exception $e ) {
 
-				wp_send_json_error( [
-					'message' => $e->getMessage(),
-				] );
+				wp_send_json_error(
+					[
+						'message' => $e->getMessage(),
+					]
+				);
 			}
 		}
 
@@ -395,10 +404,9 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Order' ) ) :
 		 * captured, and the gateway supports issuing a capture request
 		 *
 		 * @param WC_Order|int $order the order identifier or order object
-		 * @param float|null $amount capture amount
+		 * @param float|null   $amount capture amount
 		 *
 		 * @deprecated 1.1.8
-		 *
 		 */
 		protected function maybe_capture_charge( $order, $amount = null ) {
 
@@ -432,14 +440,13 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Order' ) ) :
 		/**
 		 * Captures an order on status change to a "paid" status.
 		 *
-		 * @param int $order_id order ID
+		 * @param int    $order_id order ID
 		 * @param string $old_status status being changed
 		 * @param string $new_status new order status
 		 *
 		 * @deprecated 1.1.8
 		 *
 		 * @internal
-		 *
 		 */
 		public function maybe_capture_paid_order( $order_id, $old_status, $new_status ) {
 			wc_deprecated_function( __METHOD__, '1.1.8' );
@@ -452,7 +459,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Order' ) ) :
 		 *
 		 * @return bool
 		 * @deprecated 1.1.8
-		 *
 		 */
 		protected function is_order_ready_for_capture( WC_Order $order ) {
 
@@ -462,8 +468,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Order' ) ) :
 
 			return $gateway && $gateway->get_capture_handler()->is_order_ready_for_capture( $order );
 		}
-
-
 	}
 
 

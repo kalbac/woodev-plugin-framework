@@ -18,7 +18,6 @@ if ( ! interface_exists( 'Woodev_Payment_Gateway_API_Payment_Notification_Credit
 		 *
 		 * @return string|null card type or null if not available
 		 * @see Woodev_Payment_Gateway_Helper::payment_type_to_name()
-		 *
 		 */
 		public function get_card_type();
 

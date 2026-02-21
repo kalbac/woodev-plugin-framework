@@ -1,6 +1,6 @@
 <?php
 
-defined( 'ABSPATH' ) or exit;
+defined( 'ABSPATH' ) || exit;
 
 if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_User_Handler' ) ) :
 
@@ -38,16 +38,22 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_User_Handler' ) ) :
 			add_action( 'edit_user_profile_update', array( $this, 'save_profile_fields' ) );
 
 			// Display the token editor markup inside the  profile section
-			add_action( 'wc_payment_gateway_' . $this->get_plugin()->get_id() . '_user_profile', array(
-				$this,
-				'display_token_editors'
-			) );
+			add_action(
+				'wc_payment_gateway_' . $this->get_plugin()->get_id() . '_user_profile',
+				array(
+					$this,
+					'display_token_editors',
+				)
+			);
 
 			// Display the customer ID field markup inside the  profile section
-			add_action( 'wc_payment_gateway_' . $this->get_plugin()->get_id() . '_user_profile', array(
-				$this,
-				'display_customer_id_fields'
-			) );
+			add_action(
+				'wc_payment_gateway_' . $this->get_plugin()->get_id() . '_user_profile',
+				array(
+					$this,
+					'display_customer_id_fields',
+				)
+			);
 		}
 
 
@@ -83,7 +89,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_User_Handler' ) ) :
 			$section_title       = $this->get_title();
 			$section_description = $this->get_description();
 
-			include( $this->get_plugin()->get_payment_gateway_framework_path() . '/admin/views/html-user-profile-section.php' );
+			include $this->get_plugin()->get_payment_gateway_framework_path() . '/admin/views/html-user-profile-section.php';
 		}
 
 
@@ -121,7 +127,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_User_Handler' ) ) :
 				$name  = $field['name'];
 				$value = $field['value'];
 
-				include( $this->get_plugin()->get_payment_gateway_framework_path() . '/admin/views/html-user-profile-field-customer-id.php' );
+				include $this->get_plugin()->get_payment_gateway_framework_path() . '/admin/views/html-user-profile-field-customer-id.php';
 			}
 		}
 
@@ -266,9 +272,12 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_User_Handler' ) ) :
 				$fields[] = array(
 					'label' => $label,
 					'name'  => $meta_key,
-					'value' => $gateway->get_customer_id( $user_id, array(
-						'autocreate' => false,
-					) ),
+					'value' => $gateway->get_customer_id(
+						$user_id,
+						array(
+							'autocreate' => false,
+						)
+					),
 				);
 
 				$unique_meta_key = $meta_key;
@@ -351,8 +360,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_User_Handler' ) ) :
 		protected function get_plugin() {
 			return $this->plugin;
 		}
-
-
 	}
 
 

@@ -1,8 +1,8 @@
 <?php
 
-defined( 'ABSPATH' ) or exit;
+defined( 'ABSPATH' ) || exit;
 
-if( ! class_exists( 'Woodev_Plugin_Setup_Wizard' ) ) :
+if ( ! class_exists( 'Woodev_Plugin_Setup_Wizard' ) ) :
 
 	/**
 	 * The plugin Setup Wizard class.
@@ -11,7 +11,6 @@ if( ! class_exists( 'Woodev_Plugin_Setup_Wizard' ) ) :
 	 * step-by-step interaction for configuring critical plugin options.
 	 *
 	 * Based on WooCommerce's WC_Admin_Setup_Wizard
-	 *
 	 */
 	abstract class Woodev_Plugin_Setup_Wizard {
 
@@ -42,7 +41,7 @@ if( ! class_exists( 'Woodev_Plugin_Setup_Wizard' ) ) :
 		public function __construct( Woodev_Plugin $plugin ) {
 
 			// sanity check for admin and permissions
-			if( ! is_admin() || ! current_user_can( $this->required_capability ) ) {
+			if ( ! is_admin() || ! current_user_can( $this->required_capability ) ) {
 				return;
 			}
 
@@ -55,16 +54,16 @@ if( ! class_exists( 'Woodev_Plugin_Setup_Wizard' ) ) :
 			/**
 			 * Filters the registered setup wizard steps.
 			 *
-			 * @param array $steps registered steps
-			 *
+			 * @param array                              $steps    registered steps
+			 * @param Woodev_Plugin_Setup_Wizard $instance setup wizard instance
 			 */
 			$this->steps = apply_filters( "wc_{$this->id}_setup_wizard_steps", $this->steps, $this );
 
 			// only continue if there are registered steps
-			if( $this->has_steps() ) {
+			if ( $this->has_steps() ) {
 
 				// if requesting the wizard
-				if( $this->is_setup_page() ) {
+				if ( $this->is_setup_page() ) {
 
 					$this->init_setup();
 
@@ -74,7 +73,7 @@ if( ! class_exists( 'Woodev_Plugin_Setup_Wizard' ) ) :
 					$this->add_hooks();
 
 					// mark the wizard as complete if specifically requested
-					if( Woodev_Helper::get_requested_value( "wc_{$this->id}_setup_wizard_complete" ) ) {
+					if ( Woodev_Helper::get_requested_value( "wc_{$this->id}_setup_wizard_complete" ) ) {
 						$this->complete_setup();
 					}
 				}
@@ -99,11 +98,15 @@ if( ! class_exists( 'Woodev_Plugin_Setup_Wizard' ) ) :
 			add_action( 'admin_notices', array( $this, 'add_admin_notices' ) );
 
 			// add a 'Setup' link to the plugin action links if the wizard hasn't been completed
-			if( ! $this->is_complete() ) {
-				add_filter( 'plugin_action_links_' . plugin_basename( $this->get_plugin()->get_plugin_file() ), array(
-					$this,
-					'add_setup_link'
-				), 20 );
+			if ( ! $this->is_complete() ) {
+				add_filter(
+					'plugin_action_links_' . plugin_basename( $this->get_plugin()->get_plugin_file() ),
+					array(
+						$this,
+						'add_setup_link',
+					),
+					20
+				);
 			}
 		}
 
@@ -113,9 +116,9 @@ if( ! class_exists( 'Woodev_Plugin_Setup_Wizard' ) ) :
 		 */
 		public function add_admin_notices() {
 
-			if( Woodev_Helper::is_current_screen( 'plugins' ) || $this->get_plugin()->is_plugin_settings() ) {
+			if ( Woodev_Helper::is_current_screen( 'plugins' ) || $this->get_plugin()->is_plugin_settings() ) {
 
-				if( $this->is_complete() && $this->get_documentation_notice_message() ) {
+				if ( $this->is_complete() && $this->get_documentation_notice_message() ) {
 					$notice_id = "wc_{$this->id}_docs";
 					$message   = $this->get_documentation_notice_message();
 				} else {
@@ -123,9 +126,13 @@ if( ! class_exists( 'Woodev_Plugin_Setup_Wizard' ) ) :
 					$message   = $this->get_setup_notice_message();
 				}
 
-				$this->get_plugin()->get_admin_notice_handler()->add_admin_notice( $message, $notice_id, array(
-					'always_show_on_settings' => false,
-				) );
+				$this->get_plugin()->get_admin_notice_handler()->add_admin_notice(
+					$message,
+					$notice_id,
+					array(
+						'always_show_on_settings' => false,
+					)
+				);
 			}
 		}
 
@@ -140,13 +147,14 @@ if( ! class_exists( 'Woodev_Plugin_Setup_Wizard' ) ) :
 		 */
 		protected function get_documentation_notice_message() {
 
-			if( $this->get_plugin()->get_documentation_url() ) {
+			if ( $this->get_plugin()->get_documentation_url() ) {
 
 				$message = sprintf(
 				/** translators: Placeholders: %1$s - plugin name, %2$s - <a> tag, %3$s - </a> tag */
 					__( 'Thanks for installing %1$s! To get started, take a minute to %2$sread the documentation%3$s :)', 'woodev-plugin-framework' ),
 					esc_html( $this->get_plugin()->get_plugin_name() ),
-					'<a href="' . esc_url( $this->get_plugin()->get_documentation_url() ) . '" target="_blank">', '</a>'
+					'<a href="' . esc_url( $this->get_plugin()->get_documentation_url() ) . '" target="_blank">',
+					'</a>'
 				);
 
 			} else {
@@ -172,7 +180,8 @@ if( ! class_exists( 'Woodev_Plugin_Setup_Wizard' ) ) :
 			/** translators: Placeholders: %1$s - plugin name, %2$s - <a> tag, %3$s - </a> tag */
 				__( 'Thanks for installing %1$s! To get started, take a minute to complete these %2$squick and easy setup steps%3$s :)', 'woodev-plugin-framework' ),
 				esc_html( $this->get_plugin()->get_plugin_name() ),
-				'<a href="' . esc_url( $this->get_setup_url() ) . '">', '</a>'
+				'<a href="' . esc_url( $this->get_setup_url() ) . '">',
+				'</a>'
 			);
 		}
 
@@ -186,7 +195,6 @@ if( ! class_exists( 'Woodev_Plugin_Setup_Wizard' ) ) :
 		 *
 		 * @return array
 		 * @internal
-		 *
 		 */
 		public function add_setup_link( $action_links ) {
 
@@ -210,11 +218,11 @@ if( ! class_exists( 'Woodev_Plugin_Setup_Wizard' ) ) :
 			$current_step   = sanitize_key( Woodev_Helper::get_requested_value( 'step' ) );
 			$current_action = sanitize_key( Woodev_Helper::get_requested_value( 'action' ) );
 
-			if( ! $current_action ) {
+			if ( ! $current_action ) {
 
-				if( $this->has_step( $current_step ) ) {
+				if ( $this->has_step( $current_step ) ) {
 					$this->current_step = $current_step;
-				} elseif( $first_step_url = $this->get_step_url( key( $this->steps ) ) ) {
+				} elseif ( $first_step_url = $this->get_step_url( key( $this->steps ) ) ) {
 					wp_safe_redirect( $first_step_url );
 					exit;
 				} else {
@@ -261,7 +269,7 @@ if( ! class_exists( 'Woodev_Plugin_Setup_Wizard' ) ) :
 			);
 
 			// add the step name to the page title
-			if( ! empty( $this->steps[ $this->current_step ]['name'] ) ) {
+			if ( ! empty( $this->steps[ $this->current_step ]['name'] ) ) {
 				$page_title .= " &rsaquo; {$this->steps[ $this->current_step ]['name']}";
 			}
 
@@ -270,23 +278,23 @@ if( ! class_exists( 'Woodev_Plugin_Setup_Wizard' ) ) :
 			ob_start();
 
 			?>
-            <!DOCTYPE html>
-            <html <?php language_attributes(); ?>>
-            <head>
-                <meta name="viewport" content="width=device-width"/>
-                <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
-                <title><?php echo esc_html( $page_title ); ?></title>
+			<!DOCTYPE html>
+			<html <?php language_attributes(); ?>>
+			<head>
+				<meta name="viewport" content="width=device-width"/>
+				<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+				<title><?php echo esc_html( $page_title ); ?></title>
 				<?php wp_print_scripts( 'wc-setup' ); ?>
 				<?php do_action( 'admin_print_scripts' ); ?>
 				<?php do_action( 'admin_print_styles' ); ?>
-            </head>
-            <body class="wc-setup wp-core-ui <?php echo esc_attr( $this->get_slug() ); ?>">
+			</head>
+			<body class="wc-setup wp-core-ui <?php echo esc_attr( $this->get_slug() ); ?>">
 			<?php $this->render_header(); ?>
 			<?php $this->render_steps(); ?>
 			<?php $this->render_content( $error_message ); ?>
 			<?php $this->render_footer(); ?>
-            </body>
-            </html>
+			</body>
+			</html>
 			<?php
 
 			exit;
@@ -299,7 +307,6 @@ if( ! class_exists( 'Woodev_Plugin_Setup_Wizard' ) ) :
 		 * @param string $step_id the step ID being saved
 		 *
 		 * @return void|string redirects upon success, returns an error message upon failure
-		 *
 		 */
 		protected function save_step( $step_id ) {
 
@@ -308,14 +315,14 @@ if( ! class_exists( 'Woodev_Plugin_Setup_Wizard' ) ) :
 			try {
 
 				// bail early if the nonce is bad
-				if( ! wp_verify_nonce( Woodev_Helper::get_posted_value( 'nonce' ), "wc_{$this->id}_setup_wizard_save" ) ) {
+				if ( ! wp_verify_nonce( Woodev_Helper::get_posted_value( 'nonce' ), "wc_{$this->id}_setup_wizard_save" ) ) {
 					throw new Woodev_Plugin_Exception( $error_message );
 				}
 
-				if( $this->has_step( $step_id ) ) {
+				if ( $this->has_step( $step_id ) ) {
 
 					// if the step has a saving callback defined, save the form fields
-					if( is_callable( $this->steps[ $step_id ]['save'] ) ) {
+					if ( is_callable( $this->steps[ $step_id ]['save'] ) ) {
 						call_user_func( $this->steps[ $step_id ]['save'], $this );
 					}
 
@@ -323,7 +330,6 @@ if( ! class_exists( 'Woodev_Plugin_Setup_Wizard' ) ) :
 					wp_safe_redirect( $this->get_next_step_url( $step_id ) );
 					exit;
 				}
-
 			} catch ( Woodev_Plugin_Exception $exception ) {
 
 				return $exception->getMessage() ?: $error_message;
@@ -341,10 +347,15 @@ if( ! class_exists( 'Woodev_Plugin_Setup_Wizard' ) ) :
 
 			// enhanced dropdowns
 			wp_register_script( 'selectWoo', WC()->plugin_url() . '/assets/js/selectWoo/selectWoo.full.min.js', array( 'jquery' ), '1.0.0' );
-			wp_register_script( 'wc-enhanced-select', WC()->plugin_url() . '/assets/js/admin/wc-enhanced-select.min.js', array(
-				'jquery',
-				'selectWoo'
-			), \Woodev_Helper::get_wc_version() );
+			wp_register_script(
+				'wc-enhanced-select',
+				WC()->plugin_url() . '/assets/js/admin/wc-enhanced-select.min.js',
+				array(
+					'jquery',
+					'selectWoo',
+				),
+				\Woodev_Helper::get_wc_version()
+			);
 			wp_localize_script(
 				'wc-enhanced-select',
 				'wc_enhanced_select_params',
@@ -367,18 +378,28 @@ if( ! class_exists( 'Woodev_Plugin_Setup_Wizard' ) ) :
 
 			// WooCommerce Setup core styles
 			wp_enqueue_style( 'woocommerce_admin_styles', WC()->plugin_url() . '/assets/css/admin.css', array(), \Woodev_Helper::get_wc_version() );
-			wp_enqueue_style( 'wc-setup', WC()->plugin_url() . '/assets/css/wc-setup.css', array(
-				'dashicons',
-				'install'
-			), $this->get_plugin()->get_version() );
+			wp_enqueue_style(
+				'wc-setup',
+				WC()->plugin_url() . '/assets/css/wc-setup.css',
+				array(
+					'dashicons',
+					'install',
+				),
+				$this->get_plugin()->get_version()
+			);
 
 			// framework bundled styles
 			wp_enqueue_style( 'woodev-admin-setup', $this->get_plugin()->get_framework_assets_url() . '/css/admin/woodev-plugin-admin-setup-wizard.min.css', array( 'wc-setup' ), $this->get_plugin()->get_version() );
-			wp_enqueue_script( 'woodev-admin-setup', $this->get_plugin()->get_framework_assets_url() . '/js/admin/woodev-plugin-admin-setup-wizard.min.js', array(
-				'jquery',
-				'wc-enhanced-select',
-				'jquery-blockui'
-			), $this->get_plugin()->get_version() );
+			wp_enqueue_script(
+				'woodev-admin-setup',
+				$this->get_plugin()->get_framework_assets_url() . '/js/admin/woodev-plugin-admin-setup-wizard.min.js',
+				array(
+					'jquery',
+					'wc-enhanced-select',
+					'jquery-blockui',
+				),
+				$this->get_plugin()->get_version()
+			);
 		}
 
 
@@ -397,14 +418,14 @@ if( ! class_exists( 'Woodev_Plugin_Setup_Wizard' ) ) :
 			$header_content = $image_url ? '<img src="' . esc_url( $image_url ) . '" alt="' . esc_attr( $title ) . '" />' : $title;
 
 			?>
-            <h1 id="wc-logo"
-                class="woodev-plugin-logo <?php echo esc_attr( 'woodev-' . $this->get_plugin()->get_id_dasherized() . '-logo' ); ?>">
-				<?php if( $link_url ) : ?>
-                    <a href="<?php echo esc_url( $link_url ); ?>" target="_blank"><?php echo $header_content; ?></a>
+			<h1 id="wc-logo"
+				class="woodev-plugin-logo <?php echo esc_attr( 'woodev-' . $this->get_plugin()->get_id_dasherized() . '-logo' ); ?>">
+				<?php if ( $link_url ) : ?>
+					<a href="<?php echo esc_url( $link_url ); ?>" target="_blank"><?php echo $header_content; ?></a>
 				<?php else : ?>
 					<?php echo esc_html( $header_content ); ?>
 				<?php endif; ?>
-            </h1>
+			</h1>
 			<?php
 		}
 
@@ -415,7 +436,6 @@ if( ! class_exists( 'Woodev_Plugin_Setup_Wizard' ) ) :
 		 * Plugins can override this to point to their own branding image URL.
 		 *
 		 * @return string
-		 *
 		 */
 		protected function get_header_image_url() {
 
@@ -427,30 +447,29 @@ if( ! class_exists( 'Woodev_Plugin_Setup_Wizard' ) ) :
 		 * Renders the step list.
 		 *
 		 * This displays a list of steps, marking them as complete or upcoming as sort of a progress bar.
-		 *
 		 */
 		protected function render_steps() {
 
 			?>
-            <ol class="wc-setup-steps">
+			<ol class="wc-setup-steps">
 
 				<?php foreach ( $this->steps as $id => $step ) : ?>
 
-					<?php if( $id === $this->current_step ) : ?>
-                        <li class="active"><?php echo esc_html( $step['name'] ); ?></li>
-					<?php elseif( $this->is_step_complete( $id ) ) : ?>
-                        <li class="done"><a
-                                    href="<?php echo esc_url( $this->get_step_url( $id ) ); ?>"><?php echo esc_html( $step['name'] ); ?></a>
-                        </li>
+					<?php if ( $id === $this->current_step ) : ?>
+						<li class="active"><?php echo esc_html( $step['name'] ); ?></li>
+					<?php elseif ( $this->is_step_complete( $id ) ) : ?>
+						<li class="done"><a
+									href="<?php echo esc_url( $this->get_step_url( $id ) ); ?>"><?php echo esc_html( $step['name'] ); ?></a>
+						</li>
 					<?php else : ?>
-                        <li><?php echo esc_html( $step['name'] ); ?></li>
+						<li><?php echo esc_html( $step['name'] ); ?></li>
 					<?php endif; ?>
 
 				<?php endforeach; ?>
 
-                <li class="<?php echo $this->is_finished() ? 'done' : ''; ?>"><?php esc_html_e( 'Ready!', 'woodev-plugin-framework' ); ?></li>
+				<li class="<?php echo $this->is_finished() ? 'done' : ''; ?>"><?php esc_html_e( 'Ready!', 'woodev-plugin-framework' ); ?></li>
 
-            </ol>
+			</ol>
 			<?php
 		}
 
@@ -464,15 +483,13 @@ if( ! class_exists( 'Woodev_Plugin_Setup_Wizard' ) ) :
 		 * This will display the welcome screen, finished screen, or a specific step's markup.
 		 *
 		 * @param string $error_message custom error message
-		 *
-		 *
 		 */
 		protected function render_content( $error_message = '' ) {
 
 			?>
-            <div class="wc-setup-content woodev-plugin-admin-setup-content <?php echo esc_attr( $this->get_slug() ) . '-content'; ?>">
+			<div class="wc-setup-content woodev-plugin-admin-setup-content <?php echo esc_attr( $this->get_slug() ) . '-content'; ?>">
 
-				<?php if( $this->is_finished() ) : ?>
+				<?php if ( $this->is_finished() ) : ?>
 
 					<?php $this->render_finished(); ?>
 
@@ -481,23 +498,23 @@ if( ! class_exists( 'Woodev_Plugin_Setup_Wizard' ) ) :
 				<?php else : ?>
 
 					<?php // render a welcome message if the current is the first step ?>
-					<?php if( $this->is_started() ) : ?>
+					<?php if ( $this->is_started() ) : ?>
 						<?php $this->render_welcome(); ?>
 					<?php endif; ?>
 
 					<?php // render any error message from a previous save ?>
-					<?php if( ! empty( $error_message ) ) : ?>
+					<?php if ( ! empty( $error_message ) ) : ?>
 						<?php $this->render_error( $error_message ); ?>
 					<?php endif; ?>
 
-                    <form method="post">
+					<form method="post">
 						<?php $this->render_step( $this->current_step ); ?>
 						<?php wp_nonce_field( "wc_{$this->id}_setup_wizard_save", 'nonce' ); ?>
-                    </form>
+					</form>
 
 				<?php endif; ?>
 
-            </div>
+			</div>
 			<?php
 		}
 
@@ -509,7 +526,7 @@ if( ! class_exists( 'Woodev_Plugin_Setup_Wizard' ) ) :
 		 */
 		protected function render_error( $message ) {
 
-			if( ! empty( $message ) ) {
+			if ( ! empty( $message ) ) {
 
 				printf( '<p class="error">%s</p>', esc_html( $message ) );
 			}
@@ -522,8 +539,8 @@ if( ! class_exists( 'Woodev_Plugin_Setup_Wizard' ) ) :
 		protected function render_welcome() {
 
 			?>
-            <h1><?php $this->render_welcome_heading() ?></h1>
-            <p class="welcome"><?php $this->render_welcome_text(); ?></p>
+			<h1><?php $this->render_welcome_heading(); ?></h1>
+			<p class="welcome"><?php $this->render_welcome_text(); ?></p>
 			<?php
 		}
 
@@ -558,7 +575,7 @@ if( ! class_exists( 'Woodev_Plugin_Setup_Wizard' ) ) :
 		protected function render_finished() {
 
 			?>
-            <h1><?php printf( esc_html__( '%s is ready!', 'woodev-plugin-framework' ), esc_html( $this->get_plugin()->get_plugin_name() ) ); ?></h1>
+			<h1><?php printf( esc_html__( '%s is ready!', 'woodev-plugin-framework' ), esc_html( $this->get_plugin()->get_plugin_name() ) ); ?></h1>
 			<?php $this->render_before_next_steps(); ?>
 			<?php $this->render_next_steps(); ?>
 			<?php $this->render_after_next_steps(); ?>
@@ -594,65 +611,65 @@ if( ! class_exists( 'Woodev_Plugin_Setup_Wizard' ) ) :
 			$next_steps         = $this->get_next_steps();
 			$additional_actions = $this->get_additional_actions();
 
-			if( ! empty( $next_steps ) || ! empty( $additional_actions ) ) :
+			if ( ! empty( $next_steps ) || ! empty( $additional_actions ) ) :
 
 				?>
-                <ul class="wc-wizard-next-steps">
+				<ul class="wc-wizard-next-steps">
 
 					<?php foreach ( $next_steps as $step ) : ?>
 
-                        <li class="wc-wizard-next-step-item">
-                            <div class="wc-wizard-next-step-description">
+						<li class="wc-wizard-next-step-item">
+							<div class="wc-wizard-next-step-description">
 
-                                <p class="next-step-heading"><?php esc_html_e( 'Next step', 'woodev-plugin-framework' ); ?></p>
-                                <h3 class="next-step-description"><?php echo esc_html( $step['label'] ); ?></h3>
+								<p class="next-step-heading"><?php esc_html_e( 'Next step', 'woodev-plugin-framework' ); ?></p>
+								<h3 class="next-step-description"><?php echo esc_html( $step['label'] ); ?></h3>
 
-								<?php if( ! empty( $step['description'] ) ) : ?>
-                                    <p class="next-step-extra-info"><?php echo esc_html( $step['description'] ); ?></p>
+								<?php if ( ! empty( $step['description'] ) ) : ?>
+									<p class="next-step-extra-info"><?php echo esc_html( $step['description'] ); ?></p>
 								<?php endif; ?>
 
-                            </div>
+							</div>
 
-                            <div class="wc-wizard-next-step-action">
-                                <p class="wc-setup-actions step">
+							<div class="wc-wizard-next-step-action">
+								<p class="wc-setup-actions step">
 									<?php $button_class = isset( $step['button_class'] ) ? $step['button_class'] : 'button button-primary button-large'; ?>
 									<?php $button_class = is_string( $button_class ) || is_array( $button_class ) ? array_map( 'sanitize_html_class', explode( ' ', implode( ' ', (array) $button_class ) ) ) : ''; ?>
-                                    <a class="<?php echo implode( ' ', $button_class ); ?>"
-                                       href="<?php echo esc_url( $step['url'] ); ?>">
+									<a class="<?php echo implode( ' ', $button_class ); ?>"
+										href="<?php echo esc_url( $step['url'] ); ?>">
 										<?php echo esc_html( $step['name'] ); ?>
-                                    </a>
-                                </p>
-                            </div>
-                        </li>
+									</a>
+								</p>
+							</div>
+						</li>
 
 					<?php endforeach; ?>
 
-					<?php if( ! empty( $additional_actions ) ) : ?>
+					<?php if ( ! empty( $additional_actions ) ) : ?>
 
-                        <li class="wc-wizard-additional-steps">
-                            <div class="wc-wizard-next-step-description">
-                                <p class="next-step-heading"><?php esc_html_e( 'You can also:', 'woodev-plugin-framework' ); ?></p>
-                            </div>
-                            <div class="wc-wizard-next-step-action">
+						<li class="wc-wizard-additional-steps">
+							<div class="wc-wizard-next-step-description">
+								<p class="next-step-heading"><?php esc_html_e( 'You can also:', 'woodev-plugin-framework' ); ?></p>
+							</div>
+							<div class="wc-wizard-next-step-action">
 
-                                <p class="wc-setup-actions step">
+								<p class="wc-setup-actions step">
 
 									<?php foreach ( $additional_actions as $name => $url ) : ?>
 
-                                        <a class="button button-large" href="<?php echo esc_url( $url ); ?>">
+										<a class="button button-large" href="<?php echo esc_url( $url ); ?>">
 											<?php echo esc_html( $name ); ?>
-                                        </a>
+										</a>
 
 									<?php endforeach; ?>
 
-                                </p>
-                            </div>
-                        </li>
+								</p>
+							</div>
+						</li>
 
 					<?php endif; ?>
 
-                </ul>
-			<?php
+				</ul>
+				<?php
 
 			endif;
 		}
@@ -665,13 +682,12 @@ if( ! class_exists( 'Woodev_Plugin_Setup_Wizard' ) ) :
 		 * For instance, things like "Create your first Add-On" could go here.
 		 *
 		 * @return array
-		 *
 		 */
 		protected function get_next_steps() {
 
 			$steps = array();
 
-			if( $this->get_plugin()->get_documentation_url() ) {
+			if ( $this->get_plugin()->get_documentation_url() ) {
 
 				$steps['view-docs'] = array(
 					'name'        => __( 'View the Docs', 'woodev-plugin-framework' ),
@@ -691,22 +707,21 @@ if( ! class_exists( 'Woodev_Plugin_Setup_Wizard' ) ) :
 		 * These are secondary actions.
 		 *
 		 * @return array
-		 *
 		 */
 		protected function get_additional_actions() {
 
 			$next_steps = $this->get_next_steps();
 			$actions    = array();
 
-			if( $this->get_plugin()->get_settings_url() ) {
+			if ( $this->get_plugin()->get_settings_url() ) {
 				$actions[ __( 'Review Your Settings', 'woodev-plugin-framework' ) ] = $this->get_plugin()->get_settings_url();
 			}
 
-			if( empty( $next_steps['view-docs'] ) && $this->get_plugin()->get_documentation_url() ) {
+			if ( empty( $next_steps['view-docs'] ) && $this->get_plugin()->get_documentation_url() ) {
 				$actions[ __( 'View the Docs', 'woodev-plugin-framework' ) ] = $this->get_plugin()->get_documentation_url();
 			}
 
-			if( $this->get_plugin()->get_reviews_url() ) {
+			if ( $this->get_plugin()->get_reviews_url() ) {
 				$actions[ __( 'Leave a Review', 'woodev-plugin-framework' ) ] = $this->get_plugin()->get_reviews_url();
 			}
 
@@ -721,7 +736,6 @@ if( ! class_exists( 'Woodev_Plugin_Setup_Wizard' ) ) :
 		 * callback, then the navigation buttons.
 		 *
 		 * @param string $step_id step ID to render
-		 *
 		 */
 		protected function render_step( $step_id ) {
 
@@ -734,25 +748,25 @@ if( ! class_exists( 'Woodev_Plugin_Setup_Wizard' ) ) :
 			}
 
 			?>
-            <p class="wc-setup-actions step">
+			<p class="wc-setup-actions step">
 
-				<?php if( is_callable( $this->steps[ $step_id ]['save'] ) ) : ?>
+				<?php if ( is_callable( $this->steps[ $step_id ]['save'] ) ) : ?>
 
-                    <button
-                            type="submit"
-                            name="save_step"
-                            class="button-primary button button-large button-next"
-                            value="<?php echo esc_attr( $label ); ?>">
+					<button
+							type="submit"
+							name="save_step"
+							class="button-primary button button-large button-next"
+							value="<?php echo esc_attr( $label ); ?>">
 						<?php echo esc_html( $label ); ?>
-                    </button>
+					</button>
 
 				<?php else : ?>
 
-                    <a class="button-primary button button-large button-next"
-                       href="<?php echo esc_url( $this->get_next_step_url( $step_id ) ); ?>"><?php echo esc_html( $label ); ?></a>
+					<a class="button-primary button button-large button-next"
+						href="<?php echo esc_url( $this->get_next_step_url( $step_id ) ); ?>"><?php echo esc_html( $label ); ?></a>
 
 				<?php endif; ?>
-            </p>
+			</p>
 			<?php
 		}
 
@@ -762,15 +776,13 @@ if( ! class_exists( 'Woodev_Plugin_Setup_Wizard' ) ) :
 		 *
 		 * Call this in the same way as woocommerce_form_field().
 		 *
-		 * @param string $key field key
-		 * @param array $args field args - @see woocommerce_form_field()
+		 * @param string      $key field key
+		 * @param array       $args field args - @see woocommerce_form_field()
 		 * @param string|null $value field value
-		 *
-		 *
 		 */
 		protected function render_form_field( $key, $args, $value = null ) {
 
-			if( ! isset( $args['class'] ) ) {
+			if ( ! isset( $args['class'] ) ) {
 				$args['class'] = array();
 			} else {
 				$args['class'] = (array) $args['class'];
@@ -780,23 +792,23 @@ if( ! class_exists( 'Woodev_Plugin_Setup_Wizard' ) ) :
 			$args['class'][] = 'woodev-plugin-admin-setup-control';
 
 			// add the "required" HTML attribute for browser form validation
-			if( ! empty( $args['required'] ) ) {
+			if ( ! empty( $args['required'] ) ) {
 				$args['custom_attributes']['required'] = true;
 			}
 
 			// all dropdowns are treated as enhanced selects
-			if( isset( $args['type'] ) && 'select' === $args['type'] ) {
+			if ( isset( $args['type'] ) && 'select' === $args['type'] ) {
 				$args['input_class'][] = 'wc-enhanced-select';
 			}
 
 			// always echo the field
 			$args['return'] = false;
 
-			if( isset( $args['type'] ) && 'toggle' === $args['type'] ) {
+			if ( isset( $args['type'] ) && 'toggle' === $args['type'] ) {
 				$this->render_toggle_form_field( $key, $args, $value );
-			} elseif( isset( $args['type'] ) && 'multiselect' === $args['type'] ) {
+			} elseif ( isset( $args['type'] ) && 'multiselect' === $args['type'] ) {
 				$this->render_multiselect_form_field( $key, $args, $value );
-            } else {
+			} else {
 				woocommerce_form_field( $key, $args, $value );
 			}
 		}
@@ -804,28 +816,33 @@ if( ! class_exists( 'Woodev_Plugin_Setup_Wizard' ) ) :
 		/**
 		 * Renders the multiselect form field.
 		 *
-		 * @param string $key field key
-		 * @param array $args field args - @see woocommerce_form_field()
+		 * @param string      $key field key
+		 * @param array       $args field args - @see woocommerce_form_field()
 		 * @param string|null $value field value
 		 */
 		public function render_multiselect_form_field( $key, $args, $value ) {
 
-            $args = wp_parse_args( $args, array(
-				'label'             => '',
-				'description'       => '',
-				'required'          => false,
-				'id'                => $key,
-				'class'             => array(),
-				'label_class'       => array(),
-				'input_class'       => array(),
-				'custom_attributes' => array(),
-				'default'           => false,
-				'allow_html'        => false,
-			) );
+			$args = wp_parse_args(
+				$args,
+				array(
+					'label'             => '',
+					'description'       => '',
+					'required'          => false,
+					'id'                => $key,
+					'class'             => array(),
+					'label_class'       => array(),
+					'input_class'       => array(),
+					'custom_attributes' => array(),
+					'default'           => false,
+					'allow_html'        => false,
+				)
+			);
 
-			if ( empty( $args['options'] ) ) return;
+			if ( empty( $args['options'] ) ) {
+				return;
+			}
 
-			if( $args['required'] ) {
+			if ( $args['required'] ) {
 				$args['class'][] = 'validate-required';
 				$required        = '&nbsp;<abbr class="required" title="' . esc_attr__( 'required', 'woodev-plugin-framework' ) . '">*</abbr>';
 			} else {
@@ -836,7 +853,7 @@ if( ! class_exists( 'Woodev_Plugin_Setup_Wizard' ) ) :
 			$custom_attributes         = array();
 			$args['custom_attributes'] = array_filter( (array) $args['custom_attributes'], 'strlen' );
 
-			if( ! empty( $args['required'] ) ) {
+			if ( ! empty( $args['required'] ) ) {
 				$args['custom_attributes']['required'] = true;
 			}
 
@@ -865,26 +882,26 @@ if( ! class_exists( 'Woodev_Plugin_Setup_Wizard' ) ) :
 				$options .= '<option value="' . esc_attr( $option_key ) . '" ' . $selected . '>' . esc_html( $option_text ) . '</option>';
 			}
 
-            ?>
+			?>
 
-            <div class="form-row <?php echo esc_attr( implode( ' ', $args['class'] ) ); ?>">
+			<div class="form-row <?php echo esc_attr( implode( ' ', $args['class'] ) ); ?>">
 
-                <?php if ( $args['label'] ) : ?>
-                    <label for="<?php esc_attr_e( $args['id'] );?>" class="<?php esc_attr_e( implode( ' ', $args['label_class'] ) ); ?>"><?php echo wp_kses_post( $args['label'] );?> <?php echo $required;?></label>
-                <?php endif; ?>
+				<?php if ( $args['label'] ) : ?>
+					<label for="<?php esc_attr_e( $args['id'] ); ?>" class="<?php esc_attr_e( implode( ' ', $args['label_class'] ) ); ?>"><?php echo wp_kses_post( $args['label'] ); ?> <?php echo $required; ?></label>
+				<?php endif; ?>
 
-                <select multiple="multiple" name="<?php esc_attr_e( $key );?>[]" id="<?php esc_attr_e( $args['id'] );?>" class="select wc-enhanced-select <?php esc_attr_e( implode( ' ', $args['input_class'] ) );?>" <?php echo implode( ' ', $custom_attributes );?> data-placeholder="<?php esc_attr_e( $args['placeholder'] );?>">
-                    <?php echo $options;?>
-                </select>
+				<select multiple="multiple" name="<?php esc_attr_e( $key ); ?>[]" id="<?php esc_attr_e( $args['id'] ); ?>" class="select wc-enhanced-select <?php esc_attr_e( implode( ' ', $args['input_class'] ) ); ?>" <?php echo implode( ' ', $custom_attributes ); ?> data-placeholder="<?php esc_attr_e( $args['placeholder'] ); ?>">
+					<?php echo $options; ?>
+				</select>
 
-                <?php if ( $args['description'] ) : ?>
-                    <span class="description" id="<?php esc_attr_e( $args['id'] );?>-description" aria-hidden="true"><?php echo wp_kses_post( $args['description'] ); ?></span>
-                <?php endif; ?>
+				<?php if ( $args['description'] ) : ?>
+					<span class="description" id="<?php esc_attr_e( $args['id'] ); ?>-description" aria-hidden="true"><?php echo wp_kses_post( $args['description'] ); ?></span>
+				<?php endif; ?>
 
-            </div>
+			</div>
 
-            <?php
-        }
+			<?php
+		}
 
 
 		/**
@@ -892,44 +909,47 @@ if( ! class_exists( 'Woodev_Plugin_Setup_Wizard' ) ) :
 		 *
 		 * This requires special markup for the toggle UI.
 		 *
-		 * @param string $key field key
-		 * @param array $args field args - @see woocommerce_form_field()
+		 * @param string      $key field key
+		 * @param array       $args field args - @see woocommerce_form_field()
 		 * @param string|null $value field value
 		 */
 		public function render_toggle_form_field( $key, $args, $value ) {
 
-			$args = wp_parse_args( $args, array(
-				'type'              => 'text',
-				'label'             => '',
-				'description'       => '',
-				'required'          => false,
-				'id'                => $key,
-				'class'             => array(),
-				'label_class'       => array(),
-				'input_class'       => array(),
-				'custom_attributes' => array(),
-				'default'           => false,
-				'allow_html'        => false,
-			) );
+			$args = wp_parse_args(
+				$args,
+				array(
+					'type'              => 'text',
+					'label'             => '',
+					'description'       => '',
+					'required'          => false,
+					'id'                => $key,
+					'class'             => array(),
+					'label_class'       => array(),
+					'input_class'       => array(),
+					'custom_attributes' => array(),
+					'default'           => false,
+					'allow_html'        => false,
+				)
+			);
 
 			$args['class'][] = 'toggle';
 
-			if( $args['required'] ) {
+			if ( $args['required'] ) {
 				$args['class'][] = 'validate-required';
 			}
 
-			if( null === $value ) {
+			if ( null === $value ) {
 				$value = $args['default'];
 			}
 
 			$custom_attributes         = array();
 			$args['custom_attributes'] = array_filter( (array) $args['custom_attributes'], 'strlen' );
 
-			if( $args['description'] ) {
+			if ( $args['description'] ) {
 				$args['custom_attributes']['aria-describedby'] = $args['id'] . '-description';
 			}
 
-			if( ! empty( $args['custom_attributes'] ) && is_array( $args['custom_attributes'] ) ) {
+			if ( ! empty( $args['custom_attributes'] ) && is_array( $args['custom_attributes'] ) ) {
 				foreach ( $args['custom_attributes'] as $attribute => $attribute_value ) {
 					$custom_attributes[] = esc_attr( $attribute ) . '="' . esc_attr( $attribute_value ) . '"';
 				}
@@ -937,37 +957,37 @@ if( ! class_exists( 'Woodev_Plugin_Setup_Wizard' ) ) :
 
 			$enabled = $value || $args['default'];
 
-			if( $enabled ) {
+			if ( $enabled ) {
 				$args['class'][] = 'enabled';
 			}
 
 			?>
-            <div class="form-row <?php echo esc_attr( implode( ' ', $args['class'] ) ); ?>">
+			<div class="form-row <?php echo esc_attr( implode( ' ', $args['class'] ) ); ?>">
 
-                <p class="name"><?php echo true === $args['allow_html'] ? $args['label'] : esc_html( $args['label'] ); ?></p>
+				<p class="name"><?php echo true === $args['allow_html'] ? $args['label'] : esc_html( $args['label'] ); ?></p>
 
-				<?php if( true === $args['allow_html'] ) : ?>
-                    <div class="content"><p class="description"><?php echo $args['description']; ?></p></div>
+				<?php if ( true === $args['allow_html'] ) : ?>
+					<div class="content"><p class="description"><?php echo $args['description']; ?></p></div>
 				<?php else : ?>
-                    <p class="content description"><?php echo esc_html( $args['description'] ); ?></p>
+					<p class="content description"><?php echo esc_html( $args['description'] ); ?></p>
 				<?php endif; ?>
 
-                <div class="enable">
+				<div class="enable">
 				<span class="toggle <?php echo $enabled ? '' : 'disabled'; ?>">
 					<input
-                            id="<?php echo esc_attr( $args['id'] ); ?>"
-                            type="checkbox"
-                            class="input-checkbox <?php echo esc_attr( implode( ' ', $args['input_class'] ) ); ?>"
-                            name="<?php echo esc_attr( $key ); ?>"
-                            value="yes" <?php checked( true, $value ); ?>
+							id="<?php echo esc_attr( $args['id'] ); ?>"
+							type="checkbox"
+							class="input-checkbox <?php echo esc_attr( implode( ' ', $args['input_class'] ) ); ?>"
+							name="<?php echo esc_attr( $key ); ?>"
+							value="yes" <?php checked( true, $value ); ?>
 						<?php echo implode( ' ', $custom_attributes ); ?>
 					/>
 					<label for="<?php echo esc_attr( $args['id'] ); ?>"
-                           class="<?php implode( ' ', (array) $args['label_class'] ); ?>">
+							class="<?php implode( ' ', (array) $args['label_class'] ); ?>">
 				</span>
-                </div>
+				</div>
 
-            </div>
+			</div>
 			<?php
 		}
 
@@ -978,15 +998,15 @@ if( ! class_exists( 'Woodev_Plugin_Setup_Wizard' ) ) :
 		protected function render_footer() {
 
 			?>
-			<?php if( $this->is_finished() ) : ?>
-                <a class="wc-setup-footer-links"
-                   href="<?php echo esc_url( $this->get_dashboard_url() ); ?>"><?php esc_html_e( 'Return to the WordPress Dashboard', 'woodev-plugin-framework' ); ?></a>
-			<?php elseif( $this->is_started() ) : ?>
-                <a class="wc-setup-footer-links"
-                   href="<?php echo esc_url( $this->get_dashboard_url() ); ?>"><?php esc_html_e( 'Not right now', 'woodev-plugin-framework' ); ?></a>
+			<?php if ( $this->is_finished() ) : ?>
+				<a class="wc-setup-footer-links"
+					href="<?php echo esc_url( $this->get_dashboard_url() ); ?>"><?php esc_html_e( 'Return to the WordPress Dashboard', 'woodev-plugin-framework' ); ?></a>
+			<?php elseif ( $this->is_started() ) : ?>
+				<a class="wc-setup-footer-links"
+					href="<?php echo esc_url( $this->get_dashboard_url() ); ?>"><?php esc_html_e( 'Not right now', 'woodev-plugin-framework' ); ?></a>
 			<?php else : ?>
-                <a class="wc-setup-footer-links"
-                   href="<?php echo esc_url( $this->get_next_step_url() ); ?>"><?php esc_html_e( 'Skip this step', 'woodev-plugin-framework' ); ?></a>
+				<a class="wc-setup-footer-links"
+					href="<?php echo esc_url( $this->get_next_step_url() ); ?>"><?php esc_html_e( 'Skip this step', 'woodev-plugin-framework' ); ?></a>
 			<?php endif; ?>
 			<?php
 
@@ -1000,35 +1020,34 @@ if( ! class_exists( 'Woodev_Plugin_Setup_Wizard' ) ) :
 		/**
 		 * Registers a step.
 		 *
-		 * @param string $id unique step ID
-		 * @param string $name step name for display
-		 * @param string|array $view_callback callback to render the step's content HTML
+		 * @param string            $id unique step ID
+		 * @param string            $name step name for display
+		 * @param string|array      $view_callback callback to render the step's content HTML
 		 * @param string|array|null $save_callback callback to save the step's form values
 		 *
 		 * @return bool whether the step was successfully added
-		 *
 		 */
 		public function register_step( $id, $name, $view_callback, $save_callback = null ) {
 
 			try {
 
 				// invalid ID
-				if( ! is_string( $id ) || empty( $id ) || $this->has_step( $id ) ) {
+				if ( ! is_string( $id ) || empty( $id ) || $this->has_step( $id ) ) {
 					throw new Woodev_Plugin_Exception( 'Invalid step ID' );
 				}
 
 				// invalid name
-				if( ! is_string( $name ) || empty( $name ) ) {
+				if ( ! is_string( $name ) || empty( $name ) ) {
 					throw new Woodev_Plugin_Exception( 'Invalid step name' );
 				}
 
 				// invalid view callback
-				if( ! is_callable( $view_callback ) ) {
+				if ( ! is_callable( $view_callback ) ) {
 					throw new Woodev_Plugin_Exception( 'Invalid view callback' );
 				}
 
 				// invalid save callback
-				if( null !== $save_callback && ! is_callable( $save_callback ) ) {
+				if ( null !== $save_callback && ! is_callable( $save_callback ) ) {
 					throw new Woodev_Plugin_Exception( 'Invalid save callback' );
 				}
 
@@ -1176,11 +1195,11 @@ if( ! class_exists( 'Woodev_Plugin_Setup_Wizard' ) ) :
 
 			$step_title = '';
 
-			if( ! $step_id ) {
+			if ( ! $step_id ) {
 				$step_id = $this->current_step;
 			}
 
-			if( isset( $this->steps[ $step_id ]['name'] ) ) {
+			if ( isset( $this->steps[ $step_id ]['name'] ) ) {
 				$step_title = $this->steps[ $step_id ]['name'];
 			}
 
@@ -1208,14 +1227,14 @@ if( ! class_exists( 'Woodev_Plugin_Setup_Wizard' ) ) :
 		 */
 		public function get_next_step_url( $step_id = '' ) {
 
-			if( ! $step_id ) {
+			if ( ! $step_id ) {
 				$step_id = $this->current_step;
 			}
 
 			$steps = array_keys( $this->steps );
 
 			// if on the last step, next is the final finish step
-			if( end( $steps ) === $step_id ) {
+			if ( end( $steps ) === $step_id ) {
 
 				$url = $this->get_finish_url();
 
@@ -1244,7 +1263,7 @@ if( ! class_exists( 'Woodev_Plugin_Setup_Wizard' ) ) :
 
 			$url = false;
 
-			if( $this->has_step( $step_id ) ) {
+			if ( $this->has_step( $step_id ) ) {
 				$url = add_query_arg( 'step', $step_id, remove_query_arg( 'action' ) );
 			}
 

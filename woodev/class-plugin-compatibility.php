@@ -2,7 +2,7 @@
 
 use Automattic\WooCommerce\Utilities\OrderUtil;
 
-defined( 'ABSPATH' ) or exit;
+defined( 'ABSPATH' ) || exit;
 
 if ( ! class_exists( 'Woodev_Plugin_Compatibility' ) ) :
 
@@ -21,7 +21,6 @@ if ( ! class_exists( 'Woodev_Plugin_Compatibility' ) ) :
 	 * + Core 3.0.9 - 3.7.x
 	 *
 	 * // TODO: move to /compatibility
-	 *
 	 */
 	class Woodev_Plugin_Compatibility {
 
@@ -33,7 +32,7 @@ if ( ! class_exists( 'Woodev_Plugin_Compatibility' ) ) :
 		 *
 		 * @return string[] array of semver strings
 		 */
-		public static function get_latest_wc_versions() : array {
+		public static function get_latest_wc_versions(): array {
 
 			$latest_wc_versions = get_transient( 'woodev_plugin_wc_versions' );
 
@@ -235,7 +234,6 @@ if ( ! class_exists( 'Woodev_Plugin_Compatibility' ) ) :
 		public static function is_hpos_enabled(): bool {
 			return is_callable( OrderUtil::class . '::' . 'custom_orders_table_usage_is_enabled' ) && OrderUtil::custom_orders_table_usage_is_enabled();
 		}
-
 	}
 
 

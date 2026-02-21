@@ -17,7 +17,6 @@ if ( ! interface_exists( 'Woodev_Payment_Gateway_API_Customer_Response' ) ) :
 		 * @return string customer ID returned by the gateway
 		 */
 		public function get_customer_id();
-
 	}
 
 endif;

@@ -21,7 +21,7 @@ if ( ! class_exists( 'Woodev_Register_Settings_Fields' ) ) :
 		public function textbox( $id, $classes = '' ) {
 
 			$html = '<input type="text" class="' . esc_attr( $classes ) . '" name="' . esc_attr( $this->get_setting_id( $id ) ) . '" ' .
-			        'id="' . esc_attr( $this->get_setting_id( $id ) ) . '" value="' . sanitize_text_field( $this->get_setting_value( $id ) ) . '" />';
+					'id="' . esc_attr( $this->get_setting_id( $id ) ) . '" value="' . sanitize_text_field( $this->get_setting_value( $id ) ) . '" />';
 
 			echo $html;
 		}
@@ -36,7 +36,7 @@ if ( ! class_exists( 'Woodev_Register_Settings_Fields' ) ) :
 			$checked = ( ! empty( $value ) ? checked( 1, $value, false ) : '' );
 
 			$html = '<input type="checkbox" class="' . esc_attr( $classes ) . '" id="' . esc_attr( $this->get_setting_id( $id ) ) . '" ' .
-			        'name="' . esc_attr( $this->get_setting_id( $id ) ) . '" value="1" ' . $checked . '/>';
+					'name="' . esc_attr( $this->get_setting_id( $id ) ) . '" value="1" ' . $checked . '/>';
 
 			echo $html;
 		}
@@ -55,7 +55,7 @@ if ( ! class_exists( 'Woodev_Register_Settings_Fields' ) ) :
 				$checked     = ( $saved_value == $value );
 			}
 
-			$html = '<input name="' . $name_attr . '" id="' . $id_attr . '" type="radio" ' . 'value="' . esc_attr( $value ) . '" ' . checked( true, $checked, false ) . '/>&nbsp;';
+			$html  = '<input name="' . $name_attr . '" id="' . $id_attr . '" type="radio" ' . 'value="' . esc_attr( $value ) . '" ' . checked( true, $checked, false ) . '/>&nbsp;';
 			$html .= '<label for="' . $id_attr . '">' . $label . '</label><br/>';
 
 			echo $html;
@@ -75,10 +75,10 @@ if ( ! class_exists( 'Woodev_Register_Settings_Fields' ) ) :
 
 			$selected = null !== $this->get_setting_value( $id ) ? $this->get_setting_value( $id ) : '';
 
-			$html = '<select id="' . esc_attr( $this->get_setting_id( $id ) ) . '" name="' . esc_attr( $this->get_setting_id( $id ) )  . '" />';
+			$html = '<select id="' . esc_attr( $this->get_setting_id( $id ) ) . '" name="' . esc_attr( $this->get_setting_id( $id ) ) . '" />';
 
 			foreach ( $options as $option => $value ) {
-				$html .= '<option value="' . esc_attr( $value) . '" ' . selected( $value, $selected, false ) . '>' . esc_html( $option ) . '</option>';
+				$html .= '<option value="' . esc_attr( $value ) . '" ' . selected( $value, $selected, false ) . '>' . esc_html( $option ) . '</option>';
 			}
 
 			$html .= '</select>';
@@ -103,7 +103,7 @@ if ( ! class_exists( 'Woodev_Register_Settings_Fields' ) ) :
 
 			// Ignoring size at the moment.
 			$html = '<textarea class="' . esc_attr( $classes ) . '" cols="50" rows="10" id="' . esc_attr( $this->get_setting_id( $id ) ) . '" ' .
-			        'name="' . esc_attr( $this->get_setting_id( $id ) ) . '">' . esc_textarea( $value ) . '</textarea>';
+					'name="' . esc_attr( $this->get_setting_id( $id ) ) . '">' . esc_textarea( $value ) . '</textarea>';
 
 			echo $html;
 		}
@@ -125,7 +125,7 @@ if ( ! class_exists( 'Woodev_Register_Settings_Fields' ) ) :
 			}
 
 			$html = '<input type="number" class="' . esc_attr( $classes ) . '" id="' . esc_attr( $this->get_setting_id( $id ) ) . '" ' .
-			        'name="' . esc_attr( $this->get_setting_id( $id ) ) . '" step="1" value="' . esc_attr( $value ) . '"/>';
+					'name="' . esc_attr( $this->get_setting_id( $id ) ) . '" step="1" value="' . esc_attr( $value ) . '"/>';
 
 			echo $html;
 		}

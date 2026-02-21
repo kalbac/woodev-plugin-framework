@@ -18,8 +18,10 @@
 			<thead>
 				<tr>
 
-					<?php // Display a column for each token field
-					foreach ( $columns as $column_id => $column_title ) : ?>
+					<?php
+					// Display a column for each token field
+					foreach ( $columns as $column_id => $column_title ) :
+						?>
 						<th class="token-<?php echo esc_attr( $column_id ); ?>"><?php echo esc_html( $column_title ); ?></th>
 					<?php endforeach; ?>
 
@@ -33,7 +35,8 @@
 				 *
 				 * @param int $user_id the current user ID
 				 */
-				do_action( 'wc_payment_gateway_' . $id . '_token_editor_tokens', $user_id ); ?>
+				do_action( 'wc_payment_gateway_' . $id . '_token_editor_tokens', $user_id );
+				?>
 
 			</tbody>
 
@@ -43,8 +46,10 @@
 				</tr>
 			</tbody>
 
-			<?php // Editor actions
-			if ( ! empty( $actions ) ) : ?>
+			<?php
+			// Editor actions
+			if ( ! empty( $actions ) ) :
+				?>
 
 				<tfoot>
 					<tr>

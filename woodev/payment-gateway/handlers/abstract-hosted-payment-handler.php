@@ -13,7 +13,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Hosted_Payment_Handler' ) 
 
 		/**
 		 * Adds the action & filter hooks.
-		 *
 		 */
 		protected function add_hooks() {
 
@@ -23,14 +22,20 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Hosted_Payment_Handler' ) 
 			add_action( 'woocommerce_receipt_' . $this->get_gateway()->get_id(), array( $this, 'payment_page' ) );
 
 			// payment notification listener hook
-			if ( ! has_action( 'woocommerce_api_' . $this->get_gateway()->get_id() . '_process_payment', array(
-				$this,
-				'handle_transaction_response_request'
-			) ) ) {
-				add_action( 'woocommerce_api_' . $this->get_gateway()->get_id() . '_process_payment', array(
+			if ( ! has_action(
+				'woocommerce_api_' . $this->get_gateway()->get_id() . '_process_payment',
+				array(
 					$this,
-					'handle_transaction_response_request'
-				) );
+					'handle_transaction_response_request',
+				)
+			) ) {
+				add_action(
+					'woocommerce_api_' . $this->get_gateway()->get_id() . '_process_payment',
+					array(
+						$this,
+						'handle_transaction_response_request',
+					)
+				);
 			}
 		}
 
@@ -150,7 +155,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Hosted_Payment_Handler' ) 
 		/**
 		 * Handles the response when processing is complete.
 		 *
-		 * @param WC_Order|null $order order object, if any
+		 * @param WC_Order|null                            $order order object, if any
 		 * @param Woodev_Payment_Gateway_API_Response|null $response API response object, if any
 		 */
 		protected function do_transaction_response_complete( WC_Order $order = null, Woodev_Payment_Gateway_API_Response $response = null ) {
@@ -162,9 +167,9 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Hosted_Payment_Handler' ) 
 		/**
 		 * Handles the response when processing has failed.
 		 *
-		 * @param WC_Order|null $order order object, if any
-		 * @param string $message error message, for logging
-		 * @param string $user_message user-facing message
+		 * @param WC_Order|null                            $order order object, if any
+		 * @param string                                   $message error message, for logging
+		 * @param string                                   $user_message user-facing message
 		 * @param Woodev_Payment_Gateway_API_Response|null $response API response object, if any
 		 */
 		protected function do_transaction_response_failed( WC_Order $order = null, $message = '', $user_message = '', Woodev_Payment_Gateway_API_Response $response = null ) {
@@ -186,8 +191,8 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Hosted_Payment_Handler' ) 
 		 *
 		 * This will trigger when there is no way to salvage the payment, i.e. when the response data is invalid.
 		 *
-		 * @param WC_Order|null $order order object, if any
-		 * @param string $message error message, for logging
+		 * @param WC_Order|null                            $order order object, if any
+		 * @param string                                   $message error message, for logging
 		 * @param Woodev_Payment_Gateway_API_Response|null $response API response object, if any
 		 */
 		protected function do_transaction_response_invalid( WC_Order $order = null, $message = '', Woodev_Payment_Gateway_API_Response $response = null ) {
@@ -214,7 +219,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Hosted_Payment_Handler' ) 
 		 * This is the final step after all payment verification and processing, and runs regardless of the transaction result.
 		 *
 		 * @param Woodev_Payment_Gateway_API_Response|null $response
-		 * @param string $url
+		 * @param string                                   $url
 		 */
 		protected function do_transaction_request_response( Woodev_Payment_Gateway_API_Response $response = null, $url = '' ) {
 
@@ -265,11 +270,13 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Hosted_Payment_Handler' ) 
 			// if the order is invalid, bail
 			if ( ! $order ) {
 
-				throw new Woodev_API_Exception( sprintf(
-				/* translators: Placeholders: %s - a WooCommerce order ID */
-					__( 'Could not find order %s', 'woodev-plugin-framework' ),
-					$response->get_order_id()
-				) );
+				throw new Woodev_API_Exception(
+					sprintf(
+					/* translators: Placeholders: %s - a WooCommerce order ID */
+						__( 'Could not find order %s', 'woodev-plugin-framework' ),
+						$response->get_order_id()
+					)
+				);
 			}
 
 			$order = $this->get_gateway()->get_order( $order );
@@ -287,7 +294,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Hosted_Payment_Handler' ) 
 				$order->payment->account_type = $response->get_account_type();
 				$order->payment->check_number = $response->get_check_number();
 
-			} elseif( $response instanceof  Woodev_Payment_Gateway_API_Payment_Notification_Loans_Response ) {
+			} elseif ( $response instanceof Woodev_Payment_Gateway_API_Payment_Notification_Loans_Response ) {
 
 				$order->payment->loan_type     = $response->get_loan_type();
 				$order->payment->credit_amount = $response->get_credit_amount();
@@ -326,7 +333,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Hosted_Payment_Handler' ) 
 		public function is_redirect() {
 			return false;
 		}
-
 	}
 
 

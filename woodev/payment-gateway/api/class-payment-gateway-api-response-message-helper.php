@@ -157,11 +157,10 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_API_Response_Message_Helper' ) ) :
 			 *
 			 * @param string $message message to show to user
 			 * @param string $message_id machine code for the message, e.g. card_expired
-			 * @param Woodev_Payment_Gateway_API_Response_Message_Helper $this instance
+			 * @param Woodev_Payment_Gateway_API_Response_Message_Helper $instance instance
 			 */
 			return apply_filters( 'wc_payment_gateway_transaction_response_user_message', $message, $message_id, $this );
 		}
-
 	}
 
 endif;

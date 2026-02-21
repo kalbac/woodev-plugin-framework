@@ -1,6 +1,6 @@
 <?php
 
-defined( 'ABSPATH' ) or exit;
+defined( 'ABSPATH' ) || exit;
 
 if ( ! class_exists( 'Woodev_Packer_Boxes' ) ) :
 
@@ -13,7 +13,7 @@ if ( ! class_exists( 'Woodev_Packer_Boxes' ) ) :
 		 */
 		public function pack() {
 
-			if ( ! $this->items || sizeof( $this->items ) === 0 ) {
+			if ( ! $this->items || count( $this->items ) === 0 ) {
 				throw new Woodev_Packer_Exception( __( 'No items to pack!' ) );
 			}
 
@@ -25,7 +25,7 @@ if ( ! class_exists( 'Woodev_Packer_Boxes' ) ) :
 				$this->items             = array();
 			}
 			// Keep looping until packed
-			while ( sizeof( $this->items ) > 0 ) {
+			while ( count( $this->items ) > 0 ) {
 
 				$this->items  = $this->order_items( $this->items );
 				$best_package = $this->find_best_packed_box();
@@ -73,17 +73,20 @@ if ( ! class_exists( 'Woodev_Packer_Boxes' ) ) :
 		 */
 		private function order_boxes_by_volume( array $sort ) {
 			if ( ! empty( $sort ) ) {
-				uasort( $sort, static function ( Woodev_Box_Packer_Box $a, Woodev_Box_Packer_Box $b ) {
-					if ( $a->get_volume() === $b->get_volume() ) {
-						if ( $a->get_max_weight() === $b->get_max_weight() ) {
-							return 0;
+				uasort(
+					$sort,
+					static function ( Woodev_Box_Packer_Box $a, Woodev_Box_Packer_Box $b ) {
+						if ( $a->get_volume() === $b->get_volume() ) {
+							if ( $a->get_max_weight() === $b->get_max_weight() ) {
+								return 0;
+							}
+
+							return $a->get_max_weight() < $b->get_max_weight() ? 1 : - 1;
 						}
 
-						return $a->get_max_weight() < $b->get_max_weight() ? 1 : - 1;
+						return $a->get_volume() < $b->get_volume() ? 1 : - 1;
 					}
-
-					return $a->get_volume() < $b->get_volume() ? 1 : - 1;
-				} );
+				);
 			}
 
 			return $sort;
@@ -98,17 +101,20 @@ if ( ! class_exists( 'Woodev_Packer_Boxes' ) ) :
 		 */
 		private function order_items( array $sort ): array {
 			if ( ! empty( $sort ) ) {
-				uasort( $sort, static function ( Woodev_Box_Packer_Item $a, Woodev_Box_Packer_Item $b ) {
-					if ( $a->get_volume() === $b->get_volume() ) {
-						if ( $a->get_weight() === $b->get_weight() ) {
-							return 0;
+				uasort(
+					$sort,
+					static function ( Woodev_Box_Packer_Item $a, Woodev_Box_Packer_Item $b ) {
+						if ( $a->get_volume() === $b->get_volume() ) {
+							if ( $a->get_weight() === $b->get_weight() ) {
+								return 0;
+							}
+
+							return $a->get_weight() < $b->get_weight() ? 1 : - 1;
 						}
 
-						return $a->get_weight() < $b->get_weight() ? 1 : - 1;
+						return $a->get_volume() < $b->get_volume() ? 1 : - 1;
 					}
-
-					return $a->get_volume() < $b->get_volume() ? 1 : - 1;
-				} );
+				);
 			}
 
 			return $sort;

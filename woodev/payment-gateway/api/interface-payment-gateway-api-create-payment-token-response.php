@@ -16,7 +16,6 @@ if ( ! interface_exists( 'Woodev_Payment_Gateway_API_Create_Payment_Token_Respon
 		 *
 		 * @return Woodev_Payment_Gateway_Payment_Token payment token
 		 * @since 1.0.0
-		 *
 		 */
 		public function get_payment_token();
 	}

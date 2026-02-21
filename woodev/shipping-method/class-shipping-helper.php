@@ -22,7 +22,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Helper' ) ) :
 		 *
 		 * @since 1.5.0
 		 *
-		 * @param float $weight weight value
+		 * @param float  $weight weight value
 		 * @param string $from_unit source unit (g, kg, lbs, oz), defaults to WC store unit
 		 * @return float weight in grams
 		 */
@@ -50,7 +50,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Helper' ) ) :
 		 *
 		 * @since 1.5.0
 		 *
-		 * @param float $dimension dimension value
+		 * @param float  $dimension dimension value
 		 * @param string $from_unit source unit (cm, m, mm, in, yd), defaults to WC store unit
 		 * @return float dimension in centimeters
 		 */
@@ -162,9 +162,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Helper' ) ) :
 		 *
 		 * @since 1.5.0
 		 *
-		 * @param float $cost shipping cost
+		 * @param float  $cost shipping cost
 		 * @param string $mode rounding mode: none|ceil|floor|round
-		 * @param int $precision rounding precision
+		 * @param int    $precision rounding precision
 		 * @return float rounded cost
 		 */
 		public static function round_cost( float $cost, string $mode = 'none', int $precision = 0 ): float {
@@ -189,9 +189,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Helper' ) ) :
 		 *
 		 * @since 1.5.0
 		 *
-		 * @param float $cost base shipping cost
+		 * @param float  $cost base shipping cost
 		 * @param string $fee fee value (e.g., '250' or '5%')
-		 * @param float $base_for_percent base amount for percentage calculation (order total or shipping cost)
+		 * @param float  $base_for_percent base amount for percentage calculation (order total or shipping cost)
 		 * @return float cost with fee applied
 		 */
 		public static function apply_fee( float $cost, string $fee, float $base_for_percent = 0 ): float {
@@ -257,7 +257,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Helper' ) ) :
 		 * @since 1.5.0
 		 *
 		 * @param \WC_Order $order WC order
-		 * @param string $method_id method ID to find
+		 * @param string    $method_id method ID to find
 		 * @return \WC_Order_Item_Shipping|null shipping item or null
 		 */
 		public static function get_order_shipping_item( \WC_Order $order, string $method_id ): ?\WC_Order_Item_Shipping {
@@ -271,8 +271,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Helper' ) ) :
 
 			return null;
 		}
-
-
 	}
 
 endif;

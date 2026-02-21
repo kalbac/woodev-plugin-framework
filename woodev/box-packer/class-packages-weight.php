@@ -1,6 +1,6 @@
 <?php
 
-defined( 'ABSPATH' ) or exit;
+defined( 'ABSPATH' ) || exit;
 
 if ( ! interface_exists( 'Woodev_Box_Packer_Packages_Weight' ) ) :
 

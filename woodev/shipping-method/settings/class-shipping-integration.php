@@ -54,7 +54,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Integration' ) ) :
 		/**
 		 * Initializes the integration.
 		 *
-		 * @param  Shipping_Plugin|null  $plugin  the parent plugin class
+		 * @param  Shipping_Plugin|null $plugin  the parent plugin class
 		 *
 		 * @since 1.4.0
 		 */
@@ -95,13 +95,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Integration' ) ) :
 
 			// debug mode
 
-
 			$this->form_fields['enable_debug'] = [
 				'title'       => esc_html__( 'Debug Mode', 'woodev-plugin-framework' ),
 				'type'        => 'checkbox',
 				'label'       => esc_html__( 'Enable debug mode/logging', 'woodev-plugin-framework' ),
 				'default'     => 'no',
-				'description' => sprintf( __('All requests and responses will be record to %s.', 'woodev-plugin-framework' ), sprintf( '<a href="%s">файл логов</a>', \Woodev_Helper::get_wc_log_file_url( $this->get_id() ) ) ),
+				'description' => sprintf( __( 'All requests and responses will be record to %s.', 'woodev-plugin-framework' ), sprintf( '<a href="%s">файл логов</a>', \Woodev_Helper::get_wc_log_file_url( $this->get_id() ) ) ),
 			];
 
 			// if there is more than just the production environment available
@@ -142,7 +141,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Integration' ) ) :
 		 * @param array $form_fields  plugin settings form fields
 		 *
 		 * @return array $form_fields plugin settings form fields
-		 *@since 1.5.0
+		 * @since 1.5.0
 		 */
 		protected function add_environment_form_fields( array $form_fields ): array {
 
@@ -237,7 +236,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Integration' ) ) :
 					 *
 					 * @since 1.0.0
 					 *
-					 * @param Shipping_Integration $this instance
+					 * @param Shipping_Integration $instance instance
 					 * @param string $name of supported feature being added
 					 */
 					do_action( 'wc_payment_gateway_' . $this->get_id() . '_supports_' . str_replace( '-', '_', $name ), $this, $name );
@@ -276,7 +275,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Integration' ) ) :
 					 *
 					 * @since 1.5.0
 					 *
-					 * @param Shipping_Integration $this instance
+					 * @param Shipping_Integration $instance instance
 					 * @param string $name of supported feature being removed
 					 */
 					do_action( 'woodev_shipping_integration_' . $this->get_id() . '_removed_support_' . str_replace( '-', '_', $name ), $this, $name );
@@ -309,7 +308,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Integration' ) ) :
 
 			if ( ! isset( $this->environments ) ) {
 				$this->environments = [
-					self::ENVIRONMENT_PRODUCTION => esc_html_x( 'Production', 'software environment', 'woodev-plugin-framework' )
+					self::ENVIRONMENT_PRODUCTION => esc_html_x( 'Production', 'software environment', 'woodev-plugin-framework' ),
 				];
 			}
 
@@ -363,7 +362,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Integration' ) ) :
 		 * @param string|null $environment_id optional environment id to check, otherwise defaults to the plugin environment
 		 *
 		 * @return boolean true if $environment_id (if non-null) or otherwise the current environment is production
-		 *@since 1.5.0
+		 * @since 1.5.0
 		 */
 		public function is_production_environment( ?string $environment_id = null ): bool {
 
@@ -415,7 +414,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Integration' ) ) :
 		}
 
 		abstract protected function init_plugin(): Shipping_Plugin;
-
 	}
 
 endif;

@@ -1,6 +1,6 @@
 <?php
 
-defined( 'ABSPATH' ) or exit;
+defined( 'ABSPATH' ) || exit;
 
 if ( ! class_exists( 'Woodev_Script_Handler' ) ) :
 
@@ -30,10 +30,13 @@ if ( ! class_exists( 'Woodev_Script_Handler' ) ) :
 		 */
 		protected function add_hooks() {
 			add_action( 'wp_ajax_wc_' . $this->get_id() . '_log_script_event', array( $this, 'ajax_log_event' ) );
-			add_action( 'wp_ajax_nopriv_wc_' . $this->get_id() . '_log_script_event', array(
-				$this,
-				'ajax_log_event'
-			) );
+			add_action(
+				'wp_ajax_nopriv_wc_' . $this->get_id() . '_log_script_event',
+				array(
+					$this,
+					'ajax_log_event',
+				)
+			);
 		}
 
 
@@ -70,7 +73,7 @@ if ( ! class_exists( 'Woodev_Script_Handler' ) ) :
 		/**
 		 * Gets the handler instantiation JS wrapped in a safe load technique.
 		 *
-		 * @param array $additional_args additional handler arguments, if any
+		 * @param array  $additional_args additional handler arguments, if any
 		 * @param string $handler_name handler name, if different from Woodev_Script_Handler::get_js_handler_class_name()
 		 * @param string $object_name object name, if different from Woodev_Script_Handler::get_js_handler_object_name()
 		 *
@@ -87,21 +90,21 @@ if ( ! class_exists( 'Woodev_Script_Handler' ) ) :
 			ob_start();
 
 			?>
-            function <?php echo esc_js( $load_function ) ?>() {
-			    <?php echo $this->get_handler_js( $additional_args, $handler_name, $object_name ); ?>
-            }
+			function <?php echo esc_js( $load_function ); ?>() {
+				<?php echo $this->get_handler_js( $additional_args, $handler_name, $object_name ); ?>
+			}
 
-            try {
+			try {
 
-                if ( 'undefined' !== typeof <?php echo esc_js( $handler_name ); ?> ) {
-			        <?php echo esc_js( $load_function ); ?>();
-                } else {
-                    window.jQuery( document.body ).on( '<?php echo esc_js( $this->get_js_loaded_event() ); ?>', <?php echo esc_js( $load_function ); ?> );
-                }
+				if ( 'undefined' !== typeof <?php echo esc_js( $handler_name ); ?> ) {
+					<?php echo esc_js( $load_function ); ?>();
+				} else {
+					window.jQuery( document.body ).on( '<?php echo esc_js( $this->get_js_loaded_event() ); ?>', <?php echo esc_js( $load_function ); ?> );
+				}
 
-            } catch ( err ) {
-			    <?php echo $this->get_js_handler_event_debug_log_request(); ?>
-            }
+			} catch ( err ) {
+				<?php echo $this->get_js_handler_event_debug_log_request(); ?>
+			}
 			<?php
 
 			return ob_get_clean();
@@ -111,7 +114,7 @@ if ( ! class_exists( 'Woodev_Script_Handler' ) ) :
 		/**
 		 * Gets the handler instantiation JS.
 		 *
-		 * @param array $additional_args additional handler arguments, if any
+		 * @param array  $additional_args additional handler arguments, if any
 		 * @param string $handler_name handler name, if different from self::get_js_handler_class_name()
 		 * @param string $object_name object name, if different from self::get_js_handler_object_name()
 		 *
@@ -137,7 +140,7 @@ if ( ! class_exists( 'Woodev_Script_Handler' ) ) :
 				$object_name = $this->get_js_handler_object_name();
 			}
 
-			return sprintf( 'window.%1$s = new %2$s( %3$s );', esc_js( $object_name ), esc_js( $handler_name ), json_encode( $args ) );
+			return sprintf( 'window.%1$s = new %2$s( %3$s );', esc_js( $object_name ), esc_js( $handler_name ), wp_json_encode( $args ) );
 		}
 
 
@@ -162,29 +165,29 @@ if ( ! class_exists( 'Woodev_Script_Handler' ) ) :
 
 			?>
 
-            var errorName    = '',
-            errorMessage = '';
+			var errorName    = '',
+			errorMessage = '';
 
-            if ( 'undefined' === typeof err || 0 === err.length || ! err ) {
-                errorName    = '<?php echo esc_js( 'A script error has occurred.' ); ?>';
-                errorMessage = '<?php echo esc_js( sprintf( 'The script %s could not be loaded.', $this->get_js_handler_class_name() ) ); ?>';
-            } else {
-                errorName    = 'undefined' !== typeof err.name    ? err.name    : '';
-                errorMessage = 'undefined' !== typeof err.message ? err.message : '';
-            }
+			if ( 'undefined' === typeof err || 0 === err.length || ! err ) {
+				errorName    = '<?php echo esc_js( 'A script error has occurred.' ); ?>';
+				errorMessage = '<?php echo esc_js( sprintf( 'The script %s could not be loaded.', $this->get_js_handler_class_name() ) ); ?>';
+			} else {
+				errorName    = 'undefined' !== typeof err.name    ? err.name    : '';
+				errorMessage = 'undefined' !== typeof err.message ? err.message : '';
+			}
 
 			<?php if ( $this->is_logging_enabled() ) : ?>
 
-                console.log( [ errorName, errorMessage ].filter( Boolean ).join( ' ' ) );
+				console.log( [ errorName, errorMessage ].filter( Boolean ).join( ' ' ) );
 
 			<?php endif; ?>
 
-            jQuery.post( '<?php echo esc_js( admin_url( 'admin-ajax.php' ) ); ?>', {
-                action:   '<?php echo esc_js( 'wc_' . $this->get_id() . '_log_script_event' ); ?>',
-                security: '<?php echo esc_js( wp_create_nonce( 'wc-' . $this->get_id_dasherized() . '-log-script-event' ) ); ?>',
-                name:     errorName,
-                message:  errorMessage
-            } );
+			jQuery.post( '<?php echo esc_js( admin_url( 'admin-ajax.php' ) ); ?>', {
+				action:   '<?php echo esc_js( 'wc_' . $this->get_id() . '_log_script_event' ); ?>',
+				security: '<?php echo esc_js( wp_create_nonce( 'wc-' . $this->get_id_dasherized() . '-log-script-event' ) ); ?>',
+				name:     errorName,
+				message:  errorMessage
+			} );
 
 			<?php
 
@@ -210,7 +213,7 @@ if ( ! class_exists( 'Woodev_Script_Handler' ) ) :
 					throw new Woodev_Plugin_Exception( 'Invalid nonce.' );
 				}
 
-				$name = isset( $_POST['name'] ) && is_string( $_POST['name'] ) ? trim( $_POST['name'] ) : '';
+				$name    = isset( $_POST['name'] ) && is_string( $_POST['name'] ) ? trim( $_POST['name'] ) : '';
 				$message = isset( $_POST['message'] ) && is_string( $_POST['message'] ) ? trim( $_POST['message'] ) : '';
 
 				if ( ! $message ) {
@@ -263,7 +266,6 @@ if ( ! class_exists( 'Woodev_Script_Handler' ) ) :
 		public function get_id_dasherized() {
 			return str_replace( '_', '-', $this->get_id() );
 		}
-
 	}
 
 endif;

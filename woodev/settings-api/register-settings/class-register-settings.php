@@ -47,7 +47,7 @@ if ( ! class_exists( 'Woodev_Register_Settings' ) ) :
 		 * Loads the specified template file.
 		 */
 		public function load_template( $file ) {
-			include_once( $file );
+			include_once $file;
 		}
 
 		/**

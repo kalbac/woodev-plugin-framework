@@ -1,6 +1,6 @@
 <?php
 
-defined( 'ABSPATH' ) or exit;
+defined( 'ABSPATH' ) || exit;
 
 if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Payment_Token_Editor' ) ) :
 
@@ -27,30 +27,42 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Payment_Token_Editor' ) ) :
 			add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_scripts_styles' ) );
 
 			// Display the tokens markup inside the editor
-			add_action( 'wc_payment_gateway_' . $this->get_gateway()->get_id() . '_token_editor_tokens', array(
-				$this,
-				'display_tokens'
-			) );
+			add_action(
+				'wc_payment_gateway_' . $this->get_gateway()->get_id() . '_token_editor_tokens',
+				array(
+					$this,
+					'display_tokens',
+				)
+			);
 
-			/** AJAX actions **/
+			/** AJAX actions */
 
 			// Get the blank token markup via AJAX
-			add_action( 'wp_ajax_wc_payment_gateway_' . $this->get_gateway()->get_id() . '_admin_get_blank_payment_token', array(
-				$this,
-				'ajax_get_blank_token'
-			) );
+			add_action(
+				'wp_ajax_wc_payment_gateway_' . $this->get_gateway()->get_id() . '_admin_get_blank_payment_token',
+				array(
+					$this,
+					'ajax_get_blank_token',
+				)
+			);
 
 			// Remove a token via AJAX
-			add_action( 'wp_ajax_wc_payment_gateway_' . $this->get_gateway()->get_id() . '_admin_remove_payment_token', array(
-				$this,
-				'ajax_remove_token'
-			) );
+			add_action(
+				'wp_ajax_wc_payment_gateway_' . $this->get_gateway()->get_id() . '_admin_remove_payment_token',
+				array(
+					$this,
+					'ajax_remove_token',
+				)
+			);
 
 			// Refresh the tokens via AJAX
-			add_action( 'wp_ajax_wc_payment_gateway_' . $this->get_gateway()->get_id() . '_admin_refresh_payment_tokens', array(
-				$this,
-				'ajax_refresh_tokens'
-			) );
+			add_action(
+				'wp_ajax_wc_payment_gateway_' . $this->get_gateway()->get_id() . '_admin_refresh_payment_tokens',
+				array(
+					$this,
+					'ajax_refresh_tokens',
+				)
+			);
 		}
 
 
@@ -65,27 +77,31 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Payment_Token_Editor' ) ) :
 			// Main editor script
 			wp_enqueue_script( 'woodev-payment-gateway-token-editor', $this->get_gateway()->get_plugin()->get_payment_gateway_framework_assets_url() . '/js/admin/woodev-payment-gateway-token-editor.js', array( 'jquery' ), Woodev_Plugin::VERSION, true );
 
-			wp_localize_script( 'woodev-payment-gateway-token-editor', 'wc_payment_gateway_token_editor', array(
-				'ajax_url' => admin_url( 'admin-ajax.php' ),
-				'actions'  => array(
-					'remove_token' => array(
-						'ays'   => __( 'Are you sure you want to remove this token?', 'woodev-plugin-framework' ),
-						'nonce' => wp_create_nonce( 'wc_payment_gateway_admin_remove_payment_token' ),
+			wp_localize_script(
+				'woodev-payment-gateway-token-editor',
+				'wc_payment_gateway_token_editor',
+				array(
+					'ajax_url' => admin_url( 'admin-ajax.php' ),
+					'actions'  => array(
+						'remove_token' => array(
+							'ays'   => __( 'Are you sure you want to remove this token?', 'woodev-plugin-framework' ),
+							'nonce' => wp_create_nonce( 'wc_payment_gateway_admin_remove_payment_token' ),
+						),
+						'add_token'    => array(
+							'nonce' => wp_create_nonce( 'wc_payment_gateway_admin_get_blank_payment_token' ),
+						),
+						'refresh'      => array(
+							'nonce' => wp_create_nonce( 'wc_payment_gateway_admin_refresh_payment_tokens' ),
+						),
+						'save'         => array(
+							'error' => __( 'Invalid token data', 'woodev-plugin-framework' ),
+						),
 					),
-					'add_token'    => array(
-						'nonce' => wp_create_nonce( 'wc_payment_gateway_admin_get_blank_payment_token' ),
+					'i18n'     => array(
+						'general_error' => __( 'An error occurred. Please try again.', 'woodev-plugin-framework' ),
 					),
-					'refresh'      => array(
-						'nonce' => wp_create_nonce( 'wc_payment_gateway_admin_refresh_payment_tokens' ),
-					),
-					'save'         => array(
-						'error' => __( 'Invalid token data', 'woodev-plugin-framework' ),
-					),
-				),
-				'i18n'     => array(
-					'general_error' => __( 'An error occurred. Please try again.', 'woodev-plugin-framework' ),
-				),
-			) );
+				)
+			);
 		}
 
 
@@ -101,7 +117,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Payment_Token_Editor' ) ) :
 			$columns = $this->get_columns();
 			$actions = $this->get_actions();
 
-			include( $this->get_gateway()->get_plugin()->get_payment_gateway_framework_path() . '/admin/views/html-user-payment-token-editor.php' );
+			include $this->get_gateway()->get_plugin()->get_payment_gateway_framework_path() . '/admin/views/html-user-payment-token-editor.php';
 		}
 
 
@@ -123,9 +139,9 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Payment_Token_Editor' ) ) :
 
 			foreach ( $tokens as $token ) {
 
-				include( $this->get_gateway()->get_plugin()->get_payment_gateway_framework_path() . '/admin/views/html-user-payment-token-editor-token.php' );
+				include $this->get_gateway()->get_plugin()->get_payment_gateway_framework_path() . '/admin/views/html-user-payment-token-editor-token.php';
 
-				$index ++;
+				++$index;
 			}
 		}
 
@@ -191,7 +207,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Payment_Token_Editor' ) ) :
 
 				ob_start();
 
-				include( $this->get_gateway()->get_plugin()->get_payment_gateway_framework_path() . '/admin/views/html-user-payment-token-editor-token.php' );
+				include $this->get_gateway()->get_plugin()->get_payment_gateway_framework_path() . '/admin/views/html-user-payment-token-editor-token.php';
 
 				$html = ob_get_clean();
 
@@ -231,7 +247,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Payment_Token_Editor' ) ) :
 				} else {
 					throw new Woodev_Payment_Gateway_Exception( 'Could not remove token' );
 				}
-
 			} catch ( Woodev_Plugin_Exception $e ) {
 
 				wp_send_json_error( $e->getMessage() );
@@ -277,9 +292,9 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Payment_Token_Editor' ) ) :
 		 * This method allows concrete gateways to add special token data.
 		 * See Authorize.net CIM for an example.
 		 *
-		 * @param int $user_id the user ID
+		 * @param int    $user_id the user ID
 		 * @param string $token_id the token ID
-		 * @param array $data the token data
+		 * @param array  $data the token data
 		 *
 		 * @return Woodev_Payment_Gateway_Payment_Token the payment token object
 		 */
@@ -292,7 +307,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Payment_Token_Editor' ) ) :
 		/**
 		 * Update the user's token data.
 		 *
-		 * @param int $user_id the user ID
+		 * @param int   $user_id the user ID
 		 * @param array $tokens the token objects
 		 */
 		protected function update_tokens( $user_id, $tokens ) {
@@ -304,7 +319,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Payment_Token_Editor' ) ) :
 		/**
 		 * Remove a specific token.
 		 *
-		 * @param int $user_id the user ID
+		 * @param int    $user_id the user ID
 		 * @param string $token_id the token ID
 		 *
 		 * @return bool whether the token was successfully removed
@@ -331,7 +346,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Payment_Token_Editor' ) ) :
 			 *
 			 * @param array $data the validated token data
 			 * @param string $token_id the token ID
-			 * @param Woodev_Payment_Gateway_Admin_Payment_Token_Editor $this the token editor instance
+			 * @param Woodev_Payment_Gateway_Admin_Payment_Token_Editor $instance the token editor instance
 			 *
 			 * @return array the validated token data
 			 */
@@ -376,13 +391,19 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Payment_Token_Editor' ) ) :
 			$this->get_gateway()->get_payment_tokens_handler()->clear_transient( $user_id );
 
 			// get the customer ID separately so it's never auto-created from the admin
-			$customer_id = $this->get_gateway()->get_customer_id( $user_id, array(
-				'autocreate' => false,
-			) );
+			$customer_id = $this->get_gateway()->get_customer_id(
+				$user_id,
+				array(
+					'autocreate' => false,
+				)
+			);
 
-			$stored_tokens = $this->get_gateway()->get_payment_tokens_handler()->get_tokens( $user_id, array(
-				'customer_id' => $customer_id,
-			) );
+			$stored_tokens = $this->get_gateway()->get_payment_tokens_handler()->get_tokens(
+				$user_id,
+				array(
+					'customer_id' => $customer_id,
+				)
+			);
 
 			$tokens = array();
 
@@ -428,7 +449,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Payment_Token_Editor' ) ) :
 			 * Filters the token editor name.
 			 *
 			 * @param string $title the editor title
-			 * @param Woodev_Payment_Gateway_Admin_Payment_Token_Editor $this the editor object
+			 * @param Woodev_Payment_Gateway_Admin_Payment_Token_Editor $instance the editor object
 			 */
 			return apply_filters( 'wc_payment_gateway_' . $this->get_gateway()->get_id() . '_token_editor_title', $title, $this );
 		}
@@ -455,7 +476,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Payment_Token_Editor' ) ) :
 			 * Filters the admin token editor columns.
 			 *
 			 * @param array $columns
-			 * @param Woodev_Payment_Gateway_Admin_Payment_Token_Editor $this the editor object
+			 * @param Woodev_Payment_Gateway_Admin_Payment_Token_Editor $instance the editor object
 			 */
 			return apply_filters( 'wc_payment_gateway_' . $this->get_gateway()->get_id() . '_token_editor_columns', $columns, $this );
 		}
@@ -474,8 +495,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Payment_Token_Editor' ) ) :
 
 			switch ( $type ) {
 
-				case 'credit-card' :
-
+				case 'credit-card':
 					// Define the credit card fields
 					$fields = array(
 						'id'        => array(
@@ -507,8 +527,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Payment_Token_Editor' ) ) :
 
 					break;
 
-				case 'echeck' :
-
+				case 'echeck':
 					// Define the echeck fields
 					$fields = array(
 						'id'           => array(
@@ -535,27 +554,30 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Payment_Token_Editor' ) ) :
 
 					break;
 
-				default :
+				default:
 					$fields = array();
 			}
 
 			// Parse each field against the defaults
 			foreach ( $fields as $field_id => $field ) {
 
-				$fields[ $field_id ] = wp_parse_args( $field, array(
-					'label'      => '',
-					'type'       => 'text',
-					'attributes' => array(),
-					'editable'   => true,
-					'required'   => false,
-				) );
+				$fields[ $field_id ] = wp_parse_args(
+					$field,
+					array(
+						'label'      => '',
+						'type'       => 'text',
+						'attributes' => array(),
+						'editable'   => true,
+						'required'   => false,
+					)
+				);
 			}
 
 			/**
 			 * Filters the admin token editor fields.
 			 *
 			 * @param array $fields
-			 * @param Woodev_Payment_Gateway_Admin_Payment_Token_Editor $this the editor object
+			 * @param Woodev_Payment_Gateway_Admin_Payment_Token_Editor $instance the editor object
 			 */
 			return apply_filters( 'wc_payment_gateway_' . $this->get_gateway()->get_id() . '_token_editor_fields', $fields, $this );
 		}
@@ -623,7 +645,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Payment_Token_Editor' ) ) :
 			 * Filters the payment token editor actions.
 			 *
 			 * @param array $actions the actions
-			 * @param Woodev_Payment_Gateway_Admin_Payment_Token_Editor $this the editor object
+			 * @param Woodev_Payment_Gateway_Admin_Payment_Token_Editor $instance the editor object
 			 */
 			return apply_filters( 'wc_payment_gateway_' . $this->get_gateway()->get_id() . '_token_editor_actions', $actions, $this );
 		}
@@ -644,7 +666,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Payment_Token_Editor' ) ) :
 			 * Filters the token actions.
 			 *
 			 * @param array $actions the token actions
-			 * @param Woodev_Payment_Gateway_Admin_Payment_Token_Editor $this the editor object
+			 * @param Woodev_Payment_Gateway_Admin_Payment_Token_Editor $instance the editor object
 			 */
 			return apply_filters( 'wc_payment_gateway_' . $this->get_gateway()->get_id() . '_token_editor_token_actions', $actions, $this );
 		}
@@ -658,7 +680,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Payment_Token_Editor' ) ) :
 		protected function get_gateway() {
 			return $this->gateway;
 		}
-
 	}
 
 

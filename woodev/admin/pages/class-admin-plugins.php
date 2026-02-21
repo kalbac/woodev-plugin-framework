@@ -44,7 +44,14 @@ class Woodev_Admin_Plugins {
 
 		if ( ! empty( $search ) ) {
 			$section          = 'all';
-			$transient_suffix = md5( json_encode( array( 'section' => $section, 'search' => $search ) ) );
+			$transient_suffix = md5(
+				wp_json_encode(
+					array(
+						'section' => $section,
+						'search'  => $search,
+					)
+				)
+			);
 		} else {
 			$transient_suffix = $section;
 		}
@@ -53,7 +60,7 @@ class Woodev_Admin_Plugins {
 
 		$addons = get_transient( $transient_name );
 
-		//delete_transient( $transient_name );
+		// delete_transient( $transient_name );
 
 		if ( false === $addons ) {
 
@@ -137,6 +144,6 @@ class Woodev_Admin_Plugins {
 			$addons = self::get_extension_by_query() ?: array();
 		}
 
-		include_once dirname( __FILE__ ) . '/views/html-admin-page-plugins.php';
+		include_once __DIR__ . '/views/html-admin-page-plugins.php';
 	}
 }

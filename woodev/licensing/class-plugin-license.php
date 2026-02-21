@@ -1,6 +1,6 @@
 <?php
 
-defined( 'ABSPATH' ) or exit;
+defined( 'ABSPATH' ) || exit;
 
 if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 
@@ -84,19 +84,23 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 
 		private function add_hooks() {
 
-			//License actions
+			// License actions
 			add_action( 'admin_init', array( $this, 'activate_license' ) );
 			add_action( 'admin_init', array( $this, 'deactivate_license' ) );
-
 
 			add_action( 'admin_notices', array( $this, 'notices' ) );
 
 			add_action( 'admin_print_scripts-plugins.php', array( $this, 'plugin_screen_scripts' ) );
 
-			add_action( 'in_plugin_update_message-' . plugin_basename( $this->plugin->get_plugin_file() ), array(
-				$this,
-				'plugin_row_license_missing'
-			), 10, 2 );
+			add_action(
+				'in_plugin_update_message-' . plugin_basename( $this->plugin->get_plugin_file() ),
+				array(
+					$this,
+					'plugin_row_license_missing',
+				),
+				10,
+				2
+			);
 		}
 
 		/**
@@ -131,7 +135,7 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 				'item_name_mismatch'    => __( 'License is not valid for this plugin', 'woodev-plugin-framework' ),
 				'site_inactive'         => __( 'Site is not active for this license', 'woodev-plugin-framework' ),
 				'invalid'               => __( 'License key does not match', 'woodev-plugin-framework' ),
-				'valid'                 => __( 'License is valid', 'woodev-plugin-framework' )
+				'valid'                 => __( 'License is valid', 'woodev-plugin-framework' ),
 			);
 
 			return isset( $statuses[ $status_name ] ) ? $statuses[ $status_name ] : __( 'Unknown license status', 'woodev-plugin-framework' );
@@ -151,12 +155,15 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 		 */
 		private function dispatch( $action = 'check_license', $license_key = '' ) {
 
-			if ( ! in_array( wc_strtolower( $action ), array(
-				'activate_license',
-				'deactivate_license',
-				'check_license',
-				'get_version'
-			) ) ) {
+			if ( ! in_array(
+				wc_strtolower( $action ),
+				array(
+					'activate_license',
+					'deactivate_license',
+					'check_license',
+					'get_version',
+				)
+			) ) {
 				return false;
 			}
 
@@ -166,7 +173,7 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 				'license'    => $license_key,
 				'item_id'    => $this->plugin->get_download_id(),
 				'url'        => home_url(),
-				'version'    => $this->plugin->get_version()
+				'version'    => $this->plugin->get_version(),
 			);
 
 			try {
@@ -241,7 +248,6 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 
 			} catch ( Exception $exception ) {
 			}
-
 		}
 
 		/**
@@ -316,17 +322,19 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 					throw new Exception( __( 'Cannot get license data. Please try again.', 'woodev-plugin-framework' ) );
 				}
 
-				$this->woodev_license->update( array(
-					'license' => $license_data->license,
-					'success' => $license_data->success,
-					'error'   => $license_data->error,
-					'expires' => $license_data->expires
-				) );
+				$this->woodev_license->update(
+					array(
+						'license' => $license_data->license,
+						'success' => $license_data->success,
+						'error'   => $license_data->error,
+						'expires' => $license_data->expires,
+					)
+				);
 
 				if ( $this->woodev_license->success && ! empty( $this->woodev_license->license ) ) {
 
 					$this->woodev_license->save( $license_data->get_response_data() );
-					//Clean plugins cache
+					// Clean plugins cache
 					wp_clean_plugins_cache();
 
 					if ( $ajax ) {
@@ -342,7 +350,6 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 					} else {
 						return true;
 					}
-
 				}
 
 				if ( false === $this->woodev_license->success ) {
@@ -356,11 +363,9 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 				if ( $ajax ) {
 					wp_send_json_error( $e->getMessage() );
 				}
-
 			}
 
 			return false;
-
 		}
 
 		/**
@@ -386,12 +391,14 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 					throw new Exception( __( 'Cannot get license data. Please try again.', 'woodev-plugin-framework' ) );
 				}
 
-				$this->woodev_license->update( array(
-					'license' => $license_data->license,
-					'success' => $license_data->success,
-					'error'   => $license_data->error,
-					'expires' => $license_data->expires
-				) );
+				$this->woodev_license->update(
+					array(
+						'license' => $license_data->license,
+						'success' => $license_data->success,
+						'error'   => $license_data->error,
+						'expires' => $license_data->expires,
+					)
+				);
 
 				if ( false === $this->woodev_license->success ) {
 					throw new Exception( sprintf( __( 'Your license key for %s is not valid. The key is not existing, or linked customer was deleted. Please provide another key to continue to get support and updates.', 'woodev-plugin-framework' ), $this->item_name ) );
@@ -461,19 +468,19 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 				echo '&nbsp;&nbsp;<strong><a href="' . $this->get_license_settings_url() . '" style="color: #aa0000;">' . __( 'Enter valid license key for automatic updates.', 'woodev-plugin-framework' ) . '</a></strong>';
 			}
 
-			if( ! $response ) {
+			if ( ! $response ) {
 				return;
 			}
 
 			$new_version = false;
 
-			if( is_array( $response ) && array_key_exists( 'new_version', $response ) ) {
+			if ( is_array( $response ) && array_key_exists( 'new_version', $response ) ) {
 				$new_version = $response['new_version'];
-			} elseif( is_object( $response ) && isset( $response->new_version ) ) {
+			} elseif ( is_object( $response ) && isset( $response->new_version ) ) {
 				$new_version = $response->new_version;
 			}
 
-			if( ! $new_version ) {
+			if ( ! $new_version ) {
 				return;
 			}
 
@@ -490,24 +497,24 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 				return;
 			}
 
-			$update_notice = '<div class="woodev-plugin-upgrade-notice">';
+			$update_notice  = '<div class="woodev-plugin-upgrade-notice">';
 			$update_notice .= '<p><strong>' . __( 'Attention! Please Backup your site before updating.', 'woodev-plugin-framework' ) . '</strong></p>';
 			$update_notice .= '<p>' . sprintf(
-					__( 'The latest version of %1$s%2$s %3$s%4$s includes massive changes across different areas of the plugin with revamped code structure for optimized performance. We would highly recommend you to backup your entire site before updating the plugin & test it on your staging website. %5$sContact our Support%6$s if you encounter any kind of errors or if you need any kind of assistance.', 'woodev-plugin-framework' ),
-					'<strong>',
-					$this->plugin->get_plugin_name(),
-					$new_version_top . '.' . $new_version_second . '.0',
-					'</strong>',
-					'<a href="https://woodev.ru/support" target="_blank">',
-					'</a>'
-				) . '</p>';
+				__( 'The latest version of %1$s%2$s %3$s%4$s includes massive changes across different areas of the plugin with revamped code structure for optimized performance. We would highly recommend you to backup your entire site before updating the plugin & test it on your staging website. %5$sContact our Support%6$s if you encounter any kind of errors or if you need any kind of assistance.', 'woodev-plugin-framework' ),
+				'<strong>',
+				$this->plugin->get_plugin_name(),
+				$new_version_top . '.' . $new_version_second . '.0',
+				'</strong>',
+				'<a href="https://woodev.ru/support" target="_blank">',
+				'</a>'
+			) . '</p>';
 
 			if ( $this->plugin->get_documentation_url() ) {
 				$update_notice .= '<p>' . sprintf(
-						__( 'We also recommend that you %1$sread the documentation%2$s after updating the plugin.', 'woodev-plugin-framework' ),
-						'<a href="' . esc_url( $this->plugin->get_documentation_url() ) . '" target="_blank">',
-						'</a>'
-					) . '</p>';
+					__( 'We also recommend that you %1$sread the documentation%2$s after updating the plugin.', 'woodev-plugin-framework' ),
+					'<a href="' . esc_url( $this->plugin->get_documentation_url() ) . '" target="_blank">',
+					'</a>'
+				) . '</p>';
 			}
 
 			$update_notice .= '</div>';
@@ -551,11 +558,15 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 		 * @return bool
 		 */
 		public function is_active() {
-			return ! in_array( true, array(
-				$this->is_expired(),
-				$this->is_disabled(),
-				$this->is_invalid()
-			), true );
+			return ! in_array(
+				true,
+				array(
+					$this->is_expired(),
+					$this->is_disabled(),
+					$this->is_invalid(),
+				),
+				true
+			);
 		}
 
 		/**
@@ -573,10 +584,12 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 		 * @return bool
 		 */
 		public function is_disabled() {
-			return $this->has_statuses( array(
-				'disabled',
-				'revoked'
-			) );
+			return $this->has_statuses(
+				array(
+					'disabled',
+					'revoked',
+				)
+			);
 		}
 
 		/**
@@ -585,12 +598,14 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 		 * @return bool
 		 */
 		public function is_invalid() {
-			return $this->has_statuses( array(
-				'invalid',
-				'invalid_item_id',
-				'item_name_mismatch',
-				'key_mismatch'
-			) );
+			return $this->has_statuses(
+				array(
+					'invalid',
+					'invalid_item_id',
+					'item_name_mismatch',
+					'key_mismatch',
+				)
+			);
 		}
 
 		/**

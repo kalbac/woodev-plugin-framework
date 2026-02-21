@@ -1,6 +1,6 @@
 <?php
 
-defined( 'ABSPATH' ) or exit;
+defined( 'ABSPATH' ) || exit;
 
 if ( ! class_exists( 'Woodev_Licensing_API_Request' ) ) :
 
@@ -25,8 +25,8 @@ if ( ! class_exists( 'Woodev_Licensing_API_Request' ) ) :
 
 		public function to_string() {
 
-			if( in_array( $this->get_method(), array( 'GET', 'POST' ), true ) ) {
-				//return wp_json_encode( $this->get_params() );
+			if ( in_array( $this->get_method(), array( 'GET', 'POST' ), true ) ) {
+				// return wp_json_encode( $this->get_params() );
 				return wc_print_r( $this->get_params(), true );
 			}
 		}

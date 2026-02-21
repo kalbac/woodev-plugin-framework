@@ -95,11 +95,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 
 			$this->instance_form_fields = [
 
-				'title' => [
+				'title'       => [
 					'title'    => esc_html__( 'Title', 'woodev-plugin-framework' ),
 					'type'     => 'text',
-					'desc_tip' => esc_html__( 'Shipping method title that the customer will see during checkout.',
-						'woodev-plugin-framework' ),
+					'desc_tip' => esc_html__(
+						'Shipping method title that the customer will see during checkout.',
+						'woodev-plugin-framework'
+					),
 					'default'  => $this->get_default_title(),
 				],
 
@@ -115,11 +117,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 
 			$this->instance_form_fields = array_merge( $this->instance_form_fields, $this->get_method_form_fields() );
 
-			if( $this->supports( self::FEATURE_SHIPPING_CLASSES ) ) {
+			if ( $this->supports( self::FEATURE_SHIPPING_CLASSES ) ) {
 
 				$this->instance_form_fields['shipping_class_id'] = [
-					'title'   => esc_html__( 'Shipping class', 'woodev-plugin-framework' ),
-					'type'    => 'select',
+					'title'    => esc_html__( 'Shipping class', 'woodev-plugin-framework' ),
+					'type'     => 'select',
 					'class'    => 'wc-enhanced-select',
 					'default'  => self::SHIPPING_CLASS_ANY,
 					'options'  => $this->get_shipping_classes_options(),
@@ -198,7 +200,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 			 */
 			do_action( 'woodev_shipping_method_before_calculate_shipping', $package, $this );
 
-			if( ! $this->should_send_cart_api_request() ) {
+			if ( ! $this->should_send_cart_api_request() ) {
 				return;
 			}
 
@@ -286,11 +288,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 
 			$is_available = true;
 
-			if( $this->get_plugin()->get_accepted_countries() ) {
+			if ( $this->get_plugin()->get_accepted_countries() ) {
 
 				$country_code = Shipping_Helper::get_package_country( $package );
 
-				if( ! empty( $country_code ) && ! in_array( $country_code, $this->get_plugin()->get_accepted_countries() ) ) {
+				if ( ! empty( $country_code ) && ! in_array( $country_code, $this->get_plugin()->get_accepted_countries() ) ) {
 
 					$is_available = false;
 
@@ -335,7 +337,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		/**
 		 * Hook called after calculate_rate().
 		 *
-		 * @param array $package Package data
+		 * @param array              $package Package data
 		 * @param Shipping_Rate|null $rate Calculated rate or null
 		 *
 		 * @since 1.4.0
@@ -488,7 +490,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 					 *
 					 * @since 1.0.0
 					 *
-					 * @param Shipping_Method $this instance
+					 * @param Shipping_Method $instance instance
 					 * @param string $name of supported feature being added
 					 */
 					do_action( 'woodev_shipping_method_' . $this->get_id() . '_supports_' . str_replace( '-', '_', $name ), $this, $name );
@@ -497,7 +499,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 
 			$this->supports = array_values( $this->supports );
 		}
-
 	}
 
 endif;

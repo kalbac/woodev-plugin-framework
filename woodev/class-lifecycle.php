@@ -1,6 +1,6 @@
 <?php
 
-defined( 'ABSPATH' ) or exit;
+defined( 'ABSPATH' ) || exit;
 
 if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 
@@ -56,10 +56,15 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 			}
 
 			// catch any milestones triggered by action
-			add_action( 'woodev_' . $this->get_plugin()->get_id() . '_milestone_reached', array(
-				$this,
-				'trigger_milestone'
-			), 10, 3 );
+			add_action(
+				'woodev_' . $this->get_plugin()->get_id() . '_milestone_reached',
+				array(
+					$this,
+					'trigger_milestone',
+				),
+				10,
+				3
+			);
 		}
 
 
@@ -123,7 +128,6 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 		 * plugin's activation status.
 		 *
 		 * @link https://developer.wordpress.org/reference/functions/register_activation_hook/#comment-2100
-		 *
 		 */
 		public function handle_activation() {
 
@@ -131,7 +135,7 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 
 				$this->activate();
 
-				//Reschedule weekly license check
+				// Reschedule weekly license check
 				wp_reschedule_event( time(), 'weekly', 'woodev_weekly_scheduled_events' );
 
 				/**
@@ -229,16 +233,18 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 		 *
 		 * @param string $installed_version installed version
 		 */
-		protected function upgrade( string $installed_version ) : void {
+		protected function upgrade( string $installed_version ): void {
 
 			foreach ( $this->upgrade_versions as $upgrade_version ) {
 
 				$upgrade_method = 'upgrade_to_' . str_replace( array( '.', '-' ), '_', $upgrade_version );
 
-				if ( version_compare( $installed_version, $upgrade_version, '<' ) && is_callable( array(
+				if ( version_compare( $installed_version, $upgrade_version, '<' ) && is_callable(
+					array(
 						$this,
-						$upgrade_method
-					) ) ) {
+						$upgrade_method,
+					)
+				) ) {
 
 					$this->get_plugin()->log( "Starting upgrade to v{$upgrade_version}" );
 
@@ -253,7 +259,7 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 		/**
 		 * Adds any lifecycle admin notices.
 		 */
-		public function add_admin_notices() : void {
+		public function add_admin_notices(): void {
 
 			// display any milestone notices
 			foreach ( $this->get_milestone_messages() as $id => $message ) {
@@ -273,9 +279,13 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 
 				if ( $message ) {
 
-					$this->get_plugin()->get_admin_notice_handler()->add_admin_notice( $message, $id, array(
-						'always_show_on_settings' => false,
-					) );
+					$this->get_plugin()->get_admin_notice_handler()->add_admin_notice(
+						$message,
+						$id,
+						array(
+							'always_show_on_settings' => false,
+						)
+					);
 
 					// only display one notice at a time
 					break;
@@ -335,7 +345,7 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 					__( 'Wow', 'woodev-plugin-framework' ),
 					__( 'Wonderful', 'woodev-plugin-framework' ),
 					__( 'Perfect', 'woodev-plugin-framework' ),
-					__( 'Congratulations', 'woodev-plugin-framework' )
+					__( 'Congratulations', 'woodev-plugin-framework' ),
 				);
 
 				$message = $exclamations[ array_rand( $exclamations ) ] . ', ' . esc_html( $custom_message ) . ' ';
@@ -344,8 +354,10 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 				/* translators: Placeholders: %1$s - plugin name, %2$s - <a> tag, %3$s - </a> tag, %4$s - <a> tag, %5$s - </a> tag */
 					__( 'Are you having a great experience with %1$s so far? Please consider %2$sleaving a review%3$s! If things aren\'t going quite as expected, we\'re happy to help -- please %4$sreach out to our support team%5$s.', 'woodev-plugin-framework' ),
 					'<strong>' . esc_html( $this->get_plugin()->get_plugin_name() ) . '</strong>',
-					'<a href="' . esc_url( $this->get_plugin()->get_reviews_url() ) . '">', '</a>',
-					'<a href="' . esc_url( $this->get_plugin()->get_support_url() ) . '">', '</a>'
+					'<a href="' . esc_url( $this->get_plugin()->get_reviews_url() ) . '">',
+					'</a>',
+					'<a href="' . esc_url( $this->get_plugin()->get_support_url() ) . '">',
+					'</a>'
 				);
 			}
 
@@ -361,7 +373,6 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 		 *
 		 * @return bool whether the message was successfully registered
 		 * @see Woodev_Lifecycle::generate_milestone_notice_message()
-		 *
 		 */
 		public function register_milestone_message( string $id, string $message ): bool {
 
@@ -395,9 +406,12 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 		 */
 		public function add_upgrade_event( string $from_version, array $data = array() ) {
 
-			$data = array_merge( array(
-				'from_version' => $from_version,
-			), $data );
+			$data = array_merge(
+				array(
+					'from_version' => $from_version,
+				),
+				$data
+			);
 
 			return $this->store_event( 'upgrade', $data );
 		}
@@ -414,10 +428,13 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 		 */
 		public function add_migrate_event( string $from_plugin, string $from_version = '', array $data = array() ) {
 
-			$data = array_merge( array(
-				'from_plugin'  => $from_plugin,
-				'from_version' => $from_version,
-			), $data );
+			$data = array_merge(
+				array(
+					'from_plugin'  => $from_plugin,
+					'from_version' => $from_version,
+				),
+				$data
+			);
 
 			return $this->store_event( 'migrate', $data );
 		}
@@ -459,7 +476,7 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 				$wpdb->options,
 				array(
 					'option_name'  => $this->get_event_history_option_name(),
-					'option_value' => json_encode( $history ),
+					'option_value' => wp_json_encode( $history ),
 					'autoload'     => 'no',
 				),
 				array(
@@ -583,7 +600,6 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 		public function do_update() {
 			wc_deprecated_function( __METHOD__, '1.2.0' );
 		}
-
 	}
 
 endif;

@@ -1,6 +1,6 @@
 <?php
 
-defined( 'ABSPATH' ) or exit;
+defined( 'ABSPATH' ) || exit;
 
 use Automattic\WooCommerce\Blocks\Utils\CartCheckoutUtils;
 
@@ -16,7 +16,7 @@ if ( ! class_exists( 'Woodev_Blocks_Handler' ) ) :
 	 */
 	class Woodev_Blocks_Handler {
 
-		/** @var Woodev_Plugin|Woodev_Payment_Gateway current plugin instance */
+		/** @var Woodev_Plugin|Woodev_Payment_Gateway_Plugin current plugin instance */
 		protected Woodev_Plugin $plugin;
 
 		/**
@@ -44,7 +44,7 @@ if ( ! class_exists( 'Woodev_Blocks_Handler' ) ) :
 		 *
 		 * @return bool
 		 */
-		public function is_cart_block_compatible() : bool {
+		public function is_cart_block_compatible(): bool {
 
 			$supports = $this->plugin->get_supported_features();
 
@@ -59,7 +59,7 @@ if ( ! class_exists( 'Woodev_Blocks_Handler' ) ) :
 		 *
 		 * @return bool
 		 */
-		public function is_checkout_block_compatible() : bool {
+		public function is_checkout_block_compatible(): bool {
 
 			$supports = $this->plugin->get_supported_features();
 
@@ -74,7 +74,7 @@ if ( ! class_exists( 'Woodev_Blocks_Handler' ) ) :
 		 *
 		 * @return bool false when using the legacy checkout shortcode
 		 */
-		public static function is_checkout_block_in_use() : bool {
+		public static function is_checkout_block_in_use(): bool {
 
 			if ( ! class_exists( CartCheckoutUtils::class ) ) {
 				return false;
@@ -91,8 +91,7 @@ if ( ! class_exists( 'Woodev_Blocks_Handler' ) ) :
 		 *
 		 * @return bool false if using the legacy cart shortcode
 		 */
-		public static function is_cart_block_in_use() : bool
-		{
+		public static function is_cart_block_in_use(): bool {
 			if ( ! class_exists( CartCheckoutUtils::class ) ) {
 				return false;
 			}
@@ -110,7 +109,7 @@ if ( ! class_exists( 'Woodev_Blocks_Handler' ) ) :
 		 *
 		 * @return void
 		 */
-		public function add_admin_notices() : void {
+		public function add_admin_notices(): void {
 
 			$admin_notice_handler = $this->plugin->get_admin_notice_handler();
 
@@ -119,7 +118,7 @@ if ( ! class_exists( 'Woodev_Blocks_Handler' ) ) :
 				if ( ! $this->is_checkout_block_compatible() ) {
 
 					$url = get_edit_post_link( wc_get_page_id( 'checkout' ) );
-					$cta = '<a href="' . esc_url( $url ) .'" id="' . esc_attr( sprintf( '%s-restore-cart-shortcode', $this->plugin->get_id() ) ) . '" class="button button-primary">' . _x( 'Edit the Checkout Page', 'Button label', 'woodev-plugin-framework' ) . '</a>';
+					$cta = '<a href="' . esc_url( $url ) . '" id="' . esc_attr( sprintf( '%s-restore-cart-shortcode', $this->plugin->get_id() ) ) . '" class="button button-primary">' . _x( 'Edit the Checkout Page', 'Button label', 'woodev-plugin-framework' ) . '</a>';
 
 					$admin_notice_handler->add_admin_notice(
 						sprintf(

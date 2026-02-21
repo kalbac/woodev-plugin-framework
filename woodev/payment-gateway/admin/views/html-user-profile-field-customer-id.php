@@ -3,7 +3,6 @@
  * @var string $name
  * @var string $label
  * @var string $value
- *
  */
 ?>
 

@@ -1,8 +1,8 @@
 <?php
 
-defined( 'ABSPATH' ) or exit;
+defined( 'ABSPATH' ) || exit;
 
-if( ! class_exists( 'Woodev_Async_Request' ) ) :
+if ( ! class_exists( 'Woodev_Async_Request' ) ) :
 
 	/**
 	 * Woodev Async Request class
@@ -73,7 +73,7 @@ if( ! class_exists( 'Woodev_Async_Request' ) ) :
 		 */
 		protected function get_query_args() {
 
-			if( property_exists( $this, 'query_args' ) ) {
+			if ( property_exists( $this, 'query_args' ) ) {
 				return $this->query_args;
 			}
 
@@ -86,11 +86,12 @@ if( ! class_exists( 'Woodev_Async_Request' ) ) :
 
 		/**
 		 * Get query URL
+		 *
 		 * @return string
 		 */
 		protected function get_query_url() {
 
-			if( property_exists( $this, 'query_url' ) ) {
+			if ( property_exists( $this, 'query_url' ) ) {
 				return $this->query_url;
 			}
 
@@ -105,7 +106,7 @@ if( ! class_exists( 'Woodev_Async_Request' ) ) :
 		 */
 		protected function get_request_args() {
 
-			if( property_exists( $this, 'request_args' ) ) {
+			if ( property_exists( $this, 'request_args' ) ) {
 				return $this->request_args;
 			}
 
@@ -140,7 +141,6 @@ if( ! class_exists( 'Woodev_Async_Request' ) ) :
 		 * during the async request.
 		 */
 		abstract protected function handle();
-
 	}
 
 

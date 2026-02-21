@@ -1,6 +1,6 @@
 <?php
 
-defined( 'ABSPATH' ) or exit;
+defined( 'ABSPATH' ) || exit;
 
 if ( ! class_exists( 'Woodev_License_Messages' ) ) :
 
@@ -41,7 +41,7 @@ if ( ! class_exists( 'Woodev_License_Messages' ) ) :
 				if ( ! is_numeric( $this->license_data->expires ) ) {
 					$this->expiration = strtotime( $this->license_data->expires, $this->now );
 				} else {
-					$this->expiration = $this->license_data->expires;
+					$this->expiration = (int) $this->license_data->expires;
 				}
 			}
 		}
@@ -89,12 +89,15 @@ if ( ! class_exists( 'Woodev_License_Messages' ) ) :
 		 */
 		private function get_link_helper( $base_url = 'https://woodev.ru', $query_args = array() ) {
 
-			$args = wp_parse_args( $query_args, array(
-				'utm_source'   => str_replace( '.', '_', wp_parse_url( home_url(), PHP_URL_HOST ) ),
-				'utm_medium'   => is_admin() ? Woodev_Helper::get_current_screen()->id : 'organic',
-				'utm_content'  => $this->license_data->license,
-				'utm_campaign' => 'woodev',
-			) );
+			$args = wp_parse_args(
+				$query_args,
+				array(
+					'utm_source'   => str_replace( '.', '_', wp_parse_url( home_url(), PHP_URL_HOST ) ),
+					'utm_medium'   => is_admin() ? Woodev_Helper::get_current_screen()->id : 'organic',
+					'utm_content'  => $this->license_data->license,
+					'utm_campaign' => 'woodev',
+				)
+			);
 
 			// Ensure we sanitize the medium and content.
 			$args['utm_medium']  = str_replace( '_', '-', sanitize_title( $args['utm_medium'] ) );
@@ -106,11 +109,14 @@ if ( ! class_exists( 'Woodev_License_Messages' ) ) :
 		}
 
 		private function get_renewal_link() {
-			return $this->get_link_helper( 'https://woodev.ru/checkout/', array(
-				'utm_medium'      => 'license-notice',
-				'edd_license_key' => $this->license_data->get_license_key(),
-				'download_id'     => $this->license_data->item_id
-			) );
+			return $this->get_link_helper(
+				'https://woodev.ru/checkout/',
+				array(
+					'utm_medium'      => 'license-notice',
+					'edd_license_key' => $this->license_data->get_license_key(),
+					'download_id'     => $this->license_data->item_id,
+				)
+			);
 		}
 
 		/**
@@ -225,13 +231,16 @@ if ( ! class_exists( 'Woodev_License_Messages' ) ) :
 		 */
 		private function get_disabled_message() {
 
-			$url = $this->get_link_helper( 'https://woodev.ru/support/', array(
-				'utm_medium' => 'license-notice',
-				'wpf4766_3'  => urlencode( 'Проблемы с лицензией' ),
-				'wpf4766_5'  => $this->license_data->item_id,
-				'wpf4766_7'  => site_url(),
-				'wpf4766-6'  => $this->license_data->get_license_key()
-			) );
+			$url = $this->get_link_helper(
+				'https://woodev.ru/support/',
+				array(
+					'utm_medium' => 'license-notice',
+					'wpf4766_3'  => urlencode( 'Проблемы с лицензией' ),
+					'wpf4766_5'  => $this->license_data->item_id,
+					'wpf4766_7'  => site_url(),
+					'wpf4766-6'  => $this->license_data->get_license_key(),
+				)
+			);
 
 			return sprintf(
 			/* translators: 1. opening link tag; 2. closing link tag. */
@@ -248,12 +257,15 @@ if ( ! class_exists( 'Woodev_License_Messages' ) ) :
 		 */
 		private function get_no_activations_message() {
 
-			$url = $this->get_link_helper( 'https://woodev.ru/my-account/', array(
-				'utm_medium' => 'license-notice',
-				'action'     => 'manage_licenses',
-				'payment_id' => $this->license_data->payment_id,
-				'view'       => 'upgrades'
-			) );
+			$url = $this->get_link_helper(
+				'https://woodev.ru/my-account/',
+				array(
+					'utm_medium' => 'license-notice',
+					'action'     => 'manage_licenses',
+					'payment_id' => $this->license_data->payment_id,
+					'view'       => 'upgrades',
+				)
+			);
 
 			return sprintf(
 			/* translators: 1. opening link tag; 2 closing link tag. */
@@ -270,11 +282,14 @@ if ( ! class_exists( 'Woodev_License_Messages' ) ) :
 		 */
 		private function get_inactive_message() {
 
-			$url = $this->get_link_helper( 'https://woodev.ru/my-account/', array(
-				'utm_medium' => 'license-notice',
-				'action'     => 'manage_licenses',
-				'payment_id' => $this->license_data->payment_id
-			) );
+			$url = $this->get_link_helper(
+				'https://woodev.ru/my-account/',
+				array(
+					'utm_medium' => 'license-notice',
+					'action'     => 'manage_licenses',
+					'payment_id' => $this->license_data->payment_id,
+				)
+			);
 
 			return sprintf(
 			/* translators: 1. the plugin name; 2. opening link tag; 3. closing link tag. */

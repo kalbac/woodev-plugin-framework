@@ -123,11 +123,11 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 			$current_month = date( 'n' );
 
 			if ( ! ctype_digit( $expiration_month ) || ! ctype_digit( $expiration_year ) ||
-			     $expiration_month > 12 ||
-			     $expiration_month < 1 ||
-			     $expiration_year < $current_year ||
-			     ( $expiration_year == $current_year && $expiration_month < $current_month ) ||
-			     $expiration_year > $current_year + 20
+				$expiration_month > 12 ||
+				$expiration_month < 1 ||
+				$expiration_year < $current_year ||
+				( $expiration_year == $current_year && $expiration_month < $current_month ) ||
+				$expiration_year > $current_year + 20
 			) {
 				Woodev_Helper::wc_add_notice( esc_html__( 'Card expiration date is invalid', 'woodev-plugin-framework' ), 'error' );
 				$is_valid = false;
@@ -172,7 +172,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 					Woodev_Helper::wc_add_notice( esc_html__( 'Card number is invalid', 'woodev-plugin-framework' ), 'error' );
 					$is_valid = false;
 				}
-
 			}
 
 			return $is_valid;
@@ -205,7 +204,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 					Woodev_Helper::wc_add_notice( esc_html__( 'Card security code is invalid (must be 3 or 4 digits)', 'woodev-plugin-framework' ), 'error' );
 					$is_valid = false;
 				}
-
 			} elseif ( $this->csc_required() ) {
 
 				Woodev_Helper::wc_add_notice( esc_html__( 'Card security code is missing', 'woodev-plugin-framework' ), 'error' );
@@ -252,7 +250,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 					Woodev_Helper::wc_add_notice( esc_html__( 'Routing number is invalid (must be 9 digits)', 'woodev-plugin-framework' ), 'error' );
 					$is_valid = false;
 				}
-
 			}
 
 			// account number exists?
@@ -309,7 +306,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 		 * @see WC_Payment_Gateway::process_payment()
 		 *
 		 * @since 1.0.0
-		 *
 		 */
 		public function process_payment( $order_id ) {
 
@@ -322,7 +318,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 			 *
 			 * @param bool $result default true
 			 * @param int|string $order_id order ID for the payment
-			 * @param Woodev_Payment_Gateway_Direct $this instance
+			 * @param Woodev_Payment_Gateway_Direct $instance instance
 			 *
 			 * @since 1.0.0
 			 */
@@ -404,7 +400,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 						'message' => 'The transaction failed.',
 					);
 				}
-
 			} catch ( Woodev_Plugin_Exception $e ) {
 
 				$this->mark_order_as_failed( $order, $e->getMessage() );
@@ -430,16 +425,22 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 
 			$token = $this->get_payment_tokens_handler()->get_token( $order->get_user_id(), $order->payment->token );
 
-			$new_billing_hash = md5( json_encode( array_filter( array(
-				$order->get_billing_first_name(),
-				$order->get_billing_last_name(),
-				$order->get_billing_address_1(),
-				$order->get_billing_address_2(),
-				$order->get_billing_city(),
-				$order->get_billing_state(),
-				$order->get_billing_country(),
-				$order->get_billing_postcode()
-			) ) ) );
+			$new_billing_hash = md5(
+				wp_json_encode(
+					array_filter(
+						array(
+							$order->get_billing_first_name(),
+							$order->get_billing_last_name(),
+							$order->get_billing_address_1(),
+							$order->get_billing_address_2(),
+							$order->get_billing_city(),
+							$order->get_billing_state(),
+							$order->get_billing_country(),
+							$order->get_billing_postcode(),
+						)
+					)
+				)
+			);
 
 			// if the address & token hash don't match, update
 			if ( $token->get_billing_hash() !== $new_billing_hash ) {
@@ -466,7 +467,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 
 							throw new Woodev_Plugin_Exception( $message );
 						}
-
 					} catch ( Woodev_Plugin_Exception $exception ) {
 
 						$message = sprintf(
@@ -480,7 +480,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 							$this->get_plugin()->log( $message, $this->get_id() );
 						}
 					}
-
 				} else {
 
 					// updating remotely isn't supported, so just update the hash locally
@@ -534,10 +533,14 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 			if ( Woodev_Helper::get_posted_value( 'wc-' . $this->get_id_dasherized() . '-account-number' ) && ! Woodev_Helper::get_posted_value( 'wc-' . $this->get_id_dasherized() . '-payment-token' ) ) {
 
 				// common attributes
-				$order->payment->account_number = str_replace( array(
-					' ',
-					'-'
-				), '', Woodev_Helper::get_posted_value( 'wc-' . $this->get_id_dasherized() . '-account-number' ) );
+				$order->payment->account_number = str_replace(
+					array(
+						' ',
+						'-',
+					),
+					'',
+					Woodev_Helper::get_posted_value( 'wc-' . $this->get_id_dasherized() . '-account-number' )
+				);
 				$order->payment->last_four      = substr( $order->payment->account_number, - 4 );
 
 				if ( $this->is_credit_card_gateway() ) {
@@ -561,7 +564,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 					if ( $this->csc_enabled() ) {
 						$order->payment->csc = Woodev_Helper::get_posted_value( 'wc-' . $this->get_id_dasherized() . '-csc' );
 					}
-
 				} elseif ( $this->is_echeck_gateway() ) {
 
 					// echeck specific attributes
@@ -572,7 +574,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 					$order->payment->drivers_license_state  = Woodev_Helper::get_posted_value( 'wc-' . $this->get_id_dasherized() . '-drivers-license-state' );
 
 				}
-
 			} elseif ( Woodev_Helper::get_posted_value( 'wc-' . $this->get_id_dasherized() . '-payment-token' ) ) {
 
 				// paying with tokenized payment method (we've already verified that this token exists in the validate_fields method)
@@ -592,7 +593,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 					if ( $this->csc_enabled_for_tokens() ) {
 						$order->payment->csc = Woodev_Helper::get_posted_value( 'wc-' . $this->get_id_dasherized() . '-csc' );
 					}
-
 				} elseif ( $this->is_echeck_gateway() ) {
 
 					// echeck specific attributes
@@ -630,7 +630,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 		 * @return Woodev_Payment_Gateway_API_Response the response
 		 * @throws Woodev_Plugin_Exception network timeouts, etc
 		 * @since 1.0.0
-		 *
 		 */
 		protected function do_check_transaction( $order ) {
 
@@ -664,7 +663,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 				 * @param string $message order note
 				 * @param WC_Order $order order object
 				 * @param Woodev_Payment_Gateway_API_Response $response transaction response
-				 * @param Woodev_Payment_Gateway_Direct $this instance
+				 * @param Woodev_Payment_Gateway_Direct $instance instance
 				 */
 				$message = apply_filters( 'wc_payment_gateway_' . $this->get_id() . '_check_transaction_approved_order_note', $message, $order, $response, $this );
 
@@ -673,20 +672,18 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 			}
 
 			return $response;
-
 		}
 
 
 		/**
 		 * Performs a credit card transaction for the given order and returns the result.
 		 *
-		 * @param WC_Order $order the order object
+		 * @param WC_Order                            $order the order object
 		 * @param Woodev_Payment_Gateway_API_Response $response optional credit card transaction response
 		 *
 		 * @return Woodev_Payment_Gateway_API_Response the response
 		 * @throws Woodev_Plugin_Exception network timeouts, etc
 		 * @since 1.0.0
-		 *
 		 */
 		protected function do_credit_card_transaction( $order, $response = null ) {
 
@@ -728,9 +725,9 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 
 					$message .= ' ' . sprintf(
 						/** translators: Placeholders: %s - credit card expiry date */
-							__( '(expires %s)', 'woodev-plugin-framework' ),
-							$order->payment->exp_month . '/' . substr( $order->payment->exp_year, - 2 )
-						);
+						__( '(expires %s)', 'woodev-plugin-framework' ),
+						$order->payment->exp_month . '/' . substr( $order->payment->exp_year, - 2 )
+					);
 				}
 
 				// adds the transaction id (if any) to the order note
@@ -747,7 +744,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 				 * @param string $message order note
 				 * @param WC_Order $order order object
 				 * @param Woodev_Payment_Gateway_API_Response $response transaction response
-				 * @param Woodev_Payment_Gateway_Direct $this instance
+				 * @param Woodev_Payment_Gateway_Direct $instance instance
 				 */
 				$message = apply_filters( 'wc_payment_gateway_' . $this->get_id() . '_credit_card_transaction_approved_order_note', $message, $order, $response, $this );
 
@@ -756,7 +753,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 			}
 
 			return $response;
-
 		}
 
 
@@ -768,7 +764,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 		 * @return bool
 		 * @throws Woodev_Plugin_Exception
 		 * @since 1.0.0
-		 *
 		 */
 		protected function do_transaction( $order ) {
 
@@ -786,7 +781,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 			if ( $response->transaction_approved() || $response->transaction_held() ) {
 
 				if ( $this->supports_tokenization() && 0 != $order->get_user_id() && $this->get_payment_tokens_handler()->should_tokenize() &&
-				     ( $order->payment_total > 0 && ( $this->tokenize_with_sale() || $this->tokenize_after_sale() ) ) ) {
+					( $order->payment_total > 0 && ( $this->tokenize_with_sale() || $this->tokenize_after_sale() ) ) ) {
 
 					try {
 						$order = $this->get_payment_tokens_handler()->create_token( $order, $response );
@@ -902,7 +897,8 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 				if ( $this->is_credit_card_gateway() ) {
 
 					/* translators: Payment method as in a specific credit card. Placeholders: %1$s - card type (visa, mastercard, ...), %2$s - last four digits of the card, %3$s - card expiry date */
-					$message = sprintf( esc_html__( 'Nice! New payment method added: %1$s ending in %2$s (expires %3$s)', 'woodev-plugin-framework' ),
+					$message = sprintf(
+						esc_html__( 'Nice! New payment method added: %1$s ending in %2$s (expires %3$s)', 'woodev-plugin-framework' ),
 						$token->get_type_full(),
 						$token->get_last_four(),
 						$token->get_exp_date()
@@ -912,7 +908,8 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 
 					// account type (checking/savings) may or may not be available, which is fine
 					/* translators: Payment method as in a specific e-check account. Placeholders: %1$s - account type (checking/savings), %2$s - last four digits of the account */
-					$message = sprintf( esc_html__( 'Nice! New payment method added: %1$s account ending in %2$s', 'woodev-plugin-framework' ),
+					$message = sprintf(
+						esc_html__( 'Nice! New payment method added: %1$s account ending in %2$s', 'woodev-plugin-framework' ),
 						$token->get_account_type(),
 						$token->get_last_four()
 					);
@@ -937,7 +934,10 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 				 */
 				do_action( 'wc_payment_gateway_' . $this->get_id() . '_payment_method_added', $token->get_id(), $order->get_user_id(), $response );
 
-				$result = array( 'message' => $message, 'success' => true );
+				$result = array(
+					'message' => $message,
+					'success' => true,
+				);
 
 			} else {
 
@@ -951,7 +951,10 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 					$message = 'Unknown Error';
 				}
 
-				$result = array( 'message' => $message, 'success' => false );
+				$result = array(
+					'message' => $message,
+					'success' => false,
+				);
 			}
 
 			/**
@@ -970,7 +973,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 			 *
 			 * @param Woodev_Payment_Gateway_API_Create_Payment_Token_Response $response instance
 			 * @param WC_Order $order order instance
-			 * @param Woodev_Payment_Gateway_Direct $this direct gateway instance
+			 * @param Woodev_Payment_Gateway_Direct $instance direct gateway instance
 			 */
 			return apply_filters( 'wc_payment_gateway_' . $this->get_id() . '_add_payment_method_transaction_result', $result, $response, $order, $this );
 		}
@@ -1050,7 +1053,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 			 * Allow actors to modify the order object used for an add payment method transaction.
 			 *
 			 * @param WC_Order $order order object
-			 * @param Woodev_Payment_Gateway_Direct $this instance
+			 * @param Woodev_Payment_Gateway_Direct $instance instance
 			 */
 			return apply_filters( 'wc_payment_gateway_' . $this->get_id() . '_get_order_for_add_payment_method', $order, $this );
 		}
@@ -1059,7 +1062,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 		/**
 		 * Add customer data as part of the add payment method transaction, primarily customer ID
 		 *
-		 * @param WC_Order $order mock order
+		 * @param WC_Order                                                 $order mock order
 		 * @param Woodev_Payment_Gateway_API_Create_Payment_Token_Response $response
 		 */
 		protected function add_add_payment_method_customer_data( $order, $response ) {
@@ -1090,7 +1093,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 		 * + transaction ID
 		 * + transaction date
 		 * + transaction environment
-		 *
 		 *
 		 * @param Woodev_Payment_Gateway_API_Create_Payment_Token_Response $response
 		 */

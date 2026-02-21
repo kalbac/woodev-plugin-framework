@@ -251,11 +251,14 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 
 			} elseif ( ! empty( $this->options ) && ! in_array( $value, $this->options ) ) {
 
-				throw new Woodev_Plugin_Exception( sprintf(
-					'Setting value for setting %s must be one of %s',
-					$this->id,
-					Woodev_Helper::list_array_items( $this->options, 'or' )
-				), 400 );
+				throw new Woodev_Plugin_Exception(
+					sprintf(
+						'Setting value for setting %s must be one of %s',
+						$this->id,
+						Woodev_Helper::list_array_items( $this->options, 'or' )
+					),
+					400
+				);
 
 			} else {
 

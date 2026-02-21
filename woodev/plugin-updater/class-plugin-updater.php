@@ -1,6 +1,6 @@
 <?php
 
-defined( 'ABSPATH' ) or exit;
+defined( 'ABSPATH' ) || exit;
 
 if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 	/**
@@ -38,7 +38,7 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 				'version' => $this->plugin->get_version(),
 				'item_id' => $this->plugin->get_download_id(),
 				'license' => $this->plugin->get_license_instance()->get_license(),
-				'beta'    => is_callable( array( $this->plugin, 'is_beta_allowed' ) ) && $this->plugin->is_beta_allowed()
+				'beta'    => is_callable( array( $this->plugin, 'is_beta_allowed' ) ) && $this->plugin->is_beta_allowed(),
 			);
 			$this->name                     = $this->plugin->get_plugin_file();
 			$this->slug                     = basename( $this->plugin->get_plugin_file(), '.php' );
@@ -55,7 +55,6 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 		 *
 		 * @return void
 		 * @uses add_filter()
-		 *
 		 */
 		public function init() {
 			add_filter( 'pre_set_site_transient_update_plugins', array( $this, 'check_update' ) );
@@ -72,11 +71,10 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 		 * It is reassembled from parts of the native WordPress plugin update code.
 		 * See wp-includes/update.php line 121 for the original wp_update_plugins() function.
 		 *
-		 * @param array $_transient_data Update array build by WordPress.
+		 * @param stdClass|mixed $_transient_data Update transient build by WordPress.
 		 *
-		 * @return array Modified update array with custom plugin data.
+		 * @return stdClass Modified update transient with custom plugin data.
 		 * @uses api_request()
-		 *
 		 */
 		public function check_update( $_transient_data ) {
 
@@ -307,7 +305,6 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 		 *
 		 * @return object $_data
 		 * @uses api_request()
-		 *
 		 */
 		public function plugins_api_filter( $_data, $_action = '', $_args = null ) {
 			if ( 'plugin_information' !== $_action ) {
@@ -331,7 +328,7 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 			// Get the transient where we store the api request for this plugin for 24 hours
 			$edd_api_request_transient = $this->get_cached_version_info();
 
-			//If we have no transient-saved value, run the API, set a fresh transient with the API value, and return that value too right now.
+			// If we have no transient-saved value, run the API, set a fresh transient with the API value, and return that value too right now.
 			if ( empty( $edd_api_request_transient ) ) {
 
 				$api_response = $this->api_request( 'plugin_information', $to_send );
@@ -342,7 +339,6 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 				if ( false !== $api_response ) {
 					$_data = $api_response;
 				}
-
 			} else {
 				$_data = $edd_api_request_transient;
 			}
@@ -408,7 +404,6 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 		 * @uses get_bloginfo()
 		 * @uses wp_remote_get()
 		 * @uses is_wp_error()
-		 *
 		 */
 		private function api_request( $_action, $_data ) {
 			$data = array_merge( $this->api_data, $_data );
@@ -490,7 +485,7 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 		/**
 		 * Gets the current version information from the remote site.
 		 *
-		 * @return array|false
+		 * @return object|false
 		 */
 		private function get_version_from_remote() {
 
@@ -525,7 +520,6 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 			} catch ( Exception $e ) {
 
 			}
-
 
 			return false;
 		}
@@ -594,7 +588,7 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 				'slug'        => $this->slug,
 				'beta'        => $this->beta,
 				'php_version' => phpversion(),
-				'wp_version'  => get_bloginfo( 'version' )
+				'wp_version'  => get_bloginfo( 'version' ),
 			);
 		}
 
