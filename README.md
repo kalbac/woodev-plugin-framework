@@ -163,6 +163,20 @@ woodev/
 └── utilities/                   # Background job queue
 ```
 
+## AI Development Tools
+
+The project uses a unified system of agents and skills for AI-assisted development. All files are stored in `.ai/` — this is the single source of truth. Tools connect via reference files:
+
+| Tool | Reference File | Points To |
+|------|----------------|-----------|
+| Claude Code | `.claude/skills` | `.ai/skills/` |
+| Claude Code | `.claude/agents` | `.ai/agents/` |
+| Codex | `.codex/skills` | `.ai/skills/` |
+| Qwen Code | `.qwen/skills` | `.ai/skills/` |
+| Cursor | `.cursor/rules/skills.mdc` | `.ai/skills/` |
+
+To update skills or agents, edit files in `.ai/` — changes are automatically picked up by all tools.
+
 ## Key Concepts
 
 ### Plugin Bootstrap

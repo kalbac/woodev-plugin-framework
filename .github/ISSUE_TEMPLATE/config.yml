@@ -1,0 +1,17 @@
+blank_issues_enabled: true
+contact_links:
+  - name: WooCommerce Support
+    url: https://woocommerce.com/support/
+    about: For general WooCommerce support and questions.
+  - name: WordPress Support Forums
+    url: https://wordpress.org/support/plugin/woocommerce/
+    about: For community support and discussions.
+  - name: WooCommerce Documentation
+    url: https://developer.woocommerce.com/docs/
+    about: Official WooCommerce developer documentation.
+  - name: Woodev Support
+    url: https://woodev.ru/support/
+    about: Official Woodev support and resources.
+  - name: Woodev Documentation
+    url: https://woodev.ru/docs/
+    about: Official Woodev documentation.

@@ -1,0 +1,68 @@
+# Configuration for labeler action
+# See: https://github.com/actions/labeler
+
+# PHP files
+'plugin: core':
+  - changed-files:
+      - any-glob-to-any-file:
+          - '**.php'
+          - 'includes/**/*'
+          - 'woodev/**/*'
+
+# JavaScript files
+'plugin: assets':
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'assets/**/*'
+          - '**.js'
+          - '**.ts'
+
+# Documentation
+'documentation':
+  - changed-files:
+      - any-glob-to-any-file:
+          - '**.md'
+          - 'docs/**/*'
+
+# Tests
+'tests':
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'tests/**/*'
+          - '**Test.php'
+
+# CI/CD
+'ci/cd':
+  - changed-files:
+      - any-glob-to-any-file:
+          - '.github/**/*'
+          - '.github/workflows/**/*'
+
+# Configuration files
+'configuration':
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'package.json'
+          - 'composer.json'
+          - '.editorconfig'
+          - '.gitignore'
+
+# Bug fixes
+'fix':
+  - head-branch:
+      - '^fix/'
+      - 'fix-'
+
+# Features
+'feature':
+  - head-branch:
+      - '^feature/'
+      - 'feature-'
+      - '^feat/'
+      - 'feat-'
+
+# Hotfixes
+'hotfix':
+  - head-branch:
+      - '^hotfix/'
+      - 'hotfix-'

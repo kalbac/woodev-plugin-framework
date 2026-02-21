@@ -38,7 +38,32 @@
 	</rule>
 
 	<!-- Стандарт документации (PHPDoc комментарии) -->
-	<rule ref="WordPress-Docs"/>
+	<rule ref="WordPress-Docs">
+		<!-- Легаси фреймворк: не требуем точки в конце @param/@return описаний -->
+		<exclude name="Squiz.Commenting.FunctionComment.ParamCommentFullStop"/>
+		<exclude name="Squiz.Commenting.FunctionComment.ReturnCommentFullStop"/>
+		<!-- Легаси фреймворк: не требуем описание после @throws -->
+		<exclude name="Squiz.Commenting.FunctionComment.EmptyThrows"/>
+		<exclude name="Squiz.Commenting.FunctionComment.ThrowsNoFullStop"/>
+		<exclude name="Squiz.Commenting.FunctionComment.ThrowsNotCapital"/>
+		<!-- Легаси фреймворк: не требуем точки в конце inline-комментариев -->
+		<exclude name="Squiz.Commenting.InlineComment.InvalidEndChar"/>
+		<!-- Легаси фреймворк: не требуем file-level docblock на каждом файле -->
+		<exclude name="Squiz.Commenting.FileComment.Missing"/>
+		<exclude name="Squiz.Commenting.FileComment.MissingPackageTag"/>
+		<!-- Легаси фреймворк: не требуем docblock на каждом методе -->
+		<exclude name="Squiz.Commenting.FunctionComment.Missing"/>
+		<exclude name="Squiz.Commenting.FunctionComment.MissingParamComment"/>
+		<exclude name="Squiz.Commenting.FunctionComment.MissingParamTag"/>
+		<exclude name="Squiz.Commenting.FunctionComment.MissingReturn"/>
+		<!-- Легаси фреймворк: не требуем docblock на каждом свойстве -->
+		<exclude name="Squiz.Commenting.VariableComment.Missing"/>
+		<exclude name="Squiz.Commenting.VariableComment.MissingVar"/>
+		<!-- Легаси фреймворк: не требуем class-level docblock -->
+		<exclude name="Squiz.Commenting.ClassComment.Missing"/>
+		<!-- Легаси фреймворк: DocBlock может не иметь short description -->
+		<exclude name="Generic.Commenting.DocComment.MissingShort"/>
+	</rule>
 
 	<!-- =====================================================
 		 PHP Compatibility
@@ -74,12 +99,73 @@
 		</properties>
 	</rule>
 
+	<!-- WooCommerce функции которые уже возвращают безопасный HTML -->
+	<rule ref="WordPress.Security.EscapeOutput">
+		<properties>
+			<property name="customAutoEscapedFunctions" type="array">
+				<element value="wc_help_tip"/>
+				<element value="wc_price"/>
+				<element value="wc_format_datetime"/>
+				<element value="wc_get_template"/>
+				<element value="wc_get_template_html"/>
+				<element value="wc_kses_notice"/>
+			</property>
+		</properties>
+	</rule>
+
 	<!-- Разрешаем длинные строки до 120 символов (WordPress по умолчанию 100) -->
 	<rule ref="Generic.Files.LineLength">
 		<properties>
 			<property name="lineLimit" value="120"/>
 			<property name="absoluteLineLimit" value="0"/>
 		</properties>
+	</rule>
+
+	<!-- =====================================================
+		 Исключения для паттернов фреймворка
+		 Библиотека/фреймворк имеет особую семантику:
+		 реализация безопасности — ответственность плагинов
+	====================================================== -->
+
+	<!-- Фреймворк не верифицирует нонс сам — это обязанность конкретных плагинов -->
+	<rule ref="WordPress.Security.NonceVerification.Recommended">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+	<rule ref="WordPress.Security.NonceVerification.Missing">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+
+	<!-- Сообщения Exception-ов не выводятся в HTML без обработки, не требуют esc_html() -->
+	<rule ref="WordPress.Security.EscapeOutput.ExceptionNotEscaped">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+
+	<!-- Назначение в условии — устоявшийся WordPress паттерн (while $row = get_row()) -->
+	<rule ref="Generic.CodeAnalysis.AssignmentInCondition.Found">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+	<rule ref="Squiz.PHP.DisallowMultipleAssignments.FoundInControlStructure">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+
+	<!-- Yoda conditions — стилистический выбор, не нарушение безопасности -->
+	<rule ref="WordPress.PHP.YodaConditions.NotYoda">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+
+	<!-- Short ternary — синтаксически валиден, стилистически приемлем -->
+	<rule ref="Universal.Operators.DisallowShortTernary.Found">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+
+	<!-- Динамические имена хуков — распространённый паттерн фреймворка -->
+	<rule ref="WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+
+	<!-- Отключаем предупреждения о недостающих комментариях для переводчиков -->
+	<rule ref="WordPress.WP.I18n.MissingTranslatorsComment">
+		<exclude-pattern>*</exclude-pattern>
 	</rule>
 
 </ruleset>

@@ -1,0 +1,11 @@
+./node_modules
+./vendor
+./.idea
+composer.lock
+
+# AI tools — do not ignore (reference files required)
+!.ai/
+!.claude/
+!.codex/
+!.cursor/
+!.qwen/

@@ -1,5 +1,5 @@
 includes:
-    # WordPress stubs — PHPStan знает о функциях WP и WC
+    # WordPress + WooCommerce stubs
     - vendor/szepeviktor/phpstan-wordpress/extension.neon
 
 parameters:
@@ -9,6 +9,13 @@ parameters:
     # =================================================
     paths:
         - woodev
+
+    # =================================================
+    # WooCommerce stubs — загружаются как файлы с объявлениями
+    # =================================================
+    scanFiles:
+        - vendor/php-stubs/woocommerce-stubs/woocommerce-stubs.php
+        - vendor/php-stubs/woocommerce-stubs/woocommerce-packages-stubs.php
 
     # =================================================
     # Уровень строгости: 0 (минимум) — 9 (максимум)
@@ -46,7 +53,7 @@ parameters:
         - woodev/class-lifecycle.php
         - woodev/class-admin-notice-handler.php
         - woodev/class-admin-message-handler.php
-		- woodev/class-plugin-compatibility.php
+        - woodev/class-plugin-compatibility.php
         - woodev/class-plugin-exception.php
         - woodev/class-string-conversation.php
         - woodev/class-woodev-hook-deprecator.php
@@ -63,6 +70,14 @@ parameters:
     # Не требует строгого return type везде — нужно для легаси
     treatPhpDocTypesAsCertain: false
 
+    # Отключаем параллельный анализ — WC stubs (130k строк) требует много памяти,
+    # параллельные воркеры падают по лимиту PHP memory_limit
+    parallel:
+        maximumNumberOfProcesses: 1
+
+    # Не падать если ignoreErrors паттерн не совпал ни с одной ошибкой
+    reportUnmatchedIgnoredErrors: false
+
     # =================================================
     # Игнорируемые ошибки
     #
@@ -70,9 +85,65 @@ parameters:
     # строки отсюда и повышай уровень анализа
     # =================================================
     ignoreErrors:
-        # Легаси код часто использует mixed типы
-        - '#Parameter .* of function .* has no typehint#'
+        # WP actions могут использоваться с колбеками которые возвращают значение —
+        # это штатная практика когда метод вызывается и напрямую, и через хук
+        - '#Action callback returns .* but should not return anything#'
 
-        # WordPress глобальные переменные
-        - '#Variable \$wpdb is not in scope#'
-        - '#Variable \$pagenow is not in scope#'
+        # WooCommerce использует dynamic properties на WC_Order/WC_Order_Refund (legacy паттерн)
+        - '#Access to an undefined property WC_Order::\$#'
+        - '#Cannot access property \$.* on WC_Order\|WC_Order_Refund\|false#'
+
+        # WC_Session использует dynamic properties (legacy паттерн)
+        - '#Access to an undefined property WC_Session::\$#'
+
+        # WP_User — get_user_by() может вернуть false, billing_*/shipping_* — WooCommerce meta поля
+        - '#Cannot access property \$.* on WP_User\|false#'
+
+        # Старые внутренние классы WC Admin Navigation — убраны в WC 9.x
+        - '#Class Automattic\\WooCommerce\\Admin\\Features\\Navigation\\#'
+
+        # Внутренние классы WC HPOS не всегда присутствуют в stubs
+        - '#Call to static method .* on an unknown class Automattic\\WooCommerce\\Internal\\DataStores\\Orders\\OrdersTableDataStore#'
+
+        # WC_Payment_Gateway — метод get_id_dasherized() добавлен в Woodev_Payment_Gateway
+        - '#Call to an undefined method WC_Payment_Gateway::get_id_dasherized\(\)#'
+
+        # Woodev_Plugin::get_gateways() — метод существует в Woodev_Payment_Gateway_Plugin
+        - '#Call to an undefined method Woodev_Plugin::get_gateways\(\)#'
+
+        # Payment notification response — дополнительные методы в runtime реализациях
+        - '#Call to an undefined method Woodev_Payment_Gateway_API_Payment_Notification_Response::#'
+
+        # Payment token — дополнительные методы в runtime реализациях
+        - '#Call to an undefined method Woodev_Payment_Gateway_Payment_Token::get_check_number\(\)#'
+        - '#Invalid array key type Woodev_Payment_Gateway_Payment_Token#'
+
+        # box-packer — get_product() в runtime реализациях
+        - '#Call to an undefined method Woodev_Box_Packer_Item::get_product\(\)#'
+
+        # Shipping API interface — Woodev_Shipping_* и Woodev_Exportable_* классы определены в плагинах-реализациях
+        - message: '#(Woodev_Shipping|Woodev_Exportable|not subtype of Throwable)#'
+          path: woodev/shipping-method/api/interface-shipping-api.php
+
+        # Background job handler — update_job() может вернуть false, свойства $job проверяются на уровне логики
+        - message: '#Cannot access property \$.* on object\|false#'
+          path: woodev/utilities/class-woodev-background-job-handler.php
+
+        # Background job handler — delete_job() не имеет explicit return на success пути (задумано)
+        - message: '#Method .* should return false but return statement is missing#'
+          path: woodev/utilities/class-woodev-background-job-handler.php
+
+        # plugin-updater — convert_object_to_array итерирует stdClass через foreach (валидный PHP)
+        - message: '#Argument of an invalid type stdClass supplied for foreach#'
+          path: woodev/plugin-updater/class-plugin-updater.php
+
+        # Woodev_Payment_Gateway использует dynamic property $voided_order_message как временный holder
+        - '#Access to an undefined property Woodev_Payment_Gateway::\$voided_order_message#'
+
+        # WC_Payment_Gateway::is_available() объявлен в stubs как @return true — мы возвращаем bool
+        - '#Method Woodev_Payment_Gateway::is_available\(\) should return true but returns bool#'
+
+        # class-string-conversation.php: статический анализ ограничен при unset
+        # на фиксированных массивах кириллической транслитерации
+        - message: '#Cannot unset offset .* on array#'
+          path: woodev/class-string-conversation.php

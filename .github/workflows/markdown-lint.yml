@@ -1,0 +1,61 @@
+name: Markdown Lint
+
+on:
+  pull_request:
+    paths:
+      - '**.md'
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - '**.md'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FORCE_COLOR: 1
+
+jobs:
+  markdownlint:
+    name: Markdown Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install markdownlint-cli
+        run: npm install -g markdownlint-cli
+
+      - name: Get changed markdown files
+        id: changed-files
+        uses: tj-actions/changed-files@v41
+        with:
+          files: '**.md'
+          files_ignore: |
+            node_modules/**
+            vendor/**
+
+      - name: Lint changed markdown files
+        if: steps.changed-files.outputs.any_changed == 'true'
+        run: |
+          if [ "${{ steps.changed-files.outputs.all_changed_files }}" == "" ]; then
+            echo "No markdown files changed"
+            exit 0
+          fi
+          
+          markdownlint ${{ steps.changed-files.outputs.all_changed_files }}
+
+      - name: Lint all markdown (if config exists)
+        if: always()
+        run: |
+          if [ -f ".markdownlint.json" ] || [ -f ".markdownlint.jsonc" ] || [ -f ".markdownlint.yaml" ]; then
+            markdownlint '**.md' --ignore node_modules/** --ignore vendor/**
+          fi

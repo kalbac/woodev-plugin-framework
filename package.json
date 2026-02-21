@@ -1,0 +1,16 @@
+{
+  "name": "woodev_framework",
+  "version": "1.0.0",
+  "description": "Welcome to the complete developer documentation for the Woodev Plugin Framework. This manual provides comprehensive guidance for building WooCommerce plugins using the Woodev framework.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}
