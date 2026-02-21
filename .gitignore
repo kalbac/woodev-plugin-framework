@@ -1,11 +1,12 @@
-./node_modules
-./vendor
-./.idea
+/node_modules/
+/vendor/
+/.idea/
+/.phpunit.cache/
 composer.lock
 
 # AI tools — do not ignore (reference files required)
-!.ai/
-!.claude/
-!.codex/
-!.cursor/
-!.qwen/
+!/.ai/
+!/.claude/
+!/.codex/
+!/.cursor/
+!/.qwen/
