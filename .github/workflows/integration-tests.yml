@@ -1,0 +1,89 @@
+name: Integration Tests
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+
+  # ===========================================================================
+  # Интеграционные тесты в реальном WordPress + WooCommerce
+  # через wp-env (Docker)
+  # ===========================================================================
+  integration:
+    name: Integration Tests (WP + WC)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP 8.1
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+          coverage: none
+          tools: composer:v2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Cache Composer dependencies
+        uses: actions/cache@v4
+        with:
+          path: vendor
+          key: composer-8.1-${{ hashFiles('composer.json') }}
+          restore-keys: composer-8.1-
+
+      - name: Install Composer dependencies
+        run: composer install --prefer-dist --no-progress --no-interaction
+
+      - name: Install wp-env
+        run: npm install -g @wordpress/env
+
+      - name: Start wp-env
+        run: npx wp-env start
+        env:
+          WP_ENV_HOME: /tmp/wp-env
+
+      - name: Wait for wp-env to be ready
+        run: |
+          echo "Waiting for WordPress to be ready..."
+          for i in $(seq 1 30); do
+            if npx wp-env run tests wp core is-installed 2>/dev/null; then
+              echo "WordPress is ready."
+              break
+            fi
+            echo "Attempt $i/30, retrying in 5s..."
+            sleep 5
+          done
+
+      - name: Show WP and WC versions
+        run: |
+          npx wp-env run tests wp core version
+          npx wp-env run tests wp plugin list
+
+      - name: Run integration tests
+        run: |
+          npx wp-env run tests \
+            env TEST_SUITE=integration \
+            php /var/www/html/woodev-framework/vendor/bin/phpunit \
+              --configuration /var/www/html/woodev-framework/phpunit.xml \
+              --testsuite=Integration \
+              --no-coverage
+
+      - name: Stop wp-env
+        if: always()
+        run: npx wp-env stop
+        env:
+          WP_ENV_HOME: /tmp/wp-env
