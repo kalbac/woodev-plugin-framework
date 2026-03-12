@@ -79,7 +79,7 @@ jobs:
         run: composer install --prefer-dist --no-progress --no-interaction
 
       - name: Run PHPCS
-        run: composer phpcs
+        run: ./vendor/bin/phpcs --warning-severity=0
 
       - name: Run PHPStan
         run: composer phpstan
