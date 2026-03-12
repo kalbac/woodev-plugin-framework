@@ -346,7 +346,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Payment_Token_Editor' ) ) :
 			 * Filter the validated token data.
 			 *
 			 * @param array $data the validated token data
-			 * @param string $token_id the token ID
+			 * @param int   $token_id the token ID
 			 * @param Woodev_Payment_Gateway_Admin_Payment_Token_Editor $instance the token editor instance
 			 *
 			 * @return array the validated token data
