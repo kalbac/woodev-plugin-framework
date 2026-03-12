@@ -70,6 +70,10 @@ parameters:
     # Не требует строгого return type везде — нужно для легаси
     treatPhpDocTypesAsCertain: false
 
+    # Ограничиваем параллельные воркеры — WC stubs (130k строк) требует много памяти
+    parallel:
+        maximumNumberOfProcesses: 1
+
     # Не падать если ignoreErrors паттерн не совпал ни с одной ошибкой
     reportUnmatchedIgnoredErrors: false
 
