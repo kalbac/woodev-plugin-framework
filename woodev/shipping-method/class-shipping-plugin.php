@@ -359,8 +359,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			// report any currency issues
 			if ( $this->get_accepted_currencies() ) {
 
-				// TODO: add logic
-
 				$suffix              = '';
 				$name                = $this->get_plugin_name();
 				$accepted_currencies = $this->get_accepted_currencies();
@@ -386,9 +384,37 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 
 		protected function add_countries_admin_notices() {
 
-			// report any countries issues
-			if ( $this->get_accepted_countries() ) {
-				// TODO: показываем уведомление о том что магазин не поддерживает ни одну из доступных стран доставки для матодов доставки
+			$accepted_countries = $this->get_accepted_countries();
+
+			if ( ! $accepted_countries ) {
+				return;
+			}
+
+			$store_country = wc_get_base_location()['country'] ?? '';
+
+			if ( $store_country && ! in_array( $store_country, $accepted_countries, true ) ) {
+
+				$message = sprintf(
+					/* translators: %1$s - plugin name, %2$s - list of accepted countries, %3$s - opening <a> tag, %4$s - closing </a> tag */
+					_n(
+						'%1$s поддерживает доставку только в %2$s. %3$sНастройте%4$s WooCommerce для использования поддерживаемой страны.',
+						'%1$s поддерживает доставку в одну из следующих стран: %2$s. %3$sНастройте%4$s WooCommerce для использования одной из поддерживаемых стран.',
+						count( $accepted_countries ),
+						'woodev-plugin-framework'
+					),
+					$this->get_plugin_name(),
+					'<strong>' . implode( ', ', $accepted_countries ) . '</strong>',
+					'<a href="' . esc_url( $this->get_general_configuration_url() ) . '">',
+					'</a>'
+				);
+
+				$this->get_admin_notice_handler()->add_admin_notice(
+					$message,
+					'accepted-countries',
+					[
+						'notice_class' => 'error',
+					]
+				);
 			}
 		}
 
@@ -400,7 +426,25 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		 */
 		protected function add_debug_setting_notices() {
 
-			// TODO: добавить логику проверки, включен ли режим логирования. Если да, сообщить пользователю что нужно отключить.
+			if ( ! $this->is_debug_enabled() ) {
+				return;
+			}
+
+			$message = sprintf(
+				/* translators: %1$s - plugin name, %2$s - opening <a> tag, %3$s - closing </a> tag */
+				__( 'Внимание! %1$s работает в режиме отладки и записывает данные в лог. Если у вас нет проблем с доставкой, рекомендуем %2$sотключить режим отладки%3$s.', 'woodev-plugin-framework' ),
+				$this->get_plugin_name(),
+				'<a href="' . esc_url( $this->get_settings_url() ) . '">',
+				' &raquo;</a>'
+			);
+
+			$this->get_admin_notice_handler()->add_admin_notice(
+				$message,
+				'debug-in-production',
+				[
+					'notice_class' => 'notice-warning',
+				]
+			);
 		}
 
 
@@ -411,7 +455,35 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		 */
 		protected function add_not_configured_notices() {
 
-			// TODO: добавить логику, если основные параметры плагина не скофигурированы то показываем уведомление
+			if ( ! $this->get_shipping_methods() ) {
+				return;
+			}
+
+			foreach ( $this->get_shipping_methods() as $method ) {
+
+				if ( ! $method->is_enabled() ) {
+					continue;
+				}
+
+				if ( method_exists( $method, 'is_configured' ) && ! $method->is_configured() ) {
+
+					$message = sprintf(
+						/* translators: %1$s - shipping method title, %2$s - opening <a> tag, %3$s - closing </a> tag */
+						__( '%1$s не настроен. Пожалуйста, %2$sзавершите настройку%3$s для начала работы.', 'woodev-plugin-framework' ),
+						$method->get_method_title(),
+						'<a href="' . esc_url( $this->get_settings_url() ) . '">',
+						' &raquo;</a>'
+					);
+
+					$this->get_admin_notice_handler()->add_admin_notice(
+						$message,
+						$method->id . '-not-configured',
+						[
+							'notice_class' => 'notice-warning',
+						]
+					);
+				}
+			}
 		}
 
 		/**
