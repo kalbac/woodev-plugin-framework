@@ -1,5 +1,12 @@
 # Woodev Plugin Framework — Developer Documentation
 
+[![CI](https://github.com/kalbac/woodev-plugin-framework/actions/workflows/ci.yml/badge.svg)](https://github.com/kalbac/woodev-plugin-framework/actions/workflows/ci.yml)
+[![Latest Release](https://img.shields.io/github/v/release/kalbac/woodev-plugin-framework)](https://github.com/kalbac/woodev-plugin-framework/releases/latest)
+[![PHP](https://img.shields.io/badge/PHP-7.4--8.2-777bb4)](https://www.php.net/)
+[![WordPress](https://img.shields.io/badge/WordPress-5.9%2B-21759b)](https://wordpress.org/)
+[![WooCommerce](https://img.shields.io/badge/WooCommerce-7.0%2B-96588a)](https://woocommerce.com/)
+[![License](https://img.shields.io/github/license/kalbac/woodev-plugin-framework)](LICENSE)
+
 Welcome to the complete developer documentation for the Woodev Plugin Framework. This manual provides comprehensive guidance for building WooCommerce plugins using the Woodev framework.
 
 ## What is Woodev Framework?
