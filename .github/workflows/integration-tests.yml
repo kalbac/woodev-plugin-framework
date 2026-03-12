@@ -60,7 +60,7 @@ jobs:
         run: |
           echo "Waiting for WordPress to be ready..."
           for i in $(seq 1 30); do
-            if npx wp-env run tests wp core is-installed 2>/dev/null; then
+            if npx wp-env run tests-cli wp core is-installed 2>/dev/null; then
               echo "WordPress is ready."
               break
             fi
@@ -70,12 +70,12 @@ jobs:
 
       - name: Show WP and WC versions
         run: |
-          npx wp-env run tests wp core version
-          npx wp-env run tests wp plugin list
+          npx wp-env run tests-cli wp core version
+          npx wp-env run tests-cli wp plugin list
 
       - name: Run integration tests
         run: |
-          npx wp-env run tests \
+          npx wp-env run tests-cli \
             env TEST_SUITE=integration \
             php /var/www/html/woodev-framework/vendor/bin/phpunit \
               --configuration /var/www/html/woodev-framework/phpunit.xml \
