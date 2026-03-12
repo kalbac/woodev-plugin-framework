@@ -21,6 +21,8 @@ jobs:
   integration:
     name: Integration Tests (WP + WC)
     runs-on: ubuntu-latest
+    env:
+      WP_ENV_HOME: /tmp/wp-env
 
     steps:
       - name: Checkout
@@ -53,8 +55,6 @@ jobs:
 
       - name: Start wp-env
         run: npx wp-env start
-        env:
-          WP_ENV_HOME: /tmp/wp-env
 
       - name: Wait for wp-env to be ready
         run: |
@@ -85,5 +85,3 @@ jobs:
       - name: Stop wp-env
         if: always()
         run: npx wp-env stop
-        env:
-          WP_ENV_HOME: /tmp/wp-env
