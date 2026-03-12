@@ -62,4 +62,67 @@ class PluginBootstrapTest extends TestCase {
 			'Plugin path should exist'
 		);
 	}
+
+	/**
+	 * WordPress должен быть загружен и функционировать.
+	 */
+	public function test_wordpress_is_loaded(): void {
+		$this->assertTrue( defined( 'ABSPATH' ), 'ABSPATH should be defined' );
+		$this->assertTrue( defined( 'WPINC' ), 'WPINC should be defined' );
+		$this->assertTrue( function_exists( 'add_action' ), 'add_action() should exist' );
+		$this->assertTrue( function_exists( 'get_option' ), 'get_option() should exist' );
+	}
+
+	/**
+	 * Фреймворк должен возвращать корректную версию.
+	 */
+	public function test_framework_version_is_set(): void {
+		$this->assertNotEmpty(
+			\Woodev_Plugin::VERSION,
+			'Framework VERSION constant should be set'
+		);
+		$this->assertMatchesRegularExpression(
+			'/^\d+\.\d+\.\d+/',
+			\Woodev_Plugin::VERSION,
+			'Framework VERSION should follow semver format'
+		);
+	}
+
+	/**
+	 * Bootstrap должен быть singleton.
+	 */
+	public function test_bootstrap_is_singleton(): void {
+		$instance1 = \Woodev_Plugin_Bootstrap::instance();
+		$instance2 = \Woodev_Plugin_Bootstrap::instance();
+
+		$this->assertSame(
+			$instance1,
+			$instance2,
+			'Bootstrap should always return the same instance'
+		);
+	}
+
+	/**
+	 * Плагин должен корректно возвращать URL.
+	 */
+	public function test_plugin_url_is_valid(): void {
+		$plugin = $this->get_test_plugin();
+		$url    = $plugin->get_plugin_url();
+
+		$this->assertNotEmpty( $url, 'Plugin URL should not be empty' );
+		$this->assertStringStartsWith( 'http', $url, 'Plugin URL should start with http' );
+	}
+
+	/**
+	 * WordPress минимальная версия должна удовлетворять требованиям фреймворка.
+	 */
+	public function test_wordpress_version_meets_minimum(): void {
+		global $wp_version;
+		$minimum = '5.9';
+
+		$this->assertTrue(
+			version_compare( $wp_version, $minimum, '>=' ),
+			"WordPress version {$wp_version} must be >= {$minimum}"
+		);
+	}
 }
