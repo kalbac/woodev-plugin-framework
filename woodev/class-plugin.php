@@ -583,7 +583,7 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 			require_once $framework_path . '/admin/class-notes-helper.php';
 
 			// backwards compatibility for older WC versions
-			require_once $framework_path . '/class-plugin-compatibility.php';
+			require_once $framework_path . '/compatibility/class-plugin-compatibility.php';
 			require_once $framework_path . '/compatibility/abstract-data-compatibility.php';
 			require_once $framework_path . '/compatibility/class-order-compatibility.php';
 
@@ -1201,7 +1201,7 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		 */
 		public function get_assets_version(): string {
 
-			if ( defined( 'SCRIPT_DEBUG' ) && true === SCRIPT_DEBUG || defined( 'WP_DEBUG' ) && true === WP_DEBUG ) {
+			if ( ( defined( 'SCRIPT_DEBUG' ) && SCRIPT_DEBUG ) || ( defined( 'WP_DEBUG' ) && WP_DEBUG ) ) {
 				return (string) time();
 			}
 

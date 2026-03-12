@@ -53,7 +53,7 @@ parameters:
         - woodev/class-lifecycle.php
         - woodev/class-admin-notice-handler.php
         - woodev/class-admin-message-handler.php
-        - woodev/class-plugin-compatibility.php
+        - woodev/compatibility/class-plugin-compatibility.php
         - woodev/class-plugin-exception.php
         - woodev/class-string-conversation.php
         - woodev/class-woodev-hook-deprecator.php
