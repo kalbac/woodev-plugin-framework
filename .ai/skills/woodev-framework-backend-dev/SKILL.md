@@ -7,33 +7,6 @@ description: Add or modify Woodev Framework backend PHP code following project c
 
 This skill provides guidance for developing Woodev Framework backend PHP code according to project standards and conventions.
 
-## ⚠️ CRITICAL: Backward Compatibility
-
-This is a **framework** used by 10+ dependent plugins. Breaking changes affect all of them.
-
-**Rules:**
-
-- **NEVER** delete or rename public methods/classes without a deprecation cycle
-- **ALWAYS** use `@deprecated` annotation for deprecated code
-- **ALWAYS** use `_deprecated_function()` for deprecated functions/methods
-- Deprecation cycle: minimum **one full version** before removal
-- Breaking changes require **major version bump** (semver)
-
-**Example deprecation:**
-
-```php
-/**
- * Old method name.
- *
- * @deprecated 2.0.0 Use new_method_name() instead.
- * @see self::new_method_name()
- */
-public function old_method_name(): void {
-    _deprecated_function( __METHOD__, '2.0.0', __CLASS__ . '::new_method_name()' );
-    $this->new_method_name();
-}
-```
-
 ## When to Use This Skill
 
 **ALWAYS invoke this skill before:**
@@ -60,6 +33,7 @@ Follow Woodev Framework project conventions when adding or modifying backend PHP
 4. **Working with hooks**: See [hooks.md](hooks.md) for hook callback conventions and documentation
 5. **Dependency injection**: See [dependency-injection.md](dependency-injection.md) for DI container usage
 6. **Data integrity**: See [data-integrity.md](data-integrity.md) for ensuring data integrity when performing CRUD operations
+7. **Testing**: See [../woodev-framework-dev-cycle/testing-guide.md](../woodev-framework-dev-cycle/testing-guide.md) for Brain Monkey/Mockery patterns and test writing conventions
 
 ## Key Principles
 
@@ -69,7 +43,7 @@ Follow Woodev Framework project conventions when adding or modifying backend PHP
 - Legacy code remains without namespace (`Woodev_Plugin`, `Woodev_Plugin_Bootstrap`)
 - Write comprehensive unit tests for new functionality
 - Run linting and tests before committing changes
-- **Maintain backward compatibility** (or use proper deprecation cycle)
+- Maintain backward compatibility (see CLAUDE.md for deprecation rules)
 
 ## Version Information
 

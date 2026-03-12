@@ -1,6 +1,6 @@
 ---
 name: woodev-framework-code-review
-description: Review Woodev Framework code changes for coding standards compliance. Use when reviewing code locally, performing automated PR reviews, or checking code quality. **CRITICAL: Check backward compatibility.**
+description: Review Woodev Framework code changes for coding standards compliance. Use when reviewing code locally, performing automated PR reviews, or checking code quality.
 ---
 
 # Woodev Framework Code Review
@@ -12,8 +12,7 @@ description: Review Woodev Framework code changes for coding standards complianc
 - Reviewing a pull request
 - Performing code review before merging
 - Checking code for compliance with standards
-- Setting up automated code review workflows
-- **Validating backward compatibility** (CRITICAL)
+- Validating backward compatibility
 
 **DO NOT use this skill for:**
 
@@ -23,94 +22,75 @@ description: Review Woodev Framework code changes for coding standards complianc
 
 ---
 
-## Описание
-
-Review code changes against Woodev Framework coding standards and conventions.
-
----
-
-## ⚠️ Критические нарушения для флага (Framework Specific)
-
-### Backward Compatibility (CRITICAL)
-
-These violations **require mandatory fixes** before merging. Breaking changes affect 10+ dependent plugins.
-
-- ❌ **Public method/class deleted without deprecation** — Must have deprecation cycle
-- ❌ **Public method/class renamed without deprecation** — Must have deprecation cycle
-- ❌ **Missing `@deprecated` annotation** — Deprecated code must be marked
-- ❌ **Missing `_deprecated_function()` call** — Deprecated methods must call it
-- ❌ **Breaking change without major version bump** — Semver violation
-- ❌ **Changes in `woodev/` without enhanced review** — Framework code needs extra scrutiny
-
-### Backend PHP Code
-
-Consult the `woodev-framework-backend-dev` skill for detailed standards. Using these standards as guidance, flag these violations and other similar ones:
-
-**Architecture & Structure:**
-
-- ❌ **Standalone functions** — Must use class methods
-- ❌ **Classes outside proper namespace** — Must use `Woodev\Framework\*` for new code
-- ❌ **Modifications in `woodev/` directory** — Never change framework code unless explicitly requested
-
-**Naming & Conventions:**
-
-- ❌ **camelCase naming** — Must use `snake_case` for methods/variables/hooks
-- ❌ **PascalCase for functions** — Must use `snake_case` for function names
-- ❌ **Yoda condition violations** — Must follow WordPress Coding Standards
-
-**Documentation:**
-
-- ❌ **Missing `@since` annotations** — Required for public/protected methods and hooks
-- ❌ **Missing docblocks** — Required for all hooks, methods, and classes
-- ❌ **Verbose docblocks** — Keep concise, one line is ideal
-- ❌ **Missing `@param`/`@return` types** — Required for all functions/methods
-
-**Type Safety:**
-
-- ❌ **Missing type declarations** — Must use type hints for parameters and return types (PHP 7.4+)
-- ❌ **Missing DTOs for data transfer** — Use contracts or DTOs when passing data between layers
-
-**Data Integrity:**
-
-- ❌ **Missing validation** — Must verify state before deletion/modification
-- ❌ **Direct SQL queries** — Use `$wpdb` methods or WC CRUD classes
-
-**Testing:**
-
-- ❌ **Missing tests for new functionality** — All new features must have tests
-- ❌ **Tests without assertions** — Every test must verify expected behavior
-
-### JS Code
-
-**Naming & Conventions:**
-
-- ❌ **camelCase for properties/methods** — Must use `snake_case` for properties, methods, and functions
-- ❌ **snake_case for class names** — Must use `PascalCase` for class names
-- ❌ **Semicolons at end of lines** — Do not use `;` at end of lines
-
-**Script Loading:**
-
-- ❌ **Direct script tags** — Always enqueue scripts via `wp_enqueue_script`
-- ❌ **Missing dependency check** — Check dependency availability via `wp_script_is`
-- ❌ **Third-party scripts** — Prefer built-in WordPress/WooCommerce scripts
-
-### Documentation
-
-**Markdown Files:**
-
-- ❌ **Not following `woodev-framework-markdown` skill** — All `.md` files must follow the skill guidelines
-- ❌ **Wrong language** — User docs in Russian, developer docs in English
-
----
-
 ## Review Approach
 
-1. **Check backward compatibility first** (CRITICAL for framework)
-2. **Scan for critical violations** listed above
+1. **Check backward compatibility first** (critical for a framework used by 10+ plugins)
+2. **Scan for critical violations** listed below
 3. **Cite specific skill files** when flagging issues
 4. **Provide correct examples** from the skill documentation
 5. **Group related issues** for clarity
-6. **Be constructive** — explain why the standard exists when relevant
+
+---
+
+## Critical Violations
+
+### Backward Compatibility
+
+These violations **require mandatory fixes** before merging. See CLAUDE.md for full architecture context.
+
+- Public method/class deleted or renamed without deprecation cycle
+- Missing `@deprecated` annotation on deprecated code
+- Missing `_deprecated_function()` call in deprecated methods
+- Breaking change without major version bump (semver violation)
+
+### PHP Code
+
+Consult `woodev-framework-backend-dev` skill for detailed standards. Key violations to flag:
+
+**Architecture:**
+
+- Standalone functions instead of class methods
+- Classes outside proper namespace (new code must use `Woodev\Framework\*`)
+
+**Naming:**
+
+- camelCase naming instead of `snake_case` for methods/variables/hooks
+- Yoda condition violations (WordPress Coding Standards)
+
+**Documentation:**
+
+- Missing `@since` annotations on public/protected methods and hooks
+- Missing docblocks on hooks, methods, and classes
+- Missing `@param`/`@return` types
+
+**Type Safety:**
+
+- Missing type declarations for parameters and return types
+- Missing DTOs/contracts when passing data between layers
+
+**Data Integrity:**
+
+- Missing validation before deletion/modification
+- Direct SQL queries instead of `$wpdb` methods or WC CRUD classes
+
+**Testing:**
+
+- Missing tests for new functionality
+- Tests without assertions
+
+### Security Checklist
+
+- User input is sanitized (`sanitize_text_field()`, `absint()`, etc.)
+- Output is escaped (`esc_html()`, `esc_attr()`, `wp_kses()`, etc.)
+- Nonce verification on form submissions and AJAX handlers
+- Capability checks before privileged operations
+- No raw SQL without `$wpdb->prepare()`
+- No `eval()`, `extract()`, or `$$variable`
+
+### Documentation
+
+- Markdown files follow `woodev-framework-markdown` skill
+- User-facing docs in Russian, developer docs in English
 
 ---
 
@@ -119,7 +99,7 @@ Consult the `woodev-framework-backend-dev` skill for detailed standards. Using t
 For each violation found:
 
 ```text
-❌ [Issue Type]: [Specific problem]
+[Issue Type]: [Specific problem]
 Location: [File path and line number]
 Standard: [Link to relevant skill file]
 Fix: [Brief explanation or example]
@@ -128,12 +108,11 @@ Fix: [Brief explanation or example]
 **Example:**
 
 ```text
-❌ Backward Compatibility: Public method deleted without deprecation
+Backward Compatibility: Public method deleted without deprecation
 Location: woodev/class-plugin.php:123
 Standard: woodev-framework-backend-dev/code-entities.md
-Fix: Add @deprecated annotation and keep method for at least one version. Call _deprecated_function() inside.
+Fix: Add @deprecated annotation and keep method for at least one version.
 
-Example fix:
 /**
  * @deprecated 2.0.0 Use new_method() instead.
  */
@@ -150,21 +129,18 @@ public function old_method(): void {
 Before approving a PR, ensure:
 
 - [ ] No critical violations remain
-- [ ] **Backward compatibility verified** (CRITICAL for framework)
+- [ ] Backward compatibility verified
 - [ ] All linting checks pass (`composer phpcs`)
 - [ ] All tests pass (unit + integration)
 - [ ] Commits follow Conventional Commits format
 - [ ] `@since` annotations are correct (from `VERSION` constant)
-- [ ] No changes in `woodev/` directory (unless intentional)
 - [ ] CLAUDE.md updated (if architecture changed)
-- [ ] README.md updated (if user-facing changes)
 
 ---
 
 ## Notes
 
-- All detailed standards are in the `woodev-framework-backend-dev` and `woodev-framework-dev-cycle` skills
-- Consult those skills for complete context and examples
-- When in doubt, refer to the specific skill documentation
+- Detailed coding standards are in `woodev-framework-backend-dev` skill
+- Development workflow is in `woodev-framework-dev-cycle` skill
 - **Never approve PRs with critical violations**
 - **Never approve breaking changes without deprecation cycle**

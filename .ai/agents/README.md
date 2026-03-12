@@ -1,175 +1,51 @@
-# Woodev Framework Sub-Agents
+# Woodev Framework AI Agents
 
-**Version:** 1.0.0
+Configuration files for AI-assisted development of the Woodev Plugin Framework.
 
----
+## Agents
 
-## Description
+| Agent | File | Purpose |
+|-------|------|---------|
+| Backend Dev | `woodev-framework-backend-agent.md` | PHP development, architecture, naming conventions |
+| Code Review | `woodev-framework-code-review-agent.md` | PR review, security audit, quality checks |
+| Dev Workflow | `woodev-framework-dev-workflow-agent.md` | Environment, testing, linting, commits |
+| Git | `woodev-framework-git-agent.md` | Branching, PRs, releases |
+| Docs | `woodev-framework-docs-agent.md` | Documentation, PHPDoc, CLAUDE.md |
 
-This directory contains sub-agents for the Woodev Plugin Framework. Each sub-agent specializes in a specific development area and provides specialized knowledge for their domain.
+## Cross-Tool Compatibility
 
-**IMPORTANT:** This is a **framework** used by 10+ dependent plugins. Backward compatibility is critical.
-
-## Available Sub-Agents
-
-| Sub-Agent | File | Role | When to Use |
-|-----------|------|------|-------------|
-| `woodev-framework-env-agent` | `woodev-framework-env-agent.md` | Environment Management | Starting/stopping wp-env, checking status, cleaning |
-| `woodev-framework-backend-agent` | `woodev-framework-backend-agent.md` | Backend PHP Development | Creating/modifying PHP code, classes, methods, hooks |
-| `woodev-framework-dev-cycle-agent` | `woodev-framework-dev-cycle-agent.md` | Testing & Linting | Running tests, linting, code quality checks, Conventional Commits |
-| `woodev-framework-git-agent` | `woodev-framework-git-agent.md` | Git Operations | Creating branches, commits (Conventional Commits), PRs, releases |
-| `woodev-framework-code-review-agent` | `woodev-framework-code-review-agent.md` | Code Review | Code review, standards checking, **backward compatibility** |
-| `woodev-framework-docs-agent` | `woodev-framework-docs-agent.md` | Documentation | Writing documentation, README, CLAUDE.md, markdown files |
-
-## How Sub-Agents Work
-
-Sub-agents are invoked **automatically** when the task matches their specialization. Simply describe the task clearly and specifically:
-
-### Usage Examples
-
-```
-# Environment management
-"Start the development environment"
-→ woodev-framework-env-agent
-
-# Backend development
-"Create a new framework class with backward compatibility"
-→ woodev-framework-backend-agent
-
-# Dev Cycle
-"Run linting on PHP files"
-→ woodev-framework-dev-cycle-agent
-
-# Git operations
-"Create a new branch for bug fix"
-→ woodev-framework-git-agent
-
-# Code Review
-"Review code for backward compatibility"
-→ woodev-framework-code-review-agent
-
-# Documentation
-"Update README with new features description"
-→ woodev-framework-docs-agent
-```
-
-## Development Workflow with Sub-Agents
-
-```
-1. Start task
-   └─> woodev-framework-git-agent (create branch)
-
-2. Start environment
-   └─> woodev-framework-env-agent (wp-env start)
-
-3. Write code
-   └─> woodev-framework-backend-agent (follow standards, maintain BC)
-
-4. Write tests
-   └─> woodev-framework-backend-agent (BEFORE writing tests)
-
-5. Check code
-   └─> woodev-framework-dev-cycle-agent (composer phpcs)
-   └─> woodev-framework-dev-cycle-agent (composer test:unit)
-   └─> woodev-framework-dev-cycle-agent (composer test:integration)
-
-6. Documentation
-   └─> woodev-framework-docs-agent (README, CLAUDE.md)
-
-7. Commit
-   └─> woodev-framework-dev-cycle-agent (Conventional Commits format)
-
-8. Push and PR
-   └─> woodev-framework-git-agent (create PR)
-
-9. Review
-   └─> woodev-framework-code-review-agent (check standards + BC)
-
-10. Stop environment (optional)
-    └─> woodev-framework-env-agent (wp-env stop)
-```
-
-## Key Differences from Plugin Agents
-
-| Aspect | Plugin | Framework |
-|--------|--------|-----------|
-| **Version** | `$version` property in main file | `VERSION` constant in `woodev/class-plugin.php` |
-| **Release** | Manual tagging + release script | **Fully automatic** via GitHub Actions |
-| **Changelog** | `pnpm changelog add` | **Auto-generated** by git-cliff from Conventional Commits |
-| **Commands** | `pnpm lint:php`, `pnpm test:php` | `composer phpcs`, `composer test:unit`, `composer test:integration` |
-| **Backward Compatibility** | Important | **CRITICAL** (10+ dependent plugins) |
-| **Breaking Changes** | Avoid | **Require deprecation cycle + major version bump** |
-
-## AI Agent Integration
-
-Sub-agents are integrated with the following AI agents:
+These agents are designed to work with multiple AI coding tools:
 
 ### Claude Code
-
-- Configuration: `.claude/settings.json`
-- Sub-agents available via `agents` section
-- Automatic switching based on task description
+Agents are supplementary to `CLAUDE.md` (project root), which is automatically loaded. Reference agents manually when needed for specialized tasks.
 
 ### Cursor
+Add agents as context via `@` mentions in Cursor chat, or configure them in `.cursorrules`.
 
-- Configuration: `.cursor/rules/skills.mdc`
-- Sub-agents described in `Woodev Framework Sub-Agents` section
-- Used together with project skills
+### Qwen / Windsurf
+Agents can be loaded via MCP tools (Serena) or referenced in project configuration files.
 
-### Qwen Code
+## Architecture
 
-- Configuration: `.qwen/QWEN.md`
-- Sub-agents described in available agents table
-- Automatic activation by task context
-
-## Sub-Agent File Structure
-
-Each sub-agent file follows a unified structure:
-
-```markdown
-# {Agent Name}
-
-**Role:** {Brief role description}
-
-**Version:** {Version}
-
----
-
-## Description
-
-Detailed description of agent specialization.
-
-## When to Use
-
-List of tasks the agent is designed for.
-
-## Working Principles
-
-Key principles and standards the agent follows.
-
-## Completion Checklist
-
-Quality control checklist.
-
-## Related Documentation
-
-Links to relevant project documentation.
+```
+.ai/
+  agents/          # This directory - role-specific agent instructions
+  skills/          # Detailed knowledge bases referenced by agents
+CLAUDE.md          # Single source of truth for project knowledge (AI tools)
 ```
 
-## Updating Sub-Agents
+### Information Hierarchy
 
-When updating sub-agents:
+1. **CLAUDE.md** - Project overview, architecture, commands, code style
+2. **Agents** (this directory) - Role-specific instructions and checklists
+3. **Skills** (`.ai/skills/`) - Detailed patterns, examples, and reference material
 
-1. Update version in agent file
-2. Update this index file if new agent added
-3. Ensure all AI agents have up-to-date links
-4. Document changes in commit messages (Conventional Commits)
+Agents reference CLAUDE.md and skills to avoid duplication. Each piece of information exists in ONE place only.
 
-## Related Documentation
+## Adding a New Agent
 
-- [CLAUDE.md](../../CLAUDE.md) — Main project documentation
-- [.claude/skills/](../skills/) — Project skills
-- [docs/README.md](../../docs/README.md) — Project documentation
-- [.claude/settings.json](../../.claude/settings.json) — Claude Code settings
-- [.cursor/rules/](../../.cursor/rules/) — Cursor rules
-- [.qwen/QWEN.md](../../.qwen/QWEN.md) — Qwen Code settings
+1. Create `woodev-framework-{name}-agent.md` in this directory
+2. Include Role, Version, and Scope in the header
+3. Reference shared knowledge via "See CLAUDE.md > Section" instead of duplicating
+4. Keep the file under 100 lines
+5. Update the agent table above

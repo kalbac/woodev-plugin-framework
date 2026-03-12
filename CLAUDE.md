@@ -94,11 +94,24 @@ The constructor auto-initializes all framework subsystems and registers WP hooks
 | `Woodev_REST_API` | Registers plugin REST API routes |
 | `Woodev_Blocks_Handler` | Declares WC Cart/Checkout block compatibility |
 | `Woodev_Plugin_Setup_Wizard` | Admin onboarding wizard (opt-in) |
+| `Woodev_Admin_Pages` | Plugin settings page registration |
+| `Woodev_Plugin_Compatibility` | WP/WC version helpers |
+| `Woodev_Order_Compatibility` | HPOS-compatible order data access |
+| `Woodev_License_Store` | License key persistence |
+| `Woodev_License_Messages` | License admin messages |
+| `Script_Handler` | Script/style enqueueing |
+| `Woodev_Notes_Helper` | WC Admin inbox notes |
 
 ### Plugin Variants
 
 - **`Woodev_Payment_Gateway_Plugin`** (`woodev/payment-gateway/class-payment-gateway-plugin.php`) — extends `Woodev_Plugin`; loaded only when a plugin sets `is_payment_gateway` in bootstrap args. Manages one or more `Woodev_Payment_Gateway` instances.
-- **`Woodev\Framework\Shipping\Shipping_Plugin`** (`woodev/shipping-method/class-shipping-plugin.php`) — loaded when `load_shipping_method` is set in bootstrap args.
+- **`Woodev\Framework\Shipping\Shipping_Plugin`** (`woodev/shipping-method/class-shipping-plugin.php`) — loaded when `load_shipping_method` is set in bootstrap args. Uses PSR-4 namespaces (`Woodev\Framework\Shipping\`).
+- **Payment Gateway admin handlers** — order/user/token admin UI classes in `woodev/payment-gateway/admin/`
+- **Payment Gateway REST API** — gateway-specific REST endpoints in `woodev/payment-gateway/api/`
+
+### Licensing (`woodev/licensing/`)
+
+License validation has its own API layer (`woodev/licensing/api/`) for communicating with the Woodev store.
 
 ### API Layer (`woodev/api/`)
 
@@ -141,3 +154,53 @@ Self-contained shipping box-packing algorithm. Implement `Woodev_Packer_Item_Int
 - Line length limit: 120 characters
 - PHPCompatibility checked for PHP 7.4+, minimum WP version 5.9
 - PHPStan level 3; `checkDynamicProperties: false` (legacy code uses dynamic properties)
+
+## Backward Compatibility
+
+This framework is used by 10+ dependent plugins. Breaking changes affect all of them.
+
+- Any legacy code that is rewritten or refactored **must** maintain backward compatibility
+- **NEVER** delete or rename public methods/classes without a deprecation cycle
+- **ALWAYS** add `@deprecated` annotation and call `_deprecated_function()` inside deprecated methods
+- Deprecation cycle: minimum one full version before removal
+- Breaking changes require major version bump (semver)
+- Use `class_alias`, wrapper methods, or deprecation shims where needed
+
+```php
+/** @deprecated 2.0.0 Use new_method() instead. */
+public function old_method(): void {
+    _deprecated_function( __METHOD__, '2.0.0', __CLASS__ . '::new_method()' );
+    $this->new_method();
+}
+```
+
+## Coding Conventions
+
+- **OOP only** — no standalone functions outside bootstrap
+- **Namespaces:** Legacy code has no namespace (`Woodev_Plugin`); new code uses `Woodev\Framework\*` (PSR-4)
+- **Naming:** `Snake_Case` for classes, `snake_case` for methods/variables/hooks
+- **Visibility:** default `private`, use `protected`/`public` only when needed
+- **Type declarations** required on all parameters and return types
+- **Docblocks** required on all public/protected methods with `@since`, `@param`, `@return`
+- **Pure methods** (output depends only on inputs) should be `static`
+- **Hooks:** name callbacks `handle_{hook_name}`, mark with `@internal`
+- **Yoda conditions**, short array syntax `[]`, `??` over `isset`, PHP 7.4+ features (arrow functions, `??=`)
+- **Conventional Commits** required for all commits (`feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`, `ci:`)
+
+## Commit & Release
+
+- All commits follow [Conventional Commits](https://www.conventionalcommits.org/) format
+- Breaking changes: add `!` after type + `BREAKING CHANGE:` footer
+- VERSION is stored in `woodev/class-plugin.php` as `Woodev_Plugin::VERSION`
+- Release is automatic via GitHub Actions: push to main → tests → tag → CHANGELOG → release
+- `@since` annotations use the current `VERSION` constant value
+
+## Notable Utilities
+
+- `Woodev_String_Conversion` — Cyrillic-to-Latin transliteration utility
+
+## Known Technical Debt
+
+- 50+ PHPStan baseline ignores (see `phpstan-baseline.neon`)
+- 11 deprecated methods in `Woodev_Plugin` (lines ~1486–1629), slated for removal in v2.0.0
+- `class-payment-gateway.php` is ~3900 lines — candidate for trait extraction

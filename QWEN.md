@@ -43,10 +43,11 @@ woodev_framework/
 │   │   └── ci.yml               # CI/CD (tests → tag → CHANGELOG → release)
 │   ├── PULL_REQUEST_TEMPLATE.md
 │   └── CONTRIBUTING.md
-├── .claude/                     # AI agents and skills
+├── .ai/                         # AI agents and skills (canonical location)
 │   ├── agents/                  # Sub-agents for specialized tasks
 │   ├── skills/                  # Detailed skill documentation
 │   └── QUICK-REFERENCE.md
+├── .claude/                     # Symlinks to .ai/ for tool compatibility
 ├── composer.json                # PHP dependencies and scripts
 ├── package.json                 # Node.js dependencies (markdown linting)
 ├── phpunit.xml                  # PHPUnit configuration

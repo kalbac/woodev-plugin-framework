@@ -3,6 +3,8 @@
 /.idea/
 /.phpunit.cache/
 composer.lock
+phpstan.neon
+.wp-env.override.json
 
 # AI tools — do not ignore (reference files required)
 !/.ai/

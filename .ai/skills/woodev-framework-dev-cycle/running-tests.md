@@ -9,8 +9,8 @@ Guide for running PHP tests in Woodev Framework projects.
 ### Requirements
 
 - Docker Desktop (or compatible)
-- `wp-env` CLI tool
-- PHP 7.4+
+- `@wordpress/env` CLI tool
+- PHP 8.1 (platform target)
 
 ### Setup
 
@@ -19,22 +19,22 @@ Guide for running PHP tests in Woodev Framework projects.
 npm install -g @wordpress/env
 
 # Start the test environment
-wp-env start
+npx wp-env start
 
 # Check environment status
-wp-env status
+npx wp-env status
 ```
 
 The environment includes:
 
 - WordPress (latest)
-- WooCommerce (latest)
-- Your plugin (auto-loaded)
+- WooCommerce (latest stable)
+- Fixture plugins (auto-loaded via mappings)
 - PHPUnit 9.6+
 
 ---
 
-## Three Test Levels
+## Two Test Levels
 
 ### 1. Unit Tests (Brain Monkey, no WordPress)
 
@@ -45,8 +45,11 @@ composer test:unit
 # Or directly
 TEST_SUITE=unit ./vendor/bin/phpunit --testsuite Unit
 
-# Run specific test class
-TEST_SUITE=unit ./vendor/bin/phpunit --filter TestClassName
+# Run specific test file
+./vendor/bin/phpunit tests/unit/BootstrapTest.php
+
+# Filter by class or method name
+TEST_SUITE=unit ./vendor/bin/phpunit --filter BootstrapTest
 ```
 
 ### 2. Integration Tests (WP_UnitTestCase + wp-env)
@@ -62,61 +65,17 @@ TEST_SUITE=integration ./vendor/bin/phpunit --testsuite Integration
 TEST_SUITE=integration ./vendor/bin/phpunit --filter TestClassName
 ```
 
-**IMPORTANT:** Ensure wp-env is running before integration tests!
+**IMPORTANT:** Ensure wp-env is running before integration tests.
 
-### 3. Fixture Plugins
+### Fixture Plugins
 
 Tests use fixture plugins in `tests/_fixtures/`:
 
-- `woodev-test-plugin` (general)
-- `woodev-test-payment-gateway` (payment gateway)
-- `woodev-test-shipping-method` (shipping method)
+- `woodev-test-plugin` (general framework testing)
+- `woodev-test-payment-gateway` (payment gateway testing)
+- `woodev-test-shipping-method` (shipping method testing)
 
----
-
-## Running Tests
-
-### All Tests
-
-```bash
-# Run all unit tests
-composer test:unit
-
-# Run all integration tests
-composer test:integration
-
-# Or using wp-env directly for integration
-wp-env run tests-cli --command="phpunit"
-```
-
-### Specific Tests
-
-```bash
-# Run specific test class (unit)
-TEST_SUITE=unit ./vendor/bin/phpunit --filter TestClassName
-
-# Run specific test method (integration)
-TEST_SUITE=integration ./vendor/bin/phpunit --filter testMethodName
-
-# Run tests in specific directory
-TEST_SUITE=unit ./vendor/bin/phpunit tests/php/unit/
-
-# Run tests with coverage
-TEST_SUITE=unit ./vendor/bin/phpunit --coverage-html ./coverage
-```
-
-### Test Groups
-
-```bash
-# Run only unit tests
-TEST_SUITE=unit ./vendor/bin/phpunit --group unit
-
-# Run only integration tests
-TEST_SUITE=integration ./vendor/bin/phpunit --group integration
-
-# Run only AJAX tests
-TEST_SUITE=integration ./vendor/bin/phpunit --group ajax
-```
+These are mapped into wp-env via `.wp-env.json` mappings.
 
 ---
 
@@ -124,16 +83,17 @@ TEST_SUITE=integration ./vendor/bin/phpunit --group ajax
 
 ### Test File Location
 
-```
+```text
 tests/
-├── unit/             # Unit tests (Brain Monkey)
-│   └── ExampleTest.php
-├── integration/      # Integration tests (WP_UnitTestCase)
-│   └── ExampleTest.php
-└── _fixtures/        # Fixture plugins
-    ├── woodev-test-plugin/
-    ├── woodev-test-payment-gateway/
-    └── woodev-test-shipping-method/
+  unit/             # Unit tests (Brain Monkey)
+    TestCase.php    # Base class -- extend this
+    BootstrapTest.php
+  integration/      # Integration tests (WP_UnitTestCase)
+    TestCase.php    # Base class -- extend this
+  _fixtures/        # Fixture plugins
+    woodev-test-plugin/
+    woodev-test-payment-gateway/
+    woodev-test-shipping-method/
 ```
 
 ### Test Class Structure (Unit)
@@ -143,47 +103,35 @@ tests/
 /**
  * Tests for Example_Class
  *
- * @package WoodevFramework
+ * @package Woodev\Tests\Unit
  */
 
-namespace Woodev\Framework\Tests\Unit;
+namespace Woodev\Tests\Unit;
 
 use Brain\Monkey\Functions;
-use PHPUnit\Framework\TestCase;
 
 class ExampleTest extends TestCase {
 
-    /**
-     * @var Example_Class
-     */
-    private $sut;
-
-    public function setUp(): void {
-        parent::setUp();
-        \Brain\Monkey\setUp();
-        $this->sut = new Example_Class();
-    }
-
-    public function tearDown(): void {
-        \Brain\Monkey\tearDown();
-        parent::tearDown();
-    }
-
-    /**
-     * @testdox Test method description
-     */
-    public function test_method_name(): void {
+    public function test_method_returns_expected_value(): void {
         // Arrange
-        Functions\when( 'wc_get_order' )->justReturn( $mock_order );
+        Functions\when( 'get_option' )->justReturn( 'value' );
 
         // Act
-        $result = $this->sut->process( 123 );
+        $result = some_function();
 
         // Assert
-        $this->assertTrue( $result );
+        $this->assertEquals( 'expected', $result );
     }
 }
 ```
+
+**Key points:**
+
+- Namespace: `Woodev\Tests\Unit`
+- Extend `TestCase` (not `PHPUnit\Framework\TestCase` directly)
+- `TestCase` auto-initializes Brain Monkey and stubs translation/escape functions
+- Follow Arrange-Act-Assert pattern
+- Use descriptive method names: `test_{method}_{scenario}_{expected}`
 
 ### Test Class Structure (Integration)
 
@@ -192,45 +140,29 @@ class ExampleTest extends TestCase {
 /**
  * Tests for Example_Class
  *
- * @package WoodevFramework
+ * @package Woodev\Tests\Integration
  */
 
-namespace Woodev\Framework\Tests\Integration;
+namespace Woodev\Tests\Integration;
 
-class ExampleTest extends \WP_UnitTestCase {
+class ExampleTest extends TestCase {
 
-    /**
-     * @var Example_Class
-     */
-    private $sut;
+    public function test_plugin_is_loaded(): void {
+        $plugin = $this->get_test_plugin();
 
-    public function setUp(): void {
-        parent::setUp();
-        $this->sut = new Example_Class();
-    }
-
-    /**
-     * @testdox Test method description
-     */
-    public function test_method_name(): void {
-        // Arrange
-        $order_id = $this->factory->order->create();
-
-        // Act
-        $result = $this->sut->process( $order_id );
-
-        // Assert
-        $this->assertTrue( $result );
+        $this->assertInstanceOf( \Woodev_Plugin::class, $plugin );
     }
 }
 ```
 
-### Key Conventions
+**Key points:**
 
-- Use `$sut` (System Under Test) for the tested object
-- Add `@testdox` annotation for readable test output
-- Follow Arrange-Act-Assert pattern
-- Use descriptive method names: `test_{method}_{scenario}_{expected}`
+- Namespace: `Woodev\Tests\Integration`
+- Extend `TestCase` (wraps `WP_UnitTestCase`)
+- `get_test_plugin()` helper returns the fixture plugin instance
+- Has access to real WordPress and WooCommerce
+
+For detailed Brain Monkey/Mockery patterns and advanced testing techniques, see [testing-guide.md](testing-guide.md).
 
 ---
 
@@ -240,51 +172,40 @@ class ExampleTest extends \WP_UnitTestCase {
 
 ```bash
 # Clean and rebuild environment
-wp-env clean all
-wp-env start
+npx wp-env clean all
+npx wp-env start
 
 # Update environment
-wp-env start --update
+npx wp-env start --update
 ```
 
 ### Test Failures
 
 If tests fail unexpectedly:
 
-1. **Check environment is running** — `wp-env status`
-2. **Verify database is clean** — `wp-env clean database`
-3. **Check test isolation** — ensure tests don't depend on each other
-4. **Run with verbose output** — `composer test:integration -- -v`
+1. **Check environment is running** -- `npx wp-env status`
+2. **Verify database is clean** -- `npx wp-env clean database`
+3. **Check test isolation** -- ensure tests do not depend on each other
+4. **Run with verbose output** -- `composer test:unit -- -v`
 
 ### Common Errors
 
 #### "Cannot connect to database"
 
 ```bash
-wp-env clean database
-wp-env start
+npx wp-env clean database
+npx wp-env start
 ```
 
 #### "Class not found"
 
-- Ensure autoloader is generated
+- Ensure autoloader is generated (`composer dump-autoload`)
 - Check namespace matches file path
 
 #### "Function not defined"
 
-- Ensure WordPress/WooCommerce is loaded
-- Check test bootstrap configuration
-
----
-
-## Best Practices
-
-- **Run tests frequently** during development
-- **Write tests before committing** new functionality
-- **Keep tests isolated** — no dependencies between tests
-- **Use descriptive names** for test methods
-- **Test edge cases** — not just happy path
-- **Mock external dependencies** — API calls, file system, etc.
+- For unit tests: stub the function with Brain Monkey
+- For integration tests: ensure wp-env is running
 
 ---
 
@@ -292,7 +213,7 @@ wp-env start
 
 ```bash
 # Start environment (for integration tests)
-wp-env start
+npx wp-env start
 
 # Run all unit tests
 composer test:unit
@@ -301,11 +222,11 @@ composer test:unit
 composer test:integration
 
 # Run specific test
-TEST_SUITE=unit ./vendor/bin/phpunit --filter TestClassName
+./vendor/bin/phpunit tests/unit/BootstrapTest.php
 
 # Run with coverage
 TEST_SUITE=unit ./vendor/bin/phpunit --coverage-html ./coverage
 
 # Clean environment
-wp-env clean all
+npx wp-env clean all
 ```

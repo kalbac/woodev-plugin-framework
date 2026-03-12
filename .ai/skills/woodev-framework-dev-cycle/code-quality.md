@@ -41,43 +41,25 @@ See [php-linting-patterns.md](php-linting-patterns.md) for common linting issues
 
 ---
 
-## JavaScript Code Quality
-
-### Linting
-
-```bash
-# Check JS files
-pnpm lint:js
-
-# Fix auto-fixable issues
-pnpm lint:js:fix
-```
-
-### Format
-
-```bash
-# Format JS files
-pnpm format:js
-```
-
----
-
 ## Markdown Code Quality
 
-### Linting
+Markdown files can be linted with the `markdownlint` CLI:
 
 ```bash
 # Check markdown files
-pnpm lint:md
+npx markdownlint "**/*.md"
 
 # Fix auto-fixable issues
-pnpm lint:md:fix
+npx markdownlint --fix "**/*.md"
+
+# Lint specific file
+npx markdownlint path/to/file.md
 ```
 
 ### Rules
 
 - All `.md` files must follow `woodev-framework-markdown` skill
-- Use proper heading hierarchy (`#` → `##` → `###`)
+- Use proper heading hierarchy (`#` then `##` then `###`)
 - Code blocks must have language specifier
 - Links must be descriptive (no "click here")
 
@@ -100,10 +82,9 @@ Before committing code:
 
 The following checks run automatically on PRs and pushes:
 
-- ✅ PHP linting (WordPress Coding Standards)
-- ✅ PHPStan (if configured)
-- ✅ PHPUnit tests (Unit + Integration)
-- ✅ Markdown linting
-- ✅ Conventional Commits format (for CHANGELOG generation)
+- PHP linting (WordPress Coding Standards)
+- PHPStan (if configured)
+- PHPUnit tests (Unit + Integration)
+- Conventional Commits format (for CHANGELOG generation)
 
 **Ensure all checks pass before requesting review.**

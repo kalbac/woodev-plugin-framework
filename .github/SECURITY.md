@@ -15,7 +15,7 @@ The following versions of the Woodev plugin are currently being supported with s
 
 **Please do not report security vulnerabilities through public GitHub issues.**
 
-Instead, please report them via email to **[your-email@example.com]** (replace with your email) or create a private vulnerability report using GitHub's private reporting feature.
+Instead, please create a private vulnerability report using [GitHub's private vulnerability reporting](https://docs.github.com/en/code-security/security-advisories/guidance-on-reporting-and-writing-information-about-vulnerabilities/privately-reporting-a-security-vulnerability) feature.
 
 ### What to Include
 

@@ -15,14 +15,14 @@ All markdown files must follow the `woodev-framework-markdown` skill guidelines.
 - Add space after `#`
 
 ```markdown
-<!-- ✅ Correct -->
+<!-- Correct -->
 # Heading 1
 
 ## Heading 2
 
 ### Heading 3
 
-<!-- ❌ Wrong -->
+<!-- Wrong -->
 Heading 1
 =========
 
@@ -37,12 +37,12 @@ Heading 1
 - Use backticks (```) not tildes (~~~)
 
 ````markdown
-<!-- ✅ Correct -->
+<!-- Correct -->
 ```php
 echo 'Hello';
 ```
 
-<!-- ❌ Wrong -->
+<!-- Wrong -->
 ```
 echo 'Hello';
 ```
@@ -58,10 +58,10 @@ code
 - No "click here"
 
 ```markdown
-<!-- ✅ Correct -->
+<!-- Correct -->
 See the [installation guide](INSTALL.md) for details.
 
-<!-- ❌ Wrong -->
+<!-- Wrong -->
 Click [here](INSTALL.md) for details.
 ```
 
@@ -72,7 +72,7 @@ Click [here](INSTALL.md) for details.
 - Add blank line before and after lists
 
 ```markdown
-<!-- ✅ Correct -->
+<!-- Correct -->
 Some text:
 
 - Item 1
@@ -80,7 +80,7 @@ Some text:
 
 More text.
 
-<!-- ❌ Wrong -->
+<!-- Wrong -->
 Some text:
 - Item 1
 - Item 2
@@ -93,7 +93,7 @@ More text.
 - Include header separator row
 
 ```markdown
-<!-- ✅ Correct -->
+<!-- Correct -->
 | Column 1 | Column 2 | Column 3 |
 |----------|----------|----------|
 | Data 1   | Data 2   | Data 3   |
@@ -111,13 +111,13 @@ More text.
 
 ```bash
 # Lint markdown files
-pnpm lint:md
+npx markdownlint "**/*.md"
 
 # Fix auto-fixable issues
-pnpm lint:md:fix
+npx markdownlint --fix "**/*.md"
 
 # Lint specific file
-pnpm lint:md -- path/to/file.md
+npx markdownlint path/to/file.md
 ```
 
 ---
@@ -169,7 +169,7 @@ Recommended `.vscode/settings.json`:
 
 Before committing markdown files:
 
-1. Run `pnpm lint:md`
+1. Run `npx markdownlint path/to/file.md`
 2. Fix all reported issues
-3. Verify with `pnpm lint:md -- path/to/file.md`
+3. Verify with `npx markdownlint path/to/file.md`
 4. Check rendered preview in editor
