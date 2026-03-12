@@ -53,23 +53,21 @@ class ShippingMethodIntegrationTest extends TestCase {
 	/**
 	 * Метод доставки должен быть зарегистрирован в WooCommerce.
 	 *
-	 * WC хранит методы доставки как class names, а не экземпляры.
-	 * Проверяем что наш класс присутствует в зарегистрированных методах.
+	 * Проверяем через фильтр woocommerce_shipping_methods что наш класс
+	 * присутствует в списке зарегистрированных методов доставки.
 	 */
 	public function test_shipping_method_registered_with_woocommerce(): void {
-		$registered = WC()->shipping()->get_shipping_methods();
+		$methods = apply_filters( 'woocommerce_shipping_methods', [] );
 
-		$woodev_found = false;
-		foreach ( $registered as $method ) {
-			if ( $method instanceof \Woodev\Framework\Shipping\Shipping_Method ) {
-				$woodev_found = true;
-				break;
-			}
-		}
-
-		$this->assertTrue(
-			$woodev_found,
-			'Woodev shipping method should be registered with WooCommerce'
+		$this->assertArrayHasKey(
+			'woodev_test_shipping',
+			$methods,
+			'woodev_test_shipping method should be registered via woocommerce_shipping_methods filter'
+		);
+		$this->assertSame(
+			'Woodev_Test_Shipping_Method',
+			$methods['woodev_test_shipping'],
+			'Registered class should be Woodev_Test_Shipping_Method'
 		);
 	}
 

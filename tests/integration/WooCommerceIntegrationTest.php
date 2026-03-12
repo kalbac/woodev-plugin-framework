@@ -66,37 +66,40 @@ class WooCommerceIntegrationTest extends TestCase {
 	 * Фреймворк должен видеть WooCommerce через совместимость-хелпер.
 	 */
 	public function test_framework_detects_woocommerce(): void {
-		$plugin = $this->get_test_plugin();
-
 		$this->assertTrue(
-			$plugin->is_woocommerce_active(),
-			'Framework should detect WooCommerce as active'
+			\Woodev_Helper::is_woocommerce_active(),
+			'Woodev_Helper::is_woocommerce_active() should return true'
 		);
 	}
 
 	/**
-	 * Woodev_Helper::wc_version_gte() должен корректно сравнивать версии WC.
+	 * Woodev_Plugin_Compatibility::is_wc_version_gte() должен корректно сравнивать версии WC.
 	 */
 	public function test_helper_wc_version_comparison(): void {
 		$this->assertTrue(
-			\Woodev_Helper::wc_version_gte( '5.0' ),
-			'wc_version_gte(5.0) should return true for current WC'
+			\Woodev_Plugin_Compatibility::is_wc_version_gte( '5.0' ),
+			'is_wc_version_gte(5.0) should return true for current WC'
 		);
 		$this->assertFalse(
-			\Woodev_Helper::wc_version_gte( '999.0' ),
-			'wc_version_gte(999.0) should return false'
+			\Woodev_Plugin_Compatibility::is_wc_version_gte( '999.0' ),
+			'is_wc_version_gte(999.0) should return false'
 		);
 	}
 
 	/**
-	 * WordPress должен знать о WooCommerce как активном плагине.
+	 * WooCommerce класс должен быть доступен как признак активности.
+	 *
+	 * Не используем is_plugin_active() — в wp-env WooCommerce устанавливается
+	 * как 'woocommerce.latest-stable', а не 'woocommerce/woocommerce.php'.
 	 */
 	public function test_woocommerce_is_active_plugin(): void {
 		$this->assertTrue(
-			function_exists( 'is_plugin_active' )
-				? is_plugin_active( 'woocommerce/woocommerce.php' )
-				: class_exists( 'WooCommerce' ),
-			'WooCommerce should be an active plugin'
+			class_exists( 'WooCommerce' ),
+			'WooCommerce class should exist — WC must be active'
+		);
+		$this->assertNotEmpty(
+			WC_VERSION,
+			'WC_VERSION constant should be defined and non-empty'
 		);
 	}
 }

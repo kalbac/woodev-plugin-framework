@@ -45,7 +45,7 @@ class PaymentGatewayIntegrationTest extends TestCase {
 		$plugin = woodev_test_payment_gateway_plugin();
 
 		$this->assertSame(
-			'woodev-test-payment-gateway',
+			'woodev-test-payment-gateway-plugin',
 			$plugin->get_id()
 		);
 	}
