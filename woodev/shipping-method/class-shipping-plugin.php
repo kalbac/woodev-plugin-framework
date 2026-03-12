@@ -235,7 +235,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		 *
 		 * @return Shipping_Integration|null
 		 */
-		function get_integration_handler(): ?Shipping_Integration {
+		public function get_integration_handler(): ?Shipping_Integration {
 			return null;
 		}
 

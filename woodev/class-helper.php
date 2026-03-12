@@ -938,7 +938,7 @@ if ( ! class_exists( 'Woodev_Helper' ) ) :
 		 */
 		public static function f_x( string $text, string $context ): string {
 
-			return _x( $text, $context, 'woodev-plugin-framework' );
+			return _x( $text, $context, 'woodev-plugin-framework' ); // phpcs:ignore WordPress.WP.I18n.NonSingularStringLiteralContext
 		}
 
 		/** JavaScript helper functions ***************************************/

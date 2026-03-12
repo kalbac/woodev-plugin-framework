@@ -942,7 +942,7 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		}
 
 		/**
-		 * @param $assertion
+		 * @param mixed $assertion
 		 *
 		 * @since 1.4.0
 		 *

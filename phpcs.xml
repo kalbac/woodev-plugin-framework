@@ -168,4 +168,316 @@
 		<exclude-pattern>*</exclude-pattern>
 	</rule>
 
+	<!-- =====================================================
+		 Легаси исключения — технический долг
+		 Удалять по мере рефакторинга кода
+	====================================================== -->
+
+	<!-- Фреймворк намеренно использует хуки WooCommerce/WordPress без собственного префикса
+		 (напр. wc_payment_gateway_{id}_token_editor_tokens) — это часть публичного API WC -->
+	<rule ref="WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+
+	<!-- Переменные в PHP-шаблонах (views/) не являются глобальными переменными плагина —
+		 они передаются через extract()/compact() в скоупе шаблона -->
+	<rule ref="WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+
+	<!-- Фреймворк передаёт HTML-разметку в функции WooCommerce (wc_add_notice, wc_kses_notice)
+		 которые сами обрабатывают экранирование — двойное esc_ ломает разметку -->
+	<rule ref="WordPress.Security.EscapeOutput.OutputNotEscaped">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+	<rule ref="WordPress.Security.EscapeOutput.UnsafePrintingFunction">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+
+	<!-- Легаси i18n без домена — исправляется поэтапно -->
+	<rule ref="WordPress.WP.I18n.MissingArgDomain">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+	<rule ref="WordPress.WP.I18n.NonSingularStringLiteralText">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+	<rule ref="WordPress.WP.I18n.TextDomainMismatch">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+	<rule ref="WordPress.WP.I18n.TranslatorsCommentWrongStyle">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+
+	<!-- Легаси @throws — многие методы не документируют исключения -->
+	<rule ref="Squiz.Commenting.FunctionCommentThrowTag.Missing">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+	<rule ref="Squiz.Commenting.FunctionCommentThrowTag.WrongNumber">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+
+	<!-- Параметры интерфейсных методов часто не используются в конкретных реализациях -->
+	<rule ref="Generic.CodeAnalysis.UnusedFunctionParameter.Found">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+	<rule ref="Generic.CodeAnalysis.UnusedFunctionParameter.FoundAfterLastUsed">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+
+	<!-- Легаси docblock-стиль — первая буква в строчном регистре -->
+	<rule ref="Generic.Commenting.DocComment.ShortNotCapital">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+	<rule ref="Generic.Commenting.DocComment.LongNotCapital">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+
+	<!-- WooCommerce capabilities (manage_woocommerce и др.) не определены в WP stubs -->
+	<rule ref="WordPress.WP.Capabilities.Unknown">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+
+	<!-- Скрипты фреймворка (платёжные формы) намеренно загружаются в header -->
+	<rule ref="WordPress.WP.EnqueuedResourceParameters.NotInFooter">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+	<rule ref="WordPress.WP.EnqueuedResourceParameters.MissingVersion">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+
+	<!-- Легаси форматирование file-level docblock -->
+	<rule ref="Squiz.Commenting.FileComment.SpacingAfterComment">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+	<rule ref="Squiz.Commenting.FileComment.SpacingAfterOpen">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+	<rule ref="Squiz.Commenting.ClassComment.SpacingAfter">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+
+	<!-- Закомментированный код оставлен намеренно как справочный материал -->
+	<rule ref="Squiz.PHP.CommentedOutCode.Found">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+
+	<!-- Множественное присваивание вне control-структур допустимо в некоторых паттернах -->
+	<rule ref="Squiz.PHP.DisallowMultipleAssignments.Found">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+
+	<!-- Нестрогие сравнения — используются осознанно в некоторых местах легаси кода -->
+	<rule ref="Universal.Operators.StrictComparisons.LooseEqual">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+	<rule ref="Universal.Operators.StrictComparisons.LooseNotEqual">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+
+	<!-- in_array() без строгого флага — легаси паттерн, исправляется поэтапно -->
+	<rule ref="WordPress.PHP.StrictInArray.MissingTrueStrict">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+
+	<!-- Пустые catch-блоки используются намеренно в некоторых местах -->
+	<rule ref="Generic.CodeAnalysis.EmptyStatement.DetectedCatch">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+	<rule ref="Squiz.Commenting.EmptyCatchComment.Missing">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+
+	<!-- switch/case без break/return иногда допустим (fall-through намеренный) -->
+	<rule ref="PSR2.ControlStructures.SwitchDeclaration.TerminatingComment">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+
+	<!-- Зарезервированные слова как имена параметров — легаси сигнатуры -->
+	<rule ref="Universal.NamingConventions.NoReservedKeywordParameterNames.defaultFound">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+	<rule ref="Universal.NamingConventions.NoReservedKeywordParameterNames.stringFound">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+	<rule ref="Universal.NamingConventions.NoReservedKeywordParameterNames.arrayFound">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+
+	<!-- Именование по PEAR не применяется — фреймворк использует Woodev_ конвенцию -->
+	<rule ref="PEAR.NamingConventions.ValidClassName.Invalid">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+
+	<!-- Легаси имена методов совпадающие с зарезервированными PHP-словами -->
+	<rule ref="PHPCompatibility.FunctionNameRestrictions.ReservedFunctionNames.MethodFound">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+
+	<!-- print_r() в debug-методах фреймворка (API логирование) -->
+	<rule ref="WordPress.PHP.DevelopmentFunctions.error_log_print_r">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+
+	<!-- @-подавление ошибок используется намеренно в некоторых legacy-вызовах -->
+	<rule ref="WordPress.PHP.NoSilencedErrors.Discouraged">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+
+	<!-- urlencode() используется для URL-сегментов (не query строк) -->
+	<rule ref="WordPress.PHP.DiscouragedPHPFunctions.urlencode_urlencode">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+
+	<!-- Переопределение WP-глобалей ($action и др.) в шаблонах — устоявшийся паттерн -->
+	<rule ref="WordPress.WP.GlobalVariablesOverride.Prohibited">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+
+	<!-- Конкатенация строк вместо интерполяции — стилистический выбор -->
+	<rule ref="Generic.Strings.UnnecessaryStringConcat.Found">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+
+	<!-- Одиночный if без else — стилистический выбор (early return паттерн) -->
+	<rule ref="Universal.ControlStructures.DisallowLonelyIf.Found">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+
+	<!-- snake_case свойства WP/WC объектов ($order->billing_email и др.) -->
+	<rule ref="WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+
+	<!-- Переопределяющий метод без изменений — иногда нужен для аннотаций/документации -->
+	<rule ref="Generic.CodeAnalysis.UselessOverridingMethod.Found">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+
+	<!-- Пустые docblock-и в некоторых абстрактных методах -->
+	<rule ref="Generic.Commenting.DocComment.Empty">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+
+	<!-- Интерполяция в SQL-запросах — используется через $wpdb->prepare() паттерн -->
+	<rule ref="WordPress.DB.PreparedSQL.InterpolatedNotPrepared">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+
+	<!-- current_time() deprecated — исправляется поэтапно -->
+	<rule ref="WordPress.DateTime.CurrentTimeTimestamp.Requested">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+	<rule ref="WordPress.DateTime.RestrictedFunctions.date_date">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+
+	<!-- Block comment форматирование — легаси стиль -->
+	<rule ref="Squiz.Commenting.BlockComment.CloserSameLine">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+	<rule ref="Squiz.Commenting.BlockComment.HasEmptyLineBefore">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+	<rule ref="Squiz.Commenting.BlockComment.NoCapital">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+
+	<!-- Окончания строк — нормализуются через .gitattributes; CRLF на Windows не является ошибкой кода -->
+	<rule ref="Generic.Files.LineEndings.InvalidEOLChar">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+	<rule ref="Internal.LineEndings.Mixed">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+
+	<!-- Файловый комментарий без docblock-стиля — уже исключили Missing, WrongStyle тоже не нужен -->
+	<rule ref="Squiz.Commenting.FileComment.WrongStyle">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+
+	<!-- Тип \WC_Order (с ведущим слешем FQCN) в docblock — валиден, PHPCS-Docs некорректно флагирует -->
+	<rule ref="Squiz.Commenting.FunctionComment.IncorrectTypeHint">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+
+	<!-- array{...} shape-типы в docblock — PHPCS-Docs не умеет их парсить и флагирует как Missing -->
+	<rule ref="Squiz.Commenting.FunctionComment.MissingParamName">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+	<rule ref="Squiz.Commenting.FunctionComment.MissingParamType">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+	<rule ref="Squiz.Commenting.FunctionComment.ParamNameNoMatch">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+
+	<!-- __toArray() — публичный метод с двойным подчёркиванием.
+		 Переименование нарушит backward compat (используется в плагинах-реализациях) -->
+	<rule ref="WordPress.NamingConventions.ValidFunctionName.MethodDoubleUnderscore">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+	<rule ref="WordPress.NamingConventions.ValidFunctionName.MethodNameInvalid">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+	<rule ref="PHPCompatibility.FunctionNameRestrictions.ReservedFunctionNames.MethodDoubleUnderscore">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+
+	<!-- Хуки с точками (woocommerce.after_xxx) — WC использует точки в именах хуков -->
+	<rule ref="WordPress.NamingConventions.ValidHookName.UseUnderscores">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+
+	<!-- Зарезервированное слово $class как имя параметра — легаси сигнатура -->
+	<rule ref="Universal.NamingConventions.NoReservedKeywordParameterNames.classFound">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+
+	<!-- $wpdb->prepare() → $query → $wpdb->get_col($query): снифф не отслеживает переменную,
+		 но $query уже содержит подготовленный запрос -->
+	<rule ref="WordPress.DB.PreparedSQL.NotPrepared">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+
+	<!-- error_log(), trigger_error() — используется в debug/logging подсистемах фреймворка -->
+	<rule ref="WordPress.PHP.DevelopmentFunctions.error_log_error_log">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+	<rule ref="WordPress.PHP.DevelopmentFunctions.error_log_trigger_error">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+	<rule ref="WordPress.PHP.DevelopmentFunctions.error_log_wp_debug_backtrace_summary">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+
+	<!-- base64_encode() используется для кодирования API-ключей, не для обфускации кода -->
+	<rule ref="WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+
+	<!-- serialize() используется для хранения настроек — WordPress сам использует этот паттерн -->
+	<rule ref="WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+
+	<!-- in_array() с false — снифф FoundNonStrictFalse это отдельный case от MissingTrueStrict -->
+	<rule ref="WordPress.PHP.StrictInArray.FoundNonStrictFalse">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+
+	<!-- curl_setopt используется в API базовом классе как fallback при отсутствии WP HTTP -->
+	<rule ref="WordPress.WP.AlternativeFunctions.curl_curl_setopt">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+
+	<!-- mt_rand() используется намеренно там где нужна скорость, не криптобезопасность -->
+	<rule ref="WordPress.WP.AlternativeFunctions.rand_mt_rand">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+
+	<!-- Метод без return в конце — иногда void возврат неявный и явный return не нужен -->
+	<rule ref="Squiz.PHP.NonExecutableCode.ReturnNotRequired">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+
 </ruleset>

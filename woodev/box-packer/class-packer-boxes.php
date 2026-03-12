@@ -25,7 +25,7 @@ if ( ! class_exists( 'Woodev_Packer_Boxes' ) ) :
 				$this->items             = array();
 			}
 			// Keep looping until packed
-			while ( count( $this->items ) > 0 ) {
+			while ( ! empty( $this->items ) ) {
 
 				$this->items  = $this->order_items( $this->items );
 				$best_package = $this->find_best_packed_box();

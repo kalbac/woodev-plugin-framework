@@ -335,6 +335,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Payment_Token_Editor' ) ) :
 		 *
 		 * Concrete gateways can override this to provide their own validation.
 		 *
+		 * @param int   $token_id the token ID
 		 * @param array $data the token data
 		 *
 		 * @return array|bool the validated token data or false if the token should not be saved

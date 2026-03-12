@@ -727,7 +727,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Tokens_Handler' ) ) :
 		 *
 		 * @since 1.5.0
 		 *
-		 * @param int                    $token_id WC payment token ID
+		 * @param int                   $token_id WC payment token ID
 		 * @param WC_Payment_Token|null $token    WC payment token object (passed on delete, not on set_default)
 		 */
 		public function handle_token_cache_invalidation( $token_id, $token = null ) {
