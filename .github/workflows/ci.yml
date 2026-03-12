@@ -82,7 +82,7 @@ jobs:
         run: ./vendor/bin/phpcs --warning-severity=0
 
       - name: Run PHPStan
-        run: ./vendor/bin/phpstan analyse --memory-limit=1G
+        run: ./vendor/bin/phpstan analyse --memory-limit=1G --no-parallel
 
   # ===========================================================================
   # PHP Compatibility check (7.4 → 8.2)
