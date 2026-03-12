@@ -213,7 +213,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		 * @return bool
 		 */
 		protected function is_valid_shipping_method_class( string $class ): bool {
-			return is_subclass_of( $class, 'Woodev_Shipping_Method' );
+			return is_subclass_of( $class, Shipping_Method::class );
 		}
 
 		/**

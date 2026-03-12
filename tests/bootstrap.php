@@ -46,6 +46,15 @@ function bootstrap_integration_tests(): void {
 		}
 		if ( file_exists( $wc_plugin ) ) {
 			require_once $wc_plugin;
+
+			// Simulate WooCommerce being activated so that Woodev_Helper::is_woocommerce_active()
+			// returns true. In the WP test environment plugins are loaded via require_once, not
+			// through WordPress activation, so active_plugins option is empty by default.
+			$active_plugins = (array) get_option( 'active_plugins', [] );
+			if ( ! in_array( 'woocommerce/woocommerce.php', $active_plugins, true ) ) {
+				$active_plugins[] = 'woocommerce/woocommerce.php';
+				update_option( 'active_plugins', $active_plugins );
+			}
 		}
 
 		$fixtures_dir = dirname( __DIR__ ) . '/tests/_fixtures';
