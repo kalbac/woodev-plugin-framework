@@ -1,0 +1,26 @@
+version: 2
+
+updates:
+  # Автообновление GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels:
+      - "dependencies"
+      - "ci"
+
+  # Автообновление Composer зависимостей
+  - package-ecosystem: "composer"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels:
+      - "dependencies"
+      - "php"
+    # Обновляем только dev-зависимости (инструменты),
+    # runtime зависимостей у фреймворка нет
+    allow:
+      - dependency-type: "development"
