@@ -259,7 +259,8 @@ class BootstrapRegistrationTest extends TestCase {
 		// Reset singleton.
 		$reflection = new ReflectionClass( \Woodev_Plugin_Bootstrap::class );
 		$property   = $reflection->getProperty( 'instance' );
-				$property->setValue( null, null );
+		$property->setAccessible( true );
+		$property->setValue( null, null );
 
 		$instance2 = \Woodev_Plugin_Bootstrap::instance();
 
