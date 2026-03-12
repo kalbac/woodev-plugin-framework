@@ -96,10 +96,7 @@ function woodev_test_plugin_init() {
 		 * @return Woodev_Test_Plugin
 		 */
 		public static function instance(): Woodev_Test_Plugin {
-			if ( is_null( self::$instance ) ) {
-				self::$instance = new self();
-			}
-			return self::$instance;
+			return self::$instance ??= new self();
 		}
 
 		/**
