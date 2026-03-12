@@ -371,7 +371,7 @@ if ( ! class_exists( 'Woodev_Helper' ) ) :
 		 *
 		 * @return string
 		 */
-		public static function list_array_items( array $items, string $conjunction = null, string $separator = '' ): string {
+		public static function list_array_items( array $items, ?string $conjunction = null, string $separator = '' ): string {
 
 			if ( ! is_string( $conjunction ) ) {
 				$conjunction = _x( 'and', 'coordinating conjunction for a list of items: a, b, and c', 'woodev-plugin-framework' );

@@ -2,7 +2,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-if ( ! interface_exists( 'Woodev_Box_Packer_Packages_Weight' ) ) :
+if ( ! class_exists( 'Woodev_Box_Packer_Packages_Weight' ) ) :
 
 	class Woodev_Box_Packer_Packages_Weight {
 		/**

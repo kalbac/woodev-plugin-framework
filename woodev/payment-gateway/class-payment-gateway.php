@@ -201,7 +201,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		public function __construct( $id, $plugin, $args ) {
 
 			// first setup the gateway and payment type for this gateway
-			$this->payment_type = isset( $args['payment_type'] ) ? $args['payment_type'] : self::PAYMENT_TYPE_CREDIT_CARD;
+			$this->payment_type = $args['payment_type'] ?? self::PAYMENT_TYPE_CREDIT_CARD;
 
 			// default credit card gateways to supporting 'charge' transaction type, this could be overridden by the 'supports' constructor parameter to include (or only support) authorization
 			if ( $this->is_credit_card_gateway() ) {

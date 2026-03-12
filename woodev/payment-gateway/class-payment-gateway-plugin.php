@@ -87,12 +87,12 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 
 			$args = wp_parse_args(
 				$args,
-				array(
-					'gateways'    => array(),
-					'currencies'  => array(),
-					'supports'    => array(),
+				[
+					'gateways'    => [],
+					'currencies'  => [],
+					'supports'    => [],
 					'require_ssl' => false,
-				)
+				]
 			);
 
 			// add each gateway
