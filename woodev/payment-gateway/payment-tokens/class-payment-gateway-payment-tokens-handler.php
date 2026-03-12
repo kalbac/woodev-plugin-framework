@@ -29,6 +29,10 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Tokens_Handler' ) ) :
 			$this->gateway = $gateway;
 
 			$this->environment_id = $gateway->get_environment();
+
+			// Automatically clear the token cache when WooCommerce tokens are modified.
+			add_action( 'woocommerce_payment_token_deleted', [ $this, 'handle_token_cache_invalidation' ], 10, 2 );
+			add_action( 'woocommerce_payment_token_set_default', [ $this, 'handle_token_cache_invalidation' ], 10 );
 		}
 
 
@@ -703,16 +707,38 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Tokens_Handler' ) ) :
 
 
 		/**
-		 * Helper method to clear the tokens transient
+		 * Helper method to clear the tokens transient.
 		 *
-		 * TODO: ideally the transient would make use of actions to clear itself
-		 * as needed (e.g. when customer IDs are updated/removed), but for now it's
-		 * only cleared when the tokens are updated. @MR July 2015
+		 * The transient is automatically cleared via WooCommerce hooks
+		 * (token deleted/set default) registered in the constructor,
+		 * as well as when tokens are explicitly updated.
+		 *
+		 * @since 1.0.0
 		 *
 		 * @param int|string $user_id
 		 */
 		public function clear_transient( $user_id ) {
 			delete_transient( $this->get_transient_key( $user_id ) );
+		}
+
+
+		/**
+		 * Handles cache invalidation when a WooCommerce payment token is deleted or set as default.
+		 *
+		 * @since 1.5.0
+		 *
+		 * @param int                    $token_id WC payment token ID
+		 * @param WC_Payment_Token|null $token    WC payment token object (passed on delete, not on set_default)
+		 */
+		public function handle_token_cache_invalidation( $token_id, $token = null ) {
+
+			if ( ! $token instanceof WC_Payment_Token ) {
+				$token = WC_Payment_Tokens::get( $token_id );
+			}
+
+			if ( $token instanceof WC_Payment_Token && $token->get_gateway_id() === $this->get_gateway()->get_id() ) {
+				$this->clear_transient( $token->get_user_id() );
+			}
 		}
 
 
