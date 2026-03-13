@@ -1,0 +1,88 @@
+name: Dependabot Auto-merge
+
+# Triggers after any CI or Integration Tests workflow completes.
+# If it was triggered by Dependabot and ALL checks on that commit passed,
+# the PR is automatically squash-merged.
+
+on:
+  workflow_run:
+    workflows:
+      - CI
+      - Integration Tests
+    types:
+      - completed
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    name: Merge Dependabot PR when all checks pass
+    runs-on: ubuntu-latest
+
+    # Only proceed if the triggering workflow succeeded and the actor is Dependabot.
+    if: >
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.actor.login == 'dependabot[bot]'
+
+    steps:
+      - name: Merge if all checks are green
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const sha = context.payload.workflow_run.head_sha;
+
+            // Find the open Dependabot PR for this commit.
+            const { data: prs } = await github.rest.pulls.list({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+            });
+
+            const pr = prs.find(
+              p => p.head.sha === sha && p.user.login === 'dependabot[bot]'
+            );
+
+            if (!pr) {
+              return console.log('No open Dependabot PR found for this commit.');
+            }
+
+            console.log(`Found PR #${pr.number}: ${pr.title}`);
+
+            // Fetch all check runs for this commit (may span multiple pages).
+            const { data: { check_runs } } = await github.rest.checks.listForRef({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: sha,
+              per_page: 100,
+            });
+
+            // Skip check runs that belong to this workflow itself (avoid recursion).
+            const relevant = check_runs.filter(
+              c => c.app?.slug !== 'github-actions' ||
+                   !c.name.startsWith('Merge Dependabot')
+            );
+
+            const notPassed = relevant.filter(c =>
+              c.status !== 'completed' ||
+              !['success', 'skipped', 'neutral'].includes(c.conclusion)
+            );
+
+            if (notPassed.length > 0) {
+              const names = notPassed.map(c => `${c.name} (${c.status}/${c.conclusion})`).join(', ');
+              return console.log(`Checks not yet complete or failing: ${names}`);
+            }
+
+            console.log(`All ${relevant.length} checks passed — merging PR #${pr.number}.`);
+
+            await github.rest.pulls.merge({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr.number,
+              merge_method: 'squash',
+              commit_title: `${pr.title} (#${pr.number})`,
+            });
+
+            console.log('Merged successfully.');
