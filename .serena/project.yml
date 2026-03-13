@@ -39,7 +39,15 @@ ignore_all_files_in_gitignore: true
 # list of additional paths to ignore in this project.
 # Same syntax as gitignore, so you can use * and **.
 # Note: global ignored_paths from serena_config.yml are also applied additively.
-ignored_paths: []
+#
+# Index ONLY the framework source (woodev/). All other directories are excluded.
+ignored_paths:
+  - tests/**
+  - docs/**
+  - .github/**
+  - .ai/**
+  - .serena/**
+  - .claude/**
 
 # whether the project is in read-only mode
 # If set to true, all editing tools will be disabled and attempts to use them will result in an error
