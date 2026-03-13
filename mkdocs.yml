@@ -79,6 +79,15 @@ extra:
     - icon: fontawesome/brands/github
       link: https://github.com/kalbac/woodev-plugin-framework
       name: GitHub
+    - icon: fontawesome/solid/globe
+      link: https://woodev.ru
+      name: Woodev
+    - icon: fontawesome/solid/life-ring
+      link: https://woodev.ru/support
+      name: Support
+    - icon: fontawesome/solid/store
+      link: https://woodev.ru/shop
+      name: Plugins Shop
   generator: false
 
 nav:

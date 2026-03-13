@@ -237,7 +237,7 @@
 
 <!-- Hero -->
 <section class="woodev-hero">
-  <div class="woodev-hero__badge">v%%FRAMEWORK_VERSION%% · WooCommerce Plugin Framework</div>
+  <div class="woodev-hero__badge">v%%FRAMEWORK_VERSION%% · WooCommerce Plugin Framework by <a href="https://woodev.ru" style="color:inherit;text-decoration:underline dotted;">Woodev</a></div>
   <h1 class="woodev-hero__title">
     Build <span>WooCommerce plugins</span><br>faster than ever
   </h1>
@@ -248,6 +248,9 @@
   <div class="woodev-hero__actions">
     <a href="getting-started/" class="woodev-hero__btn woodev-hero__btn--primary">
       Get Started →
+    </a>
+    <a href="https://github.com/kalbac/woodev-plugin-framework/releases/tag/v%%FRAMEWORK_VERSION%%" class="woodev-hero__btn woodev-hero__btn--secondary">
+      ↓ v%%FRAMEWORK_VERSION%%
     </a>
     <a href="https://github.com/kalbac/woodev-plugin-framework" class="woodev-hero__btn woodev-hero__btn--secondary">
       GitHub
@@ -322,5 +325,108 @@
     </div>
   </div>
 </section>
+
+<!-- Woodev Ecosystem -->
+<section class="woodev-ecosystem">
+  <h2 class="woodev-features__heading">Built by Woodev</h2>
+  <p class="woodev-features__sub">
+    The framework powers a suite of production WooCommerce plugins available at
+    <a href="https://woodev.ru" style="color:#818cf8;">woodev.ru</a>
+  </p>
+  <div class="woodev-eco__grid">
+    <a href="https://woodev.ru" class="woodev-eco__card" target="_blank" rel="noopener">
+      <span class="woodev-eco__icon">🌐</span>
+      <div class="woodev-eco__title">woodev.ru</div>
+      <div class="woodev-eco__desc">Official website — news, releases, and developer resources for the Woodev ecosystem.</div>
+    </a>
+    <a href="https://woodev.ru/shop" class="woodev-eco__card" target="_blank" rel="noopener">
+      <span class="woodev-eco__icon">🛒</span>
+      <div class="woodev-eco__title">Plugin Shop</div>
+      <div class="woodev-eco__desc">Browse WooCommerce plugins built on this framework: shipping integrations, payment gateways, and more.</div>
+    </a>
+    <a href="https://woodev.ru/support" class="woodev-eco__card" target="_blank" rel="noopener">
+      <span class="woodev-eco__icon">🛟</span>
+      <div class="woodev-eco__title">Support</div>
+      <div class="woodev-eco__desc">Get help from the Woodev team. Bug reports, licensing questions, and integration assistance.</div>
+    </a>
+    <a href="https://github.com/kalbac/woodev-plugin-framework/releases" class="woodev-eco__card" target="_blank" rel="noopener">
+      <span class="woodev-eco__icon">🏷️</span>
+      <div class="woodev-eco__title">Releases</div>
+      <div class="woodev-eco__desc">Full changelog and release notes. Current stable: <strong>v%%FRAMEWORK_VERSION%%</strong>.</div>
+    </a>
+  </div>
+</section>
+
+<style>
+  /* ── Woodev Ecosystem section ────────────────────────── */
+  .woodev-ecosystem {
+    padding: 4rem 2rem;
+    background: #080f1f;
+  }
+
+  [data-md-color-scheme="default"] .woodev-ecosystem {
+    background: #eef2fb;
+  }
+
+  .woodev-eco__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1.25rem;
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+
+  .woodev-eco__card {
+    background: linear-gradient(135deg, rgba(30,41,59,0.9), rgba(15,23,42,0.95));
+    border: 1px solid rgba(99,102,241,0.2);
+    border-radius: 0.75rem;
+    padding: 1.5rem;
+    text-decoration: none !important;
+    display: block;
+    transition: border-color 0.2s, transform 0.2s, box-shadow 0.2s;
+  }
+
+  .woodev-eco__card:hover {
+    border-color: rgba(99,102,241,0.5);
+    transform: translateY(-3px);
+    box-shadow: 0 8px 30px rgba(99,102,241,0.2);
+  }
+
+  .woodev-eco__icon {
+    font-size: 1.75rem;
+    display: block;
+    margin-bottom: 0.75rem;
+  }
+
+  .woodev-eco__title {
+    font-size: 1rem;
+    font-weight: 700;
+    color: #e2e8f0;
+    margin-bottom: 0.4rem;
+  }
+
+  .woodev-eco__desc {
+    font-size: 0.875rem;
+    color: #64748b;
+    line-height: 1.6;
+  }
+
+  .woodev-eco__desc strong {
+    color: #818cf8;
+  }
+
+  [data-md-color-scheme="default"] .woodev-eco__card {
+    background: #fff;
+    border-color: #e2e8f0;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  }
+
+  [data-md-color-scheme="default"] .woodev-eco__card:hover {
+    border-color: #6366f1;
+    box-shadow: 0 6px 24px rgba(99,102,241,0.12);
+  }
+
+  [data-md-color-scheme="default"] .woodev-eco__title { color: #1e293b; }
+</style>
 
 {% endblock %}

@@ -247,14 +247,16 @@ For developers new to Woodev Framework:
 
 ## Support
 
-- Documentation: [Documentation](./)
-- Framework Source: [woodev/](../)
+- **Documentation:** [kalbac.github.io/woodev-plugin-framework](https://kalbac.github.io/woodev-plugin-framework/)
+- **Woodev website:** [woodev.ru](https://woodev.ru)
+- **Plugin shop:** [woodev.ru/shop](https://woodev.ru/shop)
+- **Support desk:** [woodev.ru/support](https://woodev.ru/support)
 
 ## Version Information
 
 | Component | Version |
 | --- | --- |
-| Framework | %%FRAMEWORK_VERSION%% |
+| Framework | [%%FRAMEWORK_VERSION%%](https://github.com/kalbac/woodev-plugin-framework/releases/tag/v%%FRAMEWORK_VERSION%%) |
 | Minimum PHP | 7.4 |
 | Minimum WordPress | 5.9 |
 | Minimum WooCommerce | 5.6 |
