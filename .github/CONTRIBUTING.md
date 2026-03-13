@@ -37,17 +37,11 @@ If you wish to contribute code:
 
 ## Environment Setup
 
-After cloning the repository, AI tools automatically find skills and agents through reference files in `.claude/`, `.codex/`, `.qwen/`, and `.cursor/`. All these files are already in the repository — no additional commands are required after cloning.
-
-Real files are stored only in `.ai/skills/` and `.ai/agents/`. If you need to update skills or agents, edit files only there.
-
-| Tool | Reference File | Points To |
-|------|----------------|-----------|
-| Claude Code | `.claude/skills` | `.ai/skills/` |
-| Claude Code | `.claude/agents` | `.ai/agents/` |
-| Codex | `.codex/skills` | `.ai/skills/` |
-| Qwen Code | `.qwen/skills` | `.ai/skills/` |
-| Cursor | `.cursor/rules/skills.mdc` | `.ai/skills/` |
+```bash
+git clone https://github.com/kalbac/woodev-plugin-framework.git
+cd woodev-plugin-framework
+composer install
+```
 
 ### Good First Issues
 
@@ -65,12 +59,12 @@ Use descriptive branch names:
 
 **Types:**
 
-- `feature/` — новые функции
-- `fix/` — исправления багов
-- `hotfix/` — срочные исправления
-- `docs/` — документация
-- `refactor/` — рефакторинг
-- `chore/` — вспомогательные задачи
+- `feature/` — new features
+- `fix/` — bug fixes
+- `hotfix/` — urgent fixes
+- `docs/` — documentation
+- `refactor/` — refactoring
+- `chore/` — maintenance tasks
 
 **Examples:**
 
@@ -222,7 +216,7 @@ If you have questions about contributing, please:
 
 - Open a [Discussion](../../discussions)
 - Check existing [Issues](../../issues)
-- Review the [CLAUDE.md](../CLAUDE.md) documentation
+- Browse the [Documentation](https://kalbac.github.io/woodev-plugin-framework/)
 
 ---
 
