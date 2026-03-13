@@ -7,7 +7,6 @@ edit_uri: edit/main/docs/
 
 docs_dir: docs
 site_dir: _site
-custom_dir: docs/overrides
 
 theme:
   name: material
