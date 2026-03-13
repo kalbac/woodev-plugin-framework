@@ -32,4 +32,4 @@ jobs:
         run: npm install -g markdownlint-cli2
 
       - name: Lint markdown files
-        run: markdownlint-cli2 "**/*.md" "#node_modules" "#vendor"
+        run: markdownlint-cli2 "**/*.md" "#node_modules" "#vendor" "#.ai" "#CLAUDE.md" "#QWEN.md"

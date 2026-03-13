@@ -296,7 +296,11 @@ This project has specialized AI sub-agents in `.claude/agents/`:
 | `woodev-framework-env-agent` | Environment management |
 | `woodev-framework-git-agent` | Git operations and releases |
 
-See `.claude/QUICK-REFERENCE.md` for detailed usage.
+See `.ai/QUICK-REFERENCE.md` for detailed usage.
+
+## Knowledge Persistence
+
+When you discover important project rules, conventions, or patterns during your work — **always document them** in `.ai/QUICK-REFERENCE.md` (section "Project Rules & Conventions") so all AI agents share the same knowledge.
 
 ## Key URLs and Resources
 

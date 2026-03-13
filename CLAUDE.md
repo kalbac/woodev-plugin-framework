@@ -201,6 +201,10 @@ public function old_method(): void {
 
 - `Woodev_String_Conversion` — Cyrillic-to-Latin transliteration utility
 
+## Knowledge Persistence
+
+When you discover important project rules, conventions, or patterns during your work — **always document them** in `.ai/QUICK-REFERENCE.md` (section "Project Rules & Conventions") so all AI agents (Claude, Qwen, Cursor, etc.) share the same knowledge.
+
 ## Known Technical Debt
 
 - 50+ PHPStan baseline ignores (see `phpstan-baseline.neon`)

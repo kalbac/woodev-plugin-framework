@@ -1,6 +1,7 @@
 # AI agent instructions — generated/maintained by AI tools, not linted
 .ai/**
-# QWEN-specific AI tooling documentation
+# AI tooling documentation
+CLAUDE.md
 QWEN.md
 # Vendor and build artifacts
 node_modules/**

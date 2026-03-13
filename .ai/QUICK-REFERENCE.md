@@ -171,6 +171,35 @@ Summary:
 
 ---
 
+## Project Rules & Conventions
+
+Rules that ALL AI agents must follow. When you discover new important rules or conventions during work, **add them here** so other agents benefit too.
+
+### Code Navigation
+
+- **Always use Serena MCP tools** (`find_symbol`, `get_symbols_overview`, `search_for_pattern`, `find_referencing_symbols`) for reading and navigating PHP source code. Never read `.php` files directly — Serena has the codebase indexed with LSP and provides semantic search, cross-referencing, and symbol lookup.
+- Serena indexes only `woodev/` directory (configured in `.serena/project.yml`).
+
+### Documentation Code Examples
+
+- All PHP code examples in `docs/*.md` **must be verified** against the actual framework source code before writing or editing. Never write examples from memory or assumptions — use Serena to look up real method signatures, parameter types, return types, and visibility.
+- All PHP code blocks must include the `<?php` opening tag.
+- Markdown linting (`markdownlint-cli2`) проверяет `.md` файлы предназначенные для людей (`docs/`, `CHANGELOG.md`, `.github/`). AI-файлы исключены. Команда: `npx markdownlint-cli2 "**/*.md" "#node_modules" "#vendor" "#.ai" "#CLAUDE.md" "#QWEN.md"`.
+
+### Documentation Site
+
+- Docs site: MkDocs Material, config in `mkdocs.yml`, source in `docs/`.
+- Custom landing page template: `docs/overrides/home.html`.
+- `%%FRAMEWORK_VERSION%%` placeholder in docs is injected by CI (from `Woodev_Plugin::VERSION`) before `mkdocs build`.
+- CHANGELOG.md is **auto-generated** by git-cliff — do not edit manually (except formatting fixes for linting).
+
+### Knowledge Persistence
+
+- When you discover important project rules, conventions, or patterns during your work — **always document them here** in this section so all agents (Claude, Qwen, Cursor, etc.) share the same knowledge.
+- Do not add personal preferences or user-specific info here — only project-level rules and conventions.
+
+---
+
 ## Related Documentation
 
 - [CLAUDE.md](../CLAUDE.md) — Single source of truth for project knowledge
