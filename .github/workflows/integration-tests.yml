@@ -15,23 +15,42 @@ concurrency:
 jobs:
 
   # ===========================================================================
-  # Интеграционные тесты в реальном WordPress + WooCommerce
-  # через wp-env (Docker)
+  # Интеграционные тесты — матрица WP × WC × PHP
+  # Каждая комбинация запускается в изолированном wp-env (Docker)
   # ===========================================================================
   integration:
-    name: Integration Tests (WP + WC)
+    name: WP ${{ matrix.wp }} / WC ${{ matrix.wc }} / PHP ${{ matrix.php }}
     runs-on: ubuntu-latest
     env:
       WP_ENV_HOME: /tmp/wp-env
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Oldest actively-maintained pair (many shared hosting setups)
+          - wp: '6.4'
+            wc: '8.5.1'
+            php: '8.1'
+
+          # Mid-cycle 2024 — common in production environments
+          - wp: '6.6'
+            wc: '9.3.0'
+            php: '8.2'
+
+          # Current latest — always tracks the bleeding edge
+          - wp: 'latest'
+            wc: 'latest-stable'
+            php: '8.2'
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup PHP 8.1
+      - name: Setup PHP ${{ matrix.php }}
         uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.1'
+          php-version: ${{ matrix.php }}
           coverage: none
           tools: composer:v2
 
@@ -44,14 +63,39 @@ jobs:
         uses: actions/cache@v4
         with:
           path: vendor
-          key: composer-8.1-${{ hashFiles('composer.json') }}
-          restore-keys: composer-8.1-
+          key: composer-${{ matrix.php }}-${{ hashFiles('composer.json') }}
+          restore-keys: composer-${{ matrix.php }}-
 
       - name: Install Composer dependencies
         run: composer install --prefer-dist --no-progress --no-interaction
 
       - name: Install wp-env
         run: npm install -g @wordpress/env
+
+      - name: Configure wp-env versions
+        run: |
+          python3 - <<'PYEOF'
+          import json
+
+          wp  = "${{ matrix.wp }}"
+          wc  = "${{ matrix.wc }}"
+          php = "${{ matrix.php }}"
+
+          override = {
+              "core": None if wp == "latest"
+                      else f"https://wordpress.org/wordpress-{wp}.zip",
+              "phpVersion": php,
+              "plugins": [
+                  "https://downloads.wordpress.org/plugin/woocommerce.latest-stable.zip"
+                  if wc == "latest-stable"
+                  else f"https://downloads.wordpress.org/plugin/woocommerce.{wc}.zip"
+              ],
+          }
+          payload = json.dumps(override, indent=2)
+          print(payload)
+          with open(".wp-env.override.json", "w") as f:
+              f.write(payload + "\n")
+          PYEOF
 
       - name: Start wp-env
         run: npx wp-env start
