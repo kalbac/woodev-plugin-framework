@@ -33,6 +33,7 @@ The Handlers module handles:
 Declare block support in your plugin constructor:
 
 ```php
+<?php
 parent::__construct(
     'my-plugin',
     '1.0.0',
@@ -63,6 +64,7 @@ parent::__construct(
 ### Full Plugin Example
 
 ```php
+<?php
 class My_Plugin extends Woodev_Plugin {
 
     private static $instance;
@@ -108,6 +110,7 @@ class My_Plugin extends Woodev_Plugin {
 ### Checking Block Presence
 
 ```php
+<?php
 // Static methods for quick checks
 if ( Woodev_Blocks_Handler::is_cart_block_in_use() ) {
     // Cart block is active
@@ -139,6 +142,7 @@ if ( $blocks_handler->is_checkout_block_compatible() ) {
 The handler scans all posts and pages for block patterns:
 
 ```php
+<?php
 // Internally searches for:
 // - <!-- wp:woocommerce/cart -->
 // - <!-- wp:woocommerce/checkout -->
@@ -168,6 +172,7 @@ Please contact the plugin developer or update to a version that supports blocks.
 ### Creating Block-Compatible Features
 
 ```php
+<?php
 class Block_Integration {
 
     private Woodev_Blocks_Handler $blocks_handler;
@@ -218,6 +223,7 @@ add_action( 'wp_loaded', function() {
 ### Creating a Script Handler
 
 ```php
+<?php
 class My_Script_Handler extends Woodev_Script_Handler {
 
     /**
@@ -352,6 +358,7 @@ window.MyPlugin = new MyPlugin({"ajax_url":"https:\/\/example.com\/wp-admin\/adm
 ### Registering with WordPress
 
 ```php
+<?php
 class My_Plugin extends Woodev_Plugin {
 
     private $script_handler;
@@ -389,6 +396,7 @@ class My_Plugin extends Woodev_Plugin {
 ### Frontend Script Handler
 
 ```php
+<?php
 class Frontend_Script_Handler extends Woodev_Script_Handler {
 
     protected $js_handler_base_class_name = 'MyPluginFrontend';
@@ -438,6 +446,7 @@ add_action( 'wp_enqueue_scripts', function() {
 ### Example 1: AJAX Form Handler
 
 ```php
+<?php
 class Form_Script_Handler extends Woodev_Script_Handler {
 
     protected $js_handler_base_class_name = 'MyPluginForm';
@@ -539,6 +548,7 @@ window.MyPluginForm = window.MyPluginForm || class MyPluginForm {
 ### Example 2: Map Integration
 
 ```php
+<?php
 class Map_Script_Handler extends Woodev_Script_Handler {
 
     protected $js_handler_base_class_name = 'MyPluginMap';
@@ -600,6 +610,7 @@ add_action( 'wp_enqueue_scripts', function() {
 ### Example 3: Admin Settings Page
 
 ```php
+<?php
 class Settings_Script_Handler extends Woodev_Script_Handler {
 
     protected $js_handler_base_class_name = 'MyPluginSettings';
@@ -659,6 +670,7 @@ add_action( 'admin_enqueue_scripts', function( $hook_suffix ) {
 ### Example 4: Real-time Cart Updates
 
 ```php
+<?php
 class Cart_Script_Handler extends Woodev_Script_Handler {
 
     protected $js_handler_base_class_name = 'MyPluginCart';
@@ -711,6 +723,7 @@ add_action( 'wp_enqueue_scripts', function() {
 ### 1. Escape Output
 
 ```php
+<?php
 // ✅ Framework handles escaping automatically
 protected function get_js_handler_args(): array {
     return [
@@ -723,6 +736,7 @@ protected function get_js_handler_args(): array {
 ### 2. Use Unique Handler IDs
 
 ```php
+<?php
 public function get_id(): string {
     return 'my-plugin-' . $this->get_handler_type();
 }
@@ -731,6 +745,7 @@ public function get_id(): string {
 ### 3. Minimize Data
 
 ```php
+<?php
 // ✅ Only pass necessary data
 protected function get_js_handler_args(): array {
     return [
@@ -743,6 +758,7 @@ protected function get_js_handler_args(): array {
 ### 4. Conditionally Output
 
 ```php
+<?php
 public function output_inline_script(): void {
     if ( is_cart() || is_checkout() ) {
         echo '<script>' . $this->get_safe_handler_js() . '</script>';
@@ -778,6 +794,7 @@ var myPluginData = {};
 1. **Check handler registration:**
 
    ```php
+<?php
    $handler = new My_Script_Handler();
    add_action( 'wp_footer', [ $handler, 'output_inline_script' ] );
    ```
@@ -785,6 +802,7 @@ var myPluginData = {};
 2. **Verify get_id() returns unique value:**
 
    ```php
+<?php
    public function get_id(): string {
        return 'my-plugin-unique';  // Must be unique
    }
@@ -793,6 +811,7 @@ var myPluginData = {};
 3. **Check if footer action runs:**
 
    ```php
+<?php
    add_action( 'wp_footer', function() {
        error_log( 'Footer action fired' );
    }, 5 );
@@ -803,6 +822,7 @@ var myPluginData = {};
 1. **Check script load order:**
 
    ```php
+<?php
    wp_enqueue_script( 'my-plugin', '...', [], '1.0.0', true );
    add_action( 'wp_footer', [ $handler, 'output_inline_script' ], 20 );
    ```
@@ -810,6 +830,7 @@ var myPluginData = {};
 2. **Verify JavaScript class name matches:**
 
    ```php
+<?php
    // PHP
    protected $js_handler_base_class_name = 'MyPlugin';
 
@@ -822,6 +843,7 @@ var myPluginData = {};
 1. **Check get_js_handler_args() output:**
 
    ```php
+<?php
    protected function get_js_handler_args(): array {
        error_log( print_r( $this->get_js_handler_args(), true ) );
        return [ 'key' => 'value' ];
@@ -831,6 +853,7 @@ var myPluginData = {};
 2. **Inspect generated JavaScript:**
 
    ```php
+<?php
    // View page source and check:
    // window.MyPlugin = new MyPlugin({...});
    ```
@@ -840,6 +863,7 @@ var myPluginData = {};
 1. **Clear block cache:**
 
    ```php
+<?php
    delete_transient( 'woodev_blocks_detection' );
    ```
 

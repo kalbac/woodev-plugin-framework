@@ -218,61 +218,31 @@ class My_Courier_Method extends Shipping_Method {
     }
 
     /**
-     * Calculate shipping rates
+     * Calculate the shipping rate for this package.
+     *
+     * This is the method to implement — calculate_shipping() is final
+     * and calls this method internally.
+     *
+     * @param array $package WooCommerce package array.
+     * @return Shipping_Rate|null Rate object, or null to add no rate.
      */
-    public function calculate_shipping( array $package = [] ): void {
-        // Get destination
+    protected function calculate_rate( array $package ): ?Shipping_Rate {
         $country  = $package['destination']['country'];
-        $state    = $package['destination']['state'];
         $postcode = $package['destination']['postcode'];
-        $city     = $package['destination']['city'];
+        $weight   = WC()->cart->get_cart_contents_weight();
 
-        // Get cart contents
-        $weight = WC()->cart->get_cart_contents_weight();
-        $total  = WC()->cart->get_cart_contents_total();
-
-        // Calculate rate
-        $rate = $this->calculate_rate( $country, $postcode, $weight, $total );
-
-        if ( $rate ) {
-            $this->add_rate( [
-                'id'        => $this->get_rate_id(),
-                'label'     => $this->title,
-                'cost'      => $rate->cost,
-                'calc_tax'  => 'per_order',
-                'meta_data' => [
-                    'delivery_time' => $rate->delivery_time,
-                    'carrier'       => $rate->carrier,
-                ],
-            ] );
-        }
-    }
-
-    /**
-     * Calculate rate
-     */
-    private function calculate_rate(
-        string $country,
-        string $postcode,
-        float $weight,
-        float $total
-    ): ?Shipping_Rate {
-        // Get API instance
         $api = My_Shipping_Plugin::instance()->get_api();
 
         if ( ! $api ) {
             return null;
         }
 
-        // Request rates from API
         $rates = $api->get_rates( [
             'country'  => $country,
             'postcode' => $postcode,
             'weight'   => $weight,
-            'total'    => $total,
         ] );
 
-        // Return first available rate
         return $rates[0] ?? null;
     }
 }
@@ -281,6 +251,7 @@ class My_Courier_Method extends Shipping_Method {
 ### Courier Method
 
 ```php
+<?php
 class My_Courier_Method extends Shipping_Method_Courier {
 
     const METHOD_ID = 'my_courier';
@@ -292,9 +263,20 @@ class My_Courier_Method extends Shipping_Method_Courier {
         $this->method_description = __( 'Delivery by courier to your door', 'my-shipping' );
     }
 
-    public function calculate_shipping( array $package = [] ): void {
-        // Courier-specific logic
-        parent::calculate_shipping( $package );
+    /**
+     * Calculate the courier rate for this package.
+     *
+     * @param array $package WooCommerce package array.
+     * @return Shipping_Rate|null
+     */
+    protected function calculate_rate( array $package ): ?Shipping_Rate {
+        $api = My_Shipping_Plugin::instance()->get_api();
+
+        if ( ! $api ) {
+            return null;
+        }
+
+        return $api->get_courier_rate( $package );
     }
 }
 ```
@@ -302,6 +284,7 @@ class My_Courier_Method extends Shipping_Method_Courier {
 ### Pickup Method
 
 ```php
+<?php
 class My_Pickup_Method extends Shipping_Method_Pickup {
 
     const METHOD_ID = 'my_pickup';
@@ -335,6 +318,7 @@ class My_Pickup_Method extends Shipping_Method_Pickup {
 ### Postal Method
 
 ```php
+<?php
 class My_Postal_Method extends Shipping_Method_Postal {
 
     const METHOD_ID = 'my_postal';
@@ -353,6 +337,7 @@ class My_Postal_Method extends Shipping_Method_Postal {
 ### Creating Rates
 
 ```php
+<?php
 use Woodev\Framework\Shipping\Shipping_Rate;
 
 $rate = new Shipping_Rate(
@@ -377,6 +362,7 @@ $this->add_rate( [
 ### Rate with Options
 
 ```php
+<?php
 $rate = new Shipping_Rate(
     'my_courier:express',
     __( 'Express Delivery', 'my-shipping' ),
@@ -394,6 +380,7 @@ $rate = new Shipping_Rate(
 ### Shipping API Interface
 
 ```php
+<?php
 interface Shipping_API {
 
     /**
@@ -421,6 +408,7 @@ interface Shipping_API {
 ### API Implementation
 
 ```php
+<?php
 class My_Shipping_API implements Shipping_API {
 
     private Woodev_API_Base $api;
@@ -466,6 +454,7 @@ class My_Shipping_API implements Shipping_API {
 ### Shipping Integration Class
 
 ```php
+<?php
 class My_Shipping_Integration extends Shipping_Integration {
 
     /**
@@ -521,6 +510,7 @@ class My_Shipping_Integration extends Shipping_Integration {
 ### Export Handler
 
 ```php
+<?php
 class Order_Export_Handler {
 
     private My_Shipping_Plugin $plugin;
@@ -608,6 +598,7 @@ class Order_Export_Handler {
 ### Tracking Handler
 
 ```php
+<?php
 class Tracking_Handler {
 
     private My_Shipping_Plugin $plugin;
@@ -735,6 +726,7 @@ function my_shipping_init() {
 ### 1. Declare Supported Features
 
 ```php
+<?php
 parent::__construct(
     'my-shipping',
     '1.0.0',
@@ -750,6 +742,7 @@ parent::__construct(
 ### 2. Use Caching for API Calls
 
 ```php
+<?php
 $rates = get_transient( 'my_shipping_rates_' . md5( $cache_key ) );
 
 if ( false === $rates ) {
@@ -761,6 +754,7 @@ if ( false === $rates ) {
 ### 3. Log API Requests
 
 ```php
+<?php
 if ( $this->get_option( 'debug_mode' ) === 'yes' ) {
     $this->plugin->log( 'API Request: ' . print_r( $request, true ) );
     $this->plugin->log( 'API Response: ' . print_r( $response, true ) );
@@ -770,6 +764,7 @@ if ( $this->get_option( 'debug_mode' ) === 'yes' ) {
 ### 4. Handle API Errors Gracefully
 
 ```php
+<?php
 try {
     $rates = $api->get_rates( $params );
 } catch ( Exception $e ) {

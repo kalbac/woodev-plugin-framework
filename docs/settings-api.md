@@ -59,6 +59,7 @@ Available control types:
 ### Basic Example
 
 ```php
+<?php
 class My_Settings extends Woodev_Abstract_Settings {
 
     /**
@@ -142,6 +143,7 @@ class My_Settings extends Woodev_Abstract_Settings {
 ### Connecting to Plugin
 
 ```php
+<?php
 class My_Plugin extends Woodev_Plugin {
 
     public function get_settings_handler(): ?Woodev_Abstract_Settings {
@@ -155,6 +157,7 @@ class My_Plugin extends Woodev_Plugin {
 ### Get Setting Object
 
 ```php
+<?php
 $settings = $plugin->get_settings_handler();
 
 // Get a Woodev_Setting object
@@ -167,6 +170,7 @@ $api_key = $setting->get_value();
 ### Get Value Directly
 
 ```php
+<?php
 $settings = $plugin->get_settings_handler();
 
 // Shorthand to get value
@@ -178,6 +182,7 @@ $weight  = $settings->get_value( 'max_weight' );
 ### Check Default Values
 
 ```php
+<?php
 $setting = $settings->get_setting( 'max_weight' );
 
 // Get default value
@@ -190,6 +195,7 @@ $is_default = $setting->is_default();
 ### Get All Settings
 
 ```php
+<?php
 foreach ( $settings->get_settings() as $id => $setting ) {
     printf(
         "%-20s = %s\n",
@@ -204,6 +210,7 @@ foreach ( $settings->get_settings() as $id => $setting ) {
 ### Update Single Value
 
 ```php
+<?php
 $settings = $plugin->get_settings_handler();
 
 // Update value (persists immediately)
@@ -216,6 +223,7 @@ $settings->update_value( 'debug_mode', true );
 ### Update Multiple Values
 
 ```php
+<?php
 $settings->update_value( 'api_key', 'key123' );
 $settings->update_value( 'debug_mode', true );
 $settings->update_value( 'max_weight', 50.0 );
@@ -224,6 +232,7 @@ $settings->update_value( 'max_weight', 50.0 );
 ### Delete Value
 
 ```php
+<?php
 // Delete setting value (resets to default)
 $settings->delete_value( 'api_key' );
 
@@ -236,6 +245,7 @@ foreach ( $settings->get_settings() as $id => $setting ) {
 ### Save Settings
 
 ```php
+<?php
 // Save all pending changes
 $settings->save();
 ```
@@ -245,6 +255,7 @@ $settings->save();
 ### Text Input
 
 ```php
+<?php
 new Woodev_Control( 'text', [
     'placeholder' => 'Enter value',
     'class'       => 'regular-text',
@@ -254,6 +265,7 @@ new Woodev_Control( 'text', [
 ### Number Input
 
 ```php
+<?php
 new Woodev_Control( 'number', [
     'min'       => 0,
     'max'       => 100,
@@ -265,6 +277,7 @@ new Woodev_Control( 'number', [
 ### Select Dropdown
 
 ```php
+<?php
 new Woodev_Control( 'select', [
     'options' => [
         'value1' => __( 'Label 1', 'my-plugin' ),
@@ -278,6 +291,7 @@ new Woodev_Control( 'select', [
 ### Radio Buttons
 
 ```php
+<?php
 new Woodev_Control( 'radio', [
     'options' => [
         'option1' => __( 'Option 1', 'my-plugin' ),
@@ -289,6 +303,7 @@ new Woodev_Control( 'radio', [
 ### Checkbox
 
 ```php
+<?php
 new Woodev_Control( 'checkbox', [
     'label' => __( 'Enable feature', 'my-plugin' ),
 ] );
@@ -297,6 +312,7 @@ new Woodev_Control( 'checkbox', [
 ### Textarea
 
 ```php
+<?php
 new Woodev_Control( 'textarea', [
     'rows'        => 5,
     'cols'        => 50,
@@ -307,6 +323,7 @@ new Woodev_Control( 'textarea', [
 ### Color Picker
 
 ```php
+<?php
 new Woodev_Control( 'color', [
     'default' => '#ffffff',
 ] );
@@ -315,6 +332,7 @@ new Woodev_Control( 'color', [
 ### Range Slider
 
 ```php
+<?php
 new Woodev_Control( 'range', [
     'min'   => 0,
     'max'   => 100,
@@ -325,6 +343,7 @@ new Woodev_Control( 'range', [
 ### File Upload
 
 ```php
+<?php
 new Woodev_Control( 'file', [
     'button_text' => __( 'Upload File', 'my-plugin' ),
 ] );
@@ -333,6 +352,7 @@ new Woodev_Control( 'file', [
 ### Date Picker
 
 ```php
+<?php
 new Woodev_Control( 'date', [
     'min' => date( 'Y-m-d' ),
 ] );
@@ -341,6 +361,7 @@ new Woodev_Control( 'date', [
 ### Email Input
 
 ```php
+<?php
 new Woodev_Control( 'email', [
     'placeholder' => 'email@example.com',
 ] );
@@ -349,6 +370,7 @@ new Woodev_Control( 'email', [
 ### Password Input
 
 ```php
+<?php
 new Woodev_Control( 'password', [
     'placeholder' => 'Enter password',
 ] );
@@ -359,6 +381,7 @@ new Woodev_Control( 'password', [
 ### Settings Class
 
 ```php
+<?php
 class My_Settings extends Woodev_Abstract_Settings {
 
     private static $instance;
@@ -459,6 +482,7 @@ class My_Settings extends Woodev_Abstract_Settings {
 ### Plugin Integration
 
 ```php
+<?php
 class My_Plugin extends Woodev_Plugin {
 
     public function get_settings_handler(): ?Woodev_Abstract_Settings {
@@ -598,6 +622,7 @@ class My_Plugin extends Woodev_Plugin {
 ### Custom Validation
 
 ```php
+<?php
 class My_Settings extends Woodev_Abstract_Settings {
 
     protected function register_settings(): void {
@@ -654,6 +679,7 @@ Settings are automatically sanitized based on type:
 ### Custom Sanitization
 
 ```php
+<?php
 $this->register_setting(
     'custom_field',
     'string',
@@ -671,6 +697,7 @@ $this->register_setting(
 Settings are automatically available via REST API when connected to plugin:
 
 ```php
+<?php
 // GET /wp-json/wc/v3/my-plugin/settings
 // Returns all settings
 
@@ -694,6 +721,7 @@ WooCommerce > Status > My Plugin
 ### 1. Use Singleton Pattern
 
 ```php
+<?php
 class My_Settings extends Woodev_Abstract_Settings {
 
     private static $instance;
@@ -710,6 +738,7 @@ class My_Settings extends Woodev_Abstract_Settings {
 ### 2. Provide Sensible Defaults
 
 ```php
+<?php
 $this->register_setting(
     'timeout',
     'float',
@@ -723,6 +752,7 @@ $this->register_setting(
 ### 3. Use Descriptive Names
 
 ```php
+<?php
 // ✅ Good
 'name' => __( 'Maximum Weight (kg)', 'my-plugin' ),
 
@@ -733,6 +763,7 @@ $this->register_setting(
 ### 4. Add Help Text
 
 ```php
+<?php
 $this->register_setting(
     'api_key',
     'string',
@@ -746,6 +777,7 @@ $this->register_setting(
 ### 5. Validate Input
 
 ```php
+<?php
 'validate_callback' => function( $value ) {
     if ( empty( $value ) ) {
         add_settings_error( 'api_key', 'required', 'Required' );

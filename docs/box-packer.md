@@ -38,6 +38,7 @@ The Box Packer module handles:
 ### Woodev_Box_Packer_Item
 
 ```php
+<?php
 interface Woodev_Box_Packer_Item {
     public function get_name(): string;
     public function get_volume(): float;
@@ -53,6 +54,7 @@ interface Woodev_Box_Packer_Item {
 ### Using Item Implementation
 
 ```php
+<?php
 use Woodev\Framework\BoxPacker\Woodev_Packer_Item_Implementation;
 
 $item = new Woodev_Packer_Item_Implementation(
@@ -81,6 +83,7 @@ echo $item->get_height();    // 10 (smallest dimension)
 ### From WooCommerce Product
 
 ```php
+<?php
 $product = wc_get_product( 123 );
 $dimensions = $product->get_dimensions();
 
@@ -104,6 +107,7 @@ $item->set_product( $product );
 ### Woodev_Box_Packer_Box
 
 ```php
+<?php
 interface Woodev_Box_Packer_Box extends Woodev_Box_Packer_Item {
     public function get_max_weight(): ?float;
     public function get_name(): string;
@@ -114,6 +118,7 @@ interface Woodev_Box_Packer_Box extends Woodev_Box_Packer_Item {
 ### Using Box Implementation
 
 ```php
+<?php
 use Woodev\Framework\BoxPacker\Woodev_Packer_Box_Implementation;
 
 $box = new Woodev_Packer_Box_Implementation(
@@ -140,6 +145,7 @@ echo $box->get_volume();      // 60000 (cm³)
 Represents a box with items packed into it:
 
 ```php
+<?php
 use Woodev\Framework\BoxPacker\Woodev_Box_Packer_Packed_Box;
 
 $box = new Woodev_Packer_Box_Implementation( /* ... */ );
@@ -169,6 +175,7 @@ Final percentage: `weight_ratio × volume_ratio × 100`
 ### Woodev_Packer (Abstract Base)
 
 ```php
+<?php
 abstract class Woodev_Packer implements Woodev_Packer_Interface {
     
     protected $boxes;   // Available boxes
@@ -188,6 +195,7 @@ abstract class Woodev_Packer implements Woodev_Packer_Interface {
 Packs all items into one virtual box:
 
 ```php
+<?php
 use Woodev\Framework\BoxPacker\Woodev_Packer_Single_Box;
 
 $packer = new Woodev_Packer_Single_Box( 'Single Package' );
@@ -234,6 +242,7 @@ This creates a box that can contain all items laid out side by side.
 ## Package Weight Calculator
 
 ```php
+<?php
 use Woodev\Framework\BoxPacker\Woodev_Box_Packer_Packages_Weight;
 
 $packages = [ $package1, $package2, $package3 ];
@@ -248,6 +257,7 @@ echo "Total shipping weight: {$total_weight} kg";
 ### Example 1: Order Packing
 
 ```php
+<?php
 function pack_order( WC_Order $order ): array {
     $packer = new Woodev_Packer_Single_Box();
     
@@ -294,6 +304,7 @@ foreach ( $packages as $i => $package ) {
 ### Example 2: Dimensional Weight
 
 ```php
+<?php
 function calculate_dimensional_weight( array $packages ): float {
     $dimensional_factor = 5000;  // Standard divisor for cm/kg
     $total_dim_weight = 0;
@@ -325,6 +336,7 @@ echo "Billable weight: {$billable_weight} kg";
 ### Example 3: Multiple Box Types
 
 ```php
+<?php
 class Multi_Box_Packer extends Woodev_Packer {
     
     public function pack() {
@@ -401,6 +413,7 @@ $unpacked = $packer->get_items_cannot_pack();
 ### Example 4: Shipping Rate Calculation
 
 ```php
+<?php
 function calculate_shipping_rate( WC_Order $order ): array {
     $packages = pack_order( $order );
     $rates = [];
@@ -443,6 +456,7 @@ function calculate_shipping_rate( WC_Order $order ): array {
 ### Volume-Optimized Packer
 
 ```php
+<?php
 class Volume_Optimized_Packer extends Woodev_Packer {
     
     public function pack() {
@@ -479,6 +493,7 @@ class Volume_Optimized_Packer extends Woodev_Packer {
 ### 1. Validate Dimensions
 
 ```php
+<?php
 function create_item( WC_Product $product ): ?Woodev_Packer_Item_Implementation {
     $dimensions = $product->get_dimensions();
     
@@ -500,6 +515,7 @@ function create_item( WC_Product $product ): ?Woodev_Packer_Item_Implementation 
 ### 2. Handle Virtual Products
 
 ```php
+<?php
 foreach ( $order->get_items() as $item ) {
     $product = $item->get_product();
     
@@ -515,6 +531,7 @@ foreach ( $order->get_items() as $item ) {
 ### 3. Consider Box Weight
 
 ```php
+<?php
 $box = new Woodev_Packer_Box_Implementation(
     50, 40, 30,
     0.8,  // Box weight - important for accurate shipping
@@ -527,6 +544,7 @@ $box = new Woodev_Packer_Box_Implementation(
 ### 4. Cache Box Configurations
 
 ```php
+<?php
 function get_available_boxes(): array {
     $cache_key = 'shipping_boxes';
     $boxes = get_transient( $cache_key );
@@ -547,6 +565,7 @@ function get_available_boxes(): array {
 ### 5. Log Packing Results
 
 ```php
+<?php
 function log_packing_result( array $packages, WC_Order $order ) {
     $log_message = "Order #{$order->get_id()} packing:\n";
     
@@ -582,6 +601,7 @@ If items are in `get_items_cannot_pack()`:
 Dimensions are automatically sorted:
 
 ```php
+<?php
 $item = new Woodev_Packer_Item_Implementation(
     10, 30, 20,  // Input: 10x30x20
     1.0

@@ -10,6 +10,8 @@ This project has the following MCP servers configured globally:
 
 Serena provides symbolic code navigation, cross-referencing, and safe code editing capabilities across 30+ languages including PHP.
 
+> **RULE FOR ALL AI AGENTS:** Always use Serena tools (`find_symbol`, `get_symbols_overview`, `find_referencing_symbols`, `search_for_pattern`) to read and navigate PHP source code. Never use the `Read` tool directly on `.php` files. Serena has the codebase pre-indexed and provides semantic lookup — it is faster and more accurate than raw file reads.
+
 **Configuration:** Global (`~/.qwen/mcp.json`)
 
 **Available Tools:**

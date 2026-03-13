@@ -25,6 +25,7 @@ The Compatibility module handles:
 Declare HPOS support in your plugin constructor:
 
 ```php
+<?php
 parent::__construct(
     'my-plugin',
     '1.0.0',
@@ -42,6 +43,7 @@ parent::__construct(
 ### Full Example
 
 ```php
+<?php
 class My_Plugin extends Woodev_Plugin {
 
     private static $instance;
@@ -87,6 +89,7 @@ class My_Plugin extends Woodev_Plugin {
 ### Reading Order Meta
 
 ```php
+<?php
 use Woodev\Framework\Compatibility\Woodev_Order_Compatibility;
 
 $order = wc_get_order( $order_id );
@@ -118,6 +121,7 @@ $status = Woodev_Order_Compatibility::get_order_meta(
 ### Writing Order Meta
 
 ```php
+<?php
 $order = wc_get_order( $order_id );
 
 // Add meta (allows duplicates)
@@ -138,6 +142,7 @@ Woodev_Order_Compatibility::update_order_meta(
 ### Deleting Order Meta
 
 ```php
+<?php
 // Delete all meta with key
 Woodev_Order_Compatibility::delete_order_meta( $order, '_temporary_data' );
 
@@ -148,6 +153,7 @@ Woodev_Order_Compatibility::delete_order_meta( $order, '_shipment_id', '12345' )
 ### Checking Meta Existence
 
 ```php
+<?php
 if ( Woodev_Order_Compatibility::order_meta_exists( $order, '_tracking_number' ) ) {
     $tracking = Woodev_Order_Compatibility::get_order_meta( $order, '_tracking_number' );
     echo "Tracking: {$tracking}";
@@ -159,6 +165,7 @@ if ( Woodev_Order_Compatibility::order_meta_exists( $order, '_tracking_number' )
 ### Complete Example
 
 ```php
+<?php
 class Order_Meta_Manager {
 
     /**
@@ -219,6 +226,7 @@ class Order_Meta_Manager {
 ### Orders Screen
 
 ```php
+<?php
 use Woodev\Framework\Compatibility\Woodev_Order_Compatibility;
 
 // Check if on orders list
@@ -236,6 +244,7 @@ if ( Woodev_Order_Compatibility::is_orders_screen_for_status( 'processing' ) ) {
 ### Order Edit Screen
 
 ```php
+<?php
 // Check if on order edit screen
 if ( Woodev_Order_Compatibility::is_order_edit_screen() ) {
     // Show order meta fields
@@ -254,6 +263,7 @@ if ( $order_id ) {
 ### Order Screen URLs
 
 ```php
+<?php
 // Get orders screen URL
 $orders_url = Woodev_Order_Compatibility::get_orders_screen_url();
 
@@ -279,6 +289,7 @@ add_meta_box(
 For raw SQL queries:
 
 ```php
+<?php
 global $wpdb;
 
 // Get correct table names
@@ -301,6 +312,7 @@ $post_types = Woodev_Order_Compatibility::get_order_post_types();
 ## Order Type Detection
 
 ```php
+<?php
 $order = wc_get_order( $order_id );
 
 // Check if object is an order
@@ -317,6 +329,7 @@ if ( Woodev_Order_Compatibility::is_refund( $order ) ) {
 ## Formatted Meta Data
 
 ```php
+<?php
 $order = wc_get_order( $order_id );
 
 // Get formatted meta data for display
@@ -334,6 +347,7 @@ foreach ( $meta_data as $meta ) {
 ### Version Comparison
 
 ```php
+<?php
 use Woodev\Framework\Compatibility\Woodev_Plugin_Compatibility;
 
 // Check if WC >= version
@@ -360,6 +374,7 @@ if ( Woodev_Plugin_Compatibility::is_wc_version( '8.0' ) ) {
 ### Getting Version Information
 
 ```php
+<?php
 // Get current WC version
 $version = Woodev_Plugin_Compatibility::get_wc_version();
 echo "WooCommerce {$version}";  // e.g., "9.4.1"
@@ -377,6 +392,7 @@ if ( Woodev_Plugin_Compatibility::is_hpos_enabled() ) {
 ### Version-Specific Features
 
 ```php
+<?php
 class WC_Version_Handler {
 
     public function init() {
@@ -402,6 +418,7 @@ class WC_Version_Handler {
 ### Example 1: Custom Order Meta Box
 
 ```php
+<?php
 class Order_Meta_Box {
 
     public function __construct() {
@@ -489,6 +506,7 @@ class Order_Meta_Box {
 ### Example 2: Orders List Column
 
 ```php
+<?php
 class Orders_List_Columns {
 
     public function __construct() {
@@ -549,6 +567,7 @@ class Orders_List_Columns {
 ### Example 3: Order Search
 
 ```php
+<?php
 class Order_Search {
 
     public function __construct() {
@@ -581,6 +600,7 @@ class Order_Search {
 ### Example 4: Bulk Actions
 
 ```php
+<?php
 class Order_Bulk_Actions {
 
     public function __construct() {
@@ -646,6 +666,7 @@ add_action( 'admin_notices', function() {
 ### 1. Use Compatibility Helpers
 
 ```php
+<?php
 // ❌ Don't - breaks with HPOS
 $tracking = get_post_meta( $order_id, '_tracking_number', true );
 
@@ -656,6 +677,7 @@ $tracking = Woodev_Order_Compatibility::get_order_meta( $order, '_tracking_numbe
 ### 2. Type-Hint Order Parameters
 
 ```php
+<?php
 function process_order( WC_Order $order ) {
     $tracking = Woodev_Order_Compatibility::get_order_meta( $order, '_tracking_number' );
 }
@@ -664,6 +686,7 @@ function process_order( WC_Order $order ) {
 ### 3. Handle Both Post and Order Objects
 
 ```php
+<?php
 function render_meta_box( $post_or_order ) {
     $order = ( $post_or_order instanceof WP_Post )
         ? wc_get_order( $post_or_order->ID )
@@ -678,6 +701,7 @@ function render_meta_box( $post_or_order ) {
 ### 4. Use Screen Detection
 
 ```php
+<?php
 add_action( 'admin_enqueue_scripts', function( $hook_suffix ) {
     if ( ! Woodev_Order_Compatibility::is_order_edit_screen() ) {
         return;
@@ -690,6 +714,7 @@ add_action( 'admin_enqueue_scripts', function( $hook_suffix ) {
 ### 5. Cache Version Checks
 
 ```php
+<?php
 class Feature_Flags {
 
     private static $is_wc_gte_8;
@@ -710,6 +735,7 @@ class Feature_Flags {
 1. **Verify HPOS declaration:**
 
    ```php
+<?php
    add_action( 'before_woocommerce_init', function() {
        if ( class_exists( '\Automattic\WooCommerce\Utilities\FeaturesUtil' ) ) {
            \Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility(
@@ -724,6 +750,7 @@ class Feature_Flags {
 2. **Check meta key format:**
 
    ```php
+<?php
    // Use underscore prefix for hidden meta
    Woodev_Order_Compatibility::update_order_meta( $order, '_my_meta', $value );
    ```
@@ -731,6 +758,7 @@ class Feature_Flags {
 ### Screen Detection Not Working
 
 ```php
+<?php
 // Check at right time
 add_action( 'load-woocommerce_page_wc-orders', function() {
     // Runs on orders page
@@ -744,6 +772,7 @@ add_action( 'load-post.php', function() {
 ### SQL Queries Empty
 
 ```php
+<?php
 // Verify table names
 global $wpdb;
 

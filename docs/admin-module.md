@@ -32,6 +32,7 @@ The framework automatically creates a **Woodev** top-level menu with:
 ### Creating Custom Admin Pages
 
 ```php
+<?php
 class My_Plugin extends Woodev_Plugin {
 
     public function init_admin() {
@@ -71,6 +72,7 @@ Displays dismissible notices that are stored per user.
 ### Displaying a Notice
 
 ```php
+<?php
 $plugin = My_Plugin::instance();
 
 $plugin->get_admin_notice_handler()->add_admin_notice(
@@ -101,6 +103,7 @@ $plugin->get_admin_notice_handler()->add_admin_notice(
 ### Checking if Notice is Dismissed
 
 ```php
+<?php
 $handler = $plugin->get_admin_notice_handler();
 
 if ( $handler->is_notice_dismissed( 'my-notice-id' ) ) {
@@ -113,6 +116,7 @@ if ( $handler->is_notice_dismissed( 'my-notice-id' ) ) {
 ### Dismissing Notices Programmatically
 
 ```php
+<?php
 // Dismiss a notice for current user
 $handler->dismiss_notice( 'my-notice-id' );
 
@@ -126,6 +130,7 @@ $dismissed = $handler->get_dismissed_notices();
 ### Complete Notice Example
 
 ```php
+<?php
 class Notice_Manager {
 
     private Woodev_Plugin $plugin;
@@ -202,6 +207,7 @@ Used for one-off messages that appear after redirects.
 ### Adding Messages
 
 ```php
+<?php
 $plugin = My_Plugin::instance();
 
 // Add success message
@@ -228,6 +234,7 @@ $plugin->get_message_handler()->add_info(
 ### Message Methods
 
 ```php
+<?php
 $handler = $plugin->get_message_handler();
 
 // Count messages
@@ -249,6 +256,7 @@ $handler->clear_messages();
 ### Redirect with Message
 
 ```php
+<?php
 function save_settings() {
     $plugin = My_Plugin::instance();
 
@@ -274,6 +282,7 @@ function save_settings() {
 ### Displaying Messages
 
 ```php
+<?php
 function render_settings_page() {
     $plugin = My_Plugin::instance();
 
@@ -298,6 +307,7 @@ function render_settings_page() {
 ### Creating a Setup Wizard
 
 ```php
+<?php
 class My_Setup_Wizard extends Woodev_Plugin_Setup_Wizard {
 
     /**
@@ -401,6 +411,7 @@ class My_Setup_Wizard extends Woodev_Plugin_Setup_Wizard {
 ### Connecting Wizard to Plugin
 
 ```php
+<?php
 class My_Plugin extends Woodev_Plugin {
 
     public function get_setup_wizard_handler(): ?Woodev_Plugin_Setup_Wizard {
@@ -419,6 +430,7 @@ The wizard is accessible at:
 ### Enqueueing Scripts and Styles
 
 ```php
+<?php
 class My_Plugin extends Woodev_Plugin {
 
     public function init_admin() {
@@ -467,6 +479,7 @@ class My_Plugin extends Woodev_Plugin {
 ### Getting Admin Strings
 
 ```php
+<?php
 class My_Plugin extends Woodev_Plugin {
 
     public function get_admin_js_strings(): array {
@@ -484,6 +497,7 @@ class My_Plugin extends Woodev_Plugin {
 ### Example 1: Settings Page with Notices
 
 ```php
+<?php
 class Settings_Page {
 
     private Woodev_Plugin $plugin;
@@ -574,6 +588,7 @@ class Settings_Page {
 ### Example 2: Conditional Notices
 
 ```php
+<?php
 class Notice_Handler {
 
     private Woodev_Plugin $plugin;
@@ -662,6 +677,7 @@ class Notice_Handler {
 ### 1. Use Message Handler for Redirects
 
 ```php
+<?php
 // Save and redirect
 function save_and_redirect() {
     $this->save_data();
@@ -678,6 +694,7 @@ function save_and_redirect() {
 ### 2. Make Notices Dismissible
 
 ```php
+<?php
 $handler->add_admin_notice(
     'my-notice',
     '<p>Important information</p>',
@@ -688,6 +705,7 @@ $handler->add_admin_notice(
 ### 3. Use Appropriate Notice Classes
 
 ```php
+<?php
 // Errors
 'notice_class' => 'notice-error'
 
@@ -704,6 +722,7 @@ $handler->add_admin_notice(
 ### 4. Escape All Output
 
 ```php
+<?php
 echo esc_html( $text );
 echo esc_url( $url );
 echo esc_attr( $attribute );
@@ -712,6 +731,7 @@ echo esc_attr( $attribute );
 ### 5. Check Permissions
 
 ```php
+<?php
 if ( ! current_user_can( 'manage_woocommerce' ) ) {
     return;
 }

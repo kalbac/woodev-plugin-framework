@@ -19,6 +19,7 @@ This guide covers everything you need to start building WooCommerce plugins with
 The framework can check for required extensions automatically:
 
 ```php
+<?php
 parent::__construct(
     'my-plugin',
     '1.0.0',
@@ -33,6 +34,7 @@ parent::__construct(
 ### Required PHP Functions
 
 ```php
+<?php
 parent::__construct(
     'my-plugin',
     '1.0.0',
@@ -47,6 +49,7 @@ parent::__construct(
 ### Required PHP Settings
 
 ```php
+<?php
 parent::__construct(
     'my-plugin',
     '1.0.0',
@@ -215,6 +218,7 @@ final class My_Plugin extends Woodev_Plugin {
 Back in `my-plugin.php`:
 
 ```php
+<?php
 function my_plugin_init() {
     require_once plugin_dir_path( __FILE__ ) . 'includes/class-my-plugin.php';
     return My_Plugin::instance();
@@ -295,6 +299,7 @@ my-plugin/
 ### Complete Example
 
 ```php
+<?php
 Woodev_Plugin_Bootstrap::instance()->register_plugin(
     '1.4.0',  // Framework version
     'My Plugin',
@@ -331,6 +336,7 @@ Woodev_Plugin_Bootstrap::instance()->register_plugin(
 ### Complete Example
 
 ```php
+<?php
 parent::__construct(
     'my-plugin',  // Plugin ID
     '1.0.0',      // Plugin version
@@ -371,6 +377,7 @@ parent::__construct(
 Every plugin must implement these three methods:
 
 ```php
+<?php
 class My_Plugin extends Woodev_Plugin {
 
     public function get_file(): string {
@@ -392,6 +399,7 @@ class My_Plugin extends Woodev_Plugin {
 Override these methods to customize plugin behavior:
 
 ```php
+<?php
 class My_Plugin extends Woodev_Plugin {
 
     // Custom settings handler
@@ -426,6 +434,7 @@ class My_Plugin extends Woodev_Plugin {
 ### Adding Admin Menu
 
 ```php
+<?php
 class My_Plugin extends Woodev_Plugin {
 
     public function init_admin() {
@@ -455,6 +464,7 @@ class My_Plugin extends Woodev_Plugin {
 ### Adding Settings
 
 ```php
+<?php
 class My_Settings extends Woodev_Abstract_Settings {
 
     protected function register_settings() {
@@ -474,6 +484,7 @@ class My_Settings extends Woodev_Abstract_Settings {
 ### Adding Background Jobs
 
 ```php
+<?php
 class My_Job_Handler extends Woodev_Background_Job_Handler {
 
     protected $prefix = 'my_plugin';
@@ -498,6 +509,7 @@ $handler->dispatch();
 ### Enable Debug Mode
 
 ```php
+<?php
 // In wp-config.php
 define( 'WP_DEBUG', true );
 define( 'WP_DEBUG_LOG', true );
@@ -507,6 +519,7 @@ define( 'WP_DEBUG_DISPLAY', false );
 ### Logging
 
 ```php
+<?php
 // Log message
 $plugin->log( 'Processing order #' . $order_id );
 
@@ -526,6 +539,7 @@ Your plugin automatically adds data to:
 ### 1. Use Singleton Pattern
 
 ```php
+<?php
 final class My_Plugin extends Woodev_Plugin {
 
     private static $instance;
@@ -542,6 +556,7 @@ final class My_Plugin extends Woodev_Plugin {
 ### 2. Mark Class as Final
 
 ```php
+<?php
 // Prevent inheritance
 final class My_Plugin extends Woodev_Plugin {}
 ```
@@ -549,6 +564,7 @@ final class My_Plugin extends Woodev_Plugin {}
 ### 3. Use Text Domain
 
 ```php
+<?php
 // Always use text domain for translations
 __( 'String to translate', 'my-plugin' );
 ```
@@ -556,6 +572,7 @@ __( 'String to translate', 'my-plugin' );
 ### 4. Escape Output
 
 ```php
+<?php
 // Escape output
 echo esc_html( $value );
 echo esc_url( $url );
@@ -565,6 +582,7 @@ echo esc_attr( $attribute );
 ### 5. Sanitize Input
 
 ```php
+<?php
 // Sanitize input
 $value = sanitize_text_field( $_POST['value'] ?? '' );
 $id = absint( $_GET['id'] ?? 0 );

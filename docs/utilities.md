@@ -31,6 +31,7 @@ The Utilities module handles:
 ### Creating an Async Request
 
 ```php
+<?php
 class My_Async_Request extends Woodev_Async_Request {
 
     /**
@@ -70,6 +71,7 @@ class My_Async_Request extends Woodev_Async_Request {
 ### Dispatching Request
 
 ```php
+<?php
 $async = new My_Async_Request();
 
 // Set data
@@ -87,6 +89,7 @@ $async->dispatch();
 ### Data Flow
 
 ```php
+<?php
 // 1. Set data before dispatch
 $async->data( [ 'key' => 'value' ] );
 
@@ -102,6 +105,7 @@ protected function handle() {
 ### Error Handling
 
 ```php
+<?php
 class My_Async_Request extends Woodev_Async_Request {
 
     protected function handle() {
@@ -148,6 +152,7 @@ class My_Async_Request extends Woodev_Async_Request {
 ### Creating a Job Handler
 
 ```php
+<?php
 class My_Job_Handler extends Woodev_Background_Job_Handler {
 
     /**
@@ -224,6 +229,7 @@ class My_Job_Handler extends Woodev_Background_Job_Handler {
 ### Creating and Queuing Jobs
 
 ```php
+<?php
 // Create handler
 $handler = new My_Job_Handler();
 
@@ -245,6 +251,7 @@ $handler->dispatch();
 ### Job Data Structure
 
 ```php
+<?php
 $job = (object) [
     'id'           => 123,
     'status'       => 'queued',  // queued | processing | completed | failed
@@ -258,6 +265,7 @@ $job = (object) [
 ### Checking Job Status
 
 ```php
+<?php
 $handler = new My_Job_Handler();
 
 // Get job by ID
@@ -286,6 +294,7 @@ if ( 'failed' === $job->status ) {
 ### Listing Jobs
 
 ```php
+<?php
 $handler = new My_Job_Handler();
 
 // Get all jobs
@@ -312,6 +321,7 @@ echo "Jobs in queue: {$queue_count}";
 ### Managing Jobs
 
 ```php
+<?php
 $handler = new My_Job_Handler();
 
 // Complete job early
@@ -331,6 +341,7 @@ $handler->update_job( $job );
 ### Custom Job ID
 
 ```php
+<?php
 $handler = new My_Job_Handler();
 
 // Create job with specific ID
@@ -350,6 +361,7 @@ $job = $handler->get_job( 'daily_sync_2024-01-01' );
 The handler automatically monitors resources:
 
 ```php
+<?php
 class My_Job_Handler extends Woodev_Background_Job_Handler {
 
     /**
@@ -378,6 +390,7 @@ class My_Job_Handler extends Woodev_Background_Job_Handler {
 ### Custom Cron Intervals
 
 ```php
+<?php
 class My_Job_Handler extends Woodev_Background_Job_Handler {
 
     /**
@@ -395,6 +408,7 @@ class My_Job_Handler extends Woodev_Background_Job_Handler {
 ### Debug Tools
 
 ```php
+<?php
 class My_Job_Handler extends Woodev_Background_Job_Handler {
 
     /**
@@ -438,6 +452,7 @@ class My_Job_Handler extends Woodev_Background_Job_Handler {
 ### Test Connection
 
 ```php
+<?php
 $handler = new My_Job_Handler();
 
 // Test background processing
@@ -455,6 +470,7 @@ if ( is_wp_error( $result ) ) {
 ### Example 1: Bulk Order Export
 
 ```php
+<?php
 class Order_Export_Handler extends Woodev_Background_Job_Handler {
 
     protected $prefix = 'my_plugin';
@@ -521,6 +537,7 @@ $export_handler->dispatch();
 ### Example 2: Product Sync
 
 ```php
+<?php
 class Product_Sync_Handler extends Woodev_Background_Job_Handler {
 
     protected $prefix = 'my_plugin';
@@ -584,6 +601,7 @@ add_action( 'my_plugin_daily_sync', function() {
 ### Example 3: Image Processing
 
 ```php
+<?php
 class Image_Processor extends Woodev_Background_Job_Handler {
 
     protected $prefix = 'my_plugin';
@@ -629,6 +647,7 @@ add_action( 'add_attachment', function( $attachment_id ) {
 ### Example 4: Webhook Delivery
 
 ```php
+<?php
 class Webhook_Delivery extends Woodev_Background_Job_Handler {
 
     protected $prefix = 'my_plugin';
@@ -675,6 +694,7 @@ function deliver_webhook( string $url, array $data ) {
 ### 1. Validate Input
 
 ```php
+<?php
 protected function process_item( $item, $job ) {
     if ( empty( $item['id'] ) ) {
         return null;  // Skip invalid
@@ -690,6 +710,7 @@ protected function process_item( $item, $job ) {
 ### 2. Use Logging
 
 ```php
+<?php
 protected function process_item( $item, $job ) {
     wc_get_logger()->debug( "Processing item: {$item['id']}", [
         'source' => 'my-plugin-jobs',
@@ -710,6 +731,7 @@ protected function process_item( $item, $job ) {
 ### 3. Implement Retry Logic
 
 ```php
+<?php
 protected function process_item( $item, $job ) {
     $retry_count = $item['retry_count'] ?? 0;
 
@@ -731,6 +753,7 @@ protected function process_item( $item, $job ) {
 ### 4. Clean Up Old Jobs
 
 ```php
+<?php
 add_action( 'init', function() {
     if ( ! wp_next_scheduled( 'my_plugin_cleanup_jobs' ) ) {
         wp_schedule_event( time(), 'daily', 'my_plugin_cleanup_jobs' );
@@ -754,6 +777,7 @@ add_action( 'my_plugin_cleanup_jobs', function() {
 ### 5. Prevent Duplicate Jobs
 
 ```php
+<?php
 function create_unique_job( $handler, $job_type, $data ) {
     // Check for existing job
     $existing = $handler->get_jobs( [
@@ -782,6 +806,7 @@ function create_unique_job( $handler, $job_type, $data ) {
 1. **Check cron:**
 
    ```php
+<?php
    wp_schedule_event( time(), 'daily', 'test_cron' );
    add_action( 'test_cron', function() {
        error_log( 'Cron working' );
@@ -791,6 +816,7 @@ function create_unique_job( $handler, $job_type, $data ) {
 2. **Verify loopback:**
 
    ```php
+<?php
    $response = wp_remote_post( admin_url( 'admin-ajax.php' ), [
        'timeout' => 1,
        'blocking' => false,
@@ -806,6 +832,7 @@ function create_unique_job( $handler, $job_type, $data ) {
 ### Jobs Stuck in Processing
 
 ```php
+<?php
 // Manually unlock
 $handler = new My_Job_Handler();
 delete_transient( $handler->get_identifier() . '_process_lock' );
@@ -817,6 +844,7 @@ $handler->handle_cron_healthcheck();
 ### Memory Exhaustion
 
 ```php
+<?php
 add_filter( 'woodev_background_job_memory_limit', function() {
     return '512M';
 } );

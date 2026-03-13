@@ -30,6 +30,7 @@ The Core module handles:
 The `Woodev_Plugin_Bootstrap` class ensures only one version of the framework is loaded:
 
 ```php
+<?php
 class Woodev_Plugin_Bootstrap {
 
     protected static $instance = null;
@@ -77,6 +78,7 @@ class Woodev_Plugin_Bootstrap {
 ### Registration Example
 
 ```php
+<?php
 add_action( 'plugins_loaded', 'init_my_plugin', 0 );
 
 function init_my_plugin() {
@@ -104,6 +106,7 @@ function my_plugin_init() {
 ### Class Structure
 
 ```php
+<?php
 abstract class Woodev_Plugin {
 
     const VERSION = '1.4.0';
@@ -139,6 +142,7 @@ abstract class Woodev_Plugin {
 ### Constructor
 
 ```php
+<?php
 public function __construct( string $id, string $version, array $args = [] ) {
     $this->id      = $id;
     $this->version = $version;
@@ -181,6 +185,7 @@ public function __construct( string $id, string $version, array $args = [] ) {
 Every plugin **must** implement these three methods:
 
 ```php
+<?php
 class My_Plugin extends Woodev_Plugin {
 
     /**
@@ -212,6 +217,7 @@ class My_Plugin extends Woodev_Plugin {
 Access plugin information:
 
 ```php
+<?php
 $plugin = My_Plugin::instance();
 
 // Get plugin ID
@@ -238,6 +244,7 @@ echo $plugin->get_framework_assets_path(); // /path/to/plugin/woodev/assets
 Handles plugin installation, upgrades, and deactivation:
 
 ```php
+<?php
 class Woodev_Lifecycle {
 
     protected $upgrade_versions = [];
@@ -261,6 +268,7 @@ class Woodev_Lifecycle {
 ### Lifecycle Hooks
 
 ```php
+<?php
 // After installation
 add_action( 'woodev_my-plugin_installed', function() {
     // First install logic
@@ -285,6 +293,7 @@ add_action( 'woodev_my-plugin_deactivated', function() {
 ### Custom Lifecycle Handler
 
 ```php
+<?php
 class My_Plugin extends Woodev_Plugin {
 
     public function get_lifecycle_handler(): Woodev_Lifecycle {
@@ -327,6 +336,7 @@ class My_Plugin extends Woodev_Plugin {
 ### Install Routine
 
 ```php
+<?php
 class My_Lifecycle extends Woodev_Lifecycle {
 
     protected function install() {
@@ -366,6 +376,7 @@ class My_Lifecycle extends Woodev_Lifecycle {
 Handles PHP extension, function, and settings checks:
 
 ```php
+<?php
 class Woodev_Plugin_Dependencies {
 
     protected $php_extensions = [];
@@ -398,6 +409,7 @@ class Woodev_Plugin_Dependencies {
 ### Declaring Dependencies
 
 ```php
+<?php
 parent::__construct(
     'my-plugin',
     '1.0.0',
@@ -417,6 +429,7 @@ parent::__construct(
 ### Checking Dependencies Manually
 
 ```php
+<?php
 $plugin = My_Plugin::instance();
 
 // Get missing extensions
@@ -443,6 +456,7 @@ if ( ! empty( $incompatible_settings ) ) {
 ### Using the Logger
 
 ```php
+<?php
 $plugin = My_Plugin::instance();
 
 // Log info message
@@ -462,6 +476,7 @@ $plugin->log( sprintf(
 ### Accessing WC_Logger
 
 ```php
+<?php
 $logger = $plugin->logger();
 
 // Log with level
@@ -476,6 +491,7 @@ $logger->debug( 'Debug message' );
 ### Custom Log File
 
 ```php
+<?php
 class My_Plugin extends Woodev_Plugin {
 
     public function log( string $message ) {
@@ -491,6 +507,7 @@ class My_Plugin extends Woodev_Plugin {
 ### Managing Deprecated Hooks
 
 ```php
+<?php
 class My_Plugin extends Woodev_Plugin {
 
     public function init_hook_deprecator() {
@@ -518,6 +535,7 @@ class My_Plugin extends Woodev_Plugin {
 ### Hook Deprecation Format
 
 ```php
+<?php
 $deprecated_hooks = [
     'old_hook_name' => [
         'removed'     => false,  // true if hook is removed
@@ -532,6 +550,7 @@ $deprecated_hooks = [
 ### Loading Templates
 
 ```php
+<?php
 $plugin = My_Plugin::instance();
 
 // Load template with variables
@@ -552,6 +571,7 @@ Templates are loaded from:
 ### Creating Templates
 
 ```php
+<?php
 // templates/emails/shipping-notice.php
 defined( 'ABSPATH' ) || exit;
 
@@ -580,6 +600,7 @@ defined( 'ABSPATH' ) || exit;
 ### Plugin Information
 
 ```php
+<?php
 $plugin = My_Plugin::instance();
 
 // Get plugin URLs
@@ -596,6 +617,7 @@ if ( $plugin->is_general_configuration_page() ) {
 ### File Operations
 
 ```php
+<?php
 // Get uploads path
 $upload_path = $plugin->get_woocommerce_uploads_path();
 
@@ -606,6 +628,7 @@ $plugin->load_class( 'class-my-class.php', 'My_Class' );
 ### Compatibility Checks
 
 ```php
+<?php
 // Check if TLS 1.2 is available
 if ( $plugin->is_tls_1_2_available() ) {
     // Use TLS 1.2
@@ -721,6 +744,7 @@ final class My_Plugin extends Woodev_Plugin {
 ### 1. Use Singleton Pattern
 
 ```php
+<?php
 final class My_Plugin extends Woodev_Plugin {
 
     private static $instance;
@@ -737,6 +761,7 @@ final class My_Plugin extends Woodev_Plugin {
 ### 2. Mark Class as Final
 
 ```php
+<?php
 // Prevent inheritance that could break the framework
 final class My_Plugin extends Woodev_Plugin {}
 ```
@@ -744,6 +769,7 @@ final class My_Plugin extends Woodev_Plugin {}
 ### 3. Declare All Dependencies
 
 ```php
+<?php
 parent::__construct(
     'my-plugin',
     '1.0.0',
@@ -759,6 +785,7 @@ parent::__construct(
 ### 4. Implement Lifecycle Handlers
 
 ```php
+<?php
 public function get_lifecycle_handler(): Woodev_Lifecycle {
     return new class( $this ) extends Woodev_Lifecycle {
         protected function upgrade( string $installed_version ) {
@@ -772,6 +799,7 @@ public function get_lifecycle_handler(): Woodev_Lifecycle {
 ### 5. Use Logging
 
 ```php
+<?php
 public function process_order( int $order_id ) {
     $this->log( "Processing order #{$order_id}" );
     

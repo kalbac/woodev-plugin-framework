@@ -34,6 +34,7 @@ The API module provides:
 All request classes must implement this interface:
 
 ```php
+<?php
 interface Woodev_API_Request {
     public function get_method();
     public function get_path();
@@ -47,6 +48,7 @@ interface Woodev_API_Request {
 All response classes must implement this interface:
 
 ```php
+<?php
 interface Woodev_API_Response {
     public function to_string();
     public function to_string_safe();
@@ -65,6 +67,7 @@ interface Woodev_API_Response {
 The base URL is set via the `$request_uri` property. The `get_api_id()` method defaults to returning the plugin ID and can be overridden.
 
 ```php
+<?php
 class My_API extends Woodev_API_Base {
 
     public function __construct() {
@@ -113,6 +116,7 @@ class My_API extends Woodev_API_Base {
 Extend `Woodev_API_JSON_Request` for JSON APIs:
 
 ```php
+<?php
 class My_API_Request extends Woodev_API_JSON_Request {
 
     public function __construct( array $args ) {
@@ -130,6 +134,7 @@ class My_API_Request extends Woodev_API_JSON_Request {
 Extend `Woodev_API_XML_Request` for XML APIs. Must implement `get_root_element()`:
 
 ```php
+<?php
 class My_XML_Request extends Woodev_API_XML_Request {
 
     public function __construct( array $data ) {
@@ -151,6 +156,7 @@ class My_XML_Request extends Woodev_API_XML_Request {
 Extend `Woodev_API_JSON_Response` for JSON APIs. The constructor decodes the raw JSON body:
 
 ```php
+<?php
 class My_API_Response extends Woodev_API_JSON_Response {
 
     public function get_user_id(): ?int {
@@ -166,6 +172,7 @@ Access response properties via the magic `__get()` method or directly on `$respo
 Extend `Woodev_API_XML_Response` for XML APIs. The constructor parses XML using `SimpleXMLElement`:
 
 ```php
+<?php
 class My_XML_Response extends Woodev_API_XML_Response {
 
     public function get_status(): ?string {
@@ -179,6 +186,7 @@ class My_XML_Response extends Woodev_API_XML_Response {
 ### Request Headers
 
 ```php
+<?php
 // Set a single header
 $this->set_request_header( 'X-Custom-Header', 'value' );
 
@@ -198,6 +206,7 @@ $this->set_request_accept_header( 'application/json' );
 ### Authentication
 
 ```php
+<?php
 // Basic Auth — sets Authorization header with base64-encoded credentials
 $this->set_http_basic_auth( $username, $password );
 
@@ -213,6 +222,7 @@ $this->set_request_header( 'X-API-Key', $api_key );
 `get_request_args()` builds the args array passed to `wp_safe_remote_request()`:
 
 ```php
+<?php
 [
     'method'      => $this->get_request_method(),   // from request object or $request_method property
     'timeout'     => MINUTE_IN_SECONDS,              // 60 seconds
@@ -230,6 +240,7 @@ $this->set_request_header( 'X-API-Key', $api_key );
 Override `get_request_args()` to add custom defaults (e.g. timeout):
 
 ```php
+<?php
 protected function get_request_args(): array {
     return array_merge( parent::get_request_args(), [
         'timeout' => 30,
@@ -244,6 +255,7 @@ protected function get_request_args(): array {
 After `perform_request()` returns, use the getter methods to inspect the response:
 
 ```php
+<?php
 // Response HTTP code (string)
 $code = $this->get_response_code();
 
@@ -265,6 +277,7 @@ $response = $this->get_response();
 Override these no-argument methods to validate before and after parsing:
 
 ```php
+<?php
 class My_API extends Woodev_API_Base {
 
     /**
@@ -302,6 +315,7 @@ class My_API extends Woodev_API_Base {
 Set the response handler class name before calling `perform_request()`:
 
 ```php
+<?php
 protected function set_response_handler( $handler ) {
     $this->response_handler = $handler;
 }
@@ -310,6 +324,7 @@ protected function set_response_handler( $handler ) {
 The handler class is instantiated with the raw response body string as its only constructor argument:
 
 ```php
+<?php
 new $handler_class( $raw_response_body );
 ```
 
@@ -320,6 +335,7 @@ new $handler_class( $raw_response_body );
 Extend `Woodev_Cacheable_API_Base` instead of `Woodev_API_Base`. Responses are cached as WordPress transients automatically when the request uses `Woodev_Cacheable_Request_Trait`.
 
 ```php
+<?php
 class My_Cached_API extends Woodev_Cacheable_API_Base {
 
     public function __construct() {
@@ -341,6 +357,7 @@ class My_Cached_API extends Woodev_Cacheable_API_Base {
 The request class must use `Woodev_Cacheable_Request_Trait`:
 
 ```php
+<?php
 class My_Cached_Request extends Woodev_API_JSON_Request {
 
     use Woodev_Cacheable_Request_Trait;
@@ -359,6 +376,7 @@ class My_Cached_Request extends Woodev_API_JSON_Request {
 The `Woodev_Cacheable_Request_Trait` provides these methods on the request object:
 
 ```php
+<?php
 // Set cache lifetime in seconds (default: 86400 — 24 hours)
 $request->set_cache_lifetime( HOUR_IN_SECONDS );
 
@@ -382,6 +400,7 @@ $request->bypass_cache();
 The transient key is built from the plugin ID, request URI, request body, and cache lifetime:
 
 ```php
+<?php
 sprintf(
     'woodev_%s_api_response_%s',
     $plugin->get_id(),
@@ -392,12 +411,14 @@ sprintf(
 Check if a response was served from cache:
 
 ```php
+<?php
 $api->is_response_loaded_from_cache(); // bool
 ```
 
 ### Cache Filters
 
 ```php
+<?php
 // Control whether a request is cacheable
 add_filter( 'woodev_plugin_{plugin_id}_api_request_is_cacheable', function( $cacheable, $request ) {
     return $cacheable;
@@ -416,6 +437,7 @@ add_filter( 'woodev_plugin_{plugin_id}_api_request_cache_lifetime', function( $l
 `Woodev_API_Exception` extends `Woodev_Plugin_Exception`. It is thrown automatically on network errors (`WP_Error`) and can be thrown manually in the validation hooks.
 
 ```php
+<?php
 public function get_user( int $id ): My_API_Response {
     try {
         $request = $this->get_new_request( [
@@ -435,6 +457,7 @@ public function get_user( int $id ): My_API_Response {
 ```
 
 ```php
+<?php
 try {
     $response = $api->get_user( 123 );
 } catch ( Woodev_API_Exception $e ) {
@@ -448,6 +471,7 @@ try {
 After every request (including failed ones), `broadcast_request()` fires a WordPress action:
 
 ```php
+<?php
 do_action(
     'woodev_' . $this->get_api_id() . '_api_request_performed',
     $request_data,
@@ -481,6 +505,7 @@ For cacheable requests, both arrays include additional cache flags (`force_refre
 Hook into this action for request logging:
 
 ```php
+<?php
 add_action( 'woodev_my_plugin_api_request_performed', function( $request_data, $response_data, $api ) {
     My_Plugin::instance()->log( sprintf(
         '%s %s — HTTP %s (%ss)',
@@ -506,6 +531,7 @@ add_action( 'woodev_my_plugin_api_request_performed', function( $request_data, $
 ## TLS 1.2 Support
 
 ```php
+<?php
 // Check TLS 1.2 availability
 if ( $api->is_tls_1_2_available() ) {
     // TLS 1.2 is supported
@@ -577,6 +603,7 @@ class My_API extends Woodev_API_Base {
 ### Request Class
 
 ```php
+<?php
 class My_API_Request extends Woodev_API_JSON_Request {
 
     public function __construct( array $args ) {
@@ -590,6 +617,7 @@ class My_API_Request extends Woodev_API_JSON_Request {
 ### Response Class
 
 ```php
+<?php
 class My_API_Response extends Woodev_API_JSON_Response {
 
     public function get_id(): ?int {
@@ -605,6 +633,7 @@ class My_API_Response extends Woodev_API_JSON_Response {
 ### Service Class Usage
 
 ```php
+<?php
 class User_Service {
 
     private My_API $api;
@@ -642,6 +671,7 @@ class User_Service {
 ### 1. Wrap API Calls in Try-Catch
 
 ```php
+<?php
 try {
     $response = $api->get_users();
 } catch ( Woodev_API_Exception $e ) {
@@ -652,6 +682,7 @@ try {
 ### 2. Validate Responses in Validation Hooks
 
 ```php
+<?php
 protected function do_pre_parse_response_validation() {
     // Check HTTP status codes
 }
@@ -672,6 +703,7 @@ Extend `Woodev_Cacheable_API_Base` and use `Woodev_Cacheable_Request_Trait` on r
 ### 5. Set Appropriate Timeouts
 
 ```php
+<?php
 protected function get_request_args(): array {
     return array_merge( parent::get_request_args(), [
         'timeout' => 30,

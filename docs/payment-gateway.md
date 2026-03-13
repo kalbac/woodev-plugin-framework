@@ -354,6 +354,7 @@ class My_Bank_Transfer_Gateway extends WC_Payment_Gateway_BACS {
 ### Capture Charge
 
 ```php
+<?php
 class My_Payment_Plugin extends Woodev_Payment_Gateway_Plugin {
 
     public function __construct() {
@@ -377,6 +378,7 @@ $gateway = new My_Credit_Card_Gateway();
 ### Manual Capture
 
 ```php
+<?php
 class Admin_Order_Handler {
 
     public function capture_charge( int $order_id ): bool {
@@ -411,6 +413,7 @@ class Admin_Order_Handler {
 ### Save Payment Token
 
 ```php
+<?php
 class My_Credit_Card_Gateway extends Woodev_Payment_Gateway {
 
     /**
@@ -463,6 +466,7 @@ class My_Credit_Card_Gateway extends Woodev_Payment_Gateway {
 ### Order Handler
 
 ```php
+<?php
 class My_Admin_Order_Handler extends Woodev_Payment_Gateway_Admin_Order {
 
     /**
@@ -507,6 +511,7 @@ class My_Admin_Order_Handler extends Woodev_Payment_Gateway_Admin_Order {
 ### User Handler
 
 ```php
+<?php
 class My_Admin_User_Handler extends Woodev_Payment_Gateway_Admin_User_Handler {
 
     /**
@@ -547,6 +552,7 @@ class My_Admin_User_Handler extends Woodev_Payment_Gateway_Admin_User_Handler {
 ### Customer Payment Methods Page
 
 ```php
+<?php
 class My_Payment_Methods extends Woodev_Payment_Gateway_My_Payment_Methods {
 
     /**
@@ -615,6 +621,7 @@ class My_Payment_Methods extends Woodev_Payment_Gateway_My_Payment_Methods {
 ### Payment API
 
 ```php
+<?php
 class My_Payment_API extends Woodev_API_Base {
 
     const API_URL = 'https://api.mypayment.com';
@@ -726,6 +733,7 @@ function my_payment_init() {
 ### 1. Use SSL for Production
 
 ```php
+<?php
 parent::__construct(
     'my-payment',
     '1.0.0',
@@ -738,6 +746,7 @@ parent::__construct(
 ### 2. Log All Transactions
 
 ```php
+<?php
 public function process_payment( int $order_id ): array {
     $this->plugin->log( 'Processing payment for order #' . $order_id );
 
@@ -754,6 +763,7 @@ public function process_payment( int $order_id ): array {
 ### 3. Handle Errors Gracefully
 
 ```php
+<?php
 try {
     $result = $api->charge( $data );
 } catch ( Woodev_API_Exception $e ) {
@@ -765,6 +775,7 @@ try {
 ### 4. Support Tokenization
 
 ```php
+<?php
 $this->supports = [
     'products',
     'tokenization',
@@ -774,6 +785,7 @@ $this->supports = [
 ### 5. Add Transaction Links
 
 ```php
+<?php
 public function get_transaction_url( WC_Order $order ): string {
     return 'https://dashboard.mypayment.com/tx/' . $order->get_transaction_id();
 }

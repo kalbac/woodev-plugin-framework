@@ -21,6 +21,7 @@ All string functions are multi-byte safe when the `mbstring` extension is availa
 Check if a string starts with a given substring.
 
 ```php
+<?php
 // Usage
 if ( Woodev_Helper::str_starts_with( $filename, 'export-' ) ) {
     echo 'This is an export file';
@@ -37,6 +38,7 @@ Woodev_Helper::str_starts_with( 'hello world', '' );      // true
 Check if a string ends with a given substring.
 
 ```php
+<?php
 // Usage
 if ( Woodev_Helper::str_ends_with( $email, '.ru' ) ) {
     echo 'Russian email domain';
@@ -53,6 +55,7 @@ Woodev_Helper::str_ends_with( 'hello world', '' );      // true
 Check if a substring exists within a string.
 
 ```php
+<?php
 // Usage
 if ( Woodev_Helper::str_exists( $content, 'keyword' ) ) {
     echo 'Keyword found';
@@ -68,6 +71,7 @@ Woodev_Helper::str_exists( 'hello world', 'xyz' );   // false
 Truncate a string to a specified length.
 
 ```php
+<?php
 // Usage
 $short_text = Woodev_Helper::str_truncate( $long_text, 100, '...' );
 
@@ -82,6 +86,7 @@ Woodev_Helper::str_truncate( 'Hello World', 8, '>>' ); // 'Hello>>'
 Convert a string to ASCII (removes accents and special characters).
 
 ```php
+<?php
 // Usage
 $ascii_name = Woodev_Helper::str_to_ascii( $cyrillic_name );
 
@@ -95,6 +100,7 @@ Woodev_Helper::str_to_ascii( 'Ñoño' );    // 'Nono'
 Clean a string and ensure it's valid UTF-8.
 
 ```php
+<?php
 // Usage
 $clean_text = Woodev_Helper::str_to_sane_utf8( $raw_text );
 ```
@@ -106,6 +112,7 @@ $clean_text = Woodev_Helper::str_to_sane_utf8( $raw_text );
 Insert items into an array after a specific key.
 
 ```php
+<?php
 // Usage
 $new_array = Woodev_Helper::array_insert_after(
     $array,
@@ -124,6 +131,7 @@ $result = Woodev_Helper::array_insert_after( $array, 'b', [ 'x' => 10 ] );
 Convert an array to XML format.
 
 ```php
+<?php
 // Usage
 $xml = Woodev_Helper::array_to_xml( $data );
 
@@ -142,6 +150,7 @@ $xml = Woodev_Helper::array_to_xml( $data );
 Format an array as a natural language list.
 
 ```php
+<?php
 // Usage
 $text = Woodev_Helper::list_array_items( $items );
 
@@ -161,6 +170,7 @@ Woodev_Helper::list_array_items( [ 'apple', 'banana', 'cherry' ] );
 Join array items with natural language conjunctions.
 
 ```php
+<?php
 // Usage
 $text = Woodev_Helper::array_join_natural( $items, 'or' );
 
@@ -176,6 +186,7 @@ Woodev_Helper::array_join_natural( [ 'a', 'b', 'c' ], 'or' );
 Format a number as a percentage.
 
 ```php
+<?php
 // Usage
 echo Woodev_Helper::format_percentage( 0.25 );    // 25%
 echo Woodev_Helper::format_percentage( 0.255 );   // 25.5%
@@ -187,6 +198,7 @@ echo Woodev_Helper::format_percentage( 0.255, 1); // 25.5%
 Format a number with localized decimals.
 
 ```php
+<?php
 // Usage
 echo Woodev_Helper::number_format( 1234.567 );    // 1,234.57
 echo Woodev_Helper::number_format( 1234.567, 3 ); // 1,234.567
@@ -199,6 +211,7 @@ echo Woodev_Helper::number_format( 1234.567, 3 ); // 1,234.567
 Get formatted line items from an order.
 
 ```php
+<?php
 // Usage
 $items = Woodev_Helper::get_order_line_items( $order );
 
@@ -214,6 +227,7 @@ foreach ( $items as $item ) {
 Check if an order contains only virtual products.
 
 ```php
+<?php
 // Usage
 if ( Woodev_Helper::is_order_virtual( $order ) ) {
     echo 'No shipping required';
@@ -225,6 +239,7 @@ if ( Woodev_Helper::is_order_virtual( $order ) ) {
 Check if the shop has any virtual products.
 
 ```php
+<?php
 // Usage
 if ( Woodev_Helper::shop_has_virtual_products() ) {
     echo 'Shop sells virtual products';
@@ -236,6 +251,7 @@ if ( Woodev_Helper::shop_has_virtual_products() ) {
 Get the URL to view a WooCommerce log file.
 
 ```php
+<?php
 // Usage
 $log_url = Woodev_Helper::get_wc_log_file_url( 'my-plugin-log' );
 echo '<a href="' . esc_url( $log_url ) . '">View Log</a>';
@@ -248,6 +264,7 @@ echo '<a href="' . esc_url( $log_url ) . '">View Log</a>';
 Get a value from POST request.
 
 ```php
+<?php
 // Usage
 $value = Woodev_Helper::get_posted_value( 'field_name' );
 $value = Woodev_Helper::get_posted_value( 'field_name', 'default' );
@@ -262,6 +279,7 @@ $email = sanitize_email( $email );
 Get a value from GET or POST request.
 
 ```php
+<?php
 // Usage
 $value = Woodev_Helper::get_requested_value( 'param_name' );
 $value = Woodev_Helper::get_requested_value( 'param_name', 'default' );
@@ -272,6 +290,7 @@ $value = Woodev_Helper::get_requested_value( 'param_name', 'default' );
 Check if the current request is an AJAX request.
 
 ```php
+<?php
 // Usage
 if ( Woodev_Helper::is_ajax() ) {
     // Handle AJAX request
@@ -283,6 +302,7 @@ if ( Woodev_Helper::is_ajax() ) {
 Check if the current request is a REST API request.
 
 ```php
+<?php
 // Usage
 if ( Woodev_Helper::is_rest_api_request() ) {
     // Handle REST API request
@@ -296,6 +316,7 @@ if ( Woodev_Helper::is_rest_api_request() ) {
 Get the current admin screen object.
 
 ```php
+<?php
 // Usage
 $screen = Woodev_Helper::get_current_screen();
 
@@ -309,6 +330,7 @@ if ( $screen && 'shop_order' === $screen->post_type ) {
 Check if on a specific admin screen.
 
 ```php
+<?php
 // Usage
 if ( Woodev_Helper::is_current_screen( 'woocommerce_page_wc-orders' ) ) {
     echo 'On orders page';
@@ -324,6 +346,7 @@ if ( Woodev_Helper::is_current_screen( 'shop_order' ) ) {
 Check if on WooCommerce enhanced admin screen.
 
 ```php
+<?php
 // Usage
 if ( Woodev_Helper::is_enhanced_admin_screen() ) {
     echo 'Using WooCommerce Admin';
@@ -335,6 +358,7 @@ if ( Woodev_Helper::is_enhanced_admin_screen() ) {
 Check if WooCommerce navigation is enabled.
 
 ```php
+<?php
 // Usage
 if ( Woodev_Helper::is_wc_navigation_enabled() ) {
     echo 'WC Navigation active';
@@ -348,6 +372,7 @@ if ( Woodev_Helper::is_wc_navigation_enabled() ) {
 Check if the mbstring extension is loaded.
 
 ```php
+<?php
 // Usage
 if ( Woodev_Helper::multibyte_loaded() ) {
     // Use multi-byte functions
@@ -361,6 +386,7 @@ if ( Woodev_Helper::multibyte_loaded() ) {
 Enqueue inline JavaScript.
 
 ```php
+<?php
 // Usage
 Woodev_Helper::enqueue_js( 'console.log("Hello");' );
 ```
@@ -370,6 +396,7 @@ Woodev_Helper::enqueue_js( 'console.log("Hello");' );
 Output inline JavaScript.
 
 ```php
+<?php
 // Usage
 Woodev_Helper::print_js( 'alert("Hello");' );
 ```
@@ -379,6 +406,7 @@ Woodev_Helper::print_js( 'alert("Hello");' );
 Convert PHP ini size notation to bytes.
 
 ```php
+<?php
 // Usage
 $bytes = Woodev_Helper::let_to_num( '128M' );    // 134217728
 $bytes = Woodev_Helper::let_to_num( '1G' );      // 1073741824
@@ -390,6 +418,7 @@ $bytes = Woodev_Helper::let_to_num( '256K' );    // 262144
 Trigger a PHP error with context.
 
 ```php
+<?php
 // Usage
 Woodev_Helper::trigger_error( 'Something went wrong', E_USER_WARNING );
 ```
@@ -399,6 +428,7 @@ Woodev_Helper::trigger_error( 'Something went wrong', E_USER_WARNING );
 Get an escaped list of strings.
 
 ```php
+<?php
 // Usage
 $escaped = Woodev_Helper::get_escaped_string_list( $strings );
 ```
@@ -408,6 +438,7 @@ $escaped = Woodev_Helper::get_escaped_string_list( $strings );
 Get an escaped list of IDs.
 
 ```php
+<?php
 // Usage
 $escaped = Woodev_Helper::get_escaped_id_list( $ids );
 ```
@@ -419,6 +450,7 @@ $escaped = Woodev_Helper::get_escaped_id_list( $ids );
 Translate a string (returns translation).
 
 ```php
+<?php
 // Usage
 $text = f__( 'Hello World', 'my-plugin' );
 ```
@@ -428,6 +460,7 @@ $text = f__( 'Hello World', 'my-plugin' );
 Translate and echo a string.
 
 ```php
+<?php
 // Usage
 f_e( 'Hello World', 'my-plugin' );
 ```
@@ -437,6 +470,7 @@ f_e( 'Hello World', 'my-plugin' );
 Translate with context.
 
 ```php
+<?php
 // Usage
 $text = f_x( 'Post', 'noun', 'my-plugin' );
 ```
@@ -448,6 +482,7 @@ $text = f_x( 'Post', 'noun', 'my-plugin' );
 Render Select2 AJAX dropdown.
 
 ```php
+<?php
 // Usage
 Woodev_Helper::render_select2_ajax(
     'product_id',
@@ -466,6 +501,7 @@ Woodev_Helper::render_select2_ajax(
 Get the site name.
 
 ```php
+<?php
 // Usage
 $site_name = Woodev_Helper::get_site_name();
 echo "Welcome to {$site_name}";
@@ -476,6 +512,7 @@ echo "Welcome to {$site_name}";
 Get a post by ID.
 
 ```php
+<?php
 // Usage
 $post = Woodev_Helper::get_post( $post_id );
 ```
@@ -485,6 +522,7 @@ $post = Woodev_Helper::get_post( $post_id );
 Get request data.
 
 ```php
+<?php
 // Usage
 $request = Woodev_Helper::get_request();
 $value = $request['key'] ?? null;
@@ -495,6 +533,7 @@ $value = $request['key'] ?? null;
 Check if WooCommerce is active.
 
 ```php
+<?php
 // Usage
 if ( Woodev_Helper::is_woocommerce_active() ) {
     echo 'WooCommerce is active';
@@ -506,6 +545,7 @@ if ( Woodev_Helper::is_woocommerce_active() ) {
 Get the WooCommerce version.
 
 ```php
+<?php
 // Usage
 $version = Woodev_Helper::get_wc_version();
 echo "WooCommerce {$version}";
@@ -516,6 +556,7 @@ echo "WooCommerce {$version}";
 Get the count of WooCommerce notices.
 
 ```php
+<?php
 // Usage
 $count = Woodev_Helper::wc_notice_count( 'error' );
 ```
@@ -525,6 +566,7 @@ $count = Woodev_Helper::wc_notice_count( 'error' );
 Add a WooCommerce notice.
 
 ```php
+<?php
 // Usage
 Woodev_Helper::wc_add_notice( 'Message', 'error' );
 ```
@@ -534,6 +576,7 @@ Woodev_Helper::wc_add_notice( 'Message', 'error' );
 Print a WooCommerce notice.
 
 ```php
+<?php
 // Usage
 echo Woodev_Helper::wc_print_notice( 'Message', 'success' );
 ```
@@ -545,6 +588,7 @@ echo Woodev_Helper::wc_print_notice( 'Message', 'success' );
 Convert string encoding.
 
 ```php
+<?php
 // Usage
 $converted = Woodev_Helper::str_convert( $string, 'UTF-8', 'ISO-8859-1' );
 ```
@@ -556,6 +600,7 @@ $converted = Woodev_Helper::str_convert( $string, 'UTF-8', 'ISO-8859-1' );
 Convert country code between formats.
 
 ```php
+<?php
 // Usage
 $iso2 = Woodev_Helper::convert_country_code( $code, 'ISO3166-2' );
 ```
@@ -565,6 +610,7 @@ $iso2 = Woodev_Helper::convert_country_code( $code, 'ISO3166-2' );
 Check if doing it early (before init).
 
 ```php
+<?php
 // Usage
 if ( Woodev_Helper::maybe_doing_it_early() ) {
     // Too early for certain operations
@@ -576,6 +622,7 @@ if ( Woodev_Helper::maybe_doing_it_early() ) {
 ### Example 1: Form Processing
 
 ```php
+<?php
 class Form_Handler {
 
     public function handle_submit() {
@@ -604,6 +651,7 @@ class Form_Handler {
 ### Example 2: String Processing
 
 ```php
+<?php
 class Text_Processor {
 
     public function process_title( string $title ): string {
@@ -628,6 +676,7 @@ class Text_Processor {
 ### Example 3: Order Processing
 
 ```php
+<?php
 class Order_Processor {
 
     public function process_order( WC_Order $order ) {
@@ -654,6 +703,7 @@ class Order_Processor {
 ### Example 4: Admin Screen Detection
 
 ```php
+<?php
 class Admin_Handler {
 
     public function enqueue_assets() {
@@ -688,6 +738,7 @@ class Admin_Handler {
 ### Example 5: Array Manipulation
 
 ```php
+<?php
 class Settings_Page {
 
     public function get_form_fields(): array {
@@ -729,6 +780,7 @@ class Settings_Page {
 ### 1. Use Helper Functions Instead of Reinventing
 
 ```php
+<?php
 // ❌ Don't do this
 if ( substr( $string, 0, strlen( $prefix ) ) === $prefix ) {
     // ...
@@ -743,6 +795,7 @@ if ( Woodev_Helper::str_starts_with( $string, $prefix ) ) {
 ### 2. Always Sanitize Input
 
 ```php
+<?php
 // Get value
 $value = Woodev_Helper::get_posted_value( 'field' );
 
@@ -753,6 +806,7 @@ $value = sanitize_text_field( $value );
 ### 3. Use Multi-byte Safe Functions
 
 ```php
+<?php
 // Helpers automatically use mb_* if available
 $truncated = Woodev_Helper::str_truncate( $text, 100 );
 ```
@@ -760,6 +814,7 @@ $truncated = Woodev_Helper::str_truncate( $text, 100 );
 ### 4. Check for WooCommerce
 
 ```php
+<?php
 if ( ! Woodev_Helper::is_woocommerce_active() ) {
     return;
 }
@@ -768,6 +823,7 @@ if ( ! Woodev_Helper::is_woocommerce_active() ) {
 ### 5. Use Formatting Helpers
 
 ```php
+<?php
 // Format numbers consistently
 $total = Woodev_Helper::number_format( $order->get_total() );
 

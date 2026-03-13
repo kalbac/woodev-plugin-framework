@@ -23,6 +23,7 @@ The REST API module handles:
 ### Extending REST API Handler
 
 ```php
+<?php
 class My_REST_API extends Woodev_REST_API {
 
     /**
@@ -64,6 +65,7 @@ class My_REST_API extends Woodev_REST_API {
 ### Connecting to Plugin
 
 ```php
+<?php
 class My_Plugin extends Woodev_Plugin {
 
     protected function init_rest_api_handler() {
@@ -77,6 +79,7 @@ class My_Plugin extends Woodev_Plugin {
 ### Adding System Status Data
 
 ```php
+<?php
 class My_REST_API extends Woodev_REST_API {
 
     /**
@@ -169,6 +172,7 @@ curl -X PUT \
 ### Registering Routes
 
 ```php
+<?php
 class My_REST_API extends Woodev_REST_API {
 
     public function register_routes() {
@@ -237,6 +241,7 @@ class My_REST_API extends Woodev_REST_API {
 ### Route Callbacks
 
 ```php
+<?php
 class My_REST_API extends Woodev_REST_API {
 
     /**
@@ -355,6 +360,7 @@ class My_REST_API extends Woodev_REST_API {
 ### Route Arguments
 
 ```php
+<?php
 class My_REST_API extends Woodev_REST_API {
 
     /**
@@ -432,6 +438,7 @@ class My_REST_API extends Woodev_REST_API {
 ### Basic Permissions
 
 ```php
+<?php
 public function check_permissions( WP_REST_Request $request ): bool {
     return current_user_can( 'manage_woocommerce' );
 }
@@ -440,6 +447,7 @@ public function check_permissions( WP_REST_Request $request ): bool {
 ### Custom Permissions
 
 ```php
+<?php
 public function check_item_permissions( WP_REST_Request $request ): bool {
     $id = $request->get_param( 'id' );
 
@@ -455,6 +463,7 @@ public function check_item_permissions( WP_REST_Request $request ): bool {
 ### OAuth Permissions
 
 ```php
+<?php
 public function check_oauth_permissions( WP_REST_Request $request ): bool {
     // Check if request is from OAuth app
     if ( ! is_user_logged_in() ) {
@@ -471,6 +480,7 @@ public function check_oauth_permissions( WP_REST_Request $request ): bool {
 ### Schema Definition
 
 ```php
+<?php
 class My_REST_API extends Woodev_REST_API {
 
     /**
@@ -514,6 +524,7 @@ class My_REST_API extends Woodev_REST_API {
 ### Preparing Response
 
 ```php
+<?php
 public function prepare_item_for_response( $item, WP_REST_Request $request ): WP_REST_Response {
     $data = [
         'id'           => $item->get_id(),
@@ -717,6 +728,7 @@ class My_REST_API extends Woodev_REST_API {
 ### 1. Use Proper HTTP Methods
 
 ```php
+<?php
 // GET - Retrieve data
 'methods' => 'GET'
 
@@ -733,6 +745,7 @@ class My_REST_API extends Woodev_REST_API {
 ### 2. Validate All Input
 
 ```php
+<?php
 'args' => [
     'id' => [
         'required'          => true,
@@ -746,6 +759,7 @@ class My_REST_API extends Woodev_REST_API {
 ### 3. Use Proper Status Codes
 
 ```php
+<?php
 // Success
 return rest_ensure_response( $data ); // 200
 
@@ -762,6 +776,7 @@ return new WP_REST_Response( [ 'message' => 'Invalid data' ], 400 );
 ### 4. Add Permission Checks
 
 ```php
+<?php
 'permission_callback' => function() {
     return current_user_can( 'manage_woocommerce' );
 }
@@ -770,6 +785,7 @@ return new WP_REST_Response( [ 'message' => 'Invalid data' ], 400 );
 ### 5. Document Your API
 
 ```php
+<?php
 /**
  * @WP_REST_Route /my-plugin/v1/items
  * @method GET

@@ -6,8 +6,6 @@ hide:
   - toc
 ---
 
-# Woodev Plugin Framework — Developer Documentation
-
 Welcome to the complete developer documentation for the Woodev Plugin Framework. This manual provides comprehensive guidance for building WooCommerce plugins using the Woodev framework.
 
 ## What is Woodev Framework?
@@ -76,6 +74,7 @@ function my_plugin_init() {
 ### 2. Create Your Plugin Class
 
 ```php
+<?php
 class My_Plugin extends Woodev_Plugin {
 
     private static $instance;
@@ -200,6 +199,7 @@ The framework automatically checks:
 All plugins should declare HPOS support:
 
 ```php
+<?php
 parent::__construct(
     'my-plugin',
     '1.0.0',
@@ -216,6 +216,7 @@ parent::__construct(
 Declare compatibility with WooCommerce Cart and Checkout blocks:
 
 ```php
+<?php
 parent::__construct(
     'my-plugin',
     '1.0.0',
