@@ -326,7 +326,7 @@
   </div>
 </section>
 
-<!-- Plugins Showcase — infinite carousel -->
+<!-- Plugins Showcase -->
 <section class="woodev-plugins">
   <h2 class="woodev-features__heading">Plugins built on this framework</h2>
   <p class="woodev-features__sub">
@@ -334,15 +334,13 @@
     <a href="https://woodev.ru/shop" style="color:#818cf8;">View all plugins →</a>
   </p>
 
-  <!-- Carousel viewport -->
-  <div class="woodev-carousel">
-    <!-- Track contains cards × 2 for seamless looping -->
-    <div class="woodev-carousel__track" id="woodev-carousel-track">
+  <div class="woodev-plugins__grid">
 
-      <!-- ── Original set ────────────────────────── -->
+      <!-- ── Cards ── -->
+
       <a href="https://woodev.ru/downloads/wc-edostavka-integration" class="woodev-plugin-card" target="_blank" rel="noopener">
         <div class="woodev-plugin-card__img-wrap">
-          <img src="https://woodev.ru/wp-content/uploads/edd/2026/03/e6333a34-a297-4b48-8538-99e6e9373f91-150x150.jpg"
+          <img src="https://woodev.ru/wp-content/uploads/edd/2026/03/e6333a34-a297-4b48-8538-99e6e9373f91.jpg"
                alt="СДЭК для WooCommerce" loading="lazy" class="woodev-plugin-card__img">
         </div>
         <div class="woodev-plugin-card__body">
@@ -366,7 +364,7 @@
 
       <a href="https://woodev.ru/downloads/yandex-dostavka-woocommerce" class="woodev-plugin-card" target="_blank" rel="noopener">
         <div class="woodev-plugin-card__img-wrap">
-          <img src="https://woodev.ru/wp-content/uploads/edd/2025/01/yandex-delivery-integration-thumb-v2-150x150.jpg"
+          <img src="https://woodev.ru/wp-content/uploads/edd/2025/01/yandex-delivery-integration-thumb-v2.jpg"
                alt="Яндекс Доставка для WooCommerce" loading="lazy" class="woodev-plugin-card__img">
         </div>
         <div class="woodev-plugin-card__body">
@@ -403,7 +401,9 @@
       <a href="https://woodev.ru/shop" class="woodev-plugin-card woodev-plugin-card--soon" target="_blank" rel="noopener">
         <div class="woodev-plugin-card__img-wrap woodev-plugin-card__img-wrap--wb">
           <span class="woodev-plugin-card__soon-badge">Скоро</span>
-          <div class="woodev-plugin-card__wb-logo">W</div>
+          <svg class="woodev-plugin-card__wb-logo" viewBox="0 0 80 40" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <text x="0" y="34" font-family="Georgia,serif" font-size="38" font-weight="900" fill="rgba(255,255,255,0.85)">WB</text>
+          </svg>
         </div>
         <div class="woodev-plugin-card__body">
           <div class="woodev-plugin-card__tag woodev-plugin-card__tag--wb">Marketplace</div>
@@ -412,145 +412,38 @@
         </div>
       </a>
 
-      <!-- ── Cloned set (identical, for seamless loop) ── -->
-      <a href="https://woodev.ru/downloads/wc-edostavka-integration" class="woodev-plugin-card" target="_blank" rel="noopener" aria-hidden="true" tabindex="-1">
-        <div class="woodev-plugin-card__img-wrap">
-          <img src="https://woodev.ru/wp-content/uploads/edd/2026/03/e6333a34-a297-4b48-8538-99e6e9373f91-150x150.jpg"
-               alt="" loading="lazy" class="woodev-plugin-card__img">
-        </div>
-        <div class="woodev-plugin-card__body">
-          <div class="woodev-plugin-card__tag">Shipping</div>
-          <div class="woodev-plugin-card__title">СДЭК для WooCommerce</div>
-          <div class="woodev-plugin-card__desc">Расчёт стоимости доставки и экспорт заказов в личный кабинет СДЭК прямо из WooCommerce.</div>
-        </div>
-      </a>
-
-      <a href="https://woodev.ru/downloads/pochta-rossii-woocommerce" class="woodev-plugin-card" target="_blank" rel="noopener" aria-hidden="true" tabindex="-1">
-        <div class="woodev-plugin-card__img-wrap">
-          <img src="https://woodev.ru/wp-content/uploads/edd/2019/10/wc-russian-post-thumb.jpg"
-               alt="" loading="lazy" class="woodev-plugin-card__img">
-        </div>
-        <div class="woodev-plugin-card__body">
-          <div class="woodev-plugin-card__tag">Shipping</div>
-          <div class="woodev-plugin-card__title">Почта России для WooCommerce</div>
-          <div class="woodev-plugin-card__desc">Точный расчёт стоимости с учётом всех налогов и передача заказов в личный кабинет Почты России.</div>
-        </div>
-      </a>
-
-      <a href="https://woodev.ru/downloads/yandex-dostavka-woocommerce" class="woodev-plugin-card" target="_blank" rel="noopener" aria-hidden="true" tabindex="-1">
-        <div class="woodev-plugin-card__img-wrap">
-          <img src="https://woodev.ru/wp-content/uploads/edd/2025/01/yandex-delivery-integration-thumb-v2-150x150.jpg"
-               alt="" loading="lazy" class="woodev-plugin-card__img">
-        </div>
-        <div class="woodev-plugin-card__body">
-          <div class="woodev-plugin-card__tag">Shipping</div>
-          <div class="woodev-plugin-card__title">Яндекс Доставка для WooCommerce</div>
-          <div class="woodev-plugin-card__desc">Автоматизация доставки: расчёт стоимости, выбор пунктов выдачи и управление отправлениями.</div>
-        </div>
-      </a>
-
-      <a href="https://woodev.ru/downloads/ozon-woocommerce" class="woodev-plugin-card" target="_blank" rel="noopener" aria-hidden="true" tabindex="-1">
-        <div class="woodev-plugin-card__img-wrap">
-          <img src="https://woodev.ru/wp-content/uploads/edd/2026/03/6775bf52-d694-40f7-bef2-ba0e0a13c50c.jpg"
-               alt="" loading="lazy" class="woodev-plugin-card__img">
-        </div>
-        <div class="woodev-plugin-card__body">
-          <div class="woodev-plugin-card__tag">Marketplace</div>
-          <div class="woodev-plugin-card__title">OZON Seller для WooCommerce</div>
-          <div class="woodev-plugin-card__desc">Экспорт товаров, синхронизация остатков и управление заказами между WooCommerce и OZON.</div>
-        </div>
-      </a>
-
-      <a href="https://woodev.ru/downloads/tinkoff-kupi-v-kredit" class="woodev-plugin-card" target="_blank" rel="noopener" aria-hidden="true" tabindex="-1">
-        <div class="woodev-plugin-card__img-wrap">
-          <img src="https://woodev.ru/wp-content/uploads/edd/2024/09/t-bank-loans-thumb.jpg"
-               alt="" loading="lazy" class="woodev-plugin-card__img">
-        </div>
-        <div class="woodev-plugin-card__body">
-          <div class="woodev-plugin-card__tag">Payment</div>
-          <div class="woodev-plugin-card__title">Т-Банк: Рассрочки для WooCommerce</div>
-          <div class="woodev-plugin-card__desc">Платёжный шлюз Т-Банка для оформления рассрочек и кредитов прямо из корзины WooCommerce.</div>
-        </div>
-      </a>
-
-      <a href="https://woodev.ru/shop" class="woodev-plugin-card woodev-plugin-card--soon" target="_blank" rel="noopener" aria-hidden="true" tabindex="-1">
-        <div class="woodev-plugin-card__img-wrap woodev-plugin-card__img-wrap--wb">
-          <span class="woodev-plugin-card__soon-badge">Скоро</span>
-          <div class="woodev-plugin-card__wb-logo">W</div>
-        </div>
-        <div class="woodev-plugin-card__body">
-          <div class="woodev-plugin-card__tag woodev-plugin-card__tag--wb">Marketplace</div>
-          <div class="woodev-plugin-card__title">Wildberries для WooCommerce</div>
-          <div class="woodev-plugin-card__desc">Интеграция с маркетплейсом Wildberries: синхронизация товаров, остатков и заказов. В разработке.</div>
-        </div>
-      </a>
-
-    </div><!-- /.woodev-carousel__track -->
-  </div><!-- /.woodev-carousel -->
+  </div><!-- /.woodev-plugins__grid -->
 </section>
 
 <style>
-  /* ── Plugins Carousel ────────────────────────────────── */
+  /* ── Plugins Grid ────────────────────────────────────── */
   .woodev-plugins {
-    padding: 4rem 0;
+    padding: 4rem 2rem;
     background: #0b1120;
-    overflow: hidden;
-  }
-
-  .woodev-plugins > h2,
-  .woodev-plugins > p {
-    padding: 0 2rem;
   }
 
   [data-md-color-scheme="default"] .woodev-plugins {
     background: #f1f5fb;
   }
 
-  /* Viewport with fade edges */
-  .woodev-carousel {
-    position: relative;
-    width: 100%;
-    overflow: hidden;
-    /* Fade the first and last ~120px to transparent */
-    -webkit-mask-image: linear-gradient(
-      to right,
-      transparent 0%,
-      black 10%,
-      black 90%,
-      transparent 100%
-    );
-    mask-image: linear-gradient(
-      to right,
-      transparent 0%,
-      black 10%,
-      black 90%,
-      transparent 100%
-    );
-  }
-
-  /* The scrolling track */
-  .woodev-carousel__track {
-    display: flex;
-    flex-wrap: nowrap;
+  .woodev-plugins__grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
     gap: 1.25rem;
-    width: max-content;
-    padding: 1rem 1.25rem 1.5rem;
-    animation: woodev-scroll 32s linear infinite;
+    max-width: 1100px;
+    margin: 0 auto;
   }
 
-  .woodev-carousel:hover .woodev-carousel__track {
-    animation-play-state: paused;
+  @media (max-width: 768px) {
+    .woodev-plugins__grid { grid-template-columns: 1fr; }
   }
 
-  @keyframes woodev-scroll {
-    from { transform: translateX(0); }
-    to   { transform: translateX(-50%); }
+  @media (min-width: 769px) and (max-width: 1024px) {
+    .woodev-plugins__grid { grid-template-columns: repeat(2, 1fr); }
   }
 
   /* Individual card */
   .woodev-plugin-card {
-    flex: 0 0 300px;
-    width: 300px;
     background: linear-gradient(135deg, rgba(30,41,59,0.9), rgba(15,23,42,0.95));
     border: 1px solid rgba(99,102,241,0.15);
     border-radius: 0.75rem;
@@ -559,13 +452,12 @@
     flex-direction: column;
     text-decoration: none !important;
     transition: border-color 0.2s, transform 0.2s, box-shadow 0.2s;
-    cursor: pointer;
   }
 
   .woodev-plugin-card:hover {
     border-color: rgba(99,102,241,0.5);
     transform: translateY(-4px);
-    box-shadow: 0 12px 36px rgba(99,102,241,0.25);
+    box-shadow: 0 12px 36px rgba(99,102,241,0.22);
   }
 
   .woodev-plugin-card__img-wrap {
@@ -574,23 +466,24 @@
     overflow: hidden;
     background: #111827;
     position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 
   .woodev-plugin-card__img {
     width: 100%;
     height: 100%;
     object-fit: cover;
-    filter: grayscale(10%);
-    transition: filter 0.3s, transform 0.3s;
+    transition: transform 0.35s;
   }
 
   .woodev-plugin-card:hover .woodev-plugin-card__img {
-    filter: grayscale(0%);
-    transform: scale(1.05);
+    transform: scale(1.04);
   }
 
   .woodev-plugin-card__body {
-    padding: 1rem 1.2rem 1.4rem;
+    padding: 1.1rem 1.25rem 1.4rem;
     flex: 1;
   }
 
@@ -604,38 +497,32 @@
     background: rgba(99,102,241,0.12);
     border: 1px solid rgba(99,102,241,0.25);
     border-radius: 9999px;
-    padding: 0.15rem 0.6rem;
+    padding: 0.15rem 0.65rem;
     margin-bottom: 0.5rem;
   }
 
   .woodev-plugin-card__title {
-    font-size: 0.92rem;
+    font-size: 0.95rem;
     font-weight: 700;
     color: #e2e8f0;
-    margin-bottom: 0.35rem;
+    margin-bottom: 0.4rem;
     line-height: 1.35;
   }
 
   .woodev-plugin-card__desc {
-    font-size: 0.8rem;
+    font-size: 0.82rem;
     color: #64748b;
     line-height: 1.6;
   }
 
-  /* Wildberries "Coming soon" card */
+  /* Wildberries placeholder */
   .woodev-plugin-card__img-wrap--wb {
     background: linear-gradient(135deg, #7b1fa2 0%, #4a148c 100%);
-    display: flex;
-    align-items: center;
-    justify-content: center;
   }
 
   .woodev-plugin-card__wb-logo {
-    font-size: 3.5rem;
-    font-weight: 900;
-    color: rgba(255,255,255,0.9);
-    letter-spacing: -0.05em;
-    font-family: Georgia, serif;
+    width: 90px;
+    height: 45px;
   }
 
   .woodev-plugin-card__soon-badge {
@@ -676,11 +563,6 @@
   }
 
   [data-md-color-scheme="default"] .woodev-plugin-card__title { color: #1e293b; }
-
-  /* Respect prefers-reduced-motion */
-  @media (prefers-reduced-motion: reduce) {
-    .woodev-carousel__track { animation: none; }
-  }
 </style>
 
 <!-- Woodev Ecosystem -->
