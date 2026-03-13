@@ -1,6 +1,8 @@
 # Woodev Plugin Framework — Developer Documentation
 
 [![CI](https://github.com/kalbac/woodev-plugin-framework/actions/workflows/ci.yml/badge.svg)](https://github.com/kalbac/woodev-plugin-framework/actions/workflows/ci.yml)
+[![Integration Tests](https://github.com/kalbac/woodev-plugin-framework/actions/workflows/integration-tests.yml/badge.svg)](https://github.com/kalbac/woodev-plugin-framework/actions/workflows/integration-tests.yml)
+[![Docs](https://github.com/kalbac/woodev-plugin-framework/actions/workflows/docs.yml/badge.svg)](https://kalbac.github.io/woodev-plugin-framework/)
 [![Latest Release](https://img.shields.io/github/v/release/kalbac/woodev-plugin-framework)](https://github.com/kalbac/woodev-plugin-framework/releases/latest)
 [![PHP](https://img.shields.io/badge/PHP-7.4--8.2-777bb4)](https://www.php.net/)
 [![WordPress](https://img.shields.io/badge/WordPress-5.9%2B-21759b)](https://wordpress.org/)

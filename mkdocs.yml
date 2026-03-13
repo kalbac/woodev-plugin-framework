@@ -1,0 +1,76 @@
+site_name: Woodev Plugin Framework
+site_description: Developer documentation for the Woodev Plugin Framework — a scaffold for building WooCommerce plugins.
+site_url: https://kalbac.github.io/woodev-plugin-framework/
+repo_url: https://github.com/kalbac/woodev-plugin-framework
+repo_name: kalbac/woodev-plugin-framework
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: deep purple
+      accent: purple
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: deep purple
+      accent: purple
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - search.highlight
+    - search.suggest
+    - content.code.copy
+    - content.action.edit
+  icon:
+    repo: fontawesome/brands/github
+
+plugins:
+  - search
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - pymdownx.inlinehilite
+  - pymdownx.tabbed:
+      alternate_style: true
+  - admonition
+  - pymdownx.details
+  - tables
+  - toc:
+      permalink: true
+
+nav:
+  - Home: README.md
+  - Getting Started:
+    - Overview: getting-started.md
+    - Core Framework: core-framework.md
+  - Core Modules:
+    - Admin Module: admin-module.md
+    - Settings API: settings-api.md
+    - Helpers: helpers.md
+  - API & Integration:
+    - API Module: api-module.md
+    - REST API: rest-api.md
+  - Specialized Plugins:
+    - Shipping Method: shipping-method.md
+    - Payment Gateway: payment-gateway.md
+    - Box Packer: box-packer.md
+  - Utilities & Compatibility:
+    - Utilities: utilities.md
+    - Compatibility: compatibility.md
+    - Handlers: handlers.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/kalbac/woodev-plugin-framework
