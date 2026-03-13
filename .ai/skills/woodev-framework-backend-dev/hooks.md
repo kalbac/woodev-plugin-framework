@@ -55,8 +55,8 @@ All hooks must have docblocks that include:
 - Description of when the hook fires
 - `@param` tags for each parameter passed to the hook
 - `@since` annotation with the version number (last line, with blank line before)
-    - For new hooks: Use the version from `VERSION` constant in `woodev/class-plugin.php`
-    - For existing hooks: Use `git log -S "hook_name"` to find when it was introduced
+  - For new hooks: Use the version from `VERSION` constant in `woodev/class-plugin.php`
+  - For existing hooks: Use `git log -S "hook_name"` to find when it was introduced
 
 **Action hook example:**
 

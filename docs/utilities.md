@@ -75,7 +75,7 @@ class My_Async_Request extends Woodev_Async_Request {
 $async = new My_Async_Request();
 
 // Set data
-$async->data( [
+$async->set_data( [
     'order_id' => $order->get_id(),
     'action'   => 'process',
 ] );
@@ -91,9 +91,9 @@ $async->dispatch();
 ```php
 <?php
 // 1. Set data before dispatch
-$async->data( [ 'key' => 'value' ] );
+$async->set_data( [ 'key' => 'value' ] );
 
-// 2. Dispatch sends POST to admin-ajax.php
+// 2. Dispatch sends non-blocking GET to admin-ajax.php
 $async->dispatch();
 
 // 3. In handle(), access via $this->data
@@ -365,14 +365,18 @@ The handler automatically monitors resources:
 class My_Job_Handler extends Woodev_Background_Job_Handler {
 
     /**
-     * Check memory limit
+     * Check memory limit (no parameters - uses 90% of WP memory limit)
      */
-    protected function memory_exceeded( $memory_limit ) {
-        wc_get_logger()->warning( "Memory limit exceeded: {$memory_limit}", [
-            'source' => 'my-plugin-jobs',
-        ] );
+    protected function memory_exceeded() {
+        $exceeded = parent::memory_exceeded();
 
-        return true;  // Stop processing
+        if ( $exceeded ) {
+            wc_get_logger()->warning( 'Memory limit exceeded', [
+                'source' => 'my-plugin-jobs',
+            ] );
+        }
+
+        return $exceeded;
     }
 
     /**
@@ -389,45 +393,56 @@ class My_Job_Handler extends Woodev_Background_Job_Handler {
 
 ### Custom Cron Intervals
 
+Override the cron interval by setting the `$cron_interval` property (in minutes):
+
 ```php
 <?php
 class My_Job_Handler extends Woodev_Background_Job_Handler {
 
     /**
-     * Schedule cron healthcheck
+     * Cron healthcheck interval in minutes (default: 5)
      */
-    public function schedule_cron_healthcheck() {
-        return [
-            'interval' => 60,  // 1 minute instead of 5
-            'display'  => 'Every 1 minute',
-        ];
-    }
+    protected $cron_interval = 1;
 }
+```
+
+Or use the filter:
+
+```php
+<?php
+add_filter( 'my_plugin_process_cron_interval', function() {
+    return 1; // 1 minute instead of 5
+} );
 ```
 
 ### Debug Tools
 
+The framework provides a built-in WooCommerce debug tool for testing loopback connections. You can also add custom tools:
+
 ```php
 <?php
 class My_Job_Handler extends Woodev_Background_Job_Handler {
 
     /**
-     * Add debug tool
+     * Add debug tool (public method, receives $tools from WC filter)
      */
-    protected function add_debug_tool( $tools ) {
+    public function add_debug_tool( $tools ) {
+        $tools = parent::add_debug_tool( $tools );
+
         $tools['my_plugin_jobs'] = [
             'name'     => __( 'My Plugin Jobs', 'my-plugin' ),
             'button'   => __( 'View Jobs', 'my-plugin' ),
-            'callback' => [ $this, 'run_debug_tool' ],
+            'desc'     => __( 'View the job queue status.', 'my-plugin' ),
+            'callback' => [ $this, 'run_custom_debug_tool' ],
         ];
 
         return $tools;
     }
 
     /**
-     * Run debug tool
+     * Run custom debug tool
      */
-    protected function run_debug_tool() {
+    public function run_custom_debug_tool() {
         $jobs = $this->get_jobs();
 
         echo '<h2>Job Queue</h2>';
@@ -455,11 +470,11 @@ class My_Job_Handler extends Woodev_Background_Job_Handler {
 <?php
 $handler = new My_Job_Handler();
 
-// Test background processing
+// Test background processing (returns bool)
 $result = $handler->test_connection();
 
-if ( is_wp_error( $result ) ) {
-    wc_get_logger()->error( 'Background processing not working: ' . $result->get_error_message() );
+if ( ! $result ) {
+    wc_get_logger()->error( 'Background processing loopback test failed' );
 } else {
     wc_get_logger()->info( 'Background processing is working' );
 }

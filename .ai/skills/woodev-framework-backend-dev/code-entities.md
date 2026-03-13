@@ -6,11 +6,11 @@
 - [Method Visibility](#method-visibility)
 - [Static Methods](#static-methods)
 - [Docblock Requirements](#docblock-requirements)
-    - [Public, Protected Methods, and Hooks](#public-protected-methods-and-hooks)
-    - [Private Methods and Internal Callbacks](#private-methods-and-internal-callbacks)
-    - [@internal Annotation Placement](#internal-annotation-placement)
-    - [@see Annotation Placement](#see-annotation-placement)
-    - [@deprecated Annotation (CRITICAL)](#deprecated-annotation-critical)
+  - [Public, Protected Methods, and Hooks](#public-protected-methods-and-hooks)
+  - [Private Methods and Internal Callbacks](#private-methods-and-internal-callbacks)
+  - [@internal Annotation Placement](#internal-annotation-placement)
+  - [@see Annotation Placement](#see-annotation-placement)
+  - [@deprecated Annotation (CRITICAL)](#deprecated-annotation-critical)
 - [Hook Docblocks](#hook-docblocks)
 
 ## Naming Conventions

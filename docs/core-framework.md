@@ -39,6 +39,7 @@ class Woodev_Plugin_Bootstrap {
 
     private function __construct() {
         add_action( 'plugins_loaded', [ $this, 'load_plugins' ] );
+        add_action( 'admin_init', [ $this, 'maybe_deactivate_framework_plugins' ] );
     }
 
     public static function instance(): self {
@@ -109,33 +110,36 @@ function my_plugin_init() {
 <?php
 abstract class Woodev_Plugin {
 
-    const VERSION = '1.4.0';
+    const VERSION = '1.4.1';
 
     protected static $instance;
-    protected $id;
-    protected $version;
-    protected $plugin_path;
-    protected $plugin_url;
-    protected $text_domain;
-    protected $supported_features;
-    protected $logger;
+    private $id;
+    private $version;
+    private $plugin_path;
+    private $plugin_url;
+    private $template_path;
+    private $supported_features;
+    private $logger;
     protected $license;
-    protected $message_handler;
-    protected $admin_notice_handler;
-    protected $dependency_handler;
+    private $message_handler;
+    private $text_domain;
+    private $active_plugins = [];
+    private $dependency_handler;
+    private $hook_deprecator;
     protected $lifecycle_handler;
+    private $admin_notice_handler;
     protected $rest_api_handler;
-    protected $blocks_handler;
     protected $setup_wizard_handler;
+    protected Woodev_Blocks_Handler $blocks_handler;
 
     public function __construct( string $id, string $version, array $args = [] ) {
         // Initialization
     }
 
     // Abstract methods (must be implemented)
-    abstract public function get_file(): string;
-    abstract public function get_plugin_name(): string;
-    abstract public function get_download_id(): int;
+    abstract protected function get_file();
+    abstract public function get_plugin_name();
+    abstract public function get_download_id();
 }
 ```
 
@@ -174,6 +178,11 @@ public function __construct( string $id, string $version, array $args = [] ) {
     $this->init_lifecycle_handler();
     $this->init_rest_api_handler();
     $this->init_blocks_handler();
+    $this->init_setup_wizard_handler();
+
+    // Load admin pages and license fields
+    $this->load_admin_pages();
+    $this->load_license_settings_fields();
 
     // Add hooks
     $this->add_hooks();
@@ -191,14 +200,14 @@ class My_Plugin extends Woodev_Plugin {
     /**
      * Get the main plugin file path
      */
-    public function get_file(): string {
+    protected function get_file() {
         return __FILE__;
     }
 
     /**
      * Get the human-readable plugin name
      */
-    public function get_plugin_name(): string {
+    public function get_plugin_name() {
         return __( 'My Plugin', 'my-plugin' );
     }
 
@@ -206,7 +215,7 @@ class My_Plugin extends Woodev_Plugin {
      * Get the EDD download ID for licensing
      * Return 0 if plugin doesn't use licensing
      */
-    public function get_download_id(): int {
+    public function get_download_id() {
         return 0;
     }
 }
@@ -248,7 +257,7 @@ Handles plugin installation, upgrades, and deactivation:
 class Woodev_Lifecycle {
 
     protected $upgrade_versions = [];
-    protected $milestone_version;
+    private $milestone_version;
     private $plugin;
 
     public function __construct( Woodev_Plugin $plugin ) {
@@ -259,8 +268,18 @@ class Woodev_Lifecycle {
     protected function add_hooks() {
         add_action( 'admin_init', [ $this, 'handle_activation' ] );
         add_action( 'deactivate_' . $this->get_plugin()->get_plugin_file(), [ $this, 'handle_deactivation' ] );
-        add_action( 'wp_loaded', [ $this, 'init' ] );
-        add_action( 'init', [ $this, 'add_admin_notices' ] );
+
+        if ( is_admin() && ! wp_doing_ajax() ) {
+            add_action( 'wp_loaded', [ $this, 'init' ] );
+            add_action( 'init', [ $this, 'add_admin_notices' ] );
+        }
+
+        add_action(
+            'woodev_' . $this->get_plugin()->get_id() . '_milestone_reached',
+            [ $this, 'trigger_milestone' ],
+            10,
+            3
+        );
     }
 }
 ```
@@ -292,12 +311,14 @@ add_action( 'woodev_my-plugin_deactivated', function() {
 
 ### Custom Lifecycle Handler
 
+Override the `init_lifecycle_handler()` method (not `get_lifecycle_handler()`, which is just a getter):
+
 ```php
 <?php
 class My_Plugin extends Woodev_Plugin {
 
-    public function get_lifecycle_handler(): Woodev_Lifecycle {
-        return new class( $this ) extends Woodev_Lifecycle {
+    protected function init_lifecycle_handler() {
+        $this->lifecycle_handler = new class( $this ) extends Woodev_Lifecycle {
 
             protected function upgrade( string $installed_version ) {
                 parent::upgrade( $installed_version );
@@ -384,14 +405,10 @@ class Woodev_Plugin_Dependencies {
     protected $php_settings = [];
     protected $plugin;
 
-    public function __construct( Woodev_Plugin $plugin, array $args = [] ) {
+    public function __construct( Woodev_Plugin $plugin, $args = [] ) {
         $this->plugin = $plugin;
 
-        $dependencies = wp_parse_args( $args, [
-            'php_extensions' => [],
-            'php_functions'  => [],
-            'php_settings'   => [],
-        ] );
+        $dependencies = $this->parse_dependencies( $args );
 
         $this->php_extensions = (array) $dependencies['php_extensions'];
         $this->php_functions  = (array) $dependencies['php_functions'];
@@ -431,25 +448,30 @@ parent::__construct(
 ```php
 <?php
 $plugin = My_Plugin::instance();
+$dependency_handler = $plugin->get_dependency_handler();
 
 // Get missing extensions
-$missing_extensions = $plugin->get_missing_extension_dependencies();
+$missing_extensions = $dependency_handler->get_missing_php_extensions();
 if ( ! empty( $missing_extensions ) ) {
     echo 'Missing extensions: ' . implode( ', ', $missing_extensions );
 }
 
 // Get missing functions
-$missing_functions = $plugin->get_missing_function_dependencies();
+$missing_functions = $dependency_handler->get_missing_php_functions();
 if ( ! empty( $missing_functions ) ) {
     echo 'Missing functions: ' . implode( ', ', $missing_functions );
 }
 
 // Get incompatible settings
-$incompatible_settings = $plugin->get_incompatible_php_settings();
+$incompatible_settings = $dependency_handler->get_incompatible_php_settings();
 if ( ! empty( $incompatible_settings ) ) {
     echo 'Incompatible settings detected';
 }
 ```
+
+> **Note:** The methods `get_missing_extension_dependencies()`, `get_missing_function_dependencies()`,
+> and `get_incompatible_php_settings()` on `Woodev_Plugin` are deprecated since 1.1.8.
+> Use the `Woodev_Plugin_Dependencies` handler via `$plugin->get_dependency_handler()` instead.
 
 ## Logging
 
@@ -475,15 +497,16 @@ $plugin->log( sprintf(
 
 ### Accessing WC_Logger
 
+The `logger()` method is `protected`, so it is only available within the plugin class itself or subclasses. External code should use the public `log()` method instead:
+
 ```php
 <?php
-$logger = $plugin->logger();
+// From within your plugin class (logger() is protected)
+$this->logger()->add( $this->get_id(), 'Information message' );
 
-// Log with level
-$logger->info( 'Information message' );
-$logger->warning( 'Warning message' );
-$logger->error( 'Error message' );
-$logger->debug( 'Debug message' );
+// From external code, use the public log() method
+$plugin->log( 'Information message' );
+$plugin->log( 'Error message' );
 
 // View logs: WooCommerce > Status > Logs
 ```
@@ -494,10 +517,11 @@ $logger->debug( 'Debug message' );
 <?php
 class My_Plugin extends Woodev_Plugin {
 
-    public function log( string $message ) {
-        $logger = wc_get_logger();
-        $context = [ 'source' => 'my-plugin' ];
-        $logger->info( $message, $context );
+    public function log( $message, $log_id = null ) {
+        if ( is_null( $log_id ) ) {
+            $log_id = $this->get_id();
+        }
+        $this->logger()->add( $log_id, $message );
     }
 }
 ```
@@ -510,19 +534,22 @@ class My_Plugin extends Woodev_Plugin {
 <?php
 class My_Plugin extends Woodev_Plugin {
 
-    public function init_hook_deprecator() {
-        $deprecated_hooks = [
-            'my_plugin_old_action' => [
-                'removed'     => false,
-                'replacement' => 'my_plugin_new_action',
-                'map'         => true,
-            ],
-            'my_plugin_removed_filter' => [
-                'removed'     => true,
-                'replacement' => 'my_plugin_replacement_filter',
-                'map'         => true,
-            ],
-        ];
+    protected function init_hook_deprecator() {
+        $deprecated_hooks = array_merge(
+            $this->get_framework_deprecated_hooks(),
+            [
+                'my_plugin_old_action' => [
+                    'removed'     => false,
+                    'replacement' => 'my_plugin_new_action',
+                    'map'         => true,
+                ],
+                'my_plugin_removed_filter' => [
+                    'removed'     => true,
+                    'replacement' => 'my_plugin_replacement_filter',
+                    'map'         => true,
+                ],
+            ]
+        );
 
         $this->hook_deprecator = new Woodev_Hook_Deprecator(
             $this->get_plugin_name(),
@@ -716,20 +743,20 @@ final class My_Plugin extends Woodev_Plugin {
         );
     }
 
-    public function get_file(): string {
+    protected function get_file() {
         return __FILE__;
     }
 
-    public function get_plugin_name(): string {
+    public function get_plugin_name() {
         return __( 'My Plugin', 'my-plugin' );
     }
 
-    public function get_download_id(): int {
+    public function get_download_id() {
         return 0;
     }
 
-    public function get_lifecycle_handler(): Woodev_Lifecycle {
-        return new class( $this ) extends Woodev_Lifecycle {
+    protected function init_lifecycle_handler() {
+        $this->lifecycle_handler = new class( $this ) extends Woodev_Lifecycle {
             protected function install() {
                 parent::install();
                 update_option( 'my_plugin_installed', time() );
@@ -786,8 +813,8 @@ parent::__construct(
 
 ```php
 <?php
-public function get_lifecycle_handler(): Woodev_Lifecycle {
-    return new class( $this ) extends Woodev_Lifecycle {
+protected function init_lifecycle_handler() {
+    $this->lifecycle_handler = new class( $this ) extends Woodev_Lifecycle {
         protected function upgrade( string $installed_version ) {
             parent::upgrade( $installed_version );
             // Your upgrade logic

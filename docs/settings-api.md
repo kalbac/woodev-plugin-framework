@@ -22,8 +22,8 @@ Settings values are stored in `wp_options` under the pattern:
 | `Woodev_Abstract_Settings` | `settings-api/abstract-class-settings.php` | Settings container and manager |
 | `Woodev_Setting` | `settings-api/class-setting.php` | Single setting descriptor |
 | `Woodev_Control` | `settings-api/class-control.php` | UI control descriptor |
-| `Woodev_Register_Settings` | `settings-api/class-register-settings.php` | WP Settings API registration |
-| `Woodev_Register_Settings_Fields` | `settings-api/class-register-settings-fields.php` | Field registration |
+| `Woodev_Register_Settings` | `settings-api/register-settings/class-register-settings.php` | WP Settings API registration |
+| `Woodev_Register_Settings_Fields` | `settings-api/register-settings/class-register-settings-fields.php` | Field registration |
 
 ## Setting Types
 
@@ -72,7 +72,7 @@ class My_Settings extends Woodev_Abstract_Settings {
      */
     public static function instance( Woodev_Plugin $plugin ): self {
         if ( null === self::$instance ) {
-            self::$instance = new self( $plugin );
+            self::$instance = new self( $plugin->get_id() );
         }
         return self::$instance;
     }
@@ -89,9 +89,10 @@ class My_Settings extends Woodev_Abstract_Settings {
                 'name'        => __( 'API Key', 'my-plugin' ),
                 'description' => __( 'Your API key from the provider.', 'my-plugin' ),
                 'default'     => '',
-                'control'     => new Woodev_Control( 'password' ),
             ]
         );
+
+        $this->register_control( 'api_key', 'password' );
 
         // Debug Mode setting
         $this->register_setting(
@@ -101,9 +102,10 @@ class My_Settings extends Woodev_Abstract_Settings {
                 'name'        => __( 'Debug Mode', 'my-plugin' ),
                 'description' => __( 'Enable debug logging.', 'my-plugin' ),
                 'default'     => false,
-                'control'     => new Woodev_Control( 'checkbox' ),
             ]
         );
+
+        $this->register_control( 'debug_mode', 'checkbox' );
 
         // Max Weight setting
         $this->register_setting(
@@ -113,12 +115,10 @@ class My_Settings extends Woodev_Abstract_Settings {
                 'name'        => __( 'Maximum Weight (kg)', 'my-plugin' ),
                 'description' => __( 'Maximum package weight.', 'my-plugin' ),
                 'default'     => 30.0,
-                'control'     => new Woodev_Control( 'number', [
-                    'min'  => 0,
-                    'step' => 0.5,
-                ] ),
             ]
         );
+
+        $this->register_control( 'max_weight', 'number' );
 
         // Environment setting
         $this->register_setting(
@@ -128,14 +128,16 @@ class My_Settings extends Woodev_Abstract_Settings {
                 'name'        => __( 'Environment', 'my-plugin' ),
                 'description' => __( 'Select environment.', 'my-plugin' ),
                 'default'     => 'production',
-                'control'     => new Woodev_Control( 'select', [
-                    'options' => [
-                        'production' => __( 'Production', 'my-plugin' ),
-                        'sandbox'    => __( 'Sandbox', 'my-plugin' ),
-                    ],
-                ] ),
+                'options'     => [ 'production', 'sandbox' ],
             ]
         );
+
+        $this->register_control( 'environment', 'select', [
+            'options' => [
+                'production' => __( 'Production', 'my-plugin' ),
+                'sandbox'    => __( 'Sandbox', 'my-plugin' ),
+            ],
+        ] );
     }
 }
 ```
@@ -146,7 +148,7 @@ class My_Settings extends Woodev_Abstract_Settings {
 <?php
 class My_Plugin extends Woodev_Plugin {
 
-    public function get_settings_handler(): ?Woodev_Abstract_Settings {
+    public function get_settings_handler() {
         return My_Settings::instance( $this );
     }
 }
@@ -189,7 +191,7 @@ $setting = $settings->get_setting( 'max_weight' );
 $default = $setting->get_default(); // 30.0
 
 // Check if current value equals default
-$is_default = $setting->is_default();
+$is_default = ( $setting->get_value() === $setting->get_default() );
 ```
 
 ### Get All Settings
@@ -252,129 +254,69 @@ $settings->save();
 
 ## Control Configuration
 
-### Text Input
+Controls are registered separately from settings via `register_control()`. The `Woodev_Control` class has no constructor -- its properties are set via setter methods internally by `register_control()`.
+
+### Registering Controls
 
 ```php
 <?php
-new Woodev_Control( 'text', [
-    'placeholder' => 'Enter value',
-    'class'       => 'regular-text',
-] );
-```
+// Text input
+$this->register_control( 'my_setting', 'text' );
 
-### Number Input
+// Number input
+$this->register_control( 'my_setting', 'number' );
 
-```php
-<?php
-new Woodev_Control( 'number', [
-    'min'       => 0,
-    'max'       => 100,
-    'step'      => 1,
-    'placeholder' => '0',
-] );
-```
-
-### Select Dropdown
-
-```php
-<?php
-new Woodev_Control( 'select', [
+// Select dropdown with options
+$this->register_control( 'my_setting', 'select', [
     'options' => [
         'value1' => __( 'Label 1', 'my-plugin' ),
         'value2' => __( 'Label 2', 'my-plugin' ),
         'value3' => __( 'Label 3', 'my-plugin' ),
     ],
-    'class' => 'regular-text',
 ] );
-```
 
-### Radio Buttons
-
-```php
-<?php
-new Woodev_Control( 'radio', [
+// Radio buttons with options
+$this->register_control( 'my_setting', 'radio', [
     'options' => [
         'option1' => __( 'Option 1', 'my-plugin' ),
         'option2' => __( 'Option 2', 'my-plugin' ),
     ],
 ] );
+
+// Checkbox
+$this->register_control( 'my_setting', 'checkbox' );
+
+// Textarea
+$this->register_control( 'my_setting', 'textarea' );
+
+// Color picker
+$this->register_control( 'my_setting', 'color' );
+
+// Range slider
+$this->register_control( 'my_setting', 'range' );
+
+// File upload
+$this->register_control( 'my_setting', 'file' );
+
+// Date picker
+$this->register_control( 'my_setting', 'date' );
+
+// Email input
+$this->register_control( 'my_setting', 'email' );
+
+// Password input
+$this->register_control( 'my_setting', 'password' );
 ```
 
-### Checkbox
+### Available Control Args
 
-```php
-<?php
-new Woodev_Control( 'checkbox', [
-    'label' => __( 'Enable feature', 'my-plugin' ),
-] );
-```
+The `register_control()` method accepts the following optional args:
 
-### Textarea
-
-```php
-<?php
-new Woodev_Control( 'textarea', [
-    'rows'        => 5,
-    'cols'        => 50,
-    'placeholder' => 'Enter description',
-] );
-```
-
-### Color Picker
-
-```php
-<?php
-new Woodev_Control( 'color', [
-    'default' => '#ffffff',
-] );
-```
-
-### Range Slider
-
-```php
-<?php
-new Woodev_Control( 'range', [
-    'min'   => 0,
-    'max'   => 100,
-    'step'  => 1,
-] );
-```
-
-### File Upload
-
-```php
-<?php
-new Woodev_Control( 'file', [
-    'button_text' => __( 'Upload File', 'my-plugin' ),
-] );
-```
-
-### Date Picker
-
-```php
-<?php
-new Woodev_Control( 'date', [
-    'min' => date( 'Y-m-d' ),
-] );
-```
-
-### Email Input
-
-```php
-<?php
-new Woodev_Control( 'email', [
-    'placeholder' => 'email@example.com',
-] );
-```
-
-### Password Input
-
-```php
-<?php
-new Woodev_Control( 'password', [
-    'placeholder' => 'Enter password',
-] );
-```
+| Arg | Type | Default | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | Setting's name | Display name (inherits from setting) |
+| `description` | `string` | Setting's description | Display description (inherits from setting) |
+| `options` | `array` | `[]` | Key-value pairs for select/radio controls |
 
 ## Complete Settings Page Example
 
@@ -388,7 +330,7 @@ class My_Settings extends Woodev_Abstract_Settings {
 
     public static function instance( Woodev_Plugin $plugin ): self {
         if ( null === self::$instance ) {
-            self::$instance = new self( $plugin );
+            self::$instance = new self( $plugin->get_id() );
         }
         return self::$instance;
     }
@@ -402,11 +344,10 @@ class My_Settings extends Woodev_Abstract_Settings {
                 'name'        => __( 'API Key', 'my-plugin' ),
                 'description' => __( 'Your API key.', 'my-plugin' ),
                 'default'     => '',
-                'control'     => new Woodev_Control( 'password', [
-                    'placeholder' => 'sk_live_...',
-                ] ),
             ]
         );
+
+        $this->register_control( 'api_key', 'password' );
 
         $this->register_setting(
             'api_secret',
@@ -415,9 +356,10 @@ class My_Settings extends Woodev_Abstract_Settings {
                 'name'        => __( 'API Secret', 'my-plugin' ),
                 'description' => __( 'Your API secret.', 'my-plugin' ),
                 'default'     => '',
-                'control'     => new Woodev_Control( 'password' ),
             ]
         );
+
+        $this->register_control( 'api_secret', 'password' );
 
         // Advanced Section
         $this->register_setting(
@@ -427,9 +369,10 @@ class My_Settings extends Woodev_Abstract_Settings {
                 'name'        => __( 'Debug Mode', 'my-plugin' ),
                 'description' => __( 'Enable debug logging.', 'my-plugin' ),
                 'default'     => false,
-                'control'     => new Woodev_Control( 'checkbox' ),
             ]
         );
+
+        $this->register_control( 'debug_mode', 'checkbox' );
 
         $this->register_setting(
             'log_retention_days',
@@ -438,13 +381,10 @@ class My_Settings extends Woodev_Abstract_Settings {
                 'name'        => __( 'Log Retention (days)', 'my-plugin' ),
                 'description' => __( 'Days to keep logs.', 'my-plugin' ),
                 'default'     => 30,
-                'control'     => new Woodev_Control( 'number', [
-                    'min'  => 1,
-                    'max'  => 365,
-                    'step' => 1,
-                ] ),
             ]
         );
+
+        $this->register_control( 'log_retention_days', 'number' );
 
         // Limits Section
         $this->register_setting(
@@ -454,12 +394,10 @@ class My_Settings extends Woodev_Abstract_Settings {
                 'name'        => __( 'Max Requests/Minute', 'my-plugin' ),
                 'description' => __( 'Rate limit.', 'my-plugin' ),
                 'default'     => 60,
-                'control'     => new Woodev_Control( 'number', [
-                    'min'  => 1,
-                    'max'  => 1000,
-                ] ),
             ]
         );
+
+        $this->register_control( 'max_requests_per_minute', 'number' );
 
         $this->register_setting(
             'timeout',
@@ -468,13 +406,10 @@ class My_Settings extends Woodev_Abstract_Settings {
                 'name'        => __( 'Timeout (seconds)', 'my-plugin' ),
                 'description' => __( 'Request timeout.', 'my-plugin' ),
                 'default'     => 30.0,
-                'control'     => new Woodev_Control( 'range', [
-                    'min'  => 1,
-                    'max'  => 120,
-                    'step' => 0.5,
-                ] ),
             ]
         );
+
+        $this->register_control( 'timeout', 'range' );
     }
 }
 ```
@@ -485,7 +420,7 @@ class My_Settings extends Woodev_Abstract_Settings {
 <?php
 class My_Plugin extends Woodev_Plugin {
 
-    public function get_settings_handler(): ?Woodev_Abstract_Settings {
+    public function get_settings_handler() {
         return My_Settings::instance( $this );
     }
 
@@ -619,7 +554,13 @@ class My_Plugin extends Woodev_Plugin {
 
 ## Validation
 
+### Built-in Validation
+
+`Woodev_Setting` validates values automatically based on type (e.g., `validate_string_value()`, `validate_integer_value()`, `validate_boolean_value()`, etc.). If a setting has `options` defined, the value must be one of those options.
+
 ### Custom Validation
+
+Override `update_value()` in your settings class to add custom validation logic:
 
 ```php
 <?php
@@ -630,66 +571,66 @@ class My_Settings extends Woodev_Abstract_Settings {
             'api_key',
             'string',
             [
-                'name'        => __( 'API Key', 'my-plugin' ),
-                'default'     => '',
-                'control'     => new Woodev_Control( 'text' ),
-                'validate_callback' => [ $this, 'validate_api_key' ],
+                'name'    => __( 'API Key', 'my-plugin' ),
+                'default' => '',
             ]
         );
+
+        $this->register_control( 'api_key', 'text' );
     }
 
-    public function validate_api_key( $value ) {
-        if ( empty( $value ) ) {
-            add_settings_error(
-                'my_plugin_api_key',
-                'required',
-                __( 'API Key is required.', 'my-plugin' )
-            );
-            return '';
+    public function update_value( $setting_id, $value ) {
+        if ( 'api_key' === $setting_id ) {
+            if ( empty( $value ) ) {
+                throw new Woodev_Plugin_Exception(
+                    __( 'API Key is required.', 'my-plugin' ),
+                    400
+                );
+            }
+
+            if ( ! str_starts_with( $value, 'sk_live_' ) ) {
+                throw new Woodev_Plugin_Exception(
+                    __( 'API Key must start with sk_live_.', 'my-plugin' ),
+                    400
+                );
+            }
         }
 
-        if ( ! str_starts_with( $value, 'sk_live_' ) ) {
-            add_settings_error(
-                'my_plugin_api_key',
-                'invalid_format',
-                __( 'API Key must start with sk_live_.', 'my-plugin' )
-            );
-            return '';
-        }
-
-        return sanitize_text_field( $value );
+        parent::update_value( $setting_id, $value );
     }
 }
 ```
 
 ## Sanitization
 
-### Built-in Sanitization
+### Built-in Type Conversion
 
-Settings are automatically sanitized based on type:
+Settings values are automatically converted when loaded from the database:
 
-- `string` — `sanitize_text_field()`
-- `url` — `esc_url_raw()`
-- `email` — `sanitize_email()`
-- `integer` — `absint()`
-- `float` — `floatval()`
-- `boolean` — `wc_string_to_bool()`
-- `object` — `wp_json_encode()`
+- `string` — stored and returned as-is
+- `url` — validated via `wc_is_valid_url()`
+- `email` — validated via `is_email()`
+- `integer` — cast to `int` via `(int)` on load
+- `float` — cast to `float` via `(float)` on load
+- `boolean` — converted via `wc_string_to_bool()` on load, stored as `'yes'`/`'no'` via `wc_bool_to_string()`
+- `object` — stored and returned as-is
 
 ### Custom Sanitization
 
+For custom sanitization, override `update_value()` in your settings class:
+
 ```php
 <?php
-$this->register_setting(
-    'custom_field',
-    'string',
-    [
-        'name' => __( 'Custom Field', 'my-plugin' ),
-        'sanitize_callback' => function( $value ) {
-            return strtoupper( sanitize_text_field( $value ) );
-        },
-    ]
-);
+class My_Settings extends Woodev_Abstract_Settings {
+
+    public function update_value( $setting_id, $value ) {
+        if ( 'custom_field' === $setting_id && is_string( $value ) ) {
+            $value = strtoupper( sanitize_text_field( $value ) );
+        }
+
+        parent::update_value( $setting_id, $value );
+    }
+}
 ```
 
 ## REST API Integration
@@ -698,11 +639,14 @@ Settings are automatically available via REST API when connected to plugin:
 
 ```php
 <?php
-// GET /wp-json/wc/v3/my-plugin/settings
-// Returns all settings
+// GET /wp-json/wc/v3/{plugin_id}/settings
+// Returns all settings as an array
 
-// PUT /wp-json/wc/v3/my-plugin/settings
-// Update settings
+// GET /wp-json/wc/v3/{plugin_id}/settings/{setting_id}
+// Returns a single setting
+
+// PUT /wp-json/wc/v3/{plugin_id}/settings/{setting_id}
+// Update a single setting (pass "value" in request body)
 ```
 
 ## System Status Integration
@@ -728,7 +672,7 @@ class My_Settings extends Woodev_Abstract_Settings {
 
     public static function instance( Woodev_Plugin $plugin ): self {
         if ( null === self::$instance ) {
-            self::$instance = new self( $plugin );
+            self::$instance = new self( $plugin->get_id() );
         }
         return self::$instance;
     }
@@ -776,14 +720,17 @@ $this->register_setting(
 
 ### 5. Validate Input
 
+The `Woodev_Setting` class validates values automatically based on type. For custom validation, override `update_value()` in your settings class:
+
 ```php
 <?php
-'validate_callback' => function( $value ) {
-    if ( empty( $value ) ) {
-        add_settings_error( 'api_key', 'required', 'Required' );
+public function update_value( $setting_id, $value ) {
+    if ( 'api_key' === $setting_id && empty( $value ) ) {
+        throw new Woodev_Plugin_Exception( 'API Key is required.', 400 );
     }
-    return $value;
-},
+
+    parent::update_value( $setting_id, $value );
+}
 ```
 
 ## Related Documentation

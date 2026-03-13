@@ -18,7 +18,7 @@ The Admin module handles:
 | `Woodev_Admin_Pages` | `admin/class-admin-pages.php` | Woodev admin menu |
 | `Woodev_Admin_Notice_Handler` | `class-admin-notice-handler.php` | Dismissible notices |
 | `Woodev_Admin_Message_Handler` | `class-admin-message-handler.php` | Flash messages |
-| `Woodev_Plugin_Setup_Wizard` | `admin/class-setup-wizard.php` | Setup wizard |
+| `Woodev_Plugin_Setup_Wizard` | `admin/abstract-plugin-admin-setup-wizard.php` | Setup wizard |
 
 ## Admin Pages
 
@@ -76,8 +76,8 @@ Displays dismissible notices that are stored per user.
 $plugin = My_Plugin::instance();
 
 $plugin->get_admin_notice_handler()->add_admin_notice(
-    'my-notice-id',
     '<p>' . __( 'Thank you for installing My Plugin!', 'my-plugin' ) . '</p>',
+    'my-notice-id',
     [
         'dismissible'  => true,
         'notice_class' => 'notice-info',
@@ -90,8 +90,8 @@ $plugin->get_admin_notice_handler()->add_admin_notice(
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
 | `dismissible` | `bool` | `true` | Show dismiss button |
-| `notice_class` | `string` | `'notice-info'` | CSS class for styling |
-| `always_show_on_settings` | `bool` | `false` | Always show on settings pages |
+| `notice_class` | `string` | `'updated'` | CSS class for styling |
+| `always_show_on_settings` | `bool` | `true` | Always show on settings pages |
 
 ### Notice Classes
 
@@ -156,7 +156,6 @@ class Notice_Manager {
 
     private function show_api_key_notice() {
         $this->plugin->get_admin_notice_handler()->add_admin_notice(
-            'my-plugin-api-key-missing',
             sprintf(
                 '<p><strong>%1$s</strong> %2$s <a href="%3$s">%4$s</a></p>',
                 __( 'API Key Required', 'my-plugin' ),
@@ -164,6 +163,7 @@ class Notice_Manager {
                 $this->plugin->get_settings_url(),
                 __( 'Go to Settings', 'my-plugin' )
             ),
+            'my-plugin-api-key-missing',
             [
                 'dismissible'  => false,
                 'notice_class' => 'notice-error',
@@ -181,7 +181,6 @@ class Notice_Manager {
 
     private function show_license_notice() {
         $this->plugin->get_admin_notice_handler()->add_admin_notice(
-            'my-plugin-license-expired',
             sprintf(
                 '<p><strong>%1$s</strong> %2$s <a href="%3$s">%4$s</a></p>',
                 __( 'License Expired', 'my-plugin' ),
@@ -189,6 +188,7 @@ class Notice_Manager {
                 admin_url( 'admin.php?page=woodev-licenses' ),
                 __( 'Renew License', 'my-plugin' )
             ),
+            'my-plugin-license-expired',
             [
                 'dismissible'  => true,
                 'notice_class' => 'notice-warning',
@@ -311,31 +311,34 @@ function render_settings_page() {
 class My_Setup_Wizard extends Woodev_Plugin_Setup_Wizard {
 
     /**
-     * Get wizard steps
+     * Register wizard steps
      */
-    protected function get_steps(): array {
-        return [
-            'introduction' => [
-                'name'    => __( 'Introduction', 'my-plugin' ),
-                'view'    => [ $this, 'step_introduction' ],
-                'handler' => '',
-            ],
-            'api_key' => [
-                'name'    => __( 'API Key', 'my-plugin' ),
-                'view'    => [ $this, 'step_api_key' ],
-                'handler' => [ $this, 'step_api_key_save' ],
-            ],
-            'settings' => [
-                'name'    => __( 'Settings', 'my-plugin' ),
-                'view'    => [ $this, 'step_settings' ],
-                'handler' => [ $this, 'step_settings_save' ],
-            ],
-            'complete' => [
-                'name'    => __( 'Complete', 'my-plugin' ),
-                'view'    => [ $this, 'step_complete' ],
-                'handler' => '',
-            ],
-        ];
+    protected function register_steps(): void {
+        $this->register_step(
+            'introduction',
+            __( 'Introduction', 'my-plugin' ),
+            [ $this, 'step_introduction' ]
+        );
+
+        $this->register_step(
+            'api_key',
+            __( 'API Key', 'my-plugin' ),
+            [ $this, 'step_api_key' ],
+            [ $this, 'step_api_key_save' ]
+        );
+
+        $this->register_step(
+            'settings',
+            __( 'Settings', 'my-plugin' ),
+            [ $this, 'step_settings' ],
+            [ $this, 'step_settings_save' ]
+        );
+
+        $this->register_step(
+            'complete',
+            __( 'Complete', 'my-plugin' ),
+            [ $this, 'step_complete' ]
+        );
     }
 
     /**
@@ -414,8 +417,10 @@ class My_Setup_Wizard extends Woodev_Plugin_Setup_Wizard {
 <?php
 class My_Plugin extends Woodev_Plugin {
 
-    public function get_setup_wizard_handler(): ?Woodev_Plugin_Setup_Wizard {
-        return new My_Setup_Wizard( $this );
+    protected function init_setup_wizard_handler() {
+        parent::init_setup_wizard_handler();
+
+        $this->setup_wizard_handler = new My_Setup_Wizard( $this );
     }
 }
 ```
@@ -423,7 +428,7 @@ class My_Plugin extends Woodev_Plugin {
 ### Wizard URL
 
 The wizard is accessible at:
-`wp-admin/?page=my-plugin-setup-wizard`
+`wp-admin/index.php?page=woodev-{plugin-id-dasherized}-setup`
 
 ## Admin Assets
 
@@ -616,12 +621,12 @@ class Notice_Handler {
 
     private function show_ssl_notice() {
         $this->plugin->get_admin_notice_handler()->add_admin_notice(
-            'my-plugin-ssl-required',
             sprintf(
                 '<p><strong>%1$s</strong> %2$s</p>',
                 __( 'SSL Required', 'my-plugin' ),
                 __( 'Your server must support SSL to use this plugin.', 'my-plugin' )
             ),
+            'my-plugin-ssl-required',
             [
                 'dismissible'  => false,
                 'notice_class' => 'notice-error',
@@ -631,7 +636,6 @@ class Notice_Handler {
 
     private function show_api_key_notice() {
         $this->plugin->get_admin_notice_handler()->add_admin_notice(
-            'my-plugin-api-key',
             sprintf(
                 '<p><strong>%1$s</strong> %2$s <a href="%3$s">%4$s</a></p>',
                 __( 'API Key Required', 'my-plugin' ),
@@ -639,6 +643,7 @@ class Notice_Handler {
                 $this->plugin->get_settings_url(),
                 __( 'Settings', 'my-plugin' )
             ),
+            'my-plugin-api-key',
             [
                 'dismissible'  => true,
                 'notice_class' => 'notice-warning',
@@ -656,13 +661,13 @@ class Notice_Handler {
 
     private function show_update_notice() {
         $this->plugin->get_admin_notice_handler()->add_admin_notice(
-            'my-plugin-update-check',
             sprintf(
                 '<p>%1$s <a href="%2$s">%3$s</a></p>',
                 __( 'A new version is available!', 'my-plugin' ),
                 admin_url( 'update-core.php' ),
                 __( 'Update Now', 'my-plugin' )
             ),
+            'my-plugin-update-check',
             [
                 'dismissible'  => true,
                 'notice_class' => 'notice-info',
@@ -696,8 +701,8 @@ function save_and_redirect() {
 ```php
 <?php
 $handler->add_admin_notice(
-    'my-notice',
     '<p>Important information</p>',
+    'my-notice',
     [ 'dismissible' => true ]
 );
 ```

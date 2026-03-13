@@ -1,8 +1,11 @@
 # Changelog
 
 All notable changes to Woodev Plugin Framework are documented here.
+
 ## [1.4.1] — 2026-03-12
+
 ### Bug Fixes
+
 - Enforce WordPress coding standards across framework codebase
 
 - Resolve static analysis and code quality issues
@@ -23,28 +26,23 @@ All notable changes to Woodev Plugin Framework are documented here.
 
 - Add missing setAccessible(true) in test_singleton_reset_via_reflection
 
-
 ### CI/CD
+
 - Fix failing GitHub Actions workflows
 
-
 ### Documentation
+
 - Expand CLAUDE.md, revise AI agents/skills, and update tooling config
 
-
 ### Features
-- **payment-tokens**: Auto-invalidate token cache on WooCommerce token events
 
+- **payment-tokens**: Auto-invalidate token cache on WooCommerce token events
 - **shipping**: Implement admin notice handlers for countries, debug mode, and plugin configuration
 
-
 ### Refactoring
+
 - Move Woodev_Plugin_Compatibility to compatibility/ directory
 
-
 ### Tests
+
 - Restructure fixtures and improve integration test bootstrap
-
-
-
-

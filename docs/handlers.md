@@ -16,7 +16,7 @@ The Handlers module handles:
 | Class | File | Purpose |
 | --- | --- | --- |
 | `Woodev_Blocks_Handler` | `handlers/blocks-handler.php` | Blocks compatibility detection |
-| `Woodev_Script_Handler` | `handlers/class-script-handler.php` | Inline script helper |
+| `Woodev_Script_Handler` | `handlers/script-handler.php` | Inline script helper |
 
 ## Blocks Handler
 
@@ -280,14 +280,16 @@ class My_Script_Handler extends Woodev_Script_Handler {
 
 Generates JavaScript that:
 
-1. Creates a global object with your handler's class name
-2. JSON-encodes arguments from `get_js_handler_args()`
-3. Escapes output for safe HTML insertion
+1. Defines a load function that creates a handler instance using the class name from `$js_handler_base_class_name`
+2. The object is stored in `window.wc_{id}_handler` (via `get_js_handler_object_name()`)
+3. JSON-encodes arguments from `get_js_handler_args()`
+4. Wraps in a try/catch with deferred loading fallback
 
-**Generated output:**
+**Generated output (simplified):**
 
 ```javascript
-window.MyPlugin = new MyPlugin({"ajax_url":"https:\/\/example.com\/wp-admin\/admin-ajax.php","nonce":"abc123","rest_url":"https:\/\/example.com\/wp-json\/my-plugin\/v1","i18n":{"loading":"Loading…","error":"Something went wrong.","success":"Success!"},"settings":{"debug_mode":false,"api_key":"","cache_timeout":300}});
+// Object name is 'wc_my-plugin_handler' by default (from get_js_handler_object_name())
+window.wc_my_plugin_handler = new MyPlugin({"ajax_url":"https:\/\/example.com\/wp-admin\/admin-ajax.php","nonce":"abc123"});
 ```
 
 ### Client-Side JavaScript

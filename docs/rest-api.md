@@ -16,7 +16,7 @@ The REST API module handles:
 | Class | File | Purpose |
 | --- | --- | --- |
 | `Woodev_REST_API` | `rest-api/class-plugin-rest-api.php` | Base REST API handler |
-| `Woodev_REST_API_Settings` | `rest-api/class-rest-api-settings.php` | Settings REST controller |
+| `Woodev_REST_API_Settings` | `rest-api/controllers/class-plugin-rest-api-settings.php` | Settings REST controller |
 
 ## Basic Usage
 
@@ -103,7 +103,8 @@ The data appears in:
 
 ```json
 {
-  "wc_my_plugin": {
+  "wc_{plugin_id}": {
+    "is_payment_gateway": false,
     "api_key_configured": true,
     "license_active": true,
     "version": "1.0.0",
@@ -119,51 +120,67 @@ The data appears in:
 When you connect a settings handler to your plugin, the following routes are automatically available:
 
 ```text
-GET    /wp-json/wc/v3/my-plugin/settings
-PUT    /wp-json/wc/v3/my-plugin/settings
+GET    /wp-json/wc/v3/{plugin_id}/settings
+GET    /wp-json/wc/v3/{plugin_id}/settings/{setting_id}
+PUT    /wp-json/wc/v3/{plugin_id}/settings/{setting_id}
 ```
 
-### Get Settings
+### Get All Settings
 
 ```bash
 curl -X GET \
-  https://example.com/wp-json/wc/v3/my-plugin/settings \
+  https://example.com/wp-json/wc/v3/{plugin_id}/settings \
   -H 'Authorization: Bearer <token>'
 ```
 
 **Response:**
 
 ```json
-{
-  "settings": {
-    "api_key": {
-      "id": "api_key",
+[
+  {
+    "id": "api_key",
+    "type": "string",
+    "name": "API Key",
+    "description": "Your API key.",
+    "is_multi": false,
+    "options": [],
+    "default": "",
+    "value": "sk_live_...",
+    "control": {
+      "type": "password",
       "name": "API Key",
-      "type": "string",
-      "value": "sk_live_...",
-      "default": ""
-    },
-    "debug_mode": {
-      "id": "debug_mode",
+      "description": "Your API key.",
+      "options": []
+    }
+  },
+  {
+    "id": "debug_mode",
+    "type": "boolean",
+    "name": "Debug Mode",
+    "description": "Enable debug logging.",
+    "is_multi": false,
+    "options": [],
+    "default": false,
+    "value": false,
+    "control": {
+      "type": "checkbox",
       "name": "Debug Mode",
-      "type": "boolean",
-      "value": false,
-      "default": false
+      "description": "Enable debug logging.",
+      "options": []
     }
   }
-}
+]
 ```
 
-### Update Settings
+### Update a Setting
 
 ```bash
 curl -X PUT \
-  https://example.com/wp-json/wc/v3/my-plugin/settings \
+  https://example.com/wp-json/wc/v3/{plugin_id}/settings/api_key \
   -H 'Authorization: Bearer <token>' \
   -H 'Content-Type: application/json' \
   -d '{
-    "api_key": "new_key",
-    "debug_mode": true
+    "value": "new_key"
   }'
 ```
 

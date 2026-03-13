@@ -188,7 +188,7 @@ final class My_Plugin extends Woodev_Plugin {
      *
      * @return string
      */
-    public function get_file(): string {
+    protected function get_file() {
         return __FILE__;
     }
 
@@ -197,7 +197,7 @@ final class My_Plugin extends Woodev_Plugin {
      *
      * @return string
      */
-    public function get_plugin_name(): string {
+    public function get_plugin_name() {
         return __( 'My Plugin', 'my-plugin' );
     }
 
@@ -207,7 +207,7 @@ final class My_Plugin extends Woodev_Plugin {
      *
      * @return int
      */
-    public function get_download_id(): int {
+    public function get_download_id() {
         return 0;
     }
 }
@@ -380,15 +380,15 @@ Every plugin must implement these three methods:
 <?php
 class My_Plugin extends Woodev_Plugin {
 
-    public function get_file(): string {
+    protected function get_file() {
         return __FILE__;
     }
 
-    public function get_plugin_name(): string {
+    public function get_plugin_name() {
         return __( 'My Plugin', 'my-plugin' );
     }
 
-    public function get_download_id(): int {
+    public function get_download_id() {
         return 0;  // EDD download ID or 0
     }
 }
@@ -398,32 +398,36 @@ class My_Plugin extends Woodev_Plugin {
 
 Override these methods to customize plugin behavior:
 
+Override the `init_*` methods (not the `get_*` getters) to customize plugin subsystems:
+
 ```php
 <?php
 class My_Plugin extends Woodev_Plugin {
 
-    // Custom settings handler
-    public function get_settings_handler(): ?Woodev_Abstract_Settings {
+    // Custom settings handler (this is the one getter you override)
+    public function get_settings_handler() {
         return new My_Settings( $this );
     }
 
     // Custom lifecycle handler
-    public function get_lifecycle_handler(): Woodev_Lifecycle {
-        return new My_Lifecycle( $this );
+    protected function init_lifecycle_handler() {
+        $this->lifecycle_handler = new My_Lifecycle( $this );
     }
 
     // Custom setup wizard
-    public function get_setup_wizard_handler(): ?Woodev_Plugin_Setup_Wizard {
-        return new My_Setup_Wizard( $this );
+    protected function init_setup_wizard_handler() {
+        parent::init_setup_wizard_handler();
+        $this->setup_wizard_handler = new My_Setup_Wizard( $this );
     }
 
     // Custom blocks handler
-    public function get_blocks_handler(): Woodev_Blocks_Handler {
-        return new My_Blocks_Handler( $this );
+    protected function init_blocks_handler(): void {
+        parent::init_blocks_handler();
+        $this->blocks_handler = new My_Blocks_Handler( $this );
     }
 
     // Custom REST API handler
-    public function init_rest_api_handler() {
+    protected function init_rest_api_handler() {
         $this->rest_api_handler = new My_REST_API( $this );
     }
 }
@@ -466,6 +470,10 @@ class My_Plugin extends Woodev_Plugin {
 ```php
 <?php
 class My_Settings extends Woodev_Abstract_Settings {
+
+    public function __construct() {
+        parent::__construct( 'my-plugin' );
+    }
 
     protected function register_settings() {
         $this->register_setting(

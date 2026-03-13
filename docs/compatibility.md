@@ -16,7 +16,7 @@ The Compatibility module handles:
 | Class | File | Purpose |
 | --- | --- | --- |
 | `Woodev_Order_Compatibility` | `compatibility/class-order-compatibility.php` | HPOS-safe order operations |
-| `Woodev_Plugin_Compatibility` | `class-plugin-compatibility.php` | WC version checks |
+| `Woodev_Plugin_Compatibility` | `compatibility/class-plugin-compatibility.php` | WC version checks |
 
 ## Declaring HPOS Support
 
@@ -90,7 +90,7 @@ class My_Plugin extends Woodev_Plugin {
 
 ```php
 <?php
-use Woodev\Framework\Compatibility\Woodev_Order_Compatibility;
+// Woodev_Order_Compatibility is a global class (no namespace required)
 
 $order = wc_get_order( $order_id );
 
@@ -100,13 +100,6 @@ $tracking = Woodev_Order_Compatibility::get_order_meta( $order, '_tracking_numbe
 // Get all values for a key
 $all_values = Woodev_Order_Compatibility::get_order_meta( $order, '_tracking_numbers', false );
 
-// With default value
-$status = Woodev_Order_Compatibility::get_order_meta(
-    $order,
-    '_shipment_status',
-    true,
-    'pending'
-);
 ```
 
 **Parameters:**
@@ -116,7 +109,6 @@ $status = Woodev_Order_Compatibility::get_order_meta(
 | `$order` | `WC_Order\|int` | required | Order object or ID |
 | `$meta_key` | `string` | required | Meta key to retrieve |
 | `$single` | `bool` | `true` | Return single value or array |
-| `$default` | `mixed` | `''` | Default if meta doesn't exist |
 
 ### Writing Order Meta
 
@@ -130,13 +122,8 @@ Woodev_Order_Compatibility::add_order_meta( $order, '_shipment_id', '12345' );
 // Update meta (single value)
 Woodev_Order_Compatibility::update_order_meta( $order, '_tracking_number', 'ABC123' );
 
-// Update with previous value check
-Woodev_Order_Compatibility::update_order_meta(
-    $order,
-    '_sync_status',
-    'completed',
-    'pending'
-);
+// Update sync status
+Woodev_Order_Compatibility::update_order_meta( $order, '_sync_status', 'completed' );
 ```
 
 ### Deleting Order Meta
@@ -227,7 +214,7 @@ class Order_Meta_Manager {
 
 ```php
 <?php
-use Woodev\Framework\Compatibility\Woodev_Order_Compatibility;
+// Woodev_Order_Compatibility is a global class (no namespace required)
 
 // Check if on orders list
 if ( Woodev_Order_Compatibility::is_orders_screen() ) {
@@ -348,7 +335,7 @@ foreach ( $meta_data as $meta ) {
 
 ```php
 <?php
-use Woodev\Framework\Compatibility\Woodev_Plugin_Compatibility;
+// Woodev_Plugin_Compatibility is a global class (no namespace required)
 
 // Check if WC >= version
 if ( Woodev_Plugin_Compatibility::is_wc_version_gte( '8.0' ) ) {

@@ -55,7 +55,7 @@ interface Woodev_Box_Packer_Item {
 
 ```php
 <?php
-use Woodev\Framework\BoxPacker\Woodev_Packer_Item_Implementation;
+// Woodev_Packer_Item_Implementation is a global class (no namespace required)
 
 $item = new Woodev_Packer_Item_Implementation(
     30.0,  // length (cm)
@@ -119,7 +119,7 @@ interface Woodev_Box_Packer_Box extends Woodev_Box_Packer_Item {
 
 ```php
 <?php
-use Woodev\Framework\BoxPacker\Woodev_Packer_Box_Implementation;
+// Woodev_Packer_Box_Implementation is a global class (no namespace required)
 
 $box = new Woodev_Packer_Box_Implementation(
     50.0,   // length (cm)
@@ -146,7 +146,7 @@ Represents a box with items packed into it:
 
 ```php
 <?php
-use Woodev\Framework\BoxPacker\Woodev_Box_Packer_Packed_Box;
+// Woodev_Box_Packer_Packed_Box is a global class (no namespace required)
 
 $box = new Woodev_Packer_Box_Implementation( /* ... */ );
 $items = [ $item1, $item2, $item3 ];
@@ -177,15 +177,16 @@ Final percentage: `weight_ratio × volume_ratio × 100`
 ```php
 <?php
 abstract class Woodev_Packer implements Woodev_Packer_Interface {
-    
-    protected $boxes;   // Available boxes
-    protected $items;   // Items to pack
-    protected $packages; // Packed boxes
-    
-    public function add_item( Woodev_Box_Packer_Item $item ): void
-    public function add_box( Woodev_Box_Packer_Box $box ): void
-    public function get_packages(): array
-    public function get_items_cannot_pack(): array
+
+    protected $boxes;            // Available boxes
+    protected $items;            // Items to pack
+    protected $items_cannot_pack; // Items that could not be packed
+    protected $packages;         // Packed boxes
+
+    public function add_item( Woodev_Box_Packer_Item $item ): void;
+    public function add_box( Woodev_Box_Packer_Box $box ): void;
+    public function get_packages(): array;
+    public function get_items_cannot_pack(): array;
     abstract public function pack();
 }
 ```
@@ -196,7 +197,7 @@ Packs all items into one virtual box:
 
 ```php
 <?php
-use Woodev\Framework\BoxPacker\Woodev_Packer_Single_Box;
+// Woodev_Packer_Single_Box is a global class (no namespace required)
 
 $packer = new Woodev_Packer_Single_Box( 'Single Package' );
 
@@ -243,7 +244,7 @@ This creates a box that can contain all items laid out side by side.
 
 ```php
 <?php
-use Woodev\Framework\BoxPacker\Woodev_Box_Packer_Packages_Weight;
+// Woodev_Box_Packer_Packages_Weight is a global class (no namespace required)
 
 $packages = [ $package1, $package2, $package3 ];
 $weight_calc = new Woodev_Box_Packer_Packages_Weight( $packages );

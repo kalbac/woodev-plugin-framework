@@ -18,10 +18,15 @@ The Payment Gateway module handles:
 | Class | File | Purpose |
 | --- | --- | --- |
 | `Woodev_Payment_Gateway_Plugin` | `payment-gateway/class-payment-gateway-plugin.php` | Base payment plugin class |
-| `Woodev_Payment_Gateway` | `payment-gateway/abstract-payment-gateway.php` | Base gateway class |
-| `Woodev_Payment_Gateway_Admin_Order` | `payment-gateway/class-admin-order-handler.php` | Admin order handler |
-| `Woodev_Payment_Gateway_Admin_User_Handler` | `payment-gateway/class-admin-user-handler.php` | Admin user handler |
-| `Woodev_Payment_Gateway_My_Payment_Methods` | `payment-gateway/class-my-payment-methods.php` | Customer payment methods |
+| `Woodev_Payment_Gateway` | `payment-gateway/class-payment-gateway.php` | Abstract base gateway class |
+| `Woodev_Payment_Gateway_Direct` | `payment-gateway/class-payment-gateway-direct.php` | Direct (onsite) gateway class |
+| `Woodev_Payment_Gateway_Hosted` | `payment-gateway/class-payment-gateway-hosted.php` | Hosted (offsite) gateway class |
+| `Woodev_Payment_Gateway_Admin_Order` | `payment-gateway/admin/class-payment-gateway-admin-order.php` | Admin order handler |
+| `Woodev_Payment_Gateway_Admin_User_Handler` | `payment-gateway/admin/class-payment-gateway-admin-user-handler.php` | Admin user handler |
+| `Woodev_Payment_Gateway_My_Payment_Methods` | `payment-gateway/class-payment-gateway-my-payment-methods.php` | Customer payment methods |
+| `Woodev_Payment_Gateway_Payment_Form` | `payment-gateway/class-payment-gateway-payment-form.php` | Checkout payment form |
+| `Woodev_Payment_Gateway_Payment_Token` | `payment-gateway/payment-tokens/class-payment-gateway-payment-token.php` | Payment token representation |
+| `Woodev_Payment_Gateway_Payment_Tokens_Handler` | `payment-gateway/payment-tokens/class-payment-gateway-payment-tokens-handler.php` | Token storage and retrieval |
 
 ## Creating a Payment Plugin
 
@@ -96,22 +101,20 @@ final class My_Payment_Plugin extends Woodev_Payment_Gateway_Plugin {
             [
                 'text_domain' => 'my-payment',
                 'gateways'    => [
-                    'credit_card' => 'My_Credit_Card_Gateway',
-                    'bank_transfer' => 'My_Bank_Transfer_Gateway',
+                    'my_credit_card' => 'My_Credit_Card_Gateway',
                 ],
                 'currencies'  => [ 'USD', 'EUR', 'GBP' ],
                 'supports'    => [
-                    'tokenization',
-                    'transaction_link',
-                    'customer_id',
-                    'capture_charge',
+                    Woodev_Payment_Gateway_Plugin::FEATURE_CAPTURE_CHARGE,
+                    Woodev_Payment_Gateway_Plugin::FEATURE_CUSTOMER_ID,
+                    Woodev_Payment_Gateway_Plugin::FEATURE_MY_PAYMENT_METHODS,
                 ],
                 'require_ssl' => true,
             ]
         );
     }
 
-    public function get_file(): string {
+    protected function get_file(): string {
         return __FILE__;
     }
 
@@ -127,75 +130,29 @@ final class My_Payment_Plugin extends Woodev_Payment_Gateway_Plugin {
 
 ## Creating Payment Gateways
 
+Gateways extend `Woodev_Payment_Gateway_Direct` (for onsite payment processing) or `Woodev_Payment_Gateway_Hosted` (for offsite/redirect payment processing). Both inherit from `Woodev_Payment_Gateway`, which extends `WC_Payment_Gateway`.
+
+The gateway constructor signature is `__construct( $id, $plugin, $args )`. The framework handles form fields, settings, and payment form rendering automatically. You provide gateway-specific settings by overriding `get_method_form_fields()`.
+
 ### Credit Card Gateway
 
 ```php
 <?php
 
-class My_Credit_Card_Gateway extends Woodev_Payment_Gateway {
+class My_Credit_Card_Gateway extends Woodev_Payment_Gateway_Direct {
 
     /**
-     * Constructor
+     * Returns gateway-specific form fields.
+     *
+     * These are merged with common fields (enabled, title, description,
+     * environment, debug mode) that the framework provides automatically.
+     *
+     * @since 1.0.0
+     *
+     * @return array
      */
-    public function __construct() {
-        $this->id                 = 'my_credit_card';
-        $this->icon               = apply_filters( 'woocommerce_my_credit_card_icon', '' );
-        $this->has_fields         = true;
-        $this->method_title       = __( 'Credit Card', 'my-payment' );
-        $this->method_description = __( 'Accept credit card payments', 'my-payment' );
-
-        // Load settings
-        $this->init_form_fields();
-        $this->init_settings();
-
-        // Get settings
-        $this->title        = $this->get_option( 'title' );
-        $this->description  = $this->get_option( 'description' );
-        $this->enabled      = $this->get_option( 'enabled' );
-        $this->test_mode    = $this->get_option( 'test_mode' ) === 'yes';
-        $this->api_key      = $this->get_option( 'api_key' );
-        $this->api_secret   = $this->get_option( 'api_secret' );
-
-        // Hooks
-        add_action( 'woocommerce_update_options_payment_gateways_' . $this->id, [ $this, 'process_admin_options' ] );
-        add_action( 'wp_enqueue_scripts', [ $this, 'payment_scripts' ] );
-
-        // Tokenization
-        $this->supports = [
-            'products',
-            'tokenization',
-        ];
-    }
-
-    /**
-     * Settings fields
-     */
-    public function init_form_fields(): array {
-        $this->form_fields = [
-            'enabled' => [
-                'title'   => __( 'Enable/Disable', 'my-payment' ),
-                'type'    => 'checkbox',
-                'label'   => __( 'Enable credit card payments', 'my-payment' ),
-                'default' => 'yes',
-            ],
-            'title' => [
-                'title'       => __( 'Title', 'my-payment' ),
-                'type'        => 'text',
-                'description' => __( 'Title shown to customers', 'my-payment' ),
-                'default'     => __( 'Credit Card', 'my-payment' ),
-            ],
-            'description' => [
-                'title'       => __( 'Description', 'my-payment' ),
-                'type'        => 'textarea',
-                'description' => __( 'Description shown to customers', 'my-payment' ),
-                'default'     => __( 'Pay securely with your credit card', 'my-payment' ),
-            ],
-            'test_mode' => [
-                'title'   => __( 'Test Mode', 'my-payment' ),
-                'type'    => 'checkbox',
-                'label'   => __( 'Enable test mode', 'my-payment' ),
-                'default' => 'yes',
-            ],
+    protected function get_method_form_fields() {
+        return [
             'api_key' => [
                 'title'       => __( 'API Key', 'my-payment' ),
                 'type'        => 'text',
@@ -212,411 +169,199 @@ class My_Credit_Card_Gateway extends Woodev_Payment_Gateway {
     }
 
     /**
-     * Payment form on checkout
+     * Returns the API instance for this gateway.
+     *
+     * @since 1.0.0
+     *
+     * @return My_Payment_API
      */
-    public function payment_fields(): void {
-        if ( $this->description ) {
-            echo wpautop( wp_kses_post( $this->description ) );
+    public function get_api() {
+        if ( ! isset( $this->api ) ) {
+            $this->api = new My_Payment_API( $this );
         }
 
-        $this->tokenization_script();
-        $this->saved_payment_methods();
-
-        ?>
-        <fieldset id="wc-<?php echo esc_attr( $this->id ); ?>-cc-form" class="wc-credit-card-form wc-payment-form">
-            <div class="form-row form-row-wide">
-                <label><?php esc_html_e( 'Card Number', 'my-payment' ); ?> <span class="required">*</span></label>
-                <input type="text" class="input-text" placeholder="•••• •••• •••• ••••"
-                       id="<?php echo esc_attr( $this->id ); ?>-card-number" />
-            </div>
-
-            <div class="form-row form-row-first">
-                <label><?php esc_html_e( 'Expiry Date', 'my-payment' ); ?> <span class="required">*</span></label>
-                <input type="text" class="input-text" placeholder="MM / YY"
-                       id="<?php echo esc_attr( $this->id ); ?>-card-expiry" />
-            </div>
-
-            <div class="form-row form-row-last">
-                <label><?php esc_html_e( 'CVV', 'my-payment' ); ?> <span class="required">*</span></label>
-                <input type="text" class="input-text" placeholder="123"
-                       id="<?php echo esc_attr( $this->id ); ?>-card-cvv" />
-            </div>
-
-            <div class="clear"></div>
-        </fieldset>
-        <?php
-    }
-
-    /**
-     * Process payment
-     */
-    public function process_payment( int $order_id ): array {
-        $order = wc_get_order( $order_id );
-
-        try {
-            // Get payment token
-            $token = $this->get_payment_token( $order );
-
-            // Process payment via API
-            $result = $this->process_api_payment( $order, $token );
-
-            if ( $result['success'] ) {
-                // Payment successful
-                $order->payment_complete( $result['transaction_id'] );
-
-                // Add transaction data
-                $order->update_meta_data( '_transaction_id', $result['transaction_id'] );
-                $order->update_meta_data( '_payment_method_title', $this->get_title() );
-
-                // Save token if requested
-                if ( ! empty( $_POST[ 'wc-' . $this->id . '-new-payment-method' ] ) ) {
-                    $this->save_token( $order->get_customer_id(), $token );
-                }
-
-                // Empty cart
-                WC()->cart->empty_cart();
-
-                // Return result
-                return [
-                    'result'   => 'success',
-                    'redirect' => $this->get_return_url( $order ),
-                ];
-            } else {
-                throw new Exception( $result['message'] ?? __( 'Payment failed', 'my-payment' ) );
-            }
-
-        } catch ( Exception $e ) {
-            wc_add_notice( $e->getMessage(), 'error' );
-            return [ 'result' => 'failure' ];
-        }
-    }
-
-    /**
-     * Process API payment
-     */
-    private function process_api_payment( WC_Order $order, $token ): array {
-        $api = $this->get_api_client();
-
-        $payment_data = [
-            'amount'      => $order->get_total(),
-            'currency'    => $order->get_currency(),
-            'token'       => $token,
-            'customer_id' => $order->get_customer_id(),
-            'order_id'    => $order->get_id(),
-        ];
-
-        return $api->charge( $payment_data );
-    }
-
-    /**
-     * Enqueue payment scripts
-     */
-    public function payment_scripts(): void {
-        if ( ! is_checkout() ) {
-            return;
-        }
-
-        wp_enqueue_script(
-            'my-payment-gateway',
-            plugins_url( 'assets/js/gateway.js', __FILE__ ),
-            [ 'jquery' ],
-            '1.0.0',
-            true
-        );
-
-        wp_localize_script( 'my-payment-gateway', 'my_payment_params', [
-            'key'       => $this->test_mode ? 'test_key' : 'live_key',
-            'ajax_url'  => admin_url( 'admin-ajax.php' ),
-        ] );
+        return $this->api;
     }
 }
 ```
 
-### Bank Transfer Gateway
-
-```php
-<?php
-
-class My_Bank_Transfer_Gateway extends WC_Payment_Gateway_BACS {
-
-    public function __construct() {
-        parent::__construct();
-
-        $this->id                 = 'my_bank_transfer';
-        $this->method_title       = __( 'My Bank Transfer', 'my-payment' );
-        $this->method_description = __( 'Make a bank transfer payment', 'my-payment' );
-    }
-}
-```
+> **Note:** The framework's `Woodev_Payment_Gateway` base class already provides `payment_fields()` rendering via `Woodev_Payment_Gateway_Payment_Form`, and `Woodev_Payment_Gateway_Direct` already implements `process_payment()` with full transaction handling, token management, and error handling. You do not need to override these unless you require custom behavior.
 
 ## Transaction Handling
 
 ### Capture Charge
 
+To enable capture charge support, include `Woodev_Payment_Gateway_Plugin::FEATURE_CAPTURE_CHARGE` in the plugin's `supports` array. The framework's `Woodev_Payment_Gateway_Admin_Order` class automatically adds a capture button to the admin order screen when this feature is enabled.
+
 ```php
 <?php
-class My_Payment_Plugin extends Woodev_Payment_Gateway_Plugin {
-
-    public function __construct() {
-        parent::__construct(
-            'my-payment',
-            '1.0.0',
-            [
-                'supports' => [
-                    'capture_charge',
-                    // ...
-                ],
-            ]
-        );
-    }
-}
-
-// Admin order handler will add capture button
-$gateway = new My_Credit_Card_Gateway();
+parent::__construct(
+    'my-payment',
+    '1.0.0',
+    [
+        'gateways' => [
+            'my_credit_card' => 'My_Credit_Card_Gateway',
+        ],
+        'supports' => [
+            Woodev_Payment_Gateway_Plugin::FEATURE_CAPTURE_CHARGE,
+        ],
+    ]
+);
 ```
 
 ### Manual Capture
 
+The `Woodev_Payment_Gateway_Admin_Order` handles capture via AJAX automatically. To capture programmatically, use the gateway's API instance:
+
 ```php
 <?php
-class Admin_Order_Handler {
+$gateway = My_Payment_Plugin::instance()->get_gateway( 'my_credit_card' );
+$api     = $gateway->get_api();
 
-    public function capture_charge( int $order_id ): bool {
-        $order = wc_get_order( $order_id );
-
-        if ( ! $order ) {
-            return false;
-        }
-
-        $transaction_id = $order->get_transaction_id();
-
-        if ( ! $transaction_id ) {
-            return false;
-        }
-
-        $api = My_Payment_Plugin::instance()->get_gateway( 'credit_card' )->get_api_client();
-
-        $result = $api->capture( $transaction_id, $order->get_total() );
-
-        if ( $result['success'] ) {
-            $order->add_order_note( __( 'Charge captured', 'my-payment' ) );
-            return true;
-        }
-
-        return false;
-    }
+try {
+    $response = $api->capture( $transaction_id, $order->get_total() );
+    $order->add_order_note( __( 'Charge captured', 'my-payment' ) );
+} catch ( Woodev_API_Exception $e ) {
+    $order->add_order_note(
+        sprintf( __( 'Capture failed: %s', 'my-payment' ), $e->getMessage() )
+    );
 }
 ```
 
 ## Tokenization
 
-### Save Payment Token
+The framework uses its own tokenization system through `Woodev_Payment_Gateway_Payment_Token` and `Woodev_Payment_Gateway_Payment_Tokens_Handler` (not WooCommerce's `WC_Payment_Token` classes). Tokens are stored in user meta, keyed by environment.
+
+Enable tokenization by adding `Woodev_Payment_Gateway::FEATURE_TOKENIZATION` to your gateway's supported features.
+
+### Working with Tokens
 
 ```php
 <?php
-class My_Credit_Card_Gateway extends Woodev_Payment_Gateway {
+// Get the token handler from the gateway.
+$gateway       = My_Payment_Plugin::instance()->get_gateway( 'my_credit_card' );
+$token_handler = $gateway->get_payment_tokens_handler();
 
-    /**
-     * Save token
-     */
-    public function save_token( int $user_id, $token_data ): ?WC_Payment_Token {
-        $token = new WC_Payment_Token_CC();
+// Retrieve all tokens for a user in the current environment.
+$tokens = $token_handler->get_tokens( $user_id );
 
-        $token->set_token( $token_data['token'] );
-        $token->set_gateway_id( $this->id );
-        $token->set_card_type( $token_data['card_type'] );
-        $token->set_last4( $token_data['last4'] );
-        $token->set_expiry_month( $token_data['expiry_month'] );
-        $token->set_expiry_year( $token_data['expiry_year'] );
-        $token->set_user_id( $user_id );
+// Add a new token.
+$token = new Woodev_Payment_Gateway_Payment_Token( $remote_token_id, [
+    'type'      => 'credit_card',
+    'last_four' => '4242',
+    'card_type' => 'visa',
+    'exp_month' => '12',
+    'exp_year'  => '2028',
+] );
 
-        if ( $token->validate() ) {
-            $token->save();
-            return $token;
-        }
+$token_handler->add_token( $user_id, $token );
 
-        return null;
-    }
+// Update an existing token.
+$token_handler->update_token( $user_id, $token );
 
-    /**
-     * Get customer tokens
-     */
-    public function get_customer_tokens( int $user_id ): array {
-        return WC_Payment_Tokens::get_customer_tokens( $user_id, $this->id );
-    }
-
-    /**
-     * Delete token
-     */
-    public function delete_token( int $token_id ): bool {
-        $token = WC_Payment_Tokens::get( $token_id );
-
-        if ( $token && $token->get_gateway_id() === $this->id ) {
-            $token->delete();
-            return true;
-        }
-
-        return false;
-    }
-}
+// Delete a token.
+$token_handler->delete_token( $user_id, $token );
 ```
 
 ## Admin Handlers
 
 ### Order Handler
 
+`Woodev_Payment_Gateway_Admin_Order` is instantiated internally by `Woodev_Payment_Gateway_Plugin` and is not meant to be extended. It automatically provides:
+
+- Capture charge button (when `FEATURE_CAPTURE_CHARGE` is supported)
+- Bulk capture order action
+- AJAX capture processing
+
+The handler receives the plugin instance via its constructor:
+
 ```php
 <?php
-class My_Admin_Order_Handler extends Woodev_Payment_Gateway_Admin_Order {
-
-    /**
-     * Add transaction link
-     */
-    public function get_transaction_url( WC_Order $order ): string {
-        $transaction_id = $order->get_transaction_id();
-
-        if ( ! $transaction_id ) {
-            return '';
-        }
-
-        return sprintf(
-            'https://dashboard.mypayment.com/transactions/%s',
-            $transaction_id
-        );
-    }
-
-    /**
-     * Add meta box
-     */
-    public function add_meta_box( WC_Order $order ): void {
-        $transaction_id = $order->get_meta( '_transaction_id' );
-        $payment_status = $order->get_meta( '_payment_status' );
-
-        ?>
-        <div class="wc-order-meta-box-content">
-            <p>
-                <strong><?php esc_html_e( 'Transaction ID:', 'my-payment' ); ?></strong>
-                <?php echo esc_html( $transaction_id ); ?>
-            </p>
-            <p>
-                <strong><?php esc_html_e( 'Payment Status:', 'my-payment' ); ?></strong>
-                <?php echo esc_html( $payment_status ); ?>
-            </p>
-        </div>
-        <?php
-    }
-}
+// The framework instantiates this automatically in Woodev_Payment_Gateway_Plugin::init_admin().
+// Access it via the plugin:
+$admin_order_handler = My_Payment_Plugin::instance()->get_admin_order_handler();
 ```
 
 ### User Handler
 
+`Woodev_Payment_Gateway_Admin_User_Handler` is also instantiated internally. It automatically provides:
+
+- Customer ID fields on the admin user profile page (when `FEATURE_CUSTOMER_ID` is supported)
+- Token editor for each tokenized gateway
+- Save/update hooks for profile fields
+
 ```php
 <?php
-class My_Admin_User_Handler extends Woodev_Payment_Gateway_Admin_User_Handler {
-
-    /**
-     * Add customer ID field
-     */
-    public function add_customer_id_field( int $user_id ): void {
-        $customer_id = get_user_meta( $user_id, '_my_payment_customer_id', true );
-
-        ?>
-        <tr>
-            <th><label for="my_payment_customer_id"><?php esc_html_e( 'Payment Customer ID', 'my-payment' ); ?></label></th>
-            <td>
-                <input type="text" id="my_payment_customer_id" name="my_payment_customer_id"
-                       value="<?php echo esc_attr( $customer_id ); ?>" class="regular-text" />
-                <p class="description"><?php esc_html_e( 'Customer ID from payment gateway', 'my-payment' ); ?></p>
-            </td>
-        </tr>
-        <?php
-    }
-
-    /**
-     * Save customer ID
-     */
-    public function save_customer_id_field( int $user_id ): void {
-        if ( isset( $_POST['my_payment_customer_id'] ) ) {
-            update_user_meta(
-                $user_id,
-                '_my_payment_customer_id',
-                sanitize_text_field( $_POST['my_payment_customer_id'] )
-            );
-        }
-    }
-}
+// The framework instantiates this automatically in Woodev_Payment_Gateway_Plugin::init_admin().
+// Access it via the plugin:
+$admin_user_handler = My_Payment_Plugin::instance()->get_admin_user_handler();
 ```
 
 ## My Payment Methods
 
-### Customer Payment Methods Page
+`Woodev_Payment_Gateway_My_Payment_Methods` extends `Woodev_Script_Handler` and renders the My Payment Methods table on the My Account page. It is initialized automatically when `FEATURE_MY_PAYMENT_METHODS` is included in the plugin's `supports` array.
+
+The class receives the plugin instance via its constructor and handles:
+
+- Loading and displaying saved tokens for all tokenized gateways
+- Token editing (nickname) via AJAX
+- Token deletion
+- Setting a default payment method
+- Enqueuing required scripts and styles
+
+### Customizing My Payment Methods
+
+To customize, override `get_my_payment_methods_instance()` in your plugin class:
+
+```php
+<?php
+class My_Payment_Plugin extends Woodev_Payment_Gateway_Plugin {
+
+    /**
+     * Returns the My Payment Methods instance.
+     *
+     * @since 1.0.0
+     *
+     * @return My_Payment_Methods
+     */
+    protected function get_my_payment_methods_instance() {
+        return new My_Payment_Methods( $this );
+    }
+}
+```
 
 ```php
 <?php
 class My_Payment_Methods extends Woodev_Payment_Gateway_My_Payment_Methods {
 
     /**
-     * Initialize
+     * Customizes the table headers.
+     *
+     * @since 1.0.0
+     *
+     * @return array
      */
-    public function init(): void {
-        parent::init();
+    protected function get_table_headers() {
 
-        add_action( 'woocommerce_account_payment-methods_endpoint', [ $this, 'add_custom_content' ] );
-    }
+        $headers = parent::get_table_headers();
 
-    /**
-     * Add custom content
-     */
-    public function add_custom_content(): void {
-        $tokens = WC_Payment_Tokens::get_customer_tokens( get_current_user_id() );
+        // Add a custom column.
+        $headers['custom'] = __( 'Status', 'my-payment' );
 
-        if ( empty( $tokens ) ) {
-            return;
-        }
-
-        ?>
-        <h2><?php esc_html_e( 'My Payment Methods', 'my-payment' ); ?></h2>
-
-        <table class="woocommerce-MyAccount-payment-methods table shop_table">
-            <thead>
-                <tr>
-                    <th><?php esc_html_e( 'Type', 'my-payment' ); ?></th>
-                    <th><?php esc_html_e( 'Details', 'my-payment' ); ?></th>
-                    <th><?php esc_html_e( 'Actions', 'my-payment' ); ?></th>
-                </tr>
-            </thead>
-            <tbody>
-                <?php foreach ( $tokens as $token ) : ?>
-                    <tr>
-                        <td><?php echo esc_html( $token->get_display_name() ); ?></td>
-                        <td>
-                            <?php
-                            if ( $token instanceof WC_Payment_Token_CC ) {
-                                printf(
-                                    '%s •••• %s',
-                                    esc_html( $token->get_card_type() ),
-                                    esc_html( $token->get_last4() )
-                                );
-                            }
-                            ?>
-                        </td>
-                        <td>
-                            <a href="<?php echo esc_url( wc_get_endpoint_url( 'delete-payment-method', $token->get_id() ) ); ?>"
-                               class="button"
-                               onclick="return confirm('<?php esc_html_e( 'Are you sure?', 'my-payment' ); ?>')">
-                                <?php esc_html_e( 'Delete', 'my-payment' ); ?>
-                            </a>
-                        </td>
-                    </tr>
-                <?php endforeach; ?>
-            </tbody>
-        </table>
-        <?php
+        return $headers;
     }
 }
 ```
 
 ## API Client
+
+The framework provides `Woodev_API_Base` as the abstract base for all API communication. Key points:
+
+- `get_plugin()` is abstract and must return the plugin instance
+- `get_new_request( $args )` is abstract and must return a `Woodev_API_Request` instance
+- `perform_request( $request )` is protected and returns a `Woodev_API_Response` object (not raw data)
+- `get_api_id()` is not abstract; by default it returns the plugin ID
+- Request/response logging is handled automatically via the `woodev_{plugin_id}_api_request_performed` action
 
 ### Payment API
 
@@ -626,71 +371,85 @@ class My_Payment_API extends Woodev_API_Base {
 
     const API_URL = 'https://api.mypayment.com';
 
-    protected function get_plugin(): Woodev_Plugin {
-        return My_Payment_Plugin::instance();
-    }
+    /** @var Woodev_Payment_Gateway gateway instance */
+    private $gateway;
 
-    public function get_api_id(): string {
-        return 'my_payment_api';
+    /**
+     * Constructor.
+     *
+     * @since 1.0.0
+     *
+     * @param My_Credit_Card_Gateway $gateway the gateway instance
+     */
+    public function __construct( $gateway ) {
+        $this->gateway = $gateway;
+
+        $this->set_request_content_type_header( 'application/json' );
+        $this->set_request_accept_header( 'application/json' );
     }
 
     /**
-     * Charge payment
+     * Returns the plugin instance.
+     *
+     * @since 1.0.0
+     *
+     * @return Woodev_Payment_Gateway_Plugin
      */
-    public function charge( array $data ): array {
+    protected function get_plugin() {
+        return $this->gateway->get_plugin();
+    }
+
+    /**
+     * Returns a new request object.
+     *
+     * @since 1.0.0
+     *
+     * @param array $args request arguments
+     * @return My_Payment_API_Request
+     */
+    protected function get_new_request( $args = [] ) {
+        return new My_Payment_API_Request( self::API_URL, $args );
+    }
+
+    /**
+     * Charge payment.
+     *
+     * @since 1.0.0
+     *
+     * @param array $data payment data
+     * @return Woodev_API_Response
+     * @throws Woodev_API_Exception on API error
+     */
+    public function charge( array $data ) {
         $request = $this->get_new_request( [
             'method' => 'POST',
             'path'   => '/v1/charges',
-            'body'   => json_encode( $data ),
         ] );
 
-        $response = $this->perform_request( $request );
+        $request->set_data( $data );
 
-        return $this->get_parsed_response( $response );
+        return $this->perform_request( $request );
     }
 
     /**
-     * Capture charge
+     * Capture a previously authorized charge.
+     *
+     * @since 1.0.0
+     *
+     * @param string $transaction_id transaction identifier
+     * @param float  $amount amount to capture
+     * @return Woodev_API_Response
+     * @throws Woodev_API_Exception on API error
      */
-    public function capture( string $transaction_id, float $amount ): array {
+    public function capture( string $transaction_id, float $amount ) {
         $request = $this->get_new_request( [
             'method' => 'POST',
             'path'   => '/v1/charges/' . $transaction_id . '/capture',
-            'body'   => json_encode( [ 'amount' => $amount ] ),
         ] );
 
-        $response = $this->perform_request( $request );
+        $request->set_data( [ 'amount' => $amount ] );
 
-        return $this->get_parsed_response( $response );
-    }
-
-    /**
-     * Refund payment
-     */
-    public function refund( string $transaction_id, float $amount ): array {
-        $request = $this->get_new_request( [
-            'method' => 'POST',
-            'path'   => '/v1/charges/' . $transaction_id . '/refund',
-            'body'   => json_encode( [ 'amount' => $amount ] ),
-        ] );
-
-        $response = $this->perform_request( $request );
-
-        return $this->get_parsed_response( $response );
-    }
-
-    /**
-     * Get transaction
-     */
-    public function get_transaction( string $transaction_id ): array {
-        $request = $this->get_new_request( [
-            'method' => 'GET',
-            'path'   => '/v1/transactions/' . $transaction_id,
-        ] );
-
-        $response = $this->perform_request( $request );
-
-        return $this->get_parsed_response( $response );
+        return $this->perform_request( $request );
     }
 }
 ```
@@ -700,25 +459,36 @@ class My_Payment_API extends Woodev_API_Base {
 ```php
 <?php
 /**
- * Main plugin file
+ * Plugin Name: My Payment Gateway
+ * Version: 1.0.0
+ * Requires PHP: 7.4
  */
 
 defined( 'ABSPATH' ) || exit;
 
-add_action( 'plugins_loaded', 'init_my_payment', 0 );
-
-function init_my_payment() {
-    Woodev_Plugin_Bootstrap::instance()->register_plugin(
-        '1.4.0',
-        'My Payment Gateway',
-        __FILE__,
-        'my_payment_init',
-        [
-            'is_payment_gateway' => true,
-        ]
-    );
+// Include the framework bootstrap.
+if ( ! class_exists( 'Woodev_Plugin_Bootstrap' ) ) {
+    require_once plugin_dir_path( __FILE__ ) . 'woodev/bootstrap.php';
 }
 
+// Register plugin with the framework bootstrap.
+Woodev_Plugin_Bootstrap::instance()->register_plugin(
+    '1.4.0',
+    'My Payment Gateway',
+    __FILE__,
+    'my_payment_init',
+    [
+        'minimum_wc_version' => '8.0',
+        'minimum_wp_version' => '5.9',
+        'is_payment_gateway' => true,
+    ]
+);
+
+/**
+ * Initializes the plugin.
+ *
+ * @return My_Payment_Plugin
+ */
 function my_payment_init() {
     require_once __DIR__ . '/includes/class-my-payment-plugin.php';
     require_once __DIR__ . '/includes/class-my-credit-card-gateway.php';
@@ -747,16 +517,15 @@ parent::__construct(
 
 ```php
 <?php
-public function process_payment( int $order_id ): array {
-    $this->plugin->log( 'Processing payment for order #' . $order_id );
+// Use the plugin's log() method. It writes to WooCommerce logs.
+$this->get_plugin()->log( 'Processing payment for order #' . $order_id );
 
-    try {
-        $result = $this->api->charge( $data );
-        $this->plugin->log( 'Payment successful: ' . $result['transaction_id'] );
-    } catch ( Exception $e ) {
-        $this->plugin->log( 'Payment failed: ' . $e->getMessage() );
-        throw $e;
-    }
+try {
+    $response = $this->get_api()->charge( $data );
+    $this->get_plugin()->log( 'Payment successful' );
+} catch ( Woodev_API_Exception $e ) {
+    $this->get_plugin()->log( 'Payment failed: ' . $e->getMessage() );
+    throw $e;
 }
 ```
 
@@ -765,7 +534,7 @@ public function process_payment( int $order_id ): array {
 ```php
 <?php
 try {
-    $result = $api->charge( $data );
+    $response = $api->charge( $data );
 } catch ( Woodev_API_Exception $e ) {
     wc_add_notice( __( 'Payment failed. Please try again.', 'my-payment' ), 'error' );
     return [ 'result' => 'failure' ];
@@ -774,20 +543,24 @@ try {
 
 ### 4. Support Tokenization
 
+Tokenization is enabled via the gateway constructor args, not the WC `$supports` array:
+
 ```php
 <?php
-$this->supports = [
-    'products',
-    'tokenization',
-];
+// In your gateway constructor args, or by calling add_support():
+$this->add_support( Woodev_Payment_Gateway::FEATURE_TOKENIZATION );
 ```
 
 ### 5. Add Transaction Links
 
+Override `get_transaction_url()` (from `WC_Payment_Gateway`) in your gateway class, and include `'transaction_link'` in your plugin's `supports` array:
+
 ```php
 <?php
-public function get_transaction_url( WC_Order $order ): string {
-    return 'https://dashboard.mypayment.com/tx/' . $order->get_transaction_id();
+// In your gateway class:
+public function get_transaction_url( $order ) {
+    $this->view_transaction_url = 'https://dashboard.mypayment.com/tx/%s';
+    return parent::get_transaction_url( $order );
 }
 ```
 

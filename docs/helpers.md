@@ -128,21 +128,28 @@ $result = Woodev_Helper::array_insert_after( $array, 'b', [ 'x' => 10 ] );
 
 ### array_to_xml
 
-Convert an array to XML format.
+Convert an array to XML by recursively generating child elements using an `XMLWriter` instance.
 
 ```php
 <?php
 // Usage
-$xml = Woodev_Helper::array_to_xml( $data );
+$xml_writer = new XMLWriter();
+$xml_writer->openMemory();
+$xml_writer->startDocument( '1.0', 'UTF-8' );
 
-// Example
 $data = [
-    'order' => [
-        'id'    => 123,
-        'total' => 100.00,
-    ],
+    'id'    => 123,
+    'total' => 100.00,
 ];
-$xml = Woodev_Helper::array_to_xml( $data );
+
+$xml_writer->startElement( 'order' );
+foreach ( $data as $key => $value ) {
+    Woodev_Helper::array_to_xml( $xml_writer, $key, $value );
+}
+$xml_writer->endElement();
+
+$xml_writer->endDocument();
+$xml_string = $xml_writer->outputMemory();
 ```
 
 ### list_array_items
@@ -183,32 +190,34 @@ Woodev_Helper::array_join_natural( [ 'a', 'b', 'c' ], 'or' );
 
 ### format_percentage
 
-Format a number as a percentage.
+Format a fraction as a percentage. The second and third parameters are passed to `wc_format_decimal()`.
 
 ```php
 <?php
 // Usage
-echo Woodev_Helper::format_percentage( 0.25 );    // 25%
-echo Woodev_Helper::format_percentage( 0.255 );   // 25.5%
-echo Woodev_Helper::format_percentage( 0.255, 1); // 25.5%
+echo Woodev_Helper::format_percentage( 0.25 );        // '25%'
+echo Woodev_Helper::format_percentage( 0.255 );        // '25.5%'
+echo Woodev_Helper::format_percentage( 0.255, 1 );     // '25.5%' (1 decimal point)
+echo Woodev_Helper::format_percentage( 0.255, 1, true ); // '25.5%' (trim trailing zeros)
 ```
 
 ### number_format
 
-Format a number with localized decimals.
+Format a number with 2 decimal points, using a period for the decimal separator and no thousands separator. Commonly used for payment gateways.
 
 ```php
 <?php
 // Usage
-echo Woodev_Helper::number_format( 1234.567 );    // 1,234.57
-echo Woodev_Helper::number_format( 1234.567, 3 ); // 1,234.567
+echo Woodev_Helper::number_format( 1234.567 );  // '1234.57'
+echo Woodev_Helper::number_format( 99.9 );      // '99.90'
+echo Woodev_Helper::number_format( 100.0 );     // '100.00'
 ```
 
 ## WooCommerce Helpers
 
 ### get_order_line_items
 
-Get formatted line items from an order.
+Get order line items (products) as an array of `stdClass` objects.
 
 ```php
 <?php
@@ -216,9 +225,12 @@ Get formatted line items from an order.
 $items = Woodev_Helper::get_order_line_items( $order );
 
 foreach ( $items as $item ) {
-    echo $item->get_name();
-    echo $item->get_quantity();
-    echo $item->get_total();
+    echo $item->name;        // item name (HTML-encoded)
+    echo $item->description; // formatted item meta
+    echo $item->quantity;    // item quantity
+    echo $item->item_total;  // per-unit total (excl. tax)
+    echo $item->line_total;  // line total (excl. tax)
+    // Also available: $item->id, $item->meta, $item->product, $item->item
 }
 ```
 
@@ -393,12 +405,16 @@ Woodev_Helper::enqueue_js( 'console.log("Hello");' );
 
 ### print_js
 
-Output inline JavaScript.
+Output all enqueued inline JavaScript (from `enqueue_js()`) wrapped in a `<script>` tag. Takes no parameters.
 
 ```php
 <?php
-// Usage
-Woodev_Helper::print_js( 'alert("Hello");' );
+// First enqueue JS
+Woodev_Helper::enqueue_js( 'console.log("Hello");' );
+Woodev_Helper::enqueue_js( 'console.log("World");' );
+
+// Then print all enqueued JS (typically hooked to wp_footer)
+Woodev_Helper::print_js();
 ```
 
 ### let_to_num
@@ -447,51 +463,52 @@ $escaped = Woodev_Helper::get_escaped_id_list( $ids );
 
 ### f__
 
-Translate a string (returns translation).
+Gettext `__()` wrapper for framework-translated strings. Uses the hardcoded `woodev-plugin-framework` text domain. Only use for strings already registered in the framework.
 
 ```php
 <?php
-// Usage
-$text = f__( 'Hello World', 'my-plugin' );
+// Usage (text domain is always 'woodev-plugin-framework')
+$text = Woodev_Helper::f__( 'Hello World' );
 ```
 
 ### f_e
 
-Translate and echo a string.
+Gettext `_e()` wrapper for framework-translated strings. Echoes the translated string using the `woodev-plugin-framework` text domain.
 
 ```php
 <?php
-// Usage
-f_e( 'Hello World', 'my-plugin' );
+// Usage (text domain is always 'woodev-plugin-framework')
+Woodev_Helper::f_e( 'Hello World' );
 ```
 
 ### f_x
 
-Translate with context.
+Gettext `_x()` wrapper for framework-translated strings with context. Uses the `woodev-plugin-framework` text domain.
 
 ```php
 <?php
-// Usage
-$text = f_x( 'Post', 'noun', 'my-plugin' );
+// Usage (text domain is always 'woodev-plugin-framework')
+$text = Woodev_Helper::f_x( 'Post', 'noun' );
 ```
 
 ## Render Helpers
 
 ### render_select2_ajax
 
-Render Select2 AJAX dropdown.
+Enqueue JavaScript required for AJAX search with Select2. Takes no parameters; configure via HTML `data-*` attributes on input elements with class `woodev-wc-enhanced-search`.
 
 ```php
 <?php
-// Usage
-Woodev_Helper::render_select2_ajax(
-    'product_id',
-    __( 'Select Product', 'my-plugin' ),
-    [
-        'ajax_url' => admin_url( 'admin-ajax.php' ),
-        'action'   => 'search_products',
-    ]
-);
+// Usage: enqueue the Select2 AJAX script (call once)
+Woodev_Helper::render_select2_ajax();
+
+// Then render an input with data attributes:
+// <input type="hidden" class="woodev-wc-enhanced-search" name="product_ids"
+//     data-action="woocommerce_json_search_products"
+//     data-nonce="<?php echo wp_create_nonce( 'search-products' ); ?>"
+//     data-placeholder="Search for a product..."
+//     data-allow_clear="true"
+//     data-multiple="true" />
 ```
 
 ## Site Helpers
@@ -577,44 +594,51 @@ Print a WooCommerce notice.
 
 ```php
 <?php
-// Usage
-echo Woodev_Helper::wc_print_notice( 'Message', 'success' );
+// Usage (prints directly, returns void)
+Woodev_Helper::wc_print_notice( 'Message', 'success' );
 ```
 
 ## String Conversion
 
 ### str_convert
 
-Convert string encoding.
+Convert a string from Cyrillic to Latin transliteration using `Woodev_String_Conversion`.
 
 ```php
 <?php
 // Usage
-$converted = Woodev_Helper::str_convert( $string, 'UTF-8', 'ISO-8859-1' );
+$latin = Woodev_Helper::str_convert( $cyrillic_string );
+
+// With context
+$latin = Woodev_Helper::str_convert( $cyrillic_string, 'title' );
 ```
 
 ## Compatibility
 
 ### convert_country_code
 
-Convert country code between formats.
+Convert country code between ISO 3166 alpha-2 (2-letter) and alpha-3 (3-letter) formats. Automatically detects direction based on string length.
 
 ```php
 <?php
-// Usage
-$iso2 = Woodev_Helper::convert_country_code( $code, 'ISO3166-2' );
+// Usage: 2-letter to 3-letter
+$iso3 = Woodev_Helper::convert_country_code( 'US' ); // 'USA'
+$iso3 = Woodev_Helper::convert_country_code( 'RU' ); // 'RUS'
+
+// Usage: 3-letter to 2-letter
+$iso2 = Woodev_Helper::convert_country_code( 'USA' ); // 'US'
+$iso2 = Woodev_Helper::convert_country_code( 'RUS' ); // 'RU'
 ```
 
 ### maybe_doing_it_early
 
-Check if doing it early (before init).
+Display a `wc_doing_it_wrong` notice if the provided hook has not yet run.
 
 ```php
 <?php
 // Usage
-if ( Woodev_Helper::maybe_doing_it_early() ) {
-    // Too early for certain operations
-}
+Woodev_Helper::maybe_doing_it_early( 'init', __METHOD__, '1.0.0' );
+Woodev_Helper::maybe_doing_it_early( 'woocommerce_init', __METHOD__, '1.2.0' );
 ```
 
 ## Practical Examples
@@ -685,7 +709,7 @@ class Order_Processor {
             $order->update_meta_data( '_shipping_required', 'no' );
         }
 
-        // Get line items
+        // Get line items (returns stdClass[] with ->name, ->quantity, ->line_total, etc.)
         $items = Woodev_Helper::get_order_line_items( $order );
 
         // Log items
@@ -693,8 +717,8 @@ class Order_Processor {
             $this->log_item( $item );
         }
 
-        // Format total
-        $total = Woodev_Helper::number_format( $order->get_total() );
+        // Format total (always 2 decimals, no thousands separator)
+        $total = Woodev_Helper::number_format( (float) $order->get_total() );
         $order->add_order_note( "Total: {$total}" );
     }
 }
@@ -824,8 +848,8 @@ if ( ! Woodev_Helper::is_woocommerce_active() ) {
 
 ```php
 <?php
-// Format numbers consistently
-$total = Woodev_Helper::number_format( $order->get_total() );
+// Format numbers consistently (always 2 decimals, no thousands separator)
+$total = Woodev_Helper::number_format( (float) $order->get_total() );
 
 // Format percentages
 $discount = Woodev_Helper::format_percentage( 0.25 );

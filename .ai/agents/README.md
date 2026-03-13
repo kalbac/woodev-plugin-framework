@@ -17,12 +17,15 @@ Configuration files for AI-assisted development of the Woodev Plugin Framework.
 These agents are designed to work with multiple AI coding tools:
 
 ### Claude Code
+
 Agents are supplementary to `CLAUDE.md` (project root), which is automatically loaded. Reference agents manually when needed for specialized tasks.
 
 ### Cursor
+
 Add agents as context via `@` mentions in Cursor chat, or configure them in `.cursorrules`.
 
 ### Qwen / Windsurf
+
 Agents can be loaded via MCP tools (Serena) or referenced in project configuration files.
 
 ## Architecture

@@ -127,7 +127,7 @@ class My_API_Request extends Woodev_API_JSON_Request {
 }
 ```
 
-`to_string()` returns `json_encode( $this->get_params() )` when params are set.
+`to_string()` returns `wp_json_encode( $this->get_params() )` when params are set.
 
 ### XML Request
 
@@ -408,11 +408,11 @@ sprintf(
 );
 ```
 
-Check if a response was served from cache:
+Check if a response was served from cache (inside the API class):
 
 ```php
 <?php
-$api->is_response_loaded_from_cache(); // bool
+$this->is_response_loaded_from_cache(); // bool
 ```
 
 ### Cache Filters
