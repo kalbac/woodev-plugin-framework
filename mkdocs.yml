@@ -1,53 +1,86 @@
 site_name: Woodev Plugin Framework
-site_description: Developer documentation for the Woodev Plugin Framework — a scaffold for building WooCommerce plugins.
+site_description: A production-ready PHP scaffold for building WooCommerce plugins. Bootstrap, lifecycle, API, payments, shipping — all included.
 site_url: https://kalbac.github.io/woodev-plugin-framework/
 repo_url: https://github.com/kalbac/woodev-plugin-framework
 repo_name: kalbac/woodev-plugin-framework
 edit_uri: edit/main/docs/
 
+docs_dir: docs
+site_dir: _site
+custom_dir: docs/overrides
+
 theme:
   name: material
+  custom_dir: docs/overrides
   palette:
-    - scheme: default
-      primary: deep purple
-      accent: purple
-      toggle:
-        icon: material/brightness-7
-        name: Switch to dark mode
     - scheme: slate
-      primary: deep purple
-      accent: purple
+      primary: custom
+      accent: custom
       toggle:
-        icon: material/brightness-4
+        icon: material/weather-night
         name: Switch to light mode
+    - scheme: default
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to dark mode
+  font:
+    text: Inter
+    code: JetBrains Mono
   features:
     - navigation.tabs
     - navigation.tabs.sticky
     - navigation.sections
     - navigation.top
     - navigation.footer
+    - navigation.instant
+    - navigation.tracking
     - search.highlight
     - search.suggest
+    - search.share
     - content.code.copy
+    - content.code.annotate
     - content.action.edit
+    - toc.follow
   icon:
     repo: fontawesome/brands/github
+    logo: material/puzzle-outline
 
 plugins:
-  - search
+  - search:
+      lang: en
 
 markdown_extensions:
   - pymdownx.highlight:
       anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
   - pymdownx.superfences
   - pymdownx.inlinehilite
   - pymdownx.tabbed:
       alternate_style: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
   - admonition
   - pymdownx.details
   - tables
+  - attr_list
+  - md_in_html
   - toc:
       permalink: true
+      toc_depth: 3
+
+extra_css:
+  - assets/stylesheets/extra.css
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/kalbac/woodev-plugin-framework
+      name: GitHub
+  generator: false
 
 nav:
   - Home: README.md
@@ -69,8 +102,3 @@ nav:
     - Utilities: utilities.md
     - Compatibility: compatibility.md
     - Handlers: handlers.md
-
-extra:
-  social:
-    - icon: fontawesome/brands/github
-      link: https://github.com/kalbac/woodev-plugin-framework

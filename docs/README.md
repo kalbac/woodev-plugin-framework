@@ -1,3 +1,11 @@
+---
+template: home.html
+title: Woodev Plugin Framework
+hide:
+  - navigation
+  - toc
+---
+
 # Woodev Plugin Framework — Developer Documentation
 
 Welcome to the complete developer documentation for the Woodev Plugin Framework. This manual provides comprehensive guidance for building WooCommerce plugins using the Woodev framework.
