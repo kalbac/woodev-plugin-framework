@@ -254,7 +254,7 @@ For developers new to Woodev Framework:
 
 | Component | Version |
 | --- | --- |
-| Framework | 1.4.0 |
+| Framework | %%FRAMEWORK_VERSION%% |
 | Minimum PHP | 7.4 |
 | Minimum WordPress | 5.9 |
 | Minimum WooCommerce | 5.6 |

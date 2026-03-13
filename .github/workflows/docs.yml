@@ -7,6 +7,7 @@ on:
     paths:
       - 'docs/**'
       - 'mkdocs.yml'
+      - 'woodev/class-plugin.php'
   workflow_dispatch:
 
 permissions:
@@ -33,6 +34,12 @@ jobs:
 
       - name: Install MkDocs Material
         run: pip install mkdocs-material==9.6.7
+
+      - name: Inject framework version into docs
+        run: |
+          VERSION=$(grep -oP "const VERSION = '\K[^']+" woodev/class-plugin.php)
+          echo "Framework version: $VERSION"
+          find docs -name "*.md" -o -name "*.html" | xargs sed -i "s/%%FRAMEWORK_VERSION%%/$VERSION/g"
 
       - name: Build docs
         run: mkdocs build --strict --site-dir _site
