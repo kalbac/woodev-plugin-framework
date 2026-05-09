@@ -5,6 +5,10 @@
 composer.lock
 phpstan.neon
 .wp-env.override.json
+/_site/
+
+# Internal docs — tracked in git (like woodev_theme docs/)
+# docs-internal/ — AI agent operational docs (CURRENT-STATE, SESSION-LOG, GOTCHAS, ADR, wiki)
 
 # AI tools — do not ignore (reference files required)
 !/.ai/

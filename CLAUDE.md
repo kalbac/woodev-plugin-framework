@@ -1,6 +1,7 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+> Read [AGENTS.md](AGENTS.md) first for shared project rules (session start/end, coding principles, gotchas, conventions).
+> This file extends it with **Claude Code-specific** integrations: Serena MCP, Context7, and detailed architecture reference.
 
 ## MCP Tools
 
@@ -66,6 +67,50 @@ Run a single test file:
 ```
 
 Integration tests require a WordPress test library. Set `WP_TESTS_DIR` env var or use `npx wp-env start`.
+
+## Session Start Protocol
+
+At the start of every session, Claude Code agents should:
+1. Read `docs-internal/CURRENT-STATE.md` — current phase status, known bugs, next actions
+2. Read `docs-internal/GOTCHAS.md` — gotcha index (prevents repeated mistakes)
+3. If working on a specific area, read relevant files from `docs-internal/adr/`, `docs-internal/wiki/`
+
+For complete session start/end protocols and coding principles, see [AGENTS.md](AGENTS.md).
+
+## Documentation Structure
+
+| Directory | Audience | Published | Purpose |
+|-----------|----------|-----------|---------|
+| `docs/` | Developers (public) | ✅ GH Pages (mkdocs) | Usage guides, API reference, tutorials |
+| `docs-internal/` | AI agents + maintainers | ❌ Not published | Session logs, gotchas, ADRs, operational state |
+
+Internal docs (`docs-internal/`):
+- `CURRENT-STATE.md` — phase status, known bugs, next actions
+- `SESSION-LOG.md` — full session history
+- `GOTCHAS.md` — gotcha index → `gotchas/{slug}.md` atomic detail files
+- `AGENT-RULES.md` — workflow + architecture rules for AI agents
+- `DOCS-INDEX.md` — navigation hub for all internal docs
+- `DOCS-SCHEMA.md` — doc format and lint rules
+- `FUTURE-BACKLOG.md` — deferred features and technical debt
+- `adr/` — Architecture Decision Records
+- `wiki/` — compiled topic references
+- `archive/` — resolved historical documents
+
+### Public docs (`docs/`) — GH Pages
+
+- Built by mkdocs (Material theme), deployed automatically on push to `main`
+- Uses `%%FRAMEWORK_VERSION%%` placeholder — injected by CI from `Woodev_Plugin::VERSION`
+- Edit `.md` files directly, preview with `mkdocs serve`
+- Lint with `npx markdownlint-cli2 "docs/**/*.md"`
+- Never add session logs, gotchas, or internal notes here
+
+### Internal docs (`docs-internal/`) — AI agents
+
+- Plain markdown, no build step, not published
+- Gotchas → `docs-internal/gotchas/{slug}.md` + index in `GOTCHAS.md`
+- Session work → `CURRENT-STATE.md` + `SESSION-LOG.md`
+- Architecture decisions → `adr/` (see `adr/README.md` for template)
+- All files tracked in git — never gitignore docs-internal/
 
 ## Architecture
 
@@ -203,7 +248,13 @@ public function old_method(): void {
 
 ## Knowledge Persistence
 
-When you discover important project rules, conventions, or patterns during your work — **always document them** in `.ai/QUICK-REFERENCE.md` (section "Project Rules & Conventions") so all AI agents (Claude, Qwen, Cursor, etc.) share the same knowledge.
+When you discover important project rules, conventions, or patterns during your work:
+
+- **Gotchas** (mistakes to avoid, correct/incorrect patterns) → create `docs-internal/gotchas/{slug}.md` + add index line to `docs-internal/GOTCHAS.md`
+- **Architecture decisions** (non-trivial choices with tradeoffs) → create `docs-internal/adr/{NNN-title}.md` + add to `docs-internal/adr/README.md`
+- **Reference knowledge** (in-depth topic explanation) → create `docs-internal/wiki/{topic}.md`
+- **Session work** → update `docs-internal/CURRENT-STATE.md` + append to `docs-internal/SESSION-LOG.md`
+- **Quick reference** (cross-project, shared across agents) → `.ai/QUICK-REFERENCE.md` (section "Project Rules & Conventions")
 
 ## Known Technical Debt
 
