@@ -7,28 +7,31 @@
 | Phase | Code | Browser-verified | Notes |
 |-------|------|------------------|-------|
 | Framework Core | ✅ | ✅ | Bootstrap, Plugin base, Lifecycle — stable |
-| Payment Gateway | ✅ | ✅ | class-payment-gateway.php (~3900 lines) |
+| Payment Gateway | ✅ | ✅ | class-payment-gateway.php: 2984 lines (was 3927, -943) |
 | Shipping Method | ✅ | ✅ | PSR-4 namespaced |
 | Licensing | ✅ | ✅ | EDD store integration |
 | Settings API | ✅ | ✅ | Typed settings framework |
 | Box Packer | ✅ | ✅ | Shipping box-packing algorithm |
 | REST API | ✅ | ✅ | Plugin REST routes |
-| Documentation Structure | ✅ | — | Two-tier: docs/ (GH Pages) + docs-internal/ (AI agents). AGENTS.md, CLAUDE.md refactored |
+| Documentation Structure | ✅ | — | Two-tier: docs/ (GH Pages) + docs-internal/ (AI agents) |
+| Legacy Cleanup (v2.0.0) | ✅ | — | ~1647 lines removed: dead compat, deprecated methods, US-specific types |
 
 ## Known Bugs (open)
 
 - [⚠️] 50+ PHPStan baseline ignores (see phpstan-baseline.neon)
-- [⚠️] 11 deprecated methods in Woodev_Plugin (~lines 1486–1629), slated for removal in v2.0.0
-- [⚠️] class-payment-gateway.php is ~3900 lines — candidate for trait extraction
-- [✅] Woodev_Plugin_Dependencies::get_missing_php_functions() used extension_loaded() instead of function_exists() — fixed in `4d00539`
+- [⚠️] class-payment-gateway.php is ~2984 lines — candidate for trait extraction
+- [✅] Woodev_Plugin_Dependencies::get_missing_php_functions() — fixed in `4d00539`
+- [✅] 11 deprecated methods in Woodev_Plugin — removed in `728c6f9`
+- [✅] 47 deprecated methods total across codebase — removed in `728c6f9`
+- [✅] 12 dead compat guards for WP/WC below minimums — removed in `728c6f9`
 
 ## Next Actions (priority order)
 
-1. ~~Populate docs-internal/gotchas/ with initial gotchas from codebase patterns~~ ✅ done (s2)
-2. ~~Fix get_missing_php_functions() bug — extension_loaded → function_exists~~ ✅ done (s2, `4d00539`)
-3. Extract traits from class-payment-gateway.php
+1. ~~Populate docs-internal/gotchas/~~ ✅ done (s2)
+2. ~~Fix get_missing_php_functions() bug~~ ✅ done (s2)
+3. Extract traits from class-payment-gateway.php (deferred to big refactoring session)
 4. Clean up PHPStan baseline
-5. Execute deprecation removal for v2.0.0
+5. eCheck/ACH removal (separate session)
 
 ## Planned — v2.0.0 & Beyond
 
