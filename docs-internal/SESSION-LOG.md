@@ -28,6 +28,18 @@
 - PHPCS: ✅ 0 errors (pre-existing line-length warnings only)
 - Unit tests: ✅ 114/114 passed
 
+### eCheck/ACH audit
+- Comprehensive audit of eCheck/ACH code across 14 files in payment-gateway/
+- ~160 references catalogued — constants, properties, methods, interfaces, JS, CSS, images
+- 5-phase removal plan written to docs-internal/wiki/echeck-ach-audit.md:
+  - Phase 1: Trait extraction (non-breaking, v1.x — ~4h)
+  - Phase 2: API interface deprecation (breaking, v2.0.0)
+  - Phase 3: Token model cleanup (breaking, v2.0.0)
+  - Phase 4: Asset cleanup (non-breaking)
+  - Phase 5: Core cleanup (breaking, v2.0.0)
+- Risk: 10+ dependent plugins may use eCheck — MUST audit before removal
+- Estimated effort: 6.5h + dependent plugin audit
+
 ### Gotcha population
 - Created 10 gotcha files in docs-internal/gotchas/ across 6 namespaces (bootstrap, naming, compat, php, deprecation, lifecycle)
 - Updated GOTCHAS.md index with 10 entries

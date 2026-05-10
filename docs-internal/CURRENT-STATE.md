@@ -13,7 +13,7 @@
 | Box Packer | ✅ | ✅ | Shipping box-packing algorithm |
 | REST API | ✅ | ✅ | Plugin REST routes |
 | Documentation Structure | ✅ | — | Two-tier: docs/ (GH Pages) + docs-internal/ (AI agents) |
-| Legacy Cleanup (v2.0.0) | ✅ | — | ~1647 lines removed: dead compat, deprecated methods, US-specific types |
+| eCheck/ACH Audit | ✅ | — | Audit done (s3): 14 files, 5-phase removal plan in wiki/echeck-ach-audit.md |
 | PHPStan Baseline | ✅ | ✅ | 0 errors, baseline cleaned up with documented ignores |
 
 ## Known Bugs (open)
@@ -32,8 +32,9 @@
 1. ~~Populate docs-internal/gotchas/~~ ✅ done (s2)
 2. ~~Fix get_missing_php_functions() bug~~ ✅ done (s2)
 3. ~~Clean up PHPStan baseline~~ ✅ done (s3)
-4. Extract traits from class-payment-gateway.php (deferred to big refactoring session)
-5. eCheck/ACH removal (separate session)
+4. ~~eCheck/ACH audit~~ ✅ done (s3)
+5. Extract traits from class-payment-gateway.php (deferred to big refactoring session)
+6. Audit dependent plugins for eCheck usage → then execute eCheck removal plan
 
 ## Planned — v2.0.0 & Beyond
 
@@ -52,7 +53,7 @@
 
 ## Active Queue
 
-> s3 — PHPStan baseline cleanup complete: 410 errors → 0. 4 code bugs fixed. 400+ payment-gateway self-references documented and ignored.
+> s3 — PHPStan baseline (410→0 errors) + eCheck/ACH audit (14 files, 5-phase plan). Ready for trait extraction (#4).
 
 ## Infrastructure Reference
 
