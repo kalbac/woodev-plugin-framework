@@ -169,6 +169,9 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		/** @var Woodev_Payment_Gateway_Payment_Form|null payment form instance */
 		protected $payment_form;
 
+		/** @var string transient voided order message, passed between mark_order_as_voided() and maybe_cancel_voided_order() */
+		private $voided_order_message = '';
+
 
 		/**
 		 * Initialize the gateway
@@ -1210,11 +1213,11 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		 * + required currency
 		 * + required country
 		 *
-		 * @return true if this gateway is available for checkout, false otherwise
+		 * @return bool
 		 * @see WC_Payment_Gateway::is_available()
 		 * @since 1.0.0
 		 */
-		public function is_available() {
+		public function is_available(): bool {
 
 			// is enabled check
 			$is_available = parent::is_available();
@@ -2977,7 +2980,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 				'default' => 'no',
 			);
 
-		return $form_fields;
+			return $form_fields;
 		}
 	}
 

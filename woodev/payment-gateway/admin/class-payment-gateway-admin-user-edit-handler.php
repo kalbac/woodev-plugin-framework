@@ -272,7 +272,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_User_Edit_Handler' ) ) :
 			foreach ( array_keys( $gateway->get_environments() ) as $environment_id ) {
 
 				$payment_tokens_deleted_name = 'wc_' . $gateway->get_id() . '_payment_tokens_deleted_' . $environment_id;
-				$delete_payment_tokens       = Woodev_Helper::get_post( $payment_tokens_deleted_name ) ? explode( ',', trim( Woodev_Helper::get_post( $payment_tokens_deleted_name ), ',' ) ) : array();
+				$delete_payment_tokens       = Woodev_Helper::get_posted_value( $payment_tokens_deleted_name ) ? explode( ',', trim( Woodev_Helper::get_posted_value( $payment_tokens_deleted_name ), ',' ) ) : array();
 
 				foreach ( $delete_payment_tokens as $token ) {
 					$gateway->remove_payment_token( $user_id, $token, $environment_id );
@@ -280,18 +280,18 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_User_Edit_Handler' ) ) :
 
 				$payment_token_name = 'wc_' . $gateway->get_id() . '_payment_token_' . $environment_id;
 
-				if ( Woodev_Helper::get_post( $payment_token_name ) ) {
+				if ( Woodev_Helper::get_posted_value( $payment_token_name ) ) {
 
-					$exp_date = explode( '/', Woodev_Helper::get_post( 'wc_' . $gateway->get_id() . '_payment_token_exp_date_' . $environment_id ) );
+					$exp_date = explode( '/', Woodev_Helper::get_posted_value( 'wc_' . $gateway->get_id() . '_payment_token_exp_date_' . $environment_id ) );
 
 					$gateway->add_payment_token(
 						$user_id,
 						$gateway->build_payment_token(
-							Woodev_Helper::get_post( $payment_token_name ),
+							Woodev_Helper::get_posted_value( $payment_token_name ),
 							array(
 								'type'      => $gateway->is_credit_card_gateway() ? 'credit_card' : 'check',
-								'card_type' => Woodev_Helper::get_post( 'wc_' . $gateway->get_id() . '_payment_token_type_' . $environment_id ),
-								'last_four' => Woodev_Helper::get_post( 'wc_' . $gateway->get_id() . '_payment_token_last_four_' . $environment_id ),
+								'card_type' => Woodev_Helper::get_posted_value( 'wc_' . $gateway->get_id() . '_payment_token_type_' . $environment_id ),
+								'last_four' => Woodev_Helper::get_posted_value( 'wc_' . $gateway->get_id() . '_payment_token_last_four_' . $environment_id ),
 								'exp_month' => count( $exp_date ) > 1 ? sprintf( '%02s', $exp_date[0] ) : null,
 								'exp_year'  => count( $exp_date ) > 1 ? $exp_date[1] : null,
 							)

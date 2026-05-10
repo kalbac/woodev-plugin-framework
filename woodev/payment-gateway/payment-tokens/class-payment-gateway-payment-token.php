@@ -148,11 +148,13 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Token' ) ) :
 
 
 		/**
-		 * Set the card type
+		 * Sets the credit card type
 		 *
 		 * Credit Card gateway only
 		 *
-		 * @param string $card_type
+		 * @since 1.0.0
+		 *
+		 * @param string $card_type the card type identifier
 		 */
 		public function set_card_type( $card_type ) {
 			$this->data['card_type'] = $card_type;
@@ -160,11 +162,16 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Token' ) ) :
 
 
 		/**
-	 * Set the card type
+		 * Returns the credit card type from the given account number
 		 *
 		 * Credit Card gateway only
 		 *
-		 * @param string $card_type
+		 * @deprecated 1.1.8 use Woodev_Payment_Gateway_Helper::card_type_from_account_number()
+		 *
+		 * @since 1.0.0
+		 *
+		 * @param string $account_number the account number
+		 * @return string|null the card type, or null if not recognized
 		 */
 		public static function type_from_account_number( $account_number ) {
 

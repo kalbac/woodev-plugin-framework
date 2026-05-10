@@ -1,7 +1,7 @@
 <?php
 /**
  *
- * @var WC_Payment_Gateway $gateway
+ * @var Woodev_Payment_Gateway $gateway
  * @var int $authorization_total
  * @var WC_Order $order
  * @var int $total_captured

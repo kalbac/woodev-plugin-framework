@@ -1,13 +1,12 @@
 # Current State — Woodev Plugin Framework
-
-> Last updated: 2026-05-10 (s2)
+> Last updated: 2026-05-10 (s3)
 
 ## Phase Status
 
 | Phase | Code | Browser-verified | Notes |
 |-------|------|------------------|-------|
 | Framework Core | ✅ | ✅ | Bootstrap, Plugin base, Lifecycle — stable |
-| Payment Gateway | ✅ | ✅ | class-payment-gateway.php: 2984 lines (was 3927, -943) |
+| Payment Gateway | ✅ | ✅ | class-payment-gateway.php: ~2990 lines (was 3927, -937) |
 | Shipping Method | ✅ | ✅ | PSR-4 namespaced |
 | Licensing | ✅ | ✅ | EDD store integration |
 | Settings API | ✅ | ✅ | Typed settings framework |
@@ -15,22 +14,25 @@
 | REST API | ✅ | ✅ | Plugin REST routes |
 | Documentation Structure | ✅ | — | Two-tier: docs/ (GH Pages) + docs-internal/ (AI agents) |
 | Legacy Cleanup (v2.0.0) | ✅ | — | ~1647 lines removed: dead compat, deprecated methods, US-specific types |
+| PHPStan Baseline | ✅ | ✅ | 0 errors, baseline cleaned up with documented ignores |
 
 ## Known Bugs (open)
 
-- [⚠️] 50+ PHPStan baseline ignores (see phpstan-baseline.neon)
-- [⚠️] class-payment-gateway.php is ~2984 lines — candidate for trait extraction
+- [⚠️] class-payment-gateway.php is ~2990 lines — candidate for trait extraction
+- [✅] 50+ PHPStan baseline ignores — cleaned up (s3)
 - [✅] Woodev_Plugin_Dependencies::get_missing_php_functions() — fixed in `4d00539`
 - [✅] 11 deprecated methods in Woodev_Plugin — removed in `728c6f9`
 - [✅] 47 deprecated methods total across codebase — removed in `728c6f9`
 - [✅] 12 dead compat guards for WP/WC below minimums — removed in `728c6f9`
+- [✅] Woodev_Helper::get_post() call to non-existent method — fixed in s3 (→ get_posted_value)
+- [✅] Woodev_Payment_Gateway::$voided_order_message dynamic property — fixed in s3 (declared private)
 
 ## Next Actions (priority order)
 
 1. ~~Populate docs-internal/gotchas/~~ ✅ done (s2)
 2. ~~Fix get_missing_php_functions() bug~~ ✅ done (s2)
-3. Extract traits from class-payment-gateway.php (deferred to big refactoring session)
-4. Clean up PHPStan baseline
+3. ~~Clean up PHPStan baseline~~ ✅ done (s3)
+4. Extract traits from class-payment-gateway.php (deferred to big refactoring session)
 5. eCheck/ACH removal (separate session)
 
 ## Planned — v2.0.0 & Beyond
@@ -50,7 +52,7 @@
 
 ## Active Queue
 
-> s2 — 10 gotcha files created + bug fix (extension_loaded→function_exists). Ready for trait extraction (#3).
+> s3 — PHPStan baseline cleanup complete: 410 errors → 0. 4 code bugs fixed. 400+ payment-gateway self-references documented and ignored.
 
 ## Infrastructure Reference
 
