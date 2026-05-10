@@ -126,9 +126,7 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 			$this->text_domain        = $args['text_domain'];
 			$this->supported_features = $args['supported_features'];
 
-			// includes that are required to be available at all times
 			$this->includes();
-
 			// initialize the dependencies manager
 			$this->init_dependencies( $args['dependencies'] );
 
@@ -582,9 +580,7 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 			require_once $framework_path . '/class-helper.php';
 			require_once $framework_path . '/admin/class-notes-helper.php';
 
-			// backwards compatibility for older WC versions
 			require_once $framework_path . '/compatibility/class-plugin-compatibility.php';
-			require_once $framework_path . '/compatibility/abstract-data-compatibility.php';
 			require_once $framework_path . '/compatibility/class-order-compatibility.php';
 
 			// generic API base
@@ -786,21 +782,6 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		}
 
 		/**
-		 * Declares HPOS compatibility if the plugin is compatible with HPOS.
-		 *
-		 * @internal
-		 * @deprecated since 1.3.2
-		 * @see Woodev_Plugin::handle_features_compatibility()
-		 *
-		 * @since 1.2.1
-		 */
-		public function handle_hpos_compatibility() {
-
-			wc_deprecated_function( __METHOD__, '1.3.2', 'Woodev_Plugin::handle_features_compatibility' );
-
-			$this->handle_features_compatibility();
-		}
-
 		/**
 		 * Declares compatibility with specific WooCommerce features.
 		 *
@@ -809,10 +790,6 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		 * @since 1.3.2
 		 */
 		public function handle_features_compatibility(): void {
-
-			if ( ! class_exists( Automattic\WooCommerce\Utilities\FeaturesUtil::class ) ) {
-				return;
-			}
 
 			Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility( 'custom_order_tables', $this->get_plugin_file(), $this->is_hpos_compatible() );
 			Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility( 'cart_checkout_blocks', $this->get_plugin_file(), $this->get_blocks_handler()->is_cart_block_compatible() && $this->get_blocks_handler()->is_checkout_block_compatible() );
@@ -1478,156 +1455,6 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 			return $is_active;
 		}
 
-		/** Deprecated methods */
-
-		/**
-		 * Handles version checking.
-		 *
-		 * @deprecated 1.1.8
-		 */
-		public function do_install() {
-
-			wc_deprecated_function( __METHOD__, '1.1.8', get_class( $this->get_lifecycle_handler() ) . '::init()' );
-
-			$this->get_lifecycle_handler()->init();
-		}
-
-		/**
-		 * Helper method to install default settings for a plugin.
-		 *
-		 * @param array $settings array of settings in format required by WC_Admin_Settings
-		 *
-		 * @deprecated 1.1.8
-		 */
-		public function install_default_settings( array $settings ) {
-
-			wc_deprecated_function( __METHOD__, '1.1.8', get_class( $this->get_lifecycle_handler() ) . '::install_default_settings()' );
-
-			$this->get_lifecycle_handler()->install_default_settings( $settings );
-		}
-
-		/**
-		 * Plugin activated method. Perform any activation tasks here.
-		 * Note that this _does not_ run during upgrades.
-		 *
-		 * @deprecated 1.1.8
-		 */
-		public function activate() {
-			wc_deprecated_function( __METHOD__, '1.1.8' );
-		}
-
-		/**
-		 * Plugin deactivation method. Perform any deactivation tasks here.
-		 *
-		 * @deprecated 1.1.8
-		 */
-		public function deactivate() {
-			wc_deprecated_function( __METHOD__, '1.1.8' );
-		}
-
-		/**
-		 * Gets the string name of any required PHP extensions that are not loaded.
-		 *
-		 * @return array
-		 * @deprecated 1.1.8
-		 */
-		public function get_missing_extension_dependencies() {
-
-			wc_deprecated_function( __METHOD__, '1.1.8', get_class( $this->get_dependency_handler() ) . '::get_missing_php_extensions()' );
-
-			return $this->get_dependency_handler()->get_missing_php_extensions();
-		}
-
-		/**
-		 * Gets the string name of any required PHP functions that are not loaded.
-		 *
-		 * @return array
-		 * @deprecated 1.1.8
-		 */
-		public function get_missing_function_dependencies() {
-
-			wc_deprecated_function( __METHOD__, '1.1.8', get_class( $this->get_dependency_handler() ) . '::get_missing_php_functions()' );
-
-			return $this->get_dependency_handler()->get_missing_php_functions();
-		}
-
-		/**
-		 * Gets the string name of any required PHP extensions that are not loaded.
-		 *
-		 * @return array
-		 * @deprecated 1.1.8
-		 */
-		public function get_incompatible_php_settings() {
-
-			wc_deprecated_function( __METHOD__, '1.1.8', get_class( $this->get_dependency_handler() ) . '::get_incompatible_php_settings()' );
-
-			return $this->get_dependency_handler()->get_incompatible_php_settings();
-		}
-
-		/**
-		 * Gets the PHP dependencies.
-		 *
-		 * @return array
-		 * @deprecated 1.1.8
-		 */
-		protected function get_dependencies() {
-			wc_deprecated_function( __METHOD__, '1.1.8' );
-
-			return array();
-		}
-
-		/**
-		 * Gets the PHP extension dependencies.
-		 *
-		 * @return array
-		 * @deprecated 1.1.8
-		 */
-		protected function get_extension_dependencies() {
-
-			wc_deprecated_function( __METHOD__, '1.1.8', get_class( $this->get_dependency_handler() ) . '::get_php_extensions()' );
-
-			return $this->get_dependency_handler()->get_php_extensions();
-		}
-
-
-		/**
-		 * Gets the PHP function dependencies.
-		 *
-		 * @return array
-		 * @deprecated 1.1.8
-		 */
-		protected function get_function_dependencies() {
-
-			wc_deprecated_function( __METHOD__, '1.1.8', get_class( $this->get_dependency_handler() ) . '::get_php_functions()' );
-
-			return $this->get_dependency_handler()->get_php_functions();
-		}
-
-
-		/**
-		 * Gets the PHP settings dependencies.
-		 *
-		 * @return array
-		 * @deprecated 1.1.8
-		 */
-		protected function get_php_settings_dependencies() {
-
-			wc_deprecated_function( __METHOD__, '1.1.8', get_class( $this->get_dependency_handler() ) . '::get_php_settings()' );
-
-			return $this->get_dependency_handler()->get_php_settings();
-		}
-
-		/**
-		 * Sets the plugin dependencies.
-		 *
-		 * @param array $dependencies the environment dependencies
-		 *
-		 * @deprecated 1.1.8
-		 */
-		protected function set_dependencies( $dependencies = array() ) {
-
-			wc_deprecated_function( __METHOD__, '1.1.8' );
-		}
 	}
 
 endif;

@@ -14,7 +14,7 @@ if ( ! class_exists( 'Woodev_Order_Compatibility' ) ) :
 	 * WooCommerce order compatibility class.
 	 */
 
-	class Woodev_Order_Compatibility extends Woodev_Data_Compatibility {
+	class Woodev_Order_Compatibility {
 
 		/**
 		 * Gets the formatted metadata for an order item.
@@ -32,22 +32,15 @@ if ( ! class_exists( 'Woodev_Order_Compatibility' ) ) :
 		 */
 		public static function get_item_formatted_meta_data( WC_Order_Item $item, string $hide_prefix = '_', bool $include_all = false ): array {
 
-			if ( $item instanceof WC_Order_Item && Woodev_Plugin_Compatibility::is_wc_version_gte( '3.1' ) ) {
+			$meta_data = $item->get_formatted_meta_data( $hide_prefix, $include_all );
+			$item_meta = [];
 
-				$meta_data = $item->get_formatted_meta_data( $hide_prefix, $include_all );
-				$item_meta = [];
+			foreach ( $meta_data as $meta ) {
 
-				foreach ( $meta_data as $meta ) {
-
-					$item_meta[] = array(
-						'label' => $meta->display_key,
-						'value' => $meta->value,
-					);
-				}
-			} else {
-
-				$item_meta = new WC_Order_Item_Meta( $item );
-				$item_meta = $item_meta->get_formatted( $hide_prefix );
+				$item_meta[] = array(
+					'label' => $meta->display_key,
+					'value' => $meta->value,
+				);
 			}
 
 			return $item_meta;
@@ -84,22 +77,7 @@ if ( ! class_exists( 'Woodev_Order_Compatibility' ) ) :
 
 			$order_id = $order instanceof WC_Order ? $order->get_id() : $order;
 			$order_id = max( (int) $order_id, 0 );
-
-			if ( Woodev_Plugin_Compatibility::is_wc_version_gte( '3.3' ) ) {
-				$order_url = OrderUtil::get_order_admin_edit_url( $order_id );
-			} else {
-				$order_url = apply_filters(
-					'woocommerce_get_edit_order_url',
-					add_query_arg(
-						array(
-							'post'   => absint( $order_id ),
-							'action' => 'edit',
-						),
-						admin_url( 'post.php' )
-					),
-					$order
-				);
-			}
+			$order_url = OrderUtil::get_order_admin_edit_url( $order_id );
 
 			return $order_url;
 		}
@@ -221,7 +199,7 @@ if ( ! class_exists( 'Woodev_Order_Compatibility' ) ) :
 			if ( is_callable( OrderUtil::class . '::get_order_admin_screen' ) ) {
 				return OrderUtil::get_order_admin_screen();
 			} elseif ( Woodev_Plugin_Compatibility::is_hpos_enabled() ) {
-				return function_exists( 'wc_get_page_screen_id' ) ? wc_get_page_screen_id( 'shop-order' ) : 'woocommerce_page_wc-orders';
+				return wc_get_page_screen_id( 'shop-order' );
 			}
 
 			return 'shop_order';

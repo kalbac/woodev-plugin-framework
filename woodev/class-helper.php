@@ -687,33 +687,6 @@ if ( ! class_exists( 'Woodev_Helper' ) ) :
 		}
 
 		/**
-		 * Safely gets a value from $_POST.
-		 *
-		 * @param string $key posted data key
-		 *
-		 * @deprecated 1.3.0
-		 */
-		public static function get_post( string $key ) {
-
-			wc_deprecated_function( __METHOD__, '1.3.0', __CLASS__ . '::get_posted_value( $key )' );
-
-			return static::get_posted_value( $key );
-		}
-
-		/**
-		 * Safely gets a value from $_REQUEST.
-		 *
-		 * @param string $key posted data key
-		 *
-		 * @deprecated 1.3.0
-		 */
-		public static function get_request( $key ) {
-
-			wc_deprecated_function( __METHOD__, '1.3.0', __CLASS__ . '::get_requested_value( $key )' );
-
-			return static::get_requested_value( $key );
-		}
-
 		/**
 		 * Checks if is active Woocommerce
 		 *
@@ -741,9 +714,6 @@ if ( ! class_exists( 'Woodev_Helper' ) ) :
 				if ( defined( 'WC_VERSION' ) && WC_VERSION ) {
 					return WC_VERSION;
 				}
-				if ( defined( 'WOOCOMMERCE_VERSION' ) && WOOCOMMERCE_VERSION ) {
-					return WOOCOMMERCE_VERSION;
-				}
 			}
 
 			return null;
@@ -755,7 +725,7 @@ if ( ! class_exists( 'Woodev_Helper' ) ) :
 		 * @return bool
 		 */
 		public static function is_ajax(): bool {
-			return function_exists( 'wp_doing_ajax' ) ? wp_doing_ajax() : defined( 'DOING_AJAX' );
+			return wp_doing_ajax();
 		}
 
 		public static function enqueue_js( $code ) {
@@ -1042,121 +1012,49 @@ if ( ! class_exists( 'Woodev_Helper' ) ) :
 				}
 			";
 
-				if ( version_compare( self::get_wc_version(), '3.0', '>=' ) ) {
+			$javascript .= "
 
-					$javascript .= "
+			$( 'select.woodev-wc-enhanced-search' ).filter( ':not(.enhanced)' ).each( function() {
 
-					$( 'select.woodev-wc-enhanced-search' ).filter( ':not(.enhanced)' ).each( function() {
-
-						var select2_args = {
-							allowClear:         $( this ).data( 'allow_clear' ) ? true : false,
-							placeholder:        $( this ).data( 'placeholder' ),
-							minimumInputLength: $( this ).data( 'minimum_input_length' ) ? $( this ).data( 'minimum_input_length' ) : '3',
-							escapeMarkup:       function( m ) {
-								return m;
-							},
-							ajax:               {
-								url:            '" . esc_js( admin_url( 'admin-ajax.php' ) ) . "',
-								dataType:       'json',
-								cache:          true,
-								delay:          250,
-								data:           function( params ) {
-									return {
-										term:         params.term,
-										request_data: $( this ).data( 'request_data' ) ? $( this ).data( 'request_data' ) : {},
-										action:       $( this ).data( 'action' ) || 'woocommerce_json_search_products_and_variations',
-										security:     $( this ).data( 'nonce' )
-									};
-								},
-								processResults: function( data, params ) {
-									var terms = [];
-									if ( data ) {
-										$.each( data, function( id, text ) {
-											terms.push( { id: id, text: text } );
-										});
-									}
-									return { results: terms };
-								}
+				var select2_args = {
+					allowClear:         $( this ).data( 'allow_clear' ) ? true : false,
+					placeholder:        $( this ).data( 'placeholder' ),
+					minimumInputLength: $( this ).data( 'minimum_input_length' ) ? $( this ).data( 'minimum_input_length' ) : '3',
+					escapeMarkup:       function( m ) {
+						return m;
+					},
+					ajax:               {
+						url:            '" . esc_js( admin_url( 'admin-ajax.php' ) ) . "',
+						dataType:       'json',
+						cache:          true,
+						delay:          250,
+						data:           function( params ) {
+							return {
+								term:         params.term,
+								request_data: $( this ).data( 'request_data' ) ? $( this ).data( 'request_data' ) : {},
+								action:       $( this ).data( 'action' ) || 'woocommerce_json_search_products_and_variations',
+								security:     $( this ).data( 'nonce' )
+							};
+						},
+						processResults: function( data, params ) {
+							var terms = [];
+							if ( data ) {
+								$.each( data, function( id, text ) {
+									terms.push( { id: id, text: text } );
+								});
 							}
-						};
-
-						select2_args = $.extend( select2_args, getEnhancedSelectFormatString() );
-
-						$( this ).select2( select2_args ).addClass( 'enhanced' );
-					} );
-				";
-
-				} else {
-
-					$javascript .= "
-
-					$( ':input.woodev-wc-enhanced-search' ).filter( ':not(.enhanced)' ).each( function() {
-
-						var select2_args = {
-							allowClear:         $( this ).data( 'allow_clear' ) ? true : false,
-							placeholder:        $( this ).data( 'placeholder' ),
-							minimumInputLength: $( this ).data( 'minimum_input_length' ) ? $( this ).data( 'minimum_input_length' ) : '3',
-							escapeMarkup:       function( m ) {
-								return m;
-							},
-							ajax:               {
-								url:         '" . esc_js( admin_url( 'admin-ajax.php' ) ) . "',
-								dataType:    'json',
-								cache:       true,
-								quietMillis: 250,
-								data:        function( term, page ) {
-									return {
-										term:         term,
-										request_data: $( this ).data( 'request_data' ) ? $( this ).data( 'request_data' ) : {},
-										action:       $( this ).data( 'action' ) || 'woocommerce_json_search_products_and_variations',
-										security:     $( this ).data( 'nonce' )
-									};
-								},
-								results:     function( data, page ) {
-									var terms = [];
-									if ( data ) {
-										$.each( data, function( id, text ) {
-											terms.push( { id: id, text: text } );
-										});
-									}
-									return { results: terms };
-								}
-							}
-						};
-
-						if ( $( this ).data( 'multiple' ) === true ) {
-
-							select2_args.multiple        = true;
-							select2_args.initSelection   = function( element, callback ) {
-								var data     = $.parseJSON( element.attr( 'data-selected' ) );
-								var selected = [];
-
-								$( element.val().split( ',' ) ).each( function( i, val ) {
-									selected.push( { id: val, text: data[ val ] } );
-								} );
-								return callback( selected );
-							};
-							select2_args.formatSelection = function( data ) {
-								return '<div class=\"selected-option\" data-id=\"' + data.id + '\">' + data.text + '</div>';
-							};
-
-						} else {
-
-							select2_args.multiple        = false;
-							select2_args.initSelection   = function( element, callback ) {
-								var data = {id: element.val(), text: element.attr( 'data-selected' )};
-								return callback( data );
-							};
+							return { results: terms };
 						}
+					}
+				};
 
-						select2_args = $.extend( select2_args, getEnhancedSelectFormatString() );
+				select2_args = $.extend( select2_args, getEnhancedSelectFormatString() );
 
-						$( this ).select2( select2_args ).addClass( 'enhanced' );
-					} );
-				";
-				}
+				$( this ).select2( select2_args ).addClass( 'enhanced' );
+			} );
+		";
 
-				$javascript .= '} )();';
+		$javascript .= '} )();';
 
 				self::enqueue_js( $javascript );
 
@@ -1246,7 +1144,7 @@ if ( ! class_exists( 'Woodev_Helper' ) ) :
 				return (bool) WC()->is_rest_api_request();
 			}
 
-			if ( empty( $_SERVER['REQUEST_URI'] ) || ! function_exists( 'rest_get_url_prefix' ) ) {
+			if ( empty( $_SERVER['REQUEST_URI'] ) ) {
 				return false;
 			}
 

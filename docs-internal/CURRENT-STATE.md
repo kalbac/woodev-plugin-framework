@@ -20,12 +20,12 @@
 - [⚠️] 50+ PHPStan baseline ignores (see phpstan-baseline.neon)
 - [⚠️] 11 deprecated methods in Woodev_Plugin (~lines 1486–1629), slated for removal in v2.0.0
 - [⚠️] class-payment-gateway.php is ~3900 lines — candidate for trait extraction
-- [⚠️] Woodev_Plugin_Dependencies::get_missing_php_functions() uses extension_loaded() instead of function_exists() (line 374) — docs/gotchas/dependency-function-check-bug.md
+- [✅] Woodev_Plugin_Dependencies::get_missing_php_functions() used extension_loaded() instead of function_exists() — fixed in `4d00539`
 
 ## Next Actions (priority order)
 
 1. ~~Populate docs-internal/gotchas/ with initial gotchas from codebase patterns~~ ✅ done (s2)
-2. Fix get_missing_php_functions() bug — extension_loaded → function_exists
+2. ~~Fix get_missing_php_functions() bug — extension_loaded → function_exists~~ ✅ done (s2, `4d00539`)
 3. Extract traits from class-payment-gateway.php
 4. Clean up PHPStan baseline
 5. Execute deprecation removal for v2.0.0
@@ -47,7 +47,7 @@
 
 ## Active Queue
 
-> s2 — 10 gotcha files created (naming, bootstrap, compat, php, deprecation, lifecycle). Real bug found: get_missing_php_functions() uses extension_loaded instead of function_exists. Ready for bugfix (#2).
+> s2 — 10 gotcha files created + bug fix (extension_loaded→function_exists). Ready for trait extraction (#3).
 
 ## Infrastructure Reference
 

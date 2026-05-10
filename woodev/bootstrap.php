@@ -375,7 +375,7 @@ if ( ! class_exists( 'Woodev_Plugin_Bootstrap' ) ) :
 		}
 
 		/**
-		 * Returns the WooCommerce version number, backwards compatible to WC 1.5
+		 * Returns the WooCommerce version number.
 		 *
 		 * @return null|string
 		 */
@@ -383,9 +383,6 @@ if ( ! class_exists( 'Woodev_Plugin_Bootstrap' ) ) :
 
 			if ( defined( 'WC_VERSION' ) && WC_VERSION ) {
 				return WC_VERSION;
-			}
-			if ( defined( 'WOOCOMMERCE_VERSION' ) && WOOCOMMERCE_VERSION ) {
-				return WOOCOMMERCE_VERSION;
 			}
 
 			return null;

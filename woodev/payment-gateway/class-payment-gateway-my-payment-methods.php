@@ -532,17 +532,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_My_Payment_Methods' ) ) :
 
 
 		/**
-		 * Renders the payment methods table.
-		 *
-		 * @internal
-		 *
-		 * @deprecated 1.1.8
-		 */
-		public function render() {
-			wc_deprecated_function( __METHOD__, '1.1.8' );
-		}
-
-
 		/**
 		 * Gets the JS args for the payment methods handler.
 		 *
@@ -570,21 +559,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_My_Payment_Methods' ) ) :
 
 
 		/**
-		 * Gets the JS handler class name.
-		 *
-		 * Plugins can override this for their own JS implementations.
-		 *
-		 * @return string
-		 * @deprecated 1.1.8
-		 */
-		protected function get_js_handler_class() {
-
-			wc_deprecated_function( __METHOD__, '1.1.8', __CLASS__ . '::get_js_handler_class_name()' );
-
-			return parent::get_js_handler_class_name();
-		}
-
-
 		/**
 		 * Adds a log entry.
 		 *
@@ -649,108 +623,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_My_Payment_Methods' ) ) :
 			 */
 			return apply_filters( 'wc_' . $this->get_plugin()->get_id() . '_my_payment_methods_no_payment_methods_html', $html, $this );
 		}
-
-		/**
-		 * Return the table title HTML, text defaults to "My Payment Methods"
-		 *
-		 * @return string table title HTML
-		 * @deprecated 1.1.8
-		 */
-		protected function get_table_title_html() {
-
-			wc_deprecated_function( __METHOD__, '1.1.8' );
-
-			return '';
-		}
-
-
-		/**
-		 * Returns the table HTML
-		 *
-		 * @return string table HTML
-		 * @deprecated 1.1.8
-		 */
-		public function get_table_html() {
-
-			wc_deprecated_function( __METHOD__, '1.1.8' );
-
-			return '';
-		}
-
-
-		/**
-		 * Returns the table head HTML
-		 *
-		 * @return string table thead HTML
-		 * @deprecated 1.1.8
-		 */
-		protected function get_table_head_html() {
-
-			wc_deprecated_function( __METHOD__, '1.1.8' );
-
-			return '';
-		}
-
-
-		/**
-		 * Returns the table headers.
-		 *
-		 * @return array of table headers in key => Title format
-		 * @deprecated 1.1.8
-		 */
-		protected function get_table_headers() {
-
-			wc_deprecated_function( __METHOD__, '1.1.8', 'Woodev_Payment_Gateway_My_Payment_Methods::add_payment_methods_columns' );
-
-			return $this->add_payment_methods_columns();
-		}
-
-
-		/**
-		 * Returns the table body HTML
-		 *
-		 * @return string table tbody HTML
-		 * @deprecated 1.1.8
-		 */
-		protected function get_table_body_html() {
-
-			wc_deprecated_function( __METHOD__, '1.1.8' );
-
-			return '';
-		}
-
-
-		/**
-		 * Returns the table body row HTML, each row represents a single payment method.
-		 *
-		 * @param Woodev_Payment_Gateway_Payment_Token[] $tokens token objects
-		 *
-		 * @return string table tbody > tr HTML
-		 * @deprecated 1.1.8
-		 */
-		protected function get_table_body_row_html( $tokens ) {
-
-			wc_deprecated_function( __METHOD__, '1.1.8' );
-
-			return '';
-		}
-
-
-		/**
-		 * Gets the payment method data for a given token.
-		 *
-		 * @param Woodev_Payment_Gateway_Payment_Token $token the token object
-		 *
-		 * @return array payment method data suitable for HTML output
-		 * @deprecated 1.1.8
-		 */
-		protected function get_table_body_row_data( $token ) {
-
-			wc_deprecated_function( __METHOD__, '1.1.8' );
-
-			return array();
-		}
-
 
 		/**
 		 * Get a token's payment method title HTML.
@@ -853,52 +725,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_My_Payment_Methods' ) ) :
 
 
 		/**
-		 * Get a token's payment method expiration date HTML.
-		 *
-		 * @param Woodev_Payment_Gateway_Payment_Token $token token object
-		 *
-		 * @return string
-		 * @deprecated 1.1.8
-		 */
-		protected function get_payment_method_expiry_html( Woodev_Payment_Gateway_Payment_Token $token ) {
-
-			wc_deprecated_function( __METHOD__, '1.1.8' );
-
-			return '';
-		}
-
-
-		/**
-		 * Get a token's payment method actions HTML.
-		 *
-		 * @param Woodev_Payment_Gateway_Payment_Token $token token object
-		 *
-		 * @return string
-		 * @deprecated 1.1.8
-		 */
-		protected function get_payment_method_actions_html( Woodev_Payment_Gateway_Payment_Token $token ) {
-
-			wc_deprecated_function( __METHOD__, '1.1.8' );
-
-			return '';
-		}
-
-
-		/**
-		 * Gets the actions for the given payment method token.
-		 *
-		 * @param Woodev_Payment_Gateway_Payment_Token $token token object
-		 *
-		 * @return array
-		 * @deprecated 1.1.8
-		 */
-		protected function get_payment_method_actions( $token ) {
-
-			wc_deprecated_function( __METHOD__, '1.1.8' );
-
-			return array();
-		}
-
 		/**
 		 * Saves a payment method via AJAX.
 		 *
