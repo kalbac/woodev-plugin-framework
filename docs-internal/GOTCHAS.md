@@ -1,16 +1,33 @@
 # Gotchas — Woodev Plugin Framework
 
-> **0 atomic gotchas in 10 namespaces** — update count when adding/removing.
+> **10 atomic gotchas in 6 namespaces** — update count when adding/removing.
+> Last updated: 2026-05-10 (s2)
 
 ## Index
 
 <!-- Format: - [namespace/tag] summary → [gotchas/slug.md](gotchas/slug.md) (s{N}) -->
 
 ### [naming/*] — Identifier conventions
-<!-- No entries yet -->
+- [naming/woodev-spelling] woodev (single 'd'), NEVER wooddev → [gotchas/woodev-spelling.md](gotchas/woodev-spelling.md) (s2)
 
 ### [php/*] — PHP / WordPress patterns
-<!-- No entries yet -->
+- [php/dependency-function-check-bug] get_missing_php_functions() uses extension_loaded instead of function_exists → [gotchas/dependency-function-check-bug.md](gotchas/dependency-function-check-bug.md) (s2)
+- [php/namespace-migration-legacy-psr4] Legacy Woodev_* vs PSR-4 Woodev\Framework\* conventions → [gotchas/namespace-migration-legacy-psr4.md](gotchas/namespace-migration-legacy-psr4.md) (s2)
+
+### [deprecation/*] — Deprecation cycle
+- [deprecation/deprecated-which-function] wc_deprecated_function vs _deprecated_function — which to use when → [gotchas/deprecated-which-function.md](gotchas/deprecated-which-function.md) (s2)
+- [deprecation/hook-deprecator-usage] Use Woodev_Hook_Deprecator, not _deprecated_hook() directly → [gotchas/hook-deprecator-usage.md](gotchas/hook-deprecator-usage.md) (s2)
+
+### [bootstrap/*] — Multi-version loading
+- [bootstrap/singleton-instantiation] Bootstrap is singleton, constructor is private → [gotchas/singleton-instantiation.md](gotchas/singleton-instantiation.md) (s2)
+- [bootstrap/plugin-registration-timing] register_plugin() must run before plugins_loaded → [gotchas/plugin-registration-timing.md](gotchas/plugin-registration-timing.md) (s2)
+- [bootstrap/payment-gateway-conditional-load] Payment gateway base class loaded only when is_payment_gateway arg is set → [gotchas/payment-gateway-conditional-load.md](gotchas/payment-gateway-conditional-load.md) (s2)
+
+### [compat/*] — Backward compatibility, HPOS
+- [compat/hpos-order-meta-safety] Never use get_post_meta() on orders — use Woodev_Order_Compatibility → [gotchas/hpos-order-meta-safety.md](gotchas/hpos-order-meta-safety.md) (s2)
+
+### [lifecycle/*] — Install/upgrade routines
+- [lifecycle/install-upgrade-detection] Lifecycle detects install vs upgrade by version comparison → [gotchas/lifecycle-install-upgrade-detection.md](gotchas/lifecycle-install-upgrade-detection.md) (s2)
 
 ### [woocommerce/*] — WooCommerce-specific
 <!-- No entries yet -->
@@ -21,13 +38,7 @@
 ### [testing/*] — Testing patterns
 <!-- No entries yet -->
 
-### [deprecation/*] — Deprecation cycle
-<!-- No entries yet -->
-
 ### [api/*] — API layer
-<!-- No entries yet -->
-
-### [bootstrap/*] — Multi-version loading
 <!-- No entries yet -->
 
 ### [licensing/*] — License/EDD store

@@ -1,6 +1,6 @@
 # Current State — Woodev Plugin Framework
 
-> Last updated: 2026-05-09 (s1)
+> Last updated: 2026-05-10 (s2)
 
 ## Phase Status
 
@@ -20,17 +20,34 @@
 - [⚠️] 50+ PHPStan baseline ignores (see phpstan-baseline.neon)
 - [⚠️] 11 deprecated methods in Woodev_Plugin (~lines 1486–1629), slated for removal in v2.0.0
 - [⚠️] class-payment-gateway.php is ~3900 lines — candidate for trait extraction
+- [⚠️] Woodev_Plugin_Dependencies::get_missing_php_functions() uses extension_loaded() instead of function_exists() (line 374) — docs/gotchas/dependency-function-check-bug.md
 
 ## Next Actions (priority order)
 
-1. Populate docs-internal/gotchas/ with initial gotchas from codebase patterns
-2. Extract traits from class-payment-gateway.php
-3. Clean up PHPStan baseline
-4. Execute deprecation removal for v2.0.0
+1. ~~Populate docs-internal/gotchas/ with initial gotchas from codebase patterns~~ ✅ done (s2)
+2. Fix get_missing_php_functions() bug — extension_loaded → function_exists
+3. Extract traits from class-payment-gateway.php
+4. Clean up PHPStan baseline
+5. Execute deprecation removal for v2.0.0
+
+## Planned — v2.0.0 & Beyond
+
+> Detailed specs in `docs-internal/FUTURE-BACKLOG.md`
+
+| # | Task | Category | Target |
+|---|------|----------|--------|
+| 1 | Bump WP/WC minimums (WP 6.3+, WC 7.0+) + remove deprecated compat code | Maintenance | v2.0.0 |
+| 2 | Remove unused US-specific payment types (echeck, Apple Pay, Google Pay) | Cleanup | v2.0.0 |
+| 3 | Push notifications & webhooks (server→client) | Feature | Post v2.0.0 |
+| 4 | Shipping module boilerplate | Feature | Post v2.0.0 |
+| 5 | React-oriented admin UI | Feature | Post v2.0.0 |
+| 6 | Framework decoupling — support pure WP plugins + future EDD | Architecture | v2.0.0 |
+
+> **v2.0.0 execution order:** #1 → #2 (cleanup legacy) → #6 (architectural split). Features #3–#5 post v2.0.0.
 
 ## Active Queue
 
-> s1 — docs-internal/ structure established. Ready for content population.
+> s2 — 10 gotcha files created (naming, bootstrap, compat, php, deprecation, lifecycle). Real bug found: get_missing_php_functions() uses extension_loaded instead of function_exists. Ready for bugfix (#2).
 
 ## Infrastructure Reference
 
