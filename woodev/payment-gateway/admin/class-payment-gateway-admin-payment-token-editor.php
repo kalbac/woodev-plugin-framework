@@ -528,33 +528,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Payment_Token_Editor' ) ) :
 
 					break;
 
-				case 'echeck':
-					// Define the echeck fields
-					$fields = array(
-						'id'           => array(
-							'label'    => __( 'Token ID', 'woodev-plugin-framework' ),
-							'editable' => ! $this->get_gateway()->get_api()->supports_get_tokenized_payment_methods(),
-							'required' => true,
-						),
-						'account_type' => array(
-							'label'   => __( 'Account Type', 'woodev-plugin-framework' ),
-							'type'    => 'select',
-							'options' => array(
-								'checking' => __( 'Checking', 'woodev-plugin-framework' ),
-								'savings'  => __( 'Savings', 'woodev-plugin-framework' ),
-							),
-						),
-						'last_four'    => array(
-							'label'      => __( 'Last Four', 'woodev-plugin-framework' ),
-							'attributes' => array(
-								'pattern'   => '[0-9]{4}',
-								'maxlength' => 4,
-							),
-						),
-					);
-
-					break;
-
 				default:
 					$fields = array();
 			}

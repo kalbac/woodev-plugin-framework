@@ -24,9 +24,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_My_Payment_Methods' ) ) :
 		/** @var Woodev_Payment_Gateway_Payment_Token[] array of token objects */
 		protected $credit_card_tokens;
 
-		/** @var Woodev_Payment_Gateway_Payment_Token[] array of token objects */
-		protected $echeck_tokens;
-
 		/** @var bool true if there are tokens */
 		protected $has_tokens;
 
@@ -191,7 +188,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_My_Payment_Methods' ) ) :
 				return $this->tokens;
 			}
 
-			$this->credit_card_tokens = $this->echeck_tokens = array();
+			$this->credit_card_tokens = array();
 
 			foreach ( $this->get_plugin()->get_gateways() as $gateway ) {
 
@@ -202,24 +199,20 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_My_Payment_Methods' ) ) :
 				foreach ( $gateway->get_payment_tokens_handler()->get_tokens( get_current_user_id() ) as $token ) {
 
 					// prevent duplicates, as some gateways will return all tokens in each gateway
-					if ( isset( $this->credit_card_tokens[ $token->get_id() ] ) || isset( $this->echeck_tokens[ $token->get_id() ] ) ) {
+					if ( isset( $this->credit_card_tokens[ $token->get_id() ] ) ) {
 						continue;
 					}
 
 					if ( $token->is_credit_card() ) {
 
 						$this->credit_card_tokens[ $token->get_id() ] = $token;
-
-					} elseif ( $token->is_echeck() ) {
-
-						$this->echeck_tokens[ $token->get_id() ] = $token;
 					}
 				}
 			}
 
 			// we don't use array_merge here since the indexes could be numeric
 			// and cause the indexes to be reset
-			$this->tokens = $this->credit_card_tokens + $this->echeck_tokens;
+			$this->tokens = $this->credit_card_tokens;
 
 			$this->has_tokens = ! empty( $this->tokens );
 

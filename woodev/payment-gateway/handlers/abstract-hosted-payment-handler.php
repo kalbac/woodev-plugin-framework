@@ -289,11 +289,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Hosted_Payment_Handler' ) 
 				$order->payment->exp_year  = $response->get_exp_year();
 				$order->payment->card_type = $response->get_card_type();
 
-			} elseif ( $response instanceof Woodev_Payment_Gateway_API_Payment_Notification_eCheck_Response ) {
-
-				$order->payment->account_type = $response->get_account_type();
-				$order->payment->check_number = $response->get_check_number();
-
 			} elseif ( $response instanceof Woodev_Payment_Gateway_API_Payment_Notification_Loans_Response ) {
 
 				$order->payment->loan_type     = $response->get_loan_type();

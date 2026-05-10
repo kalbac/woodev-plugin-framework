@@ -46,9 +46,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		/** Credit card payment type */
 		const PAYMENT_TYPE_CREDIT_CARD = 'credit-card';
 
-		/** eCheck payment type */
-		const PAYMENT_TYPE_ECHECK = 'echeck';
-
 		/** Gateway with multiple payment options */
 		const PAYMENT_TYPE_MULTIPLE = 'multiple';
 
@@ -103,10 +100,41 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		/** Admin token editor feature */
 		const FEATURE_TOKEN_EDITOR = 'token_editor';
 
+		/**
+		 * Returns the payment type, one of 'credit-card', 'bank_transfer', 'multiple', 'loans_transfer'.
+		 *
+		 * @return string payment type
+		 * @since 1.0.0
+		 */
+		public function get_payment_type() {
+			return $this->payment_type;
+		}
+
+		/**
+		 * Returns true if this is a credit card gateway.
+		 *
+		 * @return bool
+		 * @since 1.0.0
+		 */
+		public function is_credit_card_gateway() {
+			return self::PAYMENT_TYPE_CREDIT_CARD === $this->get_payment_type();
+		}
+
+		/**
+		 * Returns true if this gateway supports eCheck payments.
+		 *
+		 * @return bool false — eCheck removed in v2.0.0
+		 * @deprecated v2.0.0 eCheck payment type removed
+		 * @since 1.0.0
+		 */
+		public function is_echeck_gateway() {
+			return false;
+		}
+
 		/** @var Woodev_Payment_Gateway_Plugin the parent plugin class */
 		private $plugin;
 
-		/** @var string payment type, one of 'credit-card' or 'echeck' */
+		/** @var string payment type, one of 'credit-card', 'bank_transfer', 'multiple', 'loans_transfer' */
 		private $payment_type;
 
 		/** @var array associative array of environment id to display name, defaults to 'production' => 'Production' */
@@ -142,9 +170,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		/** @var string configuration option: indicates whether a Card Security Code field will be presented for saved cards at checkout, either 'yes' or 'no' */
 		private $enable_token_csc;
 
-		/** @var array configuration option: supported echeck fields, one of 'check_number', 'account_type' */
-		private $supported_check_fields;
-
 		/** @var string configuration option: indicates whether tokenization is enabled, either 'yes' or 'no' */
 		private $tokenization;
 
@@ -157,7 +182,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		/** @var string configuration option: whether to use a sibling gateway's connection/authentication settings */
 		private $inherit_settings;
 
-		/** @var array of shared setting names, if any.  This can be used for instance when a single plugin supports both credit card and echeck payments, and the same credentials can be used for both gateways */
+		/** @var array of shared setting names, if any. Used when a single plugin supports multiple payment gateway variants sharing credentials. */
 		private $shared_settings = array();
 
 		/** @var Woodev_Payment_Gateway_Payment_Tokens_Handler payment tokens handler instance */
@@ -183,14 +208,13 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		 * + `supports` - array  list of supported gateway features, possible values include:
 		 *   'products', 'card_types', 'tokenziation', 'charge', 'authorization', 'customer_decline_messages'
 		 *   Defaults to 'products', 'charge' (credit-card gateways only)
-		 * + `payment_type` - string one of 'credit-card' or 'echeck', defaults to 'credit-card'
+		 * + `payment_type` - string one of 'credit-card', 'bank_transfer', 'multiple', 'loans_transfer'. Defaults to 'credit-card'.
 		 * + `card_types` - array  associative array of card type to display name, used if the payment_type is 'credit-card' and the 'card_types' feature is supported.  Defaults to:
 		 *   'VISA' => 'Visa', 'MC' => 'MasterCard', 'AMEX' => 'American Express', 'DISC' => 'Discover', 'DINERS' => 'Diners', 'JCB' => 'JCB'
-		 * + `echeck_fields` - array of supported echeck fields, including 'check_number', 'account_type'
 		 * + `environments` - associative array of environment id to display name, merged with default of 'production' => 'Production'
 		 * + `currencies` -  array of currency codes this gateway is allowed for, defaults to plugin accepted currencies
 		 * + `countries` -  array of two-letter country codes this gateway is allowed for, defaults to all
-		 * + `shared_settings` - array of shared setting names, if any.  This can be used for instance when a single plugin supports both credit card and echeck payments, and the same credentials can be used for both gateways
+		 * + `shared_settings` - array of shared setting names, if any. Used for plugins with multiple payment gateway variants.
 		 *
 		 * @param string                        $id the gateway id
 		 * @param Woodev_Payment_Gateway_Plugin $plugin the parent plugin class
@@ -229,9 +253,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 			}
 			if ( isset( $args['card_types'] ) ) {
 				$this->available_card_types = $args['card_types'];
-			}
-			if ( isset( $args['echeck_fields'] ) ) {
-				$this->supported_check_fields = $args['echeck_fields'];
 			}
 			if ( isset( $args['environments'] ) ) {
 				$this->environments = array_merge( $this->get_environments(), $args['environments'] );
@@ -458,17 +479,8 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 					'cvv_digits_invalid'             => esc_html__( 'Card security code is invalid (only digits are allowed)', 'woodev-plugin-framework' ),
 					'cvv_length_invalid'             => esc_html__( 'Card security code is invalid (must be 3 or 4 digits)', 'woodev-plugin-framework' ),
 					'card_exp_date_invalid'          => esc_html__( 'Card expiration date is invalid', 'woodev-plugin-framework' ),
-					'check_number_digits_invalid'    => esc_html__( 'Check Number is invalid (only digits are allowed)', 'woodev-plugin-framework' ),
-					'check_number_missing'           => esc_html__( 'Check Number is missing', 'woodev-plugin-framework' ),
 					'drivers_license_state_missing'  => esc_html__( 'Drivers license state is missing', 'woodev-plugin-framework' ),
 					'drivers_license_number_missing' => esc_html__( 'Drivers license number is missing', 'woodev-plugin-framework' ),
-					'drivers_license_number_invalid' => esc_html__( 'Drivers license number is invalid', 'woodev-plugin-framework' ),
-					'account_number_missing'         => esc_html__( 'Account Number is missing', 'woodev-plugin-framework' ),
-					'account_number_invalid'         => esc_html__( 'Account Number is invalid (only digits are allowed)', 'woodev-plugin-framework' ),
-					'account_number_length_invalid'  => esc_html__( 'Account number is invalid (must be between 5 and 17 digits)', 'woodev-plugin-framework' ),
-					'routing_number_missing'         => esc_html__( 'Routing Number is missing', 'woodev-plugin-framework' ),
-					'routing_number_digits_invalid'  => esc_html__( 'Routing Number is invalid (only digits are allowed)', 'woodev-plugin-framework' ),
-					'routing_number_length_invalid'  => esc_html__( 'Routing number is invalid (must be 9 digits)', 'woodev-plugin-framework' ),
 				)
 			);
 		}
@@ -824,11 +836,8 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		 */
 		protected function get_default_title() {
 
-			// defaults for credit card and echeck, override for others
 			if ( $this->is_credit_card_gateway() ) {
 				return esc_html__( 'Credit Card', 'woodev-plugin-framework' );
-			} elseif ( $this->is_echeck_gateway() ) {
-				return esc_html__( 'eCheck', 'woodev-plugin-framework' );
 			}
 
 			return '';
@@ -842,11 +851,8 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		 */
 		protected function get_default_description() {
 
-			// defaults for credit card and echeck, override for others
 			if ( $this->is_credit_card_gateway() ) {
 				return esc_html__( 'Pay securely using your credit card.', 'woodev-plugin-framework' );
-			} elseif ( $this->is_echeck_gateway() ) {
-				return esc_html__( 'Pay securely using your checking account.', 'woodev-plugin-framework' );
 			}
 
 			return '';
@@ -1307,14 +1313,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 				$icon .= '</div>';
 			}
 
-			// echeck image
-			if ( ! $icon && $this->is_echeck_gateway() ) {
-
-				if ( $url = $this->get_payment_method_image_url( 'echeck' ) ) {
-					$icon .= sprintf( '<img src="%s" alt="%s" class="woodev-payment-gateway-icon wc-%s-payment-gateway-icon" width="40" height="25" style="width: 40px; height: 25px;" />', esc_url( $url ), esc_attr( 'echeck' ), esc_attr( $this->get_id_dasherized() ) );
-				}
-			}
-
 			/* This filter is documented in WC core */
 
 			return apply_filters( 'woocommerce_gateway_icon', $icon, $this->get_id() );
@@ -1323,7 +1321,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		/**
 		 * Returns the payment method image URL (if any) for the given $type, ie
 		 * if $type is 'amex' a URL to the american express card icon will be
-		 * returned.  If $type is 'echeck', a URL to the echeck icon will be
 		 * returned.
 		 *
 		 * @param string $type the payment method cc type or name
@@ -1436,8 +1433,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 
 			if ( self::PAYMENT_TYPE_CREDIT_CARD == $response->get_payment_type() ) {
 				$order->add_order_note( $this->get_credit_card_transaction_approved_message( $order, $response ) );
-			} elseif ( self::PAYMENT_TYPE_ECHECK == $response->get_payment_type() ) {
-				$order->add_order_note( $this->get_echeck_transaction_approved_message( $order, $response ) );
 			} elseif ( self::PAYMENT_TYPE_LOANS == $response->get_payment_type() ) {
 				$order->add_order_note( $this->get_loans_transaction_approved_message( $order, $response ) );
 			} else {
@@ -2102,19 +2097,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 				if ( isset( $order->payment->card_type ) && $order->payment->card_type ) {
 					$this->update_order_meta( $order, 'card_type', $order->payment->card_type );
 				}
-			} elseif ( $this->is_echeck_gateway() ) {
-
-				// checking gateway data
-
-				// optional account type (checking/savings)
-				if ( isset( $order->payment->account_type ) && $order->payment->account_type ) {
-					$this->update_order_meta( $order, 'account_type', $order->payment->account_type );
-				}
-
-				// optional check number
-				if ( isset( $order->payment->check_number ) && $order->payment->check_number ) {
-					$this->update_order_meta( $order, 'check_number', $order->payment->check_number );
-				}
 			}
 
 			/**
@@ -2238,46 +2220,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 			 * @param Woodev_Payment_Gateway $instance instance
 			 */
 			return apply_filters( 'wc_payment_gateway_' . $this->get_id() . '_credit_card_transaction_approved_order_note', $message, $order, $response, $this );
-		}
-
-		/**
-		 * Gets the order note message for approved eCheck transactions.
-		 *
-		 * @param WC_Order                            $order order object
-		 * @param Woodev_Payment_Gateway_API_Response $response response object
-		 *
-		 * @return string
-		 */
-		public function get_echeck_transaction_approved_message( WC_Order $order, Woodev_Payment_Gateway_API_Response $response ) {
-
-			$last_four = ! empty( $order->payment->last_four ) ? $order->payment->last_four : substr( $order->payment->account_number, - 4 );
-
-			// check order note. there may not be an account_type available, but that's fine
-			/* translators: Placeholders: %1$s - payment method title, %2$s - payment account type (savings/checking) (may or may not be available), %3$s - last four digits of the account */
-			$message = sprintf( __( '%1$s Check Transaction Approved: %2$s account ending in %3$s', 'woodev-plugin-framework' ), $this->get_method_title(), $order->payment->account_type, $last_four );
-
-			// optional check number
-			if ( ! empty( $order->payment->check_number ) ) {
-				/* translators: Placeholders: %s - check number */
-				$message .= '. ' . sprintf( esc_html__( 'Check number %s', 'woodev-plugin-framework' ), $order->payment->check_number );
-			}
-
-			// adds the transaction id (if any) to the order note
-			if ( $response->get_transaction_id() ) {
-				$message .= ' ' . sprintf( esc_html__( '(Transaction ID %s)', 'woodev-plugin-framework' ), $response->get_transaction_id() );
-			}
-
-			/**
-			 * Direct Gateway eCheck Transaction Approved Order Note Filter.
-			 *
-			 * Allow actors to modify the order note added when an eCheck transaction is approved.
-			 *
-			 * @param string $message order note
-			 * @param WC_Order $order order object
-			 * @param Woodev_Payment_Gateway_API_Response $response transaction response
-			 * @param Woodev_Payment_Gateway $instance instance
-			 */
-			return apply_filters( 'wc_payment_gateway_' . $this->get_id() . '_check_transaction_approved_order_note', $message, $order, $response, $this );
 		}
 
 		/**
@@ -2609,7 +2551,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		 *
 		 * NOTE: the plugin id, rather than gateway id, is used by default to create
 		 * the meta key for this setting, because it's assumed that in the case of a
-		 * plugin having multiple gateways (ie credit card and eCheck) the customer
+		 * plugin having multiple gateways the customer
 		 * id will be the same between them.
 		 *
 		 * @param string $environment_id optional environment id, defaults to plugin current environment

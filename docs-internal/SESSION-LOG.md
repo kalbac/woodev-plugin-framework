@@ -1,44 +1,34 @@
 # Session Log — Woodev Plugin Framework
 
-## s3 (2026-05-10): PHPStan baseline cleanup — 410 errors → 0 + 4 code bugs fixed
+## s3 (2026-05-10): PHPStan baseline cleanup + eCheck/ACH removal (3 commits)
 
-### Root cause analysis
-- 410 errors were "Call to an undefined method Woodev_Payment_Gateway::*" across the payment gateway hierarchy
-- Woodev_Payment_Gateway extends WC_Payment_Gateway (stub), PHPStan can't resolve methods from the WC stub class hierarchy
-- Cannot add to bootstrapFiles (extends WC class, not loaded yet) or scanFiles (won't fix self-referencing methods)
-- Decision: documented broad ignore patterns for the payment gateway hierarchy with detailed root cause comments
+### eCheck/ACH removal — BREAKING, v2.0.0 prep
+- Removed eCheck payment type from 17 files across payment-gateway/
+- Deleted eCheck response interface: `interface-payment-gateway-api-payment-notification-echeck-response.php`
+- Deleted 3 eCheck assets: `card-echeck.svg`, `card-echeck.png`, `sample-check.png`
+- `is_echeck_gateway()` → returns `false`, marked `@deprecated`
+- `is_echeck()` on token → returns `false`
+- Added missing gateway type methods (`get_payment_type`, `is_credit_card_gateway`, `is_echeck_gateway`) that were accidentally lost in prior cleanup
+- Removed from class-payment-gateway.php: PAYMENT_TYPE_ECHECK constant, $supported_check_fields property, get_echeck_transaction_approved_message(), validate_check_fields() branch, eCheck JS error messages, eCheck icon block, eCheck transaction data, eCheck complete_payment note
+- Removed from class-payment-gateway-direct.php: validate_check_fields() (~80 lines), eCheck branches in validate_fields/get_order/do_transaction/add_payment_method
+- Removed from class-payment-gateway-payment-form.php: get_echeck_fields(), get_sample_check_html(), render_sample_check(), eCheck form rendering
+- Removed from class-payment-gateway-hosted.php: PAYMENT_TYPE_ECHECK case, eCheck token branches
+- Cleaned token model: removed get_account_type/set_account_type, simplified get_type_full/is_echeck
+- Cleaned token handler: removed eCheck branches in create_token/get_tokens/get_order_note/get_merge_attributes
+- Cleaned my-payment-methods: removed $echeck_tokens property, simplified load_tokens
+- Cleaned handlers: removed eCheck instanceof and PAYMENT_TYPE_ECHECK branches
+- Cleaned admin: removed echeck case from token editor, simplified user edit handler type
+- Cleaned helper: removed checking/savings from payment_type_to_name
+- class-payment-gateway.php: ~2860 lines (was 3927 → 2984 → ~2860, total -1067)
+- PHPStan: ✅ 0 errors, Tests: ✅ 114/114 passed
 
-### Code bugs fixed (4)
-- **Bug: Woodev_Helper::get_post()** — 6 calls in admin-user-edit-handler.php referenced non-existent method. Renamed to get_posted_value().
-- **Bug: Woodev_Payment_Gateway::$voided_order_message** — dynamic property (PHP 8.2+ deprecation risk). Declared as `private string $voided_order_message = ''`.
-- **Bug: PHPDoc copy-paste in type_from_account_number()** — `@param string $card_type` → `@param string $account_number`. Also fixed misplaced docblock on set_card_type().
-- **Bug: html-order-partial-capture.php @var** — `@var WC_Payment_Gateway $gateway` → `@var Woodev_Payment_Gateway $gateway` (get_id_dasherized is Woodev, not WC).
-
-### Type safety improvements
-- is_available() — added `: bool` return type, changed @return from descriptive text to `@return bool`
-
-### Baseline rewrite
-- Rewrote entire ignoreErrors section in phpstan.neon (English comments with root cause docs)
-- Removed 2 entries fixed in code (voided_order_message, is_available return type)
-- Added 3 broad patterns for payment gateway hierarchy (~400 self-references)
-- All remaining ignores documented with rationale in English
-
-### Verification
-- PHPStan: ✅ 0 errors (was 410)
-- PHPCS: ✅ 0 errors (pre-existing line-length warnings only)
-- Unit tests: ✅ 114/114 passed
-
-### eCheck/ACH audit
-- Comprehensive audit of eCheck/ACH code across 14 files in payment-gateway/
-- ~160 references catalogued — constants, properties, methods, interfaces, JS, CSS, images
-- 5-phase removal plan written to docs-internal/wiki/echeck-ach-audit.md:
-  - Phase 1: Trait extraction (non-breaking, v1.x — ~4h)
-  - Phase 2: API interface deprecation (breaking, v2.0.0)
-  - Phase 3: Token model cleanup (breaking, v2.0.0)
-  - Phase 4: Asset cleanup (non-breaking)
-  - Phase 5: Core cleanup (breaking, v2.0.0)
-- Risk: 10+ dependent plugins may use eCheck — MUST audit before removal
-- Estimated effort: 6.5h + dependent plugin audit
+### PHPStan baseline cleanup — 410 errors → 0
+- Bugfix: Woodev_Helper::get_post() → get_posted_value() (6 calls, non-existent method)
+- Bugfix: declare $voided_order_message as private property (was dynamic, PHP 8.2+ risk)
+- Bugfix: PHPDoc @param mismatch in type_from_account_number() (card_type → account_number)
+- Bugfix: @var WC_Payment_Gateway → Woodev_Payment_Gateway in partial-capture view
+- Improve: is_available() return type : bool
+- Baseline: rewrite ignoreErrors section with English docs, add payment-gateway hierarchy patterns
 
 ### Gotcha population
 - Created 10 gotcha files in docs-internal/gotchas/ across 6 namespaces (bootstrap, naming, compat, php, deprecation, lifecycle)

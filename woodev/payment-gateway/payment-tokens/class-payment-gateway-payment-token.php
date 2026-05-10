@@ -119,7 +119,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Token' ) ) :
 		 * @return boolean true if this payment token represents an eCheck
 		 */
 		public function is_echeck() {
-			return ! $this->is_credit_card();
+			return false;
 		}
 
 
@@ -182,31 +182,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Token' ) ) :
 
 
 		/**
-		 * Returns the bank account type, one of 'checking' or 'savings'
-		 *
-		 * eCheck gateway only
-		 *
-		 * @return string the payment type
-		 * @since 1.0.0
-		 */
-		public function get_account_type() {
-			return isset( $this->data['account_type'] ) ? $this->data['account_type'] : null;
-		}
-
-
-		/**
-		 * Set the account type
-		 *
-		 * eCheck gateway only
-		 *
-		 * @param string $account_type
-		 */
-		public function set_account_type( $account_type ) {
-			$this->data['account_type'] = $account_type;
-		}
-
-
-		/**
 		 * Returns the full payment type, ie Visa, MasterCard, American Express, Discover, Diners, MIR, eCheck, etc
 		 *
 		 * @return string the payment type
@@ -217,7 +192,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Token' ) ) :
 			if ( $this->is_credit_card() ) {
 				$type = $this->get_card_type() ? $this->get_card_type() : 'card';
 			} else {
-				$type = $this->get_account_type() ? $this->get_account_type() : 'bank';
+				$type = 'bank';
 			}
 
 			return Woodev_Payment_Gateway_Helper::payment_type_to_name( $type );

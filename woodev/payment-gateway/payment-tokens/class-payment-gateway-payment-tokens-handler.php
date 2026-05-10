@@ -118,11 +118,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Tokens_Handler' ) ) :
 					$order->payment->card_type = $token->get_card_type();
 				}
 
-				// checking/savings, if known
-				if ( $gateway->is_echeck_gateway() && $token->get_account_type() ) {
-					$order->payment->account_type = $token->get_account_type();
-				}
-
 				// set the token to the user account
 				if ( $order->get_user_id() ) {
 					$this->add_token( $order->get_user_id(), $token, $environment_id );
@@ -495,7 +490,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Tokens_Handler' ) ) :
 
 			// set the payment type image url, if any, for convenience
 			foreach ( $this->tokens[ $environment_id ][ $user_id ] as $key => $token ) {
-				$this->tokens[ $environment_id ][ $user_id ][ $key ]->set_image_url( $this->get_gateway()->get_payment_method_image_url( $token->is_credit_card() ? $token->get_card_type() : 'echeck' ) );
+				$this->tokens[ $environment_id ][ $user_id ][ $key ]->set_image_url( $this->get_gateway()->get_payment_method_image_url( $token->get_card_type() ) );
 			}
 
 			if ( $transient_key ) {
@@ -667,7 +662,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Tokens_Handler' ) ) :
 		 * @return array associative array of string token to Woodev_Payment_Gateway_Payment_Token objects
 		 */
 		protected function get_merge_attributes() {
-			return array( 'last_four', 'card_type', 'account_type', 'exp_month', 'exp_year', 'nickname' );
+			return array( 'last_four', 'card_type', 'exp_month', 'exp_year', 'nickname' );
 		}
 
 
@@ -793,17 +788,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Tokens_Handler' ) ) :
 					$token->get_type_full(),
 					$token->get_last_four(),
 					$token->get_exp_date()
-				);
-
-			} elseif ( $gateway->is_echeck_gateway() ) {
-
-				// account type (checking/savings) may or may not be available, which is fine
-				/* translators: Placeholders: %1$s - payment gateway title (such as CyberSouce, NETbilling, etc), %2$s - account type (checking/savings - may or may not be available), %3$s - last four digits of the account */
-				$message = sprintf(
-					__( '%1$s eCheck Payment Method Saved: %2$s account ending in %3$s', 'woodev-plugin-framework' ),
-					$gateway->get_method_title(),
-					$token->get_account_type(),
-					$token->get_last_four()
 				);
 			}
 

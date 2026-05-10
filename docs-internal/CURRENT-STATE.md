@@ -6,35 +6,35 @@
 | Phase | Code | Browser-verified | Notes |
 |-------|------|------------------|-------|
 | Framework Core | ✅ | ✅ | Bootstrap, Plugin base, Lifecycle — stable |
-| Payment Gateway | ✅ | ✅ | class-payment-gateway.php: ~2990 lines (was 3927, -937) |
+| Payment Gateway | ✅ | ✅ | class-payment-gateway.php: ~2860 lines (was 3927, -1067) |
 | Shipping Method | ✅ | ✅ | PSR-4 namespaced |
 | Licensing | ✅ | ✅ | EDD store integration |
 | Settings API | ✅ | ✅ | Typed settings framework |
 | Box Packer | ✅ | ✅ | Shipping box-packing algorithm |
 | REST API | ✅ | ✅ | Plugin REST routes |
 | Documentation Structure | ✅ | — | Two-tier: docs/ (GH Pages) + docs-internal/ (AI agents) |
-| eCheck/ACH Audit | ✅ | — | Audit done (s3): 14 files, 5-phase removal plan in wiki/echeck-ach-audit.md |
+| Legacy Cleanup (v2.0.0) | ✅ | — | ~1647 lines removed: dead compat, deprecated methods, US-specific types |
 | PHPStan Baseline | ✅ | ✅ | 0 errors, baseline cleaned up with documented ignores |
+| eCheck/ACH Removal | ✅ | ✅ | eCheck removed from 17 files, 1 interface deleted, 3 images deleted |
+| eCheck/ACH Audit | ✅ | — | Audit done (s3): 14 files, 5-phase removal plan in wiki/echeck-ach-audit.md |
 
 ## Known Bugs (open)
 
-- [⚠️] class-payment-gateway.php is ~2990 lines — candidate for trait extraction
+- [⚠️] class-payment-gateway.php is ~2860 lines — candidate for trait extraction
 - [✅] 50+ PHPStan baseline ignores — cleaned up (s3)
-- [✅] Woodev_Plugin_Dependencies::get_missing_php_functions() — fixed in `4d00539`
-- [✅] 11 deprecated methods in Woodev_Plugin — removed in `728c6f9`
-- [✅] 47 deprecated methods total across codebase — removed in `728c6f9`
-- [✅] 12 dead compat guards for WP/WC below minimums — removed in `728c6f9`
-- [✅] Woodev_Helper::get_post() call to non-existent method — fixed in s3 (→ get_posted_value)
-- [✅] Woodev_Payment_Gateway::$voided_order_message dynamic property — fixed in s3 (declared private)
+- [✅] Woodev_Plugin_Dependencies::get_missing_php_functions() — fixed `4d00539`
+- [✅] 47 deprecated methods total — removed `728c6f9`
+- [✅] Woodev_Helper::get_post() non-existent method — fixed (s3)
+- [✅] Woodev_Payment_Gateway::$voided_order_message dynamic — fixed (s3)
+- [✅] eCheck/ACH payment type — removed (s3), `is_echeck_gateway()` returns false, deprecated
 
 ## Next Actions (priority order)
 
-1. ~~Populate docs-internal/gotchas/~~ ✅ done (s2)
-2. ~~Fix get_missing_php_functions() bug~~ ✅ done (s2)
-3. ~~Clean up PHPStan baseline~~ ✅ done (s3)
-4. ~~eCheck/ACH audit~~ ✅ done (s3)
-5. Extract traits from class-payment-gateway.php (deferred to big refactoring session)
-6. Audit dependent plugins for eCheck usage → then execute eCheck removal plan
+1. ~~Populate docs-internal/gotchas/~~ ✅ s2
+2. ~~Fix get_missing_php_functions() bug~~ ✅ s2
+3. ~~Clean up PHPStan baseline~~ ✅ s3
+4. ~~eCheck/ACH audit + removal~~ ✅ s3
+5. Extract traits from class-payment-gateway.php (now ~2860 lines, down from 3927)
 
 ## Planned — v2.0.0 & Beyond
 

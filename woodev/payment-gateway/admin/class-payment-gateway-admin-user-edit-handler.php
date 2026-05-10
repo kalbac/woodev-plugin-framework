@@ -289,7 +289,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_User_Edit_Handler' ) ) :
 						$gateway->build_payment_token(
 							Woodev_Helper::get_posted_value( $payment_token_name ),
 							array(
-								'type'      => $gateway->is_credit_card_gateway() ? 'credit_card' : 'check',
+								'type'      => 'credit_card',
 								'card_type' => Woodev_Helper::get_posted_value( 'wc_' . $gateway->get_id() . '_payment_token_type_' . $environment_id ),
 								'last_four' => Woodev_Helper::get_posted_value( 'wc_' . $gateway->get_id() . '_payment_token_last_four_' . $environment_id ),
 								'exp_month' => count( $exp_date ) > 1 ? sprintf( '%02s', $exp_date[0] ) : null,

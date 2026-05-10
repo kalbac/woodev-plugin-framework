@@ -197,8 +197,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Payment_Handler' ) ) :
 
 				if ( Woodev_Payment_Gateway::PAYMENT_TYPE_CREDIT_CARD === $response->get_payment_type() ) {
 					$message = $this->get_gateway()->get_credit_card_transaction_approved_message( $order, $response );
-				} elseif ( Woodev_Payment_Gateway::PAYMENT_TYPE_ECHECK === $response->get_payment_type() ) {
-					$message = $this->get_gateway()->get_echeck_transaction_approved_message( $order, $response );
 				} else {
 
 					$message_method = 'get_' . $response->get_payment_type() . '_transaction_approved_message';
