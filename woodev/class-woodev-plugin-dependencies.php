@@ -371,7 +371,7 @@ if ( ! class_exists( 'Woodev_Plugin_Dependencies' ) ) :
 
 			foreach ( $this->get_php_functions() as $function ) {
 
-				if ( ! extension_loaded( $function ) ) {
+				if ( ! function_exists( $function ) ) {
 					$missing_functions[] = $function;
 				}
 			}
