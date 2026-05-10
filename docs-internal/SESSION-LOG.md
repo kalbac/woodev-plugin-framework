@@ -1,6 +1,6 @@
 # Session Log — Woodev Plugin Framework
 
-## s3 (2026-05-10): PHPStan baseline cleanup + eCheck/ACH removal (3 commits)
+## s3 (2026-05-10): PHPStan baseline cleanup + eCheck/ACH removal (4 commits)
 
 ### eCheck/ACH removal — BREAKING, v2.0.0 prep
 - Removed eCheck payment type from 17 files across payment-gateway/
@@ -29,6 +29,16 @@
 - Bugfix: @var WC_Payment_Gateway → Woodev_Payment_Gateway in partial-capture view
 - Improve: is_available() return type : bool
 - Baseline: rewrite ignoreErrors section with English docs, add payment-gateway hierarchy patterns
+
+### JS/CSS eCheck cleanup (commit 119e5b6)
+- Removed validate_account_data() and handle_sample_check_hint() from JS frontend
+- Removed eCheck event binding in constructor
+- Removed eCheck CSS selectors from both frontend.css + payment-form.css
+- Deleted dist JS artifact (Parcel build, stale since eCheck removal)
+
+### New gotcha discovered
+- `is_credit_card_gateway()`/`is_echeck_gateway()`/`get_payment_type()` — these 3 methods were missing from Woodev_Payment_Gateway (accidentally deleted in s2 cleanup). Calls existed 32+ times across the codebase but definitions were gone. Had to add them back with proper deprecation annotation for `is_echeck_gateway()`.
+- → Gotcha documented: docs-internal/gotchas/gateway-type-methods-required.md
 
 ### Gotcha population
 - Created 10 gotcha files in docs-internal/gotchas/ across 6 namespaces (bootstrap, naming, compat, php, deprecation, lifecycle)
