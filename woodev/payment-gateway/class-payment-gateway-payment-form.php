@@ -9,7 +9,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 	/**
 	 * Payment Form Class
 	 *
-	 * Handles rendering the payment form for both credit card and eCheck gateways
+	 * Handles rendering the payment form for credit card gateways.
 	 *
 	 * @since 4.0.0
 	 */
@@ -112,11 +112,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 			if ( $this->tokenization_allowed() && is_user_logged_in() ) {
 
 				foreach ( $this->get_gateway()->get_payment_tokens_handler()->get_tokens( get_current_user_id() ) as $token ) {
-
-					// some gateways return all tokens for each gateway, so ensure the token type matches the gateway type
-					if ( $this->get_gateway()->is_credit_card_gateway() && $token->is_echeck() ) {
-						continue;
-					}
 
 					// set token
 					$tokens[ $token->get_id() ] = $token;
@@ -254,9 +249,8 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 			/**
 			 * Payment Gateway Payment Form Default Payment Fields.
 			 *
-			 * Filters the default field data for a gateway, for credit cards/eCheck
-			 * gateways the get_credit_card_fields()/get_echeck_fields() methods
-			 * will be used. This filter can be used to return payment fields
+			 * Filters the default field data for a gateway. Credit card gateways use
+			 * the get_credit_card_fields() method. This filter can return payment fields
 			 * for a non-standard payment type (like PayPal Express)
 			 *
 			 * @param array $fields in the format supported by woocommerce_form_fields()
@@ -715,14 +709,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 				echo $this->get_saved_payment_methods_html();
 			}
 		}
-
-
-		/**
-		 * Render the sample check image if gateway is eCheck
-		 *
-		 * @hooked wc_{gateway ID}_payment_form_start @ priority 25
-		 */
-
 
 
 		/**

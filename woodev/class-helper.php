@@ -1012,7 +1012,7 @@ if ( ! class_exists( 'Woodev_Helper' ) ) :
 				}
 			";
 
-			$javascript .= "
+				$javascript .= "
 
 			$( 'select.woodev-wc-enhanced-search' ).filter( ':not(.enhanced)' ).each( function() {
 
@@ -1054,7 +1054,7 @@ if ( ! class_exists( 'Woodev_Helper' ) ) :
 			} );
 		";
 
-		$javascript .= '} )();';
+				$javascript .= '} )();';
 
 				self::enqueue_js( $javascript );
 

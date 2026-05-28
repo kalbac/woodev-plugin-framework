@@ -70,7 +70,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 		 * Optional args:
 		 *
 		 * + `require_ssl` - boolean true if this plugin requires SSL for proper functioning, false otherwise. Defaults to false
-		 * + `gateways` - array associative array of gateway id to gateway class name.  A single plugin might support more than one gateway, ie credit card, echeck.  Note that the credit card gateway must always be the first one listed.
+		 * + `gateways` - array associative array of gateway id to gateway class name. A single plugin might support more than one gateway variant. Note that the credit card gateway must always be the first one listed.
 		 * + `currencies` -  array of currency codes this gateway is allowed for, defaults to all
 		 * + `supports` - array named features that this gateway supports, including 'tokenization', 'transaction_link', 'customer_id', 'capture_charge'
 		 *
@@ -789,7 +789,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 
 		/**
 		 * Gets all supported gateway class names; typically this will be just one,
-		 * unless the plugin supports credit card and echeck variations
+		 * unless the plugin supports multiple gateway variations
 		 *
 		 * @return array of string gateway class names
 		 * @since 1.0.0
@@ -825,7 +825,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 
 		/**
 		 * Gets all supported gateway objects; typically this will be just one,
-		 * unless the plugin supports credit card and echeck variations
+		 * unless the plugin supports multiple gateway variations
 		 *
 		 * @return Woodev_Payment_Gateway[]
 		 * @since 1.0.0
@@ -857,7 +857,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 		/**
 		 * Returns the identified gateway object
 		 *
-		 * @param string $gateway_id optional gateway identifier, defaults to first gateway, which will be the credit card gateway in plugins with support for both credit cards and echecks
+		 * @param string $gateway_id optional gateway identifier, defaults to first gateway, which will be the credit card gateway in plugins with multiple gateway variations
 		 *
 		 * @return Woodev_Payment_Gateway the gateway object
 		 * @since 1.0.0

@@ -7,8 +7,8 @@
 - **Type:** PHP Library / Framework
 - **License:** GPL-3.0-or-later
 - **PHP:** 7.4–8.x (platform target: 8.1)
-- **Minimum WordPress:** 5.9
-- **Minimum WooCommerce:** 5.6
+- **Minimum WordPress:** 6.3
+- **Minimum WooCommerce:** 7.0
 - **Text Domain:** `woodev-plugin-framework`
 - **Namespace:** `Woodev\Framework\*` (PSR-4), legacy code without namespace
 

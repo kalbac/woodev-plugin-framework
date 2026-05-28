@@ -90,7 +90,7 @@ function init_my_plugin() {
         'my_plugin_init',
         [
             'minimum_wc_version'   => '8.0',
-            'minimum_wp_version'   => '5.9',
+            'minimum_wp_version'   => '6.3',
             'backwards_compatible' => '1.4.0',
         ]
     );
@@ -694,7 +694,7 @@ function init_my_plugin() {
         'my_plugin_init',
         [
             'minimum_wc_version' => '8.0',
-            'minimum_wp_version' => '5.9',
+            'minimum_wp_version' => '6.3',
         ]
     );
 }

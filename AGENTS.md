@@ -148,8 +148,8 @@ woodev_framework/
 | Layer | Technology | Version |
 |-------|-----------|---------|
 | Language | PHP | 7.4–8.x (platform: 8.1) |
-| WordPress | WP API | ≥5.9 |
-| WooCommerce | WC API | ≥5.6 |
+| WordPress | WP API | ≥6.3 |
+| WooCommerce | WC API | ≥7.0 |
 | Testing (unit) | Brain Monkey + Mockery | ^2.6 / ^1.6 |
 | Testing (integration) | WP PHPUnit + wp-env | ^6.9 |
 | Linting | PHP_CodeSniffer (WPCS) | ^3.9 / ^3.1 |

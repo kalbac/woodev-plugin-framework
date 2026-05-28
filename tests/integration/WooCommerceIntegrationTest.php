@@ -29,7 +29,7 @@ class WooCommerceIntegrationTest extends TestCase {
 	 * WooCommerce версия должна удовлетворять минимальным требованиям фреймворка.
 	 */
 	public function test_woocommerce_version_meets_minimum(): void {
-		$minimum = '5.6';
+		$minimum = '7.0';
 
 		$this->assertTrue(
 			version_compare( WC_VERSION, $minimum, '>=' ),

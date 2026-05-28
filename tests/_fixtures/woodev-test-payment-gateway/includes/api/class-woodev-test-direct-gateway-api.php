@@ -33,10 +33,6 @@ class Woodev_Test_Direct_Payment_Gateway_API extends Woodev_API_Base implements 
 		// TODO: Implement credit_card_capture() method.
 	}
 
-	public function check_debit( WC_Order $order ) {
-		// TODO: Implement check_debit() method.
-	}
-
 	public function refund( WC_Order $order ) {
 		// TODO: Implement refund() method.
 	}

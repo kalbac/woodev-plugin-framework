@@ -46,9 +46,9 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Tokens_Handler' ) ) :
 		 *      Payment token data.
 		 *
 		 *     @type bool   $default   Optional. Indicates this is the default payment token
-		 *     @type string $type      Payment type. Either 'credit_card' or 'check'
+		 *     @type string $type      Payment type. Usually 'credit_card'.
 		 *     @type string $last_four Last four digits of account number
-		 *     @type string $card_type Credit card type (`visa`, `mc`, `amex`, `disc`, `diners`, `jcb`, `mir`) or `echeck`
+		 *     @type string $card_type Credit card type (`visa`, `mc`, `amex`, `disc`, `diners`, `jcb`, `mir`)
 		 *     @type string $exp_month Optional. Expiration month (credit card only)
 		 *     @type string $exp_year  Optional. Expiration year (credit card only)
 		 * }
@@ -745,7 +745,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Tokens_Handler' ) ) :
 		 *
 		 * NOTE: the gateway id, rather than plugin id, is used by default to create
 		 * the meta key for this setting, because it's assumed that in the case of a
-		 * plugin having multiple gateways (ie credit card and eCheck) the payment
+		 * plugin having multiple gateway variants the payment
 		 * tokens will be distinct between them
 		 *
 		 * @since 1.0.0

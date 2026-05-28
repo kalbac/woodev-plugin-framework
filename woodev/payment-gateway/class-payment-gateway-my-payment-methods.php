@@ -180,7 +180,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_My_Payment_Methods' ) ) :
 		/**
 		 * Gets the the available tokens for each plugin gateway and combine them.
 		 *
-		 * Tokens are also separated into Credit Card and eCheck-specific class members for convenience.
+		 * Tokens are grouped by gateway for convenience.
 		 */
 		protected function load_tokens() {
 
@@ -603,7 +603,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_My_Payment_Methods' ) ) :
 			 * @param string $message no methods text
 			 * @param Woodev_Payment_Gateway_My_Payment_Methods $instance my payment methods instance
 			 */
-			/* translators: Payment method as in a specific credit card, eCheck or bank account */
+			/* translators: Payment method as in a specific credit card or stored bank transfer account */
 			$html = '<p>' . apply_filters( 'wc_' . $this->get_plugin()->get_id() . '_no_payment_methods_text', esc_html__( 'You do not have any saved payment methods.', 'woodev-plugin-framework' ), $this ) . '</p>';
 
 			/**

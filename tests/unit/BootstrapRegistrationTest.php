@@ -26,7 +26,6 @@ class BootstrapRegistrationTest extends TestCase {
 		// Reset the singleton instance via reflection.
 		$reflection = new ReflectionClass( \Woodev_Plugin_Bootstrap::class );
 		$instance   = $reflection->getProperty( 'instance' );
-		$instance->setAccessible( true );
 		$instance->setValue( null, null );
 	}
 
@@ -36,7 +35,6 @@ class BootstrapRegistrationTest extends TestCase {
 	protected function tearDown(): void {
 		$reflection = new ReflectionClass( \Woodev_Plugin_Bootstrap::class );
 		$instance   = $reflection->getProperty( 'instance' );
-		$instance->setAccessible( true );
 		$instance->setValue( null, null );
 
 		parent::tearDown();
@@ -51,7 +49,6 @@ class BootstrapRegistrationTest extends TestCase {
 	private function get_registered_plugins( \Woodev_Plugin_Bootstrap $bootstrap ): array {
 		$reflection = new ReflectionClass( $bootstrap );
 		$property   = $reflection->getProperty( 'registered_plugins' );
-		$property->setAccessible( true );
 
 		return $property->getValue( $bootstrap );
 	}
@@ -84,8 +81,8 @@ class BootstrapRegistrationTest extends TestCase {
 			'/path/to/plugin/test-plugin.php',
 			$callback,
 			[
-				'minimum_wc_version' => '5.0',
-				'minimum_wp_version' => '5.9',
+				'minimum_wc_version' => '7.0',
+				'minimum_wp_version' => '6.3',
 			]
 		);
 
@@ -96,8 +93,8 @@ class BootstrapRegistrationTest extends TestCase {
 		$this->assertSame( 'Test Plugin', $registered[0]['plugin_name'] );
 		$this->assertSame( '/path/to/plugin/test-plugin.php', $registered[0]['path'] );
 		$this->assertSame( $callback, $registered[0]['callback'] );
-		$this->assertSame( '5.0', $registered[0]['args']['minimum_wc_version'] );
-		$this->assertSame( '5.9', $registered[0]['args']['minimum_wp_version'] );
+		$this->assertSame( '7.0', $registered[0]['args']['minimum_wc_version'] );
+		$this->assertSame( '6.3', $registered[0]['args']['minimum_wp_version'] );
 	}
 
 	/**
@@ -136,8 +133,8 @@ class BootstrapRegistrationTest extends TestCase {
 			[
 				'is_payment_gateway'  => true,
 				'load_shipping_method' => true,
-				'minimum_wc_version'  => '6.0',
-				'minimum_wp_version'  => '6.0',
+				'minimum_wc_version'  => '7.0',
+				'minimum_wp_version'  => '6.3',
 			]
 		);
 
@@ -259,7 +256,6 @@ class BootstrapRegistrationTest extends TestCase {
 		// Reset singleton.
 		$reflection = new ReflectionClass( \Woodev_Plugin_Bootstrap::class );
 		$property   = $reflection->getProperty( 'instance' );
-		$property->setAccessible( true );
 		$property->setValue( null, null );
 
 		$instance2 = \Woodev_Plugin_Bootstrap::instance();

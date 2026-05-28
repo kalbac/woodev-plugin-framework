@@ -121,7 +121,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		}
 
 		/**
-		 * Returns true if this gateway supports eCheck payments.
+		 * Returns true if this gateway supports the removed eCheck payment type.
 		 *
 		 * @return bool false — eCheck removed in v2.0.0
 		 * @deprecated v2.0.0 eCheck payment type removed
@@ -479,8 +479,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 					'cvv_digits_invalid'             => esc_html__( 'Card security code is invalid (only digits are allowed)', 'woodev-plugin-framework' ),
 					'cvv_length_invalid'             => esc_html__( 'Card security code is invalid (must be 3 or 4 digits)', 'woodev-plugin-framework' ),
 					'card_exp_date_invalid'          => esc_html__( 'Card expiration date is invalid', 'woodev-plugin-framework' ),
-					'drivers_license_state_missing'  => esc_html__( 'Drivers license state is missing', 'woodev-plugin-framework' ),
-					'drivers_license_number_missing' => esc_html__( 'Drivers license number is missing', 'woodev-plugin-framework' ),
 				)
 			);
 		}
@@ -736,7 +734,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 
 		/**
 		 * Get the payment form field defaults, primarily for gateways to override
-		 * and set dummy credit card/eCheck info when in the test environment
+		 * and set dummy credit card info when in the test environment
 		 *
 		 * @return array
 		 */
@@ -746,7 +744,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 
 			$defaults = array(
 				'account-number' => '',
-				'routing-number' => '',
 				'expiry'         => '',
 				'csc'            => '',
 			);
@@ -2268,9 +2265,9 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 			}
 
 			/**
-			 * Direct Gateway eCheck Transaction Approved Order Note Filter.
+			 * Direct Gateway Loans Transaction Approved Order Note Filter.
 			 *
-			 * Allow actors to modify the order note added when an eCheck transaction is approved.
+			 * Allow actors to modify the order note added when a loans transaction is approved.
 			 *
 			 * @param string $message order note
 			 * @param WC_Order $order order object

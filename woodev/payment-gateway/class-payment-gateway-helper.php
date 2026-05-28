@@ -157,7 +157,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Helper' ) ) :
 
 		/**
 		 * Translates a credit card type or bank account name to a full name,
-		 * e.g. 'mastercard' => 'MasterCard' or 'savings' => 'eCheck'
+		 * e.g. 'mastercard' => 'MasterCard'
 		 *
 		 * @param string $payment_type the credit card or bank type, ie 'mastercard', 'amex', 'checking'
 		 *

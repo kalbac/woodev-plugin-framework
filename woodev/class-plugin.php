@@ -1204,7 +1204,7 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		 *
 		 * @param string $plugin_id optional plugin identifier.  Note that this can be a
 		 *        sub-identifier for plugins with multiple parallel settings pages
-		 *        (ie a gateway that supports both credit cards and echecks)
+		 *        (ie a plugin with multiple gateway variants)
 		 *
 		 * @return string plugin configure link
 		 * @see Woodev_Plugin::get_settings_url()
@@ -1225,7 +1225,7 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		 *
 		 * @param string $plugin_id optional plugin identifier.  Note that this can be a
 		 *        sub-identifier for plugins with multiple parallel settings pages
-		 *        (ie a gateway that supports both credit cards and echecks)
+		 *        (ie a plugin with multiple gateway variants)
 		 *
 		 * @return string plugin settings URL
 		 * @see Woodev_Plugin::get_settings_link()
@@ -1454,7 +1454,6 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 
 			return $is_active;
 		}
-
 	}
 
 endif;

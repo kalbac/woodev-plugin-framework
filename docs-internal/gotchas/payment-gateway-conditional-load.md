@@ -28,7 +28,7 @@ Woodev_Plugin_Bootstrap::instance()->register_plugin(
     '1.4.1', 'My Gateway', __FILE__, $callback,
     [
         'is_payment_gateway' => true,  // ✅ Required!
-        'minimum_wc_version' => '5.6',
+        'minimum_wc_version' => '7.0',
     ]
 );
 

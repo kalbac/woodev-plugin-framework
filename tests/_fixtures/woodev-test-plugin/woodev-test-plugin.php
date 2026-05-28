@@ -7,9 +7,9 @@
  * Author:      Woodev
  * Text Domain: woodev-test-plugin
  *
- * Requires at least: 5.9
+ * Requires at least: 6.3
  * Requires PHP:      7.4
- * WC requires at least: 5.6
+ * WC requires at least: 7.0
  *
  * @package Woodev_Test_Plugin
  */
@@ -51,8 +51,8 @@ Woodev_Plugin_Bootstrap::instance()->register_plugin(
 	__FILE__,
 	'woodev_test_plugin_init',
 	[
-		'minimum_wc_version'   => '5.6',
-		'minimum_wp_version'   => '5.9',
+		'minimum_wc_version'   => '7.0',
+		'minimum_wp_version'   => '6.3',
 		'backwards_compatible' => '1.4.0',
 	]
 );

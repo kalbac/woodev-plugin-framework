@@ -8,7 +8,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Token' ) ) :
 	/**
 	 * WooCommerce Payment Gateway Token
 	 *
-	 * Represents a credit card or check payment token
+	 * Represents a credit card payment token.
 	 */
 	class Woodev_Payment_Gateway_Payment_Token {
 
@@ -32,12 +32,11 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Token' ) ) :
 		 * have the following members:
 		 *
 		 * default      - boolean optional indicates this is the default payment token
-		 * type         - string one of 'credit_card' or 'echeck' ('check' for backwards compatibility)
+		 * type         - string 'credit_card'. Legacy 'echeck'/'check' values are accepted only for backwards compatibility.
 		 * last_four    - string last four digits of account number
 		 * card_type    - string credit card type: visa, mc, amex, disc, diners, jcb, etc (credit card only)
 		 * exp_month    - string optional expiration month MM (credit card only)
 		 * exp_year     - string optional expiration year YYYY (credit card only)
-		 * account_type - string one of 'checking' or 'savings' (checking gateway only)
 		 *
 		 * @param string $id the payment gateway token ID
 		 * @param array  $data associated data
@@ -114,9 +113,10 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Token' ) ) :
 
 
 		/**
-		 * Returns true if this payment token represents an eCheck
+		 * Returns true if this payment token represents the removed eCheck payment type.
 		 *
-		 * @return boolean true if this payment token represents an eCheck
+		 * @return boolean false — eCheck removed in v2.0.0
+		 * @deprecated v2.0.0 eCheck payment type removed
 		 */
 		public function is_echeck() {
 			return false;
@@ -124,7 +124,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Token' ) ) :
 
 
 		/**
-		 * Returns the payment type, one of 'credit_card' or 'echeck'
+		 * Returns the payment type.
 		 *
 		 * @return string the payment type
 		 * @since 1.0.0
@@ -182,7 +182,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Token' ) ) :
 
 
 		/**
-		 * Returns the full payment type, ie Visa, MasterCard, American Express, Discover, Diners, MIR, eCheck, etc
+		 * Returns the full payment type, ie Visa, MasterCard, American Express, Discover, Diners, MIR, etc.
 		 *
 		 * @return string the payment type
 		 * @since 1.0.0
@@ -200,7 +200,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Token' ) ) :
 
 
 		/**
-		 * Returns the last four digits of the credit card or check account number
+		 * Returns the last four digits of the credit card account number.
 		 *
 		 * @return string last four of account
 		 * @since 1.0.0

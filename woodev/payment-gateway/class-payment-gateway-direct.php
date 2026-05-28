@@ -415,18 +415,13 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 		 *
 		 * $order->payment_total           - the payment total
 		 * $order->customer_id             - optional payment gateway customer id (useful for tokenized payments for certain gateways, etc)
-		 * $order->payment->account_number - the credit card or checking account number
+		 * $order->payment->account_number - the credit card account number
 		 * $order->payment->last_four      - the last four digits of the account number
 		 * $order->payment->card_type      - the card type (e.g. visa) derived from the account number
-		 * $order->payment->routing_number - account routing number (check transactions only)
-		 * $order->payment->account_type   - optional type of account one of 'checking' or 'savings' if type is 'check'
 		 * $order->payment->card_type      - optional card type, ie one of 'visa', etc
 		 * $order->payment->exp_month      - the 2 digit credit card expiration month (for credit card gateways), e.g. 07
 		 * $order->payment->exp_year       - the 2 digit credit card expiration year (for credit card gateways), e.g. 17
 		 * $order->payment->csc            - the card security code (for credit card gateways)
-		 * $order->payment->check_number   - optional check number (check transactions only)
-		 * $order->payment->drivers_license_number - optional driver license number (check transactions only)
-		 * $order->payment->drivers_license_state  - optional driver license state code (check transactions only)
 		 * $order->payment->token          - payment token (for tokenized transactions)
 		 *
 		 * Note that not all gateways will necessarily pass or require all of the
@@ -521,59 +516,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 			 * @since 1.0.0
 			 */
 			return apply_filters( 'wc_payment_gateway_' . $this->get_id() . '_get_order', $order, $this );
-		}
-
-
-		/**
-		 * Performs a check transaction for the given order and returns the result.
-		 *
-		 * @param WC_Order $order the order object
-		 *
-		 * @return Woodev_Payment_Gateway_API_Response the response
-		 * @throws Woodev_Plugin_Exception network timeouts, etc
-		 * @since 1.0.0
-		 */
-		protected function do_check_transaction( $order ) {
-
-			$response = $this->get_api()->check_debit( $order );
-
-			// success! update order record
-			if ( $response->transaction_approved() ) {
-
-				$last_four = substr( $order->payment->account_number, - 4 );
-
-				// check order note. there may not be an account_type available, but that's fine
-				/* translators: Placeholders: %1$s - payment method title, %2$s - payment account type (savings/checking) (may or may not be available), %3$s - last four digits of the account */
-				$message = sprintf( esc_html__( '%1$s Check Transaction Approved: %2$s account ending in %3$s', 'woodev-plugin-framework' ), $this->get_method_title(), $order->payment->account_type, $last_four );
-
-				// optional check number
-				if ( ! empty( $order->payment->check_number ) ) {
-					/* translators: Placeholders: %s - check number */
-					$message .= '. ' . sprintf( esc_html__( 'Check number %s', 'woodev-plugin-framework' ), $order->payment->check_number );
-				}
-
-				// adds the transaction id (if any) to the order note
-				if ( $response->get_transaction_id() ) {
-					$message .= ' ' . sprintf( esc_html__( '(Transaction ID %s)', 'woodev-plugin-framework' ), $response->get_transaction_id() );
-				}
-
-				/**
-				 * Direct Gateway eCheck Transaction Approved Order Note Filter.
-				 *
-				 * Allow actors to modify the order note added when an eCheck transaction is approved.
-				 *
-				 * @param string $message order note
-				 * @param WC_Order $order order object
-				 * @param Woodev_Payment_Gateway_API_Response $response transaction response
-				 * @param Woodev_Payment_Gateway_Direct $instance instance
-				 */
-				$message = apply_filters( 'wc_payment_gateway_' . $this->get_id() . '_check_transaction_approved_order_note', $message, $order, $response, $this );
-
-				$order->add_order_note( $message );
-
-			}
-
-			return $response;
 		}
 
 
