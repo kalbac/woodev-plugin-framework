@@ -1,5 +1,5 @@
 # Current State — Woodev Plugin Framework
-> Last updated: 2026-05-29 (Platform v2 Phase 5 deprecation-helper cleanup started)
+> Last updated: 2026-05-29 (Platform v2 Phase 5 settings helper cleanup complete)
 
 ## Phase Status
 
@@ -52,6 +52,7 @@
 | 10 Platform class split | ✅ 2026-05-29 | Hook ownership, initial WooCommerce feature/Blocks state, system-status rows, WooCommerce logger, template loader, HPOS/Blocks feature declarations, and payment/shipping specialized inheritance moved to `Woodev_Woocommerce_Plugin`; remaining base items are compatibility wrappers or Phase 5 module cleanup |
 | 11 Early class availability | ✅ 2026-05-29 | Payment/shipping early capabilities load WooCommerce base from selected framework copy; callback timing test proves specialized child classes can be declared inside plugin callback |
 | 12 Phase 5 cleanup #1 | ✅ 2026-05-29 | Base-owned API, lifecycle, and licensing deprecated wrappers now use WordPress core deprecation helpers instead of WooCommerce wrappers |
+| 13 Phase 5 cleanup #2 | ✅ 2026-05-29 | Settings API boolean and URL helpers now use local platform-neutral equivalents preserving `yes`/`no` storage and `http`/`https` validation contracts |
 
 ## Planned — v2.0.0 & Beyond
 
@@ -89,7 +90,7 @@
 
 ## Active Queue
 
-> Platform v2 resolver facade + explicit loader definition slice is complete. Phase 3 is stopped: WooCommerce hook ownership, initial `supported_features`/Blocks handler construction, WooCommerce system-status row ownership, WooCommerce logger ownership, WooCommerce template loader ownership, HPOS/Blocks feature declarations, and payment/shipping specialized base inheritance live in `Woodev_Woocommerce_Plugin`; remaining `Woodev_Plugin` WooCommerce-adjacent items are compatibility wrappers or broader Phase 5 cleanup. Phase 4 callback timing coverage is complete for payment/shipping specialized child class declaration. Phase 5 cleanup has started with WordPress core deprecation helpers in base-owned API, lifecycle, and licensing wrappers. Next step: continue Phase 5 with another small tested cleanup slice, likely settings boolean/URL helper removal or licensing utility helper replacement, without expanding resolver runtime behavior or rewriting production plugin loaders before migration contracts.
+> Platform v2 resolver facade + explicit loader definition slice is complete. Phase 3 is stopped: WooCommerce hook ownership, initial `supported_features`/Blocks handler construction, WooCommerce system-status row ownership, WooCommerce logger ownership, WooCommerce template loader ownership, HPOS/Blocks feature declarations, and payment/shipping specialized base inheritance live in `Woodev_Woocommerce_Plugin`; remaining `Woodev_Plugin` WooCommerce-adjacent items are compatibility wrappers or broader Phase 5 cleanup. Phase 4 callback timing coverage is complete for payment/shipping specialized child class declaration. Phase 5 cleanup now includes WordPress core deprecation helpers in base-owned API/lifecycle/licensing wrappers plus local platform-neutral replacements for settings boolean and URL helpers. Next step: continue Phase 5 with another small tested cleanup slice, likely licensing utility helper replacement (`wc_strtolower()`, `wc_print_r()`, licensing API URL validation), without expanding resolver runtime behavior or rewriting production plugin loaders before migration contracts.
 
 ## Infrastructure Reference
 

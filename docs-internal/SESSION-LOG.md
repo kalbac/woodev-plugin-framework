@@ -1,5 +1,27 @@
 # Session Log — Woodev Plugin Framework
 
+## Platform v2 Phase 5 settings helper cleanup (2026-05-29)
+
+### Implementation
+- Continued strictly from `docs-internal/platform-v2-implementation-spec.md`, ADR-003, ADR-004, and the multi-version early class guard gotcha.
+- Inspected the remaining small WooCommerce helper dependencies in platform-neutral modules and chose the smallest safe Phase 5 slice: settings API boolean and URL helper cleanup.
+- Added `tests/unit/PlatformNeutralSettingsApiTest.php` first, proving the current failure mode when `wc_bool_to_string()`, `wc_string_to_bool()`, and `wc_is_valid_url()` are unavailable in a pure platform-neutral unit context.
+- Replaced direct WooCommerce helper usage in `woodev/settings-api/abstract-class-settings.php` with local helper methods that preserve WooCommerce-compatible boolean semantics and the installed-site `yes`/`no` storage contract.
+- Replaced direct WooCommerce URL validation in `woodev/settings-api/class-setting.php` with a local validator that preserves the previous `http`/`https` plus `FILTER_VALIDATE_URL` contract.
+- Preserved installed-site behavior, public API shape, include-based runtime loading, and resolver boundaries; did not move payment, shipping, licensing runtime behavior, or production plugin loaders.
+
+### Verification
+- `composer test -- --filter PlatformNeutralSettingsApiTest` failed first with the expected undefined WooCommerce helper errors, then passed after the implementation: 3 tests / 13 assertions.
+- `composer check` passed: PHPCS 113/113, PHPStan 0 errors, PHPUnit 142 tests / 260 assertions.
+- Gotcha compilation: no new non-obvious gotcha discovered; no `docs-internal/gotchas/` update required.
+- Commit: pending at time of entry creation; final commit hash reported in chat.
+
+### Next
+- Continue Phase 5 platform-neutral module cleanup from `docs-internal/platform-v2-implementation-spec.md`.
+- Best next small slice: licensing utility helper replacement (`wc_strtolower()`, `wc_print_r()`, licensing API URL validation) with tests first.
+- Defer broader utility/background-job/session cleanup until targeted regression coverage exists because it touches WooCommerce-specific runtime hooks.
+- Do not expand resolver runtime behavior and do not rewrite production plugin loaders before migration contract docs exist.
+
 ## Platform v2 Phase 5 deprecation-helper cleanup (2026-05-29)
 
 ### Implementation

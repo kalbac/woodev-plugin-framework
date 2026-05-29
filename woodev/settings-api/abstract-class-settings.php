@@ -330,7 +330,7 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 			$value = $setting->get_value();
 
 			if ( null !== $value && Woodev_Setting::TYPE_BOOLEAN === $setting->get_type() ) {
-				$value = wc_bool_to_string( $value );
+				$value = self::bool_to_string( $value );
 			}
 
 			return $value;
@@ -350,7 +350,7 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 				switch ( $setting->get_type() ) {
 
 					case Woodev_Setting::TYPE_BOOLEAN:
-						$value = wc_string_to_bool( $value );
+						$value = self::string_to_bool( $value );
 						break;
 
 					case Woodev_Setting::TYPE_INTEGER:
@@ -364,6 +364,33 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 			}
 
 			return $value;
+		}
+
+		/**
+		 * Converts WooCommerce-style string booleans to native booleans.
+		 *
+		 * @param mixed $string value to convert
+		 * @return bool
+		 */
+		private static function string_to_bool( $string ) {
+			$string = $string ?? '';
+
+			return is_bool( $string ) ? $string : ( 'yes' === strtolower( $string ) || 1 === $string || 'true' === strtolower( $string ) || '1' === $string );
+		}
+
+		/**
+		 * Converts booleans to the installed-site yes/no storage contract.
+		 *
+		 * @param mixed $bool value to convert
+		 * @return string
+		 */
+		private static function bool_to_string( $bool ) {
+
+			if ( ! is_bool( $bool ) ) {
+				$bool = self::string_to_bool( $bool );
+			}
+
+			return true === $bool ? 'yes' : 'no';
 		}
 
 		/**

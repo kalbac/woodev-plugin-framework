@@ -296,7 +296,26 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 		 * @return bool
 		 */
 		protected function validate_url_value( $value ) {
-			return wc_is_valid_url( $value );
+			return self::is_valid_url( $value );
+		}
+
+		/**
+		 * Validates a URL using the previous WooCommerce helper semantics.
+		 *
+		 * @param string $url URL to validate.
+		 * @return bool
+		 */
+		private static function is_valid_url( $url ) {
+
+			if ( 0 !== strpos( $url, 'http://' ) && 0 !== strpos( $url, 'https://' ) ) {
+				return false;
+			}
+
+			if ( ! filter_var( $url, FILTER_VALIDATE_URL ) ) {
+				return false;
+			}
+
+			return true;
 		}
 
 		/**
