@@ -280,6 +280,15 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		}
 
 		/**
+		 * Adds WooCommerce runtime action and filter hooks.
+		 *
+		 * @since 2.0.0
+		 *
+		 * @return void
+		 */
+		protected function add_woocommerce_hooks(): void {}
+
+		/**
 		 * Adds the action & filter hooks.
 		 */
 		private function add_hooks() {
@@ -296,17 +305,11 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 			// Load plugin updater
 			add_action( 'init', array( $this, 'load_updater' ) );
 
-			// handle WooCommerce features compatibility (such as HPOS, WC Cart & Checkout Blocks support...)
-			add_action( 'before_woocommerce_init', [ $this, 'handle_features_compatibility' ] );
+			$this->add_woocommerce_hooks();
 
 			add_action( 'wp_enqueue_scripts', [ $this, 'frontend_enqueue_scripts' ] );
 			add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_scripts' ) );
 			add_action( 'wp_ajax_woodev_verify_license', array( $this, 'ajax_verify_license' ) );
-
-			foreach ( array( 'shipping', 'checkout', 'integration' ) as $tab ) {
-				add_action( 'woocommerce_before_settings_' . $tab, array( $this, 'add_class_form_wrap_start' ) );
-				add_action( 'woocommerce_after_settings_' . $tab, array( $this, 'add_class_form_wrap_end' ) );
-			}
 
 			// add the admin notices
 			add_action( 'admin_notices', array( $this, 'add_admin_notices' ) );
@@ -323,15 +326,6 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 
 			// automatically log HTTP requests from Woodev_API_Base
 			$this->add_api_request_logging();
-
-			// add any PHP incompatibilities to the system status report
-			add_filter(
-				'woocommerce_system_status_environment_rows',
-				array(
-					$this,
-					'add_system_status_php_information',
-				)
-			);
 
 			// CRON actions
 			add_filter( 'cron_schedules', array( $this, 'add_schedules' ) );

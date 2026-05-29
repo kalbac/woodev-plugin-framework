@@ -5,9 +5,11 @@
  * @package Woodev\Framework
  */
 
+namespace Woodev\Framework;
+
 defined( 'ABSPATH' ) || exit;
 
-if ( ! class_exists( 'Woodev_Framework_Resolver', false ) ) :
+if ( ! class_exists( Framework_Resolver::class, false ) ) :
 
 	/**
 	 * Resolves registered framework copies and invokes compatible plugin callbacks.
@@ -17,7 +19,7 @@ if ( ! class_exists( 'Woodev_Framework_Resolver', false ) ) :
 	 *
 	 * @since 2.0.0
 	 */
-	class Woodev_Framework_Resolver {
+	class Framework_Resolver {
 
 		/** @var array<int,array<string,mixed>> Registered plugin arrays. */
 		protected array $registered_plugins = [];
@@ -50,7 +52,7 @@ if ( ! class_exists( 'Woodev_Framework_Resolver', false ) ) :
 		 */
 		public function register_loader_definition( array $definition ): bool {
 			$errors            = [];
-			$loader_definition = Woodev_Framework_Plugin_Loader_Definition::from_array( $definition, $errors );
+			$loader_definition = Framework_Plugin_Loader_Definition::from_array( $definition, $errors );
 
 			if ( null === $loader_definition ) {
 				$this->invalid_loader_definitions[] = [
@@ -86,7 +88,7 @@ if ( ! class_exists( 'Woodev_Framework_Resolver', false ) ) :
 			array $args = []
 		): bool {
 			$errors            = [];
-			$loader_definition = Woodev_Framework_Plugin_Loader_Definition::from_legacy_registration(
+			$loader_definition = Framework_Plugin_Loader_Definition::from_legacy_registration(
 				$framework_version,
 				$plugin_name,
 				$path,
@@ -122,7 +124,7 @@ if ( ! class_exists( 'Woodev_Framework_Resolver', false ) ) :
 			$loaded_framework = null;
 
 			foreach ( $this->registered_plugins as $plugin ) {
-				if ( ! class_exists( 'Woodev_Plugin' ) ) {
+				if ( ! class_exists( '\Woodev_Plugin' ) ) {
 					require_once $this->get_plugin_path( $plugin['path'] ) . '/woodev/class-plugin.php';
 					$loaded_framework       = $plugin;
 					$this->active_plugins[] = $plugin;
@@ -156,8 +158,8 @@ if ( ! class_exists( 'Woodev_Framework_Resolver', false ) ) :
 				$this->invoke_plugin( $plugin );
 			}
 
-			if ( $this->has_update_notices() && is_admin() && ! defined( 'DOING_AJAX' ) && ! has_action( 'admin_notices', [ Woodev_Plugin_Bootstrap::instance(), 'render_update_notices' ] ) ) {
-				add_action( 'admin_notices', [ Woodev_Plugin_Bootstrap::instance(), 'render_update_notices' ] );
+			if ( $this->has_update_notices() && is_admin() && ! defined( 'DOING_AJAX' ) && ! has_action( 'admin_notices', [ \Woodev_Plugin_Bootstrap::instance(), 'render_update_notices' ] ) ) {
+				add_action( 'admin_notices', [ \Woodev_Plugin_Bootstrap::instance(), 'render_update_notices' ] );
 			}
 
 			do_action( 'woodev_plugins_loaded' );
@@ -205,7 +207,7 @@ if ( ! class_exists( 'Woodev_Framework_Resolver', false ) ) :
 				exit;
 			}
 
-			add_action( 'admin_notices', [ Woodev_Plugin_Bootstrap::instance(), 'render_deactivation_notice' ] );
+			add_action( 'admin_notices', [ \Woodev_Plugin_Bootstrap::instance(), 'render_deactivation_notice' ] );
 		}
 
 		/**
@@ -226,7 +228,7 @@ if ( ! class_exists( 'Woodev_Framework_Resolver', false ) ) :
 					_n( '%1$sAttention!%2$s The plugin %3$s was disabled because it is out of date and incompatible with the', '%1$sAttention!%2$s The plugins %3$s were disabled because they are out of date and incompatible with the', $incompatible_plugin_count, 'woodev-plugin-framework' ),
 					'<strong>',
 					'</strong>',
-					Woodev_Helper::list_array_items(
+					\Woodev_Helper::list_array_items(
 						array_map(
 							function ( $plugin ) {
 								return sprintf( '<strong>%s</strong>', esc_html( $plugin['plugin_name'] ) );
@@ -237,7 +239,7 @@ if ( ! class_exists( 'Woodev_Framework_Resolver', false ) ) :
 				);
 				$message .= sprintf(
 					_n( ' newer plugin %s.', ' newer plugins %s.', $active_plugin_count, 'woodev-plugin-framework' ),
-					Woodev_Helper::list_array_items(
+					\Woodev_Helper::list_array_items(
 						array_map(
 							function ( $plugin ) {
 								return sprintf( '<strong>%s</strong>', esc_html( $plugin['plugin_name'] ) );
@@ -254,7 +256,7 @@ if ( ! class_exists( 'Woodev_Framework_Resolver', false ) ) :
 				);
 				$message .= sprintf(
 					_n( ' the plugin %1$s, or %2$sdeactivate%3$s', ' the plugins %1$s, or %2$sdeactivate%3$s', $incompatible_plugin_count, 'woodev-plugin-framework' ),
-					Woodev_Helper::list_array_items(
+					\Woodev_Helper::list_array_items(
 						array_map(
 							function ( $plugin ) {
 								return sprintf( '<strong>%s</strong>', esc_html( $plugin['plugin_name'] ) );
@@ -267,7 +269,7 @@ if ( ! class_exists( 'Woodev_Framework_Resolver', false ) ) :
 				);
 				$message .= sprintf(
 					_n( ' the plugin %s.', ' the plugins %s.', $active_plugin_count, 'woodev-plugin-framework' ),
-					Woodev_Helper::list_array_items(
+					\Woodev_Helper::list_array_items(
 						array_map(
 							function ( $plugin ) {
 								return sprintf( '<strong>%s</strong>', esc_html( $plugin['plugin_name'] ) );
@@ -428,7 +430,7 @@ if ( ! class_exists( 'Woodev_Framework_Resolver', false ) ) :
 		 * @return string
 		 */
 		public function get_framework_version(): string {
-			return class_exists( 'Woodev_Plugin' ) ? \Woodev_Plugin::VERSION : '';
+			return class_exists( '\Woodev_Plugin' ) ? \Woodev_Plugin::VERSION : '';
 		}
 
 		/**
@@ -442,7 +444,7 @@ if ( ! class_exists( 'Woodev_Framework_Resolver', false ) ) :
 		protected function fails_php_requirement( array $plugin ): bool {
 			$definition = $plugin['definition'] ?? null;
 
-			if ( ! $definition instanceof Woodev_Framework_Plugin_Loader_Definition ) {
+			if ( ! $definition instanceof Framework_Plugin_Loader_Definition ) {
 				return false;
 			}
 
@@ -483,11 +485,11 @@ if ( ! class_exists( 'Woodev_Framework_Resolver', false ) ) :
 		protected function fails_woocommerce_requirement( array $plugin ): bool {
 			$definition = $plugin['definition'] ?? null;
 
-			if ( ! $definition instanceof Woodev_Framework_Plugin_Loader_Definition ) {
+			if ( ! $definition instanceof Framework_Plugin_Loader_Definition ) {
 				return false;
 			}
 
-			if ( Woodev_Framework_Plugin_Loader_Definition::PLATFORM_WOOCOMMERCE !== $definition->get_platform() ) {
+			if ( Framework_Plugin_Loader_Definition::PLATFORM_WOOCOMMERCE !== $definition->get_platform() ) {
 				return false;
 			}
 
@@ -518,7 +520,7 @@ if ( ! class_exists( 'Woodev_Framework_Resolver', false ) ) :
 		protected function load_early_capability_classes( array $plugin ): void {
 			$definition = $plugin['definition'] ?? null;
 
-			if ( ! $definition instanceof Woodev_Framework_Plugin_Loader_Definition ) {
+			if ( ! $definition instanceof Framework_Plugin_Loader_Definition ) {
 				return;
 			}
 
@@ -526,9 +528,9 @@ if ( ! class_exists( 'Woodev_Framework_Resolver', false ) ) :
 
 			if ( [] === array_intersect(
 				[
-					Woodev_Framework_Plugin_Loader_Definition::CAPABILITY_WOOCOMMERCE_PLUGIN,
-					Woodev_Framework_Plugin_Loader_Definition::CAPABILITY_PAYMENT_GATEWAY,
-					Woodev_Framework_Plugin_Loader_Definition::CAPABILITY_SHIPPING_METHOD,
+					Framework_Plugin_Loader_Definition::CAPABILITY_WOOCOMMERCE_PLUGIN,
+					Framework_Plugin_Loader_Definition::CAPABILITY_PAYMENT_GATEWAY,
+					Framework_Plugin_Loader_Definition::CAPABILITY_SHIPPING_METHOD,
 				],
 				$capabilities
 			) ) {
@@ -537,19 +539,24 @@ if ( ! class_exists( 'Woodev_Framework_Resolver', false ) ) :
 
 			$plugin_path = $this->get_plugin_path( $plugin['path'] );
 
-			if ( in_array( Woodev_Framework_Plugin_Loader_Definition::CAPABILITY_WOOCOMMERCE_PLUGIN, $capabilities, true ) && ! class_exists( 'Woodev_Woocommerce_Plugin' ) ) {
-				$woocommerce_plugin_file = $plugin_path . '/woodev/class-woocommerce-plugin.php';
+			if ( in_array( Framework_Plugin_Loader_Definition::CAPABILITY_WOOCOMMERCE_PLUGIN, $capabilities, true ) && ! class_exists( '\Woodev_Woocommerce_Plugin' ) ) {
+				$woocommerce_plugin_file       = $plugin_path . '/woodev/class-woocommerce-plugin.php';
+				$woocommerce_plugin_alias_file = $plugin_path . '/woodev/class-woocommerce-plugin-alias.php';
 
 				if ( file_exists( $woocommerce_plugin_file ) ) {
 					require_once $woocommerce_plugin_file;
 				}
+
+				if ( file_exists( $woocommerce_plugin_alias_file ) ) {
+					require_once $woocommerce_plugin_alias_file;
+				}
 			}
 
-			if ( in_array( Woodev_Framework_Plugin_Loader_Definition::CAPABILITY_PAYMENT_GATEWAY, $capabilities, true ) && ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) {
+			if ( in_array( Framework_Plugin_Loader_Definition::CAPABILITY_PAYMENT_GATEWAY, $capabilities, true ) && ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) {
 				require_once $plugin_path . '/woodev/payment-gateway/class-payment-gateway-plugin.php';
 			}
 
-			if ( in_array( Woodev_Framework_Plugin_Loader_Definition::CAPABILITY_SHIPPING_METHOD, $capabilities, true ) && ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) {
+			if ( in_array( Framework_Plugin_Loader_Definition::CAPABILITY_SHIPPING_METHOD, $capabilities, true ) && ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) {
 				require_once $plugin_path . '/woodev/shipping-method/class-shipping-plugin.php';
 			}
 		}
@@ -570,7 +577,7 @@ if ( ! class_exists( 'Woodev_Framework_Resolver', false ) ) :
 
 			$definition = $plugin['definition'] ?? null;
 
-			if ( ! $definition instanceof Woodev_Framework_Plugin_Loader_Definition ) {
+			if ( ! $definition instanceof Framework_Plugin_Loader_Definition ) {
 				return;
 			}
 

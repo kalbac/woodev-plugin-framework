@@ -2,6 +2,8 @@
 
 defined( 'ABSPATH' ) || exit;
 
+use Woodev\Framework\Framework_Resolver;
+
 require_once __DIR__ . '/class-framework-plugin-loader-definition.php';
 require_once __DIR__ . '/class-framework-resolver.php';
 
@@ -12,8 +14,8 @@ if ( ! class_exists( 'Woodev_Plugin_Bootstrap' ) ) :
 		/** @var Woodev_Plugin_Bootstrap The single instance of the class */
 		protected static $instance = null;
 
-		/** @var Woodev_Framework_Resolver Minimal framework resolver. */
-		protected Woodev_Framework_Resolver $resolver;
+		/** @var Framework_Resolver Minimal framework resolver. */
+		protected Framework_Resolver $resolver;
 
 		/** @var array registered framework plugins */
 		protected array $registered_plugins = [];
@@ -37,7 +39,7 @@ if ( ! class_exists( 'Woodev_Plugin_Bootstrap' ) ) :
 		 * Hidden constructor.
 		 */
 		private function __construct() {
-			$this->resolver = new Woodev_Framework_Resolver();
+			$this->resolver = new Framework_Resolver();
 
 			add_action( 'plugins_loaded', [ $this, 'load_plugins' ] );
 			add_action( 'admin_init', [ $this, 'maybe_deactivate_framework_plugins' ] );

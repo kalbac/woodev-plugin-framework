@@ -7,6 +7,9 @@
 
 namespace Woodev\Tests\Unit;
 
+require_once dirname( __DIR__, 2 ) . '/woodev/class-framework-plugin-loader-definition.php';
+require_once dirname( __DIR__, 2 ) . '/woodev/class-framework-resolver.php';
+
 use Brain\Monkey\Functions;
 
 /**
@@ -36,12 +39,12 @@ class FrameworkResolverTest extends TestCase {
 	 * Explicit WordPress loader definitions should be accepted and normalized.
 	 */
 	public function test_registers_explicit_wordpress_loader_definition(): void {
-		$resolver = new \Woodev_Framework_Resolver();
+		$resolver = new \Woodev\Framework\Framework_Resolver();
 
 		$accepted = $resolver->register_loader_definition(
 			$this->get_loader_definition(
 				[
-					'platform'     => \Woodev_Framework_Plugin_Loader_Definition::PLATFORM_WORDPRESS,
+					'platform'     => \Woodev\Framework\Framework_Plugin_Loader_Definition::PLATFORM_WORDPRESS,
 					'requirements' => [
 						'php'       => '7.4',
 						'wordpress' => '6.3',
@@ -63,7 +66,7 @@ class FrameworkResolverTest extends TestCase {
 	 * Invalid loader definitions should be recorded without throwing broad fatals.
 	 */
 	public function test_records_invalid_loader_definition_errors(): void {
-		$resolver = new \Woodev_Framework_Resolver();
+		$resolver = new \Woodev\Framework\Framework_Resolver();
 
 		$accepted = $resolver->register_loader_definition(
 			[
@@ -93,15 +96,15 @@ class FrameworkResolverTest extends TestCase {
 	 */
 	public function test_rejects_specialized_capabilities_on_wordpress_platform(): void {
 		$errors     = [];
-		$definition = \Woodev_Framework_Plugin_Loader_Definition::from_array(
+		$definition = \Woodev\Framework\Framework_Plugin_Loader_Definition::from_array(
 			$this->get_loader_definition(
 				[
-					'platform'     => \Woodev_Framework_Plugin_Loader_Definition::PLATFORM_WORDPRESS,
+					'platform'     => \Woodev\Framework\Framework_Plugin_Loader_Definition::PLATFORM_WORDPRESS,
 					'requirements' => [
 						'php'       => '7.4',
 						'wordpress' => '6.3',
 					],
-					'capabilities' => [ \Woodev_Framework_Plugin_Loader_Definition::CAPABILITY_PAYMENT_GATEWAY ],
+					'capabilities' => [ \Woodev\Framework\Framework_Plugin_Loader_Definition::CAPABILITY_PAYMENT_GATEWAY ],
 				]
 			),
 			$errors
@@ -116,10 +119,10 @@ class FrameworkResolverTest extends TestCase {
 	 */
 	public function test_rejects_reserved_edd_platform(): void {
 		$errors     = [];
-		$definition = \Woodev_Framework_Plugin_Loader_Definition::from_array(
+		$definition = \Woodev\Framework\Framework_Plugin_Loader_Definition::from_array(
 			$this->get_loader_definition(
 				[
-					'platform' => \Woodev_Framework_Plugin_Loader_Definition::PLATFORM_EDD,
+					'platform' => \Woodev\Framework\Framework_Plugin_Loader_Definition::PLATFORM_EDD,
 				]
 			),
 			$errors
@@ -133,7 +136,7 @@ class FrameworkResolverTest extends TestCase {
 	 * Pure WordPress loaders should not require WooCommerce when callbacks run.
 	 */
 	public function test_loads_wordpress_definition_without_woocommerce_requirement(): void {
-		$resolver = new \Woodev_Framework_Resolver();
+		$resolver = new \Woodev\Framework\Framework_Resolver();
 		$loaded   = false;
 
 		Functions\when( 'get_bloginfo' )->justReturn( '6.5' );
@@ -143,7 +146,7 @@ class FrameworkResolverTest extends TestCase {
 		$resolver->register_loader_definition(
 			$this->get_loader_definition(
 				[
-					'platform'     => \Woodev_Framework_Plugin_Loader_Definition::PLATFORM_WORDPRESS,
+					'platform'     => \Woodev\Framework\Framework_Plugin_Loader_Definition::PLATFORM_WORDPRESS,
 					'requirements' => [
 						'php'       => '7.4',
 						'wordpress' => '6.3',
@@ -166,7 +169,7 @@ class FrameworkResolverTest extends TestCase {
 	 * WooCommerce loader definitions should be skipped when WooCommerce is unavailable.
 	 */
 	public function test_skips_woocommerce_definition_when_woocommerce_is_unavailable(): void {
-		$resolver = new \Woodev_Framework_Resolver();
+		$resolver = new \Woodev\Framework\Framework_Resolver();
 		$loaded   = false;
 
 		Functions\when( 'get_bloginfo' )->justReturn( '6.5' );
@@ -176,7 +179,7 @@ class FrameworkResolverTest extends TestCase {
 		$resolver->register_loader_definition(
 			$this->get_loader_definition(
 				[
-					'platform'     => \Woodev_Framework_Plugin_Loader_Definition::PLATFORM_WOOCOMMERCE,
+					'platform'     => \Woodev\Framework\Framework_Plugin_Loader_Definition::PLATFORM_WOOCOMMERCE,
 					'requirements' => [
 						'php'         => '7.4',
 						'wordpress'   => '6.3',
@@ -199,7 +202,7 @@ class FrameworkResolverTest extends TestCase {
 	 * Explicit main_class-only definitions should use the class instance() bootstrap path.
 	 */
 	public function test_loads_main_class_only_definition_with_instance_method(): void {
-		$resolver                              = new \Woodev_Framework_Resolver();
+		$resolver                              = new \Woodev\Framework\Framework_Resolver();
 		Resolver_Main_Class_Only_Plugin::$loaded = false;
 
 		Functions\when( 'get_bloginfo' )->justReturn( '6.5' );
@@ -224,7 +227,7 @@ class FrameworkResolverTest extends TestCase {
 	 * PHP requirements should be enforced before plugin callbacks run.
 	 */
 	public function test_skips_definition_when_php_requirement_fails(): void {
-		$resolver = new \Woodev_Framework_Resolver();
+		$resolver = new \Woodev\Framework\Framework_Resolver();
 		$loaded   = false;
 
 		Functions\when( 'get_bloginfo' )->justReturn( '6.5' );
@@ -255,7 +258,7 @@ class FrameworkResolverTest extends TestCase {
 	 * Legacy register_plugin() flags should map only to early capabilities.
 	 */
 	public function test_legacy_adapter_maps_specialized_flags_to_capabilities(): void {
-		$resolver = new \Woodev_Framework_Resolver();
+		$resolver = new \Woodev\Framework\Framework_Resolver();
 
 		$resolver->register_legacy_plugin(
 			'2.0.0',
@@ -274,9 +277,9 @@ class FrameworkResolverTest extends TestCase {
 		$definition   = $registered[0]['definition'];
 		$capabilities = $definition->get_capabilities();
 
-		$this->assertSame( \Woodev_Framework_Plugin_Loader_Definition::PLATFORM_WOOCOMMERCE, $definition->get_platform() );
-		$this->assertContains( \Woodev_Framework_Plugin_Loader_Definition::CAPABILITY_PAYMENT_GATEWAY, $capabilities );
-		$this->assertContains( \Woodev_Framework_Plugin_Loader_Definition::CAPABILITY_SHIPPING_METHOD, $capabilities );
+		$this->assertSame( \Woodev\Framework\Framework_Plugin_Loader_Definition::PLATFORM_WOOCOMMERCE, $definition->get_platform() );
+		$this->assertContains( \Woodev\Framework\Framework_Plugin_Loader_Definition::CAPABILITY_PAYMENT_GATEWAY, $capabilities );
+		$this->assertContains( \Woodev\Framework\Framework_Plugin_Loader_Definition::CAPABILITY_SHIPPING_METHOD, $capabilities );
 		$this->assertArrayHasKey( 'is_payment_gateway', $registered[0]['args'] );
 		$this->assertArrayHasKey( 'load_shipping_method', $registered[0]['args'] );
 	}
@@ -285,7 +288,7 @@ class FrameworkResolverTest extends TestCase {
 	 * Legacy WooCommerce capability plugins without an explicit WC minimum should keep notice data safe.
 	 */
 	public function test_legacy_woocommerce_capability_without_minimum_wc_version_keeps_notice_data(): void {
-		$resolver = new \Woodev_Framework_Resolver();
+		$resolver = new \Woodev\Framework\Framework_Resolver();
 
 		$resolver->register_legacy_plugin(
 			'2.0.0',
@@ -316,7 +319,7 @@ class FrameworkResolverTest extends TestCase {
 				'plugin_version'    => '1.0.0',
 				'framework_version' => '2.0.0',
 				'plugin_file'       => __FILE__,
-				'platform'          => \Woodev_Framework_Plugin_Loader_Definition::PLATFORM_WORDPRESS,
+				'platform'          => \Woodev\Framework\Framework_Plugin_Loader_Definition::PLATFORM_WORDPRESS,
 				'requirements'      => [
 					'php'       => '7.4',
 					'wordpress' => '6.3',

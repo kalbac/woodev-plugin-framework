@@ -5,9 +5,11 @@
  * @package Woodev\Framework
  */
 
+namespace Woodev\Framework;
+
 defined( 'ABSPATH' ) || exit;
 
-if ( ! class_exists( 'Woodev_Framework_Plugin_Loader_Definition', false ) ) :
+if ( ! class_exists( Framework_Plugin_Loader_Definition::class, false ) ) :
 
 	/**
 	 * Normalized plugin loader definition for the minimal framework resolver.
@@ -17,7 +19,7 @@ if ( ! class_exists( 'Woodev_Framework_Plugin_Loader_Definition', false ) ) :
 	 *
 	 * @since 2.0.0
 	 */
-	class Woodev_Framework_Plugin_Loader_Definition {
+	class Framework_Plugin_Loader_Definition {
 
 		public const PLATFORM_WORDPRESS   = 'wordpress';
 		public const PLATFORM_WOOCOMMERCE = 'woocommerce';

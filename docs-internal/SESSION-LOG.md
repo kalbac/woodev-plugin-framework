@@ -1,6 +1,31 @@
 # Session Log — Woodev Plugin Framework
 
+## Platform v2 namespace + WooCommerce hook ownership (2026-05-29)
+
+### Implementation
+- Refactored the initial Platform v2 resolver slice into `Woodev\Framework\*`: `Framework_Resolver`, `Framework_Plugin_Loader_Definition`, and `Woocommerce_Plugin` now start namespaced.
+- Kept production loading include-based: `bootstrap.php` explicitly requires resolver files, and the selected framework copy requires WooCommerce support files through resolver capability loading.
+- Preserved installed-site compatibility for `Woodev_Woocommerce_Plugin` via guarded `class_alias()` in `woodev/class-woocommerce-plugin-alias.php`; no Composer/autoload runtime contract was introduced.
+- Moved the first WooCommerce runtime ownership slice out of `Woodev_Plugin`: WooCommerce hook registration now lives in `Woodev\Framework\Woocommerce_Plugin::add_woocommerce_hooks()`.
+- Left `Woodev_Plugin::add_woocommerce_hooks()` as an empty protected extension point so pure WordPress plugins do not register WooCommerce runtime hooks.
+- Added `tests/unit/WoocommercePluginTest.php` for WooCommerce hook ownership without requiring WooCommerce.
+- Updated resolver tests to require namespaced framework files explicitly and assert namespaced classes.
+- Updated Composer classmap only for dev/test tooling discovery of the guarded alias file; production plugins still load through framework includes.
+
+### Verification
+- `composer check` passed: PHPCS 113/113, PHPStan 0 errors, PHPUnit 125 tests / 202 assertions.
+- Independent verification returned PARTIAL only because Bash was denied in the verifier worktree; source inspection passed namespace/include loading and WooCommerce hook ownership checks, with no FAIL findings.
+
+### Next
+- Continue Phase 3 by moving additional WooCommerce-adjacent runtime state from `Woodev_Plugin` to `Woodev_Woocommerce_Plugin` in small tested slices.
+- Keep resolver limited to selection, validation, requirements, notices, and early include loading; do not move payment/shipping/licensing runtime behavior into resolver.
+
 ## Platform v2 resolver facade implementation (2026-05-29)
+
+### Follow-up decision
+- New Platform v2 implementation classes should use the `Woodev\Framework\*` namespace from the start; the next session must refactor the initial resolver slice before adding more platform behavior.
+- Legacy global classes remain acceptable only for installed compatibility entry points, existing public API continuity, or explicit aliases/shims required by migration contracts.
+- Namespaced Platform v2 classes must still be loaded explicitly through framework include/require paths in production plugins; Composer/autoload is not a plugin runtime loading mechanism.
 
 ### Implementation
 - Started strictly from `docs-internal/platform-v2-implementation-spec.md`, ADR-003, and ADR-004; applied section 14 keep/discard before reusing spike assumptions.
