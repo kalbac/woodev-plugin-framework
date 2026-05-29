@@ -1,5 +1,26 @@
 # Session Log — Woodev Plugin Framework
 
+## Platform v2 Phase 5 admin notice JavaScript cleanup (2026-05-30)
+
+### Implementation
+- Continued strictly from `docs-internal/platform-v2-implementation-spec.md`, ADR-003, ADR-004, and the multi-version early class guard gotcha.
+- Re-checked the remaining WooCommerce helper dependencies in base-owned modules and confirmed the smallest safe next Phase 5 slice was the isolated admin notice dismiss JavaScript path in `Woodev_Admin_Notice_Handler`.
+- Added `tests/unit/PlatformNeutralAdminNoticeTest.php` first, proving the current failure mode when `wc_enqueue_js()` is unavailable in a platform-neutral unit context and locking the dismiss-notice JavaScript queue contract.
+- Replaced direct `wc_enqueue_js()` usage in `Woodev_Admin_Notice_Handler::render_admin_notice_js()` with `Woodev_Helper::enqueue_js()`.
+- Completed the existing platform-neutral JavaScript queue helper by registering `Woodev_Helper::print_js()` on admin and frontend footer script hooks when queued JavaScript is first added.
+- Preserved installed-site dismiss AJAX behavior, notice placeholder selectors, include-based runtime loading, public wrappers, and resolver boundaries; did not move admin notice runtime behavior into the resolver or reintroduce WooCommerce runtime assumptions into the base.
+
+### Verification
+- `composer test -- --filter PlatformNeutralAdminNoticeTest` failed first with the expected undefined `wc_enqueue_js()` error, then passed after the implementation: 2 tests / 8 assertions.
+- `composer check` passed: PHPCS 113/113, PHPStan 0 errors, PHPUnit 152 tests / 300 assertions.
+- Gotcha compilation: no new non-obvious gotcha discovered; no `docs-internal/gotchas/` update required.
+- Commit: `0b6e28c`.
+
+### Next
+- Continue Phase 5 platform-neutral module cleanup from `docs-internal/platform-v2-implementation-spec.md`.
+- Re-scan the remaining base-owned WooCommerce helper paths and pick the next smallest tested slice, likely `wc_doing_it_wrong()` in settings API, licensing date formatting helpers, or the job batch handler `wc_enqueue_js()` path.
+- Do not expand resolver runtime behavior and do not rewrite production plugin loaders before migration contract docs exist.
+
 ## Platform v2 Phase 5 dependency size-parser cleanup (2026-05-30)
 
 ### Implementation

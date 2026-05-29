@@ -1,6 +1,6 @@
-- 2026-05-30 Phase 5 cleanup now has six verified slices.
-- Slice 6: the PHP setting size parser in `Woodev_Plugin_Dependencies` no longer depends on `wc_let_to_num()`; a local byte conversion helper preserves incompatible-setting threshold checks plus formatted `expected`/`actual` notice payload values in a no-WooCommerce unit context.
-- Added `tests/unit/PlatformNeutralDependenciesTest.php`; the red test failed first on undefined `wc_let_to_num()`, then passed after the implementation (2 tests / 6 assertions).
-- Verification after slice 6: `composer check` green with 150 unit tests / 292 assertions and IDE lints clean for the changed files.
-- Keep next work narrow: re-scan remaining base-owned WooCommerce helper paths and prefer the next smallest tested slice, likely an isolated `wc_enqueue_js()` dependency in a base-owned admin or utility module.
+- 2026-05-30 Phase 5 cleanup now has seven verified slices.
+- Slice 7: admin notice dismiss JavaScript in `Woodev_Admin_Notice_Handler` no longer depends on `wc_enqueue_js()`; it queues through `Woodev_Helper::enqueue_js()` and the helper now registers footer print hooks for queued JavaScript in a no-WooCommerce unit context.
+- Added `tests/unit/PlatformNeutralAdminNoticeTest.php`; the red test failed first on undefined `wc_enqueue_js()`, then passed after the implementation (2 tests / 8 assertions).
+- Verification after slice 7: `composer check` green with 152 unit tests / 300 assertions.
+- Keep next work narrow: re-scan remaining base-owned WooCommerce helper paths and prefer the next smallest tested slice, likely `wc_doing_it_wrong()` in settings API, licensing date formatting helpers, or the job batch handler `wc_enqueue_js()` path.
 - Do not expand resolver scope; do not move admin/dependency/utility runtime behavior into the resolver; do not start production plugin rewrites before migration contract docs.

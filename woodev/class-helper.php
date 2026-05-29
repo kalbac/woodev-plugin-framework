@@ -728,6 +728,14 @@ if ( ! class_exists( 'Woodev_Helper' ) ) :
 			return wp_doing_ajax();
 		}
 
+		/**
+		 * Queues inline JavaScript for output on the next footer script print hook.
+		 *
+		 * @since 1.4.1
+		 *
+		 * @param string $code Inline JavaScript code.
+		 * @return void
+		 */
 		public static function enqueue_js( $code ) {
 			global $woodev_queued_js;
 
@@ -736,8 +744,34 @@ if ( ! class_exists( 'Woodev_Helper' ) ) :
 			}
 
 			$woodev_queued_js .= "\n" . $code . "\n";
+
+			self::ensure_queued_js_print_hooks();
 		}
 
+		/**
+		 * Ensures queued JavaScript is printed during admin and frontend footer script hooks.
+		 *
+		 * @since 1.4.1
+		 *
+		 * @return void
+		 */
+		public static function ensure_queued_js_print_hooks(): void {
+			if ( ! has_action( 'admin_print_footer_scripts', [ self::class, 'print_js' ] ) ) {
+				add_action( 'admin_print_footer_scripts', [ self::class, 'print_js' ], 25 );
+			}
+
+			if ( ! has_action( 'wp_print_footer_scripts', [ self::class, 'print_js' ] ) ) {
+				add_action( 'wp_print_footer_scripts', [ self::class, 'print_js' ], 25 );
+			}
+		}
+
+		/**
+		 * Prints queued inline JavaScript.
+		 *
+		 * @since 1.4.1
+		 *
+		 * @return void
+		 */
 		public static function print_js() {
 			global $woodev_queued_js;
 
