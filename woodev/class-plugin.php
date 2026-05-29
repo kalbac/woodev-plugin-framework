@@ -111,20 +111,12 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 			$args = wp_parse_args(
 				$args,
 				[
-					'text_domain'        => '',
-					'dependencies'       => [],
-					'supported_features' => [
-						'hpos'   => false,
-						'blocks' => [
-							'cart'     => false,
-							'checkout' => false,
-						],
-					],
+					'text_domain'  => '',
+					'dependencies' => [],
 				]
 			);
 
-			$this->text_domain        = $args['text_domain'];
-			$this->supported_features = $args['supported_features'];
+			$this->text_domain = $args['text_domain'];
 
 			$this->includes();
 			// initialize the dependencies manager
@@ -147,9 +139,6 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 
 			// build the REST API handler instance
 			$this->init_rest_api_handler();
-
-			// build the blocks handler instance
-			$this->init_blocks_handler();
 
 			// build the setup handler instance
 			$this->init_setup_wizard_handler();

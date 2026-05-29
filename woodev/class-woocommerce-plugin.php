@@ -23,6 +23,54 @@ if ( ! class_exists( Woocommerce_Plugin::class, false ) ) :
 	abstract class Woocommerce_Plugin extends \Woodev_Plugin {
 
 		/**
+		 * Plugin compatibility flags for WooCommerce runtime features.
+		 *
+		 * @since 2.0.0
+		 *
+		 * @var array{ hpos?: bool, blocks?: array{ cart?: bool, checkout?: bool }}
+		 */
+		protected $supported_features = [];
+
+		/**
+		 * Initialize the WooCommerce plugin.
+		 *
+		 * @since 2.0.0
+		 *
+		 * @param string $id Plugin ID.
+		 * @param string $version Plugin version number.
+		 * @param array{
+		 *     supported_features?: array{
+		 *          hpos?: bool,
+		 *          blocks?: array{
+		 *               cart?: bool,
+		 *               checkout?: bool
+		 *          }
+		 *     }
+		 * } $args Plugin arguments.
+		 */
+		public function __construct( string $id, string $version, array $args = [] ) {
+			$args = wp_parse_args(
+				$args,
+				[
+					'supported_features' => [
+						'hpos'   => false,
+						'blocks' => [
+							'cart'     => false,
+							'checkout' => false,
+						],
+					],
+				]
+			);
+
+			$this->supported_features = $args['supported_features'];
+
+			parent::__construct( $id, $version, $args );
+
+			// Build the WooCommerce Blocks handler only for WooCommerce plugins.
+			$this->init_blocks_handler();
+		}
+
+		/**
 		 * Adds WooCommerce runtime action and filter hooks.
 		 *
 		 * @since 2.0.0
@@ -47,6 +95,17 @@ if ( ! class_exists( Woocommerce_Plugin::class, false ) ) :
 					'add_system_status_php_information',
 				]
 			);
+		}
+
+		/**
+		 * Gets a list of the plugin's WooCommerce compatibility flags.
+		 *
+		 * @since 2.0.0
+		 *
+		 * @return array{ hpos?: bool, blocks?: array{ cart?: bool, checkout?: bool }}
+		 */
+		public function get_supported_features(): array {
+			return $this->supported_features;
 		}
 	}
 
