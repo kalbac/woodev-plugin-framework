@@ -1,5 +1,5 @@
 # Current State — Woodev Plugin Framework
-> Last updated: 2026-05-29 (Platform v2 strategy alignment)
+> Last updated: 2026-05-29 (Platform v2 deep analysis)
 
 ## Phase Status
 
@@ -46,7 +46,8 @@
 | 4 v2 cleanup #1–#2 gate | ✅ 2026-05-28 `f9fea5f` | WP 6.3+ / WC 7.0+; ACH/eCheck surface removed |
 | 5 Spike branch | ✅ 2026-05-28 `0ed6df8` | `feat/platform-v2-epic1-spike` — Woodev_Woocommerce_Plugin + bootstrap metadata |
 | 6 Strategy alignment | ✅ 2026-05-29 | `docs-internal/platform-v2-strategy-alignment.md` — hybrid roadmap, rewrite-first migration, minimal resolver |
-| 7 Next deep analysis | ⏳ | Autonomous analysis prompt: revise ADR/spec assumptions before implementation |
+| 7 Deep analysis | ✅ 2026-05-29 | `docs-internal/platform-v2-next-analysis.md`, ADR-003, ADR-004 — resolver, loader API, migration contracts |
+| 8 Implementation spec | ⏳ | Next: write `docs-internal/platform-v2-implementation-spec.md` before PHP implementation |
 
 ## Planned — v2.0.0 & Beyond
 
@@ -84,7 +85,7 @@
 
 ## Active Queue
 
-> Platform v2 implementation is paused for strategy alignment. Next step: deep autonomous analysis of minimal resolver, plugin loader API, migration contracts, and ADR/spec revisions.
+> Platform v2 deep analysis is complete. Next step: write `docs-internal/platform-v2-implementation-spec.md` from `platform-v2-next-analysis.md`, ADR-003, and ADR-004 before any PHP implementation.
 
 ## Infrastructure Reference
 

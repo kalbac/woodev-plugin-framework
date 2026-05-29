@@ -1,7 +1,7 @@
 # Docs Index — Woodev Plugin Framework
 > Navigation hub for AI agents. Read this FIRST in every new session. ~2 min read.
 > `docs-internal/` — internal technical documentation
-> Last updated: 2026-05-09
+> Last updated: 2026-05-29
 
 ---
 
@@ -34,8 +34,11 @@
 | `DOCS-SCHEMA.md` | Doc format rules, lint checklist, compilation protocol |
 | `platform-v2-dependency-matrix.md` | Platform decoupling audit — module WC deps, P0/P1/P2, open questions A/B |
 | `platform-v2-strategy-alignment.md` | Platform v2 strategic alignment — hybrid roadmap, rewrite-first migration, minimal resolver |
+| `platform-v2-next-analysis.md` | Platform v2 deep analysis — resolver, loader API, migration contracts, ADR/spec revision plan |
 | `adr/001-bootstrap-platform-aware-loader.md` | ADR: keep bootstrap as platform-aware loader (accepted) |
 | `adr/002-plugin-type-inheritance-with-metadata-bridge.md` | ADR: inheritance + deprecated metadata bridge (accepted) |
+| `adr/003-platform-v2-minimal-framework-resolver.md` | ADR draft: minimal resolver behind bootstrap compatibility entry point |
+| `adr/004-platform-v2-plugin-loader-api.md` | ADR draft: explicit plugin loader API and metadata limits |
 | `platform-v2-epic1-spec.md` | Epic 1 implementation spec — platform layer split (accepted) |
 
 ---
@@ -45,6 +48,8 @@
 | File | Purpose |
 |------|---------|
 | `adr/README.md` | ADR index — list of all architecture decisions |
+| `adr/003-platform-v2-minimal-framework-resolver.md` | Proposed ADR: minimal framework resolver for v2.0 |
+| `adr/004-platform-v2-plugin-loader-api.md` | Proposed ADR: explicit plugin loader API for v2.0 |
 
 ---
 

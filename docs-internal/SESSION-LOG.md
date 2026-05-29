@@ -1,5 +1,23 @@
 # Session Log — Woodev Plugin Framework
 
+## Platform v2 resolver deep analysis (2026-05-29)
+
+### Planning analysis
+- Read `PLANS.md`, Platform v2 strategy alignment, dependency matrix, ADR-001/002, Epic 1 spec, CURRENT-STATE, FUTURE-BACKLOG, top 2026-05-29/2026-05-28 session log entries, current `bootstrap.php`, current `Woodev_Lifecycle`, and SkyVerge loader/namespace references.
+- Created `docs-internal/platform-v2-next-analysis.md` with resolver recommendation, plugin loader API proposal, plugin type model, migration contract model, ADR/spec revision plan, risks, and next artifact recommendation.
+- Created proposed ADR-003: `docs-internal/adr/003-platform-v2-minimal-framework-resolver.md`.
+- Created proposed ADR-004: `docs-internal/adr/004-platform-v2-plugin-loader-api.md`.
+- Decision: keep `woodev/bootstrap.php` as compatibility entry point, but move real logic behind it into a minimal resolver.
+- Decision: explicit plugin loaders should replace loose legacy args; runtime behavior should be validated through inheritance/contracts, not brittle strings.
+- Decision: rewrite-first plugin internals require per-plugin installed-site contract audits before implementation.
+- Updated `docs-internal/DOCS-INDEX.md`, `docs-internal/adr/README.md`, and `docs-internal/CURRENT-STATE.md` to point the next session toward `platform-v2-implementation-spec.md`.
+
+### Verification
+- Docs-only analysis session; no PHP implementation was changed.
+- Tests/build: not run because only planning docs were changed.
+- Gotcha compilation: no new non-obvious technical gotcha discovered; no `docs-internal/gotchas/` update required.
+- Commit: pending at time of entry creation; final commit hash reported in chat.
+
 ## Platform v2 strategy alignment (2026-05-29)
 
 ### Planning reset

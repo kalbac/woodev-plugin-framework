@@ -4,6 +4,8 @@
 |---|-------|--------|------|
 | 001 | [Keep Bootstrap as Platform-Aware Loader](001-bootstrap-platform-aware-loader.md) | accepted | 2026-05-28 |
 | 002 | [Use Inheritance for Plugin Type with Metadata Bridge](002-plugin-type-inheritance-with-metadata-bridge.md) | accepted | 2026-05-28 |
+| 003 | [Platform v2 Minimal Framework Resolver](003-platform-v2-minimal-framework-resolver.md) | proposed | 2026-05-29 |
+| 004 | [Platform v2 Explicit Plugin Loader API](004-platform-v2-plugin-loader-api.md) | proposed | 2026-05-29 |
 
 ## Creating an ADR
 
