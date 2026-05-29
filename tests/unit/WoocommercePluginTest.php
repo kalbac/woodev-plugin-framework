@@ -157,6 +157,15 @@ class Testable_Wordpress_Plugin extends \Woodev_Plugin {
 	}
 
 	/**
+	 * Gets the plugin path.
+	 *
+	 * @return string
+	 */
+	public function get_plugin_path() {
+		return __DIR__;
+	}
+
+	/**
 	 * Gets the download ID.
 	 *
 	 * @return int
@@ -192,6 +201,15 @@ class Testable_Woocommerce_Plugin extends \Woodev_Woocommerce_Plugin {
 	 */
 	public function get_plugin_name() {
 		return 'Test WooCommerce Plugin';
+	}
+
+	/**
+	 * Gets the plugin path.
+	 *
+	 * @return string
+	 */
+	public function get_plugin_path() {
+		return __DIR__;
 	}
 
 	/**
@@ -329,6 +347,40 @@ class WoocommercePluginTest extends TestCase {
 		$plugin = new Testable_Woocommerce_Plugin();
 
 		$plugin->log( 'WooCommerce message' );
+	}
+
+	/**
+	 * Pure WordPress plugin load_template should not request WooCommerce template loading.
+	 *
+	 * @return void
+	 */
+	public function test_wordpress_plugin_load_template_does_not_request_woocommerce_template_loader(): void {
+		$this->mock_wordpress_plugin_construction_functions();
+		Functions\expect( 'wc_get_template' )->never();
+
+		$plugin = new Testable_Wordpress_Plugin( 'test-wordpress-plugin', '1.0.0' );
+
+		$plugin->load_template( 'admin/test.php' );
+	}
+
+	/**
+	 * WooCommerce plugin template loading should use the WooCommerce template loader.
+	 *
+	 * @return void
+	 */
+	public function test_woocommerce_plugin_load_template_uses_woocommerce_template_loader(): void {
+		Functions\when( 'trailingslashit' )->alias(
+			static function ( string $path ): string {
+				return rtrim( $path, '/\\' ) . '/';
+			}
+		);
+		Functions\expect( 'wc_get_template' )
+			->once()
+			->with( 'admin/test.php', [ 'id' => 123 ], 'theme/path', __DIR__ . '/templates/' );
+
+		$plugin = new Testable_Woocommerce_Plugin();
+
+		$plugin->load_template( 'admin/test.php', [ 'id' => 123 ], 'theme/path' );
 	}
 
 	/**

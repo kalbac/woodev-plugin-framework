@@ -1,5 +1,28 @@
 # Session Log — Woodev Plugin Framework
 
+## Platform v2 WooCommerce template loader ownership (2026-05-29)
+
+### Implementation
+- Continued Phase 3 with the next small WooCommerce-adjacent runtime ownership slice.
+- Moved WooCommerce `load_template()` behavior from `Woodev_Plugin` into `Woodev\Framework\Woocommerce_Plugin`.
+- Kept the public installed-site `load_template()` wrapper on `Woodev_Plugin` as a runtime-neutral no-op, while WooCommerce plugins retain the previous `wc_get_template()` behavior through the WooCommerce base override.
+- Kept generic `get_template_path()` ownership in `Woodev_Plugin` because it only derives the plugin's own `/templates` directory and is not WooCommerce runtime state.
+- Added pure WordPress coverage proving `Woodev_Plugin::load_template()` does not request `wc_get_template()`.
+- Added WooCommerce contract coverage proving `Woodev_Woocommerce_Plugin::load_template()` still calls `wc_get_template()` with the default plugin template path.
+- Preserved production include-based loading and did not expand resolver scope into payment, shipping, licensing, or runtime behavior.
+
+### Verification
+- `composer test -- --filter WoocommercePluginTest` passed: 6 tests / 23 assertions.
+- `composer check` passed: PHPCS 113/113, PHPStan 0 errors, PHPUnit 130 tests / 217 assertions.
+- Independent verification: PASS; verifier ran `composer test -- --filter WoocommercePluginTest`, `composer check`, inspected base/WooCommerce `load_template()` behavior, confirmed pure WordPress no-`wc_get_template` coverage and WooCommerce positive path coverage.
+- Gotcha compilation: no new non-obvious gotcha discovered; no `docs-internal/gotchas/` update required.
+- Commit: pending at time of entry creation; final commit hash reported in chat.
+
+### Next
+- Continue Phase 3 with another small tested WooCommerce runtime ownership slice from `Woodev_Plugin` to `Woodev_Woocommerce_Plugin`, or pause to review whether the remaining `Woodev_Plugin` WooCommerce-adjacent helpers are true runtime ownership.
+- Preserve public wrappers where installed-site compatibility requires them.
+- Do not rewrite production plugin loaders until migration contract docs exist.
+
 ## Platform v2 WooCommerce logger ownership (2026-05-29)
 
 ### Implementation

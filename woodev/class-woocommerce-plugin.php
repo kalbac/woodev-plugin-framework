@@ -180,6 +180,30 @@ if ( ! class_exists( Woocommerce_Plugin::class, false ) ) :
 		}
 
 		/**
+		 * Loads and outputs a WooCommerce template file HTML.
+		 *
+		 * @since 1.0.0
+		 *
+		 * @param string $template Template name/part.
+		 * @param array  $args Associative array of optional template arguments.
+		 * @param string $path Optional template path, can be empty, as themes can override this.
+		 * @param string $default_path Optional default template path, will normally use the plugin's own template path unless overridden.
+		 * @return void
+		 *
+		 * @see wc_get_template() except we define automatically the default path.
+		 */
+		public function load_template( $template, array $args = [], $path = '', $default_path = '' ) {
+
+			if ( '' === $default_path || ! is_string( $default_path ) ) {
+				$default_path = trailingslashit( $this->get_template_path() );
+			}
+
+			if ( function_exists( 'wc_get_template' ) ) {
+				wc_get_template( $template, $args, $path, $default_path );
+			}
+		}
+
+		/**
 		 * Gets a list of the plugin's WooCommerce compatibility flags.
 		 *
 		 * @since 2.0.0

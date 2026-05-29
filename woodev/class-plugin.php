@@ -1316,23 +1316,18 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		/**
 		 * Loads and outputs a template file HTML.
 		 *
-		 * @param string $template template name/part
-		 * @param array  $args associative array of optional template arguments
-		 * @param string $path optional template path, can be empty, as themes can override this
-		 * @param string $default_path optional default template path, will normally use the plugin's own template path unless overridden
+		 * The base plugin has no WooCommerce template loader. WooCommerce plugins override
+		 * this to load templates through wc_get_template().
 		 *
-		 * @see wc_get_template() except we define automatically the default path
+		 * @since 1.0.0
+		 *
+		 * @param string $template Template name/part.
+		 * @param array  $args Associative array of optional template arguments.
+		 * @param string $path Optional template path, can be empty, as themes can override this.
+		 * @param string $default_path Optional default template path.
+		 * @return void
 		 */
-		public function load_template( $template, array $args = [], $path = '', $default_path = '' ) {
-
-			if ( '' === $default_path || ! is_string( $default_path ) ) {
-				$default_path = trailingslashit( $this->get_template_path() );
-			}
-
-			if ( function_exists( 'wc_get_template' ) ) {
-				wc_get_template( $template, $args, $path, $default_path );
-			}
-		}
+		public function load_template( $template, array $args = [], $path = '', $default_path = '' ) {}
 
 		/**
 		 * Determines whether a plugin is active.
