@@ -38,6 +38,9 @@ class Resolver_Testable_Framework_Resolver extends \Woodev\Framework\Framework_R
 	/** @var list<string> Plugin files used for path resolution. */
 	public array $path_requests = [];
 
+	/** @var string|null WooCommerce version used for resolver assertions. */
+	public ?string $wc_version = null;
+
 	/**
 	 * Exposes early capability class loading for assertions.
 	 *
@@ -58,6 +61,15 @@ class Resolver_Testable_Framework_Resolver extends \Woodev\Framework\Framework_R
 		$this->path_requests[] = $file;
 
 		return dirname( __DIR__, 2 );
+	}
+
+	/**
+	 * Gets the test WooCommerce version.
+	 *
+	 * @return string|null
+	 */
+	protected function get_wc_version(): ?string {
+		return $this->wc_version;
 	}
 }
 
@@ -374,6 +386,55 @@ class FrameworkResolverTest extends TestCase {
 		$this->assertTrue( class_exists( \Woodev\Framework\Woocommerce_Plugin::class, false ) );
 		$this->assertTrue( class_exists( \Woodev_Payment_Gateway_Plugin::class, false ) );
 		$this->assertTrue( class_exists( \Woodev\Framework\Shipping\Shipping_Plugin::class, false ) );
+	}
+
+	/**
+	 * Specialized base classes should be available before the plugin callback runs.
+	 */
+	public function test_specialized_child_classes_can_be_declared_inside_callback(): void {
+		$resolver = new Resolver_Testable_Framework_Resolver();
+		$loaded   = false;
+
+		$resolver->wc_version = '7.0.0';
+
+		Functions\when( 'get_bloginfo' )->justReturn( '6.5' );
+		Functions\when( 'is_admin' )->justReturn( false );
+		Functions\expect( 'do_action' )->once()->with( 'woodev_plugins_loaded' );
+
+		$resolver->register_loader_definition(
+			$this->get_loader_definition(
+				[
+					'plugin_file'  => dirname( __DIR__, 2 ) . '/woodev-test-plugin.php',
+					'platform'     => \Woodev\Framework\Framework_Plugin_Loader_Definition::PLATFORM_WOOCOMMERCE,
+					'requirements' => [
+						'php'         => '7.4',
+						'wordpress'   => '6.3',
+						'woocommerce' => '7.0',
+					],
+					'capabilities' => [
+						\Woodev\Framework\Framework_Plugin_Loader_Definition::CAPABILITY_PAYMENT_GATEWAY,
+						\Woodev\Framework\Framework_Plugin_Loader_Definition::CAPABILITY_SHIPPING_METHOD,
+					],
+					'callback'     => static function () use ( &$loaded ): void {
+						if ( ! class_exists( 'Resolver_Callback_Payment_Plugin', false ) ) {
+							eval( 'abstract class Resolver_Callback_Payment_Plugin extends \\Woodev_Payment_Gateway_Plugin {}' );
+						}
+
+						if ( ! class_exists( 'Resolver_Callback_Shipping_Plugin', false ) ) {
+							eval( 'abstract class Resolver_Callback_Shipping_Plugin extends \\Woodev\\Framework\\Shipping\\Shipping_Plugin {}' );
+						}
+
+						$loaded = true;
+					},
+				]
+			)
+		);
+
+		$resolver->load_plugins();
+
+		$this->assertTrue( $loaded );
+		$this->assertTrue( is_subclass_of( 'Resolver_Callback_Payment_Plugin', \Woodev_Payment_Gateway_Plugin::class ) );
+		$this->assertTrue( is_subclass_of( 'Resolver_Callback_Shipping_Plugin', \Woodev\Framework\Shipping\Shipping_Plugin::class ) );
 	}
 
 	/**

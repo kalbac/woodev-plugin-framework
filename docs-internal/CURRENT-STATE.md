@@ -1,5 +1,5 @@
 # Current State — Woodev Plugin Framework
-> Last updated: 2026-05-29 (Platform v2 Phase 3 WooCommerce feature compatibility ownership)
+> Last updated: 2026-05-29 (Platform v2 Phase 3 stopped; Phase 4 callback timing covered)
 
 ## Phase Status
 
@@ -49,7 +49,8 @@
 | 7 Deep analysis | ✅ 2026-05-29 | `docs-internal/platform-v2-next-analysis.md`, ADR-003, ADR-004 — resolver, loader API, migration contracts |
 | 8 Implementation spec | ✅ 2026-05-29 | `docs-internal/platform-v2-implementation-spec.md` — active source for resolver-first implementation |
 | 9 PHP implementation | ✅ 2026-05-29 | Resolver facade + explicit loader definition slice implemented |
-| 10 Platform class split | ⏳ 2026-05-29 | Hook ownership, initial WooCommerce feature/Blocks state, system-status rows, WooCommerce logger, template loader, HPOS/Blocks feature declarations, and payment/shipping specialized inheritance moved to `Woodev_Woocommerce_Plugin`; pure WP constructor covered |
+| 10 Platform class split | ✅ 2026-05-29 | Hook ownership, initial WooCommerce feature/Blocks state, system-status rows, WooCommerce logger, template loader, HPOS/Blocks feature declarations, and payment/shipping specialized inheritance moved to `Woodev_Woocommerce_Plugin`; remaining base items are compatibility wrappers or Phase 5 module cleanup |
+| 11 Early class availability | ✅ 2026-05-29 | Payment/shipping early capabilities load WooCommerce base from selected framework copy; callback timing test proves specialized child classes can be declared inside plugin callback |
 
 ## Planned — v2.0.0 & Beyond
 
@@ -87,7 +88,7 @@
 
 ## Active Queue
 
-> Platform v2 resolver facade + explicit loader definition slice is complete. Phase 3 has moved WooCommerce hook ownership, initial `supported_features`/Blocks handler construction, WooCommerce system-status row ownership, WooCommerce logger ownership, WooCommerce template loader ownership, HPOS/Blocks feature declarations, and payment/shipping specialized base inheritance into `Woodev_Woocommerce_Plugin`. Next step: inspect remaining WooCommerce-adjacent helpers in `Woodev_Plugin` and either move one more small tested runtime ownership slice or stop Phase 3 and proceed to the next Platform v2 step from `platform-v2-implementation-spec.md`; do not expand resolver into runtime behavior or rewrite production plugin loaders before migration contracts.
+> Platform v2 resolver facade + explicit loader definition slice is complete. Phase 3 is stopped: WooCommerce hook ownership, initial `supported_features`/Blocks handler construction, WooCommerce system-status row ownership, WooCommerce logger ownership, WooCommerce template loader ownership, HPOS/Blocks feature declarations, and payment/shipping specialized base inheritance live in `Woodev_Woocommerce_Plugin`; remaining `Woodev_Plugin` WooCommerce-adjacent items are compatibility wrappers or broader Phase 5 cleanup. Phase 4 callback timing coverage is complete for payment/shipping specialized child class declaration. Next step: start Phase 5 platform-neutral module cleanup from `platform-v2-implementation-spec.md` without expanding resolver runtime behavior or rewriting production plugin loaders before migration contracts.
 
 ## Infrastructure Reference
 

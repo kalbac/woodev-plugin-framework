@@ -1,5 +1,28 @@
 # Session Log — Woodev Plugin Framework
 
+## Platform v2 Phase 3 stop and callback timing coverage (2026-05-29)
+
+### Implementation
+- Continued strictly from `docs-internal/platform-v2-implementation-spec.md`, ADR-003, ADR-004, and the multi-version early class guard gotcha.
+- Inspected remaining WooCommerce-adjacent helpers/state in `Woodev_Plugin` after commits `4001ae5` and `edc3f25`.
+- Stopped Phase 3: remaining base items are compatibility wrappers (`handle_features_compatibility()`, `get_supported_features()`, `is_hpos_compatible()`, `load_template()`, `log()`), public callbacks kept for installed-site continuity, or broader Phase 5 module cleanup (`includes()` loading compatibility modules used by lifecycle/helper/utilities).
+- Did not move another runtime ownership slice because no small safe slice remains without changing installed-site contracts or starting Phase 5 cleanup.
+- Proceeded to the next Platform v2 step by adding Phase 4 callback timing coverage for specialized bases.
+- Added a resolver test proving payment and shipping child classes can be declared inside the plugin callback after early capability loading.
+- Kept resolver scope unchanged: no payment/shipping/licensing/runtime behavior moved into resolver, and production plugin loading remains include-based.
+
+### Verification
+- `composer test -- --filter FrameworkResolverTest` passed: 13 tests / 42 assertions.
+- `composer test -- --filter PluginCompatibilityTest` passed: 19 tests / 34 assertions after avoiding global `WC_VERSION` test pollution.
+- `composer check` passed: PHPCS 113/113, PHPStan 0 errors, PHPUnit 136 tests / 234 assertions.
+- Gotcha compilation: no new non-obvious gotcha discovered; no `docs-internal/gotchas/` update required.
+- Commit: pending at time of entry creation; final commit hash reported in chat.
+
+### Next
+- Start Phase 5 platform-neutral module cleanup from `docs-internal/platform-v2-implementation-spec.md`.
+- First inspect residual WooCommerce helper usage in base-owned modules, especially lifecycle, API, settings, licensing, plugin updater, and utilities.
+- Do not expand resolver runtime behavior and do not rewrite production plugin loaders before migration contract docs exist.
+
 ## Platform v2 WooCommerce feature compatibility ownership (2026-05-29)
 
 ### Implementation
