@@ -20,6 +20,32 @@
 - Continue Phase 3 by moving additional WooCommerce-adjacent runtime state from `Woodev_Plugin` to `Woodev_Woocommerce_Plugin` in small tested slices.
 - Keep resolver limited to selection, validation, requirements, notices, and early include loading; do not move payment/shipping/licensing runtime behavior into resolver.
 
+### Next session prompt
+```text
+Work autonomously. Reply to Maksim in Russian; write docs-internal in English.
+Continue Platform v2 strictly from docs-internal/platform-v2-implementation-spec.md.
+First read:
+1. docs-internal/CURRENT-STATE.md
+2. docs-internal/GOTCHAS.md
+3. docs-internal/DOCS-INDEX.md
+4. docs-internal/platform-v2-implementation-spec.md
+5. docs-internal/adr/003-platform-v2-minimal-framework-resolver.md
+6. docs-internal/adr/004-platform-v2-plugin-loader-api.md
+7. docs-internal/gotchas/multiversion-early-class-guards.md
+
+Current point: commit 51df599 implemented the namespace refactor for the initial resolver slice and the first Phase 3 WooCommerce runtime ownership slice. New Platform v2 classes now live under Woodev\Framework\* while production loading stays explicit include/require based. Woodev_Woocommerce_Plugin is a guarded installed-site alias for Woodev\Framework\Woocommerce_Plugin.
+
+Continue Phase 3 in small tested steps:
+- Move additional WooCommerce-adjacent runtime state from Woodev_Plugin into Woodev_Woocommerce_Plugin.
+- Start with pure WordPress loading tests that prove Woodev_Plugin does not register WooCommerce hooks or require WooCommerce runtime state.
+- Keep installed-site contracts intact; do not start production plugin rewrites without migration contract docs.
+- Do not expand resolver scope: payment/shipping/licensing/runtime behavior must not move into resolver.
+- Keep production plugin loading include-based; composer.json may support dev/test tooling only.
+- Preserve multi-version safety: any early-loaded support class or global alias must be guarded against redeclare.
+- Use PHP short array syntax only.
+After work: run composer check, update docs-internal/CURRENT-STATE.md and SESSION-LOG.md, include the next-session prompt, and commit.
+```
+
 ## Platform v2 resolver facade implementation (2026-05-29)
 
 ### Follow-up decision

@@ -34,18 +34,18 @@ if ( ! class_exists( Woocommerce_Plugin::class, false ) ) :
 			// handle WooCommerce features compatibility (such as HPOS, WC Cart & Checkout Blocks support...)
 			add_action( 'before_woocommerce_init', [ $this, 'handle_features_compatibility' ] );
 
-			foreach ( array( 'shipping', 'checkout', 'integration' ) as $tab ) {
-				add_action( 'woocommerce_before_settings_' . $tab, array( $this, 'add_class_form_wrap_start' ) );
-				add_action( 'woocommerce_after_settings_' . $tab, array( $this, 'add_class_form_wrap_end' ) );
+			foreach ( [ 'shipping', 'checkout', 'integration' ] as $tab ) {
+				add_action( 'woocommerce_before_settings_' . $tab, [ $this, 'add_class_form_wrap_start' ] );
+				add_action( 'woocommerce_after_settings_' . $tab, [ $this, 'add_class_form_wrap_end' ] );
 			}
 
 			// add any PHP incompatibilities to the system status report
 			add_filter(
 				'woocommerce_system_status_environment_rows',
-				array(
+				[
 					$this,
 					'add_system_status_php_information',
-				)
+				]
 			);
 		}
 	}
