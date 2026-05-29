@@ -598,7 +598,7 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 		 * Handles tasks after the plugin has been updated.
 		 */
 		public function do_update() {
-			wc_deprecated_function( __METHOD__, '1.2.0' );
+			_deprecated_function( __METHOD__, '1.2.0' );
 		}
 	}
 

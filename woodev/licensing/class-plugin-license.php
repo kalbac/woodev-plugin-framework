@@ -260,7 +260,7 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 		public function deactivate_license( $deprecated = false ) {
 
 			if ( $deprecated ) {
-				wc_deprecated_argument( __METHOD__, '1.2.1', 'The AJAX parameter is not using anymore.' );
+				_deprecated_argument( __METHOD__, '1.2.1', 'The AJAX parameter is not using anymore.' );
 			}
 
 			if ( ! isset( $_POST['option_page'] ) || 'woodev_license_fields_group' !== $_POST['option_page'] ) {
@@ -380,7 +380,7 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 		public function validate_license( $license = '', $deprecated = false, $ajax = false ) {
 
 			if ( $deprecated ) {
-				wc_deprecated_argument( __METHOD__, '1.2.1', 'The "forced" parameter is not using anymore.' );
+				_deprecated_argument( __METHOD__, '1.2.1', 'The "forced" parameter is not using anymore.' );
 			}
 
 			try {
