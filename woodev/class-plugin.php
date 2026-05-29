@@ -686,7 +686,25 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		 * @return boolean true if allowed to update beta version of Plugin
 		 */
 		public function is_beta_allowed() {
-			return wc_string_to_bool( get_option( $this->get_plugin_option_name( 'beta_version' ), 'no' ) );
+			return self::string_to_bool( get_option( $this->get_plugin_option_name( 'beta_version' ), 'no' ) );
+		}
+
+		/**
+		 * Converts a stored string value to a boolean using WooCommerce-compatible semantics.
+		 *
+		 * @param mixed $string value to convert
+		 * @return bool
+		 */
+		private static function string_to_bool( $string ) {
+			$string = $string ?? '';
+
+			if ( is_bool( $string ) ) {
+				return $string;
+			}
+
+			$string = strtolower( (string) $string );
+
+			return 'yes' === $string || 'true' === $string || '1' === $string;
 		}
 
 		/**

@@ -1,9 +1,7 @@
-- 2026-05-30 Phase 5 cleanup now has four verified slices.
-- Slice 1: base-owned API/lifecycle/licensing deprecated wrappers use WordPress core deprecation helpers instead of WooCommerce wrappers.
-- Slice 2: settings API no longer depends on `wc_bool_to_string()`, `wc_string_to_bool()`, or `wc_is_valid_url()`; local helpers preserve `yes`/`no` storage and `http`/`https` + `FILTER_VALIDATE_URL` semantics.
-- Slice 3: licensing helpers no longer depend on `wc_strtolower()`, `wc_print_r()`, or WooCommerce URL validation; local helpers preserve case-insensitive dispatch, print_r-style request logging, and `http`/`https` URL acceptance.
-- Slice 4: lifecycle event history no longer depends on `wc_clean()`; a local recursive sanitization helper preserves event name/version/data cleaning in platform-neutral tests.
-- Verification after slice 4: `composer check` green with 147 unit tests / 283 assertions.
-- Keep next work narrow: the best current candidate is a plugin-updater-adjacent helper in `Woodev_Plugin` (likely the beta opt-in path) only if it can be isolated cleanly.
-- Independent review checkpoint is now after the next small Phase 5 cleanup slice and before Phase 6 migration contracts / production plugin rewrites.
-- Do not expand resolver scope; do not move payment/shipping/licensing/lifecycle runtime behavior into resolver; do not start production plugin rewrites before migration contract docs.
+- 2026-05-30 Phase 5 cleanup now has five verified slices.
+- Slice 5: plugin-updater-adjacent beta opt-in in `Woodev_Plugin` no longer depends on `wc_string_to_bool()`; a local helper preserves the installed-site `beta_version` key plus WooCommerce-compatible truthy semantics in a no-WooCommerce unit context.
+- Added `tests/unit/PlatformNeutralPluginUpdaterTest.php`; red test failed first on undefined `wc_string_to_bool()`, then passed after the implementation (1 test / 3 assertions).
+- Independent separate-model review checkpoint for the post-slice audit is complete and found no bugs or resolver/base-boundary regressions.
+- Verification after slice 5: `composer check` green with 148 unit tests / 286 assertions.
+- Keep next work narrow: the best current candidate is the PHP setting size parser path in `Woodev_Plugin_Dependencies` that still uses `wc_let_to_num()`, but only if it can be isolated cleanly.
+- Do not expand resolver scope; do not move payment/shipping/licensing/lifecycle/updater runtime behavior into the resolver; do not start production plugin rewrites before migration contract docs.

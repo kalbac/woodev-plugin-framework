@@ -1,5 +1,26 @@
 # Session Log — Woodev Plugin Framework
 
+## Platform v2 Phase 5 beta opt-in helper cleanup (2026-05-30)
+
+### Implementation
+- Continued strictly from `docs-internal/platform-v2-implementation-spec.md`, ADR-003, ADR-004, and the multi-version early class guard gotcha.
+- Re-checked the remaining WooCommerce helper dependencies in base-owned modules and confirmed the smallest safe next Phase 5 slice was the plugin-updater-adjacent beta opt-in helper path in `Woodev_Plugin`.
+- Added `tests/unit/PlatformNeutralPluginUpdaterTest.php` first, proving the current failure mode when `wc_string_to_bool()` is unavailable in a platform-neutral unit context and locking the installed-site `beta_version` option contract.
+- Replaced direct `wc_string_to_bool()` usage in `Woodev_Plugin::is_beta_allowed()` with a local platform-neutral boolean helper that preserves the existing WooCommerce-compatible truthy semantics for updater beta opt-in decisions.
+- Preserved installed-site behavior, the `beta_version` option key, plugin updater integration, include-based runtime loading, public wrappers, and resolver boundaries; did not move updater behavior into the resolver or reintroduce WooCommerce runtime assumptions into the base.
+
+### Verification
+- `composer test -- --filter PlatformNeutralPluginUpdaterTest` failed first with the expected undefined `wc_string_to_bool()` error, then passed after the implementation: 1 test / 3 assertions.
+- Independent review checkpoint completed immediately after the slice via a separate-model audit; no bugs or resolver/base-boundary regressions were found, with only an optional note that broader legacy truthy variants could be asserted in a future test if needed.
+- `composer check` passed: PHPCS 113/113, PHPStan 0 errors, PHPUnit 148 tests / 286 assertions.
+- Gotcha compilation: no new non-obvious gotcha discovered; no `docs-internal/gotchas/` update required.
+- Commit: pending at time of entry creation; final commit hash reported in chat.
+
+### Next
+- Continue Phase 5 platform-neutral module cleanup from `docs-internal/platform-v2-implementation-spec.md`.
+- Best next candidate: a small tested cleanup in `Woodev_Plugin_Dependencies`, most likely the PHP setting size parser path that still uses `wc_let_to_num()`, only if it can be isolated without pulling WooCommerce runtime assumptions back into the base.
+- Do not expand resolver runtime behavior and do not rewrite production plugin loaders before migration contract docs exist.
+
 ## Platform v2 Phase 5 lifecycle event sanitization cleanup (2026-05-30)
 
 ### Implementation

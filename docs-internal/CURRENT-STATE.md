@@ -1,5 +1,5 @@
 # Current State — Woodev Plugin Framework
-> Last updated: 2026-05-30 (Platform v2 Phase 5 lifecycle event sanitization cleanup complete)
+> Last updated: 2026-05-30 (Platform v2 Phase 5 beta opt-in helper cleanup complete)
 
 ## Phase Status
 
@@ -55,6 +55,7 @@
 | 13 Phase 5 cleanup #2 | ✅ 2026-05-29 | Settings API boolean and URL helpers now use local platform-neutral equivalents preserving `yes`/`no` storage and `http`/`https` validation contracts |
 | 14 Phase 5 cleanup #3 | ✅ 2026-05-30 | Licensing helper slice now uses local platform-neutral equivalents for `wc_strtolower()`, `wc_print_r()`, and licensing API URL validation while preserving case-insensitive action checks, print_r-style request logging output, and `http`/`https` URL acceptance contracts |
 | 15 Phase 5 cleanup #4 | ✅ 2026-05-30 | Lifecycle event history now uses a local platform-neutral recursive sanitization helper instead of `wc_clean()` while preserving stored event name/version/data cleaning semantics in a no-WooCommerce unit context |
+| 16 Phase 5 cleanup #5 | ✅ 2026-05-30 | Plugin updater beta opt-in now uses a local platform-neutral boolean helper in `Woodev_Plugin` instead of `wc_string_to_bool()`, preserving the installed-site `beta_version` option key and WooCommerce-compatible truthy semantics in a no-WooCommerce unit context |
 
 ## Planned — v2.0.0 & Beyond
 
@@ -92,7 +93,7 @@
 
 ## Active Queue
 
-> Platform v2 resolver facade + explicit loader definition slice is complete. Phase 3 is stopped: WooCommerce hook ownership, initial `supported_features`/Blocks handler construction, WooCommerce system-status row ownership, WooCommerce logger ownership, WooCommerce template loader ownership, HPOS/Blocks feature declarations, and payment/shipping specialized base inheritance live in `Woodev_Woocommerce_Plugin`; remaining `Woodev_Plugin` WooCommerce-adjacent items are compatibility wrappers or broader Phase 5 cleanup. Phase 4 callback timing coverage is complete for payment/shipping specialized child class declaration. Phase 5 cleanup now includes WordPress core deprecation helpers in base-owned API/lifecycle/licensing wrappers, local platform-neutral replacements for settings boolean and URL helpers, a licensing helper cleanup slice replacing `wc_strtolower()`, `wc_print_r()`, and licensing API URL validation, and a lifecycle event sanitization slice replacing `wc_clean()` in stored event history. Next step: continue Phase 5 with another small tested cleanup slice in remaining base-owned modules, with the best current candidate being the plugin-updater-adjacent beta opt-in helper in `Woodev_Plugin`, without expanding resolver runtime behavior or rewriting production plugin loaders before migration contracts. Independent review checkpoint: run a separate-model audit after the next small Phase 5 cleanup slice and before Phase 6 migration contracts / production plugin rewrites.
+> Platform v2 resolver facade + explicit loader definition slice is complete. Phase 3 is stopped: WooCommerce hook ownership, initial `supported_features`/Blocks handler construction, WooCommerce system-status row ownership, WooCommerce logger ownership, WooCommerce template loader ownership, HPOS/Blocks feature declarations, and payment/shipping specialized base inheritance live in `Woodev_Woocommerce_Plugin`; remaining `Woodev_Plugin` WooCommerce-adjacent items are compatibility wrappers or broader Phase 5 cleanup. Phase 4 callback timing coverage is complete for payment/shipping specialized child class declaration. Phase 5 cleanup now includes WordPress core deprecation helpers in base-owned API/lifecycle/licensing wrappers, local platform-neutral replacements for settings boolean and URL helpers, a licensing helper cleanup slice replacing `wc_strtolower()`, `wc_print_r()`, and licensing API URL validation, a lifecycle event sanitization slice replacing `wc_clean()` in stored event history, and a plugin-updater-adjacent beta opt-in helper cleanup replacing `wc_string_to_bool()` in `Woodev_Plugin` with a local platform-neutral equivalent. The separate-model review checkpoint is complete for this slice and found no issues requiring follow-up. Next step: continue Phase 5 with the next smallest tested base-owned cleanup slice, with the best current candidate being the PHP setting size parser path in `Woodev_Plugin_Dependencies` that still uses `wc_let_to_num()`, without expanding resolver runtime behavior or rewriting production plugin loaders before migration contracts.
 
 ## Infrastructure Reference
 
