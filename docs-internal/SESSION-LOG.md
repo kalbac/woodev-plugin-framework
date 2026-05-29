@@ -1,5 +1,28 @@
 # Session Log — Woodev Plugin Framework
 
+## Platform v2 Phase 5 licensing helper cleanup (2026-05-30)
+
+### Implementation
+- Continued strictly from `docs-internal/platform-v2-implementation-spec.md`, ADR-003, ADR-004, and the multi-version early class guard gotcha.
+- Inspected the remaining small WooCommerce helper dependencies in base-owned modules and confirmed the next smallest safe Phase 5 slice was licensing utility helper cleanup.
+- Added `tests/unit/PlatformNeutralLicensingTest.php` first, proving the current failure mode when `wc_strtolower()`, `wc_print_r()`, and `wc_is_valid_url()` are unavailable in a platform-neutral unit context.
+- Replaced direct WooCommerce helper usage in `woodev/licensing/class-plugin-license.php` with a local lowercase helper that preserves case-insensitive action validation for licensing API dispatch.
+- Replaced direct WooCommerce helper usage in `woodev/licensing/api/class-licensing-api-request.php` with a local `print_r` wrapper that preserves the existing request stringification contract used by request logging.
+- Replaced direct WooCommerce URL validation in `woodev/licensing/api/class-licensing-api.php` with a local validator that preserves the previous `http`/`https` plus `FILTER_VALIDATE_URL` contract.
+- Preserved installed-site behavior, public wrappers, include-based runtime loading, and resolver boundaries; did not move payment, shipping, licensing runtime behavior, or production plugin loaders.
+
+### Verification
+- `composer test -- --filter PlatformNeutralLicensingTest` failed first with the expected undefined WooCommerce helper errors, then passed after the implementation: 3 tests / 10 assertions.
+- `composer check` passed: PHPCS 113/113, PHPStan 0 errors, PHPUnit 145 tests / 270 assertions.
+- Gotcha compilation: no new non-obvious gotcha discovered; no `docs-internal/gotchas/` update required.
+- Independent review checkpoint scheduled: run a separate-model audit after the next 1-2 small Phase 5 cleanup slices and before Phase 6 migration contracts / production plugin rewrites.
+- Commit: pending at time of entry creation; final commit hash reported in chat.
+
+### Next
+- Continue Phase 5 platform-neutral module cleanup from `docs-internal/platform-v2-implementation-spec.md`.
+- Best next candidate: another small tested cleanup slice in remaining base-owned modules, likely utilities or plugin-updater-adjacent helpers only if they can be isolated without pulling WooCommerce runtime assumptions back into the base.
+- Do not expand resolver runtime behavior and do not rewrite production plugin loaders before migration contract docs exist.
+
 ## Platform v2 Phase 5 settings helper cleanup (2026-05-29)
 
 ### Implementation

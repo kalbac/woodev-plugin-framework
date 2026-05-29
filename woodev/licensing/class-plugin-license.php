@@ -156,7 +156,7 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 		private function dispatch( $action = 'check_license', $license_key = '' ) {
 
 			if ( ! in_array(
-				wc_strtolower( $action ),
+				self::strtolower( $action ),
 				array(
 					'activate_license',
 					'deactivate_license',
@@ -189,6 +189,16 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 			} catch ( Exception $e ) {
 				throw $e;
 			}
+		}
+
+		/**
+		 * Normalizes a string to lowercase without WooCommerce helper dependencies.
+		 *
+		 * @param string $value String to normalize.
+		 * @return string
+		 */
+		private static function strtolower( $value ) {
+			return strtolower( (string) $value );
 		}
 
 		/**
