@@ -10,6 +10,7 @@ namespace Woodev\Tests\Unit;
 use Brain\Monkey\Actions;
 use Brain\Monkey\Filters;
 use Brain\Monkey\Functions;
+use Mockery;
 
 require_once dirname( __DIR__, 2 ) . '/woodev/class-plugin.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/class-woocommerce-plugin.php';
@@ -24,6 +25,23 @@ if ( ! class_exists( '\WP_REST_Controller', false ) ) {
 	class_alias( WP_REST_Controller_Test_Stub::class, 'WP_REST_Controller' );
 }
 
+if ( ! interface_exists( 'WC_Logger_Interface', false ) ) {
+	/**
+	 * Minimal WooCommerce logger interface stub for isolated unit tests.
+	 */
+	interface WC_Logger_Interface {
+
+		/**
+		 * Adds a log entry.
+		 *
+		 * @param string $handle Log handle.
+		 * @param string $message Log message.
+		 * @return void
+		 */
+		public function add( $handle, $message );
+	}
+}
+
 /**
  * Test helper exposing base WordPress plugin construction state.
  */
@@ -35,7 +53,6 @@ class Testable_Wordpress_Plugin extends \Woodev_Plugin {
 	 * @var bool
 	 */
 	public $blocks_handler_initialized = false;
-
 	/**
 	 * Whether WooCommerce system status row generation was called.
 	 *
@@ -233,9 +250,11 @@ class Testable_Woocommerce_Plugin extends \Woodev_Woocommerce_Plugin {
 class WoocommercePluginTest extends TestCase {
 
 	/**
-	 * WordPress-only plugins should not initialize WooCommerce runtime state.
+	 * Defines WordPress function stubs required by base plugin construction.
+	 *
+	 * @return void
 	 */
-	public function test_wordpress_plugin_does_not_register_woocommerce_runtime_hooks(): void {
+	private function mock_wordpress_plugin_construction_functions(): void {
 		Functions\when( 'wp_parse_args' )->alias(
 			static function ( array $args, array $defaults ): array {
 				return array_replace_recursive( $defaults, $args );
@@ -259,6 +278,13 @@ class WoocommercePluginTest extends TestCase {
 		);
 		Functions\when( 'is_admin' )->justReturn( false );
 		Functions\when( 'has_action' )->justReturn( false );
+	}
+
+	/**
+	 * WordPress-only plugins should not initialize WooCommerce runtime state.
+	 */
+	public function test_wordpress_plugin_does_not_register_woocommerce_runtime_hooks(): void {
+		$this->mock_wordpress_plugin_construction_functions();
 
 		Actions\expectAdded( 'before_woocommerce_init' )->never();
 		foreach ( [ 'shipping', 'checkout', 'integration' ] as $tab ) {
@@ -271,6 +297,38 @@ class WoocommercePluginTest extends TestCase {
 
 		$this->assertFalse( $plugin->blocks_handler_initialized );
 		$this->assertFalse( $plugin->system_status_information_added );
+	}
+
+	/**
+	 * Pure WordPress plugin construction should not request the WooCommerce logger.
+	 *
+	 * @return void
+	 */
+	public function test_wordpress_plugin_construction_does_not_request_woocommerce_logger(): void {
+		$this->mock_wordpress_plugin_construction_functions();
+		Functions\expect( 'wc_get_logger' )->never();
+
+		new Testable_Wordpress_Plugin( 'test-wordpress-plugin', '1.0.0' );
+	}
+
+	/**
+	 * WooCommerce plugin logging should write to the WooCommerce logger.
+	 *
+	 * @return void
+	 */
+	public function test_woocommerce_plugin_log_uses_woocommerce_logger(): void {
+		$logger = Mockery::mock( 'WC_Logger_Interface' );
+		$logger->shouldReceive( 'add' )
+			->once()
+			->with( null, 'WooCommerce message' );
+
+		Functions\expect( 'wc_get_logger' )
+			->once()
+			->andReturn( $logger );
+
+		$plugin = new Testable_Woocommerce_Plugin();
+
+		$plugin->log( 'WooCommerce message' );
 	}
 
 	/**

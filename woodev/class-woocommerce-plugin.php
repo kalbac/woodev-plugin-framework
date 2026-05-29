@@ -32,6 +32,15 @@ if ( ! class_exists( Woocommerce_Plugin::class, false ) ) :
 		protected $supported_features = [];
 
 		/**
+		 * WooCommerce logger instance.
+		 *
+		 * @since 2.0.0
+		 *
+		 * @var \WC_Logger_Interface|null
+		 */
+		private $logger;
+
+		/**
 		 * Initialize the WooCommerce plugin.
 		 *
 		 * @since 2.0.0
@@ -139,6 +148,35 @@ if ( ! class_exists( Woocommerce_Plugin::class, false ) ) :
 			}
 
 			return $rows;
+		}
+
+		/**
+		 * Saves errors or messages to WooCommerce Log (woocommerce/logs/plugin-id-xxx.txt).
+		 *
+		 * @since 1.0.0
+		 *
+		 * @param string      $message Error or message to save to log.
+		 * @param string|null $log_id Optional log id to segment the files by, defaults to plugin id.
+		 * @return void
+		 */
+		public function log( $message, $log_id = null ) {
+
+			if ( is_null( $log_id ) ) {
+				$log_id = $this->get_id();
+			}
+
+			$this->logger()->add( $log_id, $message );
+		}
+
+		/**
+		 * Gets the WooCommerce logger instance.
+		 *
+		 * @since 1.4.0
+		 *
+		 * @return \WC_Logger_Interface
+		 */
+		protected function logger(): \WC_Logger_Interface {
+			return $this->logger ??= wc_get_logger();
 		}
 
 		/**

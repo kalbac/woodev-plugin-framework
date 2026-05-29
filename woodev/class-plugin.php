@@ -40,9 +40,6 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		/** @var array{ hpos?: bool, blocks?: array{ cart?: bool, checkout?: bool }} plugin compatibility flags */
 		private $supported_features;
 
-		/** @var WC_Logger instance */
-		private $logger;
-
 		/** @var Woodev_Plugins_License instance */
 		protected $license;
 
@@ -835,28 +832,18 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		}
 
 		/**
-		 * Saves errors or messages to WooCommerce Log (woocommerce/logs/plugin-id-xxx.txt)
+		 * Saves errors or messages to the plugin log.
 		 *
-		 * @param string $message error or message to save to log
-		 * @param string $log_id optional log id to segment the files by, defaults to plugin id
-		 */
-		public function log( $message, $log_id = null ) {
-
-			if ( is_null( $log_id ) ) {
-				$log_id = $this->get_id();
-			}
-
-			$this->logger()->add( $log_id, $message );
-		}
-
-		/**
-		 * @since 1.4.0
+		 * The base plugin has no runtime logging backend. WooCommerce plugins override this
+		 * to write to the WooCommerce logger.
 		 *
-		 * @return WC_Logger_Interface
+		 * @since 1.0.0
+		 *
+		 * @param string      $message Error or message to save to log.
+		 * @param string|null $log_id Optional log id to segment the files by.
+		 * @return void
 		 */
-		protected function logger(): WC_Logger_Interface {
-			return $this->logger ??= wc_get_logger();
-		}
+		public function log( $message, $log_id = null ) {}
 
 		/**
 		 * @param mixed $assertion
@@ -869,7 +856,7 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 			try {
 				assert( $assertion );
 			} catch ( Throwable $exception ) {
-				$this->logger()->debug( 'Assertion failed, backtrace summery: ' . wp_debug_backtrace_summary() );
+				$this->log( 'Assertion failed, backtrace summery: ' . wp_debug_backtrace_summary(), 'assertions' );
 			}
 		}
 

@@ -1,5 +1,28 @@
 # Session Log — Woodev Plugin Framework
 
+## Platform v2 WooCommerce logger ownership (2026-05-29)
+
+### Implementation
+- Continued Phase 3 with the next small WooCommerce-adjacent runtime ownership slice.
+- Moved WooCommerce logger storage and `logger()` ownership from `Woodev_Plugin` into `Woodev\Framework\Woocommerce_Plugin`.
+- Kept the public installed-site `log()` wrapper contract intact by overriding `log()` in the WooCommerce base with the previous WooCommerce logger behavior.
+- Updated `Woodev_Plugin::assert()` to call the public `log()` wrapper instead of directly reaching into WooCommerce logger internals.
+- Added pure WordPress coverage proving `Woodev_Plugin` construction does not request `wc_get_logger()`.
+- Added WooCommerce contract coverage proving `Woodev_Woocommerce_Plugin::log()` still writes through `wc_get_logger()->add()`.
+- Preserved production include-based loading and did not expand resolver scope into payment, shipping, licensing, or runtime behavior.
+
+### Verification
+- `composer test -- --filter WoocommercePluginTest` passed: 4 tests / 21 assertions.
+- `composer check` passed: PHPCS 113/113, PHPStan 0 errors, PHPUnit 128 tests / 215 assertions.
+- Independent verification: PASS; verifier ran `composer test -- --filter WoocommercePluginTest`, `composer check`, inspected public `log()`/`assert()` compatibility, and completed a hostile pure-WordPress `wc_get_logger()` probe.
+- Gotcha compilation: no new non-obvious gotcha discovered; no `docs-internal/gotchas/` update required.
+- Commit: pending at time of entry creation; final commit hash reported in chat.
+
+### Next
+- Continue Phase 3 with another small tested WooCommerce runtime ownership slice from `Woodev_Plugin` to `Woodev_Woocommerce_Plugin`.
+- Good next candidate: WooCommerce template helpers; preserve public wrappers where installed-site compatibility requires them.
+- Do not rewrite production plugin loaders until migration contract docs exist.
+
 ## Platform v2 WooCommerce system-status ownership (2026-05-29)
 
 ### Implementation
