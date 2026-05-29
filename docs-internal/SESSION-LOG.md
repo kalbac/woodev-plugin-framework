@@ -17,7 +17,7 @@
 - `composer check` passed: PHPCS 113/113, PHPStan 0 errors, PHPUnit 135 tests / 230 assertions.
 - Independent review found and fixes addressed: specialized bases missing WooCommerce inheritance, payment/shipping early capabilities missing WooCommerce base dependency, selected framework path not used for early class loading, and autoload-enabled `class_exists()` checks in resolver.
 - Gotcha compilation: updated existing `docs-internal/gotchas/multiversion-early-class-guards.md`; no new gotcha file required.
-- Commit: pending at time of entry creation; final commit hash reported in chat.
+- Commit: `4001ae5`.
 
 ### Next
 - Inspect remaining WooCommerce-adjacent helpers in `Woodev_Plugin` and decide whether one more true runtime ownership slice remains.
