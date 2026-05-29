@@ -1,7 +1,6 @@
-- 2026-05-30 Phase 5 cleanup now has five verified slices.
-- Slice 5: plugin-updater-adjacent beta opt-in in `Woodev_Plugin` no longer depends on `wc_string_to_bool()`; a local helper preserves the installed-site `beta_version` key plus WooCommerce-compatible truthy semantics in a no-WooCommerce unit context.
-- Added `tests/unit/PlatformNeutralPluginUpdaterTest.php`; red test failed first on undefined `wc_string_to_bool()`, then passed after the implementation (1 test / 3 assertions).
-- Independent separate-model review checkpoint for the post-slice audit is complete and found no bugs or resolver/base-boundary regressions.
-- Verification after slice 5: `composer check` green with 148 unit tests / 286 assertions.
-- Keep next work narrow: the best current candidate is the PHP setting size parser path in `Woodev_Plugin_Dependencies` that still uses `wc_let_to_num()`, but only if it can be isolated cleanly.
-- Do not expand resolver scope; do not move payment/shipping/licensing/lifecycle/updater runtime behavior into the resolver; do not start production plugin rewrites before migration contract docs.
+- 2026-05-30 Phase 5 cleanup now has six verified slices.
+- Slice 6: the PHP setting size parser in `Woodev_Plugin_Dependencies` no longer depends on `wc_let_to_num()`; a local byte conversion helper preserves incompatible-setting threshold checks plus formatted `expected`/`actual` notice payload values in a no-WooCommerce unit context.
+- Added `tests/unit/PlatformNeutralDependenciesTest.php`; the red test failed first on undefined `wc_let_to_num()`, then passed after the implementation (2 tests / 6 assertions).
+- Verification after slice 6: `composer check` green with 150 unit tests / 292 assertions and IDE lints clean for the changed files.
+- Keep next work narrow: re-scan remaining base-owned WooCommerce helper paths and prefer the next smallest tested slice, likely an isolated `wc_enqueue_js()` dependency in a base-owned admin or utility module.
+- Do not expand resolver scope; do not move admin/dependency/utility runtime behavior into the resolver; do not start production plugin rewrites before migration contract docs.
