@@ -1,5 +1,26 @@
 # Session Log — Woodev Plugin Framework
 
+## Platform v2 strategy alignment (2026-05-29)
+
+### Planning reset
+- Reviewed `PLANS.md` against the previously created dependency matrix, ADR-001, ADR-002, Epic 1 spec, CURRENT-STATE, FUTURE-BACKLOG, and the spike branch.
+- Reframed the prior orchestration-first track as useful but provisional until aligned with `PLANS.md`.
+- Confirmed platform-first remains the v2.0 priority; shipping is critical but must live inside the platform, not define it.
+
+### Strategic decisions
+- Chosen direction: hybrid roadmap — v2.0 keeps a minimal framework resolver, while SkyVerge-style versioned namespaces remain a future v2.x/v3 track.
+- Migration policy: rewrite-first for plugin internals, but installed-site contracts are sacred.
+- Required preservation scope: option keys, persisted settings, license state, updater continuity, method IDs, public hooks/actions/filters, scheduled events, and idempotent data migrations.
+- `Woodev_Lifecycle` remains the preferred foundation for install/upgrade/activation/deactivation migrations.
+
+### Artifacts
+- Added `docs-internal/platform-v2-strategy-alignment.md` to capture the hybrid roadmap, resolver boundaries, rewrite-first policy, lifecycle migration rules, and open decisions.
+- Updated `docs-internal/DOCS-INDEX.md` and `docs-internal/CURRENT-STATE.md` so future agents do not auto-continue the old Epic 1 implementation path.
+
+### Verification
+- Docs-only session; no PHP implementation, tests, or build were run.
+- Gotcha compilation: no new code gotcha discovered; no `docs-internal/gotchas/` update required.
+
 ## Platform v2 Phase 0 cleanup gate (2026-05-28)
 
 ### v2.0.0 cleanup #1 — minimum versions

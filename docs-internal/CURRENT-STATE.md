@@ -1,5 +1,5 @@
 # Current State — Woodev Plugin Framework
-> Last updated: 2026-05-28 (Platform v2 Phase 0 cleanup gate)
+> Last updated: 2026-05-29 (Platform v2 strategy alignment)
 
 ## Phase Status
 
@@ -36,15 +36,17 @@
 4. ~~eCheck/ACH audit + removal~~ ✅ s3
 5. Extract traits from class-payment-gateway.php (now 2378 lines, down from 3927)
 
-### Platform v2 (orchestration track)
+### Platform v2 (strategy alignment)
 
 | Step | Status | Artifact |
 |------|--------|----------|
 | 1 Dependency matrix | ✅ 2026-05-28 | `docs-internal/platform-v2-dependency-matrix.md` |
 | 2 ADR bootstrap + plugin type | ✅ 2026-05-28 | `docs-internal/adr/001-*.md`, `002-*.md` |
 | 3 Epic 1 spec (platform layer) | ✅ 2026-05-28 accepted | `docs-internal/platform-v2-epic1-spec.md` |
-| 4 v2 cleanup #1–#2 gate | ✅ 2026-05-28 | WP/WC minimums + US payment cleanup complete |
-| 5 Spike branch | Ready | After cleanup gate + spec approved |
+| 4 v2 cleanup #1–#2 gate | ✅ 2026-05-28 `f9fea5f` | WP 6.3+ / WC 7.0+; ACH/eCheck surface removed |
+| 5 Spike branch | ✅ 2026-05-28 `0ed6df8` | `feat/platform-v2-epic1-spike` — Woodev_Woocommerce_Plugin + bootstrap metadata |
+| 6 Strategy alignment | ✅ 2026-05-29 | `docs-internal/platform-v2-strategy-alignment.md` — hybrid roadmap, rewrite-first migration, minimal resolver |
+| 7 Next deep analysis | ⏳ | Autonomous analysis prompt: revise ADR/spec assumptions before implementation |
 
 ## Planned — v2.0.0 & Beyond
 
@@ -82,7 +84,7 @@
 
 ## Active Queue
 
-> Platform v2 Phase 0 cleanup gate complete. Ready for Epic 1 platform spike.
+> Platform v2 implementation is paused for strategy alignment. Next step: deep autonomous analysis of minimal resolver, plugin loader API, migration contracts, and ADR/spec revisions.
 
 ## Infrastructure Reference
 

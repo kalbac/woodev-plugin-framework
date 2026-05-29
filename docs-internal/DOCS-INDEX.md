@@ -32,6 +32,11 @@
 | `GOTCHAS.md` | Topic-indexed cross-session gotchas — scan relevant topics |
 | `AGENT-RULES.md` | Workflow rules, architecture rules, testing rules |
 | `DOCS-SCHEMA.md` | Doc format rules, lint checklist, compilation protocol |
+| `platform-v2-dependency-matrix.md` | Platform decoupling audit — module WC deps, P0/P1/P2, open questions A/B |
+| `platform-v2-strategy-alignment.md` | Platform v2 strategic alignment — hybrid roadmap, rewrite-first migration, minimal resolver |
+| `adr/001-bootstrap-platform-aware-loader.md` | ADR: keep bootstrap as platform-aware loader (accepted) |
+| `adr/002-plugin-type-inheritance-with-metadata-bridge.md` | ADR: inheritance + deprecated metadata bridge (accepted) |
+| `platform-v2-epic1-spec.md` | Epic 1 implementation spec — platform layer split (accepted) |
 
 ---
 

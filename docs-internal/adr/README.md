@@ -2,7 +2,8 @@
 
 | # | Title | Status | Date |
 |---|-------|--------|------|
-<!-- No ADRs yet -->
+| 001 | [Keep Bootstrap as Platform-Aware Loader](001-bootstrap-platform-aware-loader.md) | accepted | 2026-05-28 |
+| 002 | [Use Inheritance for Plugin Type with Metadata Bridge](002-plugin-type-inheritance-with-metadata-bridge.md) | accepted | 2026-05-28 |
 
 ## Creating an ADR
 
