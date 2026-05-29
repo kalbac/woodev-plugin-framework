@@ -14,7 +14,7 @@
 - `composer test -- --filter PlatformNeutralAdminNoticeTest` failed first with the expected undefined `wc_enqueue_js()` error, then passed after the implementation: 2 tests / 8 assertions.
 - `composer check` passed: PHPCS 113/113, PHPStan 0 errors, PHPUnit 152 tests / 300 assertions.
 - Gotcha compilation: no new non-obvious gotcha discovered; no `docs-internal/gotchas/` update required.
-- Commit: `0b6e28c`.
+- Commit: `e82eefd`.
 
 ### Next
 - Continue Phase 5 platform-neutral module cleanup from `docs-internal/platform-v2-implementation-spec.md`.
