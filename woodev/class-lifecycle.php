@@ -458,13 +458,13 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 			$history = $this->get_event_history();
 
 			$event = array(
-				'name'    => wc_clean( $name ),
+				'name'    => self::clean_event_value( $name ),
 				'time'    => (int) current_time( 'timestamp' ),
-				'version' => wc_clean( $this->get_plugin()->get_version() ),
+				'version' => self::clean_event_value( $this->get_plugin()->get_version() ),
 			);
 
 			if ( ! empty( $data ) ) {
-				$event['data'] = wc_clean( $data );
+				$event['data'] = self::clean_event_value( $data );
 			}
 
 			array_unshift( $history, $event );
@@ -505,6 +505,28 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 			}
 
 			return is_array( $history ) ? $history : array();
+		}
+
+		/**
+		 * Sanitizes lifecycle event values without relying on WooCommerce helpers.
+		 *
+		 * Mirrors the previous scalar/recursive cleaning behavior for event history
+		 * payloads while keeping this base-owned module platform-neutral.
+		 *
+		 * @param mixed $value Event value to sanitize.
+		 * @return mixed
+		 */
+		private static function clean_event_value( $value ) {
+
+			if ( is_array( $value ) ) {
+				return array_map( array( __CLASS__, 'clean_event_value' ), $value );
+			}
+
+			if ( is_scalar( $value ) ) {
+				return sanitize_text_field( (string) $value );
+			}
+
+			return $value;
 		}
 
 

@@ -1,5 +1,26 @@
 # Session Log — Woodev Plugin Framework
 
+## Platform v2 Phase 5 lifecycle event sanitization cleanup (2026-05-30)
+
+### Implementation
+- Continued strictly from `docs-internal/platform-v2-implementation-spec.md`, ADR-003, ADR-004, and the multi-version early class guard gotcha.
+- Re-checked the remaining WooCommerce helper dependencies in base-owned modules and selected the next smallest safe Phase 5 slice: lifecycle event-history sanitization in `woodev/class-lifecycle.php`.
+- Added `tests/unit/PlatformNeutralLifecycleTest.php` first, proving the current failure mode when `wc_clean()` is unavailable in a platform-neutral unit context and locking the stored event-history cleaning contract.
+- Replaced direct `wc_clean()` calls in `Woodev_Lifecycle::store_event()` with a local recursive sanitization helper that preserves scalar and nested-array cleaning behavior for event names, plugin versions, and event payload data.
+- Preserved installed-site behavior, public lifecycle APIs, event option names, include-based runtime loading, and resolver boundaries; did not move lifecycle ownership, change migration behavior, or expand WooCommerce runtime assumptions in `Woodev_Plugin`.
+
+### Verification
+- `composer test -- --filter PlatformNeutralLifecycleTest` failed first with the expected undefined `wc_clean()` error, then passed after the implementation: 2 tests / 13 assertions.
+- `composer check` passed: PHPCS 113/113, PHPStan 0 errors, PHPUnit 147 tests / 283 assertions.
+- Gotcha compilation: no new non-obvious gotcha discovered; no `docs-internal/gotchas/` update required.
+- Independent review checkpoint tightened: run a separate-model audit after the next small Phase 5 cleanup slice and before Phase 6 migration contracts / production plugin rewrites.
+- Commit: pending at time of entry creation; final commit hash reported in chat.
+
+### Next
+- Continue Phase 5 platform-neutral module cleanup from `docs-internal/platform-v2-implementation-spec.md`.
+- Best next candidate: a small plugin-updater-adjacent cleanup in `Woodev_Plugin`, most likely the beta opt-in helper path, only if it can be isolated without reintroducing WooCommerce runtime assumptions into the base.
+- Do not expand resolver runtime behavior and do not rewrite production plugin loaders before migration contract docs exist.
+
 ## Platform v2 Phase 5 licensing helper cleanup (2026-05-30)
 
 ### Implementation
