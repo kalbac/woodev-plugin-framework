@@ -107,6 +107,21 @@ if ( ! class_exists( Woocommerce_Plugin::class, false ) ) :
 		}
 
 		/**
+		 * Declares compatibility with specific WooCommerce features.
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.0
+		 *
+		 * @return void
+		 */
+		public function handle_features_compatibility(): void {
+
+			\Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility( 'custom_order_tables', $this->get_plugin_file(), $this->is_hpos_compatible() );
+			\Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility( 'cart_checkout_blocks', $this->get_plugin_file(), $this->get_blocks_handler()->is_cart_block_compatible() && $this->get_blocks_handler()->is_checkout_block_compatible() );
+		}
+
+		/**
 		 * Adds any PHP incompatibilities to the WooCommerce system status report.
 		 *
 		 * @since 2.0.0
@@ -177,6 +192,19 @@ if ( ! class_exists( Woocommerce_Plugin::class, false ) ) :
 		 */
 		protected function logger(): \WC_Logger_Interface {
 			return $this->logger ??= wc_get_logger();
+		}
+
+		/**
+		 * Determines whether the plugin supports HPOS.
+		 *
+		 * @since 2.0.0
+		 *
+		 * @return bool
+		 */
+		public function is_hpos_compatible() {
+			return isset( $this->supported_features['hpos'] )
+				&& true === $this->supported_features['hpos']
+				&& \Woodev_Plugin_Compatibility::is_wc_version_gte( '7.6' );
 		}
 
 		/**

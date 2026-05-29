@@ -31,7 +31,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 	 * + `my_payment_methods`      - adds actions to show/handle a "My Payment Methods" area on the customer's My Account page. This will show saved payment methods for all plugin gateways that support tokenization.
 	 */
 
-	abstract class Woodev_Payment_Gateway_Plugin extends Woodev_Plugin {
+	abstract class Woodev_Payment_Gateway_Plugin extends \Woodev\Framework\Woocommerce_Plugin {
 
 		/** Customer ID feature */
 		const FEATURE_CUSTOMER_ID = 'customer_id';

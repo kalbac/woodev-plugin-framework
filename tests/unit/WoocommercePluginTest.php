@@ -13,8 +13,11 @@ use Brain\Monkey\Functions;
 use Mockery;
 
 require_once dirname( __DIR__, 2 ) . '/woodev/class-plugin.php';
+require_once dirname( __DIR__, 2 ) . '/woodev/handlers/blocks-handler.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/class-woocommerce-plugin.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/class-woocommerce-plugin-alias.php';
+require_once dirname( __DIR__, 2 ) . '/woodev/payment-gateway/class-payment-gateway-plugin.php';
+require_once dirname( __DIR__, 2 ) . '/woodev/shipping-method/class-shipping-plugin.php';
 
 if ( ! class_exists( '\WP_REST_Controller', false ) ) {
 	/**
@@ -226,13 +229,6 @@ class Testable_Woocommerce_Plugin extends \Woodev_Woocommerce_Plugin {
 	 *
 	 * @return void
 	 */
-	public function handle_features_compatibility(): void {}
-
-	/**
-	 * No-op callback used for hook registration assertions.
-	 *
-	 * @return void
-	 */
 	public function add_class_form_wrap_start(): void {}
 
 	/**
@@ -299,6 +295,19 @@ class WoocommercePluginTest extends TestCase {
 	}
 
 	/**
+	 * Defines a WooCommerce FeaturesUtil stub for isolated feature declaration tests.
+	 *
+	 * @return void
+	 */
+	private function reset_woocommerce_features_util_stub(): void {
+		if ( ! class_exists( '\\Automattic\\WooCommerce\\Utilities\\FeaturesUtil', false ) ) {
+			eval( 'namespace Automattic\\WooCommerce\\Utilities; class FeaturesUtil { public static $declared = []; public static function declare_compatibility( $feature, $plugin_file, $compatible ) { self::$declared[] = [ $feature, $plugin_file, $compatible ]; } }' );
+		}
+
+		\Automattic\WooCommerce\Utilities\FeaturesUtil::$declared = [];
+	}
+
+	/**
 	 * WordPress-only plugins should not initialize WooCommerce runtime state.
 	 */
 	public function test_wordpress_plugin_does_not_register_woocommerce_runtime_hooks(): void {
@@ -361,6 +370,74 @@ class WoocommercePluginTest extends TestCase {
 		$plugin = new Testable_Wordpress_Plugin( 'test-wordpress-plugin', '1.0.0' );
 
 		$plugin->load_template( 'admin/test.php' );
+	}
+
+	/**
+	 * Pure WordPress plugin feature compatibility should not declare WooCommerce features.
+	 *
+	 * @return void
+	 */
+	public function test_wordpress_plugin_feature_compatibility_is_runtime_neutral(): void {
+		$this->mock_wordpress_plugin_construction_functions();
+		$this->reset_woocommerce_features_util_stub();
+
+		$plugin = new Testable_Wordpress_Plugin( 'test-wordpress-plugin', '1.0.0' );
+
+		$plugin->handle_features_compatibility();
+
+		$this->assertFalse( $plugin->is_hpos_compatible() );
+		$this->assertSame( [], \Automattic\WooCommerce\Utilities\FeaturesUtil::$declared );
+	}
+
+	/**
+	 * WooCommerce plugin feature compatibility should declare WooCommerce features.
+	 *
+	 * @return void
+	 */
+	public function test_woocommerce_plugin_feature_compatibility_declares_woocommerce_features(): void {
+		$this->mock_wordpress_plugin_construction_functions();
+		$this->reset_woocommerce_features_util_stub();
+
+		$plugin = new Testable_Woocommerce_Plugin();
+
+		$supported_features = new \ReflectionProperty( \Woodev_Woocommerce_Plugin::class, 'supported_features' );
+		$supported_features->setValue(
+			$plugin,
+			[
+				'hpos'   => false,
+				'blocks' => [
+					'cart'     => true,
+					'checkout' => false,
+				],
+			]
+		);
+
+		$blocks_handler = Mockery::mock( \Woodev_Blocks_Handler::class );
+		$blocks_handler->shouldReceive( 'is_cart_block_compatible' )->once()->andReturn( true );
+		$blocks_handler->shouldReceive( 'is_checkout_block_compatible' )->once()->andReturn( false );
+
+		$blocks_handler_property = new \ReflectionProperty( \Woodev_Plugin::class, 'blocks_handler' );
+		$blocks_handler_property->setValue( $plugin, $blocks_handler );
+
+		$plugin->handle_features_compatibility();
+
+		$this->assertSame(
+			[
+				[ 'custom_order_tables', $plugin->get_plugin_file(), false ],
+				[ 'cart_checkout_blocks', $plugin->get_plugin_file(), false ],
+			],
+			\Automattic\WooCommerce\Utilities\FeaturesUtil::$declared
+		);
+	}
+
+	/**
+	 * Specialized WooCommerce plugin bases should inherit WooCommerce platform behavior.
+	 *
+	 * @return void
+	 */
+	public function test_specialized_woocommerce_plugin_bases_extend_woocommerce_plugin_base(): void {
+		$this->assertTrue( is_subclass_of( \Woodev_Payment_Gateway_Plugin::class, \Woodev_Woocommerce_Plugin::class ) );
+		$this->assertTrue( is_subclass_of( \Woodev\Framework\Shipping\Shipping_Plugin::class, \Woodev_Woocommerce_Plugin::class ) );
 	}
 
 	/**

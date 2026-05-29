@@ -1,5 +1,29 @@
 # Session Log — Woodev Plugin Framework
 
+## Platform v2 WooCommerce feature compatibility ownership (2026-05-29)
+
+### Implementation
+- Continued Phase 3 with the remaining WooCommerce feature compatibility ownership slice.
+- Moved HPOS/Cart/Checkout Blocks feature declarations from pure `Woodev_Plugin` into `Woodev\Framework\Woocommerce_Plugin`.
+- Kept installed-site public wrappers on `Woodev_Plugin`: `handle_features_compatibility()` is runtime-neutral, `get_supported_features()` returns an empty array, and `is_hpos_compatible()` returns false.
+- Updated `Woodev_Payment_Gateway_Plugin` and `Woodev\Framework\Shipping\Shipping_Plugin` to inherit from `Woodev\Framework\Woocommerce_Plugin`, preserving feature declarations for specialized WooCommerce plugin paths.
+- Updated resolver early capability loading so payment/shipping capabilities load the WooCommerce base first and source early classes from the selected framework copy, not the current plugin registration path.
+- Fixed `Shipping_Plugin::get_shipping_method()` nullable parameter declaration exposed by loading the shipping base in isolated unit tests.
+- Preserved production include-based loading and did not expand resolver scope into payment, shipping, licensing, or runtime behavior beyond early class availability.
+
+### Verification
+- `composer test -- --filter WoocommercePluginTest` passed: 9 tests / 30 assertions.
+- `composer test -- --filter FrameworkResolverTest` passed: 12 tests / 38 assertions.
+- `composer check` passed: PHPCS 113/113, PHPStan 0 errors, PHPUnit 135 tests / 230 assertions.
+- Independent review found and fixes addressed: specialized bases missing WooCommerce inheritance, payment/shipping early capabilities missing WooCommerce base dependency, selected framework path not used for early class loading, and autoload-enabled `class_exists()` checks in resolver.
+- Gotcha compilation: updated existing `docs-internal/gotchas/multiversion-early-class-guards.md`; no new gotcha file required.
+- Commit: pending at time of entry creation; final commit hash reported in chat.
+
+### Next
+- Inspect remaining WooCommerce-adjacent helpers in `Woodev_Plugin` and decide whether one more true runtime ownership slice remains.
+- If no safe slice remains, stop Phase 3 and proceed to the next Platform v2 step from `platform-v2-implementation-spec.md`.
+- Do not rewrite production plugin loaders until migration contract docs exist.
+
 ## Platform v2 WooCommerce template loader ownership (2026-05-29)
 
 ### Implementation

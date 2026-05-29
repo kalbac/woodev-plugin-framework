@@ -17,7 +17,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 
-	abstract class Shipping_Plugin extends \Woodev_Plugin {
+	abstract class Shipping_Plugin extends \Woodev\Framework\Woocommerce_Plugin {
 
 		/** @var array optional associative array of shipping method id */
 		private array $methods = [];
@@ -627,7 +627,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		 * @return Shipping_Method the shipping method object
 		 * @since 1.5.0
 		 */
-		public function get_shipping_method( string $shipping_method_id = null ): Shipping_Method {
+		public function get_shipping_method( ?string $shipping_method_id = null ): Shipping_Method {
 
 			// default to first shipping method
 			if ( is_null( $shipping_method_id ) ) {

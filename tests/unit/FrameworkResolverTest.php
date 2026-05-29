@@ -31,6 +31,37 @@ class Resolver_Main_Class_Only_Plugin {
 }
 
 /**
+ * Test helper exposing protected resolver methods.
+ */
+class Resolver_Testable_Framework_Resolver extends \Woodev\Framework\Framework_Resolver {
+
+	/** @var list<string> Plugin files used for path resolution. */
+	public array $path_requests = [];
+
+	/**
+	 * Exposes early capability class loading for assertions.
+	 *
+	 * @param array<string,mixed> $plugin Registered plugin.
+	 * @return void
+	 */
+	public function load_early_classes_for_test( array $plugin, array $framework_plugin = [] ): void {
+		$this->load_early_capability_classes( $plugin, $framework_plugin );
+	}
+
+	/**
+	 * Returns a predictable plugin path for resolver assertions.
+	 *
+	 * @param string $file Plugin file.
+	 * @return string
+	 */
+	public function get_plugin_path( string $file ): string {
+		$this->path_requests[] = $file;
+
+		return dirname( __DIR__, 2 );
+	}
+}
+
+/**
  * Class FrameworkResolverTest
  */
 class FrameworkResolverTest extends TestCase {
@@ -303,6 +334,81 @@ class FrameworkResolverTest extends TestCase {
 		$registered = $resolver->get_registered_plugins();
 
 		$this->assertSame( '0', $registered[0]['args']['minimum_wc_version'] );
+	}
+
+	/**
+	 * Specialized WooCommerce capabilities should make the WooCommerce base available first.
+	 */
+	public function test_specialized_capabilities_load_woocommerce_base_dependency(): void {
+		$errors     = [];
+		$definition = \Woodev\Framework\Framework_Plugin_Loader_Definition::from_array(
+			$this->get_loader_definition(
+				[
+					'plugin_file'  => dirname( __DIR__, 2 ) . '/woodev-test-plugin.php',
+					'platform'     => \Woodev\Framework\Framework_Plugin_Loader_Definition::PLATFORM_WOOCOMMERCE,
+					'requirements' => [
+						'php'         => '7.4',
+						'wordpress'   => '6.3',
+						'woocommerce' => '7.0',
+					],
+					'capabilities' => [
+						\Woodev\Framework\Framework_Plugin_Loader_Definition::CAPABILITY_PAYMENT_GATEWAY,
+						\Woodev\Framework\Framework_Plugin_Loader_Definition::CAPABILITY_SHIPPING_METHOD,
+					],
+				]
+			),
+			$errors
+		);
+
+		Functions\when( 'plugin_dir_path' )->justReturn( dirname( __DIR__, 2 ) . '/' );
+		Functions\when( 'untrailingslashit' )->alias(
+			static function ( string $path ): string {
+				return rtrim( $path, '/\\' );
+			}
+		);
+
+		$resolver = new Resolver_Testable_Framework_Resolver();
+		$resolver->load_early_classes_for_test( $definition->to_legacy_plugin() );
+
+		$this->assertSame( [], $errors );
+		$this->assertTrue( class_exists( \Woodev\Framework\Woocommerce_Plugin::class, false ) );
+		$this->assertTrue( class_exists( \Woodev_Payment_Gateway_Plugin::class, false ) );
+		$this->assertTrue( class_exists( \Woodev\Framework\Shipping\Shipping_Plugin::class, false ) );
+	}
+
+	/**
+	 * Early capability classes should load from the selected framework copy.
+	 */
+	public function test_specialized_capabilities_use_selected_framework_path(): void {
+		$errors     = [];
+		$definition = \Woodev\Framework\Framework_Plugin_Loader_Definition::from_array(
+			$this->get_loader_definition(
+				[
+					'plugin_file'  => 'lower-version-plugin.php',
+					'platform'     => \Woodev\Framework\Framework_Plugin_Loader_Definition::PLATFORM_WOOCOMMERCE,
+					'requirements' => [
+						'php'         => '7.4',
+						'wordpress'   => '6.3',
+						'woocommerce' => '7.0',
+					],
+					'capabilities' => [
+						\Woodev\Framework\Framework_Plugin_Loader_Definition::CAPABILITY_PAYMENT_GATEWAY,
+					],
+				]
+			),
+			$errors
+		);
+
+		$resolver = new Resolver_Testable_Framework_Resolver();
+		$resolver->load_early_classes_for_test(
+			$definition->to_legacy_plugin(),
+			[
+				'path' => 'selected-framework-plugin.php',
+			]
+		);
+
+		$this->assertSame( [], $errors );
+		$this->assertSame( [ 'selected-framework-plugin.php' ], $resolver->path_requests );
 	}
 
 	/**

@@ -37,9 +37,6 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		/** @var string template path, without trailing slash */
 		private $template_path;
 
-		/** @var array{ hpos?: bool, blocks?: array{ cart?: bool, checkout?: bool }} plugin compatibility flags */
-		private $supported_features;
-
 		/** @var Woodev_Plugins_License instance */
 		protected $license;
 
@@ -83,15 +80,7 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		 * @param string $id plugin id
 		 * @param string $version plugin version number
 		 * @param array{
-		 *     latest_wc_versions?: int|float,
 		 *     text_domain?: string,
-		 *     supported_features?: array{
-		 *          hpos?: bool,
-		 *          blocks?: array{
-		 *               cart?: bool,
-		 *               checkout?: bool
-		 *          }
-		 *     },
 		 *     dependencies?: array{
 		 *          php_extensions?: array<string, mixed>,
 		 *          php_functions?: array<string, mixed>,
@@ -762,18 +751,13 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		}
 
 		/**
-		/**
-		 * Declares compatibility with specific WooCommerce features.
+		 * Declares compatibility with platform-specific features.
 		 *
 		 * @internal
 		 *
 		 * @since 1.3.2
 		 */
-		public function handle_features_compatibility(): void {
-
-			Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility( 'custom_order_tables', $this->get_plugin_file(), $this->is_hpos_compatible() );
-			Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility( 'cart_checkout_blocks', $this->get_plugin_file(), $this->get_blocks_handler()->is_cart_block_compatible() && $this->get_blocks_handler()->is_checkout_block_compatible() );
-		}
+		public function handle_features_compatibility(): void {}
 
 		/**
 		 * Automatically log API requests/responses when using Woodev_API_Base
@@ -915,7 +899,7 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		 * @return array{ hpos?: bool, blocks?: array{ cart?: bool, checkout?: bool }}
 		 */
 		public function get_supported_features(): array {
-			return $this->supported_features ?? [];
+			return [];
 		}
 
 		/**
@@ -926,9 +910,7 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		 * @return bool
 		 */
 		public function is_hpos_compatible() {
-			return isset( $this->supported_features['hpos'] )
-					&& true === $this->supported_features['hpos']
-					&& Woodev_Plugin_Compatibility::is_wc_version_gte( '7.6' );
+			return false;
 		}
 
 		/**

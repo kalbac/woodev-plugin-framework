@@ -22,7 +22,7 @@
 - [bootstrap/singleton-instantiation] Bootstrap is singleton, constructor is private → [gotchas/singleton-instantiation.md](gotchas/singleton-instantiation.md) (s2)
 - [bootstrap/plugin-registration-timing] register_plugin() must run before plugins_loaded → [gotchas/plugin-registration-timing.md](gotchas/plugin-registration-timing.md) (s2)
 - [bootstrap/payment-gateway-conditional-load] Payment gateway base class loaded only when is_payment_gateway arg is set → [gotchas/payment-gateway-conditional-load.md](gotchas/payment-gateway-conditional-load.md) (s2)
-- [bootstrap/multiversion-early-class-guards] Early-loaded bootstrap support classes must be guarded against redeclare across vendored framework copies → [gotchas/multiversion-early-class-guards.md](gotchas/multiversion-early-class-guards.md) (s4)
+- [bootstrap/multiversion-early-class-guards] Early-loaded support classes must be guarded and loaded from the selected framework copy → [gotchas/multiversion-early-class-guards.md](gotchas/multiversion-early-class-guards.md) (s4)
 
 ### [compat/*] — Backward compatibility, HPOS
 - [compat/hpos-order-meta-safety] Never use get_post_meta() on orders — use Woodev_Order_Compatibility → [gotchas/hpos-order-meta-safety.md](gotchas/hpos-order-meta-safety.md) (s2)
