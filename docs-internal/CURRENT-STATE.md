@@ -1,5 +1,5 @@
 # Current State — Woodev Plugin Framework
-> Last updated: 2026-05-29 (Platform v2 Phase 3 WooCommerce runtime state ownership)
+> Last updated: 2026-05-29 (Platform v2 Phase 3 WooCommerce system-status ownership)
 
 ## Phase Status
 
@@ -49,7 +49,7 @@
 | 7 Deep analysis | ✅ 2026-05-29 | `docs-internal/platform-v2-next-analysis.md`, ADR-003, ADR-004 — resolver, loader API, migration contracts |
 | 8 Implementation spec | ✅ 2026-05-29 | `docs-internal/platform-v2-implementation-spec.md` — active source for resolver-first implementation |
 | 9 PHP implementation | ✅ 2026-05-29 | Resolver facade + explicit loader definition slice implemented |
-| 10 Platform class split | ⏳ 2026-05-29 | Hook ownership + initial WooCommerce feature/Blocks state moved to `Woodev_Woocommerce_Plugin`; pure WP constructor covered |
+| 10 Platform class split | ⏳ 2026-05-29 | Hook ownership, initial WooCommerce feature/Blocks state, and WooCommerce system-status row ownership moved to `Woodev_Woocommerce_Plugin`; pure WP constructor covered |
 
 ## Planned — v2.0.0 & Beyond
 
@@ -87,7 +87,7 @@
 
 ## Active Queue
 
-> Platform v2 resolver facade + explicit loader definition slice is complete. Phase 3 has moved WooCommerce hook ownership plus initial `supported_features`/Blocks handler construction into `Woodev_Woocommerce_Plugin`. Next step: continue Phase 3 with another small tested slice of WooCommerce runtime ownership; do not expand resolver into runtime behavior or rewrite production plugin loaders before migration contracts.
+> Platform v2 resolver facade + explicit loader definition slice is complete. Phase 3 has moved WooCommerce hook ownership, initial `supported_features`/Blocks handler construction, and WooCommerce system-status row ownership into `Woodev_Woocommerce_Plugin`. Next step: continue Phase 3 with another small tested slice of WooCommerce runtime ownership; do not expand resolver into runtime behavior or rewrite production plugin loaders before migration contracts.
 
 ## Infrastructure Reference
 

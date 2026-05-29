@@ -1,5 +1,26 @@
 # Session Log — Woodev Plugin Framework
 
+## Platform v2 WooCommerce system-status ownership (2026-05-29)
+
+### Implementation
+- Continued Phase 3 strictly from `docs-internal/platform-v2-implementation-spec.md`, ADR-003, ADR-004, and the multi-version early class guard gotcha.
+- Moved WooCommerce system-status PHP incompatibility row generation from `Woodev_Plugin` into `Woodev\Framework\Woocommerce_Plugin`.
+- Kept the installed-site WooCommerce hook contract intact: `Woodev\Framework\Woocommerce_Plugin::add_woocommerce_hooks()` still registers `woocommerce_system_status_environment_rows` against the same public method name.
+- Removed the WooCommerce system-status method from pure `Woodev_Plugin` so WordPress-only plugin construction no longer carries this WooCommerce runtime surface.
+- Added constructor isolation coverage proving pure WordPress `Woodev_Plugin` loading does not initialize Blocks state and does not call WooCommerce system-status row generation.
+- Preserved production include-based loading and did not expand resolver scope into payment, shipping, licensing, or runtime behavior.
+
+### Verification
+- `composer test -- --filter WoocommercePluginTest` passed: 2 tests / 18 assertions.
+- `composer check` passed twice after final cleanup: PHPCS 113/113, PHPStan 0 errors, PHPUnit 126 tests / 212 assertions.
+- Gotcha compilation: no new non-obvious gotcha discovered; no `docs-internal/gotchas/` update required.
+- Commit: pending at time of entry creation; final commit hash reported in chat.
+
+### Next
+- Continue Phase 3 with another small tested WooCommerce runtime ownership slice from `Woodev_Plugin` to `Woodev_Woocommerce_Plugin`.
+- Good next candidates: WooCommerce logger helpers or WooCommerce template helpers; preserve public wrappers where installed-site compatibility requires them.
+- Do not rewrite production plugin loaders until migration contract docs exist.
+
 ## Platform v2 WooCommerce runtime state ownership (2026-05-29)
 
 ### Implementation

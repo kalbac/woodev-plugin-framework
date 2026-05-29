@@ -37,6 +37,13 @@ class Testable_Wordpress_Plugin extends \Woodev_Plugin {
 	public $blocks_handler_initialized = false;
 
 	/**
+	 * Whether WooCommerce system status row generation was called.
+	 *
+	 * @var bool
+	 */
+	public $system_status_information_added = false;
+
+	/**
 	 * No-op dependency initialization for constructor isolation.
 	 *
 	 * @param array<string,mixed> $dependencies Dependencies configuration.
@@ -101,6 +108,18 @@ class Testable_Wordpress_Plugin extends \Woodev_Plugin {
 	 * @return void
 	 */
 	protected function init_setup_wizard_handler() {}
+
+	/**
+	 * Marks any accidental WooCommerce system status row generation.
+	 *
+	 * @param array<string,mixed> $rows System status rows.
+	 * @return array<string,mixed>
+	 */
+	public function add_system_status_php_information( $rows ) {
+		$this->system_status_information_added = true;
+
+		return $rows;
+	}
 
 	/**
 	 * Gets the plugin file.
@@ -251,6 +270,7 @@ class WoocommercePluginTest extends TestCase {
 		$plugin = new Testable_Wordpress_Plugin( 'test-wordpress-plugin', '1.0.0' );
 
 		$this->assertFalse( $plugin->blocks_handler_initialized );
+		$this->assertFalse( $plugin->system_status_information_added );
 	}
 
 	/**

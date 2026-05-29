@@ -98,6 +98,50 @@ if ( ! class_exists( Woocommerce_Plugin::class, false ) ) :
 		}
 
 		/**
+		 * Adds any PHP incompatibilities to the WooCommerce system status report.
+		 *
+		 * @since 2.0.0
+		 *
+		 * @param array<string,mixed> $rows WooCommerce system status rows.
+		 * @return array<string,mixed>
+		 */
+		public function add_system_status_php_information( $rows ) {
+
+			foreach ( $this->get_dependency_handler()->get_incompatible_php_settings() as $setting => $values ) {
+
+				if ( isset( $values['type'] ) && 'min' === $values['type'] ) {
+
+					// if this setting already has a higher minimum from another plugin, skip it
+					if ( isset( $rows[ $setting ]['expected'] ) && $values['expected'] < $rows[ $setting ]['expected'] ) {
+						continue;
+					}
+
+					$note = __( '%1$s - A minimum of %2$s is required.', 'woodev-plugin-framework' );
+
+				} else {
+
+					// if this requirement is already listed, skip it
+					if ( isset( $rows[ $setting ] ) ) {
+						continue;
+					}
+
+					$note = __( 'Set as %1$s - %2$s is required.', 'woodev-plugin-framework' );
+				}
+
+				$note = sprintf( $note, $values['actual'], $values['expected'] );
+
+				$rows[ $setting ] = [
+					'name'     => $setting,
+					'note'     => $note,
+					'success'  => false,
+					'expected' => $values['expected'], // WC doesn't use this, but it's useful for us
+				];
+			}
+
+			return $rows;
+		}
+
+		/**
 		 * Gets a list of the plugin's WooCommerce compatibility flags.
 		 *
 		 * @since 2.0.0
