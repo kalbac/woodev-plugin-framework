@@ -1,5 +1,5 @@
 # Current State — Woodev Plugin Framework
-> Last updated: 2026-05-29 (Platform v2 implementation spec)
+> Last updated: 2026-05-29 (Platform v2 resolver facade implementation)
 
 ## Phase Status
 
@@ -48,7 +48,8 @@
 | 6 Strategy alignment | ✅ 2026-05-29 | `docs-internal/platform-v2-strategy-alignment.md` — hybrid roadmap, rewrite-first migration, minimal resolver |
 | 7 Deep analysis | ✅ 2026-05-29 | `docs-internal/platform-v2-next-analysis.md`, ADR-003, ADR-004 — resolver, loader API, migration contracts |
 | 8 Implementation spec | ✅ 2026-05-29 | `docs-internal/platform-v2-implementation-spec.md` — active source for resolver-first implementation |
-| 9 PHP implementation | ⏳ | Next: start from resolver facade tests and explicit loader definition, not from stale Epic 1 bridge-first plan |
+| 9 PHP implementation | ✅ 2026-05-29 | Resolver facade + explicit loader definition slice implemented; platform class split remains next |
+| 10 Platform class split | ⏳ | Next: move WooCommerce runtime assumptions from `Woodev_Plugin` into `Woodev_Woocommerce_Plugin` behind resolver tests |
 
 ## Planned — v2.0.0 & Beyond
 
@@ -86,7 +87,7 @@
 
 ## Active Queue
 
-> Platform v2 implementation spec is complete. Next step: begin PHP implementation from `docs-internal/platform-v2-implementation-spec.md`, starting with resolver facade tests and explicit loader definition.
+> Platform v2 resolver facade + explicit loader definition slice is complete. Next step: continue from `docs-internal/platform-v2-implementation-spec.md` Phase 3: move WooCommerce runtime ownership into `Woodev_Woocommerce_Plugin` without expanding resolver scope.
 
 ## Infrastructure Reference
 

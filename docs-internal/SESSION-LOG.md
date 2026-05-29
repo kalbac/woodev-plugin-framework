@@ -1,5 +1,23 @@
 # Session Log — Woodev Plugin Framework
 
+## Platform v2 resolver facade implementation (2026-05-29)
+
+### Implementation
+- Started strictly from `docs-internal/platform-v2-implementation-spec.md`, ADR-003, and ADR-004; applied section 14 keep/discard before reusing spike assumptions.
+- Added `Woodev_Framework_Plugin_Loader_Definition` with explicit `plugin_id`, `plugin_name`, versions, `plugin_file`, closed platform values, requirements, `main_class`/`callback`, and early capabilities.
+- Added `Woodev_Framework_Resolver` as the minimal resolver behind the compatibility facade: registration normalization, version sorting, PHP/WP/WC requirement gates, early capability class loading, invalid-definition tracking, notices, and callback/main-class invocation.
+- Refactored `Woodev_Plugin_Bootstrap` into a thin compatibility facade over the resolver while keeping `instance()`, legacy `register_plugin()`, reflected state, notices, and helper wrappers available.
+- Added thin `Woodev_Woocommerce_Plugin` class as the future WooCommerce runtime owner; no WooCommerce runtime behavior was moved in this slice.
+- Kept legacy `is_payment_gateway` and `load_shipping_method` only as early capability adapter inputs, not as runtime type truth.
+- Guarded new globally named early-loaded classes with `class_exists(..., false)` to preserve multi-version vendored include safety.
+
+### Verification
+- Pre-commit review found four resolver risks; fixed multi-version redeclare guards, `main_class`-only invocation, legacy WC capability notice data, and PHP requirement enforcement.
+- Added `tests/unit/FrameworkResolverTest.php` covering explicit definitions, invalid definitions, reserved EDD, capability validation, no-WooCommerce WordPress loading, WooCommerce skip, `main_class` bootstrap, PHP skip, and legacy capability mapping.
+- `composer check` ✅: PHPCS, PHPStan, and 124 unit tests / 194 assertions green.
+- Gotcha compilation: added `docs-internal/gotchas/multiversion-early-class-guards.md` and indexed it in `GOTCHAS.md`.
+- Commit: pending at time of entry creation; final commit hash reported in chat.
+
 ## Platform v2 implementation spec (2026-05-29)
 
 ### Planning output

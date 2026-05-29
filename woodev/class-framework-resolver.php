@@ -1,0 +1,618 @@
+<?php
+/**
+ * Platform v2 minimal framework resolver.
+ *
+ * @package Woodev\Framework
+ */
+
+defined( 'ABSPATH' ) || exit;
+
+if ( ! class_exists( 'Woodev_Framework_Resolver', false ) ) :
+
+	/**
+	 * Resolves registered framework copies and invokes compatible plugin callbacks.
+	 *
+	 * This class owns early loading infrastructure only. Runtime behavior stays in
+	 * platform plugin classes and specialized modules.
+	 *
+	 * @since 2.0.0
+	 */
+	class Woodev_Framework_Resolver {
+
+		/** @var array<int,array<string,mixed>> Registered plugin arrays. */
+		protected array $registered_plugins = [];
+
+		/** @var array<int,array<string,mixed>> Active plugin arrays. */
+		protected array $active_plugins = [];
+
+		/** @var array<int,array<string,mixed>> Framework-incompatible plugins. */
+		protected array $incompatible_framework_plugins = [];
+
+		/** @var array<int,array<string,mixed>> WooCommerce-incompatible plugins. */
+		protected array $incompatible_wc_version_plugins = [];
+
+		/** @var array<int,array<string,mixed>> WordPress-incompatible plugins. */
+		protected array $incompatible_wp_version_plugins = [];
+
+		/** @var array<int,array<string,mixed>> PHP-incompatible plugins. */
+		protected array $incompatible_php_version_plugins = [];
+
+		/** @var array<int,array<string,mixed>> Invalid loader definitions. */
+		protected array $invalid_loader_definitions = [];
+
+		/**
+		 * Registers an explicit Platform v2 loader definition.
+		 *
+		 * @since 2.0.0
+		 *
+		 * @param array<string,mixed> $definition Raw loader definition.
+		 * @return bool True when the definition is accepted.
+		 */
+		public function register_loader_definition( array $definition ): bool {
+			$errors            = [];
+			$loader_definition = Woodev_Framework_Plugin_Loader_Definition::from_array( $definition, $errors );
+
+			if ( null === $loader_definition ) {
+				$this->invalid_loader_definitions[] = [
+					'definition' => $definition,
+					'errors'     => $errors,
+				];
+
+				return false;
+			}
+
+			$this->registered_plugins[] = $loader_definition->to_legacy_plugin();
+
+			return true;
+		}
+
+		/**
+		 * Registers a legacy register_plugin() call through the temporary adapter.
+		 *
+		 * @since 2.0.0
+		 *
+		 * @param string   $framework_version Framework version.
+		 * @param string   $plugin_name       Plugin name.
+		 * @param string   $path              Plugin file path.
+		 * @param callable $callback          Initialization callback.
+		 * @param array    $args              Legacy args.
+		 * @return bool True when the definition is accepted.
+		 */
+		public function register_legacy_plugin(
+			string $framework_version,
+			string $plugin_name,
+			string $path,
+			callable $callback,
+			array $args = []
+		): bool {
+			$errors            = [];
+			$loader_definition = Woodev_Framework_Plugin_Loader_Definition::from_legacy_registration(
+				$framework_version,
+				$plugin_name,
+				$path,
+				$callback,
+				$args,
+				$errors
+			);
+
+			if ( null === $loader_definition ) {
+				$this->invalid_loader_definitions[] = [
+					'definition' => $args,
+					'errors'     => $errors,
+				];
+
+				return false;
+			}
+
+			$this->registered_plugins[] = $loader_definition->to_legacy_plugin( $args );
+
+			return true;
+		}
+
+		/**
+		 * Loads compatible registered plugins.
+		 *
+		 * @since 2.0.0
+		 *
+		 * @return void
+		 */
+		public function load_plugins(): void {
+			usort( $this->registered_plugins, [ $this, 'framework_compare' ] );
+
+			$loaded_framework = null;
+
+			foreach ( $this->registered_plugins as $plugin ) {
+				if ( ! class_exists( 'Woodev_Plugin' ) ) {
+					require_once $this->get_plugin_path( $plugin['path'] ) . '/woodev/class-plugin.php';
+					$loaded_framework       = $plugin;
+					$this->active_plugins[] = $plugin;
+				}
+
+				if ( ! empty( $loaded_framework['args']['backwards_compatible'] ) && version_compare( $loaded_framework['args']['backwards_compatible'], $plugin['version'], '>' ) ) {
+					$this->incompatible_framework_plugins[] = $plugin;
+					continue;
+				}
+
+				if ( $this->fails_php_requirement( $plugin ) ) {
+					$this->incompatible_php_version_plugins[] = $plugin;
+					continue;
+				}
+
+				if ( $this->fails_wordpress_requirement( $plugin ) ) {
+					$this->incompatible_wp_version_plugins[] = $plugin;
+					continue;
+				}
+
+				if ( $this->fails_woocommerce_requirement( $plugin ) ) {
+					$this->incompatible_wc_version_plugins[] = $plugin;
+					continue;
+				}
+
+				if ( ! in_array( $plugin, $this->active_plugins, true ) ) {
+					$this->active_plugins[] = $plugin;
+				}
+
+				$this->load_early_capability_classes( $plugin );
+				$this->invoke_plugin( $plugin );
+			}
+
+			if ( $this->has_update_notices() && is_admin() && ! defined( 'DOING_AJAX' ) && ! has_action( 'admin_notices', [ Woodev_Plugin_Bootstrap::instance(), 'render_update_notices' ] ) ) {
+				add_action( 'admin_notices', [ Woodev_Plugin_Bootstrap::instance(), 'render_update_notices' ] );
+			}
+
+			do_action( 'woodev_plugins_loaded' );
+		}
+
+		/**
+		 * Handles the compatibility deactivation action.
+		 *
+		 * @since 2.0.0
+		 *
+		 * @return void
+		 */
+		public function maybe_deactivate_framework_plugins(): void {
+			if ( ! isset( $_GET['woodev_framework_deactivate_newer'] ) ) {
+				return;
+			}
+
+			if ( 'yes' === sanitize_text_field( $_GET['woodev_framework_deactivate_newer'] ) ) {
+				if ( ! isset( $_GET['_wpnonce'] ) || ! wp_verify_nonce( sanitize_key( $_GET['_wpnonce'] ), 'woodev_framework_deactivate' ) ) {
+					return;
+				}
+
+				if ( 0 === count( $this->incompatible_framework_plugins ) ) {
+					return;
+				}
+
+				$plugins = [];
+
+				foreach ( $this->active_plugins as $plugin ) {
+					$plugins[] = plugin_basename( $plugin['path'] );
+				}
+
+				deactivate_plugins( $plugins );
+
+				wp_safe_redirect(
+					add_query_arg(
+						[
+							'plugin_status'                     => 'inactive',
+							'woodev_framework_deactivate_newer' => count( $plugins ),
+						],
+						admin_url( 'plugins.php' )
+					)
+				);
+
+				exit;
+			}
+
+			add_action( 'admin_notices', [ Woodev_Plugin_Bootstrap::instance(), 'render_deactivation_notice' ] );
+		}
+
+		/**
+		 * Renders update notices for incompatible registrations.
+		 *
+		 * @since 2.0.0
+		 *
+		 * @return void
+		 */
+		public function render_update_notices(): void {
+			// Must update plugin notice.
+			if ( ! empty( $this->incompatible_framework_plugins ) ) {
+				$incompatible_plugin_count = count( $this->incompatible_framework_plugins );
+				$active_plugin_count       = count( $this->active_plugins );
+
+				$message  = '<p>';
+				$message .= sprintf(
+					_n( '%1$sAttention!%2$s The plugin %3$s was disabled because it is out of date and incompatible with the', '%1$sAttention!%2$s The plugins %3$s were disabled because they are out of date and incompatible with the', $incompatible_plugin_count, 'woodev-plugin-framework' ),
+					'<strong>',
+					'</strong>',
+					Woodev_Helper::list_array_items(
+						array_map(
+							function ( $plugin ) {
+								return sprintf( '<strong>%s</strong>', esc_html( $plugin['plugin_name'] ) );
+							},
+							$this->incompatible_framework_plugins
+						)
+					)
+				);
+				$message .= sprintf(
+					_n( ' newer plugin %s.', ' newer plugins %s.', $active_plugin_count, 'woodev-plugin-framework' ),
+					Woodev_Helper::list_array_items(
+						array_map(
+							function ( $plugin ) {
+								return sprintf( '<strong>%s</strong>', esc_html( $plugin['plugin_name'] ) );
+							},
+							$this->active_plugins
+						)
+					)
+				);
+				$message .= '</p><p>';
+				$message .= sprintf(
+					__( 'To resolve this, please %1$supdate%2$s (recommended) or %1$sdeactivate%2$s', 'woodev-plugin-framework' ),
+					'<a href="' . esc_url( admin_url( 'update-core.php' ) ) . '">',
+					'</a>'
+				);
+				$message .= sprintf(
+					_n( ' the plugin %1$s, or %2$sdeactivate%3$s', ' the plugins %1$s, or %2$sdeactivate%3$s', $incompatible_plugin_count, 'woodev-plugin-framework' ),
+					Woodev_Helper::list_array_items(
+						array_map(
+							function ( $plugin ) {
+								return sprintf( '<strong>%s</strong>', esc_html( $plugin['plugin_name'] ) );
+							},
+							$this->incompatible_framework_plugins
+						)
+					),
+					'<a href="' . esc_url( wp_nonce_url( admin_url( 'plugins.php?woodev_framework_deactivate_newer=yes' ), 'woodev_framework_deactivate' ) ) . '">',
+					'</a>'
+				);
+				$message .= sprintf(
+					_n( ' the plugin %s.', ' the plugins %s.', $active_plugin_count, 'woodev-plugin-framework' ),
+					Woodev_Helper::list_array_items(
+						array_map(
+							function ( $plugin ) {
+								return sprintf( '<strong>%s</strong>', esc_html( $plugin['plugin_name'] ) );
+							},
+							$this->active_plugins
+						)
+					)
+				);
+				$message .= '</p>';
+
+				echo '<div class="error">';
+				echo $message;
+				echo '</div>';
+			}
+
+			if ( ! empty( $this->incompatible_php_version_plugins ) ) {
+				printf( '<div class="error"><p>%s</p><ul>', count( $this->incompatible_php_version_plugins ) > 1 ? esc_html__( 'The following plugins are inactive because they require a newer version of PHP:', 'woodev-plugin-framework' ) : esc_html__( 'The following plugin is inactive because it requires a newer version of PHP:', 'woodev-plugin-framework' ) );
+
+				foreach ( $this->incompatible_php_version_plugins as $plugin ) {
+					echo '<li>' . sprintf( esc_html__( '%1$s requires PHP %2$s or newer', 'woodev-plugin-framework' ), esc_html( $plugin['plugin_name'] ), esc_html( $plugin['args']['minimum_php_version'] ) ) . '</li>';
+				}
+
+				echo '</ul></div>';
+			}
+
+			if ( ! empty( $this->incompatible_wc_version_plugins ) ) {
+				printf( '<div class="error"><p>%s</p><ul>', count( $this->incompatible_wc_version_plugins ) > 1 ? esc_html__( 'The following plugins are inactive because they require a newer version of WooCommerce:', 'woodev-plugin-framework' ) : esc_html__( 'The following plugin is inactive because it requires a newer version of WooCommerce:', 'woodev-plugin-framework' ) );
+
+				foreach ( $this->incompatible_wc_version_plugins as $plugin ) {
+					/* translators: Placeholders: %1$s - plugin name, %2$s - WooCommerce version number */
+					echo '<li>' . sprintf( esc_html__( '%1$s requires WooCommerce %2$s or newer', 'woodev-plugin-framework' ), esc_html( $plugin['plugin_name'] ), esc_html( $plugin['args']['minimum_wc_version'] ) ) . '</li>';
+				}
+
+				/* translators: Placeholders: %1$s - <a> tag, %2$s - </a> tag */
+				echo '</ul><p>' . sprintf( esc_html__( 'Please %1$supdate WooCommerce%2$s', 'woodev-plugin-framework' ), '<a href="' . esc_url( admin_url( 'update-core.php' ) ) . '">', '&nbsp;&raquo;</a>' ) . '</p></div>';
+			}
+
+			if ( ! empty( $this->incompatible_wp_version_plugins ) ) {
+				printf( '<div class="error"><p>%s</p>', count( $this->incompatible_wp_version_plugins ) > 1 ? esc_html__( 'The following plugins are inactive because they require a newer version of WordPress:', 'woodev-plugin-framework' ) : esc_html__( 'The following plugin is inactive because it requires a newer version of WordPress:', 'woodev-plugin-framework' ) );
+				echo '<ul>';
+
+				foreach ( $this->incompatible_wp_version_plugins as $plugin ) {
+					echo '<li>' . sprintf( esc_html__( '%1$s requires WordPress %2$s or newer', 'woodev-plugin-framework' ), esc_html( $plugin['plugin_name'] ), esc_html( $plugin['args']['minimum_wp_version'] ) ) . '</li>';
+				}
+
+				echo '</ul>';
+				echo '<p>' . sprintf( esc_html__( 'Please %1$supdate WordPress%2$s', 'woodev-plugin-framework' ), '<a href="' . esc_url( admin_url( 'update-core.php' ) ) . '">', '&nbsp;&raquo;</a>' ) . '</p></div>';
+			}
+		}
+
+		/**
+		 * Gets registered plugin arrays.
+		 *
+		 * @since 2.0.0
+		 *
+		 * @return array<int,array<string,mixed>>
+		 */
+		public function get_registered_plugins(): array {
+			return $this->registered_plugins;
+		}
+
+		/**
+		 * Gets active plugin arrays.
+		 *
+		 * @since 2.0.0
+		 *
+		 * @return array<int,array<string,mixed>>
+		 */
+		public function get_active_plugins(): array {
+			return $this->active_plugins;
+		}
+
+		/**
+		 * Gets framework-incompatible plugin arrays.
+		 *
+		 * @since 2.0.0
+		 *
+		 * @return array<int,array<string,mixed>>
+		 */
+		public function get_incompatible_framework_plugins(): array {
+			return $this->incompatible_framework_plugins;
+		}
+
+		/**
+		 * Gets WooCommerce-incompatible plugin arrays.
+		 *
+		 * @since 2.0.0
+		 *
+		 * @return array<int,array<string,mixed>>
+		 */
+		public function get_incompatible_wc_version_plugins(): array {
+			return $this->incompatible_wc_version_plugins;
+		}
+
+		/**
+		 * Gets WordPress-incompatible plugin arrays.
+		 *
+		 * @since 2.0.0
+		 *
+		 * @return array<int,array<string,mixed>>
+		 */
+		public function get_incompatible_wp_version_plugins(): array {
+			return $this->incompatible_wp_version_plugins;
+		}
+
+		/**
+		 * Gets PHP-incompatible plugin arrays.
+		 *
+		 * @since 2.0.0
+		 *
+		 * @return array<int,array<string,mixed>>
+		 */
+		public function get_incompatible_php_version_plugins(): array {
+			return $this->incompatible_php_version_plugins;
+		}
+
+		/**
+		 * Gets invalid loader definitions.
+		 *
+		 * @since 2.0.0
+		 *
+		 * @return array<int,array<string,mixed>>
+		 */
+		public function get_invalid_loader_definitions(): array {
+			return $this->invalid_loader_definitions;
+		}
+
+		/**
+		 * Compares two framework versions for highest-first sorting.
+		 *
+		 * @since 2.0.0
+		 *
+		 * @param array $a First registered plugin.
+		 * @param array $b Second registered plugin.
+		 * @return int
+		 */
+		public function framework_compare( array $a, array $b ): int {
+			return version_compare( $b['version'], $a['version'] );
+		}
+
+		/**
+		 * Returns the plugin path for a plugin file.
+		 *
+		 * @since 2.0.0
+		 *
+		 * @param string $file Plugin file.
+		 * @return string
+		 */
+		public function get_plugin_path( string $file ): string {
+			return untrailingslashit( plugin_dir_path( $file ) );
+		}
+
+		/**
+		 * Gets the currently loaded framework version.
+		 *
+		 * @since 2.0.0
+		 *
+		 * @return string
+		 */
+		public function get_framework_version(): string {
+			return class_exists( 'Woodev_Plugin' ) ? \Woodev_Plugin::VERSION : '';
+		}
+
+		/**
+		 * Checks whether a plugin fails the PHP requirement.
+		 *
+		 * @since 2.0.0
+		 *
+		 * @param array<string,mixed> $plugin Registered plugin.
+		 * @return bool
+		 */
+		protected function fails_php_requirement( array $plugin ): bool {
+			$definition = $plugin['definition'] ?? null;
+
+			if ( ! $definition instanceof Woodev_Framework_Plugin_Loader_Definition ) {
+				return false;
+			}
+
+			$requirements = $definition->get_requirements();
+			$minimum      = $requirements['php'] ?? null;
+
+			if ( null === $minimum || '0' === $minimum ) {
+				return false;
+			}
+
+			return version_compare( PHP_VERSION, $minimum, '<' );
+		}
+
+		/**
+		 * Checks whether a plugin fails the WordPress requirement.
+		 *
+		 * @since 2.0.0
+		 *
+		 * @param array<string,mixed> $plugin Registered plugin.
+		 * @return bool
+		 */
+		protected function fails_wordpress_requirement( array $plugin ): bool {
+			if ( empty( $plugin['args']['minimum_wp_version'] ) ) {
+				return false;
+			}
+
+			return version_compare( get_bloginfo( 'version' ), $plugin['args']['minimum_wp_version'], '<' );
+		}
+
+		/**
+		 * Checks whether a plugin fails the WooCommerce requirement.
+		 *
+		 * @since 2.0.0
+		 *
+		 * @param array<string,mixed> $plugin Registered plugin.
+		 * @return bool
+		 */
+		protected function fails_woocommerce_requirement( array $plugin ): bool {
+			$definition = $plugin['definition'] ?? null;
+
+			if ( ! $definition instanceof Woodev_Framework_Plugin_Loader_Definition ) {
+				return false;
+			}
+
+			if ( Woodev_Framework_Plugin_Loader_Definition::PLATFORM_WOOCOMMERCE !== $definition->get_platform() ) {
+				return false;
+			}
+
+			$requirements = $definition->get_requirements();
+			$minimum      = $requirements['woocommerce'] ?? null;
+
+			if ( null === $minimum ) {
+				return false;
+			}
+
+			$current = $this->get_wc_version();
+
+			if ( null === $current ) {
+				return true;
+			}
+
+			return version_compare( $current, $minimum, '<' );
+		}
+
+		/**
+		 * Loads classes requested by early capabilities.
+		 *
+		 * @since 2.0.0
+		 *
+		 * @param array<string,mixed> $plugin Registered plugin.
+		 * @return void
+		 */
+		protected function load_early_capability_classes( array $plugin ): void {
+			$definition = $plugin['definition'] ?? null;
+
+			if ( ! $definition instanceof Woodev_Framework_Plugin_Loader_Definition ) {
+				return;
+			}
+
+			$capabilities = $definition->get_capabilities();
+
+			if ( [] === array_intersect(
+				[
+					Woodev_Framework_Plugin_Loader_Definition::CAPABILITY_WOOCOMMERCE_PLUGIN,
+					Woodev_Framework_Plugin_Loader_Definition::CAPABILITY_PAYMENT_GATEWAY,
+					Woodev_Framework_Plugin_Loader_Definition::CAPABILITY_SHIPPING_METHOD,
+				],
+				$capabilities
+			) ) {
+				return;
+			}
+
+			$plugin_path = $this->get_plugin_path( $plugin['path'] );
+
+			if ( in_array( Woodev_Framework_Plugin_Loader_Definition::CAPABILITY_WOOCOMMERCE_PLUGIN, $capabilities, true ) && ! class_exists( 'Woodev_Woocommerce_Plugin' ) ) {
+				$woocommerce_plugin_file = $plugin_path . '/woodev/class-woocommerce-plugin.php';
+
+				if ( file_exists( $woocommerce_plugin_file ) ) {
+					require_once $woocommerce_plugin_file;
+				}
+			}
+
+			if ( in_array( Woodev_Framework_Plugin_Loader_Definition::CAPABILITY_PAYMENT_GATEWAY, $capabilities, true ) && ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) {
+				require_once $plugin_path . '/woodev/payment-gateway/class-payment-gateway-plugin.php';
+			}
+
+			if ( in_array( Woodev_Framework_Plugin_Loader_Definition::CAPABILITY_SHIPPING_METHOD, $capabilities, true ) && ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) {
+				require_once $plugin_path . '/woodev/shipping-method/class-shipping-plugin.php';
+			}
+		}
+
+		/**
+		 * Invokes a registered plugin callback or main class bootstrap method.
+		 *
+		 * @since 2.0.0
+		 *
+		 * @param array<string,mixed> $plugin Registered plugin.
+		 * @return void
+		 */
+		protected function invoke_plugin( array $plugin ): void {
+			if ( is_callable( $plugin['callback'] ) ) {
+				$plugin['callback']();
+				return;
+			}
+
+			$definition = $plugin['definition'] ?? null;
+
+			if ( ! $definition instanceof Woodev_Framework_Plugin_Loader_Definition ) {
+				return;
+			}
+
+			$main_class = $definition->get_main_class();
+
+			if ( null === $main_class || ! class_exists( $main_class ) ) {
+				return;
+			}
+
+			if ( is_callable( [ $main_class, 'instance' ] ) ) {
+				$main_class::instance();
+				return;
+			}
+
+			new $main_class();
+		}
+
+		/**
+		 * Determines whether any update notices are pending.
+		 *
+		 * @since 2.0.0
+		 *
+		 * @return bool
+		 */
+		protected function has_update_notices(): bool {
+			return $this->incompatible_framework_plugins || $this->incompatible_wc_version_plugins || $this->incompatible_wp_version_plugins || $this->incompatible_php_version_plugins;
+		}
+
+		/**
+		 * Gets the WooCommerce version number.
+		 *
+		 * @since 2.0.0
+		 *
+		 * @return string|null
+		 */
+		protected function get_wc_version(): ?string {
+			if ( defined( 'WC_VERSION' ) && WC_VERSION ) {
+				return WC_VERSION;
+			}
+
+			return null;
+		}
+	}
+
+endif;

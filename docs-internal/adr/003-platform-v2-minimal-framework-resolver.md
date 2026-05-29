@@ -1,5 +1,5 @@
 # ADR-003: Platform v2 Minimal Framework Resolver
-> Status: Proposed
+> Status: Accepted
 > Date: 2026-05-29
 
 ## Context

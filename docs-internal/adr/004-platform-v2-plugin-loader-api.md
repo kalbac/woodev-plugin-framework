@@ -1,5 +1,5 @@
 # ADR-004: Platform v2 Explicit Plugin Loader API
-> Status: Proposed
+> Status: Accepted
 > Date: 2026-05-29
 
 ## Context
