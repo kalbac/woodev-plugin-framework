@@ -35,11 +35,12 @@
 | `platform-v2-dependency-matrix.md` | Platform decoupling audit — module WC deps, P0/P1/P2, open questions A/B |
 | `platform-v2-strategy-alignment.md` | Platform v2 strategic alignment — hybrid roadmap, rewrite-first migration, minimal resolver |
 | `platform-v2-next-analysis.md` | Platform v2 deep analysis — resolver, loader API, migration contracts, ADR/spec revision plan |
+| `platform-v2-implementation-spec.md` | Active Platform v2 implementation source — minimal resolver, explicit loader API, platform boundaries, migration gates |
 | `adr/001-bootstrap-platform-aware-loader.md` | ADR: keep bootstrap as platform-aware loader (accepted) |
 | `adr/002-plugin-type-inheritance-with-metadata-bridge.md` | ADR: inheritance + deprecated metadata bridge (accepted) |
 | `adr/003-platform-v2-minimal-framework-resolver.md` | ADR draft: minimal resolver behind bootstrap compatibility entry point |
 | `adr/004-platform-v2-plugin-loader-api.md` | ADR draft: explicit plugin loader API and metadata limits |
-| `platform-v2-epic1-spec.md` | Epic 1 implementation spec — platform layer split (accepted) |
+| `platform-v2-epic1-spec.md` | Previous Epic 1 spec — useful evidence, but stale bridge-first parts are superseded by `platform-v2-implementation-spec.md` |
 
 ---
 

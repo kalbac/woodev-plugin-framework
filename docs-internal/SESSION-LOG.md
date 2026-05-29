@@ -1,5 +1,23 @@
 # Session Log — Woodev Plugin Framework
 
+## Platform v2 implementation spec (2026-05-29)
+
+### Planning output
+- Read `PLANS.md`, strategy alignment, deep analysis, ADR-003, ADR-004, Epic 1 spec, dependency matrix, DOCS-SCHEMA, CURRENT-STATE, DOCS-INDEX, SESSION-LOG, and GOTCHAS index.
+- Created `docs-internal/platform-v2-implementation-spec.md` as the active Platform v2 implementation source.
+- Decision: stale bridge-first parts of `platform-v2-epic1-spec.md` are superseded by a resolver-first implementation plan.
+- Decision: `woodev/bootstrap.php` remains the installed compatibility entry path, but real early-loading logic belongs behind it in a minimal resolver.
+- Decision: explicit loader definitions replace loose plugin type flags as the preferred v2 API; inheritance/contracts remain the runtime source of truth.
+- Decision: production plugin rewrites require migration contract gates before PHP changes begin in those plugins.
+- Added fixture/test matrix, early class availability rules, platform class boundaries, and keep/discard guidance for `feat/platform-v2-epic1-spike`.
+- Updated `docs-internal/DOCS-INDEX.md` and `docs-internal/CURRENT-STATE.md` so future agents start implementation from the new spec.
+
+### Verification
+- Docs-only session; no PHP implementation was changed.
+- Tests/build: not run because only internal planning docs were changed.
+- Gotcha compilation: no new non-obvious technical gotcha discovered; no `docs-internal/gotchas/` update required.
+- Commit: pending at time of entry creation; final commit hash reported in chat.
+
 ## Platform v2 resolver deep analysis (2026-05-29)
 
 ### Planning analysis

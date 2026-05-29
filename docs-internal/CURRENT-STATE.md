@@ -1,5 +1,5 @@
 # Current State — Woodev Plugin Framework
-> Last updated: 2026-05-29 (Platform v2 deep analysis)
+> Last updated: 2026-05-29 (Platform v2 implementation spec)
 
 ## Phase Status
 
@@ -47,7 +47,8 @@
 | 5 Spike branch | ✅ 2026-05-28 `0ed6df8` | `feat/platform-v2-epic1-spike` — Woodev_Woocommerce_Plugin + bootstrap metadata |
 | 6 Strategy alignment | ✅ 2026-05-29 | `docs-internal/platform-v2-strategy-alignment.md` — hybrid roadmap, rewrite-first migration, minimal resolver |
 | 7 Deep analysis | ✅ 2026-05-29 | `docs-internal/platform-v2-next-analysis.md`, ADR-003, ADR-004 — resolver, loader API, migration contracts |
-| 8 Implementation spec | ⏳ | Next: write `docs-internal/platform-v2-implementation-spec.md` before PHP implementation |
+| 8 Implementation spec | ✅ 2026-05-29 | `docs-internal/platform-v2-implementation-spec.md` — active source for resolver-first implementation |
+| 9 PHP implementation | ⏳ | Next: start from resolver facade tests and explicit loader definition, not from stale Epic 1 bridge-first plan |
 
 ## Planned — v2.0.0 & Beyond
 
@@ -85,7 +86,7 @@
 
 ## Active Queue
 
-> Platform v2 deep analysis is complete. Next step: write `docs-internal/platform-v2-implementation-spec.md` from `platform-v2-next-analysis.md`, ADR-003, and ADR-004 before any PHP implementation.
+> Platform v2 implementation spec is complete. Next step: begin PHP implementation from `docs-internal/platform-v2-implementation-spec.md`, starting with resolver facade tests and explicit loader definition.
 
 ## Infrastructure Reference
 
