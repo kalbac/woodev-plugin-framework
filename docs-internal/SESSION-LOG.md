@@ -1,5 +1,76 @@
 # Session Log — Woodev Plugin Framework
 
+## Platform v2 Phase 6A first reference draft contract (2026-05-30)
+
+### Implementation
+- Continued strictly from `docs-internal/platform-v2-implementation-spec.md` and the existing Phase 6A boundary docs.
+- Re-stated the Phase 6A purpose: validate the migration-contract workflow from read-only copied plugin evidence only, not create a production contract.
+- Inspected both reference plugins as read-only evidence sources and did not edit `plugins-reference/`.
+- Selected `woocommerce-edostavka` as the first draft target because it covers more migration-contract continuity risks in one reference copy: legacy maps, deprecated wrappers, WP-Cron, WC API callbacks, webhook IDs, data stores, shipping method state, and order meta.
+- Created `docs-internal/platform-v2-phase6a-edostavka-reference-contract-draft.md` and clearly labeled it reference-based, non-production, not release-blocking, and not a real Phase 6B migration contract.
+- Filled the standard contract sections where copied-source evidence justified values, and marked incomplete values as requiring real production repo / installed-site validation.
+- Confirmed the draft revealed no new template gap; remaining unknowns are expected Phase 6B evidence gaps, not framework/template gaps.
+- Updated `CURRENT-STATE.md`, `DOCS-INDEX.md`, and `.serena/memories/platform-v2/phase-6-migration-contracts.md`.
+- Did not start Phase 6B, did not rewrite production plugins, did not modify runtime/framework PHP, and did not expand resolver/bootstrap scope.
+
+### Verification
+- Docs-safe verification: reviewed the created draft against the template section list and confirmed all standard required sections are represented.
+- Git verification: checked working tree noise before edits and staged only the Phase 6A draft/session artifacts for commit.
+- Runtime checks not run because this session changed docs/memory artifacts only.
+- Gotcha compilation: no new non-obvious framework behavior gotcha discovered; no `docs-internal/gotchas/` update required.
+- Commit: pending at time of entry creation; final hash reported in chat.
+
+### Next
+- Phase 6A has a fillable first reference draft artifact, but production migration remains blocked until a real plugin repo is selected.
+- The next safe step is still Phase 6B in the selected production plugin repository with source, release history, package identity, and installed-site DB evidence before any rewrite.
+
+## Platform v2 Phase 6A reference contract validation (2026-05-30)
+
+### Implementation
+- Continued strictly from `docs-internal/platform-v2-implementation-spec.md` and Phase 6 entry state.
+- Re-stated the boundary: Phase 6A in this repo is framework-side migration-contract methodology only; Phase 6B starts only in a real selected production plugin repo.
+- Inspected `plugins-reference/woocommerce-edostavka` and `plugins-reference/woocommerce-yandex-delivery` as read-only reference inputs only.
+- Confirmed both plugins are WooCommerce shipping plugins using include-based framework loading and legacy `register_plugin()` entry shape.
+- Used Edostavka as the stronger legacy-migration/WP-Cron/WC API webhook/data-store stress test.
+- Used Yandex as the stronger multi-method/custom-table/REST/checkout-session/Action-Scheduler stress test.
+- Created `docs-internal/platform-v2-phase6a-reference-gap-analysis.md` to record evidence and template fit.
+- Refined `docs-internal/platform-v2-migration-contract-template.md` for WC API callbacks, Action Scheduler hooks/mode/args/groups, WC data-store keys, checkout/session state, shipping package/rate meta, email template paths/placeholders, and legacy migration maps.
+- Updated `DOCS-INDEX.md`, `CURRENT-STATE.md`, and `.serena/memories/platform-v2/phase-6-migration-contracts.md`.
+- Did not edit `plugins-reference/`, did not modify framework runtime PHP, did not start Phase 6B, and did not expand resolver/bootstrap scope.
+
+### Verification
+- Evidence check: the original template covered the required spec list, but reference plugins exposed ambiguous fields that needed sharper rows rather than runtime changes.
+- Docs-only change; `composer check` not run because no PHP/runtime files changed.
+- Gotcha compilation: no new non-obvious gotcha discovered; this was methodology refinement, not a framework behavior bug.
+- Commit: not created per session instruction.
+
+### Next
+- Phase 6A workflow is solid enough to stop in this repo.
+- The next useful step is Phase 6B in a real selected plugin repository, where a plugin-specific contract must be filled from source, release history, and installed-site evidence before any rewrite.
+
+## Platform v2 Phase 6 migration contract entry (2026-05-30)
+
+### Implementation
+- Entered Phase 6 strictly from `docs-internal/platform-v2-implementation-spec.md` after confirming Phase 5 is review-cleared.
+- Read required Phase 6 sources, including ADR-003, ADR-004, latest session log entry, and `.serena/memories/platform-v2/phase-5-cleanup.md`.
+- Summarized Phase 6 entry constraints: contract before rewrite, no resolver/bootstrap scope expansion, include-based production loading, installed-site contracts are release-blocking.
+- Searched for existing migration contract docs, templates, checklists, and first-target evidence; none existed before this session.
+- Determined that `woocommerce-edostavka` appears only as an illustrative loader example, not a selected Phase 6 target.
+- Created `docs-internal/platform-v2-migration-contract-template.md` as the narrowest safe Phase 6 artifact.
+- Updated `DOCS-INDEX.md` to expose the new Phase 6 template.
+- Did not touch production plugin repositories, did not rewrite production plugin PHP, and did not expand resolver/bootstrap scope.
+
+### Verification
+- Evidence check: no clear first production plugin target exists in this framework repo.
+- Real plugin-specific contract cannot be completed here because required option, license, hook, method-ID, cron, REST/AJAX/admin, log, job, email, and schema facts live in production plugin repos or installed-site history.
+- Docs-only change; `composer check` not run because no PHP/runtime files changed.
+- Gotcha compilation: no new gotcha discovered; no `docs-internal/gotchas/` update required.
+- Commit: not created per session instruction.
+
+### Next
+- Select the first production plugin target explicitly.
+- Continue in that production plugin repository to copy/fill the contract template from source, release history, and installed-site evidence before any rewrite begins.
+
 ## Platform v2 Phase 5 post-review follow-up (2026-05-30)
 
 ### Implementation

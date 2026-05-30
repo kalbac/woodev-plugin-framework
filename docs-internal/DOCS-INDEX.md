@@ -1,7 +1,7 @@
 # Docs Index — Woodev Plugin Framework
 > Navigation hub for AI agents. Read this FIRST in every new session. ~2 min read.
 > `docs-internal/` — internal technical documentation
-> Last updated: 2026-05-29
+> Last updated: 2026-05-30
 
 ---
 
@@ -36,6 +36,9 @@
 | `platform-v2-strategy-alignment.md` | Platform v2 strategic alignment — hybrid roadmap, rewrite-first migration, minimal resolver |
 | `platform-v2-next-analysis.md` | Platform v2 deep analysis — resolver, loader API, migration contracts, ADR/spec revision plan |
 | `platform-v2-implementation-spec.md` | Active Platform v2 implementation source — minimal resolver, explicit loader API, platform boundaries, migration gates |
+| `platform-v2-migration-contract-template.md` | Phase 6 template for production plugin migration contracts and installed-site gates |
+| `platform-v2-phase6a-reference-gap-analysis.md` | Phase 6A reference-plugin validation of the migration-contract template and workflow gaps |
+| `platform-v2-phase6a-edostavka-reference-contract-draft.md` | Phase 6A non-production reference draft that exercises the migration-contract template against copied Edostavka evidence |
 | `adr/001-bootstrap-platform-aware-loader.md` | ADR: keep bootstrap as platform-aware loader (accepted) |
 | `adr/002-plugin-type-inheritance-with-metadata-bridge.md` | ADR: inheritance + deprecated metadata bridge (accepted) |
 | `adr/003-platform-v2-minimal-framework-resolver.md` | ADR draft: minimal resolver behind bootstrap compatibility entry point |

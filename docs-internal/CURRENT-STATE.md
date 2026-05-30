@@ -1,5 +1,5 @@
 # Current State — Woodev Plugin Framework
-> Last updated: 2026-05-30 (Platform v2 Phase 5 post-review follow-up clear)
+> Last updated: 2026-05-30 (Platform v2 Phase 6A first reference draft complete)
 
 ## Phase Status
 
@@ -66,6 +66,9 @@
 | 24 Phase 5 cleanup #13 | ✅ 2026-05-30 | `Woodev_Helper::format_percentage()` now falls back to local decimal formatting when `wc_format_decimal()` is unavailable while preserving the WooCommerce decimal-helper path and trim/precision contract in a no-WooCommerce unit context |
 | 25 Phase 5 cleanup #14 | ✅ 2026-05-30 | `Woodev_Helper::shop_has_virtual_products()` now returns `false` when `wc_get_products()` is unavailable, preserving published-virtual-product detection without fataling in a no-WooCommerce unit context |
 | 26 Phase 5 post-review follow-up | ✅ 2026-05-30 | Licensing date formatting now preserves WooCommerce date-format filter and WordPress timezone semantics without hard WooCommerce dependencies; licensing request debug stringification preserves the WooCommerce `wc_print_r()`/fallback-filter contract; `wc_enqueue_js()` wrapper/filter difference accepted as non-atomic for this follow-up |
+| 27 Phase 6 entry | ✅ 2026-05-30 | Created `docs-internal/platform-v2-migration-contract-template.md`; no first production plugin target is identified in this repo, so real plugin-specific contract work must wait for plugin selection/external repo context |
+| 28 Phase 6A reference validation | ✅ 2026-05-30 | Read-only copied-plugin validation completed against `plugins-reference/woocommerce-edostavka` and `plugins-reference/woocommerce-yandex-delivery`; template refined for WC API callbacks, Action Scheduler groups/payloads, WC data-store keys, checkout/session state, shipping rate/package meta, email template paths, and legacy migration maps; no Phase 6B production migration started |
+| 29 Phase 6A first reference draft | ✅ 2026-05-30 | Created `docs-internal/platform-v2-phase6a-edostavka-reference-contract-draft.md` as a reference-based, non-production, non-release-blocking draft that validates the template is fillable from copied plugin evidence while marking production repo / installed-site gaps explicitly |
 
 ## Planned — v2.0.0 & Beyond
 
@@ -103,7 +106,7 @@
 
 ## Active Queue
 
-> Platform v2 resolver facade + explicit loader definition slice is complete. Phase 3 is stopped: WooCommerce hook ownership, initial `supported_features`/Blocks handler construction, WooCommerce system-status row ownership, WooCommerce logger ownership, WooCommerce template loader ownership, HPOS/Blocks feature declarations, and payment/shipping specialized base inheritance live in `Woodev_Woocommerce_Plugin`; remaining `Woodev_Plugin` WooCommerce-adjacent items are compatibility wrappers or Phase 5 cleanup. Phase 4 callback timing coverage is complete for payment/shipping specialized child class declaration. Phase 5 cleanup has fourteen verified cleanup slices plus one post-review follow-up pass. The follow-up resolved the medium licensing date-format/timezone finding and the narrow licensing `wc_print_r()` debug-stringifier finding; the `wc_enqueue_js()` wrapper/filter concern is accepted as non-atomic because exact preservation would affect the shared `Woodev_Helper::enqueue_js()` output contract. Remaining residual seams are the boundary-sensitive `wc_rest_check_manager_permissions()` path in the REST settings controller plus intentional WooCommerce wrappers/diagnostics in `woodev/class-helper.php`. Phase 5 is review-cleared for Phase 6 planning in a future session; do not start Phase 6 from this follow-up session.
+> Platform v2 Phase 5 is review-cleared. Phase 6A framework-side contract methodology has been reference-validated with copied plugin inputs, including a first Edostavka reference draft. Next safe step remains selecting the production plugin and working in that real plugin repo to fill the contract before any rewrite; do not treat `plugins-reference/` drafts as production contracts.
 
 ## Infrastructure Reference
 

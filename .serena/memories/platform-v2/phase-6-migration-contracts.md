@@ -1,0 +1,17 @@
+- 2026-05-30 Phase 6 entered safely as production plugin migration-contract planning, not production plugin rewrite work.
+- Phase 6 constraints confirmed from `docs-internal/platform-v2-implementation-spec.md`: write a plugin-specific contract before PHP changes, preserve installed-site contracts, keep production loading include-based, do not expand resolver/bootstrap scope, and do not move runtime behavior into `Framework_Resolver`.
+- Existing repo search found no completed migration contracts and no clearly selected first production plugin target.
+- `woocommerce-edostavka` appears in `platform-v2-next-analysis.md` only as an illustrative loader API example, not as a Phase 6 target.
+- A real production plugin migration contract cannot be completed from `woodev_framework` alone because required facts live in the production plugin repo and/or installed-site release history.
+- Created `docs-internal/platform-v2-migration-contract-template.md` as the narrowest safe Phase 6 artifact.
+- Updated `docs-internal/DOCS-INDEX.md`, `docs-internal/CURRENT-STATE.md`, and `docs-internal/SESSION-LOG.md` for the Phase 6 entry state.
+- Next safe step: Maksim must explicitly select the first production plugin target, then the next session should move to that plugin repository to fill the contract before any rewrite.
+- 2026-05-30 Phase 6A reference validation used copied read-only inputs `plugins-reference/woocommerce-edostavka` and `plugins-reference/woocommerce-yandex-delivery` to validate methodology only; no plugin code or production repo was changed.
+- Edostavka provided evidence for legacy settings/license migrations, deprecated hook wrappers, WP-Cron, WC API webhooks, Action Scheduler group cleanup, and custom WC data-store keys.
+- Yandex provided evidence for multiple shipping method IDs, custom warehouse table schema, custom REST routes, checkout/session state, shipping package/rate meta, recurring Action Scheduler queues, and email template paths.
+- Refined `docs-internal/platform-v2-migration-contract-template.md` for WC API callbacks, Action Scheduler hook/mode/payload/group fields, WC data-store keys, checkout/frontend state, shipping package/rate meta, email template paths/placeholders, and legacy migration maps.
+- Added `docs-internal/platform-v2-phase6a-reference-gap-analysis.md`; it is a methodology artifact, not a production migration contract.
+- Phase 6A safe limit reached in this repo: next useful work requires selecting a real production plugin repo and entering Phase 6B with a filled contract before any rewrite.
+- 2026-05-30 Created `docs-internal/platform-v2-phase6a-edostavka-reference-contract-draft.md` as the first Phase 6A reference-based draft migration contract; it is explicitly non-production, not release-blocking, and not a real Phase 6B contract.
+- Edostavka was selected over Yandex for the first draft because it fills more installed-site continuity sections from reference evidence: legacy option/license maps, deprecated wrappers, WP-Cron, WC API callbacks, webhook IDs, custom WC data-store keys, shipping method state, and order meta.
+- The first draft revealed no new template gap; remaining unknowns are expected Phase 6B evidence gaps requiring a real production repo, release history, package identity, installed-site options/license rows, cron/Action Scheduler state, webhook IDs, and live validation.
