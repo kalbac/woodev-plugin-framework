@@ -1,5 +1,5 @@
 # Current State — Woodev Plugin Framework
-> Last updated: 2026-05-30 (Platform v2 Phase 6A complete — two reference drafts validated)
+> Last updated: 2026-05-31 (Roadmap reconciliation — framework-first re-anchored; Phase 6A paper rehearsal paused)
 
 ## Phase Status
 
@@ -34,7 +34,15 @@
 2. ~~Fix get_missing_php_functions() bug~~ ✅ s2
 3. ~~Clean up PHPStan baseline~~ ✅ s3
 4. ~~eCheck/ACH audit + removal~~ ✅ s3
-5. Extract traits from class-payment-gateway.php (now 2378 lines, down from 3927)
+5. **Corrected next category (2026-05-31 reconciliation):** sandbox-based framework
+   readiness validation — prove the new explicit-loader + `Woocommerce_Plugin` path
+   hosts a realistic shipping-plugin shape (realistic fixture and/or read-only
+   conformance mapping from a `plugins-reference/*` copy). Framework-first,
+   sandbox-only. **Do NOT** start Phase 6B, edit `plugins-reference/`, or expand
+   resolver/bootstrap scope. See `platform-v2-roadmap-reconciliation.md`.
+6. (Deferred / post-v2.0) Extract traits from class-payment-gateway.php (2378 lines)
+   and the broad `PLANS.md` vision: shipping universality, licensing webhooks/UI,
+   box-packer minimal virtual box, DI/SOLID, React admin UI, EDD runtime.
 
 ### Platform v2 (strategy alignment)
 
@@ -70,6 +78,7 @@
 | 28 Phase 6A reference validation | ✅ 2026-05-30 | Read-only copied-plugin validation completed against `plugins-reference/woocommerce-edostavka` and `plugins-reference/woocommerce-yandex-delivery`; template refined for WC API callbacks, Action Scheduler groups/payloads, WC data-store keys, checkout/session state, shipping rate/package meta, email template paths, and legacy migration maps; no Phase 6B production migration started |
 | 29 Phase 6A first reference draft | ✅ 2026-05-30 | Created `docs-internal/platform-v2-phase6a-edostavka-reference-contract-draft.md` as a reference-based, non-production, non-release-blocking draft that validates the template is fillable from copied plugin evidence while marking production repo / installed-site gaps explicitly |
 | 30 Phase 6A second reference draft | ✅ 2026-05-30 | Created `docs-internal/platform-v2-phase6a-yandex-reference-contract-draft.md` as the second reference-based draft; confirmed the template works for a different plugin shape (custom DB tables, custom REST routes, AS recurring scheduling, WC session keys, checkout POST fields, localized script objects, competitor notes); no new framework-side template gap appeared |
+| 31 Roadmap reconciliation | ✅ 2026-05-31 | Re-anchored on `PLANS.md`; verified P1–P5 complete in source (resolver/loader/`Woocommerce_Plugin`/specialized bases/tests/`composer check`); found no boundary-violating drift but a mild soft drift (Phase 6A is paper-only; new framework path unvalidated against a realistic plugin shape; sandbox copies still use the old framework). Corrected next category = sandbox-based framework readiness validation. See `docs-internal/platform-v2-roadmap-reconciliation.md` |
 
 ## Planned — v2.0.0 & Beyond
 
@@ -107,7 +116,25 @@
 
 ## Active Queue
 
-> Platform v2 Phase 5 is review-cleared. Phase 6A is complete — two reference-based draft migration contracts have been created and validated, confirming the template works for different plugin shapes (shipping with legacy migrations/webhooks vs. shipping with custom DB tables/REST routes/AS scheduling). No framework-side template gaps remain. Production Phase 6B must start in a real selected plugin repository with source, release history, package identity, and installed-site DB evidence before any rewrite; do not treat `plugins-reference/` drafts as production contracts.
+> **2026-05-31 roadmap reconciliation (see `platform-v2-roadmap-reconciliation.md`).**
+> Framework v2.0 platform-split scope (P1–P5) is genuinely complete and tested in
+> source: `Framework_Resolver`, `Framework_Plugin_Loader_Definition`,
+> `Woocommerce_Plugin` + alias, payment/shipping bases inherit the WC base,
+> pure-WP-without-WC loading and multi-version arbitration are unit-tested,
+> `composer check` passes. No boundary-violating sequencing drift occurred.
+>
+> A mild soft drift was found: Phase 6A produced **paper** contracts only (template +
+> two reference drafts + gap analysis) and never validated the **new** framework
+> runtime against a realistic plugin shape. Both sandbox copies still consume the
+> **old** framework (legacy `register_plugin()`, `extends Woodev_Plugin` directly), so
+> the new resolver/loader/`Woocommerce_Plugin` path has only synthetic inline-fixture
+> coverage.
+>
+> **Corrected course:** pause further migration-contract rehearsal; next safe category
+> is **sandbox-based framework readiness validation** (framework-first, sandbox-only).
+> Do not start Phase 6B, do not edit `plugins-reference/`, do not expand
+> resolver/bootstrap scope. The broad `PLANS.md` vision (shipping universality,
+> licensing webhooks/UI, box-packer, DI, React, EDD) stays post-v2.0.
 
 ## Infrastructure Reference
 

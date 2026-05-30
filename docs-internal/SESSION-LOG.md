@@ -1,5 +1,25 @@
 # Session Log — Woodev Plugin Framework
 
+## Platform v2 roadmap reconciliation (2026-05-31)
+
+### Implementation
+- No code changes. Roadmap/strategy reconciliation session, re-anchored on `PLANS.md`.
+- Reconstructed the true roadmap: `PLANS.md` strategic intent (platform-neutral base hierarchy, framework-first, plugins rewritten later) narrowed into the accepted `platform-v2-implementation-spec.md` phasing P1 resolver → P2 loader → P3 platform split → P4 early classes → P5 module cleanup → P6 migration contracts → P6B real rewrites; broad feature vision (shipping universality, licensing webhooks/UI, box-packer, DI, React, EDD) deferred post-v2.0.
+- Verified the actual source, not just doc claims: `woodev/class-framework-resolver.php`, `woodev/class-framework-plugin-loader-definition.php`, `woodev/class-woocommerce-plugin.php` (`Woocommerce_Plugin extends Woodev_Plugin`) + alias, payment/shipping bases `extends \Woodev\Framework\Woocommerce_Plugin`. P1–P5 are genuinely implemented.
+- Verified test matrix coverage: `FrameworkResolverTest` (pure-WP-without-WC load, WC gating, invalid loader, EDD rejection, PHP-requirement skip, legacy-adapter mapping, callback timing, selected-path early classes) and `BootstrapRegistrationTest::test_version_sorting_highest_first` (multi-version arbitration). Confirmed base-owned modules guard WC helpers via `function_exists()` fallbacks (e.g. `licensing/class-license-messages.php`).
+- Inspected sandbox copies `plugins-reference/woocommerce-edostavka` and `.../woocommerce-yandex-delivery`: both are WooCommerce shipping plugins still using legacy positional `register_plugin()` + flags and `extends Woodev_Plugin` directly — i.e. they still consume the OLD framework.
+- Created `docs-internal/platform-v2-roadmap-reconciliation.md`; updated `CURRENT-STATE.md` (header, Next Actions, Platform v2 table row 31, Active Queue) and the Serena Phase 6 memory.
+
+### Verification
+- Docs/analysis-only session; `composer check` not run because no PHP/runtime files changed.
+- Drift finding: no boundary-violating sequencing drift. Mild soft drift — Phase 6A produced only paper contracts (template + 2 reference drafts + gap analysis) and never validated the new framework runtime against a realistic plugin shape; the new resolver/loader/`Woocommerce_Plugin` path has only synthetic inline-fixture coverage.
+- Gotcha compilation: no new non-obvious framework-behavior gotcha discovered.
+- Commit: not created per session instruction.
+
+### Next
+- Single next safe category: sandbox-based framework readiness validation (framework-first, sandbox-only) — prove the new explicit-loader + `Woocommerce_Plugin` path hosts a realistic shipping-plugin shape via a realistic fixture and/or read-only conformance mapping from a sandbox copy.
+- Do NOT start Phase 6B, do NOT edit `plugins-reference/`, do NOT expand resolver/bootstrap scope. Pause further migration-contract rehearsal.
+
 ## Platform v2 Phase 6A second reference draft (2026-05-30)
 
 ### Implementation
