@@ -1,5 +1,27 @@
 # Session Log — Woodev Plugin Framework
 
+## Platform v2 Phase 5 helper doing_it_wrong cleanup (2026-05-30)
+
+### Implementation
+- Continued strictly from `docs-internal/platform-v2-implementation-spec.md`, ADR-003, ADR-004, and the multi-version early class guard gotcha.
+- Re-scanned the remaining base-owned WooCommerce helper paths and identified a smaller isolated helper seam than the boundary-sensitive REST permissions path: `Woodev_Helper::maybe_doing_it_early()` in `woodev/class-helper.php` still called `wc_doing_it_wrong()` directly.
+- Added `tests/unit/PlatformNeutralHelperTest.php` first, proving the current failure mode when `wc_doing_it_wrong()` is unavailable in a platform-neutral unit context and locking the early-hook diagnostic contract.
+- Replaced the hard `wc_doing_it_wrong()` dependency in `Woodev_Helper::maybe_doing_it_early()` with a guarded path that keeps `wc_doing_it_wrong()` when WooCommerce is available and falls back to WordPress `_doing_it_wrong()` otherwise.
+- Preserved the WooCommerce-specific diagnostic path where available, plus include-based runtime loading, public static API shape, and resolver boundaries; did not move helper/runtime behavior into the resolver or expand toward Phase 6.
+
+### Verification
+- `vendor\bin\phpunit tests\unit\PlatformNeutralHelperTest.php` failed first with the expected undefined `wc_doing_it_wrong()` error, then passed after the implementation: 2 tests / 4 assertions.
+- `composer check` passed: PHPCS 113/113, PHPStan 0 errors, PHPUnit 159 tests / 315 assertions.
+- Re-scan after the slice still leaves two residual areas only: `wc_rest_check_manager_permissions()` in the REST settings controller and broader WooCommerce-oriented helper/wrapper seams in `woodev/class-helper.php`.
+- Those remaining areas are not cleanly atomic from the current ownership boundary and should not be forced without a narrower slice definition or external review.
+- Gotcha compilation: no new non-obvious gotcha discovered; no `docs-internal/gotchas/` update required.
+- Commit: pending at time of entry creation; final commit hash reported in chat.
+
+### Next
+- Stop after this atomic Phase 5 slice rather than forcing a boundary-sensitive REST/settings change or a broad helper refactor.
+- External review by another model remains required before any Phase 6 migration-contract or production-loader work begins.
+- If Phase 5 resumes later, re-scan the remaining residual helper seams and continue only with another clearly atomic slice.
+
 ## Platform v2 Phase 5 setup wizard doing_it_wrong cleanup (2026-05-30)
 
 ### Implementation

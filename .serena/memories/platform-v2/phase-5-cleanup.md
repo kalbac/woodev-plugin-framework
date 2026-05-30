@@ -1,7 +1,8 @@
-- 2026-05-30 Phase 5 cleanup now has eleven verified slices.
-- Slice 11: setup wizard step-registration error reporting in `Woodev_Plugin_Setup_Wizard` no longer depends on `wc_doing_it_wrong()`; it now uses WordPress `_doing_it_wrong()` while preserving invalid-step diagnostics in a no-WooCommerce unit context.
-- Added `tests/unit/PlatformNeutralSetupWizardTest.php`; the red test failed first on undefined `wc_doing_it_wrong()`, then passed after the implementation (1 test / 2 assertions).
-- Verification after slice 11: `composer check` green with 157 unit tests / 311 assertions.
-- Remaining residual helper seams after the re-scan: `wc_rest_check_manager_permissions()` in the REST settings controller and WooCommerce-oriented helper/wrapper paths in `woodev/class-helper.php`.
-- Stop here: external review by another model is required before any Phase 6 work begins.
+- 2026-05-30 Phase 5 cleanup now has twelve verified slices.
+- Slice 12: `Woodev_Helper::maybe_doing_it_early()` no longer hard-depends on `wc_doing_it_wrong()`; it now falls back to WordPress `_doing_it_wrong()` when WooCommerce is unavailable while preserving the WooCommerce diagnostic path when present.
+- Added `tests/unit/PlatformNeutralHelperTest.php`; the red test failed first on undefined `wc_doing_it_wrong()`, then passed after the implementation with fallback and no-op coverage (2 tests / 4 assertions).
+- Verification after slice 12: `composer check` green with 159 unit tests / 315 assertions.
+- Remaining residual helper seams after the re-scan: `wc_rest_check_manager_permissions()` in the REST settings controller and broader WooCommerce-oriented helper/wrapper paths in `woodev/class-helper.php`.
+- Stop here for Phase 5: the remaining seams are boundary-sensitive or not cleanly atomic from the current ownership boundary.
+- External review by another model is required before any Phase 6 work begins.
 - Do not expand resolver scope; do not move runtime behavior into the resolver; do not start production plugin rewrites before migration contract docs.

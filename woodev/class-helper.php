@@ -1201,7 +1201,11 @@ if ( ! class_exists( 'Woodev_Helper' ) ) :
 		public static function maybe_doing_it_early( string $hook, string $method, string $version ): void {
 
 			if ( ! did_action( $hook ) ) {
-				wc_doing_it_wrong( $method, "This should only be called after '{$hook}'", $version );
+				if ( function_exists( 'wc_doing_it_wrong' ) ) {
+					wc_doing_it_wrong( $method, "This should only be called after '{$hook}'", $version );
+				} else {
+					_doing_it_wrong( $method, "This should only be called after '{$hook}'", $version );
+				}
 			}
 		}
 
