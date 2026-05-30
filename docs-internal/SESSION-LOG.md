@@ -1,5 +1,26 @@
 # Session Log — Woodev Plugin Framework
 
+## Platform v2 Phase 5 setup wizard doing_it_wrong cleanup (2026-05-30)
+
+### Implementation
+- Continued strictly from `docs-internal/platform-v2-implementation-spec.md`, ADR-003, ADR-004, and the multi-version early class guard gotcha.
+- Re-scanned the remaining base-owned WooCommerce helper paths and confirmed the next smallest safe Phase 5 slice was setup wizard step-registration error reporting in `woodev/admin/abstract-plugin-admin-setup-wizard.php`.
+- Added `tests/unit/PlatformNeutralSetupWizardTest.php` first, proving the current failure mode when `wc_doing_it_wrong()` is unavailable in a platform-neutral unit context and locking the invalid-step diagnostic contract.
+- Replaced direct `wc_doing_it_wrong()` usage in `Woodev_Plugin_Setup_Wizard::register_step()` with WordPress `_doing_it_wrong()`.
+- Preserved installed-site step-registration behavior, include-based runtime loading, and resolver boundaries; did not move setup wizard runtime behavior into the resolver or expand Phase 6 scope.
+
+### Verification
+- `vendor\bin\phpunit tests\unit\PlatformNeutralSetupWizardTest.php` failed first with the expected undefined `wc_doing_it_wrong()` error, then passed after the implementation: 1 test / 2 assertions.
+- `composer check` passed: PHPCS 113/113, PHPStan 0 errors, PHPUnit 157 tests / 311 assertions.
+- Re-scan after the slice left two residual helper seams: `wc_rest_check_manager_permissions()` in the REST settings controller and WooCommerce-oriented helper/wrapper paths in `woodev/class-helper.php`.
+- Gotcha compilation: no new non-obvious gotcha discovered; no `docs-internal/gotchas/` update required.
+- Commit: pending at time of entry creation; final commit hash reported in chat.
+
+### Next
+- Stop after three atomic Phase 5 slices in this session, per session protocol.
+- External review by another model is now required before any Phase 6 migration-contract or production-loader work begins.
+- If Phase 5 resumes later, re-scan the remaining base-owned helper seams and continue only with another clearly atomic slice.
+
 ## Platform v2 Phase 5 job batch handler enqueue cleanup (2026-05-30)
 
 ### Implementation

@@ -1,6 +1,7 @@
-- 2026-05-30 Phase 5 cleanup now has ten verified slices.
-- Slice 10: the inline JavaScript path in `Woodev_Job_Batch_Handler` no longer depends on `wc_enqueue_js()`; it now uses `Woodev_Helper::enqueue_js()` while preserving the batch-handler payload and footer print-hook contract in a no-WooCommerce unit context.
-- Added `tests/unit/PlatformNeutralJobBatchHandlerTest.php`; the red test failed first on undefined `wc_enqueue_js()`, then passed after the implementation (1 test / 3 assertions).
-- Verification after slice 10: `composer check` green with 156 unit tests / 309 assertions.
-- Keep next work narrow: re-scan remaining base-owned WooCommerce helper paths and prefer the next smallest tested slice, most likely the setup wizard `wc_doing_it_wrong()` path.
+- 2026-05-30 Phase 5 cleanup now has eleven verified slices.
+- Slice 11: setup wizard step-registration error reporting in `Woodev_Plugin_Setup_Wizard` no longer depends on `wc_doing_it_wrong()`; it now uses WordPress `_doing_it_wrong()` while preserving invalid-step diagnostics in a no-WooCommerce unit context.
+- Added `tests/unit/PlatformNeutralSetupWizardTest.php`; the red test failed first on undefined `wc_doing_it_wrong()`, then passed after the implementation (1 test / 2 assertions).
+- Verification after slice 11: `composer check` green with 157 unit tests / 311 assertions.
+- Remaining residual helper seams after the re-scan: `wc_rest_check_manager_permissions()` in the REST settings controller and WooCommerce-oriented helper/wrapper paths in `woodev/class-helper.php`.
+- Stop here: external review by another model is required before any Phase 6 work begins.
 - Do not expand resolver scope; do not move runtime behavior into the resolver; do not start production plugin rewrites before migration contract docs.

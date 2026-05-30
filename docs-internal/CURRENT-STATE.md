@@ -1,5 +1,5 @@
 # Current State — Woodev Plugin Framework
-> Last updated: 2026-05-30 (Platform v2 Phase 5 job batch handler enqueue cleanup complete)
+> Last updated: 2026-05-30 (Platform v2 Phase 5 setup wizard doing_it_wrong cleanup complete)
 
 ## Phase Status
 
@@ -61,6 +61,7 @@
 | 19 Phase 5 cleanup #8 | ✅ 2026-05-30 | Settings API error paths now use WordPress `_doing_it_wrong()` instead of `wc_doing_it_wrong()`, preserving register-setting and register-control failure messages in a no-WooCommerce unit context |
 | 20 Phase 5 cleanup #9 | ✅ 2026-05-30 | Licensing date formatting now uses WordPress date formatting in `Woodev_License_Messages` instead of `wc_date_format()`, `wc_string_to_datetime()`, and `wc_format_datetime()`, preserving localized expiration-date message output in a no-WooCommerce unit context |
 | 21 Phase 5 cleanup #10 | ✅ 2026-05-30 | Job batch handler inline JavaScript now queues through `Woodev_Helper::enqueue_js()` instead of `wc_enqueue_js()`, preserving the batch-handler payload and footer print-hook contract in a no-WooCommerce unit context |
+| 22 Phase 5 cleanup #11 | ✅ 2026-05-30 | Setup wizard step-registration error reporting now uses WordPress `_doing_it_wrong()` instead of `wc_doing_it_wrong()`, preserving invalid-step diagnostics in a no-WooCommerce unit context |
 
 ## Planned — v2.0.0 & Beyond
 
@@ -98,7 +99,7 @@
 
 ## Active Queue
 
-> Platform v2 resolver facade + explicit loader definition slice is complete. Phase 3 is stopped: WooCommerce hook ownership, initial `supported_features`/Blocks handler construction, WooCommerce system-status row ownership, WooCommerce logger ownership, WooCommerce template loader ownership, HPOS/Blocks feature declarations, and payment/shipping specialized base inheritance live in `Woodev_Woocommerce_Plugin`; remaining `Woodev_Plugin` WooCommerce-adjacent items are compatibility wrappers or broader Phase 5 cleanup. Phase 4 callback timing coverage is complete for payment/shipping specialized child class declaration. Phase 5 cleanup now has ten verified slices, including the new job-batch-handler cleanup in `Woodev_Job_Batch_Handler` that replaces `wc_enqueue_js()` with the existing platform-neutral `Woodev_Helper::enqueue_js()` queue while preserving the batch-handler payload and footer print-hook contract in a no-WooCommerce unit context. Next step: continue Phase 5 with the next smallest tested base-owned cleanup slice among the remaining WooCommerce helper paths, most likely the setup wizard `wc_doing_it_wrong()` path or another equally narrow base-owned helper seam, without expanding resolver runtime behavior or rewriting production plugin loaders before migration contracts.
+> Platform v2 resolver facade + explicit loader definition slice is complete. Phase 3 is stopped: WooCommerce hook ownership, initial `supported_features`/Blocks handler construction, WooCommerce system-status row ownership, WooCommerce logger ownership, WooCommerce template loader ownership, HPOS/Blocks feature declarations, and payment/shipping specialized base inheritance live in `Woodev_Woocommerce_Plugin`; remaining `Woodev_Plugin` WooCommerce-adjacent items are compatibility wrappers or broader Phase 5 cleanup. Phase 4 callback timing coverage is complete for payment/shipping specialized child class declaration. Phase 5 cleanup now has eleven verified slices, including the new setup-wizard error-path cleanup in `Woodev_Plugin_Setup_Wizard` that replaces `wc_doing_it_wrong()` with WordPress `_doing_it_wrong()` while preserving invalid-step diagnostics in a no-WooCommerce unit context. Remaining residual helper paths after the re-scan are `wc_rest_check_manager_permissions()` in the REST settings controller and WooCommerce-oriented helper/wrapper seams in `woodev/class-helper.php`; these should be revisited only as further atomic Phase 5 slices and not as Phase 6 work. Stop gate: external review by another model is now required before any Phase 6 migration-contract or production-loader work begins.
 
 ## Infrastructure Reference
 
