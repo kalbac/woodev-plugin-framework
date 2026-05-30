@@ -39,6 +39,7 @@
 | `platform-v2-migration-contract-template.md` | Phase 6 template for production plugin migration contracts and installed-site gates |
 | `platform-v2-phase6a-reference-gap-analysis.md` | Phase 6A reference-plugin validation of the migration-contract template and workflow gaps |
 | `platform-v2-phase6a-edostavka-reference-contract-draft.md` | Phase 6A non-production reference draft that exercises the migration-contract template against copied Edostavka evidence |
+| `platform-v2-phase6a-yandex-reference-contract-draft.md` | Phase 6A non-production reference draft that exercises the migration-contract template against copied Yandex delivery evidence |
 | `adr/001-bootstrap-platform-aware-loader.md` | ADR: keep bootstrap as platform-aware loader (accepted) |
 | `adr/002-plugin-type-inheritance-with-metadata-bridge.md` | ADR: inheritance + deprecated metadata bridge (accepted) |
 | `adr/003-platform-v2-minimal-framework-resolver.md` | ADR draft: minimal resolver behind bootstrap compatibility entry point |

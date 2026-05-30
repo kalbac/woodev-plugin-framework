@@ -1,5 +1,28 @@
 # Session Log — Woodev Plugin Framework
 
+## Platform v2 Phase 6A second reference draft (2026-05-30)
+
+### Implementation
+- Continued strictly from `docs-internal/platform-v2-implementation-spec.md` and existing Phase 6A boundary docs.
+- Purpose: create a second reference-based draft migration contract for `plugins-reference/woocommerce-yandex-delivery` to validate that the Phase 6A workflow is not overly tailored to the Edostavka plugin shape.
+- Inspected `plugins-reference/woocommerce-yandex-delivery` read-only and gathered comprehensive structured evidence across all contract sections.
+- Created `docs-internal/platform-v2-phase6a-yandex-reference-contract-draft.md`, explicitly labeled reference-based, non-production, not release-blocking, and not a real Phase 6B migration contract.
+- Filled all standard contract sections with values justified from copied-source evidence; marked missing installed-site data as requiring real production repo / installed-site validation.
+- Included a comparison table with the Edostavka draft showing complementary coverage: Yandex exercises custom DB tables, REST routes, Action Scheduler scheduling payloads, WC session keys, checkout POST fields, shipping rate meta, localized script objects, a custom WC_Email class, and competitor detection — sections Edostavka stressed less.
+- Compared both drafts and confirmed no new framework-side template gap appeared; the template works for two different plugin shapes without structural changes.
+- Phase 6A is now complete — validated against both reference plugins.
+
+### Verification
+- Docs-safe verification: confirmed all contract sections are filled with evidence-backed values; comparison table documents complementary coverage.
+- Runtime checks not run because this session changed docs/memory artifacts only.
+- Gotcha compilation: no new non-obvious framework behavior gotcha discovered; no `docs-internal/gotchas/` update required.
+- Updated `CURRENT-STATE.md`, `DOCS-INDEX.md`, and `.serena/memories/platform-v2/phase-6-migration-contracts.md`.
+- Did not start Phase 6B, did not rewrite production plugins, did not modify `plugins-reference/`, and did not expand resolver/bootstrap scope.
+
+### Next
+- Phase 6A is complete. Both reference drafts confirm the template is fillable for different plugin shapes.
+- Production Phase 6B must start in a real selected plugin repository with source, release history, package identity, and installed-site DB evidence before any rewrite.
+
 ## Platform v2 Phase 6A first reference draft contract (2026-05-30)
 
 ### Implementation

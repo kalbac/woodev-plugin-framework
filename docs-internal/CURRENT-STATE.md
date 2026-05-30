@@ -1,5 +1,5 @@
 # Current State — Woodev Plugin Framework
-> Last updated: 2026-05-30 (Platform v2 Phase 6A first reference draft complete)
+> Last updated: 2026-05-30 (Platform v2 Phase 6A complete — two reference drafts validated)
 
 ## Phase Status
 
@@ -69,6 +69,7 @@
 | 27 Phase 6 entry | ✅ 2026-05-30 | Created `docs-internal/platform-v2-migration-contract-template.md`; no first production plugin target is identified in this repo, so real plugin-specific contract work must wait for plugin selection/external repo context |
 | 28 Phase 6A reference validation | ✅ 2026-05-30 | Read-only copied-plugin validation completed against `plugins-reference/woocommerce-edostavka` and `plugins-reference/woocommerce-yandex-delivery`; template refined for WC API callbacks, Action Scheduler groups/payloads, WC data-store keys, checkout/session state, shipping rate/package meta, email template paths, and legacy migration maps; no Phase 6B production migration started |
 | 29 Phase 6A first reference draft | ✅ 2026-05-30 | Created `docs-internal/platform-v2-phase6a-edostavka-reference-contract-draft.md` as a reference-based, non-production, non-release-blocking draft that validates the template is fillable from copied plugin evidence while marking production repo / installed-site gaps explicitly |
+| 30 Phase 6A second reference draft | ✅ 2026-05-30 | Created `docs-internal/platform-v2-phase6a-yandex-reference-contract-draft.md` as the second reference-based draft; confirmed the template works for a different plugin shape (custom DB tables, custom REST routes, AS recurring scheduling, WC session keys, checkout POST fields, localized script objects, competitor notes); no new framework-side template gap appeared |
 
 ## Planned — v2.0.0 & Beyond
 
@@ -106,7 +107,7 @@
 
 ## Active Queue
 
-> Platform v2 Phase 5 is review-cleared. Phase 6A framework-side contract methodology has been reference-validated with copied plugin inputs, including a first Edostavka reference draft. Next safe step remains selecting the production plugin and working in that real plugin repo to fill the contract before any rewrite; do not treat `plugins-reference/` drafts as production contracts.
+> Platform v2 Phase 5 is review-cleared. Phase 6A is complete — two reference-based draft migration contracts have been created and validated, confirming the template works for different plugin shapes (shipping with legacy migrations/webhooks vs. shipping with custom DB tables/REST routes/AS scheduling). No framework-side template gaps remain. Production Phase 6B must start in a real selected plugin repository with source, release history, package identity, and installed-site DB evidence before any rewrite; do not treat `plugins-reference/` drafts as production contracts.
 
 ## Infrastructure Reference
 
