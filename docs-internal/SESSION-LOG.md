@@ -1,5 +1,25 @@
 # Session Log — Woodev Plugin Framework
 
+## Platform v2 Phase 5 job batch handler enqueue cleanup (2026-05-30)
+
+### Implementation
+- Continued strictly from `docs-internal/platform-v2-implementation-spec.md`, ADR-003, ADR-004, and the multi-version early class guard gotcha.
+- Re-scanned the remaining base-owned WooCommerce helper paths and confirmed the next smallest safe Phase 5 slice was the isolated `wc_enqueue_js()` path in `woodev/utilities/class-woodev-job-batch-handler.php`.
+- Added `tests/unit/PlatformNeutralJobBatchHandlerTest.php` first, proving the current failure mode when `wc_enqueue_js()` is unavailable in a platform-neutral unit context and locking the inline JavaScript queue contract.
+- Replaced direct `wc_enqueue_js()` usage in `Woodev_Job_Batch_Handler::render_js()` with `Woodev_Helper::enqueue_js()`.
+- Preserved installed-site batch-handler payload output, footer print-hook registration, include-based runtime loading, and resolver boundaries; did not move background-job runtime behavior into the resolver.
+
+### Verification
+- `vendor\bin\phpunit tests\unit\PlatformNeutralJobBatchHandlerTest.php` failed first with the expected undefined `wc_enqueue_js()` error, then passed after the implementation: 1 test / 3 assertions.
+- `composer check` passed: PHPCS 113/113, PHPStan 0 errors, PHPUnit 156 tests / 309 assertions.
+- Gotcha compilation: no new non-obvious gotcha discovered; no `docs-internal/gotchas/` update required.
+- Commit: pending at time of entry creation; final commit hash reported in chat.
+
+### Next
+- Continue Phase 5 platform-neutral module cleanup from `docs-internal/platform-v2-implementation-spec.md`.
+- Re-scan the remaining base-owned WooCommerce helper paths and pick the next smallest tested slice, most likely the setup wizard `wc_doing_it_wrong()` path or another equally narrow base-owned helper seam.
+- Do not expand resolver runtime behavior and do not rewrite production plugin loaders before migration contract docs exist.
+
 ## Platform v2 Phase 5 licensing date formatting cleanup (2026-05-30)
 
 ### Implementation

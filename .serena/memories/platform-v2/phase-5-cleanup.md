@@ -1,6 +1,6 @@
-- 2026-05-30 Phase 5 cleanup now has nine verified slices.
-- Slice 9: licensing date formatting in `Woodev_License_Messages` no longer depends on `wc_date_format()`, `wc_string_to_datetime()`, or `wc_format_datetime()`; it now uses WordPress date formatting while preserving localized expiration-date message output in a no-WooCommerce unit context.
-- Extended `tests/unit/PlatformNeutralLicensingTest.php`; the red test failed first on undefined `wc_date_format()`, then passed after the implementation (4 tests / 12 assertions).
-- Verification after slice 9: `composer check` green with 155 unit tests / 306 assertions.
-- Keep next work narrow: re-scan remaining base-owned WooCommerce helper paths and prefer the next smallest tested slice, most likely the job batch handler `wc_enqueue_js()` path.
+- 2026-05-30 Phase 5 cleanup now has ten verified slices.
+- Slice 10: the inline JavaScript path in `Woodev_Job_Batch_Handler` no longer depends on `wc_enqueue_js()`; it now uses `Woodev_Helper::enqueue_js()` while preserving the batch-handler payload and footer print-hook contract in a no-WooCommerce unit context.
+- Added `tests/unit/PlatformNeutralJobBatchHandlerTest.php`; the red test failed first on undefined `wc_enqueue_js()`, then passed after the implementation (1 test / 3 assertions).
+- Verification after slice 10: `composer check` green with 156 unit tests / 309 assertions.
+- Keep next work narrow: re-scan remaining base-owned WooCommerce helper paths and prefer the next smallest tested slice, most likely the setup wizard `wc_doing_it_wrong()` path.
 - Do not expand resolver scope; do not move runtime behavior into the resolver; do not start production plugin rewrites before migration contract docs.
