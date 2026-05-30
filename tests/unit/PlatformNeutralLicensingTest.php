@@ -16,6 +16,8 @@ require_once dirname( __DIR__, 2 ) . '/woodev/api/abstract-api-json-request.php'
 require_once dirname( __DIR__, 2 ) . '/woodev/api/class-api-base.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/licensing/api/class-licensing-api.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/licensing/api/class-licensing-api-request.php';
+require_once dirname( __DIR__, 2 ) . '/woodev/licensing/class-license-store.php';
+require_once dirname( __DIR__, 2 ) . '/woodev/licensing/class-license-messages.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/licensing/class-plugin-license.php';
 
 /**
@@ -157,6 +159,35 @@ class PlatformNeutralLicensingTest extends TestCase {
 			'https://woodev.ru/',
 			( new \Woodev_Licensing_API( $plugin, 'custom.example/api' ) )->get_url()
 		);
+	}
+
+	/**
+	 * License message date formatting should not require WooCommerce helpers in a platform-neutral unit context.
+	 *
+	 * @return void
+	 */
+	public function test_license_messages_keep_date_formatting_contract_without_woocommerce_helpers(): void {
+		Functions\when( 'get_option' )->alias(
+			static function ( string $option, $default = false ) {
+				if ( 'date_format' === $option ) {
+					return 'Y-m-d';
+				}
+
+				return $default;
+			}
+		);
+
+		Functions\when( 'date_i18n' )->alias(
+			static function ( string $format, int $timestamp ) {
+				return gmdate( $format, $timestamp );
+			}
+		);
+
+		$messages = ( new \ReflectionClass( \Woodev_License_Messages::class ) )->newInstanceWithoutConstructor();
+		$method   = new \ReflectionMethod( \Woodev_License_Messages::class, 'get_date_i18n' );
+
+		$this->assertSame( '2026-05-30', $method->invoke( $messages, 1_780_099_200 ) );
+		$this->assertSame( '2026-05-30', $method->invoke( $messages, '2026-05-30 00:00:00' ) );
 	}
 
 	/**

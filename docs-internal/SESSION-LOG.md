@@ -1,5 +1,25 @@
 # Session Log — Woodev Plugin Framework
 
+## Platform v2 Phase 5 licensing date formatting cleanup (2026-05-30)
+
+### Implementation
+- Continued strictly from `docs-internal/platform-v2-implementation-spec.md`, ADR-003, ADR-004, and the multi-version early class guard gotcha.
+- Re-scanned the remaining base-owned WooCommerce helper paths and confirmed the next smallest safe Phase 5 slice was licensing date formatting in `woodev/licensing/class-license-messages.php`.
+- Extended `tests/unit/PlatformNeutralLicensingTest.php` first, locking the no-WooCommerce date-formatting contract for numeric and string expiration dates.
+- Replaced `wc_date_format()`, `wc_string_to_datetime()`, and `wc_format_datetime()` in `Woodev_License_Messages::get_date_i18n()` with WordPress date formatting based on the site `date_format` option.
+- Preserved installed-site expiration-message output shape, include-based runtime loading, and resolver boundaries; did not expand resolver scope or move licensing runtime behavior into the resolver.
+
+### Verification
+- `vendor\bin\phpunit tests\unit\PlatformNeutralLicensingTest.php` failed first with the expected undefined `wc_date_format()` error, then passed after the implementation: 4 tests / 12 assertions.
+- `composer check` passed: PHPCS 113/113, PHPStan 0 errors, PHPUnit 155 tests / 306 assertions.
+- Gotcha compilation: no new non-obvious gotcha discovered; no `docs-internal/gotchas/` update required.
+- Commit: pending at time of entry creation; final commit hash reported in chat.
+
+### Next
+- Continue Phase 5 platform-neutral module cleanup from `docs-internal/platform-v2-implementation-spec.md`.
+- Re-scan the remaining base-owned WooCommerce helper paths and pick the next smallest tested slice, most likely the job batch handler `wc_enqueue_js()` path.
+- Do not expand resolver runtime behavior and do not rewrite production plugin loaders before migration contract docs exist.
+
 ## Platform v2 Phase 5 settings API doing_it_wrong cleanup (2026-05-30)
 
 ### Implementation

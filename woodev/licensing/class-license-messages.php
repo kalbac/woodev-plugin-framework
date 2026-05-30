@@ -72,11 +72,14 @@ if ( ! class_exists( 'Woodev_License_Messages' ) ) :
 		 * @return string The formatted date, translated if locale specifies it.
 		 */
 		private function get_date_i18n( $timestamp ) {
-			if ( is_numeric( $timestamp ) ) {
-				$timestamp = date_i18n( wc_date_format(), $timestamp );
+			$raw_timestamp = $timestamp;
+			$timestamp     = is_numeric( $timestamp ) ? (int) $timestamp : strtotime( (string) $timestamp );
+
+			if ( false === $timestamp ) {
+				return (string) $raw_timestamp;
 			}
 
-			return wc_format_datetime( wc_string_to_datetime( $timestamp ) );
+			return date_i18n( get_option( 'date_format', 'F j, Y' ), $timestamp );
 		}
 
 		/**

@@ -1,6 +1,6 @@
-- 2026-05-30 Phase 5 cleanup now has eight verified slices.
-- Slice 8: settings API error paths in `Woodev_Abstract_Settings` no longer depend on `wc_doing_it_wrong()`; they use WordPress `_doing_it_wrong()` while preserving register-setting and register-control failure messages in a no-WooCommerce unit context.
-- Extended `tests/unit/PlatformNeutralSettingsApiTest.php`; the red test failed first on undefined `wc_doing_it_wrong()`, then passed after the implementation (5 tests / 17 assertions).
-- Verification after slice 8: `composer check` green with 154 unit tests / 304 assertions.
-- Keep next work narrow: re-scan remaining base-owned WooCommerce helper paths and prefer the next smallest tested slice, most likely licensing date formatting helpers in `woodev/licensing/class-license-messages.php` or the job batch handler `wc_enqueue_js()` path.
+- 2026-05-30 Phase 5 cleanup now has nine verified slices.
+- Slice 9: licensing date formatting in `Woodev_License_Messages` no longer depends on `wc_date_format()`, `wc_string_to_datetime()`, or `wc_format_datetime()`; it now uses WordPress date formatting while preserving localized expiration-date message output in a no-WooCommerce unit context.
+- Extended `tests/unit/PlatformNeutralLicensingTest.php`; the red test failed first on undefined `wc_date_format()`, then passed after the implementation (4 tests / 12 assertions).
+- Verification after slice 9: `composer check` green with 155 unit tests / 306 assertions.
+- Keep next work narrow: re-scan remaining base-owned WooCommerce helper paths and prefer the next smallest tested slice, most likely the job batch handler `wc_enqueue_js()` path.
 - Do not expand resolver scope; do not move runtime behavior into the resolver; do not start production plugin rewrites before migration contract docs.
