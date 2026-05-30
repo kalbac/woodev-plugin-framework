@@ -1,5 +1,5 @@
 # Current State — Woodev Plugin Framework
-> Last updated: 2026-05-30 (Platform v2 Phase 5 helper doing_it_wrong cleanup complete)
+> Last updated: 2026-05-30 (Platform v2 Phase 5 helper fallback cleanup complete)
 
 ## Phase Status
 
@@ -63,6 +63,8 @@
 | 21 Phase 5 cleanup #10 | ✅ 2026-05-30 | Job batch handler inline JavaScript now queues through `Woodev_Helper::enqueue_js()` instead of `wc_enqueue_js()`, preserving the batch-handler payload and footer print-hook contract in a no-WooCommerce unit context |
 | 22 Phase 5 cleanup #11 | ✅ 2026-05-30 | Setup wizard step-registration error reporting now uses WordPress `_doing_it_wrong()` instead of `wc_doing_it_wrong()`, preserving invalid-step diagnostics in a no-WooCommerce unit context |
 | 23 Phase 5 cleanup #12 | ✅ 2026-05-30 | `Woodev_Helper::maybe_doing_it_early()` now falls back to WordPress `_doing_it_wrong()` when WooCommerce is unavailable while preserving the WooCommerce diagnostic path where `wc_doing_it_wrong()` exists |
+| 24 Phase 5 cleanup #13 | ✅ 2026-05-30 | `Woodev_Helper::format_percentage()` now falls back to local decimal formatting when `wc_format_decimal()` is unavailable while preserving the WooCommerce decimal-helper path and trim/precision contract in a no-WooCommerce unit context |
+| 25 Phase 5 cleanup #14 | ✅ 2026-05-30 | `Woodev_Helper::shop_has_virtual_products()` now returns `false` when `wc_get_products()` is unavailable, preserving published-virtual-product detection without fataling in a no-WooCommerce unit context |
 
 ## Planned — v2.0.0 & Beyond
 
@@ -100,7 +102,7 @@
 
 ## Active Queue
 
-> Platform v2 resolver facade + explicit loader definition slice is complete. Phase 3 is stopped: WooCommerce hook ownership, initial `supported_features`/Blocks handler construction, WooCommerce system-status row ownership, WooCommerce logger ownership, WooCommerce template loader ownership, HPOS/Blocks feature declarations, and payment/shipping specialized base inheritance live in `Woodev_Woocommerce_Plugin`; remaining `Woodev_Plugin` WooCommerce-adjacent items are compatibility wrappers or broader Phase 5 cleanup. Phase 4 callback timing coverage is complete for payment/shipping specialized child class declaration. Phase 5 cleanup now has twelve verified slices, including the new helper early-hook diagnostic cleanup in `Woodev_Helper::maybe_doing_it_early()` that removes the hard WooCommerce dependency in no-WooCommerce contexts while preserving the WooCommerce diagnostic path when available. Remaining residual helper paths after the re-scan are `wc_rest_check_manager_permissions()` in the REST settings controller and broader WooCommerce-oriented helper/wrapper seams in `woodev/class-helper.php`; neither should be forced forward without a new atomic slice definition. Stop gate: external review by another model is now required before any Phase 6 migration-contract or production-loader work begins.
+> Platform v2 resolver facade + explicit loader definition slice is complete. Phase 3 is stopped: WooCommerce hook ownership, initial `supported_features`/Blocks handler construction, WooCommerce system-status row ownership, WooCommerce logger ownership, WooCommerce template loader ownership, HPOS/Blocks feature declarations, and payment/shipping specialized base inheritance live in `Woodev_Woocommerce_Plugin`; remaining `Woodev_Plugin` WooCommerce-adjacent items are compatibility wrappers or broader Phase 5 cleanup. Phase 4 callback timing coverage is complete for payment/shipping specialized child class declaration. Phase 5 cleanup now has fourteen verified slices, with the latest helper fallback work removing no-WooCommerce fatals from `Woodev_Helper::format_percentage()` and `Woodev_Helper::shop_has_virtual_products()` while preserving the WooCommerce execution paths when available. Remaining residual seams after the re-scan are the boundary-sensitive `wc_rest_check_manager_permissions()` path in the REST settings controller plus intentional WooCommerce wrappers/diagnostics in `woodev/class-helper.php`; no third clean atomic Phase 5 slice is currently defined from this boundary. Stop gate: external review by another model is required before any Phase 6 migration-contract or production-loader work begins.
 
 ## Infrastructure Reference
 

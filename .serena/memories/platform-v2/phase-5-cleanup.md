@@ -1,8 +1,10 @@
-- 2026-05-30 Phase 5 cleanup now has twelve verified slices.
-- Slice 12: `Woodev_Helper::maybe_doing_it_early()` no longer hard-depends on `wc_doing_it_wrong()`; it now falls back to WordPress `_doing_it_wrong()` when WooCommerce is unavailable while preserving the WooCommerce diagnostic path when present.
-- Added `tests/unit/PlatformNeutralHelperTest.php`; the red test failed first on undefined `wc_doing_it_wrong()`, then passed after the implementation with fallback and no-op coverage (2 tests / 4 assertions).
-- Verification after slice 12: `composer check` green with 159 unit tests / 315 assertions.
-- Remaining residual helper seams after the re-scan: `wc_rest_check_manager_permissions()` in the REST settings controller and broader WooCommerce-oriented helper/wrapper paths in `woodev/class-helper.php`.
-- Stop here for Phase 5: the remaining seams are boundary-sensitive or not cleanly atomic from the current ownership boundary.
+- 2026-05-30 Phase 5 cleanup now has fourteen verified slices.
+- Slice 12 remains complete: `Woodev_Helper::maybe_doing_it_early()` falls back to WordPress `_doing_it_wrong()` when WooCommerce is unavailable while preserving the WooCommerce diagnostic path when present.
+- Slice 13: `Woodev_Helper::format_percentage()` no longer hard-depends on `wc_format_decimal()`; it now preserves the WooCommerce decimal-helper path when available and falls back to local decimal formatting in no-WooCommerce unit contexts.
+- Slice 14: `Woodev_Helper::shop_has_virtual_products()` no longer hard-depends on `wc_get_products()`; it now returns `false` when WooCommerce product helpers are unavailable while preserving the published-virtual-product query path when WooCommerce is loaded.
+- `tests/unit/PlatformNeutralHelperTest.php` was extended red-first for both helper seams: first failure on undefined `wc_format_decimal()`, second failure on undefined `wc_get_products()`, then green after each narrow fix (final state: 4 tests / 8 assertions).
+- Regression verification after both helper fallback slices: `tests/unit/HelperTest.php` green (81 tests / 89 assertions) and `composer check` green with 161 unit tests / 319 assertions.
+- Remaining residual seams after the re-scan: boundary-sensitive `wc_rest_check_manager_permissions()` in the REST settings controller plus intentional WooCommerce wrappers/diagnostics in `woodev/class-helper.php`.
+- No third clean atomic Phase 5 slice is currently defined from that remaining boundary.
+- Stop here for Phase 5 unless a new atomic slice definition appears; do not expand resolver scope, do not move runtime behavior into the resolver, and do not start production plugin rewrites before migration contract docs.
 - External review by another model is required before any Phase 6 work begins.
-- Do not expand resolver scope; do not move runtime behavior into the resolver; do not start production plugin rewrites before migration contract docs.

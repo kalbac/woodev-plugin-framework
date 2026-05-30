@@ -17,6 +17,26 @@ require_once dirname( __DIR__, 2 ) . '/woodev/class-helper.php';
 class PlatformNeutralHelperTest extends TestCase {
 
 	/**
+	 * Percentage formatting should work without WooCommerce decimal helpers.
+	 *
+	 * @return void
+	 */
+	public function test_format_percentage_falls_back_without_woocommerce_helper(): void {
+		$this->assertSame( '33.33%', \Woodev_Helper::format_percentage( 0.3333, 2, false ) );
+		$this->assertSame( '50%', \Woodev_Helper::format_percentage( 0.5, 2, true ) );
+		$this->assertSame( '75%', \Woodev_Helper::format_percentage( 0.75 ) );
+	}
+
+	/**
+	 * Virtual-product detection should safely return false without WooCommerce.
+	 *
+	 * @return void
+	 */
+	public function test_shop_has_virtual_products_returns_false_without_woocommerce(): void {
+		$this->assertFalse( \Woodev_Helper::shop_has_virtual_products() );
+	}
+
+	/**
 	 * Early-hook diagnostics should use WordPress doing_it_wrong() without WooCommerce.
 	 *
 	 * @return void

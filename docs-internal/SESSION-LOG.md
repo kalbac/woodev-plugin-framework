@@ -1,5 +1,32 @@
 # Session Log — Woodev Plugin Framework
 
+## Platform v2 Phase 5 helper fallback cleanup (2026-05-30)
+
+### Implementation
+- Continued strictly from `docs-internal/platform-v2-implementation-spec.md`, ADR-003, ADR-004, and the multi-version early class guard gotcha.
+- Re-scanned the remaining base-owned WooCommerce helper paths and found one additional clean helper-only boundary after slice 12: `Woodev_Helper::format_percentage()` still hard-depended on `wc_format_decimal()`.
+- Added `tests/unit/PlatformNeutralHelperTest.php` coverage first, proving the current failure mode when `wc_format_decimal()` is unavailable in a platform-neutral unit context and locking the percentage-formatting trim/precision contract.
+- Replaced the hard dependency in `Woodev_Helper::format_percentage()` with a guarded path that preserves `wc_format_decimal()` when WooCommerce is available and falls back to local decimal formatting otherwise.
+- Re-scanned again and identified one final helper-only seam still clean enough for the same session: `Woodev_Helper::shop_has_virtual_products()` fataled on direct `wc_get_products()` usage in a no-WooCommerce unit context.
+- Extended `tests/unit/PlatformNeutralHelperTest.php` first with a focused failing test for the missing `wc_get_products()` path.
+- Guarded `Woodev_Helper::shop_has_virtual_products()` so it now returns `false` when WooCommerce product helpers are unavailable, while preserving the published-virtual-product query path when WooCommerce is loaded.
+- Preserved include-based runtime loading, public static helper API shape, WooCommerce execution paths where available, and resolver/bootstrap boundaries; did not expand resolver scope or start Phase 6 work.
+
+### Verification
+- `vendor\bin\phpunit tests\unit\PlatformNeutralHelperTest.php` failed first on undefined `wc_format_decimal()`, then passed after the first helper fallback change: 3 tests / 7 assertions.
+- `vendor\bin\phpunit tests\unit\PlatformNeutralHelperTest.php` failed first on undefined `wc_get_products()`, then passed after the second helper fallback change: 4 tests / 8 assertions.
+- `vendor\bin\phpunit tests\unit\HelperTest.php` passed after both changes: 81 tests / 89 assertions.
+- `composer check` passed: PHPCS 113/113, PHPStan 0 errors, PHPUnit 161 tests / 319 assertions.
+- Re-scan after the second slice leaves only the boundary-sensitive `wc_rest_check_manager_permissions()` path in the REST settings controller plus intentional WooCommerce wrappers/diagnostics in `woodev/class-helper.php`.
+- No third clean atomic Phase 5 slice is currently defined from that remaining boundary, so the session stopped rather than forcing a resolver/runtime ownership change.
+- Gotcha compilation: no new non-obvious gotcha discovered; no `docs-internal/gotchas/` update required.
+- Commit: pending at time of entry creation; final commit hash reported in chat.
+
+### Next
+- Stop after these two helper fallback slices rather than forcing the REST permissions seam or intentional WooCommerce wrappers in `Woodev_Helper`.
+- External review by another model is required before any Phase 6 migration-contract or production-loader work begins.
+- If Phase 5 resumes later, re-scan the residual REST/settings boundary and continue only if a new truly atomic slice definition appears.
+
 ## Platform v2 Phase 5 helper doing_it_wrong cleanup (2026-05-30)
 
 ### Implementation

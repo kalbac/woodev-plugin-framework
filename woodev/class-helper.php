@@ -210,7 +210,23 @@ if ( ! class_exists( 'Woodev_Helper' ) ) :
 		 * @return string fraction formatted as percentage
 		 */
 		public static function format_percentage( $fraction, $decimal_points = false, bool $trim_zeros = false ): string {
-			return sprintf( '%s%%', (string) wc_format_decimal( $fraction * 100, $decimal_points, $trim_zeros ) );
+			$percentage = (float) $fraction * 100;
+
+			if ( function_exists( 'wc_format_decimal' ) ) {
+				return sprintf( '%s%%', (string) wc_format_decimal( $percentage, $decimal_points, $trim_zeros ) );
+			}
+
+			if ( false === $decimal_points ) {
+				$formatted = (string) $percentage;
+			} else {
+				$formatted = number_format( $percentage, '' === $decimal_points ? 2 : (int) $decimal_points, '.', '' );
+			}
+
+			if ( $trim_zeros && false !== strpos( $formatted, '.' ) ) {
+				$formatted = rtrim( rtrim( $formatted, '0' ), '.' );
+			}
+
+			return sprintf( '%s%%', $formatted );
 		}
 
 		/**
@@ -557,6 +573,10 @@ if ( ! class_exists( 'Woodev_Helper' ) ) :
 		 * @return bool
 		 */
 		public static function shop_has_virtual_products(): bool {
+
+			if ( ! function_exists( 'wc_get_products' ) ) {
+				return false;
+			}
 
 			$virtual_products = wc_get_products(
 				array(
