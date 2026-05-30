@@ -100,7 +100,7 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 
 			} catch ( Exception $exception ) {
 
-				wc_doing_it_wrong( __METHOD__, 'Could not register setting: ' . $exception->getMessage(), '1.1.2' );
+				_doing_it_wrong( __METHOD__, 'Could not register setting: ' . $exception->getMessage(), '1.1.2' );
 
 				return false;
 			}
@@ -168,7 +168,7 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 
 			} catch ( Exception $exception ) {
 
-				wc_doing_it_wrong( __METHOD__, 'Could not register setting control: ' . $exception->getMessage(), '1.1.2' );
+				_doing_it_wrong( __METHOD__, 'Could not register setting control: ' . $exception->getMessage(), '1.1.2' );
 
 				return false;
 			}

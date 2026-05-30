@@ -7,6 +7,10 @@
 
 namespace Woodev\Tests\Unit;
 
+use Brain\Monkey\Functions;
+
+require_once dirname( __DIR__, 2 ) . '/woodev/class-plugin-exception.php';
+require_once dirname( __DIR__, 2 ) . '/woodev/settings-api/class-control.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/settings-api/class-setting.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/settings-api/abstract-class-settings.php';
 
@@ -103,5 +107,43 @@ class PlatformNeutralSettingsApiTest extends TestCase {
 		$this->assertTrue( $setting->validate_value( 'https://example.com/path?foo=bar' ) );
 		$this->assertFalse( $setting->validate_value( 'ftp://example.com' ) );
 		$this->assertFalse( $setting->validate_value( 'example.com' ) );
+	}
+
+	/**
+	 * Invalid setting registrations should use WordPress doing_it_wrong() without WooCommerce.
+	 *
+	 * @return void
+	 */
+	public function test_register_setting_error_path_uses_wordpress_doing_it_wrong(): void {
+		$settings = new Testable_Platform_Neutral_Settings( 'test-plugin' );
+
+		Functions\expect( '_doing_it_wrong' )
+			->once()
+			->with(
+				'Woodev_Abstract_Settings::register_setting',
+				'Could not register setting: invalid-type is not a valid setting type',
+				'1.1.2'
+			);
+
+		$this->assertFalse( $settings->register_setting( 'example', 'invalid-type' ) );
+	}
+
+	/**
+	 * Invalid setting control registrations should use WordPress doing_it_wrong() without WooCommerce.
+	 *
+	 * @return void
+	 */
+	public function test_register_control_error_path_uses_wordpress_doing_it_wrong(): void {
+		$settings = new Testable_Platform_Neutral_Settings( 'test-plugin' );
+
+		Functions\expect( '_doing_it_wrong' )
+			->once()
+			->with(
+				'Woodev_Abstract_Settings::register_control',
+				'Could not register setting control: invalid-control is not a valid control type',
+				'1.1.2'
+			);
+
+		$this->assertFalse( $settings->register_control( 'missing-setting', 'invalid-control' ) );
 	}
 }

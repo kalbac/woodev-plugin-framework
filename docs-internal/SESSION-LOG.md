@@ -1,5 +1,25 @@
 # Session Log — Woodev Plugin Framework
 
+## Platform v2 Phase 5 settings API doing_it_wrong cleanup (2026-05-30)
+
+### Implementation
+- Continued strictly from `docs-internal/platform-v2-implementation-spec.md`, ADR-003, ADR-004, and the multi-version early class guard gotcha.
+- Re-scanned the remaining base-owned WooCommerce helper paths and confirmed the next smallest safe Phase 5 slice was the isolated settings API error-path usage of `wc_doing_it_wrong()` in `woodev/settings-api/abstract-class-settings.php`.
+- Extended `tests/unit/PlatformNeutralSettingsApiTest.php` first, locking the register-setting and register-control failure-message contract in a no-WooCommerce unit context.
+- Replaced `wc_doing_it_wrong()` with WordPress `_doing_it_wrong()` in `Woodev_Abstract_Settings::register_setting()` and `Woodev_Abstract_Settings::register_control()`.
+- Preserved installed-site failure messages, public settings API behavior, include-based runtime loading, and resolver boundaries; did not expand resolver scope or pull WooCommerce runtime assumptions back into the base.
+
+### Verification
+- `composer test -- --filter PlatformNeutralSettingsApiTest` failed first with the expected undefined `wc_doing_it_wrong()` error, then passed after the implementation: 5 tests / 17 assertions.
+- `composer check` passed: PHPCS 113/113, PHPStan 0 errors, PHPUnit 154 tests / 304 assertions.
+- Gotcha compilation: no new non-obvious gotcha discovered; no `docs-internal/gotchas/` update required.
+- Commit: pending at time of entry creation; final commit hash reported in chat.
+
+### Next
+- Continue Phase 5 platform-neutral module cleanup from `docs-internal/platform-v2-implementation-spec.md`.
+- Re-scan the remaining base-owned WooCommerce helper paths and prefer the next smallest tested slice, most likely licensing date formatting helpers in `woodev/licensing/class-license-messages.php` or the job batch handler `wc_enqueue_js()` path.
+- Do not expand resolver runtime behavior and do not rewrite production plugin loaders before migration contract docs exist.
+
 ## Platform v2 Phase 5 admin notice JavaScript cleanup (2026-05-30)
 
 ### Implementation

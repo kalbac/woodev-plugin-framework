@@ -1,6 +1,6 @@
-- 2026-05-30 Phase 5 cleanup now has seven verified slices.
-- Slice 7: admin notice dismiss JavaScript in `Woodev_Admin_Notice_Handler` no longer depends on `wc_enqueue_js()`; it queues through `Woodev_Helper::enqueue_js()` and the helper now registers footer print hooks for queued JavaScript in a no-WooCommerce unit context.
-- Added `tests/unit/PlatformNeutralAdminNoticeTest.php`; the red test failed first on undefined `wc_enqueue_js()`, then passed after the implementation (2 tests / 8 assertions).
-- Verification after slice 7: `composer check` green with 152 unit tests / 300 assertions.
-- Keep next work narrow: re-scan remaining base-owned WooCommerce helper paths and prefer the next smallest tested slice, likely `wc_doing_it_wrong()` in settings API, licensing date formatting helpers, or the job batch handler `wc_enqueue_js()` path.
-- Do not expand resolver scope; do not move admin/dependency/utility runtime behavior into the resolver; do not start production plugin rewrites before migration contract docs.
+- 2026-05-30 Phase 5 cleanup now has eight verified slices.
+- Slice 8: settings API error paths in `Woodev_Abstract_Settings` no longer depend on `wc_doing_it_wrong()`; they use WordPress `_doing_it_wrong()` while preserving register-setting and register-control failure messages in a no-WooCommerce unit context.
+- Extended `tests/unit/PlatformNeutralSettingsApiTest.php`; the red test failed first on undefined `wc_doing_it_wrong()`, then passed after the implementation (5 tests / 17 assertions).
+- Verification after slice 8: `composer check` green with 154 unit tests / 304 assertions.
+- Keep next work narrow: re-scan remaining base-owned WooCommerce helper paths and prefer the next smallest tested slice, most likely licensing date formatting helpers in `woodev/licensing/class-license-messages.php` or the job batch handler `wc_enqueue_js()` path.
+- Do not expand resolver scope; do not move runtime behavior into the resolver; do not start production plugin rewrites before migration contract docs.
