@@ -21,7 +21,7 @@ require_once dirname( __DIR__, 2 ) . '/woodev/licensing/class-license-messages.p
 require_once dirname( __DIR__, 2 ) . '/woodev/licensing/class-plugin-license.php';
 
 /**
-	* Minimal Woodev plugin test double for licensing constructor type checks.
+ * Minimal Woodev plugin test double for licensing constructor type checks.
  */
 class Testable_Platform_Neutral_Licensing_Plugin extends \Woodev_Plugin {
 
@@ -119,6 +119,12 @@ class PlatformNeutralLicensingTest extends TestCase {
 			]
 		);
 
+		Functions\when( 'apply_filters' )->alias(
+			static function ( string $hook_name, $value ) {
+				return $value;
+			}
+		);
+
 		$this->assertSame(
 			print_r(
 				[
@@ -130,6 +136,42 @@ class PlatformNeutralLicensingTest extends TestCase {
 			$request->to_string()
 		);
 		$this->assertSame( $request->to_string(), $request->to_string_safe() );
+	}
+
+	/**
+	 * Licensing API request stringification should keep the WooCommerce fallback filter contract.
+	 *
+	 * @return void
+	 */
+	public function test_licensing_api_request_keeps_print_r_alternatives_filter_contract(): void {
+		$request = new \Woodev_Licensing_API_Request();
+
+		$this->set_protected_property( $request, 'method', 'POST' );
+		$this->set_protected_property(
+			$request,
+			'params',
+			[
+				'license' => 'abc123',
+				'item_id' => 42,
+			]
+		);
+
+		Functions\when( 'apply_filters' )->alias(
+			static function ( string $hook_name, $value, $expression ) {
+				if ( 'woocommerce_print_r_alternatives' !== $hook_name ) {
+					return $value;
+				}
+
+				return [
+					[
+						'func' => 'json_encode',
+						'args' => [ $expression ],
+					],
+				];
+			}
+		);
+
+		$this->assertSame( '{"license":"abc123","item_id":42}', $request->to_string() );
 	}
 
 	/**
@@ -183,11 +225,107 @@ class PlatformNeutralLicensingTest extends TestCase {
 			}
 		);
 
+		Functions\when( 'wp_date' )->alias(
+			static function ( string $format, int $timestamp ) {
+				return gmdate( $format, $timestamp );
+			}
+		);
+
 		$messages = ( new \ReflectionClass( \Woodev_License_Messages::class ) )->newInstanceWithoutConstructor();
 		$method   = new \ReflectionMethod( \Woodev_License_Messages::class, 'get_date_i18n' );
 
 		$this->assertSame( '2026-05-30', $method->invoke( $messages, 1_780_099_200 ) );
 		$this->assertSame( '2026-05-30', $method->invoke( $messages, '2026-05-30 00:00:00' ) );
+	}
+
+	/**
+	 * License message date formatting should keep the WooCommerce date-format filter contract.
+	 *
+	 * @return void
+	 */
+	public function test_license_messages_keep_woocommerce_date_format_filter_contract_without_helpers(): void {
+		Functions\when( 'get_option' )->alias(
+			static function ( string $option, $default = false ) {
+				if ( 'date_format' === $option ) {
+					return 'Y-m-d';
+				}
+
+				return $default;
+			}
+		);
+
+		Functions\when( 'apply_filters' )->alias(
+			static function ( string $hook_name, $value ) {
+				if ( 'woocommerce_date_format' === $hook_name ) {
+					return 'd/m/Y';
+				}
+
+				return $value;
+			}
+		);
+
+		Functions\when( 'date_i18n' )->alias(
+			static function ( string $format, int $timestamp ) {
+				return gmdate( $format, $timestamp );
+			}
+		);
+
+		Functions\when( 'wp_date' )->alias(
+			static function ( string $format, int $timestamp ) {
+				return gmdate( $format, $timestamp );
+			}
+		);
+
+		$messages = ( new \ReflectionClass( \Woodev_License_Messages::class ) )->newInstanceWithoutConstructor();
+		$method   = new \ReflectionMethod( \Woodev_License_Messages::class, 'get_date_i18n' );
+
+		$this->assertSame( '30/05/2026', $method->invoke( $messages, 1_780_099_200 ) );
+	}
+
+	/**
+	 * License message string dates should be interpreted in the WordPress timezone.
+	 *
+	 * @return void
+	 */
+	public function test_license_messages_keep_wordpress_timezone_contract_for_offset_strings_without_helpers(): void {
+		Functions\when( 'get_option' )->alias(
+			static function ( string $option, $default = false ) {
+				if ( 'date_format' === $option ) {
+					return 'Y-m-d H:i';
+				}
+
+				if ( 'timezone_string' === $option ) {
+					return 'Europe/Moscow';
+				}
+
+				return $default;
+			}
+		);
+
+		Functions\when( 'apply_filters' )->alias(
+			static function ( string $hook_name, $value ) {
+				return $value;
+			}
+		);
+
+		Functions\when( 'date_i18n' )->alias(
+			static function ( string $format, int $timestamp ) {
+				return gmdate( $format, $timestamp );
+			}
+		);
+
+		Functions\when( 'wp_date' )->alias(
+			static function ( string $format, int $timestamp, ?\DateTimeZone $timezone = null ) {
+				$datetime = new \DateTimeImmutable( '@' . $timestamp );
+
+				return $datetime->setTimezone( $timezone ?: new \DateTimeZone( 'UTC' ) )->format( $format );
+			}
+		);
+
+		$messages = ( new \ReflectionClass( \Woodev_License_Messages::class ) )->newInstanceWithoutConstructor();
+		$method   = new \ReflectionMethod( \Woodev_License_Messages::class, 'get_date_i18n' );
+
+		$this->assertSame( '2026-05-30 00:30', $method->invoke( $messages, '2026-05-30T00:30:00+03:00' ) );
 	}
 
 	/**

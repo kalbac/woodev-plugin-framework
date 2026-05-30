@@ -1,5 +1,5 @@
 # Current State — Woodev Plugin Framework
-> Last updated: 2026-05-30 (Platform v2 Phase 5 helper fallback cleanup complete)
+> Last updated: 2026-05-30 (Platform v2 Phase 5 post-review follow-up clear)
 
 ## Phase Status
 
@@ -65,6 +65,7 @@
 | 23 Phase 5 cleanup #12 | ✅ 2026-05-30 | `Woodev_Helper::maybe_doing_it_early()` now falls back to WordPress `_doing_it_wrong()` when WooCommerce is unavailable while preserving the WooCommerce diagnostic path where `wc_doing_it_wrong()` exists |
 | 24 Phase 5 cleanup #13 | ✅ 2026-05-30 | `Woodev_Helper::format_percentage()` now falls back to local decimal formatting when `wc_format_decimal()` is unavailable while preserving the WooCommerce decimal-helper path and trim/precision contract in a no-WooCommerce unit context |
 | 25 Phase 5 cleanup #14 | ✅ 2026-05-30 | `Woodev_Helper::shop_has_virtual_products()` now returns `false` when `wc_get_products()` is unavailable, preserving published-virtual-product detection without fataling in a no-WooCommerce unit context |
+| 26 Phase 5 post-review follow-up | ✅ 2026-05-30 | Licensing date formatting now preserves WooCommerce date-format filter and WordPress timezone semantics without hard WooCommerce dependencies; licensing request debug stringification preserves the WooCommerce `wc_print_r()`/fallback-filter contract; `wc_enqueue_js()` wrapper/filter difference accepted as non-atomic for this follow-up |
 
 ## Planned — v2.0.0 & Beyond
 
@@ -102,7 +103,7 @@
 
 ## Active Queue
 
-> Platform v2 resolver facade + explicit loader definition slice is complete. Phase 3 is stopped: WooCommerce hook ownership, initial `supported_features`/Blocks handler construction, WooCommerce system-status row ownership, WooCommerce logger ownership, WooCommerce template loader ownership, HPOS/Blocks feature declarations, and payment/shipping specialized base inheritance live in `Woodev_Woocommerce_Plugin`; remaining `Woodev_Plugin` WooCommerce-adjacent items are compatibility wrappers or broader Phase 5 cleanup. Phase 4 callback timing coverage is complete for payment/shipping specialized child class declaration. Phase 5 cleanup now has fourteen verified slices, with the latest helper fallback work removing no-WooCommerce fatals from `Woodev_Helper::format_percentage()` and `Woodev_Helper::shop_has_virtual_products()` while preserving the WooCommerce execution paths when available. Remaining residual seams after the re-scan are the boundary-sensitive `wc_rest_check_manager_permissions()` path in the REST settings controller plus intentional WooCommerce wrappers/diagnostics in `woodev/class-helper.php`; no third clean atomic Phase 5 slice is currently defined from this boundary. Stop gate: external review by another model is required before any Phase 6 migration-contract or production-loader work begins.
+> Platform v2 resolver facade + explicit loader definition slice is complete. Phase 3 is stopped: WooCommerce hook ownership, initial `supported_features`/Blocks handler construction, WooCommerce system-status row ownership, WooCommerce logger ownership, WooCommerce template loader ownership, HPOS/Blocks feature declarations, and payment/shipping specialized base inheritance live in `Woodev_Woocommerce_Plugin`; remaining `Woodev_Plugin` WooCommerce-adjacent items are compatibility wrappers or Phase 5 cleanup. Phase 4 callback timing coverage is complete for payment/shipping specialized child class declaration. Phase 5 cleanup has fourteen verified cleanup slices plus one post-review follow-up pass. The follow-up resolved the medium licensing date-format/timezone finding and the narrow licensing `wc_print_r()` debug-stringifier finding; the `wc_enqueue_js()` wrapper/filter concern is accepted as non-atomic because exact preservation would affect the shared `Woodev_Helper::enqueue_js()` output contract. Remaining residual seams are the boundary-sensitive `wc_rest_check_manager_permissions()` path in the REST settings controller plus intentional WooCommerce wrappers/diagnostics in `woodev/class-helper.php`. Phase 5 is review-cleared for Phase 6 planning in a future session; do not start Phase 6 from this follow-up session.
 
 ## Infrastructure Reference
 

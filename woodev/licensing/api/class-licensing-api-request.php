@@ -43,7 +43,49 @@ if ( ! class_exists( 'Woodev_Licensing_API_Request' ) ) :
 		 * @return string|bool
 		 */
 		private static function print_r( $expression, $return = false ) {
-			return print_r( $expression, $return );
+
+			if ( function_exists( 'wc_print_r' ) ) {
+				return wc_print_r( $expression, $return );
+			}
+
+			$alternatives = [
+				[
+					'func' => 'print_r',
+					'args' => [ $expression, true ],
+				],
+				[
+					'func' => 'var_export',
+					'args' => [ $expression, true ],
+				],
+				[
+					'func' => 'json_encode',
+					'args' => [ $expression ],
+				],
+				[
+					'func' => 'serialize',
+					'args' => [ $expression ],
+				],
+			];
+
+			$alternatives = apply_filters( 'woocommerce_print_r_alternatives', $alternatives, $expression );
+
+			foreach ( $alternatives as $alternative ) {
+
+				if ( empty( $alternative['func'] ) || ! function_exists( $alternative['func'] ) ) {
+					continue;
+				}
+
+				$result = $alternative['func']( ...( $alternative['args'] ?? [] ) );
+
+				if ( $return ) {
+					return $result;
+				}
+
+				echo $result; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+				return true;
+			}
+
+			return false;
 		}
 	}
 

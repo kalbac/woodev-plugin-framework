@@ -1,5 +1,31 @@
 # Session Log — Woodev Plugin Framework
 
+## Platform v2 Phase 5 post-review follow-up (2026-05-30)
+
+### Implementation
+- Continued strictly from `docs-internal/platform-v2-implementation-spec.md`, ADR-003, ADR-004, and the multi-version early class guard gotcha; did not start Phase 6.
+- Treated the external review as findings to verify, not as scope expansion.
+- Added red-first coverage for `Woodev_License_Messages::get_date_i18n()` preserving the `woocommerce_date_format` filter without requiring WooCommerce helpers.
+- Added red-first coverage for ISO offset date strings preserving WordPress site timezone output in no-WooCommerce contexts.
+- Updated licensing date formatting to use the original WooCommerce helper path when available, and a WordPress timezone-aware fallback using the same WooCommerce date-format filter otherwise.
+- Re-evaluated Low findings after the Medium fix: `wc_enqueue_js()` wrapper/filter equivalence is not a clean atomic follow-up because exact preservation would alter the shared `Woodev_Helper::enqueue_js()` output contract.
+- Added red-first coverage for the licensing API debug stringifier preserving the `woocommerce_print_r_alternatives` fallback-filter contract.
+- Updated the private licensing request stringifier to delegate to `wc_print_r()` when available and otherwise mirror WooCommerce fallback alternatives without a hard WooCommerce dependency.
+
+### Verification
+- `vendor\bin\phpunit tests\unit\PlatformNeutralLicensingTest.php` failed first on the missing date-format filter, then passed after the narrow date-format fix.
+- `vendor\bin\phpunit tests\unit\PlatformNeutralLicensingTest.php` failed first on the ISO offset timezone regression, then passed after the WordPress timezone fallback.
+- `vendor\bin\phpunit tests\unit\PlatformNeutralLicensingTest.php` failed first on the missing `woocommerce_print_r_alternatives` contract, then passed after the private stringifier fix: 7 tests / 15 assertions.
+- Code simplifier review touched only a behavior-neutral test docblock alignment; production code remained unchanged after review.
+- ReadLints reported no issues for the three touched files.
+- `composer check` passed: PHPCS 113/113, PHPStan 0 errors, PHPUnit 164 tests / 322 assertions.
+- Gotcha compilation: no new non-obvious gotcha discovered; no `docs-internal/gotchas/` update required.
+- Commit: pending at time of entry creation; final commit hash reported in chat.
+
+### Next
+- Phase 5 is review-cleared for Phase 6 planning in a future session.
+- Do not start Phase 6 from this follow-up session; the next session should begin with migration-contract planning, not production plugin rewrites.
+
 ## Platform v2 Phase 5 helper fallback cleanup (2026-05-30)
 
 ### Implementation

@@ -1,10 +1,10 @@
-- 2026-05-30 Phase 5 cleanup now has fourteen verified slices.
-- Slice 12 remains complete: `Woodev_Helper::maybe_doing_it_early()` falls back to WordPress `_doing_it_wrong()` when WooCommerce is unavailable while preserving the WooCommerce diagnostic path when present.
-- Slice 13: `Woodev_Helper::format_percentage()` no longer hard-depends on `wc_format_decimal()`; it now preserves the WooCommerce decimal-helper path when available and falls back to local decimal formatting in no-WooCommerce unit contexts.
-- Slice 14: `Woodev_Helper::shop_has_virtual_products()` no longer hard-depends on `wc_get_products()`; it now returns `false` when WooCommerce product helpers are unavailable while preserving the published-virtual-product query path when WooCommerce is loaded.
-- `tests/unit/PlatformNeutralHelperTest.php` was extended red-first for both helper seams: first failure on undefined `wc_format_decimal()`, second failure on undefined `wc_get_products()`, then green after each narrow fix (final state: 4 tests / 8 assertions).
-- Regression verification after both helper fallback slices: `tests/unit/HelperTest.php` green (81 tests / 89 assertions) and `composer check` green with 161 unit tests / 319 assertions.
-- Remaining residual seams after the re-scan: boundary-sensitive `wc_rest_check_manager_permissions()` in the REST settings controller plus intentional WooCommerce wrappers/diagnostics in `woodev/class-helper.php`.
-- No third clean atomic Phase 5 slice is currently defined from that remaining boundary.
-- Stop here for Phase 5 unless a new atomic slice definition appears; do not expand resolver scope, do not move runtime behavior into the resolver, and do not start production plugin rewrites before migration contract docs.
-- External review by another model is required before any Phase 6 work begins.
+- 2026-05-30 Phase 5 cleanup has fourteen verified cleanup slices plus one post-review follow-up pass.
+- Post-review Medium finding resolved: `Woodev_License_Messages::get_date_i18n()` now preserves the WooCommerce helper path when available and otherwise uses a WordPress timezone-aware fallback that still applies the `woocommerce_date_format` filter.
+- Red-first licensing date coverage added for custom WooCommerce date-format filters and ISO offset strings that must format in the WordPress site timezone without WooCommerce helpers.
+- Post-review Low `wc_print_r()` finding resolved narrowly: `Woodev_Licensing_API_Request::print_r()` delegates to `wc_print_r()` when available and otherwise mirrors WooCommerce fallback alternatives through `woocommerce_print_r_alternatives`.
+- Red-first debug stringifier coverage added for the `woocommerce_print_r_alternatives` filter while preserving the existing print_r-style output contract.
+- Post-review Low `wc_enqueue_js()` finding accepted without code changes: exact WooCommerce queued-JS wrapper/filter preservation would affect the shared public `Woodev_Helper::enqueue_js()` output contract and is not a clean atomic follow-up.
+- Verification for the follow-up: `tests/unit/PlatformNeutralLicensingTest.php` red/green for the three reviewed behaviors, ReadLints clean for touched files, and `composer check` green with 164 unit tests / 322 assertions.
+- Remaining residual seams: boundary-sensitive `wc_rest_check_manager_permissions()` in the REST settings controller plus intentional WooCommerce wrappers/diagnostics in `woodev/class-helper.php`.
+- Phase 5 is review-cleared for Phase 6 planning in a future session.
+- Do not start Phase 6 from this follow-up session; next work should begin with migration-contract planning, not production plugin rewrites.
