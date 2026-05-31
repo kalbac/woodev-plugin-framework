@@ -1,5 +1,26 @@
 # Session Log — Woodev Plugin Framework
 
+## Platform v2 sandbox shipping runtime validation (2026-05-31)
+
+### Implementation
+- Re-anchored on `PLANS.md`, the accepted Platform v2 implementation spec, ADR-003/004, and the 2026-05-31 roadmap reconciliation: framework-first, sandbox validation second, no Phase 6B, no edits to `plugins-reference/`, no resolver/bootstrap scope expansion.
+- Inspected existing Platform v2 coverage: current tests already prove pure-WP loading, WC gating, invalid loader handling, legacy adapter capability mapping, selected-path early classes, and synthetic callback-time payment/shipping subclass declaration.
+- Inspected `plugins-reference/woocommerce-edostavka` and `plugins-reference/woocommerce-yandex-delivery` read-only for realism cues only: entry constants, include-based bootstrap/callback, singleton plugin class, method ID, shipping method registration, abstract shipping method base, courier/pickup method variants, checkout/session/rate/AJAX/cron cues.
+- Chose the narrowest useful framework-readiness artifact: a generic file-based fixture under `tests/_fixtures/woodev-realistic-shipping-plugin` plus one focused unit test, instead of modifying sandbox copies or continuing migration-contract paperwork.
+- Added red-first `tests/unit/RealisticShippingFixtureTest.php`; it initially failed because the fixture did not exist.
+- Added the fixture entry + include graph: explicit loader definition, include-based callback, concrete `Woodev_Realistic_Shipping_Plugin extends Shipping_Plugin`, abstract shipping method base, courier and pickup method classes.
+- The test proves explicit loader definition, WooCommerce requirement gate, selected-framework early shipping base availability, include-based callback loading, real `Shipping_Plugin` construction, and `Woodev_Woocommerce_Plugin` inheritance against a realistic shipping-plugin shape.
+
+### Verification
+- Red-first targeted test failed on missing fixture file, as expected.
+- `vendor\bin\phpunit tests\unit\RealisticShippingFixtureTest.php` passed after fixture implementation: 1 test / 8 assertions.
+- `composer check` passed: PHPCS 113/113, PHPStan 0 errors, PHPUnit 165 tests / 330 assertions.
+- No edits were made to `plugins-reference/`; no production plugin repo touched; no Phase 6B started; resolver/bootstrap responsibilities were not expanded.
+- Gotcha compilation: no new non-obvious framework-behavior gotcha discovered.
+
+### Next
+- A realistic sandbox validation slice is implemented and verified. Further work should only add another narrow fixture/test if it exposes a framework-readiness gap not covered here; do not resume Phase 6A paperwork or start Phase 6B from this repo.
+
 ## Platform v2 roadmap reconciliation (2026-05-31)
 
 ### Implementation
