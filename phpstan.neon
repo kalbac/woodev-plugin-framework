@@ -85,19 +85,6 @@ parameters:
     # =================================================
     ignoreErrors:
         # ---------------------------------------------------------------------------
-        # Payment gateway class hierarchy — 400+ self-referencing method calls
-        # ---------------------------------------------------------------------------
-        # Root cause: Woodev_Payment_Gateway extends WC_Payment_Gateway (stub).
-        # PHPStan cannot fully resolve methods from the WC_Payment_Gateway stub
-        # class hierarchy, causing all calls to $this->get_id(), $this->get_plugin(),
-        # etc. to be reported as undefined. The methods exist at runtime.
-        # When WC ships proper stubs or we extract interfaces, these can be removed.
-        # ---------------------------------------------------------------------------
-        - '#Call to an undefined method Woodev_Payment_Gateway_Direct::#'
-        - '#Call to an undefined method Woodev_Payment_Gateway_Hosted::#'
-        - '#Call to an undefined method Woodev_Payment_Gateway::#'
-
-        # ---------------------------------------------------------------------------
         # WordPress/WooCommerce dynamic properties (legacy patterns)
         # ---------------------------------------------------------------------------
 

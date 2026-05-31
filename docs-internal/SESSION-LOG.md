@@ -1,5 +1,24 @@
 # Session Log — Woodev Plugin Framework
 
+## Payment gateway base-method regression fix (2026-05-31)
+
+### Implementation
+- A local branch review (after the payment fixture slice) surfaced a CRITICAL regression: commits `728c6f9` ("remove 47 deprecated methods") + `d85a1f9` removed **57 methods** from `Woodev_Payment_Gateway` (1045 lines); **28 were still called** by surviving framework code, including hot-path `is_available()` → `$this->get_plugin()` / `$this->currency_is_accepted()`, and capture/refund order-meta calls. On any installed gateway plugin this is a guaranteed `Call to undefined method` fatal at checkout.
+- Root cause of non-detection: `phpstan.neon` had a blanket ignore for `Call to an undefined method Woodev_Payment_Gateway(_Direct|_Hosted)::#` (comment: "methods exist at runtime" — no longer true after deletion). Unit tests never instantiated a concrete gateway.
+- Phase 0: diffed merge-base (`2d607b75`) vs HEAD; enumerated the 57 removed methods, cross-referenced surviving call sites, and confirmed surviving properties/constants/plugin-side deps (`log`, `get_api_log_message`, `get_documentation_url`). Confirmed capture.php's `get_order_capture_maximum`/`get_order_authorization_amount` calls are on the capture handler itself (not the gateway), so those deprecated wrappers needed no restore.
+- Phase 1: restored the still-called infrastructure block on `Woodev_Payment_Gateway` from the pre-cleanup version: `get_id`, `get_id_dasherized`, `get_plugin`, `is_enabled`, `currency_is_accepted`, `get_accepted_currencies`, `get_payment_currency`, `get_available_countries`, order-meta CRUD + `get_order_meta_prefix`, environment family (`get_environments`/`get_environment`/`get_environment_name`/`is_environment`/`is_production_environment`/`is_test_environment`), `csc_*`, `share_settings`/`inherit_settings`, `add_support`/`remove_support`/`set_supports`, debug family (`debug_off`/`debug_log`/`debug_checkout`/`add_debug_message`), `is_direct_gateway`/`is_hosted_gateway`, `is_detailed_customer_decline_messages_enabled`, `get_api` stub, checkout order-id getters, `get_not_configured_error_message`, `add_api_request_logging`/`log_api_request`.
+- Phase 2 (reconciliation): deliberately did NOT restore WC-inherited `get_method_title()`, eCheck-only `supports_check_field()`, or the deprecated capture wrappers; preserved the intentional eCheck/ACH/US-payment removal. Fixed a latent `'off' == debug_off()` loose comparison to a clean `debug_off()` (behavior-preserving).
+- Phase 3: removed the blanket PHPStan ignore lines for the gateway hierarchy.
+- Phase 4: extended `RealisticPaymentFixtureTest` with a reflection-based behavioral check that executes the restored pure getters (`currency_is_accepted`, environment checks, `csc_*`, `inherit_settings`, decline-messages, `get_plugin`, `is_direct_gateway`) on a `newInstanceWithoutConstructor()` gateway — no payment runtime executed.
+
+### Verification
+- `composer check` green: PHPCS 113/113, **PHPStan 0 errors with the blanket gateway ignore removed** (authoritative proof every still-called gateway method now resolves; future regressions of this kind will be caught), PHPUnit 166 tests / 355 assertions.
+- Removing the fixture's redundant `protected get_plugin()` override surfaced and confirmed the restored base `public get_plugin()` is genuinely exercised.
+- Gotcha updated: extended `docs-internal/gotchas/gateway-type-methods-required.md` with this larger recurrence and the PHPStan-ignore-masking lesson (dedup: same root cause as the s3 gotcha).
+
+### Next
+- This fixes the release-blocker. Consider an integration test that constructs a concrete gateway through the full WC runtime and exercises `is_available()`/refund/capture end-to-end. Audit other broad `Call to an undefined method <Class>::` PHPStan ignores for similar masking risk.
+
 ## Platform v2 sandbox payment runtime validation (2026-05-31)
 
 ### Implementation

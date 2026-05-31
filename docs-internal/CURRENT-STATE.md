@@ -27,6 +27,7 @@
 - [✅] Woodev_Helper::get_post() non-existent method — fixed (s3)
 - [✅] Woodev_Payment_Gateway::$voided_order_message dynamic — fixed (s3)
 - [✅] eCheck/ACH payment type — removed (s3), `is_echeck_gateway()` returns false, deprecated
+- [✅] Payment gateway base-method regression — v2 cleanup (`728c6f9`/`d85a1f9`) removed 28 still-called `Woodev_Payment_Gateway` methods (checkout/refund fatals), masked by a blanket PHPStan ignore — restored infrastructure methods + removed the blanket ignore (2026-05-31)
 
 ## Next Actions (priority order)
 

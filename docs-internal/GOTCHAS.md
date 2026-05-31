@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 > **12 atomic gotchas in 6 namespaces** — update count when adding/removing.
-> Last updated: 2026-05-29 (s4)
+> Last updated: 2026-05-31 (gateway base-method removal recurrence + PHPStan-ignore masking)
 
 ## Index
 
@@ -12,7 +12,7 @@
 ### [php/*] — PHP / WordPress patterns
 - [php/dependency-function-check-bug] get_missing_php_functions() uses extension_loaded instead of function_exists → [gotchas/dependency-function-check-bug.md](gotchas/dependency-function-check-bug.md) (s2)
 - [php/namespace-migration-legacy-psr4] Legacy Woodev_* vs PSR-4 Woodev\Framework\* conventions → [gotchas/namespace-migration-legacy-psr4.md](gotchas/namespace-migration-legacy-psr4.md) (s2)
-- [php/gateway-type-methods-required] is_credit_card_gateway/is_echeck_gateway/get_payment_type must exist — accidentally deleted in s2 cleanup → [gotchas/gateway-type-methods-required.md](gotchas/gateway-type-methods-required.md) (s3)
+- [php/gateway-type-methods-required] gateway base methods (get_id/get_plugin/currency_is_accepted/order-meta/etc.) must exist — deleted in s2 + again in v2 cleanup; blanket PHPStan ignore masked the fatals → [gotchas/gateway-type-methods-required.md](gotchas/gateway-type-methods-required.md) (s3; recurred 2026-05-31)
 
 ### [deprecation/*] — Deprecation cycle
 - [deprecation/deprecated-which-function] wc_deprecated_function vs _deprecated_function — which to use when → [gotchas/deprecated-which-function.md](gotchas/deprecated-which-function.md) (s2)

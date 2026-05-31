@@ -2921,6 +2921,622 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 
 			return $form_fields;
 		}
+
+		/**
+		 * Returns the payment gateway id.
+		 *
+		 * @since 1.0.0
+		 *
+		 * @return string payment gateway id
+		 */
+		public function get_id() {
+			return $this->id;
+		}
+
+		/**
+		 * Returns the payment gateway id with dashes in place of underscores.
+		 *
+		 * @since 1.0.0
+		 *
+		 * @return string payment gateway id with dashes in place of underscores
+		 */
+		public function get_id_dasherized() {
+			return str_replace( '_', '-', $this->get_id() );
+		}
+
+		/**
+		 * Returns the parent plugin object.
+		 *
+		 * @since 1.0.0
+		 *
+		 * @return Woodev_Payment_Gateway_Plugin the parent plugin object
+		 */
+		public function get_plugin() {
+			return $this->plugin;
+		}
+
+		/**
+		 * Returns true if the gateway is enabled.
+		 *
+		 * This has nothing to do with whether the gateway is properly configured or functional.
+		 *
+		 * @return bool true if the gateway is enabled
+		 */
+		public function is_enabled() {
+			return 'yes' === $this->enabled;
+		}
+
+		/**
+		 * Determines if a given currency is accepted by this gateway.
+		 *
+		 * @param string|null $currency optional three-letter currency code, defaults to order currency (if available) or currently configured WooCommerce currency
+		 *
+		 * @return bool
+		 */
+		public function currency_is_accepted( $currency = null ) {
+
+			// accept all currencies
+			if ( ! $this->currencies ) {
+				return true;
+			}
+
+			// default to order/WC currency
+			if ( null === $currency ) {
+				$currency = $this->get_payment_currency();
+			}
+
+			return in_array( $currency, $this->currencies, false );
+		}
+
+		/**
+		 * Returns the set of accepted currencies, or empty array if all currencies are accepted by this gateway.
+		 *
+		 * @return array of currencies accepted by this gateway
+		 */
+		public function get_accepted_currencies() {
+			return $this->currencies;
+		}
+
+		/**
+		 * Gets the payment currency, either from current order or WC settings.
+		 *
+		 * @return string three-letter currency code
+		 */
+		protected function get_payment_currency() {
+
+			$currency = get_woocommerce_currency();
+			$order_id = $this->get_checkout_pay_page_order_id();
+
+			// gets currency for the current order, that is about to be paid for
+			if ( $order_id ) {
+
+				$order    = wc_get_order( $order_id );
+				$currency = $order->get_currency();
+			}
+
+			return $currency;
+		}
+
+		/**
+		 * Returns an array of two-letter country codes this gateway is allowed for, defaults to all.
+		 *
+		 * @return array of two-letter country codes this gateway is allowed for, defaults to all
+		 */
+		public function get_available_countries() {
+			return $this->countries;
+		}
+
+		/**
+		 * Gets the order meta prefix used for the *_order_meta() methods.
+		 *
+		 * Defaults to `_wc_{gateway_id}_`.
+		 *
+		 * @return string
+		 */
+		public function get_order_meta_prefix() {
+			return '_wc_' . $this->get_id() . '_';
+		}
+
+		/**
+		 * Adds order meta data.
+		 *
+		 * @param WC_Order|int $order the order to add meta to
+		 * @param string       $key meta key (already prefixed with gateway ID)
+		 * @param mixed        $value meta value
+		 * @param bool         $unique whether the meta value should be unique
+		 *
+		 * @return bool success
+		 */
+		public function add_order_meta( $order, $key, $value, $unique = false ) {
+
+			if ( is_numeric( $order ) ) {
+				$order = wc_get_order( $order );
+			}
+
+			if ( $order instanceof WC_Order ) {
+				$order->add_meta_data( $this->get_order_meta_prefix() . $key, $value, $unique );
+				$order->save_meta_data();
+			}
+
+			return $order instanceof WC_Order;
+		}
+
+		/**
+		 * Gets order meta data.
+		 *
+		 * @param WC_Order|int $order the order to get meta for
+		 * @param string       $key meta key
+		 *
+		 * @return false|mixed
+		 */
+		public function get_order_meta( $order, $key ) {
+
+			if ( is_numeric( $order ) ) {
+				$order = wc_get_order( $order );
+			}
+
+			if ( ! $order instanceof \WC_Order ) {
+				$meta = false;
+			} else {
+				$meta = $order->get_meta( $this->get_order_meta_prefix() . $key, true, 'edit' );
+			}
+
+			return $meta;
+		}
+
+		/**
+		 * Updates order meta data.
+		 *
+		 * @param WC_Order|int $order the order to update meta for
+		 * @param string       $key meta key
+		 * @param mixed        $value meta value
+		 *
+		 * @return bool success
+		 */
+		public function update_order_meta( $order, $key, $value ) {
+
+			if ( is_numeric( $order ) ) {
+				$order = wc_get_order( $order );
+			}
+
+			if ( $order instanceof WC_Order ) {
+				$order->update_meta_data( $this->get_order_meta_prefix() . $key, $value );
+				$order->save_meta_data();
+			}
+
+			return $order instanceof WC_Order;
+		}
+
+		/**
+		 * Deletes order meta data.
+		 *
+		 * @param WC_Order|int $order the order to delete meta for
+		 * @param string       $key meta key
+		 *
+		 * @return bool success
+		 */
+		public function delete_order_meta( $order, $key ) {
+
+			if ( is_numeric( $order ) ) {
+				$order = wc_get_order( $order );
+			}
+
+			if ( $order instanceof WC_Order ) {
+				$order->delete_meta_data( $this->get_order_meta_prefix() . $key );
+				$order->save_meta_data();
+			}
+
+			return $order instanceof WC_Order;
+		}
+
+		/**
+		 * Gets the set of environments supported by this gateway.
+		 *
+		 * All gateways support at least the production environment.
+		 *
+		 * @since 1.0.0
+		 *
+		 * @return array associative array of environment id to name supported by this gateway
+		 */
+		public function get_environments() {
+
+			// default set of environments consists of 'production'
+			if ( ! isset( $this->environments ) ) {
+				$this->environments = array( self::ENVIRONMENT_PRODUCTION => esc_html_x( 'Production', 'software environment', 'woodev-plugin-framework' ) );
+			}
+
+			return $this->environments;
+		}
+
+		/**
+		 * Returns the environment setting, one of the $environments keys, ie 'production'.
+		 *
+		 * @since 1.0.0
+		 *
+		 * @return string the configured environment id
+		 */
+		public function get_environment() {
+			return $this->environment;
+		}
+
+		/**
+		 * Gets the configured environment's display name.
+		 *
+		 * @return string the configured environment name
+		 */
+		public function get_environment_name() {
+
+			$environments = $this->get_environments();
+
+			$environment_id = $this->get_environment();
+
+			return ( isset( $environments[ $environment_id ] ) ) ? $environments[ $environment_id ] : $environment_id;
+		}
+
+		/**
+		 * Returns true if the current environment is $environment_id.
+		 *
+		 * @since 1.0.0
+		 *
+		 * @param string|mixed $environment_id environment id to check
+		 *
+		 * @return bool
+		 */
+		public function is_environment( $environment_id ) {
+			return $environment_id === $this->get_environment();
+		}
+
+		/**
+		 * Returns true if the current gateway environment is configured to 'production'.
+		 *
+		 * @since 1.0.0
+		 *
+		 * @param string|null $environment_id optional environment id to check, otherwise defaults to the gateway current environment
+		 *
+		 * @return bool true if $environment_id (if non-null) or otherwise the current environment is production
+		 */
+		public function is_production_environment( $environment_id = null ) {
+
+			// if an environment was passed in, see whether it's the production environment
+			if ( ! is_null( $environment_id ) ) {
+				return self::ENVIRONMENT_PRODUCTION === $environment_id;
+			}
+
+			// default: check the current environment
+			return $this->is_environment( self::ENVIRONMENT_PRODUCTION );
+		}
+
+		/**
+		 * Returns true if the current gateway environment is configured to 'test'.
+		 *
+		 * @param string|null $environment_id optional environment id to check, otherwise defaults to the gateway current environment
+		 *
+		 * @return bool true if $environment_id (if non-null) or otherwise the current environment is test
+		 */
+		public function is_test_environment( $environment_id = null ) {
+
+			// if an environment was passed in, see whether it's the test environment
+			if ( ! is_null( $environment_id ) ) {
+				return self::ENVIRONMENT_TEST === $environment_id;
+			}
+
+			// default: check the current environment
+			return $this->is_environment( self::ENVIRONMENT_TEST );
+		}
+
+		/**
+		 * Determines if the Card Security Code (CVV) field should be used at checkout.
+		 *
+		 * @since 1.0.0
+		 *
+		 * @return bool
+		 */
+		public function csc_enabled() {
+			return 'yes' === $this->enable_csc;
+		}
+
+		/**
+		 * Determines if the Card Security Code (CVV) field should be used for saved cards at checkout.
+		 *
+		 * @return bool
+		 */
+		public function csc_enabled_for_tokens() {
+			return $this->csc_enabled() && 'yes' === $this->enable_token_csc;
+		}
+
+		/**
+		 * Determines if the Card Security Code (CVV) field should be required at checkout.
+		 *
+		 * @return bool
+		 */
+		public function csc_required() {
+			return $this->csc_enabled();
+		}
+
+		/**
+		 * Determines if the gateway supports sharing settings with sibling gateways.
+		 *
+		 * @return bool
+		 */
+		public function share_settings() {
+			return true;
+		}
+
+		/**
+		 * Determines if settings should be inherited for this gateway.
+		 *
+		 * @return bool
+		 */
+		public function inherit_settings() {
+			return 'yes' === $this->inherit_settings;
+		}
+
+		/**
+		 * Adds support for the named feature or features.
+		 *
+		 * @since 1.0.0
+		 *
+		 * @param string|array $feature the feature name or names supported by this gateway
+		 */
+		public function add_support( $feature ) {
+
+			if ( ! is_array( $feature ) ) {
+				$feature = array( $feature );
+			}
+
+			foreach ( $feature as $name ) {
+
+				// add support for feature if it's not already declared
+				if ( ! in_array( $name, $this->supports, true ) ) {
+
+					$this->supports[] = $name;
+
+					/**
+					 * Fires when declaring support for a specific gateway feature.
+					 *
+					 * @since 1.0.0
+					 *
+					 * @param Woodev_Payment_Gateway $instance instance
+					 * @param string                 $name of supported feature being added
+					 */
+					do_action( 'wc_payment_gateway_' . $this->get_id() . '_supports_' . str_replace( '-', '_', $name ), $this, $name );
+				}
+			}
+		}
+
+		/**
+		 * Removes support for the named feature or features.
+		 *
+		 * @param string|array $feature feature name or names not supported by this gateway
+		 */
+		public function remove_support( $feature ) {
+
+			if ( ! is_array( $feature ) ) {
+				$feature = array( $feature );
+			}
+
+			foreach ( $feature as $name ) {
+
+				unset( $this->supports[ array_search( $name, $this->supports, true ) ] );
+
+				/**
+				 * Fires when removing support for a specific gateway feature.
+				 *
+				 * @param Woodev_Payment_Gateway $instance instance
+				 * @param string                 $name of supported feature being removed
+				 */
+				do_action( 'wc_payment_gateway_' . $this->get_id() . '_removed_support_' . str_replace( '-', '_', $name ), $this, $name );
+			}
+		}
+
+		/**
+		 * Sets all features supported.
+		 *
+		 * @since 1.0.0
+		 *
+		 * @param array $features array of supported feature names
+		 */
+		public function set_supports( $features ) {
+			$this->supports = $features;
+		}
+
+		/**
+		 * Returns true if all debugging is disabled.
+		 *
+		 * @return bool if all debugging is disabled
+		 */
+		public function debug_off() {
+			return self::DEBUG_MODE_OFF === $this->debug_mode;
+		}
+
+		/**
+		 * Returns true if debug logging is enabled.
+		 *
+		 * @since 1.0.0
+		 *
+		 * @return bool if debug logging is enabled
+		 */
+		public function debug_log() {
+			return self::DEBUG_MODE_LOG === $this->debug_mode || self::DEBUG_MODE_BOTH === $this->debug_mode;
+		}
+
+		/**
+		 * Returns true if checkout debugging is enabled.
+		 *
+		 * This will cause debugging statements to be displayed on the checkout/pay pages.
+		 *
+		 * @since 1.0.0
+		 *
+		 * @return bool if checkout debugging is enabled
+		 */
+		public function debug_checkout() {
+			return self::DEBUG_MODE_CHECKOUT === $this->debug_mode || self::DEBUG_MODE_BOTH === $this->debug_mode;
+		}
+
+		/**
+		 * Adds debug messages to the page as a WC message/error, and/or to the WC error log.
+		 *
+		 * @since 1.0.0
+		 *
+		 * @param string $message message to add
+		 * @param string $type how to add the message, options are: 'message' (styled as WC message), 'error' (styled as WC Error)
+		 */
+		public function add_debug_message( $message, $type = 'message' ) {
+
+			// do nothing when debug mode is off or no message
+			if ( $this->debug_off() || ! $message ) {
+				return;
+			}
+
+			// add log message to WC logger if log/both is enabled
+			if ( $this->debug_log() ) {
+				$this->get_plugin()->log( $message, $this->get_id() );
+			}
+
+			// avoid adding notices when performing refunds, these occur in the admin as an Ajax call, so checking the current filter is the only reliable way to do so
+			if ( in_array( 'wp_ajax_woocommerce_refund_line_items', $GLOBALS['wp_current_filter'], true ) ) {
+				return;
+			}
+
+			// add debug message to woocommerce->errors/messages if checkout or both is enabled, the admin/Ajax check ensures capture charge transactions aren't logged as notices to the front end
+			if ( ( $this->debug_checkout() || ( 'error' === $type && $this->is_test_environment() ) ) && ( ! is_admin() || is_ajax() ) ) {
+
+				if ( 'message' === $type ) {
+
+					Woodev_Helper::wc_add_notice( str_replace( "\n", '<br/>', htmlspecialchars( $message ) ), 'notice' );
+
+				} else {
+
+					// defaults to error message
+					Woodev_Helper::wc_add_notice( str_replace( "\n", '<br/>', htmlspecialchars( $message ) ), 'error' );
+				}
+			}
+		}
+
+		/**
+		 * Returns true if this is a direct type gateway.
+		 *
+		 * @since 1.0.0
+		 *
+		 * @return bool if this is a direct payment gateway
+		 */
+		public function is_direct_gateway() {
+			return false;
+		}
+
+		/**
+		 * Returns true if this is a hosted type gateway.
+		 *
+		 * @since 1.0.0
+		 *
+		 * @return bool if this is a hosted IPN payment gateway
+		 */
+		public function is_hosted_gateway() {
+			return false;
+		}
+
+		/**
+		 * Returns true if detailed decline messages should be displayed to customers on checkout when available.
+		 *
+		 * @return bool true if detailed decline messages should be displayed on checkout
+		 */
+		public function is_detailed_customer_decline_messages_enabled() {
+			return 'yes' === $this->enable_customer_decline_messages;
+		}
+
+		/**
+		 * Returns the API instance for this gateway if it uses direct communication.
+		 *
+		 * This is a stub method which must be overridden if this gateway performs direct communication.
+		 *
+		 * @since 1.0.0
+		 *
+		 * @return Woodev_Payment_Gateway_API|void the payment gateway API instance
+		 */
+		public function get_api() {
+
+			// concrete stub method
+			assert( false );
+		}
+
+		/**
+		 * Returns the order_id if on the checkout pay page.
+		 *
+		 * @return int order identifier
+		 */
+		public function get_checkout_pay_page_order_id() {
+			global $wp;
+
+			return isset( $wp->query_vars['order-pay'] ) ? absint( $wp->query_vars['order-pay'] ) : 0;
+		}
+
+		/**
+		 * Returns the order_id if on the checkout order received page.
+		 *
+		 * Note this must be used in the `wp` or later action, as earlier actions do not yet have access to the query vars.
+		 *
+		 * @return int order identifier
+		 */
+		public function get_checkout_order_received_order_id() {
+			global $wp;
+
+			return isset( $wp->query_vars['order-received'] ) ? absint( $wp->query_vars['order-received'] ) : 0;
+		}
+
+		/**
+		 * Returns the error message for display if the gateway is not configured.
+		 *
+		 * @return string
+		 */
+		public function get_not_configured_error_message() {
+
+			return sprintf(
+				/* translators: %1$s - gateway name, %2$s - <a> tag, %3$s - </a> tag, %4$s - <a> tag, %5$s - </a> tag */
+				__( 'Heads up! %1$s is not fully configured and cannot accept payments. Please %2$sreview the documentation%3$s and configure the %4$sgateway settings%5$s.', 'woodev-plugin-framework' ),
+				$this->get_method_title(),
+				'<a href="' . $this->get_plugin()->get_documentation_url() . '" target="_blank">',
+				'</a>',
+				'<a href="' . $this->get_plugin()->get_settings_url( $this->get_id() ) . '">',
+				'</a>'
+			);
+		}
+
+		/**
+		 * Adds API request logging for the gateway.
+		 *
+		 * The main plugin class typically handles this, but the payment gateway plugin class no-ops the method so each
+		 * gateway's requests can be logged individually and make use of the payment gateway-specific add_debug_message() method.
+		 *
+		 * @see Woodev_Plugin::add_api_request_logging()
+		 */
+		public function add_api_request_logging() {
+
+			if ( ! has_action( 'woodev_' . $this->get_id() . '_api_request_performed' ) ) {
+				add_action(
+					'woodev_' . $this->get_id() . '_api_request_performed',
+					array( $this, 'log_api_request' ),
+					10,
+					2
+				);
+			}
+		}
+
+		/**
+		 * Logs gateway API requests/responses.
+		 *
+		 * @param array $request request data, see Woodev_API_Base::broadcast_request() for format
+		 * @param array $response response data
+		 */
+		public function log_api_request( $request, $response ) {
+
+			// request
+			$this->add_debug_message( $this->get_plugin()->get_api_log_message( $request ) );
+
+			// response
+			if ( ! empty( $response ) ) {
+				$this->add_debug_message( $this->get_plugin()->get_api_log_message( $response ) );
+			}
+		}
 	}
 
 endif;
