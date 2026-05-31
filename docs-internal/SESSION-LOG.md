@@ -1,5 +1,27 @@
 # Session Log — Woodev Plugin Framework
 
+## Platform v2 sandbox payment runtime validation (2026-05-31)
+
+### Implementation
+- Re-anchored on `PLANS.md`, the accepted Platform v2 implementation spec, ADR-003/004, the 2026-05-31 roadmap reconciliation, and the already-completed shipping fixture slice: framework-first, sandbox validation second, no Phase 6B, no edits to `plugins-reference/`, no resolver/bootstrap scope expansion.
+- Confirmed the payment gap: Platform v2 payment coverage was only synthetic (`FrameworkResolverTest` declares `eval()`-based abstract subclasses of `Woodev_Payment_Gateway_Plugin`), with no realistic file-based payment fixture — the exact analog of the gap the shipping fixture closed.
+- Inspected `plugins-reference/woodev-vkredit` read-only for realism cues only: entry constants, `register_plugin()` with `is_payment_gateway`, singleton plugin class `extends Woodev_Payment_Gateway_Plugin`, `gateways` arg keyed by class name, concrete gateway `extends Woodev_Payment_Gateway_Hosted` loaded include-based via `init_plugin()`.
+- Verified feasibility before coding: among the payment base `includes()` chain only `Woodev_Payment_Gateway extends WC_Payment_Gateway` is a parse-time WC dependency; `Woodev_Script_Handler` (needed by payment-form/my-payment-methods) is loaded during base construction before `includes()` runs; `init_plugin()` is hooked on `plugins_loaded:15`, so it does not auto-run in the unit context.
+- Added red-first `tests/unit/RealisticPaymentFixtureTest.php`; it initially failed because the fixture did not exist.
+- Added the fixture under `tests/_fixtures/woodev-realistic-payment-plugin`: explicit loader definition (platform `woocommerce`, payment capability), include-based callback, singleton `Woodev_Realistic_Payment_Plugin extends Woodev_Payment_Gateway_Plugin` with `gateways` arg, abstract gateway base, and concrete `Woodev_Realistic_Gateway extends Woodev_Payment_Gateway_Hosted`.
+- The test proves explicit loader definition, payment capability + WooCommerce gating, selected-framework early payment base availability, include-based callback graph, real `Woodev_Payment_Gateway_Plugin` construction (full `includes()` chain), `Woodev_Woocommerce_Plugin` inheritance, and concrete `Woodev_Payment_Gateway` gateway-class registration via `get_gateway_class_names()`. No gateway is instantiated, so no payment business logic runs.
+
+### Verification
+- Red-first targeted test failed on missing fixture file, as expected.
+- `vendor\bin\phpunit tests\unit\RealisticPaymentFixtureTest.php` passed after fixture implementation: 1 test / 8 assertions.
+- `composer check` passed: PHPCS 113/113, PHPStan 0 errors, PHPUnit 166 tests / 338 assertions.
+- The strict unit-output context (`failOnRisky`/`beStrictAboutOutputDuringTests`) initially flagged the test risky because the payment `includes()` chain loads legacy handler files that still use implicit-nullable parameters (a pre-existing PHP 8.4+ deprecation). Scoped `E_DEPRECATED` masking around base construction in the test resolves this without touching production payment files.
+- No edits were made to `plugins-reference/`; no production plugin repo touched; no Phase 6B started; resolver/bootstrap responsibilities were not expanded.
+- Gotcha compilation: candidate noted (constructing the real payment base in a strict unit context surfaces PHP 8.4+ implicit-nullable deprecations from legacy payment handler files); kept in SESSION-LOG/CURRENT-STATE rather than a separate gotcha file because it is test-environment-specific and already documented inline in the test.
+
+### Next
+- A realistic payment sandbox validation slice is implemented and verified, alongside the shipping slice. Further work should only add another narrow fixture/test if it exposes a framework-readiness gap not covered by the shipping and payment slices; do not resume Phase 6A paperwork or start Phase 6B from this repo.
+
 ## Platform v2 sandbox shipping runtime validation (2026-05-31)
 
 ### Implementation

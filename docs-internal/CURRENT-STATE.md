@@ -1,5 +1,5 @@
 # Current State — Woodev Plugin Framework
-> Last updated: 2026-05-31 (Sandbox shipping runtime validation slice implemented)
+> Last updated: 2026-05-31 (Sandbox payment runtime validation slice implemented)
 
 ## Phase Status
 
@@ -39,7 +39,14 @@
    plus `RealisticShippingFixtureTest`, proving explicit loader definition + WC gating +
    selected-framework early shipping base + include-based callback + `Shipping_Plugin` /
    `Woodev_Woocommerce_Plugin` inheritance against a realistic plugin shape.
-6. (Deferred / post-v2.0) Extract traits from class-payment-gateway.php (2378 lines)
+6. ~~Sandbox payment runtime validation slice~~ ✅ 2026-05-31 — added a realistic
+   file-based payment fixture under `tests/_fixtures/woodev-realistic-payment-plugin`
+   plus `RealisticPaymentFixtureTest` (read-only `woodev-vkredit` cues), proving explicit
+   loader definition + payment capability + WC gating + selected-framework early payment
+   base + include-based callback + real `Woodev_Payment_Gateway_Plugin` construction +
+   `Woodev_Woocommerce_Plugin` inheritance + concrete `Woodev_Payment_Gateway` gateway-class
+   registration, against a realistic payment-plugin shape. No gateway is instantiated.
+7. (Deferred / post-v2.0) Extract traits from class-payment-gateway.php (2378 lines)
    and the broad `PLANS.md` vision: shipping universality, licensing webhooks/UI,
    box-packer minimal virtual box, DI/SOLID, React admin UI, EDD runtime.
 
@@ -79,6 +86,7 @@
 | 30 Phase 6A second reference draft | ✅ 2026-05-30 | Created `docs-internal/platform-v2-phase6a-yandex-reference-contract-draft.md` as the second reference-based draft; confirmed the template works for a different plugin shape (custom DB tables, custom REST routes, AS recurring scheduling, WC session keys, checkout POST fields, localized script objects, competitor notes); no new framework-side template gap appeared |
 | 31 Roadmap reconciliation | ✅ 2026-05-31 | Re-anchored on `PLANS.md`; verified P1–P5 complete in source (resolver/loader/`Woocommerce_Plugin`/specialized bases/tests/`composer check`); found no boundary-violating drift but a mild soft drift (Phase 6A is paper-only; new framework path unvalidated against a realistic plugin shape; sandbox copies still use the old framework). Corrected next category = sandbox-based framework readiness validation. See `docs-internal/platform-v2-roadmap-reconciliation.md` |
 | 32 Sandbox shipping validation | ✅ 2026-05-31 | Added `tests/_fixtures/woodev-realistic-shipping-plugin` and `tests/unit/RealisticShippingFixtureTest.php`; read-only cues came from Edostavka/Yandex sandbox copies, but fixture stays framework-owned and generic. Verified explicit loader definition, WooCommerce requirement gate, selected-framework early shipping base, include-based callback/class graph, real `Shipping_Plugin` construction, and inheritance from `Woodev_Woocommerce_Plugin`; `composer check` passes (165 tests / 330 assertions). |
+| 33 Sandbox payment validation | ✅ 2026-05-31 | Added `tests/_fixtures/woodev-realistic-payment-plugin` and `tests/unit/RealisticPaymentFixtureTest.php`; read-only cues came from `plugins-reference/woodev-vkredit` (entry constants, `register_plugin()` with `is_payment_gateway`, singleton plugin `extends Woodev_Payment_Gateway_Plugin`, `gateways` arg by class-name, concrete gateway `extends Woodev_Payment_Gateway_Hosted`, gateway loaded include-based). Fixture stays framework-owned and generic. Verified explicit loader definition, payment capability + WooCommerce gating, selected-framework early payment base availability, include-based callback graph, real `Woodev_Payment_Gateway_Plugin` construction (full `includes()` chain), `Woodev_Woocommerce_Plugin` inheritance, and concrete `Woodev_Payment_Gateway` gateway-class registration via `get_gateway_class_names()`. No gateway is instantiated (no payment runtime executed). `composer check` passes (166 tests / 338 assertions). |
 
 ## Planned — v2.0.0 & Beyond
 
@@ -116,22 +124,29 @@
 
 ## Active Queue
 
-> **2026-05-31 sandbox validation slice implemented.** The first framework-first
-> runtime validation gap from `platform-v2-roadmap-reconciliation.md` is closed with a
-> realistic file-based fixture and targeted unit test. The fixture is derived from
-> read-only Edostavka/Yandex shape cues (entry constants, include-based callback,
-> singleton plugin class, abstract method base, courier/pickup method classes), but it
-> is not a migration contract and does not edit `plugins-reference/`.
+> **2026-05-31 sandbox payment validation slice implemented.** The framework-first
+> payment runtime validation gap is now closed alongside the earlier shipping slice.
+> Both realistic file-based fixtures and their targeted unit tests are framework-owned
+> and generic. Payment cues are derived read-only from `plugins-reference/woodev-vkredit`
+> (entry constants, `register_plugin()` with `is_payment_gateway`, singleton plugin class
+> extending the payment gateway plugin base, `gateways` arg keyed by class name, concrete
+> gateway extending a hosted gateway base, include-based gateway loading). No
+> `plugins-reference/` file was edited and no migration contract was written.
 >
-> Verified path: explicit loader definition → WooCommerce requirement gate → selected
-> framework copy early-loads `Woodev\Framework\Shipping\Shipping_Plugin` → callback
-> includes realistic plugin/method classes → plugin constructs through the real
-> `Shipping_Plugin` base and is also a `Woodev_Woocommerce_Plugin` instance.
+> Verified payment path: explicit loader definition (platform `woocommerce`, payment
+> capability) → WooCommerce requirement gate → selected framework copy early-loads the
+> WooCommerce + payment gateway plugin bases → include-based callback constructs the real
+> `Woodev_Payment_Gateway_Plugin` (full `includes()` chain runs) → plugin is a
+> `Woodev_Woocommerce_Plugin` instance → concrete gateway class extends
+> `Woodev_Payment_Gateway` and is registered by class name via `get_gateway_class_names()`.
+> No gateway is instantiated, so no payment business logic executes. The strict
+> unit-output context masks `E_DEPRECATED` only around base construction to ignore
+> pre-existing PHP 8.4+ implicit-nullable deprecations in legacy payment handler files.
 >
 > **Current boundary:** do not continue Phase 6A paperwork, do not start Phase 6B, do
 > not edit `plugins-reference/`, and do not expand resolver/bootstrap scope. Further
 > validation should only add another narrow fixture/test if it exposes a framework
-> readiness gap not covered by this slice.
+> readiness gap not covered by the shipping and payment slices.
 
 ## Infrastructure Reference
 
