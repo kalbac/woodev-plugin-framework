@@ -32,6 +32,7 @@
             "woodev/admin",
             "woodev/api",
             "woodev/box-packer",
+            "woodev/box-packer/interfaces",
             "woodev/compatibility",
             "woodev/handlers",
             "woodev/licensing",

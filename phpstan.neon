@@ -120,8 +120,8 @@ parameters:
         - '#Call to an undefined method Woodev_Payment_Gateway_Payment_Token::get_check_number\(\)#'
         - '#Invalid array key type Woodev_Payment_Gateway_Payment_Token#'
 
+        # Box packer item — split into Item_With_Product interface (2026-06-02)
         # Box packer item — get_product() added by runtime implementations
-        - '#Call to an undefined method Woodev_Box_Packer_Item::get_product\(\)#'
 
         # Shipping API interface — Woodev_Shipping_*/Woodev_Exportable_* defined in plugins
         - message: '#(Woodev_Shipping|Woodev_Exportable|not subtype of Throwable)#'
