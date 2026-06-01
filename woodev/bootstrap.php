@@ -39,7 +39,10 @@ if ( ! class_exists( 'Woodev_Plugin_Bootstrap' ) ) :
 		 * Hidden constructor.
 		 */
 		private function __construct() {
-			$this->resolver = new Framework_Resolver();
+			$this->resolver = new Framework_Resolver(
+				[ $this, 'render_update_notices' ],
+				[ $this, 'render_deactivation_notice' ]
+			);
 
 			add_action( 'plugins_loaded', [ $this, 'load_plugins' ] );
 			add_action( 'admin_init', [ $this, 'maybe_deactivate_framework_plugins' ] );

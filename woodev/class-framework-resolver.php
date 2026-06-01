@@ -42,6 +42,31 @@ if ( ! class_exists( Framework_Resolver::class, false ) ) :
 		/** @var array<int,array<string,mixed>> Invalid loader definitions. */
 		protected array $invalid_loader_definitions = [];
 
+		/** @var array<string,bool> Plugin IDs already registered — prevents duplicates from colliding on options, cron, license keys, and logger handles. */
+		protected array $plugin_ids = [];
+
+		/** @var bool Guards load_plugins() against double execution in long-running processes (WP-Cron, Action Scheduler). */
+		protected bool $loaded = false;
+
+		/** @var callable Wired to admin_notices when incompatible plugins are registered. Defaults to a no-op so the resolver stays decoupled from the legacy bootstrap. */
+		protected $update_notice_renderer;
+
+		/** @var callable Wired to admin_notices when the deactivation action is requested. Defaults to a no-op for the same reason. */
+		protected $deactivation_notice_renderer;
+
+		/**
+		 * Constructor.
+		 *
+		 * @since 2.0.0
+		 *
+		 * @param callable|null $update_notice_renderer       Callback wired to admin_notices when incompatible plugins are registered. Default no-op keeps the resolver decoupled from the legacy bootstrap.
+		 * @param callable|null $deactivation_notice_renderer Callback wired to admin_notices when the framework deactivation action is requested. Default no-op for the same reason.
+		 */
+		public function __construct( ?callable $update_notice_renderer = null, ?callable $deactivation_notice_renderer = null ) {
+			$this->update_notice_renderer       = $update_notice_renderer ?? static function (): void {};
+			$this->deactivation_notice_renderer = $deactivation_notice_renderer ?? static function (): void {};
+		}
+
 		/**
 		 * Registers an explicit Platform v2 loader definition.
 		 *
@@ -63,7 +88,17 @@ if ( ! class_exists( Framework_Resolver::class, false ) ) :
 				return false;
 			}
 
-			$this->registered_plugins[] = $loader_definition->to_legacy_plugin();
+			if ( isset( $this->plugin_ids[ $loader_definition->get_plugin_id() ] ) ) {
+				$this->invalid_loader_definitions[] = [
+					'definition' => $definition,
+					'errors'     => [ sprintf( 'Duplicate plugin_id: %s.', $loader_definition->get_plugin_id() ) ],
+				];
+
+				return false;
+			}
+
+			$this->plugin_ids[ $loader_definition->get_plugin_id() ] = true;
+			$this->registered_plugins[]                              = $loader_definition->to_legacy_plugin();
 
 			return true;
 		}
@@ -106,7 +141,17 @@ if ( ! class_exists( Framework_Resolver::class, false ) ) :
 				return false;
 			}
 
-			$this->registered_plugins[] = $loader_definition->to_legacy_plugin( $args );
+			if ( isset( $this->plugin_ids[ $loader_definition->get_plugin_id() ] ) ) {
+				$this->invalid_loader_definitions[] = [
+					'definition' => $args,
+					'errors'     => [ sprintf( 'Duplicate plugin_id: %s.', $loader_definition->get_plugin_id() ) ],
+				];
+
+				return false;
+			}
+
+			$this->plugin_ids[ $loader_definition->get_plugin_id() ] = true;
+			$this->registered_plugins[]                              = $loader_definition->to_legacy_plugin( $args );
 
 			return true;
 		}
@@ -119,6 +164,12 @@ if ( ! class_exists( Framework_Resolver::class, false ) ) :
 		 * @return void
 		 */
 		public function load_plugins(): void {
+			if ( $this->loaded ) {
+				return;
+			}
+
+			$this->loaded = true;
+
 			usort( $this->registered_plugins, [ $this, 'framework_compare' ] );
 
 			$loaded_framework = null;
@@ -158,8 +209,8 @@ if ( ! class_exists( Framework_Resolver::class, false ) ) :
 				$this->invoke_plugin( $plugin );
 			}
 
-			if ( $this->has_update_notices() && is_admin() && ! defined( 'DOING_AJAX' ) && ! has_action( 'admin_notices', [ \Woodev_Plugin_Bootstrap::instance(), 'render_update_notices' ] ) ) {
-				add_action( 'admin_notices', [ \Woodev_Plugin_Bootstrap::instance(), 'render_update_notices' ] );
+			if ( $this->has_update_notices() && is_admin() && ! defined( 'DOING_AJAX' ) && ! has_action( 'admin_notices', $this->update_notice_renderer ) ) {
+				add_action( 'admin_notices', $this->update_notice_renderer );
 			}
 
 			do_action( 'woodev_plugins_loaded' );
@@ -207,7 +258,7 @@ if ( ! class_exists( Framework_Resolver::class, false ) ) :
 				exit;
 			}
 
-			add_action( 'admin_notices', [ \Woodev_Plugin_Bootstrap::instance(), 'render_deactivation_notice' ] );
+			add_action( 'admin_notices', $this->deactivation_notice_renderer );
 		}
 
 		/**

@@ -473,6 +473,161 @@ class FrameworkResolverTest extends TestCase {
 	}
 
 	/**
+	 * H2: Resolver must work without Woodev_Plugin_Bootstrap loaded. The injected
+	 * callback should be wired to admin_notices when an incompatible plugin is
+	 * registered, instead of referencing the legacy bootstrap singleton.
+	 */
+	public function test_resolver_wires_injected_update_notice_callback_without_bootstrap_dependency(): void {
+		$injected_renderer = static function (): void {};
+		$resolver          = new \Woodev\Framework\Framework_Resolver( $injected_renderer );
+		$captured          = null;
+
+		// Prove the test does not rely on composer autoloading Woodev_Plugin_Bootstrap.
+		// The resolver must not reference that class at all.
+		$bootstrap_loaded_during_test = false;
+		$resolver_class               = new \ReflectionClass( $resolver );
+
+		foreach ( $resolver_class->getMethods() as $method ) {
+			$file = $method->getFileName();
+			if ( ! $file ) {
+				continue;
+			}
+			$source = file_get_contents( $file );
+			if ( false !== strpos( $source, 'Woodev_Plugin_Bootstrap' ) ) {
+				$bootstrap_loaded_during_test = true;
+				break;
+			}
+		}
+
+		Functions\when( 'plugin_dir_path' )->justReturn( dirname( __DIR__, 2 ) . '/' );
+		Functions\when( 'untrailingslashit' )->alias(
+			static function ( string $path ): string {
+				return rtrim( $path, '/\\' );
+			}
+		);
+		Functions\when( 'get_bloginfo' )->justReturn( '6.5' );
+		Functions\when( 'is_admin' )->justReturn( true );
+		Functions\when( 'has_action' )->justReturn( false );
+		Functions\when( 'add_action' )->alias(
+			static function ( string $hook, callable $callback ) use ( &$captured ): void {
+				if ( 'admin_notices' === $hook ) {
+					$captured = $callback;
+				}
+			}
+		);
+		Functions\expect( 'do_action' )->once()->with( 'woodev_plugins_loaded' );
+
+		$resolver->register_loader_definition(
+			$this->get_loader_definition(
+				[
+					'requirements' => [
+						'php'       => '99.0',
+						'wordpress' => '6.3',
+					],
+				]
+			)
+		);
+
+		$resolver->load_plugins();
+
+		$this->assertFalse(
+			$bootstrap_loaded_during_test,
+			'Resolver source code must not reference Woodev_Plugin_Bootstrap to keep the minimal-resolver boundary intact.'
+		);
+		$this->assertCount( 1, $resolver->get_incompatible_php_version_plugins() );
+		$this->assertSame( $injected_renderer, $captured, 'Resolver must wire the injected renderer to admin_notices, not a bootstrap singleton.' );
+	}
+
+	/**
+	 * H3: load_plugins() must be idempotent so long-running processes (WP-Cron,
+	 * Action Scheduler) do not double-run callbacks.
+	 */
+	public function test_load_plugins_is_idempotent(): void {
+		$resolver = new \Woodev\Framework\Framework_Resolver();
+		$call_count = 0;
+
+		Functions\when( 'plugin_dir_path' )->justReturn( dirname( __DIR__, 2 ) . '/' );
+		Functions\when( 'untrailingslashit' )->alias(
+			static function ( string $path ): string {
+				return rtrim( $path, '/\\' );
+			}
+		);
+		Functions\when( 'get_bloginfo' )->justReturn( '6.5' );
+		Functions\when( 'is_admin' )->justReturn( false );
+		Functions\expect( 'do_action' )->once()->with( 'woodev_plugins_loaded' );
+
+		$resolver->register_loader_definition(
+			$this->get_loader_definition(
+				[
+					'callback' => static function () use ( &$call_count ): void {
+						++$call_count;
+					},
+				]
+			)
+		);
+
+		$resolver->load_plugins();
+		$resolver->load_plugins();
+
+		$this->assertSame( 1, $call_count );
+		$this->assertCount( 1, $resolver->get_active_plugins() );
+	}
+
+	/**
+	 * H4: Two registrations with the same plugin_id must be deduped: the first
+	 * wins, the second is recorded in invalid_loader_definitions.
+	 */
+	public function test_resolver_dedupes_loader_definitions_by_plugin_id(): void {
+		$resolver = new \Woodev\Framework\Framework_Resolver();
+
+		$first  = $resolver->register_loader_definition(
+			$this->get_loader_definition( [ 'plugin_name' => 'First' ] )
+		);
+		$second = $resolver->register_loader_definition(
+			$this->get_loader_definition( [ 'plugin_name' => 'Second' ] )
+		);
+
+		$this->assertTrue( $first );
+		$this->assertFalse( $second );
+		$this->assertCount( 1, $resolver->get_registered_plugins() );
+		$this->assertCount( 1, $resolver->get_invalid_loader_definitions() );
+		$this->assertContains(
+			'Duplicate plugin_id: test-plugin.',
+			$resolver->get_invalid_loader_definitions()[0]['errors']
+		);
+	}
+
+	/**
+	 * H4: Legacy register_plugin() path must also dedupe by plugin_id.
+	 */
+	public function test_resolver_dedupes_legacy_plugin_registrations_by_plugin_id(): void {
+		$resolver = new \Woodev\Framework\Framework_Resolver();
+
+		$resolver->register_legacy_plugin(
+			'2.0.0',
+			'First Plugin',
+			'first-plugin.php',
+			static function (): void {},
+			[ 'plugin_id' => 'shared-id' ]
+		);
+		$second = $resolver->register_legacy_plugin(
+			'2.0.0',
+			'Second Plugin',
+			'second-plugin.php',
+			static function (): void {},
+			[ 'plugin_id' => 'shared-id' ]
+		);
+
+		$this->assertFalse( $second );
+		$this->assertCount( 1, $resolver->get_registered_plugins() );
+		$this->assertCount( 1, $resolver->get_invalid_loader_definitions() );
+		$this->assertContains(
+			'Duplicate plugin_id: shared-id.',
+			$resolver->get_invalid_loader_definitions()[0]['errors']
+		);
+	}
+
+	/**
 	 * Returns a valid loader definition with optional overrides.
 	 *
 	 * @param array<string,mixed> $overrides Definition overrides.
