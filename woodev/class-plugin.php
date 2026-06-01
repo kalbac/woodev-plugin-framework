@@ -67,8 +67,16 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		/** @var Woodev_Plugin_Setup_Wizard handler instance */
 		protected $setup_wizard_handler;
 
-		/** @var Woodev_Blocks_Handler blocks handler instance */
-		protected Woodev_Blocks_Handler $blocks_handler;
+		/**
+		 * Blocks handler instance.
+		 *
+		 * Null for plugins that do not opt in to a blocks handler (i.e. any
+		 * pure-WordPress plugin not extending Woodev_Woocommerce_Plugin). Only
+		 * WooCommerce plugins initialize this via init_blocks_handler().
+		 *
+		 * @var Woodev_Blocks_Handler|null
+		 */
+		protected ?Woodev_Blocks_Handler $blocks_handler = null;
 
 		/**
 		 * Initialize the plugin.
@@ -1011,11 +1019,15 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		/**
 		 * Gets the blocks handler instance.
 		 *
+		 * Returns null for plugins that do not opt in to a blocks handler
+		 * (pure-WordPress plugins that extend Woodev_Plugin directly without
+		 * going through Woodev_Woocommerce_Plugin).
+		 *
 		 * @since 1.3.2
 		 *
-		 * @return Woodev_Blocks_Handler
+		 * @return Woodev_Blocks_Handler|null
 		 */
-		public function get_blocks_handler(): Woodev_Blocks_Handler {
+		public function get_blocks_handler(): ?Woodev_Blocks_Handler {
 			return $this->blocks_handler;
 		}
 
