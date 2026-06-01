@@ -665,7 +665,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_My_Payment_Methods' ) ) :
 		 *
 		 * @return string
 		 */
-		protected function get_payment_method_default_html( $is_default = false, Woodev_Payment_Gateway_Payment_Token $token = null ) {
+		protected function get_payment_method_default_html( $is_default = false, ?Woodev_Payment_Gateway_Payment_Token $token = null ) {
 
 			$html = $is_default ? '<mark class="default">' . esc_html__( 'Default', 'woodev-plugin-framework' ) . '</mark>' : '';
 

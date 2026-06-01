@@ -81,17 +81,7 @@ class RealisticPaymentFixtureTest extends TestCase {
 
 		$accepted = $resolver->register_loader_definition( \woodev_realistic_payment_plugin_loader_definition() );
 
-		// The payment gateway base includes() loads legacy framework handler files that
-		// still use implicit-nullable parameters (a pre-existing PHP 8.4+ deprecation
-		// unrelated to this fixture). Mask E_DEPRECATED so the strict unit-output context
-		// is not polluted by those legacy compile-time notices.
-		$previous_error_reporting = error_reporting( error_reporting() & ~E_DEPRECATED );
-
-		try {
-			$resolver->load_plugins();
-		} finally {
-			error_reporting( $previous_error_reporting );
-		}
+		$resolver->load_plugins();
 
 		$plugin = \woodev_realistic_payment_plugin();
 

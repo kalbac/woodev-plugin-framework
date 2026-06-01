@@ -2696,7 +2696,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		 * @return bool
 		 * @since 1.0.0
 		 */
-		public function perform_credit_card_charge( WC_Order $order = null ) {
+		public function perform_credit_card_charge( ?WC_Order $order = null ) {
 
 			assert( $this->supports_credit_card_charge() );
 
@@ -2724,7 +2724,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		 * @return bool
 		 * @since 1.0.0
 		 */
-		public function perform_credit_card_authorization( WC_Order $order = null ) {
+		public function perform_credit_card_authorization( ?WC_Order $order = null ) {
 
 			assert( $this->supports_credit_card_authorization() );
 

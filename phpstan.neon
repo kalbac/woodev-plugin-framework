@@ -74,8 +74,9 @@ parameters:
     parallel:
         maximumNumberOfProcesses: 1
 
-    # Не падать если ignoreErrors паттерн не совпал ни с одной ошибкой
-    reportUnmatchedIgnoredErrors: false
+    # Падать если ignoreErrors паттерн не совпал ни с одной ошибкой — catches dead
+    # ignore patterns and prevents silently masked bugs (see H1 of audit-2026-06-01).
+    reportUnmatchedIgnoredErrors: true
 
     # =================================================
     # Игнорируемые ошибки
@@ -116,8 +117,7 @@ parameters:
         # Woodev_Plugin base class — get_gateways() exists in Woodev_Payment_Gateway_Plugin
         - '#Call to an undefined method Woodev_Plugin::get_gateways\(\)#'
 
-        # Payment token — runtime implementations add check_number, subscription methods
-        - '#Call to an undefined method Woodev_Payment_Gateway_Payment_Token::get_check_number\(\)#'
+        # Payment token — runtime implementations add subscription methods
         - '#Invalid array key type Woodev_Payment_Gateway_Payment_Token#'
 
         # Box packer item — split into Item_With_Product interface (2026-06-02)

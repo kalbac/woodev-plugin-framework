@@ -259,7 +259,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Payment_Handler' ) ) :
 		 * @param string                                   $message failure message
 		 * @param Woodev_Payment_Gateway_API_Response|null $response response object
 		 */
-		protected function process_order_transaction_failed( WC_Order $order, $message = '', Woodev_Payment_Gateway_API_Response $response = null ) {
+		protected function process_order_transaction_failed( WC_Order $order, $message = '', ?Woodev_Payment_Gateway_API_Response $response = null ) {
 
 			$this->mark_order_as_failed( $order, $message, $response );
 		}
@@ -270,7 +270,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Payment_Handler' ) ) :
 		 * @param WC_Order                                                                              $order order object
 		 * @param Woodev_Payment_Gateway_API_Customer_Response|Woodev_Payment_Gateway_API_Response|null $response API response object
 		 */
-		public function mark_order_as_paid( WC_Order $order, Woodev_Payment_Gateway_API_Response $response = null ) {
+		public function mark_order_as_paid( WC_Order $order, ?Woodev_Payment_Gateway_API_Response $response = null ) {
 
 			$this->get_gateway()->add_transaction_data( $order, $response );
 
@@ -304,7 +304,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Payment_Handler' ) ) :
 		 * @param string                                   $message message for the order note
 		 * @param Woodev_Payment_Gateway_API_Response|null $response API response object
 		 */
-		public function mark_order_as_approved( WC_Order $order, $message = '', Woodev_Payment_Gateway_API_Response $response = null ) {
+		public function mark_order_as_approved( WC_Order $order, $message = '', ?Woodev_Payment_Gateway_API_Response $response = null ) {
 
 			$order->add_order_note( $message );
 		}
@@ -319,7 +319,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Payment_Handler' ) ) :
 		 * @param string                                   $message order note message
 		 * @param Woodev_Payment_Gateway_API_Response|null $response
 		 */
-		public function mark_order_as_held( WC_Order $order, $message = '', Woodev_Payment_Gateway_API_Response $response = null ) {
+		public function mark_order_as_held( WC_Order $order, $message = '', ?Woodev_Payment_Gateway_API_Response $response = null ) {
 
 			/* translators: Placeholders: %s - payment gateway title */
 			$order_note = sprintf( __( '%s Transaction Held for Review', 'woodev-plugin-framework' ), $this->get_gateway()->get_method_title() );
@@ -383,7 +383,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Payment_Handler' ) ) :
 		 * @param string                                   $message order note message
 		 * @param Woodev_Payment_Gateway_API_Response|null $response
 		 */
-		public function mark_order_as_failed( WC_Order $order, $message = '', Woodev_Payment_Gateway_API_Response $response = null ) {
+		public function mark_order_as_failed( WC_Order $order, $message = '', ?Woodev_Payment_Gateway_API_Response $response = null ) {
 
 			/* translators: Placeholders: %s - payment gateway title */
 			$order_note = sprintf( esc_html__( '%s Payment Failed', 'woodev-plugin-framework' ), $this->get_gateway()->get_method_title() );
@@ -408,7 +408,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Payment_Handler' ) ) :
 		 * @param string                                   $message order note message
 		 * @param Woodev_Payment_Gateway_API_Response|null $response
 		 */
-		public function mark_order_as_cancelled( \WC_Order $order, $message, Woodev_Payment_Gateway_API_Response $response = null ) {
+		public function mark_order_as_cancelled( \WC_Order $order, $message, ?Woodev_Payment_Gateway_API_Response $response = null ) {
 
 			/* translators: Placeholders: %s - payment gateway title */
 			$order_note = sprintf( __( '%s Transaction Cancelled', 'woodev-plugin-framework' ), $this->get_gateway()->get_method_title() );

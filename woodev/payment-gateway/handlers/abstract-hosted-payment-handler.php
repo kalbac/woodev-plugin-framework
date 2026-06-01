@@ -158,7 +158,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Hosted_Payment_Handler' ) 
 		 * @param WC_Order|null                            $order order object, if any
 		 * @param Woodev_Payment_Gateway_API_Response|null $response API response object, if any
 		 */
-		protected function do_transaction_response_complete( WC_Order $order = null, Woodev_Payment_Gateway_API_Response $response = null ) {
+		protected function do_transaction_response_complete( ?WC_Order $order = null, ?Woodev_Payment_Gateway_API_Response $response = null ) {
 
 			$this->do_transaction_request_response( $response, $this->get_gateway()->get_return_url( $order ) );
 		}
@@ -172,7 +172,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Hosted_Payment_Handler' ) 
 		 * @param string                                   $user_message user-facing message
 		 * @param Woodev_Payment_Gateway_API_Response|null $response API response object, if any
 		 */
-		protected function do_transaction_response_failed( WC_Order $order = null, $message = '', $user_message = '', Woodev_Payment_Gateway_API_Response $response = null ) {
+		protected function do_transaction_response_failed( ?WC_Order $order = null, $message = '', $user_message = '', ?Woodev_Payment_Gateway_API_Response $response = null ) {
 
 			$this->get_gateway()->add_debug_message( $message, 'error' );
 
@@ -195,7 +195,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Hosted_Payment_Handler' ) 
 		 * @param string                                   $message error message, for logging
 		 * @param Woodev_Payment_Gateway_API_Response|null $response API response object, if any
 		 */
-		protected function do_transaction_response_invalid( WC_Order $order = null, $message = '', Woodev_Payment_Gateway_API_Response $response = null ) {
+		protected function do_transaction_response_invalid( ?WC_Order $order = null, $message = '', ?Woodev_Payment_Gateway_API_Response $response = null ) {
 
 			$this->get_gateway()->add_debug_message( $message, 'error' );
 
@@ -221,7 +221,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Hosted_Payment_Handler' ) 
 		 * @param Woodev_Payment_Gateway_API_Response|null $response
 		 * @param string                                   $url
 		 */
-		protected function do_transaction_request_response( Woodev_Payment_Gateway_API_Response $response = null, $url = '' ) {
+		protected function do_transaction_request_response( ?Woodev_Payment_Gateway_API_Response $response = null, $url = '' ) {
 
 			// if this is an IPN handler
 			if ( $this->is_ipn() ) {
