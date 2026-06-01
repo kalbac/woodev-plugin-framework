@@ -17,9 +17,20 @@ Any plugin attempting to `implements \Woodev\Framework\Shipping\Shipping_API` wi
 
 ## Root cause
 The interface was added in v2 platform split as the namespaced counterpart of legacy `Woodev_Shipping_API` (see `woodev/shipping-method/api/interface-shipping-api.php` header — `@since 1.5.0` per a recent commit). The namespacing was done without porting the concrete response classes, exceptions, and `Woodev_Exportable_Order` interface from any of the production plugins that previously used the legacy global versions. The blanket PHPStan ignore was added to silence the resulting errors, locking the broken state into CI.
-
 ## Fix
-**Two options — both required to remove the ignore:**
+
+**Fixed 2026-06-02 via Option B** (narrowed interface to types that exist).
+Option A (port from plugins-reference) was not viable: V-3 verification
+grepped all 3 `plugins-reference/` copies and the missing types
+(Woodev_Shipping_API_Rate_Response, Woodev_Shipping_API_Order_Response,
+Woodev_Shipping_API_Tracking_Response, Woodev_Shipping_API_Pickup_Points_Response,
+Woodev_Exportable_Order, Woodev_Shipping_Exception) are NOT present in
+woocommerce-edostavka, woocommerce-yandex-delivery, or woodev-vkredit.
+The fictional type names were a dead end — only narrowing the
+interface to the existing `Woodev_API_Response` / `Woodev_API_Request`
+/ `Woodev_API_Exception` / `WC_Order` contracts makes it implementable.
+
+Other options considered:
 
 ### Option A — port the missing types into the framework (preferred)
 Copy the `Woodev_Shipping_API_*` response classes, `Woodev_Shipping_Exception`, and `Woodev_Exportable_Order` from one of the read-only `plugins-reference/woocommerce-edostavka` or `woocommerce-yandex-delivery` copies. Generalize their constructors, docblocks, and namespaces to fit the framework. This is the cleanest path because the types ARE the contract — porting them turns the interface into a usable plugin-inheritable shape.

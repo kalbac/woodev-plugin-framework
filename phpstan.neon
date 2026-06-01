@@ -123,9 +123,7 @@ parameters:
         # Box packer item — split into Item_With_Product interface (2026-06-02)
         # Box packer item — get_product() added by runtime implementations
 
-        # Shipping API interface — Woodev_Shipping_*/Woodev_Exportable_* defined in plugins
-        - message: '#(Woodev_Shipping|Woodev_Exportable|not subtype of Throwable)#'
-          path: woodev/shipping-method/api/interface-shipping-api.php
+        # Shipping API interface — types narrowed to base framework contracts (2026-06-02)
 
         # ---------------------------------------------------------------------------
         # Utilities — intentional runtime patterns
