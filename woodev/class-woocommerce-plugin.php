@@ -241,6 +241,24 @@ if ( ! class_exists( Woocommerce_Plugin::class, false ) ) :
 		public function get_supported_features(): array {
 			return $this->supported_features;
 		}
+
+		/**
+		 * Gets the WooCommerce uploads path, without trailing slash.
+		 *
+		 * WC core does not provide a helper for this. The path lives under
+		 * wp_upload_dir()['basedir'] and is the canonical storage location for
+		 * WC-generated export files and customer uploads.
+		 *
+		 * @since 2.0.0
+		 *
+		 * @return string
+		 */
+		public static function get_woocommerce_uploads_path(): string {
+
+			$upload_dir = wp_upload_dir();
+
+			return $upload_dir['basedir'] . '/woocommerce_uploads';
+		}
 	}
 
 endif;

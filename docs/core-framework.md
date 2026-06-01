@@ -645,8 +645,8 @@ if ( $plugin->is_general_configuration_page() ) {
 
 ```php
 <?php
-// Get uploads path
-$upload_path = $plugin->get_woocommerce_uploads_path();
+// Get WooCommerce uploads path (WC-specific helper, lives on the WC base class)
+$upload_path = \Woodev_Woocommerce_Plugin::get_woocommerce_uploads_path();
 
 // Load class from file
 $plugin->load_class( 'class-my-class.php', 'My_Class' );

@@ -741,7 +741,7 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		 */
 		public function plugin_action_links( $actions ) {
 
-			$custom_actions = array();
+			$custom_actions = [];
 
 			if ( $this->get_settings_link( $this->get_id() ) ) {
 				$custom_actions['configure'] = $this->get_settings_link( $this->get_id() );
@@ -1251,11 +1251,28 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		/**
 		 * Gets the woocommerce uploads path, without trailing slash.
 		 *
-		 * Oddly WooCommerce core does not provide a way to get this.
+		 * This method lives on the base class for backward compatibility with 10+
+		 * existing plugins that still call it. New code should use
+		 * {@see \Woodev_Woocommerce_Plugin::get_woocommerce_uploads_path()} instead —
+		 * the helper is WooCommerce-specific and does not belong on a
+		 * platform-neutral base class.
+		 *
+		 * @since 1.0.0
+		 * @deprecated 2.0.0 Use Woodev_Woocommerce_Plugin::get_woocommerce_uploads_path() instead.
 		 *
 		 * @return string
 		 */
 		public static function get_woocommerce_uploads_path() {
+
+			_deprecated_function(
+				__METHOD__,
+				'2.0.0',
+				'Woodev_Woocommerce_Plugin::get_woocommerce_uploads_path()'
+			);
+
+			if ( class_exists( Woocommerce_Plugin::class, false ) ) {
+				return Woocommerce_Plugin::get_woocommerce_uploads_path();
+			}
 
 			$upload_dir = wp_upload_dir();
 
