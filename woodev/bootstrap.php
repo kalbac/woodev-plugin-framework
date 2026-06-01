@@ -152,16 +152,15 @@ if ( ! class_exists( 'Woodev_Plugin_Bootstrap' ) ) :
 		/**
 		 * Is the WooCommerce plugin installed and active?
 		 *
+		 * Delegates to {@see Woodev_Helper::is_woocommerce_active()} so the two
+		 * public static entry points share a single source of truth. Kept on
+		 * the bootstrap for backward compatibility — 10+ dependent plugins
+		 * call this method directly.
+		 *
 		 * @return boolean true if the WooCommerce plugin is installed and active
 		 */
 		public static function is_woocommerce_active(): bool {
-			$active_plugins = (array) get_option( 'active_plugins', [] );
-
-			if ( is_multisite() ) {
-				$active_plugins = array_merge( $active_plugins, get_site_option( 'active_sitewide_plugins', [] ) );
-			}
-
-			return in_array( 'woocommerce/woocommerce.php', $active_plugins, true ) || array_key_exists( 'woocommerce/woocommerce.php', $active_plugins );
+			return Woodev_Helper::is_woocommerce_active();
 		}
 
 		/**
