@@ -40,6 +40,8 @@
 | `platform-v2-phase6a-reference-gap-analysis.md` | Phase 6A reference-plugin validation of the migration-contract template and workflow gaps |
 | `platform-v2-phase6a-edostavka-reference-contract-draft.md` | Phase 6A non-production reference draft that exercises the migration-contract template against copied Edostavka evidence |
 | `platform-v2-phase6a-yandex-reference-contract-draft.md` | Phase 6A non-production reference draft that exercises the migration-contract template against copied Yandex delivery evidence |
+| `platform-v2-roadmap-reconciliation.md` | Roadmap re-anchoring: framework-first strategy, sandbox-only validation, no Phase 6B from this repo |
+| `audit-2026-06-01.md` | Independent second-model audit: 3 release-blocker PHPStan-ignore masks + 2 base-class contract leaks + 6 lower-priority findings; prioritized in `CURRENT-STATE.md` Next Actions #7–10 |
 | `adr/001-bootstrap-platform-aware-loader.md` | ADR: keep bootstrap as platform-aware loader (accepted) |
 | `adr/002-plugin-type-inheritance-with-metadata-bridge.md` | ADR: inheritance + deprecated metadata bridge (accepted) |
 | `adr/003-platform-v2-minimal-framework-resolver.md` | ADR draft: minimal resolver behind bootstrap compatibility entry point |

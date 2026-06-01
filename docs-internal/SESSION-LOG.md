@@ -1,5 +1,30 @@
 # Session Log — Woodev Plugin Framework
 
+## Independent audit — release-blocker findings + refactor process observations (2026-06-01)
+
+### Implementation
+- Read-only second-model audit initiated after the user noted the 2026-05-31 a7da0ea regression and the impression that "что-то всё как будто не туда пошло". Scope: `phpstan.neon` blanket ignores, `Woodev_Plugin` v2 split integrity, `Woodev_Payment_Gateway` restore, resolver/loader/bootstrap architecture, `Woodev_Helper` residual coupling, realistic fixtures.
+- Ran PHPStan with the 4 suspect blanket ignores removed in a temp config (`phpstan-strict.neon`, then deleted): revealed **30 masked errors** across 5 patterns, all of the same shape as the a7da0ea bug.
+- **3 release-blocker PHPStan-ignore masks** of the same class as a7da0ea: (1) `Woodev_Payment_Gateway_API_Payment_Notification_Response::#` class-wide hides 6 unguarded calls in `class-payment-gateway-hosted.php:440-452` (checkout fatal risk); (2) `Woodev_Box_Packer_Item::get_product()` masks interface-contract violation in `class-packer-separatly.php:38` (`pack()` fatal risk); (3) `Woodev\Framework\Shipping\Shipping_API` interface references 6 non-existent types — broken contract, 20 errors.
+- **2 base-class contract leaks** that contradict the v2 split goal: `Woodev_Plugin::get_woocommerce_uploads_path()` (line 1258, WC-specific); `Woodev_Plugin::get_blocks_handler()` typed-property trap (line 71 + 1018, TypeError for pure-WP subclasses).
+- **1 dead ignore** to remove: `Woodev_Payment_Gateway_Payment_Token::get_check_number()` (eCheck removed in s3).
+- **1 PHP 8.4+ deprecation mask**: `RealisticPaymentFixtureTest.php:88-94` `error_reporting` workaround for implicit-nullable `$arg = null` parameters in legacy payment handler files. Pre-existing framework bug, not a test issue.
+- **6 lower-priority observations**: resolver has invisible runtime dep on `Woodev_Plugin_Bootstrap::instance()` (3 sites, masked by happy-path tests); `load_plugins()` not idempotent; resolver does not dedupe by `plugin_id`; `Woodev_Helper` retains hard WC coupling in `get_order_line_items()`/`is_order_virtual()`/`render_select2_ajax()` (14 Phase 5 slices missed these); `Woodev_Plugin_Bootstrap::is_woocommerce_active()` duplicates `Woodev_Helper::is_woocommerce_active()`; 166/338 assertions is thin for 10+ dependent plugins.
+- Refactor process observation (per user's "что-то пошло не так" note): Phase 5 went paperwork-heavy (3+ reference drafts) instead of advancing to admin/licensing (the user's stated next phase after split); 14 minimal-atomic cleanup slices created a `function_exists()`-fallback surface instead of a clean helper-class split; the deprecation mask in the payment fixture is the same pattern as a7da0ea (workaround that hides a real bug).
+
+### Verification
+- No code changes (audit + docs only). `composer check` still passes (no PHP/runtime files changed): PHPCS 113/113, PHPStan 0 errors, PHPUnit 166 tests / 338 assertions (per CURRENT-STATE).
+- All findings recorded as gotchas and prioritized in `CURRENT-STATE.md` Next Actions #7–10.
+- Detailed audit: `docs-internal/audit-2026-06-01.md`. Three new gotcha files: `shipping-api-broken-contract.md`, `blocks-handler-typed-property-trap.md`, `php84-implicit-nullable-payment-handlers.md`. Expanded: `gateway-type-methods-required.md` (added the 3 remaining blanket-ignore masks + cross-cutting enforcement rule).
+- Gotcha count: 12 → 15 across 6 → 8 namespaces.
+- Commit: pending at time of entry creation; final commit hash reported in chat.
+
+### Next
+- The next session must fix the 3 release-blocker PHPStan-ignore masks (B-1a/b/c) and the 2 base-class contract leaks (B-2, B-3) BEFORE any v2.0 release candidate is tagged. Then fix the PHP 8.4+ deprecation (H1) and enable `reportUnmatchedIgnoredErrors: true` in `phpstan.neon:78` to catch future dead ignores.
+- Do not continue Phase 6A paperwork, do not start Phase 6B, do not edit `plugins-reference/`, do not expand resolver/bootstrap scope.
+- The user should decide between two paths for the residual Woodev_Helper WC coupling: (a) one well-designed helper-class split, or (b) continue with minimal-atomic `function_exists()` slices. The current trajectory is (b) and has created the same kind of workaround-pattern that masked a7da0ea.
+- Admin/licensing work (the user's stated next phase per his mental model) has not been started. Future session should plan it.
+
 ## Payment gateway base-method regression fix (2026-05-31)
 
 ### Implementation

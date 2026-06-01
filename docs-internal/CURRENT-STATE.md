@@ -1,5 +1,5 @@
 # Current State — Woodev Plugin Framework
-> Last updated: 2026-05-31 (Sandbox payment runtime validation slice implemented)
+> Last updated: 2026-06-01 (Independent audit: 3 release-blocker findings, 6 lower-priority observations)
 
 ## Phase Status
 
@@ -21,6 +21,10 @@
 ## Known Bugs (open)
 
 - [⚠️] class-payment-gateway.php is 2378 lines — candidate for trait extraction
+- [⚠️] **Independent audit 2026-06-01 — 3 release-blocker PHPStan-ignore masks:** (1) `Woodev_Payment_Gateway_API_Payment_Notification_Response::#` class-wide hides 6 unguarded calls in `class-payment-gateway-hosted.php:440-452` — checkout fatal risk; (2) `Woodev_Box_Packer_Item::get_product()` masks interface-contract violation in `class-packer-separatly.php:38` — `pack()` fatal risk; (3) `Shipping_API` interface references 6 non-existent types — broken contract. See [gotchas/gateway-type-methods-required.md](gotchas/gateway-type-methods-required.md) and [gotchas/shipping-api-broken-contract.md](gotchas/shipping-api-broken-contract.md)
+- [⚠️] `Woodev_Plugin::get_woocommerce_uploads_path()` (line 1258) — WC-specific method leaked into platform-neutral base; contradicts v2 split goal. See audit section below.
+- [⚠️] `Woodev_Plugin::get_blocks_handler()` typed return `Woodev_Blocks_Handler` non-nullable, but `blocks_handler` property only initialized in `Woocommerce_Plugin` — TypeError for pure-WordPress subclasses. See [gotchas/blocks-handler-typed-property-trap.md](gotchas/blocks-handler-typed-property-trap.md)
+- [⚠️] PHP 8.4+ implicit-nullable deprecations in legacy payment handler files — masked by `error_reporting()` in `RealisticPaymentFixtureTest.php:88-94`. See [gotchas/php84-implicit-nullable-payment-handlers.md](gotchas/php84-implicit-nullable-payment-handlers.md)
 - [✅] 50+ PHPStan baseline ignores — cleaned up (s3)
 - [✅] Woodev_Plugin_Dependencies::get_missing_php_functions() — fixed `4d00539`
 - [✅] 47 deprecated methods total — removed `728c6f9`
@@ -47,9 +51,22 @@
    base + include-based callback + real `Woodev_Payment_Gateway_Plugin` construction +
    `Woodev_Woocommerce_Plugin` inheritance + concrete `Woodev_Payment_Gateway` gateway-class
    registration, against a realistic payment-plugin shape. No gateway is instantiated.
-7. (Deferred / post-v2.0) Extract traits from class-payment-gateway.php (2378 lines)
-   and the broad `PLANS.md` vision: shipping universality, licensing webhooks/UI,
-   box-packer minimal virtual box, DI/SOLID, React admin UI, EDD runtime.
+7. **Independent audit 2026-06-01 — fix 3 release-blocker PHPStan-ignore masks** (BEFORE v2.0 release)
+   - (a) Add `instanceof` guards in `class-payment-gateway-hosted.php:440-452` (mirror `abstract-hosted-payment-handler.php:286-296`), then remove class-wide ignore in `phpstan.neon:120`
+   - (b) Add `get_product()` to `Woodev_Box_Packer_Item` interface (or split into extended interface) + remove ignore at `phpstan.neon:127`
+   - (c) Fix `Shipping_API` interface — port 6 missing types from `plugins-reference/woocommerce-edostavka` OR narrow the contract + remove ignore at `phpstan.neon:130-131`
+8. **Independent audit 2026-06-01 — fix 2 base-class contract leaks** (BEFORE v2.0 release)
+   - (a) Move `Woodev_Plugin::get_woocommerce_uploads_path()` to `Woodev_Woocommerce_Plugin` with deprecation shim on base (line 1258)
+   - (b) Make `Woodev_Plugin::get_blocks_handler(): ?Woodev_Blocks_Handler` + `protected ?Woodev_Blocks_Handler $blocks_handler = null` (line 71, 1018)
+9. **Independent audit 2026-06-01 — fix PHP 8.4+ deprecation mask** (BEFORE PHP 8.4 becomes required)
+   - Audit payment handler files for implicit-nullable `$arg = null` parameters
+   - Add `?Type` annotations
+   - Remove `error_reporting` mask in `RealisticPaymentFixtureTest.php:88-94`
+   - Enable `reportUnmatchedIgnoredErrors: true` in `phpstan.neon:78` (catches future dead ignores automatically)
+10. **Deferred / post-v2.0 (lower priority than the audit fixes):** resolver edge cases (idempotency, plugin_id dedup, bootstrap-resolver coupling), `Woodev_Helper` residual WC coupling, test coverage gaps (no `backwards_compatible` window test, no multi-version arbitration test, no end-to-end gateway integration test). See [audit-2026-06-01.md](audit-2026-06-01.md) for full prioritized list.
+11. (Deferred / post-v2.0) Extract traits from class-payment-gateway.php (2378 lines)
+    and the broad `PLANS.md` vision: shipping universality, licensing webhooks/UI,
+    box-packer minimal virtual box, DI/SOLID, React admin UI, EDD runtime.
 
 ### Platform v2 (strategy alignment)
 
@@ -88,6 +105,7 @@
 | 31 Roadmap reconciliation | ✅ 2026-05-31 | Re-anchored on `PLANS.md`; verified P1–P5 complete in source (resolver/loader/`Woocommerce_Plugin`/specialized bases/tests/`composer check`); found no boundary-violating drift but a mild soft drift (Phase 6A is paper-only; new framework path unvalidated against a realistic plugin shape; sandbox copies still use the old framework). Corrected next category = sandbox-based framework readiness validation. See `docs-internal/platform-v2-roadmap-reconciliation.md` |
 | 32 Sandbox shipping validation | ✅ 2026-05-31 | Added `tests/_fixtures/woodev-realistic-shipping-plugin` and `tests/unit/RealisticShippingFixtureTest.php`; read-only cues came from Edostavka/Yandex sandbox copies, but fixture stays framework-owned and generic. Verified explicit loader definition, WooCommerce requirement gate, selected-framework early shipping base, include-based callback/class graph, real `Shipping_Plugin` construction, and inheritance from `Woodev_Woocommerce_Plugin`; `composer check` passes (165 tests / 330 assertions). |
 | 33 Sandbox payment validation | ✅ 2026-05-31 | Added `tests/_fixtures/woodev-realistic-payment-plugin` and `tests/unit/RealisticPaymentFixtureTest.php`; read-only cues came from `plugins-reference/woodev-vkredit` (entry constants, `register_plugin()` with `is_payment_gateway`, singleton plugin `extends Woodev_Payment_Gateway_Plugin`, `gateways` arg by class-name, concrete gateway `extends Woodev_Payment_Gateway_Hosted`, gateway loaded include-based). Fixture stays framework-owned and generic. Verified explicit loader definition, payment capability + WooCommerce gating, selected-framework early payment base availability, include-based callback graph, real `Woodev_Payment_Gateway_Plugin` construction (full `includes()` chain), `Woodev_Woocommerce_Plugin` inheritance, and concrete `Woodev_Payment_Gateway` gateway-class registration via `get_gateway_class_names()`. No gateway is instantiated (no payment runtime executed). `composer check` passes (166 tests / 338 assertions). |
+| 34 Independent audit 2026-06-01 | ✅ 2026-06-01 | Second-model independent audit of `phpstan.neon` blanket ignores, `Woodev_Plugin` v2 split, payment-gateway restore, and resolver architecture. Surfaced 3 release-blocker PHPStan-ignore masks (Payment_Notification_Response class-wide, Box_Packer_Item::get_product, Shipping_API broken contract) + 2 base-class contract leaks (get_woocommerce_uploads_path WC-leak, get_blocks_handler typed-property trap) + 1 PHP 8.4+ deprecation mask (RealisticPaymentFixtureTest). All findings recorded as gotchas + prioritized in [Next Actions](#next-actions-priority-order) and detailed in `docs-internal/audit-2026-06-01.md`. No code changes — audit + docs only. `composer check` still passes (no PHP/runtime changes). |
 
 ## Planned — v2.0.0 & Beyond
 
@@ -125,29 +143,23 @@
 
 ## Active Queue
 
-> **2026-05-31 sandbox payment validation slice implemented.** The framework-first
-> payment runtime validation gap is now closed alongside the earlier shipping slice.
-> Both realistic file-based fixtures and their targeted unit tests are framework-owned
-> and generic. Payment cues are derived read-only from `plugins-reference/woodev-vkredit`
-> (entry constants, `register_plugin()` with `is_payment_gateway`, singleton plugin class
-> extending the payment gateway plugin base, `gateways` arg keyed by class name, concrete
-> gateway extending a hosted gateway base, include-based gateway loading). No
-> `plugins-reference/` file was edited and no migration contract was written.
+> **2026-06-01 independent audit completed.** The framework-first v2.0 platform split is
+> essentially complete (P1–P5) and validated against realistic fixtures (P-sandbox). The
+> independent second-model audit found **3 release-blocker PHPStan-ignore masks** of the
+> same class as the a7da0ea bug (28 deleted gateway methods), **2 base-class contract
+> leaks** that contradict the v2 split goal, and **1 PHP 8.4+ deprecation** that the test
+> suite currently masks. All findings have been recorded as gotchas and prioritized in
+> [Next Actions](#next-actions-priority-order) and detailed in
+> [`docs-internal/audit-2026-06-01.md`](audit-2026-06-01.md). No code was changed in this
+> audit session — only docs and gotchas.
 >
-> Verified payment path: explicit loader definition (platform `woocommerce`, payment
-> capability) → WooCommerce requirement gate → selected framework copy early-loads the
-> WooCommerce + payment gateway plugin bases → include-based callback constructs the real
-> `Woodev_Payment_Gateway_Plugin` (full `includes()` chain runs) → plugin is a
-> `Woodev_Woocommerce_Plugin` instance → concrete gateway class extends
-> `Woodev_Payment_Gateway` and is registered by class name via `get_gateway_class_names()`.
-> No gateway is instantiated, so no payment business logic executes. The strict
-> unit-output context masks `E_DEPRECATED` only around base construction to ignore
-> pre-existing PHP 8.4+ implicit-nullable deprecations in legacy payment handler files.
->
-> **Current boundary:** do not continue Phase 6A paperwork, do not start Phase 6B, do
-> not edit `plugins-reference/`, and do not expand resolver/bootstrap scope. Further
-> validation should only add another narrow fixture/test if it exposes a framework
-> readiness gap not covered by the shipping and payment slices.
+> **Current boundary:** the next session must fix the 3 release-blocker PHPStan-ignore
+> masks and the 2 base-class contract leaks BEFORE any v2.0 release candidate is tagged.
+> Do not continue Phase 6A paperwork, do not start Phase 6B, do not edit
+> `plugins-reference/`, and do not expand resolver/bootstrap scope. Lower-priority audit
+> findings (resolver edge cases, helper residual coupling, test coverage gaps, and the
+> user's note on "what went off track" → see audit doc) are documented for the future
+> session to plan against.
 
 ## Infrastructure Reference
 

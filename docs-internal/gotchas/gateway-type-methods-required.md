@@ -1,6 +1,90 @@
-# Gateway Type Methods Required
+# Gotcha: [php/gateway-type-methods-required] — Never blanket-ignore `Call to an undefined method` on a class hierarchy
 
-> `[php/gateway-type-methods-required]` | discovered: 2026-05-10 (s3); recurred + widened: 2026-05-31
+> Tags: phpstan, static-analysis, blank-ignores, gateway, payment, shipping, box-packer
+> Discovered: 2026-05-10 (s3); recurred + widened: 2026-05-31; audit of remaining ignores: 2026-06-01
+
+## 2026-06-01 audit — 3 remaining blanket-ignores with the same fatal risk
+
+A second-model independent audit of `phpstan.neon` (after the a7da0ea fix) found
+that **the same class of bug still exists in 3 places**, plus 1 dead ignore and
+1 docblock-precision ignore. Running PHPStan with the suspect ignores removed
+revealed **30 masked errors across 5 patterns**.
+
+The pattern, in every case, is the same as the a7da0ea bug:
+
+> A blanket ignore of the form `#Call to an undefined method <Class>::#`
+> hides exactly the static-analysis errors that would have caught a real
+> `Error: Call to undefined method` at runtime. When the assumed "runtime
+> implementation" never appears (or the parent class is used where the child
+> was assumed), the site fatals on every install that triggers that path.
+
+### Surviving suspect blanket-ignores (audit of `phpstan.neon` lines 86-156)
+
+| # | Line | Regex | Risk | Where it actually exists | Notes |
+|---|------|-------|------|--------------------------|-------|
+| 1 | 117 | `Woodev_Plugin::get_gateways()` | MEDIUM | Only in `Woodev_Payment_Gateway_Plugin:833` | 2 unguarded calls: `payment-gateway/admin/abstract-payment-gateway-plugin-admin-setup-wizard.php:29`, `payment-gateway/rest-api/class-payment-gateway-plugin-rest-api.php:28` — fatals only if used by a non-gateway plugin (very narrow). The other 23 call sites are inside `Woodev_Payment_Gateway_Plugin` itself or guarded by `instanceof`. |
+| 2 | 120 | `Woodev_Payment_Gateway_API_Payment_Notification_Response::#` (CLASS-WIDE) | **HIGH** | Base interface has 4 methods; sub-interfaces add `get_exp_month`/`get_exp_year`/`get_card_type`/`get_loan_type`/`get_credit_amount`/`get_first_payment` | 6 UNGUARDED calls in `payment-gateway/class-payment-gateway-hosted.php:440-452` — `$response->get_exp_month()` etc. dispatched by `switch($response->get_payment_type())`, not by `instanceof`. If a hosted gateway returns `PAYMENT_TYPE_CREDIT_CARD` from a custom response that does NOT implement `Woodev_Payment_Gateway_API_Payment_Notification_Credit_Card_Response`, the call at line 442 **fatals on checkout**. The sibling handler (`abstract-hosted-payment-handler.php:286-296`) uses `instanceof` guards correctly — copy that pattern. |
+| 3 | 123 | `Woodev_Payment_Gateway_Payment_Token::get_check_number()` | **DEAD** (cleanup) | Nowhere — eCheck removed in s3 | Verified with `reportUnmatchedIgnoredErrors: true`: 0 matches. **Safe to delete.** |
+| 4 | 124 | `Invalid array key type Woodev_Payment_Gateway_Payment_Token` | LOW (docblock) | Runtime works; only docblock is imprecise | `@return array\|Woodev_Payment_Gateway_Payment_Token[]` should be `@return array<string, Woodev_Payment_Gateway_Payment_Token>`. |
+| 5 | 127 | `Woodev_Box_Packer_Item::get_product()` | **HIGH** | Only in `Woodev_Packer_Item_Implementation` — not in the interface contract | `box-packer/class-packer-separatly.php:38` calls `$item->get_product()` on `Woodev_Box_Packer_Item[]`. If a plugin implements `Woodev_Box_Packer_Item` with their own class (no `get_product()`), `pack()` fatals. Other packers (`Single_Box`, `Virtual_Box`, `Boxes`) do NOT call `get_product()`. |
+| 6 | 130-131 | `(Woodev_Shipping\|Woodev_Exportable\|not subtype of Throwable)` (scoped to `interface-shipping-api.php`) | **HIGH** (broken contract) | The 6 types in this interface **do not exist** in the framework | `Woodev_Shipping_API_Rate_Response`, `Woodev_Shipping_API_Order_Response`, `Woodev_Shipping_API_Tracking_Response`, `Woodev_Shipping_API_Pickup_Points_Response`, `Woodev_Exportable_Order`, `Woodev_Shipping_Exception` — see [gotcha: shipping-api-broken-contract](gotchas/shipping/shipping-api-broken-contract.md). 20 errors revealed when ignore removed. |
+
+### Required fixes (release-blocking for v2.0)
+
+**Pattern 2 (`Payment_Notification_Response` class-wide) — copy pattern from sibling handler:**
+
+```php
+// ❌ Current (class-payment-gateway-hosted.php:440-452) — value-based dispatch
+switch ( $response->get_payment_type() ) {
+    case self::PAYMENT_TYPE_CREDIT_CARD:
+        $order->payment->exp_month = $response->get_exp_month();
+        $order->payment->exp_year  = $response->get_exp_year();
+        $order->payment->card_type = $response->get_card_type();
+        break;
+    case self::PAYMENT_TYPE_LOANS:
+        $order->payment->loan_type     = $response->get_loan_type();
+        // ...
+}
+
+// ✅ Correct — type-based dispatch (matches abstract-hosted-payment-handler.php:286-296)
+if ( $response instanceof Woodev_Payment_Gateway_API_Payment_Notification_Credit_Card_Response ) {
+    $order->payment->exp_month = $response->get_exp_month();
+    $order->payment->exp_year  = $response->get_exp_year();
+    $order->payment->card_type = $response->get_card_type();
+} elseif ( $response instanceof Woodev_Payment_Gateway_API_Payment_Notification_Loans_Response ) {
+    $order->payment->loan_type     = $response->get_loan_type();
+    $order->payment->credit_amount = $response->get_credit_amount();
+    $order->payment->first_payment = $response->get_first_payment();
+}
+```
+
+After fix: remove class-wide ignore, replace with no entry (or narrow per-method ignores if PHPStan still flags false positives).
+
+**Pattern 3 (dead `get_check_number`) — one-line removal:**
+
+```neon
+# DELETE this line from phpstan.neon:123
+- '#Call to an undefined method Woodev_Payment_Gateway_Payment_Token::get_check_number\(\)#'
+```
+
+**Pattern 5 (`Box_Packer_Item::get_product`) — split interface or add to base:**
+
+Either (a) split into `Woodev_Box_Packer_Item_With_Product extends Woodev_Box_Packer_Item` and have `Woodev_Packer_Separately` require the extended type, or (b) add `public function get_product();` to the base interface with a default no-op or nullable return.
+
+**Pattern 6 (Shipping_API broken contract) — fix the interface, not the ignore.** See dedicated gotcha.
+
+### Cross-cutting enforcement (prevents recurrence)
+
+Enable dead-ignore detection permanently in `phpstan.neon:78`:
+
+```neon
+reportUnmatchedIgnoredErrors: true   # was: false
+```
+
+With this on, the next dead ignore (like `get_check_number` above) is reported at
+every `composer check` instead of silently rotting forever.
+
+---
 
 ## 2026-05-31 recurrence (much larger) + why static analysis missed it
 
