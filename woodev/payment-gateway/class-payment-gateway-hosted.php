@@ -437,18 +437,17 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 
 			$order->payment->account_number = $response->get_account_number();
 
-			switch ( $response->get_payment_type() ) {
-				case self::PAYMENT_TYPE_CREDIT_CARD:
-					$order->payment->exp_month = $response->get_exp_month();
-					$order->payment->exp_year  = $response->get_exp_year();
-					$order->payment->card_type = $response->get_card_type();
-					break;
+			if ( $response instanceof Woodev_Payment_Gateway_API_Payment_Notification_Credit_Card_Response ) {
 
-				case self::PAYMENT_TYPE_LOANS:
-					$order->payment->loan_type     = $response->get_loan_type();
-					$order->payment->credit_amount = $response->get_credit_amount();
-					$order->payment->first_payment = $response->get_first_payment();
-					break;
+				$order->payment->exp_month = $response->get_exp_month();
+				$order->payment->exp_year  = $response->get_exp_year();
+				$order->payment->card_type = $response->get_card_type();
+
+			} elseif ( $response instanceof Woodev_Payment_Gateway_API_Payment_Notification_Loans_Response ) {
+
+				$order->payment->loan_type     = $response->get_loan_type();
+				$order->payment->credit_amount = $response->get_credit_amount();
+				$order->payment->first_payment = $response->get_first_payment();
 			}
 
 			return $order;
