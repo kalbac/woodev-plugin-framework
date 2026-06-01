@@ -21,10 +21,10 @@
 ## Known Bugs (open)
 
 - [⚠️] class-payment-gateway.php is 2378 lines — candidate for trait extraction
-- [⚠️] **Independent audit 2026-06-01 — 3 release-blocker PHPStan-ignore masks:** (1) `Woodev_Payment_Gateway_API_Payment_Notification_Response::#` class-wide hides 6 unguarded calls in `class-payment-gateway-hosted.php:440-452` — checkout fatal risk; (2) `Woodev_Box_Packer_Item::get_product()` masks interface-contract violation in `class-packer-separatly.php:38` — `pack()` fatal risk; (3) `Shipping_API` interface references 6 non-existent types — broken contract. See [gotchas/gateway-type-methods-required.md](gotchas/gateway-type-methods-required.md) and [gotchas/shipping-api-broken-contract.md](gotchas/shipping-api-broken-contract.md)
-- [⚠️] `Woodev_Plugin::get_woocommerce_uploads_path()` (line 1258) — WC-specific method leaked into platform-neutral base; contradicts v2 split goal. See audit section below.
-- [⚠️] `Woodev_Plugin::get_blocks_handler()` typed return `Woodev_Blocks_Handler` non-nullable, but `blocks_handler` property only initialized in `Woocommerce_Plugin` — TypeError for pure-WordPress subclasses. See [gotchas/blocks-handler-typed-property-trap.md](gotchas/blocks-handler-typed-property-trap.md)
-- [⚠️] PHP 8.4+ implicit-nullable deprecations in legacy payment handler files — masked by `error_reporting()` in `RealisticPaymentFixtureTest.php:88-94`. See [gotchas/php84-implicit-nullable-payment-handlers.md](gotchas/php84-implicit-nullable-payment-handlers.md)
+- [✅] **Independent audit 2026-06-01 — 3 release-blocker PHPStan-ignore masks** — all fixed 2026-06-02 (`95ae463` B-1a, `96cce09` B-1b, `6a1244c` B-1c)
+- [✅] `Woodev_Plugin::get_woocommerce_uploads_path()` WC-leak — moved to `Woodev_Woocommerce_Plugin` with deprecation shim (`2817143` B-2, 2026-06-02)
+- [✅] `Woodev_Plugin::get_blocks_handler()` typed-property trap — made property/return nullable (`2bd041b` B-3, 2026-06-02)
+- [✅] PHP 8.4+ implicit-nullable deprecations in legacy payment handler files — explicit `?Type` added to 13 sites; test mask removed; `reportUnmatchedIgnoredErrors: true` enabled (`ef3d067` H1, 2026-06-02)
 - [✅] 50+ PHPStan baseline ignores — cleaned up (s3)
 - [✅] Woodev_Plugin_Dependencies::get_missing_php_functions() — fixed `4d00539`
 - [✅] 47 deprecated methods total — removed `728c6f9`
@@ -51,18 +51,15 @@
    base + include-based callback + real `Woodev_Payment_Gateway_Plugin` construction +
    `Woodev_Woocommerce_Plugin` inheritance + concrete `Woodev_Payment_Gateway` gateway-class
    registration, against a realistic payment-plugin shape. No gateway is instantiated.
-7. **Independent audit 2026-06-01 — fix 3 release-blocker PHPStan-ignore masks** (BEFORE v2.0 release)
-   - (a) Add `instanceof` guards in `class-payment-gateway-hosted.php:440-452` (mirror `abstract-hosted-payment-handler.php:286-296`), then remove class-wide ignore in `phpstan.neon:120`
-   - (b) Add `get_product()` to `Woodev_Box_Packer_Item` interface (or split into extended interface) + remove ignore at `phpstan.neon:127`
-   - (c) Fix `Shipping_API` interface — port 6 missing types from `plugins-reference/woocommerce-edostavka` OR narrow the contract + remove ignore at `phpstan.neon:130-131`
-8. **Independent audit 2026-06-01 — fix 2 base-class contract leaks** (BEFORE v2.0 release)
-   - (a) Move `Woodev_Plugin::get_woocommerce_uploads_path()` to `Woodev_Woocommerce_Plugin` with deprecation shim on base (line 1258)
-   - (b) Make `Woodev_Plugin::get_blocks_handler(): ?Woodev_Blocks_Handler` + `protected ?Woodev_Blocks_Handler $blocks_handler = null` (line 71, 1018)
-9. **Independent audit 2026-06-01 — fix PHP 8.4+ deprecation mask** (BEFORE PHP 8.4 becomes required)
-   - Audit payment handler files for implicit-nullable `$arg = null` parameters
-   - Add `?Type` annotations
-   - Remove `error_reporting` mask in `RealisticPaymentFixtureTest.php:88-94`
-   - Enable `reportUnmatchedIgnoredErrors: true` in `phpstan.neon:78` (catches future dead ignores automatically)
+7. ~~**Independent audit 2026-06-01 — fix 3 release-blocker PHPStan-ignore masks**~~ ✅ 2026-06-02
+    - (a) ✅ `95ae463` — B-1a: instanceof guards at `class-payment-gateway-hosted.php:440-452`; class-wide ignore removed
+    - (b) ✅ `96cce09` — B-1b: split `Woodev_Box_Packer_Item` into base + `Woodev_Box_Packer_Item_With_Product` interface; ignore removed
+    - (c) ✅ `6a1244c` — B-1c: narrowed `Shipping_API` to base framework contracts (`Woodev_API_Response`, `Woodev_API_Exception`, `Woodev_API_Request`, `WC_Order`); interface-scoped ignore removed
+8. ~~**Independent audit 2026-06-01 — fix 2 base-class contract leaks**~~ ✅ 2026-06-02
+    - (a) ✅ `2817143` — B-2: moved `get_woocommerce_uploads_path()` to `Woodev_Woocommerce_Plugin` with deprecation shim on base
+    - (b) ✅ `2bd041b` — B-3: made `Woodev_Plugin::$blocks_handler` nullable with `= null` default; `get_blocks_handler(): ?Woodev_Blocks_Handler`
+9. ~~**Independent audit 2026-06-01 — fix PHP 8.4+ deprecation mask**~~ ✅ 2026-06-02
+    - H1 (`ef3d067`): added explicit `?Type` nullable annotations to 13 sites across 4 files (`class-payment-gateway.php`, `class-payment-gateway-my-payment-methods.php`, `handlers/abstract-hosted-payment-handler.php`, `handlers/abstract-payment-handler.php`); removed `error_reporting` mask in `RealisticPaymentFixtureTest.php:88-94`; enabled `reportUnmatchedIgnoredErrors: true` in `phpstan.neon:78`; also surfaced and removed dead `get_check_number` ignore (eCheck API was removed in s3)
 10. **Deferred / post-v2.0 (lower priority than the audit fixes):** resolver edge cases (idempotency, plugin_id dedup, bootstrap-resolver coupling), `Woodev_Helper` residual WC coupling, test coverage gaps (no `backwards_compatible` window test, no multi-version arbitration test, no end-to-end gateway integration test). See [audit-2026-06-01.md](audit-2026-06-01.md) for full prioritized list.
 11. (Deferred / post-v2.0) Extract traits from class-payment-gateway.php (2378 lines)
     and the broad `PLANS.md` vision: shipping universality, licensing webhooks/UI,
@@ -143,23 +140,20 @@
 
 ## Active Queue
 
-> **2026-06-01 independent audit completed.** The framework-first v2.0 platform split is
-> essentially complete (P1–P5) and validated against realistic fixtures (P-sandbox). The
-> independent second-model audit found **3 release-blocker PHPStan-ignore masks** of the
-> same class as the a7da0ea bug (28 deleted gateway methods), **2 base-class contract
-> leaks** that contradict the v2 split goal, and **1 PHP 8.4+ deprecation** that the test
-> suite currently masks. All findings have been recorded as gotchas and prioritized in
-> [Next Actions](#next-actions-priority-order) and detailed in
-> [`docs-internal/audit-2026-06-01.md`](audit-2026-06-01.md). No code was changed in this
-> audit session — only docs and gotchas.
+> **2026-06-01 independent audit completed; all release-blocker items fixed 2026-06-02.**
+> Commits `95ae463`, `96cce09`, `6a1244c`, `2817143`, `2bd041b`, `ef3d067` resolve every
+> release-blocker finding (3 PHPStan-ignore masks, 2 base-class contract leaks, 1 PHP
+> 8.4+ deprecation mask) and one dead PHPStan ignore surfaced as a side effect of
+> enabling `reportUnmatchedIgnoredErrors: true`. `composer check` is green at 177 tests
+> / 369 assertions, PHPStan 0 errors, phpcs clean. The audit prompt
+> (`audit-2026-06-01-next-session-prompt.md`) is now obsolete and has been deleted.
 >
-> **Current boundary:** the next session must fix the 3 release-blocker PHPStan-ignore
-> masks and the 2 base-class contract leaks BEFORE any v2.0 release candidate is tagged.
-> Do not continue Phase 6A paperwork, do not start Phase 6B, do not edit
-> `plugins-reference/`, and do not expand resolver/bootstrap scope. Lower-priority audit
+> **Current boundary:** v2.0 release-blocking audit items are clear. Lower-priority
 > findings (resolver edge cases, helper residual coupling, test coverage gaps, and the
-> user's note on "what went off track" → see audit doc) are documented for the future
-> session to plan against.
+> user's note on "what went off track" → see audit doc) remain documented for future
+> sessions to plan against. Do not continue Phase 6A paperwork, do not start Phase 6B,
+> do not edit `plugins-reference/`, and do not expand resolver/bootstrap scope until
+> the lower-priority findings have been prioritized with the user.
 
 ## Infrastructure Reference
 

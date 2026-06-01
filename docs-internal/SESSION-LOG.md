@@ -1,5 +1,26 @@
 # Session Log — Woodev Plugin Framework
 
+## Audit fixes — all 6 release-blocker items from 2026-06-01 audit (2026-06-02)
+
+### Implementation
+- Continued from the 2026-06-01 audit session (`audit-2026-06-01-next-session-prompt.md`). B-1a/b/c were already committed in the previous session; this session completed B-2, B-3, and H1.
+- **B-2** (`2817143`) — moved `Woodev_Plugin::get_woocommerce_uploads_path()` to `Woodev_Woocommerce_Plugin::get_woocommerce_uploads_path()` with a deprecated shim on the base. Shim calls `_deprecated_function()` and delegates to the WC class when available, with a fallback to inline implementation for pure-WP contexts (defensive). Updated `docs/core-framework.md:649` example to call the WC class directly.
+- **B-3** (`2bd041b`) — changed `Woodev_Plugin::$blocks_handler` to `?Woodev_Blocks_Handler = null` (nullable with default). Made `get_blocks_handler(): ?Woodev_Blocks_Handler` nullable. Pure-WP plugins now get `null` from the getter instead of a `TypeError`. `Woodev_Woocommerce_Plugin` unaffected (still initializes the property in `init_blocks_handler()`).
+- **H1** (`ef3d067`) — added explicit `?Type` nullable annotations to 13 sites across 4 files: `class-payment-gateway.php` (2), `class-payment-gateway-my-payment-methods.php` (1), `handlers/abstract-hosted-payment-handler.php` (4), `handlers/abstract-payment-handler.php` (6). Removed the `error_reporting( error_reporting() & ~E_DEPRECATED )` mask in `RealisticPaymentFixtureTest.php:88-94`. Enabled `reportUnmatchedIgnoredErrors: true` in `phpstan.neon:78` — this immediately surfaced a dead `get_check_number` ignore pattern (eCheck API removed in s3, ignore was never removed). Removed the dead ignore in the same commit.
+
+### Verification
+- `composer check` green: PHPCS clean, **PHPStan 0 errors with `reportUnmatchedIgnoredErrors: true`** (authoritative proof that no ignore pattern is now dead), **PHPUnit 177 tests / 369 assertions** (up from 172/364 after the V-5 B-3 test started passing).
+- New tests: `tests/unit/WoocommerceUploadsPathLocationTest.php` (B-2 — 3 tests) + `tests/unit/PaymentGatewayImplicitNullableTest.php` (H1 — 5 reflection-based tests). The B-3 test (`PureWordpressPluginBlocksHandlerTest.php`) was written earlier in the previous session.
+- Audit prompt `audit-2026-06-01-next-session-prompt.md` is now obsolete — deleted. Scratch PHPStan configs (`phpstan-strict-v1/2/3.neon`) cleaned up.
+- Gotcha files updated with resolution notes: `blocks-handler-typed-property-trap.md` (B-3), `php84-implicit-nullable-payment-handlers.md` (H1).
+- Audit estimated 46 implicit-nullable sites; actual count was 13 (most untyped `$arg = null` params don't trigger the PHP 8.4 deprecation — only TYPED ones do). The fix scale was smaller than feared, but the principle (H1 audit item) still stands: implicit-nullable must be replaced with explicit `?Type`.
+
+### Next
+- Lower-priority audit findings remain in `audit-2026-06-01.md` and CURRENT-STATE.md Next Action #10: resolver edge cases (idempotency, plugin_id dedup, bootstrap-resolver coupling), `Woodev_Helper` residual WC coupling (14 missed sites), test coverage gaps (no `backwards_compatible` window test, no multi-version arbitration test, no end-to-end gateway integration test).
+- Do not continue Phase 6A paperwork, do not start Phase 6B, do not edit `plugins-reference/`, do not expand resolver/bootstrap scope.
+- Admin/licensing work (the user's stated next phase per his mental model) has not been started. Future session should plan it.
+- One residual: the commit subject for B-3 (`2bd041b`) has a `$` escape bug — PowerShell expanded `$blocks_handler` to empty in the subject. The body of the commit is correct; the subject reads `make Woodev_Plugin::\ nullable`. Cosmetic only, but visible in `git log`.
+
 ## Independent audit — release-blocker findings + refactor process observations (2026-06-01)
 
 ### Implementation
