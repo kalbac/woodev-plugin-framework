@@ -605,6 +605,17 @@ if ( ! class_exists( Framework_Resolver::class, false ) ) :
 				if ( file_exists( $woocommerce_plugin_alias_file ) ) {
 					require_once $woocommerce_plugin_alias_file;
 				}
+
+				$woocommerce_helper_file       = $plugin_path . '/woodev/class-woocommerce-helper.php';
+				$woocommerce_helper_alias_file = $plugin_path . '/woodev/class-woocommerce-helper-alias.php';
+
+				if ( ! class_exists( '\\Woodev\\Framework\\Woocommerce_Helper', false ) && file_exists( $woocommerce_helper_file ) ) {
+					require_once $woocommerce_helper_file;
+				}
+
+				if ( ! class_exists( 'Woodev_Woocommerce_Helper', false ) && file_exists( $woocommerce_helper_alias_file ) ) {
+					require_once $woocommerce_helper_alias_file;
+				}
 			}
 
 			$should_load_payment_gateway = in_array( Framework_Plugin_Loader_Definition::CAPABILITY_PAYMENT_GATEWAY, $capabilities, true ) && ! class_exists( 'Woodev_Payment_Gateway_Plugin', false );

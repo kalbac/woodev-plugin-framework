@@ -471,73 +471,18 @@ if ( ! class_exists( 'Woodev_Helper' ) ) :
 		/**
 		 * Gets order line items (products) as an array of objects.
 		 *
-		 * Object properties:
-		 *
-		 * + id          - item ID
-		 * + name        - item name, usually product title, processed through htmlentities()
-		 * + description - formatted item meta (e.g. Size: Medium, Color: blue), processed through htmlentities()
-		 * + quantity    - item quantity
-		 * + item_total  - item total (line total divided by quantity, excluding tax & rounded)
-		 * + line_total  - line item total (excluding tax & rounded)
-		 * + meta        - formatted item meta array
-		 * + product     - item product or null if getting product from item failed
-		 * + item        - raw item array
-		 *
 		 * @param WC_Order $order
 		 *
 		 * @return stdClass[] array of line item objects
+		 *
+		 * @since 1.0.0
+		 * @deprecated 2.0.0 Use Woodev_Woocommerce_Helper::get_order_line_items() instead.
 		 */
 		public static function get_order_line_items( WC_Order $order ): array {
 
-			$line_items = [];
+			_deprecated_function( __METHOD__, '2.0.0', 'Woodev_Woocommerce_Helper::get_order_line_items()' );
 
-			/** @var WC_Order_Item_Product $item */
-			foreach ( $order->get_items() as $id => $item ) {
-
-				$line_item = new stdClass();
-				$product   = $item->get_product();
-				$name      = $item->get_name();
-				$quantity  = $item->get_quantity();
-				$sku       = $product instanceof WC_Product ? $product->get_sku() : '';
-				$item_desc = [];
-
-				// add SKU to description if available
-				if ( ! empty( $sku ) ) {
-					$item_desc[] = sprintf( 'SKU: %s', $sku );
-				}
-
-				$meta_data = $item->get_formatted_meta_data( '-', true );
-				$item_meta = [];
-
-				foreach ( $meta_data as $meta ) {
-					$item_meta[] = array(
-						'label' => $meta->display_key,
-						'value' => $meta->value,
-					);
-				}
-
-				if ( ! empty( $item_meta ) ) {
-					foreach ( $item_meta as $meta ) {
-						$item_desc[] = sprintf( '%s: %s', $meta['label'], $meta['value'] );
-					}
-				}
-
-				$item_desc = implode( ', ', $item_desc );
-
-				$line_item->id          = $id;
-				$line_item->name        = htmlentities( $name, ENT_QUOTES, 'UTF-8', false );
-				$line_item->description = htmlentities( $item_desc, ENT_QUOTES, 'UTF-8', false );
-				$line_item->quantity    = $quantity;
-				$line_item->item_total  = isset( $item['recurring_line_total'] ) ? $item['recurring_line_total'] : $order->get_item_total( $item );
-				$line_item->line_total  = $order->get_line_total( $item );
-				$line_item->meta        = $item_meta;
-				$line_item->product     = is_object( $product ) ? $product : null;
-				$line_item->item        = $item;
-
-				$line_items[] = $line_item;
-			}
-
-			return $line_items;
+			return \Woodev\Framework\Woocommerce_Helper::get_order_line_items( $order );
 		}
 
 		/**
@@ -546,47 +491,34 @@ if ( ! class_exists( 'Woodev_Helper' ) ) :
 		 * @param WC_Order $order the order object
 		 *
 		 * @return bool
+		 *
+		 * @since 1.0.0
+		 * @deprecated 2.0.0 Use Woodev_Woocommerce_Helper::is_order_virtual() instead.
 		 */
 		public static function is_order_virtual( WC_Order $order ): bool {
 
-			$is_virtual = true;
+			_deprecated_function( __METHOD__, '2.0.0', 'Woodev_Woocommerce_Helper::is_order_virtual()' );
 
-			/** @var WC_Order_Item_Product $item */
-			foreach ( $order->get_items() as $item ) {
-
-				$product = $item->get_product();
-
-				// once we've found one non-virtual product we know we're done, break out of the loop
-				if ( $product && ! $product->is_virtual() ) {
-
-					$is_virtual = false;
-					break;
-				}
-			}
-
-			return $is_virtual;
+			return \Woodev\Framework\Woocommerce_Helper::is_order_virtual( $order );
 		}
 
 		/**
 		 * Determines if a shop has any published virtual products.
 		 *
 		 * @return bool
+		 *
+		 * @since 1.0.0
+		 * @deprecated 2.0.0 Use Woodev_Woocommerce_Helper::shop_has_virtual_products() instead.
 		 */
 		public static function shop_has_virtual_products(): bool {
 
-			if ( ! function_exists( 'wc_get_products' ) ) {
+			_deprecated_function( __METHOD__, '2.0.0', 'Woodev_Woocommerce_Helper::shop_has_virtual_products()' );
+
+			if ( ! class_exists( '\Woodev\Framework\Woocommerce_Helper', false ) ) {
 				return false;
 			}
 
-			$virtual_products = wc_get_products(
-				array(
-					'virtual' => true,
-					'status'  => 'publish',
-					'limit'   => 1,
-				)
-			);
-
-			return count( $virtual_products ) > 0;
+			return \Woodev\Framework\Woocommerce_Helper::shop_has_virtual_products();
 		}
 
 		/**
@@ -994,126 +926,19 @@ if ( ! class_exists( 'Woodev_Helper' ) ) :
 		 * - `data-selected` can be a json encoded associative array like Array( 'key' => 'value' )
 		 * - `value` should be a comma-separated list of selected keys
 		 * - `data-request_data` can be used to pass any additional data to the AJAX request
+		 *
+		 * @since 1.0.0
+		 * @deprecated 2.0.0 Use Woodev_Woocommerce_Helper::render_select2_ajax() instead.
 		 */
 		public static function render_select2_ajax() {
 
-			if ( ! did_action( 'woodev_wc_select2_ajax_rendered' ) ) {
+			_deprecated_function( __METHOD__, '2.0.0', 'Woodev_Woocommerce_Helper::render_select2_ajax()' );
 
-				$javascript = '( function(){
-				if ( ! $().select2 ) return;
-			';
-
-				$javascript .= "
-
-				function getEnhancedSelectFormatString() {
-
-					if ( 'undefined' !== typeof wc_select_params ) {
-						wc_enhanced_select_params = wc_select_params;
-					}
-
-					if ( 'undefined' === typeof wc_enhanced_select_params ) {
-						return {};
-					}
-
-					var formatString = {
-						formatMatches: function( matches ) {
-							if ( 1 === matches ) {
-								return wc_enhanced_select_params.i18n_matches_1;
-							}
-
-							return wc_enhanced_select_params.i18n_matches_n.replace( '%qty%', matches );
-						},
-						formatNoMatches: function() {
-							return wc_enhanced_select_params.i18n_no_matches;
-						},
-						formatAjaxError: function( jqXHR, textStatus, errorThrown ) {
-							return wc_enhanced_select_params.i18n_ajax_error;
-						},
-						formatInputTooShort: function( input, min ) {
-							var number = min - input.length;
-
-							if ( 1 === number ) {
-								return wc_enhanced_select_params.i18n_input_too_short_1
-							}
-
-							return wc_enhanced_select_params.i18n_input_too_short_n.replace( '%qty%', number );
-						},
-						formatInputTooLong: function( input, max ) {
-							var number = input.length - max;
-
-							if ( 1 === number ) {
-								return wc_enhanced_select_params.i18n_input_too_long_1
-							}
-
-							return wc_enhanced_select_params.i18n_input_too_long_n.replace( '%qty%', number );
-						},
-						formatSelectionTooBig: function( limit ) {
-							if ( 1 === limit ) {
-								return wc_enhanced_select_params.i18n_selection_too_long_1;
-							}
-
-							return wc_enhanced_select_params.i18n_selection_too_long_n.replace( '%qty%', number );
-						},
-						formatLoadMore: function( pageNumber ) {
-							return wc_enhanced_select_params.i18n_load_more;
-						},
-						formatSearching: function() {
-							return wc_enhanced_select_params.i18n_searching;
-						}
-					};
-
-					return formatString;
-				}
-			";
-
-				$javascript .= "
-
-			$( 'select.woodev-wc-enhanced-search' ).filter( ':not(.enhanced)' ).each( function() {
-
-				var select2_args = {
-					allowClear:         $( this ).data( 'allow_clear' ) ? true : false,
-					placeholder:        $( this ).data( 'placeholder' ),
-					minimumInputLength: $( this ).data( 'minimum_input_length' ) ? $( this ).data( 'minimum_input_length' ) : '3',
-					escapeMarkup:       function( m ) {
-						return m;
-					},
-					ajax:               {
-						url:            '" . esc_js( admin_url( 'admin-ajax.php' ) ) . "',
-						dataType:       'json',
-						cache:          true,
-						delay:          250,
-						data:           function( params ) {
-							return {
-								term:         params.term,
-								request_data: $( this ).data( 'request_data' ) ? $( this ).data( 'request_data' ) : {},
-								action:       $( this ).data( 'action' ) || 'woocommerce_json_search_products_and_variations',
-								security:     $( this ).data( 'nonce' )
-							};
-						},
-						processResults: function( data, params ) {
-							var terms = [];
-							if ( data ) {
-								$.each( data, function( id, text ) {
-									terms.push( { id: id, text: text } );
-								});
-							}
-							return { results: terms };
-						}
-					}
-				};
-
-				select2_args = $.extend( select2_args, getEnhancedSelectFormatString() );
-
-				$( this ).select2( select2_args ).addClass( 'enhanced' );
-			} );
-		";
-
-				$javascript .= '} )();';
-
-				self::enqueue_js( $javascript );
-
-				do_action( 'woodev_wc_select2_ajax_rendered' );
+			if ( ! class_exists( '\Woodev\Framework\Woocommerce_Helper', false ) ) {
+				return;
 			}
+
+			\Woodev\Framework\Woocommerce_Helper::render_select2_ajax();
 		}
 
 		/**

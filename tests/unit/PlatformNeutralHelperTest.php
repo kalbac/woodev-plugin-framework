@@ -10,6 +10,8 @@ namespace Woodev\Tests\Unit;
 use Brain\Monkey\Functions;
 
 require_once dirname( __DIR__, 2 ) . '/woodev/class-helper.php';
+require_once dirname( __DIR__, 2 ) . '/woodev/class-woocommerce-helper.php';
+require_once dirname( __DIR__, 2 ) . '/woodev/class-woocommerce-helper-alias.php';
 
 /**
  * Class PlatformNeutralHelperTest.
@@ -30,10 +32,14 @@ class PlatformNeutralHelperTest extends TestCase {
 	/**
 	 * Virtual-product detection should safely return false without WooCommerce.
 	 *
+	 * As of 2.0.0 the helper lives on {@see \Woodev_Woocommerce_Helper}; the
+	 * platform-neutral contract that the no-WC test exercises is now
+	 * provided by the new class.
+	 *
 	 * @return void
 	 */
 	public function test_shop_has_virtual_products_returns_false_without_woocommerce(): void {
-		$this->assertFalse( \Woodev_Helper::shop_has_virtual_products() );
+		$this->assertFalse( \Woodev_Woocommerce_Helper::shop_has_virtual_products() );
 	}
 
 	/**

@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
-> **15 atomic gotchas in 8 namespaces** — update count when adding/removing.
-> Last updated: 2026-06-01 (independent audit: 3 remaining blanket-ignores + 2 base-class traps + 1 PHP 8.4+ deprecation)
+> **16 atomic gotchas in 9 namespaces** — update count when adding/removing.
+> Last updated: 2026-06-02 (polish session: added class_alias/PHPStan gotcha)
 
 ## Index
 
@@ -26,6 +26,9 @@
 - [bootstrap/payment-gateway-conditional-load] Payment gateway base class loaded only when is_payment_gateway arg is set → [gotchas/payment-gateway-conditional-load.md](gotchas/payment-gateway-conditional-load.md) (s2)
 - [bootstrap/multiversion-early-class-guards] Early-loaded support classes must be guarded and loaded from the selected framework copy → [gotchas/multiversion-early-class-guards.md](gotchas/multiversion-early-class-guards.md) (s4)
 - [bootstrap/resolver-bootstrap-coupling] `Framework_Resolver` references `Woodev_Plugin_Bootstrap::instance()` in 3 places for notice wiring — undermines "minimal resolver" boundary; tests don't catch because happy-path data → see [../../docs-internal/audit-2026-06-01.md#m1](../../docs-internal/audit-2026-06-01.md) (2026-06-01)
+
+### [php/*] — PHP class loading patterns
+- [php/class-alias-phpstan-resolution] `class_alias()` in a conditionally-loaded file is invisible to PHPStan; use FQCN in internal code OR declare a real subclass → [gotchas/class-alias-phpstan-resolution.md](gotchas/class-alias-phpstan-resolution.md) (2026-06-02)
 
 ### [compat/*] — Backward compatibility, HPOS
 - [compat/hpos-order-meta-safety] Never use get_post_meta() on orders — use Woodev_Order_Compatibility → [gotchas/hpos-order-meta-safety.md](gotchas/hpos-order-meta-safety.md) (s2)

@@ -2703,7 +2703,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 			$perform = self::TRANSACTION_TYPE_CHARGE === $this->transaction_type;
 
 			if ( ! $perform && $order && $this->supports_credit_card_charge_virtual() && 'yes' === $this->charge_virtual_orders ) {
-				$perform = Woodev_Helper::is_order_virtual( $order );
+				$perform = \Woodev\Framework\Woocommerce_Helper::is_order_virtual( $order );
 			}
 
 			/**

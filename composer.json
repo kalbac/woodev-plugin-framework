@@ -48,6 +48,8 @@
             "woodev/class-plugin.php",
             "woodev/class-woocommerce-plugin.php",
             "woodev/class-woocommerce-plugin-alias.php",
+            "woodev/class-woocommerce-helper.php",
+            "woodev/class-woocommerce-helper-alias.php",
             "woodev/class-lifecycle.php",
             "woodev/class-helper.php",
             "woodev/class-admin-notice-handler.php",
