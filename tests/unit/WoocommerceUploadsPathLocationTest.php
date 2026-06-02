@@ -85,6 +85,33 @@ namespace Woodev\Tests\Unit {
 			$path = \Woodev_Plugin::get_woocommerce_uploads_path();
 			$this->assertSame( $this->basedir . '/woocommerce_uploads', $path );
 		}
+
+		/**
+		 * The shim must reference the FQCN \Woodev\Framework\Woocommerce_Plugin so that the
+		 * `class_exists( ..., false )` branch actually delegates to the WC class.
+		 *
+		 * The bare short name `Woocommerce_Plugin::class` resolves to the global-namespace
+		 * `\Woocommerce_Plugin` (which does not exist — the class lives under
+		 * `Woodev\Framework\`), so a shim that uses the short name silently falls through
+		 * to the inline `wp_upload_dir()` path. Since the WC class's method and the inline
+		 * fallback return the same string, a return-value assertion cannot distinguish the
+		 * two paths — we have to inspect the shim's source.
+		 *
+		 * @return void
+		 */
+		public function test_base_shim_uses_fqcn_for_woocommerce_plugin(): void {
+			$source = file_get_contents( dirname( __DIR__, 2 ) . '/woodev/class-plugin.php' );
+
+			$this->assertNotFalse( $source, 'class-plugin.php must be readable.' );
+
+			$pattern = '/function\s+get_woocommerce_uploads_path\s*\(\s*\)\s*\{[^}]*class_exists\s*\(\s*\\\\?Woodev\\\\Framework\\\\Woocommerce_Plugin::class/s';
+
+			$this->assertSame(
+				1,
+				preg_match( $pattern, $source ),
+				'Woodev_Plugin::get_woocommerce_uploads_path() shim must reference the FQCN \\Woodev\\Framework\\Woocommerce_Plugin::class. A bare short name Woocommerce_Plugin::class resolves to the global namespace \\Woocommerce_Plugin (which does not exist), which causes the shim to always fall through to the inline wp_upload_dir() path.'
+			);
+		}
 	}
 
 }

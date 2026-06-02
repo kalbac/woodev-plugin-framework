@@ -397,7 +397,7 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		 */
 		protected function load_textdomain( $textdomain, $path ) {
 			// user's locale if in the admin for WP 4.7+, or the site locale otherwise
-			$locale = is_admin() && is_callable( 'get_user_locale' ) ? get_user_locale() : get_locale();
+			$locale = ( is_admin() && is_callable( 'get_user_locale' ) ) ? get_user_locale() : get_locale();
 
 			$locale = apply_filters( 'plugin_locale', $locale, $textdomain );
 
@@ -1237,7 +1237,7 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		 */
 		public function get_reviews_url() {
 
-			return $this->get_sales_page_url() ? $this->get_sales_page_url() . '#comments' : '';
+			return $this->get_sales_page_url() ? $this->get_sales_page_url() . '#edd-reviews' : '';
 		}
 
 		/**
@@ -1292,8 +1292,8 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 				'Woodev_Woocommerce_Plugin::get_woocommerce_uploads_path()'
 			);
 
-			if ( class_exists( Woocommerce_Plugin::class, false ) ) {
-				return Woocommerce_Plugin::get_woocommerce_uploads_path();
+			if ( class_exists( \Woodev\Framework\Woocommerce_Plugin::class, false ) ) {
+				return \Woodev\Framework\Woocommerce_Plugin::get_woocommerce_uploads_path();
 			}
 
 			$upload_dir = wp_upload_dir();
