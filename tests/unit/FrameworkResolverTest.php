@@ -597,34 +597,215 @@ class FrameworkResolverTest extends TestCase {
 		);
 	}
 
+		/**
+		 * H4: Legacy register_plugin() path must also dedupe by plugin_id.
+		 */
+		public function test_resolver_dedupes_legacy_plugin_registrations_by_plugin_id(): void {
+			$resolver = new \Woodev\Framework\Framework_Resolver();
+
+			$resolver->register_legacy_plugin(
+				'2.0.0',
+				'First Plugin',
+				'first-plugin.php',
+				static function (): void {},
+				[ 'plugin_id' => 'shared-id' ]
+			);
+			$second = $resolver->register_legacy_plugin(
+				'2.0.0',
+				'Second Plugin',
+				'second-plugin.php',
+				static function (): void {},
+				[ 'plugin_id' => 'shared-id' ]
+			);
+
+			$this->assertFalse( $second );
+			$this->assertCount( 1, $resolver->get_registered_plugins() );
+			$this->assertCount( 1, $resolver->get_invalid_loader_definitions() );
+			$this->assertContains(
+				'Duplicate plugin_id: shared-id.',
+				$resolver->get_invalid_loader_definitions()[0]['errors']
+			);
+		}
+
 	/**
-	 * H4: Legacy register_plugin() path must also dedupe by plugin_id.
+	 * L-2: Multi-version framework arbitration. When two plugins register
+	 * with different framework versions, the highest-version copy is
+	 * selected and the lower-version plugin is loaded via
+	 * `require_once` from the higher-version path. Sorting uses
+	 * `version_compare` so '2.10.0' > '2.9.0' (numeric segment
+	 * comparison, not lexical).
 	 */
-	public function test_resolver_dedupes_legacy_plugin_registrations_by_plugin_id(): void {
+
+	/**
+	 * L-2: Multi-version framework arbitration. When two plugins register
+	 * with different framework versions, the highest-version copy is
+	 * selected and the lower-version plugin is loaded via
+	 * `require_once` from the higher-version path. Sorting uses
+	 * `version_compare` so '2.10.0' > '2.9.0' (numeric segment
+	 * comparison, not lexical).
+	 */
+	public function test_multi_version_arbitration_picks_highest_version(): void {
 		$resolver = new \Woodev\Framework\Framework_Resolver();
+		$low_loaded  = false;
+		$high_loaded = false;
+
+		Functions\when( 'plugin_dir_path' )->justReturn( dirname( __DIR__, 2 ) . '/' );
+		Functions\when( 'untrailingslashit' )->alias(
+			static function ( string $path ): string {
+				return rtrim( $path, '/\\' );
+			}
+		);
+		Functions\when( 'get_bloginfo' )->justReturn( '6.5' );
+		Functions\when( 'is_admin' )->justReturn( false );
+		Functions\expect( 'do_action' )->once()->with( 'woodev_plugins_loaded' );
+
+		// Register lower first; the resolver must still pick the higher version.
+		$resolver->register_loader_definition(
+			$this->get_loader_definition(
+				[
+					'plugin_id'         => 'low-plugin',
+					'plugin_name'       => 'Low Version Plugin',
+					'framework_version' => '2.0.0',
+					'callback'          => static function () use ( &$low_loaded ): void {
+						$low_loaded = true;
+					},
+				]
+			)
+		);
+		$resolver->register_loader_definition(
+			$this->get_loader_definition(
+				[
+					'plugin_id'         => 'high-plugin',
+					'plugin_name'       => 'High Version Plugin',
+					'framework_version' => '2.10.0',
+					'callback'          => static function () use ( &$high_loaded ): void {
+						$high_loaded = true;
+					},
+				]
+			)
+		);
+
+		$resolver->load_plugins();
+
+		$this->assertTrue( $high_loaded, 'Highest-version plugin must run its callback.' );
+		$this->assertTrue( $low_loaded, 'Lower-version plugin must still run (its framework is older but still compatible).' );
+		$active = $resolver->get_active_plugins();
+		$this->assertCount( 2, $active );
+		$this->assertSame( 'High Version Plugin', $active[0]['plugin_name'] );
+	}
+
+	/**
+	 * L-2: fails_wordpress_requirement() must honor the legacy
+	 * `minimum_wp_version` arg from the temporary adapter. The new
+	 * modern path uses `requirements.wordpress`; both must work.
+	 */
+	public function test_fails_wordpress_requirement_honors_legacy_minimum_wp_version(): void {
+		$resolver = new \Woodev\Framework\Framework_Resolver();
+		$loaded   = false;
+
+		Functions\when( 'get_bloginfo' )->justReturn( '6.5' );
+		Functions\when( 'is_admin' )->justReturn( false );
+		Functions\expect( 'do_action' )->once()->with( 'woodev_plugins_loaded' );
 
 		$resolver->register_legacy_plugin(
 			'2.0.0',
-			'First Plugin',
-			'first-plugin.php',
-			static function (): void {},
-			[ 'plugin_id' => 'shared-id' ]
-		);
-		$second = $resolver->register_legacy_plugin(
-			'2.0.0',
-			'Second Plugin',
-			'second-plugin.php',
-			static function (): void {},
-			[ 'plugin_id' => 'shared-id' ]
+			'WP-Versioned Plugin',
+			'wp-versioned-plugin.php',
+			static function () use ( &$loaded ): void {
+				$loaded = true;
+			},
+			[ 'minimum_wp_version' => '99.0' ]
 		);
 
-		$this->assertFalse( $second );
-		$this->assertCount( 1, $resolver->get_registered_plugins() );
-		$this->assertCount( 1, $resolver->get_invalid_loader_definitions() );
-		$this->assertContains(
-			'Duplicate plugin_id: shared-id.',
-			$resolver->get_invalid_loader_definitions()[0]['errors']
+		$resolver->load_plugins();
+
+		$this->assertFalse( $loaded );
+		$this->assertCount( 1, $resolver->get_incompatible_wp_version_plugins() );
+		$this->assertSame( '99.0', $resolver->get_incompatible_wp_version_plugins()[0]['args']['minimum_wp_version'] );
+	}
+
+	/**
+	 * L-2: Resolver boundary negative assertion. The resolver must
+	 * not own runtime platform behavior — specifically, it must not
+	 * `add_action` for `plugins_loaded`, `admin_init`, or any other
+	 * WP lifecycle hook. Those are bootstrap concerns. The resolver
+	 * only fires `woodev_plugins_loaded` (its own internal action).
+	 */
+	public function test_resolver_does_not_wire_wordpress_lifecycle_hooks(): void {
+		$resolver = new \Woodev\Framework\Framework_Resolver();
+		$registered_hooks = [];
+
+		Functions\when( 'plugin_dir_path' )->justReturn( dirname( __DIR__, 2 ) . '/' );
+		Functions\when( 'untrailingslashit' )->alias(
+			static function ( string $path ): string {
+				return rtrim( $path, '/\\' );
+			}
 		);
+		Functions\when( 'get_bloginfo' )->justReturn( '6.5' );
+		Functions\when( 'is_admin' )->justReturn( false );
+		Functions\when( 'add_action' )->alias(
+			static function ( string $hook ) use ( &$registered_hooks ): void {
+				$registered_hooks[] = $hook;
+			}
+		);
+		Functions\when( 'do_action' )->justReturn( null );
+
+		$resolver->register_loader_definition(
+			$this->get_loader_definition(
+				[
+					'plugin_id'         => 'no-wp-hooks-plugin',
+					'plugin_name'       => 'No WP Hooks Plugin',
+				]
+			)
+		);
+		$resolver->load_plugins();
+		$resolver->maybe_deactivate_framework_plugins();
+
+		$this->assertNotContains( 'plugins_loaded', $registered_hooks );
+		$this->assertNotContains( 'admin_init', $registered_hooks );
+	}
+
+	/**
+	 * L-2: Bootstrap delegation chain. The bootstrap singleton must
+	 * reflect resolver state (registered, active, incompatible lists)
+	 * after each operation, and its register_loader_definition() and
+	 * register_plugin() entry points must route to the resolver and
+	 * surface the same results.
+	 *
+	 * Runs in a separate process so the Woodev_Plugin_Bootstrap
+	 * singleton does not leak from other tests.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_bootstrap_delegates_register_and_load_to_resolver(): void {
+		require_once dirname( __DIR__, 2 ) . '/woodev/bootstrap.php';
+
+		$bootstrap = \Woodev_Plugin_Bootstrap::instance();
+
+		$accepted = $bootstrap->register_loader_definition(
+			[
+				'plugin_id'         => 'boot-test-plugin',
+				'plugin_name'       => 'Boot Test Plugin',
+				'plugin_version'    => '1.0.0',
+				'framework_version' => '2.0.0',
+				'plugin_file'       => __FILE__,
+				'platform'          => \Woodev\Framework\Framework_Plugin_Loader_Definition::PLATFORM_WORDPRESS,
+				'requirements'      => [
+					'php'       => '7.4',
+					'wordpress' => '6.3',
+				],
+				'main_class'        => 'BootTestPlugin',
+				'callback'          => static function (): void {},
+			]
+		);
+
+		$this->assertTrue( $accepted );
+		$this->assertEmpty( $bootstrap->get_invalid_loader_definitions() );
+		// Bootstrap exposes reflected state via sync_resolver_state().
+		$reflection = new \ReflectionClass( $bootstrap );
+		$registered_prop = $reflection->getProperty( 'registered_plugins' );
+		$this->assertCount( 1, $registered_prop->getValue( $bootstrap ) );
 	}
 
 	/**

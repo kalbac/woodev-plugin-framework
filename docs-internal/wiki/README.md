@@ -6,7 +6,8 @@ and provide reference material.
 
 ## Articles
 
-<!-- Add entries as they are created -->
+- [v2 extension-point pattern: `add_woocommerce_hooks()`](v2-extension-point-pattern.md) — empty stub on the base class is the cleanest possible seam for WC-specific hook installation
+
 
 ## Article Format
 
