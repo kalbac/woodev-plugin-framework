@@ -483,7 +483,7 @@ if ( ! class_exists( Framework_Resolver::class, false ) ) :
 		public function get_framework_version(): string {
 			$is_base_plugin_loaded = class_exists( '\Woodev_Plugin', false );
 			return $is_base_plugin_loaded ? \Woodev_Plugin::VERSION : '';
-      }
+		}
 
 		/**
 		 * Checks whether a plugin fails the PHP requirement.
@@ -612,11 +612,11 @@ if ( ! class_exists( Framework_Resolver::class, false ) ) :
 				require_once $plugin_path . '/woodev/payment-gateway/class-payment-gateway-plugin.php';
 			}
 
-         $should_load_shipping_method = in_array( Framework_Plugin_Loader_Definition::CAPABILITY_SHIPPING_METHOD, $capabilities, true ) && ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin', false );
+			$should_load_shipping_method = in_array( Framework_Plugin_Loader_Definition::CAPABILITY_SHIPPING_METHOD, $capabilities, true ) && ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin', false );
 			if ( $should_load_shipping_method ) {
 				require_once $plugin_path . '/woodev/shipping-method/class-shipping-plugin.php';
-           }
-      }
+			}
+		}
 
 		/**
 		 * Invokes a registered plugin callback or main class bootstrap method.

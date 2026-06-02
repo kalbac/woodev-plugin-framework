@@ -528,14 +528,18 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		}
 
 		public function add_class_form_wrap_start() {
-			if ( $this->is_plugin_settings() && ! $this->get_license_instance()->is_license_valid() ) {
-				echo '<div class="woodev-licence-need">';
+			_deprecated_function( __METHOD__, '2.0.0', \Woodev\Framework\Woocommerce_Plugin::class . '::add_class_form_wrap_start()' );
+
+			if ( $this instanceof \Woodev\Framework\Woocommerce_Plugin ) {
+				$this->add_class_form_wrap_start();
 			}
 		}
 
 		public function add_class_form_wrap_end() {
-			if ( $this->is_plugin_settings() && ! $this->get_license_instance()->is_license_valid() ) {
-				echo '</div><!-- .woodev-licence-need end-->';
+			_deprecated_function( __METHOD__, '2.0.0', \Woodev\Framework\Woocommerce_Plugin::class . '::add_class_form_wrap_end()' );
+
+			if ( $this instanceof \Woodev\Framework\Woocommerce_Plugin ) {
+				$this->add_class_form_wrap_end();
 			}
 		}
 
@@ -1194,6 +1198,8 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		/**
 		 * Gets the plugin documentation url, used for the 'Docs' plugin action
 		 *
+		 * @since 2.0.0 Must be overridden by plugin subclasses; returns null in base.
+		 *
 		 * @return string|null documentation URL
 		 */
 		public function get_documentation_url() {
@@ -1203,6 +1209,8 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		/**
 		 * Gets the support URL, used for the 'Support' plugin action link
 		 *
+		 * @since 2.0.0 Must be overridden by plugin subclasses; returns null in base.
+		 *
 		 * @return string|null support url
 		 */
 		public function get_support_url() {
@@ -1211,6 +1219,8 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 
 		/**
 		 * Gets the plugin sales page URL.
+		 *
+		 * @since 2.0.0 Must be overridden by plugin subclasses; returns empty string in base.
 		 *
 		 * @return string
 		 */
