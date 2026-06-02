@@ -1,5 +1,5 @@
 # Current State — Woodev Plugin Framework
-> Last updated: 2026-06-01 (Independent audit: 3 release-blocker findings, 6 lower-priority observations)
+> Last updated: 2026-06-02 (Post-audit H/M/L fix session: 6 commits, 12 audit items resolved)
 
 ## Phase Status
 
@@ -60,8 +60,21 @@
     - (b) ✅ `2bd041b` — B-3: made `Woodev_Plugin::$blocks_handler` nullable with `= null` default; `get_blocks_handler(): ?Woodev_Blocks_Handler`
 9. ~~**Independent audit 2026-06-01 — fix PHP 8.4+ deprecation mask**~~ ✅ 2026-06-02
     - H1 (`ef3d067`): added explicit `?Type` nullable annotations to 13 sites across 4 files (`class-payment-gateway.php`, `class-payment-gateway-my-payment-methods.php`, `handlers/abstract-hosted-payment-handler.php`, `handlers/abstract-payment-handler.php`); removed `error_reporting` mask in `RealisticPaymentFixtureTest.php:88-94`; enabled `reportUnmatchedIgnoredErrors: true` in `phpstan.neon:78`; also surfaced and removed dead `get_check_number` ignore (eCheck API was removed in s3)
-10. **Deferred / post-v2.0 (lower priority than the audit fixes):** resolver edge cases (idempotency, plugin_id dedup, bootstrap-resolver coupling), `Woodev_Helper` residual WC coupling, test coverage gaps (no `backwards_compatible` window test, no multi-version arbitration test, no end-to-end gateway integration test). See [audit-2026-06-01.md](audit-2026-06-01.md) for full prioritized list.
-11. (Deferred / post-v2.0) Extract traits from class-payment-gateway.php (2378 lines)
+10. ~~**Deferred / post-v2.0 (lower priority than the audit fixes):**~~ ✅ 2026-06-02 — 12 of 13 deferred audit items resolved in 6 commits (H2, H3, H4, M-2, M-3, M-4, M-5, L-1, L-2 [partial], L-3, L-5, L-6). Test count 177/369 → 188/406. Remaining:
+    - **H2** ✅ `0d333eb` — `Framework_Resolver` constructor accepts `?callable $update_notice_renderer` + `?callable $deactivation_notice_renderer` (defaults no-op); `Woodev_Plugin_Bootstrap::__construct()` injects `[$this, 'render_update_notices']` / `[$this, 'render_deactivation_notice']`. Resolver no longer references `Woodev_Plugin_Bootstrap::instance()`. +3 tests.
+    - **H3** ✅ `0d333eb` — `Framework_Resolver::load_plugins()` guarded by `$loaded` flag for one-shot-per-instance behavior in long-running WP-Cron/AS processes. +1 test.
+    - **H4** ✅ `0d333eb` — `register_loader_definition()` + `register_legacy_plugin()` dedupe by `plugin_id` via `plugin_ids` map; second registration with the same id throws `RuntimeException`. +1 test.
+    - **M-2** ✅ `89bd1ee` — `Woodev_Plugin_Bootstrap::is_woocommerce_active()` delegates to `Woodev_Helper::is_woocommerce_active()` (single source of truth).
+    - **M-3** ✅ `67a1ab6` — `@since 2.0.0 Must be overridden by plugin subclasses; returns null/empty in base.` added to `get_documentation_url()`, `get_support_url()`, `get_sales_page_url()`.
+    - **M-4** ✅ `e1c079a` — Moved `add_class_form_wrap_start()` and `add_class_form_wrap_end()` to `Woodev_Woocommerce_Plugin`. Base class retains deprecated shims using `_deprecated_function()` + `instanceof \Woodev\Framework\Woocommerce_Plugin` check. `tests/unit/AddClassFormWrapLocationTest.php` (3 tests).
+    - **M-5** ✅ `67a1ab6` — Fixed mixed tabs/spaces indentation at lines 486, 615, 618, 619 in `class-framework-resolver.php` (phpcbf did not auto-detect; manual fix).
+    - **L-1** ✅ `303f128` — `@version` docblock synced to 1.4.1 in `class-plugin.php`.
+    - **L-2 (partial)** ✅ `c758ca0` — 4 of 5 recommended test coverage gaps added to `FrameworkResolverTest.php` (multi-version arbitration, `minimum_wp_version` legacy, resolver boundary negative, bootstrap delegation). The 5th (backwards_compatible window test) **deferred** — see #11.
+    - **L-3** ✅ `c758ca0` — Created `docs-internal/wiki/v2-extension-point-pattern.md` documenting `add_woocommerce_hooks()` empty stub as positive pattern; updated `docs-internal/wiki/README.md` index.
+    - **L-5** ✅ `303f128` — `Woodev_Lifecycle::install_default_settings()` comment rewritten to reflect platform-neutrality (no longer describes WC_Admin_Settings as the target).
+    - **L-6** ✅ `303f128` — `get_framework_file()` docblock extended with multi-version arbitration note.
+11. **Deferred L-2 (backwards_compatible window test)** — abandoned mid-session. The proposed `Backwards_Compat_Testable_Resolver::$loaded_framework` reflection approach failed with `ReflectionException: Property ... $loaded_framework does not exist` because `$loaded_framework` is a local variable in `Framework_Resolver::load_plugins()`, not a class property. PHPUnit's `@runInSeparateProcess` does not give a true fresh composer-classmap autoloader (composer dump-autoload already ran, so `\Woodev_Plugin` is autoloadable in any subprocess). Test file `tests/unit/FrameworkResolverBackwardsCompatibleTest.php` was DELETED. The other 4 L-2 tests are committed. To make this case testable in-process, one would need to (a) refactor `$loaded_framework` local into a protected property (small but touchy change), OR (b) inject an autoloader override into `load_plugins()` (larger architectural change). Marked as deferred per "fix turns out larger than estimated" workflow rule; not release-blocking — covered by 4/5 of the recommended test gaps and the H3 `$loaded` guard.
+12. (Deferred / post-v2.0) Extract traits from class-payment-gateway.php (2378 lines)
     and the broad `PLANS.md` vision: shipping universality, licensing webhooks/UI,
     box-packer minimal virtual box, DI/SOLID, React admin UI, EDD runtime.
 
