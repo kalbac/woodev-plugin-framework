@@ -166,6 +166,41 @@ if ( ! class_exists( Woocommerce_Plugin::class, false ) ) :
 		}
 
 		/**
+		 * Outputs the start of a `<div class="woodev-licence-need">` wrap before WooCommerce settings tabs.
+		 *
+		 * The hook is installed in {@see add_woocommerce_hooks()} and only fires for
+		 * `shipping`, `checkout`, and `integration` tabs when the current screen is
+		 * the plugin settings page and the license is invalid. This method is the
+		 * platform-correct home for the WC-specific output; the base class retains
+		 * a deprecated shim for backward compatibility.
+		 *
+		 * @since 1.0.0
+		 *
+		 * @return void
+		 */
+		public function add_class_form_wrap_start() {
+			if ( $this->is_plugin_settings() && ! $this->get_license_instance()->is_license_valid() ) {
+				echo '<div class="woodev-licence-need">';
+			}
+		}
+
+		/**
+		 * Outputs the end of the `<div class="woodev-licence-need">` wrap after WooCommerce settings tabs.
+		 *
+		 * Pair to {@see add_class_form_wrap_start()}. Lives on the WooCommerce
+		 * subclass because the wrap is only opened for WC settings pages.
+		 *
+		 * @since 1.0.0
+		 *
+		 * @return void
+		 */
+		public function add_class_form_wrap_end() {
+			if ( $this->is_plugin_settings() && ! $this->get_license_instance()->is_license_valid() ) {
+				echo '</div><!-- .woodev-licence-need end-->';
+			}
+		}
+
+		/**
 		 * Saves errors or messages to WooCommerce Log (woocommerce/logs/plugin-id-xxx.txt).
 		 *
 		 * @since 1.0.0
