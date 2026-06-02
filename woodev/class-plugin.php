@@ -12,7 +12,7 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 	 * plugin.  This class handles all the "non-feature" support tasks such
 	 * as verifying dependencies are met, loading the text domain, etc.
 	 *
-	 * @version 1.4.0
+	 * @version 1.4.1
 	 */
 	abstract class Woodev_Plugin {
 
@@ -1303,6 +1303,13 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 
 		/**
 		 * Returns the loaded framework __FILE__
+		 *
+		 * In multi-version framework arbitration the resolver loads the
+		 * highest-version framework copy's class-plugin.php first, so this
+		 * method always returns the file of the active framework copy (the
+		 * one that owns the running class), not the file of the calling
+		 * plugin's vendored framework. Plugin code that needs the vendored
+		 * copy path should use its own `__FILE__` constant.
 		 *
 		 * @return string
 		 */

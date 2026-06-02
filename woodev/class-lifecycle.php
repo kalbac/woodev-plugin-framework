@@ -207,7 +207,14 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 		/**
 		 * Helper method to install default settings for a plugin.
 		 *
-		 * @param array $settings settings in format required by WC_Admin_Settings
+		 * Iterates the provided setting definitions and writes the `default`
+		 * value of each entry to its WP option row. Platform-neutral: does
+		 * not depend on WooCommerce. Plugins typically build the input
+		 * array from their settings definitions (e.g. the framework's
+		 * Settings API or a WooCommerce `WC_Admin_Settings` shape, hence
+		 * the historical naming).
+		 *
+		 * @param array $settings Settings array of `[ 'id' => ..., 'default' => ... ]` entries.
 		 */
 		public function install_default_settings( array $settings ) {
 
