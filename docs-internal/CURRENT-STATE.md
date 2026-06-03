@@ -1,5 +1,5 @@
 # Current State — Woodev Plugin Framework
-> Last updated: 2026-06-04 (P3 clean-break audit findings applied; P4 next)
+> Last updated: 2026-06-04 (P4 Tasks 5–6: removed the last WC seam from the platform-neutral base)
 
 ## Phase Status
 
@@ -17,6 +17,24 @@
 | PHPStan Baseline | ✅ | ✅ | 0 errors, baseline cleaned up with documented ignores |
 | eCheck/ACH Removal | ✅ | ✅ | Active ACH API/direct transaction paths removed; deprecated false-return wrappers retained |
 | eCheck/ACH Audit | ✅ | — | Audit done (s3): 14 files, 5-phase removal plan in wiki/echeck-ach-audit.md |
+
+## P6 Gate Evidence — `Woodev_Plugin` "not a god-object"
+
+- **Platform neutrality (audit §6.1.1):** the base `Woodev_Plugin` declares **zero**
+  WooCommerce-named methods. The last WC seam — the empty `add_woocommerce_hooks()`
+  stub — was removed in P4 Task 5 (`dd47b99`). WC hook registration now lives in
+  `Woodev\Framework\Woocommerce_Plugin::register_woocommerce_hooks()`, called from
+  that subclass's own constructor. Enforced by
+  `tests/unit/PlatformNeutralBaseHasNoWcMethodTest.php`.
+- **Base size (`woodev/class-plugin.php`), 2026-06-04:** **1,296 lines**,
+  **77 methods declared on `Woodev_Plugin`** (58 public). Baseline before the
+  handler extractions + seam removal was ~1,435 lines / ~87 methods.
+- **Construction shape (P4 Task 6):** `__construct()` is a clean ordered list of
+  `init_*_handler()` / `load_*` calls ending with `add_hooks()`; `add_hooks()` wires
+  only base-owned hooks (lifecycle `init_plugin`/`init_admin`, `load_updater`,
+  enqueue, admin notices, plugin action-links, API request logging). No orphaned
+  `add_action`/`add_filter` remained after the Translation/Cron handler extractions —
+  no further tidy was required.
 
 ## Known Bugs (open)
 
