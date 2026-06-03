@@ -6,7 +6,7 @@ and provide reference material.
 
 ## Articles
 
-- [v2 extension-point pattern: `add_woocommerce_hooks()`](v2-extension-point-pattern.md) — empty stub on the base class is the cleanest possible seam for WC-specific hook installation
+- [v2 extension-point pattern: WooCommerce hook registration](v2-extension-point-pattern.md) — WC hooks are registered by `Woocommerce_Plugin` from its own constructor; the platform-neutral base declares no WC-named method (the old `add_woocommerce_hooks()` stub was removed in P4 Task 5)
 
 
 ## Article Format
