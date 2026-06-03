@@ -78,6 +78,9 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		 */
 		protected ?Woodev_Blocks_Handler $blocks_handler = null;
 
+		/** @var \Woodev\Framework\Handlers\Translation_Handler translation handler instance */
+		protected \Woodev\Framework\Handlers\Translation_Handler $translation_handler;
+
 		/**
 		 * Initialize the plugin.
 		 *
@@ -130,6 +133,9 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 
 			// build the lifecycle handler instance
 			$this->init_lifecycle_handler();
+
+			// build the translation handler instance
+			$this->init_translation_handler();
 
 			// build the REST API handler instance
 			$this->init_rest_api_handler();
@@ -238,6 +244,20 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		}
 
 		/**
+		 * Builds the translation handler instance.
+		 *
+		 * The handler registers its own `init` hook and loads both the framework
+		 * and the plugin text domains.
+		 *
+		 * @since 2.0.0
+		 *
+		 * @return void
+		 */
+		protected function init_translation_handler(): void {
+			$this->translation_handler = new \Woodev\Framework\Handlers\Translation_Handler( $this );
+		}
+
+		/**
 		 * Builds the REST API handler instance.
 		 *
 		 * Plugins can override this to add their own data and/or routes.
@@ -289,9 +309,6 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 
 			// initialize the plugin admin
 			add_action( 'admin_init', array( $this, 'init_admin' ), 0 );
-
-			// hook for translations separately to ensure they're loaded
-			add_action( 'init', array( $this, 'load_translations' ) );
 
 			// Load plugin updater
 			add_action( 'init', array( $this, 'load_updater' ) );
@@ -368,50 +385,6 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 			}
 
 			do_action( 'woodev_plugin_updater', $license_key );
-		}
-
-		/**
-		 * Load plugin & framework text domains.
-		 */
-		public function load_translations() {
-
-			$this->load_framework_textdomain();
-
-			// if this plugin passes along its text domain, load its translation files
-			if ( $this->text_domain ) {
-				$this->load_plugin_textdomain();
-			}
-		}
-
-		/**
-		 * Loads the framework textdomain.
-		 */
-		protected function load_framework_textdomain() {
-			$this->load_textdomain( 'woodev-plugin-framework', dirname( plugin_basename( $this->get_framework_file() ) ) );
-		}
-
-		/**
-		 * Loads the plugin textdomain.
-		 */
-		protected function load_plugin_textdomain() {
-			$this->load_textdomain( $this->text_domain, dirname( plugin_basename( $this->get_plugin_file() ) ) );
-		}
-
-		/**
-		 * Loads the plugin textdomain.
-		 *
-		 * @param string $textdomain the plugin textdomain
-		 * @param string $path the i18n path
-		 */
-		protected function load_textdomain( $textdomain, $path ) {
-			// user's locale if in the admin for WP 4.7+, or the site locale otherwise
-			$locale = ( is_admin() && is_callable( 'get_user_locale' ) ) ? get_user_locale() : get_locale();
-
-			$locale = apply_filters( 'plugin_locale', $locale, $textdomain );
-
-			load_textdomain( $textdomain, WP_LANG_DIR . '/' . $textdomain . '/' . $textdomain . '-' . $locale . '.mo' );
-
-			load_plugin_textdomain( $textdomain, false, untrailingslashit( $path ) . '/languages' );
 		}
 
 		/**
@@ -599,6 +572,7 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 
 			// Handlers
 			require_once $framework_path . '/handlers/script-handler.php';
+			require_once $framework_path . '/handlers/class-translation-handler.php';
 			require_once $framework_path . '/class-woodev-plugin-dependencies.php';
 			require_once $framework_path . '/class-woodev-hook-deprecator.php';
 			require_once $framework_path . '/class-admin-message-handler.php';
