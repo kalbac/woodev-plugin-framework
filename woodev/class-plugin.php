@@ -71,7 +71,7 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		 * Blocks handler instance.
 		 *
 		 * Null for plugins that do not opt in to a blocks handler (i.e. any
-		 * pure-WordPress plugin not extending Woodev_Woocommerce_Plugin). Only
+		 * pure-WordPress plugin not extending \Woodev\Framework\Woocommerce_Plugin). Only
 		 * WooCommerce plugins initialize this via init_blocks_handler().
 		 *
 		 * @var Woodev_Blocks_Handler|null
@@ -533,22 +533,6 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 			$license = $this->get_license_instance()->get_license();
 
 			$this->get_license_instance()->validate_license( $license ?: __return_empty_string(), true, true );
-		}
-
-		public function add_class_form_wrap_start() {
-			_deprecated_function( __METHOD__, '2.0.0', \Woodev\Framework\Woocommerce_Plugin::class . '::add_class_form_wrap_start()' );
-
-			if ( $this instanceof \Woodev\Framework\Woocommerce_Plugin ) {
-				$this->add_class_form_wrap_start();
-			}
-		}
-
-		public function add_class_form_wrap_end() {
-			_deprecated_function( __METHOD__, '2.0.0', \Woodev\Framework\Woocommerce_Plugin::class . '::add_class_form_wrap_end()' );
-
-			if ( $this instanceof \Woodev\Framework\Woocommerce_Plugin ) {
-				$this->add_class_form_wrap_end();
-			}
 		}
 
 		private function includes() {
@@ -1033,7 +1017,7 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		 *
 		 * Returns null for plugins that do not opt in to a blocks handler
 		 * (pure-WordPress plugins that extend Woodev_Plugin directly without
-		 * going through Woodev_Woocommerce_Plugin).
+		 * going through \Woodev\Framework\Woocommerce_Plugin).
 		 *
 		 * @since 1.3.2
 		 *
@@ -1276,37 +1260,6 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 			}
 
 			return $this->plugin_url;
-		}
-
-		/**
-		 * Gets the woocommerce uploads path, without trailing slash.
-		 *
-		 * This method lives on the base class for backward compatibility with 10+
-		 * existing plugins that still call it. New code should use
-		 * {@see \Woodev_Woocommerce_Plugin::get_woocommerce_uploads_path()} instead —
-		 * the helper is WooCommerce-specific and does not belong on a
-		 * platform-neutral base class.
-		 *
-		 * @since 1.0.0
-		 * @deprecated 2.0.0 Use Woodev_Woocommerce_Plugin::get_woocommerce_uploads_path() instead.
-		 *
-		 * @return string
-		 */
-		public static function get_woocommerce_uploads_path() {
-
-			_deprecated_function(
-				__METHOD__,
-				'2.0.0',
-				'Woodev_Woocommerce_Plugin::get_woocommerce_uploads_path()'
-			);
-
-			if ( class_exists( \Woodev\Framework\Woocommerce_Plugin::class, false ) ) {
-				return \Woodev\Framework\Woocommerce_Plugin::get_woocommerce_uploads_path();
-			}
-
-			$upload_dir = wp_upload_dir();
-
-			return $upload_dir['basedir'] . '/woocommerce_uploads';
 		}
 
 		/**

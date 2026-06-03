@@ -87,7 +87,7 @@ class RealisticPaymentFixtureTest extends TestCase {
 
 		$this->assertTrue( $accepted );
 		$this->assertCount( 1, $resolver->get_active_plugins() );
-		$this->assertInstanceOf( \Woodev_Woocommerce_Plugin::class, $plugin );
+		$this->assertInstanceOf( \Woodev\Framework\Woocommerce_Plugin::class, $plugin );
 		$this->assertInstanceOf( \Woodev_Payment_Gateway_Plugin::class, $plugin );
 		$this->assertTrue( class_exists( 'Woodev_Realistic_Gateway', false ) );
 		$this->assertTrue( is_subclass_of( 'Woodev_Realistic_Gateway', \Woodev_Payment_Gateway::class ) );

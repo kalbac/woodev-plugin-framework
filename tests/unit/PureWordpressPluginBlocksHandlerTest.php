@@ -5,7 +5,7 @@
  * Reproduces the bug at woodev/class-plugin.php:71,1018 — a pure-WP plugin
  * subclass that extends Woodev_Plugin and calls get_blocks_handler() triggers
  * TypeError because the property is non-nullable typed but only initialized
- * in Woodev_Woocommerce_Plugin::init_blocks_handler().
+ * in \Woodev\Framework\Woocommerce_Plugin::init_blocks_handler().
  *
  * Test currently FAILS with TypeError. After B-3 fix (nullable property +
  * nullable return type), it PASSES.

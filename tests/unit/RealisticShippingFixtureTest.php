@@ -96,7 +96,7 @@ class RealisticShippingFixtureTest extends TestCase {
 
 		$this->assertTrue( $accepted );
 		$this->assertCount( 1, $resolver->get_active_plugins() );
-		$this->assertInstanceOf( \Woodev_Woocommerce_Plugin::class, $plugin );
+		$this->assertInstanceOf( \Woodev\Framework\Woocommerce_Plugin::class, $plugin );
 		$this->assertInstanceOf( \Woodev\Framework\Shipping\Shipping_Plugin::class, $plugin );
 		$this->assertTrue( class_exists( 'Woodev_Realistic_Shipping_Method', false ) );
 		$this->assertTrue( class_exists( 'Woodev_Realistic_Pickup_Shipping_Method', false ) );

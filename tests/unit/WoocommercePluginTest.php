@@ -15,7 +15,6 @@ use Mockery;
 require_once dirname( __DIR__, 2 ) . '/woodev/class-plugin.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/handlers/blocks-handler.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/class-woocommerce-plugin.php';
-require_once dirname( __DIR__, 2 ) . '/woodev/class-woocommerce-plugin-alias.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/payment-gateway/class-payment-gateway-plugin.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/shipping-method/class-shipping-plugin.php';
 
@@ -181,7 +180,7 @@ class Testable_Wordpress_Plugin extends \Woodev_Plugin {
 /**
  * Test helper exposing protected hook registration.
  */
-class Testable_Woocommerce_Plugin extends \Woodev_Woocommerce_Plugin {
+class Testable_Woocommerce_Plugin extends \Woodev\Framework\Woocommerce_Plugin {
 
 	/**
 	 * Avoid parent construction in the isolated hook registration test.
@@ -400,7 +399,7 @@ class WoocommercePluginTest extends TestCase {
 
 		$plugin = new Testable_Woocommerce_Plugin();
 
-		$supported_features = new \ReflectionProperty( \Woodev_Woocommerce_Plugin::class, 'supported_features' );
+		$supported_features = new \ReflectionProperty( \Woodev\Framework\Woocommerce_Plugin::class, 'supported_features' );
 		$supported_features->setValue(
 			$plugin,
 			[
@@ -436,8 +435,8 @@ class WoocommercePluginTest extends TestCase {
 	 * @return void
 	 */
 	public function test_specialized_woocommerce_plugin_bases_extend_woocommerce_plugin_base(): void {
-		$this->assertTrue( is_subclass_of( \Woodev_Payment_Gateway_Plugin::class, \Woodev_Woocommerce_Plugin::class ) );
-		$this->assertTrue( is_subclass_of( \Woodev\Framework\Shipping\Shipping_Plugin::class, \Woodev_Woocommerce_Plugin::class ) );
+		$this->assertTrue( is_subclass_of( \Woodev_Payment_Gateway_Plugin::class, \Woodev\Framework\Woocommerce_Plugin::class ) );
+		$this->assertTrue( is_subclass_of( \Woodev\Framework\Shipping\Shipping_Plugin::class, \Woodev\Framework\Woocommerce_Plugin::class ) );
 	}
 
 	/**

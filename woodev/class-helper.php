@@ -465,62 +465,6 @@ if ( ! class_exists( 'Woodev_Helper' ) ) :
 			return number_format( (float) $number, 2, '.', '' );
 		}
 
-		/** WooCommerce helper functions **************************************/
-
-
-		/**
-		 * Gets order line items (products) as an array of objects.
-		 *
-		 * @param WC_Order $order
-		 *
-		 * @return stdClass[] array of line item objects
-		 *
-		 * @since 1.0.0
-		 * @deprecated 2.0.0 Use Woodev_Woocommerce_Helper::get_order_line_items() instead.
-		 */
-		public static function get_order_line_items( WC_Order $order ): array {
-
-			_deprecated_function( __METHOD__, '2.0.0', 'Woodev_Woocommerce_Helper::get_order_line_items()' );
-
-			return \Woodev\Framework\Woocommerce_Helper::get_order_line_items( $order );
-		}
-
-		/**
-		 * Determines if an order contains only virtual products.
-		 *
-		 * @param WC_Order $order the order object
-		 *
-		 * @return bool
-		 *
-		 * @since 1.0.0
-		 * @deprecated 2.0.0 Use Woodev_Woocommerce_Helper::is_order_virtual() instead.
-		 */
-		public static function is_order_virtual( WC_Order $order ): bool {
-
-			_deprecated_function( __METHOD__, '2.0.0', 'Woodev_Woocommerce_Helper::is_order_virtual()' );
-
-			return \Woodev\Framework\Woocommerce_Helper::is_order_virtual( $order );
-		}
-
-		/**
-		 * Determines if a shop has any published virtual products.
-		 *
-		 * @return bool
-		 *
-		 * @since 1.0.0
-		 * @deprecated 2.0.0 Use Woodev_Woocommerce_Helper::shop_has_virtual_products() instead.
-		 */
-		public static function shop_has_virtual_products(): bool {
-
-			_deprecated_function( __METHOD__, '2.0.0', 'Woodev_Woocommerce_Helper::shop_has_virtual_products()' );
-
-			if ( ! class_exists( '\Woodev\Framework\Woocommerce_Helper', false ) ) {
-				return false;
-			}
-
-			return \Woodev\Framework\Woocommerce_Helper::shop_has_virtual_products();
-		}
-
 		/**
 		 * Safely gets a value from $_POST.
 		 *
@@ -899,47 +843,6 @@ if ( ! class_exists( 'Woodev_Helper' ) ) :
 
 		/** JavaScript helper functions ***************************************/
 
-
-		/**
-		 * Enhanced search JavaScript (Select2)
-		 *
-		 * Enqueues JavaScript required for AJAX search with Select2.
-		 *
-		 * Example usage:
-		 *    <input type="hidden" class="woodev-wc-enhanced-search" name="category_ids" data-multiple="true" style="min-width: 300px;"
-		 *       data-action="wc_cart_notices_json_search_product_categories"
-		 *       data-nonce="<?php echo wp_create_nonce( 'search-categories' ); ?>"
-		 *       data-request_data = "<?php echo esc_attr( wp_json_encode( array( 'field_name' => 'something_exciting', 'default' => 'default_label' ) ) ) ?>"
-		 *       data-placeholder="<?php esc_attr_e( 'Search for a category&hellip;', 'wc-cart-notices' ) ?>"
-		 *       data-allow_clear="true"
-		 *       data-selected="<?php
-		 *          $json_ids    = array();
-		 *          if ( isset( $notice->data['categories'] ) ) {
-		 *             foreach ( $notice->data['categories'] as $value => $title ) {
-		 *                $json_ids[ esc_attr( $value ) ] = esc_html( $title );
-		 *             }
-		 *          }
-		 *          echo esc_attr( wp_json_encode( $json_ids ) );
-		 *       ?>"
-		 *       value="<?php echo implode( ',', array_keys( $json_ids ) ); ?>" />
-		 *
-		 * - `data-selected` can be a json encoded associative array like Array( 'key' => 'value' )
-		 * - `value` should be a comma-separated list of selected keys
-		 * - `data-request_data` can be used to pass any additional data to the AJAX request
-		 *
-		 * @since 1.0.0
-		 * @deprecated 2.0.0 Use Woodev_Woocommerce_Helper::render_select2_ajax() instead.
-		 */
-		public static function render_select2_ajax() {
-
-			_deprecated_function( __METHOD__, '2.0.0', 'Woodev_Woocommerce_Helper::render_select2_ajax()' );
-
-			if ( ! class_exists( '\Woodev\Framework\Woocommerce_Helper', false ) ) {
-				return;
-			}
-
-			\Woodev\Framework\Woocommerce_Helper::render_select2_ajax();
-		}
 
 		/**
 		 * Gets the WordPress current screen.

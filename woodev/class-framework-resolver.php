@@ -542,26 +542,16 @@ if ( ! class_exists( Framework_Resolver::class, false ) ) :
 			$plugin_path      = $this->get_plugin_path( $framework_plugin['path'] );
 
 			if ( ! class_exists( '\\Woodev\\Framework\\Woocommerce_Plugin', false ) ) {
-				$woocommerce_plugin_file       = $plugin_path . '/woodev/class-woocommerce-plugin.php';
-				$woocommerce_plugin_alias_file = $plugin_path . '/woodev/class-woocommerce-plugin-alias.php';
+				$woocommerce_plugin_file = $plugin_path . '/woodev/class-woocommerce-plugin.php';
 
 				if ( file_exists( $woocommerce_plugin_file ) ) {
 					require_once $woocommerce_plugin_file;
 				}
 
-				if ( file_exists( $woocommerce_plugin_alias_file ) ) {
-					require_once $woocommerce_plugin_alias_file;
-				}
-
-				$woocommerce_helper_file       = $plugin_path . '/woodev/class-woocommerce-helper.php';
-				$woocommerce_helper_alias_file = $plugin_path . '/woodev/class-woocommerce-helper-alias.php';
+				$woocommerce_helper_file = $plugin_path . '/woodev/class-woocommerce-helper.php';
 
 				if ( ! class_exists( '\\Woodev\\Framework\\Woocommerce_Helper', false ) && file_exists( $woocommerce_helper_file ) ) {
 					require_once $woocommerce_helper_file;
-				}
-
-				if ( ! class_exists( 'Woodev_Woocommerce_Helper', false ) && file_exists( $woocommerce_helper_alias_file ) ) {
-					require_once $woocommerce_helper_alias_file;
 				}
 			}
 
