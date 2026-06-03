@@ -6,7 +6,7 @@
 **Last updated:** 2026-06-04
 
 ## Next action
-▶️ **S0 / Phase 4 — decompose `Woodev_Plugin`.** P3 deletions landed and the P3 audit-packet findings are applied: explicit definitions now preserve `backwards_compatible`, missing `main_class` loaders are recorded as invalid instead of silently no-oping, and WooCommerce capability-only preload coverage exists. `composer check` green 182/412. Proceed with `docs-internal/platform-v2-base-decomposition-subplan.md`.
+▶️ **S0 / Phase 4 — decompose `Woodev_Plugin` (in progress).** Task 1 ✅ `Translation_Handler` extracted (`dc4f661`, green 186/421). Next: Task 2 `Plugin_Action_Links_Handler`, Task 3 `API_Logger`, Task 4 `Cron_Handler`, Task 5 remove WC seams (**reduced** — P3 already deleted `get_woocommerce_uploads_path` + `add_class_form_wrap_*`; only the `add_woocommerce_hooks()` stub remains), Task 6 construction tidy. Per `docs-internal/platform-v2-base-decomposition-subplan.md`. P4 is a **key gate** → external GPT-5.5 audit at the end.
 
 ## Stage map
 | Stage | Scope | Status | Plan |
@@ -26,7 +26,7 @@
 | P1 | CLAUDE.md/AGENTS.md clean-break reconciliation | ✅ done (ADR-005 added; ADR-002 bridge superseded) | no (docs) |
 | P2 | Pilot gate: edostavka-shaped fixture through new path | ✅ **gate PASSED** (`7ebbd20`+`6ed8b72`); internal reviews ✅; ext audit (GPT-5.5) applied — caught real include-order coupling, hardened | done |
 | P3 | Delete internal-API back-compat debt (cohesive) | ✅ **gate PASSED** (`711cbae`,`7cc3666`,`4223597` + audit fixes); green 182/412; internal verify ✅; audit-packet findings applied | done |
-| P4 | Decompose `Woodev_Plugin` (sub-plan) | ⚪ | **yes** |
+| P4 | Decompose `Woodev_Plugin` (sub-plan) | 🟡 in progress — Task 1 `Translation_Handler` ✅ (`dc4f661`); Tasks 2–6 next | **yes (at end)** |
 | P5 | Re-minimize resolver (ADR-003) | ⚪ | no (internal) |
 | P6 | "Split done" gate | ⚪ | **yes** → tag `platform-v2-split-done` |
 
