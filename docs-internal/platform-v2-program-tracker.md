@@ -6,7 +6,7 @@
 **Last updated:** 2026-06-03
 
 ## Next action
-▶ **S0 / Phase 2** — pilot gate: build the edostavka-shaped fixture and drive it through the new load path; fill the data-preservation checklist. First external GPT-5.5 audit fires at this gate.
+⏸ **S0 / Phase 2 — external audit pending.** Fixture + test + checklist landed (`7ebbd20`); internal spec + code-quality reviews passed. **Operator: run `docs-internal/reviews/p2-pilot-audit-packet.md` through GPT-5.5 and return findings.** After findings resolved → Phase 3 (delete back-compat debt, cohesive).
 
 ## Stage map
 | Stage | Scope | Status | Plan |
@@ -24,7 +24,7 @@
 |---|---|---|---|
 | P0 | Branch + frozen baseline | ✅ done (197/197 green, tags set) | — |
 | P1 | CLAUDE.md/AGENTS.md clean-break reconciliation | ✅ done (ADR-005 added; ADR-002 bridge superseded) | no (docs) |
-| P2 | Pilot gate: edostavka-shaped fixture through new path | 🟡 next | **yes** |
+| P2 | Pilot gate: edostavka-shaped fixture through new path | 🟢 code done (`7ebbd20`), internal reviews ✅, ext audit pending | **yes — packet ready** |
 | P3 | Delete internal-API back-compat debt (cohesive) | ⚪ | **yes** |
 | P4 | Decompose `Woodev_Plugin` (sub-plan) | ⚪ | **yes** |
 | P5 | Re-minimize resolver (ADR-003) | ⚪ | no (internal) |
@@ -38,6 +38,7 @@
 ## Open follow-ups (out of current scope)
 - `class-payment-gateway.php` (~2,378 lines) trait extraction — post-split debt.
 - godaddy-fork study (Traits/Enums/Abilities, PLANS.md §4) — candidate GPT-5.5 research delegation before S1.
+- **Test-scaffold duplication** (P2 code-review minor): `EdostavkaPilotFixtureTest` and `RealisticShippingFixtureTest` share a near-identical testable-resolver subclass + WP-stub helper. When a 3rd such fixture lands, extract a shared trait/base under `tests/unit/` instead of copying again.
 
 ## Related
 - [platform-v2-execution-protocol.md](platform-v2-execution-protocol.md) — the rulebook
