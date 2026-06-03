@@ -247,14 +247,6 @@ class Testable_Woocommerce_Plugin extends \Woodev\Framework\Woocommerce_Plugin {
 		return $rows;
 	}
 
-	/**
-	 * Exposes WooCommerce hook registration for assertions.
-	 *
-	 * @return void
-	 */
-	public function register_woocommerce_hooks(): void {
-		$this->add_woocommerce_hooks();
-	}
 }
 
 /**
@@ -460,7 +452,7 @@ class WoocommercePluginTest extends TestCase {
 	}
 
 	/**
-	 * WooCommerce runtime hooks should be owned by the WooCommerce plugin base.
+	 * WooCommerce runtime hooks should be owned by Woocommerce_Plugin, not the platform-neutral base.
 	 */
 	public function test_registers_woocommerce_runtime_hooks(): void {
 		$plugin = new Testable_Woocommerce_Plugin();
@@ -483,6 +475,8 @@ class WoocommercePluginTest extends TestCase {
 			->once()
 			->with( [ $plugin, 'add_system_status_php_information' ] );
 
-		$plugin->register_woocommerce_hooks();
+		// register_woocommerce_hooks() is private and now runs from Woocommerce_Plugin construction.
+		$register = new \ReflectionMethod( \Woodev\Framework\Woocommerce_Plugin::class, 'register_woocommerce_hooks' );
+		$register->invoke( $plugin );
 	}
 }

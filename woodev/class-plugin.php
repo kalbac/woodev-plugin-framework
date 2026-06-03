@@ -311,18 +311,6 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 			require_once $this->get_framework_path() . '/admin/abstract-plugin-admin-setup-wizard.php';
 		}
 
-		/**
-		 * Adds WooCommerce runtime action and filter hooks.
-		 *
-		 * @since 2.0.0
-		 *
-		 * @return void
-		 */
-		protected function add_woocommerce_hooks(): void {}
-
-		/**
-		 * Adds the action & filter hooks.
-		 */
 		private function add_hooks() {
 
 			// initialize the plugin
@@ -333,8 +321,6 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 
 			// Load plugin updater
 			add_action( 'init', array( $this, 'load_updater' ) );
-
-			$this->add_woocommerce_hooks();
 
 			add_action( 'wp_enqueue_scripts', [ $this, 'frontend_enqueue_scripts' ] );
 			add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_scripts' ) );

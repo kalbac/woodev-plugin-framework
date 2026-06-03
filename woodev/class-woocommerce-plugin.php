@@ -77,16 +77,23 @@ if ( ! class_exists( Woocommerce_Plugin::class, false ) ) :
 
 			// Build the WooCommerce Blocks handler only for WooCommerce plugins.
 			$this->init_blocks_handler();
+
+			// Register WooCommerce runtime hooks owned by this WooCommerce plugin class.
+			$this->register_woocommerce_hooks();
 		}
 
 		/**
-		 * Adds WooCommerce runtime action and filter hooks.
+		 * Registers the WooCommerce runtime action and filter hooks owned by this class.
+		 *
+		 * Called at the end of {@see self::__construct()}. All registrations are
+		 * queue-only (`add_action`/`add_filter`), so wiring them during construction
+		 * is timing-safe.
 		 *
 		 * @since 2.0.0
 		 *
 		 * @return void
 		 */
-		protected function add_woocommerce_hooks(): void {
+		private function register_woocommerce_hooks(): void {
 
 			// handle WooCommerce features compatibility (such as HPOS, WC Cart & Checkout Blocks support...)
 			add_action( 'before_woocommerce_init', [ $this, 'handle_features_compatibility' ] );
@@ -168,7 +175,7 @@ if ( ! class_exists( Woocommerce_Plugin::class, false ) ) :
 		/**
 		 * Outputs the start of a `<div class="woodev-licence-need">` wrap before WooCommerce settings tabs.
 		 *
-		 * The hook is installed in {@see add_woocommerce_hooks()} and only fires for
+		 * The hook is installed in {@see register_woocommerce_hooks()} and only fires for
 		 * `shipping`, `checkout`, and `integration` tabs when the current screen is
 		 * the plugin settings page and the license is invalid. This method is the
 		 * platform-correct home for the WC-specific output; the base class retains
