@@ -74,6 +74,8 @@ The decomposition targets exactly: **cron**, **plugin action links**, **translat
 
 ## Task 2 — Extract plugin action links → `Woodev\Framework\Handlers\Plugin_Action_Links_Handler`
 
+> **CANCELLED (decision 2026-06-04).** `Woodev_Payment_Gateway_Plugin::plugin_action_links()` overrides the base and calls `parent::`, customizing per gateway — it is a polymorphic template-method, not god-object glue. Extracting it would break the `parent::` chain and need overridable-handler scaffolding (gold-plating, contra D-3). Left on the base. The steps below are not executed.
+
 **Files:**
 - Create: `woodev/handlers/class-plugin-action-links-handler.php`
 - Modify: `woodev/class-plugin.php` (remove `plugin_action_links()` + its filter wiring; add factory)
@@ -97,6 +99,8 @@ The decomposition targets exactly: **cron**, **plugin action links**, **translat
 ---
 
 ## Task 3 — Extract API request logging → `Woodev\Framework\Handlers\API_Logger`
+
+> **CANCELLED (decision 2026-06-04).** `add_api_request_logging()` is polymorphic: `Woodev_Payment_Gateway_Plugin` no-ops it and gateways log per-gateway; unconditional handler construction would double-log on every live payment plugin (installed-site regression). `get_api_log_message()` is also called externally by `Woodev_Payment_Gateway`. Left on the base. The steps below are not executed.
 
 **Files:**
 - Create: `woodev/handlers/class-api-logger.php`

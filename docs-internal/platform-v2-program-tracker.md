@@ -6,7 +6,7 @@
 **Last updated:** 2026-06-04
 
 ## Next action
-▶️ **S0 / Phase 4 — decompose `Woodev_Plugin` (in progress).** Task 1 ✅ `Translation_Handler` extracted (`dc4f661`, green 186/421). Next: Task 2 `Plugin_Action_Links_Handler`, Task 3 `API_Logger`, Task 4 `Cron_Handler`, Task 5 remove WC seams (**reduced** — P3 already deleted `get_woocommerce_uploads_path` + `add_class_form_wrap_*`; only the `add_woocommerce_hooks()` stub remains), Task 6 construction tidy. Per `docs-internal/platform-v2-base-decomposition-subplan.md`. P4 is a **key gate** → external GPT-5.5 audit at the end.
+▶️ **S0 / Phase 4 — decompose `Woodev_Plugin` (in progress).** Handlers extracted: Task 1 `Translation_Handler` ✅ (`dc4f661`), Task 4 `Cron_Handler` ✅ (`9acb359`), green 189/428. **Decision (mine, 2026-06-04): Tasks 2 (`Plugin_Action_Links_Handler`) and 3 (`API_Logger`) NOT extracted** — both are polymorphic template-methods overridden by `Woodev_Payment_Gateway_Plugin` (action-links calls `parent::`; api-logging is no-op'd by gateways which log per-gateway, and `get_api_log_message()` is an external caller). Extracting them needs overridable-handler gold-plating + risks double-logging on live payment plugins — contradicts D-3 "extract the clearest, pragmatic, no gold-plating." Two small polymorphic methods on the base ≠ god-object. Next: Task 5 remove the last WC seam `add_woocommerce_hooks()` stub (P3 already removed the other 2 seams), Task 6 construction tidy. Then P4 **key gate** → external GPT-5.5 audit.
 
 ## Stage map
 | Stage | Scope | Status | Plan |
