@@ -6,7 +6,9 @@
 **Last updated:** 2026-06-04
 
 ## Next action
-▶️ **S0 / Phase 4 — decompose `Woodev_Plugin` (in progress).** Handlers extracted: Task 1 `Translation_Handler` ✅ (`dc4f661`), Task 4 `Cron_Handler` ✅ (`9acb359`), green 189/428. **Decision (mine, 2026-06-04): Tasks 2 (`Plugin_Action_Links_Handler`) and 3 (`API_Logger`) NOT extracted** — both are polymorphic template-methods overridden by `Woodev_Payment_Gateway_Plugin` (action-links calls `parent::`; api-logging is no-op'd by gateways which log per-gateway, and `get_api_log_message()` is an external caller). Extracting them needs overridable-handler gold-plating + risks double-logging on live payment plugins — contradicts D-3 "extract the clearest, pragmatic, no gold-plating." Two small polymorphic methods on the base ≠ god-object. Next: Task 5 remove the last WC seam `add_woocommerce_hooks()` stub (P3 already removed the other 2 seams), Task 6 construction tidy. Then P4 **key gate** → external GPT-5.5 audit.
+⏸ **S0 / Phase 4 — external audit pending (key gate).** Build complete: `Translation_Handler` (`dc4f661`) + `Cron_Handler` (`9acb359`) extracted; action-links/api-logging deliberately left (polymorphic); WC seam `add_woocommerce_hooks()` removed (`dd47b99`) — base is WC-name-free, 1296/77 (was 1435/87). `composer check` green 190/508. **Operator: run `docs-internal/reviews/p4-decomposition-audit-packet.md` through GPT-5.5.** After resolved → Phase 5 (re-minimize resolver, ADR-003).
+
+> **Parallel workstream (operator-initiated 2026-06-04):** the autodev adversarial-loop bootstrap (`docs-internal/autodev-loop-{runbook,implementation-prompt}.md`) is a SEPARATE session on branch `autodev/loop-bootstrap` — additive (`.autodev/`, `tools/autodev/`), explicitly carved out from S0/P4 to avoid file collision. This session (S0) does NOT touch it; that session does NOT touch S0 files. Doc-drift fix for `cleanbreak-plan.md` Phase 3 is assigned to that bootstrap session (§3b).
 
 ## Stage map
 | Stage | Scope | Status | Plan |
@@ -26,7 +28,7 @@
 | P1 | CLAUDE.md/AGENTS.md clean-break reconciliation | ✅ done (ADR-005 added; ADR-002 bridge superseded) | no (docs) |
 | P2 | Pilot gate: edostavka-shaped fixture through new path | ✅ **gate PASSED** (`7ebbd20`+`6ed8b72`); internal reviews ✅; ext audit (GPT-5.5) applied — caught real include-order coupling, hardened | done |
 | P3 | Delete internal-API back-compat debt (cohesive) | ✅ **gate PASSED** (`711cbae`,`7cc3666`,`4223597` + audit fixes); green 182/412; internal verify ✅; audit-packet findings applied | done |
-| P4 | Decompose `Woodev_Plugin` (sub-plan) | 🟡 in progress — Task 1 `Translation_Handler` ✅ (`dc4f661`); Tasks 2–6 next | **yes (at end)** |
+| P4 | Decompose `Woodev_Plugin` (sub-plan) | 🟢 build done (`dc4f661`,`9acb359`,`dd47b99`); base WC-name-free 1296/77; green 190/508; ext audit pending | **yes — packet ready** |
 | P5 | Re-minimize resolver (ADR-003) | ⚪ | no (internal) |
 | P6 | "Split done" gate | ⚪ | **yes** → tag `platform-v2-split-done` |
 
