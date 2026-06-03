@@ -81,6 +81,9 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		/** @var \Woodev\Framework\Handlers\Translation_Handler translation handler instance */
 		protected \Woodev\Framework\Handlers\Translation_Handler $translation_handler;
 
+		/** @var \Woodev\Framework\Handlers\Cron_Handler cron handler instance */
+		protected \Woodev\Framework\Handlers\Cron_Handler $cron_handler;
+
 		/**
 		 * Initialize the plugin.
 		 *
@@ -136,6 +139,9 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 
 			// build the translation handler instance
 			$this->init_translation_handler();
+
+			// build the cron handler instance
+			$this->init_cron_handler();
 
 			// build the REST API handler instance
 			$this->init_rest_api_handler();
@@ -258,6 +264,21 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		}
 
 		/**
+		 * Builds the cron handler instance.
+		 *
+		 * The handler registers the `weekly` schedule, the
+		 * `woodev_weekly_scheduled_events` event, the weekly license check, and
+		 * the `wp_ajax_woodev_verify_license` AJAX action.
+		 *
+		 * @since 2.0.0
+		 *
+		 * @return void
+		 */
+		protected function init_cron_handler(): void {
+			$this->cron_handler = new \Woodev\Framework\Handlers\Cron_Handler( $this );
+		}
+
+		/**
 		 * Builds the REST API handler instance.
 		 *
 		 * Plugins can override this to add their own data and/or routes.
@@ -317,7 +338,6 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 
 			add_action( 'wp_enqueue_scripts', [ $this, 'frontend_enqueue_scripts' ] );
 			add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_scripts' ) );
-			add_action( 'wp_ajax_woodev_verify_license', array( $this, 'ajax_verify_license' ) );
 
 			// add the admin notices
 			add_action( 'admin_notices', array( $this, 'add_admin_notices' ) );
@@ -334,11 +354,6 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 
 			// automatically log HTTP requests from Woodev_API_Base
 			$this->add_api_request_logging();
-
-			// CRON actions
-			add_filter( 'cron_schedules', array( $this, 'add_schedules' ) );
-			add_action( 'wp', array( $this, 'schedule_events' ) );
-			add_action( 'woodev_weekly_scheduled_events', array( $this, 'weekly_license_check' ) );
 		}
 
 		/**
@@ -440,74 +455,6 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 			);
 		}
 
-		/**
-		 * Registers new cron schedules
-		 *
-		 * @param array $schedules
-		 *
-		 * @return array
-		 */
-		public function add_schedules( $schedules = array() ) {
-
-			if ( ! isset( $schedules['weekly'] ) ) {
-				$schedules['weekly'] = array(
-					'interval' => WEEK_IN_SECONDS,
-					'display'  => __( 'Once Weekly', 'woodev-plugin-framework' ),
-				);
-			}
-
-			return $schedules;
-		}
-
-
-		/**
-		 * Schedule weekly events
-		 *
-		 * @return void
-		 */
-		public function schedule_events() {
-			if ( ! wp_next_scheduled( 'woodev_weekly_scheduled_events' ) ) {
-				wp_schedule_event( time(), 'weekly', 'woodev_weekly_scheduled_events' );
-			}
-		}
-
-		/**
-		 * Check if license key is valid once per week
-		 *
-		 * @return  void
-		 */
-		public function weekly_license_check() {
-
-			// Don't fire when saving settings.
-			if ( ! empty( $_POST['woodev_settings'] ) ) {
-				return;
-			}
-
-			if ( ! wp_doing_cron() ) {
-				return;
-			}
-
-			$license_key = $this->get_license_instance()->get_license();
-
-			if ( empty( $license_key ) ) {
-				return;
-			}
-
-			$this->get_license_instance()->validate_license( $license_key );
-		}
-
-		public function ajax_verify_license() {
-			check_ajax_referer( 'woodev-admin', 'nonce' );
-
-			if ( ! current_user_can( 'manage_options' ) ) {
-				wp_send_json_error();
-			}
-
-			$license = $this->get_license_instance()->get_license();
-
-			$this->get_license_instance()->validate_license( $license ?: __return_empty_string(), true, true );
-		}
-
 		private function includes() {
 
 			$framework_path = $this->get_framework_path();
@@ -573,6 +520,7 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 			// Handlers
 			require_once $framework_path . '/handlers/script-handler.php';
 			require_once $framework_path . '/handlers/class-translation-handler.php';
+			require_once $framework_path . '/handlers/class-cron-handler.php';
 			require_once $framework_path . '/class-woodev-plugin-dependencies.php';
 			require_once $framework_path . '/class-woodev-hook-deprecator.php';
 			require_once $framework_path . '/class-admin-message-handler.php';
