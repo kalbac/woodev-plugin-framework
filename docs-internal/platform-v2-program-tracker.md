@@ -6,7 +6,7 @@
 **Last updated:** 2026-06-03
 
 ## Next action
-▶ **S0 / Phase 3, Task 3.2** — delete the legacy registration path (`register_plugin()` in bootstrap, `register_legacy_plugin()` + `from_legacy_registration()` + `is_payment_gateway`/`load_shipping_method` flag reads in resolver/loader-definition), then 3.3 (delete alias files), 3.4 (delete deprecated shims + the `Woodev_License_Settings` shim), 3.5 (residue sweep). Prereq Task 3.1 ✅ done. P3 is a **key gate** → external GPT-5.5 audit when 3.5 lands.
+⏸ **S0 / Phase 3 — external audit pending (key gate).** All deletions landed (`7cc3666` legacy path, `4223597` aliases+shims); residue swept; `composer check` green 179/397; internal verification done (no dangling prod refs, data contracts intact). **Operator: run `docs-internal/reviews/p3-cleanbreak-audit-packet.md` through GPT-5.5 and return findings.** After resolved → Phase 4 (decompose `Woodev_Plugin`, per the sub-plan).
 
 ## Stage map
 | Stage | Scope | Status | Plan |
@@ -25,7 +25,7 @@
 | P0 | Branch + frozen baseline | ✅ done (197/197 green, tags set) | — |
 | P1 | CLAUDE.md/AGENTS.md clean-break reconciliation | ✅ done (ADR-005 added; ADR-002 bridge superseded) | no (docs) |
 | P2 | Pilot gate: edostavka-shaped fixture through new path | ✅ **gate PASSED** (`7ebbd20`+`6ed8b72`); internal reviews ✅; ext audit (GPT-5.5) applied — caught real include-order coupling, hardened | done |
-| P3 | Delete internal-API back-compat debt (cohesive) | 🟡 in progress — 3.1 fixtures converted ✅ (`711cbae`); 3.2–3.5 deletions next | **yes (at 3.5)** |
+| P3 | Delete internal-API back-compat debt (cohesive) | 🟢 deletions done (`711cbae`,`7cc3666`,`4223597`); green 179/397; internal verify ✅; ext audit pending | **yes — packet ready** |
 | P4 | Decompose `Woodev_Plugin` (sub-plan) | ⚪ | **yes** |
 | P5 | Re-minimize resolver (ADR-003) | ⚪ | no (internal) |
 | P6 | "Split done" gate | ⚪ | **yes** → tag `platform-v2-split-done` |
@@ -39,6 +39,7 @@
 - `class-payment-gateway.php` (~2,378 lines) trait extraction — post-split debt.
 - godaddy-fork study (Traits/Enums/Abilities, PLANS.md §4) — candidate GPT-5.5 research delegation before S1.
 - **Test-scaffold duplication** (P2 code-review minor): `EdostavkaPilotFixtureTest` and `RealisticShippingFixtureTest` share a near-identical testable-resolver subclass + WP-stub helper. When a 3rd such fixture lands, extract a shared trait/base under `tests/unit/` instead of copying again.
+- **i18n stale markers** (P3): `woodev/languages/*.po`/`*.pot` still reference the deleted `class-plugin-license-settings.php` line markers. Cosmetic (generated artifacts); regenerate via the i18n build at a convenient point.
 
 ## Related
 - [platform-v2-execution-protocol.md](platform-v2-execution-protocol.md) — the rulebook
