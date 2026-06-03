@@ -6,7 +6,7 @@
 **Last updated:** 2026-06-03
 
 ## Next action
-▶ **S0 / Phase 3** — delete internal-API back-compat debt (cohesive). Start with Task 3.1: convert the 3 `woodev-test-*` legacy fixtures to explicit loader definitions. P2 gate PASSED (external audit applied + verified).
+▶ **S0 / Phase 3, Task 3.2** — delete the legacy registration path (`register_plugin()` in bootstrap, `register_legacy_plugin()` + `from_legacy_registration()` + `is_payment_gateway`/`load_shipping_method` flag reads in resolver/loader-definition), then 3.3 (delete alias files), 3.4 (delete deprecated shims + the `Woodev_License_Settings` shim), 3.5 (residue sweep). Prereq Task 3.1 ✅ done. P3 is a **key gate** → external GPT-5.5 audit when 3.5 lands.
 
 ## Stage map
 | Stage | Scope | Status | Plan |
@@ -25,7 +25,7 @@
 | P0 | Branch + frozen baseline | ✅ done (197/197 green, tags set) | — |
 | P1 | CLAUDE.md/AGENTS.md clean-break reconciliation | ✅ done (ADR-005 added; ADR-002 bridge superseded) | no (docs) |
 | P2 | Pilot gate: edostavka-shaped fixture through new path | ✅ **gate PASSED** (`7ebbd20`+`6ed8b72`); internal reviews ✅; ext audit (GPT-5.5) applied — caught real include-order coupling, hardened | done |
-| P3 | Delete internal-API back-compat debt (cohesive) | 🟡 next | **yes** |
+| P3 | Delete internal-API back-compat debt (cohesive) | 🟡 in progress — 3.1 fixtures converted ✅ (`711cbae`); 3.2–3.5 deletions next | **yes (at 3.5)** |
 | P4 | Decompose `Woodev_Plugin` (sub-plan) | ⚪ | **yes** |
 | P5 | Re-minimize resolver (ADR-003) | ⚪ | no (internal) |
 | P6 | "Split done" gate | ⚪ | **yes** → tag `platform-v2-split-done` |
