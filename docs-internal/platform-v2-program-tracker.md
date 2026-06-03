@@ -6,7 +6,7 @@
 **Last updated:** 2026-06-03
 
 ## Next action
-⏸ **S0 / Phase 2 — external audit pending.** Fixture + test + checklist landed (`7ebbd20`); internal spec + code-quality reviews passed. **Operator: run `docs-internal/reviews/p2-pilot-audit-packet.md` through GPT-5.5 and return findings.** After findings resolved → Phase 3 (delete back-compat debt, cohesive).
+▶ **S0 / Phase 3** — delete internal-API back-compat debt (cohesive). Start with Task 3.1: convert the 3 `woodev-test-*` legacy fixtures to explicit loader definitions. P2 gate PASSED (external audit applied + verified).
 
 ## Stage map
 | Stage | Scope | Status | Plan |
@@ -24,8 +24,8 @@
 |---|---|---|---|
 | P0 | Branch + frozen baseline | ✅ done (197/197 green, tags set) | — |
 | P1 | CLAUDE.md/AGENTS.md clean-break reconciliation | ✅ done (ADR-005 added; ADR-002 bridge superseded) | no (docs) |
-| P2 | Pilot gate: edostavka-shaped fixture through new path | 🟢 code done (`7ebbd20`), internal reviews ✅, ext audit pending | **yes — packet ready** |
-| P3 | Delete internal-API back-compat debt (cohesive) | ⚪ | **yes** |
+| P2 | Pilot gate: edostavka-shaped fixture through new path | ✅ **gate PASSED** (`7ebbd20`+`6ed8b72`); internal reviews ✅; ext audit (GPT-5.5) applied — caught real include-order coupling, hardened | done |
+| P3 | Delete internal-API back-compat debt (cohesive) | 🟡 next | **yes** |
 | P4 | Decompose `Woodev_Plugin` (sub-plan) | ⚪ | **yes** |
 | P5 | Re-minimize resolver (ADR-003) | ⚪ | no (internal) |
 | P6 | "Split done" gate | ⚪ | **yes** → tag `platform-v2-split-done` |
