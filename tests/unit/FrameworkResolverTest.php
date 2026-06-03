@@ -298,57 +298,6 @@ class FrameworkResolverTest extends TestCase {
 	}
 
 	/**
-	 * Legacy register_plugin() flags should map only to early capabilities.
-	 */
-	public function test_legacy_adapter_maps_specialized_flags_to_capabilities(): void {
-		$resolver = new \Woodev\Framework\Framework_Resolver();
-
-		$resolver->register_legacy_plugin(
-			'2.0.0',
-			'Legacy Gateway',
-			__FILE__,
-			static function (): void {},
-			[
-				'is_payment_gateway'  => true,
-				'load_shipping_method' => true,
-				'minimum_wp_version'  => '6.3',
-				'minimum_wc_version'  => '7.0',
-			]
-		);
-
-		$registered   = $resolver->get_registered_plugins();
-		$definition   = $registered[0]['definition'];
-		$capabilities = $definition->get_capabilities();
-
-		$this->assertSame( \Woodev\Framework\Framework_Plugin_Loader_Definition::PLATFORM_WOOCOMMERCE, $definition->get_platform() );
-		$this->assertContains( \Woodev\Framework\Framework_Plugin_Loader_Definition::CAPABILITY_PAYMENT_GATEWAY, $capabilities );
-		$this->assertContains( \Woodev\Framework\Framework_Plugin_Loader_Definition::CAPABILITY_SHIPPING_METHOD, $capabilities );
-		$this->assertArrayHasKey( 'is_payment_gateway', $registered[0]['args'] );
-		$this->assertArrayHasKey( 'load_shipping_method', $registered[0]['args'] );
-	}
-
-	/**
-	 * Legacy WooCommerce capability plugins without an explicit WC minimum should keep notice data safe.
-	 */
-	public function test_legacy_woocommerce_capability_without_minimum_wc_version_keeps_notice_data(): void {
-		$resolver = new \Woodev\Framework\Framework_Resolver();
-
-		$resolver->register_legacy_plugin(
-			'2.0.0',
-			'Legacy Gateway',
-			__FILE__,
-			static function (): void {},
-			[
-				'is_payment_gateway' => true,
-			]
-		);
-
-		$registered = $resolver->get_registered_plugins();
-
-		$this->assertSame( '0', $registered[0]['args']['minimum_wc_version'] );
-	}
-
-	/**
 	 * Specialized WooCommerce capabilities should make the WooCommerce base available first.
 	 */
 	public function test_specialized_capabilities_load_woocommerce_base_dependency(): void {
@@ -597,36 +546,6 @@ class FrameworkResolverTest extends TestCase {
 		);
 	}
 
-		/**
-		 * H4: Legacy register_plugin() path must also dedupe by plugin_id.
-		 */
-		public function test_resolver_dedupes_legacy_plugin_registrations_by_plugin_id(): void {
-			$resolver = new \Woodev\Framework\Framework_Resolver();
-
-			$resolver->register_legacy_plugin(
-				'2.0.0',
-				'First Plugin',
-				'first-plugin.php',
-				static function (): void {},
-				[ 'plugin_id' => 'shared-id' ]
-			);
-			$second = $resolver->register_legacy_plugin(
-				'2.0.0',
-				'Second Plugin',
-				'second-plugin.php',
-				static function (): void {},
-				[ 'plugin_id' => 'shared-id' ]
-			);
-
-			$this->assertFalse( $second );
-			$this->assertCount( 1, $resolver->get_registered_plugins() );
-			$this->assertCount( 1, $resolver->get_invalid_loader_definitions() );
-			$this->assertContains(
-				'Duplicate plugin_id: shared-id.',
-				$resolver->get_invalid_loader_definitions()[0]['errors']
-			);
-		}
-
 	/**
 	 * L-2: Multi-version framework arbitration. When two plugins register
 	 * with different framework versions, the highest-version copy is
@@ -695,11 +614,11 @@ class FrameworkResolverTest extends TestCase {
 	}
 
 	/**
-	 * L-2: fails_wordpress_requirement() must honor the legacy
-	 * `minimum_wp_version` arg from the temporary adapter. The new
-	 * modern path uses `requirements.wordpress`; both must work.
+	 * fails_wordpress_requirement() must enforce the WordPress minimum from the
+	 * explicit definition's `requirements.wordpress`, and the resolved notice
+	 * data must expose it as `minimum_wp_version` for the admin notices.
 	 */
-	public function test_fails_wordpress_requirement_honors_legacy_minimum_wp_version(): void {
+	public function test_fails_wordpress_requirement_enforces_definition_wordpress_minimum(): void {
 		$resolver = new \Woodev\Framework\Framework_Resolver();
 		$loaded   = false;
 
@@ -707,14 +626,20 @@ class FrameworkResolverTest extends TestCase {
 		Functions\when( 'is_admin' )->justReturn( false );
 		Functions\expect( 'do_action' )->once()->with( 'woodev_plugins_loaded' );
 
-		$resolver->register_legacy_plugin(
-			'2.0.0',
-			'WP-Versioned Plugin',
-			'wp-versioned-plugin.php',
-			static function () use ( &$loaded ): void {
-				$loaded = true;
-			},
-			[ 'minimum_wp_version' => '99.0' ]
+		$resolver->register_loader_definition(
+			$this->get_loader_definition(
+				[
+					'plugin_id'    => 'wp-versioned-plugin',
+					'plugin_name'  => 'WP-Versioned Plugin',
+					'requirements' => [
+						'php'       => '7.4',
+						'wordpress' => '99.0',
+					],
+					'callback'     => static function () use ( &$loaded ): void {
+						$loaded = true;
+					},
+				]
+			)
 		);
 
 		$resolver->load_plugins();
@@ -768,9 +693,8 @@ class FrameworkResolverTest extends TestCase {
 	/**
 	 * L-2: Bootstrap delegation chain. The bootstrap singleton must
 	 * reflect resolver state (registered, active, incompatible lists)
-	 * after each operation, and its register_loader_definition() and
-	 * register_plugin() entry points must route to the resolver and
-	 * surface the same results.
+	 * after each operation, and its register_loader_definition() entry
+	 * point must route to the resolver and surface the same results.
 	 *
 	 * Runs in a separate process so the Woodev_Plugin_Bootstrap
 	 * singleton does not leak from other tests.

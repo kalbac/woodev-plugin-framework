@@ -73,30 +73,6 @@ if ( ! class_exists( 'Woodev_Plugin_Bootstrap' ) ) :
 		}
 
 		/**
-		 * Register a frameworked plugin.
-		 *
-		 * This is the temporary legacy adapter. New v2 loaders should call
-		 * register_loader_definition() with an explicit definition instead.
-		 *
-		 * @param string   $framework_version The framework version.
-		 * @param string   $plugin_name       The plugin name.
-		 * @param string   $path              The plugin path.
-		 * @param callable $callback          Function to initialize the plugin.
-		 * @param array    $args              Optional plugin arguments.
-		 * @return void
-		 */
-		public function register_plugin(
-			string $framework_version,
-			string $plugin_name,
-			string $path,
-			callable $callback,
-			array $args = []
-		): void {
-			$this->resolver->register_legacy_plugin( $framework_version, $plugin_name, $path, $callback, $args );
-			$this->sync_resolver_state();
-		}
-
-		/**
 		 * Loads compatible registered plugins.
 		 *
 		 * @return void

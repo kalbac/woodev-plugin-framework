@@ -104,59 +104,6 @@ if ( ! class_exists( Framework_Resolver::class, false ) ) :
 		}
 
 		/**
-		 * Registers a legacy register_plugin() call through the temporary adapter.
-		 *
-		 * @since 2.0.0
-		 *
-		 * @param string   $framework_version Framework version.
-		 * @param string   $plugin_name       Plugin name.
-		 * @param string   $path              Plugin file path.
-		 * @param callable $callback          Initialization callback.
-		 * @param array    $args              Legacy args.
-		 * @return bool True when the definition is accepted.
-		 */
-		public function register_legacy_plugin(
-			string $framework_version,
-			string $plugin_name,
-			string $path,
-			callable $callback,
-			array $args = []
-		): bool {
-			$errors            = [];
-			$loader_definition = Framework_Plugin_Loader_Definition::from_legacy_registration(
-				$framework_version,
-				$plugin_name,
-				$path,
-				$callback,
-				$args,
-				$errors
-			);
-
-			if ( null === $loader_definition ) {
-				$this->invalid_loader_definitions[] = [
-					'definition' => $args,
-					'errors'     => $errors,
-				];
-
-				return false;
-			}
-
-			if ( isset( $this->plugin_ids[ $loader_definition->get_plugin_id() ] ) ) {
-				$this->invalid_loader_definitions[] = [
-					'definition' => $args,
-					'errors'     => [ sprintf( 'Duplicate plugin_id: %s.', $loader_definition->get_plugin_id() ) ],
-				];
-
-				return false;
-			}
-
-			$this->plugin_ids[ $loader_definition->get_plugin_id() ] = true;
-			$this->registered_plugins[]                              = $loader_definition->to_legacy_plugin( $args );
-
-			return true;
-		}
-
-		/**
 		 * Loads compatible registered plugins.
 		 *
 		 * @since 2.0.0

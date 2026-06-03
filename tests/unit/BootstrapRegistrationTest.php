@@ -54,6 +54,34 @@ class BootstrapRegistrationTest extends TestCase {
 	}
 
 	/**
+	 * Helper: build an explicit Platform v2 loader definition with overrides.
+	 *
+	 * @param string              $plugin_id         Unique plugin id.
+	 * @param string              $plugin_name       Plugin name.
+	 * @param string              $framework_version Framework version.
+	 * @param array<string,mixed> $overrides         Definition overrides.
+	 * @return array<string,mixed>
+	 */
+	private function loader_definition( string $plugin_id, string $plugin_name, string $framework_version, array $overrides = [] ): array {
+		return array_merge(
+			[
+				'plugin_id'         => $plugin_id,
+				'plugin_name'       => $plugin_name,
+				'plugin_version'    => '1.0.0',
+				'framework_version' => $framework_version,
+				'plugin_file'       => '/path/' . $plugin_id . '.php',
+				'platform'          => \Woodev\Framework\Framework_Plugin_Loader_Definition::PLATFORM_WORDPRESS,
+				'requirements'      => [
+					'php'       => '7.4',
+					'wordpress' => '6.3',
+				],
+				'callback'          => static function (): void {},
+			],
+			$overrides
+		);
+	}
+
+	/**
 	 * Bootstrap::instance() should return a singleton.
 	 */
 	public function test_instance_returns_singleton(): void {
@@ -67,23 +95,30 @@ class BootstrapRegistrationTest extends TestCase {
 	}
 
 	/**
-	 * register_plugin() should store the plugin in the registered_plugins array.
+	 * register_loader_definition() should store the plugin in the registered_plugins array.
 	 */
-	public function test_register_plugin_stores_plugin(): void {
+	public function test_register_loader_definition_stores_plugin(): void {
 		Functions\stubs( [ 'add_action' ] );
 
 		$bootstrap = \Woodev_Plugin_Bootstrap::instance();
 		$callback  = function () {};
 
-		$bootstrap->register_plugin(
-			'1.0.0',
-			'Test Plugin',
-			'/path/to/plugin/test-plugin.php',
-			$callback,
-			[
-				'minimum_wc_version' => '7.0',
-				'minimum_wp_version' => '6.3',
-			]
+		$bootstrap->register_loader_definition(
+			$this->loader_definition(
+				'test-plugin',
+				'Test Plugin',
+				'1.0.0',
+				[
+					'plugin_file' => '/path/to/plugin/test-plugin.php',
+					'platform'    => \Woodev\Framework\Framework_Plugin_Loader_Definition::PLATFORM_WOOCOMMERCE,
+					'requirements' => [
+						'php'         => '7.4',
+						'wordpress'   => '6.3',
+						'woocommerce' => '7.0',
+					],
+					'callback'    => $callback,
+				]
+			)
 		);
 
 		$registered = $this->get_registered_plugins( $bootstrap );
@@ -98,16 +133,16 @@ class BootstrapRegistrationTest extends TestCase {
 	}
 
 	/**
-	 * register_plugin() should accumulate multiple plugins.
+	 * register_loader_definition() should accumulate multiple plugins.
 	 */
 	public function test_register_multiple_plugins(): void {
 		Functions\stubs( [ 'add_action' ] );
 
 		$bootstrap = \Woodev_Plugin_Bootstrap::instance();
 
-		$bootstrap->register_plugin( '1.0.0', 'Plugin A', '/path/a.php', function () {} );
-		$bootstrap->register_plugin( '2.0.0', 'Plugin B', '/path/b.php', function () {} );
-		$bootstrap->register_plugin( '1.5.0', 'Plugin C', '/path/c.php', function () {} );
+		$bootstrap->register_loader_definition( $this->loader_definition( 'plugin-a', 'Plugin A', '1.0.0' ) );
+		$bootstrap->register_loader_definition( $this->loader_definition( 'plugin-b', 'Plugin B', '2.0.0' ) );
+		$bootstrap->register_loader_definition( $this->loader_definition( 'plugin-c', 'Plugin C', '1.5.0' ) );
 
 		$registered = $this->get_registered_plugins( $bootstrap );
 
@@ -115,51 +150,6 @@ class BootstrapRegistrationTest extends TestCase {
 		$this->assertSame( 'Plugin A', $registered[0]['plugin_name'] );
 		$this->assertSame( 'Plugin B', $registered[1]['plugin_name'] );
 		$this->assertSame( 'Plugin C', $registered[2]['plugin_name'] );
-	}
-
-	/**
-	 * register_plugin() with optional args like is_payment_gateway and load_shipping_method.
-	 */
-	public function test_register_plugin_with_optional_args(): void {
-		Functions\stubs( [ 'add_action' ] );
-
-		$bootstrap = \Woodev_Plugin_Bootstrap::instance();
-
-		$bootstrap->register_plugin(
-			'1.2.0',
-			'Payment Plugin',
-			'/path/to/payment.php',
-			function () {},
-			[
-				'is_payment_gateway'  => true,
-				'load_shipping_method' => true,
-				'minimum_wc_version'  => '7.0',
-				'minimum_wp_version'  => '6.3',
-			]
-		);
-
-		$registered = $this->get_registered_plugins( $bootstrap );
-
-		$this->assertCount( 1, $registered );
-		$this->assertTrue( $registered[0]['args']['is_payment_gateway'] );
-		$this->assertTrue( $registered[0]['args']['load_shipping_method'] );
-	}
-
-	/**
-	 * register_plugin() with no optional args should store an empty args array.
-	 */
-	public function test_register_plugin_with_no_optional_args(): void {
-		Functions\stubs( [ 'add_action' ] );
-
-		$bootstrap = \Woodev_Plugin_Bootstrap::instance();
-
-		$bootstrap->register_plugin( '1.0.0', 'Simple Plugin', '/path/simple.php', function () {} );
-
-		$registered = $this->get_registered_plugins( $bootstrap );
-
-		$this->assertCount( 1, $registered );
-		$this->assertIsArray( $registered[0]['args'] );
-		$this->assertEmpty( $registered[0]['args'] );
 	}
 
 	/**
@@ -191,9 +181,9 @@ class BootstrapRegistrationTest extends TestCase {
 
 		$bootstrap = \Woodev_Plugin_Bootstrap::instance();
 
-		$bootstrap->register_plugin( '1.0.0', 'Old Plugin', '/path/old.php', function () {} );
-		$bootstrap->register_plugin( '3.0.0', 'Newest Plugin', '/path/newest.php', function () {} );
-		$bootstrap->register_plugin( '2.0.0', 'Middle Plugin', '/path/middle.php', function () {} );
+		$bootstrap->register_loader_definition( $this->loader_definition( 'old-plugin', 'Old Plugin', '1.0.0' ) );
+		$bootstrap->register_loader_definition( $this->loader_definition( 'newest-plugin', 'Newest Plugin', '3.0.0' ) );
+		$bootstrap->register_loader_definition( $this->loader_definition( 'middle-plugin', 'Middle Plugin', '2.0.0' ) );
 
 		$registered = $this->get_registered_plugins( $bootstrap );
 
@@ -213,9 +203,9 @@ class BootstrapRegistrationTest extends TestCase {
 
 		$bootstrap = \Woodev_Plugin_Bootstrap::instance();
 
-		$bootstrap->register_plugin( '1.4.2', 'Plugin A', '/path/a.php', function () {} );
-		$bootstrap->register_plugin( '1.4.10', 'Plugin B', '/path/b.php', function () {} );
-		$bootstrap->register_plugin( '1.4.3', 'Plugin C', '/path/c.php', function () {} );
+		$bootstrap->register_loader_definition( $this->loader_definition( 'plugin-a', 'Plugin A', '1.4.2' ) );
+		$bootstrap->register_loader_definition( $this->loader_definition( 'plugin-b', 'Plugin B', '1.4.10' ) );
+		$bootstrap->register_loader_definition( $this->loader_definition( 'plugin-c', 'Plugin C', '1.4.3' ) );
 
 		$registered = $this->get_registered_plugins( $bootstrap );
 		usort( $registered, [ $bootstrap, 'framework_compare' ] );
