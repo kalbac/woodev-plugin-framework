@@ -1,4 +1,22 @@
 
+## P3 clean-break audit fixes — resolver compatibility window (2026-06-04)
+
+### Implementation
+- Processed `docs-internal/reviews/p3-cleanbreak-audit-packet.md` as an implementation/audit checklist for the landed P3 clean-break diff.
+- Fixed the P3 blocker: explicit `Framework_Plugin_Loader_Definition` now carries optional `backwards_compatible` and maps it into resolver args, so the selected framework compatibility floor still works after legacy positional registration was deleted.
+- Made `Framework_Resolver::load_plugins()` select the highest-version framework record deterministically even when `Woodev_Plugin` is already loaded, preventing compatibility-window checks from depending on class-table state.
+- Changed missing `main_class` loader invocation from silent return to an `invalid_loader_definitions` entry and only marks plugins active after successful callback/main-class invocation.
+- Added resolver regression coverage for the explicit backwards-compatible window, missing `main_class` invalidation, and `CAPABILITY_WOOCOMMERCE_PLUGIN` preloading only the WooCommerce base/helper classes.
+
+### Verification
+- Focused test: `vendor\bin\phpunit tests\unit\FrameworkResolverTest.php` passes — 21 tests / 77 assertions.
+- Full gate: `composer check` passes — PHPCS 114/114, PHPStan 0 errors, PHPUnit 182 tests / 412 assertions.
+- No gotcha file added: the reusable lesson is an application of the existing clean-break and explicit-loader rules, not a new independent gotcha.
+
+### Next
+- P3 clean-break gate is passed after audit fixes. Next action is P4: decompose `Woodev_Plugin` per `docs-internal/platform-v2-base-decomposition-subplan.md`.
+- Existing `.serena/project.yml` and `.serena/memories/memory_maintenance.md` working-tree changes were left untouched.
+
 ## P2 pilot gate hardening — Edostavka-shaped fixture (2026-06-03)
 
 ### Implementation

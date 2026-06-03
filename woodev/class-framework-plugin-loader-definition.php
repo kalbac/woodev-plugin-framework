@@ -42,6 +42,9 @@ if ( ! class_exists( Framework_Plugin_Loader_Definition::class, false ) ) :
 		/** @var string Vendored framework version. */
 		protected string $framework_version;
 
+		/** @var string|null Oldest framework version compatible with this selected framework copy. */
+		protected ?string $backwards_compatible;
+
 		/** @var string Main plugin file path. */
 		protected string $plugin_file;
 
@@ -68,16 +71,19 @@ if ( ! class_exists( Framework_Plugin_Loader_Definition::class, false ) ) :
 		 * @param array<string,mixed> $definition Raw loader definition.
 		 */
 		private function __construct( array $definition ) {
-			$this->plugin_id         = (string) $definition['plugin_id'];
-			$this->plugin_name       = (string) $definition['plugin_name'];
-			$this->plugin_version    = (string) $definition['plugin_version'];
-			$this->framework_version = (string) $definition['framework_version'];
-			$this->plugin_file       = (string) $definition['plugin_file'];
-			$this->platform          = (string) $definition['platform'];
-			$this->requirements      = $this->normalize_requirements( (array) $definition['requirements'] );
-			$this->main_class        = isset( $definition['main_class'] ) ? (string) $definition['main_class'] : null;
-			$this->callback          = $definition['callback'] ?? null;
-			$this->capabilities      = $this->normalize_capabilities( $definition['capabilities'] ?? [] );
+			$this->plugin_id            = (string) $definition['plugin_id'];
+			$this->plugin_name          = (string) $definition['plugin_name'];
+			$this->plugin_version       = (string) $definition['plugin_version'];
+			$this->framework_version    = (string) $definition['framework_version'];
+			$this->backwards_compatible = isset( $definition['backwards_compatible'] ) && '' !== (string) $definition['backwards_compatible']
+				? (string) $definition['backwards_compatible']
+				: null;
+			$this->plugin_file          = (string) $definition['plugin_file'];
+			$this->platform             = (string) $definition['platform'];
+			$this->requirements         = $this->normalize_requirements( (array) $definition['requirements'] );
+			$this->main_class           = isset( $definition['main_class'] ) ? (string) $definition['main_class'] : null;
+			$this->callback             = $definition['callback'] ?? null;
+			$this->capabilities         = $this->normalize_capabilities( $definition['capabilities'] ?? [] );
 		}
 
 		/**
@@ -141,6 +147,17 @@ if ( ! class_exists( Framework_Plugin_Loader_Definition::class, false ) ) :
 		 */
 		public function get_framework_version(): string {
 			return $this->framework_version;
+		}
+
+		/**
+		 * Gets the oldest framework version compatible with this selected framework copy.
+		 *
+		 * @since 2.0.0
+		 *
+		 * @return string|null
+		 */
+		public function get_backwards_compatible(): ?string {
+			return $this->backwards_compatible;
 		}
 
 		/**
@@ -232,6 +249,10 @@ if ( ! class_exists( Framework_Plugin_Loader_Definition::class, false ) ) :
 				$args['minimum_wc_version'] = $requirements['woocommerce'];
 			}
 
+			if ( null !== $this->get_backwards_compatible() && '0' !== $this->get_backwards_compatible() ) {
+				$args['backwards_compatible'] = $this->get_backwards_compatible();
+			}
+
 			return [
 				'version'     => $this->get_framework_version(),
 				'plugin_name' => $this->get_plugin_name(),
@@ -270,6 +291,10 @@ if ( ! class_exists( Framework_Plugin_Loader_Definition::class, false ) ) :
 			$platform = $definition['platform'] ?? '';
 			if ( ! in_array( $platform, self::get_allowed_platforms(), true ) ) {
 				$errors[] = sprintf( 'Unsupported loader definition platform: %s.', (string) $platform );
+			}
+
+			if ( array_key_exists( 'backwards_compatible', $definition ) && null !== $definition['backwards_compatible'] && ! is_scalar( $definition['backwards_compatible'] ) ) {
+				$errors[] = 'Loader definition backwards_compatible must be a scalar version string.';
 			}
 
 			if ( self::PLATFORM_EDD === $platform ) {

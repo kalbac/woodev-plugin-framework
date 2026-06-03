@@ -3,10 +3,10 @@
 > Sweep-across-the-whole-program status. Any session reads this first (per execution-protocol §0) to learn where we are. Update the "Next action" + statuses as work lands.
 
 **Branch:** `refactor/platform-v2-clean-break` · **Baselines:** `platform-v2-pivot-baseline`, `platform-v2-pre-refactor`
-**Last updated:** 2026-06-03
+**Last updated:** 2026-06-04
 
 ## Next action
-⏸ **S0 / Phase 3 — external audit pending (key gate).** All deletions landed (`7cc3666` legacy path, `4223597` aliases+shims); residue swept; `composer check` green 179/397; internal verification done (no dangling prod refs, data contracts intact). **Operator: run `docs-internal/reviews/p3-cleanbreak-audit-packet.md` through GPT-5.5 and return findings.** After resolved → Phase 4 (decompose `Woodev_Plugin`, per the sub-plan).
+▶️ **S0 / Phase 4 — decompose `Woodev_Plugin`.** P3 deletions landed and the P3 audit-packet findings are applied: explicit definitions now preserve `backwards_compatible`, missing `main_class` loaders are recorded as invalid instead of silently no-oping, and WooCommerce capability-only preload coverage exists. `composer check` green 182/412. Proceed with `docs-internal/platform-v2-base-decomposition-subplan.md`.
 
 ## Stage map
 | Stage | Scope | Status | Plan |
@@ -25,7 +25,7 @@
 | P0 | Branch + frozen baseline | ✅ done (197/197 green, tags set) | — |
 | P1 | CLAUDE.md/AGENTS.md clean-break reconciliation | ✅ done (ADR-005 added; ADR-002 bridge superseded) | no (docs) |
 | P2 | Pilot gate: edostavka-shaped fixture through new path | ✅ **gate PASSED** (`7ebbd20`+`6ed8b72`); internal reviews ✅; ext audit (GPT-5.5) applied — caught real include-order coupling, hardened | done |
-| P3 | Delete internal-API back-compat debt (cohesive) | 🟢 deletions done (`711cbae`,`7cc3666`,`4223597`); green 179/397; internal verify ✅; ext audit pending | **yes — packet ready** |
+| P3 | Delete internal-API back-compat debt (cohesive) | ✅ **gate PASSED** (`711cbae`,`7cc3666`,`4223597` + audit fixes); green 182/412; internal verify ✅; audit-packet findings applied | done |
 | P4 | Decompose `Woodev_Plugin` (sub-plan) | ⚪ | **yes** |
 | P5 | Re-minimize resolver (ADR-003) | ⚪ | no (internal) |
 | P6 | "Split done" gate | ⚪ | **yes** → tag `platform-v2-split-done` |

@@ -267,6 +267,43 @@ class FrameworkResolverTest extends TestCase {
 	}
 
 	/**
+	 * Missing main_class-only definitions should be recorded as invalid instead of silently no-oping.
+	 */
+	public function test_records_missing_main_class_definition_during_load(): void {
+		$resolver = new \Woodev\Framework\Framework_Resolver();
+
+		Functions\when( 'plugin_dir_path' )->justReturn( dirname( __DIR__, 2 ) . '/' );
+		Functions\when( 'untrailingslashit' )->alias(
+			static function ( string $path ): string {
+				return rtrim( $path, '/\\' );
+			}
+		);
+		Functions\when( 'get_bloginfo' )->justReturn( '6.5' );
+		Functions\when( 'is_admin' )->justReturn( false );
+		Functions\expect( 'do_action' )->once()->with( 'woodev_plugins_loaded' );
+
+		$resolver->register_loader_definition(
+			$this->get_loader_definition(
+				[
+					'callback'   => null,
+					'main_class' => 'Resolver_Missing_Main_Class_Plugin',
+				]
+			)
+		);
+
+		$resolver->load_plugins();
+
+		$invalid = $resolver->get_invalid_loader_definitions();
+
+		$this->assertCount( 1, $invalid );
+		$this->assertContains(
+			'Loader definition main_class does not exist: Resolver_Missing_Main_Class_Plugin.',
+			$invalid[0]['errors']
+		);
+		$this->assertEmpty( $resolver->get_active_plugins() );
+	}
+
+	/**
 	 * PHP requirements should be enforced before plugin callbacks run.
 	 */
 	public function test_skips_definition_when_php_requirement_fails(): void {
@@ -335,6 +372,51 @@ class FrameworkResolverTest extends TestCase {
 		$this->assertTrue( class_exists( \Woodev\Framework\Woocommerce_Plugin::class, false ) );
 		$this->assertTrue( class_exists( \Woodev_Payment_Gateway_Plugin::class, false ) );
 		$this->assertTrue( class_exists( \Woodev\Framework\Shipping\Shipping_Plugin::class, false ) );
+	}
+
+	/**
+	 * WooCommerce plugin capability should preload only the WooCommerce base/helper classes.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_woocommerce_plugin_capability_loads_only_woocommerce_base_dependency(): void {
+		require_once dirname( __DIR__, 2 ) . '/woodev/class-plugin.php';
+
+		$errors     = [];
+		$definition = \Woodev\Framework\Framework_Plugin_Loader_Definition::from_array(
+			$this->get_loader_definition(
+				[
+					'plugin_file'  => dirname( __DIR__, 2 ) . '/woodev-test-plugin.php',
+					'platform'     => \Woodev\Framework\Framework_Plugin_Loader_Definition::PLATFORM_WOOCOMMERCE,
+					'requirements' => [
+						'php'         => '7.4',
+						'wordpress'   => '6.3',
+						'woocommerce' => '7.0',
+					],
+					'capabilities' => [
+						\Woodev\Framework\Framework_Plugin_Loader_Definition::CAPABILITY_WOOCOMMERCE_PLUGIN,
+					],
+				]
+			),
+			$errors
+		);
+
+		Functions\when( 'plugin_dir_path' )->justReturn( dirname( __DIR__, 2 ) . '/' );
+		Functions\when( 'untrailingslashit' )->alias(
+			static function ( string $path ): string {
+				return rtrim( $path, '/\\' );
+			}
+		);
+
+		$resolver = new Resolver_Testable_Framework_Resolver();
+		$resolver->load_early_classes_for_test( $definition->to_legacy_plugin() );
+
+		$this->assertSame( [], $errors );
+		$this->assertTrue( class_exists( \Woodev\Framework\Woocommerce_Plugin::class, false ) );
+		$this->assertTrue( class_exists( \Woodev\Framework\Woocommerce_Helper::class, false ) );
+		$this->assertFalse( class_exists( \Woodev_Payment_Gateway_Plugin::class, false ) );
+		$this->assertFalse( class_exists( \Woodev\Framework\Shipping\Shipping_Plugin::class, false ) );
 	}
 
 	/**
@@ -611,6 +693,62 @@ class FrameworkResolverTest extends TestCase {
 		$active = $resolver->get_active_plugins();
 		$this->assertCount( 2, $active );
 		$this->assertSame( 'High Version Plugin', $active[0]['plugin_name'] );
+	}
+
+	/**
+	 * Explicit definitions must preserve the selected framework backwards-compatible window.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_explicit_definition_backwards_compatible_window_blocks_too_old_frameworks(): void {
+		$resolver    = new \Woodev\Framework\Framework_Resolver();
+		$low_loaded  = false;
+		$high_loaded = false;
+
+		Functions\when( 'plugin_dir_path' )->justReturn( dirname( __DIR__, 2 ) . '/' );
+		Functions\when( 'untrailingslashit' )->alias(
+			static function ( string $path ): string {
+				return rtrim( $path, '/\\' );
+			}
+		);
+		Functions\when( 'get_bloginfo' )->justReturn( '6.5' );
+		Functions\when( 'is_admin' )->justReturn( false );
+		Functions\expect( 'do_action' )->once()->with( 'woodev_plugins_loaded' );
+
+		$resolver->register_loader_definition(
+			$this->get_loader_definition(
+				[
+					'plugin_id'         => 'low-plugin',
+					'plugin_name'       => 'Low Version Plugin',
+					'framework_version' => '1.9.0',
+					'callback'          => static function () use ( &$low_loaded ): void {
+						$low_loaded = true;
+					},
+				]
+			)
+		);
+		$resolver->register_loader_definition(
+			$this->get_loader_definition(
+				[
+					'plugin_id'             => 'high-plugin',
+					'plugin_name'           => 'High Version Plugin',
+					'framework_version'     => '2.2.0',
+					'backwards_compatible' => '2.0.0',
+					'callback'              => static function () use ( &$high_loaded ): void {
+						$high_loaded = true;
+					},
+				]
+			)
+		);
+
+		$resolver->load_plugins();
+
+		$this->assertTrue( $high_loaded );
+		$this->assertFalse( $low_loaded );
+		$this->assertCount( 1, $resolver->get_active_plugins() );
+		$this->assertCount( 1, $resolver->get_incompatible_framework_plugins() );
+		$this->assertSame( 'Low Version Plugin', $resolver->get_incompatible_framework_plugins()[0]['plugin_name'] );
 	}
 
 	/**

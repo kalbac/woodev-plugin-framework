@@ -121,14 +121,18 @@ if ( ! class_exists( Framework_Resolver::class, false ) ) :
 
 			$loaded_framework = null;
 			foreach ( $this->registered_plugins as $plugin ) {
+				if ( null === $loaded_framework ) {
+					$loaded_framework = $plugin;
+				}
+
 				$is_base_plugin_loaded = class_exists( '\Woodev_Plugin', false );
 				if ( ! $is_base_plugin_loaded ) {
 					require_once $this->get_plugin_path( $plugin['path'] ) . '/woodev/class-plugin.php';
-					$loaded_framework       = $plugin;
-					$this->active_plugins[] = $plugin;
 				}
 
-				if ( ! empty( $loaded_framework['args']['backwards_compatible'] ) && version_compare( $loaded_framework['args']['backwards_compatible'], $plugin['version'], '>' ) ) {
+				$backwards_compatible     = $loaded_framework['args']['backwards_compatible'] ?? '';
+				$is_framework_incompatible = '' !== $backwards_compatible && version_compare( $backwards_compatible, $plugin['version'], '>' );
+				if ( $is_framework_incompatible ) {
 					$this->incompatible_framework_plugins[] = $plugin;
 					continue;
 				}
@@ -148,12 +152,14 @@ if ( ! class_exists( Framework_Resolver::class, false ) ) :
 					continue;
 				}
 
+				$this->load_early_capability_classes( $plugin, $loaded_framework ?? $plugin );
+				if ( ! $this->invoke_plugin( $plugin ) ) {
+					continue;
+				}
+
 				if ( ! in_array( $plugin, $this->active_plugins, true ) ) {
 					$this->active_plugins[] = $plugin;
 				}
-
-				$this->load_early_capability_classes( $plugin, $loaded_framework ?? $plugin );
-				$this->invoke_plugin( $plugin );
 			}
 
 			if ( $this->has_update_notices() && is_admin() && ! defined( 'DOING_AJAX' ) && ! has_action( 'admin_notices', $this->update_notice_renderer ) ) {
@@ -555,12 +561,14 @@ if ( ! class_exists( Framework_Resolver::class, false ) ) :
 				}
 			}
 
-			$should_load_payment_gateway = in_array( Framework_Plugin_Loader_Definition::CAPABILITY_PAYMENT_GATEWAY, $capabilities, true ) && ! class_exists( 'Woodev_Payment_Gateway_Plugin', false );
+			$has_payment_gateway_capability = in_array( Framework_Plugin_Loader_Definition::CAPABILITY_PAYMENT_GATEWAY, $capabilities, true );
+			$should_load_payment_gateway    = $has_payment_gateway_capability && ! class_exists( 'Woodev_Payment_Gateway_Plugin', false );
 			if ( $should_load_payment_gateway ) {
 				require_once $plugin_path . '/woodev/payment-gateway/class-payment-gateway-plugin.php';
 			}
 
-			$should_load_shipping_method = in_array( Framework_Plugin_Loader_Definition::CAPABILITY_SHIPPING_METHOD, $capabilities, true ) && ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin', false );
+			$has_shipping_method_capability = in_array( Framework_Plugin_Loader_Definition::CAPABILITY_SHIPPING_METHOD, $capabilities, true );
+			$should_load_shipping_method    = $has_shipping_method_capability && ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin', false );
 			if ( $should_load_shipping_method ) {
 				require_once $plugin_path . '/woodev/shipping-method/class-shipping-plugin.php';
 			}
@@ -572,32 +580,35 @@ if ( ! class_exists( Framework_Resolver::class, false ) ) :
 		 * @since 2.0.0
 		 *
 		 * @param array<string,mixed> $plugin Registered plugin.
-		 * @return void
+		 * @return bool True when a plugin callback or main class was invoked.
 		 */
-		protected function invoke_plugin( array $plugin ): void {
+		protected function invoke_plugin( array $plugin ): bool {
 			if ( is_callable( $plugin['callback'] ) ) {
 				$plugin['callback']();
-				return;
+				return true;
 			}
 
 			$definition = $plugin['definition'] ?? null;
-
 			if ( ! $definition instanceof Framework_Plugin_Loader_Definition ) {
-				return;
+				return false;
 			}
 
 			$main_class = $definition->get_main_class();
-
 			if ( null === $main_class || ! class_exists( $main_class ) ) {
-				return;
+				$this->invalid_loader_definitions[] = [
+					'definition' => $definition,
+					'errors'     => [ sprintf( 'Loader definition main_class does not exist: %s.', (string) $main_class ) ],
+				];
+				return false;
 			}
 
 			if ( is_callable( [ $main_class, 'instance' ] ) ) {
 				$main_class::instance();
-				return;
+				return true;
 			}
 
 			new $main_class();
+			return true;
 		}
 
 		/**
