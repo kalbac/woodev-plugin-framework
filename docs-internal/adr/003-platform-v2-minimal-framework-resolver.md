@@ -14,7 +14,11 @@ The current `woodev/bootstrap.php` combines framework version arbitration, plugi
 
 Use a minimal framework resolver for Platform v2.0.
 
-`woodev/bootstrap.php` remains the compatibility entry point, but the real logic should move behind it into a resolver class or resolver service set. `Woodev_Plugin_Bootstrap::instance()` may remain as a facade for existing plugin entry files.
+`woodev/bootstrap.php` remains the compatibility entry point, but the real logic should move behind it into a namespaced resolver class or resolver service set under `Woodev\Framework\*`. `Woodev_Plugin_Bootstrap::instance()` may remain as a global facade for existing plugin entry files.
+
+New Platform v2 support classes should not be added as new global symbols. Use global classes only for existing public APIs, compatibility facades, or explicit guarded aliases required by installed-site contracts.
+
+Namespaced resolver classes must still be loaded explicitly by the compatibility entry path or the selected framework copy. Production plugins do not rely on Composer autoload at runtime.
 
 The resolver owns:
 
@@ -58,6 +62,8 @@ Negative:
 - Requires a careful facade design so old `register_plugin()` callers do not break before production plugins are migrated.
 - Adds a new internal resolver abstraction that must be tested independently from WordPress hook timing.
 - Requires explicit discipline to prevent the resolver from becoming a second framework kernel.
+- Requires an early namespace refactor of the initial resolver implementation slice before expanding platform behavior.
+- Requires include-path discipline so namespaced files are available without Composer autoload in vendored production plugins.
 
 Follow-up requirements:
 

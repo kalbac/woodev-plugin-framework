@@ -1,4 +1,25 @@
-# Session Log — Woodev Plugin Framework
+
+## Licensing v2 split - Woodev_Woocommerce_License_Settings (2026-06-03)
+
+### Implementation
+- First work in the admin/licensing v2 phase (per 2026-06-02 polish session handoff + next-session-prompt). Mapped the licensing subsystem with Serena MCP: 7 files in `woodev/licensing/` (4 classes + 3 API files). Only one hard WC coupling remained - `Woodev_License_Settings::set_wc_screen_ids()` registered a `woocommerce_screen_ids` filter unconditionally in `is_admin()`. The other 4 licensing files either have no WC coupling (`Woodev_Plugins_License`, `Woodev_License`) or are already behind `function_exists()` + filter contracts from Phase 5 cleanup #9 (`Woodev_License_Messages` for `wc_date_format()`/`wc_format_datetime()`, `Woodev_Licensing_API_Request` for `wc_print_r()`).
+- New class `Woodev_Woocommerce_License_Settings` in `woodev/licensing/class-woocommerce-license-settings.php` - real implementation, 3 methods (`set_wc_screen_ids`, `register_license_settings`, `do_license_fields`) + constructor, verbatim copy of the original. Picked up by the existing `woodev/licensing/` classmap entry, no composer.json change needed.
+- `Woodev_License_Settings` truncated to a deprecated shim: stores `$plugin` in a private property (silences PHPStan `unusedParameter`), emits `_deprecated_function()` + `_doing_it_wrong()` from the constructor. Class still resolves for any external `class_exists()` / `instanceof` check.
+- `Woodev_Plugin::load_license_settings_fields()` now early-returns on `! Woodev_Helper::is_woocommerce_active()`, requires the new class file, instantiates `Woodev_Woocommerce_License_Settings`. Pure-WP plugins no longer add a callback to the `woocommerce_screen_ids` filter in `is_admin()`.
+- New test `tests/unit/WoocommerceLicenseSettingsLocationTest.php` (3 tests, 14 assertions): (1) reflection proves the new class declares all 3 methods with the right visibility, (2) source regex on `class-plugin.php` proves the loader references the new FQCN and the `is_woocommerce_active()` gate, (3) source regex on the shim file proves the constructor calls `_doing_it_wrong()`. Pattern matches the B-2 location test (`WoocommerceUploadsPathLocationTest`).
+
+### Verification
+- Red-first confirmed: ran new test file before implementation, fatal `require_once` on the non-existent new file.
+- Green after implementation: `composer check` passes - PHPCS 117/117 (was 116, +1 for the new file), **PHPStan 0 errors**, **PHPUnit 197 tests / 440 assertions** (was 194/426 at session start; +3 tests, +14 assertions).
+- PHPStan flagged the shim's unused `$plugin` param on first run - fixed by assigning to a private property (mirrors the original constructor's `$this->plugin` assignment, satisfies PHPStan without a baseline ignore or `@phpstan-ignore-next-line` annotation). No baseline growth.
+- No new gotcha files: the shim pattern is a clean application of the existing B-2 + M-1 + M-4 v2 split pattern (per `class-alias-phpstan-resolution` gotcha: real subclass in classmap, no `class_alias` for PHPStan visibility).
+- Next-session-prompt file `C:\Users\maksi\AppData\Local\Temp\kilo\woodev-framework-next-session-prompt-2026-06-02.md` deleted (the task that triggered this session).
+
+### Next
+- Admin/licensing phase is **half done** (licensing subsystem). Admin pages (`woodev/admin/`) is the remaining scope for this phase.
+- Alternative admin-phase targets the user might prefer: push notifications/webhooks (FUTURE #3), React admin UI (FUTURE #5), or broader helper-class cleanup.
+- Deferred items from audit 2026-06-01 (B-3 cosmetic commit subject, L-2 5th test, render_select2_ajax shim edge case) remain untouched.
+- v2 split boundary: pure-WP plugins using the framework now boot with zero WC coupling in `is_admin()` for both helper (M-1/L-4, 2026-06-02) and license settings (this commit). The licensing subsystem has no further clean v2 split surface.
 
 ## Polish session — B-2 FQCN fix + Woodev_Woocommerce_Helper split (M-1/L-4) (2026-06-02)
 

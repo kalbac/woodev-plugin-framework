@@ -82,6 +82,17 @@
     and the broad `PLANS.md` vision: shipping universality, licensing webhooks/UI,
     box-packer minimal virtual box, DI/SOLID, React admin UI, EDD runtime.
 
+## Session 2026-06-03 — Licensing v2 split (atomic 1 of 1)
+
+**Result:** Clean v2 split of the only hard WC coupling in `woodev/licensing/`.
+- New class `Woodev_Woocommerce_License_Settings` in `woodev/licensing/class-woocommerce-license-settings.php` (real implementation, 3 methods + constructor; picked up by existing classmap entry for `woodev/licensing/`).
+- `Woodev_License_Settings` truncated to a deprecated shim: constructor assigns `$plugin` to a private property (silences PHPStan `unusedParameter`) and emits `_deprecated_function()` + `_doing_it_wrong()`. Class still resolves for any external `class_exists()` / `instanceof` check.
+- `Woodev_Plugin::load_license_settings_fields()` now gates on `Woodev_Helper::is_woocommerce_active()` and instantiates the new class. Pure-WP plugins no longer pull in the `woocommerce_screen_ids` callback in `is_admin()`.
+- New test `tests/unit/WoocommerceLicenseSettingsLocationTest.php` (3 tests, 14 assertions): reflection proves the new class declares all 3 methods, source regex proves the loader uses the FQCN + the `is_woocommerce_active()` gate, source regex proves the shim's constructor calls `_doing_it_wrong()`.
+- `composer check` green: PHPCS 117/117, PHPStan 0 errors, **PHPUnit 197/440** (was 194/426; +3 tests, +14 assertions).
+
+**Mapping reminder (for next session).** The other 4 licensing files (`Woodev_Plugins_License`, `Woodev_License`, `Woodev_License_Messages`, `Woodev_Licensing_API_Request`) either have no WC coupling or are already behind `function_exists()` + filter contracts from Phase 5 cleanup #9. No further clean v2 split surface remains in the licensing subsystem.
+
 ### Platform v2 (strategy alignment)
 
 | Step | Status | Artifact |

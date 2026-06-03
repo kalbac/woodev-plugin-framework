@@ -92,6 +92,8 @@ Architecture rules:
 - Runtime behavior belongs to `Woodev_Plugin`, `Woodev_Woocommerce_Plugin`, specialized module bases, or platform services.
 - Plugin loader metadata is allowed only when the resolver cannot safely derive the information before the plugin class is loaded.
 - Inheritance or contracts are the runtime source of truth for plugin behavior.
+- New Platform v2 classes must use the `Woodev\Framework\*` namespace from the start. Legacy global classes remain only for existing public APIs, compatibility facades, or explicit aliases required by installed-site contracts.
+- Namespacing does not imply Composer/autoload usage in production plugins. Vendored plugin runtime loading must remain explicit include/require based through framework files.
 
 ## 6. Minimal Resolver
 
@@ -101,10 +103,12 @@ Architecture rules:
 
 The file should become thin:
 
-- Define or require the resolver facade.
+- Define or require the namespaced resolver facade.
 - Keep `Woodev_Plugin_Bootstrap::instance()` available as the compatibility object for existing entry files.
 - Delegate registration, arbitration, loading, requirement checks, notices, and callback invocation to the resolver.
 - Avoid adding new platform behavior to `bootstrap.php` itself.
+- Do not add new globally named resolver/support classes unless they are compatibility shims guarded against multi-version redeclare.
+- Do not rely on Composer autoload for production plugin runtime loading; `bootstrap.php` and the selected framework copy must include required files explicitly.
 
 ### 6.2 Resolver Responsibilities
 
@@ -151,7 +155,7 @@ At minimum, tests should assert:
 
 ### 7.1 Loader Definition
 
-Each production plugin should register an explicit loader definition. The implementation may choose an array, lightweight class, or value object under PHP 7.4 constraints, but the conceptual fields are fixed.
+Each production plugin should register an explicit loader definition. The implementation may choose an array, lightweight namespaced class, or namespaced value object under PHP 7.4 constraints, but the conceptual fields are fixed. Production loading remains include-based; the loader class file must be explicitly available before use.
 
 Required fields:
 
@@ -435,6 +439,9 @@ Phase 2: Explicit loader definition
 
 Phase 3: Platform class split
 
+- First refactor the newly added Platform v2 implementation classes from the initial resolver slice into the `Woodev\Framework\*` namespace before expanding platform behavior.
+- Keep global compatibility entry points only where required by installed-site contracts or legacy public API continuity.
+- Keep production runtime loading explicit with `require_once`/include paths; do not treat `composer.json` autoload as a plugin runtime mechanism.
 - Introduce or finalize `Woodev_Woocommerce_Plugin`.
 - Move WooCommerce runtime assumptions from `Woodev_Plugin` into `Woodev_Woocommerce_Plugin`.
 - Preserve public wrappers only when needed for installed-site compatibility or live production migrations.

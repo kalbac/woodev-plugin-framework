@@ -10,7 +10,7 @@ The resolver still needs early metadata before plugin main classes are instantia
 
 ## Decision
 
-Platform v2 should use explicit plugin loader definitions instead of loose legacy `register_plugin()` args.
+Platform v2 should use explicit plugin loader definitions instead of loose legacy `register_plugin()` args. The loader definition implementation should be namespaced under `Woodev\Framework\*`; legacy global access should exist only as a compatibility facade or guarded alias when an installed-site contract requires it. Production plugin runtime loading remains explicit include/require based rather than Composer/autoload based.
 
 Each production plugin loader must declare:
 
@@ -42,6 +42,8 @@ Positive:
 - The resolver can support pure WordPress, WooCommerce, and future EDD plugins without guessing from legacy flags.
 - Installed-site contracts can be tied to stable plugin IDs instead of incidental entry-file args.
 - Runtime behavior becomes type-system driven through platform classes and specialized contracts.
+- New loader infrastructure follows PSR-4 namespace conventions instead of adding more global legacy symbols.
+- Namespaced loader infrastructure can still be shipped as vendored framework files without requiring Composer autoload in plugins.
 
 Negative:
 
