@@ -202,24 +202,32 @@ Self-contained shipping box-packing algorithm. Implement `Woodev_Packer_Item_Int
 - PHPCompatibility checked for PHP 7.4+, minimum WP version 6.3
 - PHPStan level 3; `checkDynamicProperties: false` (legacy code uses dynamic properties)
 
-## Backward Compatibility
+## Backward Compatibility — clean-break policy (v2.0 branch)
 
-This framework is used by 10+ dependent plugins. Breaking changes affect all of them.
+> Policy set 2026-06-03 (direction audit **D-2**). Supersedes the prior "deprecation cycle for everything" rule on the `refactor/platform-v2-clean-break` branch. Rationale: this is effectively a new framework; the old one is being rewritten and the dependent plugins will be rewritten onto it (`PLANS.md` §2.4). The previous strict-deprecation mandate was generating a back-compat tax for plugins we are about to replace (audit §4.2).
 
-- Any legacy code that is rewritten or refactored **must** maintain backward compatibility
-- **NEVER** delete or rename public methods/classes without a deprecation cycle
-- **ALWAYS** add `@deprecated` annotation and call `_deprecated_function()` inside deprecated methods
-- Deprecation cycle: minimum one full version before removal
-- Breaking changes require major version bump (semver)
-- Use `class_alias`, wrapper methods, or deprecation shims where needed
+Two different rules apply depending on what you are changing:
 
-```php
-/** @deprecated 2.0.0 Use new_method() instead. */
-public function old_method(): void {
-    _deprecated_function( __METHOD__, '2.0.0', __CLASS__ . '::new_method()' );
-    $this->new_method();
-}
-```
+- **Internal code — FREE TO BREAK on the v2 branch:** class names, method
+  signatures, the plugin entry/registration shape, namespacing, file layout.
+  Do **NOT** add `@deprecated` shims, `class_alias` files, or
+  `_deprecated_function()` wrappers for moved/renamed internal APIs. **Delete**
+  existing internal-API shims (see `docs-internal/platform-v2-cleanbreak-plan.md`
+  Phase 3).
+- **Installed-site data contracts — RELEASE-BLOCKING, never break:** option keys
+  & settings arrays, license key option names + activation state + instance IDs,
+  updater identity, WC payment-gateway IDs, WC shipping-method IDs + instance
+  setting keys, public action/filter hook names, scheduled cron hooks +
+  recurrence + payload shape, custom DB tables/schemas, REST route namespaces,
+  AJAX action names, admin page slugs, log source names, background-job IDs,
+  order/session meta keys. Preserve these byte-for-byte.
+
+When a plugin is migrated onto v2, enforce the "never break" list via its
+`docs-internal/migration/<plugin>-data-preservation-checklist.md` — that is where
+data preservation is verified, at rewrite time, per plugin.
+
+Operating rules for the whole effort live in
+`docs-internal/platform-v2-execution-protocol.md`.
 
 ## Coding Conventions
 
@@ -259,5 +267,5 @@ When you discover important project rules, conventions, or patterns during your 
 ## Known Technical Debt
 
 - 50+ PHPStan baseline ignores (see `phpstan-baseline.neon`)
-- 11 deprecated methods in `Woodev_Plugin` (lines ~1486–1629), slated for removal in v2.0.0
-- `class-payment-gateway.php` is ~3900 lines — candidate for trait extraction
+- Internal-API back-compat scaffolding (2 `class_alias` files, ~10 `_deprecated_function` shims, the legacy positional registration path) is being **deleted** on `refactor/platform-v2-clean-break` per the clean-break policy — see `docs-internal/platform-v2-cleanbreak-plan.md` Phase 3.
+- `class-payment-gateway.php` (~2,378 lines) — candidate for trait extraction (post-split debt)

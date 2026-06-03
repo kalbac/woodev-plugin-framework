@@ -6,7 +6,7 @@
 **Last updated:** 2026-06-03
 
 ## Next action
-▶ **S0 / Phase 1** — reconcile `CLAUDE.md` + `AGENTS.md` to the clean-break policy (docs-only). Then S0/Phase 2 pilot gate.
+▶ **S0 / Phase 2** — pilot gate: build the edostavka-shaped fixture and drive it through the new load path; fill the data-preservation checklist. First external GPT-5.5 audit fires at this gate.
 
 ## Stage map
 | Stage | Scope | Status | Plan |
@@ -23,8 +23,8 @@
 | Phase | What | Status | External audit |
 |---|---|---|---|
 | P0 | Branch + frozen baseline | ✅ done (197/197 green, tags set) | — |
-| P1 | CLAUDE.md/AGENTS.md clean-break reconciliation | 🟡 next | no (docs) |
-| P2 | Pilot gate: edostavka-shaped fixture through new path | ⚪ | **yes** |
+| P1 | CLAUDE.md/AGENTS.md clean-break reconciliation | ✅ done (ADR-005 added; ADR-002 bridge superseded) | no (docs) |
+| P2 | Pilot gate: edostavka-shaped fixture through new path | 🟡 next | **yes** |
 | P3 | Delete internal-API back-compat debt (cohesive) | ⚪ | **yes** |
 | P4 | Decompose `Woodev_Plugin` (sub-plan) | ⚪ | **yes** |
 | P5 | Re-minimize resolver (ADR-003) | ⚪ | no (internal) |

@@ -197,7 +197,7 @@ npx markdownlint-cli2 "docs/**/*.md"  # lint public docs
 
 1. **Think Before Coding** — state assumptions, surface alternatives, ask when unclear
 2. **Simplicity First** — minimum code; no speculative features
-3. **Surgical Changes** — touch only what the task requires; backward compatibility is mandatory
+3. **Surgical Changes** — touch only what the task requires; preserve installed-site data contracts (internal APIs may break on the v2 branch — see clean-break policy)
 4. **Goal-Driven Execution** — define success as a verifiable check (`composer check` passes)
 
 **Full rules with Do/Don't tables:** `docs-internal/AGENT-RULES.md` → "Workflow Rules"
@@ -221,12 +221,11 @@ Full details + code examples in `docs-internal/gotchas/`. Scan `docs-internal/GO
 
 **Naming:** `woodev` (single d), `Woodev` prefix — `wooddev` is always wrong.
 
-**Backward compatibility — MOST CRITICAL:**
-- NEVER delete/rename public methods without a deprecation cycle
-- ALWAYS use `@deprecated` + `_deprecated_function()` + keep old method as wrapper
-- Minimum one full version before removal
-- 10+ dependent plugins — breaking changes require major version bump (semver)
-- Legacy namespace: `Woodev_*` classes; new code: `Woodev\Framework\*` PSR-4
+**Backward compatibility — clean-break policy (v2.0 branch, D-2 2026-06-03):**
+- **Internal code is FREE TO BREAK** on `refactor/platform-v2-clean-break` — class/method names, registration shape, namespacing. Do NOT add `@deprecated`/`class_alias`/`_deprecated_function` shims for moved internal APIs; delete existing ones.
+- **Installed-site data contracts are RELEASE-BLOCKING** — option keys, license/instance IDs, gateway/shipping method IDs, hook names, cron, REST namespaces, AJAX actions, admin slugs, meta keys. Preserve byte-for-byte (enforced per-plugin at rewrite time).
+- Full policy: `CLAUDE.md` → Backward Compatibility; operating rules: `docs-internal/platform-v2-execution-protocol.md`.
+- Legacy namespace: `Woodev_*` classes; new code: `Woodev\Framework\*` PSR-4 (include-based, not Composer autoload at runtime).
 
 **Serena MCP (PHP navigation):**
 - Always use Serena tools for PHP source reading — never raw `Read` on `.php` files
