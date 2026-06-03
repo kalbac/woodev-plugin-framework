@@ -42,20 +42,35 @@ if ( ! class_exists( 'Woodev_Plugin_Bootstrap' ) ) {
 }
 
 /**
+ * Возвращает явное определение загрузчика Platform v2 для тестового плагина.
+ *
+ * @return array<string,mixed>
+ */
+function woodev_test_plugin_loader_definition(): array {
+	return [
+		'plugin_id'         => 'woodev-test-plugin',
+		'plugin_name'       => 'Woodev Test Plugin',
+		'plugin_version'    => '1.0.0',
+		'framework_version' => '1.4.0',
+		'plugin_file'       => __FILE__,
+		'platform'          => \Woodev\Framework\Framework_Plugin_Loader_Definition::PLATFORM_WORDPRESS,
+		'requirements'      => [
+			'php'         => '7.4',
+			'wordpress'   => '6.3',
+			'woocommerce' => '7.0',
+		],
+		'main_class'        => 'Woodev_Test_Plugin',
+		'callback'          => 'woodev_test_plugin_init',
+		'capabilities'      => [
+			\Woodev\Framework\Framework_Plugin_Loader_Definition::CAPABILITY_WORDPRESS_PLUGIN,
+		],
+	];
+}
+
+/**
  * Регистрируем тестовый плагин в бутстрапе фреймворка.
  */
-
-Woodev_Plugin_Bootstrap::instance()->register_plugin(
-	'1.4.0',
-	'Woodev Test Plugin',
-	__FILE__,
-	'woodev_test_plugin_init',
-	[
-		'minimum_wc_version'   => '7.0',
-		'minimum_wp_version'   => '6.3',
-		'backwards_compatible' => '1.4.0',
-	]
-);
+Woodev_Plugin_Bootstrap::instance()->register_loader_definition( woodev_test_plugin_loader_definition() );
 
 /**
  * Фабричная функция — инициализирует тестовый плагин.

@@ -41,20 +41,35 @@ if ( ! class_exists( 'Woodev_Plugin_Bootstrap' ) ) {
 }
 
 /**
+ * Возвращает явное определение загрузчика Platform v2 для тестового метода доставки.
+ *
+ * @return array<string,mixed>
+ */
+function woodev_test_shipping_method_plugin_loader_definition(): array {
+	return [
+		'plugin_id'         => 'woodev-test-shipping-method',
+		'plugin_name'       => 'Woodev Test Shipping Method Plugin',
+		'plugin_version'    => '1.0.0',
+		'framework_version' => '1.4.0',
+		'plugin_file'       => __FILE__,
+		'platform'          => \Woodev\Framework\Framework_Plugin_Loader_Definition::PLATFORM_WOOCOMMERCE,
+		'requirements'      => [
+			'php'         => '7.4',
+			'wordpress'   => '6.3',
+			'woocommerce' => '7.0',
+		],
+		'main_class'        => 'Woodev_Test_Shipping_Method_Plugin',
+		'callback'          => 'woodev_test_shipping_method_plugin_init',
+		'capabilities'      => [
+			\Woodev\Framework\Framework_Plugin_Loader_Definition::CAPABILITY_SHIPPING_METHOD,
+		],
+	];
+}
+
+/**
  * Регистрируем тестовый плагин метода доставки в бутстрапе фреймворка.
  */
-Woodev_Plugin_Bootstrap::instance()->register_plugin(
-	'1.4.0',
-	'Woodev Test Shipping Method Plugin',
-	__FILE__,
-	'woodev_test_shipping_method_plugin_init',
-	[
-		'minimum_wc_version'   => '7.0',
-		'minimum_wp_version'   => '6.3',
-		'backwards_compatible' => '1.4.0',
-		'load_shipping_method' => true,
-	]
-);
+Woodev_Plugin_Bootstrap::instance()->register_loader_definition( woodev_test_shipping_method_plugin_loader_definition() );
 
 /**
  * Фабричная функция — инициализирует тестовый плагин метода доставки.
