@@ -83,11 +83,29 @@ class EdostavkaPilotFixtureTest extends TestCase {
 
 		require_once $fixture;
 
+		$this->assertFalse(
+			class_exists( 'Woodev_Edostavka_Pilot_Plugin', false ),
+			'Fixture plugin class must not be loaded before resolver invokes the callback.'
+		);
+		$this->assertFalse(
+			class_exists( 'Woodev_Edostavka_Pilot_Shipping_Method', false ),
+			'Fixture shipping method class must not be loaded before the new load path runs.'
+		);
+
 		$resolver             = new Edostavka_Pilot_Testable_Framework_Resolver();
 		$resolver->wc_version = '7.0.0';
 
 		Functions\when( 'get_bloginfo' )->justReturn( '6.5' );
-		Functions\expect( 'do_action' )->once()->with( 'woodev_plugins_loaded' );
+		Functions\when( 'do_action' )->justReturn( null );
+		Functions\expect( 'add_filter' )
+			->once()
+			->with( 'woocommerce_shipping_methods', \Mockery::type( 'array' ) )
+			->andReturn( true );
+		Functions\when( 'apply_filters' )->alias(
+			static function ( string $hook, $value ) {
+				return $value;
+			}
+		);
 
 		$accepted = $resolver->register_loader_definition( \woodev_edostavka_pilot_plugin_loader_definition() );
 
@@ -99,10 +117,16 @@ class EdostavkaPilotFixtureTest extends TestCase {
 		$this->assertCount( 1, $resolver->get_active_plugins() );
 		$this->assertInstanceOf( \Woodev\Framework\Woocommerce_Plugin::class, $plugin );
 		$this->assertInstanceOf( \Woodev\Framework\Shipping\Shipping_Plugin::class, $plugin );
+		$this->assertTrue( class_exists( 'Woodev_Edostavka_Pilot_Shipping_Method', false ) );
 		// installed-site contract: shipping method id must be exactly 'edostavka'.
 		$this->assertSame(
 			[ 'edostavka' => 'Woodev_Edostavka_Pilot_Shipping_Method' ],
 			$plugin->get_fixture_shipping_method_classes()
+		);
+		$this->assertSame(
+			[ 'edostavka' => 'Woodev_Edostavka_Pilot_Shipping_Method' ],
+			$plugin->register_shipping_methods( [] ),
+			'Real Shipping_Plugin registration must preserve the edostavka method ID.'
 		);
 		// installed-site contract: settings option key preserved.
 		$this->assertSame( 'woocommerce_edostavka_settings', $plugin->get_fixture_settings_option_name() );
@@ -138,6 +162,5 @@ class EdostavkaPilotFixtureTest extends TestCase {
 		Functions\when( 'is_admin' )->justReturn( false );
 		Functions\when( 'has_action' )->justReturn( false );
 		Functions\when( 'add_action' )->justReturn( true );
-		Functions\when( 'add_filter' )->justReturn( true );
 	}
 }

@@ -1,4 +1,21 @@
 
+## P2 pilot gate hardening — Edostavka-shaped fixture (2026-06-03)
+
+### Implementation
+- Processed `docs-internal/reviews/p2-pilot-audit-packet.md` as an audit checklist for the existing P2 pilot artifacts rather than as returned external findings.
+- Hardened `tests/_fixtures/woodev-edostavka-pilot-plugin/woodev-edostavka-pilot-plugin.php`: the fixture now includes the concrete shipping method only after `woodev_edostavka_pilot_plugin()` constructs the real `Shipping_Plugin`, so the framework shipping base classes come from `Shipping_Plugin::__construct()` instead of Composer test autoload masking the include order.
+- Strengthened `tests/unit/EdostavkaPilotFixtureTest.php`: pre-load assertions prove the plugin/method classes are absent before resolver callback execution; `add_filter( 'woocommerce_shipping_methods', ... )` is expected; `apply_filters()` is aliased; and the test now calls `register_shipping_methods( [] )` directly to assert the real registration result preserves `edostavka`.
+- Expanded `docs-internal/migration/edostavka-data-preservation-checklist.md` with WooCommerce shipping-zone persistence: `woocommerce_shipping_zone_methods.method_id = edostavka` and potential `woocommerce_edostavka_{instance_id}_settings` options are now explicit release-blocking production rewrite checks.
+
+### Verification
+- Focused test: `vendor\\bin\\phpunit tests\\unit\\EdostavkaPilotFixtureTest.php` passes — 1 test / 11 assertions.
+- Full gate: `composer check` passes — PHPCS 117/117, PHPStan 0 errors, PHPUnit 198 tests / 450 assertions.
+- No new gotcha file: this was a direct application of existing test-integrity and data-preservation rules, not a new reusable framework gotcha.
+
+### Next
+- P2 gate is stronger for framework load-path readiness, but still intentionally does not prove live-site data preservation. Production plugin rewrite must use the checklist against real installed-site data.
+- No Phase 3 deletion work was started in this session.
+
 ## Licensing v2 split - Woodev_Woocommerce_License_Settings (2026-06-03)
 
 ### Implementation

@@ -61,7 +61,15 @@ All other contracts in this document are documented here for the rewrite and are
 
 | Method | Current ID | Instance setting storage | Migration action | Enforced by fixture? |
 |--------|------------|--------------------------|------------------|----------------------|
-| Edostavka | `edostavka` | `woocommerce_edostavka_settings` | Preserve unless explicitly migrated | **Yes** (both asserted) |
+| Edostavka | `edostavka` | Global option `woocommerce_edostavka_settings`; zone instances also persist through WooCommerce shipping-zone method rows keyed by `method_id = edostavka` and may have per-instance options shaped as `woocommerce_edostavka_{instance_id}_settings` | Preserve method ID byte-for-byte; enumerate and verify all active zone rows + per-instance settings in the production checklist before rewrite | **Yes** for method ID/global option only; zone rows and per-instance settings are not fixture-enforced |
+
+### WooCommerce Shipping-Zone Persistence
+
+| Contract item | Current shape | Migration action | Enforced by fixture? |
+|---------------|---------------|------------------|----------------------|
+| Shipping-zone method rows | WooCommerce stores enabled zone methods in `woocommerce_shipping_zone_methods` with `method_id = edostavka` and an `instance_id` | Preserve `method_id` exactly; rewrite must not force merchants to recreate shipping zones | No — must be verified against production DB/state during rewrite |
+| Per-instance method settings | Potential option key shape `woocommerce_edostavka_{instance_id}_settings` for each active zone instance | Inventory exact keys from production plugin behavior and migrate idempotently if used | No — must be verified against production plugin before rewrite |
+| Global method settings | `woocommerce_edostavka_settings` | Preserve / migrate idempotently | **Yes** (asserted) |
 
 ## Scheduled Work And Queues
 
@@ -109,7 +117,8 @@ These gates are the responsibility of the production migration contract — they
 covered by the pilot fixture:
 
 - Existing `woocommerce_edostavka_settings` remain unchanged unless an explicit migration says otherwise.
-- Shipping method ID `edostavka` remains stable (user shipping-zone configuration depends on it).
+- Shipping method ID `edostavka` remains stable (user shipping-zone configuration depends on `woocommerce_shipping_zone_methods.method_id`).
+- Existing WooCommerce shipping-zone rows and any `woocommerce_edostavka_{instance_id}_settings` options remain attached to the same zone instances after migration.
 - Legacy option keys (`woocommerce_edostavka-integration_settings`, `cdek_woocommerce_shipping_method_license_key`) continue to migrate idempotently.
 - Cron hook `wc_edostavka_orders_update` on schedule `wc_edostavka_orders` remains correct after activation, deactivation, and upgrade.
 - Order meta under `_wc_edostavka_` is preserved via HPOS-safe access.

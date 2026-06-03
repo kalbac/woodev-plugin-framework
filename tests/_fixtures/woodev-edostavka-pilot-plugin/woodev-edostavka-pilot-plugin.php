@@ -50,7 +50,8 @@ function woodev_edostavka_pilot_plugin_init(): void {
 
 	require_once $plugin_path . '/includes/class-edostavka-pilot-integration.php';
 	require_once $plugin_path . '/includes/class-edostavka-pilot-plugin.php';
-	require_once $plugin_path . '/includes/class-edostavka-pilot-shipping-method.php';
 
 	woodev_edostavka_pilot_plugin();
+
+	require_once $plugin_path . '/includes/class-edostavka-pilot-shipping-method.php';
 }

@@ -1,5 +1,5 @@
 # Current State — Woodev Plugin Framework
-> Last updated: 2026-06-02 (Post-audit H/M/L fix session: 6 commits, 12 audit items resolved)
+> Last updated: 2026-06-03 (P2 pilot gate hardened after audit-packet pass)
 
 ## Phase Status
 
@@ -93,6 +93,16 @@
 
 **Mapping reminder (for next session).** The other 4 licensing files (`Woodev_Plugins_License`, `Woodev_License`, `Woodev_License_Messages`, `Woodev_Licensing_API_Request`) either have no WC coupling or are already behind `function_exists()` + filter contracts from Phase 5 cleanup #9. No further clean v2 split surface remains in the licensing subsystem.
 
+## Session 2026-06-03 — P2 pilot gate hardening
+
+**Result:** P2 edostavka-shaped pilot fixture now validates the new load path more strictly.
+- Fixed fixture include order so the concrete shipping method loads only after `Shipping_Plugin::__construct()` has included the framework shipping base classes; this prevents Composer test autoload from masking production include-order failures.
+- Strengthened `EdostavkaPilotFixtureTest` with pre-load class absence assertions, an asserted `woocommerce_shipping_methods` filter registration, a direct `register_shipping_methods( [] )` assertion, and class-existence proof after the real callback path runs.
+- Expanded `edostavka-data-preservation-checklist.md` with WooCommerce shipping-zone persistence (`woocommerce_shipping_zone_methods.method_id = edostavka`) and potential per-instance settings (`woocommerce_edostavka_{instance_id}_settings`) as release-blocking rewrite checks.
+- `composer check` green: PHPCS 117/117, PHPStan 0 errors, **PHPUnit 198/450** (was 198/446; +4 assertions).
+
+**Gate note.** P2 now better proves framework architecture/load-path readiness. It still does **not** prove live-site data preservation; that remains enforced per production plugin rewrite through the migration checklist.
+
 ### Platform v2 (strategy alignment)
 
 | Step | Status | Artifact |
@@ -131,6 +141,7 @@
 | 32 Sandbox shipping validation | ✅ 2026-05-31 | Added `tests/_fixtures/woodev-realistic-shipping-plugin` and `tests/unit/RealisticShippingFixtureTest.php`; read-only cues came from Edostavka/Yandex sandbox copies, but fixture stays framework-owned and generic. Verified explicit loader definition, WooCommerce requirement gate, selected-framework early shipping base, include-based callback/class graph, real `Shipping_Plugin` construction, and inheritance from `Woodev_Woocommerce_Plugin`; `composer check` passes (165 tests / 330 assertions). |
 | 33 Sandbox payment validation | ✅ 2026-05-31 | Added `tests/_fixtures/woodev-realistic-payment-plugin` and `tests/unit/RealisticPaymentFixtureTest.php`; read-only cues came from `plugins-reference/woodev-vkredit` (entry constants, `register_plugin()` with `is_payment_gateway`, singleton plugin `extends Woodev_Payment_Gateway_Plugin`, `gateways` arg by class-name, concrete gateway `extends Woodev_Payment_Gateway_Hosted`, gateway loaded include-based). Fixture stays framework-owned and generic. Verified explicit loader definition, payment capability + WooCommerce gating, selected-framework early payment base availability, include-based callback graph, real `Woodev_Payment_Gateway_Plugin` construction (full `includes()` chain), `Woodev_Woocommerce_Plugin` inheritance, and concrete `Woodev_Payment_Gateway` gateway-class registration via `get_gateway_class_names()`. No gateway is instantiated (no payment runtime executed). `composer check` passes (166 tests / 338 assertions). |
 | 34 Independent audit 2026-06-01 | ✅ 2026-06-01 | Second-model independent audit of `phpstan.neon` blanket ignores, `Woodev_Plugin` v2 split, payment-gateway restore, and resolver architecture. Surfaced 3 release-blocker PHPStan-ignore masks (Payment_Notification_Response class-wide, Box_Packer_Item::get_product, Shipping_API broken contract) + 2 base-class contract leaks (get_woocommerce_uploads_path WC-leak, get_blocks_handler typed-property trap) + 1 PHP 8.4+ deprecation mask (RealisticPaymentFixtureTest). All findings recorded as gotchas + prioritized in [Next Actions](#next-actions-priority-order) and detailed in `docs-internal/audit-2026-06-01.md`. No code changes — audit + docs only. `composer check` still passes (no PHP/runtime changes). |
+| 35 P2 pilot gate hardening | ✅ 2026-06-03 | Hardened the edostavka-shaped pilot fixture/test after applying `docs-internal/reviews/p2-pilot-audit-packet.md` skeptically: no Composer-autoload include-order masking, asserted WC shipping-method hook registration, direct `register_shipping_methods()` contract assertion, and shipping-zone persistence added to the data-preservation checklist. `composer check` passes (198 tests / 450 assertions). |
 
 ## Planned — v2.0.0 & Beyond
 
