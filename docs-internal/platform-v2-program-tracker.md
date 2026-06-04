@@ -6,7 +6,7 @@
 **Last updated:** 2026-06-04
 
 ## Next action
-▶️ **S0 / Phase 6 — "split done" gate (final key gate).** Run the verification checklist (pure-WP loads · base not god-object · resolver minimal · zero internal-API residue · green), produce the P6 external-audit packet for final sign-off, then tag `platform-v2-split-done`. P5 ✅ done (resolver verified minimal, responsibility table in ADR-003, no extraction needed — `093dd0d` orphan cleanup + `<p5 commit>` ADR). P4 orphan follow-up ✅ resolved (`093dd0d`).
+⏸ **S0 / Phase 6 — final external audit pending (split-done sign-off).** All P6 verification checks GREEN: pure-WP neutrality suites pass · base 1296/77 (not god-object) · resolver minimal (ADR-003) · zero internal-API residue · `composer check` 190/505. **Operator: run `docs-internal/reviews/p6-split-done-audit-packet.md` through GPT-5.5 (holistic cross-cutting review).** On sign-off → tag `platform-v2-split-done`; **S0 COMPLETE** → S1 (shipping) begins, moving into the autodev loop.
 
 > **Parallel workstream (operator-initiated 2026-06-04):** the autodev adversarial-loop bootstrap (`docs-internal/autodev-loop-{runbook,implementation-prompt}.md`) is a SEPARATE session on branch `autodev/loop-bootstrap` — additive (`.autodev/`, `tools/autodev/`), explicitly carved out from S0/P4 to avoid file collision. This session (S0) does NOT touch it; that session does NOT touch S0 files. Doc-drift fix for `cleanbreak-plan.md` Phase 3 is assigned to that bootstrap session (§3b).
 
