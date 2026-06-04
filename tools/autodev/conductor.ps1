@@ -50,6 +50,7 @@ param(
     [switch]$GuardBootstrap,
     [switch]$DryRunWorker,
     [switch]$SkipComposer,
+    [switch]$ReuseVerdict,
     [int]$SleepSeconds = 30
 )
 
@@ -83,14 +84,13 @@ function Move-Task {
 function New-WorkerDiff {
     <# Capture a diff of the task's file_set, intent-adding any new files so they show. #>
     param([pscustomobject]$Task, [string]$OutPath)
-    Push-Location $Config.RepoRoot
-    try {
-        foreach ($f in $Task.file_set) {
-            if (Test-Path $f) { & git add -N -- $f 2>$null | Out-Null }
+    foreach ($f in $Task.file_set) {
+        if (Test-Path (Join-Path $Config.RepoRoot $f)) {
+            Invoke-Native -Exe 'git' -CommandArgs @('add', '-N', '--', $f) -WorkingDirectory $Config.RepoRoot | Out-Null
         }
-        $diff = & git diff -- $Task.file_set | Out-String
-        Set-Content -Path $OutPath -Value $diff -Encoding utf8
-    } finally { Pop-Location }
+    }
+    $r = Invoke-Native -Exe 'git' -CommandArgs (@('diff', '--') + $Task.file_set) -WorkingDirectory $Config.RepoRoot
+    Set-Content -Path $OutPath -Value ($r.Output | Out-String) -Encoding utf8
 }
 
 function Invoke-Escalation {
@@ -104,13 +104,12 @@ function Invoke-Escalation {
 
 function Invoke-CommitTask {
     param([pscustomobject]$Task, [string]$Message)
-    Push-Location $Config.RepoRoot
-    try {
-        foreach ($f in $Task.file_set) { & git add -- $f 2>$null | Out-Null }
-        & git commit -m $Message | Out-Null
-        $hash = (& git rev-parse --short HEAD).Trim()
-        return $hash
-    } finally { Pop-Location }
+    foreach ($f in $Task.file_set) {
+        Invoke-Native -Exe 'git' -CommandArgs @('add', '--', $f) -WorkingDirectory $Config.RepoRoot | Out-Null
+    }
+    Invoke-Native -Exe 'git' -CommandArgs @('commit', '-m', $Message) -WorkingDirectory $Config.RepoRoot | Out-Null
+    $r = Invoke-Native -Exe 'git' -CommandArgs @('rev-parse', '--short', 'HEAD') -WorkingDirectory $Config.RepoRoot
+    return ($r.Output | Out-String).Trim()
 }
 
 function Invoke-ConductorIteration {
@@ -179,10 +178,21 @@ function Invoke-ConductorIteration {
     if (-not (Test-Path $diffPath) -or ((Get-Item $diffPath).Length -eq 0)) {
         New-WorkerDiff -Task $task -OutPath $diffPath
     }
+    $verdictFile = Join-Path $rtDir 'verdict.json'
     $criticExit = 0
-    & (Join-Path $here 'invoke-critic.ps1') -TaskId $task.id -DiffPath $diffPath | Out-Null
-    $criticExit = $LASTEXITCODE
-    $verdict = Get-Content (Join-Path $rtDir 'verdict.json') -Raw -Encoding utf8 | ConvertFrom-Json
+    $reused = $false
+    if ($ReuseVerdict -and (Test-Path $verdictFile)) {
+        $existing = Get-Content $verdictFile -Raw -Encoding utf8 | ConvertFrom-Json
+        if ($existing.verdict -eq 'clean') {
+            Write-AutodevLog -Level CRITIC -Message "Reusing fresh CLEAN verdict (-ReuseVerdict); skipping codex re-run." -Config $Config
+            $reused = $true
+        }
+    }
+    if (-not $reused) {
+        & (Join-Path $here 'invoke-critic.ps1') -TaskId $task.id -DiffPath $diffPath | Out-Null
+        $criticExit = $LASTEXITCODE
+    }
+    $verdict = Get-Content $verdictFile -Raw -Encoding utf8 | ConvertFrom-Json
     if ($criticExit -eq 4) {
         Write-AutodevLog -Level CRITIC -Message "Critic rate-limited; returning task to pending." -Config $Config
         Move-Task -TaskId $task.id -ToDir $Config.QueuePending

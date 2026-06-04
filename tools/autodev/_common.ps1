@@ -239,27 +239,65 @@ function Test-FileSetsDisjoint {
 }
 
 # --------------------------------------------------------------------------------------
+# Safe native-command runner
+# --------------------------------------------------------------------------------------
+
+function Invoke-Native {
+    <#
+      Run a native command (git/composer) safely under Windows PowerShell 5.1. In PS 5.1,
+      a native command that writes to stderr raises a NativeCommandError that TERMINATES
+      under $ErrorActionPreference='Stop' even on exit 0 (git CRLF warnings, composer
+      "Note:" lines). We relax EAP to Continue for the call, capture stdout (stderr is
+      sent to a temp file, or merged when -Merge), and read the real exit code.
+      Returns @{ ExitCode; Output (stdout lines or merged text) }.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$Exe,
+        [string[]]$CommandArgs = @(),
+        [string]$WorkingDirectory = $null,
+        [switch]$Merge   # merge stderr into output (for composer); else stdout only
+    )
+    $prevEAP = $ErrorActionPreference
+    $errTmp = [System.IO.Path]::GetTempFileName()
+    if ($WorkingDirectory) { Push-Location $WorkingDirectory }
+    try {
+        $ErrorActionPreference = 'Continue'
+        if ($Merge) {
+            $out = & $Exe @CommandArgs 2>&1 | Out-String
+        } else {
+            $out = & $Exe @CommandArgs 2> $errTmp
+        }
+        $code = $LASTEXITCODE
+        return [pscustomobject]@{ ExitCode = $code; Output = $out }
+    } finally {
+        $ErrorActionPreference = $prevEAP
+        if ($WorkingDirectory) { Pop-Location }
+        Remove-Item $errTmp -Force -ErrorAction SilentlyContinue
+    }
+}
+
+# --------------------------------------------------------------------------------------
 # Git diff helpers
 # --------------------------------------------------------------------------------------
 
 function Get-GitChangedFiles {
     <# Files changed in the working tree (staged+unstaged) or for a given range. #>
     param([string]$Range = $null, [pscustomobject]$Config = (Get-AutodevConfig))
-    Push-Location $Config.RepoRoot
-    try {
-        if ($Range) { $out = & git diff --name-only $Range }
-        else        { $out = & git status --porcelain | ForEach-Object { ($_ -replace '^...', '').Trim() } }
-        return @($out | Where-Object { $_ -and $_.Trim() -ne '' } | ForEach-Object { ConvertTo-NormalizedPath $_ })
-    } finally { Pop-Location }
+    if ($Range) {
+        $r = Invoke-Native -Exe 'git' -CommandArgs @('diff', '--name-only', $Range) -WorkingDirectory $Config.RepoRoot
+        $out = $r.Output
+    } else {
+        $r = Invoke-Native -Exe 'git' -CommandArgs @('status', '--porcelain') -WorkingDirectory $Config.RepoRoot
+        $out = @($r.Output | ForEach-Object { ($_ -replace '^...', '').Trim() })
+    }
+    return @($out | Where-Object { $_ -and $_.Trim() -ne '' } | ForEach-Object { ConvertTo-NormalizedPath $_ })
 }
 
 function Get-GitDiffText {
     param([string]$Range = $null, [pscustomobject]$Config = (Get-AutodevConfig))
-    Push-Location $Config.RepoRoot
-    try {
-        if ($Range) { return (& git diff $Range | Out-String) }
-        else        { return (& git diff HEAD | Out-String) }
-    } finally { Pop-Location }
+    $gitArgs = if ($Range) { @('diff', $Range) } else { @('diff', 'HEAD') }
+    $r = Invoke-Native -Exe 'git' -CommandArgs $gitArgs -WorkingDirectory $Config.RepoRoot
+    return ($r.Output | Out-String)
 }
 
 function Get-GitDiffAddedRemovedLines {
@@ -281,12 +319,8 @@ function Invoke-ComposerCheck {
         [string]$Subcommand = 'check',
         [pscustomobject]$Config = (Get-AutodevConfig)
     )
-    Push-Location $Config.RepoRoot
-    try {
-        $out = & composer $Subcommand 2>&1 | Out-String
-        $green = ($LASTEXITCODE -eq 0)
-        return [pscustomobject]@{ Green = $green; ExitCode = $LASTEXITCODE; Output = $out }
-    } finally { Pop-Location }
+    $r = Invoke-Native -Exe 'composer' -CommandArgs @($Subcommand) -WorkingDirectory $Config.RepoRoot -Merge
+    return [pscustomobject]@{ Green = ($r.ExitCode -eq 0); ExitCode = $r.ExitCode; Output = $r.Output }
 }
 
 # --------------------------------------------------------------------------------------

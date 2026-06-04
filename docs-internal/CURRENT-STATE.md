@@ -1,6 +1,13 @@
 # Current State — Woodev Plugin Framework
 > Last updated: 2026-06-04 (P6 split-done audit fixes: REST neutrality, HPOS gate, plugin-file contract)
 
+## Autodev digest — 2026-06-04 (loop bootstrap, branch `autodev/loop-bootstrap`)
+> Mirrored from `.autodev/digest.md` (autodev loop §7). This is a SEPARATE workstream from S0/S1.
+- Done: `guard-edostavka-contracts` → commit `6147853` (mutation-verified edostavka contract guards), landed through the conductor (claim → critic → gate → commit).
+- Guards blessed this run: 0 | **pending your blessing: 2** (`shipping_method_id_edostavka`, `settings_option_key_edostavka` — both mutation-proven RED-on-flip; awaiting operator A/B in escalation `bless-guard-edostavka-contracts`).
+- Open escalations: 1 — `.autodev/escalations/bless-guard-edostavka-contracts.md`.
+- Anti-drift (Sonnet, vs tracker intent + diffs, not titles): **ON-TRACK** — the diffs deliver exactly the bootstrap intent (adversarial loop infrastructure + mutation-verified contract guards), additive on the loop branch without touching S0 files.
+
 ## Phase Status
 
 | Phase | Code | Browser-verified | Notes |

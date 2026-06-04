@@ -44,7 +44,9 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
-. (Join-Path (Split-Path -Parent $PSCommandPath) '_common.ps1')
+$here = Split-Path -Parent $PSCommandPath
+. (Join-Path $here '_common.ps1')
+. (Join-Path $here 'watchdog.ps1')   # provides Start-WatchedProcess (clean stdin/stdout/stderr)
 
 $Config = Get-AutodevConfig
 $rtDir = Join-Path $Config.Runtime $TaskId
@@ -143,10 +145,18 @@ $diffText
 "@
 
 $rateLimited = $false
-$stderr = ''
+$combined = ''
+$exit = 1
+$combinedFile = Join-Path $rtDir 'critic-output.txt'
+$prevEAP = $ErrorActionPreference
 try {
     Write-AutodevLog -Level CRITIC -Message "Invoking codex $($Config.CriticModel) ($($Config.CriticEffort)) read-only..." -Config $Config
-    $errFile = Join-Path $rtDir 'critic-stderr.txt'
+    # Call codex via the call operator (resolves codex.cmd on PATH). Temporarily relax
+    # ErrorActionPreference: in PS 5.1, a native command writing to stderr under 'Stop'
+    # raises a terminating error even on exit 0. '*>' captures all streams to a file so we
+    # can inspect them without the pipe-redirect pitfalls. The verdict itself comes from -o.
+    $ErrorActionPreference = 'Continue'
+    if (Test-Path $outFile) { Remove-Item $outFile -Force }
     $prompt | & $Config.CodexExe exec `
         -m $Config.CriticModel `
         -c "model_reasoning_effort=`"$($Config.CriticEffort)`"" `
@@ -156,18 +166,25 @@ try {
         --skip-git-repo-check `
         --output-schema $schemaFile `
         -o $outFile `
-        - 2> $errFile | Out-Null
+        - *> $combinedFile
     $exit = $LASTEXITCODE
-    if (Test-Path $errFile) { $stderr = Get-Content $errFile -Raw }
-    $rateLimited = Test-RateLimited -ExitCode $exit -Stderr $stderr
+    if (Test-Path $combinedFile) { $combined = Get-Content $combinedFile -Raw }
+    # Fallback: if -o was not written, recover the final JSON object from combined output.
+    if (-not (Test-Path $outFile) -and $combined) {
+        $mm = [regex]::Match($combined, '(?s)\{[^{}]*"verdict".*?\}')
+        if ($mm.Success) { Set-Content -Path $outFile -Value $mm.Value -Encoding utf8 }
+    }
+    $rateLimited = Test-RateLimited -ExitCode 1 -Stderr $combined
 }
 catch {
-    $stderr = $_.Exception.Message
+    $combined = $_.Exception.Message
     $exit = 1
 }
 finally {
+    $ErrorActionPreference = $prevEAP
     foreach ($pair in $fenced) { Move-Item -Path $pair[1] -Destination $pair[0] -Force }
 }
+$stderr = $combined
 
 if ($rateLimited) {
     Write-AutodevLog -Level CRITIC -Message "Critic rate-limited; caller should back off." -Config $Config
