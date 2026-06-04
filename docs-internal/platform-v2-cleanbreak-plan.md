@@ -1,5 +1,16 @@
 # Platform v2 — Clean-Break "Finish the Split" Implementation Plan
 
+> 🏁 **STATUS (2026-06-04): SUPERSEDED — this plan is COMPLETE end-to-end.** S0 (P0–P6)
+> landed and was tagged `platform-v2-split-done` (`b9bbaf8`). The **live source of
+> truth** for phase state is now [`platform-v2-program-tracker.md`](platform-v2-program-tracker.md),
+> not the checkboxes below. The unchecked `- [ ]` step boxes in this file are
+> **historical** — they record the original decomposition and are intentionally left
+> as-written (history is not rewritten). Do not act on them; consult the tracker.
+> _Drift note (autodev bootstrap §3b): the deletion inventory below references files
+> that have since moved or been removed (`get_woocommerce_uploads_path()` now lives on
+> `class-woocommerce-plugin.php`; `class-plugin-license-settings.php` is gone). Those
+> are expected post-completion artefacts, not pending work._
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 >
 > **Branch:** all work lands on `refactor/platform-v2-clean-break` (baseline frozen at tag `platform-v2-pivot-baseline`; pristine pre-v2 framework at `platform-v2-pre-refactor`). Never commit this work to `main`.
@@ -169,6 +180,11 @@ P6  "Split done" gate ............................................... pure-WP lo
 ---
 
 ## Phase 3 — Delete internal-API back-compat debt (one cohesive clean-break)
+
+> ✅ **DONE (2026-06-04).** Gate PASSED — commits `711cbae`, `7cc3666`, `4223597`
+> (+ audit fixes); `composer check` green; external GPT-5.5 audit applied. The
+> step checkboxes below are historical and left unchecked on purpose; the
+> [program tracker](platform-v2-program-tracker.md) P3 row is authoritative.
 
 **Objective:** Remove every internal-API shim/alias/legacy path catalogued in the deletion inventory, bounded by in-repo references (per the validation model, no live plugin is rewritten here). Batch into a small number of cohesive commits, not micro-slices. Installed-site data contracts are untouched — class names and registration shapes are internal code, free to break on this branch.
 
