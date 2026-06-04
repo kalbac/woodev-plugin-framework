@@ -59,6 +59,39 @@ function Test-TaskClaimable {
     return $true
 }
 
+function Get-AutodevTaskDependencies {
+    <#
+      depends_on may be absent (StrictMode -> reach it via PSObject), a block list
+      (parsed as an array), or an inline array string ("[]" / "[a, b]"). Normalize all
+      forms to a clean string[] of ids.
+    #>
+    param([pscustomobject]$Task)
+    $p = $Task.PSObject.Properties['depends_on']
+    if (-not $p -or $null -eq $p.Value) { return @() }
+    $raw = $p.Value
+    if ($raw -is [array]) {
+        $items = $raw
+    } else {
+        $s = "$raw".Trim()
+        if ($s.StartsWith('[') -and $s.EndsWith(']')) { $s = $s.Substring(1, [Math]::Max(0, $s.Length - 2)) }
+        $items = $s -split ','
+    }
+    return @($items | ForEach-Object { "$_".Trim().Trim('"').Trim("'") } | Where-Object { $_ -ne '' })
+}
+
+function Test-DependenciesMet {
+    <#
+      True if every id in the task's depends_on has a matching file in done/. Tasks are
+      ordered by a dependency DAG, not just alphabetically: claiming a task whose deps are
+      still pending wastes a worker run rediscovering "BLOCKED" that the queue already states.
+    #>
+    param([pscustomobject]$Task, [pscustomobject]$Config = (Get-AutodevConfig))
+    foreach ($dep in (Get-AutodevTaskDependencies -Task $Task)) {
+        if (-not (Test-Path (Join-Path $Config.QueueDone "$dep.md"))) { return $false }
+    }
+    return $true
+}
+
 function Get-AutodevPendingTasks {
     param([pscustomobject]$Config = (Get-AutodevConfig))
     if (-not (Test-Path $Config.QueuePending)) { return @() }
@@ -78,6 +111,11 @@ function Invoke-ClaimNextTask {
         $task = $null
         try { $task = ConvertFrom-AutodevTask -Path $file.FullName }
         catch { Write-AutodevLog -Level WARN -Message "Skipping unparseable pending task $($file.Name)"; continue }
+
+        if (-not (Test-DependenciesMet -Task $task -Config $Config)) {
+            Write-AutodevLog -Message "Task $($task.id) not ready: depends_on not all in done/ (dependency-gated)."
+            continue
+        }
 
         if (-not (Test-TaskClaimable -Task $task -ActiveSets $activeSets)) {
             Write-AutodevLog -Message "Task $($task.id) blocked: file_set intersects an active task (serialized)."
@@ -104,12 +142,19 @@ function Show-ClaimableReport {
     $report = @()
     foreach ($file in Get-AutodevPendingTasks -Config $Config) {
         $task = ConvertFrom-AutodevTask -Path $file.FullName
-        $claimable = Test-TaskClaimable -Task $task -ActiveSets $activeSets
+        $depsMet = Test-DependenciesMet -Task $task -Config $Config
+        $fileDisjoint = Test-TaskClaimable -Task $task -ActiveSets $activeSets
+        $claimable = $depsMet -and $fileDisjoint
         $blockedBy = @()
-        if (-not $claimable) {
+        if (-not $fileDisjoint) {
             foreach ($file2 in Get-ChildItem -Path $Config.QueueActive -Filter '*.md' -File) {
                 $at = ConvertFrom-AutodevTask -Path $file2.FullName
-                if (-not (Test-FileSetsDisjoint -A $task.file_set -B $at.file_set)) { $blockedBy += $at.id }
+                if (-not (Test-FileSetsDisjoint -A $task.file_set -B $at.file_set)) { $blockedBy += "active:$($at.id)" }
+            }
+        }
+        if (-not $depsMet) {
+            foreach ($dep in (Get-AutodevTaskDependencies -Task $task)) {
+                if (-not (Test-Path (Join-Path $Config.QueueDone "$dep.md"))) { $blockedBy += "dep:$dep" }
             }
         }
         $report += [pscustomobject]@{
@@ -127,11 +172,14 @@ function Invoke-SchedulerSelfTest {
     $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("autodev-sched-" + [guid]::NewGuid().ToString('N'))
     $pending = Join-Path $tmp 'queue\pending'
     $active  = Join-Path $tmp 'queue\active'
+    $done    = Join-Path $tmp 'queue\done'
     New-Item -ItemType Directory -Path $pending -Force | Out-Null
     New-Item -ItemType Directory -Path $active  -Force | Out-Null
+    New-Item -ItemType Directory -Path $done    -Force | Out-Null
     $testCfg = $cfg.PSObject.Copy()
     $testCfg.QueuePending = $pending
     $testCfg.QueueActive  = $active
+    $testCfg.QueueDone     = $done
 
     # ACTIVE task A holds class-plugin.php.
     $taskA = @('---', 'id: taskA', 'title: Active task editing class-plugin.php',
@@ -148,15 +196,33 @@ function Invoke-SchedulerSelfTest {
                'file_set:', '  - woodev/class-lifecycle.php', '---')
     Set-Content -Path (Join-Path $pending 'taskC.md') -Encoding utf8 -Value $taskC
 
+    # DONE task depDone exists -> a dependency on it is satisfied.
+    Set-Content -Path (Join-Path $done 'depDone.md') -Encoding utf8 -Value @('---', 'id: depDone', 'file_set:', '  - woodev/class-done.php', '---')
+
+    # PENDING task D: disjoint, depends on depDone (in done/) => MUST be claimable.
+    $taskD = @('---', 'id: taskD', 'title: Pending task, dependency satisfied',
+               'file_set:', '  - woodev/class-d.php', 'depends_on:', '  - depDone', '---')
+    Set-Content -Path (Join-Path $pending 'taskD.md') -Encoding utf8 -Value $taskD
+
+    # PENDING task E: disjoint, depends on depMissing (NOT in done/) => MUST be dependency-gated.
+    $taskE = @('---', 'id: taskE', 'title: Pending task, dependency unmet',
+               'file_set:', '  - woodev/class-e.php', 'depends_on:', '  - depMissing', '---')
+    Set-Content -Path (Join-Path $pending 'taskE.md') -Encoding utf8 -Value $taskE
+
     $report = Show-ClaimableReport -Config $testCfg
     $b = $report | Where-Object { $_.id -eq 'taskB' }
     $c = $report | Where-Object { $_.id -eq 'taskC' }
+    $d = $report | Where-Object { $_.id -eq 'taskD' }
+    $e = $report | Where-Object { $_.id -eq 'taskE' }
 
-    $pass = ($b.claimable -eq $false) -and ($b.blocked_by -eq 'taskA') -and ($c.claimable -eq $true)
+    $pass = ($b.claimable -eq $false) -and ($b.blocked_by -eq 'active:taskA') -and `
+            ($c.claimable -eq $true) -and `
+            ($d.claimable -eq $true) -and `
+            ($e.claimable -eq $false) -and ($e.blocked_by -eq 'dep:depMissing')
 
-    Write-Host "--- Scheduler file-set serialization self-test ---"
+    Write-Host "--- Scheduler serialization + dependency self-test ---"
     $report | Format-Table -AutoSize | Out-String | Write-Host
-    Write-Host "Expected: taskB blocked by taskA (overlap on class-plugin.php); taskC claimable (disjoint)."
+    Write-Host "Expected: B blocked by active:taskA; C claimable; D claimable (dep depDone in done/); E gated by dep:depMissing."
 
     # Also prove the atomic claim actually serializes: claiming must take C, never B.
     $claimed = Invoke-ClaimNextTask -Config $testCfg
