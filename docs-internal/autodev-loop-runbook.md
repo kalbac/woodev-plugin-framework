@@ -18,15 +18,26 @@
 
 | Role | Tool | Context | Lifetime |
 |---|---|---|---|
+| **Planner** | human, or a planning agent whose decomposition the human blesses | — | upstream of the loop; produces tasks, not in it |
 | **Conductor** | dumb PowerShell script, no LLM | none | immortal — holds loop / gate / fallbacks |
 | **Worker** | `claude -p` (Opus→Sonnet→Haiku) | fresh per task | disposable |
-| **Critic** | `codex exec` GPT-5.5 high | fresh per diff | disposable |
-| **Anti-drift** | `claude -p` (Sonnet), periodic | fresh | disposable |
+| **Critic** | `codex exec` GPT-5.5 high — repo-read, fenced from worker rationale | fresh per diff | disposable |
+| **Anti-drift** | `claude -p` (Sonnet), periodic — checks work against phase *intent* | fresh | disposable |
 
 Principle: **agents are cattle, not pets — disposable; state lives on disk.**
 All "permission to commit" lives in the conductor + tests; all "intelligence"
 lives in the worker/critic. The conductor never reasons; it only routes files and
 runs the gate, so it has no context to rot and no rate limit to hit.
+
+**The loop is an executor, not a planner.** It consumes well-formed tasks from
+`queue/pending/`; it does not invent them. A **Planner** (the operator, or a
+planning agent whose decomposition the operator blesses) cuts a phase into tasks
+that are right-sized and **file-disjoint**, each declaring its `file_set`. The
+conductor serializes any two queued tasks whose `file_set`s intersect — two tasks
+editing the same file must never run in parallel worktrees, or the worktrees
+diverge and integration conflicts (this is exactly how P4's tasks 2–4, all editing
+`class-plugin.php`, would collide). Decomposition quality is itself a judgment act;
+keeping it upstream of the loop prevents `TOO_BIG` bounces and file contention.
 
 ## 1. Blackboard — file layout
 
@@ -113,6 +124,11 @@ Output (write to .autodev/runtime/{task-id}/):
 - diff.patch  = `git diff` of your change
 - worker-report.md with: status (DONE|TOO_BIG|NEEDS_GUARD|BLOCKED),
   files_touched[], one-line rationale, and "contract_zones_touched: [...]"
+- if the task WRITES A GUARD: also emit mutation-recipe.json — the exact
+  { file, locator (line or regex), canonical_value, mutated_value } the conductor
+  must flip to prove the guard goes RED. A contract with no machine-checkable recipe
+  (cron-payload shape, DB schema) is NOT auto-blessable — mark the guard human-only;
+  do not pretend the gate can verify it.
 - Touch heartbeat file every significant step.
 
 Do NOT claim success. Do NOT run the gate. The conductor judges you.
@@ -129,7 +145,15 @@ INPUTS:
 - diff:        .autodev/runtime/{task-id}/diff.patch
 - invariants:  .autodev/INVARIANTS.md
 - guards:      .autodev/GUARDS.md
-You are NOT given the worker's rationale. Do not ask for it. Judge the diff alone.
+- the repository, READ-ONLY (grep / Serena). USE IT. A contract break is often
+  invisible in the patch: a removed method whose NAME is a contract, an external
+  string/hook reference, a load-order regression. Reason about the whole repo, not
+  only the changed lines (the P3 backwards_compatible regression was found exactly
+  this way — by reasoning about the full load loop, not the deleted lines).
+You are FENCED from the worker's reasoning: do NOT read
+.autodev/runtime/**/worker-report.md or the worker's commit message. Repo access is
+for facts, never for the author's justification — anchoring on the worker's
+rationale is the one thing you must avoid.
 
 Check, in order:
 1. Does the diff touch any contract zone in INVARIANTS? List each touch.
@@ -151,7 +175,8 @@ When in doubt -> "uncertain" (this routes to human, never to silent pass).
 
 ```text
 loop forever:
-  task = claim_next(queue/pending -> queue/active)   # atomic move
+  task = claim_next(queue/pending -> queue/active)   # atomic move; SKIP any task whose
+                                                     # file_set intersects an active task
   if none: sleep 30s; run_periodic_jobs(); continue
 
   worktree = ensure_worktree(task.id)                # ISOLATION: one wt per task
@@ -161,14 +186,16 @@ loop forever:
   if attempts > 3:
       move task -> quarantine/ ; escalate("poison task", task) ; continue
 
-  # ---- WORKER (with model fallback ladder) ----
-  for model in [opus, sonnet, haiku-or-openrouter]:
+  # ---- WORKER (model fallback ladder) ----
+  # contract-zone work is NEVER silently downgraded by a timing 429 — it pauses.
+  ladder = task.touches_contract_zone ? [opus] : [opus, sonnet, haiku-or-openrouter]
+  for model in ladder:
       r = run_with_watchdog( claude -p --model {model} <WORKER_PROMPT>, wt,
                              timeout=20m, heartbeat=runtime/task/heartbeat )
       if r.rate_limited:        continue   # FALLBACK 1a: tier down / next provider
       if r.timed_out_no_hb:     break_and_respawn()   # WATCHDOG
       break
-  if all models rate_limited:
+  if r.rate_limited (whole ladder exhausted, incl. contract-zone single-model):
       sleep_until_window_reset()           # FALLBACK 1b: backoff, lose nothing
       release task -> pending ; continue
 
@@ -177,8 +204,12 @@ loop forever:
   if report.status == NEEDS_GUARD: escalate("needs guard", task); continue
   if report.status == BLOCKED:    escalate("blocked", task); continue
 
-  # ---- CRITIC ----
-  verdict = run( codex exec gpt-5.5-high <CRITIC_PROMPT> )   # fallback: openrouter critic if codex down
+  # ---- CRITIC (tiered by a MECHANICAL signal — never a judgment call) ----
+  # expensive GPT-5.5 critic IF: diff touches a contract zone OR diff > N lines.
+  # else (zone-free AND small): cheap critic, or machine-gate-only.
+  # "nontrivial" must stay mechanical (line count / zone grep) — never an LLM pre-call,
+  # or the tiering re-introduces the very cost it saves.
+  verdict = run( select_critic(diff) )   # gpt-5.5-high | cheap | none; openrouter fallback if codex down
   if verdict == uncertain:        escalate("critic uncertain", task, verdict); continue
   if verdict == broken:
       if round < 2: feed verdict back to a fresh worker; round++; retry
@@ -192,7 +223,9 @@ loop forever:
       guard = GUARDS.lookup(z)
       if not guard:                         escalate("no guard for contract", task, z); continue_outer
       if not mutation_check(guard):         escalate("guard not protecting", task, z); continue_outer
-      # mutation_check = break contract -> assert guard test goes RED -> revert
+      # mutation_check uses the guard's mutation-recipe (file, locator, canonical->mutated)
+      # to flip the contract, assert the guard goes RED, then revert. NO recipe -> not
+      # auto-checkable -> the contract stays human-gated (never silently "guarded").
 
   # ---- COMMIT (checkpoint) ----
   git commit -m "<type>(autodev): {task.title} ..."
@@ -204,7 +237,7 @@ loop forever:
 
 | Scenario | Detection | Conductor reaction |
 |---|---|---|
-| **1. Rate limit / 429** | CLI exit code / error string | step down the model ladder → switch provider (OpenRouter overflow) → if all out: `sleep_until_window_reset` + return task to pending (nothing lost) |
+| **1. Rate limit / 429** | CLI exit code / error string | step down the model ladder → switch provider (OpenRouter overflow) → if all out: `sleep_until_window_reset` + return task to pending (nothing lost). **Contract-zone tasks never downgrade** — a license-zone edit must not land on Haiku just because Opus is busy; it pauses instead |
 | **2. Context bloat** | not detected — **prevented**: 1 task = 1 fresh session; worker self-reports `TOO_BIG` | too-big task → decompose into queue, no code |
 | **3. Session restart** | agent died / killed | non-event: new agent reads blackboard + git + `CURRENT-STATE.md`; checkpoint = git commit after gate; idempotency via `done/` |
 
@@ -227,7 +260,11 @@ loop forever:
 **Option B:** ...
 **Cost of being wrong:** {e.g. "breaks license activation on live sites"}
 **Evidence:** diff excerpt + critic verdict + relevant INVARIANT line.
-**Reply:** `A` / `B` / free text. Until you reply, this task is parked (others continue).
+**Reply:** `A` / `B` — structured choice only. Free-form text is recorded for the
+operator's context but is **never** fed to a worker as an instruction: Telegram is
+an injection surface (the skill itself warns of prompt-injection), so escalation
+replies *select among options*, they do not author work. Until you reply, this task
+is parked (others continue).
 ```
 
 The escalation **re-hydrates** the owner with context — decide in 2 minutes
@@ -244,8 +281,15 @@ without knowing the history.
 - Anti-drift check: {result of periodic PLANS.md conformance}
 ```
 
-Anti-drift critic runs every M commits: "compare `done/` against `PLANS.md` — are
-we still doing what it says?" → one line in the digest.
+Anti-drift critic runs every M commits — and this is the highest-value safeguard in
+the whole design, so invest the most context budget here. It does **NOT** compare
+commit titles; that is far too shallow to catch real drift (a task can technically
+close "minimize the resolver" while missing the point entirely). It is given the
+**phase intent and goals from `platform-v2-program-tracker.md`** plus the actual
+**diffs** of the recent `done/` tasks, and asked: *"does this work advance the
+phase's stated intent, or has it wandered — satisfied the letter of the tasks while
+missing their purpose?"* This is the one defence against the exact failure the whole
+effort exists to prevent: green gate, wrong direction.
 
 ## 8. Decision map
 
@@ -260,6 +304,20 @@ worker change -> critic
         contract, no guard ─► HUMAN (needs guard)
         no contract ───────► COMMIT
 ```
+
+## 9. Where to deploy this (ROI)
+
+Do **not** build this loop for the tail of S0 — P5 (resolver minimization) + P6
+(gate) is ≈1.5 tasks, and the infrastructure cost dwarfs the payoff. **Finish S0 by
+hand** (it is nearly done and cheap). The loop's economics only work on a module
+with dozens of tasks: **S1 (shipping) is the real target.**
+
+Sequence: finish S0 manually → build and prove the loop on the **contract-guard
+workload** → deploy the autonomous loop on S1. The guard workload is not throwaway
+validation: those mutation-verified guards are permanent production safety — they
+protect the installed-site data contracts through all of S1 *and* the later
+per-plugin migrations. So the guards get written regardless of whether full
+autonomy is ever switched on.
 
 ## Related
 
