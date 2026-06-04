@@ -6,7 +6,9 @@
 **Last updated:** 2026-06-04
 
 ## Next action
-⏸ **S0 / Phase 4 — external audit pending (key gate).** Build complete: `Translation_Handler` (`dc4f661`) + `Cron_Handler` (`9acb359`) extracted; action-links/api-logging deliberately left (polymorphic); WC seam `add_woocommerce_hooks()` removed (`dd47b99`) — base is WC-name-free, 1296/77 (was 1435/87). `composer check` green 190/508. **Operator: run `docs-internal/reviews/p4-decomposition-audit-packet.md` through GPT-5.5.** After resolved → Phase 5 (re-minimize resolver, ADR-003).
+▶️ **S0 / Phase 5 — re-minimize the resolver (ADR-003).** Done WITH Claude (operator decision 2026-06-04: continue this format through to S1, P5 not in autodev loop). Per `cleanbreak-plan.md` Phase 5. P4 gate PASSED — external audit (GPT-5.5) caught a real HPOS-declaration timing bug (declaring in `Woocommerce_Plugin::__construct()` misses `before_woocommerce_init`); fixed by declaring early from loader-definition `supported_features` metadata in `register_loader_definition()` (`ae84d9d`), verified green 191/510.
+
+> **P4 cleanup follow-up (do at P5 start or P6 tidy):** `Woocommerce_Plugin::handle_features_compatibility()` + the base empty stub are now ORPHANED (feature-compat moved to the bootstrap closure). Remove both + the 2 `WoocommercePluginTest` cases that call them, and migrate the pure-WP neutrality assertion (old `test_wordpress_plugin_feature_compatibility_is_runtime_neutral`) to a bootstrap-level negative test (PLATFORM_WORDPRESS def → no `before_woocommerce_init` hook). GPT added only the positive case.
 
 > **Parallel workstream (operator-initiated 2026-06-04):** the autodev adversarial-loop bootstrap (`docs-internal/autodev-loop-{runbook,implementation-prompt}.md`) is a SEPARATE session on branch `autodev/loop-bootstrap` — additive (`.autodev/`, `tools/autodev/`), explicitly carved out from S0/P4 to avoid file collision. This session (S0) does NOT touch it; that session does NOT touch S0 files. Doc-drift fix for `cleanbreak-plan.md` Phase 3 is assigned to that bootstrap session (§3b).
 
@@ -28,8 +30,8 @@
 | P1 | CLAUDE.md/AGENTS.md clean-break reconciliation | ✅ done (ADR-005 added; ADR-002 bridge superseded) | no (docs) |
 | P2 | Pilot gate: edostavka-shaped fixture through new path | ✅ **gate PASSED** (`7ebbd20`+`6ed8b72`); internal reviews ✅; ext audit (GPT-5.5) applied — caught real include-order coupling, hardened | done |
 | P3 | Delete internal-API back-compat debt (cohesive) | ✅ **gate PASSED** (`711cbae`,`7cc3666`,`4223597` + audit fixes); green 182/412; internal verify ✅; audit-packet findings applied | done |
-| P4 | Decompose `Woodev_Plugin` (sub-plan) | 🟢 build done (`dc4f661`,`9acb359`,`dd47b99`); base WC-name-free 1296/77; green 190/508; ext audit pending | **yes — packet ready** |
-| P5 | Re-minimize resolver (ADR-003) | ⚪ | no (internal) |
+| P4 | Decompose `Woodev_Plugin` (sub-plan) | ✅ **gate PASSED** (`dc4f661`,`9acb359`,`dd47b99`,`ae84d9d`); base WC-name-free 1296/77; ext audit caught+fixed HPOS-timing bug; green 191/510 | done |
+| P5 | Re-minimize resolver (ADR-003) | 🟡 next (with Claude) | no (internal) |
 | P6 | "Split done" gate | ⚪ | **yes** → tag `platform-v2-split-done` |
 
 ## Decisions on record
