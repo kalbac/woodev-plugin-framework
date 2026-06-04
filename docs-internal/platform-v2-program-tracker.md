@@ -6,7 +6,7 @@
 **Last updated:** 2026-06-04
 
 ## Next action
-⏸ **S0 / Phase 6 — final external audit pending (split-done sign-off).** All P6 verification checks GREEN: pure-WP neutrality suites pass · base 1296/77 (not god-object) · resolver minimal (ADR-003) · zero internal-API residue · `composer check` 190/505. **Operator: run `docs-internal/reviews/p6-split-done-audit-packet.md` through GPT-5.5 (holistic cross-cutting review).** On sign-off → tag `platform-v2-split-done`; **S0 COMPLETE** → S1 (shipping) begins, moving into the autodev loop.
+⏸ **S0 / Phase 6 — awaiting operator decision to tag.** Final holistic audit (GPT-5.5) found+fixed real cross-cutting issues the per-phase reviews missed — base REST WC-coupling (now gated + fail-closed permission fallback), `get_plugin_file()` basename bug, `is_hpos_compatible()` WC-seam on base, HPOS WC-version gate — applied + Claude-verified + 5 regression tests (`743e153`). `composer check` green **195/592**. **Operator decision: tag `platform-v2-split-done` now (verification solid), or one final GPT confirmation on the fix diff first.** On tag → **S0 COMPLETE** → S1 (shipping) begins, moving into the autodev loop.
 
 > **Parallel workstream (operator-initiated 2026-06-04):** the autodev adversarial-loop bootstrap (`docs-internal/autodev-loop-{runbook,implementation-prompt}.md`) is a SEPARATE session on branch `autodev/loop-bootstrap` — additive (`.autodev/`, `tools/autodev/`), explicitly carved out from S0/P4 to avoid file collision. This session (S0) does NOT touch it; that session does NOT touch S0 files. Doc-drift fix for `cleanbreak-plan.md` Phase 3 is assigned to that bootstrap session (§3b).
 
