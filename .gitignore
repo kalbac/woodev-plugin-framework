@@ -26,6 +26,10 @@ opencode.json
 /.claude/settings.local.json
 /.claude/worktrees/
 
+# Autodev loop — ephemeral scratch only (blackboard + queue + escalations stay tracked)
+/.autodev/runtime/
+/.autodev/conductor.log
+
 # OS / editor junk
 .DS_Store
 Thumbs.db
