@@ -6,15 +6,17 @@
 **Last updated:** 2026-06-04
 
 ## Next action
-⏸ **S0 / Phase 6 — awaiting operator decision to tag.** Final holistic audit (GPT-5.5) found+fixed real cross-cutting issues the per-phase reviews missed — base REST WC-coupling (now gated + fail-closed permission fallback), `get_plugin_file()` basename bug, `is_hpos_compatible()` WC-seam on base, HPOS WC-version gate — applied + Claude-verified + 5 regression tests (`743e153`). `composer check` green **195/592**. **Operator decision: tag `platform-v2-split-done` now (verification solid), or one final GPT confirmation on the fix diff first.** On tag → **S0 COMPLETE** → S1 (shipping) begins, moving into the autodev loop.
+🏁 **S0 COMPLETE — tagged `platform-v2-split-done` (`b9bbaf8`, 2026-06-04).** Clean-break platform split done end-to-end; `composer check` green 195/592; every code gate adversarially audited (GPT-5.5).
+
+▶️ **S1 — Shipping universal module** is next, and per operator decision (2026-06-04) it runs **in the autodev adversarial loop** (not hand-driven). Before S1 implementation: write the S1 spec (PVZ-map abstraction first — `woocommerce-yandex-delivery` is the reference; architectural reference = the mature `payment-gateway` module; see audit §7). The autodev bootstrap session (`autodev/loop-bootstrap`) provides the loop; this S0/Claude workstream's role ends at the split-done tag unless the operator directs otherwise.
 
 > **Parallel workstream (operator-initiated 2026-06-04):** the autodev adversarial-loop bootstrap (`docs-internal/autodev-loop-{runbook,implementation-prompt}.md`) is a SEPARATE session on branch `autodev/loop-bootstrap` — additive (`.autodev/`, `tools/autodev/`), explicitly carved out from S0/P4 to avoid file collision. This session (S0) does NOT touch it; that session does NOT touch S0 files. Doc-drift fix for `cleanbreak-plan.md` Phase 3 is assigned to that bootstrap session (§3b).
 
 ## Stage map
 | Stage | Scope | Status | Plan |
 |---|---|---|---|
-| **S0 Platform Split** | clean break + decompose base + minimal resolver (+ `api/` under base) | 🟡 in progress | `platform-v2-cleanbreak-plan.md` (+ base-decomposition sub-plan) |
-| S1 Shipping | universal module; PVZ-map abstraction first | ⚪ planned (spec at S0 gate) | — |
+| **S0 Platform Split** | clean break + decompose base + minimal resolver | ✅ **DONE** (tag `platform-v2-split-done`, 195/592 green) | `platform-v2-cleanbreak-plan.md` (+ base-decomposition sub-plan) |
+| S1 Shipping | universal module; PVZ-map abstraction first | 🟡 next — spec then implement **in autodev loop** | spec TBD |
 | S2 Box-packer | minimal-virtual-box algorithm + neutral wrapper | ⚪ planned (spec at S1 gate) | — |
 | S3 Licensing | `is_need_license` → modern UI → webhooks | ⚪ planned (spec at S2 gate) | — |
 | S4 EDD | `Woodev_EDD_Plugin` (concept in v2.0) | ⚪ deferred | — |
@@ -30,7 +32,7 @@
 | P3 | Delete internal-API back-compat debt (cohesive) | ✅ **gate PASSED** (`711cbae`,`7cc3666`,`4223597` + audit fixes); green 182/412; internal verify ✅; audit-packet findings applied | done |
 | P4 | Decompose `Woodev_Plugin` (sub-plan) | ✅ **gate PASSED** (`dc4f661`,`9acb359`,`dd47b99`,`ae84d9d`); base WC-name-free 1296/77; ext audit caught+fixed HPOS-timing bug; green 191/510 | done |
 | P5 | Re-minimize resolver (ADR-003) | ✅ done — resolver already minimal post-P3 (641 lines, all members ADR-sanctioned); responsibility table + no-extraction decision in ADR-003 | no (internal) |
-| P6 | "Split done" gate | 🟡 next | **yes** → tag `platform-v2-split-done` |
+| P6 | "Split done" gate | ✅ **gate PASSED** (`743e153`); holistic audit caught base-REST neutrality leak + plugin-file bug + is_hpos seam; green 195/592; **tagged `platform-v2-split-done`** | done |
 
 ## Decisions on record
 - D-1 split-first; D-2 clean break + preserve data; D-3 pragmatic base decomposition; D-4 keep thin rendezvous; D-5 pilot=edostavka.
