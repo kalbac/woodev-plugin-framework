@@ -33,7 +33,7 @@ valid JSON. The prose around it is for humans; the JSON is authoritative for the
       "auto_guardable": true,
       "path_globs": [],
       "grep_patterns": ["get_option\\s*\\(", "update_option\\s*\\(", "add_option\\s*\\(", "delete_option\\s*\\(", "register_setting\\s*\\("],
-      "exact_strings": ["woocommerce_edostavka_settings", "woocommerce_edostavka-integration_settings", "wc_edostavka_webhook_ids", "wc_edostavka_shipping_fee_payments", "wc_edostavka_upgraded_to_2_2_2_0"]
+      "exact_strings": ["woocommerce_edostavka_settings", "woocommerce_edostavka-integration_settings", "wc_edostavka_webhook_ids", "wc_edostavka_shipping_fee_payments", "wc_edostavka_upgraded_to_2_2_2_0", "woocommerce_yandex_delivery_settings"]
     },
     {
       "id": "license_and_updater",
@@ -41,7 +41,7 @@ valid JSON. The prose around it is for humans; the JSON is authoritative for the
       "auto_guardable": true,
       "path_globs": ["woodev/licensing/**", "woodev/class-license*.php", "woodev/plugin-updater/**"],
       "grep_patterns": ["license_key", "instance_id", "activation", "download_id", "get_download_id"],
-      "exact_strings": ["cdek_woocommerce_shipping_method_license_key", "216"]
+      "exact_strings": ["cdek_woocommerce_shipping_method_license_key", "216", "821"]
     },
     {
       "id": "shipping_method_id",
@@ -49,7 +49,7 @@ valid JSON. The prose around it is for humans; the JSON is authoritative for the
       "auto_guardable": true,
       "path_globs": ["woodev/shipping-method/**"],
       "grep_patterns": ["\\$this->id\\s*=", "const\\s+METHOD_ID", "get_method_id\\s*\\(", "method_id", "woocommerce_shipping_methods"],
-      "exact_strings": ["edostavka"]
+      "exact_strings": ["edostavka", "yandex_delivery_express", "yandex_delivery_other_day"]
     },
     {
       "id": "gateway_id",
@@ -73,7 +73,7 @@ valid JSON. The prose around it is for humans; the JSON is authoritative for the
       "auto_guardable": false,
       "path_globs": ["woodev/class-lifecycle.php"],
       "grep_patterns": ["wp_schedule_event", "wp_schedule_single_event", "wp_next_scheduled", "wp_clear_scheduled_hook", "_cron"],
-      "exact_strings": ["wc_edostavka_orders_update", "wc_edostavka_orders"]
+      "exact_strings": ["wc_edostavka_orders_update", "wc_edostavka_orders", "wc_yandex_update_order", "wc_yandex_orders_update"]
     },
     {
       "id": "rest",
@@ -81,7 +81,7 @@ valid JSON. The prose around it is for humans; the JSON is authoritative for the
       "auto_guardable": true,
       "path_globs": ["woodev/rest-api/**"],
       "grep_patterns": ["register_rest_route\\s*\\("],
-      "exact_strings": ["wc/v3"]
+      "exact_strings": ["wc/v3", "wc-yandex-delivery"]
     },
     {
       "id": "ajax_actions",
@@ -89,7 +89,7 @@ valid JSON. The prose around it is for humans; the JSON is authoritative for the
       "auto_guardable": true,
       "path_globs": [],
       "grep_patterns": ["wp_ajax_", "wp_ajax_nopriv_"],
-      "exact_strings": ["edostavka_get_deliverypoints", "edostavka_set_customer_location", "edostavka_set_delivery_point", "edostavka_order_action"]
+      "exact_strings": ["edostavka_get_deliverypoints", "edostavka_set_customer_location", "edostavka_set_delivery_point", "edostavka_order_action", "get_yandex_delivery_location_detect", "get_yandex_delivery_shipment_points", "set_yandex_delivery_pickup_point", "set_yandex_delivery_time_interval"]
     },
     {
       "id": "admin_page_slugs",
@@ -97,7 +97,7 @@ valid JSON. The prose around it is for humans; the JSON is authoritative for the
       "auto_guardable": true,
       "path_globs": [],
       "grep_patterns": ["add_menu_page\\s*\\(", "add_submenu_page\\s*\\(", "page=wc_"],
-      "exact_strings": ["wc_edostavka_orders"]
+      "exact_strings": ["wc_edostavka_orders", "wc-yandex-orders"]
     },
     {
       "id": "log_source",
@@ -105,7 +105,7 @@ valid JSON. The prose around it is for humans; the JSON is authoritative for the
       "auto_guardable": true,
       "path_globs": [],
       "grep_patterns": ["'source'\\s*=>", "wc_get_logger", "->log\\s*\\("],
-      "exact_strings": ["edostavka_orders"]
+      "exact_strings": ["edostavka_orders", "yandex-delivery"]
     },
     {
       "id": "order_session_meta",
@@ -113,7 +113,7 @@ valid JSON. The prose around it is for humans; the JSON is authoritative for the
       "auto_guardable": true,
       "path_globs": [],
       "grep_patterns": ["update_post_meta\\s*\\(", "get_post_meta\\s*\\(", "->update_meta_data\\s*\\(", "->get_meta\\s*\\("],
-      "exact_strings": ["_wc_edostavka_", "edostavka_rate", "customer-location", "customer-location-session", "woocommerce_api_wc_edostavka_"]
+      "exact_strings": ["_wc_edostavka_", "edostavka_rate", "customer-location", "customer-location-session", "woocommerce_api_wc_edostavka_", "_yandex_delivery_", "chosen_yandex_pickup_point", "chosen_yandex_pickup_point_test", "chosen_yandex_time_interval"]
     },
     {
       "id": "db_schema",
@@ -121,7 +121,7 @@ valid JSON. The prose around it is for humans; the JSON is authoritative for the
       "auto_guardable": false,
       "path_globs": [],
       "grep_patterns": ["CREATE TABLE", "dbDelta\\s*\\(", "\\$wpdb->prefix"],
-      "exact_strings": []
+      "exact_strings": ["wc_yandex_delivery_warehouses"]
     },
     {
       "id": "background_jobs",
@@ -171,7 +171,23 @@ valid JSON. The prose around it is for humans; the JSON is authoritative for the
 | Admin page slug | `wc_edostavka_orders` | checklist §Web And Admin Surface |
 | Log source | `edostavka_orders` | checklist §Operational Surface |
 
+### Yandex (S1 second pilot — added 2026-06-04)
+
+| Contract | Exact value | Source line |
+|---|---|---|
+| Shipping method IDs | `yandex_delivery_express`, `yandex_delivery_other_day` | yandex checklist §Installed-Site Identity |
+| Primary settings option | `woocommerce_yandex_delivery_settings` | yandex checklist §Options And Settings |
+| EDD download ID | `821` | operator-supplied 2026-06-04 |
+| Cron hooks | `wc_yandex_update_order` (single, payload `['order_id'=>int,'slim'=>bool]`), `wc_yandex_orders_update` (recurring) | yandex checklist §Scheduled Work (auto_guardable:false) |
+| REST namespace | `wc-yandex-delivery` | yandex checklist §Web And Admin Surface |
+| Frontend AJAX | `get_yandex_delivery_location_detect`, `get_yandex_delivery_shipment_points`, `set_yandex_delivery_pickup_point`, `set_yandex_delivery_time_interval` | yandex checklist §Web And Admin Surface |
+| Admin page slug | `wc-yandex-orders` | yandex checklist §Web And Admin Surface |
+| Log source | `yandex-delivery` | yandex checklist §Operational Surface |
+| Order/session meta | `_yandex_delivery_`, `chosen_yandex_pickup_point(_test)`, `chosen_yandex_time_interval` | yandex checklist §Stored Data / Checkout State |
+| Warehouse table | `wc_yandex_delivery_warehouses` | yandex checklist §Stored Data Schemas (auto_guardable:false) |
+
 ## Related
 - `.autodev/GUARDS.md` — which of these zones are mutation-verified-guarded (autonomous).
 - `docs-internal/migration/edostavka-data-preservation-checklist.md` — the authoritative checklist.
+- `docs-internal/migration/yandex-data-preservation-checklist.md` — S1 second-pilot contracts.
 - `CLAUDE.md` → "Backward Compatibility — clean-break policy" — the never-break enumeration.
