@@ -31,3 +31,5 @@ relay `select` → call back into the selection AJAX. Documents the **MapAdapter
 A Yandex adapter implementing the same contract ships in the yandex plugin (not here).
 
 `pickup-map.css`: modal/map layout. No contract zones (assets only).
+
+<!-- committed: eeaa739 -->
