@@ -99,12 +99,19 @@ if ($DryRun) {
 $result = $null
 foreach ($model in $ladder) {
     Write-AutodevLog -Level WORKER -Message "Spawning claude -p --model $model for $TaskId ..." -Config $Config
-    $args = @('-p', '--model', $model, '--permission-mode', 'acceptEdits')
+    # --output-format stream-json + --verbose makes claude emit a JSONL event per step, so
+    # stdout is continuous -- this feeds the watchdog's process-driven liveness signal even
+    # during long read/reason phases that have not yet written any file.
+    $args = @('-p', '--model', $model, '--permission-mode', 'acceptEdits',
+              '--verbose', '--output-format', 'stream-json')
     $r = Start-WatchedProcess -FilePath $Config.ClaudeExe -ArgumentList $args `
             -HeartbeatPath $heartbeat `
             -StaleSeconds ($Config.WatchdogStaleMinutes * 60) `
             -TimeoutSeconds ($Config.WorkerTimeoutMinutes * 60) `
-            -StdinText $prompt -WorkingDirectory $Worktree
+            -StdinText $prompt -WorkingDirectory $Worktree `
+            -StdoutLogPath (Join-Path $rtDir 'worker-stdout.log') `
+            -StderrLogPath (Join-Path $rtDir 'worker-stderr.log') `
+            -ActivityPaths @($rtDir)
 
     if ($r.RateLimited) {
         if ($TouchesContractZone) {

@@ -66,7 +66,7 @@ function Get-AutodevConfig {
 
         # Mechanical thresholds (NEVER an LLM pre-call -- keep tiering mechanical).
         CriticDiffLineThreshold = 40   # diff > N lines -> expensive critic even if zone-free
-        WatchdogStaleMinutes    = 8    # heartbeat older than this -> kill + respawn
+        WatchdogStaleMinutes    = 15   # NO process activity (stdout/file writes/heartbeat) for this long -> kill + respawn
         MaxAttempts             = 3    # attempts > this -> quarantine + escalate
         AntiDriftEveryCommits   = 5    # run anti-drift every M commits
         DigestEveryCommits      = 5    # append digest every N commits

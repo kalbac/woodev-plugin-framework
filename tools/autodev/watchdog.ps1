@@ -42,11 +42,14 @@ function Start-WatchedProcess {
         [Parameter(Mandatory)][string]$FilePath,
         [string[]]$ArgumentList = @(),
         [Parameter(Mandatory)][string]$HeartbeatPath,
-        [int]$StaleSeconds = 480,
+        [int]$StaleSeconds = 900,
         [int]$TimeoutSeconds = 1200,
         [int]$PollSeconds = 5,
         [string]$StdinText = $null,
-        [string]$WorkingDirectory = $null
+        [string]$WorkingDirectory = $null,
+        [string]$StdoutLogPath = $null,
+        [string]$StderrLogPath = $null,
+        [string[]]$ActivityPaths = @()
     )
 
     $psi = New-Object System.Diagnostics.ProcessStartInfo
@@ -72,22 +75,58 @@ function Start-WatchedProcess {
     $proc = [System.Diagnostics.Process]::Start($psi)
     if ($StdinText) { $proc.StandardInput.Write($StdinText); $proc.StandardInput.Close() }
 
-    # Async-read stdout/stderr to avoid pipe deadlock.
-    $stdoutTask = $proc.StandardOutput.ReadToEndAsync()
-    $stderrTask = $proc.StandardError.ReadToEndAsync()
+    # --- Process-driven liveness ----------------------------------------------------
+    # A worker stays "alive" as long as the PROCESS shows activity -- NOT only when the
+    # LLM remembers to touch the heartbeat (models routinely forget during long read/
+    # reason phases, so a model-driven heartbeat kills healthy workers). We stream the
+    # child's stdout/stderr line-by-line; every emitted line bumps a shared last-activity
+    # clock. Run the worker with --output-format stream-json (see invoke-worker.ps1) so
+    # output is continuous, making this a reliable signal even before any file is written.
+    # File writes under $ActivityPaths and the model's own heartbeat touch also count.
+    $shared = [hashtable]::Synchronized(@{
+        LastTicks = [DateTime]::UtcNow.Ticks
+        Out       = New-Object System.Text.StringBuilder
+        Err       = New-Object System.Text.StringBuilder
+    })
+    $sink = {
+        $d = $EventArgs.Data
+        if ($null -ne $d) {
+            $s = $Event.MessageData
+            $s['LastTicks'] = [DateTime]::UtcNow.Ticks
+            if ($Event.SourceIdentifier -like '*-err-*') { [void]$s['Err'].AppendLine($d) }
+            else { [void]$s['Out'].AppendLine($d) }
+        }
+    }
+    $outSid = "wd-out-$($proc.Id)"
+    $errSid = "wd-err-$($proc.Id)"
+    $null = Register-ObjectEvent -InputObject $proc -EventName OutputDataReceived -SourceIdentifier $outSid -Action $sink -MessageData $shared
+    $null = Register-ObjectEvent -InputObject $proc -EventName ErrorDataReceived  -SourceIdentifier $errSid -Action $sink -MessageData $shared
+    $proc.BeginOutputReadLine()
+    $proc.BeginErrorReadLine()
 
     $start = Get-Date
     $timedOut = $false
     while (-not $proc.HasExited) {
         Start-Sleep -Seconds $PollSeconds
-        $now = Get-Date
-        $hbAge = if (Test-Path $HeartbeatPath) {
-            ($now - (Get-Item $HeartbeatPath).LastWriteTime).TotalSeconds
-        } else { ($now - $start).TotalSeconds }
-        $elapsed = ($now - $start).TotalSeconds
 
-        if ($hbAge -gt $StaleSeconds) {
-            Write-AutodevLog -Level WARN -Message "Watchdog: heartbeat stale ($([int]$hbAge)s > ${StaleSeconds}s). Killing PID $($proc.Id)."
+        # Most-recent activity = newest of: process output, worker file writes, model heartbeat.
+        $activity = [DateTime]::new([long]$shared['LastTicks'], [DateTimeKind]::Utc)
+        if (Test-Path $HeartbeatPath) {
+            $hb = (Get-Item $HeartbeatPath).LastWriteTimeUtc
+            if ($hb -gt $activity) { $activity = $hb }
+        }
+        foreach ($p in $ActivityPaths) {
+            if ($p -and (Test-Path $p)) {
+                $newest = Get-ChildItem -Path $p -Recurse -File -Force -ErrorAction SilentlyContinue |
+                    Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1
+                if ($newest -and $newest.LastWriteTimeUtc -gt $activity) { $activity = $newest.LastWriteTimeUtc }
+            }
+        }
+        $idleSeconds = ([DateTime]::UtcNow - $activity).TotalSeconds
+        $elapsed = ((Get-Date) - $start).TotalSeconds
+
+        if ($idleSeconds -gt $StaleSeconds) {
+            Write-AutodevLog -Level WARN -Message "Watchdog: no process activity for $([int]$idleSeconds)s (> ${StaleSeconds}s). Killing PID $($proc.Id)."
             Stop-ProcessTree -ProcessId $proc.Id
             $timedOut = $true
             break
@@ -100,17 +139,25 @@ function Start-WatchedProcess {
         }
     }
     try { $proc.WaitForExit(5000) | Out-Null } catch { }
+    try { $proc.CancelOutputRead() } catch { }
+    try { $proc.CancelErrorRead() } catch { }
+    Start-Sleep -Milliseconds 200   # let trailing OutputDataReceived / ErrorDataReceived events drain
+    Unregister-Event -SourceIdentifier $outSid -ErrorAction SilentlyContinue
+    Unregister-Event -SourceIdentifier $errSid -ErrorAction SilentlyContinue
+    Get-Job | Where-Object { $_.Name -eq $outSid -or $_.Name -eq $errSid } | Remove-Job -Force -ErrorAction SilentlyContinue
 
-    $stdout = ''
-    $stderr = ''
-    try { $stdout = $stdoutTask.GetAwaiter().GetResult() } catch { }
-    try { $stderr = $stderrTask.GetAwaiter().GetResult() } catch { }
+    $stdout = $shared['Out'].ToString()
+    $stderr = $shared['Err'].ToString()
     $exit = if ($proc.HasExited) { $proc.ExitCode } else { -1 }
+
+    # Persist worker output for postmortem (previously discarded -> failures were invisible).
+    if ($StdoutLogPath) { Set-Content -Path $StdoutLogPath -Value $stdout -Encoding utf8 }
+    if ($StderrLogPath) { Set-Content -Path $StderrLogPath -Value $stderr -Encoding utf8 }
 
     return [pscustomobject]@{
         ExitCode    = $exit
         TimedOut    = $timedOut
-        RateLimited = (Test-RateLimited -ExitCode $exit -Stderr $stderr)
+        RateLimited = (Test-RateLimited -ExitCode $exit -Stderr ($stderr + "`n" + $stdout))
         Stdout      = $stdout
         Stderr      = $stderr
     }

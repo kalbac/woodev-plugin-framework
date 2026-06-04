@@ -85,7 +85,9 @@ function Invoke-MutationCheck {
 
         # 2. MUTATE
         $text = [System.IO.File]::ReadAllText($targetFile, [System.Text.Encoding]::UTF8)
-        if ($text -notlike "*$($recipe.locator)*") {
+        # Literal substring check -- NOT -like: a locator with PHP syntax ('[]', '*', '?')
+        # is not a wildcard pattern and would throw WildcardPatternException under -like.
+        if (-not $text.Contains($recipe.locator)) {
             Write-Maybe "[mutation-check] FAIL: locator not found in $($recipe.file) (stale recipe)."
             return 1
         }
