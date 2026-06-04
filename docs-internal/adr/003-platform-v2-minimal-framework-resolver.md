@@ -71,6 +71,33 @@ Follow-up requirements:
 - Define resolver tests for multi-version arbitration, platform requirement checks, pure WordPress loading without WooCommerce, and WooCommerce plugin skipping when WooCommerce is unavailable.
 - Decide the minimal legacy adapter surface that remains necessary during production plugin rewrites.
 
+## Post-Implementation Verification — P5 minimization pass (2026-06-04)
+
+After the P3 clean break (legacy adapter removed) and P4 base decomposition, `Framework_Resolver` is **641 lines / 15 public + 7 protected members**. Every member maps to an ADR-sanctioned responsibility; the resolver does **none** of the "does not own" list.
+
+| Resolver member(s) | Owned responsibility (above) | Verdict |
+|---|---|---|
+| `register_loader_definition` | Plugin registration normalization | core ✓ |
+| `load_plugins` | Highest-compatible selection + invocation + final `woodev_plugins_loaded` timing | core ✓ |
+| `framework_compare`, `get_framework_version`, `get_plugin_path` | Framework version & path arbitration | core ✓ |
+| `fails_php_requirement`, `fails_wordpress_requirement`, `fails_woocommerce_requirement`, `get_wc_version` | PHP/WP/framework/platform requirement checks | core ✓ |
+| `load_early_capability_classes` | Early platform class availability before callbacks | core ✓ |
+| `invoke_plugin` | Plugin callback / main-class invocation | core ✓ |
+| `get_incompatible_{framework,php,wp,wc}_plugins`, `get_invalid_loader_definitions`, `has_update_notices` | Incompatible registration tracking | core ✓ |
+| `render_update_notices`, `maybe_deactivate_framework_plugins` | Admin notices + deactivation recovery (renderers **injected** via constructor — H2, so the resolver emits no HTML itself) | core ✓ |
+| `get_registered_plugins`, `get_active_plugins` | Registration/active state exposure | core ✓ |
+| `__construct(?callable, ?callable)` | DI of the two notice renderers (decouples admin rendering from the kernel) | core ✓ |
+
+**Does-not-own check:** no payment-gateway/shipping/licensing internals, no plugin data migrations, no runtime WooCommerce behavior (HPOS/Blocks/logger/templates/REST status/settings), no EDD runtime. All clear.
+
+**Decisions (P5):**
+
+- **No further extraction.** The real non-core debt was the legacy adapter (`register_legacy_plugin` / `from_legacy_registration` / the `is_payment_gateway`/`load_shipping_method` flag mapping) — removed in P3. The remaining members are all ADR-sanctioned core.
+- **The compatibility-reporting cluster stays (not extracted into a `Compatibility_Report` object).** Extraction would only reorganize internal state *behind the `Woodev_Plugin_Bootstrap` facade that consumes these getters* — it would not shrink the effective public contract, and it adds indirection. Declined per `platform-v2-cleanbreak-plan.md` Step 5.2 ("if extraction adds indirection without clarity, document why the methods stay"). *Optional future internal tidy (not required for "minimal"):* collapse the four parallel `incompatible_*` arrays into one reason-keyed map — DRY only, no behavior change.
+- **Bounded exception, recorded:** early WooCommerce HPOS/Blocks feature-compatibility declaration lives in `Woodev_Plugin_Bootstrap::register_loader_definition()` (NOT the resolver). ADR-003 lists HPOS/Blocks as runtime WC behavior the resolver must not own — and it does not. The bootstrap hosts it because `before_woocommerce_init` can fire before the resolver constructs plugin instances, so the early `add_action` must be registered at registration time when only the bootstrap is loaded. It is data-driven (reads loader-definition `supported_features`) and defers `FeaturesUtil` to the hook with a `class_exists` guard — the minimal platform decision that genuinely must live in the early layer.
+
+**Kernel discipline (ADR Consequences "prevent the resolver from becoming a second framework kernel"):** the resolver-boundary negative test (resolver must not own runtime platform behavior) stays green; `composer check` green at 190 tests / 505 assertions.
+
 ## Related
 
 - [PLANS.md](../../PLANS.md) — target platform-first architecture and open bootstrap question.

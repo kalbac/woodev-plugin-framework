@@ -6,9 +6,7 @@
 **Last updated:** 2026-06-04
 
 ## Next action
-▶️ **S0 / Phase 5 — re-minimize the resolver (ADR-003).** Done WITH Claude (operator decision 2026-06-04: continue this format through to S1, P5 not in autodev loop). Per `cleanbreak-plan.md` Phase 5. P4 gate PASSED — external audit (GPT-5.5) caught a real HPOS-declaration timing bug (declaring in `Woocommerce_Plugin::__construct()` misses `before_woocommerce_init`); fixed by declaring early from loader-definition `supported_features` metadata in `register_loader_definition()` (`ae84d9d`), verified green 191/510.
-
-> **P4 cleanup follow-up (do at P5 start or P6 tidy):** `Woocommerce_Plugin::handle_features_compatibility()` + the base empty stub are now ORPHANED (feature-compat moved to the bootstrap closure). Remove both + the 2 `WoocommercePluginTest` cases that call them, and migrate the pure-WP neutrality assertion (old `test_wordpress_plugin_feature_compatibility_is_runtime_neutral`) to a bootstrap-level negative test (PLATFORM_WORDPRESS def → no `before_woocommerce_init` hook). GPT added only the positive case.
+▶️ **S0 / Phase 6 — "split done" gate (final key gate).** Run the verification checklist (pure-WP loads · base not god-object · resolver minimal · zero internal-API residue · green), produce the P6 external-audit packet for final sign-off, then tag `platform-v2-split-done`. P5 ✅ done (resolver verified minimal, responsibility table in ADR-003, no extraction needed — `093dd0d` orphan cleanup + `<p5 commit>` ADR). P4 orphan follow-up ✅ resolved (`093dd0d`).
 
 > **Parallel workstream (operator-initiated 2026-06-04):** the autodev adversarial-loop bootstrap (`docs-internal/autodev-loop-{runbook,implementation-prompt}.md`) is a SEPARATE session on branch `autodev/loop-bootstrap` — additive (`.autodev/`, `tools/autodev/`), explicitly carved out from S0/P4 to avoid file collision. This session (S0) does NOT touch it; that session does NOT touch S0 files. Doc-drift fix for `cleanbreak-plan.md` Phase 3 is assigned to that bootstrap session (§3b).
 
@@ -31,8 +29,8 @@
 | P2 | Pilot gate: edostavka-shaped fixture through new path | ✅ **gate PASSED** (`7ebbd20`+`6ed8b72`); internal reviews ✅; ext audit (GPT-5.5) applied — caught real include-order coupling, hardened | done |
 | P3 | Delete internal-API back-compat debt (cohesive) | ✅ **gate PASSED** (`711cbae`,`7cc3666`,`4223597` + audit fixes); green 182/412; internal verify ✅; audit-packet findings applied | done |
 | P4 | Decompose `Woodev_Plugin` (sub-plan) | ✅ **gate PASSED** (`dc4f661`,`9acb359`,`dd47b99`,`ae84d9d`); base WC-name-free 1296/77; ext audit caught+fixed HPOS-timing bug; green 191/510 | done |
-| P5 | Re-minimize resolver (ADR-003) | 🟡 next (with Claude) | no (internal) |
-| P6 | "Split done" gate | ⚪ | **yes** → tag `platform-v2-split-done` |
+| P5 | Re-minimize resolver (ADR-003) | ✅ done — resolver already minimal post-P3 (641 lines, all members ADR-sanctioned); responsibility table + no-extraction decision in ADR-003 | no (internal) |
+| P6 | "Split done" gate | 🟡 next | **yes** → tag `platform-v2-split-done` |
 
 ## Decisions on record
 - D-1 split-first; D-2 clean break + preserve data; D-3 pragmatic base decomposition; D-4 keep thin rendezvous; D-5 pilot=edostavka.
