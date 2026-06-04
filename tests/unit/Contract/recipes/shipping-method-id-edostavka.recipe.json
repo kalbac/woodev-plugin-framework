@@ -1,0 +1,10 @@
+{
+  "zone_id": "shipping_method_id",
+  "contract_id": "shipping_method_id_edostavka",
+  "description": "Installed-site WC shipping-method ID must stay exactly 'edostavka' (merchants' shipping-zone rows key on method_id).",
+  "file": "tests/_fixtures/woodev-edostavka-pilot-plugin/includes/class-edostavka-pilot-shipping-method.php",
+  "locator": "const METHOD_ID = 'edostavka';",
+  "canonical_value": "edostavka",
+  "mutated_value": "edostavka__MUTATED__",
+  "guard_test": "tests/unit/Contract/ShippingMethodIdContractTest.php"
+}

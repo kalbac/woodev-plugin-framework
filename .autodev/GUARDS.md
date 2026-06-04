@@ -16,7 +16,8 @@
 
 | contract_id | contract_value | guard_test | recipe | mutation_verified | blessed_by | date |
 |-------------|----------------|------------|--------|-------------------|------------|------|
-<!-- empty at the start: almost everything escalates. Guard workloads fill this table; the operator blesses each row once. -->
+| shipping_method_id_edostavka | `edostavka` | `tests/unit/Contract/ShippingMethodIdContractTest.php` | `tests/unit/Contract/recipes/shipping-method-id-edostavka.recipe.json` | yes (red on flip) | pending-operator | 2026-06-04 |
+| settings_option_key_edostavka | `woocommerce_edostavka_settings` | `tests/unit/Contract/SettingsOptionKeyContractTest.php` | `tests/unit/Contract/recipes/settings-option-key-edostavka.recipe.json` | yes (red on flip) | pending-operator | 2026-06-04 |
 
 ## Notes
 - `mutation_verified: yes (red on flip)` is recorded only after a real run of

@@ -1,0 +1,10 @@
+{
+  "zone_id": "option_keys",
+  "contract_id": "settings_option_key_edostavka",
+  "description": "Installed-site WP settings option key must stay exactly 'woocommerce_edostavka_settings'.",
+  "file": "tests/_fixtures/woodev-edostavka-pilot-plugin/includes/class-edostavka-pilot-integration.php",
+  "locator": "const SETTINGS_OPTION_NAME = 'woocommerce_edostavka_settings';",
+  "canonical_value": "woocommerce_edostavka_settings",
+  "mutated_value": "woocommerce_edostavka_settings__MUTATED__",
+  "guard_test": "tests/unit/Contract/SettingsOptionKeyContractTest.php"
+}
