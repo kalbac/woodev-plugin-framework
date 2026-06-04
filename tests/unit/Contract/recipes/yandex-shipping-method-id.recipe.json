@@ -1,0 +1,10 @@
+{
+  "zone_id": "shipping_method_id",
+  "contract_id": "shipping_method_id_yandex_express",
+  "description": "Installed-site WC shipping-method ID must stay exactly 'yandex_delivery_express' (merchants' shipping-zone rows key on method_id). The paired guard also asserts 'yandex_delivery_other_day'; this recipe demonstrates the RED-on-flip mechanism on the express ID.",
+  "file": "plugins-reference/woocommerce-yandex-delivery/includes/class-shipping-method-express.php",
+  "locator": "'yandex_delivery_express'",
+  "canonical_value": "yandex_delivery_express",
+  "mutated_value": "yandex_delivery_express__MUTATED__",
+  "guard_test": "tests/unit/Contract/YandexShippingMethodIdContractTest.php"
+}

@@ -1,0 +1,10 @@
+{
+  "zone_id": "db_schema",
+  "contract_id": "warehouse_table_name_yandex",
+  "description": "Installed-site custom table NAME must stay exactly 'wc_yandex_delivery_warehouses'. NAME ONLY is guarded; the table SCHEMA is auto_guardable:false (human-only) and is NOT claimed guarded by this recipe.",
+  "file": "plugins-reference/woocommerce-yandex-delivery/includes/class-lifecycle.php",
+  "locator": "CREATE TABLE {$wpdb->prefix}wc_yandex_delivery_warehouses",
+  "canonical_value": "wc_yandex_delivery_warehouses",
+  "mutated_value": "wc_yandex_delivery_warehouses__MUTATED__",
+  "guard_test": "tests/unit/Contract/YandexWarehouseTableContractTest.php"
+}
