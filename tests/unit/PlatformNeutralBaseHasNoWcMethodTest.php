@@ -27,6 +27,11 @@ class PlatformNeutralBaseHasNoWcMethodTest extends TestCase {
 	public function test_base_declares_no_woocommerce_named_method(): void {
 		$reflection = new \ReflectionClass( \Woodev_Plugin::class );
 
+		$forbidden_terms = [
+			'woocommerce',
+			'hpos',
+		];
+
 		foreach ( $reflection->getMethods() as $method ) {
 
 			// Only assert on methods actually declared on the base, regardless of visibility.
@@ -34,11 +39,13 @@ class PlatformNeutralBaseHasNoWcMethodTest extends TestCase {
 				continue;
 			}
 
-			$this->assertStringNotContainsStringIgnoringCase(
-				'woocommerce',
-				$method->getName(),
-				'Woodev_Plugin (platform-neutral base) must declare no WooCommerce-named method'
-			);
+			foreach ( $forbidden_terms as $term ) {
+				$this->assertStringNotContainsStringIgnoringCase(
+					$term,
+					$method->getName(),
+					'Woodev_Plugin (platform-neutral base) must declare no WooCommerce/HPOS method'
+				);
+			}
 		}
 	}
 }

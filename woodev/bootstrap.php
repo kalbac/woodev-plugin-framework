@@ -104,10 +104,14 @@ if ( ! class_exists( 'Woodev_Plugin_Bootstrap' ) ) :
 						return;
 					}
 
+					$hpos_compatible = true === $supported_features['hpos']
+						&& defined( 'WC_VERSION' )
+						&& version_compare( WC_VERSION, '7.6', '>=' );
+
 					\Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility(
 						'custom_order_tables',
 						$plugin_file,
-						true === $supported_features['hpos']
+						$hpos_compatible
 					);
 
 					$blocks_compatible = true === $supported_features['blocks']['cart']

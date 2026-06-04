@@ -22,7 +22,14 @@ if ( ! class_exists( '\WP_REST_Controller', false ) ) {
 	/**
 	 * Minimal WordPress REST controller stub for isolated unit construction.
 	 */
-	class WP_REST_Controller_Test_Stub {}
+	class WP_REST_Controller_Test_Stub {
+
+		/** @var string */
+		protected $namespace;
+
+		/** @var string */
+		protected $rest_base;
+	}
 
 	class_alias( WP_REST_Controller_Test_Stub::class, 'WP_REST_Controller' );
 }

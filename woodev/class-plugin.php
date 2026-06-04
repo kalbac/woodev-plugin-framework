@@ -824,25 +824,12 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		}
 
 		/**
-		 * Determines whether the plugin supports HPOS.
-		 *
-		 * @since 1.2.0
-		 *
-		 * @return bool
-		 */
-		public function is_hpos_compatible() {
-			return false;
-		}
-
-		/**
 		 * Gets the main plugin file.
 		 *
 		 * @return string
 		 */
 		public function get_plugin_file() {
-			$slug = dirname( plugin_basename( $this->get_file() ) );
-
-			return trailingslashit( $slug ) . $slug . '.php';
+			return plugin_basename( $this->get_file() );
 		}
 
 		/**

@@ -134,9 +134,15 @@ class BootstrapRegistrationTest extends TestCase {
 
 	/**
 	 * WooCommerce feature compatibility should be wired before plugins_loaded.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
 	 */
 	public function test_register_loader_definition_wires_early_woocommerce_feature_compatibility(): void {
 		$registered_hooks = [];
+		if ( ! defined( 'WC_VERSION' ) ) {
+			define( 'WC_VERSION', '7.6.0' );
+		}
 
 		Functions\when( 'add_action' )->alias(
 			static function ( string $hook, $callback ) use ( &$registered_hooks ): void {
@@ -189,6 +195,70 @@ class BootstrapRegistrationTest extends TestCase {
 			[
 				[ 'custom_order_tables', '/path/to/plugin/wc-feature-plugin.php', true ],
 				[ 'cart_checkout_blocks', '/path/to/plugin/wc-feature-plugin.php', false ],
+			],
+			\Automattic\WooCommerce\Utilities\FeaturesUtil::$declared
+		);
+	}
+
+	/**
+	 * HPOS compatibility declarations should match the runtime WC >= 7.6 guard.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_register_loader_definition_requires_wc_76_for_hpos_compatibility(): void {
+		$registered_hooks = [];
+		define( 'WC_VERSION', '7.5.0' );
+
+		Functions\when( 'add_action' )->alias(
+			static function ( string $hook, $callback ) use ( &$registered_hooks ): void {
+				$registered_hooks[] = [ $hook, $callback ];
+			}
+		);
+
+		$this->reset_woocommerce_features_util_stub();
+
+		$bootstrap = \Woodev_Plugin_Bootstrap::instance();
+		$bootstrap->register_loader_definition(
+			$this->loader_definition(
+				'wc-feature-plugin',
+				'WC Feature Plugin',
+				'2.0.0',
+				[
+					'plugin_file'        => '/path/to/plugin/wc-feature-plugin.php',
+					'platform'           => \Woodev\Framework\Framework_Plugin_Loader_Definition::PLATFORM_WOOCOMMERCE,
+					'requirements'       => [
+						'php'         => '7.4',
+						'wordpress'   => '6.3',
+						'woocommerce' => '7.0',
+					],
+					'supported_features' => [
+						'hpos'   => true,
+						'blocks' => [
+							'cart'     => true,
+							'checkout' => true,
+						],
+					],
+				]
+			)
+		);
+
+		$early_hooks = array_values(
+			array_filter(
+				$registered_hooks,
+				static function ( array $hook ): bool {
+					return 'before_woocommerce_init' === $hook[0];
+				}
+			)
+		);
+
+		$this->assertCount( 1, $early_hooks );
+		$early_hooks[0][1]();
+
+		$this->assertSame(
+			[
+				[ 'custom_order_tables', '/path/to/plugin/wc-feature-plugin.php', false ],
+				[ 'cart_checkout_blocks', '/path/to/plugin/wc-feature-plugin.php', true ],
 			],
 			\Automattic\WooCommerce\Utilities\FeaturesUtil::$declared
 		);

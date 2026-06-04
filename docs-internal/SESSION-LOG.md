@@ -1,4 +1,25 @@
 
+## P6 split-done audit fixes — REST neutrality and installed-file contracts (2026-06-04)
+
+### Implementation
+- Processed `docs-internal/reviews/p6-split-done-audit-packet.md` as the final cross-cutting split sign-off checklist.
+- Fixed base REST neutrality: `Woodev_REST_API` now registers `woocommerce_rest_prepare_system_status` and `rest_api_init` only when `Woodev_Helper::is_woocommerce_active()` is true, so pure-WP base construction no longer wires WC REST hooks.
+- Hardened `Woodev_REST_API_Settings` permission callbacks: they still use `wc_rest_check_manager_permissions()` when available, but fall back to `current_user_can( 'manage_woocommerce' )` instead of fataling when the WC REST helper is absent. Declared `$namespace` and `$rest_base` to avoid PHP 8.2 dynamic-property output under lightweight REST stubs.
+- Preserved installed plugin-file contracts: `Woodev_Plugin::get_plugin_file()` now returns `plugin_basename( $this->get_file() )`, so action links, deactivation hooks, update-message hooks, and updater identity bind to the actual main plugin file instead of assuming `{directory}/{directory}.php`.
+- Aligned early HPOS declaration semantics with runtime compatibility: bootstrap `before_woocommerce_init` declarations now require both loader metadata `hpos => true` and `WC_VERSION >= 7.6`, matching `Woocommerce_Plugin::is_hpos_compatible()`.
+- Removed residual base `Woodev_Plugin::is_hpos_compatible()` and expanded the base neutrality guard to reject HPOS-named methods.
+- Added regression coverage: `PlatformNeutralRestApiTest`, `PluginFileContractTest`, HPOS WC-version gate coverage in `BootstrapRegistrationTest`, and the strengthened `PlatformNeutralBaseHasNoWcMethodTest`.
+
+### Verification
+- Focused tests passed: `PlatformNeutralRestApiTest`, `PluginFileContractTest`, `PlatformNeutralBaseHasNoWcMethodTest`, and `BootstrapRegistrationTest`.
+- Full gate: `composer check` passes — PHPCS 116/116, PHPStan 0 errors, PHPUnit 195 tests / 592 assertions.
+- No gotcha file added: fixes apply existing platform-neutrality and installed-site contract rules; no new reusable gotcha was discovered.
+- Existing `.serena/project.yml` and `.serena/memories/memory_maintenance.md` working-tree changes were pre-existing and left untouched.
+
+### Next
+- P6 split-done audit blockers found in this pass are resolved in code and tests.
+- Remaining deferred item is still post-v2.0 payment-gateway trait extraction (`class-payment-gateway.php` 2378 lines).
+
 ## P3 clean-break audit fixes — resolver compatibility window (2026-06-04)
 
 ### Implementation

@@ -33,6 +33,10 @@ if ( ! class_exists( 'Woodev_REST_API' ) ) :
 		 * Adds the action and filter hooks.
 		 */
 		protected function add_hooks() {
+			if ( ! Woodev_Helper::is_woocommerce_active() ) {
+				return;
+			}
+
 			// add plugin data to the system status
 			add_filter( 'woocommerce_rest_prepare_system_status', array( $this, 'add_system_status_data' ), 10, 3 );
 			// registers new WC REST API routes
