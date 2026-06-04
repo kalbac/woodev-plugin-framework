@@ -2,7 +2,7 @@
 
 > Status: release-blocking contract list for the eventual production yandex rewrite.
 > Date: 2026-06-04
-> Plugin ID: `wc_yandex_delivery` (dasherized `wc-yandex-delivery`)
+> Plugin ID: `yandex_delivery` (dasherized `yandex-delivery`) — runtime `method_id` (`woocommerce-yandex-delivery.php:62`); the `wc-` prefix is used only for human-facing slugs/handles, not the id-derived REST namespace or option keys
 > EDD download ID: **821** (operator-supplied 2026-06-04)
 > Source of shape: `plugins-reference/woocommerce-yandex-delivery` (read-only evidence; not copied)
 > Format mirrors `docs-internal/migration/edostavka-data-preservation-checklist.md`.
@@ -29,7 +29,7 @@ framework-build queue.
 
 | Contract item | Current value | Provenance | Migration action | Fixture-enforced? |
 |---|---|---|---|---|
-| Stable plugin ID | `wc_yandex_delivery` | lifecycle option prefix | Preserve | No |
+| Stable plugin ID | `yandex_delivery` | `method_id` → `get_id()`; lifecycle option prefix | Preserve | No |
 | Shipping method ID (express) | `yandex_delivery_express` | `includes/class-shipping-method-express.php:11` | Preserve byte-for-byte | **Yes** (asserted) |
 | Shipping method ID (other-day) | `yandex_delivery_other_day` | `includes/class-shipping-method-other-day.php:11` | Preserve byte-for-byte | **Yes** (asserted) |
 | EDD download ID | **821** | operator-supplied (2026-06-04) | Preserve updater identity continuity | No |
@@ -41,11 +41,11 @@ framework-build queue.
 | Primary integration settings | `woocommerce_yandex_delivery_settings` | `woocommerce-yandex-delivery.php:226` | Preserve / migrate idempotently | **Yes** (asserted) |
 | Shared (DaData) settings | `wc_woodev_shared_settings` | `woodev/shipping-method/class-shipping-method-integration.php:269` | Preserve / migrate idempotently | No |
 | DaData token (inside integration settings) | `dadata_token` | `includes/class-checkout.php` (integration option) | Preserve | No |
-| Activation flag | `woodev_wc_yandex_delivery_is_active` | `woodev/class-lifecycle.php:130` | Preserve | No |
-| Milestone messages | `woodev_wc_yandex_delivery_milestone_messages` | `woodev/class-lifecycle.php:381` | Preserve | No |
-| Milestone version | `woodev_wc_yandex_delivery_milestone_version` | `woodev/class-lifecycle.php:528` | Preserve | No |
+| Activation flag | `woodev_yandex_delivery_is_active` | `woodev/class-lifecycle.php:130` (`woodev_`+`get_id()`+`_is_active`) | Preserve | No |
+| Milestone messages | `woodev_yandex_delivery_milestone_messages` | `woodev/class-lifecycle.php:381` (`woodev_`+`get_id()`+`_milestone_messages`) | Preserve | No |
+| Milestone version | `woodev_yandex_delivery_milestone_version` | `woodev/class-lifecycle.php:528` (`woodev_`+`get_id()`+`_milestone_version`) | Preserve | No |
 | Orders-per-page | `wc_yandex_orders_per_page` | `includes/admin/class-admin.php:129` | Preserve | No |
-| Setup-wizard complete | `wc_wc_yandex_delivery_setup_wizard_complete` | `woodev/admin/abstract-plugin-admin-setup-wizard.php:1059` | Preserve | No |
+| Setup-wizard complete | `wc_yandex_delivery_setup_wizard_complete` | `woodev/admin/abstract-plugin-admin-setup-wizard.php:1059` (`wc_`+`{id}`+`_setup_wizard_complete`) | Preserve | No |
 
 ## WooCommerce Method Contracts
 
@@ -98,7 +98,7 @@ Other-day adds (`includes/class-shipping-method-other-day.php:46–84`): `tariff
 
 | Contract item | Current value | Provenance | Migration action | Fixture-enforced? |
 |---|---|---|---|---|
-| REST namespace | `wc-yandex-delivery` (`$plugin->get_id_dasherized()`) | `includes/rest-api/class-warehouses-rest-api.php:8` | Preserve namespace | **Yes** (asserted) |
+| REST namespace | `yandex-delivery` (`$plugin->get_id_dasherized()` of id `yandex_delivery`) | `includes/rest-api/class-warehouses-rest-api.php:8` | Preserve namespace | **Yes** (asserted) |
 | REST routes | `/warehouses`, `/warehouses/(?P<id>[\w-]+)` | `includes/rest-api/class-warehouses-rest-api.php:14,31` | Preserve route shape | No |
 | Admin page slug | `wc-yandex-orders` | `includes/admin/class-admin.php:39` | Preserve | No |
 | AJAX actions (frontend) | `get_yandex_delivery_location_detect`, `get_yandex_delivery_shipment_points`, `set_yandex_delivery_pickup_point`, `set_yandex_delivery_time_interval` | `includes/class-ajax.php:10–17` (auth + nopriv) | Preserve | No |
@@ -138,7 +138,7 @@ third-party subscribers — `hooks` is a contract zone in `.autodev/INVARIANTS.m
 - Order meta `_yandex_delivery_*` preserved via HPOS-safe access.
 - Session keys `chosen_yandex_pickup_point(_test)` + `chosen_yandex_time_interval` preserved.
 - Cron `wc_yandex_update_order` (single, payload shape) + `wc_yandex_orders_update` (recurring) preserved.
-- REST ns `wc-yandex-delivery` + routes, admin slug `wc-yandex-orders`, AJAX action families preserved.
+- REST ns `yandex-delivery` + routes, admin slug `wc-yandex-orders`, AJAX action families preserved.
 - Log source `yandex-delivery`, public `wc_yandex_*` hooks preserved.
 - License active + updater identity (EDD download id `821`) continuous.
 

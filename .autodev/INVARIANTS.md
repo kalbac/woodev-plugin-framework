@@ -81,7 +81,7 @@ valid JSON. The prose around it is for humans; the JSON is authoritative for the
       "auto_guardable": true,
       "path_globs": ["woodev/rest-api/**"],
       "grep_patterns": ["register_rest_route\\s*\\("],
-      "exact_strings": ["wc/v3", "wc-yandex-delivery"]
+      "exact_strings": ["wc/v3", "yandex-delivery"]
     },
     {
       "id": "ajax_actions",
@@ -179,7 +179,7 @@ valid JSON. The prose around it is for humans; the JSON is authoritative for the
 | Primary settings option | `woocommerce_yandex_delivery_settings` | yandex checklist §Options And Settings |
 | EDD download ID | `821` | operator-supplied 2026-06-04 |
 | Cron hooks | `wc_yandex_update_order` (single, payload `['order_id'=>int,'slim'=>bool]`), `wc_yandex_orders_update` (recurring) | yandex checklist §Scheduled Work (auto_guardable:false) |
-| REST namespace | `wc-yandex-delivery` | yandex checklist §Web And Admin Surface |
+| REST namespace | `yandex-delivery` | yandex checklist §Web And Admin Surface |
 | Frontend AJAX | `get_yandex_delivery_location_detect`, `get_yandex_delivery_shipment_points`, `set_yandex_delivery_pickup_point`, `set_yandex_delivery_time_interval` | yandex checklist §Web And Admin Surface |
 | Admin page slug | `wc-yandex-orders` | yandex checklist §Web And Admin Surface |
 | Log source | `yandex-delivery` | yandex checklist §Operational Surface |

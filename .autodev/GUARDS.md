@@ -34,12 +34,12 @@
   (2026-06-04)** — their zones (`shipping_method_id`, `option_keys`, `order_session_meta`,
   and the warehouse table NAME) are now autonomous; the conductor commits changes touching
   them without escalation. (Warehouse 15-column schema stays human-only.)
-- **Yandex REST namespace guard is NOT written — BLOCKED on an operator decision.** The
-  contract value recorded as `wc-yandex-delivery` (INVARIANTS.md `rest`, yandex checklist
-  §Web And Admin Surface) is **contradicted by the canonical source**: the namespace is
-  `$plugin->get_id_dasherized()` and the reference plugin's id is `yandex_delivery`
-  (`woocommerce-yandex-delivery.php:62,66` → `get_method_id()`), which dasherizes to
-  `yandex-delivery`, NOT `wc-yandex-delivery`. A mutation-verified guard for
-  `wc-yandex-delivery` is impossible (baseline would be RED). Resolving this means editing
-  a constitution file (INVARIANTS.md / the data-preservation checklist) to the true value
-  `yandex-delivery` — a human-only change. See worker-report for guard-yandex-contracts.
+- **Yandex REST namespace contract — RESOLVED (operator maksim, 2026-06-04).** The worker
+  correctly refused to guard the recorded value `wc-yandex-delivery`: the namespace is
+  `$plugin->get_id_dasherized()` of id `yandex_delivery` (`woocommerce-yandex-delivery.php:62`)
+  → real live value is **`yandex-delivery`**. The operator corrected the constitution
+  (INVARIANTS.md `rest.exact_strings` + yandex checklist) to `yandex-delivery`; the same
+  id-error was fixed for the activation/milestone/setup-wizard option keys. The REST guard
+  itself is **not yet written** — a follow-up task can now assert `yandex-delivery` at the
+  id source. (Admin slug `wc-yandex-orders` and script handles keep the `wc-` prefix — those
+  are literals, not id-derived.)
