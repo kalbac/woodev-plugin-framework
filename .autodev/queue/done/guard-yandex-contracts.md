@@ -51,3 +51,5 @@ production code.
 PENDING-OPERATOR inputs (checklist §): EDD download id, exact warehouse table name/columns, and
 the `wc_yandex_update_order` cron payload — if not yet supplied, write the four guards that do
 not need them and leave the EDD/cron guards as TODO (they are human-only anyway).
+
+<!-- committed: 013b0fb -->

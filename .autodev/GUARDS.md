@@ -18,10 +18,10 @@
 |-------------|----------------|------------|--------|-------------------|------------|------|
 | shipping_method_id_edostavka | `edostavka` | `tests/unit/Contract/ShippingMethodIdContractTest.php` | `tests/unit/Contract/recipes/shipping-method-id-edostavka.recipe.json` | yes (red on flip) | maksim | 2026-06-04 |
 | settings_option_key_edostavka | `woocommerce_edostavka_settings` | `tests/unit/Contract/SettingsOptionKeyContractTest.php` | `tests/unit/Contract/recipes/settings-option-key-edostavka.recipe.json` | yes (red on flip) | maksim | 2026-06-04 |
-| shipping_method_id_yandex | `yandex_delivery_express` + `yandex_delivery_other_day` | `tests/unit/Contract/YandexShippingMethodIdContractTest.php` | `tests/unit/Contract/recipes/yandex-shipping-method-id.recipe.json` | pending (conductor mutation-check) | pending-operator | 2026-06-04 |
-| settings_option_key_yandex | `woocommerce_yandex_delivery_settings` | `tests/unit/Contract/YandexSettingsOptionKeyContractTest.php` | `tests/unit/Contract/recipes/yandex-settings-option-key.recipe.json` | pending (conductor mutation-check) | pending-operator | 2026-06-04 |
-| warehouse_table_name_yandex | `wc_yandex_delivery_warehouses` (name only; schema human-only) | `tests/unit/Contract/YandexWarehouseTableContractTest.php` | `tests/unit/Contract/recipes/yandex-warehouse-table.recipe.json` | pending (conductor mutation-check) | pending-operator | 2026-06-04 |
-| order_meta_prefix_yandex | `_yandex_delivery_` | `tests/unit/Contract/YandexOrderMetaPrefixContractTest.php` | `tests/unit/Contract/recipes/yandex-order-meta-prefix.recipe.json` | pending (conductor mutation-check) | pending-operator | 2026-06-04 |
+| shipping_method_id_yandex | `yandex_delivery_express` + `yandex_delivery_other_day` | `tests/unit/Contract/YandexShippingMethodIdContractTest.php` | `tests/unit/Contract/recipes/yandex-shipping-method-id.recipe.json` | yes (red on flip) | pending-operator | 2026-06-04 |
+| settings_option_key_yandex | `woocommerce_yandex_delivery_settings` | `tests/unit/Contract/YandexSettingsOptionKeyContractTest.php` | `tests/unit/Contract/recipes/yandex-settings-option-key.recipe.json` | yes (red on flip) | pending-operator | 2026-06-04 |
+| warehouse_table_name_yandex | `wc_yandex_delivery_warehouses` (name only; schema human-only) | `tests/unit/Contract/YandexWarehouseTableContractTest.php` | `tests/unit/Contract/recipes/yandex-warehouse-table.recipe.json` | yes (red on flip) | pending-operator | 2026-06-04 |
+| order_meta_prefix_yandex | `_yandex_delivery_` | `tests/unit/Contract/YandexOrderMetaPrefixContractTest.php` | `tests/unit/Contract/recipes/yandex-order-meta-prefix.recipe.json` | yes (red on flip) | pending-operator | 2026-06-04 |
 
 ## Notes
 - `mutation_verified: yes (red on flip)` is recorded only after a real run of
@@ -29,10 +29,11 @@
 - Contracts with no machine-checkable recipe (cron-payload shape, DB schema) are
   **human-only** and must NOT appear here as guarded; list them in INVARIANTS.md with
   `auto_guardable: no` instead.
-- The yandex rows above are mutation-recipe-emitted but **not yet mutation-run**: a
-  disposable worker is prohibited from running the gate, so the conductor must run
-  `tools/autodev/mutation-check.ps1` on each recipe and flip the column to
-  `yes (red on flip)` before the operator blesses. Until then these zones still escalate.
+- The 4 yandex rows are **mutation-run and PASS** (GREEN → RED-on-flip → GREEN-on-revert,
+  verified 2026-06-04 via `tools/autodev/mutation-check.ps1`), but carry
+  `blessed_by: pending-operator` — they are mutation-proven yet **awaiting the operator's
+  blessing**. Until the operator sets `blessed_by`, the conductor still escalates these
+  zones (see escalation `bless-guard-yandex-contracts`).
 - **Yandex REST namespace guard is NOT written — BLOCKED on an operator decision.** The
   contract value recorded as `wc-yandex-delivery` (INVARIANTS.md `rest`, yandex checklist
   §Web And Admin Surface) is **contradicted by the canonical source**: the namespace is
