@@ -195,6 +195,47 @@ class BootstrapRegistrationTest extends TestCase {
 	}
 
 	/**
+	 * Pure-WordPress plugins should never wire WooCommerce feature compatibility.
+	 */
+	public function test_register_loader_definition_skips_woocommerce_feature_compatibility_for_wordpress_platform(): void {
+		$registered_hooks = [];
+
+		Functions\when( 'add_action' )->alias(
+			static function ( string $hook, $callback ) use ( &$registered_hooks ): void {
+				$registered_hooks[] = [ $hook, $callback ];
+			}
+		);
+
+		$bootstrap = \Woodev_Plugin_Bootstrap::instance();
+		$bootstrap->register_loader_definition(
+			$this->loader_definition(
+				'wp-only-plugin',
+				'WP Only Plugin',
+				'2.0.0',
+				[
+					'plugin_file'  => '/path/to/plugin/wp-only-plugin.php',
+					'platform'     => \Woodev\Framework\Framework_Plugin_Loader_Definition::PLATFORM_WORDPRESS,
+					'requirements' => [
+						'php'       => '7.4',
+						'wordpress' => '6.3',
+					],
+				]
+			)
+		);
+
+		$early_hooks = array_values(
+			array_filter(
+				$registered_hooks,
+				static function ( array $hook ): bool {
+					return 'before_woocommerce_init' === $hook[0];
+				}
+			)
+		);
+
+		$this->assertCount( 0, $early_hooks, 'A pure-WordPress plugin must not wire WooCommerce feature compatibility' );
+	}
+
+	/**
 	 * Defines a WooCommerce FeaturesUtil stub for isolated feature declaration tests.
 	 *
 	 * @return void

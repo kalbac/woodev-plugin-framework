@@ -100,21 +100,6 @@ if ( ! class_exists( Woocommerce_Plugin::class, false ) ) :
 		}
 
 		/**
-		 * Declares compatibility with specific WooCommerce features.
-		 *
-		 * @internal
-		 *
-		 * @since 2.0.0
-		 *
-		 * @return void
-		 */
-		public function handle_features_compatibility(): void {
-
-			\Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility( 'custom_order_tables', $this->get_plugin_file(), $this->is_hpos_compatible() );
-			\Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility( 'cart_checkout_blocks', $this->get_plugin_file(), $this->get_blocks_handler()->is_cart_block_compatible() && $this->get_blocks_handler()->is_checkout_block_compatible() );
-		}
-
-		/**
 		 * Adds any PHP incompatibilities to the WooCommerce system status report.
 		 *
 		 * @since 2.0.0

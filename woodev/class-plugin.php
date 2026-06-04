@@ -681,15 +681,6 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		}
 
 		/**
-		 * Declares compatibility with platform-specific features.
-		 *
-		 * @internal
-		 *
-		 * @since 1.3.2
-		 */
-		public function handle_features_compatibility(): void {}
-
-		/**
 		 * Automatically log API requests/responses when using Woodev_API_Base
 		 *
 		 * @see Woodev_API_Base::broadcast_request()
