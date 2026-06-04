@@ -66,14 +66,17 @@ function Write-Verdict {
 
 if (-not (Test-Path $DiffPath)) { throw "Diff not found: $DiffPath" }
 $diffText = Get-Content -Path $DiffPath -Raw -Encoding utf8
-$diffLines = Get-GitDiffAddedRemovedLines -DiffText $diffText
+# @() guards the PS gotcha where a function returning an empty array unrolls to $null,
+# which then throws PropertyNotFoundStrict on .Count under Set-StrictMode -Version Latest
+# (a zone-free, non-contract diff produces zero touched zones -> previously crashed here).
+$diffLines = @(Get-GitDiffAddedRemovedLines -DiffText $diffText)
 $changedFiles = @()
 foreach ($l in ($diffText -split '\r?\n')) {
     if ($l -match '^\+\+\+ b/(.+)$') { $changedFiles += (ConvertTo-NormalizedPath $Matches[1]) }
 }
 
 # ---- TIERING (mechanical) ----
-$touchedZones = Get-AutodevTouchedZoneIds -ChangedFiles $changedFiles -DiffLines $diffLines -Config $Config
+$touchedZones = @(Get-AutodevTouchedZoneIds -ChangedFiles $changedFiles -DiffLines $diffLines -Config $Config)
 $diffLineCount = $diffLines.Count
 $tier = $Mode
 if ($Mode -eq 'auto') {
@@ -128,10 +131,16 @@ Check, in order:
    is BROKEN, not a fix.
 4. Logic/regression risk independent of contracts.
 
-This particular diff claims to ADD mutation-verified contract guards (tests only) plus a
-GUARDS.md registry row. Scrutinize specifically: are the guards asserting the REAL contract
-strings ('edostavka', 'woocommerce_edostavka_settings'), or a tautology? Is any PRODUCTION
-code edited to match a changed string (it must not be)?
+Adapt to what THIS diff actually contains (do NOT assume it is any particular kind of task):
+- If it adds/modifies tests that claim to be contract guards: are they asserting the REAL
+  contract strings at the canonical source, or a tautology? Is any PRODUCTION code edited to
+  match a changed contract string (it must not be)?
+- If it adds/modifies production code: does it rename, remove, or alter any installed-site
+  contract value (option key, hook name, REST route/namespace, gateway/instance id, cron hook
+  or payload shape, order/session meta key, log source, AJAX action, admin slug, DB
+  table/schema)? Those must be preserved byte-for-byte.
+- A purely additive change that introduces NO contract value and alters none is normally
+  clean -- say so; do not invent doubt.
 
 Return ONLY the JSON verdict conforming to the provided schema:
 { "verdict": "clean" | "broken" | "uncertain",

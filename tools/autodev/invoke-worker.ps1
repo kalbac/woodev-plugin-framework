@@ -62,8 +62,13 @@ Rules:
   STOP: status=NEEDS_GUARD. Do not code.
 
 Output to .autodev/runtime/$TaskId/ :
-- the change, committed to THIS worktree (do NOT push, do NOT touch main)
-- diff.patch  = git diff of your change
+- the change WRITTEN TO DISK but NOT committed. Do NOT run ``git commit`` or ``git add``,
+  do NOT push, do NOT touch main. The conductor stages + commits your file_set ONLY after
+  the gate passes -- committing yourself would land UNVERIFIED code on the branch (the gate
+  is the lock, not you).
+- diff.patch  = run ``git add -N -- <your file_set files>`` then ``git diff -- <those files>``
+  (so new files appear). The conductor also regenerates this authoritatively; this copy is
+  for your own reference.
 - worker-report.md : status (DONE|TOO_BIG|NEEDS_GUARD|BLOCKED), files_touched[], a one-line
   rationale, and contract_zones_touched: [...]
 - if the task WRITES A GUARD: also emit mutation-recipe.json

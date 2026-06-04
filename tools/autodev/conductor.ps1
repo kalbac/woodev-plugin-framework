@@ -175,7 +175,14 @@ function Invoke-ConductorIteration {
     }
 
     # 5. DIFF + CRITIC
-    if (-not (Test-Path $diffPath) -or ((Get-Item $diffPath).Length -eq 0)) {
+    # Real-worker runs leave the change UNCOMMITTED (gate-as-lock: the conductor commits only
+    # after the gate passes). Regenerate the diff authoritatively from the working tree so the
+    # critic/gate judge the actual uncommitted change, not the worker's self-reported copy.
+    # -AssumeWorkerDone (operator-as-worker bootstrap) keeps the existing "only if missing" path.
+    if (-not $AssumeWorkerDone) {
+        New-WorkerDiff -Task $task -OutPath $diffPath
+    }
+    elseif (-not (Test-Path $diffPath) -or ((Get-Item $diffPath).Length -eq 0)) {
         New-WorkerDiff -Task $task -OutPath $diffPath
     }
     $verdictFile = Join-Path $rtDir 'verdict.json'
