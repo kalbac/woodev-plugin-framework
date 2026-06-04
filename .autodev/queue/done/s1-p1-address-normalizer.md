@@ -25,3 +25,5 @@ Spec §4.1.vii. Address normalization is pluggable, never baked into the framewo
 
 A DaData-backed normalizer ships in the plugin that holds a DaData token (yandex stores it in
 `woocommerce_yandex_delivery_settings` / `wc_woodev_shared_settings`) — NOT in the framework.
+
+<!-- committed: 778eae3 (worker), verified post-hoc: critic clean 0.90 + gate COMMIT -->
