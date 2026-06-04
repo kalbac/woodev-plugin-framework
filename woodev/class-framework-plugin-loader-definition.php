@@ -63,6 +63,9 @@ if ( ! class_exists( Framework_Plugin_Loader_Definition::class, false ) ) :
 		/** @var string[] Early class availability capabilities. */
 		protected array $capabilities;
 
+		/** @var array<string,mixed> Early WooCommerce compatibility feature flags. */
+		protected array $supported_features;
+
 		/**
 		 * Constructor.
 		 *
@@ -84,6 +87,9 @@ if ( ! class_exists( Framework_Plugin_Loader_Definition::class, false ) ) :
 			$this->main_class           = isset( $definition['main_class'] ) ? (string) $definition['main_class'] : null;
 			$this->callback             = $definition['callback'] ?? null;
 			$this->capabilities         = $this->normalize_capabilities( $definition['capabilities'] ?? [] );
+			$this->supported_features   = isset( $definition['supported_features'] ) && is_array( $definition['supported_features'] )
+				? $definition['supported_features']
+				: [];
 		}
 
 		/**
@@ -227,6 +233,17 @@ if ( ! class_exists( Framework_Plugin_Loader_Definition::class, false ) ) :
 		}
 
 		/**
+		 * Gets early WooCommerce compatibility feature flags.
+		 *
+		 * @since 2.0.0
+		 *
+		 * @return array<string,mixed>
+		 */
+		public function get_supported_features(): array {
+			return $this->supported_features;
+		}
+
+		/**
 		 * Converts this definition to the legacy plugin array used by existing notices.
 		 *
 		 * @since 2.0.0
@@ -251,6 +268,10 @@ if ( ! class_exists( Framework_Plugin_Loader_Definition::class, false ) ) :
 
 			if ( null !== $this->get_backwards_compatible() && '0' !== $this->get_backwards_compatible() ) {
 				$args['backwards_compatible'] = $this->get_backwards_compatible();
+			}
+
+			if ( [] !== $this->get_supported_features() ) {
+				$args['supported_features'] = $this->get_supported_features();
 			}
 
 			return [
@@ -295,6 +316,10 @@ if ( ! class_exists( Framework_Plugin_Loader_Definition::class, false ) ) :
 
 			if ( array_key_exists( 'backwards_compatible', $definition ) && null !== $definition['backwards_compatible'] && ! is_scalar( $definition['backwards_compatible'] ) ) {
 				$errors[] = 'Loader definition backwards_compatible must be a scalar version string.';
+			}
+
+			if ( array_key_exists( 'supported_features', $definition ) && ! is_array( $definition['supported_features'] ) ) {
+				$errors[] = 'Loader definition supported_features must be an array.';
 			}
 
 			if ( self::PLATFORM_EDD === $platform ) {

@@ -1,5 +1,5 @@
 # Current State — Woodev Plugin Framework
-> Last updated: 2026-06-04 (P4 Tasks 5–6: removed the last WC seam from the platform-neutral base)
+> Last updated: 2026-06-04 (P4 audit follow-up: early WC feature declarations moved to loader metadata)
 
 ## Phase Status
 
@@ -22,10 +22,13 @@
 
 - **Platform neutrality (audit §6.1.1):** the base `Woodev_Plugin` declares **zero**
   WooCommerce-named methods. The last WC seam — the empty `add_woocommerce_hooks()`
-  stub — was removed in P4 Task 5 (`dd47b99`). WC hook registration now lives in
-  `Woodev\Framework\Woocommerce_Plugin::register_woocommerce_hooks()`, called from
-  that subclass's own constructor. Enforced by
-  `tests/unit/PlatformNeutralBaseHasNoWcMethodTest.php`.
+  stub — was removed in P4 Task 5 (`dd47b99`). Late-safe WC admin/status hook
+  registration lives in `Woodev\Framework\Woocommerce_Plugin::register_woocommerce_hooks()`,
+  called from that subclass's own constructor. Early `before_woocommerce_init`
+  feature declarations are wired by `Woodev_Plugin_Bootstrap::register_loader_definition()`
+  from loader `supported_features` metadata so they cannot miss WooCommerce's
+  early lifecycle hook. Enforced by `PlatformNeutralBaseHasNoWcMethodTest` and
+  `BootstrapRegistrationTest::test_register_loader_definition_wires_early_woocommerce_feature_compatibility()`.
 - **Base size (`woodev/class-plugin.php`), 2026-06-04:** **1,296 lines**,
   **77 methods declared on `Woodev_Plugin`** (58 public). Baseline before the
   handler extractions + seam removal was ~1,435 lines / ~87 methods.
@@ -97,7 +100,8 @@
      - **Defer helper shim test (render_select2_ajax branch)** — The render_select2_ajax shim's "no-op when class not loaded" branch is not tested in a dedicated test method because PHPUnit's `@runInSeparateProcess` does not give clean class-table isolation on Windows in this setup (the autoloader is inherited). The shim's behavior is covered indirectly: (1) the `class_exists` guard is visible in the source (regex test verifies the FQCN reference), (2) the shim's `_deprecated_function` call is verified, (3) the actual method's behavior is tested in `WoocommerceHelperLocationTest` when the class is loaded. Acceptable for a shim whose only logic is "emit deprecation + guarded delegate".
 12. ~~**Deferred L-2 (backwards_compatible window test)**~~ ✅ 2026-06-04 — resolved during P3 audit fixes. `Framework_Plugin_Loader_Definition` now carries optional `backwards_compatible`, `Framework_Resolver::load_plugins()` keeps the selected highest-version framework record even when `Woodev_Plugin` is already loaded, and `FrameworkResolverTest::test_explicit_definition_backwards_compatible_window_blocks_too_old_frameworks()` covers the window in a separate process.
 13. **P3 clean-break audit findings** ✅ 2026-06-04 — applied audit-packet findings: explicit `backwards_compatible` mapping restored, missing `main_class` loaders now become `invalid_loader_definitions` instead of silent no-ops, and `CAPABILITY_WOOCOMMERCE_PLUGIN` has base/helper-only preload coverage. `composer check` green: PHPCS 114/114, PHPStan 0 errors, PHPUnit 182/412.
-14. (Deferred / post-v2.0) Extract traits from class-payment-gateway.php (2378 lines)
+14. **P4 decomposition audit follow-up** ✅ 2026-06-04 — applied `docs-internal/reviews/p4-decomposition-audit-packet.md` finding: `before_woocommerce_init` is no longer registered from `Woocommerce_Plugin::__construct()`; bootstrap wires early HPOS/Blocks declarations from loader `supported_features` metadata, while constructor keeps only late-safe WC admin/status hooks. `composer check` green: PHPCS 116/116, PHPStan 0 errors, PHPUnit 191/510.
+15. (Deferred / post-v2.0) Extract traits from class-payment-gateway.php (2378 lines)
     and the broad `PLANS.md` vision: shipping universality, licensing webhooks/UI,
     box-packer minimal virtual box, DI/SOLID, React admin UI, EDD runtime.
 
@@ -162,6 +166,7 @@
 | 34 Independent audit 2026-06-01 | ✅ 2026-06-01 | Second-model independent audit of `phpstan.neon` blanket ignores, `Woodev_Plugin` v2 split, payment-gateway restore, and resolver architecture. Surfaced 3 release-blocker PHPStan-ignore masks (Payment_Notification_Response class-wide, Box_Packer_Item::get_product, Shipping_API broken contract) + 2 base-class contract leaks (get_woocommerce_uploads_path WC-leak, get_blocks_handler typed-property trap) + 1 PHP 8.4+ deprecation mask (RealisticPaymentFixtureTest). All findings recorded as gotchas + prioritized in [Next Actions](#next-actions-priority-order) and detailed in `docs-internal/audit-2026-06-01.md`. No code changes — audit + docs only. `composer check` still passes (no PHP/runtime changes). |
 | 35 P2 pilot gate hardening | ✅ 2026-06-03 | Hardened the edostavka-shaped pilot fixture/test after applying `docs-internal/reviews/p2-pilot-audit-packet.md` skeptically: no Composer-autoload include-order masking, asserted WC shipping-method hook registration, direct `register_shipping_methods()` contract assertion, and shipping-zone persistence added to the data-preservation checklist. `composer check` passes (198 tests / 450 assertions). |
 | 36 P3 clean-break audit fixes | ✅ 2026-06-04 | Applied `docs-internal/reviews/p3-cleanbreak-audit-packet.md` findings: explicit `backwards_compatible` restored for loader definitions, selected framework record fixed when base class is preloaded, missing `main_class` no longer silently no-ops, and resolver coverage added. `composer check` passes (182 tests / 412 assertions). |
+| 37 P4 decomposition audit follow-up | ✅ 2026-06-04 | Applied `docs-internal/reviews/p4-decomposition-audit-packet.md` finding: early WooCommerce HPOS/Blocks declarations now register from bootstrap loader metadata before `plugins_loaded`; `Woocommerce_Plugin` constructor keeps only late-safe WC admin/status hooks. `composer check` passes (191 tests / 510 assertions). |
 
 ## Planned — v2.0.0 & Beyond
 

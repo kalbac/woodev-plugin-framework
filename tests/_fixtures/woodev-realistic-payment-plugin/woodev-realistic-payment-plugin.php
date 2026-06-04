@@ -37,6 +37,9 @@ function woodev_realistic_payment_plugin_loader_definition(): array {
 		'capabilities'      => [
 			\Woodev\Framework\Framework_Plugin_Loader_Definition::CAPABILITY_PAYMENT_GATEWAY,
 		],
+		'supported_features' => [
+			'hpos' => true,
+		],
 	];
 }
 

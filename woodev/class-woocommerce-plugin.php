@@ -82,21 +82,7 @@ if ( ! class_exists( Woocommerce_Plugin::class, false ) ) :
 			$this->register_woocommerce_hooks();
 		}
 
-		/**
-		 * Registers the WooCommerce runtime action and filter hooks owned by this class.
-		 *
-		 * Called at the end of {@see self::__construct()}. All registrations are
-		 * queue-only (`add_action`/`add_filter`), so wiring them during construction
-		 * is timing-safe.
-		 *
-		 * @since 2.0.0
-		 *
-		 * @return void
-		 */
 		private function register_woocommerce_hooks(): void {
-
-			// handle WooCommerce features compatibility (such as HPOS, WC Cart & Checkout Blocks support...)
-			add_action( 'before_woocommerce_init', [ $this, 'handle_features_compatibility' ] );
 
 			foreach ( [ 'shipping', 'checkout', 'integration' ] as $tab ) {
 				add_action( 'woocommerce_before_settings_' . $tab, [ $this, 'add_class_form_wrap_start' ] );

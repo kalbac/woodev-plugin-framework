@@ -133,6 +133,81 @@ class BootstrapRegistrationTest extends TestCase {
 	}
 
 	/**
+	 * WooCommerce feature compatibility should be wired before plugins_loaded.
+	 */
+	public function test_register_loader_definition_wires_early_woocommerce_feature_compatibility(): void {
+		$registered_hooks = [];
+
+		Functions\when( 'add_action' )->alias(
+			static function ( string $hook, $callback ) use ( &$registered_hooks ): void {
+				$registered_hooks[] = [ $hook, $callback ];
+			}
+		);
+
+		$this->reset_woocommerce_features_util_stub();
+
+		$bootstrap = \Woodev_Plugin_Bootstrap::instance();
+		$bootstrap->register_loader_definition(
+			$this->loader_definition(
+				'wc-feature-plugin',
+				'WC Feature Plugin',
+				'2.0.0',
+				[
+					'plugin_file'        => '/path/to/plugin/wc-feature-plugin.php',
+					'platform'           => \Woodev\Framework\Framework_Plugin_Loader_Definition::PLATFORM_WOOCOMMERCE,
+					'requirements'       => [
+						'php'         => '7.4',
+						'wordpress'   => '6.3',
+						'woocommerce' => '7.0',
+					],
+					'supported_features' => [
+						'hpos'   => true,
+						'blocks' => [
+							'cart'     => true,
+							'checkout' => false,
+						],
+					],
+				]
+			)
+		);
+
+		$early_hooks = array_values(
+			array_filter(
+				$registered_hooks,
+				static function ( array $hook ): bool {
+					return 'before_woocommerce_init' === $hook[0];
+				}
+			)
+		);
+
+		$this->assertCount( 1, $early_hooks );
+		$this->assertIsCallable( $early_hooks[0][1] );
+
+		$early_hooks[0][1]();
+
+		$this->assertSame(
+			[
+				[ 'custom_order_tables', '/path/to/plugin/wc-feature-plugin.php', true ],
+				[ 'cart_checkout_blocks', '/path/to/plugin/wc-feature-plugin.php', false ],
+			],
+			\Automattic\WooCommerce\Utilities\FeaturesUtil::$declared
+		);
+	}
+
+	/**
+	 * Defines a WooCommerce FeaturesUtil stub for isolated feature declaration tests.
+	 *
+	 * @return void
+	 */
+	private function reset_woocommerce_features_util_stub(): void {
+		if ( ! class_exists( '\\Automattic\\WooCommerce\\Utilities\\FeaturesUtil', false ) ) {
+			eval( 'namespace Automattic\\WooCommerce\\Utilities; class FeaturesUtil { public static $declared = []; public static function declare_compatibility( $feature, $plugin_file, $compatible ) { self::$declared[] = [ $feature, $plugin_file, $compatible ]; } }' );
+		}
+
+		\Automattic\WooCommerce\Utilities\FeaturesUtil::$declared = [];
+	}
+
+	/**
 	 * register_loader_definition() should accumulate multiple plugins.
 	 */
 	public function test_register_multiple_plugins(): void {
@@ -223,10 +298,10 @@ class BootstrapRegistrationTest extends TestCase {
 		Functions\stubs( [ 'add_action' ] );
 
 		$bootstrap = \Woodev_Plugin_Bootstrap::instance();
+		$loaded    = class_exists( 'Woodev_Plugin', false );
 		$version   = $bootstrap->get_framework_version();
 
-		// Woodev_Plugin is loaded in the test bootstrap, so VERSION should be available.
-		if ( class_exists( 'Woodev_Plugin' ) ) {
+		if ( $loaded ) {
 			$this->assertSame( \Woodev_Plugin::VERSION, $version );
 			$this->assertMatchesRegularExpression( '/^\d+\.\d+\.\d+/', $version );
 		} else {

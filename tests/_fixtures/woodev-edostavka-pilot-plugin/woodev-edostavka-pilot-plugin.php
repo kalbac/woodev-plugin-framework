@@ -37,6 +37,13 @@ function woodev_edostavka_pilot_plugin_loader_definition(): array {
 		'capabilities'      => [
 			\Woodev\Framework\Framework_Plugin_Loader_Definition::CAPABILITY_SHIPPING_METHOD,
 		],
+		'supported_features' => [
+			'hpos'   => true,
+			'blocks' => [
+				'cart'     => true,
+				'checkout' => true,
+			],
+		],
 	];
 }
 

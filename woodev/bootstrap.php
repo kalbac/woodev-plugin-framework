@@ -35,6 +35,9 @@ if ( ! class_exists( 'Woodev_Plugin_Bootstrap' ) ) :
 		/** @var array of plugins that require a newer version of PHP */
 		protected array $incompatible_php_version_plugins = [];
 
+		/** @var array invalid explicit loader definitions */
+		protected array $invalid_loader_definitions = [];
+
 		/**
 		 * Hidden constructor.
 		 */
@@ -67,9 +70,100 @@ if ( ! class_exists( 'Woodev_Plugin_Bootstrap' ) ) :
 		 */
 		public function register_loader_definition( array $definition ): bool {
 			$accepted = $this->resolver->register_loader_definition( $definition );
+
+			if ( $accepted ) {
+				$this->register_early_woocommerce_feature_compatibility( $definition );
+			}
+
 			$this->sync_resolver_state();
 
 			return $accepted;
+		}
+
+		/**
+		 * Registers early WooCommerce feature compatibility declarations from loader metadata.
+		 *
+		 * `before_woocommerce_init` can fire before the resolver constructs plugin instances,
+		 * so HPOS/Blocks compatibility must not depend on Woocommerce_Plugin::__construct().
+		 *
+		 * @param array<string,mixed> $definition Raw loader definition.
+		 * @return void
+		 */
+		private function register_early_woocommerce_feature_compatibility( array $definition ): void {
+			if ( ! $this->requires_woocommerce_feature_compatibility( $definition ) ) {
+				return;
+			}
+
+			$plugin_file        = (string) $definition['plugin_file'];
+			$supported_features = $this->normalize_supported_features( $definition['supported_features'] ?? [] );
+
+			add_action(
+				'before_woocommerce_init',
+				static function () use ( $plugin_file, $supported_features ): void {
+					if ( ! class_exists( '\\Automattic\\WooCommerce\\Utilities\\FeaturesUtil', false ) ) {
+						return;
+					}
+
+					\Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility(
+						'custom_order_tables',
+						$plugin_file,
+						true === $supported_features['hpos']
+					);
+
+					$blocks_compatible = true === $supported_features['blocks']['cart']
+						&& true === $supported_features['blocks']['checkout'];
+
+					\Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility(
+						'cart_checkout_blocks',
+						$plugin_file,
+						$blocks_compatible
+					);
+				}
+			);
+		}
+
+		/**
+		 * Determines whether a loader definition needs early WooCommerce feature declarations.
+		 *
+		 * @param array<string,mixed> $definition Raw loader definition.
+		 * @return bool
+		 */
+		private function requires_woocommerce_feature_compatibility( array $definition ): bool {
+			if ( \Woodev\Framework\Framework_Plugin_Loader_Definition::PLATFORM_WOOCOMMERCE === ( $definition['platform'] ?? '' ) ) {
+				return true;
+			}
+
+			$capabilities = isset( $definition['capabilities'] ) ? (array) $definition['capabilities'] : [];
+			$woocommerce_capabilities = [
+				\Woodev\Framework\Framework_Plugin_Loader_Definition::CAPABILITY_WOOCOMMERCE_PLUGIN,
+				\Woodev\Framework\Framework_Plugin_Loader_Definition::CAPABILITY_PAYMENT_GATEWAY,
+				\Woodev\Framework\Framework_Plugin_Loader_Definition::CAPABILITY_SHIPPING_METHOD,
+			];
+
+			return [] !== array_intersect( $woocommerce_capabilities, $capabilities );
+		}
+
+		/**
+		 * Normalizes WooCommerce feature flags to the constructor defaults.
+		 *
+		 * @param mixed $supported_features Raw supported feature flags.
+		 * @return array{hpos: bool, blocks: array{cart: bool, checkout: bool}}
+		 */
+		private function normalize_supported_features( $supported_features ): array {
+			if ( ! is_array( $supported_features ) ) {
+				$supported_features = [];
+			}
+
+			return array_replace_recursive(
+				[
+					'hpos'   => false,
+					'blocks' => [
+						'cart'     => false,
+						'checkout' => false,
+					],
+				],
+				$supported_features
+			);
 		}
 
 		/**
@@ -108,8 +202,8 @@ if ( ! class_exists( 'Woodev_Plugin_Bootstrap' ) ) :
 
 			echo '<div class="updated"><p>';
 			echo $count > 1 ?
-			sprintf( _n( 'Deactivated %d plugin', 'Deactivated %d plugins', $count, 'woodev-plugin-framework' ), $count ) :
-			esc_html__( 'Deactivated one plugin', 'woodev-plugin-framework' );
+				sprintf( _n( 'Deactivated %d plugin', 'Deactivated %d plugins', $count, 'woodev-plugin-framework' ), $count ) :
+				esc_html__( 'Deactivated one plugin', 'woodev-plugin-framework' );
 			echo '</p></div>';
 		}
 
@@ -130,7 +224,7 @@ if ( ! class_exists( 'Woodev_Plugin_Bootstrap' ) ) :
 		 *
 		 * Delegates to {@see Woodev_Helper::is_woocommerce_active()} so the two
 		 * public static entry points share a single source of truth. Kept on
-		 * the bootstrap for backward compatibility — 10+ dependent plugins
+		 * the bootstrap for backward compatibility - 10+ dependent plugins
 		 * call this method directly.
 		 *
 		 * @return boolean true if the WooCommerce plugin is installed and active
@@ -186,12 +280,13 @@ if ( ! class_exists( 'Woodev_Plugin_Bootstrap' ) ) :
 		 * @return void
 		 */
 		protected function sync_resolver_state(): void {
-			$this->registered_plugins                = $this->resolver->get_registered_plugins();
-			$this->active_plugins                    = $this->resolver->get_active_plugins();
-			$this->incompatible_framework_plugins    = $this->resolver->get_incompatible_framework_plugins();
-			$this->incompatible_wc_version_plugins   = $this->resolver->get_incompatible_wc_version_plugins();
-			$this->incompatible_wp_version_plugins   = $this->resolver->get_incompatible_wp_version_plugins();
-			$this->incompatible_php_version_plugins  = $this->resolver->get_incompatible_php_version_plugins();
+			$this->registered_plugins               = $this->resolver->get_registered_plugins();
+			$this->active_plugins                   = $this->resolver->get_active_plugins();
+			$this->incompatible_framework_plugins   = $this->resolver->get_incompatible_framework_plugins();
+			$this->incompatible_wc_version_plugins  = $this->resolver->get_incompatible_wc_version_plugins();
+			$this->incompatible_wp_version_plugins  = $this->resolver->get_incompatible_wp_version_plugins();
+			$this->incompatible_php_version_plugins = $this->resolver->get_incompatible_php_version_plugins();
+			$this->invalid_loader_definitions       = $this->resolver->get_invalid_loader_definitions();
 		}
 	}
 

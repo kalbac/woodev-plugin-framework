@@ -452,14 +452,10 @@ class WoocommercePluginTest extends TestCase {
 	}
 
 	/**
-	 * WooCommerce runtime hooks should be owned by Woocommerce_Plugin, not the platform-neutral base.
+	 * Late WooCommerce runtime hooks should be owned by Woocommerce_Plugin, not the platform-neutral base.
 	 */
 	public function test_registers_woocommerce_runtime_hooks(): void {
 		$plugin = new Testable_Woocommerce_Plugin();
-
-		Actions\expectAdded( 'before_woocommerce_init' )
-			->once()
-			->with( [ $plugin, 'handle_features_compatibility' ] );
 
 		foreach ( [ 'shipping', 'checkout', 'integration' ] as $tab ) {
 			Actions\expectAdded( 'woocommerce_before_settings_' . $tab )
