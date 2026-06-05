@@ -31,3 +31,5 @@ Typed getters, `from_array()`, `to_array()`.
 
 Contract zone is a **path-glob match only** (`woodev/shipping-method/**`) — these files
 introduce NO installed-site method-id string. Expect a one-glance human pass, no guard needed.
+
+<!-- committed: fecdd9a -->

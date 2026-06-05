@@ -32,3 +32,5 @@ adapter contract (see `s1-p1-map-js`).
 `class Leaflet_Map_Provider implements Map_Provider`: the framework's default, no-API-key
 provider. **The Yandex provider is NOT in the framework** — it ships in the yandex plugin and
 self-registers; the framework only guarantees the seam + the Leaflet fallback.
+
+<!-- committed: ae55f56 -->

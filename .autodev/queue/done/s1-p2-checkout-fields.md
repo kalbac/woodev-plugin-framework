@@ -21,3 +21,5 @@ Spec §4.2. Declarative custom checkout-field definitions (id, type, label, requ
 sanitize callback, validate callback). Pure definition object consumed by the checkout handler.
 No hardcoded field-name contract strings (plugin supplies its field names, cf. yandex
 `yandex_pickup_point` etc.).
+
+<!-- committed: 9e3758b -->
