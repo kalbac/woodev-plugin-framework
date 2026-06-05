@@ -53,10 +53,10 @@ valid JSON. The prose around it is for humans; the JSON is authoritative for the
     },
     {
       "id": "gateway_id",
-      "why": "WC payment-gateway IDs are an installed-site contract.",
+      "why": "WC payment-gateway IDs are an installed-site contract. Real gateway ids are assigned inside woodev/payment-gateway/** (covered by path_globs); a generic \\$this->id= grep was removed because it false-tripped on every value object with an id field (e.g. shipping Warehouse) that lives outside the gateway path.",
       "auto_guardable": true,
       "path_globs": ["woodev/payment-gateway/**"],
-      "grep_patterns": ["\\$this->id\\s*=", "get_method_title\\s*\\(", "payment_gateways\\s*\\("],
+      "grep_patterns": ["get_method_title\\s*\\(", "payment_gateways\\s*\\("],
       "exact_strings": []
     },
     {
