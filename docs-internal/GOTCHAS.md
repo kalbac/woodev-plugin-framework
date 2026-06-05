@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
-> **16 atomic gotchas in 9 namespaces** — update count when adding/removing.
-> Last updated: 2026-06-02 (polish session: added class_alias/PHPStan gotcha)
+> **17 atomic gotchas in 10 namespaces** — update count when adding/removing.
+> Last updated: 2026-06-06 (autodev: session-key vs order-meta-prefix contract gotcha)
 
 ## Index
 
@@ -53,6 +53,9 @@
 
 ### [build/*] — Build/CI/release
 <!-- No entries yet -->
+
+### [shipping/*] — Shipping module (S1)
+- [shipping/contracts] Session key ≠ order-meta prefix — composing one key for both checkout session and order meta breaks installed-site data (Yandex: `chosen_yandex_pickup_point` vs `_yandex_delivery_`) → [gotchas/session-key-vs-order-meta-prefix.md](gotchas/session-key-vs-order-meta-prefix.md) (2026-06-06)
 
 ## Archive (resolved gotchas)
 <!-- Resolved gotchas move here; keep for 2 sessions then remove -->

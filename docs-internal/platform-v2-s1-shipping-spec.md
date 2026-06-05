@@ -175,11 +175,20 @@ interface Pickup_Point_Source {
 (COD support), and `max_weight`/`max_dimensions` — exactly the three filters yandex applies.
 
 #### (v) Selection-state persistence — `pickup/class-pickup-selection.php`
-Persists the chosen point in **WC session** (during checkout) and **order meta** (after order),
-keyed by the plugin's `get_order_meta_prefix()` — **no hardcoded key** (yandex's
-`_yandex_delivery_destination_station_*` is supplied by the yandex plugin's prefix).
-Surface: `set(point)`, `get(): ?Pickup_Point`, `clear()`, `persist_to_order(WC_Order)`,
-`restore_from_order(WC_Order): ?Pickup_Point`. HPOS-safe via `Woodev_Order_Compatibility`.
+Persists the chosen point in the **WC session** during checkout only, keyed by the
+plugin-supplied **session key** — the framework hardcodes no contract string (yandex's
+installed session key is `chosen_yandex_pickup_point` / `chosen_yandex_pickup_point_test`,
+passed in by the plugin). Surface: `set(point)`, `get(): ?Pickup_Point`, `clear()`.
+HPOS-irrelevant (session, not order meta).
+
+**Session-only by design (corrected 2026-06-06, autodev critic-s1-p1-pickup-selection).**
+The chosen point's *order-meta* persistence is owned by the Phase-3 order handler
+(§4.3, `class-shipping-order-handler.php`), which writes/reads under the plugin's **order-meta
+prefix** (yandex: `_yandex_delivery_*`, decomposed into `_destination_station_id`/`_address`/…).
+The session key (`chosen_yandex_pickup_point`) and the order-meta prefix (`_yandex_delivery_`)
+are two DISTINCT installed-site contracts that do not share a namespace, so a single composed
+key cannot preserve both. Do **not** add `persist_to_order`/`restore_from_order` here — that
+conflation was the original spec bug.
 
 #### (vi) Checkout modal + balloon — `checkout/views/html-pickup-modal.php` + `html-pickup-balloon.php`
 The PHP ships the **modal shell** markup + a balloon template; the JS adapter fills them.
