@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
-> **17 atomic gotchas in 10 namespaces** — update count when adding/removing.
-> Last updated: 2026-06-06 (autodev: session-key vs order-meta-prefix contract gotcha)
+> **18 atomic gotchas in 11 namespaces** — update count when adding/removing.
+> Last updated: 2026-06-06 (autodev: circuit-breaker attempt-refund symmetry gotcha)
 
 ## Index
 
@@ -56,6 +56,9 @@
 
 ### [shipping/*] — Shipping module (S1)
 - [shipping/contracts] Session key ≠ order-meta prefix — composing one key for both checkout session and order meta breaks installed-site data (Yandex: `chosen_yandex_pickup_point` vs `_yandex_delivery_`) → [gotchas/session-key-vs-order-meta-prefix.md](gotchas/session-key-vs-order-meta-prefix.md) (2026-06-06)
+
+### [autodev/*] — Adversarial dev loop tooling
+- [autodev/circuit-breaker] Refund the attempt on EVERY external pause (worker AND critic 429), not just the worker's — an unrefunded critic rate-limit marches a DONE task into a false poison → [gotchas/autodev-attempt-refund-symmetry.md](gotchas/autodev-attempt-refund-symmetry.md) (2026-06-06)
 
 ## Archive (resolved gotchas)
 <!-- Resolved gotchas move here; keep for 2 sessions then remove -->
