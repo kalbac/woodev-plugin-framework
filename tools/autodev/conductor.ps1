@@ -140,7 +140,11 @@ function Invoke-ConductorIteration {
         $w = & (Join-Path $here 'invoke-worker.ps1') -TaskId $task.id `
                 -TouchesContractZone:([bool]$task.touches_contract_zone) -DryRun:$DryRunWorker
         if ($w.Status -eq 'RATE_LIMITED') {
-            Write-AutodevLog -Level WORKER -Message "Rate-limited; returning task $($task.id) to pending (lose nothing)." -Config $Config
+            # A 429 is an EXTERNAL pause, not a failed attempt -- refund the attempt counter so
+            # repeated rate-limits can never trip the circuit breaker into a false poison
+            # (observed 2026-06-06: warehouse-store poisoned by two back-to-back 429s on opus).
+            Set-Attempts -TaskId $task.id -N ([Math]::Max(0, $attempts - 1))
+            Write-AutodevLog -Level WORKER -Message "Rate-limited; returning task $($task.id) to pending (lose nothing; attempt refunded)." -Config $Config
             Move-Task -TaskId $task.id -ToDir $Config.QueuePending
             return $task
         }
@@ -216,7 +220,7 @@ function Invoke-ConductorIteration {
     }
 
     # 6. GATE
-    & (Join-Path $here 'gate.ps1') -TaskId $task.id -SkipComposer:$SkipComposer | Out-Null
+    & (Join-Path $here 'gate.ps1') -TaskId $task.id -FileSet $task.file_set -SkipComposer:$SkipComposer | Out-Null
     $gateExit = $LASTEXITCODE
     $gate = Get-Content (Join-Path $rtDir 'gate-verdict.json') -Raw -Encoding utf8 | ConvertFrom-Json
 

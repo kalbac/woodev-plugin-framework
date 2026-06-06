@@ -300,6 +300,24 @@ function Get-GitDiffText {
     return ($r.Output | Out-String)
 }
 
+function Get-GitFileSetChangedFiles {
+    <# Working-tree files (vs HEAD) restricted to a task's file_set. Used by the gate so a
+       task is judged ONLY on the files it owns, never on a parked task's uncommitted leftovers
+       (the conductor commits only the file_set, so this matches exactly what would land). #>
+    param([string[]]$FileSet, [pscustomobject]$Config = (Get-AutodevConfig))
+    if (-not $FileSet -or $FileSet.Count -eq 0) { return @() }
+    $r = Invoke-Native -Exe 'git' -CommandArgs (@('diff', '--name-only', 'HEAD', '--') + $FileSet) -WorkingDirectory $Config.RepoRoot
+    return @($r.Output | Where-Object { $_ -and $_.Trim() -ne '' } | ForEach-Object { ConvertTo-NormalizedPath $_ })
+}
+
+function Get-GitFileSetDiffText {
+    <# Working-tree diff (vs HEAD) restricted to a task's file_set. #>
+    param([string[]]$FileSet, [pscustomobject]$Config = (Get-AutodevConfig))
+    if (-not $FileSet -or $FileSet.Count -eq 0) { return '' }
+    $r = Invoke-Native -Exe 'git' -CommandArgs (@('diff', 'HEAD', '--') + $FileSet) -WorkingDirectory $Config.RepoRoot
+    return ($r.Output | Out-String)
+}
+
 function Get-GitDiffAddedRemovedLines {
     <# Only +/- content lines (excludes +++/--- headers). #>
     param([string]$DiffText)

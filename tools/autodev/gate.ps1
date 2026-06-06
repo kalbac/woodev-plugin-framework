@@ -33,6 +33,7 @@
 param(
     [string]$TaskId,
     [string]$Range,
+    [string[]]$FileSet,
     [switch]$SkipComposer,
     [string]$ComposerSubcommand = 'check'
 )
@@ -70,6 +71,7 @@ function Invoke-AutodevGate {
     param(
         [string]$TaskId,
         [string]$Range,
+        [string[]]$FileSet,
         [switch]$SkipComposer,
         [string]$ComposerSubcommand = 'check',
         [pscustomobject]$Config = (Get-AutodevConfig)
@@ -80,6 +82,16 @@ function Invoke-AutodevGate {
     if ($Range) {
         $changedFiles = Get-GitChangedFiles -Range $Range -Config $Config
         $diffText = Get-GitDiffText -Range $Range -Config $Config
+    } elseif ($FileSet -and $FileSet.Count -gt 0) {
+        # Scope zone + constitution detection to the TASK'S OWN file_set only. The whole-tree
+        # default lets a parked task's uncommitted files contaminate this task's verdict
+        # (observed 2026-06-06: a warehouse-store dbDelta leaked db_schema into pickup-selection;
+        # earlier a Warehouse $this->id= leaked gateway_id into checkout-fields). The conductor
+        # commits only the file_set, so judging only the file_set is exactly what would land.
+        # NOTE: composer check (below) still runs over the whole tree -- it MUST validate the
+        # whole codebase compiles/passes, that is not a per-task contract-zone question.
+        $changedFiles = Get-GitFileSetChangedFiles -FileSet $FileSet -Config $Config
+        $diffText = Get-GitFileSetDiffText -FileSet $FileSet -Config $Config
     } else {
         $changedFiles = Get-GitChangedFiles -Config $Config
         $diffText = Get-GitDiffText -Config $Config
@@ -182,7 +194,7 @@ function Invoke-AutodevGate {
 }
 
 # Entry point
-$v = Invoke-AutodevGate -TaskId $TaskId -Range $Range -SkipComposer:$SkipComposer -ComposerSubcommand $ComposerSubcommand
+$v = Invoke-AutodevGate -TaskId $TaskId -Range $Range -FileSet $FileSet -SkipComposer:$SkipComposer -ComposerSubcommand $ComposerSubcommand
 $v | ConvertTo-Json -Depth 6
 switch ($v.decision) {
     'COMMIT'   { exit 0 }
