@@ -243,8 +243,19 @@ function Invoke-ConductorIteration {
 
     # 7. DECISION
     if ($gate.decision -eq 'RETRY') {
-        Write-AutodevLog -Level GATE -Message "Gate RETRY ($($gate.reasons -join '; '))." -Config $Config
-        Move-Task -TaskId $task.id -ToDir $Config.QueueActive
+        # Gate RETRY == `composer check` FAILED -- the ONLY RETRY trigger (gate.ps1: contract /
+        # constitution issues ESCALATE instead, never RETRY). A build error is worker-fixable, so
+        # return the task to PENDING for a fresh worker attempt. NOT to active/: the scheduler only
+        # claims from pending/, so an active/ RETRY is never re-picked -- it silently strands a
+        # composer-failing task with no retry, no escalation, no commit (observed 2026-06-06:
+        # rest-bootstrap / status-view / abstract-api dead-ended this way). The attempt is NOT
+        # refunded: unlike a rate-limit pause, a composer failure is a genuine attempt, so repeated
+        # failures still trip the breaker into a (legitimate) poison escalation -- a VISIBLE stuck
+        # signal instead of a silent one. NOTE: `composer check` runs whole-tree (gate.ps1), so a
+        # task can RETRY on OTHER parked tasks' uncommitted breakage, not its own; keeping the
+        # escalation backlog drained (tree clean) is what prevents that cross-task false retry.
+        Write-AutodevLog -Level GATE -Message "Gate RETRY ($($gate.reasons -join '; ')); returning to pending for a fresh worker attempt." -Config $Config
+        Move-Task -TaskId $task.id -ToDir $Config.QueuePending
         return $task
     }
 
