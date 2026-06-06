@@ -1,4 +1,50 @@
 
+## Autodev operator session — 2 escalations resolved + critic-429 false-poison fix (2026-06-06)
+
+> Operator-driven session on `autodev/loop-bootstrap`. Conductor kept stopped (intentional);
+> all decisions were the operator's, executed by hand following the loop's own commit conventions.
+
+### Operator escalations (both from `.autodev/escalations/_outbox.md`)
+- `gate-s1-p2-checkout-handler` → **A (approve+commit)** → `07d8f80`. The escalation's evidence block
+  was STALE whole-tree (16 files, db_schema from the parked warehouse-store); the fresh scoped
+  gate-verdict is single-file and escalates only on the `hooks` zone — FOUR new forward hooks
+  (`woodev_shipping_{prefix}_checkout_*`), additive, not renames. Critic verdict `clean`. One-glance blessed.
+- `poison-s1-p1-warehouse-store` → **commit existing** (neither re-queue nor drop) → `c23f241`. The
+  "poison" was a MISCLASSIFICATION: worker DONE, composer green, clean additive diff; the 3 "failures"
+  were a critic INFRA failure (codex 429s), not bad code. db_schema zone is the spec-§6b-sanctioned
+  human one-glance (framework mints no table; name+schema are subclass-supplied). Bookkeeping: `829bc52`.
+
+### Q3 root-cause fix — conductor circuit breaker (`tools/autodev/conductor.ps1`) → `61811b2`
+- Root cause: the per-iteration attempt counter is incremented up front and trips the
+  poison/quarantine breaker at `attempts > MaxAttempts` (=3). The WORKER 429 path refunds the
+  attempt (commit `557126a`), but the CRITIC 429 path (exit 4) returned the task to pending
+  WITHOUT refunding — so 3 back-to-back codex 429s marched a DONE task into a false poison
+  (exact fingerprint: `verdict.json` `uncertain`/`confidence:0`/`broken_contracts:[]`, `notes`
+  full of rate-limit text). The two paths were asymmetric; only the worker half had been fixed.
+- Fix: extract shared `Restore-Attempt`; refund on critic exit 4 too; add `conductor.ps1 -SelfTest`
+  (no subprocesses) asserting the breaker invariant.
+- Q3 part 2 ("critic too aggressive on additive diffs") found NOT to be a real problem — in the
+  warehouse-store case the critic never ran (rate-limited); when it runs it is well-calibrated
+  (resolved S1 verdicts each confirmed-correct or clean), so no calibration change was made.
+
+### Verification
+- `conductor.ps1 -SelfTest`: **PASS** (external pauses never reach breaker; genuine failures still trip it).
+- `scheduler.ps1 -SelfTest`: **PASS** (regression — shared `_common.ps1` helpers untouched).
+- `tools/autodev/conductor.ps1` confirmed pure 7-bit ASCII (PS 5.1 constraint).
+- Did NOT run `composer check`: no PHP changed in the Q3 commit; the P1/P2 source files committed
+  earlier were already phpstan-green per their worker reports.
+
+### Knowledge persistence
+- New gotcha `gotchas/autodev-attempt-refund-symmetry.md` + GOTCHAS index (count 17→18, +`[autodev/*]`).
+- `_outbox.md` Q3 follow-up marked RESOLVED (`61811b2`).
+
+### Next
+- Conductor remains stopped per operator. `queue/pending/` holds P2/P3 tasks ready when the loop resumes.
+- Pending a formal "save session": refresh the stale `CURRENT-STATE.md` autodev digest mirror (still
+  shows the 2026-06-04 bless-guard escalation as open) and the `.autodev/digest.md` cadence entry.
+- Untracked working-tree noise (`.gitignore`, `.serena/project.yml`, `.serena/memories/memory_maintenance.md`)
+  is pre-existing and was left untouched.
+
 ## P6 split-done audit fixes — REST neutrality and installed-file contracts (2026-06-04)
 
 ### Implementation
