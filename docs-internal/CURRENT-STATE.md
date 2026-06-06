@@ -1,12 +1,15 @@
 # Current State — Woodev Plugin Framework
-> Last updated: 2026-06-04 (P6 split-done audit fixes: REST neutrality, HPOS gate, plugin-file contract)
+> Last updated: 2026-06-06 (autodev: 2 escalations resolved + critic-429 false-poison fix; loop being resumed)
 
-## Autodev digest — 2026-06-04 (loop bootstrap, branch `autodev/loop-bootstrap`)
+## Autodev digest — 2026-06-06 (loop bootstrap, branch `autodev/loop-bootstrap`)
 > Mirrored from `.autodev/digest.md` (autodev loop §7). This is a SEPARATE workstream from S0/S1.
-- Done: `guard-edostavka-contracts` → commit `6147853` (mutation-verified edostavka contract guards), landed through the conductor (claim → critic → gate → commit).
-- Guards blessed this run: 0 | **pending your blessing: 2** (`shipping_method_id_edostavka`, `settings_option_key_edostavka` — both mutation-proven RED-on-flip; awaiting operator A/B in escalation `bless-guard-edostavka-contracts`).
-- Open escalations: 1 — `.autodev/escalations/bless-guard-edostavka-contracts.md`.
-- Anti-drift (Sonnet, vs tracker intent + diffs, not titles): **ON-TRACK** — the diffs deliver exactly the bootstrap intent (adversarial loop infrastructure + mutation-verified contract guards), additive on the loop branch without touching S0 files.
+- **Open escalations: 0.** All S1 escalations to date are closed (edostavka + yandex guards blessed 2026-06-04; pickup-models/checkout-fields/pickup-selection/order-handler/webhook resolved 2026-06-06).
+- **2026-06-06 operator session** (conductor stopped; operator decided each item):
+  - `gate-s1-p2-checkout-handler` → approve+commit `07d8f80` (4 new additive forward hooks; critic clean).
+  - `poison-s1-p1-warehouse-store` → commit-existing `c23f241` (poison was a critic-429 infra misclassification, not bad code).
+  - **Q3 conductor bug fixed** `61811b2`: refund the breaker attempt on a critic 429 (exit 4), symmetric with the worker 429 refund (`557126a`). Locked by `conductor.ps1 -SelfTest`. Gotcha `autodev-attempt-refund-symmetry`.
+- **S1 landed so far:** P1 PVZ-map (pickup models/source/selection, warehouse store, map provider/js, address normalizer) + P2 checkout (fields + handler). P3+ in `queue/pending/`.
+- Anti-drift: ON-TRACK — all diffs additive on the loop branch; no S0 files touched.
 
 ## Phase Status
 
