@@ -45,6 +45,7 @@
 [CmdletBinding()]
 param(
     [switch]$Once,
+    [switch]$SelfTest,
     [int]$MaxIterations = 0,
     [switch]$AssumeWorkerDone,
     [switch]$GuardBootstrap,
@@ -73,6 +74,16 @@ function Set-Attempts {
     $d = Join-Path $Config.Runtime $TaskId
     if (-not (Test-Path $d)) { New-Item -ItemType Directory -Path $d -Force | Out-Null }
     Set-Content -Path (Join-Path $d 'attempts') -Value $N -Encoding utf8
+}
+function Restore-Attempt {
+    # Refund ONE attempt after an EXTERNAL pause (a 429/rate-limit from the worker OR critic
+    # transport), as opposed to a genuine failed attempt. An external pause must never advance
+    # the circuit breaker toward a false "poison": observed 2026-06-06, warehouse-store was
+    # quarantined as poison after 3 back-to-back codex (critic) 429s, even though the worker
+    # output was DONE and composer-green. Shared by the worker AND critic rate-limit paths so
+    # the two stay symmetric (the critic path was missing this refund until then).
+    param([string]$TaskId, [int]$Attempts)
+    Set-Attempts -TaskId $TaskId -N ([Math]::Max(0, $Attempts - 1))
 }
 
 function Move-Task {
@@ -143,7 +154,7 @@ function Invoke-ConductorIteration {
             # A 429 is an EXTERNAL pause, not a failed attempt -- refund the attempt counter so
             # repeated rate-limits can never trip the circuit breaker into a false poison
             # (observed 2026-06-06: warehouse-store poisoned by two back-to-back 429s on opus).
-            Set-Attempts -TaskId $task.id -N ([Math]::Max(0, $attempts - 1))
+            Restore-Attempt -TaskId $task.id -Attempts $attempts
             Write-AutodevLog -Level WORKER -Message "Rate-limited; returning task $($task.id) to pending (lose nothing; attempt refunded)." -Config $Config
             Move-Task -TaskId $task.id -ToDir $Config.QueuePending
             return $task
@@ -205,7 +216,13 @@ function Invoke-ConductorIteration {
     }
     $verdict = Get-Content $verdictFile -Raw -Encoding utf8 | ConvertFrom-Json
     if ($criticExit -eq 4) {
-        Write-AutodevLog -Level CRITIC -Message "Critic rate-limited; returning task to pending." -Config $Config
+        # A critic 429 is an EXTERNAL pause, not a failed attempt -- refund the attempt counter,
+        # symmetric with the worker rate-limit path above. Without this refund, repeated codex
+        # (critic) rate-limits march the counter to MaxAttempts and quarantine a DONE,
+        # composer-green task as a FALSE poison (observed 2026-06-06: warehouse-store, whose
+        # worker was DONE but whose critic took 3 back-to-back 429s).
+        Restore-Attempt -TaskId $task.id -Attempts $attempts
+        Write-AutodevLog -Level CRITIC -Message "Critic rate-limited; returning task to pending (attempt refunded)." -Config $Config
         Move-Task -TaskId $task.id -ToDir $Config.QueuePending
         return $task
     }
@@ -261,8 +278,66 @@ function Invoke-ConductorIteration {
 }
 
 # ----------------------------------------------------------------------------------
+# Self-test: the circuit-breaker attempt-counter invariant (acceptance for the
+# 2026-06-06 false-poison fix). No subprocesses: it drives the REAL Get/Set/Restore-Attempt
+# helpers against a temp runtime and asserts both halves of the invariant:
+#   (1) repeated EXTERNAL pauses (worker/critic 429 -> Restore-Attempt) NEVER reach the
+#       breaker threshold, so a rate-limited-but-DONE task is never quarantined as poison;
+#   (2) genuine failed attempts (no refund) DO cross the threshold, so the safety net still
+#       fires for actually-stuck tasks (the fix must not disarm the breaker).
+# ----------------------------------------------------------------------------------
+function Invoke-ConductorSelfTest {
+    $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("autodev-cond-" + [guid]::NewGuid().ToString('N'))
+    $runtime = Join-Path $tmp 'runtime'
+    New-Item -ItemType Directory -Path $runtime -Force | Out-Null
+    # Get/Set-Attempts read $Config from the calling scope (PowerShell dynamic scope), so a
+    # local override here redirects them at the temp runtime without touching the real one.
+    $Config = $script:Config.PSObject.Copy()
+    $Config.Runtime = $runtime
+    $max = $Config.MaxAttempts
+
+    # (1) EXTERNAL-PAUSE cycles: claim -> increment -> refund, more times than the threshold.
+    # Each cycle mirrors one conductor iteration that ends in a worker/critic 429. The value
+    # the breaker would test is (Get-Attempts)+1 at the top of the next iteration.
+    $taskA = 'selftest-external-pause'
+    $maxBreakerInput = 0
+    for ($i = 0; $i -lt ($max + 3); $i++) {
+        $a = (Get-Attempts -TaskId $taskA) + 1
+        Set-Attempts -TaskId $taskA -N $a
+        if ($a -gt $maxBreakerInput) { $maxBreakerInput = $a }
+        Restore-Attempt -TaskId $taskA -Attempts $a       # external pause: refund the attempt
+    }
+    $externalNeverPoisons = ($maxBreakerInput -le $max)   # breaker input never exceeds threshold
+
+    # (2) GENUINE-FAILURE cycles: claim -> increment, NO refund. The breaker must still fire.
+    $taskB = 'selftest-genuine-failure'
+    $poisoned = $false
+    for ($i = 0; $i -lt ($max + 1); $i++) {
+        $a = (Get-Attempts -TaskId $taskB) + 1
+        Set-Attempts -TaskId $taskB -N $a
+        if ($a -gt $max) { $poisoned = $true }            # breaker fires (would quarantine)
+    }
+
+    Remove-Item -Path $tmp -Recurse -Force -ErrorAction SilentlyContinue
+
+    Write-Host "--- Conductor circuit-breaker attempt-counter self-test ---"
+    Write-Host "External pauses (worker/critic 429): max breaker input = $maxBreakerInput (threshold $max); never poisons = $externalNeverPoisons"
+    Write-Host "Genuine failures: breaker fires after >$max attempts = $poisoned"
+
+    if ($externalNeverPoisons -and $poisoned) {
+        Write-Host "RESULT: PASS -- external pauses are refunded (no false poison); genuine failures still trip the breaker." -ForegroundColor Green
+        return 0
+    } else {
+        Write-Host "RESULT: FAIL" -ForegroundColor Red
+        return 1
+    }
+}
+
+# ----------------------------------------------------------------------------------
 # Entry: loop or single iteration
 # ----------------------------------------------------------------------------------
+if ($SelfTest) { exit (Invoke-ConductorSelfTest) }
+
 $iterations = 0
 while ($true) {
     $did = Invoke-ConductorIteration
