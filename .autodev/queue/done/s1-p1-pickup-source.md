@@ -30,3 +30,5 @@ objects (raw blob carries carrier specifics).
 `Pickup_Point_Filter` (pure, static-friendly): filter `Pickup_Point[]` by `type`,
 `payment_method` (COD support — the exact filter yandex applies), and
 `max_weight`/`max_dimensions`. These are the three filters the yandex reference performs.
+
+<!-- committed: d8026c7 -->

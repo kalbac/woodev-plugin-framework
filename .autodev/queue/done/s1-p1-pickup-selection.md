@@ -47,3 +47,5 @@ and rebuild via `Pickup_Point::from_array()` on read. No `update_post_meta`, no
 `order_session_meta` zone is tripped because the session key lives in that zone, but the diff
 introduces no installed-site key literal (the plugin supplies it) → no guard; human one-glance
 pass expected.
+
+<!-- committed: af28c89 -->
