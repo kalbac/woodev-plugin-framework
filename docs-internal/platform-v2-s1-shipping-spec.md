@@ -211,8 +211,17 @@ A DaData normalizer ships in the plugin that has a DaData token (yandex), not th
   Loads `assets/js/frontend/checkout.js`.
 
 ### 4.3 Order / tracking / webhook base classes — Phase 3
-- `order/class-shipping-order-handler.php` — HPOS-safe order-meta read/write via the plugin
-  prefix; carrier order id / tracking number / chosen point.
+- `order/class-shipping-order-handler.php` — HPOS-safe order-meta read/write.
+  **No hardcoded meta-key suffixes (corrected 2026-06-06, autodev critic-s1-p3-order-handler).**
+  The framework hardcodes NEITHER the prefix NOR the suffixes — the plugin supplies the **full
+  meta-key map** it must preserve, because every carrier's keys differ and are installed-site
+  contracts: edostavka stores `cdek_order_id` / `tracking_code` / `status` under `_wc_edostavka_`;
+  yandex stores a *decomposed* set (`_yandex_delivery_destination_station_id` / `_…_address` / …),
+  and its chosen-point session key is the separate `chosen_yandex_pickup_point`. A neutral
+  composed key like `_yandex_delivery_chosen_point` matches NONE of these and would orphan live
+  order data. So the handler takes an explicit map of logical-field → real-meta-key from the
+  plugin (e.g. `['carrier_order_id' => 'cdek_order_id', …]`) and reads/writes only those; it
+  invents no key of its own.
 - `order/abstract-tracking-handler.php` — tracking-status model + display hooks (uses
   `Shipping_API::get_tracking()`).
 - `order/abstract-shipment-handler.php` — create/cancel/export shipment to carrier (uses
