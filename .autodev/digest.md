@@ -6,6 +6,30 @@
 
 <!-- digest entries appended below -->
 
+## Autodev digest -- holistic integration review + remediation (2026-06-07/08)
+> After S1 "completion", an independent GPT-5.5 (codex) HOLISTIC integration review of the assembled
+> module (`docs-internal/reviews/s1-holistic-integration-review-2026-06-07.md`) found that per-task +
+> green-gate review had a blind spot: the module was NOT fully wired. Operator chose fix-via-loop.
+- **Headline (verified real): p6 wiring incomplete.** `Shipping_Plugin::includes()` omitted the
+  subsystem files and `add_hooks()` never called the checkout/ajax/admin accessors -> checkout, AJAX,
+  admin, webhook, shipment, tracking were INERT, and the chosen pickup point never reached order meta.
+  Per-task critic passed p6 on contract grounds; the gate auto-committed it (blessed zone only); the
+  fixture gate proved "loads + strings" but not "wired". The holistic pass caught it.
+- **R1 (`93a5be5`) -- wiring + session->order handoff.** includes() now loads all committed subsystem
+  files; lifecycle registers ajax/checkout/admin/webhook via null-guarded accessors; checkout handler
+  self-registers; pickup point persists to order meta via the plugin key map. The worker output
+  iterated under the adversarial critic across 4 ROUNDS, each catching a distinct REAL bug
+  composer-green missed: PHP-7.4 `?->`; data-loss field-unset without a handler; pre-save hook timing
+  (create_order -> order_processed, classic-storage meta loss); pickup-field validation not scoped to
+  pickup methods (blocked courier checkouts). 5th re-critic CLEAN 0.91.
+- **R2 (`07fa015`, autonomous) -- JS honors the AJAX success flag.** `wp_send_json_error()` is HTTP 200,
+  so the JS treated rejected selections as success; now it branches on `response.success`.
+- **Not fixed (by decision):** warehouse REST carrier-id/row-id conflation stays DEFERRED (rest-warehouses,
+  React rework); REST namespace `get_id_dasherized()` is the blessed pattern; "default selection loses
+  full point shape" is by-design (carriers override). composer GREEN (203 tests). PR #20 updated.
+- **Process lesson reinforced:** re-running the assistant's OWN in-place fixes back through the critic
+  caught all 4 R1 bugs before commit -- gotcha/feedback `re-critic-own-fixes`.
+
 ## Autodev digest -- S1 completed: operator-decision batch + unblocked-chain continuation (2026-06-07, ~12:00-16:15 local)
 > Operator (maksim) awoke, answered the 6 overnight escalations, then directed "continue the loop". S1 is now functionally complete on `autodev/loop-bootstrap` (composer GREEN, 203 tests / 638 assertions).
 - **6 overnight escalations resolved** (operator answers; assistant applied fixes in-place under supervision, re-running each contract-adjacent fix back through the codex critic before commit):
