@@ -1,4 +1,41 @@
 
+## Autodev session — S1 shipping module completed via the loop (2026-06-07)
+
+> Branch `autodev/loop-bootstrap`. Began as an unattended overnight supervised resume after an
+> internet outage; continued through the operator's morning decisions to S1 completion.
+> Final: `composer check` GREEN (PHPCS, PHPStan 0, **203 tests / 638 assertions**). PR #20 opened to `main`.
+
+**Overnight (supervised single-iteration bursts).** Resumed the loop; preflight green. Found & fixed a
+3rd conductor bug — `b186c52` `fix(autodev)`: `invoke-critic.ps1` ran the rate-limit check over the
+*entire* codex output with a hard-coded non-zero exit, so the read-only critic merely *reading* repo
+docs that mention the earlier critic-429 fix tripped the 429 detector and discarded valid verdicts.
+Fix: parse the verdict first (a completed verdict wins); declare rate-limit only when codex returns no
+verdict, using its real exit code. Validated live; gotcha `autodev-critic-ratelimit-false-positive`.
+Committed the clean additive tasks (`1f9224b` shipment, `4f52e66` admin-bootstrap, `73c0864`
+rest-bootstrap, `9df0885` rest-pickup, `e5a9e98` p5b autonomous); escalated 6 real bugs the critic
+caught (each independently verified) for the operator; paused on a genuine codex usage-limit; resumed
+automatically.
+
+**Operator decisions (morning).** Maksim answered the 6 escalations; I applied fixes in-place under
+supervision, re-running each contract-adjacent fix back through the GPT-5.5 critic before commit — which
+**caught two incomplete fixes** (p2 map needed `destroy()` not just null-reset; rest-warehouses had a
+deeper id-conflation), proving the no-self-certify property holds for operator-directed fixes too.
+- `85a99cc` ajax-base (Pickup_Point `id` wire alias) · `47b5e1c` admin-order (render-in-metabox, not
+  before redirect) · `62c1f20` status-view (is_configured via integration) · `7f06a6c` warehouse-admin
+  (admin.php submenu URLs) · `4975521` abstract-api (`get_response(): ?...` nullable).
+- **rest-warehouses → DEFERRED** to the React rework (storage-row-id vs carrier-id model conflation, 0.99
+  — a redesign, not a patch). Not committed; parked.
+
+**Unblocked chain → S1 complete.** `8887ce0` p2-pickup-checkout (map-retry fix) → `e3e31ac`
+test-scaffold-extract (autonomous; shared pilot scaffold + retrofit 3 fixtures) → `105c19f`
+p6-plugin-wiring (autonomous) → `7a21e7d` fixture-yandex (the **validation gate**). fixture-yandex
+correctly came back TOO_BIG; operator approved the split into the scaffold extraction + the re-scoped gate.
+
+**Session-save.** `7678fdc` `docs(autodev)`: queue pending→done moves, all escalation records, resolved
+`_outbox`, digest + CURRENT-STATE + 3 gotcha files. Pushed `autodev/loop-bootstrap`; PR #20.
+Queue: **done 31, active 1 (rest-warehouses deferred), pending 0.** 5 of 16 S1 commits were fully
+autonomous gate-COMMITs; the rest were one-glance/operator-fix, each contract-adjacent fix critic-verified.
+
 ## Autodev operator session — 2 escalations resolved + critic-429 false-poison fix (2026-06-06)
 
 > Operator-driven session on `autodev/loop-bootstrap`. Conductor kept stopped (intentional);
