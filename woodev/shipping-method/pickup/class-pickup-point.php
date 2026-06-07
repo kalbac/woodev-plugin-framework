@@ -137,7 +137,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Point' ) ) :
 		 */
 		public static function from_array( array $data ): self {
 			return new self(
-				(string) ( $data['code'] ?? '' ),
+				(string) ( $data['code'] ?? $data['id'] ?? '' ),
 				(string) ( $data['type'] ?? '' ),
 				(string) ( $data['name'] ?? '' ),
 				(string) ( $data['address_full'] ?? '' ),
@@ -165,6 +165,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Point' ) ) :
 		 */
 		public function to_array(): array {
 			return [
+				// `id` is the generic wire identity the shipped pickup-map.js consumes
+				// (it reads `point.id` and posts `point_id`); its value is the
+				// carrier-unique `code` (e.g. for CDEK the point's own `code`). `code`
+				// is kept for carrier-specific consumers.
+				'id'              => $this->code,
 				'code'            => $this->code,
 				'type'            => $this->type,
 				'name'            => $this->name,
