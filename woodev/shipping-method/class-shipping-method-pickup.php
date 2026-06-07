@@ -53,6 +53,21 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method_Pickup' ) )
 		abstract protected function get_point_source(): Pickup_Point_Source;
 
 		/**
+		 * Gets the carrier's normalizing pickup-point source for shared subsystems.
+		 *
+		 * Overrides the null-default accessor on {@see Shipping_Method} so the inert
+		 * base seam resolves to this pickup method's concrete {@see get_point_source()},
+		 * letting shared subsystems reach the carrier's normalizing source.
+		 *
+		 * @since 1.5.0
+		 *
+		 * @return Pickup_Point_Source
+		 */
+		public function get_pickup_point_source(): ?Pickup_Point_Source {
+			return $this->get_point_source();
+		}
+
+		/**
 		 * Gets the carrier's session-only selection store.
 		 *
 		 * The selection seam (spec §4.1.v): the concrete store carries the
