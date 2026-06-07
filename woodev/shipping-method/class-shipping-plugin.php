@@ -151,6 +151,38 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			require_once $path . '/map/interface-map-provider.php';
 			require_once $path . '/map/class-leaflet-map-provider.php';
 			require_once $path . '/map/class-map-provider-registry.php';
+
+			// pickup models, source seam, session store and warehouse persistence
+			require_once $path . '/pickup/interface-pickup-point-source.php';
+			require_once $path . '/pickup/class-pickup-point.php';
+			require_once $path . '/pickup/class-pickup-point-filter.php';
+			require_once $path . '/pickup/class-pickup-selection.php';
+			require_once $path . '/pickup/class-warehouse.php';
+			require_once $path . '/pickup/interface-warehouse-store.php';
+			require_once $path . '/pickup/class-abstract-warehouse-store.php';
+
+			// AJAX base for the pickup-point map
+			require_once $path . '/ajax/class-shipping-ajax.php';
+
+			// checkout fields + handler backbone (pickup handler extends the backbone)
+			require_once $path . '/checkout/class-checkout-fields.php';
+			require_once $path . '/checkout/class-checkout-handler.php';
+			require_once $path . '/checkout/class-pickup-checkout-handler.php';
+
+			// order meta handler + abstract shipment/tracking/webhook handlers
+			require_once $path . '/order/class-shipping-order-handler.php';
+			require_once $path . '/order/abstract-shipment-handler.php';
+			require_once $path . '/order/abstract-tracking-handler.php';
+			require_once $path . '/order/abstract-webhook-handler.php';
+
+			// admin bootstrap + order/warehouse admin handlers
+			require_once $path . '/admin/class-shipping-admin.php';
+			require_once $path . '/admin/class-shipping-admin-order.php';
+			require_once $path . '/admin/class-warehouse-admin.php';
+
+			// pickup-points REST controller base (the warehouses controller is
+			// deferred — React rework — and is NOT loaded here)
+			require_once $path . '/rest-api/abstract-pickup-points-controller.php';
 		}
 
 		/**
@@ -170,6 +202,41 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 
 			// add shipping method information to the system status report
 			add_action( 'woocommerce_system_status_report', [ $this, 'add_system_status_information' ] );
+
+			// wire the host-supplied subsystems; each accessor returns null in the base,
+			// so a plugin that does not supply a subsystem leaves it inert (null-guarded).
+
+			// AJAX endpoints behind the pickup-point map. (Explicit null checks, not the
+			// nullsafe `?->` operator: this codebase supports PHP 7.4, where `?->` is a parse error.)
+			$ajax_handler = $this->get_ajax_handler();
+			if ( null !== $ajax_handler ) {
+				$ajax_handler->register();
+			}
+
+			// checkout field injection + posted-data processing/save (and, for the
+			// pickup handler, the map assets/modal)
+			$checkout_handler = $this->get_checkout_handler();
+			if ( null !== $checkout_handler ) {
+				$checkout_handler->register();
+			}
+
+			// inbound carrier webhook REST route
+			$webhook_handler = $this->get_webhook_handler();
+			if ( null !== $webhook_handler ) {
+				$webhook_handler->register();
+			}
+
+			// admin suite. Shipping_Admin self-wires its admin_init/admin_menu
+			// registration in its constructor, so obtaining the host instance is what
+			// makes its handlers + pages live; calling register_handlers()/register_pages()
+			// here would double-register and fire before admin_menu.
+			if ( is_admin() ) {
+				$this->get_shipping_admin();
+			}
+
+			// NOTE: the REST API handler is already initialized by the base lifecycle
+			// (Woodev_Plugin::__construct() -> init_rest_api_handler()), so it is not
+			// re-wired here.
 		}
 
 		/**
@@ -792,6 +859,22 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		 * @return Ajax\Shipping_AJAX|null
 		 */
 		public function get_ajax_handler(): ?Ajax\Shipping_AJAX {
+			return null;
+		}
+
+		/**
+		 * Gets the inbound webhook handler.
+		 *
+		 * {@see Order\Abstract_Webhook_Handler} is abstract and bound to host-supplied
+		 * REST namespace/route + signature verification, so a host plugin overrides this
+		 * to return its concrete handler. Defaults to none (a carrier without an inbound
+		 * webhook — e.g. outbound-only yandex — simply leaves it unset).
+		 *
+		 * @since 1.5.0
+		 *
+		 * @return Order\Abstract_Webhook_Handler|null
+		 */
+		public function get_webhook_handler(): ?Order\Abstract_Webhook_Handler {
 			return null;
 		}
 

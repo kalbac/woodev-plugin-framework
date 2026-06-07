@@ -24,6 +24,7 @@ namespace Woodev\Framework\Shipping\Checkout;
 
 use Woodev\Framework\Shipping\Ajax\Shipping_AJAX;
 use Woodev\Framework\Shipping\Map\Map_Provider;
+use Woodev\Framework\Shipping\Order\Shipping_Order_Handler;
 use Woodev\Framework\Shipping\Pickup\Pickup_Point;
 use Woodev\Framework\Shipping\Pickup\Pickup_Selection;
 
@@ -71,20 +72,28 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Pickup_Checkout_H
 		/** @var string token namespacing this handler's forward hooks (own copy; the backbone's is private) */
 		private string $forward_hook_prefix;
 
+		/** @var Shipping_Order_Handler|null host order-meta handler the chosen point is persisted through */
+		private ?Shipping_Order_Handler $order_handler;
+
+		/** @var string logical field (in the order handler's key map) the chosen point is stored under */
+		private string $point_meta_field;
+
 		/**
 		 * Constructor.
 		 *
 		 * @since 1.5.0
 		 *
-		 * @param Checkout_Fields       $fields           checkout fields managed by the backbone (must include $field_id)
-		 * @param Map_Provider          $map_provider     provider whose assets + config drive the map
-		 * @param Pickup_Selection      $pickup_selection session store read for prefill
-		 * @param string                $field_id         hidden checkout field id receiving the chosen point code (host-supplied)
-		 * @param array<int, string>    $method_ids       shipping-method ids that trigger the modal (host-supplied contract values)
-		 * @param array<string, string> $action_map       logical endpoint => real AJAX action string (host-supplied; same map as {@see Shipping_AJAX})
-		 * @param string                $nonce_action     nonce action the map AJAX requests carry (host-supplied)
-		 * @param string                $hook_prefix      token namespacing this handler's forward hooks; defaults to none
-		 * @param string                $adapter_global   global JS constructor of the map adapter; defaults to the Leaflet adapter
+		 * @param Checkout_Fields             $fields           checkout fields managed by the backbone (must include $field_id)
+		 * @param Map_Provider                $map_provider     provider whose assets + config drive the map
+		 * @param Pickup_Selection            $pickup_selection session store read for prefill
+		 * @param string                      $field_id         hidden checkout field id receiving the chosen point code (host-supplied)
+		 * @param array<int, string>          $method_ids       shipping-method ids that trigger the modal (host-supplied contract values)
+		 * @param array<string, string>       $action_map       logical endpoint => real AJAX action string (host-supplied; same map as {@see Shipping_AJAX})
+		 * @param string                      $nonce_action     nonce action the map AJAX requests carry (host-supplied)
+		 * @param string                      $hook_prefix      token namespacing this handler's forward hooks; defaults to none
+		 * @param string                      $adapter_global   global JS constructor of the map adapter; defaults to the Leaflet adapter
+		 * @param Shipping_Order_Handler|null $order_handler order-meta handler the chosen point is persisted through at order save; defaults to none (no session→order handoff)
+		 * @param string                      $point_meta_field logical field (present in the order handler's key map) the chosen point is stored under; defaults to none
 		 */
 		public function __construct(
 			Checkout_Fields $fields,
@@ -95,7 +104,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Pickup_Checkout_H
 			array $action_map,
 			string $nonce_action,
 			string $hook_prefix = '',
-			string $adapter_global = 'WoodevPickupMapLeafletAdapter'
+			string $adapter_global = 'WoodevPickupMapLeafletAdapter',
+			?Shipping_Order_Handler $order_handler = null,
+			string $point_meta_field = ''
 		) {
 			parent::__construct( $fields, $hook_prefix );
 
@@ -107,6 +118,187 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Pickup_Checkout_H
 			$this->nonce_action        = $nonce_action;
 			$this->adapter_global      = $adapter_global;
 			$this->forward_hook_prefix = $hook_prefix;
+			$this->order_handler       = $order_handler;
+			$this->point_meta_field    = $point_meta_field;
+		}
+
+		/**
+		 * Wires the checkout backbone plus the pickup-map front end.
+		 *
+		 * Extends the backbone's {@see Checkout_Handler::register()} (field injection +
+		 * posted-data processing/save, including the session→order handoff in
+		 * {@see self::save()}) with the front-end half: the map assets/script on
+		 * `wp_enqueue_scripts` and the modal + balloon templates on `wp_footer`.
+		 *
+		 * @since 1.5.0
+		 *
+		 * @return void
+		 */
+		public function register(): void {
+			parent::register();
+
+			add_action( 'wp_enqueue_scripts', [ $this, 'enqueue' ] );
+			add_action( 'wp_footer', [ $this, 'render' ] );
+		}
+
+		/**
+		 * Saves the managed fields, routing the chosen pickup point to its real meta key.
+		 *
+		 * The hidden pickup field is excluded from the backbone's per-field persistence
+		 * (which would write it raw under the field id); instead the chosen point is read
+		 * from the WC session ({@see Pickup_Selection}) and persisted through the host's
+		 * {@see Shipping_Order_Handler} key map — the carrier's real, installed-site
+		 * order-meta key. Other managed fields are saved by the backbone as usual.
+		 *
+		 * @since 1.5.0
+		 *
+		 * @param \WC_Order|int        $order  order object or id to save onto
+		 * @param array<string, mixed> $values clean values keyed by field id
+		 *
+		 * @return void
+		 */
+		public function save( $order, array $values ): void {
+
+			// Only divert the hidden pickup field away from the backbone's per-field
+			// persistence when the session->order handoff is actually configured (order
+			// handler + logical meta field supplied). Without it, store_selected_point()
+			// is a no-op, so removing the field unconditionally would lose the chosen
+			// point entirely -- let the backbone persist it under the field id instead.
+			if ( null !== $this->order_handler && '' !== $this->point_meta_field ) {
+				unset( $values[ $this->field_id ] );
+			}
+
+			parent::save( $order, $values );
+
+			$this->store_selected_point( $order );
+		}
+
+		/**
+		 * Persists the session-chosen pickup point to order meta via the order handler.
+		 *
+		 * A no-op when no order handler / logical field was supplied, the order is not a
+		 * real {@see \WC_Order}, or no point is selected — so a courier (non-pickup) order
+		 * stores nothing. The point is stored under the carrier's plugin-supplied
+		 * order-meta key (resolved by {@see Shipping_Order_Handler}); no key is derived
+		 * and nothing is written raw under the hidden field id.
+		 *
+		 * @since 1.5.0
+		 *
+		 * @param \WC_Order|int $order order object or id being saved
+		 *
+		 * @return void
+		 */
+		private function store_selected_point( $order ): void {
+
+			if ( null === $this->order_handler || '' === $this->point_meta_field || ! $order instanceof \WC_Order ) {
+				return;
+			}
+
+			$point = $this->pickup_selection->get();
+
+			if ( ! $point instanceof Pickup_Point ) {
+				return;
+			}
+
+			$this->order_handler->store_pickup_point( $order, $this->point_meta_field, $point );
+		}
+
+		/**
+		 * Validates the pickup field ONLY when a pickup shipping method is chosen.
+		 *
+		 * The hidden pickup field is required for pickup methods, but a courier/postal
+		 * order leaves it blank -- so running the backbone's required-field validation
+		 * unconditionally would block valid non-pickup checkouts. Gate it on the chosen
+		 * method being one of this handler's pickup method ids.
+		 *
+		 * @internal
+		 *
+		 * @since 1.5.0
+		 *
+		 * @return void
+		 */
+		public function handle_checkout_process(): void {
+			if ( $this->is_pickup_method_chosen() ) {
+				parent::handle_checkout_process();
+			}
+		}
+
+		/**
+		 * Persists the managed fields + chosen point ONLY for pickup-method orders.
+		 *
+		 * For a courier/postal order there is nothing to store, and re-validating the
+		 * required pickup field after the order is created would add stray error notices.
+		 *
+		 * @internal
+		 *
+		 * @since 1.5.0
+		 *
+		 * @param int                  $order_id    the created order id
+		 * @param array<string, mixed> $posted_data the posted checkout data
+		 * @param \WC_Order            $order       the created, saved order
+		 *
+		 * @return void
+		 */
+		public function handle_checkout_order_processed( int $order_id, array $posted_data, \WC_Order $order ): void {
+			if ( $this->order_uses_pickup_method( $order ) ) {
+				parent::handle_checkout_order_processed( $order_id, $posted_data, $order );
+			}
+		}
+
+		/**
+		 * Whether the customer's chosen shipping method (WC session) is a pickup method.
+		 *
+		 * Used during the checkout validation phase, before any order exists. A chosen
+		 * rate id is `{method_id}` or `{method_id}:{instance_id}`; compare its method-id
+		 * part against this handler's host-supplied pickup `method_ids`.
+		 *
+		 * @since 1.5.0
+		 *
+		 * @return bool
+		 */
+		protected function is_pickup_method_chosen(): bool {
+
+			if ( ! function_exists( 'WC' ) || ! WC()->session instanceof \WC_Session ) {
+				return false;
+			}
+
+			$chosen = WC()->session->get( 'chosen_shipping_methods' );
+
+			if ( ! is_array( $chosen ) ) {
+				return false;
+			}
+
+			foreach ( $chosen as $rate_id ) {
+				$method_id = explode( ':', (string) $rate_id )[0];
+
+				if ( in_array( $method_id, $this->method_ids, true ) ) {
+					return true;
+				}
+			}
+
+			return false;
+		}
+
+		/**
+		 * Whether a created order uses one of this handler's pickup methods.
+		 *
+		 * Used during the save phase, when the order's shipping items are available.
+		 *
+		 * @since 1.5.0
+		 *
+		 * @param \WC_Order $order the created order
+		 *
+		 * @return bool
+		 */
+		protected function order_uses_pickup_method( \WC_Order $order ): bool {
+
+			foreach ( $order->get_shipping_methods() as $item ) {
+				if ( $item instanceof \WC_Order_Item_Shipping && in_array( $item->get_method_id(), $this->method_ids, true ) ) {
+					return true;
+				}
+			}
+
+			return false;
 		}
 
 		/**

@@ -23,6 +23,7 @@
 
 namespace Woodev\Framework\Shipping\Order;
 
+use Woodev\Framework\Shipping\Pickup\Pickup_Point;
 use Woodev\Framework\Shipping\Shipping_Exception;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -91,6 +92,29 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Shipping_Order_Handl
 		 */
 		public function set( \WC_Order $order, string $logical, $value ): void {
 			\Woodev_Order_Compatibility::update_order_meta( $order, $this->resolve( $logical ), $value );
+		}
+
+		/**
+		 * Stores a checkout-chosen pickup point onto the order.
+		 *
+		 * The point (its canonical, round-trippable {@see Pickup_Point::to_array()}
+		 * representation) is written through the plugin-supplied key map under the given
+		 * logical field — i.e. the carrier's real, installed-site order-meta key — via the
+		 * HPOS-safe {@see self::set()}. The handler derives no key: an unmapped logical
+		 * field throws rather than orphaning the chosen point under a neutral key. This is
+		 * the order-meta destination for the session-only chosen point held by
+		 * {@see \Woodev\Framework\Shipping\Pickup\Pickup_Selection}.
+		 *
+		 * @since 1.5.0
+		 *
+		 * @param \WC_Order    $order   order to store the point onto
+		 * @param string       $logical logical field name present in the key map
+		 * @param Pickup_Point $point   the chosen pickup point
+		 * @return void
+		 * @throws Shipping_Exception when the logical field is not in the plugin's key map
+		 */
+		public function store_pickup_point( \WC_Order $order, string $logical, Pickup_Point $point ): void {
+			$this->set( $order, $logical, $point->to_array() );
 		}
 
 		/**

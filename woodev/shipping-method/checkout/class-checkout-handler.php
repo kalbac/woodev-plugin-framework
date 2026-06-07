@@ -74,6 +74,100 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		}
 
 		/**
+		 * Wires the handler into the WooCommerce checkout.
+		 *
+		 * Hooks field injection onto `woocommerce_checkout_fields`, posted-data
+		 * validation onto the `woocommerce_checkout_process` validation phase (so a
+		 * failing field blocks checkout before any order is created), and the
+		 * sanitize → validate → save pipeline onto `woocommerce_checkout_order_processed`
+		 * — which fires AFTER the order is created and saved, so it has a real id and meta
+		 * persistence works on BOTH classic and HPOS storage. (Persisting on
+		 * `woocommerce_checkout_create_order` runs before the save: on classic storage the
+		 * order id is still 0 and the meta is silently dropped.) Call once during plugin
+		 * bootstrap. These are the standard WooCommerce checkout seams; no installed-site
+		 * contract value is introduced.
+		 *
+		 * @since 1.5.0
+		 *
+		 * @return void
+		 */
+		public function register(): void {
+			add_filter( 'woocommerce_checkout_fields', [ $this, 'handle_checkout_fields' ] );
+			add_action( 'woocommerce_checkout_process', [ $this, 'handle_checkout_process' ] );
+			add_action( 'woocommerce_checkout_order_processed', [ $this, 'handle_checkout_order_processed' ], 10, 3 );
+		}
+
+		/**
+		 * Injects the managed fields into the WooCommerce checkout fields.
+		 *
+		 * @internal
+		 *
+		 * @since 1.5.0
+		 *
+		 * @param mixed $checkout_fields the WC checkout fields, keyed by section
+		 *
+		 * @return array<string, mixed>
+		 */
+		public function handle_checkout_fields( $checkout_fields ): array {
+			return $this->inject( (array) $checkout_fields );
+		}
+
+		/**
+		 * Validates the posted field values during the checkout validation phase.
+		 *
+		 * Runs while WooCommerce is still collecting validation errors, so a blank
+		 * required field or a failing `validate_callback` halts checkout before an order
+		 * exists.
+		 *
+		 * @internal
+		 *
+		 * @since 1.5.0
+		 *
+		 * @return void
+		 */
+		public function handle_checkout_process(): void {
+			$this->validate( $this->sanitize_posted_data( $this->get_posted_data() ) );
+		}
+
+		/**
+		 * Sanitizes, validates and saves the posted values onto the created order.
+		 *
+		 * Fires on `woocommerce_checkout_order_processed`, AFTER the order has been saved,
+		 * so it has a real id and meta persistence works on classic + HPOS storage. Only
+		 * reached once validation has passed, so the re-validation inside
+		 * {@see self::process()} adds no duplicate notices.
+		 *
+		 * @internal
+		 *
+		 * @since 1.5.0
+		 *
+		 * @param int                  $order_id    the created order id (unused; the order object is used)
+		 * @param array<string, mixed> $posted_data the posted checkout data (unused; raw post is read directly)
+		 * @param \WC_Order            $order       the created, saved order
+		 *
+		 * @return void
+		 */
+		public function handle_checkout_order_processed( int $order_id, array $posted_data, \WC_Order $order ): void {
+			$this->process( $this->get_posted_data(), $order );
+		}
+
+		/**
+		 * Reads the raw posted checkout data.
+		 *
+		 * Returns the unslashed `$_POST`; per-field cleaning happens in
+		 * {@see self::sanitize_posted_data()}. WooCommerce verifies the checkout nonce
+		 * before its checkout hooks fire, so no separate nonce check is performed here.
+		 *
+		 * @since 1.5.0
+		 *
+		 * @return array<string, mixed>
+		 */
+		protected function get_posted_data(): array {
+			// phpcs:ignore WordPress.Security.NonceVerification.Missing -- WooCommerce verifies the checkout nonce before its checkout hooks fire; values are cleaned in sanitize_posted_data().
+			return (array) wp_unslash( $_POST );
+		}
+
+		/**
 		 * Injects the managed fields into a WooCommerce checkout-fields array.
 		 *
 		 * Adds one entry per managed field under the given section (e.g. `order`),
