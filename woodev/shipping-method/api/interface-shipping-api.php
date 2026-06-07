@@ -158,13 +158,14 @@ if ( ! interface_exists( '\\Woodev\\Framework\\Shipping\\Shipping_API' ) ) :
 
 
 		/**
-		 * Returns the most recent response object.
+		 * Returns the most recent response object, or null before any request has run
+		 * or after one failed before producing a parsed response.
 		 *
 		 * @since 1.5.0
 		 *
-		 * @return \Woodev_API_Response the most recent response object
+		 * @return \Woodev_API_Response|null the most recent response, or null when none
 		 */
-		public function get_response(): \Woodev_API_Response;
+		public function get_response(): ?\Woodev_API_Response;
 	}
 
 endif;
