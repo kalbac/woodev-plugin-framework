@@ -183,7 +183,6 @@ try {
         $mm = [regex]::Match($combined, '(?s)\{[^{}]*"verdict".*?\}')
         if ($mm.Success) { Set-Content -Path $outFile -Value $mm.Value -Encoding utf8 }
     }
-    $rateLimited = Test-RateLimited -ExitCode 1 -Stderr $combined
 }
 catch {
     $combined = $_.Exception.Message
@@ -195,13 +194,15 @@ finally {
 }
 $stderr = $combined
 
-if ($rateLimited) {
-    Write-AutodevLog -Level CRITIC -Message "Critic rate-limited; caller should back off." -Config $Config
-    Write-Verdict -Verdict 'uncertain' -Confidence 0.0 -Notes "critic rate-limited: $stderr" | Out-Null
-    exit 4
-}
-
-# Parse the structured final message.
+# Parse the structured final message FIRST. A successfully parsed verdict means codex
+# completed, so it is authoritative and MUST win over any rate-limit heuristic.
+# Bug fix 2026-06-07: the old code ran Test-RateLimited over the ENTIRE combined codex
+# output with a HARD-CODED non-zero exit code, so a benign rate-limit word the critic
+# merely READ from a repo doc (e.g. CURRENT-STATE.md / digest / gotchas, which describe
+# the earlier critic-429 fix) falsely classified a real, completed verdict as a 429 --
+# discarding it (exit 4) and re-queueing the task endlessly. Now the parsed verdict wins;
+# the rate-limit branch is reached ONLY when codex returned NO usable verdict, and it
+# uses codex's REAL exit code (a clean exit 0 is never a rate-limit).
 $parsed = $null
 if (Test-Path $outFile) {
     $raw = Get-Content $outFile -Raw -Encoding utf8
@@ -211,6 +212,13 @@ if (Test-Path $outFile) {
 }
 
 if ($null -eq $parsed -or -not ($parsed.PSObject.Properties.Name -contains 'verdict')) {
+    # No usable verdict -> this is the ONLY place a rate-limit can be declared. Use the REAL
+    # codex exit code; a benign rate-limit word in an already-parsed verdict cannot reach here.
+    if (Test-RateLimited -ExitCode $exit -Stderr $combined) {
+        Write-AutodevLog -Level CRITIC -Message "Critic rate-limited (no verdict, exit $exit); caller should back off." -Config $Config
+        Write-Verdict -Verdict 'uncertain' -Confidence 0.0 -Notes "critic rate-limited: $stderr" | Out-Null
+        exit 4
+    }
     Write-AutodevLog -Level CRITIC -Message "Critic produced no parseable verdict (exit $exit). Routing to human." -Config $Config
     Write-Verdict -Verdict 'uncertain' -Confidence 0.0 `
         -Notes "no parseable verdict from codex (exit $exit). stderr: $stderr" | Out-Null
