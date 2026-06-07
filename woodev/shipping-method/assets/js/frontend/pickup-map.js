@@ -144,6 +144,10 @@
 			}, params || {} )
 
 			return Promise.resolve( $.post( this.config.ajaxUrl, data ) ).then( ( response ) => {
+				if( this.isErrorResponse( response ) ) {
+					// wp_send_json_error() отдаёт HTTP 200 — это ошибка, а не пустой набор точек.
+					throw this.toError( response )
+				}
 				const points = this.normalizeResponse( response )
 				this.setPoints( points )
 				return points
@@ -198,6 +202,11 @@
 		 */
 		handleSelect( point ) {
 			return this.persistSelection( point ).then( ( response ) => {
+				if( this.isErrorResponse( response ) ) {
+					// Сервер отклонил выбор (wp_send_json_error, HTTP 200) — НЕ коммитим:
+					// не уведомляем подписчиков/onSelect, состояние выбора не меняем.
+					throw this.toError( response )
+				}
 				this.selectHandlers.forEach( ( handler ) => handler( point, response ) )
 				if( typeof this.config.onSelect === 'function' ) {
 					this.config.onSelect( point, response )
@@ -248,6 +257,41 @@
 			if( Array.isArray( data ) ) return data
 			if( data && Array.isArray( data.points ) ) return data.points
 			return []
+		}
+
+		/**
+		 * Является ли ответ WP-обёрткой с признаком ошибки (`wp_send_json_error`).
+		 *
+		 * `wp_send_json_success()` и `wp_send_json_error()` обе отдают HTTP 200, поэтому
+		 * `$.post()` резолвится в обоих случаях; отличить отказ от успеха можно только по
+		 * полю `success`. Ответ без этого поля (например, «голый» массив точек или иной
+		 * формат, уже обрабатываемый {@link WoodevPickupMap#normalizeResponse}) ошибкой
+		 * НЕ считается — сохраняется поведение по умолчанию.
+		 *
+		 * @param {*} response
+		 * @returns {boolean}
+		 */
+		isErrorResponse( response ) {
+			return !! response && 'object' === typeof response && 'success' in response && false === response.success
+		}
+
+		/**
+		 * Строит объект ошибки из обёртки wp_send_json_error.
+		 *
+		 * @param {*} response
+		 * @returns {Error}
+		 */
+		toError( response ) {
+			const data = response && 'object' === typeof response ? response.data : null
+			let message = 'WoodevPickupMap: the server rejected the request'
+
+			if( 'string' === typeof data ) {
+				message = data
+			} else if( data && 'string' === typeof data.message ) {
+				message = data.message
+			}
+
+			return new Error( message )
 		}
 
 		/**
