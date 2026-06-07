@@ -1,9 +1,14 @@
 # Current State — Woodev Plugin Framework
-> Last updated: 2026-06-06 (autodev: 2 escalations resolved + critic-429 false-poison fix; loop being resumed)
+> Last updated: 2026-06-07 (autodev: S1 shipping module COMPLETE via the loop — 31 done, 1 deferred; composer GREEN 203 tests)
 
-## Autodev digest — 2026-06-06 (loop bootstrap, branch `autodev/loop-bootstrap`)
-> Mirrored from `.autodev/digest.md` (autodev loop §7). This is a SEPARATE workstream from S0/S1.
-- **Open escalations: 0.** All S1 escalations to date are closed (edostavka + yandex guards blessed 2026-06-04; pickup-models/checkout-fields/pickup-selection/order-handler/webhook resolved 2026-06-06).
+## Autodev digest — 2026-06-07 (S1 complete; branch `autodev/loop-bootstrap`)
+> Mirrored from `.autodev/digest.md` (autodev loop §7) — see it for full detail. SEPARATE workstream from S0/S1.
+- **S1 shipping module functionally COMPLETE.** Queue: **done 31, active 1 (deferred), pending 0**. `composer check` GREEN (PHPCS, PHPStan 0, **203 tests / 638 assertions**). All work on `autodev/loop-bootstrap`.
+- **Open escalations: 1 — `critic-s1-p4-rest-warehouses`, DEFERRED to the React rework** (operator decision 2026-06-07). The warehouse REST controller has a storage-row-id vs carrier-unique-id model conflation (critic 0.99) spanning Warehouse + Warehouse_Store + controller; a redesign, not a patch. Not committed; parked in `queue/active/` + working tree (worker impl in `runtime/` which is gitignored → local only).
+- **3rd conductor bug fixed `b186c52`** (overnight): invoke-critic mis-read benign repo text as a 429 → discarded valid verdicts; gotcha `autodev-critic-ratelimit-false-positive`. (Prior bugs: critic-429 refund `61811b2`, gate-RETRY→pending `1e9914c`, gate file_set scoping `557126a`.)
+- **Commits this session (2026-06-07):** overnight — `1f9224b` shipment, `4f52e66` admin-bootstrap, `73c0864` rest-bootstrap, `9df0885` rest-pickup, `e5a9e98` p5b (autonomous), `b186c52` conductor fix. Operator-decision + continuation — `85a99cc` ajax-base, `47b5e1c` admin-order, `62c1f20` status-view, `7f06a6c` warehouse-admin, `4975521` abstract-api, `8887ce0` p2-pickup-checkout, `e3e31ac` test-scaffold-extract (autonomous), `105c19f` p6-plugin-wiring (autonomous), `7a21e7d` fixture-yandex (validation gate). 5 of 16 S1 commits were fully autonomous gate-COMMITs; the rest were one-glance/operator-fix with each contract-adjacent fix re-run through the codex critic.
+- **Validation gate landed:** `tests/unit/YandexPilotFixtureTest.php` proves a yandex-shaped plugin loads via the v2 path and preserves every yandex installed-site contract string (method ids, option key, REST ns `yandex-delivery`, warehouse table name, order-meta prefix, session key).
+- **Earlier (2026-06-04/06) escalations all remain closed:** edostavka + yandex guards blessed; pickup-models/checkout-fields/pickup-selection/order-handler/webhook/tracking/method-enhance resolved.
 - **2026-06-06 operator session** (conductor stopped; operator decided each item):
   - `gate-s1-p2-checkout-handler` → approve+commit `07d8f80` (4 new additive forward hooks; critic clean).
   - `poison-s1-p1-warehouse-store` → commit-existing `c23f241` (poison was a critic-429 infra misclassification, not bad code).

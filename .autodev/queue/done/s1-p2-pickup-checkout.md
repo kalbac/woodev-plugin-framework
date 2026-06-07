@@ -26,3 +26,5 @@ Spec §4.1.vi + §4.2. Specialization that wires the PVZ modal into checkout: th
 (`html-pickup-balloon.php`), and `checkout.js` (binds the pickup-method radio → opens modal →
 boots `pickup-map.js` with the active `Map_Provider` config → on select, writes hidden fields
 and calls the set-point AJAX). Cohesive single change; all four files are new and disjoint.
+
+<!-- committed: 8887ce0 (operator fix, continue-loop) -->

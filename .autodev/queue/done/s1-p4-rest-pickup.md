@@ -20,3 +20,5 @@ acceptance:
 Spec §4.4. Abstract REST controller for pickup-point search (read-only): query a
 `Pickup_Point_Source`, apply `Pickup_Point_Filter`, return points. Namespace/rest_base from the
 concrete controller/plugin; no live string in the framework.
+
+<!-- committed: 9df0885 -->

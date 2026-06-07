@@ -28,3 +28,5 @@ file-disjoint) to wire the PVZ pieces from P1:
 
 Only edits `class-shipping-method-pickup.php`. Path-zone match only; introduces no concrete
 `$this->id` literal → no guard.
+
+<!-- committed: 94b39ed -->

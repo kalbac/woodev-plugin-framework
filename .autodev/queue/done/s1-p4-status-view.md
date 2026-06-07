@@ -22,3 +22,5 @@ The skeleton ships `html-admin-shipping-method-status.php` as a placeholder that
 (environment, debug, configured/credentials state, API reachability if available) for a
 `Shipping_Method`, keeping the existing `woodev_shipping_method_{id}_system_status_*` action
 hook points. Single existing-file edit.
+
+<!-- committed: 62c1f20 (operator fix A/C) -->

@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
-> **18 atomic gotchas in 11 namespaces** — update count when adding/removing.
-> Last updated: 2026-06-06 (autodev: circuit-breaker attempt-refund symmetry gotcha)
+> **21 atomic gotchas in 11 namespaces** — update count when adding/removing.
+> Last updated: 2026-06-07 (autodev: invoke-critic rate-limit false-positive gotcha; fixed b186c52)
 
 ## Index
 
@@ -56,9 +56,12 @@
 
 ### [shipping/*] — Shipping module (S1)
 - [shipping/contracts] Session key ≠ order-meta prefix — composing one key for both checkout session and order meta breaks installed-site data (Yandex: `chosen_yandex_pickup_point` vs `_yandex_delivery_`) → [gotchas/session-key-vs-order-meta-prefix.md](gotchas/session-key-vs-order-meta-prefix.md) (2026-06-06)
+- [shipping/contracts] Installed-site contract strings (AJAX action, admin slug, meta key…) are NOT derivable from the plugin id by convention — the plugin must supply each; edostavka `wc_edostavka_orders` vs yandex `wc-yandex-orders` proves no single rule → [gotchas/contract-string-not-derivable.md](gotchas/contract-string-not-derivable.md) (2026-06-06)
 
 ### [autodev/*] — Adversarial dev loop tooling
 - [autodev/circuit-breaker] Refund the attempt on EVERY external pause (worker AND critic 429), not just the worker's — an unrefunded critic rate-limit marches a DONE task into a false poison → [gotchas/autodev-attempt-refund-symmetry.md](gotchas/autodev-attempt-refund-symmetry.md) (2026-06-06)
+- [autodev/critic] Critic over-flags two non-breaks as `broken` on every incremental task: a NEW additive hook name, and "class not yet wired into includes()" (wiring is the separate s1-p6 task). Keep its correct contract/logic findings; recalibrate only these two → [gotchas/autodev-critic-overflag.md](gotchas/autodev-critic-overflag.md) (2026-06-06)
+- [autodev/critic] invoke-critic mis-read benign repo text as a 429: it scanned the critic's ENTIRE output (incl. docs the critic READ that mention the prior critic-429 fix) with a hard-coded non-zero exit, discarding valid verdicts and re-queueing forever. Fix: parse the verdict first (it wins); rate-limit only when no verdict, using codex's real exit code → [gotchas/autodev-critic-ratelimit-false-positive.md](gotchas/autodev-critic-ratelimit-false-positive.md) (2026-06-07, fixed b186c52)
 
 ## Archive (resolved gotchas)
 <!-- Resolved gotchas move here; keep for 2 sessions then remove -->

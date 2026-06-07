@@ -33,3 +33,5 @@ registry with the Leaflet default registered, address normalizer). Mirrors how
 
 This is the one task that edits `class-shipping-plugin.php`; it depends on the subsystems
 existing so wiring compiles. Keep additive — do not disturb the existing registry methods.
+
+<!-- committed: 105c19f -->

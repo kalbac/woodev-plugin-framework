@@ -22,3 +22,5 @@ acceptance:
 Spec §4.4 — mirror `Woodev_Payment_Gateway_Admin_Order`. Order-list column + order-edit metabox:
 display carrier id / tracking / chosen pickup point (from `Shipping_Order_Handler`), and
 export/track/cancel actions (calling the shipment handler). New files; disjoint.
+
+<!-- committed: 47b5e1c (operator fix A/C) -->

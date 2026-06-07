@@ -21,3 +21,5 @@ acceptance:
 Spec §4.4. Admin UI for managing warehouses through the `Warehouse_Store` interface — works over
 ANY store implementation (yandex's existing table or a plugin's `Abstract_Warehouse_Store`).
 Does not assume a schema. New files; disjoint.
+
+<!-- committed: 7f06a6c (operator fix A/C) -->

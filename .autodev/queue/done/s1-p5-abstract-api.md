@@ -22,3 +22,5 @@ Spec §4.5. Abstract base implementing the existing `Shipping_API` interface on 
 `woodev_{plugin_id}_api_request_performed` action). Provides a default `get_pickup_points()`
 that returns `Pickup_Point[]`; carriers implement thin subclasses with their endpoint mapping.
 Extends the skeleton — does not replace `interface-shipping-api.php`.
+
+<!-- committed: 4975521 (operator fix A/C) -->

@@ -47,3 +47,5 @@ constructed with the key map. Do NOT add a chosen-point/session concern here (th
 
 `order_session_meta` zone is a grep match only; the diff introduces no installed-site key
 literal (the plugin supplies the map) → no guard; human one-glance pass expected.
+
+<!-- committed: 11acaa3 -->

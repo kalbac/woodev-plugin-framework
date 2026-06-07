@@ -21,3 +21,5 @@ Spec §4.4 — mirror `Woodev_Payment_Gateway_REST_API`. Bootstrap that wires th
 pickup-points controllers. REST **namespace is `$plugin->get_id_dasherized()`** (yandex
 `wc-yandex-delivery` is the plugin's) — the framework introduces no live namespace literal;
 `rest` grep match only, no guard.
+
+<!-- committed: 73c0864 -->
