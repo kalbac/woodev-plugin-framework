@@ -34,6 +34,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		/** @var string|null integration class name */
 		private ?string $integration_class = null;
 
+		/** @var Map\Map_Provider_Registry|null lazily-built map-provider registry */
+		private ?Map\Map_Provider_Registry $map_provider_registry = null;
+
+		/** @var Address\Address_Normalizer|null lazily-built address normalizer */
+		private ?Address\Address_Normalizer $address_normalizer = null;
+
 		/**
 		 * Initializes the shipping plugin.
 		 *
@@ -70,6 +76,25 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 
 			$this->includes();
 			$this->add_hooks();
+		}
+
+		/**
+		 * Builds the shipping REST API handler.
+		 *
+		 * Mirrors {@see \Woodev_Payment_Gateway_Plugin::init_rest_api_handler()}: the
+		 * shipping module ships its own REST bootstrap whose namespace is the plugin's
+		 * id-dasherized slug and whose controllers are host-supplied (none by default),
+		 * so the framework mints no installed-site REST namespace literal.
+		 *
+		 * @since 1.5.0
+		 *
+		 * @see \Woodev_Plugin::init_rest_api_handler()
+		 */
+		protected function init_rest_api_handler() {
+
+			require_once $this->get_shipping_framework_path() . '/rest-api/class-shipping-rest-api.php';
+
+			$this->rest_api_handler = new Rest_Api\Shipping_REST_API( $this );
 		}
 
 		/**
@@ -117,6 +142,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 
 			// settings
 			require_once $path . '/settings/class-shipping-integration.php';
+
+			// address normalizer (framework default: null object)
+			require_once $path . '/address/interface-address-normalizer.php';
+			require_once $path . '/address/class-null-address-normalizer.php';
+
+			// pickup-point map providers (framework default: Leaflet) + registry
+			require_once $path . '/map/interface-map-provider.php';
+			require_once $path . '/map/class-leaflet-map-provider.php';
+			require_once $path . '/map/class-map-provider-registry.php';
 		}
 
 		/**
@@ -671,6 +705,94 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			$this->assert( ! empty( $this->methods ) );
 
 			return array_keys( $this->methods );
+		}
+
+
+		// ---- Subsystem accessors ----
+
+		/**
+		 * Gets the map-provider registry, building it on first use.
+		 *
+		 * The framework default (Leaflet, no API key) is registered so it is always
+		 * resolvable; a host plugin registers its own provider on top.
+		 *
+		 * @since 1.5.0
+		 *
+		 * @return Map\Map_Provider_Registry
+		 */
+		public function get_map_provider_registry(): Map\Map_Provider_Registry {
+
+			if ( ! $this->map_provider_registry instanceof Map\Map_Provider_Registry ) {
+
+				$this->map_provider_registry = new Map\Map_Provider_Registry();
+				$this->map_provider_registry->register( $this->map_provider_registry->get_default() );
+			}
+
+			return $this->map_provider_registry;
+		}
+
+		/**
+		 * Gets the address normalizer, building the no-op default on first use.
+		 *
+		 * Returns the framework's {@see Address\Null_Address_Normalizer} so the shipping
+		 * module can always depend on a normalizer being present. A host plugin overrides
+		 * this to supply a carrier-backed normalizer.
+		 *
+		 * @since 1.5.0
+		 *
+		 * @return Address\Address_Normalizer
+		 */
+		public function get_address_normalizer(): Address\Address_Normalizer {
+
+			if ( ! $this->address_normalizer instanceof Address\Address_Normalizer ) {
+				$this->address_normalizer = new Address\Null_Address_Normalizer();
+			}
+
+			return $this->address_normalizer;
+		}
+
+		/**
+		 * Gets the checkout handler.
+		 *
+		 * The framework ships only the checkout backbone; a host plugin overrides this to
+		 * return its configured handler (the pickup handler binds host-supplied contract
+		 * values — hidden field id, method ids, AJAX action map). Defaults to none.
+		 *
+		 * @since 1.5.0
+		 *
+		 * @return Checkout\Checkout_Handler|null
+		 */
+		public function get_checkout_handler(): ?Checkout\Checkout_Handler {
+			return null;
+		}
+
+		/**
+		 * Gets the admin bootstrap.
+		 *
+		 * A host plugin overrides this to return its {@see Admin\Shipping_Admin}, built
+		 * from its own order/warehouse handlers and admin pages. Defaults to none.
+		 *
+		 * @since 1.5.0
+		 *
+		 * @return Admin\Shipping_Admin|null
+		 */
+		public function get_shipping_admin(): ?Admin\Shipping_Admin {
+			return null;
+		}
+
+		/**
+		 * Gets the AJAX handler.
+		 *
+		 * {@see Ajax\Shipping_AJAX} is abstract and bound to host-supplied AJAX action
+		 * strings, so a host plugin overrides this to return its concrete handler.
+		 * Defaults to none.
+		 *
+		 * @since 1.5.0
+		 *
+		 * @return Ajax\Shipping_AJAX|null
+		 */
+		public function get_ajax_handler(): ?Ajax\Shipping_AJAX {
+			return null;
 		}
 
 
