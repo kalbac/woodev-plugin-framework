@@ -79,7 +79,10 @@ jobs:
         run: composer install --prefer-dist --no-progress --no-interaction
 
       - name: Security audit
-        run: composer audit --no-dev
+        # Audit the lock file: this framework declares no runtime (non-dev) dependencies,
+        # so `composer audit --no-dev` finds no installed packages and errors out. `--locked`
+        # audits every locked dependency (the dev toolchain) for known advisories.
+        run: composer audit --locked
 
       - name: Run PHPCS
         run: ./vendor/bin/phpcs --warning-severity=0

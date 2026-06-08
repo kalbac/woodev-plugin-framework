@@ -32,4 +32,8 @@ jobs:
         run: npm install -g markdownlint-cli2
 
       - name: Lint markdown files
-        run: markdownlint-cli2 "**/*.md" "#node_modules" "#vendor" "#.ai" "#CLAUDE.md" "#QWEN.md"
+        # Gate the PUBLISHED docs/ tree (GH Pages) + root markdown. Excludes: vendored/AI-tool
+        # files (.ai, CLAUDE.md, QWEN.md, AGENTS.md — agent-instruction/constitution docs), the
+        # AI-agent operational docs (docs-internal/, not published), the autodev loop blackboard
+        # (.autodev/, machine-generated queue/escalations/digest) and Serena tooling (.serena/).
+        run: markdownlint-cli2 "**/*.md" "#node_modules" "#vendor" "#.ai" "#.kiro" "#CLAUDE.md" "#QWEN.md" "#AGENTS.md" "#docs-internal" "#.autodev" "#.serena"
