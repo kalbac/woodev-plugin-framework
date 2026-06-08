@@ -55,26 +55,41 @@ if ( ! class_exists( 'Woodev_Packer_Virtual_Box' ) ) :
 		 * @return array Возвращает массив с размерами коробки: длина, ширина, высота.
 		 */
 		private function calculate_virtual_box_dimensions( array $items ): array {
-			$max_length = 0;
-			$max_width  = 0;
-			$max_height = 0;
+			// Items are pre-normalised: length >= width >= height.
+			// Stack items along one axis: that axis gets sum(), the other two get max().
+			// Try all three axis assignments; return the combination with minimum volume.
 
-			foreach ( $items as $item ) {
-				if ( $item->get_length() > $max_length ) {
-					$max_length = $item->get_length();
-				}
-				if ( $item->get_width() > $max_width ) {
-					$max_width = $item->get_width();
-				}
-				if ( $item->get_height() > $max_height ) {
-					$max_height = $item->get_height();
+			$lengths = array_map( fn( Woodev_Box_Packer_Item $i ) => $i->get_length(), $items );
+			$widths  = array_map( fn( Woodev_Box_Packer_Item $i ) => $i->get_width(), $items );
+			$heights = array_map( fn( Woodev_Box_Packer_Item $i ) => $i->get_height(), $items );
+
+			$candidates = [
+				// Option A: stack along height (smallest dim) - common case for flat items.
+				[ max( $lengths ), max( $widths ), array_sum( $heights ) ],
+				// Option B: stack along width (middle dim).
+				[ max( $lengths ), array_sum( $widths ), max( $heights ) ],
+				// Option C: stack along length (largest dim) - common case for long thin items.
+				[ array_sum( $lengths ), max( $widths ), max( $heights ) ],
+			];
+
+			// Initialise to first candidate so $best is never null (even if all volumes overflow to INF).
+			$best        = $candidates[0];
+			$best_volume = PHP_FLOAT_MAX;
+
+			foreach ( $candidates as $dims ) {
+				$volume = $dims[0] * $dims[1] * $dims[2];
+				if ( $volume < $best_volume ) {
+					$best_volume = $volume;
+					$best        = $dims;
 				}
 			}
 
+			// Each candidate already guarantees box_axis >= max(item_axis) by construction.
+			// Do NOT rsort: that would destroy axis-name alignment for non-normalised items.
 			return [
-				'length' => $max_length,
-				'width'  => $max_width,
-				'height' => $max_height,
+				'length' => $best[0],
+				'width'  => $best[1],
+				'height' => $best[2],
 			];
 		}
 
