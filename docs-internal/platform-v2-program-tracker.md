@@ -2,22 +2,20 @@
 
 > Sweep-across-the-whole-program status. Any session reads this first (per execution-protocol §0) to learn where we are. Update the "Next action" + statuses as work lands.
 
-**Branch:** `refactor/platform-v2-clean-break` · **Baselines:** `platform-v2-pivot-baseline`, `platform-v2-pre-refactor`
-**Last updated:** 2026-06-04
+**Branch:** `autodev/loop-s2` (S2) · **Baselines:** `platform-v2-pivot-baseline`, `platform-v2-pre-refactor`
+**Last updated:** 2026-06-08
 
 ## Next action
-🏁 **S0 COMPLETE — tagged `platform-v2-split-done` (`b9bbaf8`, 2026-06-04).** Clean-break platform split done end-to-end; `composer check` green 195/592; every code gate adversarially audited (GPT-5.5).
+🏁 **S1 COMPLETE — merged to `main` 2026-06-08 (PR #20, merge commit `440f238`).** Shipping universal module done end-to-end; `composer check` green 203 tests / 638 assertions; holistic GPT-5.5 integration review + remediation; 1 task deferred (rest-warehouses, React rework).
 
-▶️ **S1 — Shipping universal module** is next, and per operator decision (2026-06-04) it runs **in the autodev adversarial loop** (not hand-driven). Before S1 implementation: write the S1 spec (PVZ-map abstraction first — `woocommerce-yandex-delivery` is the reference; architectural reference = the mature `payment-gateway` module; see audit §7). The autodev bootstrap session (`autodev/loop-bootstrap`) provides the loop; this S0/Claude workstream's role ends at the split-done tag unless the operator directs otherwise.
-
-> **Parallel workstream (operator-initiated 2026-06-04):** the autodev adversarial-loop bootstrap (`docs-internal/autodev-loop-{runbook,implementation-prompt}.md`) is a SEPARATE session on branch `autodev/loop-bootstrap` — additive (`.autodev/`, `tools/autodev/`), explicitly carved out from S0/P4 to avoid file collision. This session (S0) does NOT touch it; that session does NOT touch S0 files. Doc-drift fix for `cleanbreak-plan.md` Phase 3 is assigned to that bootstrap session (§3b).
+▶️ **S2 — Box-packer: minimal-virtual-box + WC-neutral core.** Runs in the autodev adversarial loop on branch `autodev/loop-s2`. Spec: `docs-internal/platform-v2-s2-boxpacker-spec.md`. Queue manifest: `docs-internal/platform-v2-s2-boxpacker-queue-manifest.md`. 3 tasks queued in `.autodev/queue/pending/`.
 
 ## Stage map
 | Stage | Scope | Status | Plan |
 |---|---|---|---|
 | **S0 Platform Split** | clean break + decompose base + minimal resolver | ✅ **DONE** (tag `platform-v2-split-done`, 195/592 green) | `platform-v2-cleanbreak-plan.md` (+ base-decomposition sub-plan) |
-| S1 Shipping | universal module; PVZ-map abstraction first | 🟡 next — spec then implement **in autodev loop** | spec TBD |
-| S2 Box-packer | minimal-virtual-box algorithm + neutral wrapper | ⚪ planned (spec at S1 gate) | — |
+| **S1 Shipping** | universal module; PVZ-map abstraction first | ✅ **DONE** (merged to main PR #20 `440f238`, 2026-06-08; 203 tests green; 1 task deferred) | `platform-v2-s1-shipping-spec.md` |
+| S2 Box-packer | minimal-virtual-box algorithm + neutral wrapper | 🟡 **next — in autodev loop** | `platform-v2-s2-boxpacker-spec.md` |
 | S3 Licensing | `is_need_license` → modern UI → webhooks | ⚪ planned (spec at S2 gate) | — |
 | S4 EDD | `Woodev_EDD_Plugin` (concept in v2.0) | ⚪ deferred | — |
 | S5 React admin UI | built-in WP/WC React | ⚪ post-v2.0 | — |
