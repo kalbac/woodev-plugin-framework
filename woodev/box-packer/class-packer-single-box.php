@@ -56,9 +56,9 @@ if ( ! class_exists( 'Woodev_Packer_Single_Box' ) ) :
 		 */
 		private function get_items_dimensions(): array {
 			return array(
-				'height' => wc_list_pluck( $this->items, 'get_height' ),
-				'length' => wc_list_pluck( $this->items, 'get_length' ),
-				'width'  => wc_list_pluck( $this->items, 'get_width' ),
+				'height' => array_map( fn( Woodev_Box_Packer_Item $item ) => $item->get_height(), $this->items ),
+				'length' => array_map( fn( Woodev_Box_Packer_Item $item ) => $item->get_length(), $this->items ),
+				'width'  => array_map( fn( Woodev_Box_Packer_Item $item ) => $item->get_width(), $this->items ),
 			);
 		}
 
