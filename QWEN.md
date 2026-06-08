@@ -7,8 +7,8 @@
 - **Type:** PHP Library / Framework
 - **License:** GPL-3.0-or-later
 - **PHP:** 7.4–8.x (platform target: 8.1)
-- **Minimum WordPress:** 5.9
-- **Minimum WooCommerce:** 5.6
+- **Minimum WordPress:** 6.3
+- **Minimum WooCommerce:** 7.0
 - **Text Domain:** `woodev-plugin-framework`
 - **Namespace:** `Woodev\Framework\*` (PSR-4), legacy code without namespace
 
@@ -54,6 +54,25 @@ woodev_framework/
 ├── .wp-env.json                 # wp-env Docker configuration
 └── cliff.toml                   # git-cliff CHANGELOG configuration
 ```
+
+## Documentation Structure
+
+| Directory | Audience | Published | Purpose |
+|-----------|----------|-----------|---------|
+| `docs/` | Developers (public) | ✅ GH Pages (mkdocs) | Usage guides, API reference, tutorials |
+| `docs-internal/` | AI agents + maintainers | ❌ Not published | Session logs, gotchas, ADRs, operational state |
+
+Internal docs (`docs-internal/`):
+- `CURRENT-STATE.md` — phase status, known bugs, next actions
+- `SESSION-LOG.md` — full session history
+- `GOTCHAS.md` — gotcha index → `gotchas/{slug}.md` atomic detail files
+- `AGENT-RULES.md` — workflow + architecture rules for AI agents
+- `DOCS-INDEX.md` — navigation hub for all internal docs
+- `DOCS-SCHEMA.md` — doc format and lint rules
+- `FUTURE-BACKLOG.md` — deferred features and technical debt
+- `adr/` — Architecture Decision Records
+- `wiki/` — compiled topic references
+- `archive/` — resolved historical documents
 
 ## Building and Running
 
@@ -300,7 +319,12 @@ See `.ai/QUICK-REFERENCE.md` for detailed usage.
 
 ## Knowledge Persistence
 
-When you discover important project rules, conventions, or patterns during your work — **always document them** in `.ai/QUICK-REFERENCE.md` (section "Project Rules & Conventions") so all AI agents share the same knowledge.
+When new project rules, conventions, or patterns are discovered:
+
+- **Gotchas** (mistakes to avoid) → create `docs-internal/gotchas/{slug}.md` + add index line to `docs-internal/GOTCHAS.md`
+- **Architecture decisions** → create `docs-internal/adr/{NNN-title}.md` + add to `docs-internal/adr/README.md`
+- **Quick reference** → `.ai/QUICK-REFERENCE.md` (section "Project Rules & Conventions")
+- **Session work** → update `docs-internal/CURRENT-STATE.md` + append to `docs-internal/SESSION-LOG.md`
 
 ## Key URLs and Resources
 

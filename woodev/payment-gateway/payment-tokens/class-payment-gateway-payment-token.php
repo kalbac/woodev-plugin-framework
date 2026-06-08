@@ -8,7 +8,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Token' ) ) :
 	/**
 	 * WooCommerce Payment Gateway Token
 	 *
-	 * Represents a credit card or check payment token
+	 * Represents a credit card payment token.
 	 */
 	class Woodev_Payment_Gateway_Payment_Token {
 
@@ -32,12 +32,11 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Token' ) ) :
 		 * have the following members:
 		 *
 		 * default      - boolean optional indicates this is the default payment token
-		 * type         - string one of 'credit_card' or 'echeck' ('check' for backwards compatibility)
+		 * type         - string 'credit_card'. Legacy 'echeck'/'check' values are accepted only for backwards compatibility.
 		 * last_four    - string last four digits of account number
 		 * card_type    - string credit card type: visa, mc, amex, disc, diners, jcb, etc (credit card only)
 		 * exp_month    - string optional expiration month MM (credit card only)
 		 * exp_year     - string optional expiration year YYYY (credit card only)
-		 * account_type - string one of 'checking' or 'savings' (checking gateway only)
 		 *
 		 * @param string $id the payment gateway token ID
 		 * @param array  $data associated data
@@ -69,21 +68,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Token' ) ) :
 
 
 		/**
-		 * Gets the payment token string.
-		 *
-		 * @return string payment token string
-		 * @deprecated 1.1.8
-		 *
-		 * @since 1.0.0
-		 */
-		public function get_token() {
-
-			wc_deprecated_function( __METHOD__, '1.1.8', __CLASS__ . '::get_id()' );
-
-			return $this->get_id();
-		}
-
-
 		/**
 		 * Returns the payment token string
 		 *
@@ -129,33 +113,18 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Token' ) ) :
 
 
 		/**
-		 * Determines if this payment token represents an eCheck.
+		 * Returns true if this payment token represents the removed eCheck payment type.
 		 *
-		 * @return bool
-		 * @deprecated since 1.1.8
-		 *
-		 * @since 1.0.0
-		 */
-		public function is_check() {
-
-			wc_deprecated_function( __METHOD__, '1.1.8', __CLASS__ . '::is_echeck()' );
-
-			return $this->is_echeck();
-		}
-
-
-		/**
-		 * Returns true if this payment token represents an eCheck
-		 *
-		 * @return boolean true if this payment token represents an eCheck
+		 * @return boolean false — eCheck removed in v2.0.0
+		 * @deprecated v2.0.0 eCheck payment type removed
 		 */
 		public function is_echeck() {
-			return ! $this->is_credit_card();
+			return false;
 		}
 
 
 		/**
-		 * Returns the payment type, one of 'credit_card' or 'echeck'
+		 * Returns the payment type.
 		 *
 		 * @return string the payment type
 		 * @since 1.0.0
@@ -179,11 +148,13 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Token' ) ) :
 
 
 		/**
-		 * Set the card type
+		 * Sets the credit card type
 		 *
 		 * Credit Card gateway only
 		 *
-		 * @param string $card_type
+		 * @since 1.0.0
+		 *
+		 * @param string $card_type the card type identifier
 		 */
 		public function set_card_type( $card_type ) {
 			$this->data['card_type'] = $card_type;
@@ -191,15 +162,16 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Token' ) ) :
 
 
 		/**
-		 * Determines the credit card type from the full account number.
+		 * Returns the credit card type from the given account number
 		 *
-		 * @param string $account_number the credit card account number
+		 * Credit Card gateway only
 		 *
-		 * @return string the credit card type
-		 * @see Woodev_Payment_Gateway_Helper::card_type_from_account_number()
+		 * @deprecated 1.1.8 use Woodev_Payment_Gateway_Helper::card_type_from_account_number()
 		 *
 		 * @since 1.0.0
-		 * @deprecated 1.1.8
+		 *
+		 * @param string $account_number the account number
+		 * @return string|null the card type, or null if not recognized
 		 */
 		public static function type_from_account_number( $account_number ) {
 
@@ -210,32 +182,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Token' ) ) :
 
 
 		/**
-		 * Returns the bank account type, one of 'checking' or 'savings'
-		 *
-		 * eCheck gateway only
-		 *
-		 * @return string the payment type
-		 * @since 1.0.0
-		 */
-		public function get_account_type() {
-			return isset( $this->data['account_type'] ) ? $this->data['account_type'] : null;
-		}
-
-
-		/**
-		 * Set the account type
-		 *
-		 * eCheck gateway only
-		 *
-		 * @param string $account_type
-		 */
-		public function set_account_type( $account_type ) {
-			$this->data['account_type'] = $account_type;
-		}
-
-
-		/**
-		 * Returns the full payment type, ie Visa, MasterCard, American Express, Discover, Diners, MIR, eCheck, etc
+		 * Returns the full payment type, ie Visa, MasterCard, American Express, Discover, Diners, MIR, etc.
 		 *
 		 * @return string the payment type
 		 * @since 1.0.0
@@ -245,7 +192,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Token' ) ) :
 			if ( $this->is_credit_card() ) {
 				$type = $this->get_card_type() ? $this->get_card_type() : 'card';
 			} else {
-				$type = $this->get_account_type() ? $this->get_account_type() : 'bank';
+				$type = 'bank';
 			}
 
 			return Woodev_Payment_Gateway_Helper::payment_type_to_name( $type );
@@ -253,7 +200,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Token' ) ) :
 
 
 		/**
-		 * Returns the last four digits of the credit card or check account number
+		 * Returns the last four digits of the credit card account number.
 		 *
 		 * @return string last four of account
 		 * @since 1.0.0

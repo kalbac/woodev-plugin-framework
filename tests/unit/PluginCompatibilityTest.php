@@ -104,10 +104,9 @@ class PluginCompatibilityTest extends TestCase {
 	/**
 	 * @test
 	 */
-	public function is_enhanced_admin_available_returns_false_when_wc_not_installed(): void {
+	public function is_enhanced_admin_available_returns_true(): void {
 
-		// Without WC_VERSION, is_wc_version_gte() returns false, so the whole check is false.
-		$this->assertFalse( \Woodev_Plugin_Compatibility::is_enhanced_admin_available() );
+		$this->assertTrue( \Woodev_Plugin_Compatibility::is_enhanced_admin_available() );
 	}
 
 	/*

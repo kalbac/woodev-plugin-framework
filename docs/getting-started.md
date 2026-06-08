@@ -9,8 +9,8 @@ This guide covers everything you need to start building WooCommerce plugins with
 | Requirement | Minimum | Recommended |
 | --- | --- | --- |
 | PHP | 7.4 | 8.1+ |
-| WordPress | 5.9 | 6.4+ |
-| WooCommerce | 5.6 | 8.0+ |
+| WordPress | 6.3 | 6.4+ |
+| WooCommerce | 7.0 | 8.0+ |
 | MySQL | 5.6 | 8.0+ |
 | PHP Extensions | curl, json | mbstring, xml |
 
@@ -95,9 +95,9 @@ In your main plugin file (`my-plugin.php`):
  * Author: Your Name
  * Text Domain: my-plugin
  * Domain Path: /languages
- * Requires at least: 5.9
+ * Requires at least: 6.3
  * Requires PHP: 7.4
- * WC requires at least: 5.6
+ * WC requires at least: 7.0
  * License: GPL-3.0+
  * License URI: http://www.gnu.org/licenses/gpl-3.0.txt
  */
@@ -120,7 +120,7 @@ function init_my_plugin() {
         'my_plugin_init',
         [
             'minimum_wc_version'   => '8.0',
-            'minimum_wp_version'   => '5.9',
+            'minimum_wp_version'   => '6.3',
             'backwards_compatible' => '1.4.0',
         ]
     );
@@ -308,7 +308,7 @@ Woodev_Plugin_Bootstrap::instance()->register_plugin(
     [
         // Version requirements
         'minimum_wc_version'   => '8.0',
-        'minimum_wp_version'   => '5.9',
+        'minimum_wp_version'   => '6.3',
         'backwards_compatible' => '1.4.0',
         
         // Plugin type flags

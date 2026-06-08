@@ -24,9 +24,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_My_Payment_Methods' ) ) :
 		/** @var Woodev_Payment_Gateway_Payment_Token[] array of token objects */
 		protected $credit_card_tokens;
 
-		/** @var Woodev_Payment_Gateway_Payment_Token[] array of token objects */
-		protected $echeck_tokens;
-
 		/** @var bool true if there are tokens */
 		protected $has_tokens;
 
@@ -183,7 +180,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_My_Payment_Methods' ) ) :
 		/**
 		 * Gets the the available tokens for each plugin gateway and combine them.
 		 *
-		 * Tokens are also separated into Credit Card and eCheck-specific class members for convenience.
+		 * Tokens are grouped by gateway for convenience.
 		 */
 		protected function load_tokens() {
 
@@ -191,7 +188,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_My_Payment_Methods' ) ) :
 				return $this->tokens;
 			}
 
-			$this->credit_card_tokens = $this->echeck_tokens = array();
+			$this->credit_card_tokens = array();
 
 			foreach ( $this->get_plugin()->get_gateways() as $gateway ) {
 
@@ -202,24 +199,20 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_My_Payment_Methods' ) ) :
 				foreach ( $gateway->get_payment_tokens_handler()->get_tokens( get_current_user_id() ) as $token ) {
 
 					// prevent duplicates, as some gateways will return all tokens in each gateway
-					if ( isset( $this->credit_card_tokens[ $token->get_id() ] ) || isset( $this->echeck_tokens[ $token->get_id() ] ) ) {
+					if ( isset( $this->credit_card_tokens[ $token->get_id() ] ) ) {
 						continue;
 					}
 
 					if ( $token->is_credit_card() ) {
 
 						$this->credit_card_tokens[ $token->get_id() ] = $token;
-
-					} elseif ( $token->is_echeck() ) {
-
-						$this->echeck_tokens[ $token->get_id() ] = $token;
 					}
 				}
 			}
 
 			// we don't use array_merge here since the indexes could be numeric
 			// and cause the indexes to be reset
-			$this->tokens = $this->credit_card_tokens + $this->echeck_tokens;
+			$this->tokens = $this->credit_card_tokens;
 
 			$this->has_tokens = ! empty( $this->tokens );
 
@@ -532,17 +525,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_My_Payment_Methods' ) ) :
 
 
 		/**
-		 * Renders the payment methods table.
-		 *
-		 * @internal
-		 *
-		 * @deprecated 1.1.8
-		 */
-		public function render() {
-			wc_deprecated_function( __METHOD__, '1.1.8' );
-		}
-
-
 		/**
 		 * Gets the JS args for the payment methods handler.
 		 *
@@ -570,21 +552,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_My_Payment_Methods' ) ) :
 
 
 		/**
-		 * Gets the JS handler class name.
-		 *
-		 * Plugins can override this for their own JS implementations.
-		 *
-		 * @return string
-		 * @deprecated 1.1.8
-		 */
-		protected function get_js_handler_class() {
-
-			wc_deprecated_function( __METHOD__, '1.1.8', __CLASS__ . '::get_js_handler_class_name()' );
-
-			return parent::get_js_handler_class_name();
-		}
-
-
 		/**
 		 * Adds a log entry.
 		 *
@@ -636,7 +603,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_My_Payment_Methods' ) ) :
 			 * @param string $message no methods text
 			 * @param Woodev_Payment_Gateway_My_Payment_Methods $instance my payment methods instance
 			 */
-			/* translators: Payment method as in a specific credit card, eCheck or bank account */
+			/* translators: Payment method as in a specific credit card or stored bank transfer account */
 			$html = '<p>' . apply_filters( 'wc_' . $this->get_plugin()->get_id() . '_no_payment_methods_text', esc_html__( 'You do not have any saved payment methods.', 'woodev-plugin-framework' ), $this ) . '</p>';
 
 			/**
@@ -649,108 +616,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_My_Payment_Methods' ) ) :
 			 */
 			return apply_filters( 'wc_' . $this->get_plugin()->get_id() . '_my_payment_methods_no_payment_methods_html', $html, $this );
 		}
-
-		/**
-		 * Return the table title HTML, text defaults to "My Payment Methods"
-		 *
-		 * @return string table title HTML
-		 * @deprecated 1.1.8
-		 */
-		protected function get_table_title_html() {
-
-			wc_deprecated_function( __METHOD__, '1.1.8' );
-
-			return '';
-		}
-
-
-		/**
-		 * Returns the table HTML
-		 *
-		 * @return string table HTML
-		 * @deprecated 1.1.8
-		 */
-		public function get_table_html() {
-
-			wc_deprecated_function( __METHOD__, '1.1.8' );
-
-			return '';
-		}
-
-
-		/**
-		 * Returns the table head HTML
-		 *
-		 * @return string table thead HTML
-		 * @deprecated 1.1.8
-		 */
-		protected function get_table_head_html() {
-
-			wc_deprecated_function( __METHOD__, '1.1.8' );
-
-			return '';
-		}
-
-
-		/**
-		 * Returns the table headers.
-		 *
-		 * @return array of table headers in key => Title format
-		 * @deprecated 1.1.8
-		 */
-		protected function get_table_headers() {
-
-			wc_deprecated_function( __METHOD__, '1.1.8', 'Woodev_Payment_Gateway_My_Payment_Methods::add_payment_methods_columns' );
-
-			return $this->add_payment_methods_columns();
-		}
-
-
-		/**
-		 * Returns the table body HTML
-		 *
-		 * @return string table tbody HTML
-		 * @deprecated 1.1.8
-		 */
-		protected function get_table_body_html() {
-
-			wc_deprecated_function( __METHOD__, '1.1.8' );
-
-			return '';
-		}
-
-
-		/**
-		 * Returns the table body row HTML, each row represents a single payment method.
-		 *
-		 * @param Woodev_Payment_Gateway_Payment_Token[] $tokens token objects
-		 *
-		 * @return string table tbody > tr HTML
-		 * @deprecated 1.1.8
-		 */
-		protected function get_table_body_row_html( $tokens ) {
-
-			wc_deprecated_function( __METHOD__, '1.1.8' );
-
-			return '';
-		}
-
-
-		/**
-		 * Gets the payment method data for a given token.
-		 *
-		 * @param Woodev_Payment_Gateway_Payment_Token $token the token object
-		 *
-		 * @return array payment method data suitable for HTML output
-		 * @deprecated 1.1.8
-		 */
-		protected function get_table_body_row_data( $token ) {
-
-			wc_deprecated_function( __METHOD__, '1.1.8' );
-
-			return array();
-		}
-
 
 		/**
 		 * Get a token's payment method title HTML.
@@ -800,7 +665,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_My_Payment_Methods' ) ) :
 		 *
 		 * @return string
 		 */
-		protected function get_payment_method_default_html( $is_default = false, Woodev_Payment_Gateway_Payment_Token $token = null ) {
+		protected function get_payment_method_default_html( $is_default = false, ?Woodev_Payment_Gateway_Payment_Token $token = null ) {
 
 			$html = $is_default ? '<mark class="default">' . esc_html__( 'Default', 'woodev-plugin-framework' ) . '</mark>' : '';
 
@@ -853,52 +718,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_My_Payment_Methods' ) ) :
 
 
 		/**
-		 * Get a token's payment method expiration date HTML.
-		 *
-		 * @param Woodev_Payment_Gateway_Payment_Token $token token object
-		 *
-		 * @return string
-		 * @deprecated 1.1.8
-		 */
-		protected function get_payment_method_expiry_html( Woodev_Payment_Gateway_Payment_Token $token ) {
-
-			wc_deprecated_function( __METHOD__, '1.1.8' );
-
-			return '';
-		}
-
-
-		/**
-		 * Get a token's payment method actions HTML.
-		 *
-		 * @param Woodev_Payment_Gateway_Payment_Token $token token object
-		 *
-		 * @return string
-		 * @deprecated 1.1.8
-		 */
-		protected function get_payment_method_actions_html( Woodev_Payment_Gateway_Payment_Token $token ) {
-
-			wc_deprecated_function( __METHOD__, '1.1.8' );
-
-			return '';
-		}
-
-
-		/**
-		 * Gets the actions for the given payment method token.
-		 *
-		 * @param Woodev_Payment_Gateway_Payment_Token $token token object
-		 *
-		 * @return array
-		 * @deprecated 1.1.8
-		 */
-		protected function get_payment_method_actions( $token ) {
-
-			wc_deprecated_function( __METHOD__, '1.1.8' );
-
-			return array();
-		}
-
 		/**
 		 * Saves a payment method via AJAX.
 		 *

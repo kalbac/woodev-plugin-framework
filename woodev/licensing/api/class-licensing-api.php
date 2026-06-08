@@ -20,7 +20,7 @@ if ( ! class_exists( 'Woodev_Licensing_API' ) ) :
 
 		public function __construct( Woodev_Plugin $plugin, $api_url = false ) {
 
-			if ( wc_is_valid_url( $api_url ) ) {
+			if ( self::is_valid_url( $api_url ) ) {
 				$this->api_url = $api_url;
 			}
 
@@ -73,6 +73,29 @@ if ( ! class_exists( 'Woodev_Licensing_API' ) ) :
 		 */
 		public function get_url() {
 			return $this->api_url;
+		}
+
+		/**
+		 * Validates API URLs using the previous WooCommerce helper semantics.
+		 *
+		 * @param mixed $url URL to validate.
+		 * @return bool
+		 */
+		private static function is_valid_url( $url ) {
+
+			if ( ! is_string( $url ) ) {
+				return false;
+			}
+
+			if ( 0 !== strpos( $url, 'http://' ) && 0 !== strpos( $url, 'https://' ) ) {
+				return false;
+			}
+
+			if ( ! filter_var( $url, FILTER_VALIDATE_URL ) ) {
+				return false;
+			}
+
+			return true;
 		}
 
 		/**

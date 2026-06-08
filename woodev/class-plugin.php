@@ -12,7 +12,7 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 	 * plugin.  This class handles all the "non-feature" support tasks such
 	 * as verifying dependencies are met, loading the text domain, etc.
 	 *
-	 * @version 1.4.0
+	 * @version 1.4.1
 	 */
 	abstract class Woodev_Plugin {
 
@@ -36,12 +36,6 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 
 		/** @var string template path, without trailing slash */
 		private $template_path;
-
-		/** @var array{ hpos?: bool, blocks?: array{ cart?: bool, checkout?: bool }} plugin compatibility flags */
-		private $supported_features;
-
-		/** @var WC_Logger instance */
-		private $logger;
 
 		/** @var Woodev_Plugins_License instance */
 		protected $license;
@@ -73,8 +67,22 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		/** @var Woodev_Plugin_Setup_Wizard handler instance */
 		protected $setup_wizard_handler;
 
-		/** @var Woodev_Blocks_Handler blocks handler instance */
-		protected Woodev_Blocks_Handler $blocks_handler;
+		/**
+		 * Blocks handler instance.
+		 *
+		 * Null for plugins that do not opt in to a blocks handler (i.e. any
+		 * pure-WordPress plugin not extending \Woodev\Framework\Woocommerce_Plugin). Only
+		 * WooCommerce plugins initialize this via init_blocks_handler().
+		 *
+		 * @var Woodev_Blocks_Handler|null
+		 */
+		protected ?Woodev_Blocks_Handler $blocks_handler = null;
+
+		/** @var \Woodev\Framework\Handlers\Translation_Handler translation handler instance */
+		protected \Woodev\Framework\Handlers\Translation_Handler $translation_handler;
+
+		/** @var \Woodev\Framework\Handlers\Cron_Handler cron handler instance */
+		protected \Woodev\Framework\Handlers\Cron_Handler $cron_handler;
 
 		/**
 		 * Initialize the plugin.
@@ -86,15 +94,7 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		 * @param string $id plugin id
 		 * @param string $version plugin version number
 		 * @param array{
-		 *     latest_wc_versions?: int|float,
 		 *     text_domain?: string,
-		 *     supported_features?: array{
-		 *          hpos?: bool,
-		 *          blocks?: array{
-		 *               cart?: bool,
-		 *               checkout?: bool
-		 *          }
-		 *     },
 		 *     dependencies?: array{
 		 *          php_extensions?: array<string, mixed>,
 		 *          php_functions?: array<string, mixed>,
@@ -111,24 +111,14 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 			$args = wp_parse_args(
 				$args,
 				[
-					'text_domain'        => '',
-					'dependencies'       => [],
-					'supported_features' => [
-						'hpos'   => false,
-						'blocks' => [
-							'cart'     => false,
-							'checkout' => false,
-						],
-					],
+					'text_domain'  => '',
+					'dependencies' => [],
 				]
 			);
 
-			$this->text_domain        = $args['text_domain'];
-			$this->supported_features = $args['supported_features'];
+			$this->text_domain = $args['text_domain'];
 
-			// includes that are required to be available at all times
 			$this->includes();
-
 			// initialize the dependencies manager
 			$this->init_dependencies( $args['dependencies'] );
 
@@ -147,11 +137,14 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 			// build the lifecycle handler instance
 			$this->init_lifecycle_handler();
 
+			// build the translation handler instance
+			$this->init_translation_handler();
+
+			// build the cron handler instance
+			$this->init_cron_handler();
+
 			// build the REST API handler instance
 			$this->init_rest_api_handler();
-
-			// build the blocks handler instance
-			$this->init_blocks_handler();
 
 			// build the setup handler instance
 			$this->init_setup_wizard_handler();
@@ -215,18 +208,26 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		/**
 		 * Initialize Woodev admin pages
 		 *
+		 * The license settings page admin handler moved to
+		 * Woodev_Woocommerce_License_Settings in 2.0.0 because the class
+		 * registers a woocommerce_screen_ids filter and is only relevant
+		 * for plugins running on WooCommerce. We gate the require_once and
+		 * instantiation on Woodev_Helper::is_woocommerce_active() so that
+		 * pure-WP plugins do not pull in the WC coupling in is_admin().
+		 *
 		 * @access private
 		 * @return void
 		 */
 		private function load_license_settings_fields() {
-			if ( is_admin() ) {
-
-				if ( ! class_exists( 'Woodev_License_Settings' ) ) {
-					require_once $this->get_framework_path() . '/licensing/class-plugin-license-settings.php';
-				}
-
-				new Woodev_License_Settings( $this );
+			if ( ! is_admin() || ! Woodev_Helper::is_woocommerce_active() ) {
+				return;
 			}
+
+			if ( ! class_exists( 'Woodev_Woocommerce_License_Settings' ) ) {
+				require_once $this->get_framework_path() . '/licensing/class-woocommerce-license-settings.php';
+			}
+
+			new Woodev_Woocommerce_License_Settings( $this );
 		}
 
 		/**
@@ -246,6 +247,35 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		 */
 		protected function init_lifecycle_handler() {
 			$this->lifecycle_handler = new Woodev_Lifecycle( $this );
+		}
+
+		/**
+		 * Builds the translation handler instance.
+		 *
+		 * The handler registers its own `init` hook and loads both the framework
+		 * and the plugin text domains.
+		 *
+		 * @since 2.0.0
+		 *
+		 * @return void
+		 */
+		protected function init_translation_handler(): void {
+			$this->translation_handler = new \Woodev\Framework\Handlers\Translation_Handler( $this );
+		}
+
+		/**
+		 * Builds the cron handler instance.
+		 *
+		 * The handler registers the `weekly` schedule, the
+		 * `woodev_weekly_scheduled_events` event, the weekly license check, and
+		 * the `wp_ajax_woodev_verify_license` AJAX action.
+		 *
+		 * @since 2.0.0
+		 *
+		 * @return void
+		 */
+		protected function init_cron_handler(): void {
+			$this->cron_handler = new \Woodev\Framework\Handlers\Cron_Handler( $this );
 		}
 
 		/**
@@ -281,9 +311,6 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 			require_once $this->get_framework_path() . '/admin/abstract-plugin-admin-setup-wizard.php';
 		}
 
-		/**
-		 * Adds the action & filter hooks.
-		 */
 		private function add_hooks() {
 
 			// initialize the plugin
@@ -292,23 +319,11 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 			// initialize the plugin admin
 			add_action( 'admin_init', array( $this, 'init_admin' ), 0 );
 
-			// hook for translations separately to ensure they're loaded
-			add_action( 'init', array( $this, 'load_translations' ) );
-
 			// Load plugin updater
 			add_action( 'init', array( $this, 'load_updater' ) );
 
-			// handle WooCommerce features compatibility (such as HPOS, WC Cart & Checkout Blocks support...)
-			add_action( 'before_woocommerce_init', [ $this, 'handle_features_compatibility' ] );
-
 			add_action( 'wp_enqueue_scripts', [ $this, 'frontend_enqueue_scripts' ] );
 			add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_scripts' ) );
-			add_action( 'wp_ajax_woodev_verify_license', array( $this, 'ajax_verify_license' ) );
-
-			foreach ( array( 'shipping', 'checkout', 'integration' ) as $tab ) {
-				add_action( 'woocommerce_before_settings_' . $tab, array( $this, 'add_class_form_wrap_start' ) );
-				add_action( 'woocommerce_after_settings_' . $tab, array( $this, 'add_class_form_wrap_end' ) );
-			}
 
 			// add the admin notices
 			add_action( 'admin_notices', array( $this, 'add_admin_notices' ) );
@@ -325,20 +340,6 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 
 			// automatically log HTTP requests from Woodev_API_Base
 			$this->add_api_request_logging();
-
-			// add any PHP incompatibilities to the system status report
-			add_filter(
-				'woocommerce_system_status_environment_rows',
-				array(
-					$this,
-					'add_system_status_php_information',
-				)
-			);
-
-			// CRON actions
-			add_filter( 'cron_schedules', array( $this, 'add_schedules' ) );
-			add_action( 'wp', array( $this, 'schedule_events' ) );
-			add_action( 'woodev_weekly_scheduled_events', array( $this, 'weekly_license_check' ) );
 		}
 
 		/**
@@ -385,50 +386,6 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 			}
 
 			do_action( 'woodev_plugin_updater', $license_key );
-		}
-
-		/**
-		 * Load plugin & framework text domains.
-		 */
-		public function load_translations() {
-
-			$this->load_framework_textdomain();
-
-			// if this plugin passes along its text domain, load its translation files
-			if ( $this->text_domain ) {
-				$this->load_plugin_textdomain();
-			}
-		}
-
-		/**
-		 * Loads the framework textdomain.
-		 */
-		protected function load_framework_textdomain() {
-			$this->load_textdomain( 'woodev-plugin-framework', dirname( plugin_basename( $this->get_framework_file() ) ) );
-		}
-
-		/**
-		 * Loads the plugin textdomain.
-		 */
-		protected function load_plugin_textdomain() {
-			$this->load_textdomain( $this->text_domain, dirname( plugin_basename( $this->get_plugin_file() ) ) );
-		}
-
-		/**
-		 * Loads the plugin textdomain.
-		 *
-		 * @param string $textdomain the plugin textdomain
-		 * @param string $path the i18n path
-		 */
-		protected function load_textdomain( $textdomain, $path ) {
-			// user's locale if in the admin for WP 4.7+, or the site locale otherwise
-			$locale = is_admin() && is_callable( 'get_user_locale' ) ? get_user_locale() : get_locale();
-
-			$locale = apply_filters( 'plugin_locale', $locale, $textdomain );
-
-			load_textdomain( $textdomain, WP_LANG_DIR . '/' . $textdomain . '/' . $textdomain . '-' . $locale . '.mo' );
-
-			load_plugin_textdomain( $textdomain, false, untrailingslashit( $path ) . '/languages' );
 		}
 
 		/**
@@ -484,86 +441,6 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 			);
 		}
 
-		/**
-		 * Registers new cron schedules
-		 *
-		 * @param array $schedules
-		 *
-		 * @return array
-		 */
-		public function add_schedules( $schedules = array() ) {
-
-			if ( ! isset( $schedules['weekly'] ) ) {
-				$schedules['weekly'] = array(
-					'interval' => WEEK_IN_SECONDS,
-					'display'  => __( 'Once Weekly', 'woodev-plugin-framework' ),
-				);
-			}
-
-			return $schedules;
-		}
-
-
-		/**
-		 * Schedule weekly events
-		 *
-		 * @return void
-		 */
-		public function schedule_events() {
-			if ( ! wp_next_scheduled( 'woodev_weekly_scheduled_events' ) ) {
-				wp_schedule_event( time(), 'weekly', 'woodev_weekly_scheduled_events' );
-			}
-		}
-
-		/**
-		 * Check if license key is valid once per week
-		 *
-		 * @return  void
-		 */
-		public function weekly_license_check() {
-
-			// Don't fire when saving settings.
-			if ( ! empty( $_POST['woodev_settings'] ) ) {
-				return;
-			}
-
-			if ( ! wp_doing_cron() ) {
-				return;
-			}
-
-			$license_key = $this->get_license_instance()->get_license();
-
-			if ( empty( $license_key ) ) {
-				return;
-			}
-
-			$this->get_license_instance()->validate_license( $license_key );
-		}
-
-		public function ajax_verify_license() {
-			check_ajax_referer( 'woodev-admin', 'nonce' );
-
-			if ( ! current_user_can( 'manage_options' ) ) {
-				wp_send_json_error();
-			}
-
-			$license = $this->get_license_instance()->get_license();
-
-			$this->get_license_instance()->validate_license( $license ?: __return_empty_string(), true, true );
-		}
-
-		public function add_class_form_wrap_start() {
-			if ( $this->is_plugin_settings() && ! $this->get_license_instance()->is_license_valid() ) {
-				echo '<div class="woodev-licence-need">';
-			}
-		}
-
-		public function add_class_form_wrap_end() {
-			if ( $this->is_plugin_settings() && ! $this->get_license_instance()->is_license_valid() ) {
-				echo '</div><!-- .woodev-licence-need end-->';
-			}
-		}
-
 		private function includes() {
 
 			$framework_path = $this->get_framework_path();
@@ -582,9 +459,7 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 			require_once $framework_path . '/class-helper.php';
 			require_once $framework_path . '/admin/class-notes-helper.php';
 
-			// backwards compatibility for older WC versions
 			require_once $framework_path . '/compatibility/class-plugin-compatibility.php';
-			require_once $framework_path . '/compatibility/abstract-data-compatibility.php';
 			require_once $framework_path . '/compatibility/class-order-compatibility.php';
 
 			// generic API base
@@ -630,6 +505,8 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 
 			// Handlers
 			require_once $framework_path . '/handlers/script-handler.php';
+			require_once $framework_path . '/handlers/class-translation-handler.php';
+			require_once $framework_path . '/handlers/class-cron-handler.php';
 			require_once $framework_path . '/class-woodev-plugin-dependencies.php';
 			require_once $framework_path . '/class-woodev-hook-deprecator.php';
 			require_once $framework_path . '/class-admin-message-handler.php';
@@ -721,7 +598,25 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		 * @return boolean true if allowed to update beta version of Plugin
 		 */
 		public function is_beta_allowed() {
-			return wc_string_to_bool( get_option( $this->get_plugin_option_name( 'beta_version' ), 'no' ) );
+			return self::string_to_bool( get_option( $this->get_plugin_option_name( 'beta_version' ), 'no' ) );
+		}
+
+		/**
+		 * Converts a stored string value to a boolean using WooCommerce-compatible semantics.
+		 *
+		 * @param mixed $string value to convert
+		 * @return bool
+		 */
+		private static function string_to_bool( $string ) {
+			$string = $string ?? '';
+
+			if ( is_bool( $string ) ) {
+				return $string;
+			}
+
+			$string = strtolower( (string) $string );
+
+			return 'yes' === $string || 'true' === $string || '1' === $string;
 		}
 
 		/**
@@ -758,7 +653,7 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		 */
 		public function plugin_action_links( $actions ) {
 
-			$custom_actions = array();
+			$custom_actions = [];
 
 			if ( $this->get_settings_link( $this->get_id() ) ) {
 				$custom_actions['configure'] = $this->get_settings_link( $this->get_id() );
@@ -783,39 +678,6 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 
 			// add the links to the front of the actions list
 			return array_merge( $custom_actions, $actions );
-		}
-
-		/**
-		 * Declares HPOS compatibility if the plugin is compatible with HPOS.
-		 *
-		 * @internal
-		 * @deprecated since 1.3.2
-		 * @see Woodev_Plugin::handle_features_compatibility()
-		 *
-		 * @since 1.2.1
-		 */
-		public function handle_hpos_compatibility() {
-
-			wc_deprecated_function( __METHOD__, '1.3.2', 'Woodev_Plugin::handle_features_compatibility' );
-
-			$this->handle_features_compatibility();
-		}
-
-		/**
-		 * Declares compatibility with specific WooCommerce features.
-		 *
-		 * @internal
-		 *
-		 * @since 1.3.2
-		 */
-		public function handle_features_compatibility(): void {
-
-			if ( ! class_exists( Automattic\WooCommerce\Utilities\FeaturesUtil::class ) ) {
-				return;
-			}
-
-			Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility( 'custom_order_tables', $this->get_plugin_file(), $this->is_hpos_compatible() );
-			Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility( 'cart_checkout_blocks', $this->get_plugin_file(), $this->get_blocks_handler()->is_cart_block_compatible() && $this->get_blocks_handler()->is_checkout_block_compatible() );
 		}
 
 		/**
@@ -875,71 +737,18 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		}
 
 		/**
-		 * Adds any PHP incompatibilities to the system status report.
+		 * Saves errors or messages to the plugin log.
 		 *
-		 * @param array $rows WooCommerce system status rows
+		 * The base plugin has no runtime logging backend. WooCommerce plugins override this
+		 * to write to the WooCommerce logger.
 		 *
-		 * @return array
+		 * @since 1.0.0
+		 *
+		 * @param string      $message Error or message to save to log.
+		 * @param string|null $log_id Optional log id to segment the files by.
+		 * @return void
 		 */
-		public function add_system_status_php_information( $rows ) {
-
-			foreach ( $this->get_dependency_handler()->get_incompatible_php_settings() as $setting => $values ) {
-
-				if ( isset( $values['type'] ) && 'min' === $values['type'] ) {
-
-					// if this setting already has a higher minimum from another plugin, skip it
-					if ( isset( $rows[ $setting ]['expected'] ) && $values['expected'] < $rows[ $setting ]['expected'] ) {
-						continue;
-					}
-
-					$note = __( '%1$s - A minimum of %2$s is required.', 'woodev-plugin-framework' );
-
-				} else {
-
-					// if this requirement is already listed, skip it
-					if ( isset( $rows[ $setting ] ) ) {
-						continue;
-					}
-
-					$note = __( 'Set as %1$s - %2$s is required.', 'woodev-plugin-framework' );
-				}
-
-				$note = sprintf( $note, $values['actual'], $values['expected'] );
-
-				$rows[ $setting ] = array(
-					'name'     => $setting,
-					'note'     => $note,
-					'success'  => false,
-					'expected' => $values['expected'], // WC doesn't use this, but it's useful for us
-				);
-			}
-
-			return $rows;
-		}
-
-		/**
-		 * Saves errors or messages to WooCommerce Log (woocommerce/logs/plugin-id-xxx.txt)
-		 *
-		 * @param string $message error or message to save to log
-		 * @param string $log_id optional log id to segment the files by, defaults to plugin id
-		 */
-		public function log( $message, $log_id = null ) {
-
-			if ( is_null( $log_id ) ) {
-				$log_id = $this->get_id();
-			}
-
-			$this->logger()->add( $log_id, $message );
-		}
-
-		/**
-		 * @since 1.4.0
-		 *
-		 * @return WC_Logger_Interface
-		 */
-		protected function logger(): WC_Logger_Interface {
-			return $this->logger ??= wc_get_logger();
-		}
+		public function log( $message, $log_id = null ) {}
 
 		/**
 		 * @param mixed $assertion
@@ -952,7 +761,7 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 			try {
 				assert( $assertion );
 			} catch ( Throwable $exception ) {
-				$this->logger()->debug( 'Assertion failed, backtrace summery: ' . wp_debug_backtrace_summary() );
+				$this->log( 'Assertion failed, backtrace summery: ' . wp_debug_backtrace_summary(), 'assertions' );
 			}
 		}
 
@@ -1011,20 +820,7 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		 * @return array{ hpos?: bool, blocks?: array{ cart?: bool, checkout?: bool }}
 		 */
 		public function get_supported_features(): array {
-			return $this->supported_features ?? [];
-		}
-
-		/**
-		 * Determines whether the plugin supports HPOS.
-		 *
-		 * @since 1.2.0
-		 *
-		 * @return bool
-		 */
-		public function is_hpos_compatible() {
-			return isset( $this->supported_features['hpos'] )
-					&& true === $this->supported_features['hpos']
-					&& Woodev_Plugin_Compatibility::is_wc_version_gte( '7.6' );
+			return [];
 		}
 
 		/**
@@ -1033,9 +829,7 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		 * @return string
 		 */
 		public function get_plugin_file() {
-			$slug = dirname( plugin_basename( $this->get_file() ) );
-
-			return trailingslashit( $slug ) . $slug . '.php';
+			return plugin_basename( $this->get_file() );
 		}
 
 		/**
@@ -1107,11 +901,15 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		/**
 		 * Gets the blocks handler instance.
 		 *
+		 * Returns null for plugins that do not opt in to a blocks handler
+		 * (pure-WordPress plugins that extend Woodev_Plugin directly without
+		 * going through \Woodev\Framework\Woocommerce_Plugin).
+		 *
 		 * @since 1.3.2
 		 *
-		 * @return Woodev_Blocks_Handler
+		 * @return Woodev_Blocks_Handler|null
 		 */
-		public function get_blocks_handler(): Woodev_Blocks_Handler {
+		public function get_blocks_handler(): ?Woodev_Blocks_Handler {
 			return $this->blocks_handler;
 		}
 
@@ -1227,7 +1025,7 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		 *
 		 * @param string $plugin_id optional plugin identifier.  Note that this can be a
 		 *        sub-identifier for plugins with multiple parallel settings pages
-		 *        (ie a gateway that supports both credit cards and echecks)
+		 *        (ie a plugin with multiple gateway variants)
 		 *
 		 * @return string plugin configure link
 		 * @see Woodev_Plugin::get_settings_url()
@@ -1248,7 +1046,7 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		 *
 		 * @param string $plugin_id optional plugin identifier.  Note that this can be a
 		 *        sub-identifier for plugins with multiple parallel settings pages
-		 *        (ie a gateway that supports both credit cards and echecks)
+		 *        (ie a plugin with multiple gateway variants)
 		 *
 		 * @return string plugin settings URL
 		 * @see Woodev_Plugin::get_settings_link()
@@ -1278,6 +1076,8 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		/**
 		 * Gets the plugin documentation url, used for the 'Docs' plugin action
 		 *
+		 * @since 2.0.0 Must be overridden by plugin subclasses; returns null in base.
+		 *
 		 * @return string|null documentation URL
 		 */
 		public function get_documentation_url() {
@@ -1287,6 +1087,8 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		/**
 		 * Gets the support URL, used for the 'Support' plugin action link
 		 *
+		 * @since 2.0.0 Must be overridden by plugin subclasses; returns null in base.
+		 *
 		 * @return string|null support url
 		 */
 		public function get_support_url() {
@@ -1295,6 +1097,8 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 
 		/**
 		 * Gets the plugin sales page URL.
+		 *
+		 * @since 2.0.0 Must be overridden by plugin subclasses; returns empty string in base.
 		 *
 		 * @return string
 		 */
@@ -1311,7 +1115,7 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		 */
 		public function get_reviews_url() {
 
-			return $this->get_sales_page_url() ? $this->get_sales_page_url() . '#comments' : '';
+			return $this->get_sales_page_url() ? $this->get_sales_page_url() . '#edd-reviews' : '';
 		}
 
 		/**
@@ -1345,21 +1149,14 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		}
 
 		/**
-		 * Gets the woocommerce uploads path, without trailing slash.
-		 *
-		 * Oddly WooCommerce core does not provide a way to get this.
-		 *
-		 * @return string
-		 */
-		public static function get_woocommerce_uploads_path() {
-
-			$upload_dir = wp_upload_dir();
-
-			return $upload_dir['basedir'] . '/woocommerce_uploads';
-		}
-
-		/**
 		 * Returns the loaded framework __FILE__
+		 *
+		 * In multi-version framework arbitration the resolver loads the
+		 * highest-version framework copy's class-plugin.php first, so this
+		 * method always returns the file of the active framework copy (the
+		 * one that owns the running class), not the file of the calling
+		 * plugin's vendored framework. Plugin code that needs the vendored
+		 * copy path should use its own `__FILE__` constant.
 		 *
 		 * @return string
 		 */
@@ -1412,23 +1209,18 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		/**
 		 * Loads and outputs a template file HTML.
 		 *
-		 * @param string $template template name/part
-		 * @param array  $args associative array of optional template arguments
-		 * @param string $path optional template path, can be empty, as themes can override this
-		 * @param string $default_path optional default template path, will normally use the plugin's own template path unless overridden
+		 * The base plugin has no WooCommerce template loader. WooCommerce plugins override
+		 * this to load templates through wc_get_template().
 		 *
-		 * @see wc_get_template() except we define automatically the default path
+		 * @since 1.0.0
+		 *
+		 * @param string $template Template name/part.
+		 * @param array  $args Associative array of optional template arguments.
+		 * @param string $path Optional template path, can be empty, as themes can override this.
+		 * @param string $default_path Optional default template path.
+		 * @return void
 		 */
-		public function load_template( $template, array $args = [], $path = '', $default_path = '' ) {
-
-			if ( '' === $default_path || ! is_string( $default_path ) ) {
-				$default_path = trailingslashit( $this->get_template_path() );
-			}
-
-			if ( function_exists( 'wc_get_template' ) ) {
-				wc_get_template( $template, $args, $path, $default_path );
-			}
-		}
+		public function load_template( $template, array $args = [], $path = '', $default_path = '' ) {}
 
 		/**
 		 * Determines whether a plugin is active.
@@ -1476,157 +1268,6 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 			}
 
 			return $is_active;
-		}
-
-		/** Deprecated methods */
-
-		/**
-		 * Handles version checking.
-		 *
-		 * @deprecated 1.1.8
-		 */
-		public function do_install() {
-
-			wc_deprecated_function( __METHOD__, '1.1.8', get_class( $this->get_lifecycle_handler() ) . '::init()' );
-
-			$this->get_lifecycle_handler()->init();
-		}
-
-		/**
-		 * Helper method to install default settings for a plugin.
-		 *
-		 * @param array $settings array of settings in format required by WC_Admin_Settings
-		 *
-		 * @deprecated 1.1.8
-		 */
-		public function install_default_settings( array $settings ) {
-
-			wc_deprecated_function( __METHOD__, '1.1.8', get_class( $this->get_lifecycle_handler() ) . '::install_default_settings()' );
-
-			$this->get_lifecycle_handler()->install_default_settings( $settings );
-		}
-
-		/**
-		 * Plugin activated method. Perform any activation tasks here.
-		 * Note that this _does not_ run during upgrades.
-		 *
-		 * @deprecated 1.1.8
-		 */
-		public function activate() {
-			wc_deprecated_function( __METHOD__, '1.1.8' );
-		}
-
-		/**
-		 * Plugin deactivation method. Perform any deactivation tasks here.
-		 *
-		 * @deprecated 1.1.8
-		 */
-		public function deactivate() {
-			wc_deprecated_function( __METHOD__, '1.1.8' );
-		}
-
-		/**
-		 * Gets the string name of any required PHP extensions that are not loaded.
-		 *
-		 * @return array
-		 * @deprecated 1.1.8
-		 */
-		public function get_missing_extension_dependencies() {
-
-			wc_deprecated_function( __METHOD__, '1.1.8', get_class( $this->get_dependency_handler() ) . '::get_missing_php_extensions()' );
-
-			return $this->get_dependency_handler()->get_missing_php_extensions();
-		}
-
-		/**
-		 * Gets the string name of any required PHP functions that are not loaded.
-		 *
-		 * @return array
-		 * @deprecated 1.1.8
-		 */
-		public function get_missing_function_dependencies() {
-
-			wc_deprecated_function( __METHOD__, '1.1.8', get_class( $this->get_dependency_handler() ) . '::get_missing_php_functions()' );
-
-			return $this->get_dependency_handler()->get_missing_php_functions();
-		}
-
-		/**
-		 * Gets the string name of any required PHP extensions that are not loaded.
-		 *
-		 * @return array
-		 * @deprecated 1.1.8
-		 */
-		public function get_incompatible_php_settings() {
-
-			wc_deprecated_function( __METHOD__, '1.1.8', get_class( $this->get_dependency_handler() ) . '::get_incompatible_php_settings()' );
-
-			return $this->get_dependency_handler()->get_incompatible_php_settings();
-		}
-
-		/**
-		 * Gets the PHP dependencies.
-		 *
-		 * @return array
-		 * @deprecated 1.1.8
-		 */
-		protected function get_dependencies() {
-			wc_deprecated_function( __METHOD__, '1.1.8' );
-
-			return array();
-		}
-
-		/**
-		 * Gets the PHP extension dependencies.
-		 *
-		 * @return array
-		 * @deprecated 1.1.8
-		 */
-		protected function get_extension_dependencies() {
-
-			wc_deprecated_function( __METHOD__, '1.1.8', get_class( $this->get_dependency_handler() ) . '::get_php_extensions()' );
-
-			return $this->get_dependency_handler()->get_php_extensions();
-		}
-
-
-		/**
-		 * Gets the PHP function dependencies.
-		 *
-		 * @return array
-		 * @deprecated 1.1.8
-		 */
-		protected function get_function_dependencies() {
-
-			wc_deprecated_function( __METHOD__, '1.1.8', get_class( $this->get_dependency_handler() ) . '::get_php_functions()' );
-
-			return $this->get_dependency_handler()->get_php_functions();
-		}
-
-
-		/**
-		 * Gets the PHP settings dependencies.
-		 *
-		 * @return array
-		 * @deprecated 1.1.8
-		 */
-		protected function get_php_settings_dependencies() {
-
-			wc_deprecated_function( __METHOD__, '1.1.8', get_class( $this->get_dependency_handler() ) . '::get_php_settings()' );
-
-			return $this->get_dependency_handler()->get_php_settings();
-		}
-
-		/**
-		 * Sets the plugin dependencies.
-		 *
-		 * @param array $dependencies the environment dependencies
-		 *
-		 * @deprecated 1.1.8
-		 */
-		protected function set_dependencies( $dependencies = array() ) {
-
-			wc_deprecated_function( __METHOD__, '1.1.8' );
 		}
 	}
 

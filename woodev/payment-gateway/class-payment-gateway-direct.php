@@ -46,8 +46,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 			// validate remaining payment fields
 			if ( $this->is_credit_card_gateway() ) {
 				return $this->validate_credit_card_fields( $is_valid );
-			} elseif ( $this->is_echeck_gateway() ) {
-				return $this->validate_check_fields( $is_valid );
 			} else {
 				$method_name = 'validate_' . str_replace( '-', '_', strtolower( $this->get_payment_type() ) ) . '_fields';
 				if ( is_callable( array( $this, $method_name ) ) ) {
@@ -211,89 +209,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 			}
 
 			return $is_valid;
-		}
-
-
-		/**
-		 * Returns true if the posted echeck fields are valid, false otherwise
-		 *
-		 * @param bool $is_valid true if the fields are valid, false otherwise
-		 *
-		 * @return bool
-		 * @since 1.0.0
-		 */
-		protected function validate_check_fields( $is_valid ) {
-
-			$account_number = Woodev_Helper::get_posted_value( 'wc-' . $this->get_id_dasherized() . '-account-number' );
-			$routing_number = Woodev_Helper::get_posted_value( 'wc-' . $this->get_id_dasherized() . '-routing-number' );
-
-			// optional fields (excluding account type for now)
-			$drivers_license_number = Woodev_Helper::get_posted_value( 'wc-' . $this->get_id_dasherized() . '-drivers-license-number' );
-			$check_number           = Woodev_Helper::get_posted_value( 'wc-' . $this->get_id_dasherized() . '-check-number' );
-
-			// routing number exists?
-			if ( empty( $routing_number ) ) {
-
-				Woodev_Helper::wc_add_notice( esc_html__( 'Routing Number is missing', 'woodev-plugin-framework' ), 'error' );
-				$is_valid = false;
-
-			} else {
-
-				// routing number digit validation
-				if ( ! ctype_digit( $routing_number ) ) {
-					Woodev_Helper::wc_add_notice( esc_html__( 'Routing Number is invalid (only digits are allowed)', 'woodev-plugin-framework' ), 'error' );
-					$is_valid = false;
-				}
-
-				// routing number length validation
-				if ( 9 != strlen( $routing_number ) ) {
-					Woodev_Helper::wc_add_notice( esc_html__( 'Routing number is invalid (must be 9 digits)', 'woodev-plugin-framework' ), 'error' );
-					$is_valid = false;
-				}
-			}
-
-			// account number exists?
-			if ( empty( $account_number ) ) {
-
-				Woodev_Helper::wc_add_notice( esc_html__( 'Account Number is missing', 'woodev-plugin-framework' ), 'error' );
-				$is_valid = false;
-
-			} else {
-
-				// account number digit validation
-				if ( ! ctype_digit( $account_number ) ) {
-					Woodev_Helper::wc_add_notice( esc_html__( 'Account Number is invalid (only digits are allowed)', 'woodev-plugin-framework' ), 'error' );
-					$is_valid = false;
-				}
-
-				// account number length validation
-				if ( strlen( $account_number ) < 5 || strlen( $account_number ) > 17 ) {
-					Woodev_Helper::wc_add_notice( esc_html__( 'Account number is invalid (must be between 5 and 17 digits)', 'woodev-plugin-framework' ), 'error' );
-					$is_valid = false;
-				}
-			}
-
-			// optional drivers license number validation
-			if ( ! empty( $drivers_license_number ) && ! preg_match( '/^[a-zA-Z0-9 -]+$/', $drivers_license_number ) ) {
-				Woodev_Helper::wc_add_notice( esc_html__( 'Drivers license number is invalid', 'woodev-plugin-framework' ), 'error' );
-				$is_valid = false;
-			}
-
-			// optional check number validation
-			if ( ! empty( $check_number ) && ! ctype_digit( $check_number ) ) {
-				Woodev_Helper::wc_add_notice( esc_html__( 'Check Number is invalid (only digits are allowed)', 'woodev-plugin-framework' ), 'error' );
-				$is_valid = false;
-			}
-
-			/**
-			 * Direct Payment Gateway Validate eCheck Fields Filter.
-			 *
-			 * Allow actors to filter the eCheck field validation.
-			 *
-			 * @param bool $is_valid true for validation to pass
-			 * @param Woodev_Payment_Gateway_Direct $gateway direct gateway class instance
-			 */
-			return apply_filters( 'wc_payment_gateway_' . $this->get_id() . '_validate_echeck_fields', $is_valid, $this );
 		}
 
 
@@ -500,18 +415,13 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 		 *
 		 * $order->payment_total           - the payment total
 		 * $order->customer_id             - optional payment gateway customer id (useful for tokenized payments for certain gateways, etc)
-		 * $order->payment->account_number - the credit card or checking account number
+		 * $order->payment->account_number - the credit card account number
 		 * $order->payment->last_four      - the last four digits of the account number
 		 * $order->payment->card_type      - the card type (e.g. visa) derived from the account number
-		 * $order->payment->routing_number - account routing number (check transactions only)
-		 * $order->payment->account_type   - optional type of account one of 'checking' or 'savings' if type is 'check'
 		 * $order->payment->card_type      - optional card type, ie one of 'visa', etc
 		 * $order->payment->exp_month      - the 2 digit credit card expiration month (for credit card gateways), e.g. 07
 		 * $order->payment->exp_year       - the 2 digit credit card expiration year (for credit card gateways), e.g. 17
 		 * $order->payment->csc            - the card security code (for credit card gateways)
-		 * $order->payment->check_number   - optional check number (check transactions only)
-		 * $order->payment->drivers_license_number - optional driver license number (check transactions only)
-		 * $order->payment->drivers_license_state  - optional driver license state code (check transactions only)
 		 * $order->payment->token          - payment token (for tokenized transactions)
 		 *
 		 * Note that not all gateways will necessarily pass or require all of the
@@ -564,15 +474,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 					if ( $this->csc_enabled() ) {
 						$order->payment->csc = Woodev_Helper::get_posted_value( 'wc-' . $this->get_id_dasherized() . '-csc' );
 					}
-				} elseif ( $this->is_echeck_gateway() ) {
-
-					// echeck specific attributes
-					$order->payment->routing_number         = Woodev_Helper::get_posted_value( 'wc-' . $this->get_id_dasherized() . '-routing-number' );
-					$order->payment->account_type           = Woodev_Helper::get_posted_value( 'wc-' . $this->get_id_dasherized() . '-account-type' );
-					$order->payment->check_number           = Woodev_Helper::get_posted_value( 'wc-' . $this->get_id_dasherized() . '-check-number' );
-					$order->payment->drivers_license_number = Woodev_Helper::get_posted_value( 'wc-' . $this->get_id_dasherized() . '-drivers-license-number' );
-					$order->payment->drivers_license_state  = Woodev_Helper::get_posted_value( 'wc-' . $this->get_id_dasherized() . '-drivers-license-state' );
-
 				}
 			} elseif ( Woodev_Helper::get_posted_value( 'wc-' . $this->get_id_dasherized() . '-payment-token' ) ) {
 
@@ -593,10 +494,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 					if ( $this->csc_enabled_for_tokens() ) {
 						$order->payment->csc = Woodev_Helper::get_posted_value( 'wc-' . $this->get_id_dasherized() . '-csc' );
 					}
-				} elseif ( $this->is_echeck_gateway() ) {
-
-					// echeck specific attributes
-					$order->payment->account_type = $token->get_account_type();
 				}
 
 				// make this the new default payment token
@@ -619,59 +516,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 			 * @since 1.0.0
 			 */
 			return apply_filters( 'wc_payment_gateway_' . $this->get_id() . '_get_order', $order, $this );
-		}
-
-
-		/**
-		 * Performs a check transaction for the given order and returns the result.
-		 *
-		 * @param WC_Order $order the order object
-		 *
-		 * @return Woodev_Payment_Gateway_API_Response the response
-		 * @throws Woodev_Plugin_Exception network timeouts, etc
-		 * @since 1.0.0
-		 */
-		protected function do_check_transaction( $order ) {
-
-			$response = $this->get_api()->check_debit( $order );
-
-			// success! update order record
-			if ( $response->transaction_approved() ) {
-
-				$last_four = substr( $order->payment->account_number, - 4 );
-
-				// check order note. there may not be an account_type available, but that's fine
-				/* translators: Placeholders: %1$s - payment method title, %2$s - payment account type (savings/checking) (may or may not be available), %3$s - last four digits of the account */
-				$message = sprintf( esc_html__( '%1$s Check Transaction Approved: %2$s account ending in %3$s', 'woodev-plugin-framework' ), $this->get_method_title(), $order->payment->account_type, $last_four );
-
-				// optional check number
-				if ( ! empty( $order->payment->check_number ) ) {
-					/* translators: Placeholders: %s - check number */
-					$message .= '. ' . sprintf( esc_html__( 'Check number %s', 'woodev-plugin-framework' ), $order->payment->check_number );
-				}
-
-				// adds the transaction id (if any) to the order note
-				if ( $response->get_transaction_id() ) {
-					$message .= ' ' . sprintf( esc_html__( '(Transaction ID %s)', 'woodev-plugin-framework' ), $response->get_transaction_id() );
-				}
-
-				/**
-				 * Direct Gateway eCheck Transaction Approved Order Note Filter.
-				 *
-				 * Allow actors to modify the order note added when an eCheck transaction is approved.
-				 *
-				 * @param string $message order note
-				 * @param WC_Order $order order object
-				 * @param Woodev_Payment_Gateway_API_Response $response transaction response
-				 * @param Woodev_Payment_Gateway_Direct $instance instance
-				 */
-				$message = apply_filters( 'wc_payment_gateway_' . $this->get_id() . '_check_transaction_approved_order_note', $message, $order, $response, $this );
-
-				$order->add_order_note( $message );
-
-			}
-
-			return $response;
 		}
 
 
@@ -770,8 +614,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 			// perform the credit card or check transaction
 			if ( $this->is_credit_card_gateway() ) {
 				$response = $this->do_credit_card_transaction( $order );
-			} elseif ( $this->is_echeck_gateway() ) {
-				$response = $this->do_check_transaction( $order );
 			} else {
 				$do_payment_type_transaction = 'do_' . $this->get_payment_type() . '_transaction';
 				$response                    = $this->$do_payment_type_transaction( $order );
@@ -902,16 +744,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 						$token->get_type_full(),
 						$token->get_last_four(),
 						$token->get_exp_date()
-					);
-
-				} elseif ( $this->is_echeck_gateway() ) {
-
-					// account type (checking/savings) may or may not be available, which is fine
-					/* translators: Payment method as in a specific e-check account. Placeholders: %1$s - account type (checking/savings), %2$s - last four digits of the account */
-					$message = sprintf(
-						esc_html__( 'Nice! New payment method added: %1$s account ending in %2$s', 'woodev-plugin-framework' ),
-						$token->get_account_type(),
-						$token->get_last_four()
 					);
 
 				} else {

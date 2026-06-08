@@ -434,7 +434,7 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		}
 
 		public function require_tls_1_2() {
-			wc_deprecated_function( __METHOD__, '1.1.6', 'Woodev_Plugin::require_tls_1_2()' );
+			_deprecated_function( __METHOD__, '1.1.6', 'Woodev_Plugin::require_tls_1_2()' );
 			return $this->get_plugin()->require_tls_1_2();
 		}
 

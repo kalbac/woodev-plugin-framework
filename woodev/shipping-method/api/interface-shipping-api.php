@@ -6,6 +6,15 @@
  * All shipping API classes must implement this interface to ensure
  * consistent communication with shipping carrier services.
  *
+ * Note: response/exception types in this interface use the base framework
+ * contracts (Woodev_API_Response, Woodev_API_Exception) instead of
+ * shipping-specific subclasses. Carrier-specific response objects must
+ * implement Woodev_API_Response. The previous draft referenced fictional
+ * Woodev_Shipping_API_*_Response / Woodev_Exportable_Order /
+ * Woodev_Shipping_Exception classes that were never ported into the
+ * framework, making the contract unimplementable. See
+ * docs-internal/gotchas/shipping-api-broken-contract.md.
+ *
  * @since 1.5.0
  */
 
@@ -44,10 +53,10 @@ if ( ! interface_exists( '\\Woodev\\Framework\\Shipping\\Shipping_API' ) ) :
 		 *     @type string $currency     Currency code for rate amounts.
 		 * }
 		 *
-		 * @return \Woodev_Shipping_API_Rate_Response rate calculation response
-		 * @throws \Woodev_Shipping_Exception on network timeouts, API errors, or invalid parameters
+		 * @return \Woodev_API_Response rate calculation response
+		 * @throws \Woodev_API_Exception on network timeouts, API errors, or invalid parameters
 		 */
-		public function calculate_rates( array $params ): \Woodev_Shipping_API_Rate_Response;
+		public function calculate_rates( array $params ): \Woodev_API_Response;
 
 
 		/**
@@ -68,10 +77,10 @@ if ( ! interface_exists( '\\Woodev\\Framework\\Shipping\\Shipping_API' ) ) :
 		 *     @type int    $limit       Maximum number of results to return.
 		 * }
 		 *
-		 * @return \Woodev_Shipping_API_Pickup_Points_Response pickup points response
-		 * @throws \Woodev_Shipping_Exception on network timeouts, API errors, or invalid parameters
+		 * @return \Woodev_API_Response pickup points response
+		 * @throws \Woodev_API_Exception on network timeouts, API errors, or invalid parameters
 		 */
-		public function get_pickup_points( array $params ): \Woodev_Shipping_API_Pickup_Points_Response;
+		public function get_pickup_points( array $params ): \Woodev_API_Response;
 
 
 		/**
@@ -82,12 +91,12 @@ if ( ! interface_exists( '\\Woodev\\Framework\\Shipping\\Shipping_API' ) ) :
 		 *
 		 * @since 1.5.0
 		 *
-		 * @param \Woodev_Exportable_Order $order the order to export to the shipping carrier
+		 * @param \WC_Order $order the order to export to the shipping carrier
 		 *
-		 * @return \Woodev_Shipping_API_Order_Response order creation response
-		 * @throws \Woodev_Shipping_Exception on network timeouts, API errors, or validation failures
+		 * @return \Woodev_API_Response order creation response
+		 * @throws \Woodev_API_Exception on network timeouts, API errors, or validation failures
 		 */
-		public function create_order( \Woodev_Exportable_Order $order ): \Woodev_Shipping_API_Order_Response;
+		public function create_order( \WC_Order $order ): \Woodev_API_Response;
 
 
 		/**
@@ -100,10 +109,10 @@ if ( ! interface_exists( '\\Woodev\\Framework\\Shipping\\Shipping_API' ) ) :
 		 *
 		 * @param string $order_id the carrier-assigned order identifier
 		 *
-		 * @return \Woodev_Shipping_API_Order_Response order status response
-		 * @throws \Woodev_Shipping_Exception on network timeouts, API errors, or if the order is not found
+		 * @return \Woodev_API_Response order status response
+		 * @throws \Woodev_API_Exception on network timeouts, API errors, or if the order is not found
 		 */
-		public function get_order( string $order_id ): \Woodev_Shipping_API_Order_Response;
+		public function get_order( string $order_id ): \Woodev_API_Response;
 
 
 		/**
@@ -116,10 +125,10 @@ if ( ! interface_exists( '\\Woodev\\Framework\\Shipping\\Shipping_API' ) ) :
 		 *
 		 * @param string $order_id the carrier-assigned order identifier
 		 *
-		 * @return \Woodev_Shipping_API_Order_Response order cancellation response
-		 * @throws \Woodev_Shipping_Exception on network timeouts, API errors, or if cancellation is not allowed
+		 * @return \Woodev_API_Response order cancellation response
+		 * @throws \Woodev_API_Exception on network timeouts, API errors, or if cancellation is not allowed
 		 */
-		public function cancel_order( string $order_id ): \Woodev_Shipping_API_Order_Response;
+		public function cancel_order( string $order_id ): \Woodev_API_Response;
 
 
 		/**
@@ -132,10 +141,10 @@ if ( ! interface_exists( '\\Woodev\\Framework\\Shipping\\Shipping_API' ) ) :
 		 *
 		 * @param string $tracking_number the carrier-assigned tracking number
 		 *
-		 * @return \Woodev_Shipping_API_Tracking_Response tracking information response
-		 * @throws \Woodev_Shipping_Exception on network timeouts, API errors, or if the tracking number is not found
+		 * @return \Woodev_API_Response tracking information response
+		 * @throws \Woodev_API_Exception on network timeouts, API errors, or if the tracking number is not found
 		 */
-		public function get_tracking( string $tracking_number ): \Woodev_Shipping_API_Tracking_Response;
+		public function get_tracking( string $tracking_number ): \Woodev_API_Response;
 
 
 		/**
@@ -149,13 +158,14 @@ if ( ! interface_exists( '\\Woodev\\Framework\\Shipping\\Shipping_API' ) ) :
 
 
 		/**
-		 * Returns the most recent response object.
+		 * Returns the most recent response object, or null before any request has run
+		 * or after one failed before producing a parsed response.
 		 *
 		 * @since 1.5.0
 		 *
-		 * @return \Woodev_API_Response the most recent response object
+		 * @return \Woodev_API_Response|null the most recent response, or null when none
 		 */
-		public function get_response(): \Woodev_API_Response;
+		public function get_response(): ?\Woodev_API_Response;
 	}
 
 endif;

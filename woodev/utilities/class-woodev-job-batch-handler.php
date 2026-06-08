@@ -76,7 +76,7 @@ if ( ! class_exists( 'Woodev_Job_Batch_Handler' ) ) :
 			 */
 			$args = apply_filters( $this->get_job_handler()->get_identifier() . '_batch_handler_js_args', $this->get_js_args(), $this );
 
-			wc_enqueue_js(
+			Woodev_Helper::enqueue_js(
 				sprintf(
 					'window.%1$s_batch_handler = new %2$s( %3$s );',
 					esc_js( $this->get_job_handler()->get_identifier() ),

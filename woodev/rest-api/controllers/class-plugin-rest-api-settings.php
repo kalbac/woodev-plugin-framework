@@ -9,6 +9,12 @@ if ( ! class_exists( 'Woodev_REST_API_Settings' ) ) :
 	 */
 	class Woodev_REST_API_Settings extends WP_REST_Controller {
 
+		/** @var string REST namespace. */
+		protected $namespace;
+
+		/** @var string REST base. */
+		protected $rest_base;
+
 		/** @var Woodev_Abstract_Settings settings handler */
 		protected $settings;
 
@@ -76,7 +82,7 @@ if ( ! class_exists( 'Woodev_REST_API_Settings' ) ) :
 		 */
 		public function get_items_permissions_check( $request ) {
 
-			if ( ! wc_rest_check_manager_permissions( 'settings', 'read' ) ) {
+			if ( ! $this->check_manager_permissions( 'read' ) ) {
 				return new WP_Error( 'wc_rest_cannot_view', __( 'Sorry, you cannot list resources.' ), [ 'status' => rest_authorization_required_code() ] );
 			}
 
@@ -135,11 +141,25 @@ if ( ! class_exists( 'Woodev_REST_API_Settings' ) ) :
 		 */
 		public function update_item_permissions_check( $request ) {
 
-			if ( ! wc_rest_check_manager_permissions( 'settings', 'edit' ) ) {
+			if ( ! $this->check_manager_permissions( 'edit' ) ) {
 				return new WP_Error( 'wc_rest_cannot_edit', __( 'Sorry, you cannot edit this resource.' ), [ 'status' => rest_authorization_required_code() ] );
 			}
 
 			return true;
+		}
+
+		/**
+		 * Checks whether the current user can manage WooCommerce settings.
+		 *
+		 * @param string $context Permission context.
+		 * @return bool
+		 */
+		private function check_manager_permissions( $context ) {
+			if ( function_exists( 'wc_rest_check_manager_permissions' ) ) {
+				return wc_rest_check_manager_permissions( 'settings', $context );
+			}
+
+			return current_user_can( 'manage_woocommerce' );
 		}
 
 		/**

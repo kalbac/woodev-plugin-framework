@@ -1,0 +1,130 @@
+/**
+ * Раскладка модального окна и карты пунктов выдачи (ПВЗ).
+ *
+ * Provider-agnostic: стили описывают только оболочку (модальное окно, контейнер
+ * карты, балун с кнопкой выбора). Не содержит контрактных зон (только ассеты).
+ */
+
+.woodev-pickup-map-modal {
+	position: fixed;
+	inset: 0;
+	z-index: 100000;
+	display: none;
+	align-items: center;
+	justify-content: center;
+	padding: 24px;
+	background: rgba( 0, 0, 0, 0.55 );
+}
+
+.woodev-pickup-map-modal.is-open {
+	display: flex;
+}
+
+.woodev-pickup-map-modal__dialog {
+	display: flex;
+	flex-direction: column;
+	width: 100%;
+	max-width: 960px;
+	max-height: 90vh;
+	overflow: hidden;
+	background: #fff;
+	border-radius: 8px;
+	box-shadow: 0 12px 40px rgba( 0, 0, 0, 0.25 );
+}
+
+.woodev-pickup-map-modal__header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 16px 20px;
+	border-bottom: 1px solid #e2e4e7;
+}
+
+.woodev-pickup-map-modal__title {
+	margin: 0;
+	font-size: 18px;
+	font-weight: 600;
+}
+
+.woodev-pickup-map-modal__close {
+	padding: 0;
+	font-size: 22px;
+	line-height: 1;
+	color: #666;
+	cursor: pointer;
+	background: none;
+	border: 0;
+}
+
+.woodev-pickup-map-modal__close:hover {
+	color: #000;
+}
+
+.woodev-pickup-map-modal__body {
+	display: flex;
+	flex: 1 1 auto;
+	min-height: 0;
+}
+
+.woodev-pickup-map-modal__sidebar {
+	flex: 0 0 280px;
+	overflow-y: auto;
+	border-right: 1px solid #e2e4e7;
+}
+
+.woodev-pickup-map {
+	flex: 1 1 auto;
+	min-height: 420px;
+	background: #f4f5f6;
+}
+
+/* Балун точки выдачи (общий для всех адаптеров). */
+.woodev-pickup-popup {
+	min-width: 200px;
+	font-size: 13px;
+	line-height: 1.4;
+}
+
+.woodev-pickup-popup__title {
+	margin-bottom: 4px;
+	font-weight: 600;
+}
+
+.woodev-pickup-popup__address {
+	margin-bottom: 4px;
+	color: #444;
+}
+
+.woodev-pickup-popup__description {
+	margin-bottom: 8px;
+	color: #666;
+}
+
+.woodev-pickup-popup__select {
+	display: inline-block;
+	cursor: pointer;
+}
+
+/* Адаптивность: на узких экранах карта занимает всю ширину. */
+@media screen and ( max-width: 600px ) {
+	.woodev-pickup-map-modal {
+		padding: 0;
+	}
+
+	.woodev-pickup-map-modal__dialog {
+		max-width: 100%;
+		max-height: 100%;
+		border-radius: 0;
+	}
+
+	.woodev-pickup-map-modal__body {
+		flex-direction: column;
+	}
+
+	.woodev-pickup-map-modal__sidebar {
+		flex: 0 0 auto;
+		max-height: 35vh;
+		border-right: 0;
+		border-bottom: 1px solid #e2e4e7;
+	}
+}

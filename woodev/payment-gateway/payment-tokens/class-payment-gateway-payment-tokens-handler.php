@@ -46,9 +46,9 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Tokens_Handler' ) ) :
 		 *      Payment token data.
 		 *
 		 *     @type bool   $default   Optional. Indicates this is the default payment token
-		 *     @type string $type      Payment type. Either 'credit_card' or 'check'
+		 *     @type string $type      Payment type. Usually 'credit_card'.
 		 *     @type string $last_four Last four digits of account number
-		 *     @type string $card_type Credit card type (`visa`, `mc`, `amex`, `disc`, `diners`, `jcb`, `mir`) or `echeck`
+		 *     @type string $card_type Credit card type (`visa`, `mc`, `amex`, `disc`, `diners`, `jcb`, `mir`)
 		 *     @type string $exp_month Optional. Expiration month (credit card only)
 		 *     @type string $exp_year  Optional. Expiration year (credit card only)
 		 * }
@@ -116,11 +116,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Tokens_Handler' ) ) :
 				// for credit card transactions add the card type, if known (some gateways return the credit card type as part of the response, others may require it as part of the request, and still others it may never be known)
 				if ( $gateway->is_credit_card_gateway() && $token->get_card_type() ) {
 					$order->payment->card_type = $token->get_card_type();
-				}
-
-				// checking/savings, if known
-				if ( $gateway->is_echeck_gateway() && $token->get_account_type() ) {
-					$order->payment->account_type = $token->get_account_type();
 				}
 
 				// set the token to the user account
@@ -495,7 +490,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Tokens_Handler' ) ) :
 
 			// set the payment type image url, if any, for convenience
 			foreach ( $this->tokens[ $environment_id ][ $user_id ] as $key => $token ) {
-				$this->tokens[ $environment_id ][ $user_id ][ $key ]->set_image_url( $this->get_gateway()->get_payment_method_image_url( $token->is_credit_card() ? $token->get_card_type() : 'echeck' ) );
+				$this->tokens[ $environment_id ][ $user_id ][ $key ]->set_image_url( $this->get_gateway()->get_payment_method_image_url( $token->get_card_type() ) );
 			}
 
 			if ( $transient_key ) {
@@ -667,7 +662,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Tokens_Handler' ) ) :
 		 * @return array associative array of string token to Woodev_Payment_Gateway_Payment_Token objects
 		 */
 		protected function get_merge_attributes() {
-			return array( 'last_four', 'card_type', 'account_type', 'exp_month', 'exp_year', 'nickname' );
+			return array( 'last_four', 'card_type', 'exp_month', 'exp_year', 'nickname' );
 		}
 
 
@@ -750,7 +745,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Tokens_Handler' ) ) :
 		 *
 		 * NOTE: the gateway id, rather than plugin id, is used by default to create
 		 * the meta key for this setting, because it's assumed that in the case of a
-		 * plugin having multiple gateways (ie credit card and eCheck) the payment
+		 * plugin having multiple gateway variants the payment
 		 * tokens will be distinct between them
 		 *
 		 * @since 1.0.0
@@ -793,17 +788,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Tokens_Handler' ) ) :
 					$token->get_type_full(),
 					$token->get_last_four(),
 					$token->get_exp_date()
-				);
-
-			} elseif ( $gateway->is_echeck_gateway() ) {
-
-				// account type (checking/savings) may or may not be available, which is fine
-				/* translators: Placeholders: %1$s - payment gateway title (such as CyberSouce, NETbilling, etc), %2$s - account type (checking/savings - may or may not be available), %3$s - last four digits of the account */
-				$message = sprintf(
-					__( '%1$s eCheck Payment Method Saved: %2$s account ending in %3$s', 'woodev-plugin-framework' ),
-					$gateway->get_method_title(),
-					$token->get_account_type(),
-					$token->get_last_four()
 				);
 			}
 

@@ -9,9 +9,7 @@
 }
 
 .woocommerce-checkout #payment div.payment_box input.js-woodev-payment-gateway-credit-card-form-input[type="text"],
-.woocommerce-checkout #payment div.payment_box input.js-woodev-payment-gateway-echeck-form-input[type="text"],
-#add_payment_method input.js-woodev-payment-gateway-credit-card-form-input[type="text"],
-#add_payment_method input.js-woodev-payment-gateway-echeck-form-input[type="text"] {
+#add_payment_method input.js-woodev-payment-gateway-credit-card-form-input[type="text"] {
     font-size: 1.5em;
     padding: 8px
 }
@@ -77,22 +75,6 @@
 .woocommerce-checkout #payment div.payment_box input.js-woodev-payment-gateway-credit-card-form-account-number.visaelectron,
 #add_payment_method input.js-woodev-payment-gateway-credit-card-form-account-number.visaelectron {
     background-image: url("../../images/card-visa-electron.svg")
-}
-
-.woocommerce-checkout #payment div.payment_box .js-woodev-payment-gateway-echeck-form-check-hint,
-#add_payment_method .js-woodev-payment-gateway-echeck-form-check-hint {
-    margin: 0 0 3px 2px;
-    cursor: pointer
-}
-
-.woocommerce-checkout #payment div.payment_box .js-woodev-payment-gateway-echeck-form-sample-check,
-#add_payment_method .js-woodev-payment-gateway-echeck-form-sample-check {
-    margin: 1em
-}
-
-.woocommerce-checkout #payment div.payment_box .js-woodev-payment-gateway-echeck-form-sample-check img,
-#add_payment_method .js-woodev-payment-gateway-echeck-form-sample-check img {
-    min-height: 135px
 }
 
 #add_payment_method ul.payment_methods li {

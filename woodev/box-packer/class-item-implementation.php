@@ -4,7 +4,7 @@ defined( 'ABSPATH' ) || exit;
 
 if ( ! class_exists( 'Woodev_Packer_Item_Implementation' ) ) :
 
-	class Woodev_Packer_Item_Implementation implements Woodev_Box_Packer_Item {
+	class Woodev_Packer_Item_Implementation implements Woodev_Box_Packer_Item_With_Product {
 
 		/** @var string */
 		private $name;

@@ -9,11 +9,7 @@
                     if (!a("form#add_payment_method").length) return void console.log("No payment form found!");
                     this.form = a("form#add_payment_method"), this.handle_add_payment_method_page()
                 }
-                this.params = window[this.plugin_id + "_params"], "echeck" === this.type && this.form.on("click", ".js-woodev-payment-gateway-echeck-form-check-hint, .js-woodev-payment-gateway-echeck-form-sample-check", function(a) {
-                    return function() {
-                        return a.handle_sample_check_hint()
-                    }
-                }(this)), a(document).trigger("woodev_wc_payment_form_handler_init", {
+                this.params = window[this.plugin_id + "_params"], a(document).trigger("woodev_wc_payment_form_handler_init", {
                     id: this.id,
                     instance: this
                 })
@@ -52,7 +48,7 @@
                 return this.payment_fields = a(".payment_method_" + this.id)
             }, b.prototype.validate_payment_data = function() {
                 var a;
-                return this.form.is(".processing") ? !1 : (a = this.payment_fields.find(".js-wc-payment-gateway-payment-token:checked").val(), a ? !0 : "credit-card" === this.type ? this.validate_card_data() : this.validate_account_data())
+                return this.form.is(".processing") ? !1 : (a = this.payment_fields.find(".js-wc-payment-gateway-payment-token:checked").val(), a ? !0 : this.validate_card_data())
             }, b.prototype.format_credit_card_inputs = function() {
                 return a(".js-woodev-payment-gateway-credit-card-form-account-number").payment("formatCardNumber").change(), a(".js-woodev-payment-gateway-credit-card-form-expiry").payment("formatCardExpiry").change(), a(".js-woodev-payment-gateway-credit-card-form-csc").payment("formatCardCVC").change(), a(".js-woodev-payment-gateway-credit-card-form-input").on("change paste keyup", function(a) {
                     return function() {
@@ -65,9 +61,6 @@
             }, b.prototype.validate_card_data = function() {
                 var b, c, d, e;
                 return d = [], b = this.payment_fields.find(".js-woodev-payment-gateway-credit-card-form-account-number").val(), e = a.payment.cardExpiryVal(this.payment_fields.find(".js-woodev-payment-gateway-credit-card-form-expiry").val()), c = this.payment_fields.find(".js-woodev-payment-gateway-credit-card-form-csc").val(), b = b.replace(/-|\s/g, ""), b ? ((b.length < 12 || b.length > 19) && d.push(this.params.card_number_length_invalid), /\D/.test(b) && d.push(this.params.card_number_digits_invalid), a.payment.validateCardNumber(b) || d.push(this.params.card_number_invalid)) : d.push(this.params.card_number_missing), a.payment.validateCardExpiry(e) || d.push(this.params.card_exp_date_invalid), null != c && (c ? (/\D/.test(c) && d.push(this.params.cvv_digits_invalid), (c.length < 3 || c.length > 4) && d.push(this.params.cvv_length_invalid)) : d.push(this.params.cvv_missing)), d.length > 0 ? (this.render_errors(d), !1) : (this.payment_fields.find(".js-woodev-payment-gateway-credit-card-form-account-number").val(b), !0)
-            }, b.prototype.validate_account_data = function() {
-                var a, b, c;
-                return b = [], c = this.payment_fields.find(".js-woodev-payment-gateway-echeck-form-routing-number").val(), a = this.payment_fields.find(".js-woodev-payment-gateway-echeck-form-account-number").val(), c ? (9 !== c.length && b.push(this.params.routing_number_length_invalid), /\D/.test(c) && b.push(this.params.routing_number_digits_invalid)) : b.push(this.params.routing_number_missing), a ? ((a.length < 3 || a.length > 17) && b.push(this.params.account_number_length_invalid), /\D/.test(a) && b.push(this.params.account_number_invalid)) : b.push(this.params.account_number_missing), b.length > 0 ? (this.render_errors(b), !1) : (this.payment_fields.find(".js-woodev-payment-gateway-echeck-form-account-number").val(a), !0)
             }, b.prototype.render_errors = function(b) {
                 return a(".woocommerce-error, .woocommerce-message").remove(), this.form.prepend('<ul class="woocommerce-error"><li>' + b.join("</li><li>") + "</li></ul>"), this.form.removeClass("processing").unblock(), this.form.find(".input-text, select").blur(), a("html, body").animate({
                     scrollTop: this.form.offset().top - 100
@@ -83,9 +76,6 @@
                     var b;
                     return b = a("input.js-wc-" + e + "-tokenize-payment-method").closest("p.form-row"), a(this).is(":checked") ? (b.slideDown(), b.next().show()) : (b.hide(), b.next().hide())
                 }).change()
-            }, b.prototype.handle_sample_check_hint = function() {
-                var a;
-                return a = this.payment_fields.find(".js-woodev-payment-gateway-echeck-form-sample-check"), a.is(":visible") ? a.slideUp() : a.slideDown()
             }, b
         }()
     })

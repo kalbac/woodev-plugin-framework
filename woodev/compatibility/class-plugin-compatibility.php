@@ -13,14 +13,8 @@ if ( ! class_exists( 'Woodev_Plugin_Compatibility' ) ) :
 	 * compatibility functions for dealing with supporting multiple versions
 	 * of WooCommerce and various extensions.
 	 *
-	 * The expected procedure is to remove methods from this class, using the
-	 * latest ones directly in code, as support for older versions of WooCommerce
-	 * are dropped.
-	 *
-	 * Current Compatibility
-	 * + Core 3.0.9 - 3.7.x
-	 *
-	 * // TODO: move to /compatibility
+	 * The expected procedure is to remove methods from this class and use the
+	 * latest WooCommerce APIs directly as support for older versions is dropped.
 	 */
 	class Woodev_Plugin_Compatibility {
 
@@ -146,12 +140,10 @@ if ( ! class_exists( 'Woodev_Plugin_Compatibility' ) ) :
 		/**
 		 * Determines whether the enhanced admin is available.
 		 *
-		 * This checks both for WooCommerce v4.0+ and the underlying package availability.
-		 *
 		 * @return bool
 		 */
 		public static function is_enhanced_admin_available(): bool {
-			return self::is_wc_version_gte( '4.0' ) && function_exists( 'wc_admin_url' );
+			return true;
 		}
 
 
@@ -160,10 +152,6 @@ if ( ! class_exists( 'Woodev_Plugin_Compatibility' ) ) :
 
 		/**
 		 * Normalizes a WooCommerce page screen ID.
-		 *
-		 * Needed because WordPress uses a menu title (which is translatable), not slug, to generate screen ID.
-		 * See details in: https://core.trac.wordpress.org/ticket/21454
-		 * TODO: Add WP version check when https://core.trac.wordpress.org/ticket/18857 is addressed {BR 2016-12-12}
 		 *
 		 * @param string $slug slug for the screen ID to normalize (minus `woocommerce_page_`)
 		 *
@@ -194,30 +182,7 @@ if ( ! class_exists( 'Woodev_Plugin_Compatibility' ) ) :
 		 * @return int An integer byte value.
 		 */
 		public static function convert_hr_to_bytes( string $value ): int {
-
-			if ( function_exists( 'wp_convert_hr_to_bytes' ) ) {
-
-				return wp_convert_hr_to_bytes( $value );
-			}
-
-			$value = strtolower( trim( $value ) );
-			$bytes = (int) $value;
-
-			if ( false !== strpos( $value, 'g' ) ) {
-
-				$bytes *= GB_IN_BYTES;
-
-			} elseif ( false !== strpos( $value, 'm' ) ) {
-
-				$bytes *= MB_IN_BYTES;
-
-			} elseif ( false !== strpos( $value, 'k' ) ) {
-
-				$bytes *= KB_IN_BYTES;
-			}
-
-			// deal with large (float) values which run into the maximum integer size
-			return min( $bytes, PHP_INT_MAX );
+			return wp_convert_hr_to_bytes( $value );
 		}
 
 

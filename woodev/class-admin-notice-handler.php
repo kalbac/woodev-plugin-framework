@@ -277,7 +277,7 @@ if ( ! class_exists( 'Woodev_Admin_Notice_Handler' ) ) :
 		} ) ( jQuery );
 			<?php
 
-			wc_enqueue_js( ob_get_clean() );
+			Woodev_Helper::enqueue_js( ob_get_clean() );
 		}
 
 

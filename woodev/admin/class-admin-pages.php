@@ -89,7 +89,7 @@ if ( ! class_exists( 'Woodev_Admin_Pages' ) ) :
 		 * Generates license settings page HTML markup section
 		 * The fields must be added via main plugin class. @return void
 		 *
-		 * @see Woodev_License_Settings::register_license_settings()
+		 * @see Woodev_Woocommerce_License_Settings::register_license_settings()
 		 */
 		public function license_page_init() {
 

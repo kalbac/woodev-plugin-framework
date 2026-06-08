@@ -54,20 +54,6 @@ if ( ! interface_exists( 'Woodev_Payment_Gateway_API' ) ) :
 
 
 		/**
-		 * Perform an eCheck debit (ACH transaction) for the given order
-		 *
-		 * If the gateway does not support check debits, this method can be a no-op.
-		 *
-		 * @param WC_Order $order the order
-		 *
-		 * @return Woodev_Payment_Gateway_API_Response check debit response
-		 * @throws Woodev_Payment_Gateway_Exception network timeouts, etc
-		 * @since 1.0.0
-		 */
-		public function check_debit( WC_Order $order );
-
-
-		/**
 		 * Perform a refund for the given order
 		 *
 		 * If the gateway does not support refunds, this method can be a no-op.

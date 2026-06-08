@@ -36,9 +36,9 @@ In your main plugin file:
  * Version: 1.0.0
  * Author: Your Name
  * Text Domain: my-plugin
- * Requires at least: 5.9
+ * Requires at least: 6.3
  * Requires PHP: 7.4
- * WC requires at least: 5.6
+ * WC requires at least: 7.0
  */
 
 defined( 'ABSPATH' ) || exit;
@@ -59,7 +59,7 @@ function init_my_plugin() {
         'my_plugin_init',
         [
             'minimum_wc_version'   => '8.0',
-            'minimum_wp_version'   => '5.9',
+            'minimum_wp_version'   => '6.3',
             'backwards_compatible' => '1.4.0',
         ]
     );
@@ -259,8 +259,8 @@ For developers new to Woodev Framework:
 | --- | --- |
 | Framework | [%%FRAMEWORK_VERSION%%](https://github.com/kalbac/woodev-plugin-framework/releases/tag/v%%FRAMEWORK_VERSION%%) |
 | Minimum PHP | 7.4 |
-| Minimum WordPress | 5.9 |
-| Minimum WooCommerce | 5.6 |
+| Minimum WordPress | 6.3 |
+| Minimum WooCommerce | 7.0 |
 
 ---
 

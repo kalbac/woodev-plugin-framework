@@ -10,6 +10,8 @@
 
 namespace Woodev\Framework\Shipping;
 
+use Woodev\Framework\Shipping\Pickup\Pickup_Point_Source;
+
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
@@ -210,7 +212,27 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 
 			$this->before_calculate( $package );
 
-			$rate = $this->calculate_rate( $package );
+			/**
+			 * Shipping Method Pre-Calculate Rate Filter.
+			 *
+			 * Lets a cache layer short-circuit rate calculation by returning a
+			 * previously stored rate for this package. Returning a non-null value
+			 * skips the (potentially expensive, API-backed) calculate_rate() call;
+			 * the resulting rate still passes through the
+			 * `woodev_shipping_method_calculated_rate` filter below, where a cache
+			 * can persist freshly computed rates.
+			 *
+			 * @since 1.5.0
+			 *
+			 * @param Shipping_Rate|null $rate Cached rate to use, or null to calculate normally
+			 * @param array $package Package data
+			 * @param Shipping_Method $method Method instance
+			 */
+			$rate = apply_filters( 'woodev_shipping_method_pre_calculate_rate', null, $package, $this );
+
+			if ( null === $rate ) {
+				$rate = $this->calculate_rate( $package );
+			}
 
 			/**
 			 * Shipping Method Rate Filter.
@@ -401,6 +423,22 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 
 		public function is_postal_shipping(): bool {
 			return $this->get_delivery_type() === self::TYPE_POSTAL;
+		}
+
+		/**
+		 * Gets this method's pickup-point source, if it is a pickup method.
+		 *
+		 * Accessor seam (spec §4.5): lets shared subsystems (checkout, AJAX) reach a
+		 * method's normalizing {@see Pickup_Point_Source} without knowing the concrete
+		 * method class. The base method has no source and returns null; a pickup method
+		 * overrides this to expose its {@see Pickup_Point_Source}.
+		 *
+		 * @since 1.5.0
+		 *
+		 * @return Pickup_Point_Source|null the pickup-point source, or null for non-pickup methods
+		 */
+		public function get_pickup_point_source(): ?Pickup_Point_Source {
+			return null;
 		}
 
 		/**

@@ -6,9 +6,9 @@
  * Author:      Woodev
  * Text Domain: woodev-test-payment-gateway
  *
- * Requires at least: 5.9
+ * Requires at least: 6.3
  * Requires PHP:      7.4
- * WC requires at least: 5.6
+ * WC requires at least: 7.0
  *
  * @package Woodev_Test_Payment_Gateway
  */
@@ -41,21 +41,35 @@ if ( ! class_exists( 'Woodev_Plugin_Bootstrap' ) ) {
 }
 
 /**
+ * Возвращает явное определение загрузчика Platform v2 для тестового платёжного шлюза.
+ *
+ * @return array<string,mixed>
+ */
+function woodev_test_payment_gateway_plugin_loader_definition(): array {
+	return [
+		'plugin_id'         => 'woodev-test-payment-gateway',
+		'plugin_name'       => 'Woodev Test Payment Gateway Plugin',
+		'plugin_version'    => '1.0.0',
+		'framework_version' => '1.4.0',
+		'plugin_file'       => __FILE__,
+		'platform'          => \Woodev\Framework\Framework_Plugin_Loader_Definition::PLATFORM_WOOCOMMERCE,
+		'requirements'      => [
+			'php'         => '7.4',
+			'wordpress'   => '6.3',
+			'woocommerce' => '7.0',
+		],
+		'main_class'        => 'Woodev_Test_Payment_Gateway_Plugin',
+		'callback'          => 'woodev_test_payment_gateway_plugin_init',
+		'capabilities'      => [
+			\Woodev\Framework\Framework_Plugin_Loader_Definition::CAPABILITY_PAYMENT_GATEWAY,
+		],
+	];
+}
+
+/**
  * Регистрируем тестовый плагин в бутстрапе фреймворка.
  */
-
-Woodev_Plugin_Bootstrap::instance()->register_plugin(
-	'1.4.0',
-	'Woodev Test Payment Gateway Plugin',
-	__FILE__,
-	'woodev_test_payment_gateway_plugin_init',
-	[
-		'minimum_wc_version'   => '5.6',
-		'minimum_wp_version'   => '5.9',
-		'backwards_compatible' => '1.4.0',
-		'is_payment_gateway'   => true
-	]
-);
+Woodev_Plugin_Bootstrap::instance()->register_loader_definition( woodev_test_payment_gateway_plugin_loader_definition() );
 
 function woodev_test_payment_gateway_plugin_init(): void {
 

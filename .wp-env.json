@@ -12,7 +12,10 @@
     "wp-content/plugins/woodev-test-payment-gateway":          "./tests/_fixtures/woodev-test-payment-gateway",
     "wp-content/plugins/woodev-test-payment-gateway/woodev":   "./woodev",
     "wp-content/plugins/woodev-test-shipping-method":          "./tests/_fixtures/woodev-test-shipping-method",
-    "wp-content/plugins/woodev-test-shipping-method/woodev":   "./woodev"
+    "wp-content/plugins/woodev-test-shipping-method/woodev":   "./woodev",
+    "woodev-framework/tests/_fixtures/woodev-test-plugin/woodev":          "./woodev",
+    "woodev-framework/tests/_fixtures/woodev-test-payment-gateway/woodev": "./woodev",
+    "woodev-framework/tests/_fixtures/woodev-test-shipping-method/woodev": "./woodev"
   },
   "env": {
     "tests": {
@@ -33,7 +36,10 @@
         "wp-content/plugins/woodev-test-payment-gateway":          "./tests/_fixtures/woodev-test-payment-gateway",
         "wp-content/plugins/woodev-test-payment-gateway/woodev":   "./woodev",
         "wp-content/plugins/woodev-test-shipping-method":          "./tests/_fixtures/woodev-test-shipping-method",
-        "wp-content/plugins/woodev-test-shipping-method/woodev":   "./woodev"
+        "wp-content/plugins/woodev-test-shipping-method/woodev":   "./woodev",
+        "woodev-framework/tests/_fixtures/woodev-test-plugin/woodev":          "./woodev",
+        "woodev-framework/tests/_fixtures/woodev-test-payment-gateway/woodev": "./woodev",
+        "woodev-framework/tests/_fixtures/woodev-test-shipping-method/woodev": "./woodev"
       }
     },
     "development": {

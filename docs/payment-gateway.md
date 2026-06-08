@@ -41,9 +41,9 @@ The Payment Gateway module handles:
  * Version: 1.0.0
  * Author: Your Name
  * Text Domain: my-payment
- * Requires at least: 5.9
+ * Requires at least: 6.3
  * Requires PHP: 7.4
- * WC requires at least: 5.6
+ * WC requires at least: 7.0
  */
 
 defined( 'ABSPATH' ) || exit;
@@ -64,7 +64,7 @@ function init_my_payment() {
         'my_payment_init',
         [
             'minimum_wc_version' => '8.0',
-            'minimum_wp_version' => '5.9',
+            'minimum_wp_version' => '6.3',
             'is_payment_gateway' => true,  // Important!
         ]
     );
@@ -479,7 +479,7 @@ Woodev_Plugin_Bootstrap::instance()->register_plugin(
     'my_payment_init',
     [
         'minimum_wc_version' => '8.0',
-        'minimum_wp_version' => '5.9',
+        'minimum_wp_version' => '6.3',
         'is_payment_gateway' => true,
     ]
 );

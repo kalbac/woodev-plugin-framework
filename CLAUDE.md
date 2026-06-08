@@ -1,6 +1,7 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+> Read [AGENTS.md](AGENTS.md) first for shared project rules (session start/end, coding principles, gotchas, conventions).
+> This file extends it with **Claude Code-specific** integrations: Serena MCP, Context7, and detailed architecture reference.
 
 ## MCP Tools
 
@@ -66,6 +67,50 @@ Run a single test file:
 ```
 
 Integration tests require a WordPress test library. Set `WP_TESTS_DIR` env var or use `npx wp-env start`.
+
+## Session Start Protocol
+
+At the start of every session, Claude Code agents should:
+1. Read `docs-internal/CURRENT-STATE.md` — current phase status, known bugs, next actions
+2. Read `docs-internal/GOTCHAS.md` — gotcha index (prevents repeated mistakes)
+3. If working on a specific area, read relevant files from `docs-internal/adr/`, `docs-internal/wiki/`
+
+For complete session start/end protocols and coding principles, see [AGENTS.md](AGENTS.md).
+
+## Documentation Structure
+
+| Directory | Audience | Published | Purpose |
+|-----------|----------|-----------|---------|
+| `docs/` | Developers (public) | ✅ GH Pages (mkdocs) | Usage guides, API reference, tutorials |
+| `docs-internal/` | AI agents + maintainers | ❌ Not published | Session logs, gotchas, ADRs, operational state |
+
+Internal docs (`docs-internal/`):
+- `CURRENT-STATE.md` — phase status, known bugs, next actions
+- `SESSION-LOG.md` — full session history
+- `GOTCHAS.md` — gotcha index → `gotchas/{slug}.md` atomic detail files
+- `AGENT-RULES.md` — workflow + architecture rules for AI agents
+- `DOCS-INDEX.md` — navigation hub for all internal docs
+- `DOCS-SCHEMA.md` — doc format and lint rules
+- `FUTURE-BACKLOG.md` — deferred features and technical debt
+- `adr/` — Architecture Decision Records
+- `wiki/` — compiled topic references
+- `archive/` — resolved historical documents
+
+### Public docs (`docs/`) — GH Pages
+
+- Built by mkdocs (Material theme), deployed automatically on push to `main`
+- Uses `%%FRAMEWORK_VERSION%%` placeholder — injected by CI from `Woodev_Plugin::VERSION`
+- Edit `.md` files directly, preview with `mkdocs serve`
+- Lint with `npx markdownlint-cli2 "docs/**/*.md"`
+- Never add session logs, gotchas, or internal notes here
+
+### Internal docs (`docs-internal/`) — AI agents
+
+- Plain markdown, no build step, not published
+- Gotchas → `docs-internal/gotchas/{slug}.md` + index in `GOTCHAS.md`
+- Session work → `CURRENT-STATE.md` + `SESSION-LOG.md`
+- Architecture decisions → `adr/` (see `adr/README.md` for template)
+- All files tracked in git — never gitignore docs-internal/
 
 ## Architecture
 
@@ -154,27 +199,35 @@ Self-contained shipping box-packing algorithm. Implement `Woodev_Packer_Item_Int
 - WordPress Coding Standards (`WordPress-Core`, `WordPress-Extra`, `WordPress-Docs`)
 - Short array syntax `[]` is allowed (override of WPCS default)
 - Line length limit: 120 characters
-- PHPCompatibility checked for PHP 7.4+, minimum WP version 5.9
+- PHPCompatibility checked for PHP 7.4+, minimum WP version 6.3
 - PHPStan level 3; `checkDynamicProperties: false` (legacy code uses dynamic properties)
 
-## Backward Compatibility
+## Backward Compatibility — clean-break policy (v2.0 branch)
 
-This framework is used by 10+ dependent plugins. Breaking changes affect all of them.
+> Policy set 2026-06-03 (direction audit **D-2**). Supersedes the prior "deprecation cycle for everything" rule on the `refactor/platform-v2-clean-break` branch. Rationale: this is effectively a new framework; the old one is being rewritten and the dependent plugins will be rewritten onto it (`PLANS.md` §2.4). The previous strict-deprecation mandate was generating a back-compat tax for plugins we are about to replace (audit §4.2).
 
-- Any legacy code that is rewritten or refactored **must** maintain backward compatibility
-- **NEVER** delete or rename public methods/classes without a deprecation cycle
-- **ALWAYS** add `@deprecated` annotation and call `_deprecated_function()` inside deprecated methods
-- Deprecation cycle: minimum one full version before removal
-- Breaking changes require major version bump (semver)
-- Use `class_alias`, wrapper methods, or deprecation shims where needed
+Two different rules apply depending on what you are changing:
 
-```php
-/** @deprecated 2.0.0 Use new_method() instead. */
-public function old_method(): void {
-    _deprecated_function( __METHOD__, '2.0.0', __CLASS__ . '::new_method()' );
-    $this->new_method();
-}
-```
+- **Internal code — FREE TO BREAK on the v2 branch:** class names, method
+  signatures, the plugin entry/registration shape, namespacing, file layout.
+  Do **NOT** add `@deprecated` shims, `class_alias` files, or
+  `_deprecated_function()` wrappers for moved/renamed internal APIs. **Delete**
+  existing internal-API shims (see `docs-internal/platform-v2-cleanbreak-plan.md`
+  Phase 3).
+- **Installed-site data contracts — RELEASE-BLOCKING, never break:** option keys
+  & settings arrays, license key option names + activation state + instance IDs,
+  updater identity, WC payment-gateway IDs, WC shipping-method IDs + instance
+  setting keys, public action/filter hook names, scheduled cron hooks +
+  recurrence + payload shape, custom DB tables/schemas, REST route namespaces,
+  AJAX action names, admin page slugs, log source names, background-job IDs,
+  order/session meta keys. Preserve these byte-for-byte.
+
+When a plugin is migrated onto v2, enforce the "never break" list via its
+`docs-internal/migration/<plugin>-data-preservation-checklist.md` — that is where
+data preservation is verified, at rewrite time, per plugin.
+
+Operating rules for the whole effort live in
+`docs-internal/platform-v2-execution-protocol.md`.
 
 ## Coding Conventions
 
@@ -203,10 +256,16 @@ public function old_method(): void {
 
 ## Knowledge Persistence
 
-When you discover important project rules, conventions, or patterns during your work — **always document them** in `.ai/QUICK-REFERENCE.md` (section "Project Rules & Conventions") so all AI agents (Claude, Qwen, Cursor, etc.) share the same knowledge.
+When you discover important project rules, conventions, or patterns during your work:
+
+- **Gotchas** (mistakes to avoid, correct/incorrect patterns) → create `docs-internal/gotchas/{slug}.md` + add index line to `docs-internal/GOTCHAS.md`
+- **Architecture decisions** (non-trivial choices with tradeoffs) → create `docs-internal/adr/{NNN-title}.md` + add to `docs-internal/adr/README.md`
+- **Reference knowledge** (in-depth topic explanation) → create `docs-internal/wiki/{topic}.md`
+- **Session work** → update `docs-internal/CURRENT-STATE.md` + append to `docs-internal/SESSION-LOG.md`
+- **Quick reference** (cross-project, shared across agents) → `.ai/QUICK-REFERENCE.md` (section "Project Rules & Conventions")
 
 ## Known Technical Debt
 
 - 50+ PHPStan baseline ignores (see `phpstan-baseline.neon`)
-- 11 deprecated methods in `Woodev_Plugin` (lines ~1486–1629), slated for removal in v2.0.0
-- `class-payment-gateway.php` is ~3900 lines — candidate for trait extraction
+- Internal-API back-compat scaffolding (2 `class_alias` files, ~10 `_deprecated_function` shims, the legacy positional registration path) is being **deleted** on `refactor/platform-v2-clean-break` per the clean-break policy — see `docs-internal/platform-v2-cleanbreak-plan.md` Phase 3.
+- `class-payment-gateway.php` (~2,378 lines) — candidate for trait extraction (post-split debt)

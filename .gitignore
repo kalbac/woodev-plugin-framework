@@ -5,6 +5,11 @@
 composer.lock
 phpstan.neon
 .wp-env.override.json
+/_site/
+opencode.json
+
+# Internal docs — tracked in git (like woodev_theme docs/)
+# docs-internal/ — AI agent operational docs (CURRENT-STATE, SESSION-LOG, GOTCHAS, ADR, wiki)
 
 # AI tools — do not ignore (reference files required)
 !/.ai/
@@ -12,3 +17,20 @@ phpstan.neon
 !/.codex/
 !/.cursor/
 !/.qwen/
+
+# Local tooling / scratch — not part of the repo
+/.kiro/
+/plugins-reference/
+.phpunit.result.cache
+# Re-ignore local-only .claude paths (must come AFTER the !/.claude/ whitelist)
+/.claude/settings.local.json
+/.claude/worktrees/
+
+# Autodev loop — ephemeral scratch only (blackboard + queue + escalations stay tracked)
+/.autodev/runtime/
+/.autodev/conductor.log
+
+# OS / editor junk
+.DS_Store
+Thumbs.db
+/.vscode/

@@ -63,7 +63,7 @@ if ( ! interface_exists( 'Woodev_Payment_Gateway_API_Response' ) ) :
 
 
 		/**
-		 * Gets the payment type: 'credit-card', 'echeck', etc...
+		 * Gets the payment type, such as 'credit-card'.
 		 *
 		 * @return string
 		 */

@@ -125,16 +125,9 @@ if ( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 			 *  logged-out nonce hijacking before standing aside.
 			 *
 			 * @see WC_Session_Handler::init() when the action is hooked
-			 * @see WC_Session_Handler::nonce_user_logged_out() WC < 5.3 callback
-			 * @see WC_Session_Handler::maybe_update_nonce_user_logged_out() WC >= 5.3 callback
 			 */
-			if ( Woodev_Plugin_Compatibility::is_wc_version_gte( '5.3' ) ) {
-				$callback  = array( WC()->session, 'maybe_update_nonce_user_logged_out' );
-				$arguments = 2;
-			} else {
-				$callback  = array( WC()->session, 'nonce_user_logged_out' );
-				$arguments = 1;
-			}
+			$callback  = array( WC()->session, 'maybe_update_nonce_user_logged_out' );
+			$arguments = 2;
 
 			remove_filter( 'nonce_user_logged_out', $callback );
 

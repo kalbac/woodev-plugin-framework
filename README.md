@@ -5,7 +5,7 @@
 [![Docs](https://github.com/kalbac/woodev-plugin-framework/actions/workflows/docs.yml/badge.svg)](https://kalbac.github.io/woodev-plugin-framework/)
 [![Latest Release](https://img.shields.io/github/v/release/kalbac/woodev-plugin-framework)](https://github.com/kalbac/woodev-plugin-framework/releases/latest)
 [![PHP](https://img.shields.io/badge/PHP-7.4--8.2-777bb4)](https://www.php.net/)
-[![WordPress](https://img.shields.io/badge/WordPress-5.9%2B-21759b)](https://wordpress.org/)
+[![WordPress](https://img.shields.io/badge/WordPress-6.3%2B-21759b)](https://wordpress.org/)
 [![WooCommerce](https://img.shields.io/badge/WooCommerce-7.0%2B-96588a)](https://woocommerce.com/)
 [![License](https://img.shields.io/github/license/kalbac/woodev-plugin-framework)](LICENSE)
 
@@ -39,9 +39,9 @@ In your main plugin file:
  * Version: 1.0.0
  * Author: Your Name
  * Text Domain: my-plugin
- * Requires at least: 5.9
+ * Requires at least: 6.3
  * Requires PHP: 7.4
- * WC requires at least: 5.6
+ * WC requires at least: 7.0
  */
 
 defined( 'ABSPATH' ) || exit;
@@ -62,7 +62,7 @@ function init_my_plugin() {
         'my_plugin_init',
         [
             'minimum_wc_version'   => '8.0',
-            'minimum_wp_version'   => '5.9',
+            'minimum_wp_version'   => '6.3',
             'backwards_compatible' => '1.4.0',
         ]
     );
@@ -271,8 +271,8 @@ For developers new to Woodev Framework:
 | --- | --- |
 | Framework | 1.4.0 |
 | Minimum PHP | 7.4 |
-| Minimum WordPress | 5.9 |
-| Minimum WooCommerce | 5.6 |
+| Minimum WordPress | 6.3 |
+| Minimum WooCommerce | 7.0 |
 
 ---
 

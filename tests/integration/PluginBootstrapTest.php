@@ -118,7 +118,7 @@ class PluginBootstrapTest extends TestCase {
 	 */
 	public function test_wordpress_version_meets_minimum(): void {
 		global $wp_version;
-		$minimum = '5.9';
+		$minimum = '6.3';
 
 		$this->assertTrue(
 			version_compare( $wp_version, $minimum, '>=' ),

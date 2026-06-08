@@ -133,7 +133,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 				}
 			}
 
-			return false;
+			return $order;
 		}
 
 
@@ -437,23 +437,17 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 
 			$order->payment->account_number = $response->get_account_number();
 
-			switch ( $response->get_payment_type() ) {
-				case self::PAYMENT_TYPE_CREDIT_CARD:
-					$order->payment->exp_month = $response->get_exp_month();
-					$order->payment->exp_year  = $response->get_exp_year();
-					$order->payment->card_type = $response->get_card_type();
-					break;
+			if ( $response instanceof Woodev_Payment_Gateway_API_Payment_Notification_Credit_Card_Response ) {
 
-				case self::PAYMENT_TYPE_ECHECK:
-					$order->payment->account_type = $response->get_account_type();
-					$order->payment->check_number = $response->get_check_number();
-					break;
+				$order->payment->exp_month = $response->get_exp_month();
+				$order->payment->exp_year  = $response->get_exp_year();
+				$order->payment->card_type = $response->get_card_type();
 
-				case self::PAYMENT_TYPE_LOANS:
-					$order->payment->loan_type     = $response->get_loan_type();
-					$order->payment->credit_amount = $response->get_credit_amount();
-					$order->payment->first_payment = $response->get_first_payment();
-					break;
+			} elseif ( $response instanceof Woodev_Payment_Gateway_API_Payment_Notification_Loans_Response ) {
+
+				$order->payment->loan_type     = $response->get_loan_type();
+				$order->payment->credit_amount = $response->get_credit_amount();
+				$order->payment->first_payment = $response->get_first_payment();
 			}
 
 			return $order;
@@ -593,19 +587,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 								)
 							);
 
-						} elseif ( $token->is_echeck() ) {
-
-							// account type (checking/savings) may or may not be available, which is fine
-							/* translators: Placeholders: %1$s - payment gateway title (such as CyberSouce, NETbilling, etc), %2$s - account type (checking/savings - may or may not be available), %3$s - last four digits of the account */
-							$order->add_order_note(
-								sprintf(
-									__( '%1$s eCheck Payment Method Saved: %2$s account ending in %3$s', 'woodev-plugin-framework' ),
-									$this->get_method_title(),
-									$token->get_account_type(),
-									$token->get_last_four()
-								)
-							);
-
 						} else {
 
 							/* translators: Placeholders: %s - payment gateway title (such as CyberSouce, NETbilling, etc) */
@@ -645,10 +626,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 					$order->payment->exp_year  = $token->get_exp_year();
 					$order->payment->card_type = $token->get_card_type();
 
-				} elseif ( $token->is_echeck() ) {
-
-					$order->payment->account_type = $token->get_account_type();
-					$order->payment->check_number = $token->get_check_number();
 				}
 			}
 

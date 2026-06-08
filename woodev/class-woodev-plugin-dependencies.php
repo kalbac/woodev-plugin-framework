@@ -371,7 +371,7 @@ if ( ! class_exists( 'Woodev_Plugin_Dependencies' ) ) :
 
 			foreach ( $this->get_php_functions() as $function ) {
 
-				if ( ! extension_loaded( $function ) ) {
+				if ( ! function_exists( $function ) ) {
 					$missing_functions[] = $function;
 				}
 			}
@@ -414,7 +414,7 @@ if ( ! class_exists( 'Woodev_Plugin_Dependencies' ) ) :
 						// determine if this is a size string, like "10MB"
 						$is_size = ! is_numeric( substr( $actual, -1 ) );
 
-						$actual_num = $is_size ? wc_let_to_num( $actual ) : $actual;
+						$actual_num = $is_size ? $this->convert_hr_size_to_bytes( $actual ) : $actual;
 
 						if ( $actual_num < $expected ) {
 
@@ -435,6 +435,34 @@ if ( ! class_exists( 'Woodev_Plugin_Dependencies' ) ) :
 			}
 
 			return $incompatible_settings;
+		}
+
+
+		/**
+		 * Converts a shorthand PHP size string to bytes.
+		 *
+		 * @param string $size size string.
+		 * @return int
+		 */
+		private function convert_hr_size_to_bytes( $size ) {
+
+			$unit  = strtoupper( substr( $size, -1 ) );
+			$value = (float) substr( $size, 0, -1 );
+
+			switch ( $unit ) {
+				case 'P':
+					$value *= 1024;
+				case 'T':
+					$value *= 1024;
+				case 'G':
+					$value *= 1024;
+				case 'M':
+					$value *= 1024;
+				case 'K':
+					$value *= 1024;
+			}
+
+			return (int) $value;
 		}
 
 

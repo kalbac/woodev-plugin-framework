@@ -9,7 +9,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 	/**
 	 * Payment Form Class
 	 *
-	 * Handles rendering the payment form for both credit card and eCheck gateways
+	 * Handles rendering the payment form for credit card gateways.
 	 *
 	 * @since 4.0.0
 	 */
@@ -60,9 +60,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 
 			// saved payment methods
 			add_action( "wc_{$gateway_id}_payment_form_start", array( $this, 'render_saved_payment_methods' ), 20 );
-
-			// sample eCheck image (if eCheck gateway)
-			add_action( "wc_{$gateway_id}_payment_form_start", array( $this, 'render_sample_check' ), 25 );
 
 			// fieldset start
 			add_action( "wc_{$gateway_id}_payment_form_start", array( $this, 'render_fieldset_start' ), 30 );
@@ -115,11 +112,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 			if ( $this->tokenization_allowed() && is_user_logged_in() ) {
 
 				foreach ( $this->get_gateway()->get_payment_tokens_handler()->get_tokens( get_current_user_id() ) as $token ) {
-
-					// some gateways return all tokens for each gateway, so ensure the token type matches the gateway type
-					if ( ( $this->get_gateway()->is_credit_card_gateway() && $token->is_echeck() ) || ( $this->get_gateway()->is_echeck_gateway() && $token->is_credit_card() ) ) {
-						continue;
-					}
 
 					// set token
 					$tokens[ $token->get_id() ] = $token;
@@ -249,10 +241,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 					$fields = $this->get_credit_card_fields();
 					break;
 
-				case 'echeck':
-					$fields = $this->get_echeck_fields();
-					break;
-
 				default:
 					$fields = array();
 					break;
@@ -261,9 +249,8 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 			/**
 			 * Payment Gateway Payment Form Default Payment Fields.
 			 *
-			 * Filters the default field data for a gateway, for credit cards/eCheck
-			 * gateways the get_credit_card_fields()/get_echeck_fields() methods
-			 * will be used. This filter can be used to return payment fields
+			 * Filters the default field data for a gateway. Credit card gateways use
+			 * the get_credit_card_fields() method. This filter can return payment fields
 			 * for a non-standard payment type (like PayPal Express)
 			 *
 			 * @param array $fields in the format supported by woocommerce_form_fields()
@@ -356,81 +343,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 		}
 
 
-		/**
-		 * Get default eCheck form fields, note this pulls default values
-		 * from the associated gateway
-		 *
-		 * @return array eCheck form fields
-		 */
-		protected function get_echeck_fields() {
 
-			$defaults = $this->get_gateway()->get_payment_method_defaults();
-
-			$check_hint = sprintf( '<img title="%s" alt="%s" class="js-woodev-payment-gateway-echeck-form-check-hint" src="%s" width="16" height="16" />', esc_attr__( 'Where do I find this?', 'woodev-plugin-framework' ), esc_attr__( 'Where do I find this?', 'woodev-plugin-framework' ), esc_url( WC()->plugin_url() . '/assets/images/help.png' ) );
-
-			$fields = array(
-				'routing-number' => array(
-					'type'              => 'tel',
-					'label'             => esc_html__( 'Routing Number', 'woodev-plugin-framework' ) . $check_hint,
-					'id'                => 'wc-' . $this->get_gateway()->get_id_dasherized() . '-routing-number',
-					'name'              => 'wc-' . $this->get_gateway()->get_id_dasherized() . '-routing-number',
-					'placeholder'       => '•••••••••',
-					'required'          => true,
-					'class'             => array( 'form-row-first' ),
-					'input_class'       => array( 'js-woodev-payment-gateway-echeck-form-input js-woodev-payment-gateway-echeck-form-routing-number' ),
-					'maxlength'         => 9,
-					'custom_attributes' => array(
-						'autocomplete'   => 'off',
-						'autocorrect'    => 'no',
-						'autocapitalize' => 'no',
-						'spellcheck'     => 'no',
-					),
-					'value'             => $defaults['routing-number'],
-				),
-				'account-number' => array(
-					'type'              => 'tel',
-					'label'             => esc_html__( 'Account Number', 'woocommerce-plugin-framework' ) . $check_hint,
-					'id'                => 'wc-' . $this->get_gateway()->get_id_dasherized() . '-account-number',
-					'name'              => 'wc-' . $this->get_gateway()->get_id_dasherized() . '-account-number',
-					'required'          => true,
-					'class'             => array( 'form-row-last' ),
-					'input_class'       => array( 'js-woodev-payment-gateway-echeck-form-input js-woodev-payment-gateway-echeck-form-account-number' ),
-					'maxlength'         => 17,
-					'custom_attributes' => array(
-						'autocomplete'   => 'off',
-						'autocorrect'    => 'no',
-						'autocapitalize' => 'no',
-						'spellcheck'     => 'no',
-					),
-					'value'             => $defaults['account-number'],
-				),
-				'account-type'   => array(
-					'type'              => 'select',
-					'label'             => esc_html__( 'Account Type', 'woodev-plugin-framework' ),
-					'id'                => 'wc-' . $this->get_gateway()->get_id_dasherized() . '-account-type',
-					'name'              => 'wc-' . $this->get_gateway()->get_id_dasherized() . '-account-type',
-					'required'          => true,
-					'class'             => array( 'form-row-wide' ),
-					'input_class'       => array( 'js-woodev-payment-gateway-echeck-form-input js-woodev-payment-gateway-echeck-form-account-type' ),
-					'options'           => array(
-						'checking' => esc_html_x( 'Checking', 'account type', 'woodev-plugin-framework' ),
-						'savings'  => esc_html_x( 'Savings', 'account type', 'woodev-plugin-framework' ),
-					),
-					'custom_attributes' => array(),
-					'value'             => 'checking',
-				),
-			);
-
-			/**
-			 * Payment Gateway Payment Form Default eCheck Fields.
-			 *
-			 * Filters the default field data for eCheck gateways.
-			 *
-			 * @param array $fields in the format supported by woocommerce_form_fields()
-			 * @param Woodev_Payment_Gateway_Payment_Form $instance payment form instance
-			 */
-			return apply_filters( 'wc_' . $this->get_gateway()->get_id() . '_payment_form_default_echeck_fields', $fields, $this );
-		}
 
 
 		/**
@@ -463,27 +376,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 		}
 
 
-		/**
-		 * Get the sample check image HTML
-		 *
-		 * @return string sample check image HTML
-		 */
-		protected function get_sample_check_html() {
 
-			$image_url = WC_HTTPS::force_https_url( $this->get_gateway()->get_plugin()->get_payment_gateway_framework_assets_url() . '/images/sample-check.png' );
-
-			$html = sprintf( '<div class="js-woodev-payment-gateway-echeck-form-sample-check" style="display: none;"><img width="541" height="270" src="%s" alt="%s" /></div>', esc_url( $image_url ), esc_attr__( 'Sample Check', 'woodev-plugin-framework' ) );
-
-			/**
-			 * Payment Gateway Payment Form Sample eCheck HTML.
-			 *
-			 * Filters the HTML rendered for the same eCheck image.
-			 *
-			 * @param string $html
-			 * @param Woodev_Payment_Gateway_Payment_Form $instance payment form instance
-			 */
-			return apply_filters( 'wc_' . $this->get_gateway()->get_id() . '_payment_form_sample_check_html', $html, $this );
-		}
 
 
 		/**
@@ -673,7 +566,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 			$html .= sprintf(
 				'<label style="display:inline;" for="wc-%s-use-new-payment-method">%s</label>',
 				esc_attr( $this->get_gateway()->get_id_dasherized() ),
-				$this->get_gateway()->is_credit_card_gateway() ? esc_html__( 'Use a new card', 'woodev-plugin-framework' ) : esc_html__( 'Use a new bank account', 'woodev-plugin-framework' )
+				esc_html__( 'Use a new card', 'woodev-plugin-framework' )
 			);
 
 			/**
@@ -760,9 +653,8 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 			 * Triggered before the payment fields are rendered.
 			 *
 			 * @hooked Woodev_Payment_Gateway_Payment_Form::render_payment_form_description() - 15 (outputs payment form description HTML)
-			 * @hooked Woodev_Payment_Gateway_Payment_Form::render_saved_payment_methods() - 20 (outputs saved payment method fields)
-			 * @hooked Woodev_Payment_Gateway_Payment_Form::render_sample_check() - 25 (outputs sample check div if eCheck gateway)
-			 * @hooked Woodev_Payment_Gateway_Payment_Form::render_fieldset_start() - 30 (outputs opening fieldset tag and starting payment fields div)
+		 * @hooked Woodev_Payment_Gateway_Payment_Form::render_saved_payment_methods() - 20 (outputs saved payment method fields)
+		 * @hooked Woodev_Payment_Gateway_Payment_Form::render_fieldset_start() - 30 (outputs opening fieldset tag and starting payment fields div)
 			 *
 			 * @param Woodev_Payment_Gateway_Payment_Form $instance payment form instance
 			 */
@@ -815,19 +707,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 			// tokenization forced check to prevent rendering this on the "add new payment method" screen
 			if ( $this->has_tokens() && ! $is_add_new_payment_method_page ) {
 				echo $this->get_saved_payment_methods_html();
-			}
-		}
-
-
-		/**
-		 * Render the sample check image if gateway is eCheck
-		 *
-		 * @hooked wc_{gateway ID}_payment_form_start @ priority 25
-		 */
-		public function render_sample_check() {
-
-			if ( $this->get_gateway()->is_echeck_gateway() ) {
-				echo $this->get_sample_check_html();
 			}
 		}
 

@@ -207,7 +207,14 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 		/**
 		 * Helper method to install default settings for a plugin.
 		 *
-		 * @param array $settings settings in format required by WC_Admin_Settings
+		 * Iterates the provided setting definitions and writes the `default`
+		 * value of each entry to its WP option row. Platform-neutral: does
+		 * not depend on WooCommerce. Plugins typically build the input
+		 * array from their settings definitions (e.g. the framework's
+		 * Settings API or a WooCommerce `WC_Admin_Settings` shape, hence
+		 * the historical naming).
+		 *
+		 * @param array $settings Settings array of `[ 'id' => ..., 'default' => ... ]` entries.
 		 */
 		public function install_default_settings( array $settings ) {
 
@@ -458,13 +465,13 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 			$history = $this->get_event_history();
 
 			$event = array(
-				'name'    => wc_clean( $name ),
+				'name'    => self::clean_event_value( $name ),
 				'time'    => (int) current_time( 'timestamp' ),
-				'version' => wc_clean( $this->get_plugin()->get_version() ),
+				'version' => self::clean_event_value( $this->get_plugin()->get_version() ),
 			);
 
 			if ( ! empty( $data ) ) {
-				$event['data'] = wc_clean( $data );
+				$event['data'] = self::clean_event_value( $data );
 			}
 
 			array_unshift( $history, $event );
@@ -505,6 +512,28 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 			}
 
 			return is_array( $history ) ? $history : array();
+		}
+
+		/**
+		 * Sanitizes lifecycle event values without relying on WooCommerce helpers.
+		 *
+		 * Mirrors the previous scalar/recursive cleaning behavior for event history
+		 * payloads while keeping this base-owned module platform-neutral.
+		 *
+		 * @param mixed $value Event value to sanitize.
+		 * @return mixed
+		 */
+		private static function clean_event_value( $value ) {
+
+			if ( is_array( $value ) ) {
+				return array_map( array( __CLASS__, 'clean_event_value' ), $value );
+			}
+
+			if ( is_scalar( $value ) ) {
+				return sanitize_text_field( (string) $value );
+			}
+
+			return $value;
 		}
 
 
@@ -598,7 +627,7 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 		 * Handles tasks after the plugin has been updated.
 		 */
 		public function do_update() {
-			wc_deprecated_function( __METHOD__, '1.2.0' );
+			_deprecated_function( __METHOD__, '1.2.0' );
 		}
 	}
 

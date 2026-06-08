@@ -46,9 +46,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		/** Credit card payment type */
 		const PAYMENT_TYPE_CREDIT_CARD = 'credit-card';
 
-		/** eCheck payment type */
-		const PAYMENT_TYPE_ECHECK = 'echeck';
-
 		/** Gateway with multiple payment options */
 		const PAYMENT_TYPE_MULTIPLE = 'multiple';
 
@@ -100,16 +97,44 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		/** Add new payment method feature */
 		const FEATURE_ADD_PAYMENT_METHOD = 'add_payment_method';
 
-		/** Apple Pay feature */
-		const FEATURE_APPLE_PAY = 'apple_pay';
-
 		/** Admin token editor feature */
 		const FEATURE_TOKEN_EDITOR = 'token_editor';
+
+		/**
+		 * Returns the payment type, one of 'credit-card', 'bank_transfer', 'multiple', 'loans_transfer'.
+		 *
+		 * @return string payment type
+		 * @since 1.0.0
+		 */
+		public function get_payment_type() {
+			return $this->payment_type;
+		}
+
+		/**
+		 * Returns true if this is a credit card gateway.
+		 *
+		 * @return bool
+		 * @since 1.0.0
+		 */
+		public function is_credit_card_gateway() {
+			return self::PAYMENT_TYPE_CREDIT_CARD === $this->get_payment_type();
+		}
+
+		/**
+		 * Returns true if this gateway supports the removed eCheck payment type.
+		 *
+		 * @return bool false — eCheck removed in v2.0.0
+		 * @deprecated v2.0.0 eCheck payment type removed
+		 * @since 1.0.0
+		 */
+		public function is_echeck_gateway() {
+			return false;
+		}
 
 		/** @var Woodev_Payment_Gateway_Plugin the parent plugin class */
 		private $plugin;
 
-		/** @var string payment type, one of 'credit-card' or 'echeck' */
+		/** @var string payment type, one of 'credit-card', 'bank_transfer', 'multiple', 'loans_transfer' */
 		private $payment_type;
 
 		/** @var array associative array of environment id to display name, defaults to 'production' => 'Production' */
@@ -145,9 +170,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		/** @var string configuration option: indicates whether a Card Security Code field will be presented for saved cards at checkout, either 'yes' or 'no' */
 		private $enable_token_csc;
 
-		/** @var array configuration option: supported echeck fields, one of 'check_number', 'account_type' */
-		private $supported_check_fields;
-
 		/** @var string configuration option: indicates whether tokenization is enabled, either 'yes' or 'no' */
 		private $tokenization;
 
@@ -160,7 +182,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		/** @var string configuration option: whether to use a sibling gateway's connection/authentication settings */
 		private $inherit_settings;
 
-		/** @var array of shared setting names, if any.  This can be used for instance when a single plugin supports both credit card and echeck payments, and the same credentials can be used for both gateways */
+		/** @var array of shared setting names, if any. Used when a single plugin supports multiple payment gateway variants sharing credentials. */
 		private $shared_settings = array();
 
 		/** @var Woodev_Payment_Gateway_Payment_Tokens_Handler payment tokens handler instance */
@@ -171,6 +193,9 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 
 		/** @var Woodev_Payment_Gateway_Payment_Form|null payment form instance */
 		protected $payment_form;
+
+		/** @var string transient voided order message, passed between mark_order_as_voided() and maybe_cancel_voided_order() */
+		private $voided_order_message = '';
 
 
 		/**
@@ -183,14 +208,13 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		 * + `supports` - array  list of supported gateway features, possible values include:
 		 *   'products', 'card_types', 'tokenziation', 'charge', 'authorization', 'customer_decline_messages'
 		 *   Defaults to 'products', 'charge' (credit-card gateways only)
-		 * + `payment_type` - string one of 'credit-card' or 'echeck', defaults to 'credit-card'
+		 * + `payment_type` - string one of 'credit-card', 'bank_transfer', 'multiple', 'loans_transfer'. Defaults to 'credit-card'.
 		 * + `card_types` - array  associative array of card type to display name, used if the payment_type is 'credit-card' and the 'card_types' feature is supported.  Defaults to:
 		 *   'VISA' => 'Visa', 'MC' => 'MasterCard', 'AMEX' => 'American Express', 'DISC' => 'Discover', 'DINERS' => 'Diners', 'JCB' => 'JCB'
-		 * + `echeck_fields` - array of supported echeck fields, including 'check_number', 'account_type'
 		 * + `environments` - associative array of environment id to display name, merged with default of 'production' => 'Production'
 		 * + `currencies` -  array of currency codes this gateway is allowed for, defaults to plugin accepted currencies
 		 * + `countries` -  array of two-letter country codes this gateway is allowed for, defaults to all
-		 * + `shared_settings` - array of shared setting names, if any.  This can be used for instance when a single plugin supports both credit card and echeck payments, and the same credentials can be used for both gateways
+		 * + `shared_settings` - array of shared setting names, if any. Used for plugins with multiple payment gateway variants.
 		 *
 		 * @param string                        $id the gateway id
 		 * @param Woodev_Payment_Gateway_Plugin $plugin the parent plugin class
@@ -229,9 +253,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 			}
 			if ( isset( $args['card_types'] ) ) {
 				$this->available_card_types = $args['card_types'];
-			}
-			if ( isset( $args['echeck_fields'] ) ) {
-				$this->supported_check_fields = $args['echeck_fields'];
 			}
 			if ( isset( $args['environments'] ) ) {
 				$this->environments = array_merge( $this->get_environments(), $args['environments'] );
@@ -458,17 +479,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 					'cvv_digits_invalid'             => esc_html__( 'Card security code is invalid (only digits are allowed)', 'woodev-plugin-framework' ),
 					'cvv_length_invalid'             => esc_html__( 'Card security code is invalid (must be 3 or 4 digits)', 'woodev-plugin-framework' ),
 					'card_exp_date_invalid'          => esc_html__( 'Card expiration date is invalid', 'woodev-plugin-framework' ),
-					'check_number_digits_invalid'    => esc_html__( 'Check Number is invalid (only digits are allowed)', 'woodev-plugin-framework' ),
-					'check_number_missing'           => esc_html__( 'Check Number is missing', 'woodev-plugin-framework' ),
-					'drivers_license_state_missing'  => esc_html__( 'Drivers license state is missing', 'woodev-plugin-framework' ),
-					'drivers_license_number_missing' => esc_html__( 'Drivers license number is missing', 'woodev-plugin-framework' ),
-					'drivers_license_number_invalid' => esc_html__( 'Drivers license number is invalid', 'woodev-plugin-framework' ),
-					'account_number_missing'         => esc_html__( 'Account Number is missing', 'woodev-plugin-framework' ),
-					'account_number_invalid'         => esc_html__( 'Account Number is invalid (only digits are allowed)', 'woodev-plugin-framework' ),
-					'account_number_length_invalid'  => esc_html__( 'Account number is invalid (must be between 5 and 17 digits)', 'woodev-plugin-framework' ),
-					'routing_number_missing'         => esc_html__( 'Routing Number is missing', 'woodev-plugin-framework' ),
-					'routing_number_digits_invalid'  => esc_html__( 'Routing Number is invalid (only digits are allowed)', 'woodev-plugin-framework' ),
-					'routing_number_length_invalid'  => esc_html__( 'Routing number is invalid (must be 9 digits)', 'woodev-plugin-framework' ),
 				)
 			);
 		}
@@ -724,7 +734,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 
 		/**
 		 * Get the payment form field defaults, primarily for gateways to override
-		 * and set dummy credit card/eCheck info when in the test environment
+		 * and set dummy credit card info when in the test environment
 		 *
 		 * @return array
 		 */
@@ -734,7 +744,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 
 			$defaults = array(
 				'account-number' => '',
-				'routing-number' => '',
 				'expiry'         => '',
 				'csc'            => '',
 			);
@@ -824,11 +833,8 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		 */
 		protected function get_default_title() {
 
-			// defaults for credit card and echeck, override for others
 			if ( $this->is_credit_card_gateway() ) {
 				return esc_html__( 'Credit Card', 'woodev-plugin-framework' );
-			} elseif ( $this->is_echeck_gateway() ) {
-				return esc_html__( 'eCheck', 'woodev-plugin-framework' );
 			}
 
 			return '';
@@ -842,11 +848,8 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		 */
 		protected function get_default_description() {
 
-			// defaults for credit card and echeck, override for others
 			if ( $this->is_credit_card_gateway() ) {
 				return esc_html__( 'Pay securely using your credit card.', 'woodev-plugin-framework' );
-			} elseif ( $this->is_echeck_gateway() ) {
-				return esc_html__( 'Pay securely using your checking account.', 'woodev-plugin-framework' );
 			}
 
 			return '';
@@ -1213,11 +1216,11 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		 * + required currency
 		 * + required country
 		 *
-		 * @return true if this gateway is available for checkout, false otherwise
+		 * @return bool
 		 * @see WC_Payment_Gateway::is_available()
 		 * @since 1.0.0
 		 */
-		public function is_available() {
+		public function is_available(): bool {
 
 			// is enabled check
 			$is_available = parent::is_available();
@@ -1307,14 +1310,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 				$icon .= '</div>';
 			}
 
-			// echeck image
-			if ( ! $icon && $this->is_echeck_gateway() ) {
-
-				if ( $url = $this->get_payment_method_image_url( 'echeck' ) ) {
-					$icon .= sprintf( '<img src="%s" alt="%s" class="woodev-payment-gateway-icon wc-%s-payment-gateway-icon" width="40" height="25" style="width: 40px; height: 25px;" />', esc_url( $url ), esc_attr( 'echeck' ), esc_attr( $this->get_id_dasherized() ) );
-				}
-			}
-
 			/* This filter is documented in WC core */
 
 			return apply_filters( 'woocommerce_gateway_icon', $icon, $this->get_id() );
@@ -1323,7 +1318,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		/**
 		 * Returns the payment method image URL (if any) for the given $type, ie
 		 * if $type is 'amex' a URL to the american express card icon will be
-		 * returned.  If $type is 'echeck', a URL to the echeck icon will be
 		 * returned.
 		 *
 		 * @param string $type the payment method cc type or name
@@ -1436,8 +1430,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 
 			if ( self::PAYMENT_TYPE_CREDIT_CARD == $response->get_payment_type() ) {
 				$order->add_order_note( $this->get_credit_card_transaction_approved_message( $order, $response ) );
-			} elseif ( self::PAYMENT_TYPE_ECHECK == $response->get_payment_type() ) {
-				$order->add_order_note( $this->get_echeck_transaction_approved_message( $order, $response ) );
 			} elseif ( self::PAYMENT_TYPE_LOANS == $response->get_payment_type() ) {
 				$order->add_order_note( $this->get_loans_transaction_approved_message( $order, $response ) );
 			} else {
@@ -2102,19 +2094,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 				if ( isset( $order->payment->card_type ) && $order->payment->card_type ) {
 					$this->update_order_meta( $order, 'card_type', $order->payment->card_type );
 				}
-			} elseif ( $this->is_echeck_gateway() ) {
-
-				// checking gateway data
-
-				// optional account type (checking/savings)
-				if ( isset( $order->payment->account_type ) && $order->payment->account_type ) {
-					$this->update_order_meta( $order, 'account_type', $order->payment->account_type );
-				}
-
-				// optional check number
-				if ( isset( $order->payment->check_number ) && $order->payment->check_number ) {
-					$this->update_order_meta( $order, 'check_number', $order->payment->check_number );
-				}
 			}
 
 			/**
@@ -2241,46 +2220,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		}
 
 		/**
-		 * Gets the order note message for approved eCheck transactions.
-		 *
-		 * @param WC_Order                            $order order object
-		 * @param Woodev_Payment_Gateway_API_Response $response response object
-		 *
-		 * @return string
-		 */
-		public function get_echeck_transaction_approved_message( WC_Order $order, Woodev_Payment_Gateway_API_Response $response ) {
-
-			$last_four = ! empty( $order->payment->last_four ) ? $order->payment->last_four : substr( $order->payment->account_number, - 4 );
-
-			// check order note. there may not be an account_type available, but that's fine
-			/* translators: Placeholders: %1$s - payment method title, %2$s - payment account type (savings/checking) (may or may not be available), %3$s - last four digits of the account */
-			$message = sprintf( __( '%1$s Check Transaction Approved: %2$s account ending in %3$s', 'woodev-plugin-framework' ), $this->get_method_title(), $order->payment->account_type, $last_four );
-
-			// optional check number
-			if ( ! empty( $order->payment->check_number ) ) {
-				/* translators: Placeholders: %s - check number */
-				$message .= '. ' . sprintf( esc_html__( 'Check number %s', 'woodev-plugin-framework' ), $order->payment->check_number );
-			}
-
-			// adds the transaction id (if any) to the order note
-			if ( $response->get_transaction_id() ) {
-				$message .= ' ' . sprintf( esc_html__( '(Transaction ID %s)', 'woodev-plugin-framework' ), $response->get_transaction_id() );
-			}
-
-			/**
-			 * Direct Gateway eCheck Transaction Approved Order Note Filter.
-			 *
-			 * Allow actors to modify the order note added when an eCheck transaction is approved.
-			 *
-			 * @param string $message order note
-			 * @param WC_Order $order order object
-			 * @param Woodev_Payment_Gateway_API_Response $response transaction response
-			 * @param Woodev_Payment_Gateway $instance instance
-			 */
-			return apply_filters( 'wc_payment_gateway_' . $this->get_id() . '_check_transaction_approved_order_note', $message, $order, $response, $this );
-		}
-
-		/**
 		 * Gets the order note message for approved loans transactions.
 		 *
 		 * @param WC_Order                            $order order object
@@ -2326,9 +2265,9 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 			}
 
 			/**
-			 * Direct Gateway eCheck Transaction Approved Order Note Filter.
+			 * Direct Gateway Loans Transaction Approved Order Note Filter.
 			 *
-			 * Allow actors to modify the order note added when an eCheck transaction is approved.
+			 * Allow actors to modify the order note added when a loans transaction is approved.
 			 *
 			 * @param string $message order note
 			 * @param WC_Order $order order object
@@ -2609,7 +2548,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		 *
 		 * NOTE: the plugin id, rather than gateway id, is used by default to create
 		 * the meta key for this setting, because it's assumed that in the case of a
-		 * plugin having multiple gateways (ie credit card and eCheck) the customer
+		 * plugin having multiple gateways the customer
 		 * id will be the same between them.
 		 *
 		 * @param string $environment_id optional environment id, defaults to plugin current environment
@@ -2757,14 +2696,14 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		 * @return bool
 		 * @since 1.0.0
 		 */
-		public function perform_credit_card_charge( WC_Order $order = null ) {
+		public function perform_credit_card_charge( ?WC_Order $order = null ) {
 
 			assert( $this->supports_credit_card_charge() );
 
 			$perform = self::TRANSACTION_TYPE_CHARGE === $this->transaction_type;
 
 			if ( ! $perform && $order && $this->supports_credit_card_charge_virtual() && 'yes' === $this->charge_virtual_orders ) {
-				$perform = Woodev_Helper::is_order_virtual( $order );
+				$perform = \Woodev\Framework\Woocommerce_Helper::is_order_virtual( $order );
 			}
 
 			/**
@@ -2785,7 +2724,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		 * @return bool
 		 * @since 1.0.0
 		 */
-		public function perform_credit_card_authorization( WC_Order $order = null ) {
+		public function perform_credit_card_authorization( ?WC_Order $order = null ) {
 
 			assert( $this->supports_credit_card_authorization() );
 
@@ -2984,115 +2923,78 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		}
 
 		/**
-		 * Safely gets and trims data from $_POST
-		 *
-		 * @param string $key array key to get from $_POST array
-		 *
-		 * @return string value from $_POST or blank string if $_POST[ $key ] is not set
-		 * @since 1.0.0
-		 * @deprecated 1.1.8
-		 */
-		protected function get_post( $key ) {
-
-			wc_deprecated_function( __METHOD__, '1.1.8', Woodev_Helper::class . '::get_posted_value()' );
-
-			return Woodev_Helper::get_posted_value( $key );
-		}
-
-		/**
-		 * Safely gets and trims data from $_REQUEST.
-		 *
-		 * @param string $key array key to get from $_REQUEST array
-		 *
-		 * @return string value from $_REQUEST or blank string if $_REQUEST[ $key ] is not set
-		 * @since 1.0.0
-		 * @deprecated 1.1.8
-		 */
-		protected function get_request( $key ) {
-
-			wc_deprecated_function( __METHOD__, '1.1.8', Woodev_Helper::class . '::get_requested_value()' );
-
-			return Woodev_Helper::get_requested_value( $key );
-		}
-
-		/**
-		 * Add API request logging for the gateway. The main plugin class typically handles this, but the payment
-		 * gateway plugin class no-ops the method so each gateway's requests can be logged individually (e.g. credit card &
-		 * eCheck) and make use of the payment gateway-specific add_debug_message() method
-		 *
-		 * @see Woodev_Plugin::add_api_request_logging()
-		 */
-		public function add_api_request_logging() {
-
-			if ( ! has_action( 'woodev_' . $this->get_id() . '_api_request_performed' ) ) {
-				add_action(
-					'woodev_' . $this->get_id() . '_api_request_performed',
-					array(
-						$this,
-						'log_api_request',
-					),
-					10,
-					2
-				);
-			}
-		}
-
-		/**
-		 * Log gateway API requests/responses
-		 *
-		 * @param array $request request data, see Woodev_API_Base::broadcast_request() for format
-		 * @param array $response response data
-		 */
-		public function log_api_request( $request, $response ) {
-
-			// request
-			$this->add_debug_message( $this->get_plugin()->get_api_log_message( $request ) );
-
-			// response
-			if ( ! empty( $response ) ) {
-				$this->add_debug_message( $this->get_plugin()->get_api_log_message( $response ) );
-			}
-		}
-
-		/**
-		 * Adds debug messages to the page as a WC message/error, and/or to the WC Error log
-		 *
-		 * @param string $message message to add
-		 * @param string $type how to add the message, options are: 'message' (styled as WC message), 'error' (styled as WC Error)
+		 * Returns the payment gateway id.
 		 *
 		 * @since 1.0.0
+		 *
+		 * @return string payment gateway id
 		 */
-		public function add_debug_message( $message, $type = 'message' ) {
+		public function get_id() {
+			return $this->id;
+		}
 
-			// do nothing when debug mode is off or no message
-			if ( 'off' == $this->debug_off() || ! $message ) {
-				return;
+		/**
+		 * Returns the payment gateway id with dashes in place of underscores.
+		 *
+		 * @since 1.0.0
+		 *
+		 * @return string payment gateway id with dashes in place of underscores
+		 */
+		public function get_id_dasherized() {
+			return str_replace( '_', '-', $this->get_id() );
+		}
+
+		/**
+		 * Returns the parent plugin object.
+		 *
+		 * @since 1.0.0
+		 *
+		 * @return Woodev_Payment_Gateway_Plugin the parent plugin object
+		 */
+		public function get_plugin() {
+			return $this->plugin;
+		}
+
+		/**
+		 * Returns true if the gateway is enabled.
+		 *
+		 * This has nothing to do with whether the gateway is properly configured or functional.
+		 *
+		 * @return bool true if the gateway is enabled
+		 */
+		public function is_enabled() {
+			return 'yes' === $this->enabled;
+		}
+
+		/**
+		 * Determines if a given currency is accepted by this gateway.
+		 *
+		 * @param string|null $currency optional three-letter currency code, defaults to order currency (if available) or currently configured WooCommerce currency
+		 *
+		 * @return bool
+		 */
+		public function currency_is_accepted( $currency = null ) {
+
+			// accept all currencies
+			if ( ! $this->currencies ) {
+				return true;
 			}
 
-			// add log message to WC logger if log/both is enabled
-			if ( $this->debug_log() ) {
-				$this->get_plugin()->log( $message, $this->get_id() );
+			// default to order/WC currency
+			if ( null === $currency ) {
+				$currency = $this->get_payment_currency();
 			}
 
-			// avoid adding notices when performing refunds, these occur in the admin as an Ajax call, so checking the current filter
-			// is the only reliably way to do so
-			if ( in_array( 'wp_ajax_woocommerce_refund_line_items', $GLOBALS['wp_current_filter'] ) ) {
-				return;
-			}
+			return in_array( $currency, $this->currencies, false );
+		}
 
-			// add debug message to woocommerce->errors/messages if checkout or both is enabled, the admin/Ajax check ensures capture charge transactions aren't logged as notices to the front end
-			if ( ( $this->debug_checkout() || ( 'error' === $type && $this->is_test_environment() ) ) && ( ! is_admin() || is_ajax() ) ) {
-
-				if ( 'message' === $type ) {
-
-					Woodev_Helper::wc_add_notice( str_replace( "\n", '<br/>', htmlspecialchars( $message ) ), 'notice' );
-
-				} else {
-
-					// defaults to error message
-					Woodev_Helper::wc_add_notice( str_replace( "\n", '<br/>', htmlspecialchars( $message ) ), 'error' );
-				}
-			}
+		/**
+		 * Returns the set of accepted currencies, or empty array if all currencies are accepted by this gateway.
+		 *
+		 * @return array of currencies accepted by this gateway
+		 */
+		public function get_accepted_currencies() {
+			return $this->currencies;
 		}
 
 		/**
@@ -3116,53 +3018,23 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		}
 
 		/**
-		 * Determines if a given currency is accepted by this gateway.
+		 * Returns an array of two-letter country codes this gateway is allowed for, defaults to all.
 		 *
-		 * @param string $currency optional three-letter currency code, defaults to order currency (if available) or currently configured WooCommerce currency
-		 *
-		 * @return bool
+		 * @return array of two-letter country codes this gateway is allowed for, defaults to all
 		 */
-		public function currency_is_accepted( $currency = null ) {
-
-			// accept all currencies
-			if ( ! $this->currencies ) {
-				return true;
-			}
-
-			// default to order/WC currency
-			if ( null === $currency ) {
-				$currency = $this->get_payment_currency();
-			}
-
-			return in_array( $currency, $this->currencies, false );
+		public function get_available_countries() {
+			return $this->countries;
 		}
 
 		/**
-		 * Returns true if the given order needs shipping, false otherwise. This is based on the WooCommerce core WC_Cart::needs_shipping()
+		 * Gets the order meta prefix used for the *_order_meta() methods.
 		 *
-		 * @param WC_Order $order
+		 * Defaults to `_wc_{gateway_id}_`.
 		 *
-		 * @return boolean true if $order needs shipping, false otherwise
+		 * @return string
 		 */
-		protected function order_needs_shipping( $order ) {
-
-			if ( get_option( 'woocommerce_calc_shipping' ) == 'no' ) {
-				return false;
-			}
-
-			/** @var WC_Order_Item_Product $item */
-			foreach ( $order->get_items() as $item ) {
-
-				$product = $item->get_product();
-
-				if ( $product && $product->needs_shipping() ) {
-
-					return true;
-				}
-			}
-
-			// no shipping required
-			return false;
+		public function get_order_meta_prefix() {
+			return '_wc_' . $this->get_id() . '_';
 		}
 
 		/**
@@ -3236,7 +3108,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		}
 
 		/**
-		 * Delete order meta data.
+		 * Deletes order meta data.
 		 *
 		 * @param WC_Order|int $order the order to delete meta for
 		 * @param string       $key meta key
@@ -3258,223 +3130,13 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		}
 
 		/**
-		 * Gets the order meta prefixed used for the *_order_meta() methods
+		 * Gets the set of environments supported by this gateway.
 		 *
-		 * Defaults to `_wc_{gateway_id}_`
-		 *
-		 * @return string
-		 */
-		public function get_order_meta_prefix() {
-			return '_wc_' . $this->get_id() . '_';
-		}
-
-		/**
-		 * Returns the payment gateway id
-		 *
-		 * @return string payment gateway id
-		 * @see WC_Payment_Gateway::$id
-		 * @since 1.0.0
-		 */
-		public function get_id() {
-			return $this->id;
-		}
-
-		/**
-		 * Returns the payment gateway id with dashes in place of underscores, and
-		 * appropriate for use in frontend element names, classes and ids
-		 *
-		 * @return string payment gateway id with dashes in place of underscores
-		 * @since 1.0.0
-		 */
-		public function get_id_dasherized() {
-			return str_replace( '_', '-', $this->get_id() );
-		}
-
-
-		/**
-		 * Returns the parent plugin object
-		 *
-		 * @return Woodev_Payment_Gateway_Plugin the parent plugin object
-		 * @since 1.0.0
-		 */
-		public function get_plugin() {
-			return $this->plugin;
-		}
-
-		/**
-		 * Returns the admin method title. This should be the gateway name
-		 *
-		 * @return string method title
-		 * @see WC_Settings_API::$method_title
-		 * @since 1.0.0
-		 */
-		public function get_method_title() {
-			return $this->method_title;
-		}
-
-
-		/**
-		 * Determines if the Card Security Code (CVV) field should be used at checkout.
-		 *
-		 * @return bool
-		 * @since 1.0.0
-		 */
-		public function csc_enabled() {
-			return 'yes' === $this->enable_csc;
-		}
-
-
-		/**
-		 * Determines if the Card Security Code (CVV) field should be used for saved cards at checkout.
-		 *
-		 * @return bool
-		 */
-		public function csc_enabled_for_tokens() {
-			return $this->csc_enabled() && 'yes' === $this->enable_token_csc;
-		}
-
-
-		/**
-		 * Determines if the Card Security Code (CVV) field should be required at checkout.
-		 *
-		 * @return bool
-		 */
-		public function csc_required() {
-			return $this->csc_enabled();
-		}
-
-
-		/**
-		 * Determines if the gateway supports sharing settings with sibling gateways.
-		 *
-		 * @return bool
-		 */
-		public function share_settings() {
-			return true;
-		}
-
-
-		/**
-		 * Determines if settings should be inherited for this gateway.
-		 *
-		 * @return bool
-		 */
-		public function inherit_settings() {
-			return 'yes' === $this->inherit_settings;
-		}
-
-
-		/**
-		 * Returns an array of two-letter country codes this gateway is allowed for, defaults to all
-		 *
-		 * @return array of two-letter country codes this gateway is allowed for, defaults to all
-		 * @see WC_Payment_Gateway::$countries
-		 */
-		public function get_available_countries() {
-			return $this->countries;
-		}
-
-
-		/**
-		 * Add support for the named feature or features
-		 *
-		 * @param string|array $feature the feature name or names supported by this gateway
+		 * All gateways support at least the production environment.
 		 *
 		 * @since 1.0.0
-		 */
-		public function add_support( $feature ) {
-
-			if ( ! is_array( $feature ) ) {
-				$feature = array( $feature );
-			}
-
-			foreach ( $feature as $name ) {
-
-				// add support for feature if it's not already declared
-				if ( ! in_array( $name, $this->supports ) ) {
-
-					$this->supports[] = $name;
-
-					/**
-					 * Payment Gateway Add Support Action.
-					 *
-					 * Fired when declaring support for a specific gateway feature.
-					 * Allows other actors (including ourselves) to take action when support is declared.
-					 *
-					 * @param Woodev_Payment_Gateway $instance instance
-					 * @param string $name of supported feature being added
-					 *
-					 * @since 1.0.0
-					 */
-					do_action( 'wc_payment_gateway_' . $this->get_id() . '_supports_' . str_replace( '-', '_', $name ), $this, $name );
-				}
-			}
-		}
-
-
-		/**
-		 * Remove support for the named feature or features
-		 *
-		 * @param string|array $feature feature name or names not supported by this gateway
-		 */
-		public function remove_support( $feature ) {
-
-			if ( ! is_array( $feature ) ) {
-				$feature = array( $feature );
-			}
-
-			foreach ( $feature as $name ) {
-
-				unset( $this->supports[ array_search( $name, $this->supports ) ] );
-
-				/**
-				 * Payment Gateway Remove Support Action.
-				 *
-				 * Fired when removing support for a specific gateway feature.
-				 * Allows other actors (including ourselves) to take action when support is removed.
-				 *
-				 * @param Woodev_Payment_Gateway $instance instance
-				 * @param string $name of supported feature being removed
-				 */
-				do_action( 'wc_payment_gateway_' . $this->get_id() . '_removed_support_' . str_replace( '-', '_', $name ), $this, $name );
-			}
-		}
-
-
-		/**
-		 * Set all features supported
-		 *
-		 * @param array $features array of supported feature names
-		 *
-		 * @since 1.0.0
-		 */
-		public function set_supports( $features ) {
-			$this->supports = $features;
-		}
-
-
-		/**
-		 * Returns true if this echeck gateway supports
-		 *
-		 * @param string $field_name check gateway field name, includes 'check_number', 'account_type'
-		 *
-		 * @return boolean true if this check gateway supports the named field
-		 * @since 1.0.0
-		 */
-		public function supports_check_field( $field_name ) {
-
-			assert( $this->is_echeck_gateway() );
-
-			return is_array( $this->supported_check_fields ) && in_array( $field_name, $this->supported_check_fields );
-		}
-
-
-		/**
-		 * Gets the set of environments supported by this gateway.  All gateways
-		 * support at least the production environment
 		 *
 		 * @return array associative array of environment id to name supported by this gateway
-		 * @since 1.0.0
 		 */
 		public function get_environments() {
 
@@ -3486,22 +3148,21 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 			return $this->environments;
 		}
 
-
 		/**
-		 * Returns the environment setting, one of the $environments keys, ie 'production'
+		 * Returns the environment setting, one of the $environments keys, ie 'production'.
+		 *
+		 * @since 1.0.0
 		 *
 		 * @return string the configured environment id
-		 * @since 1.0.0
 		 */
 		public function get_environment() {
 			return $this->environment;
 		}
 
-
 		/**
-		 * Get the configured environment's display name.
+		 * Gets the configured environment's display name.
 		 *
-		 * @return string The configured environment name
+		 * @return string the configured environment name
 		 */
 		public function get_environment_name() {
 
@@ -3512,198 +3173,285 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 			return ( isset( $environments[ $environment_id ] ) ) ? $environments[ $environment_id ] : $environment_id;
 		}
 
-
 		/**
 		 * Returns true if the current environment is $environment_id.
 		 *
-		 * @param string|mixed $environment_id
+		 * @since 1.0.0
+		 *
+		 * @param string|mixed $environment_id environment id to check
 		 *
 		 * @return bool
-		 * @since 1.0.0
 		 */
 		public function is_environment( $environment_id ) {
-			return $environment_id == $this->get_environment();
+			return $environment_id === $this->get_environment();
 		}
-
 
 		/**
 		 * Returns true if the current gateway environment is configured to 'production'.
-		 * All gateways have at least the production environment
 		 *
-		 * @param string $environment_id optional environment id to check, otherwise defaults to the gateway current environment
-		 *
-		 * @return boolean true if $environment_id (if non-null) or otherwise the current environment is production
 		 * @since 1.0.0
+		 *
+		 * @param string|null $environment_id optional environment id to check, otherwise defaults to the gateway current environment
+		 *
+		 * @return bool true if $environment_id (if non-null) or otherwise the current environment is production
 		 */
 		public function is_production_environment( $environment_id = null ) {
 
 			// if an environment was passed in, see whether it's the production environment
 			if ( ! is_null( $environment_id ) ) {
-				return self::ENVIRONMENT_PRODUCTION == $environment_id;
+				return self::ENVIRONMENT_PRODUCTION === $environment_id;
 			}
 
 			// default: check the current environment
 			return $this->is_environment( self::ENVIRONMENT_PRODUCTION );
 		}
 
-
 		/**
-		 * Returns true if the current gateway environment is configured to 'test'
+		 * Returns true if the current gateway environment is configured to 'test'.
 		 *
-		 * @param string $environment_id optional environment id to check, otherwise defaults to the gateway current environment
+		 * @param string|null $environment_id optional environment id to check, otherwise defaults to the gateway current environment
 		 *
-		 * @return boolean true if $environment_id (if non-null) or otherwise the current environment is test
+		 * @return bool true if $environment_id (if non-null) or otherwise the current environment is test
 		 */
 		public function is_test_environment( $environment_id = null ) {
 
-			// if an environment was passed in, see whether it's the production environment
+			// if an environment was passed in, see whether it's the test environment
 			if ( ! is_null( $environment_id ) ) {
-				return self::ENVIRONMENT_TEST == $environment_id;
+				return self::ENVIRONMENT_TEST === $environment_id;
 			}
 
 			// default: check the current environment
 			return $this->is_environment( self::ENVIRONMENT_TEST );
 		}
 
-
 		/**
-		 * Returns true if the gateway is enabled. This has nothing to do with whether the gateway is properly configured or functional.
+		 * Determines if the Card Security Code (CVV) field should be used at checkout.
 		 *
-		 * @return boolean true if the gateway is enabled
-		 * @see WC_Payment_Gateway::$enabled
+		 * @since 1.0.0
+		 *
+		 * @return bool
 		 */
-		public function is_enabled() {
-			return 'yes' == $this->enabled;
+		public function csc_enabled() {
+			return 'yes' === $this->enable_csc;
 		}
 
-
 		/**
-		 * Returns true if detailed decline messages should be displayed to
-		 * customers on checkout when available, rather than a single generic
-		 * decline message
+		 * Determines if the Card Security Code (CVV) field should be used for saved cards at checkout.
 		 *
-		 * @return boolean true if detailed decline messages should be displayed on checkout
-		 * @see Woodev_Payment_Gateway_API_Response::get_user_message()
-		 * @see Woodev_Payment_Gateway_API_Response_Message_Helper
+		 * @return bool
 		 */
-		public function is_detailed_customer_decline_messages_enabled() {
-			return 'yes' == $this->enable_customer_decline_messages;
+		public function csc_enabled_for_tokens() {
+			return $this->csc_enabled() && 'yes' === $this->enable_token_csc;
 		}
 
-
 		/**
-		 * Returns the set of accepted currencies, or empty array if all currencies are accepted by this gateway
+		 * Determines if the Card Security Code (CVV) field should be required at checkout.
 		 *
-		 * @return array of currencies accepted by this gateway
+		 * @return bool
 		 */
-		public function get_accepted_currencies() {
-			return $this->currencies;
+		public function csc_required() {
+			return $this->csc_enabled();
 		}
 
+		/**
+		 * Determines if the gateway supports sharing settings with sibling gateways.
+		 *
+		 * @return bool
+		 */
+		public function share_settings() {
+			return true;
+		}
 
 		/**
-		 * Returns true if all debugging is disabled
+		 * Determines if settings should be inherited for this gateway.
 		 *
-		 * @return boolean if all debuging is disabled
+		 * @return bool
+		 */
+		public function inherit_settings() {
+			return 'yes' === $this->inherit_settings;
+		}
+
+		/**
+		 * Adds support for the named feature or features.
+		 *
+		 * @since 1.0.0
+		 *
+		 * @param string|array $feature the feature name or names supported by this gateway
+		 */
+		public function add_support( $feature ) {
+
+			if ( ! is_array( $feature ) ) {
+				$feature = array( $feature );
+			}
+
+			foreach ( $feature as $name ) {
+
+				// add support for feature if it's not already declared
+				if ( ! in_array( $name, $this->supports, true ) ) {
+
+					$this->supports[] = $name;
+
+					/**
+					 * Fires when declaring support for a specific gateway feature.
+					 *
+					 * @since 1.0.0
+					 *
+					 * @param Woodev_Payment_Gateway $instance instance
+					 * @param string                 $name of supported feature being added
+					 */
+					do_action( 'wc_payment_gateway_' . $this->get_id() . '_supports_' . str_replace( '-', '_', $name ), $this, $name );
+				}
+			}
+		}
+
+		/**
+		 * Removes support for the named feature or features.
+		 *
+		 * @param string|array $feature feature name or names not supported by this gateway
+		 */
+		public function remove_support( $feature ) {
+
+			if ( ! is_array( $feature ) ) {
+				$feature = array( $feature );
+			}
+
+			foreach ( $feature as $name ) {
+
+				unset( $this->supports[ array_search( $name, $this->supports, true ) ] );
+
+				/**
+				 * Fires when removing support for a specific gateway feature.
+				 *
+				 * @param Woodev_Payment_Gateway $instance instance
+				 * @param string                 $name of supported feature being removed
+				 */
+				do_action( 'wc_payment_gateway_' . $this->get_id() . '_removed_support_' . str_replace( '-', '_', $name ), $this, $name );
+			}
+		}
+
+		/**
+		 * Sets all features supported.
+		 *
+		 * @since 1.0.0
+		 *
+		 * @param array $features array of supported feature names
+		 */
+		public function set_supports( $features ) {
+			$this->supports = $features;
+		}
+
+		/**
+		 * Returns true if all debugging is disabled.
+		 *
+		 * @return bool if all debugging is disabled
 		 */
 		public function debug_off() {
 			return self::DEBUG_MODE_OFF === $this->debug_mode;
 		}
 
-
 		/**
-		 * Returns true if debug logging is enabled
+		 * Returns true if debug logging is enabled.
 		 *
-		 * @return boolean if debug logging is enabled
 		 * @since 1.0.0
+		 *
+		 * @return bool if debug logging is enabled
 		 */
 		public function debug_log() {
 			return self::DEBUG_MODE_LOG === $this->debug_mode || self::DEBUG_MODE_BOTH === $this->debug_mode;
 		}
 
-
 		/**
-		 * Returns true if checkout debugging is enabled.  This will cause debugging statements to be displayed on the checkout/pay pages
+		 * Returns true if checkout debugging is enabled.
 		 *
-		 * @return boolean if checkout debugging is enabled
+		 * This will cause debugging statements to be displayed on the checkout/pay pages.
+		 *
 		 * @since 1.0.0
+		 *
+		 * @return bool if checkout debugging is enabled
 		 */
 		public function debug_checkout() {
 			return self::DEBUG_MODE_CHECKOUT === $this->debug_mode || self::DEBUG_MODE_BOTH === $this->debug_mode;
 		}
 
+		/**
+		 * Adds debug messages to the page as a WC message/error, and/or to the WC error log.
+		 *
+		 * @since 1.0.0
+		 *
+		 * @param string $message message to add
+		 * @param string $type how to add the message, options are: 'message' (styled as WC message), 'error' (styled as WC Error)
+		 */
+		public function add_debug_message( $message, $type = 'message' ) {
+
+			// do nothing when debug mode is off or no message
+			if ( $this->debug_off() || ! $message ) {
+				return;
+			}
+
+			// add log message to WC logger if log/both is enabled
+			if ( $this->debug_log() ) {
+				$this->get_plugin()->log( $message, $this->get_id() );
+			}
+
+			// avoid adding notices when performing refunds, these occur in the admin as an Ajax call, so checking the current filter is the only reliable way to do so
+			if ( in_array( 'wp_ajax_woocommerce_refund_line_items', $GLOBALS['wp_current_filter'], true ) ) {
+				return;
+			}
+
+			// add debug message to woocommerce->errors/messages if checkout or both is enabled, the admin/Ajax check ensures capture charge transactions aren't logged as notices to the front end
+			if ( ( $this->debug_checkout() || ( 'error' === $type && $this->is_test_environment() ) ) && ( ! is_admin() || is_ajax() ) ) {
+
+				if ( 'message' === $type ) {
+
+					Woodev_Helper::wc_add_notice( str_replace( "\n", '<br/>', htmlspecialchars( $message ) ), 'notice' );
+
+				} else {
+
+					// defaults to error message
+					Woodev_Helper::wc_add_notice( str_replace( "\n", '<br/>', htmlspecialchars( $message ) ), 'error' );
+				}
+			}
+		}
 
 		/**
-		 * Returns true if this is a direct type gateway
+		 * Returns true if this is a direct type gateway.
 		 *
-		 * @return boolean if this is a direct payment gateway
 		 * @since 1.0.0
+		 *
+		 * @return bool if this is a direct payment gateway
 		 */
 		public function is_direct_gateway() {
 			return false;
 		}
 
-
 		/**
-		 * Returns true if this is a hosted type gateway
+		 * Returns true if this is a hosted type gateway.
 		 *
-		 * @return boolean if this is a hosted IPN payment gateway
 		 * @since 1.0.0
+		 *
+		 * @return bool if this is a hosted IPN payment gateway
 		 */
 		public function is_hosted_gateway() {
 			return false;
 		}
 
-
 		/**
-		 * Returns the payment type for this gateway
+		 * Returns true if detailed decline messages should be displayed to customers on checkout when available.
 		 *
-		 * @return string the payment type, ie 'credit-card', 'echeck', etc
+		 * @return bool true if detailed decline messages should be displayed on checkout
 		 */
-		public function get_payment_type() {
-			return $this->payment_type;
+		public function is_detailed_customer_decline_messages_enabled() {
+			return 'yes' === $this->enable_customer_decline_messages;
 		}
 
-
 		/**
-		 * Returns true if this is a credit card gateway
+		 * Returns the API instance for this gateway if it uses direct communication.
 		 *
-		 * @return boolean true if this is a credit card gateway
+		 * This is a stub method which must be overridden if this gateway performs direct communication.
+		 *
 		 * @since 1.0.0
-		 */
-		public function is_credit_card_gateway() {
-			return self::PAYMENT_TYPE_CREDIT_CARD == $this->get_payment_type();
-		}
-
-
-		/**
-		 * Returns true if this is an echeck gateway
-		 *
-		 * @return boolean true if this is an echeck gateway
-		 * @since 1.0.0
-		 */
-		public function is_echeck_gateway() {
-			return self::PAYMENT_TYPE_ECHECK == $this->get_payment_type();
-		}
-
-		/**
-		 * Returns true if this is an loans/credit gateway
-		 *
-		 * @return boolean true if this is an loans gateway
-		 * @since 1.2.0
-		 */
-		public function is_loans_gateway() {
-			return self::PAYMENT_TYPE_LOANS == $this->get_payment_type();
-		}
-
-
-		/**
-		 * Returns the API instance for this gateway if it uses direct communication
-		 *
-		 * This is a stub method which must be overridden if this gateway performs direct communication
 		 *
 		 * @return Woodev_Payment_Gateway_API|void the payment gateway API instance
-		 * @since 1.0.0
 		 */
 		public function get_api() {
 
@@ -3711,9 +3459,8 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 			assert( false );
 		}
 
-
 		/**
-		 * Returns the order_id if on the checkout pay page
+		 * Returns the order_id if on the checkout pay page.
 		 *
 		 * @return int order identifier
 		 */
@@ -3723,11 +3470,10 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 			return isset( $wp->query_vars['order-pay'] ) ? absint( $wp->query_vars['order-pay'] ) : 0;
 		}
 
-
 		/**
-		 * Returns the order_id if on the checkout order received page
+		 * Returns the order_id if on the checkout order received page.
 		 *
-		 * Note this must be used in the `wp` or later action, as earlier actions do not yet have access to the query vars
+		 * Note this must be used in the `wp` or later action, as earlier actions do not yet have access to the query vars.
 		 *
 		 * @return int order identifier
 		 */
@@ -3737,7 +3483,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 			return isset( $wp->query_vars['order-received'] ) ? absint( $wp->query_vars['order-received'] ) : 0;
 		}
 
-
 		/**
 		 * Returns the error message for display if the gateway is not configured.
 		 *
@@ -3746,7 +3491,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		public function get_not_configured_error_message() {
 
 			return sprintf(
-			/* translators: %1$s - gateway name, %2$s - <a> tag, %3$s - </a> tag, %4$s - <a> tag, %5$s - </a> tag */
+				/* translators: %1$s - gateway name, %2$s - <a> tag, %3$s - </a> tag, %4$s - <a> tag, %5$s - </a> tag */
 				__( 'Heads up! %1$s is not fully configured and cannot accept payments. Please %2$sreview the documentation%3$s and configure the %4$sgateway settings%5$s.', 'woodev-plugin-framework' ),
 				$this->get_method_title(),
 				'<a href="' . $this->get_plugin()->get_documentation_url() . '" target="_blank">',
@@ -3757,170 +3502,40 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		}
 
 		/**
-		 * Determines if the authorization for $order is still valid for capture.
+		 * Adds API request logging for the gateway.
 		 *
-		 * @param WC_Order $order order object
+		 * The main plugin class typically handles this, but the payment gateway plugin class no-ops the method so each
+		 * gateway's requests can be logged individually and make use of the payment gateway-specific add_debug_message() method.
 		 *
-		 * @return bool
-		 * @deprecated 1.1.8
+		 * @see Woodev_Plugin::add_api_request_logging()
 		 */
-		public function authorization_valid_for_capture( $order ) {
+		public function add_api_request_logging() {
 
-			wc_deprecated_function( __METHOD__, '1.1.8', get_class( $this->get_capture_handler() ) . '::order_can_be_captured()' );
-
-			return $this->get_capture_handler()->order_can_be_captured( $order );
+			if ( ! has_action( 'woodev_' . $this->get_id() . '_api_request_performed' ) ) {
+				add_action(
+					'woodev_' . $this->get_id() . '_api_request_performed',
+					array( $this, 'log_api_request' ),
+					10,
+					2
+				);
+			}
 		}
 
-
 		/**
-		 * Determines if an order's authorization has been captured, event partially.
+		 * Logs gateway API requests/responses.
 		 *
-		 * @param WC_Order $order order object
-		 *
-		 * @return bool
-		 * @deprecated 1.1.8
+		 * @param array $request request data, see Woodev_API_Base::broadcast_request() for format
+		 * @param array $response response data
 		 */
-		public function authorization_captured( $order ) {
+		public function log_api_request( $request, $response ) {
 
-			wc_deprecated_function( __METHOD__, '1.1.8', get_class( $this->get_capture_handler() ) . '::is_order_captured()' );
+			// request
+			$this->add_debug_message( $this->get_plugin()->get_api_log_message( $request ) );
 
-			return $this->get_capture_handler()->is_order_captured( $order );
-		}
-
-
-		/**
-		 * Returns true if the authorization for $order has expired
-		 *
-		 * @param WC_Order $order order object
-		 *
-		 * @return bool
-		 * @deprecated 1.1.8
-		 */
-		public function has_authorization_expired( $order ) {
-
-			wc_deprecated_function( __METHOD__, '1.1.8', get_class( $this->get_capture_handler() ) . '::has_order_authorization_expired()' );
-
-			return $this->get_capture_handler()->has_order_authorization_expired( $order );
-		}
-
-
-		/**
-		 * Determines if an order's authorization has been fully captured.
-		 *
-		 * @param WC_Order $order order object
-		 *
-		 * @return bool
-		 * @deprecated 1.1.8
-		 */
-		public function authorization_fully_captured( $order ) {
-
-			wc_deprecated_function( __METHOD__, '1.1.8', get_class( $this->get_capture_handler() ) . '::is_order_fully_captured()' );
-
-			return $this->get_capture_handler()->is_order_fully_captured( $order );
-		}
-
-
-		/**
-		 * Perform a credit card capture for an order.
-		 *
-		 * @param WC_Order   $order the order object
-		 * @param float|null $amount amount to capture
-		 *
-		 * @return array
-		 * @deprecated 1.1.8
-		 */
-		public function do_credit_card_capture( $order, $amount = null ) {
-
-			wc_deprecated_function( __METHOD__, '1.1.8', get_class( $this->get_capture_handler() ) . '::perform_capture()' );
-
-			$result = $this->get_capture_handler()->perform_capture( $order, $amount );
-
-			// convert to the deprecated format
-			$result['result'] = $result['success'] ? 'success' : 'failure';
-
-			return $result;
-		}
-
-
-		/**
-		 * Lets gateways handle any specific capture failure results for the order.
-		 *
-		 * @param WC_Order                            $order the order object
-		 * @param Woodev_Payment_Gateway_API_Response $response API response object
-		 *
-		 * @deprecated 1.1.8
-		 */
-		protected function do_credit_card_capture_failed( WC_Order $order, Woodev_Payment_Gateway_API_Response $response ) {
-
-			wc_deprecated_function( __METHOD__, '1.1.8', get_class( $this->get_capture_handler() ) . '::do_capture_failed()' );
-
-			$this->get_capture_handler()->do_capture_failed( $order, $response );
-		}
-
-
-		/**
-		 * Gets the maximum amount that can be captured from an order.
-		 *
-		 * Gateways can override this for an value above or below the order total.
-		 * For instance, some processors allow capturing an amount a certain
-		 * percentage higher than the payment total.
-		 *
-		 * @param WC_Order $order order object
-		 *
-		 * @return float
-		 * @deprecated 1.1.8
-		 */
-		public function get_order_capture_maximum( WC_Order $order ) {
-
-			wc_deprecated_function( __METHOD__, '1.1.8', get_class( $this->get_capture_handler() ) . '::get_order_capture_maximum()' );
-
-			return $this->get_capture_handler()->get_order_capture_maximum( $order );
-		}
-
-
-		/**
-		 * Gets the amount originally authorized for an order.
-		 *
-		 * @param WC_Order $order order object
-		 *
-		 * @return float
-		 * @deprecated 1.1.8
-		 */
-		public function get_order_authorization_amount( WC_Order $order ) {
-
-			wc_deprecated_function( __METHOD__, '1.1.8', get_class( $this->get_capture_handler() ) . '::get_order_authorization_amount()' );
-
-			return $this->get_capture_handler()->get_order_authorization_amount( $order );
-		}
-
-
-		/**
-		 * Adds the standard capture data to an order.
-		 *
-		 * @param WC_Order                            $order the order object
-		 * @param Woodev_Payment_Gateway_API_Response $response the transaction response
-		 *
-		 * @deprecated 1.1.8
-		 */
-		protected function add_capture_data( $order, $response ) {
-
-			wc_deprecated_function( __METHOD__, '1.1.8', get_class( $this->get_capture_handler() ) . '::do_capture_success()' );
-
-			$this->get_capture_handler()->do_capture_success( $order, $response );
-		}
-
-
-		/**
-		 * Adds any gateway-specific data to the order after a capture is performed.
-		 *
-		 * @param WC_Order                            $order the order object
-		 * @param Woodev_Payment_Gateway_API_Response $response the transaction response
-		 *
-		 * @deprecated 1.1.8
-		 */
-		protected function add_payment_gateway_capture_data( $order, $response ) {
-
-			wc_deprecated_function( __METHOD__, '1.1.8' );
+			// response
+			if ( ! empty( $response ) ) {
+				$this->add_debug_message( $this->get_plugin()->get_api_log_message( $response ) );
+			}
 		}
 	}
 

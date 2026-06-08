@@ -1,0 +1,28 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["verdict", "broken_contracts", "notes", "confidence"],
+  "properties": {
+    "verdict": {
+      "type": "string",
+      "enum": ["clean", "broken", "uncertain"],
+      "description": "clean = no contract break found; broken = a specific break proven; uncertain = cannot prove safe (routes to human)."
+    },
+    "broken_contracts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["zone", "file", "line", "evidence"],
+        "properties": {
+          "zone": { "type": "string" },
+          "file": { "type": "string" },
+          "line": { "type": "integer" },
+          "evidence": { "type": "string" }
+        }
+      }
+    },
+    "notes": { "type": "string" },
+    "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+  }
+}

@@ -35,6 +35,10 @@ if ( ! class_exists( 'Woodev_Packer_Separately' ) ) :
 			// Pack items.
 			foreach ( $this->items as $item ) {
 
+				if ( ! $item instanceof Woodev_Box_Packer_Item_With_Product ) {
+					throw new Woodev_Packer_Exception( __( 'Items added to Packer_Separately must implement Woodev_Box_Packer_Item_With_Product.' ) );
+				}
+
 				$product = $item->get_product();
 
 				$packed_box = new Woodev_Box_Packer_Packed_Box(

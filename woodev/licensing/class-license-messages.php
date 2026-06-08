@@ -72,11 +72,122 @@ if ( ! class_exists( 'Woodev_License_Messages' ) ) :
 		 * @return string The formatted date, translated if locale specifies it.
 		 */
 		private function get_date_i18n( $timestamp ) {
-			if ( is_numeric( $timestamp ) ) {
-				$timestamp = date_i18n( wc_date_format(), $timestamp );
+			if ( function_exists( 'wc_string_to_datetime' ) && function_exists( 'wc_format_datetime' ) ) {
+				if ( is_numeric( $timestamp ) ) {
+					$timestamp = date_i18n( $this->get_date_format(), (int) $timestamp );
+				}
+
+				return wc_format_datetime( wc_string_to_datetime( $timestamp ), $this->get_date_format() );
 			}
 
-			return wc_format_datetime( wc_string_to_datetime( $timestamp ) );
+			$raw_timestamp = $timestamp;
+			$timestamp     = $this->get_timestamp_for_site_timezone( $timestamp );
+
+			if ( false === $timestamp ) {
+				return (string) $raw_timestamp;
+			}
+
+			return $this->format_timestamp_i18n( $timestamp );
+		}
+
+		/**
+		 * Gets the WooCommerce-compatible date format without requiring WooCommerce helpers.
+		 *
+		 * @return string
+		 */
+		private function get_date_format() {
+
+			if ( function_exists( 'wc_date_format' ) ) {
+				return wc_date_format();
+			}
+
+			$date_format = get_option( 'date_format' );
+
+			if ( empty( $date_format ) ) {
+				$date_format = 'F j, Y';
+			}
+
+			return apply_filters( 'woocommerce_date_format', $date_format );
+		}
+
+		/**
+		 * Gets a timestamp for a date value using WordPress timezone semantics.
+		 *
+		 * @param int|string $timestamp Timestamp or parseable date string.
+		 * @return int|false
+		 */
+		private function get_timestamp_for_site_timezone( $timestamp ) {
+
+			if ( is_numeric( $timestamp ) ) {
+				return (int) $timestamp;
+			}
+
+			$timestamp = (string) $timestamp;
+
+			if ( '' === $timestamp ) {
+				return false;
+			}
+
+			try {
+				$datetime = $this->has_explicit_timezone( $timestamp )
+					? new DateTimeImmutable( $timestamp )
+					: new DateTimeImmutable( $timestamp, $this->get_site_timezone() );
+			} catch ( Exception $exception ) {
+				return false;
+			}
+
+			return $datetime->getTimestamp();
+		}
+
+		/**
+		 * Determines whether a date string carries an explicit timezone.
+		 *
+		 * @param string $timestamp Date string.
+		 * @return bool
+		 */
+		private function has_explicit_timezone( $timestamp ) {
+			return 1 === preg_match( '/(?:Z|[+-]\d{2}:?\d{2})$/', $timestamp );
+		}
+
+		/**
+		 * Formats a timestamp for the WordPress site timezone.
+		 *
+		 * @param int $timestamp Timestamp.
+		 * @return string
+		 */
+		private function format_timestamp_i18n( $timestamp ) {
+			$date_format = $this->get_date_format();
+
+			if ( function_exists( 'wp_date' ) ) {
+				return wp_date( $date_format, $timestamp, $this->get_site_timezone() );
+			}
+
+			return date_i18n( $date_format, $timestamp );
+		}
+
+		/**
+		 * Gets the WordPress site timezone.
+		 *
+		 * @return DateTimeZone
+		 */
+		private function get_site_timezone() {
+
+			if ( function_exists( 'wp_timezone' ) ) {
+				return wp_timezone();
+			}
+
+			$timezone_string = get_option( 'timezone_string' );
+
+			if ( ! empty( $timezone_string ) ) {
+				return new DateTimeZone( $timezone_string );
+			}
+
+			$offset  = (float) get_option( 'gmt_offset', 0 );
+			$sign    = $offset < 0 ? '-' : '+';
+			$hours   = (int) abs( $offset );
+			$minutes = (int) round( ( abs( $offset ) - $hours ) * 60 );
+
+			return new DateTimeZone( sprintf( '%s%02d:%02d', $sign, $hours, $minutes ) );
 		}
 
 		/**

@@ -157,7 +157,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Helper' ) ) :
 
 		/**
 		 * Translates a credit card type or bank account name to a full name,
-		 * e.g. 'mastercard' => 'MasterCard' or 'savings' => 'eCheck'
+		 * e.g. 'mastercard' => 'MasterCard'
 		 *
 		 * @param string $payment_type the credit card or bank type, ie 'mastercard', 'amex', 'checking'
 		 *
@@ -170,12 +170,10 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Helper' ) ) :
 
 			// known payment type names, excluding credit cards
 			$payment_types = array(
-				'paypal'   => esc_html__( 'PayPal', 'woodev-plugin-framework' ),
-				'checking' => esc_html__( 'Checking Account', 'woodev-plugin-framework' ),
-				'savings'  => esc_html__( 'Savings Account', 'woodev-plugin-framework' ),
-				'card'     => esc_html__( 'Credit / Debit Card', 'woodev-plugin-framework' ),
-				'bank'     => esc_html__( 'Bank Account', 'woodev-plugin-framework' ),
-				'loan'     => esc_html__( 'Loan', 'woodev-plugin-framework' ),
+				'paypal' => esc_html__( 'PayPal', 'woodev-plugin-framework' ),
+				'card'   => esc_html__( 'Credit / Debit Card', 'woodev-plugin-framework' ),
+				'bank'   => esc_html__( 'Bank Account', 'woodev-plugin-framework' ),
+				'loan'   => esc_html__( 'Loan', 'woodev-plugin-framework' ),
 			);
 
 			// add the credit card names

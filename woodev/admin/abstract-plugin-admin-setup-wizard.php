@@ -1061,7 +1061,7 @@ if ( ! class_exists( 'Woodev_Plugin_Setup_Wizard' ) ) :
 
 			} catch ( Woodev_Plugin_Exception $exception ) {
 
-				wc_doing_it_wrong( __METHOD__, $exception->getMessage(), '1.8.0' );
+				_doing_it_wrong( __METHOD__, $exception->getMessage(), '1.8.0' );
 
 				return false;
 			}
