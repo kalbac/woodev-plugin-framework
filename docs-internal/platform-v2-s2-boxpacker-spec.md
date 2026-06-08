@@ -94,14 +94,16 @@ Option A — stack along height (smallest dim):
 
 Option B — stack along width (middle dim):
     box = max(lengths) × sum(widths) × max(heights)
-    then rsort dims to keep length ≥ width ≥ height
 
 Option C — stack along length (largest dim):
     box = sum(lengths) × max(widths) × max(heights)
-    then rsort dims
 ```
 
-Pick the option with `L × W × H` minimised; rsort the result so `length ≥ width ≥ height`.
+Pick the option with `L × W × H` minimised. **Do NOT rsort the result** — each candidate
+already guarantees `box_axis ≥ max(item_axis)` by construction. rsort destroys axis-name
+alignment for non-normalised custom items (e.g. item `l=1,w=10,h=1` → rsorted box
+`length=10,width=1` → `box_width=1 < item_width=10` → packing rejects the item).
+Caught by GPT-5.5 adversarial critic on first worker attempt (2026-06-09).
 
 ### Algorithm walkthrough (PLANS.md §3.5.1 examples)
 
@@ -145,7 +147,7 @@ None. No option keys, hooks, routes, cron, or meta keys touched. Pure in-memory 
 - Single item: result equals item dimensions (no regression)
 - 2 items: result ≤ volume of sum-smallest-axis option (= PLANS.md expected 20×15×15)
 - 3+ identical small items: result volume = N × item_volume (correct stacking)
-- Result `length ≥ width ≥ height` always (rsort invariant)
+- Each box axis ≥ max of that axis across all items (axis-alignment invariant, no rsort)
 
 ---
 
@@ -161,7 +163,7 @@ Unit tests using Brain Monkey. No WordPress or WooCommerce required.
 2. `test_two_items_plans_md_example()` — Items from PLANS.md §3.5.1: result = 20×15×15, volume ≤ 4500
 3. `test_three_items_volume_correct()` — 3 items (PLANS.md): result volume ≤ Single_Box result (20×15×20)
 4. `test_ten_identical_items_volume_equals_sum()` — 10 items of 10×10×5: result volume = 5000 (not 500)
-5. `test_result_dims_sorted_descending()` — length ≥ width ≥ height for any input
+5. `test_result_dimensions_axis_aligned()` — `box_length >= max(item_lengths)`, `box_width >= max(item_widths)`, `box_height >= max(item_heights)` (axis-alignment invariant; no rsort)
 6. `test_single_box_wc_free()` — call `Woodev_Packer_Single_Box::pack()` without WC active; verify no fatal
 
 **Helper:** use `Woodev_Packer_Item_Implementation` directly (no WC needed) for items.

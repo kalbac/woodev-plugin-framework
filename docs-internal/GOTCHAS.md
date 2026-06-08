@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
-> **27 atomic gotchas in 13 namespaces** — update count when adding/removing.
-> Last updated: 2026-06-08 (PR #20 CI-fix: 6 gotchas — audit/markdownlint/CI-gating + wp-env fixture mapping, Brain Monkey pollution, reflection setAccessible)
+> **29 atomic gotchas in 14 namespaces** — update count when adding/removing.
+> Last updated: 2026-06-09 (S2 box-packer: 2 gotchas — virtual-box rsort axis-alignment, null-best INF overflow)
 
 ## Index
 
@@ -57,6 +57,10 @@
 - [build/ci] A failing early CI job (e.g. Lint) silently SKIPS jobs that `needs:` it — skipped ≠ failed, so the suite looks green while dependent jobs (the whole Unit matrix here) never run; fixing the gate REVEALS masked failures → [gotchas/ci-failing-gate-skips-dependent-jobs.md](gotchas/ci-failing-gate-skips-dependent-jobs.md) (2026-06-08)
 - [build/ci] `composer audit --no-dev` errors "No installed packages found" for a library with no runtime deps — use `composer audit --locked` → [gotchas/composer-audit-no-prod-deps.md](gotchas/composer-audit-no-prod-deps.md) (2026-06-08)
 - [build/ci] markdownlint-cli2 ignores `.markdownlintignore` when globs are passed as CLI args — manage exclusions in the workflow glob; MD051 disabled (can't validate Cyrillic anchors) → [gotchas/markdownlint-ignorefile-vs-globs.md](gotchas/markdownlint-ignorefile-vs-globs.md) (2026-06-08)
+
+### [box-packer/*] — Box-packer algorithm (S2)
+- [box-packer/virtual-box-rsort-axis-alignment] `rsort()` on the axis-assignment result destroys axis-name alignment for non-normalized items — Option A `[1,10,1]` after rsort → `[10,1,1]` → `box_width=1 < item_width=10` → packing rejects item. Never rsort the candidate; each option guarantees axis alignment by construction → [gotchas/virtual-box-rsort-axis-alignment.md](gotchas/virtual-box-rsort-axis-alignment.md) (2026-06-09)
+- [box-packer/virtual-box-null-best-inf-overflow] `$best=null; $best_volume=PHP_FLOAT_MAX` → if all candidate volumes overflow to INF, `INF < PHP_FLOAT_MAX = false` → `$best` never set → null dereference. Fix: initialize `$best = $candidates[0]` → [gotchas/virtual-box-null-best-inf-overflow.md](gotchas/virtual-box-null-best-inf-overflow.md) (2026-06-09)
 
 ### [shipping/*] — Shipping module (S1)
 - [shipping/contracts] Session key ≠ order-meta prefix — composing one key for both checkout session and order meta breaks installed-site data (Yandex: `chosen_yandex_pickup_point` vs `_yandex_delivery_`) → [gotchas/session-key-vs-order-meta-prefix.md](gotchas/session-key-vs-order-meta-prefix.md) (2026-06-06)
