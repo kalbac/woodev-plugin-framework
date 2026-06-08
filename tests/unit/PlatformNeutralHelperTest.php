@@ -20,6 +20,13 @@ class PlatformNeutralHelperTest extends TestCase {
 	/**
 	 * Percentage formatting should work without WooCommerce decimal helpers.
 	 *
+	 * Runs in a separate process so that wc_format_decimal -- which another test may define
+	 * via Brain Monkey, and which PHP cannot un-define within a process -- is genuinely
+	 * absent here, so this exercises the real WordPress-only fallback (function_exists() false).
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 *
 	 * @return void
 	 */
 	public function test_format_percentage_falls_back_without_woocommerce_helper(): void {

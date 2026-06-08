@@ -23,6 +23,14 @@ use Woodev\Tests\Unit\TestCase;
  */
 final class YandexSettingsOptionKeyContractTest extends TestCase {
 
+	protected function setUp(): void {
+		parent::setUp();
+
+		if ( ! is_dir( dirname( __DIR__, 3 ) . '/plugins-reference/woocommerce-yandex-delivery' ) ) {
+			$this->markTestSkipped( 'plugins-reference/woocommerce-yandex-delivery is not present (gitignored); this yandex contract guard runs where the reference plugin copy exists.' );
+		}
+	}
+
 	/**
 	 * Canonical read-only reference source declaring the settings option key.
 	 *
