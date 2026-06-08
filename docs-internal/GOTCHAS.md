@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
-> **21 atomic gotchas in 11 namespaces** — update count when adding/removing.
-> Last updated: 2026-06-07 (autodev: invoke-critic rate-limit false-positive gotcha; fixed b186c52)
+> **27 atomic gotchas in 13 namespaces** — update count when adding/removing.
+> Last updated: 2026-06-08 (PR #20 CI-fix: 6 gotchas — audit/markdownlint/CI-gating + wp-env fixture mapping, Brain Monkey pollution, reflection setAccessible)
 
 ## Index
 
@@ -43,7 +43,9 @@
 <!-- No entries yet -->
 
 ### [testing/*] — Testing patterns
-<!-- No entries yet -->
+- [testing/integration] Integration fixtures need the framework mapped at the bootstrap's load path (`woodev-framework/tests/_fixtures/*/woodev` in `.wp-env.json`), not just the `wp-content/plugins/*` mount — the v2 resolver requires each fixture's bundled `woodev/class-plugin.php` → [gotchas/wpenv-resolver-fixture-mapping.md](gotchas/wpenv-resolver-fixture-mapping.md) (2026-06-08)
+- [testing/unit] Brain Monkey `expect`/`when` DEFINES a function and PHP can't un-define it, so it leaks (`function_exists` true) into later tests in the same process — order-dependent "passes locally / fails on CI"; isolate "function-absent" tests with `@runInSeparateProcess` → [gotchas/brain-monkey-function-pollution.md](gotchas/brain-monkey-function-pollution.md) (2026-06-08)
+- [testing/unit] Reflection `setAccessible()` is REQUIRED on PHP < 8.1 and DEPRECATED on 8.5 — guard private getValue/invoke with `if ( PHP_VERSION_ID < 80100 )` to satisfy both ends of the supported range → [gotchas/reflection-setaccessible-version-guard.md](gotchas/reflection-setaccessible-version-guard.md) (2026-06-08)
 
 ### [api/*] — API layer
 <!-- No entries yet -->
@@ -52,7 +54,9 @@
 <!-- No entries yet -->
 
 ### [build/*] — Build/CI/release
-<!-- No entries yet -->
+- [build/ci] A failing early CI job (e.g. Lint) silently SKIPS jobs that `needs:` it — skipped ≠ failed, so the suite looks green while dependent jobs (the whole Unit matrix here) never run; fixing the gate REVEALS masked failures → [gotchas/ci-failing-gate-skips-dependent-jobs.md](gotchas/ci-failing-gate-skips-dependent-jobs.md) (2026-06-08)
+- [build/ci] `composer audit --no-dev` errors "No installed packages found" for a library with no runtime deps — use `composer audit --locked` → [gotchas/composer-audit-no-prod-deps.md](gotchas/composer-audit-no-prod-deps.md) (2026-06-08)
+- [build/ci] markdownlint-cli2 ignores `.markdownlintignore` when globs are passed as CLI args — manage exclusions in the workflow glob; MD051 disabled (can't validate Cyrillic anchors) → [gotchas/markdownlint-ignorefile-vs-globs.md](gotchas/markdownlint-ignorefile-vs-globs.md) (2026-06-08)
 
 ### [shipping/*] — Shipping module (S1)
 - [shipping/contracts] Session key ≠ order-meta prefix — composing one key for both checkout session and order meta breaks installed-site data (Yandex: `chosen_yandex_pickup_point` vs `_yandex_delivery_`) → [gotchas/session-key-vs-order-meta-prefix.md](gotchas/session-key-vs-order-meta-prefix.md) (2026-06-06)

@@ -6,6 +6,42 @@
 
 <!-- digest entries appended below -->
 
+## Autodev digest -- PR #20 CI fixed, fully GREEN (2026-06-08, operator-directed; NOT merged)
+> The PR's GitHub Actions were failing. Operator directed: investigate + fix ONLY the CI failures on
+> `autodev/loop-bootstrap`, preserve the deferred `rest-warehouses` controller + pre-existing
+> `.gitignore`/`.serena` working-tree changes, run matching local checks, commit, push, report. Done.
+> Run `27110768183` is all green. Do NOT auto-merge (operator decides).
+- **Lint / `composer audit`** (`c640209`): `--no-dev` errors "No installed packages" because the
+  framework declares zero runtime deps -> `composer audit --locked`. This step had been failing
+  IDENTICALLY on `main`, and because Unit/PHPCompat/Publish `needs:` Lint, the **entire Unit Tests
+  matrix had been SKIPPED (not failed) -- never actually run on CI**. Fixing the gate revealed 3
+  masked Unit failures (below). Gotchas `composer-audit-no-prod-deps`, `ci-failing-gate-skips-dependent-jobs`.
+- **Markdown Lint** (`c640209`): 427 errors -- the `**/*.md` glob covered not-published operational
+  docs. Scoped the workflow glob to published `docs/` + root; excluded `.autodev/`, `docs-internal/`,
+  `.serena/`, `.kiro/`, `AGENTS.md`; disabled MD051 (markdownlint can't validate the repo's Cyrillic
+  heading anchors). Key trap: `.markdownlintignore` is NOT honored when globs are CLI args -- the
+  workflow glob is authoritative. Gotcha `markdownlint-ignorefile-vs-globs`.
+- **Integration (3 matrix jobs)** (`1422c1e`): the platform-v2 resolver loads each selected plugin's
+  BUNDLED `{plugin}/woodev/class-plugin.php`; the bootstrap require_once's the fixtures from the
+  `tests/_fixtures/*` path, where `.wp-env.json` did NOT map `./woodev` (it mapped it only at the
+  `wp-content/plugins/*` mount). Added the mapping for the tests/_fixtures path (both mapping blocks).
+  Passed on `main` only because the old resolver loaded class-plugin early. Reverted a non-working
+  bootstrap-symlink attempt (`c6a18b1`; the wp-env mount isn't writable at test runtime). Gotcha
+  `wpenv-resolver-fixture-mapping`.
+- **Unit cascade** (revealed by unblocking the job; operator approved "fix now"):
+  - `5ea04fd`: 4 yandex contract-guard tests assert gitignored `plugins-reference/` files -> `setUp()`
+    skip-guard (they run locally / in-loop where the reference copy exists). `format_percentage`
+    fallback test hit Brain Monkey pollution (`wc_format_decimal` defined by a prior test; PHP can't
+    un-define a function) -> `@runInSeparateProcess`. Gotcha `brain-monkey-function-pollution`.
+  - `05db8a1`: 26 `ReflectionException` on PHP 7.4/8.0 -- private members reflected without
+    `setAccessible(true)` (required <8.1, no-op 8.1+, DEPRECATED 8.5). Added it at 18 sites across 9
+    files, guarded by `PHP_VERSION_ID < 80100`. Gotcha `reflection-setaccessible-version-guard`.
+- **Verification:** run `27110768183` green across the full matrix (Lint, Markdown, PHP Compat
+  7.4-8.3, Unit 7.4-8.3, Integration WP6.4/6.6/latest). Local on PHP 8.5: composer check 203 tests,
+  `composer audit --locked` clean, markdownlint 0 errors with the new glob.
+- **Meta-lesson:** "green CI" can mean "the gate job failed, so nothing downstream ran." A cluster of
+  `skipping` rows under one failed job = a hidden gate; budget for a cascade when you fix it.
+
 ## Autodev digest -- holistic integration review + remediation (2026-06-07/08)
 > After S1 "completion", an independent GPT-5.5 (codex) HOLISTIC integration review of the assembled
 > module (`docs-internal/reviews/s1-holistic-integration-review-2026-06-07.md`) found that per-task +

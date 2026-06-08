@@ -1,4 +1,42 @@
 
+## PR #20 CI fixed — fully GREEN (2026-06-08, operator-directed; NOT merged)
+
+> Branch `autodev/loop-bootstrap`. PR #20's GitHub Actions were failing. Operator directed:
+> investigate + fix **only** the CI failures, preserve the deferred `rest-warehouses` controller +
+> pre-existing `.gitignore`/`.serena` working-tree changes, run matching local checks, commit, push,
+> report — do **not** merge. Result: run `27110768183` all green across the full matrix.
+
+**The 3 originally-failing checks.**
+- **Lint** died at `composer audit --no-dev` ("No installed packages found") — the framework declares
+  zero runtime deps, so `--no-dev` audits nothing and Composer treats it as an error. → `--locked`
+  (`c640209`). Critically, this step fails identically on `main`, and since Unit/PHPCompat/Publish
+  `needs:` Lint, the **entire Unit Tests matrix had been SKIPPED — never run on CI**. (skipped ≠ failed,
+  so `main` looked green.)
+- **Markdown Lint** (427 errors): the `**/*.md` glob covered not-published operational docs. Scoped the
+  workflow glob to published `docs/` + root; excluded `.autodev/`, `docs-internal/`, `.serena/`,
+  `.kiro/`, `AGENTS.md` (constitution doc); disabled MD051 (can't validate Cyrillic anchors). Found that
+  `.markdownlintignore` is **ignored** when globs are CLI args — the glob is authoritative (`c640209`).
+- **Integration** (3 jobs): the v2 resolver loads each fixture's bundled `{plugin}/woodev/class-plugin.php`,
+  but `.wp-env.json` mapped `./woodev` only at the `wp-content/plugins/*` mount, not the
+  `tests/_fixtures/*` path the bootstrap loads from. → added the mapping to both blocks (`1422c1e`).
+  A first attempt to symlink in `tests/bootstrap.php` (`c6a18b1`) failed — the wp-env mount isn't
+  writable at test runtime — and was reverted.
+
+**The Unit cascade** (revealed once the audit fix unblocked the never-run Unit job; operator approved
+fixing): yandex contract guards assert gitignored `plugins-reference/` → `setUp()` skip-guard; the
+`format_percentage` fallback test hit Brain Monkey function pollution (`wc_format_decimal` defined by a
+prior test, and PHP can't un-define a function) → `@runInSeparateProcess` (`5ea04fd`). Then the 7.4/8.0
+jobs hit 26 `ReflectionException` (private members reflected without `setAccessible(true)`, required
+< 8.1, deprecated 8.5) → added it at 18 sites across 9 files guarded by `PHP_VERSION_ID < 80100`
+(`05db8a1`).
+
+**Verification.** Run `27110768183`: Lint, Markdown, PHP Compat (7.4–8.3), Unit (7.4–8.3), Integration
+(WP 6.4/6.6/latest) all green. Local on PHP 8.5: `composer check` 203 tests, `composer audit --locked`
+clean, markdownlint 0 errors. 6 gotchas captured (`composer-audit-no-prod-deps`,
+`ci-failing-gate-skips-dependent-jobs`, `markdownlint-ignorefile-vs-globs`, `wpenv-resolver-fixture-mapping`,
+`brain-monkey-function-pollution`, `reflection-setaccessible-version-guard`). **Meta-lesson:** a failing
+gate job silently skips dependents — "green" can mask an entire never-run suite.
+
 ## Autodev session — S1 shipping module completed via the loop (2026-06-07)
 
 > Branch `autodev/loop-bootstrap`. Began as an unattended overnight supervised resume after an

@@ -1,5 +1,13 @@
 # Current State — Woodev Plugin Framework
-> Last updated: 2026-06-08 (autodev: S1 complete + holistic-review remediation; PR #20; 33 done, 1 deferred; composer GREEN 203 tests)
+> Last updated: 2026-06-08 (autodev: S1 complete + holistic-review remediation; **PR #20 CI now fully GREEN**; 33 done, 1 deferred; composer GREEN 203 tests)
+
+## PR #20 CI fixed — fully GREEN (2026-06-08, operator-directed; NOT merged)
+> The PR's GitHub Actions had been failing. Investigated + fixed **only the CI failures**; the deferred `rest-warehouses` controller + pre-existing `.gitignore`/`.serena` working-tree changes were left untouched. Run `27110768183` all green. **Do NOT auto-merge** (operator decides).
+- **Lint (`composer audit`)** `c640209`: `--no-dev` errors with zero runtime deps → `--locked`. This step had been failing identically on `main`, **gating/skipping the entire Unit Tests matrix** (skipped ≠ failed) — so Unit had never run on CI. Gotchas [[composer-audit-no-prod-deps]], [[ci-failing-gate-skips-dependent-jobs]].
+- **Markdown Lint** `c640209`: 427 errors — the `**/*.md` glob covered not-published operational docs. Scoped the workflow glob to published `docs/` + root (excluded `.autodev/`, `docs-internal/`, `.serena/`, `.kiro/`, `AGENTS.md`); disabled MD051 (Cyrillic anchors). `.markdownlintignore` is ignored when globs are CLI args. Gotcha [[markdownlint-ignorefile-vs-globs]].
+- **Integration (3 jobs)** `1422c1e`: v2 resolver loads each fixture's bundled `woodev/class-plugin.php`, but `.wp-env.json` mapped `./woodev` only at the `wp-content/plugins/*` mount, not the `tests/_fixtures/*` path the bootstrap loads from → added the mapping (both blocks). Superseded a non-working bootstrap-symlink attempt (`c6a18b1`; wp-env mount not writable at runtime). Gotcha [[wpenv-resolver-fixture-mapping]].
+- **Unit cascade** (revealed once the audit fix unblocked the job; operator approved fixing): `5ea04fd` — yandex contract guards skip when gitignored `plugins-reference/` is absent; `format_percentage` fallback test → `@runInSeparateProcess` (Brain Monkey can't un-define `wc_format_decimal`, gotcha [[brain-monkey-function-pollution]]). `05db8a1` — 26 `ReflectionException` on 7.4/8.0: added `setAccessible(true)` at 18 sites across 9 files, guarded by `PHP_VERSION_ID < 80100` (deprecated on 8.5), gotcha [[reflection-setaccessible-version-guard]].
+- **CI-fix commits:** `c640209` (ci), `1422c1e` (integration), `5ea04fd` (unit yandex+isolation), `05db8a1` (unit reflection). Local verified on PHP 8.5: composer check 203 tests, `composer audit --locked` clean, markdownlint 0.
 
 ## Autodev digest — 2026-06-08 (S1 complete + reviewed/remediated; branch `autodev/loop-bootstrap`; PR #20)
 > Mirrored from `.autodev/digest.md` (autodev loop §7) — see it for full detail. SEPARATE workstream from S0/S1.
