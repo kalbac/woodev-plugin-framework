@@ -867,6 +867,9 @@ class FrameworkResolverTest extends TestCase {
 		// Bootstrap exposes reflected state via sync_resolver_state().
 		$reflection = new \ReflectionClass( $bootstrap );
 		$registered_prop = $reflection->getProperty( 'registered_plugins' );
+		if ( PHP_VERSION_ID < 80100 ) {
+			$registered_prop->setAccessible( true );
+		}
 		$this->assertCount( 1, $registered_prop->getValue( $bootstrap ) );
 	}
 

@@ -21,6 +21,9 @@ class Testable_Platform_Neutral_Updater_Plugin extends \Woodev_Plugin {
 	 */
 	public function __construct() {
 		$property = new \ReflectionProperty( \Woodev_Plugin::class, 'id' );
+		if ( PHP_VERSION_ID < 80100 ) {
+			$property->setAccessible( true );
+		}
 		$property->setValue( $this, 'platform-neutral-updater' );
 	}
 

@@ -58,6 +58,9 @@ namespace Woodev\Tests\Unit {
 
 			$reflection = new \ReflectionClass( $packer );
 			$prop       = $reflection->getProperty( 'items' );
+			if ( PHP_VERSION_ID < 80100 ) {
+				$prop->setAccessible( true );
+			}
 			$prop->setValue( $packer, array( $item ) );
 
 			$this->expectException( \Woodev_Packer_Exception::class );

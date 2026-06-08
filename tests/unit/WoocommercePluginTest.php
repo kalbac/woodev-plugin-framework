@@ -409,6 +409,9 @@ class WoocommercePluginTest extends TestCase {
 
 		// register_woocommerce_hooks() is private and now runs from Woocommerce_Plugin construction.
 		$register = new \ReflectionMethod( \Woodev\Framework\Woocommerce_Plugin::class, 'register_woocommerce_hooks' );
+		if ( PHP_VERSION_ID < 80100 ) {
+			$register->setAccessible( true );
+		}
 		$register->invoke( $plugin );
 	}
 }

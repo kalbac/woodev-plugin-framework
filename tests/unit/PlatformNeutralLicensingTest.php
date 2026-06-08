@@ -97,6 +97,9 @@ class PlatformNeutralLicensingTest extends TestCase {
 		$this->set_private_property( $license, 'api_handler', $api_handler );
 
 		$dispatch = new \ReflectionMethod( \Woodev_Plugins_License::class, 'dispatch' );
+		if ( PHP_VERSION_ID < 80100 ) {
+			$dispatch->setAccessible( true );
+		}
 
 		$this->assertSame( $response, $dispatch->invoke( $license, 'CHECK_LICENSE', 'license-key' ) );
 	}
@@ -233,6 +236,9 @@ class PlatformNeutralLicensingTest extends TestCase {
 
 		$messages = ( new \ReflectionClass( \Woodev_License_Messages::class ) )->newInstanceWithoutConstructor();
 		$method   = new \ReflectionMethod( \Woodev_License_Messages::class, 'get_date_i18n' );
+		if ( PHP_VERSION_ID < 80100 ) {
+			$method->setAccessible( true );
+		}
 
 		$this->assertSame( '2026-05-30', $method->invoke( $messages, 1_780_099_200 ) );
 		$this->assertSame( '2026-05-30', $method->invoke( $messages, '2026-05-30 00:00:00' ) );
@@ -278,6 +284,9 @@ class PlatformNeutralLicensingTest extends TestCase {
 
 		$messages = ( new \ReflectionClass( \Woodev_License_Messages::class ) )->newInstanceWithoutConstructor();
 		$method   = new \ReflectionMethod( \Woodev_License_Messages::class, 'get_date_i18n' );
+		if ( PHP_VERSION_ID < 80100 ) {
+			$method->setAccessible( true );
+		}
 
 		$this->assertSame( '30/05/2026', $method->invoke( $messages, 1_780_099_200 ) );
 	}
@@ -324,6 +333,9 @@ class PlatformNeutralLicensingTest extends TestCase {
 
 		$messages = ( new \ReflectionClass( \Woodev_License_Messages::class ) )->newInstanceWithoutConstructor();
 		$method   = new \ReflectionMethod( \Woodev_License_Messages::class, 'get_date_i18n' );
+		if ( PHP_VERSION_ID < 80100 ) {
+			$method->setAccessible( true );
+		}
 
 		$this->assertSame( '2026-05-30 00:30', $method->invoke( $messages, '2026-05-30T00:30:00+03:00' ) );
 	}
@@ -338,6 +350,9 @@ class PlatformNeutralLicensingTest extends TestCase {
 	 */
 	private function set_private_property( $object, string $property, $value ): void {
 		$reflection_property = new \ReflectionProperty( $object, $property );
+		if ( PHP_VERSION_ID < 80100 ) {
+			$reflection_property->setAccessible( true );
+		}
 		$reflection_property->setValue( $object, $value );
 	}
 
@@ -351,6 +366,9 @@ class PlatformNeutralLicensingTest extends TestCase {
 	 */
 	private function set_protected_property( $object, string $property, $value ): void {
 		$reflection_property = new \ReflectionProperty( $object, $property );
+		if ( PHP_VERSION_ID < 80100 ) {
+			$reflection_property->setAccessible( true );
+		}
 		$reflection_property->setValue( $object, $value );
 	}
 }

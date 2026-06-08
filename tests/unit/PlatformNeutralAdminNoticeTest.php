@@ -35,6 +35,9 @@ class Testable_Platform_Neutral_Admin_Notice_Handler extends \Woodev_Admin_Notic
 	 */
 	private function set_plugin( $plugin ): void {
 		$property = new \ReflectionProperty( \Woodev_Admin_Notice_Handler::class, 'plugin' );
+		if ( PHP_VERSION_ID < 80100 ) {
+			$property->setAccessible( true );
+		}
 		$property->setValue( $this, $plugin );
 	}
 
@@ -46,6 +49,9 @@ class Testable_Platform_Neutral_Admin_Notice_Handler extends \Woodev_Admin_Notic
 	 */
 	public function seed_admin_notices( array $admin_notices ): void {
 		$property = new \ReflectionProperty( \Woodev_Admin_Notice_Handler::class, 'admin_notices' );
+		if ( PHP_VERSION_ID < 80100 ) {
+			$property->setAccessible( true );
+		}
 		$property->setValue( $this, $admin_notices );
 	}
 
@@ -56,6 +62,9 @@ class Testable_Platform_Neutral_Admin_Notice_Handler extends \Woodev_Admin_Notic
 	 */
 	public static function reset_js_render_state(): void {
 		$property = new \ReflectionProperty( \Woodev_Admin_Notice_Handler::class, 'admin_notice_js_rendered' );
+		if ( PHP_VERSION_ID < 80100 ) {
+			$property->setAccessible( true );
+		}
 		$property->setValue( null, false );
 	}
 }

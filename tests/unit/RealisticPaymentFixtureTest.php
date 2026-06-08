@@ -73,6 +73,9 @@ class RealisticPaymentFixtureTest extends TestCase {
 
 		$set = static function ( string $property, $value ) use ( $gateway ): void {
 			$reflection = new \ReflectionProperty( \Woodev_Payment_Gateway::class, $property );
+			if ( PHP_VERSION_ID < 80100 ) {
+				$reflection->setAccessible( true );
+			}
 			$reflection->setValue( $gateway, $value );
 		};
 

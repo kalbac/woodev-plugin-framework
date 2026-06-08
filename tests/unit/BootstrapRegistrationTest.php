@@ -26,6 +26,9 @@ class BootstrapRegistrationTest extends TestCase {
 		// Reset the singleton instance via reflection.
 		$reflection = new ReflectionClass( \Woodev_Plugin_Bootstrap::class );
 		$instance   = $reflection->getProperty( 'instance' );
+		if ( PHP_VERSION_ID < 80100 ) {
+			$instance->setAccessible( true );
+		}
 		$instance->setValue( null, null );
 	}
 
@@ -35,6 +38,9 @@ class BootstrapRegistrationTest extends TestCase {
 	protected function tearDown(): void {
 		$reflection = new ReflectionClass( \Woodev_Plugin_Bootstrap::class );
 		$instance   = $reflection->getProperty( 'instance' );
+		if ( PHP_VERSION_ID < 80100 ) {
+			$instance->setAccessible( true );
+		}
 		$instance->setValue( null, null );
 
 		parent::tearDown();
@@ -49,6 +55,9 @@ class BootstrapRegistrationTest extends TestCase {
 	private function get_registered_plugins( \Woodev_Plugin_Bootstrap $bootstrap ): array {
 		$reflection = new ReflectionClass( $bootstrap );
 		$property   = $reflection->getProperty( 'registered_plugins' );
+		if ( PHP_VERSION_ID < 80100 ) {
+			$property->setAccessible( true );
+		}
 
 		return $property->getValue( $bootstrap );
 	}
@@ -432,6 +441,9 @@ class BootstrapRegistrationTest extends TestCase {
 		// Reset singleton.
 		$reflection = new ReflectionClass( \Woodev_Plugin_Bootstrap::class );
 		$property   = $reflection->getProperty( 'instance' );
+		if ( PHP_VERSION_ID < 80100 ) {
+			$property->setAccessible( true );
+		}
 		$property->setValue( null, null );
 
 		$instance2 = \Woodev_Plugin_Bootstrap::instance();
