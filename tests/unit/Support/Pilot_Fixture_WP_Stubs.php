@@ -52,6 +52,8 @@ trait Pilot_Fixture_WP_Stubs {
 		Functions\when( 'is_admin' )->justReturn( false );
 		Functions\when( 'has_action' )->justReturn( false );
 		Functions\when( 'add_action' )->justReturn( true );
+		Functions\when( 'get_option' )->returnArg( 2 );
+		Functions\when( 'is_multisite' )->justReturn( false );
 
 		if ( $stub_add_filter ) {
 			Functions\when( 'add_filter' )->justReturn( true );
