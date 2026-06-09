@@ -163,6 +163,12 @@ namespace Woodev\Tests\Unit {
 		private function invoke( object $object, string $name, ...$args ) {
 			$ref = new \ReflectionMethod( $object, $name );
 
+			// setAccessible() is required to invoke a protected method on PHP < 8.1
+			// and is deprecated on 8.5+; guard so both ends of the range pass.
+			if ( PHP_VERSION_ID < 80100 ) {
+				$ref->setAccessible( true );
+			}
+
 			return $ref->invokeArgs( $object, $args );
 		}
 

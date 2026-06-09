@@ -804,6 +804,11 @@ namespace Woodev\Tests\Unit {
 
 			$method = new \ReflectionMethod( \Warehouses_Controller_Yandex_Controller::class, 'prepare_item_for_database' );
 
+			// setAccessible() is required on PHP < 8.1 and deprecated on 8.5+.
+			if ( PHP_VERSION_ID < 80100 ) {
+				$method->setAccessible( true );
+			}
+
 			/** @var Warehouse $merged */
 			$merged = $method->invoke( $controller, $request, $existing );
 
@@ -829,6 +834,11 @@ namespace Woodev\Tests\Unit {
 			$request = new \WP_REST_Request( [ 'name' => 'Fresh' ] );
 
 			$method = new \ReflectionMethod( \Warehouses_Controller_Yandex_Controller::class, 'prepare_item_for_database' );
+
+			// setAccessible() is required on PHP < 8.1 and deprecated on 8.5+.
+			if ( PHP_VERSION_ID < 80100 ) {
+				$method->setAccessible( true );
+			}
 
 			/** @var Warehouse $built */
 			$built = $method->invoke( $controller, $request, null );
