@@ -19,7 +19,26 @@
 namespace {
 
 	if ( ! class_exists( 'WC_Shipping_Method', false ) ) {
-		class ShippingMethodBoxPackingTest_WC_Shipping_Method_Stub {}
+		/**
+		 * Minimal WC_Shipping_Method double exposing supports()/$supports so the
+		 * calculate_rate() template's $this->supports( FEATURE_BOX_PACKING ) check
+		 * works under newInstanceWithoutConstructor().
+		 */
+		class ShippingMethodBoxPackingTest_WC_Shipping_Method_Stub {
+
+			/** @var string[] declared supported features. */
+			public array $supports = [];
+
+			/**
+			 * Reports whether a feature is declared as supported.
+			 *
+			 * @param string $feature feature slug to check.
+			 * @return bool
+			 */
+			public function supports( $feature ): bool {
+				return in_array( $feature, $this->supports, true );
+			}
+		}
 		class_alias( ShippingMethodBoxPackingTest_WC_Shipping_Method_Stub::class, 'WC_Shipping_Method' );
 	}
 
@@ -99,6 +118,9 @@ namespace {
 		/** @var array<string,mixed> stored option values keyed by option name. */
 		public array $stored_options = [];
 
+		/** @var \Woodev_Packer_Result|null|false  false = rate_package() not called yet. */
+		public $received_packed = false;
+
 		public static function get_method_id(): string {
 			return 'box_packing_test_method';
 		}
@@ -112,6 +134,8 @@ namespace {
 		}
 
 		protected function rate_package( array $package, ?\Woodev_Packer_Result $packed ): ?\Woodev\Framework\Shipping\Shipping_Rate {
+			$this->received_packed = $packed;
+
 			return null;
 		}
 
@@ -245,6 +269,106 @@ namespace Woodev\Tests\Unit {
 			$this->assertSame( \Woodev_Packer_Dispatcher::ALGORITHM_VIRTUAL, $data['algorithm'] );
 			$this->assertNotEmpty( $data['packages'] );
 			$this->assertSame( 3.0, $data['total_weight'] );
+		}
+
+		/**
+		 * The template packs a non-virtual cart when box-packing is supported and
+		 * hands the resulting Woodev_Packer_Result to rate_package().
+		 *
+		 * Runs in a separate process so the conditionally-defined WC_Product stub
+		 * is declared and aliased in a clean class table (Brain Monkey class
+		 * pollution).
+		 *
+		 * @runInSeparateProcess
+		 * @preserveGlobalState disabled
+		 */
+		public function test_calculate_rate_passes_parcels_to_rate_package_when_box_packing_supported(): void {
+			$product         = new \ShippingMethodBoxPackingTest_WC_Product_Stub();
+			$product->length = 10.0;
+			$product->width  = 5.0;
+			$product->height = 3.0;
+			$product->weight = 1.5;
+
+			$method            = $this->make_method( [ 'packing_algorithm' => \Woodev_Packer_Dispatcher::ALGORITHM_VIRTUAL ] );
+			$method->supports  = [ \Woodev\Framework\Shipping\Shipping_Method::FEATURE_BOX_PACKING ];
+
+			$package = [
+				'contents' => [
+					'item_key' => [ 'data' => $product, 'quantity' => 2 ],
+				],
+			];
+
+			$this->invoke( $method, 'calculate_rate', $package );
+
+			$this->assertInstanceOf( \Woodev_Packer_Result::class, $method->received_packed );
+
+			$data = $method->received_packed->to_array();
+
+			$this->assertSame( 3.0, $data['total_weight'] );
+			$this->assertNotEmpty( $data['packages'] );
+		}
+
+		/**
+		 * A virtual-only cart has nothing physical to pack, so the template passes
+		 * null to rate_package() even though box-packing is supported.
+		 *
+		 * Runs in a separate process so the conditionally-defined WC_Product stub
+		 * is declared and aliased in a clean class table (Brain Monkey class
+		 * pollution).
+		 *
+		 * @runInSeparateProcess
+		 * @preserveGlobalState disabled
+		 */
+		public function test_calculate_rate_passes_null_for_virtual_only_cart(): void {
+			$product          = new \ShippingMethodBoxPackingTest_WC_Product_Stub();
+			$product->virtual = true;
+
+			$method           = $this->make_method( [ 'packing_algorithm' => \Woodev_Packer_Dispatcher::ALGORITHM_VIRTUAL ] );
+			$method->supports = [ \Woodev\Framework\Shipping\Shipping_Method::FEATURE_BOX_PACKING ];
+
+			$package = [
+				'contents' => [
+					'item_key' => [ 'data' => $product, 'quantity' => 1 ],
+				],
+			];
+
+			$this->invoke( $method, 'calculate_rate', $package );
+
+			$this->assertNotSame( false, $method->received_packed );
+			$this->assertNull( $method->received_packed );
+		}
+
+		/**
+		 * Packing is opt-in: a method that does not support box-packing receives
+		 * null in rate_package() even with physical cart contents.
+		 *
+		 * Runs in a separate process so the conditionally-defined WC_Product stub
+		 * is declared and aliased in a clean class table (Brain Monkey class
+		 * pollution).
+		 *
+		 * @runInSeparateProcess
+		 * @preserveGlobalState disabled
+		 */
+		public function test_calculate_rate_passes_null_when_box_packing_not_supported(): void {
+			$product         = new \ShippingMethodBoxPackingTest_WC_Product_Stub();
+			$product->length = 10.0;
+			$product->width  = 5.0;
+			$product->height = 3.0;
+			$product->weight = 1.5;
+
+			$method           = $this->make_method( [ 'packing_algorithm' => \Woodev_Packer_Dispatcher::ALGORITHM_VIRTUAL ] );
+			$method->supports = [];
+
+			$package = [
+				'contents' => [
+					'item_key' => [ 'data' => $product, 'quantity' => 2 ],
+				],
+			];
+
+			$this->invoke( $method, 'calculate_rate', $package );
+
+			$this->assertNotSame( false, $method->received_packed );
+			$this->assertNull( $method->received_packed );
 		}
 	}
 
