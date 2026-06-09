@@ -4,43 +4,49 @@ defined( 'ABSPATH' ) || exit;
 
 if ( ! class_exists( 'Woodev_Packer_Separately' ) ) :
 
+	/**
+	 * Packs each item into its own individual box.
+	 *
+	 * Accepts any Woodev_Box_Packer_Item — no WooCommerce dependency.
+	 * For WC-specific box labelling (product name/SKU in the box label),
+	 * use the WC-specific dispatcher layer.
+	 *
+	 * @since 1.4.1
+	 */
 	class Woodev_Packer_Separately extends Woodev_Packer {
+
 		/**
-		 * Box name.
+		 * Label template for each package box.
 		 *
 		 * @var string
 		 */
 		private $box_name;
 
 		/**
-		 * Woodev_Packer_Separately constructor.
-		 *
-		 * @param string $box_name .
+		 * @since  1.4.1
+		 * @param  string $box_name Label applied to every package. Default empty.
 		 */
 		public function __construct( string $box_name = '' ) {
 			$this->box_name = $box_name;
 		}
 
 		/**
-		 * Pack items to boxes creating packages.
+		 * Packs each item into its own Woodev_Packer_Box_Implementation.
 		 *
-		 * @throws Woodev_Packer_Exception .
+		 * @since  1.4.1
+		 * @throws Woodev_Packer_Exception If no items have been added.
 		 */
 		public function pack() {
 			if ( ! $this->items || 0 === count( $this->items ) ) {
 				throw new Woodev_Packer_Exception( __( 'No items to pack!' ) );
 			}
 
-			$this->packages = array();
-			// Pack items.
+			$this->packages = [];
+			$index          = 0;
+
 			foreach ( $this->items as $item ) {
-
-				if ( ! $item instanceof Woodev_Box_Packer_Item_With_Product ) {
-					throw new Woodev_Packer_Exception( __( 'Items added to Packer_Separately must implement Woodev_Box_Packer_Item_With_Product.' ) );
-				}
-
-				$product = $item->get_product();
-
+				$box_label  = $this->box_name ?: 'Package';
+				$box_id     = 'package-' . $index;
 				$packed_box = new Woodev_Box_Packer_Packed_Box(
 					new Woodev_Packer_Box_Implementation(
 						$item->get_length(),
@@ -48,43 +54,18 @@ if ( ! class_exists( 'Woodev_Packer_Separately' ) ) :
 						$item->get_height(),
 						0,
 						null,
-						Woodev_Helper::str_convert( $this->get_box_name( $product ) ),
-						$this->get_box_name( $product )
+						$box_id,
+						$box_label
 					),
-					array( $item )
+					[ $item ]
 				);
 
 				$packed_box->get_packed_items();
-				// Calculates weight!
 				$this->packages[] = $packed_box;
+				$index++;
 			}
 
-			$this->items = array();
-		}
-
-		/**
-		 * @param WC_Product $product
-		 *
-		 * @return string
-		 */
-		private function get_box_name( WC_Product $product ): string {
-			if ( $product instanceof WC_Product ) {
-				return str_replace(
-					array(
-						'{product_name}',
-						'{product_sku}',
-						'{product_id}',
-					),
-					array(
-						$product->get_name(),
-						$product->get_sku(),
-						$product->get_id(),
-					),
-					$this->box_name
-				);
-			}
-
-			return $this->box_name;
+			$this->items = [];
 		}
 	}
 

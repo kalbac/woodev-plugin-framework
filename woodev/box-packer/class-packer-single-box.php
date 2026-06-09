@@ -31,7 +31,7 @@ if ( ! class_exists( 'Woodev_Packer_Single_Box' ) ) :
 				throw new Woodev_Packer_Exception( __( 'No items to pack!' ) );
 			}
 
-			$this->packages = array(
+			$this->packages = [
 				new Woodev_Box_Packer_Packed_Box(
 					new Woodev_Packer_Box_Implementation(
 						$this->get_package_dimension( 'length' ),
@@ -44,9 +44,9 @@ if ( ! class_exists( 'Woodev_Packer_Single_Box' ) ) :
 					),
 					$this->items
 				),
-			);
+			];
 
-			$this->items = array();
+			$this->items = [];
 		}
 
 		/**
@@ -55,11 +55,11 @@ if ( ! class_exists( 'Woodev_Packer_Single_Box' ) ) :
 		 * @return array
 		 */
 		private function get_items_dimensions(): array {
-			return array(
+			return [
 				'height' => array_map( fn( Woodev_Box_Packer_Item $item ) => $item->get_height(), $this->items ),
 				'length' => array_map( fn( Woodev_Box_Packer_Item $item ) => $item->get_length(), $this->items ),
 				'width'  => array_map( fn( Woodev_Box_Packer_Item $item ) => $item->get_width(), $this->items ),
-			);
+			];
 		}
 
 		/**
@@ -68,8 +68,7 @@ if ( ! class_exists( 'Woodev_Packer_Single_Box' ) ) :
 		 * @return array
 		 */
 		private function get_max_values(): array {
-
-			$find = array();
+			$find = [];
 
 			foreach ( $this->get_items_dimensions() as $dimension => $values ) {
 				$find[ $dimension ] = max( $values );
@@ -92,7 +91,7 @@ if ( ! class_exists( 'Woodev_Packer_Single_Box' ) ) :
 		private function get_package_dimension( string $dimension ) {
 
 			$dimensions      = $this->get_items_dimensions();
-			$diff_dimensions = array_diff_key( $dimensions, array_flip( array( $this->get_greatest_dimension() ) ) );
+			$diff_dimensions = array_diff_key( $dimensions, array_flip( [ $this->get_greatest_dimension() ] ) );
 			$greatest        = $this->get_greatest_dimension() === $dimension ? $dimension : array_search( max( $diff_dimensions ), $diff_dimensions, true );
 
 			return $greatest === $dimension ? max( $dimensions[ $greatest ] ) : array_sum( $dimensions[ $dimension ] );

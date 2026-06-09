@@ -1,14 +1,8 @@
 <?php
 /**
- * Failing test for V-2: Woodev_Box_Packer_Item interface does not declare get_product(),
- * but Woodev_Packer_Separately::pack() calls $item->get_product() unconditionally.
- *
- * Reproduces the bug at woodev/box-packer/class-packer-separatly.php:38 — a plugin that
- * implements Woodev_Box_Packer_Item without get_product() (the documented extension
- * contract) fatals at pack() time.
- *
- * Test currently FAILS with a fatal Error. After B-1b fix (split interface or add
- * get_product() to base), it PASSES.
+ * Regression test for V-2 WC-free fix: Woodev_Packer_Separately no longer requires
+ * get_product() (WC_Product) on items. Any Woodev_Box_Packer_Item implementation
+ * (the documented extension contract) must pack without error.
  *
  * @package Woodev\Tests\Unit
  */
@@ -52,8 +46,12 @@ namespace Woodev\Tests\Unit {
 
 	class PackerSeparatelyGetProductTest extends TestCase {
 
-		public function test_pack_rejects_plugin_item_without_get_product_with_clear_exception() {
-			$packer = new \Woodev_Packer_Separately( '{product_name}' );
+		/**
+		 * Verifies the WC-free fix: Woodev_Box_Packer_Item without get_product()
+		 * must pack successfully (no fatal, no exception).
+		 */
+		public function test_pack_accepts_plugin_item_without_get_product() {
+			$packer = new \Woodev_Packer_Separately( 'Test Package' );
 			$item   = new \Woodev_Test_BoxPacker_Item_Without_Product();
 
 			$reflection = new \ReflectionClass( $packer );
@@ -61,12 +59,13 @@ namespace Woodev\Tests\Unit {
 			if ( PHP_VERSION_ID < 80100 ) {
 				$prop->setAccessible( true );
 			}
-			$prop->setValue( $packer, array( $item ) );
+			$prop->setValue( $packer, [ $item ] );
 
-			$this->expectException( \Woodev_Packer_Exception::class );
-			$this->expectExceptionMessage( 'Woodev_Box_Packer_Item_With_Product' );
-
+			// Must not throw — WC dependency is gone.
 			$packer->pack();
+
+			$packages = $packer->get_packages();
+			$this->assertCount( 1, $packages );
 		}
 	}
 
