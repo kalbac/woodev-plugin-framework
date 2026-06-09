@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
-> **31 atomic gotchas in 14 namespaces** — update count when adding/removing.
-> Last updated: 2026-06-09 (session 2: 3 gotchas — dispatcher files unwired in includes(), warehouse storage-id vs carrier-id, PR conflict skips pull_request CI)
+> **32 atomic gotchas in 14 namespaces** — update count when adding/removing.
+> Last updated: 2026-06-09 (session 3: 1 gotcha — don't sum per-parcel prices in the framework rate seam)
 
 ## Index
 
@@ -66,6 +66,7 @@
 ### [shipping/*] — Shipping module (S1)
 - [shipping/contracts] Session key ≠ order-meta prefix — composing one key for both checkout session and order meta breaks installed-site data (Yandex: `chosen_yandex_pickup_point` vs `_yandex_delivery_`) → [gotchas/session-key-vs-order-meta-prefix.md](gotchas/session-key-vs-order-meta-prefix.md) (2026-06-06)
 - [shipping/contracts] Installed-site contract strings (AJAX action, admin slug, meta key…) are NOT derivable from the plugin id by convention — the plugin must supply each; edostavka `wc_edostavka_orders` vs yandex `wc-yandex-orders` proves no single rule → [gotchas/contract-string-not-derivable.md](gotchas/contract-string-not-derivable.md) (2026-06-06)
+- [shipping/rate-calc] Do NOT sum per-parcel prices in the framework rate seam — `calculate_rate` (final template) only wires packing; per-parcel summing mis-prices multi-place carrier tariffs (СДЭК/Яндекс quote a whole shipment in one request). The carrier subclass aggregates → [gotchas/shipping-rate-no-parcel-sum.md](gotchas/shipping-rate-no-parcel-sum.md) (s3)
 - [shipping/warehouse-identity] Warehouse storage row id ≠ carrier-unique id — VO carries a nullable `storage_id` (DB PK) separate from `get_id()` (carrier code); store keys CRUD on the row id, never fold the REST route id into `get_id()`, and use read-merge on update → [gotchas/warehouse-storage-id-vs-carrier-id.md](gotchas/warehouse-storage-id-vs-carrier-id.md) (session 2)
 
 ### [autodev/*] — Adversarial dev loop tooling

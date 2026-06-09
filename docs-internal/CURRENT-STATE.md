@@ -1,5 +1,13 @@
 # Current State — Woodev Plugin Framework
-> Last updated: 2026-06-09 (session 2: dispatcher production wiring + warehouse REST redesign; **PR #22 MERGED**; 259 tests GREEN)
+> Last updated: 2026-06-09 (session 3: packing seam → real rate-calc, single-seam template; **PR open** on `feat/shipping-rate-packing-seam`; 263 tests GREEN)
+
+## Autodev digest — 2026-06-09 (session 3: packing seam → real rate-calc; **PR open, not merged**)
+- **Operator-directed via the autodev pattern** (design brainstormed + approved by operator; atomic specs queued; worker subagents wrote files; adversarial silent-failure-hunter + holistic code-reviewer agents stood in for the GPT-5.5 critic). Branch `feat/shipping-rate-packing-seam` off fresh `main`.
+- **Packing woven into the rate flow (Variant B — single-seam template):** `Shipping_Method::calculate_rate()` is now a **final** concrete template — when the method supports `FEATURE_BOX_PACKING` it packs via `pack_package()` and hands the nullable `?\Woodev_Packer_Result` to a new abstract seam `rate_package( array $package, ?\Woodev_Packer_Result $packed ): ?Shipping_Rate`. Framework owns ONLY the wiring; **per-parcel price aggregation stays the carrier's job** (no built-in summing — billing footgun for multi-place carrier tariffs). Migrated the 5 in-repo subclasses to the new seam. Internal-API rename only — zero installed-site contract touched. Gotcha [[shipping-rate-no-parcel-sum]].
+- **Validation gate:** 3 wiring tests (parcels delivered / virtual-only→null / opt-in-off→null) + a multi-parcel end-to-end test; a `false` sentinel + `assertNotSame` guard proves `rate_package` actually ran.
+- **Reviews:** P1 adversarial = SAFE (suggested `final`, adopted); whole-feature holistic = SHIP, zero must-fix (3 optional polish items adopted).
+- **`composer check` green: PHPCS clean, PHPStan 0, 263 tests / 823 assertions.** Commits `063ba78` (spec+queue), `71f8969` (seam), `51bb97a` (gate), `bf3d7bd` (polish).
+- **Next:** merge after green GH Actions + operator decision. Known follow-up still open: `Abstract_Warehouse_Store::save()` doesn't check the wpdb return value.
 
 ## Autodev digest — 2026-06-09 (session 2: dispatcher wiring + warehouse REST redesign; **PR #22 MERGED**)
 - **Operator-directed** (worker agents for file-writing + adversarial silent-failure-hunter as the GPT-5.5-critic stand-in; this session did **not** drive the conductor loop). Three workstreams on top of merged S2.
@@ -9,7 +17,7 @@
 - **PR #22 MERGED to `main`** (squash). CI green across Unit PHP 7.4–8.3 + Integration (WP 6.4–latest × WC 8.5.1–latest). Getting there surfaced two CI lessons: a PR that conflicts with base (`mergeStateStatus: DIRTY`) does **not** run `pull_request` workflows — only `pull_request_target` — so CI silently never ran until I rebased onto `main` (PR #21 had been squash-merged → branch diverged); gotcha [[pr-conflict-skips-pull-request-ci]]. And the new reflection tests failed on PHP 7.4/8.0 without `setAccessible(true)` (gotcha [[reflection-setaccessible-version-guard]] recurred).
 - **233 → 259 unit tests / 812 assertions.** PHPStan 0, PHPCS clean. Both feature changes passed adversarial review (SAFE, no blockers).
 - **Known follow-up (rides in PR #22):** `Warehouse_Store::save()` doesn't check the wpdb insert/update return value — a failed UPDATE returns 200 with stale data (newly reachable now that update actually runs). Hardening deferred (would change the `save()` contract).
-- **Next:** bring the packing seam to a **real rate-calc** flow — to run **within the autodev-loop** (worker + GPT-5.5 codex critic), see `docs-internal/next-session-prompt-rate-calc.md`.
+- **Next:** ✅ done in session 3 — packing seam brought to a real rate-calc flow (single-seam template). See the session-3 digest at the top.
 
 ## Autodev digest — 2026-06-09 (S2 box-packer complete; branch `autodev/loop-s2`; **PR #21 open**)
 - **S2 complete: 3/3 tasks done.** P1 WC-neutral single-box, P2 minimal-virtual-box algorithm, P3 validation gate tests.
