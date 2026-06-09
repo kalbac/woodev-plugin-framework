@@ -41,6 +41,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 
 		const FEATURE_SHIPPING_CLASSES = 'shipping-classes';
 
+		/** Box-packing feature: lets the method combine package contents into parcels. */
+		const FEATURE_BOX_PACKING = 'box-packing';
+
 		/**
 		 * Gets the unique method identifier.
 		 *
@@ -128,6 +131,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 					'default'  => self::SHIPPING_CLASS_ANY,
 					'options'  => $this->get_shipping_classes_options(),
 					'desc_tip' => esc_html__( 'Select the shipping class that this method applies to.', 'woodev-plugin-framework' ),
+				];
+			}
+
+			if ( $this->supports( self::FEATURE_BOX_PACKING ) ) {
+
+				$this->instance_form_fields['packing_algorithm'] = [
+					'title'    => esc_html__( 'Packing algorithm', 'woodev-plugin-framework' ),
+					'type'     => 'select',
+					'class'    => 'wc-enhanced-select',
+					'default'  => \Woodev_Packer_Dispatcher::ALGORITHM_VIRTUAL,
+					'options'  => \Woodev_Packer_Dispatcher::get_algorithms(),
+					'desc_tip' => esc_html__( 'How cart items are combined into parcels before rate calculation.', 'woodev-plugin-framework' ),
 				];
 			}
 
@@ -365,6 +380,58 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		 * @since 1.4.0
 		 */
 		protected function after_calculate( array $package, ?Shipping_Rate $rate ): void {}
+
+		/**
+		 * Packs the package contents into parcels using the configured algorithm.
+		 *
+		 * Converts the WooCommerce package's cart contents into packer input
+		 * items via {@see \Woodev_WC_Packer_Dispatcher::from_cart_items()} and
+		 * runs the algorithm selected in this method's settings (falling back to
+		 * the virtual minimal box). Returns null when there is nothing physical
+		 * to pack or the WooCommerce-aware dispatcher is unavailable, so callers
+		 * can skip dimensional rate logic without catching exceptions.
+		 *
+		 * @since 2.0.0
+		 *
+		 * @param array $package WooCommerce shipping package (expects a 'contents' array of cart items).
+		 * @return \Woodev_Packer_Result|null packed result, or null when nothing is packable
+		 */
+		protected function pack_package( array $package ): ?\Woodev_Packer_Result {
+
+			if ( ! class_exists( '\\Woodev_WC_Packer_Dispatcher' ) ) {
+				return null;
+			}
+
+			$contents = isset( $package['contents'] ) && is_array( $package['contents'] ) ? $package['contents'] : [];
+
+			$items = \Woodev_WC_Packer_Dispatcher::from_cart_items( $contents );
+
+			if ( [] === $items ) {
+				return null;
+			}
+
+			return \Woodev_WC_Packer_Dispatcher::pack( $this->get_packing_algorithm(), $items );
+		}
+
+		/**
+		 * Gets the packing algorithm configured for this method.
+		 *
+		 * Falls back to the virtual minimal box when the stored value is not a
+		 * registered algorithm, so an out-of-range option can never reach the
+		 * dispatcher (which would otherwise throw).
+		 *
+		 * @since 2.0.0
+		 *
+		 * @return string one of the \Woodev_Packer_Dispatcher::ALGORITHM_* constants
+		 */
+		protected function get_packing_algorithm(): string {
+
+			$algorithm = (string) $this->get_option( 'packing_algorithm', \Woodev_Packer_Dispatcher::ALGORITHM_VIRTUAL );
+
+			return array_key_exists( $algorithm, \Woodev_Packer_Dispatcher::get_algorithms() )
+				? $algorithm
+				: \Woodev_Packer_Dispatcher::ALGORITHM_VIRTUAL;
+		}
 
 		/**
 		 * Gets the plugin instance that owns this shipping method.

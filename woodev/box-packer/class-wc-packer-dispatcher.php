@@ -38,7 +38,7 @@ if ( ! class_exists( 'Woodev_WC_Packer_Dispatcher' ) ) :
 
 			foreach ( $cart_contents as $cart_item ) {
 				/** @var \WC_Product|false $product */
-				$product = isset( $cart_item['data'] ) ? $cart_item['data'] : false;
+				$product = $cart_item['data'] ?? false;
 
 				if ( ! $product instanceof \WC_Product || $product->is_virtual() ) {
 					continue;

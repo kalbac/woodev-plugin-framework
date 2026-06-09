@@ -496,6 +496,18 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 			require_once $framework_path . '/box-packer/class-packer-single-box.php';
 			require_once $framework_path . '/box-packer/class-packer-virtual-box.php';
 
+			// Packer dispatcher + input/output contracts (platform-neutral).
+			require_once $framework_path . '/box-packer/interfaces/interface-packer-packable-item.php';
+			require_once $framework_path . '/box-packer/class-packer-input-item.php';
+			require_once $framework_path . '/box-packer/class-packer-package-result.php';
+			require_once $framework_path . '/box-packer/class-packer-result.php';
+			require_once $framework_path . '/box-packer/class-packer-dispatcher.php';
+
+			// WooCommerce-aware dispatcher (cart/order input conversion). Loaded only when WooCommerce is active.
+			if ( Woodev_Helper::is_woocommerce_active() ) {
+				require_once $framework_path . '/box-packer/class-wc-packer-dispatcher.php';
+			}
+
 			require_once $framework_path . '/utilities/class-woodev-async-request.php';
 			require_once $framework_path . '/utilities/class-woodev-background-job-handler.php';
 			require_once $framework_path . '/utilities/class-woodev-job-batch-handler.php';

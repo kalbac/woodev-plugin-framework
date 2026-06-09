@@ -15,7 +15,7 @@ acceptance:
   - PHPStan 0 errors
   - for 2 items (10x10x5 and 15x10x20 sorted as 20x15x10) result volume <= 4500
   - for 10 identical items 10x10x5 result volume = 5000 (not 500)
-  - result dimensions sorted descending (length >= width >= height)
+  - box_length >= max(item_lengths), box_width >= max(item_widths), box_height >= max(item_heights)
 ---
 
 # Task
@@ -52,7 +52,8 @@ private function calculate_virtual_box_dimensions( array $items ): array {
         [ array_sum( $lengths ), max( $widths ),  max( $heights ) ],
     ];
 
-    $best        = null;
+    // Initialise to first candidate so $best is never null (even if all volumes overflow to INF).
+    $best        = $candidates[0];
     $best_volume = PHP_FLOAT_MAX;
 
     foreach ( $candidates as $dims ) {
@@ -63,9 +64,8 @@ private function calculate_virtual_box_dimensions( array $items ): array {
         }
     }
 
-    // Normalise: ensure length >= width >= height for the result box.
-    rsort( $best );
-
+    // Each candidate guarantees box_axis >= max(item_axis) by construction.
+    // Do NOT rsort: that destroys axis-name alignment for non-normalised custom items.
     return [
         'length' => $best[0],
         'width'  => $best[1],
@@ -98,3 +98,5 @@ change needed there.
 ## Spec reference
 
 `docs-internal/platform-v2-s2-boxpacker-spec.md §P2`
+
+<!-- committed: 7abd7a4 -->

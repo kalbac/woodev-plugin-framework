@@ -290,6 +290,8 @@ class WoocommercePluginTest extends TestCase {
 		);
 		Functions\when( 'is_admin' )->justReturn( false );
 		Functions\when( 'has_action' )->justReturn( false );
+		Functions\when( 'get_option' )->returnArg( 2 );
+		Functions\when( 'is_multisite' )->justReturn( false );
 	}
 
 	/**

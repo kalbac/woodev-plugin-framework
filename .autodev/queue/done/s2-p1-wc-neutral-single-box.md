@@ -50,3 +50,5 @@ Arrow function syntax is PHP 7.4+ — within the project minimum.
 ## Spec reference
 
 `docs-internal/platform-v2-s2-boxpacker-spec.md §P1`
+
+<!-- committed: 031e9e9 -->
