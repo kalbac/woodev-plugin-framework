@@ -111,7 +111,7 @@ namespace {
 			return [];
 		}
 
-		protected function calculate_rate( array $package ): ?\Woodev\Framework\Shipping\Shipping_Rate {
+		protected function rate_package( array $package, ?\Woodev_Packer_Result $packed ): ?\Woodev\Framework\Shipping\Shipping_Rate {
 			return null;
 		}
 

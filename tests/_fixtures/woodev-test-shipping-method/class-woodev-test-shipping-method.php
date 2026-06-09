@@ -63,7 +63,7 @@ class Woodev_Test_Shipping_Method extends Shipping_Method {
 	/**
 	 * @inheritDoc
 	 */
-	protected function calculate_rate( array $package ): ?Shipping_Rate {
+	protected function rate_package( array $package, ?\Woodev_Packer_Result $packed ): ?Shipping_Rate {
 		return new Shipping_Rate(
 			$this->id,
 			$this->get_rate_id(),

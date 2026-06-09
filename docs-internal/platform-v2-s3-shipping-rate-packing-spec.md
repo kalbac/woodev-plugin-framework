@@ -33,20 +33,24 @@ subtly-wrong prices and N API calls. Aggregation is therefore the subclass's job
 
 ### Contract change (internal API — free to break on v2)
 
-`calculate_rate()` stops being abstract and becomes a concrete template that packs (when
-the method opts into `FEATURE_BOX_PACKING`) and dispatches to a single new abstract carrier
-seam, `rate_package()`, which always receives the packed result as a **nullable** argument:
+`calculate_rate()` stops being abstract and becomes a **final** concrete template that packs
+(when the method opts into `FEATURE_BOX_PACKING`) and dispatches to a single new abstract
+carrier seam, `rate_package()`, which always receives the packed result as a **nullable**
+argument. It is `final` (hardening from the P1 adversarial review) so the packing wiring
+cannot be silently bypassed: carriers implement `rate_package()`, and the existing
+`woodev_shipping_method_pre_calculate_rate` filter remains the supported short-circuit
+(e.g. a cache layer), so no legitimate use needs to override the template:
 
 ```php
 /**
  * Template: packs the cart into parcels when this method opts into box-packing,
  * then hands the (nullable) packed result to the carrier-specific rate_package().
  *
- * Overriding this method bypasses packing — implement rate_package() instead.
+ * Final — implement rate_package() (or hook the pre_calculate_rate filter).
  *
- * @since 2.0.0
+ * @since 1.4.0
  */
-protected function calculate_rate( array $package ): ?Shipping_Rate {
+final protected function calculate_rate( array $package ): ?Shipping_Rate {
 
     $packed = $this->supports( self::FEATURE_BOX_PACKING )
         ? $this->pack_package( $package )
