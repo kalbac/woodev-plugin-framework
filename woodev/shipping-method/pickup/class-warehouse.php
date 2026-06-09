@@ -63,21 +63,25 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Warehouse' ) ) :
 		/** @var array original carrier payload — escape hatch for carrier-specific fields */
 		private array $raw;
 
+		/** @var int|null storage row id (PK in the backing store; null when carrier-fetched, not yet persisted) */
+		private ?int $storage_id;
+
 		/**
 		 * Constructor.
 		 *
 		 * @since 1.5.0
 		 *
-		 * @param string $id            carrier-unique warehouse id
-		 * @param string $name          human-readable name
-		 * @param string $address       full one-line postal address
-		 * @param float  $lat           latitude in decimal degrees
-		 * @param float  $lng           longitude in decimal degrees
-		 * @param string $contact_name  contact person name
-		 * @param string $contact_phone contact phone
-		 * @param string $contact_email contact email
-		 * @param array  $work_hours    working-hours descriptors
-		 * @param array  $raw           original carrier payload
+		 * @param string   $id            carrier-unique warehouse id
+		 * @param string   $name          human-readable name
+		 * @param string   $address       full one-line postal address
+		 * @param float    $lat           latitude in decimal degrees
+		 * @param float    $lng           longitude in decimal degrees
+		 * @param string   $contact_name  contact person name
+		 * @param string   $contact_phone contact phone
+		 * @param string   $contact_email contact email
+		 * @param array    $work_hours    working-hours descriptors
+		 * @param array    $raw           original carrier payload
+		 * @param int|null $storage_id    storage row id (PK in the backing store), or null when not yet persisted
 		 */
 		public function __construct(
 			string $id = '',
@@ -89,7 +93,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Warehouse' ) ) :
 			string $contact_phone = '',
 			string $contact_email = '',
 			array $work_hours = [],
-			array $raw = []
+			array $raw = [],
+			?int $storage_id = null
 		) {
 			$this->id            = $id;
 			$this->name          = $name;
@@ -101,6 +106,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Warehouse' ) ) :
 			$this->contact_email = $contact_email;
 			$this->work_hours    = $work_hours;
 			$this->raw           = $raw;
+			$this->storage_id    = $storage_id;
 		}
 
 		/**
@@ -126,7 +132,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Warehouse' ) ) :
 				(string) ( $data['contact_phone'] ?? '' ),
 				(string) ( $data['contact_email'] ?? '' ),
 				(array) ( $data['work_hours'] ?? [] ),
-				(array) ( $data['raw'] ?? [] )
+				(array) ( $data['raw'] ?? [] ),
+				isset( $data['storage_id'] ) ? (int) $data['storage_id'] : null
 			);
 		}
 
@@ -152,6 +159,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Warehouse' ) ) :
 				'contact_email' => $this->contact_email,
 				'work_hours'    => $this->work_hours,
 				'raw'           => $this->raw,
+				'storage_id'    => $this->storage_id,
 			];
 		}
 
@@ -265,6 +273,37 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Warehouse' ) ) :
 		 */
 		public function get_raw(): array {
 			return $this->raw;
+		}
+
+		/**
+		 * Gets the storage row id (PK in the backing store), or null when this
+		 * warehouse was built from carrier data and not yet persisted.
+		 *
+		 * @since 2.0.0
+		 *
+		 * @return int|null
+		 */
+		public function get_storage_id(): ?int {
+			return $this->storage_id;
+		}
+
+		/**
+		 * Returns a copy of this warehouse with the storage row id set.
+		 *
+		 * The value object is immutable; this produces a new instance rather
+		 * than mutating in place. Used by the store to stamp the PK onto a
+		 * warehouse loaded from a row.
+		 *
+		 * @since 2.0.0
+		 *
+		 * @param int|null $storage_id storage row id, or null to clear it
+		 * @return self
+		 */
+		public function with_storage_id( ?int $storage_id ): self {
+			$clone             = clone $this;
+			$clone->storage_id = $storage_id;
+
+			return $clone;
 		}
 	}
 

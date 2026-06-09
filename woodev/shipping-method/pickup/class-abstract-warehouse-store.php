@@ -144,7 +144,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Abstract_Warehouse_
 				ARRAY_A
 			);
 
-			return is_array( $row ) ? $this->from_row( $row ) : null;
+			if ( ! is_array( $row ) ) {
+				return null;
+			}
+
+			return $this->from_row( $row )->with_storage_id( (int) $row[ $id_col ] );
 		}
 
 		/**
@@ -155,7 +159,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Abstract_Warehouse_
 		 * @return Warehouse[] all stored warehouses (possibly empty)
 		 */
 		public function all(): array {
-			$table = $this->get_table_name();
+			$table  = $this->get_table_name();
+			$id_col = $this->get_id_column();
 
 			$rows = $this->wpdb->get_results( "SELECT * FROM `{$table}`", ARRAY_A );
 
@@ -167,7 +172,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Abstract_Warehouse_
 
 			foreach ( $rows as $row ) {
 				if ( is_array( $row ) ) {
-					$warehouses[] = $this->from_row( $row );
+					$warehouses[] = $this->from_row( $row )->with_storage_id( (int) $row[ $id_col ] );
 				}
 			}
 
@@ -177,8 +182,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Abstract_Warehouse_
 		/**
 		 * Persists a warehouse, inserting or updating as needed.
 		 *
-		 * When {@see to_row()} carries a positive id column the existing row is
-		 * updated; otherwise a new row is inserted and its id returned.
+		 * The row id is read from {@see Warehouse::get_storage_id()}, never from the
+		 * row data: a positive value updates the existing row, while null/0 inserts a
+		 * new row and returns its generated id. The PK column is owned by the store
+		 * and is stripped from the row data before writing.
 		 *
 		 * @since 1.5.0
 		 *
@@ -191,7 +198,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Abstract_Warehouse_
 			$id_col = $this->get_id_column();
 			$data   = $this->to_row( $warehouse );
 
-			$existing_id = isset( $data[ $id_col ] ) ? (int) $data[ $id_col ] : 0;
+			// The PK column is owned by the store, never written from row data.
+			unset( $data[ $id_col ] );
+
+			$existing_id = $warehouse->get_storage_id() ?? 0;
 
 			if ( $existing_id > 0 ) {
 				$this->wpdb->update( $table, $data, [ $id_col => $existing_id ] );
