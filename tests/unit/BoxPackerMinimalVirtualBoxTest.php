@@ -107,7 +107,9 @@ namespace Woodev\Tests\Unit {
 		}
 
 		/**
-		 * P2: ten flat items stack to exactly their combined volume — no waste.
+		 * P2: ten flat identical items — grid search produces a cube-like result.
+		 * Old linear stacking: 10×10×50 (sausage, max_dim=50).
+		 * Grid search: 20×20×15 (cube-like, max_dim=20).
 		 */
 		public function test_ten_identical_items_physically_possible() {
 			$items = array();
@@ -117,7 +119,12 @@ namespace Woodev\Tests\Unit {
 
 			$box = $this->pack_virtual( $items );
 
-			$this->assertEqualsWithDelta( 5000.0, $box->get_volume(), 0.001 );
+			// Must hold all 10 items — volume >= sum of item volumes (10 × 500).
+			$this->assertGreaterThanOrEqual( 5000.0, $box->get_volume() );
+
+			// Must be cube-like: no single dimension should be a sausage (old result: 50).
+			$max_dim = max( $box->get_length(), $box->get_width(), $box->get_height() );
+			$this->assertLessThanOrEqual( 20.0, $max_dim );
 		}
 
 		/**

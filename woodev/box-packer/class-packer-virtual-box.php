@@ -55,37 +55,62 @@ if ( ! class_exists( 'Woodev_Packer_Virtual_Box' ) ) :
 		 * @return array Возвращает массив с размерами коробки: длина, ширина, высота.
 		 */
 		private function calculate_virtual_box_dimensions( array $items ): array {
-			// Items are pre-normalised: length >= width >= height.
-			// Stack items along one axis: that axis gets sum(), the other two get max().
-			// Try all three axis assignments; return the combination with minimum volume.
+			$n = count( $items );
 
+			// Sort each dimension independently so the largest values are assigned
+			// to whichever grid axis expands the least.
 			$lengths = array_map( fn( Woodev_Box_Packer_Item $i ) => $i->get_length(), $items );
 			$widths  = array_map( fn( Woodev_Box_Packer_Item $i ) => $i->get_width(), $items );
 			$heights = array_map( fn( Woodev_Box_Packer_Item $i ) => $i->get_height(), $items );
 
-			$candidates = [
-				// Option A: stack along height (smallest dim) - common case for flat items.
-				[ max( $lengths ), max( $widths ), array_sum( $heights ) ],
-				// Option B: stack along width (middle dim).
-				[ max( $lengths ), array_sum( $widths ), max( $heights ) ],
-				// Option C: stack along length (largest dim) - common case for long thin items.
-				[ array_sum( $lengths ), max( $widths ), max( $heights ) ],
-			];
+			rsort( $lengths );
+			rsort( $widths );
+			rsort( $heights );
 
-			// Initialise to first candidate so $best is never null (even if all volumes overflow to INF).
-			$best        = $candidates[0];
-			$best_volume = PHP_FLOAT_MAX;
+			// Prefix sums for O(1) slice-sum inside the double loop.
+			$sum_l = array_fill( 0, $n + 1, 0.0 );
+			$sum_w = array_fill( 0, $n + 1, 0.0 );
+			$sum_h = array_fill( 0, $n + 1, 0.0 );
+			for ( $i = 0; $i < $n; $i++ ) {
+				$sum_l[ $i + 1 ] = $sum_l[ $i ] + $lengths[ $i ];
+				$sum_w[ $i + 1 ] = $sum_w[ $i ] + $widths[ $i ];
+				$sum_h[ $i + 1 ] = $sum_h[ $i ] + $heights[ $i ];
+			}
 
-			foreach ( $candidates as $dims ) {
-				$volume = $dims[0] * $dims[1] * $dims[2];
-				if ( $volume < $best_volume ) {
-					$best_volume = $volume;
-					$best        = $dims;
+			$best_max_dim = PHP_FLOAT_MAX;
+			$best_volume  = PHP_FLOAT_MAX;
+			$best         = [ $sum_l[1], $sum_w[1], $sum_h[ $n ] ]; // (1,1,N) as initial fallback
+
+			// Enumerate every 3-D grid arrangement (a × b × c):
+			// a items placed side-by-side along L, b along W, c stacked along H.
+			// c is set to ceil(N / (a×b)) — the minimum layers needed to hold all items.
+			for ( $a = 1; $a <= $n; $a++ ) {
+				for ( $b = 1; $b <= (int) ceil( $n / $a ); $b++ ) {
+					$c = (int) ceil( $n / ( $a * $b ) );
+
+					$l = $sum_l[ $a ];
+					$w = $sum_w[ $b ];
+					$h = $sum_h[ $c ];
+
+					$max_dim = max( $l, $w, $h );
+					$volume  = $l * $w * $h;
+
+					// Primary: minimise max dimension (avoids sausage shapes and carrier
+					// oversized-parcel surcharges). Secondary: minimise volume.
+					if (
+						$max_dim < $best_max_dim - 1e-9 ||
+						( $max_dim < $best_max_dim + 1e-9 && $volume < $best_volume )
+					) {
+						$best_max_dim = $max_dim;
+						$best_volume  = $volume;
+						$best         = [ $l, $w, $h ];
+					}
 				}
 			}
 
-			// Each candidate already guarantees box_axis >= max(item_axis) by construction.
-			// Do NOT rsort: that would destroy axis-name alignment for non-normalised items.
+			// sum_l[$a] >= $lengths[0] = max(lengths), so each axis is automatically >=
+			// the per-item maximum for that axis. Do NOT re-sort the result — that would
+			// destroy L/W/H axis names for non-normalised custom item implementations.
 			return [
 				'length' => $best[0],
 				'width'  => $best[1],
