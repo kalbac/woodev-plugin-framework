@@ -54,6 +54,8 @@ physical to pack (virtual-only), or the WC-aware packer is unavailable — rate 
 dimensional data in that case.
 
 ## Related
+- [Capability-Gated Feature Seam](../wiki/capability-gated-feature-seam.md) — the broader pattern; this gotcha is its "base owns orchestration, not domain decisions" invariant
+- [ADR-006](../adr/006-capability-gated-feature-seam.md) — the decision adopting that pattern
 - `docs-internal/platform-v2-s3-shipping-rate-packing-spec.md` — the full design (Variant B)
 - `docs-internal/platform-v2-s2-boxpacker-spec.md` — the packer/dispatcher producing the parcels
 - [[contract-string-not-derivable]] — another "the plugin must supply carrier specifics" rule

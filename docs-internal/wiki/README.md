@@ -7,6 +7,7 @@ and provide reference material.
 ## Articles
 
 - [v2 extension-point pattern: WooCommerce hook registration](v2-extension-point-pattern.md) — WC hooks are registered by `Woocommerce_Plugin` from its own constructor; the platform-neutral base declares no WC-named method (the old `add_woocommerce_hooks()` stub was removed in P4 Task 5)
+- [Capability-Gated Feature Seam](capability-gated-feature-seam.md) — the reference pattern for optional behaviour: feature logic at a guaranteed invocation point, gated by `supports( FEATURE_* )`, delegating to a named seam, inert by default. `payment-gateway` is the exemplar; the s3 shipping box-packing seam is the newest instance (ADR-006)
 
 
 ## Article Format

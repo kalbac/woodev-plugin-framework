@@ -7,6 +7,7 @@
 | 003 | [Platform v2 Minimal Framework Resolver](003-platform-v2-minimal-framework-resolver.md) | accepted | 2026-05-29 |
 | 004 | [Platform v2 Explicit Plugin Loader API](004-platform-v2-plugin-loader-api.md) | accepted | 2026-05-29 |
 | 005 | [Platform v2 Clean-Break Policy](005-platform-v2-clean-break-policy.md) | accepted | 2026-06-03 |
+| 006 | [Capability-Gated Feature Seam](006-capability-gated-feature-seam.md) | accepted | 2026-06-09 |
 
 ## Creating an ADR
 
