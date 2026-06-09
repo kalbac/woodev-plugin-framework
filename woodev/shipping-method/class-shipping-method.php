@@ -302,16 +302,50 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		}
 
 		/**
-		 * Calculate shipping rate for the package.
+		 * Calculates the shipping rate for the package.
 		 *
-		 * Must be implemented by concrete shipping method classes.
+		 * Template method: when this method opts into {@see self::FEATURE_BOX_PACKING},
+		 * the cart contents are packed into parcels via {@see self::pack_package()} and
+		 * the (nullable) result is handed to {@see self::rate_package()}. Methods that do
+		 * not support box-packing receive a null packed result. This method is final
+		 * so the packing wiring cannot be bypassed — implement {@see self::rate_package()}
+		 * for carrier-specific rating, or hook {@see 'woodev_shipping_method_pre_calculate_rate'}
+		 * to short-circuit (e.g. a cache layer).
 		 *
-		 * @param array $package Package data
-		 *
-		 * @return Shipping_Rate|null Shipping rate object or null if no rate should be added
 		 * @since 1.4.0
+		 * @since 2.0.0 Now a final template; carrier logic moved to {@see self::rate_package()}.
+		 *
+		 * @param array $package Package data.
+		 * @return Shipping_Rate|null Shipping rate object, or null if no rate should be added.
 		 */
-		abstract protected function calculate_rate( array $package ): ?Shipping_Rate;
+		final protected function calculate_rate( array $package ): ?Shipping_Rate {
+
+			$packed = $this->supports( self::FEATURE_BOX_PACKING )
+				? $this->pack_package( $package )
+				: null;
+
+			return $this->rate_package( $package, $packed );
+		}
+
+		/**
+		 * Produces the shipping rate for a package.
+		 *
+		 * Implemented by concrete shipping methods. When this method supports
+		 * {@see self::FEATURE_BOX_PACKING} and the cart has physical contents, $packed
+		 * carries the parcels produced by the configured packing algorithm; the carrier
+		 * decides how to quote them (typically one multi-place request, not a sum of
+		 * per-parcel prices). $packed is null when this method does not support
+		 * box-packing, there is nothing physical to pack (e.g. a virtual-only cart),
+		 * or the WooCommerce-aware packer is unavailable; rate without dimensional
+		 * data in that case.
+		 *
+		 * @since 2.0.0
+		 *
+		 * @param array                      $package Package data.
+		 * @param \Woodev_Packer_Result|null $packed  Packed parcels, or null (see above).
+		 * @return Shipping_Rate|null Shipping rate object, or null if no rate should be added.
+		 */
+		abstract protected function rate_package( array $package, ?\Woodev_Packer_Result $packed ): ?Shipping_Rate;
 
 		/**
 		 * Check if method is available for package.

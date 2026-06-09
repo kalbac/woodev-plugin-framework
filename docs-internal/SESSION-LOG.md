@@ -1,4 +1,24 @@
 
+## Session 3 (2026-06-09) — packing seam → real rate-calc (single-seam template; PR open)
+
+> Operator-directed via the autodev pattern: design brainstormed with the operator (approved Variant B), atomic specs queued in `.autodev/queue/pending/`, worker subagents wrote the files, an adversarial silent-failure-hunter agent + a holistic code-reviewer agent stood in for the GPT-5.5 critic. Branch `feat/shipping-rate-packing-seam` off fresh `main`; PR open (NOT merged — awaits green GH Actions + operator).
+
+**Goal:** weave the session-2 box-packing seam into the shipping rate flow so a migrating plugin can pack the cart into parcels and rate by packed boxes.
+
+**Design (approved Variant B — single-seam template):** `Shipping_Method::calculate_rate()` became a **final** concrete template — when the method opts into `FEATURE_BOX_PACKING` it packs via `pack_package()` and hands the nullable `?\Woodev_Packer_Result` to a new abstract seam `rate_package( array $package, ?\Woodev_Packer_Result $packed ): ?Shipping_Rate`. The framework owns ONLY the packing wiring; **per-parcel price aggregation stays the carrier's job** — no built-in summing (Russian carriers quote a whole multi-place shipment in one request; a sum-of-parcels default would be a billing footgun and N API calls). Considered and rejected: per-parcel+base-sum (wrong prices), helper-only (nothing actually woven). `final` + single nullable param removes the "feature on, nothing happens" footgun; caching still uses the existing `woodev_shipping_method_pre_calculate_rate` filter.
+
+**What was done:**
+1. **Spec + queue (`063ba78`):** `docs-internal/platform-v2-s3-shipping-rate-packing-spec.md` + two atomic tasks.
+2. **Core seam (`71f8969`):** `calculate_rate` abstract→final template; new abstract `rate_package`; migrated the 5 in-repo subclasses (4 fixtures + 1 in-test) to the new signature, bodies verbatim. Internal-API rename only (v2 clean-break) — zero installed-site contract touched.
+3. **Validation gate (`51bb97a`):** 3 behavioral tests proving the wiring — box-packing on + physical cart → `rate_package` receives a `Woodev_Packer_Result`; virtual-only → `null`; feature off → `null`. A `false` sentinel + `assertNotSame` guard proves `rate_package` actually ran (a wiring failure can't pass as null). `WC_Shipping_Method` stub gained `supports()`/`$supports`.
+4. **Review polish (`bf3d7bd`):** adopted the holistic reviewer's optional items — `@since 2.0.0` note on the now-final `calculate_rate`, the WC-packer-absent null cause in the `rate_package` docblock, and an end-to-end multi-parcel test (2 lines packed SEPARATELY → 2 parcels at `rate_package`).
+
+**Reviews:** P1 contract-adjacent diff → adversarial silent-failure-hunter = **SAFE** (throw-paths pre-empted, `supports()` inherited from `WC_Shipping_Method`, FQCN type-sound, zero contract drift); it suggested `final`, adopted. Whole-feature holistic code-reviewer = **SHIP**, zero must-fix; 3 optional polish items all adopted.
+
+**Result:** `composer check` green — PHPCS clean, PHPStan 0, **263 tests / 823 assertions** (was 259). Removed the consumed `docs-internal/next-session-prompt-rate-calc.md`.
+
+**Next:** merge after green CI + operator decision. Deferred follow-up still open: `Abstract_Warehouse_Store::save()` doesn't check the wpdb return (failed UPDATE returns 200 with stale data).
+
 ## Session 2 (2026-06-09) — dispatcher production wiring + warehouse REST redesign (PR #22 MERGED)
 
 > Operator-directed session (not the conductor loop). Worker agents wrote files; an adversarial silent-failure-hunter agent stood in for the GPT-5.5 critic on contract-adjacent edits. Operator sequenced the work: cleanup → dispatcher integration → rest-warehouses redesign → merge.

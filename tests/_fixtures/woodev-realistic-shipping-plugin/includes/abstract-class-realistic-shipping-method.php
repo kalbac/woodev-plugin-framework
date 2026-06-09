@@ -37,10 +37,11 @@ abstract class Abstract_Woodev_Realistic_Shipping_Method extends Shipping_Method
 	/**
 	 * Calculates a deterministic fixture rate.
 	 *
-	 * @param array<string,mixed> $package Shipping package.
+	 * @param array<string,mixed>        $package Shipping package.
+	 * @param \Woodev_Packer_Result|null $packed  Packed parcels, or null.
 	 * @return Shipping_Rate|null
 	 */
-	protected function calculate_rate( array $package ): ?Shipping_Rate {
+	protected function rate_package( array $package, ?\Woodev_Packer_Result $packed ): ?Shipping_Rate {
 		return new Shipping_Rate(
 			$this->id,
 			$this->get_rate_id(),
