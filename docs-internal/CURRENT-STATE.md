@@ -1,5 +1,12 @@
 # Current State — Woodev Plugin Framework
-> Last updated: 2026-06-08 (autodev: S1 complete + holistic-review remediation; **PR #20 CI now fully GREEN**; 33 done, 1 deferred; composer GREEN 203 tests)
+> Last updated: 2026-06-09 (autodev: S2 box-packer complete; **PR #21 open** — P1 WC-neutral + P2 minimal-virtual-box + P3 tests; 3/3 tasks done; composer GREEN)
+
+## Autodev digest — 2026-06-09 (S2 box-packer complete; branch `autodev/loop-s2`; **PR #21 open**)
+- **S2 complete: 3/3 tasks done.** P1 WC-neutral single-box, P2 minimal-virtual-box algorithm, P3 validation gate tests.
+- **Two adversarial-critic-caught bugs fixed in P2:** (1) rsort breaks axis-name alignment for non-normalized items; (2) `$best=null` + `PHP_FLOAT_MAX` threshold → INF volumes never update `$best` → null dereference. Both fixed before commit. See gotchas below.
+- **Key commits:** `031e9e9` (P1), `7abd7a4` (P2), `05deea8` (P3). `composer check` green.
+- **PR #21 open to `main`.** Do NOT auto-merge — operator decides.
+- **Next:** S3 TBD (operator defines). Deferred: `s1-p4-rest-warehouses` (warehouse id-conflation → React rework).
 
 ## PR #20 CI fixed — fully GREEN (2026-06-08, operator-directed; NOT merged)
 > The PR's GitHub Actions had been failing. Investigated + fixed **only the CI failures**; the deferred `rest-warehouses` controller + pre-existing `.gitignore`/`.serena` working-tree changes were left untouched. Run `27110768183` all green. **Do NOT auto-merge** (operator decides).

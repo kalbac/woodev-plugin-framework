@@ -1,4 +1,20 @@
 
+## S2 Box-Packer complete — 2026-06-09 (branch `autodev/loop-s2`; PR #21)
+
+> Autodev adversarial loop session. All 3 S2 tasks committed, PR #21 open to `main`.
+
+**What was done:**
+- P1 `031e9e9`: Remove `wc_list_pluck()` from `Woodev_Packer_Single_Box::get_items_dimensions()` → `array_map()`. Box-packer core no longer requires WooCommerce.
+- P2 `7abd7a4`: Replace per-axis `max()` calculation in `calculate_virtual_box_dimensions()` with 3-option axis-assignment search. Returns minimum-volume enclosing box. Two bugs caught by GPT-5.5 adversarial critic before commit (see gotchas).
+- P3 `05deea8`: 6-test `BoxPackerMinimalVirtualBoxTest.php` validates P1 (WC-free) + P2 (axis-alignment invariant, PLANS.md §3.5.1 examples, volume correctness).
+
+**GPT-5.5 critic catches (both fixed before commit):**
+1. `rsort($best)` on the result array destroys axis-name alignment for non-normalized items (e.g. item `l=1,w=10,h=1` → Option A gives `[1,10,1]` → after rsort `[10,1,1]` → `box_width=1 < item_width=10`). Removed rsort entirely — candidates already guarantee axis alignment by construction.
+2. `$best = null; $best_volume = PHP_FLOAT_MAX` — if all volumes overflow to INF, `INF < PHP_FLOAT_MAX = false` → `$best` never updated → null dereference at `$best[0]`. Fixed: `$best = $candidates[0]` initialization.
+
+**Build result:** `composer check` green (PHPCS, PHPStan 0, all unit tests pass).
+**Escalations:** 0 open for S2 (all resolved before commit). Deferred `s1-p4-rest-warehouses` stays parked.
+
 ## PR #20 CI fixed — fully GREEN (2026-06-08, operator-directed; NOT merged)
 
 > Branch `autodev/loop-bootstrap`. PR #20's GitHub Actions were failing. Operator directed:

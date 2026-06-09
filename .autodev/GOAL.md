@@ -10,7 +10,7 @@ A Claude worker makes one file-disjoint change per fresh session; a non-Claude c
 + mutation-check) closes reversible/guarded commits autonomously; everything else
 escalates to the operator.
 
-**Why:** Move fast on the Platform v2 rewrite (S1 shipping and the later per-plugin
+**Why:** Move fast on the Platform v2 rewrite (S1 done; S2 box-packer and the later per-plugin
 migrations) without ever breaking an installed-site data contract — the loop's
 adversarial gate is the safety net that lets autonomy be trusted.
 
@@ -24,7 +24,7 @@ The loop only *executes* tasks from `queue/pending/`; it does not invent them.
 4. `docs-internal/autodev-loop-runbook.md` — the full design of this loop.
 
 ## Boundaries of this loop
-- Branch: `autodev/loop-bootstrap` (never `main`). All loop artefacts live under
+- Branch: `autodev/loop-s2` (never `main`). All loop artefacts live under
   `.autodev/` and `tools/autodev/` — additive, no collision with other workstreams.
-- Deployment target: **S1 (shipping)**, a module with dozens of tasks. NOT the S0 tail.
+- Deployment target: **S2 (box-packer)** — 3 tasks. S1 (shipping, 33 done + 1 deferred) merged to main 2026-06-08.
 - The conductor never reasons. All intelligence is in the worker/critic subprocesses.
