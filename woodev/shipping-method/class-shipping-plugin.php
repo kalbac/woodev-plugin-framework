@@ -180,9 +180,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			require_once $path . '/admin/class-shipping-admin-order.php';
 			require_once $path . '/admin/class-warehouse-admin.php';
 
-			// pickup-points REST controller base (the warehouses controller is
-			// deferred — React rework — and is NOT loaded here)
+			// pickup-points + warehouses REST controller bases
 			require_once $path . '/rest-api/abstract-pickup-points-controller.php';
+			require_once $path . '/rest-api/abstract-warehouses-controller.php';
 		}
 
 		/**
