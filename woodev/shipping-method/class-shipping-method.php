@@ -313,6 +313,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		 * to short-circuit (e.g. a cache layer).
 		 *
 		 * @since 1.4.0
+		 * @since 2.0.0 Now a final template; carrier logic moved to {@see self::rate_package()}.
 		 *
 		 * @param array $package Package data.
 		 * @return Shipping_Rate|null Shipping rate object, or null if no rate should be added.
@@ -334,7 +335,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		 * carries the parcels produced by the configured packing algorithm; the carrier
 		 * decides how to quote them (typically one multi-place request, not a sum of
 		 * per-parcel prices). $packed is null when this method does not support
-		 * box-packing OR there is nothing physical to pack (e.g. a virtual-only cart).
+		 * box-packing, there is nothing physical to pack (e.g. a virtual-only cart),
+		 * or the WooCommerce-aware packer is unavailable; rate without dimensional
+		 * data in that case.
 		 *
 		 * @since 2.0.0
 		 *

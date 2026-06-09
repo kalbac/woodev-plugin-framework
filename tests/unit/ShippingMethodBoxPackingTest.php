@@ -370,6 +370,48 @@ namespace Woodev\Tests\Unit {
 			$this->assertNotSame( false, $method->received_packed );
 			$this->assertNull( $method->received_packed );
 		}
+
+		/**
+		 * A multi-line physical cart packed "separately" reaches rate_package() as a
+		 * multi-parcel result, proving the packages[] multi-element path carriers rely
+		 * on flows end-to-end through the template.
+		 *
+		 * Runs in a separate process so the conditionally-defined WC_Product stub is
+		 * declared and aliased in a clean class table (Brain Monkey class pollution).
+		 *
+		 * @runInSeparateProcess
+		 * @preserveGlobalState disabled
+		 */
+		public function test_calculate_rate_delivers_multiple_parcels_to_rate_package(): void {
+			$first         = new \ShippingMethodBoxPackingTest_WC_Product_Stub();
+			$first->length = 10.0;
+			$first->width  = 5.0;
+			$first->height = 3.0;
+			$first->weight = 1.5;
+
+			$second         = new \ShippingMethodBoxPackingTest_WC_Product_Stub();
+			$second->length = 20.0;
+			$second->width  = 10.0;
+			$second->height = 8.0;
+			$second->weight = 2.0;
+
+			$method           = $this->make_method( [ 'packing_algorithm' => \Woodev_Packer_Dispatcher::ALGORITHM_SEPARATELY ] );
+			$method->supports = [ \Woodev\Framework\Shipping\Shipping_Method::FEATURE_BOX_PACKING ];
+
+			$package = [
+				'contents' => [
+					'first_key'  => [ 'data' => $first, 'quantity' => 1 ],
+					'second_key' => [ 'data' => $second, 'quantity' => 1 ],
+				],
+			];
+
+			$this->invoke( $method, 'calculate_rate', $package );
+
+			$this->assertInstanceOf( \Woodev_Packer_Result::class, $method->received_packed );
+			$this->assertSame( 2, $method->received_packed->get_package_count() );
+			$this->assertCount( 2, $method->received_packed->to_array()['packages'] );
+			$this->assertSame( 3.5, $method->received_packed->get_total_weight() );
+		}
 	}
 
 }
