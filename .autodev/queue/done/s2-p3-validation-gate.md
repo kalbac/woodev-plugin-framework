@@ -47,8 +47,10 @@ that the NEW result volume ≥ sum of item volumes:
 10 items of (10,10,5). Result volume must be ≥ 10 × 500 = 5000.
 Assert result volume == 5000.
 
-### 5. test_result_dimensions_sorted_descending()
-Several items with mixed sizes. Assert `length ≥ width ≥ height` on every result.
+### 5. test_result_dimensions_axis_aligned()
+Several items with mixed sizes. Assert each box axis accommodates all items on that axis:
+`get_length() >= max(item_lengths)`, `get_width() >= max(item_widths)`, `get_height() >= max(item_heights)`.
+(No rsort on the result — axis names are preserved for interface correctness.)
 
 ### 6. test_single_box_pack_without_woocommerce()
 Create a `Woodev_Packer_Single_Box`, add 3 items of (10,10,5), call `pack()`.
@@ -67,3 +69,5 @@ functions are NOT stubbed — the test must pass without them.
 ## Spec reference
 
 `docs-internal/platform-v2-s2-boxpacker-spec.md §P3`
+
+<!-- committed: 05deea8 -->
