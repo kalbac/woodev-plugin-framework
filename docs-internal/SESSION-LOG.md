@@ -1,4 +1,28 @@
 
+## Session 2 (2026-06-09) — dispatcher production wiring + warehouse REST redesign (PR #22 MERGED)
+
+> Operator-directed session (not the conductor loop). Worker agents wrote files; an adversarial silent-failure-hunter agent stood in for the GPT-5.5 critic on contract-adjacent edits. Operator sequenced the work: cleanup → dispatcher integration → rest-warehouses redesign → merge.
+
+**What was done (PR #22, squash-merged to `main` as `176ab82`):**
+1. **Cleanup (`da3f7cf`, `bc72cda`):** S2 queue pending→done, `s2-p2` escalation resolved, Serena config regen synced, `.mcp.json` gitignored.
+2. **Box-packer dispatcher integration (`662bff5`):** the dispatcher + WC subclass + contract classes were never `require`d by `Woodev_Plugin::includes()` (only the Composer test classmap saw them → prod fatal). Wired the 5 platform-neutral files unconditionally + `Woodev_WC_Packer_Dispatcher` behind `is_woocommerce_active()`. Added a `Shipping_Method` packing seam: `FEATURE_BOX_PACKING` opt-in + `packing_algorithm` setting + `pack_package()` / `get_packing_algorithm()` (validates the stored algorithm, falls back to virtual).
+3. **Warehouse model fix (`e3f9e7d`):** `Warehouse` VO gained a nullable `storage_id` distinct from the carrier `get_id()`; `Abstract_Warehouse_Store` stamps it from the PK in `get()/all()` and reads it in `save()`. This fixed a **latent always-insert bug** (save could never update, because the VO never carried the row id).
+4. **Warehouses controller redesign + wiring (`1033c62`):** rewrote the previously-deferred `Abstract_Warehouses_Controller` (critic 0.99). Route `(?P<id>\d+)` = storage row id; body `code` = carrier id; the route id is never folded into the carrier id. `update_item` is **read-merge** (omitted fields preserved). Three subclass seams add carrier-specific typed fields, round-tripped through the `raw` escape hatch. Wired into `Shipping_Plugin::includes()`. `WarehousesControllerDataPreservationTest` drives a Yandex-shaped fixture (table `wc_yandex_delivery_warehouses`, `station_id`, ns `yandex-delivery`) proving partial-update preservation + id separation + create.
+5. **Escalation bookkeeping (`6b870fd`):** moved `s1-p4-rest-warehouses` active→done, marked the escalation RESOLVED.
+6. **CI fix (`afb6a7c`):** version-guarded `ReflectionMethod::setAccessible()` for PHP < 8.1 in the two new tests.
+
+**Adversarial critic verdicts:** both feature changes — SAFE TO COMMIT, no blockers. The critic confirmed no residual id conflation, genuine read-merge preservation (correct absent-vs-zero handling), and that the `save()` change *fixes* a latent bug.
+
+**Getting PR #22 green (two CI lessons):**
+- CI initially never ran: PR #21 had been **squash-merged**, so `autodev/loop-s2` carried the unsquashed history and **conflicted with `main`** (`mergeStateStatus: DIRTY`). GitHub doesn't run `pull_request` workflows on a conflicting PR (only `pull_request_target`/PR-Triage). **Rebased** the 6 commits onto `origin/main` → CI fired. Gotcha `pr-conflict-skips-pull-request-ci`.
+- Unit Tests failed on PHP 7.4/8.0: 8 `ReflectionException`s — protected methods invoked via reflection without `setAccessible(true)` (mandatory < 8.1; my local PHP 8.5 hid it). Guarded with `PHP_VERSION_ID < 80100`. Gotcha `reflection-setaccessible-version-guard` (recurred).
+
+**Result:** 233 → **259 unit tests / 812 assertions**, PHPStan 0, PHPCS clean; full CI matrix green (Unit PHP 7.4–8.3, Integration WP 6.4–latest × WC 8.5.1–latest). PR #22 MERGED.
+
+**Known follow-up:** `Warehouse_Store::save()` ignores the wpdb return value — a failed UPDATE returns 200 with stale data (newly reachable). Deferred (hardening would change the `save()` contract).
+
+**Next session:** packing seam → real rate-calc, **within the autodev-loop** + a GPT-5.5 codex critic pass. Prompt: `docs-internal/next-session-prompt-rate-calc.md`.
+
 ## S2 Box-Packer complete — 2026-06-09 (branch `autodev/loop-s2`; PR #21)
 
 > Autodev adversarial loop session. All 3 S2 tasks committed, PR #21 open to `main`.

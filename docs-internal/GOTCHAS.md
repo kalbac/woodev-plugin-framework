@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
-> **29 atomic gotchas in 14 namespaces** — update count when adding/removing.
-> Last updated: 2026-06-09 (S2 box-packer: 2 gotchas — virtual-box rsort axis-alignment, null-best INF overflow)
+> **31 atomic gotchas in 14 namespaces** — update count when adding/removing.
+> Last updated: 2026-06-09 (session 2: 3 gotchas — dispatcher files unwired in includes(), warehouse storage-id vs carrier-id, PR conflict skips pull_request CI)
 
 ## Index
 
@@ -40,7 +40,7 @@
 - [woocommerce/shipping-api-broken-contract] `Woodev\Framework\Shipping\Shipping_API` interface references 6 types (Rate_Response, Order_Response, Tracking_Response, Pickup_Points_Response, Exportable_Order, Shipping_Exception) that don't exist in the framework — masked by blanket PHPStan ignore → [gotchas/shipping-api-broken-contract.md](gotchas/shipping-api-broken-contract.md) (2026-06-01)
 
 ### [framework/*] — Framework internals
-<!-- No entries yet -->
+- [framework/includes-wiring] New framework class files must be `require_once`'d in the right `includes()` (dependency order; WC files gated) — the Composer classmap loads them in tests but production fatals if unwired → [gotchas/dispatcher-files-unwired-in-includes.md](gotchas/dispatcher-files-unwired-in-includes.md) (session 2)
 
 ### [testing/*] — Testing patterns
 - [testing/integration] Integration fixtures need the framework mapped at the bootstrap's load path (`woodev-framework/tests/_fixtures/*/woodev` in `.wp-env.json`), not just the `wp-content/plugins/*` mount — the v2 resolver requires each fixture's bundled `woodev/class-plugin.php` → [gotchas/wpenv-resolver-fixture-mapping.md](gotchas/wpenv-resolver-fixture-mapping.md) (2026-06-08)
@@ -57,6 +57,7 @@
 - [build/ci] A failing early CI job (e.g. Lint) silently SKIPS jobs that `needs:` it — skipped ≠ failed, so the suite looks green while dependent jobs (the whole Unit matrix here) never run; fixing the gate REVEALS masked failures → [gotchas/ci-failing-gate-skips-dependent-jobs.md](gotchas/ci-failing-gate-skips-dependent-jobs.md) (2026-06-08)
 - [build/ci] `composer audit --no-dev` errors "No installed packages found" for a library with no runtime deps — use `composer audit --locked` → [gotchas/composer-audit-no-prod-deps.md](gotchas/composer-audit-no-prod-deps.md) (2026-06-08)
 - [build/ci] markdownlint-cli2 ignores `.markdownlintignore` when globs are passed as CLI args — manage exclusions in the workflow glob; MD051 disabled (can't validate Cyrillic anchors) → [gotchas/markdownlint-ignorefile-vs-globs.md](gotchas/markdownlint-ignorefile-vs-globs.md) (2026-06-08)
+- [build/ci] A PR that conflicts with base (`mergeStateStatus: DIRTY`) runs NO `pull_request` CI — only `pull_request_target`; "all green" can mean the matrix never ran. Check `gh pr view --json mergeable,mergeStateStatus`; rebase onto the new base after a squash-merge → [gotchas/pr-conflict-skips-pull-request-ci.md](gotchas/pr-conflict-skips-pull-request-ci.md) (session 2)
 
 ### [box-packer/*] — Box-packer algorithm (S2)
 - [box-packer/virtual-box-rsort-axis-alignment] `rsort()` on the axis-assignment result destroys axis-name alignment for non-normalized items — Option A `[1,10,1]` after rsort → `[10,1,1]` → `box_width=1 < item_width=10` → packing rejects item. Never rsort the candidate; each option guarantees axis alignment by construction → [gotchas/virtual-box-rsort-axis-alignment.md](gotchas/virtual-box-rsort-axis-alignment.md) (2026-06-09)
@@ -65,6 +66,7 @@
 ### [shipping/*] — Shipping module (S1)
 - [shipping/contracts] Session key ≠ order-meta prefix — composing one key for both checkout session and order meta breaks installed-site data (Yandex: `chosen_yandex_pickup_point` vs `_yandex_delivery_`) → [gotchas/session-key-vs-order-meta-prefix.md](gotchas/session-key-vs-order-meta-prefix.md) (2026-06-06)
 - [shipping/contracts] Installed-site contract strings (AJAX action, admin slug, meta key…) are NOT derivable from the plugin id by convention — the plugin must supply each; edostavka `wc_edostavka_orders` vs yandex `wc-yandex-orders` proves no single rule → [gotchas/contract-string-not-derivable.md](gotchas/contract-string-not-derivable.md) (2026-06-06)
+- [shipping/warehouse-identity] Warehouse storage row id ≠ carrier-unique id — VO carries a nullable `storage_id` (DB PK) separate from `get_id()` (carrier code); store keys CRUD on the row id, never fold the REST route id into `get_id()`, and use read-merge on update → [gotchas/warehouse-storage-id-vs-carrier-id.md](gotchas/warehouse-storage-id-vs-carrier-id.md) (session 2)
 
 ### [autodev/*] — Adversarial dev loop tooling
 - [autodev/circuit-breaker] Refund the attempt on EVERY external pause (worker AND critic 429), not just the worker's — an unrefunded critic rate-limit marches a DONE task into a false poison → [gotchas/autodev-attempt-refund-symmetry.md](gotchas/autodev-attempt-refund-symmetry.md) (2026-06-06)
