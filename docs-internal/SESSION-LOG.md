@@ -1,4 +1,25 @@
 
+## Session 4 (2026-06-10) — shipping conformance audit vs Capability-Gated Feature Seam → predicate wrappers (PR #24 open)
+
+> Operator-directed via the autodev pattern: Phase-1 audit done directly, scope brainstormed with the operator (AskUserQuestion), atomic specs queued in `.autodev/queue/pending/`, worker subagents wrote the files, an adversarial critic subagent reviewed the contract-adjacent diff + a holistic critic reviewed the whole feature (GPT-5.5 stand-ins). Branch `feat/shipping-supports-predicates` off fresh `main`; PR #24 open (NOT merged — awaits green GH Actions + operator).
+
+**Goal:** AUDIT-then-remediate `woodev/shipping-method/` against the "Capability-Gated Feature Seam" pattern (wiki + ADR-006), then point-fix only what's justified. Not a blind refactor.
+
+**Phase 1 — audit (`docs-internal/reviews/shipping-pattern-conformance-audit-2026-06-10.md`):** mapped every optional behaviour as ✅ conforming / 🟡 justified deviation / 🔵 convention. **Headline: overwhelmingly conforming, zero hard gaps.** The box-packing seam (s3) is a textbook instance; shipping-class gating conforms; `FEATURE_SHIPPING_ZONES`/`FEATURE_INSTANCE_SETTINGS` are WC-native (consumed by WC core), `FEATURE_SHIPPING_CLASSES`/`FEATURE_BOX_PACKING` framework-owned — a clean dictionary split. Every standalone subsystem (REST/AJAX/checkout/webhook/admin/integration) is wired via null-by-default / self-gating-handler = placement-#2 justified deviation; forcing the pattern there would be a regress. Two 🔵 convention deviations actionable: **M7** (no `supports_*()` predicate wrappers despite each framework feature being checked at 2 sites — payment-gateway wraps via `supports_refunds/voids/tokenization`) and **P6** (`Shipping_Plugin::supports()` declared+populated but zero in-framework consumers and no `FEATURE_*` constants — verified via `find_referencing_symbols` → `{}`).
+
+**Phase 2 — scope (operator):** A (predicates) + C (document P6). P6 handling = document as host-facing surface, **no speculative constants** (operator declined that option). Dictionary alignment (B) = no-op (already clean). Subsystems (D) = do not touch.
+
+**What was done:**
+1. **Audit + specs (`779ec6c`):** the conformance report + two atomic queue tasks.
+2. **s4-p1 predicates (`7287c89`):** added public `supports_box_packing()` / `supports_shipping_classes()` on `Shipping_Method`; routed the 4 raw `$this->supports(self::FEATURE_*)` sites through them (init_form_fields x2, calculate_rate, is_available_for_package). +2 unit tests (public predicates, no reflection). Internal-API only — no `FEATURE_*`/hook/option-key/method-id touched; `add_support()` + `woodev_shipping_method_{id}_supports_{name}` byte-identical.
+3. **s4-p2 docs (`b1978e7`):** documented `Shipping_Plugin::supports()` + `$args['supports']` as the deliberate host-facing, plugin-scoped capability surface (docblock-only).
+
+**Reviews:** s4-p1 adversarial critic = **SAFE-WITH-NITS**, zero must-fix (one cosmetic double-blank-line, fixed pre-commit). Whole-feature holistic critic = **SHIP**, zero must-fix (spot-checked audit file:line claims against source — all held; confirmed no over-refactor, no contract drift, no name clash on the new public methods). s4-p2 docs-only → self-reviewed diff (comment-only).
+
+**Result:** `composer check` green — PHPCS 152/152, PHPStan 0, **265 tests / 827 assertions** (was 263). PR #24 `mergeable: MERGEABLE / UNSTABLE` (CI running, not DIRTY). Removed the consumed `docs-internal/next-session-prompt-shipping-pattern-audit.md`.
+
+**Next:** merge after green CI + operator decision. Deferred follow-up still open: `Abstract_Warehouse_Store::save()` doesn't check the wpdb return value.
+
 ## Session 3 (2026-06-09) — packing seam → real rate-calc (single-seam template; PR open)
 
 > Operator-directed via the autodev pattern: design brainstormed with the operator (approved Variant B), atomic specs queued in `.autodev/queue/pending/`, worker subagents wrote the files, an adversarial silent-failure-hunter agent + a holistic code-reviewer agent stood in for the GPT-5.5 critic. Branch `feat/shipping-rate-packing-seam` off fresh `main`; PR open (NOT merged — awaits green GH Actions + operator).
