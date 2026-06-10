@@ -683,7 +683,7 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 				$custom_actions['review'] = sprintf( '<a href="%s">%s</a>', $this->get_reviews_url(), 'Оставить отзыв' );
 			}
 
-			if ( $this->get_license_instance()->get_license_settings_url() ) {
+			if ( $this->is_need_license() && $this->get_license_instance()->get_license_settings_url() ) {
 				$license_text              = $this->get_license_instance()->is_license_valid() ? 'Лицензия' : 'Указать лицензию';
 				$custom_actions['license'] = sprintf( '<a href="%s">%s</a>', $this->get_license_instance()->get_license_settings_url(), esc_html( $license_text ) );
 			}

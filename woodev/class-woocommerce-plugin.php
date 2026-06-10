@@ -157,7 +157,7 @@ if ( ! class_exists( Woocommerce_Plugin::class, false ) ) :
 		 * @return void
 		 */
 		public function add_class_form_wrap_start() {
-			if ( $this->is_plugin_settings() && ! $this->get_license_instance()->is_license_valid() ) {
+			if ( $this->is_need_license() && $this->is_plugin_settings() && ! $this->get_license_instance()->is_license_valid() ) {
 				echo '<div class="woodev-licence-need">';
 			}
 		}
@@ -173,7 +173,7 @@ if ( ! class_exists( Woocommerce_Plugin::class, false ) ) :
 		 * @return void
 		 */
 		public function add_class_form_wrap_end() {
-			if ( $this->is_plugin_settings() && ! $this->get_license_instance()->is_license_valid() ) {
+			if ( $this->is_need_license() && $this->is_plugin_settings() && ! $this->get_license_instance()->is_license_valid() ) {
 				echo '</div><!-- .woodev-licence-need end-->';
 			}
 		}

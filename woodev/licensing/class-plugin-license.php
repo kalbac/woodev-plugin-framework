@@ -208,6 +208,11 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 		 */
 		public function activate_license() {
 
+			// License-free plugins never process license activation (presentation flag — see Woodev_Plugin::is_need_license()).
+			if ( ! $this->plugin->is_need_license() ) {
+				return;
+			}
+
 			if ( ! isset( $_POST['option_page'] ) || 'woodev_license_fields_group' !== $_POST['option_page'] ) {
 				return;
 			}
@@ -271,6 +276,11 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 
 			if ( $deprecated ) {
 				_deprecated_argument( __METHOD__, '1.2.1', 'The AJAX parameter is not using anymore.' );
+			}
+
+			// License-free plugins never process license deactivation (presentation flag — see Woodev_Plugin::is_need_license()).
+			if ( ! $this->plugin->is_need_license() ) {
+				return;
 			}
 
 			if ( ! isset( $_POST['option_page'] ) || 'woodev_license_fields_group' !== $_POST['option_page'] ) {
@@ -435,6 +445,10 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 
 		public function notices() {
 
+			if ( ! $this->plugin->is_need_license() ) {
+				return;
+			}
+
 			if ( empty( $this->license_key ) ) {
 				return;
 			}
@@ -474,7 +488,7 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 				return;
 			}
 
-			if ( ! $this->woodev_license || 'valid' !== $this->woodev_license->license ) {
+			if ( $this->plugin->is_need_license() && ( ! $this->woodev_license || 'valid' !== $this->woodev_license->license ) ) {
 				echo '&nbsp;&nbsp;<strong><a href="' . $this->get_license_settings_url() . '" style="color: #aa0000;">' . __( 'Enter valid license key for automatic updates.', 'woodev-plugin-framework' ) . '</a></strong>';
 			}
 
