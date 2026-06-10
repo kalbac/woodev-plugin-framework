@@ -3,6 +3,25 @@
 > Features and improvements deferred for later versions.
 > Format: what's done | what's missing | why deferred | when to implement
 
+## Fable 5 Architecture Review — triaged findings (2026-06-10, s5)
+
+> Source: `docs-internal/reviews/fable5-architecture-review-2026-06-10.md` (single Fable 5 agent, fresh-eyes architecture/direction review). **Operator decision (s5): record now, do not fix now.** Each item carries a trigger-stage; convert to an autodev atomic task when its trigger fires. **Verification:** B-1/B-2/B-3 verified against source this session (file:line in the report); B-4…B-12 are plausible-pending-verification — **re-verify before acting** (never apply an external audit blindly).
+
+| ID | Sev | Trigger-stage | Action when triggered |
+|----|-----|---------------|------------------------|
+| **B-1** mixed v1/v2 fleet → site-wide fatal at the bootstrap rendezvous | **Critical** | **BEFORE first production plugin rewrite ships** | Soft-fail probe (`method_exists`) in the v2 entry-file template + a `register_plugin()` tombstone on the v2 bootstrap that records the legacy plugin into the incompatible list + admin notice. Fixture test both directions. Site-availability armor — does NOT violate clean-break (ADR-005). |
+| **B-2** loader-protocol is first-loaded-wins + hard-rejects unknown vocabulary | High | **before S4 (EDD)** | (1) document the bootstrap public surface + loader-definition schema as a frozen, additive-only **wire-protocol contract between vendored copies** (new contract category); (2) capability/platform validation → warn-and-ignore unknown strings (forward tolerance), keep hard-reject only for structurally malformed defs; (3) drop the `PLATFORM_EDD` hard-reject; (4) optional protocol-version constant. |
+| **B-3** keyless/free-product updates can't work: `load_updater()` requires a key | High | **with S3 §4 signing impl** | Rework `load_updater()` to always construct `Woodev_Plugin_Updater` (empty-key polling is harmless; server tolerates it); align the `is_admin()‖WP_CLI` gate with the cron path; regression test "no key → updater constructed → claim consumed". **Also correct both S3 specs** (§4.3 premise) — the fix is framework-side only; woodev-core needs no change. |
+| **B-4** Ed25519 protects only the license-free path, not paid-status piracy | Medium | S3 §4 (doc) | One paragraph in spec §1.2 naming the asymmetry (paid status is a plain WP option; crypto only gates the free short-circuit). Keep enforcement server-side. |
+| **B-5** signing-key ops: lazy regen, DB-resident secret, no rotation/`kid` | Medium | S3 §4 + woodev-core ops | Refuse-to-sign + alert on key absence (explicit one-time generation, not lazy); offline keypair backup; add optional `kid` to the envelope + let the framework accept a short list of embedded pubkeys (flag-day-free rotation). |
+| **B-6** `site` claim binding has no defined normalization | Medium | S3 §4 | Define one normalization fn (e.g. `untrailingslashit(home_url())`, lowercase scheme+host), use byte-identically on send/sign/verify; extend the published test vector; decide multisite semantics. |
+| **B-7** licensing UI is WooCommerce-only while licensing is a base service | Medium | **S3 sub-stage 2 (acceptance criterion)** | "License page renders with WooCommerce absent" becomes an explicit S3.2 acceptance criterion (React rework is the natural fix). Record limitation in tracker so S4 doesn't start before it. |
+| **B-8** S3.2 React page will de-facto define the S5 React architecture | Medium | **before S3.2 coding** | One-page "React baseline" decision (PLANS §6: WP/WC-bundled React; `@wordpress/scripts` vs Vite; `apiFetch`+REST conventions; component location in a vendored framework; `@wordpress/element` availability by WP version). Treat the license page as the S5 pilot explicitly. |
+| **B-9** base `includes()` eagerly loads every module for every plugin | Medium | ongoing convention | Do NOT retro-split (churn > value). Policy for NEW modules: include behind capability/feature checks (the `is_woocommerce_active()` packer-dispatcher gate is the model). Revisit only if S4/S5 measurably suffer. |
+| **B-10** `invoke_plugin()` never validates main class vs declared platform/capabilities | Medium-Low | during plugin migrations | Cheap post-instantiation `instanceof` check → mismatches into `invalid_loader_definitions` (or `_doing_it_wrong` in debug). One test per capability. ADR-004 already anticipates this. |
+| **B-11** data-contract enforcement at rewrite time is prose, not machine | Medium | **first real plugin migration** | Convert that plugin's checklist into an executable contract test in its repo (assert exact option keys / method ids / cron hooks / meta prefixes — `YandexPilotFixtureTest` is the template); "contract test green" becomes migration definition-of-done. One-time template, reused ~12×. |
+| **B-12** `is_active()` returns true with no license data | Low | S3.2 (docblock) | Clarify the three distinct "true" meanings (genuinely-active vs not-known-bad vs license-free) in docblocks during S3.2; pre-existing, do not change behavior. |
+
 ## Technical Debt
 
 ### PHPStan Baseline Cleanup

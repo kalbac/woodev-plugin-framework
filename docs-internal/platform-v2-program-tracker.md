@@ -37,6 +37,10 @@
 - Validation deviation (operator): P2 gate uses an **in-repo fixture**, not a live edostavka rewrite → branch proves architecture, not live-data; data preservation enforced per-plugin at rewrite time.
 - Review: external GPT-5.5 audit at key gates (P2/P3/P4/P6 + module gates); GPT-5.5 also = second opinion on contested design forks.
 
+## Fable 5 architecture review (2026-06-10) + autodev model shift
+- **Fresh-eyes architecture review done** (`docs-internal/reviews/fable5-architecture-review-2026-06-10.md`). 12 findings triaged into `FUTURE-BACKLOG.md` → "Fable 5 Architecture Review" with trigger-stages. **Operator: record now, fix per-trigger.** Top-3 (B-1 Critical mixed-fleet WSOD, B-2 loader-protocol forward-compat, B-3 keyless-updater premise) **verified against source**; B-4…B-12 re-verify before acting. **B-1 is a hard gate before the first production plugin rewrite ships.**
+- **Autodev model re-tiering (operator decision s5):** orchestrator = **Fable 5 high**; workers/executors = **Haiku / Sonnet 4.6 / Opus 4.8** by task complexity; critic = **GPT-5.5 high** (later 5.6). Orchestrator prompt: `docs-internal/fable5-autodev-orchestrator-prompt.md`. Next autodev runs use this tiering.
+
 ## Open follow-ups (out of current scope)
 - `class-payment-gateway.php` (~2,378 lines) trait extraction — post-split debt.
 - godaddy-fork study (Traits/Enums/Abilities, PLANS.md §4) — candidate GPT-5.5 research delegation before S1.
