@@ -50,7 +50,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		 * @param array  $args {
 		 *      Plugin configuration arguments.
 		 *
-		 *     @type string[] $supports          Feature flags (see FEATURE_* constants)
+		 *     @type string[] $supports          Plugin-scoped feature flags consumed by the host plugin (no framework-side consumer yet)
 		 *     @type string[] $currencies         Accepted currency codes
 		 *     @type string[] $countries          Accepted country codes
 		 *     @type string   $integration_class  WC_Integration class name for settings
@@ -588,11 +588,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		}
 
 		/**
-		 * Checks if a feature is supported.
+		 * Checks whether the plugin declares support for a plugin-scoped feature.
+		 *
+		 * Host-facing extension surface: a host plugin passes plugin-wide capability
+		 * flags via the `supports` constructor arg and queries them here. This is the
+		 * plugin-level counterpart to the per-method capability surface on
+		 * {@see Shipping_Method::supports()} (cf. the per-gateway vs per-plugin scope
+		 * split on Woodev_Payment_Gateway_Plugin). The framework ships no plugin-scoped
+		 * FEATURE_* constants of its own; the vocabulary is defined by the host plugin.
 		 *
 		 * @since 1.5.0
 		 *
-		 * @param string $feature feature constant
+		 * @param string $feature feature flag declared via the `supports` constructor arg
 		 * @return bool
 		 */
 		public function supports( string $feature ): bool {
