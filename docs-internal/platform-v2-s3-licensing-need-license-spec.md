@@ -123,29 +123,36 @@ Implemented in the framework only once `woodev-core` issues signed claims (canno
 
 ### 4.2 Claim envelope
 
-Stored client-side in a new additive option `woodev_{plugin_id}_license_required` (autoload `false`). The value is the **signed envelope**, never a bare boolean:
+> **Cross-repo contract RESOLVED (woodev-core s126, 2026-06-10)** — the server half is implemented; the values below are now fixed, not proposals. See `D:\Projects\woodev_theme\docs\superpowers\specs\2026-06-10-woodev-core-license-authority-signing-spec.md` ("Resolved decisions" + "Test vector").
+
+Delivered in API responses under the top-level key **`license_authority`**, and stored client-side in a new additive option `woodev_{plugin_id}_license_required` (autoload `false`). The value is the **signed envelope**, never a bare boolean:
 
 ```json
 {
   "payload": {
     "site": "https://example.com",
-    "plugin_id": "woodev_my_plugin",
+    "plugin_id": "216",
     "license_required": false,
     "issued_at": 1749513600,
-    "expires_at": 1751933600
+    "expires_at": 1750723200
   },
   "signature": "base64(ed25519(canonical_json(payload)))"
 }
 ```
 
+- **`plugin_id` is the EDD download id as a DECIMAL STRING** (e.g. `"216"`), NOT `woodev_{slug}`. The framework already sends `item_id` in every API request, so the server binds the claim to it.
+- **`expires_at` = `issued_at` + 14 days.** The weekly (7-day) license check refreshes the claim → two cycles of grace, so a single missed check never relocks a legitimately-free site.
+
 Verification (all must pass before honoring `license_required = false`):
 
 1. signature verifies against the embedded public key over the canonical JSON of `payload`;
 2. `payload.site === home_url()` (anti-replay onto another site);
-3. `payload.plugin_id` matches this plugin;
+3. `payload.plugin_id === (string) $this->get_download_id()` (compare against the **download id**, not a slug);
 4. `now <= payload.expires_at`.
 
 Any failure → fall back to `license_required = true` (safe / locked).
+
+> The public key is generated lazily per environment (prod ≠ dev), so the embedded `WOODEV_LICENSE_AUTHORITY_PUBKEY` must be the **production** key, captured after deploy via the woodev-core spec's `wp eval` snippet. A documented test vector (payload + canonical bytes + signature + public key) lives in that spec for a cross-implementation fixture test.
 
 ### 4.3 Transport — how the client learns the claim
 

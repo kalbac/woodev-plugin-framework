@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
-> **32 atomic gotchas in 14 namespaces** — update count when adding/removing.
-> Last updated: 2026-06-09 (session 3: 1 gotcha — don't sum per-parcel prices in the framework rate seam)
+> **33 atomic gotchas in 14 namespaces** — update count when adding/removing.
+> Last updated: 2026-06-10 (session 5: 1 gotcha — is_need_license (presentation) vs is_license_required (enforcement) two-layer trap)
 
 ## Index
 
@@ -51,7 +51,7 @@
 <!-- No entries yet -->
 
 ### [licensing/*] — License/EDD store
-<!-- No entries yet -->
+- [licensing/two-layer] `is_need_license()` (Woodev_Plugin, presentation, UNTRUSTED) vs `is_license_required()` (Woodev_Plugins_License, enforcement, server-trusted) — gating a feature/enforcement on the local flag reopens the piracy hole; the local flag renders UI only → [gotchas/license-need-vs-required.md](gotchas/license-need-vs-required.md) (2026-06-10)
 
 ### [build/*] — Build/CI/release
 - [build/ci] A failing early CI job (e.g. Lint) silently SKIPS jobs that `needs:` it — skipped ≠ failed, so the suite looks green while dependent jobs (the whole Unit matrix here) never run; fixing the gate REVEALS masked failures → [gotchas/ci-failing-gate-skips-dependent-jobs.md](gotchas/ci-failing-gate-skips-dependent-jobs.md) (2026-06-08)

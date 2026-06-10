@@ -1,4 +1,27 @@
 
+## Session 5 (2026-06-10) — S3 Licensing sub-stage 1: `is_need_license` safe-scaffold (PR open)
+
+> Operator-directed via the full superpowers pipeline: `brainstorming` (discussion-format, PLANS §6) → `writing-plans` → autodev atomic tasks (worker subagent → adversarial critic per diff → commit; whole-feature holistic critic at the end). Branch `feat/s3-licensing-need-license` off fresh `main`; PR open, NOT merged (awaits green GH Actions + operator).
+
+**Goal:** Implement PLANS §3.4 `is_need_license`. Operator chose fork **A (S3 Licensing)**, then decomposed S3 into 3 sub-stages and scoped this session to **sub-stage 1 only** (`is_need_license` flag).
+
+**Design (brainstormed, key operator constraints):**
+- A plugin must NOT blindly trust the flag — a pirate would set it `false` for free updates/features. → **TWO-LAYER model.** **L1** `is_need_license()` (presentation only) vs **L2** server-signed `license_required` authority (enforcement). The local flag renders UI only; `is_license_valid()`/`is_active()` never depend on it (anti-pirate invariant).
+- Server can be down → outage-grace: the weekly check must never error/relock; last-known-good retained.
+- Client-stored authority must be **tamper-evident** → Ed25519 signed, site-bound, expiring claim (HMAC rejected — secret extractable from distributed PHP). Honest limit: client-side PHP can't be absolutely protected; goal = raise the bar from "edit a bool" to "forge a signature". Same primitive reused by §3.4.1 webhooks.
+- Scope cut: **safe-scaffold this session** (flag + conservative seam + outage-grace, all byte-for-byte), full signing **deferred** (can't verify unissued signatures). Full signing spec written for both halves.
+
+**Specs:** `docs-internal/platform-v2-s3-licensing-need-license-spec.md` + `-plan.md`. Cross-repo server spec written into `D:\Projects\woodev_theme\docs\superpowers\specs\2026-06-10-woodev-core-license-authority-signing-spec.md` (operator: so a woodev_theme agent can "study & implement"). That agent **already implemented it** (woodev-core s126) and resolved the open forks: Ed25519, `plugin_id` = EDD download-id string, `licensing_enabled()` marker, 14-day window, `license_authority` envelope key, published test vector. Framework spec §4 reconciled to those values.
+
+**What was done (3 atomic autodev tasks):**
+1. **s5-p1 (flag + seam):** `Woodev_Plugin::is_need_license()` (default true); `Woodev_Plugins_License::is_license_required()` (default true); routed `is_license_valid()`/`is_active()` through it (short-circuit only on `! is_license_required()` → byte-for-byte). +4 tests. Adversarial critic: **SHIP**.
+2. **s5-p2 (presentation gating):** gated 5 sites on `is_need_license()` — `notices()`, `plugin_row_license_missing()` (sentence only), `plugin_action_links()` license branch, WC `add_class_form_wrap_*()`, `do_license_fields()` ("Лицензия не требуется"). Adversarial critic **BLOCK**: found a real regression — a license-free plugin's still-rendered "Save changes" button posts to `options.php` → `deactivate_license()` passes the option_page guard then `wp_die(403)` on the absent custom nonce. **Fix:** short-circuit `activate_license()`/`deactivate_license()` on `! is_need_license()` (symmetric with `notices()`; presentation-layer handlers, not enforcement). Re-critic of own fix: **SHIP-WITH-NITS** → restored docblocks dropped by `replace_symbol_body`. +5 tests incl. the anti-pirate invariant + a `wp_die`-never regression test.
+3. **s5-p3 (outage-grace):** wrapped `weekly_license_check()`'s `validate_license()` in `try/catch (\Throwable) { return; }` — cron never throws/relocks; still runs regardless of the flag (keyless free plugin is a no-op via the empty-key guard). +1 test. Adversarial critic: **SHIP**.
+
+**Reviews:** per-task adversarial critics (1 BLOCK caught + fixed + re-critiqued, no self-certify) + **whole-feature holistic critic = SHIP** (verified all spec coverage, every consumer found, anti-pirate end-to-end, deferred signing correctly absent, contracts untouched).
+
+**Result:** `composer check` green — PHPCS 152/152, PHPStan 0, **275 tests / 847 assertions** (was 269 at branch start). New gotcha `gotchas/license-need-vs-required.md` (the L1/L2 naming trap). Additive only — zero installed-site contract touched. PR open (not merged).
+
 ## Session 4 (2026-06-10) — shipping conformance audit vs Capability-Gated Feature Seam → predicate wrappers (PR #24 open)
 
 > Operator-directed via the autodev pattern: Phase-1 audit done directly, scope brainstormed with the operator (AskUserQuestion), atomic specs queued in `.autodev/queue/pending/`, worker subagents wrote the files, an adversarial critic subagent reviewed the contract-adjacent diff + a holistic critic reviewed the whole feature (GPT-5.5 stand-ins). Branch `feat/shipping-supports-predicates` off fresh `main`; PR #24 open (NOT merged — awaits green GH Actions + operator).
