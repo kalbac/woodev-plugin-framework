@@ -38,6 +38,12 @@ if ( ! class_exists( 'Woodev_Plugin_Bootstrap' ) ) :
 		/** @var array invalid explicit loader definitions */
 		protected array $invalid_loader_definitions = [];
 
+		/** @var array<int,array<string,string>> Legacy (v1) plugins quarantined by the mixed-fleet tombstone — see B-1. */
+		protected array $mixed_fleet_incompatible_plugins = [];
+
+		/** @var bool Whether the mixed-fleet admin notice has already been hooked — idempotency guard (B-1). */
+		private bool $mixed_fleet_notice_hooked = false;
+
 		/**
 		 * Hidden constructor.
 		 */
@@ -78,6 +84,95 @@ if ( ! class_exists( 'Woodev_Plugin_Bootstrap' ) ) :
 			$this->sync_resolver_state();
 
 			return $accepted;
+		}
+
+		/**
+		 * Tombstone for the legacy v1 registration entry point — mixed-fleet armor (B-1).
+		 *
+		 * On a site mixing one v2-rewritten plugin with one still-v1 plugin, WordPress loads
+		 * plugins directory-alphabetically and the first vendored copy to define
+		 * `Woodev_Plugin_Bootstrap` wins the class rendezvous. When this v2 copy wins, a v1
+		 * plugin entry file still calls `register_plugin()` (the v1 API). Without this method
+		 * that call is an uncaught `Error` -> site-wide WSOD. This tombstone quarantines the
+		 * legacy plugin instead: it NEVER invokes the v1 callback and NEVER initializes the
+		 * plugin, it only records it so the existing admin-notice path tells the merchant to
+		 * update the outdated plugin.
+		 *
+		 * The signature is intentionally variadic and untyped: the caller is unknown-version
+		 * legacy code and nothing it passes (the v1 shape was
+		 * `register_plugin( string $framework_version, string $plugin_name, string $path, callable $callback, array $args = [] )`,
+		 * but a still-older copy may differ) may trip a TypeError — robustness for
+		 * site-availability beats the project's type-declaration convention here. Name and path
+		 * are best-effort extracted from the v1 positional shape (name at index 1, path at index 2).
+		 *
+		 * This is NOT a deprecation shim (ADR-005): it never delegates to a real implementation,
+		 * it permanently quarantines the legacy registration.
+		 *
+		 * @since 2.0.0
+		 *
+		 * @param mixed ...$args Legacy v1 registration arguments, any shape.
+		 * @return void
+		 */
+		public function register_plugin( ...$args ): void {
+			$plugin_name = isset( $args[1] ) && is_string( $args[1] ) && '' !== $args[1] ? $args[1] : __( 'Неизвестный плагин', 'woodev-plugin-framework' );
+			$plugin_path = isset( $args[2] ) && is_string( $args[2] ) ? $args[2] : '';
+
+			$this->mixed_fleet_incompatible_plugins[] = [
+				'plugin_name' => $plugin_name,
+				'path'        => $plugin_path,
+			];
+
+			if ( ! $this->mixed_fleet_notice_hooked && is_admin() && ! defined( 'DOING_AJAX' ) ) {
+				$this->mixed_fleet_notice_hooked = true;
+				add_action( 'admin_notices', [ $this, 'render_mixed_fleet_notice' ] );
+			}
+		}
+
+		/**
+		 * Renders the mixed-fleet quarantine notice for legacy (v1) plugins (B-1).
+		 *
+		 * @since 2.0.0
+		 *
+		 * @return void
+		 */
+		public function render_mixed_fleet_notice(): void {
+			if ( empty( $this->mixed_fleet_incompatible_plugins ) ) {
+				return;
+			}
+
+			// Build the plugin-name list with ONLY WordPress core functions + plain PHP. This runs in
+			// the mixed-fleet scenario where the framework runtime (e.g. Woodev_Helper) may NOT be loaded,
+			// so it must never reference a framework class — see B-1.
+			$names = array_map(
+				static function ( array $plugin ): string {
+					return sprintf( '<strong>%s</strong>', esc_html( $plugin['plugin_name'] ) );
+				},
+				$this->mixed_fleet_incompatible_plugins
+			);
+
+			$count = count( $names );
+
+			if ( $count > 1 ) {
+				$last_name  = (string) array_pop( $names );
+				$conjunction = _x( 'и', 'coordinating conjunction for a list of items: a, b и c', 'woodev-plugin-framework' );
+				$name_list  = implode( ', ', $names ) . ' ' . $conjunction . ' ' . $last_name;
+			} else {
+				$name_list = (string) reset( $names );
+			}
+
+			echo '<div class="error"><p>';
+			echo wp_kses(
+				sprintf(
+					/* translators: %s — list of plugin names. */
+					__(
+						'Следующие плагины собраны для устаревшей версии фреймворка Woodev и поэтому были отключены: %s. Пожалуйста, обновите их.',
+						'woodev-plugin-framework'
+					),
+					$name_list
+				),
+				[ 'strong' => [] ]
+			);
+			echo '</p></div>';
 		}
 
 		/**

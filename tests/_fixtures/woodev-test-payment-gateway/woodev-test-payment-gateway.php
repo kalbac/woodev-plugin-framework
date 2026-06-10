@@ -68,8 +68,33 @@ function woodev_test_payment_gateway_plugin_loader_definition(): array {
 
 /**
  * Регистрируем тестовый плагин в бутстрапе фреймворка.
+ *
+ * Mixed-fleet probe (B-1): на сайте, где соседствуют v2-переписанный и ещё-v1 плагин,
+ * WordPress грузит плагины по алфавиту, и первая vendored-копия, определившая
+ * Woodev_Plugin_Bootstrap, выигрывает rendezvous. Если выиграла легаси (v1) копия — у неё
+ * нет register_loader_definition(). Зондируем метод: если его нет, остаёмся в спячке,
+ * показываем предупреждение и выходим — никакого фатала.
  */
-Woodev_Plugin_Bootstrap::instance()->register_loader_definition( woodev_test_payment_gateway_plugin_loader_definition() );
+$woodev_test_payment_gateway_bootstrap = Woodev_Plugin_Bootstrap::instance();
+if ( ! method_exists( $woodev_test_payment_gateway_bootstrap, 'register_loader_definition' ) ) {
+	add_action(
+		'admin_notices',
+		static function (): void {
+			echo '<div class="error"><p>';
+			echo wp_kses(
+				sprintf(
+					/* translators: %s — plugin name. */
+					esc_html__( 'Плагин %s не запущен: загруженная версия фреймворка устарела. Обновите плагин или фреймворк.', 'woodev-plugin-framework' ),
+					'<strong>' . esc_html__( 'Woodev Test Payment Gateway Plugin', 'woodev-plugin-framework' ) . '</strong>'
+				),
+				[ 'strong' => [] ]
+			);
+			echo '</p></div>';
+		}
+	);
+	return;
+}
+$woodev_test_payment_gateway_bootstrap->register_loader_definition( woodev_test_payment_gateway_plugin_loader_definition() );
 
 function woodev_test_payment_gateway_plugin_init(): void {
 
