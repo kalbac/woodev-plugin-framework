@@ -84,6 +84,17 @@ if ( ! class_exists( Woodev_Woocommerce_License_Settings::class, false ) ) :
 
 		public function do_license_fields() {
 
+			if ( ! $this->plugin->is_need_license() ) {
+				echo '<div class="license-item license-not-required">';
+				printf(
+					'<p>%s</p>',
+					esc_html__( 'Лицензия для этого плагина не требуется.', 'woodev-plugin-framework' )
+				);
+				echo '</div>';
+
+				return;
+			}
+
 			$woodev_license = new Woodev_License( $this->plugin->get_id_underscored() );
 
 			echo '<div class="license-item">';

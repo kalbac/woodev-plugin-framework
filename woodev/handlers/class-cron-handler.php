@@ -105,7 +105,13 @@ if ( ! class_exists( '\Woodev\Framework\Handlers\Cron_Handler' ) ) :
 				return;
 			}
 
-			$this->plugin->get_license_instance()->validate_license( $license_key );
+			try {
+				$this->plugin->get_license_instance()->validate_license( $license_key );
+			} catch ( \Throwable $e ) {
+				// Woodev server unreachable / transport failure: keep last-known-good license state.
+				// Never error out and never relock a previously-valid license on a failed check.
+				return;
+			}
 		}
 
 		/**

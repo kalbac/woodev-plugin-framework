@@ -3,12 +3,12 @@
 > Sweep-across-the-whole-program status. Any session reads this first (per execution-protocol §0) to learn where we are. Update the "Next action" + statuses as work lands.
 
 **Branch:** `main` (S0/S1/S2 all merged) · **Baselines:** `platform-v2-pivot-baseline`, `platform-v2-pre-refactor`
-**Last updated:** 2026-06-10
+**Last updated:** 2026-06-10 (session 5)
 
 ## Next action
-🏁 **S0 + S1 + S2 COMPLETE — all merged to `main`.** S1 shipping (PR #20), S2 box-packer (PR #21) + dispatcher production wiring & warehouse REST redesign (PR #22), packing woven into the rate-calc single-seam template (s3), and a shipping-module conformance audit vs the Capability-Gated Feature Seam pattern + `supports_*()` predicate alignment (s4, PR #24 `033368c`). `composer check` green 265 tests / 827 assertions.
+🏁 **S0 + S1 + S2 COMPLETE — all merged to `main`.** S1 shipping (PR #20), S2 box-packer (PR #21) + dispatcher production wiring & warehouse REST redesign (PR #22), packing woven into the rate-calc single-seam template (s3), and a shipping-module conformance audit vs the Capability-Gated Feature Seam pattern + `supports_*()` predicate alignment (s4, PR #24 `033368c`).
 
-▶️ **S3 — Licensing: `is_need_license` → modern UI → built-in webhooks (PLANS §3.4 / §3.4.1) — the next planned stage.** Not yet started; needs a brainstorm + spec first (PLANS §6 expects discussion-format planning). See `docs-internal/next-session-prompt.md` for the A/B/C decision fork. Release-blocking: licensing option keys / activation state / instance ids / updater identity must be preserved byte-for-byte.
+▶️ **S3 — Licensing: IN PROGRESS, decomposed into 3 sub-stages.** **Sub-stage 1 (`is_need_license` safe-scaffold) DONE on branch `feat/s3-licensing-need-license` — PR open, not merged** (275 tests green). Two-layer model: L1 `is_need_license()` (presentation) + L2 `is_license_required()` (server authority, default-true seam); full Ed25519 signing **deferred** (server half already implemented in woodev-core s126; framework client signing is a later cross-repo session). Specs: `platform-v2-s3-licensing-need-license-spec.md` + `-plan.md`; server spec in woodev_theme. **Remaining sub-stages:** (2) modern license-page UI; (3) built-in webhooks (PLANS §3.4.1, reuses the Ed25519 primitive). Release-blocking: licensing option keys / activation state / instance ids / updater identity preserved byte-for-byte (safe-scaffold touched none — additive only).
 
 ## Stage map
 | Stage | Scope | Status | Plan |
@@ -16,7 +16,7 @@
 | **S0 Platform Split** | clean break + decompose base + minimal resolver | ✅ **DONE** (tag `platform-v2-split-done`, 195/592 green) | `platform-v2-cleanbreak-plan.md` (+ base-decomposition sub-plan) |
 | **S1 Shipping** | universal module; PVZ-map abstraction first | ✅ **DONE** (merged to main PR #20 `440f238`, 2026-06-08; 203 tests green; 1 task deferred) | `platform-v2-s1-shipping-spec.md` |
 | S2 Box-packer | minimal-virtual-box algorithm + neutral wrapper | ✅ **DONE** (PR #21/#22 merged; woven into rate-calc s3; shipping module conformance-audited + predicate-aligned s4 PR #24) | `platform-v2-s2-boxpacker-spec.md` |
-| S3 Licensing | `is_need_license` → modern UI → webhooks | 🟡 **next — needs brainstorm + spec** | `PLANS.md` §3.4/§3.4.1 → spec TBD |
+| S3 Licensing | `is_need_license` → modern UI → webhooks | 🟢 **in progress** — sub-stage 1 (`is_need_license` safe-scaffold) done, PR open; sub-stages 2 (UI) + 3 (webhooks) remain | `platform-v2-s3-licensing-need-license-spec.md` (+ `-plan.md`) |
 | S4 EDD | `Woodev_EDD_Plugin` (concept in v2.0) | ⚪ deferred | — |
 | S5 React admin UI | built-in WP/WC React | ⚪ post-v2.0 | — |
 | S6 Ecosystem orchestration | cross-project automation | ⚪ post-v2.0 stable | — |
