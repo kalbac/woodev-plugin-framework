@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
-> **33 atomic gotchas in 14 namespaces** — update count when adding/removing.
-> Last updated: 2026-06-10 (session 5: 1 gotcha — is_need_license (presentation) vs is_license_required (enforcement) two-layer trap)
+> **35 atomic gotchas in 15 namespaces** — update count when adding/removing.
+> Last updated: 2026-06-11 (session 7: 2 gotchas — Russian-source `_n()` plural trap; Serena index vs git worktree)
 
 ## Index
 
@@ -69,7 +69,11 @@
 - [shipping/rate-calc] Do NOT sum per-parcel prices in the framework rate seam — `calculate_rate` (final template) only wires packing; per-parcel summing mis-prices multi-place carrier tariffs (СДЭК/Яндекс quote a whole shipment in one request). The carrier subclass aggregates → [gotchas/shipping-rate-no-parcel-sum.md](gotchas/shipping-rate-no-parcel-sum.md) (s3)
 - [shipping/warehouse-identity] Warehouse storage row id ≠ carrier-unique id — VO carries a nullable `storage_id` (DB PK) separate from `get_id()` (carrier code); store keys CRUD on the row id, never fold the REST route id into `get_id()`, and use read-merge on update → [gotchas/warehouse-storage-id-vs-carrier-id.md](gotchas/warehouse-storage-id-vs-carrier-id.md) (session 2)
 
+### [i18n/*] — Localization
+- [i18n/russian-source-plural-n] `_n()` with Russian SOURCE strings falls back to English 2-form plural logic (no ru catalog exists — Russian IS the source) → 21/31/101 render the wrong form; avoid `_n()`, use count-neutral phrasing → [gotchas/russian-source-i18n-plural-n.md](gotchas/russian-source-i18n-plural-n.md) (s7)
+
 ### [autodev/*] — Adversarial dev loop tooling
+- [autodev/serena-worktree] Serena MCP index is bound to the MAIN working tree (its current branch + uncommitted edits) — workers operating in a git worktree must use Grep/Read under the worktree root, never Serena; `invoke-worker.ps1` prompt says the opposite (follow-up) → [gotchas/serena-index-vs-git-worktree.md](gotchas/serena-index-vs-git-worktree.md) (s7)
 - [autodev/circuit-breaker] Refund the attempt on EVERY external pause (worker AND critic 429), not just the worker's — an unrefunded critic rate-limit marches a DONE task into a false poison → [gotchas/autodev-attempt-refund-symmetry.md](gotchas/autodev-attempt-refund-symmetry.md) (2026-06-06)
 - [autodev/critic] Critic over-flags two non-breaks as `broken` on every incremental task: a NEW additive hook name, and "class not yet wired into includes()" (wiring is the separate s1-p6 task). Keep its correct contract/logic findings; recalibrate only these two → [gotchas/autodev-critic-overflag.md](gotchas/autodev-critic-overflag.md) (2026-06-06)
 - [autodev/critic] invoke-critic mis-read benign repo text as a 429: it scanned the critic's ENTIRE output (incl. docs the critic READ that mention the prior critic-429 fix) with a hard-coded non-zero exit, discarding valid verdicts and re-queueing forever. Fix: parse the verdict first (it wins); rate-limit only when no verdict, using codex's real exit code → [gotchas/autodev-critic-ratelimit-false-positive.md](gotchas/autodev-critic-ratelimit-false-positive.md) (2026-06-07, fixed b186c52)
