@@ -92,9 +92,12 @@
 
 ## After / housekeeping
 - Save any new Fable orchestrator review output to `docs-internal/reviews/`.
-- When `tools/autodev/conductor.ps1` (the automated loop) is used instead of the operator-directed
+- ~~When `tools/autodev/conductor.ps1` (the automated loop) is used instead of the operator-directed
   pattern, wire the same tiering there (worker model per task, GPT-5.5 critic) — a small tooling
-  change, separate from this prompt.
+  change, separate from this prompt.~~ **DONE 2026-06-10** — frontmatter `model: haiku|sonnet|opus`
+  parsed by `ConvertFrom-AutodevTask`; `invoke-worker.ps1` builds a sub-ladder starting at the
+  declared tier; `conductor.ps1` passes `-Model $task.model`; contract-zone pin (opus) unchanged
+  and overrides any weaker declared model with a WARN.
 
 ## Related
 - [reviews/fable5-architecture-review-2026-06-10.md](reviews/fable5-architecture-review-2026-06-10.md)

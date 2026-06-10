@@ -149,6 +149,7 @@ function Invoke-ConductorIteration {
     # 3. WORKER
     if (-not $AssumeWorkerDone) {
         $w = & (Join-Path $here 'invoke-worker.ps1') -TaskId $task.id `
+                -Model ([string]$task.model) `
                 -TouchesContractZone:([bool]$task.touches_contract_zone) -DryRun:$DryRunWorker
         if ($w.Status -eq 'RATE_LIMITED') {
             # A 429 is an EXTERNAL pause, not a failed attempt -- refund the attempt counter so
