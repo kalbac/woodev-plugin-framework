@@ -23,6 +23,8 @@ A plugin must **not** blindly trust a locally-set flag. A pirate would set `is_n
 
 Client-side PHP executes on a machine the pirate controls; **absolute DRM is impossible**. The realistic goal is to raise the bar from "edit one boolean option in the DB" (trivial) to "forge an Ed25519 signature" (infeasible). Updates have an independent server gate (the download URL requires a live license), so a tampered local flag yields, at most, locally-unlocked code that never updates — and only if the signature check is bypassed, which this design prevents for honoring `license_required = false`.
 
+**Asymmetry of this protection (B-4, recorded 2026-06-11).** The Ed25519 claim gates only the **license-free short-circuit**. The **paid-status path is not crypto-gated**: license status lives in a plain WP option (a status string plus the locally-stored key), so a pirate editing local state to look `valid` is still the cheap attack — and client-side code edits can bypass any local feature gating entirely. That is accepted by design: the only things actually enforced are the **server-provided operations** (update downloads require a live license; license API operations are server-checked). Locally-running paid code remains bypassable on a machine the pirate controls. Do not read §4 as DRM for paid products.
+
 ## 2. Two-layer model
 
 | Layer | Lives in | Governs | Who can set it |
@@ -146,11 +148,34 @@ Delivered in API responses under the top-level key **`license_authority`**, and 
 Verification (all must pass before honoring `license_required = false`):
 
 1. signature verifies against the embedded public key over the canonical JSON of `payload`;
-2. `payload.site === home_url()` (anti-replay onto another site);
+2. `woodev_normalize_site( payload.site ) === woodev_normalize_site( home_url() )` (anti-replay onto another site; see the normalization rule below);
 3. `payload.plugin_id === (string) $this->get_download_id()` (compare against the **download id**, not a slug);
 4. `now <= payload.expires_at`.
 
 Any failure → fall back to `license_required = true` (safe / locked).
+
+**`site` normalization (B-6, defined 2026-06-11).** Without a single normalization rule, a trailing slash or scheme/host case difference between what the client sent at request time (what the server signed) and `home_url()` at verify time silently locks a legitimately-free site. One pure function, applied **byte-identically at every point** — the client normalizes the request `url` field before sending, **the server signs the normalized value** (it becomes `payload.site`), and the client normalizes `home_url()` before comparing at verify time:
+
+```
+woodev_normalize_site( $url ): string|FAIL
+    0. input MUST be an absolute http/https URL with a non-empty host
+       (parse_url() failure, missing/other scheme, empty host → FAIL);
+    1. scheme → strtolower
+    2. host   → strtolower; non-ASCII (IDN) hosts MUST already be in their
+       IDNA-ASCII (punycode) form — a host containing bytes > 0x7F → FAIL
+       (WP stores home/siteurl as entered; punycode is the deterministic form);
+       IPv6 literal hosts keep their brackets, hex lowercased
+    3. drop default ports (:80 for http, :443 for https); keep non-default ports
+    4. path  → untrailingslashit(), preserved case (subdirectory installs are
+       case-sensitive); absent path → '' (empty string)
+    5. drop query + fragment (user/pass present → FAIL)
+    6. return exact concatenation: scheme . '://' . host [. ':' . port] . path
+```
+
+`FAIL` semantics: client-side, a `FAIL` on either input makes the claim **invalid → locked** (safe default); server-side, a `FAIL` on the received `url` means **do not issue a claim**.
+
+- **Multisite (minimal rule + explicit §4 TODO):** claims are stored, refreshed, and verified strictly **per-site** — the binding is the normalized per-site `home_url()` of the site whose options hold the license; there is no network-wide claim. ⚠️ Open at §4 implementation time: WP's update flow runs network-level (one `update_plugins` cycle for all sites), so claim *consumption from updater responses* needs a defined owner (e.g. only the request's current-blog context consumes; other sites refresh via their own weekly license checks). Decide + test blog-switching and cache isolation in the §4 task — do not hand-wave it.
+- **Test vector:** when §4 is implemented, the published woodev-core test vector must gain at least one normalization case — e.g. raw client URL `https://Example.com/` → normalized **and signed** `site` = `https://example.com`, verified on a site whose raw `home_url()` is `https://Example.com/` — so cross-implementation fixtures lock the rule, not just the signature math.
 
 > The public key is generated lazily per environment (prod ≠ dev), so the embedded `WOODEV_LICENSE_AUTHORITY_PUBKEY` must be the **production** key, captured after deploy via the woodev-core spec's `wp eval` snippet. A documented test vector (payload + canonical bytes + signature + public key) lives in that spec for a cross-implementation fixture test.
 
@@ -161,13 +186,19 @@ Accept the signed envelope from **any** Woodev API response that carries it:
 - `check_license` / `activate_license` responses (`Woodev_Licencing_API_Response`);
 - the updater's `plugin_latest_version` response (`Woodev_Plugin_Updater::get_repo_api_data()`).
 
-The update check runs on a regular schedule even with an empty license key, so a **keyless free plugin learns its status during normal update polling** — this is what solves the chicken-and-egg for keyless products.
+The intended model: the update check runs on a regular schedule even with an empty license key, so a **keyless free plugin learns its status during normal update polling** — this is what solves the chicken-and-egg for keyless products.
+
+> **⚠️ Corrected premise (B-3, verified 2026-06-11).** Today's framework does NOT provide that transport: `Woodev_Plugin::load_updater()` constructs `Woodev_Plugin_Updater` only when `get_license_instance()->get_license()` returns a non-empty key, and only in `is_admin() || WP_CLI` contexts (`woodev/class-plugin.php:376-388`) — a keyless plugin never polls, never receives `license_authority`, and `is_license_required()` would stay `true` forever. The §4 implementation plan therefore **must include a framework-side task**:
+>
+> 1. rework `load_updater()` to construct the updater **regardless of license key**, within the eligible contexts `is_admin() || DOING_CRON || WP_CLI` (literal unconditional construction would reference a class not loaded on ordinary frontend requests) — empty-key polling is harmless and the woodev-core server tolerates it (no woodev-core change needed);
+> 2. align the `is_admin() || WP_CLI` gate with the cron path so polling cadence does not depend on admin visits (`includes()` already loads the updater file for `DOING_CRON`);
+> 3. regression tests: *no key → updater constructed (admin AND cron contexts) → `license_authority` claim consumed*; *ordinary frontend request → updater NOT constructed* (unchanged).
 
 ### 4.4 Outage grace (interaction with §3.2)
 
 - A verified claim is honored until `payload.expires_at`. A successful refresh re-issues it with a later expiry.
 - Server unreachable → keep the last verified claim until it expires; do not relock within the window.
-- Recommended server-issued validity window: 14–30 days (final value set in the woodev-core spec). Long enough that a routine outage never locks a legitimately-free site; short enough that a real change propagates.
+- Server-issued validity window: **resolved — 14 days** (woodev-core s126 resolved decision #4; `issued_at + 14·DAY_IN_SECONDS`). Long enough that a routine outage never locks a legitimately-free site (two weekly check cycles); short enough that a real change propagates.
 
 ### 4.5 When §4 lands, §3.3 changes to
 
