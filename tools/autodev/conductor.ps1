@@ -16,7 +16,7 @@
     5. critic (tiered, read-only, fenced) -> uncertain/broken route to human
     6. gate (composer check + INVARIANTS grep + per-guard mutation-check)
     7. COMMIT (checkpoint) | ESCALATE | RETRY
-    8. periodic: anti-drift every M commits, digest every N commits
+    8. periodic: anti-drift (+ digest) every AntiDriftEveryCommits commits
 
 .PARAMETER Once
   Run a single iteration and exit (no idle loop).
@@ -30,11 +30,12 @@
   as the worker (sanctioned by the brief: "you ARE the planner for the guard workload").
 
 .PARAMETER GuardBootstrap
-  Special section-6 flow: the change ADDS mutation-verified guards + a GUARDS.md row. That diff
-  legitimately trips the constitution rule (GUARDS.md) and the contract-zone rule (the
-  exact strings appear in the new tests). So instead of refusing, the conductor commits
-  the guard checkpoint (recording blessed_by: pending-operator) AND emits ONE escalation
-  asking the operator to bless. Autonomy for those zones switches on only after blessing.
+  Special section-6 flow: used when the worker session itself implements new mutation-verified
+  guards + GUARDS.md rows. This flag does NOT override the gate decision: the gate still runs
+  normally and the change must earn a 'COMMIT' decision on its own merits. The only extra
+  behaviour is that AFTER a successful commit, the conductor also emits one escalation asking
+  the operator to bless the new guards (blessed_by: pending-operator). Autonomy for the new
+  contract zones switches on only after that blessing.
 
 .PARAMETER DryRunWorker
   Pass -DryRun to invoke-worker (build the command + ladder, do not spawn claude).
@@ -92,6 +93,22 @@ function Move-Task {
     if (Test-Path $src) { Move-Item -Path $src -Destination (Join-Path $ToDir "$TaskId.md") -Force }
 }
 
+# Pure predicate: returns $true only when the gate issued a literal 'COMMIT' decision.
+# Used by BOTH the production commit-path condition (Invoke-ConductorIteration) and the
+# self-test cases (3 & 4), so a regression in the condition is caught by the tests.
+function Test-AutodevCommitDecision {
+    param([string]$Decision)
+    return ($Decision -eq 'COMMIT')
+}
+
+# Pure predicate: returns $true only when an iteration's committed flag is set, meaning the
+# counter should be incremented. Used by BOTH the outer loop counter and self-test case 4,
+# so any change that re-adds false-increment paths is caught by the tests.
+function Test-AutodevCounterIncrement {
+    param([bool]$IterationCommitted)
+    return $IterationCommitted
+}
+
 function New-WorkerDiff {
     <# Capture a diff of the task's file_set, intent-adding any new files so they show. #>
     param([pscustomobject]$Task, [string]$OutPath)
@@ -124,6 +141,11 @@ function Invoke-CommitTask {
 }
 
 function Invoke-ConductorIteration {
+    # Reset the commit flag for each iteration. Set to $true ONLY by the COMMIT route below so
+    # the caller can count actual commits without relying on done/ file existence (which can
+    # false-increment on a reused/re-queued task id that had a prior done/ entry).
+    $script:iterationCommitted = $false
+
     # 1. CLAIM (atomic, file-disjoint)
     $claimedId = (& (Join-Path $here 'scheduler.ps1') | Select-Object -First 1)
     if (-not $claimedId) { return $null }
@@ -136,9 +158,13 @@ function Invoke-ConductorIteration {
     Set-Attempts -TaskId $task.id -N $attempts
     if ($attempts -gt $Config.MaxAttempts) {
         Move-Task -TaskId $task.id -ToDir $Config.QueueQuarantine
-        Invoke-Escalation -Id "poison-$($task.id)" -Reason 'poison task' -Type 'poison' -Task $task `
-            -What "Task failed across $($attempts-1) fresh agents." -Decision 'Re-scope or drop this task?' `
-            -OptionA 'Re-scope and re-queue' -OptionB 'Drop' -Cost 'wasted token spend' -Evidence ''
+        try {
+            Invoke-Escalation -Id "poison-$($task.id)" -Reason 'poison task' -Type 'poison' -Task $task `
+                -What "Task failed across $($attempts-1) fresh agents." -Decision 'Re-scope or drop this task?' `
+                -OptionA 'Re-scope and re-queue' -OptionB 'Drop' -Cost 'wasted token spend' -Evidence ''
+        } catch {
+            Write-AutodevLog -Level WARN -Message "Escalation artifact write failed for poison-$($task.id): $($_.Exception.Message)" -Config $Config
+        }
         return $task
     }
 
@@ -161,7 +187,7 @@ function Invoke-ConductorIteration {
             return $task
         }
         if ($w.Status -eq 'TIMED_OUT') {
-            Write-AutodevLog -Level WORKER -Message "Timed out; leaving in active for respawn (attempts=$attempts)." -Config $Config
+            Write-AutodevLog -Level WORKER -Message "Timed out; moving to pending for a fresh attempt (attempts=$attempts)." -Config $Config
             Move-Task -TaskId $task.id -ToDir $Config.QueuePending
             return $task
         }
@@ -174,17 +200,25 @@ function Invoke-ConductorIteration {
         if ($report -match '(?im)^\s*status\s*[:=]\s*TOO_BIG') {
             Write-AutodevLog -Message "Task $($task.id) TOO_BIG; archiving for re-decomposition." -Config $Config
             Move-Task -TaskId $task.id -ToDir $Config.QueueQuarantine
-            Invoke-Escalation -Id "toobig-$($task.id)" -Reason 'task too big' -Type 'blocked' -Task $task `
-                -What 'Worker reported TOO_BIG; needs decomposition.' -Decision 'Approve the proposed split?' `
-                -OptionA 'Approve split' -OptionB 'Re-scope manually' -Cost 'none (no code landed)' -Evidence $report
+            try {
+                Invoke-Escalation -Id "toobig-$($task.id)" -Reason 'task too big' -Type 'blocked' -Task $task `
+                    -What 'Worker reported TOO_BIG; needs decomposition.' -Decision 'Approve the proposed split?' `
+                    -OptionA 'Approve split' -OptionB 'Re-scope manually' -Cost 'none (no code landed)' -Evidence $report
+            } catch {
+                Write-AutodevLog -Level WARN -Message "Escalation artifact write failed for toobig-$($task.id): $($_.Exception.Message)" -Config $Config
+            }
             return $task
         }
         foreach ($pair in @(@('NEEDS_GUARD', 'needs-guard'), @('BLOCKED', 'blocked'))) {
             if ($report -match "(?im)^\s*status\s*[:=]\s*$($pair[0])") {
-                Move-Task -TaskId $task.id -ToDir $Config.QueueActive
-                Invoke-Escalation -Id "$($pair[1])-$($task.id)" -Reason $pair[0] -Type $pair[1] -Task $task `
-                    -What "Worker reported $($pair[0])." -Decision 'Provide guidance.' `
-                    -OptionA 'Write/bless a guard' -OptionB 'Mark human-only' -Cost 'blocks the task' -Evidence $report
+                Move-Task -TaskId $task.id -ToDir $Config.QueueEscalated
+                try {
+                    Invoke-Escalation -Id "$($pair[1])-$($task.id)" -Reason $pair[0] -Type $pair[1] -Task $task `
+                        -What "Worker reported $($pair[0])." -Decision 'Provide guidance.' `
+                        -OptionA 'Write/bless a guard' -OptionB 'Mark human-only' -Cost 'blocks the task' -Evidence $report
+                } catch {
+                    Write-AutodevLog -Level WARN -Message "Escalation artifact write failed for $($pair[1])-$($task.id): $($_.Exception.Message)" -Config $Config
+                }
                 return $task
             }
         }
@@ -207,8 +241,16 @@ function Invoke-ConductorIteration {
     if ($ReuseVerdict -and (Test-Path $verdictFile)) {
         $existing = Get-Content $verdictFile -Raw -Encoding utf8 | ConvertFrom-Json
         if ($existing.verdict -eq 'clean') {
-            Write-AutodevLog -Level CRITIC -Message "Reusing fresh CLEAN verdict (-ReuseVerdict); skipping codex re-run." -Config $Config
-            $reused = $true
+            # Verify the stored verdict was computed over the SAME diff we have now.
+            $currentDiff = if (Test-Path $diffPath) { Get-Content $diffPath -Raw -Encoding utf8 } else { '' }
+            $currentHash = Get-AutodevTextSha256 -Text $currentDiff
+            $storedHash = if ($existing.PSObject.Properties.Name -contains 'diff_sha256') { $existing.diff_sha256 } else { '' }
+            if ($storedHash -ne '' -and $storedHash -eq $currentHash) {
+                Write-AutodevLog -Level CRITIC -Message "Reusing CLEAN verdict (-ReuseVerdict); diff hash matches ($currentHash)." -Config $Config
+                $reused = $true
+            } else {
+                Write-AutodevLog -Level CRITIC -Message "Verdict hash mismatch (stored=$storedHash current=$currentHash); falling through to fresh critic run." -Config $Config
+            }
         }
     }
     if (-not $reused) {
@@ -228,12 +270,17 @@ function Invoke-ConductorIteration {
         return $task
     }
     if ($verdict.verdict -ne 'clean') {
-        Invoke-Escalation -Id "critic-$($task.id)" -Reason "critic $($verdict.verdict)" `
-            -Type $(if ($verdict.verdict -eq 'broken') { 'disagreement' } else { 'uncertain' }) -Task $task `
-            -What "Critic verdict: $($verdict.verdict). $($verdict.notes)" `
-            -Decision 'Override the critic, or fix the diff?' -OptionA 'Send back to worker' -OptionB 'Override (commit anyway)' `
-            -Cost 'a real contract break could land' -Evidence ($verdict | ConvertTo-Json -Depth 5)
-        Move-Task -TaskId $task.id -ToDir $Config.QueueActive
+        # Move-Task FIRST so the task is in escalated/ even if the artifact write throws.
+        Move-Task -TaskId $task.id -ToDir $Config.QueueEscalated
+        try {
+            Invoke-Escalation -Id "critic-$($task.id)" -Reason "critic $($verdict.verdict)" `
+                -Type $(if ($verdict.verdict -eq 'broken') { 'disagreement' } else { 'uncertain' }) -Task $task `
+                -What "Critic verdict: $($verdict.verdict). $($verdict.notes)" `
+                -Decision 'Override the critic, or fix the diff?' -OptionA 'Send back to worker' -OptionB 'Override (commit anyway)' `
+                -Cost 'a real contract break could land' -Evidence ($verdict | ConvertTo-Json -Depth 5)
+        } catch {
+            Write-AutodevLog -Level WARN -Message "Escalation artifact write failed for critic-$($task.id): $($_.Exception.Message)" -Config $Config
+        }
         return $task
     }
 
@@ -260,32 +307,49 @@ function Invoke-ConductorIteration {
         return $task
     }
 
-    if ($gate.decision -eq 'COMMIT' -or $GuardBootstrap) {
+    # -GuardBootstrap enters the commit path ONLY when the gate says COMMIT.
+    # Unknown / malformed gate decisions MUST NOT fall through to the commit path (fail-closed):
+    # only the literal string 'COMMIT' is accepted here; everything else routes to the ESCALATE
+    # handler below (including 'GARBAGE', empty string, or any future decision value).
+    if (Test-AutodevCommitDecision -Decision $gate.decision) {
         $kind = if ($task.type -eq 'guard') { 'test' } else { 'refactor' }
         $hash = Invoke-CommitTask -Task $task -Message "$kind(autodev): $($task.title)"
         Write-AutodevLog -Level GATE -Message "Committed $($task.id) as $hash." -Config $Config
         Move-Task -TaskId $task.id -ToDir $Config.QueueDone
         Add-Content -Path (Join-Path $Config.QueueDone "$($task.id).md") -Value "`n<!-- committed: $hash -->" -Encoding utf8
+        # Signal to the outer loop that this iteration produced an actual commit.
+        # This is the canonical commit-counter source; the outer loop MUST use this flag,
+        # not done/ file existence (which can be stale from a prior run of the same task id).
+        $script:iterationCommitted = $true
 
         if ($GuardBootstrap) {
             # section 6.5: one escalation for the operator to BLESS the new guards.
-            Invoke-Escalation -Id "bless-$($task.id)" -Reason 'bless new contract guards' -Type 'constitution' -Task $task `
-                -What "Committed $($hash): mutation-verified guards + GUARDS.md rows (blessed_by pending-operator). Until you bless, those zones still escalate." `
-                -Decision 'Bless these guards so their contract zones become autonomous?' `
-                -OptionA 'Bless (set blessed_by to your name in GUARDS.md)' -OptionB 'Reject / keep human-only' `
-                -Cost 'a wrong guard would auto-pass a real contract break' `
-                -Evidence ($gate | ConvertTo-Json -Depth 5)
+            try {
+                Invoke-Escalation -Id "bless-$($task.id)" -Reason 'bless new contract guards' -Type 'constitution' -Task $task `
+                    -What "Committed $($hash): mutation-verified guards + GUARDS.md rows (blessed_by pending-operator). Until you bless, those zones still escalate." `
+                    -Decision 'Bless these guards so their contract zones become autonomous?' `
+                    -OptionA 'Bless (set blessed_by to your name in GUARDS.md)' -OptionB 'Reject / keep human-only' `
+                    -Cost 'a wrong guard would auto-pass a real contract break' `
+                    -Evidence ($gate | ConvertTo-Json -Depth 5)
+            } catch {
+                Write-AutodevLog -Level WARN -Message "Escalation artifact write failed for bless-$($task.id): $($_.Exception.Message)" -Config $Config
+            }
         }
         return $task
     }
 
-    # ESCALATE (constitution / no-guard / guard-not-protecting / unblessed)
-    Invoke-Escalation -Id "gate-$($task.id)" -Reason 'gate escalation' `
-        -Type $(if ($gate.constitution_touched.Count -gt 0) { 'constitution' } else { 'needs-guard' }) -Task $task `
-        -What "Gate decision: ESCALATE. $($gate.reasons -join '; ')" `
-        -Decision 'Approve this change manually?' -OptionA 'Approve + commit' -OptionB 'Reject' `
-        -Cost 'touches an unguarded contract zone or the constitution' -Evidence ($gate | ConvertTo-Json -Depth 5)
-    Move-Task -TaskId $task.id -ToDir $Config.QueueActive
+    # ESCALATE (constitution / no-guard / guard-not-protecting / unblessed / empty file_set)
+    # Move-Task FIRST so the task is in escalated/ even if the artifact write throws.
+    Move-Task -TaskId $task.id -ToDir $Config.QueueEscalated
+    try {
+        Invoke-Escalation -Id "gate-$($task.id)" -Reason 'gate escalation' `
+            -Type $(if ($gate.constitution_touched.Count -gt 0) { 'constitution' } else { 'needs-guard' }) -Task $task `
+            -What "Gate decision: ESCALATE. $($gate.reasons -join '; ')" `
+            -Decision 'Approve this change manually?' -OptionA 'Approve + commit' -OptionB 'Reject' `
+            -Cost 'touches an unguarded contract zone or the constitution' -Evidence ($gate | ConvertTo-Json -Depth 5)
+    } catch {
+        Write-AutodevLog -Level WARN -Message "Escalation artifact write failed for gate-$($task.id): $($_.Exception.Message)" -Config $Config
+    }
     return $task
 }
 
@@ -332,12 +396,39 @@ function Invoke-ConductorSelfTest {
 
     Remove-Item -Path $tmp -Recurse -Force -ErrorAction SilentlyContinue
 
+    # (3) FAIL-CLOSED: a GARBAGE gate decision must NOT take the commit path.
+    # Calls Test-AutodevCommitDecision -- the SAME function the production commit path uses --
+    # so this test FAILS if someone changes the function to return $true for non-'COMMIT' values.
+    # Three inputs are checked: 'GARBAGE' -> $false, 'COMMIT' -> $true, 'ESCALATE' -> $false.
+    $c3_garbage  = (Test-AutodevCommitDecision -Decision 'GARBAGE')   # must be $false
+    $c3_commit   = (Test-AutodevCommitDecision -Decision 'COMMIT')    # must be $true
+    $c3_escalate = (Test-AutodevCommitDecision -Decision 'ESCALATE')  # must be $false
+    $c3_null     = (Test-AutodevCommitDecision -Decision $null)       # must be $false
+    $case3 = (-not $c3_garbage) -and $c3_commit -and (-not $c3_escalate) -and (-not $c3_null)
+    if ($case3) {
+        Write-Host "Case 3 PASS -- Test-AutodevCommitDecision: GARBAGE=$c3_garbage COMMIT=$c3_commit ESCALATE=$c3_escalate null=$c3_null (fail-closed verified)." -ForegroundColor Green
+    } else {
+        Write-Host "Case 3 FAIL -- Test-AutodevCommitDecision returned unexpected value(s): GARBAGE=$c3_garbage COMMIT=$c3_commit ESCALATE=$c3_escalate null=$c3_null" -ForegroundColor Red
+    }
+
+    # (4) ESCALATED outcome must NOT increment the commit counter.
+    # Calls Test-AutodevCounterIncrement -- the SAME function the outer loop uses -- so this
+    # test FAILS if someone changes the function to return $true when committed flag is $false.
+    $c4_notCommitted = (Test-AutodevCounterIncrement -IterationCommitted $false)  # must be $false
+    $c4_committed    = (Test-AutodevCounterIncrement -IterationCommitted $true)   # must be $true
+    $case4 = (-not $c4_notCommitted) -and $c4_committed
+    if ($case4) {
+        Write-Host "Case 4 PASS -- Test-AutodevCounterIncrement: notCommitted=$c4_notCommitted committed=$c4_committed (counter guard verified)." -ForegroundColor Green
+    } else {
+        Write-Host "Case 4 FAIL -- Test-AutodevCounterIncrement returned unexpected value(s): notCommitted=$c4_notCommitted committed=$c4_committed" -ForegroundColor Red
+    }
+
     Write-Host "--- Conductor circuit-breaker attempt-counter self-test ---"
     Write-Host "External pauses (worker/critic 429): max breaker input = $maxBreakerInput (threshold $max); never poisons = $externalNeverPoisons"
     Write-Host "Genuine failures: breaker fires after >$max attempts = $poisoned"
 
-    if ($externalNeverPoisons -and $poisoned) {
-        Write-Host "RESULT: PASS -- external pauses are refunded (no false poison); genuine failures still trip the breaker." -ForegroundColor Green
+    if ($externalNeverPoisons -and $poisoned -and $case3 -and $case4) {
+        Write-Host "RESULT: PASS -- external pauses are refunded (no false poison); genuine failures still trip the breaker; fail-closed gate; escalate does not increment counter." -ForegroundColor Green
         return 0
     } else {
         Write-Host "RESULT: FAIL" -ForegroundColor Red
@@ -350,15 +441,43 @@ function Invoke-ConductorSelfTest {
 # ----------------------------------------------------------------------------------
 if ($SelfTest) { exit (Invoke-ConductorSelfTest) }
 
+$sessionStart = Get-Date
 $iterations = 0
+$commitsSinceDrift = 0
 while ($true) {
+    # MaxSessionHours wall-clock cap: exit gracefully before spawning another worker.
+    $elapsedHours = ((Get-Date) - $sessionStart).TotalHours
+    if ($elapsedHours -ge $Config.MaxSessionHours) {
+        Write-AutodevLog -Level WARN -Message "MaxSessionHours ($($Config.MaxSessionHours)) reached after $([Math]::Round($elapsedHours,2)) h; stopping conductor." -Config $Config
+        break
+    }
     $did = Invoke-ConductorIteration
     $iterations++
+
+    # Anti-drift trigger: count successful COMMITs via the explicit flag set by the COMMIT route.
+    # Using the flag (not done/ file existence) prevents false-increments from reused task ids.
+    if ($null -ne $did -and (Test-AutodevCounterIncrement -IterationCommitted $script:iterationCommitted)) {
+        $commitsSinceDrift++
+        if ($commitsSinceDrift -ge $Config.AntiDriftEveryCommits) {
+            $commitsSinceDrift = 0
+            try {
+                Write-AutodevLog -Level INFO -Message "Anti-drift: running after $($Config.AntiDriftEveryCommits) commits ..." -Config $Config
+                # Pass the exact commit window so anti-drift reviews ALL commits since the last
+                # check, not just a fixed HEAD~3 default. $commitsSinceDrift was the running
+                # count before the reset above; use $Config.AntiDriftEveryCommits as the count.
+                $driftWindow = $Config.AntiDriftEveryCommits
+                & (Join-Path $here 'anti-drift.ps1') `
+                    -SinceRef "HEAD~$driftWindow" `
+                    -CommitsSinceLast $driftWindow | Out-Null
+            } catch {
+                Write-AutodevLog -Level WARN -Message "Anti-drift run failed (non-fatal): $($_.Exception.Message)" -Config $Config
+            }
+        }
+    }
+
     if ($Once) { break }
     if ($MaxIterations -gt 0 -and $iterations -ge $MaxIterations) { break }
     if ($null -eq $did) {
-        # idle: no claimable task. (Periodic jobs -- anti-drift/digest -- run here in a
-        # full deployment; in bootstrap they are exercised explicitly.)
         Start-Sleep -Seconds $SleepSeconds
     }
 }

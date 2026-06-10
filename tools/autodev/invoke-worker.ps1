@@ -3,7 +3,8 @@
   Run a disposable worker (claude -p) on one task, with model ladder + watchdog.
 
 .DESCRIPTION
-  Spawns a fresh `claude -p` worker for a single task in its worktree. Implements:
+  Spawns a fresh `claude -p` worker for a single task in the repository working tree
+  (serialized by file_set disjointness -- no per-task git worktrees). Implements:
     - MODEL LADDER: starts at the task-declared tier when present (opus -> sonnet -> haiku
       for 'opus', sonnet -> haiku for 'sonnet', haiku only for 'haiku'); full ladder when
       no model is declared. Rate-limit step-downs only go to cheaper tiers.
@@ -57,14 +58,16 @@ function Build-WorkerPrompt {
     $taskBody = if (Test-Path $taskFile) { Get-Content $taskFile -Raw -Encoding utf8 } else { "(task file missing)" }
     return @"
 You are a disposable worker. You do ONE task, then you die. Your memory is the
-blackboard on disk, not your context. Use Serena for all PHP reads -- never the Read tool.
+blackboard on disk, not your context.
+Use Serena tools for PHP if they are available in your session; otherwise use Grep/Read.
 
 TASK: $TaskId  (full spec below, also at .autodev/queue/active/$TaskId.md)
 ANCHOR: read .autodev/GOAL.md before anything. Do not exceed the task scope.
 INVARIANTS: read .autodev/INVARIANTS.md. You MUST NOT break any contract zone.
 
 Rules:
-- Work in this git worktree: $Worktree . Touch ONLY files the task names in file_set.
+- Work in the repository working tree (serialized by file_set disjointness): $Worktree
+  Touch ONLY files the task names in file_set.
 - Make the smallest change that completes the task.
 - If the task needs >1 logical change, STOP: write worker-report.md status=TOO_BIG with a
   proposed decomposition. Do not code.
@@ -72,10 +75,12 @@ Rules:
   STOP: status=NEEDS_GUARD. Do not code.
 
 Output to .autodev/runtime/$TaskId/ :
-- the change WRITTEN TO DISK but NOT committed. Do NOT run ``git commit`` or ``git add``,
+- the change WRITTEN TO DISK but NOT committed. Do NOT run ``git commit`` or ``git add``;
   do NOT push, do NOT touch main. The conductor stages + commits your file_set ONLY after
   the gate passes -- committing yourself would land UNVERIFIED code on the branch (the gate
   is the lock, not you).
+  EXCEPTION: ``git add -N -- <file_set files>`` is the EXPLICIT sole allowed git-add
+  command; it intent-stages new files so they appear in ``git diff`` without staging content.
 - diff.patch  = run ``git add -N -- <your file_set files>`` then ``git diff -- <those files>``
   (so new files appear). The conductor also regenerates this authoritatively; this copy is
   for your own reference.
@@ -126,7 +131,7 @@ if ($DryRun) {
     Write-Host "TouchesContractZone: $([bool]$TouchesContractZone)"
     Write-Host "Ladder: $($ladder -join ' -> ')"
     foreach ($model in $ladder) {
-        Write-Host "  would run: $($Config.ClaudeExe) -p --model $model --permission-mode acceptEdits  (cwd=$Worktree, prompt via stdin, heartbeat=$heartbeat)"
+        Write-Host "  would run: $($Config.ClaudeExe) -p --model $model --permission-mode acceptEdits --max-turns $($Config.WorkerMaxTurns)  (cwd=$Worktree, prompt via stdin, heartbeat=$heartbeat)"
     }
     Write-Host "Prompt preview (first 280 chars):"
     Write-Host ($prompt.Substring(0, [Math]::Min(280, $prompt.Length)) + ' ...')
@@ -140,6 +145,7 @@ foreach ($model in $ladder) {
     # stdout is continuous -- this feeds the watchdog's process-driven liveness signal even
     # during long read/reason phases that have not yet written any file.
     $args = @('-p', '--model', $model, '--permission-mode', 'acceptEdits',
+              '--max-turns', [string]$Config.WorkerMaxTurns,
               '--verbose', '--output-format', 'stream-json')
     $r = Start-WatchedProcess -FilePath $Config.ClaudeExe -ArgumentList $args `
             -HeartbeatPath $heartbeat `

@@ -76,6 +76,29 @@ function Invoke-AutodevGate {
         [string]$ComposerSubcommand = 'check',
         [pscustomobject]$Config = (Get-AutodevConfig)
     )
+    # Empty/missing file_set: no files are owned by this task, so there is nothing safe to
+    # judge or commit. Escalate immediately -- checked BEFORE loading invariants/guards so
+    # that a load failure (missing INVARIANTS.md) cannot prevent writing the gate-verdict.json
+    # and cannot prevent the conductor from routing to escalation.
+    if (-not $Range -and (-not $FileSet -or $FileSet.Count -eq 0)) {
+        $emptyVerdict = [pscustomobject]@{
+            task_id              = $TaskId
+            composer_green       = $false
+            constitution_touched = @()
+            zones_touched        = @()
+            decision             = 'ESCALATE'
+            reasons              = @('empty file_set -- nothing can be safely judged')
+            changed_files        = @()
+        }
+        if ($TaskId) {
+            $rtDir = Join-Path $Config.Runtime $TaskId
+            if (-not (Test-Path $rtDir)) { New-Item -ItemType Directory -Path $rtDir -Force | Out-Null }
+            $emptyVerdict | ConvertTo-Json -Depth 6 | Set-Content -Path (Join-Path $rtDir 'gate-verdict.json') -Encoding utf8
+        }
+        Write-AutodevLog -Level GATE -Message "Task $TaskId has empty file_set; escalating." -Config $Config
+        return $emptyVerdict
+    }
+
     $inv = Get-AutodevInvariants -Config $Config
     $guards = Get-AutodevGuards -Config $Config
 

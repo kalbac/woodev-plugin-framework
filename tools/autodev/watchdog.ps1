@@ -89,7 +89,9 @@ function Start-WatchedProcess {
         Err       = New-Object System.Text.StringBuilder
     })
     $sink = {
-        $d = $EventArgs.Data
+        # $Event.SourceEventArgs.Data works on both Windows PowerShell 5.1 and PS 7+.
+        # $EventArgs.Data is unreliable on 5.1 and silently drops lines, killing stdout liveness.
+        $d = $Event.SourceEventArgs.Data
         if ($null -ne $d) {
             $s = $Event.MessageData
             $s['LastTicks'] = [DateTime]::UtcNow.Ticks
@@ -164,20 +166,59 @@ function Start-WatchedProcess {
 }
 
 function Invoke-WatchdogSelfTest {
+    # Resolve the current PowerShell engine so child processes use the same binary.
+    # Hardcoding 'powershell' breaks on systems where only pwsh (PS 7+) is installed.
+    $psExe = if ($PSVersionTable.PSEdition -eq 'Core') { 'pwsh' } else { 'powershell' }
+
+    # Case 1: heartbeat-staleness kill.
     # Spawn a process that sleeps 60s but NEVER updates the heartbeat. With a 6s stale
     # window the watchdog must kill it well before it finishes.
     $hb = Join-Path ([System.IO.Path]::GetTempPath()) ("autodev-hb-" + [guid]::NewGuid().ToString('N'))
     $sleeper = 'Start-Sleep -Seconds 60'
-    Write-Host "Watchdog self-test: launching a 60s sleeper with a 6s stale window (no heartbeat updates)..."
+    Write-Host "Watchdog self-test case 1: launching a 60s sleeper with a 6s stale window (no heartbeat updates)..."
     $t0 = Get-Date
-    $r = Start-WatchedProcess -FilePath 'powershell' `
+    $r = Start-WatchedProcess -FilePath $psExe `
             -ArgumentList @('-NoProfile', '-Command', $sleeper) `
             -HeartbeatPath $hb -StaleSeconds 6 -TimeoutSeconds 120 -PollSeconds 2
     $elapsed = ((Get-Date) - $t0).TotalSeconds
     Remove-Item $hb -Force -ErrorAction SilentlyContinue
-    Write-Host ("Killed after {0:N0}s; TimedOut={1}; ExitCode={2}" -f $elapsed, $r.TimedOut, $r.ExitCode)
-    if ($r.TimedOut -and $elapsed -lt 30) {
-        Write-Host "RESULT: PASS -- watchdog killed the hung process on heartbeat staleness." -ForegroundColor Green
+    Write-Host ("  Killed after {0:N0}s; TimedOut={1}; ExitCode={2}" -f $elapsed, $r.TimedOut, $r.ExitCode)
+    $case1 = ($r.TimedOut -and $elapsed -lt 30)
+    if ($case1) {
+        Write-Host "  Case 1 PASS -- watchdog killed the hung process on heartbeat staleness." -ForegroundColor Green
+    } else {
+        Write-Host "  Case 1 FAIL" -ForegroundColor Red
+    }
+
+    # Case 2: stdout-liveness (sink must receive data).
+    # Spawn a short-lived process that emits lines to stdout. With a 6s stale window and
+    # NO heartbeat file the watchdog MUST stay alive long enough to let the process finish
+    # naturally (stdout events keep LastTicks fresh). If the event sink is broken (e.g.
+    # $EventArgs.Data instead of $Event.SourceEventArgs.Data), LastTicks never updates,
+    # the watchdog kills the process early as "stale", and TimedOut=true -- FAIL.
+    $hb2 = Join-Path ([System.IO.Path]::GetTempPath()) ("autodev-hb2-" + [guid]::NewGuid().ToString('N'))
+    # Emit one line per second for 8 seconds (> the 6s stale window) then exit normally.
+    $emitter = '1..8 | ForEach-Object { Write-Host "line $_"; Start-Sleep -Seconds 1 }'
+    Write-Host "Watchdog self-test case 2: 8s stdout-emitting process with 6s stale window (stdout keeps sink alive)..."
+    $t1 = Get-Date
+    $r2 = Start-WatchedProcess -FilePath $psExe `
+            -ArgumentList @('-NoProfile', '-Command', $emitter) `
+            -HeartbeatPath $hb2 -StaleSeconds 6 -TimeoutSeconds 60 -PollSeconds 1
+    $elapsed2 = ((Get-Date) - $t1).TotalSeconds
+    Remove-Item $hb2 -Force -ErrorAction SilentlyContinue
+    Write-Host ("  Elapsed {0:N0}s; TimedOut={1}; StdoutLines={2}" -f $elapsed2, $r2.TimedOut, ($r2.Stdout -split "`n" | Where-Object { $_.Trim() }).Count)
+    # Process must NOT have been killed (TimedOut=false) and must have emitted all 8 lines.
+    $linesReceived = ($r2.Stdout -split "`n" | Where-Object { $_.Trim() -match '^line \d' }).Count
+    $case2 = ((-not $r2.TimedOut) -and $linesReceived -ge 8)
+    if ($case2) {
+        Write-Host "  Case 2 PASS -- sink received all stdout lines; process ran to completion." -ForegroundColor Green
+    } else {
+        Write-Host "  Case 2 FAIL -- sink did not receive lines or process was killed early (linesReceived=$linesReceived, TimedOut=$($r2.TimedOut))." -ForegroundColor Red
+    }
+
+    Write-Host "--- Watchdog self-test summary ---"
+    if ($case1 -and $case2) {
+        Write-Host "RESULT: PASS -- heartbeat-staleness kill + stdout-liveness both verified." -ForegroundColor Green
         return 0
     }
     Write-Host "RESULT: FAIL" -ForegroundColor Red

@@ -53,9 +53,9 @@ function Get-AutodevConfig {
         QueueActive     = Join-Path $autodev 'queue\active'
         QueueDone       = Join-Path $autodev 'queue\done'
         QueueQuarantine = Join-Path $autodev 'queue\quarantine'
+        QueueEscalated  = Join-Path $autodev 'queue\escalated'
         Runtime         = Join-Path $autodev 'runtime'
         Escalations     = Join-Path $autodev 'escalations'
-        CurrentState    = Join-Path $root 'docs-internal\CURRENT-STATE.md'
         Tracker         = Join-Path $root 'docs-internal\platform-v2-program-tracker.md'
 
         # Runtime roles (model ladder). Contract-zone tasks pin to the first entry only.
@@ -68,9 +68,10 @@ function Get-AutodevConfig {
         CriticDiffLineThreshold = 40   # diff > N lines -> expensive critic even if zone-free
         WatchdogStaleMinutes    = 15   # NO process activity (stdout/file writes/heartbeat) for this long -> kill + respawn
         MaxAttempts             = 3    # attempts > this -> quarantine + escalate
-        AntiDriftEveryCommits   = 5    # run anti-drift every M commits
-        DigestEveryCommits      = 5    # append digest every N commits
+        AntiDriftEveryCommits   = 5    # run anti-drift every M commits; digest rides this cadence
         WorkerTimeoutMinutes    = 20
+        WorkerMaxTurns          = 100  # passed as --max-turns to claude (hard cap per worker spawn)
+        MaxSessionHours         = 8    # conductor wall-clock exit: stop gracefully after N hours
 
         # Tool transports
         ClaudeExe       = 'claude'
@@ -81,9 +82,27 @@ function Get-AutodevConfig {
 function Initialize-AutodevDirectories {
     param([pscustomobject]$Config = (Get-AutodevConfig))
     foreach ($p in @($Config.QueuePending, $Config.QueueActive, $Config.QueueDone,
-                      $Config.QueueQuarantine, $Config.Runtime, $Config.Escalations)) {
+                      $Config.QueueQuarantine, $Config.QueueEscalated,
+                      $Config.Runtime, $Config.Escalations)) {
         if (-not (Test-Path $p)) { New-Item -ItemType Directory -Path $p -Force | Out-Null }
     }
+}
+
+# --------------------------------------------------------------------------------------
+# Cryptographic helpers
+# --------------------------------------------------------------------------------------
+
+function Get-AutodevTextSha256 {
+    <# Returns the hex SHA256 of a UTF-8 string. Used for diff identity in verdict.json. #>
+    param([string]$Text)
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes($Text)
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $hash = $sha.ComputeHash($bytes)
+    } finally {
+        $sha.Dispose()
+    }
+    return ([System.BitConverter]::ToString($hash) -replace '-', '').ToLower()
 }
 
 # --------------------------------------------------------------------------------------

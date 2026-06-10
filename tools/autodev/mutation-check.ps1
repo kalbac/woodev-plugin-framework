@@ -39,11 +39,11 @@ function Invoke-GuardTest {
     param([string]$TestFile, [pscustomobject]$Config)
     $phpunit = Join-Path $Config.RepoRoot 'vendor\bin\phpunit.bat'
     if (-not (Test-Path $phpunit)) { $phpunit = Join-Path $Config.RepoRoot 'vendor\bin\phpunit' }
-    Push-Location $Config.RepoRoot
-    try {
-        $out = & $phpunit $TestFile 2>&1 | Out-String
-        return [pscustomobject]@{ Green = ($LASTEXITCODE -eq 0); Output = $out }
-    } finally { Pop-Location }
+    # Route through Invoke-Native so phpunit stderr (test summaries, notices) does not trigger
+    # NativeCommandError under $ErrorActionPreference='Stop' on Windows PowerShell 5.1.
+    # Exit-code semantics are preserved: non-zero = RED (expected on mutation step).
+    $r = Invoke-Native -Exe $phpunit -CommandArgs @($TestFile) -WorkingDirectory $Config.RepoRoot -Merge
+    return [pscustomobject]@{ Green = ($r.ExitCode -eq 0); Output = $r.Output }
 }
 
 function Write-Maybe { param([string]$Msg) if (-not $Quiet) { Write-Host $Msg } }
