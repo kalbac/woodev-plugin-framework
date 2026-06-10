@@ -20,6 +20,7 @@ opencode.json
 !/.qwen/
 
 # Local tooling / scratch — not part of the repo
+/.openclaude/
 /.kiro/
 /plugins-reference/
 .phpunit.result.cache

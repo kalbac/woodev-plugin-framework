@@ -1,5 +1,14 @@
 # Current State — Woodev Plugin Framework
-> Last updated: 2026-06-09 (session 3: packing seam → real rate-calc, single-seam template; **PR open** on `feat/shipping-rate-packing-seam`; 263 tests GREEN)
+> Last updated: 2026-06-10 (session 4: shipping conformance audit → `supports_*()` predicate wrappers; **PR #24 open** on `feat/shipping-supports-predicates`; 265 tests GREEN)
+
+## Autodev digest — 2026-06-10 (session 4: shipping pattern-conformance audit + remediation; **PR #24 open, not merged**)
+- **Operator-directed via the autodev pattern** (Phase-1 audit done directly; scope brainstormed with operator; atomic specs queued; worker subagents wrote files; adversarial + holistic critic subagents stood in for GPT-5.5). Branch `feat/shipping-supports-predicates` off fresh `main`.
+- **Audit (`docs-internal/reviews/shipping-pattern-conformance-audit-2026-06-10.md`):** `woodev/shipping-method/` vs Capability-Gated Feature Seam (wiki + ADR-006). **Overwhelmingly conforming, zero hard gaps.** Standalone subsystems (REST/AJAX/checkout/webhook/admin) = justified deviations (placement #2), left untouched. Two convention fixes: M7 predicate wrappers + P6 dead plugin-level `supports()`.
+- **s4-p1 (`7287c89`):** added public `supports_box_packing()` / `supports_shipping_classes()` on `Shipping_Method`, routed the 4 raw `supports(self::FEATURE_*)` sites through them (aligns with payment-gateway). +2 tests. Internal-API only — no contract touched.
+- **s4-p2 (`b1978e7`):** documented `Shipping_Plugin::supports()` as the host-facing plugin-scoped capability surface (docblock-only; no speculative constants per operator).
+- **Reviews:** s4-p1 adversarial = SAFE-WITH-NITS (0 must-fix); whole-feature holistic = SHIP (0 must-fix).
+- **`composer check` green: PHPCS 152/152, PHPStan 0, 265 tests / 827 assertions.** Commits `779ec6c` (audit+specs), `7287c89` (predicates), `b1978e7` (docs). PR #24 `MERGEABLE/UNSTABLE` (CI running).
+- **Next:** merge after green GH Actions + operator decision. Known follow-up still open: `Abstract_Warehouse_Store::save()` doesn't check the wpdb return value.
 
 ## Autodev digest — 2026-06-09 (session 3: packing seam → real rate-calc; **PR open, not merged**)
 - **Operator-directed via the autodev pattern** (design brainstormed + approved by operator; atomic specs queued; worker subagents wrote files; adversarial silent-failure-hunter + holistic code-reviewer agents stood in for the GPT-5.5 critic). Branch `feat/shipping-rate-packing-seam` off fresh `main`.
