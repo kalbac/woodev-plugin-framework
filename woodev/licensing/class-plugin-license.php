@@ -559,6 +559,10 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 		 * @return bool
 		 */
 		public function is_license_valid() {
+			if ( ! $this->is_license_required() ) {
+				return true;
+			}
+
 			return ! empty( $this->license_key ) && $this->has_status( 'valid' );
 		}
 
@@ -568,6 +572,10 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 		 * @return bool
 		 */
 		public function is_active() {
+			if ( ! $this->is_license_required() ) {
+				return true;
+			}
+
 			return ! in_array(
 				true,
 				array(
@@ -577,6 +585,22 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 				),
 				true
 			);
+		}
+
+		/**
+		 * Authoritative answer to whether this product requires a valid license.
+		 *
+		 * Returns true unless a VERIFIED server claim says it is license-free. Until
+		 * signed claims are issued (see the S3.1 spec §4) this always returns true,
+		 * so enforcement is byte-for-byte unchanged. The local Woodev_Plugin::is_need_license()
+		 * flag does NOT influence this method (anti-pirate).
+		 *
+		 * @since 2.0.0
+		 *
+		 * @return bool
+		 */
+		public function is_license_required() {
+			return true;
 		}
 
 		/**

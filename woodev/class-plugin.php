@@ -960,6 +960,23 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		abstract public function get_download_id();
 
 		/**
+		 * Whether this plugin requires a license to operate.
+		 *
+		 * Presentation hint only — controls how the license page renders and whether
+		 * "enter your license" nags appear. NEVER used to gate features or updates;
+		 * the authority on that is the server-signed claim consulted by
+		 * {@see Woodev_Plugins_License::is_license_required()}. A plugin shipped
+		 * without a license overrides this to return false.
+		 *
+		 * @since 2.0.0
+		 *
+		 * @return bool
+		 */
+		public function is_need_license(): bool {
+			return true;
+		}
+
+		/**
 		 * Gets the settings API handler instance.
 		 *
 		 * Plugins can use this to init the settings API handler.
