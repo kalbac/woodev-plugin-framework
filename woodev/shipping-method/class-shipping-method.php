@@ -122,7 +122,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 
 			$this->instance_form_fields = array_merge( $this->instance_form_fields, $this->get_method_form_fields() );
 
-			if ( $this->supports( self::FEATURE_SHIPPING_CLASSES ) ) {
+			if ( $this->supports_shipping_classes() ) {
 
 				$this->instance_form_fields['shipping_class_id'] = [
 					'title'    => esc_html__( 'Shipping class', 'woodev-plugin-framework' ),
@@ -134,7 +134,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 				];
 			}
 
-			if ( $this->supports( self::FEATURE_BOX_PACKING ) ) {
+			if ( $this->supports_box_packing() ) {
 
 				$this->instance_form_fields['packing_algorithm'] = [
 					'title'    => esc_html__( 'Packing algorithm', 'woodev-plugin-framework' ),
@@ -320,7 +320,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		 */
 		final protected function calculate_rate( array $package ): ?Shipping_Rate {
 
-			$packed = $this->supports( self::FEATURE_BOX_PACKING )
+			$packed = $this->supports_box_packing()
 				? $this->pack_package( $package )
 				: null;
 
@@ -374,7 +374,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 				}
 			}
 
-			if ( $this->supports( self::FEATURE_SHIPPING_CLASSES ) && ! $this->has_only_selected_shipping_class( $package ) ) {
+			if ( $this->supports_shipping_classes() && ! $this->has_only_selected_shipping_class( $package ) ) {
 
 				$is_available = false;
 
@@ -599,6 +599,34 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 			}
 
 			return true;
+		}
+
+		/**
+		 * Determines whether this method combines package contents into parcels before rating.
+		 *
+		 * Named predicate over {@see self::FEATURE_BOX_PACKING}: one point of change and a
+		 * self-documenting capability surface (the convention from Woodev_Payment_Gateway's
+		 * supports_*() wrappers).
+		 *
+		 * @since 2.0.0
+		 *
+		 * @return bool
+		 */
+		public function supports_box_packing(): bool {
+			return $this->supports( self::FEATURE_BOX_PACKING );
+		}
+
+		/**
+		 * Determines whether this method is gated by a configured WooCommerce shipping class.
+		 *
+		 * Named predicate over {@see self::FEATURE_SHIPPING_CLASSES}.
+		 *
+		 * @since 2.0.0
+		 *
+		 * @return bool
+		 */
+		public function supports_shipping_classes(): bool {
+			return $this->supports( self::FEATURE_SHIPPING_CLASSES );
 		}
 
 		/**

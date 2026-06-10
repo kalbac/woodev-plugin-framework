@@ -235,6 +235,26 @@ namespace Woodev\Tests\Unit {
 			$this->assertNull( $this->invoke( $method, 'pack_package', [] ) );
 		}
 
+		public function test_supports_box_packing_predicate_reflects_declared_support(): void {
+			$method = $this->make_method();
+
+			$this->assertFalse( $method->supports_box_packing() );
+
+			$method->supports = [ \Woodev\Framework\Shipping\Shipping_Method::FEATURE_BOX_PACKING ];
+
+			$this->assertTrue( $method->supports_box_packing() );
+		}
+
+		public function test_supports_shipping_classes_predicate_reflects_declared_support(): void {
+			$method = $this->make_method();
+
+			$this->assertFalse( $method->supports_shipping_classes() );
+
+			$method->supports = [ \Woodev\Framework\Shipping\Shipping_Method::FEATURE_SHIPPING_CLASSES ];
+
+			$this->assertTrue( $method->supports_shipping_classes() );
+		}
+
 		/**
 		 * Runs in a separate process so the conditionally-defined WC_Product
 		 * stub is declared and aliased in a clean class table — another test in
