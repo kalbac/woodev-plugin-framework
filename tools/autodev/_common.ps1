@@ -186,6 +186,7 @@ function ConvertFrom-AutodevTask {
         type: guard
         touches_contract_zone: true
         writes_guard: true
+        model: sonnet        # optional: haiku | sonnet | opus (omit for full ladder)
         file_set:
           - path/one.php
           - path/two.json
@@ -203,6 +204,7 @@ function ConvertFrom-AutodevTask {
     $obj = [ordered]@{
         id = $null; title = $null; type = $null
         touches_contract_zone = $false; writes_guard = $false
+        model = $null
         file_set = @(); body = $body; path = $Path
     }
     $currentList = $null

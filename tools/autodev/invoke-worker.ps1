@@ -4,10 +4,13 @@
 
 .DESCRIPTION
   Spawns a fresh `claude -p` worker for a single task in its worktree. Implements:
-    - MODEL LADDER: Opus -> Sonnet -> Haiku for ordinary tasks.
-    - CONTRACT-ZONE PIN: a task that touches a contract zone is pinned to Opus. On a
-      rate-limit it PAUSES (returns rate_limited) -- it is NEVER silently downgraded to
-      a weaker model. A license-zone edit must not land on Haiku just because Opus is busy.
+    - MODEL LADDER: starts at the task-declared tier when present (opus -> sonnet -> haiku
+      for 'opus', sonnet -> haiku for 'sonnet', haiku only for 'haiku'); full ladder when
+      no model is declared. Rate-limit step-downs only go to cheaper tiers.
+    - CONTRACT-ZONE PIN: a task that touches a contract zone is pinned to Opus regardless
+      of any declared model. On a rate-limit it PAUSES (returns rate_limited) -- it is
+      NEVER silently downgraded to a weaker model. A license-zone edit must not land on
+      Haiku just because Opus is busy.
     - WATCHDOG: the worker touches runtime/<id>/heartbeat; a stale heartbeat kills the
       hung process so the conductor can respawn (attempts++).
     - RATE-LIMIT DETECTION: 429/quota in exit code or stderr steps down the ladder
@@ -17,6 +20,12 @@
   Status in DONE-ish (the conductor then reads runtime/<id>/worker-report.md for the
   authoritative worker status) | RATE_LIMITED | TIMED_OUT | ERROR.
 
+.PARAMETER Model
+  Optional model declared in the task frontmatter (haiku|sonnet|opus). When set, the
+  ladder starts at that tier and steps down only to cheaper models on rate-limits.
+  Ignored (with a WARN) if -TouchesContractZone is set and the declared model is weaker
+  than opus. Unknown values fall back to the full ladder with a WARN.
+
 .PARAMETER DryRun
   Build and print the ladder + claude command(s) without spawning claude. Used to verify
   command construction and the contract-zone Opus pin in this bootstrap session.
@@ -25,6 +34,7 @@
 param(
     [Parameter(Mandatory)][string]$TaskId,
     [string]$Worktree,
+    [string]$Model,
     [switch]$TouchesContractZone,
     [switch]$DryRun
 )
@@ -84,13 +94,35 @@ $taskBody
 
 # Build the ladder. Cast to [string[]] so a single-element ladder is NOT unwrapped to a
 # scalar string (which would make $ladder[0] index a character instead of the model name).
-[string[]]$ladder = if ($TouchesContractZone) { , $Config.WorkerLadder[0] } else { $Config.WorkerLadder }
-Write-AutodevLog -Level WORKER -Message "Task $TaskId ladder: $($ladder -join ' -> ')$(if ($TouchesContractZone) { ' (CONTRACT-ZONE: pinned to ' + $ladder[0] + ', pause-not-downgrade on 429)' })" -Config $Config
+# Priority: (1) contract-zone pin always wins; (2) declared model starts a sub-ladder;
+# (3) unknown declared model -> WARN + full ladder; (4) no model -> full ladder (unchanged).
+$declaredModel = if ($Model) { $Model.Trim().ToLower() } else { '' }
+[string[]]$ladder = @()
+if ($TouchesContractZone) {
+    $ladder = , $Config.WorkerLadder[0]
+    if ($declaredModel -and $declaredModel -ne $Config.WorkerLadder[0]) {
+        Write-AutodevLog -Level WARN -Message "Task $TaskId declares model '$declaredModel' but touches a contract zone -- pinned to $($Config.WorkerLadder[0]) (contract-zone pin overrides declared model)." -Config $Config
+    }
+} elseif ($declaredModel) {
+    $idx = [array]::IndexOf($Config.WorkerLadder, $declaredModel)
+    if ($idx -ge 0) {
+        # Sub-ladder: declared tier first, then cheaper tiers only (rate-limit step-down).
+        $ladder = [string[]]($Config.WorkerLadder[$idx..($Config.WorkerLadder.Length - 1)])
+    } else {
+        Write-AutodevLog -Level WARN -Message "Task $TaskId declares unknown model '$declaredModel' -- falling back to full ladder." -Config $Config
+        $ladder = $Config.WorkerLadder
+    }
+} else {
+    $ladder = $Config.WorkerLadder
+}
+$declaredLabel = if ($declaredModel) { $declaredModel } else { '(none)' }
+Write-AutodevLog -Level WORKER -Message "Task $TaskId declared-model: $declaredLabel  ladder: $($ladder -join ' -> ')$(if ($TouchesContractZone) { ' (CONTRACT-ZONE: pinned to ' + $ladder[0] + ', pause-not-downgrade on 429)' })" -Config $Config
 
 $prompt = Build-WorkerPrompt -TaskId $TaskId -Worktree $Worktree
 
 if ($DryRun) {
     Write-Host "=== invoke-worker DRY RUN (task $TaskId) ==="
+    Write-Host "DeclaredModel: $declaredLabel"
     Write-Host "TouchesContractZone: $([bool]$TouchesContractZone)"
     Write-Host "Ladder: $($ladder -join ' -> ')"
     foreach ($model in $ladder) {
