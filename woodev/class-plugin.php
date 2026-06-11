@@ -498,6 +498,14 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 			require_once $framework_path . '/class-lifecycle.php';
 			require_once $framework_path . '/rest-api/class-plugin-rest-api.php';
 
+			// Load the shared Ed25519 envelope verifier + site-normalization primitive.
+			// Unconditional and BEFORE the licensing block: the §4 claim store and the
+			// §3.4.1 command dispatcher both consume these (gotcha framework/includes-wiring).
+			// Order matters: the function file defines woodev_normalize_site() that the
+			// verifier's callers rely on, so it is required before the verifier class.
+			require_once $framework_path . '/functions-license-authority.php';
+			require_once $framework_path . '/licensing/class-license-envelope-verifier.php';
+
 			// Load plugin license classes
 			require_once $framework_path . '/licensing/api/class-licensing-api.php';
 			require_once $framework_path . '/licensing/api/class-licensing-api-request.php';

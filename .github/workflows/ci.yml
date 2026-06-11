@@ -148,6 +148,10 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php }}
+          # sodium is required: the Ed25519 envelope-verifier vector tests skip
+          # without it, and LicenseEnvelopeVerifierTest::test_sodium_available_on_ci
+          # fails the build if it ever goes missing here.
+          extensions: sodium
           coverage: none
           tools: composer:v2
 
