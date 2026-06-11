@@ -165,6 +165,53 @@ jobs:
         run: composer test:unit
 
   # ===========================================================================
+  # Сборка JS-бандла и проверка паритета с закоммиченным woodev/assets/build/
+  # Независимый job: node-сбой не должен маскировать PHP-матрицу
+  # ===========================================================================
+  assets:
+    name: Assets build parity
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Build assets
+        run: npm run build
+
+      - name: Verify build parity
+        run: |
+          DIFF=$(git diff -- woodev/assets/build/)
+          # Run git status separately so its failure fails the job; the `|| true`
+          # below tolerates only the grep filtering step, not a git error.
+          STATUS=$(git status --porcelain woodev/assets/build/)
+          UNTRACKED=$(printf '%s\n' "$STATUS" | grep '^??' || true)
+          if [ -n "$DIFF" ] || [ -n "$UNTRACKED" ]; then
+            echo "::error::The committed bundle in woodev/assets/build/ does not match the build output."
+            echo "Run 'npm ci && npm run build' locally, then commit the updated files."
+            echo ""
+            if [ -n "$DIFF" ]; then
+              echo "--- Modified files ---"
+              git diff --name-only -- woodev/assets/build/
+            fi
+            if [ -n "$UNTRACKED" ]; then
+              echo "--- Untracked files ---"
+              echo "$UNTRACKED"
+            fi
+            exit 1
+          fi
+          echo "Build parity check passed."
+
+  # ===========================================================================
   # Публикуем релиз — только если:
   # • пуш в main (не PR)
   # • версия изменилась
@@ -247,6 +294,9 @@ jobs:
             --exclude='composer.lock' \
             --exclude='package.json' \
             --exclude='package-lock.json' \
+            --exclude='src' \
+            --exclude='.nvmrc' \
+            --exclude='babel.config.js' \
             ./ /tmp/release/woodev-plugin-framework/
 
           cd /tmp/release && zip -r "$ZIP_NAME" woodev-plugin-framework/
