@@ -1,5 +1,6 @@
 {
     "redefinable-internals": [
-        "function_exists"
+        "function_exists",
+        "error_log"
     ]
 }

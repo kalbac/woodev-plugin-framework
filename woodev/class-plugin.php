@@ -542,6 +542,14 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 			require_once $framework_path . '/licensing/class-license-authority-claims.php';
 			require_once $framework_path . '/licensing/class-plugin-license.php';
 
+			// The §3.4.1 signed-command core: the atomic nonce store + the
+			// transport-neutral dispatcher. Unconditional and after the licensing
+			// block — the dispatcher resolves engines via Woodev_Plugins_License and
+			// the REST endpoint (s8-p3) / pull-fallback (s8-p5) both feed it, neither
+			// of which is admin- or WooCommerce-gated (gotcha framework/includes-wiring).
+			require_once $framework_path . '/licensing/class-license-command-nonce-store.php';
+			require_once $framework_path . '/licensing/class-license-command-dispatcher.php';
+
 			// Load the woodev/v1 REST namespace registrar + the license REST controller.
 			// Unconditional: REST requests are neither admin nor WooCommerce-gated, so an
 			// admin/WC-only require would leave these unwired and fatal on a REST request.

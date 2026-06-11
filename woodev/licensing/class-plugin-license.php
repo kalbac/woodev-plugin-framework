@@ -90,6 +90,20 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 		private static $registered_instances = array();
 
 		/**
+		 * Download ids registered by MORE THAN ONE distinct plugin (§9.3).
+		 *
+		 * A colliding download id from a different plugin id keeps the FIRST
+		 * registration and flags the id here; the command dispatcher then rejects
+		 * commands targeting an ambiguous id with `unknown_plugin` (deterministic, no
+		 * info leak). Keyed by download id → true.
+		 *
+		 * @since 2.0.0
+		 *
+		 * @var array<string, bool>
+		 */
+		private static $ambiguous_download_ids = array();
+
+		/**
 		 * Class constructor
 		 *
 		 * @param Woodev_Plugin $plugin
@@ -108,7 +122,51 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 			$this->includes();
 			$this->add_hooks();
 
-			self::$registered_instances[ (string) $this->plugin->get_download_id() ] = $this;
+			$this->register_instance();
+		}
+
+		/**
+		 * Registers this engine in the by-download-id registry, flagging collisions.
+		 *
+		 * The FIRST registration for a download id wins. A second registration for the
+		 * SAME download id from a DIFFERENT plugin id (§9.3 collision) keeps the first,
+		 * records the id in self::$ambiguous_download_ids, and logs ONE error_log line
+		 * — the command endpoint then treats that id as unknown_plugin. A re-register
+		 * of the SAME plugin id (e.g. a reload) is not a collision.
+		 *
+		 * @since 2.0.0
+		 *
+		 * @return void
+		 */
+		private function register_instance(): void {
+
+			$download_id = (string) $this->plugin->get_download_id();
+
+			if ( isset( self::$registered_instances[ $download_id ] ) ) {
+
+				$existing    = self::$registered_instances[ $download_id ];
+				$existing_id = $existing->plugin->get_id();
+				$this_id     = $this->plugin->get_id();
+
+				if ( $existing_id !== $this_id && ! isset( self::$ambiguous_download_ids[ $download_id ] ) ) {
+
+					self::$ambiguous_download_ids[ $download_id ] = true;
+
+					error_log(
+						sprintf(
+							'Woodev license: download id %1$s is registered by two plugins (%2$s, %3$s); license commands for it will be rejected as unknown_plugin.',
+							$download_id,
+							$existing_id,
+							$this_id
+						)
+					);
+				}
+
+				// First registration wins — never overwrite.
+				return;
+			}
+
+			self::$registered_instances[ $download_id ] = $this;
 		}
 
 		private function includes() {
@@ -516,6 +574,22 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 		 */
 		public static function get_registered_instance( string $plugin_id ): ?Woodev_Plugins_License {
 			return self::$registered_instances[ $plugin_id ] ?? null;
+		}
+
+		/**
+		 * Whether a download id was registered by more than one distinct plugin (§9.3).
+		 *
+		 * The command dispatcher rejects commands targeting an ambiguous id with
+		 * `unknown_plugin` (deterministic, no info leak).
+		 *
+		 * @since 2.0.0
+		 *
+		 * @param string $id The download id.
+		 *
+		 * @return bool
+		 */
+		public static function is_download_id_ambiguous( string $id ): bool {
+			return isset( self::$ambiguous_download_ids[ $id ] );
 		}
 
 		/**
