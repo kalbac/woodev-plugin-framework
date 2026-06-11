@@ -30,6 +30,9 @@ require_once dirname( __DIR__, 2 ) . '/woodev/licensing/api/class-licensing-api.
 require_once dirname( __DIR__, 2 ) . '/woodev/licensing/api/class-licensing-api-request.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/licensing/class-license-store.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/licensing/class-license-messages.php';
+require_once dirname( __DIR__, 2 ) . '/woodev/functions-license-authority.php';
+require_once dirname( __DIR__, 2 ) . '/woodev/licensing/class-license-envelope-verifier.php';
+require_once dirname( __DIR__, 2 ) . '/woodev/licensing/class-license-authority-claims.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/licensing/class-plugin-license.php';
 
 /**
@@ -866,6 +869,9 @@ class LicensePureOperationsTest extends TestCase {
 		$plugin = Mockery::mock();
 		$plugin->shouldReceive( 'get_plugin_option_name' )->with( 'license_key' )->andReturn( 'woodev_test_plugin_license_key' );
 		$plugin->shouldReceive( 'get_plugin_option_name' )->with( 'beta_version' )->andReturn( 'woodev_test_plugin_beta_version' );
+		// is_license_required() reads the §4 claim option; the get_option() stub returns
+		// the date-format fallback for it (not an array) → no verified claim → required.
+		$plugin->shouldReceive( 'get_plugin_option_name' )->with( 'license_required' )->andReturn( 'woodev_test_plugin_license_required' );
 		$plugin->shouldReceive( 'get_download_id' )->andReturn( 216 );
 		$plugin->shouldReceive( 'get_plugin_name' )->andReturn( 'Test Plugin' );
 		$plugin->shouldReceive( 'get_version' )->andReturn( '2.0.0' );
@@ -897,6 +903,15 @@ class LicensePureOperationsTest extends TestCase {
 		$this->set_private_property( $license, 'license_key', $license_key );
 		$this->set_private_property( $license, 'woodev_license', $woodev_license );
 		$this->set_private_property( $license, 'item_name', 'Test Plugin' );
+
+		// Inject a §4 claim-store double so the engine's plugin stub (an untyped
+		// Mockery double, not a real Woodev_Plugin) never reaches the typed store
+		// constructor. No verified claim → is_license_required() stays true; consume
+		// is a no-op so activate()/validate_license() write paths are unchanged.
+		$claims = Mockery::mock( \Woodev_License_Authority_Claims::class );
+		$claims->shouldReceive( 'get_verified' )->andReturn( null )->byDefault();
+		$claims->shouldReceive( 'consume_from_response' )->byDefault();
+		$this->set_private_property( $license, 'authority_claims', $claims );
 
 		return $license;
 	}

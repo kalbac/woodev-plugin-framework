@@ -23,6 +23,9 @@ require_once dirname( __DIR__, 2 ) . '/woodev/licensing/api/class-licensing-api.
 require_once dirname( __DIR__, 2 ) . '/woodev/licensing/api/class-licensing-api-request.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/licensing/class-license-store.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/licensing/class-license-messages.php';
+require_once dirname( __DIR__, 2 ) . '/woodev/functions-license-authority.php';
+require_once dirname( __DIR__, 2 ) . '/woodev/licensing/class-license-envelope-verifier.php';
+require_once dirname( __DIR__, 2 ) . '/woodev/licensing/class-license-authority-claims.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/licensing/class-plugin-license.php';
 
 /**
@@ -143,6 +146,12 @@ class LicenseNeedLicenseFlagTest extends TestCase {
 		$this->set_private_property( $license, 'plugin', $plugin );
 		$this->set_private_property( $license, 'license_key', $license_key );
 		$this->set_private_property( $license, 'woodev_license', $woodev_license );
+
+		// License REQUIRED (no verified license-free claim): the anti-pirate assertions
+		// rely on is_license_valid()/is_active() routing through the status logic.
+		$claims = Mockery::mock( \Woodev_License_Authority_Claims::class );
+		$claims->shouldReceive( 'get_verified' )->andReturn( null );
+		$this->set_private_property( $license, 'authority_claims', $claims );
 
 		return $license;
 	}

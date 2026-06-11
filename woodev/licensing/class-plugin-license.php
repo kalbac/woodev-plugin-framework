@@ -65,6 +65,18 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 		private $api_handler;
 
 		/**
+		 * The §4 signed-claim store backing is_license_required().
+		 *
+		 * Lazily constructed (get_authority_claims()) so unit tests that build the
+		 * engine via newInstanceWithoutConstructor() still resolve a store on demand.
+		 *
+		 * @since 2.0.0
+		 *
+		 * @var Woodev_License_Authority_Claims|null
+		 */
+		private $authority_claims = null;
+
+		/**
 		 * Registry of live license engines keyed by (string) download id.
 		 *
 		 * Lets the REST controller and the page enqueue resolve a plugin's license
@@ -288,12 +300,20 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 				throw new Woodev_Plugin_Exception( esc_html__( 'Не удалось получить данные лицензии. Попробуйте ещё раз.', 'woodev-plugin-framework' ) );
 			}
 
+			// Fetch the response payload once; it feeds both the §4 claim store and the
+			// license-data save below (a single get_response_data() call — parity).
+			$response_data = $license_data->get_response_data();
+
+			// §4: consume any signed claim riding the activation response (post-dispatch
+			// only; a dispatch() throw bypasses this — outage grace untouched).
+			$this->get_authority_claims()->consume_from_response( $response_data );
+
 			// Clear the option for licensed extensions to force regeneration.
 			if ( ! empty( $license_data->license ) && 'valid' === $license_data->license ) {
 				delete_transient( 'woodev_extensions' );
 			}
 
-			$this->woodev_license->save( $license_data->get_response_data() );
+			$this->woodev_license->save( $response_data );
 
 			return $this->get_state();
 		}
@@ -590,6 +610,12 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 					throw new Exception( __( 'Cannot get license data. Please try again.', 'woodev-plugin-framework' ) );
 				}
 
+				// §4: consume any signed claim riding this response. Only reached after a
+				// successful dispatch — a dispatch() throw bypasses this, so outage grace
+				// (§3.2) is preserved byte-for-byte. consume_from_response() swallows its
+				// own Throwables, so it can never break the weekly check.
+				$this->get_authority_claims()->consume_from_response( $license_data->get_response_data() );
+
 				$this->woodev_license->update(
 					array(
 						'license' => $license_data->license,
@@ -801,17 +827,46 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 		/**
 		 * Authoritative answer to whether this product requires a valid license.
 		 *
-		 * Returns true unless a VERIFIED server claim says it is license-free. Until
-		 * signed claims are issued (see the S3.1 spec §4) this always returns true,
-		 * so enforcement is byte-for-byte unchanged. The local Woodev_Plugin::is_need_license()
-		 * flag does NOT influence this method (anti-pirate).
+		 * Returns true UNLESS a cryptographically VERIFIED, site-bound, unexpired
+		 * server claim says license_required === false. The §4 claim store
+		 * (Woodev_License_Authority_Claims) is the sole authority: any doubt — no
+		 * stored claim, a tampered/expired/wrong-site/wrong-plugin claim, or a missing
+		 * sodium extension — yields a null verified payload and this method returns
+		 * true (license required). The 14-day claim expiry IS the outage grace.
+		 *
+		 * The local Woodev_Plugin::is_need_license() presentation flag does NOT
+		 * influence this method (anti-pirate invariant): a pirate cannot flip
+		 * enforcement by toggling a client-side flag — only a server signature can.
 		 *
 		 * @since 2.0.0
 		 *
 		 * @return bool
 		 */
 		public function is_license_required() {
-			return true;
+
+			$claim = $this->get_authority_claims()->get_verified();
+
+			// verify_claim() guarantees a strict bool license_required on every verified
+			// payload (non-bool claims are rejected wholesale, never stored). The
+			// `?? true` + cast is belt-and-braces only: if the guarantee ever regressed,
+			// the seam still defaults to locked.
+			return null === $claim ? true : (bool) ( $claim['license_required'] ?? true );
+		}
+
+		/**
+		 * Gets the §4 signed-claim store for this engine (lazily constructed).
+		 *
+		 * @since 2.0.0
+		 *
+		 * @return Woodev_License_Authority_Claims
+		 */
+		public function get_authority_claims(): Woodev_License_Authority_Claims {
+
+			if ( null === $this->authority_claims ) {
+				$this->authority_claims = new Woodev_License_Authority_Claims( $this->plugin );
+			}
+
+			return $this->authority_claims;
 		}
 
 		/**

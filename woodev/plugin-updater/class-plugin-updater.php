@@ -515,6 +515,18 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 					}
 				}
 
+				// §4 keyless claim transport (B-3): feed any signed claim riding the
+				// get_version response to the claim store. Wrapped in its own guard so a
+				// consumption Throwable can NEVER break the update flow — the parsed
+				// $response is still returned. consume_from_response() also swallows
+				// internally; this is belt-and-suspenders against a resolution failure.
+				try {
+					$this->plugin->get_license_instance()->get_authority_claims()->consume_from_response( $response );
+				} catch ( \Throwable $throwable ) {
+					// Intentionally swallowed — the update flow must not break on claim IO.
+					unset( $throwable );
+				}
+
 				return $response;
 
 			} catch ( Exception $e ) {
@@ -589,6 +601,10 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 				'beta'        => $this->beta,
 				'php_version' => phpversion(),
 				'wp_version'  => get_bloginfo( 'version' ),
+				// ADDITIVE (s8-p0 §9.7): the keyless poll must carry the site so the
+				// server can bind acks. RAW home_url() — the server normalizes before
+				// signing (plan decision 2); the wire value is NOT normalized here.
+				'url'         => home_url(),
 			);
 		}
 
