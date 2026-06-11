@@ -15,12 +15,14 @@
 
 defined( 'ABSPATH' ) || exit;
 
-// The framework embeds the Woodev authority PUBLIC key (base64) here. Defined
-// with a placeholder so the file is self-contained; the production key is
-// injected post-deploy. An empty/undecodable key makes every verification fail,
-// which is the safe default (claims locked, commands rejected).
+// The Woodev authority PUBLIC key (base64, Ed25519/32 bytes) — the PRODUCTION
+// key captured from woodev.ru on 2026-06-12 (woodev-core License_Authority,
+// option woodev_license_authority_keys; capture procedure in the woodev-core
+// signing spec). Rotating the server key invalidates every issued claim and
+// command and REQUIRES updating this constant in lockstep. An empty or
+// undecodable value makes every verification fail — the safe default.
 if ( ! defined( 'WOODEV_LICENSE_AUTHORITY_PUBKEY' ) ) {
-	define( 'WOODEV_LICENSE_AUTHORITY_PUBKEY', '' );
+	define( 'WOODEV_LICENSE_AUTHORITY_PUBKEY', '6N6HaUIrqZMuyDTYjvazMoQjpHwdeyLbmz5Zu3Fh2rM=' );
 }
 
 if ( ! class_exists( 'Woodev_License_Envelope_Verifier' ) ) :
