@@ -555,6 +555,7 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 			// admin/WC-only require would leave these unwired and fatal on a REST request.
 			require_once $framework_path . '/rest-api/class-rest-v1-registrar.php';
 			require_once $framework_path . '/licensing/api/class-rest-api-license.php';
+			require_once $framework_path . '/licensing/api/class-rest-api-license-command.php';
 
 			// Load plugin updater class. The condition is EXPRESSION-IDENTICAL to the
 			// load_updater() gate (B-3): wp_doing_cron() is filterable, so a

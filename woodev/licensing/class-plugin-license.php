@@ -182,6 +182,13 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 				Woodev_REST_API_License::boot();
 			}
 
+			// Boot the woodev/v1 license-command REST controller (idempotent).
+			// Registered unconditionally: server→client signed commands arrive via the
+			// public REST endpoint regardless of WP auth state (§9.3 election).
+			if ( class_exists( 'Woodev_REST_API_License_Command' ) ) {
+				Woodev_REST_API_License_Command::boot();
+			}
+
 			add_action( 'admin_notices', array( $this, 'notices' ) );
 
 			add_action( 'admin_print_scripts-plugins.php', array( $this, 'plugin_screen_scripts' ) );
