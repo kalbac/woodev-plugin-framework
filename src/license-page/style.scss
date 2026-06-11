@@ -1,0 +1,70 @@
+// License page layout and status badge styles.
+// @wordpress/components handles Card, Notice, Button etc. — no re-styling here.
+
+.woodev-licenses-intro {
+	margin-bottom: 16px;
+	max-width: 720px;
+}
+
+.woodev-licenses-grid {
+	display: grid;
+	gap: 16px;
+	grid-template-columns: repeat( auto-fill, minmax( 360px, 1fr ) );
+}
+
+// Status badge pill — colored by message_variant.
+.woodev-license-badge {
+	display: inline-block;
+	padding: 2px 10px;
+	border-radius: 12px;
+	font-size: 12px;
+	font-weight: 600;
+	line-height: 1.6;
+	color: #fff;
+
+	&.is-success {
+		background-color: #00a32a; // WP admin green
+	}
+
+	&.is-warning {
+		background-color: #dba617; // WP admin yellow
+		color: #1d2327;
+	}
+
+	&.is-error {
+		background-color: #d63638; // WP admin red
+	}
+
+	&.is-info {
+		background-color: #72aee6; // WP admin blue
+		color: #1d2327;
+	}
+}
+
+// Key display row.
+.woodev-license-key-row {
+	margin-bottom: 8px;
+}
+
+.woodev-license-key-value {
+	font-family: monospace;
+	font-size: 13px;
+	letter-spacing: 0.05em;
+	word-break: break-all;
+}
+
+.woodev-license-key-value--masked {
+	letter-spacing: 0.1em;
+	color: #50575e;
+}
+
+.woodev-license-eye-button {
+	min-width: unset;
+	padding: 4px;
+
+	.dashicons {
+		width: 18px;
+		height: 18px;
+		font-size: 18px;
+	}
+}

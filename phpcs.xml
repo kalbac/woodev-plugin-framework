@@ -18,6 +18,9 @@
 	<exclude-pattern>*/node_modules/*</exclude-pattern>
 	<exclude-pattern>*/tests/*</exclude-pattern>
 
+	<!-- Исключаем сгенерированные webpack-артефакты (@wordpress/scripts build output) -->
+	<exclude-pattern>*/assets/build/*</exclude-pattern>
+
 	<!-- =====================================================
 		 WordPress Coding Standards
 	====================================================== -->

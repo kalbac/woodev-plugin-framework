@@ -86,33 +86,44 @@ class LicenseNeedLicenseFlagTest extends TestCase {
 	}
 
 	/**
-	 * A license-free plugin's deactivate handler never reaches wp_die on a license-form submit.
+	 * A license-free plugin's deactivate() pure op is a clean no-op.
 	 *
-	 * The shared license page still renders a "Save changes" button; pressing it posts
-	 * option_page=woodev_license_fields_group with no per-plugin nonce. Without the
-	 * is_need_license() guard, deactivate_license() would wp_die( 403 ) on the missing
-	 * nonce. The guard makes it a clean no-op before the option_page/nonce checks.
+	 * The legacy admin_init deactivate_license() handler (which could wp_die on a
+	 * missing form nonce) was deleted in 2.0.0; the transport-agnostic deactivate()
+	 * replaces it. For a license-free product it must return the current state
+	 * without dispatching to the store or deleting any stored license data
+	 * (the no-op short-circuits before transport — anti-pirate presentation flag).
 	 *
 	 * @return void
 	 */
-	public function test_deactivate_license_no_wp_die_when_license_not_needed(): void {
-		$_POST['option_page'] = 'woodev_license_fields_group';
-
-		Functions\expect( 'wp_die' )->never();
-
+	public function test_license_free_deactivate_is_noop(): void {
 		$plugin = Mockery::mock();
 		$plugin->shouldReceive( 'is_need_license' )->andReturn( false );
-		$plugin->shouldNotReceive( 'get_id_dasherized' );
+		$plugin->shouldReceive( 'is_beta_allowed' )->andReturn( false );
+		$plugin->shouldReceive( 'get_download_id' )->andReturn( 0 );
+		$plugin->shouldReceive( 'get_plugin_name' )->andReturn( 'Test Plugin' );
+
+		Functions\expect( 'current_time' )->andReturn( 1000 );
+		Functions\expect( 'delete_option' )->never();
+		// wp_kses_post wraps the message in get_state(); passthrough here.
+		Functions\when( 'wp_kses_post' )->returnArg();
+
+		$woodev_license          = ( new \ReflectionClass( \Woodev_License::class ) )->newInstanceWithoutConstructor();
+		$woodev_license->license = 'valid';
+		$woodev_license->expires = 'lifetime';
 
 		$license = $this->make_license_for_plugin( $plugin, 'KEY-123', 'valid' );
+		$this->set_private_property( $license, 'woodev_license', $woodev_license );
 
-		try {
-			$license->deactivate_license();
-		} finally {
-			unset( $_POST['option_page'] );
-		}
+		// The api_handler must never be touched on a license-free no-op.
+		$api_handler = Mockery::mock();
+		$api_handler->shouldNotReceive( 'make_request' );
+		$this->set_private_property( $license, 'api_handler', $api_handler );
 
-		$this->assertTrue( true );
+		$state = $license->deactivate();
+
+		$this->assertIsArray( $state );
+		$this->assertSame( 'valid', $state['status'] );
 	}
 
 	/**

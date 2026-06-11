@@ -152,9 +152,6 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 			// load the admin settings pages
 			$this->load_admin_pages();
 
-			// load the plugin license settings fields
-			$this->load_license_settings_fields();
-
 			// add the action & filter hooks
 			$this->add_hooks();
 		}
@@ -203,31 +200,6 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 				$admin_pages = $this->load_class( '/woodev/admin/class-admin-pages.php', 'Woodev_Admin_Pages' );
 				$admin_pages->instance( $this );
 			}
-		}
-
-		/**
-		 * Initialize Woodev admin pages
-		 *
-		 * The license settings page admin handler moved to
-		 * Woodev_Woocommerce_License_Settings in 2.0.0 because the class
-		 * registers a woocommerce_screen_ids filter and is only relevant
-		 * for plugins running on WooCommerce. We gate the require_once and
-		 * instantiation on Woodev_Helper::is_woocommerce_active() so that
-		 * pure-WP plugins do not pull in the WC coupling in is_admin().
-		 *
-		 * @access private
-		 * @return void
-		 */
-		private function load_license_settings_fields() {
-			if ( ! is_admin() || ! Woodev_Helper::is_woocommerce_active() ) {
-				return;
-			}
-
-			if ( ! class_exists( 'Woodev_Woocommerce_License_Settings' ) ) {
-				require_once $this->get_framework_path() . '/licensing/class-woocommerce-license-settings.php';
-			}
-
-			new Woodev_Woocommerce_License_Settings( $this );
 		}
 
 		/**
@@ -533,6 +505,12 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 			require_once $framework_path . '/licensing/class-license-messages.php';
 			require_once $framework_path . '/licensing/class-license-store.php';
 			require_once $framework_path . '/licensing/class-plugin-license.php';
+
+			// Load the woodev/v1 REST namespace registrar + the license REST controller.
+			// Unconditional: REST requests are neither admin nor WooCommerce-gated, so an
+			// admin/WC-only require would leave these unwired and fatal on a REST request.
+			require_once $framework_path . '/rest-api/class-rest-v1-registrar.php';
+			require_once $framework_path . '/licensing/api/class-rest-api-license.php';
 
 			// Load plugin updater class
 			if ( is_admin() || ( defined( 'DOING_CRON' ) && DOING_CRON ) || ( defined( 'WP_CLI' ) && WP_CLI ) ) {

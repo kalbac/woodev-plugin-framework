@@ -213,6 +213,8 @@ public function is_license_required(): bool {
 
 Unchanged: option keys `woodev_{id}_license` and `woodev_{id}_license_key`; settings group `woodev_license_fields_group`; settings page `woodev_licenses_page`; section `woodev_licenses_section`; admin slug `woodev-licenses` (parent `woodev`); nonce `{id-dasherized}-nonce`; option names `license_key`/`deactivate`/`verify`/`beta_version`; EDD `edd_action` API contract; endpoint `https://woodev.ru/`; hooks `woodev_license_saved` / `woodev_license_deleted` / `woodev_enable_license_logging`; transient `woodev_extensions`; constant `WOODEV_LICENSE_DEBUG`.
 
+> [Superseded in S3.2: the Settings-API form was removed (ADR-005); the registration-time names `woodev_license_fields_group` / `woodev_licenses_page` / `woodev_licenses_section` and the form nonce `{id-dasherized}-nonce` no longer exist — see `platform-v2-s3-licensing-ui-spec.md` §2.1. The data-contract option keys (`woodev_{id}_license`, `woodev_{id}_license_key`), admin slug, and EDD/API contracts above remain unchanged.]
+
 **Additive only:** method `Woodev_Plugin::is_need_license()`; method `Woodev_Plugins_License::is_license_required()`; (deferred) option `woodev_{id}_license_required` holding the signed envelope; (deferred) public-key constant.
 
 ## 6. Testing (Brain Monkey, unit)

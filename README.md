@@ -172,6 +172,22 @@ woodev/
 └── utilities/                   # Background job queue
 ```
 
+## Building admin JS
+
+The license management admin page uses a React app built with `@wordpress/scripts`.
+The compiled bundle is committed to `woodev/assets/build/` and ships directly in the release ZIP — no build step is required to use the framework.
+
+To regenerate the bundle after changing files under `src/`:
+
+```bash
+npm ci                 # install dependencies (Node version from .nvmrc)
+npm run build          # compile src/ → woodev/assets/build/
+```
+
+CI runs the same commands on every PR and fails if the committed bundle does not
+match what `npm run build` produces, so always commit the updated `woodev/assets/build/`
+files alongside any `src/` changes.
+
 ## AI Development Tools
 
 The project uses a unified system of agents and skills for AI-assisted development. All files are stored in `.ai/` — this is the single source of truth. Tools connect via reference files:

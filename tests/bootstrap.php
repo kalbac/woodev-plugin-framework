@@ -12,6 +12,14 @@ if ( 'integration' === $test_suite ) {
 } else {
 	// Unit tests need ABSPATH defined (no WordPress loaded).
 	defined( 'ABSPATH' ) || define( 'ABSPATH', __DIR__ . '/' );
+
+	// WordPress core time constants the licensing code relies on (no WP loaded).
+	defined( 'MINUTE_IN_SECONDS' ) || define( 'MINUTE_IN_SECONDS', 60 );
+	defined( 'HOUR_IN_SECONDS' ) || define( 'HOUR_IN_SECONDS', 60 * MINUTE_IN_SECONDS );
+	defined( 'DAY_IN_SECONDS' ) || define( 'DAY_IN_SECONDS', 24 * HOUR_IN_SECONDS );
+	defined( 'WEEK_IN_SECONDS' ) || define( 'WEEK_IN_SECONDS', 7 * DAY_IN_SECONDS );
+	defined( 'MONTH_IN_SECONDS' ) || define( 'MONTH_IN_SECONDS', 30 * DAY_IN_SECONDS );
+
 	bootstrap_unit_tests();
 }
 

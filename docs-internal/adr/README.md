@@ -8,6 +8,7 @@
 | 004 | [Platform v2 Explicit Plugin Loader API](004-platform-v2-plugin-loader-api.md) | accepted | 2026-05-29 |
 | 005 | [Platform v2 Clean-Break Policy](005-platform-v2-clean-break-policy.md) | accepted | 2026-06-03 |
 | 006 | [Capability-Gated Feature Seam](006-capability-gated-feature-seam.md) | accepted | 2026-06-09 |
+| 007 | [React Admin Stack — @wordpress/scripts](007-react-admin-stack-wordpress-scripts.md) | accepted | 2026-06-11 |
 
 ## Creating an ADR
 

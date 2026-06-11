@@ -152,19 +152,11 @@ public function __construct( string $id, string $version, array $args = [] ) {
     $this->version = $version;
 
     $args = wp_parse_args( $args, [
-        'text_domain'        => '',
-        'dependencies'       => [],
-        'supported_features' => [
-            'hpos'   => false,
-            'blocks' => [
-                'cart'     => false,
-                'checkout' => false,
-            ],
-        ],
+        'text_domain'  => '',
+        'dependencies' => [],
     ] );
 
-    $this->text_domain        = $args['text_domain'];
-    $this->supported_features = $args['supported_features'];
+    $this->text_domain = $args['text_domain'];
 
     // Load required files
     $this->includes();
@@ -176,13 +168,13 @@ public function __construct( string $id, string $version, array $args = [] ) {
     $this->init_license_handler();
     $this->init_hook_deprecator();
     $this->init_lifecycle_handler();
+    $this->init_translation_handler();
+    $this->init_cron_handler();
     $this->init_rest_api_handler();
-    $this->init_blocks_handler();
     $this->init_setup_wizard_handler();
 
-    // Load admin pages and license fields
+    // Load admin pages
     $this->load_admin_pages();
-    $this->load_license_settings_fields();
 
     // Add hooks
     $this->add_hooks();

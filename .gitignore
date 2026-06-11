@@ -36,3 +36,6 @@ opencode.json
 .DS_Store
 Thumbs.db
 /.vscode/
+
+# Visual brainstorming companion (local only)
+.superpowers/
