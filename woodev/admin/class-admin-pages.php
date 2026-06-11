@@ -86,10 +86,13 @@ if ( ! class_exists( 'Woodev_Admin_Pages' ) ) :
 		}
 
 		/**
-		 * Generates license settings page HTML markup section
-		 * The fields must be added via main plugin class. @return void
+		 * Generates license settings page HTML markup section.
 		 *
-		 * @see Woodev_Woocommerce_License_Settings::register_license_settings()
+		 * The legacy Settings-API field renderer was removed in 2.0.0 (clean-break,
+		 * ADR-005); the React license-page app (s6-p4) replaces it. This section is
+		 * retained as the mount surface until that task lands.
+		 *
+		 * @return void
 		 */
 		public function license_page_init() {
 

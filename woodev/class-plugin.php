@@ -152,9 +152,6 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 			// load the admin settings pages
 			$this->load_admin_pages();
 
-			// load the plugin license settings fields
-			$this->load_license_settings_fields();
-
 			// add the action & filter hooks
 			$this->add_hooks();
 		}
@@ -203,31 +200,6 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 				$admin_pages = $this->load_class( '/woodev/admin/class-admin-pages.php', 'Woodev_Admin_Pages' );
 				$admin_pages->instance( $this );
 			}
-		}
-
-		/**
-		 * Initialize Woodev admin pages
-		 *
-		 * The license settings page admin handler moved to
-		 * Woodev_Woocommerce_License_Settings in 2.0.0 because the class
-		 * registers a woocommerce_screen_ids filter and is only relevant
-		 * for plugins running on WooCommerce. We gate the require_once and
-		 * instantiation on Woodev_Helper::is_woocommerce_active() so that
-		 * pure-WP plugins do not pull in the WC coupling in is_admin().
-		 *
-		 * @access private
-		 * @return void
-		 */
-		private function load_license_settings_fields() {
-			if ( ! is_admin() || ! Woodev_Helper::is_woocommerce_active() ) {
-				return;
-			}
-
-			if ( ! class_exists( 'Woodev_Woocommerce_License_Settings' ) ) {
-				require_once $this->get_framework_path() . '/licensing/class-woocommerce-license-settings.php';
-			}
-
-			new Woodev_Woocommerce_License_Settings( $this );
 		}
 
 		/**

@@ -60,6 +60,19 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 		private $api_handler;
 
 		/**
+		 * Registry of live license engines keyed by (string) download id.
+		 *
+		 * Lets the REST controller and the page enqueue resolve a plugin's license
+		 * engine by its EDD download id. The bootstrap registry holds definition
+		 * arrays, not engine instances, so this engine keeps its own.
+		 *
+		 * @since 2.0.0
+		 *
+		 * @var array<string, Woodev_Plugins_License>
+		 */
+		private static $registered_instances = array();
+
+		/**
 		 * Class constructor
 		 *
 		 * @param Woodev_Plugin $plugin
@@ -77,16 +90,14 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 
 			$this->includes();
 			$this->add_hooks();
+
+			self::$registered_instances[ (string) $this->plugin->get_download_id() ] = $this;
 		}
 
 		private function includes() {
 		}
 
 		private function add_hooks() {
-
-			// License actions
-			add_action( 'admin_init', array( $this, 'activate_license' ) );
-			add_action( 'admin_init', array( $this, 'deactivate_license' ) );
 
 			add_action( 'admin_notices', array( $this, 'notices' ) );
 
@@ -202,121 +213,276 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 		}
 
 		/**
-		 * Activate the license key.
+		 * Activates a license key against the store and persists the result.
 		 *
-		 * @return  void
+		 * Transport-agnostic single writer for license activation (the REST
+		 * controller is the only caller). It reproduces, byte-for-byte, the writes
+		 * the legacy flow performed: the Settings API sanitize callback wrote the
+		 * woodev_{id}_license_key option, and the admin_init handler dispatched the
+		 * EDD activate_license request, cleared the woodev_extensions transient on a
+		 * 'valid' response, and saved the payload via Woodev_License::save().
+		 *
+		 * Write ordering (legacy Settings-API parity): the submitted key is persisted
+		 * to the woodev_{id}_license_key option BEFORE the store call — the legacy
+		 * Settings API saved the key option even when the activation API call later
+		 * failed, so this ordering yields the identical end state. A transport failure
+		 * therefore leaves the stored LICENSE DATA (woodev_{id}_license) untouched
+		 * (save() is never reached) while the key option retains the submitted value.
+		 *
+		 * License-free products (Woodev_Plugin::is_need_license() === false) are a
+		 * no-op that returns the current state — never an enforcement decision
+		 * (anti-pirate invariant: see is_license_required()).
+		 *
+		 * Throw contract: throws Woodev_Plugin_Exception on validation failure
+		 * (empty key, no license data) and propagates the Exception thrown by
+		 * dispatch() on transport failure. The REST layer (s6-p2) maps both to a
+		 * WP_Error. Stored license DATA is left untouched on any throw (the key option
+		 * write above is intentional parity, not a data write).
+		 *
+		 * @since 2.0.0
+		 *
+		 * @param string $license_key The license key to activate.
+		 *
+		 * @return array The new license state (see get_state()).
+		 * @throws Woodev_Plugin_Exception On validation failure.
+		 * @throws Exception On transport failure (propagated from dispatch()).
 		 */
-		public function activate_license() {
+		public function activate( string $license_key ): array {
 
 			// License-free plugins never process license activation (presentation flag — see Woodev_Plugin::is_need_license()).
 			if ( ! $this->plugin->is_need_license() ) {
-				return;
+				return $this->get_state();
 			}
 
-			if ( ! isset( $_POST['option_page'] ) || 'woodev_license_fields_group' !== $_POST['option_page'] ) {
-				return;
+			$license_key = sanitize_text_field( $license_key );
+
+			if ( '' === $license_key ) {
+				throw new Woodev_Plugin_Exception( esc_html__( 'Лицензионный ключ не указан.', 'woodev-plugin-framework' ) );
 			}
 
-			$nonce_name = sprintf( '%s-nonce', $this->plugin->get_id_dasherized() );
+			// Parity: the Settings API wrote this option in the legacy flow.
+			update_option( $this->plugin->get_plugin_option_name( 'license_key' ), $license_key );
+			$this->license_key = $license_key;
 
-			if ( ! isset( $_REQUEST[ $nonce_name ] ) || ! wp_verify_nonce( $_REQUEST[ $nonce_name ], $nonce_name ) ) {
-				return;
-			}
-
-			if ( ! current_user_can( 'manage_options' ) ) {
-				return;
-			}
-
-			$license_key = sanitize_text_field( $_POST[ $this->plugin->get_plugin_option_name( 'license_key' ) ] );
-
-			if ( empty( $license_key ) ) {
-				$this->woodev_license->delete();
-
-				return;
-			}
-
-			if ( isset( $_POST[ $this->plugin->get_plugin_option_name( 'deactivate' ) ] ) ) {
-				// Don't activate a key when deactivating a different key
-				return;
-			}
-
+			// Parity: the legacy activate_license() early-returned when already valid.
 			if ( $this->is_license_valid() ) {
-				return;
+				return $this->get_state();
 			}
 
-			try {
+			$license_data = $this->dispatch( 'activate_license', $license_key );
 
-				// Call the API
-				$license_data = $this->dispatch( 'activate_license', $license_key );
+			if ( ! $license_data ) {
+				throw new Woodev_Plugin_Exception( esc_html__( 'Не удалось получить данные лицензии. Попробуйте ещё раз.', 'woodev-plugin-framework' ) );
+			}
 
-				// Make sure there are no errors
-				if ( ! $license_data ) {
-					return;
-				}
+			// Clear the option for licensed extensions to force regeneration.
+			if ( ! empty( $license_data->license ) && 'valid' === $license_data->license ) {
+				delete_transient( 'woodev_extensions' );
+			}
 
-				// Clear the option for licensed extensions to force regeneration.
-				if ( ! empty( $license_data->license ) && 'valid' === $license_data->license ) {
-					delete_transient( 'woodev_extensions' );
-				}
+			$this->woodev_license->save( $license_data->get_response_data() );
 
-				$this->woodev_license->save( $license_data->get_response_data() );
+			return $this->get_state();
+		}
 
-			} catch ( Exception $exception ) {
+		/**
+		 * Deactivates the current license key against the store.
+		 *
+		 * Transport-agnostic single writer for deactivation. It dispatches the EDD
+		 * deactivate_license request with the stored key and, on success, deletes
+		 * the stored license object via Woodev_License::delete(). It NEVER writes or
+		 * deletes the woodev_{id}_license_key option — parity with the legacy
+		 * handler, which left the key option in place on deactivation.
+		 *
+		 * License-free products are a no-op returning the current state.
+		 *
+		 * Throw contract: propagates the Exception thrown by dispatch() on transport
+		 * failure, and throws Woodev_Plugin_Exception when no license data comes
+		 * back. The REST layer maps both to a WP_Error.
+		 *
+		 * @since 2.0.0
+		 *
+		 * @return array The new license state (see get_state()).
+		 * @throws Woodev_Plugin_Exception When no license data is returned.
+		 * @throws Exception On transport failure (propagated from dispatch()).
+		 */
+		public function deactivate(): array {
+
+			// License-free plugins never process license deactivation (presentation flag — see Woodev_Plugin::is_need_license()).
+			if ( ! $this->plugin->is_need_license() ) {
+				return $this->get_state();
+			}
+
+			$response = $this->dispatch( 'deactivate_license', $this->license_key );
+
+			if ( ! $response ) {
+				throw new Woodev_Plugin_Exception( esc_html__( 'Не удалось деактивировать лицензию. Попробуйте ещё раз.', 'woodev-plugin-framework' ) );
+			}
+
+			$this->woodev_license->delete();
+
+			// Woodev_License::delete() removes the license-data option but leaves the
+			// already-populated in-memory object fields (license='valid', expires, …)
+			// untouched, because Woodev_License::get() early-returns without resetting
+			// them when the key option survives deactivation (which it does by design).
+			// Re-instantiate the license object so get_state() reflects a fresh read —
+			// legacy parity: the old flow re-instantiated Woodev_License on the next
+			// page render, so post-deactivate state was always a fresh read.
+			$this->woodev_license = new Woodev_License( $this->plugin->get_id_underscored() );
+			$this->license_key    = $this->woodev_license->key;
+
+			return $this->get_state();
+		}
+
+		/**
+		 * Persists the beta opt-in flag.
+		 *
+		 * Reproduces the legacy register_setting sanitize semantics exactly: when
+		 * enabled, write the woodev_{id}_beta_version option with value 'yes';
+		 * otherwise delete the option (absence is the "disabled" state). The
+		 * Woodev_Plugin::is_beta_allowed() reader interprets it.
+		 *
+		 * @since 2.0.0
+		 *
+		 * @param bool $enabled Whether beta versions are allowed.
+		 *
+		 * @return void
+		 */
+		public function set_beta_enabled( bool $enabled ): void {
+
+			$option_name = $this->plugin->get_plugin_option_name( 'beta_version' );
+
+			if ( $enabled ) {
+				update_option( $option_name, 'yes' );
+			} else {
+				delete_option( $option_name );
 			}
 		}
 
 		/**
-		 * Deactivate the license key
+		 * Builds the structured license state for the React app and REST responses.
 		 *
-		 * @param bool $deprecated Deprecated since 1.2.1.
+		 * The is_valid / is_active booleans come from the real accessors, which
+		 * consult ONLY is_license_required() (server authority) — never the local
+		 * is_need_license() presentation flag (anti-pirate invariant).
 		 *
-		 * @return  void
+		 * @since 2.0.0
+		 *
+		 * @return array {
+		 *     @type string $plugin_id       The EDD download id (string).
+		 *     @type string $plugin_name     The plugin display name.
+		 *     @type string $license_key     The full license key, '' when none.
+		 *     @type string $status          The raw EDD status token, or ''.
+		 *     @type string $status_label    Localized status label, '' when no status.
+		 *     @type string $message         The already-built license message.
+		 *     @type string $message_variant One of success|warning|error|info.
+		 *     @type mixed  $expires         The raw expiry value, untyped ('lifetime'|date string|numeric timestamp|''|null).
+		 *     @type bool   $is_valid        Whether the license is valid.
+		 *     @type bool   $is_active       Whether the license is active.
+		 *     @type bool   $is_need_license Presentation flag.
+		 *     @type bool   $beta_enabled    Whether the beta opt-in is set.
+		 * }
 		 */
-		public function deactivate_license( $deprecated = false ) {
+		public function get_state(): array {
 
-			if ( $deprecated ) {
-				_deprecated_argument( __METHOD__, '1.2.1', 'The AJAX parameter is not using anymore.' );
+			$status = (string) $this->woodev_license->license;
+
+			return array(
+				'plugin_id'       => (string) $this->plugin->get_download_id(),
+				'plugin_name'     => $this->plugin->get_plugin_name(),
+				'license_key'     => (string) $this->license_key,
+				'status'          => $status,
+				'status_label'    => '' === $status ? '' : $this->get_license_status( $status ),
+				'message'         => ( new Woodev_License_Messages( $this->woodev_license ) )->get_message(),
+				'message_variant' => $this->get_message_variant(),
+				// Raw expiry — a numeric timestamp stays numeric, a 'Y-m-d H:i:s'
+				// string stays a string, ''/null stay as-is. Do NOT coerce the type:
+				// the React app distinguishes lifetime / date / unknown by raw value.
+				'expires'         => $this->woodev_license->expires,
+				'is_valid'        => $this->is_license_valid(),
+				'is_active'       => $this->is_active(),
+				'is_need_license' => (bool) $this->plugin->is_need_license(),
+				'beta_enabled'    => (bool) $this->plugin->is_beta_allowed(),
+			);
+		}
+
+		/**
+		 * Maps the raw license status to a presentation bucket.
+		 *
+		 * Single source of truth for the status → bucket mapping the legacy CSS did
+		 * inline (woodev-licenses-status-*). The expires-soon timestamp is computed
+		 * the way Woodev_License_Messages::__construct() does (NOT the broken
+		 * `is_numeric(...) ?: strtotime(...)` line from the deleted renderer).
+		 *
+		 * @since 2.0.0
+		 *
+		 * @return string One of success|warning|error|info.
+		 */
+		private function get_message_variant(): string {
+
+			$status = (string) $this->woodev_license->license;
+
+			$error_statuses = array(
+				'expired',
+				'disabled',
+				'revoked',
+				'missing',
+				'missing_url',
+				'invalid',
+				'invalid_item_id',
+				'item_name_mismatch',
+				'key_mismatch',
+				'site_inactive',
+				'no_activations_left',
+				'license_not_activable',
+			);
+
+			if ( in_array( $status, $error_statuses, true ) ) {
+				return 'error';
 			}
 
-			// License-free plugins never process license deactivation (presentation flag — see Woodev_Plugin::is_need_license()).
-			if ( ! $this->plugin->is_need_license() ) {
-				return;
-			}
+			if ( 'valid' === $status ) {
 
-			if ( ! isset( $_POST['option_page'] ) || 'woodev_license_fields_group' !== $_POST['option_page'] ) {
-				return;
-			}
+				$expires = $this->woodev_license->expires;
 
-			$nonce_name = sprintf( '%s-nonce', $this->plugin->get_id_dasherized() );
+				if ( ! empty( $expires ) && 'lifetime' !== $expires ) {
 
-			if ( ! isset( $_REQUEST[ $nonce_name ] ) || ! wp_verify_nonce( $_REQUEST[ $nonce_name ], $nonce_name ) ) {
-				wp_die( __( 'Nonce verification failed', 'woodev-plugin-framework' ), __( 'Error', 'woodev-plugin-framework' ), array( 'response' => 403 ) );
-			}
+					$now        = current_time( 'timestamp' );
+					$expiration = is_numeric( $expires ) ? (int) $expires : strtotime( $expires, $now );
 
-			if ( ! current_user_can( 'manage_options' ) ) {
-				return;
-			}
-
-			// Run on deactivate button press
-			if ( isset( $_POST[ $this->plugin->get_plugin_option_name( 'deactivate' ) ] ) ) {
-
-				try {
-					// Call the API
-					$response = $this->dispatch( 'deactivate_license', $this->license_key );
-
-					// Make sure there are no errors
-					if ( ! $response ) {
-						return;
+					if ( $expiration && ( $expiration > $now ) && ( ( $expiration - $now ) < MONTH_IN_SECONDS ) ) {
+						return 'warning';
 					}
-
-					$this->woodev_license->delete();
-
-				} catch ( Exception $exception ) {
-
-					wp_die( $exception->getMessage(), __( 'Error', 'woodev-plugin-framework' ), $exception->getCode() );
-
 				}
+
+				return 'success';
 			}
+
+			return 'info';
+		}
+
+		/**
+		 * Gets the registered license engines keyed by (string) download id.
+		 *
+		 * @since 2.0.0
+		 *
+		 * @return array<string, Woodev_Plugins_License>
+		 */
+		public static function get_registered_instances(): array {
+			return self::$registered_instances;
+		}
+
+		/**
+		 * Resolves a registered license engine by its EDD download id.
+		 *
+		 * @since 2.0.0
+		 *
+		 * @param string $plugin_id The download id.
+		 *
+		 * @return Woodev_Plugins_License|null The engine, or null when unknown.
+		 */
+		public static function get_registered_instance( string $plugin_id ): ?Woodev_Plugins_License {
+			return self::$registered_instances[ $plugin_id ] ?? null;
 		}
 
 		/**
@@ -582,6 +748,24 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 
 		/**
 		 * Whether the site is using an active license.
+		 *
+		 * A true return carries three distinct meanings, all of which are
+		 * acceptable for "active" (do not nag / do not block updates):
+		 *
+		 * 1. **Genuinely-active license** — a real key is present and its recorded
+		 *    status is none of expired / disabled / invalid.
+		 * 2. **Not-known-bad** — no failing status has been recorded yet (e.g. an
+		 *    empty or unknown status, before the first verification round-trip);
+		 *    the license is given the benefit of the doubt rather than treated as
+		 *    inactive.
+		 * 3. **License-free product per server authority** — is_license_required()
+		 *    returns false (a verified server claim says this product needs no
+		 *    license), so the question of activity does not apply and the method
+		 *    short-circuits to true.
+		 *
+		 * This depends ONLY on is_license_required() (server authority), never on
+		 * the local Woodev_Plugin::is_need_license() presentation flag (anti-pirate
+		 * invariant). Behavior is unchanged — this docblock only documents it.
 		 *
 		 * @return bool
 		 */
