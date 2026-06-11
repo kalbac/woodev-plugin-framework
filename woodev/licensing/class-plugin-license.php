@@ -530,7 +530,7 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 					)
 				);
 
-				if ( $this->woodev_license->success && ! empty( $this->woodev_license->license ) ) {
+				if ( ! empty( $this->woodev_license->license ) && $this->woodev_license->success ) {
 
 					$this->woodev_license->save( $license_data->get_response_data() );
 					// Clean plugins cache
@@ -743,7 +743,7 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 		 * @return object|string|null
 		 */
 		public function get_license_data() {
-			return isset( $this->woodev_license->data ) ? $this->woodev_license->data : null;
+			return $this->woodev_license->data ?? null;
 		}
 
 		/**
