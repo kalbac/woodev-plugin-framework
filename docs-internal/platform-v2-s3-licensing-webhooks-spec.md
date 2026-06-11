@@ -1,11 +1,17 @@
-# Platform v2 — S3.3 Licensing: built-in webhooks (spec — DRAFT)
+# Platform v2 — S3.3 Licensing: built-in webhooks (spec — IMPLEMENTED)
 
 > Written 2026-06-11 (s7, Fable orchestrator + operator fork decisions). Implements PLANS
-> §3.4.1. **Status: DRAFT — direction + operator decisions are fixed; the protocol
-> details listed in §9 (GPT-5.5 adversarial review, 2026-06-11) MUST be resolved in the
-> implementation session before any code lands.** Implementation deferred until S3.2
-> (license UI) merges — both touch `woodev/licensing/` + the `woodev/v1` REST namespace;
-> S3.2 establishes the namespace registration pattern this spec reuses.
+> §3.4.1. **Status: IMPLEMENTED (s9, 2026-06-11) — every §9 item was resolved before its
+> code landed; the resolutions are recorded in
+> `platform-v2-s3-licensing-webhooks-plan.md` → "§9 protocol resolutions" and the §5
+> table below is the FROZEN contract set, pinned by
+> `tests/unit/LicenseCommandContractParityTest.php`.** Two recorded deviations from the
+> draft text: (1) execution order p1→p0 (the verifier precedes its consumers); (2) the
+> client sends the RAW `home_url()` as the `url` request param — the woodev-core server
+> normalizes before signing (already implemented s126), so signed `payload.site` is
+> normalized regardless; client-side *send* normalization was deliberately not
+> implemented to keep the EDD wire byte-for-byte (plan "Additional locked implementation
+> decisions" #2).
 >
 > **Operator decisions on record (2026-06-11):** (D-W1) v1 command power = **deactivate
 > only** — file deletion is a separate future decision; (D-W2) **one shared
@@ -120,16 +126,34 @@ polls again never receives the command:
 - **Never deletes files** (D-W1). `delete_plugin` is NOT in the v1 vocabulary; if the
   server sends it, the client answers `unsupported_command`.
 
-## 5. New installed-site contracts created here (freeze at implementation)
+## 5. New installed-site contracts — FROZEN at implementation (s9, 2026-06-11)
 
-| Contract | Value |
+Pinned by `tests/unit/LicenseCommandContractParityTest.php` (+ behavioral pins in the
+verifier/dispatcher/handler suites). Byte-for-byte; changes require an operator-approved
+protocol-version bump.
+
+| Contract | Frozen value |
 |---|---|
-| REST route | `woodev/v1/license-command` (POST) |
-| Option (nonce store) | `woodev_license_command_nonces` |
-| Action hook | `woodev_{plugin_id}_remote_deactivated` |
-| Response/request keys | `license_commands`, `consumed_command_nonces`, ack `status` values |
+| REST route | POST `woodev/v1/license-command`, `permission_callback => '__return_true'` (auth IS the signature) |
+| Command envelope payload | exact keys `{protocol, command, site, plugin_id, nonce, issued_at, expires_at}` + optional `args`; `protocol = 1` (int); `nonce` = 32 lowercase hex; `issued_at`/`expires_at` int; scalar caps command ≤ 64, site ≤ 255, plugin_id ≤ 20, kid ≤ 64, args ≤ 16 scalar entries ≤ 255 chars |
+| Envelope top level | `{payload, signature}` + optional `kid`; signature = strict base64 of 64-byte Ed25519 over canonical JSON (recursive `ksort SORT_STRING`, `JSON_UNESCAPED_SLASHES\|UNICODE`) |
+| kid rule (B-5) | absent OR first-16-hex of `sha256(raw 32-byte pubkey)`; any other present value → `bad_signature` |
+| Command vocabulary (v1) | exactly `deactivate_plugin`; registry contract: commands MUST be idempotent; `delete_plugin` → `unsupported_command` (D-W1) |
+| Rejection vocabulary + HTTP map | `executed` 200 · `already` 200 · `malformed`/`unsupported_protocol`/`unsupported_command`/`invalid_window` 400 · `bad_signature`/`site_mismatch` 401 · `unknown_plugin` 404 · `network_active_unsupported` 409 · `expired`/`replayed` 410 · `rate_limited` 429 · `failed` 500 |
+| Wire body shape | 2xx: `{"status":"executed"\|"already"}`; every non-2xx: exactly `{"status":"rejected","reason":"<code>"}`, reason whitelisted against the map (unknown internals masked as `failed`) |
+| Nonce store | option prefix `woodev_license_command_nonces_` + first-32-hex sha256(nonce), autoload no; record `{s: processing\|consumed, c, e, r?}`; atomic fresh-claim via `add_option`; takeover after `STUCK_TAKEOVER_AFTER` = 300 s (best-effort); retention `e = min(expires_at, now + MAX_TTL)` |
+| Ack store | option `woodev_license_command_acks`, autoload no; entry exactly `{nonce, status, terminal, protocol: 1, ts}`; `terminal = (status !== 'failed')`; FIFO cap 50; retention 30 days |
+| Request field | `consumed_command_nonces` = array of ack entries, present ONLY when non-empty; carried by `check_license` and updater `get_version` requests |
+| Response fields | `license_commands` (array of envelopes; carried by `check_license` + updater responses, each through the full §2 verification, rate-limit-exempt); `acks_received` (array of nonces; client confirms ONLY the intersection with the set it sent this request); `license_authority` (§4 claim envelope) |
+| Action hook | `do_action( "woodev_{plugin_id}_remote_deactivated", array $payload )` — `plugin_id` = `get_id()`, single arg, fired exactly once strictly after successful deactivation |
+| Notice option | `woodev_license_remote_deactivation_notices` (site-level, autoload no), keyed by target `get_id()` → `{message, ts}`; rendered by every surviving license instance, once per request, dismissible per-user (message_id `woodev_{target_id}_remote_deactivated`) |
+| Constants | `PROTOCOL_VERSION` 1 · `MAX_BODY_BYTES` 8192 · `JSON_DEPTH` 8 · `CLOCK_SKEW` 300 · `MAX_TTL` 1 209 600 (14 d) · `STUCK_TAKEOVER_AFTER` 300 · `MAX_NONCE_ENTRIES` 100 (soft) · `MAX_PENDING_ACKS` 50 · ack retention 2 592 000 (30 d) · rate limit 30 rejections / 60 s window (`woodev_license_cmd_rl`, inbound-only, `{n, t0}`-anchored) |
+| §4 claim option | `woodev_{id_underscored}_license_required` (autoload no, raw verified envelope only; `license_required` must be strict bool) |
+| Pubkey constant | `WOODEV_LICENSE_AUTHORITY_PUBKEY` (placeholder `''` until the operator captures the production key — `test_production_pubkey_is_not_placeholder` is skipped until then) |
+| Shared function | `woodev_normalize_site()` (cross-repo byte-identical contract, B-6) |
+| Multisite rules | commands bind per-site (normalized `home_url()`); network-activated target → `network_active_unsupported`; §4 claims consumed in current-blog context only, no `switch_to_blog()` |
 
-Once shipped these join the §2 never-break list (byte-for-byte).
+These are now part of the §2 installed-site never-break list.
 
 ## 6. Server half (woodev-core) — to spec at implementation time
 
@@ -159,12 +183,16 @@ same `License_Authority` key, TTL policy. Retry/queue robustness lives server-si
 | s8-p5 | pull-fallback consumption + ack field | sonnet |
 | s8-p6 | holistic critic pass + contract freeze (update §5 into INVARIANTS) | — |
 
-## 9. Protocol hardening checklist — BLOCKING, resolve in the s8 implementation session
+## 9. Protocol hardening checklist — ✅ ALL 9 RESOLVED (s9, 2026-06-11)
 
 > Source: GPT-5.5 high adversarial review of this draft (2026-06-11, verdict BLOCK).
-> Items #3/#4/#7/#8 of that review are already folded into §2/§4 above. The rest are
-> protocol-engineering decisions that need code in hand — each becomes part of its
-> matching s8 task's acceptance criteria. **No s8 task ships while its items are open.**
+> **Every item below was resolved and implemented in s9.** The binding resolutions
+> (including the critic-round amendments: lazy at-cap pruning with the recorded
+> store_full exception, best-effort takeover + idempotent-vocabulary registry contract,
+> soft nonce cap, `{n, t0}`-anchored inbound-only rate limiter, intersection-only ack
+> confirmation) live in `platform-v2-s3-licensing-webhooks-plan.md` → "§9 protocol
+> resolutions"; the frozen outcomes are §5 above. Original checklist retained for
+> traceability:
 
 1. **Atomic nonce claim (→ s8-p2).** The option-based nonce store is read-modify-write —
    two concurrent requests (inbound + pull) can both pass the check. Define an atomic

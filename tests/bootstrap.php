@@ -10,6 +10,15 @@ $test_suite = getenv( 'TEST_SUITE' ) ?: 'unit';
 if ( 'integration' === $test_suite ) {
 	bootstrap_integration_tests();
 } else {
+	// Load Patchwork BEFORE any framework source file. Brain Monkey only loads it
+	// lazily at the first Monkey\setUp() — but PHPUnit loads every test file (and
+	// the source files they require_once) at suite-BUILD time, before any setUp
+	// runs, so call sites in those source files would never be instrumented and
+	// the redefinable-internals from patchwork.json (function_exists, error_log)
+	// could not be stubbed where it matters. Patchwork's own docs: load it as
+	// early as possible.
+	require_once dirname( __DIR__ ) . '/vendor/antecedent/patchwork/Patchwork.php';
+
 	// Unit tests need ABSPATH defined (no WordPress loaded).
 	defined( 'ABSPATH' ) || define( 'ABSPATH', __DIR__ . '/' );
 
@@ -19,6 +28,7 @@ if ( 'integration' === $test_suite ) {
 	defined( 'DAY_IN_SECONDS' ) || define( 'DAY_IN_SECONDS', 24 * HOUR_IN_SECONDS );
 	defined( 'WEEK_IN_SECONDS' ) || define( 'WEEK_IN_SECONDS', 7 * DAY_IN_SECONDS );
 	defined( 'MONTH_IN_SECONDS' ) || define( 'MONTH_IN_SECONDS', 30 * DAY_IN_SECONDS );
+	defined( 'YEAR_IN_SECONDS' ) || define( 'YEAR_IN_SECONDS', 365 * DAY_IN_SECONDS );
 
 	bootstrap_unit_tests();
 }

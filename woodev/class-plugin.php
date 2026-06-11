@@ -347,17 +347,39 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		 */
 		public function load_updater() {
 
-			if ( ! is_admin() && ! ( defined( 'WP_CLI' ) && WP_CLI ) ) {
+			// B-3: the updater is the §4 claim transport for keyless products, so it is
+			// constructed UNCONDITIONALLY in any admin / cron / WP-CLI context — no
+			// license-key gate. The keyless get_version poll carries signed claims +
+			// license_commands. The cron branch is new (was admin/CLI only). This gate
+			// MUST stay expression-identical to the updater require gate in includes()
+			// (wp_doing_cron() is filterable — a constant-based require with a
+			// filter-based gate here would fatal on an unloaded class; the
+			// UpdaterKeylessPollingTest source assertion pins the parity).
+			if ( ! is_admin() && ! wp_doing_cron() && ! ( defined( 'WP_CLI' ) && WP_CLI ) ) {
 				return;
 			}
 
 			$license_key = $this->get_license_instance()->get_license();
 
-			if ( $license_key ) {
-				new Woodev_Plugin_Updater( $this );
-			}
+			$this->construct_updater();
 
+			// PUBLIC HOOK CONTRACT (byte-for-byte): the woodev_plugin_updater action
+			// still fires with the license-key arg exactly as before.
 			do_action( 'woodev_plugin_updater', $license_key );
+		}
+
+		/**
+		 * Constructs the plugin updater.
+		 *
+		 * Extracted as a seam so load_updater()'s keyless construction decision is unit
+		 * testable without newing up the real Woodev_Licensing_API HTTP stack.
+		 *
+		 * @since 2.0.0
+		 *
+		 * @return void
+		 */
+		protected function construct_updater(): void {
+			new Woodev_Plugin_Updater( $this );
 		}
 
 		/**
@@ -498,22 +520,62 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 			require_once $framework_path . '/class-lifecycle.php';
 			require_once $framework_path . '/rest-api/class-plugin-rest-api.php';
 
+			// Load the shared Ed25519 envelope verifier + site-normalization primitive.
+			// Unconditional and BEFORE the licensing block: the §4 claim store and the
+			// §3.4.1 command dispatcher both consume these (gotcha framework/includes-wiring).
+			// Order matters: the function file defines woodev_normalize_site() that the
+			// verifier's callers rely on, so it is required before the verifier class.
+			require_once $framework_path . '/functions-license-authority.php';
+			require_once $framework_path . '/licensing/class-license-envelope-verifier.php';
+
 			// Load plugin license classes
 			require_once $framework_path . '/licensing/api/class-licensing-api.php';
 			require_once $framework_path . '/licensing/api/class-licensing-api-request.php';
 			require_once $framework_path . '/licensing/api/class-licensing-api-response.php';
 			require_once $framework_path . '/licensing/class-license-messages.php';
 			require_once $framework_path . '/licensing/class-license-store.php';
+
+			// The §4 signed-claim store sits BEHIND is_license_required(); require it
+			// within the licensing block BEFORE the license engine that consumes it
+			// (gotcha framework/includes-wiring). It depends on the envelope verifier +
+			// woodev_normalize_site(), both required above.
+			require_once $framework_path . '/licensing/class-license-authority-claims.php';
 			require_once $framework_path . '/licensing/class-plugin-license.php';
+
+			// The §3.4.1 signed-command core: the atomic nonce store + the
+			// transport-neutral dispatcher. Unconditional and after the licensing
+			// block — the dispatcher resolves engines via Woodev_Plugins_License and
+			// the REST endpoint (s8-p3) / pull-fallback (s8-p5) both feed it, neither
+			// of which is admin- or WooCommerce-gated (gotcha framework/includes-wiring).
+			require_once $framework_path . '/licensing/class-license-command-nonce-store.php';
+			require_once $framework_path . '/licensing/class-license-command-dispatcher.php';
+
+			// The §9.5 durable structured ack store (pull-fallback delivery + ack drain).
+			// Site-level; any surviving plugin drains the store on its next scheduled call.
+			// Unconditional and within the licensing block — both transports write acks
+			// (gotcha framework/includes-wiring).
+			require_once $framework_path . '/licensing/class-license-command-acks.php';
+
+			// v1 command vocabulary — interface BEFORE implementation (gotcha framework/includes-wiring).
+			// Both are unconditional: the dispatcher is REST-reachable and pull-reachable regardless
+			// of admin/WC context, so a gated require would leave the vocabulary unregistered.
+			require_once $framework_path . '/licensing/commands/interface-license-command.php';
+			require_once $framework_path . '/licensing/commands/class-license-command-deactivate-plugin.php';
 
 			// Load the woodev/v1 REST namespace registrar + the license REST controller.
 			// Unconditional: REST requests are neither admin nor WooCommerce-gated, so an
 			// admin/WC-only require would leave these unwired and fatal on a REST request.
 			require_once $framework_path . '/rest-api/class-rest-v1-registrar.php';
 			require_once $framework_path . '/licensing/api/class-rest-api-license.php';
+			require_once $framework_path . '/licensing/api/class-rest-api-license-command.php';
 
-			// Load plugin updater class
-			if ( is_admin() || ( defined( 'DOING_CRON' ) && DOING_CRON ) || ( defined( 'WP_CLI' ) && WP_CLI ) ) {
+			// Load plugin updater class. The condition is EXPRESSION-IDENTICAL to the
+			// load_updater() gate (B-3): wp_doing_cron() is filterable, so a
+			// constant-based require here with a filter-based gate there could construct
+			// Woodev_Plugin_Updater on an unloaded class → production fatal (the test
+			// classmap masks it — gotcha framework/includes-wiring). The
+			// UpdaterKeylessPollingTest source assertion pins this parity.
+			if ( is_admin() || wp_doing_cron() || ( defined( 'WP_CLI' ) && WP_CLI ) ) {
 				require_once $framework_path . '/plugin-updater/class-plugin-updater.php';
 			}
 		}

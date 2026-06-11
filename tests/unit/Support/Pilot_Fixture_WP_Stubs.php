@@ -50,6 +50,10 @@ trait Pilot_Fixture_WP_Stubs {
 			}
 		);
 		Functions\when( 'is_admin' )->justReturn( false );
+		// includes()/load_updater() gate on the filterable wp_doing_cron() (B-3,
+		// s8-p0); like is_admin it always exists on a real WP (>= 4.8) and must be
+		// stubbed here for the real includes() to run in unit context.
+		Functions\when( 'wp_doing_cron' )->justReturn( false );
 		Functions\when( 'has_action' )->justReturn( false );
 		Functions\when( 'add_action' )->justReturn( true );
 		Functions\when( 'get_option' )->returnArg( 2 );

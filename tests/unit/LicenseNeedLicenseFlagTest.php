@@ -23,6 +23,9 @@ require_once dirname( __DIR__, 2 ) . '/woodev/licensing/api/class-licensing-api.
 require_once dirname( __DIR__, 2 ) . '/woodev/licensing/api/class-licensing-api-request.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/licensing/class-license-store.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/licensing/class-license-messages.php';
+require_once dirname( __DIR__, 2 ) . '/woodev/functions-license-authority.php';
+require_once dirname( __DIR__, 2 ) . '/woodev/licensing/class-license-envelope-verifier.php';
+require_once dirname( __DIR__, 2 ) . '/woodev/licensing/class-license-authority-claims.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/licensing/class-plugin-license.php';
 
 /**
@@ -60,6 +63,11 @@ class LicenseNeedLicenseFlagTest extends TestCase {
 		$plugin = Mockery::mock();
 		$plugin->shouldReceive( 'is_need_license' )->andReturn( false );
 		$plugin->shouldNotReceive( 'get_admin_notice_handler' );
+
+		// s8-p4: render_remote_deactivation_notices() reads the site-level notices option.
+		// Stub it to return an empty array so the function exits early before any
+		// get_admin_notice_handler() call — the shouldNotReceive assertion above must pass.
+		Functions\when( 'get_option' )->justReturn( array() );
 
 		$license = $this->make_license_for_plugin( $plugin, 'KEY-123', 'expired' );
 
@@ -143,6 +151,12 @@ class LicenseNeedLicenseFlagTest extends TestCase {
 		$this->set_private_property( $license, 'plugin', $plugin );
 		$this->set_private_property( $license, 'license_key', $license_key );
 		$this->set_private_property( $license, 'woodev_license', $woodev_license );
+
+		// License REQUIRED (no verified license-free claim): the anti-pirate assertions
+		// rely on is_license_valid()/is_active() routing through the status logic.
+		$claims = Mockery::mock( \Woodev_License_Authority_Claims::class );
+		$claims->shouldReceive( 'get_verified' )->andReturn( null );
+		$this->set_private_property( $license, 'authority_claims', $claims );
 
 		return $license;
 	}

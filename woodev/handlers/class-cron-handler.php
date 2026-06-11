@@ -30,6 +30,19 @@ if ( ! class_exists( '\Woodev\Framework\Handlers\Cron_Handler' ) ) :
 		private \Woodev_Plugin $plugin;
 
 		/**
+		 * Guards the weekly nonce-store prune so it runs once per request.
+		 *
+		 * Every active framework plugin registers its own Cron_Handler and hooks the
+		 * shared `woodev_weekly_scheduled_events` event, but the per-nonce option store
+		 * is site-global — N instances must prune ONCE, not N times.
+		 *
+		 * @since 2.0.0
+		 *
+		 * @var bool
+		 */
+		private static bool $nonces_pruned = false;
+
+		/**
 		 * Cron handler constructor.
 		 *
 		 * @since 2.0.0
@@ -44,7 +57,39 @@ if ( ! class_exists( '\Woodev\Framework\Handlers\Cron_Handler' ) ) :
 			add_filter( 'cron_schedules', array( $this, 'add_schedules' ) );
 			add_action( 'wp', array( $this, 'schedule_events' ) );
 			add_action( 'woodev_weekly_scheduled_events', array( $this, 'weekly_license_check' ) );
+			// Piggyback the scheduled prune on the EXISTING weekly event (no new cron
+			// hook = no new cron contract — §9.2). The hook name/recurrence/payload are
+			// untouched; this is an added listener only.
+			add_action( 'woodev_weekly_scheduled_events', array( $this, 'prune_license_command_nonces' ) );
 			add_action( 'wp_ajax_woodev_verify_license', array( $this, 'ajax_verify_license' ) );
+		}
+
+		/**
+		 * Prunes expired signed-command nonce rows on the weekly cron (§9.2).
+		 *
+		 * Static once-per-request guard so N plugin instances prune exactly once. The
+		 * class_exists guard keeps a mixed-version fleet (a plugin loaded by an older
+		 * framework copy that lacks the store) from fataling.
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.0
+		 *
+		 * @return void
+		 */
+		public function prune_license_command_nonces(): void {
+
+			if ( self::$nonces_pruned ) {
+				return;
+			}
+
+			self::$nonces_pruned = true;
+
+			if ( ! class_exists( '\Woodev_License_Command_Nonce_Store' ) ) {
+				return;
+			}
+
+			( new \Woodev_License_Command_Nonce_Store() )->prune();
 		}
 
 		/**

@@ -30,7 +30,16 @@ require_once dirname( __DIR__, 2 ) . '/woodev/licensing/api/class-licensing-api.
 require_once dirname( __DIR__, 2 ) . '/woodev/licensing/api/class-licensing-api-request.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/licensing/class-license-store.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/licensing/class-license-messages.php';
+require_once dirname( __DIR__, 2 ) . '/woodev/functions-license-authority.php';
+require_once dirname( __DIR__, 2 ) . '/woodev/licensing/class-license-envelope-verifier.php';
+require_once dirname( __DIR__, 2 ) . '/woodev/licensing/class-license-authority-claims.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/licensing/class-plugin-license.php';
+// s8-p5: dispatch() consumes pull commands + acks on every successful response.
+// Loaded explicitly so dispatch() behaves identically in isolation and in the
+// full suite (the class_exists() gates inside dispatch() depend on these).
+require_once dirname( __DIR__, 2 ) . '/woodev/licensing/class-license-command-nonce-store.php';
+require_once dirname( __DIR__, 2 ) . '/woodev/licensing/class-license-command-dispatcher.php';
+require_once dirname( __DIR__, 2 ) . '/woodev/licensing/class-license-command-acks.php';
 
 /**
  * Class LicensePureOperationsTest.
@@ -90,6 +99,9 @@ class LicensePureOperationsTest extends TestCase {
 
 		$response = Mockery::mock();
 		$response->license = 'valid';
+		// Called exactly ONCE — by activate() itself for the §4 claim + save parity
+		// path. dispatch() does NOT parse activate_license responses: the command/ack
+		// machinery is check_license-only (holistic-round carrier-scope ruling).
 		$response->shouldReceive( 'get_response_data' )->once()->andReturn( $payload );
 
 		// Starts un-activated ('') so activate() does not short-circuit on the
@@ -225,6 +237,9 @@ class LicensePureOperationsTest extends TestCase {
 
 		$response          = Mockery::mock();
 		$response->license = 'deactivated';
+		// Carrier scope (holistic-round ruling): deactivate_license dispatches carry
+		// and consume NOTHING - the response payload is never parsed by dispatch().
+		$response->shouldReceive( 'get_response_data' )->never();
 
 		$woodev_license          = Mockery::mock( \Woodev_License::class );
 		$woodev_license->license = '';
@@ -728,6 +743,9 @@ class LicensePureOperationsTest extends TestCase {
 
 		$response          = Mockery::mock();
 		$response->license = 'deactivated';
+		// Carrier scope (holistic-round ruling): deactivate_license dispatches carry
+		// and consume NOTHING - the response payload is never parsed by dispatch().
+		$response->shouldReceive( 'get_response_data' )->never();
 
 		// Model the preserved key option: a fresh Woodev_License::get() reads
 		// 'woodev_test_plugin_license_key' => 'KEY-123' (survives deactivation)
@@ -829,6 +847,9 @@ class LicensePureOperationsTest extends TestCase {
 
 		$response          = Mockery::mock();
 		$response->license = 'deactivated';
+		// Carrier scope (holistic-round ruling): deactivate_license dispatches carry
+		// and consume NOTHING - the response payload is never parsed by dispatch().
+		$response->shouldReceive( 'get_response_data' )->never();
 
 		$woodev_license = ( new \ReflectionClass( \Woodev_License::class ) )->newInstanceWithoutConstructor();
 		$woodev_license->license   = 'valid';
@@ -866,6 +887,9 @@ class LicensePureOperationsTest extends TestCase {
 		$plugin = Mockery::mock();
 		$plugin->shouldReceive( 'get_plugin_option_name' )->with( 'license_key' )->andReturn( 'woodev_test_plugin_license_key' );
 		$plugin->shouldReceive( 'get_plugin_option_name' )->with( 'beta_version' )->andReturn( 'woodev_test_plugin_beta_version' );
+		// is_license_required() reads the §4 claim option; the get_option() stub returns
+		// the date-format fallback for it (not an array) → no verified claim → required.
+		$plugin->shouldReceive( 'get_plugin_option_name' )->with( 'license_required' )->andReturn( 'woodev_test_plugin_license_required' );
 		$plugin->shouldReceive( 'get_download_id' )->andReturn( 216 );
 		$plugin->shouldReceive( 'get_plugin_name' )->andReturn( 'Test Plugin' );
 		$plugin->shouldReceive( 'get_version' )->andReturn( '2.0.0' );
@@ -897,6 +921,15 @@ class LicensePureOperationsTest extends TestCase {
 		$this->set_private_property( $license, 'license_key', $license_key );
 		$this->set_private_property( $license, 'woodev_license', $woodev_license );
 		$this->set_private_property( $license, 'item_name', 'Test Plugin' );
+
+		// Inject a §4 claim-store double so the engine's plugin stub (an untyped
+		// Mockery double, not a real Woodev_Plugin) never reaches the typed store
+		// constructor. No verified claim → is_license_required() stays true; consume
+		// is a no-op so activate()/validate_license() write paths are unchanged.
+		$claims = Mockery::mock( \Woodev_License_Authority_Claims::class );
+		$claims->shouldReceive( 'get_verified' )->andReturn( null )->byDefault();
+		$claims->shouldReceive( 'consume_from_response' )->byDefault();
+		$this->set_private_property( $license, 'authority_claims', $claims );
 
 		return $license;
 	}
@@ -1004,6 +1037,11 @@ class LicensePureOperationsTest extends TestCase {
 				// wp_kses_post is not in Brain Monkey's stubEscapeFunctions() list;
 				// register a passthrough so get_state() works in all other tests.
 				'wp_kses_post'    => static function ( $content ) { return $content; },
+				// s8-p5: dispatch() consumes pull commands on every successful response;
+				// consume_pull_commands() normalises object payloads via wp_json_encode.
+				'wp_json_encode'  => static function ( $data, $options = 0, $depth = 512 ) {
+					return json_encode( $data, $options, $depth );
+				},
 				// Real Woodev_License instances (deactivate re-instantiation + parity
 				// tests) call get_option() for the *_license_key option and the saved
 				// payload. The key option returns $this->license_key_option_value

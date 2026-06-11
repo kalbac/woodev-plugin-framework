@@ -21,6 +21,20 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 		private $failed_request_cache_key;
 
 		/**
+		 * Nonces of the pending acks attached to the CURRENT outgoing request.
+		 *
+		 * Set by get_api_params() when it attaches consumed_command_nonces; reset to
+		 * empty otherwise. Ruled (s8-p5 critic re-review #1): acks_received may only
+		 * confirm the intersection with THIS set — a response must never clear an ack
+		 * recorded while the request was in flight (lost-ack protection §9.9).
+		 *
+		 * @since 2.0.0
+		 *
+		 * @var array<int, string>
+		 */
+		private $sent_ack_nonces = array();
+
+		/**
 		 * Class constructor.
 		 *
 		 * @param Woodev_Plugin $plugin       Instance of main plugin
@@ -495,6 +509,59 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 
 				$response = $request->get_response_data();
 
+				// Consumption block — runs BEFORE the sections early-return below, in
+				// the frozen order claims → commands → acks (holistic-round ruling #2 +
+				// s8-p5 re-review #2): an authority-only or command-only response (no
+				// version payload) must still refresh the claim, deliver its commands,
+				// and confirm sent acks; the function still returns false for it,
+				// exactly as before. Each step is containment-guarded.
+
+				// §4 keyless claim transport (B-3): feed any signed claim riding the
+				// get_version response to the claim store — the keyless-free-plugin
+				// case B-3 exists for sends authority WITHOUT a version payload.
+				// consume_from_response() also swallows internally; this is
+				// belt-and-suspenders against a resolution failure.
+				try {
+					$this->plugin->get_license_instance()->get_authority_claims()->consume_from_response( $response );
+				} catch ( \Throwable $throwable ) {
+					// Intentionally swallowed — the update flow must not break on claim IO.
+					unset( $throwable );
+				}
+
+				// D-W3 / §3.2 pull-fallback: consume any license_commands delivered in
+				// the response and drain acks.
+				$ack_store = class_exists( 'Woodev_License_Command_Acks' ) ? new Woodev_License_Command_Acks() : null;
+
+				if ( class_exists( 'Woodev_License_Command_Dispatcher' ) ) {
+					try {
+						Woodev_License_Command_Dispatcher::consume_pull_commands( $response, 'pull', $ack_store );
+					} catch ( \Throwable $throwable ) {
+						// Ruled containment boundary (s8-p5 critic #4b): a command-processing
+						// bug must not break the update flow — loud-but-contained, never silent.
+						error_log( 'Woodev updater: pull-command consumption failed: ' . $throwable->getMessage() ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- ruled loud-but-contained boundary (s8-p5 #4b).
+					}
+				}
+
+				// acks_received drain — ruled s8-p5 re-review #1: confirm ONLY the
+				// intersection with the nonces THIS request actually sent; when nothing
+				// was sent, skip entirely. A rogue/buggy response must never clear an
+				// ack recorded while the request was in flight (lost-ack §9.9).
+				if ( null !== $ack_store && array() !== $this->sent_ack_nonces ) {
+					try {
+						$acks_received = isset( $response->acks_received ) ? $response->acks_received : null;
+						if ( is_array( $acks_received ) ) {
+							$confirmed = array_values( array_intersect( array_filter( $acks_received, 'is_string' ), $this->sent_ack_nonces ) );
+							if ( array() !== $confirmed ) {
+								$ack_store->confirm_received( $confirmed );
+							}
+						}
+					} catch ( \Throwable $throwable ) {
+						// Ruled containment boundary (s8-p5 critic #4b): ack confirmation must
+						// not break the update flow — loud-but-contained, never silent.
+						error_log( 'Woodev updater: ack confirmation failed: ' . $throwable->getMessage() ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- ruled loud-but-contained boundary (s8-p5 #4b).
+					}
+				}
+
 				if ( $response && isset( $response->sections ) ) {
 					$response->sections = maybe_unserialize( $response->sections );
 				} else {
@@ -576,11 +643,16 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 		/**
 		 * Gets the parameters for the API request.
 		 *
+		 * D-W3 / §9.5: if there are pending command acks, they are attached as
+		 * `consumed_command_nonces` (structured entries). The field is ABSENT when
+		 * there is nothing to send — the request shape is byte-for-byte identical
+		 * to the pre-ack shape for the no-pending-acks case (EDD wire contract).
+		 *
 		 * @since 1.2.1
 		 * @return array
 		 */
 		private function get_api_params() {
-			return array(
+			$params = array(
 				'edd_action'  => 'get_version',
 				'license'     => ! empty( $this->api_data['license'] ) ? $this->api_data['license'] : '',
 				'item_id'     => isset( $this->api_data['item_id'] ) ? $this->api_data['item_id'] : false,
@@ -589,7 +661,27 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 				'beta'        => $this->beta,
 				'php_version' => phpversion(),
 				'wp_version'  => get_bloginfo( 'version' ),
+				// ADDITIVE (s8-p0 §9.7): the keyless poll must carry the site so the
+				// server can bind acks. RAW home_url() — the server normalizes before
+				// signing (plan decision 2); the wire value is NOT normalized here.
+				'url'         => home_url(),
 			);
+
+			// D-W3 / §9.5: attach pending acks ONLY when non-empty so the request shape
+			// remains byte-for-byte identical to the pre-ack shape when there is nothing
+			// to send (EDD wire contract). The sent nonce set is stashed so the response
+			// handler can confirm ONLY what THIS request carried (s8-p5 re-review #1).
+			$this->sent_ack_nonces = array();
+
+			if ( class_exists( 'Woodev_License_Command_Acks' ) ) {
+				$pending = ( new Woodev_License_Command_Acks() )->get_pending();
+				if ( array() !== $pending ) {
+					$params['consumed_command_nonces'] = $pending;
+					$this->sent_ack_nonces             = array_values( array_filter( array_column( $pending, 'nonce' ), 'is_string' ) );
+				}
+			}
+
+			return $params;
 		}
 
 		/**
