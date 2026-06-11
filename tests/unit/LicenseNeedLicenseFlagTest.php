@@ -105,6 +105,8 @@ class LicenseNeedLicenseFlagTest extends TestCase {
 
 		Functions\expect( 'current_time' )->andReturn( 1000 );
 		Functions\expect( 'delete_option' )->never();
+		// wp_kses_post wraps the message in get_state(); passthrough here.
+		Functions\when( 'wp_kses_post' )->returnArg();
 
 		$woodev_license          = ( new \ReflectionClass( \Woodev_License::class ) )->newInstanceWithoutConstructor();
 		$woodev_license->license = 'valid';

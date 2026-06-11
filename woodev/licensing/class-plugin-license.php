@@ -387,7 +387,7 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 		 *     @type string $license_key     The full license key, '' when none.
 		 *     @type string $status          The raw EDD status token, or ''.
 		 *     @type string $status_label    Localized status label, '' when no status.
-		 *     @type string $message         The already-built license message.
+		 *     @type string $message         The license message, sanitized with wp_kses_post().
 		 *     @type string $message_variant One of success|warning|error|info.
 		 *     @type mixed  $expires         The raw expiry value, untyped ('lifetime'|date string|numeric timestamp|''|null).
 		 *     @type bool   $is_valid        Whether the license is valid.
@@ -406,7 +406,7 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 				'license_key'     => (string) $this->license_key,
 				'status'          => $status,
 				'status_label'    => '' === $status ? '' : $this->get_license_status( $status ),
-				'message'         => ( new Woodev_License_Messages( $this->woodev_license ) )->get_message(),
+				'message'         => wp_kses_post( ( new Woodev_License_Messages( $this->woodev_license ) )->get_message() ),
 				'message_variant' => $this->get_message_variant(),
 				// Raw expiry — a numeric timestamp stays numeric, a 'Y-m-d H:i:s'
 				// string stays a string, ''/null stay as-is. Do NOT coerce the type:

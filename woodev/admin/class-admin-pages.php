@@ -73,70 +73,91 @@ if ( ! class_exists( 'Woodev_Admin_Pages' ) ) :
 			);
 
 			add_action( 'admin_print_scripts-' . $license_page, array( $this, 'load_licenses_page_scripts' ) );
-			add_action( 'load-' . $license_page, array( $this, 'license_page_init' ) );
 		}
 
-		public function load_licenses_page_scripts() {
+		/**
+		 * Enqueues the React license-page app scripts and styles.
+		 *
+		 * Reads build-time dependency manifest from index.asset.php so WordPress
+		 * enqueues exactly the handles webpack recorded (wp-element, wp-components,
+		 * wp-api-fetch, wp-i18n). Falls back to empty deps + plugin version when
+		 * the manifest file is absent (e.g. before first build on a fresh checkout).
+		 *
+		 * Inlines window.woodevLicenses BEFORE the bundle so the app can access
+		 * restRoot, restNonce, and the initial plugin states on first render.
+		 *
+		 * @since 2.0.0
+		 *
+		 * @return void
+		 */
+		public function load_licenses_page_scripts(): void {
+
+			$asset_file = $this->woodev_plugin->get_framework_path() . '/assets/build/license-page/index.asset.php';
+
+			if ( file_exists( $asset_file ) ) {
+				$asset = include $asset_file;
+			} else {
+				$asset = array(
+					'dependencies' => array(),
+					'version'      => $this->woodev_plugin->get_version(),
+				);
+			}
+
+			$build_url = $this->woodev_plugin->get_framework_assets_url() . '/build/license-page';
+
+			// Native WP component library styles (externalized in bundle).
+			wp_enqueue_style( 'wp-components' );
+
+			// Framework license-page app styles.
 			wp_enqueue_style(
-				'woodev-plugin-license-page',
-				$this->woodev_plugin->get_framework_assets_url() . '/css/admin/woodev-license-page.css',
-				array(),
-				$this->woodev_plugin->get_version()
+				'woodev-license-app',
+				$build_url . '/style-index.css',
+				array( 'wp-components' ),
+				$asset['version']
 			);
-		}
 
-		/**
-		 * Generates license settings page HTML markup section.
-		 *
-		 * The legacy Settings-API field renderer was removed in 2.0.0 (clean-break,
-		 * ADR-005); the React license-page app (s6-p4) replaces it. This section is
-		 * retained as the mount surface until that task lands.
-		 *
-		 * @return void
-		 */
-		public function license_page_init() {
-
-			add_settings_section(
-				'woodev_licenses_section',
-				esc_html( get_admin_page_title() ),
-				array( $this, 'license_section_description' ),
-				'woodev_licenses_page',
-				array(
-					'before_section' => '<div class="%s">',
-					'after_section'  => '</div><div class="clear"></div>',
-					'section_class'  => 'wrap wrap-licenses',
-				)
+			// Framework license-page app bundle.
+			wp_enqueue_script(
+				'woodev-license-app',
+				$build_url . '/index.js',
+				$asset['dependencies'],
+				$asset['version'],
+				true
 			);
-		}
 
-		/**
-		 * Displays license page description on top (below the title section)
-		 *
-		 * @return void
-		 */
-		public function license_section_description() {
-			echo wp_kses_post(
-				wpautop(
-					sprintf(
-						__( 'To use Woodev plugins, please provide your valid license key and activate it below. License key was sending to your email after purchase. Also, you can get key on <a href="%s" target="_blank">your account page</a>.', 'woodev-plugin-framework' ),
-						esc_url( 'https://woodev.ru/my-account' )
+			// Collect initial state for every registered license engine.
+			$states = array();
+			foreach ( Woodev_Plugins_License::get_registered_instances() as $license_engine ) {
+				$states[] = $license_engine->get_state();
+			}
+
+			// Inline bootstrap data BEFORE the bundle so it is available on first render.
+			wp_add_inline_script(
+				'woodev-license-app',
+				'window.woodevLicenses = ' . wp_json_encode(
+					array(
+						'restRoot'   => esc_url_raw( rest_url() ),
+						'restNonce'  => wp_create_nonce( 'wp_rest' ),
+						'plugins'    => array_values( $states ),
 					)
-				)
+				) . ';',
+				'before'
 			);
 		}
 
-		public function license_page() {
-
-			echo '<form method="POST" id="woodev-plugin-license-settings" action="options.php">';
-
-			settings_fields( 'woodev_license_fields_group' );
-
-			do_settings_sections( 'woodev_licenses_page' );
-
-			submit_button( __( 'Save changes', 'woodev-plugin-framework' ), 'primary', 'submit', false );
-
-			echo '</form><!-- end form#woodev-plugin-license-settings -->';
-
+		/**
+		 * Renders the license page mount point for the React app.
+		 *
+		 * The legacy Settings-API form and its section/field registration were
+		 * removed in 2.0.0 (clean-break, ADR-005). The React license-page app
+		 * (s6-p4) mounted here replaces the form.
+		 *
+		 * @since 2.0.0
+		 *
+		 * @return void
+		 */
+		public function license_page(): void {
+			echo '<div id="woodev-licenses-app"></div>';
 			$this->get_settings_section();
 		}
 

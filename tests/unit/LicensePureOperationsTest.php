@@ -373,6 +373,58 @@ class LicensePureOperationsTest extends TestCase {
 	}
 
 	/**
+	 * MUST-FIX 1 (XSS boundary) — get_state()['message'] is always passed
+	 * through wp_kses_post() before being returned, covering both the bootstrap
+	 * payload and every REST response from a single sanitization point.
+	 *
+	 * Strategy: override the wp_kses_post stub (TestCase::setUp already
+	 * registered it as a passthrough via stubEscapeFunctions()) by calling
+	 * Functions\when()->alias() — Brain Monkey allows a later when() to
+	 * supersede an earlier one for the same name. The alias closure returns a
+	 * unique sentinel and increments a call counter. Asserting that the sentinel
+	 * surfaces from get_state()['message'] and that the counter is exactly 1
+	 * proves the XSS boundary is wired — no raw message can bypass kses.
+	 *
+	 * @return void
+	 */
+	public function test_get_state_message_is_sanitized_via_wp_kses_post(): void {
+		$plugin = $this->make_plugin_stub();
+		$plugin->shouldReceive( 'is_need_license' )->andReturn( true );
+		$plugin->shouldReceive( 'is_beta_allowed' )->andReturn( false );
+
+		// license='' triggers the default 'Unlicensed' branch of build_message().
+		$woodev_license            = Mockery::mock( \Woodev_License::class );
+		$woodev_license->license   = '';
+		$woodev_license->expires   = '';
+		$woodev_license->item_name = 'Test Plugin';
+		$woodev_license->item_id   = 216;
+		$woodev_license->payment_id = 1;
+		$woodev_license->shouldReceive( 'get_license_key' )->andReturn( 'KEY-123' );
+
+		$license = $this->make_license( $plugin, '', '', $woodev_license );
+
+		// Override the passthrough stub registered by stubEscapeFunctions() in setUp.
+		// Brain Monkey allows a later when()->alias() to supersede an earlier when().
+		$sentinel        = '<!-- kses-boundary-sentinel -->';
+		$kses_call_count = 0;
+		Functions\when( 'wp_kses_post' )->alias(
+			static function ( $raw ) use ( $sentinel, &$kses_call_count ) {
+				$kses_call_count++;
+				return $sentinel;
+			}
+		);
+
+		Functions\expect( 'current_time' )->andReturn( 1000 );
+
+		$state = $license->get_state();
+
+		// The sentinel must surface — no raw message can bypass wp_kses_post.
+		$this->assertSame( $sentinel, $state['message'] );
+		// Called exactly once per get_state() invocation.
+		$this->assertSame( 1, $kses_call_count );
+	}
+
+	/**
 	 * message_variant: every error-bucket status maps to 'error'.
 	 *
 	 * @dataProvider error_status_provider
@@ -936,9 +988,11 @@ class LicensePureOperationsTest extends TestCase {
 	/**
 	 * Registers benign stubs for the WP functions the license-message builder calls.
 	 *
-	 * get_state() builds a Woodev_License_Messages instance; its link/date helpers
-	 * touch a wide WP surface. These passthrough stubs keep message construction
-	 * side-effect-free in unit context.
+	 * get_state() builds a Woodev_License_Messages instance AND passes the raw
+	 * message through wp_kses_post() before returning it. All these stubs keep
+	 * message construction side-effect-free in unit context. Individual tests
+	 * that need to observe the wp_kses_post boundary can override the stub via
+	 * Functions\when('wp_kses_post')->alias(...) after this method returns.
 	 *
 	 * @return void
 	 */
@@ -947,6 +1001,9 @@ class LicensePureOperationsTest extends TestCase {
 			[
 				'home_url'        => 'https://example.test',
 				'site_url'        => 'https://example.test',
+				// wp_kses_post is not in Brain Monkey's stubEscapeFunctions() list;
+				// register a passthrough so get_state() works in all other tests.
+				'wp_kses_post'    => static function ( $content ) { return $content; },
 				// Real Woodev_License instances (deactivate re-instantiation + parity
 				// tests) call get_option() for the *_license_key option and the saved
 				// payload. The key option returns $this->license_key_option_value
