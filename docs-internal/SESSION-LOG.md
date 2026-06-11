@@ -1,4 +1,20 @@
 
+## Session 8 (2026-06-11) — S3.2 modern license-page UI implemented (autodev tasks s6-p1…p5) — PR #31 MERGED
+
+> The implementation half of session 6's approved spec. Fable 5 orchestrator; workers = tiered subagents (p1/p2 opus, p3–p5 sonnet); critic = **real GPT-5.5 high via `codex exec` read-only** on every contract-adjacent diff AND every in-place fix (no self-certify); holistic whole-feature critic at the end (codex usage-limit hit on round 3 → stand-in Opus critic per session rules, traced wp-env route registration fully → SHIP-WITH-NITS).
+
+**Step 0 hygiene:** operator's WIP draft `class-plugin-license.php` stashed (`s6 pre-rebase WIP class-plugin-license` — still in stash, superseded by s6-p1's rewrite); rebased onto origin/main (s7's merges); 281-test baseline green.
+
+**Shipped (branch `feat/s3-licensing-ui` → squash `f7d29f3`):** plan `platform-v2-s3-licensing-ui-plan.md` (`3f34ba1`); s6-p1 pure ops + static registry + legacy Settings-form transport deleted (`19b9f5f`); s6-p2 `Woodev_REST_API_License` + reusable `Woodev_REST_V1_Registrar` on core `rest_api_init` (`570ce6a`); s6-p3 `@wordpress/scripts` scaffold + ADR-007 + classic-JSX babel override (`45039b2`); s6-p4 React card-grid app + enqueue/mount, committed bundle (`dec115c`); s6-p5 CI assets build-parity job (`6e63c51`); holistic fixes — release gated on assets + REST nonce-auth integration test (`eb651ff`); tracker + next-session-prompt deletion (`6c3dcc1`); CI fixes — function pollution + 401/403 (`a6844dc`).
+
+**Critic value (6 real bugs caught pre-merge):** deactivate() stale state; `react-jsx-runtime` WP 6.6+ dependency (broke WP 6.3–6.5); stored-admin XSS regression via RawHTML (legacy used `wp_kses_post` — restored at the PHP boundary); React mutation race + lock leak; CI parity fail-open; release-without-assets gate.
+
+**CI:** first run red (Unit 7.4 — Brain-Monkey `wp_date` pollution, order differs locally vs CI; Integration — anonymous REST gets 401 not 403) → fixed in `a6844dc` → ALL 18 checks green. Merged squash + branch deleted on operator decision. **337 unit tests / 1107 assertions** (was 281) + 5-test integration `LicenseRestAuthTest`.
+
+**Docs:** ADR-007 (React admin stack); B-7/B-8/B-12 closed in FUTURE-BACKLOG; gotchas [[wp-scripts-jsx-runtime-wp66]], [[rest-cookie-nonce-auth-semantics]].
+
+**Next:** S3.3 webhooks (spec §9 blocking checklist + §4 Ed25519 signing + B-3 updater rework + woodev-core PROD pubkey capture).
+
 ## Session 7 (2026-06-10/11) — Fable 5 orchestrator: autodev re-tiering wired + B-1 hard-gate + B-3/B-4/B-6 spec fixes + S3.3 webhooks draft (PRs #26/#27/#28 MERGED)
 
 > First session run under `docs-internal/fable5-autodev-orchestrator-prompt.md`: Fable 5 = orchestrator (plans/decomposes/assigns/synthesizes, writes no bulk code), workers = Haiku/Sonnet/Opus by task tier via the Agent tool, critic = **real GPT-5.5 high via `codex exec` (read-only)** — not a Claude stand-in. Operator fork decision: S3.2 skipped (owned by a parallel session); took B-1 + B-3/B-4/B-6 + S3.3-spec + the pending conductor re-tiering. **All work in an isolated git worktree** (`woodev_framework-wt-orch`, removed at session end) on branches off fresh `main` — the main tree (parallel session, `feat/s3-licensing-ui`) was never touched.
