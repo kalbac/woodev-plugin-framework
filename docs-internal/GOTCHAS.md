@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
-> **35 atomic gotchas in 15 namespaces** — update count when adding/removing.
-> Last updated: 2026-06-11 (session 7: 2 gotchas — Russian-source `_n()` plural trap; Serena index vs git worktree)
+> **37 atomic gotchas in 15 namespaces** — update count when adding/removing.
+> Last updated: 2026-06-11 (session 8: 2 gotchas — `@wordpress/scripts` JSX runtime needs WP 6.6+; WP REST cookie-nonce auth semantics)
 
 ## Index
 
@@ -46,6 +46,7 @@
 - [testing/integration] Integration fixtures need the framework mapped at the bootstrap's load path (`woodev-framework/tests/_fixtures/*/woodev` in `.wp-env.json`), not just the `wp-content/plugins/*` mount — the v2 resolver requires each fixture's bundled `woodev/class-plugin.php` → [gotchas/wpenv-resolver-fixture-mapping.md](gotchas/wpenv-resolver-fixture-mapping.md) (2026-06-08)
 - [testing/unit] Brain Monkey `expect`/`when` DEFINES a function and PHP can't un-define it, so it leaks (`function_exists` true) into later tests in the same process — order-dependent "passes locally / fails on CI"; isolate "function-absent" tests with `@runInSeparateProcess` → [gotchas/brain-monkey-function-pollution.md](gotchas/brain-monkey-function-pollution.md) (2026-06-08)
 - [testing/unit] Reflection `setAccessible()` is REQUIRED on PHP < 8.1 and DEPRECATED on 8.5 — guard private getValue/invoke with `if ( PHP_VERSION_ID < 80100 )` to satisfy both ends of the supported range → [gotchas/reflection-setaccessible-version-guard.md](gotchas/reflection-setaccessible-version-guard.md) (2026-06-08)
+- [testing/integration] `rest_cookie_check_errors()` only checks the nonce when global `$wp_rest_auth_cookie === true`; nonce comes from superglobals, not the request object; missing nonce demotes to anonymous (later 401 via `rest_authorization_required_code()`), only an invalid nonce errors directly → [gotchas/rest-cookie-nonce-auth-semantics.md](gotchas/rest-cookie-nonce-auth-semantics.md) (s8)
 
 ### [api/*] — API layer
 <!-- No entries yet -->
@@ -58,6 +59,7 @@
 - [build/ci] `composer audit --no-dev` errors "No installed packages found" for a library with no runtime deps — use `composer audit --locked` → [gotchas/composer-audit-no-prod-deps.md](gotchas/composer-audit-no-prod-deps.md) (2026-06-08)
 - [build/ci] markdownlint-cli2 ignores `.markdownlintignore` when globs are passed as CLI args — manage exclusions in the workflow glob; MD051 disabled (can't validate Cyrillic anchors) → [gotchas/markdownlint-ignorefile-vs-globs.md](gotchas/markdownlint-ignorefile-vs-globs.md) (2026-06-08)
 - [build/ci] A PR that conflicts with base (`mergeStateStatus: DIRTY`) runs NO `pull_request` CI — only `pull_request_target`; "all green" can mean the matrix never ran. Check `gh pr view --json mergeable,mergeStateStatus`; rebase onto the new base after a squash-merge → [gotchas/pr-conflict-skips-pull-request-ci.md](gotchas/pr-conflict-skips-pull-request-ci.md) (session 2)
+- [build/js] `@wordpress/scripts` default (automatic) JSX runtime depends on the `react-jsx-runtime` script handle — registered only in WP ≥ 6.6; for WP 6.3+ support force the classic runtime via `babel.config.js` and import `createElement`/`Fragment` in every JSX file → [gotchas/wp-scripts-jsx-runtime-wp66.md](gotchas/wp-scripts-jsx-runtime-wp66.md) (s8)
 
 ### [box-packer/*] — Box-packer algorithm (S2)
 - [box-packer/virtual-box-rsort-axis-alignment] `rsort()` on the axis-assignment result destroys axis-name alignment for non-normalized items — Option A `[1,10,1]` after rsort → `[10,1,1]` → `box_width=1 < item_width=10` → packing rejects item. Never rsort the candidate; each option guarantees axis alignment by construction → [gotchas/virtual-box-rsort-axis-alignment.md](gotchas/virtual-box-rsort-axis-alignment.md) (2026-06-09)
