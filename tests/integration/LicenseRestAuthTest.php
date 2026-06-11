@@ -115,7 +115,11 @@ class LicenseRestAuthTest extends TestCase {
 	 * unauthenticated: rest_cookie_check_errors() resets the current user to 0
 	 * (anonymous) and returns true. The route is therefore reached as an anonymous
 	 * visitor, so the controller's manage_options gate rejects it
-	 * (woodev_license_forbidden, 403).
+	 * (woodev_license_forbidden). The HTTP status is whatever
+	 * rest_authorization_required_code() returns: 401 for a logged-OUT (anonymous)
+	 * user, 403 only when a user is determined — so after the demotion to anonymous
+	 * this is a 401. Assert the stable error CODE plus a 401/403 auth status, not an
+	 * exact status.
 	 *
 	 * NOTE: missing-nonce does NOT itself emit rest_cookie_invalid_nonce — core only
 	 * errors when a nonce IS present but invalid (see the invalid-nonce test). The
@@ -151,17 +155,20 @@ class LicenseRestAuthTest extends TestCase {
 
 		$response = rest_get_server()->dispatch( $request );
 
-		$this->assertSame(
-			403,
-			$response->get_status(),
-			'An anonymous (no-nonce) request must be forbidden by the capability gate.'
-		);
-
 		$data = $response->get_data();
 		$this->assertSame(
 			'woodev_license_forbidden',
 			is_array( $data ) ? ( $data['code'] ?? '' ) : '',
 			'The capability gate must forbid an anonymous request.'
+		);
+
+		// rest_authorization_required_code() returns 401 for an anonymous (logged-out)
+		// user and 403 only when a user is determined; after the demotion to anonymous
+		// this is a 401. Accept either auth status.
+		$this->assertContains(
+			$response->get_status(),
+			array( 401, 403 ),
+			'An anonymous (no-nonce) request must be forbidden by the capability gate (401 or 403).'
 		);
 	}
 

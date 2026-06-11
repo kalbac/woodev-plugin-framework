@@ -209,6 +209,18 @@ class PlatformNeutralLicensingTest extends TestCase {
 	/**
 	 * License message date formatting should not require WooCommerce helpers in a platform-neutral unit context.
 	 *
+	 * This test's contract is the ABSENCE of WooCommerce/WP date helpers
+	 * (wc_string_to_datetime, wc_format_datetime, wc_date_format, wp_date, wp_timezone):
+	 * Woodev_License_Messages branches on function_exists() and must take its
+	 * non-helper fallback path. Because Brain Monkey defines a stubbed function
+	 * globally for the WHOLE PHP process (PHP cannot un-define a function), any OTHER
+	 * test that stubs one of these would flip function_exists() true here and break
+	 * this contract (gotcha: testing/brain-monkey-function-pollution). Run in a
+	 * separate process so the fallback path is guaranteed regardless of test order.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 *
 	 * @return void
 	 */
 	public function test_license_messages_keep_date_formatting_contract_without_woocommerce_helpers(): void {
@@ -246,6 +258,13 @@ class PlatformNeutralLicensingTest extends TestCase {
 
 	/**
 	 * License message date formatting should keep the WooCommerce date-format filter contract.
+	 *
+	 * Depends on the WooCommerce/WP date helpers being UNDEFINED (non-helper fallback
+	 * path) — isolated to a separate process so prior tests that stub them cannot
+	 * pollute function_exists() here (see the without-WooCommerce-helpers test above).
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
 	 *
 	 * @return void
 	 */
@@ -293,6 +312,13 @@ class PlatformNeutralLicensingTest extends TestCase {
 
 	/**
 	 * License message string dates should be interpreted in the WordPress timezone.
+	 *
+	 * Depends on the WooCommerce/WP date helpers being UNDEFINED (non-helper fallback
+	 * path) — isolated to a separate process so prior tests that stub them cannot
+	 * pollute function_exists() here (see the without-WooCommerce-helpers test above).
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
 	 *
 	 * @return void
 	 */

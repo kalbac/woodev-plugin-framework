@@ -1052,6 +1052,39 @@ class LicensePureOperationsTest extends TestCase {
 				},
 			]
 		);
+
+		// Order-independence guard for the date-formatting paths of the message
+		// builder (gotcha: testing/brain-monkey-function-pollution). When the message
+		// builder needs to render a non-lifetime expiry it walks
+		// get_date_i18n() -> get_timestamp_for_site_timezone()/format_timestamp_i18n(),
+		// each of which branches on function_exists(): get_date_i18n() prefers the WC
+		// helpers (wc_string_to_datetime/wc_format_datetime), get_date_format() prefers
+		// wc_date_format(), format_timestamp_i18n() prefers wp_date(), and
+		// get_site_timezone() prefers wp_timezone(). Brain Monkey DEFINES a function
+		// the instant any test stubs it, and that definition PERSISTS for the whole PHP
+		// process. On CI's unlucky 7.4 order, PlatformNeutralLicensingTest runs first
+		// and stubs wp_date/date_i18n; function_exists('wp_date') is then true here, but
+		// these get_state() tests had not re-stubbed it, so the unstubbed wp_date call
+		// blew up with MissingFunctionExpectations.
+		//
+		// Fix: explicitly stub the NON-WooCommerce fallback path (wp_date + wp_timezone)
+		// so the outcome is identical whether or not an earlier test already defined
+		// them. We deliberately DO NOT stub the wc_* helpers: no test defines them
+		// before us (so function_exists('wc_*') stays false and the builder takes the
+		// fallback path we DO stub), and defining them here would itself pollute the
+		// process and break PlatformNeutralLicensingTest, whose whole purpose is to
+		// exercise the no-WooCommerce-helpers path (its function_exists('wc_*') must
+		// stay false). date_i18n is already stubbed in the stubs() block above.
+		Functions\when( 'wp_date' )->alias(
+			static function ( $format, $timestamp = null, $timezone = null ) {
+				return gmdate( (string) $format, (int) ( $timestamp ?? 0 ) );
+			}
+		);
+		Functions\when( 'wp_timezone' )->alias(
+			static function () {
+				return new \DateTimeZone( 'UTC' );
+			}
+		);
 	}
 
 	/**
