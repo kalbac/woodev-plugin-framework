@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
-> **37 atomic gotchas in 15 namespaces** — update count when adding/removing.
-> Last updated: 2026-06-11 (session 8: 2 gotchas — `@wordpress/scripts` JSX runtime needs WP 6.6+; WP REST cookie-nonce auth semantics)
+> **40 atomic gotchas in 15 namespaces** — update count when adding/removing.
+> Last updated: 2026-06-11 (session 9: 3 gotchas — PHPUnit multiple file args; wp-env Git-Bash path mangling; Patchwork early-load in bootstrap)
 
 ## Index
 
@@ -47,6 +47,9 @@
 - [testing/unit] Brain Monkey `expect`/`when` DEFINES a function and PHP can't un-define it, so it leaks (`function_exists` true) into later tests in the same process — order-dependent "passes locally / fails on CI"; isolate "function-absent" tests with `@runInSeparateProcess` → [gotchas/brain-monkey-function-pollution.md](gotchas/brain-monkey-function-pollution.md) (2026-06-08)
 - [testing/unit] Reflection `setAccessible()` is REQUIRED on PHP < 8.1 and DEPRECATED on 8.5 — guard private getValue/invoke with `if ( PHP_VERSION_ID < 80100 )` to satisfy both ends of the supported range → [gotchas/reflection-setaccessible-version-guard.md](gotchas/reflection-setaccessible-version-guard.md) (2026-06-08)
 - [testing/integration] `rest_cookie_check_errors()` only checks the nonce when global `$wp_rest_auth_cookie === true`; nonce comes from superglobals, not the request object; missing nonce demotes to anonymous (later 401 via `rest_authorization_required_code()`), only an invalid nonce errors directly → [gotchas/rest-cookie-nonce-auth-semantics.md](gotchas/rest-cookie-nonce-auth-semantics.md) (s8)
+- [testing/unit] PHPUnit silently runs ONLY the first file argument when given several — "both files green" can mean file B never executed; run per-file or use --testsuite/--filter → [gotchas/phpunit-multiple-file-args.md](gotchas/phpunit-multiple-file-args.md) (s9)
+- [testing/integration] wp-env on Windows Git-Bash: MSYS mangles absolute container paths (`/var/www/…` → `C:/Program Files/Git/…`) — run from PowerShell or wrap in `bash -c "cd …"`; integration bootstrap also needs `TEST_SUITE=integration` → [gotchas/wpenv-windows-gitbash-path-mangling.md](gotchas/wpenv-windows-gitbash-path-mangling.md) (s9)
+- [testing/unit] Patchwork redefinable internals (`function_exists`, `error_log`) need Patchwork force-loaded in bootstrap BEFORE source files — Brain Monkey loads it lazily at first setUp(), but PHPUnit compiles all required source at suite-build time → order-dependent dead stubs → [gotchas/patchwork-early-load-bootstrap.md](gotchas/patchwork-early-load-bootstrap.md) (s9)
 
 ### [api/*] — API layer
 <!-- No entries yet -->

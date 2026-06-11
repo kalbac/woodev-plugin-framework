@@ -1,4 +1,22 @@
 
+## Session 9 (2026-06-11) — S3.3 built-in webhooks + §4 Ed25519 signing implemented (autodev tasks s8-p1…p6) — PR #35 OPEN, CI green
+
+> Mission from `next-session-prompt.md` (deleted on completion). Fable 5 orchestrator; workers = tiered subagents (opus p1/p0/p2, sonnet p3/p4/p5); critic = **real GPT-5.5 high via `codex exec` read-only** on every diff AND every fix batch (no self-certify); holistic whole-feature critic at the end. All 9 §9 BLOCKING protocol decisions resolved in the plan BEFORE any code.
+
+**Shipped (branch `feat/s3-licensing-webhooks`, 8 commits):** plan + queue (`18c7884`); p1 Ed25519 verifier + `woodev_normalize_site()` locked to the woodev-core test vector (`9592462`); p0 `is_license_required()` consumes verified claims + B-3 keyless updater (`cdeea1d`); p2 atomic nonce store + 11-step dispatcher pipeline (`112eeb7`); p3 public `woodev/v1/license-command` (`31cf2f5`); p4 `deactivate_plugin` handler D-W1 (`4f9b638`); p5 pull-fallback + structured acks D-W3 (`a88d0ab`); p6 contract freeze + holistic hardening (`fdfaa8c`). Mirror server spec → woodev_theme local `a484067`.
+
+**Execution order deviation (recorded):** p1 before p0 (verifier precedes consumers); B-3 still landed before pull-fallback as the mission required. Second recorded deviation: raw `url` stays on the EDD wire — the server normalizes pre-signing (woodev-core s126 already does).
+
+**Critic ledger:** 6 per-task reviews + 1 holistic, every round BLOCK→fix→re-critic→APPROVE; ~12 real defects killed pre-merge. Highest-value catches: kid-erasure signature bypass; `license_required` type-juggling unlock (signed `0` would unlock); OPEN command registry → SEALED vocabulary (no runtime registration); pull delivery accidentally gated off the common path; inbound transport never writing acks; unconditional ack confirmation (lost-ack); cron-gate misalignment (filterable `wp_doing_cron()` vs `DOING_CRON` require = prod fatal masked by classmap); PHP-8 named args in the 7.4 CI matrix.
+
+**One worker session-limit death** mid-fix-batch (s8-p4, reset 16:40) — resumed via SendMessage after reset, no work lost. A second death after the holistic fix batch — fixes were already on disk; orchestrator ran the verification matrix + wrote the missing authority-only updater test directly (re-criticized, APPROVE).
+
+**Verification:** 600 unit tests / 2056 assertions (sodium: exactly 1 by-design skip = production-pubkey placeholder test); 41/41 integration in wp-env; PHPCS + PHPStan L3 clean; every commit green; PR #35 all GH Actions green.
+
+**Docs:** spec §5 rewritten as the frozen-contract table (§9 marked resolved); need-license spec §4 marked IMPLEMENTED; plan carries all rulings; tracker updated; gotchas [[phpunit-multiple-file-args]], [[wpenv-windows-gitbash-path-mangling]], [[patchwork-early-load-bootstrap]].
+
+**Next:** operator merge decision on PR #35; capture PROD `WOODEV_LICENSE_AUTHORITY_PUBKEY` (wp-eval snippet in woodev-core signing spec); implement the woodev-core server half per the new command-queue mirror spec.
+
 ## Session 8 (2026-06-11) — S3.2 modern license-page UI implemented (autodev tasks s6-p1…p5) — PR #31 MERGED
 
 > The implementation half of session 6's approved spec. Fable 5 orchestrator; workers = tiered subagents (p1/p2 opus, p3–p5 sonnet); critic = **real GPT-5.5 high via `codex exec` read-only** on every contract-adjacent diff AND every in-place fix (no self-certify); holistic whole-feature critic at the end (codex usage-limit hit on round 3 → stand-in Opus critic per session rules, traced wp-env route registration fully → SHIP-WITH-NITS).
