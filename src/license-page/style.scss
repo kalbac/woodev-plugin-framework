@@ -1,0 +1,8 @@
+// License page layout — placeholder skeleton.
+// Full styles are added in task s6-p4.
+
+.woodev-licenses-grid {
+	display: grid;
+	gap: 16px;
+	grid-template-columns: repeat( auto-fill, minmax( 360px, 1fr ) );
+}

@@ -1,16 +1,16 @@
 {
   "name": "woodev_framework",
   "version": "1.0.0",
-  "description": "Welcome to the complete developer documentation for the Woodev Plugin Framework. This manual provides comprehensive guidance for building WooCommerce plugins using the Woodev framework.",
-  "main": "index.js",
-  "directories": {
-    "doc": "docs",
-    "test": "tests"
+  "description": "Woodev Plugin Framework — build toolchain for the React-powered license management admin UI.",
+  "private": true,
+  "engines": {
+    "node": ">=22"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "wp-scripts build ./src/license-page/index.js --output-path=woodev/assets/build/license-page",
+    "start": "wp-scripts start ./src/license-page/index.js --output-path=woodev/assets/build/license-page"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC"
+  "devDependencies": {
+    "@wordpress/scripts": "32.4.0"
+  }
 }
