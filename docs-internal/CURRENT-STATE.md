@@ -1,5 +1,5 @@
 # Current State — Woodev Plugin Framework
-> Last updated: 2026-06-11 (session 9: **S3.3 webhooks + §4 Ed25519 signing IMPLEMENTED — PR #35 open, all GH Actions green, awaiting operator merge.** 600 unit tests / 41 integration. Operator steps: merge decision; capture PROD pubkey; woodev-core server half.)
+> Last updated: 2026-06-11 (session 9: **S3.3 webhooks + §4 Ed25519 signing IMPLEMENTED — PR #35 MERGED `a9c0c14`, all GH Actions green — S3 COMPLETE.** 600 unit tests / 41 integration. Cross-repo follow-ups: capture PROD pubkey; woodev-core server half.)
 
 ## Autodev digest — 2026-06-11 (session 9: S3.3 built-in webhooks + §4 signing — autodev tasks s8-p1…p6; **PR #35 OPEN, CI green**)
 - **Full mission from `next-session-prompt.md` executed:** plan first (`platform-v2-s3-licensing-webhooks-plan.md` — all 9 §9 BLOCKING protocol decisions resolved PRE-code + critic-round rulings recorded), then 6 autodev tasks in order **p1→p0→p2→p3→p4→p5** (p1 before p0: the verifier precedes its consumers; B-3 still lands before pull-fallback as mandated) + s8-p6 freeze/holistic. Worker subagents (opus p1/p0/p2, sonnet p3/p4/p5) → **GPT-5.5-high critic via `codex exec` read-only on EVERY diff and EVERY fix batch** (no self-certify) → commit. Every commit `composer check` green.
