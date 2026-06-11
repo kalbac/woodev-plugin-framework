@@ -6,8 +6,13 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 
 	/**
 	 * Handler Plugins License Class
+	 *
+	 * Not final: the REST controller (Woodev_REST_API_License) resolves engine
+	 * instances through the typed static accessor get_registered_instance() and is
+	 * unit-tested against Mockery doubles of this class, which requires it to be
+	 * sub-classable.
 	 */
-	final class Woodev_Plugins_License {
+	class Woodev_Plugins_License {
 
 		/**
 		 * The plugin URL.
@@ -98,6 +103,14 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 		}
 
 		private function add_hooks() {
+
+			// Boot the woodev/v1 license REST controller (idempotent). The controller
+			// + registrar are require_once'd in Woodev_Plugin::includes(), which runs
+			// before the license handler is constructed; the class_exists guard keeps
+			// this resilient to any future include-order change.
+			if ( class_exists( 'Woodev_REST_API_License' ) ) {
+				Woodev_REST_API_License::boot();
+			}
 
 			add_action( 'admin_notices', array( $this, 'notices' ) );
 

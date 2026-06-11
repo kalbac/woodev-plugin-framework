@@ -506,6 +506,12 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 			require_once $framework_path . '/licensing/class-license-store.php';
 			require_once $framework_path . '/licensing/class-plugin-license.php';
 
+			// Load the woodev/v1 REST namespace registrar + the license REST controller.
+			// Unconditional: REST requests are neither admin nor WooCommerce-gated, so an
+			// admin/WC-only require would leave these unwired and fatal on a REST request.
+			require_once $framework_path . '/rest-api/class-rest-v1-registrar.php';
+			require_once $framework_path . '/licensing/api/class-rest-api-license.php';
+
 			// Load plugin updater class
 			if ( is_admin() || ( defined( 'DOING_CRON' ) && DOING_CRON ) || ( defined( 'WP_CLI' ) && WP_CLI ) ) {
 				require_once $framework_path . '/plugin-updater/class-plugin-updater.php';
