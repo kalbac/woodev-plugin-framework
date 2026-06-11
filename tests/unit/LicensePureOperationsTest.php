@@ -99,10 +99,10 @@ class LicensePureOperationsTest extends TestCase {
 
 		$response = Mockery::mock();
 		$response->license = 'valid';
-		// Called exactly twice: once inside dispatch() (s8-p5 pull-command consumption
-		// on every successful response — critic ruling #1) and once by activate()
-		// itself for the §4 claim + save parity path.
-		$response->shouldReceive( 'get_response_data' )->twice()->andReturn( $payload );
+		// Called exactly ONCE — by activate() itself for the §4 claim + save parity
+		// path. dispatch() does NOT parse activate_license responses: the command/ack
+		// machinery is check_license-only (holistic-round carrier-scope ruling).
+		$response->shouldReceive( 'get_response_data' )->once()->andReturn( $payload );
 
 		// Starts un-activated ('') so activate() does not short-circuit on the
 		// already-valid parity check; save() flips the recorded status to 'valid'.
@@ -237,8 +237,9 @@ class LicensePureOperationsTest extends TestCase {
 
 		$response          = Mockery::mock();
 		$response->license = 'deactivated';
-		// s8-p5: dispatch() parses every successful response for pull commands.
-		$response->shouldReceive( 'get_response_data' )->andReturn( array() );
+		// Carrier scope (holistic-round ruling): deactivate_license dispatches carry
+		// and consume NOTHING - the response payload is never parsed by dispatch().
+		$response->shouldReceive( 'get_response_data' )->never();
 
 		$woodev_license          = Mockery::mock( \Woodev_License::class );
 		$woodev_license->license = '';
@@ -742,8 +743,9 @@ class LicensePureOperationsTest extends TestCase {
 
 		$response          = Mockery::mock();
 		$response->license = 'deactivated';
-		// s8-p5: dispatch() parses every successful response for pull commands.
-		$response->shouldReceive( 'get_response_data' )->andReturn( array() );
+		// Carrier scope (holistic-round ruling): deactivate_license dispatches carry
+		// and consume NOTHING - the response payload is never parsed by dispatch().
+		$response->shouldReceive( 'get_response_data' )->never();
 
 		// Model the preserved key option: a fresh Woodev_License::get() reads
 		// 'woodev_test_plugin_license_key' => 'KEY-123' (survives deactivation)
@@ -845,8 +847,9 @@ class LicensePureOperationsTest extends TestCase {
 
 		$response          = Mockery::mock();
 		$response->license = 'deactivated';
-		// s8-p5: dispatch() parses every successful response for pull commands.
-		$response->shouldReceive( 'get_response_data' )->andReturn( array() );
+		// Carrier scope (holistic-round ruling): deactivate_license dispatches carry
+		// and consume NOTHING - the response payload is never parsed by dispatch().
+		$response->shouldReceive( 'get_response_data' )->never();
 
 		$woodev_license = ( new \ReflectionClass( \Woodev_License::class ) )->newInstanceWithoutConstructor();
 		$woodev_license->license   = 'valid';

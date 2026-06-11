@@ -509,11 +509,27 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 
 				$response = $request->get_response_data();
 
+				// Consumption block — runs BEFORE the sections early-return below, in
+				// the frozen order claims → commands → acks (holistic-round ruling #2 +
+				// s8-p5 re-review #2): an authority-only or command-only response (no
+				// version payload) must still refresh the claim, deliver its commands,
+				// and confirm sent acks; the function still returns false for it,
+				// exactly as before. Each step is containment-guarded.
+
+				// §4 keyless claim transport (B-3): feed any signed claim riding the
+				// get_version response to the claim store — the keyless-free-plugin
+				// case B-3 exists for sends authority WITHOUT a version payload.
+				// consume_from_response() also swallows internally; this is
+				// belt-and-suspenders against a resolution failure.
+				try {
+					$this->plugin->get_license_instance()->get_authority_claims()->consume_from_response( $response );
+				} catch ( \Throwable $throwable ) {
+					// Intentionally swallowed — the update flow must not break on claim IO.
+					unset( $throwable );
+				}
+
 				// D-W3 / §3.2 pull-fallback: consume any license_commands delivered in
-				// the response and drain acks BEFORE the sections early-return below —
-				// ruled s8-p5 re-review #2: a command-only response (no version payload)
-				// must still deliver its commands and confirm sent acks; the function
-				// still returns false for it, exactly as before.
+				// the response and drain acks.
 				$ack_store = class_exists( 'Woodev_License_Command_Acks' ) ? new Woodev_License_Command_Acks() : null;
 
 				if ( class_exists( 'Woodev_License_Command_Dispatcher' ) ) {
@@ -564,18 +580,6 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 					foreach ( $response->sections as $key => $section ) {
 						$response->$key = (array) $section;
 					}
-				}
-
-				// §4 keyless claim transport (B-3): feed any signed claim riding the
-				// get_version response to the claim store. Wrapped in its own guard so a
-				// consumption Throwable can NEVER break the update flow — the parsed
-				// $response is still returned. consume_from_response() also swallows
-				// internally; this is belt-and-suspenders against a resolution failure.
-				try {
-					$this->plugin->get_license_instance()->get_authority_claims()->consume_from_response( $response );
-				} catch ( \Throwable $throwable ) {
-					// Intentionally swallowed — the update flow must not break on claim IO.
-					unset( $throwable );
 				}
 
 				return $response;

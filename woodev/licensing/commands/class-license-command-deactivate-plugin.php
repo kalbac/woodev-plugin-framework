@@ -11,11 +11,10 @@
  * the server-signed claim — deactivating the plugin does not change the
  * claim, so the enforcement seam is unaffected.
  *
- * Registration: the single v1 vocabulary entry is registered once via
- * the idempotent static `ensure_default_commands()`, called from
- * `Woodev_Plugins_License::add_hooks()`. A static boolean guard
- * (`$defaults_registered`) prevents re-registration on the same request,
- * even when multiple plugin instances each call add_hooks().
+ * Registration (holistic-round ruling, 2026-06-11 — SEALED): the dispatcher
+ * constructs this handler itself inside its private get_commands() builder.
+ * There is no runtime registration step and no public mutation API — the
+ * vocabulary ships as code.
  *
  * @package Woodev\Framework\Licensing\Commands
  * @since   2.0.0
@@ -43,15 +42,6 @@ if ( ! class_exists( 'Woodev_License_Command_Deactivate_Plugin' ) ) :
 		const NOTICES_OPTION = 'woodev_license_remote_deactivation_notices';
 
 		/**
-		 * Whether the v1 default commands have been registered this request.
-		 *
-		 * @since 2.0.0
-		 *
-		 * @var bool
-		 */
-		private static $defaults_registered = false;
-
-		/**
 		 * Per-request notice dedup guard. Multiple surviving license instances
 		 * call notices() each; only the FIRST call reads the option and renders
 		 * (§9.9 notice deduplication, one get_option read per request).
@@ -63,36 +53,7 @@ if ( ! class_exists( 'Woodev_License_Command_Deactivate_Plugin' ) ) :
 		private static $notices_rendered = false;
 
 		/**
-		 * Registers the v1 default command vocabulary. Idempotent (static guard).
-		 *
-		 * Called from Woodev_Plugins_License::add_hooks() via the existing hook
-		 * infrastructure so the registration runs once per site-request regardless
-		 * of how many plugin instances are active.
-		 *
-		 * @since 2.0.0
-		 *
-		 * @return void
-		 */
-		public static function ensure_default_commands(): void {
-
-			if ( self::$defaults_registered ) {
-				return;
-			}
-
-			self::$defaults_registered = true;
-
-			Woodev_License_Command_Dispatcher::register_command(
-				'deactivate_plugin',
-				new self()
-			);
-
-			// 'delete_plugin' is deliberately absent (D-W1: deactivate-only).
-			// Any other command string → dispatcher answers 'unsupported_command'
-			// (forward tolerance, B-2).
-		}
-
-		/**
-		 * Resets the $defaults_registered flag and static dedup state for tests.
+		 * Resets the static notice-dedup state for tests.
 		 * TEST SEAM ONLY — not called in production code.
 		 *
 		 * @since 2.0.0
@@ -100,8 +61,7 @@ if ( ! class_exists( 'Woodev_License_Command_Deactivate_Plugin' ) ) :
 		 * @return void
 		 */
 		public static function reset_notice_dedup_for_tests(): void {
-			self::$notices_rendered    = false;
-			self::$defaults_registered = false;
+			self::$notices_rendered = false;
 		}
 
 		/**

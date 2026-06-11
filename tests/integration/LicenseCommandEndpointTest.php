@@ -21,14 +21,14 @@
  *   This avoids touching the WOODEV_LICENSE_AUTHORITY_PUBKEY constant (which is the
  *   production key placeholder, never set in tests).
  *
- * COMMAND REGISTRATION (s8-p4 not landed):
- *   Task s8-p4 (deactivate_plugin command handler) has not landed yet. We use
- *   Woodev_License_Command_Dispatcher::register_command() to register a stub
- *   'deactivate_plugin' callable that returns 'executed'. This exercises the full
- *   200-executed happy path end-to-end. The command registry is SNAPSHOT (via
- *   reflection) before the stub registration and restored verbatim in tearDown,
- *   so the test leaves the registry exactly as found — when s8-p4 lands the real
- *   handler, it survives this test untouched.
+ * COMMAND REGISTRATION (sealed registry — holistic-round ruling):
+ *   The dispatcher's vocabulary is SEALED (no public register_command()); tests
+ *   inject via the reflection seam on the private $commands property. We inject a
+ *   stub 'deactivate_plugin' callable that returns 'executed' to exercise the full
+ *   200-executed happy path end-to-end without deactivating a real fixture plugin.
+ *   The registry is SNAPSHOT (raw value, including the pristine null lazy state)
+ *   before the stub injection and restored verbatim in tearDown, so the test
+ *   leaves the registry exactly as found.
  *
  * PLUGIN ID = '9999' (unique test-only id, disambiguation):
  *   The wp-env test environment loads all three test fixtures
@@ -110,12 +110,13 @@ class LicenseCommandEndpointTest extends TestCase {
 
 	/**
 	 * Snapshot of the dispatcher's command registry taken BEFORE this test's
-	 * stub registration — restored exactly in tearDown so the test leaves the
-	 * registry as found (after s8-p4 lands the real handler, it must survive).
+	 * stub injection — the RAW property value (array OR the pristine null lazy
+	 * state), restored exactly in tearDown so the test leaves the registry as
+	 * found.
 	 *
-	 * @var array<string, callable|object>
+	 * @var array<string, callable|object>|null
 	 */
-	private array $commands_snapshot = array();
+	private $commands_snapshot = null;
 
 	/**
 	 * Whether the registry snapshot was actually taken this test. Guards the
@@ -166,19 +167,19 @@ class LicenseCommandEndpointTest extends TestCase {
 		};
 		add_filter( 'woodev_license_authority_pubkey', $this->pubkey_filter, 99 );
 
-		// SNAPSHOT the dispatcher's command registry, THEN register the stub.
-		// s8-p4 (the real 'deactivate_plugin' handler) has not landed yet; the stub
-		// exercises the full 200-executed path end-to-end. Once p4 lands, the real
-		// handler is captured by the snapshot and restored after the test.
+		// SNAPSHOT the dispatcher's command registry (raw value, may be the
+		// pristine null lazy state), THEN inject the stub via the reflection seam
+		// (sealed registry — no public register_command() exists by ruling). The
+		// stub exercises the full 200-executed path end-to-end without
+		// deactivating a real fixture plugin.
 		$this->commands_snapshot = $this->get_dispatcher_commands();
 		$this->snapshot_taken    = true;
 
-		\Woodev_License_Command_Dispatcher::register_command(
-			'deactivate_plugin',
-			static function (): string {
-				return 'executed';
-			}
-		);
+		$stubbed                        = is_array( $this->commands_snapshot ) ? $this->commands_snapshot : array();
+		$stubbed['deactivate_plugin']   = static function (): string {
+			return 'executed';
+		};
+		$this->set_dispatcher_commands( $stubbed );
 
 		// Inject a synthetic engine for the test plugin_id '9999' into the static
 		// registry via reflection. This sidesteps the §9.3 ambiguous-id problem
@@ -533,24 +534,27 @@ class LicenseCommandEndpointTest extends TestCase {
 	/**
 	 * Reads the dispatcher's private static command registry via reflection.
 	 *
-	 * @return array<string, callable|object>
+	 * Returns the RAW value — array, or NULL for the pristine lazy state (the
+	 * sealed registry builds itself on first use; restoring null preserves that).
+	 *
+	 * @return array<string, callable|object>|null
 	 */
-	private function get_dispatcher_commands(): array {
+	private function get_dispatcher_commands(): ?array {
 		$property = new \ReflectionProperty( \Woodev_License_Command_Dispatcher::class, 'commands' );
 		if ( PHP_VERSION_ID < 80100 ) {
 			$property->setAccessible( true );
 		}
-		return (array) $property->getValue();
+		return $property->getValue();
 	}
 
 	/**
 	 * Overwrites the dispatcher's private static command registry via reflection
-	 * (used to restore the pre-test snapshot exactly).
+	 * (used to restore the pre-test snapshot exactly — including null).
 	 *
-	 * @param array<string, callable|object> $commands The registry to restore.
+	 * @param array<string, callable|object>|null $commands The registry to restore.
 	 * @return void
 	 */
-	private function set_dispatcher_commands( array $commands ): void {
+	private function set_dispatcher_commands( ?array $commands ): void {
 		$property = new \ReflectionProperty( \Woodev_License_Command_Dispatcher::class, 'commands' );
 		if ( PHP_VERSION_ID < 80100 ) {
 			$property->setAccessible( true );

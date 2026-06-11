@@ -113,9 +113,15 @@ public function is_license_valid() {
 
 With the §3.3 default (`is_license_required()` always `true`), this collapses to the current implementation — **no behavioral change, no new option read** (so no tamper vector is introduced before signing exists).
 
-## 4. Deferred to a later cross-repo session — full signed authority (spec only)
+## 4. Full signed authority — ✅ IMPLEMENTED (s9, 2026-06-11)
 
-Implemented in the framework only once `woodev-core` issues signed claims (cannot be verified end-to-end before then). Fixture-keyed unit tests for the verifier may land earlier if convenient, but the production wiring waits for the server.
+> **Status: implemented** alongside S3.3 webhooks (the shared Ed25519 primitive): the
+> verifier + `woodev_normalize_site()` (s8-p1), claim consumption + `is_license_required()`
+> + the B-3 keyless-updater rework (s8-p0). One operator step remains: capturing the
+> PRODUCTION `WOODEV_LICENSE_AUTHORITY_PUBKEY` after deploy (wp-eval snippet in the
+> woodev-core spec) — until then the placeholder `''` keeps every claim rejected =
+> safe default (license required), and `test_production_pubkey_is_not_placeholder`
+> stays skipped. Section retained as the design record:
 
 ### 4.1 Primitive — Ed25519 via libsodium
 
@@ -154,7 +160,16 @@ Verification (all must pass before honoring `license_required = false`):
 
 Any failure → fall back to `license_required = true` (safe / locked).
 
-**`site` normalization (B-6, defined 2026-06-11).** Without a single normalization rule, a trailing slash or scheme/host case difference between what the client sent at request time (what the server signed) and `home_url()` at verify time silently locks a legitimately-free site. One pure function, applied **byte-identically at every point** — the client normalizes the request `url` field before sending, **the server signs the normalized value** (it becomes `payload.site`), and the client normalizes `home_url()` before comparing at verify time:
+**`site` normalization (B-6, defined 2026-06-11).** Without a single normalization rule, a trailing slash or scheme/host case difference between what the client sent at request time (what the server signed) and `home_url()` at verify time silently locks a legitimately-free site. One pure function, applied **byte-identically at every point** — the `url` is normalized **server-side** before signing (see deviation note below; the wire value stays raw `home_url()`), the normalized value becomes `payload.site`, and the client normalizes `home_url()` before comparing at verify time:
+
+> [Implementation deviation, s9 2026-06-11: the client keeps sending the **raw**
+> `home_url()` on the wire — the `url` request param is a pre-existing EDD installed-site
+> contract and changing its value could break EDD SL site matching for existing
+> activations. The server normalizes before signing (implemented woodev-core s126), so
+> `payload.site` is normalized regardless; the client normalizes **both** operands at
+> verify time (double normalization is idempotent — tested). Recorded in
+> `platform-v2-s3-licensing-webhooks-plan.md` → "Additional locked implementation
+> decisions" #2.]
 
 ```
 woodev_normalize_site( $url ): string|FAIL

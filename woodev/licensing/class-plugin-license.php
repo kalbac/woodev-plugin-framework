@@ -189,12 +189,8 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 				Woodev_REST_API_License_Command::boot();
 			}
 
-			// Register the v1 default command vocabulary (deactivate_plugin only).
-			// Idempotent: the static guard in ensure_default_commands() prevents
-			// re-registration when multiple plugin instances each call add_hooks().
-			if ( class_exists( 'Woodev_License_Command_Deactivate_Plugin' ) ) {
-				Woodev_License_Command_Deactivate_Plugin::ensure_default_commands();
-			}
+			// The command vocabulary needs no registration step: the dispatcher builds
+			// its SEALED registry internally (get_commands(), holistic-round ruling).
 
 			add_action( 'admin_notices', array( $this, 'notices' ) );
 
@@ -298,6 +294,14 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 				'version'    => $this->plugin->get_version(),
 			);
 
+			// D-W3 carrier scope (holistic-round ruling): the weekly check_license
+			// call and the updater get_version poll are the ONLY command/ack
+			// carriers. activate_license / deactivate_license dispatches carry and
+			// consume NOTHING — no ack field, no pull consumption, no ack drain.
+			// (§4 claim consumption on activate is a SEPARATE machinery and lives in
+			// activate() itself, not here.)
+			$is_check_license = 'check_license' === self::strtolower( $action );
+
 			// D-W3 / §9.5: attach any pending command acks to this request so the
 			// server can clear its queue. The field is ABSENT when there is nothing
 			// to send — the request shape must be byte-for-byte identical to the
@@ -305,7 +309,7 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 			// $sent_ack_nonces remembers exactly WHICH nonces this request carries:
 			// the acks_received drain below may only confirm that set — ruled s8-p5
 			// re-review #1, lost-ack protection §9.9.
-			$ack_store        = class_exists( 'Woodev_License_Command_Acks' ) ? new Woodev_License_Command_Acks() : null;
+			$ack_store        = ( $is_check_license && class_exists( 'Woodev_License_Command_Acks' ) ) ? new Woodev_License_Command_Acks() : null;
 			$has_pending_acks = false;
 			$sent_ack_nonces  = array();
 
@@ -326,16 +330,16 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 					throw new Exception( __( 'Cannot get license data', 'woodev-plugin-framework' ) );
 				}
 
-				// D-W3 / §3.2 pull-fallback: on EVERY successful response, parse it and
-				// consume any license_commands delivered in it (identical §9.4 pipeline,
-				// minus HTTP gates 1–2). ONLY the acks_received confirmation is skipped
-				// when no acks were sent. Inside the existing try so a transport throw
-				// changes nothing (outage grace §3.2).
+				// D-W3 / §3.2 pull-fallback: on EVERY successful check_license response,
+				// parse it and consume any license_commands delivered in it (identical
+				// §9.4 pipeline, minus HTTP gates 1–2). ONLY the acks_received
+				// confirmation is skipped when no acks were sent. Inside the existing
+				// try so a transport throw changes nothing (outage grace §3.2).
 				// Containment catch — critic ruling s8-p5 #4b: a command-processing bug
 				// must never break license validation; loud-but-contained (error_log),
 				// never silent.
 				try {
-					if ( class_exists( 'Woodev_License_Command_Dispatcher' ) || $has_pending_acks ) {
+					if ( $is_check_license && ( class_exists( 'Woodev_License_Command_Dispatcher' ) || $has_pending_acks ) ) {
 						// Single get_response_data() fetch reused by both hooks.
 						$response_data = $license_data->get_response_data();
 

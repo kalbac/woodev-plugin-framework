@@ -201,6 +201,60 @@ class UpdaterKeylessPollingTest extends TestCase {
 	}
 
 	/**
+	 * get_version_from_remote(): an AUTHORITY-ONLY response (license_authority but
+	 * NO sections — the keyless-free-plugin case B-3 exists for) still feeds the
+	 * claim store, and the function returns false exactly as before (holistic-round
+	 * ruling #2: the consumption block runs BEFORE the sections early-return).
+	 *
+	 * @return void
+	 */
+	public function test_authority_only_response_consumes_claim_and_returns_false(): void {
+		$envelope = array(
+			'payload'   => array( 'site' => 'https://example.com' ),
+			'signature' => 'sig',
+		);
+
+		$response = new \stdClass(); // NO ->sections on purpose.
+		$response->license_authority = $envelope;
+
+		$captured_claims = null;
+		$claims          = Mockery::mock();
+		$claims->shouldReceive( 'consume_from_response' )->once()->andReturnUsing(
+			static function ( $passed ) use ( &$captured_claims ) {
+				$captured_claims = $passed;
+			}
+		);
+
+		$license = Mockery::mock();
+		$license->shouldReceive( 'get_authority_claims' )->andReturn( $claims );
+
+		$plugin = Mockery::mock( \Woodev_Plugin::class );
+		$plugin->shouldReceive( 'get_license_instance' )->andReturn( $license );
+
+		$updater = $this->make_updater( array(), 'woodev-test-plugin', false, $plugin );
+
+		$api_handler = Mockery::mock();
+		$request     = Mockery::mock();
+		$request->shouldReceive( 'get_response_data' )->andReturn( $response );
+		$api_handler->shouldReceive( 'make_request' )->andReturn( $request );
+		$this->set_private( $updater, 'api_handler', $api_handler );
+
+		Functions\when( 'home_url' )->justReturn( 'https://example.com' );
+		Functions\when( 'get_bloginfo' )->justReturn( '6.5' );
+		Functions\when( 'get_option' )->justReturn( false );
+		Functions\when( 'wp_json_encode' )->alias(
+			static function ( $data, $options = 0, $depth = 512 ) {
+				return json_encode( $data, $options, $depth );
+			}
+		);
+
+		$result = $this->call_private( $updater, 'get_version_from_remote' );
+
+		$this->assertFalse( $result, 'A sections-less response still returns false (pre-change contract).' );
+		$this->assertSame( $response, $captured_claims, 'The claim is consumed BEFORE the sections early-return.' );
+	}
+
+	/**
 	 * get_version_from_remote(): a Throwable from claim consumption never breaks the
 	 * update flow — the parsed response is still returned.
 	 *

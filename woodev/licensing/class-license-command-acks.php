@@ -96,6 +96,14 @@ if ( ! class_exists( 'Woodev_License_Command_Acks' ) ) :
 		 * FIFO overflow: when adding the new entry would exceed MAX_PENDING_ACKS,
 		 * the oldest entry (index 0) is dropped first.
 		 *
+		 * RMW race — ACCEPTED + RECORDED (plan "Holistic-round rulings",
+		 * 2026-06-11): this is a single-option read-modify-write; two CONCURRENT
+		 * distinct commands may interleave and one ack may be lost. Bounded
+		 * consequence: the lost ack degrades to server-side queue-until-expiry
+		 * redelivery (`replayed` rejections are non-terminal), so it only delays
+		 * queue clearing — no security or correctness loss. Atomic per-ack rows
+		 * are deliberately NOT introduced in v1.
+		 *
 		 * @since 2.0.0
 		 *
 		 * @param string $nonce  The 32-hex command nonce.

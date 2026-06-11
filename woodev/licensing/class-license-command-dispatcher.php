@@ -21,11 +21,21 @@
  *      then vocabulary lookup (post-claim) + dispatch
  *
  * ZERO side effects on every rejection path: no add_option/update_option (except the
- * rate transient on steps 2–6), no command handler call, no do_action. The atomic
- * claim is the FIRST persistent write; the nonce is consumed for every terminal
- * outcome reached AFTER it (executed / already / unsupported_command /
- * network_active_unsupported). Steps 4–6 verify the signature BEFORE any site/plugin
- * lookup so an attacker learns nothing about the installed fleet.
+ * rate transient on steps 2–6, inbound transport only), no command handler call, no
+ * do_action — with ONE RECORDED EXCEPTION (plan §9.2 amended): the at-cap
+ * 'store_full' rejection has pruned EXPIRED nonce rows before rejecting; it never
+ * creates or mutates live state. The atomic claim is the FIRST persistent write; the
+ * nonce is consumed for every terminal outcome reached AFTER it (executed / already /
+ * unsupported_command / network_active_unsupported). Steps 4–6 verify the signature
+ * BEFORE any site/plugin lookup so an attacker learns nothing about the installed
+ * fleet.
+ *
+ * SEALED VOCABULARY (holistic-round ruling, 2026-06-11): the command registry is
+ * built internally by get_commands() — 'deactivate_plugin' only. There is NO public
+ * registration/mutation API: an open registry would let any plugin replace the
+ * kill-switch handler or add 'delete_plugin', defeating D-W1 and the anti-pirate
+ * invariant. Future commands ship as code. Tests inject via reflection on the
+ * private $commands property.
  *
  * @package Woodev\Framework\Licensing
  * @since 2.0.0
@@ -141,46 +151,56 @@ if ( ! class_exists( 'Woodev_License_Command_Dispatcher' ) ) :
 		);
 
 		/**
-		 * Registered command vocabulary, keyed by command name.
-		 *
-		 * Values are handlers. The typed Woodev_License_Command interface lands in
-		 * s8-p4; until then the registry accepts callables.
+		 * Exact payload key whitelist (frozen §9.8; `args` is the single optional
+		 * extra). is_payload_schema_valid() reads this constant — the parity test
+		 * pins it byte-for-byte.
 		 *
 		 * @since 2.0.0
 		 *
-		 * @var array<string, callable|object>
+		 * @var array<int, string>
 		 */
-		private static $commands = array();
+		const PAYLOAD_KEYS = array( 'protocol', 'command', 'site', 'plugin_id', 'nonce', 'issued_at', 'expires_at' );
 
 		/**
-		 * Registers a command handler under its vocabulary name.
+		 * The SEALED command vocabulary, lazily built by get_commands(). Null until
+		 * first use. NO public mutation API exists (holistic-round ruling) — tests
+		 * inject via reflection on this property.
 		 *
-		 * BINDING registry contract (plan §9.2, amended 2026-06-11): registered
+		 * BINDING registry contract (plan §9.2, amended 2026-06-11): vocabulary
 		 * commands MUST be idempotent — re-executing the same payload must be safe.
 		 * The crash-recovery TAKEOVER of a stuck nonce (and its accepted non-atomic
 		 * race: two stale-takeover requests can both win and both re-execute) relies
 		 * on this. A future NON-idempotent command must first replace the takeover
-		 * rule in Woodev_License_Command_Nonce_Store before it may be registered.
+		 * rule in Woodev_License_Command_Nonce_Store before it may join the
+		 * vocabulary in get_commands().
 		 *
 		 * @since 2.0.0
 		 *
-		 * @param string          $name    The command vocabulary name.
-		 * @param callable|object $handler The handler (callable now; interface in s8-p4).
-		 * @return void
+		 * @var array<string, callable|object>|null
 		 */
-		public static function register_command( string $name, $handler ): void {
-			self::$commands[ $name ] = $handler;
-		}
+		private static $commands = null;
 
 		/**
-		 * Clears the command registry. Test seam only.
+		 * Builds (lazily) and returns the sealed v1 command vocabulary.
+		 *
+		 * 'deactivate_plugin' is the ONLY v1 entry (D-W1: deactivate-only — no
+		 * 'delete_plugin'). Any other command string answers 'unsupported_command'
+		 * (forward tolerance, B-2). The dispatcher OWNS handler construction; there
+		 * is deliberately no runtime registration or replacement.
 		 *
 		 * @since 2.0.0
 		 *
-		 * @return void
+		 * @return array<string, callable|object>
 		 */
-		public static function reset_commands_for_tests(): void {
-			self::$commands = array();
+		private static function get_commands(): array {
+
+			if ( null === self::$commands && class_exists( 'Woodev_License_Command_Deactivate_Plugin' ) ) {
+				self::$commands = array(
+					'deactivate_plugin' => new Woodev_License_Command_Deactivate_Plugin(),
+				);
+			}
+
+			return self::$commands ?? array();
 		}
 
 		/**
@@ -333,12 +353,14 @@ if ( ! class_exists( 'Woodev_License_Command_Dispatcher' ) ) :
 				return self::reject( 'rate_limited' );
 			}
 
-			// Vocabulary lookup AFTER the claim. An unknown command consumes the nonce
-			// and takes NO action (forward tolerance B-2: never hard-fail, never
-			// ack-as-done).
-			$command = (string) $payload['command'];
+			// Vocabulary lookup AFTER the claim — against the SEALED internal registry
+			// (get_commands(); no runtime mutation API exists). An unknown command
+			// consumes the nonce and takes NO action (forward tolerance B-2: never
+			// hard-fail, never ack-as-done).
+			$command  = (string) $payload['command'];
+			$commands = self::get_commands();
 
-			if ( ! isset( self::$commands[ $command ] ) ) {
+			if ( ! isset( $commands[ $command ] ) ) {
 				// Frozen lifecycle order (§9.1): action (none) → ack record → mark consumed.
 				if ( null !== $ack_store ) {
 					$ack_store->record( $nonce, 'unsupported_command' );
@@ -351,7 +373,7 @@ if ( ! class_exists( 'Woodev_License_Command_Dispatcher' ) ) :
 			// Dispatch. A handler Throwable is a retryable 'failed' (nonce stays
 			// processing → §9.1 takeover retry); a clean return is the terminal status.
 			try {
-				$status = (string) self::invoke( self::$commands[ $command ], $engine, $payload );
+				$status = (string) self::invoke( $commands[ $command ], $engine, $payload );
 			} catch ( \Throwable $throwable ) {
 				// Frozen lifecycle order: action (threw) → ack record (retryable) →
 				// nonce stays processing (mark_consumed NOT called, §9.1 takeover retry).
@@ -587,8 +609,8 @@ if ( ! class_exists( 'Woodev_License_Command_Dispatcher' ) ) :
 		/**
 		 * Strict payload-schema validation.
 		 *
-		 * Payload keys must be exactly {protocol, command, site, plugin_id, nonce,
-		 * issued_at, expires_at} plus an optional `args`. Enforces the §9.4 scalar caps.
+		 * Payload keys must be exactly PAYLOAD_KEYS (frozen §9.8) plus an optional
+		 * `args`. Enforces the §9.4 scalar caps.
 		 *
 		 * @since 2.0.0
 		 *
@@ -597,7 +619,7 @@ if ( ! class_exists( 'Woodev_License_Command_Dispatcher' ) ) :
 		 */
 		private static function is_payload_schema_valid( array $payload ): bool {
 
-			$required = array( 'protocol', 'command', 'site', 'plugin_id', 'nonce', 'issued_at', 'expires_at' );
+			$required = self::PAYLOAD_KEYS;
 			$allowed  = array_merge( $required, array( 'args' ) );
 
 			foreach ( $required as $key ) {

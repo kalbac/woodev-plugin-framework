@@ -456,13 +456,13 @@ class LicenseCommandDeactivateTest extends TestCase {
 			}
 		);
 
-		// Register a throwing handler.
-		\Woodev_License_Command_Dispatcher::reset_commands_for_tests();
-		\Woodev_License_Command_Dispatcher::register_command(
-			'deactivate_plugin',
-			static function () {
-				throw new \RuntimeException( 'Simulated deactivation failure' );
-			}
+		// Inject a throwing handler via the sealed-registry reflection seam.
+		$this->set_dispatcher_commands(
+			array(
+				'deactivate_plugin' => static function () {
+					throw new \RuntimeException( 'Simulated deactivation failure' );
+				},
+			)
 		);
 
 		Functions\when( 'wp_json_encode' )->alias( static fn( $d, $o = 0, $dep = 512 ) => json_encode( $d, $o, $dep ) );
@@ -759,31 +759,39 @@ class LicenseCommandDeactivateTest extends TestCase {
 	 * ----------------------------------------------------------------------- */
 
 	/**
-	 * After ensure_default_commands() on a clean registry the vocabulary is
-	 * EXACTLY ['deactivate_plugin'] — count 1, the real handler instance, and
-	 * delete_plugin absent (critic finding s8-p4#6a). A second
-	 * ensure_default_commands() call is a no-op (idempotent static guard).
+	 * The SEALED lazy vocabulary (holistic-round ruling): after the dispatcher's
+	 * first internal get_commands() build on a pristine (null) registry, the
+	 * vocabulary is EXACTLY ['deactivate_plugin'] — count 1, the real handler
+	 * instance, delete_plugin absent (D-W1) — and there is NO public mutation
+	 * API on the dispatcher.
 	 *
 	 * @return void
 	 */
 	public function test_v1_vocabulary_is_exactly_deactivate_plugin(): void {
 
-		\Woodev_License_Command_Dispatcher::reset_commands_for_tests();
-		\Woodev_License_Command_Deactivate_Plugin::reset_notice_dedup_for_tests(); // Resets the defaults guard too.
+		// Pristine lazy state (null) → first use builds the real sealed vocabulary.
+		$this->set_dispatcher_commands( null );
 
-		\Woodev_License_Command_Deactivate_Plugin::ensure_default_commands();
-		\Woodev_License_Command_Deactivate_Plugin::ensure_default_commands(); // Idempotent.
-
-		$commands_prop = new \ReflectionProperty( \Woodev_License_Command_Dispatcher::class, 'commands' );
+		$builder = new \ReflectionMethod( \Woodev_License_Command_Dispatcher::class, 'get_commands' );
 		if ( PHP_VERSION_ID < 80100 ) {
-			$commands_prop->setAccessible( true );
+			$builder->setAccessible( true );
 		}
-		$vocab = $commands_prop->getValue();
+		$vocab = $builder->invoke( null );
 
 		$this->assertCount( 1, $vocab, 'The v1 vocabulary holds EXACTLY one command (D-W1).' );
 		$this->assertSame( array( 'deactivate_plugin' ), array_keys( $vocab ) );
 		$this->assertInstanceOf( \Woodev_License_Command_Deactivate_Plugin::class, $vocab['deactivate_plugin'] );
 		$this->assertArrayNotHasKey( 'delete_plugin', $vocab, 'delete_plugin must NOT be in the v1 vocabulary (D-W1).' );
+
+		// Sealed: no public runtime registration or reset API exists (ruling).
+		$this->assertFalse(
+			method_exists( \Woodev_License_Command_Dispatcher::class, 'register_command' ),
+			'register_command() must NOT exist — the vocabulary is sealed.'
+		);
+		$this->assertFalse(
+			method_exists( \Woodev_License_Command_Dispatcher::class, 'reset_commands_for_tests' ),
+			'reset_commands_for_tests() must NOT exist — tests use the reflection seam.'
+		);
 	}
 
 	/**
@@ -1016,11 +1024,26 @@ class LicenseCommandDeactivateTest extends TestCase {
 	 * @return void
 	 */
 	protected function tearDown(): void {
-		\Woodev_License_Command_Dispatcher::reset_commands_for_tests();
+		$this->set_dispatcher_commands( array() );
 		$this->reset_license_registry();
 		\Woodev_License_Command_Deactivate_Plugin::reset_notice_dedup_for_tests();
 		$this->plugin_mock = null;
 		unset( $GLOBALS['wpdb'] );
 		parent::tearDown();
+	}
+
+	/**
+	 * Overwrites the dispatcher's SEALED private registry via reflection (the
+	 * only injection seam — holistic-round ruling: no public mutation API).
+	 *
+	 * @param array<string, callable|object>|null $commands Registry value (null = pristine lazy state).
+	 * @return void
+	 */
+	private function set_dispatcher_commands( ?array $commands ): void {
+		$property = new \ReflectionProperty( \Woodev_License_Command_Dispatcher::class, 'commands' );
+		if ( PHP_VERSION_ID < 80100 ) {
+			$property->setAccessible( true );
+		}
+		$property->setValue( null, $commands );
 	}
 }

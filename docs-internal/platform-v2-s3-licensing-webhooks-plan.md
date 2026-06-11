@@ -63,6 +63,23 @@ Increment the rate counter on every rejection at steps 2–6 (pre-authentication
 - Bounds: `MAX_PENDING_ACKS = 50` (FIFO drop-oldest on overflow), retention ≤ `30 * DAY_IN_SECONDS` (dropped on next write/drain pass).
 - Last-woodev-plugin-deactivated case: nobody polls → the ack may never be sent; **accepted** — delivery is best-effort by design (§3.2), the server-side queue expires commands at `expires_at` (mirror spec).
 
+### Holistic-round rulings (s9 final critic pass, 2026-06-11)
+
+- **Sealed command registry:** runtime command registration is REMOVED — the dispatcher's
+  vocabulary is built internally (`deactivate_plugin` only) and there is no public
+  `register_command()`. Future commands ship as code, never as runtime registration
+  (an open registry would let any plugin replace the kill-switch handler or add
+  `delete_plugin`, defeating D-W1 and the anti-pirate invariant). Tests inject via the
+  reflection seam on the private registry.
+- **Carrier scope enforced in code:** acks attach / pull commands consume ONLY on
+  `check_license` (license API) and `get_version` (updater) — `activate_license` /
+  `deactivate_license` dispatches carry nothing (D-W3 letter; the §5 table is the law).
+- **Ack-store RMW race accepted + recorded:** concurrent distinct commands may overwrite
+  each other's ack (single-option read-modify-write). Bounded consequence: the lost ack
+  degrades to server-side queue-until-expiry redelivery (`replayed` rejections are
+  non-terminal); no security or correctness loss. Atomic per-ack rows are deliberately
+  NOT introduced in v1.
+
 ### §9.6 Structured acks
 
 `consumed_command_nonces` (D-W3 field name kept) carries **structured entries**, not bare nonces:

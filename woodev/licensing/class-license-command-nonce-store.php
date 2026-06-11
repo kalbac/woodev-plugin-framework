@@ -111,9 +111,9 @@ if ( ! class_exists( 'Woodev_License_Command_Nonce_Store' ) ) :
 		 * guarantee covers the FRESH-claim path ONLY — add_option() rides MySQL's
 		 * UNIQUE option_name index, so exactly one concurrent writer wins. The stale
 		 * TAKEOVER path is explicitly BEST-EFFORT, not atomic: two requests can both
-		 * pass the stale check and both re-execute. Accepted because the command
-		 * registry contract requires idempotent commands (see
-		 * Woodev_License_Command_Dispatcher::register_command()).
+		 * pass the stale check and both re-execute. Accepted because the sealed
+		 * vocabulary contract requires idempotent commands (see
+		 * Woodev_License_Command_Dispatcher::get_commands()).
 		 *
 		 * Writes: the add_option() claim and the update_option() takeover (claimed
 		 * path), plus — on the at-cap 'store_full' path only — prune() deletions of

@@ -76,7 +76,7 @@ class LicenseCommandTransportAcksTest extends TestCase {
 	 * @return void
 	 */
 	protected function tearDown(): void {
-		\Woodev_License_Command_Dispatcher::reset_commands_for_tests();
+		$this->reset_dispatcher_commands();
 
 		foreach ( array( 'registered_instances', 'ambiguous_download_ids' ) as $name ) {
 			$property = new \ReflectionProperty( \Woodev_Plugins_License::class, $name );
@@ -93,6 +93,39 @@ class LicenseCommandTransportAcksTest extends TestCase {
 	// -----------------------------------------------------------------------
 	// Helpers
 	// -----------------------------------------------------------------------
+
+	/**
+	 * Injects a command handler into the dispatcher's SEALED private registry
+	 * (reflection — the only seam; no public mutation API exists by ruling).
+	 *
+	 * @param string          $name    Command name.
+	 * @param callable|object $handler Handler.
+	 * @return void
+	 */
+	private function register_test_command( string $name, $handler ): void {
+		$property = new \ReflectionProperty( \Woodev_License_Command_Dispatcher::class, 'commands' );
+		if ( PHP_VERSION_ID < 80100 ) {
+			$property->setAccessible( true );
+		}
+		$commands          = $property->getValue();
+		$commands          = is_array( $commands ) ? $commands : array();
+		$commands[ $name ] = $handler;
+		$property->setValue( null, $commands );
+	}
+
+	/**
+	 * Resets the dispatcher's command registry to EMPTY (blocks the lazy default
+	 * build so only explicitly injected handlers exist).
+	 *
+	 * @return void
+	 */
+	private function reset_dispatcher_commands(): void {
+		$property = new \ReflectionProperty( \Woodev_License_Command_Dispatcher::class, 'commands' );
+		if ( PHP_VERSION_ID < 80100 ) {
+			$property->setAccessible( true );
+		}
+		$property->setValue( null, array() );
+	}
 
 	/**
 	 * Builds a Woodev_Plugins_License instance with a mocked plugin and api_handler.
@@ -590,6 +623,69 @@ class LicenseCommandTransportAcksTest extends TestCase {
 	}
 
 	// -----------------------------------------------------------------------
+	// Carrier scope (holistic-round ruling #3): check_license is the ONLY
+	// license-API carrier — activate/deactivate dispatches carry and consume
+	// NOTHING.
+	// -----------------------------------------------------------------------
+
+	/**
+	 * activate_license / deactivate_license dispatches with PENDING acks in the
+	 * store: no consumed_command_nonces field is attached, the response payload
+	 * is never parsed (no pull consumption, no ack drain), and the store is
+	 * untouched.
+	 *
+	 * @return void
+	 */
+	public function test_activate_and_deactivate_dispatches_carry_and_consume_nothing(): void {
+		Functions\when( 'home_url' )->justReturn( 'https://example.com' );
+
+		// Pending ack exists — a check_license dispatch WOULD carry it.
+		$pending_entry = array(
+			'nonce'    => str_repeat( 'a', 32 ),
+			'status'   => 'executed',
+			'terminal' => true,
+			'protocol' => 1,
+			'ts'       => time(),
+		);
+		$ack_stored    = array( $pending_entry );
+		$this->stub_option_io( $ack_stored );
+
+		foreach ( array( 'activate_license', 'deactivate_license' ) as $action ) {
+
+			$captured_params = null;
+			$api_handler     = Mockery::mock();
+			$api_handler->shouldReceive( 'make_request' )->once()->andReturnUsing(
+				static function ( $params ) use ( &$captured_params ) {
+					$captured_params = $params;
+
+					$response = Mockery::mock();
+					// dispatch() must NEVER parse a non-check_license response.
+					$response->shouldReceive( 'get_response_data' )->never();
+					return $response;
+				}
+			);
+
+			$engine = $this->make_license_engine( $api_handler );
+
+			try {
+				$this->call_dispatch( $engine, $action, 'KEY-123' );
+			} catch ( \Exception $e ) {
+				// May throw — irrelevant here.
+			}
+
+			$this->assertIsArray( $captured_params );
+			$this->assertArrayNotHasKey(
+				'consumed_command_nonces',
+				$captured_params,
+				"{$action} must NOT carry acks (carrier scope: check_license only)."
+			);
+		}
+
+		// The pending entry is untouched by both dispatches.
+		$this->assertSame( array( $pending_entry ), $ack_stored, 'The ack store is untouched by non-carrier dispatches.' );
+	}
+
+	// -----------------------------------------------------------------------
 	// Re-review #1: acks_received may confirm ONLY the intersection with the
 	// nonces THIS request actually sent (lost-ack protection §9.9).
 	// -----------------------------------------------------------------------
@@ -814,8 +910,8 @@ class LicenseCommandTransportAcksTest extends TestCase {
 		);
 
 		$calls = 0;
-		\Woodev_License_Command_Dispatcher::reset_commands_for_tests();
-		\Woodev_License_Command_Dispatcher::register_command(
+		$this->reset_dispatcher_commands();
+		$this->register_test_command(
 			'deactivate_plugin',
 			static function () use ( &$calls ) {
 				$calls++;
@@ -938,8 +1034,8 @@ class LicenseCommandTransportAcksTest extends TestCase {
 		);
 
 		$calls = 0;
-		\Woodev_License_Command_Dispatcher::reset_commands_for_tests();
-		\Woodev_License_Command_Dispatcher::register_command(
+		$this->reset_dispatcher_commands();
+		$this->register_test_command(
 			'deactivate_plugin',
 			static function () use ( &$calls ) {
 				$calls++;

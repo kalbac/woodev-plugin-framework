@@ -27,6 +27,8 @@ require_once dirname( __DIR__, 2 ) . '/woodev/licensing/class-license-envelope-v
 require_once dirname( __DIR__, 2 ) . '/woodev/licensing/class-license-command-nonce-store.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/licensing/class-license-command-dispatcher.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/licensing/class-license-command-acks.php';
+require_once dirname( __DIR__, 2 ) . '/woodev/licensing/commands/interface-license-command.php';
+require_once dirname( __DIR__, 2 ) . '/woodev/licensing/commands/class-license-command-deactivate-plugin.php';
 
 require_once dirname( __DIR__, 2 ) . '/woodev/class-plugin.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/licensing/class-license-store.php';
@@ -107,7 +109,7 @@ class LicenseCommandDispatcherTest extends TestCase {
 		);
 
 		Probe_Command_Dispatcher::$fixed_now = self::NOW;
-		Probe_Command_Dispatcher::reset_commands_for_tests();
+		$this->reset_dispatcher_commands();
 
 		$this->reset_license_registry();
 	}
@@ -118,10 +120,47 @@ class LicenseCommandDispatcherTest extends TestCase {
 	 * @return void
 	 */
 	protected function tearDown(): void {
-		Probe_Command_Dispatcher::reset_commands_for_tests();
+		$this->reset_dispatcher_commands();
 		$this->reset_license_registry();
 		unset( $GLOBALS['wpdb'] );
 		parent::tearDown();
+	}
+
+	/* ----------------------------------------------------------------------- *
+	 * Sealed-registry reflection seam (holistic-round ruling: no public
+	 * mutation API on the dispatcher — tests inject via the private property).
+	 * ----------------------------------------------------------------------- */
+
+	/**
+	 * Injects a command handler into the dispatcher's SEALED private registry.
+	 *
+	 * @param string          $name    Command name.
+	 * @param callable|object $handler Handler (callable or execute()-object).
+	 * @return void
+	 */
+	private function register_test_command( string $name, $handler ): void {
+		$property = new \ReflectionProperty( \Woodev_License_Command_Dispatcher::class, 'commands' );
+		if ( PHP_VERSION_ID < 80100 ) {
+			$property->setAccessible( true );
+		}
+		$commands          = $property->getValue();
+		$commands          = is_array( $commands ) ? $commands : array();
+		$commands[ $name ] = $handler;
+		$property->setValue( null, $commands );
+	}
+
+	/**
+	 * Resets the dispatcher's command registry to EMPTY (deterministic: the lazy
+	 * default build is blocked, so only explicitly injected handlers exist).
+	 *
+	 * @return void
+	 */
+	private function reset_dispatcher_commands(): void {
+		$property = new \ReflectionProperty( \Woodev_License_Command_Dispatcher::class, 'commands' );
+		if ( PHP_VERSION_ID < 80100 ) {
+			$property->setAccessible( true );
+		}
+		$property->setValue( null, array() );
 	}
 
 	/* ----------------------------------------------------------------------- *
@@ -270,7 +309,7 @@ class LicenseCommandDispatcherTest extends TestCase {
 		$this->arm_wpdb();
 
 		$calls = 0;
-		Probe_Command_Dispatcher::register_command(
+		$this->register_test_command(
 			'deactivate_plugin',
 			static function () use ( &$calls ) {
 				$calls++;
@@ -326,7 +365,7 @@ class LicenseCommandDispatcherTest extends TestCase {
 
 		$this->arm_wpdb();
 
-		Probe_Command_Dispatcher::register_command(
+		$this->register_test_command(
 			'deactivate_plugin',
 			static function () use ( &$sequence ) {
 				$sequence[] = 'handler';
@@ -375,7 +414,7 @@ class LicenseCommandDispatcherTest extends TestCase {
 		$this->arm_wpdb();
 
 		$calls = 0;
-		Probe_Command_Dispatcher::register_command(
+		$this->register_test_command(
 			'deactivate_plugin',
 			static function () use ( &$calls ) {
 				$calls++;
@@ -423,7 +462,7 @@ class LicenseCommandDispatcherTest extends TestCase {
 		Functions\expect( 'deactivate_plugins' )->never();
 
 		// Register a DIFFERENT command so the vocabulary is non-empty but lacks delete_plugin.
-		Probe_Command_Dispatcher::register_command( 'deactivate_plugin', static fn() => 'executed' );
+		$this->register_test_command( 'deactivate_plugin', static fn() => 'executed' );
 
 		$result = Probe_Command_Dispatcher::handle_envelope(
 			$this->sign( $this->valid_payload( array( 'command' => 'delete_plugin' ) ) ),
@@ -887,7 +926,7 @@ class LicenseCommandDispatcherTest extends TestCase {
 			array( 's' => 'consumed', 'r' => 'executed', 'c' => self::NOW, 'e' => self::NOW + 100 )
 		);
 
-		Probe_Command_Dispatcher::register_command( 'deactivate_plugin', static fn() => 'executed' );
+		$this->register_test_command( 'deactivate_plugin', static fn() => 'executed' );
 
 		$result = Probe_Command_Dispatcher::handle_envelope( $this->sign( $this->valid_payload() ), 'inbound' );
 
@@ -943,7 +982,7 @@ class LicenseCommandDispatcherTest extends TestCase {
 			}
 		);
 
-		Probe_Command_Dispatcher::register_command( 'deactivate_plugin', static fn() => 'executed' );
+		$this->register_test_command( 'deactivate_plugin', static fn() => 'executed' );
 
 		$result = Probe_Command_Dispatcher::handle_envelope( $this->sign( $this->valid_payload() ), 'inbound' );
 
@@ -1420,7 +1459,7 @@ class LicenseCommandDispatcherTest extends TestCase {
 		$this->arm_wpdb();
 
 		$calls = 0;
-		Probe_Command_Dispatcher::register_command(
+		$this->register_test_command(
 			'deactivate_plugin',
 			static function () use ( &$calls ) {
 				$calls++;
@@ -1461,7 +1500,7 @@ class LicenseCommandDispatcherTest extends TestCase {
 		Functions\when( 'maybe_unserialize' )->returnArg();
 		$this->arm_wpdb();
 
-		Probe_Command_Dispatcher::register_command(
+		$this->register_test_command(
 			'deactivate_plugin',
 			static function () {
 				return 'already';
@@ -1520,7 +1559,7 @@ class LicenseCommandDispatcherTest extends TestCase {
 		Functions\when( 'maybe_unserialize' )->returnArg();
 		$this->arm_wpdb();
 
-		Probe_Command_Dispatcher::register_command(
+		$this->register_test_command(
 			'deactivate_plugin',
 			static function () {
 				throw new \RuntimeException( 'Simulated failure.' );
@@ -1592,7 +1631,7 @@ class LicenseCommandDispatcherTest extends TestCase {
 		Functions\when( 'maybe_unserialize' )->returnArg();
 		$this->arm_wpdb();
 
-		Probe_Command_Dispatcher::register_command(
+		$this->register_test_command(
 			'deactivate_plugin',
 			static function () use ( &$sequence ) {
 				$sequence[] = 'action';
@@ -1634,7 +1673,7 @@ class LicenseCommandDispatcherTest extends TestCase {
 		$this->arm_wpdb();
 
 		$calls = 0;
-		Probe_Command_Dispatcher::register_command(
+		$this->register_test_command(
 			'deactivate_plugin',
 			static function () use ( &$calls ) {
 				$calls++;
@@ -1672,7 +1711,7 @@ class LicenseCommandDispatcherTest extends TestCase {
 		$this->arm_wpdb();
 
 		$calls = 0;
-		Probe_Command_Dispatcher::register_command(
+		$this->register_test_command(
 			'deactivate_plugin',
 			static function () use ( &$calls ) {
 				$calls++;
@@ -1713,7 +1752,7 @@ class LicenseCommandDispatcherTest extends TestCase {
 		$this->arm_wpdb();
 
 		$calls = 0;
-		Probe_Command_Dispatcher::register_command(
+		$this->register_test_command(
 			'deactivate_plugin',
 			static function () use ( &$calls ) {
 				$calls++;
@@ -1780,7 +1819,7 @@ class LicenseCommandDispatcherTest extends TestCase {
 		$this->arm_wpdb();
 
 		$calls = 0;
-		Probe_Command_Dispatcher::register_command(
+		$this->register_test_command(
 			'deactivate_plugin',
 			static function () use ( &$calls ) {
 				$calls++;
@@ -1820,7 +1859,7 @@ class LicenseCommandDispatcherTest extends TestCase {
 		$this->arm_wpdb();
 
 		$calls = 0;
-		Probe_Command_Dispatcher::register_command(
+		$this->register_test_command(
 			'deactivate_plugin',
 			static function () use ( &$calls ) {
 				$calls++;
@@ -1932,7 +1971,7 @@ class LicenseCommandDispatcherTest extends TestCase {
 		Functions\when( 'get_transient' )->justReturn( false );
 		$this->arm_wpdb();
 
-		Probe_Command_Dispatcher::register_command( 'deactivate_plugin', static fn() => 'executed' );
+		$this->register_test_command( 'deactivate_plugin', static fn() => 'executed' );
 
 		$body   = (string) json_encode( $this->sign( $this->valid_payload() ) );
 		$result = Probe_Command_Dispatcher::handle_raw_body( $body );
@@ -1969,6 +2008,207 @@ class LicenseCommandDispatcherTest extends TestCase {
 			1,
 			substr_count( $source, "require_once \$framework_path . '/licensing/class-license-command-acks.php';" ),
 			'class-license-command-acks.php must be required exactly once.'
+		);
+	}
+
+	/* ----------------------------------------------------------------------- *
+	 * §9.9 gap closure (holistic-round #6): dispatcher-level takeover lifecycle
+	 * + hook-failure → redelivery convergence.
+	 * ----------------------------------------------------------------------- */
+
+	/**
+	 * §9.1 takeover at DISPATCHER level: a stale 'processing' record (older than
+	 * STUCK_TAKEOVER_AFTER = 300s) is taken over by handle_envelope() and runs the
+	 * FULL lifecycle — the command re-executes, the ack is recorded, and the nonce
+	 * is marked consumed (not just the store-level claim).
+	 *
+	 * @return void
+	 */
+	public function test_stale_processing_takeover_runs_full_lifecycle(): void {
+		$this->register_target_plugin();
+
+		// Pre-existing STALE processing record: claimed 301s ago (> 300s takeover bound).
+		$nonce_record = array(
+			's' => 'processing',
+			'c' => self::NOW - 301,
+			'e' => self::NOW + 1000,
+		);
+		$ack_stored   = null;
+
+		Functions\when( 'get_option' )->alias(
+			static function ( $name ) use ( &$nonce_record, &$ack_stored ) {
+				if ( \Woodev_License_Command_Acks::OPTION_NAME === $name ) {
+					return $ack_stored ?? false;
+				}
+				if ( 0 === strpos( (string) $name, \Woodev_License_Command_Nonce_Store::OPTION_PREFIX ) ) {
+					return $nonce_record;
+				}
+				return false;
+			}
+		);
+		Functions\when( 'update_option' )->alias(
+			static function ( $name, $value ) use ( &$nonce_record, &$ack_stored ) {
+				if ( \Woodev_License_Command_Acks::OPTION_NAME === $name ) {
+					$ack_stored = $value;
+				} elseif ( 0 === strpos( (string) $name, \Woodev_License_Command_Nonce_Store::OPTION_PREFIX ) ) {
+					$nonce_record = $value;
+				}
+				return true;
+			}
+		);
+		// The record EXISTS — the fresh-claim insert must never run on a takeover.
+		Functions\expect( 'add_option' )->never();
+		Functions\when( 'maybe_unserialize' )->returnArg();
+		$this->arm_wpdb();
+
+		$calls = 0;
+		$this->register_test_command(
+			'deactivate_plugin',
+			static function () use ( &$calls ) {
+				$calls++;
+				return 'executed';
+			}
+		);
+
+		$ack_store = $this->make_ack_store();
+
+		$result = Probe_Command_Dispatcher::handle_envelope(
+			$this->sign( $this->valid_payload() ),
+			'inbound',
+			$ack_store
+		);
+
+		// Full lifecycle, not just the claim: action → ack record → mark consumed.
+		$this->assertSame( 'executed', $result['status'] );
+		$this->assertSame( 200, $result['http'] );
+		$this->assertSame( 1, $calls, 'The takeover RE-EXECUTES the (idempotent) command.' );
+
+		$this->assertNotNull( $ack_stored, 'The takeover writes the §9.5 ack record.' );
+		$this->assertSame( 'executed', $ack_stored[0]['status'] );
+		$this->assertTrue( $ack_stored[0]['terminal'] );
+
+		$this->assertSame( 'consumed', $nonce_record['s'], 'The taken-over nonce ends consumed.' );
+		$this->assertSame( 'executed', $nonce_record['r'] );
+	}
+
+	/**
+	 * §9.9 hook-failure → redelivery convergence, through the REAL handler:
+	 * a listener on woodev_{id}_remote_deactivated throws AFTER deactivate_plugins()
+	 * succeeded → the dispatcher returns 'failed' (retryable ack, nonce stays
+	 * 'processing'); the follow-up redelivery (after the takeover window) finds the
+	 * plugin already inactive and converges to 'already' (deactivation persisted),
+	 * consuming the nonce.
+	 *
+	 * @return void
+	 */
+	public function test_hook_failure_then_redelivery_converges_to_already(): void {
+		// REAL handler target: engine exposing a plugin double.
+		$plugin = Mockery::mock( \Woodev_Plugin::class );
+		$plugin->shouldReceive( 'get_id' )->andReturn( 'test_plugin' );
+		$plugin->shouldReceive( 'get_plugin_file' )->andReturn( 'test-plugin/test-plugin.php' );
+		$plugin->shouldReceive( 'get_plugin_name' )->andReturn( 'Test Plugin' );
+
+		$engine = Mockery::mock( \Woodev_Plugins_License::class );
+		$engine->shouldReceive( 'get_plugin' )->andReturn( $plugin );
+		$this->seed_license_registry( '216', $engine );
+
+		// WP plugin API state: active until deactivate_plugins() runs.
+		$plugin_active = true;
+		Functions\when( 'is_plugin_active' )->alias(
+			static function () use ( &$plugin_active ) {
+				return $plugin_active;
+			}
+		);
+		Functions\when( 'is_plugin_active_for_network' )->justReturn( false );
+		Functions\when( 'is_multisite' )->justReturn( false );
+		Functions\when( 'deactivate_plugins' )->alias(
+			static function () use ( &$plugin_active ) {
+				$plugin_active = false;
+			}
+		);
+
+		// Option IO: nonce record + ack store + notices option, all stateful.
+		$nonce_record   = false;
+		$ack_stored     = null;
+		$notices_stored = array();
+
+		Functions\when( 'get_option' )->alias(
+			static function ( $name, $default_value = false ) use ( &$nonce_record, &$ack_stored, &$notices_stored ) {
+				if ( \Woodev_License_Command_Acks::OPTION_NAME === $name ) {
+					return $ack_stored ?? false;
+				}
+				if ( \Woodev_License_Command_Deactivate_Plugin::NOTICES_OPTION === $name ) {
+					return $notices_stored;
+				}
+				if ( 0 === strpos( (string) $name, \Woodev_License_Command_Nonce_Store::OPTION_PREFIX ) ) {
+					return $nonce_record;
+				}
+				return $default_value;
+			}
+		);
+		Functions\when( 'add_option' )->alias(
+			static function ( $name, $value ) use ( &$nonce_record ) {
+				if ( 0 === strpos( (string) $name, \Woodev_License_Command_Nonce_Store::OPTION_PREFIX ) ) {
+					$nonce_record = $value;
+				}
+				return true;
+			}
+		);
+		Functions\when( 'update_option' )->alias(
+			static function ( $name, $value ) use ( &$nonce_record, &$ack_stored, &$notices_stored ) {
+				if ( \Woodev_License_Command_Acks::OPTION_NAME === $name ) {
+					$ack_stored = $value;
+				} elseif ( \Woodev_License_Command_Deactivate_Plugin::NOTICES_OPTION === $name ) {
+					$notices_stored = $value;
+				} elseif ( 0 === strpos( (string) $name, \Woodev_License_Command_Nonce_Store::OPTION_PREFIX ) ) {
+					$nonce_record = $value;
+				}
+				return true;
+			}
+		);
+		Functions\when( 'maybe_unserialize' )->returnArg();
+		$this->arm_wpdb();
+
+		// The hook listener throws — fired EXACTLY ONCE (the 'already' path of the
+		// second delivery never fires the hook).
+		Actions\expectDone( 'woodev_test_plugin_remote_deactivated' )->once()->whenHappen(
+			static function (): void {
+				throw new \RuntimeException( 'listener exploded' );
+			}
+		);
+
+		// REAL handler in the sealed registry (reflection seam).
+		$this->register_test_command( 'deactivate_plugin', new \Woodev_License_Command_Deactivate_Plugin() );
+
+		$ack_store = $this->make_ack_store();
+		$envelope  = $this->sign( $this->valid_payload() );
+
+		// Delivery 1: deactivation SUCCEEDS, then the hook throws → 'failed'.
+		$first = Probe_Command_Dispatcher::handle_envelope( $envelope, 'inbound', $ack_store );
+
+		$this->assertSame( 'failed', $first['status'] );
+		$this->assertSame( 500, $first['http'] );
+		$this->assertFalse( $plugin_active, 'deactivate_plugins() ran before the hook threw.' );
+		$this->assertSame( 'processing', $nonce_record['s'], 'Nonce stays processing (retryable).' );
+		$this->assertSame( 'failed', $ack_stored[0]['status'] );
+		$this->assertFalse( $ack_stored[0]['terminal'], 'The failed ack is retryable.' );
+
+		// Delivery 2 (redelivery after the §9.1 takeover window): the deactivation
+		// PERSISTED, so the real handler converges to 'already' and consumes.
+		Probe_Command_Dispatcher::$fixed_now = self::NOW + 301;
+
+		$second = Probe_Command_Dispatcher::handle_envelope( $envelope, 'inbound', $ack_store );
+
+		$this->assertSame( 'already', $second['status'], 'Redelivery converges to already (§9.9).' );
+		$this->assertSame( 200, $second['http'] );
+		$this->assertSame( 'consumed', $nonce_record['s'], 'The nonce is consumed on convergence.' );
+		$this->assertSame( 'already', $nonce_record['r'] );
+
+		// Both acks queued: the retryable 'failed' from delivery 1 + the terminal 'already'.
+		$this->assertSame(
+			array( 'failed', 'already' ),
+			array_column( (array) $ack_stored, 'status' ),
+			'Ack history pins the convergence: failed (retryable) then already (terminal).'
 		);
 	}
 }
