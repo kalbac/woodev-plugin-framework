@@ -64,6 +64,11 @@ class LicenseNeedLicenseFlagTest extends TestCase {
 		$plugin->shouldReceive( 'is_need_license' )->andReturn( false );
 		$plugin->shouldNotReceive( 'get_admin_notice_handler' );
 
+		// s8-p4: render_remote_deactivation_notices() reads the site-level notices option.
+		// Stub it to return an empty array so the function exits early before any
+		// get_admin_notice_handler() call — the shouldNotReceive assertion above must pass.
+		Functions\when( 'get_option' )->justReturn( array() );
+
 		$license = $this->make_license_for_plugin( $plugin, 'KEY-123', 'expired' );
 
 		$license->notices();

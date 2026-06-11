@@ -189,6 +189,13 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 				Woodev_REST_API_License_Command::boot();
 			}
 
+			// Register the v1 default command vocabulary (deactivate_plugin only).
+			// Idempotent: the static guard in ensure_default_commands() prevents
+			// re-registration when multiple plugin instances each call add_hooks().
+			if ( class_exists( 'Woodev_License_Command_Deactivate_Plugin' ) ) {
+				Woodev_License_Command_Deactivate_Plugin::ensure_default_commands();
+			}
+
 			add_action( 'admin_notices', array( $this, 'notices' ) );
 
 			add_action( 'admin_print_scripts-plugins.php', array( $this, 'plugin_screen_scripts' ) );
@@ -202,6 +209,20 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 				10,
 				2
 			);
+		}
+
+		/**
+		 * Returns the plugin instance backing this license engine.
+		 *
+		 * Used by command handlers (e.g. Woodev_License_Command_Deactivate_Plugin)
+		 * to resolve the plugin file and call plugin-level methods such as log().
+		 *
+		 * @since 2.0.0
+		 *
+		 * @return Woodev_Plugin
+		 */
+		public function get_plugin(): Woodev_Plugin {
+			return $this->plugin;
 		}
 
 		/**
@@ -730,6 +751,16 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 		}
 
 		public function notices() {
+
+			// Render any pending remote-deactivation notices (plan decision 10, §9.9 dedup).
+			// MUST run BEFORE the is_need_license() early-return below: a license-free
+			// surviving plugin still renders the deactivated plugin's notice (pinned by
+			// LicenseCommandDeactivateTest::test_license_free_surviving_plugin_still_renders_foreign_notice).
+			// The static per-request dedup guard inside makes the first caller do the one
+			// option read + render pass; every later instance returns immediately (§9.9).
+			if ( class_exists( 'Woodev_License_Command_Deactivate_Plugin' ) ) {
+				Woodev_License_Command_Deactivate_Plugin::render_remote_deactivation_notices( $this );
+			}
 
 			if ( ! $this->plugin->is_need_license() ) {
 				return;

@@ -550,6 +550,12 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 			require_once $framework_path . '/licensing/class-license-command-nonce-store.php';
 			require_once $framework_path . '/licensing/class-license-command-dispatcher.php';
 
+			// v1 command vocabulary — interface BEFORE implementation (gotcha framework/includes-wiring).
+			// Both are unconditional: the dispatcher is REST-reachable and pull-reachable regardless
+			// of admin/WC context, so a gated require would leave the vocabulary unregistered.
+			require_once $framework_path . '/licensing/commands/interface-license-command.php';
+			require_once $framework_path . '/licensing/commands/class-license-command-deactivate-plugin.php';
+
 			// Load the woodev/v1 REST namespace registrar + the license REST controller.
 			// Unconditional: REST requests are neither admin nor WooCommerce-gated, so an
 			// admin/WC-only require would leave these unwired and fatal on a REST request.
