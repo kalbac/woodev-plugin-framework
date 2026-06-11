@@ -200,14 +200,14 @@ if ( ! class_exists( 'Woodev_License_Command_Dispatcher' ) ) :
 
 			// Gate 2: body size (cheap, before any JSON work).
 			if ( strlen( $body ) > self::MAX_BODY_BYTES ) {
-				return self::reject_and_count( 'malformed' );
+				return self::reject_and_count( 'malformed', 'inbound' );
 			}
 
 			// Gate 3: strict JSON decode + strict schema.
 			$envelope = json_decode( $body, true, self::JSON_DEPTH );
 
 			if ( ! is_array( $envelope ) || ! self::is_schema_valid( $envelope ) ) {
-				return self::reject_and_count( 'malformed' );
+				return self::reject_and_count( 'malformed', 'inbound' );
 			}
 
 			return self::handle_envelope( $envelope, 'inbound' );
@@ -220,31 +220,54 @@ if ( ! class_exists( 'Woodev_License_Command_Dispatcher' ) ) :
 		 * envelopes here. The schema gate runs here too so a pull-delivered envelope is
 		 * held to the same strictness as an inbound one (steps 1–2 are HTTP-only).
 		 *
+		 * The dispatcher writes an ack record for EVERY terminal outcome reached AFTER
+		 * the atomic claim (§9.5). When no $ack_store is injected it constructs the
+		 * real default store itself (critic ruling s8-p5 #2) — the parameter is an
+		 * injection seam for tests. Frozen lifecycle order: action → ack record →
+		 * mark nonce consumed. For 'failed' (handler threw) the ack is non-terminal
+		 * (retryable) and the nonce stays 'processing' so §9.1 takeover can retry.
+		 * Both transports write acks; the duplicate is harmless — the server ignores
+		 * nonces it has already cleared (§9.5).
+		 *
+		 * §9.7 client-side note: the ack carries no extra authenticity material —
+		 * the request already carries `url` (raw home_url()) and the license key when
+		 * present. The server binds acks to the request's url; that rule lives in the
+		 * mirror spec, not here.
+		 *
 		 * @since 2.0.0
 		 *
-		 * @param array<string, mixed> $envelope  The decoded envelope.
-		 * @param string               $transport The delivery transport ('inbound'|'pull').
+		 * @param array<string, mixed>             $envelope  The decoded envelope.
+		 * @param string                           $transport The delivery transport ('inbound'|'pull').
+		 * @param Woodev_License_Command_Acks|null $ack_store Optional ack store for structured ack writes (§9.5).
 		 * @return array{status: string, reason?: string, http: int}
 		 */
-		public static function handle_envelope( array $envelope, string $transport ): array {
+		public static function handle_envelope( array $envelope, string $transport, $ack_store = null ): array {
+
+			// §9.5: BOTH transports write acks. The production inbound path
+			// (handle_raw_body via the REST controller) injects no store, so default
+			// to the real one — critic ruling s8-p5 #2. The parameter stays an
+			// injection seam for tests.
+			if ( null === $ack_store ) {
+				$ack_store = self::get_default_ack_store();
+			}
 
 			// Schema (idempotent with handle_raw_body's gate 3; the pull path enters here).
 			if ( ! self::is_schema_valid( $envelope ) ) {
-				return self::reject_and_count( 'malformed' );
+				return self::reject_and_count( 'malformed', $transport );
 			}
 
 			// Step 4: strict base64 signature, 64 bytes.
 			$raw_signature = base64_decode( (string) $envelope['signature'], true );
 
 			if ( false === $raw_signature || Woodev_License_Envelope_Verifier::SIGNATURE_BYTES !== strlen( $raw_signature ) ) {
-				return self::reject_and_count( 'bad_signature' );
+				return self::reject_and_count( 'bad_signature', $transport );
 			}
 
 			// Steps 5–6: kid rule + Ed25519 verify (BEFORE any site/plugin lookup).
 			$payload = Woodev_License_Envelope_Verifier::verify( $envelope, self::get_public_key() );
 
 			if ( null === $payload ) {
-				return self::reject_and_count( 'bad_signature' );
+				return self::reject_and_count( 'bad_signature', $transport );
 			}
 
 			// From here the signature is authentic — pre-auth rate counting stops.
@@ -316,6 +339,10 @@ if ( ! class_exists( 'Woodev_License_Command_Dispatcher' ) ) :
 			$command = (string) $payload['command'];
 
 			if ( ! isset( self::$commands[ $command ] ) ) {
+				// Frozen lifecycle order (§9.1): action (none) → ack record → mark consumed.
+				if ( null !== $ack_store ) {
+					$ack_store->record( $nonce, 'unsupported_command' );
+				}
 				$store->mark_consumed( $nonce, 'unsupported_command', $expires_at );
 
 				return self::terminal( 'unsupported_command' );
@@ -326,12 +353,78 @@ if ( ! class_exists( 'Woodev_License_Command_Dispatcher' ) ) :
 			try {
 				$status = (string) self::invoke( self::$commands[ $command ], $engine, $payload );
 			} catch ( \Throwable $throwable ) {
+				// Frozen lifecycle order: action (threw) → ack record (retryable) →
+				// nonce stays processing (mark_consumed NOT called, §9.1 takeover retry).
+				if ( null !== $ack_store ) {
+					$ack_store->record( $nonce, 'failed' );
+				}
 				return self::terminal( 'failed' );
 			}
 
+			// Frozen lifecycle order (§9.1): action → ack record → mark consumed.
+			if ( null !== $ack_store ) {
+				$ack_store->record( $nonce, $status );
+			}
 			$store->mark_consumed( $nonce, $status, $expires_at );
 
 			return self::terminal( $status );
+		}
+
+		/**
+		 * Processes a pull-fallback license_commands array from a server response.
+		 *
+		 * Extracts the top-level `license_commands` field (array of envelopes; an
+		 * object-shaped response is normalised via json_decode(wp_json_encode())),
+		 * then feeds each envelope through the FULL §9.4 verification pipeline
+		 * (minus HTTP gates 1–2: rate-limit and body-size checks are HTTP-only).
+		 * Schema gate 3 onward applies identically to the inbound path.
+		 *
+		 * A malformed or rejected entry is SKIPPED with zero side effects; remaining
+		 * entries still process. The same nonce delivered via both inbound and pull
+		 * executes ONCE (the nonce store's replay protection handles deduplication).
+		 *
+		 * @since 2.0.0
+		 *
+		 * @param array<string, mixed>|object      $response_data The server response (array or object).
+		 * @param string                           $transport     The transport label, default 'pull'.
+		 * @param Woodev_License_Command_Acks|null $ack_store     Optional ack store for structured ack writes (§9.5).
+		 * @return void
+		 */
+		public static function consume_pull_commands( $response_data, string $transport = 'pull', $ack_store = null ): void {
+
+			// Normalise an object-shaped response to an associative array.
+			if ( is_object( $response_data ) ) {
+				$response_data = json_decode( (string) wp_json_encode( $response_data ), true );
+			}
+
+			if ( ! is_array( $response_data ) ) {
+				return;
+			}
+
+			$commands = $response_data['license_commands'] ?? null;
+
+			if ( ! is_array( $commands ) ) {
+				return;
+			}
+
+			foreach ( $commands as $envelope ) {
+
+				// Silently skip non-array entries (§9.9: malformed entries skipped,
+				// zero side effects, remaining entries still processed).
+				if ( ! is_array( $envelope ) ) {
+					continue;
+				}
+
+				// Normalise object-valued payload (e.g. json_decode without assoc).
+				if ( isset( $envelope['payload'] ) && is_object( $envelope['payload'] ) ) {
+					$envelope['payload'] = json_decode( (string) wp_json_encode( $envelope['payload'] ), true );
+				}
+
+				// Run the full pipeline from schema gate (step 3) onward.
+				// Rejected or replayed envelopes produce a result but no side effects;
+				// we discard the result — the pull path has no HTTP response.
+				self::handle_envelope( $envelope, $transport, $ack_store );
+			}
 		}
 
 		/**
@@ -420,12 +513,22 @@ if ( ! class_exists( 'Woodev_License_Command_Dispatcher' ) ) :
 		 * only — the gate reads t0, never the TTL. The read-modify-write increment is
 		 * lossy under concurrency — accepted, best-effort by design (plan §9.2).
 		 *
+		 * Ruled (s8-p5 critic #3): ONLY inbound (public REST) rejections count toward
+		 * the HTTP rate limit. Pull-path rejections must NOT touch the transient — the
+		 * limit guards the public endpoint against floods, and a server-delivered pull
+		 * batch with malformed entries must never lock out the legitimate inbound path.
+		 *
 		 * @since 2.0.0
 		 *
-		 * @param string $reason The rejection reason code.
+		 * @param string $reason    The rejection reason code.
+		 * @param string $transport The delivery transport ('inbound'|'pull').
 		 * @return array{status: string, reason: string, http: int}
 		 */
-		private static function reject_and_count( string $reason ): array {
+		private static function reject_and_count( string $reason, string $transport = 'inbound' ): array {
+
+			if ( 'inbound' !== $transport ) {
+				return self::reject( $reason );
+			}
 
 			$now    = static::now();
 			$window = get_transient( self::RATE_LIMIT_TRANSIENT );
@@ -583,6 +686,31 @@ if ( ! class_exists( 'Woodev_License_Command_Dispatcher' ) ) :
 			$default = defined( 'WOODEV_LICENSE_AUTHORITY_PUBKEY' ) ? (string) WOODEV_LICENSE_AUTHORITY_PUBKEY : '';
 
 			return (string) apply_filters( 'woodev_license_authority_pubkey', $default );
+		}
+
+		/**
+		 * Builds the DEFAULT ack store used when no store is injected (§9.5).
+		 *
+		 * Critic ruling s8-p5 #2: the production inbound path (REST controller →
+		 * handle_raw_body) passes no store, so the dispatcher must construct the real
+		 * one itself or inbound acks would never be written. Shares the dispatcher's
+		 * now() seam so the retention math is deterministic under test.
+		 *
+		 * @since 2.0.0
+		 *
+		 * @return Woodev_License_Command_Acks|null Null when the acks class is not loaded.
+		 */
+		private static function get_default_ack_store() {
+
+			if ( ! class_exists( 'Woodev_License_Command_Acks' ) ) {
+				return null;
+			}
+
+			return new Woodev_License_Command_Acks(
+				static function (): int {
+					return static::now();
+				}
+			);
 		}
 
 		/**

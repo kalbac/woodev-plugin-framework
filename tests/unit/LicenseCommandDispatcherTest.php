@@ -26,6 +26,7 @@ require_once dirname( __DIR__, 2 ) . '/woodev/functions-license-authority.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/licensing/class-license-envelope-verifier.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/licensing/class-license-command-nonce-store.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/licensing/class-license-command-dispatcher.php';
+require_once dirname( __DIR__, 2 ) . '/woodev/licensing/class-license-command-acks.php';
 
 require_once dirname( __DIR__, 2 ) . '/woodev/class-plugin.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/licensing/class-license-store.php';
@@ -1355,5 +1356,619 @@ class LicenseCommandDispatcherTest extends TestCase {
 			}
 			$property->setValue( null, array() );
 		}
+	}
+
+	/* ----------------------------------------------------------------------- *
+	 * Ack writes — dispatcher records acks for BOTH transports (§9.5)
+	 * ----------------------------------------------------------------------- */
+
+	/**
+	 * Builds a fixed-now ack store whose clock matches the Probe dispatcher.
+	 *
+	 * @return \Woodev_License_Command_Acks
+	 */
+	private function make_ack_store(): \Woodev_License_Command_Acks {
+		return new \Woodev_License_Command_Acks(
+			static function (): int {
+				return Probe_Command_Dispatcher::$fixed_now;
+			}
+		);
+	}
+
+	/**
+	 * Arms the ack store's option stubs and returns a reference to the stored value.
+	 *
+	 * After calling, the referenced $stored variable mirrors the option contents
+	 * for assertions.
+	 *
+	 * @param mixed $stored Reference that will be updated by update_option stubs.
+	 * @return void
+	 */
+	private function arm_ack_store_stubs( &$stored ): void {
+		// get_option returns $stored only for the acks option; delegate others.
+		Functions\when( 'get_option' )->alias(
+			static function ( $name ) use ( &$stored ) {
+				if ( \Woodev_License_Command_Acks::OPTION_NAME === $name ) {
+					return $stored ?? false;
+				}
+				return false;
+			}
+		);
+		Functions\when( 'update_option' )->alias(
+			static function ( $name, $value ) use ( &$stored ) {
+				if ( \Woodev_License_Command_Acks::OPTION_NAME === $name ) {
+					$stored = $value;
+				}
+				return true;
+			}
+		);
+	}
+
+	/**
+	 * A terminal 'executed' outcome on the inbound transport records an ack entry
+	 * in the ack store: { nonce, status:'executed', terminal:true, protocol:1, ts }.
+	 *
+	 * @return void
+	 */
+	public function test_inbound_terminal_outcome_records_ack(): void {
+		$this->register_target_plugin();
+
+		$ack_stored = null;
+		$this->arm_ack_store_stubs( $ack_stored );
+		Functions\when( 'add_option' )->justReturn( true );
+		Functions\when( 'maybe_unserialize' )->returnArg();
+		$this->arm_wpdb();
+
+		$calls = 0;
+		Probe_Command_Dispatcher::register_command(
+			'deactivate_plugin',
+			static function () use ( &$calls ) {
+				$calls++;
+				return 'executed';
+			}
+		);
+
+		$ack_store = $this->make_ack_store();
+
+		Probe_Command_Dispatcher::handle_envelope(
+			$this->sign( $this->valid_payload() ),
+			'inbound',
+			$ack_store
+		);
+
+		$this->assertNotNull( $ack_stored, 'Ack store was written.' );
+		$this->assertCount( 1, (array) $ack_stored );
+		$entry = $ack_stored[0];
+		$this->assertSame( str_repeat( 'a', 32 ), $entry['nonce'] );
+		$this->assertSame( 'executed', $entry['status'] );
+		$this->assertTrue( $entry['terminal'] );
+		$this->assertSame( 1, $entry['protocol'] );
+	}
+
+	/**
+	 * A terminal 'already' outcome on the pull transport records an ack entry too.
+	 * Both transports write acks (§9.5, the duplicate is harmless — server ignores
+	 * already-cleared nonces).
+	 *
+	 * @return void
+	 */
+	public function test_pull_terminal_outcome_records_ack(): void {
+		$this->register_target_plugin();
+
+		$ack_stored = null;
+		$this->arm_ack_store_stubs( $ack_stored );
+		Functions\when( 'add_option' )->justReturn( true );
+		Functions\when( 'maybe_unserialize' )->returnArg();
+		$this->arm_wpdb();
+
+		Probe_Command_Dispatcher::register_command(
+			'deactivate_plugin',
+			static function () {
+				return 'already';
+			}
+		);
+
+		$ack_store = $this->make_ack_store();
+
+		Probe_Command_Dispatcher::handle_envelope(
+			$this->sign( $this->valid_payload() ),
+			'pull',
+			$ack_store
+		);
+
+		$this->assertNotNull( $ack_stored );
+		$this->assertSame( 'already', $ack_stored[0]['status'] );
+		$this->assertTrue( $ack_stored[0]['terminal'] );
+	}
+
+	/**
+	 * A 'failed' outcome (handler threw) records a NON-terminal ack (retryable)
+	 * and leaves the nonce in 'processing' state (§9.6, §9.1 takeover retry).
+	 *
+	 * @return void
+	 */
+	public function test_failed_outcome_records_retryable_ack_nonce_stays_processing(): void {
+		$this->register_target_plugin();
+
+		$ack_stored    = null;
+		$nonce_records = array();
+
+		Functions\when( 'get_option' )->alias(
+			static function ( $name ) use ( &$nonce_records ) {
+				if ( \Woodev_License_Command_Acks::OPTION_NAME === $name ) {
+					return false;
+				}
+				return $nonce_records[ $name ] ?? false;
+			}
+		);
+		Functions\when( 'add_option' )->alias(
+			static function ( $name, $value ) use ( &$nonce_records ) {
+				$nonce_records[ $name ] = $value;
+				return true;
+			}
+		);
+		Functions\when( 'update_option' )->alias(
+			static function ( $name, $value ) use ( &$nonce_records, &$ack_stored ) {
+				if ( \Woodev_License_Command_Acks::OPTION_NAME === $name ) {
+					$ack_stored = $value;
+				} else {
+					$nonce_records[ $name ] = $value;
+				}
+				return true;
+			}
+		);
+		Functions\when( 'maybe_unserialize' )->returnArg();
+		$this->arm_wpdb();
+
+		Probe_Command_Dispatcher::register_command(
+			'deactivate_plugin',
+			static function () {
+				throw new \RuntimeException( 'Simulated failure.' );
+			}
+		);
+
+		$ack_store = $this->make_ack_store();
+
+		$result = Probe_Command_Dispatcher::handle_envelope(
+			$this->sign( $this->valid_payload() ),
+			'inbound',
+			$ack_store
+		);
+
+		$this->assertSame( 'failed', $result['status'] );
+
+		// Ack is recorded but NOT terminal.
+		$this->assertNotNull( $ack_stored );
+		$this->assertSame( 'failed', $ack_stored[0]['status'] );
+		$this->assertFalse( $ack_stored[0]['terminal'], 'failed ack is NOT terminal (retryable).' );
+
+		// Nonce NOT consumed (stays processing → §9.1 takeover retry).
+		$processing_found = false;
+		foreach ( $nonce_records as $record ) {
+			if ( is_array( $record ) && ( 'processing' === ( $record['s'] ?? null ) ) ) {
+				$processing_found = true;
+			}
+		}
+		$this->assertTrue( $processing_found, 'Nonce stays in processing state after failed execution.' );
+
+		// mark_consumed() must NOT have been called (no consumed record).
+		foreach ( $nonce_records as $record ) {
+			if ( is_array( $record ) ) {
+				$this->assertNotSame( 'consumed', $record['s'] ?? null, 'Nonce must not be consumed after failed execution.' );
+			}
+		}
+	}
+
+	/**
+	 * Frozen lifecycle order (§9.1): action → ack record → mark nonce consumed.
+	 * The ack is written BEFORE mark_consumed() — verified by side-effect ordering.
+	 *
+	 * @return void
+	 */
+	public function test_ack_recorded_before_nonce_consumed(): void {
+		$this->register_target_plugin();
+
+		$sequence = array();
+
+		Functions\when( 'get_option' )->alias(
+			static function ( $name ) {
+				if ( \Woodev_License_Command_Acks::OPTION_NAME === $name ) {
+					return false;
+				}
+				return false;
+			}
+		);
+		Functions\when( 'add_option' )->justReturn( true );
+		Functions\when( 'update_option' )->alias(
+			static function ( $name, $value ) use ( &$sequence ) {
+				if ( \Woodev_License_Command_Acks::OPTION_NAME === $name ) {
+					$sequence[] = 'ack';
+				} elseif ( isset( $value['s'] ) && 'consumed' === $value['s'] ) {
+					$sequence[] = 'consumed';
+				}
+				return true;
+			}
+		);
+		Functions\when( 'maybe_unserialize' )->returnArg();
+		$this->arm_wpdb();
+
+		Probe_Command_Dispatcher::register_command(
+			'deactivate_plugin',
+			static function () use ( &$sequence ) {
+				$sequence[] = 'action';
+				return 'executed';
+			}
+		);
+
+		$ack_store = $this->make_ack_store();
+		Probe_Command_Dispatcher::handle_envelope(
+			$this->sign( $this->valid_payload() ),
+			'inbound',
+			$ack_store
+		);
+
+		$this->assertSame(
+			array( 'action', 'ack', 'consumed' ),
+			$sequence,
+			'Frozen lifecycle order: action → ack record → mark nonce consumed.'
+		);
+	}
+
+	/* ----------------------------------------------------------------------- *
+	 * consume_pull_commands() — pull-fallback (§3.2, D-W3)
+	 * ----------------------------------------------------------------------- */
+
+	/**
+	 * consume_pull_commands() with a valid license_commands array executes each
+	 * envelope through the full pipeline (minus HTTP gates 1–2).
+	 *
+	 * @return void
+	 */
+	public function test_consume_pull_commands_executes_valid_envelopes(): void {
+		$this->register_target_plugin();
+
+		$ack_stored = null;
+		$this->arm_ack_store_stubs( $ack_stored );
+		Functions\when( 'add_option' )->justReturn( true );
+		Functions\when( 'maybe_unserialize' )->returnArg();
+		$this->arm_wpdb();
+
+		$calls = 0;
+		Probe_Command_Dispatcher::register_command(
+			'deactivate_plugin',
+			static function () use ( &$calls ) {
+				$calls++;
+				return 'executed';
+			}
+		);
+
+		$ack_store = $this->make_ack_store();
+
+		$payload_a   = $this->valid_payload( array( 'nonce' => str_repeat( 'a', 32 ) ) );
+		$payload_b   = $this->valid_payload( array( 'nonce' => str_repeat( 'b', 32 ) ) );
+		$response    = array( 'license_commands' => array( $this->sign( $payload_a ), $this->sign( $payload_b ) ) );
+
+		Probe_Command_Dispatcher::consume_pull_commands( $response, 'pull', $ack_store );
+
+		$this->assertSame( 2, $calls, 'Both valid commands are executed.' );
+	}
+
+	/**
+	 * A [valid, tampered, valid] pull array executes 2 and skips 1 with zero side
+	 * effects for the tampered entry; the remaining entries still process (§9.9).
+	 *
+	 * @return void
+	 */
+	public function test_consume_pull_commands_skips_tampered_entry(): void {
+		$this->register_target_plugin();
+
+		// Ruled s8-p5 #3: the tampered (pull) rejection must NOT touch the rate transient.
+		Functions\expect( 'set_transient' )->never();
+
+		$ack_stored = null;
+		$this->arm_ack_store_stubs( $ack_stored );
+		Functions\when( 'add_option' )->justReturn( true );
+		Functions\when( 'maybe_unserialize' )->returnArg();
+		$this->arm_wpdb();
+
+		$calls = 0;
+		Probe_Command_Dispatcher::register_command(
+			'deactivate_plugin',
+			static function () use ( &$calls ) {
+				$calls++;
+				return 'executed';
+			}
+		);
+
+		$ack_store = $this->make_ack_store();
+
+		$valid_a  = $this->sign( $this->valid_payload( array( 'nonce' => str_repeat( 'a', 32 ) ) ) );
+		$tampered = $this->sign( $this->valid_payload( array( 'nonce' => str_repeat( 'c', 32 ) ) ) );
+		$tampered['payload']['plugin_id'] = '999'; // Tamper the payload after signing.
+		$valid_b  = $this->sign( $this->valid_payload( array( 'nonce' => str_repeat( 'b', 32 ) ) ) );
+
+		$response = array( 'license_commands' => array( $valid_a, $tampered, $valid_b ) );
+
+		Probe_Command_Dispatcher::consume_pull_commands( $response, 'pull', $ack_store );
+
+		$this->assertSame( 2, $calls, '2 valid commands executed, tampered entry skipped.' );
+	}
+
+	/**
+	 * A malformed (non-array) entry in the pull array is skipped with zero side
+	 * effects; remaining entries still process.
+	 *
+	 * @return void
+	 */
+	public function test_consume_pull_commands_skips_malformed_entry(): void {
+		$this->register_target_plugin();
+
+		// Ruled s8-p5 #3: malformed (pull) rejections must NOT touch the rate transient.
+		Functions\expect( 'set_transient' )->never();
+
+		$ack_stored = null;
+		$this->arm_ack_store_stubs( $ack_stored );
+		Functions\when( 'add_option' )->justReturn( true );
+		Functions\when( 'maybe_unserialize' )->returnArg();
+		$this->arm_wpdb();
+
+		$calls = 0;
+		Probe_Command_Dispatcher::register_command(
+			'deactivate_plugin',
+			static function () use ( &$calls ) {
+				$calls++;
+				return 'executed';
+			}
+		);
+
+		$ack_store = $this->make_ack_store();
+
+		$valid    = $this->sign( $this->valid_payload( array( 'nonce' => str_repeat( 'a', 32 ) ) ) );
+		$response = array(
+			'license_commands' => array(
+				$valid,
+				'not-an-array',   // malformed entry.
+				array( 'garbage' => 'data' ), // schema-invalid entry.
+			),
+		);
+
+		Probe_Command_Dispatcher::consume_pull_commands( $response, 'pull', $ack_store );
+
+		$this->assertSame( 1, $calls, 'Only the valid command is executed.' );
+	}
+
+	/**
+	 * Double delivery (same nonce inbound then pull) executes the command exactly once.
+	 * This extends the existing double-delivery test to use consume_pull_commands().
+	 *
+	 * @return void
+	 */
+	public function test_consume_pull_commands_nonce_deduplicated_with_inbound(): void {
+		$this->register_target_plugin();
+
+		$record = null;
+		$ack_stored = null;
+
+		Functions\when( 'get_option' )->alias(
+			static function ( $name ) use ( &$record, &$ack_stored ) {
+				if ( \Woodev_License_Command_Acks::OPTION_NAME === $name ) {
+					return $ack_stored ?? false;
+				}
+				return $record ?? false;
+			}
+		);
+		Functions\when( 'add_option' )->alias(
+			static function ( $name, $value ) use ( &$record ) {
+				if ( null !== $record ) {
+					return false;
+				}
+				$record = $value;
+				return true;
+			}
+		);
+		Functions\when( 'update_option' )->alias(
+			static function ( $name, $value ) use ( &$record, &$ack_stored ) {
+				if ( \Woodev_License_Command_Acks::OPTION_NAME === $name ) {
+					$ack_stored = $value;
+				} else {
+					$record = $value;
+				}
+				return true;
+			}
+		);
+		Functions\when( 'maybe_unserialize' )->returnArg();
+		$this->arm_wpdb();
+
+		$calls = 0;
+		Probe_Command_Dispatcher::register_command(
+			'deactivate_plugin',
+			static function () use ( &$calls ) {
+				$calls++;
+				return 'executed';
+			}
+		);
+
+		$ack_store = $this->make_ack_store();
+		$envelope  = $this->sign( $this->valid_payload() );
+
+		// First: inbound.
+		Probe_Command_Dispatcher::handle_envelope( $envelope, 'inbound', $ack_store );
+
+		// Second: pull via consume_pull_commands().
+		Probe_Command_Dispatcher::consume_pull_commands(
+			array( 'license_commands' => array( $envelope ) ),
+			'pull',
+			$ack_store
+		);
+
+		$this->assertSame( 1, $calls, 'Command executes exactly once even when delivered by both transports.' );
+	}
+
+	/**
+	 * consume_pull_commands() tolerates an object-shaped response (json_decode
+	 * without assoc=true) by converting the payload to array via wp_json_encode.
+	 *
+	 * @return void
+	 */
+	public function test_consume_pull_commands_tolerates_object_shaped_response(): void {
+		$this->register_target_plugin();
+
+		$ack_stored = null;
+		$this->arm_ack_store_stubs( $ack_stored );
+		Functions\when( 'add_option' )->justReturn( true );
+		Functions\when( 'maybe_unserialize' )->returnArg();
+		$this->arm_wpdb();
+
+		$calls = 0;
+		Probe_Command_Dispatcher::register_command(
+			'deactivate_plugin',
+			static function () use ( &$calls ) {
+				$calls++;
+				return 'executed';
+			}
+		);
+
+		$ack_store = $this->make_ack_store();
+
+		// Simulate json_decode without assoc=true returning an object.
+		$envelope     = $this->sign( $this->valid_payload() );
+		$as_object    = json_decode( (string) json_encode( array( 'license_commands' => array( $envelope ) ) ) );
+
+		Probe_Command_Dispatcher::consume_pull_commands( $as_object, 'pull', $ack_store );
+
+		$this->assertSame( 1, $calls, 'Object-shaped response is normalised and the command executes.' );
+	}
+
+	/**
+	 * consume_pull_commands() with no license_commands field in the response is a
+	 * no-op (no side effects).
+	 *
+	 * @return void
+	 */
+	public function test_consume_pull_commands_no_license_commands_is_noop(): void {
+		Functions\expect( 'add_option' )->never();
+		Functions\expect( 'update_option' )->never();
+
+		$ack_store = new \Woodev_License_Command_Acks();
+		Probe_Command_Dispatcher::consume_pull_commands( array( 'other_key' => 'value' ), 'pull', $ack_store );
+		// No assertion needed: expect() declarations above verify zero writes.
+		$this->addToAssertionCount( 1 );
+	}
+
+	/* ----------------------------------------------------------------------- *
+	 * Pull-path rejections never touch the HTTP rate-limit transient (ruled
+	 * s8-p5 critic #3) — the limit guards the public REST endpoint only.
+	 * ----------------------------------------------------------------------- */
+
+	/**
+	 * A malformed (schema-invalid) pull entry is rejected WITHOUT any rate-limit
+	 * transient write: reject_and_count() only counts when transport === 'inbound'.
+	 *
+	 * @return void
+	 */
+	public function test_pull_malformed_entry_does_not_touch_rate_limit_transient(): void {
+		Functions\expect( 'set_transient' )->never();
+		Functions\expect( 'get_transient' )->never();
+		Functions\expect( 'add_option' )->never();
+		Functions\expect( 'update_option' )->never();
+
+		$ack_store = $this->make_ack_store();
+
+		Probe_Command_Dispatcher::consume_pull_commands(
+			array( 'license_commands' => array( array( 'garbage' => 'data' ) ) ),
+			'pull',
+			$ack_store
+		);
+
+		// The expect()->never() declarations above are the assertions.
+		$this->addToAssertionCount( 1 );
+	}
+
+	/**
+	 * A bad-signature pull entry (tampered after signing) is likewise rejected with
+	 * ZERO rate-transient writes — the same envelope on the INBOUND transport DOES
+	 * count (contrast pinned in test_pre_auth_rejection_starts_rate_window).
+	 *
+	 * @return void
+	 */
+	public function test_pull_bad_signature_does_not_touch_rate_limit_transient(): void {
+		Functions\expect( 'set_transient' )->never();
+		Functions\expect( 'get_transient' )->never();
+
+		$ack_store = $this->make_ack_store();
+
+		$tampered                         = $this->sign( $this->valid_payload() );
+		$tampered['payload']['plugin_id'] = '999'; // signature no longer matches.
+
+		Probe_Command_Dispatcher::consume_pull_commands(
+			array( 'license_commands' => array( $tampered ) ),
+			'pull',
+			$ack_store
+		);
+
+		$this->addToAssertionCount( 1 );
+	}
+
+	/* ----------------------------------------------------------------------- *
+	 * Default ack store — production inbound wiring writes acks (ruled
+	 * s8-p5 critic #2): handle_raw_body() with NO injected store must still
+	 * record the §9.5 ack via a lazily-constructed default store.
+	 * ----------------------------------------------------------------------- */
+
+	/**
+	 * handle_raw_body() — the production REST wiring, no manual ack-store
+	 * injection — records the §9.5 ack for a terminal outcome via the DEFAULT
+	 * Woodev_License_Command_Acks store.
+	 *
+	 * @return void
+	 */
+	public function test_handle_raw_body_records_ack_via_default_store(): void {
+		$this->register_target_plugin();
+
+		$ack_stored = null;
+		$this->arm_ack_store_stubs( $ack_stored );
+		Functions\when( 'add_option' )->justReturn( true );
+		Functions\when( 'maybe_unserialize' )->returnArg();
+		Functions\when( 'get_transient' )->justReturn( false );
+		$this->arm_wpdb();
+
+		Probe_Command_Dispatcher::register_command( 'deactivate_plugin', static fn() => 'executed' );
+
+		$body   = (string) json_encode( $this->sign( $this->valid_payload() ) );
+		$result = Probe_Command_Dispatcher::handle_raw_body( $body );
+
+		$this->assertSame( 'executed', $result['status'] );
+		$this->assertNotNull( $ack_stored, 'handle_raw_body must write the ack through the DEFAULT store (no injection).' );
+		$this->assertCount( 1, (array) $ack_stored );
+		$this->assertSame( str_repeat( 'a', 32 ), $ack_stored[0]['nonce'] );
+		$this->assertSame( 'executed', $ack_stored[0]['status'] );
+		$this->assertTrue( $ack_stored[0]['terminal'] );
+		$this->assertSame( 1, $ack_stored[0]['protocol'] );
+	}
+
+	/* ----------------------------------------------------------------------- *
+	 * Wiring: class-plugin.php requires class-license-command-acks.php
+	 * ----------------------------------------------------------------------- */
+
+	/**
+	 * includes() must require class-license-command-acks.php within the licensing
+	 * block (gotcha framework/includes-wiring).
+	 *
+	 * @return void
+	 */
+	public function test_includes_requires_command_acks_file(): void {
+		$source = (string) file_get_contents( dirname( __DIR__, 2 ) . '/woodev/class-plugin.php' );
+
+		$this->assertStringContainsString(
+			"require_once \$framework_path . '/licensing/class-license-command-acks.php';",
+			$source,
+			'class-plugin.php must require_once class-license-command-acks.php.'
+		);
+
+		$this->assertSame(
+			1,
+			substr_count( $source, "require_once \$framework_path . '/licensing/class-license-command-acks.php';" ),
+			'class-license-command-acks.php must be required exactly once.'
+		);
 	}
 }

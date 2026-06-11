@@ -106,6 +106,9 @@ class UpdaterKeylessPollingTest extends TestCase {
 	public function test_get_api_params_adds_raw_url_and_keeps_existing(): void {
 		Functions\when( 'home_url' )->justReturn( 'https://Example.com/' ); // RAW (not normalized).
 		Functions\when( 'get_bloginfo' )->justReturn( '6.5' );
+		// s8-p5 (critic ruling #4a): the §9.5 ack-store read in get_api_params() is
+		// NOT wrapped in a swallow — stub get_option (empty store → field ABSENT).
+		Functions\when( 'get_option' )->justReturn( false );
 
 		$updater = $this->make_updater(
 			array(
@@ -182,6 +185,14 @@ class UpdaterKeylessPollingTest extends TestCase {
 		// get_api_params() runs (phpversion() lives), but its values are irrelevant
 		// to this test — only get_bloginfo() needs a stub to stay side-effect-free.
 		Functions\when( 'get_bloginfo' )->justReturn( '6.5' );
+		// s8-p5: the §9.5 ack store reads get_option (no swallow — critic #4a), and
+		// consume_pull_commands() normalises the object response via wp_json_encode.
+		Functions\when( 'get_option' )->justReturn( false );
+		Functions\when( 'wp_json_encode' )->alias(
+			static function ( $data, $options = 0, $depth = 512 ) {
+				return json_encode( $data, $options, $depth );
+			}
+		);
 
 		$result = $this->call_private( $updater, 'get_version_from_remote' );
 
@@ -222,6 +233,14 @@ class UpdaterKeylessPollingTest extends TestCase {
 		// get_api_params() runs (phpversion() lives), but its values are irrelevant
 		// to this test — only get_bloginfo() needs a stub to stay side-effect-free.
 		Functions\when( 'get_bloginfo' )->justReturn( '6.5' );
+		// s8-p5: the §9.5 ack store reads get_option (no swallow — critic #4a), and
+		// consume_pull_commands() normalises the object response via wp_json_encode.
+		Functions\when( 'get_option' )->justReturn( false );
+		Functions\when( 'wp_json_encode' )->alias(
+			static function ( $data, $options = 0, $depth = 512 ) {
+				return json_encode( $data, $options, $depth );
+			}
+		);
 
 		// Must NOT throw, and must still return the response.
 		$result = $this->call_private( $updater, 'get_version_from_remote' );

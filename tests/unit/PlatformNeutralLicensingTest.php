@@ -71,7 +71,13 @@ class PlatformNeutralLicensingTest extends TestCase {
 	public function test_license_dispatch_keeps_case_insensitive_action_validation(): void {
 		$plugin      = Mockery::mock();
 		$api_handler = Mockery::mock();
-		$response    = (object) [ 'license' => 'valid' ];
+
+		// s8-p5: dispatch() parses every successful response for pull commands, so
+		// the response double must expose get_response_data() (an array return keeps
+		// consume_pull_commands() free of wp_json_encode normalisation).
+		$response          = Mockery::mock();
+		$response->license = 'valid';
+		$response->shouldReceive( 'get_response_data' )->andReturn( array() );
 
 		$plugin->shouldReceive( 'get_download_id' )->once()->andReturn( 42 );
 		$plugin->shouldReceive( 'get_version' )->once()->andReturn( '2.2.0' );
@@ -90,6 +96,9 @@ class PlatformNeutralLicensingTest extends TestCase {
 			->andReturn( $response );
 
 		Functions\when( 'home_url' )->justReturn( 'https://example.test' );
+		// s8-p5 (critic ruling #4a): the ack-store read is NOT wrapped in a swallow —
+		// the test stubs get_option like any other WP function dispatch() touches.
+		Functions\when( 'get_option' )->justReturn( false );
 
 		$license = ( new \ReflectionClass( \Woodev_Plugins_License::class ) )->newInstanceWithoutConstructor();
 

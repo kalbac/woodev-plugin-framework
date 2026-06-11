@@ -34,6 +34,12 @@ require_once dirname( __DIR__, 2 ) . '/woodev/functions-license-authority.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/licensing/class-license-envelope-verifier.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/licensing/class-license-authority-claims.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/licensing/class-plugin-license.php';
+// s8-p5: dispatch() consumes pull commands + acks on every successful response.
+// Loaded explicitly so dispatch() behaves identically in isolation and in the
+// full suite (the class_exists() gates inside dispatch() depend on these).
+require_once dirname( __DIR__, 2 ) . '/woodev/licensing/class-license-command-nonce-store.php';
+require_once dirname( __DIR__, 2 ) . '/woodev/licensing/class-license-command-dispatcher.php';
+require_once dirname( __DIR__, 2 ) . '/woodev/licensing/class-license-command-acks.php';
 
 /**
  * Class LicensePureOperationsTest.
@@ -93,7 +99,10 @@ class LicensePureOperationsTest extends TestCase {
 
 		$response = Mockery::mock();
 		$response->license = 'valid';
-		$response->shouldReceive( 'get_response_data' )->once()->andReturn( $payload );
+		// Called exactly twice: once inside dispatch() (s8-p5 pull-command consumption
+		// on every successful response — critic ruling #1) and once by activate()
+		// itself for the §4 claim + save parity path.
+		$response->shouldReceive( 'get_response_data' )->twice()->andReturn( $payload );
 
 		// Starts un-activated ('') so activate() does not short-circuit on the
 		// already-valid parity check; save() flips the recorded status to 'valid'.
@@ -228,6 +237,8 @@ class LicensePureOperationsTest extends TestCase {
 
 		$response          = Mockery::mock();
 		$response->license = 'deactivated';
+		// s8-p5: dispatch() parses every successful response for pull commands.
+		$response->shouldReceive( 'get_response_data' )->andReturn( array() );
 
 		$woodev_license          = Mockery::mock( \Woodev_License::class );
 		$woodev_license->license = '';
@@ -731,6 +742,8 @@ class LicensePureOperationsTest extends TestCase {
 
 		$response          = Mockery::mock();
 		$response->license = 'deactivated';
+		// s8-p5: dispatch() parses every successful response for pull commands.
+		$response->shouldReceive( 'get_response_data' )->andReturn( array() );
 
 		// Model the preserved key option: a fresh Woodev_License::get() reads
 		// 'woodev_test_plugin_license_key' => 'KEY-123' (survives deactivation)
@@ -832,6 +845,8 @@ class LicensePureOperationsTest extends TestCase {
 
 		$response          = Mockery::mock();
 		$response->license = 'deactivated';
+		// s8-p5: dispatch() parses every successful response for pull commands.
+		$response->shouldReceive( 'get_response_data' )->andReturn( array() );
 
 		$woodev_license = ( new \ReflectionClass( \Woodev_License::class ) )->newInstanceWithoutConstructor();
 		$woodev_license->license   = 'valid';
@@ -1019,6 +1034,11 @@ class LicensePureOperationsTest extends TestCase {
 				// wp_kses_post is not in Brain Monkey's stubEscapeFunctions() list;
 				// register a passthrough so get_state() works in all other tests.
 				'wp_kses_post'    => static function ( $content ) { return $content; },
+				// s8-p5: dispatch() consumes pull commands on every successful response;
+				// consume_pull_commands() normalises object payloads via wp_json_encode.
+				'wp_json_encode'  => static function ( $data, $options = 0, $depth = 512 ) {
+					return json_encode( $data, $options, $depth );
+				},
 				// Real Woodev_License instances (deactivate re-instantiation + parity
 				// tests) call get_option() for the *_license_key option and the saved
 				// payload. The key option returns $this->license_key_option_value

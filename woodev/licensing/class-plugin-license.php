@@ -289,7 +289,7 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 				return false;
 			}
 
-			// Data to send to the API
+			// Data to send to the API.
 			$api_params = array(
 				'edd_action' => $action,
 				'license'    => $license_key,
@@ -298,12 +298,78 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 				'version'    => $this->plugin->get_version(),
 			);
 
+			// D-W3 / §9.5: attach any pending command acks to this request so the
+			// server can clear its queue. The field is ABSENT when there is nothing
+			// to send — the request shape must be byte-for-byte identical to the
+			// pre-ack shape for the no-pending-acks case (EDD wire contract).
+			// $sent_ack_nonces remembers exactly WHICH nonces this request carries:
+			// the acks_received drain below may only confirm that set — ruled s8-p5
+			// re-review #1, lost-ack protection §9.9.
+			$ack_store        = class_exists( 'Woodev_License_Command_Acks' ) ? new Woodev_License_Command_Acks() : null;
+			$has_pending_acks = false;
+			$sent_ack_nonces  = array();
+
+			if ( null !== $ack_store ) {
+				$pending = $ack_store->get_pending();
+				if ( array() !== $pending ) {
+					$api_params['consumed_command_nonces'] = $pending;
+					$has_pending_acks                      = true;
+					$sent_ack_nonces                       = array_values( array_filter( array_column( $pending, 'nonce' ), 'is_string' ) );
+				}
+			}
+
 			try {
 
 				$license_data = $this->api_handler->make_request( $api_params );
 
 				if ( ! $license_data ) {
 					throw new Exception( __( 'Cannot get license data', 'woodev-plugin-framework' ) );
+				}
+
+				// D-W3 / §3.2 pull-fallback: on EVERY successful response, parse it and
+				// consume any license_commands delivered in it (identical §9.4 pipeline,
+				// minus HTTP gates 1–2). ONLY the acks_received confirmation is skipped
+				// when no acks were sent. Inside the existing try so a transport throw
+				// changes nothing (outage grace §3.2).
+				// Containment catch — critic ruling s8-p5 #4b: a command-processing bug
+				// must never break license validation; loud-but-contained (error_log),
+				// never silent.
+				try {
+					if ( class_exists( 'Woodev_License_Command_Dispatcher' ) || $has_pending_acks ) {
+						// Single get_response_data() fetch reused by both hooks.
+						$response_data = $license_data->get_response_data();
+
+						if ( class_exists( 'Woodev_License_Command_Dispatcher' ) ) {
+							Woodev_License_Command_Dispatcher::consume_pull_commands(
+								$response_data,
+								'pull',
+								$ack_store
+							);
+						}
+
+						// acks_received drain — ruled s8-p5 re-review #1: confirm ONLY the
+						// intersection with the nonces THIS request actually sent; when
+						// nothing was sent, skip entirely. A rogue/buggy response must
+						// never clear an ack recorded while the request was in flight
+						// (e.g. one just written by consume_pull_commands() above).
+						if ( $has_pending_acks && null !== $ack_store ) {
+							$acks_received = null;
+							if ( is_object( $response_data ) ) {
+								$acks_received = isset( $response_data->acks_received ) ? $response_data->acks_received : null;
+							} elseif ( is_array( $response_data ) ) {
+								$acks_received = $response_data['acks_received'] ?? null;
+							}
+							if ( is_array( $acks_received ) ) {
+								$confirmed = array_values( array_intersect( array_filter( $acks_received, 'is_string' ), $sent_ack_nonces ) );
+								if ( array() !== $confirmed ) {
+									$ack_store->confirm_received( $confirmed );
+								}
+							}
+						}
+					}
+				} catch ( \Throwable $throwable ) {
+					// Ruled containment boundary (s8-p5 critic #4b) — loud-but-contained.
+					error_log( 'Woodev licensing: pull-command/ack consumption failed: ' . $throwable->getMessage() ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- ruled loud-but-contained boundary (s8-p5 #4b).
 				}
 
 				return $license_data;

@@ -550,6 +550,12 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 			require_once $framework_path . '/licensing/class-license-command-nonce-store.php';
 			require_once $framework_path . '/licensing/class-license-command-dispatcher.php';
 
+			// The §9.5 durable structured ack store (pull-fallback delivery + ack drain).
+			// Site-level; any surviving plugin drains the store on its next scheduled call.
+			// Unconditional and within the licensing block — both transports write acks
+			// (gotcha framework/includes-wiring).
+			require_once $framework_path . '/licensing/class-license-command-acks.php';
+
 			// v1 command vocabulary — interface BEFORE implementation (gotcha framework/includes-wiring).
 			// Both are unconditional: the dispatcher is REST-reachable and pull-reachable regardless
 			// of admin/WC context, so a gated require would leave the vocabulary unregistered.

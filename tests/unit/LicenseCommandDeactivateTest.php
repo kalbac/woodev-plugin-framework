@@ -32,6 +32,10 @@ require_once dirname( __DIR__, 2 ) . '/woodev/functions-license-authority.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/licensing/class-license-envelope-verifier.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/licensing/class-license-command-nonce-store.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/licensing/class-license-command-dispatcher.php';
+// s8-p5 (critic ruling #2): the dispatcher defaults to the real ack store when none
+// is injected — loaded explicitly so the failed-ack assertion below behaves the same
+// in isolation and in the full suite.
+require_once dirname( __DIR__, 2 ) . '/woodev/licensing/class-license-command-acks.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/licensing/commands/interface-license-command.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/licensing/commands/class-license-command-deactivate-plugin.php';
 
@@ -441,7 +445,16 @@ class LicenseCommandDeactivateTest extends TestCase {
 		Functions\when( 'maybe_unserialize' )->returnArg();
 
 		// mark_consumed must NOT run (nonce stays processing → §9.1 takeover retry).
-		Functions\expect( 'update_option' )->never();
+		// s8-p5 (critic ruling #2): the DEFAULT ack store records exactly ONE
+		// retryable 'failed' ack — the ONLY allowed update_option write is the acks
+		// option. Any other write (i.e. a consumed nonce record) fails the test.
+		$option_writes = array();
+		Functions\expect( 'update_option' )->once()->andReturnUsing(
+			static function ( $name, $value ) use ( &$option_writes ) {
+				$option_writes[] = array( $name, $value );
+				return true;
+			}
+		);
 
 		// Register a throwing handler.
 		\Woodev_License_Command_Dispatcher::reset_commands_for_tests();
@@ -492,6 +505,12 @@ class LicenseCommandDeactivateTest extends TestCase {
 
 		$this->assertSame( 'failed', $result['status'] );
 		$this->assertSame( 500, $result['http'] );
+
+		// The single write was the §9.5 retryable ack — NOT a consumed nonce record.
+		$this->assertCount( 1, $option_writes );
+		$this->assertSame( \Woodev_License_Command_Acks::OPTION_NAME, $option_writes[0][0] );
+		$this->assertSame( 'failed', $option_writes[0][1][0]['status'] );
+		$this->assertFalse( $option_writes[0][1][0]['terminal'], 'The failed ack is retryable (non-terminal).' );
 	}
 
 	/* ----------------------------------------------------------------------- *
