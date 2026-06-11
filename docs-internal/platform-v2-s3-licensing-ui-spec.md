@@ -104,7 +104,7 @@ public function get_state(): array;
   'plugin_id'       => '216',                 // (string) get_download_id()
   'plugin_name'     => 'WooCommerce Edostavka',
   'license_key'     => 'A1B2-C3D4-...',       // full key (masked client-side); '' when none
-  'status'          => 'valid',               // raw EDD status token, or '' 
+  'status'          => 'valid',               // raw EDD status token, or ''
   'status_label'    => 'License is valid',    // get_license_status() localized
   'message'         => '...',                 // Woodev_License_Messages::get_message() (already-built HTML/text)
   'message_variant' => 'success',             // success | warning | error | info  (maps the current CSS status buckets)

@@ -215,12 +215,12 @@ jobs:
   # Публикуем релиз — только если:
   # • пуш в main (не PR)
   # • версия изменилась
-  # • lint и unit-tests прошли
+  # • lint, unit-tests и assets (проверка собранного бандла) прошли
   # ===========================================================================
   release:
     name: Publish Release v${{ needs.version.outputs.current }}
     runs-on: ubuntu-latest
-    needs: [version, lint, unit-tests]
+    needs: [version, lint, unit-tests, assets]
     permissions:
       contents: write
 
