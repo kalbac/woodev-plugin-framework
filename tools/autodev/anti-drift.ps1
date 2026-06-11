@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Anti-drift check + digest. The highest-value safeguard: green gate, wrong direction.
+  Anti-drift check. Feeds recent diffs to a Sonnet critic and appends one verdict line to digest.md.
 
 .DESCRIPTION
   Every M commits the conductor calls this. It does NOT compare commit titles (too
@@ -9,8 +9,7 @@
   tasks, and asks: "does this work advance the phase's stated intent, or has it wandered
   -- satisfied the letter of the tasks while missing their purpose?"
 
-  Produces one strong line for the digest, appends a digest block to .autodev/digest.md,
-  and mirrors the operator-facing summary into docs-internal/CURRENT-STATE.md.
+  Appends one timestamped verdict line (ON-TRACK/DRIFT/UNCERTAIN) to .autodev/digest.md.
 
   Transport: claude -p --model sonnet (cheap, frequent). If claude is rate-limited or
   unavailable, the anti-drift line records that it could not run (never a false "on-track").
@@ -20,7 +19,7 @@
 .PARAMETER DigestOnly
   Skip the Sonnet call; just emit the digest block (used when anti-drift already ran).
 .PARAMETER CommitsSinceLast
-  Number of commits this digest covers (for the header).
+  Number of commits this digest covers; included in the digest line as '(window: N commits)'.
 #>
 [CmdletBinding()]
 param(
@@ -49,12 +48,9 @@ function Get-TrackerIntent {
 
 function Get-RecentDoneDiffs {
     param([string]$SinceRef, [pscustomobject]$Config)
-    Push-Location $Config.RepoRoot
-    try {
-        $log = & git log "$SinceRef..HEAD" --grep='(autodev)' --oneline 2>$null | Out-String
-        $diff = & git diff "$SinceRef..HEAD" 2>$null | Out-String
-        return [pscustomobject]@{ Log = $log.Trim(); Diff = $diff }
-    } finally { Pop-Location }
+    $rLog  = Invoke-Native -Exe 'git' -CommandArgs @('log', "$SinceRef..HEAD", '--grep=(autodev)', '--oneline') -WorkingDirectory $Config.RepoRoot
+    $rDiff = Invoke-Native -Exe 'git' -CommandArgs @('diff', "$SinceRef..HEAD") -WorkingDirectory $Config.RepoRoot
+    return [pscustomobject]@{ Log = ($rLog.Output | Out-String).Trim(); Diff = ($rDiff.Output | Out-String) }
 }
 
 $driftLine = ''
@@ -93,11 +89,31 @@ $($recent.Diff)
 
     if ($exit -eq 0 -and $out) {
         $lm = [regex]::Match($out, '(?im)^\s*(ON-TRACK|DRIFT|UNCERTAIN):.*$')
-        $driftLine = if ($lm.Success) { $lm.Value.Trim() } else { ($out -split "`n" | Where-Object { $_.Trim() } | Select-Object -Last 1).Trim() }
+        if ($lm.Success) {
+            $driftLine = $lm.Value.Trim()
+        } else {
+            # Model output has no recognized prefix -- degrade to UNCERTAIN rather than recording
+            # an unstructured line that would be invisible to any downstream grep/parser.
+            $firstChars = ($out -replace '[\r\n]+',' ').Trim()
+            if ($firstChars.Length -gt 120) { $firstChars = $firstChars.Substring(0, 120) }
+            $driftLine = "UNCERTAIN: model output had no ON-TRACK/DRIFT/UNCERTAIN prefix -- $firstChars"
+        }
     } else {
         $driftLine = "UNCERTAIN: anti-drift could not run (claude exit $exit) -- not asserting on-track."
     }
     Write-AutodevLog -Message "Anti-drift result: $driftLine" -Config $Config
+} else {
+    # -DigestOnly: emit/append the digest line without the Sonnet call.
+    $driftLine = "UNCERTAIN: -DigestOnly requested -- Sonnet not invoked."
 }
 
+# Append one-line verdict to digest (timestamped). Format:
+#   [yyyy-MM-dd HH:mm:ss] [anti-drift] (window: N commits) <verdict line>
+$stamp = (Get-Date).ToString('yyyy-MM-dd HH:mm:ss')
+$digestEntry = "[$stamp] [anti-drift] (window: $CommitsSinceLast commits) $driftLine"
+try {
+    Add-Content -Path $Config.Digest -Value $digestEntry -Encoding utf8
+} catch {
+    Write-AutodevLog -Level WARN -Message "Anti-drift: could not write to digest ($($Config.Digest)): $($_.Exception.Message)" -Config $Config
+}
 Write-Output $driftLine

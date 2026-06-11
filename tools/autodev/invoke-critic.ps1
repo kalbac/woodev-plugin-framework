@@ -55,9 +55,10 @@ if (-not $DiffPath) { $DiffPath = Join-Path $rtDir 'diff.patch' }
 $verdictPath = Join-Path $rtDir 'verdict.json'
 
 function Write-Verdict {
-    param([string]$Verdict, [string]$Notes, [double]$Confidence, [array]$Broken = @())
+    param([string]$Verdict, [string]$Notes, [double]$Confidence, [array]$Broken = @(), [string]$DiffSha256 = '')
     $v = [pscustomobject]@{
         verdict = $Verdict; broken_contracts = $Broken; notes = $Notes; confidence = $Confidence
+        diff_sha256 = $DiffSha256
     }
     $v | ConvertTo-Json -Depth 6 | Set-Content -Path $verdictPath -Encoding utf8
     $v | ConvertTo-Json -Depth 6
@@ -66,6 +67,7 @@ function Write-Verdict {
 
 if (-not (Test-Path $DiffPath)) { throw "Diff not found: $DiffPath" }
 $diffText = Get-Content -Path $DiffPath -Raw -Encoding utf8
+$diffSha256 = Get-AutodevTextSha256 -Text $diffText
 # @() guards the PS gotcha where a function returning an empty array unrolls to $null,
 # which then throws PropertyNotFoundStrict on .Count under Set-StrictMode -Version Latest
 # (a zone-free, non-contract diff produces zero touched zones -> previously crashed here).
@@ -86,7 +88,7 @@ if ($Mode -eq 'auto') {
 Write-AutodevLog -Level CRITIC -Message "Tier=$tier (zones touched: $($touchedZones -join ',' ); diff lines: $diffLineCount)" -Config $Config
 
 if ($tier -eq 'none' -or $tier -eq 'cheap') {
-    Write-Verdict -Verdict 'clean' -Confidence 0.5 `
+    Write-Verdict -Verdict 'clean' -Confidence 0.5 -DiffSha256 $diffSha256 `
         -Notes "cheap tier (zone-free, small diff): machine-gate-only. Zones touched: none. Diff lines: $diffLineCount." | Out-Null
     Get-Content $verdictPath -Raw
     exit 0
@@ -216,11 +218,11 @@ if ($null -eq $parsed -or -not ($parsed.PSObject.Properties.Name -contains 'verd
     # codex exit code; a benign rate-limit word in an already-parsed verdict cannot reach here.
     if (Test-RateLimited -ExitCode $exit -Stderr $combined) {
         Write-AutodevLog -Level CRITIC -Message "Critic rate-limited (no verdict, exit $exit); caller should back off." -Config $Config
-        Write-Verdict -Verdict 'uncertain' -Confidence 0.0 -Notes "critic rate-limited: $stderr" | Out-Null
+        Write-Verdict -Verdict 'uncertain' -Confidence 0.0 -DiffSha256 $diffSha256 -Notes "critic rate-limited: $stderr" | Out-Null
         exit 4
     }
     Write-AutodevLog -Level CRITIC -Message "Critic produced no parseable verdict (exit $exit). Routing to human." -Config $Config
-    Write-Verdict -Verdict 'uncertain' -Confidence 0.0 `
+    Write-Verdict -Verdict 'uncertain' -Confidence 0.0 -DiffSha256 $diffSha256 `
         -Notes "no parseable verdict from codex (exit $exit). stderr: $stderr" | Out-Null
     exit 3
 }
@@ -231,7 +233,7 @@ if ($parsed.PSObject.Properties.Name -contains 'broken_contracts' -and $parsed.b
 }
 $notes = if ($parsed.PSObject.Properties.Name -contains 'notes') { $parsed.notes } else { '' }
 $conf = if ($parsed.PSObject.Properties.Name -contains 'confidence') { [double]$parsed.confidence } else { 0.0 }
-Write-Verdict -Verdict $parsed.verdict -Confidence $conf -Notes $notes -Broken $broken | Out-Null
+Write-Verdict -Verdict $parsed.verdict -Confidence $conf -Notes $notes -Broken $broken -DiffSha256 $diffSha256 | Out-Null
 
 switch ($parsed.verdict) {
     'clean' { exit 0 }
