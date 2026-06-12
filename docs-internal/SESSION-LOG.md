@@ -1,4 +1,24 @@
 
+## Session 9 continuation (2026-06-12) — merges, production pubkey, framework_version, v2.0.0 release, deactivator specs
+
+> Same session, post-save continuation driven by operator discussion (пункты 1-3 of the follow-up list).
+
+**Standing rule change (operator):** PRs are SELF-MERGED once GH Actions are green — no operator review wait ("для этого у меня есть ты"). Applied to #35/#36/#37/#38/#39. Local memory `feedback_auto_merge_green_ci`.
+
+**Merged:** #35 S3.3 (`a9c0c14`), #36 tracker docs (`e41cad0`), #37 production pubkey (`fdde793`), #38 framework_version param (`a372a2a`), #39 version 2.0.0 (`885232e` + tag `v2.0.0`, release published).
+
+**Production pubkey:** operator captured via wp-eval on woodev.ru -> `6N6HaUIrqZMuyDTYjvazMoQjpHwdeyLbmz5Zu3Fh2rM=`; embedded as `WOODEV_LICENSE_AUTHORITY_PUBKEY`; pubkey parity test un-skipped (sodium suite 0 skips); value + rotation warning recorded in the woodev-core signing spec (woodev_theme `594d98a` — initial `git add -A` mistake swept npm-cache junk into the commit, reset and redone clean).
+
+**Server-half design discussion -> locked decisions D-PD1..D-PD7:** standalone plugin `woodev-plugins-deactivator` (own kill-switch for a dangerous feature; ONE hard dep = woodev-core License_Authority key; theme/monitor = optional read-only sources); EDD SL license-page metabox for ALL licenses listing knocking sites (activations + theme version meta + monitor violations), per-site Deactivate button enabled iff webhook-capable (framework >= 2.0.0) && license-not-valid-for-site; simple confirm; 14-day freshness window; read-only pubkey display field. The earlier L3-gating idea was DROPPED after I surfaced that monitor L3 is volume-based (>=2000/day x3 days), not expiry-based.
+
+**Specs committed in woodev_theme (`51c78d0`):** `2026-06-12-woodev-plugins-deactivator-spec.md` (the big one: wire contract, queue table + lifecycle, sites registry merge, gating matrix, sign_envelope() addition to woodev-core License_Authority, tests), `2026-06-12-woodev-theme-version-tracker-framework-version-spec.md`, `2026-06-12-woodev-license-monitor-versions-and-filters-spec.md`; old queue spec marked SUPERSEDED. Operator launched a separate agent session in woodev_theme (Opus 4.8 recommended and chosen) with an orchestration prompt (3 tasks in order, wire contract frozen, php -l + per-task commits, FTP-deploy list in the report).
+
+**v2.0.0 bump rationale:** discovered `Woodev_Plugin::VERSION` was still 1.4.1 — the webhook-capability signal (PR #38) was reporting 1.4.1 against the deactivator's >= 2.0.0 gate. Bumped constant + @version + v2 fixture loader definitions (MixedFleet legacy 1.4.1 values kept — they simulate v1). 601 unit / 41 integration green; release pipeline published v2.0.0.
+
+**Operator findings recorded:** (1) many `@since 1.4.1` on v2 code + agents writing `array()` instead of `[]` -> FUTURE-BACKLOG "big consistency review" incl. phpcs DisallowLongArraySyntax enforcement; (2) shipping module possibly not production-ready (manual review nuances) -> edostavka pilot session must start with a module audit.
+
+**Next session (s10):** review the woodev_theme agent's implementation (codex `/codex:review` directly — no autodev loop needed for a review pass), operator FTP-deploys, then e2e checks (pubkey field match, test command issue from the metabox, push/pull/ack path on a framework-2.0.0 site). After that, separate session: edostavka pilot discussion (module audit first).
+
 ## Session 9 (2026-06-11) — S3.3 built-in webhooks + §4 Ed25519 signing implemented (autodev tasks s8-p1…p6) — PR #35 OPEN, CI green
 
 > Mission from `next-session-prompt.md` (deleted on completion). Fable 5 orchestrator; workers = tiered subagents (opus p1/p0/p2, sonnet p3/p4/p5); critic = **real GPT-5.5 high via `codex exec` read-only** on every diff AND every fix batch (no self-certify); holistic whole-feature critic at the end. All 9 §9 BLOCKING protocol decisions resolved in the plan BEFORE any code.
