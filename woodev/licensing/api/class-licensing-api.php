@@ -127,9 +127,15 @@ if ( ! class_exists( 'Woodev_Licensing_API' ) ) :
 			return wp_parse_args(
 				$api_params,
 				array(
-					'url'    => home_url(),
-					'author' => 'Woodev',
-					'email'  => get_option( 'admin_email' ),
+					'url'               => home_url(),
+					'author'            => 'Woodev',
+					'email'             => get_option( 'admin_email' ),
+					// Additive: tells the server which framework version the site runs —
+					// e.g. whether it is webhook-capable (the woodev/v1/license-command
+					// endpoint exists on framework >= 2.0.0). Every licensing request
+					// funnels through here (dispatch() AND the updater), so the server
+					// sees it on check_license, activate/deactivate and get_version.
+					'framework_version' => Woodev_Plugin::VERSION,
 				)
 			);
 		}
