@@ -216,6 +216,43 @@ class PlatformNeutralLicensingTest extends TestCase {
 	}
 
 	/**
+	 * get_body() merges framework_version into EVERY request's defaults — the
+	 * server-side "is this site webhook-capable?" signal (additive request param;
+	 * explicit caller params still win via wp_parse_args, url/author/email defaults
+	 * unchanged).
+	 *
+	 * @return void
+	 */
+	public function test_get_body_adds_framework_version_default(): void {
+		Functions\when( 'home_url' )->justReturn( 'https://example.com' );
+		Functions\when( 'get_option' )->justReturn( 'admin@example.com' );
+		Functions\when( 'wp_parse_args' )->alias(
+			static function ( $args, $defaults ) {
+				return array_merge( $defaults, $args );
+			}
+		);
+
+		$plugin = new Testable_Platform_Neutral_Licensing_Plugin();
+		$api    = new \Woodev_Licensing_API( $plugin );
+
+		$method = new \ReflectionMethod( \Woodev_Licensing_API::class, 'get_body' );
+		if ( PHP_VERSION_ID < 80100 ) {
+			$method->setAccessible( true );
+		}
+
+		$body = $method->invoke( $api, array( 'edd_action' => 'check_license', 'license' => 'KEY' ) );
+
+		$this->assertSame( \Woodev_Plugin::VERSION, $body['framework_version'] );
+		$this->assertSame( 'https://example.com', $body['url'] );
+		$this->assertSame( 'Woodev', $body['author'] );
+		$this->assertSame( 'check_license', $body['edd_action'] );
+
+		// An explicit caller value must never be overridden by the default.
+		$body = $method->invoke( $api, array( 'framework_version' => 'caller-wins' ) );
+		$this->assertSame( 'caller-wins', $body['framework_version'] );
+	}
+
+	/**
 	 * License message date formatting should not require WooCommerce helpers in a platform-neutral unit context.
 	 *
 	 * This test's contract is the ABSENCE of WooCommerce/WP date helpers
