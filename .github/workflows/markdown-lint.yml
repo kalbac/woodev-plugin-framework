@@ -36,4 +36,4 @@ jobs:
         # files (.ai, CLAUDE.md, QWEN.md, AGENTS.md — agent-instruction/constitution docs), the
         # AI-agent operational docs (docs-internal/, not published), the autodev loop blackboard
         # (.autodev/, machine-generated queue/escalations/digest) and Serena tooling (.serena/).
-        run: markdownlint-cli2 "**/*.md" "#node_modules" "#vendor" "#.ai" "#.kiro" "#CLAUDE.md" "#QWEN.md" "#AGENTS.md" "#docs-internal" "#.autodev" "#.serena"
+        run: markdownlint-cli2 "**/*.md" "#node_modules" "#vendor" "#.ai" "#.kiro" "#CLAUDE.md" "#QWEN.md" "#AGENTS.md" "#docs-internal" "#.autodev" "#.serena" "#CHANGELOG.md"
