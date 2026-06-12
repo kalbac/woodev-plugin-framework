@@ -1,4 +1,23 @@
 
+## Session 10 (2026-06-12) — cross-repo review of the woodev_theme server half + prod deploy + plugin version bumps
+
+> Mission from `next-session-prompt.md` (s9). Cross-repo: nearly all work in `D:\Projects\woodev_theme` (separate local repo, no remote; inner `woodev-theme/` is its own gitignored repo with a GitHub remote `kalbac/woodev-theme`). The framework repo itself was NOT touched (601 unit / baseline integration confirmed green, `composer check` exit 0).
+
+**What the woodev_theme agent had built (reviewed, not written here):** 3 specs implemented overnight — `woodev-plugins-deactivator` standalone plugin (12 files, ~1821 LOC, commits `02b5c5b`+`e119f5b`) + woodev-core `License_Authority::sign_envelope()`; license-monitor schema v2.2 + versions capture + reason filter/sorting (`d9c3a93`); theme version-tracker `framework_version`+`last_check` capture (inner repo `eb77642`, released as **v1.0.25** by the inner CI on the night push `267d023`).
+
+**Review = GPT-5.5 high via `codex exec`, READ-ONLY, 3 rounds (no self-certify).** Codex's shell sandbox is broken on this Windows box (`CreateProcessAsUserW failed: 5`) — worked around by assembling an INLINE bundle (specs + full diffs + frozen framework client source: `woodev_normalize_site`, parity test, webhooks-spec §2-5) and feeding it to a no-shell critic. Gotcha-worthy.
+- **Round 1 → BLOCK:** 3 MAJOR (admin-context XSS via target-controlled push outcome rendered with `innerHTML`; SSRF DNS-rebinding; pull `collect_for_pull` could resurrect a cancelled row — `set_status` had no status guard) + 3 MINOR (missing `args:{}`; acks could rewrite terminal rows + unwhitelisted client status string into the DB; expired-push no re-issue) + 2 NIT (non-atomic dup guard; `issue()` didn't re-derive gating). I verified every MAJOR against source before showing the operator.
+- Operator chose: fix 1,3,4,6,7,8 + light-fix 2; finding 5 (expired re-issue) deliberately left.
+- **Fixes applied (deactivator commit `17aeedf`):** metabox JS → `textContent`; `wp_safe_remote_post` + redirection 0; CAS `queued→delivered_pending_ack` before attach; `args:[]` added pre-sign; ack terminal-status whitelist + terminal-row confirm-without-write + `mark_ack_terminal` conditional on in-play; `issue()` re-derives D-PD5 gating + `GET_LOCK` per-target serialization + insert-unless-live-row-exists.
+- **Round 2 → SHIP-WITH-NITS:** ack still confirmed on a DB-failure update; `INSERT…WHERE NOT EXISTS` alone not atomic. Delta-fixed (re-read after failed `mark_ack_terminal`; `GET_LOCK`/`RELEASE_LOCK` in a `finally`, push outside the lock).
+- **Round 3 → SHIP**, zero regressions. `php -l` clean throughout.
+
+**Deploy (operator, done this session):** plugins FTP-uploaded, woodev-plugins-deactivator activated. Theme already live at v1.0.25 (operator updated via admin the night before). **Version bumps for traceability (commit `16dbf0f`):** woodev-core 1.0.1→1.0.2, woodev-license-monitor 2.0.0→2.1.0, woodev-plugins-deactivator 1.0.0→1.0.1 (header + `WOODEV_*_VERSION` constant each). Theme NOT bumped — I changed nothing in it (verified: inner repo clean, both my commits touched only `plugins/`).
+
+**E2e (partial, operator-verified on prod):** (1) deactivator settings pubkey field shows the key — OK; (2) EDD SL license metabox renders, sites listed, buttons correctly GREY (no prod plugin reports framework ≥ 2.0.0 yet — gating working as designed); monitor new columns + reason filter — OK; `framework_version`/`url` confirmed arriving (metabox/monitor have live rows). **Still open:** the live command cycle (issue → pull-deliver → executed ack → status → replay-reject) needs a framework-2.0.0 site — deferred to a fresh session (option A: wp-env stand).
+
+**Operator question answered (delivery architecture):** the FRAMEWORK is receiver-only (push lands on its `woodev/v1/license-command` REST route, auth = the Ed25519 signature). The ISSUER is the deactivator on woodev.ru: **push** = `POST https://<site>/wp-json/woodev/v1/license-command` JSON envelope; **pull/acks** ride the EDD SL requests the sites already make (`POST woodev.ru/?edd_action=check_license|get_version`, where `class-plugin-license.php::dispatch()` + `class-licensing-api.php::get_body()` add `url`/`framework_version`/`consumed_command_nonces`; the deactivator's `Pull_Attach`@31 / `Ack_Ingest`@29 inject `license_commands` / `acks_received`). SSRF-guard + NAT block push to localhost → the stand will exercise the pull path.
+
 ## Session 9 continuation (2026-06-12) — merges, production pubkey, framework_version, v2.0.0 release, deactivator specs
 
 > Same session, post-save continuation driven by operator discussion (пункты 1-3 of the follow-up list).

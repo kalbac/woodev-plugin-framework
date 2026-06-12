@@ -1,5 +1,12 @@
 # Current State — Woodev Plugin Framework
-> Last updated: 2026-06-12 (session 9 continued: **v2.0.0 RELEASED** (PR #39 `885232e`, tag `v2.0.0`); production pubkey embedded (PR #37); `framework_version` on every licensing request (PR #38); 3 server-side specs written into woodev_theme — agent implementing there. Next session: review that work -> deploy -> e2e checks -> edostavka-pilot discussion.)
+> Last updated: 2026-06-12 (session 10: server half (woodev_theme) REVIEWED via 3-round GPT-5.5 critic — BLOCK→fixes→SHIP; deployed to prod + deactivator activated; plugin versions bumped. Framework untouched, green. **Open:** live command cycle on a framework-2.0.0 site — fresh session, wp-env stand (option A). Then edostavka-pilot (module audit first).)
+
+## Session 10 (2026-06-12) — server half reviewed + deployed (cross-repo woodev_theme)
+- **Reviewed the woodev_theme agent's 3-spec implementation** with a 3-round READ-ONLY GPT-5.5 critic (`codex exec`). Round 1 BLOCK (3 MAJOR: admin XSS via `innerHTML` of target-controlled push outcome; SSRF DNS-rebind; pull resurrecting a cancelled row + 3 MINOR + 2 NIT). Operator picked fixes; deactivator `17aeedf` (XSS→textContent, `wp_safe_remote_post`, CAS pull flip, `args:{}`, ack whitelist + terminal-row guard, `issue()` gating + `GET_LOCK`). Round 2 SHIP-WITH-NITS → delta fixes → Round 3 SHIP, no regressions.
+- **Codex shell sandbox is broken on this Windows box** (`CreateProcessAsUserW failed: 5`) → ran the critic with an INLINE bundle (no shell). Reusable pattern for future codex reviews here.
+- **Deployed (operator):** plugins FTP'd, woodev-plugins-deactivator activated; theme already v1.0.25 (admin update). **Bumps `16dbf0f`:** woodev-core 1.0.2, license-monitor 2.1.0, deactivator 1.0.1. Theme NOT bumped (I changed nothing in it).
+- **E2e partial (prod):** pubkey field ✓, license metabox ✓ (buttons grey — no prod plugin on fw≥2.0.0 yet = correct gating), monitor columns+filter ✓, `framework_version`/`url` arriving ✓. **Open:** live issue→pull→ack→replay cycle needs a fw-2.0.0 site.
+- All woodev_theme work is LOCAL (no remote); inner `woodev-theme/` repo released v1.0.25 to `kalbac/woodev-theme`. Per-file `git add` only (npm-cache junk in the tree).
 
 ## Session 9 continuation (2026-06-12) — cross-repo server half launched + v2.0.0 release
 - **PR #35 (S3.3) + #36 (docs) merged**; operator standing rule: **self-merge any PR once GH Actions are green** — recorded in local memory `feedback_auto_merge_green_ci`.

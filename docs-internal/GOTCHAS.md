@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
-> **40 atomic gotchas in 15 namespaces** — update count when adding/removing.
-> Last updated: 2026-06-11 (session 9: 3 gotchas — PHPUnit multiple file args; wp-env Git-Bash path mangling; Patchwork early-load in bootstrap)
+> **41 atomic gotchas in 16 namespaces** — update count when adding/removing.
+> Last updated: 2026-06-12 (session 10: 1 gotcha — codex exec shell-sandbox broken on this Windows box → inline-bundle critic pattern)
 
 ## Index
 
@@ -82,6 +82,9 @@
 - [autodev/circuit-breaker] Refund the attempt on EVERY external pause (worker AND critic 429), not just the worker's — an unrefunded critic rate-limit marches a DONE task into a false poison → [gotchas/autodev-attempt-refund-symmetry.md](gotchas/autodev-attempt-refund-symmetry.md) (2026-06-06)
 - [autodev/critic] Critic over-flags two non-breaks as `broken` on every incremental task: a NEW additive hook name, and "class not yet wired into includes()" (wiring is the separate s1-p6 task). Keep its correct contract/logic findings; recalibrate only these two → [gotchas/autodev-critic-overflag.md](gotchas/autodev-critic-overflag.md) (2026-06-06)
 - [autodev/critic] invoke-critic mis-read benign repo text as a 429: it scanned the critic's ENTIRE output (incl. docs the critic READ that mention the prior critic-429 fix) with a hard-coded non-zero exit, discarding valid verdicts and re-queueing forever. Fix: parse the verdict first (it wins); rate-limit only when no verdict, using codex's real exit code → [gotchas/autodev-critic-ratelimit-false-positive.md](gotchas/autodev-critic-ratelimit-false-positive.md) (2026-06-07, fixed b186c52)
+
+### [tooling/*] — Dev tooling, codex critic
+- [tooling/codex-shell-sandbox-broken-windows] `codex exec -s read-only` shell-spawn fails on this Windows box (`CreateProcessAsUserW failed: 5`) — run critics with an INLINE bundle (spec+diffs+reference source in the prompt), never relying on codex shell access → [gotchas/codex-shell-sandbox-broken-windows.md](gotchas/codex-shell-sandbox-broken-windows.md) (s10)
 
 ## Archive (resolved gotchas)
 <!-- Resolved gotchas move here; keep for 2 sessions then remove -->
