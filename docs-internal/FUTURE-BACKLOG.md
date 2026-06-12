@@ -26,6 +26,20 @@
 
 ## Technical Debt
 
+### Big consistency review: @since annotations + long array() syntax (operator request, 12.06.2026)
+- **What's wrong:** (1) v2-era code carries `@since 1.4.1` (and other stale versions) — the
+  framework was bumped to 2.0.0 on 12.06.2026, every symbol ADDED during the v2 program
+  must say `@since 2.0.0`; (2) agents keep writing `array()` where the project convention
+  is short `[]` (CLAUDE.md → Coding Conventions) — the codebase is inconsistent.
+- **Action when triggered:** one dedicated review session: (a) sweep `@since`/`@version`
+  tags against git history (symbols introduced on the v2 branch → `2.0.0`); (b) convert
+  long array syntax to `[]` across `woodev/` and `tests/`; (c) ENFORCE both going forward —
+  add `Generic.Arrays.DisallowLongArraySyntax` to phpcs.xml so phpcbf auto-fixes and CI
+  pins the convention (no more agent drift).
+- **Why deferred:** pure mechanical churn — schedule between feature blocks; the phpcs rule
+  makes the fix one `composer phpcbf` run plus a docblock sweep.
+- **When:** operator-scheduled "большое ревью" session (after the deactivator deployment).
+
 ### PHPStan Baseline Cleanup
 - **What's done:** 50+ errors baselined in phpstan-baseline.neon
 - **What's missing:** Fix or properly type-annotate each ignored error

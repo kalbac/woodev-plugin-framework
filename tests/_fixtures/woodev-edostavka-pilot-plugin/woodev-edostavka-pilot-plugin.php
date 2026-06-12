@@ -24,7 +24,7 @@ function woodev_edostavka_pilot_plugin_loader_definition(): array {
 		'plugin_id'         => 'woodev-edostavka-pilot',
 		'plugin_name'       => 'Woodev Edostavka Pilot Fixture',
 		'plugin_version'    => WOODEV_EDOSTAVKA_PILOT_VERSION,
-		'framework_version' => '1.4.1',
+		'framework_version' => '2.0.0',
 		'plugin_file'       => WOODEV_EDOSTAVKA_PILOT_FILE,
 		'platform'          => \Woodev\Framework\Framework_Plugin_Loader_Definition::PLATFORM_WOOCOMMERCE,
 		'requirements'      => [

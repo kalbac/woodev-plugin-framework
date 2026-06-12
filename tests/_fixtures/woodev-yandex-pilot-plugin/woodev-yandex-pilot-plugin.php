@@ -28,7 +28,7 @@ function woodev_yandex_pilot_plugin_loader_definition(): array {
 		'plugin_id'         => 'yandex_delivery',
 		'plugin_name'       => 'Woodev Yandex Pilot Fixture',
 		'plugin_version'    => WOODEV_YANDEX_PILOT_VERSION,
-		'framework_version' => '1.4.1',
+		'framework_version' => '2.0.0',
 		'plugin_file'       => WOODEV_YANDEX_PILOT_FILE,
 		'platform'          => \Woodev\Framework\Framework_Plugin_Loader_Definition::PLATFORM_WOOCOMMERCE,
 		'requirements'      => [
