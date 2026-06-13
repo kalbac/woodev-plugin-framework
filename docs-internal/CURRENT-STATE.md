@@ -1,13 +1,13 @@
 # Current State — Woodev Plugin Framework
 
 > Lean state doc: phase status, open bugs, next actions. **Full session history → `SESSION-LOG.md`** (newest on top). Program-level status → `platform-v2-program-tracker.md`.
-> Last updated: 2026-06-13 (session 13 — framework grooming: docs audit + licensing-api base-URL consolidation, PR #48 merged `b8bffed`; operator backlog dump OB-1..9 captured in FUTURE-BACKLOG).
+> Last updated: 2026-06-14 (session 14 — overnight autonomous grooming: OB-1/OB-6/OB-2 fixed + OB-3 reviewed, PRs #51–#54 all merged to main, CI green).
 
 ## Last session context (≤3 lines)
 
-- **s12:** remote-deactivation UX gaps B-13/14/15 resolved + rig-verified vs real WC 10.8.1 (Finding A kept; WC Admin Notes breadcrumb reverted per operator — single-v2-plugin sites intentionally show no banner; deactivator wording by delivery state). Framework PR #44 merged, B-revert PR #46.
-- **Open:** v2.0.1 is in code but **NOT released** — operator rule: do NOT bump `VERSION` per change; release is a future operator decision.
-- **s13 task (operator):** framework **grooming** — edostavka pilot DEFERRED ("too early"). Started with this docs audit.
+- **s14 (autonomous, operator asleep — "stop babysitting"):** cleared 4 backlog items via 4 squash-merged PRs. **OB-1** (#51) mixed-fleet dormant notice now best-effort names the conflicting v1 plugin. **OB-6** (#52) removed 1 verified-dead file (`Admin_User_Edit_Handler`; audit found only 1 of 163). **OB-3** (#53) `Woodev_Plugin_Updater` reviewed → recorded (not auto-fixed; contract-sensitive) — recommendation MOVE to `woodev/licensing/updater/`, keep per-plugin+idempotent. **OB-2** (#54) license page: added `.wrap`/`<h1>` + ported the unstyled quick-links section's CSS into the bundle (before/after screenshots in transcript).
+- **Open:** v2.0.1 in code, **NOT released** (operator rule: don't bump `VERSION` per change). New symbols → `@since 2.0.2`.
+- **Carried:** OB-3 *implementation* (5-step order in its review doc) + OB-4/5/7/8/9 + the two big ones (payment-gateway traits, the array/typing/@since review) — none started.
 
 ## Program status (high level)
 
@@ -54,9 +54,10 @@
 
 ## Next Actions
 
-- ✅ **s13 done (PR #48 merged `b8bffed`):** docs audit + `licensing-api` consolidation (single `woodev_license_base_url` filter, type-hardening). Public docs deferred (see above).
-- 📥 **Operator backlog dump (s13)** → `FUTURE-BACKLOG.md` → "Operator backlog dump — s13": OB-1 bootstrap silent v1-yield notice · OB-2 license React UI broken · OB-3 updater review/fold into Licensing · OB-4 reusable-JS-php-based principle · OB-5 godaddy fork study · OB-6 dead-file sweep · OB-7 modernize Plugins page (React + woodev.ru account) · OB-8 marketplace tab on plugin-install · OB-9 shipping nuances (separate session).
-- **Next grooming candidates (operator-scheduled, not solo):** payment-gateway trait extraction (autodev-loop); the big review #4 — `array()`→`[]` (~797) + type declarations everywhere + `@since` sweep + enforce `Generic.Arrays.DisallowLongArraySyntax`. OB-6 dead-file sweep pairs well with either. B-2 loader-protocol forward-tolerance before S4/EDD.
+- ✅ **s14 done (PRs #51–#54 merged):** OB-1 (mixed-fleet notice names conflicting v1 plugin), OB-6 (dead-file sweep — 1 file removed), OB-3 (updater review recorded), OB-2 (license page frame + quick-links styling).
+- 🔜 **OB-3 implementation** — the review (`reviews/ob3-plugin-updater-review-2026-06-14.md`) is recorded with a 5-step order; needs operator sign-off because several findings touch installed-site contracts (hook arg shape, cache/changelog-URL keys) + browser/integration verification. Safe pre-clean subset (Findings 11/13/12) could go solo+critic first.
+- 📥 **Remaining backlog** (`FUTURE-BACKLOG.md` → "Operator backlog dump — s13"): OB-4 reusable-JS-php-based principle (apply by-the-way) · OB-5 godaddy fork study (GPT research) · OB-7 modernize Plugins page (WP React + woodev.ru account) · OB-8 marketplace tab on `plugin-install.php` · OB-9 shipping nuances (dedicated session).
+- **Big ones (operator-scheduled, not solo):** payment-gateway trait extraction (autodev-loop); the big review #4 — `array()`→`[]` (~797) + type declarations everywhere + `@since` sweep + enforce `Generic.Arrays.DisallowLongArraySyntax`. B-2 loader-protocol forward-tolerance before S4/EDD.
 
 ## 🔔 Cross-Project Reminder — Ecosystem Orchestration (dormant)
 
