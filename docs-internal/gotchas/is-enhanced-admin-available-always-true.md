@@ -1,6 +1,11 @@
 # `Woodev_Plugin_Compatibility::is_enhanced_admin_available()` returns `true` unconditionally
 
 > Namespace: `[php/wc-compat]` · Discovered s12 (2026-06-13)
+>
+> Context note: the s12 WC-Admin-Notes breadcrumb that first surfaced this was
+> reverted (operator decision — a single-v2-plugin site intentionally shows no
+> deactivation banner). The underlying trap below is permanent and applies to ANY
+> future WooCommerce-gated code (e.g. the existing payment-gateway note code).
 
 ## The trap
 
@@ -39,5 +44,5 @@ the WC path. The platform-neutral option-clearing path is intentionally NOT behi
 this guard (it must run regardless of WooCommerce).
 
 ## Related
-- [[wc-note-breadcrumb-survives-deactivation]] — the feature that needed this guard
-- SESSION-LOG s12 — remote-deactivation UX (Finding B)
+- SESSION-LOG s12 — remote-deactivation UX (Finding B, since reverted)
+- `woodev/payment-gateway/class-payment-gateway-plugin.php` — live WC-note code that relies on this being true only inside a real WC context

@@ -1055,7 +1055,6 @@ class LicenseCommandDeactivateTest extends TestCase {
 
 		$plugin = Mockery::mock( \Woodev_Plugin::class );
 		$plugin->shouldReceive( 'get_id' )->andReturn( self::PLUGIN_ID );
-		$plugin->shouldReceive( 'get_id_dasherized' )->andReturn( self::PLUGIN_ID );
 
 		$stored = array(
 			self::PLUGIN_ID => array( 'message' => 'stale', 'ts' => 1 ),
@@ -1096,7 +1095,6 @@ class LicenseCommandDeactivateTest extends TestCase {
 
 		$plugin = Mockery::mock( \Woodev_Plugin::class );
 		$plugin->shouldReceive( 'get_id' )->andReturn( self::PLUGIN_ID );
-		$plugin->shouldReceive( 'get_id_dasherized' )->andReturn( self::PLUGIN_ID );
 
 		Functions\when( 'get_option' )->justReturn(
 			array( self::PLUGIN_ID => array( 'message' => 'stale', 'ts' => 1 ) )
@@ -1121,7 +1119,6 @@ class LicenseCommandDeactivateTest extends TestCase {
 
 		$plugin = Mockery::mock( \Woodev_Plugin::class );
 		$plugin->shouldReceive( 'get_id' )->andReturn( self::PLUGIN_ID );
-		$plugin->shouldReceive( 'get_id_dasherized' )->andReturn( self::PLUGIN_ID );
 
 		Functions\when( 'get_option' )->justReturn(
 			array( 'other-plugin' => array( 'message' => 'keep', 'ts' => 2 ) )
