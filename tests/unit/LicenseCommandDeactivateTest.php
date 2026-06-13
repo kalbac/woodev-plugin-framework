@@ -1042,6 +1042,98 @@ class LicenseCommandDeactivateTest extends TestCase {
 	}
 
 	/* ----------------------------------------------------------------------- *
+	 * Finding A (s12) — clear stale notice on (re)activation
+	 * ----------------------------------------------------------------------- */
+
+	/**
+	 * clear_remote_deactivation_artifacts() removes ONLY the target plugin's entry
+	 * from the notices option and rewrites the remainder (other plugins untouched).
+	 *
+	 * @return void
+	 */
+	public function test_clear_artifacts_removes_only_target_entry(): void {
+
+		$plugin = Mockery::mock( \Woodev_Plugin::class );
+		$plugin->shouldReceive( 'get_id' )->andReturn( self::PLUGIN_ID );
+		$plugin->shouldReceive( 'get_id_dasherized' )->andReturn( self::PLUGIN_ID );
+
+		$stored = array(
+			self::PLUGIN_ID => array( 'message' => 'stale', 'ts' => 1 ),
+			'other-plugin'  => array( 'message' => 'keep', 'ts' => 2 ),
+		);
+
+		Functions\when( 'get_option' )->justReturn( $stored );
+
+		$written = null;
+		Functions\expect( 'update_option' )
+			->once()
+			->with(
+				'woodev_license_remote_deactivation_notices',
+				Mockery::on(
+					static function ( $v ) use ( &$written ) {
+						$written = $v;
+						return is_array( $v );
+					}
+				),
+				'no'
+			)
+			->andReturn( true );
+		Functions\expect( 'delete_option' )->never();
+
+		\Woodev_License_Command_Deactivate_Plugin::clear_remote_deactivation_artifacts( $plugin );
+
+		$this->assertArrayNotHasKey( self::PLUGIN_ID, $written );
+		$this->assertArrayHasKey( 'other-plugin', $written );
+	}
+
+	/**
+	 * clear_remote_deactivation_artifacts() deletes the whole option when removing
+	 * the target leaves it empty (no orphan empty array left behind).
+	 *
+	 * @return void
+	 */
+	public function test_clear_artifacts_deletes_option_when_empty(): void {
+
+		$plugin = Mockery::mock( \Woodev_Plugin::class );
+		$plugin->shouldReceive( 'get_id' )->andReturn( self::PLUGIN_ID );
+		$plugin->shouldReceive( 'get_id_dasherized' )->andReturn( self::PLUGIN_ID );
+
+		Functions\when( 'get_option' )->justReturn(
+			array( self::PLUGIN_ID => array( 'message' => 'stale', 'ts' => 1 ) )
+		);
+
+		Functions\expect( 'delete_option' )
+			->once()
+			->with( 'woodev_license_remote_deactivation_notices' )
+			->andReturn( true );
+		Functions\expect( 'update_option' )->never();
+
+		\Woodev_License_Command_Deactivate_Plugin::clear_remote_deactivation_artifacts( $plugin );
+	}
+
+	/**
+	 * clear_remote_deactivation_artifacts() writes NOTHING when the plugin has no
+	 * pending entry (no needless option churn on every activation).
+	 *
+	 * @return void
+	 */
+	public function test_clear_artifacts_no_write_when_no_entry(): void {
+
+		$plugin = Mockery::mock( \Woodev_Plugin::class );
+		$plugin->shouldReceive( 'get_id' )->andReturn( self::PLUGIN_ID );
+		$plugin->shouldReceive( 'get_id_dasherized' )->andReturn( self::PLUGIN_ID );
+
+		Functions\when( 'get_option' )->justReturn(
+			array( 'other-plugin' => array( 'message' => 'keep', 'ts' => 2 ) )
+		);
+
+		Functions\expect( 'update_option' )->never();
+		Functions\expect( 'delete_option' )->never();
+
+		\Woodev_License_Command_Deactivate_Plugin::clear_remote_deactivation_artifacts( $plugin );
+	}
+
+	/* ----------------------------------------------------------------------- *
 	 * Helpers
 	 * ----------------------------------------------------------------------- */
 

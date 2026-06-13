@@ -105,6 +105,69 @@ if ( ! class_exists( 'Woodev_Notes_Helper' ) ) :
 				}
 			}
 		}
+
+
+		/** Setter methods */
+
+
+		/**
+		 * Creates (or updates, by name) a single WooCommerce Admin inbox note.
+		 *
+		 * Best-effort and self-guarding: returns false without side effects when the
+		 * WooCommerce Admin Notes API is absent, so callers (incl. the heavily
+		 * unit-tested remote-deactivation command) can call it unconditionally in any
+		 * environment. An existing note with the same name is revived and updated
+		 * rather than duplicated. Each action is `[ 'name' => , 'label' => , 'url' => ]`.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string                                                       $name    Unique note name (used for dedup).
+		 * @param string                                                       $source  Note source (plugin id-dasherized).
+		 * @param string                                                       $title   Note title.
+		 * @param string                                                       $content Note content.
+		 * @param array<int, array{name: string, label: string, url?: string}> $actions Optional action buttons.
+		 * @return bool True when the note was saved, false when WC Admin is unavailable or saving failed.
+		 */
+		public static function add_note( string $name, string $source, string $title, string $content, array $actions = [] ): bool {
+
+			if ( ! class_exists( '\Automattic\WooCommerce\Admin\Notes\Note' ) ) {
+				return false;
+			}
+
+			try {
+
+				$note = self::get_note_with_name( $name );
+
+				if ( ! $note ) {
+					$note = new Automattic\WooCommerce\Admin\Notes\Note();
+					$note->set_name( $name );
+				}
+
+				$note->set_source( $source );
+				$note->set_type( Automattic\WooCommerce\Admin\Notes\Note::E_WC_ADMIN_NOTE_ERROR );
+				$note->set_title( $title );
+				$note->set_content( $content );
+				$note->set_status( Automattic\WooCommerce\Admin\Notes\Note::E_WC_ADMIN_NOTE_UNACTIONED );
+
+				$note->set_actions( [] );
+
+				foreach ( $actions as $action ) {
+
+					if ( empty( $action['name'] ) || empty( $action['label'] ) ) {
+						continue;
+					}
+
+					$note->add_action( $action['name'], $action['label'], $action['url'] ?? '' );
+				}
+
+				// WC_Data::save() returns the saved note id (> 0); cast so a silent
+				// non-throwing save failure (id 0) is reported as false per the contract.
+				return (bool) $note->save();
+
+			} catch ( \Throwable $exception ) {
+				return false;
+			}
+		}
 	}
 
 endif;
