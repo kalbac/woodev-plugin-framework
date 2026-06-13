@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
-> **46 atomic gotchas in 16 namespaces** — update count when adding/removing.
-> Last updated: 2026-06-13 (session 13 docs audit: corrected the count 45→46 to match the actual files in `gotchas/`; no gotcha content changed. s12 added `is-enhanced-admin-available-always-true` — guard WC code on the Note class; the s12 WC-note breadcrumb that would have prompted a 2nd gotcha was reverted per operator decision.)
+> **48 atomic gotchas in 17 namespaces** — update count when adding/removing.
+> Last updated: 2026-06-14 (session 14: +2 from OB-2 — `license-page-css-bundle-only` [new `[admin-ui/*]` namespace] and `build-artifacts-eol-lf-windows-parity` [build/*]).
 
 ## Index
 
@@ -68,6 +68,10 @@
 - [build/ci] markdownlint-cli2 ignores `.markdownlintignore` when globs are passed as CLI args — manage exclusions in the workflow glob; MD051 disabled (can't validate Cyrillic anchors) → [gotchas/markdownlint-ignorefile-vs-globs.md](gotchas/markdownlint-ignorefile-vs-globs.md) (2026-06-08)
 - [build/ci] A PR that conflicts with base (`mergeStateStatus: DIRTY`) runs NO `pull_request` CI — only `pull_request_target`; "all green" can mean the matrix never ran. Check `gh pr view --json mergeable,mergeStateStatus`; rebase onto the new base after a squash-merge → [gotchas/pr-conflict-skips-pull-request-ci.md](gotchas/pr-conflict-skips-pull-request-ci.md) (session 2)
 - [build/js] `@wordpress/scripts` default (automatic) JSX runtime depends on the `react-jsx-runtime` script handle — registered only in WP ≥ 6.6; for WP 6.3+ support force the classic runtime via `babel.config.js` and import `createElement`/`Fragment` in every JSX file → [gotchas/wp-scripts-jsx-runtime-wp66.md](gotchas/wp-scripts-jsx-runtime-wp66.md) (s8)
+- [build/assets-eol] Rebuilding the license-page bundle on Windows can commit CRLF while Linux CI rebuilds LF → "Assets build parity" fails on identical content. `.gitattributes` pins `woodev/assets/build/** text eol=lf` → [gotchas/build-artifacts-eol-lf-windows-parity.md](gotchas/build-artifacts-eol-lf-windows-parity.md) (s14)
+
+### [admin-ui/*] — Admin pages / React UI
+- [admin-ui/license-page] The "Woodev → Лицензии" page enqueues ONLY `style-index.css` (the React bundle) + `wp-components`; the legacy `woodev-license-page.css` is enqueued nowhere. Styles for ANY server-rendered section on that page (e.g. `html-settings-section.php`) must live in `src/license-page/style.scss`, and `license_page()` must wrap output in `.wrap` + `<h1>` → [gotchas/license-page-css-bundle-only.md](gotchas/license-page-css-bundle-only.md) (s14)
 
 ### [box-packer/*] — Box-packer algorithm (S2)
 - [box-packer/virtual-box-rsort-axis-alignment] `rsort()` on the axis-assignment result destroys axis-name alignment for non-normalized items — Option A `[1,10,1]` after rsort → `[10,1,1]` → `box_width=1 < item_width=10` → packing rejects item. Never rsort the candidate; each option guarantees axis alignment by construction → [gotchas/virtual-box-rsort-axis-alignment.md](gotchas/virtual-box-rsort-axis-alignment.md) (2026-06-09)
