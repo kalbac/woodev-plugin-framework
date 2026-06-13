@@ -1,34 +1,32 @@
-# Промт для следующей сессии (s10): ревью работы агента woodev_theme → деплой → e2e-проверки
+# Промт для следующей сессии (s12): пилот edostavka — НАЧАТЬ С АУДИТА shipping-модуля
 
-> Написан в s9 (12.06.2026). Скопируй в новую сессию как стартовый бриф. После выполнения — удали этот файл.
+> Написан в s11 (13.06.2026). Скопируй в новую сессию как стартовый бриф. После выполнения — удали этот файл.
 
 ---
 
-Проект: **Woodev Plugin Framework** (`D:\Projects\woodev_framework`), но основная работа этой сессии — **кросс-репо** в `D:\Projects\woodev_theme`. Контекст: S3.3 + §4 signing смерджены и зарелизены (**v2.0.0**, tag есть); продакшн-ключ вшит (`6N6HaUIrqZMuyDTYjvazMoQjpHwdeyLbmz5Zu3Fh2rM=`); `framework_version` шлётся в каждом запросе. Отдельный агент в woodev_theme реализовал (или дореализует) 3 спеки: `docs/superpowers/specs/2026-06-12-woodev-plugins-deactivator-spec.md` (+ theme-tracker и license-monitor companions).
+Проект: **Woodev Plugin Framework** (`D:\Projects\woodev_framework`).
 
-## Шаг 1 — ревью работы агента woodev_theme
+## Контекст (что закрыто в s11)
+Живой цикл remote-деактивации **полностью доказан** на реальном коде — оба канала (push: прод woodev.ru → публичный staging; pull: локальный двух-стековый rig) + ack + replay-отказ (HTTP 410), а также отображение уведомления 2.0.1. Попутно найден и починен **release-blocking WSOD** (box-packer interface не подключался в `includes()`). Фреймворк **2.0.1** на PR #41 (нейтральное уведомление + фильтр `woodev_licensing_api_url` + interface-fix + бамп). Лицензионная подсистема v2 и анти-пиратская инфраструктура — на этом ЗАВЕРШЕНЫ.
 
-1. Прочитать 3 спеки + финальный отчёт агента (спроси оператора, где он).
-2. Прогнать **GPT-5.5-критика через `codex exec` (read-only, cwd = D:\Projects\woodev_theme)** по диффу реализации против спек. Фокус: wire-контракт байт-в-байт (canonical JSON, envelope, vocabulary только deactivate_plugin, TTL 14d, acks intersection), гейтинг кнопки (webhook-capable && license-not-valid — security-критично), отсутствие изменений в account page / эскалациях / существующих колонках, миграции dbDelta идемпотентны, sign_envelope() не светит секретный ключ.
-3. Findings → оператору на решение, фиксы → re-critic (no self-certify).
+## Задача s12 — пилот миграции edostavka, НО строго audit-first
+Оператор по **ручному ревью** считает shipping-модуль фреймворка **не полностью готовым** к продакшну. Поэтому:
 
-## Шаг 2 — деплой (оператор, FTP)
+1. **ПЕРВЫМ ДЕЛОМ — попроси у оператора его список замеченных нюансов** по shipping-модулю (`woodev/shipping-method/`, `woodev/box-packer/`, warehouse/PVZ, rate-calc, checkout-поля, REST). Это вход аудита. Не начинай миграцию, пока не получишь список и не проведёшь аудит.
+2. **Аудит shipping-модуля** против его списка + против паттернов (wiki `v2-extension-point-pattern`, ADR-006 capability-seam, гочи `shipping/*`). Зафиксируй находки в `docs-internal/reviews/`.
+3. **Только после аудита** — спека миграции edostavka + **data-preservation контракт-тест (B-11)**: option keys, shipping-method ids + instance settings (`woocommerce_edostavka_{instance}_settings`), warehouse-таблица, order-meta/session-keys, AJAX actions, admin slugs — всё byte-for-byte (см. `docs-internal/migration/edostavka-data-preservation-checklist.md`).
 
-Тема + woodev-core (правка License_Authority) + woodev-license-monitor + новый woodev-plugins-deactivator. Активировать новый плагин.
+## Переиспользуемый локальный rig (поднят в s11, можно переиспользовать)
+- **Issuer** (woodev_theme, локальный woodev.ru + EDD SL + деактиватор): `wp-env` в `d:\projects\woodev_theme`, dev-сайт `http://localhost:8090`. Локальные лицензии в таблице `wp_edd_licenses` (напр. download_id=21 `19bcfa9e…` expired). Authority-pubkey: `wp eval '(new Woodev\EDD\Plugin\EDD\License_Authority())->get_public_key_base64();'` (был `QSisoK0CDOmIOqGHvilMe+4mB/LMRFHf9hi6BxatfMk=`).
+- **Stand/consumer** (фреймворк wp-env): `http://localhost:8888`, gitignored `.wp-env-stand/` + `.wp-env.override.json` (core 6.9, php 8.1). Стенд `cdek-stand` (download 21) с админ-страницей Tools → Woodev Stand (capture/apply/setkey). Для локального issuer стенд использует: `WOODEV_LICENSE_AUTHORITY_PUBKEY` (define), фильтр `woodev_licensing_api_url`→`host.docker.internal:8090`, `http_request_host_is_external`+`http_allowed_safe_ports` (порт 8090). Канал — **PULL** (push кросс-контейнерно не работает + SSRF).
+- **woodev_theme локальная правка (оставлена):** `Push_Delivery::is_safe_target()` → `if ('local'===wp_get_environment_type()) return true;` (только env=local; прод не затронут).
+- Остановить оба стека: `wp-env stop` в каждой папке. Запустить: `wp-env start` (woodev_theme первый старт ~10 мин).
+- Гоча [[wp-safe-remote-request-local-rig]] — все грабли локального rig.
 
-## Шаг 3 — e2e-проверки (мои, после деплоя)
-
-1. Страница настроек деактиватора: публичный ключ === вшитому во фреймворк.
-2. Метабокс на странице лицензии: сайты видны, версии/fw-версии/last_seen корректны, гейтинг-матрица (валидная лицензия → кнопка серая; fw < 2.0.0 → серая).
-3. Тестовый сайт с фреймворком **2.0.0** (wp-env или стейджинг — спросить оператора): выписать команду из метабокса → проследить push (или pull на следующем check_license) → executed ack → статус в метабоксе. Replay → отказ.
-4. Проверить, что `framework_version=2.0.0` реально доезжает (таблица монитора / мета трекера).
-
-## Гигиена
-
-- `composer check` во фреймворке зелёный (601 unit, 41 integration baseline); фреймворк трогать не планируется.
-- Правило: PR мерджить самому при зелёном CI (память `feedback_auto_merge_green_ci`).
-- Контекст woodev_theme: репо локальное (без remote), коммиты только локальные; НЕ делать `git add -A` там (рабочее дерево замусорено npm-cache — добавлять файлы пофайлово).
-
-## После этой сессии (отдельная, НЕ начинать здесь)
-
-Пилот edostavka: начать с **аудита shipping-модуля** — оператор по ручному ревью считает модуль не полностью готовым; запросить у него список замеченных нюансов как вход аудита. Только после аудита — спека миграции + data-preservation контракт-тест (B-11).
+## Гигиена / контекст
+- **Serena** для PHP-навигации; `tests/` и `.wp-env-stand/` Serena игнорирует — там Grep/Read/Edit.
+- **Codex shell-sandbox сломан** на этой Windows-машine — критика только INLINE-бандлом (гоча `codex-shell-sandbox-broken-windows`).
+- woodev_theme — **локальный репо без remote**; коммиты локальные, пофайлово (рабочее дерево замусорено). Внутренний `woodev-theme/` — отдельный репо с remote `kalbac/woodev-theme`.
+- `composer check` зелёный (603 unit, 41 integration baseline) — держать.
+- Память: PR мерджить самому при зелёном CI (`feedback_auto_merge_green_ci`); рекомендованную опцию в AskUserQuestion ставить ПЕРВОЙ (`feedback_recommended_option_first`); инфраструктуру (worktree/temp) объяснять одной фразой ДО создания (`feedback_explain_infrastructure_moves`).
+- **Проверить статус PR #41** в начале сессии (должен был само-смерджиться при зелёном CI; если нет — домерджить).

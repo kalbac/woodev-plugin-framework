@@ -197,7 +197,7 @@ if ( ! class_exists( 'Woodev_License_Command_Deactivate_Plugin' ) ) :
 			// Write the persistent site-level notice so the admin knows why the plugin
 			// was deactivated. autoload 'no' — only read on admin_notices, not on every
 			// page load.
-			$this->write_notice( $plugin_id, $plugin->get_plugin_name() );
+			$this->write_notice( $plugin_id, $plugin->get_plugin_name(), $plugin->get_support_url() );
 
 			/**
 			 * Fires after a remote deactivate_plugin command executes successfully.
@@ -236,13 +236,23 @@ if ( ! class_exists( 'Woodev_License_Command_Deactivate_Plugin' ) ) :
 		 * i18n/russian-source-plural-n) keyed by the target plugin id so that
 		 * notices() can render it on the next admin page load.
 		 *
-		 * @since 2.0.0
+		 * The message is intentionally NEUTRAL about the cause: the signed payload
+		 * carries no reason (args: {}), so the client must not assert a specific
+		 * reason (e.g. "license expired") that is frequently wrong (wrong domain,
+		 * revoked, refunded). It states the plugin is off because the license is
+		 * not valid for this site and points the admin at their account. The
+		 * "contact us" tail is appended ONLY when the plugin supplies a support
+		 * URL — get_support_url() returns null in the base, so a plugin that did
+		 * not override it must not render an empty <a href="">.
 		 *
-		 * @param string $plugin_id   The plugin id (get_id()).
-		 * @param string $plugin_name The plugin display name.
+		 * @since 2.0.1
+		 *
+		 * @param string      $plugin_id   The plugin id (get_id()).
+		 * @param string      $plugin_name The plugin display name.
+		 * @param string|null $support_url Optional support URL (get_support_url()); null/empty omits the contact tail.
 		 * @return void
 		 */
-		private function write_notice( string $plugin_id, string $plugin_name ): void {
+		private function write_notice( string $plugin_id, string $plugin_name, ?string $support_url = null ): void {
 
 			$notices = get_option( self::NOTICES_OPTION, array() );
 
@@ -250,14 +260,28 @@ if ( ! class_exists( 'Woodev_License_Command_Deactivate_Plugin' ) ) :
 				$notices = array();
 			}
 
-			// Russian, count-neutral (no _n()): names the plugin, states why.
-			// Translation domain woodev-plugin-framework (project standard).
-			$notices[ $plugin_id ] = array(
-				'message' => sprintf(
+			$support_url = is_string( $support_url ) ? trim( $support_url ) : '';
+
+			// Russian, count-neutral (no _n()), cause-neutral: names the plugin and
+			// states the license is not valid for this site (the signed payload
+			// carries no reason). Translation domain woodev-plugin-framework.
+			if ( '' !== $support_url ) {
+				$message = sprintf(
+					/* translators: 1: plugin name, 2: support URL */
+					__( 'Плагин %1$s отключён: лицензия недействительна для этого сайта. Проверьте статус лицензии в личном кабинете на woodev.ru или <a href="%2$s">свяжитесь с нами</a>.', 'woodev-plugin-framework' ),
+					$plugin_name,
+					esc_url( $support_url )
+				);
+			} else {
+				$message = sprintf(
 					/* translators: %s: plugin name */
-					__( 'Плагин %s был удалённо деактивирован: истёк срок лицензии.', 'woodev-plugin-framework' ),
+					__( 'Плагин %s отключён: лицензия недействительна для этого сайта. Проверьте статус лицензии в личном кабинете на woodev.ru.', 'woodev-plugin-framework' ),
 					$plugin_name
-				),
+				);
+			}
+
+			$notices[ $plugin_id ] = array(
+				'message' => $message,
 				'ts'      => time(),
 			);
 
