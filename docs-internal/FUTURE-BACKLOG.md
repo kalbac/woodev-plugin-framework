@@ -18,6 +18,7 @@
 
 ### OB-3 — Review `Woodev_Plugin_Updater` (currently a singleton)
 - **Wanted:** code review of `Woodev_Plugin_Updater`; consider folding it into the **Licensing** module (it already depends on `Woodev_Licensing_API` and reads `get_url()`). Decide on the singleton pattern.
+- **✅ s14 — REVIEW DONE, recorded (not auto-fixed):** GPT-5.5 read-only review → `docs-internal/reviews/ob3-plugin-updater-review-2026-06-14.md`. Outcome: **(a)** it is NOT a singleton (fire-and-forget per-plugin instance) and should stay per-plugin but be plugin-owned + idempotent; **(b)** recommendation = **MOVE** `woodev/plugin-updater/` → `woodev/licensing/updater/` (cohesion; clean-break permits, no shim) but **do NOT** merge into `Woodev_Licensing_API` (distinct responsibilities). 4 BLOCK + 13 MINOR/NOTE findings triaged with a 5-step execution order. **Several findings touch installed-site contracts (hook arg shape, cache/changelog-URL keys) → operator sign-off + consumer audit + browser/integration verification required before implementing.** Not applied this session per the review-findings contract + updater criticality.
 
 ### OB-4 — Reusable framework JS should be PHP-based where possible (design principle)
 - **Principle:** scripts that exist for **reuse across plugins** (e.g. the PVZ-map builder for shipping methods) should be designed to be **as PHP-driven as possible** (config/markup from PHP, minimal hand-written JS). **Exception:** fixed, framework-owned admin UI (e.g. the "Woodev → Лицензии" React page) stays React — this principle does NOT apply to those.
