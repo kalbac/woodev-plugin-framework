@@ -1,4 +1,26 @@
 
+## Session 11 (2026-06-13) — live remote-deactivation e2e (push prod + pull local rig), 2.0.1 release (PR #41)
+
+> Mission from `next-session-prompt.md` (s10): prove the full command cycle on a framework-2.0.0+ site. Did it on BOTH channels and found/fixed a release-blocking fatal along the way. Framework changes shipped as **2.0.1** on branch `feat/s11-licensing-2.0.1` (PR #41).
+
+**s11 doc-prompt code change (done first):** rewrote `Woodev_License_Command_Deactivate_Plugin::write_notice()` — cause-neutral text ("лицензия недействительна для этого сайта", the signed payload carries no reason) + conditional support link appended ONLY when `get_support_url()` is non-empty (no empty `<a href="">`); HTML via `wp_kses_post`, URL via `esc_url`. Updated the pinning render-fixtures + added with/without-URL branch tests. VERSION 2.0.0 → 2.0.1. `composer check` green: 603 unit (+2).
+
+**Live e2e — PUSH channel (prod woodev.ru + public staging `pochta.wootest.ru`):** built a self-contained stand zip (vendored framework + thin consumer, no embedded key, admin-only Tools driver). License key `b947…` (item 216 = СДЭК) is **expired** → natural can_deactivate. Operator clicked Деактивировать → woodev.ru **pushed** the signed envelope to the public site → executed → plugin deactivated → ack synchronous → metabox "выполнена (push: executed)". Notice rendered (verified DOM + screenshot, with the support link). The **localhost knock** earlier proved the SSRF guard refuses command CREATION for private hosts ("команда не создана") — push/pull need a public host.
+
+**Live e2e — PULL channel (local two-stack rig):** stood up woodev_theme wp-env (issuer, :8090) + framework wp-env (stand, :8888). Cross-container → PULL only (push between containers + SSRF both block). Drove the **real `validate_license`** path: knock → gating `can_deactivate=YES` → `Command_Queue::issue` → pull delivers signed envelope → **Ed25519 verify against the LOCAL authority pubkey** → `deactivate_plugin` → notice rendered (confirmed on the dashboard) → ack (`consumed_command_nonces`) → issuer row `status=executed` → in-pull replay rejected (no re-deactivate) → **replay POST to the REST endpoint = HTTP 410 `{"status":"rejected","reason":"replayed"}`**. Both channels + replay fully proven on real code.
+
+**Release-blocking fatal found + fixed (the headline):** `box-packer/class-item-implementation.php` implements `Woodev_Box_Packer_Item_With_Product`, but the interface file was **never `require_once`'d** in `Woodev_Plugin::includes()` → every real vendored v2 boot (no Composer autoloader at runtime) WSOD'd. Unit + integration masked it via the classmap; the first real boot caught it. One-line wiring fix. Gotcha [[box-packer-interface-unwired-in-includes]].
+
+**Other findings:** (1) option key double-prefix for plugin ids starting with `woodev` — `get_plugin_option_name()` always prepends `woodev_`, `Woodev_License` only conditionally → diverge; real plugin ids (cdek/edostavka) unaffected; the stand id was changed `woodev-stand`→`cdek-stand` to mirror reality. Gotcha [[license-key-option-double-prefix]]. (2) B-1 mixed-fleet armor confirmed LIVE: with v1-bootstrap plugins ("Почта РФ"/"Тинькофф") active, the v2 stand goes dormant (no WSOD) and the v2 React license page only appears once they're deactivated — v1+v2 can't be co-active until all plugins migrate (documented clean-break). (3) Local-rig transport: `wp_safe_remote_request` blocks the private issuer host + non-standard port — allowed via `http_request_host_is_external` + `http_allowed_safe_ports` in the (gitignored) stand only. Gotcha [[wp-safe-remote-request-local-rig]].
+
+**feat shipped:** `woodev_licensing_api_url` filter (default false → `https://woodev.ru/`) — lets licensing target a self-hosted/staging/local store; the constructor already accepted an override, this exposes it.
+
+**Cross-repo (woodev_theme, local repo no remote):** added `woodev-plugins-deactivator` to `.wp-env.json`; one local-only change in `class-push-delivery.php::is_safe_target()` — `if ( 'local' === wp_get_environment_type() ) return true;` (bypasses the private-host SSRF guard ONLY under env=local; production unaffected). Operator approved keeping it for the reusable rig.
+
+**Commits (PR #41, branch `feat/s11-licensing-2.0.1`):** `36209ee` fix(box-packer) interface include + VERSION 2.0.1; `295c57c` feat api_url filter; `b20ea8b` feat neutral notice + tests; `e4cfd0f` chore gitignore stand. CI running at save time; self-merge on green (`feedback_auto_merge_green_ci`).
+
+**Reusable local rig (left running):** issuer woodev_theme wp-env :8090, stand framework wp-env :8888; stand at gitignored `.wp-env-stand/` + `.wp-env.override.json`. Stop with `wp-env stop` in each dir. Valuable for the upcoming edostavka migration testing.
+
 ## Session 10 (2026-06-12) — cross-repo review of the woodev_theme server half + prod deploy + plugin version bumps
 
 > Mission from `next-session-prompt.md` (s9). Cross-repo: nearly all work in `D:\Projects\woodev_theme` (separate local repo, no remote; inner `woodev-theme/` is its own gitignored repo with a GitHub remote `kalbac/woodev-theme`). The framework repo itself was NOT touched (601 unit / baseline integration confirmed green, `composer check` exit 0).

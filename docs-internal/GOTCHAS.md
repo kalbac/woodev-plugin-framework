@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
-> **41 atomic gotchas in 16 namespaces** — update count when adding/removing.
-> Last updated: 2026-06-12 (session 10: 1 gotcha — codex exec shell-sandbox broken on this Windows box → inline-bundle critic pattern)
+> **44 atomic gotchas in 16 namespaces** — update count when adding/removing.
+> Last updated: 2026-06-13 (session 11: 3 gotchas — box-packer interface unwired in includes() (release-blocking WSOD); license-key option double-prefix for woodev-prefixed ids; wp_safe_remote_request blocks the local-rig issuer host+port)
 
 ## Index
 
@@ -41,6 +41,7 @@
 
 ### [framework/*] — Framework internals
 - [framework/includes-wiring] New framework class files must be `require_once`'d in the right `includes()` (dependency order; WC files gated) — the Composer classmap loads them in tests but production fatals if unwired → [gotchas/dispatcher-files-unwired-in-includes.md](gotchas/dispatcher-files-unwired-in-includes.md) (session 2)
+- [framework/includes-wiring] `class-item-implementation.php` implemented `Woodev_Box_Packer_Item_With_Product` whose interface file was never required in `includes()` → release-blocking WSOD on every real vendored v2 boot (no runtime autoloader); classmap masked it in tests; first live boot caught it → [gotchas/box-packer-interface-unwired-in-includes.md](gotchas/box-packer-interface-unwired-in-includes.md) (s11)
 
 ### [testing/*] — Testing patterns
 - [testing/integration] Integration fixtures need the framework mapped at the bootstrap's load path (`woodev-framework/tests/_fixtures/*/woodev` in `.wp-env.json`), not just the `wp-content/plugins/*` mount — the v2 resolver requires each fixture's bundled `woodev/class-plugin.php` → [gotchas/wpenv-resolver-fixture-mapping.md](gotchas/wpenv-resolver-fixture-mapping.md) (2026-06-08)
@@ -50,12 +51,14 @@
 - [testing/unit] PHPUnit silently runs ONLY the first file argument when given several — "both files green" can mean file B never executed; run per-file or use --testsuite/--filter → [gotchas/phpunit-multiple-file-args.md](gotchas/phpunit-multiple-file-args.md) (s9)
 - [testing/integration] wp-env on Windows Git-Bash: MSYS mangles absolute container paths (`/var/www/…` → `C:/Program Files/Git/…`) — run from PowerShell or wrap in `bash -c "cd …"`; integration bootstrap also needs `TEST_SUITE=integration` → [gotchas/wpenv-windows-gitbash-path-mangling.md](gotchas/wpenv-windows-gitbash-path-mangling.md) (s9)
 - [testing/unit] Patchwork redefinable internals (`function_exists`, `error_log`) need Patchwork force-loaded in bootstrap BEFORE source files — Brain Monkey loads it lazily at first setUp(), but PHPUnit compiles all required source at suite-build time → order-dependent dead stubs → [gotchas/patchwork-early-load-bootstrap.md](gotchas/patchwork-early-load-bootstrap.md) (s9)
+- [testing/integration] Local two-stack e2e rig: `wp_safe_remote_request` (framework licensing transport) blocks private hosts (`host.docker.internal`) + non-80/443/8080 ports → silent swallowed throw, pull never runs. Stand-only fix: `http_request_host_is_external` + `http_allowed_safe_ports` filters + `woodev_licensing_api_url` + local-pubkey define; use PULL (cross-container push can't work) → [gotchas/wp-safe-remote-request-local-rig.md](gotchas/wp-safe-remote-request-local-rig.md) (s11)
 
 ### [api/*] — API layer
 <!-- No entries yet -->
 
 ### [licensing/*] — License/EDD store
 - [licensing/two-layer] `is_need_license()` (Woodev_Plugin, presentation, UNTRUSTED) vs `is_license_required()` (Woodev_Plugins_License, enforcement, server-trusted) — gating a feature/enforcement on the local flag reopens the piracy hole; the local flag renders UI only → [gotchas/license-need-vs-required.md](gotchas/license-need-vs-required.md) (2026-06-10)
+- [licensing/option-keys] License-key option double-prefix for plugin ids starting with `woodev`: `get_plugin_option_name()` always prepends `woodev_`, `Woodev_License` only conditionally → write/read diverge. Real plugin ids unaffected; never name a plugin/fixture id `woodev*` → [gotchas/license-key-option-double-prefix.md](gotchas/license-key-option-double-prefix.md) (s11)
 
 ### [build/*] — Build/CI/release
 - [build/ci] A failing early CI job (e.g. Lint) silently SKIPS jobs that `needs:` it — skipped ≠ failed, so the suite looks green while dependent jobs (the whole Unit matrix here) never run; fixing the gate REVEALS masked failures → [gotchas/ci-failing-gate-skips-dependent-jobs.md](gotchas/ci-failing-gate-skips-dependent-jobs.md) (2026-06-08)
