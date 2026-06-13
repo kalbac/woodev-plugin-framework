@@ -8,9 +8,13 @@
 namespace Woodev\Tests\Unit;
 
 use Brain\Monkey\Functions;
+use Brain\Monkey\Actions;
 use Mockery;
 
 require_once dirname( __DIR__, 2 ) . '/woodev/class-lifecycle.php';
+require_once dirname( __DIR__, 2 ) . '/woodev/class-plugin.php';
+require_once dirname( __DIR__, 2 ) . '/woodev/licensing/commands/interface-license-command.php';
+require_once dirname( __DIR__, 2 ) . '/woodev/licensing/commands/class-license-command-deactivate-plugin.php';
 
 /**
  * Test wpdb double for lifecycle event persistence.
@@ -169,6 +173,58 @@ class PlatformNeutralLifecycleTest extends TestCase {
 		$this->assertSame( '2.0.0', $stored_history[0]['version'] );
 		$this->assertSame( '1.9.0', $stored_history[0]['data']['from_version'] );
 		$this->assertSame( 'alert(1)ready', $stored_history[0]['data']['nested']['note'] );
+	}
+
+	/**
+	 * Finding A (s12): a genuine (re)activation transition clears this plugin's own
+	 * stale entry from the remote-deactivation notices option (other plugins kept)
+	 * so a reactivated plugin never shows a "you were disabled" banner.
+	 *
+	 * @return void
+	 */
+	public function test_handle_activation_clears_stale_remote_deactivation_notice(): void {
+
+		$id = 'platform-neutral-lifecycle';
+
+		$plugin = Mockery::mock( \Woodev_Plugin::class );
+		$plugin->shouldReceive( 'get_id' )->andReturn( $id );
+		$plugin->shouldReceive( 'get_id_dasherized' )->andReturn( $id );
+
+		Functions\when( 'get_option' )->alias(
+			static function ( $name, $default = false ) use ( $id ) {
+				if ( 'woodev_' . $id . '_is_active' === $name ) {
+					return false; // not yet active → genuine activation transition.
+				}
+				if ( 'woodev_license_remote_deactivation_notices' === $name ) {
+					return array(
+						$id      => array( 'message' => 'stale', 'ts' => 1 ),
+						'other'  => array( 'message' => 'keep', 'ts' => 2 ),
+					);
+				}
+				return $default;
+			}
+		);
+		Functions\when( 'wp_reschedule_event' )->justReturn( true );
+		Functions\when( 'delete_option' )->justReturn( true );
+
+		$writes = array();
+		Functions\when( 'update_option' )->alias(
+			static function ( $name, $value, $autoload = '' ) use ( &$writes ) {
+				$writes[ $name ] = $value;
+				return true;
+			}
+		);
+
+		Actions\expectDone( 'woodev_' . $id . '_activated' )->once();
+
+		$lifecycle = new Testable_Platform_Neutral_Lifecycle( $plugin );
+		$lifecycle->handle_activation();
+
+		$this->assertArrayHasKey( 'woodev_license_remote_deactivation_notices', $writes );
+		$notices = $writes[ 'woodev_license_remote_deactivation_notices' ];
+		$this->assertArrayNotHasKey( $id, $notices, 'The reactivated plugin\'s own stale notice must be removed.' );
+		$this->assertArrayHasKey( 'other', $notices, 'Other plugins\' notices must be preserved.' );
+		$this->assertSame( 'yes', $writes[ 'woodev_' . $id . '_is_active' ] );
 	}
 
 	/**

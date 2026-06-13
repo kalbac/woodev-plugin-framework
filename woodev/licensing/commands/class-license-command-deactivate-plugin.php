@@ -115,6 +115,62 @@ if ( ! class_exists( 'Woodev_License_Command_Deactivate_Plugin' ) ) :
 		}
 
 		/**
+		 * Clears all pending remote-deactivation artifacts for a plugin that is
+		 * (again) active.
+		 *
+		 * Called from Woodev_Lifecycle::handle_activation() on a genuine
+		 * (re)activation transition (Finding A, s12): a plugin that is running must
+		 * not show a stale "you were disabled" banner — or WC Admin inbox note — for
+		 * itself. Removes the plugin's own entry from NOTICES_OPTION (deleting the
+		 * whole option when it becomes empty) and removes the WC Admin inbox
+		 * breadcrumb note when WooCommerce Admin is present. No-op when the plugin
+		 * has no pending entry, so it adds no option churn on routine activations.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param Woodev_Plugin $plugin The plugin that has just (re)activated.
+		 * @return void
+		 */
+		public static function clear_remote_deactivation_artifacts( Woodev_Plugin $plugin ): void {
+
+			$plugin_id = (string) $plugin->get_id();
+
+			$notices = get_option( self::NOTICES_OPTION, array() );
+
+			if ( is_array( $notices ) && array_key_exists( $plugin_id, $notices ) ) {
+
+				unset( $notices[ $plugin_id ] );
+
+				if ( empty( $notices ) ) {
+					delete_option( self::NOTICES_OPTION );
+				} else {
+					update_option( self::NOTICES_OPTION, $notices, 'no' );
+				}
+			}
+
+			// Remove the WC Admin inbox breadcrumb (Finding B), if WooCommerce Admin
+			// is present. class_exists keeps the core lifecycle free of any hard WC
+			// dependency — the deactivated plugin's note is rendered by WooCommerce,
+			// so it must also be cleared here on reactivation.
+			if ( class_exists( '\Automattic\WooCommerce\Admin\Notes\Notes' ) ) {
+				\Automattic\WooCommerce\Admin\Notes\Notes::delete_notes_with_name( self::get_breadcrumb_note_name( $plugin ) );
+			}
+		}
+
+		/**
+		 * Builds the deterministic WC Admin inbox note name for a plugin's remote
+		 * deactivation breadcrumb (Finding B, s12).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param Woodev_Plugin $plugin The target plugin.
+		 * @return string
+		 */
+		private static function get_breadcrumb_note_name( Woodev_Plugin $plugin ): string {
+			return 'woodev-' . $plugin->get_id_dasherized() . '-remote-deactivated';
+		}
+
+		/**
 		 * Whether the WP plugin API needs loading before this command can run.
 		 *
 		 * Gates on the FULL set of plugin-API functions execute() calls — NOT just
@@ -198,6 +254,12 @@ if ( ! class_exists( 'Woodev_License_Command_Deactivate_Plugin' ) ) :
 			// was deactivated. autoload 'no' — only read on admin_notices, not on every
 			// page load.
 			$this->write_notice( $plugin_id, $plugin->get_plugin_name(), $plugin->get_support_url() );
+
+			// Also leave a WooCommerce Admin inbox breadcrumb (Finding B, s12).
+			// WooCommerce renders it independent of this plugin's active state, so the
+			// admin still learns why a SINGLE-v2-plugin site went dark — the
+			// admin_notices banner above can only be drawn by a still-active sibling.
+			$this->maybe_add_breadcrumb_note( $plugin );
 
 			/**
 			 * Fires after a remote deactivate_plugin command executes successfully.
@@ -286,6 +348,56 @@ if ( ! class_exists( 'Woodev_License_Command_Deactivate_Plugin' ) ) :
 			);
 
 			update_option( self::NOTICES_OPTION, $notices, 'no' );
+		}
+
+		/**
+		 * Leaves a WooCommerce Admin inbox breadcrumb for a remote deactivation.
+		 *
+		 * The admin_notices banner (NOTICES_OPTION) can only be drawn by an ACTIVE
+		 * Woodev_Plugins_License engine — on a site whose only v2 plugin is the one
+		 * just deactivated, NO framework code loads at all, so the banner never shows
+		 * (Finding B, s12). A WC Admin note is stored in WooCommerce's own table and
+		 * rendered by WooCommerce regardless of this plugin's state, so it survives
+		 * the deactivation. Cleared on reactivation by
+		 * clear_remote_deactivation_artifacts(). Best-effort: a no-op when WooCommerce
+		 * Admin is not present (e.g. a pure-WP plugin or the unit suite), which is why
+		 * the class_exists guard runs FIRST — before any plugin accessor — so the
+		 * heavily mocked command tests never reach the WC path.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param Woodev_Plugin $plugin The plugin being remotely deactivated.
+		 * @return void
+		 */
+		private function maybe_add_breadcrumb_note( Woodev_Plugin $plugin ): void {
+
+			if ( ! class_exists( '\Automattic\WooCommerce\Admin\Notes\Note' ) || ! class_exists( 'Woodev_Notes_Helper' ) ) {
+				return;
+			}
+
+			$support_url = trim( (string) $plugin->get_support_url() );
+
+			$actions = array();
+
+			if ( '' !== $support_url ) {
+				$actions[] = array(
+					'name'  => 'woodev-remote-deactivated-support',
+					'label' => __( 'Связаться с нами', 'woodev-plugin-framework' ),
+					'url'   => $support_url,
+				);
+			}
+
+			Woodev_Notes_Helper::add_note(
+				self::get_breadcrumb_note_name( $plugin ),
+				$plugin->get_id_dasherized(),
+				sprintf(
+					/* translators: %s: plugin name */
+					__( 'Плагин %s отключён', 'woodev-plugin-framework' ),
+					$plugin->get_plugin_name()
+				),
+				__( 'Лицензия недействительна для этого сайта. Проверьте статус лицензии в личном кабинете на woodev.ru.', 'woodev-plugin-framework' ),
+				$actions
+			);
 		}
 	}
 

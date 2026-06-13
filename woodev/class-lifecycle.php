@@ -135,6 +135,14 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 
 				$this->activate();
 
+				// The plugin is active again — clear any stale "remotely deactivated"
+				// artifacts for it (Finding A, s12) so the admin never sees a "you were
+				// disabled" banner/inbox note for a plugin that is now running. Guarded
+				// so the core lifecycle never hard-depends on the licensing subsystem.
+				if ( class_exists( 'Woodev_License_Command_Deactivate_Plugin' ) ) {
+					Woodev_License_Command_Deactivate_Plugin::clear_remote_deactivation_artifacts( $this->get_plugin() );
+				}
+
 				// Reschedule weekly license check
 				wp_reschedule_event( time(), 'weekly', 'woodev_weekly_scheduled_events' );
 
