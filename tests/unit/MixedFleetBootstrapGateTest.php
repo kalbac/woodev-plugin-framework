@@ -134,6 +134,188 @@ class MixedFleetBootstrapGateTest extends TestCase {
 		);
 
 		$this->assertCount( 1, $admin_notice_hooks, 'The probe must hook exactly one admin_notices warning.' );
+
+		// The dormant notice must render actionable wording. With an eval'd stub the conflicting
+		// plugin can't be resolved (eval'd classes have no file, and WP_PLUGIN_DIR is undefined),
+		// so the generic still-actionable fallback must appear: it names this dormant plugin and
+		// tells the merchant exactly what to do (OB-1).
+		$render_callback = $admin_notice_hooks[ array_key_first( $admin_notice_hooks ) ][1];
+		ob_start();
+		$render_callback();
+		$output = (string) ob_get_clean();
+
+		$this->assertStringContainsString( 'Woodev Framework Test Plugin', $output, 'The notice must name this dormant plugin.' );
+		$this->assertStringContainsString( 'Обновите все плагины Woodev', $output, 'The generic fallback must give an actionable update instruction.' );
+		$this->assertStringContainsString( '<div class="error">', $output, 'The notice must produce the admin-notice markup.' );
+	}
+
+	/**
+	 * Direction A (OB-1): when the conflicting v1 plugin can be resolved, the dormant notice names
+	 * it explicitly and tells the merchant to update that plugin.
+	 *
+	 * A file-based v1-shaped stub Woodev_Plugin_Bootstrap is written under a fake WP_PLUGIN_DIR so
+	 * ReflectionClass::getFileName() yields a real plugins-dir path; a stubbed get_plugins() maps
+	 * that plugin slug to a display name. Including the fixture entry file then exercises the real
+	 * probe + resolver boilerplate end to end.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_direction_a_notice_names_resolved_conflicting_plugin(): void {
+		$base       = sys_get_temp_dir() . '/woodev_mf_' . uniqid( '', true );
+		$plugin_dir = $base . '/legacy-woodev-plugin/woodev';
+		mkdir( $plugin_dir, 0777, true );
+		$stub_file = $plugin_dir . '/bootstrap.php';
+
+		$stub_source  = "<?php\n";
+		$stub_source .= 'class Woodev_Plugin_Bootstrap {' . "\n";
+		$stub_source .= "\tprivate static \$instance;\n";
+		$stub_source .= "\tpublic static function instance() { return self::\$instance ??= new self(); }\n";
+		$stub_source .= "\tpublic function register_plugin( ...\$args ) {}\n";
+		$stub_source .= "}\n";
+		file_put_contents( $stub_file, $stub_source );
+
+		require $stub_file; // Defines the legacy stub from a real file so getFileName() resolves.
+
+		if ( ! defined( 'WP_PLUGIN_DIR' ) ) {
+			define( 'WP_PLUGIN_DIR', $base );
+		}
+		if ( ! defined( 'WOODEV_FRAMEWORK_DIR' ) ) {
+			define( 'WOODEV_FRAMEWORK_DIR', dirname( __DIR__, 2 ) );
+		}
+
+		Functions\stubEscapeFunctions();
+		Functions\when( 'wp_kses' )->returnArg();
+		Functions\when( 'wp_normalize_path' )->alias(
+			static function ( string $path ): string {
+				return str_replace( '\\', '/', $path );
+			}
+		);
+		Functions\when( 'get_plugins' )->justReturn(
+			[ 'legacy-woodev-plugin/legacy-woodev-plugin.php' => [ 'Name' => 'Legacy Woodev Plugin' ] ]
+		);
+
+		$added = [];
+		Functions\when( 'add_action' )->alias(
+			static function ( string $hook, $callback ) use ( &$added ): void {
+				$added[] = [ $hook, $callback ];
+			}
+		);
+
+		require __DIR__ . '/../_fixtures/woodev-test-plugin/woodev-test-plugin.php';
+
+		// The resolver must map the winning v1 framework file back to its plugin display name.
+		$this->assertSame(
+			'Legacy Woodev Plugin',
+			woodev_test_plugin_conflicting_framework_plugin_name(),
+			'The resolver must map the winning v1 framework file to its owning plugin display name.'
+		);
+
+		$admin_notice_hooks = array_filter(
+			$added,
+			static function ( array $hook ): bool {
+				return 'admin_notices' === $hook[0];
+			}
+		);
+		$this->assertCount( 1, $admin_notice_hooks, 'The probe must hook exactly one admin_notices warning (named path).' );
+
+		$render_callback = $admin_notice_hooks[ array_key_first( $admin_notice_hooks ) ][1];
+		ob_start();
+		$render_callback();
+		$output = (string) ob_get_clean();
+
+		$this->assertStringContainsString( 'Legacy Woodev Plugin', $output, 'The notice must name the conflicting v1 plugin.' );
+		$this->assertStringContainsString( 'Woodev Framework Test Plugin', $output, 'The notice must also name this dormant plugin.' );
+
+		if ( is_file( $stub_file ) ) {
+			unlink( $stub_file );
+		}
+		foreach ( [ $plugin_dir, dirname( $plugin_dir ), $base ] as $dir ) {
+			if ( is_dir( $dir ) ) {
+				rmdir( $dir );
+			}
+		}
+	}
+
+	/**
+	 * Direction A (OB-1, XSS guard): a hostile conflicting-plugin name must be escaped in the notice.
+	 *
+	 * The resolved name comes from another plugin's header (get_plugins()), so a plugin named
+	 * '<script>…</script>…' must render as inert text — esc_html() + wp_kses() must strip the script.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_direction_a_notice_escapes_hostile_conflicting_plugin_name(): void {
+		$base       = sys_get_temp_dir() . '/woodev_mf_' . uniqid( '', true );
+		$plugin_dir = $base . '/legacy-woodev-plugin/woodev';
+		mkdir( $plugin_dir, 0777, true );
+		$stub_file = $plugin_dir . '/bootstrap.php';
+
+		$stub_source  = "<?php\n";
+		$stub_source .= 'class Woodev_Plugin_Bootstrap {' . "\n";
+		$stub_source .= "\tprivate static \$instance;\n";
+		$stub_source .= "\tpublic static function instance() { return self::\$instance ??= new self(); }\n";
+		$stub_source .= "\tpublic function register_plugin( ...\$args ) {}\n";
+		$stub_source .= "}\n";
+		file_put_contents( $stub_file, $stub_source );
+
+		require $stub_file;
+
+		if ( ! defined( 'WP_PLUGIN_DIR' ) ) {
+			define( 'WP_PLUGIN_DIR', $base );
+		}
+		if ( ! defined( 'WOODEV_FRAMEWORK_DIR' ) ) {
+			define( 'WOODEV_FRAMEWORK_DIR', dirname( __DIR__, 2 ) );
+		}
+
+		Functions\stubEscapeFunctions();
+		Functions\when( 'esc_html' )->alias(
+			static function ( string $text ): string {
+				return htmlspecialchars( $text, ENT_QUOTES, 'UTF-8' );
+			}
+		);
+		Functions\when( 'wp_kses' )->returnArg();
+		Functions\when( 'wp_normalize_path' )->alias(
+			static function ( string $path ): string {
+				return str_replace( '\\', '/', $path );
+			}
+		);
+		Functions\when( 'get_plugins' )->justReturn(
+			[ 'legacy-woodev-plugin/legacy-woodev-plugin.php' => [ 'Name' => '<script>alert(1)</script>Legacy' ] ]
+		);
+
+		$added = [];
+		Functions\when( 'add_action' )->alias(
+			static function ( string $hook, $callback ) use ( &$added ): void {
+				$added[] = [ $hook, $callback ];
+			}
+		);
+
+		require __DIR__ . '/../_fixtures/woodev-test-plugin/woodev-test-plugin.php';
+
+		$admin_notice_hooks = array_filter(
+			$added,
+			static function ( array $hook ): bool {
+				return 'admin_notices' === $hook[0];
+			}
+		);
+		$render_callback = $admin_notice_hooks[ array_key_first( $admin_notice_hooks ) ][1];
+		ob_start();
+		$render_callback();
+		$output = (string) ob_get_clean();
+
+		$this->assertStringNotContainsString( '<script>', $output, 'The hostile conflicting-plugin name must be escaped.' );
+		$this->assertStringContainsString( 'alert(1)', $output, 'The escaped name text must still appear.' );
+
+		if ( is_file( $stub_file ) ) {
+			unlink( $stub_file );
+		}
+		foreach ( [ $plugin_dir, dirname( $plugin_dir ), $base ] as $dir ) {
+			if ( is_dir( $dir ) ) {
+				rmdir( $dir );
+			}
+		}
 	}
 
 	/**
