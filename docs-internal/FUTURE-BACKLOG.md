@@ -3,6 +3,42 @@
 > Features and improvements deferred for later versions.
 > Format: what's done | what's missing | why deferred | when to implement
 
+## Operator backlog dump — s13 (2026-06-13)
+
+> Captured verbatim from the operator at the s13 close ("пока помню"). Not yet scoped — convert each to a spec/autodev task when scheduled. None block current work.
+
+### OB-1 — Bootstrap silently yields to a v1-framework plugin (no notice)
+- **Problem:** when a plugin bundling framework **v1** is already installed and wins the class rendezvous, the bootstrap silently gives it load priority and the **v2** plugin does not load — with **no admin notice**. (This is the reverse of the B-1 tombstone case, which only covers "v2 copy wins + a v1 plugin calls `register_plugin()`".)
+- **Wanted:** at minimum show a notice, e.g. "у вас установлен плагин X с версией фреймворка v1, поэтому мы не можем загрузить плагин с версией v2 (Y)." Don't fail silently.
+- **Relates to:** B-1 mixed-fleet armor; `Woodev_Plugin_Bootstrap`/`Framework_Resolver`.
+
+### OB-2 — License page React block is visually broken
+- **Problem:** "Woodev → Лицензии" now renders the new React block (S3.2), but the layout/styling is "криво-косо".
+- **Wanted:** fix the UI/UX of the license card-grid (styling pass). Relates to ADR-007 / S3.2.
+
+### OB-3 — Review `Woodev_Plugin_Updater` (currently a singleton)
+- **Wanted:** code review of `Woodev_Plugin_Updater`; consider folding it into the **Licensing** module (it already depends on `Woodev_Licensing_API` and reads `get_url()`). Decide on the singleton pattern.
+
+### OB-4 — Reusable framework JS should be PHP-based where possible (design principle)
+- **Principle:** scripts that exist for **reuse across plugins** (e.g. the PVZ-map builder for shipping methods) should be designed to be **as PHP-driven as possible** (config/markup from PHP, minimal hand-written JS). **Exception:** fixed, framework-owned admin UI (e.g. the "Woodev → Лицензии" React page) stays React — this principle does NOT apply to those.
+- **Relates to:** PLANS.md §6 UI note (built-in WP/WC React for reactive admin).
+
+### OB-5 — Study the godaddy fork for v2 patterns to borrow
+- Review https://github.com/godaddy-wordpress/wc-plugin-framework for `Traits` / `Enums` / `Abilities` worth adopting in v2. (Also noted in PLANS.md §4 and the program-tracker "Open follow-ups".) Candidate for a GPT-5.x research delegation.
+
+### OB-6 — Dead-file sweep in v2
+- Many files in the v2 tree are effectively unused (loaded nowhere / never referenced). Do a dead-code/dead-file audit and remove them. Pairs well with the trait-extraction + the big array/typing review.
+
+### OB-7 — Modernize "Woodev → Плагины" page (React) + woodev.ru account integration
+- **Now:** the plugins page is badly outdated.
+- **Wanted:** rebuild it in a modern style using built-in **WP React** components. **Future idea:** let the user connect their **woodev.ru account** on this page to see which plugins they already own. Reference UX: WooCommerce extensions screen `/wp-admin/admin.php?page=wc-admin&path=%2Fextensions`.
+
+### OB-8 — Add a "Woodev marketplace" entry on the plugin-install screen
+- WooCommerce adds a "WooCommerce marketplace" tab on `/wp-admin/plugin-install.php` (link `?tab=woo`). Add the equivalent for Woodev — a marketplace tab/link on the Add-Plugins screen.
+
+### OB-9 — Shipping module nuances (many) — discuss separately
+- The operator has many shipping-module (`shipping-method/`) nuances to raise; they will be discussed in a dedicated session. Placeholder so they are not forgotten. Pairs with the deferred edostavka pilot (audit-first).
+
 ## Fable 5 Architecture Review — triaged findings (2026-06-10, s5)
 
 > Source: `docs-internal/reviews/fable5-architecture-review-2026-06-10.md` (single Fable 5 agent, fresh-eyes architecture/direction review). **Operator decision (s5): record now, do not fix now.** Each item carries a trigger-stage; convert to an autodev atomic task when its trigger fires. **Verification:** B-1/B-2/B-3 verified against source this session (file:line in the report); B-4…B-12 are plausible-pending-verification — **re-verify before acting** (never apply an external audit blindly).
