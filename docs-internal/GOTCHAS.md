@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
-> **44 atomic gotchas in 16 namespaces** — update count when adding/removing.
-> Last updated: 2026-06-13 (session 11: 3 gotchas — box-packer interface unwired in includes() (release-blocking WSOD); license-key option double-prefix for woodev-prefixed ids; wp_safe_remote_request blocks the local-rig issuer host+port)
+> **46 atomic gotchas in 16 namespaces** — update count when adding/removing.
+> Last updated: 2026-06-13 (session 12: 2 gotchas — `is_enhanced_admin_available()` returns true unconditionally (guard WC code on the Note class); WC-note breadcrumb survives a single-v2-plugin deactivation only if created AFTER handle_deactivation's source bulk-delete)
 
 ## Index
 
@@ -15,6 +15,7 @@
 - [php/gateway-type-methods-required] Never blanket-ignore `Call to an undefined method` on a class hierarchy — same class of bug as 2026-05-31; audit 2026-06-01 found 3 more surviving instances → [gotchas/gateway-type-methods-required.md](gotchas/gateway-type-methods-required.md) (s3; recurred 2026-05-31; re-audited 2026-06-01)
 - [php/blocks-handler-typed-property-trap] Non-nullable typed return on `get_blocks_handler()` can TypeError for pure-WordPress subclasses (property only initialized in Woocommerce_Plugin) → [gotchas/blocks-handler-typed-property-trap.md](gotchas/blocks-handler-typed-property-trap.md) (2026-06-01)
 - [php/php84-implicit-nullable-payment-handlers] Legacy payment handler files use implicit-nullable `$arg = null` — deprecated PHP 8.4+, hidden by `error_reporting` mask in RealisticPaymentFixtureTest → [gotchas/php84-implicit-nullable-payment-handlers.md](gotchas/php84-implicit-nullable-payment-handlers.md) (2026-06-01)
+- [php/wc-compat] `Woodev_Plugin_Compatibility::is_enhanced_admin_available()` returns `true` UNCONDITIONALLY — it can't gate WC-only code out of the unit suite; guard WC-Admin code on `class_exists('\Automattic\WooCommerce\Admin\Notes\Note')` (checked first, before any mocked accessor) → [gotchas/is-enhanced-admin-available-always-true.md](gotchas/is-enhanced-admin-available-always-true.md) (s12)
 
 ### [deprecation/*] — Deprecation cycle
 - [deprecation/deprecated-which-function] wc_deprecated_function vs _deprecated_function — which to use when → [gotchas/deprecated-which-function.md](gotchas/deprecated-which-function.md) (s2)
@@ -58,6 +59,7 @@
 
 ### [licensing/*] — License/EDD store
 - [licensing/two-layer] `is_need_license()` (Woodev_Plugin, presentation, UNTRUSTED) vs `is_license_required()` (Woodev_Plugins_License, enforcement, server-trusted) — gating a feature/enforcement on the local flag reopens the piracy hole; the local flag renders UI only → [gotchas/license-need-vs-required.md](gotchas/license-need-vs-required.md) (2026-06-10)
+- [licensing/remote-deactivation] A remotely-deactivated single-v2-plugin can't render its own `admin_notices` banner (no framework code loads when inactive); surface it via a WC Admin inbox note created AFTER `deactivate_plugins()`/`handle_deactivation` (which bulk-deletes notes by source) so it survives → [gotchas/wc-note-breadcrumb-survives-deactivation.md](gotchas/wc-note-breadcrumb-survives-deactivation.md) (s12)
 - [licensing/option-keys] License-key option double-prefix for plugin ids starting with `woodev`: `get_plugin_option_name()` always prepends `woodev_`, `Woodev_License` only conditionally → write/read diverge. Real plugin ids unaffected; never name a plugin/fixture id `woodev*` → [gotchas/license-key-option-double-prefix.md](gotchas/license-key-option-double-prefix.md) (s11)
 
 ### [build/*] — Build/CI/release
