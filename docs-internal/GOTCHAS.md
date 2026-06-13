@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
-> **46 atomic gotchas in 16 namespaces** — update count when adding/removing.
-> Last updated: 2026-06-13 (session 12: 2 gotchas — `is_enhanced_admin_available()` returns true unconditionally (guard WC code on the Note class); WC-note breadcrumb survives a single-v2-plugin deactivation only if created AFTER handle_deactivation's source bulk-delete)
+> **45 atomic gotchas in 16 namespaces** — update count when adding/removing.
+> Last updated: 2026-06-13 (session 12: 1 gotcha — `is_enhanced_admin_available()` returns true unconditionally (guard WC code on the Note class). The s12 WC-note breadcrumb that prompted a 2nd gotcha was reverted per operator decision — single-v2-plugin sites intentionally show no banner.)
 
 ## Index
 
@@ -59,7 +59,7 @@
 
 ### [licensing/*] — License/EDD store
 - [licensing/two-layer] `is_need_license()` (Woodev_Plugin, presentation, UNTRUSTED) vs `is_license_required()` (Woodev_Plugins_License, enforcement, server-trusted) — gating a feature/enforcement on the local flag reopens the piracy hole; the local flag renders UI only → [gotchas/license-need-vs-required.md](gotchas/license-need-vs-required.md) (2026-06-10)
-- [licensing/remote-deactivation] A remotely-deactivated single-v2-plugin can't render its own `admin_notices` banner (no framework code loads when inactive); surface it via a WC Admin inbox note created AFTER `deactivate_plugins()`/`handle_deactivation` (which bulk-deletes notes by source) so it survives → [gotchas/wc-note-breadcrumb-survives-deactivation.md](gotchas/wc-note-breadcrumb-survives-deactivation.md) (s12)
+- [licensing/remote-deactivation] A remotely-deactivated single-v2-plugin can't render its own `admin_notices` banner (no framework code loads when inactive) — **accepted, by design** (the kill-switch targets violators; losing the banner on a single-plugin site costs nothing). The banner shows only when another active v2 plugin renders it (≥2 v2 plugins). s12 WC-note breadcrumb was tried then reverted (operator). See SESSION-LOG s12.
 - [licensing/option-keys] License-key option double-prefix for plugin ids starting with `woodev`: `get_plugin_option_name()` always prepends `woodev_`, `Woodev_License` only conditionally → write/read diverge. Real plugin ids unaffected; never name a plugin/fixture id `woodev*` → [gotchas/license-key-option-double-prefix.md](gotchas/license-key-option-double-prefix.md) (s11)
 
 ### [build/*] — Build/CI/release

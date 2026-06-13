@@ -188,7 +188,6 @@ class PlatformNeutralLifecycleTest extends TestCase {
 
 		$plugin = Mockery::mock( \Woodev_Plugin::class );
 		$plugin->shouldReceive( 'get_id' )->andReturn( $id );
-		$plugin->shouldReceive( 'get_id_dasherized' )->andReturn( $id );
 
 		Functions\when( 'get_option' )->alias(
 			static function ( $name, $default = false ) use ( $id ) {
