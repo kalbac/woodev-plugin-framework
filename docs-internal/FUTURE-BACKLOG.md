@@ -24,6 +24,16 @@
 | **B-11** data-contract enforcement at rewrite time is prose, not machine | Medium | **first real plugin migration** | Convert that plugin's checklist into an executable contract test in its repo (assert exact option keys / method ids / cron hooks / meta prefixes — `YandexPilotFixtureTest` is the template); "contract test green" becomes migration definition-of-done. One-time template, reused ~12×. |
 | **B-12** `is_active()` returns true with no license data | Low | ✅ **DONE s8 (PR #31, 2026-06-11)** | Docblock on `Woodev_Plugins_License::is_active()` now names the three distinct "true" meanings (genuinely-active vs not-known-bad vs license-free); behavior unchanged (s6-p1). |
 
+## Remote-deactivation UX findings (operator manual run, s11, 2026-06-13)
+
+> Source: `docs-internal/reviews/remote-deactivation-ux-findings-2026-06-13.md`. The happy path is proven; these are lifecycle/UX gaps. **Operator decision (s11): fix next session (s12), before edostavka.** None block prod (no prod plugin on v2 yet).
+
+| ID | Sev | Trigger-stage | Action when triggered |
+|----|-----|---------------|------------------------|
+| **B-13** remote-deactivation notice not cleared on plugin (re)activation | Medium | **s12** | Framework: on plugin activation, remove the plugin's entry from `woodev_license_remote_deactivation_notices` so a re-enabled plugin doesn't show a stale "you were disabled" notice. |
+| **B-14** a remotely-deactivated single-v2-plugin site can't render its own notice | Medium | **s12 (design)** | Framework: `render_remote_deactivation_notices()` only runs via an ACTIVE engine; the deactivated plugin can't render its own. Pick a design — render from bootstrap/any loaded copy independent of plugin state, OR a core-surfaced breadcrumb, OR accept sibling-render-only. Operator decision needed. |
+| **B-15** issuer metabox button stuck on «Отменить»; can't re-deactivate | Medium | **s12** | Deactivator (woodev_theme): clarify «Отменить» semantics for an already-delivered command; ensure re-deactivation is possible after a completed cycle + client reactivation. (Part of the "stuck" was a rig-only missing-ack — ack is synchronous in prod push.) |
+
 ## Technical Debt
 
 ### Big consistency review: @since annotations + long array() syntax (operator request, 12.06.2026)
