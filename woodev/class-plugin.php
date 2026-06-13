@@ -12,12 +12,12 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 	 * plugin.  This class handles all the "non-feature" support tasks such
 	 * as verifying dependencies are met, loading the text domain, etc.
 	 *
-	 * @version 2.0.0
+	 * @version 2.0.1
 	 */
 	abstract class Woodev_Plugin {
 
 		/** Plugin Framework Version */
-		const VERSION = '2.0.0';
+		const VERSION = '2.0.1';
 
 		/** @var object single instance of plugin */
 		protected static $instance;
@@ -477,6 +477,7 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 			// Packer base
 			require_once $framework_path . '/box-packer/class-packer-exception.php';
 			require_once $framework_path . '/box-packer/interfaces/interface-packer-item.php';
+			require_once $framework_path . '/box-packer/interfaces/interface-packer-item-with-product.php';
 			require_once $framework_path . '/box-packer/interfaces/interface-packer-box.php';
 			require_once $framework_path . '/box-packer/interfaces/interface-packer.php';
 
