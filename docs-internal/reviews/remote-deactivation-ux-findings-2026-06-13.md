@@ -1,5 +1,7 @@
 # Remote-deactivation UX findings (operator manual run, s11, 2026-06-13)
 
+> **RESOLVED in s12 (2026-06-13).** A — `handle_activation()` clears the option entry + WC note on reactivation. B — operator picked WC Admin Notes: the deactivate command writes a WC inbox breadcrumb (rendered by WooCommerce independent of the plugin's state) AFTER `handle_deactivation`'s source bulk-delete so it survives; additive to the banner (sole-channel decision deferred). C — was a pull-only rig artifact; real fix = «Отменить»(queued) vs «Снять с доставки»(delivered) wording, and re-deactivation-after-terminal verified. Framework PR #44 (`21bb436`); deactivator local `28af8b9`. Rig-verified vs real WC 10.8.1. See SESSION-LOG s12.
+
 Found during the operator's manual run on the local two-stack rig (issuer
 woodev_theme :8090, stand framework :8888). The **happy path works** (issue →
 deliver → execute → ack → replay-reject, both channels — see SESSION-LOG s11),
