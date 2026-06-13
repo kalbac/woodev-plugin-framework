@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
-> **45 atomic gotchas in 16 namespaces** — update count when adding/removing.
-> Last updated: 2026-06-13 (session 12: 1 gotcha — `is_enhanced_admin_available()` returns true unconditionally (guard WC code on the Note class). The s12 WC-note breadcrumb that prompted a 2nd gotcha was reverted per operator decision — single-v2-plugin sites intentionally show no banner.)
+> **46 atomic gotchas in 16 namespaces** — update count when adding/removing.
+> Last updated: 2026-06-13 (session 13 docs audit: corrected the count 45→46 to match the actual files in `gotchas/`; no gotcha content changed. s12 added `is-enhanced-admin-available-always-true` — guard WC code on the Note class; the s12 WC-note breadcrumb that would have prompted a 2nd gotcha was reverted per operator decision.)
 
 ## Index
 

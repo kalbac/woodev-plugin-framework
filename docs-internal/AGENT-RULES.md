@@ -74,22 +74,15 @@ ci: add php 8.3 to test matrix
 
 ## Architecture Rules
 
-### Rule 0 — Backward Compatibility (CRITICAL)
-**NEVER break public APIs.** This framework is used by 10+ dependent plugins. Breaking changes affect all of them.
+### Rule 0 — Backward Compatibility: clean-break policy (CRITICAL)
+> Policy set 2026-06-03 (direction audit D-2, ADR-005). **Supersedes the prior "deprecation cycle for everything" rule.** Two different rules apply depending on what you change. Full policy: `CLAUDE.md` → "Backward Compatibility — clean-break policy"; ADR: `adr/005-platform-v2-clean-break-policy.md`.
 
-- **NEVER** delete or rename public methods/classes without a deprecation cycle
-- **ALWAYS** add `@deprecated` annotation and call `_deprecated_function()` inside deprecated methods
-- Deprecation cycle: minimum one full version before removal
-- Breaking changes require major version bump (semver)
-- Use `class_alias`, wrapper methods, or deprecation shims where needed
+- **Internal code — FREE TO BREAK on the v2 line:** class names, method signatures, the plugin entry/registration shape, namespacing, file layout. Do **NOT** add `@deprecated` shims, `class_alias` files, or `_deprecated_function()` wrappers for moved/renamed internal APIs — delete existing ones (clean-break Phase 3 already removed them).
+- **Installed-site data contracts — RELEASE-BLOCKING, never break:** option keys & settings arrays, license key option names + activation state + instance IDs, updater identity, WC payment-gateway IDs, WC shipping-method IDs + instance setting keys, public action/filter hook names, scheduled cron hooks + recurrence + payload shape, custom DB tables/schemas, REST route namespaces, AJAX action names, admin page slugs, log source names, background-job IDs, order/session meta keys. Preserve these byte-for-byte.
 
-```php
-/** @deprecated 2.0.0 Use new_method() instead. */
-public function old_method(): void {
-    _deprecated_function( __METHOD__, '2.0.0', __CLASS__ . '::new_method()' );
-    $this->new_method();
-}
-```
+When a plugin is migrated onto v2, enforce the "never break" list via its `docs-internal/migration/<plugin>-data-preservation-checklist.md` — verified at rewrite time, per plugin.
+
+The remaining legitimate `_deprecated_function()`/`_doing_it_wrong()` calls are misuse-markers and clone/wakeup guards, **not** internal-API move-shims — those are allowed.
 
 ### Rule 1 — OOP Only
 No standalone functions outside bootstrap. Everything is a class method.

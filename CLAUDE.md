@@ -266,6 +266,6 @@ When you discover important project rules, conventions, or patterns during your 
 
 ## Known Technical Debt
 
-- 50+ PHPStan baseline ignores (see `phpstan-baseline.neon`)
-- Internal-API back-compat scaffolding (2 `class_alias` files, ~10 `_deprecated_function` shims, the legacy positional registration path) is being **deleted** on `refactor/platform-v2-clean-break` per the clean-break policy — see `docs-internal/platform-v2-cleanbreak-plan.md` Phase 3.
-- `class-payment-gateway.php` (~2,378 lines) — candidate for trait extraction (post-split debt)
+- PHPStan level 3, **no baseline** — `phpstan-baseline.neon` was removed; the 50+ legacy ignores were fixed/typed (s3). Do not reintroduce a baseline; fix errors at source.
+- Internal-API back-compat scaffolding (the 2 `class_alias` files, the `_deprecated_function` move-shims, the legacy positional registration path) has been **deleted** — clean-break Phase 3 complete + merged to `main` (2026-06-04). Only 3 legitimate `_deprecated_function` misuse-markers remain (`api/class-api-base.php`, `class-lifecycle.php`, `payment-gateway/payment-tokens/class-payment-gateway-payment-token.php`); `Woodev_Plugin_Bootstrap::register_plugin()` survives only as a B-1 mixed-fleet **tombstone** (quarantines legacy v1 callers, never registers).
+- `class-payment-gateway.php` (~3,542 lines) — candidate for trait extraction (post-split debt). The whole `woodev/payment-gateway/` tree is ~13.8k lines.

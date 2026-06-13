@@ -124,7 +124,7 @@ woodev_framework/
 │   ├── compatibility/               # HPOS + WooCommerce compat
 │   ├── handlers/                    # Blocks + script handlers
 │   ├── licensing/                   # License key + EDD store integration
-│   ├── payment-gateway/             # Payment gateway base classes (~3900 lines)
+│   ├── payment-gateway/             # Payment gateway base classes (~13.8k lines; main file ~3,542)
 │   ├── plugin-updater/              # Plugin update mechanism
 │   ├── rest-api/                    # REST API routes
 │   ├── settings-api/                # Typed settings framework
@@ -280,7 +280,7 @@ Full details + code examples in `docs-internal/gotchas/`. Scan `docs-internal/GO
 
 Run review before committing when changes touch:
 - `woodev/class-plugin.php` or `woodev/bootstrap.php` (core architecture)
-- `woodev/payment-gateway/` (high complexity, ~3900 lines in main file)
+- `woodev/payment-gateway/` (high complexity, ~3,542 lines in main file)
 - Public API surface (new/changed public methods, new classes)
 - Deprecation/removal of existing functionality
 - Changes spanning 3+ files
