@@ -145,20 +145,13 @@ if ( ! class_exists( 'Woodev_Admin_Pages' ) ) :
 			);
 		}
 
-		/**
-		 * Renders the license page mount point for the React app.
-		 *
-		 * The legacy Settings-API form and its section/field registration were
-		 * removed in 2.0.0 (clean-break, ADR-005). The React license-page app
-		 * (s6-p4) mounted here replaces the form.
-		 *
-		 * @since 2.0.0
-		 *
-		 * @return void
-		 */
 		public function license_page(): void {
+			echo '<div class="wrap woodev-licenses-wrap">';
+			echo '<h1 class="wp-heading-inline">' . esc_html__( 'Лицензии Woodev', 'woodev-plugin-framework' ) . '</h1>';
+			echo '<hr class="wp-header-end">';
 			echo '<div id="woodev-licenses-app"></div>';
 			$this->get_settings_section();
+			echo '</div>';
 		}
 
 		private function get_settings_section() {

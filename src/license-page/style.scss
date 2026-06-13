@@ -1,5 +1,9 @@
 // License page layout and status badge styles.
 // @wordpress/components handles Card, Notice, Button etc. — no re-styling here.
+//
+// NOTE: this bundle (style-index.css) is enqueued on the whole license page, so it
+// also styles the server-rendered quick-links section below the React app
+// (woodev/admin/pages/views/html-settings-section.php) — see .woodev-settings-documentation.
 
 .woodev-licenses-intro {
 	margin-bottom: 16px;
@@ -10,6 +14,7 @@
 	display: grid;
 	gap: 16px;
 	grid-template-columns: repeat( auto-fill, minmax( 360px, 1fr ) );
+	align-items: start; // cards size to their own content instead of stretching to the tallest in the row
 }
 
 // Status badge pill — colored by message_variant.
@@ -66,5 +71,87 @@
 		width: 18px;
 		height: 18px;
 		font-size: 18px;
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Quick-links section (Shop / Docs / Support / Telegram).
+//
+// Rendered server-side by html-settings-section.php below the React app. Its
+// stylesheet (the legacy woodev-license-page.css) was never enqueued on the v2
+// React page, so these blocks used to render unstyled. The styles now live here
+// in the page bundle, modernised to the WP-admin palette and made responsive
+// (the legacy version was a fixed 4-column flex with an off-theme gradient).
+// ---------------------------------------------------------------------------
+
+.woodev-settings-documentation {
+	margin-top: 24px;
+
+	.woodev-settings-row {
+		display: grid;
+		gap: 16px;
+		grid-template-columns: repeat( auto-fill, minmax( 240px, 1fr ) );
+	}
+
+	.woodev-admin-block {
+		display: flex;
+		flex-direction: column;
+		padding: 20px;
+		background: #fff;
+		border: 1px solid #dcdcde; // WP admin border grey
+		border-radius: 4px;
+
+		.header {
+			display: flex;
+			align-items: center;
+			gap: 8px;
+			margin-bottom: 8px;
+
+			.dashicons {
+				width: 22px;
+				height: 22px;
+				font-size: 22px;
+				color: #2271b1; // WP admin blue
+			}
+
+			h4 {
+				margin: 0;
+				font-size: 14px;
+				line-height: 1.4;
+			}
+		}
+
+		.content {
+			display: flex;
+			flex: 1;
+			flex-direction: column;
+			justify-content: space-between;
+
+			p {
+				margin-top: 0;
+				color: #50575e;
+			}
+
+			.button-link {
+				margin-top: 12px;
+
+				> a {
+					display: inline-block;
+					padding: 6px 14px;
+					border: 1px solid #2271b1;
+					border-radius: 3px;
+					color: #2271b1;
+					font-weight: 500;
+					text-decoration: none;
+					transition: background-color 0.15s ease, color 0.15s ease;
+
+					&:hover,
+					&:focus {
+						background-color: #2271b1;
+						color: #fff;
+					}
+				}
+			}
+		}
 	}
 }

@@ -12,6 +12,10 @@
 *.md text eol=lf
 *.txt text eol=lf
 
+# Built front-end assets — enforce LF so a Windows rebuild matches the
+# Linux CI build-parity check byte-for-byte.
+woodev/assets/build/** text eol=lf
+
 # Binary files — no conversion
 *.png binary
 *.jpg binary
