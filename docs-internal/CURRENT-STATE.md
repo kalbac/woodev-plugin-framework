@@ -1,7 +1,7 @@
 # Current State — Woodev Plugin Framework
 
 > Lean state doc: phase status, open bugs, next actions. **Full session history → `SESSION-LOG.md`** (newest on top). Program-level status → `platform-v2-program-tracker.md`.
-> Last updated: 2026-06-13 (session 13 — framework grooming: docs audit).
+> Last updated: 2026-06-13 (session 13 — framework grooming: docs audit + licensing-api base-URL consolidation, PR #48 merged `b8bffed`; operator backlog dump OB-1..9 captured in FUTURE-BACKLOG).
 
 ## Last session context (≤3 lines)
 
@@ -47,16 +47,16 @@
 - [⚠️] `class-payment-gateway.php` ~3,542 lines — trait-extraction candidate (grooming, s13; → `FUTURE-BACKLOG`).
 - **All earlier release-blocker findings RESOLVED** (2026-06-01 audit, PHPStan masks, base-class leaks, eCheck/ACH removal, payment-gateway base-method regression, etc.) — see `SESSION-LOG.md` + git history. Not repeated here.
 
-### Public-docs API staleness (found in s13 audit — needs a decision)
+### Public-docs API staleness — DEFERRED (operator decision, s13)
 
-- `docs/` (GH Pages) registration examples still teach the **v1 `register_plugin( '1.4.0', ... )` positional API**, which in v2 is a **tombstone** (quarantines the caller, never registers). The live API is `register_loader_definition([...])`. Examples also hardcode `'1.4.0'`/`VERSION='1.4.1'` instead of the `%%FRAMEWORK_VERSION%%` placeholder / `2.0.1`. Affected: `getting-started.md`, `core-framework.md`, `payment-gateway.md`, `shipping-method.md`, `README.md`. **This is its own task (public-facing, verify the loader-definition schema against code before rewriting) — not folded into the docs audit.**
+- `docs/` (GH Pages) registration examples still teach the **v1 `register_plugin( '1.4.0', ... )` positional API**, which in v2 is a **tombstone** (quarantines the caller, never registers). The live API is `register_loader_definition([...])`. Examples also hardcode `'1.4.0'`/`VERSION='1.4.1'` instead of the `%%FRAMEWORK_VERSION%%` placeholder / `2.0.1`. Affected: `getting-started.md`, `core-framework.md`, `payment-gateway.md`, `shipping-method.md`, `README.md`.
+- **Operator decision (s13): do NOT touch public docs yet** — he is currently the only consumer of the framework; the public docs get rewritten once everything is fully ready. Recorded so it is not mistaken for an oversight.
 
-## Next Actions (s13 grooming — priority order)
+## Next Actions
 
-1. ✅ **Docs audit** (this session) — fix stale facts (PG line count, PHPStan baseline, clean-break shims), trim this file, archive passed-gate review packets, reconcile AGENT-RULES Rule 0 to ADR-005, fix GOTCHAS count, refresh DOCS-INDEX.
-2. **Finish the `licensing-api` WIP** (operator-started, manual): consolidate to the single `woodev_license_base_url` filter in `class-licensing-api.php` (drop the duplicate `woodev_licensing_api_url` in `class-plugin-license.php`) + the type-hardening; `composer check`; commit.
-3. **Deferred — dedicated big review session:** `array()`→`[]` (~797 sites in `woodev/`) + **type declarations everywhere** (missing across legacy + new) + `@since` sweep vs git history + enforce `Generic.Arrays.DisallowLongArraySyntax` in phpcs.
-4. **Backlog (triggered later):** payment-gateway trait extraction (autodev-loop); B-2 loader-protocol forward-tolerance (before S4/EDD).
+- ✅ **s13 done (PR #48 merged `b8bffed`):** docs audit + `licensing-api` consolidation (single `woodev_license_base_url` filter, type-hardening). Public docs deferred (see above).
+- 📥 **Operator backlog dump (s13)** → `FUTURE-BACKLOG.md` → "Operator backlog dump — s13": OB-1 bootstrap silent v1-yield notice · OB-2 license React UI broken · OB-3 updater review/fold into Licensing · OB-4 reusable-JS-php-based principle · OB-5 godaddy fork study · OB-6 dead-file sweep · OB-7 modernize Plugins page (React + woodev.ru account) · OB-8 marketplace tab on plugin-install · OB-9 shipping nuances (separate session).
+- **Next grooming candidates (operator-scheduled, not solo):** payment-gateway trait extraction (autodev-loop); the big review #4 — `array()`→`[]` (~797) + type declarations everywhere + `@since` sweep + enforce `Generic.Arrays.DisallowLongArraySyntax`. OB-6 dead-file sweep pairs well with either. B-2 loader-protocol forward-tolerance before S4/EDD.
 
 ## 🔔 Cross-Project Reminder — Ecosystem Orchestration (dormant)
 
