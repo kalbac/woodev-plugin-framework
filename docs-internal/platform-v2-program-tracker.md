@@ -3,7 +3,7 @@
 > Sweep-across-the-whole-program status. Any session reads this first (per execution-protocol §0) to learn where we are. Update the "Next action" + statuses as work lands.
 
 **Branch:** `main` (S3.3 merged; next work branches off fresh `main`) · **Baselines:** `platform-v2-pivot-baseline`, `platform-v2-pre-refactor`
-**Last updated:** 2026-06-11 (session 9 — S3.3 webhooks + §4 Ed25519 signing **PR #35 MERGED** `a9c0c14`; all GH Actions green)
+**Last updated:** 2026-06-13 (session 13 docs audit — fact-fixes only; PG main-file line count corrected). Post-S3 (s10–s12): remote-deactivation command cycle proven live on both channels (push prod + pull rig) and the 3 UX gaps (B-13/14/15) resolved + rig-verified vs real WC 10.8.1 — see SESSION-LOG. **v2.0.1 is in code but NOT released** (operator: do not bump VERSION per-change). s13 = framework grooming (edostavka pilot deferred).
 
 ## Next action
 🏁 **S0 + S1 + S2 COMPLETE — all merged to `main`.** S1 shipping (PR #20), S2 box-packer (PR #21) + dispatcher production wiring & warehouse REST redesign (PR #22), packing woven into the rate-calc single-seam template (s3), and a shipping-module conformance audit vs the Capability-Gated Feature Seam pattern + `supports_*()` predicate alignment (s4, PR #24 `033368c`).
@@ -53,7 +53,7 @@
 - **Autodev model re-tiering (operator decision s5):** orchestrator = **Fable 5 high**; workers/executors = **Haiku / Sonnet 4.6 / Opus 4.8** by task complexity; critic = **GPT-5.5 high** (later 5.6). Orchestrator prompt: `docs-internal/fable5-autodev-orchestrator-prompt.md`. Next autodev runs use this tiering.
 
 ## Open follow-ups (out of current scope)
-- `class-payment-gateway.php` (~2,378 lines) trait extraction — post-split debt.
+- `class-payment-gateway.php` (~3,542 lines) trait extraction — post-split debt (grooming candidate, s13).
 - godaddy-fork study (Traits/Enums/Abilities, PLANS.md §4) — candidate GPT-5.5 research delegation before S1.
 - **Test-scaffold duplication** (P2 code-review minor): `EdostavkaPilotFixtureTest` and `RealisticShippingFixtureTest` share a near-identical testable-resolver subclass + WP-stub helper. When a 3rd such fixture lands, extract a shared trait/base under `tests/unit/` instead of copying again.
 - **i18n stale markers** (P3): `woodev/languages/*.po`/`*.pot` still reference the deleted `class-plugin-license-settings.php` line markers. Cosmetic (generated artifacts); regenerate via the i18n build at a convenient point.

@@ -1,4 +1,14 @@
 
+## Session 13 (2026-06-13) — framework grooming kickoff + comprehensive docs audit
+
+- **Operator scope (s13):** framework grooming; edostavka pilot DEFERRED ("too early"). Started by reconciling the docs against code reality, then will finish the operator's manual `licensing-api` WIP.
+- **Code reality vs docs — 3 contradictions found & fixed everywhere:** (1) `class-payment-gateway.php` is **3,542 lines**, not 2,378 (CLAUDE.md, AGENTS.md ×2, CURRENT-STATE, program-tracker, FUTURE-BACKLOG). (2) `phpstan-baseline.neon` **does not exist** — the "50+ baseline ignores" debt was resolved in s3; marked accordingly + "do not reintroduce". (3) Clean-break Phase 3 shim deletion is **DONE/merged** (zero `class_alias`/legacy-registration residue; only 3 legit `_deprecated_function` misuse-markers remain; `register_plugin()` survives only as the B-1 tombstone) — CLAUDE.md "Known Technical Debt" + AGENT-RULES Rule 0 were still mandating the old strict-deprecation cycle.
+- **CURRENT-STATE.md trimmed** from ~72 KB of inline session digests + resolved-history tables down to a lean state doc (phase status, open bugs, next actions, cross-project reminder, infra). All removed detail is already in this SESSION-LOG.
+- **Archived** (→ `archive/`, zero active inbound links): the 6 passed-gate review packets (p2/p3/p4/p6 audit packets, s1-holistic-integration-review, shipping-pattern-conformance-audit). **Deleted** `next-session-prompt.md` (transient, tasks extracted). Phase6a drafts + epic1-spec kept in place (still cited by active analysis docs).
+- **AGENT-RULES.md Rule 0** reconciled to the clean-break policy (ADR-005). **GOTCHAS.md** count 45→46 (matched actual files; agent verified all 46 indexed + all have `## Related`). **DOCS-INDEX.md** refreshed (was 2026-05-30, missing the live `program-tracker.md`/`execution-protocol.md`; promoted archive-candidates) → now points to live docs first, lists archive + historical-reference groups.
+- **Found, NOT fixed (own task, needs operator decision):** public `docs/` (GH Pages) registration examples still teach the v2-**tombstoned** `register_plugin('1.4.0', …)` positional API (live API is `register_loader_definition([...])`) + hardcode `1.4.0`/`1.4.1` instead of `%%FRAMEWORK_VERSION%%`. Recorded in CURRENT-STATE.
+- No code changed in this audit; commit is docs-only.
+
 ## Session 12 (2026-06-13) — remote-deactivation UX hardening (B-13/14/15 → all 3 resolved); framework PR #44 merged
 
 > Mission from `next-session-prompt.md` (s11): fix the 3 remote-deactivation UX gaps the operator found in the s11 manual run (findings doc `reviews/remote-deactivation-ux-findings-2026-06-13.md`). All three resolved + verified on the reused two-stack rig against real WooCommerce 10.8.1.

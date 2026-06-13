@@ -7,7 +7,7 @@ if ( ! class_exists( 'Woodev_Licensing_API' ) ) :
 	class Woodev_Licensing_API extends Woodev_API_Base {
 
 		/** @var Woodev_Plugin */
-		private $plugin;
+		private Woodev_Plugin $plugin;
 
 		/**
 		 * The Software Licensing API URL.
@@ -16,9 +16,9 @@ if ( ! class_exists( 'Woodev_Licensing_API' ) ) :
 		 *
 		 * @var string
 		 */
-		private $api_url = 'https://woodev.ru/';
+		private string $api_url = 'https://woodev.ru/';
 
-		public function __construct( Woodev_Plugin $plugin, $api_url = false ) {
+		public function __construct( Woodev_Plugin $plugin, string $api_url = '' ) {
 
 			if ( self::is_valid_url( $api_url ) ) {
 				$this->api_url = $api_url;
@@ -50,7 +50,7 @@ if ( ! class_exists( 'Woodev_Licensing_API' ) ) :
 		 *
 		 * @return bool
 		 */
-		public function is_debug_enabled() {
+		public function is_debug_enabled(): bool {
 			return apply_filters( 'woodev_enable_license_logging', defined( 'WOODEV_LICENSE_DEBUG' ) && WOODEV_LICENSE_DEBUG );
 		}
 
@@ -61,18 +61,34 @@ if ( ! class_exists( 'Woodev_Licensing_API' ) ) :
 		 *
 		 * @return array
 		 */
-		protected function http_request_args( $args ) {
+		protected function http_request_args( array $args ): array {
 			return $args;
 		}
 
 		/**
-		 * Gets the API URL.
+		 * Gets the API base URL.
+		 *
+		 * The single override point for the licensing endpoint: filter
+		 * `woodev_license_base_url` to point licensing requests (and the updater,
+		 * which reads this method) at a self-hosted, staging, or local test store.
+		 * The constructor's default is the built-in production endpoint
+		 * (https://woodev.ru/); a constructor-supplied URL is honored only when
+		 * syntactically valid (see {@see self::is_valid_url()}).
 		 *
 		 * @since 1.2.1
+		 *
 		 * @return string
 		 */
-		public function get_url() {
-			return $this->api_url;
+		public function get_url(): string {
+			/**
+			 * Filters the licensing API base URL.
+			 *
+			 * @since 2.0.2
+			 *
+			 * @param string        $api_url The current API base URL.
+			 * @param Woodev_Plugin $plugin  The plugin instance.
+			 */
+			return apply_filters( 'woodev_license_base_url', $this->api_url, $this->get_plugin() );
 		}
 
 		/**
@@ -81,7 +97,7 @@ if ( ! class_exists( 'Woodev_Licensing_API' ) ) :
 		 * @param mixed $url URL to validate.
 		 * @return bool
 		 */
-		private static function is_valid_url( $url ) {
+		private static function is_valid_url( $url ): bool {
 
 			if ( ! is_string( $url ) ) {
 				return false;
@@ -108,7 +124,7 @@ if ( ! class_exists( 'Woodev_Licensing_API' ) ) :
 		 * @throws Woodev_API_Exception
 		 * @throws Woodev_Plugin_Exception
 		 */
-		public function make_request( array $api_params = array() ) {
+		public function make_request( array $api_params = [] ) {
 
 			$request = $this->get_new_request();
 			$request->get_license( $this->get_body( $api_params ) );
@@ -171,7 +187,7 @@ if ( ! class_exists( 'Woodev_Licensing_API' ) ) :
 		 * @return Woodev_Licensing_API_Request the request object
 		 * @see   Woodev_API_Base::get_new_request()
 		 */
-		protected function get_new_request( $args = array() ) {
+		protected function get_new_request( $args = [] ) {
 			return new Woodev_Licensing_API_Request();
 		}
 
@@ -181,7 +197,7 @@ if ( ! class_exists( 'Woodev_Licensing_API' ) ) :
 		 * @since 2.2.0
 		 * @return Woodev_Plugin
 		 */
-		protected function get_plugin() {
+		protected function get_plugin(): Woodev_Plugin {
 			return $this->plugin;
 		}
 	}

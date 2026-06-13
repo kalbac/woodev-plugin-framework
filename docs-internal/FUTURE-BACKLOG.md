@@ -26,7 +26,7 @@
 
 ## Remote-deactivation UX findings (operator manual run, s11, 2026-06-13)
 
-> Source: `docs-internal/reviews/remote-deactivation-ux-findings-2026-06-13.md`. The happy path is proven; these are lifecycle/UX gaps. **Operator decision (s11): fix next session (s12), before edostavka.** None block prod (no prod plugin on v2 yet).
+> Source: `docs-internal/reviews/remote-deactivation-ux-findings-2026-06-13.md`. The happy path is proven; these were lifecycle/UX gaps. **✅ ALL THREE RESOLVED in s12 (rig-verified vs real WC 10.8.1):** B-13 — `Woodev_Lifecycle::handle_activation()` clears the stale notice option entry on reactivation (KEPT). B-14 — WC Admin Notes breadcrumb was tried then **reverted per operator** (PR #46): a single-v2-plugin site intentionally shows NO banner (kill-switch targets violators); banner shows only with ≥2 active v2 plugins. B-15 — deactivator «Отменить»→«Снять с доставки» wording by delivery state + re-deactivation-after-terminal verified. None blocked prod.
 
 | ID | Sev | Trigger-stage | Action when triggered |
 |----|-----|---------------|------------------------|
@@ -50,23 +50,17 @@
   makes the fix one `composer phpcbf` run plus a docblock sweep.
 - **When:** operator-scheduled "большое ревью" session (after the deactivator deployment).
 
-### PHPStan Baseline Cleanup
-- **What's done:** 50+ errors baselined in phpstan-baseline.neon
-- **What's missing:** Fix or properly type-annotate each ignored error
-- **Why deferred:** Non-blocking; baseline errors are existing patterns, not regressions
-- **When:** Gradually, during normal development
+### PHPStan Baseline Cleanup — ✅ RESOLVED (s3)
+- **Outcome:** the 50+ baselined errors were fixed/typed; `phpstan-baseline.neon` was **removed**. PHPStan runs at level 3 with no baseline. **Do not reintroduce a baseline** — fix errors at source.
 
-### Deprecated Methods Removal (v2.0.0)
-- **What's done:** 11 methods deprecated in Woodev_Plugin, `_deprecated_function()` called
-- **What's missing:** Remove the deprecated methods after deprecation cycle
-- **Why deferred:** Backward compatibility — 10+ dependent plugins need migration time
-- **When:** v2.0.0 (next major version)
+### Deprecated Methods Removal — ✅ DONE (clean-break Phase 3, 2026-06-04)
+- **Outcome:** the internal-API deprecation shims, the 2 `class_alias` files, and the legacy positional registration path were deleted (merged to `main`). Only 3 legitimate `_deprecated_function()` misuse-markers remain (api-base, lifecycle, payment-token); `register_plugin()` survives only as a B-1 mixed-fleet tombstone. Clean-break policy: ADR-005.
 
-### Payment Gateway Trait Extraction
-- **What's done:** class-payment-gateway.php works correctly
-- **What's missing:** File is ~3900 lines — extract logical groups into traits
-- **Why deferred:** Functional priority over code organization
-- **When:** During payment-gateway refactoring cycle
+### Payment Gateway Trait Extraction — OPEN (grooming candidate, s13)
+- **What's done:** `class-payment-gateway.php` works correctly.
+- **What's missing:** main file is ~3,542 lines (whole `payment-gateway/` tree ~13.8k) — extract cohesive method groups (Refunds / Voids / Tokenization / Capture-Authorization / Customer-ID / Card-Types / CSC / Environments / Debug / Order-Meta / Settings) into PHP traits. Pure physical reorganization — no public signature/hook/contract change.
+- **Why deferred:** large; functional priority over code organization. Run via the autodev-loop with a Codex critic.
+- **When:** dedicated grooming session (operator-scheduled).
 
 ## Maintenance & Cleanup (v2.0.0)
 
