@@ -68,6 +68,57 @@ function woodev_test_plugin_loader_definition(): array {
 }
 
 /**
+ * Best-effort resolves the display name of the plugin whose outdated (v1) framework
+ * copy won the Woodev_Plugin_Bootstrap class rendezvous (B-1 / OB-1).
+ *
+ * Runs only on the mixed-fleet dormant path, so it relies on WordPress core +
+ * reflection alone and never references a framework class — the loaded runtime is the
+ * legacy v1 copy. Returns '' when the owner cannot be determined; the caller then
+ * falls back to generic wording.
+ *
+ * @return string Conflicting plugin display name, or '' if undeterminable.
+ */
+function woodev_test_plugin_conflicting_framework_plugin_name(): string {
+	if ( ! class_exists( 'Woodev_Plugin_Bootstrap', false ) || ! defined( 'WP_PLUGIN_DIR' ) || ! function_exists( 'wp_normalize_path' ) || ! function_exists( 'get_plugins' ) ) {
+		return '';
+	}
+
+	try {
+		$framework_file = ( new ReflectionClass( 'Woodev_Plugin_Bootstrap' ) )->getFileName();
+	} catch ( ReflectionException $e ) {
+		return '';
+	}
+
+	$plugins_dir = constant( 'WP_PLUGIN_DIR' );
+
+	if ( ! is_string( $framework_file ) || '' === $framework_file || ! is_string( $plugins_dir ) || '' === $plugins_dir ) {
+		return '';
+	}
+
+	$framework_file = wp_normalize_path( $framework_file );
+	$plugins_dir    = wp_normalize_path( $plugins_dir );
+
+	if ( 0 !== strpos( $framework_file, $plugins_dir . '/' ) ) {
+		return '';
+	}
+
+	$relative = ltrim( substr( $framework_file, strlen( $plugins_dir ) ), '/' );
+	$slug     = strstr( $relative . '/', '/', true );
+
+	if ( ! is_string( $slug ) || '' === $slug ) {
+		return '';
+	}
+
+	foreach ( get_plugins() as $plugin_file => $plugin_data ) {
+		if ( 0 === strpos( (string) $plugin_file, $slug . '/' ) && ! empty( $plugin_data['Name'] ) ) {
+			return (string) $plugin_data['Name'];
+		}
+	}
+
+	return '';
+}
+
+/**
  * Регистрируем тестовый плагин в бутстрапе фреймворка.
  *
  * Mixed-fleet probe (B-1): на сайте, где соседствуют v2-переписанный и ещё-v1 плагин,
@@ -81,15 +132,30 @@ if ( ! method_exists( $woodev_test_plugin_bootstrap, 'register_loader_definition
 	add_action(
 		'admin_notices',
 		static function (): void {
+			$this_plugin_name = esc_html__( 'Woodev Framework Test Plugin', 'woodev-plugin-framework' );
+
+			// Best-effort: name the plugin whose outdated (v1) framework copy won the class
+			// rendezvous. Uses ONLY WordPress core + reflection — never a framework class,
+			// because here the loaded framework runtime is the legacy v1 copy (B-1 / OB-1).
+			$conflicting_plugin_name = woodev_test_plugin_conflicting_framework_plugin_name();
+
+			if ( '' !== $conflicting_plugin_name ) {
+				$message = sprintf(
+					/* translators: 1: this plugin name, 2: the conflicting plugin name. */
+					esc_html__( 'Плагин %1$s не запущен: на сайте активен плагин %2$s с устаревшей версией фреймворка Woodev, которая мешает его загрузке. Обновите плагин %2$s до последней версии.', 'woodev-plugin-framework' ),
+					'<strong>' . $this_plugin_name . '</strong>',
+					'<strong>' . esc_html( $conflicting_plugin_name ) . '</strong>'
+				);
+			} else {
+				$message = sprintf(
+					/* translators: %s — this plugin name. */
+					esc_html__( 'Плагин %s не запущен: на сайте активен другой плагин Woodev с устаревшей версией фреймворка. Обновите все плагины Woodev до последней версии.', 'woodev-plugin-framework' ),
+					'<strong>' . $this_plugin_name . '</strong>'
+				);
+			}
+
 			echo '<div class="error"><p>';
-			echo wp_kses(
-				sprintf(
-					/* translators: %s — plugin name. */
-					esc_html__( 'Плагин %s не запущен: загруженная версия фреймворка устарела. Обновите плагин или фреймворк.', 'woodev-plugin-framework' ),
-					'<strong>' . esc_html__( 'Woodev Framework Test Plugin', 'woodev-plugin-framework' ) . '</strong>'
-				),
-				[ 'strong' => [] ]
-			);
+			echo wp_kses( $message, [ 'strong' => [] ] );
 			echo '</p></div>';
 		}
 	);
