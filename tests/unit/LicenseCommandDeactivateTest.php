@@ -122,19 +122,22 @@ class LicenseCommandDeactivateTest extends TestCase {
 	 * STRICT: any un-expected method call (including a stray log()) throws.
 	 * Executed-path tests must add an explicit log() expectation via expect_log_once().
 	 *
-	 * @param string $plugin_id   Plugin id.
-	 * @param string $plugin_file Plugin file basename.
+	 * @param string      $plugin_id   Plugin id.
+	 * @param string      $plugin_file Plugin file basename.
+	 * @param string|null $support_url Support URL returned by the plugin mock (default null = base behavior).
 	 * @return \Mockery\MockInterface
 	 */
 	private function make_engine(
 		string $plugin_id = self::PLUGIN_ID,
-		string $plugin_file = self::PLUGIN_FILE
+		string $plugin_file = self::PLUGIN_FILE,
+		?string $support_url = null
 	): object {
 
 		$plugin = Mockery::mock( \Woodev_Plugin::class );
 		$plugin->shouldReceive( 'get_id' )->andReturn( $plugin_id );
 		$plugin->shouldReceive( 'get_plugin_file' )->andReturn( $plugin_file );
 		$plugin->shouldReceive( 'get_plugin_name' )->andReturn( 'Test Plugin' );
+		$plugin->shouldReceive( 'get_support_url' )->andReturn( $support_url );
 
 		$this->plugin_mock = $plugin;
 
@@ -562,6 +565,95 @@ class LicenseCommandDeactivateTest extends TestCase {
 		$this->assertIsString( $entry['message'] );
 		$this->assertNotEmpty( $entry['message'] );
 		$this->assertIsInt( $entry['ts'] );
+
+		// Cause-neutral wording (the signed payload carries no reason): names the
+		// plugin and states the license is not valid for this site — never asserts
+		// a specific cause such as "license expired".
+		$this->assertStringContainsString( 'Test Plugin', $entry['message'] );
+		$this->assertStringContainsString( 'недействительна для этого сайта', $entry['message'] );
+		$this->assertStringNotContainsString( 'истёк срок', $entry['message'] );
+		$this->assertStringNotContainsString( 'удалённо деактивирован', $entry['message'] );
+	}
+
+	/**
+	 * When the plugin supplies a support URL, the notice appends the "contact us"
+	 * link pointing at that URL.
+	 *
+	 * @return void
+	 */
+	public function test_notice_message_includes_support_link_when_url_present(): void {
+
+		$engine  = $this->make_engine( self::PLUGIN_ID, self::PLUGIN_FILE, 'https://woodev.ru/support/' );
+		$handler = $this->make_handler( true );
+
+		$written_value = null;
+
+		Functions\when( 'get_option' )->justReturn( array() );
+		Functions\expect( 'update_option' )
+			->once()
+			->with(
+				'woodev_license_remote_deactivation_notices',
+				Mockery::on(
+					static function ( $v ) use ( &$written_value ) {
+						$written_value = $v;
+						return is_array( $v );
+					}
+				),
+				'no'
+			)
+			->andReturn( true );
+
+		Functions\when( 'deactivate_plugins' )->justReturn( null );
+		Actions\expectDone( 'woodev_' . self::PLUGIN_ID . '_remote_deactivated' )->once();
+		$this->expect_log_once();
+
+		$handler->execute( $engine, self::PAYLOAD );
+
+		$message = $written_value[ self::PLUGIN_ID ]['message'];
+		$this->assertStringContainsString( 'https://woodev.ru/support/', $message );
+		$this->assertStringContainsString( '<a href="https://woodev.ru/support/">', $message );
+		$this->assertStringContainsString( 'свяжитесь с нами', $message );
+	}
+
+	/**
+	 * With no support URL (base get_support_url() returns null) the notice omits the
+	 * "contact us" tail entirely — never an empty <a href="">.
+	 *
+	 * @return void
+	 */
+	public function test_notice_message_omits_link_when_no_support_url(): void {
+
+		$engine  = $this->make_engine( self::PLUGIN_ID, self::PLUGIN_FILE, null );
+		$handler = $this->make_handler( true );
+
+		$written_value = null;
+
+		Functions\when( 'get_option' )->justReturn( array() );
+		Functions\expect( 'update_option' )
+			->once()
+			->with(
+				'woodev_license_remote_deactivation_notices',
+				Mockery::on(
+					static function ( $v ) use ( &$written_value ) {
+						$written_value = $v;
+						return is_array( $v );
+					}
+				),
+				'no'
+			)
+			->andReturn( true );
+
+		Functions\when( 'deactivate_plugins' )->justReturn( null );
+		Actions\expectDone( 'woodev_' . self::PLUGIN_ID . '_remote_deactivated' )->once();
+		$this->expect_log_once();
+
+		$handler->execute( $engine, self::PAYLOAD );
+
+		$message = $written_value[ self::PLUGIN_ID ]['message'];
+		$this->assertStringNotContainsString( '<a ', $message );
+		$this->assertStringNotContainsString( 'href=""', $message );
+		$this->assertStringNotContainsString( 'свяжитесь с нами', $message );
+		$this->assertStringContainsString( 'личном кабинете', $message );
 	}
 
 	/**
@@ -708,6 +800,7 @@ class LicenseCommandDeactivateTest extends TestCase {
 		$plugin->shouldReceive( 'get_id' )->andReturn( self::PLUGIN_ID );
 		$plugin->shouldReceive( 'get_plugin_file' )->andReturn( self::PLUGIN_FILE );
 		$plugin->shouldReceive( 'get_plugin_name' )->andReturn( 'Test Plugin' );
+		$plugin->shouldReceive( 'get_support_url' )->andReturn( null );
 		$plugin->shouldReceive( 'log' )
 			->once()
 			->with(
@@ -862,7 +955,7 @@ class LicenseCommandDeactivateTest extends TestCase {
 	public function test_notice_dedup_two_instances_one_stored_notice(): void {
 
 		$notice_entry = array(
-			'message' => 'Плагин Test Plugin был удалённо деактивирован: истёк срок лицензии.',
+			'message' => 'Плагин Test Plugin отключён: лицензия недействительна для этого сайта. Проверьте статус лицензии в личном кабинете на woodev.ru.',
 			'ts'      => 1_700_000_000,
 		);
 
@@ -909,7 +1002,7 @@ class LicenseCommandDeactivateTest extends TestCase {
 		Functions\when( 'get_option' )->justReturn(
 			array(
 				'other-plugin' => array(
-					'message' => 'Плагин Other был удалённо деактивирован: истёк срок лицензии.',
+					'message' => 'Плагин Other отключён: лицензия недействительна для этого сайта. Проверьте статус лицензии в личном кабинете на woodev.ru.',
 					'ts'      => 1_700_000_000,
 				),
 			)
