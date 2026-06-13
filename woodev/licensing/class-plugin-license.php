@@ -117,7 +117,21 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 			$this->item_shortname = $this->plugin->get_id_underscored();
 			$this->woodev_license = new Woodev_License( $this->plugin->get_id_underscored() );
 			$this->license_key    = $this->woodev_license->key;
-			$this->api_handler    = new Woodev_Licensing_API( $this->plugin );
+			/**
+			 * Filters the licensing API base URL.
+			 *
+			 * Defaults to false, which keeps the built-in production endpoint
+			 * (https://woodev.ru/). Return a valid http(s) URL to point licensing
+			 * requests at a self-hosted, staging, or local test store. Only a
+			 * syntactically valid URL is honored (see Woodev_Licensing_API).
+			 *
+			 * @since 2.0.1
+			 *
+			 * @param string|false  $api_url The override URL, or false for the default.
+			 * @param Woodev_Plugin $plugin  The plugin instance.
+			 */
+			$api_url           = apply_filters( 'woodev_licensing_api_url', false, $this->plugin );
+			$this->api_handler = new Woodev_Licensing_API( $this->plugin, $api_url );
 
 			$this->includes();
 			$this->add_hooks();
