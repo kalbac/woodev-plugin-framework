@@ -148,12 +148,18 @@ if ( ! class_exists( 'Woodev_License_Command_Deactivate_Plugin' ) ) :
 				}
 			}
 
-			// Remove the WC Admin inbox breadcrumb (Finding B), if WooCommerce Admin
-			// is present. class_exists keeps the core lifecycle free of any hard WC
-			// dependency — the deactivated plugin's note is rendered by WooCommerce,
-			// so it must also be cleared here on reactivation.
-			if ( class_exists( '\Automattic\WooCommerce\Admin\Notes\Notes' ) ) {
-				\Automattic\WooCommerce\Admin\Notes\Notes::delete_notes_with_name( self::get_breadcrumb_note_name( $plugin ) );
+			// Remove the WC Admin inbox breadcrumb (Finding B), if WooCommerce Admin is
+			// present. Guarded on the same Note marker the writer uses (the option path
+			// above is platform-neutral and intentionally runs without it), and wrapped
+			// so a WooCommerce/DB hiccup while deleting the inbox note can never abort
+			// the activation flow that called us — clearing the breadcrumb is best-effort.
+			if ( class_exists( '\Automattic\WooCommerce\Admin\Notes\Note' ) ) {
+				try {
+					\Automattic\WooCommerce\Admin\Notes\Notes::delete_notes_with_name( self::get_breadcrumb_note_name( $plugin ) );
+				} catch ( \Throwable $exception ) {
+					// Best-effort: the next admin_notices pass / dismissal still resolves it.
+					unset( $exception );
+				}
 			}
 		}
 

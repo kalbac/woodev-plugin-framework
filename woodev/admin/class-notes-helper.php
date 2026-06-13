@@ -160,9 +160,9 @@ if ( ! class_exists( 'Woodev_Notes_Helper' ) ) :
 					$note->add_action( $action['name'], $action['label'], $action['url'] ?? '' );
 				}
 
-				$note->save();
-
-				return true;
+				// WC_Data::save() returns the saved note id (> 0); cast so a silent
+				// non-throwing save failure (id 0) is reported as false per the contract.
+				return (bool) $note->save();
 
 			} catch ( \Throwable $exception ) {
 				return false;
