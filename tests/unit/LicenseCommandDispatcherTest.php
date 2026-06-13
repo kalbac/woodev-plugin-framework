@@ -2107,6 +2107,7 @@ class LicenseCommandDispatcherTest extends TestCase {
 		$plugin->shouldReceive( 'get_id' )->andReturn( 'test_plugin' );
 		$plugin->shouldReceive( 'get_plugin_file' )->andReturn( 'test-plugin/test-plugin.php' );
 		$plugin->shouldReceive( 'get_plugin_name' )->andReturn( 'Test Plugin' );
+		$plugin->shouldReceive( 'get_support_url' )->andReturn( null );
 
 		$engine = Mockery::mock( \Woodev_Plugins_License::class );
 		$engine->shouldReceive( 'get_plugin' )->andReturn( $plugin );
