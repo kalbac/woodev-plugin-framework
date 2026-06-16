@@ -419,8 +419,9 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 		 *
 		 * All callers issue the same `get_version` action (OB-3 F5: the former
 		 * `$_action` parameter was unused — every call resolved to `get_version`).
-		 * The slug guard is a containment sanity-check: both call sites always pass
-		 * `$this->slug`, so this returns false only on an internal wiring mistake.
+		 * Returns false in two cases: (a) slug mismatch (containment sanity-check —
+		 * both call sites always pass `$this->slug`, so this only fires on a wiring
+		 * mistake); (b) a recent request failure recorded by request_recently_failed().
 		 *
 		 * @since 1.2.1
 		 *
