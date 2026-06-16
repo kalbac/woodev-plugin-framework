@@ -36,6 +36,7 @@ class UpdaterRobustnessTest extends TestCase {
 		$source = (string) file_get_contents(
 			dirname( __DIR__, 2 ) . '/woodev/plugin-updater/class-plugin-updater.php'
 		);
+		$this->assertNotEmpty( $source, 'class-plugin-updater.php source file could not be read.' );
 		$this->assertStringNotContainsString(
 			'catch ( Exception $e ) {',
 			$source,
@@ -62,6 +63,7 @@ class UpdaterRobustnessTest extends TestCase {
 		$source = (string) file_get_contents(
 			dirname( __DIR__, 2 ) . '/woodev/plugin-updater/class-plugin-updater.php'
 		);
+		$this->assertNotEmpty( $source, 'class-plugin-updater.php source file could not be read.' );
 		$this->assertStringContainsString(
 			"'Woodev updater: get_version_from_remote failed: '",
 			$source,
@@ -85,6 +87,7 @@ class UpdaterRobustnessTest extends TestCase {
 		$source = (string) file_get_contents(
 			dirname( __DIR__, 2 ) . '/woodev/plugin-updater/class-plugin-updater.php'
 		);
+		$this->assertNotEmpty( $source, 'class-plugin-updater.php source file could not be read.' );
 		$this->assertStringContainsString(
 			"'Woodev updater: Woodev_License_Command_Acks not available",
 			$source,
@@ -106,6 +109,7 @@ class UpdaterRobustnessTest extends TestCase {
 		$source = (string) file_get_contents(
 			dirname( __DIR__, 2 ) . '/woodev/plugin-updater/class-plugin-updater.php'
 		);
+		$this->assertNotEmpty( $source, 'class-plugin-updater.php source file could not be read.' );
 		$this->assertStringContainsString(
 			"'Woodev updater: Woodev_License_Command_Dispatcher not available",
 			$source,
