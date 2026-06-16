@@ -538,6 +538,9 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 				// D-W3 / §3.2 pull-fallback: consume any license_commands delivered in
 				// the response and drain acks.
 				$ack_store = class_exists( 'Woodev_License_Command_Acks' ) ? new Woodev_License_Command_Acks() : null;
+				if ( null === $ack_store ) {
+					error_log( 'Woodev updater: Woodev_License_Command_Acks not available — ack transport disabled.' ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- wiring-failure diagnostic (OB-3 F7).
+				}
 
 				if ( class_exists( 'Woodev_License_Command_Dispatcher' ) ) {
 					try {
@@ -547,6 +550,8 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 						// bug must not break the update flow — loud-but-contained, never silent.
 						error_log( 'Woodev updater: pull-command consumption failed: ' . $throwable->getMessage() ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- ruled loud-but-contained boundary (s8-p5 #4b).
 					}
+				} else {
+					error_log( 'Woodev updater: Woodev_License_Command_Dispatcher not available — pull-command transport disabled.' ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- wiring-failure diagnostic (OB-3 F7).
 				}
 
 				// acks_received drain — ruled s8-p5 re-review #1: confirm ONLY the
@@ -591,8 +596,8 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 
 				return $response;
 
-			} catch ( Exception $e ) {
-
+			} catch ( \Throwable $e ) {
+				error_log( 'Woodev updater: get_version_from_remote failed: ' . $e->getMessage() ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- loud-but-contained boundary; the update flow must not break on API failure (OB-3 F2).
 			}
 
 			return false;
