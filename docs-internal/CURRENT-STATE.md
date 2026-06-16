@@ -1,13 +1,13 @@
 # Current State — Woodev Plugin Framework
 
 > Lean state doc: phase status, open bugs, next actions. **Full session history → `SESSION-LOG.md`** (newest on top). Program-level status → `platform-v2-program-tracker.md`.
-> Last updated: 2026-06-14 (session 14 — overnight autonomous grooming: OB-1/OB-6/OB-2 fixed + OB-3 reviewed, PRs #51–#54 all merged to main, CI green).
+> Last updated: 2026-06-16 (session 15 — OB-3 safe subset: F11/F12/F13 in plugin updater, PR #57 in CI).
 
 ## Last session context (≤3 lines)
 
-- **s14 (autonomous, operator asleep — "stop babysitting"):** cleared 4 backlog items via 4 squash-merged PRs. **OB-1** (#51) mixed-fleet dormant notice now best-effort names the conflicting v1 plugin. **OB-6** (#52) removed 1 verified-dead file (`Admin_User_Edit_Handler`; audit found only 1 of 163). **OB-3** (#53) `Woodev_Plugin_Updater` reviewed → recorded (not auto-fixed; contract-sensitive) — recommendation MOVE to `woodev/licensing/updater/`, keep per-plugin+idempotent. **OB-2** (#54) license page: added `.wrap`/`<h1>` + ported the unstyled quick-links section's CSS into the bundle (before/after screenshots in transcript).
+- **s15:** OB-3 safe-subset (Findings 11/12/13 from the GPT-5.5 OB-3 review). TDD: 8 new unit tests in `UpdaterSafeSubsetTest.php`; `composer check` green (617 tests). Codex BLOCK on F12 visibility narrowing → operator approved "Мерджить как есть (ADR-005 покрывает)". **PR #57 open, CI pending.**
 - **Open:** v2.0.1 in code, **NOT released** (operator rule: don't bump `VERSION` per change). New symbols → `@since 2.0.2`.
-- **Carried:** OB-3 *implementation* (5-step order in its review doc) + OB-4/5/7/8/9 + the two big ones (payment-gateway traits, the array/typing/@since review) — none started.
+- **Carried:** OB-3 *implementation steps 2–5* (robustness/normalization/contract/MOVE — needs integration verification + operator sign-off) + OB-4/5/7/8/9 + the two big ones.
 
 ## Program status (high level)
 
@@ -54,8 +54,8 @@
 
 ## Next Actions
 
-- ✅ **s14 done (PRs #51–#54 merged):** OB-1 (mixed-fleet notice names conflicting v1 plugin), OB-6 (dead-file sweep — 1 file removed), OB-3 (updater review recorded), OB-2 (license page frame + quick-links styling).
-- 🔜 **OB-3 implementation** — the review (`reviews/ob3-plugin-updater-review-2026-06-14.md`) is recorded with a 5-step order; needs operator sign-off because several findings touch installed-site contracts (hook arg shape, cache/changelog-URL keys) + browser/integration verification. Safe pre-clean subset (Findings 11/13/12) could go solo+critic first.
+- ✅ **s15 done (PR #57):** OB-3 safe subset — F11 tested-guard, F12 type/visibility hardening, F13 esc_attr. 8 new tests. Codex-reviewed; operator approved ADR-005 override for F12 BLOCK. PR merging after CI.
+- 🔜 **OB-3 steps 2–5** — robustness (F2+F6+F7, error handling+backoff+wiring-failure logging), normalization (F1+F3+F5, verify store payload first), contract-touching (F8/F9/F10, operator sign-off), MOVE to `woodev/licensing/updater/` (autodev session + data-preservation checklist).
 - 📥 **Remaining backlog** (`FUTURE-BACKLOG.md` → "Operator backlog dump — s13"): OB-4 reusable-JS-php-based principle (apply by-the-way) · OB-5 godaddy fork study (GPT research) · OB-7 modernize Plugins page (WP React + woodev.ru account) · OB-8 marketplace tab on `plugin-install.php` · OB-9 shipping nuances (dedicated session).
 - **Big ones (operator-scheduled, not solo):** payment-gateway trait extraction (autodev-loop); the big review #4 — `array()`→`[]` (~797) + type declarations everywhere + `@since` sweep + enforce `Generic.Arrays.DisallowLongArraySyntax`. B-2 loader-protocol forward-tolerance before S4/EDD.
 
