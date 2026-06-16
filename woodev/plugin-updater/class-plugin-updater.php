@@ -10,15 +10,16 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 	 */
 	final class Woodev_Plugin_Updater {
 
-		private $plugin;
+		private Woodev_Plugin $plugin;
+		/** @var Woodev_Licensing_API */
 		private $api_handler;
-		private $api_url;
-		private $api_data;
-		private $name;
-		private $slug;
-		private $version;
-		private $beta;
-		private $failed_request_cache_key;
+		private string $api_url;
+		private array $api_data;
+		private string $name;
+		private string $slug;
+		private string $version;
+		private bool $beta;
+		private string $failed_request_cache_key;
 
 		/**
 		 * Nonces of the pending acks attached to the CURRENT outgoing request.
@@ -32,7 +33,7 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 		 *
 		 * @var array<int, string>
 		 */
-		private $sent_ack_nonces = array();
+		private array $sent_ack_nonces = [];
 
 		/**
 		 * Class constructor.
@@ -70,7 +71,7 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 		 * @return void
 		 * @uses add_filter()
 		 */
-		public function init() {
+		private function init(): void {
 			add_filter( 'pre_set_site_transient_update_plugins', array( $this, 'check_update' ) );
 			add_filter( 'plugins_api', array( $this, 'plugins_api_filter' ), 10, 3 );
 			add_action( 'after_plugin_row', array( $this, 'show_update_notification' ), 10, 2 );
@@ -160,7 +161,7 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 		 * @since 1.2.1
 		 * @return null|string
 		 */
-		private function get_tested_version( $version_info ) {
+		private function get_tested_version( object $version_info ): ?string {
 
 			// There is no tested version.
 			if ( empty( $version_info->tested ) ) {
@@ -178,6 +179,12 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 			$current_version_parts = explode( '.', $current_wp_version );
 			$tested_parts          = explode( '.', $version_info->tested );
 
+			// A malformed single-segment tested value (e.g. '6') would trigger an
+			// undefined-index warning when the major versions match -- return it as-is.
+			if ( count( $tested_parts ) < 2 ) {
+				return $version_info->tested;
+			}
+
 			// The current WordPress version is x.y.z, so update the tested version to match it.
 			if ( isset( $current_version_parts[2] ) && $current_version_parts[0] === $tested_parts[0] && $current_version_parts[1] === $tested_parts[1] ) {
 				$tested_parts[2] = $current_version_parts[2];
@@ -192,7 +199,7 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 		 * @param string $file
 		 * @param array  $plugin
 		 */
-		public function show_update_notification( $file, $plugin ) {
+		public function show_update_notification( string $file, array $plugin ): void {
 
 			// Return early if in the network admin, or if this is not a multisite install.
 			if ( is_network_admin() || ! is_multisite() ) {
@@ -225,8 +232,8 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 
 			printf(
 				'<tr class="plugin-update-tr %3$s" id="%1$s-update" data-slug="%1$s" data-plugin="%2$s">',
-				$this->slug,
-				$file,
+				esc_attr( $this->slug ),
+				esc_attr( $file ),
 				in_array( $this->name, $this->get_active_plugins(), true ) ? 'active' : 'inactive'
 			);
 
@@ -303,7 +310,7 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 		 *
 		 * @return array
 		 */
-		private function get_active_plugins() {
+		private function get_active_plugins(): array {
 			$active_plugins         = (array) get_option( 'active_plugins' );
 			$active_network_plugins = (array) get_site_option( 'active_sitewide_plugins' );
 
@@ -396,7 +403,7 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 		 *
 		 * @return array
 		 */
-		private function convert_object_to_array( $data ) {
+		private function convert_object_to_array( $data ): array {
 			if ( ! is_array( $data ) && ! is_object( $data ) ) {
 				return array();
 			}
@@ -419,7 +426,7 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 		 * @uses wp_remote_get()
 		 * @uses is_wp_error()
 		 */
-		private function api_request( $_action, $_data ) {
+		private function api_request( string $_action, array $_data ) {
 			$data = array_merge( $this->api_data, $_data );
 
 			if ( $data['slug'] !== $this->slug ) {
@@ -440,7 +447,7 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 		 *
 		 * @return bool
 		 */
-		private function request_recently_failed() {
+		private function request_recently_failed(): bool {
 			$failed_request_details = get_option( $this->failed_request_cache_key );
 
 			// Request has never failed.
@@ -464,7 +471,7 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 		/**
 		 * If available, show the changelog for sites in a multisite install.
 		 */
-		public function show_changelog() {
+		public function show_changelog(): void {
 
 			if ( empty( $_REQUEST['woodev_action'] ) || 'view_plugin_changelog' !== $_REQUEST['woodev_action'] ) {
 				return;
@@ -598,7 +605,7 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 		 *
 		 * @return object|false
 		 */
-		public function get_cached_version_info( $cache_key = '' ) {
+		private function get_cached_version_info( string $cache_key = '' ) {
 
 			if ( empty( $cache_key ) ) {
 				$cache_key = $this->get_cache_key();
@@ -626,7 +633,7 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 		 * @param string $value
 		 * @param string $cache_key
 		 */
-		public function set_version_info_cache( $value = '', $cache_key = '' ) {
+		private function set_version_info_cache( $value = '', string $cache_key = '' ): void {
 
 			if ( empty( $cache_key ) ) {
 				$cache_key = $this->get_cache_key();
@@ -651,7 +658,7 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 		 * @since 1.2.1
 		 * @return array
 		 */
-		private function get_api_params() {
+		private function get_api_params(): array {
 			$params = array(
 				'edd_action'  => 'get_version',
 				'license'     => ! empty( $this->api_data['license'] ) ? $this->api_data['license'] : '',
@@ -690,7 +697,7 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 		 * @since 1.2.1
 		 * @return string
 		 */
-		private function get_cache_key() {
+		private function get_cache_key(): string {
 			$string = $this->slug . $this->api_data['license'] . $this->beta;
 
 			return 'woodev_' . md5( serialize( $string ) );
