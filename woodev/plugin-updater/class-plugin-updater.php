@@ -131,7 +131,6 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 			if ( false === $version_info || ( $this->api_handler->is_debug_enabled() && isset( $_GET['force-check'] ) ) ) {
 
 				$version_info = $this->api_request(
-					'plugin_latest_version',
 					array(
 						'slug' => $this->slug,
 						'beta' => $this->beta,
@@ -352,7 +351,7 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 			// If we have no transient-saved value, run the API, set a fresh transient with the API value, and return that value too right now.
 			if ( empty( $edd_api_request_transient ) ) {
 
-				$api_response = $this->api_request( 'plugin_information', $to_send );
+				$api_response = $this->api_request( $to_send );
 
 				// Expires in 3 hours
 				$this->set_version_info_cache( $api_response );
@@ -416,17 +415,20 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 		}
 
 		/**
-		 * Calls the API and, if successfull, returns the object delivered by the API.
+		 * Fetches version info from the remote store.
 		 *
-		 * @param string $_action The requested action.
-		 * @param array  $_data   Parameters for the API action.
+		 * All callers issue the same `get_version` action (OB-3 F5: the former
+		 * `$_action` parameter was unused — every call resolved to `get_version`).
+		 * The slug guard is a containment sanity-check: both call sites always pass
+		 * `$this->slug`, so this returns false only on an internal wiring mistake.
+		 *
+		 * @since 1.2.1
+		 *
+		 * @param array $_data Parameters that must contain a `slug` key matching this plugin.
 		 *
 		 * @return false|object
-		 * @uses get_bloginfo()
-		 * @uses wp_remote_get()
-		 * @uses is_wp_error()
 		 */
-		private function api_request( string $_action, array $_data ) {
+		private function api_request( array $_data ) {
 			$data = array_merge( $this->api_data, $_data );
 
 			if ( $data['slug'] !== $this->slug ) {
