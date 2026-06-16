@@ -28,7 +28,7 @@ if ( ! class_exists( 'Woodev_Admin_Pages' ) ) :
 		 *
 		 * @return void
 		 */
-		public function instance( Woodev_Plugin $woodev_plugin ) {
+		public function instance( Woodev_Plugin $woodev_plugin ): void {
 
 			$this->woodev_plugin = $woodev_plugin;
 
@@ -41,6 +41,19 @@ if ( ! class_exists( 'Woodev_Admin_Pages' ) ) :
 			}
 
 			add_filter( 'menu_order', array( $this, 'menu_order' ) );
+
+			$this->init_plugin_install_tab();
+		}
+
+		/**
+		 * Register the Woodev tab on the plugin-install.php screen.
+		 *
+		 * @since 2.0.2
+		 * @return void
+		 */
+		private function init_plugin_install_tab(): void {
+			include_once $this->woodev_plugin->get_framework_path() . '/admin/class-plugin-install-tab.php';
+			( new Woodev_Plugin_Install_Tab( $this->woodev_plugin ) )->init();
 		}
 
 		public function admin_menu() {
