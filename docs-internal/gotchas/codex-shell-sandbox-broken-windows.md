@@ -48,6 +48,25 @@ Bundles get large (s10's was ~150 KB) but well within context. The tradeoff vs a
 shell-capable critic: you must decide up front WHAT source the critic may need to compare
 against — if you under-include, it correctly flags an OPEN QUESTION rather than guessing.
 
+## s17 wrinkle — the `codex:codex-rescue` subagent hits the SAME wall, silently
+
+Dispatching a review through the `codex:codex-rescue` subagent (Agent tool) inherits the
+same broken inner sandbox. Observed s17 (2026-06-17): a background `codex-rescue` review
+returned "I'll forward this to Codex as a background task, you'll be notified" — but the
+underlying codex run died on `CreateProcessAsUserW failed: 5`, switched to a Node REPL,
+and **stalled with no SHIP/HOLD verdict and no notification**. The subagent's optimistic
+"you'll be notified" is NOT proof a verdict arrived.
+
+Two rules from this:
+1. **Always verify a background codex result actually landed** — read the latest
+   `~/.codex/sessions/<YYYY>/<MM>/<DD>/rollout-*.jsonl` and extract the final assistant
+   message before trusting "done". (Extract with a `PYTHONIOENCODING=utf-8` python one-liner;
+   the transcripts contain non-cp1251 chars that crash a naive `print`.)
+2. **Make the rescue inline-bundle too** — put the full diff + the contract list IN the
+   prompt and explicitly instruct: *"DO NOT run any shell/git/file commands; the Windows
+   sandbox is broken; review ONLY the pasted diff with reasoning and return a verdict."*
+   s17's re-run did exactly this and Codex returned a clean SHIP from reasoning alone.
+
 ## Related
 
 - [[autodev-critic-ratelimit-false-positive]] — the other codex-critic transport gotcha

@@ -1,13 +1,13 @@
 # Current State — Woodev Plugin Framework
 
 > Lean state doc: phase status, open bugs, next actions. **Full session history → `SESSION-LOG.md`** (newest on top). Program-level status → `platform-v2-program-tracker.md`.
-> Last updated: 2026-06-16 (session 16 — OB-3 steps 2+3 merged; OB-8 marketplace tab PR #60 in CI).
+> Last updated: 2026-06-17 (session 17 — OB-3 Step 5 MOVE updater → licensing/updater/, PR #61 merged).
 
 ## Last session context (≤3 lines)
 
-- **s16 (autonomous overnight):** OB-3 Step 2 (F2+F7 robustness, PR #58) merged; OB-3 Step 3 F5 (api_request param removal, PR #59) merged. OB-8 marketplace tab on `plugin-install.php` (PR #60) in CI. 633 unit tests green.
+- **s17:** OB-3 Step 5 done — moved `woodev/plugin-updater/` → `woodev/licensing/updater/` (pure byte-identical rename, no shim per ADR-005; all 6 frozen contracts preserved). PR #61 merged to main (`829420d`), CI fully green. Codex inline-bundle review: SHIP.
 - **Open:** v2.0.1 in code, **NOT released** (operator rule: don't bump `VERSION` per change). New symbols → `@since 2.0.2`.
-- **Carried:** OB-3 F1+F3 (normalization, needs store payload verification) + Step 4 (F8/F9/F10, operator sign-off) + Step 5 (MOVE, autodev session) + OB-5/7/9 + the two big ones.
+- **Carried:** OB-3 F1+F3 (normalization, needs store payload verification) + Step 4 (F8/F9/F10, operator sign-off) + OB-5/7/9 + the two big ones.
 
 ## Program status (high level)
 
@@ -54,10 +54,9 @@
 
 ## Next Actions
 
-- ✅ **s16 done:** OB-3 Step 2 (F2 Throwable catch + F7 wiring-failure log, PR #58 merged); OB-3 Step 3 F5 (remove unused `api_request` `$_action` param, PR #59 merged); OB-8 marketplace tab on `plugin-install.php` (PR #60 in CI — merge when green).
+- ✅ **s17 done:** OB-3 Step 5 — MOVE `woodev/plugin-updater/` → `woodev/licensing/updater/` (PR #61 merged `829420d`). Pure byte-identical rename; all references repointed (require, classmap, phpstan ignore, 6 tests, .pot/.po, INVARIANTS, AGENTS map); 6 frozen contracts preserved; Codex SHIP.
 - ⛔ **OB-3 Step 3 remaining — F1+F3 BLOCKED:** sections normalization + cache key isolation need store payload shape verified. Cannot proceed autonomously without the rig or API access.
-- ⛔ **OB-3 Step 4 BLOCKED (operator sign-off):** F8 (`in_plugin_update_message-{$file}` wrong 2nd arg), F9 (nonce in changelog endpoint), F10 (cache key missing endpoint) — touch installed-site contracts; need operator approval + consumer audit + migration note.
-- ⛔ **OB-3 Step 5 BLOCKED:** MOVE `woodev/plugin-updater/` → `woodev/licensing/updater/` — autodev session + data-preservation checklist for 6 frozen contracts.
+- 🖊️ **OB-3 Step 4 NEXT (operator sign-off):** F8 (`in_plugin_update_message-{$file}` wrong 2nd arg — hand-verified real), F9 (nonce in changelog endpoint), F10 (cache key missing endpoint) — touch installed-site contracts; need operator approval + consumer audit + migration note. **Scheduled for s18.**
 - 📥 **Remaining backlog** (`FUTURE-BACKLOG.md` → "Operator backlog dump — s13"): OB-4 reusable-JS-php-based principle · OB-5 godaddy fork study (GPT research delegation) · OB-7 modernize Plugins page (WP React + woodev.ru account) · OB-9 shipping nuances (dedicated session).
 - **Big ones (operator-scheduled, not solo):** payment-gateway trait extraction (autodev-loop); the big review #4 — `array()`→`[]` (~797) + type declarations everywhere + `@since` sweep + enforce `Generic.Arrays.DisallowLongArraySyntax`. B-2 loader-protocol forward-tolerance before S4/EDD.
 
