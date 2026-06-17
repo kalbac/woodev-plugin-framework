@@ -123,9 +123,8 @@ woodev_framework/
 │   ├── box-packer/                  # Box packing algorithm
 │   ├── compatibility/               # HPOS + WooCommerce compat
 │   ├── handlers/                    # Blocks + script handlers
-│   ├── licensing/                   # License key + EDD store integration
+│   ├── licensing/                   # License key + EDD store integration (incl. updater/ — plugin update mechanism)
 │   ├── payment-gateway/             # Payment gateway base classes (~13.8k lines; main file ~3,542)
-│   ├── plugin-updater/              # Plugin update mechanism
 │   ├── rest-api/                    # REST API routes
 │   ├── settings-api/                # Typed settings framework
 │   ├── shipping-method/             # Shipping plugin + method bases

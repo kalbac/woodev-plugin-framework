@@ -37,7 +37,7 @@
             "woodev/handlers",
             "woodev/licensing",
             "woodev/payment-gateway",
-            "woodev/plugin-updater",
+            "woodev/licensing/updater",
             "woodev/rest-api",
             "woodev/settings-api",
             "woodev/shipping-method",

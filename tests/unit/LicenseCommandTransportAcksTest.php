@@ -39,7 +39,7 @@ require_once dirname( __DIR__, 2 ) . '/woodev/licensing/class-plugin-license.php
 require_once dirname( __DIR__, 2 ) . '/woodev/licensing/class-license-command-nonce-store.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/licensing/class-license-command-dispatcher.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/licensing/class-license-command-acks.php';
-require_once dirname( __DIR__, 2 ) . '/woodev/plugin-updater/class-plugin-updater.php';
+require_once dirname( __DIR__, 2 ) . '/woodev/licensing/updater/class-plugin-updater.php';
 
 /**
  * Class LicenseCommandTransportAcksTest.

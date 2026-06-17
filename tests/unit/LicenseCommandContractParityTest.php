@@ -274,7 +274,7 @@ class LicenseCommandContractParityTest extends TestCase {
 
 		$dispatcher = (string) file_get_contents( $root . '/woodev/licensing/class-license-command-dispatcher.php' );
 		$license    = (string) file_get_contents( $root . '/woodev/licensing/class-plugin-license.php' );
-		$updater    = (string) file_get_contents( $root . '/woodev/plugin-updater/class-plugin-updater.php' );
+		$updater    = (string) file_get_contents( $root . '/woodev/licensing/updater/class-plugin-updater.php' );
 		$controller = (string) file_get_contents( $root . '/woodev/licensing/api/class-rest-api-license-command.php' );
 		$registrar  = (string) file_get_contents( $root . '/woodev/rest-api/class-rest-v1-registrar.php' );
 		$claims     = (string) file_get_contents( $root . '/woodev/licensing/class-license-authority-claims.php' );

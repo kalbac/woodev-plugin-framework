@@ -137,9 +137,9 @@ parameters:
         - message: '#Method .* should return false but return statement is missing#'
           path: woodev/utilities/class-woodev-background-job-handler.php
 
-        # plugin-updater — convert_object_to_array() iterates stdClass via foreach (valid PHP)
+        # licensing/updater — convert_object_to_array() iterates stdClass via foreach (valid PHP)
         - message: '#Argument of an invalid type stdClass supplied for foreach#'
-          path: woodev/plugin-updater/class-plugin-updater.php
+          path: woodev/licensing/updater/class-plugin-updater.php
 
         # class-string-conversation.php — static analysis limited when unset on fixed arrays
         - message: '#Cannot unset offset .* on array#'

@@ -39,7 +39,7 @@ valid JSON. The prose around it is for humans; the JSON is authoritative for the
       "id": "license_and_updater",
       "why": "License key option names, activation state, instance IDs, and updater identity (EDD download id) are release-blocking.",
       "auto_guardable": true,
-      "path_globs": ["woodev/licensing/**", "woodev/class-license*.php", "woodev/plugin-updater/**"],
+      "path_globs": ["woodev/licensing/**", "woodev/class-license*.php"],
       "grep_patterns": ["license_key", "instance_id", "activation", "download_id", "get_download_id"],
       "exact_strings": ["cdek_woocommerce_shipping_method_license_key", "216", "821"]
     },

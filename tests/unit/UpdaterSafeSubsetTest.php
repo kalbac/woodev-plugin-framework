@@ -15,7 +15,7 @@ namespace Woodev\Tests\Unit;
 
 use Brain\Monkey\Functions;
 
-require_once dirname( __DIR__, 2 ) . '/woodev/plugin-updater/class-plugin-updater.php';
+require_once dirname( __DIR__, 2 ) . '/woodev/licensing/updater/class-plugin-updater.php';
 
 /**
  * Class UpdaterSafeSubsetTest.
@@ -147,7 +147,7 @@ class UpdaterSafeSubsetTest extends TestCase {
 	 */
 	public function test_update_row_printf_escapes_slug_with_esc_attr(): void {
 		$source = (string) file_get_contents(
-			dirname( __DIR__, 2 ) . '/woodev/plugin-updater/class-plugin-updater.php'
+			dirname( __DIR__, 2 ) . '/woodev/licensing/updater/class-plugin-updater.php'
 		);
 		$this->assertStringContainsString(
 			'esc_attr( $this->slug )',
@@ -165,7 +165,7 @@ class UpdaterSafeSubsetTest extends TestCase {
 	 */
 	public function test_update_row_printf_escapes_file_with_esc_attr(): void {
 		$source = (string) file_get_contents(
-			dirname( __DIR__, 2 ) . '/woodev/plugin-updater/class-plugin-updater.php'
+			dirname( __DIR__, 2 ) . '/woodev/licensing/updater/class-plugin-updater.php'
 		);
 		$this->assertStringContainsString(
 			'esc_attr( $file )',
