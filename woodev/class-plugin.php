@@ -577,7 +577,7 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 			// classmap masks it — gotcha framework/includes-wiring). The
 			// UpdaterKeylessPollingTest source assertion pins this parity.
 			if ( is_admin() || wp_doing_cron() || ( defined( 'WP_CLI' ) && WP_CLI ) ) {
-				require_once $framework_path . '/plugin-updater/class-plugin-updater.php';
+				require_once $framework_path . '/licensing/updater/class-plugin-updater.php';
 			}
 		}
 

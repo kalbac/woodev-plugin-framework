@@ -20,7 +20,7 @@ use Brain\Monkey\Functions;
 use Brain\Monkey\Actions;
 
 require_once dirname( __DIR__, 2 ) . '/woodev/class-plugin.php';
-require_once dirname( __DIR__, 2 ) . '/woodev/plugin-updater/class-plugin-updater.php';
+require_once dirname( __DIR__, 2 ) . '/woodev/licensing/updater/class-plugin-updater.php';
 
 /**
  * Class UpdaterKeylessPollingTest.
@@ -328,7 +328,7 @@ class UpdaterKeylessPollingTest extends TestCase {
 
 		// ...and includes() requires the updater file under the positive form,
 		// immediately guarding the require line.
-		$includes_gate_block = "if ( is_admin() || wp_doing_cron() || ( defined( 'WP_CLI' ) && WP_CLI ) ) {\n\t\t\t\trequire_once \$framework_path . '/plugin-updater/class-plugin-updater.php';";
+		$includes_gate_block = "if ( is_admin() || wp_doing_cron() || ( defined( 'WP_CLI' ) && WP_CLI ) ) {\n\t\t\t\trequire_once \$framework_path . '/licensing/updater/class-plugin-updater.php';";
 
 		$this->assertStringContainsString(
 			$includes_gate_block,
@@ -346,7 +346,7 @@ class UpdaterKeylessPollingTest extends TestCase {
 		// Exactly one require of the updater file (inside the gate above).
 		$this->assertSame(
 			1,
-			substr_count( $source, "require_once \$framework_path . '/plugin-updater/class-plugin-updater.php';" ),
+			substr_count( $source, "require_once \$framework_path . '/licensing/updater/class-plugin-updater.php';" ),
 			'The updater file must be required exactly once, inside the gated block.'
 		);
 	}

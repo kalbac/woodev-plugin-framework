@@ -11,7 +11,7 @@
 
 namespace Woodev\Tests\Unit;
 
-require_once dirname( __DIR__, 2 ) . '/woodev/plugin-updater/class-plugin-updater.php';
+require_once dirname( __DIR__, 2 ) . '/woodev/licensing/updater/class-plugin-updater.php';
 
 /**
  * Class UpdaterNormalizationF5Test.
@@ -30,7 +30,7 @@ class UpdaterNormalizationF5Test extends TestCase {
 	 */
 	public function test_f5_api_request_has_no_action_string_parameter(): void {
 		$source = (string) file_get_contents(
-			dirname( __DIR__, 2 ) . '/woodev/plugin-updater/class-plugin-updater.php'
+			dirname( __DIR__, 2 ) . '/woodev/licensing/updater/class-plugin-updater.php'
 		);
 		$this->assertNotEmpty( $source, 'class-plugin-updater.php source file could not be read.' );
 		$this->assertStringNotContainsString(
@@ -49,7 +49,7 @@ class UpdaterNormalizationF5Test extends TestCase {
 	 */
 	public function test_f5_api_request_accepts_array_data_parameter(): void {
 		$source = (string) file_get_contents(
-			dirname( __DIR__, 2 ) . '/woodev/plugin-updater/class-plugin-updater.php'
+			dirname( __DIR__, 2 ) . '/woodev/licensing/updater/class-plugin-updater.php'
 		);
 		$this->assertNotEmpty( $source, 'class-plugin-updater.php source file could not be read.' );
 		$this->assertStringContainsString(

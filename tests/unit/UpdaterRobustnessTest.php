@@ -13,7 +13,7 @@ namespace Woodev\Tests\Unit;
 
 use Brain\Monkey\Functions;
 
-require_once dirname( __DIR__, 2 ) . '/woodev/plugin-updater/class-plugin-updater.php';
+require_once dirname( __DIR__, 2 ) . '/woodev/licensing/updater/class-plugin-updater.php';
 
 /**
  * Class UpdaterRobustnessTest.
@@ -34,7 +34,7 @@ class UpdaterRobustnessTest extends TestCase {
 	 */
 	public function test_f2_source_catches_throwable_not_just_exception(): void {
 		$source = (string) file_get_contents(
-			dirname( __DIR__, 2 ) . '/woodev/plugin-updater/class-plugin-updater.php'
+			dirname( __DIR__, 2 ) . '/woodev/licensing/updater/class-plugin-updater.php'
 		);
 		$this->assertNotEmpty( $source, 'class-plugin-updater.php source file could not be read.' );
 		$this->assertStringNotContainsString(
@@ -61,7 +61,7 @@ class UpdaterRobustnessTest extends TestCase {
 	 */
 	public function test_f2_source_logs_throwable_message(): void {
 		$source = (string) file_get_contents(
-			dirname( __DIR__, 2 ) . '/woodev/plugin-updater/class-plugin-updater.php'
+			dirname( __DIR__, 2 ) . '/woodev/licensing/updater/class-plugin-updater.php'
 		);
 		$this->assertNotEmpty( $source, 'class-plugin-updater.php source file could not be read.' );
 		$this->assertStringContainsString(
@@ -85,7 +85,7 @@ class UpdaterRobustnessTest extends TestCase {
 	 */
 	public function test_f7_source_logs_when_acks_class_missing(): void {
 		$source = (string) file_get_contents(
-			dirname( __DIR__, 2 ) . '/woodev/plugin-updater/class-plugin-updater.php'
+			dirname( __DIR__, 2 ) . '/woodev/licensing/updater/class-plugin-updater.php'
 		);
 		$this->assertNotEmpty( $source, 'class-plugin-updater.php source file could not be read.' );
 		$this->assertStringContainsString(
@@ -107,7 +107,7 @@ class UpdaterRobustnessTest extends TestCase {
 	 */
 	public function test_f7_source_logs_when_dispatcher_class_missing(): void {
 		$source = (string) file_get_contents(
-			dirname( __DIR__, 2 ) . '/woodev/plugin-updater/class-plugin-updater.php'
+			dirname( __DIR__, 2 ) . '/woodev/licensing/updater/class-plugin-updater.php'
 		);
 		$this->assertNotEmpty( $source, 'class-plugin-updater.php source file could not be read.' );
 		$this->assertStringContainsString(

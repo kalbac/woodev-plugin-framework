@@ -684,7 +684,7 @@ msgstr ""
 
 #: licensing/class-plugin-license.php:267
 #: licensing/class-plugin-license.php:290
-#: plugin-updater/class-plugin-updater.php:473
+#: licensing/updater/class-plugin-updater.php:473
 msgid "Error"
 msgstr ""
 
@@ -1820,31 +1820,31 @@ msgid "Unknown Error"
 msgstr ""
 
 #. translators: the plugin name.
-#: plugin-updater/class-plugin-updater.php:249
+#: licensing/updater/class-plugin-updater.php:249
 #, php-format
 msgid "There is a new version of %1$s available."
 msgstr ""
 
-#: plugin-updater/class-plugin-updater.php:255
+#: licensing/updater/class-plugin-updater.php:255
 msgid "Contact your network administrator to install the update."
 msgstr ""
 
 #. translators: 1. opening anchor tag, do not translate 2. the new plugin version 3. closing anchor tag, do not translate.
-#: plugin-updater/class-plugin-updater.php:260
+#: licensing/updater/class-plugin-updater.php:260
 #, php-format
 msgid "%1$sView version %2$s details%3$s."
 msgstr ""
 
-#: plugin-updater/class-plugin-updater.php:268
+#: licensing/updater/class-plugin-updater.php:268
 #, php-format
 msgid "%1$sView version %2$s details%3$s or %4$supdate now%5$s."
 msgstr ""
 
-#: plugin-updater/class-plugin-updater.php:279
+#: licensing/updater/class-plugin-updater.php:279
 msgid "Update now."
 msgstr ""
 
-#: plugin-updater/class-plugin-updater.php:473
+#: licensing/updater/class-plugin-updater.php:473
 msgid "You do not have permission to install plugin updates"
 msgstr ""
 
