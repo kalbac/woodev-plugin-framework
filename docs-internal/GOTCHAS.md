@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
-> **48 atomic gotchas in 17 namespaces** — update count when adding/removing.
-> Last updated: 2026-06-14 (session 14: +2 from OB-2 — `license-page-css-bundle-only` [new `[admin-ui/*]` namespace] and `build-artifacts-eol-lf-windows-parity` [build/*]).
+> **50 atomic gotchas in 17 namespaces** — update count when adding/removing.
+> Last updated: 2026-06-17 (session 18: +2 from OB-3 Step 4 — `in-plugin-update-message-arg-shape` and `updater-cache-source-stamp-not-key` [both `[php/*]`]).
 
 ## Index
 
@@ -16,6 +16,8 @@
 - [php/blocks-handler-typed-property-trap] Non-nullable typed return on `get_blocks_handler()` can TypeError for pure-WordPress subclasses (property only initialized in Woocommerce_Plugin) → [gotchas/blocks-handler-typed-property-trap.md](gotchas/blocks-handler-typed-property-trap.md) (2026-06-01)
 - [php/php84-implicit-nullable-payment-handlers] Legacy payment handler files use implicit-nullable `$arg = null` — deprecated PHP 8.4+, hidden by `error_reporting` mask in RealisticPaymentFixtureTest → [gotchas/php84-implicit-nullable-payment-handlers.md](gotchas/php84-implicit-nullable-payment-handlers.md) (2026-06-01)
 - [php/wc-compat] `Woodev_Plugin_Compatibility::is_enhanced_admin_available()` returns `true` UNCONDITIONALLY — it can't gate WC-only code out of the unit suite; guard WC-Admin code on `class_exists('\Automattic\WooCommerce\Admin\Notes\Note')` (checked first, before any mocked accessor) → [gotchas/is-enhanced-admin-available-always-true.md](gotchas/is-enhanced-admin-available-always-true.md) (s12)
+- [php/in-plugin-update-message-arg-shape] `in_plugin_update_message-{$file}` passes `($plugin_data, $response)`; `package`/`new_version` live on arg 2 (response), NOT arg 1 (header). Producer must pass the response object; consumer must read off arg 2 → [gotchas/in-plugin-update-message-arg-shape.md](gotchas/in-plugin-update-message-arg-shape.md) (s18)
+- [php/updater-cache-source-stamp-not-key] To isolate a cache keyed by a FROZEN option name, don't change the key — stamp the discriminator (e.g. licensing endpoint) into the value and validate on read → [gotchas/updater-cache-source-stamp-not-key.md](gotchas/updater-cache-source-stamp-not-key.md) (s18)
 
 ### [deprecation/*] — Deprecation cycle
 - [deprecation/deprecated-which-function] wc_deprecated_function vs _deprecated_function — which to use when → [gotchas/deprecated-which-function.md](gotchas/deprecated-which-function.md) (s2)
