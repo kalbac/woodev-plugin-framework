@@ -299,7 +299,11 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 				);
 			}
 
-			do_action( "in_plugin_update_message-{$file}", $plugin, $plugin );
+			// Pass the update RESPONSE object as the 2nd arg, per the WP core
+			// `in_plugin_update_message-{$file}` contract ($plugin_data, $response).
+			// It previously passed the plugin-data array twice (OB-3 F8), which
+			// denied consumers the `package`/`new_version` they read off arg 2.
+			do_action( "in_plugin_update_message-{$file}", $plugin, $update_cache->response[ $this->name ] );
 
 			echo '</p></div></td></tr>';
 		}
@@ -476,17 +480,33 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 		 */
 		public function show_changelog(): void {
 
-			if ( empty( $_REQUEST['woodev_action'] ) || 'view_plugin_changelog' !== $_REQUEST['woodev_action'] ) {
+			// OB-3 F9: unslash + sanitize every read, and match the plugin path
+			// strictly against $this->name. The endpoint stays capability-gated and
+			// read-only; no nonce is added (it would change the changelog URL shape,
+			// an installed-site contract).
+			// phpcs:disable WordPress.Security.NonceVerification.Recommended -- read-only changelog view, gated by current_user_can( 'update_plugins' ) below.
+			$action = isset( $_REQUEST['woodev_action'] ) ? sanitize_text_field( wp_unslash( $_REQUEST['woodev_action'] ) ) : '';
+
+			if ( 'view_plugin_changelog' !== $action ) {
 				return;
 			}
 
-			if ( empty( $_REQUEST['plugin'] ) ) {
+			// rawurldecode() before sanitizing: the changelog link encodes the
+			// plugin path with urlencode() (the basename slash becomes %2F). PHP
+			// normally decodes $_REQUEST, but decode defensively so the strict
+			// match below never rejects a legitimate, server-generated link.
+			$plugin = isset( $_REQUEST['plugin'] ) ? sanitize_text_field( rawurldecode( wp_unslash( $_REQUEST['plugin'] ) ) ) : '';
+
+			if ( $this->name !== $plugin ) {
 				return;
 			}
 
-			if ( empty( $_REQUEST['slug'] ) || $this->slug !== $_REQUEST['slug'] ) {
+			$slug = isset( $_REQUEST['slug'] ) ? sanitize_text_field( wp_unslash( $_REQUEST['slug'] ) ) : '';
+
+			if ( $this->slug !== $slug ) {
 				return;
 			}
+			// phpcs:enable WordPress.Security.NonceVerification.Recommended
 
 			if ( ! current_user_can( 'update_plugins' ) ) {
 				wp_die( esc_html__( 'You do not have permission to install plugin updates', 'woodev-plugin-framework' ), esc_html__( 'Error', 'woodev-plugin-framework' ), array( 'response' => 403 ) );
@@ -626,6 +646,14 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 				return false;
 			}
 
+			// OB-3 F10: a value stamped with a DIFFERENT licensing endpoint (or an
+			// old, unstamped cache) is a miss, so a changed `woodev_license_base_url`
+			// never serves stale cross-store data. The option KEY is left untouched
+			// (frozen contract); the source is validated inside the value instead.
+			if ( ! isset( $cache['source'] ) || $cache['source'] !== $this->api_url ) {
+				return false;
+			}
+
 			// We need to turn the icons into an array, thanks to WP Core forcing these into an object at some point.
 			$cache['value'] = json_decode( $cache['value'] );
 			if ( ! empty( $cache['value']->icons ) ) {
@@ -650,6 +678,9 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 			$data = array(
 				'timeout' => strtotime( '+3 hours', time() ),
 				'value'   => wp_json_encode( $value ),
+				// OB-3 F10: stamp the source licensing endpoint so a later read can
+				// reject a value cached against a different woodev_license_base_url.
+				'source'  => $this->api_url,
 			);
 
 			update_option( $cache_key, $data, false );

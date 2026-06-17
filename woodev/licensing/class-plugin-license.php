@@ -869,12 +869,17 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 		/**
 		 * Show plugin changes on the plugins screen.
 		 *
-		 * @param array    $plugin_data Unused parameter.
-		 * @param stdClass $response    Plugin update response.
+		 * Hooked to `in_plugin_update_message-{$file}`. Per the WP contract the
+		 * downloadable `package` and `new_version` live on the update RESPONSE object
+		 * (2nd arg), NOT on the plugin-header array (1st arg). Reading `package` off
+		 * the 1st arg meant this notice never rendered (OB-3 F8).
+		 *
+		 * @param array          $plugin_data Plugin-header data. Unused.
+		 * @param stdClass|array $response    Plugin update response (carries package + new_version).
 		 */
 		public function plugin_row_license_missing( $plugin_data, $response ) {
 
-			if ( ! $plugin_data || ! isset( $plugin_data['package'] ) ) {
+			if ( ! $this->extract_update_field( $response, 'package' ) ) {
 				return;
 			}
 
@@ -882,17 +887,7 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 				echo '&nbsp;&nbsp;<strong><a href="' . $this->get_license_settings_url() . '" style="color: #aa0000;">' . __( 'Enter valid license key for automatic updates.', 'woodev-plugin-framework' ) . '</a></strong>';
 			}
 
-			if ( ! $response ) {
-				return;
-			}
-
-			$new_version = false;
-
-			if ( is_array( $response ) && array_key_exists( 'new_version', $response ) ) {
-				$new_version = $response['new_version'];
-			} elseif ( is_object( $response ) && isset( $response->new_version ) ) {
-				$new_version = $response->new_version;
-			}
+			$new_version = $this->extract_update_field( $response, 'new_version' );
 
 			if ( ! $new_version ) {
 				return;
@@ -934,6 +929,30 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 			$update_notice .= '</div>';
 
 			echo '</p>' . wp_kses_post( $update_notice ) . '<p class="dummy">';
+		}
+
+		/**
+		 * Reads a field from a plugin-update response that may arrive as an object or array.
+		 *
+		 * WP core supplies the `in_plugin_update_message-{$file}` response as an
+		 * stdClass; some callers pass an array. This normalizes both shapes.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param mixed  $response Update response (object or array).
+		 * @param string $field    Field name to read.
+		 * @return mixed The field value, or null when absent.
+		 */
+		private function extract_update_field( $response, string $field ) {
+			if ( is_array( $response ) && array_key_exists( $field, $response ) ) {
+				return $response[ $field ];
+			}
+
+			if ( is_object( $response ) && isset( $response->$field ) ) {
+				return $response->$field;
+			}
+
+			return null;
 		}
 
 		public function plugin_screen_scripts() {

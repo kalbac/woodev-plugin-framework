@@ -121,7 +121,13 @@ expression-identical `includes()` ↔ `load_updater()` gate (B-3 parity).
    handling + backoff + wiring-failure logging) — decide the endpoint-wide-key question first.
 3. **Normalization correctness (verify store payload first):** Findings 1 + 3 + 5.
 4. **Contract-touching (operator sign-off + consumer audit + migration note):** Findings 8,
-   9, 10.
+   9, 10. **✅ DONE s18** (branch `fix/ob3-updater-contract-touching`). No data contract broken:
+   F8 = arg2 → response object (WP convention; repairs the in-repo consumer
+   `plugin_row_license_missing`, fixed in same change to read `package`/`new_version` off
+   arg 2); F9 = unslash/sanitize + strict `plugin === $this->name`, **no nonce** → changelog
+   URL shape unchanged; F10 = `source => api_url` stamped inside the cache **value**, frozen
+   option key untouched (missing/mismatched source = miss). Tests:
+   `UpdaterContractTouchingTest` (9) + `PluginLicenseUpdateRowTest` (3).
 5. **Structural MOVE** to `woodev/licensing/updater/` with the collaborator extraction — its
    own autodev session with a data-preservation checklist for the 6 frozen contracts above.
 
