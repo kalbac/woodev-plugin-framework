@@ -491,7 +491,11 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 				return;
 			}
 
-			$plugin = isset( $_REQUEST['plugin'] ) ? sanitize_text_field( wp_unslash( $_REQUEST['plugin'] ) ) : '';
+			// rawurldecode() before sanitizing: the changelog link encodes the
+			// plugin path with urlencode() (the basename slash becomes %2F). PHP
+			// normally decodes $_REQUEST, but decode defensively so the strict
+			// match below never rejects a legitimate, server-generated link.
+			$plugin = isset( $_REQUEST['plugin'] ) ? sanitize_text_field( rawurldecode( wp_unslash( $_REQUEST['plugin'] ) ) ) : '';
 
 			if ( $this->name !== $plugin ) {
 				return;
