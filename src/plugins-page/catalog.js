@@ -83,31 +83,34 @@ export function ExtensionCard( { product } ) {
 
 	return (
 		<div className="woodev-extension-card">
-			<a
-				className="woodev-extension-card__media"
-				href={ product.permalink }
-				target="_blank"
-				rel="noreferrer"
-			>
-				{ product.thumbnail ? (
-					<img src={ product.thumbnail } alt={ product.title } />
-				) : null }
-			</a>
-			<div className="woodev-extension-card__body">
+			<div className="woodev-extension-card__head">
+				<a
+					className="woodev-extension-card__icon"
+					href={ product.permalink }
+					target="_blank"
+					rel="noreferrer"
+				>
+					{ product.thumbnail ? (
+						<img src={ product.thumbnail } alt={ product.title } loading="lazy" />
+					) : null }
+				</a>
 				<h3 className="woodev-extension-card__title">
 					<a href={ product.permalink } target="_blank" rel="noreferrer">
 						{ product.title }
 					</a>
 				</h3>
-				<div
-					className="woodev-extension-card__excerpt"
-					// eslint-disable-next-line react/no-danger -- excerpt sanitized server-side with wp_kses_post.
-					dangerouslySetInnerHTML={ { __html: product.excerpt } }
-				/>
 			</div>
+			<div
+				className="woodev-extension-card__excerpt"
+				// eslint-disable-next-line react/no-danger -- excerpt sanitized server-side with wp_kses_post.
+				dangerouslySetInnerHTML={ { __html: product.excerpt } }
+			/>
 			<div className="woodev-extension-card__footer">
 				<a
-					className="button button-primary"
+					className={
+						'woodev-extension-card__buy' +
+						( product.free ? ' is-free' : '' )
+					}
 					href={ product.permalink }
 					target="_blank"
 					rel="noreferrer"

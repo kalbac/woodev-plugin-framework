@@ -186,6 +186,43 @@ default false) until the connector plugin is live.
 - **JS:** no runner (parity with license page) → rig browser verification on :8888 (catalog
   renders from live woodev.ru, search/filter work, error/empty states, 0 console errors).
 
+## 8a. Polish round (s21, operator feedback)
+
+Visual refinement after the first Phase-A merge, to match the WC-extensions feel + woodev.ru brand:
+
+- **Wide layout** — `.woodev-extensions-wrap` `max-width: none` (was 1180px); fills the admin column.
+- **Grid 4 / 2 / 1** — `repeat(4,1fr)`; `≤1280px → 2`; `≤782px → 1`.
+- **Compact cards** — modeled on the woodev.ru «Похожие плагины» block: small 52px square icon + 2-line-clamped title in a header row, 3-line-clamped excerpt, full-width accent price button pinned to the bottom (flex column). Thumbnail uses `thumbnails.small` (150×150) instead of the medium banner.
+- **Brand styling** — woodev.ru accent **cyan `#00C9FD`** (verified in-browser: it's the site link color; site font is Onest, dark bg `#080C10`). Applied on the price button, active category chip, chip hover, search focus ring, and card hover (cyan border + lift + shadow). The page stays light to sit in the wp-admin chrome — only the accent is borrowed.
+
+### woodev.ru-side dependency (#3 icon + #4 coming-soon) — NOT in the current API
+
+Verified s21: the public `edd-api/v2` products payload does **not** expose `_product_icon` or
+`_coming_soon` (the `info` object is fixed; `fields=meta` is ignored). So:
+
+- **#3 product icon** — the normalizer already prefers `info._product_icon` when present, else
+  `thumbnails.small`. Works today with the square thumbnail; upgrades automatically once the store
+  API exposes the icon.
+- **#4 hide coming-soon** — the normalizer already drops a product when `info._coming_soon` (or a
+  top-level `coming_soon`) is truthy. **No client-side signal exists today** (discontinued items like
+  Беру.ру/GOODS.ru still return `status: publish`), so they keep showing until woodev.ru exposes the
+  flag. This is forward-compatible — the moment the API includes it, they vanish.
+
+To enable both, woodev.ru must extend its EDD API product payload (a tiny mu-plugin / theme snippet
+on the production site — separate from this framework repo):
+
+```php
+// On woodev.ru: expose the product icon + coming-soon flag in edd-api/v2 products.
+add_filter( 'edd_api_products_product', function ( $product_data, $product_info ) {
+    $id = $product_info->ID;
+    $product_data['info']['_product_icon'] = (string) get_post_meta( $id, '_product_icon', true );
+    $product_data['info']['_coming_soon']  = (bool) get_post_meta( $id, '_coming_soon', true );
+    return $product_data;
+}, 10, 2 );
+```
+
+(Filter name/shape to be confirmed against the woodev.ru EDD version when implemented.)
+
 ## 9. Out of scope (this session)
 
 - Live woodev.ru handshake / real purchases (Phase B, needs store endpoints).
