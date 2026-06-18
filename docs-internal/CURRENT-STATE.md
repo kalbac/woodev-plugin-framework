@@ -44,6 +44,7 @@
 
 ## Known Bugs / Open debt
 
+- [🔴 BLOCKING, s21 Item 0] License page: «Изменить ключ» + ввод несуществующего ключа → бейдж «Неизвестный статус», нет кнопки «Изменить ключ» → пользователь застревает (как был отозванный до #67). Fallback-группа `unknown` в `card-state.js` имеет `changeKey: false`. Fix: захватить реальный EDD-токен мусорного ключа (возможно маппить в группу E), и дать `unknown` `changeKey: true`. Детали: `next-session-prompt.md` Item 0. Найден оператором после s20.
 - [⚠️] `class-payment-gateway.php` ~3,542 lines — trait-extraction candidate (grooming, s13; → `FUTURE-BACKLOG`).
 - **All earlier release-blocker findings RESOLVED** (2026-06-01 audit, PHPStan masks, base-class leaks, eCheck/ACH removal, payment-gateway base-method regression, etc.) — see `SESSION-LOG.md` + git history. Not repeated here.
 
@@ -55,6 +56,7 @@
 ## Next Actions
 
 - ✅ **s20 DONE — license page redesign + bug-fix rounds (PRs #64/#65/#66/#67), operator-approved:** see "Last session context" above + `SESSION-LOG.md` s20. 656 unit, all states rig-verified, CI green. Plan: `docs-internal/plans/2026-06-18-license-page-redesign.md`.
+- 🔴 **s21 Item 0 (BLOCKING, do FIRST):** license-page `unknown` fallback strands the user on a non-existent key (no «Изменить ключ») — see Known Bugs above + `next-session-prompt.md` Item 0.
 - 🎯 **s21 NEXT — OB-7: modernize «Woodev → Плагины» page (operator pick):** server-rendered addon list (`woodev/admin/pages/views/html-admin-page-plugins.php` + controller `Woodev_Admin_Plugins`, menu slug `woodev-extensions`) is outdated + English. Rebuild in the new design language (parity with the license page), RU-localize, modern WP components. Future idea: woodev.ru account integration (see OB-7 in `FUTURE-BACKLOG.md`). Start with `brainstorming` (design not yet specced) → `writing-plans` → TDD + rig browser-verify + Codex critic. Ref UX: WC extensions screen.
 - ✅ **OB-3 COMPLETE** (s15 F11/F12/F13, s16 F2/F7+F5, s17 move, s18 F8/F9/F10, s19 F1/F3); only **F6** backoff deferred (endpoint-wide-key question).
 - 📥 **Remaining backlog** (`FUTURE-BACKLOG.md` → "Operator backlog dump — s13"): OB-4 reusable-JS-php-based principle · OB-5 godaddy fork study (GPT research delegation) · OB-7 modernize Plugins page (WP React + woodev.ru account) · OB-9 shipping nuances. Big ones: payment-gateway trait extraction; review #4 (`array()`→`[]` + typing + `@since` sweep).
