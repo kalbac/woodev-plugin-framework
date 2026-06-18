@@ -162,8 +162,55 @@ if ( ! class_exists( 'Woodev_Admin_Pages' ) ) :
 			echo '<div class="wrap woodev-licenses-wrap">';
 			echo '<h1 class="wp-heading-inline">' . esc_html__( 'Лицензии Woodev', 'woodev-plugin-framework' ) . '</h1>';
 			echo '<hr class="wp-header-end">';
-			echo '<div id="woodev-licenses-app"></div>';
+			echo '<div id="woodev-licenses-app">';
+			$this->render_license_skeleton();
+			echo '</div>';
 			$this->get_settings_section();
+			echo '</div>';
+		}
+
+		/**
+		 * Renders a loading skeleton inside the React mount node — one placeholder
+		 * card per registered license engine plus an intro bar.
+		 *
+		 * The skeleton reserves the card-grid height so the page does not "jump"
+		 * when the React bundle finishes loading; React's createRoot().render()
+		 * replaces this markup on mount. Emits nothing when no engine is registered.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		private function render_license_skeleton(): void {
+
+			$count = count( Woodev_Plugins_License::get_registered_instances() );
+
+			if ( $count < 1 ) {
+				return;
+			}
+
+			echo '<div class="woodev-licenses-skeleton" aria-hidden="true">';
+			echo '<div class="woodev-skeleton woodev-skeleton--intro"></div>';
+			echo '<div class="woodev-licenses-grid">';
+
+			for ( $i = 0; $i < $count; $i++ ) {
+				echo '<div class="woodev-skeleton-card">'
+					. '<div class="woodev-skeleton-card__header">'
+						. '<span class="woodev-skeleton woodev-skeleton--title"></span>'
+						. '<span class="woodev-skeleton woodev-skeleton--badge"></span>'
+					. '</div>'
+					. '<div class="woodev-skeleton-card__body">'
+						. '<span class="woodev-skeleton woodev-skeleton--line"></span>'
+						. '<span class="woodev-skeleton woodev-skeleton--field"></span>'
+					. '</div>'
+					. '<div class="woodev-skeleton-card__footer">'
+						. '<span class="woodev-skeleton woodev-skeleton--button"></span>'
+						. '<span class="woodev-skeleton woodev-skeleton--toggle"></span>'
+					. '</div>'
+				. '</div>';
+			}
+
+			echo '</div>';
 			echo '</div>';
 		}
 

@@ -118,6 +118,43 @@ class LicensePageRenderTest extends TestCase {
 		$this->assertSame( 1, substr_count( $output, 'id="woodev-licenses-app"' ) );
 	}
 
+	/**
+	 * license_page() renders one loading-skeleton card per registered engine,
+	 * inside the mount div, so the page reserves the grid height and does not
+	 * jump when React mounts. React's createRoot().render() replaces the
+	 * skeleton on mount.
+	 *
+	 * @return void
+	 */
+	public function test_license_page_renders_one_skeleton_card_per_registered_engine(): void {
+		$this->seed_license_registry( '216', Mockery::mock( \Woodev_Plugins_License::class ) );
+		$this->seed_license_registry( '217', Mockery::mock( \Woodev_Plugins_License::class ) );
+
+		$pages = $this->make_admin_pages();
+
+		ob_start();
+		$pages->license_page();
+		$output = ob_get_clean();
+
+		$this->assertStringContainsString( 'woodev-licenses-skeleton', $output );
+		$this->assertSame( 2, substr_count( $output, 'class="woodev-skeleton-card"' ) );
+	}
+
+	/**
+	 * license_page() renders no skeleton when there are no registered engines.
+	 *
+	 * @return void
+	 */
+	public function test_license_page_renders_no_skeleton_without_engines(): void {
+		$pages = $this->make_admin_pages();
+
+		ob_start();
+		$pages->license_page();
+		$output = ob_get_clean();
+
+		$this->assertStringNotContainsString( 'woodev-skeleton-card', $output );
+	}
+
 	/* ----------------------------------------------------------------------- *
 	 * (2) load_licenses_page_scripts() enqueue
 	 * ----------------------------------------------------------------------- */
