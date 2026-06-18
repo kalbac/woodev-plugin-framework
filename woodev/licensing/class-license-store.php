@@ -291,7 +291,14 @@ if ( ! class_exists( 'Woodev_License' ) ) :
 			$license = (string) $this->license;
 			$error   = (string) $this->error;
 
-			if ( '' !== $error && in_array( $license, array( '', 'invalid' ), true ) ) {
+			// Surface the `error` token over a generic '' / 'invalid' license ONLY when it
+			// is a machine status code (e.g. `no_activations_left`, `site_inactive`). Some
+			// stores put a localized free-text sentence in `error` for a plain bad key
+			// (observed: 'Неверно указан лицензионный ключ.'); that must NOT become the
+			// status or the presentation can't classify it (falls through to the «unknown»
+			// fallback and the user gets stranded). A free-text error keeps `license`, so a
+			// bad key resolves to 'invalid' → editable «bad-key» group + the right message.
+			if ( '' !== $error && in_array( $license, array( '', 'invalid' ), true ) && 1 === preg_match( '/^[a-z][a-z0-9_]*$/', $error ) ) {
 				return $error;
 			}
 
