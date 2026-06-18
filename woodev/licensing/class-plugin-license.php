@@ -245,21 +245,21 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 		public function get_license_status( $status_name ) {
 
 			$statuses = array(
-				'missing'               => __( 'License does not exist', 'woodev-plugin-framework' ),
-				'missing_url'           => __( 'Site URL is not provided', 'woodev-plugin-framework' ),
-				'license_not_activable' => __( 'Attempting to activate a bundles parent license', 'woodev-plugin-framework' ),
-				'disabled'              => __( 'License key revoked', 'woodev-plugin-framework' ),
-				'no_activations_left'   => __( 'No activations left', 'woodev-plugin-framework' ),
-				'expired'               => __( 'License has expired', 'woodev-plugin-framework' ),
-				'key_mismatch'          => __( 'License is not valid for this plugin', 'woodev-plugin-framework' ),
-				'invalid_item_id'       => __( 'Invalid plugin ID', 'woodev-plugin-framework' ),
-				'item_name_mismatch'    => __( 'License is not valid for this plugin', 'woodev-plugin-framework' ),
-				'site_inactive'         => __( 'Site is not active for this license', 'woodev-plugin-framework' ),
-				'invalid'               => __( 'License key does not match', 'woodev-plugin-framework' ),
-				'valid'                 => __( 'License is valid', 'woodev-plugin-framework' ),
+				'missing'               => __( 'Лицензия не найдена', 'woodev-plugin-framework' ),
+				'missing_url'           => __( 'URL сайта не передан', 'woodev-plugin-framework' ),
+				'license_not_activable' => __( 'Это родительский ключ комплекта', 'woodev-plugin-framework' ),
+				'disabled'              => __( 'Ключ отозван', 'woodev-plugin-framework' ),
+				'no_activations_left'   => __( 'Лимит активаций исчерпан', 'woodev-plugin-framework' ),
+				'expired'               => __( 'Срок лицензии истёк', 'woodev-plugin-framework' ),
+				'key_mismatch'          => __( 'Ключ не подходит для этого плагина', 'woodev-plugin-framework' ),
+				'invalid_item_id'       => __( 'Неверный идентификатор плагина', 'woodev-plugin-framework' ),
+				'item_name_mismatch'    => __( 'Ключ не подходит для этого плагина', 'woodev-plugin-framework' ),
+				'site_inactive'         => __( 'Сайт не активирован для этой лицензии', 'woodev-plugin-framework' ),
+				'invalid'               => __( 'Неверный лицензионный ключ', 'woodev-plugin-framework' ),
+				'valid'                 => __( 'Лицензия активна', 'woodev-plugin-framework' ),
 			);
 
-			return isset( $statuses[ $status_name ] ) ? $statuses[ $status_name ] : __( 'Unknown license status', 'woodev-plugin-framework' );
+			return isset( $statuses[ $status_name ] ) ? $statuses[ $status_name ] : __( 'Неизвестный статус', 'woodev-plugin-framework' );
 		}
 
 		/**

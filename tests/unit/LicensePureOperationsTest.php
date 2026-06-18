@@ -352,7 +352,7 @@ class LicensePureOperationsTest extends TestCase {
 		$this->assertSame( 'Test Plugin', $state['plugin_name'] );
 		$this->assertSame( 'KEY-123', $state['license_key'] );
 		$this->assertSame( 'valid', $state['status'] );
-		$this->assertSame( 'License is valid', $state['status_label'] );
+		$this->assertSame( 'Лицензия активна', $state['status_label'] );
 		$this->assertSame( 'lifetime', $state['expires'] );
 		$this->assertTrue( $state['is_valid'] );
 		$this->assertTrue( $state['is_active'] );
