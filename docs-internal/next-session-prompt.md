@@ -1,6 +1,6 @@
-# Промт для следующей сессии (s19): OB-3 closeout на риге (browser-verify F8/F9 + payload для F1+F3) или новый кандидат
+# Промт для следующей сессии (s20): редизайн страницы «Woodev → Лицензии» (UI/UX)
 
-> Написан в s18 (17.06.2026). Скопируй в новую сессию как стартовый бриф. После выполнения — замени на промт для s20.
+> Написан в s19 (18.06.2026). Скопируй в новую сессию как стартовый бриф. После выполнения — замени на промт для s21.
 
 ---
 
@@ -8,45 +8,40 @@
 
 ## Старт сессии
 1. `docs-internal/CURRENT-STATE.md` — lean-состояние (фазы, открытые баги, next actions).
-2. `docs-internal/SESSION-LOG.md` — верхняя запись (s18) — что сделано.
-3. `docs-internal/GOTCHAS.md` — сканировать релевантные теги (**50**). Особо: `tooling/codex-shell-sandbox-broken-windows` (фоновый codex-rescue молча умирает на Windows-сэндбоксе → INLINE-бандл + проверять, что вердикт реально вернулся), `wp-safe-remote-request-local-rig` (все ловушки рига), и два новых из s18: `in-plugin-update-message-arg-shape`, `updater-cache-source-stamp-not-key`.
-4. `docs-internal/FUTURE-BACKLOG.md` → «Operator backlog dump — s13» (остались OB-5/7/9) + «Technical Debt».
-5. `docs-internal/reviews/ob3-plugin-updater-review-2026-06-14.md` — если продолжаем OB-3 (Step 3 = Findings F1/F3).
+2. `docs-internal/SESSION-LOG.md` — верхняя запись (s19) — что сделано.
+3. `docs-internal/GOTCHAS.md` — сканировать релевантные теги (**52**). Особо для этой задачи: `license-page-css-bundle-only` (страница грузит ТОЛЬКО `style-index.css` + `wp-components`; стили серверных секций — в `src/license-page/style.scss`; `license_page()` оборачивает вывод в `.wrap`+`<h1>`), `wp-scripts-jsx-runtime-wp66` (классический JSX-рантайм, импортить `createElement`/`Fragment` в каждом JSX), `build-artifacts-eol-lf-windows-parity` (коммитить и `src/`, и `woodev/assets/build/`; `.gitattributes` пинит LF), `russian-source-i18n-plural-n` (русский — исходный язык; избегать `_n()`), `wp-safe-remote-request-local-rig` + `wc-blocks-subscriber-wp-admin-403-test` (ловушки рига).
 
-## Что сделано в s18 (PR #62 → main, `bcfd271`)
-- **OB-3 Step 4 (contract-touching, operator sign-off per fix):**
-  - **F8** — `in_plugin_update_message-{$file}` 2-й аргумент → response-объект (WP-конвенция). Параллельно **починен мёртвый consumer** `Woodev_Plugins_License::plugin_row_license_missing()` (читал `package` из arg1, который WP не заполняет → нотис «backup before updating» НИКОГДА не рендерился, даже на single-site). Хелпер `extract_update_field()`.
-  - **F9** — changelog endpoint: `wp_unslash`+`sanitize_text_field` на всех `$_REQUEST`-чтениях + строгое `plugin === $this->name`. **Без nonce** (URL-shape changelog не меняется). Codex HOLD по `%2F` → защитный `rawurldecode()` перед sanitize.
-  - **F10** — version-cache: штамп `source => api_url` внутри значения опции; mismatch/absent source = miss. **Frozen-ключ опции не тронут.**
-  - Ни один data-контракт не сломан. +12 тестов (645 unit), Codex SHIP, CI зелёный. 2 новых gotcha.
+## ⭐ Задача s20 — редизит «Woodev → Лицензии» (дизайн УЖЕ УТВЕРЖДЁН)
 
-## ⚠️ Висит (решения оператора / не сделано)
-1. **v2.0.1 не вышел.** Не бампать VERSION. Новые символы → `@since 2.0.2`.
+**Спека (авторитетная, утверждена оператором в s19):** `docs-internal/specs/2026-06-18-license-page-ui-ux-redesign.md`. Прочитай её целиком — там вся раскладка, анатомия карточки, form-group ключа, машина состояний на 7 групп (на реальных EDD-статусах), решённые вопросы и список файлов.
+
+**Порядок:**
+1. Дать оператору бегло освежить спеку (он уже согласовал; если правок нет — двигаемся).
+2. **`writing-plans`** — составить план реализации по спеке.
+3. Реализация TDD-циклами, `composer check` зелёный после каждого куска.
+4. `npm run build`; коммитить и `src/`, и `woodev/assets/build/**` (build-parity CI).
+5. **Браузер-верификация на двухстековом риге** — оба стека UP (issuer `c8ec…` :8090, stand `de59…` :8888). Stand уже фильтрует `woodev_license_base_url` → `host.docker.internal:8090`. Логин `admin`/`password`. Прогнать разные состояния карточки (активна / истекает / истекла / неверный ключ / лимит) — драйвить через активацию разных issuer-загрузок и правку их сроков. Серверные сообщения нужно ЛОКАЛИЗОВАТЬ на русский (`Woodev_License_Messages` сейчас на английском).
+6. **Codex INLINE-бандлом** на существенных кусках; PR; мердж `gh pr merge <N> --squash --delete-branch` ТОЛЬКО после подтверждённо зелёного CI; НЕ `--auto`. Рекомендованная опция в AskUserQuestion — ПЕРВОЙ.
+
+**Ключевые точки из спеки (напоминание):**
+- Карточки лицензий: flex/grid **3/2/1**. Карточки ссылок (`.woodev-settings-documentation`): `.card.card-compact`-стиль (иконка слева, справа заголовок/текст/CTA), равная высота, **4/2/1**. Intro — info-notice на всю ширину.
+- Form-group ключа: `[ input ][ 👁 ][ Проверить ]`. Ключ не сохранён → editable+плейсхолдер, 👁/Проверить disabled. Ключ сохранён → маска (4+4) read-only, 👁/Проверить enabled. «Проверить» = re-validate через `/verify` с сохранённым ключом.
+- Машина состояний: editable только когда подозрителен сам ключ (группы **A** «нет ключа», **E** «неверный ключ»); маска+read-only для valid/expiring/expired/site_inactive/no_activations_left/disabled/revoked.
+- Бета: прижат вправо, лейбл «Бета» + tooltip; по умолчанию выкл.
+- Бэкенд: **аддитивно** добавить `renewal_url` в `Woodev_Plugins_License::get_state()` (тест!) для кнопки «Продлить». REST-роуты/`activate`/`deactivate`/кэш/ключи опций — НЕ трогать.
+
+## ⚠️ Висит (решения оператора / контекст)
+1. **v2.0.1 НЕ выпущен.** Не бампать `VERSION`. Новые символы → `@since 2.0.2`.
 2. **Публичные docs/ — НЕ трогаем** до готовности фреймворка.
-3. **НЕ browser-verified (s18, unit-only):** F8 multisite custom update-row + нотисы (`plugin_row_license_missing` теперь должен рендериться) и F9 changelog endpoint (`?woodev_action=view_plugin_changelog`).
-4. **OB-2 follow-up:** живую страницу «Лицензии» проверить в браузере на риге.
+3. **OB-3 завершён** (кроме осознанно отложенного **F6** — backoff, вопрос endpoint-wide-ключа). Ревью-детали: `docs-internal/reviews/ob3-plugin-updater-review-2026-06-14.md`.
+4. **F8 multisite** custom update-row в браузере НЕ проверяли (нужен multisite-стенд; consumer-починка подтверждена на single-site в s19). Низкий приоритет.
 
-## Задача s19 — рекомендуется: OB-3 closeout на риге (оператор присутствует → live-проверка по ходу)
-
-**Двухстековый риг** (см. CURRENT-STATE «Local rig» + gotcha `wp-safe-remote-request-local-rig`): issuer = `woodev_theme` (`localhost:8090`), stand/consumer = framework wp-env (`localhost:8888`/`8080`). Драйв через `docker exec <cli> wp eval-file ...` (НЕ inline `wp eval` — кириллица/кавычки ломаются). НЕ запускать `do_action('admin_init')` в wp-cli (WC OrderAttributionController фаталит).
-
-1. **Browser-verify s18-изменений** (multisite-стенд для F8): что custom update-row рендерится и нотис «Внимание! Сделайте бэкап…» + «Enter valid license key…» теперь показываются (раньше были мертвы). F9 — открыть `index.php?woodev_action=view_plugin_changelog&plugin=<basename>&slug=<slug>` под admin и под не-admin (403).
-2. **Снять реальный store-payload `get_version`** с issuer-рига (`plugin_latest_version` vs `plugin_information`) → этим **разблокировать OB-3 Step 3 (F1+F3)**:
-   - **F1** — `sections` нормализация (промоут секций в top-level + cast-to-array vs `show_update_notification()` читает `…->sections->changelog` как объект). Решить по фактической форме payload.
-   - **F3** — shared cache key конфлейтит `get_repo_api_data()` и `plugins_api_filter()`: нормализовать на каждом чтении для `check_update()`, **ключ НЕ менять** (frozen). Открытый вопрос ревью: одинаковы ли payload-ы у `plugin_latest_version` и `plugin_information`?
-   - TDD; `composer check` зелёный; Codex INLINE-бандлом.
-
-**Альтернативы (если риг не берём):**
-- **Большой ревью #4 (автономно-дружелюбно):** `array()`→`[]` (~797 в `woodev/`) + типизация везде + `@since`-свип + включить `Generic.Arrays.DisallowLongArraySyntax`. Крупный механический проход — autodev-loop.
-- **Payment-gateway traits** (3 542 строки → ~10 трейтов) — отдельная autodev-сессия.
-- **OB-5** — godaddy fork (Traits/Enums/Abilities) — GPT research-делегация.
-- **OB-7** — модернизировать «Woodev → Плагины» (WP React) + аккаунт woodev.ru. *(крупная)*
-- **OB-9** — нюансы модуля доставки — отдельная сессия.
+## Бэклог (если редизайн закроется быстро) — `FUTURE-BACKLOG.md` «Operator backlog dump — s13»
+- OB-4 (reusable-JS-php-based) · OB-5 (godaddy fork, GPT-research) · OB-7 (модернизация Plugins page) · OB-9 (нюансы доставки).
+- Крупные: payment-gateway trait extraction (~3 542 строки); ревью #4 (`array()`→`[]` ~797 + типизация + `@since`-свип + `Generic.Arrays.DisallowLongArraySyntax`).
 
 ## Подход и гигиена
-- Каждый кусок — атомная задача (по возможности TDD), `composer check` зелёный после каждого.
-- **Codex-критика INLINE-бандлом** на существенных изменениях (diff + контракты прямо в промте; «no shell, review pasted diff only»). Фоновый `codex:codex-rescue` молча умирает — если используешь, **проверь что вердикт реально вернулся** (читай финальное сообщение агента / транскрипт `~/.codex/sessions/.../rollout-*.jsonl`).
-- Serena для PHP **если доступна** (в s17/s18 НЕ была загружена → Grep/Read/Edit). `tests/`, `.wp-env-stand/`, весь woodev_theme — Serena игнорит → Grep/Read/Edit.
-- React/SCSS правки: `npm run build`, коммить и `src/` и `woodev/assets/build/`; build-parity CI (gotcha `build-artifacts-eol-lf-windows-parity`).
-- Контракт-трогающие фиксы: аудит consumers + sign-off оператора + проверка 6 frozen-контрактов (CLAUDE.md «never break» list).
-- Мердж PR: `gh pr merge <N> --squash --delete-branch` ТОЛЬКО после подтверждённо зелёного CI; НЕ `--auto`. Рекомендованная опция в AskUserQuestion — ПЕРВОЙ.
+- Брейншторм уже проведён → сразу `writing-plans` (НЕ повторять брейншторм). Реализация — атомарные TDD-куски.
+- Serena для PHP **если доступна** (в s17–s19 НЕ была загружена → Grep/Read/Edit). `src/`, `tests/`, `.wp-env-stand/`, весь woodev_theme — Serena игнорит.
+- Рижные пробы: `docker cp` файл в контейнер + `wp eval-file` (НЕ inline `wp eval` — кириллица/кавычки ломаются). НЕ `do_action('admin_init')` в wp-cli (WC OrderAttributionController фаталит). Чистить пробы/временные файлы/тест-юзеров в конце.
+- Фоновый `codex:codex-rescue` молча умирает на Windows-сэндбоксе → INLINE-бандл + проверять, что вердикт реально вернулся.
