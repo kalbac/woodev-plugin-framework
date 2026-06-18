@@ -1,4 +1,12 @@
 
+## Session 22 (2026-06-19) — OB-7 store-side build (cross-project) + plugins-page rating (PR #71 merged)
+
+> Cross-project session: the two main tasks were on the **woodev.ru side** (`D:\Projects\woodev_theme\plugins\`), with one small forward-compatible follow-up here in the framework. Framework-side work = PR #71 only.
+
+- **Store-side (woodev_theme, s127 — NOT this repo):** (1) `woodev-core` edd-api now exposes `info._product_icon` + `info._coming_soon` (rating was already present) — so the OB-7 catalog's forward-compatible normalizer now actually receives the icon + can hide discontinued items. (2) New plugin **`woodev-account-connector`** (OB-7 Phase B OAuth provider per spec §7): 6 endpoints + authorize screen + connections table + HMAC + EDD purchases, 31 unit tests, rig-verified, Codex adversarial-reviewed then hardened (timestamp-freshness / atomic grant consume / same-origin redirect) and Codex re-reviewed sound.
+- **Framework follow-up (PR #71 `e1696e0`):** `Woodev_REST_API_Extensions::normalize_product()` now surfaces **`rating`** as a 0–5 value (from woodev-core's top-level `rating`, WP.org 0–100 scale; `null` when absent/zero — note: it is **top-level `$raw->rating`**, not `$info->rating`). React catalog card renders a star row + numeric value (brand cyan) above the excerpt. 2 new pure-normalizer tests → **667 unit / 1957 assertions**, phpcs/phpstan clean, build + Assets-build-parity green. `@since 2.0.2`; VERSION not bumped.
+- **Process:** `brainstorming` → `writing-plans` → inline TDD for the new plugin (store side); framework follow-up via branch → PR → confirmed-green CI → `--squash --delete-branch` (not `--auto`) → main resynced.
+
 ## Session 21 (2026-06-18/19) — license Item 0 fix + OB-7 «Плагины» React redesign (PRs #68/#69/#70 merged)
 
 > Operator present on the rig. Closed the BLOCKING license Item 0, then ran OB-7 Phase A end-to-end (`brainstorming` → `writing-plans` → inline TDD/build → Codex inline critic → two-stack rig browser-verify → explicit squash-merge on green CI), then a brand-polish round. Three PRs, all rig-verified, no installed-site data contract touched.
