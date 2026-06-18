@@ -294,6 +294,10 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 			// Load plugin updater
 			add_action( 'init', array( $this, 'load_updater' ) );
 
+			// Register the woodev/v1 extensions catalog REST controller. Idempotent;
+			// must boot in all contexts because REST requests are not is_admin().
+			Woodev_REST_API_Extensions::boot();
+
 			add_action( 'wp_enqueue_scripts', [ $this, 'frontend_enqueue_scripts' ] );
 			add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_scripts' ) );
 
@@ -569,6 +573,7 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 			require_once $framework_path . '/rest-api/class-rest-v1-registrar.php';
 			require_once $framework_path . '/licensing/api/class-rest-api-license.php';
 			require_once $framework_path . '/licensing/api/class-rest-api-license-command.php';
+			require_once $framework_path . '/rest-api/controllers/class-rest-api-extensions.php';
 
 			// Load plugin updater class. The condition is EXPRESSION-IDENTICAL to the
 			// load_updater() gate (B-3): wp_doing_cron() is filterable, so a
