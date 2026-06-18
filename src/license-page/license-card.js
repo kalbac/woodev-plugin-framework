@@ -6,6 +6,10 @@
  * array). Request errors surface the WP_Error message in an error Notice —
  * no silent catch.
  *
+ * The card's presentation (status badge, accent bar, key-field mode, action
+ * set) is derived by the PURE getCardView() helper (./card-state) from the
+ * approved 7-group state machine; this component stays declarative.
+ *
  * __experimentalConfirmDialog availability:
  *   - Exported by @wordpress/components from WP ≥ 6.2 (graduated from
  *     internal, still under the experimental prefix). This framework targets
@@ -46,21 +50,23 @@ import {
 	Button,
 	Notice,
 	ToggleControl,
+	Tooltip,
 	Spinner,
 	__experimentalConfirmDialog as ConfirmDialog,
 } from '@wordpress/components';
+import { getCardView } from './card-state';
 
 /**
- * Masks all characters of a license key except the last 4.
+ * Masks a license key, keeping the first 4 and last 4 characters visible.
  *
  * @param {string} key The full license key.
  * @return {string} Masked key string.
  */
 function maskKey( key ) {
-	if ( ! key || key.length <= 4 ) {
+	if ( ! key || key.length <= 8 ) {
 		return key;
 	}
-	return '•'.repeat( key.length - 4 ) + key.slice( -4 );
+	return key.slice( 0, 4 ) + '•'.repeat( Math.max( 4, key.length - 8 ) ) + key.slice( -4 );
 }
 
 /**
@@ -75,6 +81,8 @@ export default function LicenseCard( { initialState } ) {
 	const [ state, setState ] = useState( initialState );
 	const [ keyInput, setKeyInput ] = useState( initialState.license_key || '' );
 	const [ revealKey, setRevealKey ] = useState( false );
+	// «Изменить ключ» — client-only: replace a saved key without deactivating.
+	const [ editingKey, setEditingKey ] = useState( false );
 	// Single shared busy flag: any in-flight mutation disables ALL action
 	// controls until the request settles (prevents concurrent mutations and
 	// stale-state races from overlapping verify/deactivate/beta requests).
@@ -97,8 +105,6 @@ export default function LicenseCard( { initialState } ) {
 		license_key: licenseKey,
 		message,
 		message_variant: messageVariant,
-		status_label: statusLabel,
-		is_valid: isValid,
 		is_need_license: isNeedLicense,
 		beta_enabled: betaEnabled,
 	} = state;
@@ -123,6 +129,7 @@ export default function LicenseCard( { initialState } ) {
 			} );
 			setState( response );
 			setKeyInput( response.license_key || '' );
+			setEditingKey( false );
 		} catch ( err ) {
 			setError(
 				err && err.message
@@ -152,6 +159,7 @@ export default function LicenseCard( { initialState } ) {
 			} );
 			setState( response );
 			setKeyInput( response.license_key || '' );
+			setEditingKey( false );
 		} catch ( err ) {
 			setError(
 				err && err.message
@@ -214,45 +222,55 @@ export default function LicenseCard( { initialState } ) {
 
 	if ( ! isNeedLicense ) {
 		return (
-			<Card className="woodev-license-card woodev-license-card--free">
+			<Card className="woodev-license-card woodev-license-card--info woodev-license-card--free">
 				<CardHeader>
 					<Flex justify="space-between" align="center">
 						<FlexItem>
 							<strong>{ pluginName }</strong>
 						</FlexItem>
+						<FlexItem>
+							<span className="woodev-license-badge is-info">
+								{ __( 'Лицензия не требуется', 'woodev-plugin-framework' ) }
+							</span>
+						</FlexItem>
 					</Flex>
 				</CardHeader>
 				<CardBody>
 					{ errorNotice }
-					<Notice
-						status="info"
-						isDismissible={ false }
-					>
+					<Notice status="info" isDismissible={ false }>
 						{ __( 'Лицензия для этого плагина не требуется.', 'woodev-plugin-framework' ) }
 					</Notice>
 				</CardBody>
 				<CardFooter>
-					<ToggleControl
-						label={ __( 'Разрешить установку бета-версий', 'woodev-plugin-framework' ) }
-						checked={ state.beta_enabled }
-						disabled={ busy }
-						onChange={ handleBetaToggle }
-					/>
-					{ togglingBeta && <Spinner /> }
+					<Flex justify="flex-end" align="center">
+						<FlexItem className="woodev-license-beta">
+							<Tooltip text={ __( 'Разрешает устанавливать бета-версии плагина', 'woodev-plugin-framework' ) }>
+								<span className="woodev-license-beta-toggle">
+									<ToggleControl
+										label={ __( 'Бета', 'woodev-plugin-framework' ) }
+										checked={ betaEnabled }
+										disabled={ busy }
+										onChange={ handleBetaToggle }
+									/>
+								</span>
+							</Tooltip>
+							{ togglingBeta && <Spinner /> }
+						</FlexItem>
+					</Flex>
 				</CardFooter>
 			</Card>
 		);
 	}
 
 	// ------------------------------------------------------------------ //
-	// Standard licensed card
+	// Standard licensed card — driven by the derived view descriptor.
 	// ------------------------------------------------------------------ //
 
-	const statusBadgeClass = `woodev-license-badge is-${ messageVariant || 'info' }`;
+	const view = getCardView( state, editingKey );
+	const showKeyField = view.group !== 'unknown' || !! licenseKey;
 
 	return (
-		<Card className="woodev-license-card">
-			{ /* Confirm deactivate dialog */ }
+		<Card className={ `woodev-license-card woodev-license-card--${ view.accent }` }>
 			{ confirmOpen && (
 				<ConfirmDialog
 					onConfirm={ handleDeactivate }
@@ -268,116 +286,144 @@ export default function LicenseCard( { initialState } ) {
 						<strong>{ pluginName }</strong>
 					</FlexItem>
 					<FlexItem>
-						<span className={ statusBadgeClass }>
-							{ statusLabel || __( 'Неизвестный статус', 'woodev-plugin-framework' ) }
+						<span className={ `woodev-license-badge is-${ view.badge.variant }` }>
+							{ view.badge.label }
 						</span>
 					</FlexItem>
 				</Flex>
 			</CardHeader>
 
 			<CardBody>
-				{ /* License status message — content is kses-sanitized by the PHP
-				     layer (wp_kses_post in Woodev_Plugins_License::get_state()),
-				     so RawHTML is safe here. */ }
+				{ /* License status message — kses-sanitized on the PHP layer, so RawHTML is safe. */ }
 				{ message && (
-					<Notice
-						status={ messageVariant || 'info' }
-						isDismissible={ false }
-					>
+					<Notice status={ messageVariant || 'info' } isDismissible={ false }>
 						<RawHTML>{ message }</RawHTML>
 					</Notice>
 				) }
 
-				{ /* Error notice (from failed API requests) */ }
 				{ errorNotice }
 
-				{ /* Key field: masked display when key exists and not revealing */ }
-				{ licenseKey && (
-					<Flex align="center" className="woodev-license-key-row">
-						<FlexItem isBlock>
-							{ revealKey
-								? <code className="woodev-license-key-value">{ licenseKey }</code>
-								: <code className="woodev-license-key-value woodev-license-key-value--masked">{ maskKey( licenseKey ) }</code>
-							}
-						</FlexItem>
-						<FlexItem>
-							<Button
-								variant="tertiary"
-								className="woodev-license-eye-button"
-								onClick={ () => setRevealKey( ( prev ) => ! prev ) }
-								label={ revealKey
-									? __( 'Скрыть ключ', 'woodev-plugin-framework' )
-									: __( 'Показать ключ', 'woodev-plugin-framework' )
-								}
-							>
-								<span
-									className={ `dashicons ${ revealKey ? 'dashicons-hidden' : 'dashicons-visibility' }` }
-									aria-hidden="true"
-								/>
-							</Button>
-						</FlexItem>
-					</Flex>
+				{ showKeyField && (
+					<div className="woodev-license-key-group">
+						<TextControl
+							className="woodev-license-key-input"
+							hideLabelFromVision
+							label={ __( 'Лицензионный ключ', 'woodev-plugin-framework' ) }
+							value={ view.keyEditable
+								? keyInput
+								: ( revealKey ? licenseKey : maskKey( licenseKey ) ) }
+							readOnly={ ! view.keyEditable }
+							onChange={ ( value ) => setKeyInput( value ) }
+							placeholder={ __( 'Укажите ваш ключ', 'woodev-plugin-framework' ) }
+						/>
+						<Button
+							className="woodev-license-eye-button"
+							variant="secondary"
+							disabled={ ! view.controlsEnabled }
+							onClick={ () => setRevealKey( ( prev ) => ! prev ) }
+							label={ revealKey
+								? __( 'Скрыть ключ', 'woodev-plugin-framework' )
+								: __( 'Показать ключ', 'woodev-plugin-framework' ) }
+						>
+							<span
+								className={ `dashicons ${ revealKey ? 'dashicons-hidden' : 'dashicons-visibility' }` }
+								aria-hidden="true"
+							/>
+						</Button>
+						<Button
+							className="woodev-license-verify-button"
+							variant="secondary"
+							isBusy={ verifying }
+							disabled={ busy || ! view.controlsEnabled }
+							onClick={ handleVerify }
+						>
+							{ __( 'Проверить', 'woodev-plugin-framework' ) }
+						</Button>
+					</div>
 				) }
-
-				{ /* Text input for entering or replacing the key */ }
-				<TextControl
-					label={ __( 'Лицензионный ключ', 'woodev-plugin-framework' ) }
-					value={ keyInput }
-					onChange={ ( value ) => setKeyInput( value ) }
-					readOnly={ isValid }
-					disabled={ isValid }
-					placeholder={ __( 'Введите лицензионный ключ', 'woodev-plugin-framework' ) }
-					className="woodev-license-key-input"
-				/>
 			</CardBody>
 
 			<CardFooter>
-				<Flex wrap align="center" gap={ 2 }>
-					{ /* Verify / activate button — gated on shared busy flag */ }
+				<Flex justify="space-between" align="center" wrap>
 					<FlexItem>
-						<Button
-							variant="primary"
-							isBusy={ verifying }
-							disabled={ busy || ! keyInput.trim() || isValid }
-							onClick={ handleVerify }
-						>
-							{ verifying
-								? __( 'Проверка…', 'woodev-plugin-framework' )
-								: __( 'Активировать', 'woodev-plugin-framework' )
-							}
-						</Button>
+						<Flex gap={ 2 } align="center" wrap>
+							{ view.actions.activate && (
+								<Button
+									variant="primary"
+									isBusy={ verifying }
+									disabled={ busy || ! keyInput.trim() }
+									onClick={ handleVerify }
+								>
+									{ verifying
+										? __( 'Проверка…', 'woodev-plugin-framework' )
+										: __( 'Активировать', 'woodev-plugin-framework' ) }
+								</Button>
+							) }
+
+							{ view.actions.renew && state.renewal_url && (
+								<Button
+									variant={ view.actions.renewAccent ? 'primary' : 'secondary' }
+									href={ state.renewal_url }
+									target="_blank"
+									rel="noopener noreferrer"
+								>
+									{ __( 'Продлить', 'woodev-plugin-framework' ) }
+								</Button>
+							) }
+
+							{ view.actions.deactivate && (
+								<Button
+									isDestructive
+									disabled={ busy }
+									isBusy={ deactivating }
+									onClick={ () => setConfirmOpen( true ) }
+								>
+									{ __( 'Деактивировать', 'woodev-plugin-framework' ) }
+								</Button>
+							) }
+
+							{ view.actions.changeKey && ! editingKey && (
+								<Button
+									variant="link"
+									disabled={ busy }
+									onClick={ () => {
+										setEditingKey( true );
+										setKeyInput( '' );
+										setRevealKey( false );
+									} }
+								>
+									{ __( 'Изменить ключ', 'woodev-plugin-framework' ) }
+								</Button>
+							) }
+
+							{ view.actions.cancelEdit && (
+								<Button
+									variant="link"
+									disabled={ busy }
+									onClick={ () => {
+										setEditingKey( false );
+										setKeyInput( licenseKey || '' );
+									} }
+								>
+									{ __( 'Отмена', 'woodev-plugin-framework' ) }
+								</Button>
+							) }
+						</Flex>
 					</FlexItem>
 
-					{ /* Deactivate button — only when license is currently valid/active;
-					     gated on shared busy flag */ }
-					{ isValid && (
-						<FlexItem>
-							<Button
-								isDestructive
-								disabled={ busy }
-								isBusy={ deactivating }
-								onClick={ () => setConfirmOpen( true ) }
-							>
-								{ __( 'Деактивировать', 'woodev-plugin-framework' ) }
-							</Button>
-						</FlexItem>
-					) }
-
-					{ /* Beta versions toggle — gated on shared busy flag */ }
-					<FlexItem>
-						<ToggleControl
-							label={ __( 'Разрешить установку бета-версий', 'woodev-plugin-framework' ) }
-							checked={ betaEnabled }
-							disabled={ busy }
-							onChange={ handleBetaToggle }
-						/>
+					<FlexItem className="woodev-license-beta">
+						<Tooltip text={ __( 'Разрешает устанавливать бета-версии плагина', 'woodev-plugin-framework' ) }>
+							<span className="woodev-license-beta-toggle">
+								<ToggleControl
+									label={ __( 'Бета', 'woodev-plugin-framework' ) }
+									checked={ betaEnabled }
+									disabled={ busy }
+									onChange={ handleBetaToggle }
+								/>
+							</span>
+						</Tooltip>
+						{ togglingBeta && <Spinner /> }
 					</FlexItem>
-
-					{ togglingBeta && (
-						<FlexItem>
-							<Spinner />
-						</FlexItem>
-					) }
 				</Flex>
 			</CardFooter>
 		</Card>
