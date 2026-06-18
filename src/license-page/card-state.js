@@ -129,7 +129,8 @@ export function getCardView( state, editingKeyForce = false ) {
 		};
 	}
 
-	// Group F — revoked/disabled → message only, masked, no activate.
+	// Group F — revoked/disabled → masked, no re-activate of the dead key itself,
+	// but «Изменить ключ» IS offered so the user can switch to a different license.
 	if ( REVOKED_STATUSES.includes( status ) ) {
 		return {
 			group: 'revoked',
@@ -137,7 +138,7 @@ export function getCardView( state, editingKeyForce = false ) {
 			badge: { label: __( 'Ключ отозван', 'woodev-plugin-framework' ), variant: 'error' },
 			keyEditable: false,
 			controlsEnabled: true,
-			actions: { activate: false, verify: true, renew: false, deactivate: false, changeKey: false },
+			actions: { activate: false, verify: true, renew: false, deactivate: false, changeKey: true },
 		};
 	}
 
