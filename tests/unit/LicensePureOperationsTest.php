@@ -343,6 +343,7 @@ class LicensePureOperationsTest extends TestCase {
 				'is_active',
 				'is_need_license',
 				'beta_enabled',
+				'renewal_url',
 			],
 			array_keys( $state )
 		);
@@ -351,13 +352,44 @@ class LicensePureOperationsTest extends TestCase {
 		$this->assertSame( 'Test Plugin', $state['plugin_name'] );
 		$this->assertSame( 'KEY-123', $state['license_key'] );
 		$this->assertSame( 'valid', $state['status'] );
-		$this->assertSame( 'License is valid', $state['status_label'] );
+		$this->assertSame( 'Лицензия активна', $state['status_label'] );
 		$this->assertSame( 'lifetime', $state['expires'] );
 		$this->assertTrue( $state['is_valid'] );
 		$this->assertTrue( $state['is_active'] );
 		$this->assertTrue( $state['is_need_license'] );
 		$this->assertTrue( $state['beta_enabled'] );
 		$this->assertSame( 'success', $state['message_variant'] );
+	}
+
+	/**
+	 * get_state(): exposes an additive renewal_url built from the same checkout
+	 * URL + edd_license_key + download_id as Woodev_License_Messages::get_renewal_url().
+	 * Additive field — safe for the bootstrap payload and every REST response.
+	 *
+	 * @return void
+	 */
+	public function test_get_state_includes_renewal_url(): void {
+		$plugin = $this->make_plugin_stub();
+		$plugin->shouldReceive( 'is_need_license' )->andReturn( true );
+		$plugin->shouldReceive( 'is_beta_allowed' )->andReturn( false );
+
+		$woodev_license            = Mockery::mock( \Woodev_License::class );
+		$woodev_license->license   = 'valid';
+		$woodev_license->expires   = 'lifetime';
+		$woodev_license->item_name = 'Test Plugin';
+		$woodev_license->item_id   = 216;
+		$woodev_license->shouldReceive( 'get_license_key' )->andReturn( 'KEY-123' );
+
+		$license = $this->make_license( $plugin, 'KEY-123', 'valid', $woodev_license );
+
+		Functions\expect( 'current_time' )->andReturn( 1000 );
+
+		$state = $license->get_state();
+
+		$this->assertArrayHasKey( 'renewal_url', $state );
+		$this->assertStringContainsString( 'woodev.ru/checkout', $state['renewal_url'] );
+		$this->assertStringContainsString( 'edd_license_key=KEY-123', $state['renewal_url'] );
+		$this->assertStringContainsString( 'download_id=216', $state['renewal_url'] );
 	}
 
 	/**
@@ -1076,8 +1108,11 @@ class LicensePureOperationsTest extends TestCase {
 				'sanitize_title'  => static function ( $value ) {
 					return strtolower( (string) $value );
 				},
-				'add_query_arg'   => static function () {
-					return 'https://example.test/';
+				// Build a real query string so renewal_url assertions can inspect the
+				// args (edd_license_key / download_id). Signature used by get_link_helper:
+				// add_query_arg( array $args, string $url ).
+				'add_query_arg'   => static function ( $args = [], $url = '' ) {
+					return $url . '?' . http_build_query( (array) $args );
 				},
 				'wp_parse_args'   => static function ( $args, $defaults = [] ) {
 					return array_merge( (array) $defaults, (array) $args );

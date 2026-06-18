@@ -1,23 +1,73 @@
-// License page layout and status badge styles.
-// @wordpress/components handles Card, Notice, Button etc. — no re-styling here.
+// License page layout and status styles.
+// @wordpress/components handles Card, Notice, Button etc. — the rules here add
+// the redesign layer: intro info-notice, responsive card grid, per-status accent
+// bars, the status badge, the key form-group, and the compact quick-link cards.
 //
 // NOTE: this bundle (style-index.css) is enqueued on the whole license page, so it
 // also styles the server-rendered quick-links section below the React app
 // (woodev/admin/pages/views/html-settings-section.php) — see .woodev-settings-documentation.
 
+// ---------------------------------------------------------------------------
+// Intro — info-notice spanning the content width.
+// ---------------------------------------------------------------------------
+
 .woodev-licenses-intro {
-	margin-bottom: 16px;
-	max-width: 720px;
+	display: flex;
+	align-items: flex-start;
+	gap: 10px;
+	margin: 0 0 20px;
+	padding: 12px 16px;
+	background: #f0f6fc;
+	border: 1px solid #c5d9ed;
+	border-left: 4px solid #2271b1;
+	border-radius: 4px;
+
+	&__icon {
+		flex: 0 0 auto;
+		margin-top: 2px;
+		color: #2271b1;
+	}
+
+	&__text {
+		margin: 0;
+		line-height: 1.6;
+	}
 }
+
+// ---------------------------------------------------------------------------
+// Responsive card grid: 1 → 2 → 3 columns.
+// ---------------------------------------------------------------------------
 
 .woodev-licenses-grid {
 	display: grid;
 	gap: 16px;
-	grid-template-columns: repeat( auto-fill, minmax( 360px, 1fr ) );
-	align-items: start; // cards size to their own content instead of stretching to the tallest in the row
+	grid-template-columns: 1fr;
+	align-items: start; // cards size to their own content instead of stretching
+
+	@media ( min-width: 782px ) {
+		grid-template-columns: repeat( 2, 1fr );
+	}
+
+	@media ( min-width: 1280px ) {
+		grid-template-columns: repeat( 3, 1fr );
+	}
 }
 
-// Status badge pill — colored by message_variant.
+// ---------------------------------------------------------------------------
+// License card — left accent bar by status.
+// ---------------------------------------------------------------------------
+
+.woodev-license-card {
+	border-left: 4px solid #c3c4c7; // neutral default
+
+	&--success { border-left-color: #00a32a; }
+	&--warning { border-left-color: #dba617; }
+	&--error   { border-left-color: #d63638; }
+	&--info,
+	&--neutral { border-left-color: #72aee6; }
+}
+
+// Status badge pill — colored by variant.
 .woodev-license-badge {
 	display: inline-block;
 	padding: 2px 10px;
@@ -26,51 +76,69 @@
 	font-weight: 600;
 	line-height: 1.6;
 	color: #fff;
+	white-space: nowrap;
 
-	&.is-success {
-		background-color: #00a32a; // WP admin green
+	&.is-success { background-color: #00a32a; }
+	&.is-warning { background-color: #dba617; color: #1d2327; }
+	&.is-error   { background-color: #d63638; }
+	&.is-info    { background-color: #72aee6; color: #1d2327; }
+}
+
+// ---------------------------------------------------------------------------
+// Key form-group: [ input ][ 👁 ][ Проверить ] as one attached control.
+// ---------------------------------------------------------------------------
+
+.woodev-license-key-group {
+	display: flex;
+	align-items: stretch;
+	margin: 12px 0 4px;
+
+	.woodev-license-key-input {
+		flex: 1 1 auto;
+		margin-bottom: 0;
+
+		input {
+			height: 100%;
+			border-top-right-radius: 0;
+			border-bottom-right-radius: 0;
+			font-family: monospace;
+			letter-spacing: 0.06em;
+		}
 	}
 
-	&.is-warning {
-		background-color: #dba617; // WP admin yellow
-		color: #1d2327;
+	.woodev-license-eye-button,
+	.woodev-license-verify-button {
+		border-radius: 0;
+		margin-left: -1px;
+		height: auto;
 	}
 
-	&.is-error {
-		background-color: #d63638; // WP admin red
+	.woodev-license-verify-button {
+		border-top-right-radius: 3px;
+		border-bottom-right-radius: 3px;
+		white-space: nowrap;
 	}
 
-	&.is-info {
-		background-color: #72aee6; // WP admin blue
-		color: #1d2327;
+	.woodev-license-eye-button {
+		min-width: 40px;
+		justify-content: center;
+
+		.dashicons {
+			width: 18px;
+			height: 18px;
+			font-size: 18px;
+		}
 	}
 }
 
-// Key display row.
-.woodev-license-key-row {
-	margin-bottom: 8px;
-}
+// Beta toggle pinned to the footer's right edge.
+.woodev-license-beta {
+	.components-toggle-control {
+		margin-bottom: 0;
+	}
 
-.woodev-license-key-value {
-	font-family: monospace;
-	font-size: 13px;
-	letter-spacing: 0.05em;
-	word-break: break-all;
-}
-
-.woodev-license-key-value--masked {
-	letter-spacing: 0.1em;
-	color: #50575e;
-}
-
-.woodev-license-eye-button {
-	min-width: unset;
-	padding: 4px;
-
-	.dashicons {
-		width: 18px;
-		height: 18px;
-		font-size: 18px;
+	.woodev-license-beta-toggle {
+		display: inline-flex;
 	}
 }
 
@@ -78,79 +146,81 @@
 // Quick-links section (Shop / Docs / Support / Telegram).
 //
 // Rendered server-side by html-settings-section.php below the React app. Its
-// stylesheet (the legacy woodev-license-page.css) was never enqueued on the v2
-// React page, so these blocks used to render unstyled. The styles now live here
-// in the page bundle, modernised to the WP-admin palette and made responsive
-// (the legacy version was a fixed 4-column flex with an off-theme gradient).
+// legacy stylesheet was never enqueued on the v2 React page, so these styles
+// live here in the page bundle. Compact cards modeled on woodev.ru
+// .card.card-compact: icon on the LEFT, right column title → text → CTA, equal
+// height, responsive 4 → 2 → 1 columns.
 // ---------------------------------------------------------------------------
 
 .woodev-settings-documentation {
-	margin-top: 24px;
+	margin-top: 28px;
 
 	.woodev-settings-row {
 		display: grid;
 		gap: 16px;
-		grid-template-columns: repeat( auto-fill, minmax( 240px, 1fr ) );
+		grid-template-columns: 1fr;
+
+		@media ( min-width: 600px ) {
+			grid-template-columns: repeat( 2, 1fr );
+		}
+
+		@media ( min-width: 1280px ) {
+			grid-template-columns: repeat( 4, 1fr );
+		}
 	}
 
 	.woodev-admin-block {
 		display: flex;
-		flex-direction: column;
-		padding: 20px;
+		align-items: flex-start;
+		gap: 14px;
+		height: 100%; // equal height across the row
+		padding: 18px;
 		background: #fff;
 		border: 1px solid #dcdcde; // WP admin border grey
-		border-radius: 4px;
+		border-radius: 6px;
+		box-sizing: border-box;
 
-		.header {
-			display: flex;
-			align-items: center;
-			gap: 8px;
-			margin-bottom: 8px;
-
-			.dashicons {
-				width: 22px;
-				height: 22px;
-				font-size: 22px;
-				color: #2271b1; // WP admin blue
-			}
-
-			h4 {
-				margin: 0;
-				font-size: 14px;
-				line-height: 1.4;
-			}
+		&__icon {
+			flex: 0 0 auto;
+			width: 32px;
+			height: 32px;
+			font-size: 32px;
+			color: #2271b1; // WP admin blue
 		}
 
-		.content {
+		&__content {
 			display: flex;
-			flex: 1;
+			flex: 1 1 auto;
 			flex-direction: column;
-			justify-content: space-between;
+		}
 
-			p {
-				margin-top: 0;
-				color: #50575e;
-			}
+		&__title {
+			margin: 0 0 6px;
+			font-size: 14px;
+			line-height: 1.4;
+		}
 
-			.button-link {
-				margin-top: 12px;
+		&__text {
+			flex: 1 1 auto;
+			margin: 0 0 12px;
+			color: #50575e;
+		}
 
-				> a {
-					display: inline-block;
-					padding: 6px 14px;
-					border: 1px solid #2271b1;
-					border-radius: 3px;
-					color: #2271b1;
-					font-weight: 500;
-					text-decoration: none;
-					transition: background-color 0.15s ease, color 0.15s ease;
+		&__cta {
+			align-self: flex-start;
+			margin-top: auto;
+			padding: 6px 14px;
+			border: 1px solid #2271b1;
+			border-radius: 3px;
+			color: #2271b1;
+			font-weight: 500;
+			text-decoration: none;
+			transition: background-color 0.15s ease, color 0.15s ease;
 
-					&:hover,
-					&:focus {
-						background-color: #2271b1;
-						color: #fff;
-					}
-				}
+			&:hover,
+			&:focus {
+				background-color: #2271b1;
+				color: #fff;
 			}
 		}
 	}

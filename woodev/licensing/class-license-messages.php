@@ -61,7 +61,7 @@ if ( ! class_exists( 'Woodev_License_Messages' ) ) :
 		 * @return string
 		 */
 		private function get_plugin_name() {
-			return $this->license_data->item_name ?: __( 'plugin', 'woodev-plugin-framework' );
+			return $this->license_data->item_name ?: __( 'плагина', 'woodev-plugin-framework' );
 		}
 
 		/**
@@ -219,6 +219,20 @@ if ( ! class_exists( 'Woodev_License_Messages' ) ) :
 			return esc_url( $url );
 		}
 
+		/**
+		 * Public renewal-checkout URL for the current license.
+		 *
+		 * Single source of truth for the «Продлить» button in the license page UI
+		 * and for the renewal CTAs embedded in the status messages.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string The checkout URL with edd_license_key + download_id.
+		 */
+		public function get_renewal_url() {
+			return $this->get_renewal_link();
+		}
+
 		private function get_renewal_link() {
 			return $this->get_link_helper(
 				'https://woodev.ru/checkout/',
@@ -260,7 +274,8 @@ if ( ! class_exists( 'Woodev_License_Messages' ) ) :
 				case 'invalid_item_id':
 				case 'item_name_mismatch':
 				case 'key_mismatch':
-					$message = sprintf( __( 'This appears to be an invalid license key for %s.', 'woodev-plugin-framework' ), $this->get_plugin_name() );
+				case 'missing_url':
+					$message = sprintf( __( 'Похоже, это неверный лицензионный ключ для %s.', 'woodev-plugin-framework' ), $this->get_plugin_name() );
 					break;
 
 				case 'no_activations_left':
@@ -268,11 +283,11 @@ if ( ! class_exists( 'Woodev_License_Messages' ) ) :
 					break;
 
 				case 'license_not_activable':
-					$message = __( 'The key you entered belongs to a bundle, please use the product specific license key.', 'woodev-plugin-framework' );
+					$message = __( 'Введённый ключ относится к комплекту. Используйте ключ конкретного товара.', 'woodev-plugin-framework' );
 					break;
 
 				case 'deactivated':
-					$message = __( 'Your license key has been deactivated.', 'woodev-plugin-framework' );
+					$message = __( 'Лицензионный ключ деактивирован.', 'woodev-plugin-framework' );
 					break;
 
 				case 'valid':
@@ -280,7 +295,7 @@ if ( ! class_exists( 'Woodev_License_Messages' ) ) :
 					break;
 
 				default:
-					$message = __( 'Unlicensed: currently not receiving updates.', 'woodev-plugin-framework' );
+					$message = __( 'Без лицензии: обновления сейчас не поступают.', 'woodev-plugin-framework' );
 					break;
 			}
 
@@ -295,19 +310,19 @@ if ( ! class_exists( 'Woodev_License_Messages' ) ) :
 		private function get_valid_message() {
 
 			if ( ! empty( $this->license_data->expires ) && 'lifetime' === $this->license_data->expires ) {
-				return __( 'License key never expires.', 'woodev-plugin-framework' );
+				return __( 'Бессрочный лицензионный ключ.', 'woodev-plugin-framework' );
 			}
 
 			if ( ( $this->expiration > $this->now ) && ( ( $this->expiration - $this->now ) < MONTH_IN_SECONDS ) ) {
 				return sprintf(
-					__( 'Your license key expires soon! It expires on %1$s. %2$sRenew your key%3$s before it expires.', 'woodev-plugin-framework' ),
+					__( 'Срок действия ключа скоро истекает — %1$s. %2$sПродлите ключ%3$s заранее.', 'woodev-plugin-framework' ),
 					$this->get_date_i18n( $this->expiration ),
 					'<a href="' . $this->get_renewal_link() . '" target="_blank">',
 					'</a>'
 				);
 			}
 
-			return sprintf( __( 'Your license key expires on %s.', 'woodev-plugin-framework' ), $this->get_date_i18n( $this->expiration ) );
+			return sprintf( __( 'Срок действия ключа — до %s.', 'woodev-plugin-framework' ), $this->get_date_i18n( $this->expiration ) );
 		}
 
 		/**
@@ -320,7 +335,7 @@ if ( ! class_exists( 'Woodev_License_Messages' ) ) :
 			if ( $this->expiration ) {
 				return sprintf(
 				/* translators: 1. license expiration date; 2. opening link tag; 3. closing link tag. */
-					__( 'Your license key expired on %1$s. Please %2$srenew your license key%3$s.', 'woodev-plugin-framework' ),
+					__( 'Срок действия ключа истёк %1$s. %2$sПродлите лицензионный ключ%3$s.', 'woodev-plugin-framework' ),
 					$this->get_date_i18n( $this->expiration ),
 					'<a href="' . $this->get_renewal_link() . '" target="_blank">',
 					'</a>'
@@ -329,7 +344,7 @@ if ( ! class_exists( 'Woodev_License_Messages' ) ) :
 
 			return sprintf(
 			/* translators: 1. opening link tag; 2. closing link tag. */
-				__( 'Your license key has expired. Please %1$srenew your license key%2$s.', 'woodev-plugin-framework' ),
+				__( 'Срок действия лицензионного ключа истёк. %1$sПродлите ключ%2$s.', 'woodev-plugin-framework' ),
 				'<a href="' . $this->get_renewal_link() . '" target="_blank">',
 				'</a>'
 			);
@@ -355,7 +370,7 @@ if ( ! class_exists( 'Woodev_License_Messages' ) ) :
 
 			return sprintf(
 			/* translators: 1. opening link tag; 2. closing link tag. */
-				__( 'Your license key has been disabled. Please %1$scontact support%2$s for more information.', 'woodev-plugin-framework' ),
+				__( 'Лицензионный ключ отключён. %1$sОбратитесь в поддержку%2$s за подробностями.', 'woodev-plugin-framework' ),
 				'<a href="' . $url . '" target="_blank">',
 				'</a>'
 			);
@@ -380,7 +395,7 @@ if ( ! class_exists( 'Woodev_License_Messages' ) ) :
 
 			return sprintf(
 			/* translators: 1. opening link tag; 2 closing link tag. */
-				__( 'Your license key has reached its activation limit. %1$sView possible upgrades%2$s now.', 'woodev-plugin-framework' ),
+				__( 'Достигнут лимит активаций ключа. %1$sПосмотрите варианты расширения%2$s.', 'woodev-plugin-framework' ),
 				'<a href="' . $url . '">',
 				'</a>'
 			);
@@ -404,7 +419,7 @@ if ( ! class_exists( 'Woodev_License_Messages' ) ) :
 
 			return sprintf(
 			/* translators: 1. the plugin name; 2. opening link tag; 3. closing link tag. */
-				__( 'Your %1$s license key is not active for this URL. Please %2$svisit your account page%3$s to manage your license keys.', 'woodev-plugin-framework' ),
+				__( 'Ключ %1$s не активирован для этого адреса. %2$sПерейдите в личный кабинет%3$s, чтобы управлять ключами.', 'woodev-plugin-framework' ),
 				esc_html( $this->get_plugin_name() ),
 				'<a href="' . $url . '" target="_blank">',
 				'</a>'
@@ -419,7 +434,7 @@ if ( ! class_exists( 'Woodev_License_Messages' ) ) :
 		private function get_missing_message() {
 			return sprintf(
 			/* translators: 1. opening link tag; 2. closing link tag. */
-				__( 'Invalid license. Please %1$svisit your account page%2$s and verify it.', 'woodev-plugin-framework' ),
+				__( 'Лицензия недействительна. %1$sПерейдите в личный кабинет%2$s и проверьте её.', 'woodev-plugin-framework' ),
 				'<a href="' . $this->get_link_helper( 'https://woodev.ru/my-account/' ) . '" target="_blank">',
 				'</a>'
 			);

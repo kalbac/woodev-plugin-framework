@@ -115,6 +115,18 @@ class LicenseNeedLicenseFlagTest extends TestCase {
 		Functions\expect( 'delete_option' )->never();
 		// wp_kses_post wraps the message in get_state(); passthrough here.
 		Functions\when( 'wp_kses_post' )->returnArg();
+		// get_state() now builds an additive renewal_url (get_renewal_url() →
+		// get_link_helper), which reads the key option and assembles a checkout URL.
+		// Stub the URL path so the no-op state build stays side-effect-free in unit
+		// context; is_admin()=>false skips Woodev_Helper::get_current_screen().
+		Functions\when( 'get_option' )->justReturn( 'KEY-123' );
+		Functions\when( 'home_url' )->justReturn( 'https://example.test' );
+		Functions\when( 'is_admin' )->justReturn( false );
+		Functions\when( 'sanitize_title' )->alias( static fn( $value ) => strtolower( (string) $value ) );
+		Functions\when( 'trailingslashit' )->alias( static fn( $url ) => rtrim( (string) $url, '/' ) . '/' );
+		Functions\when( 'add_query_arg' )->alias( static fn( $args = array(), $url = '' ) => $url . '?' . http_build_query( (array) $args ) );
+		Functions\when( 'wp_parse_url' )->alias( static fn( $url, $component = -1 ) => 'example.test' );
+		Functions\when( 'wp_parse_args' )->alias( static fn( $args, $defaults = array() ) => array_merge( (array) $defaults, (array) $args ) );
 
 		$woodev_license          = ( new \ReflectionClass( \Woodev_License::class ) )->newInstanceWithoutConstructor();
 		$woodev_license->license = 'valid';

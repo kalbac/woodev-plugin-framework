@@ -245,21 +245,22 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 		public function get_license_status( $status_name ) {
 
 			$statuses = array(
-				'missing'               => __( 'License does not exist', 'woodev-plugin-framework' ),
-				'missing_url'           => __( 'Site URL is not provided', 'woodev-plugin-framework' ),
-				'license_not_activable' => __( 'Attempting to activate a bundles parent license', 'woodev-plugin-framework' ),
-				'disabled'              => __( 'License key revoked', 'woodev-plugin-framework' ),
-				'no_activations_left'   => __( 'No activations left', 'woodev-plugin-framework' ),
-				'expired'               => __( 'License has expired', 'woodev-plugin-framework' ),
-				'key_mismatch'          => __( 'License is not valid for this plugin', 'woodev-plugin-framework' ),
-				'invalid_item_id'       => __( 'Invalid plugin ID', 'woodev-plugin-framework' ),
-				'item_name_mismatch'    => __( 'License is not valid for this plugin', 'woodev-plugin-framework' ),
-				'site_inactive'         => __( 'Site is not active for this license', 'woodev-plugin-framework' ),
-				'invalid'               => __( 'License key does not match', 'woodev-plugin-framework' ),
-				'valid'                 => __( 'License is valid', 'woodev-plugin-framework' ),
+				'missing'               => __( 'Лицензия не найдена', 'woodev-plugin-framework' ),
+				'missing_url'           => __( 'URL сайта не передан', 'woodev-plugin-framework' ),
+				'license_not_activable' => __( 'Это родительский ключ комплекта', 'woodev-plugin-framework' ),
+				'disabled'              => __( 'Ключ отозван', 'woodev-plugin-framework' ),
+				'revoked'               => __( 'Ключ отозван', 'woodev-plugin-framework' ),
+				'no_activations_left'   => __( 'Лимит активаций исчерпан', 'woodev-plugin-framework' ),
+				'expired'               => __( 'Срок лицензии истёк', 'woodev-plugin-framework' ),
+				'key_mismatch'          => __( 'Ключ не подходит для этого плагина', 'woodev-plugin-framework' ),
+				'invalid_item_id'       => __( 'Неверный идентификатор плагина', 'woodev-plugin-framework' ),
+				'item_name_mismatch'    => __( 'Ключ не подходит для этого плагина', 'woodev-plugin-framework' ),
+				'site_inactive'         => __( 'Сайт не активирован для этой лицензии', 'woodev-plugin-framework' ),
+				'invalid'               => __( 'Неверный лицензионный ключ', 'woodev-plugin-framework' ),
+				'valid'                 => __( 'Лицензия активна', 'woodev-plugin-framework' ),
 			);
 
-			return isset( $statuses[ $status_name ] ) ? $statuses[ $status_name ] : __( 'Unknown license status', 'woodev-plugin-framework' );
+			return isset( $statuses[ $status_name ] ) ? $statuses[ $status_name ] : __( 'Неизвестный статус', 'woodev-plugin-framework' );
 		}
 
 		/**
@@ -573,11 +574,16 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 		 *     @type bool   $is_active       Whether the license is active.
 		 *     @type bool   $is_need_license Presentation flag.
 		 *     @type bool   $beta_enabled    Whether the beta opt-in is set.
+		 *     @type string $renewal_url     Renewal-checkout URL (edd_license_key + download_id).
 		 * }
 		 */
 		public function get_state(): array {
 
 			$status = (string) $this->woodev_license->license;
+
+			// Built once and reused for both the message and the renewal URL so the
+			// renewal-checkout link is a single source of truth (get_renewal_url()).
+			$messages = new Woodev_License_Messages( $this->woodev_license );
 
 			return array(
 				'plugin_id'       => (string) $this->plugin->get_download_id(),
@@ -585,7 +591,7 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 				'license_key'     => (string) $this->license_key,
 				'status'          => $status,
 				'status_label'    => '' === $status ? '' : $this->get_license_status( $status ),
-				'message'         => wp_kses_post( ( new Woodev_License_Messages( $this->woodev_license ) )->get_message() ),
+				'message'         => wp_kses_post( $messages->get_message() ),
 				'message_variant' => $this->get_message_variant(),
 				// Raw expiry — a numeric timestamp stays numeric, a 'Y-m-d H:i:s'
 				// string stays a string, ''/null stay as-is. Do NOT coerce the type:
@@ -595,6 +601,8 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 				'is_active'       => $this->is_active(),
 				'is_need_license' => (bool) $this->plugin->is_need_license(),
 				'beta_enabled'    => (bool) $this->plugin->is_beta_allowed(),
+				// Additive (2.0.2): renewal-checkout URL for the «Продлить» button.
+				'renewal_url'     => $messages->get_renewal_url(),
 			);
 		}
 
