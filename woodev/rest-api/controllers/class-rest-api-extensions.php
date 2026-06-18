@@ -258,9 +258,19 @@ if ( ! class_exists( 'Woodev_REST_API_Extensions' ) ) :
 				return null;
 			}
 
+			// Hide coming-soon / unreleased products. Forward-compatible: the flag is
+			// not in the current store API, so nothing is hidden until woodev.ru adds
+			// `_coming_soon` to the edd-api product payload (see the polish spec).
+			if ( ! empty( $info->_coming_soon ) || ! empty( $raw->coming_soon ) ) {
+				return null;
+			}
+
 			$price = isset( $raw->pricing->amount ) ? (int) $raw->pricing->amount : 0;
 
-			$thumbnail = $info->thumbnails->medium
+			// Prefer the dedicated product icon when the store API exposes it
+			// (`_product_icon`), then the small SQUARE thumbnail (compact-card sizing),
+			// then any remaining fallback image.
+			$thumbnail = $info->_product_icon
 				?? $info->thumbnails->small
 				?? $info->thumbnail
 				?? '';

@@ -62,7 +62,7 @@ final class ExtensionsRestControllerTest extends TestCase {
 		$this->assertSame( 'Интеграция WB', $out['title'] );
 		$this->assertSame( 12500, $out['price'] );
 		$this->assertFalse( $out['free'] );
-		$this->assertSame( 'https://woodev.ru/m.jpg', $out['thumbnail'] );
+		$this->assertSame( 'https://woodev.ru/s.jpg', $out['thumbnail'] );
 		$this->assertStringStartsWith( 'https://woodev.ru/downloads/wb', $out['permalink'] );
 		$this->assertStringContainsString( 'utm_source=extensionsscreen', $out['permalink'] );
 		$this->assertStringContainsString( 'utm_content=wb', $out['permalink'] );
@@ -100,6 +100,54 @@ final class ExtensionsRestControllerTest extends TestCase {
 		$raw = (object) array( 'pricing' => (object) array( 'amount' => '100' ) );
 
 		$this->assertNull( \Woodev_REST_API_Extensions::normalize_product( $raw ) );
+	}
+
+	public function test_normalize_product_hides_coming_soon(): void {
+		$base = array(
+			'info'    => (object) array(
+				'id'    => 7,
+				'slug'  => 'soon',
+				'title' => 'Soon',
+				'link'  => 'https://woodev.ru/?p=7',
+			),
+			'pricing' => (object) array( 'amount' => '500' ),
+		);
+
+		// Flag on info._coming_soon hides it.
+		$info_flag             = (object) $base;
+		$info_flag->info->_coming_soon = true;
+		$this->assertNull( \Woodev_REST_API_Extensions::normalize_product( $info_flag ) );
+
+		// Flag on the top-level coming_soon hides it too.
+		$top_flag               = (object) array(
+			'info'        => (object) array(
+				'id'    => 8,
+				'slug'  => 'soon2',
+				'title' => 'Soon 2',
+				'link'  => 'https://woodev.ru/?p=8',
+			),
+			'pricing'     => (object) array( 'amount' => '500' ),
+			'coming_soon' => true,
+		);
+		$this->assertNull( \Woodev_REST_API_Extensions::normalize_product( $top_flag ) );
+	}
+
+	public function test_normalize_product_prefers_product_icon(): void {
+		$raw = (object) array(
+			'info'    => (object) array(
+				'id'            => 9,
+				'slug'          => 'icon',
+				'title'         => 'Icon',
+				'link'          => 'https://woodev.ru/?p=9',
+				'_product_icon' => 'https://woodev.ru/icon.svg',
+				'thumbnails'    => (object) array( 'small' => 'https://woodev.ru/s.jpg' ),
+			),
+			'pricing' => (object) array( 'amount' => '500' ),
+		);
+
+		$out = \Woodev_REST_API_Extensions::normalize_product( $raw );
+
+		$this->assertSame( 'https://woodev.ru/icon.svg', $out['thumbnail'] );
 	}
 
 	/**
