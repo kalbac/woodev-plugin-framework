@@ -205,6 +205,26 @@ $wd-radius-sm: 8px;
 		}
 	}
 
+	&__rating {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		margin: 2px 0 8px;
+	}
+
+	&__stars {
+		color: $wd-accent;
+		font-size: 13px;
+		letter-spacing: 1px;
+		line-height: 1;
+	}
+
+	&__rating-value {
+		font-size: 12px;
+		font-weight: 600;
+		color: $wd-muted;
+	}
+
 	&__excerpt {
 		flex: 1 1 auto;
 		font-size: 12.5px;

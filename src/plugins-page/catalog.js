@@ -65,6 +65,33 @@ export function CategoryFilter( { categories, selected, onSelect } ) {
 }
 
 /**
+ * A 0–5 star rating with its numeric value. Rendered only when a product has a
+ * rating; stars are decorative (the numeric value carries the accessible label).
+ *
+ * @param {Object} props        Props.
+ * @param {number} props.rating Rating on a 0–5 scale.
+ * @return {JSX.Element} The rating row.
+ */
+export function RatingStars( { rating } ) {
+	const full = Math.round( rating );
+	const label = __( 'Рейтинг: %s из 5', 'woodev-plugin-framework' ).replace(
+		'%s',
+		rating.toFixed( 1 )
+	);
+
+	return (
+		<div className="woodev-extension-card__rating" title={ label }>
+			<span className="woodev-extension-card__stars" aria-hidden="true">
+				{ '★★★★★'.slice( 0, full ) + '☆☆☆☆☆'.slice( 0, 5 - full ) }
+			</span>
+			<span className="woodev-extension-card__rating-value">
+				{ rating.toFixed( 1 ) }
+			</span>
+		</div>
+	);
+}
+
+/**
  * A single add-on card. The whole media/title/footer links to the store
  * product permalink (UTM-decorated server-side) in a new tab.
  *
@@ -100,6 +127,7 @@ export function ExtensionCard( { product } ) {
 					</a>
 				</h3>
 			</div>
+			{ product.rating ? <RatingStars rating={ product.rating } /> : null }
 			<div
 				className="woodev-extension-card__excerpt"
 				// eslint-disable-next-line react/no-danger -- excerpt sanitized server-side with wp_kses_post.
