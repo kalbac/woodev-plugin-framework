@@ -1,13 +1,13 @@
 # Current State — Woodev Plugin Framework
 
 > Lean state doc: phase status, open bugs, next actions. **Full session history → `SESSION-LOG.md`** (newest on top). Program-level status → `platform-v2-program-tracker.md`.
-> Last updated: 2026-06-18 (session 19 — OB-3 F1/F3 merged + rig-verified; license-page UI/UX redesign spec'd & approved, queued for s20).
+> Last updated: 2026-06-18 (session 20 — «Woodev → Лицензии» UI/UX redesign merged (PR #64) + rig browser-verified).
 
 ## Last session context (≤3 lines)
 
-- **s19:** OB-3 **F1+F3** done (the rig-blocked pair) — captured the real EDD SL `get_version` payload (`sections`/`banners`/`icons` = PHP-serialized strings; `plugin_latest_version`≡`plugin_information`), then F1 (normalize `sections` → stdClass, drop the bogus top-level promotion) + F3 (normalize `plugin`/`id`/`tested` on EVERY read; frozen cache key untouched). PR #63 (`c66a955`), 650 unit, Codex SHIP, CI green. **Verified live in browser on the rig** (F1/F3 row + plugin-info sections; bonus: s18 F8 license/backup notice renders; F9 admin 200 / non-admin 403; OB-2 Лицензии page OK).
-- **OB-3 is now effectively COMPLETE** (F11/F12/F13 s15, F2/F7 s16, F5 s16, move s17, F8/F9/F10 s18, F1/F3 s19); only **F6** (failed-request backoff) deliberately left — endpoint-wide-key question unresolved.
-- **Next (s20):** «Woodev → Лицензии» **UI/UX redesign** — design APPROVED, spec at `docs-internal/specs/2026-06-18-license-page-ui-ux-redesign.md`. Start with `writing-plans`. v2.0.1 still **NOT released**; new symbols → `@since 2.0.2`.
+- **s20:** «Woodev → Лицензии» **UI/UX redesign** shipped (PR #64, squash `894889b`). Additive backend `renewal_url` in `get_state()` (TDD, single-source via public `get_renewal_url()`); RU-localized `Woodev_License_Messages` + status labels; new pure `card-state.js` 7-group state machine; rewritten card (key form-group, badge, accent bar, Активировать/Продлить/Деактивировать/Изменить ключ, Бета tooltip); intro info-notice; 3/2/1 grid; compact quick-link cards (4/2/1). No installed-site data contract touched.
+- **Verified:** `composer check` green (**651 unit / 1906 assertions**, phpcs 0, phpstan 0); Codex inline critic (no blockers, all 5 findings applied + re-criticked); **rig browser-verified** groups E (editable, controls off) + B (masked, controls on, «Продлить»→`renewal_url` live) + «Изменить ключ» flow, 0 console errors; full CI + Assets-build-parity green.
+- **Next (s21):** redesign closed early → pull from `FUTURE-BACKLOG.md` "Operator backlog dump — s13" (OB-4 reusable-JS / OB-5 godaddy / OB-7 Plugins page / OB-9). v2.0.1 still **NOT released**; new symbols → `@since 2.0.2`. **OB-3 COMPLETE** except deferred F6 (backoff).
 
 ## Program status (high level)
 
@@ -20,7 +20,7 @@
 | Remote-deactivation UX | ✅ DONE | s10–s12; command cycle proven live (push prod + pull rig); B-13/14/15 resolved |
 | S4 EDD / S5 React admin / S6 ecosystem | ⚪ deferred | post-v2.0 |
 
-`composer check` green at s19: **650 unit tests** / 1902 assertions (65 skipped), 41 integration (baseline). Keep green after each change.
+`composer check` green at s20: **651 unit tests** / 1906 assertions (65 skipped), 41 integration (baseline). Keep green after each change.
 
 ## Phase Status (subsystems)
 
@@ -54,8 +54,8 @@
 
 ## Next Actions
 
-- 🎨 **s20 — «Woodev → Лицензии» UI/UX redesign (NEXT, design APPROVED):** spec at `docs-internal/specs/2026-06-18-license-page-ui-ux-redesign.md`. Responsive card grid (3/2/1), key form-group (input+👁+Проверить, masked-RO when saved), 7-group state machine on real EDD statuses, beta tooltip, compact link cards (4/2/1, icon-left, equal height), intro as info-notice, additive `renewal_url` in `get_state()`, RU-localize `Woodev_License_Messages`. Start with `writing-plans` → TDD + `npm run build` + rig browser-verify + Codex inline critic.
-- ✅ **s19 done:** OB-3 **F1+F3** (PR #63 `c66a955`) — captured real EDD SL `get_version` payload on the rig, normalized `sections`→stdClass + dropped bogus promotion (F1), normalized `plugin`/`id`/`tested` on every read with frozen cache key (F3). 650 unit, Codex SHIP, CI green, **rig browser-verified** (also confirmed s18 F8 notice + F9 403/200 + OB-2 page).
+- ✅ **s20 done — «Woodev → Лицензии» UI/UX redesign (PR #64 `894889b`):** additive `renewal_url` in `get_state()` (single-source public `get_renewal_url()`); RU-localized messages + status labels; pure `card-state.js` 7-group state machine; rewritten card (key form-group, badge, accent, Продлить/Деактивировать/Изменить ключ, Бета tooltip); intro info-notice; 3/2/1 grid; compact quick-link cards (4/2/1). 651 unit, Codex no-blockers (5 fixes applied + re-criticked), **rig browser-verified** (E + B + Изменить-ключ, 0 console errors), CI + build-parity green. Plan: `docs-internal/plans/2026-06-18-license-page-redesign.md`.
+- 📥 **s21 — pull from backlog** (`FUTURE-BACKLOG.md` "Operator backlog dump — s13"): OB-4 reusable-JS-php-based · OB-5 godaddy fork study · OB-7 modernize Plugins page · OB-9 shipping nuances. Or the big ones (operator-scheduled): payment-gateway trait extraction; review #4 (`array()`→`[]` + typing + `@since` sweep).
 - ✅ **OB-3 COMPLETE** (s15 F11/F12/F13, s16 F2/F7+F5, s17 move, s18 F8/F9/F10, s19 F1/F3); only **F6** backoff deferred (endpoint-wide-key question).
 - 📥 **Remaining backlog** (`FUTURE-BACKLOG.md` → "Operator backlog dump — s13"): OB-4 reusable-JS-php-based principle · OB-5 godaddy fork study (GPT research delegation) · OB-7 modernize Plugins page (WP React + woodev.ru account) · OB-9 shipping nuances. Big ones: payment-gateway trait extraction; review #4 (`array()`→`[]` + typing + `@since` sweep).
 - **Big ones (operator-scheduled, not solo):** payment-gateway trait extraction (autodev-loop); the big review #4 — `array()`→`[]` (~797) + type declarations everywhere + `@since` sweep + enforce `Generic.Arrays.DisallowLongArraySyntax`. B-2 loader-protocol forward-tolerance before S4/EDD.
