@@ -152,6 +152,17 @@
 	}
 }
 
+// «Продлить» button — leading renew icon.
+.woodev-license-renew-button {
+	.dashicons {
+		width: 18px;
+		height: 18px;
+		font-size: 18px;
+		margin-right: 4px;
+		vertical-align: text-bottom;
+	}
+}
+
 // Beta toggle pinned to the footer's right edge.
 .woodev-license-beta {
 	.components-toggle-control {

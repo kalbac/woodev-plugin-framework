@@ -362,11 +362,13 @@ export default function LicenseCard( { initialState } ) {
 
 							{ view.actions.renew && state.renewal_url && (
 								<Button
+									className="woodev-license-renew-button"
 									variant={ view.actions.renewAccent ? 'primary' : 'secondary' }
 									href={ state.renewal_url }
 									target="_blank"
 									rel="noopener noreferrer"
 								>
+									<span className="dashicons dashicons-update" aria-hidden="true" />
 									{ __( 'Продлить', 'woodev-plugin-framework' ) }
 								</Button>
 							) }
