@@ -249,6 +249,7 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 				'missing_url'           => __( 'URL сайта не передан', 'woodev-plugin-framework' ),
 				'license_not_activable' => __( 'Это родительский ключ комплекта', 'woodev-plugin-framework' ),
 				'disabled'              => __( 'Ключ отозван', 'woodev-plugin-framework' ),
+				'revoked'               => __( 'Ключ отозван', 'woodev-plugin-framework' ),
 				'no_activations_left'   => __( 'Лимит активаций исчерпан', 'woodev-plugin-framework' ),
 				'expired'               => __( 'Срок лицензии истёк', 'woodev-plugin-framework' ),
 				'key_mismatch'          => __( 'Ключ не подходит для этого плагина', 'woodev-plugin-framework' ),

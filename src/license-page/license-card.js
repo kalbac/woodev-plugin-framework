@@ -125,7 +125,7 @@ export default function LicenseCard( { initialState } ) {
 			const response = await apiFetch( {
 				path: `/woodev/v1/licenses/${ pluginId }/verify`,
 				method: 'POST',
-				data: { license_key: keyInput },
+				data: { license_key: keyInput.trim() },
 			} );
 			setState( response );
 			setKeyInput( response.license_key || '' );

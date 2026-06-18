@@ -274,6 +274,7 @@ if ( ! class_exists( 'Woodev_License_Messages' ) ) :
 				case 'invalid_item_id':
 				case 'item_name_mismatch':
 				case 'key_mismatch':
+				case 'missing_url':
 					$message = sprintf( __( 'Похоже, это неверный лицензионный ключ для %s.', 'woodev-plugin-framework' ), $this->get_plugin_name() );
 					break;
 

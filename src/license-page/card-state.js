@@ -143,13 +143,16 @@ export function getCardView( state, editingKeyForce = false ) {
 		const label = status === 'no_activations_left'
 			? __( 'Лимит исчерпан', 'woodev-plugin-framework' )
 			: __( 'Активна на другом сайте', 'woodev-plugin-framework' );
+		// changeKey is intentionally OFF here: the key is GENUINE (the problem is
+		// site binding / slot limit, not the key), so per the editability principle
+		// the field stays masked + read-only — re-activate retries the stored key.
 		return {
 			group: 'binding',
 			accent: 'error',
 			badge: { label, variant: 'error' },
 			keyEditable: false,
 			controlsEnabled: true,
-			actions: { activate: true, verify: true, renew: false, deactivate: false, changeKey: true },
+			actions: { activate: true, verify: true, renew: false, deactivate: false, changeKey: false },
 		};
 	}
 
@@ -201,6 +204,8 @@ export function getCardView( state, editingKeyForce = false ) {
 		},
 		keyEditable: false,
 		controlsEnabled: true,
-		actions: { activate: false, verify: true, renew: false, deactivate: false, changeKey: true },
+		// changeKey OFF: an unrecognised status must not open the editable path and
+		// weaken the "editable only in A and E" rule; re-verify is still available.
+		actions: { activate: false, verify: true, renew: false, deactivate: false, changeKey: false },
 	};
 }
