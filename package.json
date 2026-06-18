@@ -7,8 +7,9 @@
     "node": ">=22"
   },
   "scripts": {
-    "build": "wp-scripts build ./src/license-page/index.js --output-path=woodev/assets/build/license-page",
-    "start": "wp-scripts start ./src/license-page/index.js --output-path=woodev/assets/build/license-page"
+    "build": "wp-scripts build ./src/license-page/index.js --output-path=woodev/assets/build/license-page && wp-scripts build ./src/plugins-page/index.js --output-path=woodev/assets/build/plugins-page",
+    "start": "wp-scripts start ./src/license-page/index.js --output-path=woodev/assets/build/license-page",
+    "start:plugins": "wp-scripts start ./src/plugins-page/index.js --output-path=woodev/assets/build/plugins-page"
   },
   "devDependencies": {
     "@wordpress/scripts": "32.4.0"
