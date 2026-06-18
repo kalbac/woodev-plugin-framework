@@ -573,11 +573,16 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 		 *     @type bool   $is_active       Whether the license is active.
 		 *     @type bool   $is_need_license Presentation flag.
 		 *     @type bool   $beta_enabled    Whether the beta opt-in is set.
+		 *     @type string $renewal_url     Renewal-checkout URL (edd_license_key + download_id).
 		 * }
 		 */
 		public function get_state(): array {
 
 			$status = (string) $this->woodev_license->license;
+
+			// Built once and reused for both the message and the renewal URL so the
+			// renewal-checkout link is a single source of truth (get_renewal_url()).
+			$messages = new Woodev_License_Messages( $this->woodev_license );
 
 			return array(
 				'plugin_id'       => (string) $this->plugin->get_download_id(),
@@ -585,7 +590,7 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 				'license_key'     => (string) $this->license_key,
 				'status'          => $status,
 				'status_label'    => '' === $status ? '' : $this->get_license_status( $status ),
-				'message'         => wp_kses_post( ( new Woodev_License_Messages( $this->woodev_license ) )->get_message() ),
+				'message'         => wp_kses_post( $messages->get_message() ),
 				'message_variant' => $this->get_message_variant(),
 				// Raw expiry — a numeric timestamp stays numeric, a 'Y-m-d H:i:s'
 				// string stays a string, ''/null stay as-is. Do NOT coerce the type:
@@ -595,6 +600,8 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 				'is_active'       => $this->is_active(),
 				'is_need_license' => (bool) $this->plugin->is_need_license(),
 				'beta_enabled'    => (bool) $this->plugin->is_beta_allowed(),
+				// Additive (2.0.2): renewal-checkout URL for the «Продлить» button.
+				'renewal_url'     => $messages->get_renewal_url(),
 			);
 		}
 

@@ -219,6 +219,20 @@ if ( ! class_exists( 'Woodev_License_Messages' ) ) :
 			return esc_url( $url );
 		}
 
+		/**
+		 * Public renewal-checkout URL for the current license.
+		 *
+		 * Single source of truth for the «Продлить» button in the license page UI
+		 * and for the renewal CTAs embedded in the status messages.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string The checkout URL with edd_license_key + download_id.
+		 */
+		public function get_renewal_url() {
+			return $this->get_renewal_link();
+		}
+
 		private function get_renewal_link() {
 			return $this->get_link_helper(
 				'https://woodev.ru/checkout/',
