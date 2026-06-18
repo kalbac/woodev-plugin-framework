@@ -141,13 +141,22 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 					return false;
 				}
 
-				// This is required for plugin to support auto-updates in WordPress 5.5.
-				$version_info->plugin = $this->name;
-				$version_info->id     = $this->name;
-				$version_info->tested = $this->get_tested_version( $version_info );
-
 				$this->set_version_info_cache( $version_info );
 			}
+
+			if ( ! is_object( $version_info ) ) {
+				return false;
+			}
+
+			// OB-3 F3: this cache key is SHARED with plugins_api_filter(), which stores
+			// the response WITHOUT the auto-update fields below. Normalize on EVERY read
+			// (cached or fresh) — not only when this method performs the request itself —
+			// so check_update() never injects an under-normalized object into the update
+			// transient. WP 5.5+ auto-updates require plugin/id. The frozen cache KEY is
+			// unchanged (the discriminator lives in the value; see set_version_info_cache).
+			$version_info->plugin = $this->name;
+			$version_info->id     = $this->name;
+			$version_info->tested = $this->get_tested_version( $version_info );
 
 			return $version_info;
 		}
@@ -598,7 +607,14 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 				}
 
 				if ( $response && isset( $response->sections ) ) {
-					$response->sections = maybe_unserialize( $response->sections );
+					// OB-3 F1: the wire payload delivers `sections` as a serialize()d
+					// assoc-array STRING; after maybe_unserialize() it is an assoc array.
+					// Cast to stdClass so the FRESH path matches the cache round-trip
+					// (get_cached_version_info() json_decodes the cached value, yielding an
+					// object) and show_update_notification() can read ->sections->changelog
+					// consistently. The previous code left sections as a bare array on the
+					// fresh path AND promoted each section to a bogus top-level (array) cast.
+					$response->sections = (object) maybe_unserialize( $response->sections );
 				} else {
 					return false;
 				}
@@ -609,12 +625,6 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 
 				if ( isset( $response->icons ) ) {
 					$response->icons = maybe_unserialize( $response->icons );
-				}
-
-				if ( ! empty( $response->sections ) ) {
-					foreach ( $response->sections as $key => $section ) {
-						$response->$key = (array) $section;
-					}
 				}
 
 				return $response;
