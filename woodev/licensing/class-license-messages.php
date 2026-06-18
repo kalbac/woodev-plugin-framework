@@ -198,7 +198,7 @@ if ( ! class_exists( 'Woodev_License_Messages' ) ) :
 		 *
 		 * @return string.
 		 */
-		private function get_link_helper( $base_url = 'https://woodev.ru', $query_args = array() ) {
+		private function get_link_helper( $base_url = 'https://woodev.ru', $query_args = array(), $raw = false ) {
 
 			$args = wp_parse_args(
 				$query_args,
@@ -216,31 +216,36 @@ if ( ! class_exists( 'Woodev_License_Messages' ) ) :
 
 			$url = add_query_arg( $args, trailingslashit( $base_url ) );
 
-			return esc_url( $url );
+			// $raw=true → esc_url_raw (plain '&'), for URLs consumed as data (the React
+			// «Продлить» href sets the DOM property and would NOT decode esc_url()'s
+			// '&#038;'). $raw=false → esc_url for embedding in message HTML.
+			return $raw ? esc_url_raw( $url ) : esc_url( $url );
 		}
 
 		/**
 		 * Public renewal-checkout URL for the current license.
 		 *
 		 * Single source of truth for the «Продлить» button in the license page UI
-		 * and for the renewal CTAs embedded in the status messages.
+		 * and for the renewal CTAs embedded in the status messages. Returned RAW
+		 * (esc_url_raw) because the React button consumes it as data, not HTML.
 		 *
 		 * @since 2.0.2
 		 *
 		 * @return string The checkout URL with edd_license_key + download_id.
 		 */
 		public function get_renewal_url() {
-			return $this->get_renewal_link();
+			return $this->get_renewal_link( true );
 		}
 
-		private function get_renewal_link() {
+		private function get_renewal_link( $raw = false ) {
 			return $this->get_link_helper(
 				'https://woodev.ru/checkout/',
 				array(
 					'utm_medium'      => 'license-notice',
 					'edd_license_key' => $this->license_data->get_license_key(),
 					'download_id'     => $this->license_data->item_id,
-				)
+				),
+				$raw
 			);
 		}
 
@@ -251,7 +256,7 @@ if ( ! class_exists( 'Woodev_License_Messages' ) ) :
 		 */
 		private function build_message() {
 
-			switch ( $this->license_data->license ) {
+			switch ( $this->license_data->get_display_status() ) {
 
 				case 'expired':
 					$message = $this->get_expired_message();
@@ -295,7 +300,12 @@ if ( ! class_exists( 'Woodev_License_Messages' ) ) :
 					break;
 
 				default:
-					$message = __( 'Без лицензии: обновления сейчас не поступают.', 'woodev-plugin-framework' );
+					$message = sprintf(
+					/* translators: 1. opening link tag; 2. closing link tag. */
+						__( 'Без лицензии: функционал плагина ограничен. Обратитесь в %1$sподдержку%2$s.', 'woodev-plugin-framework' ),
+						'<a href="' . $this->get_link_helper( 'https://woodev.ru/support/', array( 'utm_medium' => 'license-notice' ) ) . '" target="_blank">',
+						'</a>'
+					);
 					break;
 			}
 

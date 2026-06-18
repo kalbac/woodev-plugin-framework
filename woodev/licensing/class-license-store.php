@@ -269,6 +269,36 @@ if ( ! class_exists( 'Woodev_License' ) ) :
 		}
 
 		/**
+		 * Presentation-only effective status.
+		 *
+		 * EDD reports the precise failure reason in `error` while leaving `license`
+		 * at the generic 'invalid' (or empty) on activation failures — e.g. activating
+		 * at the activation limit yields license='invalid' + error='no_activations_left'.
+		 * This returns the more specific `error` token in that case so the status label,
+		 * message, badge and card grouping reflect the real reason instead of a generic
+		 * "invalid key".
+		 *
+		 * READ-ONLY: it never mutates `license`, so enforcement (is_active()/is_invalid()/
+		 * has_status(), which key off the raw `license`) is unchanged — the anti-pirate
+		 * invariant is preserved.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string
+		 */
+		public function get_display_status(): string {
+
+			$license = (string) $this->license;
+			$error   = (string) $this->error;
+
+			if ( '' !== $error && in_array( $license, array( '', 'invalid' ), true ) ) {
+				return $error;
+			}
+
+			return $license;
+		}
+
+		/**
 		 * Only allow certain keys to be modified.
 		 *
 		 * @return array

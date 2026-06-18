@@ -189,14 +189,66 @@ class LicensePureOperationsTest extends TestCase {
 	}
 
 	/**
-	 * activate(): when the stored license is already valid, early-return the
-	 * current state without dispatching (parity with the legacy handler's
-	 * is_license_valid() early-return). The key option IS still written first
-	 * (parity: the Settings API wrote it on every save).
+	 * activate(): re-activating (or re-verifying via «Проверить») a currently-VALID
+	 * license MUST still dispatch to the store and refresh the recorded status —
+	 * it must NOT short-circuit on the in-memory status of the previous key.
+	 *
+	 * Regression guard: the old is_license_valid() early-return keyed off the
+	 * status of the PREVIOUSLY-validated key, so (a) submitting a different key
+	 * while valid silently kept the stale "valid" status, and (b) «Проверить»
+	 * could never refresh an expiry. Here a valid license is re-checked with a new
+	 * key and the store reports 'expired' — the new status must surface.
 	 *
 	 * @return void
 	 */
-	public function test_activate_already_valid_short_circuits_without_dispatch(): void {
+	public function test_activate_revalidates_even_when_already_valid(): void {
+		$payload = (object) [ 'license' => 'expired', 'expires' => '2020-01-01 00:00:00' ];
+
+		$plugin = $this->make_plugin_stub();
+		$plugin->shouldReceive( 'is_need_license' )->andReturn( true );
+
+		$response          = Mockery::mock();
+		$response->license = 'expired';
+		$response->shouldReceive( 'get_response_data' )->once()->andReturn( $payload );
+
+		$woodev_license            = Mockery::mock( \Woodev_License::class );
+		$woodev_license->license   = 'valid'; // currently valid (previous key)
+		$woodev_license->expires   = 'lifetime';
+		$woodev_license->item_name = 'Test Plugin';
+		$woodev_license->shouldReceive( 'save' )->once()->with( $payload )->andReturnUsing(
+			static function () use ( $woodev_license ) {
+				$woodev_license->license = 'expired';
+				$woodev_license->expires = '2020-01-01 00:00:00';
+				return true;
+			}
+		);
+
+		$license = $this->make_license( $plugin, 'KEY-123', 'valid', $woodev_license );
+		$this->stub_api_handler( $license, 'activate_license', 'KEY-NEW', $response );
+
+		Functions\expect( 'sanitize_text_field' )->andReturnFirstArg();
+		Functions\expect( 'home_url' )->andReturn( 'https://example.test' );
+		Functions\expect( 'update_option' )->once()->with( 'woodev_test_plugin_license_key', 'KEY-NEW' );
+		Functions\expect( 'current_time' )->andReturn( 1000 );
+
+		$state = $license->activate( 'KEY-NEW' );
+
+		$this->assertSame( 'expired', $state['status'] );
+	}
+
+	/**
+	 * Outage grace: re-verifying a genuinely VALID license while the woodev API is
+	 * unreachable (transport failure / server down) must NOT deactivate or alter the
+	 * stored license DATA. dispatch() throws BEFORE save() is reached, so the valid
+	 * status survives — the server's silence is never an enforcement decision.
+	 *
+	 * This is the safety net for removing activate()'s is_license_valid() early-return:
+	 * the old code skipped the request entirely; the new code makes the request but
+	 * must still fail SAFE when the server does not answer.
+	 *
+	 * @return void
+	 */
+	public function test_activate_transport_failure_on_valid_license_preserves_data(): void {
 		$plugin = $this->make_plugin_stub();
 		$plugin->shouldReceive( 'is_need_license' )->andReturn( true );
 
@@ -204,22 +256,25 @@ class LicensePureOperationsTest extends TestCase {
 		$woodev_license->license   = 'valid';
 		$woodev_license->expires   = 'lifetime';
 		$woodev_license->item_name = 'Test Plugin';
+		// The stored license DATA must never be overwritten or deleted on a transport
+		// failure — the valid license stays valid.
 		$woodev_license->shouldNotReceive( 'save' );
+		$woodev_license->shouldNotReceive( 'delete' );
 
 		$license = $this->make_license( $plugin, 'KEY-123', 'valid', $woodev_license );
 
 		$api_handler = Mockery::mock();
-		$api_handler->shouldNotReceive( 'make_request' );
+		$api_handler->shouldReceive( 'make_request' )->andThrow( new \Exception( 'license server down' ) );
 		$this->set_private_property( $license, 'api_handler', $api_handler );
 
 		Functions\expect( 'sanitize_text_field' )->andReturnFirstArg();
+		Functions\expect( 'home_url' )->andReturn( 'https://example.test' );
 		Functions\expect( 'update_option' )->once()->with( 'woodev_test_plugin_license_key', 'KEY-123' );
 		Functions\expect( 'delete_transient' )->never();
-		Functions\expect( 'current_time' )->andReturn( 1000 );
 
-		$state = $license->activate( 'KEY-123' );
+		$this->expectException( \Exception::class );
 
-		$this->assertSame( 'valid', $state['status'] );
+		$license->activate( 'KEY-123' );
 	}
 
 	/**
@@ -390,6 +445,61 @@ class LicensePureOperationsTest extends TestCase {
 		$this->assertStringContainsString( 'woodev.ru/checkout', $state['renewal_url'] );
 		$this->assertStringContainsString( 'edd_license_key=KEY-123', $state['renewal_url'] );
 		$this->assertStringContainsString( 'download_id=216', $state['renewal_url'] );
+	}
+
+	/**
+	 * Woodev_License::get_display_status() prefers the EDD `error` token over a
+	 * generic 'invalid'/'' license, and leaves real tokens untouched.
+	 *
+	 * @return void
+	 */
+	public function test_license_display_status_prefers_error_over_generic_invalid(): void {
+		$lic = ( new \ReflectionClass( \Woodev_License::class ) )->newInstanceWithoutConstructor();
+
+		$lic->license = 'invalid';
+		$lic->error   = 'no_activations_left';
+		$this->assertSame( 'no_activations_left', $lic->get_display_status() );
+
+		$lic->license = 'valid';
+		$lic->error   = '';
+		$this->assertSame( 'valid', $lic->get_display_status() );
+
+		$lic->license = 'invalid';
+		$lic->error   = '';
+		$this->assertSame( 'invalid', $lic->get_display_status() );
+
+		// A real token in `license` is never overridden by `error`.
+		$lic->license = 'expired';
+		$lic->error   = 'expired';
+		$this->assertSame( 'expired', $lic->get_display_status() );
+	}
+
+	/**
+	 * get_state(): an activation-limit failure (license='invalid' + error=
+	 * 'no_activations_left') surfaces the specific token as status, with the
+	 * error message variant — not the generic "invalid key".
+	 *
+	 * @return void
+	 */
+	public function test_get_state_uses_display_status_for_limit_reached(): void {
+		$plugin = $this->make_plugin_stub();
+		$plugin->shouldReceive( 'is_need_license' )->andReturn( true );
+		$plugin->shouldReceive( 'is_beta_allowed' )->andReturn( false );
+
+		$woodev_license            = Mockery::mock( \Woodev_License::class );
+		$woodev_license->license   = 'invalid';
+		$woodev_license->error     = 'no_activations_left';
+		$woodev_license->expires   = '';
+		$woodev_license->item_name = 'Test Plugin';
+
+		$license = $this->make_license( $plugin, 'KEY-123', '', $woodev_license );
+
+		Functions\expect( 'current_time' )->andReturn( 1000 );
+
+		$state = $license->get_state();
+
+		$this->assertSame( 'no_activations_left', $state['status'] );
+		$this->assertSame( 'error', $state['message_variant'] );
 	}
 
 	/**
@@ -1038,6 +1148,17 @@ class LicensePureOperationsTest extends TestCase {
 
 		if ( $woodev_license instanceof \Mockery\MockInterface ) {
 			$woodev_license->shouldReceive( 'get_license_key' )->andReturn( 'KEY-123' )->byDefault();
+			// Mirror the real Woodev_License::get_display_status() so get_state()/
+			// build_message() (which now key off the display status) work against the
+			// per-test ->license/->error the mock carries.
+			$woodev_license->shouldReceive( 'get_display_status' )->andReturnUsing(
+				static function () use ( $woodev_license ) {
+					$license = (string) ( $woodev_license->license ?? '' );
+					$error   = (string) ( $woodev_license->error ?? '' );
+
+					return ( '' !== $error && in_array( $license, array( '', 'invalid' ), true ) ) ? $error : $license;
+				}
+			)->byDefault();
 			$woodev_license->item_id    = 216;
 			$woodev_license->payment_id = 1;
 
