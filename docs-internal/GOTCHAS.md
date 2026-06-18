@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
-> **53 atomic gotchas in 17 namespaces** — update count when adding/removing.
-> Last updated: 2026-06-18 (session 20: +1 — `edd-error-field-vs-license-status` [`[licensing/*]`]).
+> **54 atomic gotchas in 17 namespaces** — update count when adding/removing.
+> Last updated: 2026-06-18 (session 20: +2 — `edd-error-field-vs-license-status` [`[licensing/*]`], `esc-url-raw-for-js-consumed-urls` [`[admin-ui/*]`]).
 
 ## Index
 
@@ -77,6 +77,7 @@
 
 ### [admin-ui/*] — Admin pages / React UI
 - [admin-ui/license-page] The "Woodev → Лицензии" page enqueues ONLY `style-index.css` (the React bundle) + `wp-components`; the legacy `woodev-license-page.css` is enqueued nowhere. Styles for ANY server-rendered section on that page (e.g. `html-settings-section.php`) must live in `src/license-page/style.scss`, and `license_page()` must wrap output in `.wrap` + `<h1>` → [gotchas/license-page-css-bundle-only.md](gotchas/license-page-css-bundle-only.md) (s14)
+- [admin-ui/esc-url-raw-for-js] `esc_url()` HTML-entity-encodes `&`→`&#038;`; a URL set as a React `href` (DOM property) or inlined in a JSON payload is NOT HTML-parsed, so the literal `&#038;` breaks the URL. Use `esc_url_raw` for data (JS/REST/redirect/storage); keep `esc_url` only for URLs inside HTML output → [gotchas/esc-url-raw-for-js-consumed-urls.md](gotchas/esc-url-raw-for-js-consumed-urls.md) (s20)
 
 ### [box-packer/*] — Box-packer algorithm (S2)
 - [box-packer/virtual-box-rsort-axis-alignment] `rsort()` on the axis-assignment result destroys axis-name alignment for non-normalized items — Option A `[1,10,1]` after rsort → `[10,1,1]` → `box_width=1 < item_width=10` → packing rejects item. Never rsort the candidate; each option guarantees axis alignment by construction → [gotchas/virtual-box-rsort-axis-alignment.md](gotchas/virtual-box-rsort-axis-alignment.md) (2026-06-09)

@@ -1,4 +1,4 @@
-# Промт для следующей сессии (s21): выбор задачи из бэклога
+# Промт для следующей сессии (s21): редизайн страницы «Woodev → Плагины» (OB-7)
 
 > Написан в s20 (18.06.2026). Скопируй в новую сессию как стартовый бриф. После выполнения — замени на промт для s22.
 
@@ -7,31 +7,43 @@
 Проект: **Woodev Plugin Framework** (`D:\Projects\woodev_framework`).
 
 ## Старт сессии
-1. `docs-internal/CURRENT-STATE.md` — lean-состояние (фазы, открытые баги, next actions).
+1. `docs-internal/CURRENT-STATE.md` — lean-состояние (фазы, баги, next actions).
 2. `docs-internal/SESSION-LOG.md` — верхняя запись (s20) — что сделано.
-3. `docs-internal/GOTCHAS.md` — сканировать релевантные теги под выбранную задачу.
+3. `docs-internal/GOTCHAS.md` — сканировать релевантные теги (**54**). Под эту задачу особо: `license-page-css-bundle-only`, `esc-url-raw-for-js-consumed-urls`, `wp-scripts-jsx-runtime-wp66`, `build-artifacts-eol-lf-windows-parity`, `russian-source-i18n-plural-n`, рижные `wp-safe-remote-request-local-rig` + `wpenv-windows-gitbash-path-mangling`.
 
-## Контекст: s20 закрыт
-- «Woodev → Лицензии» **UI/UX редизайн смержен** (PR #64, `894889b`) и проверен в браузере на риге. Бэкенд тронут только аддитивно (`renewal_url` в `get_state()`); контракты установленных сайтов не менялись.
-- **OB-3 завершён** (кроме осознанно отложенного **F6** — backoff, вопрос endpoint-wide-ключа). Ревью-детали: `docs-internal/reviews/ob3-plugin-updater-review-2026-06-14.md`.
+## Контекст: s20 закрыт и принят оператором
+- Страница «Woodev → Лицензии» полностью переделана и отлажена (PR #64 редизайн, #65 polish, #66 6 багов активации/деактивации, #67 отозванный ключ). Оператор: «работает как нужно, выглядит солидно, мне нравится». Все состояния EDD проверены в браузере на риге.
+- **OB-3 завершён** (кроме отложенного **F6** — backoff).
 
-## ⭐ Задача s21 — выбрать с оператором из бэклога
-Спросить оператора, что брать (AskUserQuestion, рекомендованная опция — ПЕРВОЙ). Кандидаты из `FUTURE-BACKLOG.md` → «Operator backlog dump — s13»:
-- **OB-4** — reusable-JS-php-based принцип (PVZ-map и т.п.; фикс-React админ-UI исключение).
-- **OB-7** — модернизация страницы Plugins (WP React + аккаунт woodev.ru).
-- **OB-5** — изучение godaddy fork (делегировать GPT-research).
-- **OB-9** — нюансы доставки.
-- **Крупные (operator-scheduled, не solo):** payment-gateway trait extraction (~3 542 строки `class-payment-gateway.php`, autodev-loop); ревью #4 — `array()`→`[]` (~797) + типизация везде + `@since`-свип + включить `Generic.Arrays.DisallowLongArraySyntax`.
-- **B-2** — loader-protocol forward-tolerance перед S4/EDD.
+## ⭐ Задача s21 — OB-7: модернизация «Woodev → Плагины» (дизайн ещё НЕ согласован)
+
+**Что есть сейчас (привязка к коду):**
+- Меню `woodev-extensions` (метод `Woodev_Admin_Pages::extensions_menu()` / `extensions_page()` в `woodev/admin/class-admin-pages.php`).
+- Контроллер `Woodev_Admin_Plugins` (`woodev/admin/pages/class-admin-plugins.php`) — тянет список аддонов из стора woodev.ru, категории, поиск, рейтинги, кнопки купить/скачать; `generate_utm_url()`.
+- Вью `woodev/admin/pages/views/html-admin-page-plugins.php` — серверный рендер: header (заголовок+описание+поиск), сайдбар категорий, грид карточек аддонов (картинка, название, excerpt, рейтинг `wp_star_rating`, цена «Buy by %d RUB» / «Free download»).
+- **Проблемы:** устаревший вид; текст на **английском** (надо RU, русский — исходный язык фреймворка); нет единого языка дизайна с новой страницей лицензий.
+
+**Чего хочет оператор (OB-7, `FUTURE-BACKLOG.md`):**
+- Перерисовать в современном стиле, в идеале на **WP React** компонентах (как license page). Дизайн-парити с обновлённой страницей лицензий (карточки, сетка, акценты).
+- RU-локализация всего текста.
+- **Будущая идея (не обязательно в этой сессии):** подключение **аккаунта woodev.ru** на этой странице — показывать, какие плагины у пользователя уже куплены. Референс UX: экран расширений WooCommerce `admin.php?page=wc-admin&path=%2Fextensions`.
+
+**Порядок:**
+1. **`brainstorming`** (дизайн не специфицирован) — снять с оператора требования/раскладку, решить React-vs-server-render, scope (включать ли account-интеграцию сейчас). Заземлять дизайн на РЕАЛЬНОЙ логике контроллера (что реально отдаёт стор woodev.ru) — feedback `ground_design_in_actual_logic`.
+2. **`writing-plans`** → план.
+3. Реализация TDD-кусками, `composer check` зелёный после каждого; `npm run build`; коммитить и `src/`, и `woodev/assets/build/**` (build-parity).
+4. **Рига-верификация** на стенде :8888 (страница реально дёргает стор — проверить, что список аддонов рендерится; если стор недоступен из стенда — учесть как в license-rig).
+5. Codex INLINE-критик на существенных кусках; PR; мердж `gh pr merge <N> --squash --delete-branch` ТОЛЬКО после зелёного CI; НЕ `--auto`. Рекомендованная опция в AskUserQuestion — ПЕРВОЙ.
+
+**Смежное (если всплывёт):** OB-8 — вкладка «Woodev marketplace» на `plugin-install.php` (как WooCommerce `?tab=woo`).
 
 ## ⚠️ Висит (решения оператора / контекст)
 1. **v2.0.1 НЕ выпущен.** Не бампать `VERSION`. Новые символы → `@since 2.0.2`.
 2. **Публичные docs/ — НЕ трогаем** до готовности фреймворка (решение s13).
-3. **F8 multisite** custom update-row в браузере НЕ проверяли (нужен multisite-стенд; consumer-починка подтверждена на single-site в s19). Низкий приоритет.
-4. **s60-аудит доков:** при следующей сессии, кратной 10 — предложить docs audit (последний — n/a; следить за дрейфом).
+3. **F8 multisite** custom update-row в браузере НЕ проверяли (низкий приоритет).
 
 ## Подход и гигиена
-- Существенная работа → `brainstorming` → `writing-plans` → атомарные TDD-куски; `composer check` зелёный после каждого. Codex INLINE-бандлом на существенных кусках (фоновый rescue молча умирает на Windows-сэндбоксе → проверять, что вердикт вернулся). Re-critic собственных правок.
+- Существенная работа → `brainstorming` → `writing-plans` → атомарные TDD-куски; `composer check` зелёный после каждого. Codex INLINE-бандлом (фоновый rescue молча умирает на Windows-сэндбоксе → проверять, что вердикт вернулся). Re-critic собственных правок. Codex-находки НЕ автофиксить — спрашивать оператора (рекоменд. опция первой).
 - Serena для PHP **если доступна** (в s17–s20 НЕ была загружена → Grep/Read/Edit).
-- **Риг (если нужен):** оба стека — issuer `c8ec…` :8090, stand `de59…` :8888. Стенд live-маунтит `woodev-stand/woodev`→`./woodev` (правки в `woodev/` + `npm run build` видны сразу). Логин `admin`/`password`. Драйв состояний: `docker cp` + `wp eval-file` **через PowerShell** (Git-Bash манглит `/tmp/...` пути; кириллица/кавычки ломают inline `wp eval`). НЕ `do_action('admin_init')` в wp-cli. Чистить пробы/тест-юзеров в конце.
-- Мердж: `gh pr merge <N> --squash --delete-branch` ТОЛЬКО после подтверждённо зелёного CI; НЕ `--auto`. После merge: `git fetch && git reset --hard origin/main` (squash расходится с локальным main → `git pull --ff-only` упадёт).
+- **Риг:** issuer `c8ec…` :8090, stand `de59…` :8888. Стенд live-маунтит `woodev-stand/woodev`→`./woodev` (правки в `woodev/` + `npm run build` видны сразу). Логин `admin`/`password`. Сейчас лицензия на стенде в состоянии `valid`. Драйв состояний: `docker cp` + `wp eval-file` **через PowerShell** (Git-Bash манглит `/tmp/...`; кириллица/кавычки ломают inline `wp eval`). НЕ `do_action('admin_init')` в wp-cli. Чистить пробы/тест-юзеров в конце.
+- Мердж: `--squash --delete-branch` после зелёного CI; НЕ `--auto`. После merge: `git fetch && git reset --hard origin/main` (squash расходится с локальным main).
