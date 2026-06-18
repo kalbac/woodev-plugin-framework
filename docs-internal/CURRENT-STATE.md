@@ -20,7 +20,7 @@
 | Remote-deactivation UX | ✅ DONE | s10–s12; command cycle proven live (push prod + pull rig); B-13/14/15 resolved |
 | S4 EDD / S5 React admin / S6 ecosystem | ⚪ deferred | post-v2.0 |
 
-`composer check` green at s20: **651 unit tests** / 1906 assertions (65 skipped), 41 integration (baseline). Keep green after each change.
+`composer check` green at s20: **653 unit tests** / 1909 assertions (65 skipped), 41 integration (baseline). Keep green after each change.
 
 ## Phase Status (subsystems)
 
@@ -54,7 +54,7 @@
 
 ## Next Actions
 
-- ✅ **s20 done — «Woodev → Лицензии» UI/UX redesign (PR #64 `894889b`):** additive `renewal_url` in `get_state()` (single-source public `get_renewal_url()`); RU-localized messages + status labels; pure `card-state.js` 7-group state machine; rewritten card (key form-group, badge, accent, Продлить/Деактивировать/Изменить ключ, Бета tooltip); intro info-notice; 3/2/1 grid; compact quick-link cards (4/2/1). 651 unit, Codex no-blockers (5 fixes applied + re-criticked), **rig browser-verified** (E + B + Изменить-ключ, 0 console errors), CI + build-parity green. Plan: `docs-internal/plans/2026-06-18-license-page-redesign.md`.
+- ✅ **s20 done — «Woodev → Лицензии» UI/UX redesign (PR #64 `894889b`):** additive `renewal_url` in `get_state()` (single-source public `get_renewal_url()`); RU-localized messages + status labels; pure `card-state.js` 7-group state machine; rewritten card (key form-group, badge, accent, Продлить/Деактивировать/Изменить ключ, Бета tooltip); intro info-notice; 3/2/1 grid; compact quick-link cards (4/2/1). 651 unit, Codex no-blockers (5 fixes applied + re-criticked), **rig browser-verified** (E + B + Изменить-ключ, 0 console errors), CI + build-parity green. Plan: `docs-internal/plans/2026-06-18-license-page-redesign.md`. **Polish (PR #65 `830f197`):** key form-group height/border alignment (40px / `#8c8f94`), compact-card icons vertically centered (CTAs bottom-pinned), server-rendered load **skeleton** (1 card per registered engine, replaced by React on mount → no page jump); 653 unit, rig-verified.
 - 📥 **s21 — pull from backlog** (`FUTURE-BACKLOG.md` "Operator backlog dump — s13"): OB-4 reusable-JS-php-based · OB-5 godaddy fork study · OB-7 modernize Plugins page · OB-9 shipping nuances. Or the big ones (operator-scheduled): payment-gateway trait extraction; review #4 (`array()`→`[]` + typing + `@since` sweep).
 - ✅ **OB-3 COMPLETE** (s15 F11/F12/F13, s16 F2/F7+F5, s17 move, s18 F8/F9/F10, s19 F1/F3); only **F6** backoff deferred (endpoint-wide-key question).
 - 📥 **Remaining backlog** (`FUTURE-BACKLOG.md` → "Operator backlog dump — s13"): OB-4 reusable-JS-php-based principle · OB-5 godaddy fork study (GPT research delegation) · OB-7 modernize Plugins page (WP React + woodev.ru account) · OB-9 shipping nuances. Big ones: payment-gateway trait extraction; review #4 (`array()`→`[]` + typing + `@since` sweep).
