@@ -446,6 +446,15 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 			}
 
 			// Parity: the Settings API wrote this option in the legacy flow.
+			//
+			// Accepted edge (reviewed 2026-06-18): the key option is persisted BEFORE the
+			// store call, so if the user submits a DIFFERENT key and the store is unreachable
+			// at that moment, the new (unverified) key is stored while the license DATA still
+			// holds the previous key's 'valid' status — the card shows a "phantom valid". This
+			// is the SAFE direction (an outage never deactivates) and self-heals on the next
+			// successful verify / weekly check. Left as-is on purpose: the scenario (key change
+			// AND simultaneous outage) is near-impossible and not worth breaking the key-write
+			// ordering for. The genuinely-valid SAME-key outage case is regression-tested.
 			update_option( $this->plugin->get_plugin_option_name( 'license_key' ), $license_key );
 			$this->license_key = $license_key;
 
