@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
-> **52 atomic gotchas in 17 namespaces** — update count when adding/removing.
-> Last updated: 2026-06-18 (session 19: +2 — `edd-sl-get-version-serialized-sections` [`[licensing/*]`] and `wc-blocks-subscriber-wp-admin-403-test` [`[testing/*]`]).
+> **53 atomic gotchas in 17 namespaces** — update count when adding/removing.
+> Last updated: 2026-06-18 (session 20: +1 — `edd-error-field-vs-license-status` [`[licensing/*]`]).
 
 ## Index
 
@@ -64,6 +64,7 @@
 - [licensing/two-layer] `is_need_license()` (Woodev_Plugin, presentation, UNTRUSTED) vs `is_license_required()` (Woodev_Plugins_License, enforcement, server-trusted) — gating a feature/enforcement on the local flag reopens the piracy hole; the local flag renders UI only → [gotchas/license-need-vs-required.md](gotchas/license-need-vs-required.md) (2026-06-10)
 - [licensing/remote-deactivation] A remotely-deactivated single-v2-plugin can't render its own `admin_notices` banner (no framework code loads when inactive) — **accepted, by design** (the kill-switch targets violators; losing the banner on a single-plugin site costs nothing). The banner shows only when another active v2 plugin renders it (≥2 v2 plugins). s12 WC-note breadcrumb was tried then reverted (operator). See SESSION-LOG s12.
 - [licensing/edd-sl-get-version-payload] EDD SL `get_version` returns `sections`/`banners`/`icons` as PHP-`serialize()`d STRINGS inside JSON (hence `maybe_unserialize`); `contributors` as a JSON object; `plugin_latest_version` ≡ `plugin_information` (one store action) → [gotchas/edd-sl-get-version-serialized-sections.md](gotchas/edd-sl-get-version-serialized-sections.md) (s19)
+- [licensing/edd-error-vs-license] EDD reports activation failures (e.g. limit reached → `no_activations_left`, `site_inactive`) in the response `error` field while `license` stays generic `'invalid'`; presentation must read an error-aware effective status (`Woodev_License::get_display_status()`), NOT route enforcement through it → [gotchas/edd-error-field-vs-license-status.md](gotchas/edd-error-field-vs-license-status.md) (s20)
 - [licensing/option-keys] License-key option double-prefix for plugin ids starting with `woodev`: `get_plugin_option_name()` always prepends `woodev_`, `Woodev_License` only conditionally → write/read diverge. Real plugin ids unaffected; never name a plugin/fixture id `woodev*` → [gotchas/license-key-option-double-prefix.md](gotchas/license-key-option-double-prefix.md) (s11)
 
 ### [build/*] — Build/CI/release

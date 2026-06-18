@@ -20,7 +20,7 @@
 | Remote-deactivation UX | ✅ DONE | s10–s12; command cycle proven live (push prod + pull rig); B-13/14/15 resolved |
 | S4 EDD / S5 React admin / S6 ecosystem | ⚪ deferred | post-v2.0 |
 
-`composer check` green at s20: **653 unit tests** / 1909 assertions (65 skipped), 41 integration (baseline). Keep green after each change.
+`composer check` green at s20: **656 unit tests** / 1921 assertions (65 skipped), 41 integration (baseline). Keep green after each change.
 
 ## Phase Status (subsystems)
 
