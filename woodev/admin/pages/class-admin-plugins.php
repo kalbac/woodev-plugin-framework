@@ -131,19 +131,4 @@ class Woodev_Admin_Plugins {
 			$url
 		);
 	}
-
-	public static function output() {
-
-		$section  = isset( $_GET['section'] ) ? sanitize_text_field( wp_unslash( $_GET['section'] ) ) : 'all';
-		$search   = isset( $_GET['search'] ) ? sanitize_text_field( wp_unslash( $_GET['search'] ) ) : '';
-		$sections = self::get_sections();
-
-		if ( 'all' == $section && empty( $search ) ) {
-			$addons = self::get_all_extension() ?: array();
-		} else {
-			$addons = self::get_extension_by_query() ?: array();
-		}
-
-		include_once __DIR__ . '/views/html-admin-page-plugins.php';
-	}
 }

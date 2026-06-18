@@ -222,33 +222,94 @@ if ( ! class_exists( 'Woodev_Admin_Pages' ) ) :
 
 			$extensions_suffix = add_submenu_page(
 				'woodev',
-				__( 'Woodev all plugins', 'woodev-plugin-framework' ),
-				__( 'Plugins', 'woodev-plugin-framework' ),
+				__( 'Плагины Woodev', 'woodev-plugin-framework' ),
+				__( 'Плагины', 'woodev-plugin-framework' ),
 				'manage_options',
 				'woodev-extensions',
 				array( $this, 'extensions_page' )
 			);
 
 			add_action( 'admin_print_scripts-' . $extensions_suffix, array( $this, 'load_plugins_page_scripts' ) );
-			add_action( 'load-' . $extensions_suffix, array( $this, 'extensions_page_init' ) );
 		}
 
-		public function load_plugins_page_scripts() {
+		/**
+		 * Enqueues the React «Плагины» app bundle + inline bootstrap.
+		 *
+		 * Reads the build-time dependency manifest from index.asset.php so WordPress
+		 * enqueues exactly the handles webpack recorded (wp-element, wp-components,
+		 * wp-api-fetch, wp-i18n), falling back to empty deps + plugin version when the
+		 * manifest is absent (e.g. before the first build on a fresh checkout). Inlines
+		 * window.woodevExtensions BEFORE the bundle so the app has the REST root, nonce,
+		 * and account feature flag on first render.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		public function load_plugins_page_scripts(): void {
 
+			$asset_file = $this->woodev_plugin->get_framework_path() . '/assets/build/plugins-page/index.asset.php';
+
+			if ( file_exists( $asset_file ) ) {
+				$asset = include $asset_file;
+			} else {
+				$asset = array(
+					'dependencies' => array(),
+					'version'      => $this->woodev_plugin->get_version(),
+				);
+			}
+
+			$build_url = $this->woodev_plugin->get_framework_assets_url() . '/build/plugins-page';
+
+			// Native WP component library styles (externalized in bundle).
+			wp_enqueue_style( 'wp-components' );
+
+			// Framework plugins-page app styles.
 			wp_enqueue_style(
-				'woodev-plugin-plugins-page',
-				$this->woodev_plugin->get_framework_assets_url() . '/css/admin/woodev-plugins-page.css',
-				array(),
-				$this->woodev_plugin->get_version()
+				'woodev-plugins-app',
+				$build_url . '/style-index.css',
+				array( 'wp-components' ),
+				$asset['version']
+			);
+
+			// Framework plugins-page app bundle.
+			wp_enqueue_script(
+				'woodev-plugins-app',
+				$build_url . '/index.js',
+				$asset['dependencies'],
+				$asset['version'],
+				true
+			);
+
+			// Inline bootstrap data BEFORE the bundle so it is available on first render.
+			wp_add_inline_script(
+				'woodev-plugins-app',
+				'window.woodevExtensions = ' . wp_json_encode(
+					array(
+						'restRoot'       => esc_url_raw( rest_url() ),
+						'restNonce'      => wp_create_nonce( 'wp_rest' ),
+						/**
+						 * Gates the woodev.ru account-connection UI (Phase B). Default
+						 * false until the woodev-account-connector plugin ships the
+						 * OAuth endpoints.
+						 *
+						 * @since 2.0.2
+						 *
+						 * @param bool $enabled Whether to enable the account-connection UI.
+						 */
+						'accountEnabled' => (bool) apply_filters( 'woodev_extensions_account_enabled', false ),
+					)
+				) . ';',
+				'before'
 			);
 		}
 
-		public function extensions_page_init() {
-			include_once $this->woodev_plugin->get_framework_path() . '/admin/pages/class-admin-plugins.php';
-		}
-
-		public function extensions_page() {
-			Woodev_Admin_Plugins::output();
+		public function extensions_page(): void {
+			echo '<div class="wrap woodev-extensions-wrap">';
+			echo '<h1 class="wp-heading-inline">' . esc_html__( 'Плагины Woodev', 'woodev-plugin-framework' ) . '</h1>';
+			echo '<hr class="wp-header-end">';
+			echo '<div id="woodev-extensions-app"></div>';
+			echo '</div>';
 		}
 
 		/**
