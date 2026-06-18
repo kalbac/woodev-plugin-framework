@@ -102,8 +102,11 @@ export function getCardView( state, editingKeyForce = false ) {
 		};
 	}
 
-	// Group A — no key stored.
-	if ( ! hasKey ) {
+	// Group A — not activated: no key yet, OR a key is present but the license has
+	// no active status (e.g. just deactivated — the key option is kept while the
+	// license data is cleared, so status is ''). The field is editable so the user
+	// can activate the prefilled/typed key or replace it.
+	if ( status === '' || ! hasKey ) {
 		return {
 			group: 'no-key',
 			accent: 'neutral',

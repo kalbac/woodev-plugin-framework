@@ -446,14 +446,22 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 			}
 
 			// Parity: the Settings API wrote this option in the legacy flow.
+			//
+			// Accepted edge (reviewed 2026-06-18): the key option is persisted BEFORE the
+			// store call, so if the user submits a DIFFERENT key and the store is unreachable
+			// at that moment, the new (unverified) key is stored while the license DATA still
+			// holds the previous key's 'valid' status — the card shows a "phantom valid". This
+			// is the SAFE direction (an outage never deactivates) and self-heals on the next
+			// successful verify / weekly check. Left as-is on purpose: the scenario (key change
+			// AND simultaneous outage) is near-impossible and not worth breaking the key-write
+			// ordering for. The genuinely-valid SAME-key outage case is regression-tested.
 			update_option( $this->plugin->get_plugin_option_name( 'license_key' ), $license_key );
 			$this->license_key = $license_key;
 
-			// Parity: the legacy activate_license() early-returned when already valid.
-			if ( $this->is_license_valid() ) {
-				return $this->get_state();
-			}
-
+			// Always dispatch — do NOT short-circuit on the in-memory is_license_valid()
+			// status of the PREVIOUS key. That early-return (legacy parity) silently kept
+			// a stale "valid" status when the user submitted a different key, and blocked
+			// «Проверить» from refreshing an expiry on an already-valid key.
 			$license_data = $this->dispatch( 'activate_license', $license_key );
 
 			if ( ! $license_data ) {
@@ -579,7 +587,9 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 		 */
 		public function get_state(): array {
 
-			$status = (string) $this->woodev_license->license;
+			// Presentation status prefers the EDD `error` token over a generic
+			// 'invalid' (e.g. activation-limit failures) — see get_display_status().
+			$status = $this->woodev_license->get_display_status();
 
 			// Built once and reused for both the message and the renewal URL so the
 			// renewal-checkout link is a single source of truth (get_renewal_url()).
@@ -620,7 +630,7 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 		 */
 		private function get_message_variant(): string {
 
-			$status = (string) $this->woodev_license->license;
+			$status = $this->woodev_license->get_display_status();
 
 			$error_statuses = array(
 				'expired',
