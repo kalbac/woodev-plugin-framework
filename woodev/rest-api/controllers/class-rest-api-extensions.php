@@ -120,9 +120,13 @@ if ( ! class_exists( 'Woodev_REST_API_Extensions' ) ) :
 		/**
 		 * GET handler: returns { categories, products, stale }.
 		 *
-		 * Serves a cached payload when present; otherwise fetches both endpoints,
-		 * normalizes, and caches a successful (non-empty) result. An outage yields
-		 * `stale: true` with empty products and is left uncached so it stays retryable.
+		 * Serves a cached payload when present; otherwise fetches both endpoints and
+		 * normalizes. Only a COMPLETE result (both products and categories non-empty)
+		 * is cached — a partial result (e.g. the categories endpoint blipped while
+		 * products succeeded) is still served this request but left uncached, so the
+		 * next load retries rather than serving a chip-less catalog for a full week.
+		 * `stale: true` (products empty) is the hard-failure flag the client renders
+		 * an error for; a categories-only outage does NOT hide the working grid.
 		 *
 		 * @internal
 		 *
@@ -138,15 +142,17 @@ if ( ! class_exists( 'Woodev_REST_API_Extensions' ) ) :
 				return rest_ensure_response( $cached );
 			}
 
-			$products = $this->fetch_products();
+			$products   = $this->fetch_products();
+			$categories = $this->fetch_categories();
 
 			$payload = array(
-				'categories' => $this->fetch_categories(),
+				'categories' => $categories,
 				'products'   => $products,
 				'stale'      => ( array() === $products ),
 			);
 
-			if ( ! $payload['stale'] ) {
+			// Cache only a complete fetch; a partial/failed one stays retryable.
+			if ( array() !== $products && array() !== $categories ) {
 				set_transient( self::CACHE_KEY, $payload, WEEK_IN_SECONDS );
 			}
 
