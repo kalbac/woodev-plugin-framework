@@ -472,6 +472,19 @@ class LicensePureOperationsTest extends TestCase {
 		$lic->license = 'expired';
 		$lic->error   = 'expired';
 		$this->assertSame( 'expired', $lic->get_display_status() );
+
+		// A free-text (localized) error for a plain bad key must NOT become the status —
+		// it would fall through to the «unknown» fallback and strand the user (s21 Item 0).
+		// The generic 'invalid' license is kept so the card resolves to the editable
+		// «bad-key» group instead.
+		$lic->license = 'invalid';
+		$lic->error   = 'Неверно указан лицензионный ключ.';
+		$this->assertSame( 'invalid', $lic->get_display_status() );
+
+		// Same guard for an empty license with a free-text error.
+		$lic->license = '';
+		$lic->error   = 'Some human readable error.';
+		$this->assertSame( '', $lic->get_display_status() );
 	}
 
 	/**
@@ -1156,7 +1169,7 @@ class LicensePureOperationsTest extends TestCase {
 					$license = (string) ( $woodev_license->license ?? '' );
 					$error   = (string) ( $woodev_license->error ?? '' );
 
-					return ( '' !== $error && in_array( $license, array( '', 'invalid' ), true ) ) ? $error : $license;
+					return ( '' !== $error && in_array( $license, array( '', 'invalid' ), true ) && 1 === preg_match( '/^[a-z][a-z0-9_]*$/', $error ) ) ? $error : $license;
 				}
 			)->byDefault();
 			$woodev_license->item_id    = 216;

@@ -208,8 +208,10 @@ export function getCardView( state, editingKeyForce = false ) {
 		},
 		keyEditable: false,
 		controlsEnabled: true,
-		// changeKey OFF: an unrecognised status must not open the editable path and
-		// weaken the "editable only in A and E" rule; re-verify is still available.
-		actions: { activate: false, verify: true, renew: false, deactivate: false, changeKey: false },
+		// changeKey ON (safety net, s21 Item 0): an unrecognised status must never strand
+		// the user. The field stays masked + read-only (so we don't weaken the "editable
+		// only in A and E" rule), but «Изменить ключ» is always offered so any unforeseen
+		// status still has an escape to enter a different key. Re-verify stays available.
+		actions: { activate: false, verify: true, renew: false, deactivate: false, changeKey: true },
 	};
 }
