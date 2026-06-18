@@ -1,6 +1,6 @@
-# EDD reports activation failures via `error`, not `license`
+# EDD reports activation failures via `error`, not `license` — but only TOKEN errors
 
-**Topic:** `[licensing/*]` · Discovered s20 (2026-06-18), live operator testing.
+**Topic:** `[licensing/*]` · Discovered s20 (2026-06-18), live operator testing. Updated s21 (token-guard fix).
 
 ## Problem
 
@@ -27,14 +27,28 @@ back out for display.
 $status = (string) $this->woodev_license->license; // 'invalid'
 ```
 
-## ✅ Correct
+## ⚠️ s21 trap — the `error` field can be FREE TEXT, not a machine token
+
+Some stores put a **localized human sentence** in `error` for a plain bad key, NOT a machine
+code. Observed on the woodev.ru store: a non-existent key returns
+`{ "license": "invalid", "error": "Неверно указан лицензионный ключ." }`. The naïve override
+(below) then returned that whole sentence as the "status" → it matched **no** presentation group
+→ fell through to the JS `unknown` fallback → badge «Неизвестный статус», message «Без лицензии…»,
+and (because `unknown` had `changeKey:false`) the user was **stranded** with no way to enter a
+different key. Same class of bug as the revoked-key stranding fixed in #67.
+
+## ✅ Correct (s21 — guard the override to machine tokens only)
 
 ```php
-// Woodev_License::get_display_status() — presentation-only, prefers the specific error token.
+// Woodev_License::get_display_status() — presentation-only, prefers a specific error TOKEN.
 public function get_display_status(): string {
     $license = (string) $this->license;
     $error   = (string) $this->error;
-    if ( '' !== $error && in_array( $license, array( '', 'invalid' ), true ) ) {
+    // Override ONLY when `error` is a machine status code (e.g. no_activations_left,
+    // site_inactive). A free-text/localized error keeps `license`, so a plain bad key
+    // resolves to 'invalid' → the editable «bad-key» group + the right message.
+    if ( '' !== $error && in_array( $license, array( '', 'invalid' ), true )
+        && 1 === preg_match( '/^[a-z][a-z0-9_]*$/', $error ) ) {
         return $error; // e.g. 'no_activations_left', 'site_inactive'
     }
     return $license;
@@ -45,6 +59,9 @@ Use the display status in **presentation only** (`get_state()` status/`status_la
 `message_variant`, and `Woodev_License_Messages::build_message()`'s switch). **Do NOT** mutate
 `license` or route enforcement through it: `is_active()` / `is_invalid()` / `has_status()` must
 keep reading the raw `license` so the anti-pirate invariant is unchanged.
+
+**Defense in depth (s21):** the JS `card-state.js` `unknown` fallback now also sets
+`changeKey: true`, so even a genuinely-unforeseen status can never strand the user.
 
 ## Related
 

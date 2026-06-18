@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
-> **54 atomic gotchas in 17 namespaces** — update count when adding/removing.
-> Last updated: 2026-06-18 (session 20: +2 — `edd-error-field-vs-license-status` [`[licensing/*]`], `esc-url-raw-for-js-consumed-urls` [`[admin-ui/*]`]).
+> **55 atomic gotchas in 17 namespaces** — update count when adding/removing.
+> Last updated: 2026-06-19 (session 21: +1 — `edd-api-v2-products-no-post-meta` [`[licensing/*]`]; updated `edd-error-field-vs-license-status` with the free-text token-guard).
 
 ## Index
 
@@ -65,6 +65,7 @@
 - [licensing/remote-deactivation] A remotely-deactivated single-v2-plugin can't render its own `admin_notices` banner (no framework code loads when inactive) — **accepted, by design** (the kill-switch targets violators; losing the banner on a single-plugin site costs nothing). The banner shows only when another active v2 plugin renders it (≥2 v2 plugins). s12 WC-note breadcrumb was tried then reverted (operator). See SESSION-LOG s12.
 - [licensing/edd-sl-get-version-payload] EDD SL `get_version` returns `sections`/`banners`/`icons` as PHP-`serialize()`d STRINGS inside JSON (hence `maybe_unserialize`); `contributors` as a JSON object; `plugin_latest_version` ≡ `plugin_information` (one store action) → [gotchas/edd-sl-get-version-serialized-sections.md](gotchas/edd-sl-get-version-serialized-sections.md) (s19)
 - [licensing/edd-error-vs-license] EDD reports activation failures (e.g. limit reached → `no_activations_left`, `site_inactive`) in the response `error` field while `license` stays generic `'invalid'`; presentation must read an error-aware effective status (`Woodev_License::get_display_status()`), NOT route enforcement through it → [gotchas/edd-error-field-vs-license-status.md](gotchas/edd-error-field-vs-license-status.md) (s20)
+- [licensing/edd-api-no-meta] woodev.ru `edd-api/v2` products payload is fixed EDD fields only — no post meta (`_product_icon`/`_coming_soon`/`rating` absent; `fields=meta` ignored); expose via an `edd_api_products_product` filter store-side. Normalizer reads them forward-compatibly → [gotchas/edd-api-v2-products-no-post-meta.md](gotchas/edd-api-v2-products-no-post-meta.md) (s21)
 - [licensing/option-keys] License-key option double-prefix for plugin ids starting with `woodev`: `get_plugin_option_name()` always prepends `woodev_`, `Woodev_License` only conditionally → write/read diverge. Real plugin ids unaffected; never name a plugin/fixture id `woodev*` → [gotchas/license-key-option-double-prefix.md](gotchas/license-key-option-double-prefix.md) (s11)
 
 ### [build/*] — Build/CI/release

@@ -1,64 +1,84 @@
-# Промт для следующей сессии (s21): редизайн страницы «Woodev → Плагины» (OB-7)
+# Промт для следующей сессии (s22): woodev.ru-side — `woodev-core` API + `woodev-account-connector`
 
-> Написан в s20 (18.06.2026). Скопируй в новую сессию как стартовый бриф. После выполнения — замени на промт для s22.
-
----
-
-Проект: **Woodev Plugin Framework** (`D:\Projects\woodev_framework`).
-
-## Старт сессии
-1. `docs-internal/CURRENT-STATE.md` — lean-состояние (фазы, баги, next actions).
-2. `docs-internal/SESSION-LOG.md` — верхняя запись (s20) — что сделано.
-3. `docs-internal/GOTCHAS.md` — сканировать релевантные теги (**54**). Под эту задачу особо: `license-page-css-bundle-only`, `esc-url-raw-for-js-consumed-urls`, `wp-scripts-jsx-runtime-wp66`, `build-artifacts-eol-lf-windows-parity`, `russian-source-i18n-plural-n`, рижные `wp-safe-remote-request-local-rig` + `wpenv-windows-gitbash-path-mangling`.
-
-## Контекст: s20 закрыт и принят оператором
-- Страница «Woodev → Лицензии» полностью переделана и отлажена (PR #64 редизайн, #65 polish, #66 6 багов активации/деактивации, #67 отозванный ключ). Оператор: «работает как нужно, выглядит солидно, мне нравится». Все состояния EDD проверены в браузере на риге.
-- **OB-3 завершён** (кроме отложенного **F6** — backoff).
-
-## ⛔ Item 0 (BLOCKING) — НАЧАТЬ С ЭТОГО ФИКСА (license page, найден оператором после s20)
-
-**Баг:** «Изменить ключ» → ввести любой несуществующий ключ → активировать → бейдж **«Неизвестный статус»**, сообщение «Без лицензии: функционал плагина ограничен.», и **нет кнопки «Изменить ключ»** — пользователь застревает (та же проблема, что была с отозванным ключом в #67).
-
-**Корень (диагноз s20):** мусорный ключ возвращает токен EDD, не попавший ни в одну группу → fallback-группа **`unknown`** в `src/license-page/card-state.js` (`getCardView`), у которой `changeKey: false` (выставлено в #66 по совету Codex, чтобы «не размывать editable-only-A/E»). Из-за этого нет ни «Активировать», ни «Изменить ключ».
-
-**План фикса:**
-1. **Сначала захватить реальный токен** EDD для несуществующего ключа на риге (`docker cp` + `wp eval-file` через PowerShell; либо посмотреть, что `activate()` сохраняет в `woodev_license->license`/`error` после ввода мусора). Возможно, его правильнее маппить в **группу E** (bad-key, editable, «Неверный ключ») — тогда поле сразу редактируемое и это закрывает кейс «по месту».
-2. **В любом случае** дать fallback-группе `unknown` безопасную возможность сменить ключ: `changeKey: true` (как сделали для группы F в #67) — чтобы НИ В ОДНОМ состоянии пользователь не оставался без способа ввести другой ключ.
-3. Рига-верификация (ввести мусор → убедиться, что «Изменить ключ»/editable доступны и новый ключ активируется), `npm run build`, коммит `src/`+`build/`, Codex-критик, PR, мердж после зелёного CI.
-
-> Это маленький, но release-blocking UX-фикс. Закрыть ПЕРЕД тем как браться за OB-7.
+> Написан в s21 (2026-06-19). Скопируй в новую сессию как стартовый бриф. После выполнения — замени на промт для s23.
 
 ---
 
-## ⭐ Задача s21 — OB-7: модернизация «Woodev → Плагины» (дизайн ещё НЕ согласован)
+## ⚠️ Это КРОСС-ПРОЕКТНАЯ сессия — работаем в `D:\Projects\woodev_theme`, НЕ в framework
 
-**Что есть сейчас (привязка к коду):**
-- Меню `woodev-extensions` (метод `Woodev_Admin_Pages::extensions_menu()` / `extensions_page()` в `woodev/admin/class-admin-pages.php`).
-- Контроллер `Woodev_Admin_Plugins` (`woodev/admin/pages/class-admin-plugins.php`) — тянет список аддонов из стора woodev.ru, категории, поиск, рейтинги, кнопки купить/скачать; `generate_utm_url()`.
-- Вью `woodev/admin/pages/views/html-admin-page-plugins.php` — серверный рендер: header (заголовок+описание+поиск), сайдбар категорий, грид карточек аддонов (картинка, название, excerpt, рейтинг `wp_star_rating`, цена «Buy by %d RUB» / «Free download»).
-- **Проблемы:** устаревший вид; текст на **английском** (надо RU, русский — исходный язык фреймворка); нет единого языка дизайна с новой страницей лицензий.
+Обе задачи s22 — на стороне **woodev.ru** (исходники в **`D:\Projects\woodev_theme\plugins\`**), а не в `woodev_framework`. Framework-сторона (потребитель) уже готова и **forward-compatible** — она сама подхватит новые поля API, как только стор начнёт их отдавать. Открой `D:\Projects\woodev_theme` как рабочий проект; читай его `CLAUDE.md`/`AGENTS.md`/`docs`.
 
-**Чего хочет оператор (OB-7, `FUTURE-BACKLOG.md`):**
-- Перерисовать в современном стиле, в идеале на **WP React** компонентах (как license page). Дизайн-парити с обновлённой страницей лицензий (карточки, сетка, акценты).
-- RU-локализация всего текста.
-- **Будущая идея (не обязательно в этой сессии):** подключение **аккаунта woodev.ru** на этой странице — показывать, какие плагины у пользователя уже куплены. Референс UX: экран расширений WooCommerce `admin.php?page=wc-admin&path=%2Fextensions`.
+## Старт сессии (в woodev_theme)
+1. `docs-internal/CURRENT-STATE.md` (или аналог) проекта woodev_theme — состояние, баги, next actions.
+2. Свежий `SESSION-LOG`/gotchas woodev_theme.
+3. **Из framework** (контекст-референс, НЕ редактировать здесь): спек OB-7 `D:\Projects\woodev_framework\docs-internal\specs\2026-06-18-plugins-page-ob7-redesign-design.md` — §7 (auth-контракт) и §8a (store-side snippet); гоча `D:\Projects\woodev_framework\docs-internal\gotchas\edd-api-v2-products-no-post-meta.md`.
 
-**Порядок:**
-1. **`brainstorming`** (дизайн не специфицирован) — снять с оператора требования/раскладку, решить React-vs-server-render, scope (включать ли account-интеграцию сейчас). Заземлять дизайн на РЕАЛЬНОЙ логике контроллера (что реально отдаёт стор woodev.ru) — feedback `ground_design_in_actual_logic`.
-2. **`writing-plans`** → план.
-3. Реализация TDD-кусками, `composer check` зелёный после каждого; `npm run build`; коммитить и `src/`, и `woodev/assets/build/**` (build-parity).
-4. **Рига-верификация** на стенде :8888 (страница реально дёргает стор — проверить, что список аддонов рендерится; если стор недоступен из стенда — учесть как в license-rig).
-5. Codex INLINE-критик на существенных кусках; PR; мердж `gh pr merge <N> --squash --delete-branch` ТОЛЬКО после зелёного CI; НЕ `--auto`. Рекомендованная опция в AskUserQuestion — ПЕРВОЙ.
+## Контекст: что сделано в s21 (framework, всё смерджено)
+- License Item 0 пофикшен (PR #68). «Woodev → Плагины» переделан на React-витрину (PR #69) + бренд-полиш (PR #70): wide, грид 4/2/1, компактные карточки, бренд-циан `#00C9FD`, `thumbnails.small`.
+- **Нормализатор framework уже forward-compatible:** `Woodev_REST_API_Extensions::normalize_product()` (`woodev/rest-api/controllers/class-rest-api-extensions.php`) уже: предпочитает `info._product_icon` для иконки; **скрывает** товар если `info._coming_soon`/`coming_soon` truthy. Осталось, чтобы стор начал отдавать эти поля. Рейтинг — добавить и в API, и потом в карточку (framework follow-up, см. ниже).
 
-**Смежное (если всплывёт):** OB-8 — вкладка «Woodev marketplace» на `plugin-install.php` (как WooCommerce `?tab=woo`).
+---
 
-## ⚠️ Висит (решения оператора / контекст)
-1. **v2.0.1 НЕ выпущен.** Не бампать `VERSION`. Новые символы → `@since 2.0.2`.
-2. **Публичные docs/ — НЕ трогаем** до готовности фреймворка (решение s13).
-3. **F8 multisite** custom update-row в браузере НЕ проверяли (низкий приоритет).
+## ⭐ Задача №1 (ПЕРВАЯ) — расширить edd-api в `woodev-core`
 
-## Подход и гигиена
-- Существенная работа → `brainstorming` → `writing-plans` → атомарные TDD-куски; `composer check` зелёный после каждого. Codex INLINE-бандлом (фоновый rescue молча умирает на Windows-сэндбоксе → проверять, что вердикт вернулся). Re-critic собственных правок. Codex-находки НЕ автофиксить — спрашивать оператора (рекоменд. опция первой).
-- Serena для PHP **если доступна** (в s17–s20 НЕ была загружена → Grep/Read/Edit).
-- **Риг:** issuer `c8ec…` :8090, stand `de59…` :8888. Стенд live-маунтит `woodev-stand/woodev`→`./woodev` (правки в `woodev/` + `npm run build` видны сразу). Логин `admin`/`password`. Сейчас лицензия на стенде в состоянии `valid`. Драйв состояний: `docker cp` + `wp eval-file` **через PowerShell** (Git-Bash манглит `/tmp/...`; кириллица/кавычки ломают inline `wp eval`). НЕ `do_action('admin_init')` в wp-cli. Чистить пробы/тест-юзеров в конце.
-- Мердж: `--squash --delete-branch` после зелёного CI; НЕ `--auto`. После merge: `git fetch && git reset --hard origin/main` (squash расходится с локальным main).
+В плагине **`D:\Projects\woodev_theme\plugins\woodev-core`** добавить в ответ EDD API v2 (`/edd-api/v2/products/`) три поля на каждый товар:
+1. **`_product_icon`** — ссылка на иконку товара (у многих товаров есть это мета-поле).
+2. **`_coming_soon`** — флаг «скоро / не в продаже» (чтобы прятать снятые товары: сейчас в витрине висят Беру.ру, GOODS.ru и т.п.).
+3. **`rating`** — рейтинг товара (рейтинг повышает доверие; оператор попросил добавить раз уж модифицируем ответ).
+
+> **⚠️ Точные имена мета-ключей НЕ подтверждены** — оператор может ошибаться в названиях (`_product_icon`, `_coming_soon`, ключ рейтинга). **Сначала найди реальные ключи** в `woodev-core`/в БД woodev.ru (поиск по `_product_icon`, `coming_soon`, `rating`, `get_post_meta`, `register_meta`, `add_meta_box`), потом маппь. НЕ хардкодь предполагаемые имена.
+
+**Как (паттерн, уточнить под версию EDD на woodev.ru):**
+```php
+add_filter( 'edd_api_products_product', function ( $data, $info ) {
+    $id = $info->ID;
+    $data['info']['_product_icon'] = (string) get_post_meta( $id, '<РЕАЛЬНЫЙ_КЛЮЧ_ИКОНКИ>', true );
+    $data['info']['_coming_soon']  = (bool)   get_post_meta( $id, '<РЕАЛЬНЫЙ_КЛЮЧ_COMING_SOON>', true );
+    $data['info']['rating']        = (float)  get_post_meta( $id, '<РЕАЛЬНЫЙ_КЛЮЧ_РЕЙТИНГА>', true );
+    return $data;
+}, 10, 2 );
+```
+- Проверь точное имя/сигнатуру фильтра под установленную версию EDD (`edd_api_products_product` vs `edd_api_products`/`edd_api_products_data`).
+- Верификация: дёрнуть `edd-api/v2/products/?number=1` (на woodev_theme-риге и/или на проде после деплоя) и убедиться, что три поля присутствуют.
+- Контракт: только ДОБАВЛЯЕМ поля (не ломаем существующие).
+
+**После задачи №1 — framework follow-up (в `woodev_framework`, отдельный мелкий PR):**
+- Витрина уже подхватит иконку и скрытие coming-soon автоматически. **Рейтинг** нужно прокинуть в нормализатор (`normalize_product`: `'rating' => isset($info->rating) ? (float)$info->rating : null`) и отрисовать в карточке (звёзды/число) — добавить в `src/plugins-page/catalog.js` + стили + юнит-тест нормализатора. (Можно сделать в этой же сессии, переключившись в framework, либо отдельной s23.)
+- ⚠️ **Нюанс тестирования:** framework-витрина хардкодит `https://woodev.ru` (прод), а НЕ woodev_theme-риг :8090. Чтобы проверить подхват новых полей локально — либо задеплоить на прод, либо временно сделать `Woodev_REST_API_Extensions::PRODUCTS_URL/CATEGORIES_URL` фильтруемыми (по аналогии с `woodev_licensing_api_url`) и указать на локальный стор. Рассмотри добавление фильтра как улучшение.
+
+---
+
+## ⭐ Задача №2 — создать плагин `woodev-account-connector` (OB-7 Phase B)
+
+Новый плагин в **`D:\Projects\woodev_theme\plugins\woodev-account-connector`** — серверная (woodev.ru) половина «Подключить аккаунт», по модели **WC Helper** (см. framework-спек §7, выверено по реальному коду WooCommerce).
+
+**Что реализовать (REST на woodev.ru, namespace напр. `woodev-account/v1`):**
+- `POST /oauth/request_token` → `{secret}` (по `home_url`,`redirect_uri`).
+- `GET /oauth/authorize` → экран входа/одобрения пользователя woodev.ru → редирект назад с `request_token`.
+- `POST /oauth/access_token` → `{access_token, access_token_secret, site_id}`.
+- `GET /oauth/me` (authenticated) → `{name,email}`.
+- `POST /oauth/invalidate_token` (disconnect).
+- `GET /purchases` (authenticated, HMAC-SHA256 подпись по `{host,request_uri,method,body}`) → список купленных пользователем товаров (download_id/slug/название/иконка/дата), чтобы framework-панель показала «Мои плагины».
+- Хранение/идентичность сайта, привязка к EDD-customer.
+
+**Способ реализации — выбор оператора в начале s22:** **autodev-loop** (worker+critic) ИЛИ ты сам через `codex:*` (`/codex:review`, `codex:codex-rescue`, `/codex:adversarial-review` на архитектуре auth). Спроси оператора, если не указал.
+
+**После Phase B:** включить в framework `woodev_extensions_account_enabled` (фильтр) → панель «Подключить аккаунт» оживает; рига-верификация полного хендшейка end-to-end; флипнуть флаг по умолчанию когда стор-сторона готова.
+
+---
+
+## ⚠️ Висит (контекст)
+1. **v2.0.1 framework НЕ выпущен.** Не бампать `VERSION`. Новые символы framework → `@since 2.0.2`.
+2. **Публичные framework `docs/` — НЕ трогаем** до готовности (решение s13).
+3. Рейтинг и follow-up по витрине (выше) — после задачи №1.
+
+## Подход и гигиена (общие)
+- Существенная работа → `brainstorming` → `writing-plans` → атомарные TDD-куски; зелёная сборка после каждого.
+- Codex INLINE-бандлом (фоновый rescue молча умирает на Windows-сэндбоксе → проверять, что вердикт вернулся). Re-critic собственных правок. Codex-находки НЕ автофиксить — спрашивать оператора (рекомендованная опция первой в AskUserQuestion).
+- Serena для PHP, если загружена (в s21 подключилась поздно → Grep/Read/Edit).
+- Мердж: `--squash --delete-branch` после зелёного CI; НЕ `--auto`. После merge: `git fetch && git reset --hard origin/main`.
+- Чистить пробы/тест-данные на ригах в конце.
+
+## Риг (framework-сторона, если понадобится)
+- Issuer/woodev_theme: `wp-env` в `D:\projects\woodev_theme`, `http://localhost:8090`. Stand (framework consumer): `http://localhost:8888`, логин `admin`/`password`. Драйв состояний: `docker cp` + `wp eval-file` через PowerShell (Git-Bash манглит `/tmp/...`; кириллица/кавычки ломают inline `wp eval`). НЕ `do_action('admin_init')` в wp-cli.
+- Браузерная сессия wp-admin на стенде живёт недолго — при долгой верификации придётся перелогиниваться (`admin`/`password`).

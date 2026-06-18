@@ -1,13 +1,13 @@
 # Current State — Woodev Plugin Framework
 
 > Lean state doc: phase status, open bugs, next actions. **Full session history → `SESSION-LOG.md`** (newest on top). Program-level status → `platform-v2-program-tracker.md`.
-> Last updated: 2026-06-18 (session 20 — «Woodev → Лицензии» UI/UX redesign merged (PR #64) + rig browser-verified).
+> Last updated: 2026-06-19 (session 21 — license Item 0 fix + OB-7 «Плагины» React redesign + brand polish, PRs #68/#69/#70 merged + rig-verified).
 
 ## Last session context (≤3 lines)
 
-- **s20 (DONE, operator-approved "выглядит солидно"):** «Woodev → Лицензии» **UI/UX redesign** + polish + activation/deactivation bug-fix rounds, across 5 PRs all rig-verified + merged on green CI: **#64** redesign (additive `renewal_url`, RU-localized messages, pure `card-state.js` 7-group machine, rewritten card, info-notice intro, 3/2/1 grid, compact quick-link cards) · **#65** polish (form-group height/border, centered card icons, load skeleton) · **#66** 6 activation bugs (re-validate + outage-safe, error-aware status, no-license text, raw renewal URL, post-deactivate «Активировать», «Продлить» icon) · **#67** «Изменить ключ» on revoked key. No installed-site data contract touched.
-- **Verified:** `composer check` green (**656 unit / 1921 assertions**, phpcs 0, phpstan 0); Codex inline critics (no blockers, all findings applied + re-criticked); **rig browser-verified** all real EDD states (A/B/B′/C/D/E/F/S0 + flows), 0 console errors; full CI + Assets-build-parity green each PR. New gotchas: `edd-error-field-vs-license-status`, `esc-url-raw-for-js-consumed-urls`.
-- **Next (s21):** **OB-7 — modernize «Woodev → Плагины» page** (operator pick). v2.0.1 still **NOT released**; new symbols → `@since 2.0.2`. **OB-3 COMPLETE** except deferred F6 (backoff).
+- **s21 (DONE):** (1) **License Item 0** (BLOCKING) fixed — bad key no longer strands the user; `get_display_status()` overrides with `error` only when it's a machine token (free-text store errors kept polluting status → `unknown` group), + JS `unknown` fallback `changeKey:true` (PR #68). (2) **OB-7 Phase A** — «Woodev → Плагины» rebuilt as a WP-React catalog over a new `woodev/v1/extensions` REST proxy (normalizer, transient cache), RU-localized, account scaffold behind a feature flag; legacy view removed, slug+cap preserved (PR #69). (3) **OB-7 polish** — wide, grid 4/2/1, compact branded cards (cyan `#00C9FD`), `thumbnails.small`; normalizer forward-compatible for `_product_icon`/`_coming_soon` (PR #70).
+- **Verified:** `composer check` green (**665 unit / 1954 assertions**, phpcs 0, phpstan 0); Codex inline critics on both (one finding — partial-payload caching — fixed with tests); rig browser-verified (license group E; plugins catalog renders from live store, filter/search, 4-col wide, 0 console errors); CI + Assets-build-parity green each PR. New gotcha `edd-api-v2-products-no-post-meta`; updated `edd-error-field-vs-license-status`.
+- **Next (s22):** woodev.ru-side work in **`D:\Projects\woodev_theme\plugins\`** — (1) extend `woodev-core` edd-api to expose `_product_icon` + `_coming_soon` + **rating** (key names TBC); (2) build **`woodev-account-connector`** (OB-7 Phase B, WC-Helper-style OAuth). v2.0.1 still **NOT released** → `@since 2.0.2`.
 
 ## Program status (high level)
 
@@ -20,7 +20,7 @@
 | Remote-deactivation UX | ✅ DONE | s10–s12; command cycle proven live (push prod + pull rig); B-13/14/15 resolved |
 | S4 EDD / S5 React admin / S6 ecosystem | ⚪ deferred | post-v2.0 |
 
-`composer check` green at s20: **656 unit tests** / 1921 assertions (65 skipped), 41 integration (baseline). Keep green after each change.
+`composer check` green at s21: **665 unit tests** / 1954 assertions (65 skipped), 41 integration (baseline). Keep green after each change.
 
 ## Phase Status (subsystems)
 
@@ -44,8 +44,9 @@
 
 ## Known Bugs / Open debt
 
-- [🔴 BLOCKING, s21 Item 0] License page: «Изменить ключ» + ввод несуществующего ключа → бейдж «Неизвестный статус», нет кнопки «Изменить ключ» → пользователь застревает (как был отозванный до #67). Fallback-группа `unknown` в `card-state.js` имеет `changeKey: false`. Fix: захватить реальный EDD-токен мусорного ключа (возможно маппить в группу E), и дать `unknown` `changeKey: true`. Детали: `next-session-prompt.md` Item 0. Найден оператором после s20.
+- ✅ **[RESOLVED s21] License page Item 0** — bad/non-existent key no longer strands the user (PR #68). See SESSION-LOG s21.
 - [⚠️] `class-payment-gateway.php` ~3,542 lines — trait-extraction candidate (grooming, s13; → `FUTURE-BACKLOG`).
+- [ℹ️ OB-7 follow-up] «Плагины» still shows discontinued/coming-soon items (Беру.ру/GOODS) — `edd-api/v2` exposes no `_coming_soon`/`_product_icon`/rating; needs a woodev.ru-side API extension (s22 task #1). Framework normalizer already consumes them forward-compatibly.
 - **All earlier release-blocker findings RESOLVED** (2026-06-01 audit, PHPStan masks, base-class leaks, eCheck/ACH removal, payment-gateway base-method regression, etc.) — see `SESSION-LOG.md` + git history. Not repeated here.
 
 ### Public-docs API staleness — DEFERRED (operator decision, s13)
@@ -55,9 +56,11 @@
 
 ## Next Actions
 
-- ✅ **s20 DONE — license page redesign + bug-fix rounds (PRs #64/#65/#66/#67), operator-approved:** see "Last session context" above + `SESSION-LOG.md` s20. 656 unit, all states rig-verified, CI green. Plan: `docs-internal/plans/2026-06-18-license-page-redesign.md`.
-- 🔴 **s21 Item 0 (BLOCKING, do FIRST):** license-page `unknown` fallback strands the user on a non-existent key (no «Изменить ключ») — see Known Bugs above + `next-session-prompt.md` Item 0.
-- 🎯 **s21 NEXT — OB-7: modernize «Woodev → Плагины» page (operator pick):** server-rendered addon list (`woodev/admin/pages/views/html-admin-page-plugins.php` + controller `Woodev_Admin_Plugins`, menu slug `woodev-extensions`) is outdated + English. Rebuild in the new design language (parity with the license page), RU-localize, modern WP components. Future idea: woodev.ru account integration (see OB-7 in `FUTURE-BACKLOG.md`). Start with `brainstorming` (design not yet specced) → `writing-plans` → TDD + rig browser-verify + Codex critic. Ref UX: WC extensions screen.
+- ✅ **s21 DONE — license Item 0 + OB-7 «Плагины» React redesign + polish (PRs #68/#69/#70):** see "Last session context" + `SESSION-LOG.md` s21. 665 unit, rig-verified, CI green. Spec/plan: `docs-internal/specs|plans/2026-06-18-plugins-page-ob7-redesign*`.
+- 🎯 **s22 (operator-set) — woodev.ru-side work in `D:\Projects\woodev_theme\plugins\`:**
+  1. **`woodev-core` edd-api extension (task #1):** expose `_product_icon` + `_coming_soon` + product **rating** in the `edd-api/v2` products payload (via `edd_api_products_product`-style filter). **Confirm the exact meta key names first** (operator unsure of names). Then the framework «Плагины» page auto-uses them (icon, hides coming-soon, can show rating). See gotcha `edd-api-v2-products-no-post-meta` + spec §8a.
+  2. **`woodev-account-connector` (OB-7 Phase B):** new plugin in `woodev_theme\plugins\` — WC-Helper-style OAuth provider (`/oauth/{request_token,authorize,access_token,me,invalidate_token}` + `/purchases`) so the framework account panel can connect. Spec §7. Build via **autodev-loop** or `codex:*` (operator's choice next session).
+  - Prompt: `docs-internal/next-session-prompt.md`.
 - ✅ **OB-3 COMPLETE** (s15 F11/F12/F13, s16 F2/F7+F5, s17 move, s18 F8/F9/F10, s19 F1/F3); only **F6** backoff deferred (endpoint-wide-key question).
 - 📥 **Remaining backlog** (`FUTURE-BACKLOG.md` → "Operator backlog dump — s13"): OB-4 reusable-JS-php-based principle · OB-5 godaddy fork study (GPT research delegation) · OB-7 modernize Plugins page (WP React + woodev.ru account) · OB-9 shipping nuances. Big ones: payment-gateway trait extraction; review #4 (`array()`→`[]` + typing + `@since` sweep).
 - **Big ones (operator-scheduled, not solo):** payment-gateway trait extraction (autodev-loop); the big review #4 — `array()`→`[]` (~797) + type declarations everywhere + `@since` sweep + enforce `Generic.Arrays.DisallowLongArraySyntax`. B-2 loader-protocol forward-tolerance before S4/EDD.
