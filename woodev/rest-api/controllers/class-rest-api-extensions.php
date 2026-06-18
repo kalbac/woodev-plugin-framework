@@ -288,6 +288,12 @@ if ( ! class_exists( 'Woodev_REST_API_Extensions' ) ) :
 				}
 			}
 
+			// woodev-core exposes a top-level `rating` on the WP.org 0–100 scale
+			// (absent when the product has no reviews). Surface it as a 0–5 value.
+			$rating = ( isset( $raw->rating ) && (int) $raw->rating > 0 )
+				? round( (int) $raw->rating / 20, 1 )
+				: null;
+
 			return array(
 				'id'         => (int) $info->id,
 				'slug'       => $slug,
@@ -297,6 +303,7 @@ if ( ! class_exists( 'Woodev_REST_API_Extensions' ) ) :
 				'permalink'  => esc_url_raw( self::utm_url( (string) $permalink, $slug ) ),
 				'price'      => $price,
 				'free'       => $price <= 0,
+				'rating'     => $rating,
 				'categories' => $categories,
 			);
 		}

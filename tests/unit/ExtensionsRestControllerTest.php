@@ -150,6 +150,41 @@ final class ExtensionsRestControllerTest extends TestCase {
 		$this->assertSame( 'https://woodev.ru/icon.svg', $out['thumbnail'] );
 	}
 
+	public function test_normalize_product_maps_rating_to_five_star_scale(): void {
+		// woodev-core exposes a top-level `rating` on the WP.org 0–100 scale.
+		$raw = (object) array(
+			'info'    => (object) array(
+				'id'    => 11,
+				'slug'  => 'r',
+				'title' => 'R',
+				'link'  => 'https://woodev.ru/?p=11',
+			),
+			'pricing' => (object) array( 'amount' => '100' ),
+			'rating'  => 80,
+		);
+
+		$out = \Woodev_REST_API_Extensions::normalize_product( $raw );
+
+		$this->assertSame( 4.0, $out['rating'] );
+	}
+
+	public function test_normalize_product_rating_null_when_absent_or_zero(): void {
+		$raw = (object) array(
+			'info'    => (object) array(
+				'id'    => 12,
+				'slug'  => 'nr',
+				'title' => 'NR',
+				'link'  => 'https://woodev.ru/?p=12',
+			),
+			'pricing' => (object) array( 'amount' => '100' ),
+		);
+
+		$this->assertNull( \Woodev_REST_API_Extensions::normalize_product( $raw )['rating'] );
+
+		$raw->rating = 0;
+		$this->assertNull( \Woodev_REST_API_Extensions::normalize_product( $raw )['rating'] );
+	}
+
 	/**
 	 * Stubs the HTTP layer so each fetched URL yields the given JSON body.
 	 *
