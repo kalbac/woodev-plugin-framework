@@ -1,14 +1,13 @@
 # Current State — Woodev Plugin Framework
 
 > Lean state doc: phase status, open bugs, next actions. **Full session history → `SESSION-LOG.md`** (newest on top). Program-level status → `platform-v2-program-tracker.md`.
-> Last updated: 2026-06-19 (session 23 — «Плагины» catalog polish OB-8 PR #72 merged + account-connection client SPEC).
+> Last updated: 2026-06-19 (session 24 — account-connection client implemented + shipped; PRs #73/#74 merged; account UI enabled by default).
 
 ## Last session context (≤3 lines)
 
-- **s23 (DONE):** **Block A polish (PR #72 `8f19dcd`, merged):** OB-8 — `plugin-install.php` «Woodev» tab → «Плагины Woodev» + **redirect** to the React catalog (legacy `Woodev_Admin_Plugins` + view deleted); `ExtensionCard` initial-letter placeholder. **668 unit / 1955**, CI+parity green, redirect rig-verified. **Block B (SPEC only, no code):** account-connection client designed + committed — `docs-internal/specs/2026-06-19-account-connection-client-design.md`. Scope **MVP handshake + connected state (#6/#9) + installed badges (#5)**; #7/#8 deferred. Implementation queued **s24**.
-- **Rating-in-API:** **woodev_theme-side bug** (public edd-api omits `rating` even though reviews exist — `query_reviews()`/global-`$post` gap; repro inconclusive). **Operator-SKIPPED for now.** Not a framework issue. Wildberries `_coming_soon=true` confirmed intentional.
-- **s22 (DONE):** Cross-project — OB-7 store-side in **woodev_theme** (`woodev-core` edd-api `_product_icon`+`_coming_soon`; new **`woodev-account-connector`** OAuth provider, 31 tests, rig-verified, Codex-hardened). Framework **PR #71**: `normalize_product()` 0–5 `rating` + React stars.
-- **Next (s24):** implement the account-connection spec (TDD) — see next-session-prompt. v2.0.1 still **NOT released** → `@since 2.0.2`.
+- **s24 (DONE — SHIPPED):** account-connection client implemented end-to-end (TDD) + rig-verified + Codex-reviewed. **PR #73 `0cdd542`** (`Woodev_Account_Signer`/`Woodev_Account_Connection`/REST disconnect/installed-id collector/`AccountMenu` #6/#9/`Установлен` badge #5; OAuth `state` binding) → **PR #74 `ab12ef0`** flipped `woodev_extensions_account_enabled` default **false→true** after the operator deployed the connector to prod. **690 unit**, CI+parity green. Details → SESSION-LOG s24.
+- **Connector (woodev_theme, deployed by operator):** authorize is now a front-end `parse_request` screen (WC_Auth-style, NOT REST — fixed the login loop); guest login → branded `/login` (default inside the connector, theme untouched); richer approval screen; `/oauth/me` avatar. Outer master `47e71b4`+`262a1b4`.
+- **Next (s25):** **#7** «Мои покупки» tab + «Куплено» catalog badge — connector `/purchases` exists (s22); needs a framework signed proxy + React tab + badge. v2.0.1 still unreleased → `@since 2.0.2`.
 
 ## Program status (high level)
 
@@ -21,7 +20,7 @@
 | Remote-deactivation UX | ✅ DONE | s10–s12; command cycle proven live (push prod + pull rig); B-13/14/15 resolved |
 | S4 EDD / S5 React admin / S6 ecosystem | ⚪ deferred | post-v2.0 |
 
-`composer check` green at s23: **668 unit tests** / 1955 assertions (65 skipped), 41 integration (baseline). Keep green after each change.
+`composer check` green at s24: **690 unit tests** / 2005 assertions (65 skipped), 41 integration (baseline). Keep green after each change.
 
 ## Phase Status (subsystems)
 
@@ -63,7 +62,8 @@
   2. **`woodev-account-connector` (DONE, woodev_theme, new plugin):** WC-Helper-style OAuth provider per spec §7. 6 endpoints + authorize screen + connections table + HMAC + EDD purchases. 31 tests, rig-verified, Codex-hardened (timestamp-freshness / atomic consume / same-origin). Driven by me + Codex critic (operator's choice). Deferred Low: rate-limit `/oauth/request_token` (woodev_theme FUTURE-BACKLOG).
   3. **Framework follow-up (DONE, PR #71):** `normalize_product()` surfaces a 0–5 `rating` + React card stars. **Forward-compat for live handshake stays gated** (`woodev_extensions_account_enabled` default false) until the framework **account client** (`Woodev_Account_Connection`, spec §7) is built — that is the open Phase-B item.
 - ✅ **s23 DONE — catalog polish (OB-8, PR #72) + account-connection client SPEC.** See "Last session context" + SESSION-LOG s23. Spec: `docs-internal/specs/2026-06-19-account-connection-client-design.md`.
-- 🎯 **s24 (queued):** implement the account-connection spec (TDD) — `Woodev_Account_Connection` + connect/return handlers + REST disconnect + UI #6/#9/#5 + 1-line connector `/oauth/me` avatar. e2e on rig against the live connector, then flip `woodev_extensions_account_enabled`. Codex review mandatory on signing/auth. See next-session-prompt.
+- ✅ **s24 DONE — account-connection client implemented + SHIPPED (PRs #73/#74):** `Woodev_Account_Connection` + connect/return handlers + REST disconnect + `AccountMenu` #6/#9 + `Установлен` badge #5 + OAuth `state` binding; connector authorize → front-end `parse_request` screen (WC_Auth-style) + branded `/login` + richer approval; flag `woodev_extensions_account_enabled` flipped default true after prod connector deploy. Rig-verified, Codex-reviewed. See SESSION-LOG s24.
+- 🎯 **s25 (queued) — #7 «Мои покупки» + «Куплено» badge:** framework signed proxy to the connector's existing `/purchases` (use `Woodev_Account_Connection::request('GET','/purchases')`) → React «Мои покупки» tab/section + a «Куплено» badge in `ExtensionCard` (distinct from `#5` «Установлен»). Security-lighter than #8; Codex review on the proxy auth. See next-session-prompt.
 - ℹ️ **Rating-in-API (woodev_theme, deferred):** public edd-api omits `rating` despite reviews existing (`query_reviews()`/global-`$post` gap; repro inconclusive). Operator-skipped — revisit on the woodev_theme side if/when "Мои покупки" lands.
 - ✅ **OB-3 COMPLETE** (s15 F11/F12/F13, s16 F2/F7+F5, s17 move, s18 F8/F9/F10, s19 F1/F3); only **F6** backoff deferred (endpoint-wide-key question).
 - 📥 **Remaining backlog** (`FUTURE-BACKLOG.md` → "Operator backlog dump — s13"): OB-4 reusable-JS-php-based principle · OB-5 godaddy fork study (GPT research delegation) · OB-7 modernize Plugins page (WP React + woodev.ru account) · OB-9 shipping nuances. Big ones: payment-gateway trait extraction; review #4 (`array()`→`[]` + typing + `@since` sweep).

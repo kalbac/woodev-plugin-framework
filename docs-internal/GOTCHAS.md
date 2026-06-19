@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
-> **55 atomic gotchas in 17 namespaces** — update count when adding/removing.
-> Last updated: 2026-06-19 (session 21: +1 — `edd-api-v2-products-no-post-meta` [`[licensing/*]`]; updated `edd-error-field-vs-license-status` with the free-text token-guard).
+> **57 atomic gotchas in 17 namespaces** — update count when adding/removing.
+> Last updated: 2026-06-19 (session 24: +2 — `rest-endpoint-not-for-browser-cookie-auth` [`[api/*]`], `wp-nonce-url-esc-html-breaks-js-urls` [`[admin-ui/*]`]).
 
 ## Index
 
@@ -58,7 +58,7 @@
 - [testing/integration] Local two-stack e2e rig: `wp_safe_remote_request` (framework licensing transport) blocks private hosts (`host.docker.internal`) + non-80/443/8080 ports → silent swallowed throw, pull never runs. Stand-only fix: `http_request_host_is_external` + `http_allowed_safe_ports` filters + `woodev_licensing_api_url` + local-pubkey define; use PULL (cross-container push can't work) → [gotchas/wp-safe-remote-request-local-rig.md](gotchas/wp-safe-remote-request-local-rig.md) (s11)
 
 ### [api/*] — API layer
-<!-- No entries yet -->
+- [api/rest-not-for-browser-auth] A REST route can't back a browser-facing screen gated on `is_user_logged_in()` — a plain cookie browser navigation to `/wp-json/` has no `X-WP-Nonce`, so REST treats it as logged-out → endless wp-login loop. Use a `parse_request` query-var endpoint in normal WP context (the WC_Auth pattern) → [gotchas/rest-endpoint-not-for-browser-cookie-auth.md](gotchas/rest-endpoint-not-for-browser-cookie-auth.md) (s24)
 
 ### [licensing/*] — License/EDD store
 - [licensing/two-layer] `is_need_license()` (Woodev_Plugin, presentation, UNTRUSTED) vs `is_license_required()` (Woodev_Plugins_License, enforcement, server-trusted) — gating a feature/enforcement on the local flag reopens the piracy hole; the local flag renders UI only → [gotchas/license-need-vs-required.md](gotchas/license-need-vs-required.md) (2026-06-10)
@@ -79,6 +79,7 @@
 ### [admin-ui/*] — Admin pages / React UI
 - [admin-ui/license-page] The "Woodev → Лицензии" page enqueues ONLY `style-index.css` (the React bundle) + `wp-components`; the legacy `woodev-license-page.css` is enqueued nowhere. Styles for ANY server-rendered section on that page (e.g. `html-settings-section.php`) must live in `src/license-page/style.scss`, and `license_page()` must wrap output in `.wrap` + `<h1>` → [gotchas/license-page-css-bundle-only.md](gotchas/license-page-css-bundle-only.md) (s14)
 - [admin-ui/esc-url-raw-for-js] `esc_url()` HTML-entity-encodes `&`→`&#038;`; a URL set as a React `href` (DOM property) or inlined in a JSON payload is NOT HTML-parsed, so the literal `&#038;` breaks the URL. Use `esc_url_raw` for data (JS/REST/redirect/storage); keep `esc_url` only for URLs inside HTML output → [gotchas/esc-url-raw-for-js-consumed-urls.md](gotchas/esc-url-raw-for-js-consumed-urls.md) (s20)
+- [admin-ui/wp-nonce-url-esc-html] `wp_nonce_url()` runs its result through `esc_html()` (`&`→`&amp;`) — fine for HTML output, but a nonced URL placed into JSON / a React `href` / a redirect mangles the query keys (`amp;param`) and silently no-ops. Build it with `add_query_arg('_wpnonce', wp_create_nonce($action), $url)` + `esc_url_raw`, never `wp_nonce_url` → [gotchas/wp-nonce-url-esc-html-breaks-js-urls.md](gotchas/wp-nonce-url-esc-html-breaks-js-urls.md) (s24)
 
 ### [box-packer/*] — Box-packer algorithm (S2)
 - [box-packer/virtual-box-rsort-axis-alignment] `rsort()` on the axis-assignment result destroys axis-name alignment for non-normalized items — Option A `[1,10,1]` after rsort → `[10,1,1]` → `box_width=1 < item_width=10` → packing rejects item. Never rsort the candidate; each option guarantees axis alignment by construction → [gotchas/virtual-box-rsort-axis-alignment.md](gotchas/virtual-box-rsort-axis-alignment.md) (2026-06-09)
