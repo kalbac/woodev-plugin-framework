@@ -294,7 +294,7 @@ if ( ! class_exists( 'Woodev_Plugin_Bootstrap' ) ) :
 
 				$definition = $plugin['definition'] ?? null;
 
-				if ( ! $definition instanceof Framework_Plugin_Loader_Definition ) {
+				if ( ! $definition instanceof \Woodev\Framework\Framework_Plugin_Loader_Definition ) {
 					continue;
 				}
 
