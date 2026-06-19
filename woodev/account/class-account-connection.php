@@ -70,18 +70,22 @@ if ( ! class_exists( 'Woodev_Account_Connection' ) ) :
 
 
 		/**
-		 * The browser-facing authorize URL.
+		 * The browser-facing authorize URL (the connector's front-end approval screen).
 		 *
 		 * The OAuth authorize step is a full-page redirect followed by the user's
-		 * BROWSER (unlike request_token/access_token/me which are server-to-server). In
-		 * production this is the same origin as the API; the seam exists so a split
+		 * BROWSER. On the connector it is a normal front-end request (a
+		 * `?woodev_account_authorize=1` query-var screen, modeled on WC_Auth), NOT a
+		 * REST route — a REST endpoint would not honor the cookie login for a plain
+		 * browser navigation and the login gate would loop.
+		 *
+		 * In production this is the same origin as the API; the filter seam lets a split
 		 * deployment — or a local two-stack rig where the server reaches the issuer at a
 		 * container-only host (host.docker.internal) but the browser reaches it at
-		 * localhost — can point the browser at a different, browser-resolvable origin.
+		 * localhost — point the browser at a different, browser-resolvable origin.
 		 *
 		 * @since 2.0.2
 		 *
-		 * @return string The full /oauth/authorize URL.
+		 * @return string The issuer front-end base URL (trailing slash).
 		 */
 		private function authorize_url(): string {
 
@@ -97,7 +101,7 @@ if ( ! class_exists( 'Woodev_Account_Connection' ) ) :
 			 */
 			$base = untrailingslashit( apply_filters( 'woodev_account_authorize_url', $this->api_base() ) );
 
-			return $base . '/wp-json/' . self::REST_NAMESPACE . '/oauth/authorize';
+			return $base . '/';
 		}
 
 		/**
@@ -457,13 +461,16 @@ if ( ! class_exists( 'Woodev_Account_Connection' ) ) :
 			);
 
 			// Cross-origin to the issuer — wp_redirect (NOT wp_safe_redirect). The host
-			// is the configured/filtered authorize origin only (browser-facing).
+			// is the configured/filtered authorize origin only (browser-facing). The
+			// connector's authorize screen is a front-end ?woodev_account_authorize=1
+			// request (not REST), so cookie login works there.
 			wp_redirect(
 				add_query_arg(
 					array(
-						'home_url'     => rawurlencode( $home_url ),
-						'redirect_uri' => rawurlencode( $redirect_uri ),
-						'secret'       => $secret,
+						'woodev_account_authorize' => '1',
+						'home_url'                 => rawurlencode( $home_url ),
+						'redirect_uri'             => rawurlencode( $redirect_uri ),
+						'secret'                   => $secret,
 					),
 					$this->authorize_url()
 				)
