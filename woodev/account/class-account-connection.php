@@ -218,7 +218,101 @@ if ( ! class_exists( 'Woodev_Account_Connection' ) ) :
 			delete_option( self::OPTION_KEY );
 		}
 
-		// ---- Transport + handlers added in Tasks 4-5 -------------------------
+		// ---- Transport -------------------------------------------------------
+
+		/**
+		 * Performs a signed request against a connector resource path and returns the
+		 * decoded JSON array, or a WP_Error.
+		 *
+		 * Resource paths get the `Authorization: Bearer` header; all signed requests
+		 * get the canonical X-Woodev-Signature + X-Woodev-Timestamp. The signed body is
+		 * the exact bytes sent (empty for a no-body request), so the connector's
+		 * get_body() matches.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string              $method HTTP method.
+		 * @param string              $path   Connector path, e.g. '/oauth/me'.
+		 * @param array<string,mixed> $body   JSON body (omitted when empty).
+		 *
+		 * @return array<string,mixed>|WP_Error
+		 */
+		public function request( string $method, string $path, array $body = array() ) {
+
+			$auth = $this->get_auth();
+			$key  = (string) ( $auth['access_token_secret'] ?? '' );
+
+			if ( '' === $key || '' === (string) ( $auth['access_token'] ?? '' ) ) {
+				return new WP_Error( 'woodev_account_not_connected', __( 'Аккаунт не подключён.', 'woodev-plugin-framework' ) );
+			}
+
+			$url       = $this->endpoint( $path );
+			$method    = strtoupper( $method );
+			$json_body = array() === $body ? '' : (string) wp_json_encode( $body );
+			$timestamp = (string) time();
+
+			$signature = Woodev_Account_Signer::sign(
+				$this->canonical_for( $url, $method, $json_body, $timestamp ),
+				$key
+			);
+
+			$args = array(
+				'method'  => $method,
+				'timeout' => 15,
+				'headers' => array(
+					'Authorization'      => 'Bearer ' . (string) $auth['access_token'],
+					'X-Woodev-Signature' => $signature,
+					'X-Woodev-Timestamp' => $timestamp,
+				),
+			);
+
+			if ( '' !== $json_body ) {
+				$args['headers']['Content-Type'] = 'application/json';
+				$args['body']                    = $json_body;
+			}
+
+			$response = wp_safe_remote_request( $url, $args );
+
+			if ( is_wp_error( $response ) ) {
+				return $response;
+			}
+
+			if ( 200 !== (int) wp_remote_retrieve_response_code( $response ) ) {
+				return new WP_Error(
+					'woodev_account_http_error',
+					__( 'Сервер woodev.ru вернул ошибку.', 'woodev-plugin-framework' )
+				);
+			}
+
+			$decoded = json_decode( wp_remote_retrieve_body( $response ), true );
+
+			return is_array( $decoded ) ? $decoded : array();
+		}
+
+		/**
+		 * Disconnects: best-effort signed invalidate, then always clears local state.
+		 *
+		 * A revoked or unreachable connector must never strand the admin in a
+		 * permanently-"connected" UI, so the local option is deleted even when the
+		 * remote call errors.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool Always true (local clear cannot fail meaningfully).
+		 */
+		public function disconnect(): bool {
+
+			if ( $this->is_connected() ) {
+				// Best-effort; return value intentionally ignored.
+				$this->request( 'POST', '/oauth/invalidate_token' );
+			}
+
+			$this->clear();
+
+			return true;
+		}
+
+		// ---- Handlers added in Task 5 ----------------------------------------
 	}
 
 endif;

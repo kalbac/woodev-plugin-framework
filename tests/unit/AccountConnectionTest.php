@@ -137,4 +137,93 @@ final class AccountConnectionTest extends TestCase {
 		$this->assertStringContainsString( 'woodev-account-connect=1', $url );
 		$this->assertStringContainsString( '_wpnonce=', $url );
 	}
+
+	public function test_request_signs_resource_request_with_bearer_and_headers(): void {
+		Functions\when( 'wp_json_encode' )->alias(
+			static function ( $d ) {
+				return json_encode( $d );
+			}
+		);
+		Functions\when( 'get_option' )->justReturn(
+			array(
+				'auth' => array(
+					'access_token'        => 'TOK',
+					'access_token_secret' => 'SECRET',
+					'url'                 => 'https://woodev.ru',
+				),
+			)
+		);
+		Functions\when( 'is_wp_error' )->justReturn( false );
+		Functions\when( 'wp_remote_retrieve_response_code' )->justReturn( 200 );
+		Functions\when( 'wp_remote_retrieve_body' )->justReturn( '{"name":"Jane","email":"j@x.dev","avatar":"a"}' );
+
+		$captured = array();
+		Functions\when( 'wp_safe_remote_request' )->alias(
+			static function ( $url, $args ) use ( &$captured ) {
+				$captured = array( 'url' => $url, 'args' => $args );
+				return array();
+			}
+		);
+
+		$out = ( new \Woodev_Account_Connection() )->request( 'GET', '/oauth/me' );
+
+		$this->assertSame( 'Jane', $out['name'] );
+		$this->assertSame( 'https://woodev.ru/wp-json/woodev-account/v1/oauth/me', $captured['url'] );
+		$this->assertSame( 'Bearer TOK', $captured['args']['headers']['Authorization'] );
+		$this->assertArrayHasKey( 'X-Woodev-Signature', $captured['args']['headers'] );
+		$this->assertArrayHasKey( 'X-Woodev-Timestamp', $captured['args']['headers'] );
+
+		// Signature must equal an independent HMAC over the canonical GET payload.
+		$ts       = $captured['args']['headers']['X-Woodev-Timestamp'];
+		$expected = hash_hmac(
+			'sha256',
+			json_encode(
+				array(
+					'host'        => 'woodev.ru',
+					'request_uri' => '/wp-json/woodev-account/v1/oauth/me',
+					'method'      => 'GET',
+					'body'        => '',
+					'timestamp'   => (string) $ts,
+				)
+			),
+			'SECRET'
+		);
+		$this->assertSame( $expected, $captured['args']['headers']['X-Woodev-Signature'] );
+	}
+
+	public function test_request_returns_wp_error_on_http_failure(): void {
+		Functions\when( 'wp_json_encode' )->alias( static function ( $d ) { return json_encode( $d ); } );
+		Functions\when( 'get_option' )->justReturn(
+			array( 'auth' => array( 'access_token' => 'TOK', 'access_token_secret' => 'S', 'url' => 'https://woodev.ru' ) )
+		);
+		Functions\when( 'is_wp_error' )->justReturn( false );
+		Functions\when( 'wp_remote_retrieve_response_code' )->justReturn( 401 );
+		Functions\when( 'wp_remote_retrieve_body' )->justReturn( '' );
+		Functions\when( 'wp_safe_remote_request' )->justReturn( array() );
+
+		$out = ( new \Woodev_Account_Connection() )->request( 'GET', '/oauth/me' );
+		$this->assertInstanceOf( \WP_Error::class, $out );
+	}
+
+	public function test_request_without_connection_returns_wp_error(): void {
+		Functions\when( 'get_option' )->justReturn( false );
+
+		$out = ( new \Woodev_Account_Connection() )->request( 'GET', '/oauth/me' );
+		$this->assertInstanceOf( \WP_Error::class, $out );
+	}
+
+	public function test_disconnect_clears_option_even_when_remote_errors(): void {
+		Functions\when( 'wp_json_encode' )->alias( static function ( $d ) { return json_encode( $d ); } );
+		Functions\when( 'get_option' )->justReturn(
+			array( 'auth' => array( 'access_token' => 'TOK', 'access_token_secret' => 'S', 'url' => 'https://woodev.ru' ) )
+		);
+		// Remote invalidate fails hard.
+		Functions\when( 'is_wp_error' )->justReturn( true );
+		Functions\when( 'wp_safe_remote_request' )->justReturn( array() );
+
+		// The local option MUST be deleted regardless.
+		Functions\expect( 'delete_option' )->once()->with( \Woodev_Account_Connection::OPTION_KEY )->andReturn( true );
+
+		$this->assertTrue( ( new \Woodev_Account_Connection() )->disconnect() );
+	}
 }
