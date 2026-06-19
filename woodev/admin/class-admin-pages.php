@@ -233,19 +233,6 @@ if ( ! class_exists( 'Woodev_Admin_Pages' ) ) :
 			add_action( 'load-' . $extensions_suffix, array( $this, 'handle_account_page_load' ) );
 		}
 
-		/**
-		 * Drives the account-connection OAuth handlers on the extensions page load.
-		 *
-		 * Query-flag triggered (mirrors the plugin-install tab redirect). Inert unless
-		 * the account feature is enabled, so the handshake stays gated until the rig
-		 * flip. The handlers themselves verify nonce + capability and redirect+exit.
-		 *
-		 * @internal
-		 *
-		 * @since 2.0.2
-		 *
-		 * @return void
-		 */
 		public function handle_account_page_load(): void {
 
 			if ( ! apply_filters( 'woodev_extensions_account_enabled', false ) ) {

@@ -68,6 +68,38 @@ if ( ! class_exists( 'Woodev_Account_Connection' ) ) :
 			return $this->api_base() . '/wp-json/' . self::REST_NAMESPACE . $path;
 		}
 
+
+		/**
+		 * The browser-facing authorize URL.
+		 *
+		 * The OAuth authorize step is a full-page redirect followed by the user's
+		 * BROWSER (unlike request_token/access_token/me which are server-to-server). In
+		 * production this is the same origin as the API; the seam exists so a split
+		 * deployment — or a local two-stack rig where the server reaches the issuer at a
+		 * container-only host (host.docker.internal) but the browser reaches it at
+		 * localhost — can point the browser at a different, browser-resolvable origin.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string The full /oauth/authorize URL.
+		 */
+		private function authorize_url(): string {
+
+			/**
+			 * Filters the browser-facing authorize base URL.
+			 *
+			 * Defaults to the API base. Override only when the browser must reach the
+			 * issuer at a different origin than the server does (e.g. the local rig).
+			 *
+			 * @since 2.0.2
+			 *
+			 * @param string $base The authorize base URL (defaults to the API base).
+			 */
+			$base = untrailingslashit( apply_filters( 'woodev_account_authorize_url', $this->api_base() ) );
+
+			return $base . '/wp-json/' . self::REST_NAMESPACE . '/oauth/authorize';
+		}
+
 		/**
 		 * Derives the canonical signed-request fields for an OUTGOING request exactly
 		 * as the connector's server will reconstruct them from its superglobals.
@@ -152,6 +184,13 @@ if ( ! class_exists( 'Woodev_Account_Connection' ) ) :
 		/**
 		 * The nonce'd connect-init admin URL the React app links to.
 		 *
+		 * Returns a RAW URL (esc_url_raw, not esc_html) because it is consumed as JSON
+		 * bootstrap data and set as a React href — HTML-entity-encoding the `&` (which
+		 * `wp_nonce_url()` does) would send the browser to `…&amp;woodev-account-connect`,
+		 * mangling the query keys so the connect handler never fires (gotcha
+		 * `esc-url-raw-for-js-consumed-urls`). The nonce is added as a plain query arg,
+		 * NOT via wp_nonce_url, to avoid that esc_html pass.
+		 *
 		 * @since 2.0.2
 		 *
 		 * @return string
@@ -162,11 +201,12 @@ if ( ! class_exists( 'Woodev_Account_Connection' ) ) :
 				array(
 					'page'                   => self::PAGE_SLUG,
 					'woodev-account-connect' => '1',
+					'_wpnonce'               => wp_create_nonce( 'woodev_account_connect' ),
 				),
 				admin_url( 'admin.php' )
 			);
 
-			return wp_nonce_url( $url, 'woodev_account_connect' );
+			return esc_url_raw( $url );
 		}
 
 		// ---- Stored state ----------------------------------------------------
@@ -417,7 +457,7 @@ if ( ! class_exists( 'Woodev_Account_Connection' ) ) :
 			);
 
 			// Cross-origin to the issuer — wp_redirect (NOT wp_safe_redirect). The host
-			// is the configured/filtered api_base origin only.
+			// is the configured/filtered authorize origin only (browser-facing).
 			wp_redirect(
 				add_query_arg(
 					array(
@@ -425,7 +465,7 @@ if ( ! class_exists( 'Woodev_Account_Connection' ) ) :
 						'redirect_uri' => rawurlencode( $redirect_uri ),
 						'secret'       => $secret,
 					),
-					$this->endpoint( '/oauth/authorize' )
+					$this->authorize_url()
 				)
 			);
 			exit;

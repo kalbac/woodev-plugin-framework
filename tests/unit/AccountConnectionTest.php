@@ -114,7 +114,7 @@ final class AccountConnectionTest extends TestCase {
 		$this->assertSame( 'https://woodev.ru', $account['url'] );
 	}
 
-	public function test_get_connect_url_is_nonced_and_flagged(): void {
+	public function test_get_connect_url_is_nonced_flagged_and_not_entity_encoded(): void {
 		Functions\when( 'admin_url' )->alias(
 			static function ( $path ) {
 				return 'https://shop.test/wp-admin/' . $path;
@@ -122,20 +122,22 @@ final class AccountConnectionTest extends TestCase {
 		);
 		Functions\when( 'add_query_arg' )->alias(
 			static function ( $args, $url ) {
-				return $url . '?' . http_build_query( $args );
+				return $url . '?' . http_build_query( $args ); // clean & separators.
 			}
 		);
-		Functions\when( 'wp_nonce_url' )->alias(
-			static function ( $url, $action ) {
-				return $url . '&_wpnonce=' . md5( (string) $action );
-			}
-		);
+		Functions\when( 'wp_create_nonce' )->justReturn( 'NONCE' );
+		// esc_url_raw (data context) does NOT HTML-entity-encode '&' — model that.
+		Functions\when( 'esc_url_raw' )->returnArg();
 
 		$url = ( new \Woodev_Account_Connection() )->get_connect_url();
 
 		$this->assertStringContainsString( 'page=woodev-extensions', $url );
 		$this->assertStringContainsString( 'woodev-account-connect=1', $url );
-		$this->assertStringContainsString( '_wpnonce=', $url );
+		$this->assertStringContainsString( '_wpnonce=NONCE', $url );
+		// Regression: the URL is JSON/JS-consumed, so it must NOT be HTML-entity
+		// encoded (gotcha esc-url-raw-for-js-consumed-urls). wp_nonce_url would do this.
+		$this->assertStringNotContainsString( '&amp;', $url );
+		$this->assertStringNotContainsString( '&#038;', $url );
 	}
 
 	public function test_request_signs_resource_request_with_bearer_and_headers(): void {

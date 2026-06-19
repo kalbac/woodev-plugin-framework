@@ -326,10 +326,26 @@ $wd-radius-sm: 8px;
 		cursor: pointer;
 		font-size: 13px;
 		color: $wd-ink;
-		transition: border-color 0.15s ease, box-shadow 0.15s ease;
+		transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
 
 		&:hover {
 			border-color: $wd-accent;
+		}
+
+		// Disconnected CTA: filled accent pill so «Подключить аккаунт» reads as the
+		// primary action.
+		&--cta {
+			padding: 8px 16px;
+			background: $wd-accent;
+			border-color: $wd-accent;
+			color: $wd-accent-ink;
+			font-weight: 600;
+
+			&:hover {
+				background: $wd-accent-strong;
+				border-color: $wd-accent-strong;
+				color: #fff;
+			}
 		}
 	}
 
