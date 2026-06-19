@@ -1,14 +1,14 @@
 # Current State — Woodev Plugin Framework
 
 > Lean state doc: phase status, open bugs, next actions. **Full session history → `SESSION-LOG.md`** (newest on top). Program-level status → `platform-v2-program-tracker.md`.
-> Last updated: 2026-06-19 (session 22 — OB-7 store-side build cross-project + plugins-page rating PR #71 merged).
+> Last updated: 2026-06-19 (session 23 — «Плагины» catalog polish OB-8 PR #72 merged + account-connection client SPEC).
 
 ## Last session context (≤3 lines)
 
-- **s22 (DONE):** Cross-project — the OB-7 store-side landed in **woodev_theme** (`woodev-core` edd-api now sends `_product_icon`+`_coming_soon`; new **`woodev-account-connector`** OAuth provider plugin, 31 tests, rig-verified, Codex-hardened). Framework follow-up **PR #71** (`e1696e0`): `normalize_product()` surfaces a 0–5 **`rating`** (from woodev-core's top-level `rating`) + React card stars. **667 unit / 1957**, phpcs/phpstan 0, CI+parity green. `@since 2.0.2`.
-- **s21 (DONE):** (1) **License Item 0** (BLOCKING) fixed — bad key no longer strands the user; `get_display_status()` overrides with `error` only when it's a machine token (free-text store errors kept polluting status → `unknown` group), + JS `unknown` fallback `changeKey:true` (PR #68). (2) **OB-7 Phase A** — «Woodev → Плагины» rebuilt as a WP-React catalog over a new `woodev/v1/extensions` REST proxy (normalizer, transient cache), RU-localized, account scaffold behind a feature flag; legacy view removed, slug+cap preserved (PR #69). (3) **OB-7 polish** — wide, grid 4/2/1, compact branded cards (cyan `#00C9FD`), `thumbnails.small`; normalizer forward-compatible for `_product_icon`/`_coming_soon` (PR #70).
-- **Verified:** `composer check` green (**665 unit / 1954 assertions**, phpcs 0, phpstan 0); Codex inline critics on both (one finding — partial-payload caching — fixed with tests); rig browser-verified (license group E; plugins catalog renders from live store, filter/search, 4-col wide, 0 console errors); CI + Assets-build-parity green each PR. New gotcha `edd-api-v2-products-no-post-meta`; updated `edd-error-field-vs-license-status`.
-- **Next (s22):** woodev.ru-side work in **`D:\Projects\woodev_theme\plugins\`** — (1) extend `woodev-core` edd-api to expose `_product_icon` + `_coming_soon` + **rating** (key names TBC); (2) build **`woodev-account-connector`** (OB-7 Phase B, WC-Helper-style OAuth). v2.0.1 still **NOT released** → `@since 2.0.2`.
+- **s23 (DONE):** **Block A polish (PR #72 `8f19dcd`, merged):** OB-8 — `plugin-install.php` «Woodev» tab → «Плагины Woodev» + **redirect** to the React catalog (legacy `Woodev_Admin_Plugins` + view deleted); `ExtensionCard` initial-letter placeholder. **668 unit / 1955**, CI+parity green, redirect rig-verified. **Block B (SPEC only, no code):** account-connection client designed + committed — `docs-internal/specs/2026-06-19-account-connection-client-design.md`. Scope **MVP handshake + connected state (#6/#9) + installed badges (#5)**; #7/#8 deferred. Implementation queued **s24**.
+- **Rating-in-API:** **woodev_theme-side bug** (public edd-api omits `rating` even though reviews exist — `query_reviews()`/global-`$post` gap; repro inconclusive). **Operator-SKIPPED for now.** Not a framework issue. Wildberries `_coming_soon=true` confirmed intentional.
+- **s22 (DONE):** Cross-project — OB-7 store-side in **woodev_theme** (`woodev-core` edd-api `_product_icon`+`_coming_soon`; new **`woodev-account-connector`** OAuth provider, 31 tests, rig-verified, Codex-hardened). Framework **PR #71**: `normalize_product()` 0–5 `rating` + React stars.
+- **Next (s24):** implement the account-connection spec (TDD) — see next-session-prompt. v2.0.1 still **NOT released** → `@since 2.0.2`.
 
 ## Program status (high level)
 
@@ -21,7 +21,7 @@
 | Remote-deactivation UX | ✅ DONE | s10–s12; command cycle proven live (push prod + pull rig); B-13/14/15 resolved |
 | S4 EDD / S5 React admin / S6 ecosystem | ⚪ deferred | post-v2.0 |
 
-`composer check` green at s22: **667 unit tests** / 1957 assertions (65 skipped), 41 integration (baseline). Keep green after each change.
+`composer check` green at s23: **668 unit tests** / 1955 assertions (65 skipped), 41 integration (baseline). Keep green after each change.
 
 ## Phase Status (subsystems)
 
@@ -62,7 +62,9 @@
   1. **`woodev-core` edd-api (DONE, woodev_theme `8a32fda`):** `enrich_product()` (hooks `edd_api_products_product_v2`) now sends `info._product_icon` (theme `_product_icon` attachment-ID → URL) + `info._coming_soon` (bool incl. legacy `edd_coming_soon`). **rating was already present** (top-level, 0–100). Real keys found in `woodev-theme/inc/metaboxes.php`.
   2. **`woodev-account-connector` (DONE, woodev_theme, new plugin):** WC-Helper-style OAuth provider per spec §7. 6 endpoints + authorize screen + connections table + HMAC + EDD purchases. 31 tests, rig-verified, Codex-hardened (timestamp-freshness / atomic consume / same-origin). Driven by me + Codex critic (operator's choice). Deferred Low: rate-limit `/oauth/request_token` (woodev_theme FUTURE-BACKLOG).
   3. **Framework follow-up (DONE, PR #71):** `normalize_product()` surfaces a 0–5 `rating` + React card stars. **Forward-compat for live handshake stays gated** (`woodev_extensions_account_enabled` default false) until the framework **account client** (`Woodev_Account_Connection`, spec §7) is built — that is the open Phase-B item.
-- 🎯 **s23 (TBD):** framework-side account client + full e2e handshake (operator wants to discuss scope before the next-session-prompt is written). Then flip `woodev_extensions_account_enabled`.
+- ✅ **s23 DONE — catalog polish (OB-8, PR #72) + account-connection client SPEC.** See "Last session context" + SESSION-LOG s23. Spec: `docs-internal/specs/2026-06-19-account-connection-client-design.md`.
+- 🎯 **s24 (queued):** implement the account-connection spec (TDD) — `Woodev_Account_Connection` + connect/return handlers + REST disconnect + UI #6/#9/#5 + 1-line connector `/oauth/me` avatar. e2e on rig against the live connector, then flip `woodev_extensions_account_enabled`. Codex review mandatory on signing/auth. See next-session-prompt.
+- ℹ️ **Rating-in-API (woodev_theme, deferred):** public edd-api omits `rating` despite reviews existing (`query_reviews()`/global-`$post` gap; repro inconclusive). Operator-skipped — revisit on the woodev_theme side if/when "Мои покупки" lands.
 - ✅ **OB-3 COMPLETE** (s15 F11/F12/F13, s16 F2/F7+F5, s17 move, s18 F8/F9/F10, s19 F1/F3); only **F6** backoff deferred (endpoint-wide-key question).
 - 📥 **Remaining backlog** (`FUTURE-BACKLOG.md` → "Operator backlog dump — s13"): OB-4 reusable-JS-php-based principle · OB-5 godaddy fork study (GPT research delegation) · OB-7 modernize Plugins page (WP React + woodev.ru account) · OB-9 shipping nuances. Big ones: payment-gateway trait extraction; review #4 (`array()`→`[]` + typing + `@since` sweep).
 - **Big ones (operator-scheduled, not solo):** payment-gateway trait extraction (autodev-loop); the big review #4 — `array()`→`[]` (~797) + type declarations everywhere + `@since` sweep + enforce `Generic.Arrays.DisallowLongArraySyntax`. B-2 loader-protocol forward-tolerance before S4/EDD.
