@@ -226,4 +226,63 @@ final class AccountConnectionTest extends TestCase {
 
 		$this->assertTrue( ( new \Woodev_Account_Connection() )->disconnect() );
 	}
+
+	public function test_canonical_for_drops_default_ports_keeps_explicit(): void {
+		$conn = new \Woodev_Account_Connection();
+
+		// Default https :443 must be omitted (RFC clients omit it from Host).
+		$https = $this->call_private(
+			$conn,
+			'canonical_for',
+			array( 'https://woodev.ru:443/wp-json/woodev-account/v1/oauth/me', 'GET', '', '1' )
+		);
+		$this->assertSame( 'woodev.ru', $https['host'] );
+
+		// Default http :80 must be omitted.
+		$http = $this->call_private(
+			$conn,
+			'canonical_for',
+			array( 'http://woodev.ru:80/x', 'GET', '', '1' )
+		);
+		$this->assertSame( 'woodev.ru', $http['host'] );
+
+		// A non-default port (rig issuer) is kept.
+		$rig = $this->call_private(
+			$conn,
+			'canonical_for',
+			array( 'http://localhost:8090/wp-json/woodev-account/v1/oauth/me', 'GET', '', '1' )
+		);
+		$this->assertSame( 'localhost:8090', $rig['host'] );
+	}
+
+	public function test_request_returns_error_when_body_encode_fails(): void {
+		Functions\when( 'get_option' )->justReturn(
+			array( 'auth' => array( 'access_token' => 'TOK', 'access_token_secret' => 'S', 'url' => 'https://woodev.ru' ) )
+		);
+		// Simulate a non-encodable body (e.g. invalid UTF-8).
+		Functions\when( 'wp_json_encode' )->justReturn( false );
+
+		$out = ( new \Woodev_Account_Connection() )->request( 'POST', '/oauth/test', array( 'x' => "\xB1\x31" ) );
+
+		$this->assertInstanceOf( \WP_Error::class, $out );
+		$this->assertSame( 'woodev_account_encode_error', $out->get_error_code() );
+	}
+
+	public function test_exchange_token_rejects_tokens_without_secret(): void {
+		Functions\when( 'wp_json_encode' )->alias( static function ( $d ) { return json_encode( $d ); } );
+		Functions\when( 'home_url' )->justReturn( 'https://shop.test' );
+		Functions\when( 'is_wp_error' )->justReturn( false );
+		Functions\when( 'wp_remote_retrieve_response_code' )->justReturn( 200 );
+		// Connector returns an access_token but NO access_token_secret.
+		Functions\when( 'wp_remote_retrieve_body' )->justReturn( '{"access_token":"x","site_id":"s"}' );
+		Functions\when( 'wp_safe_remote_post' )->justReturn( array() );
+
+		// A broken exchange must NOT persist any connection state.
+		Functions\expect( 'update_option' )->never();
+
+		$conn   = new \Woodev_Account_Connection();
+		$result = $this->call_private( $conn, 'exchange_token', array( 'sec', 'rtok' ) );
+
+		$this->assertFalse( $result );
+	}
 }

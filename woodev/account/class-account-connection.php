@@ -72,8 +72,10 @@ if ( ! class_exists( 'Woodev_Account_Connection' ) ) :
 		 * Derives the canonical signed-request fields for an OUTGOING request exactly
 		 * as the connector's server will reconstruct them from its superglobals.
 		 *
-		 * host = URL host (+ :port when explicit), request_uri = URL path (+ ?query),
-		 * method upper-cased, body the exact bytes sent, timestamp the header value.
+		 * host = URL host (+ :port only when non-default for the scheme — RFC-compliant
+		 * HTTP clients omit :80/:443 from the Host header, so signing them would mismatch
+		 * the server's $_SERVER['HTTP_HOST']), request_uri = URL path (+ ?query), method
+		 * upper-cased, body the exact bytes sent, timestamp the header value.
 		 *
 		 * @since 2.0.2
 		 *
@@ -89,8 +91,15 @@ if ( ! class_exists( 'Woodev_Account_Connection' ) ) :
 			$parts = wp_parse_url( $url );
 
 			$host = isset( $parts['host'] ) ? (string) $parts['host'] : '';
+
 			if ( isset( $parts['port'] ) ) {
-				$host .= ':' . (int) $parts['port'];
+				$port    = (int) $parts['port'];
+				$scheme  = isset( $parts['scheme'] ) ? strtolower( (string) $parts['scheme'] ) : '';
+				$default = ( 'https' === $scheme && 443 === $port ) || ( 'http' === $scheme && 80 === $port );
+
+				if ( ! $default ) {
+					$host .= ':' . $port;
+				}
 			}
 
 			$request_uri = isset( $parts['path'] ) ? (string) $parts['path'] : '';
@@ -218,6 +227,20 @@ if ( ! class_exists( 'Woodev_Account_Connection' ) ) :
 			delete_option( self::OPTION_KEY );
 		}
 
+
+		/**
+		 * The per-state handshake transient key.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $state The OAuth state token.
+		 *
+		 * @return string
+		 */
+		private function handshake_key( string $state ): string {
+			return self::HANDSHAKE_KEY . '_' . $state;
+		}
+
 		// ---- Transport -------------------------------------------------------
 
 		/**
@@ -246,9 +269,16 @@ if ( ! class_exists( 'Woodev_Account_Connection' ) ) :
 				return new WP_Error( 'woodev_account_not_connected', __( 'Аккаунт не подключён.', 'woodev-plugin-framework' ) );
 			}
 
+			$json_body = '';
+			if ( array() !== $body ) {
+				$json_body = wp_json_encode( $body );
+				if ( false === $json_body ) {
+					return new WP_Error( 'woodev_account_encode_error', __( 'Не удалось подготовить запрос.', 'woodev-plugin-framework' ) );
+				}
+			}
+
 			$url       = $this->endpoint( $path );
 			$method    = strtoupper( $method );
-			$json_body = array() === $body ? '' : (string) wp_json_encode( $body );
 			$timestamp = (string) time();
 
 			$signature = Woodev_Account_Signer::sign(
@@ -331,12 +361,17 @@ if ( ! class_exists( 'Woodev_Account_Connection' ) ) :
 				return;
 			}
 
+			// Random OAuth `state`: binds this browser round-trip to one handshake record
+			// (no global-transient overwrite when two connects race) and is validated on
+			// return. Carried inside redirect_uri so it survives the issuer round-trip.
+			$state        = bin2hex( random_bytes( 16 ) );
 			$home_url     = home_url();
 			$return_nonce = wp_create_nonce( 'woodev_account_return' );
 			$redirect_uri = add_query_arg(
 				array(
 					'page'                  => self::PAGE_SLUG,
 					'woodev-account-return' => '1',
+					'state'                 => $state,
 					'_wpnonce'              => $return_nonce,
 				),
 				admin_url( 'admin.php' )
@@ -367,14 +402,16 @@ if ( ! class_exists( 'Woodev_Account_Connection' ) ) :
 				return;
 			}
 
-			// Store the secret + the EXACT redirect_uri string registered with the
-			// connector (the authorize screen tamper-checks it byte-for-byte).
+			// Per-state, single-use handshake record bound to the initiating user. Stores
+			// the EXACT redirect_uri registered with the connector (its authorize screen
+			// tamper-checks it byte-for-byte).
 			set_transient(
-				self::HANDSHAKE_KEY,
+				$this->handshake_key( $state ),
 				array(
 					'secret'       => $secret,
 					'redirect_uri' => $redirect_uri,
 					'home_url'     => $home_url,
+					'user_id'      => get_current_user_id(),
 				),
 				15 * MINUTE_IN_SECONDS
 			);
@@ -395,9 +432,9 @@ if ( ! class_exists( 'Woodev_Account_Connection' ) ) :
 		}
 
 		/**
-		 * Connect-return page handler: verifies the nonce, exchanges the request_token,
-		 * fetches the profile, stores state, and redirects to the clean page. Hooked on
-		 * the extensions page load when `?woodev-account-return=1` is present.
+		 * Connect-return page handler: verifies the nonce + state, exchanges the
+		 * request_token, fetches the profile, stores state, and redirects to the clean
+		 * page. Hooked on the extensions page load when `?woodev-account-return=1`.
 		 *
 		 * @internal
 		 *
@@ -411,8 +448,12 @@ if ( ! class_exists( 'Woodev_Account_Connection' ) ) :
 				return;
 			}
 
-			$handshake = get_transient( self::HANDSHAKE_KEY );
-			delete_transient( self::HANDSHAKE_KEY ); // single-use, always.
+			$state     = isset( $_GET['state'] ) ? sanitize_text_field( wp_unslash( $_GET['state'] ) ) : '';
+			$handshake = '' !== $state ? get_transient( $this->handshake_key( $state ) ) : false;
+
+			if ( '' !== $state ) {
+				delete_transient( $this->handshake_key( $state ) ); // single-use, always.
+			}
 
 			if ( isset( $_GET['woodev_account_denied'] ) ) {
 				$this->fail_redirect( __( 'Подключение отклонено.', 'woodev-plugin-framework' ) );
@@ -421,7 +462,12 @@ if ( ! class_exists( 'Woodev_Account_Connection' ) ) :
 
 			$request_token = isset( $_GET['request_token'] ) ? sanitize_text_field( wp_unslash( $_GET['request_token'] ) ) : '';
 
-			if ( ! is_array( $handshake ) || '' === (string) ( $handshake['secret'] ?? '' ) || '' === $request_token ) {
+			// Bind the return to the SAME admin who initiated (state + user_id), with a
+			// live handshake and a request_token.
+			if ( ! is_array( $handshake )
+				|| '' === (string) ( $handshake['secret'] ?? '' )
+				|| (int) ( $handshake['user_id'] ?? 0 ) !== get_current_user_id()
+				|| '' === $request_token ) {
 				$this->fail_redirect( __( 'Сессия подключения истекла. Попробуйте снова.', 'woodev-plugin-framework' ) );
 				return;
 			}
@@ -457,11 +503,17 @@ if ( ! class_exists( 'Woodev_Account_Connection' ) ) :
 		private function exchange_token( string $secret, string $request_token ): bool {
 
 			$url       = $this->endpoint( '/oauth/access_token' );
-			$body      = array(
-				'request_token' => $request_token,
-				'home_url'      => home_url(),
+			$json_body = wp_json_encode(
+				array(
+					'request_token' => $request_token,
+					'home_url'      => home_url(),
+				)
 			);
-			$json_body = (string) wp_json_encode( $body );
+
+			if ( false === $json_body ) {
+				return false;
+			}
+
 			$timestamp = (string) time();
 			$signature = Woodev_Account_Signer::sign(
 				$this->canonical_for( $url, 'POST', $json_body, $timestamp ),
@@ -487,7 +539,12 @@ if ( ! class_exists( 'Woodev_Account_Connection' ) ) :
 
 			$tokens = json_decode( wp_remote_retrieve_body( $response ), true );
 
-			if ( ! is_array( $tokens ) || '' === (string) ( $tokens['access_token'] ?? '' ) ) {
+			// Both the token AND its signing secret are required — without the secret
+			// every subsequent signed request would 401, leaving a "connected" UI that
+			// cannot talk to the store.
+			if ( ! is_array( $tokens )
+				|| '' === (string) ( $tokens['access_token'] ?? '' )
+				|| '' === (string) ( $tokens['access_token_secret'] ?? '' ) ) {
 				return false;
 			}
 
@@ -495,7 +552,7 @@ if ( ! class_exists( 'Woodev_Account_Connection' ) ) :
 			$this->store_auth(
 				array(
 					'access_token'        => (string) $tokens['access_token'],
-					'access_token_secret' => (string) ( $tokens['access_token_secret'] ?? '' ),
+					'access_token_secret' => (string) $tokens['access_token_secret'],
 					'site_id'             => (string) ( $tokens['site_id'] ?? '' ),
 					'url'                 => $this->api_base(),
 					'user_id'             => get_current_user_id(),
