@@ -503,7 +503,7 @@ if ( ! class_exists( 'Woodev_Account_Connection' ) ) :
 			}
 
 			if ( isset( $_GET['woodev_account_denied'] ) ) {
-				$this->fail_redirect( __( 'Подключение отклонено.', 'woodev-plugin-framework' ) );
+				$this->fail_redirect( __( 'Подключение отклонено: вы не подтвердили передачу данных аккаунта woodev.ru.', 'woodev-plugin-framework' ) );
 				return;
 			}
 
@@ -608,6 +608,12 @@ if ( ! class_exists( 'Woodev_Account_Connection' ) ) :
 				array()
 			);
 
+			// A new connection invalidates any purchases cached for a prior account.
+			// The cache is site-wide; this key is kept in sync with
+			// Woodev_REST_API_Account::PURCHASES_CACHE_KEY (the connection layer owns
+			// the lifecycle, so it must not depend on the REST controller class).
+			delete_transient( 'woodev_account_purchases' );
+
 			$me = $this->request( 'GET', '/oauth/me' );
 
 			if ( ! is_wp_error( $me ) ) {
@@ -648,6 +654,53 @@ if ( ! class_exists( 'Woodev_Account_Connection' ) ) :
 				)
 			);
 			exit;
+		}
+
+		/**
+		 * Renders the connect outcome as an admin notice on the extensions page.
+		 *
+		 * The connect/return handlers redirect back to the page carrying only a
+		 * query flag (the handshake transient is gone by then), so the outcome must
+		 * be surfaced here: `woodev-account-connected` → success, `woodev-account-failed`
+		 * → the flash error stored by {@see fail_redirect()} (single-use; deleted on
+		 * read), falling back to a generic message. Hooked on `admin_notices` from
+		 * {@see Woodev_Admin_Pages::handle_account_page_load()} (extensions page only).
+		 * The query flags drive a static notice only (no state change), so no nonce
+		 * is required to read them.
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		public function render_connect_notice(): void {
+
+			// phpcs:disable WordPress.Security.NonceVerification.Recommended -- read-only flag → static notice; no state change.
+			if ( isset( $_GET['woodev-account-connected'] ) ) {
+				printf(
+					'<div class="notice notice-success is-dismissible"><p>%s</p></div>',
+					esc_html__( 'Аккаунт woodev.ru успешно подключён.', 'woodev-plugin-framework' )
+				);
+				return;
+			}
+
+			if ( ! isset( $_GET['woodev-account-failed'] ) ) {
+				return;
+			}
+			// phpcs:enable WordPress.Security.NonceVerification.Recommended
+
+			$message = get_transient( 'woodev_account_notice' );
+			delete_transient( 'woodev_account_notice' );
+
+			if ( ! is_string( $message ) || '' === $message ) {
+				$message = __( 'Не удалось подключить аккаунт woodev.ru. Попробуйте снова.', 'woodev-plugin-framework' );
+			}
+
+			printf(
+				'<div class="notice notice-error is-dismissible"><p>%s</p></div>',
+				esc_html( $message )
+			);
 		}
 	}
 

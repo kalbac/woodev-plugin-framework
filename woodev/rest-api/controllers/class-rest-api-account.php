@@ -27,6 +27,15 @@ if ( ! class_exists( 'Woodev_REST_API_Account' ) ) :
 		private static $booted = false;
 
 		/**
+		 * Per-site purchases cache key (short TTL — user-scoped data).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var string
+		 */
+		const PURCHASES_CACHE_KEY = 'woodev_account_purchases';
+
+		/**
 		 * Registers a single controller instance through the woodev/v1 registrar.
 		 *
 		 * @since 2.0.2
@@ -61,6 +70,16 @@ if ( ! class_exists( 'Woodev_REST_API_Account' ) ) :
 				array(
 					'methods'             => 'POST',
 					'callback'            => array( $this, 'handle_disconnect' ),
+					'permission_callback' => array( $this, 'check_permissions' ),
+				)
+			);
+
+			register_rest_route(
+				Woodev_REST_V1_Registrar::ROUTE_NAMESPACE,
+				'/account/purchases',
+				array(
+					'methods'             => 'GET',
+					'callback'            => array( $this, 'handle_purchases' ),
 					'permission_callback' => array( $this, 'check_permissions' ),
 				)
 			);
@@ -101,7 +120,73 @@ if ( ! class_exists( 'Woodev_REST_API_Account' ) ) :
 
 			( new Woodev_Account_Connection() )->disconnect();
 
+			delete_transient( self::PURCHASES_CACHE_KEY );
+
 			return rest_ensure_response( array( 'connected' => false ) );
+		}
+
+		/**
+		 * GET handler: the connected customer's purchases + the badge-id set.
+		 *
+		 * Returns { purchases, purchased } — the lean list for the «Мои покупки»
+		 * tab and the deduped int id list for the «Куплено» catalog badge — in one
+		 * payload (one network round-trip, fetched async by the React app). Served
+		 * from a short-lived transient when present. A disconnected site returns the
+		 * empty shape without any network call; a transport/HTTP failure or a
+		 * malformed reply (no `purchases` key) sets `stale: true` and is NOT cached,
+		 * so the next load retries.
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return WP_REST_Response|array<string,mixed>
+		 */
+		public function handle_purchases() {
+
+			$connection = new Woodev_Account_Connection();
+
+			if ( ! $connection->is_connected() ) {
+				return rest_ensure_response(
+					array(
+						'purchases' => array(),
+						'purchased' => array(),
+					)
+				);
+			}
+
+			$cached = get_transient( self::PURCHASES_CACHE_KEY );
+
+			if ( is_array( $cached ) ) {
+				return rest_ensure_response( $cached );
+			}
+
+			$response = $connection->request( 'GET', '/purchases' );
+
+			// A genuine connector reply always carries an ARRAY `purchases`. A
+			// WP_Error (transport/HTTP failure) or a present-but-non-array value
+			// (e.g. "purchases": null from a buggy/hostile issuer) is a bad reply:
+			// surface it as stale and do NOT cache it, so the next load retries
+			// rather than serving — and caching — a fake empty success for the TTL.
+			if ( is_wp_error( $response ) || ! isset( $response['purchases'] ) || ! is_array( $response['purchases'] ) ) {
+				return rest_ensure_response(
+					array(
+						'purchases' => array(),
+						'purchased' => array(),
+						'stale'     => true,
+					)
+				);
+			}
+
+			$purchases = Woodev_Account_Purchases::normalize( $response );
+			$payload   = array(
+				'purchases' => $purchases,
+				'purchased' => Woodev_Account_Purchases::download_ids( $purchases ),
+			);
+
+			set_transient( self::PURCHASES_CACHE_KEY, $payload, 5 * MINUTE_IN_SECONDS );
+
+			return rest_ensure_response( $payload );
 		}
 	}
 

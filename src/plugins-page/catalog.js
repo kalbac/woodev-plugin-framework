@@ -99,7 +99,7 @@ export function RatingStars( { rating } ) {
  * @param {Object} props.product Normalized product.
  * @return {JSX.Element} The card.
  */
-export function ExtensionCard( { product, isInstalled = false } ) {
+export function ExtensionCard( { product, isInstalled = false, isPurchased = false } ) {
 	const buttonText = isInstalled
 		? __( 'Посмотреть', 'woodev-plugin-framework' )
 		: product.free
@@ -143,6 +143,10 @@ export function ExtensionCard( { product, isInstalled = false } ) {
 					<span className="woodev-extension-card__badge">
 						{ __( 'Установлен', 'woodev-plugin-framework' ) }
 					</span>
+				) : isPurchased ? (
+					<span className="woodev-extension-card__badge woodev-extension-card__badge--purchased">
+						{ __( 'Куплено', 'woodev-plugin-framework' ) }
+					</span>
 				) : null }
 			</div>
 			{ product.rating ? <RatingStars rating={ product.rating } /> : null }
@@ -176,7 +180,7 @@ export function ExtensionCard( { product, isInstalled = false } ) {
  * @param {Array}  props.products Filtered products.
  * @return {JSX.Element} The grid.
  */
-export function ExtensionGrid( { products, installed = [] } ) {
+export function ExtensionGrid( { products, installed = [], purchased = [] } ) {
 	if ( ! products.length ) {
 		return (
 			<p className="woodev-extensions__empty">
@@ -192,6 +196,7 @@ export function ExtensionGrid( { products, installed = [] } ) {
 					key={ p.id }
 					product={ p }
 					isInstalled={ installed.includes( p.id ) }
+					isPurchased={ purchased.includes( p.id ) }
 				/>
 			) ) }
 		</div>

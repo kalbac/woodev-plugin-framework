@@ -246,6 +246,11 @@ if ( ! class_exists( 'Woodev_Admin_Pages' ) ) :
 			} elseif ( isset( $_GET['woodev-account-return'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- nonce verified inside handle_connect_return().
 				$connection->handle_connect_return();
 			}
+
+			// The connect/return handlers above redirect+exit; this only runs on the
+			// post-redirect landing, where it surfaces the connect outcome (success or
+			// the stored failure/denial message) as an admin notice.
+			add_action( 'admin_notices', array( $connection, 'render_connect_notice' ) );
 		}
 
 		/**
