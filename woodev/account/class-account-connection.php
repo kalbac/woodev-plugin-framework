@@ -608,6 +608,12 @@ if ( ! class_exists( 'Woodev_Account_Connection' ) ) :
 				array()
 			);
 
+			// A new connection invalidates any purchases cached for a prior account.
+			// The cache is site-wide; this key is kept in sync with
+			// Woodev_REST_API_Account::PURCHASES_CACHE_KEY (the connection layer owns
+			// the lifecycle, so it must not depend on the REST controller class).
+			delete_transient( 'woodev_account_purchases' );
+
 			$me = $this->request( 'GET', '/oauth/me' );
 
 			if ( ! is_wp_error( $me ) ) {
