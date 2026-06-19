@@ -292,3 +292,147 @@ $wd-radius-sm: 8px;
 		}
 	}
 }
+
+// ---- Account menu -----------------------------------------------------------
+.woodev-extensions__account.is-connected {
+	justify-content: flex-end;
+}
+
+.woodev-account-menu {
+	position: relative;
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	flex-wrap: wrap;
+
+	&__link {
+		font-size: 13px;
+		color: $wd-accent-strong;
+		text-decoration: none;
+
+		&:hover {
+			text-decoration: underline;
+		}
+	}
+
+	&__trigger {
+		display: inline-flex;
+		align-items: center;
+		gap: 10px;
+		padding: 6px 12px;
+		background: $wd-surface;
+		border: 1px solid $wd-border;
+		border-radius: 999px;
+		cursor: pointer;
+		font-size: 13px;
+		color: $wd-ink;
+		transition: border-color 0.15s ease, box-shadow 0.15s ease;
+
+		&:hover {
+			border-color: $wd-accent;
+		}
+	}
+
+	&__avatar {
+		width: 28px;
+		height: 28px;
+		border-radius: 50%;
+		object-fit: cover;
+		display: block;
+
+		&--placeholder {
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			font-weight: 700;
+			color: $wd-accent-strong;
+			background: rgba(0, 201, 253, 0.14);
+		}
+	}
+
+	&__name {
+		font-weight: 600;
+		max-width: 180px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	&__caret {
+		color: $wd-muted;
+		font-size: 11px;
+	}
+
+	&__dropdown {
+		position: absolute;
+		top: calc(100% + 6px);
+		right: 0;
+		min-width: 200px;
+		background: $wd-surface;
+		border: 1px solid $wd-border;
+		border-radius: $wd-radius-sm;
+		box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+		padding: 6px;
+		z-index: 10;
+		display: flex;
+		flex-direction: column;
+	}
+
+	&__item {
+		display: block;
+		width: 100%;
+		box-sizing: border-box;
+		text-align: left;
+		padding: 9px 12px;
+		font-size: 13px;
+		color: $wd-ink;
+		text-decoration: none;
+		background: transparent;
+		border: 0;
+		border-radius: 6px;
+		cursor: pointer;
+
+		&:hover {
+			background: rgba(0, 201, 253, 0.08);
+		}
+
+		&--danger {
+			color: #b32d2e;
+
+			&:hover {
+				background: rgba(179, 45, 46, 0.08);
+			}
+
+			&:disabled {
+				opacity: 0.6;
+				cursor: default;
+			}
+		}
+	}
+}
+
+// ---- Installed badge --------------------------------------------------------
+.woodev-extension-card__badge {
+	margin-left: auto;
+	align-self: flex-start;
+	padding: 3px 9px;
+	font-size: 11px;
+	font-weight: 600;
+	color: #1a6b2f;
+	background: rgba(38, 164, 76, 0.14);
+	border-radius: 999px;
+	white-space: nowrap;
+}
+
+.woodev-extension-card__buy.is-installed {
+	background: transparent;
+	color: $wd-ink;
+	border-color: $wd-border;
+
+	&:hover {
+		background: rgba(0, 201, 253, 0.08);
+		color: $wd-accent-strong;
+		border-color: $wd-accent;
+		box-shadow: none;
+	}
+}
