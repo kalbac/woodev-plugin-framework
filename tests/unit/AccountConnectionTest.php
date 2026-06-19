@@ -287,4 +287,55 @@ final class AccountConnectionTest extends TestCase {
 
 		$this->assertFalse( $result );
 	}
+
+	public function test_render_connect_notice_shows_failure_with_transient_message(): void {
+		$_GET = array( 'woodev-account-failed' => '1' );
+		Functions\when( 'get_transient' )->justReturn( 'Подключение отклонено: вы не подтвердили передачу данных.' );
+		Functions\expect( 'delete_transient' )->once()->with( 'woodev_account_notice' );
+
+		ob_start();
+		( new \Woodev_Account_Connection() )->render_connect_notice();
+		$html = (string) ob_get_clean();
+
+		$_GET = array();
+
+		$this->assertStringContainsString( 'notice-error', $html );
+		$this->assertStringContainsString( 'не подтвердили передачу данных', $html );
+	}
+
+	public function test_render_connect_notice_failure_falls_back_to_generic_message(): void {
+		$_GET = array( 'woodev-account-failed' => '1' );
+		Functions\when( 'get_transient' )->justReturn( false );
+		Functions\when( 'delete_transient' )->justReturn( true );
+
+		ob_start();
+		( new \Woodev_Account_Connection() )->render_connect_notice();
+		$html = (string) ob_get_clean();
+
+		$_GET = array();
+
+		$this->assertStringContainsString( 'notice-error', $html );
+		$this->assertMatchesRegularExpression( '/<p>\s*\S+/', $html ); // non-empty message body.
+	}
+
+	public function test_render_connect_notice_shows_success(): void {
+		$_GET = array( 'woodev-account-connected' => '1' );
+
+		ob_start();
+		( new \Woodev_Account_Connection() )->render_connect_notice();
+		$html = (string) ob_get_clean();
+
+		$_GET = array();
+
+		$this->assertStringContainsString( 'notice-success', $html );
+	}
+
+	public function test_render_connect_notice_renders_nothing_without_params(): void {
+		$_GET = array();
+
+		ob_start();
+		( new \Woodev_Account_Connection() )->render_connect_notice();
+
+		$this->assertSame( '', ob_get_clean() );
+	}
 }
