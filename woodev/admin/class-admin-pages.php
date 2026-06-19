@@ -235,7 +235,7 @@ if ( ! class_exists( 'Woodev_Admin_Pages' ) ) :
 
 		public function handle_account_page_load(): void {
 
-			if ( ! apply_filters( 'woodev_extensions_account_enabled', false ) ) {
+			if ( ! apply_filters( 'woodev_extensions_account_enabled', true ) ) {
 				return;
 			}
 
@@ -315,14 +315,15 @@ if ( ! class_exists( 'Woodev_Admin_Pages' ) ) :
 						'restRoot'       => esc_url_raw( rest_url() ),
 						'restNonce'      => wp_create_nonce( 'wp_rest' ),
 						/**
-						 * Gates the woodev.ru account-connection UI (Phase B). Default
-						 * false until the handshake is rig-verified.
+						 * Gates the woodev.ru account-connection UI. Enabled by default
+						 * now that the woodev-account-connector is live on the store; a
+						 * site can still disable it by returning false.
 						 *
 						 * @since 2.0.2
 						 *
 						 * @param bool $enabled Whether to enable the account-connection UI.
 						 */
-						'accountEnabled' => (bool) apply_filters( 'woodev_extensions_account_enabled', false ),
+						'accountEnabled' => (bool) apply_filters( 'woodev_extensions_account_enabled', true ),
 						'account'        => $account,
 						'installed'      => $installed,
 					)
