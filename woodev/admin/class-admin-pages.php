@@ -53,7 +53,7 @@ if ( ! class_exists( 'Woodev_Admin_Pages' ) ) :
 		 */
 		private function init_plugin_install_tab(): void {
 			include_once $this->woodev_plugin->get_framework_path() . '/admin/class-plugin-install-tab.php';
-			( new Woodev_Plugin_Install_Tab( $this->woodev_plugin ) )->init();
+			( new Woodev_Plugin_Install_Tab() )->init();
 		}
 
 		public function admin_menu() {
