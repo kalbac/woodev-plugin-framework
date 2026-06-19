@@ -31,6 +31,16 @@ final class ExtensionsRestControllerTest extends TestCase {
 				return $url . $sep . http_build_query( $args );
 			}
 		);
+		Functions\when( 'apply_filters' )->alias(
+			static function ( $tag, $value = null ) {
+				return $value;
+			}
+		);
+		Functions\when( 'untrailingslashit' )->alias(
+			static function ( $url ) {
+				return rtrim( (string) $url, '/' );
+			}
+		);
 	}
 
 	public function test_normalize_product_maps_paid_product(): void {
