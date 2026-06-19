@@ -440,6 +440,12 @@ $wd-radius-sm: 8px;
 	white-space: nowrap;
 }
 
+// «Куплено» badge — accent (cyan) pill, distinct from the green «Установлен».
+.woodev-extension-card__badge--purchased {
+	color: $wd-accent-ink;
+	background: rgba(0, 201, 253, 0.16);
+}
+
 .woodev-extension-card__buy.is-installed {
 	background: transparent;
 	color: $wd-ink;
@@ -451,4 +457,83 @@ $wd-radius-sm: 8px;
 		border-color: $wd-accent;
 		box-shadow: none;
 	}
+}
+
+// ---- Catalog / «Мои покупки» tab bar ----------------------------------------
+.woodev-extensions__tabs {
+	display: flex;
+	gap: 4px;
+	margin: 16px 0;
+	border-bottom: 1px solid $wd-border;
+}
+
+.woodev-extensions__tab {
+	appearance: none;
+	background: none;
+	border: 0;
+	border-bottom: 2px solid transparent;
+	padding: 8px 14px;
+	font-size: 14px;
+	cursor: pointer;
+	color: #50575e;
+
+	&.is-active {
+		color: $wd-ink;
+		font-weight: 600;
+		border-bottom-color: $wd-accent-strong;
+	}
+
+	&:hover {
+		color: $wd-ink;
+	}
+}
+
+// ---- «Мои покупки» list ------------------------------------------------------
+.woodev-purchases {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.woodev-purchases__row {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 12px 4px;
+	border-bottom: 1px solid #f0f0f1;
+}
+
+.woodev-purchases__icon {
+	flex: 0 0 40px;
+
+	img {
+		width: 40px;
+		height: 40px;
+		border-radius: 6px;
+		object-fit: cover;
+		display: block;
+	}
+}
+
+.woodev-purchases__icon-placeholder {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 40px;
+	height: 40px;
+	border-radius: 6px;
+	background: #f0f0f1;
+	font-weight: 600;
+	color: #50575e;
+}
+
+.woodev-purchases__title {
+	flex: 1 1 auto;
+	font-weight: 500;
+}
+
+.woodev-purchases__date {
+	flex: 0 0 auto;
+	color: #787c82;
+	font-size: 13px;
 }
