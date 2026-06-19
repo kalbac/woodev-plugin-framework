@@ -230,6 +230,22 @@ if ( ! class_exists( 'Woodev_Admin_Pages' ) ) :
 			);
 
 			add_action( 'admin_print_scripts-' . $extensions_suffix, array( $this, 'load_plugins_page_scripts' ) );
+			add_action( 'load-' . $extensions_suffix, array( $this, 'handle_account_page_load' ) );
+		}
+
+		public function handle_account_page_load(): void {
+
+			if ( ! apply_filters( 'woodev_extensions_account_enabled', false ) ) {
+				return;
+			}
+
+			$connection = new Woodev_Account_Connection();
+
+			if ( isset( $_GET['woodev-account-connect'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- nonce verified inside handle_connect_init().
+				$connection->handle_connect_init();
+			} elseif ( isset( $_GET['woodev-account-return'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- nonce verified inside handle_connect_return().
+				$connection->handle_connect_return();
+			}
 		}
 
 		/**
@@ -240,7 +256,7 @@ if ( ! class_exists( 'Woodev_Admin_Pages' ) ) :
 		 * wp-api-fetch, wp-i18n), falling back to empty deps + plugin version when the
 		 * manifest is absent (e.g. before the first build on a fresh checkout). Inlines
 		 * window.woodevExtensions BEFORE the bundle so the app has the REST root, nonce,
-		 * and account feature flag on first render.
+		 * account state, and installed-plugin ids on first render.
 		 *
 		 * @since 2.0.2
 		 *
@@ -281,6 +297,16 @@ if ( ! class_exists( 'Woodev_Admin_Pages' ) ) :
 				true
 			);
 
+			$connection = new Woodev_Account_Connection();
+
+			$account                 = $connection->get_account();
+			$account['connectUrl']   = $connection->get_connect_url();
+			$account['myAccountUrl'] = apply_filters( 'woodev_account_api_url', 'https://woodev.ru' ) . '/my-account/';
+
+			$installed = Woodev_Installed_Plugins::download_ids(
+				Woodev_Plugin_Bootstrap::instance()->get_active_plugin_instances()
+			);
+
 			// Inline bootstrap data BEFORE the bundle so it is available on first render.
 			wp_add_inline_script(
 				'woodev-plugins-app',
@@ -290,14 +316,15 @@ if ( ! class_exists( 'Woodev_Admin_Pages' ) ) :
 						'restNonce'      => wp_create_nonce( 'wp_rest' ),
 						/**
 						 * Gates the woodev.ru account-connection UI (Phase B). Default
-						 * false until the woodev-account-connector plugin ships the
-						 * OAuth endpoints.
+						 * false until the handshake is rig-verified.
 						 *
 						 * @since 2.0.2
 						 *
 						 * @param bool $enabled Whether to enable the account-connection UI.
 						 */
 						'accountEnabled' => (bool) apply_filters( 'woodev_extensions_account_enabled', false ),
+						'account'        => $account,
+						'installed'      => $installed,
 					)
 				) . ';',
 				'before'

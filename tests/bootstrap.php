@@ -30,6 +30,50 @@ if ( 'integration' === $test_suite ) {
 	defined( 'MONTH_IN_SECONDS' ) || define( 'MONTH_IN_SECONDS', 30 * DAY_IN_SECONDS );
 	defined( 'YEAR_IN_SECONDS' ) || define( 'YEAR_IN_SECONDS', 365 * DAY_IN_SECONDS );
 
+	// Minimal WP_Error stand-in for unit context (no WordPress loaded). Only the
+	// (code, message, data) constructor + accessors the assertions touch. Guarded so
+	// a real WP_Error wins if present and a sibling test file's stub is not redeclared.
+	// Shared here so any single test file run in isolation has WP_Error available.
+	if ( ! class_exists( 'WP_Error', false ) ) {
+		class WP_Error {
+
+			/** @var string */
+			public $code;
+
+			/** @var string */
+			public $message;
+
+			/** @var array<string, mixed> */
+			public $data;
+
+			/**
+			 * @param string               $code    Error code.
+			 * @param string               $message Error message.
+			 * @param array<string, mixed> $data    Error data.
+			 */
+			public function __construct( $code = '', $message = '', $data = array() ) {
+				$this->code    = $code;
+				$this->message = $message;
+				$this->data    = $data;
+			}
+
+			/** @return string */
+			public function get_error_code() {
+				return $this->code;
+			}
+
+			/** @return string */
+			public function get_error_message() {
+				return $this->message;
+			}
+
+			/** @return array<string, mixed> */
+			public function get_error_data() {
+				return $this->data;
+			}
+		}
+	}
+
 	bootstrap_unit_tests();
 }
 

@@ -99,8 +99,10 @@ export function RatingStars( { rating } ) {
  * @param {Object} props.product Normalized product.
  * @return {JSX.Element} The card.
  */
-export function ExtensionCard( { product } ) {
-	const buttonText = product.free
+export function ExtensionCard( { product, isInstalled = false } ) {
+	const buttonText = isInstalled
+		? __( 'Посмотреть', 'woodev-plugin-framework' )
+		: product.free
 		? __( 'Бесплатно', 'woodev-plugin-framework' )
 		: // translators: %s is a formatted RUB amount.
 		  __( 'Купить за %s ₽', 'woodev-plugin-framework' ).replace(
@@ -109,7 +111,11 @@ export function ExtensionCard( { product } ) {
 		  );
 
 	return (
-		<div className="woodev-extension-card">
+		<div
+			className={
+				'woodev-extension-card' + ( isInstalled ? ' is-installed' : '' )
+			}
+		>
 			<div className="woodev-extension-card__head">
 				<a
 					className="woodev-extension-card__icon"
@@ -133,6 +139,11 @@ export function ExtensionCard( { product } ) {
 						{ product.title }
 					</a>
 				</h3>
+				{ isInstalled ? (
+					<span className="woodev-extension-card__badge">
+						{ __( 'Установлен', 'woodev-plugin-framework' ) }
+					</span>
+				) : null }
 			</div>
 			{ product.rating ? <RatingStars rating={ product.rating } /> : null }
 			<div
@@ -144,7 +155,8 @@ export function ExtensionCard( { product } ) {
 				<a
 					className={
 						'woodev-extension-card__buy' +
-						( product.free ? ' is-free' : '' )
+						( product.free && ! isInstalled ? ' is-free' : '' ) +
+						( isInstalled ? ' is-installed' : '' )
 					}
 					href={ product.permalink }
 					target="_blank"
@@ -164,7 +176,7 @@ export function ExtensionCard( { product } ) {
  * @param {Array}  props.products Filtered products.
  * @return {JSX.Element} The grid.
  */
-export function ExtensionGrid( { products } ) {
+export function ExtensionGrid( { products, installed = [] } ) {
 	if ( ! products.length ) {
 		return (
 			<p className="woodev-extensions__empty">
@@ -176,7 +188,11 @@ export function ExtensionGrid( { products } ) {
 	return (
 		<div className="woodev-extensions__grid">
 			{ products.map( ( p ) => (
-				<ExtensionCard key={ p.id } product={ p } />
+				<ExtensionCard
+					key={ p.id }
+					product={ p }
+					isInstalled={ installed.includes( p.id ) }
+				/>
 			) ) }
 		</div>
 	);

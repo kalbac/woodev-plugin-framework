@@ -276,6 +276,41 @@ if ( ! class_exists( 'Woodev_Plugin_Bootstrap' ) ) :
 		}
 
 		/**
+		 * Resolves the main-class singleton instance of each active framework plugin.
+		 *
+		 * Skips legacy callback-registered actives (no loader definition) and any
+		 * definition whose main class lacks an `instance()` accessor. Used by the
+		 * «Плагины» installed-badge collector.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array<int,object> Plugin main-class instances.
+		 */
+		public function get_active_plugin_instances(): array {
+
+			$instances = array();
+
+			foreach ( $this->active_plugins as $plugin ) {
+
+				$definition = $plugin['definition'] ?? null;
+
+				if ( ! $definition instanceof \Woodev\Framework\Framework_Plugin_Loader_Definition ) {
+					continue;
+				}
+
+				$main_class = $definition->get_main_class();
+
+				if ( null === $main_class || ! is_callable( array( $main_class, 'instance' ) ) ) {
+					continue;
+				}
+
+				$instances[] = $main_class::instance();
+			}
+
+			return $instances;
+		}
+
+		/**
 		 * Handles the compatibility deactivation action.
 		 *
 		 * @return void

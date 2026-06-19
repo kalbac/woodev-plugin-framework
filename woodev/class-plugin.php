@@ -298,6 +298,9 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 			// must boot in all contexts because REST requests are not is_admin().
 			Woodev_REST_API_Extensions::boot();
 
+			// Register the woodev/v1 account disconnect REST controller (idempotent).
+			Woodev_REST_API_Account::boot();
+
 			add_action( 'wp_enqueue_scripts', [ $this, 'frontend_enqueue_scripts' ] );
 			add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_scripts' ) );
 
@@ -574,6 +577,15 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 			require_once $framework_path . '/licensing/api/class-rest-api-license.php';
 			require_once $framework_path . '/licensing/api/class-rest-api-license-command.php';
 			require_once $framework_path . '/rest-api/controllers/class-rest-api-extensions.php';
+
+			// Account-connection client (Phase B). Signer before the connection that
+			// uses it; the disconnect REST controller registers via the woodev/v1
+			// registrar. Unconditional: the disconnect route is REST-reachable
+			// (neither admin- nor WC-gated) — gotcha framework/includes-wiring.
+			require_once $framework_path . '/account/class-account-signer.php';
+			require_once $framework_path . '/account/class-account-connection.php';
+			require_once $framework_path . '/account/class-installed-plugins.php';
+			require_once $framework_path . '/rest-api/controllers/class-rest-api-account.php';
 
 			// Load plugin updater class. The condition is EXPRESSION-IDENTICAL to the
 			// load_updater() gate (B-3): wp_doing_cron() is filterable, so a

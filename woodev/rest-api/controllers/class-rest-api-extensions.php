@@ -168,7 +168,7 @@ if ( ! class_exists( 'Woodev_REST_API_Extensions' ) ) :
 		 */
 		private function fetch_categories(): array {
 
-			$body = $this->remote_json( self::CATEGORIES_URL );
+			$body = $this->remote_json( $this->store_base() . '/edd-api/v2/categories' );
 
 			if ( ! $body || ! isset( $body->categories ) || ! is_array( $body->categories ) ) {
 				return array();
@@ -197,7 +197,7 @@ if ( ! class_exists( 'Woodev_REST_API_Extensions' ) ) :
 		 */
 		private function fetch_products(): array {
 
-			$url  = add_query_arg( array( 'number' => -1 ), self::PRODUCTS_URL );
+			$url  = add_query_arg( array( 'number' => -1 ), $this->store_base() . '/edd-api/v2/products/' );
 			$body = $this->remote_json( $url );
 
 			if ( ! $body || ! isset( $body->products ) || ! is_array( $body->products ) ) {
@@ -236,6 +236,28 @@ if ( ! class_exists( 'Woodev_REST_API_Extensions' ) ) :
 			$body = json_decode( wp_remote_retrieve_body( $response ) );
 
 			return is_object( $body ) ? $body : null;
+		}
+
+		/**
+		 * The storefront base URL, overridable for the local rig.
+		 *
+		 * Mirrors the licensing `woodev_license_base_url` override point so the whole
+		 * store side can be repointed at the issuer (:8090) during e2e.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string Trailing-slash-trimmed base, e.g. https://woodev.ru.
+		 */
+		private function store_base(): string {
+
+			/**
+			 * Filters the woodev.ru storefront base URL the catalog proxy fetches from.
+			 *
+			 * @since 2.0.2
+			 *
+			 * @param string $base The storefront base URL.
+			 */
+			return untrailingslashit( apply_filters( 'woodev_extensions_store_url', 'https://woodev.ru' ) );
 		}
 
 		/**
