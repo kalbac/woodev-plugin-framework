@@ -119,7 +119,14 @@ export function ExtensionCard( { product } ) {
 				>
 					{ product.thumbnail ? (
 						<img src={ product.thumbnail } alt={ product.title } loading="lazy" />
-					) : null }
+					) : (
+						<span
+							className="woodev-extension-card__icon-placeholder"
+							aria-hidden="true"
+						>
+							{ ( product.title || '?' ).trim().charAt( 0 ).toUpperCase() }
+						</span>
+					) }
 				</a>
 				<h3 className="woodev-extension-card__title">
 					<a href={ product.permalink } target="_blank" rel="noreferrer">
