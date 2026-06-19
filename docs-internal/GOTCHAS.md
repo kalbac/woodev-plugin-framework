@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
-> **57 atomic gotchas in 17 namespaces** — update count when adding/removing.
-> Last updated: 2026-06-19 (session 24: +2 — `rest-endpoint-not-for-browser-cookie-auth` [`[api/*]`], `wp-nonce-url-esc-html-breaks-js-urls` [`[admin-ui/*]`]).
+> **59 atomic gotchas in 17 namespaces** — update count when adding/removing.
+> Last updated: 2026-06-20 (session 25: +2 — `extensions-catalog-fetch-5s-timeout` [`[api/*]`], `serena-replace-content-eol-flip` [`[tooling/*]`]).
 
 ## Index
 
@@ -59,6 +59,7 @@
 
 ### [api/*] — API layer
 - [api/rest-not-for-browser-auth] A REST route can't back a browser-facing screen gated on `is_user_logged_in()` — a plain cookie browser navigation to `/wp-json/` has no `X-WP-Nonce`, so REST treats it as logged-out → endless wp-login loop. Use a `parse_request` query-var endpoint in normal WP context (the WC_Auth pattern) → [gotchas/rest-endpoint-not-for-browser-cookie-auth.md](gotchas/rest-endpoint-not-for-browser-cookie-auth.md) (s24)
+- [api/catalog-fetch-timeout] `Woodev_REST_API_Extensions` fetches the store catalog with `wp_safe_remote_get`'s DEFAULT 5s timeout; the issuer `edd-api/v2/products` (~252KB enriched) takes ~8.6s cold → timeout → `stale`, uncached, fails every load until warm. Masked in prod by the week-long transient. Account client uses 15s; bump the catalog fetch timeout → [gotchas/extensions-catalog-fetch-5s-timeout.md](gotchas/extensions-catalog-fetch-5s-timeout.md) (s25)
 
 ### [licensing/*] — License/EDD store
 - [licensing/two-layer] `is_need_license()` (Woodev_Plugin, presentation, UNTRUSTED) vs `is_license_required()` (Woodev_Plugins_License, enforcement, server-trusted) — gating a feature/enforcement on the local flag reopens the piracy hole; the local flag renders UI only → [gotchas/license-need-vs-required.md](gotchas/license-need-vs-required.md) (2026-06-10)
@@ -102,6 +103,7 @@
 
 ### [tooling/*] — Dev tooling, codex critic
 - [tooling/codex-shell-sandbox-broken-windows] `codex exec -s read-only` shell-spawn fails on this Windows box (`CreateProcessAsUserW failed: 5`) — run critics with an INLINE bundle (spec+diffs+reference source in the prompt), never relying on codex shell access → [gotchas/codex-shell-sandbox-broken-windows.md](gotchas/codex-shell-sandbox-broken-windows.md) (s10)
+- [tooling/serena-eol-flip] Serena `replace_content` rewrites the whole file as CRLF on Windows even for a 1-line edit → breaks LF source-assertion tests / Assets-parity; `git diff` hides it (EOL-normalized). Use built-in `Edit` for existing source, or `sed -i 's/\r$//'` after → [gotchas/serena-replace-content-eol-flip.md](gotchas/serena-replace-content-eol-flip.md) (s25)
 
 ## Archive (resolved gotchas)
 <!-- Resolved gotchas move here; keep for 2 sessions then remove -->

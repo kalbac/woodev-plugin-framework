@@ -1,13 +1,13 @@
 # Current State — Woodev Plugin Framework
 
 > Lean state doc: phase status, open bugs, next actions. **Full session history → `SESSION-LOG.md`** (newest on top). Program-level status → `platform-v2-program-tracker.md`.
-> Last updated: 2026-06-19 (session 24 — account-connection client implemented + shipped; PRs #73/#74 merged; account UI enabled by default).
+> Last updated: 2026-06-20 (session 25 — #7 «Мои покупки» tab + «Куплено» badge implemented, shipped (PR #75) and rig-verified; connect failure/denial notice fix).
 
 ## Last session context (≤3 lines)
 
-- **s24 (DONE — SHIPPED):** account-connection client implemented end-to-end (TDD) + rig-verified + Codex-reviewed. **PR #73 `0cdd542`** (`Woodev_Account_Signer`/`Woodev_Account_Connection`/REST disconnect/installed-id collector/`AccountMenu` #6/#9/`Установлен` badge #5; OAuth `state` binding) → **PR #74 `ab12ef0`** flipped `woodev_extensions_account_enabled` default **false→true** after the operator deployed the connector to prod. **690 unit**, CI+parity green. Details → SESSION-LOG s24.
-- **Connector (woodev_theme, deployed by operator):** authorize is now a front-end `parse_request` screen (WC_Auth-style, NOT REST — fixed the login loop); guest login → branded `/login` (default inside the connector, theme untouched); richer approval screen; `/oauth/me` avatar. Outer master `47e71b4`+`262a1b4`.
-- **Next (s25):** **#7** «Мои покупки» tab + «Куплено» catalog badge — connector `/purchases` exists (s22); needs a framework signed proxy + React tab + badge. v2.0.1 still unreleased → `@since 2.0.2`.
+- **s25 (DONE — SHIPPED, PR #75 `bbc09bb`):** #7 «Мои покупки» tab + «Куплено» badge. `Woodev_Account_Purchases` (pure normalizer + badge-id collector) + `GET woodev/v1/account/purchases` signed proxy (cap+nonce, 5-min transient, stale/empty handling, cache cleared on disconnect & connect) + React tab (lazy async fetch, cross-ref link by id) + cyan «Куплено» badge («Установлен» wins). **706 unit**, CI+parity green. Codex-reviewed (2 IMPORTANT fixed: non-array cache-poisoning guard, cross-account stale cache). Rig-verified e2e (7 purchases, badges, precedence, notice).
+- **Bonus fix (s25):** failed/denied connect bounced to the extensions page silently — added `Woodev_Account_Connection::render_connect_notice()` on `admin_notices` + clearer denial message.
+- **Flagged, NOT fixed (operator decision pending):** catalog proxy uses default 5s `wp_safe_remote_get` timeout; issuer products endpoint ~8.6s → cold-cache catalog fails (gotcha `extensions-catalog-fetch-5s-timeout`). One-line fix available. v2.0.1 still unreleased → `@since 2.0.2`.
 
 ## Program status (high level)
 
@@ -20,7 +20,7 @@
 | Remote-deactivation UX | ✅ DONE | s10–s12; command cycle proven live (push prod + pull rig); B-13/14/15 resolved |
 | S4 EDD / S5 React admin / S6 ecosystem | ⚪ deferred | post-v2.0 |
 
-`composer check` green at s24: **690 unit tests** / 2005 assertions (65 skipped), 41 integration (baseline). Keep green after each change.
+`composer check` green at s25: **706 unit tests** / 2045 assertions (65 skipped), 41 integration (baseline). Keep green after each change.
 
 ## Phase Status (subsystems)
 
@@ -63,7 +63,8 @@
   3. **Framework follow-up (DONE, PR #71):** `normalize_product()` surfaces a 0–5 `rating` + React card stars. **Forward-compat for live handshake stays gated** (`woodev_extensions_account_enabled` default false) until the framework **account client** (`Woodev_Account_Connection`, spec §7) is built — that is the open Phase-B item.
 - ✅ **s23 DONE — catalog polish (OB-8, PR #72) + account-connection client SPEC.** See "Last session context" + SESSION-LOG s23. Spec: `docs-internal/specs/2026-06-19-account-connection-client-design.md`.
 - ✅ **s24 DONE — account-connection client implemented + SHIPPED (PRs #73/#74):** `Woodev_Account_Connection` + connect/return handlers + REST disconnect + `AccountMenu` #6/#9 + `Установлен` badge #5 + OAuth `state` binding; connector authorize → front-end `parse_request` screen (WC_Auth-style) + branded `/login` + richer approval; flag `woodev_extensions_account_enabled` flipped default true after prod connector deploy. Rig-verified, Codex-reviewed. See SESSION-LOG s24.
-- 🎯 **s25 (queued) — #7 «Мои покупки» + «Куплено» badge:** framework signed proxy to the connector's existing `/purchases` (use `Woodev_Account_Connection::request('GET','/purchases')`) → React «Мои покупки» tab/section + a «Куплено» badge in `ExtensionCard` (distinct from `#5` «Установлен»). Security-lighter than #8; Codex review on the proxy auth. See next-session-prompt.
+- ✅ **s25 DONE — #7 «Мои покупки» + «Куплено» badge (PR #75 `bbc09bb`):** `Woodev_Account_Purchases` + `GET woodev/v1/account/purchases` signed proxy + React tab (cross-ref link by id) + cyan «Куплено» badge («Установлен» wins) + connect-notice fix. 706 unit, Codex-reviewed, rig-verified. See "Last session context" + SESSION-LOG s25.
+- 🎯 **s26 (queued) — operator's pick.** Candidates: (a) **catalog fetch timeout fix** (one-liner, flagged s25 — gotcha `extensions-catalog-fetch-5s-timeout`); (b) **#8 install-from-connector** (`WP_Upgrader` + connector `/download/{id}`, security-critical, own session); (c) **rating-in-API** woodev_theme bug (s23 deferred). See next-session-prompt.
 - ℹ️ **Rating-in-API (woodev_theme, deferred):** public edd-api omits `rating` despite reviews existing (`query_reviews()`/global-`$post` gap; repro inconclusive). Operator-skipped — revisit on the woodev_theme side if/when "Мои покупки" lands.
 - ✅ **OB-3 COMPLETE** (s15 F11/F12/F13, s16 F2/F7+F5, s17 move, s18 F8/F9/F10, s19 F1/F3); only **F6** backoff deferred (endpoint-wide-key question).
 - 📥 **Remaining backlog** (`FUTURE-BACKLOG.md` → "Operator backlog dump — s13"): OB-4 reusable-JS-php-based principle · OB-5 godaddy fork study (GPT research delegation) · OB-7 modernize Plugins page (WP React + woodev.ru account) · OB-9 shipping nuances. Big ones: payment-gateway trait extraction; review #4 (`array()`→`[]` + typing + `@since` sweep).
