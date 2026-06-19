@@ -11,7 +11,7 @@ import { __ } from '@wordpress/i18n';
 import apiFetch from '@wordpress/api-fetch';
 import { filterProducts } from './filter';
 import { SearchBox, CategoryFilter, ExtensionGrid } from './catalog';
-import AccountPanel from './account-panel';
+import AccountMenu from './account';
 
 /**
  * The «Плагины» application root.
@@ -44,7 +44,7 @@ export default function App( { config } ) {
 
 			<SearchBox value={ search } onChange={ setSearch } />
 
-			<AccountPanel enabled={ !! config.accountEnabled } />
+			<AccountMenu enabled={ !! config.accountEnabled } account={ config.account } />
 
 			{ ! data && ! error ? (
 				<p className="woodev-extensions__loading">
@@ -65,7 +65,7 @@ export default function App( { config } ) {
 						selected={ category }
 						onSelect={ setCategory }
 					/>
-					<ExtensionGrid products={ products } />
+					<ExtensionGrid products={ products } installed={ config.installed || [] } />
 				</Fragment>
 			) : null }
 		</div>
