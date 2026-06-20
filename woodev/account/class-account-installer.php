@@ -102,8 +102,17 @@ if ( ! class_exists( 'Woodev_Account_Installer' ) ) :
 				return false;
 			}
 
-			$store      = wp_parse_url( untrailingslashit( apply_filters( 'woodev_account_api_url', 'https://woodev.ru' ) ) );
-			$store_host = is_array( $store ) ? strtolower( (string) ( $store['host'] ?? '' ) ) : '';
+			$store        = wp_parse_url( untrailingslashit( apply_filters( 'woodev_account_api_url', 'https://woodev.ru' ) ) );
+			$store_host   = is_array( $store ) ? strtolower( (string) ( $store['host'] ?? '' ) ) : '';
+			$store_scheme = is_array( $store ) ? strtolower( (string) ( $store['scheme'] ?? 'https' ) ) : 'https';
+
+			// Pin the transport: when the store is reached over https, the package
+			// MUST also be https — never let a reply downgrade the install fetch to
+			// cleartext (network tampering of the package). A plain-http store base
+			// (the local rig) is the only case where http is accepted.
+			if ( 'https' === $store_scheme && 'https' !== $scheme ) {
+				return false;
+			}
 
 			/**
 			 * Filters the hosts a plugin package may be downloaded from for install.

@@ -54,8 +54,24 @@ final class AccountInstallerTest extends TestCase {
 		);
 	}
 
-	public function test_trusts_http_store_host(): void {
-		$this->assertTrue( \Woodev_Account_Installer::is_trusted_package_url( 'http://woodev.ru/index.php?x=1' ) );
+	public function test_rejects_http_when_store_is_https(): void {
+		// Default store base is https → a cleartext package URL must be rejected.
+		$this->assertFalse( \Woodev_Account_Installer::is_trusted_package_url( 'http://woodev.ru/index.php?x=1' ) );
+	}
+
+	public function test_allows_http_when_store_base_is_http(): void {
+		// Local rig: an http store base accepts an http package on an allowed host.
+		Functions\when( 'apply_filters' )->alias( static function ( $tag, $value = null ) {
+			if ( 'woodev_account_api_url' === $tag ) {
+				return 'http://localhost:8090';
+			}
+			if ( 'woodev_account_install_allowed_hosts' === $tag ) {
+				return array( 'localhost' );
+			}
+			return $value;
+		} );
+
+		$this->assertTrue( \Woodev_Account_Installer::is_trusted_package_url( 'http://localhost:8090/index.php?eddfile=1' ) );
 	}
 
 	public function test_rejects_foreign_host(): void {
@@ -80,15 +96,17 @@ final class AccountInstallerTest extends TestCase {
 		$this->assertFalse( \Woodev_Account_Installer::is_trusted_package_url( '' ) );
 	}
 
-	public function test_allowed_hosts_filter_admits_rig_host(): void {
+	public function test_allowed_hosts_filter_admits_extra_host(): void {
+		// The filter admits an additional host (here over https, so the transport
+		// pin is satisfied); the rig's http case is covered separately.
 		Functions\when( 'apply_filters' )->alias( static function ( $tag, $value = null ) {
 			if ( 'woodev_account_install_allowed_hosts' === $tag ) {
-				return array( 'woodev.ru', 'localhost' );
+				return array( 'woodev.ru', 'cdn.woodev.ru' );
 			}
 			return $value;
 		} );
 
-		$this->assertTrue( \Woodev_Account_Installer::is_trusted_package_url( 'http://localhost:8090/index.php?eddfile=1' ) );
+		$this->assertTrue( \Woodev_Account_Installer::is_trusted_package_url( 'https://cdn.woodev.ru/p.zip' ) );
 	}
 
 	/* ---- install() orchestration ---- */
