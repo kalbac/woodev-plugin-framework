@@ -46,7 +46,9 @@ if ( ! class_exists( 'Woodev_Account_Installer' ) ) :
 				);
 			}
 
-			$response = $connection->request( 'GET', '/download/' . $download_id );
+			// Generous timeout: the store may be slow generating the package URL
+			// under load (the catalog fetch hit the same class of timeout, s26).
+			$response = $connection->request( 'GET', '/download/' . $download_id, array(), 30 );
 
 			if ( is_wp_error( $response ) ) {
 				return $response;
