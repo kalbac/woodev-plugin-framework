@@ -30,11 +30,12 @@ add_filter( 'http_request_timeout', static fn() => 40 );
 ( new Woodev_REST_API_Extensions() )->get_items(); // populates the transient
 ```
 
-## Suggested fix (backlog, not done in s25 — out of #7 scope)
+## Fix (done — s26, 2026-06-20)
 
-Pass an explicit longer timeout to the catalog fetch, e.g.
-`wp_safe_remote_get( $url, array( 'timeout' => 20 ) )` in `remote_json()`. Mirrors
-the 15 s the account client already uses. Flagged to the operator; see FUTURE-BACKLOG.
+`Woodev_REST_API_Extensions::remote_json()` now passes
+`array( 'timeout' => self::FETCH_TIMEOUT )` (`FETCH_TIMEOUT = 20`) to
+`wp_safe_remote_get()` — both the products and categories fetches. Covered by
+`ExtensionsRestControllerTest::test_catalog_fetch_uses_extended_timeout`.
 
 ## Related
 

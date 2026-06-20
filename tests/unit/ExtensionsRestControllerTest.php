@@ -268,4 +268,30 @@ final class ExtensionsRestControllerTest extends TestCase {
 		$this->assertSame( array(), $payload['products'] );
 		$this->assertTrue( $payload['stale'] );
 	}
+
+	public function test_catalog_fetch_uses_extended_timeout(): void {
+		// The store products endpoint can exceed the default 5s; both fetches
+		// (products + categories) must pass an extended timeout, or a cold cache
+		// fails against a slow issuer (gotcha extensions-catalog-fetch-5s-timeout).
+		Functions\when( 'get_transient' )->justReturn( false );
+		Functions\when( 'is_wp_error' )->justReturn( false );
+		Functions\when( 'wp_remote_retrieve_response_code' )->justReturn( 200 );
+		Functions\when( 'wp_remote_retrieve_body' )->justReturn( '{"products":[],"categories":[]}' );
+		Functions\when( 'rest_ensure_response' )->returnArg();
+
+		$timeouts = array();
+		Functions\when( 'wp_safe_remote_get' )->alias(
+			static function ( $url, $args = array() ) use ( &$timeouts ) {
+				$timeouts[] = is_array( $args ) ? (int) ( $args['timeout'] ?? 0 ) : 0;
+				return $url;
+			}
+		);
+
+		( new \Woodev_REST_API_Extensions() )->get_items();
+
+		$this->assertNotEmpty( $timeouts );
+		foreach ( $timeouts as $timeout ) {
+			$this->assertGreaterThanOrEqual( 20, $timeout );
+		}
+	}
 }
