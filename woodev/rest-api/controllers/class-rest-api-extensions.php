@@ -45,6 +45,18 @@ if ( ! class_exists( 'Woodev_REST_API_Extensions' ) ) :
 		const CACHE_KEY = 'woodev_extensions_catalog_v2';
 
 		/**
+		 * Remote-fetch timeout (seconds). The default WP 5s is too short for the
+		 * enriched products payload (~250KB) on a cold cache; a timeout there fails
+		 * the whole catalog (gotcha extensions-catalog-fetch-5s-timeout). Mirrors the
+		 * 15s the account client uses, with headroom.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var int
+		 */
+		const FETCH_TIMEOUT = 20;
+
+		/**
 		 * Whether boot() has already registered the controller (idempotency guard).
 		 *
 		 * @since 2.0.2
@@ -227,7 +239,7 @@ if ( ! class_exists( 'Woodev_REST_API_Extensions' ) ) :
 		 */
 		private function remote_json( string $url ) {
 
-			$response = wp_safe_remote_get( $url );
+			$response = wp_safe_remote_get( $url, array( 'timeout' => self::FETCH_TIMEOUT ) );
 
 			if ( is_wp_error( $response ) || 200 !== (int) wp_remote_retrieve_response_code( $response ) ) {
 				return null;
