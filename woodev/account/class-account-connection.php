@@ -298,13 +298,14 @@ if ( ! class_exists( 'Woodev_Account_Connection' ) ) :
 		 *
 		 * @since 2.0.2
 		 *
-		 * @param string              $method HTTP method.
-		 * @param string              $path   Connector path, e.g. '/oauth/me'.
-		 * @param array<string,mixed> $body   JSON body (omitted when empty).
+		 * @param string              $method  HTTP method.
+		 * @param string              $path    Connector path, e.g. '/oauth/me'.
+		 * @param array<string,mixed> $body    JSON body (omitted when empty).
+		 * @param int                 $timeout Per-call timeout in seconds (filterable default 15).
 		 *
 		 * @return array<string,mixed>|WP_Error
 		 */
-		public function request( string $method, string $path, array $body = array() ) {
+		public function request( string $method, string $path, array $body = array(), int $timeout = 15 ) {
 
 			$auth = $this->get_auth();
 			$key  = (string) ( $auth['access_token_secret'] ?? '' );
@@ -325,6 +326,18 @@ if ( ! class_exists( 'Woodev_Account_Connection' ) ) :
 			$method    = strtoupper( $method );
 			$timestamp = (string) time();
 
+			/**
+			 * Filters the signed account request timeout (seconds). The store can be
+			 * slow under load — the install package lookup passes a generous default.
+			 *
+			 * @since 2.0.2
+			 *
+			 * @param int    $timeout Per-call timeout in seconds.
+			 * @param string $path    Connector path being requested.
+			 * @param string $method  HTTP method.
+			 */
+			$timeout = (int) apply_filters( 'woodev_account_request_timeout', $timeout, $path, $method );
+
 			$signature = Woodev_Account_Signer::sign(
 				$this->canonical_for( $url, $method, $json_body, $timestamp ),
 				$key
@@ -332,7 +345,7 @@ if ( ! class_exists( 'Woodev_Account_Connection' ) ) :
 
 			$args = array(
 				'method'  => $method,
-				'timeout' => 15,
+				'timeout' => max( 1, $timeout ),
 				'headers' => array(
 					'Authorization'      => 'Bearer ' . (string) $auth['access_token'],
 					'X-Woodev-Signature' => $signature,

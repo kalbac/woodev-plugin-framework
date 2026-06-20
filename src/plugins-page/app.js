@@ -28,8 +28,24 @@ export default function App( { config } ) {
 	const [ category, setCategory ] = useState( 'all' );
 	const [ tab, setTab ] = useState( 'catalog' );
 	const [ purchases, setPurchases ] = useState( null );
+	const [ installState, setInstallState ] = useState( {} );
 
 	const connected = !! ( config.accountEnabled && config.account && config.account.connected );
+
+	const installPlugin = ( downloadId ) => {
+		const id = Number( downloadId );
+		if ( ! id ) {
+			return;
+		}
+		setInstallState( ( prev ) => ( { ...prev, [ id ]: 'installing' } ) );
+		apiFetch( {
+			path: '/woodev/v1/account/install',
+			method: 'POST',
+			data: { download_id: id },
+		} )
+			.then( () => setInstallState( ( prev ) => ( { ...prev, [ id ]: 'done' } ) ) )
+			.catch( () => setInstallState( ( prev ) => ( { ...prev, [ id ]: 'error' } ) ) );
+	};
 
 	useEffect( () => {
 		apiFetch( { path: '/woodev/v1/extensions' } )
@@ -89,7 +105,13 @@ export default function App( { config } ) {
 			) : null }
 
 			{ connected && tab === 'purchases' ? (
-				<PurchasesTab data={ purchases } products={ data ? data.products : [] } />
+				<PurchasesTab
+					data={ purchases }
+					products={ data ? data.products : [] }
+					installed={ config.installed || [] }
+					installState={ installState }
+					onInstall={ installPlugin }
+				/>
 			) : (
 				<Fragment>
 					<SearchBox value={ search } onChange={ setSearch } />
@@ -117,6 +139,8 @@ export default function App( { config } ) {
 								products={ products }
 								installed={ config.installed || [] }
 								purchased={ purchased }
+								installState={ installState }
+								onInstall={ installPlugin }
 							/>
 						</Fragment>
 					) : null }

@@ -207,6 +207,39 @@ final class AccountConnectionTest extends TestCase {
 		$this->assertInstanceOf( \WP_Error::class, $out );
 	}
 
+	public function test_request_timeout_default_per_call_and_filter(): void {
+		Functions\when( 'wp_json_encode' )->alias( static function ( $d ) { return json_encode( $d ); } );
+		Functions\when( 'get_option' )->justReturn(
+			array( 'auth' => array( 'access_token' => 'TOK', 'access_token_secret' => 'S', 'url' => 'https://woodev.ru' ) )
+		);
+		Functions\when( 'is_wp_error' )->justReturn( false );
+		Functions\when( 'wp_remote_retrieve_response_code' )->justReturn( 200 );
+		Functions\when( 'wp_remote_retrieve_body' )->justReturn( '{}' );
+
+		$timeouts = array();
+		Functions\when( 'wp_safe_remote_request' )->alias(
+			static function ( $url, $args ) use ( &$timeouts ) {
+				$timeouts[] = $args['timeout'];
+				return array();
+			}
+		);
+
+		$conn = new \Woodev_Account_Connection();
+		$conn->request( 'GET', '/oauth/me' );                 // default 15
+		$conn->request( 'GET', '/download/26', array(), 30 );  // install path: 30
+
+		$this->assertSame( array( 15, 30 ), $timeouts );
+
+		// A site filter overrides the per-call default.
+		Functions\when( 'apply_filters' )->alias(
+			static function ( $tag, $value = null ) {
+				return 'woodev_account_request_timeout' === $tag ? 45 : $value;
+			}
+		);
+		$conn->request( 'GET', '/oauth/me' );
+		$this->assertSame( 45, end( $timeouts ) );
+	}
+
 	public function test_request_without_connection_returns_wp_error(): void {
 		Functions\when( 'get_option' )->justReturn( false );
 

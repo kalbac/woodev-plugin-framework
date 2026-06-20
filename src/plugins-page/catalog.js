@@ -8,6 +8,7 @@
 import { createElement, Fragment } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { formatPrice } from './filter';
+import InstallButton, { InstallOverlay } from './install';
 
 /**
  * The catalog search input.
@@ -99,7 +100,13 @@ export function RatingStars( { rating } ) {
  * @param {Object} props.product Normalized product.
  * @return {JSX.Element} The card.
  */
-export function ExtensionCard( { product, isInstalled = false, isPurchased = false } ) {
+export function ExtensionCard( {
+	product,
+	isInstalled = false,
+	isPurchased = false,
+	installState = 'idle',
+	onInstall,
+} ) {
 	const buttonText = isInstalled
 		? __( 'Посмотреть', 'woodev-plugin-framework' )
 		: product.free
@@ -110,12 +117,18 @@ export function ExtensionCard( { product, isInstalled = false, isPurchased = fal
 				formatPrice( product.price )
 		  );
 
+	const installing = 'installing' === installState;
+
 	return (
 		<div
 			className={
-				'woodev-extension-card' + ( isInstalled ? ' is-installed' : '' )
+				'woodev-extension-card' +
+				( isInstalled ? ' is-installed' : '' ) +
+				( installing ? ' is-installing' : '' )
 			}
+			aria-busy={ installing }
 		>
+			<InstallOverlay active={ installing } />
 			<div className="woodev-extension-card__head">
 				<a
 					className="woodev-extension-card__icon"
@@ -156,18 +169,25 @@ export function ExtensionCard( { product, isInstalled = false, isPurchased = fal
 				dangerouslySetInnerHTML={ { __html: product.excerpt } }
 			/>
 			<div className="woodev-extension-card__footer">
-				<a
-					className={
-						'woodev-extension-card__buy' +
-						( product.free && ! isInstalled ? ' is-free' : '' ) +
-						( isInstalled ? ' is-installed' : '' )
-					}
-					href={ product.permalink }
-					target="_blank"
-					rel="noreferrer"
-				>
-					{ buttonText }
-				</a>
+				{ isPurchased && ! isInstalled ? (
+					<InstallButton
+						state={ installState }
+						onInstall={ () => onInstall && onInstall( product.id ) }
+					/>
+				) : (
+					<a
+						className={
+							'woodev-extension-card__buy' +
+							( product.free && ! isInstalled ? ' is-free' : '' ) +
+							( isInstalled ? ' is-installed' : '' )
+						}
+						href={ product.permalink }
+						target="_blank"
+						rel="noreferrer"
+					>
+						{ buttonText }
+					</a>
+				) }
 			</div>
 		</div>
 	);
@@ -180,7 +200,13 @@ export function ExtensionCard( { product, isInstalled = false, isPurchased = fal
  * @param {Array}  props.products Filtered products.
  * @return {JSX.Element} The grid.
  */
-export function ExtensionGrid( { products, installed = [], purchased = [] } ) {
+export function ExtensionGrid( {
+	products,
+	installed = [],
+	purchased = [],
+	installState = {},
+	onInstall,
+} ) {
 	if ( ! products.length ) {
 		return (
 			<p className="woodev-extensions__empty">
@@ -197,6 +223,8 @@ export function ExtensionGrid( { products, installed = [], purchased = [] } ) {
 					product={ p }
 					isInstalled={ installed.includes( p.id ) }
 					isPurchased={ purchased.includes( p.id ) }
+					installState={ installState[ p.id ] || 'idle' }
+					onInstall={ onInstall }
 				/>
 			) ) }
 		</div>
