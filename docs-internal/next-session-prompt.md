@@ -6,7 +6,8 @@
 
 ## ⚠️ Самое первое (do first)
 
-1. **Ничего не висит:** s26 полностью смержен. Фреймворк: `main` на `9d67f67` (PR #76). Синхронизируй `main` (`git pull --ff-only`).
+1. **Ничего не висит:** s26 полностью смержен. Фреймворк: `main` на `9d67f67` (PR #76; поверх — docs `423f610`). Синхронизируй `main` (`git pull --ff-only`).
+   - **Риг-хвост от s25/s26:** consumer (:8888) почищен (disconnected). Issuer wp-env (:8090) был снесён до очистки — если том сохранился, после `wp-env start` остаётся 1 осиротевшая строка в `{prefix}woodev_account_connections` + засиженный EDD-заказ #12 (downloads 33+26, customer 1, admin). Безвредно; почистить при первом старте issuer: `wp eval 'global $wpdb; $wpdb->query("DELETE FROM ".$wpdb->prefix."woodev_account_connections"); edd_destroy_order(12);'`.
 2. **Прочитать контекст:** `docs-internal/SESSION-LOG.md` (s26 + s25) + `docs-internal/CURRENT-STATE.md`. Готчи: `extensions-catalog-fetch-5s-timeout` (fixed), `serena-replace-content-eol-flip` [`[tooling/*]`], `rest-endpoint-not-for-browser-cookie-auth`, `wp-nonce-url-esc-html-breaks-js-urls`.
 3. **Serena MCP** доступна? На Windows для правок СУЩЕСТВУЮЩИХ PHP-файлов используй встроенный `Edit` (Serena `replace_content` ломает EOL → CRLF).
 
