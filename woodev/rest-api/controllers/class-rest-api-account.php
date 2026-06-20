@@ -83,6 +83,26 @@ if ( ! class_exists( 'Woodev_REST_API_Account' ) ) :
 					'permission_callback' => array( $this, 'check_permissions' ),
 				)
 			);
+
+			register_rest_route(
+				Woodev_REST_V1_Registrar::ROUTE_NAMESPACE,
+				'/account/install',
+				array(
+					'methods'             => 'POST',
+					'callback'            => array( $this, 'handle_install' ),
+					'permission_callback' => array( $this, 'check_install_permissions' ),
+					'args'                => array(
+						'download_id' => array(
+							'required'          => true,
+							'type'              => 'integer',
+							'sanitize_callback' => 'absint',
+							'validate_callback' => static function ( $value ) {
+								return is_numeric( $value ) && (int) $value > 0;
+							},
+						),
+					),
+				)
+			);
 		}
 
 		/**
@@ -105,6 +125,56 @@ if ( ! class_exists( 'Woodev_REST_API_Account' ) ) :
 				esc_html__( 'Недостаточно прав для управления подключением аккаунта.', 'woodev-plugin-framework' ),
 				array( 'status' => rest_authorization_required_code() )
 			);
+		}
+
+		/**
+		 * Capability gate for installing plugins — `install_plugins` (stricter than
+		 * the page's `manage_options`; matches WordPress's own plugin-install cap).
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return true|WP_Error
+		 */
+		public function check_install_permissions() {
+
+			if ( current_user_can( 'install_plugins' ) ) {
+				return true;
+			}
+
+			return new WP_Error(
+				'woodev_account_forbidden',
+				esc_html__( 'Недостаточно прав для установки плагинов.', 'woodev-plugin-framework' ),
+				array( 'status' => rest_authorization_required_code() )
+			);
+		}
+
+		/**
+		 * POST handler: installs an owned plugin from the connected account.
+		 *
+		 * Returns `{ installed: true }` on success, or the install WP_Error (which
+		 * carries its own HTTP status) on failure. The plugin is installed inactive.
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param WP_REST_Request $request The request.
+		 *
+		 * @return WP_REST_Response|WP_Error|array<string,bool>
+		 */
+		public function handle_install( $request ) {
+
+			$download_id = (int) $request->get_param( 'download_id' );
+
+			$result = ( new Woodev_Account_Installer() )->install( $download_id );
+
+			if ( is_wp_error( $result ) ) {
+				return $result;
+			}
+
+			return rest_ensure_response( array( 'installed' => true ) );
 		}
 
 		/**

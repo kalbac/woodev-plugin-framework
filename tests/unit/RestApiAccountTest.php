@@ -13,6 +13,7 @@ use Brain\Monkey\Functions;
 require_once dirname( __DIR__, 2 ) . '/woodev/account/class-account-signer.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/account/class-account-connection.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/account/class-account-purchases.php';
+require_once dirname( __DIR__, 2 ) . '/woodev/account/class-account-installer.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/rest-api/controllers/class-rest-api-account.php';
 
 /**
@@ -154,5 +155,39 @@ final class RestApiAccountTest extends TestCase {
 		$this->assertSame( array(), $response['purchases'] );
 		$this->assertSame( array(), $response['purchased'] );
 		$this->assertArrayNotHasKey( 'stale', $response );
+	}
+
+	public function test_install_permissions_require_install_plugins(): void {
+		Functions\when( 'current_user_can' )->alias(
+			static function ( $cap ) { return 'install_plugins' === $cap; }
+		);
+
+		$this->assertTrue( ( new \Woodev_REST_API_Account() )->check_install_permissions() );
+	}
+
+	public function test_install_permissions_deny_without_install_plugins(): void {
+		Functions\when( 'current_user_can' )->justReturn( false );
+		Functions\when( 'rest_authorization_required_code' )->justReturn( 403 );
+
+		$result = ( new \Woodev_REST_API_Account() )->check_install_permissions();
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+	}
+
+	public function test_install_returns_error_when_not_connected(): void {
+		Functions\when( 'apply_filters' )->alias( static function ( $t, $v = null ) { return $v; } );
+		Functions\when( 'is_wp_error' )->alias( static function ( $t ) { return $t instanceof \WP_Error; } );
+		Functions\when( 'get_option' )->justReturn( false ); // not connected → no upgrader reached.
+
+		$request = new class() {
+			public function get_param( $key ) {
+				return 'download_id' === $key ? 21 : null;
+			}
+		};
+
+		$result = ( new \Woodev_REST_API_Account() )->handle_install( $request );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'woodev_install_not_connected', $result->get_error_code() );
 	}
 }

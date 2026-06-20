@@ -586,6 +586,7 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 			require_once $framework_path . '/account/class-account-connection.php';
 			require_once $framework_path . '/account/class-installed-plugins.php';
 			require_once $framework_path . '/account/class-account-purchases.php';
+			require_once $framework_path . '/account/class-account-installer.php';
 			require_once $framework_path . '/rest-api/controllers/class-rest-api-account.php';
 
 			// Load plugin updater class. The condition is EXPRESSION-IDENTICAL to the

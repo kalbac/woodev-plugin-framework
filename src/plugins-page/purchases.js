@@ -10,6 +10,7 @@
 // eslint-disable-next-line no-unused-vars -- createElement required by classic JSX runtime.
 import { createElement } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
+import InstallButton from './install';
 
 /**
  * Formats a connector date string ("Y-m-d H:i:s") to "DD.MM.YYYY", or '' when
@@ -26,12 +27,21 @@ function formatDate( raw ) {
 /**
  * The «Мои покупки» tab.
  *
- * @param {Object}      props          Props.
- * @param {Object|null} props.data     { purchases, purchased, stale } or null while loading.
- * @param {Array}       props.products Loaded catalog products (for the id→permalink cross-ref).
+ * @param {Object}      props              Props.
+ * @param {Object|null} props.data         { purchases, purchased, stale } or null while loading.
+ * @param {Array}       props.products     Loaded catalog products (for the id→permalink cross-ref).
+ * @param {Array}       props.installed    Installed download ids.
+ * @param {Object}      props.installState Per-download install lifecycle state.
+ * @param {Function}    props.onInstall    Install handler (receives a download id).
  * @return {JSX.Element} The tab.
  */
-export default function PurchasesTab( { data, products = [] } ) {
+export default function PurchasesTab( {
+	data,
+	products = [],
+	installed = [],
+	installState = {},
+	onInstall,
+} ) {
 	if ( ! data ) {
 		return (
 			<p className="woodev-extensions__loading">
@@ -97,6 +107,18 @@ export default function PurchasesTab( { data, products = [] } ) {
 						{ date ? (
 							<span className="woodev-purchases__date">{ date }</span>
 						) : null }
+						<span className="woodev-purchases__action">
+							{ installed.includes( item.id ) ? (
+								<span className="woodev-purchases__installed">
+									{ __( 'Установлен', 'woodev-plugin-framework' ) }
+								</span>
+							) : (
+								<InstallButton
+									state={ installState[ item.id ] || 'idle' }
+									onInstall={ () => onInstall && onInstall( item.id ) }
+								/>
+							) }
+						</span>
 					</li>
 				);
 			} ) }
