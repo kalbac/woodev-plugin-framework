@@ -1,25 +1,36 @@
-# Промт для следующей сессии (s26)
+# Промт для следующей сессии (s27 / s26-part-2): #8 установка-из-коннектора
 
-> Написан в s25 (2026-06-20). #7 «Мои покупки» + «Куплено» badge ЗАШИПЛЕН (PR #75, `bbc09bb`) и риг-проверен. Скопируй как стартовый бриф. После выполнения — замени на промт для s27.
+> Написан в s26 (2026-06-20). #7 ЗАШИПЛЕН (PR #75 `bbc09bb`), таймаут каталога исправлен (PR #76 `9d67f67`). Осталась одна большая задача — **#8 установка плагина из каталога**. Security-critical → отдельный фокусный заход.
 
 ---
 
 ## ⚠️ Самое первое (do first)
 
-1. **Ничего не висит:** s25 полностью смержен. Фреймворк: `main` на `bbc09bb` (PR #75). Просто синхронизируй `main` (`git pull --ff-only`).
-2. **Прочитать контекст s25:** `docs-internal/SESSION-LOG.md` (запись s25) + `docs-internal/CURRENT-STATE.md`. Новые готчи s25: `extensions-catalog-fetch-5s-timeout` [`[api/*]`], `serena-replace-content-eol-flip` [`[tooling/*]`].
-3. **Проверить Serena MCP** доступна. На Windows для правок СУЩЕСТВУЮЩИХ PHP-файлов используй встроенный `Edit` (Serena `replace_content` ломает EOL → CRLF, см. готчу).
+1. **Ничего не висит:** s26 полностью смержен. Фреймворк: `main` на `9d67f67` (PR #76). Синхронизируй `main` (`git pull --ff-only`).
+2. **Прочитать контекст:** `docs-internal/SESSION-LOG.md` (s26 + s25) + `docs-internal/CURRENT-STATE.md`. Готчи: `extensions-catalog-fetch-5s-timeout` (fixed), `serena-replace-content-eol-flip` [`[tooling/*]`], `rest-endpoint-not-for-browser-cookie-auth`, `wp-nonce-url-esc-html-breaks-js-urls`.
+3. **Serena MCP** доступна? На Windows для правок СУЩЕСТВУЮЩИХ PHP-файлов используй встроенный `Edit` (Serena `replace_content` ломает EOL → CRLF).
 
-## Что сделано в s25 (контекст)
+## Что сделано (контекст)
 
-- **#7 «Мои покупки» tab + «Куплено» badge** — `Woodev_Account_Purchases` (чистый нормализатор + коллектор id), `GET woodev/v1/account/purchases` (подписанный прокси, cap+nonce, 5-мин кэш, stale/empty-обработка, чистка кэша при disconnect/connect), React-вкладка (ленивый async-fetch, кросс-ссылка по id), cyan-бейдж «Куплено» («Установлен» побеждает). Codex-ревью (2 IMPORTANT исправлены). 706 unit, риг-e2e.
-- **Фикс уведомления:** failed/denied подключение теперь показывает admin-notice (`render_connect_notice`).
+- **#7 «Мои покупки» + «Куплено» badge (s25, PR #75):** `Woodev_Account_Purchases`, `GET woodev/v1/account/purchases` (подписанный прокси), React-вкладка + бейдж. Риг-e2e.
+- **Таймаут каталога (s26, PR #76):** `Woodev_REST_API_Extensions::FETCH_TIMEOUT = 20`.
+- База: **707 unit**.
 
-## Кандидаты на s26 (выбор оператора)
+## Задача — #8 установка-из-коннектора (security-critical)
 
-1. **Catalog fetch timeout fix (однострочник, рекомендую первым — дёшево, реальный баг).** `Woodev_REST_API_Extensions::remote_json()` использует дефолтный 5s таймаут `wp_safe_remote_get`; issuer `edd-api/v2/products` отвечает ~8.6s холодным → каталог падает в `stale` при пустом кэше. Фикс: `wp_safe_remote_get( $url, array( 'timeout' => 20 ) )` (как 15s у account-клиента). Готча `extensions-catalog-fetch-5s-timeout`. + юнит-тест на передачу таймаута если осмыслено.
-2. **#8 установка-из-коннектора** — `WP_Upgrader` + коннекторный `/download/{id}` (EDD SL package URL). **Security-critical, отдельная сессия**, Codex adversarial-review обязателен. Бейдж «Куплено» уже даёт точку входа («Скачать»).
-3. **Рейтинг-в-API** (баг woodev_theme, оператор скипнул в s23): публичный `edd-api` не отдаёт `rating` несмотря на наличие отзывов (`query_reviews()`/global-`$post` gap). Кросс-проектная, на стороне woodev_theme.
+Дать пользователю установить купленный/бесплатный плагин прямо из каталога/«Мои покупки» (кнопка «Скачать»/«Установить» там, где сейчас бейдж «Куплено»).
+
+- **Коннектор (woodev_theme):** нужен новый подписанный endpoint `GET /download/{id}` (или аналог), отдающий EDD SL **package URL** (или сам zip-поток) только для владельца — проверка, что `customer_id` соединения владеет download_id. Изучить EDD SL `get_download`/`get_version` package механизм. Это сторона woodev.ru → согласовать с оператором (там EDD-зависимости ок).
+- **Framework:** REST-маршрут (cap `install_plugins` + nonce) → подписанный `request()` к коннектору за package URL → `WP_Upgrader`/`Plugin_Upgrader` с кастомным skin для установки. **Поверхность исполнения кода** — валидировать источник URL, не доверять ответу issuer слепо.
+- **UI:** кнопка установки в `ExtensionCard`/`PurchasesTab` (где `purchased && !installed`), состояния progress/done/error.
+
+## Подход и гигиена
+
+- **Codex adversarial-review ОБЯЗАТЕЛЕН** (SSRF на package URL, проверка владения, путь/распаковка zip, capability, nonce). Re-critic собственных правок. Находки НЕ автофиксить — спрашивать (рекомендованная первой).
+- `composer check` зелёный база = **707 unit**. JS-сборка перед коммитом (Assets-parity); ассеты LF.
+- Мердж: ветка → PR → зелёный CI → `--squash --delete-branch`, НЕ `--auto`; ресинк main.
+- `@since 2.0.2`. Публичные `docs/` — НЕ трогаем. Тему woodev-theme — только с согласия оператора (коннектор woodev.ru-специфичен, EDD там ок).
+- **Отброшено оператором:** рейтинг-в-API, мгновенные бейджи через bootstrap.
 
 ## Подход и гигиена
 

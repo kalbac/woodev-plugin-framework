@@ -1,4 +1,12 @@
 
+## Session 26 (2026-06-20) — catalog fetch timeout fix (PR #76); #8 install-from-connector queued
+
+> Continued straight after s25 once the operator confirmed the connect/disconnect/deny pipeline works flawlessly on the rig. Operator's call: do the quick timeout fix now, then #8 install-from-connector; dropped rating-in-API and the bootstrap-instant-badge idea (both non-critical).
+
+- **Catalog fetch timeout fix (PR #76 `9d67f67`):** `Woodev_REST_API_Extensions::remote_json()` used `wp_safe_remote_get`'s default 5s timeout; the issuer `edd-api/v2/products` (~250KB enriched) takes ~8.6s cold → cold-cache catalog failed with `stale`. Added `FETCH_TIMEOUT = 20` (both products + categories fetches) + unit test asserting the extended timeout is passed. **707 unit**, CI green, squash-merged. Gotcha `extensions-catalog-fetch-5s-timeout` marked fixed.
+- **Confirmed by-design (not a bug):** «Куплено» badges appear on the catalog ~1s after page load (async non-blocking fetch — decision A from s25), not instantly on first paint. Operator OK with it; bootstrap-instant-badge option declined.
+- **Next:** **#8 install-from-connector** — `WP_Upgrader` + connector `/download/{id}` (EDD SL package URL). Security-critical; own focused session with mandatory Codex adversarial-review.
+
 ## Session 25 (2026-06-20) — #7 «Мои покупки» tab + «Куплено» badge shipped (PR #75) + connect-notice fix
 
 > Operator present; approach = **self-driven worker + GPT-5.5/Codex critic** (operator's choice). Wrote a full TDD plan (`docs-internal/plans/2026-06-20-purchases-tab-and-badge.md`), executed inline (no worktree — Serena + rig bound to the main tree), Codex-reviewed the auth proxy, then rig-verified e2e.
