@@ -60,3 +60,28 @@ export default function InstallButton( { state = 'idle', onInstall } ) {
 		</button>
 	);
 }
+
+/**
+ * A full-cover loading overlay with a centered spinner, shown over a card/row
+ * while its plugin is installing. The host element must be position:relative.
+ *
+ * @param {Object}  props        Props.
+ * @param {boolean} props.active Whether to render the overlay.
+ * @return {JSX.Element|null} The overlay, or null.
+ */
+export function InstallOverlay( { active } ) {
+	if ( ! active ) {
+		return null;
+	}
+
+	return (
+		<div
+			className="woodev-install-overlay"
+			role="status"
+			aria-live="polite"
+			aria-label={ __( 'Установка…', 'woodev-plugin-framework' ) }
+		>
+			<span className="woodev-install-overlay__spinner" aria-hidden="true" />
+		</div>
+	);
+}

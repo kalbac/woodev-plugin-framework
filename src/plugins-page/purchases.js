@@ -10,7 +10,7 @@
 // eslint-disable-next-line no-unused-vars -- createElement required by classic JSX runtime.
 import { createElement } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
-import InstallButton from './install';
+import InstallButton, { InstallOverlay } from './install';
 
 /**
  * Formats a connector date string ("Y-m-d H:i:s") to "DD.MM.YYYY", or '' when
@@ -80,9 +80,18 @@ export default function PurchasesTab( {
 			{ purchases.map( ( item ) => {
 				const link = linkById[ item.id ] || null;
 				const date = formatDate( item.date );
+				const installing = 'installing' === installState[ item.id ];
 
 				return (
-					<li key={ item.id } className="woodev-purchases__row">
+					<li
+						key={ item.id }
+						className={
+							'woodev-purchases__row' +
+							( installing ? ' is-installing' : '' )
+						}
+						aria-busy={ installing }
+					>
+						<InstallOverlay active={ installing } />
 						<span className="woodev-purchases__icon">
 							{ item.icon ? (
 								<img src={ item.icon } alt="" loading="lazy" />

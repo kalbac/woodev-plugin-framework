@@ -623,3 +623,45 @@ $wd-radius-sm: 8px;
 	align-items: center;
 	text-align: center;
 }
+
+// ---- Install loading overlay (full card/row block + centered spinner) -------
+.woodev-extension-card,
+.woodev-purchases__row {
+	position: relative;
+}
+
+.woodev-extension-card.is-installing,
+.woodev-purchases__row.is-installing {
+	// Dim the underlying content and block interaction while installing.
+	& > *:not( .woodev-install-overlay ) {
+		opacity: 0.45;
+		pointer-events: none;
+		user-select: none;
+	}
+}
+
+.woodev-install-overlay {
+	position: absolute;
+	inset: 0;
+	z-index: 5;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: rgba(255, 255, 255, 0.6);
+	border-radius: inherit;
+}
+
+.woodev-install-overlay__spinner {
+	width: 34px;
+	height: 34px;
+	border-radius: 50%;
+	border: 3px solid rgba(0, 201, 253, 0.25);
+	border-top-color: $wd-accent;
+	animation: woodev-install-spin 0.8s linear infinite;
+}
+
+@keyframes woodev-install-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}

@@ -8,7 +8,7 @@
 import { createElement, Fragment } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { formatPrice } from './filter';
-import InstallButton from './install';
+import InstallButton, { InstallOverlay } from './install';
 
 /**
  * The catalog search input.
@@ -117,12 +117,18 @@ export function ExtensionCard( {
 				formatPrice( product.price )
 		  );
 
+	const installing = 'installing' === installState;
+
 	return (
 		<div
 			className={
-				'woodev-extension-card' + ( isInstalled ? ' is-installed' : '' )
+				'woodev-extension-card' +
+				( isInstalled ? ' is-installed' : '' ) +
+				( installing ? ' is-installing' : '' )
 			}
+			aria-busy={ installing }
 		>
+			<InstallOverlay active={ installing } />
 			<div className="woodev-extension-card__head">
 				<a
 					className="woodev-extension-card__icon"
