@@ -1,52 +1,39 @@
-# Промт для следующей сессии (s27 / s26-part-2): #8 установка-из-коннектора
+# Промт для следующей сессии (s27): #8 — триаж findings + rig e2e + merge
 
-> Написан в s26 (2026-06-20). #7 ЗАШИПЛЕН (PR #75 `bbc09bb`), таймаут каталога исправлен (PR #76 `9d67f67`). Осталась одна большая задача — **#8 установка плагина из каталога**. Security-critical → отдельный фокусный заход.
+> Написан в s26 part-2 (2026-06-20) автономно ночью. #8 install-from-connector РЕАЛИЗОВАН и закоммичен в обоих репозиториях. **PR #77 ОТКРЫТ, CI зелёный (17/17), НО НЕ смержен** — ждёт твоего триажа findings и rig e2e.
 
----
+## ⚠️ Состояние (do first)
 
-## ⚠️ Самое первое (do first)
+1. **Framework PR #77** (`feat/account-install-from-connector`, голова `71c1dd5` + docs-коммит): CI зелёный 17/17. **НЕ авто-мержить** — security-critical, есть нерешённые findings.
+2. **Connector (woodev_theme `d375d6d`):** закоммичен в outer-репо woodev_theme, **НЕ задеплоен на прод** woodev.ru. Деплой — за тобой (woodev.ru-сторона). 50 connector unit зелёные.
+3. **Прочитать:** SESSION-LOG s26-part-2 + CURRENT-STATE. Новая готча `edd-sl-package-download-domain-bound`.
 
-1. **Ничего не висит:** s26 полностью смержен. Фреймворк: `main` на `9d67f67` (PR #76; поверх — docs `423f610`). Синхронизируй `main` (`git pull --ff-only`).
-   - **Риг-хвост от s25/s26:** consumer (:8888) почищен (disconnected). Issuer wp-env (:8090) был снесён до очистки — если том сохранился, после `wp-env start` остаётся 1 осиротевшая строка в `{prefix}woodev_account_connections` + засиженный EDD-заказ #12 (downloads 33+26, customer 1, admin). Безвредно; почистить при первом старте issuer: `wp eval 'global $wpdb; $wpdb->query("DELETE FROM ".$wpdb->prefix."woodev_account_connections"); edd_destroy_order(12);'`.
-2. **Прочитать контекст:** `docs-internal/SESSION-LOG.md` (s26 + s25) + `docs-internal/CURRENT-STATE.md`. Готчи: `extensions-catalog-fetch-5s-timeout` (fixed), `serena-replace-content-eol-flip` [`[tooling/*]`], `rest-endpoint-not-for-browser-cookie-auth`, `wp-nonce-url-esc-html-breaks-js-urls`.
-3. **Serena MCP** доступна? На Windows для правок СУЩЕСТВУЮЩИХ PHP-файлов используй встроенный `Edit` (Serena `replace_content` ломает EOL → CRLF).
+## Что сделано
 
-## Что сделано (контекст)
+- **Доставка:** EDD core `edd_get_download_file_url` (purchase-link, привязка к заказу/покупателю, не к домену) — НЕ `package_download` токен (он domain-bound → `site_inactive`). Заземлено по исходникам EDD SL.
+- **Connector `GET /download/{id}`:** HMAC + `Purchases::owned_order_item()` (владение) + `Download_Throttle` (rate-limit по аккаунту) + `Install_Download` (signed `woodev_install` маркер обходит per-file лимит только на подписанном пути).
+- **Framework `POST woodev/v1/account/install`:** cap `install_plugins`+nonce → `Woodev_Account_Installer` (SSRF host-pin + `Plugin_Upgrader`, **без активации**). React-кнопка «Установить» (idle/installing/done/error) в карточке + «Мои покупки». 723 unit.
 
-- **#7 «Мои покупки» + «Куплено» badge (s25, PR #75):** `Woodev_Account_Purchases`, `GET woodev/v1/account/purchases` (подписанный прокси), React-вкладка + бейдж. Риг-e2e.
-- **Таймаут каталога (s26, PR #76):** `Woodev_REST_API_Extensions::FETCH_TIMEOUT = 20`.
-- База: **707 unit**.
+## 🔴 ПЕРВОЕ — триаж Codex findings (НЕ автофикснуты, рекомендованная первой)
 
-## Задача — #8 установка-из-коннектора (security-critical)
+Codex: **нет CRITICAL/HIGH.** Три находки — реши, какие чинить, я применю + re-critic:
 
-Дать пользователю установить купленный/бесплатный плагин прямо из каталога/«Мои покупки» (кнопка «Скачать»/«Установить» там, где сейчас бейдж «Куплено»).
+1. **[MEDIUM] Неатомарный rate-limit** (`Download_Throttle::allow`, connector): `get_transient`→`set_transient` не атомарны → пачка параллельных install-запросов на один `customer_id`+`download_id` может слегка превысить лимит. Владение+HMAC всё равно держатся; лимит — мягкий анти-абуз. **Рекоменд.: починить** — атомарный инкремент через object cache (`wp_cache_incr`) с фолбэком на транзиент.
+2. **[LOW] http на store-хосте проходит SSRF-гард** (`is_trusted_package_url`, framework): принимает и `http`, и `https` → теоретически cleartext-загрузка пакета. На проде store=https, так что не воспроизводится штатно. **Рекоменд.: починить** — требовать `https` для не-локальных хостов.
+3. **[INFO] `woodev_account_install_allowed_hosts`** — локальный trust-boundary (только риг). Оставить test-only. **Рекоменд.: не трогать.**
 
-- **Коннектор (woodev_theme):** нужен новый подписанный endpoint `GET /download/{id}` (или аналог), отдающий EDD SL **package URL** (или сам zip-поток) только для владельца — проверка, что `customer_id` соединения владеет download_id. Изучить EDD SL `get_download`/`get_version` package механизм. Это сторона woodev.ru → согласовать с оператором (там EDD-зависимости ок).
-- **Framework:** REST-маршрут (cap `install_plugins` + nonce) → подписанный `request()` к коннектору за package URL → `WP_Upgrader`/`Plugin_Upgrader` с кастомным skin для установки. **Поверхность исполнения кода** — валидировать источник URL, не доверять ответу issuer слепо.
-- **UI:** кнопка установки в `ExtensionCard`/`PurchasesTab` (где `purchased && !installed`), состояния progress/done/error.
+## 🟡 ВТОРОЕ — rig e2e (со мной, на стенде)
 
-## Подход и гигиена
+Issuer :8090 ночью был выключен. Для e2e нужно:
+- Issuer (woodev_theme wp-env :8090) с EDD SL: download с прикреплёнными файлами (zip), завершённый заказ на тест-покупателя, строка в `{prefix}woodev_account_connections`.
+- Consumer (:8888, уже поднят): подключённый аккаунт (миррор token+secret), фильтр `woodev_account_install_allowed_hosts` → добавить issuer-хост (`localhost`), + safe-remote rig-фильтры (готча `wp-safe-remote-request-local-rig`).
+- Проверить: кнопка «Установить» → REST `/account/install` → connector `/download/{id}` отдаёт purchase-URL → `Plugin_Upgrader` ставит плагин (неактивным) → состояние done. Проверить отказы: чужой download (403), без `install_plugins` (403), rate-limit (429).
 
-- **Codex adversarial-review ОБЯЗАТЕЛЕН** (SSRF на package URL, проверка владения, путь/распаковка zip, capability, nonce). Re-critic собственных правок. Находки НЕ автофиксить — спрашивать (рекомендованная первой).
-- `composer check` зелёный база = **707 unit**. JS-сборка перед коммитом (Assets-parity); ассеты LF.
-- Мердж: ветка → PR → зелёный CI → `--squash --delete-branch`, НЕ `--auto`; ресинк main.
-- `@since 2.0.2`. Публичные `docs/` — НЕ трогаем. Тему woodev-theme — только с согласия оператора (коннектор woodev.ru-специфичен, EDD там ок).
-- **Отброшено оператором:** рейтинг-в-API, мгновенные бейджи через bootstrap.
+## 🟢 ТРЕТЬЕ — деплой + merge
 
-## Подход и гигиена
+- Ты деплоишь connector на прод woodev.ru (+ при желании выставляешь `woodev_account_download_rate_limit`).
+- Merge PR #77: `gh pr merge 77 --squash --delete-branch` ТОЛЬКО на подтверждённо-зелёном CI (НЕ `--auto`). Ресинк main.
 
-- `composer check` зелёный база = **706 unit**. JS-сборка (`npm run build`) перед коммитом (Assets-parity); ассеты LF.
-- Worker+critic: Codex-ревью на security-чувствительное (#8 — обязательно). Re-critic собственных правок. Находки НЕ автофиксить — спрашивать (рекомендованная первой).
-- Мердж: ветка → PR → зелёный CI → `--squash --delete-branch`, НЕ `--auto`; ресинк main.
-- v2.0.1 НЕ выпущен → новые символы `@since 2.0.2`. Публичные `docs/` — НЕ трогаем (s13). Тему woodev-theme — НЕ трогать без явного согласия.
+## Гигиена
 
-## Риг (e2e)
-
-- **Issuer** (woodev_theme wp-env `:8090`): CLI `c8ec47a5035920b76223df8ef5b79e40-cli-1`. **Consumer/стенд** (framework wp-env `:8888`, `admin`/`password`): CLI `de59f74e6d3d19d18a7f7b6608fda7e7-cli-1`. `./woodev`+`assets/build` live-mapped.
-- **Подключение аккаунта на риге пересоздаётся** (wp-env сбрасывает опции между сессиями). s25-способ без браузерного OAuth: засидить EDD-заказ + строку в `{prefix}woodev_account_connections` на issuer (`Connection_Store::create` с известным секретом), затем `update_option('woodev_account_data', …)` на consumer с тем же token+secret. См. SESSION-LOG s25.
-- ⚠️ `docker cp` в consumer-контейнер ломается на bind-mount overlay → подавай скрипт через `Get-Content … | docker exec -i <cli> wp eval-file -` (PowerShell).
-- ⚠️ Кэш каталога (TTL неделя): после очистки прогрей с длинным таймаутом — `add_filter('http_request_timeout',fn()=>40); (new Woodev_REST_API_Extensions())->get_items();` — иначе холодный fetch падает (готча выше). Сбросы: `wp transient delete woodev_extensions_catalog_v2` / `woodev_account_purchases`.
-
-## Старт сессии
-
-- framework: `docs-internal/CURRENT-STATE.md`, `docs-internal/GOTCHAS.md`, этот промт.
+`@since 2.0.2`. Публичные `docs/` не трогаем. Re-critic собственных правок после фиксов findings (бюджет GPT-5.5 сбрасывается в 6:08). Серена есть; для правок существующих PHP — встроенный `Edit` (Serena `replace_content` ломает EOL на Windows).
