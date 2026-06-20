@@ -168,3 +168,24 @@
 - **When:** AFTER Framework v2.0.0 has shipped AND stabilized in production for several weeks
 - **Spec location:** `D:\Projects\woodev_theme\docs\superpowers\specs\2026-05-13-woodev-ecosystem-orchestration-spec.md`
 - **Trigger action for the future agent:** when v2.0 is stable, do **NOT** auto-start implementation. Re-read the spec, verify the 5 prerequisites in §8 of the spec, weigh the 4 approaches against the post-v2.0 reality, then propose a plan to Maksim for approval. The spec itself contains explicit "do not implement" instructions for the agent who picks it up.
+
+---
+
+## Account ecosystem ideas — s26 (2026-06-21)
+
+> Operator's ideas after #8 (install-from-connector) shipped + the connector went live on prod. **DEFER until v2 is fully done AND all Woodev plugins are rewritten onto v2** — premature before that. Recorded so they aren't lost. Likely the client-side counterpart of the dormant ecosystem-orchestration spec above.
+
+### IDEA-1 — Connected-sites management in the user's account (woodev.ru ЛК)
+- **Goal:** show the user their connected sites in the woodev.ru account, with a «Отключить» button to revoke a connection right from the ЛК (server side). Later (low priority): stats/graphs — when each site connected, which plugins were installed via the connector.
+- **What's already done:** the connector's `woodev_account_connections` table already stores `user_id`/`customer_id`/`site_url`/`site_id`/`created`/`last_access` per connection — the data for the list exists. Disconnect = delete the row (`Connection_Store`).
+- **What's missing:** account-UI to list+revoke (filterable, per operator); install-event logging for the future stats (new log).
+- **Framework-side pairing (this repo):** when a connection is revoked server-side, the consumer still holds `woodev_account_data` → next signed request 401s. Teach `Woodev_Account_Connection` to detect a revoked/invalid connection (401/invalid-token) and **auto-clear the local state** (mirrors the remote-deactivation pattern), so the UI doesn't desync.
+- **Where (server side):** woodev_theme `woodev-account-connector` — cross-ref its `docs/FUTURE-BACKLOG.md`.
+
+### IDEA-2 (main) — Free "Woodev Plugins Updater" plugin = the framework-v2 hub/entry-point
+- **Goal:** a free plugin that simply bundles framework v2+ and adds the "Woodev" admin section (Плагины/Лицензии/Мои покупки/install/updates) — a thin wrapper / hub, like the WooCommerce.com Helper or the EDD updater.
+- **Why it matters:** today the "Woodev" section + account + catalog + install (#8) only appear if the user already has an active v2 plugin (the framework boots from a bundled copy). A new user with no Woodev plugin has no entry point — chicken-and-egg. The free Updater is the entry point: install it → connect account → browse catalog → install everything else from admin. It's also the natural home for account connection (connect once) and the future push-«Обновить».
+- **What's already proven:** `.wp-env-stand/woodev-stand.php` is effectively this wrapper (thin plugin that bundles `woodev/` + registers a v2 loader). Productize it: free, no own license, **plugin-agnostic hub**.
+- **Design points to settle:** the hub must render with ZERO feature-plugins active (catalog + account are already framework-level; the Лицензии page just aggregates — verify standalone); free → `is_need_license()` false; new `plugin_id` + free `download_id` on woodev.ru; multi-version bootstrap already picks the highest framework version → the Updater becomes the version-floor raiser for the whole fleet (a benefit).
+- **Interlock:** IDEA-2 (hub) + push-«Обновить» (woodev_theme backlog) + IDEA-1 (ЛК site management) = one "Woodev account ecosystem"; likely the core of the dormant ecosystem-orchestration spec.
+- **When:** after v2 ships AND all plugins are migrated onto v2 (operator's explicit gate).
