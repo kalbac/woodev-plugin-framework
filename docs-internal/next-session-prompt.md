@@ -1,36 +1,28 @@
-# Промт для следующей сессии (s28): реализовать Competitor Notification модуль
+# Промт для следующей сессии (s29)
 
-> Написан в конце s27 (2026-06-21). **Дизайн согласован с оператором, спека готова — реализацию начинаем с нуля в s28.** Версия НЕ бампнута (2.0.1 unreleased, `@since 2.0.2`).
+> Написан в конце s28 (2026-06-21). **s28 = Competitor Notification модуль — SHIPPED (PR #79 `f96e9ce`).** Версия НЕ бампнута (2.0.1 unreleased, `@since 2.0.2`).
 
 ## Старт сессии
 
 - framework: `docs-internal/CURRENT-STATE.md`, `docs-internal/GOTCHAS.md`, этот промт.
-- `main` синхронизирован, **729 unit**, всё зелёное (phpstan L3 + phpcs).
+- `main` синхронизирован (`f96e9ce`), **760 unit**, phpcs чисто.
+- ⚠️ **PHPStan локально на Windows падает** с `-1073741819` (нативный segfault, **не ошибка кода**) — гоча `phpstan-windows-parallel-worker-segfault`. Авторитетный гейт — **Linux CI** («Run PHPStan» в job Lint). Локально гоняй `composer phpcs` + `composer test:unit`.
 - **Серена есть** — для PHP-навигации (`find_symbol`/`get_symbols_overview`), для правок существующих PHP — встроенный `Edit` (Serena `replace_content` ломает EOL).
 
-## 🎯 Задача s28 — Competitor Notification модуль (рерайт v1 → v2)
+## Что сделано в s28 (контекст)
 
-**Спека готова и согласована:** `docs-internal/specs/2026-06-21-competitor-notification-design.md`. Первый шаг — **`writing-plans`** по этой спеке, затем реализация по TDD.
+Competitor Notification модуль: нейтральный движок `Competitor_Notification_Handler` + декларативные правила `Competitor_Rule` + рендереры (`WC_Admin_Notes_Renderer` по `class_exists(Note::class)`, `Admin_Notice_Renderer` фоллбэк). Opt-in через `Woodev_Plugin::get_competitor_notification_handler()` (default null) на `current_screen`. Умная recommend-ссылка через кэш покупок. Codex-ревью (3 HIGH/3 MED/1 LOW) пофикшено + re-critic. Спека/план: `docs-internal/specs|plans/2026-06-21-competitor-notification*`.
 
-Суть (5 решений из s27-брейншторма):
-1. Два режима через **декларативные правила** (`mode: recommend|conflict`); плагин отдаёт `get_competitor_rules(): array`, движок прогоняет.
-2. **Нейтральный движок + рендереры** (`Woodev\Framework\Competitor\…`): WC-Admin Notes когда есть WC, иначе admin-notice фоллбэк. **Выбор по `class_exists(Note::class)`** — фикс гочи `is-enhanced-admin-available-always-true`.
-3. **Умный таргет ссылки** recommend через account-экосистему (s24–s26): подключён+куплено → ведём на `admin.php?page=woodev-extensions` (install-кнопка #8); иначе → `our_url`. Деградация ок.
-4. **Дефолтные i18n-шаблоны** во фреймворке (per mode), маппинг «конкурент→продукт» — в плагине. Без центрального реестра.
-5. **Уважать закрытие**, авто-удаление ноты при деактивации конкурента, без форс-всплытия.
+**Вне scope (на будущее):** миграция yandex-подкласса на новый API — при переписывании плагина на v2 (тогда же удалить старый `woodev/handlers/competitor-notification.php` из плагина). Реестр конкурентов — отклонён (YAGNI).
 
-Референс реальной логики (v1, для рерайта): `woocommerce-yandex-delivery/woodev/handlers/competitor-notification.php` + `…/includes/class-plugin-competitor-notices.php`. Субстрат в v2: `Woodev_Notes_Helper` (`woodev/admin/class-notes-helper.php`). Подключение как подсистема — паттерн `init_*_handler()` в `class-plugin.php` (opt-in, как setup wizard).
+## 🎯 Кандидаты на s29 (выбор за оператором)
 
-Открытые plan-time развилки (спека §10): точный accessor «куплено по download_id» на `Woodev_Account_Purchases`; нужен ли `?highlight={id}` на странице extensions; точка триггера (`admin_init` vs wc-admin hook, не на фронте).
-
-Вне scope: миграция yandex-подкласса (при переписывании плагина), реальная install-механика (#8 готова), Setup Wizard (OB-10).
+- **Shipping module** (большой, нужно участие оператора; он отдельно напишет черновик `SHIPPING-PLANS.md`) — скелет богатый, но **не валидирован реальным плагином**: `admin/views/html-admin-shipping-method-status.php` ~30% стаб, нет setup-wizard, **нет абстракции label/export**, JS/CSS не проверены, webhook не валидирован на yandex. План: conformance-аудит против 3 референсов → закрыть дыры → пилот yandex (ПВЗ). Хороший autodev-loop кандидат.
+- **OB-10 Setup Wizard** — отдельный брейншторм (сначала аудит состояния `Woodev_Plugin_Setup_Wizard`).
+- **payment-gateway trait extraction** (`class-payment-gateway.php` ~3,542 строк) — autodev-loop.
+- **review #4** — `array()`→`[]` (~797) + type declarations + `@since` sweep + включить `Generic.Arrays.DisallowLongArraySyntax`.
+- **OB-6 dead-file sweep**.
 
 ## Гигиена
 
-`@since 2.0.2`. Публичные `docs/` не трогаем. **Composer только в dev/тестах, не в плагинах.** После добавления класса фреймворка — `php bin/generate-class-map.php` + коммит карты (гоча `framework-classmap-autoload-vendored-boot`). Новый код PSR-4 (`Woodev\Framework\*`). Мерж: ветка → PR → зелёный CI (проверь, что unit-матрица реально прошла) → `--squash --delete-branch` (НЕ `--auto`). Codex-ревью на архитектурно-чувствительное; находки в неавтономном режиме не автофиксить — спрашивать.
-
-## Прочие кандидаты (после competitor, на выбор)
-
-- **Shipping module** (большой, нужно участие оператора; он отдельно напишет черновик `SHIPPING-PLANS.md`) — аудит против 3 референсов → закрыть дыры → пилот yandex.
-- **OB-10 Setup Wizard** — отдельный брейншторм (сначала аудит состояния).
-- payment-gateway trait extraction · review #4 (`array()`→`[]` + typing) · OB-6 dead-file sweep — кандидаты на возврат **autodev-loop**.
+`@since 2.0.2`. Публичные `docs/` не трогаем. **Composer только в dev/тестах, не в плагинах.** После добавления класса фреймворка — `php bin/generate-class-map.php` + коммит карты (гоча `framework-classmap-autoload-vendored-boot`). Новый код PSR-4 (`Woodev\Framework\*`). Мерж: ветка → PR → зелёный CI (проверь, что unit-матрица **и** «Run PHPStan» реально прошли) → `--squash --delete-branch` (НЕ `--auto`). Codex-ревью на архитектурно-чувствительное; находки в неавтономном режиме не автофиксить — спрашивать.

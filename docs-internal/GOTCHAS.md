@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
-> **61 atomic gotchas in 17 namespaces** — update count when adding/removing.
-> Last updated: 2026-06-21 (session 27: +1 — `framework-classmap-autoload-vendored-boot` [`[framework/*]`]).
+> **62 atomic gotchas in 17 namespaces** — update count when adding/removing.
+> Last updated: 2026-06-21 (session 28: +1 — `phpstan-windows-parallel-worker-segfault` [`[tooling/*]`]).
 
 ## Index
 
@@ -106,6 +106,7 @@
 ### [tooling/*] — Dev tooling, codex critic
 - [tooling/codex-shell-sandbox-broken-windows] `codex exec -s read-only` shell-spawn fails on this Windows box (`CreateProcessAsUserW failed: 5`) — run critics with an INLINE bundle (spec+diffs+reference source in the prompt), never relying on codex shell access → [gotchas/codex-shell-sandbox-broken-windows.md](gotchas/codex-shell-sandbox-broken-windows.md) (s10)
 - [tooling/serena-eol-flip] Serena `replace_content` rewrites the whole file as CRLF on Windows even for a 1-line edit → breaks LF source-assertion tests / Assets-parity; `git diff` hides it (EOL-normalized). Use built-in `Edit` for existing source, or `sed -i 's/\r$//'` after → [gotchas/serena-replace-content-eol-flip.md](gotchas/serena-replace-content-eol-flip.md) (s25)
+- [tooling/phpstan-windows-segfault] PHPStan exits `-1073741819` (0xC0000005 native stack overflow in its PHPDoc type resolver) NON-deterministically on Windows — crashes even on untouched single files that passed minutes earlier; not a code error, cache-clear doesn't help. Confirm by analysing a file you didn't touch; rely on Linux CI ("Run PHPStan") as the authoritative gate → [gotchas/phpstan-windows-parallel-worker-segfault.md](gotchas/phpstan-windows-parallel-worker-segfault.md) (s28)
 
 ## Archive (resolved gotchas)
 <!-- Resolved gotchas move here; keep for 2 sessions then remove -->
