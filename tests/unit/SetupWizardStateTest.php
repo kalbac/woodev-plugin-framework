@@ -45,4 +45,14 @@ class SetupWizardStateTest extends TestCase {
 		$wizard = new State_Test_Wizard();
 		$wizard->complete_setup( 'skipped' );
 	}
+
+	public function test_complete_setup_updates_cache_without_reread(): void {
+		Functions\expect( 'update_option' )->once();
+		Functions\expect( 'get_option' )->never(); // state was just written; no DB re-read.
+
+		$wizard = new State_Test_Wizard();
+		$wizard->complete_setup( 'completed' );
+
+		$this->assertTrue( $wizard->is_complete() );
+	}
 }

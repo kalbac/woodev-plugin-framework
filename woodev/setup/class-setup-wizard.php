@@ -29,6 +29,15 @@ abstract class Setup_Wizard {
 	protected array $steps = [];
 
 	/**
+	 * Cached completion state ('' | 'completed' | 'skipped'); null until first read.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @var string|null
+	 */
+	protected $state = null;
+
+	/**
 	 * Constructs the wizard and wires its hooks.
 	 *
 	 * @since 2.0.2
@@ -176,15 +185,6 @@ abstract class Setup_Wizard {
 	}
 
 	/**
-	 * Cached completion state ('' | 'completed' | 'skipped'); null until first read.
-	 *
-	 * @since 2.0.2
-	 *
-	 * @var string|null
-	 */
-	protected $state = null;
-
-	/**
 	 * Option name storing completion state.
 	 *
 	 * @since 2.0.2
@@ -248,7 +248,7 @@ abstract class Setup_Wizard {
 	 *
 	 * @since 2.0.2
 	 *
-	 * @param string $state 'completed' (default) or 'skipped'.
+	 * @param string $state 'completed' (default) or 'skipped'; any other value normalises to 'completed'.
 	 * @return void
 	 */
 	public function complete_setup( string $state = 'completed' ): void {
