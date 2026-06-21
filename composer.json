@@ -43,6 +43,7 @@
             "woodev/shipping-method",
             "woodev/utilities",
             "woodev/bootstrap.php",
+            "woodev/loader.php",
             "woodev/class-framework-autoloader.php",
             "woodev/class-framework-plugin-loader-definition.php",
             "woodev/class-framework-resolver.php",
