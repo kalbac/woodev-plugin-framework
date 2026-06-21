@@ -29,6 +29,9 @@
 ### OB-5 — Study the godaddy fork for v2 patterns to borrow
 - Review https://github.com/godaddy-wordpress/wc-plugin-framework for `Traits` / `Enums` / `Abilities` worth adopting in v2. (Also noted in PLANS.md §4 and the program-tracker "Open follow-ups".) Candidate for a GPT-5.x research delegation.
 
+### OB-10 — Audit + rework Setup Wizard (brainstorm later)
+- Framework has an opt-in onboarding wizard (`Woodev_Plugin_Setup_Wizard`, `woodev/admin/abstract-plugin-admin-setup-wizard.php` + payment-gateway variant `abstract-payment-gateway-plugin-admin-setup-wizard.php`) that has **never been touched/reviewed** in v2. Operator wants a dedicated **brainstorm** for it (s27 — раздельно от competitor-модуля). First step: state-of-the-module audit (what it does today, coupling, whether it survived clean-break intact), then brainstorm the v2 rework.
+
 ### OB-6 — Dead-file sweep in v2
 - Many files in the v2 tree are effectively unused (loaded nowhere / never referenced). Do a dead-code/dead-file audit and remove them. Pairs well with the trait-extraction + the big array/typing review.
 
