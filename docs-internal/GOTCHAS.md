@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
-> **60 atomic gotchas in 17 namespaces** — update count when adding/removing.
-> Last updated: 2026-06-20 (session 26: +1 — `edd-sl-package-download-domain-bound` [`[licensing/*]`]).
+> **61 atomic gotchas in 17 namespaces** — update count when adding/removing.
+> Last updated: 2026-06-21 (session 27: +1 — `framework-classmap-autoload-vendored-boot` [`[framework/*]`]).
 
 ## Index
 
@@ -45,6 +45,7 @@
 ### [framework/*] — Framework internals
 - [framework/includes-wiring] New framework class files must be `require_once`'d in the right `includes()` (dependency order; WC files gated) — the Composer classmap loads them in tests but production fatals if unwired → [gotchas/dispatcher-files-unwired-in-includes.md](gotchas/dispatcher-files-unwired-in-includes.md) (session 2)
 - [framework/includes-wiring] `class-item-implementation.php` implemented `Woodev_Box_Packer_Item_With_Product` whose interface file was never required in `includes()` → release-blocking WSOD on every real vendored v2 boot (no runtime autoloader); classmap masked it in tests; first live boot caught it → [gotchas/box-packer-interface-unwired-in-includes.md](gotchas/box-packer-interface-unwired-in-includes.md) (s11)
+- [framework/autoload] Framework classes must be in the generated `woodev/class-map.php` (regenerate via `bin/generate-class-map.php`) or they WSOD on a real vendored boot — Composer masks missing/stale entries in tests; the runtime spl_autoload (no Composer in shipped plugins) is the only resolver in prod. Completeness test guards missing AND moved files. Also: B-2 older-v2-mixed-fleet pre-release blocker → [gotchas/framework-classmap-autoload-vendored-boot.md](gotchas/framework-classmap-autoload-vendored-boot.md) (s27)
 
 ### [testing/*] — Testing patterns
 - [testing/integration] Integration fixtures need the framework mapped at the bootstrap's load path (`woodev-framework/tests/_fixtures/*/woodev` in `.wp-env.json`), not just the `wp-content/plugins/*` mount — the v2 resolver requires each fixture's bundled `woodev/class-plugin.php` → [gotchas/wpenv-resolver-fixture-mapping.md](gotchas/wpenv-resolver-fixture-mapping.md) (2026-06-08)
