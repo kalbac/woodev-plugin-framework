@@ -125,29 +125,6 @@ class FrameworkResolverTest extends TestCase {
 	}
 
 	/**
-	 * Payment and shipping capabilities are early WooCommerce hints, not standalone platforms.
-	 */
-	public function test_rejects_specialized_capabilities_on_wordpress_platform(): void {
-		$errors     = [];
-		$definition = \Woodev\Framework\Framework_Plugin_Loader_Definition::from_array(
-			$this->get_loader_definition(
-				[
-					'platform'     => \Woodev\Framework\Framework_Plugin_Loader_Definition::PLATFORM_WORDPRESS,
-					'requirements' => [
-						'php'       => '7.4',
-						'wordpress' => '6.3',
-					],
-					'capabilities' => [ \Woodev\Framework\Framework_Plugin_Loader_Definition::CAPABILITY_PAYMENT_GATEWAY ],
-				]
-			),
-			$errors
-		);
-
-		$this->assertNull( $definition );
-		$this->assertContains( 'Payment gateway capability requires the woocommerce platform.', $errors );
-	}
-
-	/**
 	 * EDD loader definitions are reserved for a future spec and rejected in v2.0.
 	 */
 	public function test_rejects_reserved_edd_platform(): void {
@@ -370,10 +347,6 @@ class FrameworkResolverTest extends TestCase {
 						'php'         => '7.4',
 						'wordpress'   => '6.3',
 						'woocommerce' => '7.0',
-					],
-					'capabilities' => [
-						\Woodev\Framework\Framework_Plugin_Loader_Definition::CAPABILITY_PAYMENT_GATEWAY,
-						\Woodev\Framework\Framework_Plugin_Loader_Definition::CAPABILITY_SHIPPING_METHOD,
 					],
 					'callback'     => static function () use ( &$loaded ): void {
 						if ( ! class_exists( 'Resolver_Callback_Payment_Plugin', false ) ) {

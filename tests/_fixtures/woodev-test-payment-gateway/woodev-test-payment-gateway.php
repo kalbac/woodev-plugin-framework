@@ -60,9 +60,6 @@ function woodev_test_payment_gateway_plugin_loader_definition(): array {
 		],
 		'main_class'        => 'Woodev_Test_Payment_Gateway_Plugin',
 		'callback'          => 'woodev_test_payment_gateway_plugin_init',
-		'capabilities'      => [
-			\Woodev\Framework\Framework_Plugin_Loader_Definition::CAPABILITY_PAYMENT_GATEWAY,
-		],
 	];
 }
 

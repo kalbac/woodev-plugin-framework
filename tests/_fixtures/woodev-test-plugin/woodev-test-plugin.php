@@ -61,9 +61,6 @@ function woodev_test_plugin_loader_definition(): array {
 		],
 		'main_class'        => 'Woodev_Test_Plugin',
 		'callback'          => 'woodev_test_plugin_init',
-		'capabilities'      => [
-			\Woodev\Framework\Framework_Plugin_Loader_Definition::CAPABILITY_WORDPRESS_PLUGIN,
-		],
 	];
 }
 

@@ -17,6 +17,14 @@ final class FrameworkAutoloaderTest extends TestCase {
 	/** @var string[] Temp dirs to clean up. */
 	private array $temp_dirs = [];
 
+	protected function setUp(): void {
+		parent::setUp();
+		// Other tests (e.g. the resolver suite) register the autoloader against the real
+		// framework root and never reset it; start each test here from a clean slate so the
+		// idempotent register() is not a no-op against a stale base path.
+		\Woodev_Framework_Autoloader::reset();
+	}
+
 	protected function tearDown(): void {
 		\Woodev_Framework_Autoloader::reset();
 
