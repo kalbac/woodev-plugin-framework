@@ -90,6 +90,12 @@
 - **Issuer `:8090` — KEPT, do NOT touch.** It is effectively a copy of prod (woodev_theme = local woodev.ru + EDD SL + deactivator, with test data); operator uses it independently. Container `c8ec47a5...-wordpress-1`. Authority pubkey `QSisoK0CDOmIOqGHvilMe+4mB/LMRFHf9hi6BxatfMk=`. The rig-only `zz-rig-host-rewrite.php` mu-plugin was **removed in s28** (from the container's `wp-content/mu-plugins/` and the `woodev_theme/` source), so :8090 is now a clean prod copy. NB: `docker exec ... rm /var/www/...` needs `MSYS_NO_PATHCONV=1` on Git-Bash or the path is mangled and the rm silently no-ops (gotcha `wpenv-windows-gitbash-path-mangling`).
 - Drive via `docker exec <cli> wp eval-file ...` (cyrillic/quoting breaks inline `wp eval` — always eval-file). Do NOT run `do_action('admin_init')` in wp-cli (WC OrderAttributionController fatals). All rig traps: gotcha `wp-safe-remote-request-local-rig`.
 
+### Docker inventory — DO NOT blindly prune (s28)
+
+- **`wordpress-test` stack** (`wordpress-test` + `wp-mysql` + `wp-phpmyadmin`, volume `wordpress-test_db_data`, ~`:8080`) is the operator's **production-plugins test instance — ALL real plugins in one env** (intentional single instance, to test plugin↔plugin compatibility). **NEVER delete it or its volume, even when its containers are `Exited`.**
+- Because that volume is unattached while the stack is down, **never run `docker volume prune` / `docker system prune --volumes` here** — it would wipe `wordpress-test_db_data`. Clean docker only surgically: `docker builder prune`, `docker image prune` (dangling), and explicitly-identified orphans.
+- Project wp-env = `de59f74e…` (dev `:8888` + tests `:8889`); issuer = `c8ec47a5…` (`:8090`). Both KEEP.
+
 ## Infrastructure Reference
 
 - **Version:** `Woodev_Plugin::VERSION` (in `woodev/class-plugin.php`) = 2.0.1 (unreleased).
