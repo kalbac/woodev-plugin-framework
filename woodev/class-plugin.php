@@ -67,6 +67,9 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		/** @var Woodev_Plugin_Setup_Wizard handler instance */
 		protected $setup_wizard_handler;
 
+		/** @var \Woodev\Framework\Competitor\Competitor_Notification_Handler|null competitor notification engine (opt-in) */
+		protected $competitor_handler;
+
 		/**
 		 * Blocks handler instance.
 		 *
@@ -148,6 +151,9 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 
 			// build the setup handler instance
 			$this->init_setup_wizard_handler();
+
+			// build the competitor notification handler instance (opt-in)
+			$this->init_competitor_handler();
 
 			// load the admin settings pages
 			$this->load_admin_pages();
@@ -283,6 +289,49 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 			require_once $this->get_framework_path() . '/admin/abstract-plugin-admin-setup-wizard.php';
 		}
 
+		/**
+		 * Builds the competitor notification handler (opt-in).
+		 *
+		 * Stores the plugin's handler when one is provided. Plugins opt in by
+		 * overriding get_competitor_notification_handler() to return their
+		 * subclass; the default returns null (feature off).
+		 *
+		 * @since 2.0.2
+		 */
+		protected function init_competitor_handler() {
+			$this->competitor_handler = $this->get_competitor_notification_handler();
+		}
+
+		/**
+		 * Gets the plugin's competitor notification handler, or null when the
+		 * plugin does not opt in. Plugins override this to return their subclass
+		 * of \Woodev\Framework\Competitor\Competitor_Notification_Handler.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return \Woodev\Framework\Competitor\Competitor_Notification_Handler|null
+		 */
+		protected function get_competitor_notification_handler() {
+			return null;
+		}
+
+		/**
+		 * Runs competitor detection on an admin screen. Hooked to current_screen
+		 * (admin-only, never the front end). No-op when the plugin has not opted in.
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.2
+		 */
+		public function run_competitor_notices() {
+
+			if ( ! is_admin() || null === $this->competitor_handler ) {
+				return;
+			}
+
+			$this->competitor_handler->run();
+		}
+
 		private function add_hooks() {
 
 			// initialize the plugin
@@ -307,6 +356,9 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 			// add the admin notices
 			add_action( 'admin_notices', array( $this, 'add_admin_notices' ) );
 			add_action( 'admin_footer', array( $this, 'add_delayed_admin_notices' ) );
+
+			// run competitor detection on admin screens (never the front end)
+			add_action( 'current_screen', array( $this, 'run_competitor_notices' ) );
 
 			// add a 'Configure' link to the plugin action links
 			add_filter(
