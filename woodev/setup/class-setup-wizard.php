@@ -174,4 +174,86 @@ abstract class Setup_Wizard {
 	public function get_required_capability(): string {
 		return $this->required_capability;
 	}
+
+	/**
+	 * Cached completion state ('' | 'completed' | 'skipped'); null until first read.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @var string|null
+	 */
+	protected $state = null;
+
+	/**
+	 * Option name storing completion state.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @return string
+	 */
+	protected function get_complete_option_name(): string {
+		return "woodev_{$this->get_id()}_setup_wizard_complete";
+	}
+
+	/**
+	 * Gets the completion state, reading the option once per request.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @return string '' | 'completed' | 'skipped'
+	 */
+	public function get_state(): string {
+		if ( null === $this->state ) {
+			$this->state = (string) get_option( $this->get_complete_option_name(), '' );
+		}
+
+		return $this->state;
+	}
+
+	/**
+	 * Whether the wizard was completed.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @return bool
+	 */
+	public function is_complete(): bool {
+		return 'completed' === $this->get_state();
+	}
+
+	/**
+	 * Whether the wizard was skipped.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @return bool
+	 */
+	public function is_skipped(): bool {
+		return 'skipped' === $this->get_state();
+	}
+
+	/**
+	 * Whether the wizard is finished (completed or skipped).
+	 *
+	 * @since 2.0.2
+	 *
+	 * @return bool
+	 */
+	public function is_finished(): bool {
+		return '' !== $this->get_state();
+	}
+
+	/**
+	 * Persists completion state (server-side authority, not a client flag).
+	 *
+	 * @since 2.0.2
+	 *
+	 * @param string $state 'completed' (default) or 'skipped'.
+	 * @return void
+	 */
+	public function complete_setup( string $state = 'completed' ): void {
+		$value = 'skipped' === $state ? 'skipped' : 'completed';
+		update_option( $this->get_complete_option_name(), $value );
+		$this->state = $value;
+	}
 }
