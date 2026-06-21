@@ -62,7 +62,10 @@ foreach ( $map as $fqcn => $path ) {
 }
 $export .= "];\n";
 
-file_put_contents( $framework . '/class-map.php', $export );
+if ( false === file_put_contents( $framework . '/class-map.php', $export ) ) {
+	fwrite( STDERR, "Failed to write woodev/class-map.php\n" );
+	exit( 1 );
+}
 
 fwrite( STDOUT, sprintf( "Wrote %d entries to woodev/class-map.php\n", count( $map ) ) );
 
@@ -98,7 +101,12 @@ function woodev_extract_symbols( string $source ): array {
 			continue;
 		}
 
-		if ( is_array( $token ) && in_array( $token[0], [ T_CLASS, T_INTERFACE, T_TRAIT ], true ) ) {
+		$class_like = [ T_CLASS, T_INTERFACE, T_TRAIT ];
+		if ( defined( 'T_ENUM' ) ) {
+			$class_like[] = T_ENUM;
+		}
+
+		if ( is_array( $token ) && in_array( $token[0], $class_like, true ) ) {
 			// Skip `::class` and anonymous classes.
 			$prev = $tokens[ $i - 1 ] ?? null;
 			if ( is_array( $prev ) && T_DOUBLE_COLON === $prev[0] ) {

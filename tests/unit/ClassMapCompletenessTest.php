@@ -28,8 +28,9 @@ final class ClassMapCompletenessTest extends TestCase {
 			'woodev/class-framework-autoloader.php',
 		];
 
-		$missing  = [];
-		$iterator = new \RecursiveIteratorIterator(
+		$missing    = [];
+		$mislocated = [];
+		$iterator   = new \RecursiveIteratorIterator(
 			new \RecursiveDirectoryIterator( $root . '/woodev', \FilesystemIterator::SKIP_DOTS )
 		);
 
@@ -47,6 +48,11 @@ final class ClassMapCompletenessTest extends TestCase {
 			foreach ( $this->extract_symbols( (string) file_get_contents( $file->getPathname() ) ) as $fqcn ) {
 				if ( ! array_key_exists( $fqcn, $map ) ) {
 					$missing[] = $fqcn . ' (' . $relative . ')';
+				} elseif ( $map[ $fqcn ] !== $relative ) {
+					// Catches a moved/renamed file whose stale map entry points at the old
+					// path: the autoloader would silently fail to load it (is_readable guard),
+					// causing a downstream "class not found" WSOD on a real vendored boot.
+					$mislocated[] = sprintf( '%s mapped to %s but declared in %s', $fqcn, $map[ $fqcn ], $relative );
 				}
 			}
 		}
@@ -55,6 +61,12 @@ final class ClassMapCompletenessTest extends TestCase {
 			[],
 			$missing,
 			"Classmap is stale — run `php bin/generate-class-map.php`. Missing:\n" . implode( "\n", $missing )
+		);
+
+		$this->assertSame(
+			[],
+			$mislocated,
+			"Classmap has stale paths — run `php bin/generate-class-map.php`. Mislocated:\n" . implode( "\n", $mislocated )
 		);
 	}
 
@@ -90,7 +102,12 @@ final class ClassMapCompletenessTest extends TestCase {
 				continue;
 			}
 
-			if ( is_array( $token ) && in_array( $token[0], [ T_CLASS, T_INTERFACE, T_TRAIT ], true ) ) {
+			$class_like = [ T_CLASS, T_INTERFACE, T_TRAIT ];
+			if ( defined( 'T_ENUM' ) ) {
+				$class_like[] = T_ENUM;
+			}
+
+			if ( is_array( $token ) && in_array( $token[0], $class_like, true ) ) {
 				$prev = $tokens[ $i - 1 ] ?? null;
 				if ( is_array( $prev ) && T_DOUBLE_COLON === $prev[0] ) {
 					continue;
