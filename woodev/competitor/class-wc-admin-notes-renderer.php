@@ -35,6 +35,17 @@ final class WC_Admin_Notes_Renderer implements Competitor_Notice_Renderer {
 	}
 
 	/**
+	 * Whether WC Admin Notes are available — the gotcha-correct gate
+	 * (class_exists( Note::class ), NOT the always-true is_enhanced_admin_available()).
+	 * Owning this check here keeps the WooCommerce reference out of the engine.
+	 *
+	 * @since 2.0.2
+	 */
+	public static function is_available(): bool {
+		return class_exists( Note::class );
+	}
+
+	/**
 	 * @since 2.0.2
 	 *
 	 * @param Competitor_Rule     $rule the rule being rendered
@@ -42,7 +53,7 @@ final class WC_Admin_Notes_Renderer implements Competitor_Notice_Renderer {
 	 */
 	public function render( Competitor_Rule $rule, array $note ): void {
 
-		if ( ! class_exists( Note::class ) ) {
+		if ( ! self::is_available() ) {
 			return;
 		}
 
@@ -60,24 +71,25 @@ final class WC_Admin_Notes_Renderer implements Competitor_Notice_Renderer {
 
 		try {
 
-			$wc_note = Woodev_Notes_Helper::get_note_with_name( $rule->get_note_name() );
-
-			if ( ! $wc_note ) {
-				$wc_note = new Note();
-				$wc_note->set_name( $rule->get_note_name() );
-				$wc_note->set_title( $note['title'] );
-				$wc_note->set_content( $note['content'] );
-				$wc_note->set_source( $this->source );
-				$wc_note->set_type( $note['type'] );
-				$wc_note->set_layout( $note['layout'] );
+			// Create once (spec §5): if our per-plugin note already exists, the WC
+			// inbox owns it from here (dismissal, etc.) — do not re-save on every
+			// admin load, and never force-resurface.
+			if ( Woodev_Notes_Helper::get_note_with_name( $this->note_name( $rule ) ) ) {
+				return;
 			}
+
+			$wc_note = new Note();
+			$wc_note->set_name( $this->note_name( $rule ) );
+			$wc_note->set_title( $note['title'] );
+			$wc_note->set_content( $note['content'] );
+			$wc_note->set_source( $this->source );
+			$wc_note->set_type( $this->map_type( (string) $note['type'] ) );
+			$wc_note->set_layout( $note['layout'] );
 
 			if ( ! empty( $note['image'] ) ) {
 				$wc_note->set_layout( 'thumbnail' );
 				$wc_note->set_image( $note['image'] );
 			}
-
-			$wc_note->set_actions( [] );
 
 			foreach ( (array) $note['actions'] as $action ) {
 
@@ -122,8 +134,33 @@ final class WC_Admin_Notes_Renderer implements Competitor_Notice_Renderer {
 			return;
 		}
 
-		if ( Woodev_Notes_Helper::note_with_name_exists( $rule->get_note_name() ) ) {
-			Notes::delete_notes_with_name( $rule->get_note_name() );
+		if ( Woodev_Notes_Helper::note_with_name_exists( $this->note_name( $rule ) ) ) {
+			Notes::delete_notes_with_name( $this->note_name( $rule ) );
 		}
+	}
+
+	/**
+	 * The plugin-namespaced WC note name. WC Admin Notes are a single global
+	 * table keyed by name, so the rule's generic name is prefixed with this
+	 * plugin's source — otherwise two Woodev plugins flagging the same competitor
+	 * would update/delete each other's note.
+	 *
+	 * @since 2.0.2
+	 */
+	private function note_name( Competitor_Rule $rule ): string {
+		return $this->source . '-' . $rule->get_note_name();
+	}
+
+	/**
+	 * Maps a neutral engine note type to the WC Admin Note constant.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @param string $type neutral type (Competitor_Notification_Handler::TYPE_*)
+	 */
+	private function map_type( string $type ): string {
+		return Competitor_Notification_Handler::TYPE_ERROR === $type
+			? Note::E_WC_ADMIN_NOTE_ERROR
+			: Note::E_WC_ADMIN_NOTE_UPDATE;
 	}
 }

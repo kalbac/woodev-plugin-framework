@@ -262,6 +262,20 @@ class CompetitorNotificationHandlerTest extends TestCase {
 		$this->assertStringContainsString( 'NONCE', $primary['url'] );
 	}
 
+	public function test_conflict_deactivate_link_targets_the_active_slug_not_the_first(): void {
+		// Rule lists two competitors; only the SECOND is active. The deactivate
+		// link must target the active one, not the first declared (H-2).
+		$plugin  = $this->make_plugin( [ 'second-rival.php' ] );
+		$handler = $this->make_handler(
+			$plugin,
+			[ [ 'detect' => [ 'first-rival.php', 'second-rival.php' ], 'mode' => 'conflict' ] ]
+		);
+		$handler->run();
+		$primary = $this->primary_action( $handler->spy->rendered[0]['note'] );
+		$this->assertStringContainsString( 'plugin=second-rival.php', $primary['url'] );
+		$this->assertStringNotContainsString( 'first-rival.php', $primary['url'] );
+	}
+
 	public function test_invalid_rule_is_skipped_not_fatal(): void {
 		$plugin  = $this->make_plugin( [ 'cdek.php' ] );
 		$handler = $this->make_handler(

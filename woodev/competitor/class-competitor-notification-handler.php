@@ -6,7 +6,6 @@ defined( 'ABSPATH' ) || exit;
 
 use Woodev_Plugin;
 use Woodev_Account_Connection;
-use Automattic\WooCommerce\Admin\Notes\Note;
 use InvalidArgumentException;
 
 /**
@@ -16,12 +15,20 @@ use InvalidArgumentException;
  * screen load run() normalizes every raw rule to a Competitor_Rule, detects
  * whether any competitor slug is active, suppresses recommend rules when our
  * equivalent is installed, then asks the resolved renderer to create/update or
- * delete the note. The renderer is chosen by class_exists( Note::class ) — the
- * gotcha-correct gate, NOT is_enhanced_admin_available() (always true).
+ * delete the note. The engine emits a renderer-agnostic note payload (neutral
+ * 'type' strings); the WC-specific gate (class_exists( Note::class ) — the
+ * gotcha-correct one, NOT is_enhanced_admin_available()) lives inside the
+ * renderer layer, so this engine carries no WooCommerce reference.
  *
  * @since 2.0.2
  */
 abstract class Competitor_Notification_Handler {
+
+	/** @since 2.0.2 neutral note type → WC E_WC_ADMIN_NOTE_UPDATE in the WC renderer */
+	public const TYPE_UPDATE = 'update';
+
+	/** @since 2.0.2 neutral note type → WC E_WC_ADMIN_NOTE_ERROR in the WC renderer */
+	public const TYPE_ERROR = 'error';
 
 	/** @var Woodev_Plugin owning plugin */
 	private Woodev_Plugin $plugin;
@@ -67,29 +74,34 @@ abstract class Competitor_Notification_Handler {
 				continue;
 			}
 
-			if ( ! $this->is_competitor_active( $rule ) || $this->is_suppressed( $rule ) ) {
+			$active_slug = $this->get_active_slug( $rule );
+
+			if ( null === $active_slug || $this->is_suppressed( $rule ) ) {
 				$renderer->delete( $rule );
 				continue;
 			}
 
-			$renderer->render( $rule, $this->build_note( $rule ) );
+			$renderer->render( $rule, $this->build_note( $rule, $active_slug ) );
 		}
 	}
 
 	/**
-	 * True when ANY of the rule's detect slugs is an active plugin.
+	 * The FIRST of the rule's detect slugs that is an active plugin, or null
+	 * when none is active. Used both for detection (null ⇒ not present) and to
+	 * target the conflict deactivate link at the actually-active competitor (not
+	 * blindly the first declared slug).
 	 *
 	 * @since 2.0.2
 	 */
-	protected function is_competitor_active( Competitor_Rule $rule ): bool {
+	protected function get_active_slug( Competitor_Rule $rule ): ?string {
 
 		foreach ( $rule->get_detect_slugs() as $slug ) {
 			if ( $this->plugin->is_plugin_active( $slug ) ) {
-				return true;
+				return $slug;
 			}
 		}
 
-		return false;
+		return null;
 	}
 
 	/**
@@ -115,9 +127,12 @@ abstract class Competitor_Notification_Handler {
 	 *
 	 * @since 2.0.2
 	 *
+	 * @param Competitor_Rule $rule        the active rule
+	 * @param string          $active_slug the detect slug found active (conflict deactivate target)
+	 *
 	 * @return array<string,mixed>
 	 */
-	protected function build_note( Competitor_Rule $rule ): array {
+	protected function build_note( Competitor_Rule $rule, string $active_slug ): array {
 
 		if ( $rule->is_recommend() ) {
 
@@ -134,7 +149,7 @@ abstract class Competitor_Notification_Handler {
 				$this->dismiss_action(),
 			];
 
-			$type = $this->note_type_update();
+			$type = self::TYPE_UPDATE;
 
 		} else {
 
@@ -145,13 +160,13 @@ abstract class Competitor_Notification_Handler {
 				[
 					'name'    => 'deactivate-plugin',
 					'label'   => sprintf( 'Отключить плагин %s', $this->competitor_label( $rule ) ),
-					'url'     => $this->get_deactivation_url( $rule ),
+					'url'     => $this->get_deactivation_url( $active_slug ),
 					'primary' => true,
 				],
 				$this->dismiss_action(),
 			];
 
-			$type = $this->note_type_error();
+			$type = self::TYPE_ERROR;
 		}
 
 		return [
@@ -218,18 +233,22 @@ abstract class Competitor_Notification_Handler {
 	}
 
 	/**
-	 * Nonce'd deactivate link for a conflict rule's first detect slug.
+	 * Nonce'd deactivate link for the active competitor plugin file.
+	 *
+	 * The plugin file is passed RAW to add_query_arg() (which URL-encodes the
+	 * value once); pre-encoding here would double-encode it and break WordPress's
+	 * nonce check, which is signed against the raw basename.
 	 *
 	 * @since 2.0.2
+	 *
+	 * @param string $plugin_file the active competitor plugin basename
 	 */
-	protected function get_deactivation_url( Competitor_Rule $rule ): string {
-
-		$plugin_file = $rule->get_detect_slugs()[0];
+	protected function get_deactivation_url( string $plugin_file ): string {
 
 		$url = add_query_arg(
 			[
 				'action'   => 'deactivate',
-				'plugin'   => urlencode( $plugin_file ),
+				'plugin'   => $plugin_file,
 				'_wpnonce' => wp_create_nonce( sprintf( 'deactivate-plugin_%s', $plugin_file ) ),
 			],
 			admin_url( 'plugins.php' )
@@ -260,7 +279,15 @@ abstract class Competitor_Notification_Handler {
 	 */
 	protected function owns_download( int $download_id ): bool {
 
-		$cached = get_transient( 'woodev_account_purchases' );
+		// Best-effort read of the purchases cache the account REST controller
+		// populates; reference its canonical key const so a future rename can't
+		// silently desync this lookup. A cold/absent/malformed cache degrades to
+		// false → the public our_url (graceful degradation, by design — spec §6).
+		$key = class_exists( 'Woodev_REST_API_Account' )
+			? \Woodev_REST_API_Account::PURCHASES_CACHE_KEY
+			: 'woodev_account_purchases';
+
+		$cached = get_transient( $key );
 
 		if ( ! is_array( $cached ) || ! isset( $cached['purchased'] ) || ! is_array( $cached['purchased'] ) ) {
 			return false;
@@ -292,7 +319,7 @@ abstract class Competitor_Notification_Handler {
 	protected function get_renderer(): Competitor_Notice_Renderer {
 
 		if ( null === $this->renderer ) {
-			$this->renderer = class_exists( Note::class )
+			$this->renderer = WC_Admin_Notes_Renderer::is_available()
 				? new WC_Admin_Notes_Renderer( $this->plugin->get_id_dasherized() )
 				: new Admin_Notice_Renderer( $this->plugin->get_admin_notice_handler() );
 		}
@@ -307,23 +334,5 @@ abstract class Competitor_Notification_Handler {
 	 */
 	public function get_plugin(): Woodev_Plugin {
 		return $this->plugin;
-	}
-
-	/**
-	 * WC update note type, indirected so the engine has no hard WC dep at unit time.
-	 *
-	 * @since 2.0.2
-	 */
-	protected function note_type_update(): string {
-		return class_exists( Note::class ) ? Note::E_WC_ADMIN_NOTE_UPDATE : 'update';
-	}
-
-	/**
-	 * WC error note type, indirected so the engine has no hard WC dep at unit time.
-	 *
-	 * @since 2.0.2
-	 */
-	protected function note_type_error(): string {
-		return class_exists( Note::class ) ? Note::E_WC_ADMIN_NOTE_ERROR : 'error';
 	}
 }

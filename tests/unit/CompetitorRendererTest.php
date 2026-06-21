@@ -18,6 +18,7 @@ use Mockery;
 
 require_once dirname( __DIR__, 2 ) . '/woodev/competitor/class-competitor-rule.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/competitor/interface-competitor-notice-renderer.php';
+require_once dirname( __DIR__, 2 ) . '/woodev/competitor/class-competitor-notification-handler.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/competitor/class-admin-notice-renderer.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/admin/class-notes-helper.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/competitor/class-wc-admin-notes-renderer.php';
@@ -37,6 +38,37 @@ class CompetitorRendererTest extends TestCase {
 		$renderer->render( $rule, [ 'title' => 'T', 'content' => 'BODY', 'actions' => [] ] );
 
 		$this->assertTrue( true ); // Mockery verifies the expectation on tearDown.
+	}
+
+	public function test_admin_notice_renderer_appends_primary_action_link(): void {
+
+		\Brain\Monkey\Functions\when( 'esc_url' )->returnArg();
+		\Brain\Monkey\Functions\when( 'esc_html' )->returnArg();
+
+		$rule = new Competitor_Rule( [ 'detect' => 'cdek.php', 'mode' => 'recommend' ] );
+
+		$captured = '';
+		$handler  = Mockery::mock( 'Woodev_Admin_Notice_Handler' );
+		$handler->shouldReceive( 'add_admin_notice' )->once()->andReturnUsing(
+			static function ( $content ) use ( &$captured ) {
+				$captured = $content;
+			}
+		);
+
+		$renderer = new Admin_Notice_Renderer( $handler );
+		$renderer->render(
+			$rule,
+			[
+				'content' => 'BODY',
+				'actions' => [
+					[ 'name' => 'go', 'label' => 'Перейти', 'url' => 'https://woodev.ru/x', 'primary' => true ],
+					[ 'name' => 'dismiss', 'label' => 'Скрыть' ],
+				],
+			]
+		);
+
+		$this->assertStringContainsString( 'BODY', $captured );
+		$this->assertStringContainsString( '<a href="https://woodev.ru/x">Перейти</a>', $captured );
 	}
 
 	public function test_admin_notice_renderer_delete_is_noop(): void {
@@ -77,6 +109,7 @@ class CompetitorRendererTest extends TestCase {
 		require_once dirname( __DIR__, 2 ) . '/woodev/admin/class-notes-helper.php';
 		require_once dirname( __DIR__, 2 ) . '/woodev/competitor/class-competitor-rule.php';
 		require_once dirname( __DIR__, 2 ) . '/woodev/competitor/interface-competitor-notice-renderer.php';
+		require_once dirname( __DIR__, 2 ) . '/woodev/competitor/class-competitor-notification-handler.php';
 		require_once dirname( __DIR__, 2 ) . '/woodev/competitor/class-wc-admin-notes-renderer.php';
 
 		\Brain\Monkey\Functions\when( 'wp_parse_args' )->alias(
@@ -103,7 +136,8 @@ class CompetitorRendererTest extends TestCase {
 
 		$this->assertNotEmpty( \Automattic\WooCommerce\Admin\Notes\Note::$saved );
 		$saved = \Automattic\WooCommerce\Admin\Notes\Note::$saved[0];
-		$this->assertSame( 'woodev-competitor-recommend-cdek-php', $saved['name'] );
+		// Note name is namespaced by the plugin source to avoid cross-plugin collision.
+		$this->assertSame( 'woodev-test-plugin-woodev-competitor-recommend-cdek-php', $saved['name'] );
 		$this->assertSame( 'Заголовок', $saved['title'] );
 		$this->assertSame( 'woodev-test-plugin', $saved['source'] );
 	}
