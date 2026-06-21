@@ -35,4 +35,11 @@ class SetupWizardStepTest extends TestCase {
 		$this->assertSame( $save, $step->get_on_save() );
 		$this->assertFalse( $step->is_visible() );
 	}
+
+	public function test_content_step_accepts_plain_string_markup(): void {
+		$step = Step::content( 'info', 'Инфо', '<p>Привет</p>' );
+
+		$this->assertSame( Step::TYPE_CONTENT, $step->get_type() );
+		$this->assertSame( '<p>Привет</p>', $step->get_content() );
+	}
 }

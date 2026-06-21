@@ -49,12 +49,12 @@ final class Step {
 	 * @since 2.0.2
 	 */
 	private function __construct( string $id, string $label, string $type ) {
-		$this->id                 = $id;
-		$this->label              = $label;
-		$this->type               = $type;
-		$this->setting_ids        = [];
-		$this->content            = null;
-		$this->on_save            = null;
+		$this->id = $id;
+		$this->label = $label;
+		$this->type = $type;
+		$this->setting_ids = [];
+		$this->content = null;
+		$this->on_save = null;
 		$this->visibility_callback = null;
 	}
 
