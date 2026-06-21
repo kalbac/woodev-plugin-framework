@@ -25,11 +25,6 @@ if ( ! class_exists( Framework_Plugin_Loader_Definition::class, false ) ) :
 		public const PLATFORM_WOOCOMMERCE = 'woocommerce';
 		public const PLATFORM_EDD         = 'edd';
 
-		public const CAPABILITY_WORDPRESS_PLUGIN   = 'wordpress_plugin';
-		public const CAPABILITY_WOOCOMMERCE_PLUGIN = 'woocommerce_plugin';
-		public const CAPABILITY_PAYMENT_GATEWAY    = 'payment_gateway';
-		public const CAPABILITY_SHIPPING_METHOD    = 'shipping_method';
-
 		/** @var string Stable internal plugin ID. */
 		protected string $plugin_id;
 
@@ -60,9 +55,6 @@ if ( ! class_exists( Framework_Plugin_Loader_Definition::class, false ) ) :
 		/** @var callable|null Initialization callback. */
 		protected $callback;
 
-		/** @var string[] Early class availability capabilities. */
-		protected array $capabilities;
-
 		/** @var array<string,mixed> Early WooCommerce compatibility feature flags. */
 		protected array $supported_features;
 
@@ -86,7 +78,6 @@ if ( ! class_exists( Framework_Plugin_Loader_Definition::class, false ) ) :
 			$this->requirements         = $this->normalize_requirements( (array) $definition['requirements'] );
 			$this->main_class           = isset( $definition['main_class'] ) ? (string) $definition['main_class'] : null;
 			$this->callback             = $definition['callback'] ?? null;
-			$this->capabilities         = $this->normalize_capabilities( $definition['capabilities'] ?? [] );
 			$this->supported_features   = isset( $definition['supported_features'] ) && is_array( $definition['supported_features'] )
 				? $definition['supported_features']
 				: [];
@@ -222,17 +213,6 @@ if ( ! class_exists( Framework_Plugin_Loader_Definition::class, false ) ) :
 		}
 
 		/**
-		 * Gets early class availability capabilities.
-		 *
-		 * @since 2.0.0
-		 *
-		 * @return string[]
-		 */
-		public function get_capabilities(): array {
-			return $this->capabilities;
-		}
-
-		/**
 		 * Gets early WooCommerce compatibility feature flags.
 		 *
 		 * @since 2.0.0
@@ -338,21 +318,6 @@ if ( ! class_exists( Framework_Plugin_Loader_Definition::class, false ) ) :
 				$errors[] = 'WooCommerce loader definitions require a woocommerce requirement.';
 			}
 
-			$capabilities = isset( $definition['capabilities'] ) ? (array) $definition['capabilities'] : [];
-			foreach ( $capabilities as $capability ) {
-				if ( ! in_array( $capability, self::get_allowed_capabilities(), true ) ) {
-					$errors[] = sprintf( 'Unsupported loader capability: %s.', (string) $capability );
-				}
-			}
-
-			if ( in_array( self::CAPABILITY_PAYMENT_GATEWAY, $capabilities, true ) && self::PLATFORM_WOOCOMMERCE !== $platform ) {
-				$errors[] = 'Payment gateway capability requires the woocommerce platform.';
-			}
-
-			if ( in_array( self::CAPABILITY_SHIPPING_METHOD, $capabilities, true ) && self::PLATFORM_WOOCOMMERCE !== $platform ) {
-				$errors[] = 'Shipping method capability requires the woocommerce platform.';
-			}
-
 			return $errors;
 		}
 
@@ -368,22 +333,6 @@ if ( ! class_exists( Framework_Plugin_Loader_Definition::class, false ) ) :
 				self::PLATFORM_WORDPRESS,
 				self::PLATFORM_WOOCOMMERCE,
 				self::PLATFORM_EDD,
-			];
-		}
-
-		/**
-		 * Gets allowed capability values.
-		 *
-		 * @since 2.0.0
-		 *
-		 * @return string[]
-		 */
-		protected static function get_allowed_capabilities(): array {
-			return [
-				self::CAPABILITY_WORDPRESS_PLUGIN,
-				self::CAPABILITY_WOOCOMMERCE_PLUGIN,
-				self::CAPABILITY_PAYMENT_GATEWAY,
-				self::CAPABILITY_SHIPPING_METHOD,
 			];
 		}
 
@@ -418,18 +367,6 @@ if ( ! class_exists( Framework_Plugin_Loader_Definition::class, false ) ) :
 			}
 
 			return $normalized;
-		}
-
-		/**
-		 * Normalizes capabilities to strings.
-		 *
-		 * @since 2.0.0
-		 *
-		 * @param mixed $capabilities Raw capabilities.
-		 * @return string[]
-		 */
-		protected function normalize_capabilities( $capabilities ): array {
-			return array_values( array_unique( array_map( 'strval', (array) $capabilities ) ) );
 		}
 	}
 

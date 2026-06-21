@@ -228,18 +228,7 @@ if ( ! class_exists( 'Woodev_Plugin_Bootstrap' ) ) :
 		 * @return bool
 		 */
 		private function requires_woocommerce_feature_compatibility( array $definition ): bool {
-			if ( \Woodev\Framework\Framework_Plugin_Loader_Definition::PLATFORM_WOOCOMMERCE === ( $definition['platform'] ?? '' ) ) {
-				return true;
-			}
-
-			$capabilities = isset( $definition['capabilities'] ) ? (array) $definition['capabilities'] : [];
-			$woocommerce_capabilities = [
-				\Woodev\Framework\Framework_Plugin_Loader_Definition::CAPABILITY_WOOCOMMERCE_PLUGIN,
-				\Woodev\Framework\Framework_Plugin_Loader_Definition::CAPABILITY_PAYMENT_GATEWAY,
-				\Woodev\Framework\Framework_Plugin_Loader_Definition::CAPABILITY_SHIPPING_METHOD,
-			];
-
-			return [] !== array_intersect( $woocommerce_capabilities, $capabilities );
+			return \Woodev\Framework\Framework_Plugin_Loader_Definition::PLATFORM_WOOCOMMERCE === ( $definition['platform'] ?? '' );
 		}
 
 		/**
