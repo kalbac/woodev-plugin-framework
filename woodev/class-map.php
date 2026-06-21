@@ -7,6 +7,11 @@
  */
 
 return [
+	'Woodev\\Framework\\Competitor\\Admin_Notice_Renderer' => 'woodev/competitor/class-admin-notice-renderer.php',
+	'Woodev\\Framework\\Competitor\\Competitor_Notice_Renderer' => 'woodev/competitor/interface-competitor-notice-renderer.php',
+	'Woodev\\Framework\\Competitor\\Competitor_Notification_Handler' => 'woodev/competitor/class-competitor-notification-handler.php',
+	'Woodev\\Framework\\Competitor\\Competitor_Rule' => 'woodev/competitor/class-competitor-rule.php',
+	'Woodev\\Framework\\Competitor\\WC_Admin_Notes_Renderer' => 'woodev/competitor/class-wc-admin-notes-renderer.php',
 	'Woodev\\Framework\\Framework_Plugin_Loader_Definition' => 'woodev/class-framework-plugin-loader-definition.php',
 	'Woodev\\Framework\\Framework_Resolver' => 'woodev/class-framework-resolver.php',
 	'Woodev\\Framework\\Handlers\\Cron_Handler' => 'woodev/handlers/class-cron-handler.php',
