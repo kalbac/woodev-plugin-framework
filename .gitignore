@@ -39,6 +39,3 @@ Thumbs.db
 
 # Visual brainstorming companion (local only)
 .superpowers/
-
-# s11 live e2e stand — local-only wp-env consumer plugin (download_id=216 knocker)
-/.wp-env-stand/

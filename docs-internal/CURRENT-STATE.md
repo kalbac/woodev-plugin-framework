@@ -84,10 +84,10 @@
 - **Trigger:** v2.0.0 shipped AND stable in production for several weeks. When it fires, surface it in the session-opening summary; do **NOT** auto-start; point the operator to the spec and read its "Prompt for the Future Agent" section first.
 - **Spec:** `D:\Projects\woodev_theme\docs\superpowers\specs\2026-05-13-woodev-ecosystem-orchestration-spec.md`. Cross-ref: `FUTURE-BACKLOG.md` → "Cross-Project Initiatives" #7.
 
-## Local rig (s11/s12 — reusable)
+## Local rig
 
-- **Issuer** (woodev_theme = local woodev.ru + EDD SL + deactivator): `wp-env` in `d:\projects\woodev_theme`, `http://localhost:8090`. Authority pubkey `QSisoK0CDOmIOqGHvilMe+4mB/LMRFHf9hi6BxatfMk=`. Local SSRF-bypass in `Push_Delivery::is_safe_target()` (env==='local'). Command queue: `wp_woodev_pd_commands`.
-- **Stand/consumer** (framework wp-env): `http://localhost:8888`, WP 6.9 / WC 10.8.1. Gitignored `.wp-env-stand/`. Channel = PULL. Login `admin`/`password`.
+- **s28 — consumer stand DISMANTLED (operator request).** The s11/s12 PULL consumer stand on `:8888` was removed: deleted `.wp-env-stand/` (the `woodev-stand` plugin), the `woodev-stand` mapping in `.wp-env.override.json`, `.rig-stubs/` (s26 install stubs), and the `.gitignore` entry. The project wp-env (`.wp-env.json` fixtures) + `composer test:integration` are untouched and were never dependent on the stand. To drop the stand plugin from a running instance: `wp-env start --update`. Rig knowledge retained in gotcha `wp-safe-remote-request-local-rig` (historical).
+- **Issuer `:8090` — KEPT, do NOT touch.** It is effectively a copy of prod (woodev_theme = local woodev.ru + EDD SL + deactivator, with test data); operator uses it independently. Container `c8ec47a5...-wordpress-1`. Authority pubkey `QSisoK0CDOmIOqGHvilMe+4mB/LMRFHf9hi6BxatfMk=`. Note: a rig-only `zz-rig-host-rewrite.php` mu-plugin (rewrites URLs to `host.docker.internal:8090`) may still be installed there — that lives in the woodev_theme side; revisit there if it interferes with using :8090 as a clean prod copy.
 - Drive via `docker exec <cli> wp eval-file ...` (cyrillic/quoting breaks inline `wp eval` — always eval-file). Do NOT run `do_action('admin_init')` in wp-cli (WC OrderAttributionController fatals). All rig traps: gotcha `wp-safe-remote-request-local-rig`.
 
 ## Infrastructure Reference
