@@ -42,16 +42,6 @@ class Resolver_Testable_Framework_Resolver extends \Woodev\Framework\Framework_R
 	public ?string $wc_version = null;
 
 	/**
-	 * Exposes early capability class loading for assertions.
-	 *
-	 * @param array<string,mixed> $plugin Registered plugin.
-	 * @return void
-	 */
-	public function load_early_classes_for_test( array $plugin, array $framework_plugin = [] ): void {
-		$this->load_early_capability_classes( $plugin, $framework_plugin );
-	}
-
-	/**
 	 * Returns a predictable plugin path for resolver assertions.
 	 *
 	 * @param string $file Plugin file.
@@ -182,6 +172,12 @@ class FrameworkResolverTest extends TestCase {
 		$resolver = new \Woodev\Framework\Framework_Resolver();
 		$loaded   = false;
 
+		Functions\when( 'plugin_dir_path' )->justReturn( dirname( __DIR__, 2 ) . '/' );
+		Functions\when( 'untrailingslashit' )->alias(
+			static function ( string $path ): string {
+				return rtrim( $path, '/\\' );
+			}
+		);
 		Functions\when( 'get_bloginfo' )->justReturn( '6.5' );
 		Functions\when( 'is_admin' )->justReturn( false );
 		Functions\expect( 'do_action' )->once()->with( 'woodev_plugins_loaded' );
@@ -215,6 +211,12 @@ class FrameworkResolverTest extends TestCase {
 		$resolver = new \Woodev\Framework\Framework_Resolver();
 		$loaded   = false;
 
+		Functions\when( 'plugin_dir_path' )->justReturn( dirname( __DIR__, 2 ) . '/' );
+		Functions\when( 'untrailingslashit' )->alias(
+			static function ( string $path ): string {
+				return rtrim( $path, '/\\' );
+			}
+		);
 		Functions\when( 'get_bloginfo' )->justReturn( '6.5' );
 		Functions\when( 'is_admin' )->justReturn( false );
 		Functions\expect( 'do_action' )->once()->with( 'woodev_plugins_loaded' );
@@ -248,6 +250,12 @@ class FrameworkResolverTest extends TestCase {
 		$resolver                              = new \Woodev\Framework\Framework_Resolver();
 		Resolver_Main_Class_Only_Plugin::$loaded = false;
 
+		Functions\when( 'plugin_dir_path' )->justReturn( dirname( __DIR__, 2 ) . '/' );
+		Functions\when( 'untrailingslashit' )->alias(
+			static function ( string $path ): string {
+				return rtrim( $path, '/\\' );
+			}
+		);
 		Functions\when( 'get_bloginfo' )->justReturn( '6.5' );
 		Functions\when( 'is_admin' )->justReturn( false );
 		Functions\expect( 'do_action' )->once()->with( 'woodev_plugins_loaded' );
@@ -310,6 +318,12 @@ class FrameworkResolverTest extends TestCase {
 		$resolver = new \Woodev\Framework\Framework_Resolver();
 		$loaded   = false;
 
+		Functions\when( 'plugin_dir_path' )->justReturn( dirname( __DIR__, 2 ) . '/' );
+		Functions\when( 'untrailingslashit' )->alias(
+			static function ( string $path ): string {
+				return rtrim( $path, '/\\' );
+			}
+		);
 		Functions\when( 'get_bloginfo' )->justReturn( '6.5' );
 		Functions\when( 'is_admin' )->justReturn( false );
 		Functions\expect( 'do_action' )->once()->with( 'woodev_plugins_loaded' );
@@ -332,91 +346,6 @@ class FrameworkResolverTest extends TestCase {
 
 		$this->assertFalse( $loaded );
 		$this->assertCount( 1, $resolver->get_incompatible_php_version_plugins() );
-	}
-
-	/**
-	 * Specialized WooCommerce capabilities should make the WooCommerce base available first.
-	 */
-	public function test_specialized_capabilities_load_woocommerce_base_dependency(): void {
-		$errors     = [];
-		$definition = \Woodev\Framework\Framework_Plugin_Loader_Definition::from_array(
-			$this->get_loader_definition(
-				[
-					'plugin_file'  => dirname( __DIR__, 2 ) . '/woodev-test-plugin.php',
-					'platform'     => \Woodev\Framework\Framework_Plugin_Loader_Definition::PLATFORM_WOOCOMMERCE,
-					'requirements' => [
-						'php'         => '7.4',
-						'wordpress'   => '6.3',
-						'woocommerce' => '7.0',
-					],
-					'capabilities' => [
-						\Woodev\Framework\Framework_Plugin_Loader_Definition::CAPABILITY_PAYMENT_GATEWAY,
-						\Woodev\Framework\Framework_Plugin_Loader_Definition::CAPABILITY_SHIPPING_METHOD,
-					],
-				]
-			),
-			$errors
-		);
-
-		Functions\when( 'plugin_dir_path' )->justReturn( dirname( __DIR__, 2 ) . '/' );
-		Functions\when( 'untrailingslashit' )->alias(
-			static function ( string $path ): string {
-				return rtrim( $path, '/\\' );
-			}
-		);
-
-		$resolver = new Resolver_Testable_Framework_Resolver();
-		$resolver->load_early_classes_for_test( $definition->to_legacy_plugin() );
-
-		$this->assertSame( [], $errors );
-		$this->assertTrue( class_exists( \Woodev\Framework\Woocommerce_Plugin::class, false ) );
-		$this->assertTrue( class_exists( \Woodev_Payment_Gateway_Plugin::class, false ) );
-		$this->assertTrue( class_exists( \Woodev\Framework\Shipping\Shipping_Plugin::class, false ) );
-	}
-
-	/**
-	 * WooCommerce plugin capability should preload only the WooCommerce base/helper classes.
-	 *
-	 * @runInSeparateProcess
-	 * @preserveGlobalState disabled
-	 */
-	public function test_woocommerce_plugin_capability_loads_only_woocommerce_base_dependency(): void {
-		require_once dirname( __DIR__, 2 ) . '/woodev/class-plugin.php';
-
-		$errors     = [];
-		$definition = \Woodev\Framework\Framework_Plugin_Loader_Definition::from_array(
-			$this->get_loader_definition(
-				[
-					'plugin_file'  => dirname( __DIR__, 2 ) . '/woodev-test-plugin.php',
-					'platform'     => \Woodev\Framework\Framework_Plugin_Loader_Definition::PLATFORM_WOOCOMMERCE,
-					'requirements' => [
-						'php'         => '7.4',
-						'wordpress'   => '6.3',
-						'woocommerce' => '7.0',
-					],
-					'capabilities' => [
-						\Woodev\Framework\Framework_Plugin_Loader_Definition::CAPABILITY_WOOCOMMERCE_PLUGIN,
-					],
-				]
-			),
-			$errors
-		);
-
-		Functions\when( 'plugin_dir_path' )->justReturn( dirname( __DIR__, 2 ) . '/' );
-		Functions\when( 'untrailingslashit' )->alias(
-			static function ( string $path ): string {
-				return rtrim( $path, '/\\' );
-			}
-		);
-
-		$resolver = new Resolver_Testable_Framework_Resolver();
-		$resolver->load_early_classes_for_test( $definition->to_legacy_plugin() );
-
-		$this->assertSame( [], $errors );
-		$this->assertTrue( class_exists( \Woodev\Framework\Woocommerce_Plugin::class, false ) );
-		$this->assertTrue( class_exists( \Woodev\Framework\Woocommerce_Helper::class, false ) );
-		$this->assertFalse( class_exists( \Woodev_Payment_Gateway_Plugin::class, false ) );
-		$this->assertFalse( class_exists( \Woodev\Framework\Shipping\Shipping_Plugin::class, false ) );
 	}
 
 	/**
@@ -466,41 +395,6 @@ class FrameworkResolverTest extends TestCase {
 		$this->assertTrue( $loaded );
 		$this->assertTrue( is_subclass_of( 'Resolver_Callback_Payment_Plugin', \Woodev_Payment_Gateway_Plugin::class ) );
 		$this->assertTrue( is_subclass_of( 'Resolver_Callback_Shipping_Plugin', \Woodev\Framework\Shipping\Shipping_Plugin::class ) );
-	}
-
-	/**
-	 * Early capability classes should load from the selected framework copy.
-	 */
-	public function test_specialized_capabilities_use_selected_framework_path(): void {
-		$errors     = [];
-		$definition = \Woodev\Framework\Framework_Plugin_Loader_Definition::from_array(
-			$this->get_loader_definition(
-				[
-					'plugin_file'  => 'lower-version-plugin.php',
-					'platform'     => \Woodev\Framework\Framework_Plugin_Loader_Definition::PLATFORM_WOOCOMMERCE,
-					'requirements' => [
-						'php'         => '7.4',
-						'wordpress'   => '6.3',
-						'woocommerce' => '7.0',
-					],
-					'capabilities' => [
-						\Woodev\Framework\Framework_Plugin_Loader_Definition::CAPABILITY_PAYMENT_GATEWAY,
-					],
-				]
-			),
-			$errors
-		);
-
-		$resolver = new Resolver_Testable_Framework_Resolver();
-		$resolver->load_early_classes_for_test(
-			$definition->to_legacy_plugin(),
-			[
-				'path' => 'selected-framework-plugin.php',
-			]
-		);
-
-		$this->assertSame( [], $errors );
-		$this->assertSame( [ 'selected-framework-plugin.php' ], $resolver->path_requests );
 	}
 
 	/**
@@ -760,6 +654,12 @@ class FrameworkResolverTest extends TestCase {
 		$resolver = new \Woodev\Framework\Framework_Resolver();
 		$loaded   = false;
 
+		Functions\when( 'plugin_dir_path' )->justReturn( dirname( __DIR__, 2 ) . '/' );
+		Functions\when( 'untrailingslashit' )->alias(
+			static function ( string $path ): string {
+				return rtrim( $path, '/\\' );
+			}
+		);
 		Functions\when( 'get_bloginfo' )->justReturn( '6.5' );
 		Functions\when( 'is_admin' )->justReturn( false );
 		Functions\expect( 'do_action' )->once()->with( 'woodev_plugins_loaded' );

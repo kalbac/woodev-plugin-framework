@@ -123,6 +123,21 @@ if ( ! class_exists( Framework_Resolver::class, false ) ) :
 			foreach ( $this->registered_plugins as $plugin ) {
 				if ( null === $loaded_framework ) {
 					$loaded_framework = $plugin;
+
+					// Register the framework autoloader against the winning copy (first after
+					// the version sort) BEFORE any typed plugin class (`extends ...`) is parsed.
+					// This is what lets a plugin declare its type by inheritance alone — no
+					// capabilities hint, no hard-coded base-class requires.
+					$winner_path = $this->get_plugin_path( $loaded_framework['path'] );
+					$autoloader  = $winner_path . '/woodev/class-framework-autoloader.php';
+
+					if ( ! class_exists( 'Woodev_Framework_Autoloader', false ) && is_readable( $autoloader ) ) {
+						require_once $autoloader;
+					}
+
+					if ( class_exists( 'Woodev_Framework_Autoloader', false ) ) {
+						\Woodev_Framework_Autoloader::register( $winner_path );
+					}
 				}
 
 				$is_base_plugin_loaded = class_exists( '\Woodev_Plugin', false );
@@ -152,7 +167,6 @@ if ( ! class_exists( Framework_Resolver::class, false ) ) :
 					continue;
 				}
 
-				$this->load_early_capability_classes( $plugin, $loaded_framework ?? $plugin );
 				if ( ! $this->invoke_plugin( $plugin ) ) {
 					continue;
 				}
@@ -512,66 +526,6 @@ if ( ! class_exists( Framework_Resolver::class, false ) ) :
 			}
 
 			return version_compare( $current, $minimum, '<' );
-		}
-
-		/**
-		 * Loads classes requested by early capabilities.
-		 *
-		 * @since 2.0.0
-		 *
-		 * @param array<string,mixed> $plugin Registered plugin.
-		 * @param array<string,mixed> $framework_plugin Selected framework plugin.
-		 * @return void
-		 */
-		protected function load_early_capability_classes( array $plugin, array $framework_plugin = [] ): void {
-			$definition = $plugin['definition'] ?? null;
-
-			if ( ! $definition instanceof Framework_Plugin_Loader_Definition ) {
-				return;
-			}
-
-			$capabilities = $definition->get_capabilities();
-
-			$woocommerce_capabilities = [
-				Framework_Plugin_Loader_Definition::CAPABILITY_WOOCOMMERCE_PLUGIN,
-				Framework_Plugin_Loader_Definition::CAPABILITY_PAYMENT_GATEWAY,
-				Framework_Plugin_Loader_Definition::CAPABILITY_SHIPPING_METHOD,
-			];
-
-			$requires_woocommerce_base = [] !== array_intersect( $woocommerce_capabilities, $capabilities );
-
-			if ( ! $requires_woocommerce_base ) {
-				return;
-			}
-
-			$framework_plugin = [] !== $framework_plugin ? $framework_plugin : $plugin;
-			$plugin_path      = $this->get_plugin_path( $framework_plugin['path'] );
-
-			if ( ! class_exists( '\\Woodev\\Framework\\Woocommerce_Plugin', false ) ) {
-				$woocommerce_plugin_file = $plugin_path . '/woodev/class-woocommerce-plugin.php';
-
-				if ( file_exists( $woocommerce_plugin_file ) ) {
-					require_once $woocommerce_plugin_file;
-				}
-
-				$woocommerce_helper_file = $plugin_path . '/woodev/class-woocommerce-helper.php';
-
-				if ( ! class_exists( '\\Woodev\\Framework\\Woocommerce_Helper', false ) && file_exists( $woocommerce_helper_file ) ) {
-					require_once $woocommerce_helper_file;
-				}
-			}
-
-			$has_payment_gateway_capability = in_array( Framework_Plugin_Loader_Definition::CAPABILITY_PAYMENT_GATEWAY, $capabilities, true );
-			$should_load_payment_gateway    = $has_payment_gateway_capability && ! class_exists( 'Woodev_Payment_Gateway_Plugin', false );
-			if ( $should_load_payment_gateway ) {
-				require_once $plugin_path . '/woodev/payment-gateway/class-payment-gateway-plugin.php';
-			}
-
-			$has_shipping_method_capability = in_array( Framework_Plugin_Loader_Definition::CAPABILITY_SHIPPING_METHOD, $capabilities, true );
-			$should_load_shipping_method    = $has_shipping_method_capability && ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin', false );
-			if ( $should_load_shipping_method ) {
-				require_once $plugin_path . '/woodev/shipping-method/class-shipping-plugin.php';
-			}
 		}
 
 		/**
