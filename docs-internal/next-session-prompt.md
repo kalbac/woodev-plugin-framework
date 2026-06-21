@@ -1,31 +1,36 @@
-# Промт для следующей сессии (s28): после автозагрузчика — выбрать следующий крупный кусок
+# Промт для следующей сессии (s28): реализовать Competitor Notification модуль
 
-> Написан в s27 (2026-06-21, автономный ночной прогон). **s27 ПОЛНОСТЬЮ ЗАВЕРШЁН и зашиплен** (PR #78 `1aa4ec4` смержен в main): рантайм-автозагрузчик + тип плагина только через `extends`, `capabilities` удалён. Версия НЕ бампнута (2.0.1 unreleased, `@since 2.0.2`). Следующая задача — на выбор оператора; шиппинг ждёт его участия.
+> Написан в конце s27 (2026-06-21). **Дизайн согласован с оператором, спека готова — реализацию начинаем с нуля в s28.** Версия НЕ бампнута (2.0.1 unreleased, `@since 2.0.2`).
 
 ## Старт сессии
 
 - framework: `docs-internal/CURRENT-STATE.md`, `docs-internal/GOTCHAS.md`, этот промт.
-- `main` синхронизирован на `1aa4ec4`. **729 unit**, всё зелёное (phpstan L3 + phpcs чисто).
+- `main` синхронизирован, **729 unit**, всё зелёное (phpstan L3 + phpcs).
+- **Серена есть** — для PHP-навигации (`find_symbol`/`get_symbols_overview`), для правок существующих PHP — встроенный `Edit` (Serena `replace_content` ломает EOL).
 
-## Что зашиплено в s27 (контекст)
+## 🎯 Задача s28 — Competitor Notification модуль (рерайт v1 → v2)
 
-- `Woodev_Framework_Autoloader` — рукописный `spl_autoload` поверх генерируемой `woodev/class-map.php` (**Composer в плагинах НЕ используем**, только dev/test). Регистрируется резолвером на победившую копию до парсинга `extends`.
-- Тип плагина = `extends` (`Woodev_Payment_Gateway_Plugin`/`Shipping_Plugin extends Woodev\Framework\Woocommerce_Plugin extends Woodev_Plugin`). `capabilities` удалён везде.
-- `Woodev_Loader::register(__FILE__, [...])` — тонкий фасад entry-файла.
-- `bin/generate-class-map.php` — **после добавления/переименования любого класса фреймворка перегенерировать карту** и закоммитить (гочи `framework-classmap-autoload-vendored-boot`).
-- Спека/план: `docs-internal/specs|plans/2026-06-21-plugin-type-autoloader*`. Godaddy-разведка (OB-5) — в спеке §9.
+**Спека готова и согласована:** `docs-internal/specs/2026-06-21-competitor-notification-design.md`. Первый шаг — **`writing-plans`** по этой спеке, затем реализация по TDD.
 
-## ✅ B-2 forward-tolerance — РЕШЕНО (обсуждено с оператором s27)
+Суть (5 решений из s27-брейншторма):
+1. Два режима через **декларативные правила** (`mode: recommend|conflict`); плагин отдаёт `get_competitor_rules(): array`, движок прогоняет.
+2. **Нейтральный движок + рендереры** (`Woodev\Framework\Competitor\…`): WC-Admin Notes когда есть WC, иначе admin-notice фоллбэк. **Выбор по `class_exists(Note::class)`** — фикс гочи `is-enhanced-admin-available-always-true`.
+3. **Умный таргет ссылки** recommend через account-экосистему (s24–s26): подключён+куплено → ведём на `admin.php?page=woodev-extensions` (install-кнопка #8); иначе → `our_url`. Деградация ок.
+4. **Дефолтные i18n-шаблоны** во фреймворке (per mode), маппинг «конкурент→продукт» — в плагине. Без центрального реестра.
+5. **Уважать закрытие**, авто-удаление ноты при деактивации конкурента, без форс-всплытия.
 
-Классы фреймворка **всегда грузятся из старшей зарегистрированной копии** для всего парка (резолвер регистрирует автозагрузчик на путь победителя-по-версии), независимо от того, кто выиграл bootstrap-rendezvous. Поэтому новый плагин не ломается против старого победителя rendezvous; под риском — старый плагин против нового фреймворка, и его прикрывает существующий guard `backwards_compatible` (`resolver:148-153`: деактивация-с-варнингом плагина ниже минимума загруженной копии — как в v1). Протокол с `capabilities` никогда не релизился → сломать развёрнутый плагин не может. Два правила закреплены письменно в `AGENT-RULES.md` Rule 3: каждое определение задаёт `version` + `backwards_compatible`; контракт регистрации additive-only с v2.0.0.
+Референс реальной логики (v1, для рерайта): `woocommerce-yandex-delivery/woodev/handlers/competitor-notification.php` + `…/includes/class-plugin-competitor-notices.php`. Субстрат в v2: `Woodev_Notes_Helper` (`woodev/admin/class-notes-helper.php`). Подключение как подсистема — паттерн `init_*_handler()` в `class-plugin.php` (opt-in, как setup wizard).
 
-## 🎯 Кандидаты на следующую задачу (выбор оператора)
+Открытые plan-time развилки (спека §10): точный accessor «куплено по download_id» на `Woodev_Account_Purchases`; нужен ли `?highlight={id}` на странице extensions; точка триггера (`admin_init` vs wc-admin hook, не на фронте).
 
-1. **🚧 Shipping module (главный кусок, нужно участие оператора).** PLANS §3.2 — «идеальным и максимально универсальным». Скелет богатый, но **ни разу не проверен реальным плагином**. Конкретные дыры (аудит s27): `admin/views/html-admin-shipping-method-status.php` — заглушка 30%; нет setup-wizard; **нет абстракции label/export**; JS/CSS не верифицированы; webhook-handler не проверен на yandex. План: conformance-аудит против 3 референс-плагинов (`woocommerce-edostavka`, `woodev-russian-post`, `woocommerce-yandex-delivery` — последний эталон ПВЗ) → закрыть дыры → пилотная миграция yandex как доказательство универсальности. Хорошо ложится на **autodev-loop**.
-2. **payment-gateway trait extraction** (`class-payment-gateway.php` ~3 542 строки) — классический autodev-loop кандидат. Godaddy borrow: `Block_Integration_Trait`, `Enum_Trait`+псевдо-энумы (спека §9).
-3. **Review #4** — `array()`→`[]` (~797) + типы + `@since` sweep + enforce `Generic.Arrays.DisallowLongArraySyntax`. + OB-6 dead-file sweep. autodev-loop.
-4. **box-packer добивка** (наименее срочно): non-WC wrapper (S), или настоящая минимальная упаковка (грид-эвристика уже стоит, не оптимальна).
+Вне scope: миграция yandex-подкласса (при переписывании плагина), реальная install-механика (#8 готова), Setup Wizard (OB-10).
 
 ## Гигиена
 
-`@since 2.0.2`. Публичные `docs/` не трогаем (s13). Серена есть; для существующих PHP — встроенный `Edit` (Serena `replace_content` ломает EOL на Windows). JS/SCSS не пиннятся к LF → `sed -i 's/\r$//'` после Edit. **Composer только в dev/тестах, не в плагинах.** После добавления класса фреймворка — `php bin/generate-class-map.php`. Мерж: ветка → PR → зелёный CI (проверь, что unit-матрица реально прошла, а не скипнулась за гейтом) → `--squash --delete-branch` (НЕ `--auto`). Codex-ревью на архитектурно/security-чувствительное; находки не автофиксить вне автономного режима — спрашивать.
+`@since 2.0.2`. Публичные `docs/` не трогаем. **Composer только в dev/тестах, не в плагинах.** После добавления класса фреймворка — `php bin/generate-class-map.php` + коммит карты (гоча `framework-classmap-autoload-vendored-boot`). Новый код PSR-4 (`Woodev\Framework\*`). Мерж: ветка → PR → зелёный CI (проверь, что unit-матрица реально прошла) → `--squash --delete-branch` (НЕ `--auto`). Codex-ревью на архитектурно-чувствительное; находки в неавтономном режиме не автофиксить — спрашивать.
+
+## Прочие кандидаты (после competitor, на выбор)
+
+- **Shipping module** (большой, нужно участие оператора; он отдельно напишет черновик `SHIPPING-PLANS.md`) — аудит против 3 референсов → закрыть дыры → пилот yandex.
+- **OB-10 Setup Wizard** — отдельный брейншторм (сначала аудит состояния).
+- payment-gateway trait extraction · review #4 (`array()`→`[]` + typing) · OB-6 dead-file sweep — кандидаты на возврат **autodev-loop**.
