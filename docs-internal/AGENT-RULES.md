@@ -1,5 +1,5 @@
 # Agent Rules — Woodev Plugin Framework
-> For AI agents. Keep updated. Last updated: 2026-05-09.
+> For AI agents. Keep updated. Last updated: 2026-06-21 (s27 — Rule 3 rewritten for v2 loader/autoloader + multi-version conventions).
 > Navigation → `DOCS-INDEX.md` | Current status → `CURRENT-STATE.md`
 
 ---
@@ -107,8 +107,21 @@ All framework subsystems are initialized in `Woodev_Plugin::__construct()` via `
 | Script Handler | `init_script_handler()` |
 | Admin Settings | `init_admin()` |
 
-### Rule 3 — Singleton Bootstrap
-`Woodev_Plugin_Bootstrap` (singleton) is the entry point. Each plugin calls `register_plugin()` on the shared instance. On `plugins_loaded`, the bootstrap selects the highest framework version to load. Never instantiate `Woodev_Plugin_Bootstrap` directly — use its singleton accessor.
+### Rule 3 — Bootstrap, plugin registration & multi-version (post-s27)
+`Woodev_Plugin_Bootstrap` (singleton) is the entry point. Never instantiate it directly — use the singleton accessor. `register_plugin()` is a **v1 tombstone only** (quarantines legacy callers; see `bootstrap.php`). v2 plugins register via **`Woodev_Loader::register( __FILE__, [...] )`** (or `register_loader_definition()` directly).
+
+**Plugin type is declared by `extends`, never by a flag/array (s27):**
+- pure WordPress → `extends Woodev_Plugin`
+- WooCommerce → `extends \Woodev\Framework\Woocommerce_Plugin`
+- payment gateway → `extends Woodev_Payment_Gateway_Plugin` (already extends Woocommerce_Plugin)
+- shipping → `extends \Woodev\Framework\Shipping\Shipping_Plugin` (already extends Woocommerce_Plugin)
+
+There is **no `capabilities` array** — it was removed in s27. The runtime `Woodev_Framework_Autoloader` resolves base classes on demand from a generated `woodev/class-map.php`. **After adding/renaming any framework class, run `php bin/generate-class-map.php` and commit the map** (gotcha `framework-classmap-autoload-vendored-boot`; no Composer in shipped plugins).
+
+**Multi-version conventions (REQUIRED in every loader definition):**
+1. **Always set `version`** (the framework version this plugin bundles) **and `backwards_compatible`** (the oldest framework version this plugin is compatible with). The guard at `resolver:148-153` is skipped if `backwards_compatible` is empty — then a too-old plugin is NOT quarantined.
+2. On `plugins_loaded` the resolver loads the **highest** registered framework version for the WHOLE fleet — so framework **classes always come from the highest copy**, regardless of which copy won the bootstrap class rendezvous (the rendezvous winner, first-loaded alphabetically, runs only orchestration; it registers the autoloader against the winning/highest path). A plugin whose bundled framework `version` is **older than the loaded copy's `backwards_compatible`** is deactivated with an "update the outdated plugin" admin notice.
+3. **The registration contract is additive-only from v2.0.0.** Future releases may ADD optional fields to the loader definition, but must not remove/rename required ones — an older copy that wins the rendezvous must always be able to read a newer plugin's registration. (This is why B-2 "loader-protocol forward-tolerance" is handled rather than a blocker: highest-wins class loading + additive contract.)
 
 ### Rule 4 — Type Declarations
 Type declarations are **required** on all parameters and return types. PHP 7.4+ features allowed: `??`, `??=`, arrow functions, typed properties.

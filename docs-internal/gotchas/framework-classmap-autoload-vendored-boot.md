@@ -21,9 +21,11 @@ In **tests**, Composer's classmap autoloader is present, so any framework class 
 - `autoload()` returns silently for non-framework classes and `is_readable`-guards the require, so a stale entry degrades to a miss, not a `require` fatal — but the class still never loads.
 - Files loaded explicitly and therefore **excluded** from the map: `bootstrap.php`, `loader.php`, `class-map.php`, `class-framework-autoloader.php`.
 
-## Related pre-release blocker (B-2)
+## Multi-version forward-tolerance (B-2) — handled
 
-Removing `capabilities` (s27) evolved the loader protocol. If an **older v2** framework copy wins the bootstrap rendezvous in a mixed v2 fleet, its resolver has no autoloader → a new-protocol plugin's `extends` fatals. Not a live risk while v2 is unreleased, but **B-2 loader-protocol forward-tolerance must be designed before any v2 plugin ships.** See `CURRENT-STATE.md` → Big ones.
+Removing `capabilities` (s27) evolved the loader protocol, but this does **not** create a mixed-fleet hazard, because framework **classes always load from the highest registered copy** for the whole fleet (the resolver registers the autoloader against the winning/highest path), regardless of which copy wins the bootstrap class rendezvous. So a newer plugin never breaks against an older rendezvous winner; the at-risk party is an *older* plugin running against a newer framework, which the existing `backwards_compatible` min-version guard (`resolver:148-153`) deactivates-with-notice — same as v1. The removed `capabilities` protocol was never released, so it cannot break any deployed plugin.
+
+Two standing rules keep this true (see `AGENT-RULES.md` Rule 3): (1) every loader definition MUST set `version` + `backwards_compatible`; (2) the registration contract is additive-only from v2.0.0 (older rendezvous-winner resolver must always read a newer plugin's registration).
 
 ## Related
 

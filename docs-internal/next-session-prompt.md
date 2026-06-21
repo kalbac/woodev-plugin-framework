@@ -15,17 +15,16 @@
 - `bin/generate-class-map.php` — **после добавления/переименования любого класса фреймворка перегенерировать карту** и закоммитить (гочи `framework-classmap-autoload-vendored-boot`).
 - Спека/план: `docs-internal/specs|plans/2026-06-21-plugin-type-autoloader*`. Godaddy-разведка (OB-5) — в спеке §9.
 
-## 🛑 ВАЖНО — pre-release блокер (B-2), обсудить до релиза v2
+## ✅ B-2 forward-tolerance — РЕШЕНО (обсуждено с оператором s27)
 
-Удаление `capabilities` изменило loader-протокол. Если в смешанном v2-парке rendezvous выиграет **старая v2-копия** (её резолвер без автозагрузчика), `extends` нового плагина даст fatal. **Сейчас невозможно** (v2 не released, плагинов на старом протоколе нет), но **forward-tolerance (B-2) надо спроектировать до выпуска любого v2-плагина.** Это требует решения оператора (как версионировать/прощать loader-протокол; связано с будущей фазой версионных неймспейсов — спека §8).
+Классы фреймворка **всегда грузятся из старшей зарегистрированной копии** для всего парка (резолвер регистрирует автозагрузчик на путь победителя-по-версии), независимо от того, кто выиграл bootstrap-rendezvous. Поэтому новый плагин не ломается против старого победителя rendezvous; под риском — старый плагин против нового фреймворка, и его прикрывает существующий guard `backwards_compatible` (`resolver:148-153`: деактивация-с-варнингом плагина ниже минимума загруженной копии — как в v1). Протокол с `capabilities` никогда не релизился → сломать развёрнутый плагин не может. Два правила закреплены письменно в `AGENT-RULES.md` Rule 3: каждое определение задаёт `version` + `backwards_compatible`; контракт регистрации additive-only с v2.0.0.
 
 ## 🎯 Кандидаты на следующую задачу (выбор оператора)
 
 1. **🚧 Shipping module (главный кусок, нужно участие оператора).** PLANS §3.2 — «идеальным и максимально универсальным». Скелет богатый, но **ни разу не проверен реальным плагином**. Конкретные дыры (аудит s27): `admin/views/html-admin-shipping-method-status.php` — заглушка 30%; нет setup-wizard; **нет абстракции label/export**; JS/CSS не верифицированы; webhook-handler не проверен на yandex. План: conformance-аудит против 3 референс-плагинов (`woocommerce-edostavka`, `woodev-russian-post`, `woocommerce-yandex-delivery` — последний эталон ПВЗ) → закрыть дыры → пилотная миграция yandex как доказательство универсальности. Хорошо ложится на **autodev-loop**.
-2. **B-2 forward-tolerance** (см. блокер выше) — если хочешь снять риск до движения к релизу/неймспейсам.
-3. **payment-gateway trait extraction** (`class-payment-gateway.php` ~3 542 строки) — классический autodev-loop кандидат. Godaddy borrow: `Block_Integration_Trait`, `Enum_Trait`+псевдо-энумы (спека §9).
-4. **Review #4** — `array()`→`[]` (~797) + типы + `@since` sweep + enforce `Generic.Arrays.DisallowLongArraySyntax`. + OB-6 dead-file sweep. autodev-loop.
-5. **box-packer добивка** (наименее срочно): non-WC wrapper (S), или настоящая минимальная упаковка (грид-эвристика уже стоит, не оптимальна).
+2. **payment-gateway trait extraction** (`class-payment-gateway.php` ~3 542 строки) — классический autodev-loop кандидат. Godaddy borrow: `Block_Integration_Trait`, `Enum_Trait`+псевдо-энумы (спека §9).
+3. **Review #4** — `array()`→`[]` (~797) + типы + `@since` sweep + enforce `Generic.Arrays.DisallowLongArraySyntax`. + OB-6 dead-file sweep. autodev-loop.
+4. **box-packer добивка** (наименее срочно): non-WC wrapper (S), или настоящая минимальная упаковка (грид-эвристика уже стоит, не оптимальна).
 
 ## Гигиена
 
