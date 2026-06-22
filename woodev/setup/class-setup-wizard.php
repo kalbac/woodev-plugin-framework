@@ -307,6 +307,10 @@ abstract class Setup_Wizard {
 			return false;
 		}
 
+		if ( ! current_user_can( $this->required_capability ) ) {
+			return false;
+		}
+
 		if ( isset( $_GET['activate-multi'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only bulk-activation marker, no state change.
 			return false;
 		}

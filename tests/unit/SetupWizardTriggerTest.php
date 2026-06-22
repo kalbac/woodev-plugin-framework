@@ -36,6 +36,7 @@ class SetupWizardTriggerTest extends TestCase {
 	private function base_env(): void {
 		Functions\when( 'wp_doing_ajax' )->justReturn( false );
 		Functions\when( 'wp_doing_cron' )->justReturn( false );
+		Functions\when( 'current_user_can' )->justReturn( true );
 		Functions\when( 'get_transient' )->justReturn( 1 );
 	}
 
@@ -47,11 +48,12 @@ class SetupWizardTriggerTest extends TestCase {
 	}
 
 	public function test_no_redirect_on_bulk_activation(): void {
+		$get_backup = $_GET;
 		$this->base_env();
 		$_GET = [ 'activate-multi' => '1' ];
 		$wizard = new Trigger_Test_Wizard();
 		$this->assertFalse( $wizard->should() );
-		$_GET = [];
+		$_GET = $get_backup;
 	}
 
 	public function test_no_redirect_when_already_finished(): void {
@@ -65,7 +67,18 @@ class SetupWizardTriggerTest extends TestCase {
 	public function test_no_redirect_without_transient(): void {
 		Functions\when( 'wp_doing_ajax' )->justReturn( false );
 		Functions\when( 'wp_doing_cron' )->justReturn( false );
+		Functions\when( 'current_user_can' )->justReturn( true );
 		Functions\when( 'get_transient' )->justReturn( false );
+		$_GET = [];
+		$wizard = new Trigger_Test_Wizard();
+		$this->assertFalse( $wizard->should() );
+	}
+
+	public function test_no_redirect_without_capability(): void {
+		Functions\when( 'wp_doing_ajax' )->justReturn( false );
+		Functions\when( 'wp_doing_cron' )->justReturn( false );
+		Functions\when( 'current_user_can' )->justReturn( false );
+		Functions\when( 'get_transient' )->justReturn( 1 );
 		$_GET = [];
 		$wizard = new Trigger_Test_Wizard();
 		$this->assertFalse( $wizard->should() );
