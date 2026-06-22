@@ -453,11 +453,17 @@ abstract class Setup_Wizard {
 				}
 			}
 
+			$content = $step->get_content();
+			if ( is_callable( $content ) ) {
+				$content = (string) call_user_func( $content );
+			}
+
 			$steps[] = [
-				'id'     => $step->get_id(),
-				'label'  => $step->get_label(),
-				'type'   => $step->get_type(),
-				'fields' => $fields,
+				'id'      => $step->get_id(),
+				'label'   => $step->get_label(),
+				'type'    => $step->get_type(),
+				'fields'  => $fields,
+				'content' => is_string( $content ) ? $content : '',
 			];
 		}
 

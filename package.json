@@ -7,9 +7,11 @@
     "node": ">=22"
   },
   "scripts": {
-    "build": "wp-scripts build ./src/license-page/index.js --output-path=woodev/assets/build/license-page && wp-scripts build ./src/plugins-page/index.js --output-path=woodev/assets/build/plugins-page",
+    "build": "wp-scripts build ./src/license-page/index.js --output-path=woodev/assets/build/license-page && wp-scripts build ./src/plugins-page/index.js --output-path=woodev/assets/build/plugins-page && wp-scripts build ./src/setup-wizard/index.js --output-path=woodev/assets/build/setup-wizard",
+    "build:setup": "wp-scripts build ./src/setup-wizard/index.js --output-path=woodev/assets/build/setup-wizard",
     "start": "wp-scripts start ./src/license-page/index.js --output-path=woodev/assets/build/license-page",
-    "start:plugins": "wp-scripts start ./src/plugins-page/index.js --output-path=woodev/assets/build/plugins-page"
+    "start:plugins": "wp-scripts start ./src/plugins-page/index.js --output-path=woodev/assets/build/plugins-page",
+    "start:setup": "wp-scripts start ./src/setup-wizard/index.js --output-path=woodev/assets/build/setup-wizard"
   },
   "devDependencies": {
     "@wordpress/scripts": "32.4.0"

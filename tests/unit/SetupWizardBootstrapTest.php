@@ -16,7 +16,7 @@ require_once dirname( __DIR__, 2 ) . '/woodev/setup/class-setup-wizard.php';
 class Bootstrap_Test_Wizard extends Setup_Wizard {
 	public function __construct( $plugin ) { $this->plugin = $plugin; } // inject mock, skip parent wiring
 	protected function register_steps(): void {
-		$this->register_content_step( 'welcome', 'Привет', static function (): string { return ''; } );
+		$this->register_content_step( 'welcome', 'Привет', static function (): string { return '<p>hi</p>'; } );
 		$this->register_step( 'connection', 'Подключение', [ 'api_key' ] );
 	}
 	public function get_id(): string { return 'acme'; }
@@ -47,6 +47,7 @@ class SetupWizardBootstrapTest extends TestCase {
 		$this->assertSame( [ 'welcome', 'connection' ], array_column( $data['steps'], 'id' ) );
 		// content step carries no fields; settings step carries its schema slice.
 		$this->assertSame( [], $data['steps'][0]['fields'] );
+		$this->assertSame( '<p>hi</p>', $data['steps'][0]['content'] );
 		$this->assertArrayHasKey( 'api_key', $data['steps'][1]['fields'] );
 		$this->assertStringContainsString( 'woodev/v1/acme/setup', $data['restRoot'] );
 	}
