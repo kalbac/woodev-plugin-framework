@@ -102,13 +102,6 @@ final class Woodev_Realistic_Shipping_Plugin extends \Woodev\Framework\Shipping\
 	protected function init_blocks_handler(): void {}
 
 	/**
-	 * No-op setup wizard handler for isolated fixture construction.
-	 *
-	 * @return void
-	 */
-	protected function init_setup_wizard_handler() {}
-
-	/**
 	 * Gets the plugin file.
 	 *
 	 * @return string

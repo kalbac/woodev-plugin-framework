@@ -129,13 +129,6 @@ class Testable_Wordpress_Plugin extends \Woodev_Plugin {
 	}
 
 	/**
-	 * No-op setup wizard initialization for constructor isolation.
-	 *
-	 * @return void
-	 */
-	protected function init_setup_wizard_handler() {}
-
-	/**
 	 * Marks any accidental WooCommerce system status row generation.
 	 *
 	 * @param array<string,mixed> $rows System status rows.

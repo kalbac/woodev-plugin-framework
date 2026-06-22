@@ -140,7 +140,7 @@ The constructor auto-initializes all framework subsystems and registers WP hooks
 | `Woodev_Lifecycle` | Install/upgrade routines and milestone notices |
 | `Woodev_REST_API` | Registers plugin REST API routes |
 | `Woodev_Blocks_Handler` | Declares WC Cart/Checkout block compatibility |
-| `Woodev_Plugin_Setup_Wizard` | Admin onboarding wizard (opt-in) |
+| `Woodev\Framework\Setup\Setup_Wizard` | Admin onboarding wizard — neutral React-driven, opt-in via `get_setup_wizard_handler()` (WC wrapper: `Woocommerce_Setup_Wizard`) |
 | `Woodev_Admin_Pages` | Plugin settings page registration |
 | `Woodev_Plugin_Compatibility` | WP/WC version helpers |
 | `Woodev_Order_Compatibility` | HPOS-compatible order data access |
@@ -197,7 +197,8 @@ Self-contained shipping box-packing algorithm. Implement `Woodev_Packer_Item_Int
 ## Code Style
 
 - WordPress Coding Standards (`WordPress-Core`, `WordPress-Extra`, `WordPress-Docs`)
-- Short array syntax `[]` is allowed (override of WPCS default)
+- Short array syntax `[]` is **required for new/modified code** — never `array()` (override of WPCS default)
+- **New code is authored directly in namespaces** (`Woodev\Framework\*` PSR-4) — do not write new code under the legacy global `Woodev_*` shape
 - Line length limit: 120 characters
 - PHPCompatibility checked for PHP 7.4+, minimum WP version 6.3
 - PHPStan level 3; `checkDynamicProperties: false` (legacy code uses dynamic properties)

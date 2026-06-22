@@ -104,13 +104,6 @@ final class Woodev_Edostavka_Pilot_Plugin extends \Woodev\Framework\Shipping\Shi
 	protected function init_blocks_handler(): void {}
 
 	/**
-	 * No-op setup wizard handler for isolated fixture construction.
-	 *
-	 * @return void
-	 */
-	protected function init_setup_wizard_handler() {}
-
-	/**
 	 * Gets the plugin file.
 	 *
 	 * @return string

@@ -167,6 +167,28 @@ $woodev_test_plugin_bootstrap->register_loader_definition( woodev_test_plugin_lo
 function woodev_test_plugin_init() {
 
 	/**
+	 * Minimal setup wizard (one content step) so the woodev/v1 setup routes
+	 * register for integration coverage.
+	 */
+	class Woodev_Test_Setup_Wizard extends \Woodev\Framework\Setup\Setup_Wizard {
+
+		/**
+		 * Registers a single content step.
+		 *
+		 * @return void
+		 */
+		protected function register_steps(): void {
+			$this->register_content_step(
+				'welcome',
+				'Welcome',
+				static function (): string {
+					return '<p>Welcome</p>';
+				}
+			);
+		}
+	}
+
+	/**
 	 * Class Woodev_Test_Plugin
 	 */
 	class Woodev_Test_Plugin extends Woodev_Plugin {
@@ -221,6 +243,15 @@ function woodev_test_plugin_init() {
 
 		public function get_download_id(): int {
 			return 0;
+		}
+
+		/**
+		 * Opts into the minimal setup wizard so the woodev/v1 setup routes register.
+		 *
+		 * @return \Woodev\Framework\Setup\Setup_Wizard
+		 */
+		protected function build_setup_wizard_handler() {
+			return new Woodev_Test_Setup_Wizard( $this );
 		}
 	}
 

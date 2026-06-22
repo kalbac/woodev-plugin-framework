@@ -254,10 +254,10 @@ Full details + code examples in `docs-internal/gotchas/`. Scan `docs-internal/GO
 | Documentation language | English (for AI agents) — see `docs-internal/DOCS-SCHEMA.md` |
 | User-facing strings | Russian (via WordPress i18n, text domain: `woodev-plugin-framework`) |
 | PHP style | WordPress Coding Standards (tabs, snake_case, PHPDoc) |
-| Classes | `Snake_Case` (legacy: `Woodev_Plugin`, new: `Woodev\Framework\Shipping\Shipping_Plugin`) |
+| Classes | `Snake_Case`. **New code is authored directly in namespaces** (`Woodev\Framework\*` PSR-4, e.g. `Woodev\Framework\Shipping\Shipping_Plugin`) — do NOT write new code under the legacy global `Woodev_*` shape. Legacy `Woodev_*` exists only in not-yet-migrated files. |
 | Methods/variables/hooks | `snake_case` |
 | Visibility | default `private`, `protected`/`public` only when needed |
-| Arrays | Short syntax `[]` |
+| Arrays | Short syntax `[]` **only — never `array()`** in new or modified code |
 | Git | Conventional Commits (`feat:`, `fix:`, `docs:`, etc.) |
 | Version | Stored in `Woodev_Plugin::VERSION` (in `woodev/class-plugin.php`) |
 | `@since` | Uses current `VERSION` constant value |
