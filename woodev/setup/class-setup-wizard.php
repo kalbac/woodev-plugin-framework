@@ -581,4 +581,21 @@ abstract class Setup_Wizard {
 
 		return $links;
 	}
+
+	/**
+	 * Registers the wizard REST controller through the woodev/v1 registrar.
+	 *
+	 * @internal
+	 *
+	 * @since 2.0.2
+	 *
+	 * @return void
+	 */
+	public function register_rest(): void {
+		if ( ! class_exists( 'Woodev_REST_API_Setup' ) ) {
+			require_once $this->plugin->get_framework_path() . '/rest-api/controllers/class-rest-api-setup.php';
+		}
+
+		\Woodev_REST_V1_Registrar::register_controller( new \Woodev_REST_API_Setup( $this ) );
+	}
 }
