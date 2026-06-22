@@ -10,7 +10,15 @@
 
 import apiFetch from '@wordpress/api-fetch';
 
-const { restRoot, nonce } = window.woodevSetupWizard;
+/**
+ * Reads the PHP bootstrap lazily (never at module load), so importing this file
+ * has no side effect and the entry-point guard in index.js stays meaningful.
+ *
+ * @return {Object} { restRoot, nonce } (empty when the bootstrap is absent).
+ */
+function bootstrap() {
+	return window.woodevSetupWizard || {};
+}
 
 /**
  * Persists one step's values.
@@ -20,6 +28,8 @@ const { restRoot, nonce } = window.woodevSetupWizard;
  * @return {Promise} REST promise.
  */
 export function saveStep( stepId, values ) {
+	const { restRoot, nonce } = bootstrap();
+
 	return apiFetch( {
 		url: `${ restRoot }/steps/${ stepId }`,
 		method: 'POST',
@@ -35,6 +45,8 @@ export function saveStep( stepId, values ) {
  * @return {Promise} REST promise.
  */
 export function complete( state = 'completed' ) {
+	const { restRoot, nonce } = bootstrap();
+
 	return apiFetch( {
 		url: `${ restRoot }/complete`,
 		method: 'POST',
