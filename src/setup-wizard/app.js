@@ -53,12 +53,14 @@ export default function App() {
 	}
 
 	async function skip() {
+		setError( null );
 		setBusy( true );
 		try {
 			await complete( 'skipped' );
 			setDone( true );
 		} catch ( e ) {
 			setError( e.message || __wizardError() );
+		} finally {
 			setBusy( false );
 		}
 	}
