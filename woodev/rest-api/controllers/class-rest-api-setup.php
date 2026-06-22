@@ -167,7 +167,7 @@ if ( ! class_exists( 'Woodev_REST_API_Setup' ) ) :
 		 * @since 2.0.2
 		 *
 		 * @param \WP_REST_Request $request request.
-		 * @return \WP_REST_Response|array<string,mixed>
+		 * @return \WP_REST_Response|\WP_Error|array<string,mixed>
 		 */
 		public function complete( $request ) {
 			$state = 'skipped' === $request->get_param( 'state' ) ? 'skipped' : 'completed';
