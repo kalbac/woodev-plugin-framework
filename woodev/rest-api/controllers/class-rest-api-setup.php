@@ -86,8 +86,11 @@ if ( ! class_exists( 'Woodev_REST_API_Setup' ) ) :
 		/**
 		 * Validates + persists one step's values, then runs the optional on_save.
 		 *
-		 * Settings are persisted BEFORE on_save; a thrown on_save reports an error
-		 * while settings are already saved (on_save must be idempotent).
+		 * Each setting is persisted as it passes validation: if setting N fails,
+		 * settings 0..N-1 are already saved. This is intentional and idempotent —
+		 * re-submitting the step overwrites any already-saved values. Settings are
+		 * persisted BEFORE on_save; a thrown on_save reports an error while settings
+		 * are already saved (on_save must therefore be idempotent too).
 		 *
 		 * @since 2.0.2
 		 *
@@ -124,6 +127,15 @@ if ( ! class_exists( 'Woodev_REST_API_Setup' ) ) :
 									'field' => $sid,
 								]
 							);
+						} catch ( \Throwable $e ) {
+							// Unexpected failure (e.g. a third-party hook on update_option threw):
+							// log for traceability and return a generic 500 — never leak internals.
+							error_log( sprintf( '[woodev] setup wizard save_step failed on "%s": %s', $sid, $e->getMessage() ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- diagnostic for an unexpected persistence failure.
+							return new WP_Error(
+								'woodev_setup_server_error',
+								__( 'Внутренняя ошибка сервера. Попробуйте ещё раз.', 'woodev-plugin-framework' ),
+								[ 'status' => 500 ]
+							);
 						}
 					}
 				}
@@ -134,6 +146,9 @@ if ( ! class_exists( 'Woodev_REST_API_Setup' ) ) :
 				try {
 					call_user_func( $on_save, $values, $request );
 				} catch ( \Exception $e ) {
+					// on_save is the plugin's own callback; surface its message as a 400
+					// (settings are already persisted — on_save must be idempotent), and log.
+					error_log( sprintf( '[woodev] setup wizard on_save failed for step "%s": %s', $step_id, $e->getMessage() ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- diagnostic for an on_save failure.
 					return new WP_Error( 'woodev_setup_step_failed', $e->getMessage(), [ 'status' => 400 ] );
 				}
 			}
@@ -156,7 +171,18 @@ if ( ! class_exists( 'Woodev_REST_API_Setup' ) ) :
 		 */
 		public function complete( $request ) {
 			$state = 'skipped' === $request->get_param( 'state' ) ? 'skipped' : 'completed';
-			$this->wizard->complete_setup( $state );
+
+			try {
+				$this->wizard->complete_setup( $state );
+			} catch ( \Throwable $e ) {
+				// Never report success if the completion option was not persisted.
+				error_log( sprintf( '[woodev] setup wizard complete failed: %s', $e->getMessage() ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- diagnostic for a completion persistence failure.
+				return new WP_Error(
+					'woodev_setup_complete_failed',
+					__( 'Не удалось сохранить статус настройки. Попробуйте ещё раз.', 'woodev-plugin-framework' ),
+					[ 'status' => 500 ]
+				);
+			}
 
 			return rest_ensure_response(
 				[

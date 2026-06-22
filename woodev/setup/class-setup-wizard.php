@@ -303,7 +303,7 @@ abstract class Setup_Wizard {
 	 * @return bool
 	 */
 	protected function should_redirect_on_admin_init(): bool {
-		if ( wp_doing_ajax() || wp_doing_cron() ) {
+		if ( wp_doing_ajax() || wp_doing_cron() || ( defined( 'REST_REQUEST' ) && REST_REQUEST ) ) {
 			return false;
 		}
 
@@ -414,12 +414,19 @@ abstract class Setup_Wizard {
 	 */
 	public function enqueue_assets(): void {
 		$asset_file = $this->plugin->get_framework_path() . '/assets/build/setup-wizard/index.asset.php';
-		$asset      = file_exists( $asset_file )
-			? include $asset_file
-			: [
+
+		if ( file_exists( $asset_file ) ) {
+			$asset = include $asset_file;
+		} else {
+			// Build missing (npm run build not run / failed): the bundle's real
+			// dependencies are absent, so the React page would render blank (only the
+			// noscript notice shows). Log so the cause is traceable, then fall back.
+			error_log( sprintf( '[woodev] Setup wizard asset manifest missing: %s', $asset_file ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- diagnostic for a missing build artifact.
+			$asset = [
 				'dependencies' => [],
 				'version'      => $this->plugin->get_version(),
 			];
+		}
 
 		$build_url = $this->plugin->get_framework_assets_url() . '/build/setup-wizard';
 
@@ -451,6 +458,18 @@ abstract class Setup_Wizard {
 				if ( isset( $schema[ $sid ] ) ) {
 					$fields[ $sid ] = $schema[ $sid ];
 				}
+			}
+
+			if ( Step::TYPE_SETTINGS === $step->get_type() && empty( $fields ) && ! empty( $step->get_setting_ids() ) ) {
+				_doing_it_wrong(
+					__METHOD__,
+					sprintf(
+						/* translators: %s step id */
+						esc_html__( 'Setup wizard step "%s" declares setting ids but none resolved — ensure the plugin returns a settings handler from get_settings_handler().', 'woodev-plugin-framework' ),
+						esc_html( $step->get_id() )
+					),
+					'2.0.2'
+				);
 			}
 
 			$content = $step->get_content();
@@ -546,6 +565,10 @@ abstract class Setup_Wizard {
 	 * @return void
 	 */
 	public function maybe_render_notice(): void {
+		if ( ! current_user_can( $this->required_capability ) ) {
+			return;
+		}
+
 		if ( $this->is_finished() ) {
 			return;
 		}
@@ -602,6 +625,12 @@ abstract class Setup_Wizard {
 			require_once $this->plugin->get_framework_path() . '/rest-api/controllers/class-rest-api-setup.php';
 		}
 
-		\Woodev_REST_V1_Registrar::register_controller( new \Woodev_REST_API_Setup( $this ) );
+		// Per-plugin dedup key: the controller is stateful (carries this wizard),
+		// so two plugins with wizards must each register their own instance —
+		// the default class-name key would collapse them to one.
+		\Woodev_REST_V1_Registrar::register_controller(
+			new \Woodev_REST_API_Setup( $this ),
+			\Woodev_REST_API_Setup::class . '_' . $this->get_id()
+		);
 	}
 }

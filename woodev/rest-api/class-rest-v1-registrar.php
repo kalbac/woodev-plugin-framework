@@ -52,22 +52,27 @@ if ( ! class_exists( 'Woodev_REST_V1_Registrar' ) ) :
 		/**
 		 * Registers a controller under the `woodev/v1` namespace.
 		 *
-		 * Stores one instance per concrete class (a second instance of the same class
-		 * is ignored), and adds the shared rest_api_init hook exactly once across all
-		 * registrations.
+		 * Deduplicated by $key (one controller per key); adds the shared
+		 * rest_api_init hook exactly once across all registrations. The key
+		 * defaults to the concrete class name, which is correct for singleton
+		 * controllers. Stateful controllers that carry per-plugin identity (e.g.
+		 * one instance of the same class per plugin, like the setup-wizard
+		 * controller) MUST pass a unique $key — otherwise a second instance of
+		 * the same class is silently ignored and its routes never register.
 		 *
 		 * @since 2.0.0
 		 *
-		 * @param object $controller A controller exposing a public register_routes() method.
+		 * @param object      $controller A controller exposing a public register_routes() method.
+		 * @param string|null $key        Dedup key; defaults to the concrete class name.
 		 *
 		 * @return void
 		 */
-		public static function register_controller( object $controller ): void {
+		public static function register_controller( object $controller, ?string $key = null ): void {
 
-			$class = get_class( $controller );
+			$key = $key ?? get_class( $controller );
 
-			if ( ! isset( self::$controllers[ $class ] ) ) {
-				self::$controllers[ $class ] = $controller;
+			if ( ! isset( self::$controllers[ $key ] ) ) {
+				self::$controllers[ $key ] = $controller;
 			}
 
 			if ( ! self::$hooked ) {
