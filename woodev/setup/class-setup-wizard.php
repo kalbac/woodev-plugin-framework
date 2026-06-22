@@ -130,6 +130,7 @@ abstract class Setup_Wizard {
 	protected function add_hooks(): void {
 		add_action( "woodev_{$this->get_id()}_installed", [ $this, 'handle_installed' ] );
 		add_action( 'admin_init', [ $this, 'maybe_redirect' ] );
+		add_action( 'admin_init', [ $this, 'maybe_render_full_screen' ] );
 		add_action( 'admin_notices', [ $this, 'maybe_render_notice' ] );
 		add_action( 'admin_menu', [ $this, 'register_page' ] );
 		add_action( 'rest_api_init', [ $this, 'register_rest' ], 5 );
@@ -399,6 +400,85 @@ abstract class Setup_Wizard {
 	public function render_page(): void {
 		echo '<div id="woodev-setup-wizard-root"></div>';
 		echo '<noscript><p>' . esc_html__( 'Для мастера настройки нужен JavaScript. Включите его и обновите страницу.', 'woodev-plugin-framework' ) . '</p></noscript>';
+	}
+
+	/**
+	 * Whether the current request targets the wizard page.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @return bool
+	 */
+	protected function is_wizard_page_request(): bool {
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only page routing check, no state change.
+		return is_admin() && ! wp_doing_ajax() && isset( $_GET['page'] ) && $this->get_page_slug() === sanitize_key( wp_unslash( $_GET['page'] ) );
+	}
+
+	/**
+	 * Renders the wizard as a standalone full-screen page (no admin chrome).
+	 *
+	 * Hooked early on admin_init: on the wizard page it enqueues the bundle,
+	 * prints a minimal HTML document with the React mount, and exits before
+	 * admin-header.php loads the menu/toolbar/notices.
+	 *
+	 * @internal
+	 *
+	 * @since 2.0.2
+	 *
+	 * @return void
+	 */
+	public function maybe_render_full_screen(): void {
+		if ( ! $this->is_wizard_page_request() ) {
+			return;
+		}
+
+		if ( ! current_user_can( $this->required_capability ) ) {
+			wp_die(
+				esc_html__( 'У вас нет прав для доступа к этой странице.', 'woodev-plugin-framework' ),
+				'',
+				[ 'response' => 403 ]
+			);
+		}
+
+		$this->enqueue_assets();
+		$this->render_full_screen_page();
+
+		exit;
+	}
+
+	/**
+	 * Outputs the standalone full-screen HTML document for the wizard.
+	 *
+	 * @internal
+	 *
+	 * @since 2.0.2
+	 *
+	 * @return void
+	 */
+	public function render_full_screen_page(): void {
+		// The standalone wizard has no emoji content; skip the (deprecated in WP 6.4)
+		// emoji-styles print so the <head> stays clean.
+		remove_action( 'wp_print_styles', 'print_emoji_styles' );
+		remove_action( 'admin_print_styles', 'print_emoji_styles' );
+		?>
+<!DOCTYPE html>
+<html <?php language_attributes(); ?>>
+<head>
+	<meta charset="<?php bloginfo( 'charset' ); ?>" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<title><?php echo esc_html( $this->plugin->get_plugin_name() ); ?></title>
+		<?php
+		wp_print_styles();
+		wp_print_head_scripts();
+		?>
+</head>
+<body class="woodev-setup-wizard wp-core-ui">
+	<div id="woodev-setup-wizard-root"></div>
+	<noscript><p><?php echo esc_html__( 'Для мастера настройки нужен JavaScript. Включите его и обновите страницу.', 'woodev-plugin-framework' ); ?></p></noscript>
+		<?php wp_print_footer_scripts(); ?>
+</body>
+</html>
+		<?php
 	}
 
 	/**

@@ -167,24 +167,55 @@ $woodev_test_plugin_bootstrap->register_loader_definition( woodev_test_plugin_lo
 function woodev_test_plugin_init() {
 
 	/**
-	 * Minimal setup wizard (one content step) so the woodev/v1 setup routes
-	 * register for integration coverage.
+	 * RIG DEMO settings handler — several field types for the wizard demo.
+	 * (Rig-only scaffolding; reverted before the framework PR.)
+	 */
+	class Woodev_Test_Settings extends \Woodev_Abstract_Settings {
+
+		/**
+		 * @return void
+		 */
+		protected function register_settings() {
+			$this->register_setting( 'api_key', \Woodev_Setting::TYPE_STRING, [ 'name' => 'API-ключ', 'description' => 'Ключ из личного кабинета перевозчика.' ] );
+			$this->register_setting( 'api_secret', \Woodev_Setting::TYPE_STRING, [ 'name' => 'Секретный ключ' ] );
+			$this->register_setting( 'environment', \Woodev_Setting::TYPE_STRING, [ 'name' => 'Режим работы', 'options' => [ 'production' => 'Боевой', 'test' => 'Тестовый' ], 'default' => 'production' ] );
+			$this->register_setting( 'enable_tracking', \Woodev_Setting::TYPE_BOOLEAN, [ 'name' => 'Автоматический трекинг статусов', 'default' => true ] );
+			$this->register_setting( 'default_status', \Woodev_Setting::TYPE_STRING, [ 'name' => 'Статус заказа после отгрузки', 'options' => [ 'processing' => 'В обработке', 'completed' => 'Выполнен' ], 'default' => 'processing' ] );
+		}
+	}
+
+	/**
+	 * RIG DEMO setup wizard — multi-step with content + settings steps.
+	 * (Rig-only scaffolding; reverted before the framework PR.)
 	 */
 	class Woodev_Test_Setup_Wizard extends \Woodev\Framework\Setup\Setup_Wizard {
 
 		/**
-		 * Registers a single content step.
-		 *
 		 * @return void
 		 */
 		protected function register_steps(): void {
 			$this->register_content_step(
 				'welcome',
-				'Welcome',
+				'Добро пожаловать',
 				static function (): string {
-					return '<p>Welcome</p>';
+					return '<p>Этот мастер поможет за пару минут подключить плагин к перевозчику и задать базовые параметры доставки.</p>'
+						. '<ul><li>Подключение к API перевозчика</li><li>Параметры расчёта и упаковки</li><li>Автоматический трекинг статусов</li></ul>'
+						. '<p>Все настройки можно изменить позже на странице плагина.</p>';
 				}
 			);
+
+			$this->register_step( 'connection', 'Подключение', [ 'api_key', 'api_secret', 'environment' ] );
+			$this->register_step( 'delivery', 'Доставка', [ 'enable_tracking', 'default_status' ] );
+		}
+
+		/**
+		 * @return array<int,array<string,string>>
+		 */
+		protected function get_finish_actions(): array {
+			return [
+				[ 'label' => 'Перейти к настройкам', 'url' => admin_url( 'admin.php?page=wc-settings' ) ],
+				[ 'label' => 'Документация', 'url' => 'https://woodev.ru/' ],
+			];
 		}
 	}
 
@@ -252,6 +283,22 @@ function woodev_test_plugin_init() {
 		 */
 		protected function build_setup_wizard_handler() {
 			return new Woodev_Test_Setup_Wizard( $this );
+		}
+
+		/** @var Woodev_Test_Settings|null rig-demo settings handler. */
+		private $woodev_test_settings;
+
+		/**
+		 * RIG DEMO settings handler (rig-only; reverted before the framework PR).
+		 *
+		 * @return Woodev_Test_Settings
+		 */
+		public function get_settings_handler() {
+			if ( null === $this->woodev_test_settings ) {
+				$this->woodev_test_settings = new Woodev_Test_Settings( self::PLUGIN_ID );
+			}
+
+			return $this->woodev_test_settings;
 		}
 	}
 

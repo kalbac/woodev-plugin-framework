@@ -3,7 +3,7 @@
  *
  * Renders a settings step's fields (from the Settings-API schema slice) or a
  * content step's server-rendered markup. Classic JSX runtime: createElement /
- * Fragment imported and used directly (no JSX).
+ * Fragment used directly (no JSX).
  *
  * @package woodev-plugin-framework
  */
@@ -22,15 +22,19 @@ import ControlField from './control-field';
  */
 export default function StepView( { step, values, onChange } ) {
 	const body = 'settings' === step.type
-		? Object.entries( step.fields ).map( ( [ id, schema ] ) =>
-			createElement( ControlField, {
-				key: id,
-				schema,
-				value: values[ id ] ?? schema.value,
-				onChange: ( v ) => onChange( { ...values, [ id ]: v } ),
-			} ) )
+		? createElement(
+			'div',
+			{ className: 'woodev-setup__fields' },
+			Object.entries( step.fields ).map( ( [ id, schema ] ) =>
+				createElement( ControlField, {
+					key: id,
+					schema,
+					value: values[ id ] ?? schema.value,
+					onChange: ( v ) => onChange( { ...values, [ id ]: v } ),
+				} ) )
+		)
 		: createElement( 'div', {
-			className: 'woodev-setup-step-content',
+			className: 'woodev-setup__content',
 			// Content originates from the plugin's own trusted server-side callback.
 			dangerouslySetInnerHTML: { __html: step.content || '' },
 		} );
@@ -38,7 +42,7 @@ export default function StepView( { step, values, onChange } ) {
 	return createElement(
 		Fragment,
 		null,
-		createElement( 'h2', { className: 'woodev-setup-step-title' }, step.label ),
+		createElement( 'h2', { className: 'woodev-setup__step-title' }, step.label ),
 		body
 	);
 }
