@@ -340,4 +340,240 @@ abstract class Setup_Wizard {
 		wp_safe_redirect( $this->get_setup_url() );
 		exit;
 	}
+
+	/**
+	 * Returns the admin page slug for this wizard.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @return string
+	 */
+	public function get_page_slug(): string {
+		return "woodev-{$this->get_id()}-setup";
+	}
+
+	/**
+	 * Returns the full admin URL to the wizard page.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @return string
+	 */
+	public function get_setup_url(): string {
+		return esc_url_raw( admin_url( 'admin.php?page=' . $this->get_page_slug() ) );
+	}
+
+	/**
+	 * Registers the hidden full-screen wizard admin page.
+	 *
+	 * @internal
+	 *
+	 * @since 2.0.2
+	 *
+	 * @return void
+	 */
+	public function register_page(): void {
+		$hook = add_submenu_page(
+			'', // hidden: no parent menu.
+			$this->plugin->get_plugin_name(),
+			$this->plugin->get_plugin_name(),
+			$this->required_capability,
+			$this->get_page_slug(),
+			[ $this, 'render_page' ]
+		);
+
+		if ( $hook ) {
+			add_action( "admin_print_scripts-{$hook}", [ $this, 'enqueue_assets' ] );
+		}
+	}
+
+	/**
+	 * Renders the React mount node for the wizard.
+	 *
+	 * @internal
+	 *
+	 * @since 2.0.2
+	 *
+	 * @return void
+	 */
+	public function render_page(): void {
+		echo '<div id="woodev-setup-wizard-root"></div>';
+		echo '<noscript><p>' . esc_html__( 'Для мастера настройки нужен JavaScript. Включите его и обновите страницу.', 'woodev-plugin-framework' ) . '</p></noscript>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- esc_html__ output is already escaped.
+	}
+
+	/**
+	 * Enqueues the wizard React bundle and inline bootstrap data.
+	 *
+	 * Mirrors Woodev_Admin_Pages::load_licenses_page_scripts().
+	 *
+	 * @internal
+	 *
+	 * @since 2.0.2
+	 *
+	 * @return void
+	 */
+	public function enqueue_assets(): void {
+		$asset_file = $this->plugin->get_framework_path() . '/assets/build/setup-wizard/index.asset.php';
+		$asset      = file_exists( $asset_file )
+			? include $asset_file
+			: [
+				'dependencies' => [],
+				'version' => $this->plugin->get_version(),
+			];
+
+		$build_url = $this->plugin->get_framework_assets_url() . '/build/setup-wizard';
+
+		wp_enqueue_style( 'wp-components' );
+		wp_enqueue_style( 'woodev-setup-wizard', $build_url . '/style-index.css', [ 'wp-components' ], $asset['version'] );
+		wp_enqueue_script( 'woodev-setup-wizard', $build_url . '/index.js', $asset['dependencies'], $asset['version'], true );
+
+		wp_add_inline_script(
+			'woodev-setup-wizard',
+			'window.woodevSetupWizard = ' . wp_json_encode( $this->get_bootstrap_data() ) . ';',
+			'before'
+		);
+	}
+
+	/**
+	 * Builds the PHP-driven bootstrap payload for the React shell.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @return array<string,mixed>
+	 */
+	protected function get_bootstrap_data(): array {
+		$schema = $this->get_field_schema();
+		$steps  = [];
+
+		foreach ( $this->steps as $step ) {
+			$fields = [];
+			foreach ( $step->get_setting_ids() as $sid ) {
+				if ( isset( $schema[ $sid ] ) ) {
+					$fields[ $sid ] = $schema[ $sid ];
+				}
+			}
+
+			$steps[] = [
+				'id'     => $step->get_id(),
+				'label'  => $step->get_label(),
+				'type'   => $step->get_type(),
+				'fields' => $fields,
+			];
+		}
+
+		return [
+			'pluginId'      => $this->get_id(),
+			'pluginName'    => $this->plugin->get_plugin_name(),
+			'headerLogoUrl' => esc_url_raw( $this->get_header_image_url() ),
+			'restRoot'      => esc_url_raw( rest_url( "woodev/v1/{$this->get_id()}/setup" ) ),
+			'nonce'         => wp_create_nonce( 'wp_rest' ),
+			'state'         => $this->get_state(),
+			'steps'         => $steps,
+			'finishActions' => $this->get_finish_actions(),
+		];
+	}
+
+	/**
+	 * Resolves the JSON field schema for referenced settings from the plugin's
+	 * Settings API handler. Returns an empty map when the plugin has no handler.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @return array<string,array<string,mixed>>
+	 */
+	protected function get_field_schema(): array {
+		$handler = $this->plugin->get_settings_handler();
+		if ( ! $handler ) {
+			return [];
+		}
+
+		$schema = [];
+		foreach ( $handler->get_settings() as $setting ) {
+			$schema[ $setting->get_id() ] = [
+				'type'    => $setting->get_type(),
+				'name'    => $setting->get_name(),
+				'options' => $setting->get_options(),
+				'value'   => $handler->get_value( $setting->get_id() ),
+			];
+		}
+
+		return $schema;
+	}
+
+	/**
+	 * Finish-screen "what's next" actions. Override per plugin.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @return array<int,array<string,string>>
+	 */
+	protected function get_finish_actions(): array {
+		$actions = [];
+		if ( $this->plugin->get_documentation_url() ) {
+			$actions[] = [
+				'label' => __( 'Документация', 'woodev-plugin-framework' ),
+				'url'   => esc_url_raw( $this->plugin->get_documentation_url() ),
+			];
+		}
+
+		return $actions;
+	}
+
+	/**
+	 * Returns the header logo URL. Override per plugin.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @return string
+	 */
+	protected function get_header_image_url(): string {
+		return '';
+	}
+
+	/**
+	 * Renders the "run the wizard" admin notice fallback.
+	 *
+	 * @internal
+	 *
+	 * @since 2.0.2
+	 *
+	 * @return void
+	 */
+	public function maybe_render_notice(): void {
+		if ( $this->is_finished() ) {
+			return;
+		}
+
+		printf(
+			'<div class="notice notice-info"><p>%1$s <a href="%2$s" class="button button-primary">%3$s</a></p></div>',
+			esc_html(
+				sprintf(
+					/* translators: %s plugin name */
+					__( 'Завершите настройку %s.', 'woodev-plugin-framework' ),
+					$this->plugin->get_plugin_name()
+				)
+			),
+			esc_url( $this->get_setup_url() ),
+			esc_html__( 'Запустить мастер настройки', 'woodev-plugin-framework' )
+		);
+	}
+
+	/**
+	 * Adds a "Setup" link to the plugin row while incomplete.
+	 *
+	 * @internal
+	 *
+	 * @since 2.0.2
+	 *
+	 * @param string[] $links existing action links.
+	 *
+	 * @return string[]
+	 */
+	public function add_action_link( array $links ): array {
+		if ( ! $this->is_finished() ) {
+			$links[] = sprintf( '<a href="%s">%s</a>', esc_url( $this->get_setup_url() ), esc_html__( 'Настройка', 'woodev-plugin-framework' ) );
+		}
+
+		return $links;
+	}
 }
