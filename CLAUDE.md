@@ -140,7 +140,7 @@ The constructor auto-initializes all framework subsystems and registers WP hooks
 | `Woodev_Lifecycle` | Install/upgrade routines and milestone notices |
 | `Woodev_REST_API` | Registers plugin REST API routes |
 | `Woodev_Blocks_Handler` | Declares WC Cart/Checkout block compatibility |
-| `Woodev_Plugin_Setup_Wizard` | Admin onboarding wizard (opt-in) |
+| `Woodev\Framework\Setup\Setup_Wizard` | Admin onboarding wizard — neutral React-driven, opt-in via `get_setup_wizard_handler()` (WC wrapper: `Woocommerce_Setup_Wizard`) |
 | `Woodev_Admin_Pages` | Plugin settings page registration |
 | `Woodev_Plugin_Compatibility` | WP/WC version helpers |
 | `Woodev_Order_Compatibility` | HPOS-compatible order data access |

@@ -302,12 +302,13 @@ require_once dirname( __DIR__, 2 ) . '/woodev/setup/class-setup-wizard.php';
 class Registry_Test_Wizard extends Setup_Wizard {
 	public array $declared = [];
 	public function __construct() {}                       // bypass parent wiring
+	public function get_id(): string { return 'reg'; }     // no plugin in this double
 	protected function register_steps(): void {
-		foreach ( $this->declared as $s ) {
-			if ( 'content' === $s ) {
-				$this->register_content_step( $s, $s, static function (): string { return ''; } );
+		foreach ( $this->declared as $id => $kind ) {       // associative: key=id, value=kind
+			if ( 'content' === $kind ) {
+				$this->register_content_step( $id, $id, static function (): string { return ''; } );
 			} else {
-				$this->register_step( $s, $s, [ $s . '_field' ] );
+				$this->register_step( $id, $id, [ $id . '_field' ] );
 			}
 		}
 	}
@@ -527,9 +528,7 @@ require_once dirname( __DIR__, 2 ) . '/woodev/setup/class-setup-wizard.php';
 class State_Test_Wizard extends Setup_Wizard {
 	public function __construct() {}
 	protected function register_steps(): void {}
-	public function set_id( string $id ): void { $this->wizard_id = $id; }
-	protected string $wizard_id = 'acme';
-	public function get_id(): string { return $this->wizard_id; }
+	public function get_id(): string { return 'acme'; }
 }
 
 class SetupWizardStateTest extends TestCase {
