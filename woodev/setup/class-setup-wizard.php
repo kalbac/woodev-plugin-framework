@@ -398,7 +398,7 @@ abstract class Setup_Wizard {
 	 */
 	public function render_page(): void {
 		echo '<div id="woodev-setup-wizard-root"></div>';
-		echo '<noscript><p>' . esc_html__( 'Для мастера настройки нужен JavaScript. Включите его и обновите страницу.', 'woodev-plugin-framework' ) . '</p></noscript>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- esc_html__ output is already escaped.
+		echo '<noscript><p>' . esc_html__( 'Для мастера настройки нужен JavaScript. Включите его и обновите страницу.', 'woodev-plugin-framework' ) . '</p></noscript>';
 	}
 
 	/**
@@ -418,7 +418,7 @@ abstract class Setup_Wizard {
 			? include $asset_file
 			: [
 				'dependencies' => [],
-				'version' => $this->plugin->get_version(),
+				'version'      => $this->plugin->get_version(),
 			];
 
 		$build_url = $this->plugin->get_framework_assets_url() . '/build/setup-wizard';
@@ -541,6 +541,11 @@ abstract class Setup_Wizard {
 	 */
 	public function maybe_render_notice(): void {
 		if ( $this->is_finished() ) {
+			return;
+		}
+
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only screen check, no state change.
+		if ( isset( $_GET['page'] ) && $this->get_page_slug() === sanitize_key( wp_unslash( $_GET['page'] ) ) ) {
 			return;
 		}
 
