@@ -64,7 +64,7 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		/** @var Woodev_REST_API REST API handler instance */
 		protected $rest_api_handler;
 
-		/** @var Woodev_Plugin_Setup_Wizard handler instance */
+		/** @var \Woodev\Framework\Setup\Setup_Wizard|null setup wizard handler (opt-in) */
 		protected $setup_wizard_handler;
 
 		/** @var \Woodev\Framework\Competitor\Competitor_Notification_Handler|null competitor notification engine (opt-in) */
@@ -281,12 +281,33 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		}
 
 		/**
-		 * Builds the Setup Wizard handler instance.
+		 * Builds the setup wizard handler (opt-in).
 		 *
-		 * Plugins can override and extend this method to add their own setup wizard.
+		 * Stores the plugin's wizard when one is provided. Plugins opt in by
+		 * overriding build_setup_wizard_handler() to return their Setup_Wizard
+		 * subclass; the default returns null (no wizard). The wizard self-wires
+		 * its own hooks in its constructor.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
 		 */
-		protected function init_setup_wizard_handler() {
-			require_once $this->get_framework_path() . '/admin/abstract-plugin-admin-setup-wizard.php';
+		protected function init_setup_wizard_handler(): void {
+			$this->setup_wizard_handler = $this->build_setup_wizard_handler();
+		}
+
+		/**
+		 * Returns the plugin's setup wizard instance, or null when not opted in.
+		 *
+		 * Override per plugin to return a new Setup_Wizard subclass instance,
+		 * e.g. `return new Plugin_Setup_Wizard( $this );`.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return \Woodev\Framework\Setup\Setup_Wizard|null
+		 */
+		protected function build_setup_wizard_handler() {
+			return null;
 		}
 
 		/**
@@ -1038,9 +1059,11 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		}
 
 		/**
-		 * Gets the Setup Wizard handler instance.
+		 * Gets the setup wizard handler instance (null when not opted in).
 		 *
-		 * @return null|Woodev_Plugin_Setup_Wizard
+		 * @since 2.0.2
+		 *
+		 * @return \Woodev\Framework\Setup\Setup_Wizard|null
 		 */
 		public function get_setup_wizard_handler() {
 			return $this->setup_wizard_handler;

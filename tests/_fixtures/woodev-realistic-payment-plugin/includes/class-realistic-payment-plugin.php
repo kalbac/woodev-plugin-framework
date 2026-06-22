@@ -111,13 +111,6 @@ final class Woodev_Realistic_Payment_Plugin extends \Woodev_Payment_Gateway_Plug
 	protected function init_blocks_handler(): void {}
 
 	/**
-	 * No-op setup wizard handler for isolated fixture construction.
-	 *
-	 * @return void
-	 */
-	protected function init_setup_wizard_handler() {}
-
-	/**
 	 * Gets the plugin file.
 	 *
 	 * @return string

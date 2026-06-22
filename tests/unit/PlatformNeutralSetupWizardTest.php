@@ -7,28 +7,27 @@
 
 namespace Woodev\Tests\Unit;
 
-use Brain\Monkey\Functions;
+use Woodev\Framework\Setup\Setup_Wizard;
 
-require_once dirname( __DIR__, 2 ) . '/woodev/class-plugin.php';
-require_once dirname( __DIR__, 2 ) . '/woodev/class-plugin-exception.php';
-require_once dirname( __DIR__, 2 ) . '/woodev/admin/abstract-plugin-admin-setup-wizard.php';
+require_once dirname( __DIR__, 2 ) . '/woodev/setup/class-step.php';
+require_once dirname( __DIR__, 2 ) . '/woodev/setup/class-setup-wizard.php';
 
 /**
- * Minimal setup wizard test double.
+ * Minimal neutral probe wizard (bypasses parent construction).
  */
-class Testable_Platform_Neutral_Setup_Wizard extends \Woodev_Plugin_Setup_Wizard {
+class Neutral_Probe_Wizard extends Setup_Wizard {
 
 	/**
-	 * Avoid parent construction for isolated helper tests.
+	 * Skip parent wiring for isolated tests.
 	 */
 	public function __construct() {}
 
 	/**
-	 * Satisfies the abstract setup wizard contract for isolated tests.
+	 * Satisfies the abstract contract.
 	 *
 	 * @return void
 	 */
-	protected function register_steps() {}
+	protected function register_steps(): void {}
 }
 
 /**
@@ -37,27 +36,25 @@ class Testable_Platform_Neutral_Setup_Wizard extends \Woodev_Plugin_Setup_Wizard
 class PlatformNeutralSetupWizardTest extends TestCase {
 
 	/**
-	 * Invalid step registration should use WordPress doing_it_wrong() without WooCommerce.
+	 * The neutral base wizard defaults to a non-WooCommerce capability.
 	 *
 	 * @return void
 	 */
-	public function test_register_step_error_path_uses_wordpress_doing_it_wrong(): void {
-		Functions\expect( '_doing_it_wrong' )
-			->once()
-			->with(
-				'Woodev_Plugin_Setup_Wizard::register_step',
-				'Invalid step ID',
-				'1.8.0'
-			);
+	public function test_base_wizard_default_capability_is_not_wc(): void {
+		$wizard = new Neutral_Probe_Wizard();
 
-		$wizard = new Testable_Platform_Neutral_Setup_Wizard();
+		$this->assertSame( 'manage_options', $wizard->get_required_capability() );
+	}
 
-		$this->assertFalse(
-			$wizard->register_step(
-				'',
-				'General',
-				static function (): void {}
-			)
-		);
+	/**
+	 * The neutral base wizard declares no WooCommerce/HPOS-named methods.
+	 *
+	 * @return void
+	 */
+	public function test_base_wizard_declares_no_woocommerce_methods(): void {
+		foreach ( get_class_methods( Setup_Wizard::class ) as $method ) {
+			$this->assertStringNotContainsStringIgnoringCase( 'woocommerce', $method );
+			$this->assertStringNotContainsStringIgnoringCase( 'hpos', $method );
+		}
 	}
 }
