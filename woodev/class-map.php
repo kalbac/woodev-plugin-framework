@@ -18,6 +18,7 @@ return [
 	'Woodev\\Framework\\Handlers\\Translation_Handler' => 'woodev/handlers/class-translation-handler.php',
 	'Woodev\\Framework\\Setup\\Setup_Wizard' => 'woodev/setup/class-setup-wizard.php',
 	'Woodev\\Framework\\Setup\\Step' => 'woodev/setup/class-step.php',
+	'Woodev\\Framework\\Setup\\Woocommerce_Setup_Wizard' => 'woodev/setup/class-woocommerce-setup-wizard.php',
 	'Woodev\\Framework\\Shipping\\Abstract_Shipping_API' => 'woodev/shipping-method/api/class-abstract-shipping-api.php',
 	'Woodev\\Framework\\Shipping\\Address\\Address_Normalizer' => 'woodev/shipping-method/address/interface-address-normalizer.php',
 	'Woodev\\Framework\\Shipping\\Address\\Null_Address_Normalizer' => 'woodev/shipping-method/address/class-null-address-normalizer.php',
