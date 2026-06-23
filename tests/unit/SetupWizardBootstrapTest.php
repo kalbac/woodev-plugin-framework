@@ -37,6 +37,8 @@ class SetupWizardBootstrapTest extends TestCase {
 		$plugin = Mockery::mock( 'Woodev_Plugin' );
 		$plugin->shouldReceive( 'get_plugin_name' )->andReturn( 'Acme' );
 		$plugin->shouldReceive( 'get_documentation_url' )->andReturn( '' );
+		$plugin->shouldReceive( 'get_settings_url' )->andReturn( '' );
+		$plugin->shouldReceive( 'get_reviews_url' )->andReturn( '' );
 
 		$wizard = new Bootstrap_Test_Wizard( $plugin );
 		$wizard->build();

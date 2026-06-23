@@ -579,14 +579,15 @@ abstract class Setup_Wizard {
 		];
 
 		return [
-			'pluginId'      => $this->get_id(),
-			'pluginName'    => $this->plugin->get_plugin_name(),
-			'headerLogoUrl' => esc_url_raw( $this->get_header_image_url() ),
-			'restRoot'      => esc_url_raw( rest_url( "woodev/v1/{$this->get_id()}/setup" ) ),
-			'nonce'         => wp_create_nonce( 'wp_rest' ),
-			'state'         => $this->get_state(),
-			'steps'         => $steps,
-			'finishActions' => $this->get_finish_actions(),
+			'pluginId'              => $this->get_id(),
+			'pluginName'            => $this->plugin->get_plugin_name(),
+			'headerLogoUrl'         => esc_url_raw( $this->get_header_image_url() ),
+			'restRoot'              => esc_url_raw( rest_url( "woodev/v1/{$this->get_id()}/setup" ) ),
+			'nonce'                 => wp_create_nonce( 'wp_rest' ),
+			'state'                 => $this->get_state(),
+			'steps'                 => $steps,
+			'finishActions'         => $this->get_finish_actions(),
+			'finishSecondaryActions' => $this->get_finish_secondary_actions(),
 		];
 	}
 
@@ -639,7 +640,9 @@ abstract class Setup_Wizard {
 	}
 
 	/**
-	 * Finish-screen "what's next" actions. Override per plugin.
+	 * Finish-screen "what's next" next-step cards. Override per plugin.
+	 *
+	 * Each card has keys: heading, title, description, actionLabel, url.
 	 *
 	 * @since 2.0.2
 	 *
@@ -649,8 +652,46 @@ abstract class Setup_Wizard {
 		$actions = [];
 		if ( $this->plugin->get_documentation_url() ) {
 			$actions[] = [
-				'label' => __( 'Документация', 'woodev-plugin-framework' ),
-				'url'   => esc_url_raw( $this->plugin->get_documentation_url() ),
+				'heading'     => \__( 'Документация', 'woodev-plugin-framework' ),
+				'title'       => \__( 'Тонкая настройка', 'woodev-plugin-framework' ),
+				'description' => \__( 'Подробнее о возможностях плагина.', 'woodev-plugin-framework' ),
+				'actionLabel' => \__( 'Читать', 'woodev-plugin-framework' ),
+				'url'         => \esc_url_raw( $this->plugin->get_documentation_url() ),
+			];
+		}
+
+		return $actions;
+	}
+
+	/**
+	 * Finish-screen secondary action links (settings, review, etc.).
+	 *
+	 * Each item has keys: label, icon ('settings' | 'review'), url.
+	 * Items are only added when the plugin returns a non-empty URL from the
+	 * corresponding accessor; absent or empty URLs are silently omitted.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @return array<int,array<string,string>>
+	 */
+	protected function get_finish_secondary_actions(): array {
+		$actions = [];
+
+		$settings_url = method_exists( $this->plugin, 'get_settings_url' ) ? $this->plugin->get_settings_url() : '';
+		if ( $settings_url ) {
+			$actions[] = [
+				'label' => \__( 'Настройки', 'woodev-plugin-framework' ),
+				'icon'  => 'settings',
+				'url'   => \esc_url_raw( $settings_url ),
+			];
+		}
+
+		$reviews_url = method_exists( $this->plugin, 'get_reviews_url' ) ? $this->plugin->get_reviews_url() : '';
+		if ( $reviews_url ) {
+			$actions[] = [
+				'label' => \__( 'Оставить отзыв', 'woodev-plugin-framework' ),
+				'icon'  => 'review',
+				'url'   => \esc_url_raw( $reviews_url ),
 			];
 		}
 

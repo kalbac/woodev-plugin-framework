@@ -122,6 +122,8 @@ class SetupWizardStepDescriptionTest extends TestCase {
 		$plugin = Mockery::mock( 'Woodev_Plugin' );
 		$plugin->shouldReceive( 'get_plugin_name' )->andReturn( 'Test' );
 		$plugin->shouldReceive( 'get_documentation_url' )->andReturn( '' );
+		$plugin->shouldReceive( 'get_settings_url' )->andReturn( '' );
+		$plugin->shouldReceive( 'get_reviews_url' )->andReturn( '' );
 
 		$wizard                  = new Desc_Test_Wizard( $plugin );
 		$wizard->step_description = 'Step description text';
@@ -159,6 +161,8 @@ class SetupWizardStepDescriptionTest extends TestCase {
 		$plugin = Mockery::mock( 'Woodev_Plugin' );
 		$plugin->shouldReceive( 'get_plugin_name' )->andReturn( 'Test' );
 		$plugin->shouldReceive( 'get_documentation_url' )->andReturn( '' );
+		$plugin->shouldReceive( 'get_settings_url' )->andReturn( '' );
+		$plugin->shouldReceive( 'get_reviews_url' )->andReturn( '' );
 
 		$wizard = new Desc_Test_Wizard( $plugin );
 		$wizard->rebuild();
