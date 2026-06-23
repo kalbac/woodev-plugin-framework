@@ -144,4 +144,29 @@ class SettingsControlTypesTest extends TestCase {
 		$this->assertNull( $control->get_step() );
 		$this->assertSame( '', $control->get_tooltip() );
 	}
+
+	/**
+	 * A multi-value setting keeps its array default — register_setting must set
+	 * is_multi BEFORE default, else the array is validated as a scalar and nulled.
+	 *
+	 * @return void
+	 */
+	public function test_multi_setting_retains_array_default(): void {
+		$this->settings->register_setting(
+			'methods',
+			'string',
+			[
+				'is_multi' => true,
+				'options'  => [
+					'courier' => 'Курьер',
+					'pickup'  => 'ПВЗ',
+					'locker'  => 'Постамат',
+				],
+				'default'  => [ 'courier', 'pickup', 'locker' ],
+			]
+		);
+
+		$this->assertSame( [ 'courier', 'pickup', 'locker' ], $this->settings->get_setting( 'methods' )->get_default() );
+		$this->assertSame( [ 'courier', 'pickup', 'locker' ], $this->settings->get_value( 'methods' ) );
+	}
 }

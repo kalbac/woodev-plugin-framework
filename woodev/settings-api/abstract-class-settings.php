@@ -87,12 +87,15 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 
 				$setting->set_name( $args['name'] );
 				$setting->set_description( $args['description'] );
-				$setting->set_default( $args['default'] );
 				$setting->set_is_multi( $args['is_multi'] );
 
 				if ( is_array( $args['options'] ) ) {
 					$setting->set_options( $args['options'] );
 				}
+
+				// Default must be set AFTER is_multi so multi-value array defaults are
+				// validated per element instead of being rejected as a non-scalar.
+				$setting->set_default( $args['default'] );
 
 				$this->settings[ $id ] = $setting;
 
