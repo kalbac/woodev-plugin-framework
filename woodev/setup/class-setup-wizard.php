@@ -582,6 +582,10 @@ abstract class Setup_Wizard {
 	 * Resolves the JSON field schema for referenced settings from the plugin's
 	 * Settings API handler. Returns an empty map when the plugin has no handler.
 	 *
+	 * Each entry includes controlType, description (control description falling
+	 * back to setting description), tooltip, and conditional range bounds
+	 * (min/max/step) when the associated control provides them.
+	 *
 	 * @since 2.0.2
 	 *
 	 * @return array<string,array<string,mixed>>
@@ -594,12 +598,29 @@ abstract class Setup_Wizard {
 
 		$schema = [];
 		foreach ( $handler->get_settings() as $setting ) {
-			$schema[ $setting->get_id() ] = [
-				'type'    => $setting->get_type(),
-				'name'    => $setting->get_name(),
-				'options' => $setting->get_options(),
-				'value'   => $handler->get_value( $setting->get_id() ),
+			$control = $setting->get_control();
+
+			$entry = [
+				'type'        => $setting->get_type(),
+				'name'        => $setting->get_name(),
+				'options'     => $setting->get_options(),
+				'value'       => $handler->get_value( $setting->get_id() ),
+				'controlType' => $control ? $control->get_type() : null,
+				'description' => $control && $control->get_description() ? $control->get_description() : ( method_exists( $setting, 'get_description' ) ? $setting->get_description() : '' ),
+				'tooltip'     => $control ? $control->get_tooltip() : '',
 			];
+
+			if ( $control && null !== $control->get_min() ) {
+				$entry['min'] = $control->get_min();
+			}
+			if ( $control && null !== $control->get_max() ) {
+				$entry['max'] = $control->get_max();
+			}
+			if ( $control && null !== $control->get_step() ) {
+				$entry['step'] = $control->get_step();
+			}
+
+			$schema[ $setting->get_id() ] = $entry;
 		}
 
 		return $schema;
