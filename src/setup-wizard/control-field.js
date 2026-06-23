@@ -236,6 +236,7 @@ export default function ControlField( { schema, value, onChange } ) {
 				createElement( FormTokenField, {
 					__nextHasNoMarginBottom: true,
 					__next40pxDefaultSize: true,
+					__experimentalShowHowTo: false,
 					value: tokenValue,
 					suggestions: opts.map( ( option ) => option.label ),
 					onChange: ( tokens ) =>
