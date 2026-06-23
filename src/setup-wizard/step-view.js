@@ -66,8 +66,10 @@ function renderFields( step, values, onChange ) {
 
 	entries.forEach( ( [ id, schema ] ) => {
 		const kind = controlKind( schema );
-		const groupable = 'radio' === kind || 'toggle' === kind || 'checkbox' === kind;
-		const groupKind = 'radio' === kind ? 'radio' : 'toggle';
+		// Only consecutive toggles share one bordered group; each radio field is
+		// self-contained (own label + its own option-group, in control-field).
+		const groupable = 'toggle' === kind || 'checkbox' === kind;
+		const groupKind = 'toggle';
 
 		const field = createElement( ControlField, {
 			key: id,

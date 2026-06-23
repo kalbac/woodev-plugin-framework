@@ -164,13 +164,20 @@ export default function ControlField( { schema, value, onChange } ) {
 			);
 
 		case 'radio':
-			// Radio rows are wrapped in an option-group by step-view; render the
-			// raw RadioControl here.
-			return createElement( RadioControl, {
-				selected: value ?? schema.value ?? '',
-				options: normalizeOptions( schema.options ),
-				onChange,
-			} );
+			// Each radio field is self-contained: its own label + description above
+			// a bordered option-group holding the options.
+			return withAnatomy(
+				schema,
+				createElement(
+					'div',
+					{ className: 'woodev-setup__option-group' },
+					createElement( RadioControl, {
+						selected: value ?? schema.value ?? '',
+						options: normalizeOptions( schema.options ),
+						onChange,
+					} )
+				)
+			);
 
 		case 'range':
 			return withAnatomy(
