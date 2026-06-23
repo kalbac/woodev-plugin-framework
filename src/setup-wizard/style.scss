@@ -470,6 +470,12 @@ body.woodev-setup-wizard {
 			margin-top: 4px;
 		}
 
+		// RadioControl wraps options in a VStack with a gap — kill it so rows are
+		// flush (dividers separate them) and the selected-row fill has no strips.
+		.components-radio-control__group-wrapper {
+			gap: 0 !important;
+		}
+
 		// radio rows from RadioControl
 		.components-radio-control__option {
 			display: flex;
@@ -794,6 +800,7 @@ body.woodev-setup-wizard {
 	&__also {
 		display: flex;
 		align-items: center;
+		justify-content: center;
 		flex-wrap: wrap;
 		gap: 12px;
 		padding: 1.2em 1.6em;
@@ -803,6 +810,8 @@ body.woodev-setup-wizard {
 	}
 
 	&__also-label {
+		flex-basis: 100%;
+		text-align: center;
 		color: $wd-desc;
 	}
 

@@ -512,8 +512,14 @@ abstract class Setup_Wizard {
 
 		$build_url = $this->plugin->get_framework_assets_url() . '/build/setup-wizard';
 
+		// The asset manifest version tracks the JS bundle only; SCSS-only changes
+		// leave it unchanged, so version the stylesheet by its own mtime to bust
+		// the cache when just the CSS is rebuilt (and on every release).
+		$style_path    = $this->plugin->get_framework_path() . '/assets/build/setup-wizard/style-index.css';
+		$style_version = file_exists( $style_path ) ? (string) filemtime( $style_path ) : $asset['version'];
+
 		wp_enqueue_style( 'wp-components' );
-		wp_enqueue_style( 'woodev-setup-wizard', $build_url . '/style-index.css', [ 'wp-components' ], $asset['version'] );
+		wp_enqueue_style( 'woodev-setup-wizard', $build_url . '/style-index.css', [ 'wp-components' ], $style_version );
 		wp_enqueue_script( 'woodev-setup-wizard', $build_url . '/index.js', $asset['dependencies'], $asset['version'], true );
 
 		wp_add_inline_script(

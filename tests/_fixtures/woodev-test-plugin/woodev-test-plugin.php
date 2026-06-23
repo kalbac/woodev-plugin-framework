@@ -537,25 +537,6 @@ function woodev_test_plugin_init() {
 			];
 		}
 
-		/**
-		 * Finish-screen secondary "also" actions (settings / review icon buttons).
-		 *
-		 * @return array<int,array<string,string>>
-		 */
-		protected function get_finish_secondary_actions(): array {
-			return [
-				[
-					'label' => 'Перейти к настройкам',
-					'icon'  => 'settings',
-					'url'   => admin_url( 'admin.php?page=wc-settings' ),
-				],
-				[
-					'label' => 'Оставить отзыв',
-					'icon'  => 'review',
-					'url'   => 'https://woodev.ru/',
-				],
-			];
-		}
 	}
 
 	/**
@@ -613,6 +594,16 @@ function woodev_test_plugin_init() {
 
 		public function get_download_id(): int {
 			return 0;
+		}
+
+		// Demo URLs so the wizard finish screen shows the conditional "also" actions
+		// (the framework only renders each button when its URL is non-empty).
+		public function get_settings_url( $plugin_id = null ) {
+			return admin_url( 'admin.php?page=wc-settings' );
+		}
+
+		public function get_reviews_url() {
+			return 'https://woodev.ru/';
 		}
 
 		/**
