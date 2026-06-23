@@ -117,6 +117,7 @@ class SetupWizardStepDescriptionTest extends TestCase {
 		Functions\when( 'wp_create_nonce' )->justReturn( 'N' );
 		Functions\when( 'rest_url' )->returnArg( 1 );
 		Functions\when( 'esc_url_raw' )->returnArg( 1 );
+		Functions\when( 'admin_url' )->justReturn( 'http://example.org/wp-admin/' );
 		Functions\when( '__' )->returnArg( 1 );
 
 		$plugin = Mockery::mock( 'Woodev_Plugin' );
@@ -156,6 +157,7 @@ class SetupWizardStepDescriptionTest extends TestCase {
 		Functions\when( 'wp_create_nonce' )->justReturn( 'N' );
 		Functions\when( 'rest_url' )->returnArg( 1 );
 		Functions\when( 'esc_url_raw' )->returnArg( 1 );
+		Functions\when( 'admin_url' )->justReturn( 'http://example.org/wp-admin/' );
 		Functions\when( '__' )->returnArg( 1 );
 
 		$plugin = Mockery::mock( 'Woodev_Plugin' );

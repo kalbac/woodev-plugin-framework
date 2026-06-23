@@ -86,6 +86,7 @@ class SetupWizardFinishActionsTest extends TestCase {
 	 */
 	public function test_finish_actions_contains_documentation_card(): void {
 		Functions\when( 'esc_url_raw' )->returnArg( 1 );
+		Functions\when( 'admin_url' )->justReturn( 'http://example.org/wp-admin/' );
 		Functions\when( '__' )->returnArg( 1 );
 
 		$plugin = Mockery::mock( 'Woodev_Plugin' );
@@ -129,6 +130,7 @@ class SetupWizardFinishActionsTest extends TestCase {
 	 */
 	public function test_secondary_actions_settings_card(): void {
 		Functions\when( 'esc_url_raw' )->returnArg( 1 );
+		Functions\when( 'admin_url' )->justReturn( 'http://example.org/wp-admin/' );
 		Functions\when( '__' )->returnArg( 1 );
 
 		$plugin = Mockery::mock( 'Woodev_Plugin' );
@@ -161,6 +163,7 @@ class SetupWizardFinishActionsTest extends TestCase {
 	 */
 	public function test_secondary_actions_review_card(): void {
 		Functions\when( 'esc_url_raw' )->returnArg( 1 );
+		Functions\when( 'admin_url' )->justReturn( 'http://example.org/wp-admin/' );
 		Functions\when( '__' )->returnArg( 1 );
 
 		$plugin = Mockery::mock( 'Woodev_Plugin' );
@@ -212,6 +215,7 @@ class SetupWizardFinishActionsTest extends TestCase {
 		Functions\when( 'wp_create_nonce' )->justReturn( 'N' );
 		Functions\when( 'rest_url' )->returnArg( 1 );
 		Functions\when( 'esc_url_raw' )->returnArg( 1 );
+		Functions\when( 'admin_url' )->justReturn( 'http://example.org/wp-admin/' );
 		Functions\when( '__' )->returnArg( 1 );
 
 		$plugin = Mockery::mock( 'Woodev_Plugin' );
