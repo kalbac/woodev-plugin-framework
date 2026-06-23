@@ -167,54 +167,373 @@ $woodev_test_plugin_bootstrap->register_loader_definition( woodev_test_plugin_lo
 function woodev_test_plugin_init() {
 
 	/**
-	 * RIG DEMO settings handler — several field types for the wizard demo.
-	 * (Rig-only scaffolding; reverted before the framework PR.)
+	 * RIG DEMO settings handler — all supported control types for the wizard demo.
+	 *
+	 * Step «Подключение»: text+tooltip, select, radio, number+tooltip, range, toggle×2, richtext.
+	 * Step «Доставка»:    multiselect, number×3, toggle, select.
+	 *
+	 * (Rig-only scaffolding — reverted before the framework PR.)
 	 */
 	class Woodev_Test_Settings extends \Woodev_Abstract_Settings {
 
 		/**
+		 * Registers all demo settings and their controls.
+		 *
 		 * @return void
 		 */
 		protected function register_settings() {
-			$this->register_setting( 'api_key', \Woodev_Setting::TYPE_STRING, [ 'name' => 'API-ключ', 'description' => 'Ключ из личного кабинета перевозчика.' ] );
-			$this->register_setting( 'api_secret', \Woodev_Setting::TYPE_STRING, [ 'name' => 'Секретный ключ' ] );
-			$this->register_setting( 'environment', \Woodev_Setting::TYPE_STRING, [ 'name' => 'Режим работы', 'options' => [ 'production' => 'Боевой', 'test' => 'Тестовый' ], 'default' => 'production' ] );
-			$this->register_setting( 'enable_tracking', \Woodev_Setting::TYPE_BOOLEAN, [ 'name' => 'Автоматический трекинг статусов', 'default' => true ] );
-			$this->register_setting( 'default_status', \Woodev_Setting::TYPE_STRING, [ 'name' => 'Статус заказа после отгрузки', 'options' => [ 'processing' => 'В обработке', 'completed' => 'Выполнен' ], 'default' => 'processing' ] );
+
+			// ----------------------------------------------------------------
+			// Step: connection — Подключение
+			// ----------------------------------------------------------------
+
+			// 1. text + tooltip
+			$this->register_setting(
+				'api_key',
+				\Woodev_Setting::TYPE_STRING,
+				[
+					'name'        => 'API-ключ',
+					'description' => 'Найдите ключ в кабинете перевозчика → Интеграции → API.',
+				]
+			);
+			$this->register_control(
+				'api_key',
+				'text',
+				[
+					'tooltip' => 'Секретный ключ из личного кабинета перевозчика. Хранится в зашифрованном виде и не передаётся третьим лицам.',
+				]
+			);
+
+			// 2. select
+			$this->register_setting(
+				'default_tariff',
+				\Woodev_Setting::TYPE_STRING,
+				[
+					'name'        => 'Тариф по умолчанию',
+					'description' => 'Используется, если для зоны не задан отдельный тариф.',
+					'options'     => [
+						'courier' => 'Курьер до двери',
+						'pickup'  => 'Пункт выдачи',
+						'locker'  => 'Постамат',
+					],
+					'default'     => 'courier',
+				]
+			);
+			$this->register_control( 'default_tariff', 'select' );
+
+			// 3. radio — 3 options with sub-text labels
+			$this->register_setting(
+				'calc_mode',
+				\Woodev_Setting::TYPE_STRING,
+				[
+					'name'        => 'Режим расчёта стоимости',
+					'description' => 'Как плагин считает цену доставки для покупателя.',
+					'options'     => [
+						'api'      => 'По тарифам перевозчика',
+						'fixed'    => 'Фиксированная ставка',
+						'freefrom' => 'Бесплатно от суммы заказа',
+					],
+					'default'     => 'api',
+				]
+			);
+			$this->register_control(
+				'calc_mode',
+				'radio',
+				[
+					'options' => [
+						'api'      => 'По тарифам перевозчика|Стоимость запрашивается у API в реальном времени',
+						'fixed'    => 'Фиксированная ставка|Единая цена за доставку независимо от веса',
+						'freefrom' => 'Бесплатно от суммы заказа|Порог задаётся ниже',
+					],
+				]
+			);
+
+			// 4. number + tooltip
+			$this->register_setting(
+				'free_shipping_threshold',
+				\Woodev_Setting::TYPE_INTEGER,
+				[
+					'name'        => 'Бесплатная доставка от',
+					'description' => 'Заказы дороже этой суммы получают бесплатную доставку выбранным тарифом.',
+					'default'     => 5000,
+				]
+			);
+			$this->register_control(
+				'free_shipping_threshold',
+				'number',
+				[
+					'tooltip' => 'Заказы дороже этой суммы получают бесплатную доставку выбранным тарифом.',
+					'min'     => 0,
+					'step'    => 100,
+				]
+			);
+
+			// 5. range with min / max / step
+			$this->register_setting(
+				'markup_percent',
+				\Woodev_Setting::TYPE_FLOAT,
+				[
+					'name'        => 'Наценка к тарифу перевозчика',
+					'description' => 'Добавляется к цене доставки от API — например, на упаковку.',
+					'default'     => 15,
+				]
+			);
+			$this->register_control(
+				'markup_percent',
+				'range',
+				[
+					'min'  => 0,
+					'max'  => 100,
+					'step' => 5,
+				]
+			);
+
+			// 6. toggle — COD (toggle group: два boolean подряд)
+			$this->register_setting(
+				'cod_enabled',
+				\Woodev_Setting::TYPE_BOOLEAN,
+				[
+					'name'        => 'Наложенный платёж',
+					'description' => 'Разрешить оплату при получении для этого способа доставки.',
+					'default'     => false,
+				]
+			);
+			$this->register_control( 'cod_enabled', 'toggle' );
+
+			// 7. toggle — sandbox
+			$this->register_setting(
+				'sandbox_mode',
+				\Woodev_Setting::TYPE_BOOLEAN,
+				[
+					'name'        => 'Тестовый режим (sandbox)',
+					'description' => 'Запросы уходят на тестовый контур перевозчика, реальные отправления не создаются.',
+					'default'     => false,
+				]
+			);
+			$this->register_control( 'sandbox_mode', 'toggle' );
+
+			// 8. richtext
+			$this->register_setting(
+				'checkout_notice',
+				\Woodev_Setting::TYPE_STRING,
+				[
+					'name'        => 'Примечание на странице оформления заказа',
+					'description' => 'Покажется покупателю под выбором способа доставки.',
+				]
+			);
+			$this->register_control( 'checkout_notice', 'richtext' );
+
+			// ----------------------------------------------------------------
+			// Step: delivery — Доставка
+			// ----------------------------------------------------------------
+
+			// 9. multiselect (is_multi)
+			$this->register_setting(
+				'delivery_methods',
+				\Woodev_Setting::TYPE_STRING,
+				[
+					'name'        => 'Доступные способы доставки',
+					'description' => 'Будут предложены покупателю на странице оформления заказа.',
+					'is_multi'    => true,
+					'options'     => [
+						'courier' => 'Курьер до двери',
+						'pickup'  => 'Пункт выдачи',
+						'locker'  => 'Постамат',
+					],
+					'default'     => [ 'courier', 'pickup', 'locker' ],
+				]
+			);
+			$this->register_control( 'delivery_methods', 'multiselect' );
+
+			// 10. number — вес упаковки (float)
+			$this->register_setting(
+				'box_weight',
+				\Woodev_Setting::TYPE_FLOAT,
+				[
+					'name'        => 'Вес пустой упаковки',
+					'description' => 'Прибавляется к весу товаров при расчёте тарифа.',
+					'default'     => 0.3,
+				]
+			);
+			$this->register_control(
+				'box_weight',
+				'number',
+				[
+					'min'  => 0,
+					'step' => 0.1,
+				]
+			);
+
+			// 11. number — длина коробки
+			$this->register_setting(
+				'box_length',
+				\Woodev_Setting::TYPE_INTEGER,
+				[
+					'name'        => 'Длина коробки по умолчанию',
+					'description' => 'Используются для расчёта тарифа, если у товара не заданы свои размеры.',
+					'default'     => 30,
+				]
+			);
+			$this->register_control(
+				'box_length',
+				'number',
+				[
+					'tooltip' => 'Используются для расчёта тарифа, если у товара не заданы свои размеры.',
+					'min'     => 1,
+				]
+			);
+
+			// 12. number — ширина коробки
+			$this->register_setting(
+				'box_width',
+				\Woodev_Setting::TYPE_INTEGER,
+				[
+					'name'    => 'Ширина коробки по умолчанию',
+					'default' => 20,
+				]
+			);
+			$this->register_control( 'box_width', 'number', [ 'min' => 1 ] );
+
+			// 13. toggle — показывать срок доставки
+			$this->register_setting(
+				'show_delivery_time',
+				\Woodev_Setting::TYPE_BOOLEAN,
+				[
+					'name'        => 'Показывать срок доставки покупателю',
+					'description' => 'Под способом доставки выводится ориентировочный срок из ответа API.',
+					'default'     => true,
+				]
+			);
+			$this->register_control( 'show_delivery_time', 'toggle' );
+
+			// 14. select — регион расчёта
+			$this->register_setting(
+				'default_region',
+				\Woodev_Setting::TYPE_STRING,
+				[
+					'name'        => 'Регион расчёта по умолчанию',
+					'description' => 'Откуда отправляются заказы — для предварительного расчёта.',
+					'options'     => [
+						'msk' => 'Москва',
+						'spb' => 'Санкт-Петербург',
+						'ekb' => 'Екатеринбург',
+						'nsk' => 'Новосибирск',
+					],
+					'default'     => 'msk',
+				]
+			);
+			$this->register_control( 'default_region', 'select' );
 		}
 	}
 
 	/**
-	 * RIG DEMO setup wizard — multi-step with content + settings steps.
-	 * (Rig-only scaffolding; reverted before the framework PR.)
+	 * RIG DEMO setup wizard — multi-step covering all control types.
+	 *
+	 * Logo URL: returns '' intentionally — the text-brand fallback renders the plugin
+	 * name and is safe for offline rigs. A remote URL (e.g. https://woodev.ru/…/logo.png)
+	 * would show the brand image only when the rig has internet access; esc_url_raw() strips
+	 * data: URIs (they contain commas which WP sanitises away), so inline SVG is not viable.
+	 * For a networked rig, replace '' with the HTTPS logo URL directly.
+	 *
+	 * (Rig-only scaffolding — reverted before the framework PR.)
 	 */
 	class Woodev_Test_Setup_Wizard extends \Woodev\Framework\Setup\Setup_Wizard {
 
 		/**
+		 * Registers all demo steps.
+		 *
 		 * @return void
 		 */
 		protected function register_steps(): void {
+
+			// Content step: Welcome.
 			$this->register_content_step(
 				'welcome',
 				'Добро пожаловать',
 				static function (): string {
-					return '<p>Этот мастер поможет за пару минут подключить плагин к перевозчику и задать базовые параметры доставки.</p>'
-						. '<ul><li>Подключение к API перевозчика</li><li>Параметры расчёта и упаковки</li><li>Автоматический трекинг статусов</li></ul>'
-						. '<p>Все настройки можно изменить позже на странице плагина.</p>';
-				}
+					return '<p>Этот мастер за пару минут подключит плагин к API перевозчика и задаст базовые параметры расчёта и упаковки. Все настройки можно изменить позже на странице плагина.</p>'
+						. '<ul>'
+						. '<li>Подключение к API перевозчика по ключу</li>'
+						. '<li>Расчёт стоимости и упаковка заказов</li>'
+						. '<li>Автоматический трекинг статусов доставки</li>'
+						. '</ul>';
+				},
+				'Настройка занимает около двух минут.'
 			);
 
-			$this->register_step( 'connection', 'Подключение', [ 'api_key', 'api_secret', 'environment' ] );
-			$this->register_step( 'delivery', 'Доставка', [ 'enable_tracking', 'default_status' ] );
+			// Settings step: connection — text, select, radio, number, range, toggle×2, richtext.
+			$this->register_step(
+				'connection',
+				'Подключение',
+				[
+					'api_key',
+					'default_tariff',
+					'calc_mode',
+					'free_shipping_threshold',
+					'markup_percent',
+					'cod_enabled',
+					'sandbox_mode',
+					'checkout_notice',
+				],
+				null,
+				'Укажите данные доступа к API. Их можно найти в личном кабинете перевозчика в разделе «Интеграции».'
+			);
+
+			// Settings step: delivery — multiselect, number×3, toggle, select.
+			$this->register_step(
+				'delivery',
+				'Доставка',
+				[
+					'delivery_methods',
+					'box_weight',
+					'box_length',
+					'box_width',
+					'show_delivery_time',
+					'default_region',
+				],
+				null,
+				'Базовые правила упаковки и набор способов доставки, доступных покупателю. Их можно детально настроить позже.'
+			);
+
+			// Terminal finish step is auto-appended by the framework — not registered here.
 		}
 
 		/**
+		 * Returns '' so the text-brand fallback renders safely on offline rigs.
+		 *
+		 * To show the Woodev logo on a networked rig, replace with:
+		 *   return 'https://woodev.ru/wp-content/uploads/woodev-logo.png';
+		 *
+		 * Note: esc_url_raw() strips data: URIs (commas are sanitised), so inline
+		 * SVG/PNG data URIs cannot be used here.
+		 *
+		 * @return string
+		 */
+		protected function get_header_image_url(): string {
+			return '';
+		}
+
+		/**
+		 * Finish-screen primary actions.
+		 *
 		 * @return array<int,array<string,string>>
 		 */
 		protected function get_finish_actions(): array {
 			return [
-				[ 'label' => 'Перейти к настройкам', 'url' => admin_url( 'admin.php?page=wc-settings' ) ],
-				[ 'label' => 'Документация', 'url' => 'https://woodev.ru/' ],
+				[
+					'heading'     => 'Следующий шаг',
+					'title'       => 'Страница настроек',
+					'description' => 'Тонкая настройка тарифов, зон доставки и упаковки.',
+					'actionLabel' => 'Перейти',
+					'url'         => admin_url( 'admin.php?page=wc-settings' ),
+				],
+				[
+					'heading'     => 'Документация',
+					'title'       => 'Справочное руководство',
+					'description' => 'Подробнее о возможностях плагина.',
+					'actionLabel' => 'Читать',
+					'url'         => 'https://woodev.ru/',
+				],
 			];
 		}
 	}
@@ -277,7 +596,7 @@ function woodev_test_plugin_init() {
 		}
 
 		/**
-		 * Opts into the minimal setup wizard so the woodev/v1 setup routes register.
+		 * Opts into the full-featured demo setup wizard.
 		 *
 		 * @return \Woodev\Framework\Setup\Setup_Wizard
 		 */
