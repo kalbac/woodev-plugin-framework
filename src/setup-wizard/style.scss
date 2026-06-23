@@ -858,6 +858,11 @@ body.woodev-setup-wizard {
 			color: $wd-accent-strong;
 		}
 	}
+
+	// Hide the untranslated wp-components "Separate with commas…" help line.
+	.components-form-token-field__help {
+		display: none;
+	}
 }
 
 // ---- Popover (custom dropdown menu) — rendered outside .woodev-setup -------
