@@ -24,6 +24,7 @@ import {
 } from '@wordpress/components';
 import { InfoIcon } from './icons';
 import WizardDropdown from './dropdown';
+import WizardRichText from './richtext';
 
 /**
  * Normalizes a schema's options ({key:label} object OR array) into a list of
@@ -211,24 +212,10 @@ export default function ControlField( { schema, value, onChange } ) {
 		case 'richtext':
 			return withAnatomy(
 				schema,
-				createElement(
-					'div',
-					{ className: 'woodev-setup__richtext' },
-					createElement(
-						'div',
-						{ className: 'woodev-setup__richtext-toolbar', 'aria-hidden': 'true' },
-						createElement( 'button', { type: 'button', className: 'is-bold', tabIndex: -1 }, 'B' ),
-						createElement( 'button', { type: 'button', className: 'is-italic', tabIndex: -1 }, 'I' ),
-						createElement( 'button', { type: 'button', tabIndex: -1 }, '☰' ),
-						createElement( 'button', { type: 'button', tabIndex: -1 }, '🔗' )
-					),
-					createElement( TextareaControl, {
-						__nextHasNoMarginBottom: true,
-						className: 'woodev-setup__richtext-body',
-						value: value ?? '',
-						onChange,
-					} )
-				)
+				createElement( WizardRichText, {
+					value: value ?? '',
+					onChange,
+				} )
 			);
 
 		case 'multiselect': {

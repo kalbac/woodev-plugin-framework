@@ -151,6 +151,28 @@ body.woodev-setup-wizard {
 		}
 	}
 
+	// Step label rendered as a clickable button for non-current steps; reset all
+	// button chrome so it visually matches the plain <span> of the current step.
+	&__step-label {
+		background: none;
+		border: 0;
+		padding: 0;
+		font: inherit;
+		cursor: pointer;
+		color: inherit;
+	}
+
+	// The active step's label is a non-clickable <span> — keep the default cursor.
+	&__steps li.is-active &__step-label {
+		cursor: default;
+	}
+
+	// Hover affordance only on the clickable (non-active) labels.
+	&__steps li:not( .is-active ) &__step-label:hover {
+		color: $wd-accent-strong;
+		text-decoration: underline;
+	}
+
 	// ---- Card --------------------------------------------------------------
 	&__card {
 		box-shadow: 0 1px 2px rgba( 0, 0, 0, 0.04 ), 0 14px 30px rgba( 10, 30, 40, 0.07 );
@@ -345,7 +367,6 @@ body.woodev-setup-wizard {
 		display: flex;
 		flex-direction: column;
 		padding: 6px;
-		min-width: 220px;
 	}
 
 	&__dropdown-item {
@@ -414,33 +435,35 @@ body.woodev-setup-wizard {
 		}
 	}
 
-	// custom radio indicator: ring -> gap -> dot
+	// custom radio indicator: forced-square ring + transform-centered dot
 	.components-radio-control__input[type="radio"] {
 		appearance: none;
 		-webkit-appearance: none;
-		margin: 1px 0 0;
-		width: 18px;
-		height: 18px;
-		flex: 0 0 auto;
+		width: 18px !important;
+		height: 18px !important;
+		min-width: 18px !important;
+		flex: 0 0 18px;
+		margin: 1px 8px 0 0;
+		padding: 0;
 		border: 2px solid $wd-line;
 		border-radius: 50%;
 		background: #fff;
 		position: relative;
 		cursor: pointer;
-		transition: border-color 0.15s;
 		box-shadow: none;
+		transition: border-color 0.15s;
 
 		&:checked {
 			border-color: $wd-accent;
 
-			&::after,
-			&::before {
+			&::after {
 				content: "";
 				position: absolute;
-				top: 3px;
-				left: 3px;
-				right: 3px;
-				bottom: 3px;
+				top: 50%;
+				left: 50%;
+				transform: translate( -50%, -50% );
+				width: 8px;
+				height: 8px;
 				border-radius: 50%;
 				background: $wd-accent;
 			}
@@ -493,12 +516,16 @@ body.woodev-setup-wizard {
 			width: 30px;
 			height: 30px;
 			border-radius: 6px;
-			cursor: default;
+			cursor: pointer;
 			color: $wd-text;
 			font-size: 15px;
 			display: flex;
 			align-items: center;
 			justify-content: center;
+
+			&:hover {
+				background: rgba( 0, 0, 0, 0.05 );
+			}
 
 			&.is-bold {
 				font-weight: 700;
@@ -510,16 +537,17 @@ body.woodev-setup-wizard {
 		}
 	}
 
-	&__richtext-body textarea {
-		border: 0;
-		border-radius: 0;
-		box-shadow: none;
+	&__richtext-editor {
+		padding: 13px 15px;
 		min-height: 84px;
 		font-size: 15px;
 		line-height: 1.65;
+		color: #2c3338;
+		outline: none;
 
-		&:focus {
-			box-shadow: none;
+		&:empty::before {
+			content: attr( data-placeholder );
+			color: #9aa0a6;
 		}
 	}
 
@@ -527,9 +555,29 @@ body.woodev-setup-wizard {
 	&__actions {
 		margin: 34px 0 0;
 		display: flex;
-		justify-content: flex-end;
+		justify-content: space-between;
 		align-items: center;
 		gap: 16px;
+	}
+
+	&__actions-left {
+		display: flex;
+		align-items: center;
+	}
+
+	&__actions-right {
+		display: flex;
+		align-items: center;
+		gap: 16px;
+	}
+
+	&__back.components-button.is-tertiary {
+		color: #787c82;
+		font-weight: 500;
+
+		&:hover:not( :disabled ) {
+			color: $wd-accent-strong;
+		}
 	}
 
 	&__skip.components-button.is-link {
@@ -735,13 +783,30 @@ body.woodev-setup-wizard {
 		border-radius: $wd-radius-sm;
 		font-size: 15px;
 		color: #2c3338;
-		padding: 9px 13px;
+		padding: 9px 14px;
+		min-height: 40px;
 
 		&:focus {
 			border-color: $wd-accent;
 			box-shadow: 0 0 0 3px $wd-accent-soft;
 			outline: 0;
 		}
+	}
+
+	// InputControl-based controls (e.g. RangeControl's number box): the visible
+	// border is drawn by a sibling backdrop, so it must be targeted separately.
+	.components-input-control__backdrop {
+		border-color: $wd-line !important;
+		border-radius: $wd-radius-sm !important;
+	}
+
+	.components-input-control__input {
+		min-height: 38px;
+	}
+
+	.components-input-control:focus-within .components-input-control__backdrop {
+		border-color: $wd-accent !important;
+		box-shadow: 0 0 0 3px $wd-accent-soft;
 	}
 
 	.components-button.is-primary {

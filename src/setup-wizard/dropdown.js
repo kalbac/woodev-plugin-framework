@@ -13,7 +13,7 @@
  * @package woodev-plugin-framework
  */
 
-import { createElement, Fragment } from '@wordpress/element';
+import { createElement, Fragment, useRef } from '@wordpress/element';
 import { Dropdown } from '@wordpress/components';
 import { ChevronIcon, CheckFilledIcon } from './icons';
 
@@ -29,6 +29,7 @@ import { ChevronIcon, CheckFilledIcon } from './icons';
 export default function WizardDropdown( { value, options = [], onChange } ) {
 	const selected = options.find( ( option ) => String( option.value ) === String( value ) );
 	const selectedLabel = selected ? selected.label : '';
+	const triggerRef = useRef( null );
 
 	return createElement( Dropdown, {
 		className: 'woodev-setup__dropdown',
@@ -39,6 +40,7 @@ export default function WizardDropdown( { value, options = [], onChange } ) {
 				'button',
 				{
 					type: 'button',
+					ref: triggerRef,
 					className:
 						'woodev-setup__dropdown-trigger' +
 						( isOpen ? ' is-open' : '' ),
@@ -56,7 +58,12 @@ export default function WizardDropdown( { value, options = [], onChange } ) {
 		renderContent: ( { onClose } ) =>
 			createElement(
 				'div',
-				{ className: 'woodev-setup__dropdown-menu', role: 'listbox' },
+				{
+					className: 'woodev-setup__dropdown-menu',
+					role: 'listbox',
+					// Match the menu width to the full-width trigger.
+					style: { width: triggerRef.current ? triggerRef.current.offsetWidth + 'px' : undefined },
+				},
 				options.map( ( option ) => {
 					const isSelected = String( option.value ) === String( value );
 

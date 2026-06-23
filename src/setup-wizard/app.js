@@ -51,7 +51,19 @@ export default function App() {
 		headerLogoUrl,
 	} = window.woodevSetupWizard;
 
-	const [ index, setIndex ] = useState( 0 );
+	/**
+	 * Resolves the initial step index from the URL hash (`#{id}-step`), falling
+	 * back to 0 when absent or unrecognized.
+	 *
+	 * @return {number} initial step index.
+	 */
+	function initialIndex() {
+		const hash = window.location.hash.replace( /^#/, '' );
+		const found = steps.findIndex( ( s ) => `${ s.id }-step` === hash );
+		return found >= 0 ? found : 0;
+	}
+
+	const [ index, setIndex ] = useState( initialIndex );
 	const [ values, setValues ] = useState( {} );
 	const [ error, setError ] = useState( null );
 	const [ busy, setBusy ] = useState( false );
@@ -60,6 +72,40 @@ export default function App() {
 	const isFinish = 'finish' === step.type;
 	const isWelcome = 'content' === step.type && 0 === index;
 	const isSettings = 'settings' === step.type;
+
+	// Keep the URL hash in sync with the active step (WooCommerce-style anchor).
+	useEffect( () => {
+		const target = `#${ step.id }-step`;
+		if ( window.location.hash !== target ) {
+			window.location.hash = target;
+		}
+	}, [ index, step.id ] );
+
+	// Navigate when the user edits the hash or uses browser back/forward.
+	useEffect( () => {
+		function handleHashChange() {
+			const hash = window.location.hash.replace( /^#/, '' );
+			const found = steps.findIndex( ( s ) => `${ s.id }-step` === hash );
+			if ( found >= 0 ) {
+				setIndex( ( current ) => ( current === found ? current : found ) );
+			}
+		}
+
+		window.addEventListener( 'hashchange', handleHashChange );
+		return () => window.removeEventListener( 'hashchange', handleHashChange );
+	}, [ steps ] );
+
+	/**
+	 * Navigates to an arbitrary step index (used by the stepper + Back button).
+	 *
+	 * @param {number} i target step index.
+	 */
+	function goTo( i ) {
+		setError( null );
+		if ( i >= 0 && i < steps.length && i !== index ) {
+			setIndex( i );
+		}
+	}
 
 	// Mark the wizard complete once when the finish step becomes active.
 	useEffect( () => {
@@ -124,7 +170,7 @@ export default function App() {
 		'div',
 		{ className: 'woodev-setup' },
 		renderHeader( pluginName, headerLogoUrl ),
-		createElement( Stepper, { steps, index } ),
+		createElement( Stepper, { steps, index, onNavigate: goTo } ),
 		isFinish
 			? renderFinish( pluginName, finishActions, finishSecondaryActions )
 			: createElement(
@@ -147,27 +193,46 @@ export default function App() {
 					createElement(
 						'div',
 						{ className: 'woodev-setup__actions' },
-						isSettings && step.skippable !== false &&
+						createElement(
+							'div',
+							{ className: 'woodev-setup__actions-left' },
+							index > 0 &&
+								createElement(
+									Button,
+									{
+										variant: 'tertiary',
+										disabled: busy,
+										onClick: () => goTo( index - 1 ),
+										className: 'woodev-setup__back',
+									},
+									__( 'Назад', 'woodev-plugin-framework' )
+								)
+						),
+						createElement(
+							'div',
+							{ className: 'woodev-setup__actions-right' },
+							isSettings && step.skippable !== false &&
+								createElement(
+									Button,
+									{
+										variant: 'link',
+										disabled: busy,
+										onClick: skipStep,
+										className: 'woodev-setup__skip',
+									},
+									__( 'Пропустить', 'woodev-plugin-framework' )
+								),
 							createElement(
 								Button,
 								{
-									variant: 'link',
+									variant: 'primary',
+									isBusy: busy,
 									disabled: busy,
-									onClick: skipStep,
-									className: 'woodev-setup__skip',
+									onClick: goNext,
+									className: 'woodev-setup__primary',
 								},
-								__( 'Пропустить', 'woodev-plugin-framework' )
-							),
-						createElement(
-							Button,
-							{
-								variant: 'primary',
-								isBusy: busy,
-								disabled: busy,
-								onClick: goNext,
-								className: 'woodev-setup__primary',
-							},
-							primaryLabel
+								primaryLabel
+							)
 						)
 					)
 				)

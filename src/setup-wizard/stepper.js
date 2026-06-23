@@ -17,22 +17,38 @@ import { createElement } from '@wordpress/element';
 /**
  * Step indicator.
  *
- * @param {Object} props       component props.
- * @param {Array}  props.steps step descriptors (incl. terminal 'finish').
- * @param {number} props.index current step index.
+ * @param {Object}   props            component props.
+ * @param {Array}    props.steps      step descriptors (incl. terminal 'finish').
+ * @param {number}   props.index      current step index.
+ * @param {Function} props.onNavigate optional (i)=>void invoked when a non-current
+ *                                    step label is clicked.
  * @return {Object} React element.
  */
-export default function Stepper( { steps, index } ) {
+export default function Stepper( { steps, index, onNavigate } ) {
 	return createElement(
 		'ol',
 		{ className: 'woodev-setup__steps' },
 		steps.map( ( step, i ) => {
 			const state = i < index ? 'done' : ( i === index ? 'active' : 'upcoming' );
 
+			// The current step is a plain (non-clickable) label; any other step is a
+			// button that navigates to it.
+			const label = i === index
+				? createElement( 'span', { className: 'woodev-setup__step-label' }, step.label )
+				: createElement(
+					'button',
+					{
+						type: 'button',
+						className: 'woodev-setup__step-label',
+						onClick: () => onNavigate && onNavigate( i ),
+					},
+					step.label
+				);
+
 			return createElement(
 				'li',
 				{ key: step.id, className: `is-${ state }` },
-				step.label
+				label
 			);
 		} )
 	);
