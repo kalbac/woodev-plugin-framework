@@ -1,37 +1,47 @@
 /**
- * Setup Wizard — full-screen onboarding, WooCommerce-React style.
+ * Setup Wizard — full-screen onboarding, WooCommerce-React style (cyan brand).
  *
- * Neutral framework styling (no wc-setup-* legacy classes). Ships in this bundle
- * only (the standalone wizard page prints style-index.css). Accent = Woo purple.
+ * Ports the operator-approved mockup (`.mockups/style.css`) into BEM scoped under
+ * `.woodev-setup` (page background on `body.woodev-setup-wizard`). Built on
+ * `@wordpress/components`; the `.components-*` overrides recolor wp-components to
+ * the woodev.ru muted cyan. Ships in this bundle only (the standalone wizard page
+ * prints style-index.css + wp-components).
  */
 
-$wd-accent: #7f54b3;
-$wd-accent-dark: #6b4699;
-$wd-bg: #f0f0f1;
+// ---- Design tokens (woodev.ru muted cyan) ---------------------------------
+$wd-accent: #06aedd;
+$wd-accent-strong: #0596c4;
+$wd-accent-ink: #04303d;
+$wd-accent-soft: rgba( 6, 174, 221, 0.10 );
+$wd-accent-soft-2: rgba( 6, 174, 221, 0.07 );
+$wd-bg: #f1f1f1;
 $wd-surface: #fff;
-$wd-border: #e0e0e0;
-$wd-line: #c3c4c7;
-$wd-text: #1e1e1e;
-$wd-text-secondary: #50575e;
-$wd-text-muted: #757575;
-$wd-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+$wd-ink: #1d2327;
+$wd-text: #3c434a;
+$wd-muted: #646970;
+$wd-desc: #757575;
+$wd-border: #e2e4e7;
+$wd-divider: #eef0f2;
+$wd-radius: 12px;
+$wd-radius-sm: 8px;
+$wd-line: #c4c7cb;
+$wd-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Helvetica, Arial, sans-serif;
 
 body.woodev-setup-wizard {
 	margin: 0;
-	padding: 0;
+	padding: 56px 20px 60px;
 	background: $wd-bg;
 	min-height: 100vh;
 	color: $wd-text;
 	font-family: $wd-font;
+	font-size: 15px;
 	-webkit-font-smoothing: antialiased;
 }
 
 .woodev-setup {
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	min-height: 100vh;
-	box-sizing: border-box;
+	max-width: 600px;
+	margin: 0 auto;
+	text-align: center;
 
 	*,
 	*::before,
@@ -39,150 +49,167 @@ body.woodev-setup-wizard {
 		box-sizing: border-box;
 	}
 
-	// ---- Header ------------------------------------------------------------
-	&__header {
-		width: 100%;
-		height: 64px;
-		background: $wd-surface;
-		border-bottom: 1px solid $wd-border;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-	}
-
-	&__title {
-		font-size: 15px;
-		font-weight: 600;
-		letter-spacing: 0.2px;
-		color: $wd-text;
-	}
-
-	&__logo {
-		max-height: 32px;
-		width: auto;
-	}
-
-	// ---- Stepper -----------------------------------------------------------
-	&__stepper {
-		display: flex;
-		align-items: center;
-		list-style: none;
-		margin: 48px 0 28px;
-		padding: 0;
-	}
-
-	&__step {
-		display: flex;
-		align-items: center;
-		gap: 10px;
-		color: $wd-text-muted;
-		font-size: 13px;
-		font-weight: 500;
-
-		// connector between steps
-		&:not(:first-child)::before {
-			content: "";
-			width: 48px;
-			height: 2px;
-			margin: 0 14px;
-			background: $wd-line;
-		}
-
-		&.is-done::before,
-		&.is-active::before {
-			background: $wd-accent;
-		}
-	}
-
-	&__step-marker {
+	// ---- Brand header ------------------------------------------------------
+	&__brand {
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		width: 28px;
-		height: 28px;
-		border-radius: 50%;
-		border: 2px solid $wd-line;
-		background: $wd-surface;
-		color: $wd-text-muted;
-		font-size: 13px;
-		font-weight: 600;
-		flex: none;
+		gap: 14px;
+		margin: 0 0 30px;
+		text-decoration: none;
+	}
+
+	&__brand-logo {
+		max-height: 50px;
+		width: auto;
+	}
+
+	&__brand-mark {
+		width: 50px;
+		height: 50px;
+		border-radius: 13px;
+		background: linear-gradient( 135deg, #1bb8e6, $wd-accent-strong );
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		box-shadow: 0 4px 12px rgba( 6, 174, 221, 0.4 );
 
 		svg {
-			width: 16px;
-			height: 16px;
+			width: 28px;
+			height: 28px;
+			fill: #fff;
 		}
 	}
 
-	&__step.is-active &__step-marker {
-		border-color: $wd-accent;
-		color: $wd-accent;
+	&__brand-name {
+		font: 700 23px/1 $wd-font;
+		color: #16313b;
+		letter-spacing: 0.2px;
+		text-align: left;
+
+		small {
+			display: block;
+			font: 500 12.5px/1.3 $wd-font;
+			color: #8b8b8b;
+			margin-top: 5px;
+			letter-spacing: 0.3px;
+		}
 	}
 
-	&__step.is-done &__step-marker {
-		background: $wd-accent;
-		border-color: $wd-accent;
-		color: #fff;
-	}
+	// ---- Stepper (progress-line + dot) -------------------------------------
+	&__steps {
+		padding: 0 0 32px;
+		margin: 0;
+		list-style: none;
+		width: 100%;
+		display: inline-flex;
 
-	&__step.is-active &__step-label {
-		color: $wd-text;
-		font-weight: 600;
-	}
+		li {
+			flex: 1 1 0;
+			padding: 0 0 0.85em;
+			margin: 0;
+			text-align: center;
+			position: relative;
+			border-bottom: 4px solid #d8dadd;
+			line-height: 1.4;
+			font-size: 14px;
+			color: #9a9a9a;
 
-	&__step.is-done &__step-label {
-		color: $wd-text-secondary;
+			&::before {
+				content: "";
+				border: 4px solid #d8dadd;
+				border-radius: 100%;
+				width: 5px;
+				height: 5px;
+				position: absolute;
+				bottom: 0;
+				left: 50%;
+				margin-left: -6.5px;
+				margin-bottom: -9px;
+				background: #fff;
+			}
+
+			&.is-done {
+				border-color: $wd-accent;
+				color: $wd-accent;
+
+				&::before {
+					border-color: $wd-accent;
+					background: $wd-accent;
+				}
+			}
+
+			&.is-active {
+				border-color: $wd-accent;
+				color: $wd-accent-ink;
+				font-weight: 700;
+
+				&::before {
+					border-color: $wd-accent;
+				}
+			}
+		}
 	}
 
 	// ---- Card --------------------------------------------------------------
-	&__card.components-card {
-		width: 100%;
-		max-width: 560px;
-		border: 1px solid $wd-border;
-		border-radius: 8px;
-		box-shadow: 0 4px 20px rgba( 0, 0, 0, 0.06 );
-
-		.components-card__body {
-			padding: 32px 36px;
-		}
+	&__card {
+		box-shadow: 0 1px 2px rgba( 0, 0, 0, 0.04 ), 0 14px 30px rgba( 10, 30, 40, 0.07 );
+		padding: 2.6em 2.8em;
+		margin: 0 0 18px;
+		background: $wd-surface;
+		border-radius: $wd-radius;
+		text-align: left;
 	}
 
 	&__step-title {
-		margin: 0 0 12px;
-		font-size: 20px;
+		margin: 0 0 8px;
+		padding: 0;
+		font-size: 25px;
 		font-weight: 600;
+		color: $wd-ink;
 		line-height: 1.3;
-		color: $wd-text;
+	}
+
+	&__step-desc {
+		margin: 0 0 28px;
+		font-size: 14.5px;
+		line-height: 1.65;
+		color: $wd-desc;
 	}
 
 	&__content {
-		color: $wd-text-secondary;
-		font-size: 14px;
+		color: $wd-muted;
+		font-size: 15px;
 		line-height: 1.7;
 
 		p {
-			margin: 0 0 12px;
+			margin: 18px 0;
+		}
+
+		a {
+			color: $wd-accent-strong;
 		}
 
 		ul {
-			margin: 0 0 12px 18px;
-			list-style: disc;
+			list-style: none;
+			padding: 0;
+			margin: 22px 0 6px;
 		}
 
 		li {
-			margin: 4px 0;
+			display: flex;
+			align-items: flex-start;
+			gap: 13px;
+			padding: 11px 0;
+			font-size: 15px;
+			color: $wd-text;
 		}
-	}
 
-	&__fields {
-		margin-top: 4px;
-
-		.components-base-control {
-			margin-bottom: 22px;
-
-			&:last-child {
-				margin-bottom: 4px;
-			}
+		li svg {
+			width: 22px;
+			height: 22px;
+			flex: 0 0 22px;
+			fill: $wd-accent;
 		}
 	}
 
@@ -197,83 +224,537 @@ body.woodev-setup-wizard {
 		line-height: 1.5;
 	}
 
-	// ---- Actions -----------------------------------------------------------
-	&__actions {
+	// ---- Fields ------------------------------------------------------------
+	&__field {
+		margin-top: 30px;
+
+		&:first-child {
+			margin-top: 4px;
+		}
+	}
+
+	&__field-label {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		font-size: 15px;
+		font-weight: 600;
+		color: $wd-ink;
+		margin-bottom: 6px;
+	}
+
+	&__field-req {
+		color: #d63638;
+		font-weight: 700;
+	}
+
+	&__field-desc {
+		font-size: 13px;
+		line-height: 1.55;
+		color: $wd-desc;
+		margin: 2px 0 12px;
+	}
+
+	&__field-tip {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 17px;
+		height: 17px;
+		border-radius: 50%;
+		background: #c3c4c7;
+		color: #fff;
+		cursor: help;
+
+		svg {
+			width: 11px;
+			height: 11px;
+		}
+
+		&:hover,
+		&:focus {
+			background: $wd-accent-strong;
+			outline: none;
+		}
+	}
+
+	// inputs (unit suffix rows)
+	&__input-row,
+	&__range-row {
+		display: flex;
+		align-items: center;
+		gap: 11px;
+
+		.components-base-control {
+			flex: 1;
+		}
+	}
+
+	&__suffix {
+		font-size: 14px;
+		color: $wd-desc;
+		flex: 0 0 auto;
+	}
+
+	// ---- Custom dropdown ---------------------------------------------------
+	&__dropdown {
+		display: block;
+	}
+
+	&__dropdown-trigger {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
+		gap: 10px;
 		width: 100%;
-		max-width: 560px;
-		margin: 20px 0 56px;
+		padding: 10px 14px;
+		border: 1px solid $wd-line;
+		border-radius: $wd-radius-sm;
+		background: #fff;
+		font-size: 15px;
+		color: #2c3338;
+		cursor: pointer;
+		text-align: left;
+		transition: border-color 0.15s, box-shadow 0.15s;
+
+		&:hover {
+			border-color: $wd-accent;
+		}
+
+		&.is-open {
+			border-color: $wd-accent;
+			box-shadow: 0 0 0 3px $wd-accent-soft;
+		}
 	}
 
-	&__actions-left,
-	&__actions-right {
+	&__dropdown-value {
+		flex: 1;
+	}
+
+	&__dropdown-chevron {
+		flex: 0 0 auto;
+		color: $wd-muted;
+		display: flex;
+	}
+
+	&__dropdown-trigger.is-open &__dropdown-chevron {
+		transform: rotate( 180deg );
+	}
+
+	&__dropdown-menu {
+		display: flex;
+		flex-direction: column;
+		padding: 6px;
+		min-width: 220px;
+	}
+
+	&__dropdown-item {
 		display: flex;
 		align-items: center;
-		gap: 14px;
-		min-height: 36px;
+		justify-content: space-between;
+		gap: 10px;
+		padding: 10px 12px;
+		border: 0;
+		border-radius: 6px;
+		background: transparent;
+		font-size: 15px;
+		color: $wd-ink;
+		cursor: pointer;
+		text-align: left;
+
+		&:hover {
+			background: $wd-accent-soft-2;
+		}
+
+		&.is-selected {
+			background: $wd-accent-soft;
+			color: $wd-accent-ink;
+			font-weight: 600;
+		}
+	}
+
+	&__dropdown-tick {
+		display: flex;
+		color: $wd-accent;
+	}
+
+	// ---- Grouped fields (radio / toggle) -----------------------------------
+	&__option-group {
+		border: 1px solid $wd-border;
+		border-radius: $wd-radius-sm;
+		overflow: hidden;
+		background: #fff;
+		margin-top: 30px;
+
+		&:first-child {
+			margin-top: 4px;
+		}
+
+		// radio rows from RadioControl
+		.components-radio-control__option {
+			display: flex;
+			align-items: flex-start;
+			gap: 12px;
+			padding: 15px 17px;
+			margin: 0;
+			border-top: 1px solid $wd-divider;
+
+			&:first-child {
+				border-top: 0;
+			}
+		}
+
+		// toggle rows
+		.woodev-setup__toggle-row {
+			border-top: 1px solid $wd-divider;
+
+			&:first-child {
+				border-top: 0;
+			}
+		}
+	}
+
+	// custom radio indicator: ring -> gap -> dot
+	.components-radio-control__input[type="radio"] {
+		appearance: none;
+		-webkit-appearance: none;
+		margin: 1px 0 0;
+		width: 18px;
+		height: 18px;
+		flex: 0 0 auto;
+		border: 2px solid $wd-line;
+		border-radius: 50%;
+		background: #fff;
+		position: relative;
+		cursor: pointer;
+		transition: border-color 0.15s;
+		box-shadow: none;
+
+		&:checked {
+			border-color: $wd-accent;
+
+			&::after,
+			&::before {
+				content: "";
+				position: absolute;
+				top: 3px;
+				left: 3px;
+				right: 3px;
+				bottom: 3px;
+				border-radius: 50%;
+				background: $wd-accent;
+			}
+		}
+	}
+
+	// ---- Toggle rows -------------------------------------------------------
+	&__toggle-row {
+		display: flex;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: 20px;
+		padding: 16px 17px;
+	}
+
+	&__toggle-meta {
+		flex: 1;
+	}
+
+	&__toggle-label {
+		font-size: 15px;
+		font-weight: 600;
+		color: $wd-ink;
+	}
+
+	&__toggle-desc {
+		font-size: 13px;
+		color: $wd-desc;
+		margin-top: 3px;
+		line-height: 1.5;
+	}
+
+	// ---- Richtext ----------------------------------------------------------
+	&__richtext {
+		border: 1px solid $wd-line;
+		border-radius: $wd-radius-sm;
+		overflow: hidden;
+	}
+
+	&__richtext-toolbar {
+		display: flex;
+		gap: 2px;
+		padding: 6px 7px;
+		border-bottom: 1px solid #e6e7e9;
+		background: #f6f7f8;
+
+		button {
+			border: 0;
+			background: transparent;
+			width: 30px;
+			height: 30px;
+			border-radius: 6px;
+			cursor: default;
+			color: $wd-text;
+			font-size: 15px;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+
+			&.is-bold {
+				font-weight: 700;
+			}
+
+			&.is-italic {
+				font-style: italic;
+			}
+		}
+	}
+
+	&__richtext-body textarea {
+		border: 0;
+		border-radius: 0;
+		box-shadow: none;
+		min-height: 84px;
+		font-size: 15px;
+		line-height: 1.65;
+
+		&:focus {
+			box-shadow: none;
+		}
+	}
+
+	// ---- Actions -----------------------------------------------------------
+	&__actions {
+		margin: 34px 0 0;
+		display: flex;
+		justify-content: flex-end;
+		align-items: center;
+		gap: 16px;
 	}
 
 	&__skip.components-button.is-link {
-		color: $wd-text-muted;
+		color: #787c82;
+		font-weight: 500;
 		text-decoration: none;
 
 		&:hover:not( :disabled ) {
-			color: $wd-text-secondary;
+			color: $wd-accent-strong;
+		}
+	}
+
+	&__primary.components-button.is-primary {
+		min-width: 11em;
+		justify-content: center;
+		font-weight: 600;
+		padding: 0.8em 2.1em;
+		height: auto;
+		border-radius: $wd-radius-sm;
+	}
+
+	// ---- Footer exit link --------------------------------------------------
+	&__footer {
+		font-size: 13.5px;
+		color: #787c82;
+		margin: 8px auto 0;
+		display: block;
+		text-align: center;
+
+		a {
+			color: #787c82;
+			text-decoration: none;
+
+			&:hover {
+				color: $wd-accent-strong;
+				text-decoration: underline;
+			}
 		}
 	}
 
 	// ---- Finish ------------------------------------------------------------
-	&__card--finish .components-card__body {
-		padding: 48px 36px;
+	&__finish-hero {
 		text-align: center;
+		padding: 8px 0 4px;
 	}
 
-	&__finish-badge {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		width: 56px;
-		height: 56px;
-		margin-bottom: 20px;
+	&__finish-check {
+		width: 64px;
+		height: 64px;
 		border-radius: 50%;
 		background: $wd-accent;
 		color: #fff;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		margin-bottom: 16px;
+		box-shadow: 0 6px 18px rgba( 6, 174, 221, 0.45 );
 
 		svg {
-			width: 30px;
-			height: 30px;
+			width: 34px;
+			height: 34px;
 		}
 	}
 
 	&__finish-title {
-		margin: 0 0 8px;
-		font-size: 23px;
+		text-align: center;
+	}
+
+	&__finish-intro {
+		text-align: center;
+		margin: 0 0 4px;
+		font-size: 15px;
+		line-height: 1.7;
+		color: $wd-muted;
+	}
+
+	&__next-steps {
+		border: 1px solid $wd-border;
+		border-radius: $wd-radius-sm;
+		list-style: none;
+		padding: 0;
+		margin: 24px 0 0;
+
+		li {
+			display: flex;
+			align-items: center;
+			border-top: 1px solid $wd-border;
+
+			&:first-child {
+				border-top: 0;
+			}
+		}
+	}
+
+	&__ns-desc {
+		flex: 1;
+		margin: 1.4em 1.6em;
+	}
+
+	&__ns-heading {
+		margin: 0;
+		font-size: 12px;
 		font-weight: 600;
-		color: $wd-text;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		color: #9a9a9a;
 	}
 
-	&__finish-text {
-		margin: 0 0 24px;
-		color: $wd-text-secondary;
-		font-size: 14px;
+	&__ns-title {
+		margin: 4px 0 0;
+		font-size: 16.5px;
+		font-weight: 600;
+		color: $wd-ink;
 	}
 
-	&__finish-actions {
+	&__ns-extra {
+		margin: 4px 0 0;
+		font-size: 13.5px;
+		color: $wd-desc;
+	}
+
+	&__ns-action {
+		flex: 0 0 auto;
 		display: flex;
-		justify-content: center;
-		gap: 12px;
+		align-items: center;
+		margin: 0 1.4em;
 	}
 
-	// ---- wp-components accent overrides (scoped) ---------------------------
+	&__secondary.components-button.is-secondary {
+		box-shadow: inset 0 0 0 1px #c3c4c7;
+		color: $wd-ink;
+		font-size: 14px;
+		font-weight: 500;
+		padding: 0.62em 1.5em;
+		height: auto;
+		border-radius: $wd-radius-sm;
+
+		&:hover:not( :disabled ) {
+			box-shadow: inset 0 0 0 1px $wd-accent;
+			color: $wd-accent-strong;
+		}
+	}
+
+	&__also {
+		display: flex;
+		align-items: center;
+		flex-wrap: wrap;
+		gap: 12px;
+		padding: 1.2em 1.6em;
+		border-top: 1px solid $wd-border;
+		font-size: 13.5px;
+		color: $wd-desc;
+	}
+
+	&__also-label {
+		color: $wd-desc;
+	}
+
+	&__btn-icon {
+		display: inline-flex;
+		align-items: center;
+		gap: 8px;
+		background: #fff;
+		border: 1px solid #c3c4c7;
+		color: $wd-ink;
+		font-size: 13.5px;
+		font-weight: 500;
+		padding: 0.55em 1.05em;
+		border-radius: $wd-radius-sm;
+		text-decoration: none;
+
+		svg {
+			width: 15px;
+			height: 15px;
+			fill: $wd-muted;
+		}
+
+		&:hover {
+			border-color: $wd-accent;
+			color: $wd-accent-strong;
+
+			svg {
+				fill: $wd-accent-strong;
+			}
+		}
+	}
+
+	// ---- wp-components accent overrides (scoped, cyan) ---------------------
+	.components-base-control {
+		margin-bottom: 0;
+	}
+
+	input[type="text"],
+	input[type="email"],
+	input[type="password"],
+	input[type="number"],
+	input[type="date"],
+	input[type="color"],
+	textarea,
+	.components-text-control__input,
+	.components-textarea-control__input {
+		border: 1px solid $wd-line;
+		border-radius: $wd-radius-sm;
+		font-size: 15px;
+		color: #2c3338;
+		padding: 9px 13px;
+
+		&:focus {
+			border-color: $wd-accent;
+			box-shadow: 0 0 0 3px $wd-accent-soft;
+			outline: 0;
+		}
+	}
+
 	.components-button.is-primary {
 		background: $wd-accent;
-		box-shadow: none;
+		color: #fff;
+		border-color: $wd-accent;
+		box-shadow: 0 4px 14px rgba( 6, 174, 221, 0.4 );
 
 		&:hover:not( :disabled ),
 		&:focus:not( :disabled ) {
-			background: $wd-accent-dark;
+			background: $wd-accent-strong;
+			border-color: $wd-accent-strong;
+			color: #fff;
 		}
 
 		&:focus:not( :disabled ) {
@@ -281,30 +762,73 @@ body.woodev-setup-wizard {
 		}
 	}
 
-	.components-toggle-control .components-form-toggle.is-checked .components-form-toggle__track {
+	// WC-pill toggle, cyan on
+	.components-form-toggle.is-checked .components-form-toggle__track {
 		background-color: $wd-accent;
+		border-color: $wd-accent;
+	}
+
+	// RangeControl rail + thumb cyan
+	.components-range-control__track,
+	.components-input-control__container .components-range-control__track {
+		background-color: $wd-accent;
+	}
+
+	.components-range-control__thumb-wrapper .components-range-control__thumb {
+		background-color: $wd-accent;
+		border-color: $wd-accent;
+	}
+
+	// FormTokenField tokens (chips) cyan tint
+	.components-form-token-field__token {
+		background: $wd-accent-soft;
+
+		.components-form-token-field__token-text {
+			color: $wd-accent-ink;
+		}
+
+		.components-form-token-field__remove-token {
+			color: $wd-accent-strong;
+		}
 	}
 }
 
+// ---- Popover (custom dropdown menu) — rendered outside .woodev-setup -------
+.woodev-setup__dropdown-popover.components-popover .components-popover__content {
+	border: 1px solid $wd-border;
+	border-radius: 10px;
+	box-shadow: 0 12px 32px rgba( 10, 30, 40, 0.16 );
+}
+
 @media ( max-width: 600px ) {
-	.woodev-setup__stepper {
-		margin: 28px 0 20px;
+	body.woodev-setup-wizard {
+		padding: 28px 12px 40px;
 	}
 
-	.woodev-setup__step-label {
-		display: none; // markers only on narrow screens
+	.woodev-setup__steps li {
+		font-size: 12px;
 	}
 
-	.woodev-setup__step:not( :first-child )::before {
-		width: 28px;
-		margin: 0 8px;
-	}
-
-	.woodev-setup__card.components-card .components-card__body {
-		padding: 24px 20px;
+	.woodev-setup__card {
+		padding: 1.8em 1.4em;
 	}
 
 	.woodev-setup__actions {
-		padding: 0 16px;
+		flex-direction: column-reverse;
+		align-items: stretch;
+		gap: 10px;
+	}
+
+	.woodev-setup__primary.components-button.is-primary {
+		width: 100%;
+	}
+
+	.woodev-setup__next-steps li {
+		flex-direction: column;
+		align-items: flex-start;
+	}
+
+	.woodev-setup__ns-action {
+		margin: 0 1.6em 1.4em;
 	}
 }
