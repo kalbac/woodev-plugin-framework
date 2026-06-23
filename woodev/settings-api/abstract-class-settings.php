@@ -162,6 +162,22 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 					$control->set_options( $args['options'], $setting->get_options() );
 				}
 
+				if ( isset( $args['min'] ) ) {
+					$control->set_min( $args['min'] );
+				}
+
+				if ( isset( $args['max'] ) ) {
+					$control->set_max( $args['max'] );
+				}
+
+				if ( isset( $args['step'] ) ) {
+					$control->set_step( $args['step'] );
+				}
+
+				if ( isset( $args['tooltip'] ) ) {
+					$control->set_tooltip( (string) $args['tooltip'] );
+				}
+
 				$setting->set_control( $control );
 
 				return true;
@@ -439,6 +455,9 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 				Woodev_Control::TYPE_FILE,
 				Woodev_Control::TYPE_COLOR,
 				Woodev_Control::TYPE_RANGE,
+				Woodev_Control::TYPE_TOGGLE,
+				Woodev_Control::TYPE_RICHTEXT,
+				Woodev_Control::TYPE_MULTISELECT,
 			];
 
 			/**
