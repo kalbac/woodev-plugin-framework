@@ -100,10 +100,11 @@ abstract class Setup_Wizard {
 	 * @param string        $label       step label.
 	 * @param string[]      $setting_ids referenced setting ids.
 	 * @param callable|null $on_save     optional idempotent save side-effect.
+	 * @param string        $description optional step description shown in the wizard UI.
 	 * @return void
 	 */
-	protected function register_step( string $id, string $label, array $setting_ids, ?callable $on_save = null ): void {
-		$this->steps[ $id ] = Step::settings( $id, $label, $setting_ids, $on_save );
+	protected function register_step( string $id, string $label, array $setting_ids, ?callable $on_save = null, string $description = '' ): void {
+		$this->steps[ $id ] = Step::settings( $id, $label, $setting_ids, $on_save, $description );
 	}
 
 	/**
@@ -111,13 +112,14 @@ abstract class Setup_Wizard {
 	 *
 	 * @since 2.0.2
 	 *
-	 * @param string          $id      step id.
-	 * @param string          $label   step label.
-	 * @param callable|string $content content callback or markup.
+	 * @param string          $id          step id.
+	 * @param string          $label       step label.
+	 * @param callable|string $content     content callback or markup.
+	 * @param string          $description optional step description shown in the wizard UI.
 	 * @return void
 	 */
-	protected function register_content_step( string $id, string $label, $content ): void {
-		$this->steps[ $id ] = Step::content( $id, $label, $content );
+	protected function register_content_step( string $id, string $label, $content, string $description = '' ): void {
+		$this->steps[ $id ] = Step::content( $id, $label, $content, $description );
 	}
 
 	/**
@@ -558,13 +560,23 @@ abstract class Setup_Wizard {
 			}
 
 			$steps[] = [
-				'id'      => $step->get_id(),
-				'label'   => $step->get_label(),
-				'type'    => $step->get_type(),
-				'fields'  => $fields,
-				'content' => is_string( $content ) ? $content : '',
+				'id'          => $step->get_id(),
+				'label'       => $step->get_label(),
+				'type'        => $step->get_type(),
+				'description' => $step->get_description(),
+				'fields'      => $fields,
+				'content'     => is_string( $content ) ? $content : '',
 			];
 		}
+
+		$steps[] = [
+			'id'          => 'finish',
+			'label'       => \__( 'Готово', 'woodev-plugin-framework' ),
+			'type'        => 'finish',
+			'description' => '',
+			'fields'      => [],
+			'content'     => '',
+		];
 
 		return [
 			'pluginId'      => $this->get_id(),

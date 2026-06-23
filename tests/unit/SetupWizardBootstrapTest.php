@@ -44,7 +44,11 @@ class SetupWizardBootstrapTest extends TestCase {
 
 		$this->assertSame( 'acme', $data['pluginId'] );
 		$this->assertSame( 'NONCE', $data['nonce'] );
-		$this->assertSame( [ 'welcome', 'connection' ], array_column( $data['steps'], 'id' ) );
+		$step_ids = array_column( $data['steps'], 'id' );
+		$this->assertContains( 'welcome', $step_ids );
+		$this->assertContains( 'connection', $step_ids );
+		// Last step is always the synthetic terminal finish descriptor.
+		$this->assertSame( 'finish', end( $step_ids ) );
 		// content step carries no fields; settings step carries its schema slice.
 		$this->assertSame( [], $data['steps'][0]['fields'] );
 		$this->assertSame( '<p>hi</p>', $data['steps'][0]['content'] );
