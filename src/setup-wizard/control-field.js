@@ -20,7 +20,6 @@ import {
 	RadioControl,
 	RangeControl,
 	FormTokenField,
-	Tooltip,
 } from '@wordpress/components';
 import { InfoIcon } from './icons';
 import WizardDropdown from './dropdown';
@@ -90,13 +89,10 @@ function renderLabel( schema ) {
 			createElement( 'span', { className: 'woodev-setup__field-req' }, '*' ),
 		schema.tooltip &&
 			createElement(
-				Tooltip,
-				{ text: schema.tooltip },
-				createElement(
-					'span',
-					{ className: 'woodev-setup__field-tip', tabIndex: 0, role: 'img', 'aria-label': schema.tooltip },
-					createElement( InfoIcon )
-				)
+				'span',
+				{ className: 'woodev-setup__field-tip', tabIndex: 0, role: 'img', 'aria-label': schema.tooltip },
+				createElement( InfoIcon ),
+				createElement( 'span', { className: 'woodev-setup__field-tip-bubble' }, schema.tooltip )
 			)
 	);
 }

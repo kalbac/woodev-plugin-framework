@@ -61,8 +61,11 @@ export default function WizardDropdown( { value, options = [], onChange } ) {
 				{
 					className: 'woodev-setup__dropdown-menu',
 					role: 'listbox',
-					// Match the menu width to the full-width trigger.
-					style: { width: triggerRef.current ? triggerRef.current.offsetWidth + 'px' : undefined },
+					// Match the menu box (border included) to the full-width trigger.
+					style: {
+						width: triggerRef.current ? triggerRef.current.offsetWidth + 'px' : undefined,
+						boxSizing: 'border-box',
+					},
 				},
 				options.map( ( option ) => {
 					const isSelected = String( option.value ) === String( value );

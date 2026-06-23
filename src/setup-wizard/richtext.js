@@ -13,7 +13,7 @@
  * @package woodev-plugin-framework
  */
 
-import { createElement, useRef } from '@wordpress/element';
+import { createElement, useRef, useEffect } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 
 /**
@@ -26,6 +26,16 @@ import { __ } from '@wordpress/i18n';
  */
 export default function WizardRichText( { value = '', onChange } ) {
 	const editorRef = useRef( null );
+
+	// Seed the editable node from `value` ONCE on mount. We never feed `value`
+	// back into the DOM on re-render — React reconciling a contentEditable's
+	// children resets the caret to the start on every keystroke (the bug we hit).
+	useEffect( () => {
+		if ( editorRef.current ) {
+			editorRef.current.innerHTML = value || '';
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [] );
 
 	/**
 	 * Emits the editor's current innerHTML to the parent.
@@ -118,10 +128,8 @@ export default function WizardRichText( { value = '', onChange } ) {
 			role: 'textbox',
 			'aria-multiline': 'true',
 			onInput: emit,
-			// Seed once from the initial value; never re-set from props (avoids
-			// caret jumps). React will not update this because dangerouslySetInnerHTML
-			// content is treated as the source of truth only on mount here.
-			dangerouslySetInnerHTML: { __html: value },
+			// Content is seeded imperatively once on mount (see useEffect above) and
+			// never re-applied from props — re-applying resets the caret on typing.
 		} )
 	);
 }

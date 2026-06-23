@@ -117,18 +117,18 @@ body.woodev-setup-wizard {
 
 			&::before {
 				content: "";
-				border: 4px solid #d8dadd;
+				border: 3px solid #d8dadd;
 				border-radius: 100%;
-				width: 5px;
-				height: 5px;
+				width: 8px;
+				height: 8px;
 				position: absolute;
 				left: 50%;
 				bottom: 0;
 				margin: 0;
-				// Center the dot ON the 4px progress line: shift down by half the
-				// dot's own height, then by half the line width (2px).
+				// Center the ring ON the 4px progress line (shift down by half the
+				// ring's own height + half the line width). Hollow center (page bg).
 				transform: translate( -50%, calc( 50% + 2px ) );
-				background: #fff;
+				background: $wd-bg;
 			}
 
 			&.is-done {
@@ -235,6 +235,16 @@ body.woodev-setup-wizard {
 			flex: 0 0 22px;
 			fill: $wd-accent;
 		}
+
+		// Cyan check before each bullet (mockup welcome look) when the plugin's
+		// content list item has no inline icon of its own.
+		li:not( :has( svg ) )::before {
+			content: "";
+			flex: 0 0 22px;
+			width: 22px;
+			height: 22px;
+			background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%2306aedd"><path d="M9 16.2l-3.5-3.5L4 14.2 9 19.2 20 8.2l-1.4-1.4z"/></svg>') no-repeat center / 22px 22px;
+		}
 	}
 
 	&__error {
@@ -280,6 +290,7 @@ body.woodev-setup-wizard {
 	}
 
 	&__field-tip {
+		position: relative;
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
@@ -299,6 +310,48 @@ body.woodev-setup-wizard {
 		&:focus {
 			background: $wd-accent-strong;
 			outline: none;
+		}
+
+		&:hover &-bubble,
+		&:focus &-bubble {
+			opacity: 1;
+			visibility: visible;
+		}
+	}
+
+	// Fixed-width instant tooltip bubble (matches the approved mockup; replaces
+	// wp Tooltip which opened with a delay and stretched to one long line).
+	&__field-tip-bubble {
+		position: absolute;
+		bottom: 150%;
+		left: 50%;
+		transform: translateX( -50% );
+		width: max-content;
+		max-width: 240px;
+		padding: 9px 11px;
+		background: #1e1e1e;
+		color: #fff;
+		font-size: 12.5px;
+		font-weight: 400;
+		line-height: 1.5;
+		text-align: left;
+		white-space: normal;
+		border-radius: 7px;
+		box-shadow: 0 8px 22px rgba( 0, 0, 0, 0.28 );
+		opacity: 0;
+		visibility: hidden;
+		transition: opacity 0.12s ease;
+		z-index: 10;
+		pointer-events: none;
+
+		&::after {
+			content: "";
+			position: absolute;
+			top: 100%;
+			left: 50%;
+			margin-left: -5px;
+			border: 5px solid transparent;
+			border-top-color: #1e1e1e;
 		}
 	}
 
@@ -369,6 +422,10 @@ body.woodev-setup-wizard {
 		display: flex;
 		flex-direction: column;
 		padding: 6px;
+		background: #fff;
+		border: 1px solid $wd-border;
+		border-radius: 10px;
+		box-shadow: 0 12px 32px rgba( 10, 30, 40, 0.16 );
 	}
 
 	&__dropdown-item {
@@ -424,6 +481,11 @@ body.woodev-setup-wizard {
 
 			&:first-child {
 				border-top: 0;
+			}
+
+			// Highlight the selected row (mockup .option-row.selected).
+			&:has( input:checked ) {
+				background: $wd-accent-soft-2;
 			}
 		}
 
@@ -599,6 +661,12 @@ body.woodev-setup-wizard {
 		padding: 0.8em 2.1em;
 		height: auto;
 		border-radius: $wd-radius-sm;
+	}
+
+	// Big "Готово" completion button under the finish card.
+	&__finish-done {
+		text-align: center;
+		margin: 2px 0 6px;
 	}
 
 	// ---- Footer exit link --------------------------------------------------
@@ -863,13 +931,24 @@ body.woodev-setup-wizard {
 	.components-form-token-field__help {
 		display: none;
 	}
+
+	// Number fields rarely need long values — cap their width by default.
+	input[type="number"].components-text-control__input,
+	input[type="number"] {
+		max-width: 150px;
+	}
 }
 
 // ---- Popover (custom dropdown menu) — rendered outside .woodev-setup -------
+// Strip the wp popover chrome so the inner menu IS the visible box; the menu is
+// sized in JS to the trigger width (so popover width == dropdown width exactly).
 .woodev-setup__dropdown-popover.components-popover .components-popover__content {
-	border: 1px solid $wd-border;
-	border-radius: 10px;
-	box-shadow: 0 12px 32px rgba( 10, 30, 40, 0.16 );
+	border: 0;
+	border-radius: 0;
+	box-shadow: none;
+	background: transparent;
+	padding: 0;
+	min-width: 0;
 }
 
 @media ( max-width: 600px ) {

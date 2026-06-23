@@ -172,7 +172,26 @@ export default function App() {
 		renderHeader( pluginName, headerLogoUrl ),
 		createElement( Stepper, { steps, index, onNavigate: goTo } ),
 		isFinish
-			? renderFinish( pluginName, finishActions, finishSecondaryActions )
+			? createElement(
+				Fragment,
+				null,
+				renderFinish( pluginName, finishActions, finishSecondaryActions ),
+				createElement(
+					'div',
+					{ className: 'woodev-setup__finish-done' },
+					createElement(
+						Button,
+						{
+							variant: 'primary',
+							className: 'woodev-setup__primary',
+							onClick: () => {
+								window.location.href = adminUrl();
+							},
+						},
+						__( 'Готово', 'woodev-plugin-framework' )
+					)
+				)
+			)
 			: createElement(
 				Fragment,
 				null,
