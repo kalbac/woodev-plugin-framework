@@ -585,6 +585,7 @@ abstract class Setup_Wizard {
 			'restRoot'              => esc_url_raw( rest_url( "woodev/v1/{$this->get_id()}/setup" ) ),
 			'nonce'                 => wp_create_nonce( 'wp_rest' ),
 			'state'                 => $this->get_state(),
+			'adminUrl'              => esc_url_raw( admin_url() ),
 			'steps'                 => $steps,
 			'finishActions'         => $this->get_finish_actions(),
 			'finishSecondaryActions' => $this->get_finish_secondary_actions(),

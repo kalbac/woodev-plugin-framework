@@ -60,12 +60,15 @@ export default function App() {
 	const isFinish = 'finish' === step.type;
 	const isWelcome = 'content' === step.type && 0 === index;
 	const isSettings = 'settings' === step.type;
-	const nextIsFinish = index < steps.length - 1 && 'finish' === steps[ index + 1 ].type;
 
 	// Mark the wizard complete once when the finish step becomes active.
 	useEffect( () => {
 		if ( isFinish ) {
-			complete( 'completed' ).catch( () => {} );
+			complete( 'completed' ).catch( ( e ) => {
+				if ( window.console ) {
+					window.console.warn( 'woodev setup: complete() failed', e );
+				}
+			} );
 		}
 	}, [ isFinish ] );
 

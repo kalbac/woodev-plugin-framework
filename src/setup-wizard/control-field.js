@@ -240,7 +240,8 @@ export default function ControlField( { schema, value, onChange } ) {
 				valueByLabel[ option.label ] = option.value;
 			} );
 
-			const current = Array.isArray( value ) ? value : ( value ? [ value ] : [] );
+			const raw = value ?? schema.value;
+			const current = Array.isArray( raw ) ? raw : ( raw ? [ raw ] : [] );
 			const tokenValue = current.map( ( v ) => labelByValue[ String( v ) ] ?? String( v ) );
 
 			return withAnatomy(
