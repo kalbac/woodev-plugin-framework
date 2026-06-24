@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
-> **63 atomic gotchas in 17 namespaces** — update count when adding/removing.
-> Last updated: 2026-06-25 (session 31: +1 — `wp-scripts-css-enqueue-version-by-mtime` [`[build/*]`]).
+> **64 atomic gotchas in 17 namespaces** — update count when adding/removing.
+> Last updated: 2026-06-25 (session 31: +2 — `wp-scripts-css-enqueue-version-by-mtime` [`[build/*]`], `settings-api-control-save-path-pitfalls` [`[php/*]`]).
 
 ## Index
 
@@ -18,6 +18,7 @@
 - [php/wc-compat] `Woodev_Plugin_Compatibility::is_enhanced_admin_available()` returns `true` UNCONDITIONALLY — it can't gate WC-only code out of the unit suite; guard WC-Admin code on `class_exists('\Automattic\WooCommerce\Admin\Notes\Note')` (checked first, before any mocked accessor) → [gotchas/is-enhanced-admin-available-always-true.md](gotchas/is-enhanced-admin-available-always-true.md) (s12)
 - [php/in-plugin-update-message-arg-shape] `in_plugin_update_message-{$file}` passes `($plugin_data, $response)`; `package`/`new_version` live on arg 2 (response), NOT arg 1 (header). Producer must pass the response object; consumer must read off arg 2 → [gotchas/in-plugin-update-message-arg-shape.md](gotchas/in-plugin-update-message-arg-shape.md) (s18)
 - [php/updater-cache-source-stamp-not-key] To isolate a cache keyed by a FROZEN option name, don't change the key — stamp the discriminator (e.g. licensing endpoint) into the value and validate on read → [gotchas/updater-cache-source-stamp-not-key.md](gotchas/updater-cache-source-stamp-not-key.md) (s18)
+- [php/settings-api] Settings-API save path: validate enum options by KEY-or-VALUE (not the label — drops integer/zero-based enums → validation bypass), coerce numeric strings from number inputs, and wp_kses_post() richtext controls on save → [gotchas/settings-api-control-save-path-pitfalls.md](gotchas/settings-api-control-save-path-pitfalls.md) (s31)
 
 ### [deprecation/*] — Deprecation cycle
 - [deprecation/deprecated-which-function] wc_deprecated_function vs _deprecated_function — which to use when → [gotchas/deprecated-which-function.md](gotchas/deprecated-which-function.md) (s2)

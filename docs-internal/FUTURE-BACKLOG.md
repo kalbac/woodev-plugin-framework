@@ -32,6 +32,12 @@
 ### OB-10 — Audit + rework Setup Wizard (brainstorm later)
 - Framework has an opt-in onboarding wizard (`Woodev_Plugin_Setup_Wizard`, `woodev/admin/abstract-plugin-admin-setup-wizard.php` + payment-gateway variant `abstract-payment-gateway-plugin-admin-setup-wizard.php`) that has **never been touched/reviewed** in v2. Operator wants a dedicated **brainstorm** for it (s27 — раздельно от competitor-модуля). First step: state-of-the-module audit (what it does today, coupling, whether it survived clean-break intact), then brainstorm the v2 rework.
 
+### OB-11 — Setup Wizard: deferred Codex-critic findings (s31, 2026-06-25)
+Deferred from the s31 Codex GPT-5.5 critic pass (PR #85 fixed the confirmed-real ones; these are lower-severity / judgment calls):
+- **#2 forward-navigation can complete setup without saving:** the clickable stepper + `#finish-step` hash let a user jump to the synthetic finish step (which fires `complete('completed')`) without passing the intervening settings steps. All wizard steps are skippable so this only means defaults remain, but jumping straight to finish via hash is sloppy. Fix idea: allow back-nav freely, forward only to already-visited steps; ignore `#finish-step` unless reached normally; optionally have the server verify prerequisites before accepting `completed`.
+- **#3 completion failure still shows success:** the finish-step effect catches a failed `complete()`, warns to console, and still renders the success screen. Completion is idempotent (retried on next admin load) so this is cosmetic, but a retry/error UI would be more honest.
+- **#7 sensitive setting values exposed in bootstrap:** `get_field_schema()` emits the current `value` for every field, including any future password/secret control, into page source + JS state (admin-only). When a `TYPE_PASSWORD`/sensitive control is actually used in a wizard, return an empty/masked sentinel and handle "unchanged" semantics on save.
+
 ### OB-6 — Dead-file sweep in v2
 - Many files in the v2 tree are effectively unused (loaded nowhere / never referenced). Do a dead-code/dead-file audit and remove them. Pairs well with the trait-extraction + the big array/typing review.
 
