@@ -189,7 +189,13 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 
 			foreach ( $options as $key => $option ) {
 
-				if ( ! $this->validate_value( $option ) ) {
+				// Keep the option when EITHER its KEY (the submittable token for an
+				// associative [ key => label ] map) OR its VALUE (a plain [ value, value ]
+				// list) is valid for the setting type. Validating only the label wrongly
+				// dropped whole enums whose labels are free-text display strings (e.g. an
+				// integer setting registered as [ 0 => 'Zero', 1 => 'One' ]), which left
+				// validation with no options and silently accepted any value of the type.
+				if ( ! $this->validate_value( $key ) && ! $this->validate_value( $option ) ) {
 					unset( $options[ $key ] );
 				}
 			}
@@ -251,7 +257,12 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 
 			if ( $this->is_is_multi() ) {
 
-				$elements = array_values( (array) $value );
+				$elements = array_map(
+					function ( $element ) {
+						return $this->sanitize_value( $this->coerce_value( $element ) );
+					},
+					array_values( (array) $value )
+				);
 
 				foreach ( $elements as $element ) {
 					$this->assert_valid_value( $element );
@@ -261,9 +272,62 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 
 			} else {
 
+				$value = $this->sanitize_value( $this->coerce_value( $value ) );
+
 				$this->assert_valid_value( $value );
 				$this->set_value( $value );
 			}
+		}
+
+		/**
+		 * Coerces a numeric string to the setting's numeric type.
+		 *
+		 * HTML number inputs submit their value as a string (e.g. "5000"); the strict
+		 * is_int()/is_float() validators would reject it. Coercion is applied only for
+		 * the integer/float setting types and only when the value is genuinely numeric;
+		 * everything else is returned untouched so non-numeric types keep their strict
+		 * validation.
+		 *
+		 * @param mixed $value
+		 * @return mixed int|float for numeric types, the value untouched otherwise
+		 */
+		private function coerce_value( $value ) {
+
+			if ( self::TYPE_INTEGER === $this->type && is_numeric( $value ) && (float) (int) $value === (float) $value ) {
+				return (int) $value;
+			}
+
+			if ( self::TYPE_FLOAT === $this->type && is_numeric( $value ) ) {
+				return (float) $value;
+			}
+
+			return $value;
+		}
+
+		/**
+		 * Sanitizes an HTML-bearing value before persistence.
+		 *
+		 * A richtext control submits raw HTML; without sanitization a privileged user
+		 * could persist script-capable markup that is later re-rendered (stored XSS).
+		 * Run it through wp_kses_post() — which also strips unsafe link protocols such as
+		 * javascript: — when the setting's control is a richtext editor. All other
+		 * controls store their value verbatim.
+		 *
+		 * @param mixed $value
+		 * @return mixed wp_kses_post()'d string for a richtext control, the value untouched otherwise
+		 */
+		private function sanitize_value( $value ) {
+
+			if ( is_string( $value ) ) {
+
+				$control = $this->get_control();
+
+				if ( $control instanceof Woodev_Control && Woodev_Control::TYPE_RICHTEXT === $control->get_type() ) {
+					return wp_kses_post( $value );
+				}
+			}
+
+			return $value;
 		}
 
 		/**

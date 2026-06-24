@@ -7,10 +7,12 @@
 
 namespace Woodev\Tests\Unit\SettingsApi;
 
+use Brain\Monkey\Functions;
 use Woodev\Tests\Unit\TestCase;
 
 require_once dirname( __DIR__, 3 ) . '/woodev/class-plugin-exception.php';
 require_once dirname( __DIR__, 3 ) . '/woodev/class-helper.php';
+require_once dirname( __DIR__, 3 ) . '/woodev/settings-api/class-control.php';
 require_once dirname( __DIR__, 3 ) . '/woodev/settings-api/class-setting.php';
 
 /**
@@ -286,5 +288,176 @@ class SettingUpdateValueTest extends TestCase {
 		} catch ( \Woodev_Plugin_Exception $e ) {
 			$this->assertSame( 400, $e->getCode() );
 		}
+	}
+
+	// -----------------------------------------------------------------------
+	// 7. Associative enum on a NON-string setting type (integer keys, string labels)
+	//    Regression: set_options() validated the LABEL against the type, dropped the
+	//    whole enum, and assert_valid_value() then accepted ANY value (validation bypass).
+	// -----------------------------------------------------------------------
+
+	/**
+	 * An integer enum registered as [ int_key => string_label ] keeps its options
+	 * (the submittable token is the integer KEY, not the free-text label).
+	 *
+	 * @return void
+	 */
+	public function test_set_options_retains_integer_enum_with_string_labels(): void {
+		$setting = $this->make_setting( 'integer', false, [ 1 => 'One', 2 => 'Two' ] );
+
+		$this->assertSame( [ 1 => 'One', 2 => 'Two' ], $setting->get_options() );
+	}
+
+	/**
+	 * update_value() accepts a valid integer enum key.
+	 *
+	 * @return void
+	 */
+	public function test_update_value_accepts_integer_enum_key(): void {
+		$setting = $this->make_setting( 'integer', false, [ 1 => 'One', 2 => 'Two' ] );
+
+		$setting->update_value( 2 );
+
+		$this->assertSame( 2, $setting->get_value() );
+	}
+
+	/**
+	 * update_value() REJECTS an integer outside the enum — the bypass is closed
+	 * (previously the emptied options map let any integer through).
+	 *
+	 * @return void
+	 */
+	public function test_update_value_rejects_integer_outside_enum(): void {
+		$this->expectException( \Woodev_Plugin_Exception::class );
+
+		$setting = $this->make_setting( 'integer', false, [ 1 => 'One', 2 => 'Two' ] );
+
+		$setting->update_value( 99 );
+	}
+
+	/**
+	 * A ZERO-BASED integer enum ([ 0 => 'Zero', 1 => 'One' ]) keeps its options.
+	 *
+	 * Regression guard: a key-range heuristic would misread 0-based integer keys as
+	 * a plain list, validate the string labels against the integer type, drop every
+	 * option, and reopen the empty-enum bypass. Validating key-OR-value avoids it.
+	 *
+	 * @return void
+	 */
+	public function test_set_options_retains_zero_based_integer_enum(): void {
+		$setting = $this->make_setting( 'integer', false, [ 0 => 'Zero', 1 => 'One' ] );
+
+		$this->assertSame( [ 0 => 'Zero', 1 => 'One' ], $setting->get_options() );
+	}
+
+	/**
+	 * A zero-based integer enum accepts the key 0 and rejects values outside it.
+	 *
+	 * @return void
+	 */
+	public function test_update_value_zero_based_integer_enum_accepts_key_and_rejects_others(): void {
+		$setting = $this->make_setting( 'integer', false, [ 0 => 'Zero', 1 => 'One' ] );
+
+		$setting->update_value( 0 );
+		$this->assertSame( 0, $setting->get_value() );
+
+		$this->expectException( \Woodev_Plugin_Exception::class );
+		$setting->update_value( 7 );
+	}
+
+	// -----------------------------------------------------------------------
+	// 8. Numeric-string coercion (HTML number inputs submit strings)
+	// -----------------------------------------------------------------------
+
+	/**
+	 * A numeric string is coerced to int for an integer setting.
+	 *
+	 * @return void
+	 */
+	public function test_update_value_coerces_numeric_string_to_integer(): void {
+		$setting = $this->make_setting( 'integer' );
+
+		$setting->update_value( '5000' );
+
+		$this->assertSame( 5000, $setting->get_value() );
+	}
+
+	/**
+	 * A numeric string is coerced to float for a float setting.
+	 *
+	 * @return void
+	 */
+	public function test_update_value_coerces_numeric_string_to_float(): void {
+		$setting = $this->make_setting( 'float' );
+
+		$setting->update_value( '5.5' );
+
+		$this->assertSame( 5.5, $setting->get_value() );
+	}
+
+	/**
+	 * A fractional string is NOT silently truncated into an integer setting — it
+	 * must fail validation rather than become a wrong value.
+	 *
+	 * @return void
+	 */
+	public function test_update_value_integer_rejects_fractional_string(): void {
+		$this->expectException( \Woodev_Plugin_Exception::class );
+
+		$setting = $this->make_setting( 'integer' );
+
+		$setting->update_value( '5.5' );
+	}
+
+	// -----------------------------------------------------------------------
+	// 9. Richtext sanitization (stored-XSS guard)
+	// -----------------------------------------------------------------------
+
+	/**
+	 * A richtext-controlled setting runs its value through wp_kses_post() on save,
+	 * stripping script-capable markup before persistence.
+	 *
+	 * @return void
+	 */
+	public function test_update_value_sanitizes_richtext_via_kses(): void {
+		Functions\when( 'wp_kses_post' )->alias(
+			static function ( $html ) {
+				// Minimal stand-in: strip <script>…</script> like kses would.
+				return preg_replace( '#<script\b[^>]*>.*?</script>#is', '', (string) $html );
+			}
+		);
+
+		$setting = new \Woodev_Setting();
+		$setting->set_id( 'notice' );
+		$setting->set_type( 'string' );
+
+		$control = new \Woodev_Control();
+		$control->set_type( \Woodev_Control::TYPE_RICHTEXT );
+		$setting->set_control( $control );
+
+		$setting->update_value( '<p>Hello</p><script>alert(1)</script>' );
+
+		$this->assertSame( '<p>Hello</p>', $setting->get_value() );
+	}
+
+	/**
+	 * A plain (non-richtext) string control stores its value verbatim — sanitization
+	 * is scoped to HTML-bearing controls only.
+	 *
+	 * @return void
+	 */
+	public function test_update_value_plain_string_not_sanitized(): void {
+		$setting = new \Woodev_Setting();
+		$setting->set_id( 'plain' );
+		$setting->set_type( 'string' );
+
+		$control = new \Woodev_Control();
+		$control->set_type( \Woodev_Control::TYPE_TEXT );
+		$setting->set_control( $control );
+
+		$value = '<p>kept as-is</p>';
+		$setting->update_value( $value );
+
+		$this->assertSame( $value, $setting->get_value() );
 	}
 }

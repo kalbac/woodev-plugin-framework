@@ -17,6 +17,27 @@ import { createElement, useRef, useEffect } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 
 /**
+ * Whether a user-entered link URL uses a safe protocol.
+ *
+ * Blocks `javascript:`/`data:`/etc. from ever entering the editor DOM. The server
+ * also strips unsafe protocols via wp_kses_post() on save — this is the immediate
+ * client-side guard. Relative URLs (no scheme) are allowed.
+ *
+ * @param {string} url candidate URL.
+ * @return {boolean} true when the protocol is http/https/mailto/tel or relative.
+ */
+function isSafeUrl( url ) {
+	// Strip ALL whitespace/control chars (<= 0x20) before testing the scheme — a
+	// browser ignores them when resolving a URL, so "java\nscript:" would execute.
+	const cleaned = String( url ).replace( /[\s\x00-\x1f]/g, '' );
+	const scheme = cleaned.match( /^([a-z][a-z0-9+.-]*):/i );
+	if ( ! scheme ) {
+		return true; // relative URL — no protocol to abuse.
+	}
+	return [ 'http', 'https', 'mailto', 'tel' ].includes( scheme[ 1 ].toLowerCase() );
+}
+
+/**
  * Minimal contentEditable rich-text control.
  *
  * @param {Object}   props          component props.
@@ -114,7 +135,7 @@ export default function WizardRichText( { value = '', onChange } ) {
 				title: __( 'Ссылка', 'woodev-plugin-framework' ),
 				onAction: () => {
 					const url = window.prompt( __( 'Адрес ссылки (URL):', 'woodev-plugin-framework' ), 'https://' );
-					if ( url ) {
+					if ( url && isSafeUrl( url ) ) {
 						run( 'createLink', url );
 					}
 				},

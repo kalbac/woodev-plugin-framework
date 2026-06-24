@@ -60,4 +60,42 @@ class SetupWizardRestControllerTest extends TestCase {
 
 		$this->assertSame( [ 'saved' => true, 'step' => 'connection' ], $response );
 	}
+
+	public function test_save_step_passes_only_step_fields_to_on_save(): void {
+		Functions\when( 'rest_ensure_response' )->returnArg( 1 );
+
+		$captured = null;
+		$on_save  = static function ( $values ) use ( &$captured ): void {
+			$captured = $values;
+		};
+
+		$handler = Mockery::mock( '\Woodev_Abstract_Settings' );
+		// Only the declared field is ever persisted.
+		$handler->shouldReceive( 'update_value' )->once()->with( 'api_key', 'K' );
+
+		$plugin = Mockery::mock( '\Woodev_Plugin' );
+		$plugin->shouldReceive( 'get_settings_handler' )->andReturn( $handler );
+
+		$wizard = Mockery::mock( '\Woodev\Framework\Setup\Setup_Wizard' );
+		$wizard->shouldReceive( 'get_steps' )->andReturn(
+			[ 'connection' => Step::settings( 'connection', 'C', [ 'api_key' ], $on_save ) ]
+		);
+		$wizard->shouldReceive( 'get_plugin' )->andReturn( $plugin );
+
+		$request = Mockery::mock( '\WP_REST_Request' );
+		$request->shouldReceive( 'get_param' )->with( 'step_id' )->andReturn( 'connection' );
+		// A crafted request smuggles an extra, undeclared key.
+		$request->shouldReceive( 'get_param' )->with( 'values' )->andReturn(
+			[
+				'api_key' => 'K',
+				'evil'    => 'X',
+			]
+		);
+
+		$controller = new \Woodev_REST_API_Setup( $wizard );
+		$controller->save_step( $request );
+
+		// on_save must receive ONLY the step's declared field, never 'evil'.
+		$this->assertSame( [ 'api_key' => 'K' ], $captured );
+	}
 }
