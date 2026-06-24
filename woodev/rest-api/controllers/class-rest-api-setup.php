@@ -143,8 +143,11 @@ if ( ! class_exists( 'Woodev_REST_API_Setup' ) ) :
 
 			$on_save = $step->get_on_save();
 			if ( is_callable( $on_save ) ) {
+				// Hand the callback only the values for fields declared on this step —
+				// never arbitrary extra keys a crafted request may have included.
+				$step_values = array_intersect_key( $values, array_flip( $step->get_setting_ids() ) );
 				try {
-					call_user_func( $on_save, $values, $request );
+					call_user_func( $on_save, $step_values, $request );
 				} catch ( \Exception $e ) {
 					// on_save is the plugin's own callback; surface its message as a 400
 					// (settings are already persisted — on_save must be idempotent), and log.

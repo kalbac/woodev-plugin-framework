@@ -625,6 +625,7 @@ abstract class Setup_Wizard {
 				'name'        => $setting->get_name(),
 				'options'     => $setting->get_options(),
 				'value'       => $handler->get_value( $setting->get_id() ),
+				'is_multi'    => $setting->is_is_multi(),
 				'controlType' => $control ? $control->get_type() : null,
 				'description' => $control && $control->get_description() ? $control->get_description() : ( method_exists( $setting, 'get_description' ) ? $setting->get_description() : '' ),
 				'tooltip'     => $control ? $control->get_tooltip() : '',

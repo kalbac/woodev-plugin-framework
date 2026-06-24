@@ -87,6 +87,7 @@ class SetupWizardFieldSchemaTest extends TestCase {
 		// Build the setting mock.
 		$setting = Mockery::mock( 'Woodev_Setting' );
 		$setting->shouldReceive( 'get_id' )->andReturn( 'speed' );
+		$setting->shouldReceive( 'is_is_multi' )->andReturn( false );
 		$setting->shouldReceive( 'get_type' )->andReturn( 'integer' );
 		$setting->shouldReceive( 'get_name' )->andReturn( 'Speed' );
 		$setting->shouldReceive( 'get_options' )->andReturn( [] );
@@ -143,6 +144,7 @@ class SetupWizardFieldSchemaTest extends TestCase {
 
 		$setting = Mockery::mock( 'Woodev_Setting' );
 		$setting->shouldReceive( 'get_id' )->andReturn( 'api_key' );
+		$setting->shouldReceive( 'is_is_multi' )->andReturn( false );
 		$setting->shouldReceive( 'get_type' )->andReturn( 'string' );
 		$setting->shouldReceive( 'get_name' )->andReturn( 'API Key' );
 		$setting->shouldReceive( 'get_options' )->andReturn( [] );
@@ -173,6 +175,7 @@ class SetupWizardFieldSchemaTest extends TestCase {
 	public function test_no_control_emits_null_controltype(): void {
 		$setting = Mockery::mock( 'Woodev_Setting' );
 		$setting->shouldReceive( 'get_id' )->andReturn( 'label' );
+		$setting->shouldReceive( 'is_is_multi' )->andReturn( false );
 		$setting->shouldReceive( 'get_type' )->andReturn( 'string' );
 		$setting->shouldReceive( 'get_name' )->andReturn( 'Label' );
 		$setting->shouldReceive( 'get_options' )->andReturn( [] );
@@ -193,5 +196,34 @@ class SetupWizardFieldSchemaTest extends TestCase {
 		$this->assertSame( 'No control', $schema['label']['description'] );
 		$this->assertSame( '', $schema['label']['tooltip'] );
 		$this->assertArrayNotHasKey( 'min', $schema['label'] );
+	}
+
+	/**
+	 * The schema emits is_multi so the React control-field can resolve a multiselect
+	 * for a multi setting even without an explicit multiselect control type.
+	 *
+	 * @return void
+	 */
+	public function test_schema_emits_is_multi_flag(): void {
+		$setting = Mockery::mock( 'Woodev_Setting' );
+		$setting->shouldReceive( 'get_id' )->andReturn( 'methods' );
+		$setting->shouldReceive( 'is_is_multi' )->andReturn( true );
+		$setting->shouldReceive( 'get_type' )->andReturn( 'string' );
+		$setting->shouldReceive( 'get_name' )->andReturn( 'Methods' );
+		$setting->shouldReceive( 'get_options' )->andReturn( [ 'a' => 'A', 'b' => 'B' ] );
+		$setting->shouldReceive( 'get_control' )->andReturn( null );
+		$setting->shouldReceive( 'get_description' )->andReturn( '' );
+
+		$handler = Mockery::mock( 'Woodev_Abstract_Settings' );
+		$handler->shouldReceive( 'get_settings' )->andReturn( [ $setting ] );
+		$handler->shouldReceive( 'get_value' )->with( 'methods' )->andReturn( [] );
+
+		$plugin = Mockery::mock( 'Woodev_Plugin' );
+		$plugin->shouldReceive( 'get_settings_handler' )->andReturn( $handler );
+
+		$wizard = new Field_Schema_Test_Wizard( $plugin );
+		$schema = $wizard->public_get_field_schema();
+
+		$this->assertTrue( $schema['methods']['is_multi'] );
 	}
 }
