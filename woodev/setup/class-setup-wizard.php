@@ -100,10 +100,11 @@ abstract class Setup_Wizard {
 	 * @param string        $label       step label.
 	 * @param string[]      $setting_ids referenced setting ids.
 	 * @param callable|null $on_save     optional idempotent save side-effect.
+	 * @param string        $description optional step description shown in the wizard UI.
 	 * @return void
 	 */
-	protected function register_step( string $id, string $label, array $setting_ids, ?callable $on_save = null ): void {
-		$this->steps[ $id ] = Step::settings( $id, $label, $setting_ids, $on_save );
+	protected function register_step( string $id, string $label, array $setting_ids, ?callable $on_save = null, string $description = '' ): void {
+		$this->steps[ $id ] = Step::settings( $id, $label, $setting_ids, $on_save, $description );
 	}
 
 	/**
@@ -111,13 +112,14 @@ abstract class Setup_Wizard {
 	 *
 	 * @since 2.0.2
 	 *
-	 * @param string          $id      step id.
-	 * @param string          $label   step label.
-	 * @param callable|string $content content callback or markup.
+	 * @param string          $id          step id.
+	 * @param string          $label       step label.
+	 * @param callable|string $content     content callback or markup.
+	 * @param string          $description optional step description shown in the wizard UI.
 	 * @return void
 	 */
-	protected function register_content_step( string $id, string $label, $content ): void {
-		$this->steps[ $id ] = Step::content( $id, $label, $content );
+	protected function register_content_step( string $id, string $label, $content, string $description = '' ): void {
+		$this->steps[ $id ] = Step::content( $id, $label, $content, $description );
 	}
 
 	/**
@@ -130,6 +132,7 @@ abstract class Setup_Wizard {
 	protected function add_hooks(): void {
 		add_action( "woodev_{$this->get_id()}_installed", [ $this, 'handle_installed' ] );
 		add_action( 'admin_init', [ $this, 'maybe_redirect' ] );
+		add_action( 'admin_init', [ $this, 'maybe_render_full_screen' ] );
 		add_action( 'admin_notices', [ $this, 'maybe_render_notice' ] );
 		add_action( 'admin_menu', [ $this, 'register_page' ] );
 		add_action( 'rest_api_init', [ $this, 'register_rest' ], 5 );
@@ -402,6 +405,85 @@ abstract class Setup_Wizard {
 	}
 
 	/**
+	 * Whether the current request targets the wizard page.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @return bool
+	 */
+	protected function is_wizard_page_request(): bool {
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only page routing check, no state change.
+		return is_admin() && ! wp_doing_ajax() && isset( $_GET['page'] ) && $this->get_page_slug() === sanitize_key( wp_unslash( $_GET['page'] ) );
+	}
+
+	/**
+	 * Renders the wizard as a standalone full-screen page (no admin chrome).
+	 *
+	 * Hooked early on admin_init: on the wizard page it enqueues the bundle,
+	 * prints a minimal HTML document with the React mount, and exits before
+	 * admin-header.php loads the menu/toolbar/notices.
+	 *
+	 * @internal
+	 *
+	 * @since 2.0.2
+	 *
+	 * @return void
+	 */
+	public function maybe_render_full_screen(): void {
+		if ( ! $this->is_wizard_page_request() ) {
+			return;
+		}
+
+		if ( ! current_user_can( $this->required_capability ) ) {
+			wp_die(
+				esc_html__( 'У вас нет прав для доступа к этой странице.', 'woodev-plugin-framework' ),
+				'',
+				[ 'response' => 403 ]
+			);
+		}
+
+		$this->enqueue_assets();
+		$this->render_full_screen_page();
+
+		exit;
+	}
+
+	/**
+	 * Outputs the standalone full-screen HTML document for the wizard.
+	 *
+	 * @internal
+	 *
+	 * @since 2.0.2
+	 *
+	 * @return void
+	 */
+	public function render_full_screen_page(): void {
+		// The standalone wizard has no emoji content; skip the (deprecated in WP 6.4)
+		// emoji-styles print so the <head> stays clean.
+		remove_action( 'wp_print_styles', 'print_emoji_styles' );
+		remove_action( 'admin_print_styles', 'print_emoji_styles' );
+		?>
+<!DOCTYPE html>
+<html <?php language_attributes(); ?>>
+<head>
+	<meta charset="<?php bloginfo( 'charset' ); ?>" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<title><?php echo esc_html( $this->plugin->get_plugin_name() ); ?></title>
+		<?php
+		wp_print_styles();
+		wp_print_head_scripts();
+		?>
+</head>
+<body class="woodev-setup-wizard wp-core-ui">
+	<div id="woodev-setup-wizard-root"></div>
+	<noscript><p><?php echo esc_html__( 'Для мастера настройки нужен JavaScript. Включите его и обновите страницу.', 'woodev-plugin-framework' ); ?></p></noscript>
+		<?php wp_print_footer_scripts(); ?>
+</body>
+</html>
+		<?php
+	}
+
+	/**
 	 * Enqueues the wizard React bundle and inline bootstrap data.
 	 *
 	 * Mirrors Woodev_Admin_Pages::load_licenses_page_scripts().
@@ -430,8 +512,14 @@ abstract class Setup_Wizard {
 
 		$build_url = $this->plugin->get_framework_assets_url() . '/build/setup-wizard';
 
+		// The asset manifest version tracks the JS bundle only; SCSS-only changes
+		// leave it unchanged, so version the stylesheet by its own mtime to bust
+		// the cache when just the CSS is rebuilt (and on every release).
+		$style_path    = $this->plugin->get_framework_path() . '/assets/build/setup-wizard/style-index.css';
+		$style_version = file_exists( $style_path ) ? (string) filemtime( $style_path ) : $asset['version'];
+
 		wp_enqueue_style( 'wp-components' );
-		wp_enqueue_style( 'woodev-setup-wizard', $build_url . '/style-index.css', [ 'wp-components' ], $asset['version'] );
+		wp_enqueue_style( 'woodev-setup-wizard', $build_url . '/style-index.css', [ 'wp-components' ], $style_version );
 		wp_enqueue_script( 'woodev-setup-wizard', $build_url . '/index.js', $asset['dependencies'], $asset['version'], true );
 
 		wp_add_inline_script(
@@ -478,29 +566,45 @@ abstract class Setup_Wizard {
 			}
 
 			$steps[] = [
-				'id'      => $step->get_id(),
-				'label'   => $step->get_label(),
-				'type'    => $step->get_type(),
-				'fields'  => $fields,
-				'content' => is_string( $content ) ? $content : '',
+				'id'          => $step->get_id(),
+				'label'       => $step->get_label(),
+				'type'        => $step->get_type(),
+				'description' => $step->get_description(),
+				'fields'      => $fields,
+				'content'     => is_string( $content ) ? $content : '',
 			];
 		}
 
+		$steps[] = [
+			'id'          => 'finish',
+			'label'       => \__( 'Готово', 'woodev-plugin-framework' ),
+			'type'        => 'finish',
+			'description' => '',
+			'fields'      => [],
+			'content'     => '',
+		];
+
 		return [
-			'pluginId'      => $this->get_id(),
-			'pluginName'    => $this->plugin->get_plugin_name(),
-			'headerLogoUrl' => esc_url_raw( $this->get_header_image_url() ),
-			'restRoot'      => esc_url_raw( rest_url( "woodev/v1/{$this->get_id()}/setup" ) ),
-			'nonce'         => wp_create_nonce( 'wp_rest' ),
-			'state'         => $this->get_state(),
-			'steps'         => $steps,
-			'finishActions' => $this->get_finish_actions(),
+			'pluginId'              => $this->get_id(),
+			'pluginName'            => $this->plugin->get_plugin_name(),
+			'headerLogoUrl'         => esc_url_raw( $this->get_header_image_url() ),
+			'restRoot'              => esc_url_raw( rest_url( "woodev/v1/{$this->get_id()}/setup" ) ),
+			'nonce'                 => wp_create_nonce( 'wp_rest' ),
+			'state'                 => $this->get_state(),
+			'adminUrl'              => esc_url_raw( admin_url() ),
+			'steps'                 => $steps,
+			'finishActions'         => $this->get_finish_actions(),
+			'finishSecondaryActions' => $this->get_finish_secondary_actions(),
 		];
 	}
 
 	/**
 	 * Resolves the JSON field schema for referenced settings from the plugin's
 	 * Settings API handler. Returns an empty map when the plugin has no handler.
+	 *
+	 * Each entry includes controlType, description (control description falling
+	 * back to setting description), tooltip, and conditional range bounds
+	 * (min/max/step) when the associated control provides them.
 	 *
 	 * @since 2.0.2
 	 *
@@ -514,19 +618,38 @@ abstract class Setup_Wizard {
 
 		$schema = [];
 		foreach ( $handler->get_settings() as $setting ) {
-			$schema[ $setting->get_id() ] = [
-				'type'    => $setting->get_type(),
-				'name'    => $setting->get_name(),
-				'options' => $setting->get_options(),
-				'value'   => $handler->get_value( $setting->get_id() ),
+			$control = $setting->get_control();
+
+			$entry = [
+				'type'        => $setting->get_type(),
+				'name'        => $setting->get_name(),
+				'options'     => $setting->get_options(),
+				'value'       => $handler->get_value( $setting->get_id() ),
+				'controlType' => $control ? $control->get_type() : null,
+				'description' => $control && $control->get_description() ? $control->get_description() : ( method_exists( $setting, 'get_description' ) ? $setting->get_description() : '' ),
+				'tooltip'     => $control ? $control->get_tooltip() : '',
 			];
+
+			if ( $control && null !== $control->get_min() ) {
+				$entry['min'] = $control->get_min();
+			}
+			if ( $control && null !== $control->get_max() ) {
+				$entry['max'] = $control->get_max();
+			}
+			if ( $control && null !== $control->get_step() ) {
+				$entry['step'] = $control->get_step();
+			}
+
+			$schema[ $setting->get_id() ] = $entry;
 		}
 
 		return $schema;
 	}
 
 	/**
-	 * Finish-screen "what's next" actions. Override per plugin.
+	 * Finish-screen "what's next" next-step cards. Override per plugin.
+	 *
+	 * Each card has keys: heading, title, description, actionLabel, url.
 	 *
 	 * @since 2.0.2
 	 *
@@ -536,8 +659,46 @@ abstract class Setup_Wizard {
 		$actions = [];
 		if ( $this->plugin->get_documentation_url() ) {
 			$actions[] = [
-				'label' => __( 'Документация', 'woodev-plugin-framework' ),
-				'url'   => esc_url_raw( $this->plugin->get_documentation_url() ),
+				'heading'     => \__( 'Документация', 'woodev-plugin-framework' ),
+				'title'       => \__( 'Тонкая настройка', 'woodev-plugin-framework' ),
+				'description' => \__( 'Подробнее о возможностях плагина.', 'woodev-plugin-framework' ),
+				'actionLabel' => \__( 'Читать', 'woodev-plugin-framework' ),
+				'url'         => \esc_url_raw( $this->plugin->get_documentation_url() ),
+			];
+		}
+
+		return $actions;
+	}
+
+	/**
+	 * Finish-screen secondary action links (settings, review, etc.).
+	 *
+	 * Each item has keys: label, icon ('settings' | 'review'), url.
+	 * Items are only added when the plugin returns a non-empty URL from the
+	 * corresponding accessor; absent or empty URLs are silently omitted.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @return array<int,array<string,string>>
+	 */
+	protected function get_finish_secondary_actions(): array {
+		$actions = [];
+
+		$settings_url = method_exists( $this->plugin, 'get_settings_url' ) ? $this->plugin->get_settings_url() : '';
+		if ( $settings_url ) {
+			$actions[] = [
+				'label' => \__( 'Настройки', 'woodev-plugin-framework' ),
+				'icon'  => 'settings',
+				'url'   => \esc_url_raw( $settings_url ),
+			];
+		}
+
+		$reviews_url = method_exists( $this->plugin, 'get_reviews_url' ) ? $this->plugin->get_reviews_url() : '';
+		if ( $reviews_url ) {
+			$actions[] = [
+				'label' => \__( 'Оставить отзыв', 'woodev-plugin-framework' ),
+				'icon'  => 'review',
+				'url'   => \esc_url_raw( $reviews_url ),
 			];
 		}
 

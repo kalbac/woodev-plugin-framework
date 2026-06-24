@@ -33,10 +33,13 @@ class SetupWizardBootstrapTest extends TestCase {
 		Functions\when( 'wp_create_nonce' )->justReturn( 'NONCE' );
 		Functions\when( 'rest_url' )->returnArg( 1 );      // return the path arg so restRoot contains it
 		Functions\when( 'esc_url_raw' )->returnArg( 1 );
+		Functions\when( 'admin_url' )->justReturn( 'http://example.org/wp-admin/' );
 
 		$plugin = Mockery::mock( 'Woodev_Plugin' );
 		$plugin->shouldReceive( 'get_plugin_name' )->andReturn( 'Acme' );
 		$plugin->shouldReceive( 'get_documentation_url' )->andReturn( '' );
+		$plugin->shouldReceive( 'get_settings_url' )->andReturn( '' );
+		$plugin->shouldReceive( 'get_reviews_url' )->andReturn( '' );
 
 		$wizard = new Bootstrap_Test_Wizard( $plugin );
 		$wizard->build();
@@ -44,7 +47,11 @@ class SetupWizardBootstrapTest extends TestCase {
 
 		$this->assertSame( 'acme', $data['pluginId'] );
 		$this->assertSame( 'NONCE', $data['nonce'] );
-		$this->assertSame( [ 'welcome', 'connection' ], array_column( $data['steps'], 'id' ) );
+		$step_ids = array_column( $data['steps'], 'id' );
+		$this->assertContains( 'welcome', $step_ids );
+		$this->assertContains( 'connection', $step_ids );
+		// Last step is always the synthetic terminal finish descriptor.
+		$this->assertSame( 'finish', end( $step_ids ) );
 		// content step carries no fields; settings step carries its schema slice.
 		$this->assertSame( [], $data['steps'][0]['fields'] );
 		$this->assertSame( '<p>hi</p>', $data['steps'][0]['content'] );

@@ -240,16 +240,51 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 		/**
 		 * Sets the setting current value, after validating it against the type and, if set, options.
 		 *
+		 * For is_multi settings, $value must be an array; each element is validated individually
+		 * against the type and, when options are configured, against the option keys or values.
+		 * For scalar settings, $value is validated directly.
+		 *
 		 * @param mixed $value
 		 * @throws Woodev_Plugin_Exception
 		 */
 		public function update_value( $value ) {
 
+			if ( $this->is_is_multi() ) {
+
+				$elements = array_values( (array) $value );
+
+				foreach ( $elements as $element ) {
+					$this->assert_valid_value( $element );
+				}
+
+				$this->set_value( $elements );
+
+			} else {
+
+				$this->assert_valid_value( $value );
+				$this->set_value( $value );
+			}
+		}
+
+		/**
+		 * Asserts that a single scalar value is valid for this setting's type and options.
+		 *
+		 * Accepts a value when it is either an option KEY (array_key_exists on assoc maps)
+		 * or an option VALUE (strict in_array), covering both associative [key=>label] and
+		 * plain list [label, label] registration styles.
+		 *
+		 * @param mixed $value
+		 * @throws Woodev_Plugin_Exception
+		 */
+		private function assert_valid_value( $value ) {
+
 			if ( ! $this->validate_value( $value ) ) {
-
 				throw new Woodev_Plugin_Exception( "Setting value for setting {$this->id} is not valid for the setting type {$this->type}", 400 );
+			}
 
-			} elseif ( ! empty( $this->options ) && ! in_array( $value, $this->options ) ) {
+			if ( ! empty( $this->options )
+				&& ! ( is_scalar( $value ) && array_key_exists( $value, $this->options ) )
+				&& ! in_array( $value, $this->options, true ) ) {
 
 				throw new Woodev_Plugin_Exception(
 					sprintf(
@@ -259,10 +294,6 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 					),
 					400
 				);
-
-			} else {
-
-				$this->set_value( $value );
 			}
 		}
 

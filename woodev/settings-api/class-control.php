@@ -45,6 +45,15 @@ if ( ! class_exists( 'Woodev_Control' ) ) :
 		/** @var string the range control type */
 		const TYPE_RANGE = 'range';
 
+		/** @var string the toggle control type */
+		const TYPE_TOGGLE = 'toggle';
+
+		/** @var string the richtext control type */
+		const TYPE_RICHTEXT = 'richtext';
+
+		/** @var string the multiselect control type */
+		const TYPE_MULTISELECT = 'multiselect';
+
 		/** @var string|null the setting ID to which this control belongs */
 		protected $setting_id;
 
@@ -59,6 +68,18 @@ if ( ! class_exists( 'Woodev_Control' ) ) :
 
 		/** @var array the control options, as $option => $label */
 		protected $options = [];
+
+		/** @var float|null the minimum value for range/number controls */
+		protected $min = null;
+
+		/** @var float|null the maximum value for range/number controls */
+		protected $max = null;
+
+		/** @var float|null the step value for range/number controls */
+		protected $step = null;
+
+		/** @var string the tooltip text for the control */
+		protected $tooltip = '';
 
 		/**
 		 * The setting ID to which this control belongs.
@@ -199,6 +220,96 @@ if ( ! class_exists( 'Woodev_Control' ) ) :
 			}
 
 			$this->options = $options;
+		}
+
+		/**
+		 * Gets the minimum value.
+		 *
+		 * @since 2.0.2
+		 * @return float|null
+		 */
+		public function get_min(): ?float {
+			return $this->min;
+		}
+
+		/**
+		 * Sets the minimum value.
+		 *
+		 * Non-numeric values are stored as null.
+		 *
+		 * @since 2.0.2
+		 * @param mixed $value minimum value to set
+		 * @return void
+		 */
+		public function set_min( $value ): void {
+			$this->min = is_numeric( $value ) ? (float) $value : null;
+		}
+
+		/**
+		 * Gets the maximum value.
+		 *
+		 * @since 2.0.2
+		 * @return float|null
+		 */
+		public function get_max(): ?float {
+			return $this->max;
+		}
+
+		/**
+		 * Sets the maximum value.
+		 *
+		 * Non-numeric values are stored as null.
+		 *
+		 * @since 2.0.2
+		 * @param mixed $value maximum value to set
+		 * @return void
+		 */
+		public function set_max( $value ): void {
+			$this->max = is_numeric( $value ) ? (float) $value : null;
+		}
+
+		/**
+		 * Gets the step value.
+		 *
+		 * @since 2.0.2
+		 * @return float|null
+		 */
+		public function get_step(): ?float {
+			return $this->step;
+		}
+
+		/**
+		 * Sets the step value.
+		 *
+		 * Non-numeric values are stored as null.
+		 *
+		 * @since 2.0.2
+		 * @param mixed $value step value to set
+		 * @return void
+		 */
+		public function set_step( $value ): void {
+			$this->step = is_numeric( $value ) ? (float) $value : null;
+		}
+
+		/**
+		 * Gets the tooltip text.
+		 *
+		 * @since 2.0.2
+		 * @return string
+		 */
+		public function get_tooltip(): string {
+			return $this->tooltip;
+		}
+
+		/**
+		 * Sets the tooltip text.
+		 *
+		 * @since 2.0.2
+		 * @param string $value tooltip text to set
+		 * @return void
+		 */
+		public function set_tooltip( string $value ): void {
+			$this->tooltip = $value;
 		}
 	}
 

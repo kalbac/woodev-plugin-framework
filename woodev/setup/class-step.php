@@ -40,6 +40,9 @@ final class Step {
 	/** @var callable|null server-side save side-effect. */
 	private $on_save;
 
+	/** @var string optional step description shown in the wizard UI. */
+	private string $description = '';
+
 	/** @var callable|null visibility predicate. */
 	private $visibility_callback;
 
@@ -67,12 +70,14 @@ final class Step {
 	 * @param string        $label       step label.
 	 * @param string[]      $setting_ids referenced setting ids.
 	 * @param callable|null $on_save     optional save side-effect.
+	 * @param string        $description optional step description.
 	 * @return self
 	 */
-	public static function settings( string $id, string $label, array $setting_ids, ?callable $on_save = null ): self {
+	public static function settings( string $id, string $label, array $setting_ids, ?callable $on_save = null, string $description = '' ): self {
 		$step              = new self( $id, $label, self::TYPE_SETTINGS );
 		$step->setting_ids = array_values( $setting_ids );
 		$step->on_save     = $on_save;
+		$step->description = $description;
 
 		return $step;
 	}
@@ -82,14 +87,16 @@ final class Step {
 	 *
 	 * @since 2.0.2
 	 *
-	 * @param string          $id      step id.
-	 * @param string          $label   step label.
-	 * @param callable|string $content content callback or markup.
+	 * @param string          $id          step id.
+	 * @param string          $label       step label.
+	 * @param callable|string $content     content callback or markup.
+	 * @param string          $description optional step description.
 	 * @return self
 	 */
-	public static function content( string $id, string $label, $content ): self {
-		$step          = new self( $id, $label, self::TYPE_CONTENT );
-		$step->content = $content;
+	public static function content( string $id, string $label, $content, string $description = '' ): self {
+		$step              = new self( $id, $label, self::TYPE_CONTENT );
+		$step->content     = $content;
+		$step->description = $description;
 
 		return $step;
 	}
@@ -106,6 +113,17 @@ final class Step {
 		$this->visibility_callback = $callback;
 
 		return $this;
+	}
+
+	/**
+	 * Returns the step description.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @return string
+	 */
+	public function get_description(): string {
+		return $this->description;
 	}
 
 	/**
