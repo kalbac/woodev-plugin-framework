@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
-> **62 atomic gotchas in 17 namespaces** — update count when adding/removing.
-> Last updated: 2026-06-21 (session 28: +1 — `phpstan-windows-parallel-worker-segfault` [`[tooling/*]`]).
+> **63 atomic gotchas in 17 namespaces** — update count when adding/removing.
+> Last updated: 2026-06-25 (session 31: +1 — `wp-scripts-css-enqueue-version-by-mtime` [`[build/*]`]).
 
 ## Index
 
@@ -78,6 +78,7 @@
 - [build/ci] A PR that conflicts with base (`mergeStateStatus: DIRTY`) runs NO `pull_request` CI — only `pull_request_target`; "all green" can mean the matrix never ran. Check `gh pr view --json mergeable,mergeStateStatus`; rebase onto the new base after a squash-merge → [gotchas/pr-conflict-skips-pull-request-ci.md](gotchas/pr-conflict-skips-pull-request-ci.md) (session 2)
 - [build/js] `@wordpress/scripts` default (automatic) JSX runtime depends on the `react-jsx-runtime` script handle — registered only in WP ≥ 6.6; for WP 6.3+ support force the classic runtime via `babel.config.js` and import `createElement`/`Fragment` in every JSX file → [gotchas/wp-scripts-jsx-runtime-wp66.md](gotchas/wp-scripts-jsx-runtime-wp66.md) (s8)
 - [build/assets-eol] Rebuilding the license-page bundle on Windows can commit CRLF while Linux CI rebuilds LF → "Assets build parity" fails on identical content. `.gitattributes` pins `woodev/assets/build/** text eol=lf` → [gotchas/build-artifacts-eol-lf-windows-parity.md](gotchas/build-artifacts-eol-lf-windows-parity.md) (s14)
+- [build/css-enqueue-version] wp-scripts emits `style-index.css` separately from `index.js`; enqueuing CSS with the JS bundle's `index.asset.php` hash means SCSS-only rebuilds never bust the browser cache — version the stylesheet by its own `filemtime` → [gotchas/wp-scripts-css-enqueue-version-by-mtime.md](gotchas/wp-scripts-css-enqueue-version-by-mtime.md) (s31)
 
 ### [admin-ui/*] — Admin pages / React UI
 - [admin-ui/license-page] The "Woodev → Лицензии" page enqueues ONLY `style-index.css` (the React bundle) + `wp-components`; the legacy `woodev-license-page.css` is enqueued nowhere. Styles for ANY server-rendered section on that page (e.g. `html-settings-section.php`) must live in `src/license-page/style.scss`, and `license_page()` must wrap output in `.wrap` + `<h1>` → [gotchas/license-page-css-bundle-only.md](gotchas/license-page-css-bundle-only.md) (s14)
