@@ -174,12 +174,16 @@ When in doubt -> "uncertain" (this routes to human, never to silent pass).
 ## 4. CONDUCTOR logic + three fallback branches
 
 ```text
+preflight: refuse to run unless HEAD matches AllowedBranchPattern (^autodev/) -- never main
+
 loop forever:
   task = claim_next(queue/pending -> queue/active)   # atomic move; SKIP any task whose
                                                      # file_set intersects an active task
   if none: sleep 30s; run_periodic_jobs(); continue
 
-  worktree = ensure_worktree(task.id)                # ISOLATION: one wt per task
+  # NO per-task git worktree exists. Workers run in the shared repository working tree,
+  # SERIALIZED by file_set disjointness (the scheduler is the lock). A dirty-file fence
+  # (below) catches any worker edit outside its file_set.
   attempts = inc(runtime/task/attempts)
 
   # ---- CIRCUIT BREAKER ----
@@ -204,40 +208,58 @@ loop forever:
   if report.status == NEEDS_GUARD: escalate("needs guard", task); continue
   if report.status == BLOCKED:    escalate("blocked", task); continue
 
-  # ---- CRITIC (tiered by a MECHANICAL signal — never a judgment call) ----
-  # expensive GPT-5.5 critic IF: diff touches a contract zone OR diff > N lines.
-  # else (zone-free AND small): cheap critic, or machine-gate-only.
-  # "nontrivial" must stay mechanical (line count / zone grep) — never an LLM pre-call,
-  # or the tiering re-introduces the very cost it saves.
-  verdict = run( select_critic(diff) )   # gpt-5.5-high | cheap | none; openrouter fallback if codex down
-  if verdict == uncertain:        escalate("critic uncertain", task, verdict); continue
-  if verdict == broken:
-      if round < 2: feed verdict back to a fresh worker; round++; retry
-      else:         escalate("worker/critic disagreement", task, verdict); continue
+  # ---- DIRTY-FILE FENCE (the shared tree has no worktree isolation) ----
+  worker_changed = git_status_changed_files() - pre_worker_baseline   # only NEW dirt this run
+  stray = worker_changed - file_set - under(.autodev scratch)         # constitution files NOT ignored
+  forbidden = worker_changed matching task.forbidden_paths            # honored even for -AssumeWorkerDone
+  if stray or forbidden: escalate("dirty-file", task); continue
+
+  # ---- CRITIC (heterogeneous non-Claude checker; runs on EVERY non-empty diff) ----
+  # There is NO "cheap rubber-stamp" tier: a zone-free small diff can still carry a logic or
+  # architecture regression that composer-check alone would miss. The only legitimate cost
+  # lever is a cheaper Codex tier (Config.CriticModel = gpt-5.3-codex-spark) -- never a skip
+  # and never a Claude model (Claude reviewing Claude is not independent).
+  verdict = run( codex_critic(diff) )                  # gpt-5.5-high (read-only, fenced)
+  if verdict != clean:
+      if task.touches_contract_zone:  escalate("critic reject", task, verdict); continue   # never auto-retry a contract risk
+      elif round < maxRounds(task):   feed verdict back to a FRESH worker; round++; retry   # CriticRetryMax / task.max_rounds
+      else:                           escalate("critic reject (retries spent)", task); continue
 
   # ---- MACHINE GATE (the real lock) ----
-  if not run("composer test").green:        retry_or_escalate(); continue
+  if not run("composer check").green:       retry(); continue
+  for cmd in task.success_commands:                    # operator-authored acceptance gate
+      if exit(cmd) != 0:                    retry(); continue
   zones = grep_diff_against(INVARIANTS)
   if zones.touch_constitution:              escalate("constitution change", task); continue
   for z in zones.contract:
-      guard = GUARDS.lookup(z)
-      if not guard:                         escalate("no guard for contract", task, z); continue_outer
-      if not mutation_check(guard):         escalate("guard not protecting", task, z); continue_outer
+      touched_values = enumerated exact_strings of z present in the diff
+      if touched_values:
+          # PER-VALUE coverage: every touched value needs ITS OWN mutation-verified+blessed
+          # guard (recipe.canonical_value == value). One zone guard does NOT bless the whole
+          # zone -- e.g. an 'option_keys' guard on settings does not cover a different key.
+          for v in touched_values:
+              guard = GUARDS.lookup_by_value(v)
+              if not guard or not blessed(guard) or not mutation_check(guard):
+                  escalate("no guard for contract value", task, v); continue_outer
+      else:
+          # zone touched via path_glob/grep with no enumerated value: legacy zone-level guard.
+          guard = GUARDS.lookup_by_zone(z)
+          if not guard or not blessed(guard) or not mutation_check(guard):
+              escalate("no guard for contract", task, z); continue_outer
       # mutation_check uses the guard's mutation-recipe (file, locator, canonical->mutated)
       # to flip the contract, assert the guard goes RED, then revert. NO recipe -> not
       # auto-checkable -> the contract stays human-gated (never silently "guarded").
 
   # ---- COMMIT (checkpoint) ----
-  git commit -m "<type>(autodev): {task.title} ..."
-  merge worktree -> integration branch ; move task -> done/ (record hash)
-  append_digest(task)
+  git commit -m "<type>(autodev): {task.title} ..."   # in the shared tree, on the loop branch
+  move task -> done/ (record hash) ; append_digest(task)
 ```
 
 ### Fallback branches, summarized
 
 | Scenario | Detection | Conductor reaction |
 |---|---|---|
-| **1. Rate limit / 429** | CLI exit code / error string | step down the model ladder → switch provider (OpenRouter overflow) → if all out: `sleep_until_window_reset` + return task to pending (nothing lost). **Contract-zone tasks never downgrade** — a license-zone edit must not land on Haiku just because Opus is busy; it pauses instead |
+| **1. Rate limit / 429** | CLI exit code / error string | step down the model ladder (ordinary tasks) → return task to pending with the **attempt refunded** (a 429 is not a failed attempt; never a false poison) → the conductor then **sleeps `RateLimitBackoffSeconds`** before the next claim so it does not busy-loop on the same limit. **Contract-zone tasks never downgrade** — a license-zone edit must not land on Haiku just because Opus is busy; it pauses instead |
 | **2. Context bloat** | not detected — **prevented**: 1 task = 1 fresh session; worker self-reports `TOO_BIG` | too-big task → decompose into queue, no code |
 | **3. Session restart** | agent died / killed | non-event: new agent reads blackboard + git + `CURRENT-STATE.md`; checkpoint = git commit after gate; idempotency via `done/` |
 

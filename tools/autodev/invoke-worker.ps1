@@ -56,6 +56,19 @@ $taskFile = Join-Path $Config.QueueActive "$TaskId.md"
 function Build-WorkerPrompt {
     param([string]$TaskId, [string]$Worktree)
     $taskBody = if (Test-Path $taskFile) { Get-Content $taskFile -Raw -Encoding utf8 } else { "(task file missing)" }
+    # On a bounded worker<->critic retry the conductor writes the checker's notes here; fold
+    # them into the prompt so the fresh worker addresses them instead of repeating the mistake.
+    $feedbackFile = Join-Path $rtDir 'critic-feedback.md'
+    $feedback = ''
+    if (Test-Path $feedbackFile) {
+        $fb = Get-Content $feedbackFile -Raw -Encoding utf8
+        $feedback = @"
+
+===== PREVIOUS CRITIC FEEDBACK (a checker REJECTED your last attempt -- fix these first) =====
+$fb
+===== END CRITIC FEEDBACK =====
+"@
+    }
     return @"
 You are a disposable worker. You do ONE task, then you die. Your memory is the
 blackboard on disk, not your context.
@@ -64,10 +77,11 @@ Use Serena tools for PHP if they are available in your session; otherwise use Gr
 TASK: $TaskId  (full spec below, also at .autodev/queue/active/$TaskId.md)
 ANCHOR: read .autodev/GOAL.md before anything. Do not exceed the task scope.
 INVARIANTS: read .autodev/INVARIANTS.md. You MUST NOT break any contract zone.
-
+$feedback
 Rules:
 - Work in the repository working tree (serialized by file_set disjointness): $Worktree
-  Touch ONLY files the task names in file_set.
+  Touch ONLY files the task names in file_set. NEVER touch a path listed in the task's
+  forbidden_paths (the conductor escalates if you do).
 - Make the smallest change that completes the task.
 - If the task needs >1 logical change, STOP: write worker-report.md status=TOO_BIG with a
   proposed decomposition. Do not code.

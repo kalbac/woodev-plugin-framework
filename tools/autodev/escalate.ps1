@@ -16,7 +16,7 @@
   injection surface. This script only SENDS; it never ingests replies.
 
 .PARAMETER Type
-  needs-guard | disagreement | constitution | uncertain | poison | blocked
+  needs-guard | disagreement | constitution | uncertain | poison | blocked | dirty-file | drift
 
 .PARAMETER CostOfWrong
   One line: the concrete blast radius if the operator chooses wrong.
@@ -27,7 +27,7 @@ param(
     [Parameter(Mandatory)][string]$Reason,
     [string]$TaskId = '',
     [string]$Title = '',
-    [ValidateSet('needs-guard', 'disagreement', 'constitution', 'uncertain', 'poison', 'blocked')]
+    [ValidateSet('needs-guard', 'disagreement', 'constitution', 'uncertain', 'poison', 'blocked', 'dirty-file', 'drift')]
     [string]$Type = 'uncertain',
     [string]$What = '',
     [string]$Decision = '',
