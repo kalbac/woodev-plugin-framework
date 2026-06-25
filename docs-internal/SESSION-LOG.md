@@ -1,4 +1,27 @@
 
+## Session 32 (2026-06-25 → 2026-06-26) — Shipping Module brainstorm: all 14 operator gaps CLOSED + program decomposition (NO code)
+
+> Operator-led interactive brainstorm over the draft `SHIPPING-PLANS.md` (repo root, 434 lines, 20 sections, 14 `{нужно дополнить оператором}` gaps). Goal explicitly NOT implementation — close every gap step-by-step, then decompose the program. Used the `brainstorming` skill; one decision at a time; grounded §15 on a real code-map (Explore agent).
+
+- **All 14 §20 questions resolved** (see decision table in `SHIPPING-PLANS.md` §20 + authoritative detail in `docs-internal/specs/2026-06-25-shipping-module-decisions.md`). Headlines:
+  - **§15 settings (blocking ADR):** variant (б) — `Woodev > Настройки` neutral React slot over the s31 Settings-API via `woodev/v1`; page→tabs→sections; **rule 1 tab = 1 provider** (carrier OR framework-service); instance/zone settings stay WC-native; legacy option-key preserved + legacy-URL admin-redirect.
+  - **§8/§11 fields:** state-outside-DOM store + field registry + delegation = **one core + two render adapters** (classic / blocks). Classic first, blocks mandatory fast-follow (block-ready core). Ref: WC address-autocomplete API (limited to Address/Postcode → reference only).
+  - **§6:** framework builds NO tariff fallback — hide method + log + `do_action` hook; cache-as-fallback rejected.
+  - **§5:** no DB-encryption mandate — `sensitive` masking (always) + optional `constant_name` wp-config override (secret never in DB; endorsed > encryption).
+  - **§9:** extensible shared-services registry, only Dadata for now; §9 (services) ≠ §8 (field registry).
+  - **§13:** canonical ~9 statuses + raw label + history; `ready_for_pickup` tracked, no default email.
+  - **§10:** support flags + one "method↔gateways" coordination hook; calc = domain.
+  - **§17:** **warehouses DROPPED from framework** (YAGNI); origin = ordinary plugin settings fields.
+  - **§18:** Pochta CMS-backend/GUID = domain legacy (kept); only a multi-carrier registry seam; **corrected an earlier-session misread** that framed Pochta's GUID as an "aggregator skeleton."
+  - **§12:** export state machine (distinct from §13) + configurable auto-export (default off) + idempotency + **document-source abstraction** (`binary_content`/`remote_url`/`local_generated`, carriers differ).
+  - **§14:** status-driven email base + placeholder registry + dedup + ready-made set on canonical statuses.
+  - **§4:** declaration mechanism locked (support flags + config-contracts + auto-by-`extends`); names at migration.
+  - **§19:** per-plugin migration via `Woodev_Lifecycle` `upgrade_to_X_Y_Z()` with explicit key mapping; canonical framework fields; batch existing-orders meta via background-job; idempotent, non-destructive, verify no external readers.
+- **Recurring principle crystallized:** framework = DRY mechanism + contract + hooks; domain = carrier specifics. Operator corrected me twice toward it (§6 fallbacks, §17 warehouses → both pulled back into domain/YAGNI).
+- **(A) follow-ups (post-decomposition):** A1 Setup Wizard reuse → **NO** (plugin self-onboards); A2 checkout validation gating (block order w/o pickup point) → **YES in SP-3 field core**; A3 shipment **cancellation in v1**, **returns deferred but architecturally ready** (return = "another shipment in the opposite direction").
+- **Process decided:** decomposition is done (program level); going forward = **one sub-project at a time** (spec → plan → implement → CI/review → merge), NOT all-specs-then-bulk. 11 SPs + pilot-migration (Yandex → CDEK → Pochta) in dependency order (Phases A–E). **Recommended first = SP-1 settings slot.**
+- **Artifacts:** new `docs-internal/specs/2026-06-25-shipping-module-decisions.md` (authoritative decisions + decomposition + cross-cutting constraints + gap analysis); `SHIPPING-PLANS.md` fully resolved (14 gaps → ✅ РЕШЕНО, matrix fixed, §18 misread flagged, §20 → decision table). **No framework code touched.**
+
 ## Session 31 (2026-06-23 → 2026-06-25) — Setup Wizard UI redesign SHIPPED (operator visually approved on rig → merged to main)
 
 > Design-led session. Operator: s30 redesign was "лучше, но не то; легаси выглядит современнее." Decided NOT to use a heavy design tool — instead mockup-first on static HTML, grounded in a real reference, then port to React. Operator led the design interactively; approved after 4 mockup iterations; then chose subagent-driven autonomous execution overnight ("работай автономно, проверю утром").
