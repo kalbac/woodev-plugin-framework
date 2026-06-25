@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
-> **64 atomic gotchas in 17 namespaces** — update count when adding/removing.
-> Last updated: 2026-06-25 (session 31: +2 — `wp-scripts-css-enqueue-version-by-mtime` [`[build/*]`], `settings-api-control-save-path-pitfalls` [`[php/*]`]).
+> **65 atomic gotchas in 17 namespaces** — update count when adding/removing.
+> Last updated: 2026-06-26 (session 33: +1 — `autodev-loop-gate-fence-pitfalls` [`[autodev/*]`]).
 
 ## Index
 
@@ -104,6 +104,7 @@
 - [autodev/circuit-breaker] Refund the attempt on EVERY external pause (worker AND critic 429), not just the worker's — an unrefunded critic rate-limit marches a DONE task into a false poison → [gotchas/autodev-attempt-refund-symmetry.md](gotchas/autodev-attempt-refund-symmetry.md) (2026-06-06)
 - [autodev/critic] Critic over-flags two non-breaks as `broken` on every incremental task: a NEW additive hook name, and "class not yet wired into includes()" (wiring is the separate s1-p6 task). Keep its correct contract/logic findings; recalibrate only these two → [gotchas/autodev-critic-overflag.md](gotchas/autodev-critic-overflag.md) (2026-06-06)
 - [autodev/critic] invoke-critic mis-read benign repo text as a 429: it scanned the critic's ENTIRE output (incl. docs the critic READ that mention the prior critic-429 fix) with a hard-coded non-zero exit, discarding valid verdicts and re-queueing forever. Fix: parse the verdict first (it wins); rate-limit only when no verdict, using codex's real exit code → [gotchas/autodev-critic-ratelimit-false-positive.md](gotchas/autodev-critic-ratelimit-false-positive.md) (2026-06-07, fixed b186c52)
+- [autodev/gate-fence] Four loop correctness traps: (1) guard coverage must be per contract-VALUE not per-zone (one zone bundles many keys); (2) dirty-file fence needs a content-FINGERPRINT baseline (path-only both false-positives on pre-existing dirt and false-negatives on edits to it); (3) `ConvertTo-NormalizedPath` strips a leading dot — use raw git paths to read `.autodev/*`, and keep constitution files OUT of the scratch ignore; (4) contract-risk gating must read the actual diff incl. deleted `--- a/` paths, not just frontmatter → [gotchas/autodev-loop-gate-fence-pitfalls.md](gotchas/autodev-loop-gate-fence-pitfalls.md) (s33)
 
 ### [tooling/*] — Dev tooling, codex critic
 - [tooling/codex-shell-sandbox-broken-windows] `codex exec -s read-only` shell-spawn fails on this Windows box (`CreateProcessAsUserW failed: 5`) — run critics with an INLINE bundle (spec+diffs+reference source in the prompt), never relying on codex shell access → [gotchas/codex-shell-sandbox-broken-windows.md](gotchas/codex-shell-sandbox-broken-windows.md) (s10)

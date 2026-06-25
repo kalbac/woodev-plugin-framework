@@ -1,16 +1,17 @@
 <#
 .SYNOPSIS
   Adversarial critic (codex exec, GPT-5.5 high) over a diff. READ-ONLY repo, fenced
-  from the worker's rationale. Tiered by a mechanical signal.
+  from the worker's rationale.
 
 .DESCRIPTION
   Runs the heterogeneous (non-Claude) critic described in the runbook section 3.
 
-  TIERING (mechanical, never an LLM pre-call): the expensive GPT-5.5 critic runs only
-  when the diff TOUCHES A CONTRACT ZONE or the diff is LARGER THAN a line threshold.
-  Otherwise the critic is "cheap" -> here that means machine-gate-only (a pass-through
-  verdict), because the gate still runs afterward and a zone-free small diff carries
-  little contract risk. This keeps the cost where the risk is.
+  POLICY: in 'auto' mode the real critic runs on EVERY non-empty diff -- there is no
+  "cheap" rubber-stamp tier. A zone-free small diff can still carry a logic or architecture
+  regression that `composer check` alone would miss. The only legitimate cost lever is a
+  cheaper Codex tier (set Config.CriticModel = 'gpt-5.3-codex-spark'), never a skip and never
+  a Claude model (Claude reviewing Claude is not independent). An empty diff passes through
+  (nothing to review). '-Mode none'/'cheap' remain as EXPLICIT caller overrides (e.g. tests).
 
   FENCING (mechanical, not just instruction): before invoking codex, the worker's
   rationale files (worker-report.md and the commit message) are physically moved OUT of
@@ -77,19 +78,26 @@ foreach ($l in ($diffText -split '\r?\n')) {
     if ($l -match '^\+\+\+ b/(.+)$') { $changedFiles += (ConvertTo-NormalizedPath $Matches[1]) }
 }
 
-# ---- TIERING (mechanical) ----
+# ---- TIER SELECTION (mechanical) ----
+# Operator policy: the heterogeneous (non-Claude) critic runs on EVERY non-empty diff. There
+# is NO "cheap" rubber-stamp tier in 'auto' -- a zone-free small diff can still carry a logic
+# or architecture regression that only `composer check` would miss, and the only legitimate
+# cheaper critic is a cheaper Codex tier (set Config.CriticModel = 'gpt-5.3-codex-spark'),
+# never a skip and never a Claude model (that would be Claude reviewing Claude). 'none'/'cheap'
+# remain as EXPLICIT caller overrides (e.g. unit tests), but 'auto' never selects them.
 $touchedZones = @(Get-AutodevTouchedZoneIds -ChangedFiles $changedFiles -DiffLines $diffLines -Config $Config)
 $diffLineCount = $diffLines.Count
 $tier = $Mode
 if ($Mode -eq 'auto') {
-    if ($touchedZones.Count -gt 0 -or $diffLineCount -gt $Config.CriticDiffLineThreshold) { $tier = 'expensive' }
-    else { $tier = 'cheap' }
+    if ($diffLineCount -eq 0) { $tier = 'none' }   # nothing changed -> nothing to review
+    else { $tier = 'expensive' }
 }
 Write-AutodevLog -Level CRITIC -Message "Tier=$tier (zones touched: $($touchedZones -join ',' ); diff lines: $diffLineCount)" -Config $Config
 
 if ($tier -eq 'none' -or $tier -eq 'cheap') {
+    $why = if ($diffLineCount -eq 0) { 'empty diff: nothing to review' } else { "explicit -Mode $Mode pass-through" }
     Write-Verdict -Verdict 'clean' -Confidence 0.5 -DiffSha256 $diffSha256 `
-        -Notes "cheap tier (zone-free, small diff): machine-gate-only. Zones touched: none. Diff lines: $diffLineCount." | Out-Null
+        -Notes "pass-through ($why). Zones touched: $($touchedZones -join ',' ). Diff lines: $diffLineCount." | Out-Null
     Get-Content $verdictPath -Raw
     exit 0
 }

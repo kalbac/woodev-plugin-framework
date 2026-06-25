@@ -60,18 +60,30 @@ function Get-AutodevConfig {
 
         # Runtime roles (model ladder). Contract-zone tasks pin to the first entry only.
         WorkerLadder    = @('opus', 'sonnet', 'haiku')
+        # Critic is the HETEROGENEOUS (non-Claude) checker. It MUST stay a different model
+        # family from the worker (Claude) so it is not lenient to its own output. The only
+        # legitimate cheaper critic is a cheaper Codex tier: set CriticModel to
+        # 'gpt-5.3-codex-spark' (spark) if cost becomes a concern -- never a Claude model
+        # (that would be Claude reviewing Claude). Sonnet is fine for ANTI-DRIFT only, which
+        # judges program-intent drift, not its own diff.
         CriticModel     = 'gpt-5.5'
         CriticEffort    = 'high'
         AntiDriftModel  = 'sonnet'
 
-        # Mechanical thresholds (NEVER an LLM pre-call -- keep tiering mechanical).
-        CriticDiffLineThreshold = 40   # diff > N lines -> expensive critic even if zone-free
+        # Mechanical thresholds (NEVER an LLM pre-call).
         WatchdogStaleMinutes    = 15   # NO process activity (stdout/file writes/heartbeat) for this long -> kill + respawn
         MaxAttempts             = 3    # attempts > this -> quarantine + escalate
         AntiDriftEveryCommits   = 5    # run anti-drift every M commits; digest rides this cadence
         WorkerTimeoutMinutes    = 20
         WorkerMaxTurns          = 100  # passed as --max-turns to claude (hard cap per worker spawn)
         MaxSessionHours         = 8    # conductor wall-clock exit: stop gracefully after N hours
+        RateLimitBackoffSeconds = 600  # after a worker/critic 429, sleep this long before re-claiming (no busy-loop)
+        CriticRetryMax          = 1    # NON-contract diffs: max worker<->critic re-tries before escalating to human
+        AllowedBranchPattern    = '^autodev/'  # conductor refuses to run/commit unless HEAD matches this (never main)
+        # Path prefixes the dirty-file fence ignores: ONLY loop scratch/operational paths. The
+        # constitution files (.autodev/GOAL.md, INVARIANTS.md, GUARDS.md) are DELIBERATELY absent
+        # so a worker editing them outside its file_set is still caught as a stray change.
+        DirtyFenceIgnore        = @('.autodev/runtime/', '.autodev/queue/', '.autodev/escalations/', '.autodev/conductor.log', '.autodev/digest.md')
 
         # Tool transports
         ClaudeExe       = 'claude'
@@ -192,6 +204,146 @@ function Get-AutodevTouchedZoneIds {
     return $ids
 }
 
+function Get-AutodevZoneTouchedStrings {
+    <#
+      Returns the SPECIFIC exact_strings of a zone that actually appear in the diff's +/-
+      lines. This is finer than Test-ZoneTouched (which is a boolean "any signal"): it tells
+      the gate WHICH enumerated contract value(s) the diff mutates, so a guard can be required
+      PER touched value instead of treating one zone-level guard as covering the whole zone.
+      (A zone like 'option_keys' bundles many distinct keys; one guard must not bless them all.)
+      Empty result = the zone was touched only via path_glob/grep_pattern, with no enumerated
+      contract string in the diff.
+    #>
+    param([pscustomobject]$Zone, [string[]]$DiffLines)
+    $hit = @()
+    if (-not ($Zone.PSObject.Properties.Name -contains 'exact_strings')) { return $hit }
+    foreach ($s in $Zone.exact_strings) {
+        if ($null -eq $s -or $s -eq '') { continue }
+        foreach ($l in $DiffLines) {
+            if ($l.Contains($s)) { $hit += $s; break }
+        }
+    }
+    return $hit
+}
+
+# --------------------------------------------------------------------------------------
+# Branch guard (the conductor must never run/commit outside the loop branch)
+# --------------------------------------------------------------------------------------
+
+function Get-AutodevCurrentBranch {
+    param([pscustomobject]$Config = (Get-AutodevConfig))
+    $r = Invoke-Native -Exe 'git' -CommandArgs @('rev-parse', '--abbrev-ref', 'HEAD') -WorkingDirectory $Config.RepoRoot
+    return ($r.Output | Out-String).Trim()
+}
+
+function Test-AutodevBranchAllowed {
+    <# Pure predicate: does the branch name match the allowed pattern? Tested in self-test. #>
+    param([string]$Branch, [string]$Pattern)
+    if ($null -eq $Branch -or $Branch -eq '') { return $false }
+    return ($Branch -match $Pattern)
+}
+
+# --------------------------------------------------------------------------------------
+# Dirty-file fence + forbidden paths (a worker must touch ONLY its file_set)
+# --------------------------------------------------------------------------------------
+
+function Test-AutodevPathUnderAnyPrefix {
+    <#
+      Pure: is the normalized path under any of the given prefixes (loop scratch to ignore)?
+      A DIRECTORY prefix (ends with '/') matches by StartsWith; a FILE prefix (no trailing '/')
+      matches only by exact equality -- so ignoring '.autodev/conductor.log' does NOT also ignore
+      '.autodev/conductor.log.bak' (boundary-safe).
+    #>
+    param([string]$Path, [string[]]$Prefixes)
+    $p = ConvertTo-NormalizedPath $Path
+    foreach ($pre in $Prefixes) {
+        $n = ConvertTo-NormalizedPath $pre
+        if ($n.EndsWith('/')) {
+            if ($p -eq $n.TrimEnd('/') -or $p.StartsWith($n)) { return $true }
+        } else {
+            if ($p -eq $n) { return $true }
+        }
+    }
+    return $false
+}
+
+function Get-AutodevBytesSha256 {
+    <# Hex SHA256 of a byte array (for working-tree file fingerprints). #>
+    param([byte[]]$Bytes)
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try { $hash = $sha.ComputeHash($Bytes) } finally { $sha.Dispose() }
+    return ([System.BitConverter]::ToString($hash) -replace '-', '').ToLower()
+}
+
+function Get-AutodevFileFingerprints {
+    <#
+      Map of RAW git path -> content fingerprint for the given changed files. Keyed by the raw
+      (un-normalized) git path so the file can actually be read (ConvertTo-NormalizedPath strips a
+      leading '.', which would break reading '.autodev/...'). A deleted/absent file gets a stable
+      '<absent>' marker. Used as the dirty-file fence baseline: comparing fingerprints (not just
+      paths) detects a worker EDITING a pre-existing-dirty file, while still excluding untouched
+      pre-existing dirt (which keeps its baseline fingerprint).
+    #>
+    param([string[]]$RawPaths, [pscustomobject]$Config = (Get-AutodevConfig))
+    $map = @{}
+    foreach ($f in $RawPaths) {
+        if (-not $f -or "$f".Trim() -eq '') { continue }
+        $full = Join-Path $Config.RepoRoot $f
+        if (Test-Path $full -PathType Leaf) {
+            try { $map[$f] = Get-AutodevBytesSha256 ([System.IO.File]::ReadAllBytes($full)) }
+            catch { $map[$f] = '<unreadable>' }
+        } else {
+            $map[$f] = '<absent>'
+        }
+    }
+    return $map
+}
+
+function Get-AutodevWorkerTouchedFiles {
+    <#
+      PURE (self-tested): raw paths whose fingerprint is NEW or CHANGED vs the pre-worker baseline.
+      Both a brand-new dirty file and a further edit to a pre-existing-dirty file are returned;
+      a pre-existing-dirty file the worker did NOT touch keeps its fingerprint and is excluded.
+    #>
+    param([hashtable]$Baseline, [hashtable]$Current)
+    $touched = @()
+    foreach ($k in $Current.Keys) {
+        if (-not $Baseline.ContainsKey($k) -or $Baseline[$k] -ne $Current[$k]) { $touched += $k }
+    }
+    return $touched
+}
+
+function Get-AutodevStrayChangedFiles {
+    <#
+      Pure set logic (tested in self-test): which working-tree changed files are OUTSIDE the
+      task's file_set AND not under an ignored prefix (loop's own .autodev/ scratch)? A
+      non-empty result means the worker wrote files it does not own -- those would silently
+      persist in the shared tree (the conductor only diffs/gates/commits the file_set), so the
+      conductor escalates instead of committing.
+    #>
+    param([string[]]$ChangedFiles, [string[]]$FileSet, [string[]]$IgnorePrefixes = @('.autodev/'))
+    $owned = @(); foreach ($x in $FileSet) { $owned += (ConvertTo-NormalizedPath $x) }
+    $stray = @()
+    foreach ($f in $ChangedFiles) {
+        $n = ConvertTo-NormalizedPath $f
+        if ($owned -contains $n) { continue }
+        if (Test-AutodevPathUnderAnyPrefix -Path $n -Prefixes $IgnorePrefixes) { continue }
+        $stray += $n
+    }
+    return $stray
+}
+
+function Get-AutodevForbiddenTouches {
+    <# Pure: which changed files match a task's forbidden_paths globs (must NOT be touched)? #>
+    param([string[]]$ChangedFiles, [string[]]$ForbiddenGlobs)
+    $hit = @()
+    if (-not $ForbiddenGlobs -or $ForbiddenGlobs.Count -eq 0) { return $hit }
+    foreach ($f in $ChangedFiles) {
+        if (Test-PathMatchesAnyGlob -Path $f -Globs $ForbiddenGlobs) { $hit += (ConvertTo-NormalizedPath $f) }
+    }
+    return $hit
+}
+
 # --------------------------------------------------------------------------------------
 # Task file (frontmatter) parsing
 # --------------------------------------------------------------------------------------
@@ -224,6 +376,12 @@ function ConvertFrom-AutodevTask {
         id = $null; title = $null; type = $null
         touches_contract_zone = $false; writes_guard = $false
         model = $null
+        # Structured contract fields (optional; pre-initialized so consumers can read them
+        # StrictMode-safe even when a task omits them):
+        #   success_commands : shell commands the gate runs; each MUST exit 0 to COMMIT.
+        #   forbidden_paths  : globs the worker must NOT touch (enforced by the dirty-file fence).
+        #   max_rounds       : per-task override of CriticRetryMax (non-contract worker<->critic retries).
+        success_commands = @(); forbidden_paths = @(); max_rounds = $null
         file_set = @(); body = $body; path = $Path
     }
     $currentList = $null
@@ -312,6 +470,15 @@ function Get-GitChangedFiles {
         $out = @($r.Output | ForEach-Object { ($_ -replace '^...', '').Trim() })
     }
     return @($out | Where-Object { $_ -and $_.Trim() -ne '' } | ForEach-Object { ConvertTo-NormalizedPath $_ })
+}
+
+function Get-GitChangedFilesRaw {
+    <# Working-tree changed files as RAW git paths (forward-slashed but NOT dot-stripped), so
+       they can be read from disk. Includes untracked (??) files. Used by the fingerprint fence. #>
+    param([pscustomobject]$Config = (Get-AutodevConfig))
+    $r = Invoke-Native -Exe 'git' -CommandArgs @('status', '--porcelain') -WorkingDirectory $Config.RepoRoot
+    $out = @($r.Output | ForEach-Object { ($_ -replace '^...', '').Trim() })
+    return @($out | Where-Object { $_ -and $_.Trim() -ne '' } | ForEach-Object { ($_ -replace '\\', '/') })
 }
 
 function Get-GitDiffText {
