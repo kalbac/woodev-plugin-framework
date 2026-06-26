@@ -67,18 +67,27 @@ export default function App() {
 		setSaveError( '' );
 		setSaved( '' );
 		saveTab( providerId, edits[ providerId ] || {} )
-			// Re-fetch so the UI reflects the persisted (possibly coerced/sanitized)
-			// values instead of shadowing them with the local edits.
-			.then( () => fetchSchema() )
-			.then( ( res ) => {
-				setTabs( ( res && res.tabs ) || [] );
-				setEdits( ( prev ) => {
-					const next = { ...prev };
-					delete next[ providerId ];
-					return next;
-				} );
+			.then( () => {
 				setSaving( '' );
 				setSaved( providerId );
+
+				// Best-effort re-fetch so the UI reflects the persisted (possibly
+				// coerced/sanitized) values. A refresh failure must NOT be reported
+				// as a save failure — the save already succeeded. Only clear the
+				// tab's local edits once the refresh lands, so a failed refresh
+				// still shows the user the values they entered.
+				fetchSchema()
+					.then( ( res ) => {
+						if ( res && res.tabs ) {
+							setTabs( res.tabs );
+						}
+						setEdits( ( prev ) => {
+							const next = { ...prev };
+							delete next[ providerId ];
+							return next;
+						} );
+					} )
+					.catch( () => {} );
 			} )
 			.catch( ( err ) => {
 				setSaving( '' );
