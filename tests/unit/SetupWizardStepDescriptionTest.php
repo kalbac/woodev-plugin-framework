@@ -12,6 +12,7 @@ use Mockery;
 use Woodev\Framework\Setup\Setup_Wizard;
 use Woodev\Framework\Setup\Step;
 
+require_once dirname( __DIR__, 2 ) . '/woodev/settings-page/class-field-schema.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/setup/class-step.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/setup/class-setup-wizard.php';
 

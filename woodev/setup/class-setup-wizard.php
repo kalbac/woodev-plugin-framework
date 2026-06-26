@@ -616,35 +616,7 @@ abstract class Setup_Wizard {
 			return [];
 		}
 
-		$schema = [];
-		foreach ( $handler->get_settings() as $setting ) {
-			$control = $setting->get_control();
-
-			$entry = [
-				'type'        => $setting->get_type(),
-				'name'        => $setting->get_name(),
-				'options'     => $setting->get_options(),
-				'value'       => $handler->get_value( $setting->get_id() ),
-				'is_multi'    => $setting->is_is_multi(),
-				'controlType' => $control ? $control->get_type() : null,
-				'description' => $control && $control->get_description() ? $control->get_description() : ( method_exists( $setting, 'get_description' ) ? $setting->get_description() : '' ),
-				'tooltip'     => $control ? $control->get_tooltip() : '',
-			];
-
-			if ( $control && null !== $control->get_min() ) {
-				$entry['min'] = $control->get_min();
-			}
-			if ( $control && null !== $control->get_max() ) {
-				$entry['max'] = $control->get_max();
-			}
-			if ( $control && null !== $control->get_step() ) {
-				$entry['step'] = $control->get_step();
-			}
-
-			$schema[ $setting->get_id() ] = $entry;
-		}
-
-		return $schema;
+		return \Woodev\Framework\Settings\Field_Schema::from_handler( $handler );
 	}
 
 	/**
