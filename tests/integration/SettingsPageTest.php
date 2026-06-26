@@ -98,9 +98,14 @@ class SettingsPageTest extends TestCase {
 
 		wp_set_current_user( self::factory()->user->create( [ 'role' => 'shop_manager' ] ) );
 
+		// Isolate from any prior test's menu registration: the global $submenu
+		// accumulates across tests, so an earlier admin/quarry-only register_page()
+		// left a manage_options entry with the same slug.
+		global $submenu;
+		unset( $submenu['woodev'] );
+
 		$registry->register_page();
 
-		global $submenu;
 		$entries = $submenu['woodev'] ?? [];
 
 		$settings_entry = null;
