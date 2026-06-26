@@ -553,6 +553,12 @@ final class Settings_Page_Registry {
 	 * @return void
 	 */
 	public function reset_for_tests(): void {
+		// Remove the hooks add_hooks() registered so a fresh register_plugin()
+		// does not double-bind register_page() (which would duplicate the submenu).
+		remove_action( 'admin_menu', [ $this, 'register_page' ], 40 );
+		remove_action( 'admin_init', [ $this, 'maybe_redirect_legacy' ] );
+		remove_action( 'rest_api_init', [ $this, 'register_rest' ], 5 );
+
 		$this->plugins       = [];
 		$this->services      = [];
 		$this->tabs_cache    = null;

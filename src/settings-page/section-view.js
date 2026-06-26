@@ -28,9 +28,7 @@ export default function SectionView( { tab, values, onFieldChange } ) {
 						key: settingId,
 						schema: section.fields[ settingId ],
 						value:
-							settingId in values
-								? values[ settingId ]
-								: section.fields[ settingId ].value,
+							values[ settingId ] ?? section.fields[ settingId ].value,
 						onChange: ( next ) => onFieldChange( settingId, next ),
 					} )
 				)

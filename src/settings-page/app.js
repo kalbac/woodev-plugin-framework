@@ -67,7 +67,16 @@ export default function App() {
 		setSaveError( '' );
 		setSaved( '' );
 		saveTab( providerId, edits[ providerId ] || {} )
-			.then( () => {
+			// Re-fetch so the UI reflects the persisted (possibly coerced/sanitized)
+			// values instead of shadowing them with the local edits.
+			.then( () => fetchSchema() )
+			.then( ( res ) => {
+				setTabs( ( res && res.tabs ) || [] );
+				setEdits( ( prev ) => {
+					const next = { ...prev };
+					delete next[ providerId ];
+					return next;
+				} );
 				setSaving( '' );
 				setSaved( providerId );
 			} )
@@ -87,7 +96,15 @@ export default function App() {
 		{ className: 'woodev-settings' },
 		createElement(
 			TabPanel,
-			{ className: 'woodev-settings__tabs', tabs: tabOptions },
+			{
+				className: 'woodev-settings__tabs',
+				tabs: tabOptions,
+				// Clear cross-tab save notices when switching tabs.
+				onSelect: () => {
+					setSaveError( '' );
+					setSaved( '' );
+				},
+			},
 			( tabOption ) => {
 				const tab = tabs.find( ( t ) => t.id === tabOption.name );
 				const values = edits[ tab.id ] || {};

@@ -88,6 +88,42 @@ class SettingsPageRegistryTest extends TestCase {
 		$this->assertSame( 'manage_woocommerce', $tabs[1]['capability'] );
 	}
 
+	public function test_build_tabs_preserves_multiple_sections_in_order(): void {
+		$setting = Mockery::mock();
+		$setting->shouldReceive( 'get_id' )->andReturn( 'api_key' );
+		$setting->shouldReceive( 'get_type' )->andReturn( 'string' );
+		$setting->shouldReceive( 'get_name' )->andReturn( 'Ключ' );
+		$setting->shouldReceive( 'get_options' )->andReturn( [] );
+		$setting->shouldReceive( 'is_is_multi' )->andReturn( false );
+		$setting->shouldReceive( 'get_description' )->andReturn( '' );
+		$setting->shouldReceive( 'get_control' )->andReturn( null );
+
+		$handler = Mockery::mock();
+		$handler->shouldReceive( 'get_id' )->andReturn( 'cdek' );
+		$handler->shouldReceive( 'get_settings' )->andReturn( [ 'api_key' => $setting ] );
+		$handler->shouldReceive( 'get_value' )->andReturn( 'v' );
+
+		$provider = Settings_Provider::create(
+			'cdek',
+			'СДЭК',
+			$handler,
+			[
+				Settings_Section::create( 'general', 'Общие', [ 'api_key' ] ),
+				Settings_Section::create( 'advanced', 'Дополнительно', [ 'api_key' ] ),
+			]
+		);
+
+		$tabs = Settings_Page_Registry::instance()->build_tabs(
+			[ [ 'provider' => $provider, 'is_woocommerce' => false ] ],
+			static function (): bool {
+				return true;
+			}
+		);
+
+		$this->assertCount( 2, $tabs[0]['sections'] );
+		$this->assertSame( [ 'general', 'advanced' ], array_column( $tabs[0]['sections'], 'id' ) );
+	}
+
 	public function test_build_tabs_omits_tabs_the_user_cannot_access(): void {
 		$registry = Settings_Page_Registry::instance();
 

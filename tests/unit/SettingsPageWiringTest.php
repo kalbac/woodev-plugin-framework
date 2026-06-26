@@ -59,6 +59,24 @@ class SettingsPageWiringTest extends TestCase {
 		}
 	}
 
+	public function test_multi_carrier_plugin_contributes_multiple_tabs(): void {
+		Functions\when( 'apply_filters' )->returnArg( 2 );
+
+		$plugin = Mockery::mock( '\Woodev\Framework\Woocommerce_Plugin' );
+		$plugin->shouldReceive( 'get_id' )->andReturn( 'multi' );
+		$plugin->shouldReceive( 'get_settings_providers' )->andReturn(
+			[ $this->neutral_provider( 'cdek' ), $this->neutral_provider( 'pochta' ) ]
+		);
+
+		$registry = Settings_Page_Registry::instance();
+		$registry->reset_for_tests();
+		$registry->register_plugin( $plugin );
+
+		$ids = array_map( static fn( $e ) => $e['provider']->get_id(), $registry->collect_entries() );
+
+		$this->assertSame( [ 'cdek', 'pochta' ], $ids );
+	}
+
 	public function test_get_page_capability_uses_broadest_reach(): void {
 		Functions\when( 'apply_filters' )->returnArg( 2 );
 		Functions\when( 'current_user_can' )->justReturn( true );

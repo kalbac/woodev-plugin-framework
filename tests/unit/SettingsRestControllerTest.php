@@ -92,6 +92,28 @@ class SettingsRestControllerTest extends TestCase {
 		$this->assertTrue( $response['saved'] );
 	}
 
+	public function test_save_is_non_atomic_persisting_valid_keys_before_a_later_failure(): void {
+		// Documented behavior (mirrors the wizard): each key persists as it
+		// validates; a mid-tab failure leaves earlier keys saved and names the
+		// failing field. Re-submitting the tab is idempotent.
+		$handler = Mockery::mock();
+		$handler->shouldReceive( 'update_value' )->once()->with( 'api_key', 'good' );
+		$handler->shouldReceive( 'update_value' )->once()->with( 'mode', 'bad' )->andThrow( new \Woodev_Plugin_Exception( 'invalid mode', 400 ) );
+
+		$provider = Mockery::mock();
+		$provider->shouldReceive( 'get_sections' )->andReturn( [ $this->section( [ 'api_key', 'mode' ] ) ] );
+		$provider->shouldReceive( 'get_handler' )->andReturn( $handler );
+
+		$registry = Mockery::mock();
+		$registry->shouldReceive( 'get_provider' )->with( 'cdek' )->andReturn( $provider );
+
+		$controller = new \Woodev_REST_API_Settings_Page( $registry );
+		$result     = $controller->save( $this->request( [ 'provider_id' => 'cdek', 'values' => [ 'api_key' => 'good', 'mode' => 'bad' ] ] ) );
+
+		$this->assertInstanceOf( 'WP_Error', $result );
+		$this->assertSame( 'mode', $result->get_error_data()['field'] );
+	}
+
 	public function test_save_reports_validation_error_with_field(): void {
 		$handler = Mockery::mock();
 		$handler->shouldReceive( 'update_value' )->andThrow( new \Woodev_Plugin_Exception( 'bad value', 400 ) );
