@@ -22,6 +22,9 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		/** @var object single instance of plugin */
 		protected static $instance;
 
+		/** @var bool whether the shared Woodev admin pages were initialized once, fleet-wide */
+		private static $admin_pages_initialized = false;
+
 		/** @var string plugin id */
 		private $id;
 
@@ -205,9 +208,15 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		 * @return void
 		 */
 		private function load_admin_pages() {
-			if ( is_admin() && ! class_exists( 'Woodev_Admin_Pages' ) ) {
+			// Initialize the shared Woodev admin pages exactly once across the fleet.
+			// Guarded by an explicit static flag — NOT class_exists(), which the s27
+			// runtime class-map autoloader resolves on demand (always true), so it would
+			// short-circuit instance() and the top-level «Woodev» menu would never register.
+			if ( is_admin() && ! self::$admin_pages_initialized ) {
 				$admin_pages = $this->load_class( '/woodev/admin/class-admin-pages.php', 'Woodev_Admin_Pages' );
 				$admin_pages->instance( $this );
+
+				self::$admin_pages_initialized = true;
 			}
 		}
 
