@@ -1,37 +1,355 @@
 /**
- * Settings page styles — tab + section layout, brand cyan accent.
+ * Settings page styles — WooCommerce-settings idiom, muted cyan brand.
+ *
+ * A recurring settings surface rendered as a white card panel with a tab bar and
+ * two-column [ label | control ] rows, mirroring core WC settings. Tokens match
+ * the s31 setup wizard so the framework's admin React surfaces share one palette.
+ * Ships in this bundle only (style-index.css + wp-components).
  *
  * @package woodev-plugin-framework
  */
 
-.woodev-settings {
-	max-width: 920px;
+// ---- Design tokens (shared with the setup wizard) -------------------------
+$wd-accent: #06aedd;
+$wd-accent-strong: #0596c4;
+$wd-accent-soft: rgba( 6, 174, 221, 0.10 );
+$wd-bg: #f0f0f1;
+$wd-surface: #fff;
+$wd-ink: #1d2327;
+$wd-text: #3c434a;
+$wd-muted: #646970;
+$wd-desc: #757575;
+$wd-border: #dcdcde;
+$wd-divider: #f0f0f1;
+$wd-line: #c3c4c7;
+$wd-radius: 8px;
+$wd-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Helvetica, Arial, sans-serif;
 
+.woodev-settings {
+	max-width: 900px;
+	margin: 16px 0 0;
+	font-family: $wd-font;
+	color: $wd-text;
+
+	* {
+		box-sizing: border-box;
+	}
+
+	// ---- Load / empty states ---------------------------------------------
 	&__loading {
 		display: flex;
 		align-items: center;
 		gap: 8px;
-		padding: 24px 0;
+		padding: 28px;
+		background: $wd-surface;
+		border: 1px solid $wd-border;
+		border-radius: $wd-radius;
+		color: $wd-muted;
+	}
+
+	// ---- Card panel ------------------------------------------------------
+	&__panel {
+		background: $wd-surface;
+		border: 1px solid $wd-border;
+		border-radius: $wd-radius;
+		box-shadow: 0 1px 2px rgba( 0, 0, 0, 0.04 );
+		overflow: hidden;
+	}
+
+	// ---- Tab bar (TabPanel) ----------------------------------------------
+	&__tabs {
+		.components-tab-panel__tabs {
+			display: flex;
+			gap: 4px;
+			padding: 0 12px;
+			border-bottom: 1px solid $wd-divider;
+			background: linear-gradient( to bottom, #fbfbfc, $wd-surface );
+		}
+
+		.components-tab-panel__tabs-item {
+			position: relative;
+			height: 52px;
+			padding: 0 16px;
+			font-size: 14px;
+			font-weight: 500;
+			color: $wd-muted;
+			background: transparent;
+			border: 0;
+			box-shadow: none;
+
+			&::after {
+				content: "";
+				position: absolute;
+				left: 12px;
+				right: 12px;
+				bottom: 0;
+				height: 2px;
+				background: transparent;
+				border-radius: 2px 2px 0 0;
+				transition: background 0.12s ease;
+			}
+
+			&:hover {
+				color: $wd-ink;
+			}
+
+			&.is-active {
+				color: $wd-accent-strong;
+				font-weight: 600;
+
+				&::after {
+					background: $wd-accent;
+				}
+			}
+
+			&:focus-visible {
+				outline: 2px solid $wd-accent;
+				outline-offset: -2px;
+			}
+		}
+	}
+
+	// ---- Body ------------------------------------------------------------
+	&__body {
+		padding: 8px 28px 4px;
+	}
+
+	.components-notice {
+		margin: 16px 0 4px;
 	}
 
 	&__section {
-		margin: 0 0 24px;
+		margin: 24px 0 8px;
+
+		&:first-child {
+			margin-top: 16px;
+		}
 	}
 
+	// Section heading rendered as a labelled hairline divider.
 	&__section-title {
-		font-size: 14px;
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		margin: 0 0 4px;
+		font-size: 11px;
 		font-weight: 600;
-		margin: 0 0 12px;
+		line-height: 1.4;
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
+		color: $wd-muted;
+
+		&::after {
+			content: "";
+			flex: 1 1 auto;
+			height: 1px;
+			background: $wd-divider;
+		}
 	}
 
-	&__actions {
-		margin-top: 16px;
-		padding-top: 16px;
-		border-top: 1px solid #e0e0e0;
+	// ---- Field rows ------------------------------------------------------
+	&__row {
+		display: grid;
+		grid-template-columns: 180px minmax( 0, 1fr );
+		column-gap: 24px;
+		align-items: flex-start;
+		padding: 16px 0;
+		border-bottom: 1px solid $wd-divider;
+
+		&:last-child {
+			border-bottom: 0;
+		}
 	}
 
-	// Brand cyan accent on the active tab (matches the s31 wizard tone).
-	.components-tab-panel__tabs-item.is-active {
-		box-shadow: inset 0 -2px 0 0 #06aedd;
+	&__row-label {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		padding-top: 8px;
+		font-size: 13px;
+		font-weight: 600;
+		line-height: 1.4;
+		color: $wd-ink;
+	}
+
+	&__row-control {
+		max-width: 440px;
+
+		// wp-components fields fill the control column.
+		.components-base-control,
+		.components-text-control__input,
+		.components-textarea-control__input,
+		.components-form-token-field {
+			width: 100%;
+		}
+	}
+
+	&__row-help {
+		margin: 8px 0 0;
+		font-size: 13px;
+		line-height: 1.5;
+		color: $wd-desc;
+	}
+
+	// ---- Inline composite controls ---------------------------------------
+	&__input-row,
+	&__range-row {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+	}
+
+	&__range-row .components-range-control {
+		flex: 1 1 auto;
+	}
+
+	&__suffix {
+		flex: 0 0 auto;
+		font-size: 13px;
+		color: $wd-muted;
+	}
+
+	&__option-group {
+		padding: 4px 0;
+	}
+
+	// ---- Tooltip ---------------------------------------------------------
+	&__row-tip {
+		position: relative;
+		display: inline-flex;
+		align-items: center;
+		color: $wd-muted;
+		cursor: help;
+
+		svg {
+			width: 16px;
+			height: 16px;
+			fill: currentColor;
+		}
+
+		&:hover,
+		&:focus {
+			color: $wd-accent-strong;
+			outline: none;
+
+			.woodev-settings__row-tip-bubble {
+				opacity: 1;
+				visibility: visible;
+				transform: translate( -50%, 0 );
+			}
+		}
+	}
+
+	&__row-tip-bubble {
+		position: absolute;
+		bottom: calc( 100% + 8px );
+		left: 50%;
+		z-index: 10;
+		width: max-content;
+		max-width: 240px;
+		padding: 8px 10px;
+		font-size: 12px;
+		font-weight: 400;
+		line-height: 1.4;
+		color: #fff;
+		text-transform: none;
+		letter-spacing: 0;
+		background: $wd-ink;
+		border-radius: 6px;
+		opacity: 0;
+		visibility: hidden;
+		transform: translate( -50%, 4px );
+		transition: opacity 0.12s ease, transform 0.12s ease;
+		pointer-events: none;
+
+		&::after {
+			content: "";
+			position: absolute;
+			top: 100%;
+			left: 50%;
+			border: 5px solid transparent;
+			border-top-color: $wd-ink;
+			transform: translateX( -50% );
+		}
+	}
+
+	// ---- Footer ----------------------------------------------------------
+	&__footer {
+		display: flex;
+		justify-content: flex-start;
+		padding: 16px 28px;
+		border-top: 1px solid $wd-divider;
+		background: #fbfbfc;
+	}
+
+	// ---- wp-components recolouring to the brand cyan ---------------------
+	.components-button.is-primary {
+		background: $wd-accent;
+		box-shadow: none;
+
+		&:hover:not( :disabled ),
+		&:focus:not( :disabled ) {
+			background: $wd-accent-strong;
+		}
+
+		&:focus:not( :disabled ) {
+			box-shadow: 0 0 0 1px $wd-surface, 0 0 0 3px $wd-accent;
+		}
+
+		&.is-busy {
+			background-image: linear-gradient(
+				-45deg,
+				$wd-accent 28%,
+				$wd-accent-strong 28%,
+				$wd-accent-strong 72%,
+				$wd-accent 72%
+			);
+		}
+	}
+
+	.components-text-control__input,
+	.components-textarea-control__input,
+	.components-select-control__input {
+		&:focus {
+			border-color: $wd-accent;
+			box-shadow: 0 0 0 1px $wd-accent;
+		}
+	}
+
+	.components-form-token-field__input-container.is-active {
+		border-color: $wd-accent;
+		box-shadow: 0 0 0 1px $wd-accent;
+	}
+
+	// Brand-cyan "on" state for toggles (matches the wizard).
+	.components-form-toggle.is-checked .components-form-toggle__track {
+		background-color: $wd-accent;
+		border-color: $wd-accent;
+	}
+
+	.components-form-toggle input:focus + .components-form-toggle__track {
+		box-shadow: 0 0 0 2px $wd-surface, 0 0 0 4px $wd-accent;
+	}
+
+	// ---- Responsive: collapse rows to a single column --------------------
+	@media ( max-width: 782px ) {
+		&__body,
+		&__footer {
+			padding-left: 16px;
+			padding-right: 16px;
+		}
+
+		&__row {
+			grid-template-columns: 1fr;
+			row-gap: 8px;
+		}
+
+		&__row-label {
+			padding-top: 0;
+		}
+
+		&__row-control {
+			max-width: none;
+		}
 	}
 }

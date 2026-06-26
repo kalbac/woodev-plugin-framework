@@ -1,5 +1,5 @@
 /**
- * Renders one settings tab: its sections, each field via the shared ControlField.
+ * Renders one settings tab: its sections, each field via the WC-style FieldRow.
  *
  * Classic JSX runtime: createElement / Fragment used directly (no JSX).
  *
@@ -7,7 +7,7 @@
  */
 
 import { createElement, Fragment } from '@wordpress/element';
-import ControlField from '../components/control-field';
+import FieldRow from './field-row';
 
 export default function SectionView( { tab, values, onFieldChange } ) {
 	return createElement(
@@ -21,16 +21,20 @@ export default function SectionView( { tab, values, onFieldChange } ) {
 					createElement(
 						'h3',
 						{ className: 'woodev-settings__section-title' },
-						section.label
+						createElement( 'span', null, section.label )
 					),
-				Object.keys( section.fields ).map( ( settingId ) =>
-					createElement( ControlField, {
-						key: settingId,
-						schema: section.fields[ settingId ],
-						value:
-							values[ settingId ] ?? section.fields[ settingId ].value,
-						onChange: ( next ) => onFieldChange( settingId, next ),
-					} )
+				createElement(
+					'div',
+					{ className: 'woodev-settings__rows' },
+					Object.keys( section.fields ).map( ( settingId ) =>
+						createElement( FieldRow, {
+							key: settingId,
+							schema: section.fields[ settingId ],
+							value:
+								values[ settingId ] ?? section.fields[ settingId ].value,
+							onChange: ( next ) => onFieldChange( settingId, next ),
+						} )
+					)
 				)
 			)
 		)

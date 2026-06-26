@@ -104,62 +104,70 @@ export default function App() {
 		'div',
 		{ className: 'woodev-settings' },
 		createElement(
-			TabPanel,
-			{
-				className: 'woodev-settings__tabs',
-				tabs: tabOptions,
-				// Clear cross-tab save notices when switching tabs.
-				onSelect: () => {
-					setSaveError( '' );
-					setSaved( '' );
+			'div',
+			{ className: 'woodev-settings__panel' },
+			createElement(
+				TabPanel,
+				{
+					className: 'woodev-settings__tabs',
+					tabs: tabOptions,
+					// Clear cross-tab save notices when switching tabs.
+					onSelect: () => {
+						setSaveError( '' );
+						setSaved( '' );
+					},
 				},
-			},
-			( tabOption ) => {
-				const tab = tabs.find( ( t ) => t.id === tabOption.name );
-				const values = edits[ tab.id ] || {};
+				( tabOption ) => {
+					const tab = tabs.find( ( t ) => t.id === tabOption.name );
+					const values = edits[ tab.id ] || {};
 
-				return createElement(
-					Fragment,
-					null,
-					saveError &&
-						'' === saving &&
+					return createElement(
+						Fragment,
+						null,
 						createElement(
-							Notice,
-							{ status: 'error', onRemove: () => setSaveError( '' ) },
-							saveError
+							'div',
+							{ className: 'woodev-settings__body' },
+							saveError &&
+								'' === saving &&
+								createElement(
+									Notice,
+									{ status: 'error', onRemove: () => setSaveError( '' ) },
+									saveError
+								),
+							saved === tab.id &&
+								createElement(
+									Notice,
+									{
+										status: 'success',
+										isDismissible: true,
+										onRemove: () => setSaved( '' ),
+									},
+									__( 'Настройки сохранены.', 'woodev-plugin-framework' )
+								),
+							createElement( SectionView, {
+								tab,
+								values,
+								onFieldChange: ( settingId, value ) =>
+									onFieldChange( tab.id, settingId, value ),
+							} )
 						),
-					saved === tab.id &&
 						createElement(
-							Notice,
-							{
-								status: 'success',
-								isDismissible: true,
-								onRemove: () => setSaved( '' ),
-							},
-							__( 'Настройки сохранены.', 'woodev-plugin-framework' )
-						),
-					createElement( SectionView, {
-						tab,
-						values,
-						onFieldChange: ( settingId, value ) =>
-							onFieldChange( tab.id, settingId, value ),
-					} ),
-					createElement(
-						'div',
-						{ className: 'woodev-settings__actions' },
-						createElement(
-							Button,
-							{
-								variant: 'primary',
-								isBusy: saving === tab.id,
-								disabled: saving === tab.id,
-								onClick: () => onSave( tab.id ),
-							},
-							__( 'Сохранить', 'woodev-plugin-framework' )
+							'div',
+							{ className: 'woodev-settings__footer' },
+							createElement(
+								Button,
+								{
+									variant: 'primary',
+									isBusy: saving === tab.id,
+									disabled: saving === tab.id,
+									onClick: () => onSave( tab.id ),
+								},
+								__( 'Сохранить', 'woodev-plugin-framework' )
+							)
 						)
-					)
-				);
-			}
+					);
+				}
+			)
 		)
 	);
 }
