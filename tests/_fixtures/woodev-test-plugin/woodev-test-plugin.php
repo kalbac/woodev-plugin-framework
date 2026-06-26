@@ -189,6 +189,24 @@ function woodev_test_plugin_init() {
 	}
 
 	/**
+	 * Minimal settings handler for the «Карьер» reference provider.
+	 */
+	class Woodev_Test_Settings extends \Woodev_Abstract_Settings {
+
+		/**
+		 * Registers the reference settings.
+		 *
+		 * @return void
+		 */
+		protected function register_settings() {
+			$this->register_setting( 'api_key', \Woodev_Setting::TYPE_STRING, [ 'name' => 'API-ключ', 'default' => '' ] );
+			$this->register_setting( 'mode', \Woodev_Setting::TYPE_STRING, [ 'name' => 'Режим', 'options' => [ 'test' => 'Тест', 'live' => 'Боевой' ], 'default' => 'test' ] );
+			$this->register_control( 'api_key', \Woodev_Control::TYPE_TEXT );
+			$this->register_control( 'mode', \Woodev_Control::TYPE_SELECT );
+		}
+	}
+
+	/**
 	 * Class Woodev_Test_Plugin
 	 */
 	class Woodev_Test_Plugin extends Woodev_Plugin {
@@ -252,6 +270,43 @@ function woodev_test_plugin_init() {
 		 */
 		protected function build_setup_wizard_handler() {
 			return new Woodev_Test_Setup_Wizard( $this );
+		}
+
+		/** @var Woodev_Test_Settings|null reference settings handler */
+		private $settings_handler;
+
+		/**
+		 * Lazily builds the reference settings handler (shared by wizard + page).
+		 *
+		 * @return Woodev_Test_Settings
+		 */
+		public function get_settings_handler() {
+			if ( null === $this->settings_handler ) {
+				$this->settings_handler = new Woodev_Test_Settings( $this->get_id() );
+			}
+
+			return $this->settings_handler;
+		}
+
+		/**
+		 * Contributes the «Карьер» reference tab to the settings page.
+		 *
+		 * @return \Woodev\Framework\Settings\Settings_Provider[]
+		 */
+		public function get_settings_providers(): array {
+			return [
+				\Woodev\Framework\Settings\Settings_Provider::create(
+					'quarry',
+					'Карьер',
+					$this->get_settings_handler(),
+					[
+						\Woodev\Framework\Settings\Settings_Section::create( 'general', 'Общие', [ 'api_key', 'mode' ] ),
+					],
+					[
+						'legacy_page' => 'wc-settings&tab=shipping&section=quarry',
+					]
+				),
+			];
 		}
 	}
 

@@ -13,7 +13,7 @@
  */
 
 import { createElement, Fragment } from '@wordpress/element';
-import ControlField from './control-field';
+import ControlField from '../components/control-field';
 
 /**
  * Resolves a field's control kind for grouping (controlType, then inference).
