@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
-> **67 atomic gotchas in 18 namespaces** — update count when adding/removing.
-> Last updated: 2026-06-26 (session 34: +1 — `integration-test-global-admin-hooks-output-and-submenu-accumulation` [`[testing/integration]`]).
+> **68 atomic gotchas in 18 namespaces** — update count when adding/removing.
+> Last updated: 2026-06-26 (session 35: +1 — `classmap-autoload-breaks-class-exists-once-guard` [`[framework/autoload]`]).
 
 ## Index
 
@@ -47,6 +47,7 @@
 - [framework/includes-wiring] New framework class files must be `require_once`'d in the right `includes()` (dependency order; WC files gated) — the Composer classmap loads them in tests but production fatals if unwired → [gotchas/dispatcher-files-unwired-in-includes.md](gotchas/dispatcher-files-unwired-in-includes.md) (session 2)
 - [framework/includes-wiring] `class-item-implementation.php` implemented `Woodev_Box_Packer_Item_With_Product` whose interface file was never required in `includes()` → release-blocking WSOD on every real vendored v2 boot (no runtime autoloader); classmap masked it in tests; first live boot caught it → [gotchas/box-packer-interface-unwired-in-includes.md](gotchas/box-packer-interface-unwired-in-includes.md) (s11)
 - [framework/autoload] Framework classes must be in the generated `woodev/class-map.php` (regenerate via `bin/generate-class-map.php`) or they WSOD on a real vendored boot — Composer masks missing/stale entries in tests; the runtime spl_autoload (no Composer in shipped plugins) is the only resolver in prod. Completeness test guards missing AND moved files. Also: B-2 older-v2-mixed-fleet pre-release blocker → [gotchas/framework-classmap-autoload-vendored-boot.md](gotchas/framework-classmap-autoload-vendored-boot.md) (s27)
+- [framework/autoload] `class_exists()`/`function_exists()` as an "init-once" flag is BROKEN under the runtime class-map autoloader: every framework class is autoloadable, so `class_exists()` (autoload on) is always true → the once-guard never runs. The top-level «Woodev» menu silently vanished for every real v2 plugin. Use a static boolean for once-init; assert with autoload ON to reproduce → [gotchas/classmap-autoload-breaks-class-exists-once-guard.md](gotchas/classmap-autoload-breaks-class-exists-once-guard.md) (s35)
 
 ### [testing/*] — Testing patterns
 - [testing/integration] Integration fixtures need the framework mapped at the bootstrap's load path (`woodev-framework/tests/_fixtures/*/woodev` in `.wp-env.json`), not just the `wp-content/plugins/*` mount — the v2 resolver requires each fixture's bundled `woodev/class-plugin.php` → [gotchas/wpenv-resolver-fixture-mapping.md](gotchas/wpenv-resolver-fixture-mapping.md) (2026-06-08)
