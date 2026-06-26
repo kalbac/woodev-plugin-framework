@@ -155,6 +155,9 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 			// build the competitor notification handler instance (opt-in)
 			$this->init_competitor_handler();
 
+			// register with the settings-page registry
+			$this->init_settings_page();
+
 			// load the admin settings pages
 			$this->load_admin_pages();
 
@@ -206,6 +209,17 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 				$admin_pages = $this->load_class( '/woodev/admin/class-admin-pages.php', 'Woodev_Admin_Pages' );
 				$admin_pages->instance( $this );
 			}
+		}
+
+		/**
+		 * Registers this plugin with the settings-page registry.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		protected function init_settings_page(): void {
+			\Woodev\Framework\Settings\Settings_Page_Registry::instance()->register_plugin( $this );
 		}
 
 		/**
@@ -1120,6 +1134,21 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		 */
 		public function get_settings_handler() {
 			return;
+		}
+
+		/**
+		 * Returns this plugin's settings-page providers (tabs).
+		 *
+		 * Plugins override this to contribute one or more Settings_Provider
+		 * descriptors to the neutral Woodev > Настройки page. A multi-carrier
+		 * plugin returns several providers (one tab each). Default: none.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return \Woodev\Framework\Settings\Settings_Provider[]
+		 */
+		public function get_settings_providers(): array {
+			return [];
 		}
 
 		/**
