@@ -1,0 +1,23 @@
+<?php
+namespace Woodev\Tests\Unit;
+
+use Woodev\Framework\Settings\Settings_Section;
+
+require_once dirname( __DIR__, 2 ) . '/woodev/settings-page/class-settings-section.php';
+
+class SettingsSectionTest extends TestCase {
+
+	public function test_create_exposes_id_label_and_setting_ids(): void {
+		$section = Settings_Section::create( 'general', 'Общие', [ 'api_key', 'mode' ] );
+
+		$this->assertSame( 'general', $section->get_id() );
+		$this->assertSame( 'Общие', $section->get_label() );
+		$this->assertSame( [ 'api_key', 'mode' ], $section->get_setting_ids() );
+	}
+
+	public function test_setting_ids_are_reindexed(): void {
+		$section = Settings_Section::create( 'x', 'X', [ 2 => 'a', 5 => 'b' ] );
+
+		$this->assertSame( [ 'a', 'b' ], $section->get_setting_ids() );
+	}
+}
