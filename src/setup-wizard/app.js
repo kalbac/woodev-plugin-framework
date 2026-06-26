@@ -25,7 +25,7 @@ import { __, sprintf } from '@wordpress/i18n';
 import { Button } from '@wordpress/components';
 import Stepper from './stepper';
 import StepView from './step-view';
-import { CheckFilledIcon, GearIcon, StarIcon } from './icons';
+import { CheckFilledIcon, GearIcon, StarIcon } from '../components/icons';
 import { saveStep, complete } from './rest';
 
 /**

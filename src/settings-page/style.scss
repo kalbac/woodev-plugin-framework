@@ -1,0 +1,37 @@
+/**
+ * Settings page styles — tab + section layout, brand cyan accent.
+ *
+ * @package woodev-plugin-framework
+ */
+
+.woodev-settings {
+	max-width: 920px;
+
+	&__loading {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: 24px 0;
+	}
+
+	&__section {
+		margin: 0 0 24px;
+	}
+
+	&__section-title {
+		font-size: 14px;
+		font-weight: 600;
+		margin: 0 0 12px;
+	}
+
+	&__actions {
+		margin-top: 16px;
+		padding-top: 16px;
+		border-top: 1px solid #e0e0e0;
+	}
+
+	// Brand cyan accent on the active tab (matches the s31 wizard tone).
+	.components-tab-panel__tabs-item.is-active {
+		box-shadow: inset 0 -2px 0 0 #06aedd;
+	}
+}
