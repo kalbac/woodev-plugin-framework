@@ -164,6 +164,7 @@ return [
 	'Woodev_REST_API_License' => 'woodev/licensing/api/class-rest-api-license.php',
 	'Woodev_REST_API_License_Command' => 'woodev/licensing/api/class-rest-api-license-command.php',
 	'Woodev_REST_API_Settings' => 'woodev/rest-api/controllers/class-plugin-rest-api-settings.php',
+	'Woodev_REST_API_Settings_Page' => 'woodev/rest-api/controllers/class-rest-api-settings-page.php',
 	'Woodev_REST_API_Setup' => 'woodev/rest-api/controllers/class-rest-api-setup.php',
 	'Woodev_REST_V1_Registrar' => 'woodev/rest-api/class-rest-v1-registrar.php',
 	'Woodev_Register_Settings' => 'woodev/settings-api/register-settings/class-register-settings.php',
