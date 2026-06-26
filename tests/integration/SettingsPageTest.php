@@ -69,8 +69,15 @@ class SettingsPageTest extends TestCase {
 	}
 
 	/**
-	 * Discharges Decision 5 point 4: a manage_woocommerce-only shop manager must
-	 * reach the settings page even though the parent `woodev` menu is manage_options.
+	 * Discharges Decision 5 point 4: with a WC-capability tab present the page cap
+	 * resolves to manage_woocommerce and the submenu is registered under that cap,
+	 * so a shop manager (who holds manage_woocommerce, not manage_options) can reach
+	 * it — and the cap-filtered schema hides the manage_options-only quarry tab.
+	 *
+	 * Registers the submenu directly (not via do_action('admin_menu'), which would
+	 * also fire WooCommerce's admin_menu callbacks — some WC versions print a PHP
+	 * deprecation notice that PHPUnit treats as unexpected output). WP's own
+	 * parent-menu promotion is core behaviour and is not re-tested here.
 	 */
 	public function test_shop_manager_reaches_settings_submenu(): void {
 		$registry = Settings_Page_Registry::instance();
@@ -91,14 +98,22 @@ class SettingsPageTest extends TestCase {
 
 		wp_set_current_user( self::factory()->user->create( [ 'role' => 'shop_manager' ] ) );
 
-		$admin_pages = new \Woodev_Admin_Pages();
-		$admin_pages->instance( woodev_test_plugin() );
-		do_action( 'admin_menu' );
+		$registry->register_page();
 
 		global $submenu;
-		$slugs = array_column( $submenu['woodev'] ?? [], 2 );
+		$entries = $submenu['woodev'] ?? [];
 
-		$this->assertContains( Settings_Page_Registry::PAGE_SLUG, $slugs );
+		$settings_entry = null;
+		foreach ( $entries as $entry ) {
+			if ( Settings_Page_Registry::PAGE_SLUG === $entry[2] ) {
+				$settings_entry = $entry;
+				break;
+			}
+		}
+
+		$this->assertNotNull( $settings_entry, 'The settings submenu must be registered.' );
+		// Registered under the cap a shop manager holds → reachable.
+		$this->assertSame( 'manage_woocommerce', $settings_entry[1] );
 
 		// Shop manager sees the WC tab but NOT the manage_options-only quarry tab.
 		$tab_ids = array_column( $registry->get_tabs(), 'id' );
