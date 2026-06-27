@@ -12,11 +12,13 @@
 
 ## 🎯 Задача s36 — UI-kit (по плану оператора)
 
-**Шаг 1 — ИЗУЧИТЬ готовое (operator's explicit ask: «не изобретать велосипед»):**
-- **WP `@wordpress/components`** (Gutenberg-дизайн-система): какие React-компоненты есть «из-под капота», их Storybook/дизайн-гайд. Особое внимание тому, что закрывает 9 замечаний: табы (`TabPanel` и есть ли «папочный» вид), `ComboboxControl` (select с поиском), `Tooltip`/`Popover` (портал — решает overflow), `RangeControl`, `Card`, `__experimental*`.
-- **WC `@woocommerce/components`** + WC-admin design system: их `SelectControl` (поиск + async, как selectWoo), таб-навигация, layout-примитивы.
-- Использовать **context7** для актуальной доки этих библиотек (`mcp__plugin_context7_context7__resolve-library-id` → `query-docs`).
-- **Результат шага 1:** инвентарь доступных компонентов + карта «наша поверхность/потребность → их компонент или кастом». Заземление на реальный код наших 4 поверхностей (см. ниже), а не предположения.
+**Шаг 1 — ИЗУЧИТЬ готовое (operator's explicit ask: «не изобретать велосипед»). ОСНОВНОЙ ИСТОЧНИК — ИСХОДНИКИ РЕПОЗИТОРИЕВ, не context7** (оператор s35: context7 хорош точечно, но не даёт полной картины и может отставать от версии; исходник авторитетнее):
+- **WP `@wordpress/components`** — настоящий исходник в **Gutenberg** (`WordPress/gutenberg`, `packages/components`: каждый компонент `.tsx` + Storybook-stories + README = полный каталог). Особое внимание под 9 замечаний: `TabPanel` (есть ли «папочный»/folder-вид), **`ComboboxControl`** (select с поиском), `Tooltip`/`Popover` (портал → решает overflow п.4), `RangeControl` (п.8), `Card`, `__experimental*`.
+- **WC `@woocommerce/components`** — монорепо **WooCommerce** (`woocommerce/woocommerce`, `packages/js/components`): их `SelectControl`, таб-навигация, layout.
+- **`selectWoo`** (форк select2, поиск + async, п.6) — лежит в установленном плагине на риге: `wp-content/plugins/woocommerce/assets/js/selectWoo/`. Читать прямо там.
+- **Метод (легковесно):** сначала проверить `node_modules` (вдруг `@wordpress/components` подтянут транзитивно). Иначе — `git clone --depth 1 --filter=blob:none --sparse <repo>` + `git sparse-checkout set packages/components` (или `packages/js/components`) во **временную reference-папку** (объяснить оператору одной фразой перед созданием; удалить в конце сессии — `feedback_explain_infrastructure_moves`). Читать на **тегах под наши целевые версии** (WP 6.3+/текущая, WC), т.к. trunk опережает то, что доступно. **context7 — только точечный fallback** (сигнатура/быстрая справка), не основной источник.
+- **Сверка с реально шипнутым:** собранные ассеты на риге (`wp-includes/js/dist/` для WP, `…/woocommerce/assets/` для WC) — что реально доступно в наших версиях.
+- **Результат шага 1:** инвентарь доступных компонентов + карта «наша поверхность/потребность → их компонент или кастом». Заземление на реальный исходник, не на предположения.
 
 **Шаг 2 — брейншторм UI-kit (skill `brainstorming`, по одному вопросу):**
 - **Канонический язык дизайна** (первое открытое решение): три «уже отточенные» поверхности расходятся (license=WP-синий `#2271b1`, plugins=красный `#b32d2e`, wizard+settings=cyan `#06aedd`). «Общий знаменатель» обязан свести палитру к одной — **моя рекомендация: брендовый cyan мастера** (он бренд + свежеодобрен). Подтвердить с оператором.
