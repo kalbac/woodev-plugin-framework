@@ -1,50 +1,80 @@
-# Промт для следующей сессии (s35): SP-2 «Auth + секреты» → brainstorm → spec → план → реализация
+# Промт следующей сессии (s36): UI-kit — сначала исследовать WP/WC, потом проектировать свой
 
-> Написан в конце s34 (2026-06-26). **s34 = SP-1 «Страница настроек» СПЛАНИРОВАНА И ОТГРУЖЕНА** (PR #87 `39d31a6`): `writing-plans` → 2 раунда независимых критиков → CI-green (incl. PHPStan + 3× integration) → squash-merge. Первый sub-project shipping-модуля закрыт. Дальше по программе — **SP-2 (auth + секреты)**, начиная с брейншторма (у SP-2 ещё НЕТ дизайн-спеки — только §5 решений в decisions-doc).
+> Написан в конце s35 (2026-06-27). **s35:** SP-1 рег-верифицирован; найден и **починен release-blocker** меню Woodev (PR #88 `e9b9235`, мёрж); автономный полиш страницы настроек (PR #89, **DRAFT/superseded**) оператор оценил как «намного лучше, но не то». **Главный итог — разворот направления:** у 4 админ-React-поверхностей свои скрипты и расходящиеся стили → **строим общий UI-kit**. **SP-2 (auth+секреты) ОТЛОЖЕН** до готовности kit'а.
 
 ## Возобновление (ОБЯЗАТЕЛЬНО)
 
-1. Прочитать `docs-internal/CURRENT-STATE.md` (раздел «Last session context» — s34) + `docs-internal/GOTCHAS.md` (индекс; новая `integration-test-global-admin-hooks-output-and-submenu-accumulation`).
-2. Прочитать **`docs-internal/specs/2026-06-25-shipping-module-decisions.md`** — §5 (секреты), §9 (сервисы), §2/§4 (программный контекст). **§5 уже зафиксирован:** НЕТ обязательного DB-шифрования; `sensitive`-маскирование (всегда) + опциональный `constant_name` wp-config override (секрет никогда не в БД; endorsed > шифрование). SP-2 = превратить это в реализуемый дизайн поверх SP-1.
-3. (Справочно) изучить **отгруженный SP-1** — на нём SP-2 строится: `woodev/settings-page/` (`Settings_Page_Registry`, `Settings_Provider`, `Settings_Section`, `Field_Schema`), `woodev/rest-api/controllers/class-rest-api-settings-page.php`, `woodev/settings-api/abstract-class-settings.php` + `class-control.php` (control-типы, save-path), `src/settings-page/` + `src/components/control-field.js`. Спека/план SP-1: `docs-internal/specs|plans/2026-06-26-sp1-settings-page-*`.
-4. **Ветка:** создать `feat/sp2-auth-secrets` от свежего `main` (`git switch main && git pull`). Версию НЕ бампать (`@since 2.0.2`, VERSION=2.0.1 in-dev).
-5. **Риг:** проектный wp-env dev `:8888` (если погашен — `npx wp-env start` из PowerShell; прод `:8080`/issuer `:8090` НЕ трогать). admin/password.
+1. Прочитать `docs-internal/CURRENT-STATE.md` (раздел «Last session context» — s35) + `docs-internal/GOTCHAS.md` (индекс; новая `classmap-autoload-breaks-class-exists-once-guard`).
+2. Прочитать этот файл целиком.
+3. (Справочно) посмотреть **полиш-ветку** `polish/settings-page-ui` (PR #89 draft) — это НЕ финал, а референс: WC-заземлённые метрики (label 182px / control 425px), паттерн `FieldRow`, токены cyan, богатая демо-фикстура со всеми типами полей. На ней же — мои скриншоты текущего вида настроек.
+4. **Ветку под код пока НЕ создавать** — s36 начинается с research + брейншторма (кода нет, пока не утверждён дизайн). Версию НЕ бампать (`@since 2.0.2`).
+5. **Риг:** проектный wp-env dev `:8888` (если погашен — `npx wp-env start` из PowerShell). admin/password. Прод `:8080`/issuer `:8090` НЕ трогать.
 
-## 🎯 Задача s35 — SP-2 «Auth + секреты»
+## 🎯 Задача s36 — UI-kit (по плану оператора)
 
-**Шаг 0 — рег-верификация SP-1 (по желанию оператора, в начале):** React-страница `Woodev > Настройки` отгружена и CI-зелёная (server-side + структура), но **в браузере ещё НЕ проверена**. Можно посмотреть на `:8888` (вкладка «Карьер» фикстуры, per-tab save, валидация) — диагностировать/пофиксить, если что-то не так, прежде чем строить SP-2 поверх.
+**Шаг 1 — ИЗУЧИТЬ готовое (operator's explicit ask: «не изобретать велосипед»):**
+- **WP `@wordpress/components`** (Gutenberg-дизайн-система): какие React-компоненты есть «из-под капота», их Storybook/дизайн-гайд. Особое внимание тому, что закрывает 9 замечаний: табы (`TabPanel` и есть ли «папочный» вид), `ComboboxControl` (select с поиском), `Tooltip`/`Popover` (портал — решает overflow), `RangeControl`, `Card`, `__experimental*`.
+- **WC `@woocommerce/components`** + WC-admin design system: их `SelectControl` (поиск + async, как selectWoo), таб-навигация, layout-примитивы.
+- Использовать **context7** для актуальной доки этих библиотек (`mcp__plugin_context7_context7__resolve-library-id` → `query-docs`).
+- **Результат шага 1:** инвентарь доступных компонентов + карта «наша поверхность/потребность → их компонент или кастом». Заземление на реальный код наших 4 поверхностей (см. ниже), а не предположения.
 
-**Шаг 1 — brainstorm (skill `brainstorming`):** по одному решению за раз, **заземляя каждый вопрос на реальный код SP-1** (control-типы, `update_value` save-path, React `control-field.js`, реестр), а не на предположения (правило «ground design in actual logic»). Открытые вопросы для SP-2:
-- Новый control-тип/флаг `sensitive` (маскирование в React-контроле: показывать `••••`, «изменить» кнопка; не возвращать секрет в `GET`-схему?). Где это: `Woodev_Control` + `Field_Schema` + `control-field.js`.
-- `constant_name` override: как декларируется (на `Woodev_Setting`?), как резолвится при чтении (`get_value` → если константа определена в wp-config, она авторитетна и поле read-only в UI), как НЕ попадает в БД при save.
-- Где живёт «auth» как сущность: отдельная секция настроек у провайдера? Поток подключения/проверки токена (если карьер требует OAuth/refresh) — или это домен плагина, а фреймворк даёт только механизм хранения+маскирования? (Помнить правило: **framework = механизм+контракт+хуки; домен/конкретный карьер = плагин**.)
-- Контракт сохранности (§5 + back-compat): имена опций секретов — installed-site data contract, не ломать.
+**Шаг 2 — брейншторм UI-kit (skill `brainstorming`, по одному вопросу):**
+- **Канонический язык дизайна** (первое открытое решение): три «уже отточенные» поверхности расходятся (license=WP-синий `#2271b1`, plugins=красный `#b32d2e`, wizard+settings=cyan `#06aedd`). «Общий знаменатель» обязан свести палитру к одной — **моя рекомендация: брендовый cyan мастера** (он бренд + свежеодобрен). Подтвердить с оператором.
+- **Архитектура kit'а:** общий токен-партиал (SCSS, напр. `src/ui/tokens.scss`) + переиспользуемые компоненты (`src/ui/` или расширить `src/components/`), импортируемые всеми entry. Сейчас общего токен-файла НЕТ — каждая поверхность определяет SCSS с нуля (cyan продублирован в 3 местах).
+- **Декомпозиция (как SP-программа, по одной за раз):** **UK-0** research → **UK-1** фундамент (токены + ядро компонентов), доказать на странице настроек (закрыть все 9 замечаний) → **UK-2** миграция «Плагины» → **UK-3** «Лицензии» → **UK-4** мастер (самый крупный/особый — full-screen). Потом вернуться к SP-2.
+- **Идея (предложить):** демо-галерея компонентов (страница-витрина со всеми типами полей) — ревьюить kit изолированно до расстановки по поверхностям. Закрывает п.9.
 
-**Шаг 2 — spec → `writing-plans` → реализация.** Спека `docs-internal/specs/2026-06-2X-sp2-auth-secrets-design.md`, план `docs-internal/plans/...`. Реализация — **напрямую worker + независимый inline-bundle/субагент-критик** (autodev-loop НЕ использовать: его codex-критик нерабочий на этой Windows-машине — `invoke-critic.ps1` спавнит shell, падает `CreateProcessAsUserW failed:5`, gotcha `codex-shell-sandbox-broken-windows`; `.autodev/` к тому же нацелен на завершённый S2). Worker+critic суть сохраняется: реализую инкрементами TDD, независимый критик ДО мёржа, **re-critic на собственные фиксы** (без self-certify).
+**Шаг 3 — spec → `writing-plans` → реализация UK-1.** Спека `docs-internal/specs/2026-06-2X-ui-kit-design.md`, план `docs-internal/plans/...`. Реализация — worker + независимый inline-bundle/субагент-критик, re-critic на свои фиксы (autodev-loop НЕ использовать: codex-shell сломан на этой Windows-машине — gotcha `codex-shell-sandbox-broken-windows`).
 
-## Кросс-катинг-констрейнты (не забыть — те же, что в SP-1)
+## 9 замечаний оператора по текущему UI настроек (= требования к kit'у)
 
-- **Нет Composer в прод:** после нового класса фреймворка — `php bin/generate-class-map.php` в **той же** задаче (иначе `ClassMapCompletenessTest` краснеет).
+1. **Full-width**, а не карточка фиксированной ширины.
+2. Закладки — настоящие **«папочные» табы**, не подчёркнутый текст.
+3. **Deep-link** на конкретную закладку (прямая ссылка открывает нужный таб).
+4. **Тултип не должен обрезаться** за пределами viewport (длинный текст уходит за край) → портал/`Popover`.
+5. **Убрать дивайдеры** между каждой опцией.
+6. **Select** — как dropdown мастера; + для длинных списков **поиск внутри** + **динамическая подгрузка** (à la `selectWoo.js`/select2). Проверить `ComboboxControl` (WP) и WC async SelectControl.
+7. **Подразделы как под-табы:** основной таб «Карьер» → под-табы-ссылки «Авторизация»/«Форма заказа» (по умолчанию первая); сейчас секции рендерятся стопкой с заголовками — нужно навигацией. (Это то, что обсуждали в s32: page → tabs → sub-sections.)
+8. **Range «Наценка»** — сейчас сломанная «синяя точка» вместо слайдера; нужен нормальный слайдер.
+9. Демо со **всеми** типами полей (сейчас не видно multiselect, richtext).
+
+## Карта расхождений 4 поверхностей (заземление, s35)
+
+| Поверхность | Файлы | Акцент | Токены |
+|---|---|---|---|
+| `src/license-page/` | app, card-state, license-card (433), style.scss (334) | `#2271b1` WP-синий | свои, cyan нет |
+| `src/plugins-page/` | app, account, catalog (232), install, purchases, filter, style.scss (667) | `#b32d2e` красный | свои |
+| `src/setup-wizard/` | app (407), step-view, stepper, style.scss (994) | `#06aedd` cyan | свои `$wd-*` |
+| `src/settings-page/` | app, section-view, field-row, rest, style.scss | `#06aedd` cyan | свои (полиш s35) |
+| `src/components/` (общее) | control-field (283), dropdown (103), icons (153), richtext (156) | — | используют только wizard+settings |
+
+Общего токен-партиала нет; license-page на WP-синем — главный визуальный outlier.
+
+## Кросс-катинг-констрейнты (те же)
+
+- **React:** `@wordpress/scripts`, **classic JSX** (`createElement`/`Fragment`, без JSX-рантайма — WP 6.3+; gotcha `wp-scripts-jsx-runtime-wp66`), LF в `assets/build` (gotcha `build-artifacts-eol-lf-windows-parity`); собранные ассеты коммитить (assets-parity CI). CSS версионировать по `filemtime` (gotcha `wp-scripts-css-enqueue-version-by-mtime`).
+- **Нет Composer в прод:** после нового PHP-класса фреймворка — `php bin/generate-class-map.php` в той же задаче (UI-kit — в основном JS/SCSS, но если добавится PHP — не забыть).
 - **i18n:** без `_n()` (русский — source; gotcha `russian-source-i18n-plural-n`).
-- **Settings-API save-path** (s31): валидация enum по ключу-или-значению, sanitize richtext (`wp_kses_post`), числовая коэрция — переиспользовать (gotcha `settings-api-control-save-path-pitfalls`).
-- **React:** `@wordpress/scripts`, classic JSX (`createElement`/`Fragment`), LF в `assets/build`; собранные ассеты коммитить (assets-parity CI). Общие контролы уже в `src/components/` — расширять там, не дублировать.
-- **Интеграционные тесты:** НЕ `do_action('admin_menu')` и прочие широкие глобальные admin-хуки (WC-callbacks печатают deprecation на части матрицы → PHPUnit «unexpected output» → красный только на одних версиях); `$menu`/`$submenu` накапливаются между тестами — звать конкретный метод + `unset()` ключ перед ассертом (новая gotcha `integration-test-global-admin-hooks-output-and-submenu-accumulation`).
-- **HPOS-safe:** для секретов это про опции, не order-meta; держать в уме на будущие SP.
+- **Serena EOL-флип:** для существующих source-файлов править built-in `Edit`, не Serena `replace_content` (CRLF-флип; gotcha `serena-replace-content-eol-flip`).
+- **Build:** `npm run build` собирает 4 бандла; entry в `package.json` scripts.
 
-## Гигиена / процесс (project rules)
+## Гигиена / процесс
 
-- `@since 2.0.2`, версию НЕ бампать. Новый код — namespaces (PSR-4 `Woodev\Framework\*`) + короткие массивы `[]`, type declarations, docblocks, OOP-only, Yoda.
-- PHPStan локально на Windows падает (segfault, environmental — gotcha `phpstan-windows-parallel-worker-segfault`); гейт — **Linux CI «Lint»**. Локально гонять `composer phpcs` + `composer test:unit`.
-- **Интеграция + PHPStan — только Linux CI** (локально нет `WP_TESTS_DIR`). Цикл: push → читать лог упавшей matrix-ячейки → фикс → re-push (так в s34 поймали 2 версионных красноты).
-- Независимое ревью: Codex shell сломан (gotcha `codex-shell-sandbox-broken-windows`) — критик **inline-bundle** методом / pr-review-toolkit субагенты / `/code-review ultra`.
-- **Мёрж:** ветка → PR → проверить **КАЖДЫЙ** CI-job = pass + state CLEAN (main НЕ защищён обязательным чеком) → `gh pr merge --squash --delete-branch` (никогда `--auto`). После прямых docs-коммитов в main — **сразу push** (gotcha `git-squash-onto-stale-origin-main-diverge`).
+- PHPStan локально на Windows падает (segfault, environmental — gotcha `phpstan-windows-parallel-worker-segfault`); гейт — Linux CI «Lint». Локально: `composer phpcs` + `composer test:unit` + JS-сборка. Интеграция + PHPStan — только Linux CI.
+- Интеграционные тесты гонять через `npx wp-env run tests-cli env TEST_SUITE=integration php /var/www/html/woodev-framework/vendor/bin/phpunit --configuration .../phpunit.xml --testsuite=Integration --no-coverage`.
+- Независимое ревью: Codex shell сломан → критик inline-bundle / pr-review-toolkit субагенты / `/code-review`.
+- **Мёрж:** ветка → PR → проверить **КАЖДЫЙ** CI-job = pass + state CLEAN → `gh pr merge --squash --delete-branch` (никогда `--auto`). После прямых docs-коммитов в main — сразу push (gotcha `git-squash-onto-stale-origin-main-diverge`).
+- **Дизайн субъективен:** оператор ревьюит UI на риге; не мержить визуал без его аппрува (полиш он отклонял дважды у мастера). Богато сидировать демо-данные перед ревью (`feedback_design_bar_modern_wc_react`).
 
-## Процесс программы (напоминание)
+## Открытые висящие вопросы (для брейншторма)
 
-- **По одному SP за раз.** Порядок (Фазы A–E в decisions-doc): ✅ SP-1 (настройки, s34) → **SP-2 (auth+секреты)** → SP-3 (поля, классика) → SP-4 (DaData) → SP-5 (карта/ПВЗ) → SP-6 (тариф+упаковка) → SP-7 (экспорт+документы) → SP-8 (трекинг+статусы) → SP-9 (письма) → SP-10 (страница заказов) → SP-11 (блоки) → пилот-миграция (Яндекс→CDEK→Почта).
+1. Канонический язык дизайна → **cyan** (рекомендация) vs иной.
+2. Searchable/async select: `ComboboxControl` (WP, есть поиск) vs WC async SelectControl vs кастом на базе dropdown мастера.
+3. Демо-галерея как отдельная страница-витрина — делать ли.
+4. Что делать с PR #89: после UK-1 (ребилд настроек на kit) — закрыть (superseded) или переиспользовать ветку как базу UK-1.
 
-## Прочее (по приоритету ниже доставки)
+## Прочее
 
-- **s-кратно-10 — следующий аудит доков на s40** (последний — методология s39). На s35 не требуется.
-- payment-gateway trait extraction (`class-payment-gateway.php` ~3,542 строк) — кандидат.
-- review #4: `array()`→`[]` (~797 мест) + type declarations + `@since` sweep + `Generic.Arrays.DisallowLongArraySyntax`.
+- **SP-2 (auth+секреты) ОТЛОЖЕН** — вернуться после UI-kit. Контекст SP-2: §5 decisions-doc (`sensitive`-маскирование + `constant_name` override), грунт в коде SP-1 (Field_Schema эмитит value всегда — дыра маскирования; per-field dirty-tracking уже есть). Первый висящий вопрос SP-2 — граница объёма (только механизм секретов vs + auth-контракт).
+- **s-кратно-10 — следующий аудит доков на s40** (последний — s39).
+- PR #88 (меню-фикс) — в main. PR #89 (полиш) — draft, superseded.
