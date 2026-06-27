@@ -199,10 +199,29 @@ function woodev_test_plugin_init() {
 		 * @return void
 		 */
 		protected function register_settings() {
-			$this->register_setting( 'api_key', \Woodev_Setting::TYPE_STRING, [ 'name' => 'API-ключ', 'default' => '' ] );
-			$this->register_setting( 'mode', \Woodev_Setting::TYPE_STRING, [ 'name' => 'Режим', 'options' => [ 'test' => 'Тест', 'live' => 'Боевой' ], 'default' => 'test' ] );
-			$this->register_control( 'api_key', \Woodev_Control::TYPE_TEXT );
+			// --- Авторизация ---
+			$this->register_setting( 'api_key', \Woodev_Setting::TYPE_STRING, [ 'name' => 'API-ключ', 'description' => 'Выдаётся в личном кабинете карьера.', 'default' => '' ] );
+			$this->register_setting( 'secret', \Woodev_Setting::TYPE_STRING, [ 'name' => 'Секретный ключ', 'default' => '' ] );
+			$this->register_setting( 'mode', \Woodev_Setting::TYPE_STRING, [ 'name' => 'Режим', 'description' => 'Боевой режим включает реальные списания.', 'options' => [ 'test' => 'Тест', 'live' => 'Боевой' ], 'default' => 'test' ] );
+			$this->register_setting( 'debug', \Woodev_Setting::TYPE_BOOLEAN, [ 'name' => 'Логирование запросов', 'description' => 'Записывать запросы к API в журнал WooCommerce.', 'default' => false ] );
+
+			$this->register_control( 'api_key', \Woodev_Control::TYPE_TEXT, [ 'tooltip' => 'Скопируйте ключ целиком, без пробелов.' ] );
+			$this->register_control( 'secret', \Woodev_Control::TYPE_PASSWORD, [ 'tooltip' => 'Хранится в настройках сайта.' ] );
 			$this->register_control( 'mode', \Woodev_Control::TYPE_SELECT );
+			$this->register_control( 'debug', \Woodev_Control::TYPE_TOGGLE );
+
+			// --- Форма заказа ---
+			$this->register_setting( 'pickup_required', \Woodev_Setting::TYPE_BOOLEAN, [ 'name' => 'Обязательный выбор ПВЗ', 'description' => 'Запретить оформление без выбранного пункта выдачи.', 'default' => true ] );
+			$this->register_setting( 'default_city', \Woodev_Setting::TYPE_STRING, [ 'name' => 'Город по умолчанию', 'default' => 'Москва' ] );
+			$this->register_setting( 'services', \Woodev_Setting::TYPE_STRING, [ 'name' => 'Доп. услуги', 'description' => 'Предлагать покупателю на оформлении.', 'is_multi' => true, 'options' => [ 'sms' => 'SMS-уведомление', 'insurance' => 'Страховка', 'fitting' => 'Примерка' ], 'default' => [] ] );
+			$this->register_setting( 'comment', \Woodev_Setting::TYPE_STRING, [ 'name' => 'Комментарий к доставке', 'default' => '' ] );
+			$this->register_setting( 'markup', \Woodev_Setting::TYPE_INTEGER, [ 'name' => 'Наценка к тарифу', 'description' => 'Процент сверху к рассчитанной стоимости.', 'default' => 0 ] );
+
+			$this->register_control( 'pickup_required', \Woodev_Control::TYPE_TOGGLE );
+			$this->register_control( 'default_city', \Woodev_Control::TYPE_TEXT, [ 'tooltip' => 'Используется, если город не определён автоматически.' ] );
+			$this->register_control( 'services', \Woodev_Control::TYPE_MULTISELECT );
+			$this->register_control( 'comment', \Woodev_Control::TYPE_TEXTAREA );
+			$this->register_control( 'markup', \Woodev_Control::TYPE_RANGE, [ 'min' => 0, 'max' => 50, 'step' => 1 ] );
 		}
 	}
 
@@ -300,7 +319,8 @@ function woodev_test_plugin_init() {
 					'Карьер',
 					$this->get_settings_handler(),
 					[
-						\Woodev\Framework\Settings\Settings_Section::create( 'general', 'Общие', [ 'api_key', 'mode' ] ),
+						\Woodev\Framework\Settings\Settings_Section::create( 'auth', 'Авторизация', [ 'api_key', 'secret', 'mode', 'debug' ] ),
+						\Woodev\Framework\Settings\Settings_Section::create( 'order_form', 'Форма заказа', [ 'pickup_required', 'default_city', 'services', 'comment', 'markup' ] ),
 					],
 					[
 						'legacy_page' => 'wc-settings&tab=shipping&section=quarry',
