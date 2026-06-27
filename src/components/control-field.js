@@ -18,10 +18,9 @@ import {
 	ToggleControl,
 	RadioControl,
 	RangeControl,
-	FormTokenField,
-	ComboboxControl,
 } from '@wordpress/components';
 import FieldRow from './field-row';
+import SelectField from './select-field';
 import WizardRichText from './richtext';
 
 /**
@@ -174,17 +173,13 @@ export default function ControlField( { schema, value, onChange } ) {
 			);
 
 		case 'select':
-			// Searchable combobox (zam.6): in-list filtering out of the box; the
-			// options array is fully controlled, so a plugin can feed it async.
+			// WC-style dropdown with search (zam.6): trigger button + popover list.
 			return withAnatomy(
 				schema,
-				createElement( ComboboxControl, {
-					__nextHasNoMarginBottom: true,
-					__next40pxDefaultSize: true,
-					value: ( value ?? schema.value ?? '' ) === '' ? null : String( value ?? schema.value ),
+				createElement( SelectField, {
+					value: value ?? schema.value ?? '',
 					options: normalizeOptions( schema.options ),
 					onChange: ( next ) => onChange( next ?? '' ),
-					allowReset: false,
 				} )
 			);
 
@@ -243,31 +238,17 @@ export default function ControlField( { schema, value, onChange } ) {
 			);
 
 		case 'multiselect': {
-			const opts = normalizeOptions( schema.options );
-			const labelByValue = {};
-			const valueByLabel = {};
-			opts.forEach( ( option ) => {
-				labelByValue[ String( option.value ) ] = option.label;
-				valueByLabel[ option.label ] = option.value;
-			} );
-
+			// Same WC-style dropdown as select, but multiple values (zam.9).
 			const raw = value ?? schema.value;
 			const current = Array.isArray( raw ) ? raw : ( raw ? [ raw ] : [] );
-			const tokenValue = current.map( ( v ) => labelByValue[ String( v ) ] ?? String( v ) );
 
 			return withAnatomy(
 				schema,
-				createElement( FormTokenField, {
-					__nextHasNoMarginBottom: true,
-					__next40pxDefaultSize: true,
-					__experimentalShowHowTo: false,
-					// Show the full option list on focus (no need to know names upfront).
-					__experimentalExpandOnFocus: true,
-					value: tokenValue,
-					suggestions: opts.map( ( option ) => option.label ),
-					onChange: ( tokens ) =>
-						onChange( tokens.map( ( token ) => ( token in valueByLabel ? valueByLabel[ token ] : token ) ) ),
-					label: '',
+				createElement( SelectField, {
+					value: current,
+					options: normalizeOptions( schema.options ),
+					multi: true,
+					onChange,
 				} )
 			);
 		}
