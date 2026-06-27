@@ -244,4 +244,86 @@
 			color: #9aa0a6;
 		}
 	}
+
+	// Range row (zam.6): stretch the slider, pin the value input next to the suffix.
+	&__range-row {
+		.components-range-control {
+			flex: 1;
+		}
+
+		.components-range-control__root {
+			display: flex;
+			align-items: center;
+			gap: wd.$gap;
+			width: 100%;
+		}
+
+		// The slider rail grows; the number input stays compact at the right edge.
+		.components-range-control__wrapper {
+			flex: 1;
+		}
+
+		.components-range-control__number-control {
+			flex: 0 0 auto;
+		}
+
+		.woodev-field__suffix {
+			margin-left: 0;
+		}
+	}
+
+	// Number inputs are narrow — most numeric params need little space (zam.8).
+	input[type="number"] {
+		max-width: 150px;
+	}
+
+	// Color picker: a filled square, not a full-width progress-bar (zam.7).
+	input[type="color"].components-text-control__input {
+		width: 48px;
+		height: 36px;
+		padding: 2px;
+		cursor: pointer;
+	}
+
+	// Toggle meta needs inner horizontal breathing room (zam.9).
+	&__toggle-meta {
+		padding-left: 4px;
+	}
+
+	// Password field with eye toggle (zam.10).
+	&__password {
+		position: relative;
+
+		.components-text-control__input {
+			padding-right: 40px;
+		}
+	}
+
+	&__password-toggle {
+		position: absolute;
+		right: 8px;
+		top: 50%;
+		transform: translateY( -50% );
+		display: flex;
+		align-items: center;
+		padding: 4px;
+		border: 0;
+		background: none;
+		color: wd.$muted;
+		cursor: pointer;
+
+		&:hover,
+		&:focus {
+			color: wd.$accent;
+			outline: none;
+		}
+	}
+}
+
+// Radio group: drop the empty fieldset legend that adds a top gap before the
+// first (possibly selected) option (zam.9).
+.woodev-field__option-group .components-radio-control > legend:empty {
+	display: none;
+	margin: 0;
+	padding: 0;
 }

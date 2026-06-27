@@ -11,7 +11,7 @@
  * @package woodev-plugin-framework
  */
 
-import { createElement } from '@wordpress/element';
+import { createElement, useState } from '@wordpress/element';
 import {
 	TextControl,
 	TextareaControl,
@@ -23,6 +23,56 @@ import {
 } from '@wordpress/components';
 import FieldRow from './field-row';
 import WizardRichText from './richtext';
+
+/**
+ * Password input with a show/hide eye toggle.
+ *
+ * @param {Object}   props          component props.
+ * @param {string}   props.value    current value.
+ * @param {Function} props.onChange change handler.
+ * @return {Object} React element.
+ */
+function PasswordControl( { value, onChange } ) {
+	const [ show, setShow ] = useState( false );
+
+	return createElement(
+		'div',
+		{ className: 'woodev-field__password' },
+		createElement( TextControl, {
+			__nextHasNoMarginBottom: true,
+			type: show ? 'text' : 'password',
+			value: value ?? '',
+			onChange,
+		} ),
+		createElement(
+			'button',
+			{
+				type: 'button',
+				className: 'woodev-field__password-toggle',
+				onClick: () => setShow( ( s ) => ! s ),
+				'aria-label': show ? 'Скрыть' : 'Показать',
+				'aria-pressed': show,
+			},
+			createElement(
+				'svg',
+				{ width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', 'aria-hidden': true },
+				show
+					? createElement( 'path', {
+						d: 'M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7zm10 3a3 3 0 100-6 3 3 0 000 6zM3 3l18 18',
+						stroke: 'currentColor',
+						'stroke-width': 2,
+						'stroke-linecap': 'round',
+					} )
+					: createElement( 'path', {
+						d: 'M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7zm10 3a3 3 0 100-6 3 3 0 000 6z',
+						stroke: 'currentColor',
+						'stroke-width': 2,
+						'stroke-linecap': 'round',
+					} )
+			)
+		)
+	);
+}
 
 /**
  * Normalizes a schema's options ({key:label} object OR array) into a list of
@@ -211,6 +261,8 @@ export default function ControlField( { schema, value, onChange } ) {
 					__nextHasNoMarginBottom: true,
 					__next40pxDefaultSize: true,
 					__experimentalShowHowTo: false,
+					// Show the full option list on focus (no need to know names upfront).
+					__experimentalExpandOnFocus: true,
 					value: tokenValue,
 					suggestions: opts.map( ( option ) => option.label ),
 					onChange: ( tokens ) =>
@@ -231,13 +283,18 @@ export default function ControlField( { schema, value, onChange } ) {
 				} )
 			);
 
-		case 'email':
 		case 'password':
+			return withAnatomy(
+				schema,
+				createElement( PasswordControl, { value, onChange } )
+			);
+
+		case 'email':
 		case 'number':
 		case 'date':
 		case 'text':
 		default: {
-			const type = [ 'email', 'password', 'number', 'date' ].includes( control ) ? control : 'text';
+			const type = [ 'email', 'number', 'date' ].includes( control ) ? control : 'text';
 			const input = createElement( TextControl, {
 				__nextHasNoMarginBottom: true,
 				type,
