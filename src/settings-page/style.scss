@@ -1,40 +1,61 @@
 /**
- * Settings page styles — tab + section layout, brand cyan accent.
+ * Settings page styles — built on the UI-kit. Full-width card, folder provider
+ * tabs, section sub-tabs, horizontal field rows (WC metrics). Brand cyan via
+ * shared tokens; native components recolored via the shared partials.
  *
  * @package woodev-plugin-framework
  */
 
 @use '../components/tokens' as wd;
 @use '../components/wp-recolor';
+@use '../components/field';
+@use '../components/tabs';
 
 .woodev-settings {
-	max-width: 920px;
+	// Full-width (zam.1) — no fixed max-width; the Card frames the content.
 
 	&__loading {
 		display: flex;
 		align-items: center;
-		gap: 8px;
-		padding: 24px 0;
+		gap: wd.$gap-sm;
+		padding: wd.$gap-lg 0;
 	}
 
-	&__section {
-		margin: 0 0 24px;
-	}
-
-	&__section-title {
-		font-size: 14px;
-		font-weight: 600;
-		margin: 0 0 12px;
+	&__card {
+		width: 100%;
 	}
 
 	&__actions {
-		margin-top: 16px;
-		padding-top: 16px;
-		border-top: 1px solid #e0e0e0;
+		margin-top: wd.$gap-lg;
+		// No divider above the actions (zam.5).
 	}
 
-	// Brand cyan accent on the active tab (matches the s31 wizard tone).
-	.components-tab-panel__tabs-item.is-active {
-		box-shadow: inset 0 -2px 0 0 wd.$accent;
+	// Horizontal field rows: label column | control column (zam.5 — no per-field
+	// dividers; rows are separated by rhythm only).
+	.woodev-field {
+		display: grid;
+		grid-template-columns: wd.$label-col minmax( 0, wd.$control-col );
+		align-items: start;
+		gap: wd.$gap-lg;
+		margin: 0;
+		padding: wd.$gap 0;
+
+		&:first-child {
+			padding-top: 0;
+		}
+	}
+
+	.woodev-field__label {
+		margin-bottom: 0;
+		padding-top: 6px;
+	}
+
+	.woodev-field__control {
+		min-width: 0;
+	}
+
+	// Toggle rows are full-width (label/desc meta beside the pill), not gridded.
+	.woodev-field__toggle-row {
+		padding: wd.$gap 0;
 	}
 }
