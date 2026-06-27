@@ -161,6 +161,7 @@ export default function ControlField( { schema, value, onChange } ) {
 					{ className: 'woodev-field__range-row' },
 					createElement( RangeControl, {
 						__nextHasNoMarginBottom: true,
+						__next40pxDefaultSize: true,
 						value: Number( value ?? schema.value ?? 0 ),
 						min: schema.min ?? 0,
 						max: schema.max ?? 100,
