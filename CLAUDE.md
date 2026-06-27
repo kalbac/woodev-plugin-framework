@@ -200,7 +200,7 @@ Self-contained shipping box-packing algorithm. Implement `Woodev_Packer_Item_Int
 - Short array syntax `[]` is **required for new/modified code** — never `array()` (override of WPCS default)
 - **New code is authored directly in namespaces** (`Woodev\Framework\*` PSR-4) — do not write new code under the legacy global `Woodev_*` shape
 - Line length limit: 120 characters
-- PHPCompatibility checked for PHP 7.4+, minimum WP version 6.3
+- PHPCompatibility checked for PHP 7.4+, minimum WP version 6.6 (raised from 6.3 in s36 — enables the automatic JSX runtime; classic-JSX babel hack removed)
 - PHPStan level 3; `checkDynamicProperties: false` (legacy code uses dynamic properties)
 
 ## Backward Compatibility — clean-break policy (v2.0 branch)

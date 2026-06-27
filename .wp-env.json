@@ -46,7 +46,8 @@
       "config": {
         "WP_DEBUG": true,
         "SCRIPT_DEBUG": true,
-        "WOODEV_FRAMEWORK_DIR": "/var/www/html/woodev-framework"
+        "WOODEV_FRAMEWORK_DIR": "/var/www/html/woodev-framework",
+        "WOODEV_UI_KIT_GALLERY": true
       }
     }
   }

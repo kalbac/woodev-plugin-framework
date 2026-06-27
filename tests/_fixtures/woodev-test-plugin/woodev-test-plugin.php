@@ -199,10 +199,28 @@ function woodev_test_plugin_init() {
 		 * @return void
 		 */
 		protected function register_settings() {
+			// Section «Общие» (general).
 			$this->register_setting( 'api_key', \Woodev_Setting::TYPE_STRING, [ 'name' => 'API-ключ', 'default' => '' ] );
 			$this->register_setting( 'mode', \Woodev_Setting::TYPE_STRING, [ 'name' => 'Режим', 'options' => [ 'test' => 'Тест', 'live' => 'Боевой' ], 'default' => 'test' ] );
-			$this->register_control( 'api_key', \Woodev_Control::TYPE_TEXT );
+			$this->register_control( 'api_key', \Woodev_Control::TYPE_TEXT, [ 'tooltip' => 'Длинная подсказка для проверки того, что тултип отображается в портале и не обрезается за правым краем экрана, перенося текст на несколько строк.' ] );
 			$this->register_control( 'mode', \Woodev_Control::TYPE_SELECT );
+
+			// Section «Форма заказа» (order) — exercises every control type.
+			$this->register_setting( 'enabled', \Woodev_Setting::TYPE_BOOLEAN, [ 'name' => 'Включить интеграцию', 'default' => true ] );
+			$this->register_setting( 'markup', \Woodev_Setting::TYPE_INTEGER, [ 'name' => 'Наценка, %', 'default' => 15 ] );
+			$this->register_setting( 'calc_type', \Woodev_Setting::TYPE_STRING, [ 'name' => 'Тип расчёта', 'options' => [ 'fixed' => 'Фиксированная ставка', 'dynamic' => 'По тарифу перевозчика' ], 'default' => 'dynamic' ] );
+			$this->register_setting( 'methods', \Woodev_Setting::TYPE_STRING, [ 'name' => 'Способы доставки', 'is_multi' => true, 'options' => [ 'pickup' => 'Самовывоз', 'courier' => 'Курьер', 'post' => 'Почта', 'postamat' => 'Постамат' ], 'default' => [ 'pickup', 'courier' ] ] );
+			$this->register_setting( 'max_weight', \Woodev_Setting::TYPE_INTEGER, [ 'name' => 'Макс. вес, кг', 'default' => 30 ] );
+			$this->register_setting( 'comment', \Woodev_Setting::TYPE_STRING, [ 'name' => 'Комментарий', 'default' => '' ] );
+			$this->register_setting( 'note', \Woodev_Setting::TYPE_STRING, [ 'name' => 'Описание для клиента', 'default' => '' ] );
+
+			$this->register_control( 'enabled', \Woodev_Control::TYPE_TOGGLE, [ 'description' => 'Запросы идут к перевозчику.' ] );
+			$this->register_control( 'markup', \Woodev_Control::TYPE_RANGE, [ 'min' => 0, 'max' => 100, 'step' => 5 ] );
+			$this->register_control( 'calc_type', \Woodev_Control::TYPE_RADIO );
+			$this->register_control( 'methods', \Woodev_Control::TYPE_MULTISELECT );
+			$this->register_control( 'max_weight', \Woodev_Control::TYPE_NUMBER );
+			$this->register_control( 'comment', \Woodev_Control::TYPE_TEXTAREA );
+			$this->register_control( 'note', \Woodev_Control::TYPE_RICHTEXT );
 		}
 	}
 
@@ -301,6 +319,7 @@ function woodev_test_plugin_init() {
 					$this->get_settings_handler(),
 					[
 						\Woodev\Framework\Settings\Settings_Section::create( 'general', 'Общие', [ 'api_key', 'mode' ] ),
+						\Woodev\Framework\Settings\Settings_Section::create( 'order', 'Форма заказа', [ 'enabled', 'markup', 'calc_type', 'methods', 'max_weight', 'comment', 'note' ] ),
 					],
 					[
 						'legacy_page' => 'wc-settings&tab=shipping&section=quarry',

@@ -1,0 +1,247 @@
+// Woodev UI-kit — shared field anatomy (neutral classes `woodev-field__*`).
+//
+// Used by control-field.js across every surface (settings, wizard, gallery).
+// Default layout is VERTICAL (label above control); a surface may override to a
+// horizontal grid (settings does — label column | control column).
+//
+// @use '../components/field';
+//
+// @package woodev-plugin-framework
+
+@use './tokens' as wd;
+
+.woodev-field {
+	margin-top: wd.$gap-lg;
+
+	&:first-child {
+		margin-top: wd.$gap-xs;
+	}
+
+	&__label {
+		display: flex;
+		align-items: center;
+		gap: wd.$gap-sm;
+		font-size: 15px;
+		font-weight: 600;
+		color: wd.$ink;
+		margin-bottom: 6px;
+	}
+
+	&__req {
+		color: wd.$error;
+		font-weight: 700;
+	}
+
+	&__desc {
+		font-size: 13px;
+		line-height: 1.55;
+		color: wd.$ink-muted;
+		margin: 6px 0 0;
+	}
+
+	// Tooltip trigger — the bubble itself is now wp `Tooltip` (portal, zam.4).
+	&__tip {
+		position: relative;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 17px;
+		height: 17px;
+		border-radius: 50%;
+		background: #c3c4c7;
+		color: #fff;
+		cursor: help;
+
+		svg {
+			width: 11px;
+			height: 11px;
+		}
+
+		&:hover,
+		&:focus {
+			background: wd.$accent-strong;
+			outline: none;
+		}
+	}
+
+	// Suffix rows (unit beside the input / range).
+	&__input-row,
+	&__range-row {
+		display: flex;
+		align-items: center;
+		gap: 11px;
+
+		.components-base-control {
+			flex: 1;
+		}
+	}
+
+	&__suffix {
+		font-size: 14px;
+		color: wd.$ink-muted;
+		flex: 0 0 auto;
+	}
+
+	// Grouped fields (radio / toggle) — bordered card, flush rows, no gaps.
+	&__option-group {
+		border: 1px solid wd.$border;
+		border-radius: wd.$radius-sm;
+		overflow: hidden;
+		background: wd.$surface;
+
+		// Standalone groups (e.g. the wizard's consecutive-toggle group) carry
+		// their own vertical rhythm; inside a FieldRow the row supplies spacing.
+		&--standalone {
+			margin-top: wd.$gap-lg;
+
+			&:first-child {
+				margin-top: wd.$gap-xs;
+			}
+		}
+
+		.components-radio-control__group-wrapper {
+			gap: 0 !important;
+		}
+
+		.components-radio-control__option {
+			display: flex;
+			align-items: flex-start;
+			gap: wd.$gap;
+			padding: 15px 17px;
+			margin: 0;
+			border-top: 1px solid wd.$divider;
+
+			&:first-child {
+				border-top: 0;
+			}
+
+			&:has( input:checked ) {
+				background: wd.$accent-soft-2;
+			}
+		}
+
+		.woodev-field__toggle-row {
+			border-top: 1px solid wd.$divider;
+
+			&:first-child {
+				border-top: 0;
+			}
+		}
+	}
+
+	// Custom square-ring radio indicator.
+	.components-radio-control__input[type="radio"] {
+		appearance: none;
+		-webkit-appearance: none;
+		width: 18px !important;
+		height: 18px !important;
+		min-width: 18px !important;
+		flex: 0 0 18px;
+		margin: 1px 8px 0 0;
+		padding: 0;
+		border: 2px solid wd.$line;
+		border-radius: 50%;
+		background: #fff;
+		position: relative;
+		cursor: pointer;
+		box-shadow: none;
+		transition: border-color 0.15s;
+
+		&:checked {
+			border-color: wd.$accent;
+
+			&::after {
+				content: "";
+				position: absolute;
+				top: 50%;
+				left: 50%;
+				transform: translate( -50%, -50% );
+				width: 8px;
+				height: 8px;
+				border-radius: 50%;
+				background: wd.$accent;
+			}
+		}
+	}
+
+	// Toggle rows (label/desc meta beside the WC-pill toggle).
+	&__toggle-row {
+		display: flex;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: 20px;
+		padding: 16px 17px;
+	}
+
+	&__toggle-meta {
+		flex: 1;
+	}
+
+	&__toggle-label {
+		font-size: 15px;
+		font-weight: 600;
+		color: wd.$ink;
+	}
+
+	&__toggle-desc {
+		font-size: 13px;
+		color: wd.$ink-muted;
+		margin-top: 3px;
+		line-height: 1.5;
+	}
+
+	// Richtext (contentEditable editor + toolbar).
+	&__richtext {
+		border: 1px solid wd.$line;
+		border-radius: wd.$radius-sm;
+		overflow: hidden;
+	}
+
+	&__richtext-toolbar {
+		display: flex;
+		gap: 2px;
+		padding: 6px 7px;
+		border-bottom: 1px solid #e6e7e9;
+		background: #f6f7f8;
+
+		button {
+			border: 0;
+			background: transparent;
+			width: 30px;
+			height: 30px;
+			border-radius: 6px;
+			cursor: pointer;
+			color: wd.$ink-muted;
+			font-size: 15px;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+
+			&:hover {
+				background: rgba( 0, 0, 0, 0.05 );
+			}
+
+			&.is-bold {
+				font-weight: 700;
+			}
+
+			&.is-italic {
+				font-style: italic;
+			}
+		}
+	}
+
+	&__richtext-editor {
+		padding: 13px 15px;
+		min-height: 84px;
+		font-size: 15px;
+		line-height: 1.65;
+		color: #2c3338;
+		outline: none;
+
+		&:empty::before {
+			content: attr( data-placeholder );
+			color: #9aa0a6;
+		}
+	}
+}

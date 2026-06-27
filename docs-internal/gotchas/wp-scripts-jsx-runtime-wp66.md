@@ -1,5 +1,12 @@
 # [build/js] `@wordpress/scripts` automatic JSX runtime requires WP ≥ 6.6 — use the classic runtime for WP 6.3+ support
 
+> **⚠️ SUPERSEDED (s36, 2026-06-27):** the framework minimum WP was raised to **6.6**,
+> so `react-jsx-runtime` is always available. `babel.config.js` was **deleted** and the
+> build now uses the **automatic** JSX runtime. New JSX files no longer need to import
+> `createElement`/`Fragment`. The historical detail below explains why the classic-runtime
+> hack existed (kept for context). The "must NOT contain react-jsx-runtime" rule no longer
+> applies — bundles with JSX syntax now legitimately depend on `react-jsx-runtime`.
+
 **Discovered:** 2026-06-11 (s8, S3.2 — caught by the GPT-5.5 critic on s6-p3 before any browser ever saw it)
 
 ## The trap

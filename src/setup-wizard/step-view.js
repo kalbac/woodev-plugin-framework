@@ -56,7 +56,7 @@ function renderFields( step, values, onChange ) {
 			blocks.push(
 				createElement(
 					'div',
-					{ key: `group-${ blocks.length }`, className: 'woodev-setup__option-group' },
+					{ key: `group-${ blocks.length }`, className: 'woodev-field__option-group woodev-field__option-group--standalone' },
 					group.items
 				)
 			);

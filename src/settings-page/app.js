@@ -1,16 +1,18 @@
 /**
- * Settings page root component — provider tabs over the aggregated schema with
- * per-tab save.
+ * Settings page root — provider folder-tabs over the aggregated schema, with
+ * per-provider section sub-tabs and per-provider save.
  *
- * Classic JSX runtime: createElement / Fragment used directly (no JSX).
+ * Rebuilt on the UI-kit (TabsNav + Card + FieldRow). Authored in JSX
+ * (automatic runtime — WP 6.6+).
  *
  * @package woodev-plugin-framework
  */
 
-import { createElement, Fragment, useState, useEffect } from '@wordpress/element';
+import { useState, useEffect } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
-import { Button, Notice, Spinner, TabPanel } from '@wordpress/components';
+import { Button, Notice, Spinner, Card, CardBody } from '@wordpress/components';
 import { fetchSchema, saveTab } from './rest';
+import TabsNav from '../components/tabs-nav';
 import SectionView from './section-view';
 
 export default function App() {
@@ -30,27 +32,27 @@ export default function App() {
 	}, [] );
 
 	if ( loadError ) {
-		return createElement(
-			Notice,
-			{ status: 'error', isDismissible: false },
-			loadError
+		return (
+			<Notice status="error" isDismissible={ false }>
+				{ loadError }
+			</Notice>
 		);
 	}
 
 	if ( null === tabs ) {
-		return createElement(
-			'div',
-			{ className: 'woodev-settings__loading' },
-			createElement( Spinner ),
-			createElement( 'span', null, __( 'Загрузка…', 'woodev-plugin-framework' ) )
+		return (
+			<div className="woodev-settings__loading">
+				<Spinner />
+				<span>{ __( 'Загрузка…', 'woodev-plugin-framework' ) }</span>
+			</div>
 		);
 	}
 
 	if ( 0 === tabs.length ) {
-		return createElement(
-			Notice,
-			{ status: 'info', isDismissible: false },
-			__( 'Нет доступных настроек.', 'woodev-plugin-framework' )
+		return (
+			<Notice status="info" isDismissible={ false }>
+				{ __( 'Нет доступных настроек.', 'woodev-plugin-framework' ) }
+			</Notice>
 		);
 	}
 
@@ -71,11 +73,9 @@ export default function App() {
 				setSaving( '' );
 				setSaved( providerId );
 
-				// Best-effort re-fetch so the UI reflects the persisted (possibly
-				// coerced/sanitized) values. A refresh failure must NOT be reported
-				// as a save failure — the save already succeeded. Only clear the
-				// tab's local edits once the refresh lands, so a failed refresh
-				// still shows the user the values they entered.
+				// Best-effort re-fetch so the UI reflects persisted (coerced) values.
+				// A refresh failure must NOT be reported as a save failure. Clear the
+				// tab's local edits only once the refresh lands.
 				fetchSchema()
 					.then( ( res ) => {
 						if ( res && res.tabs ) {
@@ -98,68 +98,59 @@ export default function App() {
 			} );
 	};
 
-	const tabOptions = tabs.map( ( tab ) => ( { name: tab.id, title: tab.label } ) );
+	const renderSection = ( tab, sectionId ) => {
+		const section = tab.sections.find( ( s ) => s.id === sectionId ) || tab.sections[ 0 ];
+		const values = edits[ tab.id ] || {};
 
-	return createElement(
-		'div',
-		{ className: 'woodev-settings' },
-		createElement(
-			TabPanel,
-			{
-				className: 'woodev-settings__tabs',
-				tabs: tabOptions,
-				// Clear cross-tab save notices when switching tabs.
-				onSelect: () => {
+		return (
+			<Card className="woodev-settings__card">
+				<CardBody>
+					{ saveError && '' === saving && (
+						<Notice status="error" onRemove={ () => setSaveError( '' ) }>
+							{ saveError }
+						</Notice>
+					) }
+					{ saved === tab.id && (
+						<Notice
+							status="success"
+							isDismissible={ true }
+							onRemove={ () => setSaved( '' ) }
+						>
+							{ __( 'Настройки сохранены.', 'woodev-plugin-framework' ) }
+						</Notice>
+					) }
+					<SectionView
+						section={ section }
+						values={ values }
+						onFieldChange={ ( settingId, value ) =>
+							onFieldChange( tab.id, settingId, value )
+						}
+					/>
+					<div className="woodev-settings__actions">
+						<Button
+							variant="primary"
+							isBusy={ saving === tab.id }
+							disabled={ saving === tab.id }
+							onClick={ () => onSave( tab.id ) }
+						>
+							{ __( 'Сохранить', 'woodev-plugin-framework' ) }
+						</Button>
+					</div>
+				</CardBody>
+			</Card>
+		);
+	};
+
+	return (
+		<div className="woodev-settings">
+			<TabsNav
+				tabs={ tabs }
+				renderSection={ renderSection }
+				onTabChange={ () => {
 					setSaveError( '' );
 					setSaved( '' );
-				},
-			},
-			( tabOption ) => {
-				const tab = tabs.find( ( t ) => t.id === tabOption.name );
-				const values = edits[ tab.id ] || {};
-
-				return createElement(
-					Fragment,
-					null,
-					saveError &&
-						'' === saving &&
-						createElement(
-							Notice,
-							{ status: 'error', onRemove: () => setSaveError( '' ) },
-							saveError
-						),
-					saved === tab.id &&
-						createElement(
-							Notice,
-							{
-								status: 'success',
-								isDismissible: true,
-								onRemove: () => setSaved( '' ),
-							},
-							__( 'Настройки сохранены.', 'woodev-plugin-framework' )
-						),
-					createElement( SectionView, {
-						tab,
-						values,
-						onFieldChange: ( settingId, value ) =>
-							onFieldChange( tab.id, settingId, value ),
-					} ),
-					createElement(
-						'div',
-						{ className: 'woodev-settings__actions' },
-						createElement(
-							Button,
-							{
-								variant: 'primary',
-								isBusy: saving === tab.id,
-								disabled: saving === tab.id,
-								onClick: () => onSave( tab.id ),
-							},
-							__( 'Сохранить', 'woodev-plugin-framework' )
-						)
-					)
-				);
-			}
-		)
+				} }
+			/>
+		</div>
 	);
 }

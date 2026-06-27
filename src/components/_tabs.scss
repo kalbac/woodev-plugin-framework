@@ -1,0 +1,45 @@
+// Woodev UI-kit — sub-tab link bar (level 2, under the folder provider tabs).
+//
+// @use '../components/tabs';
+//
+// @package woodev-plugin-framework
+
+@use './tokens' as wd;
+
+.woodev-subtabs {
+	display: flex;
+	flex-wrap: wrap;
+	gap: wd.$gap-lg;
+	margin: 0 0 wd.$gap-lg;
+	padding: 0 0 2px;
+	border-bottom: 1px solid wd.$divider;
+
+	&__link {
+		appearance: none;
+		border: 0;
+		background: transparent;
+		padding: 8px 2px;
+		margin-bottom: -3px;
+		font-size: 14px;
+		font-weight: 500;
+		color: wd.$muted;
+		cursor: pointer;
+		border-bottom: 2px solid transparent;
+		transition: color 0.15s, border-color 0.15s;
+
+		&:hover {
+			color: wd.$accent-strong;
+		}
+
+		&.is-active {
+			color: wd.$accent-ink;
+			border-bottom-color: wd.$accent;
+			font-weight: 600;
+		}
+
+		&:focus-visible {
+			outline: 2px solid wd.$accent;
+			outline-offset: 2px;
+		}
+	}
+}

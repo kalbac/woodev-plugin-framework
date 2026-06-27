@@ -216,6 +216,13 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 				$admin_pages = $this->load_class( '/woodev/admin/class-admin-pages.php', 'Woodev_Admin_Pages' );
 				$admin_pages->instance( $this );
 
+				// Dev-only UI-kit gallery — registered once, only when explicitly enabled.
+				// Static gate first so no object is built (and the class file is only
+				// autoloaded) when the gallery is off.
+				if ( \Woodev\Framework\Admin\Ui_Kit_Gallery_Page::is_enabled() ) {
+					( new \Woodev\Framework\Admin\Ui_Kit_Gallery_Page( $this ) )->add_hooks();
+				}
+
 				self::$admin_pages_initialized = true;
 			}
 		}

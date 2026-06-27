@@ -8,6 +8,14 @@
  * prints style-index.css + wp-components).
  */
 
+// Shared UI-kit: tokens + recolor + neutral field anatomy. control-field now
+// renders neutral `woodev-field__*` classes — they are styled by `_field.scss`.
+// The legacy `woodev-setup__field*` blocks below are dead (nothing renders them)
+// and will be removed when the wizard is fully migrated to the kit (UK-4).
+@use '../components/tokens' as wd;
+@use '../components/wp-recolor';
+@use '../components/field';
+
 // ---- Design tokens (woodev.ru muted cyan) ---------------------------------
 $wd-accent: #06aedd;
 $wd-accent-strong: #0596c4;

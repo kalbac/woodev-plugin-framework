@@ -1,0 +1,56 @@
+/**
+ * UI-kit gallery styles — shows kit components on a neutral page. Reuses the kit
+ * partials and the settings horizontal field grid.
+ *
+ * @package woodev-plugin-framework
+ */
+
+@use '../components/tokens' as wd;
+@use '../components/wp-recolor';
+@use '../components/field';
+@use '../components/tabs';
+
+.woodev-gallery {
+	max-width: 900px;
+
+	&__card {
+		margin: wd.$gap-lg 0;
+	}
+
+	&__heading {
+		font-size: 16px;
+		font-weight: 600;
+		margin: 0 0 wd.$gap-lg;
+		padding-bottom: wd.$gap-sm;
+		border-bottom: 1px solid wd.$divider;
+		color: wd.$accent-ink;
+	}
+
+	&__note {
+		color: wd.$muted;
+		font-size: 14px;
+	}
+
+	// Horizontal field rows (same as settings).
+	.woodev-field {
+		display: grid;
+		grid-template-columns: wd.$label-col minmax( 0, wd.$control-col );
+		align-items: start;
+		gap: wd.$gap-lg;
+		margin: 0;
+		padding: wd.$gap 0;
+	}
+
+	.woodev-field__label {
+		margin-bottom: 0;
+		padding-top: 6px;
+	}
+
+	.woodev-field__control {
+		min-width: 0;
+	}
+
+	.woodev-field__toggle-row {
+		padding: wd.$gap 0;
+	}
+}

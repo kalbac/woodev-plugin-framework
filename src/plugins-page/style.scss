@@ -9,8 +9,10 @@
  * @package woodev-plugin-framework
  */
 
-$wd-accent: #00c9fd;
-$wd-accent-strong: #06aedd;
+// Canonical brand cyan (s36 UI-kit) — unified with tokens.scss ($accent).
+// Full migration to @use tokens is UK-2; here we only kill the divergent cyan.
+$wd-accent: #06aedd;
+$wd-accent-strong: #0596c4;
 $wd-accent-ink: #04303d;
 $wd-ink: #1d2327;
 $wd-muted: #646970;
