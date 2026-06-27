@@ -35,7 +35,8 @@ function writeUrl( tab, section ) {
 	const p = new URLSearchParams( window.location.search );
 	p.set( 'tab', tab );
 	p.set( 'section', section );
-	window.history.replaceState( {}, '', `${ window.location.pathname }?${ p.toString() }` );
+	// Preserve any existing hash (e.g. an embedding surface's anchor state).
+	window.history.replaceState( {}, '', `${ window.location.pathname }?${ p.toString() }${ window.location.hash }` );
 }
 
 /**
@@ -46,12 +47,15 @@ function writeUrl( tab, section ) {
  * @return {JSX.Element} the navigation.
  */
 export default function TabsNav( { tabs, renderSection, onTabChange } ) {
-	const initial = readUrl();
-	const initialTab = tabs.find( ( t ) => t.id === initial.tab ) ? initial.tab : tabs[ 0 ].id;
-
-	// Per-tab active section (lazily defaulted to each tab's first section, or the
-	// deep-linked section when it belongs to the deep-linked tab).
+	// Hooks run unconditionally (rules-of-hooks); the empty-tabs guard is a render
+	// decision AFTER the hooks. Shared component: callers may render during loading
+	// or after capability filtering, so an empty list must not throw.
 	const [ activeSection, setActiveSection ] = useState( {} );
+	const hasTabs = Array.isArray( tabs ) && tabs.length > 0;
+	const initial = readUrl();
+	const initialTab = hasTabs
+		? ( tabs.find( ( t ) => t.id === initial.tab ) ? initial.tab : tabs[ 0 ].id )
+		: '';
 
 	const sectionFor = ( tab ) => {
 		if ( activeSection[ tab.id ] ) {
@@ -68,10 +72,17 @@ export default function TabsNav( { tabs, renderSection, onTabChange } ) {
 
 	// On mount, make the URL explicit so it is shareable even on first load.
 	useEffect( () => {
+		if ( ! hasTabs ) {
+			return;
+		}
 		const tab = tabs.find( ( t ) => t.id === initialTab );
 		writeUrl( initialTab, sectionFor( tab ) );
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [] );
+
+	if ( ! hasTabs ) {
+		return null;
+	}
 
 	return (
 		<TabPanel

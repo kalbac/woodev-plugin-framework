@@ -40,11 +40,13 @@ class Ui_Kit_Gallery_Page {
 	/**
 	 * Whether the gallery is enabled (dev gate).
 	 *
+	 * Static so callers can gate BEFORE instantiating (no object created when off).
+	 *
 	 * @since 2.0.2
 	 *
 	 * @return bool
 	 */
-	public function is_enabled(): bool {
+	public static function is_enabled(): bool {
 		if ( defined( 'WOODEV_UI_KIT_GALLERY' ) && WOODEV_UI_KIT_GALLERY ) {
 			return true;
 		}
@@ -125,8 +127,10 @@ class Ui_Kit_Gallery_Page {
 		$asset      = file_exists( $asset_file )
 			? include $asset_file
 			: [
-				'dependencies' => [],
-				'version' => $this->plugin->get_version(),
+				// Realistic fallback so a missing manifest still loads a working bundle
+				// instead of a script with no wp.* deps.
+				'dependencies' => [ 'react-jsx-runtime', 'wp-components', 'wp-element', 'wp-i18n' ],
+				'version'      => $this->plugin->get_version(),
 			];
 
 		$build_url     = $this->plugin->get_framework_assets_url() . '/build/ui-kit-gallery';
