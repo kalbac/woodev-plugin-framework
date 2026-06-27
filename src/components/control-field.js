@@ -1,13 +1,12 @@
 /**
- * Setup Wizard — single field control.
+ * UI-kit — single field control.
  *
  * Renders one Settings-API field by its declared control-type, falling back to
  * legacy value-type inference when controlType is null (so existing plugins keep
- * working). Each field renders the anatomy:
- *   [ label + optional InfoIcon tooltip ] / [ optional description ] / [ control ]
+ * working). The field anatomy (label + tooltip + description + control) is laid
+ * out by the shared FieldRow; layout orientation is decided by the surface.
  *
- * Classic JSX runtime: createElement is imported and used directly (no JSX), so
- * no react/jsx-runtime handle is emitted (WP 6.3+ compatible).
+ * Classic createElement (works under the automatic JSX runtime too).
  *
  * @package woodev-plugin-framework
  */
@@ -20,9 +19,9 @@ import {
 	RadioControl,
 	RangeControl,
 	FormTokenField,
+	ComboboxControl,
 } from '@wordpress/components';
-import { InfoIcon } from './icons';
-import WizardDropdown from './dropdown';
+import FieldRow from './field-row';
 import WizardRichText from './richtext';
 
 /**
@@ -71,34 +70,7 @@ function resolveControl( schema ) {
 }
 
 /**
- * Renders the field label (with optional required marker + tooltip icon).
- *
- * @param {Object} schema field schema slice.
- * @return {Object|null} React element or null when there is no label.
- */
-function renderLabel( schema ) {
-	if ( ! schema.name ) {
-		return null;
-	}
-
-	return createElement(
-		'div',
-		{ className: 'woodev-setup__field-label' },
-		schema.name,
-		schema.required &&
-			createElement( 'span', { className: 'woodev-setup__field-req' }, '*' ),
-		schema.tooltip &&
-			createElement(
-				'span',
-				{ className: 'woodev-setup__field-tip', tabIndex: 0, role: 'img', 'aria-label': schema.tooltip },
-				createElement( InfoIcon ),
-				createElement( 'span', { className: 'woodev-setup__field-tip-bubble' }, schema.tooltip )
-			)
-	);
-}
-
-/**
- * Wraps a control with the field anatomy (label + description + control).
+ * Wraps a control with the shared field anatomy (label + tooltip + description).
  *
  * @param {Object} schema  field schema slice.
  * @param {Object} control rendered control element.
@@ -106,11 +78,13 @@ function renderLabel( schema ) {
  */
 function withAnatomy( schema, control ) {
 	return createElement(
-		'div',
-		{ className: 'woodev-setup__field' },
-		renderLabel( schema ),
-		schema.description &&
-			createElement( 'div', { className: 'woodev-setup__field-desc' }, schema.description ),
+		FieldRow,
+		{
+			label: schema.name,
+			required: schema.required,
+			tooltip: schema.tooltip,
+			description: schema.description,
+		},
 		control
 	);
 }
@@ -131,17 +105,16 @@ export default function ControlField( { schema, value, onChange } ) {
 	switch ( control ) {
 		case 'toggle':
 		case 'checkbox':
-			// Toggle rows are laid out by step-view's option-group; here we render
-			// the WC-pill toggle with its meta column.
+			// Toggle rows carry their own label/description meta beside the pill.
 			return createElement(
 				'div',
-				{ className: 'woodev-setup__toggle-row' },
+				{ className: 'woodev-field__toggle-row' },
 				createElement(
 					'div',
-					{ className: 'woodev-setup__toggle-meta' },
-					createElement( 'div', { className: 'woodev-setup__toggle-label' }, schema.name ),
+					{ className: 'woodev-field__toggle-meta' },
+					createElement( 'div', { className: 'woodev-field__toggle-label' }, schema.name ),
 					schema.description &&
-						createElement( 'div', { className: 'woodev-setup__toggle-desc' }, schema.description )
+						createElement( 'div', { className: 'woodev-field__toggle-desc' }, schema.description )
 				),
 				createElement( ToggleControl, {
 					__nextHasNoMarginBottom: true,
@@ -151,23 +124,27 @@ export default function ControlField( { schema, value, onChange } ) {
 			);
 
 		case 'select':
+			// Searchable combobox (zam.6): in-list filtering out of the box; the
+			// options array is fully controlled, so a plugin can feed it async.
 			return withAnatomy(
 				schema,
-				createElement( WizardDropdown, {
-					value: value ?? schema.value ?? '',
+				createElement( ComboboxControl, {
+					__nextHasNoMarginBottom: true,
+					__next40pxDefaultSize: true,
+					value: ( value ?? schema.value ?? '' ) === '' ? null : String( value ?? schema.value ),
 					options: normalizeOptions( schema.options ),
-					onChange,
+					onChange: ( next ) => onChange( next ?? '' ),
+					allowReset: false,
 				} )
 			);
 
 		case 'radio':
-			// Each radio field is self-contained: its own label + description above
-			// a bordered option-group holding the options.
+			// Self-contained: label + description above a bordered option-group.
 			return withAnatomy(
 				schema,
 				createElement(
 					'div',
-					{ className: 'woodev-setup__option-group' },
+					{ className: 'woodev-field__option-group' },
 					createElement( RadioControl, {
 						selected: value ?? schema.value ?? '',
 						options: normalizeOptions( schema.options ),
@@ -181,7 +158,7 @@ export default function ControlField( { schema, value, onChange } ) {
 				schema,
 				createElement(
 					'div',
-					{ className: 'woodev-setup__range-row' },
+					{ className: 'woodev-field__range-row' },
 					createElement( RangeControl, {
 						__nextHasNoMarginBottom: true,
 						value: Number( value ?? schema.value ?? 0 ),
@@ -191,7 +168,7 @@ export default function ControlField( { schema, value, onChange } ) {
 						onChange,
 					} ),
 					suffix &&
-						createElement( 'span', { className: 'woodev-setup__suffix' }, suffix )
+						createElement( 'span', { className: 'woodev-field__suffix' }, suffix )
 				)
 			);
 
@@ -272,9 +249,9 @@ export default function ControlField( { schema, value, onChange } ) {
 				suffix
 					? createElement(
 						'div',
-						{ className: 'woodev-setup__input-row' },
+						{ className: 'woodev-field__input-row' },
 						input,
-						createElement( 'span', { className: 'woodev-setup__suffix' }, suffix )
+						createElement( 'span', { className: 'woodev-field__suffix' }, suffix )
 					)
 					: input
 			);

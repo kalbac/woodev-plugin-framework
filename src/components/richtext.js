@@ -109,10 +109,10 @@ export default function WizardRichText( { value = '', onChange } ) {
 
 	return createElement(
 		'div',
-		{ className: 'woodev-setup__richtext' },
+		{ className: 'woodev-field__richtext' },
 		createElement(
 			'div',
-			{ className: 'woodev-setup__richtext-toolbar' },
+			{ className: 'woodev-field__richtext-toolbar' },
 			toolButton( {
 				label: 'B',
 				title: __( 'Полужирный', 'woodev-plugin-framework' ),
@@ -143,7 +143,7 @@ export default function WizardRichText( { value = '', onChange } ) {
 		),
 		createElement( 'div', {
 			ref: editorRef,
-			className: 'woodev-setup__richtext-editor',
+			className: 'woodev-field__richtext-editor',
 			contentEditable: true,
 			suppressContentEditableWarning: true,
 			role: 'textbox',
