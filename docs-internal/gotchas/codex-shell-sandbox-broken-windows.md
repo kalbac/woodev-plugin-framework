@@ -1,5 +1,15 @@
 # gotcha: codex exec shell-sandbox broken on this Windows box — run critics with an inline bundle
 
+> **⚠️ UPDATE (s36, 2026-06-27):** the Codex **companion auth/runtime** works
+> (`codex-companion.mjs setup --json` → `loggedIn: true`, `sessionRuntime.mode: "direct"`),
+> BUT the built-in reviewer (`codex-companion.mjs review --json`) STILL hits this exact
+> wall — it returned: *"every shell command, including the requested git diff, failed with
+> a sandbox CreateProcessAsUserW access error."* So the inner-sandbox shell is still broken
+> for any codex flow that shells out (review/adversarial-review). **The working path is the
+> INLINE BUNDLE below** — feed the full diff + spec IN the prompt and instruct NO SHELL.
+> This is the "run it differently" the operator meant. Auth being live just means you don't
+> need `!codex login`.
+
 **Namespace:** `[tooling/codex-critic]`
 **Discovered:** s10 (2026-06-12)
 
