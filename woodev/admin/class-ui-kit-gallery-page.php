@@ -124,7 +124,10 @@ class Ui_Kit_Gallery_Page {
 		$asset_file = $this->plugin->get_framework_path() . '/assets/build/ui-kit-gallery/index.asset.php';
 		$asset      = file_exists( $asset_file )
 			? include $asset_file
-			: [ 'dependencies' => [], 'version' => $this->plugin->get_version() ];
+			: [
+				'dependencies' => [],
+				'version' => $this->plugin->get_version(),
+			];
 
 		$build_url     = $this->plugin->get_framework_assets_url() . '/build/ui-kit-gallery';
 		$style_path    = $this->plugin->get_framework_path() . '/assets/build/ui-kit-gallery/style-index.css';
