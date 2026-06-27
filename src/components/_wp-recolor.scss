@@ -1,0 +1,64 @@
+// Recolor native @wordpress/components to the Woodev brand (cyan).
+//
+// @use '../components/wp-recolor';  (import for side-effect CSS only)
+//
+// Selectors verified against the rig DOM (WP 6.9). Where a native default uses
+// the WP accent, we override to wd.$accent. Folder-style tabs (zam.2) replace
+// the default underline with a folder cap.
+//
+// @package woodev-plugin-framework
+
+@use './tokens' as wd;
+
+// --- TabPanel: folder-style active tab (zam.2) -------------------------------
+.woodev-tabs {
+	.components-tab-panel__tabs {
+		border-bottom: 1px solid wd.$border;
+	}
+
+	.components-tab-panel__tabs-item {
+		border: 1px solid transparent;
+		border-bottom: none;
+		border-radius: wd.$radius-sm wd.$radius-sm 0 0;
+		margin-bottom: -1px;
+
+		&.is-active {
+			background: #fff;
+			border-color: wd.$border;
+			border-bottom: 1px solid #fff;
+			color: wd.$accent-ink;
+			box-shadow: none;
+
+			// Kill the default underline indicator.
+			&::after {
+				display: none;
+			}
+		}
+	}
+}
+
+// --- RangeControl: brand thumb + filled track (zam.8) -------------------------
+.components-range-control {
+	.components-range-control__track {
+		background-color: wd.$accent;
+	}
+
+	.components-range-control__thumb-wrapper .components-range-control__thumb {
+		background-color: wd.$accent;
+		border-color: wd.$accent;
+	}
+}
+
+// --- ComboboxControl + FormTokenField: brand focus/selection (zam.6, zam.9) ---
+.components-combobox-control__suggestions-container:focus-within {
+	box-shadow: 0 0 0 1px wd.$accent;
+	border-color: wd.$accent;
+}
+
+.components-form-token-field__token {
+	background: wd.$accent-soft;
+
+	.components-form-token-field__remove-token {
+		color: wd.$accent-ink;
+	}
+}

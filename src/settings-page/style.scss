@@ -4,6 +4,9 @@
  * @package woodev-plugin-framework
  */
 
+@use '../components/tokens' as wd;
+@use '../components/wp-recolor';
+
 .woodev-settings {
 	max-width: 920px;
 
@@ -32,6 +35,6 @@
 
 	// Brand cyan accent on the active tab (matches the s31 wizard tone).
 	.components-tab-panel__tabs-item.is-active {
-		box-shadow: inset 0 -2px 0 0 #06aedd;
+		box-shadow: inset 0 -2px 0 0 wd.$accent;
 	}
 }

@@ -1,0 +1,36 @@
+// Woodev UI-kit design tokens — single source of truth.
+//
+// @use this partial; never hardcode brand values elsewhere:
+//   @use '../components/tokens' as wd;  // then wd.$accent, wd.$radius, …
+//
+// @package woodev-plugin-framework
+
+// Brand accent (master cyan — canonical for all 4 admin surfaces).
+$accent:        #06aedd;
+$accent-strong: #0596c4;
+$accent-ink:    #04303d;
+$accent-soft:   rgba(6, 174, 221, 0.10);
+$accent-soft-2: rgba(6, 174, 221, 0.07);
+
+// Status colors (kept from the license page — not folded into the accent).
+$ok:    #00a32a;
+$warn:  #dba617;
+$error: #d63638;
+
+// Neutrals / layout.
+$divider:   #eef0f2;
+$border:    #dcdcde;
+$ink:       #1e1e1e;
+$ink-muted: #757575;
+$radius:    12px;
+$radius-sm: 8px;
+
+// Field metrics (WC-grounded, from PR #89).
+$label-col:   182px;
+$control-col: 425px;
+
+// Spacing scale.
+$gap-xs: 4px;
+$gap-sm: 8px;
+$gap:    12px;
+$gap-lg: 24px;
