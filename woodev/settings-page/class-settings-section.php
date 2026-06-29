@@ -30,16 +30,24 @@ final class Settings_Section {
 	/** @var string optional section description (shown under the sub-tab). */
 	private string $description;
 
+	/** @var bool whether this section is a self-contained connection block. */
+	private bool $is_connection = false;
+
+	/** @var string label for the block's primary action button (e.g. «Проверить»/«Подключить»). */
+	private string $action_label = '';
+
 	/**
 	 * Use the named constructor instead.
 	 *
 	 * @since 2.0.2
 	 */
-	private function __construct( string $id, string $label, array $setting_ids, string $description = '' ) {
-		$this->id          = $id;
-		$this->label       = $label;
-		$this->setting_ids = array_values( $setting_ids );
-		$this->description = $description;
+	private function __construct( string $id, string $label, array $setting_ids, string $description = '', bool $is_connection = false, string $action_label = '' ) {
+		$this->id            = $id;
+		$this->label         = $label;
+		$this->setting_ids   = array_values( $setting_ids );
+		$this->description   = $description;
+		$this->is_connection = $is_connection;
+		$this->action_label  = $action_label;
 	}
 
 	/**
@@ -47,14 +55,16 @@ final class Settings_Section {
 	 *
 	 * @since 2.0.2
 	 *
-	 * @param string   $id          section id.
-	 * @param string   $label       section label.
-	 * @param string[] $setting_ids referenced setting ids.
-	 * @param string   $description optional description shown under the sub-tab.
+	 * @param string   $id            section id.
+	 * @param string   $label         section label.
+	 * @param string[] $setting_ids   referenced setting ids.
+	 * @param string   $description   optional description shown under the sub-tab.
+	 * @param bool     $is_connection whether this section is a self-contained connection block.
+	 * @param string   $action_label  label for the block's primary action button.
 	 * @return self
 	 */
-	public static function create( string $id, string $label, array $setting_ids, string $description = '' ): self {
-		return new self( $id, $label, $setting_ids, $description );
+	public static function create( string $id, string $label, array $setting_ids, string $description = '', bool $is_connection = false, string $action_label = '' ): self {
+		return new self( $id, $label, $setting_ids, $description, $is_connection, $action_label );
 	}
 
 	/**
@@ -99,5 +109,27 @@ final class Settings_Section {
 	 */
 	public function get_setting_ids(): array {
 		return $this->setting_ids;
+	}
+
+	/**
+	 * Whether this section is a self-contained connection block.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @return bool
+	 */
+	public function is_connection(): bool {
+		return $this->is_connection;
+	}
+
+	/**
+	 * Returns the primary action button label for a connection block.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @return string
+	 */
+	public function get_action_label(): string {
+		return $this->action_label;
 	}
 }

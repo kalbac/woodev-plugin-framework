@@ -20,4 +20,20 @@ class SettingsSectionTest extends TestCase {
 
 		$this->assertSame( [ 'a', 'b' ], $section->get_setting_ids() );
 	}
+
+	public function test_section_defaults_to_non_connection(): void {
+		$section = Settings_Section::create( 'general', 'Общие', [ 'a' ] );
+
+		$this->assertFalse( $section->is_connection() );
+		$this->assertSame( '', $section->get_action_label() );
+	}
+
+	public function test_connection_section_carries_action_label(): void {
+		$section = Settings_Section::create(
+			'api', 'Подключение', [ 'token' ], 'Креды API.', true, 'Проверить'
+		);
+
+		$this->assertTrue( $section->is_connection() );
+		$this->assertSame( 'Проверить', $section->get_action_label() );
+	}
 }
