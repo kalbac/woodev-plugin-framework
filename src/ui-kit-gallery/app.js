@@ -14,8 +14,8 @@ import TabsNav from '../components/tabs-nav';
 
 const FIELD_SPECS = [
 	{ id: 'text', name: 'Текстовое поле', controlType: 'text', description: 'Обычный однострочный ввод.', tooltip: 'Это длинная подсказка, которая раньше обрезалась за краем экрана; теперь она в портале и переносится корректно.', value: 'Карьер №1' },
-	{ id: 'select', name: 'Выпадающий список (поиск)', controlType: 'select', description: 'ComboboxControl — поиск внутри списка.', options: { msk: 'Москва', spb: 'Санкт-Петербург', nsk: 'Новосибирск', ekb: 'Екатеринбург', kzn: 'Казань' }, value: 'spb' },
-	{ id: 'multi', name: 'Мультивыбор', controlType: 'multiselect', description: 'FormTokenField — несколько значений.', options: { a: 'Самовывоз', b: 'Курьер', c: 'Почта', d: 'Постамат' }, value: [ 'a', 'b' ] },
+	{ id: 'select', name: 'Выпадающий список (поиск)', controlType: 'select', description: 'WC-стиль: кнопка + поиск в выпадающем списке.', options: { msk: 'Москва', spb: 'Санкт-Петербург', nsk: 'Новосибирск', ekb: 'Екатеринбург', kzn: 'Казань' }, value: 'spb' },
+	{ id: 'multi', name: 'Мультивыбор', controlType: 'multiselect', description: 'Как выпадающий список, но можно выбрать несколько.', options: { a: 'Самовывоз', b: 'Курьер', c: 'Почта', d: 'Постамат' }, value: [ 'a', 'b' ] },
 	{ id: 'range', name: 'Наценка', controlType: 'range', description: 'Слайдер с суффиксом.', min: 0, max: 100, step: 5, suffix: '%', value: 25 },
 	{ id: 'textarea', name: 'Многострочное', controlType: 'textarea', value: 'Несколько\nстрок текста.' },
 	{ id: 'richtext', name: 'Форматированный текст', controlType: 'richtext', description: 'contentEditable с тулбаром.', value: '<b>Жирный</b> и <i>курсив</i>.' },

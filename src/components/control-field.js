@@ -11,18 +11,67 @@
  * @package woodev-plugin-framework
  */
 
-import { createElement } from '@wordpress/element';
+import { createElement, useState } from '@wordpress/element';
 import {
 	TextControl,
 	TextareaControl,
 	ToggleControl,
 	RadioControl,
 	RangeControl,
-	FormTokenField,
-	ComboboxControl,
 } from '@wordpress/components';
 import FieldRow from './field-row';
+import SelectField from './select-field';
 import WizardRichText from './richtext';
+
+/**
+ * Password input with a show/hide eye toggle.
+ *
+ * @param {Object}   props          component props.
+ * @param {string}   props.value    current value.
+ * @param {Function} props.onChange change handler.
+ * @return {Object} React element.
+ */
+function PasswordControl( { value, onChange } ) {
+	const [ show, setShow ] = useState( false );
+
+	return createElement(
+		'div',
+		{ className: 'woodev-field__password' },
+		createElement( TextControl, {
+			__nextHasNoMarginBottom: true,
+			type: show ? 'text' : 'password',
+			value: value ?? '',
+			onChange,
+		} ),
+		createElement(
+			'button',
+			{
+				type: 'button',
+				className: 'woodev-field__password-toggle',
+				onClick: () => setShow( ( s ) => ! s ),
+				'aria-label': show ? 'Скрыть' : 'Показать',
+				'aria-pressed': show,
+			},
+			createElement(
+				'svg',
+				{ width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', 'aria-hidden': true },
+				show
+					? createElement( 'path', {
+						d: 'M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7zm10 3a3 3 0 100-6 3 3 0 000 6zM3 3l18 18',
+						stroke: 'currentColor',
+						'stroke-width': 2,
+						'stroke-linecap': 'round',
+					} )
+					: createElement( 'path', {
+						d: 'M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7zm10 3a3 3 0 100-6 3 3 0 000 6z',
+						stroke: 'currentColor',
+						'stroke-width': 2,
+						'stroke-linecap': 'round',
+					} )
+			)
+		)
+	);
+}
 
 /**
  * Normalizes a schema's options ({key:label} object OR array) into a list of
@@ -124,17 +173,13 @@ export default function ControlField( { schema, value, onChange } ) {
 			);
 
 		case 'select':
-			// Searchable combobox (zam.6): in-list filtering out of the box; the
-			// options array is fully controlled, so a plugin can feed it async.
+			// WC-style dropdown with search (zam.6): trigger button + popover list.
 			return withAnatomy(
 				schema,
-				createElement( ComboboxControl, {
-					__nextHasNoMarginBottom: true,
-					__next40pxDefaultSize: true,
-					value: ( value ?? schema.value ?? '' ) === '' ? null : String( value ?? schema.value ),
+				createElement( SelectField, {
+					value: value ?? schema.value ?? '',
 					options: normalizeOptions( schema.options ),
 					onChange: ( next ) => onChange( next ?? '' ),
-					allowReset: false,
 				} )
 			);
 
@@ -193,29 +238,17 @@ export default function ControlField( { schema, value, onChange } ) {
 			);
 
 		case 'multiselect': {
-			const opts = normalizeOptions( schema.options );
-			const labelByValue = {};
-			const valueByLabel = {};
-			opts.forEach( ( option ) => {
-				labelByValue[ String( option.value ) ] = option.label;
-				valueByLabel[ option.label ] = option.value;
-			} );
-
+			// Same WC-style dropdown as select, but multiple values (zam.9).
 			const raw = value ?? schema.value;
 			const current = Array.isArray( raw ) ? raw : ( raw ? [ raw ] : [] );
-			const tokenValue = current.map( ( v ) => labelByValue[ String( v ) ] ?? String( v ) );
 
 			return withAnatomy(
 				schema,
-				createElement( FormTokenField, {
-					__nextHasNoMarginBottom: true,
-					__next40pxDefaultSize: true,
-					__experimentalShowHowTo: false,
-					value: tokenValue,
-					suggestions: opts.map( ( option ) => option.label ),
-					onChange: ( tokens ) =>
-						onChange( tokens.map( ( token ) => ( token in valueByLabel ? valueByLabel[ token ] : token ) ) ),
-					label: '',
+				createElement( SelectField, {
+					value: current,
+					options: normalizeOptions( schema.options ),
+					multi: true,
+					onChange,
 				} )
 			);
 		}
@@ -231,13 +264,18 @@ export default function ControlField( { schema, value, onChange } ) {
 				} )
 			);
 
-		case 'email':
 		case 'password':
+			return withAnatomy(
+				schema,
+				createElement( PasswordControl, { value, onChange } )
+			);
+
+		case 'email':
 		case 'number':
 		case 'date':
 		case 'text':
 		default: {
-			const type = [ 'email', 'password', 'number', 'date' ].includes( control ) ? control : 'text';
+			const type = [ 'email', 'number', 'date' ].includes( control ) ? control : 'text';
 			const input = createElement( TextControl, {
 				__nextHasNoMarginBottom: true,
 				type,

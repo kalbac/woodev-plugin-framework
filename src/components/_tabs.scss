@@ -11,8 +11,15 @@
 	flex-wrap: wrap;
 	gap: wd.$gap-lg;
 	margin: 0 0 wd.$gap-lg;
-	padding: 0 0 2px;
+	padding: 1rem 0;
 	border-bottom: 1px solid wd.$divider;
+
+	// Reserve the bar's full height so the following block never overlaps it.
+	&::after {
+		content: "";
+		display: table;
+		clear: both;
+	}
 
 	&__link {
 		appearance: none;

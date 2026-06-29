@@ -69,10 +69,16 @@
 	&__range-row {
 		display: flex;
 		align-items: center;
-		gap: 11px;
+		gap: wd.$gap-sm;
+	}
+
+	// A plain input with a unit keeps the input compact so the suffix sits next
+	// to it, not orphaned at the far right (zam.5 follow-up).
+	&__input-row {
+		justify-content: flex-start;
 
 		.components-base-control {
-			flex: 1;
+			flex: 0 0 auto;
 		}
 	}
 
@@ -244,4 +250,236 @@
 			color: #9aa0a6;
 		}
 	}
+
+	// Range row (zam.6): stretch the slider, pin the value input next to the suffix.
+	&__range-row {
+		.components-range-control {
+			flex: 1;
+		}
+
+		.components-range-control__root {
+			display: flex;
+			align-items: center;
+			gap: wd.$gap;
+			width: 100%;
+		}
+
+		// The slider rail grows to fill; the number input stays compact and is
+		// pushed to the right edge so the suffix sits right next to it (zam.4).
+		.components-range-control__wrapper {
+			flex: 1 1 0;
+			min-width: 0;
+			margin: 0;
+		}
+
+		.components-range-control__number {
+			flex: 0 0 auto;
+			margin: 0;
+		}
+
+		.woodev-field__suffix {
+			flex: 0 0 auto;
+			margin-left: 0;
+		}
+	}
+
+	// Number inputs are narrow — most numeric params need little space (zam.8).
+	input[type="number"] {
+		max-width: 150px;
+	}
+
+	// Color picker: a filled 1:1 square with the swatch covering the whole area.
+	input[type="color"].components-text-control__input {
+		width: calc( 1rem * 2 );
+		height: calc( 1rem * 2 );
+		padding: 0;
+		border-radius: wd.$radius-sm;
+		overflow: hidden;
+		cursor: pointer;
+
+		&::-webkit-color-swatch-wrapper {
+			padding: 0;
+		}
+
+		&::-webkit-color-swatch {
+			border: none;
+			border-radius: wd.$radius-sm;
+		}
+
+		&::-moz-color-swatch {
+			border: none;
+			border-radius: wd.$radius-sm;
+		}
+	}
+
+	// Toggle meta needs inner horizontal breathing room (zam.9).
+	&__toggle-meta {
+		padding: 0 1rem;
+	}
+
+	// Password field with eye toggle (zam.10).
+	&__password {
+		position: relative;
+
+		.components-text-control__input {
+			padding-right: 40px;
+		}
+	}
+
+	&__password-toggle {
+		position: absolute;
+		right: 8px;
+		top: 50%;
+		transform: translateY( -50% );
+		display: flex;
+		align-items: center;
+		padding: 4px;
+		border: 0;
+		background: none;
+		color: wd.$muted;
+		cursor: pointer;
+
+		&:hover,
+		&:focus {
+			color: wd.$accent;
+			outline: none;
+		}
+	}
+}
+
+// Radio group: drop the empty fieldset legend that adds a top gap before the
+// first (possibly selected) option (zam.9).
+.woodev-field__option-group .components-radio-control > legend:empty {
+	display: none;
+	margin: 0;
+	padding: 0;
+}
+
+// Uniform 40px control height across inputs/selects (batch-2 #1).
+.components-input-control__container,
+.woodev-select__trigger {
+	min-height: 40px;
+}
+
+// TextControl ships a fixed 32px height — override it with a more specific
+// selector (the color swatch resets its own size below, more specific still).
+.woodev-field .components-text-control__input {
+	height: 40px;
+}
+
+// WC-style SelectField (batch-2 #2/#3): trigger button + search popover.
+.woodev-select {
+	display: block;
+
+	&__trigger {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: wd.$gap;
+		width: 100%;
+		padding: 0 12px;
+		border: 1px solid wd.$line;
+		border-radius: wd.$radius-sm;
+		background: #fff;
+		font-size: 14px;
+		color: wd.$ink;
+		cursor: pointer;
+		text-align: left;
+		box-shadow: 0 1px 2px rgba( 0, 0, 0, 0.05 );
+		transition: border-color 0.15s, box-shadow 0.15s;
+
+		&:hover {
+			border-color: wd.$accent;
+		}
+
+		&.is-open {
+			border-color: wd.$accent;
+			box-shadow: 0 0 0 1px wd.$accent;
+		}
+	}
+
+	&__value {
+		flex: 1;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+
+		&.is-placeholder {
+			color: wd.$muted;
+		}
+	}
+
+	&__chevron {
+		display: flex;
+		flex: 0 0 auto;
+		color: wd.$muted;
+		transition: transform 0.15s;
+	}
+
+	&__trigger.is-open &__chevron {
+		transform: rotate( 180deg );
+	}
+
+	&__menu {
+		box-sizing: border-box;
+		padding: 10px;
+		min-width: 240px;
+	}
+
+	&__list {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		margin-top: 8px;
+		max-height: 260px;
+		overflow-y: auto;
+	}
+
+	&__option {
+		display: flex;
+		align-items: center;
+		gap: wd.$gap-sm;
+		width: 100%;
+		padding: 9px 10px;
+		border: 0;
+		border-radius: 6px;
+		background: transparent;
+		font-size: 14px;
+		color: wd.$ink;
+		cursor: pointer;
+		text-align: left;
+
+		&:hover {
+			background: wd.$accent-soft-2;
+		}
+
+		&.is-selected {
+			background: wd.$accent-soft;
+			color: wd.$accent-ink;
+			font-weight: 600;
+		}
+	}
+
+	&__check {
+		display: flex;
+		flex: 0 0 18px;
+		width: 18px;
+		color: wd.$accent;
+	}
+
+	&__option-label {
+		flex: 1;
+	}
+
+	&__empty {
+		padding: 10px;
+		color: wd.$muted;
+		font-size: 13px;
+	}
+}
+
+.woodev-select__popover .components-popover__content {
+	padding: 0;
+	border-radius: wd.$radius-sm;
+	box-shadow: 0 12px 32px rgba( 10, 30, 40, 0.16 );
 }

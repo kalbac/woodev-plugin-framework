@@ -62,3 +62,50 @@
 		color: wd.$accent-ink;
 	}
 }
+
+// --- Tooltip: fixed max width so long text wraps instead of one long line ----
+.components-tooltip,
+.components-tooltip .components-popover__content {
+	max-width: 260px;
+	white-space: normal;
+}
+
+// --- Inputs: subtle radius + shadow on every control (zam.3) -----------------
+.components-text-control__input,
+.components-textarea-control__input,
+.components-input-control__backdrop,
+.components-combobox-control__suggestions-container {
+	border-radius: wd.$radius-sm !important;
+}
+
+.components-text-control__input,
+.components-textarea-control__input {
+	box-shadow: 0 1px 2px rgba( 0, 0, 0, 0.05 );
+}
+
+.components-input-control__container {
+	border-radius: wd.$radius-sm;
+	box-shadow: 0 1px 2px rgba( 0, 0, 0, 0.05 );
+}
+
+// --- ComboboxControl + FormTokenField: open the list as an OVERLAY (zam.4,5) -
+// Default renders the suggestions inline, which pushes the page down. Float it.
+.components-combobox-control,
+.components-form-token-field {
+	position: relative;
+}
+
+.components-combobox-control .components-form-token-field__suggestions-list,
+.components-form-token-field__suggestions-list {
+	position: absolute;
+	z-index: 1000;
+	left: 0;
+	right: 0;
+	margin-top: 2px;
+	max-height: 240px;
+	overflow-y: auto;
+	background: #fff;
+	border: 1px solid wd.$border;
+	border-radius: wd.$radius-sm;
+	box-shadow: 0 8px 24px rgba( 10, 30, 40, 0.16 );
+}
