@@ -135,6 +135,7 @@ export default function App() {
 						</Notice>
 					) }
 					<SectionView
+						key={ `${ tab.id }:${ section.id }` }
 						providerId={ tab.id }
 						section={ section }
 						values={ values }

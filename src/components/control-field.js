@@ -26,19 +26,21 @@ import WizardRichText from './richtext';
 /**
  * Password input with a show/hide eye toggle.
  *
- * When `isSet` is true the field renders an empty input with a "saved"
- * placeholder (the stored secret is never sent to the client) plus a clear
- * affordance that wipes it explicitly.
+ * When `isSet` is true and the user has not typed anything, the input stays
+ * empty with a "saved" placeholder (the stored secret never reaches the client);
+ * typing a new value replaces it on save. The eye toggle appears only while
+ * there is a typed value to reveal — revealing an empty masked field shows
+ * nothing, so the toggle would be meaningless.
  *
  * @param {Object}   props          component props.
  * @param {string}   props.value    current value.
  * @param {Function} props.onChange change handler.
  * @param {boolean}  props.isSet    whether a secret is already stored.
- * @param {Function} props.onClear  explicit-wipe handler (optional).
  * @return {Object} React element.
  */
-function PasswordControl( { value, onChange, isSet, onClear } ) {
+function PasswordControl( { value, onChange, isSet } ) {
 	const [ show, setShow ] = useState( false );
+	const hasValue = '' !== ( value ?? '' );
 
 	return createElement(
 		'div',
@@ -46,47 +48,38 @@ function PasswordControl( { value, onChange, isSet, onClear } ) {
 		createElement( TextControl, {
 			__nextHasNoMarginBottom: true,
 			__next40pxDefaultSize: true,
-			type: show ? 'text' : 'password',
+			type: show && hasValue ? 'text' : 'password',
 			value: value ?? '',
-			placeholder: isSet ? '•••••• (сохранено)' : '',
+			placeholder: isSet && ! hasValue ? '•••••• сохранено — введите новое для замены' : '',
 			onChange,
 		} ),
-		createElement(
-			'button',
-			{
-				type: 'button',
-				className: 'woodev-field__password-toggle',
-				onClick: () => setShow( ( s ) => ! s ),
-				'aria-label': show ? 'Скрыть' : 'Показать',
-				'aria-pressed': show,
-			},
-			createElement(
-				'svg',
-				{ width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', 'aria-hidden': true },
-				show
-					? createElement( 'path', {
-						d: 'M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7zm10 3a3 3 0 100-6 3 3 0 000 6zM3 3l18 18',
-						stroke: 'currentColor',
-						strokeWidth: 2,
-						strokeLinecap: 'round',
-					} )
-					: createElement( 'path', {
-						d: 'M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7zm10 3a3 3 0 100-6 3 3 0 000 6z',
-						stroke: 'currentColor',
-						strokeWidth: 2,
-						strokeLinecap: 'round',
-					} )
-			)
-		),
-		isSet && onClear &&
+		hasValue &&
 			createElement(
 				'button',
 				{
 					type: 'button',
-					className: 'woodev-field__password-clear',
-					onClick: onClear,
+					className: 'woodev-field__password-toggle',
+					onClick: () => setShow( ( s ) => ! s ),
+					'aria-label': show ? 'Скрыть' : 'Показать',
+					'aria-pressed': show,
 				},
-				'Очистить'
+				createElement(
+					'svg',
+					{ width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', 'aria-hidden': true },
+					show
+						? createElement( 'path', {
+							d: 'M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7zm10 3a3 3 0 100-6 3 3 0 000 6zM3 3l18 18',
+							stroke: 'currentColor',
+							strokeWidth: 2,
+							strokeLinecap: 'round',
+						} )
+						: createElement( 'path', {
+							d: 'M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7zm10 3a3 3 0 100-6 3 3 0 000 6z',
+							stroke: 'currentColor',
+							strokeWidth: 2,
+							strokeLinecap: 'round',
+						} )
+				)
 			)
 	);
 }
@@ -183,7 +176,8 @@ export default function ControlField( { schema, value, onChange } ) {
 		);
 	}
 
-	// A sensitive value is masked: empty input + "saved" placeholder + clear.
+	// A sensitive value is masked: empty input + "saved" placeholder; typing a new
+	// value replaces it on save (an untouched empty field is never sent).
 	if ( schema.sensitive ) {
 		return withAnatomy(
 			schema,
@@ -191,7 +185,6 @@ export default function ControlField( { schema, value, onChange } ) {
 				value: value ?? '',
 				isSet: !! schema.is_set,
 				onChange,
-				onClear: () => onChange( '' ),
 			} )
 		);
 	}

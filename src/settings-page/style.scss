@@ -117,15 +117,3 @@
 
 	&-note { color: wd.$muted; }
 }
-
-.woodev-field__password-clear {
-	appearance: none;
-	background: none;
-	border: 0;
-	margin-left: wd.$gap-sm;
-	color: wd.$muted;
-	cursor: pointer;
-	font-size: 12px;
-
-	&:hover { color: wd.$accent-strong; }
-}

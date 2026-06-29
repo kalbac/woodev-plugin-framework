@@ -31,6 +31,13 @@ export default function ConnectionBlock( { providerId, section, values, onFieldC
 			.finally( () => setBusy( false ) );
 	};
 
+	// An ephemeral test result goes stale the moment a credential changes — drop
+	// it so a prior "success" never lingers next to edited fields.
+	const handleFieldChange = ( settingId, next ) => {
+		setResult( null );
+		onFieldChange( settingId, next );
+	};
+
 	// Gate the action button on every field being satisfied. A handshake block
 	// (no fields) is vacuously satisfied → always enabled. A masked secret that
 	// is already saved (is_set) or backed by a wp-config constant counts as
@@ -57,7 +64,7 @@ export default function ConnectionBlock( { providerId, section, values, onFieldC
 					key={ settingId }
 					schema={ section.fields[ settingId ] }
 					value={ values[ settingId ] ?? section.fields[ settingId ].value }
-					onChange={ ( next ) => onFieldChange( settingId, next ) }
+					onChange={ ( next ) => handleFieldChange( settingId, next ) }
 				/>
 			) ) }
 			<div className="woodev-connection__action">
