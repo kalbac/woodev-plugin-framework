@@ -14,6 +14,8 @@
 namespace Woodev\Tests\Integration;
 
 use Woodev\Framework\Settings\Settings_Page_Registry;
+use Woodev\Framework\Settings\Settings_Provider;
+use Woodev\Framework\Settings\Settings_Section;
 use WP_REST_Request;
 
 class SettingsPageRestTest extends TestCase {
@@ -61,5 +63,130 @@ class SettingsPageRestTest extends TestCase {
 		$data = $response->get_data();
 		$ids  = array_column( is_array( $data ) ? ( $data['tabs'] ?? [] ) : [], 'id' );
 		$this->assertContains( 'quarry', $ids );
+	}
+
+	/**
+	 * An untouched (masked) secret must reach the test via the stored value.
+	 *
+	 * @return void
+	 */
+	public function test_test_connection_merges_stored_secret_for_untouched_field(): void {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+
+		// The provider's handler returns success only when it receives token === 'good'.
+		// Pre-store 'good'; POST an EMPTY body → the route must merge the stored secret.
+		$this->seed_provider_with_connection( 'good' );
+
+		$request = new WP_REST_Request( 'POST', '/woodev/v1/settings/carrier/connection/api/test' );
+		$request->set_param( 'values', [] ); // untouched: nothing typed.
+		$request->set_header( 'X-WP-Nonce', wp_create_nonce( 'wp_rest' ) );
+
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertTrue( $response->get_data()['success'] );
+	}
+
+	/**
+	 * A freshly typed value must override the stored secret.
+	 *
+	 * @return void
+	 */
+	public function test_test_connection_uses_posted_value_over_stored(): void {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+
+		$this->seed_provider_with_connection( 'good' ); // stored is good.
+
+		$request = new WP_REST_Request( 'POST', '/woodev/v1/settings/carrier/connection/api/test' );
+		$request->set_param( 'values', [ 'token' => 'bad' ] ); // user typed a wrong new token.
+		$request->set_header( 'X-WP-Nonce', wp_create_nonce( 'wp_rest' ) );
+
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertFalse( $response->get_data()['success'] );
+	}
+
+	/**
+	 * The action route enforces the provider capability (manage_options here).
+	 *
+	 * @return void
+	 */
+	public function test_test_connection_requires_capability(): void {
+		$this->seed_provider_with_connection( 'good' );
+
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'subscriber' ] ) );
+
+		$request = new WP_REST_Request( 'POST', '/woodev/v1/settings/carrier/connection/api/test' );
+		$request->set_header( 'X-WP-Nonce', wp_create_nonce( 'wp_rest' ) );
+
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertSame( 403, $response->get_status() );
+	}
+
+	/**
+	 * Registers a `carrier` provider whose handler implements the connection-test
+	 * seam (success iff token === 'good') and persists $stored into the token
+	 * option so get_value('token') returns it.
+	 *
+	 * Registered as a framework service (no owning plugin → neutral manage_options
+	 * capability), so a subscriber is correctly forbidden by the capability gate.
+	 *
+	 * @param string $stored value to persist into the connection's token secret.
+	 * @return void
+	 */
+	private function seed_provider_with_connection( string $stored ): void {
+		$handler = new class( 'carrier' ) extends \Woodev_Abstract_Settings implements \Woodev_Settings_Connection_Test {
+
+			/**
+			 * Registers a single sensitive token secret.
+			 *
+			 * @return void
+			 */
+			protected function register_settings() {
+				$this->register_setting(
+					'token',
+					\Woodev_Setting::TYPE_STRING,
+					[
+						'name'      => 'Token',
+						'sensitive' => true,
+						'default'   => '',
+					]
+				);
+			}
+
+			/**
+			 * Succeeds only when it receives token === 'good'.
+			 *
+			 * @param string              $connection_id connection section id.
+			 * @param array<string,mixed> $values        merged field values.
+			 * @return \Woodev_Connection_Result
+			 */
+			public function test_connection( string $connection_id, array $values ): \Woodev_Connection_Result {
+				return ( isset( $values['token'] ) && 'good' === $values['token'] )
+					? \Woodev_Connection_Result::success( 'OK' )
+					: \Woodev_Connection_Result::failure( 'Неверный токен.' );
+			}
+		};
+
+		// Persist the secret so an untouched-field test reads it back via get_value().
+		$handler->update_value( 'token', $stored );
+
+		$provider = Settings_Provider::create(
+			'carrier',
+			'Carrier',
+			$handler,
+			[
+				Settings_Section::create( 'api', 'API', [ 'token' ], '', true, 'Проверить' ),
+			]
+		);
+
+		$registry = Settings_Page_Registry::instance();
+		$registry->register_service( $provider );
+
+		// Rebuild the REST server so the freshly added route/provider are visible.
+		$GLOBALS['wp_rest_server'] = null;
+		rest_get_server();
 	}
 }
