@@ -135,6 +135,7 @@ export default function App() {
 						</Notice>
 					) }
 					<SectionView
+						providerId={ tab.id }
 						section={ section }
 						values={ values }
 						onFieldChange={ ( settingId, value ) =>

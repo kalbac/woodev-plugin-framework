@@ -40,3 +40,21 @@ export function saveTab( providerId, values ) {
 		data: { values },
 	} );
 }
+
+/**
+ * Tests one connection section's credentials.
+ *
+ * @param {string} providerId   tab/provider id.
+ * @param {string} connectionId connection section id.
+ * @param {Object} values       edited setting_id => value.
+ * @return {Promise<Object>} { success, message }
+ */
+export function testConnection( providerId, connectionId, values ) {
+	const { restRoot, nonce } = bootstrap();
+	return apiFetch( {
+		url: `${ restRoot }/${ providerId }/connection/${ connectionId }/test`,
+		method: 'POST',
+		headers: { 'X-WP-Nonce': nonce },
+		data: { values },
+	} );
+}

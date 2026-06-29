@@ -8,10 +8,22 @@
  */
 
 import ControlField from '../components/control-field';
+import ConnectionBlock from './connection-block';
 
-export default function SectionView( { section, values, onFieldChange } ) {
+export default function SectionView( { providerId, section, values, onFieldChange } ) {
 	if ( ! section ) {
 		return null;
+	}
+
+	if ( section.is_connection ) {
+		return (
+			<ConnectionBlock
+				providerId={ providerId }
+				section={ section }
+				values={ values }
+				onFieldChange={ onFieldChange }
+			/>
+		);
 	}
 
 	return (
