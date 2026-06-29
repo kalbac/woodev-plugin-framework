@@ -39,6 +39,7 @@ function PasswordControl( { value, onChange } ) {
 		{ className: 'woodev-field__password' },
 		createElement( TextControl, {
 			__nextHasNoMarginBottom: true,
+			__next40pxDefaultSize: true,
 			type: show ? 'text' : 'password',
 			value: value ?? '',
 			onChange,
@@ -59,14 +60,14 @@ function PasswordControl( { value, onChange } ) {
 					? createElement( 'path', {
 						d: 'M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7zm10 3a3 3 0 100-6 3 3 0 000 6zM3 3l18 18',
 						stroke: 'currentColor',
-						'stroke-width': 2,
-						'stroke-linecap': 'round',
+						strokeWidth: 2,
+						strokeLinecap: 'round',
 					} )
 					: createElement( 'path', {
 						d: 'M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7zm10 3a3 3 0 100-6 3 3 0 000 6z',
 						stroke: 'currentColor',
-						'stroke-width': 2,
-						'stroke-linecap': 'round',
+						strokeWidth: 2,
+						strokeLinecap: 'round',
 					} )
 			)
 		)
@@ -223,6 +224,7 @@ export default function ControlField( { schema, value, onChange } ) {
 				schema,
 				createElement( TextareaControl, {
 					__nextHasNoMarginBottom: true,
+					__next40pxDefaultSize: true,
 					value: value ?? '',
 					onChange,
 				} )
@@ -258,6 +260,7 @@ export default function ControlField( { schema, value, onChange } ) {
 				schema,
 				createElement( TextControl, {
 					__nextHasNoMarginBottom: true,
+					__next40pxDefaultSize: true,
 					type: 'color',
 					value: value ?? schema.value ?? '',
 					onChange,
@@ -278,6 +281,7 @@ export default function ControlField( { schema, value, onChange } ) {
 			const type = [ 'email', 'number', 'date' ].includes( control ) ? control : 'text';
 			const input = createElement( TextControl, {
 				__nextHasNoMarginBottom: true,
+				__next40pxDefaultSize: true,
 				type,
 				value: value ?? '',
 				onChange,

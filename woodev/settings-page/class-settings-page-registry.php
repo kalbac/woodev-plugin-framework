@@ -173,9 +173,10 @@ final class Settings_Page_Registry {
 
 		foreach ( $provider->get_sections() as $section ) {
 			$sections[] = [
-				'id'     => $section->get_id(),
-				'label'  => $section->get_label(),
-				'fields' => Field_Schema::from_handler( $handler, $section->get_setting_ids() ),
+				'id'          => $section->get_id(),
+				'label'       => $section->get_label(),
+				'description' => $section->get_description(),
+				'fields'      => Field_Schema::from_handler( $handler, $section->get_setting_ids() ),
 			];
 		}
 

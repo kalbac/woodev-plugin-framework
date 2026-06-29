@@ -16,6 +16,9 @@ export default function SectionView( { section, values, onFieldChange } ) {
 
 	return (
 		<div className="woodev-settings__section">
+			{ section.description && (
+				<p className="woodev-settings__section-desc">{ section.description }</p>
+			) }
 			{ Object.keys( section.fields ).map( ( settingId ) => (
 				<ControlField
 					key={ settingId }

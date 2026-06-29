@@ -21,6 +21,13 @@
 		padding: wd.$gap-lg 0;
 	}
 
+	&__section-desc {
+		margin: 0 0 wd.$gap-lg;
+		color: wd.$muted;
+		font-size: 14px;
+		line-height: 1.5;
+	}
+
 	&__card {
 		width: 100%;
 	}
@@ -28,6 +35,14 @@
 	&__actions {
 		margin-top: wd.$gap-lg;
 		// No divider above the actions (zam.5).
+	}
+
+	// Native WP snackbar notices, pinned bottom-left like core.
+	&__snackbars {
+		position: fixed;
+		bottom: 20px;
+		left: 20px;
+		z-index: 100000;
 	}
 
 	// Horizontal field rows: label column | control column (zam.5 — no per-field

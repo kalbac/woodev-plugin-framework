@@ -27,15 +27,19 @@ final class Settings_Section {
 	/** @var string[] referenced Woodev_Setting ids. */
 	private array $setting_ids;
 
+	/** @var string optional section description (shown under the sub-tab). */
+	private string $description;
+
 	/**
 	 * Use the named constructor instead.
 	 *
 	 * @since 2.0.2
 	 */
-	private function __construct( string $id, string $label, array $setting_ids ) {
+	private function __construct( string $id, string $label, array $setting_ids, string $description = '' ) {
 		$this->id          = $id;
 		$this->label       = $label;
 		$this->setting_ids = array_values( $setting_ids );
+		$this->description = $description;
 	}
 
 	/**
@@ -46,10 +50,22 @@ final class Settings_Section {
 	 * @param string   $id          section id.
 	 * @param string   $label       section label.
 	 * @param string[] $setting_ids referenced setting ids.
+	 * @param string   $description optional description shown under the sub-tab.
 	 * @return self
 	 */
-	public static function create( string $id, string $label, array $setting_ids ): self {
-		return new self( $id, $label, $setting_ids );
+	public static function create( string $id, string $label, array $setting_ids, string $description = '' ): self {
+		return new self( $id, $label, $setting_ids, $description );
+	}
+
+	/**
+	 * Returns the section description.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @return string
+	 */
+	public function get_description(): string {
+		return $this->description;
 	}
 
 	/**

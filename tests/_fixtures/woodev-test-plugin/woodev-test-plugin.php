@@ -329,8 +329,8 @@ function woodev_test_plugin_init() {
 					'Карьер',
 					$this->get_settings_handler(),
 					[
-						\Woodev\Framework\Settings\Settings_Section::create( 'general', 'Общие', [ 'api_key', 'mode' ] ),
-						\Woodev\Framework\Settings\Settings_Section::create( 'order', 'Форма заказа', [ 'enabled', 'markup', 'calc_type', 'methods', 'max_weight', 'comment', 'note' ] ),
+						\Woodev\Framework\Settings\Settings_Section::create( 'general', 'Общие', [ 'api_key', 'mode' ], 'Основные параметры подключения к API перевозчика.' ),
+						\Woodev\Framework\Settings\Settings_Section::create( 'order', 'Форма заказа', [ 'enabled', 'markup', 'calc_type', 'methods', 'max_weight', 'comment', 'note' ], 'Как тариф и способы доставки отображаются покупателю при оформлении.' ),
 						\Woodev\Framework\Settings\Settings_Section::create( 'misc', 'Прочее', [ 'manager_email', 'secret', 'brand_color', 'start_date' ] ),
 					],
 					[
