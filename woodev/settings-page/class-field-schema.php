@@ -35,16 +35,35 @@ final class Field_Schema {
 		foreach ( $handler->get_settings( $setting_ids ) as $setting ) {
 			$control = $setting->get_control();
 
+			// Mask secrets: sensitive fields and constant-backed fields never emit
+			// their stored value to the browser — only whether a value is present.
+			$constant_name    = $setting->get_constant_name();
+			$constant_managed = null !== $constant_name && defined( $constant_name );
+			$is_secret        = $setting->is_sensitive() || $constant_managed;
+			$stored           = $handler->get_value( $setting->get_id() );
+			$is_set           = '' !== (string) ( is_array( $stored ) ? implode( '', $stored ) : $stored );
+
 			$entry = [
 				'type'        => $setting->get_type(),
 				'name'        => $setting->get_name(),
 				'options'     => $setting->get_options(),
-				'value'       => $handler->get_value( $setting->get_id() ),
+				'value'       => $is_secret ? '' : $stored,
 				'is_multi'    => $setting->is_is_multi(),
 				'controlType' => $control ? $control->get_type() : null,
 				'description' => $control && $control->get_description() ? $control->get_description() : $setting->get_description(),
 				'tooltip'     => $control ? $control->get_tooltip() : '',
 			];
+
+			if ( $setting->is_sensitive() ) {
+				$entry['sensitive'] = true;
+			}
+			if ( $is_secret ) {
+				$entry['is_set'] = $is_set;
+			}
+			if ( $constant_managed ) {
+				$entry['constant_managed'] = true;
+				$entry['constant_name']    = $constant_name;
+			}
 
 			if ( $control && null !== $control->get_min() ) {
 				$entry['min'] = $control->get_min();

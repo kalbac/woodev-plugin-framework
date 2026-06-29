@@ -1,9 +1,14 @@
 <?php
 namespace Woodev\Tests\Unit;
 
+use Brain\Monkey\Functions;
 use Mockery;
 use Woodev\Framework\Settings\Field_Schema;
 
+require_once dirname( __DIR__, 2 ) . '/woodev/class-plugin-exception.php';
+require_once dirname( __DIR__, 2 ) . '/woodev/settings-api/class-control.php';
+require_once dirname( __DIR__, 2 ) . '/woodev/settings-api/class-setting.php';
+require_once dirname( __DIR__, 2 ) . '/woodev/settings-api/abstract-class-settings.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/settings-page/class-field-schema.php';
 
 class FieldSchemaTest extends TestCase {
@@ -17,8 +22,61 @@ class FieldSchemaTest extends TestCase {
 		$setting->shouldReceive( 'is_is_multi' )->andReturn( false );
 		$setting->shouldReceive( 'get_description' )->andReturn( 'desc ' . $id );
 		$setting->shouldReceive( 'get_control' )->andReturn( $control );
+		$setting->shouldReceive( 'is_sensitive' )->andReturn( false );
+		$setting->shouldReceive( 'get_constant_name' )->andReturn( null );
 
 		return $setting;
+	}
+
+	/**
+	 * Builds an anonymous settings handler whose register_settings() runs the
+	 * supplied closure, so settings can be registered and have values set
+	 * purely in memory (no WordPress DB).
+	 *
+	 * @param callable $register closure receiving the handler to register settings on.
+	 * @return \Woodev_Abstract_Settings
+	 */
+	private function make_handler( callable $register ): \Woodev_Abstract_Settings {
+
+		// Stub the WP plumbing the abstract handler touches during construction.
+		Functions\when( 'get_option' )->justReturn( null );
+		Functions\when( 'wp_parse_args' )->alias(
+			static function ( $args, $defaults = [] ) {
+				return array_merge( (array) $defaults, (array) $args );
+			}
+		);
+
+		return new class( 'test-plugin', $register ) extends \Woodev_Abstract_Settings {
+
+			/** @var callable */
+			private $register_cb;
+
+			/**
+			 * @param string   $id       handler ID.
+			 * @param callable $register closure registering settings.
+			 */
+			public function __construct( string $id, callable $register ) {
+				$this->register_cb = $register;
+				parent::__construct( $id );
+			}
+
+			/**
+			 * Runs the supplied registration closure.
+			 *
+			 * @return void
+			 */
+			protected function register_settings() {
+				( $this->register_cb )( $this );
+			}
+
+			/**
+			 * No-op save() — tests operate purely in memory.
+			 *
+			 * @param string $setting_id setting ID.
+			 * @return void
+			 */
+			public function save( $setting_id = '' ) {}
+		};
 	}
 
 	public function test_builds_entry_with_control_metadata(): void {
@@ -83,5 +141,72 @@ class FieldSchemaTest extends TestCase {
 
 		$this->assertNull( $schema['plain']['controlType'] );
 		$this->assertSame( 'desc plain', $schema['plain']['description'] );
+	}
+
+	/**
+	 * A sensitive field must be masked but still report it has a stored value.
+	 *
+	 * @return void
+	 */
+	public function test_sensitive_field_is_masked_with_is_set_flag(): void {
+		$handler = $this->make_handler(
+			static function ( $h ): void {
+				$h->register_setting( 'token', \Woodev_Setting::TYPE_STRING, [ 'name' => 'Токен', 'sensitive' => true ] );
+			}
+		);
+
+		// Stored AFTER construction: load_settings() runs inside the ctor and would
+		// otherwise clobber an in-closure value with the (null) get_option result.
+		$handler->get_setting( 'token' )->set_value( 's3cr3t' );
+
+		// Guard: the secret WAS stored — it just must not be emitted.
+		$this->assertSame( 's3cr3t', $handler->get_value( 'token' ) );
+
+		$schema = Field_Schema::from_handler( $handler, [ 'token' ] );
+
+		$this->assertSame( '', $schema['token']['value'], 'secret must not be emitted' );
+		$this->assertTrue( $schema['token']['sensitive'] );
+		$this->assertTrue( $schema['token']['is_set'] );
+	}
+
+	/**
+	 * An unset sensitive field reports is_set = false.
+	 *
+	 * @return void
+	 */
+	public function test_unset_sensitive_field_reports_is_set_false(): void {
+		$handler = $this->make_handler(
+			static function ( $h ): void {
+				$h->register_setting( 'token', \Woodev_Setting::TYPE_STRING, [ 'name' => 'Токен', 'sensitive' => true, 'default' => '' ] );
+			}
+		);
+
+		$schema = Field_Schema::from_handler( $handler, [ 'token' ] );
+
+		$this->assertSame( '', $schema['token']['value'] );
+		$this->assertFalse( $schema['token']['is_set'] );
+	}
+
+	/**
+	 * A constant-backed field is masked, flagged constant_managed and read-only.
+	 *
+	 * @return void
+	 */
+	public function test_constant_backed_field_is_masked_and_read_only(): void {
+		if ( ! defined( 'WOODEV_FS_CONST' ) ) {
+			define( 'WOODEV_FS_CONST', 'from-config' );
+		}
+		$handler = $this->make_handler(
+			static function ( $h ): void {
+				$h->register_setting( 'token', \Woodev_Setting::TYPE_STRING, [ 'name' => 'Токен', 'sensitive' => true, 'constant_name' => 'WOODEV_FS_CONST' ] );
+			}
+		);
+
+		$schema = Field_Schema::from_handler( $handler, [ 'token' ] );
+
+		$this->assertSame( '', $schema['token']['value'], 'constant value must not be emitted' );
+		$this->assertTrue( $schema['token']['constant_managed'] );
+		$this->assertSame( 'WOODEV_FS_CONST', $schema['token']['constant_name'] );
+		$this->assertTrue( $schema['token']['is_set'] );
 	}
 }

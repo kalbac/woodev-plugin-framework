@@ -53,6 +53,8 @@ class SettingsPageRegistryTest extends TestCase {
 		$setting->shouldReceive( 'is_is_multi' )->andReturn( false );
 		$setting->shouldReceive( 'get_description' )->andReturn( '' );
 		$setting->shouldReceive( 'get_control' )->andReturn( null );
+		$setting->shouldReceive( 'is_sensitive' )->andReturn( false );
+		$setting->shouldReceive( 'get_constant_name' )->andReturn( null );
 
 		$handler = Mockery::mock();
 		$handler->shouldReceive( 'get_id' )->andReturn( $id );
@@ -97,6 +99,8 @@ class SettingsPageRegistryTest extends TestCase {
 		$setting->shouldReceive( 'is_is_multi' )->andReturn( false );
 		$setting->shouldReceive( 'get_description' )->andReturn( '' );
 		$setting->shouldReceive( 'get_control' )->andReturn( null );
+		$setting->shouldReceive( 'is_sensitive' )->andReturn( false );
+		$setting->shouldReceive( 'get_constant_name' )->andReturn( null );
 
 		$handler = Mockery::mock();
 		$handler->shouldReceive( 'get_id' )->andReturn( 'cdek' );
