@@ -39,10 +39,6 @@
 		gap: wd.$gap-lg;
 		margin: 0;
 		padding: wd.$gap 0;
-
-		&:first-child {
-			padding-top: 0;
-		}
 	}
 
 	.woodev-field__label {
@@ -54,8 +50,15 @@
 		min-width: 0;
 	}
 
-	// Toggle rows are full-width (label/desc meta beside the pill), not gridded.
+	// Toggle rows align to the same grid width as other fields (so the pill sits
+	// at the control column's right edge, not the card's), and the meta label
+	// lines up flush-left with other labels (no extra inset).
 	.woodev-field__toggle-row {
+		max-width: calc( #{ wd.$label-col } + #{ wd.$control-col } + #{ wd.$gap-lg } );
 		padding: wd.$gap 0;
+
+		.woodev-field__toggle-meta {
+			padding: 0;
+		}
 	}
 }
