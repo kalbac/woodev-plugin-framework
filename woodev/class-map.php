@@ -89,6 +89,7 @@ return [
 	'Woodev_Box_Packer_Packed_Box' => 'woodev/box-packer/class-packed-box.php',
 	'Woodev_Cacheable_API_Base' => 'woodev/api/abstract-cacheable-api-base.php',
 	'Woodev_Cacheable_Request_Trait' => 'woodev/api/traits/cacheable-request-trait.php',
+	'Woodev_Connection_Result' => 'woodev/settings-api/class-connection-result.php',
 	'Woodev_Control' => 'woodev/settings-api/class-control.php',
 	'Woodev_Helper' => 'woodev/class-helper.php',
 	'Woodev_Hook_Deprecator' => 'woodev/class-woodev-hook-deprecator.php',
@@ -172,6 +173,8 @@ return [
 	'Woodev_Register_Settings_Fields' => 'woodev/settings-api/register-settings/class-register-settings-fields.php',
 	'Woodev_Script_Handler' => 'woodev/handlers/script-handler.php',
 	'Woodev_Setting' => 'woodev/settings-api/class-setting.php',
+	'Woodev_Settings_Connection_Status' => 'woodev/settings-page/interface-connection-status.php',
+	'Woodev_Settings_Connection_Test' => 'woodev/settings-page/interface-connection-test.php',
 	'Woodev_String_Conversion' => 'woodev/class-string-conversation.php',
 	'Woodev_WC_Packer_Dispatcher' => 'woodev/box-packer/class-wc-packer-dispatcher.php',
 ];
