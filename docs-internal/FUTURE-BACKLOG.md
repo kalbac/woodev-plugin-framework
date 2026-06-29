@@ -198,3 +198,11 @@ Deferred from the s31 Codex GPT-5.5 critic pass (PR #85 fixed the confirmed-real
 - **Design points to settle:** the hub must render with ZERO feature-plugins active (catalog + account are already framework-level; the Лицензии page just aggregates — verify standalone); free → `is_need_license()` false; new `plugin_id` + free `download_id` on woodev.ru; multi-version bootstrap already picks the highest framework version → the Updater becomes the version-floor raiser for the whole fleet (a benefit).
 - **Interlock:** IDEA-2 (hub) + push-«Обновить» (woodev_theme backlog) + IDEA-1 (ЛК site management) = one "Woodev account ecosystem"; likely the core of the dormant ecosystem-orchestration spec.
 - **When:** after v2 ships AND all plugins are migrated onto v2 (operator's explicit gate).
+
+### UK-CFR — Custom field/section renderers (settings extensibility)
+- **Goal (operator s36/2026-06-29):** a plugin must be able to add ANY custom field or whole section to the settings page — not be limited to the framework's built-in control types. The framework must be open, not a closed component set.
+- **Two levels:**
+  - **(a) Custom field renderer** — for an unknown `controlType`, `control-field` asks a hook (`woodev.settings.controlRenderer` via `@wordpress/hooks` `applyFilters(null, controlType, {schema, value, onChange})`); the plugin returns its own React component. Cheap; covers any single custom field/widget.
+  - **(b) Custom whole section** — for sub-CRUD widgets (СДЭК «Формирование упаковок» box table, Яндекс «Склады» table): the section declares a React component provider and the kit renders it INSTEAD of the field list; the plugin owns the table + its REST + add/edit/delete.
+- **Why deferred (operator chose «separate cycle», not in #92):** design both levels together as one coherent API, ideally against a real consumer (when migrating СДЭК/Яндекс onto v2) so the contract isn't guessed. No real consumer yet (YAGNI).
+- **When:** a dedicated mini-cycle (brainstorm → spec → impl) after the settings polish, or folded into the СДЭК/Яндекс pilot migration.
