@@ -221,6 +221,17 @@ function woodev_test_plugin_init() {
 			$this->register_control( 'max_weight', \Woodev_Control::TYPE_NUMBER );
 			$this->register_control( 'comment', \Woodev_Control::TYPE_TEXTAREA );
 			$this->register_control( 'note', \Woodev_Control::TYPE_RICHTEXT );
+
+			// Section «Прочее» (misc) — the remaining control types.
+			$this->register_setting( 'manager_email', \Woodev_Setting::TYPE_EMAIL, [ 'name' => 'E-mail менеджера', 'default' => '' ] );
+			$this->register_setting( 'secret', \Woodev_Setting::TYPE_STRING, [ 'name' => 'Секретный токен', 'default' => '' ] );
+			$this->register_setting( 'brand_color', \Woodev_Setting::TYPE_STRING, [ 'name' => 'Цвет бренда', 'default' => '#06aedd' ] );
+			$this->register_setting( 'start_date', \Woodev_Setting::TYPE_STRING, [ 'name' => 'Дата старта', 'default' => '' ] );
+
+			$this->register_control( 'manager_email', \Woodev_Control::TYPE_EMAIL );
+			$this->register_control( 'secret', \Woodev_Control::TYPE_PASSWORD );
+			$this->register_control( 'brand_color', \Woodev_Control::TYPE_COLOR );
+			$this->register_control( 'start_date', \Woodev_Control::TYPE_DATE );
 		}
 	}
 
@@ -318,8 +329,9 @@ function woodev_test_plugin_init() {
 					'Карьер',
 					$this->get_settings_handler(),
 					[
-						\Woodev\Framework\Settings\Settings_Section::create( 'general', 'Общие', [ 'api_key', 'mode' ] ),
-						\Woodev\Framework\Settings\Settings_Section::create( 'order', 'Форма заказа', [ 'enabled', 'markup', 'calc_type', 'methods', 'max_weight', 'comment', 'note' ] ),
+						\Woodev\Framework\Settings\Settings_Section::create( 'general', 'Общие', [ 'api_key', 'mode' ], 'Основные параметры подключения к API перевозчика.' ),
+						\Woodev\Framework\Settings\Settings_Section::create( 'order', 'Форма заказа', [ 'enabled', 'markup', 'calc_type', 'methods', 'max_weight', 'comment', 'note' ], 'Как тариф и способы доставки отображаются покупателю при оформлении.' ),
+						\Woodev\Framework\Settings\Settings_Section::create( 'misc', 'Прочее', [ 'manager_email', 'secret', 'brand_color', 'start_date' ] ),
 					],
 					[
 						'legacy_page' => 'wc-settings&tab=shipping&section=quarry',

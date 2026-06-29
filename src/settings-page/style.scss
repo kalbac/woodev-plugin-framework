@@ -21,6 +21,13 @@
 		padding: wd.$gap-lg 0;
 	}
 
+	&__section-desc {
+		margin: 0 0 wd.$gap-lg;
+		color: wd.$muted;
+		font-size: 14px;
+		line-height: 1.5;
+	}
+
 	&__card {
 		width: 100%;
 	}
@@ -28,6 +35,14 @@
 	&__actions {
 		margin-top: wd.$gap-lg;
 		// No divider above the actions (zam.5).
+	}
+
+	// Native WP snackbar notices, pinned bottom-left like core.
+	&__snackbars {
+		position: fixed;
+		bottom: 20px;
+		left: 20px;
+		z-index: 100000;
 	}
 
 	// Horizontal field rows: label column | control column (zam.5 — no per-field
@@ -39,10 +54,6 @@
 		gap: wd.$gap-lg;
 		margin: 0;
 		padding: wd.$gap 0;
-
-		&:first-child {
-			padding-top: 0;
-		}
 	}
 
 	.woodev-field__label {
@@ -54,8 +65,15 @@
 		min-width: 0;
 	}
 
-	// Toggle rows are full-width (label/desc meta beside the pill), not gridded.
+	// Toggle rows align to the same grid width as other fields (so the pill sits
+	// at the control column's right edge, not the card's), and the meta label
+	// lines up flush-left with other labels (no extra inset).
 	.woodev-field__toggle-row {
+		max-width: calc( #{ wd.$label-col } + #{ wd.$control-col } + #{ wd.$gap-lg } );
 		padding: wd.$gap 0;
+
+		.woodev-field__toggle-meta {
+			padding: 0;
+		}
 	}
 }

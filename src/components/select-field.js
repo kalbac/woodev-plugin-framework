@@ -94,6 +94,7 @@ export default function SelectField( { value, options = [], multi = false, onCha
 				>
 					<SearchControl
 						__nextHasNoMarginBottom
+						__next40pxDefaultSize
 						value={ search }
 						onChange={ setSearch }
 						placeholder={ __( 'Поиск…', 'woodev-plugin-framework' ) }
