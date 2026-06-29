@@ -206,3 +206,13 @@ Deferred from the s31 Codex GPT-5.5 critic pass (PR #85 fixed the confirmed-real
   - **(b) Custom whole section** — for sub-CRUD widgets (СДЭК «Формирование упаковок» box table, Яндекс «Склады» table): the section declares a React component provider and the kit renders it INSTEAD of the field list; the plugin owns the table + its REST + add/edit/delete.
 - **Why deferred (operator chose «separate cycle», not in #92):** design both levels together as one coherent API, ideally against a real consumer (when migrating СДЭК/Яндекс onto v2) so the contract isn't guessed. No real consumer yet (YAGNI).
 - **When:** a dedicated mini-cycle (brainstorm → spec → impl) after the settings polish, or folded into the СДЭК/Яндекс pilot migration.
+
+### SP-2-DEF — Secret wipe / disconnect affordance (deferred from SP-2, s38)
+- **What's done (SP-2):** a `sensitive` field masks its stored value; replacing it = type a new value (force-sent via dirty-tracking). A `constant_name` field is always masked + read-only.
+- **What's missing:** an explicit way to **clear a stored secret to empty** (i.e. disconnect / forget the credential). SP-2's first attempt at a «Очистить» button was removed in the rig fix-loop — it gave no visual feedback (the `is_set` placeholder stayed), its layout wrapped below the input, and the operator found it confusing. The functional path works (dirty-tracking sends `''`), but the UX was wrong.
+- **Wanted:** a proper "Очистить сохранённое" / "Отключить" affordance with **confirmation** and a visible "значение будет удалено при сохранении" + «Отменить» state (the Отменить needs an app-level "remove a single edit" path so the untouched secret is preserved). Design it when a real carrier needs disconnect (the secret-rotation/disconnect UX is the real consumer).
+- **When:** fold into SP-3 «поля» validation work OR the carrier pilot, whichever first needs it. Not blocking.
+
+### SP-3 — Settings field validation (live + Save + server) — NEXT increment (s39 spec)
+- **Operator-requested (s38):** `required` fields (+ star `<abbr>*</abbr>`), email/url/tel/number validation. **Decision #1 LOCKED:** live inline validation = **blur-first → live-clear-on-input once errored**; `required` validated on blur+Save (not on focus); color/date constrained by pickers (no live). Two tiers — client UX blocks Save, server is the authoritative per-field gate (client is bypassable — s31 enum lesson).
+- **Open for the spec (s39):** `required` semantics per control type (toggle/select/multiselect — what is "filled"?), the REST save **per-field error contract** (response shape on invalid), and **wizard step-gating** (block «Далее» on an invalid step?). Applies to BOTH surfaces (settings + setup wizard). This is the roadmap's SP-3 «поля (классика)».

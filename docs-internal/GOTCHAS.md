@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
-> **68 atomic gotchas in 18 namespaces** — update count when adding/removing.
-> Last updated: 2026-06-26 (session 35: +1 — `classmap-autoload-breaks-class-exists-once-guard` [`[framework/autoload]`]).
+> **70 atomic gotchas in 19 namespaces** — update count when adding/removing.
+> Last updated: 2026-06-30 (session 38: +2 — `mask-constant-backed-field-even-when-constant-undefined` [`[settings-api/secrets]`], `react-missing-key-state-bleed-across-tabs` [`[admin-ui/react-state]`]).
 
 ## Index
 
@@ -19,6 +19,7 @@
 - [php/in-plugin-update-message-arg-shape] `in_plugin_update_message-{$file}` passes `($plugin_data, $response)`; `package`/`new_version` live on arg 2 (response), NOT arg 1 (header). Producer must pass the response object; consumer must read off arg 2 → [gotchas/in-plugin-update-message-arg-shape.md](gotchas/in-plugin-update-message-arg-shape.md) (s18)
 - [php/updater-cache-source-stamp-not-key] To isolate a cache keyed by a FROZEN option name, don't change the key — stamp the discriminator (e.g. licensing endpoint) into the value and validate on read → [gotchas/updater-cache-source-stamp-not-key.md](gotchas/updater-cache-source-stamp-not-key.md) (s18)
 - [php/settings-api] Settings-API save path: validate enum options by KEY-or-VALUE (not the label — drops integer/zero-based enums → validation bypass), coerce numeric strings from number inputs, and wp_kses_post() richtext controls on save → [gotchas/settings-api-control-save-path-pitfalls.md](gotchas/settings-api-control-save-path-pitfalls.md) (s31)
+- [settings-api/secrets] A `constant_name`-backed field must be masked even when the constant is UNDEFINED — masking is decided by declared intent (sensitive OR constant_name present), not by `defined()`; else the stored DB fallback leaks to the browser. `constant_managed` = "currently defined" (read-only note) is a SEPARATE question from "must never be emitted" → [gotchas/mask-constant-backed-field-even-when-constant-undefined.md](gotchas/mask-constant-backed-field-even-when-constant-undefined.md) (s38)
 
 ### [deprecation/*] — Deprecation cycle
 - [deprecation/deprecated-which-function] wc_deprecated_function vs _deprecated_function — which to use when → [gotchas/deprecated-which-function.md](gotchas/deprecated-which-function.md) (s2)
@@ -87,6 +88,9 @@
 - [admin-ui/license-page] The "Woodev → Лицензии" page enqueues ONLY `style-index.css` (the React bundle) + `wp-components`; the legacy `woodev-license-page.css` is enqueued nowhere. Styles for ANY server-rendered section on that page (e.g. `html-settings-section.php`) must live in `src/license-page/style.scss`, and `license_page()` must wrap output in `.wrap` + `<h1>` → [gotchas/license-page-css-bundle-only.md](gotchas/license-page-css-bundle-only.md) (s14)
 - [admin-ui/esc-url-raw-for-js] `esc_url()` HTML-entity-encodes `&`→`&#038;`; a URL set as a React `href` (DOM property) or inlined in a JSON payload is NOT HTML-parsed, so the literal `&#038;` breaks the URL. Use `esc_url_raw` for data (JS/REST/redirect/storage); keep `esc_url` only for URLs inside HTML output → [gotchas/esc-url-raw-for-js-consumed-urls.md](gotchas/esc-url-raw-for-js-consumed-urls.md) (s20)
 - [admin-ui/wp-nonce-url-esc-html] `wp_nonce_url()` runs its result through `esc_html()` (`&`→`&amp;`) — fine for HTML output, but a nonced URL placed into JSON / a React `href` / a redirect mangles the query keys (`amp;param`) and silently no-ops. Build it with `add_query_arg('_wpnonce', wp_create_nonce($action), $url)` + `esc_url_raw`, never `wp_nonce_url` → [gotchas/wp-nonce-url-esc-html-breaks-js-urls.md](gotchas/wp-nonce-url-esc-html-breaks-js-urls.md) (s24)
+
+### [admin-ui/react-state] — React component state
+- [admin-ui/react-state] A stateful section component swapped into ONE tree slot by a tab/router (no `key`) → React reuses the instance → its `useState` BLEEDS across tabs (the connection block's test result showed in the wrong section). Give it a section-unique `key` so it remounts; invisible in tests that mount one section at a time → [gotchas/react-missing-key-state-bleed-across-tabs.md](gotchas/react-missing-key-state-bleed-across-tabs.md) (s38)
 
 ### [box-packer/*] — Box-packer algorithm (S2)
 - [box-packer/virtual-box-rsort-axis-alignment] `rsort()` on the axis-assignment result destroys axis-name alignment for non-normalized items — Option A `[1,10,1]` after rsort → `[10,1,1]` → `box_width=1 < item_width=10` → packing rejects item. Never rsort the candidate; each option guarantees axis alignment by construction → [gotchas/virtual-box-rsort-axis-alignment.md](gotchas/virtual-box-rsort-axis-alignment.md) (2026-06-09)
