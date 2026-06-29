@@ -290,8 +290,8 @@
 
 	// Color picker: a filled 1:1 square with the swatch covering the whole area.
 	input[type="color"].components-text-control__input {
-		width: 40px;
-		height: 40px;
+		width: calc( 1rem * 2 );
+		height: calc( 1rem * 2 );
 		padding: 0;
 		border-radius: wd.$radius-sm;
 		overflow: hidden;
@@ -314,8 +314,7 @@
 
 	// Toggle meta needs inner horizontal breathing room (zam.9).
 	&__toggle-meta {
-		padding-left: 4px;
-		padding-right: 1rem;
+		padding: 0 1rem;
 	}
 
 	// Password field with eye toggle (zam.10).
@@ -357,10 +356,15 @@
 }
 
 // Uniform 40px control height across inputs/selects (batch-2 #1).
-.components-text-control__input,
 .components-input-control__container,
 .woodev-select__trigger {
 	min-height: 40px;
+}
+
+// TextControl ships a fixed 32px height — override it with a more specific
+// selector (the color swatch resets its own size below, more specific still).
+.woodev-field .components-text-control__input {
+	height: 40px;
 }
 
 // WC-style SelectField (batch-2 #2/#3): trigger button + search popover.
@@ -417,6 +421,7 @@
 	}
 
 	&__menu {
+		box-sizing: border-box;
 		padding: 10px;
 		min-width: 240px;
 	}
@@ -474,6 +479,7 @@
 }
 
 .woodev-select__popover .components-popover__content {
+	padding: 0;
 	border-radius: wd.$radius-sm;
 	box-shadow: 0 12px 32px rgba( 10, 30, 40, 0.16 );
 }
