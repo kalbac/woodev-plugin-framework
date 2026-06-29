@@ -191,7 +191,7 @@ function woodev_test_plugin_init() {
 	/**
 	 * Minimal settings handler for the «Карьер» reference provider.
 	 */
-	class Woodev_Test_Settings extends \Woodev_Abstract_Settings {
+	class Woodev_Test_Settings extends \Woodev_Abstract_Settings implements \Woodev_Settings_Connection_Test, \Woodev_Settings_Connection_Status {
 
 		/**
 		 * Registers the reference settings.
@@ -232,6 +232,45 @@ function woodev_test_plugin_init() {
 			$this->register_control( 'secret', \Woodev_Control::TYPE_PASSWORD );
 			$this->register_control( 'brand_color', \Woodev_Control::TYPE_COLOR );
 			$this->register_control( 'start_date', \Woodev_Control::TYPE_DATE );
+
+			// Connection block fields (SP-2 fixture): «api» credential block.
+			$this->register_setting( 'conn_login', \Woodev_Setting::TYPE_STRING, [ 'name' => 'Логин' ] );
+			$this->register_setting( 'conn_password', \Woodev_Setting::TYPE_STRING, [ 'name' => 'Пароль', 'sensitive' => true ] );
+			$this->register_setting( 'conn_token', \Woodev_Setting::TYPE_STRING, [ 'name' => 'Токен', 'sensitive' => true, 'constant_name' => 'WOODEV_DEMO_TOKEN' ] );
+
+			$this->register_control( 'conn_login', \Woodev_Control::TYPE_TEXT );
+			$this->register_control( 'conn_password', \Woodev_Control::TYPE_PASSWORD );
+			$this->register_control( 'conn_token', \Woodev_Control::TYPE_PASSWORD );
+		}
+
+		/**
+		 * Tests / performs the connection for one «Карьер» block (SP-2 fixture seam).
+		 *
+		 * @since 2.0.2
+		 * @param string              $connection_id the connection section id.
+		 * @param array<string,mixed> $values        merged field values (POSTed ∪ stored).
+		 * @return \Woodev_Connection_Result
+		 */
+		public function test_connection( string $connection_id, array $values ): \Woodev_Connection_Result {
+			if ( 'api' === $connection_id ) {
+				return ( '' !== ( $values['conn_login'] ?? '' ) )
+					? \Woodev_Connection_Result::success( 'Подключение успешно.' )
+					: \Woodev_Connection_Result::failure( 'Укажите логин.' );
+			}
+
+			// «widget» handshake block (no input fields): always "connects".
+			return \Woodev_Connection_Result::success( 'Экземпляр зарегистрирован (GUID получен).' );
+		}
+
+		/**
+		 * Current known status for one block (demo: nothing persisted).
+		 *
+		 * @since 2.0.2
+		 * @param string $connection_id the connection section id.
+		 * @return \Woodev_Connection_Result|null
+		 */
+		public function get_connection_status( string $connection_id ): ?\Woodev_Connection_Result {
+			return null;
 		}
 	}
 
@@ -332,6 +371,8 @@ function woodev_test_plugin_init() {
 						\Woodev\Framework\Settings\Settings_Section::create( 'general', 'Общие', [ 'api_key', 'mode' ], 'Основные параметры подключения к API перевозчика.' ),
 						\Woodev\Framework\Settings\Settings_Section::create( 'order', 'Форма заказа', [ 'enabled', 'markup', 'calc_type', 'methods', 'max_weight', 'comment', 'note' ], 'Как тариф и способы доставки отображаются покупателю при оформлении.' ),
 						\Woodev\Framework\Settings\Settings_Section::create( 'misc', 'Прочее', [ 'manager_email', 'secret', 'brand_color', 'start_date' ] ),
+						\Woodev\Framework\Settings\Settings_Section::create( 'api', 'Подключение', [ 'conn_login', 'conn_password', 'conn_token' ], 'Учётные данные для доступа к API перевозчика.', true, 'Проверить подключение' ),
+						\Woodev\Framework\Settings\Settings_Section::create( 'widget', 'Виджет ЛК', [], 'Регистрация экземпляра магазина в личном кабинете перевозчика.', true, 'Подключить' ),
 					],
 					[
 						'legacy_page' => 'wc-settings&tab=shipping&section=quarry',
