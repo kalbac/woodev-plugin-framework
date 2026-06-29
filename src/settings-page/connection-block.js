@@ -31,6 +31,22 @@ export default function ConnectionBlock( { providerId, section, values, onFieldC
 			.finally( () => setBusy( false ) );
 	};
 
+	// Gate the action button on every field being satisfied. A handshake block
+	// (no fields) is vacuously satisfied → always enabled. A masked secret that
+	// is already saved (is_set) or backed by a wp-config constant counts as
+	// filled even though its input is empty.
+	const allFieldsFilled = Object.keys( section.fields ).every( ( settingId ) => {
+		const field = section.fields[ settingId ];
+		if ( field.constant_managed ) {
+			return true;
+		}
+		const current = values[ settingId ] ?? field.value;
+		if ( current !== '' && current !== null && current !== undefined ) {
+			return true;
+		}
+		return !! ( field.sensitive && field.is_set );
+	} );
+
 	return (
 		<div className="woodev-connection">
 			{ section.description && (
@@ -46,7 +62,12 @@ export default function ConnectionBlock( { providerId, section, values, onFieldC
 			) ) }
 			<div className="woodev-connection__action">
 				{ section.supports_test && (
-					<Button variant="secondary" isBusy={ busy } disabled={ busy } onClick={ run }>
+					<Button
+						variant="secondary"
+						isBusy={ busy }
+						disabled={ busy || ! allFieldsFilled }
+						onClick={ run }
+					>
 						{ section.action_label || __( 'Проверить подключение', 'woodev-plugin-framework' ) }
 					</Button>
 				) }
