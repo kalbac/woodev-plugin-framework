@@ -10,6 +10,9 @@ require_once dirname( __DIR__, 2 ) . '/woodev/settings-page/class-settings-secti
 require_once dirname( __DIR__, 2 ) . '/woodev/settings-page/class-field-schema.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/settings-page/class-settings-provider.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/settings-page/class-settings-page-registry.php';
+require_once dirname( __DIR__, 2 ) . '/woodev/settings-api/class-connection-result.php';
+require_once dirname( __DIR__, 2 ) . '/woodev/settings-page/interface-connection-test.php';
+require_once dirname( __DIR__, 2 ) . '/woodev/settings-page/interface-connection-status.php';
 
 class SettingsPageRegistryTest extends TestCase {
 
@@ -53,6 +56,8 @@ class SettingsPageRegistryTest extends TestCase {
 		$setting->shouldReceive( 'is_is_multi' )->andReturn( false );
 		$setting->shouldReceive( 'get_description' )->andReturn( '' );
 		$setting->shouldReceive( 'get_control' )->andReturn( null );
+		$setting->shouldReceive( 'is_sensitive' )->andReturn( false );
+		$setting->shouldReceive( 'get_constant_name' )->andReturn( null );
 
 		$handler = Mockery::mock();
 		$handler->shouldReceive( 'get_id' )->andReturn( $id );
@@ -97,6 +102,8 @@ class SettingsPageRegistryTest extends TestCase {
 		$setting->shouldReceive( 'is_is_multi' )->andReturn( false );
 		$setting->shouldReceive( 'get_description' )->andReturn( '' );
 		$setting->shouldReceive( 'get_control' )->andReturn( null );
+		$setting->shouldReceive( 'is_sensitive' )->andReturn( false );
+		$setting->shouldReceive( 'get_constant_name' )->andReturn( null );
 
 		$handler = Mockery::mock();
 		$handler->shouldReceive( 'get_id' )->andReturn( 'cdek' );
@@ -141,5 +148,99 @@ class SettingsPageRegistryTest extends TestCase {
 		$this->assertArrayHasKey( 'sections', $tabs[0] );
 		$this->assertSame( 'general', $tabs[0]['sections'][0]['id'] );
 		$this->assertArrayHasKey( 'api_key', $tabs[0]['sections'][0]['fields'] );
+	}
+
+	// ----- connection metadata + status (build_sections) -----
+
+	public function test_build_sections_marks_connection_and_action_label(): void {
+		$handler  = $this->make_connection_handler();
+		$provider = Settings_Provider::create(
+			'carrier',
+			'Перевозчик',
+			$handler,
+			[ Settings_Section::create( 'api', 'Подключение', [ 'token' ], '', true, 'Проверить' ) ]
+		);
+
+		$registry = Settings_Page_Registry::instance();
+		$sections = $this->call_private( $registry, 'build_sections', [ $provider ] );
+
+		$this->assertTrue( $sections[0]['is_connection'] );
+		$this->assertSame( 'Проверить', $sections[0]['action_label'] );
+		$this->assertTrue( $sections[0]['supports_test'] );
+	}
+
+	public function test_build_sections_includes_status_when_handler_provides_one(): void {
+		$handler  = $this->make_connection_handler_with_status();
+		$provider = Settings_Provider::create(
+			'carrier',
+			'Перевозчик',
+			$handler,
+			[ Settings_Section::create( 'api', 'Подключение', [ 'token' ], '', true, 'Проверить' ) ]
+		);
+
+		$registry = Settings_Page_Registry::instance();
+		$sections = $this->call_private( $registry, 'build_sections', [ $provider ] );
+
+		$this->assertSame( [ 'success' => true, 'message' => 'Подключено' ], $sections[0]['status'] );
+	}
+
+	/**
+	 * Builds a minimal `token` setting mock that Field_Schema::from_handler accepts.
+	 */
+	private function token_setting() {
+		$setting = Mockery::mock();
+		$setting->shouldReceive( 'get_id' )->andReturn( 'token' );
+		$setting->shouldReceive( 'get_type' )->andReturn( 'string' );
+		$setting->shouldReceive( 'get_name' )->andReturn( 'Токен' );
+		$setting->shouldReceive( 'get_options' )->andReturn( [] );
+		$setting->shouldReceive( 'is_is_multi' )->andReturn( false );
+		$setting->shouldReceive( 'get_description' )->andReturn( '' );
+		$setting->shouldReceive( 'get_control' )->andReturn( null );
+		$setting->shouldReceive( 'is_sensitive' )->andReturn( false );
+		$setting->shouldReceive( 'get_constant_name' )->andReturn( null );
+
+		return $setting;
+	}
+
+	/**
+	 * Handler that implements only the connection-test seam.
+	 */
+	private function make_connection_handler() {
+		$handler = Mockery::mock( '\Woodev_Settings_Connection_Test' );
+		$handler->shouldReceive( 'get_id' )->andReturn( 'carrier' );
+		$handler->shouldReceive( 'get_settings' )->andReturn( [ 'token' => $this->token_setting() ] );
+		$handler->shouldReceive( 'get_value' )->andReturn( '' );
+
+		return $handler;
+	}
+
+	/**
+	 * Handler that also implements the optional connection-status seam.
+	 */
+	private function make_connection_handler_with_status() {
+		$handler = Mockery::mock( '\Woodev_Settings_Connection_Test, \Woodev_Settings_Connection_Status' );
+		$handler->shouldReceive( 'get_id' )->andReturn( 'carrier' );
+		$handler->shouldReceive( 'get_settings' )->andReturn( [ 'token' => $this->token_setting() ] );
+		$handler->shouldReceive( 'get_value' )->andReturn( '' );
+		$handler->shouldReceive( 'get_connection_status' )->andReturn( \Woodev_Connection_Result::success( 'Подключено' ) );
+
+		return $handler;
+	}
+
+	/**
+	 * Invokes a private/protected method via reflection.
+	 *
+	 * @param object  $object target instance.
+	 * @param string  $method method name.
+	 * @param mixed[] $args   positional arguments.
+	 * @return mixed
+	 */
+	private function call_private( object $object, string $method, array $args = [] ) {
+		$ref = new \ReflectionMethod( $object, $method );
+		if ( PHP_VERSION_ID < 80100 ) {
+			$ref->setAccessible( true );
+		}
+
+		return $ref->invokeArgs( $object, $args );
 	}
 }

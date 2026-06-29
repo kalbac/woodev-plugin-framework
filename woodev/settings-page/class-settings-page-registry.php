@@ -172,12 +172,27 @@ final class Settings_Page_Registry {
 		$sections = [];
 
 		foreach ( $provider->get_sections() as $section ) {
-			$sections[] = [
+			$entry = [
 				'id'          => $section->get_id(),
 				'label'       => $section->get_label(),
 				'description' => $section->get_description(),
 				'fields'      => Field_Schema::from_handler( $handler, $section->get_setting_ids() ),
 			];
+
+			if ( $section->is_connection() ) {
+				$entry['is_connection'] = true;
+				$entry['action_label']  = $section->get_action_label();
+				$entry['supports_test'] = $handler instanceof \Woodev_Settings_Connection_Test;
+
+				if ( $handler instanceof \Woodev_Settings_Connection_Status ) {
+					$status = $handler->get_connection_status( $section->get_id() );
+					if ( null !== $status ) {
+						$entry['status'] = $status->to_array();
+					}
+				}
+			}
+
+			$sections[] = $entry;
 		}
 
 		return $sections;

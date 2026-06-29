@@ -74,6 +74,16 @@ if ( ! class_exists( 'Woodev_REST_API_Settings_Page' ) ) :
 					'permission_callback' => [ $this, 'save_permissions_check' ],
 				]
 			);
+
+			register_rest_route(
+				$base,
+				'/settings/(?P<provider_id>[\w-]+)/connection/(?P<connection_id>[\w-]+)/test',
+				[
+					'methods'             => WP_REST_Server::EDITABLE,
+					'callback'            => [ $this, 'test_connection' ],
+					'permission_callback' => [ $this, 'save_permissions_check' ],
+				]
+			);
 		}
 
 		/**
@@ -183,6 +193,104 @@ if ( ! class_exists( 'Woodev_REST_API_Settings_Page' ) ) :
 					'provider' => $provider_id,
 				]
 			);
+		}
+
+		/**
+		 * Runs a connection block's test/connect action through the plugin callback.
+		 *
+		 * Merges the POSTed (unsaved) values with the stored values for the block's
+		 * declared setting ids, so an untouched (masked) secret still reaches the
+		 * plugin's test. The plugin owns all auth behavior; the framework only
+		 * transports the Woodev_Connection_Result.
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WP_REST_Request $request request.
+		 * @return \WP_REST_Response|\WP_Error
+		 */
+		public function test_connection( $request ) {
+			$provider_id   = (string) $request->get_param( 'provider_id' );
+			$connection_id = (string) $request->get_param( 'connection_id' );
+			$provider      = $this->registry->get_provider( $provider_id );
+
+			if ( null === $provider ) {
+				return new WP_Error(
+					'woodev_settings_unknown_provider',
+					__( 'Неизвестная вкладка настроек.', 'woodev-plugin-framework' ),
+					[ 'status' => 404 ]
+				);
+			}
+
+			$handler = $provider->get_handler();
+
+			if ( ! $handler instanceof \Woodev_Settings_Connection_Test ) {
+				return new WP_Error(
+					'woodev_settings_no_connection_test',
+					__( 'Проверка подключения для этого раздела недоступна.', 'woodev-plugin-framework' ),
+					[ 'status' => 400 ]
+				);
+			}
+
+			// Find the connection section and its declared setting ids.
+			$section_ids = null;
+			foreach ( $provider->get_sections() as $section ) {
+				if ( $section->get_id() === $connection_id && $section->is_connection() ) {
+					$section_ids = $section->get_setting_ids();
+					break;
+				}
+			}
+
+			if ( null === $section_ids ) {
+				return new WP_Error(
+					'woodev_settings_unknown_connection',
+					__( 'Неизвестный блок подключения.', 'woodev-plugin-framework' ),
+					[ 'status' => 404 ]
+				);
+			}
+
+			// Scope POSTed values to the block's declared setting ids (allow-list).
+			$posted = array_intersect_key( (array) $request->get_param( 'values' ), array_flip( $section_ids ) );
+
+			// Merge per field. The stored-value fallback exists ONLY to recover a
+			// masked secret the browser never held: it applies to a secret field
+			// (sensitive or constant-backed) whose POSTed value is absent or empty.
+			// A non-secret field always uses its POSTed value when present — even
+			// '', 0, or false are valid, intentional inputs and must not be
+			// silently replaced by the stored value.
+			$merged = [];
+			foreach ( $section_ids as $setting_id ) {
+				$setting   = $handler->get_setting( $setting_id );
+				$is_secret = $setting instanceof \Woodev_Setting
+					&& ( $setting->is_sensitive() || null !== $setting->get_constant_name() );
+
+				$use_posted = array_key_exists( $setting_id, $posted )
+					&& ( ! $is_secret || '' !== (string) $posted[ $setting_id ] );
+
+				if ( $use_posted ) {
+					$merged[ $setting_id ] = $posted[ $setting_id ];
+				} else {
+					try {
+						$merged[ $setting_id ] = $handler->get_value( $setting_id );
+					} catch ( \Woodev_Plugin_Exception $e ) {
+						$merged[ $setting_id ] = null;
+					}
+				}
+			}
+
+			try {
+				$result = $handler->test_connection( $connection_id, $merged );
+			} catch ( \Throwable $e ) {
+				error_log( sprintf( '[woodev] connection test failed for %s/%s: %s', $provider_id, $connection_id, $e->getMessage() ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- diagnostic for an unexpected callback failure.
+				return new WP_Error(
+					'woodev_settings_connection_error',
+					__( 'Ошибка при проверке подключения.', 'woodev-plugin-framework' ),
+					[ 'status' => 500 ]
+				);
+			}
+
+			return rest_ensure_response( $result->to_array() );
 		}
 	}
 

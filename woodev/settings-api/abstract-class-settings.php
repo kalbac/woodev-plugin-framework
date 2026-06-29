@@ -77,17 +77,21 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 				$args = wp_parse_args(
 					$args,
 					[
-						'name'        => '',
-						'description' => '',
-						'is_multi'    => false,
-						'options'     => [],
-						'default'     => null,
+						'name'          => '',
+						'description'   => '',
+						'is_multi'      => false,
+						'options'       => [],
+						'default'       => null,
+						'sensitive'     => false,
+						'constant_name' => null,
 					]
 				);
 
 				$setting->set_name( $args['name'] );
 				$setting->set_description( $args['description'] );
 				$setting->set_is_multi( $args['is_multi'] );
+				$setting->set_sensitive( (bool) $args['sensitive'] );
+				$setting->set_constant_name( null !== $args['constant_name'] ? (string) $args['constant_name'] : null );
 
 				if ( is_array( $args['options'] ) ) {
 					$setting->set_options( $args['options'] );
@@ -278,6 +282,13 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 
 			if ( ! $setting ) {
 				throw new Woodev_Plugin_Exception( "Setting {$setting_id} does not exist", 404 );
+			}
+
+			// A constant-backed setting is code-managed (wp-config); never persist
+			// it to the DB. The user cannot edit it, so an inbound value is ignored.
+			$constant = $setting->get_constant_name();
+			if ( null !== $constant && defined( $constant ) ) {
+				return;
 			}
 
 			// performs the validations and updates the value

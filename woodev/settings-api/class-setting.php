@@ -52,6 +52,12 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 		/** @var Woodev_Control control object */
 		protected $control;
 
+		/** @var bool whether this setting holds a secret (masked in transport) */
+		protected $sensitive = false;
+
+		/** @var string|null name of a PHP constant that, when defined, supplies the value (kept out of the DB) */
+		protected $constant_name = null;
+
 		/**
 		 * Gets the setting ID.
 		 *
@@ -122,6 +128,10 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 		 * @return mixed
 		 */
 		public function get_value() {
+			if ( null !== $this->constant_name && defined( $this->constant_name ) ) {
+				return constant( $this->constant_name );
+			}
+
 			return $this->value;
 		}
 
@@ -132,6 +142,48 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 		 */
 		public function get_control() {
 			return $this->control;
+		}
+
+		/**
+		 * Whether this setting holds a secret value (masked in the schema).
+		 *
+		 * @since 2.0.2
+		 * @return bool
+		 */
+		public function is_sensitive(): bool {
+			return $this->sensitive;
+		}
+
+		/**
+		 * Sets the sensitive flag.
+		 *
+		 * @since 2.0.2
+		 * @param bool $value sensitive flag.
+		 * @return void
+		 */
+		public function set_sensitive( bool $value ): void {
+			$this->sensitive = $value;
+		}
+
+		/**
+		 * The PHP constant name backing this setting, or null.
+		 *
+		 * @since 2.0.2
+		 * @return string|null
+		 */
+		public function get_constant_name(): ?string {
+			return $this->constant_name;
+		}
+
+		/**
+		 * Sets the backing constant name.
+		 *
+		 * @since 2.0.2
+		 * @param string|null $value constant name.
+		 * @return void
+		 */
+		public function set_constant_name( ?string $value ): void {
+			$this->constant_name = ( null === $value || '' === $value ) ? null : $value;
 		}
 
 		/**

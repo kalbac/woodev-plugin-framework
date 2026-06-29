@@ -26,13 +26,21 @@ import WizardRichText from './richtext';
 /**
  * Password input with a show/hide eye toggle.
  *
+ * When `isSet` is true and the user has not typed anything, the input stays
+ * empty with a "saved" placeholder (the stored secret never reaches the client);
+ * typing a new value replaces it on save. The eye toggle appears only while
+ * there is a typed value to reveal — revealing an empty masked field shows
+ * nothing, so the toggle would be meaningless.
+ *
  * @param {Object}   props          component props.
  * @param {string}   props.value    current value.
  * @param {Function} props.onChange change handler.
+ * @param {boolean}  props.isSet    whether a secret is already stored.
  * @return {Object} React element.
  */
-function PasswordControl( { value, onChange } ) {
+function PasswordControl( { value, onChange, isSet } ) {
 	const [ show, setShow ] = useState( false );
+	const hasValue = '' !== ( value ?? '' );
 
 	return createElement(
 		'div',
@@ -40,37 +48,39 @@ function PasswordControl( { value, onChange } ) {
 		createElement( TextControl, {
 			__nextHasNoMarginBottom: true,
 			__next40pxDefaultSize: true,
-			type: show ? 'text' : 'password',
+			type: show && hasValue ? 'text' : 'password',
 			value: value ?? '',
+			placeholder: isSet && ! hasValue ? '•••••• сохранено — введите новое для замены' : '',
 			onChange,
 		} ),
-		createElement(
-			'button',
-			{
-				type: 'button',
-				className: 'woodev-field__password-toggle',
-				onClick: () => setShow( ( s ) => ! s ),
-				'aria-label': show ? 'Скрыть' : 'Показать',
-				'aria-pressed': show,
-			},
+		hasValue &&
 			createElement(
-				'svg',
-				{ width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', 'aria-hidden': true },
-				show
-					? createElement( 'path', {
-						d: 'M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7zm10 3a3 3 0 100-6 3 3 0 000 6zM3 3l18 18',
-						stroke: 'currentColor',
-						strokeWidth: 2,
-						strokeLinecap: 'round',
-					} )
-					: createElement( 'path', {
-						d: 'M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7zm10 3a3 3 0 100-6 3 3 0 000 6z',
-						stroke: 'currentColor',
-						strokeWidth: 2,
-						strokeLinecap: 'round',
-					} )
+				'button',
+				{
+					type: 'button',
+					className: 'woodev-field__password-toggle',
+					onClick: () => setShow( ( s ) => ! s ),
+					'aria-label': show ? 'Скрыть' : 'Показать',
+					'aria-pressed': show,
+				},
+				createElement(
+					'svg',
+					{ width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', 'aria-hidden': true },
+					show
+						? createElement( 'path', {
+							d: 'M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7zm10 3a3 3 0 100-6 3 3 0 000 6zM3 3l18 18',
+							stroke: 'currentColor',
+							strokeWidth: 2,
+							strokeLinecap: 'round',
+						} )
+						: createElement( 'path', {
+							d: 'M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7zm10 3a3 3 0 100-6 3 3 0 000 6z',
+							stroke: 'currentColor',
+							strokeWidth: 2,
+							strokeLinecap: 'round',
+						} )
+				)
 			)
-		)
 	);
 }
 
@@ -149,6 +159,36 @@ function withAnatomy( schema, control ) {
  * @return {Object} React element.
  */
 export default function ControlField( { schema, value, onChange } ) {
+	// A wp-config-backed secret is read-only and never editable here.
+	if ( schema.constant_managed ) {
+		return withAnatomy(
+			schema,
+			createElement(
+				'div',
+				{ className: 'woodev-field__constant' },
+				createElement( 'code', null, schema.constant_name ),
+				createElement(
+					'span',
+					{ className: 'woodev-field__constant-note' },
+					' — задано в wp-config.php'
+				)
+			)
+		);
+	}
+
+	// A sensitive value is masked: empty input + "saved" placeholder; typing a new
+	// value replaces it on save (an untouched empty field is never sent).
+	if ( schema.sensitive ) {
+		return withAnatomy(
+			schema,
+			createElement( PasswordControl, {
+				value: value ?? '',
+				isSet: !! schema.is_set,
+				onChange,
+			} )
+		);
+	}
+
 	const control = resolveControl( schema );
 	const suffix = schema.suffix || schema.unit || '';
 
