@@ -26,12 +26,18 @@ import WizardRichText from './richtext';
 /**
  * Password input with a show/hide eye toggle.
  *
+ * When `isSet` is true the field renders an empty input with a "saved"
+ * placeholder (the stored secret is never sent to the client) plus a clear
+ * affordance that wipes it explicitly.
+ *
  * @param {Object}   props          component props.
  * @param {string}   props.value    current value.
  * @param {Function} props.onChange change handler.
+ * @param {boolean}  props.isSet    whether a secret is already stored.
+ * @param {Function} props.onClear  explicit-wipe handler (optional).
  * @return {Object} React element.
  */
-function PasswordControl( { value, onChange } ) {
+function PasswordControl( { value, onChange, isSet, onClear } ) {
 	const [ show, setShow ] = useState( false );
 
 	return createElement(
@@ -42,6 +48,7 @@ function PasswordControl( { value, onChange } ) {
 			__next40pxDefaultSize: true,
 			type: show ? 'text' : 'password',
 			value: value ?? '',
+			placeholder: isSet ? '•••••• (сохранено)' : '',
 			onChange,
 		} ),
 		createElement(
@@ -70,7 +77,17 @@ function PasswordControl( { value, onChange } ) {
 						strokeLinecap: 'round',
 					} )
 			)
-		)
+		),
+		isSet && onClear &&
+			createElement(
+				'button',
+				{
+					type: 'button',
+					className: 'woodev-field__password-clear',
+					onClick: onClear,
+				},
+				'Очистить'
+			)
 	);
 }
 
@@ -149,6 +166,36 @@ function withAnatomy( schema, control ) {
  * @return {Object} React element.
  */
 export default function ControlField( { schema, value, onChange } ) {
+	// A wp-config-backed secret is read-only and never editable here.
+	if ( schema.constant_managed ) {
+		return withAnatomy(
+			schema,
+			createElement(
+				'div',
+				{ className: 'woodev-field__constant' },
+				createElement( 'code', null, schema.constant_name ),
+				createElement(
+					'span',
+					{ className: 'woodev-field__constant-note' },
+					' — задано в wp-config.php'
+				)
+			)
+		);
+	}
+
+	// A sensitive value is masked: empty input + "saved" placeholder + clear.
+	if ( schema.sensitive ) {
+		return withAnatomy(
+			schema,
+			createElement( PasswordControl, {
+				value: value ?? '',
+				isSet: !! schema.is_set,
+				onChange,
+				onClear: () => onChange( '' ),
+			} )
+		);
+	}
+
 	const control = resolveControl( schema );
 	const suffix = schema.suffix || schema.unit || '';
 
