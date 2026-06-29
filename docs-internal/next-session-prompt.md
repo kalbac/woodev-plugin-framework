@@ -1,82 +1,60 @@
-# Промт следующей сессии (s36): UI-kit — сначала исследовать WP/WC, потом проектировать свой
+# Промт следующей сессии (s37): UK-2 (Плагины/Лицензии на kit) → решить UK-CFR vs SP-2
 
-> Написан в конце s35 (2026-06-27). **s35:** SP-1 рег-верифицирован; найден и **починен release-blocker** меню Woodev (PR #88 `e9b9235`, мёрж); автономный полиш страницы настроек (PR #89, **DRAFT/superseded**) оператор оценил как «намного лучше, но не то». **Главный итог — разворот направления:** у 4 админ-React-поверхностей свои скрипты и расходящиеся стили → **строим общий UI-kit**. **SP-2 (auth+секреты) ОТЛОЖЕН** до готовности kit'а.
+> Написан в конце s36 (2026-06-29). **s36 итог:** UI-kit построен и отполирован — **UK-1 (PR #90)** + 2 полиш-раунда (**#91 kit → 10/10**, **#92 settings**). Всё в `main`. Настройки и витрина доведены, console чист. Расширяемость полей (UK-CFR) отложена в backlog. **s37 = UK-2** (мигрировать «Плагины» и «Лицензии» на общий kit), затем **решить: UK-CFR или SP-2**.
 
 ## Возобновление (ОБЯЗАТЕЛЬНО)
 
-1. Прочитать `docs-internal/CURRENT-STATE.md` (раздел «Last session context» — s35) + `docs-internal/GOTCHAS.md` (индекс; новая `classmap-autoload-breaks-class-exists-once-guard`).
-2. Прочитать этот файл целиком.
-3. (Справочно) посмотреть **полиш-ветку** `polish/settings-page-ui` (PR #89 draft) — это НЕ финал, а референс: WC-заземлённые метрики (label 182px / control 425px), паттерн `FieldRow`, токены cyan, богатая демо-фикстура со всеми типами полей. На ней же — мои скриншоты текущего вида настроек.
-4. **Ветку под код пока НЕ создавать** — s36 начинается с research + брейншторма (кода нет, пока не утверждён дизайн). Версию НЕ бампать (`@since 2.0.2`).
-5. **Риг:** проектный wp-env dev `:8888` (если погашен — `npx wp-env start` из PowerShell). admin/password. Прод `:8080`/issuer `:8090` НЕ трогать.
+1. Прочитать `docs-internal/CURRENT-STATE.md` (раздел «Last session context» — s36 polish + s36 UK-1) + `docs-internal/GOTCHAS.md` (индекс).
+2. Прочитать этот файл целиком + спеку `docs-internal/specs/2026-06-27-ui-kit-design.md` (декомпозиция UK-0…4).
+3. **Риг:** проектный wp-env dev `:8888` (`npx wp-env start` из PowerShell если погашен). admin/password. Галерея kit видна (`WOODEV_UI_KIT_GALLERY` в `.wp-env.json` dev). Прод `:8080`/issuer `:8090` НЕ трогать.
+4. Версию НЕ бампать (`@since 2.0.2`).
 
-## 🎯 Задача s36 — UI-kit (по плану оператора)
+## 🎯 Задача s37 — UK-2: «Плагины» и «Лицензии» на общий kit
 
-**Шаг 1 — ИЗУЧИТЬ готовое (operator's explicit ask: «не изобретать велосипед»). ОСНОВНОЙ ИСТОЧНИК — ИСХОДНИКИ РЕПОЗИТОРИЕВ, не context7** (оператор s35: context7 хорош точечно, но не даёт полной картины и может отставать от версии; исходник авторитетнее):
-- **WP `@wordpress/components`** — настоящий исходник в **Gutenberg** (`WordPress/gutenberg`, `packages/components`: каждый компонент `.tsx` + Storybook-stories + README = полный каталог). Особое внимание под 9 замечаний: `TabPanel` (есть ли «папочный»/folder-вид), **`ComboboxControl`** (select с поиском), `Tooltip`/`Popover` (портал → решает overflow п.4), `RangeControl` (п.8), `Card`, `__experimental*`.
-- **WC `@woocommerce/components`** — монорепо **WooCommerce** (`woocommerce/woocommerce`, `packages/js/components`): их `SelectControl`, таб-навигация, layout.
-- **`selectWoo`** (форк select2, поиск + async, п.6) — лежит в установленном плагине на риге: `wp-content/plugins/woocommerce/assets/js/selectWoo/`. Читать прямо там.
-- **Метод (легковесно):** сначала проверить `node_modules` (вдруг `@wordpress/components` подтянут транзитивно). Иначе — `git clone --depth 1 --filter=blob:none --sparse <repo>` + `git sparse-checkout set packages/components` (или `packages/js/components`) во **временную reference-папку** (объяснить оператору одной фразой перед созданием; удалить в конце сессии — `feedback_explain_infrastructure_moves`). Читать на **тегах под наши целевые версии** (WP 6.3+/текущая, WC), т.к. trunk опережает то, что доступно. **context7 — только точечный fallback** (сигнатура/быстрая справка), не основной источник.
-- **Сверка с реально шипнутым:** собранные ассеты на риге (`wp-includes/js/dist/` для WP, `…/woocommerce/assets/` для WC) — что реально доступно в наших версиях.
-- **Результат шага 1:** инвентарь доступных компонентов + карта «наша поверхность/потребность → их компонент или кастом». Заземление на реальный исходник, не на предположения.
+Цель: довести оставшиеся 2 из 4 admin-React-поверхностей до общего kit (wizard = UK-4, самый крупный, после).
 
-**Шаг 2 — брейншторм UI-kit (skill `brainstorming`, по одному вопросу):**
-- **Канонический язык дизайна** (первое открытое решение): три «уже отточенные» поверхности расходятся (license=WP-синий `#2271b1`, plugins=красный `#b32d2e`, wizard+settings=cyan `#06aedd`). «Общий знаменатель» обязан свести палитру к одной — **моя рекомендация: брендовый cyan мастера** (он бренд + свежеодобрен). Подтвердить с оператором.
-- **Архитектура kit'а:** общий токен-партиал (SCSS, напр. `src/ui/tokens.scss`) + переиспользуемые компоненты (`src/ui/` или расширить `src/components/`), импортируемые всеми entry. Сейчас общего токен-файла НЕТ — каждая поверхность определяет SCSS с нуля (cyan продублирован в 3 местах).
-- **Декомпозиция (как SP-программа, по одной за раз):** **UK-0** research → **UK-1** фундамент (токены + ядро компонентов), доказать на странице настроек (закрыть все 9 замечаний) → **UK-2** миграция «Плагины» → **UK-3** «Лицензии» → **UK-4** мастер (самый крупный/особый — full-screen). Потом вернуться к SP-2.
-- **Идея (предложить):** демо-галерея компонентов (страница-витрина со всеми типами полей) — ревьюить kit изолированно до расстановки по поверхностям. Закрывает п.9.
+- **UK-2a «Плагины»** (`src/plugins-page/`): перевести scss на `@use '../components/tokens'` (cyan уже унифицирован в `#06aedd` s36, но переменные `$wd-*` ещё локальные — заменить на токены); подключить `_wp-recolor`/`_field`/`_tabs` где уместно; убрать локальные дубли. Красный акцент `#b32d2e` — решить с оператором (оставить как статус-цвет или свести). Rig-проверить.
+- **UK-2b «Лицензии»** (`src/license-page/`): **главный visual outlier** — на WP-синем `#2271b1`. Перевести на cyan-токены (`@use tokens` + recolor), сохранив статусные цвета (зелёный/жёлтый/красный для license states). Это закрывает последнее расхождение палитры. Rig-проверить (оператор аппрувит визуал).
+- **Метод:** как s36 — мигрировать scss на токены, переиспользовать kit-компоненты где подходят, НЕ ломать существующую вёрстку (license/plugins имеют свои layout — это не полная переделка, а унификация токенов+recolor). Оператор ревьюит на риге батчами (`feedback_operator_manual_ui_testing`).
 
-**Шаг 3 — spec → `writing-plans` → реализация UK-1.** Спека `docs-internal/specs/2026-06-2X-ui-kit-design.md`, план `docs-internal/plans/...`. Реализация — worker + независимый inline-bundle/субагент-критик, re-critic на свои фиксы (autodev-loop НЕ использовать: codex-shell сломан на этой Windows-машине — gotcha `codex-shell-sandbox-broken-windows`).
+## Затем — РЕШИТЬ с оператором: UK-CFR или SP-2
 
-## 9 замечаний оператора по текущему UI настроек (= требования к kit'у)
+Открытое решение (оператор отложил на после UK-2):
+- **UK-CFR** (settings extensibility, `FUTURE-BACKLOG.md`) — плагин может добавлять ЛЮБЫЕ кастомные поля/секции, не только встроенные. Два уровня: (a) хук `woodev.settings.controlRenderer` (`@wordpress/hooks`) для любого кастом-поля; (b) кастомная секция целиком (sub-CRUD таблицы — СДЭК упаковки / Яндекс склады). Оператор хочет проектировать ОБА уровня вместе, желательно под реальный плагин (брейншторм→спека→реализация).
+- **SP-2** (auth + секреты, отложен с s35) — §5 decisions-doc: `sensitive`-маскирование (Field_Schema эмитит value всегда — дыра маскирования) + опциональный `constant_name` wp-config override (секрет не в DB). Per-field dirty-tracking уже есть. Первый висящий вопрос — граница объёма (только механизм секретов vs + auth-контракт).
 
-1. **Full-width**, а не карточка фиксированной ширины.
-2. Закладки — настоящие **«папочные» табы**, не подчёркнутый текст.
-3. **Deep-link** на конкретную закладку (прямая ссылка открывает нужный таб).
-4. **Тултип не должен обрезаться** за пределами viewport (длинный текст уходит за край) → портал/`Popover`.
-5. **Убрать дивайдеры** между каждой опцией.
-6. **Select** — как dropdown мастера; + для длинных списков **поиск внутри** + **динамическая подгрузка** (à la `selectWoo.js`/select2). Проверить `ComboboxControl` (WP) и WC async SelectControl.
-7. **Подразделы как под-табы:** основной таб «Карьер» → под-табы-ссылки «Авторизация»/«Форма заказа» (по умолчанию первая); сейчас секции рендерятся стопкой с заголовками — нужно навигацией. (Это то, что обсуждали в s32: page → tabs → sub-sections.)
-8. **Range «Наценка»** — сейчас сломанная «синяя точка» вместо слайдера; нужен нормальный слайдер.
-9. Демо со **всеми** типами полей (сейчас не видно multiselect, richtext).
+## Что есть в kit (s36) — карта
 
-## Карта расхождений 4 поверхностей (заземление, s35)
+`src/components/`:
+- `tokens.scss` — единый источник (accent `#06aedd`, scale, метрики label 182 / control 425).
+- `_wp-recolor.scss` — recolor нативных wp-компонентов (TabPanel, RangeControl, и т.д.) + tooltip фикс-ширина + input radius/shadow.
+- `_field.scss` — нейтральная анатомия поля (`woodev-field__*`); вертикаль по умолчанию, surface задаёт горизонталь.
+- `_tabs.scss` — под-табы (`woodev-subtabs`).
+- `field-row.js` — анатомия (label+tooltip[wp Tooltip портал]+desc+control).
+- `control-field.js` — диспетчер control-типов (text/textarea/toggle/radio/range/richtext/select/multiselect/color/email/password[eye]/number/date). select/multiselect → `select-field.js`. Неизвестный тип → сейчас падает в text (UK-CFR добавит хук).
+- `select-field.js` — **WC-style** select: trigger button + popover (SearchControl + список + галочки), single & multi, overlay (не сдвигает страницу).
+- `richtext.js`, `icons.js`.
+- `Woodev → UI Kit` dev-витрина (`src/ui-kit-gallery/`, gated `WOODEV_UI_KIT_GALLERY`).
 
-| Поверхность | Файлы | Акцент | Токены |
-|---|---|---|---|
-| `src/license-page/` | app, card-state, license-card (433), style.scss (334) | `#2271b1` WP-синий | свои, cyan нет |
-| `src/plugins-page/` | app, account, catalog (232), install, purchases, filter, style.scss (667) | `#b32d2e` красный | свои |
-| `src/setup-wizard/` | app (407), step-view, stepper, style.scss (994) | `#06aedd` cyan | свои `$wd-*` |
-| `src/settings-page/` | app, section-view, field-row, rest, style.scss | `#06aedd` cyan | свои (полиш s35) |
-| `src/components/` (общее) | control-field (283), dropdown (103), icons (153), richtext (156) | — | используют только wizard+settings |
+`src/settings-page/` — эталон на kit: `TabsNav` (папочные табы провайдеров + под-табы секций + deep-link `?tab=&section=`), full-width Card, Save-disabled-until-change, WP snackbar + inline notice, описания секций.
 
-Общего токен-партиала нет; license-page на WP-синем — главный визуальный outlier.
+## Кросс-катинг-констрейнты
 
-## Кросс-катинг-констрейнты (те же)
-
-- **React:** `@wordpress/scripts`, **classic JSX** (`createElement`/`Fragment`, без JSX-рантайма — WP 6.3+; gotcha `wp-scripts-jsx-runtime-wp66`), LF в `assets/build` (gotcha `build-artifacts-eol-lf-windows-parity`); собранные ассеты коммитить (assets-parity CI). CSS версионировать по `filemtime` (gotcha `wp-scripts-css-enqueue-version-by-mtime`).
-- **Нет Composer в прод:** после нового PHP-класса фреймворка — `php bin/generate-class-map.php` в той же задаче (UI-kit — в основном JS/SCSS, но если добавится PHP — не забыть).
+- **React:** `@wordpress/scripts`, **min WP 6.6 → автоматический JSX-runtime** (babel.config.js удалён; новые файлы можно на JSX-синтаксисе, старые createElement работают). **SVG-атрибуты в createElement — camelCase** (`strokeWidth`, не `stroke-width`). На всех wp-инпутах ставить `__next40pxDefaultSize` (иначе 36px-deprecation warning). LF в `assets/build` (gotcha `build-artifacts-eol-lf-windows-parity`); собранные ассеты коммитить (assets-parity CI). CSS версионируется по `filemtime`.
+- **Нет Composer в прод:** новый PHP-класс фреймворка → `php bin/generate-class-map.php` в той же задаче.
 - **i18n:** без `_n()` (русский — source; gotcha `russian-source-i18n-plural-n`).
-- **Serena EOL-флип:** для существующих source-файлов править built-in `Edit`, не Serena `replace_content` (CRLF-флип; gotcha `serena-replace-content-eol-flip`).
-- **Build:** `npm run build` собирает 4 бандла; entry в `package.json` scripts.
+- **Serena EOL-флип:** существующие source-файлы править built-in `Edit`, не Serena `replace_content` (gotcha `serena-replace-content-eol-flip`).
+- **Build:** `npm run build` собирает 5 бандлов (license/plugins/setup-wizard/settings/ui-kit-gallery).
 
 ## Гигиена / процесс
 
-- PHPStan локально на Windows падает (segfault, environmental — gotcha `phpstan-windows-parallel-worker-segfault`); гейт — Linux CI «Lint». Локально: `composer phpcs` + `composer test:unit` + JS-сборка. Интеграция + PHPStan — только Linux CI.
-- Интеграционные тесты гонять через `npx wp-env run tests-cli env TEST_SUITE=integration php /var/www/html/woodev-framework/vendor/bin/phpunit --configuration .../phpunit.xml --testsuite=Integration --no-coverage`.
-- Независимое ревью: Codex shell сломан → критик inline-bundle / pr-review-toolkit субагенты / `/code-review`.
-- **Мёрж:** ветка → PR → проверить **КАЖДЫЙ** CI-job = pass + state CLEAN → `gh pr merge --squash --delete-branch` (никогда `--auto`). После прямых docs-коммитов в main — сразу push (gotcha `git-squash-onto-stale-origin-main-diverge`).
-- **Дизайн субъективен:** оператор ревьюит UI на риге; не мержить визуал без его аппрува (полиш он отклонял дважды у мастера). Богато сидировать демо-данные перед ревью (`feedback_design_bar_modern_wc_react`).
-
-## Открытые висящие вопросы (для брейншторма)
-
-1. Канонический язык дизайна → **cyan** (рекомендация) vs иной.
-2. Searchable/async select: `ComboboxControl` (WP, есть поиск) vs WC async SelectControl vs кастом на базе dropdown мастера.
-3. Демо-галерея как отдельная страница-витрина — делать ли.
-4. Что делать с PR #89: после UK-1 (ребилд настроек на kit) — закрыть (superseded) или переиспользовать ветку как базу UK-1.
+- PHPStan локально на Windows падает (segfault, environmental); гейт — Linux CI «Lint». Локально: `composer phpcs` + `composer test:unit` + JS-сборка. Интеграция через `MSYS_NO_PATHCONV=1 npx wp-env run tests-cli env TEST_SUITE=integration php /var/www/html/woodev-framework/vendor/bin/phpunit --configuration /var/www/html/woodev-framework/phpunit.xml --testsuite=Integration --no-coverage [--filter X]`.
+- **Критик = GPT-5.5 (Codex):** companion auth работает, но built-in `review` всё ещё упирается в Windows-sandbox shell → **рабочий путь = inline-bundle** (`node <plugin>/scripts/codex-companion.mjs task "$(cat bundle)" --json`, NO-SHELL framing, bundle **<~30KB** — Windows arg-лимит; дробить/убирать scss). См. gotcha `codex-shell-sandbox-broken-windows` (обновлена s36). re-critic свои фиксы.
+- **Мёрж:** ветка → PR → проверить **КАЖДЫЙ** CI-job = pass + state CLEAN → `gh pr merge --squash --delete-branch` (никогда `--auto`). После прямых docs-коммитов в main — сразу push.
+- **Дизайн субъективен:** оператор ревьюит UI на риге батчами, не мержить визуал без его аппрува; богато сидировать демо (фикстура «Карьер» уже покрывает все типы полей по 3 секциям).
 
 ## Прочее
 
-- **SP-2 (auth+секреты) ОТЛОЖЕН** — вернуться после UI-kit. Контекст SP-2: §5 decisions-doc (`sensitive`-маскирование + `constant_name` override), грунт в коде SP-1 (Field_Schema эмитит value всегда — дыра маскирования; per-field dirty-tracking уже есть). Первый висящий вопрос SP-2 — граница объёма (только механизм секретов vs + auth-контракт).
+- **PR #90/#91/#92 — все в main.** main HEAD после session-save = docs-коммит s36.
+- **Obsidian MCP был недоступен в конце s36** (disconnected) — `sessions/latest-context.md` не обновлён за этот save; обновить при следующей возможности (не блокер).
 - **s-кратно-10 — следующий аудит доков на s40** (последний — s39).
-- PR #88 (меню-фикс) — в main. PR #89 (полиш) — draft, superseded.
