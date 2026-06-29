@@ -3,9 +3,16 @@
 // the redesign layer: intro info-notice, responsive card grid, per-status accent
 // bars, the status badge, the key form-group, and the compact quick-link cards.
 //
+// UK-2 (s37): migrated to the shared UI-kit — the page's WP-blue (#2271b1) and the
+// light-blue info state (#72aee6) move onto the brand cyan ($accent), and the
+// license status colors (green/yellow/red) read from tokens.scss. This closes the
+// last palette outlier; the page no longer carries any WP-blue.
+//
 // NOTE: this bundle (style-index.css) is enqueued on the whole license page, so it
 // also styles the server-rendered quick-links section below the React app
 // (woodev/admin/pages/views/html-settings-section.php) — see .woodev-settings-documentation.
+
+@use '../components/tokens' as wd;
 
 // ---------------------------------------------------------------------------
 // Intro — info-notice spanning the content width.
@@ -17,15 +24,15 @@
 	gap: 10px;
 	margin: 0 0 20px;
 	padding: 12px 16px;
-	background: #f0f6fc;
-	border: 1px solid #c5d9ed;
-	border-left: 4px solid #2271b1;
+	background: wd.$accent-soft-2;
+	border: 1px solid rgba(wd.$accent, 0.3);
+	border-left: 4px solid wd.$accent;
 	border-radius: 4px;
 
 	&__icon {
 		flex: 0 0 auto;
 		margin-top: 2px;
-		color: #2271b1;
+		color: wd.$accent-strong;
 	}
 
 	&__text {
@@ -58,13 +65,13 @@
 // ---------------------------------------------------------------------------
 
 .woodev-license-card {
-	border-left: 4px solid #c3c4c7; // neutral default
+	border-left: 4px solid wd.$line; // neutral default
 
-	&--success { border-left-color: #00a32a; }
-	&--warning { border-left-color: #dba617; }
-	&--error   { border-left-color: #d63638; }
+	&--success { border-left-color: wd.$ok; }
+	&--warning { border-left-color: wd.$warn; }
+	&--error   { border-left-color: wd.$error; }
 	&--info,
-	&--neutral { border-left-color: #72aee6; }
+	&--neutral { border-left-color: wd.$accent; }
 }
 
 // Status badge pill — colored by variant.
@@ -78,10 +85,10 @@
 	color: #fff;
 	white-space: nowrap;
 
-	&.is-success { background-color: #00a32a; }
-	&.is-warning { background-color: #dba617; color: #1d2327; }
-	&.is-error   { background-color: #d63638; }
-	&.is-info    { background-color: #72aee6; color: #1d2327; }
+	&.is-success { background-color: wd.$ok; }
+	&.is-warning { background-color: wd.$warn; color: wd.$ink; }
+	&.is-error   { background-color: wd.$error; }
+	&.is-info    { background-color: wd.$accent; color: wd.$ink; }
 }
 
 // ---------------------------------------------------------------------------
@@ -128,8 +135,8 @@
 		margin-left: -1px;
 
 		&:focus:not( :disabled ) {
-			border-color: #2271b1;
-			box-shadow: 0 0 0 1px #2271b1;
+			border-color: wd.$accent;
+			box-shadow: 0 0 0 1px wd.$accent;
 			z-index: 1;
 		}
 	}
@@ -220,7 +227,7 @@
 			width: 32px;
 			height: 32px;
 			font-size: 32px;
-			color: #2271b1; // WP admin blue
+			color: wd.$accent-strong;
 		}
 
 		&__content {
@@ -245,16 +252,16 @@
 			align-self: flex-start;
 			margin-top: auto;
 			padding: 6px 14px;
-			border: 1px solid #2271b1;
+			border: 1px solid wd.$accent-strong;
 			border-radius: 3px;
-			color: #2271b1;
+			color: wd.$accent-strong;
 			font-weight: 500;
 			text-decoration: none;
 			transition: background-color 0.15s ease, color 0.15s ease;
 
 			&:hover,
 			&:focus {
-				background-color: #2271b1;
+				background-color: wd.$accent-strong;
 				color: #fff;
 			}
 		}
@@ -284,7 +291,7 @@
 
 	.woodev-skeleton {
 		display: block;
-		background: #e2e4e7;
+		background: wd.$border;
 		border-radius: 4px;
 		animation: woodev-skeleton-pulse 1.4s ease-in-out infinite;
 	}
@@ -295,9 +302,9 @@
 	}
 
 	.woodev-skeleton-card {
-		background: #fff;
+		background: wd.$surface;
 		border: 1px solid #e0e0e0;
-		border-left: 4px solid #c3c4c7;
+		border-left: 4px solid wd.$line;
 		border-radius: 2px;
 	}
 

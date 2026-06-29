@@ -2,24 +2,18 @@
  * «Плагины» page styles — modern compact catalog with the woodev.ru brand accent.
  *
  * Light, wp-admin-native surface (so it sits well in the admin chrome) accented
- * with the woodev.ru brand cyan (#00C9FD), rounded corners and soft shadows.
- * Compact cards modeled on the woodev.ru "Похожие плагины" block: small square
- * icon + title + short excerpt + an accent price button.
+ * with the shared UI-kit brand cyan (tokens.scss $accent #06aedd), rounded corners
+ * and soft shadows. Compact cards modeled on the woodev.ru "Похожие плагины" block:
+ * small square icon + title + short excerpt + an accent price button.
+ *
+ * UK-2 (s37): migrated to the shared kit — all brand color/radius come from
+ * tokens.scss via @use; the divergent legacy cyan rgba(0,201,253) (#00c9fd) is
+ * unified to the accent, and the bespoke red #b32d2e folds into the $error token.
  *
  * @package woodev-plugin-framework
  */
 
-// Canonical brand cyan (s36 UI-kit) — unified with tokens.scss ($accent).
-// Full migration to @use tokens is UK-2; here we only kill the divergent cyan.
-$wd-accent: #06aedd;
-$wd-accent-strong: #0596c4;
-$wd-accent-ink: #04303d;
-$wd-ink: #1d2327;
-$wd-muted: #646970;
-$wd-border: #e2e4e7;
-$wd-surface: #fff;
-$wd-radius: 12px;
-$wd-radius-sm: 8px;
+@use '../components/tokens' as wd;
 
 .woodev-extensions-wrap {
 	// Wide: fill the admin content column (no artificial max-width).
@@ -31,7 +25,7 @@ $wd-radius-sm: 8px;
 
 	&__intro {
 		font-size: 14px;
-		color: $wd-muted;
+		color: wd.$muted;
 		margin: 0.25em 0 1.5em;
 	}
 
@@ -46,14 +40,14 @@ $wd-radius-sm: 8px;
 		padding: 10px 14px;
 		font-size: 14px;
 		line-height: 1.4;
-		border: 1px solid $wd-border;
-		border-radius: $wd-radius-sm;
-		background: $wd-surface;
+		border: 1px solid wd.$border;
+		border-radius: wd.$radius-sm;
+		background: wd.$surface;
 		transition: border-color 0.15s ease, box-shadow 0.15s ease;
 
 		&:focus {
-			border-color: $wd-accent;
-			box-shadow: 0 0 0 2px rgba(0, 201, 253, 0.25);
+			border-color: wd.$accent;
+			box-shadow: 0 0 0 2px rgba(wd.$accent, 0.25);
 			outline: none;
 		}
 
@@ -70,19 +64,19 @@ $wd-radius-sm: 8px;
 		flex-wrap: wrap;
 		margin: 0 0 22px;
 		padding: 16px 20px;
-		background: linear-gradient(135deg, rgba(0, 201, 253, 0.08), rgba(0, 201, 253, 0.02));
-		border: 1px solid rgba(0, 201, 253, 0.35);
-		border-radius: $wd-radius;
+		background: linear-gradient(135deg, rgba(wd.$accent, 0.08), rgba(wd.$accent, 0.02));
+		border: 1px solid rgba(wd.$accent, 0.35);
+		border-radius: wd.$radius;
 	}
 
 	&__account-text {
 		flex: 1 1 260px;
-		color: $wd-ink;
+		color: wd.$ink;
 		font-size: 13.5px;
 	}
 
 	&__account .button {
-		border-radius: $wd-radius-sm;
+		border-radius: wd.$radius-sm;
 	}
 
 	// ---- Category chips -----------------------------------------------------
@@ -95,25 +89,25 @@ $wd-radius-sm: 8px;
 
 	&__chip {
 		padding: 7px 16px;
-		border: 1px solid $wd-border;
+		border: 1px solid wd.$border;
 		border-radius: 999px;
-		background: $wd-surface;
-		color: $wd-ink;
+		background: wd.$surface;
+		color: wd.$ink;
 		cursor: pointer;
 		font-size: 13px;
 		line-height: 1.2;
 		transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
 
 		&:hover {
-			border-color: $wd-accent;
-			color: $wd-accent-strong;
+			border-color: wd.$accent;
+			color: wd.$accent-strong;
 		}
 
 		&.is-active {
-			background: $wd-accent;
-			border-color: $wd-accent;
+			background: wd.$accent;
+			border-color: wd.$accent;
 			color: #fff;
-			box-shadow: 0 2px 8px rgba(0, 201, 253, 0.35);
+			box-shadow: 0 2px 8px rgba(wd.$accent, 0.35);
 		}
 	}
 
@@ -135,13 +129,13 @@ $wd-radius-sm: 8px;
 	&__empty,
 	&__error,
 	&__loading {
-		color: $wd-muted;
+		color: wd.$muted;
 		padding: 28px 0;
 		font-size: 14px;
 	}
 
 	&__error {
-		color: #b32d2e;
+		color: wd.$error;
 	}
 }
 
@@ -149,16 +143,16 @@ $wd-radius-sm: 8px;
 .woodev-extension-card {
 	display: flex;
 	flex-direction: column;
-	background: $wd-surface;
-	border: 1px solid $wd-border;
-	border-radius: $wd-radius;
+	background: wd.$surface;
+	border: 1px solid wd.$border;
+	border-radius: wd.$radius;
 	padding: 16px;
 	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 	transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
 
 	&:hover {
-		border-color: rgba(0, 201, 253, 0.6);
-		box-shadow: 0 8px 24px rgba(0, 201, 253, 0.16);
+		border-color: rgba(wd.$accent, 0.6);
+		box-shadow: 0 8px 24px rgba(wd.$accent, 0.16);
 		transform: translateY(-2px);
 	}
 
@@ -195,8 +189,8 @@ $wd-radius-sm: 8px;
 			font-size: 24px;
 			font-weight: 700;
 			line-height: 1;
-			color: $wd-accent-strong;
-			background: rgba(0, 201, 253, 0.12);
+			color: wd.$accent-strong;
+			background: rgba(wd.$accent, 0.12);
 		}
 	}
 
@@ -212,11 +206,11 @@ $wd-radius-sm: 8px;
 		overflow: hidden;
 
 		a {
-			color: $wd-ink;
+			color: wd.$ink;
 			text-decoration: none;
 
 			&:hover {
-				color: $wd-accent-strong;
+				color: wd.$accent-strong;
 			}
 		}
 	}
@@ -229,7 +223,7 @@ $wd-radius-sm: 8px;
 	}
 
 	&__stars {
-		color: $wd-accent;
+		color: wd.$accent;
 		font-size: 13px;
 		letter-spacing: 1px;
 		line-height: 1;
@@ -238,14 +232,14 @@ $wd-radius-sm: 8px;
 	&__rating-value {
 		font-size: 12px;
 		font-weight: 600;
-		color: $wd-muted;
+		color: wd.$muted;
 	}
 
 	&__excerpt {
 		flex: 1 1 auto;
 		font-size: 12.5px;
 		line-height: 1.5;
-		color: $wd-muted;
+		color: wd.$muted;
 		margin-bottom: 14px;
 		// clamp to 3 lines
 		display: -webkit-box;
@@ -271,25 +265,25 @@ $wd-radius-sm: 8px;
 		font-size: 13px;
 		font-weight: 600;
 		text-decoration: none;
-		border-radius: $wd-radius-sm;
-		background: $wd-accent;
-		color: $wd-accent-ink;
-		border: 1px solid $wd-accent;
+		border-radius: wd.$radius-sm;
+		background: wd.$accent;
+		color: wd.$accent-ink;
+		border: 1px solid wd.$accent;
 		transition: background 0.15s ease, box-shadow 0.15s ease, color 0.15s ease;
 
 		&:hover {
-			background: $wd-accent-strong;
+			background: wd.$accent-strong;
 			color: #fff;
-			box-shadow: 0 4px 14px rgba(0, 201, 253, 0.4);
+			box-shadow: 0 4px 14px rgba(wd.$accent, 0.4);
 		}
 
 		&.is-free {
 			background: transparent;
-			color: $wd-accent-strong;
+			color: wd.$accent-strong;
 
 			&:hover {
-				background: rgba(0, 201, 253, 0.1);
-				color: $wd-accent-strong;
+				background: rgba(wd.$accent, 0.1);
+				color: wd.$accent-strong;
 			}
 		}
 	}
@@ -309,7 +303,7 @@ $wd-radius-sm: 8px;
 
 	&__link {
 		font-size: 13px;
-		color: $wd-accent-strong;
+		color: wd.$accent-strong;
 		text-decoration: none;
 
 		&:hover {
@@ -322,30 +316,30 @@ $wd-radius-sm: 8px;
 		align-items: center;
 		gap: 10px;
 		padding: 6px 12px;
-		background: $wd-surface;
-		border: 1px solid $wd-border;
+		background: wd.$surface;
+		border: 1px solid wd.$border;
 		border-radius: 999px;
 		cursor: pointer;
 		font-size: 13px;
-		color: $wd-ink;
+		color: wd.$ink;
 		transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
 
 		&:hover {
-			border-color: $wd-accent;
+			border-color: wd.$accent;
 		}
 
 		// Disconnected CTA: filled accent pill so «Подключить аккаунт» reads as the
 		// primary action.
 		&--cta {
 			padding: 8px 16px;
-			background: $wd-accent;
-			border-color: $wd-accent;
-			color: $wd-accent-ink;
+			background: wd.$accent;
+			border-color: wd.$accent;
+			color: wd.$accent-ink;
 			font-weight: 600;
 
 			&:hover {
-				background: $wd-accent-strong;
-				border-color: $wd-accent-strong;
+				background: wd.$accent-strong;
+				border-color: wd.$accent-strong;
 				color: #fff;
 			}
 		}
@@ -363,8 +357,8 @@ $wd-radius-sm: 8px;
 			align-items: center;
 			justify-content: center;
 			font-weight: 700;
-			color: $wd-accent-strong;
-			background: rgba(0, 201, 253, 0.14);
+			color: wd.$accent-strong;
+			background: rgba(wd.$accent, 0.14);
 		}
 	}
 
@@ -377,7 +371,7 @@ $wd-radius-sm: 8px;
 	}
 
 	&__caret {
-		color: $wd-muted;
+		color: wd.$muted;
 		font-size: 11px;
 	}
 
@@ -386,9 +380,9 @@ $wd-radius-sm: 8px;
 		top: calc(100% + 6px);
 		right: 0;
 		min-width: 200px;
-		background: $wd-surface;
-		border: 1px solid $wd-border;
-		border-radius: $wd-radius-sm;
+		background: wd.$surface;
+		border: 1px solid wd.$border;
+		border-radius: wd.$radius-sm;
 		box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
 		padding: 6px;
 		z-index: 10;
@@ -403,7 +397,7 @@ $wd-radius-sm: 8px;
 		text-align: left;
 		padding: 9px 12px;
 		font-size: 13px;
-		color: $wd-ink;
+		color: wd.$ink;
 		text-decoration: none;
 		background: transparent;
 		border: 0;
@@ -411,14 +405,14 @@ $wd-radius-sm: 8px;
 		cursor: pointer;
 
 		&:hover {
-			background: rgba(0, 201, 253, 0.08);
+			background: rgba(wd.$accent, 0.08);
 		}
 
 		&--danger {
-			color: #b32d2e;
+			color: wd.$error;
 
 			&:hover {
-				background: rgba(179, 45, 46, 0.08);
+				background: rgba(wd.$error, 0.08);
 			}
 
 			&:disabled {
@@ -444,19 +438,19 @@ $wd-radius-sm: 8px;
 
 // «Куплено» badge — accent (cyan) pill, distinct from the green «Установлен».
 .woodev-extension-card__badge--purchased {
-	color: $wd-accent-ink;
-	background: rgba(0, 201, 253, 0.16);
+	color: wd.$accent-ink;
+	background: rgba(wd.$accent, 0.16);
 }
 
 .woodev-extension-card__buy.is-installed {
 	background: transparent;
-	color: $wd-ink;
-	border-color: $wd-border;
+	color: wd.$ink;
+	border-color: wd.$border;
 
 	&:hover {
-		background: rgba(0, 201, 253, 0.08);
-		color: $wd-accent-strong;
-		border-color: $wd-accent;
+		background: rgba(wd.$accent, 0.08);
+		color: wd.$accent-strong;
+		border-color: wd.$accent;
 		box-shadow: none;
 	}
 }
@@ -466,7 +460,7 @@ $wd-radius-sm: 8px;
 	display: flex;
 	gap: 4px;
 	margin: 16px 0;
-	border-bottom: 1px solid $wd-border;
+	border-bottom: 1px solid wd.$border;
 }
 
 .woodev-extensions__tab {
@@ -480,13 +474,13 @@ $wd-radius-sm: 8px;
 	color: #50575e;
 
 	&.is-active {
-		color: $wd-ink;
+		color: wd.$ink;
 		font-weight: 600;
-		border-bottom-color: $wd-accent-strong;
+		border-bottom-color: wd.$accent-strong;
 	}
 
 	&:hover {
-		color: $wd-ink;
+		color: wd.$ink;
 	}
 }
 
@@ -551,7 +545,7 @@ $wd-radius-sm: 8px;
 .woodev-purchases__installed {
 	font-size: 12px;
 	font-weight: 600;
-	color: $wd-accent-strong;
+	color: wd.$accent-strong;
 }
 
 // ---- Install control --------------------------------------------------------
@@ -560,16 +554,16 @@ $wd-radius-sm: 8px;
 	padding: 7px 14px;
 	font-size: 13px;
 	font-weight: 600;
-	border-radius: $wd-radius-sm;
-	background: $wd-accent;
-	color: $wd-accent-ink;
-	border: 1px solid $wd-accent;
+	border-radius: wd.$radius-sm;
+	background: wd.$accent;
+	color: wd.$accent-ink;
+	border: 1px solid wd.$accent;
 	transition: background 0.15s ease, box-shadow 0.15s ease, color 0.15s ease;
 
 	&:hover:not( :disabled ) {
-		background: $wd-accent-strong;
+		background: wd.$accent-strong;
 		color: #fff;
-		box-shadow: 0 4px 14px rgba(0, 201, 253, 0.4);
+		box-shadow: 0 4px 14px rgba(wd.$accent, 0.4);
 	}
 
 	&:disabled {
@@ -579,12 +573,12 @@ $wd-radius-sm: 8px;
 
 	&--error {
 		background: transparent;
-		color: #b32d2e;
-		border-color: #b32d2e;
+		color: wd.$error;
+		border-color: wd.$error;
 
 		&:hover:not( :disabled ) {
-			background: rgba(179, 45, 46, 0.08);
-			color: #b32d2e;
+			background: rgba(wd.$error, 0.08);
+			color: wd.$error;
 			box-shadow: none;
 		}
 	}
@@ -608,15 +602,15 @@ $wd-radius-sm: 8px;
 
 .woodev-install__done-label {
 	font-weight: 600;
-	color: $wd-accent-strong;
+	color: wd.$accent-strong;
 }
 
 .woodev-install__activate {
-	color: $wd-muted;
+	color: wd.$muted;
 	text-decoration: none;
 
 	&:hover {
-		color: $wd-accent-strong;
+		color: wd.$accent-strong;
 		text-decoration: underline;
 	}
 }
@@ -657,8 +651,8 @@ $wd-radius-sm: 8px;
 	width: 34px;
 	height: 34px;
 	border-radius: 50%;
-	border: 3px solid rgba(0, 201, 253, 0.25);
-	border-top-color: $wd-accent;
+	border: 3px solid rgba(wd.$accent, 0.25);
+	border-top-color: wd.$accent;
 	animation: woodev-install-spin 0.8s linear infinite;
 }
 
