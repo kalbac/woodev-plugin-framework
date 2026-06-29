@@ -14,6 +14,11 @@
 .woodev-settings {
 	// Full-width (zam.1) — no fixed max-width; the Card frames the content.
 
+	// Notices (save success/error) need breathing room from the adjacent block.
+	.components-notice {
+		margin: 1rem auto;
+	}
+
 	&__loading {
 		display: flex;
 		align-items: center;
