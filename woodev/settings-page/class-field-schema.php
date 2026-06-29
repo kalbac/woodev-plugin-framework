@@ -37,9 +37,13 @@ final class Field_Schema {
 
 			// Mask secrets: sensitive fields and constant-backed fields never emit
 			// their stored value to the browser — only whether a value is present.
+			// A field declaring a constant_name is secret-bearing regardless of
+			// whether the constant is currently defined: when undefined it falls
+			// back to the stored option, which must still never be emitted.
 			$constant_name    = $setting->get_constant_name();
-			$constant_managed = null !== $constant_name && defined( $constant_name );
-			$is_secret        = $setting->is_sensitive() || $constant_managed;
+			$has_constant     = null !== $constant_name;
+			$constant_managed = $has_constant && defined( $constant_name );
+			$is_secret        = $setting->is_sensitive() || $has_constant;
 			$stored           = $handler->get_value( $setting->get_id() );
 			$is_set           = '' !== (string) ( is_array( $stored ) ? implode( '', $stored ) : $stored );
 
@@ -54,11 +58,12 @@ final class Field_Schema {
 				'tooltip'     => $control ? $control->get_tooltip() : '',
 			];
 
-			if ( $setting->is_sensitive() ) {
-				$entry['sensitive'] = true;
-			}
+			// Any secret (declared sensitive OR constant-backed) is masked in the UI
+			// via the password control; a defined constant additionally renders the
+			// read-only wp-config note (ControlField checks constant_managed first).
 			if ( $is_secret ) {
-				$entry['is_set'] = $is_set;
+				$entry['sensitive'] = true;
+				$entry['is_set']    = $is_set;
 			}
 			if ( $constant_managed ) {
 				$entry['constant_managed'] = true;

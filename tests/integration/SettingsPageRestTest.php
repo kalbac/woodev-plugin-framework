@@ -126,6 +126,82 @@ class SettingsPageRestTest extends TestCase {
 	}
 
 	/**
+	 * A non-secret field's explicitly-empty POSTed value must be honored, not
+	 * silently replaced by the stored value (the stored-fallback is for masked
+	 * secrets only). Stored mode='stored-mode'; the test succeeds iff the merge
+	 * yields mode='' (posted, empty) AND token='good' (secret fallback, untouched).
+	 *
+	 * @return void
+	 */
+	public function test_test_connection_honors_empty_posted_value_for_non_secret_field(): void {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+
+		$this->seed_provider_with_mixed_connection();
+
+		$request = new WP_REST_Request( 'POST', '/woodev/v1/settings/carrier/connection/api/test' );
+		$request->set_param( 'values', [ 'mode' => '' ] ); // intentionally cleared non-secret; token untouched.
+		$request->set_header( 'X-WP-Nonce', wp_create_nonce( 'wp_rest' ) );
+
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertTrue( $response->get_data()['success'], 'empty non-secret value must win over the stored value' );
+	}
+
+	/**
+	 * Registers a `carrier` provider whose connection block mixes a non-secret
+	 * `mode` (stored 'stored-mode') with a sensitive `token` (stored 'good'). The
+	 * handler succeeds only when the merge yields mode='' AND token='good'.
+	 *
+	 * @return void
+	 */
+	private function seed_provider_with_mixed_connection(): void {
+		$handler = new class( 'carrier' ) extends \Woodev_Abstract_Settings implements \Woodev_Settings_Connection_Test {
+
+			/**
+			 * Registers a non-secret mode + a sensitive token.
+			 *
+			 * @return void
+			 */
+			protected function register_settings() {
+				$this->register_setting( 'mode', \Woodev_Setting::TYPE_STRING, [ 'name' => 'Mode', 'default' => '' ] );
+				$this->register_setting( 'token', \Woodev_Setting::TYPE_STRING, [ 'name' => 'Token', 'sensitive' => true, 'default' => '' ] );
+			}
+
+			/**
+			 * Succeeds iff mode is the empty string and token === 'good'.
+			 *
+			 * @param string              $connection_id connection section id.
+			 * @param array<string,mixed> $values        merged field values.
+			 * @return \Woodev_Connection_Result
+			 */
+			public function test_connection( string $connection_id, array $values ): \Woodev_Connection_Result {
+				return ( '' === ( $values['mode'] ?? null ) && 'good' === ( $values['token'] ?? null ) )
+					? \Woodev_Connection_Result::success( 'OK' )
+					: \Woodev_Connection_Result::failure( 'Нет.' );
+			}
+		};
+
+		$handler->update_value( 'mode', 'stored-mode' );
+		$handler->update_value( 'token', 'good' );
+
+		$provider = Settings_Provider::create(
+			'carrier',
+			'Carrier',
+			$handler,
+			[
+				Settings_Section::create( 'api', 'API', [ 'mode', 'token' ], '', true, 'Проверить' ),
+			]
+		);
+
+		$registry = Settings_Page_Registry::instance();
+		$registry->register_service( $provider );
+
+		$GLOBALS['wp_rest_server'] = null;
+		rest_get_server();
+	}
+
+	/**
 	 * Registers a `carrier` provider whose handler implements the connection-test
 	 * seam (success iff token === 'good') and persists $stored into the token
 	 * option so get_value('token') returns it.

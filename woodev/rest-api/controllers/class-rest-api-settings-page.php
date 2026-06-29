@@ -253,11 +253,22 @@ if ( ! class_exists( 'Woodev_REST_API_Settings_Page' ) ) :
 			// Scope POSTed values to the block's declared setting ids (allow-list).
 			$posted = array_intersect_key( (array) $request->get_param( 'values' ), array_flip( $section_ids ) );
 
-			// Merge: a non-empty POSTed value wins; otherwise fall back to the stored
-			// value so an untouched (masked) secret is still available to the test.
+			// Merge per field. The stored-value fallback exists ONLY to recover a
+			// masked secret the browser never held: it applies to a secret field
+			// (sensitive or constant-backed) whose POSTed value is absent or empty.
+			// A non-secret field always uses its POSTed value when present — even
+			// '', 0, or false are valid, intentional inputs and must not be
+			// silently replaced by the stored value.
 			$merged = [];
 			foreach ( $section_ids as $setting_id ) {
-				if ( array_key_exists( $setting_id, $posted ) && '' !== (string) $posted[ $setting_id ] ) {
+				$setting   = $handler->get_setting( $setting_id );
+				$is_secret = $setting instanceof \Woodev_Setting
+					&& ( $setting->is_sensitive() || null !== $setting->get_constant_name() );
+
+				$use_posted = array_key_exists( $setting_id, $posted )
+					&& ( ! $is_secret || '' !== (string) $posted[ $setting_id ] );
+
+				if ( $use_posted ) {
 					$merged[ $setting_id ] = $posted[ $setting_id ];
 				} else {
 					try {

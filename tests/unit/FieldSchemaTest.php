@@ -209,4 +209,32 @@ class FieldSchemaTest extends TestCase {
 		$this->assertSame( 'WOODEV_FS_CONST', $schema['token']['constant_name'] );
 		$this->assertTrue( $schema['token']['is_set'] );
 	}
+
+	/**
+	 * A constant-backed field whose constant is NOT defined still masks its stored
+	 * fallback value (it is secret-bearing regardless of the constant's presence).
+	 *
+	 * @return void
+	 */
+	public function test_constant_backed_field_masks_stored_value_when_constant_undefined(): void {
+		$this->assertFalse( defined( 'WOODEV_FS_UNDEFINED_CONST' ), 'precondition: constant must be undefined' );
+
+		$handler = $this->make_handler(
+			static function ( $h ): void {
+				// constant_name set, NOT marked sensitive — the prior leak path.
+				$h->register_setting( 'token', \Woodev_Setting::TYPE_STRING, [ 'name' => 'Токен', 'constant_name' => 'WOODEV_FS_UNDEFINED_CONST' ] );
+			}
+		);
+
+		// A stored fallback exists (e.g. left over before the operator moved it to wp-config).
+		$handler->get_setting( 'token' )->set_value( 'leftover-secret' );
+		$this->assertSame( 'leftover-secret', $handler->get_value( 'token' ) );
+
+		$schema = Field_Schema::from_handler( $handler, [ 'token' ] );
+
+		$this->assertSame( '', $schema['token']['value'], 'stored fallback of a constant-backed field must not be emitted' );
+		$this->assertTrue( $schema['token']['sensitive'], 'constant-backed field must be masked in the UI' );
+		$this->assertTrue( $schema['token']['is_set'] );
+		$this->assertArrayNotHasKey( 'constant_managed', $schema['token'], 'not read-only while the constant is undefined' );
+	}
 }
