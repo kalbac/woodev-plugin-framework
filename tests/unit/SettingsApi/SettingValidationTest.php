@@ -168,4 +168,83 @@ class SettingValidationTest extends TestCase {
 
 		$this->assertSame( [ 'email' => 'Введите корректный email.' ], $errors );
 	}
+
+	public function test_validate_values_skips_unknown_id(): void {
+		Functions\when( 'get_option' )->justReturn( null );
+		Functions\when( 'apply_filters' )->returnArg( 2 );
+		Functions\when( 'wp_parse_args' )->alias(
+			static function ( array $args, array $defaults ): array {
+				return array_merge( $defaults, $args );
+			}
+		);
+
+		require_once dirname( __DIR__, 3 ) . '/woodev/settings-api/abstract-class-settings.php';
+
+		$handler = new class( 'test' ) extends \Woodev_Abstract_Settings {
+			protected function register_settings() {
+				$this->register_setting( 'name', 'string', [] );
+				$this->register_control( 'name', 'text' );
+			}
+		};
+
+		$errors = $handler->validate_values( [ 'ghost' => 'whatever', 'name' => 'ok' ] );
+
+		$this->assertArrayNotHasKey( 'ghost', $errors );
+		$this->assertSame( [], $errors );
+	}
+
+	public function test_validate_values_skips_defined_constant_setting(): void {
+		Functions\when( 'get_option' )->justReturn( null );
+		Functions\when( 'apply_filters' )->returnArg( 2 );
+		Functions\when( 'wp_parse_args' )->alias(
+			static function ( array $args, array $defaults ): array {
+				return array_merge( $defaults, $args );
+			}
+		);
+
+		require_once dirname( __DIR__, 3 ) . '/woodev/settings-api/abstract-class-settings.php';
+
+		define( 'WOODEV_TEST_VALIDATE_CONST_EMAIL', 'managed@example.com' );
+
+		$handler = new class( 'test' ) extends \Woodev_Abstract_Settings {
+			protected function register_settings() {
+				$this->register_setting( 'managed_email', 'email', [ 'required' => true, 'constant_name' => 'WOODEV_TEST_VALIDATE_CONST_EMAIL' ] );
+				$this->register_control( 'managed_email', 'email' );
+			}
+		};
+
+		// Submit a bad value: it must be ignored because the setting is code-managed.
+		$errors = $handler->validate_values( [ 'managed_email' => 'nope' ] );
+
+		$this->assertArrayNotHasKey( 'managed_email', $errors );
+		$this->assertSame( [], $errors );
+	}
+
+	public function test_validate_values_accepts_valid_multi_values(): void {
+		Functions\when( 'get_option' )->justReturn( null );
+		Functions\when( 'apply_filters' )->returnArg( 2 );
+		Functions\when( 'wp_parse_args' )->alias(
+			static function ( array $args, array $defaults ): array {
+				return array_merge( $defaults, $args );
+			}
+		);
+
+		require_once dirname( __DIR__, 3 ) . '/woodev/settings-api/abstract-class-settings.php';
+
+		$handler = new class( 'test' ) extends \Woodev_Abstract_Settings {
+			protected function register_settings() {
+				$this->register_setting( 'emails', 'email', [ 'is_multi' => true ] );
+				$this->register_control( 'emails', 'email' );
+			}
+		};
+
+		// All elements valid → no false email error.
+		$this->assertSame( [], $handler->validate_values( [ 'emails' => [ 'a@b.com', 'c@d.com' ] ] ) );
+
+		// A bad element surfaces the per-field error.
+		$this->assertSame(
+			[ 'emails' => 'Введите корректный email.' ],
+			$handler->validate_values( [ 'emails' => [ 'a@b.com', 'nope' ] ] )
+		);
+	}
 }

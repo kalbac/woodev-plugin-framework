@@ -327,9 +327,30 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 					continue;
 				}
 
-				$error = $setting->get_validation_error( $value );
-				if ( null !== $error ) {
-					$errors[ $setting_id ] = $error;
+				if ( $setting->is_is_multi() ) {
+
+					$elements     = array_values( (array) $value );
+					$control      = $setting->get_control();
+					$control_type = $control instanceof Woodev_Control ? $control->get_type() : null;
+
+					if ( $setting->is_required() && Woodev_Setting::is_requirable( $control_type ) && 0 === count( $elements ) ) {
+						$errors[ $setting_id ] = __( 'Обязательное поле.', 'woodev-plugin-framework' );
+						continue;
+					}
+
+					foreach ( $elements as $element ) {
+						$element_error = $setting->get_validation_error( $element );
+						if ( null !== $element_error ) {
+							$errors[ $setting_id ] = $element_error;
+							break;
+						}
+					}
+				} else {
+
+					$error = $setting->get_validation_error( $value );
+					if ( null !== $error ) {
+						$errors[ $setting_id ] = $error;
+					}
 				}
 			}
 

@@ -343,7 +343,7 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 				$control_type = $this->control instanceof Woodev_Control ? $this->control->get_type() : null;
 
 				if ( $this->required && self::is_requirable( $control_type ) && 0 === count( $elements ) ) {
-					throw new Woodev_Plugin_Exception( 'Обязательное поле.', 400 );
+					throw new Woodev_Plugin_Exception( __( 'Обязательное поле.', 'woodev-plugin-framework' ), 400 );
 				}
 
 				foreach ( $elements as $element ) {
@@ -437,7 +437,7 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 			$control_type = $this->control instanceof Woodev_Control ? $this->control->get_type() : null;
 
 			if ( $this->required && self::is_requirable( $control_type ) && self::is_empty_value( $control_type, $value ) ) {
-				return 'Обязательное поле.';
+				return __( 'Обязательное поле.', 'woodev-plugin-framework' );
 			}
 
 			if ( self::is_empty_value( $control_type, $value ) ) {
@@ -448,41 +448,41 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 
 				case Woodev_Control::TYPE_EMAIL:
 					if ( ! is_email( $value ) ) {
-						return 'Введите корректный email.';
+						return __( 'Введите корректный email.', 'woodev-plugin-framework' );
 					}
 					break;
 
 				case Woodev_Control::TYPE_URL:
 					if ( ! self::is_valid_url( $value ) ) {
-						return 'Введите корректный URL (с http:// или https://).';
+						return __( 'Введите корректный URL (с http:// или https://).', 'woodev-plugin-framework' );
 					}
 					break;
 
 				case Woodev_Control::TYPE_TEL:
 					if ( ! self::is_valid_tel( $value ) ) {
-						return 'Введите корректный номер телефона.';
+						return __( 'Введите корректный номер телефона.', 'woodev-plugin-framework' );
 					}
 					break;
 
 				case Woodev_Control::TYPE_NUMBER:
 				case Woodev_Control::TYPE_RANGE:
 					if ( ! is_numeric( $value ) ) {
-						return 'Введите число.';
+						return __( 'Введите число.', 'woodev-plugin-framework' );
 					}
 					$min = $this->control->get_min();
 					$max = $this->control->get_max();
 					if ( null !== $min && (float) $value < $min ) {
-						return sprintf( 'Значение не меньше %s.', self::format_number( $min ) );
+						return sprintf( __( 'Значение не меньше %s.', 'woodev-plugin-framework' ), self::format_number( $min ) );
 					}
 					if ( null !== $max && (float) $value > $max ) {
-						return sprintf( 'Значение не больше %s.', self::format_number( $max ) );
+						return sprintf( __( 'Значение не больше %s.', 'woodev-plugin-framework' ), self::format_number( $max ) );
 					}
 					break;
 			}
 
 			// Legacy type validity (string/url/email/integer/float/boolean).
 			if ( ! $this->validate_value( $value ) ) {
-				return sprintf( 'Недопустимое значение для типа %s.', $this->type );
+				return sprintf( __( 'Недопустимое значение для типа %s.', 'woodev-plugin-framework' ), $this->type );
 			}
 
 			// Enum: accept an option KEY (assoc map) or VALUE (plain list).
@@ -491,7 +491,7 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 				&& ! in_array( $value, $this->options, true ) ) {
 
 				return sprintf(
-					'Значение должно быть одним из: %s.',
+					__( 'Значение должно быть одним из: %s.', 'woodev-plugin-framework' ),
 					Woodev_Helper::list_array_items( $this->options, 'or' )
 				);
 			}

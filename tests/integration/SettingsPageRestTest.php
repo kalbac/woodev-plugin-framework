@@ -200,7 +200,7 @@ class SettingsPageRestTest extends TestCase {
 		$this->assertArrayHasKey( 'manager_email', $data['data']['errors'] );
 
 		// Nothing must have been persisted.
-		$this->assertFalse( get_option( 'woodev_atomic_test_manager_email' ) );
+		$this->assertNull( get_option( 'woodev_atomic_test_manager_email', null ) );
 	}
 
 	/**
