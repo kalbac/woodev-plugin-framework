@@ -13,8 +13,8 @@ defined( 'ABSPATH' ) || exit;
  * Builds the JSON field schema a React control consumes from a settings handler.
  *
  * Single source of truth for the field-schema shape shared by the settings page
- * and the setup wizard (controlType / options / value / tooltip / min / max /
- * step / is_multi / description / name / type).
+ * and the setup wizard (controlType / options / value / tooltip / placeholder /
+ * min / max / step / is_multi / description / name / type / required).
  *
  * @since 2.0.2
  */
