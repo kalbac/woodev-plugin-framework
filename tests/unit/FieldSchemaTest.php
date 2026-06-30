@@ -24,6 +24,7 @@ class FieldSchemaTest extends TestCase {
 		$setting->shouldReceive( 'get_control' )->andReturn( $control );
 		$setting->shouldReceive( 'is_sensitive' )->andReturn( false );
 		$setting->shouldReceive( 'get_constant_name' )->andReturn( null );
+		$setting->shouldReceive( 'is_required' )->andReturn( false )->byDefault();
 
 		return $setting;
 	}
@@ -208,6 +209,40 @@ class FieldSchemaTest extends TestCase {
 		$this->assertTrue( $schema['token']['constant_managed'] );
 		$this->assertSame( 'WOODEV_FS_CONST', $schema['token']['constant_name'] );
 		$this->assertTrue( $schema['token']['is_set'] );
+	}
+
+	/**
+	 * Field_Schema must emit `required` from Woodev_Setting::is_required():
+	 * true when the setting is required, false when it is optional (the default).
+	 *
+	 * @return void
+	 */
+	public function test_required_flag_is_emitted(): void {
+		$control = Mockery::mock();
+		$control->shouldReceive( 'get_type' )->andReturn( 'tel' );
+		$control->shouldReceive( 'get_description' )->andReturn( '' );
+		$control->shouldReceive( 'get_tooltip' )->andReturn( '' );
+		$control->shouldReceive( 'get_min' )->andReturn( null );
+		$control->shouldReceive( 'get_max' )->andReturn( null );
+		$control->shouldReceive( 'get_step' )->andReturn( null );
+
+		$required_setting = $this->make_setting( 'phone', 'string', $control );
+		$required_setting->shouldReceive( 'is_required' )->andReturn( true );
+
+		$optional_setting = $this->make_setting( 'notes', 'string', $control );
+
+		$handler = Mockery::mock();
+		$handler->shouldReceive( 'get_settings' )->with( [] )->andReturn( [
+			'phone' => $required_setting,
+			'notes' => $optional_setting,
+		] );
+		$handler->shouldReceive( 'get_value' )->with( 'phone' )->andReturn( '' );
+		$handler->shouldReceive( 'get_value' )->with( 'notes' )->andReturn( '' );
+
+		$schema = Field_Schema::from_handler( $handler );
+
+		$this->assertTrue( $schema['phone']['required'], 'required setting must emit required = true' );
+		$this->assertFalse( $schema['notes']['required'], 'optional setting must emit required = false' );
 	}
 
 	/**
