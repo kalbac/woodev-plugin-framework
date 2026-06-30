@@ -58,7 +58,7 @@ export default function FieldRow( { label, required, tooltip, description, error
 					<div className="woodev-field__desc">{ description }</div>
 				) }
 				{ error && (
-					<div className="woodev-field__error" role="alert">
+					<div className="woodev-field__error" aria-live="polite" aria-atomic="true">
 						{ error }
 					</div>
 				) }
