@@ -143,12 +143,4 @@ class SettingValidationTest extends TestCase {
 		$required->set_required( true );
 		$this->assertSame( 'Обязательное поле.', $required->get_validation_error( '' ) );
 	}
-
-	public function test_update_value_required_multi_empty_throws(): void {
-		$this->expectException( \Woodev_Plugin_Exception::class );
-
-		$setting = $this->make( 'string', 'multiselect', true );
-		$setting->set_is_multi( true );
-		$setting->update_value( [] );
-	}
 }

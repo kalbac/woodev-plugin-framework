@@ -245,6 +245,27 @@ class SettingUpdateValueTest extends TestCase {
 		}
 	}
 
+	/**
+	 * A required is_multi (multiselect) setting must reject an empty array — the
+	 * per-element loop never runs for [], so the required check needs a dedicated guard.
+	 *
+	 * @return void
+	 */
+	public function test_update_value_required_multi_empty_throws(): void {
+		$this->expectException( \Woodev_Plugin_Exception::class );
+		$this->expectExceptionMessage( 'Обязательное поле.' );
+		$this->expectExceptionCode( 400 );
+
+		$setting = $this->make_setting( 'string', true );
+		$setting->set_required( true );
+
+		$control = new \Woodev_Control();
+		$control->set_type( \Woodev_Control::TYPE_MULTISELECT );
+		$setting->set_control( $control );
+
+		$setting->update_value( [] );
+	}
+
 	// -----------------------------------------------------------------------
 	// 6. Non-enum scalar types unchanged
 	// -----------------------------------------------------------------------
