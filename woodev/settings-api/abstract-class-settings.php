@@ -300,6 +300,43 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 		}
 
 		/**
+		 * Validates a map of setting_id => value, returning a map of field errors.
+		 *
+		 * Read-only: nothing is persisted. Unknown ids and code-managed
+		 * (defined-constant) settings are skipped (they cannot be edited). Mirrors
+		 * update_value()'s constant guard so the two passes agree.
+		 *
+		 * @since 2.0.2
+		 * @param array<string,mixed> $values setting_id => value.
+		 * @return array<string,string> setting_id => error message (empty when all valid).
+		 */
+		public function validate_values( array $values ): array {
+
+			$errors = [];
+
+			foreach ( $values as $setting_id => $value ) {
+
+				$setting = $this->get_setting( (string) $setting_id );
+
+				if ( ! $setting ) {
+					continue;
+				}
+
+				$constant = $setting->get_constant_name();
+				if ( null !== $constant && defined( $constant ) ) {
+					continue;
+				}
+
+				$error = $setting->get_validation_error( $value );
+				if ( null !== $error ) {
+					$errors[ $setting_id ] = $error;
+				}
+			}
+
+			return $errors;
+		}
+
+		/**
 		 * Deletes the stored value for a setting.
 		 *
 		 * @param string $setting_id setting ID

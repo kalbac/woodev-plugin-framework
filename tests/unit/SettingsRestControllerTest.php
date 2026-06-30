@@ -56,6 +56,7 @@ class SettingsRestControllerTest extends TestCase {
 		Functions\when( 'rest_ensure_response' )->returnArg( 1 );
 
 		$handler = Mockery::mock();
+		$handler->shouldReceive( 'validate_values' )->once()->andReturn( [] );
 		$handler->shouldReceive( 'update_value' )->once()->with( 'api_key', 'secret' );
 
 		$provider = Mockery::mock();
@@ -76,6 +77,7 @@ class SettingsRestControllerTest extends TestCase {
 		Functions\when( 'rest_ensure_response' )->returnArg( 1 );
 
 		$handler = Mockery::mock();
+		$handler->shouldReceive( 'validate_values' )->once()->andReturn( [] );
 		// Undeclared key must never reach the handler — not even to be 404-rejected.
 		$handler->shouldNotReceive( 'update_value' );
 
@@ -92,13 +94,12 @@ class SettingsRestControllerTest extends TestCase {
 		$this->assertTrue( $response['saved'] );
 	}
 
-	public function test_save_is_non_atomic_persisting_valid_keys_before_a_later_failure(): void {
-		// Documented behavior (mirrors the wizard): each key persists as it
-		// validates; a mid-tab failure leaves earlier keys saved and names the
-		// failing field. Re-submitting the tab is idempotent.
+	public function test_save_returns_error_map_when_validation_fails(): void {
 		$handler = Mockery::mock();
-		$handler->shouldReceive( 'update_value' )->once()->with( 'api_key', 'good' );
-		$handler->shouldReceive( 'update_value' )->once()->with( 'mode', 'bad' )->andThrow( new \Woodev_Plugin_Exception( 'invalid mode', 400 ) );
+		$handler->shouldReceive( 'validate_values' )
+			->once()
+			->andReturn( [ 'mode' => 'invalid mode' ] );
+		$handler->shouldNotReceive( 'update_value' );
 
 		$provider = Mockery::mock();
 		$provider->shouldReceive( 'get_sections' )->andReturn( [ $this->section( [ 'api_key', 'mode' ] ) ] );
@@ -111,25 +112,31 @@ class SettingsRestControllerTest extends TestCase {
 		$result     = $controller->save( $this->request( [ 'provider_id' => 'cdek', 'values' => [ 'api_key' => 'good', 'mode' => 'bad' ] ] ) );
 
 		$this->assertInstanceOf( 'WP_Error', $result );
-		$this->assertSame( 'mode', $result->get_error_data()['field'] );
+		$this->assertSame( 'woodev_settings_invalid', $result->get_error_code() );
+		$data = $result->get_error_data();
+		$this->assertSame( 400, $data['status'] );
+		$this->assertSame( [ 'mode' => 'invalid mode' ], $data['errors'] );
 	}
 
-	public function test_save_reports_validation_error_with_field(): void {
+	public function test_save_persists_all_when_valid(): void {
+		Functions\when( 'rest_ensure_response' )->returnArg( 1 );
+
 		$handler = Mockery::mock();
-		$handler->shouldReceive( 'update_value' )->andThrow( new \Woodev_Plugin_Exception( 'bad value', 400 ) );
+		$handler->shouldReceive( 'validate_values' )->once()->andReturn( [] );
+		$handler->shouldReceive( 'update_value' )->once()->with( 'api_key', 'good' );
+		$handler->shouldReceive( 'update_value' )->once()->with( 'mode', 'live' );
 
 		$provider = Mockery::mock();
-		$provider->shouldReceive( 'get_sections' )->andReturn( [ $this->section( [ 'mode' ] ) ] );
+		$provider->shouldReceive( 'get_sections' )->andReturn( [ $this->section( [ 'api_key', 'mode' ] ) ] );
 		$provider->shouldReceive( 'get_handler' )->andReturn( $handler );
 
 		$registry = Mockery::mock();
 		$registry->shouldReceive( 'get_provider' )->with( 'cdek' )->andReturn( $provider );
 
 		$controller = new \Woodev_REST_API_Settings_Page( $registry );
-		$result     = $controller->save( $this->request( [ 'provider_id' => 'cdek', 'values' => [ 'mode' => 'x' ] ] ) );
+		$response   = $controller->save( $this->request( [ 'provider_id' => 'cdek', 'values' => [ 'api_key' => 'good', 'mode' => 'live' ] ] ) );
 
-		$this->assertInstanceOf( 'WP_Error', $result );
-		$this->assertSame( 'woodev_settings_invalid', $result->get_error_code() );
-		$this->assertSame( 'mode', $result->get_error_data()['field'] );
+		$this->assertTrue( $response['saved'] );
+		$this->assertSame( 'cdek', $response['provider'] );
 	}
 }

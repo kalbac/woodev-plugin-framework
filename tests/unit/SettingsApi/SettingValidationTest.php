@@ -143,4 +143,29 @@ class SettingValidationTest extends TestCase {
 		$required->set_required( true );
 		$this->assertSame( 'Обязательное поле.', $required->get_validation_error( '' ) );
 	}
+
+	public function test_handler_validate_values_collects_field_errors(): void {
+		Functions\when( 'get_option' )->justReturn( null );
+		Functions\when( 'apply_filters' )->returnArg( 2 );
+		Functions\when( 'wp_parse_args' )->alias(
+			static function ( array $args, array $defaults ): array {
+				return array_merge( $defaults, $args );
+			}
+		);
+
+		require_once dirname( __DIR__, 3 ) . '/woodev/settings-api/abstract-class-settings.php';
+
+		$handler = new class( 'test' ) extends \Woodev_Abstract_Settings {
+			protected function register_settings() {
+				$this->register_setting( 'email', 'email', [ 'required' => true ] );
+				$this->register_control( 'email', 'email' );
+				$this->register_setting( 'name', 'string', [] );
+				$this->register_control( 'name', 'text' );
+			}
+		};
+
+		$errors = $handler->validate_values( [ 'email' => 'nope', 'name' => 'ok' ] );
+
+		$this->assertSame( [ 'email' => 'Введите корректный email.' ], $errors );
+	}
 }

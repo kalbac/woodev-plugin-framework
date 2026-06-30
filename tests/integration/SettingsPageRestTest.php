@@ -149,6 +149,61 @@ class SettingsPageRestTest extends TestCase {
 	}
 
 	/**
+	 * POSTing an invalid value to the settings save route must return HTTP 400
+	 * with the atomic error map and must NOT persist anything.
+	 *
+	 * @return void
+	 */
+	public function test_save_returns_error_map_without_persisting_on_invalid_fields(): void {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+
+		// Seed a provider with a required email field.
+		$handler = new class( 'atomic_test' ) extends \Woodev_Abstract_Settings {
+			/**
+			 * Registers a required email field.
+			 *
+			 * @return void
+			 */
+			protected function register_settings() {
+				$this->register_setting( 'manager_email', \Woodev_Setting::TYPE_EMAIL, [ 'name' => 'Manager Email', 'required' => true ] );
+				$this->register_control( 'manager_email', 'email' );
+			}
+		};
+
+		$provider = Settings_Provider::create(
+			'atomic_test',
+			'Atomic Test',
+			$handler,
+			[
+				Settings_Section::create( 'main', 'Main', [ 'manager_email' ] ),
+			]
+		);
+
+		$registry = Settings_Page_Registry::instance();
+		$registry->register_service( $provider );
+
+		$GLOBALS['wp_rest_server'] = null;
+		rest_get_server();
+
+		// POST an invalid (non-email) value.
+		$request = new WP_REST_Request( 'POST', '/woodev/v1/settings/atomic_test' );
+		$request->set_param( 'provider_id', 'atomic_test' );
+		$request->set_param( 'values', [ 'manager_email' => 'not-an-email' ] );
+		$request->set_header( 'X-WP-Nonce', wp_create_nonce( 'wp_rest' ) );
+
+		$response = rest_get_server()->dispatch( $request );
+
+		// Must be HTTP 400 with the field error map.
+		$this->assertSame( 400, $response->get_status() );
+		$data = $response->get_data();
+		$this->assertSame( 'woodev_settings_invalid', $data['code'] );
+		$this->assertArrayHasKey( 'manager_email', $data['data']['errors'] );
+
+		// Nothing must have been persisted.
+		$this->assertFalse( get_option( 'woodev_atomic_test_manager_email' ) );
+	}
+
+	/**
 	 * Registers a `carrier` provider whose connection block mixes a non-secret
 	 * `mode` (stored 'stored-mode') with a sensitive `token` (stored 'good'). The
 	 * handler succeeds only when the merge yields mode='' AND token='good'.
