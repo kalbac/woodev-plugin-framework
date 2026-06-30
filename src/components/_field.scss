@@ -35,19 +35,26 @@
 	}
 
 	&__error {
+		display: block;
 		color: wd.$error;
 		font-size: 12px;
+		line-height: 1.5;
 		margin-top: 4px;
 	}
 
 	&--error {
 		.components-text-control__input,
-		input[type='text'],
-		input[type='email'],
-		input[type='url'],
-		input[type='tel'],
-		input[type='number'],
-		input[type='date'] {
+		input[type="text"],
+		input[type="email"],
+		input[type="url"],
+		input[type="tel"],
+		input[type="number"],
+		input[type="date"] {
+			border-color: wd.$error;
+			box-shadow: 0 0 0 1px wd.$error;
+		}
+
+		.woodev-select__trigger {
 			border-color: wd.$error;
 			box-shadow: 0 0 0 1px wd.$error;
 		}
