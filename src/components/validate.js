@@ -6,7 +6,7 @@
  * the SP-3 design spec §4. The server is the authoritative gate; this only
  * drives client UX (live errors + Save/«Продолжить» gating).
  *
- * @package
+ * @package woodev-plugin-framework
  */
 
 /**
@@ -157,6 +157,8 @@ export function validateField( schema, value ) {
 			break;
 	}
 
+	// PHP also runs a legacy type check + enum-membership check here; intentionally
+	// omitted client-side — the server is the authoritative gate for those.
 	return null;
 }
 
