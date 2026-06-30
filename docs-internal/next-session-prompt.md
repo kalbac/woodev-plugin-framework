@@ -1,56 +1,39 @@
-# Промт следующей сессии (s39): SP-3 «поля + валидация» — brainstorm → спека (→ план)
+# Промт следующей сессии (s40): SP-4 (DaData seam) — brainstorm → spec → plan → impl
 
-> Написан в конце s38 (2026-06-30). **s38 итог:** **SP-2 SHIPPED** (PR #94 `79a9d67`) — маскировка секретов (`sensitive` + `constant_name`) + универсальный connection auth-контракт (1..N блоков, seam + плагин-callback, `Woodev_Connection_Result`, REST-тест с server-side мёржем секретов) + React-карточка. Оператор rig-аппрувнул после fix-loop; Codex-критик 2 находки исправлены+re-critic'нуты. Оператор зафиксировал **SP-3 решение #1** (live-валидация) и попросил сохранить сессию. **s39 = SP-3 brainstorm → spec** (не сразу код — сначала добить модель валидации с оператором).
+> Написан в конце s39 (2026-06-30). **s39 итог:** **SP-3 SHIPPED** (PR #96 `9ad9b5d`) — валидация полей (`required` + email/url/tel/number(min/max)), two-tier (клиент = UX-гейт блокирует Save/«Продолжить», сервер = авторитетная атомарная карта ошибок), обе поверхности (settings + wizard). Гнали 13-задачным subagent-driven + two-stage review + Codex-критик + **моя браузерная e2e на `:8888` (Playwright) перед мерджем**. 910 unit / 61 integration / 0 risky, каждый CI-job CLEAN. main = `9ad9b5d`.
+
+## ⚠️ s40 кратно 10 — аудит доков
+
+Последний полный аудит доков был давно. **В начале s40 предложить оператору `Сделай аудит документов`** (методология в глобальном CLAUDE.md). Не блокер — если оператор хочет сразу SP-4, аудит можно отложить, но напомнить.
 
 ## Возобновление (ОБЯЗАТЕЛЬНО)
 
-1. Прочитать `docs-internal/CURRENT-STATE.md` (раздел «Last session context» — s38) + `docs-internal/GOTCHAS.md` (индекс; s38 добавил 2: `mask-constant-backed-field-even-when-constant-undefined`, `react-missing-key-state-bleed-across-tabs`).
-2. Прочитать `docs-internal/FUTURE-BACKLOG.md` → раздел **SP-3** (зафиксированное решение + открытые вопросы) и **SP-2-DEF** (отложенный wipe-secret affordance).
-3. Карта shipping-программы: `docs-internal/specs/2026-06-25-shipping-module-decisions.md`. SP-1 спека/план + SP-2 спека/план — для стиля.
-4. **Риг:** проектный wp-env dev `:8888` (`npx wp-env start` из PowerShell если погашен). admin/password. Вкладка «Карьер» уже содержит connection + handshake блоки (фикстура SP-2). Прод `:8080`/issuer `:8090` НЕ трогать.
-5. Версию НЕ бампать (`@since 2.0.2`).
+1. `docs-internal/CURRENT-STATE.md` (раздел «Last session context» — s39) + `docs-internal/GOTCHAS.md` (индекс; **71 готча**; s39 добавил `format-validator-null-strlen-deprecation` [`[settings-api/validation]`]).
+2. Карта программы: `docs-internal/specs/2026-06-25-shipping-module-decisions.md`. SP-1/SP-2/SP-3 спеки+планы — для стиля.
+3. **Риг:** проектный wp-env dev `:8888` (`npx wp-env start`). admin/password. Вкладка «Карьер» теперь содержит SP-3 демо-поля (manager_email/support_phone required, tracking_url=url, max_weight number 1..1000) — на риге уже сохранены валидные тестовые значения (manager@woodev.ru, +7 (999) 123-45-67). Прод `:8080`/issuer `:8090` НЕ трогать.
+4. Версию НЕ бампать (`@since 2.0.2`).
 
-## 🎯 Задача s39 — SP-3 «поля + валидация»: brainstorm → spec (потом план в этой же или следующей сессии)
+## 🎯 Задача s40 — SP-4 (DaData seam)
 
-**Способ:** сначала **brainstorming** (skill) с оператором — добить модель валидации, заземляясь на РЕАЛЬНОМ коде (`Woodev_Setting`/`register_setting`/`Field_Schema`/`update_value`/`control-field.js`/`field-row.js` + save-путь REST-контроллера + визард `setup-wizard`). НЕ изобретать — изучить, что уже есть (enum-валидация по ключу, `wp_kses_post` richtext, number-коэрсия — gotcha `settings-api-control-save-path-pitfalls`). Затем `writing-plans`.
+**Что это (из §9 карты программы):** сервисный seam для адресной автоподсказки/нормализации (DaData как первый провайдер). Framework = mechanism+contract+hooks; конкретика DaData/тарифы — в плагине (YAGNI, `feedback_framework_mechanism_not_domain`). Уточнить с оператором scope на brainstorm: что именно фреймворк предоставляет (интерфейс провайдера подсказок? REST-прокси? JS-виджет PHP-driven per `feedback_php_based_reusable_js`?) vs что остаётся плагину.
 
-### Зафиксировано в s38 (решение #1 — НЕ переоткрывать)
+**Способ:** как SP-1/2/3 — `brainstorming` (skill, заземляясь на РЕАЛЬНОМ коде — settings/connection-контракт SP-2, REST `woodev/v1`, account-client) → `writing-plans` → **subagent-driven impl** (fresh agent на задачу, two-stage review каждая) → Codex GPT-5.5 критик → **обязательная моя браузерная e2e на `:8888` перед мерджем** (правило `feedback_self_e2e_verify_before_merge`).
 
-- **Live inline валидация** для `email / url / tel / number(min/max/step)`: паттерн **blur-first → live-clear-on-input, когда поле уже помечено ошибкой** (не флагать во время первого набора; убирать ошибку мгновенно, как только значение валидно).
-- **`required`**: валидировать на **blur (ушёл из пустого) + на Save**, НЕ на фокус; звёздочка `<abbr>*</abbr>` в лейбле всегда.
-- **color / date**: пикеры ограничивают — live не нужен.
-- **Два уровня**: клиент = UX (блокирует Save, показывает пер-полевые ошибки), **сервер = авторитетный гейт** (клиент обходится — урок enum-дырки s31).
+## Процесс/уроки s39 (применить)
 
-### Открытые вопросы для брейншторма/спеки (добить с оператором)
+- **Codex-критик:** inline-bundle ≤~12KB строго (11.8KB бандл завис на 10 мин — у порога). Дробить по файлам, слать только security/логику-критичные source-диффы. `node <codex-plugin>/scripts/codex-companion.mjs task "$(cat bundle)" --json`. Re-critic свои фиксы перед мерджем.
+- **Браузер:** Claude-in-Chrome расширение НЕ подключено в этой среде → гонять **Playwright MCP** (`browser_navigate`/`browser_snapshot`/`browser_type`/`browser_click`/`browser_network_requests`). Логин admin/password. REST идёт через `?rest_route=%2Fwoodev%2Fv1...` (URL-encoded — фильтровать сеть по `woodev`, не по `/woodev/v1`).
+- **subagent-driven:** работает отлично, когда план содержит реальный код пошагово; two-stage review (spec → code-quality) ловит реальные баги (в s39 ~10 + 2 от Codex). Имплементеру: built-in `Edit` (не Serena — CRLF), не бампать VERSION, гонять unit+phpcs+build.
+- **Мерж:** локальные docs-коммиты на main НЕ пушить отдельно (создаёт divergence после squash — готча `git-squash-onto-stale-origin-main-diverge`; лечится containment-check + `git reset --hard origin/main`). Лучше: коммитить спеку/план уже на фиче-ветке ИЛИ пушить main сразу.
+- **Валидаторы:** любой формат-валидатор guard'ить `is_string()` (готча `format-validator-null-strlen-deprecation`).
 
-1. **`required`-семантика по типам контролов:** что считать «заполнено» для `toggle` (false — это пусто?), `select`/`multiselect` (пустой выбор), `range` (всегда есть значение)?
-2. **Контракт серверных ошибок по REST:** форма ответа `POST woodev/v1/settings` при невалидном поле — статус (422?), `{ errors: { settingId: message } }`? Как клиент маппит их обратно на поля. Где валидация в `update_value`/контроллере (не сломать существующую enum/kses-логику).
-3. **Визард (`setup-wizard`):** блокировать «Далее» по невалидному шагу? Как required+формат ложатся на шаги. Обе поверхности (`ControlField`/`FieldRow` общие) — звёздочка + ошибки консистентно.
-4. **Какие новые флаги на `Woodev_Setting`:** `required` (точно); формат email/url/tel выводится из `controlType` или нужен явный `validate`/`format`? (склон — из controlType, минимум флагов).
-5. **Где живут валидаторы:** чистые JS-функции (email/url/tel/number) + PHP-зеркало на сервере. Состояние ошибки — на поле в `ControlField` (blur/debounce-проводка).
+## Кросс-катинг (как в SP-1/2/3)
 
-## Кросс-катинг (как в SP-1/SP-2)
-
-- Новые классы фреймворка → `php bin/generate-class-map.php` (no Composer в проде).
-- i18n без `_n()` (русский — source; gotcha `russian-source-i18n-plural-n`).
-- Существующие source-файлы править built-in `Edit`, не Serena `replace_content` (gotcha `serena-replace-content-eol-flip`).
-- Build: `npm run build`, коммитить собранные ассеты (assets-parity CI), LF, CSS-версия по `filemtime`. min WP 6.6 → JSX в новых файлах ок.
-- PHPStan локально на Windows падает (segfault) — гейт Linux CI. Локально: `composer phpcs` + `composer test:unit` + JS-сборка.
-- Интеграция: `MSYS_NO_PATHCONV=1 npx wp-env run tests-cli env TEST_SUITE=integration php /var/www/html/woodev-framework/vendor/bin/phpunit --configuration /var/www/html/woodev-framework/phpunit.xml --testsuite=Integration [--filter X]`. Фоновые wp-env прогоны харнесс иногда «killed» — гонять foreground.
-
-## Критик = GPT-5.5 (Codex) — после реализации
-
-- Рабочий путь = **inline-bundle** (`node <plugin>/scripts/codex-companion.mjs task "$(cat bundle)" --json`, NO-SHELL framing). **Бандл ≤~12KB** — на 27KB критик завис на 15 мин в s38 (Windows arg-лимит ~30KB = порог зависания на практике); дробить, scss/тесты убирать, слать только security-/логику-критичные диффы. См. gotcha `codex-shell-sandbox-broken-windows`.
-- re-critic свои in-place фиксы перед коммитом (`feedback_recritic_own_fixes`).
-
-## Мёрж / процесс
-
-- Ветка `feat/sp3-field-validation` → PR → каждый CI-job pass + state CLEAN → **визуал на rig-аппрув оператора `:8888`** (звёздочки, live-ошибки, blur-поведение, блокировка Save) → `gh pr merge --squash --delete-branch` (никогда `--auto`). Docker-Hub 502 на integration-джобе = транзиент → `gh run rerun --failed`.
+- Новые классы → `php bin/generate-class-map.php` (no Composer в проде). i18n без `_n()` (русский — source). Built-in `Edit` для source. Build: `npm run build`, коммитить ассеты (LF, assets-parity CI). PHPStan локально на Windows падает (segfault) — гейт Linux CI. Интеграция foreground: `MSYS_NO_PATHCONV=1 npx wp-env run tests-cli env TEST_SUITE=integration php /var/www/html/woodev-framework/vendor/bin/phpunit --configuration /var/www/html/woodev-framework/phpunit.xml --testsuite=Integration [--filter X]`.
 
 ## Прочее / бэклог
 
-- **SP-2-DEF:** wipe-secret/disconnect affordance с подтверждением (FUTURE-BACKLOG) — вынесено из SP-2; можно сделать в SP-3 или на пилоте.
-- **UK-3/UK-4 wizard** — последняя не-kit поверхность (full-screen; удалить мёртвые `woodev-setup__field*`, дубли `$wd-*`). Можно вставить между SP, по согласованию.
-- **SP-программа дальше:** SP-4 (DaData seam) … SP-11 → пилот-миграция (Яндекс→СДЭК→Почта).
-- **s-кратно-10 — следующий аудит доков на s40** (последний — s39 не было; последний аудит s39? нет — см. историю; аудит планировался на s40).
-- **MCP в конце s38 отвалились** (Supermemory + Obsidian + Telegram) — `sessions/latest-context.md` мог не обновиться; обновить при возможности (не блокер).
+- **SP-2-DEF:** wipe-secret/disconnect affordance (FUTURE-BACKLOG) — можно в SP-4 или на пилоте.
+- **UK-3/UK-4 wizard** — последняя не-kit поверхность (можно вставить между SP).
+- **SP-программа дальше:** SP-4 (DaData) … SP-11 → пилот-миграция (Яндекс→СДЭК→Почта).
+- **MCP:** Supermemory/Obsidian статус не проверялся в s39 — проверить в начале s40, обновить `sessions/latest-context.md` если доступны.
