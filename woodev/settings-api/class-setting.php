@@ -340,6 +340,12 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 					array_values( (array) $value )
 				);
 
+				$control_type = $this->control instanceof Woodev_Control ? $this->control->get_type() : null;
+
+				if ( $this->required && self::is_requirable( $control_type ) && 0 === count( $elements ) ) {
+					throw new Woodev_Plugin_Exception( 'Обязательное поле.', 400 );
+				}
+
 				foreach ( $elements as $element ) {
 					$error = $this->get_validation_error( $element );
 					if ( null !== $error ) {
@@ -414,43 +420,12 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 		}
 
 		/**
-		 * Asserts that a single scalar value is valid for this setting's type and options.
-		 *
-		 * Accepts a value when it is either an option KEY (array_key_exists on assoc maps)
-		 * or an option VALUE (strict in_array), covering both associative [key=>label] and
-		 * plain list [label, label] registration styles.
-		 *
-		 * @param mixed $value
-		 * @throws Woodev_Plugin_Exception
-		 */
-		private function assert_valid_value( $value ) {
-
-			if ( ! $this->validate_value( $value ) ) {
-				throw new Woodev_Plugin_Exception( "Setting value for setting {$this->id} is not valid for the setting type {$this->type}", 400 );
-			}
-
-			if ( ! empty( $this->options )
-				&& ! ( is_scalar( $value ) && array_key_exists( $value, $this->options ) )
-				&& ! in_array( $value, $this->options, true ) ) {
-
-				throw new Woodev_Plugin_Exception(
-					sprintf(
-						'Setting value for setting %s must be one of %s',
-						$this->id,
-						Woodev_Helper::list_array_items( $this->options, 'or' )
-					),
-					400
-				);
-			}
-		}
-
-		/**
 		 * Returns a human-readable validation error for the given input, or null when valid.
 		 *
-		 * Single server source of truth for SP-3 validation. Rule order: required →
-		 * empty-optional short-circuit → format (by control type) → legacy type check →
-		 * enum (options). Mirrored client-side in src/components/validate.js — keep both
-		 * in sync (the rule table lives in the SP-3 design spec §4).
+		 * Single server source of truth for SP-3 validation. Rule order: coerce → required →
+		 * empty-optional → format → legacy type → enum. Mirrored client-side in
+		 * src/components/validate.js — keep both in sync (the rule table lives in the SP-3
+		 * design spec §4).
 		 *
 		 * @since 2.0.2
 		 * @param mixed $value the raw input value.

@@ -11,6 +11,7 @@ use Brain\Monkey\Functions;
 use Woodev\Tests\Unit\TestCase;
 
 require_once dirname( __DIR__, 3 ) . '/woodev/class-plugin-exception.php';
+require_once dirname( __DIR__, 3 ) . '/woodev/class-helper.php';
 require_once dirname( __DIR__, 3 ) . '/woodev/settings-api/class-control.php';
 require_once dirname( __DIR__, 3 ) . '/woodev/settings-api/class-setting.php';
 
@@ -100,5 +101,54 @@ class SettingValidationTest extends TestCase {
 		$this->assertSame( 'Значение не меньше 0.', $setting->get_validation_error( '-1' ) );
 		$this->assertSame( 'Значение не больше 100.', $setting->get_validation_error( '101' ) );
 		$this->assertSame( 'Введите число.', $setting->get_validation_error( 'x' ) );
+	}
+
+	public function test_required_null_input(): void {
+		$setting = $this->make( 'string', 'text', true );
+		$this->assertSame( 'Обязательное поле.', $setting->get_validation_error( null ) );
+	}
+
+	public function test_enum_rejection(): void {
+		$setting = $this->make( 'string', 'text' );
+		$setting->set_options( [ 'a', 'b' ] );
+		$this->assertStringStartsWith( 'Значение должно быть одним из:', (string) $setting->get_validation_error( 'c' ) );
+	}
+
+	public function test_checkbox_required_is_noop(): void {
+		$setting = $this->make( 'boolean', 'checkbox', true );
+		$this->assertNull( $setting->get_validation_error( false ) );
+	}
+
+	public function test_select_zero_is_not_empty(): void {
+		$setting = $this->make( 'string', 'select', true );
+		$this->assertNull( $setting->get_validation_error( '0' ) );
+	}
+
+	public function test_tel_digit_boundary(): void {
+		$setting = $this->make( 'string', 'tel' );
+		$this->assertSame( 'Введите корректный номер телефона.', $setting->get_validation_error( '1234' ) );
+		$this->assertNull( $setting->get_validation_error( '12345' ) );
+	}
+
+	public function test_no_control_type_skips_format(): void {
+		$optional = new \Woodev_Setting();
+		$optional->set_id( 'f' );
+		$optional->set_type( 'string' );
+		$optional->set_required( false );
+		$this->assertNull( $optional->get_validation_error( 'anything' ) );
+
+		$required = new \Woodev_Setting();
+		$required->set_id( 'f' );
+		$required->set_type( 'string' );
+		$required->set_required( true );
+		$this->assertSame( 'Обязательное поле.', $required->get_validation_error( '' ) );
+	}
+
+	public function test_update_value_required_multi_empty_throws(): void {
+		$this->expectException( \Woodev_Plugin_Exception::class );
+
+		$setting = $this->make( 'string', 'multiselect', true );
+		$setting->set_is_multi( true );
+		$setting->update_value( [] );
 	}
 }
