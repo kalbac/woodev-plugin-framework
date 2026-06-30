@@ -82,6 +82,10 @@ final class Field_Schema {
 				$entry['step'] = $control->get_step();
 			}
 
+			if ( null !== $setting->get_validate() ) {
+				$entry['server_validated'] = true;
+			}
+
 			$schema[ $setting->get_id() ] = $entry;
 		}
 

@@ -25,6 +25,7 @@ class FieldSchemaTest extends TestCase {
 		$setting->shouldReceive( 'is_sensitive' )->andReturn( false );
 		$setting->shouldReceive( 'get_constant_name' )->andReturn( null );
 		$setting->shouldReceive( 'is_required' )->andReturn( false )->byDefault();
+		$setting->shouldReceive( 'get_validate' )->andReturn( null )->byDefault();
 
 		return $setting;
 	}

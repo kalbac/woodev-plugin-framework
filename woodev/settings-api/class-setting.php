@@ -61,6 +61,12 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 		/** @var bool whether this setting must be filled (validated client + server) */
 		protected $required = false;
 
+		/** @var callable|null plugin-supplied validator overriding the default format check */
+		private $validate = null;
+
+		/** @var string custom error message for a failed validate callback */
+		private $validate_message = '';
+
 		/**
 		 * Gets the setting ID.
 		 *
@@ -208,6 +214,49 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 		 */
 		public function set_required( bool $value ): void {
 			$this->required = $value;
+		}
+
+		/**
+		 * The plugin-supplied validate callback, or null.
+		 *
+		 * @since 2.0.2
+		 * @return callable|null
+		 */
+		public function get_validate(): ?callable {
+			return $this->validate;
+		}
+
+		/**
+		 * Sets the validate callback (fn($value): bool). Overrides the default
+		 * format/type/enum check for this field; required is still applied.
+		 *
+		 * @since 2.0.2
+		 * @param callable|null $value validator.
+		 * @return void
+		 */
+		public function set_validate( ?callable $value ): void {
+			$this->validate = $value;
+		}
+
+		/**
+		 * The custom message shown when the validate callback fails.
+		 *
+		 * @since 2.0.2
+		 * @return string
+		 */
+		public function get_validate_message(): string {
+			return $this->validate_message;
+		}
+
+		/**
+		 * Sets the custom validate-failure message.
+		 *
+		 * @since 2.0.2
+		 * @param string $value message.
+		 * @return void
+		 */
+		public function set_validate_message( string $value ): void {
+			$this->validate_message = $value;
 		}
 
 		/**
@@ -450,6 +499,14 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 
 			if ( self::is_empty_value( $control_type, $value ) ) {
 				return null;
+			}
+
+			// A plugin-supplied validate callback overrides the default format/type/enum
+			// check for this field (required was already applied above). Server-authoritative.
+			if ( is_callable( $this->validate ) ) {
+				return call_user_func( $this->validate, $value )
+					? null
+					: ( '' !== $this->validate_message ? $this->validate_message : __( 'Неверное значение.', 'woodev-plugin-framework' ) );
 			}
 
 			switch ( $control_type ) {

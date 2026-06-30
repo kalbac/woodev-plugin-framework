@@ -121,6 +121,13 @@ export function validateField( schema, value ) {
 		return null;
 	}
 
+	// A field with a plugin-supplied server validator can't be checked client-side
+	// (the PHP callback has no JS equivalent) — only required is enforced here; the
+	// server is the authority for its format. Skip the default format check.
+	if ( schema.server_validated ) {
+		return null;
+	}
+
 	switch ( kind ) {
 		case 'email':
 			if ( ! isValidEmail( value ) ) {
