@@ -98,8 +98,8 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 				$setting->set_required( (bool) $args['required'] );
 				if ( is_callable( $args['validate'] ) ) {
 					$setting->set_validate( $args['validate'] );
+					$setting->set_validate_message( (string) $args['validate_message'] );
 				}
-				$setting->set_validate_message( (string) $args['validate_message'] );
 
 				if ( is_array( $args['options'] ) ) {
 					$setting->set_options( $args['options'] );

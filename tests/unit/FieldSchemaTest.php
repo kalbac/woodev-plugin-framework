@@ -250,6 +250,34 @@ class FieldSchemaTest extends TestCase {
 	}
 
 	/**
+	 * Field_Schema must emit `server_validated = true` for a field carrying a
+	 * plugin-supplied validate callback, and must NOT emit the key otherwise so
+	 * the JS client only skips its format check for server-validated fields.
+	 *
+	 * @return void
+	 */
+	public function test_server_validated_flag_is_emitted_for_callback_field(): void {
+		$validated_setting = $this->make_setting( 'phone', 'string', null );
+		$validated_setting->shouldReceive( 'get_validate' )->andReturn( static fn( $v ) => true );
+
+		$plain_setting = $this->make_setting( 'notes', 'string', null );
+
+		$handler = Mockery::mock();
+		$handler->shouldReceive( 'get_settings' )->with( [] )->andReturn( [
+			'phone' => $validated_setting,
+			'notes' => $plain_setting,
+		] );
+		$handler->shouldReceive( 'get_value' )->with( 'phone' )->andReturn( '' );
+		$handler->shouldReceive( 'get_value' )->with( 'notes' )->andReturn( '' );
+
+		$schema = Field_Schema::from_handler( $handler );
+
+		$this->assertArrayHasKey( 'server_validated', $schema['phone'] );
+		$this->assertTrue( $schema['phone']['server_validated'] );
+		$this->assertArrayNotHasKey( 'server_validated', $schema['notes'] );
+	}
+
+	/**
 	 * Field_Schema must emit `placeholder` from the control when one is set.
 	 *
 	 * @return void

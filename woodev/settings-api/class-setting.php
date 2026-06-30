@@ -230,6 +230,10 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 		 * Sets the validate callback (fn($value): bool). Overrides the default
 		 * format/type/enum check for this field; required is still applied.
 		 *
+		 * NOTE: this OVERRIDES the default format/type AND the options (enum) check
+		 * for this field. If the setting has options, the callback must itself
+		 * validate the value against the allowed set when that constraint applies.
+		 *
 		 * @since 2.0.2
 		 * @param callable|null $value validator.
 		 * @return void
@@ -504,7 +508,7 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 			// A plugin-supplied validate callback overrides the default format/type/enum
 			// check for this field (required was already applied above). Server-authoritative.
 			if ( is_callable( $this->validate ) ) {
-				return call_user_func( $this->validate, $value )
+				return (bool) call_user_func( $this->validate, $value )
 					? null
 					: ( '' !== $this->validate_message ? $this->validate_message : __( 'Неверное значение.', 'woodev-plugin-framework' ) );
 			}
