@@ -31,9 +31,9 @@ Locked s38 (decision #1, NOT reopened): live inline validation = **blur-first �
 
 ### D1 — Flag model: source = `controlType`, minimum new flags (brainstorm Q4)
 
-- New boolean flag **`required`** on `Woodev_Setting` (default `false`), with a setter wired through `Woodev_Register_Settings`.
-- New **`tel`** control type on `Woodev_Control` (`TYPE_TEL = 'tel'`).
-- Format is derived from **`controlType`** (`email` / `url` / `tel` / `number`) — one source for client and server. The legacy `validate_{type}_value` methods stay for back-compat, but the authoritative format path keys off the control type.
+- New boolean flag **`required`** on `Woodev_Setting` (default `false`), with a setter wired through `register_setting()` args.
+- New **`tel`** AND **`url`** control types on `Woodev_Control` (`TYPE_TEL = 'tel'`, `TYPE_URL = 'url'`). `url` had a setting *type* but no *control* type — adding it makes the format model fully controlType-driven and symmetric with `email`. Both are added to `Woodev_Abstract_Settings::get_control_types()` and render as native HTML `type="tel"`/`type="url"` inputs.
+- Format is derived from **`controlType`** (`email` / `url` / `tel` / `number`/`range`) — one source for client and server. The legacy `validate_{type}_value` methods stay for back-compat (and run as a trailing check inside `get_validation_error()`), but the authoritative format path keys off the control type.
 
 ### D2 — Single validation method, two callers (brainstorm Q5)
 
@@ -60,10 +60,10 @@ Locked s38 (decision #1, NOT reopened): live inline validation = **blur-first �
 
 | Format | Server | Client (mirror) |
 |---|---|---|
-| email | `is_email()` | email regex approximating `is_email()` |
-| url | `http(s)://` prefix + valid URL (reuse `Woodev_Setting::is_valid_url` semantics) | prefix check + `URL` constructor |
-| tel | permissive: digits + `+ - ( ) space`, minimum digit count (Russian numbers etc.) | same permissive regex |
-| number | enforce **min/max** on both sides (currently NOT enforced) | enforce min/max |
+| email (control type `email`) | `is_email()` | email regex approximating `is_email()` |
+| url (control type `url`) | `http(s)://` prefix + valid URL (reuse `Woodev_Setting::is_valid_url` semantics) | prefix check + `URL` constructor |
+| tel (control type `tel`) | permissive: digits + `+ - ( ) space`, ≥5 digits (Russian numbers etc.) | same permissive regex |
+| number (control type `number`/`range`) | enforce **min/max** on both sides (currently NOT enforced) | enforce min/max |
 
 - **`step` is a UI hint for the spinner only — NOT a validation error.** Enforcing step on floats is a known floating-point trap; deliberately out of scope (this narrows the "number(min/max/step)" brief — recorded as a gotcha).
 - Validation order: `required` → format → range. An empty non-required field is valid (skips format/range).
@@ -125,7 +125,7 @@ Server `get_validation_error()` additionally runs the existing enum (`options` k
 
 **PHP**
 - `woodev/settings-api/class-setting.php` — add `$required` + `is_required()`/`set_required()`; add `TYPE`-agnostic `get_validation_error()`; have `update_value()` route through it; add `tel` + `number(min/max)` checks. Keep legacy `validate_*`.
-- `woodev/settings-api/class-control.php` — add `const TYPE_TEL = 'tel'`.
+- `woodev/settings-api/class-control.php` — add `const TYPE_TEL = 'tel'` and `const TYPE_URL = 'url'`; add both to `Woodev_Abstract_Settings::get_control_types()`.
 - `woodev/settings-api/register-settings/class-register-settings*.php` — wire a `required` setter (mirror `set_is_multi`/`set_default` ordering rules — gotcha: `set_is_multi` before `set_default`).
 - `woodev/settings-page/class-field-schema.php` — emit `'required' => $setting->is_required()` (min/max already emitted).
 - `woodev/rest-api/controllers/class-rest-api-settings-page.php` — atomic two-pass `save()` returning the `errors` map.
