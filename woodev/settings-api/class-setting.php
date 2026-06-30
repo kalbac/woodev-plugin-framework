@@ -61,6 +61,12 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 		/** @var bool whether this setting must be filled (validated client + server) */
 		protected $required = false;
 
+		/** @var callable|null plugin-supplied validator overriding the default format check */
+		private $validate = null;
+
+		/** @var string custom error message for a failed validate callback */
+		private $validate_message = '';
+
 		/**
 		 * Gets the setting ID.
 		 *
@@ -208,6 +214,57 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 		 */
 		public function set_required( bool $value ): void {
 			$this->required = $value;
+		}
+
+		/**
+		 * The plugin-supplied validate callback, or null.
+		 *
+		 * @since 2.0.2
+		 * @return callable|null
+		 */
+		public function get_validate(): ?callable {
+			return $this->validate;
+		}
+
+		/**
+		 * Sets the validate callback (fn($value): bool). Overrides the default
+		 * format/type/enum check for this field; required is still applied.
+		 *
+		 * The callback runs ONLY on a non-empty submitted value (an empty optional
+		 * value short-circuits to valid before it; use `required` to enforce presence).
+		 * It must return strictly `true` to pass — any other return is treated as invalid.
+		 *
+		 * NOTE: this OVERRIDES the default format/type AND the options (enum) check
+		 * for this field. If the setting has options, the callback must itself
+		 * validate the value against the allowed set when that constraint applies.
+		 *
+		 * @since 2.0.2
+		 * @param callable|null $value validator.
+		 * @return void
+		 */
+		public function set_validate( ?callable $value ): void {
+			$this->validate = $value;
+		}
+
+		/**
+		 * The custom message shown when the validate callback fails.
+		 *
+		 * @since 2.0.2
+		 * @return string
+		 */
+		public function get_validate_message(): string {
+			return $this->validate_message;
+		}
+
+		/**
+		 * Sets the custom validate-failure message.
+		 *
+		 * @since 2.0.2
+		 * @param string $value message.
+		 * @return void
+		 */
+		public function set_validate_message( string $value ): void {
+			$this->validate_message = $value;
 		}
 
 		/**
@@ -450,6 +507,17 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 
 			if ( self::is_empty_value( $control_type, $value ) ) {
 				return null;
+			}
+
+			// A plugin-supplied validate callback overrides the default format/type/enum
+			// check for this field (required was already applied above, and an empty
+			// optional value already returned null — the callback only sees a non-empty
+			// value). Server-authoritative. Strict `true ===` is fail-closed: any non-true
+			// return (string, array, WP_Error, 1) counts as invalid, per the fn($value):bool contract.
+			if ( is_callable( $this->validate ) ) {
+				return true === call_user_func( $this->validate, $value )
+					? null
+					: ( '' !== $this->validate_message ? $this->validate_message : __( 'Неверное значение.', 'woodev-plugin-framework' ) );
 			}
 
 			switch ( $control_type ) {

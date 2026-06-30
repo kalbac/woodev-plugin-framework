@@ -164,6 +164,24 @@ class SettingsControlTypesTest extends TestCase {
 	}
 
 	/**
+	 * register_control() forwards the placeholder arg to the control object.
+	 *
+	 * @return void
+	 */
+	public function test_register_control_forwards_placeholder(): void {
+		$this->settings->register_setting( 'city', 'string' );
+		$this->settings->register_control(
+			'city',
+			'text',
+			[ 'placeholder' => 'enter value' ]
+		);
+
+		$control = $this->settings->get_setting( 'city' )->get_control();
+
+		$this->assertSame( 'enter value', $control->get_placeholder() );
+	}
+
+	/**
 	 * A multi-value setting keeps its array default — register_setting must set
 	 * is_multi BEFORE default, else the array is validated as a scalar and nulled.
 	 *

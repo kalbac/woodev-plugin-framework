@@ -227,15 +227,23 @@ function woodev_test_plugin_init() {
 			$this->register_setting( 'secret', \Woodev_Setting::TYPE_STRING, [ 'name' => 'Секретный токен', 'default' => '' ] );
 			$this->register_setting( 'brand_color', \Woodev_Setting::TYPE_STRING, [ 'name' => 'Цвет бренда', 'default' => '#06aedd' ] );
 			$this->register_setting( 'start_date', \Woodev_Setting::TYPE_STRING, [ 'name' => 'Дата старта', 'default' => '' ] );
-			$this->register_setting( 'support_phone', \Woodev_Setting::TYPE_STRING, [ 'name' => 'Телефон поддержки', 'default' => '', 'required' => true ] );
+			$this->register_setting( 'support_phone', \Woodev_Setting::TYPE_STRING, [
+				'name'             => 'Телефон поддержки',
+				'default'          => '',
+				'required'         => true,
+				'validate'         => static function ( $value ): bool {
+					return 11 === strlen( (string) preg_replace( '/\D/', '', (string) $value ) );
+				},
+				'validate_message' => 'Введите номер из 11 цифр (например, 79991234567).',
+			] );
 			$this->register_setting( 'tracking_url', \Woodev_Setting::TYPE_STRING, [ 'name' => 'URL отслеживания', 'default' => '' ] );
 
-			$this->register_control( 'manager_email', \Woodev_Control::TYPE_EMAIL );
+			$this->register_control( 'manager_email', \Woodev_Control::TYPE_EMAIL, [ 'placeholder' => 'name@company.ru' ] );
 			$this->register_control( 'secret', \Woodev_Control::TYPE_PASSWORD );
 			$this->register_control( 'brand_color', \Woodev_Control::TYPE_COLOR );
 			$this->register_control( 'start_date', \Woodev_Control::TYPE_DATE );
-			$this->register_control( 'support_phone', \Woodev_Control::TYPE_TEL );
-			$this->register_control( 'tracking_url', \Woodev_Control::TYPE_URL );
+			$this->register_control( 'support_phone', \Woodev_Control::TYPE_TEL, [ 'placeholder' => '+7 (___) ___-__-__' ] );
+			$this->register_control( 'tracking_url', \Woodev_Control::TYPE_URL, [ 'placeholder' => 'https://track.example.com/{track}' ] );
 
 			// Connection block fields (SP-2 fixture): «api» credential block.
 			$this->register_setting( 'conn_login', \Woodev_Setting::TYPE_STRING, [ 'name' => 'Логин' ] );

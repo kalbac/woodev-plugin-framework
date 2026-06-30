@@ -27,6 +27,7 @@ export default function App() {
 	const [ saveError, setSaveError ] = useState( '' );
 	const [ showErrors, setShowErrors ] = useState( {} ); // { providerId: bool }
 	const [ fieldErrors, setFieldErrors ] = useState( {} ); // { providerId: { settingId: message } }
+	const [ errorRevealGen, setErrorRevealGen ] = useState( 0 );
 
 	// Native WP snackbar notices (created on save via the notices store).
 	const snackbars = useSelect(
@@ -41,6 +42,20 @@ export default function App() {
 				setLoadError( __( 'Не удалось загрузить настройки.', 'woodev-plugin-framework' ) )
 			);
 	}, [] );
+
+	useEffect( () => {
+		if ( ! errorRevealGen ) {
+			return;
+		}
+		const el = document.querySelector( '.woodev-settings .woodev-field--error' );
+		if ( el ) {
+			el.scrollIntoView( { behavior: 'smooth', block: 'center' } );
+			const control = el.querySelector( 'input, textarea, button' );
+			if ( control ) {
+				control.focus( { preventScroll: true } );
+			}
+		}
+	}, [ errorRevealGen ] );
 
 	if ( loadError ) {
 		return (
@@ -98,7 +113,12 @@ export default function App() {
 		const clientErrors = validateFields( allFields, merged );
 		if ( Object.keys( clientErrors ).length > 0 ) {
 			setShowErrors( ( p ) => ( { ...p, [ providerId ]: true } ) );
-			setFieldErrors( ( p ) => ( { ...p, [ providerId ]: {} } ) );
+			setFieldErrors( ( p ) => ( { ...p, [ providerId ]: {} } ) ); // clear stale server errors before revealing fresh client errors
+			setErrorRevealGen( ( g ) => g + 1 );
+			dispatch( noticesStore ).createErrorNotice(
+				__( 'Проверьте правильность заполнения полей.', 'woodev-plugin-framework' ),
+				{ type: 'snackbar', id: 'woodev-settings-validate' }
+			);
 			return; // block REST — reveal fresh client errors only
 		}
 
@@ -141,6 +161,7 @@ export default function App() {
 				if ( map ) {
 					setFieldErrors( ( p ) => ( { ...p, [ providerId ]: map } ) );
 					setShowErrors( ( p ) => ( { ...p, [ providerId ]: true } ) );
+					setErrorRevealGen( ( g ) => g + 1 );
 				}
 				const message = ( err && err.message ) ||
 					__( 'Не удалось сохранить настройки.', 'woodev-plugin-framework' );

@@ -260,6 +260,43 @@ class SettingValidationTest extends TestCase {
 		);
 	}
 
+	public function test_validate_callback_overrides_with_custom_message(): void {
+		$setting = $this->make( 'string', 'text' );
+		$setting->set_validate( static fn( $v ) => false );
+		$setting->set_validate_message( 'Кастомная ошибка.' );
+		$this->assertSame( 'Кастомная ошибка.', $setting->get_validation_error( 'x' ) );
+	}
+
+	public function test_validate_callback_default_message(): void {
+		$setting = $this->make( 'string', 'text' );
+		$setting->set_validate( static fn( $v ) => false );
+		$this->assertSame( 'Неверное значение.', $setting->get_validation_error( 'x' ) );
+	}
+
+	public function test_validate_callback_passes(): void {
+		$setting = $this->make( 'string', 'text' );
+		$setting->set_validate( static fn( $v ) => true );
+		$this->assertNull( $setting->get_validation_error( 'x' ) );
+	}
+
+	public function test_validate_callback_required_still_fires(): void {
+		$setting = $this->make( 'string', 'text', true );
+		$setting->set_validate( static fn( $v ) => true );
+		// Empty value → required fires before the callback is consulted.
+		$this->assertSame( 'Обязательное поле.', $setting->get_validation_error( '' ) );
+	}
+
+	public function test_validate_callback_tel_eleven_digits(): void {
+		$setting = $this->make( 'string', 'tel' );
+		$setting->set_validate(
+			static fn( $v ) => 11 === strlen( (string) preg_replace( '/\D/', '', (string) $v ) )
+		);
+		// 6 digits → callback returns false → validation error.
+		$this->assertNotNull( $setting->get_validation_error( '+79009' ) );
+		// 11 digits → callback returns true → valid.
+		$this->assertNull( $setting->get_validation_error( '+79009009090' ) );
+	}
+
 	public function test_validate_values_required_multiselect_bypass_rejected(): void {
 		Functions\when( 'get_option' )->justReturn( null );
 		Functions\when( 'apply_filters' )->returnArg( 2 );

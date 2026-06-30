@@ -81,6 +81,7 @@ class SetupWizardFieldSchemaTest extends TestCase {
 		$control->shouldReceive( 'get_type' )->andReturn( 'range' );
 		$control->shouldReceive( 'get_description' )->andReturn( 'Speed description' );
 		$control->shouldReceive( 'get_tooltip' )->andReturn( 'Hover tip' );
+		$control->shouldReceive( 'get_placeholder' )->andReturn( '' )->byDefault();
 		$control->shouldReceive( 'get_min' )->andReturn( 0.0 );
 		$control->shouldReceive( 'get_max' )->andReturn( 100.0 );
 		$control->shouldReceive( 'get_step' )->andReturn( 1.0 );
@@ -97,6 +98,7 @@ class SetupWizardFieldSchemaTest extends TestCase {
 		$setting->shouldReceive( 'is_sensitive' )->andReturn( false );
 		$setting->shouldReceive( 'get_constant_name' )->andReturn( null );
 		$setting->shouldReceive( 'is_required' )->andReturn( false );
+		$setting->shouldReceive( 'get_validate' )->andReturn( null );
 
 		// Build the handler mock.
 		$handler = Mockery::mock( 'Woodev_Abstract_Settings' );
@@ -142,6 +144,7 @@ class SetupWizardFieldSchemaTest extends TestCase {
 		$control->shouldReceive( 'get_type' )->andReturn( 'text' );
 		$control->shouldReceive( 'get_description' )->andReturn( '' );
 		$control->shouldReceive( 'get_tooltip' )->andReturn( '' );
+		$control->shouldReceive( 'get_placeholder' )->andReturn( '' )->byDefault();
 		$control->shouldReceive( 'get_min' )->andReturn( null );
 		$control->shouldReceive( 'get_max' )->andReturn( null );
 		$control->shouldReceive( 'get_step' )->andReturn( null );
@@ -157,6 +160,7 @@ class SetupWizardFieldSchemaTest extends TestCase {
 		$setting->shouldReceive( 'is_sensitive' )->andReturn( false );
 		$setting->shouldReceive( 'get_constant_name' )->andReturn( null );
 		$setting->shouldReceive( 'is_required' )->andReturn( false );
+		$setting->shouldReceive( 'get_validate' )->andReturn( null );
 
 		$handler = Mockery::mock( 'Woodev_Abstract_Settings' );
 		$handler->shouldReceive( 'get_settings' )->andReturn( [ $setting ] );
@@ -191,6 +195,7 @@ class SetupWizardFieldSchemaTest extends TestCase {
 		$setting->shouldReceive( 'is_sensitive' )->andReturn( false );
 		$setting->shouldReceive( 'get_constant_name' )->andReturn( null );
 		$setting->shouldReceive( 'is_required' )->andReturn( false );
+		$setting->shouldReceive( 'get_validate' )->andReturn( null );
 
 		$handler = Mockery::mock( 'Woodev_Abstract_Settings' );
 		$handler->shouldReceive( 'get_settings' )->andReturn( [ $setting ] );
@@ -226,6 +231,7 @@ class SetupWizardFieldSchemaTest extends TestCase {
 		$setting->shouldReceive( 'is_sensitive' )->andReturn( false );
 		$setting->shouldReceive( 'get_constant_name' )->andReturn( null );
 		$setting->shouldReceive( 'is_required' )->andReturn( false );
+		$setting->shouldReceive( 'get_validate' )->andReturn( null );
 
 		$handler = Mockery::mock( 'Woodev_Abstract_Settings' );
 		$handler->shouldReceive( 'get_settings' )->andReturn( [ $setting ] );

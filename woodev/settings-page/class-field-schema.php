@@ -13,8 +13,8 @@ defined( 'ABSPATH' ) || exit;
  * Builds the JSON field schema a React control consumes from a settings handler.
  *
  * Single source of truth for the field-schema shape shared by the settings page
- * and the setup wizard (controlType / options / value / tooltip / min / max /
- * step / is_multi / description / name / type).
+ * and the setup wizard (controlType / options / value / tooltip / placeholder /
+ * min / max / step / is_multi / description / name / type / required).
  *
  * @since 2.0.2
  */
@@ -56,6 +56,7 @@ final class Field_Schema {
 				'controlType' => $control ? $control->get_type() : null,
 				'description' => $control && $control->get_description() ? $control->get_description() : $setting->get_description(),
 				'tooltip'     => $control ? $control->get_tooltip() : '',
+				'placeholder' => $control ? $control->get_placeholder() : '',
 				'required'    => $setting->is_required(),
 			];
 
@@ -79,6 +80,10 @@ final class Field_Schema {
 			}
 			if ( $control && null !== $control->get_step() ) {
 				$entry['step'] = $control->get_step();
+			}
+
+			if ( null !== $setting->get_validate() ) {
+				$entry['server_validated'] = true;
 			}
 
 			$schema[ $setting->get_id() ] = $entry;

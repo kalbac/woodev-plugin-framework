@@ -70,6 +70,7 @@ export default function App() {
 	const [ busy, setBusy ] = useState( false );
 	const [ showErrors, setShowErrors ] = useState( false );
 	const [ fieldErrors, setFieldErrors ] = useState( {} );
+	const [ errorRevealGen, setErrorRevealGen ] = useState( 0 );
 
 	const step = steps[ index ];
 	const isFinish = 'finish' === step.type;
@@ -123,6 +124,22 @@ export default function App() {
 		}
 	}, [ isFinish ] );
 
+	// Scroll to the first invalid field and focus its control whenever validation
+	// errors are revealed (client-side block or server-side 400 reject).
+	useEffect( () => {
+		if ( ! errorRevealGen ) {
+			return;
+		}
+		const el = document.querySelector( '.woodev-setup .woodev-field--error' );
+		if ( el ) {
+			el.scrollIntoView( { behavior: 'smooth', block: 'center' } );
+			const control = el.querySelector( 'input, textarea, button' );
+			if ( control ) {
+				control.focus( { preventScroll: true } );
+			}
+		}
+	}, [ errorRevealGen ] );
+
 	/**
 	 * Advances to the next step, saving the current settings step first.
 	 *
@@ -143,8 +160,10 @@ export default function App() {
 			const clientErrors = validateFields( step.fields, stepValues );
 			if ( Object.keys( clientErrors ).length > 0 ) {
 				setShowErrors( true );
-				setFieldErrors( {} );
-				return; // block advance — reveal fresh client errors
+				setFieldErrors( {} ); // clear stale server errors before revealing fresh client errors
+				setError( __( 'Проверьте правильность заполнения полей на этом шаге.', 'woodev-plugin-framework' ) );
+				setErrorRevealGen( ( g ) => g + 1 );
+				return; // block advance — reveal fresh client errors + summary
 			}
 		}
 
@@ -161,6 +180,7 @@ export default function App() {
 			if ( map ) {
 				setFieldErrors( map );
 				setShowErrors( true );
+				setErrorRevealGen( ( g ) => g + 1 );
 			}
 			setError( e.message || __( 'Что-то пошло не так. Попробуйте ещё раз.', 'woodev-plugin-framework' ) );
 		} finally {

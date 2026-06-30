@@ -77,14 +77,16 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 				$args = wp_parse_args(
 					$args,
 					[
-						'name'          => '',
-						'description'   => '',
-						'is_multi'      => false,
-						'options'       => [],
-						'default'       => null,
-						'sensitive'     => false,
-						'constant_name' => null,
-						'required'      => false,
+						'name'             => '',
+						'description'      => '',
+						'is_multi'         => false,
+						'options'          => [],
+						'default'          => null,
+						'sensitive'        => false,
+						'constant_name'    => null,
+						'required'         => false,
+						'validate'         => null,
+						'validate_message' => '',
 					]
 				);
 
@@ -94,6 +96,10 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 				$setting->set_sensitive( (bool) $args['sensitive'] );
 				$setting->set_constant_name( null !== $args['constant_name'] ? (string) $args['constant_name'] : null );
 				$setting->set_required( (bool) $args['required'] );
+				if ( is_callable( $args['validate'] ) ) {
+					$setting->set_validate( $args['validate'] );
+					$setting->set_validate_message( (string) $args['validate_message'] );
+				}
 
 				if ( is_array( $args['options'] ) ) {
 					$setting->set_options( $args['options'] );
@@ -185,6 +191,10 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 
 				if ( isset( $args['tooltip'] ) ) {
 					$control->set_tooltip( (string) $args['tooltip'] );
+				}
+
+				if ( isset( $args['placeholder'] ) ) {
+					$control->set_placeholder( (string) $args['placeholder'] );
 				}
 
 				$setting->set_control( $control );
