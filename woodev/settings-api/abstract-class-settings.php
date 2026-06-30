@@ -187,6 +187,10 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 					$control->set_tooltip( (string) $args['tooltip'] );
 				}
 
+				if ( isset( $args['placeholder'] ) ) {
+					$control->set_placeholder( (string) $args['placeholder'] );
+				}
+
 				$setting->set_control( $control );
 
 				return true;

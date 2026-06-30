@@ -85,6 +85,7 @@ class FieldSchemaTest extends TestCase {
 		$control->shouldReceive( 'get_type' )->andReturn( 'range' );
 		$control->shouldReceive( 'get_description' )->andReturn( 'control desc' );
 		$control->shouldReceive( 'get_tooltip' )->andReturn( 'tip' );
+		$control->shouldReceive( 'get_placeholder' )->andReturn( '' )->byDefault();
 		$control->shouldReceive( 'get_min' )->andReturn( 1.0 );
 		$control->shouldReceive( 'get_max' )->andReturn( 10.0 );
 		$control->shouldReceive( 'get_step' )->andReturn( 0.5 );
@@ -112,6 +113,7 @@ class FieldSchemaTest extends TestCase {
 		$control->shouldReceive( 'get_type' )->andReturn( 'text' );
 		$control->shouldReceive( 'get_description' )->andReturn( '' );
 		$control->shouldReceive( 'get_tooltip' )->andReturn( '' );
+		$control->shouldReceive( 'get_placeholder' )->andReturn( '' )->byDefault();
 		$control->shouldReceive( 'get_min' )->andReturn( null );
 		$control->shouldReceive( 'get_max' )->andReturn( null );
 		$control->shouldReceive( 'get_step' )->andReturn( null );
@@ -222,6 +224,7 @@ class FieldSchemaTest extends TestCase {
 		$control->shouldReceive( 'get_type' )->andReturn( 'tel' );
 		$control->shouldReceive( 'get_description' )->andReturn( '' );
 		$control->shouldReceive( 'get_tooltip' )->andReturn( '' );
+		$control->shouldReceive( 'get_placeholder' )->andReturn( '' )->byDefault();
 		$control->shouldReceive( 'get_min' )->andReturn( null );
 		$control->shouldReceive( 'get_max' )->andReturn( null );
 		$control->shouldReceive( 'get_step' )->andReturn( null );
@@ -243,6 +246,32 @@ class FieldSchemaTest extends TestCase {
 
 		$this->assertTrue( $schema['phone']['required'], 'required setting must emit required = true' );
 		$this->assertFalse( $schema['notes']['required'], 'optional setting must emit required = false' );
+	}
+
+	/**
+	 * Field_Schema must emit `placeholder` from the control when one is set.
+	 *
+	 * @return void
+	 */
+	public function test_from_handler_emits_placeholder(): void {
+		$control = Mockery::mock();
+		$control->shouldReceive( 'get_type' )->andReturn( 'text' );
+		$control->shouldReceive( 'get_description' )->andReturn( '' );
+		$control->shouldReceive( 'get_tooltip' )->andReturn( '' );
+		$control->shouldReceive( 'get_placeholder' )->andReturn( 'enter value' );
+		$control->shouldReceive( 'get_min' )->andReturn( null );
+		$control->shouldReceive( 'get_max' )->andReturn( null );
+		$control->shouldReceive( 'get_step' )->andReturn( null );
+
+		$setting = $this->make_setting( 'city', 'string', $control );
+
+		$handler = Mockery::mock();
+		$handler->shouldReceive( 'get_settings' )->with( [] )->andReturn( [ 'city' => $setting ] );
+		$handler->shouldReceive( 'get_value' )->with( 'city' )->andReturn( '' );
+
+		$schema = Field_Schema::from_handler( $handler );
+
+		$this->assertSame( 'enter value', $schema['city']['placeholder'] );
 	}
 
 	/**

@@ -87,6 +87,9 @@ if ( ! class_exists( 'Woodev_Control' ) ) :
 		/** @var string the tooltip text for the control */
 		protected $tooltip = '';
 
+		/** @var string the placeholder text for the control */
+		protected $placeholder = '';
+
 		/**
 		 * The setting ID to which this control belongs.
 		 *
@@ -316,6 +319,27 @@ if ( ! class_exists( 'Woodev_Control' ) ) :
 		 */
 		public function set_tooltip( string $value ): void {
 			$this->tooltip = $value;
+		}
+
+		/**
+		 * Gets the placeholder text.
+		 *
+		 * @since 2.0.2
+		 * @return string
+		 */
+		public function get_placeholder(): string {
+			return $this->placeholder;
+		}
+
+		/**
+		 * Sets the placeholder text.
+		 *
+		 * @since 2.0.2
+		 * @param string $value placeholder text to set
+		 * @return void
+		 */
+		public function set_placeholder( string $value ): void {
+			$this->placeholder = $value;
 		}
 	}
 
