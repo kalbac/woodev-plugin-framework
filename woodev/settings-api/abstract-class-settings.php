@@ -333,7 +333,8 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 					$control      = $setting->get_control();
 					$control_type = $control instanceof Woodev_Control ? $control->get_type() : null;
 
-					if ( $setting->is_required() && Woodev_Setting::is_requirable( $control_type ) && 0 === count( $elements ) ) {
+					if ( $setting->is_required() && Woodev_Setting::is_requirable( $control_type )
+						&& 0 === count( array_filter( $elements, static fn( $element ) => ! Woodev_Setting::is_empty_value( $control_type, $element ) ) ) ) {
 						$errors[ $setting_id ] = __( 'Обязательное поле.', 'woodev-plugin-framework' );
 						continue;
 					}

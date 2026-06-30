@@ -349,7 +349,8 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 
 				$control_type = $this->control instanceof Woodev_Control ? $this->control->get_type() : null;
 
-				if ( $this->required && self::is_requirable( $control_type ) && 0 === count( $elements ) ) {
+				if ( $this->required && self::is_requirable( $control_type )
+					&& 0 === count( array_filter( $elements, fn( $element ) => ! self::is_empty_value( $control_type, $element ) ) ) ) {
 					throw new Woodev_Plugin_Exception( __( 'Обязательное поле.', 'woodev-plugin-framework' ), 400 );
 				}
 
@@ -454,8 +455,9 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 			switch ( $control_type ) {
 
 				case Woodev_Control::TYPE_EMAIL:
-					// $value is non-empty here (is_empty_value() returned false above), so it is never null.
-					if ( ! is_email( $value ) ) {
+					// $value is non-empty here (is_empty_value() returned false above). Guard is_string
+					// so a crafted non-scalar (e.g. an array POSTed to a scalar field) can't reach is_email().
+					if ( ! is_string( $value ) || ! is_email( $value ) ) {
 						return __( 'Введите корректный email.', 'woodev-plugin-framework' );
 					}
 					break;
@@ -527,12 +529,15 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 		/**
 		 * Whether a value counts as "empty" for the given control type.
 		 *
+		 * Public so the settings handler (Woodev_Abstract_Settings::validate_values) can
+		 * call it when counting non-empty elements in a required is_multi field.
+		 *
 		 * @since 2.0.2
 		 * @param string|null $control_type control type.
 		 * @param mixed       $value        value to inspect.
 		 * @return bool
 		 */
-		private static function is_empty_value( ?string $control_type, $value ): bool {
+		public static function is_empty_value( ?string $control_type, $value ): bool {
 
 			if ( is_array( $value ) ) {
 				return 0 === count( $value );

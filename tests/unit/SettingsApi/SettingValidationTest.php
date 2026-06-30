@@ -259,4 +259,46 @@ class SettingValidationTest extends TestCase {
 			$handler->validate_values( [ 'emails' => [ 'a@b.com', 'nope' ] ] )
 		);
 	}
+
+	public function test_validate_values_required_multiselect_bypass_rejected(): void {
+		Functions\when( 'get_option' )->justReturn( null );
+		Functions\when( 'apply_filters' )->returnArg( 2 );
+		Functions\when( 'wp_parse_args' )->alias(
+			static function ( array $args, array $defaults ): array {
+				return array_merge( $defaults, $args );
+			}
+		);
+
+		require_once dirname( __DIR__, 3 ) . '/woodev/settings-api/abstract-class-settings.php';
+
+		$handler = new class( 'test' ) extends \Woodev_Abstract_Settings {
+			protected function register_settings() {
+				$this->register_setting(
+					'langs',
+					'string',
+					[
+						'is_multi' => true,
+						'required' => true,
+						'options'  => [ 'ru' => 'RU', 'en' => 'EN' ],
+					]
+				);
+				$this->register_control( 'langs', 'multiselect' );
+			}
+		};
+
+		// Empty array → required error.
+		$this->assertSame(
+			[ 'langs' => 'Обязательное поле.' ],
+			$handler->validate_values( [ 'langs' => [] ] )
+		);
+
+		// [''] — one empty string — must also trigger required (bypass is now closed).
+		$this->assertSame(
+			[ 'langs' => 'Обязательное поле.' ],
+			$handler->validate_values( [ 'langs' => [ '' ] ] )
+		);
+
+		// A valid key from the registered options → no error.
+		$this->assertSame( [], $handler->validate_values( [ 'langs' => [ 'ru' ] ] ) );
+	}
 }

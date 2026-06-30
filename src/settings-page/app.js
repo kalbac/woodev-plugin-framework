@@ -205,7 +205,6 @@ export default function App() {
 				onTabChange={ () => {
 					setSaveError( '' );
 					setSaved( '' );
-					setShowErrors( {} );
 				} }
 			/>
 			<SnackbarList
