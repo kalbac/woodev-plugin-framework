@@ -155,7 +155,7 @@ export default function App() {
 			}
 			setShowErrors( false );
 			setFieldErrors( {} );
-			setIndex( index + 1 );
+			setIndex( ( prev ) => prev + 1 );
 		} catch ( e ) {
 			const map = e && e.data && e.data.errors ? e.data.errors : null;
 			if ( map ) {
@@ -173,6 +173,8 @@ export default function App() {
 	 */
 	function skipStep() {
 		setError( null );
+		setShowErrors( false );
+		setFieldErrors( {} );
 		setIndex( index + 1 );
 	}
 
@@ -202,7 +204,7 @@ export default function App() {
 		'div',
 		{ className: 'woodev-setup' },
 		renderHeader( pluginName, headerLogoUrl ),
-		createElement( Stepper, { steps, index, onNavigate: goTo } ),
+		createElement( Stepper, { steps, index, onNavigate: goTo, disabled: busy } ),
 		isFinish
 			? createElement(
 				Fragment,
@@ -239,7 +241,12 @@ export default function App() {
 					createElement( StepView, {
 						step,
 						values: values[ step.id ] || {},
-						onChange: ( v ) => setValues( { ...values, [ step.id ]: v } ),
+						onChange: ( v ) => {
+							if ( Object.keys( fieldErrors ).length > 0 ) {
+								setFieldErrors( {} );
+							}
+							setValues( { ...values, [ step.id ]: v } );
+						},
 						showErrors,
 						serverErrors: fieldErrors,
 					} ),
