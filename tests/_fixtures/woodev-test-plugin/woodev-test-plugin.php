@@ -200,7 +200,7 @@ function woodev_test_plugin_init() {
 		 */
 		protected function register_settings() {
 			// Section «Общие» (general).
-			$this->register_setting( 'api_key', \Woodev_Setting::TYPE_STRING, [ 'name' => 'API-ключ', 'default' => '' ] );
+			$this->register_setting( 'api_key', \Woodev_Setting::TYPE_STRING, [ 'name' => 'API-ключ', 'default' => '', 'required' => true ] );
 			$this->register_setting( 'mode', \Woodev_Setting::TYPE_STRING, [ 'name' => 'Режим', 'options' => [ 'test' => 'Тест', 'live' => 'Боевой' ], 'default' => 'test' ] );
 			$this->register_control( 'api_key', \Woodev_Control::TYPE_TEXT, [ 'tooltip' => 'Длинная подсказка для проверки того, что тултип отображается в портале и не обрезается за правым краем экрана, перенося текст на несколько строк.' ] );
 			$this->register_control( 'mode', \Woodev_Control::TYPE_SELECT );
@@ -218,20 +218,24 @@ function woodev_test_plugin_init() {
 			$this->register_control( 'markup', \Woodev_Control::TYPE_RANGE, [ 'min' => 0, 'max' => 100, 'step' => 5 ] );
 			$this->register_control( 'calc_type', \Woodev_Control::TYPE_RADIO );
 			$this->register_control( 'methods', \Woodev_Control::TYPE_MULTISELECT );
-			$this->register_control( 'max_weight', \Woodev_Control::TYPE_NUMBER );
+			$this->register_control( 'max_weight', \Woodev_Control::TYPE_NUMBER, [ 'min' => 1, 'max' => 1000 ] );
 			$this->register_control( 'comment', \Woodev_Control::TYPE_TEXTAREA );
 			$this->register_control( 'note', \Woodev_Control::TYPE_RICHTEXT );
 
 			// Section «Прочее» (misc) — the remaining control types.
-			$this->register_setting( 'manager_email', \Woodev_Setting::TYPE_EMAIL, [ 'name' => 'E-mail менеджера', 'default' => '' ] );
+			$this->register_setting( 'manager_email', \Woodev_Setting::TYPE_EMAIL, [ 'name' => 'E-mail менеджера', 'default' => '', 'required' => true ] );
 			$this->register_setting( 'secret', \Woodev_Setting::TYPE_STRING, [ 'name' => 'Секретный токен', 'default' => '' ] );
 			$this->register_setting( 'brand_color', \Woodev_Setting::TYPE_STRING, [ 'name' => 'Цвет бренда', 'default' => '#06aedd' ] );
 			$this->register_setting( 'start_date', \Woodev_Setting::TYPE_STRING, [ 'name' => 'Дата старта', 'default' => '' ] );
+			$this->register_setting( 'support_phone', \Woodev_Setting::TYPE_STRING, [ 'name' => 'Телефон поддержки', 'default' => '', 'required' => true ] );
+			$this->register_setting( 'tracking_url', \Woodev_Setting::TYPE_STRING, [ 'name' => 'URL отслеживания', 'default' => '' ] );
 
 			$this->register_control( 'manager_email', \Woodev_Control::TYPE_EMAIL );
 			$this->register_control( 'secret', \Woodev_Control::TYPE_PASSWORD );
 			$this->register_control( 'brand_color', \Woodev_Control::TYPE_COLOR );
 			$this->register_control( 'start_date', \Woodev_Control::TYPE_DATE );
+			$this->register_control( 'support_phone', \Woodev_Control::TYPE_TEL );
+			$this->register_control( 'tracking_url', \Woodev_Control::TYPE_URL );
 
 			// Connection block fields (SP-2 fixture): «api» credential block.
 			$this->register_setting( 'conn_login', \Woodev_Setting::TYPE_STRING, [ 'name' => 'Логин' ] );
@@ -370,7 +374,7 @@ function woodev_test_plugin_init() {
 					[
 						\Woodev\Framework\Settings\Settings_Section::create( 'general', 'Общие', [ 'api_key', 'mode' ], 'Основные параметры подключения к API перевозчика.' ),
 						\Woodev\Framework\Settings\Settings_Section::create( 'order', 'Форма заказа', [ 'enabled', 'markup', 'calc_type', 'methods', 'max_weight', 'comment', 'note' ], 'Как тариф и способы доставки отображаются покупателю при оформлении.' ),
-						\Woodev\Framework\Settings\Settings_Section::create( 'misc', 'Прочее', [ 'manager_email', 'secret', 'brand_color', 'start_date' ] ),
+						\Woodev\Framework\Settings\Settings_Section::create( 'misc', 'Прочее', [ 'manager_email', 'secret', 'brand_color', 'start_date', 'support_phone', 'tracking_url' ] ),
 						\Woodev\Framework\Settings\Settings_Section::create( 'api', 'Подключение', [ 'conn_login', 'conn_password', 'conn_token' ], 'Учётные данные для доступа к API перевозчика.', true, 'Проверить подключение' ),
 						\Woodev\Framework\Settings\Settings_Section::create( 'widget', 'Виджет ЛК', [], 'Регистрация экземпляра магазина в личном кабинете перевозчика.', true, 'Подключить' ),
 					],

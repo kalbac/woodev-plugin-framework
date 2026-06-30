@@ -84,6 +84,7 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 						'default'       => null,
 						'sensitive'     => false,
 						'constant_name' => null,
+						'required'      => false,
 					]
 				);
 
@@ -92,6 +93,7 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 				$setting->set_is_multi( $args['is_multi'] );
 				$setting->set_sensitive( (bool) $args['sensitive'] );
 				$setting->set_constant_name( null !== $args['constant_name'] ? (string) $args['constant_name'] : null );
+				$setting->set_required( (bool) $args['required'] );
 
 				if ( is_array( $args['options'] ) ) {
 					$setting->set_options( $args['options'] );
@@ -298,6 +300,65 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 		}
 
 		/**
+		 * Validates a map of setting_id => value, returning a map of field errors.
+		 *
+		 * Read-only: nothing is persisted. Unknown ids and code-managed
+		 * (defined-constant) settings are skipped (they cannot be edited). Mirrors
+		 * update_value()'s constant guard so the two passes agree.
+		 *
+		 * @since 2.0.2
+		 * @param array<string,mixed> $values setting_id => value.
+		 * @return array<string,string> setting_id => error message (empty when all valid).
+		 */
+		public function validate_values( array $values ): array {
+
+			$errors = [];
+
+			foreach ( $values as $setting_id => $value ) {
+
+				$setting = $this->get_setting( (string) $setting_id );
+
+				if ( ! $setting ) {
+					continue;
+				}
+
+				$constant = $setting->get_constant_name();
+				if ( null !== $constant && defined( $constant ) ) {
+					continue;
+				}
+
+				if ( $setting->is_is_multi() ) {
+
+					$elements     = array_values( (array) $value );
+					$control      = $setting->get_control();
+					$control_type = $control instanceof Woodev_Control ? $control->get_type() : null;
+
+					if ( $setting->is_required() && Woodev_Setting::is_requirable( $control_type )
+						&& 0 === count( array_filter( $elements, static fn( $element ) => ! Woodev_Setting::is_empty_value( $control_type, $element ) ) ) ) {
+						$errors[ $setting_id ] = __( 'Обязательное поле.', 'woodev-plugin-framework' );
+						continue;
+					}
+
+					foreach ( $elements as $element ) {
+						$element_error = $setting->get_validation_error( $element );
+						if ( null !== $element_error ) {
+							$errors[ $setting_id ] = $element_error;
+							break;
+						}
+					}
+				} else {
+
+					$error = $setting->get_validation_error( $value );
+					if ( null !== $error ) {
+						$errors[ $setting_id ] = $error;
+					}
+				}
+			}
+
+			return $errors;
+		}
+
+		/**
 		 * Deletes the stored value for a setting.
 		 *
 		 * @param string $setting_id setting ID
@@ -461,6 +522,8 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 				Woodev_Control::TYPE_TEXTAREA,
 				Woodev_Control::TYPE_NUMBER,
 				Woodev_Control::TYPE_EMAIL,
+				Woodev_Control::TYPE_TEL,
+				Woodev_Control::TYPE_URL,
 				Woodev_Control::TYPE_PASSWORD,
 				Woodev_Control::TYPE_DATE,
 				Woodev_Control::TYPE_CHECKBOX,

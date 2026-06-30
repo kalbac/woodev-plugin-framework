@@ -58,6 +58,18 @@ class SettingTest extends TestCase {
 	}
 
 	/**
+	 * The required flag defaults to false and round-trips through its setter.
+	 *
+	 * @return void
+	 */
+	public function test_required_flag_defaults_false_and_roundtrips() {
+		$setting = new \Woodev_Setting();
+		$this->assertFalse( $setting->is_required() );
+		$setting->set_required( true );
+		$this->assertTrue( $setting->is_required() );
+	}
+
+	/**
 	 * The stored DB value is returned when the backing constant is undefined.
 	 *
 	 * @return void

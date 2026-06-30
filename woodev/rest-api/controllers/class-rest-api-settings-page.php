@@ -128,13 +128,14 @@ if ( ! class_exists( 'Woodev_REST_API_Settings_Page' ) ) :
 		}
 
 		/**
-		 * Persists one tab's values through its handler.
+		 * Persists one tab's values through its handler — atomic two-pass.
 		 *
 		 * Values are scoped to the tab's declared section setting ids (a crafted
 		 * request can never reach a setting the handler registered but this tab
-		 * does not expose). Each setting is validated + persisted by update_value()
-		 * as it is read; a failure reports which field failed (settings before it
-		 * are saved — re-submitting the tab is idempotent, mirroring the wizard).
+		 * does not expose). Pass 1 validates ALL submitted fields and collects a
+		 * per-field error map; if any errors exist, nothing is persisted and the
+		 * map is returned under data.errors (status 400). Pass 2 persists only
+		 * when all fields are valid.
 		 *
 		 * @since 2.0.2
 		 *
@@ -165,18 +166,24 @@ if ( ! class_exists( 'Woodev_REST_API_Settings_Page' ) ) :
 			}
 			$values = array_intersect_key( $values, array_flip( $allowed ) );
 
+			// Pass 1 — validate everything; persist nothing on any failure.
+			$errors = $handler->validate_values( $values );
+
+			if ( ! empty( $errors ) ) {
+				return new WP_Error(
+					'woodev_settings_invalid',
+					__( 'Проверьте правильность заполнения полей.', 'woodev-plugin-framework' ),
+					[
+						'status' => 400,
+						'errors' => $errors,
+					]
+				);
+			}
+
+			// Pass 2 — persist. A throw here is unexpected (already validated) → 500.
 			foreach ( $values as $setting_id => $value ) {
 				try {
 					$handler->update_value( (string) $setting_id, $value );
-				} catch ( \Woodev_Plugin_Exception $e ) {
-					return new WP_Error(
-						'woodev_settings_invalid',
-						$e->getMessage(),
-						[
-							'status' => $e->getCode() ?: 400,
-							'field'  => $setting_id,
-						]
-					);
 				} catch ( \Throwable $e ) {
 					error_log( sprintf( '[woodev] settings save failed on "%s": %s', $setting_id, $e->getMessage() ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- diagnostic for an unexpected persistence failure.
 					return new WP_Error(

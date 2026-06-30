@@ -41,12 +41,14 @@ function controlKind( schema ) {
  * Renders the settings fields, grouping consecutive radio / toggle fields into
  * shared bordered option-groups.
  *
- * @param {Object}   step     step descriptor.
- * @param {Object}   values   current field values for this step.
- * @param {Function} onChange step values change handler.
+ * @param {Object}   step         step descriptor.
+ * @param {Object}   values       current field values for this step.
+ * @param {Function} onChange     step values change handler.
+ * @param {boolean}  showErrors   whether to reveal validation errors.
+ * @param {Object}   serverErrors map of fieldId → server error string.
  * @return {Array} list of React elements.
  */
-function renderFields( step, values, onChange ) {
+function renderFields( step, values, onChange, showErrors, serverErrors ) {
 	const entries = Object.entries( step.fields || {} );
 	const blocks = [];
 	let group = null;
@@ -73,9 +75,10 @@ function renderFields( step, values, onChange ) {
 
 		const field = createElement( ControlField, {
 			key: id,
-			schema,
+			schema: { ...schema, serverError: ( serverErrors || {} )[ id ] },
 			value: values[ id ] ?? schema.value,
 			onChange: ( v ) => onChange( { ...values, [ id ]: v } ),
+			showErrors,
 		} );
 
 		if ( groupable ) {
@@ -100,18 +103,20 @@ function renderFields( step, values, onChange ) {
 /**
  * Step body.
  *
- * @param {Object}   props          component props.
- * @param {Object}   props.step     step descriptor (id, label, type, description, fields, content).
- * @param {Object}   props.values   current field values for this step.
- * @param {Function} props.onChange step values change handler.
+ * @param {Object}   props              component props.
+ * @param {Object}   props.step         step descriptor (id, label, type, description, fields, content).
+ * @param {Object}   props.values       current field values for this step.
+ * @param {Function} props.onChange     step values change handler.
+ * @param {boolean}  props.showErrors   whether to reveal validation errors.
+ * @param {Object}   props.serverErrors map of fieldId → server error string.
  * @return {Object} React element.
  */
-export default function StepView( { step, values, onChange } ) {
+export default function StepView( { step, values, onChange, showErrors, serverErrors } ) {
 	const body = 'settings' === step.type
 		? createElement(
 			'div',
 			{ className: 'woodev-setup__fields' },
-			renderFields( step, values, onChange )
+			renderFields( step, values, onChange, showErrors, serverErrors )
 		)
 		: createElement( 'div', {
 			className: 'woodev-setup__content',

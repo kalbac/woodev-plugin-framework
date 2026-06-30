@@ -27,6 +27,7 @@ import Stepper from './stepper';
 import StepView from './step-view';
 import { CheckFilledIcon, GearIcon, StarIcon } from '../components/icons';
 import { saveStep, complete } from './rest';
+import { validateFields } from '../components/validate';
 
 /**
  * Resolves the admin landing URL used by the footer exit link.
@@ -67,6 +68,8 @@ export default function App() {
 	const [ values, setValues ] = useState( {} );
 	const [ error, setError ] = useState( null );
 	const [ busy, setBusy ] = useState( false );
+	const [ showErrors, setShowErrors ] = useState( false );
+	const [ fieldErrors, setFieldErrors ] = useState( {} );
 
 	const step = steps[ index ];
 	const isFinish = 'finish' === step.type;
@@ -102,6 +105,8 @@ export default function App() {
 	 */
 	function goTo( i ) {
 		setError( null );
+		setShowErrors( false );
+		setFieldErrors( {} );
 		if ( i >= 0 && i < steps.length && i !== index ) {
 			setIndex( i );
 		}
@@ -120,16 +125,43 @@ export default function App() {
 
 	/**
 	 * Advances to the next step, saving the current settings step first.
+	 *
+	 * For settings steps, client-side validation runs before the save request.
+	 * If any field is invalid the reveal state is set and the advance is blocked.
+	 * On a server 400, `err.data.errors` is mapped to per-field error state.
+	 *
+	 * @since 2.0.2
 	 */
 	async function goNext() {
 		setError( null );
+
+		if ( isSettings ) {
+			const stepValues = {};
+			Object.keys( step.fields || {} ).forEach( ( id ) => {
+				stepValues[ id ] = ( values[ step.id ] || {} )[ id ] ?? step.fields[ id ].value;
+			} );
+			const clientErrors = validateFields( step.fields, stepValues );
+			if ( Object.keys( clientErrors ).length > 0 ) {
+				setShowErrors( true );
+				setFieldErrors( {} );
+				return; // block advance — reveal fresh client errors
+			}
+		}
+
 		setBusy( true );
 		try {
 			if ( isSettings ) {
 				await saveStep( step.id, values[ step.id ] || {} );
 			}
-			setIndex( index + 1 );
+			setShowErrors( false );
+			setFieldErrors( {} );
+			setIndex( ( prev ) => prev + 1 );
 		} catch ( e ) {
+			const map = e && e.data && e.data.errors ? e.data.errors : null;
+			if ( map ) {
+				setFieldErrors( map );
+				setShowErrors( true );
+			}
 			setError( e.message || __( 'Что-то пошло не так. Попробуйте ещё раз.', 'woodev-plugin-framework' ) );
 		} finally {
 			setBusy( false );
@@ -141,6 +173,8 @@ export default function App() {
 	 */
 	function skipStep() {
 		setError( null );
+		setShowErrors( false );
+		setFieldErrors( {} );
 		setIndex( index + 1 );
 	}
 
@@ -170,7 +204,7 @@ export default function App() {
 		'div',
 		{ className: 'woodev-setup' },
 		renderHeader( pluginName, headerLogoUrl ),
-		createElement( Stepper, { steps, index, onNavigate: goTo } ),
+		createElement( Stepper, { steps, index, onNavigate: goTo, disabled: busy } ),
 		isFinish
 			? createElement(
 				Fragment,
@@ -207,7 +241,14 @@ export default function App() {
 					createElement( StepView, {
 						step,
 						values: values[ step.id ] || {},
-						onChange: ( v ) => setValues( { ...values, [ step.id ]: v } ),
+						onChange: ( v ) => {
+							if ( Object.keys( fieldErrors ).length > 0 ) {
+								setFieldErrors( {} );
+							}
+							setValues( { ...values, [ step.id ]: v } );
+						},
+						showErrors,
+						serverErrors: fieldErrors,
 					} ),
 					createElement(
 						'div',

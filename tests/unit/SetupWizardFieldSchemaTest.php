@@ -96,6 +96,7 @@ class SetupWizardFieldSchemaTest extends TestCase {
 		$setting->shouldReceive( 'get_description' )->andReturn( 'Setting-level description' );
 		$setting->shouldReceive( 'is_sensitive' )->andReturn( false );
 		$setting->shouldReceive( 'get_constant_name' )->andReturn( null );
+		$setting->shouldReceive( 'is_required' )->andReturn( false );
 
 		// Build the handler mock.
 		$handler = Mockery::mock( 'Woodev_Abstract_Settings' );
@@ -155,6 +156,7 @@ class SetupWizardFieldSchemaTest extends TestCase {
 		$setting->shouldReceive( 'get_description' )->andReturn( 'Fallback description' );
 		$setting->shouldReceive( 'is_sensitive' )->andReturn( false );
 		$setting->shouldReceive( 'get_constant_name' )->andReturn( null );
+		$setting->shouldReceive( 'is_required' )->andReturn( false );
 
 		$handler = Mockery::mock( 'Woodev_Abstract_Settings' );
 		$handler->shouldReceive( 'get_settings' )->andReturn( [ $setting ] );
@@ -188,6 +190,7 @@ class SetupWizardFieldSchemaTest extends TestCase {
 		$setting->shouldReceive( 'get_description' )->andReturn( 'No control' );
 		$setting->shouldReceive( 'is_sensitive' )->andReturn( false );
 		$setting->shouldReceive( 'get_constant_name' )->andReturn( null );
+		$setting->shouldReceive( 'is_required' )->andReturn( false );
 
 		$handler = Mockery::mock( 'Woodev_Abstract_Settings' );
 		$handler->shouldReceive( 'get_settings' )->andReturn( [ $setting ] );
@@ -222,6 +225,7 @@ class SetupWizardFieldSchemaTest extends TestCase {
 		$setting->shouldReceive( 'get_description' )->andReturn( '' );
 		$setting->shouldReceive( 'is_sensitive' )->andReturn( false );
 		$setting->shouldReceive( 'get_constant_name' )->andReturn( null );
+		$setting->shouldReceive( 'is_required' )->andReturn( false );
 
 		$handler = Mockery::mock( 'Woodev_Abstract_Settings' );
 		$handler->shouldReceive( 'get_settings' )->andReturn( [ $setting ] );

@@ -21,6 +21,12 @@ if ( ! class_exists( 'Woodev_Control' ) ) :
 		/** @var string the email control type */
 		const TYPE_EMAIL = 'email';
 
+		/** @var string the tel (phone) control type */
+		const TYPE_TEL = 'tel';
+
+		/** @var string the url control type */
+		const TYPE_URL = 'url';
+
 		/** @var string the password control type */
 		const TYPE_PASSWORD = 'password';
 

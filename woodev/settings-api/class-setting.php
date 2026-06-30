@@ -58,6 +58,9 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 		/** @var string|null name of a PHP constant that, when defined, supplies the value (kept out of the DB) */
 		protected $constant_name = null;
 
+		/** @var bool whether this setting must be filled (validated client + server) */
+		protected $required = false;
+
 		/**
 		 * Gets the setting ID.
 		 *
@@ -187,6 +190,27 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 		}
 
 		/**
+		 * Whether this setting is required (must be non-empty for requirable controls).
+		 *
+		 * @since 2.0.2
+		 * @return bool
+		 */
+		public function is_required(): bool {
+			return $this->required;
+		}
+
+		/**
+		 * Sets the required flag.
+		 *
+		 * @since 2.0.2
+		 * @param bool $value required flag.
+		 * @return void
+		 */
+		public function set_required( bool $value ): void {
+			$this->required = $value;
+		}
+
+		/**
 		 * Sets the setting ID.
 		 *
 		 * @param string $id
@@ -262,6 +286,13 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 		 */
 		public function set_default( $value ) {
 
+			// A null default means "no default supplied" — never run format validators on it
+			// (avoids is_email(null)/strpos(null) etc.; the value stays null either way).
+			if ( null === $value ) {
+				$this->default = null;
+				return;
+			}
+
 			if ( $this->is_is_multi() ) {
 
 				$_value = array_filter( (array) $value, [ $this, 'validate_value' ] );
@@ -316,8 +347,18 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 					array_values( (array) $value )
 				);
 
+				$control_type = $this->control instanceof Woodev_Control ? $this->control->get_type() : null;
+
+				if ( $this->required && self::is_requirable( $control_type )
+					&& 0 === count( array_filter( $elements, fn( $element ) => ! self::is_empty_value( $control_type, $element ) ) ) ) {
+					throw new Woodev_Plugin_Exception( __( 'Обязательное поле.', 'woodev-plugin-framework' ), 400 );
+				}
+
 				foreach ( $elements as $element ) {
-					$this->assert_valid_value( $element );
+					$error = $this->get_validation_error( $element );
+					if ( null !== $error ) {
+						throw new Woodev_Plugin_Exception( $error, 400 );
+					}
 				}
 
 				$this->set_value( $elements );
@@ -326,7 +367,11 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 
 				$value = $this->sanitize_value( $this->coerce_value( $value ) );
 
-				$this->assert_valid_value( $value );
+				$error = $this->get_validation_error( $value );
+				if ( null !== $error ) {
+					throw new Woodev_Plugin_Exception( $error, 400 );
+				}
+
 				$this->set_value( $value );
 			}
 		}
@@ -383,34 +428,159 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 		}
 
 		/**
-		 * Asserts that a single scalar value is valid for this setting's type and options.
+		 * Returns a human-readable validation error for the given input, or null when valid.
 		 *
-		 * Accepts a value when it is either an option KEY (array_key_exists on assoc maps)
-		 * or an option VALUE (strict in_array), covering both associative [key=>label] and
-		 * plain list [label, label] registration styles.
+		 * Single server source of truth for SP-3 validation. Rule order: coerce → required →
+		 * empty-optional → format → legacy type → enum. Mirrored client-side in
+		 * src/components/validate.js — keep both in sync (the rule table lives in the SP-3
+		 * design spec §4).
 		 *
-		 * @param mixed $value
-		 * @throws Woodev_Plugin_Exception
+		 * @since 2.0.2
+		 * @param mixed $value the raw input value.
+		 * @return string|null error message (Russian) or null when valid.
 		 */
-		private function assert_valid_value( $value ) {
+		public function get_validation_error( $value ): ?string {
 
-			if ( ! $this->validate_value( $value ) ) {
-				throw new Woodev_Plugin_Exception( "Setting value for setting {$this->id} is not valid for the setting type {$this->type}", 400 );
+			$value        = $this->coerce_value( $value );
+			$control_type = $this->control instanceof Woodev_Control ? $this->control->get_type() : null;
+
+			if ( $this->required && self::is_requirable( $control_type ) && self::is_empty_value( $control_type, $value ) ) {
+				return __( 'Обязательное поле.', 'woodev-plugin-framework' );
 			}
 
+			if ( self::is_empty_value( $control_type, $value ) ) {
+				return null;
+			}
+
+			switch ( $control_type ) {
+
+				case Woodev_Control::TYPE_EMAIL:
+					// $value is non-empty here (is_empty_value() returned false above). Guard is_string
+					// so a crafted non-scalar (e.g. an array POSTed to a scalar field) can't reach is_email().
+					if ( ! is_string( $value ) || ! is_email( $value ) ) {
+						return __( 'Введите корректный email.', 'woodev-plugin-framework' );
+					}
+					break;
+
+				case Woodev_Control::TYPE_URL:
+					if ( ! self::is_valid_url( $value ) ) {
+						return __( 'Введите корректный URL (с http:// или https://).', 'woodev-plugin-framework' );
+					}
+					break;
+
+				case Woodev_Control::TYPE_TEL:
+					if ( ! self::is_valid_tel( $value ) ) {
+						return __( 'Введите корректный номер телефона.', 'woodev-plugin-framework' );
+					}
+					break;
+
+				case Woodev_Control::TYPE_NUMBER:
+				case Woodev_Control::TYPE_RANGE:
+					if ( ! is_numeric( $value ) ) {
+						return __( 'Введите число.', 'woodev-plugin-framework' );
+					}
+					$min = $this->control->get_min();
+					$max = $this->control->get_max();
+					if ( null !== $min && (float) $value < $min ) {
+						return sprintf( __( 'Значение не меньше %s.', 'woodev-plugin-framework' ), self::format_number( $min ) );
+					}
+					if ( null !== $max && (float) $value > $max ) {
+						return sprintf( __( 'Значение не больше %s.', 'woodev-plugin-framework' ), self::format_number( $max ) );
+					}
+					break;
+			}
+
+			// Legacy type validity (string/url/email/integer/float/boolean).
+			if ( ! $this->validate_value( $value ) ) {
+				return sprintf( __( 'Недопустимое значение для типа %s.', 'woodev-plugin-framework' ), $this->type );
+			}
+
+			// Enum: accept an option KEY (assoc map) or VALUE (plain list).
 			if ( ! empty( $this->options )
 				&& ! ( is_scalar( $value ) && array_key_exists( $value, $this->options ) )
 				&& ! in_array( $value, $this->options, true ) ) {
 
-				throw new Woodev_Plugin_Exception(
-					sprintf(
-						'Setting value for setting %s must be one of %s',
-						$this->id,
-						Woodev_Helper::list_array_items( $this->options, 'or' )
-					),
-					400
+				return sprintf(
+					__( 'Значение должно быть одним из: %s.', 'woodev-plugin-framework' ),
+					Woodev_Helper::list_array_items( $this->options, 'or' )
 				);
 			}
+
+			return null;
+		}
+
+		/**
+		 * Whether a `required` flag applies to a given control type.
+		 *
+		 * Toggle/checkbox/range always carry a value, so requiring them is a no-op.
+		 *
+		 * @since 2.0.2
+		 * @param string|null $control_type control type.
+		 * @return bool
+		 */
+		public static function is_requirable( ?string $control_type ): bool {
+			return ! in_array(
+				$control_type,
+				[ Woodev_Control::TYPE_TOGGLE, Woodev_Control::TYPE_CHECKBOX, Woodev_Control::TYPE_RANGE ],
+				true
+			);
+		}
+
+		/**
+		 * Whether a value counts as "empty" for the given control type.
+		 *
+		 * Public so the settings handler (Woodev_Abstract_Settings::validate_values) can
+		 * call it when counting non-empty elements in a required is_multi field.
+		 *
+		 * @since 2.0.2
+		 * @param string|null $control_type control type.
+		 * @param mixed       $value        value to inspect.
+		 * @return bool
+		 */
+		public static function is_empty_value( ?string $control_type, $value ): bool {
+
+			if ( is_array( $value ) ) {
+				return 0 === count( $value );
+			}
+
+			if ( in_array( $control_type, [ Woodev_Control::TYPE_SELECT, Woodev_Control::TYPE_RADIO ], true ) ) {
+				return '' === (string) $value;
+			}
+
+			return '' === trim( (string) $value );
+		}
+
+		/**
+		 * Permissive phone validator: allowed chars only, at least 5 digits.
+		 *
+		 * @since 2.0.2
+		 * @param mixed $value value to validate.
+		 * @return bool
+		 */
+		private static function is_valid_tel( $value ): bool {
+
+			if ( ! is_string( $value ) && ! is_numeric( $value ) ) {
+				return false;
+			}
+
+			$value = (string) $value;
+
+			if ( ! preg_match( '/^[\d\s\-\(\)\+]+$/', $value ) ) {
+				return false;
+			}
+
+			return strlen( (string) preg_replace( '/\D/', '', $value ) ) >= 5;
+		}
+
+		/**
+		 * Formats a numeric bound without a trailing ".0" for whole numbers.
+		 *
+		 * @since 2.0.2
+		 * @param float $number bound to format.
+		 * @return string
+		 */
+		private static function format_number( float $number ): string {
+			return floor( $number ) === $number ? (string) (int) $number : (string) $number;
 		}
 
 		/**
@@ -454,6 +624,10 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 		 */
 		private static function is_valid_url( $url ) {
 
+			if ( ! is_string( $url ) ) {
+				return false;
+			}
+
 			if ( 0 !== strpos( $url, 'http://' ) && 0 !== strpos( $url, 'https://' ) ) {
 				return false;
 			}
@@ -472,7 +646,7 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 		 * @return bool
 		 */
 		protected function validate_email_value( $value ) {
-			return (bool) is_email( $value );
+			return is_string( $value ) && (bool) is_email( $value );
 		}
 
 		/**

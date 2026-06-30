@@ -56,6 +56,7 @@ final class Field_Schema {
 				'controlType' => $control ? $control->get_type() : null,
 				'description' => $control && $control->get_description() ? $control->get_description() : $setting->get_description(),
 				'tooltip'     => $control ? $control->get_tooltip() : '',
+				'required'    => $setting->is_required(),
 			];
 
 			// Any secret (declared sensitive OR constant-backed) is masked in the UI

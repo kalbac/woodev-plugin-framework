@@ -22,9 +22,11 @@ import { createElement } from '@wordpress/element';
  * @param {number}   props.index      current step index.
  * @param {Function} props.onNavigate optional (i)=>void invoked when a non-current
  *                                    step label is clicked.
+ * @param {boolean}  props.disabled   when true, step buttons are non-clickable
+ *                                    (e.g. while a save request is in flight).
  * @return {Object} React element.
  */
-export default function Stepper( { steps, index, onNavigate } ) {
+export default function Stepper( { steps, index, onNavigate, disabled } ) {
 	return createElement(
 		'ol',
 		{ className: 'woodev-setup__steps' },
@@ -40,6 +42,7 @@ export default function Stepper( { steps, index, onNavigate } ) {
 					{
 						type: 'button',
 						className: 'woodev-setup__step-label',
+						disabled: !! disabled,
 						onClick: () => onNavigate && onNavigate( i ),
 					},
 					step.label

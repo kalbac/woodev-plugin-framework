@@ -12,6 +12,7 @@
  */
 
 import { createElement, useState } from '@wordpress/element';
+import { validateField, isRequirable } from './validate';
 import {
 	TextControl,
 	TextareaControl,
@@ -130,20 +131,22 @@ function resolveControl( schema ) {
 }
 
 /**
- * Wraps a control with the shared field anatomy (label + tooltip + description).
+ * Wraps a control with the shared field anatomy (label + tooltip + description + error).
  *
- * @param {Object} schema  field schema slice.
- * @param {Object} control rendered control element.
+ * @param {Object}      schema  field schema slice.
+ * @param {Object}      control rendered control element.
+ * @param {string|null} error   validation error message, if any.
  * @return {Object} React element.
  */
-function withAnatomy( schema, control ) {
+function withAnatomy( schema, control, error ) {
 	return createElement(
 		FieldRow,
 		{
 			label: schema.name,
-			required: schema.required,
+			required: schema.required && isRequirable( resolveControl( schema ) ),
 			tooltip: schema.tooltip,
 			description: schema.description,
+			error,
 		},
 		control
 	);
@@ -152,13 +155,26 @@ function withAnatomy( schema, control ) {
 /**
  * Field control component.
  *
- * @param {Object}   props          component props.
- * @param {Object}   props.schema   field schema slice.
- * @param {*}        props.value    current value.
- * @param {Function} props.onChange change handler.
+ * Implements blur-first / live-clear validation (SP-3): an error is shown only
+ * after the field has been blurred, or when the parent forces reveal via
+ * `showErrors` (e.g. on Save). Once an error is visible it is re-evaluated on
+ * every input change and cleared live as soon as the value becomes valid.
+ * A server-supplied `schema.serverError` always takes precedence.
+ *
+ * Toggle, checkbox, and range controls are non-requirable and carry no error UI.
+ *
+ * @param {Object}   props              component props.
+ * @param {Object}   props.schema       field schema slice.
+ * @param {*}        props.value        current value.
+ * @param {Function} props.onChange     change handler.
+ * @param {boolean}  props.showErrors   when true, reveal errors without waiting for blur.
  * @return {Object} React element.
+ * @since 2.0.2
  */
-export default function ControlField( { schema, value, onChange } ) {
+export default function ControlField( { schema, value, onChange, showErrors } ) {
+	// Must be called unconditionally before any early return (React hook rules).
+	const [ touched, setTouched ] = useState( false );
+
 	// A wp-config-backed secret is read-only and never editable here.
 	if ( schema.constant_managed ) {
 		return withAnatomy(
@@ -188,6 +204,11 @@ export default function ControlField( { schema, value, onChange } ) {
 			} )
 		);
 	}
+
+	// Blur-first: show error only after touch or when parent forces reveal on Save.
+	// serverError (set by parent after REST rejection) always takes precedence.
+	const error = schema.serverError || ( ( touched || showErrors ) ? validateField( schema, value ) : null );
+	const onBlur = () => setTouched( true );
 
 	const control = resolveControl( schema );
 	const suffix = schema.suffix || schema.unit || '';
@@ -220,8 +241,9 @@ export default function ControlField( { schema, value, onChange } ) {
 				createElement( SelectField, {
 					value: value ?? schema.value ?? '',
 					options: normalizeOptions( schema.options ),
-					onChange: ( next ) => onChange( next ?? '' ),
-				} )
+					onChange: ( next ) => { setTouched( true ); onChange( next ?? '' ); },
+				} ),
+				error
 			);
 
 		case 'radio':
@@ -234,9 +256,10 @@ export default function ControlField( { schema, value, onChange } ) {
 					createElement( RadioControl, {
 						selected: value ?? schema.value ?? '',
 						options: normalizeOptions( schema.options ),
-						onChange,
+						onChange: ( next ) => { setTouched( true ); onChange( next ); },
 					} )
-				)
+				),
+				error
 			);
 
 		case 'range':
@@ -267,7 +290,9 @@ export default function ControlField( { schema, value, onChange } ) {
 					__next40pxDefaultSize: true,
 					value: value ?? '',
 					onChange,
-				} )
+					onBlur,
+				} ),
+				error
 			);
 
 		case 'richtext':
@@ -276,7 +301,8 @@ export default function ControlField( { schema, value, onChange } ) {
 				createElement( WizardRichText, {
 					value: value ?? '',
 					onChange,
-				} )
+				} ),
+				error
 			);
 
 		case 'multiselect': {
@@ -290,8 +316,9 @@ export default function ControlField( { schema, value, onChange } ) {
 					value: current,
 					options: normalizeOptions( schema.options ),
 					multi: true,
-					onChange,
-				} )
+					onChange: ( next ) => { setTouched( true ); onChange( next ); },
+				} ),
+				error
 			);
 		}
 
@@ -304,27 +331,33 @@ export default function ControlField( { schema, value, onChange } ) {
 					type: 'color',
 					value: value ?? schema.value ?? '',
 					onChange,
-				} )
+				} ),
+				error
 			);
 
 		case 'password':
 			return withAnatomy(
 				schema,
-				createElement( PasswordControl, { value, onChange } )
+				createElement( PasswordControl, { value, onChange } ),
+				error
 			);
 
 		case 'email':
+		case 'url':
+		case 'tel':
 		case 'number':
 		case 'date':
 		case 'text':
 		default: {
-			const type = [ 'email', 'number', 'date' ].includes( control ) ? control : 'text';
+			const type = [ 'email', 'url', 'tel', 'number', 'date' ].includes( control ) ? control : 'text';
 			const input = createElement( TextControl, {
 				__nextHasNoMarginBottom: true,
 				__next40pxDefaultSize: true,
 				type,
 				value: value ?? '',
 				onChange,
+				onBlur,
+				'aria-invalid': !! error,
 			} );
 
 			return withAnatomy(
@@ -336,7 +369,8 @@ export default function ControlField( { schema, value, onChange } ) {
 						input,
 						createElement( 'span', { className: 'woodev-field__suffix' }, suffix )
 					)
-					: input
+					: input,
+				error
 			);
 		}
 	}
