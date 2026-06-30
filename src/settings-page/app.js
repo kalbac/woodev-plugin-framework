@@ -42,6 +42,20 @@ export default function App() {
 			);
 	}, [] );
 
+	useEffect( () => {
+		if ( ! Object.values( showErrors ).some( Boolean ) ) {
+			return;
+		}
+		const el = document.querySelector( '.woodev-settings .woodev-field--error' );
+		if ( el ) {
+			el.scrollIntoView( { behavior: 'smooth', block: 'center' } );
+			const control = el.querySelector( 'input, textarea, button' );
+			if ( control ) {
+				control.focus( { preventScroll: true } );
+			}
+		}
+	}, [ showErrors ] );
+
 	if ( loadError ) {
 		return (
 			<Notice status="error" isDismissible={ false }>
@@ -99,6 +113,10 @@ export default function App() {
 		if ( Object.keys( clientErrors ).length > 0 ) {
 			setShowErrors( ( p ) => ( { ...p, [ providerId ]: true } ) );
 			setFieldErrors( ( p ) => ( { ...p, [ providerId ]: {} } ) );
+			dispatch( noticesStore ).createErrorNotice(
+				__( 'Проверьте правильность заполнения полей.', 'woodev-plugin-framework' ),
+				{ type: 'snackbar', id: 'woodev-settings-validate' }
+			);
 			return; // block REST — reveal fresh client errors only
 		}
 
