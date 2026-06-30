@@ -58,6 +58,9 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 		/** @var string|null name of a PHP constant that, when defined, supplies the value (kept out of the DB) */
 		protected $constant_name = null;
 
+		/** @var bool whether this setting must be filled (validated client + server) */
+		protected $required = false;
+
 		/**
 		 * Gets the setting ID.
 		 *
@@ -184,6 +187,27 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 		 */
 		public function set_constant_name( ?string $value ): void {
 			$this->constant_name = ( null === $value || '' === $value ) ? null : $value;
+		}
+
+		/**
+		 * Whether this setting is required (must be non-empty for requirable controls).
+		 *
+		 * @since 2.0.2
+		 * @return bool
+		 */
+		public function is_required(): bool {
+			return $this->required;
+		}
+
+		/**
+		 * Sets the required flag.
+		 *
+		 * @since 2.0.2
+		 * @param bool $value required flag.
+		 * @return void
+		 */
+		public function set_required( bool $value ): void {
+			$this->required = $value;
 		}
 
 		/**

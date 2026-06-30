@@ -84,6 +84,7 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 						'default'       => null,
 						'sensitive'     => false,
 						'constant_name' => null,
+						'required'      => false,
 					]
 				);
 
@@ -92,6 +93,7 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 				$setting->set_is_multi( $args['is_multi'] );
 				$setting->set_sensitive( (bool) $args['sensitive'] );
 				$setting->set_constant_name( null !== $args['constant_name'] ? (string) $args['constant_name'] : null );
+				$setting->set_required( (bool) $args['required'] );
 
 				if ( is_array( $args['options'] ) ) {
 					$setting->set_options( $args['options'] );
