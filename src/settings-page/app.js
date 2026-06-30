@@ -81,22 +81,25 @@ export default function App() {
 	};
 
 	const onSave = ( providerId, tab ) => {
+		const providerEdits = edits[ providerId ] || {};
+
 		// Gather this tab's fields across sections (skip connection sections — SP-2).
 		const allFields = {};
-		tab.sections.forEach( ( s ) => {
+		( tab.sections || [] ).forEach( ( s ) => {
 			if ( ! s.is_connection ) {
 				Object.assign( allFields, s.fields || {} );
 			}
 		} );
 		const merged = {};
 		Object.keys( allFields ).forEach( ( id ) => {
-			merged[ id ] = ( edits[ providerId ] || {} )[ id ] ?? allFields[ id ].value;
+			merged[ id ] = providerEdits[ id ] ?? allFields[ id ].value;
 		} );
 
 		const clientErrors = validateFields( allFields, merged );
 		if ( Object.keys( clientErrors ).length > 0 ) {
 			setShowErrors( ( p ) => ( { ...p, [ providerId ]: true } ) );
-			return; // block REST — reveal client errors
+			setFieldErrors( ( p ) => ( { ...p, [ providerId ]: {} } ) );
+			return; // block REST — reveal fresh client errors only
 		}
 
 		setSaving( providerId );
@@ -104,7 +107,7 @@ export default function App() {
 		setSaved( '' );
 		setFieldErrors( ( p ) => ( { ...p, [ providerId ]: {} } ) );
 
-		saveTab( providerId, edits[ providerId ] || {} )
+		saveTab( providerId, providerEdits )
 			.then( () => {
 				setSaving( '' );
 				setSaved( providerId );
