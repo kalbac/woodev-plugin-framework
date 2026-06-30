@@ -338,7 +338,8 @@ export default function ControlField( { schema, value, onChange, showErrors } ) 
 		case 'password':
 			return withAnatomy(
 				schema,
-				createElement( PasswordControl, { value, onChange } )
+				createElement( PasswordControl, { value, onChange } ),
+				error
 			);
 
 		case 'email':
