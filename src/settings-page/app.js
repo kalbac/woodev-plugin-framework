@@ -27,6 +27,7 @@ export default function App() {
 	const [ saveError, setSaveError ] = useState( '' );
 	const [ showErrors, setShowErrors ] = useState( {} ); // { providerId: bool }
 	const [ fieldErrors, setFieldErrors ] = useState( {} ); // { providerId: { settingId: message } }
+	const [ errorRevealGen, setErrorRevealGen ] = useState( 0 );
 
 	// Native WP snackbar notices (created on save via the notices store).
 	const snackbars = useSelect(
@@ -43,7 +44,7 @@ export default function App() {
 	}, [] );
 
 	useEffect( () => {
-		if ( ! Object.values( showErrors ).some( Boolean ) ) {
+		if ( ! errorRevealGen ) {
 			return;
 		}
 		const el = document.querySelector( '.woodev-settings .woodev-field--error' );
@@ -54,7 +55,7 @@ export default function App() {
 				control.focus( { preventScroll: true } );
 			}
 		}
-	}, [ showErrors ] );
+	}, [ errorRevealGen ] );
 
 	if ( loadError ) {
 		return (
@@ -112,7 +113,8 @@ export default function App() {
 		const clientErrors = validateFields( allFields, merged );
 		if ( Object.keys( clientErrors ).length > 0 ) {
 			setShowErrors( ( p ) => ( { ...p, [ providerId ]: true } ) );
-			setFieldErrors( ( p ) => ( { ...p, [ providerId ]: {} } ) );
+			setFieldErrors( ( p ) => ( { ...p, [ providerId ]: {} } ) ); // clear stale server errors before revealing fresh client errors
+			setErrorRevealGen( ( g ) => g + 1 );
 			dispatch( noticesStore ).createErrorNotice(
 				__( 'Проверьте правильность заполнения полей.', 'woodev-plugin-framework' ),
 				{ type: 'snackbar', id: 'woodev-settings-validate' }
@@ -159,6 +161,7 @@ export default function App() {
 				if ( map ) {
 					setFieldErrors( ( p ) => ( { ...p, [ providerId ]: map } ) );
 					setShowErrors( ( p ) => ( { ...p, [ providerId ]: true } ) );
+					setErrorRevealGen( ( g ) => g + 1 );
 				}
 				const message = ( err && err.message ) ||
 					__( 'Не удалось сохранить настройки.', 'woodev-plugin-framework' );
