@@ -286,6 +286,13 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 		 */
 		public function set_default( $value ) {
 
+			// A null default means "no default supplied" — never run format validators on it
+			// (avoids is_email(null)/strpos(null) etc.; the value stays null either way).
+			if ( null === $value ) {
+				$this->default = null;
+				return;
+			}
+
 			if ( $this->is_is_multi() ) {
 
 				$_value = array_filter( (array) $value, [ $this, 'validate_value' ] );
@@ -447,6 +454,7 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 			switch ( $control_type ) {
 
 				case Woodev_Control::TYPE_EMAIL:
+					// $value is non-empty here (is_empty_value() returned false above), so it is never null.
 					if ( ! is_email( $value ) ) {
 						return __( 'Введите корректный email.', 'woodev-plugin-framework' );
 					}

@@ -145,6 +145,8 @@ class SettingValidationTest extends TestCase {
 	}
 
 	public function test_validate_value_null_is_false_without_deprecation(): void {
+		// Regression: PHP 8.1 `strlen(null)` deprecation via is_email(null) / strpos(null,...) when a
+		// format-typed setting is registered with no default. The is_string() guards keep validate_value(null) clean.
 		$email = new \Woodev_Setting();
 		$email->set_type( 'email' );
 		$this->assertFalse( $email->validate_value( null ) );
