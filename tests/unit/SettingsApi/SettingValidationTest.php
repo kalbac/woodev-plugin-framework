@@ -144,6 +144,16 @@ class SettingValidationTest extends TestCase {
 		$this->assertSame( 'Обязательное поле.', $required->get_validation_error( '' ) );
 	}
 
+	public function test_validate_value_null_is_false_without_deprecation(): void {
+		$email = new \Woodev_Setting();
+		$email->set_type( 'email' );
+		$this->assertFalse( $email->validate_value( null ) );
+
+		$url = new \Woodev_Setting();
+		$url->set_type( 'url' );
+		$this->assertFalse( $url->validate_value( null ) );
+	}
+
 	public function test_handler_validate_values_collects_field_errors(): void {
 		Functions\when( 'get_option' )->justReturn( null );
 		Functions\when( 'apply_filters' )->returnArg( 2 );

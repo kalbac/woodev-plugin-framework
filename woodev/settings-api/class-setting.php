@@ -611,6 +611,10 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 		 */
 		private static function is_valid_url( $url ) {
 
+			if ( ! is_string( $url ) ) {
+				return false;
+			}
+
 			if ( 0 !== strpos( $url, 'http://' ) && 0 !== strpos( $url, 'https://' ) ) {
 				return false;
 			}
@@ -629,7 +633,7 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 		 * @return bool
 		 */
 		protected function validate_email_value( $value ) {
-			return (bool) is_email( $value );
+			return is_string( $value ) && (bool) is_email( $value );
 		}
 
 		/**

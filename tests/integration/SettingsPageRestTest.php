@@ -165,7 +165,7 @@ class SettingsPageRestTest extends TestCase {
 			 * @return void
 			 */
 			protected function register_settings() {
-				$this->register_setting( 'manager_email', \Woodev_Setting::TYPE_EMAIL, [ 'name' => 'Manager Email', 'required' => true ] );
+				$this->register_setting( 'manager_email', \Woodev_Setting::TYPE_EMAIL, [ 'name' => 'Manager Email', 'default' => '', 'required' => true ] );
 				$this->register_control( 'manager_email', 'email' );
 			}
 		};
