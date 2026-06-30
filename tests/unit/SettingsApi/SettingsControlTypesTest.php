@@ -98,6 +98,24 @@ class SettingsControlTypesTest extends TestCase {
 		$this->assertContains( 'multiselect', $this->settings->get_control_types() );
 	}
 
+	/**
+	 * get_control_types() must include the new tel type.
+	 *
+	 * @return void
+	 */
+	public function test_get_control_types_includes_tel(): void {
+		$this->assertContains( 'tel', $this->settings->get_control_types() );
+	}
+
+	/**
+	 * get_control_types() must include the new url type.
+	 *
+	 * @return void
+	 */
+	public function test_get_control_types_includes_url(): void {
+		$this->assertContains( 'url', $this->settings->get_control_types() );
+	}
+
 	// ---------------------------------------------------------------
 	// register_control() with min/max/step/tooltip args
 	// ---------------------------------------------------------------

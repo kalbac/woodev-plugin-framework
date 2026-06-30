@@ -461,6 +461,8 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 				Woodev_Control::TYPE_TEXTAREA,
 				Woodev_Control::TYPE_NUMBER,
 				Woodev_Control::TYPE_EMAIL,
+				Woodev_Control::TYPE_TEL,
+				Woodev_Control::TYPE_URL,
 				Woodev_Control::TYPE_PASSWORD,
 				Woodev_Control::TYPE_DATE,
 				Woodev_Control::TYPE_CHECKBOX,
