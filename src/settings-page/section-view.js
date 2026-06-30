@@ -10,7 +10,7 @@
 import ControlField from '../components/control-field';
 import ConnectionBlock from './connection-block';
 
-export default function SectionView( { providerId, section, values, onFieldChange } ) {
+export default function SectionView( { providerId, section, values, onFieldChange, showErrors, serverErrors } ) {
 	if ( ! section ) {
 		return null;
 	}
@@ -34,9 +34,10 @@ export default function SectionView( { providerId, section, values, onFieldChang
 			{ Object.keys( section.fields ).map( ( settingId ) => (
 				<ControlField
 					key={ settingId }
-					schema={ section.fields[ settingId ] }
+					schema={ { ...section.fields[ settingId ], serverError: ( serverErrors || {} )[ settingId ] } }
 					value={ values[ settingId ] ?? section.fields[ settingId ].value }
 					onChange={ ( next ) => onFieldChange( settingId, next ) }
+					showErrors={ showErrors }
 				/>
 			) ) }
 		</div>

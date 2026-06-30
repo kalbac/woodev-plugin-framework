@@ -14,6 +14,7 @@ import { dispatch, useSelect } from '@wordpress/data';
 import { store as noticesStore } from '@wordpress/notices';
 import { Button, Notice, Spinner, Card, CardBody, SnackbarList } from '@wordpress/components';
 import { fetchSchema, saveTab } from './rest';
+import { validateFields } from '../components/validate';
 import TabsNav from '../components/tabs-nav';
 import SectionView from './section-view';
 
@@ -24,6 +25,8 @@ export default function App() {
 	const [ saving, setSaving ] = useState( '' );
 	const [ saved, setSaved ] = useState( '' );
 	const [ saveError, setSaveError ] = useState( '' );
+	const [ showErrors, setShowErrors ] = useState( {} ); // { providerId: bool }
+	const [ fieldErrors, setFieldErrors ] = useState( {} ); // { providerId: { settingId: message } }
 
 	// Native WP snackbar notices (created on save via the notices store).
 	const snackbars = useSelect(
@@ -66,20 +69,46 @@ export default function App() {
 
 	const onFieldChange = ( providerId, settingId, value ) => {
 		setSaved( '' );
+		setFieldErrors( ( prev ) => {
+			const tabErrs = { ...( prev[ providerId ] || {} ) };
+			delete tabErrs[ settingId ];
+			return { ...prev, [ providerId ]: tabErrs };
+		} );
 		setEdits( ( prev ) => ( {
 			...prev,
 			[ providerId ]: { ...( prev[ providerId ] || {} ), [ settingId ]: value },
 		} ) );
 	};
 
-	const onSave = ( providerId ) => {
+	const onSave = ( providerId, tab ) => {
+		// Gather this tab's fields across sections (skip connection sections — SP-2).
+		const allFields = {};
+		tab.sections.forEach( ( s ) => {
+			if ( ! s.is_connection ) {
+				Object.assign( allFields, s.fields || {} );
+			}
+		} );
+		const merged = {};
+		Object.keys( allFields ).forEach( ( id ) => {
+			merged[ id ] = ( edits[ providerId ] || {} )[ id ] ?? allFields[ id ].value;
+		} );
+
+		const clientErrors = validateFields( allFields, merged );
+		if ( Object.keys( clientErrors ).length > 0 ) {
+			setShowErrors( ( p ) => ( { ...p, [ providerId ]: true } ) );
+			return; // block REST — reveal client errors
+		}
+
 		setSaving( providerId );
 		setSaveError( '' );
 		setSaved( '' );
+		setFieldErrors( ( p ) => ( { ...p, [ providerId ]: {} } ) );
+
 		saveTab( providerId, edits[ providerId ] || {} )
 			.then( () => {
 				setSaving( '' );
 				setSaved( providerId );
+				setShowErrors( ( p ) => ( { ...p, [ providerId ]: false } ) );
 
 				// Also surface a native WP (snackbar) notice, not just the inline one.
 				dispatch( noticesStore ).createSuccessNotice(
@@ -105,6 +134,11 @@ export default function App() {
 			} )
 			.catch( ( err ) => {
 				setSaving( '' );
+				const map = err && err.data && err.data.errors ? err.data.errors : null;
+				if ( map ) {
+					setFieldErrors( ( p ) => ( { ...p, [ providerId ]: map } ) );
+					setShowErrors( ( p ) => ( { ...p, [ providerId ]: true } ) );
+				}
 				const message = ( err && err.message ) ||
 					__( 'Не удалось сохранить настройки.', 'woodev-plugin-framework' );
 				setSaveError( message );
@@ -142,13 +176,15 @@ export default function App() {
 						onFieldChange={ ( settingId, value ) =>
 							onFieldChange( tab.id, settingId, value )
 						}
+						showErrors={ !! showErrors[ tab.id ] }
+						serverErrors={ fieldErrors[ tab.id ] || {} }
 					/>
 					<div className="woodev-settings__actions">
 						<Button
 							variant="primary"
 							isBusy={ saving === tab.id }
 							disabled={ saving === tab.id || ! hasChanges }
-							onClick={ () => onSave( tab.id ) }
+							onClick={ () => onSave( tab.id, tab ) }
 						>
 							{ __( 'Сохранить', 'woodev-plugin-framework' ) }
 						</Button>
@@ -166,6 +202,7 @@ export default function App() {
 				onTabChange={ () => {
 					setSaveError( '' );
 					setSaved( '' );
+					setShowErrors( {} );
 				} }
 			/>
 			<SnackbarList
