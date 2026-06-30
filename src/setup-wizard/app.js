@@ -123,6 +123,22 @@ export default function App() {
 		}
 	}, [ isFinish ] );
 
+	// Scroll to the first invalid field and focus its control whenever validation
+	// errors are revealed (client-side block or server-side 400 reject).
+	useEffect( () => {
+		if ( ! showErrors ) {
+			return;
+		}
+		const el = document.querySelector( '.woodev-setup .woodev-field--error' );
+		if ( el ) {
+			el.scrollIntoView( { behavior: 'smooth', block: 'center' } );
+			const control = el.querySelector( 'input, textarea, button' );
+			if ( control ) {
+				control.focus( { preventScroll: true } );
+			}
+		}
+	}, [ showErrors ] );
+
 	/**
 	 * Advances to the next step, saving the current settings step first.
 	 *
@@ -144,7 +160,8 @@ export default function App() {
 			if ( Object.keys( clientErrors ).length > 0 ) {
 				setShowErrors( true );
 				setFieldErrors( {} );
-				return; // block advance — reveal fresh client errors
+				setError( __( 'Проверьте правильность заполнения полей на этом шаге.', 'woodev-plugin-framework' ) );
+				return; // block advance — reveal fresh client errors + summary
 			}
 		}
 
