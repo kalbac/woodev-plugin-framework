@@ -92,15 +92,19 @@ Adopt the proven `WP_Meta_Query`/`WP_Tax_Query` shape (a `relation` plus a flat 
 - **JS:** `evaluateConditions( conditions, values )` + `isFieldVisible( schema, values )` in `src/components/validate.js` (co-located with the existing validator mirror; it already owns the "KEEP IN SYNC" discipline).
 - Both files carry a cross-reference comment naming the other; §5 is the contract.
 
-### D5 — Server resolution: posted-else-stored
+### D5 — Server resolution: posted-else-stored, via one `filter_visible_values()`
 
-`validate_values()` resolves each field's visibility against the **effective** controlling value: the posted value if the controlling id is in the submitted map, otherwise the current stored value (`$this->get_value( $controlling_id )`). This mirrors the client's `edit ?? schema.value` so both gates agree even though the client submits only changed fields.
+The server strips hidden fields from the submitted values map **once, at the top of both REST save paths**, via a shared handler method `Woodev_Abstract_Settings::filter_visible_values( array $values ): array`. Each field's visibility resolves against the **effective** controlling value: the posted value if the controlling id is in the submitted map, otherwise the current stored value (`$this->get_value( $controlling_id )`). This mirrors the client's `edit ?? schema.value` so both gates agree even though the client submits only changed fields.
 
-Implementation: at the top of the per-field loop (after the existing unknown-id and constant guards), resolve `$conditions = $setting->get_show_if_conditions()`; if non-empty and `! evaluate_conditions( $conditions, $effective_values )` → `continue` (skip — no error). `$effective_values` is built once per call as `posted + stored-fallback` for the ids referenced by any condition.
+Wiring:
+- Settings page (`class-rest-api-settings-page.php`): call `filter_visible_values()` right after the tab allow-list `array_intersect_key`, before the SP-3 two-pass (validate → persist).
+- Setup wizard (`class-rest-api-setup.php`): call it right after reading `$values`, before the per-field `update_value()` loop (the wizard persists per-field, not via the atomic batch).
 
-### D6 — Hidden fields are skipped, not stripped
+`validate_values()` and `update_value()` are unchanged — they simply never see a hidden field, so they neither error on nor persist it.
 
-A hidden field is **excluded from validation** (both gates) but its posted value, if any, is still **persisted as-is**. Rationale: preserve user input when the controlling field toggles back (set `mode=live`, type the key, switch to `test` → the key survives, hidden); the plugin does not read a hidden field's value, so persisting an unvalidated hidden value is harmless. This keeps the change surgical — no new "strip on hide" path.
+### D6 — Hidden fields are skipped entirely on save
+
+Because `filter_visible_values()` removes a hidden field from the map before validate **and** persist, a hidden field is **neither validated nor persisted** on both surfaces. A field the user edited then hid is not written; the plugin reads the controlling field and ignores a hidden dependent anyway. This is simpler and consistent across the two save paths (vs. "validate-skip but still persist", which would diverge between the settings atomic-persist and the wizard per-field-persist).
 
 ### D7 — Scope: individual fields only
 
@@ -125,7 +129,7 @@ A hidden field is **excluded from validation** (both gates) but its posted value
 2. **Normalize the sugar:** if `conditions` has a `setting` key, it is a single bare condition → wrap as `[ conditions ]` (a one-condition group with no `relation`).
 3. `relation` = `conditions['relation'] ?? 'AND'`, uppercased; the condition list = the members that are themselves arrays (i.e. drop the scalar `relation` entry — in PHP the numeric-key members, in JS the `Object.values` that are arrays). An empty condition list → `true` (visible).
 4. For each condition `{ setting, operator = '=', value }`:
-   - `cv = (string)( values[setting] ?? '' )`.
+   - `cv` = the controlling value **scalar-guarded**: `is_scalar( raw ) ? (string) raw : ''` in PHP; `(raw === null || raw === undefined || typeof raw === 'object') ? '' : String(raw)` in JS. An array/unset controller coerces to the empty string (controlling fields are scalar in v1), so both sides agree.
    - `'='`      → `cv === (string) value`
    - `'!='`     → `cv !== (string) value`
    - `'in'`     → `in_array( cv, array_map( 'strval', (array) value ), true )`
@@ -140,16 +144,16 @@ JS `evaluateConditions` reproduces this exactly (`String(values[setting] ?? '')`
 ## 6. Server behavior
 
 - **Emission:** `Field_Schema::from_handler()` adds `'show_if' => $setting->get_show_if_conditions()` to the entry **only when non-empty**. (Resolves the callback once, server-side, at build time.)
-- **Validation skip:** `validate_values()` per D5 — resolve effective values for referenced controlling ids, `continue` on hidden fields.
-- **No REST route changes.** The atomic two-pass and error-map contract are unchanged; hidden required-empty fields simply never enter the error map.
+- **Hidden-field strip:** `filter_visible_values()` per D5 at both REST save entry points — resolves effective controlling values, `unset()`s hidden fields from the submitted map.
+- **No REST route changes.** The atomic two-pass and error-map contract are unchanged; hidden required-empty fields simply never reach validation.
 
 ## 7. Fixture demo («Карьер»)
 
 Extend the existing fixture to prove both surfaces and both operators/relations:
 - `mode` (select: test/live) controls a `live_api_key` (`show_if = mode = live`).
 - `calc_type` (select/radio: fixed/dynamic) controls a `rate` field (`show_if = calc_type = fixed`) and a `formula` field (`show_if = calc_type != fixed`, demonstrating `!=` + the empty-controlling rule).
-- One field driven by a **callback** `show_if` returning conditions for several ids (demo DRY).
-- Include at least one `in` / `not_in` and one `OR` case so the evaluator paths are exercised end-to-end.
+- Two fields (`rate`, `formula`) driven by a **callback** `show_if` returning conditions for several ids (demo DRY), using `=` and `not_in`.
+- Exhaustive operator/relation coverage (`in`, `OR`, unknown-operator fail-closed, empty-controller) lives in the **unit tests** (`evaluate_conditions`), which cover them more thoroughly than a browser demo; the fixture proves the realistic same-section case end-to-end.
 
 ## 8. Scope / deferred
 
