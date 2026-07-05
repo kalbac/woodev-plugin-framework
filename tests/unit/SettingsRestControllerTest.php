@@ -56,6 +56,7 @@ class SettingsRestControllerTest extends TestCase {
 		Functions\when( 'rest_ensure_response' )->returnArg( 1 );
 
 		$handler = Mockery::mock();
+		$handler->shouldReceive( 'filter_visible_values' )->andReturnUsing( static fn( $values ) => $values );
 		$handler->shouldReceive( 'validate_values' )->once()->andReturn( [] );
 		$handler->shouldReceive( 'update_value' )->once()->with( 'api_key', 'secret' );
 
@@ -77,6 +78,7 @@ class SettingsRestControllerTest extends TestCase {
 		Functions\when( 'rest_ensure_response' )->returnArg( 1 );
 
 		$handler = Mockery::mock();
+		$handler->shouldReceive( 'filter_visible_values' )->andReturnUsing( static fn( $values ) => $values );
 		$handler->shouldReceive( 'validate_values' )->once()->andReturn( [] );
 		// Undeclared key must never reach the handler — not even to be 404-rejected.
 		$handler->shouldNotReceive( 'update_value' );
@@ -96,6 +98,7 @@ class SettingsRestControllerTest extends TestCase {
 
 	public function test_save_returns_error_map_when_validation_fails(): void {
 		$handler = Mockery::mock();
+		$handler->shouldReceive( 'filter_visible_values' )->andReturnUsing( static fn( $values ) => $values );
 		$handler->shouldReceive( 'validate_values' )
 			->once()
 			->andReturn( [ 'mode' => 'invalid mode' ] );
@@ -122,6 +125,7 @@ class SettingsRestControllerTest extends TestCase {
 		Functions\when( 'rest_ensure_response' )->returnArg( 1 );
 
 		$handler = Mockery::mock();
+		$handler->shouldReceive( 'filter_visible_values' )->andReturnUsing( static fn( $values ) => $values );
 		$handler->shouldReceive( 'validate_values' )->once()->andReturn( [] );
 		$handler->shouldReceive( 'update_value' )->once()->with( 'api_key', 'good' );
 		$handler->shouldReceive( 'update_value' )->once()->with( 'mode', 'live' );

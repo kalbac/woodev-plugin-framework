@@ -40,6 +40,7 @@ class SetupWizardRestControllerTest extends TestCase {
 		Functions\when( 'rest_ensure_response' )->returnArg( 1 );
 
 		$handler = Mockery::mock( '\Woodev_Abstract_Settings' );
+		$handler->shouldReceive( 'filter_visible_values' )->andReturnUsing( static fn( $values ) => $values );
 		$handler->shouldReceive( 'update_value' )->once()->with( 'api_key', 'K' );
 
 		$plugin = Mockery::mock( '\Woodev_Plugin' );
@@ -70,6 +71,7 @@ class SetupWizardRestControllerTest extends TestCase {
 		};
 
 		$handler = Mockery::mock( '\Woodev_Abstract_Settings' );
+		$handler->shouldReceive( 'filter_visible_values' )->andReturnUsing( static fn( $values ) => $values );
 		// Only the declared field is ever persisted.
 		$handler->shouldReceive( 'update_value' )->once()->with( 'api_key', 'K' );
 
