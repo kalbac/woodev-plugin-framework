@@ -188,3 +188,106 @@ export function validateFields( fields, values ) {
 	} );
 	return errors;
 }
+
+/**
+ * Normalizes a show_if group into { relation, members }.
+ *
+ * PHP serializes a mixed-key array (`['relation'=>…, 0=>{…}]`) to a JSON OBJECT,
+ * and a pure list to a JSON ARRAY — so handle both. A bare single condition
+ * (has a `setting` key) becomes a one-condition AND group.
+ *
+ * @param {Object|Array} conditions raw show_if from the schema.
+ * @return {{relation: string, members: Array}} normalized group.
+ */
+function conditionGroup( conditions ) {
+	if ( conditions && conditions.setting ) {
+		return { relation: 'AND', members: [ conditions ] };
+	}
+	const relation = String( conditions.relation || 'AND' ).toUpperCase();
+	const members = Object.keys( conditions )
+		.filter( ( k ) => 'relation' !== k )
+		.map( ( k ) => conditions[ k ] )
+		.filter( ( c ) => c && 'object' === typeof c );
+	return { relation, members };
+}
+
+/**
+ * Evaluates a show_if condition group against current field values.
+ *
+ * Faithful mirror of Woodev_Setting::evaluate_conditions() — KEEP IN SYNC with
+ * woodev/settings-api/class-setting.php. Rule table: conditional-fields spec §5.
+ * Pure + total: empty group → visible; string comparison; an unset/non-scalar
+ * controlling value is the empty string; unknown operator → not matching.
+ *
+ * @param {Object|Array} conditions show_if group.
+ * @param {Object}       values     controlling settingId => current value.
+ * @return {boolean} true when visible.
+ */
+export function evaluateConditions( conditions, values ) {
+	if ( ! conditions ) {
+		return true;
+	}
+
+	const { relation, members } = conditionGroup( conditions );
+
+	if ( 0 === members.length ) {
+		return true;
+	}
+
+	for ( const condition of members ) {
+		const settingId = String( condition.setting ?? '' );
+		const operator = condition.operator || '=';
+		const target = condition.value ?? '';
+		const raw = values[ settingId ];
+		const current =
+			null === raw || undefined === raw || 'object' === typeof raw
+				? ''
+				: String( raw );
+
+		let match;
+		switch ( operator ) {
+			case '=':
+				match = current === String( target );
+				break;
+			case '!=':
+				match = current !== String( target );
+				break;
+			case 'in':
+				match = ( Array.isArray( target ) ? target : [ target ] )
+					.map( String )
+					.includes( current );
+				break;
+			case 'not_in':
+				match = ! ( Array.isArray( target ) ? target : [ target ] )
+					.map( String )
+					.includes( current );
+				break;
+			default:
+				match = false; // unknown operator → fail-closed
+				break;
+		}
+
+		if ( 'OR' === relation && match ) {
+			return true;
+		}
+		if ( 'AND' === relation && ! match ) {
+			return false;
+		}
+	}
+
+	return 'AND' === relation;
+}
+
+/**
+ * Whether a field is visible given the current values (schema.show_if absent → visible).
+ *
+ * @param {Object} schema field schema slice.
+ * @param {Object} values controlling settingId => current value.
+ * @return {boolean} true when visible.
+ */
+export function isFieldVisible( schema, values ) {
+	if ( ! schema || ! schema.show_if ) {
+		return true;
+	}
+	return evaluateConditions( schema.show_if, values );
+}
