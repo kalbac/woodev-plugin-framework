@@ -89,4 +89,43 @@ class ConditionalFieldsTest extends TestCase {
 		$c = [ [ 'setting' => 'm', 'value' => 'x' ] ];
 		$this->assertFalse( \Woodev_Setting::evaluate_conditions( $c, [ 'm' => [ 'x' ] ] ) );
 	}
+
+	public function test_show_if_accepts_array_directly(): void {
+		$setting = new \Woodev_Setting();
+		$setting->set_id( 'live_key' );
+		$setting->set_show_if( [ 'setting' => 'mode', 'value' => 'live' ] );
+
+		$this->assertSame( [ 'setting' => 'mode', 'value' => 'live' ], $setting->get_show_if_conditions() );
+		$this->assertTrue( $setting->is_visible( [ 'mode' => 'live' ] ) );
+		$this->assertFalse( $setting->is_visible( [ 'mode' => 'test' ] ) );
+	}
+
+	public function test_show_if_accepts_callback_receiving_field_id(): void {
+		$setting = new \Woodev_Setting();
+		$setting->set_id( 'rate' );
+		$setting->set_show_if(
+			static function ( string $field_id ): array {
+				return 'rate' === $field_id
+					? [ 'setting' => 'calc_type', 'value' => 'fixed' ]
+					: [];
+			}
+		);
+
+		$this->assertSame( [ 'setting' => 'calc_type', 'value' => 'fixed' ], $setting->get_show_if_conditions() );
+		$this->assertTrue( $setting->is_visible( [ 'calc_type' => 'fixed' ] ) );
+	}
+
+	public function test_show_if_defaults_to_empty_visible(): void {
+		$setting = new \Woodev_Setting();
+		$setting->set_id( 'x' );
+		$this->assertSame( [], $setting->get_show_if_conditions() );
+		$this->assertTrue( $setting->is_visible( [] ) );
+	}
+
+	public function test_show_if_rejects_non_array_non_callable(): void {
+		$setting = new \Woodev_Setting();
+		$setting->set_id( 'x' );
+		$setting->set_show_if( 'nonsense' );
+		$this->assertSame( [], $setting->get_show_if_conditions() );
+	}
 }

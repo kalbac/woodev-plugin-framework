@@ -67,6 +67,9 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 		/** @var string custom error message for a failed validate callback */
 		private $validate_message = '';
 
+		/** @var array|callable show_if condition group, or a callback returning one. Default [] = always visible. */
+		private $show_if = [];
+
 		/**
 		 * Gets the setting ID.
 		 *
@@ -265,6 +268,45 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 		 */
 		public function set_validate_message( string $value ): void {
 			$this->validate_message = $value;
+		}
+
+		/**
+		 * Sets the show_if visibility conditions: a condition-group array, or a
+		 * callback `fn( string $field_id ): array` returning one (resolved once at
+		 * schema-build time — it does NOT see live form values). Anything else = [].
+		 *
+		 * @since 2.0.2
+		 * @param array|callable $show_if conditions or a callback returning them.
+		 * @return void
+		 */
+		public function set_show_if( $show_if ): void {
+			$this->show_if = ( is_array( $show_if ) || is_callable( $show_if ) ) ? $show_if : [];
+		}
+
+		/**
+		 * Resolves the show_if conditions to a plain array (calling the callback if set).
+		 *
+		 * @since 2.0.2
+		 * @return array<string,mixed> the condition group ([] = always visible).
+		 */
+		public function get_show_if_conditions(): array {
+			if ( is_callable( $this->show_if ) ) {
+				$resolved = call_user_func( $this->show_if, $this->id );
+				return is_array( $resolved ) ? $resolved : [];
+			}
+
+			return is_array( $this->show_if ) ? $this->show_if : [];
+		}
+
+		/**
+		 * Whether this field is visible given a map of current controlling values.
+		 *
+		 * @since 2.0.2
+		 * @param array<string,mixed> $values controlling setting_id => current value.
+		 * @return bool
+		 */
+		public function is_visible( array $values ): bool {
+			return self::evaluate_conditions( $this->get_show_if_conditions(), $values );
 		}
 
 		/**

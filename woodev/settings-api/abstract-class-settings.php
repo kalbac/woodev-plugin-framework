@@ -87,6 +87,7 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 						'required'         => false,
 						'validate'         => null,
 						'validate_message' => '',
+						'show_if'          => [],
 					]
 				);
 
@@ -100,6 +101,8 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 					$setting->set_validate( $args['validate'] );
 					$setting->set_validate_message( (string) $args['validate_message'] );
 				}
+
+				$setting->set_show_if( $args['show_if'] );
 
 				if ( is_array( $args['options'] ) ) {
 					$setting->set_options( $args['options'] );
