@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
-> **72 atomic gotchas in 19 namespaces** — update count when adding/removing.
-> Last updated: 2026-07-05 (session 40: +1 — `mockery-mock-new-method-full-suite` [`[testing/unit]`]).
+> **73 atomic gotchas in 19 namespaces** — update count when adding/removing.
+> Last updated: 2026-07-06 (session 41: +1 — `settings-sensitive-secret-empty-skip-is-client-side` [`[settings-api/secrets]`]).
 
 ## Index
 
@@ -21,6 +21,7 @@
 - [php/settings-api] Settings-API save path: validate enum options by KEY-or-VALUE (not the label — drops integer/zero-based enums → validation bypass), coerce numeric strings from number inputs, and wp_kses_post() richtext controls on save → [gotchas/settings-api-control-save-path-pitfalls.md](gotchas/settings-api-control-save-path-pitfalls.md) (s31)
 - [settings-api/secrets] A `constant_name`-backed field must be masked even when the constant is UNDEFINED — masking is decided by declared intent (sensitive OR constant_name present), not by `defined()`; else the stored DB fallback leaks to the browser. `constant_managed` = "currently defined" (read-only note) is a SEPARATE question from "must never be emitted" → [gotchas/mask-constant-backed-field-even-when-constant-undefined.md](gotchas/mask-constant-backed-field-even-when-constant-undefined.md) (s38)
 - [settings-api/validation] Format validators (`validate_email_value`/`validate_url_value` → `is_email`/`strpos`) must guard `is_string()` first — a null default (`set_default(null)`) or a crafted non-scalar REST payload reaches `is_email(null)`/`is_email(array)` → PHP 8.1 `strlen(null)` deprecation (risky test → red CI matrix) or a TypeError → 500. Guard validators + short-circuit `set_default(null)` → [gotchas/format-validator-null-strlen-deprecation.md](gotchas/format-validator-null-strlen-deprecation.md) (s39)
+- [settings-api/secrets] The settings SAVE path persists EXACTLY what the client sends — there is NO server-side "skip empty sensitive". The "don't overwrite a masked secret with empty" guard is purely CLIENT dirty-tracking (untouched field absent from `edits` → never sent). So an explicit `''` edit clears the secret (this is what SP-2-DEF's wipe relies on), and any non-browser/REST consumer that posts `''` for a sensitive field WILL wipe it. Don't add a server empty-skip (breaks the intentional wipe) → [gotchas/settings-sensitive-secret-empty-skip-is-client-side.md](gotchas/settings-sensitive-secret-empty-skip-is-client-side.md) (s41)
 
 ### [deprecation/*] — Deprecation cycle
 - [deprecation/deprecated-which-function] wc_deprecated_function vs _deprecated_function — which to use when → [gotchas/deprecated-which-function.md](gotchas/deprecated-which-function.md) (s2)
