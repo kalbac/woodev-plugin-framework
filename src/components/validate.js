@@ -212,6 +212,21 @@ function conditionGroup( conditions ) {
 }
 
 /**
+ * Coerces a value to its comparable string, matching PHP's (string) cast:
+ * booleans become '1' / '' (not 'true' / 'false'). KEEP IN SYNC with the PHP
+ * evaluator's is_scalar/(string) handling.
+ *
+ * @param {*} value value to coerce.
+ * @return {string} comparable string.
+ */
+function toComparable( value ) {
+	if ( 'boolean' === typeof value ) {
+		return value ? '1' : '';
+	}
+	return String( value );
+}
+
+/**
  * Evaluates a show_if condition group against current field values.
  *
  * Faithful mirror of Woodev_Setting::evaluate_conditions() — KEEP IN SYNC with
@@ -242,24 +257,24 @@ export function evaluateConditions( conditions, values ) {
 		const current =
 			null === raw || undefined === raw || 'object' === typeof raw
 				? ''
-				: String( raw );
+				: toComparable( raw );
 
 		let match;
 		switch ( operator ) {
 			case '=':
-				match = current === String( target );
+				match = current === toComparable( target );
 				break;
 			case '!=':
-				match = current !== String( target );
+				match = current !== toComparable( target );
 				break;
 			case 'in':
 				match = ( Array.isArray( target ) ? target : [ target ] )
-					.map( String )
+					.map( toComparable )
 					.includes( current );
 				break;
 			case 'not_in':
 				match = ! ( Array.isArray( target ) ? target : [ target ] )
-					.map( String )
+					.map( toComparable )
 					.includes( current );
 				break;
 			default:
