@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
-> **71 atomic gotchas in 19 namespaces** — update count when adding/removing.
-> Last updated: 2026-06-30 (session 39: +1 — `format-validator-null-strlen-deprecation` [`[settings-api/validation]`]).
+> **72 atomic gotchas in 19 namespaces** — update count when adding/removing.
+> Last updated: 2026-07-05 (session 40: +1 — `mockery-mock-new-method-full-suite` [`[testing/unit]`]).
 
 ## Index
 
@@ -61,6 +61,7 @@
 - [testing/unit] Patchwork redefinable internals (`function_exists`, `error_log`) need Patchwork force-loaded in bootstrap BEFORE source files — Brain Monkey loads it lazily at first setUp(), but PHPUnit compiles all required source at suite-build time → order-dependent dead stubs → [gotchas/patchwork-early-load-bootstrap.md](gotchas/patchwork-early-load-bootstrap.md) (s9)
 - [testing/wc-admin-access-403] Verifying an admin capability gate returns 403: a SUBSCRIBER can't test it — WooCommerce redirects customers/subscribers out of wp-admin before `admin_init`; use an EDITOR (has `edit_posts` → admin reachable, lacks `update_plugins`) → [gotchas/wc-blocks-subscriber-wp-admin-403-test.md](gotchas/wc-blocks-subscriber-wp-admin-403-test.md) (s19)
 - [testing/integration] Local two-stack e2e rig: `wp_safe_remote_request` (framework licensing transport) blocks private hosts (`host.docker.internal`) + non-80/443/8080 ports → silent swallowed throw, pull never runs. Stand-only fix: `http_request_host_is_external` + `http_allowed_safe_ports` filters + `woodev_licensing_api_url` + local-pubkey define; use PULL (cross-container push can't work) → [gotchas/wp-safe-remote-request-local-rig.md](gotchas/wp-safe-remote-request-local-rig.md) (s11)
+- [testing/unit] Adding a public method to a `Mockery::mock()`-ed class AND calling it from a shared path (REST controller `save()`) → every strict mock throws `BadMethodCallException`; add a pass-through `shouldReceive(...)->andReturnUsing(fn($v)=>$v)` (no `->once()`). A targeted/integration-only test run misses it — run the FULL `composer test:unit` after wiring any new call → [gotchas/mockery-mock-new-method-full-suite.md](gotchas/mockery-mock-new-method-full-suite.md) (s40)
 - [testing/integration] Integration tests: never `do_action('admin_menu')` (or other broad global admin hooks) — it fires WooCommerce's callbacks, which PRINT a PHP deprecation on some WC versions → PHPUnit "unexpected output" → red on part of the matrix only. Also `$menu`/`$submenu` globals accumulate across `WP_UnitTestCase` tests (stale entries leak). Call the specific method directly + `unset()` the global key before asserting → [gotchas/integration-test-global-admin-hooks-output-and-submenu-accumulation.md](gotchas/integration-test-global-admin-hooks-output-and-submenu-accumulation.md) (s34)
 
 ### [api/*] — API layer
