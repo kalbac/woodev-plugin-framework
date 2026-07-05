@@ -8,6 +8,7 @@
 
 namespace Woodev\Tests\Unit\SettingsApi;
 
+use Brain\Monkey\Functions;
 use Woodev\Tests\Unit\TestCase;
 
 require_once dirname( __DIR__, 3 ) . '/woodev/class-plugin-exception.php';
@@ -127,5 +128,69 @@ class ConditionalFieldsTest extends TestCase {
 		$setting->set_id( 'x' );
 		$setting->set_show_if( 'nonsense' );
 		$this->assertSame( [], $setting->get_show_if_conditions() );
+	}
+
+	/**
+	 * Builds a handler with two settings: a plain `mode` and a `live_key` that is
+	 * visible only when mode = live. `get_value()` returns the given stored map.
+	 *
+	 * @param array $stored setting_id => stored value.
+	 * @return \Woodev_Abstract_Settings
+	 */
+	private function make_handler( array $stored ): \Woodev_Abstract_Settings {
+		require_once dirname( __DIR__, 3 ) . '/woodev/settings-api/register-settings/class-register-settings.php';
+		require_once dirname( __DIR__, 3 ) . '/woodev/settings-api/abstract-class-settings.php';
+
+		// Stub the WP plumbing the abstract handler touches during construction.
+		Functions\when( 'get_option' )->justReturn( null );
+		Functions\when( 'wp_parse_args' )->alias(
+			static function ( $args, $defaults = [] ) {
+				return array_merge( (array) $defaults, (array) $args );
+			}
+		);
+
+		return new class( $stored ) extends \Woodev_Abstract_Settings {
+			/** @var array */
+			private $stored;
+			public function __construct( array $stored ) {
+				$this->stored = $stored;
+				parent::__construct( 'cond_test' );
+			}
+			protected function register_settings() {
+				$this->register_setting( 'mode', \Woodev_Setting::TYPE_STRING, [ 'options' => [ 'test' => 'T', 'live' => 'L' ], 'default' => 'test' ] );
+				$this->register_setting( 'live_key', \Woodev_Setting::TYPE_STRING, [ 'required' => true, 'show_if' => [ 'setting' => 'mode', 'value' => 'live' ] ] );
+			}
+			public function get_value( $id, $default = null ) {
+				return $this->stored[ $id ] ?? $default;
+			}
+			public function save( $setting_id = '' ) {}
+		};
+	}
+
+	public function test_filter_strips_hidden_field(): void {
+		$handler = $this->make_handler( [ 'mode' => 'test' ] );
+		// live_key is hidden (mode=test) → stripped even though submitted empty.
+		$result = $handler->filter_visible_values( [ 'mode' => 'test', 'live_key' => '' ] );
+		$this->assertArrayNotHasKey( 'live_key', $result );
+		$this->assertArrayHasKey( 'mode', $result );
+	}
+
+	public function test_filter_keeps_visible_field(): void {
+		$handler = $this->make_handler( [ 'mode' => 'live' ] );
+		$result  = $handler->filter_visible_values( [ 'mode' => 'live', 'live_key' => 'abc' ] );
+		$this->assertArrayHasKey( 'live_key', $result );
+	}
+
+	public function test_filter_uses_stored_when_controller_not_submitted(): void {
+		// mode is NOT in the submitted map → resolve against stored (mode=live) → keep.
+		$handler = $this->make_handler( [ 'mode' => 'live' ] );
+		$result  = $handler->filter_visible_values( [ 'live_key' => 'abc' ] );
+		$this->assertArrayHasKey( 'live_key', $result );
+	}
+
+	public function test_filter_passes_through_unconditional_fields(): void {
+		$handler = $this->make_handler( [ 'mode' => 'test' ] );
+		$result  = $handler->filter_visible_values( [ 'mode' => 'test' ] );
+		$this->assertSame( [ 'mode' => 'test' ], $result );
 	}
 }

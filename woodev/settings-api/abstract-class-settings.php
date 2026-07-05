@@ -372,6 +372,70 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 		}
 
 		/**
+		 * Removes fields hidden by their show_if conditions from a submitted values map.
+		 *
+		 * Called at the top of both REST save paths so a hidden field is neither
+		 * validated nor persisted. Visibility resolves against the EFFECTIVE controlling
+		 * value (submitted if present, else the stored value) so the server agrees with
+		 * the client (which merges edits over stored/default values). Unknown ids and
+		 * unconditional fields pass through unchanged.
+		 *
+		 * @since 2.0.2
+		 * @param array<string,mixed> $values submitted setting_id => value.
+		 * @return array<string,mixed> the submitted map with hidden fields removed.
+		 */
+		public function filter_visible_values( array $values ): array {
+
+			foreach ( array_keys( $values ) as $setting_id ) {
+
+				$setting = $this->get_setting( (string) $setting_id );
+
+				if ( ! $setting ) {
+					continue;
+				}
+
+				$conditions = $setting->get_show_if_conditions();
+
+				if ( empty( $conditions ) ) {
+					continue;
+				}
+
+				if ( ! Woodev_Setting::evaluate_conditions( $conditions, $this->effective_condition_values( $conditions, $values ) ) ) {
+					unset( $values[ $setting_id ] );
+				}
+			}
+
+			return $values;
+		}
+
+		/**
+		 * Builds the controlling-value map a condition group needs: for each referenced
+		 * controlling setting, the submitted value if present, else the stored value.
+		 *
+		 * @since 2.0.2
+		 * @param array<string,mixed> $conditions the condition group.
+		 * @param array<string,mixed> $submitted  the submitted values map.
+		 * @return array<string,mixed> controlling setting_id => effective value.
+		 */
+		private function effective_condition_values( array $conditions, array $submitted ): array {
+
+			$group  = isset( $conditions['setting'] ) ? [ $conditions ] : $conditions;
+			$result = [];
+
+			foreach ( $group as $condition ) {
+
+				if ( ! is_array( $condition ) || ! isset( $condition['setting'] ) ) {
+					continue;
+				}
+
+				$id            = (string) $condition['setting'];
+				$result[ $id ] = array_key_exists( $id, $submitted ) ? $submitted[ $id ] : $this->get_value( $id );
+			}
+
+			return $result;
+		}
+
+		/**
 		 * Deletes the stored value for a setting.
 		 *
 		 * @param string $setting_id setting ID
