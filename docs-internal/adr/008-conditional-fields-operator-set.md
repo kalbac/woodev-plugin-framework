@@ -31,6 +31,17 @@ Spec: `docs-internal/specs/2026-07-05-conditional-fields-design.md`.
 
 **Deferred (NOT in v1):** comparison operators `>` `<` `>=` `<=`; unary `empty` / `set`; `contains` (array/multiselect controller); **nested** condition groups; section / sub-tab / step-level visibility; a DRY `apply_show_if( ids, conditions )` registration helper.
 
+## Author guidance (condition value types — the mirror's boundary)
+
+The PHP↔JS mirror is faithful for **well-formed** conditions. A `show_if` is server-defined (never client-injected), so a malformed condition is an author bug, not an attack surface. To stay inside the faithful range:
+
+- **`value` for `=` / `!=` is a scalar** (string / bool / number). A non-scalar target coerces to `''` on both sides (no crash, no PHP warning) but is meaningless.
+- **`value` for `in` / `not_in` is a plain list** (`['a','b']`), not an associative array. A PHP associative array serializes to a JS object and the two runtimes would disagree — do not use one.
+- **Compare against the controlling field's stored form:** for `select`/`radio` that is the option **key** (a string); for a `toggle` use a boolean (`true`/`false`) — both sides coerce booleans to `'1'`/`''`. Avoid float `value`s (PHP `(string)` vs JS `String()` can differ for exponent-form/edge numbers).
+- **`operator` / `relation` empty or misspelled fails closed** (field hidden) on both sides — a visible misbehaviour caught immediately in development.
+
+These are documented limitations, not bugs: the flat grammar + scalar-list contract covers every real conditional-settings case. (Source: Codex critic triage, s40.)
+
 ## Consequences
 
 - **Adding a future operator** is mechanical and contract-bound: add the case to PHP `evaluate_conditions()` **and** the JS `evaluateConditions()` mirror (keep string comparison + `toComparable` + fail-closed default), add a unit case to `ConditionalFieldsTest`, and document it here. Do not diverge the two runtimes.
