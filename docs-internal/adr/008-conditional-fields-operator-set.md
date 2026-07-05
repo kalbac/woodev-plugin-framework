@@ -42,6 +42,8 @@ The PHP↔JS mirror is faithful for **well-formed** conditions. A `show_if` is s
 
 These are documented limitations, not bugs: the flat grammar + scalar-list contract covers every real conditional-settings case. (Source: Codex critic triage, s40.)
 
+**`show_if` is a UX affordance, not an authorization boundary.** The REST save routes are already capability-gated (`manage_options` / `manage_woocommerce`); an authorized user can set any registered, otherwise-visible field regardless of `show_if`. So "revealing" a dependent field via a crafted payload grants nothing an authorized admin could not already do. **Chained visibility uses the controller's literal submitted value — there is no transitive hiding** (a field whose controller is itself hidden still evaluates against that controller's submitted value, by design, per the v1 spec). Never rely on `show_if` to protect a setting; gate sensitive behaviour in the plugin's own logic. (Transitive-hiding semantics, if ever wanted, are in the "conditional-fields v2" backlog.)
+
 ## Consequences
 
 - **Adding a future operator** is mechanical and contract-bound: add the case to PHP `evaluate_conditions()` **and** the JS `evaluateConditions()` mirror (keep string comparison + `toComparable` + fail-closed default), add a unit case to `ConditionalFieldsTest`, and document it here. Do not diverge the two runtimes.
