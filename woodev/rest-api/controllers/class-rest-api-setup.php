@@ -112,6 +112,11 @@ if ( ! class_exists( 'Woodev_REST_API_Setup' ) ) :
 			$handler = $this->wizard->get_plugin()->get_settings_handler();
 			$values  = (array) $request->get_param( 'values' );
 
+			// Drop fields hidden by their show_if conditions — never validated, never persisted.
+			if ( $handler ) {
+				$values = $handler->filter_visible_values( $values );
+			}
+
 			if ( $handler ) {
 				foreach ( $step->get_setting_ids() as $sid ) {
 					if ( array_key_exists( $sid, $values ) ) {
