@@ -272,8 +272,8 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 
 		/**
 		 * Sets the show_if visibility conditions: a condition-group array, or a
-		 * callback `fn( string $field_id ): array` returning one (resolved once at
-		 * schema-build time — it does NOT see live form values). Anything else = [].
+		 * callback `fn( string $field_id ): array` returning one (resolved on demand
+		 * server-side (not memoized) — it does NOT see live form values). Anything else = [].
 		 *
 		 * @since 2.0.2
 		 * @param array|callable $show_if conditions or a callback returning them.

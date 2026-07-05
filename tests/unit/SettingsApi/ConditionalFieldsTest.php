@@ -204,4 +204,46 @@ class ConditionalFieldsTest extends TestCase {
 		$this->assertArrayHasKey( 'show_if', $schema['live_key'] );
 		$this->assertSame( [ 'setting' => 'mode', 'value' => 'live' ], $schema['live_key']['show_if'] );
 	}
+
+	/**
+	 * A show_if that references an UNREGISTERED controller id absent from the
+	 * submission must not crash: the base get_value() throws on unknown ids, so the
+	 * effective-value resolver must guard with get_setting() and treat the missing
+	 * controller as the empty string. Uses the REAL base get_value()/get_setting()
+	 * (no override) so the guard is genuinely exercised.
+	 *
+	 * @return void
+	 */
+	private function make_real_value_handler(): \Woodev_Abstract_Settings {
+		require_once dirname( __DIR__, 3 ) . '/woodev/settings-api/register-settings/class-register-settings.php';
+		require_once dirname( __DIR__, 3 ) . '/woodev/settings-api/abstract-class-settings.php';
+
+		Functions\when( 'get_option' )->justReturn( null );
+		Functions\when( 'wp_parse_args' )->alias(
+			static function ( $args, $defaults = [] ) {
+				return array_merge( (array) $defaults, (array) $args );
+			}
+		);
+
+		return new class() extends \Woodev_Abstract_Settings {
+			public function __construct() {
+				parent::__construct( 'ghost_test' );
+			}
+			protected function register_settings() {
+				$this->register_setting( 'region', \Woodev_Setting::TYPE_STRING, [ 'default' => '', 'show_if' => [ 'setting' => 'ghost', 'value' => 'x' ] ] );
+			}
+			public function save( $setting_id = '' ) {}
+		};
+	}
+
+	public function test_filter_does_not_crash_on_unregistered_controller(): void {
+		$handler = $this->make_real_value_handler();
+
+		// 'ghost' is not registered and is absent from the submission → the resolver
+		// must fall back to '' instead of calling get_value('ghost') (which throws).
+		$result = $handler->filter_visible_values( [ 'region' => 'north' ] );
+
+		// '' !== 'x' → region is hidden → stripped, but crucially no exception thrown.
+		$this->assertArrayNotHasKey( 'region', $result );
+	}
 }

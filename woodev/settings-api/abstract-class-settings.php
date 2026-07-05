@@ -428,8 +428,13 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 					continue;
 				}
 
+				// An unregistered controller (typo'd or cross-handler id) has no stored
+				// value and get_value() would throw on it — treat it as the empty string,
+				// matching the "unset controlling value = empty string" contract.
 				$id            = (string) $condition['setting'];
-				$result[ $id ] = array_key_exists( $id, $submitted ) ? $submitted[ $id ] : $this->get_value( $id );
+				$result[ $id ] = array_key_exists( $id, $submitted )
+					? $submitted[ $id ]
+					: ( $this->get_setting( $id ) ? $this->get_value( $id ) : '' );
 			}
 
 			return $result;
