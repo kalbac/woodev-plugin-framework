@@ -86,6 +86,11 @@ final class Field_Schema {
 				$entry['server_validated'] = true;
 			}
 
+			$show_if = $setting->get_show_if_conditions();
+			if ( ! empty( $show_if ) ) {
+				$entry['show_if'] = $show_if;
+			}
+
 			$schema[ $setting->get_id() ] = $entry;
 		}
 

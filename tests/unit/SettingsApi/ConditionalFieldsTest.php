@@ -193,4 +193,15 @@ class ConditionalFieldsTest extends TestCase {
 		$result  = $handler->filter_visible_values( [ 'mode' => 'test' ] );
 		$this->assertSame( [ 'mode' => 'test' ], $result );
 	}
+
+	public function test_field_schema_emits_show_if_only_when_present(): void {
+		require_once dirname( __DIR__, 3 ) . '/woodev/settings-page/class-field-schema.php';
+
+		$handler = $this->make_handler( [ 'mode' => 'live' ] );
+		$schema  = \Woodev\Framework\Settings\Field_Schema::from_handler( $handler );
+
+		$this->assertArrayNotHasKey( 'show_if', $schema['mode'] );
+		$this->assertArrayHasKey( 'show_if', $schema['live_key'] );
+		$this->assertSame( [ 'setting' => 'mode', 'value' => 'live' ], $schema['live_key']['show_if'] );
+	}
 }
