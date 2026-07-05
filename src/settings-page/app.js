@@ -95,6 +95,23 @@ export default function App() {
 		} ) );
 	};
 
+	// Drops a single staged edit, restoring the field's untouched (persisted)
+	// value — used to cancel a pending sensitive-secret wipe without touching the
+	// rest of the tab's edits.
+	const onFieldRevert = ( providerId, settingId ) => {
+		setSaved( '' );
+		setFieldErrors( ( prev ) => {
+			const tabErrs = { ...( prev[ providerId ] || {} ) };
+			delete tabErrs[ settingId ];
+			return { ...prev, [ providerId ]: tabErrs };
+		} );
+		setEdits( ( prev ) => {
+			const tabEdits = { ...( prev[ providerId ] || {} ) };
+			delete tabEdits[ settingId ];
+			return { ...prev, [ providerId ]: tabEdits };
+		} );
+	};
+
 	const onSave = ( providerId, tab ) => {
 		const providerEdits = edits[ providerId ] || {};
 
@@ -216,6 +233,9 @@ export default function App() {
 						conditionValues={ conditionValues }
 						onFieldChange={ ( settingId, value ) =>
 							onFieldChange( tab.id, settingId, value )
+						}
+						onFieldRevert={ ( settingId ) =>
+							onFieldRevert( tab.id, settingId )
 						}
 						showErrors={ !! showErrors[ tab.id ] }
 						serverErrors={ fieldErrors[ tab.id ] || {} }

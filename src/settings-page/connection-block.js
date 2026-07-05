@@ -13,7 +13,7 @@ import { Button } from '@wordpress/components';
 import ControlField from '../components/control-field';
 import { testConnection } from './rest';
 
-export default function ConnectionBlock( { providerId, section, values, onFieldChange } ) {
+export default function ConnectionBlock( { providerId, section, values, onFieldChange, onFieldRevert } ) {
 	const [ busy, setBusy ] = useState( false );
 	const [ result, setResult ] = useState( section.status || null );
 
@@ -36,6 +36,13 @@ export default function ConnectionBlock( { providerId, section, values, onFieldC
 	const handleFieldChange = ( settingId, next ) => {
 		setResult( null );
 		onFieldChange( settingId, next );
+	};
+
+	// Reverting a staged edit (e.g. cancelling a pending secret wipe) is a change
+	// too — drop any stale result the same way.
+	const handleFieldRevert = ( settingId ) => {
+		setResult( null );
+		onFieldRevert( settingId );
 	};
 
 	// Gate the action button on every field being satisfied. A handshake block
@@ -65,6 +72,8 @@ export default function ConnectionBlock( { providerId, section, values, onFieldC
 					schema={ section.fields[ settingId ] }
 					value={ values[ settingId ] ?? section.fields[ settingId ].value }
 					onChange={ ( next ) => handleFieldChange( settingId, next ) }
+					hasEdit={ Object.prototype.hasOwnProperty.call( values, settingId ) }
+					onRevert={ () => handleFieldRevert( settingId ) }
 				/>
 			) ) }
 			<div className="woodev-connection__action">

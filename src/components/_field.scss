@@ -373,6 +373,44 @@
 			outline: none;
 		}
 	}
+
+	// Sensitive-secret "clear stored value" affordance (disconnect). A subtle
+	// text link under the masked input; clicking it swaps the control for the
+	// pending-clear notice + «Отменить».
+	&__secret-clear-link,
+	&__secret-cancel {
+		display: inline-block;
+		padding: 0;
+		border: 0;
+		background: none;
+		color: wd.$muted;
+		font-size: 13px;
+		cursor: pointer;
+
+		&:hover,
+		&:focus {
+			color: wd.$accent-strong;
+			text-decoration: underline;
+			outline: none;
+		}
+	}
+
+	&__secret-clear-link {
+		margin-top: 6px;
+	}
+
+	// Pending-clear state: replaces the input, so nothing wraps below a masked box.
+	&__secret-clear {
+		display: flex;
+		align-items: center;
+		gap: wd.$gap;
+		min-height: 40px;
+	}
+
+	&__secret-clear-note {
+		font-size: 13px;
+		color: wd.$error;
+	}
 }
 
 // Radio group: drop the empty fieldset legend that adds a top gap before the
