@@ -204,6 +204,26 @@ class SettingsPageRestTest extends TestCase {
 	}
 
 	/**
+	 * A hidden required field must not block a save. «Карьер»'s `api_key` is
+	 * required + show_if mode=live; POSTing mode=test (which hides api_key) with
+	 * no api_key must return 200, not a 400 error map.
+	 *
+	 * @return void
+	 */
+	public function test_hidden_required_field_does_not_block_save(): void {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+
+		$request = new WP_REST_Request( 'POST', '/woodev/v1/settings/quarry' );
+		$request->set_param( 'provider_id', 'quarry' );
+		$request->set_param( 'values', [ 'mode' => 'test' ] );
+		$request->set_header( 'X-WP-Nonce', wp_create_nonce( 'wp_rest' ) );
+
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+	}
+
+	/**
 	 * Registers a `carrier` provider whose connection block mixes a non-secret
 	 * `mode` (stored 'stored-mode') with a sensitive `token` (stored 'good'). The
 	 * handler succeeds only when the merge yields mode='' AND token='good'.

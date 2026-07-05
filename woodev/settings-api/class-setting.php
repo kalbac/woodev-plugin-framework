@@ -67,6 +67,9 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 		/** @var string custom error message for a failed validate callback */
 		private $validate_message = '';
 
+		/** @var array|callable show_if condition group, or a callback returning one. Default [] = always visible. */
+		private $show_if = [];
+
 		/**
 		 * Gets the setting ID.
 		 *
@@ -265,6 +268,45 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 		 */
 		public function set_validate_message( string $value ): void {
 			$this->validate_message = $value;
+		}
+
+		/**
+		 * Sets the show_if visibility conditions: a condition-group array, or a
+		 * callback `fn( string $field_id ): array` returning one (resolved on demand
+		 * server-side (not memoized) — it does NOT see live form values). Anything else = [].
+		 *
+		 * @since 2.0.2
+		 * @param array|callable $show_if conditions or a callback returning them.
+		 * @return void
+		 */
+		public function set_show_if( $show_if ): void {
+			$this->show_if = ( is_array( $show_if ) || is_callable( $show_if ) ) ? $show_if : [];
+		}
+
+		/**
+		 * Resolves the show_if conditions to a plain array (calling the callback if set).
+		 *
+		 * @since 2.0.2
+		 * @return array<string,mixed> the condition group ([] = always visible).
+		 */
+		public function get_show_if_conditions(): array {
+			if ( is_callable( $this->show_if ) ) {
+				$resolved = call_user_func( $this->show_if, $this->id );
+				return is_array( $resolved ) ? $resolved : [];
+			}
+
+			return is_array( $this->show_if ) ? $this->show_if : [];
+		}
+
+		/**
+		 * Whether this field is visible given a map of current controlling values.
+		 *
+		 * @since 2.0.2
+		 * @param array<string,mixed> $values controlling setting_id => current value.
+		 * @return bool
+		 */
+		public function is_visible( array $values ): bool {
+			return self::evaluate_conditions( $this->get_show_if_conditions(), $values );
 		}
 
 		/**
@@ -649,6 +691,81 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 		 */
 		private static function format_number( float $number ): string {
 			return floor( $number ) === $number ? (string) (int) $number : (string) $number;
+		}
+
+		/**
+		 * Evaluates a show_if condition group against a map of current field values.
+		 *
+		 * Pure + total: an empty group is visible; every value is compared as a string
+		 * (so PHP and the JS mirror agree, and enum option keys round-trip). An unset or
+		 * non-scalar controlling value is the empty string — no special-casing.
+		 *
+		 * Mirrored in src/components/validate.js::evaluateConditions — KEEP IN SYNC.
+		 * Rule table: conditional-fields design spec §5.
+		 *
+		 * @since 2.0.2
+		 * @param array<string,mixed> $conditions show_if group (relation + members), or one bare condition.
+		 * @param array<string,mixed> $values     controlling setting_id => current value.
+		 * @return bool true when the field should be visible.
+		 */
+		public static function evaluate_conditions( array $conditions, array $values ): bool {
+
+			if ( empty( $conditions ) ) {
+				return true;
+			}
+
+			// Sugar: a single bare condition (has a 'setting' key) is a one-condition group.
+			if ( isset( $conditions['setting'] ) ) {
+				$conditions = [ $conditions ];
+			}
+
+			$relation = isset( $conditions['relation'] ) ? strtoupper( (string) $conditions['relation'] ) : 'AND';
+			$members  = array_filter( $conditions, 'is_array' );
+
+			if ( empty( $members ) ) {
+				return true;
+			}
+
+			foreach ( $members as $condition ) {
+
+				$setting_id = (string) ( $condition['setting'] ?? '' );
+				$operator   = (string) ( $condition['operator'] ?? '=' );
+				$target     = $condition['value'] ?? '';
+				$raw        = $values[ $setting_id ] ?? '';
+				$current    = is_scalar( $raw ) ? (string) $raw : '';
+				// A non-scalar target for a scalar operator (e.g. an array mistakenly used
+				// with '=') coerces to '' — avoids a PHP `(string) array` E_WARNING and
+				// matches the JS mirror's toComparable().
+				$target_str = is_scalar( $target ) ? (string) $target : '';
+
+				switch ( $operator ) {
+					case '=':
+						$match = ( $current === $target_str );
+						break;
+					case '!=':
+						$match = ( $current !== $target_str );
+						break;
+					case 'in':
+						$match = in_array( $current, array_map( 'strval', (array) $target ), true );
+						break;
+					case 'not_in':
+						$match = ! in_array( $current, array_map( 'strval', (array) $target ), true );
+						break;
+					default:
+						$match = false; // unknown operator → fail-closed.
+						break;
+				}
+
+				if ( 'OR' === $relation && $match ) {
+					return true;
+				}
+
+				if ( 'AND' === $relation && ! $match ) {
+					return false;
+				}
+			}
+
+			return 'AND' === $relation;
 		}
 
 		/**

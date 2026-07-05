@@ -27,7 +27,7 @@ import Stepper from './stepper';
 import StepView from './step-view';
 import { CheckFilledIcon, GearIcon, StarIcon } from '../components/icons';
 import { saveStep, complete } from './rest';
-import { validateFields } from '../components/validate';
+import { validateFields, isFieldVisible } from '../components/validate';
 
 /**
  * Resolves the admin landing URL used by the footer exit link.
@@ -157,7 +157,15 @@ export default function App() {
 			Object.keys( step.fields || {} ).forEach( ( id ) => {
 				stepValues[ id ] = ( values[ step.id ] || {} )[ id ] ?? step.fields[ id ].value;
 			} );
-			const clientErrors = validateFields( step.fields, stepValues );
+
+			const visibleFields = {};
+			Object.keys( step.fields || {} ).forEach( ( id ) => {
+				if ( isFieldVisible( step.fields[ id ], stepValues ) ) {
+					visibleFields[ id ] = step.fields[ id ];
+				}
+			} );
+
+			const clientErrors = validateFields( visibleFields, stepValues );
 			if ( Object.keys( clientErrors ).length > 0 ) {
 				setShowErrors( true );
 				setFieldErrors( {} ); // clear stale server errors before revealing fresh client errors

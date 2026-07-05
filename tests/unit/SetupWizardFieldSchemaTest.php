@@ -99,6 +99,7 @@ class SetupWizardFieldSchemaTest extends TestCase {
 		$setting->shouldReceive( 'get_constant_name' )->andReturn( null );
 		$setting->shouldReceive( 'is_required' )->andReturn( false );
 		$setting->shouldReceive( 'get_validate' )->andReturn( null );
+		$setting->shouldReceive( 'get_show_if_conditions' )->andReturn( [] );
 
 		// Build the handler mock.
 		$handler = Mockery::mock( 'Woodev_Abstract_Settings' );
@@ -161,6 +162,7 @@ class SetupWizardFieldSchemaTest extends TestCase {
 		$setting->shouldReceive( 'get_constant_name' )->andReturn( null );
 		$setting->shouldReceive( 'is_required' )->andReturn( false );
 		$setting->shouldReceive( 'get_validate' )->andReturn( null );
+		$setting->shouldReceive( 'get_show_if_conditions' )->andReturn( [] );
 
 		$handler = Mockery::mock( 'Woodev_Abstract_Settings' );
 		$handler->shouldReceive( 'get_settings' )->andReturn( [ $setting ] );
@@ -196,6 +198,7 @@ class SetupWizardFieldSchemaTest extends TestCase {
 		$setting->shouldReceive( 'get_constant_name' )->andReturn( null );
 		$setting->shouldReceive( 'is_required' )->andReturn( false );
 		$setting->shouldReceive( 'get_validate' )->andReturn( null );
+		$setting->shouldReceive( 'get_show_if_conditions' )->andReturn( [] );
 
 		$handler = Mockery::mock( 'Woodev_Abstract_Settings' );
 		$handler->shouldReceive( 'get_settings' )->andReturn( [ $setting ] );
@@ -232,6 +235,7 @@ class SetupWizardFieldSchemaTest extends TestCase {
 		$setting->shouldReceive( 'get_constant_name' )->andReturn( null );
 		$setting->shouldReceive( 'is_required' )->andReturn( false );
 		$setting->shouldReceive( 'get_validate' )->andReturn( null );
+		$setting->shouldReceive( 'get_show_if_conditions' )->andReturn( [] );
 
 		$handler = Mockery::mock( 'Woodev_Abstract_Settings' );
 		$handler->shouldReceive( 'get_settings' )->andReturn( [ $setting ] );

@@ -9,8 +9,9 @@
 
 import ControlField from '../components/control-field';
 import ConnectionBlock from './connection-block';
+import { isFieldVisible } from '../components/validate';
 
-export default function SectionView( { providerId, section, values, onFieldChange, showErrors, serverErrors } ) {
+export default function SectionView( { providerId, section, values, conditionValues, onFieldChange, showErrors, serverErrors } ) {
 	if ( ! section ) {
 		return null;
 	}
@@ -31,15 +32,19 @@ export default function SectionView( { providerId, section, values, onFieldChang
 			{ section.description && (
 				<p className="woodev-settings__section-desc">{ section.description }</p>
 			) }
-			{ Object.keys( section.fields ).map( ( settingId ) => (
-				<ControlField
-					key={ settingId }
-					schema={ { ...section.fields[ settingId ], serverError: ( serverErrors || {} )[ settingId ] } }
-					value={ values[ settingId ] ?? section.fields[ settingId ].value }
-					onChange={ ( next ) => onFieldChange( settingId, next ) }
-					showErrors={ showErrors }
-				/>
-			) ) }
+			{ Object.keys( section.fields )
+				.filter( ( settingId ) =>
+					isFieldVisible( section.fields[ settingId ], conditionValues || values )
+				)
+				.map( ( settingId ) => (
+					<ControlField
+						key={ settingId }
+						schema={ { ...section.fields[ settingId ], serverError: ( serverErrors || {} )[ settingId ] } }
+						value={ values[ settingId ] ?? section.fields[ settingId ].value }
+						onChange={ ( next ) => onFieldChange( settingId, next ) }
+						showErrors={ showErrors }
+					/>
+				) ) }
 		</div>
 	);
 }

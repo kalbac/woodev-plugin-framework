@@ -3,6 +3,20 @@
 > Features and improvements deferred for later versions.
 > Format: what's done | what's missing | why deferred | when to implement
 
+## CF — Conditional fields v2 (2026-07-05, low priority)
+
+> `show_if` v1 shipped s40 (individual fields; grammar `relation` + flat `{setting, operator, value}`; operators `=`/`!=`/`in`/`not_in`; array-or-callback declaration; server strip via `filter_visible_values()`; both surfaces). Contract locked in **ADR-008**; design in `specs/2026-07-05-conditional-fields-design.md`.
+
+- **What's missing (all additive, none block v1):**
+  - Comparison operators `>` `<` `>=` `<=` (numeric coercion — a new evaluation shape).
+  - Unary `empty` / `set` (no `value` operand; partially reachable today via `!= ''` for scalars).
+  - `contains` for a multiselect / array **controlling** field (v1 constrains controllers to scalar: `select`/`radio`/`toggle`/`text`).
+  - **Nested** condition groups (groups within groups).
+  - Section / sub-tab / step-level visibility (v1 hides individual fields only).
+  - A DRY registration helper `apply_show_if( ids, conditions )` if per-field/callback proves verbose.
+- **Why deferred:** YAGNI — no real plugin needs them yet; each is a new grammar/mirror surface. The flat grammar is a strict subset, so all are additive without breaking v1.
+- **When to implement:** when the shipping-module pilot (Yandex→CDEK→Pochta) proves a concrete need. Follow **ADR-008**: add the operator to PHP `evaluate_conditions()` AND the JS `evaluateConditions()` mirror (string comparison + `toComparable` + fail-closed default) + a `ConditionalFieldsTest` case.
+
 ## Operator backlog dump — s13 (2026-06-13)
 
 > Captured verbatim from the operator at the s13 close ("пока помню"). Not yet scoped — convert each to a spec/autodev task when scheduled. None block current work.

@@ -166,6 +166,9 @@ if ( ! class_exists( 'Woodev_REST_API_Settings_Page' ) ) :
 			}
 			$values = array_intersect_key( $values, array_flip( $allowed ) );
 
+			// Drop fields hidden by their show_if conditions — never validated, never persisted.
+			$values = $handler->filter_visible_values( $values );
+
 			// Pass 1 — validate everything; persist nothing on any failure.
 			$errors = $handler->validate_values( $values );
 

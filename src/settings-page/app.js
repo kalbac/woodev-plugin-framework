@@ -14,7 +14,7 @@ import { dispatch, useSelect } from '@wordpress/data';
 import { store as noticesStore } from '@wordpress/notices';
 import { Button, Notice, Spinner, Card, CardBody, SnackbarList } from '@wordpress/components';
 import { fetchSchema, saveTab } from './rest';
-import { validateFields } from '../components/validate';
+import { validateFields, isFieldVisible } from '../components/validate';
 import TabsNav from '../components/tabs-nav';
 import SectionView from './section-view';
 
@@ -110,7 +110,14 @@ export default function App() {
 			merged[ id ] = providerEdits[ id ] ?? allFields[ id ].value;
 		} );
 
-		const clientErrors = validateFields( allFields, merged );
+		const visibleFields = {};
+		Object.keys( allFields ).forEach( ( id ) => {
+			if ( isFieldVisible( allFields[ id ], merged ) ) {
+				visibleFields[ id ] = allFields[ id ];
+			}
+		} );
+
+		const clientErrors = validateFields( visibleFields, merged );
 		if ( Object.keys( clientErrors ).length > 0 ) {
 			setShowErrors( ( p ) => ( { ...p, [ providerId ]: true } ) );
 			setFieldErrors( ( p ) => ( { ...p, [ providerId ]: {} } ) ); // clear stale server errors before revealing fresh client errors
@@ -175,6 +182,15 @@ export default function App() {
 		const values = edits[ tab.id ] || {};
 		const hasChanges = Object.keys( values ).length > 0;
 
+		// Provider-wide effective values so a field can react to a controller in
+		// any section of this tab (live reactivity still only within the open section).
+		const conditionValues = {};
+		( tab.sections || [] ).forEach( ( s ) => {
+			Object.keys( s.fields || {} ).forEach( ( id ) => {
+				conditionValues[ id ] = values[ id ] ?? s.fields[ id ].value;
+			} );
+		} );
+
 		return (
 			<Card className="woodev-settings__card">
 				<CardBody>
@@ -197,6 +213,7 @@ export default function App() {
 						providerId={ tab.id }
 						section={ section }
 						values={ values }
+						conditionValues={ conditionValues }
 						onFieldChange={ ( settingId, value ) =>
 							onFieldChange( tab.id, settingId, value )
 						}

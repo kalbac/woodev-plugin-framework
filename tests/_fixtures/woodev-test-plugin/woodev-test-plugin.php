@@ -200,7 +200,7 @@ function woodev_test_plugin_init() {
 		 */
 		protected function register_settings() {
 			// Section «Общие» (general).
-			$this->register_setting( 'api_key', \Woodev_Setting::TYPE_STRING, [ 'name' => 'API-ключ', 'default' => '', 'required' => true ] );
+			$this->register_setting( 'api_key', \Woodev_Setting::TYPE_STRING, [ 'name' => 'API-ключ', 'default' => '', 'required' => true, 'show_if' => [ 'setting' => 'mode', 'value' => 'live' ] ] );
 			$this->register_setting( 'mode', \Woodev_Setting::TYPE_STRING, [ 'name' => 'Режим', 'options' => [ 'test' => 'Тест', 'live' => 'Боевой' ], 'default' => 'test' ] );
 			$this->register_control( 'api_key', \Woodev_Control::TYPE_TEXT, [ 'tooltip' => 'Длинная подсказка для проверки того, что тултип отображается в портале и не обрезается за правым краем экрана, перенося текст на несколько строк.' ] );
 			$this->register_control( 'mode', \Woodev_Control::TYPE_SELECT );
@@ -209,6 +209,8 @@ function woodev_test_plugin_init() {
 			$this->register_setting( 'enabled', \Woodev_Setting::TYPE_BOOLEAN, [ 'name' => 'Включить интеграцию', 'default' => true ] );
 			$this->register_setting( 'markup', \Woodev_Setting::TYPE_INTEGER, [ 'name' => 'Наценка, %', 'default' => 15 ] );
 			$this->register_setting( 'calc_type', \Woodev_Setting::TYPE_STRING, [ 'name' => 'Тип расчёта', 'options' => [ 'fixed' => 'Фиксированная ставка', 'dynamic' => 'По тарифу перевозчика' ], 'default' => 'dynamic' ] );
+			$this->register_setting( 'rate', \Woodev_Setting::TYPE_INTEGER, [ 'name' => 'Фикс. ставка, ₽', 'default' => 300, 'show_if' => [ $this, 'order_field_rules' ] ] );
+			$this->register_setting( 'formula', \Woodev_Setting::TYPE_STRING, [ 'name' => 'Формула тарифа', 'default' => '', 'show_if' => [ $this, 'order_field_rules' ] ] );
 			$this->register_setting( 'methods', \Woodev_Setting::TYPE_STRING, [ 'name' => 'Способы доставки', 'is_multi' => true, 'options' => [ 'pickup' => 'Самовывоз', 'courier' => 'Курьер', 'post' => 'Почта', 'postamat' => 'Постамат' ], 'default' => [ 'pickup', 'courier' ] ] );
 			$this->register_setting( 'max_weight', \Woodev_Setting::TYPE_INTEGER, [ 'name' => 'Макс. вес, кг', 'default' => 30 ] );
 			$this->register_setting( 'comment', \Woodev_Setting::TYPE_STRING, [ 'name' => 'Комментарий', 'default' => '' ] );
@@ -217,6 +219,8 @@ function woodev_test_plugin_init() {
 			$this->register_control( 'enabled', \Woodev_Control::TYPE_TOGGLE, [ 'description' => 'Запросы идут к перевозчику.' ] );
 			$this->register_control( 'markup', \Woodev_Control::TYPE_RANGE, [ 'min' => 0, 'max' => 100, 'step' => 5 ] );
 			$this->register_control( 'calc_type', \Woodev_Control::TYPE_RADIO );
+			$this->register_control( 'rate', \Woodev_Control::TYPE_NUMBER, [ 'min' => 0 ] );
+			$this->register_control( 'formula', \Woodev_Control::TYPE_TEXT, [ 'placeholder' => 'weight * 10 + 50' ] );
 			$this->register_control( 'methods', \Woodev_Control::TYPE_MULTISELECT );
 			$this->register_control( 'max_weight', \Woodev_Control::TYPE_NUMBER, [ 'min' => 1, 'max' => 1000 ] );
 			$this->register_control( 'comment', \Woodev_Control::TYPE_TEXTAREA );
@@ -253,6 +257,22 @@ function woodev_test_plugin_init() {
 			$this->register_control( 'conn_login', \Woodev_Control::TYPE_TEXT );
 			$this->register_control( 'conn_password', \Woodev_Control::TYPE_PASSWORD );
 			$this->register_control( 'conn_token', \Woodev_Control::TYPE_PASSWORD );
+		}
+
+		/**
+		 * show_if rules for the order-section fields (demo of the callback form + DRY).
+		 *
+		 * @param string $field_id the setting being resolved.
+		 * @return array the condition group, or [] when always visible.
+		 */
+		public function order_field_rules( string $field_id ): array {
+			if ( 'rate' === $field_id ) {
+				return [ 'setting' => 'calc_type', 'value' => 'fixed' ];
+			}
+			if ( 'formula' === $field_id ) {
+				return [ 'setting' => 'calc_type', 'operator' => 'not_in', 'value' => [ 'fixed' ] ];
+			}
+			return [];
 		}
 
 		/**
@@ -381,7 +401,7 @@ function woodev_test_plugin_init() {
 					$this->get_settings_handler(),
 					[
 						\Woodev\Framework\Settings\Settings_Section::create( 'general', 'Общие', [ 'api_key', 'mode' ], 'Основные параметры подключения к API перевозчика.' ),
-						\Woodev\Framework\Settings\Settings_Section::create( 'order', 'Форма заказа', [ 'enabled', 'markup', 'calc_type', 'methods', 'max_weight', 'comment', 'note' ], 'Как тариф и способы доставки отображаются покупателю при оформлении.' ),
+						\Woodev\Framework\Settings\Settings_Section::create( 'order', 'Форма заказа', [ 'enabled', 'markup', 'calc_type', 'rate', 'formula', 'methods', 'max_weight', 'comment', 'note' ], 'Как тариф и способы доставки отображаются покупателю при оформлении.' ),
 						\Woodev\Framework\Settings\Settings_Section::create( 'misc', 'Прочее', [ 'manager_email', 'secret', 'brand_color', 'start_date', 'support_phone', 'tracking_url' ] ),
 						\Woodev\Framework\Settings\Settings_Section::create( 'api', 'Подключение', [ 'conn_login', 'conn_password', 'conn_token' ], 'Учётные данные для доступа к API перевозчика.', true, 'Проверить подключение' ),
 						\Woodev\Framework\Settings\Settings_Section::create( 'widget', 'Виджет ЛК', [], 'Регистрация экземпляра магазина в личном кабинете перевозчика.', true, 'Подключить' ),

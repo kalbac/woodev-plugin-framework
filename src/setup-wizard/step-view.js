@@ -14,6 +14,7 @@
 
 import { createElement, Fragment } from '@wordpress/element';
 import ControlField from '../components/control-field';
+import { isFieldVisible } from '../components/validate';
 
 /**
  * Resolves a field's control kind for grouping (controlType, then inference).
@@ -49,7 +50,14 @@ function controlKind( schema ) {
  * @return {Array} list of React elements.
  */
 function renderFields( step, values, onChange, showErrors, serverErrors ) {
-	const entries = Object.entries( step.fields || {} );
+	const stepValues = {};
+	Object.keys( step.fields || {} ).forEach( ( id ) => {
+		stepValues[ id ] = values[ id ] ?? step.fields[ id ].value;
+	} );
+
+	const entries = Object.entries( step.fields || {} ).filter( ( [ , schema ] ) =>
+		isFieldVisible( schema, stepValues )
+	);
 	const blocks = [];
 	let group = null;
 
