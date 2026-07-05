@@ -8,31 +8,18 @@
  * prints style-index.css + wp-components).
  */
 
-// Shared UI-kit: tokens + recolor + neutral field anatomy. control-field now
-// renders neutral `woodev-field__*` classes — they are styled by `_field.scss`.
-// The legacy `woodev-setup__field*` blocks below are dead (nothing renders them)
-// and will be removed when the wizard is fully migrated to the kit (UK-4).
+// Shared UI-kit: tokens + recolor + neutral field anatomy. control-field renders
+// neutral `woodev-field__*` classes styled by `_field.scss` — the wizard carries
+// no field-rendering CSS of its own (UK-3/UK-4). This file keeps only the
+// full-screen page chrome (brand header, stepper, card, actions, finish).
 @use '../components/tokens' as wd;
 @use '../components/wp-recolor';
 @use '../components/field';
 
-// ---- Design tokens (woodev.ru muted cyan) ---------------------------------
-$wd-accent: #06aedd;
-$wd-accent-strong: #0596c4;
-$wd-accent-ink: #04303d;
-$wd-accent-soft: rgba( 6, 174, 221, 0.10 );
-$wd-accent-soft-2: rgba( 6, 174, 221, 0.07 );
-$wd-bg: #f1f1f1;
-$wd-surface: #fff;
-$wd-ink: #1d2327;
-$wd-text: #3c434a;
-$wd-muted: #646970;
-$wd-desc: #757575;
-$wd-border: #e2e4e7;
-$wd-divider: #eef0f2;
-$wd-radius: 12px;
-$wd-radius-sm: 8px;
-$wd-line: #c4c7cb;
+// Wizard-only locals — no kit-token equivalent. Brand accents, surface, ink,
+// border, radius, divider and line now come from `wd.$*` (tokens.scss).
+$wd-bg: #f1f1f1; // full-screen page background
+$wd-text: #3c434a; // body text on the wizard page
 $wd-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Helvetica, Arial, sans-serif;
 
 body.woodev-setup-wizard {
@@ -76,7 +63,7 @@ body.woodev-setup-wizard {
 		width: 50px;
 		height: 50px;
 		border-radius: 13px;
-		background: linear-gradient( 135deg, #1bb8e6, $wd-accent-strong );
+		background: linear-gradient( 135deg, #1bb8e6, wd.$accent-strong );
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -140,22 +127,22 @@ body.woodev-setup-wizard {
 			}
 
 			&.is-done {
-				border-color: $wd-accent;
-				color: $wd-accent;
+				border-color: wd.$accent;
+				color: wd.$accent;
 
 				&::before {
-					border-color: $wd-accent;
-					background: $wd-accent;
+					border-color: wd.$accent;
+					background: wd.$accent;
 				}
 			}
 
 			&.is-active {
-				border-color: $wd-accent;
-				color: $wd-accent-ink;
+				border-color: wd.$accent;
+				color: wd.$accent-ink;
 				font-weight: 700;
 
 				&::before {
-					border-color: $wd-accent;
+					border-color: wd.$accent;
 				}
 			}
 		}
@@ -179,7 +166,7 @@ body.woodev-setup-wizard {
 
 	// Hover affordance only on the clickable (non-active) labels.
 	&__steps li:not( .is-active ) &__step-label:hover {
-		color: $wd-accent-strong;
+		color: wd.$accent-strong;
 		text-decoration: underline;
 	}
 
@@ -188,8 +175,8 @@ body.woodev-setup-wizard {
 		box-shadow: 0 1px 2px rgba( 0, 0, 0, 0.04 ), 0 14px 30px rgba( 10, 30, 40, 0.07 );
 		padding: 2.6em 2.8em;
 		margin: 0 0 18px;
-		background: $wd-surface;
-		border-radius: $wd-radius;
+		background: wd.$surface;
+		border-radius: wd.$radius;
 		text-align: left;
 	}
 
@@ -198,7 +185,7 @@ body.woodev-setup-wizard {
 		padding: 0;
 		font-size: 25px;
 		font-weight: 600;
-		color: $wd-ink;
+		color: wd.$ink;
 		line-height: 1.3;
 	}
 
@@ -206,11 +193,11 @@ body.woodev-setup-wizard {
 		margin: 0 0 28px;
 		font-size: 14.5px;
 		line-height: 1.65;
-		color: $wd-desc;
+		color: wd.$ink-muted;
 	}
 
 	&__content {
-		color: $wd-muted;
+		color: wd.$muted;
 		font-size: 15px;
 		line-height: 1.7;
 
@@ -219,7 +206,7 @@ body.woodev-setup-wizard {
 		}
 
 		a {
-			color: $wd-accent-strong;
+			color: wd.$accent-strong;
 		}
 
 		ul {
@@ -241,7 +228,7 @@ body.woodev-setup-wizard {
 			width: 22px;
 			height: 22px;
 			flex: 0 0 22px;
-			fill: $wd-accent;
+			fill: wd.$accent;
 		}
 
 		// Cyan check before each bullet (mockup welcome look) when the plugin's
@@ -264,369 +251,6 @@ body.woodev-setup-wizard {
 		color: $wd-text;
 		font-size: 13px;
 		line-height: 1.5;
-	}
-
-	// ---- Fields ------------------------------------------------------------
-	&__field {
-		margin-top: 30px;
-
-		&:first-child {
-			margin-top: 4px;
-		}
-	}
-
-	&__field-label {
-		display: flex;
-		align-items: center;
-		gap: 8px;
-		font-size: 15px;
-		font-weight: 600;
-		color: $wd-ink;
-		margin-bottom: 6px;
-	}
-
-	&__field-req {
-		color: #d63638;
-		font-weight: 700;
-	}
-
-	&__field-desc {
-		font-size: 13px;
-		line-height: 1.55;
-		color: $wd-desc;
-		margin: 2px 0 12px;
-	}
-
-	&__field-tip {
-		position: relative;
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		width: 17px;
-		height: 17px;
-		border-radius: 50%;
-		background: #c3c4c7;
-		color: #fff;
-		cursor: help;
-
-		svg {
-			width: 11px;
-			height: 11px;
-		}
-
-		&:hover,
-		&:focus {
-			background: $wd-accent-strong;
-			outline: none;
-		}
-
-		&:hover &-bubble,
-		&:focus &-bubble {
-			opacity: 1;
-			visibility: visible;
-		}
-	}
-
-	// Fixed-width instant tooltip bubble (matches the approved mockup; replaces
-	// wp Tooltip which opened with a delay and stretched to one long line).
-	&__field-tip-bubble {
-		position: absolute;
-		bottom: 150%;
-		left: 50%;
-		transform: translateX( -50% );
-		width: max-content;
-		max-width: 240px;
-		padding: 9px 11px;
-		background: #1e1e1e;
-		color: #fff;
-		font-size: 12.5px;
-		font-weight: 400;
-		line-height: 1.5;
-		text-align: left;
-		white-space: normal;
-		border-radius: 7px;
-		box-shadow: 0 8px 22px rgba( 0, 0, 0, 0.28 );
-		opacity: 0;
-		visibility: hidden;
-		transition: opacity 0.12s ease;
-		z-index: 10;
-		pointer-events: none;
-
-		&::after {
-			content: "";
-			position: absolute;
-			top: 100%;
-			left: 50%;
-			margin-left: -5px;
-			border: 5px solid transparent;
-			border-top-color: #1e1e1e;
-		}
-	}
-
-	// inputs (unit suffix rows)
-	&__input-row,
-	&__range-row {
-		display: flex;
-		align-items: center;
-		gap: 11px;
-
-		.components-base-control {
-			flex: 1;
-		}
-	}
-
-	&__suffix {
-		font-size: 14px;
-		color: $wd-desc;
-		flex: 0 0 auto;
-	}
-
-	// ---- Custom dropdown ---------------------------------------------------
-	&__dropdown {
-		display: block;
-	}
-
-	&__dropdown-trigger {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 10px;
-		width: 100%;
-		padding: 10px 14px;
-		border: 1px solid $wd-line;
-		border-radius: $wd-radius-sm;
-		background: #fff;
-		font-size: 15px;
-		color: #2c3338;
-		cursor: pointer;
-		text-align: left;
-		transition: border-color 0.15s, box-shadow 0.15s;
-
-		&:hover {
-			border-color: $wd-accent;
-		}
-
-		&.is-open {
-			border-color: $wd-accent;
-			box-shadow: 0 0 0 3px $wd-accent-soft;
-		}
-	}
-
-	&__dropdown-value {
-		flex: 1;
-	}
-
-	&__dropdown-chevron {
-		flex: 0 0 auto;
-		color: $wd-muted;
-		display: flex;
-	}
-
-	&__dropdown-trigger.is-open &__dropdown-chevron {
-		transform: rotate( 180deg );
-	}
-
-	&__dropdown-menu {
-		display: flex;
-		flex-direction: column;
-		padding: 6px;
-		background: #fff;
-		border: 1px solid $wd-border;
-		border-radius: 10px;
-		box-shadow: 0 12px 32px rgba( 10, 30, 40, 0.16 );
-	}
-
-	&__dropdown-item {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 10px;
-		padding: 10px 12px;
-		border: 0;
-		border-radius: 6px;
-		background: transparent;
-		font-size: 15px;
-		color: $wd-ink;
-		cursor: pointer;
-		text-align: left;
-
-		&:hover {
-			background: $wd-accent-soft-2;
-		}
-
-		&.is-selected {
-			background: $wd-accent-soft;
-			color: $wd-accent-ink;
-			font-weight: 600;
-		}
-	}
-
-	&__dropdown-tick {
-		display: flex;
-		color: $wd-accent;
-	}
-
-	// ---- Grouped fields (radio / toggle) -----------------------------------
-	&__option-group {
-		border: 1px solid $wd-border;
-		border-radius: $wd-radius-sm;
-		overflow: hidden;
-		background: #fff;
-		margin-top: 30px;
-
-		&:first-child {
-			margin-top: 4px;
-		}
-
-		// RadioControl wraps options in a VStack with a gap — kill it so rows are
-		// flush (dividers separate them) and the selected-row fill has no strips.
-		.components-radio-control__group-wrapper {
-			gap: 0 !important;
-		}
-
-		// radio rows from RadioControl
-		.components-radio-control__option {
-			display: flex;
-			align-items: flex-start;
-			gap: 12px;
-			padding: 15px 17px;
-			margin: 0;
-			border-top: 1px solid $wd-divider;
-
-			&:first-child {
-				border-top: 0;
-			}
-
-			// Highlight the selected row (mockup .option-row.selected).
-			&:has( input:checked ) {
-				background: $wd-accent-soft-2;
-			}
-		}
-
-		// toggle rows
-		.woodev-setup__toggle-row {
-			border-top: 1px solid $wd-divider;
-
-			&:first-child {
-				border-top: 0;
-			}
-		}
-	}
-
-	// custom radio indicator: forced-square ring + transform-centered dot
-	.components-radio-control__input[type="radio"] {
-		appearance: none;
-		-webkit-appearance: none;
-		width: 18px !important;
-		height: 18px !important;
-		min-width: 18px !important;
-		flex: 0 0 18px;
-		margin: 1px 8px 0 0;
-		padding: 0;
-		border: 2px solid $wd-line;
-		border-radius: 50%;
-		background: #fff;
-		position: relative;
-		cursor: pointer;
-		box-shadow: none;
-		transition: border-color 0.15s;
-
-		&:checked {
-			border-color: $wd-accent;
-
-			&::after {
-				content: "";
-				position: absolute;
-				top: 50%;
-				left: 50%;
-				transform: translate( -50%, -50% );
-				width: 8px;
-				height: 8px;
-				border-radius: 50%;
-				background: $wd-accent;
-			}
-		}
-	}
-
-	// ---- Toggle rows -------------------------------------------------------
-	&__toggle-row {
-		display: flex;
-		align-items: flex-start;
-		justify-content: space-between;
-		gap: 20px;
-		padding: 16px 17px;
-	}
-
-	&__toggle-meta {
-		flex: 1;
-	}
-
-	&__toggle-label {
-		font-size: 15px;
-		font-weight: 600;
-		color: $wd-ink;
-	}
-
-	&__toggle-desc {
-		font-size: 13px;
-		color: $wd-desc;
-		margin-top: 3px;
-		line-height: 1.5;
-	}
-
-	// ---- Richtext ----------------------------------------------------------
-	&__richtext {
-		border: 1px solid $wd-line;
-		border-radius: $wd-radius-sm;
-		overflow: hidden;
-	}
-
-	&__richtext-toolbar {
-		display: flex;
-		gap: 2px;
-		padding: 6px 7px;
-		border-bottom: 1px solid #e6e7e9;
-		background: #f6f7f8;
-
-		button {
-			border: 0;
-			background: transparent;
-			width: 30px;
-			height: 30px;
-			border-radius: 6px;
-			cursor: pointer;
-			color: $wd-text;
-			font-size: 15px;
-			display: flex;
-			align-items: center;
-			justify-content: center;
-
-			&:hover {
-				background: rgba( 0, 0, 0, 0.05 );
-			}
-
-			&.is-bold {
-				font-weight: 700;
-			}
-
-			&.is-italic {
-				font-style: italic;
-			}
-		}
-	}
-
-	&__richtext-editor {
-		padding: 13px 15px;
-		min-height: 84px;
-		font-size: 15px;
-		line-height: 1.65;
-		color: #2c3338;
-		outline: none;
-
-		&:empty::before {
-			content: attr( data-placeholder );
-			color: #9aa0a6;
-		}
 	}
 
 	// ---- Actions -----------------------------------------------------------
@@ -654,7 +278,7 @@ body.woodev-setup-wizard {
 		font-weight: 500;
 
 		&:hover:not( :disabled ) {
-			color: $wd-accent-strong;
+			color: wd.$accent-strong;
 		}
 	}
 
@@ -664,7 +288,7 @@ body.woodev-setup-wizard {
 		text-decoration: none;
 
 		&:hover:not( :disabled ) {
-			color: $wd-accent-strong;
+			color: wd.$accent-strong;
 		}
 	}
 
@@ -674,7 +298,7 @@ body.woodev-setup-wizard {
 		font-weight: 600;
 		padding: 0.8em 2.1em;
 		height: auto;
-		border-radius: $wd-radius-sm;
+		border-radius: wd.$radius-sm;
 	}
 
 	// Big "Готово" completion button under the finish card.
@@ -696,7 +320,7 @@ body.woodev-setup-wizard {
 			text-decoration: none;
 
 			&:hover {
-				color: $wd-accent-strong;
+				color: wd.$accent-strong;
 				text-decoration: underline;
 			}
 		}
@@ -712,7 +336,7 @@ body.woodev-setup-wizard {
 		width: 64px;
 		height: 64px;
 		border-radius: 50%;
-		background: $wd-accent;
+		background: wd.$accent;
 		color: #fff;
 		display: inline-flex;
 		align-items: center;
@@ -735,12 +359,12 @@ body.woodev-setup-wizard {
 		margin: 0 0 4px;
 		font-size: 15px;
 		line-height: 1.7;
-		color: $wd-muted;
+		color: wd.$muted;
 	}
 
 	&__next-steps {
-		border: 1px solid $wd-border;
-		border-radius: $wd-radius-sm;
+		border: 1px solid wd.$border;
+		border-radius: wd.$radius-sm;
 		list-style: none;
 		padding: 0;
 		margin: 24px 0 0;
@@ -748,7 +372,7 @@ body.woodev-setup-wizard {
 		li {
 			display: flex;
 			align-items: center;
-			border-top: 1px solid $wd-border;
+			border-top: 1px solid wd.$border;
 
 			&:first-child {
 				border-top: 0;
@@ -774,13 +398,13 @@ body.woodev-setup-wizard {
 		margin: 4px 0 0;
 		font-size: 16.5px;
 		font-weight: 600;
-		color: $wd-ink;
+		color: wd.$ink;
 	}
 
 	&__ns-extra {
 		margin: 4px 0 0;
 		font-size: 13.5px;
-		color: $wd-desc;
+		color: wd.$ink-muted;
 	}
 
 	&__ns-action {
@@ -792,16 +416,16 @@ body.woodev-setup-wizard {
 
 	&__secondary.components-button.is-secondary {
 		box-shadow: inset 0 0 0 1px #c3c4c7;
-		color: $wd-ink;
+		color: wd.$ink;
 		font-size: 14px;
 		font-weight: 500;
 		padding: 0.62em 1.5em;
 		height: auto;
-		border-radius: $wd-radius-sm;
+		border-radius: wd.$radius-sm;
 
 		&:hover:not( :disabled ) {
-			box-shadow: inset 0 0 0 1px $wd-accent;
-			color: $wd-accent-strong;
+			box-shadow: inset 0 0 0 1px wd.$accent;
+			color: wd.$accent-strong;
 		}
 	}
 
@@ -812,15 +436,15 @@ body.woodev-setup-wizard {
 		flex-wrap: wrap;
 		gap: 12px;
 		padding: 1.2em 1.6em;
-		border-top: 1px solid $wd-border;
+		border-top: 1px solid wd.$border;
 		font-size: 13.5px;
-		color: $wd-desc;
+		color: wd.$ink-muted;
 	}
 
 	&__also-label {
 		flex-basis: 100%;
 		text-align: center;
-		color: $wd-desc;
+		color: wd.$ink-muted;
 	}
 
 	&__btn-icon {
@@ -829,25 +453,25 @@ body.woodev-setup-wizard {
 		gap: 8px;
 		background: #fff;
 		border: 1px solid #c3c4c7;
-		color: $wd-ink;
+		color: wd.$ink;
 		font-size: 13.5px;
 		font-weight: 500;
 		padding: 0.55em 1.05em;
-		border-radius: $wd-radius-sm;
+		border-radius: wd.$radius-sm;
 		text-decoration: none;
 
 		svg {
 			width: 15px;
 			height: 15px;
-			fill: $wd-muted;
+			fill: wd.$muted;
 		}
 
 		&:hover {
-			border-color: $wd-accent;
-			color: $wd-accent-strong;
+			border-color: wd.$accent;
+			color: wd.$accent-strong;
 
 			svg {
-				fill: $wd-accent-strong;
+				fill: wd.$accent-strong;
 			}
 		}
 	}
@@ -866,16 +490,16 @@ body.woodev-setup-wizard {
 	textarea,
 	.components-text-control__input,
 	.components-textarea-control__input {
-		border: 1px solid $wd-line;
-		border-radius: $wd-radius-sm;
+		border: 1px solid wd.$line;
+		border-radius: wd.$radius-sm;
 		font-size: 15px;
 		color: #2c3338;
 		padding: 9px 14px;
 		min-height: 40px;
 
 		&:focus {
-			border-color: $wd-accent;
-			box-shadow: 0 0 0 3px $wd-accent-soft;
+			border-color: wd.$accent;
+			box-shadow: 0 0 0 3px wd.$accent-soft;
 			outline: 0;
 		}
 	}
@@ -883,8 +507,8 @@ body.woodev-setup-wizard {
 	// InputControl-based controls (e.g. RangeControl's number box): the visible
 	// border is drawn by a sibling backdrop, so it must be targeted separately.
 	.components-input-control__backdrop {
-		border-color: $wd-line !important;
-		border-radius: $wd-radius-sm !important;
+		border-color: wd.$line !important;
+		border-radius: wd.$radius-sm !important;
 	}
 
 	.components-input-control__input {
@@ -892,55 +516,55 @@ body.woodev-setup-wizard {
 	}
 
 	.components-input-control:focus-within .components-input-control__backdrop {
-		border-color: $wd-accent !important;
-		box-shadow: 0 0 0 3px $wd-accent-soft;
+		border-color: wd.$accent !important;
+		box-shadow: 0 0 0 3px wd.$accent-soft;
 	}
 
 	.components-button.is-primary {
-		background: $wd-accent;
+		background: wd.$accent;
 		color: #fff;
-		border-color: $wd-accent;
+		border-color: wd.$accent;
 		box-shadow: 0 4px 14px rgba( 6, 174, 221, 0.4 );
 
 		&:hover:not( :disabled ),
 		&:focus:not( :disabled ) {
-			background: $wd-accent-strong;
-			border-color: $wd-accent-strong;
+			background: wd.$accent-strong;
+			border-color: wd.$accent-strong;
 			color: #fff;
 		}
 
 		&:focus:not( :disabled ) {
-			box-shadow: 0 0 0 1.5px #fff, 0 0 0 3.5px $wd-accent;
+			box-shadow: 0 0 0 1.5px #fff, 0 0 0 3.5px wd.$accent;
 		}
 	}
 
 	// WC-pill toggle, cyan on
 	.components-form-toggle.is-checked .components-form-toggle__track {
-		background-color: $wd-accent;
-		border-color: $wd-accent;
+		background-color: wd.$accent;
+		border-color: wd.$accent;
 	}
 
 	// RangeControl rail + thumb cyan
 	.components-range-control__track,
 	.components-input-control__container .components-range-control__track {
-		background-color: $wd-accent;
+		background-color: wd.$accent;
 	}
 
 	.components-range-control__thumb-wrapper .components-range-control__thumb {
-		background-color: $wd-accent;
-		border-color: $wd-accent;
+		background-color: wd.$accent;
+		border-color: wd.$accent;
 	}
 
 	// FormTokenField tokens (chips) cyan tint
 	.components-form-token-field__token {
-		background: $wd-accent-soft;
+		background: wd.$accent-soft;
 
 		.components-form-token-field__token-text {
-			color: $wd-accent-ink;
+			color: wd.$accent-ink;
 		}
 
 		.components-form-token-field__remove-token {
-			color: $wd-accent-strong;
+			color: wd.$accent-strong;
 		}
 	}
 
@@ -954,18 +578,6 @@ body.woodev-setup-wizard {
 	input[type="number"] {
 		max-width: 150px;
 	}
-}
-
-// ---- Popover (custom dropdown menu) — rendered outside .woodev-setup -------
-// Strip the wp popover chrome so the inner menu IS the visible box; the menu is
-// sized in JS to the trigger width (so popover width == dropdown width exactly).
-.woodev-setup__dropdown-popover.components-popover .components-popover__content {
-	border: 0;
-	border-radius: 0;
-	box-shadow: none;
-	background: transparent;
-	padding: 0;
-	min-width: 0;
 }
 
 @media ( max-width: 600px ) {
