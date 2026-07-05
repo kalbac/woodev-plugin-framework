@@ -4,8 +4,8 @@
  * Renders a settings step's fields (from the Settings-API schema slice) or a
  * content step's server-rendered markup. Consecutive radio fields are grouped
  * into one bordered option-group, as are consecutive toggle fields (shared
- * border + dividers per the approved mockup); standalone controls render in
- * their own .woodev-setup__field blocks.
+ * border + dividers per the approved mockup); standalone controls render via
+ * the shared control-field (neutral `woodev-field__*`, styled by _field.scss).
  *
  * Classic JSX runtime: createElement / Fragment used directly (no JSX).
  *
