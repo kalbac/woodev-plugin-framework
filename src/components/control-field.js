@@ -11,7 +11,7 @@
  * @package woodev-plugin-framework
  */
 
-import { createElement, useState } from '@wordpress/element';
+import { createElement, useState, Fragment } from '@wordpress/element';
 import { validateField, isRequirable } from './validate';
 import {
 	TextControl,
@@ -81,6 +81,72 @@ function PasswordControl( { value, onChange, isSet } ) {
 							strokeLinecap: 'round',
 						} )
 				)
+			)
+	);
+}
+
+/**
+ * Sensitive-secret control: a masked PasswordControl plus an explicit
+ * "clear stored secret" (disconnect) affordance.
+ *
+ * A stored secret (`isSet`) never reaches the browser, so an empty input is
+ * ambiguous — "untouched" vs "about to be wiped". This makes the wipe explicit:
+ * «Очистить сохранённое» stages an empty edit (`onChange('')`), after which the
+ * field shows a pending-clear notice with «Отменить». «Отменить» calls
+ * `onRevert` to drop that single staged edit, restoring the untouched masked
+ * state (the stored secret is preserved). The wipe persists on Save — the empty
+ * value reaches the server, which deletes the stored option. The affordance
+ * shows only when a secret is stored, the field is not being replaced (no typed
+ * value), and the parent wired an `onRevert` (the wizard, which has no per-field
+ * edit model, passes none → unchanged there).
+ *
+ * @param {Object}   props            component props.
+ * @param {string}   props.value      current value.
+ * @param {Function} props.onChange   change handler.
+ * @param {boolean}  props.isSet      whether a secret is already stored.
+ * @param {boolean}  props.hasEdit    whether an explicit edit is staged for this field.
+ * @param {Function} [props.onRevert] drops the staged edit (enables the clear affordance).
+ * @return {Object} React element.
+ */
+function SecretControl( { value, onChange, isSet, hasEdit, onRevert } ) {
+	const hasValue = '' !== ( value ?? '' );
+	const canClear = isSet && 'function' === typeof onRevert;
+
+	// Pending clear: an explicit empty edit staged against a stored secret.
+	if ( canClear && hasEdit && ! hasValue ) {
+		return createElement(
+			'div',
+			{ className: 'woodev-field__secret-clear' },
+			createElement(
+				'span',
+				{ className: 'woodev-field__secret-clear-note', role: 'status' },
+				'Сохранённый секрет будет удалён при сохранении.'
+			),
+			createElement(
+				'button',
+				{
+					type: 'button',
+					className: 'woodev-field__secret-cancel',
+					onClick: onRevert,
+				},
+				'Отменить'
+			)
+		);
+	}
+
+	return createElement(
+		Fragment,
+		null,
+		createElement( PasswordControl, { value, onChange, isSet } ),
+		canClear && ! hasValue &&
+			createElement(
+				'button',
+				{
+					type: 'button',
+					className: 'woodev-field__secret-clear-link',
+					onClick: () => onChange( '' ),
+				},
+				'Очистить сохранённое'
 			)
 	);
 }
@@ -168,10 +234,12 @@ function withAnatomy( schema, control, error ) {
  * @param {*}        props.value        current value.
  * @param {Function} props.onChange     change handler.
  * @param {boolean}  props.showErrors   when true, reveal errors without waiting for blur.
+ * @param {boolean}  [props.hasEdit]    whether an explicit edit is staged (sensitive clear).
+ * @param {Function} [props.onRevert]   drops a staged edit (enables the sensitive clear affordance).
  * @return {Object} React element.
  * @since 2.0.2
  */
-export default function ControlField( { schema, value, onChange, showErrors } ) {
+export default function ControlField( { schema, value, onChange, showErrors, hasEdit, onRevert } ) {
 	// Must be called unconditionally before any early return (React hook rules).
 	const [ touched, setTouched ] = useState( false );
 
@@ -193,13 +261,16 @@ export default function ControlField( { schema, value, onChange, showErrors } ) 
 	}
 
 	// A sensitive value is masked: empty input + "saved" placeholder; typing a new
-	// value replaces it on save (an untouched empty field is never sent).
+	// value replaces it on save (an untouched empty field is never sent). A stored
+	// secret can also be explicitly wiped via SecretControl's clear affordance.
 	if ( schema.sensitive ) {
 		return withAnatomy(
 			schema,
-			createElement( PasswordControl, {
+			createElement( SecretControl, {
 				value: value ?? '',
 				isSet: !! schema.is_set,
+				hasEdit,
+				onRevert,
 				onChange,
 			} )
 		);
