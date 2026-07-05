@@ -733,13 +733,17 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 				$target     = $condition['value'] ?? '';
 				$raw        = $values[ $setting_id ] ?? '';
 				$current    = is_scalar( $raw ) ? (string) $raw : '';
+				// A non-scalar target for a scalar operator (e.g. an array mistakenly used
+				// with '=') coerces to '' — avoids a PHP `(string) array` E_WARNING and
+				// matches the JS mirror's toComparable().
+				$target_str = is_scalar( $target ) ? (string) $target : '';
 
 				switch ( $operator ) {
 					case '=':
-						$match = ( $current === (string) $target );
+						$match = ( $current === $target_str );
 						break;
 					case '!=':
-						$match = ( $current !== (string) $target );
+						$match = ( $current !== $target_str );
 						break;
 					case 'in':
 						$match = in_array( $current, array_map( 'strval', (array) $target ), true );

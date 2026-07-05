@@ -386,6 +386,11 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 		 */
 		public function filter_visible_values( array $values ): array {
 
+			// Resolve every field's visibility against the ORIGINAL submitted map first,
+			// then strip — so a chained dependency (a controller that is itself hidden)
+			// is order-independent instead of depending on array key order.
+			$hidden = [];
+
 			foreach ( array_keys( $values ) as $setting_id ) {
 
 				$setting = $this->get_setting( (string) $setting_id );
@@ -401,8 +406,12 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 				}
 
 				if ( ! Woodev_Setting::evaluate_conditions( $conditions, $this->effective_condition_values( $conditions, $values ) ) ) {
-					unset( $values[ $setting_id ] );
+					$hidden[] = $setting_id;
 				}
+			}
+
+			foreach ( $hidden as $setting_id ) {
+				unset( $values[ $setting_id ] );
 			}
 
 			return $values;

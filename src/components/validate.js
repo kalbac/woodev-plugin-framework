@@ -203,7 +203,7 @@ function conditionGroup( conditions ) {
 	if ( conditions && conditions.setting ) {
 		return { relation: 'AND', members: [ conditions ] };
 	}
-	const relation = String( conditions.relation || 'AND' ).toUpperCase();
+	const relation = String( conditions.relation ?? 'AND' ).toUpperCase();
 	const members = Object.keys( conditions )
 		.filter( ( k ) => 'relation' !== k )
 		.map( ( k ) => conditions[ k ] )
@@ -222,6 +222,11 @@ function conditionGroup( conditions ) {
 function toComparable( value ) {
 	if ( 'boolean' === typeof value ) {
 		return value ? '1' : '';
+	}
+	// Non-scalar (null/undefined/array/object) → '' to match PHP's is_scalar guard
+	// (a scalar operator against a non-scalar target compares as empty on both sides).
+	if ( null === value || undefined === value || 'object' === typeof value ) {
+		return '';
 	}
 	return String( value );
 }
@@ -251,7 +256,7 @@ export function evaluateConditions( conditions, values ) {
 
 	for ( const condition of members ) {
 		const settingId = String( condition.setting ?? '' );
-		const operator = condition.operator || '=';
+		const operator = condition.operator ?? '=';
 		const target = condition.value ?? '';
 		const raw = values[ settingId ];
 		const current =

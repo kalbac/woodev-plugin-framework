@@ -246,4 +246,67 @@ class ConditionalFieldsTest extends TestCase {
 		// '' !== 'x' → region is hidden → stripped, but crucially no exception thrown.
 		$this->assertArrayNotHasKey( 'region', $result );
 	}
+
+	public function test_empty_operator_fails_closed(): void {
+		// operator '' is unknown → no match (mirror parity: PHP and JS both fail closed).
+		$c = [ [ 'setting' => 'm', 'operator' => '', 'value' => 'x' ] ];
+		$this->assertFalse( \Woodev_Setting::evaluate_conditions( $c, [ 'm' => 'x' ] ) );
+	}
+
+	public function test_empty_relation_is_not_visible(): void {
+		// relation '' is neither AND nor OR → falls through to hidden (mirror parity).
+		$c = [ 'relation' => '', [ 'setting' => 'm', 'value' => 'x' ] ];
+		$this->assertFalse( \Woodev_Setting::evaluate_conditions( $c, [ 'm' => 'x' ] ) );
+	}
+
+	public function test_non_scalar_target_coerces_to_empty(): void {
+		// An array target with '=' coerces to '' (no PHP `(string) array` warning; JS parity).
+		$c = [ [ 'setting' => 'm', 'value' => [ 'x' ] ] ];
+		$this->assertTrue( \Woodev_Setting::evaluate_conditions( $c, [ 'm' => '' ] ) );
+		$this->assertFalse( \Woodev_Setting::evaluate_conditions( $c, [ 'm' => 'x' ] ) );
+	}
+
+	/**
+	 * Builds a handler with a chained dependency: `ctrl` is itself hidden (gate off),
+	 * and `dep` is visible only when `ctrl` = live. Nothing is stored.
+	 *
+	 * @return \Woodev_Abstract_Settings
+	 */
+	private function make_chained_handler(): \Woodev_Abstract_Settings {
+		require_once dirname( __DIR__, 3 ) . '/woodev/settings-api/register-settings/class-register-settings.php';
+		require_once dirname( __DIR__, 3 ) . '/woodev/settings-api/abstract-class-settings.php';
+
+		Functions\when( 'get_option' )->justReturn( null );
+		Functions\when( 'wp_parse_args' )->alias(
+			static function ( $args, $defaults = [] ) {
+				return array_merge( (array) $defaults, (array) $args );
+			}
+		);
+
+		return new class() extends \Woodev_Abstract_Settings {
+			public function __construct() {
+				parent::__construct( 'chain_test' );
+			}
+			protected function register_settings() {
+				$this->register_setting( 'ctrl', \Woodev_Setting::TYPE_STRING, [ 'default' => '', 'show_if' => [ 'setting' => 'gate', 'value' => 'on' ] ] );
+				$this->register_setting( 'dep', \Woodev_Setting::TYPE_STRING, [ 'default' => '', 'show_if' => [ 'setting' => 'ctrl', 'value' => 'live' ] ] );
+			}
+			public function get_value( $id, $default = null ) {
+				return $default; // nothing stored → gate resolves empty → ctrl hidden.
+			}
+			public function save( $setting_id = '' ) {}
+		};
+	}
+
+	public function test_chained_visibility_is_order_independent(): void {
+		// `dep` depends on ctrl=live; `ctrl` is itself hidden (gate off) and gets stripped.
+		// `dep` must be KEPT in BOTH key orders because visibility resolves against the
+		// ORIGINAL submitted map (ctrl='live'), not the partially stripped one.
+		$order_a = $this->make_chained_handler()->filter_visible_values( [ 'ctrl' => 'live', 'dep' => 'x' ] );
+		$order_b = $this->make_chained_handler()->filter_visible_values( [ 'dep' => 'x', 'ctrl' => 'live' ] );
+
+		$this->assertArrayNotHasKey( 'ctrl', $order_a ); // ctrl hidden → stripped.
+		$this->assertArrayHasKey( 'dep', $order_a );     // dep visible (ctrl submitted 'live').
+		$this->assertArrayHasKey( 'dep', $order_b );     // identical regardless of key order.
+	}
 }
