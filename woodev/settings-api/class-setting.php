@@ -652,6 +652,77 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 		}
 
 		/**
+		 * Evaluates a show_if condition group against a map of current field values.
+		 *
+		 * Pure + total: an empty group is visible; every value is compared as a string
+		 * (so PHP and the JS mirror agree, and enum option keys round-trip). An unset or
+		 * non-scalar controlling value is the empty string — no special-casing.
+		 *
+		 * Mirrored in src/components/validate.js::evaluateConditions — KEEP IN SYNC.
+		 * Rule table: conditional-fields design spec §5.
+		 *
+		 * @since 2.0.2
+		 * @param array<string,mixed> $conditions show_if group (relation + members), or one bare condition.
+		 * @param array<string,mixed> $values     controlling setting_id => current value.
+		 * @return bool true when the field should be visible.
+		 */
+		public static function evaluate_conditions( array $conditions, array $values ): bool {
+
+			if ( empty( $conditions ) ) {
+				return true;
+			}
+
+			// Sugar: a single bare condition (has a 'setting' key) is a one-condition group.
+			if ( isset( $conditions['setting'] ) ) {
+				$conditions = [ $conditions ];
+			}
+
+			$relation = isset( $conditions['relation'] ) ? strtoupper( (string) $conditions['relation'] ) : 'AND';
+			$members  = array_filter( $conditions, 'is_array' );
+
+			if ( empty( $members ) ) {
+				return true;
+			}
+
+			foreach ( $members as $condition ) {
+
+				$setting_id = (string) ( $condition['setting'] ?? '' );
+				$operator   = (string) ( $condition['operator'] ?? '=' );
+				$target     = $condition['value'] ?? '';
+				$raw        = $values[ $setting_id ] ?? '';
+				$current    = is_scalar( $raw ) ? (string) $raw : '';
+
+				switch ( $operator ) {
+					case '=':
+						$match = ( $current === (string) $target );
+						break;
+					case '!=':
+						$match = ( $current !== (string) $target );
+						break;
+					case 'in':
+						$match = in_array( $current, array_map( 'strval', (array) $target ), true );
+						break;
+					case 'not_in':
+						$match = ! in_array( $current, array_map( 'strval', (array) $target ), true );
+						break;
+					default:
+						$match = false; // unknown operator → fail-closed.
+						break;
+				}
+
+				if ( 'OR' === $relation && $match ) {
+					return true;
+				}
+
+				if ( 'AND' === $relation && ! $match ) {
+					return false;
+				}
+			}
+
+			return 'AND' === $relation;
+		}
+
+		/**
 		 * Validates the setting value.
 		 *
 		 * @param mixed $value
