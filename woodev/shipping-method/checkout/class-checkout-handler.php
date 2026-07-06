@@ -122,11 +122,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * @internal
 		 *
 		 * @since 1.5.0
+		 * @since 2.0.2 Builds a `$state` map (chosen shipping method + billing country) and
+		 *              passes it to `validate()` so conditional-required specs (A2) can be
+		 *              resolved at validation time.
 		 *
 		 * @return void
 		 */
 		public function handle_checkout_process(): void {
-			$this->validate( $this->sanitize_posted_data( $this->get_posted_data() ) );
+			$state = [
+				'chosen_shipping_method' => $this->chosen_shipping_method(),
+				'country'                => $this->posted_country(),
+			];
+			$this->validate( $this->sanitize_posted_data( $this->get_posted_data() ), $state );
 		}
 
 		/**
@@ -300,19 +307,28 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * `false` or a {@see \WP_Error} fails. Every failure adds a WooCommerce error
 		 * notice — which halts checkout — and the method returns `false` overall.
 		 *
+		 * The `required` descriptor is resolved via {@see Checkout_Condition::is_required()}
+		 * which handles both plain booleans and conditional condition-spec arrays (A2 gating).
+		 * Pass `$state` with the runtime context (chosen shipping method, billing country) so
+		 * condition-spec `required` values can be evaluated correctly.
+		 *
 		 * @since 1.5.0
+		 * @since 2.0.2 Added `$state` parameter for conditional-required (A2) evaluation.
 		 *
 		 * @param array<string, mixed> $values clean values keyed by field id
+		 * @param array<string, mixed> $state  flat checkout-state map, e.g.
+		 *                                     `['chosen_shipping_method' => 'carrier_pickup', 'country' => 'RU']`
 		 *
 		 * @return bool true when every field is valid; false when any field blocks checkout
 		 */
-		public function validate( array $values ): bool {
+		public function validate( array $values, array $state = [] ): bool {
 			$valid = true;
 
 			foreach ( $this->fields->get_fields() as $id => $field ) {
-				$value = $values[ $id ] ?? '';
+				$value    = $values[ $id ] ?? '';
+				$required = Checkout_Condition::is_required( $field['required'], $state );
 
-				if ( $field['required'] && self::is_blank( $value ) ) {
+				if ( $required && self::is_blank( $value ) ) {
 					$this->add_error( self::required_message( $field ) );
 					$valid = false;
 					continue;
@@ -340,11 +356,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * Saves the managed field values onto the order (HPOS-safe).
 		 *
 		 * Persists each value under the field id as the order-meta key via
-		 * {@see \Woodev_Order_Compatibility::update_order_meta()} (the only persistence
-		 * path, so HPOS and classic post-meta stores are both covered). Fires a per-field
-		 * and a final forward hook so plugins can react to saved data.
+		 * {@see self::persist_field()} → {@see \Woodev_Order_Compatibility::update_order_meta()}
+		 * (the only persistence path, so HPOS and classic post-meta stores are both covered).
+		 * Fires a per-field and a final forward hook so plugins can react to saved data.
+		 *
+		 * Fields whose id is a native WooCommerce address key (starts with `billing_` or
+		 * `shipping_`) are skipped — WooCommerce already persists those as core order
+		 * properties; writing them again as plugin meta double-stores the value and causes
+		 * drift after edits/refunds. See {@see self::is_native_wc_field()}.
 		 *
 		 * @since 1.5.0
+		 * @since 2.0.2 Native WC address fields (`billing_*` / `shipping_*`) are skipped.
 		 *
 		 * @param \WC_Order|int        $order  order object or id to save onto
 		 * @param array<string, mixed> $values clean values keyed by field id
@@ -357,9 +379,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 					continue;
 				}
 
+				// Skip native WC address fields — WooCommerce already persists these as core
+				// order properties; adding our own meta would double-store and cause drift.
+				if ( $this->is_native_wc_field( $id ) ) {
+					continue;
+				}
+
 				$value = $values[ $id ];
 
-				\Woodev_Order_Compatibility::update_order_meta( $order, $id, $value );
+				$this->persist_field( $order, $id, $value );
 
 				/**
 				 * Fires after a single checkout field value is saved to the order.
@@ -392,6 +420,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * hook fires.
 		 *
 		 * @since 1.5.0
+		 * @since 2.0.2 Builds a `$state` map from the `$posted` data and threads it through
+		 *              `validate()` for consistent conditional-required evaluation at save time.
 		 *
 		 * @param array<string, mixed> $posted raw posted data (e.g. `$_POST`)
 		 * @param \WC_Order|int        $order  order object or id to save onto
@@ -400,8 +430,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 */
 		public function process( array $posted, $order ): bool {
 			$values = $this->sanitize_posted_data( $posted );
+			$state  = [
+				'chosen_shipping_method' => wc_clean( (string) wp_unslash( $posted['shipping_method'][0] ?? '' ) ),
+				'country'                => wc_clean( (string) wp_unslash( $posted['billing_country'] ?? '' ) ),
+			];
 
-			if ( ! $this->validate( $values ) ) {
+			if ( ! $this->validate( $values, $state ) ) {
 				return false;
 			}
 
@@ -500,6 +534,74 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 
 			/* translators: %s: checkout field label */
 			return sprintf( __( '%s is not valid.', 'woodev-plugin-framework' ), $label );
+		}
+
+		/**
+		 * Returns the chosen shipping method for the first package from the posted data.
+		 *
+		 * WooCommerce posts `shipping_method` as a zero-indexed array keyed by package index;
+		 * we take index 0 as the primary method. WooCommerce verifies the checkout nonce
+		 * before its checkout hooks fire, so no separate nonce check is performed here.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string sanitized shipping method id, e.g. `carrier_pickup:3`, or empty string
+		 */
+		private function chosen_shipping_method(): string {
+			// phpcs:ignore WordPress.Security.NonceVerification.Missing -- WooCommerce verifies the checkout nonce before its checkout hooks fire; values are cleaned in sanitize_posted_data().
+			return wc_clean( (string) wp_unslash( $_POST['shipping_method'][0] ?? '' ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotValidated
+		}
+
+		/**
+		 * Returns the billing country from the posted data.
+		 *
+		 * WooCommerce verifies the checkout nonce before its checkout hooks fire, so no
+		 * separate nonce check is performed here.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string sanitized ISO 2-letter country code, or empty string
+		 */
+		private function posted_country(): string {
+			// phpcs:ignore WordPress.Security.NonceVerification.Missing -- WooCommerce verifies the checkout nonce before its checkout hooks fire; values are cleaned in sanitize_posted_data().
+			return wc_clean( (string) wp_unslash( $_POST['billing_country'] ?? '' ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotValidated
+		}
+
+		/**
+		 * Determines whether a field id belongs to the native WooCommerce address namespace.
+		 *
+		 * WooCommerce persists `billing_*` and `shipping_*` fields as core order properties
+		 * via its own checkout pipeline. Writing them again as plugin order-meta would
+		 * double-store the value and cause silent drift after order edits or refunds. This
+		 * heuristic covers the two address namespaces that WC always owns; plugin-defined
+		 * ids (e.g. `carrier_pickup_point`, `pvz_id`) never start with these prefixes.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $id field id to test
+		 *
+		 * @return bool true when WooCommerce already persists this field natively
+		 */
+		protected function is_native_wc_field( string $id ): bool {
+			return 0 === strpos( $id, 'billing_' ) || 0 === strpos( $id, 'shipping_' );
+		}
+
+		/**
+		 * Persists a single field value onto the order via HPOS-safe meta storage.
+		 *
+		 * Extracted as a protected seam so subclasses (and unit-test spies) can intercept
+		 * persistence without depending on {@see \Woodev_Order_Compatibility} in test contexts.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order|int $order order object or id to persist onto
+		 * @param string        $id    field id used as the order-meta key
+		 * @param mixed         $value the value to persist
+		 *
+		 * @return void
+		 */
+		protected function persist_field( $order, string $id, $value ): void {
+			\Woodev_Order_Compatibility::update_order_meta( $order, $id, $value );
 		}
 	}
 
