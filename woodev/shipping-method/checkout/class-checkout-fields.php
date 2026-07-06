@@ -30,11 +30,24 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Fields' 
 	 * Custom checkout-field definitions.
 	 *
 	 * A small collection of declarative field descriptors. Each descriptor is
-	 * normalized to a fixed core schema — `id`, `type`, `label`, `required`,
-	 * `sanitize_callback`, `validate_callback` — so the checkout handler can
-	 * consume them uniformly without re-checking shape. The `sanitize_callback`
-	 * and `validate_callback` seams let the host plugin own field-specific
-	 * sanitization/validation while this object stays WooCommerce-free.
+	 * normalized to a fixed core schema so the checkout handler can consume them
+	 * uniformly without re-checking shape.
+	 *
+	 * Core schema keys (all present after {@see normalize()}):
+	 *  - `id`                 — field identifier supplied by the host plugin.
+	 *  - `type`               — input type, e.g. `'text'`, `'hidden'`.
+	 *  - `label`              — human-readable label.
+	 *  - `section`            — checkout section: `'order'` (default), `'billing'`, `'shipping'`.
+	 *  - `required`           — `bool` (coerced) OR an array condition-spec when the host plugin
+	 *                           passes a structured condition array; preserved verbatim so the
+	 *                           checkout handler can evaluate it.
+	 *  - `depends_on`         — id of a parent field this field depends on, or `null`.
+	 *  - `source`             — callable producing option/suggestion items, or `null`.
+	 *  - `source_kind`        — `'options'` or `'suggest'`, or `null` when `source` is absent.
+	 *  - `takeover_condition` — callable deciding whether this field should take over native
+	 *                           WC output, or `null`.
+	 *  - `sanitize_callback`  — callable for sanitizing posted value, or `null`.
+	 *  - `validate_callback`  — callable for validating posted value, or `null`.
 	 *
 	 * @since 1.5.0
 	 */
@@ -101,27 +114,58 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Fields' 
 		/**
 		 * Normalizes a raw field definition to the core schema.
 		 *
-		 * Casts every known key to its declared type and fills defaults so the
-		 * result is always well-formed. Callback seams are kept only when they are
-		 * actually callable; otherwise they are normalized to `null`.
+		 * Casts every known key to its declared type and fills defaults so the result
+		 * is always well-formed. Callable seams are kept only when they are actually
+		 * callable; otherwise they are normalized to `null`. The `required` key is
+		 * special: when the host plugin supplies an array condition-spec it is preserved
+		 * verbatim; scalar values are coerced to `bool`.
+		 *
+		 * New generic keys added in 2.0.2: `section`, `depends_on`, `source`,
+		 * `source_kind`, `takeover_condition`.
 		 *
 		 * @since 1.5.0
+		 * @since 2.0.2 Added `section`, `depends_on`, `source`, `source_kind`,
+		 *              `takeover_condition`; `required` array preserved verbatim.
 		 *
 		 * @param array<string, mixed> $definition raw field definition
 		 *
-		 * @return array{id: string, type: string, label: string, required: bool, sanitize_callback: callable|null, validate_callback: callable|null}
+		 * @return array{
+		 *     id: string,
+		 *     type: string,
+		 *     label: string,
+		 *     section: string,
+		 *     required: bool|array<string, mixed>,
+		 *     depends_on: string|null,
+		 *     source: callable|null,
+		 *     source_kind: string|null,
+		 *     takeover_condition: callable|null,
+		 *     sanitize_callback: callable|null,
+		 *     validate_callback: callable|null
+		 * }
 		 */
 		public static function normalize( array $definition ): array {
 			$sanitize = $definition['sanitize_callback'] ?? null;
 			$validate = $definition['validate_callback'] ?? null;
+			$source   = $definition['source'] ?? null;
+			$takeover = $definition['takeover_condition'] ?? null;
+			$required = $definition['required'] ?? false;
 
 			return [
-				'id'                => (string) ( $definition['id'] ?? '' ),
-				'type'              => (string) ( $definition['type'] ?? 'text' ),
-				'label'             => (string) ( $definition['label'] ?? '' ),
-				'required'          => (bool) ( $definition['required'] ?? false ),
-				'sanitize_callback' => is_callable( $sanitize ) ? $sanitize : null,
-				'validate_callback' => is_callable( $validate ) ? $validate : null,
+				'id'                 => (string) ( $definition['id'] ?? '' ),
+				'type'               => (string) ( $definition['type'] ?? 'text' ),
+				'label'              => (string) ( $definition['label'] ?? '' ),
+				'section'            => (string) ( $definition['section'] ?? 'order' ),
+				'required'           => is_array( $required ) ? $required : (bool) $required,
+				'depends_on'         => isset( $definition['depends_on'] ) && '' !== (string) $definition['depends_on']
+					? (string) $definition['depends_on']
+					: null,
+				'source'             => is_callable( $source ) ? $source : null,
+				'source_kind'        => isset( $definition['source_kind'] ) && '' !== (string) $definition['source_kind']
+					? (string) $definition['source_kind']
+					: null,
+				'takeover_condition' => is_callable( $takeover ) ? $takeover : null,
+				'sanitize_callback'  => is_callable( $sanitize ) ? $sanitize : null,
+				'validate_callback'  => is_callable( $validate ) ? $validate : null,
 			];
 		}
 
