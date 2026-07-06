@@ -348,9 +348,13 @@ function woodev_test_shipping_method_plugin_init(): void {
 							),
 
 						// 3. Hidden pickup-point slot — required when the fixture method is chosen.
+						// Use the literal method id (= Woodev_Test_Shipping_Method::METHOD_ID) —
+						// get_checkout_handler() runs on every request (incl. REST) via the
+						// plugin's register(), before WC lazily loads the shipping-method class, so
+						// referencing that class constant here would fatal "class not found".
 						\Woodev\Framework\Shipping\Checkout\Presets\Pickup_Field::create(
 							'carrier_pickup_point',
-							[ \Woodev_Test_Shipping_Method::METHOD_ID ]
+							[ 'woodev_test_shipping' ]
 						),
 					]
 				);
@@ -359,7 +363,7 @@ function woodev_test_shipping_method_plugin_init(): void {
 					$fields,
 					self::PLUGIN_ID
 				);
-				$handler->set_requires_pickup_methods( [ \Woodev_Test_Shipping_Method::METHOD_ID ] );
+				$handler->set_requires_pickup_methods( [ 'woodev_test_shipping' ] ); // = Woodev_Test_Shipping_Method::METHOD_ID (literal — see above).
 
 				$this->checkout_handler_instance = $handler;
 				return $this->checkout_handler_instance;
