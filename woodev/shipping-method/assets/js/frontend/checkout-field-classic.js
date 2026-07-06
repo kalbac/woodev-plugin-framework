@@ -520,7 +520,10 @@
 			$anchor.after( $error )
 		}
 
-		$error.text( 'Заполните обязательное поле.' )
+		var i18nRequired = ( entry.config && entry.config.i18n && entry.config.i18n.required )
+			? entry.config.i18n.required
+			: 'Заполните обязательное поле.'
+		$error.text( i18nRequired )
 	}
 
 	/**

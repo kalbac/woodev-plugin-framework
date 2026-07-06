@@ -60,6 +60,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		private array $requires_pickup_methods = [];
 
 		/**
+		 * Registry of native WC field ids claimed by a plugin_id.
+		 *
+		 * Used by {@see guard_native_field_conflicts()} to detect multi-plugin
+		 * conflicts at registration time. Keyed by field id, value is the
+		 * plugin_id string of the first handler that registered that field.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var array<string, string>
+		 */
+		private static array $native_field_registry = [];
+
+		/**
 		 * Constructor.
 		 *
 		 * @since 1.5.0
@@ -114,9 +127,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * — which fires AFTER the order is created and saved, so it has a real id and meta
 		 * persistence works on BOTH classic and HPOS storage. (Persisting on
 		 * `woocommerce_checkout_create_order` runs before the save: on classic storage the
-		 * order id is still 0 and the meta is silently dropped.) Call once during plugin
-		 * bootstrap. These are the standard WooCommerce checkout seams; no installed-site
-		 * contract value is introduced.
+		 * order id is still 0 and the meta is silently dropped.) Also enqueues frontend
+		 * assets on `wp_enqueue_scripts` and registers the field-source REST route on
+		 * `rest_api_init`. Not gated on `is_checkout()` so the REST route is available
+		 * on API requests. Call once during plugin bootstrap.
 		 *
 		 * @since 1.5.0
 		 *
@@ -126,6 +140,196 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 			add_filter( 'woocommerce_checkout_fields', [ $this, 'handle_checkout_fields' ] );
 			add_action( 'woocommerce_checkout_process', [ $this, 'handle_checkout_process' ] );
 			add_action( 'woocommerce_checkout_order_processed', [ $this, 'handle_checkout_order_processed' ], 10, 3 );
+			add_action( 'wp_enqueue_scripts', [ $this, 'enqueue_assets' ] );
+			add_action( 'rest_api_init', [ $this, 'register_rest' ] );
+
+			$this->guard_native_field_conflicts();
+		}
+
+		/**
+		 * Returns the plugin token that identifies this handler.
+		 *
+		 * Exposes the constructor-injected `$hook_prefix` as a stable public accessor.
+		 * Used to namespace the JS config global and the REST route plugin-id segment.
+		 * Falls back to `'shipping'` when the prefix was left empty (anonymous handler).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string
+		 */
+		public function plugin_id(): string {
+			return '' !== $this->hook_prefix ? $this->hook_prefix : 'shipping';
+		}
+
+		/**
+		 * Returns a JS-identifier-safe version of the plugin id.
+		 *
+		 * Used as the suffix in the `woodev_checkout_field_config_{suffix}` global name
+		 * so the name is always a valid JS identifier regardless of what the plugin
+		 * supplies as its id token.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string
+		 */
+		public function config_object_suffix(): string {
+			return preg_replace( '/[^a-z0-9_]/i', '_', $this->plugin_id() );
+		}
+
+		/**
+		 * Enqueues the checkout-field store and classic adapter scripts.
+		 *
+		 * Only runs on the checkout page and only when there is at least one managed
+		 * field. Localizes the full JS config (field descriptors, REST endpoint, nonce,
+		 * takeover map, i18n strings) onto the classic adapter handle so it can
+		 * bootstrap without any inline PHP.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		public function enqueue_assets(): void {
+
+			if ( ! function_exists( 'is_checkout' ) || ! is_checkout() ) {
+				return;
+			}
+
+			if ( [] === $this->fields->get_fields() ) {
+				return;
+			}
+
+			$store_path   = self::asset_path( 'js/frontend/checkout-field-store.js' );
+			$classic_path = self::asset_path( 'js/frontend/checkout-field-classic.js' );
+
+			wp_enqueue_script(
+				'woodev-checkout-field-store',
+				self::asset_url( 'js/frontend/checkout-field-store.js' ),
+				[],
+				file_exists( $store_path ) ? (string) filemtime( $store_path ) : (string) \Woodev_Plugin::VERSION,
+				true
+			);
+
+			wp_enqueue_script(
+				'woodev-checkout-field-classic',
+				self::asset_url( 'js/frontend/checkout-field-classic.js' ),
+				[ 'jquery', 'selectWoo', 'woodev-checkout-field-store' ],
+				file_exists( $classic_path ) ? (string) filemtime( $classic_path ) : (string) \Woodev_Plugin::VERSION,
+				true
+			);
+
+			$config          = ( new Checkout_Config(
+				$this->plugin_id(),
+				rtrim( rest_url( 'woodev/v1' ), '/' ),
+				wp_create_nonce( 'wp_rest' ),
+				array_keys( WC()->countries->get_countries() )
+			) )->build( $this->fields );
+			$config['i18n']  = [
+				'required' => __( 'Заполните обязательное поле.', 'woodev-plugin-framework' ),
+			];
+
+			wp_localize_script(
+				'woodev-checkout-field-classic',
+				'woodev_checkout_field_config_' . $this->config_object_suffix(),
+				$config
+			);
+		}
+
+		/**
+		 * Registers the field-source REST route for this handler.
+		 *
+		 * Delegates to {@see Field_Source_Controller::register_routes()} so the route
+		 * is available on all REST requests, not just checkout-page loads.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		public function register_rest(): void {
+			( new \Woodev\Framework\Shipping\Rest_Api\Field_Source_Controller( $this->fields, $this->plugin_id() ) )->register_routes();
+		}
+
+		/**
+		 * Warns when two handlers try to enhance the same native WC field.
+		 *
+		 * Maintains a static registry of native-field-id → plugin_id claims.
+		 * If a field id that belongs to the WooCommerce billing/shipping address
+		 * namespace (see {@see is_native_wc_field()}) is already registered by a
+		 * different handler, fires `_doing_it_wrong` so the developer sees the conflict
+		 * immediately. Last registration wins — the warning is advisory only.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		protected function guard_native_field_conflicts(): void {
+
+			foreach ( array_keys( $this->fields->get_fields() ) as $id ) {
+				if ( ! $this->is_native_wc_field( $id ) ) {
+					continue;
+				}
+
+				if ( isset( self::$native_field_registry[ $id ] ) && self::$native_field_registry[ $id ] !== $this->plugin_id() ) {
+					_doing_it_wrong(
+						__METHOD__,
+						sprintf(
+							"checkout field '%s' is enhanced by more than one shipping plugin; last registration wins",
+							$id
+						),
+						'2.0.2'
+					);
+				}
+
+				self::$native_field_registry[ $id ] = $this->plugin_id();
+			}
+		}
+
+		/**
+		 * Resets the static native-field registry.
+		 *
+		 * Provided for unit-test teardown so that tests that register handlers with
+		 * conflicting native-field ids do not bleed state into subsequent tests.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		public static function reset_native_field_registry(): void {
+			self::$native_field_registry = [];
+		}
+
+		/**
+		 * Resolves the filesystem path to a shipping-framework asset.
+		 *
+		 * Mirrors {@see asset_url()} but returns a local path suitable for
+		 * `filemtime()` and `file_exists()` checks.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $relative path relative to the assets directory
+		 *
+		 * @return string absolute filesystem path to the asset
+		 */
+		private static function asset_path( string $relative ): string {
+			return dirname( __DIR__ ) . '/assets/' . ltrim( $relative, '/' );
+		}
+
+		/**
+		 * Resolves a URL within the shipping-framework assets directory.
+		 *
+		 * This file lives in `checkout/`, a direct child of the shipping-method root;
+		 * `assets/` is a sibling of that root. Resolving from this file keeps the
+		 * handler self-contained — it needs no plugin instance to locate its assets.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $relative path relative to the assets directory
+		 *
+		 * @return string absolute URL to the asset
+		 */
+		private static function asset_url( string $relative ): string {
+			$file = self::asset_path( $relative );
+
+			return plugins_url( basename( $file ), $file );
 		}
 
 		/**
