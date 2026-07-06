@@ -194,6 +194,44 @@ function woodev_test_shipping_method_plugin_init(): void {
 						],
 					]
 				);
+
+				// DEMO ONLY (rig): §8 provides the pickup SLOT; the real "choose a point" button +
+				// map is SP-5. Mount a fake picker into the slot so the A2 gate can be exercised
+				// end-to-end on the rig without SP-5.
+				add_action( 'wp_footer', [ $this, 'render_demo_pickup_picker' ], 99 );
+			}
+
+			/**
+			 * DEMO ONLY: injects a fake pickup-point picker into the §8 slot on the checkout.
+			 *
+			 * @internal
+			 *
+			 * @return void
+			 */
+			public function render_demo_pickup_picker(): void {
+				if ( ! function_exists( 'is_checkout' ) || ! is_checkout() ) {
+					return;
+				}
+				?>
+				<script>
+				( function( $ ) {
+					function mount() {
+						var $slot = $( '[data-woodev-pickup-slot="carrier_pickup_point"]' );
+						if ( ! $slot.length || $slot.find( '.woodev-demo-pvz' ).length ) { return; }
+						$slot.append( '<button type="button" class="button woodev-demo-pvz">Выбрать ПВЗ (демо)</button>' );
+					}
+					$( document.body ).on( 'click', '.woodev-demo-pvz', function( e ) {
+						e.preventDefault();
+						$( '#carrier_pickup_point' ).val( 'DEMO-PVZ-1' ).trigger( 'change' );
+						$( this ).text( 'ПВЗ выбран: DEMO-PVZ-1' );
+					} );
+					// Defer so it runs AFTER the adapter's own updated_checkout handler re-places the slot.
+					$( document.body ).on( 'updated_checkout', function() { setTimeout( mount, 60 ); } );
+					$( document.body ).on( 'change', 'input[name^="shipping_method"]', function() { setTimeout( mount, 60 ); } );
+					setTimeout( mount, 200 );
+				} )( jQuery );
+				</script>
+				<?php
 			}
 
 			/**

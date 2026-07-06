@@ -387,11 +387,50 @@
 		return $sel
 	}
 
+	function isWcManagedField( fieldId ) {
+		// WooCommerce re-renders its own state fields on country change; leave those to WC
+		// (reverting billing_state to a bare text input would destroy WC's US state <select>).
+		return /(^|_)state$/.test( fieldId )
+	}
+
+	function ensureText( entry, fieldId ) {
+		var $field = $( '#' + fieldId )
+
+		if( ! $field.length || ! $field.is( 'select' ) ) {
+			return
+		}
+
+		var method = select2Method()
+
+		if( method && $field.hasClass( 'select2-hidden-accessible' ) ) {
+			try { $field[ method ]( 'destroy' ) } catch( e ) {}
+		}
+
+		var value  = entry.store.getValue( fieldId )
+		var $input = $( '<input type="text" />' )
+			.attr( 'id', $field.attr( 'id' ) || '' )
+			.attr( 'name', $field.attr( 'name' ) || '' )
+			.attr( 'class', ( $field.attr( 'class' ) || '' ).replace( /select2\S*/g, '' ).replace( /\s+/g, ' ' ).trim() )
+			.val( value !== undefined && value !== null ? value : '' )
+
+		$field.replaceWith( $input )
+	}
+
 	function applyTakeover( entry, fieldId, country ) {
 		var $field = $( '#' + fieldId )
 
-		// Гейт: применяем только когда наше поле присутствует/активно.
-		if( ! $field.length || ! entry.store.takeoverFor( fieldId, country ) ) {
+		if( ! $field.length ) {
+			return
+		}
+
+		// Takeover no longer applies for this country: revert a field WE converted back to a
+		// native text input — but only for fields WooCommerce does NOT manage itself (WC
+		// re-renders its own state field on country change; a custom city autocomplete it does
+		// not, so without this it would stay a broken select2 for e.g. the US).
+		if( ! entry.store.takeoverFor( fieldId, country ) ) {
+			if( ! isWcManagedField( fieldId ) ) {
+				ensureText( entry, fieldId )
+			}
 			return
 		}
 
@@ -680,14 +719,24 @@
 		$( document.body ).on( 'change', function( event ) {
 			var id    = event.target && event.target.id ? event.target.id : ''
 			var entry = id ? entryForField( id ) : null
+			var value = id ? $( event.target ).val() : ''
+
+			// WooCommerce re-renders address fields on `update_checkout` and fires a PROGRAMMATIC
+			// change('') on them (jQuery .trigger, so no originalEvent). Such spurious empty
+			// changes must NOT wipe the external store nor trigger a cascade — only a real user
+			// change (or a non-empty programmatic set, e.g. our own restore) counts.
+			var meaningful = !! event.originalEvent || ( value !== '' && value !== null && value !== undefined )
 
 			if( entry ) {
-				entry.store.setValue( id, $( event.target ).val() )
+				if( meaningful ) {
+					entry.store.setValue( id, value )
+				}
+
 				refreshGate()
 			}
 
 			// Изменение поля-родителя (в т.ч. нативного) → каскад потомков.
-			if( id ) {
+			if( id && meaningful ) {
 				cascadeFromParent( id )
 			}
 		} )
