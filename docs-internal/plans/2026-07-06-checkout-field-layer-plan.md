@@ -20,6 +20,43 @@
 - Run unit tests with `./vendor/bin/phpunit --testsuite unit` (full suite after wiring a shared path — s40 lesson). PHPStan/phpcs are CI-authoritative (PHPStan segfaults locally on Windows).
 - Commit after each task (Conventional Commits). Long messages with backticks/parens → write to a file + `git commit -F`.
 
+## Codex hardening amendments (s42 — apply within the referenced tasks)
+
+Adversarial Codex pass (threadId `019f34cc-4399-7180-8e2c-3830c170168b`) folded pre-code. Each subagent MUST
+apply the amendment(s) for its task:
+
+- **[Task 3 + Task 10] parity edges:** empty `conditions: []` → **`false`** on BOTH sides (PHP already guards via
+  `[] !== $results`; the JS mirror must NOT use bare `every([])` which is `true`). `in`/`not_in` with a non-array
+  `value` → **`false`** both sides. Add shared parity fixtures + tests.
+- **[Task 4 + new Task 7b] register-time spec validation:** `Field::set_required()` / `Checkout_Fields::add()`
+  validate a condition-spec's shape and fire `_doing_it_wrong()` on a malformed spec or an operator outside
+  `{=,!=,in,not_in}`. Typos die in dev/CI, not at checkout. Add a `_doing_it_wrong` test (Brain Monkey `expect`).
+- **[new Task 7b] independent pickup backstop:** the shipping method declares a boolean `requires_pickup`;
+  `Checkout_Handler::validate()` blocks placement when a `requires_pickup` method is chosen and the pickup field
+  is empty — **independent of the condition-spec** (covers a fat-fingered spec). Fulfillment-critical hard gate.
+- **[Task 6] enhance-in-place safety:** conservative merge — override only descriptor-provided keys; **preserve
+  WC's `validate` array** (append, never replace). For an `options` root, call `source` **with the current
+  country context** (`[ 'country' => $posted_or_default ]`), not `{}`.
+- **[Task 7] native-save skip:** `save()` must SKIP any field whose id is a native WC checkout/address key
+  (`billing_*`/`shipping_*` — WC persists those itself). Persist only genuinely-new ids. Add a test: a field
+  `billing_city` is NOT written via `update_order_meta`; a field `carrier_pickup_point` IS.
+- **[Task 8] guest REST hardening + escaping contract:** strictly normalize `country` (whitelist against
+  `WC()->countries` keys → `''` if unknown), `parent`/`q` (`wc_clean` + length cap 128) BEFORE the callback;
+  best-effort per-IP transient rate-limit; response schema `{ value, label }` with `label` `esc_html`'d
+  server-side; a code comment states the endpoint is intentionally public-read (a future sensitive source must
+  add its own auth). Add a test: an out-of-whitelist `country` is normalized to `''`.
+- **[Task 9 / Task 12] early registration:** field + source registration runs on **`init`** (NEVER
+  `is_checkout()`-gated) so the registry exists on a REST request. Integration test (Task 8) hits the route
+  WITHOUT rendering checkout. If the shipping plugin's `register()` is frontend/admin-gated, move field+source
+  registration to an `init`-hooked path.
+- **[Task 9] multi-plugin guard:** `_doing_it_wrong()` when two handlers register the same native field id;
+  last wins, logged. (Full arbitration out of scope.)
+- **[Task 11] takeover event + value preservation:** re-apply takeover on WC's **`country_to_state_changed`**
+  event (fired AFTER WC re-renders `billing_state`), not raw `change`. Gate takeover application on the carrier
+  field being active. On a native↔custom swap, keep the prior value in the store and restore it if a matching
+  option reappears (never silently drop a freeform value). Client renders option `label` via **`textContent`**,
+  never `innerHTML` (XSS).
+
 ## File Structure
 
 **Core (PHP):**
@@ -482,6 +519,57 @@ public function test_conditional_required_passes_when_other_method(): void {
 
 ---
 
+## Task 7b: Register-time spec validation + independent pickup backstop (Codex HIGH #2)
+
+**Files:**
+- Modify: `woodev/shipping-method/checkout/class-field.php` (`set_required()`) or `class-checkout-fields.php` (`add()`) — spec-shape validation.
+- Modify: `woodev/shipping-method/checkout/class-checkout-handler.php` (`validate()` / `handle_checkout_process()`) — independent pickup backstop.
+- Modify: `woodev/shipping-method/checkout/presets/class-pickup-field.php` — carry the pickup-field id + a `requires_pickup` linkage note.
+- Test: extend `tests/unit/Shipping/Checkout/CheckoutHandlerValidateTest.php` + `FieldTest`/`CheckoutFieldsTest`.
+
+Rationale: a fat-fingered spec (`operator:'inn'`) would make client AND server evaluate `required=false` → an
+order places with an empty mandatory pickup. Two independent guards.
+
+- [ ] **Step 1: Write failing tests.**
+
+```php
+// (a) register-time validation — malformed spec fires _doing_it_wrong
+public function test_malformed_required_spec_triggers_doing_it_wrong(): void {
+	\Brain\Monkey\Functions\expect( '_doing_it_wrong' )->atLeast()->once();
+	Checkout_Fields::from_array( [ Field::create( 'pvz' )->set_required( [ 'state' => 's', 'operator' => 'inn', 'value' => [] ] )->to_array() ] );
+}
+
+// (b) independent backstop — a requires_pickup method with an empty pickup field blocks,
+//     even if the field's condition-spec is (wrongly) absent/false.
+public function test_requires_pickup_backstop_blocks_regardless_of_spec(): void {
+	\Brain\Monkey\Functions\expect( 'wc_add_notice' )->once();
+	$fields  = Checkout_Fields::from_array( [ Pickup_Field::create( 'carrier_pickup_point', [ 'carrier_pickup' ] )->to_array() ] );
+	$handler = new Checkout_Handler( $fields, 'carrier' );
+	$handler->set_requires_pickup_methods( [ 'carrier_pickup' ] ); // method-level flag, NOT the spec
+	$ok = $handler->validate( [ 'carrier_pickup_point' => '' ], [ 'chosen_shipping_method' => 'carrier_pickup' ] );
+	$this->assertFalse( $ok );
+}
+```
+
+- [ ] **Step 2: Run, expect FAIL.**
+
+- [ ] **Step 3: Implement.**
+  - **Validation:** a private `Checkout_Fields::validate_required_spec( $required ): void` — when `$required`
+    is an array, assert it is a single `{state,operator,value}` or `{relation,conditions[]}` and every operator
+    is in `{=,!=,in,not_in}`; else `_doing_it_wrong( __METHOD__, 'invalid condition-spec ...', '2.0.2' )`. Called
+    from `add()` after `normalize()`.
+  - **Backstop:** add `Checkout_Handler::set_requires_pickup_methods( array $ids )` (+ a `$pickup_field_id` known
+    from the `is_pickup_slot` descriptor). In `validate()`, after the per-field loop, if the chosen method is in
+    `requires_pickup_methods` and the pickup field value is blank → `add_error` + return false. This runs
+    independent of the condition-spec (a spec typo can't disable it). The shipping method/plugin declares the
+    `requires_pickup` ids (domain data) via the seam.
+  - The `Pickup_Field` preset stays as the UX/gating spec; the backstop is the hard server guarantee.
+
+- [ ] **Step 4: Run, expect PASS** + full unit suite.
+- [ ] **Step 5: Commit.** `feat(shipping): register-time spec validation + independent pickup backstop`
+
+---
+
 ## Task 8: `Field_Source_Controller` REST endpoint
 
 **Files:**
@@ -647,4 +735,4 @@ jQuery IIFE (pattern = existing `checkout.js`). Reads `window.woodev_checkout_fi
 
 **Type consistency:** `Field::create()->to_array()` (raw def) vs `Checkout_Fields::normalize()` (normalized) — Task 6/7/8 consume normalized fields via `Checkout_Fields::get_fields()`, builders feed raw defs into `add()`; consistent. `validate( $values, $state )` new arg threaded in Tasks 7/9. `get_field_source()` name stable across Tasks 8/11. `evaluateRequired`/`childrenOf`/`takeoverFor` stable across Tasks 10/11.
 
-**Open flag for the implementer / Codex critic:** the fail-open-on-malformed-spec gate (Task 3) — confirm this is the desired customer-safe default vs. fail-closed (block). Server `validate_callback` + the carrier's own method-requires-pickup check remain the hard backstop either way.
+**Resolved (Codex HIGH #2, operator-chosen):** fail-open runtime is kept ONLY for non-fulfillment fields; the mandatory-pickup case is protected by (a) register-time condition-spec validation (`_doing_it_wrong`, new Task 7b) and (b) an independent `requires_pickup` server backstop (new Task 7b) that blocks regardless of the spec. See the "Codex hardening amendments" section — new **Task 7b** owns both; Tasks 3/6/7/8/9/10/11 carry the rest.

@@ -84,6 +84,16 @@ pain is concrete and was grounded on the **real CDEK plugin** behavior during th
    placement via `wc_add_notice`); the client store mirrors it (blocks the Place-order button + shows the error).
    Arbitrary server-only logic that can't be expressed as a spec stays in the existing `validate_callback`
    (blocks authoritatively, just without proactive client gating).
+   **Robustness (Codex HIGH #2, s42 — operator-chosen):** because a fat-fingered spec (`operator: 'inn'`) would
+   make BOTH the mirrored client AND the server evaluate `required = false` — silently placing an order with an
+   empty **mandatory** pickup — the runtime fail-open is NOT trusted for fulfillment-critical fields. Two guards:
+   (a) **register-time spec validation** — `Checkout_Fields::add()`/`Field` validate the condition-spec shape and
+   fire `_doing_it_wrong()` on a malformed spec or an operator outside the closed set `{=,!=,in,not_in}`, so a
+   typo is caught in dev/CI, never reaching production; (b) an **independent server-side pickup backstop** —
+   the shipping method declares `requires_pickup` (a boolean method-level flag, NOT the mirrorable spec), and
+   `Checkout_Handler` blocks placement when a `requires_pickup` method is chosen and the pickup field is empty,
+   **regardless of the condition-spec**. Runtime eval stays fail-open (`false`) only for non-fulfillment fields
+   (never trap a paying customer on a broken optional-field spec).
 
 ---
 
@@ -103,7 +113,11 @@ pain is concrete and was grounded on the **real CDEK plugin** behavior during th
 ### 3.2 CLASSIC adapter = `Checkout_Handler` (extended)
 
 Server: `inject()` maps descriptors into `woocommerce_checkout_fields` (add or enhance-in-place); WC renders
-natively; the existing validate/save/HPOS-meta pipeline stays. Client (jQuery glue only): delegated binding,
+natively; the existing validate/save/HPOS-meta pipeline stays — **except `save()` skips enhanced-native fields**
+(Codex HIGH #3): a field whose `id` is a native WC checkout/address key (`billing_*`/`shipping_*`) is already
+persisted by WooCommerce as a core order property, so re-writing it as our own order meta would double-store and
+drift after edits/refunds/imports. `save()` persists only genuinely-new field ids (e.g. the pickup point code).
+Client (jQuery glue only): delegated binding,
 `updated_checkout` restore, select2 for `suggest` fields, takeover swap on country change, mount the pickup
 slot, block "Оформить заказ".
 
@@ -222,3 +236,38 @@ Canonical **normalized** shape (extends `Checkout_Fields::normalize()`; array is
 subagent-driven implementation (fresh agent, two-stage spec + code-quality review) → **Codex critic on the impl
 + re-critic own fixes** (no self-certify) → **operator/self browser e2e on `:8888` (classic)** before merge.
 `@since 2.0.2`, VERSION unchanged.
+
+## 11. Codex critic hardening (s42, folded into the design pre-code)
+
+Adversarial Codex pass on the design/plan (threadId `019f34cc-4399-7180-8e2c-3830c170168b`). Dispositions:
+
+- **HIGH #2 A2 fail-direction** → §2 decision 8 above (register-time spec validation + independent
+  `requires_pickup` server backstop; runtime fail-open only for non-fulfillment fields). *Operator-chosen.*
+- **HIGH #3 native-save collision** → §3.2 above (`save()` skips enhanced-native ids).
+- **HIGH #1 guest REST hardening** → the controller **strictly normalizes** `country` (whitelist against
+  `WC()->countries` keys → `''` if unknown), `parent`/`q` (`wc_clean` + a length cap, e.g. 128) BEFORE they reach
+  the source callback; best-effort per-IP transient rate-limit (acknowledged weak vs proxies/IPv6 — a bar-raiser,
+  not a wall); the source-response contract is `{ value, label }` with `label` rendered client-side via
+  `textContent` (never `innerHTML`) and `esc_html`'d server-side → closes the label-XSS (LOW). A code comment on
+  `permission_callback => __return_true` states the endpoint is intentionally public-read; a future *sensitive*
+  source must add its own auth.
+- **HIGH #4 multi-plugin conflict** → register-time `_doing_it_wrong()` when two handlers claim the same native
+  field id; documented limitation (full arbitration is out of scope — no such deployment exists). Last-registered
+  wins, logged.
+- **MED parity** → the JS mirror MUST match PHP exactly on the edges: empty `conditions: []` → **`false`** (guard
+  against JS `every([])===true`); `in`/`not_in` with a non-array `value` → **`false`**; bool/`'0'`/`''`/missing
+  coercion identical. Shared parity fixtures test both sides.
+- **MED takeover event** → re-apply takeover on WC's **`country_to_state_changed`** event (fired AFTER WC
+  re-renders `billing_state`), not a raw `change` — removes the re-render race. Takeover application is
+  additionally gated on the carrier field being active (a country-only map that says "takeover=true" is only
+  *applied* when our field is in play). The US-state-code-for-tax caveat is the **domain predicate's**
+  responsibility (CDEK's `in [RU,BY,KZ,UZ]` deliberately never takes over a WC-state country) — framework docs
+  warn; it does not police it.
+- **MED conservative merge** → enhance-in-place overrides only descriptor-provided keys; WC's `validate` array is
+  preserved/appended, never replaced.
+- **MED early registration** → field + source registration is wired on **`init`** (never `is_checkout()`-gated),
+  with an integration test that hits the REST route **without** rendering checkout.
+- **LOW options-context** → a root `options` field's `source` is called at inject **with the current country
+  context**, not `{}` (avoids emitting a full/irrelevant list).
+- **LOW value preservation** → the store keeps the prior value across a native↔custom swap and restores it if a
+  matching option reappears (freeform-with-no-match is kept in the store, not silently dropped).
