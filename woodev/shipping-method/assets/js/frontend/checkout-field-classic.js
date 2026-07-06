@@ -721,11 +721,14 @@
 			var entry = id ? entryForField( id ) : null
 			var value = id ? $( event.target ).val() : ''
 
-			// WooCommerce re-renders address fields on `update_checkout` and fires a PROGRAMMATIC
-			// change('') on them (jQuery .trigger, so no originalEvent). Such spurious empty
-			// changes must NOT wipe the external store nor trigger a cascade — only a real user
-			// change (or a non-empty programmatic set, e.g. our own restore) counts.
-			var meaningful = !! event.originalEvent || ( value !== '' && value !== null && value !== undefined )
+			// WooCommerce re-renders address fields on `update_checkout` and fires PROGRAMMATIC
+			// changes on them (jQuery .trigger, so no originalEvent): an empty value, or the
+			// state wildcard "*" for a `RU:*`-style base country. Such spurious changes must NOT
+			// wipe the external store nor trigger a cascade. `*` is WooCommerce's "any state"
+			// wildcard and is never a real user selection, so it is always ignored; an empty
+			// value is honoured only from a real user event (a deliberate clear).
+			var meaningful = '*' !== value
+				&& ( !! event.originalEvent || ( value !== '' && value !== null && value !== undefined ) )
 
 			if( entry ) {
 				if( meaningful ) {
