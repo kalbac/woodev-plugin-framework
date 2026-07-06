@@ -450,11 +450,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 					$checkout_fields[ $field_section ] = [];
 				}
 
-				// Build only the keys we own.
+				// Build only the keys we own. A condition-spec `required` (array) must NOT
+				// become WooCommerce's static `required => true` — WC would then block a blank
+				// conditional field regardless of the chosen method. Conditional requiredness is
+				// enforced by our own validate() (server) + store gate (client); WC only sees a
+				// static bool for plainly-required fields. (Codex review P1.)
 				$our_overrides = [
 					'type'     => (string) $field['type'],
 					'label'    => (string) $field['label'],
-					'required' => (bool) $field['required'],
+					'required' => is_array( $field['required'] ) ? false : (bool) $field['required'],
 				];
 
 				// Pre-fill options for root options-kind fields (source must be callable,

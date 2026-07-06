@@ -118,9 +118,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Field_Source_Cont
 		 */
 		public function register_routes(): void {
 
+			// The plugin id is baked into the route PATH as a literal (not a
+			// `(?P<plugin_id>…)` capture) so that each shipping plugin registers a DISTINCT
+			// route. A shared capture-group route would be identical across plugins, and
+			// WordPress dispatches to the FIRST matching route — so plugin B's request would
+			// land in plugin A's controller and 404 on the id mismatch. (Codex review P2.)
+			$plugin_segment = preg_replace( '/[^\w-]/', '', $this->plugin_id );
+
 			register_rest_route(
 				'woodev/v1',
-				'/shipping/checkout/(?P<plugin_id>[\w-]+)/field-source/(?P<field_id>[\w-]+)',
+				'/shipping/checkout/' . $plugin_segment . '/field-source/(?P<field_id>[\w-]+)',
 				[
 					[
 						'methods'  => 'GET',
@@ -132,17 +139,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Field_Source_Cont
 						 */
 						'permission_callback' => '__return_true',
 						'args'                => [
-							'plugin_id' => [
+							'field_id' => [
 								'type'     => 'string',
 								'required' => true,
 							],
-							'field_id'  => [
-								'type'     => 'string',
-								'required' => true,
-							],
-							'country'   => [ 'type' => 'string' ],
-							'parent'    => [ 'type' => 'string' ],
-							'q'         => [ 'type' => 'string' ],
+							'country'  => [ 'type' => 'string' ],
+							'parent'   => [ 'type' => 'string' ],
+							'q'        => [ 'type' => 'string' ],
 						],
 					],
 				]
@@ -152,10 +155,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Field_Source_Cont
 		/**
 		 * Handles a field-source request.
 		 *
-		 * Guards the `plugin_id` path segment against this controller's owner,
-		 * applies the best-effort rate limit, normalizes the query context, invokes
+		 * Applies the best-effort rate limit, normalizes the query context, invokes
 		 * the field's source through {@see get_field_source()}, then escapes every
-		 * returned option via {@see normalize_options()} before serializing.
+		 * returned option via {@see normalize_options()} before serializing. The
+		 * plugin id is enforced by the route path itself (see {@see register_routes()}).
 		 *
 		 * @internal
 		 *
@@ -167,14 +170,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Field_Source_Cont
 		 */
 		public function handle_request( $request ) {
 
-			if ( (string) $request->get_param( 'plugin_id' ) !== $this->plugin_id ) {
-				return new \WP_Error(
-					'woodev_field_source_not_found',
-					__( 'Unknown field source.', 'woodev-plugin-framework' ),
-					[ 'status' => 404 ]
-				);
-			}
-
+			// No plugin_id guard needed: the route path embeds this controller's plugin id
+			// as a literal segment (see register_routes()), so only this plugin's requests
+			// ever reach here. (Codex review P2.)
 			if ( $this->is_rate_limited() ) {
 				return new \WP_Error(
 					'woodev_field_source_rate_limited',

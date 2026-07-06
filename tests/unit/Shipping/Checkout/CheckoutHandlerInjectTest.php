@@ -156,4 +156,21 @@ class CheckoutHandlerInjectTest extends TestCase {
 		$this->assertSame( 'ПВЗ', $out['order']['carrier_pvz']['label'] );
 		$this->assertTrue( $out['order']['carrier_pvz']['required'] );
 	}
+
+	/**
+	 * A condition-spec `required` (array) must NOT become WC's static `required => true`
+	 * — otherwise WooCommerce's own validation blocks a blank conditional field regardless
+	 * of the chosen method. Conditional requiredness is enforced by our validate()/store.
+	 * (Codex review P1.)
+	 */
+	public function test_inject_emits_false_required_for_condition_spec_field(): void {
+		$fields = Checkout_Fields::from_array( [
+			Field::create( 'carrier_pvz' )->set_type( 'hidden' )->set_section( 'order' )
+				->set_required( [ 'state' => 'chosen_shipping_method', 'operator' => 'in', 'value' => [ 'carrier_pickup' ] ] )
+				->to_array(),
+		] );
+		$out = ( new Checkout_Handler( $fields, 'carrier' ) )->inject( [ 'order' => [] ] );
+
+		$this->assertFalse( $out['order']['carrier_pvz']['required'] );
+	}
 }

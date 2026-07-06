@@ -65,8 +65,10 @@ class FieldSourceRouteTest extends TestCase {
 	public function test_route_is_registered(): void {
 		$routes = rest_get_server()->get_routes( 'woodev/v1' );
 
+		// The plugin id is a literal path segment (not a capture group) so each plugin
+		// gets a distinct route — see Field_Source_Controller::register_routes() (Codex P2).
 		$this->assertArrayHasKey(
-			'/woodev/v1/shipping/checkout/(?P<plugin_id>[\w-]+)/field-source/(?P<field_id>[\w-]+)',
+			'/woodev/v1/shipping/checkout/carrier/field-source/(?P<field_id>[\w-]+)',
 			$routes
 		);
 	}
