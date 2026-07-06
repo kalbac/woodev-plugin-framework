@@ -288,8 +288,10 @@
 
 		// Only enhance an actual <select> (a text input stays native — a suggest field
 		// left un-enhanced for a country the carrier does not serve). Without select2 the
-		// native select remains; remote search is skipped.
-		if( ! method || ! $select.length || ! url || ! $select.is( 'select' ) ) {
+		// native select remains; remote search is skipped. Skip a field that is ALREADY
+		// select2-enhanced: re-initialising it on `updated_checkout` clears the current value.
+		if( ! method || ! $select.length || ! url || ! $select.is( 'select' )
+			|| $select.hasClass( 'select2-hidden-accessible' ) ) {
 			return
 		}
 
@@ -417,6 +419,13 @@
 	}
 
 	function applyTakeover( entry, fieldId, country ) {
+		// State fields are handled NATIVELY by WooCommerce — regions are injected as WC states
+		// via the `woocommerce_states` server filter, so WC renders the <select> and persists
+		// the value in its session (surviving update_checkout). Never DOM-convert them here.
+		if( isWcManagedField( fieldId ) ) {
+			return
+		}
+
 		var $field = $( '#' + fieldId )
 
 		if( ! $field.length ) {
@@ -424,13 +433,9 @@
 		}
 
 		// Takeover no longer applies for this country: revert a field WE converted back to a
-		// native text input — but only for fields WooCommerce does NOT manage itself (WC
-		// re-renders its own state field on country change; a custom city autocomplete it does
-		// not, so without this it would stay a broken select2 for e.g. the US).
+		// native text input (e.g. the city autocomplete for the US).
 		if( ! entry.store.takeoverFor( fieldId, country ) ) {
-			if( ! isWcManagedField( fieldId ) ) {
-				ensureText( entry, fieldId )
-			}
+			ensureText( entry, fieldId )
 			return
 		}
 
@@ -444,9 +449,16 @@
 		}
 
 		// suggest-takeover: гарантируем <select> (WC/сервер оставили text-input для
-		// не-обслуживаемой страны) и вешаем typeahead.
+		// не-обслуживаемой страны), сохраняем ранее выбранное значение и вешаем typeahead.
 		if( field && field.source_kind === 'suggest' ) {
-			ensureSelect( $field )
+			var current = $field.val() || previous
+			var $sel    = ensureSelect( $field )
+
+			if( current ) {
+				$sel.append( new Option( current, current, true, true ) )
+				store.setValue( fieldId, current )
+			}
+
 			initSuggest( entry, fieldId )
 			return
 		}
@@ -780,10 +792,21 @@
 
 				Object.keys( fields ).forEach( function( fieldId ) {
 					var $field = $( '#' + fieldId )
-					var stored = store.getValue( fieldId )
 
-					if( $field.length && stored !== undefined && stored !== null ) {
-						$field.val( stored )
+					// Restore is a SAFETY NET, not an overwrite: only put the stored value back
+					// when WooCommerce actually cleared the field (DOM empty) but the store still
+					// holds it. Overwriting unconditionally clobbered a value the field still had
+					// (WC does not re-render non-state fields on update_checkout).
+					if( $field.length && ! $field.val() ) {
+						var stored = store.getValue( fieldId )
+
+						if( stored !== undefined && stored !== null && stored !== '' ) {
+							$field.val( stored )
+
+							if( $field.hasClass( 'select2-hidden-accessible' ) ) {
+								$field.trigger( 'change.select2' )
+							}
+						}
 					}
 
 					maybeInitSelect2( entry, fieldId )

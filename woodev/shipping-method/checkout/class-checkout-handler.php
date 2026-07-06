@@ -138,12 +138,66 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 */
 		public function register(): void {
 			add_filter( 'woocommerce_checkout_fields', [ $this, 'handle_checkout_fields' ] );
+			add_filter( 'woocommerce_states', [ $this, 'inject_states' ] );
 			add_action( 'woocommerce_checkout_process', [ $this, 'handle_checkout_process' ] );
 			add_action( 'woocommerce_checkout_order_processed', [ $this, 'handle_checkout_order_processed' ], 10, 3 );
 			add_action( 'wp_enqueue_scripts', [ $this, 'enqueue_assets' ] );
 			add_action( 'rest_api_init', [ $this, 'register_rest' ] );
 
 			$this->guard_native_field_conflicts();
+		}
+
+		/**
+		 * Injects a takeover STATE field's source options as WooCommerce native states.
+		 *
+		 * For a field whose id is a WC state field (`*_state`) that declares a `source` +
+		 * `takeover_condition`, this registers the source's options as the country's states for
+		 * every country where the takeover condition holds. WooCommerce then renders the field
+		 * as a native `<select>` and persists the chosen value in the session — so the region
+		 * survives `update_checkout` with NO client-side DOM surgery (the fragile approach this
+		 * replaces). Non-state takeover fields (e.g. a city autocomplete) are still enhanced on
+		 * the client, since "city" is not a WooCommerce concept.
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<string, array<string, string>> $states WC states keyed by country code
+		 *
+		 * @return array<string, array<string, string>>
+		 */
+		public function inject_states( $states ): array {
+			$states    = is_array( $states ) ? $states : [];
+			$countries = $this->wc_country_codes();
+
+			foreach ( $this->fields->get_fields() as $id => $field ) {
+				$condition = $field['takeover_condition'] ?? null;
+				$source    = $field['source'] ?? null;
+
+				if ( '_state' !== substr( $id, -6 ) || null === $condition || ! is_callable( $source ) ) {
+					continue;
+				}
+
+				foreach ( $countries as $code ) {
+					if ( ! (bool) $condition( [ 'country' => (string) $code ] ) ) {
+						continue;
+					}
+
+					$options = [];
+
+					foreach ( (array) $source( [ 'country' => (string) $code ] ) as $item ) {
+						if ( is_array( $item ) && isset( $item['value'], $item['label'] ) ) {
+							$options[ (string) $item['value'] ] = (string) $item['label'];
+						}
+					}
+
+					if ( [] !== $options ) {
+						$states[ (string) $code ] = $options;
+					}
+				}
+			}
+
+			return $states;
 		}
 
 		/**
@@ -577,6 +631,23 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 */
 		protected function placeholder_label(): string {
 			return __( 'Выберите…', 'woodev-plugin-framework' );
+		}
+
+		/**
+		 * Returns the list of WooCommerce country codes.
+		 *
+		 * Extracted so tests can supply a country list without bootstrapping WooCommerce.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string[]
+		 */
+		protected function wc_country_codes(): array {
+			if ( ! function_exists( 'WC' ) || ! WC()->countries ) {
+				return [];
+			}
+
+			return array_map( 'strval', array_keys( (array) WC()->countries->get_countries() ) );
 		}
 
 		/**

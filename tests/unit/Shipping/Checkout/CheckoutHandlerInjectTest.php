@@ -230,4 +230,29 @@ class CheckoutHandlerInjectTest extends TestCase {
 		// Untouched: still WC's native 'state' type, not our 'select'.
 		$this->assertSame( 'state', $out['billing']['billing_state']['type'] );
 	}
+
+	/**
+	 * A takeover STATE field's regions are injected as WooCommerce NATIVE states (via the
+	 * woocommerce_states filter) for every takeover-true country, so WC renders the select and
+	 * persists the value natively (surviving update_checkout). Non-takeover countries keep their
+	 * existing states. (The robust replacement for the fragile client-side state conversion.)
+	 */
+	public function test_inject_states_adds_regions_for_takeover_countries(): void {
+		$fields  = Checkout_Fields::from_array( [
+			Field::create( 'billing_state' )->set_type( 'select' )
+				->set_source( static fn( $c ) => 'RU' === ( $c['country'] ?? '' ) ? [ [ 'value' => '77', 'label' => 'Москва' ] ] : [], 'options' )
+				->set_takeover_condition( static fn( $c ) => in_array( $c['country'] ?? '', [ 'RU', 'BY' ], true ) )->to_array(),
+		] );
+		$handler = new class( $fields, 'carrier' ) extends Checkout_Handler {
+			protected function wc_country_codes(): array {
+				return [ 'RU', 'BY', 'US' ];
+			}
+		};
+
+		$states = $handler->inject_states( [ 'US' => [ 'CA' => 'California' ] ] );
+
+		$this->assertSame( [ '77' => 'Москва' ], $states['RU'] );          // regions injected
+		$this->assertSame( [ 'CA' => 'California' ], $states['US'] );        // non-takeover preserved
+		$this->assertArrayNotHasKey( 'BY', $states );                       // takeover-true but source empty → no entry
+	}
 }
