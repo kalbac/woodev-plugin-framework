@@ -36,6 +36,8 @@ return [
 	'Woodev\\Framework\\Shipping\\Checkout\\Field' => 'woodev/shipping-method/checkout/class-field.php',
 	'Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler' => 'woodev/shipping-method/checkout/class-checkout-handler.php',
 	'Woodev\\Framework\\Shipping\\Checkout\\Pickup_Checkout_Handler' => 'woodev/shipping-method/checkout/class-pickup-checkout-handler.php',
+	'Woodev\\Framework\\Shipping\\Checkout\\Presets\\Dependent_Select' => 'woodev/shipping-method/checkout/presets/class-dependent-select.php',
+	'Woodev\\Framework\\Shipping\\Checkout\\Presets\\Pickup_Field' => 'woodev/shipping-method/checkout/presets/class-pickup-field.php',
 	'Woodev\\Framework\\Shipping\\Map\\Leaflet_Map_Provider' => 'woodev/shipping-method/map/class-leaflet-map-provider.php',
 	'Woodev\\Framework\\Shipping\\Map\\Map_Provider' => 'woodev/shipping-method/map/interface-map-provider.php',
 	'Woodev\\Framework\\Shipping\\Map\\Map_Provider_Registry' => 'woodev/shipping-method/map/class-map-provider-registry.php',

@@ -49,6 +49,16 @@ class CheckoutFieldsTest extends TestCase {
 		$this->assertSame( 'suggest', $field['source_kind'] );
 	}
 
+	public function test_normalize_is_pickup_slot_defaults_to_false(): void {
+		$field = Checkout_Fields::normalize( [ 'id' => 'x' ] );
+		$this->assertFalse( $field['is_pickup_slot'] );
+	}
+
+	public function test_normalize_is_pickup_slot_true_when_set(): void {
+		$field = Checkout_Fields::normalize( [ 'id' => 'x', 'is_pickup_slot' => true ] );
+		$this->assertTrue( $field['is_pickup_slot'] );
+	}
+
 	public function test_add_and_from_array_accept_field_instance(): void {
 		// from_array path: a Field instance in the list is accepted and normalized.
 		$collection = Checkout_Fields::from_array( [ Field::create( 'billing_city' )->set_type( 'select' ) ] );

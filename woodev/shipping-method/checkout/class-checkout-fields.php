@@ -50,6 +50,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Fields' 
 	 *                           WC output, or `null`.
 	 *  - `sanitize_callback`  — callable for sanitizing posted value, or `null`.
 	 *  - `validate_callback`  — callable for validating posted value, or `null`.
+	 *  - `is_pickup_slot`     — `true` when this field is a pickup slot anchor for the SP-5 adapter.
 	 *
 	 * @since 1.5.0
 	 */
@@ -137,11 +138,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Fields' 
 		 * verbatim; scalar values are coerced to `bool`.
 		 *
 		 * New generic keys added in 2.0.2: `section`, `depends_on`, `source`,
-		 * `source_kind`, `takeover_condition`.
+		 * `source_kind`, `takeover_condition`. `is_pickup_slot` added in 2.0.2
+		 * (Task 4): marks a field as a pickup slot anchor for the SP-5 adapter.
 		 *
 		 * @since 1.5.0
 		 * @since 2.0.2 Added `section`, `depends_on`, `source`, `source_kind`,
-		 *              `takeover_condition`; `required` array preserved verbatim.
+		 *              `takeover_condition`; `required` array preserved verbatim;
+		 *              `is_pickup_slot` bool (default false).
 		 *
 		 * @param array<string, mixed> $definition raw field definition
 		 *
@@ -156,7 +159,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Fields' 
 		 *     source_kind: string|null,
 		 *     takeover_condition: callable|null,
 		 *     sanitize_callback: callable|null,
-		 *     validate_callback: callable|null
+		 *     validate_callback: callable|null,
+		 *     is_pickup_slot: bool
 		 * }
 		 */
 		public static function normalize( array $definition ): array {
@@ -182,6 +186,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Fields' 
 				'takeover_condition' => is_callable( $takeover ) ? $takeover : null,
 				'sanitize_callback'  => is_callable( $sanitize ) ? $sanitize : null,
 				'validate_callback'  => is_callable( $validate ) ? $validate : null,
+				'is_pickup_slot'     => (bool) ( $definition['is_pickup_slot'] ?? false ),
 			];
 		}
 

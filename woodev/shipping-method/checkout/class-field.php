@@ -218,6 +218,23 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Field' ) ) :
 		}
 
 		/**
+		 * Marks this field as a pickup slot anchor.
+		 *
+		 * Sets `is_pickup_slot = true` in the raw definition so the checkout
+		 * adapter can locate the correct injection point for the SP-5 slot.
+		 * After normalization via {@see Checkout_Fields::normalize()}, the flag
+		 * is always present as a `bool`.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return self
+		 */
+		public function mark_pickup_slot(): self {
+			$this->def['is_pickup_slot'] = true;
+			return $this;
+		}
+
+		/**
 		 * Returns the raw definition array accumulated by the builder.
 		 *
 		 * The returned array is intentionally un-normalized — keys set via the
