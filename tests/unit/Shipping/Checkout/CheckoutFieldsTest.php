@@ -12,6 +12,7 @@
 namespace Woodev\Tests\Unit\Shipping\Checkout;
 
 use Woodev\Framework\Shipping\Checkout\Checkout_Fields;
+use Woodev\Framework\Shipping\Checkout\Field;
 use Woodev\Tests\Unit\TestCase;
 
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/checkout/class-checkout-fields.php';
@@ -46,5 +47,15 @@ class CheckoutFieldsTest extends TestCase {
 		$field = Checkout_Fields::normalize( [ 'id' => 'c', 'depends_on' => 'billing_state', 'source_kind' => 'suggest' ] );
 		$this->assertSame( 'billing_state', $field['depends_on'] );
 		$this->assertSame( 'suggest', $field['source_kind'] );
+	}
+
+	public function test_add_and_from_array_accept_field_instance(): void {
+		// from_array path: a Field instance in the list is accepted and normalized.
+		$collection = Checkout_Fields::from_array( [ Field::create( 'billing_city' )->set_type( 'select' ) ] );
+		$this->assertSame( 'select', $collection->get_field( 'billing_city' )['type'] );
+
+		// add() path: a Field instance replaces the raw definition.
+		$collection->add( Field::create( 'billing_city' )->set_type( 'hidden' ) );
+		$this->assertSame( 'hidden', $collection->get_field( 'billing_city' )['type'] );
 	}
 }

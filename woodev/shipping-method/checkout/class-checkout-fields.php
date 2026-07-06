@@ -24,6 +24,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 } // Exit if accessed directly
 
+require_once __DIR__ . '/class-field.php';
+
 if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Fields' ) ) :
 
 	/**
@@ -64,10 +66,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Fields' 
 		 * Constructor.
 		 *
 		 * @since 1.5.0
+		 * @since 2.0.2 Each entry may also be a {@see Field} builder instance.
 		 *
-		 * @param array<int|string, array<string, mixed>> $definitions list of raw
-		 *        field definitions; each is normalized and keyed by its `id`.
-		 *        Definitions without a non-empty `id` are skipped.
+		 * @param array<int|string, Field|array<string, mixed>> $definitions list of raw
+		 *        field definitions or Field instances; each is normalized and keyed by
+		 *        its `id`. Definitions without a non-empty `id` are skipped.
 		 */
 		public function __construct( array $definitions = [] ) {
 			foreach ( $definitions as $definition ) {
@@ -79,8 +82,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Fields' 
 		 * Builds a definition set from a plain list of field definitions.
 		 *
 		 * @since 1.5.0
+		 * @since 2.0.2 Each entry may also be a {@see Field} builder instance.
 		 *
-		 * @param array<int|string, array<string, mixed>> $definitions raw field definitions
+		 * @param array<int|string, Field|array<string, mixed>> $definitions raw field
+		 *        definitions or Field instances.
 		 *
 		 * @return self
 		 */
@@ -95,13 +100,24 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Fields' 
 		 * definition with an empty `id` is ignored — the host plugin owns the
 		 * field id, so a missing one is a no-op rather than a contract value.
 		 *
-		 * @since 1.5.0
+		 * Accepts either a raw associative array or a {@see Field} builder instance;
+		 * when a `Field` is passed, {@see Field::to_array()} is called first so the
+		 * same normalization path is used regardless of how the definition was
+		 * assembled.
 		 *
-		 * @param array<string, mixed> $definition raw field definition
+		 * @since 1.5.0
+		 * @since 2.0.2 Also accepts a {@see Field} instance.
+		 *
+		 * @param Field|array<string, mixed> $definition raw field definition or a
+		 *        Field builder instance.
 		 *
 		 * @return self
 		 */
-		public function add( array $definition ): self {
+		public function add( $definition ): self {
+			if ( $definition instanceof Field ) {
+				$definition = $definition->to_array();
+			}
+
 			$field = self::normalize( $definition );
 
 			if ( '' !== $field['id'] ) {
