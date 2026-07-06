@@ -1,15 +1,17 @@
-> ⏸️ **RESUME s42 (§8 IN PROGRESS — design DONE, implementing).** Branch `feat/checkout-field-layer`.
-> Design+plan+Codex-critic phase COMPLETE & committed: spec `docs-internal/specs/2026-07-06-checkout-field-layer-design.md`,
-> plan `docs-internal/plans/2026-07-06-checkout-field-layer-plan.md` (14 tasks: 1,2,3,4,5,6,7,7b,8,9,10,11,12,13 +
-> a "Codex hardening amendments" section that amends specific tasks — APPLY the tagged amendment per task).
-> **DO NOT re-brainstorm.** Resume: `git checkout feat/checkout-field-layer`; `git log --oneline -8` to see the last
-> committed task; continue **superpowers:subagent-driven-development** (fresh implementer per task → spec reviewer →
-> code-quality reviewer; NO worktree so Serena works; edit PHP with built-in Edit not Serena; @since 2.0.2, VERSION
-> unchanged; regen `woodev/class-map.php` after any new class; full `composer test:unit` after wiring a shared path).
-> After all tasks: Codex critic on the impl diff (companion `…/openai-codex/codex/1.0.4/scripts/codex-companion.mjs task`,
-> inline bundle ≤~10KB; plan-critic thread `019f34cc`) → present verbatim, ask operator, re-critic own fixes → **my
-> browser e2e on `:8888` classic** (cascade / country-takeover RU-vs-FR / block-placement-without-pickup, screenshots)
-> → merge after green CI + CLEAN (squash + delete-branch, never `--auto`). The §8 brainstorm below is HISTORICAL.
+> ⏸️ **RESUME s42 (§8 — CODE COMPLETE + Codex-reviewed + SERVER-PATH LIVE-VERIFIED; ONLY the visual rig-verify + merge remain).**
+> Branch `feat/checkout-field-layer` (pushed to origin). Spec `…/specs/2026-07-06-checkout-field-layer-design.md`,
+> plan `…/plans/2026-07-06-checkout-field-layer-plan.md`. **All 14 tasks implemented + committed** (subagent-driven,
+> 1018 unit + 7 jest + phpcs clean; integration tests written for CI). **Codex review DONE** (P1 conditional-required-not-static +
+> P2 per-plugin REST route) + **re-critic DONE** (preserve WC required on enhance; guard empty route id) — all fixed & committed.
+> **Live rig on `:8888` (shipping fixture ACTIVATED):** boot 200 no WSOD; REST field-source works for a GUEST via
+> `/?rest_route=/woodev/v1/shipping/checkout/woodev-test-shipping-method/field-source/billing_state&country=RU`
+> → returns regions; `…/billing_city&parent=77&q=мос` → Москва; FR → empty. (NOTE: pretty-permalinks are OFF on this rig,
+> so use the `?rest_route=` form, not `/wp-json/…`.) Caught + fixed a real fixture bug (literal method id vs early WC class load).
+> **REMAINING (operator's own rig-verify, then merge):** VISUAL classic-checkout e2e — set up a product + a WC shipping zone
+> with the `woodev_test_shipping` method + a classic `[woocommerce_checkout]` page + cart; verify in-browser: country RU→our
+> region select (takeover) / FR→WC native; region→city cascade dropdown; choosing the pickup method with an empty pickup point
+> BLOCKS «Оформить заказ». Then merge after green CI + `mergeStateStatus: CLEAN` (squash + delete-branch, never `--auto`).
+> **DO NOT re-brainstorm / re-implement.** The §8 brainstorm below is HISTORICAL.
 
 # Промт следующей сессии: §8 «Checkout field layer» (SP-3-checkout) — brainstorm → spec → plan → impl
 
