@@ -112,8 +112,9 @@ class CheckoutHandlerInjectTest extends TestCase {
 			protected function current_country(): string { return 'RU'; }
 		};
 		$out = $handler->inject( [ 'billing' => [] ] );
-		// A placeholder empty option is prepended so WC always renders the <select>.
-		$this->assertSame( [ '' => '', '77' => 'Москва' ], $out['billing']['billing_state']['options'] );
+		// A placeholder empty option (with a "choose…" label) is prepended so WC always
+		// renders the <select> and never shows a blank first row.
+		$this->assertSame( [ '' => 'Выберите…', '77' => 'Москва' ], $out['billing']['billing_state']['options'] );
 	}
 
 	public function test_inject_skips_options_for_dependent_field(): void {
@@ -204,14 +205,14 @@ class CheckoutHandlerInjectTest extends TestCase {
 		] );
 		$out = ( new Checkout_Handler( $fields, 'carrier' ) )->inject( [ 'billing' => [] ] );
 
-		$this->assertSame( [ '' => '' ], $out['billing']['billing_city']['options'] );
+		$this->assertSame( [ '' => 'Выберите…' ], $out['billing']['billing_city']['options'] );
 	}
 
 	/**
-	 * A field with a takeover_condition that is FALSE for the current country must NOT be
-	 * enhanced — WooCommerce's native field is left untouched (e.g. keep WC's US state
-	 * <select> when the carrier only owns the field for CIS countries). The client re-applies
-	 * takeover on country change. (Caught by live browser e2e.)
+	 * A field that declares a takeover_condition is owned by the CLIENT and must NOT be
+	 * enhanced server-side (the server renders a guessed country that may differ from what the
+	 * customer sees). WooCommerce's native field is left untouched; the adapter converts it for
+	 * the actual country on load + on country change. (Caught by live browser e2e.)
 	 */
 	public function test_inject_skips_field_when_takeover_condition_false(): void {
 		$fields  = Checkout_Fields::from_array( [

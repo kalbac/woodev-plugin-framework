@@ -224,7 +224,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 				array_keys( WC()->countries->get_countries() )
 			) )->build( $this->fields );
 			$config['i18n']  = [
-				'required' => __( 'Заполните обязательное поле.', 'woodev-plugin-framework' ),
+				'required'    => __( 'Заполните обязательное поле.', 'woodev-plugin-framework' ),
+				'placeholder' => $this->placeholder_label(),
 			];
 
 			wp_localize_script(
@@ -450,13 +451,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 					$checkout_fields[ $field_section ] = [];
 				}
 
-				// Takeover gating (server side): a field that declares a takeover_condition is
-				// enhanced ONLY when the condition holds for the current country; otherwise WC's
-				// native field is left untouched (e.g. keep WooCommerce's own state <select> for
-				// the US). The classic adapter re-applies takeover on the client when the country
-				// changes (WC's `country_to_state_changed` event).
-				if ( null !== ( $field['takeover_condition'] ?? null )
-					&& ! (bool) ( $field['takeover_condition'] )( [ 'country' => $country ] ) ) {
+				// Takeover fields are owned entirely by the CLIENT: the server renders a guessed
+				// country (a guest has no country yet), but the customer may see a different one,
+				// so a server-side swap would mismatch the displayed country. Leave WC's native
+				// field untouched here; the classic adapter converts it for the ACTUAL country on
+				// load and on every `country_to_state_changed`. (No-JS falls back to WC's native
+				// field — acceptable progressive enhancement.)
+				if ( null !== ( $field['takeover_condition'] ?? null ) ) {
 					continue;
 				}
 
@@ -508,7 +509,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 						: [];
 
 					if ( ! array_key_exists( '', $options ) ) {
-						$options = [ '' => '' ] + $options;
+						$options = [ '' => $this->placeholder_label() ] + $options;
 					}
 
 					$our_overrides['options'] = $options;
@@ -561,6 +562,21 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 			}
 
 			return $country;
+		}
+
+		/**
+		 * Returns the placeholder label for an empty <select> option.
+		 *
+		 * Mirrors WooCommerce's own "Select an option…" empty option so an enhanced select
+		 * never shows a blank first row. Shared by inject() (the server-rendered option) and
+		 * the JS config (`i18n.placeholder`, used by the client cascade/select2).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string
+		 */
+		protected function placeholder_label(): string {
+			return __( 'Выберите…', 'woodev-plugin-framework' );
 		}
 
 		/**

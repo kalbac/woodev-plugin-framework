@@ -345,6 +345,11 @@ function woodev_test_shipping_method_plugin_init(): void {
 									return $result;
 								},
 								'suggest'
+							)
+							// City autocomplete only for the CIS countries this carrier serves; for
+							// e.g. the US the field stays WooCommerce's native text input.
+							->set_takeover_condition(
+								static fn( array $c ): bool => in_array( (string) ( $c['country'] ?? '' ), [ 'RU', 'BY', 'KZ', 'UZ' ], true )
 							),
 
 						// 3. Hidden pickup-point slot — required when the fixture method is chosen.

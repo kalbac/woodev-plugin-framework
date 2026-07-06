@@ -158,8 +158,13 @@
 	 * @param {string}   previous Прежнее значение для восстановления.
 	 * @returns {boolean} Было ли восстановлено прежнее значение.
 	 */
-	function fillSelect( $select, options, previous ) {
-		var html    = '<option value=""></option>'
+	function placeholderText( config ) {
+		return config && config.i18n && config.i18n.placeholder ? config.i18n.placeholder : 'Выберите…'
+	}
+
+	function fillSelect( $select, options, previous, placeholder ) {
+		var ph      = placeholder !== undefined && placeholder !== null ? placeholder : ''
+		var html    = '<option value="">' + escapeHtml( ph ) + '</option>'
 		var matched = false
 		var list    = options || []
 
@@ -230,7 +235,7 @@
 			}
 		} ).done( function( response ) {
 			var options  = response && response.options ? response.options : []
-			var restored = fillSelect( $child, options, previous )
+			var restored = fillSelect( $child, options, previous, placeholderText( entry.config ) )
 
 			// Значение, введённое пользователем, не теряем: держим прежнее в сторе
 			// независимо от того, вернулась ли опция (спека: не «ронять» значение).
@@ -281,20 +286,24 @@
 		var $select = $( '#' + fieldId )
 		var url     = sourceUrl( entry.config, fieldId )
 
-		if( ! method || ! $select.length || ! url ) {
-			// Деградация: без select2 остаётся нативный select — remote пропускаем.
+		// Only enhance an actual <select> (a text input stays native — a suggest field
+		// left un-enhanced for a country the carrier does not serve). Without select2 the
+		// native select remains; remote search is skipped.
+		if( ! method || ! $select.length || ! url || ! $select.is( 'select' ) ) {
 			return
 		}
 
 		var store  = entry.store
 		var config = entry.config
 
-		function renderText( item ) {
-			return $( '<span/>' ).text( item && item.label !== undefined ? item.label : ( item.text || '' ) )
-		}
-
 		$select[ method ]( {
 			minimumInputLength: 2,
+			placeholder:        placeholderText( config ),
+			// No custom templateResult/templateSelection: select2's default rendering
+			// escapes the option text (escapeMarkup) and displays it correctly. A custom
+			// template that returned a jQuery object rendered as "[object Object]" in the
+			// selection box on the bundled selectWoo build. Labels are also esc_html'd by
+			// the REST controller server-side.
 			ajax: {
 				url:      url,
 				dataType: 'json',
@@ -327,9 +336,7 @@
 						} )
 					}
 				}
-			},
-			templateResult:    renderText,
-			templateSelection: renderText
+			}
 		} )
 	}
 
@@ -370,7 +377,7 @@
 		// states (RU/BY/KZ/UZ). Replace it with a <select> — preserving id/name/class — so
 		// our region options can populate it. (country-select.js keeps rewriting it back on
 		// country change, which is why takeover re-runs on every country_to_state_changed.)
-		var $sel = $( '<select></select>' )
+		var $sel = $( '<select><option value=""></option></select>' )
 			.attr( 'id', $field.attr( 'id' ) || '' )
 			.attr( 'name', $field.attr( 'name' ) || '' )
 			.attr( 'class', $field.attr( 'class' ) || '' )
@@ -397,8 +404,10 @@
 			return
 		}
 
-		// suggest-takeover: просто вешаем typeahead на нативный select.
+		// suggest-takeover: гарантируем <select> (WC/сервер оставили text-input для
+		// не-обслуживаемой страны) и вешаем typeahead.
 		if( field && field.source_kind === 'suggest' ) {
+			ensureSelect( $field )
 			initSuggest( entry, fieldId )
 			return
 		}
@@ -418,7 +427,7 @@
 			}
 		} ).done( function( response ) {
 			var options  = response && response.options ? response.options : []
-			var restored = fillSelect( $field, options, previous )
+			var restored = fillSelect( $field, options, previous, placeholderText( entry.config ) )
 			var initSel2 = select2Method()
 
 			if( restored ) {
