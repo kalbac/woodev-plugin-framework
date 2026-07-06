@@ -125,6 +125,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Field_Source_Cont
 			// land in plugin A's controller and 404 on the id mismatch. (Codex review P2.)
 			$plugin_segment = preg_replace( '/[^\w-]/', '', $this->plugin_id );
 
+			// A plugin id made only of stripped characters would yield a malformed
+			// `/shipping/checkout//field-source/` route — fall back to the same default the
+			// handler uses for an empty plugin id. (Codex re-critic.)
+			if ( '' === (string) $plugin_segment ) {
+				$plugin_segment = 'shipping';
+			}
+
 			register_rest_route(
 				'woodev/v1',
 				'/shipping/checkout/' . $plugin_segment . '/field-source/(?P<field_id>[\w-]+)',

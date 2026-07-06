@@ -173,4 +173,20 @@ class CheckoutHandlerInjectTest extends TestCase {
 
 		$this->assertFalse( $out['order']['carrier_pvz']['required'] );
 	}
+
+	/**
+	 * Enhancing a native WC field with a descriptor that does NOT set `required` must
+	 * NOT strip WC's own required flag (e.g. turning `billing_city` into a select must
+	 * keep it required if WC required it). (Codex re-critic P1.)
+	 */
+	public function test_inject_preserves_wc_required_when_descriptor_does_not_set_it(): void {
+		$fields = Checkout_Fields::from_array( [
+			Field::create( 'billing_city' )->set_type( 'select' )->set_section( 'billing' )->to_array(),
+		] );
+		$wc  = [ 'billing' => [ 'billing_city' => [ 'type' => 'text', 'required' => true ] ] ];
+		$out = ( new Checkout_Handler( $fields, 'carrier' ) )->inject( $wc );
+
+		$this->assertSame( 'select', $out['billing']['billing_city']['type'] ); // enhanced
+		$this->assertTrue( $out['billing']['billing_city']['required'] );        // WC required preserved
+	}
 }
