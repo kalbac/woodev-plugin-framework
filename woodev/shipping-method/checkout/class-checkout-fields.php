@@ -121,11 +121,92 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Fields' 
 
 			$field = self::normalize( $definition );
 
+			self::validate_required_spec( $field['required'] );
+
 			if ( '' !== $field['id'] ) {
 				$this->fields[ $field['id'] ] = $field;
 			}
 
 			return $this;
+		}
+
+		/**
+		 * Validates the shape of a condition-spec `required` value at registration time.
+		 *
+		 * A boolean `required` is always valid and returns immediately. An array spec must
+		 * be either a single `{state, operator, value}` triplet (identified by having an
+		 * `operator` key) or a multi-condition `{relation, conditions[]}` object (identified
+		 * by having a `conditions` key). Every `operator` value must be in the closed set
+		 * `{=, !=, in, not_in}`. Any violation fires `_doing_it_wrong()` so the problem
+		 * is caught in development and CI rather than silently at checkout.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param bool|array<string, mixed> $required Normalized `required` value from the descriptor.
+		 *
+		 * @return void
+		 */
+		private static function validate_required_spec( $required ): void {
+			if ( ! is_array( $required ) ) {
+				return; // Plain bool — always valid.
+			}
+
+			$valid_operators = [ '=', '!=', 'in', 'not_in' ];
+			$caller          = 'Woodev\\Framework\\Shipping\\Checkout\\Checkout_Fields::add';
+
+			if ( isset( $required['operator'] ) ) {
+				// Single-condition spec: {state, operator, value}.
+				if ( ! in_array( $required['operator'], $valid_operators, true ) ) {
+					_doing_it_wrong(
+						$caller,
+						sprintf(
+							/* translators: 1: supplied operator, 2: comma-separated list of valid operators */
+							'Invalid condition-spec operator "%1$s". Allowed operators: %2$s.',
+							(string) $required['operator'],
+							implode( ', ', $valid_operators )
+						),
+						'2.0.2'
+					);
+				}
+
+				return;
+			}
+
+			if ( isset( $required['conditions'] ) && is_array( $required['conditions'] ) ) {
+				// Multi-condition spec: {relation, conditions[]}.
+				foreach ( $required['conditions'] as $condition ) {
+					if ( ! is_array( $condition ) ) {
+						_doing_it_wrong(
+							$caller,
+							'Each entry in a multi-condition required spec must be an array.',
+							'2.0.2'
+						);
+						continue;
+					}
+
+					if ( isset( $condition['operator'] ) && ! in_array( $condition['operator'], $valid_operators, true ) ) {
+						_doing_it_wrong(
+							$caller,
+							sprintf(
+								/* translators: 1: supplied operator, 2: comma-separated list of valid operators */
+								'Invalid condition-spec operator "%1$s". Allowed operators: %2$s.',
+								(string) $condition['operator'],
+								implode( ', ', $valid_operators )
+							),
+							'2.0.2'
+						);
+					}
+				}
+
+				return;
+			}
+
+			// Non-empty array that is neither a single-condition spec nor a multi-condition spec.
+			_doing_it_wrong(
+				$caller,
+				'A required condition-spec array must contain either an "operator" key (single condition) or a "conditions" key (multi-condition).',
+				'2.0.2'
+			);
 		}
 
 		/**

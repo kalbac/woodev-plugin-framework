@@ -48,6 +48,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		private string $hook_prefix;
 
 		/**
+		 * Shipping method ids that unconditionally require a non-empty pickup field.
+		 *
+		 * Populated via {@see set_requires_pickup_methods()}. When non-empty,
+		 * {@see validate()} runs an independent backstop guard after the per-field
+		 * loop to ensure a pickup method can never be placed without a pickup point —
+		 * regardless of the field's condition-spec.
+		 *
+		 * @var string[]
+		 */
+		private array $requires_pickup_methods = [];
+
+		/**
 		 * Constructor.
 		 *
 		 * @since 1.5.0
@@ -71,6 +83,25 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 */
 		public function get_fields(): Checkout_Fields {
 			return $this->fields;
+		}
+
+		/**
+		 * Registers the shipping method ids that unconditionally require a pickup point.
+		 *
+		 * When set, {@see validate()} runs an independent backstop guard (separate from the
+		 * per-field condition-spec loop) that blocks checkout whenever one of these methods
+		 * is active and the first `is_pickup_slot` field is blank. This catches the case
+		 * where a malformed or missing condition-spec would otherwise silently let an order
+		 * place without a mandatory pickup point.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string[] $ids Shipping method ids, e.g. `[ 'carrier_pickup', 'carrier_pickup_express' ]`.
+		 *
+		 * @return void
+		 */
+		public function set_requires_pickup_methods( array $ids ): void {
+			$this->requires_pickup_methods = array_values( $ids );
 		}
 
 		/**
@@ -312,8 +343,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * Pass `$state` with the runtime context (chosen shipping method, billing country) so
 		 * condition-spec `required` values can be evaluated correctly.
 		 *
+		 * After the per-field loop an independent pickup backstop runs when
+		 * {@see set_requires_pickup_methods()} has been called: if the chosen method is one of
+		 * the declared pickup methods AND the `is_pickup_slot` field value is blank, checkout is
+		 * blocked regardless of that field's condition-spec.
+		 *
 		 * @since 1.5.0
 		 * @since 2.0.2 Added `$state` parameter for conditional-required (A2) evaluation.
+		 * @since 2.0.2 Added independent pickup backstop guard.
 		 *
 		 * @param array<string, mixed> $values clean values keyed by field id
 		 * @param array<string, mixed> $state  flat checkout-state map, e.g.
@@ -349,7 +386,62 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 				}
 			}
 
+			// Independent pickup backstop: runs after the per-field loop regardless of spec.
+			if ( [] !== $this->requires_pickup_methods ) {
+				$chosen = (string) ( $state['chosen_shipping_method'] ?? '' );
+
+				if ( self::chosen_method_matches( $chosen, $this->requires_pickup_methods ) ) {
+					$pickup_field = null;
+
+					foreach ( $this->fields->get_fields() as $field ) {
+						if ( ! empty( $field['is_pickup_slot'] ) ) {
+							$pickup_field = $field;
+							break;
+						}
+					}
+
+					if ( null !== $pickup_field ) {
+						$pickup_value = $values[ $pickup_field['id'] ] ?? '';
+
+						if ( self::is_blank( $pickup_value ) ) {
+							$this->add_error(
+								sprintf(
+									/* translators: %s: pickup field label */
+									__( '%s is required for pickup delivery.', 'woodev-plugin-framework' ),
+									'' !== (string) $pickup_field['label'] ? (string) $pickup_field['label'] : (string) $pickup_field['id']
+								)
+							);
+							$valid = false;
+						}
+					}
+				}
+			}
+
 			return $valid;
+		}
+
+		/**
+		 * Determines whether a chosen shipping method value matches any of the given method ids.
+		 *
+		 * WooCommerce passes the method value as either `method_id` (bare, when only one instance
+		 * is configured) or `method_id:instance_id` (when multiple instances exist). This helper
+		 * matches both shapes so plugins only need to register the base method id.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string   $chosen The `chosen_shipping_method` value from checkout state.
+		 * @param string[] $ids    Method ids to match against (base ids without instance suffix).
+		 *
+		 * @return bool True when `$chosen` is or starts with one of the given ids.
+		 */
+		private static function chosen_method_matches( string $chosen, array $ids ): bool {
+			foreach ( $ids as $id ) {
+				if ( $chosen === $id || 0 === strpos( $chosen, $id . ':' ) ) {
+					return true;
+				}
+			}
+
+			return false;
 		}
 
 		/**

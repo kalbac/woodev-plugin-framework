@@ -26,11 +26,13 @@ require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/checkout/class-fie
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/checkout/class-checkout-fields.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/checkout/class-checkout-condition.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/checkout/class-checkout-handler.php';
+require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/checkout/presets/class-pickup-field.php';
 
 /**
  * @covers \Woodev\Framework\Shipping\Checkout\Checkout_Handler::validate
  * @covers \Woodev\Framework\Shipping\Checkout\Checkout_Handler::save
  * @covers \Woodev\Framework\Shipping\Checkout\Checkout_Handler::is_native_wc_field
+ * @covers \Woodev\Framework\Shipping\Checkout\Checkout_Handler::set_requires_pickup_methods
  */
 class CheckoutHandlerValidateTest extends TestCase {
 
@@ -195,6 +197,45 @@ class CheckoutHandlerValidateTest extends TestCase {
 
 		$this->assertCount( 1, $spy->persisted );
 		$this->assertSame( 'carrier_pickup_point', $spy->persisted[0]['id'] );
+	}
+
+	// -----------------------------------------------------------------------
+	// Part B — independent pickup backstop (Task 7b)
+	// -----------------------------------------------------------------------
+
+	/**
+	 * When a pickup method is chosen and the pickup field is empty, the backstop
+	 * must block checkout regardless of the field's condition-spec. Matches by
+	 * prefix ('carrier_pickup:3' matches id 'carrier_pickup').
+	 */
+	public function test_requires_pickup_backstop_blocks_regardless_of_spec(): void {
+		\Brain\Monkey\Functions\expect( 'wc_add_notice' )->atLeast()->once();
+		$fields  = Checkout_Fields::from_array( [ \Woodev\Framework\Shipping\Checkout\Presets\Pickup_Field::create( 'carrier_pickup_point', [ 'carrier_pickup' ] )->to_array() ] );
+		$handler = new Checkout_Handler( $fields, 'carrier' );
+		$handler->set_requires_pickup_methods( [ 'carrier_pickup' ] );
+		$this->assertFalse( $handler->validate( [ 'carrier_pickup_point' => '' ], [ 'chosen_shipping_method' => 'carrier_pickup:3' ] ) ); // matches by prefix
+	}
+
+	/**
+	 * When the pickup field is filled, the backstop must pass even when the
+	 * method matches (exact match variant).
+	 */
+	public function test_backstop_passes_when_pickup_filled(): void {
+		$fields  = Checkout_Fields::from_array( [ \Woodev\Framework\Shipping\Checkout\Presets\Pickup_Field::create( 'carrier_pickup_point', [ 'carrier_pickup' ] )->to_array() ] );
+		$handler = new Checkout_Handler( $fields, 'carrier' );
+		$handler->set_requires_pickup_methods( [ 'carrier_pickup' ] );
+		$this->assertTrue( $handler->validate( [ 'carrier_pickup_point' => 'PVZ-1' ], [ 'chosen_shipping_method' => 'carrier_pickup' ] ) );
+	}
+
+	/**
+	 * When a different (non-pickup) method is chosen, the backstop must be silent
+	 * even when the pickup field is empty.
+	 */
+	public function test_backstop_ignored_for_other_method(): void {
+		$fields  = Checkout_Fields::from_array( [ \Woodev\Framework\Shipping\Checkout\Presets\Pickup_Field::create( 'carrier_pickup_point', [ 'carrier_pickup' ] )->to_array() ] );
+		$handler = new Checkout_Handler( $fields, 'carrier' );
+		$handler->set_requires_pickup_methods( [ 'carrier_pickup' ] );
+		$this->assertTrue( $handler->validate( [ 'carrier_pickup_point' => '' ], [ 'chosen_shipping_method' => 'flat_rate' ] ) );
 	}
 }
 

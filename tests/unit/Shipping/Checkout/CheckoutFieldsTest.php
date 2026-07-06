@@ -19,6 +19,7 @@ require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/checkout/class-che
 
 /**
  * @covers \Woodev\Framework\Shipping\Checkout\Checkout_Fields::normalize
+ * @covers \Woodev\Framework\Shipping\Checkout\Checkout_Fields::validate_required_spec
  */
 class CheckoutFieldsTest extends TestCase {
 
@@ -67,5 +68,35 @@ class CheckoutFieldsTest extends TestCase {
 		// add() path: a Field instance replaces the raw definition.
 		$collection->add( Field::create( 'billing_city' )->set_type( 'hidden' ) );
 		$this->assertSame( 'hidden', $collection->get_field( 'billing_city' )['type'] );
+	}
+
+	// -----------------------------------------------------------------------
+	// Part A — register-time condition-spec validation (Task 7b)
+	// -----------------------------------------------------------------------
+
+	/**
+	 * A single-condition spec with an unknown operator (e.g. 'inn') must fire
+	 * _doing_it_wrong() at least once.
+	 */
+	public function test_malformed_required_operator_triggers_doing_it_wrong(): void {
+		\Brain\Monkey\Functions\expect( '_doing_it_wrong' )->atLeast()->once();
+		Checkout_Fields::from_array( [ Field::create( 'pvz' )->set_required( [ 'state' => 's', 'operator' => 'inn', 'value' => [] ] )->to_array() ] );
+	}
+
+	/**
+	 * A single-condition spec with a valid operator ('in') must NOT fire
+	 * _doing_it_wrong().
+	 */
+	public function test_valid_spec_does_not_trigger_doing_it_wrong(): void {
+		\Brain\Monkey\Functions\expect( '_doing_it_wrong' )->never();
+		Checkout_Fields::from_array( [ Field::create( 'pvz' )->set_required( [ 'state' => 'chosen_shipping_method', 'operator' => 'in', 'value' => [ 'x' ] ] )->to_array() ] );
+	}
+
+	/**
+	 * A plain bool required=true must never fire _doing_it_wrong().
+	 */
+	public function test_bool_required_never_triggers_doing_it_wrong(): void {
+		\Brain\Monkey\Functions\expect( '_doing_it_wrong' )->never();
+		Checkout_Fields::from_array( [ Field::create( 'a' )->set_required( true )->to_array() ] );
 	}
 }
