@@ -170,34 +170,76 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		/**
 		 * Injects the managed fields into a WooCommerce checkout-fields array.
 		 *
-		 * Adds one entry per managed field under the given section (e.g. `order`),
-		 * mapping the normalized descriptor to WooCommerce's field-args shape. Existing
-		 * entries are preserved. The merged result is passed through the forward
-		 * `..._checkout_fields` filter so the host plugin can refine field args.
+		 * Each managed field is placed under its own `section` descriptor key
+		 * (default `'order'`). When a field already exists in WooCommerce's array it
+		 * is **enhanced in place**: only the keys this framework owns (`type`, `label`,
+		 * `required`, plus `options` when pre-filled) are overridden; all other WC
+		 * args (`class`, `priority`, `validate`, `custom_attributes`, …) are
+		 * preserved unchanged via `array_merge( $existing, $our_overrides )`.
+		 *
+		 * For an options-kind root field (has a callable `source`, `source_kind ===
+		 * 'options'`, `depends_on === null`) the source is invoked with the current
+		 * customer billing country as context to pre-fill the native `<select>`
+		 * `options` map (`[ value => label ]`). Dependent and suggest-kind fields
+		 * receive their options dynamically via the field-source REST endpoint and
+		 * are left without a static `options` key.
+		 *
+		 * The fully-merged result is passed through the forward `..._checkout_fields`
+		 * filter so the host plugin can refine field args further.
 		 *
 		 * @since 1.5.0
+		 * @since 2.0.2 Fields are grouped by their own `section`; existing WC args
+		 *              are preserved (conservative merge); options-kind root fields
+		 *              have their source() called to pre-fill the options map.
 		 *
 		 * @param array<string, mixed> $checkout_fields WC checkout fields, keyed by section
-		 * @param string               $section         section to inject into; default `order`
+		 * @param string               $section         unused override kept for BC; per-field
+		 *                                              `section` key is the primary path
 		 *
 		 * @return array<string, mixed>
 		 */
 		public function inject( array $checkout_fields, string $section = 'order' ): array {
-			$section_fields = $checkout_fields[ $section ] ?? [];
-
-			if ( ! is_array( $section_fields ) ) {
-				$section_fields = [];
-			}
+			$country = $this->current_country();
 
 			foreach ( $this->fields->get_fields() as $id => $field ) {
-				$section_fields[ $id ] = [
+				$field_section = '' !== ( $field['section'] ?? '' ) ? (string) $field['section'] : $section;
+
+				if ( ! isset( $checkout_fields[ $field_section ] ) || ! is_array( $checkout_fields[ $field_section ] ) ) {
+					$checkout_fields[ $field_section ] = [];
+				}
+
+				// Build only the keys we own.
+				$our_overrides = [
 					'type'     => (string) $field['type'],
 					'label'    => (string) $field['label'],
 					'required' => (bool) $field['required'],
 				];
-			}
 
-			$checkout_fields[ $section ] = $section_fields;
+				// Pre-fill options for root options-kind fields (source must be callable,
+				// source_kind must be 'options', depends_on must be null).
+				$is_options_root = null === $field['depends_on']
+					&& 'options' === ( $field['source_kind'] ?? null )
+					&& is_callable( $field['source'] ?? null );
+
+				if ( $is_options_root ) {
+					$raw_options = (array) ( $field['source'] )( [ 'country' => $country ] );
+					$options_map = [];
+					foreach ( $raw_options as $item ) {
+						if ( is_array( $item ) && isset( $item['value'], $item['label'] ) ) {
+							$options_map[ (string) $item['value'] ] = (string) $item['label'];
+						}
+					}
+					$our_overrides['options'] = $options_map;
+				}
+
+				// Conservative merge: start from whatever WC already has for this field,
+				// then overlay only our keys — preserving validate, class, priority, etc.
+				$existing_wc_args                         = $checkout_fields[ $field_section ][ $id ] ?? [];
+				$checkout_fields[ $field_section ][ $id ] = array_merge(
+					is_array( $existing_wc_args ) ? $existing_wc_args : [],
+					$our_overrides
+				);
+			}
 
 			/**
 			 * Filters the checkout fields after the managed fields are injected.
@@ -205,9 +247,24 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 			 * @since 1.5.0
 			 *
 			 * @param array<string, mixed> $checkout_fields the merged checkout fields
-			 * @param string               $section         the section that was injected into
+			 * @param string               $section         the primary section (legacy param, kept for BC)
 			 */
 			return (array) apply_filters( $this->hook( 'checkout_fields' ), $checkout_fields, $section );
+		}
+
+		/**
+		 * Returns the current WooCommerce customer billing country.
+		 *
+		 * Returns an empty string when WC is not available (e.g. in unit tests).
+		 * Override in subclasses or test doubles to supply a specific country code
+		 * without bootstrapping WooCommerce.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string ISO 3166-1 alpha-2 country code, or empty string.
+		 */
+		protected function current_country(): string {
+			return ( function_exists( 'WC' ) && WC()->customer ) ? (string) WC()->customer->get_billing_country() : '';
 		}
 
 		/**
