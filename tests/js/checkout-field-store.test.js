@@ -56,3 +56,12 @@ test( 'takeoverFor reads the per-country map', () => {
 	expect( s.takeoverFor( 'billing_state', 'FR' ) ).toBe( false );
 	expect( s.takeoverFor( 'billing_state', 'DE' ) ).toBe( false );
 } );
+
+test( 'setChosenMethod strips the :instance suffix for condition matching', () => {
+	// WooCommerce posts `method_id:instance_id`; a condition-spec targets the bare method id.
+	const s = createStore( {
+		fields: { pvz: { id: 'pvz', required: { state: 'chosen_shipping_method', operator: 'in', value: [ 'carrier_pickup' ] } } },
+	} );
+	s.setChosenMethod( 'carrier_pickup:3' );
+	expect( s.evaluateRequired( 'pvz' ) ).toBe( true );
+} );

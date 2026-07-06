@@ -361,6 +361,25 @@
 	 * @param {string} country ISO-2 код страны.
 	 * @returns {void}
 	 */
+	function ensureSelect( $field ) {
+		if( $field.is( 'select' ) ) {
+			return $field
+		}
+
+		// WooCommerce renders `billing_state` as a text <input> for countries with no WC
+		// states (RU/BY/KZ/UZ). Replace it with a <select> — preserving id/name/class — so
+		// our region options can populate it. (country-select.js keeps rewriting it back on
+		// country change, which is why takeover re-runs on every country_to_state_changed.)
+		var $sel = $( '<select></select>' )
+			.attr( 'id', $field.attr( 'id' ) || '' )
+			.attr( 'name', $field.attr( 'name' ) || '' )
+			.attr( 'class', $field.attr( 'class' ) || '' )
+
+		$field.replaceWith( $sel )
+
+		return $sel
+	}
+
 	function applyTakeover( entry, fieldId, country ) {
 		var $field = $( '#' + fieldId )
 
@@ -383,6 +402,9 @@
 			initSuggest( entry, fieldId )
 			return
 		}
+
+		// options-takeover: гарантируем <select> (WC мог отрисовать text-input) и заливаем.
+		$field = ensureSelect( $field )
 
 		$.ajax( {
 			url:      url,
@@ -634,6 +656,16 @@
 		} )
 
 		refreshGate()
+
+		// Re-assert takeover for the current country AFTER WooCommerce's country-select.js
+		// has done its initial state-field render (it rewrites billing_state to a text input
+		// for stateless countries). Deferred a tick so it runs after WC's ready handlers.
+		window.setTimeout( function() {
+			stores.forEach( function( entry ) {
+				runTakeover( entry, currentCountry() )
+			} )
+			refreshGate()
+		}, 0 )
 
 		// 2. Делегированное отслеживание изменений управляемых полей.
 		$( document.body ).on( 'change', function( event ) {

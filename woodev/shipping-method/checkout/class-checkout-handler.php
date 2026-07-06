@@ -450,6 +450,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 					$checkout_fields[ $field_section ] = [];
 				}
 
+				// Takeover gating (server side): a field that declares a takeover_condition is
+				// enhanced ONLY when the condition holds for the current country; otherwise WC's
+				// native field is left untouched (e.g. keep WooCommerce's own state <select> for
+				// the US). The classic adapter re-applies takeover on the client when the country
+				// changes (WC's `country_to_state_changed` event).
+				if ( null !== ( $field['takeover_condition'] ?? null )
+					&& ! (bool) ( $field['takeover_condition'] )( [ 'country' => $country ] ) ) {
+					continue;
+				}
+
 				// Build only the keys we own. `required` is touched ONLY when the descriptor is
 				// opinionated, so enhancing a native WC field never silently changes its required
 				// flag (Codex review P1 + re-critic):
@@ -487,6 +497,23 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 					$our_overrides['options'] = $options_map;
 				}
 
+				// A `select`-type field with EMPTY options is rendered as an empty string by
+				// woocommerce_form_field() — the field silently vanishes from the checkout. Ensure
+				// at least a placeholder empty option so the <select> always renders (suggest
+				// fields have no preset options; a takeover-true country may have no regions). The
+				// classic adapter / select2 populate real options client-side.
+				if ( 'select' === $our_overrides['type'] ) {
+					$options = isset( $our_overrides['options'] ) && is_array( $our_overrides['options'] )
+						? $our_overrides['options']
+						: [];
+
+					if ( ! array_key_exists( '', $options ) ) {
+						$options = [ '' => '' ] + $options;
+					}
+
+					$our_overrides['options'] = $options;
+				}
+
 				// Conservative merge: start from whatever WC already has for this field,
 				// then overlay only our keys — preserving validate, class, priority, etc.
 				$existing_wc_args                         = $checkout_fields[ $field_section ][ $id ] ?? [];
@@ -519,7 +546,21 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * @return string ISO 3166-1 alpha-2 country code, or empty string.
 		 */
 		protected function current_country(): string {
-			return ( function_exists( 'WC' ) && WC()->customer ) ? (string) WC()->customer->get_billing_country() : '';
+			if ( ! function_exists( 'WC' ) || ! WC()->customer ) {
+				return '';
+			}
+
+			$country = (string) WC()->customer->get_billing_country();
+
+			// A fresh guest has no customer country yet, but WooCommerce still DISPLAYS the
+			// store base country in the checkout country field. Mirror that fallback so the
+			// server enhances the same country the customer actually sees (otherwise takeover
+			// never applies on the initial render).
+			if ( '' === $country && function_exists( 'wc_get_base_country' ) ) {
+				$country = (string) wc_get_base_country();
+			}
+
+			return $country;
 		}
 
 		/**
@@ -854,11 +895,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 *
 		 * @since 2.0.2
 		 *
-		 * @return string sanitized shipping method id, e.g. `carrier_pickup:3`, or empty string
+		 * @return string bare method id (the `:instance_id` suffix is stripped), or empty string
 		 */
 		private function chosen_shipping_method(): string {
 			// phpcs:ignore WordPress.Security.NonceVerification.Missing -- WooCommerce verifies the checkout nonce before its checkout hooks fire; values are cleaned in sanitize_posted_data().
-			return wc_clean( (string) wp_unslash( $_POST['shipping_method'][0] ?? '' ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotValidated
+			$method = wc_clean( (string) wp_unslash( $_POST['shipping_method'][0] ?? '' ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotValidated
+
+			// Strip the `:instance_id` suffix so it matches a bare method id in a condition-spec
+			// or requires-pickup list. Mirrors the JS store's setChosenMethod().
+			return explode( ':', (string) $method )[0];
 		}
 
 		/**

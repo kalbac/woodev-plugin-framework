@@ -112,7 +112,8 @@ class CheckoutHandlerInjectTest extends TestCase {
 			protected function current_country(): string { return 'RU'; }
 		};
 		$out = $handler->inject( [ 'billing' => [] ] );
-		$this->assertSame( [ '77' => 'Москва' ], $out['billing']['billing_state']['options'] );
+		// A placeholder empty option is prepended so WC always renders the <select>.
+		$this->assertSame( [ '' => '', '77' => 'Москва' ], $out['billing']['billing_state']['options'] );
 	}
 
 	public function test_inject_skips_options_for_dependent_field(): void {
@@ -188,5 +189,44 @@ class CheckoutHandlerInjectTest extends TestCase {
 
 		$this->assertSame( 'select', $out['billing']['billing_city']['type'] ); // enhanced
 		$this->assertTrue( $out['billing']['billing_city']['required'] );        // WC required preserved
+	}
+
+	/**
+	 * A `select` field with no computed options (a suggest field, or a takeover-true country
+	 * with no regions) must still get a placeholder option, or WooCommerce's
+	 * woocommerce_form_field() renders the select as an empty string and the field vanishes.
+	 * (Caught by live browser e2e on the classic checkout.)
+	 */
+	public function test_inject_gives_empty_select_a_placeholder_option(): void {
+		$fields = Checkout_Fields::from_array( [
+			Field::create( 'billing_city' )->set_type( 'select' )->set_section( 'billing' )
+				->set_source( static fn() => [], 'suggest' )->depends_on( 'billing_state' )->to_array(),
+		] );
+		$out = ( new Checkout_Handler( $fields, 'carrier' ) )->inject( [ 'billing' => [] ] );
+
+		$this->assertSame( [ '' => '' ], $out['billing']['billing_city']['options'] );
+	}
+
+	/**
+	 * A field with a takeover_condition that is FALSE for the current country must NOT be
+	 * enhanced — WooCommerce's native field is left untouched (e.g. keep WC's US state
+	 * <select> when the carrier only owns the field for CIS countries). The client re-applies
+	 * takeover on country change. (Caught by live browser e2e.)
+	 */
+	public function test_inject_skips_field_when_takeover_condition_false(): void {
+		$fields  = Checkout_Fields::from_array( [
+			Field::create( 'billing_state' )->set_type( 'select' )->set_section( 'billing' )
+				->set_source( static fn() => [], 'options' )
+				->set_takeover_condition( static fn( $c ) => 'RU' === ( $c['country'] ?? '' ) )->to_array(),
+		] );
+		// current_country() stubbed to a takeover-FALSE country.
+		$handler = new class( $fields, 'carrier' ) extends Checkout_Handler {
+			protected function current_country(): string { return 'US'; }
+		};
+		$wc  = [ 'billing' => [ 'billing_state' => [ 'type' => 'state', 'label' => 'State' ] ] ];
+		$out = $handler->inject( $wc );
+
+		// Untouched: still WC's native 'state' type, not our 'select'.
+		$this->assertSame( 'state', $out['billing']['billing_state']['type'] );
 	}
 }

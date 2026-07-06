@@ -184,7 +184,11 @@
 		 * @returns {void}
 		 */
 		function setChosenMethod( method ) {
-			_state.chosen_shipping_method = method;
+			// WooCommerce posts the chosen method as `method_id:instance_id`, but a
+			// condition-spec targets the bare `method_id` (instance ids are dynamic). Strip
+			// the instance so `{ operator: 'in', value: [ 'method_id' ] }` matches. Mirrors the
+			// server (Checkout_Handler::chosen_shipping_method()).
+			_state.chosen_shipping_method = String( method == null ? '' : method ).split( ':' )[ 0 ];
 		}
 
 		/**
