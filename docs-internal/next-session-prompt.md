@@ -1,3 +1,16 @@
+> ⏸️ **RESUME s42 (§8 IN PROGRESS — design DONE, implementing).** Branch `feat/checkout-field-layer`.
+> Design+plan+Codex-critic phase COMPLETE & committed: spec `docs-internal/specs/2026-07-06-checkout-field-layer-design.md`,
+> plan `docs-internal/plans/2026-07-06-checkout-field-layer-plan.md` (14 tasks: 1,2,3,4,5,6,7,7b,8,9,10,11,12,13 +
+> a "Codex hardening amendments" section that amends specific tasks — APPLY the tagged amendment per task).
+> **DO NOT re-brainstorm.** Resume: `git checkout feat/checkout-field-layer`; `git log --oneline -8` to see the last
+> committed task; continue **superpowers:subagent-driven-development** (fresh implementer per task → spec reviewer →
+> code-quality reviewer; NO worktree so Serena works; edit PHP with built-in Edit not Serena; @since 2.0.2, VERSION
+> unchanged; regen `woodev/class-map.php` after any new class; full `composer test:unit` after wiring a shared path).
+> After all tasks: Codex critic on the impl diff (companion `…/openai-codex/codex/1.0.4/scripts/codex-companion.mjs task`,
+> inline bundle ≤~10KB; plan-critic thread `019f34cc`) → present verbatim, ask operator, re-critic own fixes → **my
+> browser e2e on `:8888` classic** (cascade / country-takeover RU-vs-FR / block-placement-without-pickup, screenshots)
+> → merge after green CI + CLEAN (squash + delete-branch, never `--auto`). The §8 brainstorm below is HISTORICAL.
+
 # Промт следующей сессии: §8 «Checkout field layer» (SP-3-checkout) — brainstorm → spec → plan → impl
 
 > Обновлён 06.07.2026 после **s41: UK-3/UK-4 (визард на UI-kit, PR #99) + SP-2-DEF (очистка секрета, PR #100) SHIPPED**, оба браузер-верифицированы мной на `:8888`. **SP-4 (DaData) ОТЛОЖЕН до §8** (решение s41 — см. ниже). Следующий приоритет — **§8 checkout field layer**, «одна из самых больных точек в реальных плагинах доставки» (слова оператора). Оператор явно попросил начать §8 **свежей сессией** (большой кусок, детальная проработка).
