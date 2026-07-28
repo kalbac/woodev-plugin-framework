@@ -1,4 +1,17 @@
 
+## Session 43 (2026-07-28) — GitHub backlog reconciled; stale AO branch removed
+
+- Audited GitHub Project #6, the Woodev Framework Backlog: all 28 framework issues are in Backlog; Inbox is empty.
+- Confirmed that nine autodev-harness cards on the framework board (#122–#127, #129, #131, #132) were real duplicates: each exists on the Autodev Harness board with its intended status.
+- Removed only those nine project items from the framework board; neither GitHub issues nor the source-board cards were changed.
+- Found that framework card #128 is stale: SP-3 field validation shipped in s39, so its open Backlog card needs a later closure decision.
+- Confirmed checkout field layer remains unmerged: it has no PR or branch CI run; the next gate is operator checkout submission, re-critic of rig fixes, then PR/CI and merge.
+- Confirmed `ao/woodev_frame-orchestrator` had no remote ref or unique commits and was fully merged into main; removed its Git worktree registration and deleted the local branch.
+- Windows keeps the empty former worktree directory locked by another process; no Git worktree or branch remains, so this is filesystem-only cleanup.
+- Updated Supermemory with the cross-project GitHub-card hygiene rule: verify source-board presence before removing foreign cards.
+- Gotcha compilation: no new source or workflow gotcha; the foreign-card condition is already represented by autodev issue #122.
+- PHPStan: not run (GitHub/docs housekeeping only; no source changed). Baseline HEAD: `a061b8f`.
+
 ## Session 42 (2026-07-06) — §8 CHECKOUT FIELD LAYER built + self-verified end-to-end; ⚠️ NOT merged (needs operator manual verify)
 
 > The big one: §8 checkout field layer ("one of the most painful points in real shipping plugins"). Fresh session per operator. Full pipeline start-to-finish; branch `feat/checkout-field-layer` (28 commits, pushed, NOT merged). Operator's explicit call at session end: mark **"needs operator manual verification"**, not DONE. `@since 2.0.2`, VERSION unchanged.
