@@ -6,20 +6,23 @@
  * {@see Map_Provider} seam (the other end being a carrier's own embedded
  * widget/iframe, see {@see Embedded_Map_Provider}).
  *
- * **Fallback key filter — no default shipped.** {@see self::resolve_api_key()} applies
- * `woodev_shipping_map_fallback_api_key`, but THIS FRAMEWORK hooks nothing on it. With no
- * merchant-set key and no plugin-supplied filter, `apikey=` is emitted empty and the map will
- * not load — {@see self::get_js_config()}'s `hasApiKey` flag exists so the JS provider can
- * detect that and degrade VISIBLY (a message, not an empty rectangle) instead of guessing from
- * a script load failure.
+ * **The fallback key is a plugin obligation, not a framework one.** The framework ships no
+ * Yandex Maps key and cannot even construct this class without one — the fallback key is a
+ * REQUIRED constructor argument (see {@see self::__construct()}), not an optional one an
+ * author could forget to pass. Resolution order is: the merchant's own `map_api_key` setting
+ * ({@see self::$api_key}) first, then the PLUGIN's fallback
+ * ({@see self::get_fallback_map_key()}), then nothing. A site-level
+ * `woodev_shipping_map_fallback_api_key` filter can still override the plugin's fallback —
+ * see {@see self::resolve_api_key()}.
  *
- * A plugin that DOES hook this filter with a shared key inherits a documented risk: one
- * shared key is a single quota-failure point across every install that relies on it — if
- * Yandex throttles or revokes it, all of them lose their map at once. This is exactly the
+ * **Accepted risk:** the plugin's fallback key is shared across every install of THAT plugin
+ * — its quota is a shared pool, and abuse or heavy use on one site can exhaust or get the key
+ * throttled/revoked for every other install relying on the same fallback. This is exactly the
  * reference plugin's own approach (`plugins-reference/woocommerce-yandex-delivery`) and has
- * worked for it for years, so it is a watch item for whichever plugin chooses it, not a
- * blocker — but that plugin still owns making the degradation visible; this class only builds
- * the URL and reports whether a key was supplied.
+ * worked for it for years, so it is a watch item for the plugin author, not a blocker — but it
+ * does mean the map must degrade VISIBLY (a message, not an empty rectangle) when the key is
+ * rejected; {@see self::get_js_config()}'s `hasApiKey` flag exists so the JS provider can
+ * detect a missing key directly instead of guessing from a script load failure.
  *
  * @since 2.0.2
  */
@@ -35,9 +38,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Map\\Yandex_Map_Provider' )
 	/**
 	 * Yandex.Maps pickup-point map provider.
 	 *
+	 * Not `final`, deliberately: {@see self::get_fallback_map_key()} exists precisely so a
+	 * plugin whose fallback key comes from somewhere unusual (a constant, a remote config)
+	 * can subclass this provider and override that ONE accessor.
+	 *
 	 * @since 2.0.2
 	 */
-	final class Yandex_Map_Provider implements Map_Provider {
+	class Yandex_Map_Provider implements Map_Provider {
 
 		/** @var string provider identifier */
 		private const PROVIDER_ID = 'yandex';
@@ -71,6 +78,20 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Map\\Yandex_Map_Provider' )
 		private const DEFAULT_LANG = 'ru_RU';
 
 		/**
+		 * The plugin's own shared fallback Yandex Maps API key.
+		 *
+		 * REQUIRED — this class cannot be constructed without one. That is deliberate: an
+		 * optional argument here would let a plugin author forget to pass it and ship a map
+		 * that only fails once it reaches the storefront. See
+		 * {@see self::get_fallback_map_key()} for the override seam and this class's
+		 * docblock for the shared-quota risk this key carries.
+		 *
+		 * @since 2.0.2
+		 * @var string
+		 */
+		private string $fallback_key;
+
+		/**
 		 * The plugin's own `map_api_key` setting value, or empty string when unset.
 		 *
 		 * Resolved by the OWNING PLUGIN (it knows how to read its own settings) and
@@ -83,18 +104,38 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Map\\Yandex_Map_Provider' )
 		private string $api_key;
 
 		/**
+		 * URL to instructions for obtaining a Yandex Maps API key, or `''` to render the
+		 * settings-field description without a link.
+		 *
+		 * TODO: the operator will supply the canonical URL for these instructions — do not
+		 * guess at a Yandex documentation address in the meantime; leave this `''` (or let a
+		 * plugin supply its own) until that URL is provided.
+		 *
+		 * @since 2.0.2
+		 * @var string
+		 */
+		private string $key_docs_url;
+
+		/**
 		 * Constructor.
 		 *
 		 * @since 2.0.2
 		 *
-		 * @param string $api_key the plugin's own `map_api_key` setting value, or
-		 *                        `''` when the merchant has not configured one — in
-		 *                        which case {@see self::resolve_api_key()} falls
-		 *                        back to the `woodev_shipping_map_fallback_api_key`
-		 *                        filter.
+		 * @param string $fallback_key the plugin's own shared fallback Yandex Maps API key —
+		 *                             REQUIRED, see this class's docblock and
+		 *                             {@see self::get_fallback_map_key()}.
+		 * @param string $api_key      the plugin's own `map_api_key` setting value, or `''`
+		 *                             when the merchant has not configured one — in which
+		 *                             case {@see self::resolve_api_key()} falls back to
+		 *                             `$fallback_key` (filterable via
+		 *                             `woodev_shipping_map_fallback_api_key`).
+		 * @param string $key_docs_url URL to instructions for obtaining a key, or `''` to
+		 *                             omit the link from the settings-field description.
 		 */
-		public function __construct( string $api_key = '' ) {
-			$this->api_key = $api_key;
+		public function __construct( string $fallback_key, string $api_key = '', string $key_docs_url = '' ) {
+			$this->fallback_key = $fallback_key;
+			$this->api_key      = $api_key;
+			$this->key_docs_url = $key_docs_url;
 		}
 
 		/**
@@ -156,19 +197,41 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Map\\Yandex_Map_Provider' )
 				'map_api_key' => [
 					'name'        => __( 'Ключ API Яндекс.Карт', 'woodev-plugin-framework' ),
 					'type'        => \Woodev_Setting::TYPE_STRING,
-					'description' => __(
-						'Необязательно. Фреймворк предоставляет фильтр '
-						. 'woodev_shipping_map_fallback_api_key для резервного ключа, но не '
-						. 'задаёт его по умолчанию — если ни этот ключ, ни фильтр не заданы, '
-						. 'карта не загрузится.',
-						'woodev-plugin-framework'
-					),
+					'description' => $this->build_field_description(),
 					'default'     => '',
 					'required'    => false,
 					// Deliberately not sensitive/masked — see method docblock.
 					'sensitive'   => false,
 				],
 			];
+		}
+
+		/**
+		 * Builds the settings-field description, warning the merchant about the shared
+		 * fallback key and pointing at instructions for obtaining their own — only when
+		 * {@see self::$key_docs_url} was actually supplied (see the TODO on that property).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string
+		 */
+		private function build_field_description(): string {
+			$description = __(
+				'Если не указан, используется общий ключ поставщика плагина. Общий ключ '
+				. 'расходует одну квоту на все магазины и может быть заблокирован. '
+				. 'Рекомендуем указать собственный ключ.',
+				'woodev-plugin-framework'
+			);
+
+			if ( '' === $this->key_docs_url ) {
+				return $description;
+			}
+
+			return $description . ' ' . sprintf(
+				/* translators: %s: URL to instructions for obtaining a Yandex Maps API key. */
+				__( 'Инструкция по получению ключа: %s.', 'woodev-plugin-framework' ),
+				$this->key_docs_url
+			);
 		}
 
 		/**
@@ -192,9 +255,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Map\\Yandex_Map_Provider' )
 			$api_key = $this->resolve_api_key();
 
 			return [
-				'scriptUrl'  => $this->build_script_url( $api_key ),
-				'ns'         => self::JS_NAMESPACE,
-				'hasApiKey'  => '' !== $api_key,
+				'scriptUrl' => $this->build_script_url( $api_key ),
+				'ns'        => self::JS_NAMESPACE,
+				'hasApiKey' => '' !== $api_key,
 			];
 		}
 
@@ -251,8 +314,23 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Map\\Yandex_Map_Provider' )
 		}
 
 		/**
-		 * Resolves the Yandex.Maps API key: the plugin's own setting when
-		 * non-empty, otherwise the fallback filter.
+		 * Gets the plugin's own shared fallback Yandex Maps API key.
+		 *
+		 * `protected`, not `private`: a plugin that resolves its fallback from somewhere
+		 * unusual (a constant, a remote config) can subclass this provider and override this
+		 * accessor instead of being forced through the constructor argument.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string
+		 */
+		protected function get_fallback_map_key(): string {
+			return $this->fallback_key;
+		}
+
+		/**
+		 * Resolves the Yandex.Maps API key: the merchant's own setting when non-empty,
+		 * otherwise the plugin's fallback — itself overridable by a site-level filter.
 		 *
 		 * @since 2.0.2
 		 *
@@ -266,18 +344,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Map\\Yandex_Map_Provider' )
 			/**
 			 * Filters the fallback Yandex Maps API key used when a merchant supplies none.
 			 *
-			 * The framework itself hooks nothing here — obtaining a key from Yandex is
-			 * awkward enough that requiring one would block many merchants outright, so a
-			 * plugin MAY hook this to supply a shared key, but is not required to. When
-			 * neither the merchant's own setting nor this filter supplies one, `apikey=` is
-			 * emitted empty and the map will not load; see this class's docblock for the
-			 * shared-key quota risk a plugin that DOES hook this takes on.
+			 * The default is the PLUGIN's own fallback key
+			 * ({@see Yandex_Map_Provider::get_fallback_map_key()}) — the framework itself
+			 * still hooks nothing here. This filter is a site-level override ON TOP of that
+			 * plugin-supplied fallback (e.g. to swap in an operator-managed key without a
+			 * plugin release), not the framework's own source of one.
 			 *
 			 * @since 2.0.2
 			 *
-			 * @param string $key The fallback API key. Default `''`.
+			 * @param string $key The fallback API key. Default: the plugin's own fallback key.
 			 */
-			return (string) apply_filters( 'woodev_shipping_map_fallback_api_key', '' );
+			return (string) apply_filters( 'woodev_shipping_map_fallback_api_key', $this->get_fallback_map_key() );
 		}
 	}
 

@@ -1,11 +1,13 @@
 <?php
 /**
  * Unit tests for the SP-5 Task 9 `Map_Provider` seam: the registry's register()/get()
- * resolution (an unknown id pins `null`, a re-registered id overrides), the concrete
- * `Yandex_Map_Provider` (script handle, settings field, ymaps URL construction — `load`,
- * `lang` locale-restriction, `ns`, `apikey` resolution order — and that no credential-shaped
- * key ever appears bare in `get_js_config()`), and the concrete `Embedded_Map_Provider`
- * (script handle, no API-key field, its own `get_js_config()` passthrough).
+ * resolution (an unknown id pins `null`, a re-registered id overrides, nothing is
+ * auto-registered), the concrete `Yandex_Map_Provider` (script handle, settings field, ymaps
+ * URL construction — `load`, `lang` locale-restriction, `ns`, the merchant-setting /
+ * plugin-fallback / site-filter `apikey` resolution chain, the REQUIRED fallback-key
+ * constructor argument — and that no credential-shaped key ever appears bare in
+ * `get_js_config()`), and the concrete `Embedded_Map_Provider` (script handle, no API-key
+ * field, its own `get_js_config()` passthrough).
  *
  * @package Woodev\Tests\Unit\Shipping\Map
  */
@@ -70,33 +72,41 @@ final class MapProviderRegistryTest extends TestCase {
 	}
 
 	// -------------------------------------------------------------------------
-	// registry — register()/get() resolution
+	// registry — register()/get() resolution; nothing auto-registered
 	// -------------------------------------------------------------------------
 
 	public function test_a_registered_provider_resolves_by_its_id(): void {
 		$registry = new Map_Provider_Registry();
-		$registry->register( new Yandex_Map_Provider() );
+		$registry->register( new Yandex_Map_Provider( '' ) );
 
 		$this->assertInstanceOf( Yandex_Map_Provider::class, $registry->get( 'yandex' ) );
 	}
 
 	public function test_an_unknown_provider_id_resolves_to_null(): void {
 		$registry = new Map_Provider_Registry();
-		$registry->register( new Yandex_Map_Provider() );
+		$registry->register( new Yandex_Map_Provider( '' ) );
 
 		$this->assertNull( $registry->get( 'leaflet' ) );
 	}
 
+	/**
+	 * The registry auto-registers NOTHING — not even Yandex_Map_Provider, whose fallback
+	 * key is now a required, plugin-supplied constructor argument the registry itself has
+	 * no source for. Every provider is registered by its owning plugin.
+	 */
 	public function test_a_registry_with_nothing_registered_resolves_every_id_to_null(): void {
 		$registry = new Map_Provider_Registry();
 
 		$this->assertNull( $registry->get( 'yandex' ) );
+		$this->assertNull( $registry->get( 'embedded' ) );
 	}
 
 	public function test_registering_a_provider_under_an_existing_id_overrides_the_previous_one(): void {
 		$registry = new Map_Provider_Registry();
-		$registry->register( new Yandex_Map_Provider( 'first' ) );
-		$registry->register( new Yandex_Map_Provider( 'second' ) );
+		// Merchant setting (2nd arg) supplied directly and non-empty, so resolution never
+		// touches apply_filters() — keeps this test about override behaviour only.
+		$registry->register( new Yandex_Map_Provider( 'unused-fallback', 'first' ) );
+		$registry->register( new Yandex_Map_Provider( 'unused-fallback', 'second' ) );
 
 		Functions\when( 'get_locale' )->justReturn( 'ru_RU' );
 
@@ -114,17 +124,60 @@ final class MapProviderRegistryTest extends TestCase {
 	}
 
 	// -------------------------------------------------------------------------
+	// Yandex_Map_Provider — the fallback key is a REQUIRED constructor argument
+	// -------------------------------------------------------------------------
+
+	/**
+	 * The honest way to pin "required": PHP itself will fatal on a call missing this
+	 * argument, so a `ReflectionMethod` parameter check proves the signature demands it
+	 * rather than merely documenting that it should be supplied. An optional argument here
+	 * would let a plugin author forget to pass it and ship a map that only fails once it
+	 * reaches the storefront.
+	 */
+	public function test_the_fallback_key_constructor_argument_is_required(): void {
+		$constructor = new \ReflectionMethod( Yandex_Map_Provider::class, '__construct' );
+		$parameters  = $constructor->getParameters();
+
+		$this->assertSame( 'fallback_key', $parameters[0]->getName() );
+		$this->assertFalse(
+			$parameters[0]->isOptional(),
+			'the fallback key must be a REQUIRED constructor argument'
+		);
+		$this->assertFalse( $parameters[0]->isDefaultValueAvailable() );
+	}
+
+	/**
+	 * A plugin that resolves its fallback from somewhere unusual (a constant, a remote
+	 * config) can subclass and override get_fallback_map_key() rather than being forced
+	 * through the constructor argument.
+	 */
+	public function test_get_fallback_map_key_can_be_overridden_by_a_subclass(): void {
+		Functions\when( 'get_locale' )->justReturn( 'ru_RU' );
+		Functions\when( 'apply_filters' )->returnArg( 2 );
+
+		$provider = new class( 'constructor-fallback' ) extends Yandex_Map_Provider {
+			protected function get_fallback_map_key(): string {
+				return 'overridden-fallback';
+			}
+		};
+
+		$params = $this->query_params_of( $provider->get_js_config( [] )['scriptUrl'] );
+
+		$this->assertSame( 'overridden-fallback', $params['apikey'] );
+	}
+
+	// -------------------------------------------------------------------------
 	// Yandex_Map_Provider — identity
 	// -------------------------------------------------------------------------
 
 	public function test_yandex_provider_id_is_yandex(): void {
-		$this->assertSame( 'yandex', ( new Yandex_Map_Provider() )->get_id() );
+		$this->assertSame( 'yandex', ( new Yandex_Map_Provider( '' ) )->get_id() );
 	}
 
 	public function test_yandex_provider_label_is_yandex_maps_in_russian(): void {
 		Functions\when( '__' )->returnArg( 1 );
 
-		$this->assertSame( 'Яндекс.Карты', ( new Yandex_Map_Provider() )->get_label() );
+		$this->assertSame( 'Яндекс.Карты', ( new Yandex_Map_Provider( '' ) )->get_label() );
 	}
 
 	public function test_embedded_provider_label_names_a_carrier_widget_in_russian(): void {
@@ -140,7 +193,10 @@ final class MapProviderRegistryTest extends TestCase {
 	 * mean.
 	 */
 	public function test_yandex_script_handle_matches_the_handler_enqueue_pattern(): void {
-		$this->assertSame( 'woodev-pickup-map-provider-yandex', ( new Yandex_Map_Provider() )->get_script_handle() );
+		$this->assertSame(
+			'woodev-pickup-map-provider-yandex',
+			( new Yandex_Map_Provider( '' ) )->get_script_handle()
+		);
 	}
 
 	// -------------------------------------------------------------------------
@@ -150,7 +206,7 @@ final class MapProviderRegistryTest extends TestCase {
 	public function test_yandex_declares_an_optional_api_key_field_that_is_not_sensitive(): void {
 		Functions\when( '__' )->returnArg( 1 );
 
-		$fields = ( new Yandex_Map_Provider() )->get_settings_fields();
+		$fields = ( new Yandex_Map_Provider( '' ) )->get_settings_fields();
 
 		$this->assertArrayHasKey( 'map_api_key', $fields );
 		$this->assertArrayHasKey( 'sensitive', $fields['map_api_key'] );
@@ -169,7 +225,7 @@ final class MapProviderRegistryTest extends TestCase {
 	public function test_yandex_api_key_field_is_not_required(): void {
 		Functions\when( '__' )->returnArg( 1 );
 
-		$fields = ( new Yandex_Map_Provider() )->get_settings_fields();
+		$fields = ( new Yandex_Map_Provider( '' ) )->get_settings_fields();
 
 		$this->assertArrayHasKey( 'required', $fields['map_api_key'] );
 		$this->assertFalse( $fields['map_api_key']['required'] );
@@ -184,7 +240,7 @@ final class MapProviderRegistryTest extends TestCase {
 	public function test_yandex_api_key_field_uses_the_woodev_settings_api_shape(): void {
 		Functions\when( '__' )->returnArg( 1 );
 
-		$field = ( new Yandex_Map_Provider() )->get_settings_fields()['map_api_key'];
+		$field = ( new Yandex_Map_Provider( '' ) )->get_settings_fields()['map_api_key'];
 
 		$this->assertArrayHasKey( 'name', $field );
 		$this->assertArrayNotHasKey( 'title', $field, 'WC form_fields key, not the Woodev settings-API shape' );
@@ -194,7 +250,7 @@ final class MapProviderRegistryTest extends TestCase {
 	public function test_yandex_api_key_field_type_is_the_woodev_string_setting_type(): void {
 		Functions\when( '__' )->returnArg( 1 );
 
-		$fields = ( new Yandex_Map_Provider() )->get_settings_fields();
+		$fields = ( new Yandex_Map_Provider( '' ) )->get_settings_fields();
 
 		$this->assertSame( \Woodev_Setting::TYPE_STRING, $fields['map_api_key']['type'] );
 	}
@@ -207,6 +263,36 @@ final class MapProviderRegistryTest extends TestCase {
 	}
 
 	// -------------------------------------------------------------------------
+	// Yandex_Map_Provider — settings-field description: shared-key warning + docs link
+	// -------------------------------------------------------------------------
+
+	public function test_settings_field_description_warns_about_the_shared_fallback_key(): void {
+		Functions\when( '__' )->returnArg( 1 );
+
+		$description = ( new Yandex_Map_Provider( '' ) )->get_settings_fields()['map_api_key']['description'];
+
+		$this->assertStringContainsString( 'общий ключ', $description );
+		$this->assertStringContainsString( 'собственный ключ', $description );
+	}
+
+	public function test_settings_field_description_renders_without_a_docs_link_by_default(): void {
+		Functions\when( '__' )->returnArg( 1 );
+
+		$description = ( new Yandex_Map_Provider( '' ) )->get_settings_fields()['map_api_key']['description'];
+
+		$this->assertStringNotContainsString( 'Инструкция', $description );
+	}
+
+	public function test_settings_field_description_includes_the_docs_link_when_supplied(): void {
+		Functions\when( '__' )->returnArg( 1 );
+
+		$description = ( new Yandex_Map_Provider( '', '', 'https://example.test/docs' ) )
+			->get_settings_fields()['map_api_key']['description'];
+
+		$this->assertStringContainsString( 'https://example.test/docs', $description );
+	}
+
+	// -------------------------------------------------------------------------
 	// Yandex_Map_Provider — ymaps script URL: load, ns, lang, apikey
 	// -------------------------------------------------------------------------
 
@@ -214,7 +300,7 @@ final class MapProviderRegistryTest extends TestCase {
 		Functions\when( 'get_locale' )->justReturn( 'ru_RU' );
 		Functions\when( 'apply_filters' )->justReturn( '' );
 
-		$url    = ( new Yandex_Map_Provider() )->get_js_config( [] )['scriptUrl'];
+		$url    = ( new Yandex_Map_Provider( '' ) )->get_js_config( [] )['scriptUrl'];
 		$params = $this->query_params_of( $url );
 
 		$this->assertStringStartsWith( 'https://api-maps.yandex.ru/2.1/', $url );
@@ -234,7 +320,7 @@ final class MapProviderRegistryTest extends TestCase {
 		Functions\when( 'get_locale' )->justReturn( 'ru_RU' );
 		Functions\when( 'apply_filters' )->returnArg( 2 );
 
-		$config = ( new Yandex_Map_Provider() )->get_js_config( [] );
+		$config = ( new Yandex_Map_Provider( '' ) )->get_js_config( [] );
 		$params = $this->query_params_of( $config['scriptUrl'] );
 
 		$this->assertSame( 'WoodevPickupMap', $params['ns'] );
@@ -249,7 +335,7 @@ final class MapProviderRegistryTest extends TestCase {
 		Functions\when( 'get_locale' )->justReturn( 'ru_RU' );
 		Functions\when( 'apply_filters' )->returnArg( 2 );
 
-		$params = $this->query_params_of( ( new Yandex_Map_Provider() )->get_js_config( [] )['scriptUrl'] );
+		$params = $this->query_params_of( ( new Yandex_Map_Provider( '' ) )->get_js_config( [] )['scriptUrl'] );
 
 		$this->assertSame( 'package.standard', $params['load'] );
 	}
@@ -261,7 +347,7 @@ final class MapProviderRegistryTest extends TestCase {
 		Functions\when( 'get_locale' )->justReturn( $locale );
 		Functions\when( 'apply_filters' )->returnArg( 2 );
 
-		$params = $this->query_params_of( ( new Yandex_Map_Provider() )->get_js_config( [] )['scriptUrl'] );
+		$params = $this->query_params_of( ( new Yandex_Map_Provider( '' ) )->get_js_config( [] )['scriptUrl'] );
 
 		$this->assertSame( $locale, $params['lang'] );
 	}
@@ -288,7 +374,7 @@ final class MapProviderRegistryTest extends TestCase {
 		Functions\when( 'get_locale' )->justReturn( 'de_DE' );
 		Functions\when( 'apply_filters' )->returnArg( 2 );
 
-		$params = $this->query_params_of( ( new Yandex_Map_Provider() )->get_js_config( [] )['scriptUrl'] );
+		$params = $this->query_params_of( ( new Yandex_Map_Provider( '' ) )->get_js_config( [] )['scriptUrl'] );
 
 		$this->assertSame( 'ru_RU', $params['lang'] );
 	}
@@ -297,147 +383,9 @@ final class MapProviderRegistryTest extends TestCase {
 		Functions\when( 'get_locale' )->justReturn( '' );
 		Functions\when( 'apply_filters' )->returnArg( 2 );
 
-		$params = $this->query_params_of( ( new Yandex_Map_Provider() )->get_js_config( [] )['scriptUrl'] );
-
-		$this->assertSame( 'ru_RU', $params['lang'] );
-	}
-
-	// -------------------------------------------------------------------------
-	// Yandex_Map_Provider — apikey resolution order
-	// -------------------------------------------------------------------------
-
-	public function test_the_constructor_supplied_key_wins_over_the_fallback_filter(): void {
-		Functions\when( 'get_locale' )->justReturn( 'ru_RU' );
-		Functions\expect( 'apply_filters' )->never();
-
-		$params = $this->query_params_of(
-			( new Yandex_Map_Provider( 'MERCHANT-KEY' ) )->get_js_config( [] )['scriptUrl']
-		);
-
-		$this->assertSame( 'MERCHANT-KEY', $params['apikey'] );
-	}
-
-	public function test_the_fallback_filter_is_used_when_no_key_is_configured(): void {
-		Functions\when( 'get_locale' )->justReturn( 'ru_RU' );
-		Functions\when( 'apply_filters' )->alias(
-			static fn( string $tag, $default ) => 'woodev_shipping_map_fallback_api_key' === $tag
-				? 'FALLBACK-KEY'
-				: $default
-		);
-
 		$params = $this->query_params_of( ( new Yandex_Map_Provider( '' ) )->get_js_config( [] )['scriptUrl'] );
 
-		$this->assertSame( 'FALLBACK-KEY', $params['apikey'] );
-	}
-
-	public function test_the_fallback_filter_receives_the_correct_hook_name_and_default(): void {
-		Functions\when( 'get_locale' )->justReturn( 'ru_RU' );
-
-		$captured = [];
-		Functions\when( 'apply_filters' )->alias(
-			static function ( string $tag, $default ) use ( &$captured ) {
-				$captured[] = [ $tag, $default ];
-
-				return $default;
-			}
-		);
-
-		( new Yandex_Map_Provider() )->get_js_config( [] );
-
-		$this->assertCount( 1, $captured );
-		$this->assertSame( 'woodev_shipping_map_fallback_api_key', $captured[0][0] );
-		$this->assertSame( '', $captured[0][1], 'the filter default must be an empty string' );
-	}
-
-	public function test_the_apikey_param_is_empty_when_both_the_setting_and_the_filter_are_empty(): void {
-		Functions\when( 'get_locale' )->justReturn( 'ru_RU' );
-		Functions\when( 'apply_filters' )->returnArg( 2 );
-
-		$params = $this->query_params_of( ( new Yandex_Map_Provider() )->get_js_config( [] )['scriptUrl'] );
-
-		$this->assertSame( '', $params['apikey'] );
-	}
-
-	// -------------------------------------------------------------------------
-	// no bare credential-shaped key ever leaves get_js_config()
-	// -------------------------------------------------------------------------
-
-	/**
-	 * The api key must reach the browser ONLY inside `scriptUrl` — never under a separate
-	 * top-level key that looks like a secret (which would invite masking it, contradicting
-	 * the "not sensitive" decision, since it is not actually hideable).
-	 */
-	public function test_yandex_js_config_emits_no_bare_credential_shaped_key(): void {
-		Functions\when( 'get_locale' )->justReturn( 'ru_RU' );
-		Functions\when( 'apply_filters' )->returnArg( 2 );
-
-		$config = ( new Yandex_Map_Provider( 'SOME-KEY' ) )->get_js_config( [] );
-
-		$this->assertSame( [ 'scriptUrl', 'ns', 'hasApiKey' ], array_keys( $config ) );
-
-		// hasApiKey is a plain boolean, not the credential itself — explicitly confirm it
-		// is not a string that could carry a leaked key value.
-		$this->assertIsBool( $config['hasApiKey'] );
-
-		foreach ( array_keys( $config ) as $key ) {
-			$this->assertDoesNotMatchRegularExpression( '/^(api[_-]?key|secret|token|password)/i', $key );
-		}
-	}
-
-	// -------------------------------------------------------------------------
-	// Yandex_Map_Provider — hasApiKey: lets the JS detect a missing key directly
-	// -------------------------------------------------------------------------
-
-	public function test_has_api_key_is_true_when_a_key_is_configured(): void {
-		Functions\when( 'get_locale' )->justReturn( 'ru_RU' );
-		Functions\expect( 'apply_filters' )->never();
-
-		$config = ( new Yandex_Map_Provider( 'MERCHANT-KEY' ) )->get_js_config( [] );
-
-		$this->assertTrue( $config['hasApiKey'] );
-	}
-
-	public function test_has_api_key_is_false_when_neither_the_setting_nor_the_filter_supply_one(): void {
-		Functions\when( 'get_locale' )->justReturn( 'ru_RU' );
-		Functions\when( 'apply_filters' )->returnArg( 2 );
-
-		$config = ( new Yandex_Map_Provider() )->get_js_config( [] );
-
-		$this->assertFalse( $config['hasApiKey'] );
-	}
-
-	public function test_has_api_key_is_true_when_only_the_fallback_filter_supplies_one(): void {
-		Functions\when( 'get_locale' )->justReturn( 'ru_RU' );
-		Functions\when( 'apply_filters' )->justReturn( 'FALLBACK-KEY' );
-
-		$config = ( new Yandex_Map_Provider() )->get_js_config( [] );
-
-		$this->assertTrue( $config['hasApiKey'] );
-	}
-
-	// -------------------------------------------------------------------------
-	// Yandex_Map_Provider — apikey must be percent-encoded, not corrupt the query string
-	// -------------------------------------------------------------------------
-
-	/**
-	 * `add_query_arg()` does not encode its values (WordPress's own docs say callers must).
-	 * A key containing `&` or a space must be `rawurlencode()`d before it reaches the URL,
-	 * or it forks off a bogus extra query param / breaks the URL. The test setup's
-	 * add_query_arg() stub deliberately mirrors that real, non-encoding behaviour (unlike
-	 * http_build_query(), which would silently mask a missing rawurlencode() call).
-	 */
-	public function test_a_key_containing_ampersand_and_space_does_not_corrupt_the_query_string(): void {
-		Functions\when( 'get_locale' )->justReturn( 'ru_RU' );
-
-		$url    = ( new Yandex_Map_Provider( 'a&b c' ) )->get_js_config( [] )['scriptUrl'];
-		$params = $this->query_params_of( $url );
-
-		$this->assertSame( 'a&b c', $params['apikey'] );
-		$this->assertArrayNotHasKey(
-			'b',
-			$params,
-			'an unencoded "&" in the key must not fork off a bogus extra query param'
-		);
+		$this->assertSame( 'ru_RU', $params['lang'] );
 	}
 
 	// -------------------------------------------------------------------------
@@ -451,7 +399,7 @@ final class MapProviderRegistryTest extends TestCase {
 		Functions\when( 'get_locale' )->justReturn( $locale );
 		Functions\when( 'apply_filters' )->returnArg( 2 );
 
-		$params = $this->query_params_of( ( new Yandex_Map_Provider() )->get_js_config( [] )['scriptUrl'] );
+		$params = $this->query_params_of( ( new Yandex_Map_Provider( '' ) )->get_js_config( [] )['scriptUrl'] );
 
 		$this->assertSame( 'en_US', $params['lang'] );
 	}
@@ -475,9 +423,114 @@ final class MapProviderRegistryTest extends TestCase {
 		Functions\when( 'get_locale' )->justReturn( 'enx_XX' );
 		Functions\when( 'apply_filters' )->returnArg( 2 );
 
-		$params = $this->query_params_of( ( new Yandex_Map_Provider() )->get_js_config( [] )['scriptUrl'] );
+		$params = $this->query_params_of( ( new Yandex_Map_Provider( '' ) )->get_js_config( [] )['scriptUrl'] );
 
 		$this->assertSame( 'ru_RU', $params['lang'] );
+	}
+
+	// -------------------------------------------------------------------------
+	// Yandex_Map_Provider — apikey resolution chain: setting -> plugin fallback -> filter
+	// -------------------------------------------------------------------------
+
+	public function test_the_merchant_setting_wins_over_the_plugin_fallback(): void {
+		Functions\when( 'get_locale' )->justReturn( 'ru_RU' );
+		Functions\expect( 'apply_filters' )->never();
+
+		$params = $this->query_params_of(
+			( new Yandex_Map_Provider( 'PLUGIN-FALLBACK', 'MERCHANT-KEY' ) )->get_js_config( [] )['scriptUrl']
+		);
+
+		$this->assertSame( 'MERCHANT-KEY', $params['apikey'] );
+	}
+
+	public function test_the_plugin_fallback_is_used_when_no_merchant_setting_is_configured(): void {
+		Functions\when( 'get_locale' )->justReturn( 'ru_RU' );
+		Functions\when( 'apply_filters' )->returnArg( 2 );
+
+		$params = $this->query_params_of(
+			( new Yandex_Map_Provider( 'PLUGIN-FALLBACK' ) )->get_js_config( [] )['scriptUrl']
+		);
+
+		$this->assertSame( 'PLUGIN-FALLBACK', $params['apikey'] );
+	}
+
+	/**
+	 * The site-level filter is an OVERRIDE on top of the plugin's fallback, not a second
+	 * independent source: it can replace the fallback with something else entirely,
+	 * regardless of what the plugin supplied.
+	 */
+	public function test_a_site_level_filter_can_override_the_plugin_fallback(): void {
+		Functions\when( 'get_locale' )->justReturn( 'ru_RU' );
+		Functions\when( 'apply_filters' )->justReturn( 'SITE-OVERRIDE-KEY' );
+
+		$params = $this->query_params_of(
+			( new Yandex_Map_Provider( 'PLUGIN-FALLBACK' ) )->get_js_config( [] )['scriptUrl']
+		);
+
+		$this->assertSame( 'SITE-OVERRIDE-KEY', $params['apikey'] );
+	}
+
+	/**
+	 * Value-mutant guard: the filter's DEFAULT argument must be the plugin's own fallback
+	 * key, not a hardcoded `''` — a mutant reverting to `apply_filters( $tag, '' )` would
+	 * silently discard the plugin's fallback the moment a merchant filter returns its own
+	 * `$default` unchanged (as `returnArg( 2 )` does here).
+	 */
+	public function test_the_fallback_filter_receives_the_plugins_fallback_key_as_its_default(): void {
+		Functions\when( 'get_locale' )->justReturn( 'ru_RU' );
+
+		$captured = [];
+		Functions\when( 'apply_filters' )->alias(
+			static function ( string $tag, $default ) use ( &$captured ) {
+				$captured[] = [ $tag, $default ];
+
+				return $default;
+			}
+		);
+
+		( new Yandex_Map_Provider( 'PLUGIN-FALLBACK-KEY' ) )->get_js_config( [] );
+
+		$this->assertCount( 1, $captured );
+		$this->assertSame( 'woodev_shipping_map_fallback_api_key', $captured[0][0] );
+		$this->assertSame(
+			'PLUGIN-FALLBACK-KEY',
+			$captured[0][1],
+			'the filter default must be the PLUGIN fallback key, not a hardcoded empty string'
+		);
+	}
+
+	public function test_the_apikey_param_is_empty_when_neither_the_setting_nor_the_plugin_fallback_supply_one(): void {
+		Functions\when( 'get_locale' )->justReturn( 'ru_RU' );
+		Functions\when( 'apply_filters' )->returnArg( 2 );
+
+		$params = $this->query_params_of( ( new Yandex_Map_Provider( '' ) )->get_js_config( [] )['scriptUrl'] );
+
+		$this->assertSame( '', $params['apikey'] );
+	}
+
+	// -------------------------------------------------------------------------
+	// no bare credential-shaped key ever leaves get_js_config()
+	// -------------------------------------------------------------------------
+
+	/**
+	 * The api key must reach the browser ONLY inside `scriptUrl` — never under a separate
+	 * top-level key that looks like a secret (which would invite masking it, contradicting
+	 * the "not sensitive" decision, since it is not actually hideable).
+	 */
+	public function test_yandex_js_config_emits_no_bare_credential_shaped_key(): void {
+		Functions\when( 'get_locale' )->justReturn( 'ru_RU' );
+
+		$config = ( new Yandex_Map_Provider( '', 'SOME-KEY' ) )->get_js_config( [] );
+
+		$this->assertSame( [ 'scriptUrl', 'ns', 'hasApiKey' ], array_keys( $config ) );
+
+		// hasApiKey is a plain boolean, not the credential itself — explicitly confirm it
+		// is not a string that could carry a leaked key value.
+		$this->assertIsBool( $config['hasApiKey'] );
+
+		foreach ( array_keys( $config ) as $key ) {
+			$this->assertDoesNotMatchRegularExpression( '/^(api[_-]?key|secret|token|password)/i', $key );
+		}
 	}
 
 	public function test_embedded_js_config_declares_no_api_key_of_any_kind(): void {
@@ -487,6 +540,62 @@ final class MapProviderRegistryTest extends TestCase {
 		foreach ( array_keys( $config ) as $key ) {
 			$this->assertDoesNotMatchRegularExpression( '/^(api[_-]?key|secret|token|password)/i', $key );
 		}
+	}
+
+	// -------------------------------------------------------------------------
+	// Yandex_Map_Provider — hasApiKey: lets the JS detect a missing key directly
+	// -------------------------------------------------------------------------
+
+	public function test_has_api_key_is_true_when_a_merchant_key_is_configured(): void {
+		Functions\when( 'get_locale' )->justReturn( 'ru_RU' );
+		Functions\expect( 'apply_filters' )->never();
+
+		$config = ( new Yandex_Map_Provider( '', 'MERCHANT-KEY' ) )->get_js_config( [] );
+
+		$this->assertTrue( $config['hasApiKey'] );
+	}
+
+	public function test_has_api_key_is_false_when_neither_the_setting_nor_the_plugin_fallback_supply_one(): void {
+		Functions\when( 'get_locale' )->justReturn( 'ru_RU' );
+		Functions\when( 'apply_filters' )->returnArg( 2 );
+
+		$config = ( new Yandex_Map_Provider( '' ) )->get_js_config( [] );
+
+		$this->assertFalse( $config['hasApiKey'] );
+	}
+
+	public function test_has_api_key_is_true_when_only_the_plugin_fallback_supplies_one(): void {
+		Functions\when( 'get_locale' )->justReturn( 'ru_RU' );
+		Functions\when( 'apply_filters' )->returnArg( 2 );
+
+		$config = ( new Yandex_Map_Provider( 'PLUGIN-FALLBACK' ) )->get_js_config( [] );
+
+		$this->assertTrue( $config['hasApiKey'] );
+	}
+
+	// -------------------------------------------------------------------------
+	// Yandex_Map_Provider — apikey must be percent-encoded, not corrupt the query string
+	// -------------------------------------------------------------------------
+
+	/**
+	 * `add_query_arg()` does not encode its values (WordPress's own docs say callers must).
+	 * A key containing `&` or a space must be `rawurlencode()`d before it reaches the URL,
+	 * or it forks off a bogus extra query param / breaks the URL. The test setup's
+	 * add_query_arg() stub deliberately mirrors that real, non-encoding behaviour (unlike
+	 * http_build_query(), which would silently mask a missing rawurlencode() call).
+	 */
+	public function test_a_key_containing_ampersand_and_space_does_not_corrupt_the_query_string(): void {
+		Functions\when( 'get_locale' )->justReturn( 'ru_RU' );
+
+		$url    = ( new Yandex_Map_Provider( '', 'a&b c' ) )->get_js_config( [] )['scriptUrl'];
+		$params = $this->query_params_of( $url );
+
+		$this->assertSame( 'a&b c', $params['apikey'] );
+		$this->assertArrayNotHasKey(
+			'b',
+			$params,
+			'an unencoded "&" in the key must not fork off a bogus extra query param'
+		);
 	}
 
 	// -------------------------------------------------------------------------

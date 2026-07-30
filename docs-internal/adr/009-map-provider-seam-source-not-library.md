@@ -47,24 +47,46 @@ public function get_js_config( array $context ): array;
 `get_js_config( array $context )` so a provider can shape its config against the current
 request instead of emitting a fixed blob.
 
-Two concrete providers now ship as framework classes (not "framework ships no default
-provider" — that line from the original registry docblock no longer describes reality):
-`Yandex_Map_Provider` (our own map; resolves its API key from the plugin's own setting, else
-a `woodev_shipping_map_fallback_api_key` filter the framework itself hooks nothing on — see
-that class's docblock for why a plugin that DOES hook it with a shared key takes on a
-documented, accepted quota risk, not an oversight) and `Embedded_Map_Provider` (a carrier's
-widget/iframe; declares no API-key field at all).
+Two concrete providers now ship as framework classes: `Yandex_Map_Provider` (our own map;
+resolves its API key from the merchant's own setting, else the PLUGIN's own required
+fallback key, itself overridable by a site-level `woodev_shipping_map_fallback_api_key`
+filter — see that class's docblock and the 2026-07-31 addendum below for why the fallback is
+a plugin obligation, not a framework one, and the shared-quota risk that obligation carries)
+and `Embedded_Map_Provider` (a carrier's widget/iframe; declares no API-key field at all).
+"Framework ships no default provider" from the original registry docblock DOES still
+describe reality — see below.
 
-`Yandex_Map_Provider` IS registered by default, in
-`Shipping_Plugin::get_map_provider_registry()` — its constructor is fully defaulted (an
-empty key just falls back to the filter above), so the registry can build one with no
-plugin-supplied data, giving the seam a real id → provider resolution path rather than a
-permanently-empty registry with zero consumers. `Embedded_Map_Provider` is deliberately NOT
-auto-registered: its constructor requires an embed URL and an expected origin, both
-plugin-supplied, which the registry has no source for. A host plugin that wants a
-merchant-configured Yandex key re-registers `yandex` with its own instance
-(`Map_Provider_Registry::register()` overrides a previous registration under the same id).
-`Map_Provider_Registry::get()` for an id with nothing registered still resolves to `null`.
+Neither concrete provider is registered by default. `Map_Provider_Registry::get()` for an id
+with nothing registered resolves to `null`; the OWNING PLUGIN registers whichever provider(s)
+it uses. `Embedded_Map_Provider` was never a candidate for a default registration — its
+constructor requires an embed URL and an expected origin, both plugin-supplied, which the
+registry has no source for. `Yandex_Map_Provider` briefly WAS registered by default (see the
+2026-07-31 addendum below) on the theory that its constructor was fully optional; the operator
+reversed that once the fallback key became a required, plugin-supplied constructor argument —
+the framework can no longer construct one at all without plugin data, so it registers none.
+
+## Addendum (2026-07-31): the fallback key is a plugin obligation, not a framework one
+
+A code-review round on this seam raised the fallback-key design as underspecified:
+`Yandex_Map_Provider`'s constructor originally took an OPTIONAL API key defaulting to `''`,
+with `woodev_shipping_map_fallback_api_key` as the only fallback source and no default value
+of its own. That made the constructor fully defaultable, so `Shipping_Plugin::get_map_provider_registry()`
+was changed to register a `Yandex_Map_Provider()` by default — the review's own suggestion at
+the time, reasoned as "the registry can build one with no plugin-supplied data."
+
+The operator settled the question differently: **the framework ships no key and takes no
+responsibility for one; the plugin is obliged to supply its own fallback, and a
+site-level filter can still override it.** Concretely: the fallback key is now a REQUIRED
+first constructor argument (not optional — an optional one would let a plugin author forget
+it and ship a map that only fails on the storefront), exposed via an overridable
+`get_fallback_map_key()` accessor for a plugin that resolves its key unusually, with the site
+filter wrapped around that accessor's return value rather than around `''`. This makes
+`new Yandex_Map_Provider()` — and therefore the just-added default registration — IMPOSSIBLE:
+the framework cannot construct the class without plugin-supplied data. The default
+registration in `get_map_provider_registry()` is reverted; the framework registers no
+provider, exactly the position the ORIGINAL registry docblock held before this ADR's Decision
+section (line 50–56 above) briefly reversed it. This addendum exists so that reversal is a
+recorded correction, not a silently vanished line of reasoning.
 
 `Pickup_Handler` now takes the `Map_Provider` instance directly (not a bare id string) — its
 `get_js_config()`'s `provider` key reads `$map_provider->get_id()`, and `enqueue_assets()`

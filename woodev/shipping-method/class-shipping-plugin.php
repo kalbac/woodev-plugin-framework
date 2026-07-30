@@ -772,18 +772,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		/**
 		 * Gets the map-provider registry, building it on first use.
 		 *
-		 * {@see Map\Yandex_Map_Provider} is registered by default — its constructor is fully
-		 * defaulted (an empty API key falls back to the
-		 * `woodev_shipping_map_fallback_api_key` filter), so the registry can build one with
-		 * no plugin-supplied data. A host plugin that wants a merchant-configured key
-		 * re-registers `yandex` with its own instance (see
-		 * {@see Map\Map_Provider_Registry::register()} — a re-registered id overrides the
-		 * previous one).
-		 *
-		 * {@see Map\Embedded_Map_Provider} is deliberately NOT registered here: its
-		 * constructor requires an embed URL and an expected origin, both plugin-supplied —
-		 * the registry has no source for either, so only the owning plugin can construct and
-		 * register it.
+		 * The framework registers no default provider — neither
+		 * {@see Map\Yandex_Map_Provider} nor {@see Map\Embedded_Map_Provider}. An earlier
+		 * revision of this method registered `Yandex_Map_Provider` by default on the theory
+		 * that its constructor was fully defaulted; that is no longer true. The fallback API
+		 * key is now a REQUIRED constructor argument (a plugin obligation, not a framework
+		 * one — see that class's docblock), so the framework literally cannot construct one
+		 * without plugin-supplied data. Every host plugin registers whichever provider(s) it
+		 * uses; see {@see Map\Map_Provider_Registry::register()} — a re-registered id
+		 * overrides the previous one.
 		 *
 		 * @since 1.5.0
 		 *
@@ -793,7 +790,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 
 			if ( ! $this->map_provider_registry instanceof Map\Map_Provider_Registry ) {
 				$this->map_provider_registry = new Map\Map_Provider_Registry();
-				$this->map_provider_registry->register( new Map\Yandex_Map_Provider() );
 			}
 
 			return $this->map_provider_registry;
