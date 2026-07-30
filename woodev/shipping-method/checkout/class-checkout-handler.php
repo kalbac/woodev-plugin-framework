@@ -790,7 +790,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 							$this->add_error(
 								sprintf(
 									/* translators: %s: pickup field label */
-									__( '%s is required for pickup delivery.', 'woodev-plugin-framework' ),
+									__( 'Для доставки в пункт выдачи выберите значение поля «%s».', 'woodev-plugin-framework' ),
 									'' !== (string) $pickup_field['label'] ? (string) $pickup_field['label'] : (string) $pickup_field['id']
 								)
 							);
@@ -992,7 +992,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 			$label = '' !== (string) $field['label'] ? (string) $field['label'] : (string) $field['id'];
 
 			/* translators: %s: checkout field label */
-			return sprintf( __( '%s is a required field.', 'woodev-plugin-framework' ), $label );
+			return sprintf( __( 'Заполните поле «%s».', 'woodev-plugin-framework' ), $label );
 		}
 
 		/**
@@ -1008,7 +1008,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 			$label = '' !== (string) $field['label'] ? (string) $field['label'] : (string) $field['id'];
 
 			/* translators: %s: checkout field label */
-			return sprintf( __( '%s is not valid.', 'woodev-plugin-framework' ), $label );
+			return sprintf( __( 'Поле «%s» заполнено некорректно.', 'woodev-plugin-framework' ), $label );
 		}
 
 		/**

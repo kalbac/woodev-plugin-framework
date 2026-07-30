@@ -21,8 +21,8 @@ use Woodev\Framework\Shipping\Rest_Api\Field_Source_Controller;
 use Woodev\Tests\Integration\TestCase;
 use WP_REST_Request;
 
-require_once dirname( __DIR__, 2 ) . '/woodev/shipping-method/checkout/class-checkout-fields.php';
-require_once dirname( __DIR__, 2 ) . '/woodev/shipping-method/rest-api/class-field-source-controller.php';
+require_once dirname( __DIR__, 3 ) . '/woodev/shipping-method/checkout/class-checkout-fields.php';
+require_once dirname( __DIR__, 3 ) . '/woodev/shipping-method/rest-api/class-field-source-controller.php';
 
 class FieldSourceRouteTest extends TestCase {
 

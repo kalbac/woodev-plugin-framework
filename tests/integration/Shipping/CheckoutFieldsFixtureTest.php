@@ -106,13 +106,18 @@ class CheckoutFieldsFixtureTest extends TestCase {
 	// -------------------------------------------------------------------------
 
 	/**
-	 * inject() must enhance `billing_state` and `billing_city` in-place so that
-	 * their `type` becomes `select` — even when those keys already exist in the
-	 * WC-shaped array with a different type.
+	 * inject() must leave TAKEOVER fields exactly as WooCommerce shaped them.
+	 *
+	 * The server renders a guessed country (a guest has no country yet) while the customer
+	 * may be looking at a different one, so a server-side type swap would mismatch what is
+	 * displayed. Regions instead reach the field as WooCommerce NATIVE states through
+	 * {@see Checkout_Handler::inject_states()}, and the city select is converted by the
+	 * classic adapter for the ACTUAL country. With JavaScript off, WooCommerce's own field
+	 * survives — acceptable progressive enhancement.
 	 *
 	 * @return void
 	 */
-	public function test_inject_enhances_billing_state_and_billing_city_type(): void {
+	public function test_inject_leaves_takeover_fields_to_woocommerce(): void {
 		$handler = $this->plugin->get_checkout_handler();
 
 		// Simulate a WC checkout fields array with pre-existing billing section.
@@ -126,18 +131,33 @@ class CheckoutFieldsFixtureTest extends TestCase {
 		$result = $handler->inject( $input );
 
 		$this->assertArrayHasKey( 'billing', $result, 'Billing section must exist after inject().' );
-		$this->assertArrayHasKey( 'billing_state', $result['billing'], 'billing_state must be in billing section.' );
-		$this->assertArrayHasKey( 'billing_city', $result['billing'], 'billing_city must be in billing section.' );
 
 		$this->assertSame(
-			'select',
-			$result['billing']['billing_state']['type'],
-			'billing_state type should be enhanced to "select" by inject().'
+			$input['billing']['billing_state'],
+			$result['billing']['billing_state'],
+			'billing_state is a takeover field — inject() must not touch it.'
 		);
 		$this->assertSame(
-			'select',
-			$result['billing']['billing_city']['type'],
-			'billing_city type should be enhanced to "select" by inject().'
+			$input['billing']['billing_city'],
+			$result['billing']['billing_city'],
+			'billing_city is a takeover field — inject() must not touch it.'
+		);
+	}
+
+	/**
+	 * The pickup slot is NOT a takeover field, so inject() still owns it: it declares no
+	 * section of its own and must therefore land in the caller-supplied default section.
+	 * Guards that skipping takeover fields did not disable injection wholesale.
+	 *
+	 * @return void
+	 */
+	public function test_inject_still_adds_non_takeover_fields(): void {
+		$result = $this->plugin->get_checkout_handler()->inject( [ 'billing' => [] ], 'order' );
+
+		$this->assertArrayHasKey(
+			'carrier_pickup_point',
+			$result['order'],
+			'A non-takeover field must still be injected into the default section.'
 		);
 	}
 
@@ -330,29 +350,32 @@ class CheckoutFieldsFixtureTest extends TestCase {
 	// -------------------------------------------------------------------------
 
 	/**
-	 * inject() must pre-fill the `options` map on billing_state when the current
-	 * WC customer country is RU (options-kind root field).
+	 * The fixture's regions must reach the checkout as WooCommerce NATIVE states for RU.
 	 *
-	 * We mock the WC customer country by filtering `woocommerce_countries_allowed_countries`
-	 * indirectly — the simplest shim is to update the WC customer directly.
+	 * This is the region path since the takeover redesign: `inject_states()` feeds the
+	 * `woocommerce_states` filter, WooCommerce renders the `<select>` itself and persists
+	 * the choice in its own session, so the value survives `update_checkout` without any
+	 * client-side DOM surgery.
 	 *
 	 * @return void
 	 */
-	public function test_inject_prefills_billing_state_options_for_ru_customer(): void {
-		// Set the WC customer's billing country to RU so inject() picks it up via
-		// WC()->customer->get_billing_country().
-		if ( ! function_exists( 'WC' ) || null === WC()->customer ) {
-			$this->markTestSkipped( 'WooCommerce customer session not available in this harness.' );
-		}
+	public function test_inject_states_publishes_fixture_regions_for_ru(): void {
+		$states = $this->plugin->get_checkout_handler()->inject_states( [] );
 
-		WC()->customer->set_billing_country( 'RU' );
+		$this->assertArrayHasKey( 'RU', $states, 'RU must receive the fixture regions as WC states.' );
+		$this->assertArrayHasKey( '77', $states['RU'], 'Regions must contain key 77 (Москва).' );
+		$this->assertSame( 'Москва', $states['RU']['77'] );
+	}
 
-		$result = $this->plugin->get_checkout_handler()->inject( [] );
+	/**
+	 * A country the fixture does not serve must keep whatever states WooCommerce already
+	 * had — the takeover never blanks out an unrelated country.
+	 *
+	 * @return void
+	 */
+	public function test_inject_states_leaves_unserved_country_alone(): void {
+		$states = $this->plugin->get_checkout_handler()->inject_states( [ 'US' => [ 'CA' => 'California' ] ] );
 
-		$billing_state = $result['billing']['billing_state'] ?? null;
-		$this->assertNotNull( $billing_state, 'billing_state should be present after inject().' );
-		$this->assertArrayHasKey( 'options', $billing_state, 'billing_state should have options pre-filled for RU customer.' );
-		$this->assertArrayHasKey( '77', $billing_state['options'], 'Options must contain key 77 (Москва).' );
-		$this->assertSame( 'Москва', $billing_state['options']['77'] );
+		$this->assertSame( [ 'CA' => 'California' ], $states['US'] );
 	}
 }
