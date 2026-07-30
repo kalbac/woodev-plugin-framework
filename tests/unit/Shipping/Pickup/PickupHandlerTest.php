@@ -1369,15 +1369,29 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 		}
 
 		/**
-		 * BLOCKING fix proof: on THIS branch today, every asset genuinely does not exist
-		 * on disk (Tasks 10–15 have not landed), so enqueue_assets() must skip all of
-		 * them — never enqueue a URL that will 404, and never localize a config nothing
-		 * on the page can consume. Uses the plain {@see Pickup_Handler} (no override).
+		 * BLOCKING fix proof, updated for Task 10: `pickup-modal.js` has landed (this
+		 * task), so enqueue_assets() must enqueue THAT handle for real, while still
+		 * skipping the four assets that have not landed yet — the dataSource, the mount
+		 * script, the map-provider script, and the stylesheet (Tasks 11–15) — never
+		 * enqueuing a URL that will 404. The mount script is one of the still-missing
+		 * four, so `wp_localize_script()` must still not fire (see the `$mount_enqueued`
+		 * gate in {@see Pickup_Handler::enqueue_assets()}). Uses the plain
+		 * {@see Pickup_Handler} (no override) — the real filesystem state on this branch
+		 * IS the fixture.
 		 */
-		public function test_enqueue_assets_skips_everything_while_the_assets_are_not_yet_built(): void {
+		public function test_enqueue_assets_enqueues_only_the_assets_already_built(): void {
 			Functions\when( 'is_checkout' )->justReturn( true );
+			Functions\when( 'plugins_url' )->alias(
+				static fn( $path, $file ) => 'https://example.test/wp-content/plugins/x/' . $path
+			);
 
-			Functions\expect( 'wp_enqueue_script' )->never();
+			$scripts = [];
+			Functions\when( 'wp_enqueue_script' )->alias(
+				static function ( $handle, $src, $deps, $ver, $footer ) use ( &$scripts ) {
+					$scripts[ $handle ] = [ 'src' => $src, 'deps' => $deps ];
+				}
+			);
+
 			Functions\expect( 'wp_enqueue_style' )->never();
 			Functions\expect( 'wp_localize_script' )->never();
 
@@ -1388,6 +1402,14 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				$this->yandex_provider()
 			);
 			$handler->enqueue_assets();
+
+			$this->assertArrayHasKey( 'woodev-pickup-modal', $scripts );
+			$this->assertStringContainsString( 'pickup-modal.js', $scripts['woodev-pickup-modal']['src'] );
+			$this->assertSame( [], $scripts['woodev-pickup-modal']['deps'] );
+
+			$this->assertArrayNotHasKey( 'woodev-pickup-datasource', $scripts );
+			$this->assertArrayNotHasKey( 'woodev-pickup-map-provider-yandex', $scripts );
+			$this->assertArrayNotHasKey( 'woodev-pickup-mount', $scripts );
 		}
 
 		public function test_enqueue_assets_registers_the_expected_handles_and_paths_once_built(): void {

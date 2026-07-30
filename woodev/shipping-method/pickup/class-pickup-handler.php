@@ -944,10 +944,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 * `protected static`, not `private`, purely so a test subclass can force it `true`
 		 * to exercise {@see self::enqueue_script_if_built()}/{@see self::enqueue_style_if_built()}'s
 		 * "built" branch without writing a real file into the assets directory. The real
-		 * (default) implementation is a plain `file_exists()` — every asset this task
-		 * registers genuinely does not exist yet (Tasks 10–15 build them), so this reports
-		 * `false` for all of them today, which is exactly the "skip a not-yet-built asset"
-		 * behaviour {@see self::enqueue_assets()} exists to get right.
+		 * (default) implementation is a plain `file_exists()` — each SP-5 asset reports
+		 * `true`/`false` independently as its own task lands (e.g. `pickup-modal.js` as of
+		 * Task 10; `pickup-datasource.js`, `pickup-mount.js`, the map-provider script, and
+		 * the stylesheet still report `false` until Tasks 11–15 build them), which is
+		 * exactly the "skip a not-yet-built asset" behaviour
+		 * {@see self::enqueue_assets()} exists to get right.
 		 *
 		 * @since 2.0.2
 		 *
