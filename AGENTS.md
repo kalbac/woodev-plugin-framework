@@ -300,3 +300,54 @@ Run review before committing when changes touch:
 5. **Cross-link** — add `## Related` section in the new file
 
 **Full protocol with examples:** `docs-internal/DOCS-SCHEMA.md` → "Gotcha write protocol"
+
+---
+
+## 📋 Backlog rule — GitHub Projects, not docs (MANDATORY)
+
+**The single backlog for this repo is GitHub Issues + the board
+[Woodev Framework Backlog](https://github.com/users/kalbac/projects/6) (project №6).**
+
+Ideas, bugs, tech debt and deferred findings go there — **not** into `docs-internal/FUTURE-BACKLOG.md`,
+not into a `// TODO` comment, not into a chat message the operator has to remember.
+
+### Capture — do this immediately, not at session end
+
+Any out-of-scope idea, bug or tech-debt item that surfaces mid-session:
+
+1. `gh issue create --repo kalbac/woodev-plugin-framework` — **title and body in Russian** (the operator
+   is the reader; labels, code, commits and docs stay English). Add a type label: `bug`, `enhancement`,
+   `idea`, `tech-debt`, `research` or `polish`.
+2. Add it to the board — auto-add is **not** enabled, so always do it explicitly:
+   `gh project item-add 6 --owner kalbac --url <issue-url>`
+3. Set the status (the board has no default that suits us):
+   `gh project item-edit --id <item-id> --project-id PVT_kwHOAIbGB84BeLao --field-id PVTSSF_lAHOAIbGB84BeLaozhYnkgs --single-select-option-id <option>`
+
+   | Status | Option id | When |
+   |---|---|---|
+   | Инбокс | `e765cf18` | The card needs the operator's judgement before anyone builds it |
+   | Бэклог | `bdd0cc46` | **Agent-authored and you are confident it should be built** — file it straight here |
+   | В работе | `34407388` | You are working on it right now |
+   | Готово | `c88618cf` | Set by the board itself when the issue closes |
+
+A code `TODO` must reference an issue (`// TODO(#123): …`) — never stand alone.
+
+### Lifecycle
+
+- An **agent-authored** card you are confident about goes straight to `Бэклог`. Parking it in `Инбокс`
+  only forces a re-triage of a decision already made. A card the **operator** authored stays in `Инбокс`
+  until he moves it — agents never promote his.
+- **Take the card you are working on into `В работе`.** Work driven by a spec/plan rather than a card
+  still needs one — create it and move it, so the board reflects reality.
+- Close via `Closes #N` in the implementing commit or PR (the board moves the card to `Готово` itself),
+  or `gh issue close --reason completed` with a **Russian** comment explaining what closed it.
+  Wrong-idea rejections close as `not planned`, also with a Russian comment.
+- **Before creating a card from memory or docs, verify against the code first.** A card was once filed
+  for work that had already shipped weeks earlier.
+- **At session end, audit the board** — some cards get closed by unrelated work. A file deleted for one
+  reason can resolve a card filed for another.
+
+### `docs-internal/FUTURE-BACKLOG.md` is superseded
+
+It remains as a historical record of items filed before the board existed. **Do not add to it.** If you
+find something there that is still live, move it to an issue rather than editing the file.

@@ -264,6 +264,7 @@ When you discover important project rules, conventions, or patterns during your 
 - **Reference knowledge** (in-depth topic explanation) → create `docs-internal/wiki/{topic}.md`
 - **Session work** → update `docs-internal/CURRENT-STATE.md` + append to `docs-internal/SESSION-LOG.md`
 - **Quick reference** (cross-project, shared across agents) → `.ai/QUICK-REFERENCE.md` (section "Project Rules & Conventions")
+- **Ideas, bugs, tech debt, deferred findings** → a **GitHub issue on board №6**, filed immediately, in Russian — never `docs-internal/FUTURE-BACKLOG.md` (frozen) and never a bare `// TODO`. Full protocol, including the board's status option ids and when a card goes to `Инбокс` versus straight to `Бэклог`: [AGENTS.md](AGENTS.md) → "Backlog rule".
 
 ## Known Technical Debt
 
