@@ -341,4 +341,42 @@ final class ConstraintCheckerTest extends TestCase {
 		$this->assertTrue( $verdict['allowed'] );
 		$this->assertNull( $verdict['reason'] );
 	}
+
+	// ---- to_grams(): the single grams-conversion authority shared by every caller ----
+
+	/**
+	 * Value-mutant guard: pins that the conversion goes through `wc_get_weight()` rather
+	 * than being a raw pass-through of the store-unit value.
+	 */
+	public function test_to_grams_converts_via_wc_get_weight_not_a_raw_pass_through(): void {
+		Functions\when( 'wc_get_weight' )->alias(
+			static fn( $weight, $to_unit ) => $weight * 1000
+		);
+
+		$this->assertSame( 2500, Constraint_Checker::to_grams( 2.5 ) );
+		$this->assertNotSame( 2, Constraint_Checker::to_grams( 2.5 ) );
+	}
+
+	/**
+	 * Value-mutant guard: pins the TARGET unit passed to `wc_get_weight()` as `'g'`. A
+	 * mutant swapping it to e.g. `'kg'` survives an assertion that only checks the
+	 * returned number (a stub discarding `$to_unit` cannot distinguish them) — capturing
+	 * the argument itself is what catches it. Getting this wrong means every weight
+	 * constraint silently passes and an over-weight order ships to a point that cannot
+	 * accept it.
+	 */
+	public function test_to_grams_targets_the_g_unit(): void {
+		$captured_unit = null;
+		Functions\when( 'wc_get_weight' )->alias(
+			static function ( $weight, $to_unit ) use ( &$captured_unit ) {
+				$captured_unit = $to_unit;
+
+				return $weight;
+			}
+		);
+
+		Constraint_Checker::to_grams( 2.5 );
+
+		$this->assertSame( 'g', $captured_unit );
+	}
 }

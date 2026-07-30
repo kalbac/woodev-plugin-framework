@@ -160,6 +160,29 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Constraint_Checker'
 		}
 
 		/**
+		 * Converts a weight expressed in the store's configured unit into GRAMS.
+		 *
+		 * Both {@see self::check()}'s `$cart_weight` parameter and a {@see Pickup_Point}'s
+		 * own `max_weight` are GRAMS by contract — this is the single conversion authority
+		 * every caller of that contract must go through (the checkout-process re-check in
+		 * {@see \Woodev\Framework\Shipping\Pickup\Pickup_Handler}, and the REST controller's
+		 * injected cart-weight callable), never a raw pass-through of `$weight`. WooCommerce's
+		 * own weight unit is a store setting (`woocommerce_weight_unit` — kg, g, lbs, or oz);
+		 * `wc_get_weight( $weight, 'g' )` is the same conversion authority WooCommerce itself
+		 * uses, so every caller compares against `max_weight` in the same unit regardless of
+		 * the store's configured unit.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param float|int|string $weight weight in the store's configured unit.
+		 *
+		 * @return int weight in grams.
+		 */
+		public static function to_grams( $weight ): int {
+			return (int) wc_get_weight( $weight, 'g' );
+		}
+
+		/**
 		 * Validates a filtered verdict and fails closed to the computed one when malformed.
 		 *
 		 * A third-party filter can return anything — a string, an object, an array missing
