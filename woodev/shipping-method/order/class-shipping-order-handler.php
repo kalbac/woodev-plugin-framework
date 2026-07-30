@@ -97,13 +97,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Shipping_Order_Handl
 		/**
 		 * Stores a checkout-chosen pickup point onto the order.
 		 *
-		 * The point (its canonical, round-trippable {@see Pickup_Point::to_array()}
-		 * representation) is written through the plugin-supplied key map under the given
-		 * logical field — i.e. the carrier's real, installed-site order-meta key — via the
-		 * HPOS-safe {@see self::set()}. The handler derives no key: an unmapped logical
-		 * field throws rather than orphaning the chosen point under a neutral key. This is
-		 * the order-meta destination for the session-only chosen point held by
-		 * {@see \Woodev\Framework\Shipping\Pickup\Pickup_Selection}.
+		 * The point's canonical, unescaped {@see Pickup_Point::to_array()} representation is
+		 * written through the plugin-supplied key map under the given logical field — i.e. the
+		 * carrier's real, installed-site order-meta key — via the HPOS-safe {@see self::set()}.
+		 * Order meta is data at rest, not display markup: escaping happens only at the browser
+		 * boundary via {@see Pickup_Point::to_browser_array()}, never here. The handler derives
+		 * no key: an unmapped logical field throws rather than orphaning the chosen point under
+		 * a neutral key. This is the order-meta destination for the session-only chosen point
+		 * held by {@see \Woodev\Framework\Shipping\Pickup\Pickup_Selection}.
 		 *
 		 * @since 1.5.0
 		 *

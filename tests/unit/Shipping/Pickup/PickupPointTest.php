@@ -1,0 +1,174 @@
+<?php
+/**
+ * Unit tests for Pickup_Point — payload validation, rejection rules, and the
+ * canonical (to_array) vs. browser-safe (to_browser_array) serialization split.
+ *
+ * @package Woodev\Tests\Unit\Shipping\Pickup
+ */
+
+namespace Woodev\Tests\Unit\Shipping\Pickup;
+
+use Woodev\Framework\Shipping\Pickup\Pickup_Point;
+use Woodev\Tests\Unit\TestCase;
+
+require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/pickup/class-pickup-point.php';
+
+/**
+ * @covers \Woodev\Framework\Shipping\Pickup\Pickup_Point
+ */
+final class PickupPointTest extends TestCase {
+
+	private function valid(): array {
+		return [
+			'id'      => 'PVZ-1',
+			'name'    => 'ПВЗ на Тверской',
+			'lat'     => 55.7558,
+			'lng'     => 37.6173,
+			'address' => 'Москва, ул. Тверская, 1',
+			'type'    => [ 'code' => 'PVZ', 'label' => 'Пункт выдачи' ],
+		];
+	}
+
+	public function test_builds_from_a_complete_payload(): void {
+		$point = Pickup_Point::from_array( $this->valid() );
+		$this->assertNotNull( $point, 'a complete, valid payload must build a point' );
+		$this->assertSame( 'PVZ-1', $point->get_id() );
+		$this->assertSame( 55.7558, $point->get_lat() );
+	}
+
+	public function test_returns_null_when_a_required_field_is_missing(): void {
+		foreach ( [ 'id', 'name', 'lat', 'lng', 'address', 'type' ] as $key ) {
+			$payload = $this->valid();
+			unset( $payload[ $key ] );
+			$this->assertNull( Pickup_Point::from_array( $payload ), "missing {$key} must reject" );
+		}
+	}
+
+	public function test_returns_null_when_a_required_field_is_an_empty_string(): void {
+		foreach ( [ 'id', 'name', 'address' ] as $key ) {
+			$payload         = $this->valid();
+			$payload[ $key ] = '';
+			$this->assertNull( Pickup_Point::from_array( $payload ), "empty {$key} must reject" );
+		}
+	}
+
+	public function test_returns_null_when_type_is_not_an_array(): void {
+		$payload         = $this->valid();
+		$payload['type'] = 'PVZ';
+		$this->assertNull( Pickup_Point::from_array( $payload ) );
+	}
+
+	public function test_returns_null_when_type_is_missing_code(): void {
+		$payload         = $this->valid();
+		$payload['type'] = [ 'label' => 'Пункт выдачи' ];
+		$this->assertNull( Pickup_Point::from_array( $payload ) );
+	}
+
+	public function test_returns_null_when_type_is_missing_label(): void {
+		$payload         = $this->valid();
+		$payload['type'] = [ 'code' => 'PVZ' ];
+		$this->assertNull( Pickup_Point::from_array( $payload ) );
+	}
+
+	public function test_returns_null_for_out_of_range_coordinates(): void {
+		$payload        = $this->valid();
+		$payload['lat'] = 91.0;
+		$this->assertNull( Pickup_Point::from_array( $payload ), 'lat above 90 must reject' );
+
+		$payload        = $this->valid();
+		$payload['lat'] = -91.0;
+		$this->assertNull( Pickup_Point::from_array( $payload ), 'lat below -90 must reject' );
+
+		$payload        = $this->valid();
+		$payload['lng'] = 181.0;
+		$this->assertNull( Pickup_Point::from_array( $payload ), 'lng above 180 must reject' );
+
+		$payload        = $this->valid();
+		$payload['lng'] = -181.0;
+		$this->assertNull( Pickup_Point::from_array( $payload ), 'lng below -180 must reject' );
+	}
+
+	public function test_returns_null_for_non_scalar_required_fields(): void {
+		$payload       = $this->valid();
+		$payload['id'] = [ 'x' ];
+		$this->assertNull( Pickup_Point::from_array( $payload ), 'a non-scalar id must reject' );
+	}
+
+	public function test_returns_null_for_non_numeric_coordinates(): void {
+		$payload        = $this->valid();
+		$payload['lat'] = 'abc';
+		$this->assertNull( Pickup_Point::from_array( $payload ), 'a non-numeric lat must reject, not coerce to 0.0' );
+
+		$payload        = $this->valid();
+		$payload['lat'] = true;
+		$this->assertNull( Pickup_Point::from_array( $payload ), 'a boolean lat must reject' );
+
+		$payload        = $this->valid();
+		$payload['lng'] = [];
+		$this->assertNull( Pickup_Point::from_array( $payload ), 'an array lng must reject' );
+	}
+
+	public function test_unknown_constraints_default_to_permissive(): void {
+		$point = Pickup_Point::from_array( $this->valid() );
+		$this->assertNotNull( $point );
+		$this->assertNull( $point->get_accepts_cod() );
+		$this->assertNull( $point->get_max_weight() );
+	}
+
+	public function test_known_constraints_are_honored_when_present(): void {
+		$payload                  = $this->valid();
+		$payload['accepts_cod']   = true;
+		$payload['max_weight']    = 15000;
+		$point                    = Pickup_Point::from_array( $payload );
+		$this->assertNotNull( $point );
+		$this->assertTrue( $point->get_accepts_cod() );
+		$this->assertSame( 15000, $point->get_max_weight() );
+	}
+
+	public function test_optional_string_fields_default_to_empty(): void {
+		$point = Pickup_Point::from_array( $this->valid() );
+		$this->assertNotNull( $point );
+		$this->assertSame( '', $point->get_locality() );
+		$this->assertSame( '', $point->get_postal_code() );
+	}
+
+	public function test_optional_string_fields_are_kept_when_present(): void {
+		$payload               = $this->valid();
+		$payload['locality']   = 'Москва';
+		$payload['postal_code'] = '125009';
+		$point                 = Pickup_Point::from_array( $payload );
+		$this->assertNotNull( $point );
+		$this->assertSame( 'Москва', $point->get_locality() );
+		$this->assertSame( '125009', $point->get_postal_code() );
+	}
+
+	public function test_to_array_does_not_escape(): void {
+		$payload         = $this->valid();
+		$payload['name'] = '<script>alert(1)</script>';
+		$array           = Pickup_Point::from_array( $payload )->to_array();
+		$this->assertStringContainsString( '<script>', $array['name'], 'to_array() is the canonical, unescaped form' );
+	}
+
+	public function test_to_browser_array_escapes_display_strings(): void {
+		$payload         = $this->valid();
+		$payload['name'] = '<script>alert(1)</script>';
+		$array           = Pickup_Point::from_array( $payload )->to_browser_array();
+		$this->assertStringNotContainsString( '<script>', $array['name'] );
+	}
+
+	public function test_to_browser_array_escapes_nested_type_and_payment_methods(): void {
+		$payload                     = $this->valid();
+		$payload['type']['label']    = '<b>Пункт</b>';
+		$payload['payment_methods']  = [ '<b>cash</b>' ];
+		$array                       = Pickup_Point::from_array( $payload )->to_browser_array();
+		$this->assertStringNotContainsString( '<b>', $array['type']['label'] );
+		$this->assertStringNotContainsString( '<b>', $array['payment_methods'][0] );
+	}
+
+	public function test_to_browser_array_does_not_escape_id(): void {
+		$payload       = $this->valid();
+		$payload['id'] = 'PVZ-1&2';
+		$array         = Pickup_Point::from_array( $payload )->to_browser_array();
+		$this->assertSame( 'PVZ-1&2', $array['id'], 'id is an identity token, not display text' );
+	}
+}

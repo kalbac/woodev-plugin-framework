@@ -25,28 +25,35 @@ use Woodev\Framework\Shipping\Pickup\Pickup_Selection;
  * Yandex-shaped fixture pickup point source.
  *
  * The sourcing seam: normalizes a carrier search into framework {@see Pickup_Point}
- * value objects, preserving the raw query on the `raw` escape hatch.
+ * value objects.
  */
 final class Woodev_Yandex_Pilot_Point_Source implements Pickup_Point_Source {
 
 	/**
 	 * Searches for yandex pickup points matching the given query.
 	 *
+	 * Filters out a null {@see Pickup_Point::from_array()} result — the same rule
+	 * {@see \Woodev\Framework\Shipping\Abstract_Shipping_API::to_pickup_points()} applies:
+	 * one malformed point from the carrier must not break the whole list.
+	 *
 	 * @param array<string,mixed> $params Pickup point search parameters.
 	 * @return Pickup_Point[]
 	 */
 	public function search( array $params ): array {
-		return [
-			Pickup_Point::from_array(
-				[
-					'code' => 'YND-001',
-					'name' => 'Yandex PVZ',
-					'lat'  => 55.751244,
-					'lng'  => 37.618423,
-					'raw'  => $params,
-				]
-			),
-		];
+		return array_filter(
+			[
+				Pickup_Point::from_array(
+					[
+						'id'      => 'YND-001',
+						'name'    => 'Yandex PVZ',
+						'lat'     => 55.751244,
+						'lng'     => 37.618423,
+						'address' => 'Москва, ул. Тестовая, 1',
+						'type'    => [ 'code' => 'PVZ', 'label' => 'Пункт выдачи' ],
+					]
+				),
+			]
+		);
 	}
 }
 

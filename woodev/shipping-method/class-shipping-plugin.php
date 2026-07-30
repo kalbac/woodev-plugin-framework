@@ -154,7 +154,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			// pickup models, source seam, session store and warehouse persistence
 			require_once $path . '/pickup/interface-pickup-point-source.php';
 			require_once $path . '/pickup/class-pickup-point.php';
-			require_once $path . '/pickup/class-pickup-point-filter.php';
 			require_once $path . '/pickup/class-pickup-selection.php';
 			require_once $path . '/pickup/class-warehouse.php';
 			require_once $path . '/pickup/interface-warehouse-store.php';
@@ -175,8 +174,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			require_once $path . '/admin/class-shipping-admin-order.php';
 			require_once $path . '/admin/class-warehouse-admin.php';
 
-			// pickup-points + warehouses REST controller bases
-			require_once $path . '/rest-api/abstract-pickup-points-controller.php';
+			// warehouses REST controller base
 			require_once $path . '/rest-api/abstract-warehouses-controller.php';
 		}
 

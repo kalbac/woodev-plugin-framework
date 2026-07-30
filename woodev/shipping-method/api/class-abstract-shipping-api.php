@@ -17,7 +17,9 @@
  *    `get_pickup_points()` returns the raw `\Woodev_API_Response` (a fixed contract that is
  *    NOT changed here); {@see self::to_pickup_points()} / {@see self::get_pickup_point_models()}
  *    are the carrier-neutral default that yields `Pickup_Point[]`. A carrier supplies only the
- *    thin response→rows extraction via {@see self::parse_pickup_points_data()}.
+ *    thin response→rows extraction via {@see self::parse_pickup_points_data()}; a row that fails
+ *    {@see \Woodev\Framework\Shipping\Pickup\Pickup_Point::from_array()} validation is dropped
+ *    rather than breaking the whole list.
  *
  * Carriers extend this with thin subclasses providing their endpoint mapping: the per-operation
  * request building (`calculate_rates()`, `get_pickup_points()`, `create_order()`, `get_order()`,
@@ -117,22 +119,26 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Abstract_Shipping_API' ) ) 
 		 * Maps a carrier pickup-points response into {@see Pickup_Point} value objects.
 		 *
 		 * The default loops the carrier-extracted rows from {@see self::parse_pickup_points_data()}
-		 * and builds one {@see Pickup_Point} per row with {@see Pickup_Point::from_array()}. The
-		 * core-schema casting lives in the value object, so a carrier only has to surface its rows
-		 * keyed by the core schema (plus an optional `raw` escape hatch).
+		 * and builds one {@see Pickup_Point} per row with {@see Pickup_Point::from_array()}. A row
+		 * that {@see Pickup_Point::from_array()} rejects (missing required field, out-of-range
+		 * coordinates) is skipped: one malformed point from a carrier must not break the whole list.
 		 *
 		 * @since 1.5.0
 		 *
 		 * @param \Woodev_API_Response $response the carrier pickup-points response
 		 *
-		 * @return Pickup_Point[] the mapped pickup points
+		 * @return Pickup_Point[] the mapped, validated pickup points
 		 */
 		public function to_pickup_points( \Woodev_API_Response $response ): array {
 
 			$points = [];
 
 			foreach ( $this->parse_pickup_points_data( $response ) as $data ) {
-				$points[] = Pickup_Point::from_array( (array) $data );
+				$point = Pickup_Point::from_array( (array) $data );
+
+				if ( null !== $point ) {
+					$points[] = $point;
+				}
 			}
 
 			return $points;
@@ -142,9 +148,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Abstract_Shipping_API' ) ) 
 		 * Extracts the carrier pickup-point rows from a pickup-points response.
 		 *
 		 * Each returned element is fed to {@see Pickup_Point::from_array()}, so it should be an
-		 * array keyed by the core pickup-point schema (with carrier-specific fields preserved
-		 * under the `raw` key). This is the only carrier-specific piece of the pickup-point
-		 * mapping — everything else is the carrier-neutral default above.
+		 * array keyed by the normalized pickup-point schema (`id`, `name`, `lat`, `lng`, `address`,
+		 * `type`, plus any optional fields the value object accepts). This is the only
+		 * carrier-specific piece of the pickup-point mapping — everything else is the
+		 * carrier-neutral default above.
 		 *
 		 * @since 1.5.0
 		 *
