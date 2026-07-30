@@ -17,6 +17,8 @@ require_once dirname( __DIR__, 2 ) . '/woodev/class-framework-plugin-loader-defi
 use Brain\Monkey\Functions;
 use Woodev\Framework\Shipping\Shipping_Method_Pickup;
 use Woodev\Framework\Shipping\Pickup\Pickup_Point;
+use Woodev\Framework\Shipping\Pickup\Point_Query;
+use Woodev\Framework\Shipping\Pickup\Point_Source;
 use Woodev\Tests\Unit\Support\Pilot_Fixture_WP_Stubs;
 use Woodev\Tests\Unit\Support\Pilot_Testable_Framework_Resolver;
 
@@ -122,8 +124,27 @@ class YandexPilotFixtureTest extends TestCase {
 		// The map-provider and pickup-source seams resolve to yandex collaborators.
 		$this->assertSame( 'yandex', ( new \Woodev_Yandex_Pilot_Map_Provider() )->get_id() );
 
-		$points = ( new \Woodev_Yandex_Pilot_Point_Source() )->search( [ 'city' => 'Moscow' ] );
+		$source = new \Woodev_Yandex_Pilot_Point_Source();
+		$this->assertSame(
+			Point_Source::STRATEGY_BULK,
+			$source->get_strategy(),
+			'Yandex loads a whole locality at once and must declare the bulk strategy.'
+		);
+
+		$query = Point_Query::from_request( [ 'locality' => 'Moscow' ] );
+		$this->assertNotNull( $query, 'A locality-only request must build a valid query.' );
+
+		$points = $source->fetch_points( $query );
 		$this->assertNotEmpty( $points, 'Yandex pickup source must normalize carrier results into points.' );
 		$this->assertContainsOnlyInstancesOf( Pickup_Point::class, $points );
+
+		$details = $source->fetch_details( 'YND-001' );
+		$this->assertInstanceOf( Pickup_Point::class, $details, 'A known point id must resolve to its detail.' );
+		$this->assertSame( 'YND-001', $details->get_id() );
+
+		$this->assertNull(
+			$source->fetch_details( 'NOT-A-REAL-POINT' ),
+			'An unknown point id must resolve to null, not throw or return a wrong point.'
+		);
 	}
 }

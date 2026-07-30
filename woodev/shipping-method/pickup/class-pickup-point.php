@@ -205,11 +205,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Point' ) ) :
 		 * Returns the canonical, unescaped normalized representation.
 		 *
 		 * This is what gets persisted: {@see \Woodev\Framework\Shipping\Order\Shipping_Order_Handler}
-		 * writes it into installed-site order meta, and {@see Pickup_Selection} round-trips it
-		 * through the WC session. Both destinations must receive the un-mangled value — an
-		 * address containing `"` or `&` must not be permanently HTML-entity-encoded in the
-		 * database, and a session set→get→set cycle must not double-escape. Escaping happens
-		 * only at the browser boundary; see {@see self::to_browser_array()}.
+		 * writes it into installed-site order meta. The un-mangled value must reach that
+		 * destination — an address containing `"` or `&` must not be permanently
+		 * HTML-entity-encoded in the database. Escaping happens only at the browser
+		 * boundary; see {@see self::to_browser_array()}.
 		 *
 		 * @since 2.0.2
 		 *

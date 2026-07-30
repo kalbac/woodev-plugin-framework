@@ -68,8 +68,6 @@ function woodev_yandex_pilot_plugin_init(): void {
 	$framework = $plugin->get_shipping_framework_path();
 
 	require_once $framework . '/pickup/class-pickup-point.php';
-	require_once $framework . '/pickup/class-pickup-selection.php';
-	require_once $framework . '/pickup/interface-pickup-point-source.php';
 	require_once $framework . '/pickup/class-warehouse.php';
 	require_once $framework . '/pickup/interface-warehouse-store.php';
 	require_once $framework . '/pickup/class-abstract-warehouse-store.php';

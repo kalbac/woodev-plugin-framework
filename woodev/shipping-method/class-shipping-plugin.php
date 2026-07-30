@@ -151,10 +151,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			require_once $path . '/map/interface-map-provider.php';
 			require_once $path . '/map/class-map-provider-registry.php';
 
-			// pickup models, source seam, session store and warehouse persistence
-			require_once $path . '/pickup/interface-pickup-point-source.php';
+			// pickup models and warehouse persistence
 			require_once $path . '/pickup/class-pickup-point.php';
-			require_once $path . '/pickup/class-pickup-selection.php';
 			require_once $path . '/pickup/class-warehouse.php';
 			require_once $path . '/pickup/interface-warehouse-store.php';
 			require_once $path . '/pickup/class-abstract-warehouse-store.php';

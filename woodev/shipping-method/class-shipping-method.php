@@ -10,7 +10,7 @@
 
 namespace Woodev\Framework\Shipping;
 
-use Woodev\Framework\Shipping\Pickup\Pickup_Point_Source;
+use Woodev\Framework\Shipping\Pickup\Point_Source;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -529,16 +529,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		/**
 		 * Gets this method's pickup-point source, if it is a pickup method.
 		 *
-		 * Accessor seam (spec §4.5): lets shared subsystems (checkout, AJAX) reach a
-		 * method's normalizing {@see Pickup_Point_Source} without knowing the concrete
+		 * Accessor seam: lets shared subsystems — the pickup REST controller (forthcoming) —
+		 * reach a method's normalizing {@see Point_Source} without knowing the concrete
 		 * method class. The base method has no source and returns null; a pickup method
-		 * overrides this to expose its {@see Pickup_Point_Source}.
+		 * overrides this to expose its {@see Point_Source}.
 		 *
 		 * @since 1.5.0
 		 *
-		 * @return Pickup_Point_Source|null the pickup-point source, or null for non-pickup methods
+		 * @return Point_Source|null the pickup-point source, or null for non-pickup methods
 		 */
-		public function get_pickup_point_source(): ?Pickup_Point_Source {
+		public function get_pickup_point_source(): ?Point_Source {
 			return null;
 		}
 

@@ -12,9 +12,11 @@
  * routes them through {@see \Woodev_Order_Compatibility} so the same code works on
  * both HPOS and legacy post-meta storage.
  *
- * The checkout/session half of the chosen point lives in
- * {@see \Woodev\Framework\Shipping\Pickup\Pickup_Selection} (session-only); this
- * class is the order-meta half and shares no key with it.
+ * The checkout half of the chosen point is owned by the §8 checkout field layer: the
+ * point id is a checkout field value posted with the order and persisted to order meta
+ * by the field layer ({@see \Woodev\Framework\Shipping\Checkout\Checkout_Handler::persist_field()});
+ * it survives `update_checkout` because classic checkout does not re-render the form.
+ * This class is the order-meta half and shares no key with it.
  *
  * See docs-internal/platform-v2-s1-shipping-spec.md §4.3.
  *
@@ -103,8 +105,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Shipping_Order_Handl
 		 * Order meta is data at rest, not display markup: escaping happens only at the browser
 		 * boundary via {@see Pickup_Point::to_browser_array()}, never here. The handler derives
 		 * no key: an unmapped logical field throws rather than orphaning the chosen point under
-		 * a neutral key. This is the order-meta destination for the session-only chosen point
-		 * held by {@see \Woodev\Framework\Shipping\Pickup\Pickup_Selection}.
+		 * a neutral key. This is the order-meta destination for the point chosen through the §8
+		 * checkout field layer during checkout.
 		 *
 		 * @since 1.5.0
 		 *
