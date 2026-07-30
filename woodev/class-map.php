@@ -44,6 +44,7 @@ return [
 	'Woodev\\Framework\\Shipping\\Order\\Abstract_Webhook_Handler' => 'woodev/shipping-method/order/abstract-webhook-handler.php',
 	'Woodev\\Framework\\Shipping\\Order\\Shipping_Order_Handler' => 'woodev/shipping-method/order/class-shipping-order-handler.php',
 	'Woodev\\Framework\\Shipping\\Pickup\\Abstract_Warehouse_Store' => 'woodev/shipping-method/pickup/class-abstract-warehouse-store.php',
+	'Woodev\\Framework\\Shipping\\Pickup\\Address_Target' => 'woodev/shipping-method/pickup/class-address-target.php',
 	'Woodev\\Framework\\Shipping\\Pickup\\Constraint_Checker' => 'woodev/shipping-method/pickup/class-constraint-checker.php',
 	'Woodev\\Framework\\Shipping\\Pickup\\Pickup_Point' => 'woodev/shipping-method/pickup/class-pickup-point.php',
 	'Woodev\\Framework\\Shipping\\Pickup\\Point_Query' => 'woodev/shipping-method/pickup/class-point-query.php',
