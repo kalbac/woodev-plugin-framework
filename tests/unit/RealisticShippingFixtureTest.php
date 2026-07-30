@@ -56,5 +56,13 @@ class RealisticShippingFixtureTest extends TestCase {
 			],
 			$plugin->get_fixture_shipping_method_classes()
 		);
+
+		// SP-5 Task 9: Yandex_Map_Provider is registered by default (its constructor is
+		// fully defaulted), resolved here through the REAL class-map autoloader, not a
+		// manual require — proves the registry has an actual id -> provider path wired up.
+		$this->assertInstanceOf(
+			\Woodev\Framework\Shipping\Map\Yandex_Map_Provider::class,
+			$plugin->get_map_provider_registry()->get( 'yandex' )
+		);
 	}
 }

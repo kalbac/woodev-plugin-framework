@@ -3,9 +3,13 @@
  * Woodev Map Provider Registry
  *
  * Holds the set of available pickup-point map providers and resolves the one a
- * shipping plugin should use. Providers self-register (the Yandex provider ships
- * in the Yandex plugin); the framework ships no default provider — the registry
- * seam itself is the only guarantee.
+ * shipping plugin should use. The framework ships the provider CLASSES
+ * ({@see \Woodev\Framework\Shipping\Map\Yandex_Map_Provider},
+ * {@see \Woodev\Framework\Shipping\Map\Embedded_Map_Provider}), but registers
+ * neither by default — each needs plugin-supplied construction data (an API key,
+ * an embed URL) the registry cannot invent, so the owning plugin instantiates and
+ * registers whichever one it uses. An id with nothing registered under it
+ * resolves to `null` (see {@see self::get()}), never a fallback provider.
  *
  * Pure PHP — no WooCommerce calls — so it stays unit-testable. See
  * docs-internal/platform-v2-s1-shipping-spec.md and decision §6a.

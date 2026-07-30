@@ -2,16 +2,22 @@
 /**
  * Woodev Map Provider Interface
  *
- * Defines the pluggable seam for pickup-point (PVZ) map rendering. Per decision
- * §6a the real provider boundary lives in a JS adapter contract; the PHP side
- * is a thin descriptor that only declares which JS adapter to use, enqueues
- * the provider's assets, and supplies the config the adapter consumes at
- * runtime.
+ * Defines the pluggable seam for pickup-point (PVZ) map rendering. The seam asks
+ * "where does the map come from" — our own Yandex map, or a carrier's own
+ * widget/iframe embedded in the same modal shell (see {@see \Woodev\Framework\Shipping\Map\Embedded_Map_Provider}).
+ * That axis has two real consumers, unlike the earlier "which library draws the
+ * map" axis this interface used to describe: a five-method thin-adapter contract
+ * cannot express the target UX (clustering, a viewport-synced drawer, map
+ * controls, bounded geocoding search, custom balloon layouts), so a second
+ * library was always going to be a second full build, never a thin adapter.
  *
- * No markup is produced here — rendering is the JS adapter's responsibility. A
- * provider that needs an API key (e.g. Yandex.Maps) ships in the plugin that
- * holds the key and self-registers; the framework ships no default provider —
- * it guarantees only this seam.
+ * A provider now owns EVERYTHING drawn inside its own container — enqueueing
+ * (see {@see \Woodev\Framework\Shipping\Pickup\Pickup_Handler::enqueue_assets()},
+ * which already registers `woodev-pickup-map-provider-{provider}` pointing at
+ * `js/frontend/map-provider-{provider}.js`), rendering, interaction — and pulls
+ * point data through a `dataSource` the framework hands its `init()`. The PHP
+ * side declares only which script implements it and the config that script
+ * needs; no markup is produced here.
  *
  * @since 1.5.0
  */
@@ -27,9 +33,12 @@ if ( ! interface_exists( '\\Woodev\\Framework\\Shipping\\Map\\Map_Provider' ) ) 
 	/**
 	 * Pickup-point map provider contract.
 	 *
-	 * Implementations wrap a map library (e.g. Yandex.Maps in the Yandex plugin)
-	 * and describe to PHP how to load it. All actual rendering and interaction
-	 * happens in the JS adapter identified by get_js_adapter_handle().
+	 * Implementations own everything drawn inside the modal's map container — an
+	 * own-rendered Yandex map (see {@see Yandex_Map_Provider}) or a carrier's own
+	 * embedded widget/iframe (see {@see Embedded_Map_Provider}) — and describe to
+	 * PHP which script implements it and what config that script needs. All
+	 * actual rendering and interaction happens in the script identified by
+	 * {@see self::get_script_handle()}.
 	 *
 	 * @since 1.5.0
 	 */
@@ -38,8 +47,11 @@ if ( ! interface_exists( '\\Woodev\\Framework\\Shipping\\Map\\Map_Provider' ) ) 
 		/**
 		 * Gets the provider's unique identifier.
 		 *
-		 * Used as the registry key and to select a provider from plugin
-		 * configuration (e.g. 'yandex').
+		 * Used as the registry key, to select a provider from plugin configuration
+		 * (e.g. 'yandex'), and — by convention, see {@see self::get_script_handle()} —
+		 * to derive the script handle
+		 * {@see \Woodev\Framework\Shipping\Pickup\Pickup_Handler::enqueue_assets()}
+		 * enqueues (`woodev-pickup-map-provider-{id}`).
 		 *
 		 * @since 1.5.0
 		 *
@@ -48,54 +60,71 @@ if ( ! interface_exists( '\\Woodev\\Framework\\Shipping\\Map\\Map_Provider' ) ) 
 		public function get_id(): string;
 
 		/**
-		 * Enqueues the provider's frontend assets.
+		 * Gets the provider's human-readable label.
 		 *
-		 * Registers and enqueues the map library together with the JS adapter
-		 * that renders it. Produces no markup.
+		 * Shown to the merchant when choosing a provider in the settings UI.
+		 * User-facing — Russian, per project convention.
 		 *
-		 * @since 1.5.0
+		 * @since 2.0.2
 		 *
-		 * @return void
+		 * @return string
 		 */
-		public function enqueue_assets(): void;
+		public function get_label(): string;
+
+		/**
+		 * Gets the registered handle of the script that implements this provider.
+		 *
+		 * Should return the handle
+		 * {@see \Woodev\Framework\Shipping\Pickup\Pickup_Handler::enqueue_assets()}
+		 * enqueues for this provider's id (`woodev-pickup-map-provider-{id}`) — the
+		 * handler already owns enqueueing (registering
+		 * `js/frontend/map-provider-{provider}.js`, built from {@see self::get_id()},
+		 * and skipping the asset while it does not yet exist on disk). Both concrete
+		 * providers derive this from {@see self::get_id()} by convention; nothing
+		 * ENFORCES the pattern, so a provider that strays from it silently points at
+		 * a differently-named script file.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string script handle
+		 */
+		public function get_script_handle(): string;
 
 		/**
 		 * Gets the provider-specific settings fields.
 		 *
-		 * Returned in WooCommerce settings-field format for merging into the
-		 * shipping integration settings. A no-API-key provider returns no
-		 * credential fields.
+		 * Returned in the Woodev settings-API `register_setting()` args shape (`name`,
+		 * `type`, `default`, `description`, `required`, `sensitive`, …) — see
+		 * `woodev/settings-api/abstract-class-settings.php` — for merging into the
+		 * shipping integration settings. A provider that needs no credential (e.g.
+		 * {@see Embedded_Map_Provider}) returns an empty array.
 		 *
 		 * @since 1.5.0
 		 *
-		 * @return array settings field definitions keyed by field id
+		 * @return array<string, array<string, mixed>> settings field definitions keyed by field id
 		 */
 		public function get_settings_fields(): array;
 
 		/**
-		 * Gets the registered handle of the JS adapter script.
+		 * Gets the provider-specific configuration handed to the browser.
 		 *
-		 * Identifies which enqueued script implements the adapter for this
-		 * provider; it must match a handle enqueued by enqueue_assets().
+		 * Shaped against the current request via `$context` — a plugin-supplied
+		 * bag of request-scoped values (e.g. plugin id) the provider may use to
+		 * tailor its config, rather than a fixed blob computed once. Carries no
+		 * installed-site contract data — AJAX action names, nonces and the like are
+		 * merged in by the host plugin/handler. Must never emit a value shaped like
+		 * a carrier or provider credential under a key name that invites treating
+		 * it as a secret (e.g. `apiKey`) — a JS map key ships to the browser inside
+		 * a script URL regardless and cannot be hidden; see
+		 * {@see Yandex_Map_Provider} for how that is handled.
 		 *
-		 * @since 1.5.0
+		 * @since 2.0.2
 		 *
-		 * @return string script handle
+		 * @param array<string, mixed> $context request-scoped context.
+		 *
+		 * @return array<string, mixed> configuration merged into `mapConfig`.
 		 */
-		public function get_js_adapter_handle(): string;
-
-		/**
-		 * Gets the configuration handed to the JS adapter at runtime.
-		 *
-		 * Provider-agnostic map options (center, zoom, tiles/API key) consumed by
-		 * the adapter's init(). Carries no installed-site contract data — AJAX
-		 * action names, nonces and the like are merged in by the host plugin.
-		 *
-		 * @since 1.5.0
-		 *
-		 * @return array localized adapter configuration
-		 */
-		public function get_localized_config(): array;
+		public function get_js_config( array $context ): array;
 	}
 
 endif;

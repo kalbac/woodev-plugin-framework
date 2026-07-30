@@ -37,10 +37,10 @@
  *    live checkbox at write time.
  *
  * `replaceAddress.enabled` is unconditionally `true` for now — the merchant-configurable
- * on/off toggle is SP-5 Task 17's job, not this one's. `mapConfig` is an empty array for
- * the same reason: SP-5 Task 9 re-points the
- * {@see \Woodev\Framework\Shipping\Map\Map_Provider} seam and will populate it from the
- * active provider's own config once that seam exists.
+ * on/off toggle is SP-5 Task 17's job, not this one's. `mapConfig` comes straight from the
+ * active {@see \Woodev\Framework\Shipping\Map\Map_Provider}'s own
+ * {@see \Woodev\Framework\Shipping\Map\Map_Provider::get_js_config()} (SP-5 Task 9) — this
+ * handler owns none of that shape itself, only passes through a request-scoped `$context`.
  *
  * The client verdict rendered in the modal is UX only. `woocommerce_checkout_process`
  * hooks {@see self::handle_checkout_process()}, the real authority: it re-fetches the
@@ -72,6 +72,7 @@
 
 namespace Woodev\Framework\Shipping\Pickup;
 
+use Woodev\Framework\Shipping\Map\Map_Provider;
 use Woodev\Framework\Shipping\Order\Shipping_Order_Handler;
 use Woodev\Framework\Shipping\Rest_Api\Pickup_Controller;
 
@@ -115,12 +116,24 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		private Point_Source $source;
 
 		/**
-		 * The active map provider id (e.g. `yandex`, `embedded`).
+		 * The active map provider.
+		 *
+		 * Owns everything drawn inside the modal's map container; see
+		 * {@see Map_Provider} for the seam. `get_js_config()` reads this provider's
+		 * own {@see Map_Provider::get_id()} and
+		 * {@see Map_Provider::get_js_config()} — never a bare id string —
+		 * and {@see self::enqueue_assets()} enqueues under
+		 * {@see Map_Provider::get_script_handle()} verbatim, so the `provider`
+		 * config value and the enqueued HANDLE can never silently disagree with the
+		 * provider. The enqueued script's FILE PATH is still built from
+		 * {@see Map_Provider::get_id()} separately (`map-provider-{id}.js`) — that
+		 * half is convention, not an enforced invariant; see
+		 * {@see Map_Provider::get_script_handle()}'s own docblock.
 		 *
 		 * @since 2.0.2
-		 * @var string
+		 * @var Map_Provider
 		 */
-		private string $provider;
+		private Map_Provider $map_provider;
 
 		/**
 		 * The plugin's order-meta accessor, or null when the plugin has not wired
@@ -181,7 +194,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 *                                                          for the strategy — see the
 		 *                                                          class docblock's first
 		 *                                                          deviation.
-		 * @param string                      $provider            the active map provider id.
+		 * @param Map_Provider                $map_provider        the active map provider.
 		 * @param Shipping_Order_Handler|null $order_handler   the plugin's order-meta
 		 *                                                      accessor, holding its own
 		 *                                                      logical→real key map. Omit to
@@ -196,14 +209,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 			string $plugin_id,
 			string $field_id,
 			Point_Source $source,
-			string $provider,
+			Map_Provider $map_provider,
 			?Shipping_Order_Handler $order_handler = null,
 			?string $point_field_logical = null
 		) {
 			$this->plugin_id           = $plugin_id;
 			$this->field_id            = $field_id;
 			$this->source              = $source;
-			$this->provider            = $provider;
+			$this->map_provider        = $map_provider;
 			$this->order_handler       = $order_handler;
 			$this->point_field_logical = $point_field_logical;
 		}
@@ -236,7 +249,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 			return [
 				'fieldId'  => $this->field_id,
 				'strategy' => $this->source->get_strategy(),
-				'provider' => $this->provider,
+				'provider' => $this->map_provider->get_id(),
 				'restRoot' => $this->rest_root(),
 				'nonce'    => wp_create_nonce( 'wp_rest' ),
 				'i18n'     => [
@@ -255,9 +268,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 					),
 				],
 
-				// Deferred to SP-5 Task 9 (Map_Provider seam): the active provider's own
-				// get_js_config() will populate this once the registry is wired up here.
-				'mapConfig'      => [],
+				'mapConfig'      => $this->map_provider->get_js_config( [ 'plugin_id' => $this->plugin_id ] ),
 
 				'replaceAddress' => [
 					// Deferred to SP-5 Task 17 (address replacement toggle): a
@@ -514,13 +525,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 				return;
 			}
 
-			$provider_handle = 'woodev-pickup-map-provider-' . $this->provider;
+			$provider_handle = $this->map_provider->get_script_handle();
 
 			$this->enqueue_script_if_built( 'woodev-pickup-modal', 'js/frontend/pickup-modal.js', [] );
 			$this->enqueue_script_if_built( 'woodev-pickup-datasource', 'js/frontend/pickup-datasource.js', [] );
 			$this->enqueue_script_if_built(
 				$provider_handle,
-				'js/frontend/map-provider-' . $this->provider . '.js',
+				'js/frontend/map-provider-' . $this->map_provider->get_id() . '.js',
 				[]
 			);
 
