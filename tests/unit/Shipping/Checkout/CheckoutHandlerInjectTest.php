@@ -255,4 +255,76 @@ class CheckoutHandlerInjectTest extends TestCase {
 		$this->assertSame( [ 'CA' => 'California' ], $states['US'] );        // non-takeover preserved
 		$this->assertArrayNotHasKey( 'BY', $states );                       // takeover-true but source empty → no entry
 	}
+
+	/**
+	 * A takeover country whose source yields NOTHING (unserved country, or a transient carrier
+	 * API failure) must keep WooCommerce's own states rather than being overwritten with an
+	 * empty set — an empty array tells WooCommerce the country has no states at all and it
+	 * HIDES the region field, which is a worse checkout than falling back to WC's list.
+	 */
+	public function test_inject_states_empty_source_preserves_existing_wc_states(): void {
+		$fields  = Checkout_Fields::from_array( [
+			Field::create( 'billing_state' )->set_type( 'select' )
+				->set_source( static fn() => [], 'options' )
+				->set_takeover_condition( static fn() => true )->to_array(),
+		] );
+		$handler = new class( $fields, 'carrier' ) extends Checkout_Handler {
+			protected function wc_country_codes(): array {
+				return [ 'RU' ];
+			}
+		};
+
+		$states = $handler->inject_states( [ 'RU' => [ 'MOW' => 'Москва' ] ] );
+
+		$this->assertSame( [ 'MOW' => 'Москва' ], $states['RU'] );
+	}
+
+	/**
+	 * `woocommerce_states` is keyed by COUNTRY, not by field, so a country can only carry one
+	 * region set. When two state descriptors disagree for the same country, the conflict must
+	 * be reported loudly and the first registration kept — not silently overwritten by
+	 * whichever descriptor happened to be iterated last.
+	 */
+	public function test_inject_states_conflicting_descriptors_warn_and_keep_first(): void {
+		Functions\expect( '_doing_it_wrong' )->atLeast()->once();
+
+		$fields  = Checkout_Fields::from_array( [
+			Field::create( 'billing_state' )->set_type( 'select' )
+				->set_source( static fn() => [ [ 'value' => '77', 'label' => 'Москва' ] ], 'options' )
+				->set_takeover_condition( static fn() => true )->to_array(),
+			Field::create( 'shipping_state' )->set_type( 'select' )
+				->set_source( static fn() => [ [ 'value' => '78', 'label' => 'Санкт-Петербург' ] ], 'options' )
+				->set_takeover_condition( static fn() => true )->to_array(),
+		] );
+		$handler = new class( $fields, 'carrier' ) extends Checkout_Handler {
+			protected function wc_country_codes(): array {
+				return [ 'RU' ];
+			}
+		};
+
+		$this->assertSame( [ '77' => 'Москва' ], $handler->inject_states( [] )['RU'] );
+	}
+
+	/**
+	 * Two state descriptors that agree (the normal billing/shipping pair sharing one source)
+	 * are NOT a conflict and must stay silent.
+	 */
+	public function test_inject_states_agreeing_descriptors_do_not_warn(): void {
+		Functions\expect( '_doing_it_wrong' )->never();
+
+		$source  = static fn() => [ [ 'value' => '77', 'label' => 'Москва' ] ];
+		$fields  = Checkout_Fields::from_array( [
+			Field::create( 'billing_state' )->set_type( 'select' )
+				->set_source( $source, 'options' )->set_takeover_condition( static fn() => true )->to_array(),
+			Field::create( 'shipping_state' )->set_type( 'select' )
+				->set_source( $source, 'options' )->set_takeover_condition( static fn() => true )->to_array(),
+		] );
+		$handler = new class( $fields, 'carrier' ) extends Checkout_Handler {
+			protected function wc_country_codes(): array {
+				return [ 'RU' ];
+			}
+		};
+
+		$this->assertSame( [ '77' => 'Москва' ], $handler->inject_states( [] )['RU'] );
+	}
 }

@@ -237,6 +237,58 @@ class CheckoutHandlerValidateTest extends TestCase {
 		$handler->set_requires_pickup_methods( [ 'carrier_pickup' ] );
 		$this->assertTrue( $handler->validate( [ 'carrier_pickup_point' => '' ], [ 'chosen_shipping_method' => 'flat_rate' ] ) );
 	}
+
+	// -----------------------------------------------------------------------
+	// Part D — entry-point parity for the chosen shipping method
+	// -----------------------------------------------------------------------
+
+	/**
+	 * process() must strip the `:instance_id` suffix before evaluating condition-specs,
+	 * exactly as the `woocommerce_checkout_process` path and the JS store do.
+	 *
+	 * Regression: process() used to thread the RAW posted value ('carrier_pickup:3') into
+	 * the state map, so a spec declared against the bare id ('carrier_pickup') evaluated to
+	 * "not required" here while blocking on the other entry point — the same order was
+	 * gated or not depending on which path validated it.
+	 */
+	public function test_process_normalizes_instance_id_before_evaluating_conditions(): void {
+		\Brain\Monkey\Functions\expect( 'wc_add_notice' )->atLeast()->once();
+		\Brain\Monkey\Functions\when( 'wc_clean' )->returnArg();
+		\Brain\Monkey\Functions\when( 'wp_unslash' )->returnArg();
+
+		$fields = Checkout_Fields::from_array( [
+			Field::create( 'pvz' )->set_required( [ 'state' => 'chosen_shipping_method', 'operator' => 'in', 'value' => [ 'carrier_pickup' ] ] )->to_array(),
+		] );
+
+		$handler = new Checkout_Handler( $fields, 'carrier' );
+
+		$blocked = $handler->process(
+			[ 'pvz' => '', 'shipping_method' => [ 'carrier_pickup:3' ], 'billing_country' => 'RU' ],
+			0
+		);
+
+		$this->assertFalse( $blocked, 'process() must block: the bare-id spec has to match a posted method carrying an instance id' );
+	}
+
+	/**
+	 * The same spec must still pass through process() when a genuinely different
+	 * method is chosen (guards against the normalization matching too eagerly).
+	 */
+	public function test_process_does_not_match_a_different_method_with_instance_id(): void {
+		\Brain\Monkey\Functions\expect( 'wc_add_notice' )->never();
+		\Brain\Monkey\Functions\when( 'wc_clean' )->returnArg();
+		\Brain\Monkey\Functions\when( 'wp_unslash' )->returnArg();
+
+		$fields = Checkout_Fields::from_array( [
+			Field::create( 'pvz' )->set_required( [ 'state' => 'chosen_shipping_method', 'operator' => 'in', 'value' => [ 'carrier_pickup' ] ] )->to_array(),
+		] );
+
+		$handler = new SpyCheckoutHandler( $fields, 'carrier' );
+
+		$this->assertTrue(
+			$handler->process( [ 'pvz' => '', 'shipping_method' => [ 'flat_rate:2' ], 'billing_country' => 'RU' ], 0 )
+		);
+	}
 }
 
 /**

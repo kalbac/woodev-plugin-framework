@@ -158,6 +158,24 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * replaces). Non-state takeover fields (e.g. a city autocomplete) are still enhanced on
 		 * the client, since "city" is not a WooCommerce concept.
 		 *
+		 * Two contract constraints follow from `woocommerce_states` being keyed by COUNTRY, not
+		 * by field:
+		 *
+		 * 1. **Empty source → WooCommerce's own states are kept.** When the takeover condition
+		 *    holds but the source yields no options (an unserved country, or a transient carrier
+		 *    API failure), the country is left untouched rather than overwritten. Writing an empty
+		 *    array would tell WooCommerce "this country has no states at all" and it would HIDE
+		 *    the region field entirely — a far worse checkout than falling back to WC's list.
+		 * 2. **One state source per country.** Two state descriptors (e.g. `billing_state` and
+		 *    `shipping_state`) that take over the same country must resolve to the same options,
+		 *    because only one option set can be registered for that country. Two NON-EMPTY sets
+		 *    that disagree are a plugin bug: the first one wins and `_doing_it_wrong()` reports
+		 *    the conflict rather than letting the last descriptor silently overwrite it. An EMPTY
+		 *    result is deliberately NOT treated as a conflicting opinion — per rule 1 it means
+		 *    "this source has nothing for this country", which is indistinguishable from a
+		 *    transient carrier API failure, so warning on it would fire falsely at runtime on a
+		 *    live checkout rather than flagging a real coding mistake.
+		 *
 		 * @internal
 		 *
 		 * @since 2.0.2
@@ -169,6 +187,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		public function inject_states( $states ): array {
 			$states    = is_array( $states ) ? $states : [];
 			$countries = $this->wc_country_codes();
+			$injected  = [];
 
 			foreach ( $this->fields->get_fields() as $id => $field ) {
 				$condition = $field['takeover_condition'] ?? null;
@@ -191,9 +210,28 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 						}
 					}
 
-					if ( [] !== $options ) {
-						$states[ (string) $code ] = $options;
+					if ( [] === $options ) {
+						continue;
 					}
+
+					$code = (string) $code;
+
+					if ( isset( $injected[ $code ] ) && $injected[ $code ] !== $options ) {
+						_doing_it_wrong(
+							__METHOD__,
+							sprintf(
+								"checkout field '%s' registers a different region set for country '%s'; a country can only have one state source, so this registration is ignored",
+								$id,
+								$code
+							),
+							'2.0.2'
+						);
+
+						continue;
+					}
+
+					$injected[ $code ] = $options;
+					$states[ $code ]   = $options;
 				}
 			}
 
@@ -868,7 +906,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		public function process( array $posted, $order ): bool {
 			$values = $this->sanitize_posted_data( $posted );
 			$state  = [
-				'chosen_shipping_method' => wc_clean( (string) wp_unslash( $posted['shipping_method'][0] ?? '' ) ),
+				'chosen_shipping_method' => self::normalize_method_id( wc_clean( (string) wp_unslash( $posted['shipping_method'][0] ?? '' ) ) ),
 				'country'                => wc_clean( (string) wp_unslash( $posted['billing_country'] ?? '' ) ),
 			];
 
@@ -988,9 +1026,26 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 			// phpcs:ignore WordPress.Security.NonceVerification.Missing -- WooCommerce verifies the checkout nonce before its checkout hooks fire; values are cleaned in sanitize_posted_data().
 			$method = wc_clean( (string) wp_unslash( $_POST['shipping_method'][0] ?? '' ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotValidated
 
-			// Strip the `:instance_id` suffix so it matches a bare method id in a condition-spec
-			// or requires-pickup list. Mirrors the JS store's setChosenMethod().
-			return explode( ':', (string) $method )[0];
+			return self::normalize_method_id( (string) $method );
+		}
+
+		/**
+		 * Strips the `:instance_id` suffix from a WooCommerce shipping-method value.
+		 *
+		 * WooCommerce posts the chosen method as `method_id:instance_id` whenever the zone has
+		 * an instance id (the usual case). Condition-specs and the requires-pickup list are
+		 * declared against the BARE method id, and the JS store's `setChosenMethod()` strips the
+		 * suffix client-side — so every server entry point must normalise identically or the same
+		 * spec evaluates differently depending on which path validated it.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $method Raw posted shipping-method value.
+		 *
+		 * @return string Bare method id, or empty string.
+		 */
+		private static function normalize_method_id( string $method ): string {
+			return explode( ':', $method )[0];
 		}
 
 		/**

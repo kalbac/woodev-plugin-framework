@@ -455,7 +455,19 @@
 			var $sel    = ensureSelect( $field )
 
 			if( current ) {
-				$sel.append( new Option( current, current, true, true ) )
+				// Takeover re-runs on every `country_to_state_changed`. When the field is ALREADY
+				// a <select> (switching between two takeover countries) ensureSelect() returns it
+				// untouched, so appending unconditionally accumulates a duplicate option per pass.
+				var hasOption = $sel.find( 'option' ).filter( function() {
+					return this.value === String( current )
+				} ).length > 0
+
+				if( hasOption ) {
+					$sel.val( current )
+				} else {
+					$sel.append( new Option( current, current, true, true ) )
+				}
+
 				store.setValue( fieldId, current )
 			}
 
@@ -797,7 +809,13 @@
 					// when WooCommerce actually cleared the field (DOM empty) but the store still
 					// holds it. Overwriting unconditionally clobbered a value the field still had
 					// (WC does not re-render non-state fields on update_checkout).
-					if( $field.length && ! $field.val() ) {
+					//
+					// WC-managed state fields are EXCLUDED: WooCommerce owns them (regions are
+					// injected server-side via `woocommerce_states` and the choice lives in WC's
+					// session). After a country change WC legitimately renders an empty state
+					// field, and restoring the previous country's region would resurrect a stale
+					// value whenever it happens to exist in the new country's option set.
+					if( ! isWcManagedField( fieldId ) && $field.length && ! $field.val() ) {
 						var stored = store.getValue( fieldId )
 
 						if( stored !== undefined && stored !== null && stored !== '' ) {
