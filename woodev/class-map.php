@@ -53,6 +53,8 @@ return [
 	'Woodev\\Framework\\Shipping\\Pickup\\Warehouse_Store' => 'woodev/shipping-method/pickup/interface-warehouse-store.php',
 	'Woodev\\Framework\\Shipping\\Rest_Api\\Abstract_Warehouses_Controller' => 'woodev/shipping-method/rest-api/abstract-warehouses-controller.php',
 	'Woodev\\Framework\\Shipping\\Rest_Api\\Field_Source_Controller' => 'woodev/shipping-method/rest-api/class-field-source-controller.php',
+	'Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller' => 'woodev/shipping-method/rest-api/class-pickup-controller.php',
+	'Woodev\\Framework\\Shipping\\Rest_Api\\Rest_Rate_Limit_Trait' => 'woodev/shipping-method/rest-api/trait-rest-rate-limit.php',
 	'Woodev\\Framework\\Shipping\\Rest_Api\\Shipping_REST_API' => 'woodev/shipping-method/rest-api/class-shipping-rest-api.php',
 	'Woodev\\Framework\\Shipping\\Shipping_API' => 'woodev/shipping-method/api/interface-shipping-api.php',
 	'Woodev\\Framework\\Shipping\\Shipping_Exception' => 'woodev/shipping-method/exceptions/class-shipping-exception.php',

@@ -21,6 +21,7 @@ if ( ! class_exists( '\\WP_REST_Controller' ) ) {
 	require_once __DIR__ . '/wp-rest-controller-stub.php';
 }
 
+require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/rest-api/trait-rest-rate-limit.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/rest-api/class-field-source-controller.php';
 
 /**
@@ -72,9 +73,13 @@ class Field_Source_Controller_Probe extends Field_Source_Controller {
 	/**
 	 * Never rate-limits in unit tests.
 	 *
+	 * @param string $key_prefix transient key prefix (unused).
+	 * @param int    $max        requests allowed per window (unused).
+	 * @param int    $window     window length in seconds (unused).
+	 *
 	 * @return bool
 	 */
-	protected function is_rate_limited(): bool {
+	protected function is_rate_limited( string $key_prefix, int $max, int $window = 60 ): bool {
 		return false;
 	}
 }

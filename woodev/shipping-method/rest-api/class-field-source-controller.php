@@ -46,6 +46,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Field_Source_Cont
 	 */
 	class Field_Source_Controller extends \WP_REST_Controller {
 
+		use Rest_Rate_Limit_Trait;
+
 		/**
 		 * Maximum accepted length (chars) for the free-text `q` / `parent` params.
 		 *
@@ -56,16 +58,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Field_Source_Cont
 		protected const MAX_PARAM_LENGTH = 128;
 
 		/**
-		 * Rate-limit window, in seconds.
-		 *
-		 * @since 2.0.2
-		 *
-		 * @var int
-		 */
-		protected const RATE_LIMIT_WINDOW = 60; // MINUTE_IN_SECONDS — literal so the class loads WC-free.
-
-		/**
-		 * Maximum requests allowed per IP within {@see RATE_LIMIT_WINDOW}.
+		 * Maximum requests allowed per IP per rate-limit window (default 60s window,
+		 * see {@see Rest_Rate_Limit_Trait::is_rate_limited()}).
 		 *
 		 * @since 2.0.2
 		 *
@@ -180,7 +174,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Field_Source_Cont
 			// No plugin_id guard needed: the route path embeds this controller's plugin id
 			// as a literal segment (see register_routes()), so only this plugin's requests
 			// ever reach here. (Codex review P2.)
-			if ( $this->is_rate_limited() ) {
+			if ( $this->is_rate_limited( 'woodev_fieldsrc_rl_', self::RATE_LIMIT_MAX ) ) {
 				return new \WP_Error(
 					'woodev_field_source_rate_limited',
 					__( 'Too many requests. Please slow down.', 'woodev-plugin-framework' ),
@@ -250,26 +244,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Field_Source_Cont
 
 			$country = strtoupper( (string) wc_clean( wp_unslash( $raw['country'] ?? '' ) ) );
 
+			$parent = (string) wc_clean( wp_unslash( $raw['parent'] ?? '' ) );
+			$search = (string) wc_clean( wp_unslash( $raw['q'] ?? '' ) );
+
 			return [
 				'country' => '' !== $country && $this->is_valid_country( $country ) ? $country : '',
-				'parent'  => $this->cap_length( (string) wc_clean( wp_unslash( $raw['parent'] ?? '' ) ) ),
-				'q'       => $this->cap_length( (string) wc_clean( wp_unslash( $raw['q'] ?? '' ) ) ),
+				'parent'  => $this->cap_length( $parent, self::MAX_PARAM_LENGTH ),
+				'q'       => $this->cap_length( $search, self::MAX_PARAM_LENGTH ),
 			];
-		}
-
-		/**
-		 * Caps a string to {@see MAX_PARAM_LENGTH} characters (multibyte-aware).
-		 *
-		 * @since 2.0.2
-		 *
-		 * @param string $value value to cap.
-		 *
-		 * @return string
-		 */
-		protected function cap_length( string $value ): string {
-			return function_exists( 'mb_substr' )
-				? mb_substr( $value, 0, self::MAX_PARAM_LENGTH )
-				: substr( $value, 0, self::MAX_PARAM_LENGTH );
 		}
 
 		/**
@@ -328,59 +310,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Field_Source_Cont
 			return $normalized;
 		}
 
-		/**
-		 * Best-effort per-IP rate limit (bar-raiser).
-		 *
-		 * Allows {@see RATE_LIMIT_MAX} requests per client IP within
-		 * {@see RATE_LIMIT_WINDOW}, tracked in a transient keyed by the hashed IP.
-		 * This is a weak defense — it is trivially defeated by proxies and does not
-		 * account for shared / rotating IPv6 — but it raises the cost of trivial
-		 * abuse of the public endpoint. Overridable so tests can bypass it.
-		 *
-		 * @since 2.0.2
-		 *
-		 * @return bool true when the caller has exceeded the window's budget.
-		 */
-		protected function is_rate_limited(): bool {
-
-			$ip = $this->get_client_ip();
-
-			if ( '' === $ip ) {
-				return false;
-			}
-
-			$key   = 'woodev_fieldsrc_rl_' . md5( $ip );
-			$count = (int) get_transient( $key );
-
-			if ( $count >= self::RATE_LIMIT_MAX ) {
-				return true;
-			}
-
-			set_transient( $key, $count + 1, self::RATE_LIMIT_WINDOW );
-
-			return false;
-		}
-
-		/**
-		 * Resolves the client IP for the rate-limit key.
-		 *
-		 * Uses WooCommerce's geolocation helper when present (which already applies
-		 * the trusted-proxy logic), falling back to the raw remote address.
-		 *
-		 * @since 2.0.2
-		 *
-		 * @return string sanitized client IP, or '' when unknown.
-		 */
-		protected function get_client_ip(): string {
-
-			if ( class_exists( '\\WC_Geolocation' ) ) {
-				return (string) \WC_Geolocation::get_ip_address();
-			}
-
-			return isset( $_SERVER['REMOTE_ADDR'] )
-				? (string) wc_clean( wp_unslash( $_SERVER['REMOTE_ADDR'] ) )
-				: '';
-		}
+		// is_rate_limited(), get_client_ip() and cap_length() are provided by
+		// Rest_Rate_Limit_Trait (shared with Pickup_Controller) — see that trait for the
+		// rate-limit mechanism and its proxy/IPv6 caveats.
 	}
 
 endif;
