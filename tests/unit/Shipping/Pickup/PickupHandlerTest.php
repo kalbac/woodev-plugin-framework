@@ -1369,15 +1369,15 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 		}
 
 		/**
-		 * BLOCKING fix proof, updated for Task 10: `pickup-modal.js` has landed (this
-		 * task), so enqueue_assets() must enqueue THAT handle for real, while still
-		 * skipping the four assets that have not landed yet — the dataSource, the mount
-		 * script, the map-provider script, and the stylesheet (Tasks 11–15) — never
-		 * enqueuing a URL that will 404. The mount script is one of the still-missing
-		 * four, so `wp_localize_script()` must still not fire (see the `$mount_enqueued`
-		 * gate in {@see Pickup_Handler::enqueue_assets()}). Uses the plain
-		 * {@see Pickup_Handler} (no override) — the real filesystem state on this branch
-		 * IS the fixture.
+		 * BLOCKING fix proof, updated for Task 11: `pickup-datasource.js` has now landed
+		 * alongside `pickup-modal.js` (Task 10), so enqueue_assets() must enqueue BOTH
+		 * handles for real, while still skipping the two assets that have not landed yet —
+		 * the mount script and the map-provider script (Tasks 12–13/14) — plus the
+		 * stylesheet (Task 15) — never enqueuing a URL that will 404. The mount script is
+		 * one of the still-missing ones, so `wp_localize_script()` must still not fire
+		 * (see the `$mount_enqueued` gate in {@see Pickup_Handler::enqueue_assets()}). Uses
+		 * the plain {@see Pickup_Handler} (no override) — the real filesystem state on
+		 * this branch IS the fixture.
 		 */
 		public function test_enqueue_assets_enqueues_only_the_assets_already_built(): void {
 			Functions\when( 'is_checkout' )->justReturn( true );
@@ -1407,7 +1407,10 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			$this->assertStringContainsString( 'pickup-modal.js', $scripts['woodev-pickup-modal']['src'] );
 			$this->assertSame( [], $scripts['woodev-pickup-modal']['deps'] );
 
-			$this->assertArrayNotHasKey( 'woodev-pickup-datasource', $scripts );
+			$this->assertArrayHasKey( 'woodev-pickup-datasource', $scripts );
+			$this->assertStringContainsString( 'pickup-datasource.js', $scripts['woodev-pickup-datasource']['src'] );
+			$this->assertSame( [], $scripts['woodev-pickup-datasource']['deps'] );
+
 			$this->assertArrayNotHasKey( 'woodev-pickup-map-provider-yandex', $scripts );
 			$this->assertArrayNotHasKey( 'woodev-pickup-mount', $scripts );
 		}

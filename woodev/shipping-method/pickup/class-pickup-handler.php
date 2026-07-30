@@ -501,18 +501,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		/**
 		 * Enqueues the picker's frontend assets on the checkout page.
 		 *
-		 * Registers handles for JS files owned by LATER SP-5 tasks — the modal shell
-		 * (`pickup-modal.js`, Task 10), the dataSource (`pickup-datasource.js`, Task 11),
-		 * the mount script (`pickup-mount.js`, Task 12), the active provider's script
-		 * (`map-provider-{$provider}.js`, Tasks 13/14) — and the stylesheet
-		 * (`pickup.css`, Task 15). None of those files exist on disk yet, so
-		 * {@see self::enqueue_script_if_built()}/{@see self::enqueue_style_if_built()} skip
-		 * each one entirely via {@see self::asset_exists()} rather than enqueueing a URL
-		 * that will 404: a missing script/style tag is invisible, but a 404ing `src` next
-		 * to a `wp_localize_script()`-printed inline global that nothing on the page can
-		 * yet consume is a live checkout regression waiting for whichever task lands its
-		 * PHP wiring before the asset tasks. The mount config is therefore localized only
-		 * when the mount script itself was actually enqueued.
+		 * Registers handles for JS files owned by SP-5 tasks — the modal shell
+		 * (`pickup-modal.js`, Task 10) and the dataSource (`pickup-datasource.js`,
+		 * Task 11) have LANDED; the mount script (`pickup-mount.js`, Task 12), the active
+		 * provider's script (`map-provider-{$provider}.js`, Tasks 13/14) and the
+		 * stylesheet (`pickup.css`, Task 15) have NOT. Every one of those still-pending
+		 * files is skipped entirely via {@see self::enqueue_script_if_built()}/
+		 * {@see self::enqueue_style_if_built()}'s {@see self::asset_exists()} check rather
+		 * than enqueueing a URL that will 404: a missing script/style tag is invisible, but
+		 * a 404ing `src` next to a `wp_localize_script()`-printed inline global that
+		 * nothing on the page can yet consume is a live checkout regression waiting for
+		 * whichever task lands its PHP wiring before the asset tasks. The mount config is
+		 * therefore localized only when the mount script itself was actually enqueued.
 		 *
 		 * @internal
 		 *
@@ -945,10 +945,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 * to exercise {@see self::enqueue_script_if_built()}/{@see self::enqueue_style_if_built()}'s
 		 * "built" branch without writing a real file into the assets directory. The real
 		 * (default) implementation is a plain `file_exists()` — each SP-5 asset reports
-		 * `true`/`false` independently as its own task lands (e.g. `pickup-modal.js` as of
-		 * Task 10; `pickup-datasource.js`, `pickup-mount.js`, the map-provider script, and
-		 * the stylesheet still report `false` until Tasks 11–15 build them), which is
-		 * exactly the "skip a not-yet-built asset" behaviour
+		 * `true`/`false` independently as its own task lands (`pickup-modal.js` as of
+		 * Task 10, `pickup-datasource.js` as of Task 11; `pickup-mount.js`, the
+		 * map-provider script, and the stylesheet still report `false` until Tasks 12–15
+		 * build them), which is exactly the "skip a not-yet-built asset" behaviour
 		 * {@see self::enqueue_assets()} exists to get right.
 		 *
 		 * @since 2.0.2
