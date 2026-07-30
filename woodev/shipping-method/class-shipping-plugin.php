@@ -54,7 +54,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		 *     @type string[] $currencies         Accepted currency codes
 		 *     @type string[] $countries          Accepted country codes
 		 *     @type string   $integration_class  WC_Integration class name for settings
-		 *     @type string   $map_provider       Map provider: 'yandex' or 'leaflet'
+		 *     @type string   $map_provider       Map provider id, e.g. 'yandex'
 		 * }
 		 */
 		public function __construct( string $id, string $version, array $args = [] ) {
@@ -147,9 +147,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			require_once $path . '/address/interface-address-normalizer.php';
 			require_once $path . '/address/class-null-address-normalizer.php';
 
-			// pickup-point map providers (framework default: Leaflet) + registry
+			// pickup-point map provider interface + registry (no default provider ships)
 			require_once $path . '/map/interface-map-provider.php';
-			require_once $path . '/map/class-leaflet-map-provider.php';
 			require_once $path . '/map/class-map-provider-registry.php';
 
 			// pickup models, source seam, session store and warehouse persistence
@@ -161,13 +160,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			require_once $path . '/pickup/interface-warehouse-store.php';
 			require_once $path . '/pickup/class-abstract-warehouse-store.php';
 
-			// AJAX base for the pickup-point map
-			require_once $path . '/ajax/class-shipping-ajax.php';
-
-			// checkout fields + handler backbone (pickup handler extends the backbone)
+			// checkout fields + handler backbone
 			require_once $path . '/checkout/class-checkout-fields.php';
 			require_once $path . '/checkout/class-checkout-handler.php';
-			require_once $path . '/checkout/class-pickup-checkout-handler.php';
 
 			// order meta handler + abstract shipment/tracking/webhook handlers
 			require_once $path . '/order/class-shipping-order-handler.php';
@@ -205,16 +200,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 
 			// wire the host-supplied subsystems; each accessor returns null in the base,
 			// so a plugin that does not supply a subsystem leaves it inert (null-guarded).
+			// (Explicit null checks, not the nullsafe `?->` operator: this codebase
+			// supports PHP 7.4, where `?->` is a parse error.)
 
-			// AJAX endpoints behind the pickup-point map. (Explicit null checks, not the
-			// nullsafe `?->` operator: this codebase supports PHP 7.4, where `?->` is a parse error.)
-			$ajax_handler = $this->get_ajax_handler();
-			if ( null !== $ajax_handler ) {
-				$ajax_handler->register();
-			}
-
-			// checkout field injection + posted-data processing/save (and, for the
-			// pickup handler, the map assets/modal)
+			// checkout field injection + posted-data processing/save
 			$checkout_handler = $this->get_checkout_handler();
 			if ( null !== $checkout_handler ) {
 				$checkout_handler->register();
@@ -787,8 +776,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		/**
 		 * Gets the map-provider registry, building it on first use.
 		 *
-		 * The framework default (Leaflet, no API key) is registered so it is always
-		 * resolvable; a host plugin registers its own provider on top.
+		 * The framework ships no default provider; a host plugin registers its own.
 		 *
 		 * @since 1.5.0
 		 *
@@ -797,9 +785,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		public function get_map_provider_registry(): Map\Map_Provider_Registry {
 
 			if ( ! $this->map_provider_registry instanceof Map\Map_Provider_Registry ) {
-
 				$this->map_provider_registry = new Map\Map_Provider_Registry();
-				$this->map_provider_registry->register( $this->map_provider_registry->get_default() );
 			}
 
 			return $this->map_provider_registry;
@@ -828,9 +814,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		/**
 		 * Gets the checkout handler.
 		 *
-		 * The framework ships only the checkout backbone; a host plugin overrides this to
-		 * return its configured handler (the pickup handler binds host-supplied contract
-		 * values — hidden field id, method ids, AJAX action map). Defaults to none.
+		 * The framework ships only the checkout backbone ({@see Checkout\Checkout_Handler});
+		 * a host plugin overrides this to return its concrete §8 checkout field handler.
+		 * Defaults to none.
 		 *
 		 * @since 1.5.0
 		 *
@@ -851,21 +837,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		 * @return Admin\Shipping_Admin|null
 		 */
 		public function get_shipping_admin(): ?Admin\Shipping_Admin {
-			return null;
-		}
-
-		/**
-		 * Gets the AJAX handler.
-		 *
-		 * {@see Ajax\Shipping_AJAX} is abstract and bound to host-supplied AJAX action
-		 * strings, so a host plugin overrides this to return its concrete handler.
-		 * Defaults to none.
-		 *
-		 * @since 1.5.0
-		 *
-		 * @return Ajax\Shipping_AJAX|null
-		 */
-		public function get_ajax_handler(): ?Ajax\Shipping_AJAX {
 			return null;
 		}
 

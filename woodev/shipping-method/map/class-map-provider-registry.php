@@ -4,8 +4,8 @@
  *
  * Holds the set of available pickup-point map providers and resolves the one a
  * shipping plugin should use. Providers self-register (the Yandex provider ships
- * in the Yandex plugin); the framework only guarantees this registry seam plus
- * the Leaflet default returned by get_default().
+ * in the Yandex plugin); the framework ships no default provider — the registry
+ * seam itself is the only guarantee.
  *
  * Pure PHP — no WooCommerce calls — so it stays unit-testable. See
  * docs-internal/platform-v2-s1-shipping-spec.md and decision §6a.
@@ -30,9 +30,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Map\\Map_Provider_Registry'
 
 		/** @var array<string, Map_Provider> registered providers keyed by id */
 		private array $providers = [];
-
-		/** @var Map_Provider|null cached framework default (Leaflet) */
-		private ?Map_Provider $default = null;
 
 		/**
 		 * Registers a map provider.
@@ -59,25 +56,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Map\\Map_Provider_Registry'
 		 */
 		public function get( string $id ): ?Map_Provider {
 			return $this->providers[ $id ] ?? null;
-		}
-
-		/**
-		 * Gets the framework default provider.
-		 *
-		 * Always the no-API-key Leaflet provider — the guaranteed fallback when a
-		 * plugin configures no provider or its configured provider is absent.
-		 *
-		 * @since 1.5.0
-		 *
-		 * @return Map_Provider the Leaflet default
-		 */
-		public function get_default(): Map_Provider {
-
-			if ( ! $this->default instanceof Map_Provider ) {
-				$this->default = new Leaflet_Map_Provider();
-			}
-
-			return $this->default;
 		}
 	}
 
