@@ -214,6 +214,23 @@
 	}
 
 	/**
+	 * Removes the current dismissible notice (see {@see WoodevPickupModal#showNotice}),
+	 * if one is showing. A harmless no-op otherwise — used both by the notice's own
+	 * dismiss button and by showNotice() itself so a second call never stacks a
+	 * second banner alongside the first.
+	 *
+	 * @param {WoodevPickupModal} self
+	 * @returns {void}
+	 */
+	function dismissNotice( self ) {
+		if ( self._notice && self._notice.parentNode ) {
+			self._notice.parentNode.removeChild( self._notice );
+		}
+
+		self._notice = null;
+	}
+
+	/**
 	 * @typedef {Object} WoodevPickupModalOptions
 	 * @property {string}      [title]         Dialog title (rendered as text, never markup).
 	 * @property {string}      [closeLabel]    Accessible label for the close button.
@@ -235,6 +252,7 @@
 
 		this._isOpen = false;
 		this._isDestroyed = false;
+		this._notice = null;
 
 		buildDom( this );
 	}
@@ -343,6 +361,66 @@
 	};
 
 	/**
+	 * Shows a dismissible banner ALONGSIDE the body — a sibling of
+	 * `getContainer()`'s node, never inside it — so whatever a map provider has
+	 * already drawn into its container (a live map, a viewport's worth of
+	 * placemarks) is left completely untouched. This is the NON-destructive
+	 * counterpart to showError()/showEmpty(): those two exist for when there is
+	 * nothing worth preserving yet; this one exists for when there is — a
+	 * customer who has already panned to a drawn map and hits a transient
+	 * failure, or pans into an empty patch, keeps their map and gets a banner,
+	 * never a wiped-blank body.
+	 *
+	 * Only ever one notice at a time: a second call replaces the first rather
+	 * than stacking banners.
+	 *
+	 * @param {string}   message
+	 * @param {Function} [onRetry] when given, renders a retry control that
+	 *                             invokes it; omitted for a state with nothing
+	 *                             to retry (e.g. a genuinely empty viewport).
+	 * @returns {void}
+	 */
+	WoodevPickupModal.prototype.showNotice = function( message, onRetry ) {
+		if ( this._isDestroyed ) {
+			return;
+		}
+
+		dismissNotice( this );
+
+		var notice = document.createElement( 'div' );
+		notice.className = 'woodev-pickup-modal__notice';
+		notice.setAttribute( 'role', 'alert' );
+
+		var text = document.createElement( 'span' );
+		text.className = 'woodev-pickup-modal__notice-message';
+		text.textContent = message;
+		notice.appendChild( text );
+
+		if ( typeof onRetry === 'function' ) {
+			var retryButton = document.createElement( 'button' );
+			retryButton.type = 'button';
+			retryButton.className = 'woodev-pickup-modal__notice-retry';
+			retryButton.textContent = this._retryLabel;
+			retryButton.addEventListener( 'click', onRetry );
+			notice.appendChild( retryButton );
+		}
+
+		var self = this;
+		var dismissButton = document.createElement( 'button' );
+		dismissButton.type = 'button';
+		dismissButton.className = 'woodev-pickup-modal__notice-dismiss';
+		dismissButton.setAttribute( 'aria-label', this._closeLabel );
+		dismissButton.textContent = '×'; // '×' — decorative, aria-label carries the meaning.
+		dismissButton.addEventListener( 'click', function() {
+			dismissNotice( self );
+		} );
+		notice.appendChild( dismissButton );
+
+		this._notice = notice;
+		this._dialog.insertBefore( notice, this._body );
+	};
+
+	/**
 	 * Tear the instance down completely: close it (if open), remove the
 	 * close-button listener, and drop every internal reference. After
 	 * destroy(), every other method is a no-op — reopening a destroyed
@@ -368,6 +446,7 @@
 		this._titleEl = null;
 		this._closeButton = null;
 		this._body = null;
+		this._notice = null;
 		this._returnFocusTo = null;
 	};
 

@@ -118,6 +118,91 @@ test( 'showEmpty() renders an explicit empty state', () => {
 	modal.destroy();
 } );
 
+test( 'showNotice() renders a banner ALONGSIDE the body, never replacing its content', () => {
+	const modal = new WoodevPickupModal( { title: 'T' } );
+	const container = modal.getContainer();
+	const marker = document.createElement( 'div' );
+	marker.className = 'provider-marker';
+	container.appendChild( marker ); // pretend the provider already drew a map here
+
+	modal.open();
+	modal.showNotice( 'Не удалось обновить пункты выдачи' );
+
+	// The provider's own content survives untouched.
+	expect( document.querySelector( '.provider-marker' ) ).not.toBeNull();
+	expect( modal.getContainer() ).toBe( container );
+
+	const dialog = document.querySelector( '[role="dialog"]' );
+	expect( dialog.textContent ).toContain( 'Не удалось обновить пункты выдачи' );
+
+	const notice = dialog.querySelector( '.woodev-pickup-modal__notice' );
+	expect( notice ).not.toBeNull();
+	expect( container.contains( notice ) ).toBe( false ); // sibling of the body, not a child
+
+	modal.destroy();
+} );
+
+test( 'showNotice() with no onRetry renders no retry control (the empty-after-drawn case)', () => {
+	const modal = new WoodevPickupModal( { title: 'T' } );
+	modal.open();
+	modal.showNotice( 'Пункты выдачи не найдены в этой области' );
+
+	const notice = document.querySelector( '.woodev-pickup-modal__notice' );
+	expect( notice.querySelector( '.woodev-pickup-modal__notice-retry' ) ).toBeNull();
+	// Still has its own dismiss control.
+	expect( notice.querySelector( '.woodev-pickup-modal__notice-dismiss' ) ).not.toBeNull();
+
+	modal.destroy();
+} );
+
+test( 'showNotice() retry control invokes the callback', () => {
+	const modal = new WoodevPickupModal( { title: 'T', retryLabel: 'Повторить' } );
+	modal.open();
+
+	const onRetry = jest.fn();
+	modal.showNotice( 'Ошибка обновления', onRetry );
+
+	const retryBtn = document.querySelector( '.woodev-pickup-modal__notice-retry' );
+	expect( retryBtn ).not.toBeNull();
+	expect( retryBtn.textContent ).toBe( 'Повторить' );
+
+	retryBtn.dispatchEvent( new MouseEvent( 'click', { bubbles: true } ) );
+	expect( onRetry ).toHaveBeenCalledTimes( 1 );
+
+	modal.destroy();
+} );
+
+test( 'showNotice() dismiss control removes the banner without touching the body', () => {
+	const modal = new WoodevPickupModal( { title: 'T' } );
+	const container = modal.getContainer();
+	container.appendChild( document.createElement( 'div' ) );
+
+	modal.open();
+	modal.showNotice( 'Что-то пошло не так' );
+
+	const dismissBtn = document.querySelector( '.woodev-pickup-modal__notice-dismiss' );
+	dismissBtn.dispatchEvent( new MouseEvent( 'click', { bubbles: true } ) );
+
+	expect( document.querySelector( '.woodev-pickup-modal__notice' ) ).toBeNull();
+	expect( container.children.length ).toBe( 1 ); // the pre-existing content is untouched
+
+	modal.destroy();
+} );
+
+test( 'showNotice() called twice replaces the first banner rather than stacking a second', () => {
+	const modal = new WoodevPickupModal( { title: 'T' } );
+	modal.open();
+
+	modal.showNotice( 'Первое сообщение' );
+	modal.showNotice( 'Второе сообщение' );
+
+	const notices = document.querySelectorAll( '.woodev-pickup-modal__notice' );
+	expect( notices.length ).toBe( 1 );
+	expect( notices[ 0 ].textContent ).toContain( 'Второе сообщение' );
+
+	modal.destroy();
+} );
+
 test( 'showError() retry control invokes the callback', () => {
 	const modal = new WoodevPickupModal( { title: 'T', retryLabel: 'Повторить' } );
 	modal.open();

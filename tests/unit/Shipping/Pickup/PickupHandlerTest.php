@@ -1369,18 +1369,29 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 		}
 
 		/**
-		 * BLOCKING fix proof, updated for Task 11: `pickup-datasource.js` has now landed
-		 * alongside `pickup-modal.js` (Task 10), so enqueue_assets() must enqueue BOTH
-		 * handles for real, while still skipping the two assets that have not landed yet —
-		 * the mount script and the map-provider script (Tasks 12–13/14) — plus the
-		 * stylesheet (Task 15) — never enqueuing a URL that will 404. The mount script is
-		 * one of the still-missing ones, so `wp_localize_script()` must still not fire
-		 * (see the `$mount_enqueued` gate in {@see Pickup_Handler::enqueue_assets()}). Uses
-		 * the plain {@see Pickup_Handler} (no override) — the real filesystem state on
-		 * this branch IS the fixture.
+		 * BLOCKING fix proof, updated for Task 12: `pickup-mount.js` has now landed
+		 * alongside `pickup-modal.js` (Task 10) and `pickup-datasource.js` (Task 11), so
+		 * `wp_enqueue_script()` is called for all three handles — including localizing the
+		 * mount config, now that the `$mount_enqueued` gate in
+		 * {@see Pickup_Handler::enqueue_assets()} is open — while the one asset that has not
+		 * landed yet (the map-provider script, Tasks 13/14) — plus the stylesheet (Task 15)
+		 * — are still skipped entirely, never enqueuing a URL that will 404. Uses the plain
+		 * {@see Pickup_Handler} (no override) — the real filesystem state on this branch IS
+		 * the fixture.
+		 *
+		 * "Enqueued" here is a PHP-level fact only: the mount handle's own dependency list
+		 * names `woodev-pickup-map-provider-yandex`, a handle that is never itself
+		 * registered on this branch (its file does not exist yet), so WordPress's real
+		 * dependency resolution will not actually PRINT the mount `<script>` tag to the page
+		 * until Task 13/14 lands that file — see {@see Pickup_Handler::enqueue_assets()}'s
+		 * own docblock.
 		 */
 		public function test_enqueue_assets_enqueues_only_the_assets_already_built(): void {
 			Functions\when( 'is_checkout' )->justReturn( true );
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			Functions\when( 'rest_url' )->justReturn( 'https://example.test/wp-json/woodev/v1' );
+			Functions\when( 'wp_create_nonce' )->justReturn( 'NONCE' );
+			Functions\when( 'wc_ship_to_billing_address_only' )->justReturn( false );
 			Functions\when( 'plugins_url' )->alias(
 				static fn( $path, $file ) => 'https://example.test/wp-content/plugins/x/' . $path
 			);
@@ -1393,7 +1404,13 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			);
 
 			Functions\expect( 'wp_enqueue_style' )->never();
-			Functions\expect( 'wp_localize_script' )->never();
+
+			$localized = [];
+			Functions\when( 'wp_localize_script' )->alias(
+				static function ( $handle, $object_name, $data ) use ( &$localized ) {
+					$localized[] = [ $handle, $object_name, $data ];
+				}
+			);
 
 			$handler = new Pickup_Handler(
 				'p',
@@ -1412,7 +1429,18 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			$this->assertSame( [], $scripts['woodev-pickup-datasource']['deps'] );
 
 			$this->assertArrayNotHasKey( 'woodev-pickup-map-provider-yandex', $scripts );
-			$this->assertArrayNotHasKey( 'woodev-pickup-mount', $scripts );
+
+			$this->assertArrayHasKey( 'woodev-pickup-mount', $scripts );
+			$this->assertStringContainsString( 'pickup-mount.js', $scripts['woodev-pickup-mount']['src'] );
+			$this->assertSame(
+				[ 'jquery', 'woodev-pickup-modal', 'woodev-pickup-datasource', 'woodev-pickup-map-provider-yandex' ],
+				$scripts['woodev-pickup-mount']['deps']
+			);
+
+			$this->assertCount( 1, $localized );
+			[ $handle, $object_name ] = $localized[0];
+			$this->assertSame( 'woodev-pickup-mount', $handle );
+			$this->assertSame( 'woodev_pickup_config_p', $object_name );
 		}
 
 		public function test_enqueue_assets_registers_the_expected_handles_and_paths_once_built(): void {
@@ -1464,7 +1492,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			$this->assertArrayHasKey( 'woodev-pickup-mount', $scripts );
 			$this->assertStringContainsString( 'pickup-mount.js', $scripts['woodev-pickup-mount']['src'] );
 			$this->assertSame(
-				[ 'woodev-pickup-modal', 'woodev-pickup-datasource', 'woodev-pickup-map-provider-yandex' ],
+				[ 'jquery', 'woodev-pickup-modal', 'woodev-pickup-datasource', 'woodev-pickup-map-provider-yandex' ],
 				$scripts['woodev-pickup-mount']['deps']
 			);
 

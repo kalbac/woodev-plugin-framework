@@ -253,17 +253,33 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 				'restRoot' => $this->rest_root(),
 				'nonce'    => wp_create_nonce( 'wp_rest' ),
 				'i18n'     => [
-					'modalTitle' => __( 'Выберите пункт выдачи', 'woodev-plugin-framework' ),
-					'close'      => __( 'Закрыть', 'woodev-plugin-framework' ),
-					'select'     => __( 'Выбрать этот пункт', 'woodev-plugin-framework' ),
-					'loading'    => __( 'Загрузка пунктов выдачи…', 'woodev-plugin-framework' ),
-					'error'      => __(
+					'modalTitle'    => __( 'Выберите пункт выдачи', 'woodev-plugin-framework' ),
+					'close'         => __( 'Закрыть', 'woodev-plugin-framework' ),
+					'select'        => __( 'Выбрать этот пункт', 'woodev-plugin-framework' ),
+					'loading'       => __( 'Загрузка пунктов выдачи…', 'woodev-plugin-framework' ),
+					'error'         => __(
 						'Не удалось загрузить пункты выдачи. Попробуйте ещё раз.',
 						'woodev-plugin-framework'
 					),
-					'noResults'  => __( 'Пункты выдачи не найдены.', 'woodev-plugin-framework' ),
-					'blocked'    => __(
+					'noResults'     => __( 'Пункты выдачи не найдены.', 'woodev-plugin-framework' ),
+					'blocked'       => __(
 						'Этот пункт выдачи недоступен для вашего заказа.',
+						'woodev-plugin-framework'
+					),
+					// Consumed by the mount script (Task 12), not by the modal shell or the map
+					// provider — see Pickup_Mount's own docblock for why it reads these keys.
+					'trigger'       => __( 'Выбрать пункт выдачи', 'woodev-plugin-framework' ),
+					'retry'         => __( 'Повторить', 'woodev-plugin-framework' ),
+					'upstreamError' => __(
+						'Сервис пунктов выдачи временно недоступен. Попробуйте ещё раз позже.',
+						'woodev-plugin-framework'
+					),
+					'rateLimited'   => __(
+						'Слишком много запросов. Подождите немного и попробуйте снова.',
+						'woodev-plugin-framework'
+					),
+					'notFound'      => __(
+						'Этот пункт выдачи больше не найден. Пожалуйста, выберите другой.',
 						'woodev-plugin-framework'
 					),
 				],
@@ -502,8 +518,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 * Enqueues the picker's frontend assets on the checkout page.
 		 *
 		 * Registers handles for JS files owned by SP-5 tasks — the modal shell
-		 * (`pickup-modal.js`, Task 10) and the dataSource (`pickup-datasource.js`,
-		 * Task 11) have LANDED; the mount script (`pickup-mount.js`, Task 12), the active
+		 * (`pickup-modal.js`, Task 10), the dataSource (`pickup-datasource.js`, Task 11)
+		 * and the mount script (`pickup-mount.js`, Task 12) have LANDED; the active
 		 * provider's script (`map-provider-{$provider}.js`, Tasks 13/14) and the
 		 * stylesheet (`pickup.css`, Task 15) have NOT. Every one of those still-pending
 		 * files is skipped entirely via {@see self::enqueue_script_if_built()}/
@@ -513,6 +529,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 * nothing on the page can yet consume is a live checkout regression waiting for
 		 * whichever task lands its PHP wiring before the asset tasks. The mount config is
 		 * therefore localized only when the mount script itself was actually enqueued.
+		 *
+		 * On THIS branch `wp_enqueue_script()` is still called for the mount handle (its
+		 * own file exists now), but WordPress will not actually PRINT it to the page: one
+		 * of its declared dependencies (`$provider_handle`) is not itself a registered
+		 * handle until Task 13/14 lands the map-provider script, and WordPress's dependency
+		 * resolution silently omits a script whose declared dependency was never
+		 * registered. This is expected and resolves itself the moment the provider script
+		 * lands — see {@see PickupHandlerTest::test_enqueue_assets_enqueues_only_the_assets_already_built()}.
 		 *
 		 * @internal
 		 *
@@ -535,10 +559,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 				[]
 			);
 
+			// `jquery`: the mount script binds `updated_checkout` through jQuery when it is
+			// present (see pickup-mount.js's own docblock) — declared explicitly here rather
+			// than free-riding on `checkout-field-classic.js` happening to also require it.
 			$mount_enqueued = $this->enqueue_script_if_built(
 				'woodev-pickup-mount',
 				'js/frontend/pickup-mount.js',
-				[ 'woodev-pickup-modal', 'woodev-pickup-datasource', $provider_handle ]
+				[ 'jquery', 'woodev-pickup-modal', 'woodev-pickup-datasource', $provider_handle ]
 			);
 
 			$this->enqueue_style_if_built( 'woodev-pickup-styles', 'css/frontend/pickup.css' );
