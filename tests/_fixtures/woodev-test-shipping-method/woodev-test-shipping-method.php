@@ -194,6 +194,44 @@ function woodev_test_shipping_method_plugin_init(): void {
 						],
 					]
 				);
+
+				// DEMO ONLY (rig): §8 provides the pickup SLOT; the real "choose a point" button +
+				// map is SP-5. Mount a fake picker into the slot so the A2 gate can be exercised
+				// end-to-end on the rig without SP-5.
+				add_action( 'wp_footer', [ $this, 'render_demo_pickup_picker' ], 99 );
+			}
+
+			/**
+			 * DEMO ONLY: injects a fake pickup-point picker into the §8 slot on the checkout.
+			 *
+			 * @internal
+			 *
+			 * @return void
+			 */
+			public function render_demo_pickup_picker(): void {
+				if ( ! function_exists( 'is_checkout' ) || ! is_checkout() ) {
+					return;
+				}
+				?>
+				<script>
+				( function( $ ) {
+					function mount() {
+						var $slot = $( '[data-woodev-pickup-slot="carrier_pickup_point"]' );
+						if ( ! $slot.length || $slot.find( '.woodev-demo-pvz' ).length ) { return; }
+						$slot.append( '<button type="button" class="button woodev-demo-pvz">Выбрать ПВЗ (демо)</button>' );
+					}
+					$( document.body ).on( 'click', '.woodev-demo-pvz', function( e ) {
+						e.preventDefault();
+						$( '#carrier_pickup_point' ).val( 'DEMO-PVZ-1' ).trigger( 'change' );
+						$( this ).text( 'ПВЗ выбран: DEMO-PVZ-1' );
+					} );
+					// Defer so it runs AFTER the adapter's own updated_checkout handler re-places the slot.
+					$( document.body ).on( 'updated_checkout', function() { setTimeout( mount, 60 ); } );
+					$( document.body ).on( 'change', 'input[name^="shipping_method"]', function() { setTimeout( mount, 60 ); } );
+					setTimeout( mount, 200 );
+				} )( jQuery );
+				</script>
+				<?php
 			}
 
 			/**
@@ -247,6 +285,131 @@ function woodev_test_shipping_method_plugin_init(): void {
 			 */
 			public function get_api(): ?\Woodev\Framework\Shipping\Shipping_API {
 				return null;
+			}
+
+			// -----------------------------------------------------------------
+			// Checkout handler seam — demo fields for Task 12 fixture wiring.
+			// -----------------------------------------------------------------
+
+			/**
+			 * Cached checkout handler instance.
+			 *
+			 * @since 2.0.2
+			 *
+			 * @var \Woodev\Framework\Shipping\Checkout\Checkout_Handler|null
+			 */
+			private ?\Woodev\Framework\Shipping\Checkout\Checkout_Handler $checkout_handler_instance = null;
+
+			/**
+			 * Returns a Checkout_Handler configured with a small demo field set.
+			 *
+			 * Three fields are wired to exercise every major branch of the layer:
+			 *  1. `billing_state`        — root select with static regions, RU/BY/KZ/UZ takeover.
+			 *  2. `billing_city`         — dependent suggest filtered by region + query string.
+			 *  3. `carrier_pickup_point` — hidden pickup-slot required when the fixture
+			 *                              shipping method is chosen.
+			 *
+			 * Domain data (regions, cities, method ids) lives here in the fixture;
+			 * the framework stays generic.
+			 *
+			 * @since 2.0.2
+			 *
+			 * @return \Woodev\Framework\Shipping\Checkout\Checkout_Handler
+			 */
+			public function get_checkout_handler(): \Woodev\Framework\Shipping\Checkout\Checkout_Handler {
+
+				if ( null !== $this->checkout_handler_instance ) {
+					return $this->checkout_handler_instance;
+				}
+
+				$fields = \Woodev\Framework\Shipping\Checkout\Checkout_Fields::from_array(
+					[
+						// 1. Root region select — takes over `billing_state` for CIS countries.
+						\Woodev\Framework\Shipping\Checkout\Field::create( 'billing_state' )
+							->set_type( 'select' )
+							->set_label( 'Регион' )
+							->set_section( 'billing' )
+							->set_required( true )
+							->set_source(
+								static function ( array $context ): array {
+									if ( 'RU' !== ( $context['country'] ?? '' ) ) {
+										return [];
+									}
+									return [
+										[ 'value' => '77', 'label' => 'Москва' ],
+										[ 'value' => '78', 'label' => 'Санкт-Петербург' ],
+										[ 'value' => '23', 'label' => 'Краснодарский край' ],
+									];
+								},
+								'options'
+							)
+							->set_takeover_condition(
+								static function ( array $context ): bool {
+									return in_array( $context['country'] ?? '', [ 'RU', 'BY', 'KZ', 'UZ' ], true );
+								}
+							),
+
+						// 2. Dependent city suggest — driven by parent region + free-text query.
+						\Woodev\Framework\Shipping\Checkout\Presets\Dependent_Select::create( 'billing_city', 'billing_state' )
+							->set_label( 'Город' )
+							->set_section( 'billing' )
+							->set_required( true )
+							->set_source(
+								static function ( array $context ): array {
+									$cities_by_region = [
+										'77' => [ 'Москва', 'Зеленоград', 'Троицк' ],
+										'78' => [ 'Санкт-Петербург', 'Кронштадт', 'Пушкин' ],
+										'23' => [ 'Краснодар', 'Сочи', 'Новороссийск' ],
+									];
+
+									$region = (string) ( $context['parent'] ?? '' );
+									$query  = mb_strtolower( (string) ( $context['q'] ?? '' ) );
+
+									$candidates = $cities_by_region[ $region ] ?? [];
+
+									if ( '' === $query ) {
+										return array_map(
+											static fn( string $c ) => [ 'value' => $c, 'label' => $c ],
+											$candidates
+										);
+									}
+
+									$result = [];
+									foreach ( $candidates as $city ) {
+										if ( false !== mb_stripos( $city, $query ) ) {
+											$result[] = [ 'value' => $city, 'label' => $city ];
+										}
+									}
+									return $result;
+								},
+								'suggest'
+							)
+							// City autocomplete only for the CIS countries this carrier serves; for
+							// e.g. the US the field stays WooCommerce's native text input.
+							->set_takeover_condition(
+								static fn( array $c ): bool => in_array( (string) ( $c['country'] ?? '' ), [ 'RU', 'BY', 'KZ', 'UZ' ], true )
+							),
+
+						// 3. Hidden pickup-point slot — required when the fixture method is chosen.
+						// Use the literal method id (= Woodev_Test_Shipping_Method::METHOD_ID) —
+						// get_checkout_handler() runs on every request (incl. REST) via the
+						// plugin's register(), before WC lazily loads the shipping-method class, so
+						// referencing that class constant here would fatal "class not found".
+						\Woodev\Framework\Shipping\Checkout\Presets\Pickup_Field::create(
+							'carrier_pickup_point',
+							[ 'woodev_test_shipping' ]
+						),
+					]
+				);
+
+				$handler = new \Woodev\Framework\Shipping\Checkout\Checkout_Handler(
+					$fields,
+					self::PLUGIN_ID
+				);
+				$handler->set_requires_pickup_methods( [ 'woodev_test_shipping' ] ); // = Woodev_Test_Shipping_Method::METHOD_ID (literal — see above).
+
+				$this->checkout_handler_instance = $handler;
+				return $this->checkout_handler_instance;
 			}
 		}
 	}

@@ -1,3 +1,21 @@
+> ⏸️ **RESUME s42 (§8 — FIELD LAYER VERIFIED WORKING END-TO-END on the rig; remaining = operator's own final rig-verify + Codex re-critic on all the rig fixes + merge).**
+> Branch `feat/checkout-field-layer` (pushed). The classic checkout field layer is browser-verified by me on `:8888`:
+> RU → NATIVE WC region select (regions injected via the **`woocommerce_states`** filter — `Checkout_Handler::inject_states`, the robust redesign that replaced the fragile client DOM-conversion) + city select2 typeahead ("мос"→"Москва"); US → native WC states + native TEXT city; "Выберите…" placeholder (no [object Object]); region→city cascade; A2 pickup gate blocks the order + a demo pickup button releases it; **all field values (region/city/pickup) now SURVIVE `update_checkout`** (selecting a shipping method + a payment method) — the value-persistence bug is FIXED (region via WC-native session persistence; city via: no select2 re-init on updated_checkout + safety-net-only restore + re-add value as option on suggest conversion; store ignores WC's `*` wildcard). Rig setup done: shipping fixture active, product #12, shipping method in the "Russia" + rest-of-world zones, COD enabled, classic `/classic-checkout/` page, pretty permalinks ON. NOTE: an actual order **submit** via the Playwright automation did not fire WC's checkout ajax (a test-harness limitation, not a product defect) — the operator should click **Оформить заказ** himself to confirm the order saves (`carrier_pickup_point` meta + native billing_state/city); ALSO double-check our gate's `#place_order` disable/enable does not fight WC's own submit. THEN: Codex re-critic on the whole rig-fix set (many commits after `bd12dce`), then merge after green CI + CLEAN (squash + delete-branch, never `--auto`).
+> --- historical: design+plan+Codex-critic COMPLETE + SERVER-PATH LIVE-VERIFIED ---
+> Branch `feat/checkout-field-layer` (pushed to origin). Spec `…/specs/2026-07-06-checkout-field-layer-design.md`,
+> plan `…/plans/2026-07-06-checkout-field-layer-plan.md`. **All 14 tasks implemented + committed** (subagent-driven,
+> 1018 unit + 7 jest + phpcs clean; integration tests written for CI). **Codex review DONE** (P1 conditional-required-not-static +
+> P2 per-plugin REST route) + **re-critic DONE** (preserve WC required on enhance; guard empty route id) — all fixed & committed.
+> **Live rig on `:8888` (shipping fixture ACTIVATED):** boot 200 no WSOD; REST field-source works for a GUEST via
+> `/?rest_route=/woodev/v1/shipping/checkout/woodev-test-shipping-method/field-source/billing_state&country=RU`
+> → returns regions; `…/billing_city&parent=77&q=мос` → Москва; FR → empty. (NOTE: pretty-permalinks are OFF on this rig,
+> so use the `?rest_route=` form, not `/wp-json/…`.) Caught + fixed a real fixture bug (literal method id vs early WC class load).
+> **REMAINING (operator's own rig-verify, then merge):** VISUAL classic-checkout e2e — set up a product + a WC shipping zone
+> with the `woodev_test_shipping` method + a classic `[woocommerce_checkout]` page + cart; verify in-browser: country RU→our
+> region select (takeover) / FR→WC native; region→city cascade dropdown; choosing the pickup method with an empty pickup point
+> BLOCKS «Оформить заказ». Then merge after green CI + `mergeStateStatus: CLEAN` (squash + delete-branch, never `--auto`).
+> **DO NOT re-brainstorm / re-implement.** The §8 brainstorm below is HISTORICAL.
+
 # Промт следующей сессии: §8 «Checkout field layer» (SP-3-checkout) — brainstorm → spec → plan → impl
 
 > Обновлён 06.07.2026 после **s41: UK-3/UK-4 (визард на UI-kit, PR #99) + SP-2-DEF (очистка секрета, PR #100) SHIPPED**, оба браузер-верифицированы мной на `:8888`. **SP-4 (DaData) ОТЛОЖЕН до §8** (решение s41 — см. ниже). Следующий приоритет — **§8 checkout field layer**, «одна из самых больных точек в реальных плагинах доставки» (слова оператора). Оператор явно попросил начать §8 **свежей сессией** (большой кусок, детальная проработка).

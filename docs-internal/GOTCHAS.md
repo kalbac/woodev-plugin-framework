@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
-> **73 atomic gotchas in 19 namespaces** — update count when adding/removing.
-> Last updated: 2026-07-06 (session 41: +1 — `settings-sensitive-secret-empty-skip-is-client-side` [`[settings-api/secrets]`]).
+> **74 atomic gotchas in 19 namespaces** — update count when adding/removing.
+> Last updated: 2026-07-06 (session 42: +1 — `checkout-field-takeover-woocommerce-states` [`[shipping/checkout]`]).
 
 ## Index
 
@@ -98,6 +98,9 @@
 ### [box-packer/*] — Box-packer algorithm (S2)
 - [box-packer/virtual-box-rsort-axis-alignment] `rsort()` on the axis-assignment result destroys axis-name alignment for non-normalized items — Option A `[1,10,1]` after rsort → `[10,1,1]` → `box_width=1 < item_width=10` → packing rejects item. Never rsort the candidate; each option guarantees axis alignment by construction → [gotchas/virtual-box-rsort-axis-alignment.md](gotchas/virtual-box-rsort-axis-alignment.md) (2026-06-09)
 - [box-packer/virtual-box-null-best-inf-overflow] `$best=null; $best_volume=PHP_FLOAT_MAX` → if all candidate volumes overflow to INF, `INF < PHP_FLOAT_MAX = false` → `$best` never set → null dereference. Fix: initialize `$best = $candidates[0]` → [gotchas/virtual-box-null-best-inf-overflow.md](gotchas/virtual-box-null-best-inf-overflow.md) (2026-06-09)
+
+### [shipping/checkout] — Checkout field layer (§8)
+- [shipping/checkout] Takeover for a WC-states field (region) must use the `woocommerce_states` filter (WC renders + persists natively), NOT client DOM conversion — WC's `update_checkout` re-render fires programmatic `change('' / '*')` that wipes an external store, re-inits select2 (clearing values), etc. City (non-WC concept) stays client select2 with defensive guards (no re-init, safety-net restore, re-add value as option) → [gotchas/checkout-field-takeover-woocommerce-states.md](gotchas/checkout-field-takeover-woocommerce-states.md) (s42)
 
 ### [shipping/*] — Shipping module (S1)
 - [shipping/contracts] Session key ≠ order-meta prefix — composing one key for both checkout session and order meta breaks installed-site data (Yandex: `chosen_yandex_pickup_point` vs `_yandex_delivery_`) → [gotchas/session-key-vs-order-meta-prefix.md](gotchas/session-key-vs-order-meta-prefix.md) (2026-06-06)

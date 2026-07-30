@@ -1,5 +1,12 @@
 # Future Backlog — Woodev Plugin Framework
 
+> **FROZEN (2026-07-23).** This file no longer accepts new items. The backlog moved to
+> **GitHub Issues + the "Woodev Framework Backlog" project board**
+> (`https://github.com/users/kalbac/projects/6`) — see the global Backlog protocol in
+> `~/.claude/CLAUDE.md` (issue cards are written in Russian). The 27 open items below
+> were migrated to `kalbac/woodev-plugin-framework` issues #103–#129; resolved entries
+> stay here as history. Do not append to this file.
+
 > Features and improvements deferred for later versions.
 > Format: what's done | what's missing | why deferred | when to implement
 
