@@ -1,62 +1,56 @@
-> ⏸️ **RESUME s42 (§8 — FIELD LAYER VERIFIED WORKING END-TO-END on the rig; remaining = operator's own final rig-verify + Codex re-critic on all the rig fixes + merge).**
-> Branch `feat/checkout-field-layer` (pushed). The classic checkout field layer is browser-verified by me on `:8888`:
-> RU → NATIVE WC region select (regions injected via the **`woocommerce_states`** filter — `Checkout_Handler::inject_states`, the robust redesign that replaced the fragile client DOM-conversion) + city select2 typeahead ("мос"→"Москва"); US → native WC states + native TEXT city; "Выберите…" placeholder (no [object Object]); region→city cascade; A2 pickup gate blocks the order + a demo pickup button releases it; **all field values (region/city/pickup) now SURVIVE `update_checkout`** (selecting a shipping method + a payment method) — the value-persistence bug is FIXED (region via WC-native session persistence; city via: no select2 re-init on updated_checkout + safety-net-only restore + re-add value as option on suggest conversion; store ignores WC's `*` wildcard). Rig setup done: shipping fixture active, product #12, shipping method in the "Russia" + rest-of-world zones, COD enabled, classic `/classic-checkout/` page, pretty permalinks ON. NOTE: an actual order **submit** via the Playwright automation did not fire WC's checkout ajax (a test-harness limitation, not a product defect) — the operator should click **Оформить заказ** himself to confirm the order saves (`carrier_pickup_point` meta + native billing_state/city); ALSO double-check our gate's `#place_order` disable/enable does not fight WC's own submit. THEN: Codex re-critic on the whole rig-fix set (many commits after `bd12dce`), then merge after green CI + CLEAN (squash + delete-branch, never `--auto`).
-> --- historical: design+plan+Codex-critic COMPLETE + SERVER-PATH LIVE-VERIFIED ---
-> Branch `feat/checkout-field-layer` (pushed to origin). Spec `…/specs/2026-07-06-checkout-field-layer-design.md`,
-> plan `…/plans/2026-07-06-checkout-field-layer-plan.md`. **All 14 tasks implemented + committed** (subagent-driven,
-> 1018 unit + 7 jest + phpcs clean; integration tests written for CI). **Codex review DONE** (P1 conditional-required-not-static +
-> P2 per-plugin REST route) + **re-critic DONE** (preserve WC required on enhance; guard empty route id) — all fixed & committed.
-> **Live rig on `:8888` (shipping fixture ACTIVATED):** boot 200 no WSOD; REST field-source works for a GUEST via
-> `/?rest_route=/woodev/v1/shipping/checkout/woodev-test-shipping-method/field-source/billing_state&country=RU`
-> → returns regions; `…/billing_city&parent=77&q=мос` → Москва; FR → empty. (NOTE: pretty-permalinks are OFF on this rig,
-> so use the `?rest_route=` form, not `/wp-json/…`.) Caught + fixed a real fixture bug (literal method id vs early WC class load).
-> **REMAINING (operator's own rig-verify, then merge):** VISUAL classic-checkout e2e — set up a product + a WC shipping zone
-> with the `woodev_test_shipping` method + a classic `[woocommerce_checkout]` page + cart; verify in-browser: country RU→our
-> region select (takeover) / FR→WC native; region→city cascade dropdown; choosing the pickup method with an empty pickup point
-> BLOCKS «Оформить заказ». Then merge after green CI + `mergeStateStatus: CLEAN` (squash + delete-branch, never `--auto`).
-> **DO NOT re-brainstorm / re-implement.** The §8 brainstorm below is HISTORICAL.
-
-# Промт следующей сессии: §8 «Checkout field layer» (SP-3-checkout) — brainstorm → spec → plan → impl
-
-> Обновлён 06.07.2026 после **s41: UK-3/UK-4 (визард на UI-kit, PR #99) + SP-2-DEF (очистка секрета, PR #100) SHIPPED**, оба браузер-верифицированы мной на `:8888`. **SP-4 (DaData) ОТЛОЖЕН до §8** (решение s41 — см. ниже). Следующий приоритет — **§8 checkout field layer**, «одна из самых больных точек в реальных плагинах доставки» (слова оператора). Оператор явно попросил начать §8 **свежей сессией** (большой кусок, детальная проработка).
+> ✅ **§8 CHECKOUT FIELD LAYER — MERGED** (s44, 2026-07-30, PR #132 → `main` `957c039`, ветка удалена, main синхронизирован 0-behind).
+> Всё, что висело с s42, закрыто: реальный сабмит заказа доверифицирован, Codex re-critic на риговых фиксах проведён, интеграционные тесты починены, CI полностью зелёный, `mergeStateStatus: CLEAN`.
+>
+> **🎯 СЛЕДУЮЩЕЕ — SP-5 «Карта / ПВЗ» (§7).** Решение оператора s44: ранний пилот НЕ берём, из пары SP-4/SP-5 выбран **SP-5**.
+> Обоснование: §8 оставил хук/слот под кнопку ПВЗ, но самой кнопки и карты нет — сейчас A2-гейт разблокируется только демо-заглушкой фикстуры,
+> то есть чекаут доставки нефункционален. И СДЭК, и Яндекс, и будущий OZON — ПВЗ-центричные. DaData (SP-4) садится поверх готового §8-слоя и ничего не блокирует.
+>
+> **Способ (как в §8, он себя оправдал):** `brainstorming` (заземляясь на РЕАЛЬНОМ коде — что уже есть в скелете
+> `woodev/shipping-method/checkout/class-pickup-checkout-handler.php`, какой слот оставил §8, как v1-плагины рисуют карту) →
+> `writing-plans` → subagent-driven impl → Codex-критик + re-critic → **обязательная моя браузерная e2e на риге ДО мерджа**.
 
 ## Возобновление (ОБЯЗАТЕЛЬНО)
-1. `docs-internal/CURRENT-STATE.md` («Last session context» — s41) + `docs-internal/GOTCHAS.md` (73 готчи).
-2. Программа shipping-модуля: `docs-internal/specs/2026-06-25-shipping-module-decisions.md` — **§8 решения** (state-outside-DOM store + field registry + event delegation; core + 2 тонких адаптера: classic first, blocks fast-follow; A2 validation-gating блокирует размещение заказа, если способ требует ПВЗ а он не выбран). Также cross-cutting constraints (HPOS-safe meta, no `_n()`, class-map regen).
-3. **Риг:** wp-env dev `:8888` (`npx wp-env start`). admin/password. Фикстура `woodev-test-plugin` = провайдер «Карьер» (страница настроек + визард). На риге я **стёр conn_password** в ходе e2e SP-2-DEF — оператор восстановит тестовое значение при желании.
-4. Версию НЕ бампать (`@since 2.0.2`).
 
-## 🎯 Задача — §8 «Checkout field layer core + classic adapter» (в decomposition-доке это SP-3)
-> ⚠️ **Именование:** зашипленный «SP-3» (s39) = валидация полей на **странице настроек**. §8 из decomposition-дока = **checkout-поля** — другое. Здесь речь про §8/checkout.
+1. `docs-internal/CURRENT-STATE.md` («Last session context» — s44) + `docs-internal/GOTCHAS.md` (75 готчей).
+2. Программа shipping-модуля: `docs-internal/specs/2026-06-25-shipping-module-decisions.md` — **§7 решения** (наша карта + iframe + опциональный `<select>`;
+   `<select>`-режим берём ТОЛЬКО если тривиален, иначе выкидываем). Плюс cross-cutting constraints (HPOS-safe meta, no `_n()`, class-map regen).
+3. Контракт §8, на который SP-5 садится: `docs-internal/specs/2026-07-06-checkout-field-layer-design.md` + готча
+   `checkout-field-takeover-woocommerce-states`.
+4. **Риг: порт сменён на `:8973` (dev) / `:8974` (tests)** — 8888 занял проект `woodev_base_theme`, порты вынесены в `.wp-env.override.json` (он в gitignore).
+   `npx wp-env start`. admin/password. Продуктовое состояние рига живо: товар #12, зоны Russia + rest-of-world, метод `woodev_test_shipping`, COD,
+   страница `/classic-checkout/`, pretty permalinks. NB: `woocommerce_coming_soon` пришлось выключить вручную.
+5. **Браузер: гонять чекаут через chrome-devtools MCP, НЕ Playwright MCP** — готча `playwright-mcp-does-not-fire-wc-checkout-ajax` (Playwright молча не поднимает сабмит WC; это стоило s42 целого цикла верификации).
+6. Версию НЕ бампать (`@since 2.0.2`).
 
-Слой полей оформления заказа: **store вне DOM + реестр полей + делегирование событий** (НЕ re-binding патчи). Общий core (какие поля, cascade регион→город→адрес, валидация, AJAX/REST endpoints) + **два тонких адаптера**:
-- **Classic adapter** (`[woocommerce_checkout]`): читает/пишет store, рендерит DOM через делегирование, синкает WC-сессию.
-- **Blocks adapter** (Gutenberg): тот же store, монтирует React в слоты блоков, синкает `wc/store/checkout` — **обязательный fast-follow**, но core проектируется block-ready с первого дня.
+## Что осталось по программе после SP-5
 
-**Ключевое (A2):** если способ требует ПВЗ и он не выбран — слой **блокирует размещение заказа** с внятной ошибкой (classic + blocks). Часть контракта поля.
-**Референс (обязательно изучить):** WC address-autocomplete API (developer.woocommerce.com/docs/features/address-autocomplete/) — близко к идеалу, но ограничено Address/Postcode (нам нужны Region/City) → как референс, не reuse as-is.
+`SP-4` DaData → `SP-6` расчёт + упаковка → `SP-7` экспорт отправлений → `SP-8` трекинг + статусы → `SP-9` письма →
+`SP-10` админ-страница заказов → `SP-11` blocks-адаптер → **Phase E пилот: Яндекс → СДЭК → Почта**.
 
-**Принцип:** framework = mechanism + contract + hooks; **доменная специфика (тарифы, single-carrier) — в плагине.** §8 — фундамент, на который потом сядет SP-4 (DaData autocomplete) и SP-5 (карта/ПВЗ).
+Цель оператора (озвучена s44): доделать фреймворк и перевести на v2 минимум СДЭК и Яндекс.Доставку — после этого берём новый плагин
+**OZON Логистика** (пользователи спрашивают). Чек-листы сохранности данных уже лежат: `docs-internal/migration/edostavka-data-preservation-checklist.md`,
+`docs-internal/migration/yandex-data-preservation-checklist.md`.
 
-**Способ:** `brainstorming` (skill, заземляясь на РЕАЛЬНОМ коде — существующий shipping-skeleton `woodev/shipping-method/checkout/`, WC checkout hooks, как v1-плагины делают поля; изучить, что уже есть в скелете) → `writing-plans` → **subagent-driven** (fresh agent, two-stage spec+code-quality review) → Codex-критик + re-critic → **обязательная моя браузерная e2e на `:8888` (classic checkout) перед мерджем**.
+## Открытые вопросы для брейншторма SP-5
 
-### Открытые вопросы для брейншторма (добить с оператором)
-1. AJAX vs REST для checkout/ПВЗ-поиска (по decisions-доку: prefer `woodev/v1` REST для нового кода vs WC admin-ajax fragments) — решить в §8.
-2. Что уже есть в скелете (`admin/views/html-admin-shipping-method-status.php` ~30% заглушка; checkout-handler; assets непроверены) — что переиспользуем, что переписываем.
-3. Границы core vs adapter: где именно проходит шов (store+registry+валидация в core; рендер+session-sync в адаптере).
-4. Мин. block-set (город с source, регион, кнопка ПВЗ+модалка, корректная запись order-meta/session) — но кнопка+карта = §7/SP-5, не §8; §8 даёт хук/слот под неё.
+1. Чья карта: своя (Leaflet/Яндекс.Карты) vs iframe карьера vs оба режима — и где проходит шов «механизм фреймворка / домен плагина».
+2. Как ПВЗ-пикер садится в §8-слот: контракт данных точки (id, адрес, координаты, расписание, оплата картой) — что из этого framework-обязательное.
+3. Мобильный сценарий (модалка vs полноэкранный лист) и поведение при отсутствии JS.
+4. Кэширование списка ПВЗ (их бывают десятки тысяч) — на чьей стороне и в каком слое.
+5. Что переиспользовать из существующего `class-pickup-checkout-handler.php` (скелет ~30%, строки там ещё английские — issue #133).
 
-## Прочее / бэклог
-- **SP-4 DaData** — ОТЛОЖЕН до §8 (FUTURE-BACKLOG «SP-4»); цель = полный address-service (checkout autocomplete + backend нормализация), DaData-специфика в плагине.
-- **UI-kit программа ЗАВЕРШЕНА** — все 4 React-поверхности (settings/plugins/licenses/wizard) на общем ките. UK-CFR (кастомные field/section рендереры) — отдельный цикл против реального потребителя (FUTURE-BACKLOG).
-- **SP-2-DEF block-level «Отключить»** — deferred (по-полю зашипено s41); добавить когда реальный карьер потребует.
-- **UK-3/UK-4** — done (s41). **UK-CFR** — deferred.
-- **MCP:** Supermemory не подключён; Obsidian — синкнуть `sessions/latest-context.md` при сохранении сессии.
-- **s41-аудит доков** — s41 не кратно 10; следующий триггер s50 (или по запросу).
+## Бэклог, открытый в s44
 
-## Процесс/уроки (применить)
-- **Codex-критик:** inline-bundle ≤~12KB (12.8KB был на грани — урезал до 10.8KB, отработал; 11.8KB как-то завис 10 мин). `node <codex-plugin>/scripts/codex-companion.mjs task "$(cat bundle)" --json`; follow-up → `--resume <threadId>`. **Re-critic свои фиксы.** Для секрет/безопасность-путей — критик обязателен.
-- **Git commit -m с бэктиками/скобками ЛОМАЕТ bash-парсинг** (subshell на `(`) — писать длинные сообщения в файл + `git commit -F <file>`.
-- **Browser:** Playwright MCP (admin/password), :8888. Кастомный SelectField = кнопка+портал-popover. Скриншоты слать оператору как пруф.
-- **Мерж:** всё коммитить на фиче-ветке; после squash `git rev-list --count main..origin/main`==0. Каждый CI job = pass + `mergeStateStatus: CLEAN` отдельным шагом. `--watch --interval 20` в фоне для ожидания CI.
-- **Общие компоненты** (`control-field.js`, `_field.scss`) при изменении пересобирают ВСЕ бандлы, которые их import'ят (settings + wizard + gallery) — это норма, стейджить все собранные ассеты.
+- **#133** — английские строки в `class-pickup-checkout-handler.php` (на русской витрине смесь языков). Бэклог, доска #6.
+- **#134** — в тексте ошибки светится сырой id поля, когда у дескриптора нет label; заодно задать label пикап-полю фикстуры. Бэклог, доска #6.
+
+## Процесс / уроки (применить)
+
+- **Codex-критик:** inline-bundle ≤ ~12KB (15KB не влез — резать; 8–11KB работает стабильно).
+  `node <codex-plugin>/scripts/codex-companion.mjs task "$(cat bundle)" --json`; follow-up → `--resume <threadId>`.
+  **Re-critic свои фиксы обязательно** — в s44 он поймал незакрытый край в моём же фиксе.
+  Критика надо перепроверять по коду: из 6 находок s44 одна была неверна по механике (но привела к настоящему багу рядом), две — недостижимы.
+- **Интеграционные тесты гонять локально, а не «под CI»** — `MSYS_NO_PATHCONV=1 npx wp-env run tests-cli env TEST_SUITE=integration php /var/www/html/woodev-framework/vendor/bin/phpunit --configuration /var/www/html/woodev-framework/phpunit.xml --testsuite=Integration --no-coverage`.
+- **Живая проверка ловит то, что не ловят ни тесты, ни критик** — s42 нашла 5+ багов только в браузере, s44 нашла языковую несогласованность только на отрендеренной странице.
+- **Git commit -m с бэктиками/скобками ЛОМАЕТ bash-парсинг** — писать сообщение в файл + `git commit -F <file>`.
+- **Мердж:** каждый CI job = pass + `mergeStateStatus: CLEAN` ОТДЕЛЬНЫМ шагом, затем `--squash --delete-branch`, никогда `--auto`.
