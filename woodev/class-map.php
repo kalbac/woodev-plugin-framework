@@ -47,6 +47,7 @@ return [
 	'Woodev\\Framework\\Shipping\\Pickup\\Pickup_Point' => 'woodev/shipping-method/pickup/class-pickup-point.php',
 	'Woodev\\Framework\\Shipping\\Pickup\\Pickup_Point_Source' => 'woodev/shipping-method/pickup/interface-pickup-point-source.php',
 	'Woodev\\Framework\\Shipping\\Pickup\\Pickup_Selection' => 'woodev/shipping-method/pickup/class-pickup-selection.php',
+	'Woodev\\Framework\\Shipping\\Pickup\\Point_Query' => 'woodev/shipping-method/pickup/class-point-query.php',
 	'Woodev\\Framework\\Shipping\\Pickup\\Warehouse' => 'woodev/shipping-method/pickup/class-warehouse.php',
 	'Woodev\\Framework\\Shipping\\Pickup\\Warehouse_Store' => 'woodev/shipping-method/pickup/interface-warehouse-store.php',
 	'Woodev\\Framework\\Shipping\\Rest_Api\\Abstract_Warehouses_Controller' => 'woodev/shipping-method/rest-api/abstract-warehouses-controller.php',
