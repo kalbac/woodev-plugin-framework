@@ -565,12 +565,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 * {@see self::current_cart_weight_grams()} and {@see self::posted_payment_method()}
 		 * — as its cart-weight and payment-method callables, closing the asymmetry where
 		 * §8's `Checkout_Handler::register()` wires its own REST controller but nothing
-		 * wired this one. On the points/detail GET requests these routes actually serve
-		 * (map panning, before the checkout form has been submitted), `$_POST` is typically
-		 * empty, so `posted_payment_method()` legitimately returns `''` — not in
-		 * {@see Constraint_Checker}'s COD method list, so permissive by the same "unknown
-		 * is permissive" rule {@see Constraint_Checker::check()} already documents for a
-		 * carrier's sparse list response.
+		 * wired this one.
+		 *
+		 * The points/detail GET requests these routes actually serve fire on map panning,
+		 * before the checkout form is ever posted, so `$_POST['payment_method']` is empty.
+		 * That is NOT the same as the payment method being unknown — the "unknown is
+		 * permissive" rule {@see Constraint_Checker::check()} documents was written for a
+		 * carrier's genuinely sparse list response, where the framework has no way to learn
+		 * the missing value at all. Here the value is knowable: WooCommerce writes the
+		 * customer's live choice to `WC()->session` on every `update_order_review` ajax call
+		 * the checkout form fires the instant a payment method is picked, and
+		 * {@see self::posted_payment_method()} now reads it — see that method's own docblock
+		 * for why treating this as permissive was the bug an SP-5 rig e2e caught, not a
+		 * legitimate use of the sparse-response rule.
 		 *
 		 * @internal
 		 *
@@ -710,11 +717,33 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		}
 
 		/**
-		 * Reads the posted WooCommerce payment method (gateway) id.
+		 * Reads the chosen WooCommerce payment method (gateway) id.
 		 *
 		 * `public`, not `protected`: also used as the payment-method callable
 		 * {@see self::register_rest()} hands to {@see Pickup_Controller} — see
 		 * {@see self::current_cart_weight_grams()} for why that requires public visibility.
+		 *
+		 * `$_POST['payment_method']` is tried FIRST and returned as-is when present — it is
+		 * authoritative on `woocommerce_checkout_process`
+		 * ({@see self::handle_checkout_process()}), where WooCommerce has already verified
+		 * the checkout nonce and the posted value IS the customer's final choice. This
+		 * method's behaviour on THAT call site is unchanged by the fallback below.
+		 *
+		 * The points/detail REST routes ({@see self::register_rest()}) are GET requests
+		 * fired while the customer pans the map, well before the checkout form ever posts —
+		 * `$_POST` is empty there, not because the payment method is unknown, but because
+		 * nothing has been submitted yet. Returning `''` unconditionally in that case (the
+		 * previous behaviour) silently disabled the §4.5 COD gate for every map request:
+		 * `''` is never in {@see Constraint_Checker}'s COD method list, so a COD-refusing
+		 * point always looked selectable. The value IS knowable server-side — WooCommerce
+		 * writes it to `WC()->session` under `chosen_payment_method` on every
+		 * `update_order_review` ajax call the checkout form fires the moment a payment
+		 * method is picked — so this falls back to {@see self::wc_session_chosen_payment_method()}
+		 * instead. A REQUEST PARAMETER would be the obvious alternative and is deliberately
+		 * NOT used: it is client-supplied, so it cannot serve a §4.5 verdict that spec
+		 * requires to be server-authoritative; the session is the only server-side source a
+		 * GET request has.
+		 *
 		 * Guards with `is_scalar()` for the same reason as {@see self::posted_field_value()}.
 		 *
 		 * @since 2.0.2
@@ -723,9 +752,43 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 */
 		public function posted_payment_method(): string {
 			// phpcs:ignore WordPress.Security.NonceVerification.Missing -- WC verifies the nonce before hooks fire.
-			$value = $_POST['payment_method'] ?? '';
+			$posted = $_POST['payment_method'] ?? '';
+			$posted = is_scalar( $posted ) ? wc_clean( (string) wp_unslash( $posted ) ) : '';
 
-			return is_scalar( $value ) ? wc_clean( (string) wp_unslash( $value ) ) : '';
+			if ( '' !== $posted ) {
+				return $posted;
+			}
+
+			$chosen = $this->wc_session_chosen_payment_method();
+
+			return is_scalar( $chosen ) ? wc_clean( (string) $chosen ) : '';
+		}
+
+		/**
+		 * Reads WooCommerce's own record of the customer's live payment-method choice —
+		 * `WC()->session->get( 'chosen_payment_method' )` — or `null` when WooCommerce is
+		 * unavailable or no session has been started yet (WC loaded but no session store
+		 * started, the same "not wrong, just not there yet" case
+		 * {@see self::wc_cart()} guards for the cart).
+		 *
+		 * `protected`, not inlined into {@see self::posted_payment_method()}: a test
+		 * subclass overrides this single line to exercise the fallback's precedence and
+		 * value handling WITHOUT `WC()` needing to be a real function in the unit-test
+		 * process — see {@see self::asset_exists()}'s own docblock for why this project's
+		 * test doubles override a single forwarding seam rather than faking WordPress
+		 * globals. Every real call site is this method's own default body; only
+		 * `PickupHandlerTest`'s probes override it.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return mixed the raw session value, or null when unavailable.
+		 */
+		protected function wc_session_chosen_payment_method() {
+			if ( ! function_exists( 'WC' ) || ! WC()->session ) {
+				return null;
+			}
+
+			return WC()->session->get( 'chosen_payment_method' );
 		}
 
 		/**
@@ -737,15 +800,32 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 * class's scope requires public visibility, or the call fatals with "Call to
 		 * protected method ... from scope Pickup_Controller".
 		 *
-		 * Unlike
-		 * {@see \Woodev\Framework\Shipping\Rest_Api\Pickup_Controller}'s own docblock for
-		 * that callable — where a `0` cart-not-loaded answer is a legitimate, frequent,
-		 * permissive case (a customer panning the map before a checkout session even
-		 * exists) — when THIS method is called from
-		 * {@see self::handle_checkout_process()}, the cart IS loaded; a `0` there only
-		 * means an actually-empty cart (or `WC()` being unavailable, e.g. in a unit test),
-		 * never a routine missing session. The implementation is identical either way —
-		 * only the caller's expectation of what `0` means differs.
+		 * On `woocommerce_checkout_process` ({@see self::handle_checkout_process()}) the
+		 * cart is already loaded — WooCommerce guarantees a live cart/session by the time
+		 * that hook fires — so the load-fallback below never triggers there; a `0` from
+		 * THAT caller still only means an actually-empty cart (or `WC()` being unavailable,
+		 * e.g. in a unit test), exactly as before this fix. This method's behaviour on that
+		 * call site is unchanged.
+		 *
+		 * The points/detail REST routes ({@see self::register_rest()}) are a different
+		 * story: WooCommerce does NOT initialize `WC()->cart` for a plain custom REST route
+		 * (only the core Store API does, via `wc_load_cart()`, for this exact reason) — a
+		 * customer panning the map before `update_order_review` has ever run finds
+		 * `WC()->cart` null even though a real cart/session exists. Returning `0`
+		 * unconditionally in that case (the previous behaviour) silently disabled the §4.5
+		 * weight-limit gate for every map request. `wc_load_cart()` (WC 3.6+, guarded by
+		 * {@see self::wc_load_cart_available()}) is exactly what the Store API itself calls
+		 * to bridge this gap, so this method now does the same — but ONLY when the cart is
+		 * not already loaded, never a redundant reload on the checkout-process path.
+		 * {@see Pickup_Controller::get_points_data()} and
+		 * {@see Pickup_Controller::get_point_data()} each invoke this callable at most ONCE
+		 * per REST request — never once per returned point — so the extra initialization
+		 * cost lands once per debounced map pan (client-side, 300ms), not once per point on
+		 * screen; the same amortization the Store API's own callers already accept for the
+		 * identical `wc_load_cart()` call. A cart that still cannot be loaded (WooCommerce
+		 * absent, or the load itself leaves `WC()->cart` null) legitimately stays `0` —
+		 * permissive, matching {@see Pickup_Controller}'s own docblock for why `0` is a
+		 * frequent, expected answer on this path.
 		 *
 		 * Delegates the actual unit conversion to
 		 * {@see Constraint_Checker::to_grams()}, the single conversion authority both this
@@ -756,11 +836,68 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 * @return int
 		 */
 		public function current_cart_weight_grams(): int {
-			if ( ! function_exists( 'WC' ) || ! WC()->cart ) {
+			$cart = $this->wc_cart();
+
+			if ( ! $cart && $this->wc_load_cart_available() ) {
+				$this->load_wc_cart();
+				$cart = $this->wc_cart();
+			}
+
+			if ( ! $cart ) {
 				return 0;
 			}
 
-			return Constraint_Checker::to_grams( WC()->cart->get_cart_contents_weight() );
+			return Constraint_Checker::to_grams( $cart->get_cart_contents_weight() );
+		}
+
+		/**
+		 * Reads the live `WC()->cart`, or `null` when WooCommerce is unavailable or no
+		 * cart has been initialized for this request yet.
+		 *
+		 * `protected`, not inlined into {@see self::current_cart_weight_grams()}: a test
+		 * subclass overrides this single line to simulate every cart-availability
+		 * combination WITHOUT `WC()` needing to be a real function in the unit-test
+		 * process — mirrors {@see self::asset_exists()}'s own seam, added for the identical
+		 * reason (there, faking a built asset without writing one to disk; here, faking a
+		 * WooCommerce global without loading WooCommerce). Every real call site is this
+		 * method's own default body; only `PickupHandlerTest`'s probes override it.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return object|null
+		 */
+		protected function wc_cart() {
+			return function_exists( 'WC' ) ? WC()->cart : null;
+		}
+
+		/**
+		 * Reports whether `wc_load_cart()` exists (WooCommerce 3.6+).
+		 *
+		 * `protected` for the same test-seam reason as {@see self::wc_cart()}.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool
+		 */
+		protected function wc_load_cart_available(): bool {
+			return function_exists( 'wc_load_cart' );
+		}
+
+		/**
+		 * Initializes the WooCommerce cart via `wc_load_cart()` — the same call WooCommerce's
+		 * own Store API makes to bridge the identical gap (see
+		 * {@see self::current_cart_weight_grams()}'s own docblock).
+		 *
+		 * `protected` for the same test-seam reason as {@see self::wc_cart()}: a probe
+		 * overrides this to simulate a successful (or still-failed) load without the real
+		 * `wc_load_cart()` function needing to exist in the unit-test process.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		protected function load_wc_cart(): void {
+			wc_load_cart();
 		}
 
 		/**

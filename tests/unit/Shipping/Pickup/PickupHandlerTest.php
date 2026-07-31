@@ -199,6 +199,28 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 		public function current_cart_weight_grams_public(): int {
 			return $this->current_cart_weight_grams();
 		}
+
+		/**
+		 * Exposes the protected wc_cart() seam's OWN default body for direct
+		 * assertions — proves the seam itself (not a probe override) degrades
+		 * safely when WC() is unavailable.
+		 *
+		 * @return object|null
+		 */
+		public function wc_cart_public() {
+			return $this->wc_cart();
+		}
+
+		/**
+		 * Exposes the protected wc_session_chosen_payment_method() seam's OWN
+		 * default body for direct assertions — same reasoning as
+		 * {@see self::wc_cart_public()}.
+		 *
+		 * @return mixed
+		 */
+		public function wc_session_chosen_payment_method_public() {
+			return $this->wc_session_chosen_payment_method();
+		}
 	}
 
 	/**
@@ -236,6 +258,123 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 
 		public function current_cart_weight_grams(): int {
 			return $this->forced_weight;
+		}
+	}
+
+	/**
+	 * Minimal cart double exposing only get_cart_contents_weight() — the single
+	 * method {@see Pickup_Handler::current_cart_weight_grams()} calls on whatever
+	 * {@see Pickup_Handler::wc_cart()} returns.
+	 */
+	final class Pickup_Handler_Test_Cart {
+
+		/** @var float */
+		private float $weight;
+
+		public function __construct( float $weight ) {
+			$this->weight = $weight;
+		}
+
+		/** @return float */
+		public function get_cart_contents_weight() {
+			return $this->weight;
+		}
+	}
+
+	/**
+	 * Probe exercising the REAL current_cart_weight_grams() orchestration —
+	 * including the "load only when absent, then re-read" branch — while
+	 * overriding only the three WC()-touching seams
+	 * ({@see Pickup_Handler::wc_cart()}, {@see Pickup_Handler::wc_load_cart_available()},
+	 * {@see Pickup_Handler::load_wc_cart()}). This is deliberately NOT done via
+	 * Brain Monkey's `Functions\when( 'WC' )`: WC() is not a real WordPress
+	 * function in this unit-test process, and once ANY test in this suite mocks
+	 * it, Brain Monkey's underlying Patchwork redefinition makes `function_exists(
+	 * 'WC' )` report `true` for the REST OF THE PROCESS — breaking every other
+	 * test (in this file and others, e.g. CheckoutHandlerInjectTest) that relies
+	 * on WC() genuinely not existing. Confirmed empirically while building this
+	 * fix. Overriding the small protected seams instead keeps `WC()` untouched.
+	 *
+	 * `load_wc_cart()` sets `$cart` to `$cart_after_load` and counts its own
+	 * calls, so a test can assert BOTH the returned weight AND that loading was
+	 * (or was not) actually attempted — catching a mutant that drops the
+	 * `load_wc_cart()` call entirely (the cart would then never become available).
+	 */
+	final class Pickup_Handler_Cart_Probe extends Pickup_Handler {
+
+		/** @var object|null */
+		private $cart;
+
+		/** @var bool */
+		private bool $load_cart_available;
+
+		/** @var object|null */
+		private $cart_after_load;
+
+		/** @var int number of times load_wc_cart() was called. */
+		public int $load_wc_cart_calls = 0;
+
+		/**
+		 * @param object|null $cart                 what wc_cart() returns before any load.
+		 * @param bool        $load_cart_available   what wc_load_cart_available() returns.
+		 * @param object|null $cart_after_load       what wc_cart() returns AFTER load_wc_cart() runs.
+		 */
+		public function __construct(
+			string $plugin_id,
+			string $field_id,
+			Point_Source $source,
+			Map_Provider $map_provider,
+			$cart,
+			bool $load_cart_available = false,
+			$cart_after_load = null
+		) {
+			parent::__construct( $plugin_id, $field_id, $source, $map_provider );
+			$this->cart                = $cart;
+			$this->load_cart_available = $load_cart_available;
+			$this->cart_after_load     = $cart_after_load;
+		}
+
+		protected function wc_cart() {
+			return $this->cart;
+		}
+
+		protected function wc_load_cart_available(): bool {
+			return $this->load_cart_available;
+		}
+
+		protected function load_wc_cart(): void {
+			++$this->load_wc_cart_calls;
+			$this->cart = $this->cart_after_load;
+		}
+	}
+
+	/**
+	 * Probe exercising the REAL posted_payment_method() precedence logic
+	 * ($_POST first, session fallback second) while overriding only
+	 * {@see Pickup_Handler::wc_session_chosen_payment_method()} — for the same
+	 * "never mock WC() itself" reason {@see Pickup_Handler_Cart_Probe} documents.
+	 */
+	final class Pickup_Handler_Session_Probe extends Pickup_Handler {
+
+		/** @var mixed */
+		private $session_value;
+
+		/**
+		 * @param mixed $session_value what wc_session_chosen_payment_method() returns.
+		 */
+		public function __construct(
+			string $plugin_id,
+			string $field_id,
+			Point_Source $source,
+			Map_Provider $map_provider,
+			$session_value
+		) {
+			parent::__construct( $plugin_id, $field_id, $source, $map_provider );
+			$this->session_value = $session_value;
+		}
+
+		protected function wc_session_chosen_payment_method() {
+			return $this->session_value;
 		}
 	}
 
@@ -1318,8 +1457,136 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 		}
 
 		// -------------------------------------------------------------------------
+		// posted_payment_method() — $_POST wins, the session fallback (via the
+		// wc_session_chosen_payment_method() seam) is the GET-request fallback
+		// (SP-5 rig e2e BLOCKING fix: the points/detail routes are GET, so $_POST
+		// is always empty there — see the method's own docblock for why returning
+		// '' unconditionally silently disabled the §4.5 COD gate). Exercised via
+		// Pickup_Handler_Session_Probe, never via `Functions\when( 'WC' )` — see
+		// that probe's own docblock for why mocking WC() itself is unsafe here.
+		// -------------------------------------------------------------------------
+
+		/**
+		 * Precedence proof: a posted value must win even when the session disagrees
+		 * with it — mirrors the real `woocommerce_checkout_process` call site, where
+		 * `$_POST` is authoritative. Value-mutant guard: a mutant flipping the
+		 * precedence (session wins) would return the probe's 'cod' instead.
+		 */
+		public function test_posted_payment_method_prefers_the_posted_value_over_the_session(): void {
+			$_POST = [ 'payment_method' => 'bacs' ];
+
+			$handler = new Pickup_Handler_Session_Probe(
+				'p',
+				'f',
+				$this->source_returning( null ),
+				$this->yandex_provider(),
+				'cod'
+			);
+
+			$this->assertSame( 'bacs', $handler->posted_payment_method() );
+		}
+
+		/**
+		 * The BLOCKING fix itself: a GET points/detail request never populates
+		 * `$_POST`, so the session — written by WooCommerce's own
+		 * `update_order_review` ajax handler the instant the customer picks a
+		 * method — is the only server-side source of the live choice.
+		 */
+		public function test_posted_payment_method_falls_back_to_the_session_when_post_is_empty(): void {
+			$_POST = [];
+
+			$handler = new Pickup_Handler_Session_Probe(
+				'p',
+				'f',
+				$this->source_returning( null ),
+				$this->yandex_provider(),
+				'cod'
+			);
+
+			$this->assertSame( 'cod', $handler->posted_payment_method() );
+		}
+
+		/**
+		 * Value-mutant guard: proves the fallback returns the probe's ACTUAL
+		 * value, not a hardcoded 'cod' literal — the previous test alone cannot
+		 * distinguish a real forward from a mutant that always answers 'cod'.
+		 */
+		public function test_posted_payment_method_returns_the_actual_session_value_not_a_hardcoded_one(): void {
+			$_POST = [];
+
+			$handler = new Pickup_Handler_Session_Probe(
+				'p',
+				'f',
+				$this->source_returning( null ),
+				$this->yandex_provider(),
+				'bacs'
+			);
+
+			$this->assertSame( 'bacs', $handler->posted_payment_method() );
+		}
+
+		/**
+		 * No session value available (WC() unavailable, no session started, or no
+		 * choice made yet — {@see Pickup_Handler::wc_session_chosen_payment_method()}
+		 * returns `null` in all three cases) must degrade to permissive, never
+		 * fatal. `''` is never in {@see Constraint_Checker}'s COD method list.
+		 */
+		public function test_posted_payment_method_is_empty_when_the_session_value_is_absent(): void {
+			$_POST = [];
+
+			$handler = new Pickup_Handler_Session_Probe(
+				'p',
+				'f',
+				$this->source_returning( null ),
+				$this->yandex_provider(),
+				null
+			);
+
+			$this->assertSame( '', $handler->posted_payment_method() );
+		}
+
+		/**
+		 * A non-scalar session value (defensive: the real `WC_Session::get()`
+		 * should never return one, but nothing prevents a plugin from writing an
+		 * array under this key) must degrade to permissive rather than crash on
+		 * the `(string)` cast — same `is_scalar()` guard as `$_POST`.
+		 */
+		public function test_posted_payment_method_is_empty_for_a_non_scalar_session_value(): void {
+			$_POST = [];
+
+			$handler = new Pickup_Handler_Session_Probe(
+				'p',
+				'f',
+				$this->source_returning( null ),
+				$this->yandex_provider(),
+				[ 'unexpected' => 'array' ]
+			);
+
+			$this->assertSame( '', $handler->posted_payment_method() );
+		}
+
+		/**
+		 * `wc_session_chosen_payment_method()`'s OWN default body (not the probe) —
+		 * proves the seam itself degrades to `null`, not a fatal, when WC()
+		 * genuinely does not exist in this unit-test process. Mirrors the same
+		 * truthful exercise
+		 * {@see self::test_current_cart_weight_grams_defaults_to_zero_when_wc_is_unavailable()}
+		 * relies on for the cart seam.
+		 */
+		public function test_wc_session_chosen_payment_method_is_null_when_wc_is_unavailable(): void {
+			$handler = new Pickup_Handler_Probe( 'p', 'f', $this->source_returning( null ), $this->yandex_provider() );
+
+			$this->assertNull( $handler->wc_session_chosen_payment_method_public() );
+		}
+
+		// -------------------------------------------------------------------------
 		// current_cart_weight_grams() — the grams conversion is now Constraint_Checker's;
 		// see ConstraintCheckerTest for the wc_get_weight()-target-unit mutation guard.
+		// SP-5 rig e2e BLOCKING fix: the points/detail REST routes never had a
+		// WooCommerce-initialized cart to read from (see class docblock), so this now
+		// also covers the wc_load_cart() fallback path. Exercised via
+		// Pickup_Handler_Cart_Probe, never via `Functions\when( 'WC' )` — see that
+		// probe's own docblock for why mocking WC() itself is unsafe here.
 		// -------------------------------------------------------------------------
 
 		public function test_current_cart_weight_grams_defaults_to_zero_when_wc_is_unavailable(): void {
@@ -1328,6 +1595,102 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			$probe = new Pickup_Handler_Probe( 'p', 'f', $this->source_returning( null ), $this->yandex_provider() );
 
 			$this->assertSame( 0, $probe->current_cart_weight_grams_public() );
+		}
+
+		/**
+		 * `wc_cart()`'s OWN default body (not the probe) — proves the seam itself
+		 * degrades to `null`, not a fatal, when WC() genuinely does not exist.
+		 */
+		public function test_wc_cart_is_null_when_wc_is_unavailable(): void {
+			$handler = new Pickup_Handler_Probe( 'p', 'f', $this->source_returning( null ), $this->yandex_provider() );
+
+			$this->assertNull( $handler->wc_cart_public() );
+		}
+
+		/**
+		 * The checkout-process case: the cart is already loaded, so the value is
+		 * read directly and `load_wc_cart()` must never even be consulted — proven
+		 * by the call counter, not just the returned value.
+		 */
+		public function test_current_cart_weight_grams_reads_an_already_loaded_cart_without_loading_one(): void {
+			Functions\when( 'wc_get_weight' )->alias( static fn( $weight, $to_unit ) => $weight * 1000 );
+
+			$handler = new Pickup_Handler_Cart_Probe(
+				'p',
+				'f',
+				$this->source_returning( null ),
+				$this->yandex_provider(),
+				new Pickup_Handler_Test_Cart( 1.5 )
+			);
+
+			$this->assertSame( 1500, $handler->current_cart_weight_grams() );
+			$this->assertSame( 0, $handler->load_wc_cart_calls );
+		}
+
+		/**
+		 * The BLOCKING fix itself: the cart starts absent (the real state on the
+		 * points/detail REST routes, which WooCommerce never initializes a cart for
+		 * — see the method's own docblock), but loading is available, so it must be
+		 * attempted, and the weight read AFTER it runs — the carrier weight limit
+		 * gate now actually fires on a GET map request instead of silently
+		 * reporting 0. A dropped `load_wc_cart()` call site would leave the cart
+		 * null and this assertion would see `0`, not `2500`.
+		 */
+		public function test_current_cart_weight_grams_loads_the_cart_when_absent_but_loadable(): void {
+			Functions\when( 'wc_get_weight' )->alias( static fn( $weight, $to_unit ) => $weight * 1000 );
+
+			$handler = new Pickup_Handler_Cart_Probe(
+				'p',
+				'f',
+				$this->source_returning( null ),
+				$this->yandex_provider(),
+				null,
+				true,
+				new Pickup_Handler_Test_Cart( 2.5 )
+			);
+
+			$this->assertSame( 2500, $handler->current_cart_weight_grams() );
+			$this->assertSame( 1, $handler->load_wc_cart_calls );
+		}
+
+		/**
+		 * Neither branch helps: the cart is absent AND loading is unavailable (an
+		 * older WC install, pre-3.6) — must degrade to the permissive `0` without
+		 * ever attempting to load.
+		 */
+		public function test_current_cart_weight_grams_is_zero_when_the_cart_is_absent_and_not_loadable(): void {
+			$handler = new Pickup_Handler_Cart_Probe(
+				'p',
+				'f',
+				$this->source_returning( null ),
+				$this->yandex_provider(),
+				null,
+				false
+			);
+
+			$this->assertSame( 0, $handler->current_cart_weight_grams() );
+			$this->assertSame( 0, $handler->load_wc_cart_calls );
+		}
+
+		/**
+		 * A cart that STILL cannot be loaded (load_wc_cart() ran but left the cart
+		 * null — e.g. a corrupt session) must also degrade to `0` rather than fatal
+		 * on a null `get_cart_contents_weight()` call, while proving the load WAS
+		 * attempted (distinguishing this from the "not loadable at all" case above).
+		 */
+		public function test_current_cart_weight_grams_is_zero_when_the_cart_is_still_absent_after_loading(): void {
+			$handler = new Pickup_Handler_Cart_Probe(
+				'p',
+				'f',
+				$this->source_returning( null ),
+				$this->yandex_provider(),
+				null,
+				true,
+				null
+			);
+
+			$this->assertSame( 0, $handler->current_cart_weight_grams() );
+			$this->assertSame( 1, $handler->load_wc_cart_calls );
 		}
 
 		// -------------------------------------------------------------------------
