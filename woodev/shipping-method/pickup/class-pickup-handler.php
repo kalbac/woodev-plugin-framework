@@ -562,7 +562,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 *
 		 * Constructs {@see Pickup_Controller} with the SAME {@see Point_Source} this
 		 * handler re-checks against, and with this handler's own request-context readers —
-		 * {@see self::current_cart_weight_grams()} and {@see self::posted_payment_method()}
+		 * {@see self::current_cart_weight_grams()} and {@see self::rest_payment_method()}
 		 * — as its cart-weight and payment-method callables, closing the asymmetry where
 		 * §8's `Checkout_Handler::register()` wires its own REST controller but nothing
 		 * wired this one.
@@ -575,9 +575,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 * the missing value at all. Here the value is knowable: WooCommerce writes the
 		 * customer's live choice to `WC()->session` on every `update_order_review` ajax call
 		 * the checkout form fires the instant a payment method is picked, and
-		 * {@see self::posted_payment_method()} now reads it — see that method's own docblock
-		 * for why treating this as permissive was the bug an SP-5 rig e2e caught, not a
-		 * legitimate use of the sparse-response rule.
+		 * {@see self::rest_payment_method()} reads it — see that method's own docblock for
+		 * why treating this as permissive was the bug an SP-5 rig e2e caught, not a
+		 * legitimate use of the sparse-response rule. That fallback is REST-only by design:
+		 * {@see self::handle_checkout_process()} deliberately uses the separate, POST-only
+		 * {@see self::checkout_payment_method()} instead — see that method's docblock for
+		 * why the checkout path must never inherit this one's session fallback.
 		 *
 		 * @internal
 		 *
@@ -590,7 +593,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 				$this->plugin_id,
 				$this->source,
 				[ $this, 'current_cart_weight_grams' ],
-				[ $this, 'posted_payment_method' ]
+				[ $this, 'rest_payment_method' ]
 			) )->register_routes();
 		}
 
@@ -716,41 +719,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 			return is_scalar( $value ) ? wc_clean( (string) wp_unslash( $value ) ) : '';
 		}
 
-		/**
-		 * Reads the chosen WooCommerce payment method (gateway) id.
-		 *
-		 * `public`, not `protected`: also used as the payment-method callable
-		 * {@see self::register_rest()} hands to {@see Pickup_Controller} — see
-		 * {@see self::current_cart_weight_grams()} for why that requires public visibility.
-		 *
-		 * `$_POST['payment_method']` is tried FIRST and returned as-is when present — it is
-		 * authoritative on `woocommerce_checkout_process`
-		 * ({@see self::handle_checkout_process()}), where WooCommerce has already verified
-		 * the checkout nonce and the posted value IS the customer's final choice. This
-		 * method's behaviour on THAT call site is unchanged by the fallback below.
-		 *
-		 * The points/detail REST routes ({@see self::register_rest()}) are GET requests
-		 * fired while the customer pans the map, well before the checkout form ever posts —
-		 * `$_POST` is empty there, not because the payment method is unknown, but because
-		 * nothing has been submitted yet. Returning `''` unconditionally in that case (the
-		 * previous behaviour) silently disabled the §4.5 COD gate for every map request:
-		 * `''` is never in {@see Constraint_Checker}'s COD method list, so a COD-refusing
-		 * point always looked selectable. The value IS knowable server-side — WooCommerce
-		 * writes it to `WC()->session` under `chosen_payment_method` on every
-		 * `update_order_review` ajax call the checkout form fires the moment a payment
-		 * method is picked — so this falls back to {@see self::wc_session_chosen_payment_method()}
-		 * instead. A REQUEST PARAMETER would be the obvious alternative and is deliberately
-		 * NOT used: it is client-supplied, so it cannot serve a §4.5 verdict that spec
-		 * requires to be server-authoritative; the session is the only server-side source a
-		 * GET request has.
-		 *
-		 * Guards with `is_scalar()` for the same reason as {@see self::posted_field_value()}.
-		 *
-		 * @since 2.0.2
-		 *
-		 * @return string
-		 */
-		public function posted_payment_method(): string {
+		public function rest_payment_method(): string {
 			// phpcs:ignore WordPress.Security.NonceVerification.Missing -- WC verifies the nonce before hooks fire.
 			$posted = $_POST['payment_method'] ?? '';
 			$posted = is_scalar( $posted ) ? wc_clean( (string) wp_unslash( $posted ) ) : '';
@@ -764,6 +733,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 			return is_scalar( $chosen ) ? wc_clean( (string) $chosen ) : '';
 		}
 
+
+		protected function checkout_payment_method(): string {
+			// phpcs:ignore WordPress.Security.NonceVerification.Missing -- WC verifies the nonce before hooks fire.
+			$posted = $_POST['payment_method'] ?? '';
+
+			return is_scalar( $posted ) ? wc_clean( (string) wp_unslash( $posted ) ) : '';
+		}
+
 		/**
 		 * Reads WooCommerce's own record of the customer's live payment-method choice —
 		 * `WC()->session->get( 'chosen_payment_method' )` — or `null` when WooCommerce is
@@ -771,13 +748,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 * started, the same "not wrong, just not there yet" case
 		 * {@see self::wc_cart()} guards for the cart).
 		 *
-		 * `protected`, not inlined into {@see self::posted_payment_method()}: a test
+		 * `protected`, not inlined into {@see self::rest_payment_method()}: a test
 		 * subclass overrides this single line to exercise the fallback's precedence and
 		 * value handling WITHOUT `WC()` needing to be a real function in the unit-test
 		 * process — see {@see self::asset_exists()}'s own docblock for why this project's
 		 * test doubles override a single forwarding seam rather than faking WordPress
 		 * globals. Every real call site is this method's own default body; only
-		 * `PickupHandlerTest`'s probes override it.
+		 * `PickupHandlerTest`'s probes override it. NOT used by
+		 * {@see self::checkout_payment_method()} — that reader is deliberately POST-only.
 		 *
 		 * @since 2.0.2
 		 *
@@ -906,6 +884,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 * A blank posted field value means nothing is our concern here — see the class
 		 * docblock's "does NOT re-implement a pickup point is required" note.
 		 *
+		 * Reads the payment method via {@see self::checkout_payment_method()}, NOT
+		 * {@see self::rest_payment_method()} — the latter's session fallback is a
+		 * REST-only best-effort for a GET request that never posts anything; here, on the
+		 * checkout POST itself, an absent value IS the answer and must not be overridden
+		 * by a stale session entry. See {@see self::checkout_payment_method()}'s own
+		 * docblock for why.
+		 *
 		 * @internal
 		 *
 		 * @since 2.0.2
@@ -921,7 +906,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 
 			$this->validate_posted_point(
 				$point_id,
-				$this->posted_payment_method(),
+				$this->checkout_payment_method(),
 				$this->current_cart_weight_grams()
 			);
 		}

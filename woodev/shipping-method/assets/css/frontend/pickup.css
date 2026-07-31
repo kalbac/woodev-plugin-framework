@@ -405,6 +405,13 @@
 	   element behind this one: without a background and padding the text renders directly on
 	   top of the map and is unreadable. Verified on the rig — the balloon pane contains only
 	   an overlay wrapper and this root. */
+	/* `box-sizing` is set HERE, not inherited. The reset above is scoped to
+	   `.woodev-pickup-modal-backdrop *`, and ymaps renders the balloon into its own overlay
+	   layer OUTSIDE that subtree — so without this the padding and border are added OUTSIDE
+	   the `max-width` below, and the panel can exceed the viewport on a narrow screen while
+	   appearing to obey a 90vw cap. */
+	box-sizing: border-box;
+
 	/* WIDTH IS EXPLICIT, NOT `max-width`. ymaps' balloon overlay ancestors are zero-sized, so
 	   a `max-width`-only rule leaves this element shrink-wrapping to nothing — measured at
 	   30px on the rig, a narrow scrolling sliver. It must not depend on a parent's width. */

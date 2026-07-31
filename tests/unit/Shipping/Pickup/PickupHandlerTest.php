@@ -349,7 +349,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 	}
 
 	/**
-	 * Probe exercising the REAL posted_payment_method() precedence logic
+	 * Probe exercising the REAL rest_payment_method() precedence logic
 	 * ($_POST first, session fallback second) while overriding only
 	 * {@see Pickup_Handler::wc_session_chosen_payment_method()} — for the same
 	 * "never mock WC() itself" reason {@see Pickup_Handler_Cart_Probe} documents.
@@ -371,6 +371,52 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 		) {
 			parent::__construct( $plugin_id, $field_id, $source, $map_provider );
 			$this->session_value = $session_value;
+		}
+
+		protected function wc_session_chosen_payment_method() {
+			return $this->session_value;
+		}
+	}
+
+	/**
+	 * Probe combining a forced cart weight ({@see Pickup_Handler_Weight_Probe}'s own
+	 * reason for existing) with a forced WC-session payment-method value
+	 * ({@see Pickup_Handler_Session_Probe}'s), so `handle_checkout_process()` can be
+	 * exercised end-to-end while a session value is present — the only way to prove
+	 * {@see Pickup_Handler::checkout_payment_method()} never reads it, unlike
+	 * {@see Pickup_Handler::rest_payment_method()}, which {@see Pickup_Handler_Session_Probe}
+	 * alone already exercises. A mutant that routes `handle_checkout_process()` back to
+	 * `rest_payment_method()`, or that swaps the two readers' bodies, makes the forced
+	 * session value leak into the checkout re-check — see the tests using this probe for
+	 * the assertions that catch it.
+	 */
+	final class Pickup_Handler_Checkout_Session_Probe extends Pickup_Handler {
+
+		/** @var int */
+		private int $forced_weight;
+
+		/** @var mixed */
+		private $session_value;
+
+		/**
+		 * @param int   $forced_weight what current_cart_weight_grams() returns.
+		 * @param mixed $session_value what wc_session_chosen_payment_method() returns.
+		 */
+		public function __construct(
+			string $plugin_id,
+			string $field_id,
+			Point_Source $source,
+			Map_Provider $map_provider,
+			int $forced_weight,
+			$session_value
+		) {
+			parent::__construct( $plugin_id, $field_id, $source, $map_provider );
+			$this->forced_weight = $forced_weight;
+			$this->session_value = $session_value;
+		}
+
+		public function current_cart_weight_grams(): int {
+			return $this->forced_weight;
 		}
 
 		protected function wc_session_chosen_payment_method() {
@@ -1457,11 +1503,87 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 		}
 
 		// -------------------------------------------------------------------------
-		// posted_payment_method() — $_POST wins, the session fallback (via the
+		// handle_checkout_process() — checkout_payment_method() must never fall back
+		// to the WC session (post-ac57dc2 review finding, MEDIUM): the checkout POST
+		// is authoritative, so an ABSENT $_POST['payment_method'] must be treated as
+		// "no payment method", never overridden by a stale `chosen_payment_method`
+		// left in WC()->session by an earlier, abandoned choice. Contrast with the
+		// rest_payment_method() tests below, which prove the OPPOSITE precedence is
+		// correct for the REST points/detail routes.
+		// -------------------------------------------------------------------------
+
+		/**
+		 * The MEDIUM finding this task fixes: a checkout that posts no payment method
+		 * at all (e.g. an order needing no payment) must not have a stale session
+		 * value silently substituted in. A COD-refusing point must therefore NOT be
+		 * blocked here — '' is never in Constraint_Checker's COD method list, exactly
+		 * restoring this class's pre-ac57dc2 behaviour on this call site.
+		 *
+		 * Mutation guard: if handle_checkout_process() were routed back to
+		 * rest_payment_method() (or the two readers' bodies were swapped), the
+		 * forced session value 'cod' would leak in, the COD-refusing point would be
+		 * blocked, and wc_add_notice() would be called — failing the `never()`
+		 * expectation below.
+		 */
+		public function test_handle_checkout_process_does_not_leak_a_stale_session_payment_method(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			Functions\when( '__' )->returnArg( 1 );
+			Functions\when( 'number_format_i18n' )->returnArg( 1 );
+
+			Functions\expect( 'wc_add_notice' )->never();
+
+			$point  = $this->point( [ 'accepts_cod' => false ] );
+			$source = $this->source_returning( $point );
+			$_POST  = [ 'pickup_point' => 'P1' ];
+
+			$handler = new Pickup_Handler_Checkout_Session_Probe(
+				'p',
+				'pickup_point',
+				$source,
+				$this->yandex_provider(),
+				0,
+				'cod'
+			);
+			$handler->handle_checkout_process();
+		}
+
+		/**
+		 * A non-empty `$_POST['payment_method']` must still win on the checkout path
+		 * even when a conflicting value sits in the session — proves
+		 * checkout_payment_method() is POST-first, not merely POST-only-when-the-
+		 * session-is-absent. Uses a COD-refusing point with a POSTED non-COD method
+		 * ('bacs') while the session disagrees ('cod'): if the posted value did not
+		 * win, nothing here would distinguish this test from the leak test above, so
+		 * this asserts the ALLOWED outcome specifically.
+		 */
+		public function test_handle_checkout_process_posted_payment_method_wins_over_a_conflicting_session(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+
+			Functions\expect( 'wc_add_notice' )->never();
+
+			$point  = $this->point( [ 'accepts_cod' => false ] );
+			$source = $this->source_returning( $point );
+			$_POST  = [ 'pickup_point' => 'P1', 'payment_method' => 'bacs' ];
+
+			$handler = new Pickup_Handler_Checkout_Session_Probe(
+				'p',
+				'pickup_point',
+				$source,
+				$this->yandex_provider(),
+				0,
+				'cod'
+			);
+			$handler->handle_checkout_process();
+		}
+
+		// -------------------------------------------------------------------------
+		// rest_payment_method() — $_POST wins, the session fallback (via the
 		// wc_session_chosen_payment_method() seam) is the GET-request fallback
 		// (SP-5 rig e2e BLOCKING fix: the points/detail routes are GET, so $_POST
 		// is always empty there — see the method's own docblock for why returning
-		// '' unconditionally silently disabled the §4.5 COD gate). Exercised via
+		// '' unconditionally silently disabled the §4.5 COD gate). REST-ONLY: never
+		// used by handle_checkout_process() — see the section above and
+		// checkout_payment_method()'s own docblock. Exercised via
 		// Pickup_Handler_Session_Probe, never via `Functions\when( 'WC' )` — see
 		// that probe's own docblock for why mocking WC() itself is unsafe here.
 		// -------------------------------------------------------------------------
@@ -1472,7 +1594,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 		 * `$_POST` is authoritative. Value-mutant guard: a mutant flipping the
 		 * precedence (session wins) would return the probe's 'cod' instead.
 		 */
-		public function test_posted_payment_method_prefers_the_posted_value_over_the_session(): void {
+		public function test_rest_payment_method_prefers_the_posted_value_over_the_session(): void {
 			$_POST = [ 'payment_method' => 'bacs' ];
 
 			$handler = new Pickup_Handler_Session_Probe(
@@ -1483,7 +1605,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				'cod'
 			);
 
-			$this->assertSame( 'bacs', $handler->posted_payment_method() );
+			$this->assertSame( 'bacs', $handler->rest_payment_method() );
 		}
 
 		/**
@@ -1492,7 +1614,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 		 * `update_order_review` ajax handler the instant the customer picks a
 		 * method — is the only server-side source of the live choice.
 		 */
-		public function test_posted_payment_method_falls_back_to_the_session_when_post_is_empty(): void {
+		public function test_rest_payment_method_falls_back_to_the_session_when_post_is_empty(): void {
 			$_POST = [];
 
 			$handler = new Pickup_Handler_Session_Probe(
@@ -1503,7 +1625,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				'cod'
 			);
 
-			$this->assertSame( 'cod', $handler->posted_payment_method() );
+			$this->assertSame( 'cod', $handler->rest_payment_method() );
 		}
 
 		/**
@@ -1511,7 +1633,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 		 * value, not a hardcoded 'cod' literal — the previous test alone cannot
 		 * distinguish a real forward from a mutant that always answers 'cod'.
 		 */
-		public function test_posted_payment_method_returns_the_actual_session_value_not_a_hardcoded_one(): void {
+		public function test_rest_payment_method_returns_the_actual_session_value_not_a_hardcoded_one(): void {
 			$_POST = [];
 
 			$handler = new Pickup_Handler_Session_Probe(
@@ -1522,7 +1644,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				'bacs'
 			);
 
-			$this->assertSame( 'bacs', $handler->posted_payment_method() );
+			$this->assertSame( 'bacs', $handler->rest_payment_method() );
 		}
 
 		/**
@@ -1531,7 +1653,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 		 * returns `null` in all three cases) must degrade to permissive, never
 		 * fatal. `''` is never in {@see Constraint_Checker}'s COD method list.
 		 */
-		public function test_posted_payment_method_is_empty_when_the_session_value_is_absent(): void {
+		public function test_rest_payment_method_is_empty_when_the_session_value_is_absent(): void {
 			$_POST = [];
 
 			$handler = new Pickup_Handler_Session_Probe(
@@ -1542,7 +1664,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				null
 			);
 
-			$this->assertSame( '', $handler->posted_payment_method() );
+			$this->assertSame( '', $handler->rest_payment_method() );
 		}
 
 		/**
@@ -1551,7 +1673,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 		 * array under this key) must degrade to permissive rather than crash on
 		 * the `(string)` cast — same `is_scalar()` guard as `$_POST`.
 		 */
-		public function test_posted_payment_method_is_empty_for_a_non_scalar_session_value(): void {
+		public function test_rest_payment_method_is_empty_for_a_non_scalar_session_value(): void {
 			$_POST = [];
 
 			$handler = new Pickup_Handler_Session_Probe(
@@ -1562,7 +1684,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				[ 'unexpected' => 'array' ]
 			);
 
-			$this->assertSame( '', $handler->posted_payment_method() );
+			$this->assertSame( '', $handler->rest_payment_method() );
 		}
 
 		/**
