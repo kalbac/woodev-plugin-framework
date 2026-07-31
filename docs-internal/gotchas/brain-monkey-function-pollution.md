@@ -53,6 +53,29 @@ mocking the function (that tests the wrong branch and reimplements the fallback 
 - `passes locally / fails on CI` for a `function_exists` test → suspect cross-test function
   pollution + test ordering.
 
+## The worst instance of this: never mock `WC()` (s46)
+
+Mocking `WC()` itself — `Functions\when( 'WC' )->justReturn( $fake )`, to fake a cart or session
+— is the same trap with the widest blast radius, because **every** WooCommerce-touching guard in
+the framework is written `! function_exists( 'WC' ) || ! WC()->something`. Defining `WC` poisons
+`function_exists( 'WC' )` process-wide, so every one of those guards flips to the "WooCommerce is
+available" branch in every later test in the run.
+
+Measured while fixing the SP-5 constraint readers: one such mock turned a green suite into **12
+errors**, nine of them in an unrelated `CheckoutHandlerInjectTest`, plus the mocking file's own
+pre-existing "WC unavailable" test. Isolated, that file was 17/17 green — so the failure looks
+like it belongs to whatever file runs next, not to the file that caused it.
+
+**No test in this codebase mocks `WC()`, and none should.** To make a class testable against a
+cart, session or customer, put a small `protected` seam in front of the WC call and override it
+in a test probe — the pattern `Pickup_Handler::asset_exists()` already established:
+
+```php
+protected function wc_cart() { return function_exists( 'WC' ) && WC()->cart ? WC()->cart : null; }
+```
+
+The probe overrides `wc_cart()`; the real `WC()` function is never touched, so nothing leaks.
+
 ## Related
 
 - [[ci-failing-gate-skips-dependent-jobs]] — this was one of the masked Unit failures
