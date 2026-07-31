@@ -75,6 +75,30 @@
  * {@see \Woodev\Framework\Shipping\Pickup\Address_Target::resolve()} encodes,
  * against the checkbox's CURRENT state, every time a point is selected.
  *
+ * THE PROVIDER CONFIG IS A MERGE, BUILT HERE, NOT PASSED THROUGH RAW: PHP's
+ * `config.mapConfig` only ever carries what the ACTIVE MAP PROVIDER itself
+ * contributes (for the Yandex provider: `scriptUrl`, `ns`, `hasApiKey` — see
+ * `class-yandex-map-provider.php::get_js_config()`) — it deliberately knows
+ * nothing about the picker's own strategy, i18n, or the customer's address.
+ * {@see buildProviderConfig} shallow-merges three more things a provider
+ * always needs on top of that: `strategy` and `i18n` (both already sitting on
+ * the outer config §8/Task 8 already builds — no new PHP surface), and
+ * `locality`, resolved LIVE by reading `{target}_city`'s CURRENT `.value` at
+ * the moment the picker opens — through the SAME {@see resolveAddressTarget}
+ * this file already uses for address replacement, never a second, potentially
+ * diverging rule. Locality is deliberately NOT baked into the PHP config for
+ * the identical reason `replaceAddress`'s target is not (see above): the
+ * customer can change the city field, or tick "ship to a different address",
+ * AFTER the page (and the PHP config with it) has already rendered, and a
+ * value resolved once at render time would go stale the moment they do —
+ * openSession() calls {@see buildProviderConfig} at OPEN time, and a retry
+ * re-opens with a brand new provider (see "RETRY NEVER RE-init()S..." below),
+ * so a locality change between retries is picked up too, not just once per
+ * page load. An unresolved/empty city field yields `''`, never `undefined` —
+ * a provider (e.g. the Yandex one, spec §4.3) treats an empty locality as "no
+ * known locality" and degrades accordingly, rather than having to guard
+ * against a missing key.
+ *
  * EVERY WRITTEN FIELD GETS A REAL `change` (plus `change.select2` when it is a
  * select2-enhanced `<select>`), mirroring EXACTLY how §8's own
  * `updated_checkout` restore does it (`checkout-field-classic.js`): setting
@@ -399,6 +423,57 @@
 	}
 
 	/**
+	 * Shallow-merges two plain objects into a NEW object — `overrides` wins on a key
+	 * clash. A hand-rolled loop rather than `Object.assign()`, matching the manual-copy
+	 * style the sibling SP-5 files already use (see e.g. this file's own `writeField()`
+	 * or `pickup-datasource.js`'s `resolveAll()`), not because `Object.assign` would be
+	 * unsafe here (this codebase already relies on runtime-only APIs like `fetch`/
+	 * `Promise` — see `pickup-datasource.js`'s own docblock).
+	 *
+	 * @param {Object} base
+	 * @param {Object} overrides
+	 * @returns {Object}
+	 */
+	function shallowMerge( base, overrides ) {
+		var result = {};
+		var key;
+
+		for ( key in base ) {
+			if ( Object.prototype.hasOwnProperty.call( base, key ) ) {
+				result[ key ] = base[ key ];
+			}
+		}
+
+		for ( key in overrides ) {
+			if ( Object.prototype.hasOwnProperty.call( overrides, key ) ) {
+				result[ key ] = overrides[ key ];
+			}
+		}
+
+		return result;
+	}
+
+	/**
+	 * Builds the config object handed to the map provider's `init()` — see the file
+	 * docblock's "THE PROVIDER CONFIG IS A MERGE" section for why this exists and why
+	 * `locality` is resolved live rather than baked into the PHP config.
+	 *
+	 * @param {Object} config the full mount config (`window.woodev_pickup_config_*`).
+	 * @returns {Object}
+	 */
+	function buildProviderConfig( config ) {
+		var target = resolveAddressTarget( config );
+		var cityField = document.getElementById( target + '_city' );
+		var locality = cityField && 'string' === typeof cityField.value ? cityField.value : '';
+
+		return shallowMerge( config.mapConfig || {}, {
+			strategy: config.strategy,
+			i18n: config.i18n,
+			locality: locality,
+		} );
+	}
+
+	/**
 	 * Writes a selected point's address/locality/postal code into the resolved
 	 * fieldset — a no-op when `replaceAddress` is disabled.
 	 *
@@ -615,7 +690,7 @@
 				}
 			);
 
-			provider.init( modal.getContainer(), config.mapConfig, dataSource );
+			provider.init( modal.getContainer(), buildProviderConfig( config ), dataSource );
 		}
 
 		start();

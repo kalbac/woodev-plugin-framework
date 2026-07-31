@@ -36,11 +36,14 @@
  *    {@see \Woodev\Framework\Shipping\Pickup\Address_Target::resolve()}'s rule against the
  *    live checkbox at write time.
  *
- * `replaceAddress.enabled` is unconditionally `true` for now — the merchant-configurable
- * on/off toggle is SP-5 Task 17's job, not this one's. `mapConfig` comes straight from the
+ * `replaceAddress.enabled` follows the `$replace_address` constructor argument (SP-5 Task 17,
+ * default `true`) — the merchant-configurable on/off toggle. `mapConfig` comes straight from the
  * active {@see \Woodev\Framework\Shipping\Map\Map_Provider}'s own
  * {@see \Woodev\Framework\Shipping\Map\Map_Provider::get_js_config()} (SP-5 Task 9) — this
  * handler owns none of that shape itself, only passes through a request-scoped `$context`.
+ * {@see self::get_settings_fields()} (SP-5 Task 16) applies the same pass-through discipline to
+ * the active provider's own {@see \Woodev\Framework\Shipping\Map\Map_Provider::get_settings_fields()}
+ * — the handler never learns what a map key IS, only that the active provider may want one.
  *
  * The client verdict rendered in the modal is UX only. `woocommerce_checkout_process`
  * hooks {@see self::handle_checkout_process()}, the real authority: it re-fetches the
@@ -155,6 +158,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		private ?string $point_field_logical;
 
 		/**
+		 * Whether the picker replaces the delivery address fields with the selected
+		 * point's address (SP-5 Task 17). Only the STABLE half of the rule — this flag,
+		 * plus `wc_ship_to_billing_address_only()` — travels to the browser via
+		 * {@see self::get_js_config()}; see the class docblock's second deviation for why
+		 * a resolved `billing`/`shipping` target never does.
+		 *
+		 * @since 2.0.2
+		 * @var bool
+		 */
+		private bool $replace_address;
+
+		/**
 		 * Per-request memoization of {@see Point_Source::fetch_details()}, keyed by point
 		 * id — see {@see self::fetch_point()}.
 		 *
@@ -204,6 +219,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 *                                                          {@see Shipping_Order_Handler::store_pickup_point()}.
 		 *                                                          Omit to skip full-point
 		 *                                                          persistence.
+		 * @param bool                        $replace_address     whether the picker replaces the
+		 *                                                          delivery address fields with the
+		 *                                                          selected point's address (SP-5
+		 *                                                          Task 17). Appended last, after the
+		 *                                                          `$order_handler` /
+		 *                                                          `$point_field_logical` pair, so
+		 *                                                          the overwhelming majority of
+		 *                                                          callers — who want the default
+		 *                                                          `true` — never have to pass
+		 *                                                          anything for it, including every
+		 *                                                          caller that DOES wire full-point
+		 *                                                          persistence.
 		 */
 		public function __construct(
 			string $plugin_id,
@@ -211,7 +238,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 			Point_Source $source,
 			Map_Provider $map_provider,
 			?Shipping_Order_Handler $order_handler = null,
-			?string $point_field_logical = null
+			?string $point_field_logical = null,
+			bool $replace_address = true
 		) {
 			$this->plugin_id           = $plugin_id;
 			$this->field_id            = $field_id;
@@ -219,6 +247,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 			$this->map_provider        = $map_provider;
 			$this->order_handler       = $order_handler;
 			$this->point_field_logical = $point_field_logical;
+			$this->replace_address     = $replace_address;
 		}
 
 		/**
@@ -253,33 +282,49 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 				'restRoot' => $this->rest_root(),
 				'nonce'    => wp_create_nonce( 'wp_rest' ),
 				'i18n'     => [
-					'modalTitle'    => __( 'Выберите пункт выдачи', 'woodev-plugin-framework' ),
-					'close'         => __( 'Закрыть', 'woodev-plugin-framework' ),
-					'select'        => __( 'Выбрать этот пункт', 'woodev-plugin-framework' ),
-					'loading'       => __( 'Загрузка пунктов выдачи…', 'woodev-plugin-framework' ),
-					'error'         => __(
+					'modalTitle'     => __( 'Выберите пункт выдачи', 'woodev-plugin-framework' ),
+					'close'          => __( 'Закрыть', 'woodev-plugin-framework' ),
+					'select'         => __( 'Выбрать этот пункт', 'woodev-plugin-framework' ),
+					'loading'        => __( 'Загрузка пунктов выдачи…', 'woodev-plugin-framework' ),
+					'error'          => __(
 						'Не удалось загрузить пункты выдачи. Попробуйте ещё раз.',
 						'woodev-plugin-framework'
 					),
-					'noResults'     => __( 'Пункты выдачи не найдены.', 'woodev-plugin-framework' ),
-					'blocked'       => __(
+					'noResults'      => __( 'Пункты выдачи не найдены.', 'woodev-plugin-framework' ),
+					'blocked'        => __(
 						'Этот пункт выдачи недоступен для вашего заказа.',
 						'woodev-plugin-framework'
 					),
 					// Consumed by the mount script (Task 12), not by the modal shell or the map
 					// provider — see Pickup_Mount's own docblock for why it reads these keys.
-					'trigger'       => __( 'Выбрать пункт выдачи', 'woodev-plugin-framework' ),
-					'retry'         => __( 'Повторить', 'woodev-plugin-framework' ),
-					'upstreamError' => __(
+					'trigger'        => __( 'Выбрать пункт выдачи', 'woodev-plugin-framework' ),
+					'retry'          => __( 'Повторить', 'woodev-plugin-framework' ),
+					'upstreamError'  => __(
 						'Сервис пунктов выдачи временно недоступен. Попробуйте ещё раз позже.',
 						'woodev-plugin-framework'
 					),
-					'rateLimited'   => __(
+					'rateLimited'    => __(
 						'Слишком много запросов. Подождите немного и попробуйте снова.',
 						'woodev-plugin-framework'
 					),
-					'notFound'      => __(
+					'notFound'       => __(
 						'Этот пункт выдачи больше не найден. Пожалуйста, выберите другой.',
+						'woodev-plugin-framework'
+					),
+					// Consumed by the map provider scripts (Tasks 13/14), not by this handler or
+					// the modal shell — a missing key here renders BLANK in the provider's UI
+					// rather than throwing, so every one of these nine must stay exact: the
+					// provider reads them by name, never falls back to a hardcoded default.
+					'search'         => __( 'Поиск по адресу', 'woodev-plugin-framework' ),
+					'drawerTitle'    => __( 'Пункты выдачи в этой области', 'woodev-plugin-framework' ),
+					'howToGet'       => __( 'Как добраться', 'woodev-plugin-framework' ),
+					'paymentMethods' => __( 'Способы оплаты', 'woodev-plugin-framework' ),
+					'workTime'       => __( 'Часы работы', 'woodev-plugin-framework' ),
+					'phone'          => __( 'Телефон', 'woodev-plugin-framework' ),
+					'maxWeight'      => __( 'Максимальный вес', 'woodev-plugin-framework' ),
+					'allTypes'       => __( 'Все типы пунктов', 'woodev-plugin-framework' ),
+					'detailsError'   => __(
+						'Не удалось загрузить подробности о пункте выдачи. Вы всё ещё можете его выбрать.',
 						'woodev-plugin-framework'
 					),
 				],
@@ -287,12 +332,40 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 				'mapConfig'      => $this->map_provider->get_js_config( [ 'plugin_id' => $this->plugin_id ] ),
 
 				'replaceAddress' => [
-					// Deferred to SP-5 Task 17 (address replacement toggle): a
-					// merchant-configurable on/off setting. Unconditionally on until then.
-					'enabled'     => true,
+					'enabled'     => $this->replace_address,
 					'billingOnly' => (bool) wc_ship_to_billing_address_only(),
 				],
 			];
+		}
+
+		/**
+		 * Gets the settings fields the active map provider needs, if any.
+		 *
+		 * A pure pass-through to {@see Map_Provider::get_settings_fields()} — this handler
+		 * does not know what a map key IS, only that the active provider may want one (SP-5
+		 * Task 16).
+		 *
+		 * This is NOT automatic. Nothing on the framework side calls this method — the
+		 * plugin that owns the shipping integration MUST call it itself and merge the
+		 * result into its own settings registration for the merchant-facing
+		 * `map_api_key` field to exist at all. Spec §10.8 amends §4.7's "auto-registers"
+		 * wording, which described the field as something a plugin "automatically gains";
+		 * the framework cannot register a field into a plugin's own settings provider
+		 * without owning it, the same boundary §10.6 already drew for the fallback key.
+		 * Skip the call and every install of the plugin stays pinned to the plugin's
+		 * shared fallback key — exactly the quota risk §4.7 flagged as a watch item.
+		 *
+		 * The descriptor is returned UNMODIFIED — in the Woodev settings-API
+		 * `register_setting()` args shape (`name`, `type`, `default`, `required`,
+		 * `sensitive`, `description`), not the WooCommerce `form_fields` shape — so the
+		 * caller merges it into the shipping integration's own settings as-is.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array<string, array<string, mixed>> settings field definitions keyed by field id.
+		 */
+		public function get_settings_fields(): array {
+			return $this->map_provider->get_settings_fields();
 		}
 
 		/**
@@ -518,25 +591,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 * Enqueues the picker's frontend assets on the checkout page.
 		 *
 		 * Registers handles for JS files owned by SP-5 tasks — the modal shell
-		 * (`pickup-modal.js`, Task 10), the dataSource (`pickup-datasource.js`, Task 11)
-		 * and the mount script (`pickup-mount.js`, Task 12) have LANDED; the active
-		 * provider's script (`map-provider-{$provider}.js`, Tasks 13/14) and the
-		 * stylesheet (`pickup.css`, Task 15) have NOT. Every one of those still-pending
-		 * files is skipped entirely via {@see self::enqueue_script_if_built()}/
-		 * {@see self::enqueue_style_if_built()}'s {@see self::asset_exists()} check rather
-		 * than enqueueing a URL that will 404: a missing script/style tag is invisible, but
-		 * a 404ing `src` next to a `wp_localize_script()`-printed inline global that
-		 * nothing on the page can yet consume is a live checkout regression waiting for
-		 * whichever task lands its PHP wiring before the asset tasks. The mount config is
-		 * therefore localized only when the mount script itself was actually enqueued.
-		 *
-		 * On THIS branch `wp_enqueue_script()` is still called for the mount handle (its
-		 * own file exists now), but WordPress will not actually PRINT it to the page: one
-		 * of its declared dependencies (`$provider_handle`) is not itself a registered
-		 * handle until Task 13/14 lands the map-provider script, and WordPress's dependency
-		 * resolution silently omits a script whose declared dependency was never
-		 * registered. This is expected and resolves itself the moment the provider script
-		 * lands — see {@see PickupHandlerTest::test_enqueue_assets_enqueues_only_the_assets_already_built()}.
+		 * (`pickup-modal.js`, Task 10), the dataSource (`pickup-datasource.js`, Task 11),
+		 * the mount script (`pickup-mount.js`, Task 12) and the active provider's script
+		 * (`map-provider-{$provider}.js`, Tasks 13/14) have all LANDED; only the
+		 * stylesheet (`pickup.css`, Task 15) has NOT. That still-pending file is skipped
+		 * entirely via {@see self::enqueue_style_if_built()}'s {@see self::asset_exists()}
+		 * check rather than enqueueing a `href` that will 404 — a missing style tag is
+		 * invisible, but a 404ing one next to fully wired JS is a live checkout regression
+		 * waiting for Task 15 to land. The mount config is therefore localized only when
+		 * the mount script itself was actually enqueued (it now always is, since every one
+		 * of its declared dependencies — including the provider handle — is a registered
+		 * handle as of this fix; see
+		 * {@see PickupHandlerTest::test_enqueue_assets_enqueues_only_the_assets_already_built()}).
 		 *
 		 * @internal
 		 *

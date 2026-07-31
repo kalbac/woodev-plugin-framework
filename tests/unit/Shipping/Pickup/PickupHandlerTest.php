@@ -7,7 +7,11 @@
  * catching `\Throwable` — not just `\Woodev_API_Exception` — plus the outage filter),
  * per-request fetch memoization, REST controller registration, and full-point
  * persistence delegated to `Shipping_Order_Handler::store_pickup_point()` (never a
- * framework-coined meta key).
+ * framework-coined meta key). Also covers Task 16 (`get_settings_fields()` as a pure,
+ * unmodified pass-through to the active `Map_Provider`) and Task 17 (the
+ * `$replace_address` constructor toggle — default on, `billingOnly` unaffected by it,
+ * `target` never emitted) and the nine map-provider i18n keys `get_js_config()` now
+ * carries.
  *
  * @package Woodev\Tests\Unit\Shipping\Pickup
  */
@@ -659,6 +663,213 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				$this->source_returning( null ),
 				$this->yandex_provider()
 			) )->get_js_config();
+		}
+
+		// -------------------------------------------------------------------------
+		// get_js_config() — the nine map-provider i18n keys (Tasks 13/14 consumers)
+		// -------------------------------------------------------------------------
+
+		/**
+		 * The map provider scripts (Tasks 13/14, out of this task's scope) read these nine
+		 * keys by NAME and render blank — not an error — when one is missing, so a typo
+		 * here is a silent UI hole nothing else would catch. Assert every key is present
+		 * AND non-empty; the exact-set list also fails loudly the instant one is renamed.
+		 */
+		public function test_config_i18n_carries_all_nine_map_provider_keys_non_empty(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			Functions\when( 'rest_url' )->justReturn( 'https://example.test/wp-json/woodev/v1' );
+			Functions\when( 'wp_create_nonce' )->justReturn( 'NONCE' );
+			Functions\when( 'wc_ship_to_billing_address_only' )->justReturn( false );
+
+			$i18n = ( new Pickup_Handler(
+				'p',
+				'carrier_pickup_point',
+				$this->source_returning( null ),
+				$this->yandex_provider()
+			) )->get_js_config()['i18n'];
+
+			// Exact expected VALUES, not just key presence — two adjacent keys (e.g.
+			// `phone`/`workTime`) swapping their Russian text would leave every key present
+			// and non-empty, so a presence-only check cannot catch it. Pinning the exact
+			// string per key is what does.
+			$expected = [
+				'search'         => 'Поиск по адресу',
+				'drawerTitle'    => 'Пункты выдачи в этой области',
+				'howToGet'       => 'Как добраться',
+				'paymentMethods' => 'Способы оплаты',
+				'workTime'       => 'Часы работы',
+				'phone'          => 'Телефон',
+				'maxWeight'      => 'Максимальный вес',
+				'allTypes'       => 'Все типы пунктов',
+				'detailsError'   => 'Не удалось загрузить подробности о пункте выдачи.'
+					. ' Вы всё ещё можете его выбрать.',
+			];
+
+			foreach ( $expected as $key => $value ) {
+				$this->assertArrayHasKey(
+					$key,
+					$i18n,
+					"i18n is missing the \"{$key}\" key the map provider reads by name"
+				);
+				$this->assertSame(
+					$value,
+					$i18n[ $key ],
+					"i18n[\"{$key}\"] must be the exact expected Russian string, not a swapped/blank one"
+				);
+			}
+		}
+
+		// -------------------------------------------------------------------------
+		// get_settings_fields() (SP-5 Task 16) — pure pass-through to the active
+		// Map_Provider's own get_settings_fields(), never reshaped
+		// -------------------------------------------------------------------------
+
+		/**
+		 * Coordination proof with the REAL Yandex_Map_Provider (not the test double, which
+		 * hardcodes `[]`): proves the handler passes the descriptor through UNCHANGED —
+		 * `assertSame()` against the same live `$provider` instance's own return value
+		 * means both sides move together, so this test cannot see a reshape that mutates
+		 * the provider's own field content (e.g. dropping `description`, flipping
+		 * `required`, or rebuilding the field in the WooCommerce `form_fields` shape) —
+		 * such a mutation would corrupt both sides identically and still compare equal.
+		 * That content is genuinely pinned, just not here: see
+		 * `tests/unit/Shipping/Map/MapProviderRegistryTest.php` for the assertions against
+		 * the descriptor's actual shape and values.
+		 */
+		public function test_get_settings_fields_passes_the_yandex_providers_descriptor_through_unmodified(): void {
+			require_once dirname( __DIR__, 4 ) . '/woodev/settings-api/class-setting.php';
+			require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/map/class-yandex-map-provider.php';
+
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+
+			$provider = new \Woodev\Framework\Shipping\Map\Yandex_Map_Provider( 'FALLBACK-KEY' );
+			$handler  = new Pickup_Handler( 'p', 'carrier_pickup_point', $this->source_returning( null ), $provider );
+
+			$this->assertArrayHasKey( 'map_api_key', $handler->get_settings_fields() );
+			$this->assertSame( $provider->get_settings_fields(), $handler->get_settings_fields() );
+		}
+
+		/**
+		 * A plugin using the embedded provider gains no field at all — the handler must
+		 * not invent one nor merge in a placeholder shape of its own.
+		 */
+		public function test_get_settings_fields_is_empty_for_the_embedded_provider(): void {
+			require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/map/class-embedded-map-provider.php';
+
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			Functions\when( 'untrailingslashit' )->alias( static fn( string $value ) => rtrim( $value, '/' ) );
+
+			$provider = new \Woodev\Framework\Shipping\Map\Embedded_Map_Provider(
+				'https://carrier.example/widget',
+				'https://carrier.example'
+			);
+			$handler = new Pickup_Handler( 'p', 'carrier_pickup_point', $this->source_returning( null ), $provider );
+
+			$this->assertSame( [], $handler->get_settings_fields() );
+			$this->assertArrayNotHasKey( 'map_api_key', $handler->get_settings_fields() );
+		}
+
+		// -------------------------------------------------------------------------
+		// replaceAddress toggle (SP-5 Task 17) — the `$replace_address` constructor arg
+		// -------------------------------------------------------------------------
+
+		/**
+		 * Default-on proof: a caller that never mentions `$replace_address` at all — every
+		 * existing caller in this suite, and every caller wired before Task 17 shipped —
+		 * must keep getting `enabled: true`. The flag is purely additive.
+		 */
+		public function test_replace_address_defaults_to_enabled(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			Functions\when( 'rest_url' )->justReturn( 'https://example.test/wp-json/woodev/v1' );
+			Functions\when( 'wp_create_nonce' )->justReturn( 'NONCE' );
+			Functions\when( 'wc_ship_to_billing_address_only' )->justReturn( false );
+
+			$handler = new Pickup_Handler(
+				'p',
+				'carrier_pickup_point',
+				$this->source_returning( null ),
+				$this->yandex_provider()
+			);
+
+			$this->assertTrue( $handler->get_js_config()['replaceAddress']['enabled'] );
+		}
+
+		/**
+		 * `$replace_address` is appended AFTER the `$order_handler` / `$point_field_logical`
+		 * pair (see the constructor's own docblock for why), so disabling it here means
+		 * passing `null, null` first — exactly what the omitted-persistence case already
+		 * defaults to.
+		 */
+		public function test_replace_address_false_disables_it(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			Functions\when( 'rest_url' )->justReturn( 'https://example.test/wp-json/woodev/v1' );
+			Functions\when( 'wp_create_nonce' )->justReturn( 'NONCE' );
+			Functions\when( 'wc_ship_to_billing_address_only' )->justReturn( false );
+
+			$handler = new Pickup_Handler(
+				'p',
+				'carrier_pickup_point',
+				$this->source_returning( null ),
+				$this->yandex_provider(),
+				null,
+				null,
+				false
+			);
+
+			$this->assertFalse( $handler->get_js_config()['replaceAddress']['enabled'] );
+		}
+
+		/**
+		 * `billingOnly` must keep mirroring the store setting regardless of whether
+		 * replacement itself is on or off, and `target` must never appear — a mutant that
+		 * ties the two flags together, or that resurrects a resolved `target` key once the
+		 * toggle exists, must fail this.
+		 */
+		public function test_replace_address_billing_only_still_mirrors_the_store_setting_when_disabled(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			Functions\when( 'rest_url' )->justReturn( 'https://example.test/wp-json/woodev/v1' );
+			Functions\when( 'wp_create_nonce' )->justReturn( 'NONCE' );
+			Functions\when( 'wc_ship_to_billing_address_only' )->justReturn( true );
+
+			$handler = new Pickup_Handler(
+				'p',
+				'carrier_pickup_point',
+				$this->source_returning( null ),
+				$this->yandex_provider(),
+				null,
+				null,
+				false
+			);
+
+			$config = $handler->get_js_config();
+
+			$this->assertSame( [ 'enabled' => false, 'billingOnly' => true ], $config['replaceAddress'] );
+			$this->assertArrayNotHasKey( 'target', $config['replaceAddress'] );
+		}
+
+		/**
+		 * Existing callers wiring full-point persistence (`$order_handler` +
+		 * `$point_field_logical`) must keep getting the default `enabled: true` — proves
+		 * the new trailing parameter did not silently shift meaning for the pair that
+		 * already occupied that constructor slot.
+		 */
+		public function test_replace_address_still_defaults_to_enabled_when_persistence_is_wired(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			Functions\when( 'rest_url' )->justReturn( 'https://example.test/wp-json/woodev/v1' );
+			Functions\when( 'wp_create_nonce' )->justReturn( 'NONCE' );
+			Functions\when( 'wc_ship_to_billing_address_only' )->justReturn( false );
+
+			$order_handler = new Shipping_Order_Handler( [ 'pickup_full' => 'cdek_full_point' ] );
+			$handler       = new Pickup_Handler(
+				'p',
+				'carrier_pickup_point',
+				$this->source_returning( null ),
+				$this->yandex_provider(),
+				$order_handler,
+				'pickup_full'
+			);
+
+			$this->assertTrue( $handler->get_js_config()['replaceAddress']['enabled'] );
 		}
 
 		// -------------------------------------------------------------------------
@@ -1386,6 +1597,22 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 		 * until Task 13/14 lands that file — see {@see Pickup_Handler::enqueue_assets()}'s
 		 * own docblock.
 		 */
+		/**
+		 * Guards `enqueue_script_if_built()`/`enqueue_style_if_built()`'s "only enqueue
+		 * what exists on disk" behaviour — the real reason a vendored boot must never
+		 * register a dependency on a handle nothing ever registered. As of this fix, the
+		 * modal, datasource, mount AND the active provider's script (`map-provider-yandex.js`,
+		 * SP-5 Tasks 13/14) all exist on disk and are asserted enqueued; only the
+		 * stylesheet (`css/frontend/pickup.css`, SP-5 Task 15) does not exist yet. This
+		 * test originally asserted the provider script was NOT enqueued — that premise
+		 * died the moment Tasks 13/14 landed `map-provider-yandex.js`, which is why the
+		 * assertion below flipped from `assertArrayNotHasKey()` to `assertArrayHasKey()`.
+		 *
+		 * IMPORTANT: the `Functions\expect( 'wp_enqueue_style' )->never()` expectation
+		 * below must flip to an assertion that it WAS enqueued the moment Task 15 ships
+		 * `pickup.css` — do not mistake that future failure for a regression; it is this
+		 * same premise expiring again.
+		 */
 		public function test_enqueue_assets_enqueues_only_the_assets_already_built(): void {
 			Functions\when( 'is_checkout' )->justReturn( true );
 			Functions\when( 'apply_filters' )->returnArg( 2 );
@@ -1403,6 +1630,8 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				}
 			);
 
+			// pickup.css (SP-5 Task 15) does not exist on disk yet — see the method
+			// docblock above for what must change here once it lands.
 			Functions\expect( 'wp_enqueue_style' )->never();
 
 			$localized = [];
@@ -1428,7 +1657,13 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			$this->assertStringContainsString( 'pickup-datasource.js', $scripts['woodev-pickup-datasource']['src'] );
 			$this->assertSame( [], $scripts['woodev-pickup-datasource']['deps'] );
 
-			$this->assertArrayNotHasKey( 'woodev-pickup-map-provider-yandex', $scripts );
+			// map-provider-yandex.js (SP-5 Tasks 13/14) now exists on disk — see the
+			// method docblock above for why this flipped from assertArrayNotHasKey().
+			$this->assertArrayHasKey( 'woodev-pickup-map-provider-yandex', $scripts );
+			$this->assertStringContainsString(
+				'map-provider-yandex.js',
+				$scripts['woodev-pickup-map-provider-yandex']['src']
+			);
 
 			$this->assertArrayHasKey( 'woodev-pickup-mount', $scripts );
 			$this->assertStringContainsString( 'pickup-mount.js', $scripts['woodev-pickup-mount']['src'] );

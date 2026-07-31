@@ -179,6 +179,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Map\\Yandex_Map_Provider' )
 		 * surface, with real masking, validation, and the React settings page behind it.
 		 * Contributes ONE optional field: the merchant's own Yandex.Maps API key.
 		 *
+		 * This descriptor does not register itself anywhere on its own. {@see
+		 * \Woodev\Framework\Shipping\Pickup\Pickup_Handler::get_settings_fields()} exposes
+		 * it as a pure pass-through, and the PLUGIN that owns the shipping integration must
+		 * call that and merge the result into its own settings registration — otherwise the
+		 * `map_api_key` field this method describes never reaches a merchant. See that
+		 * method's docblock and spec §10.8 for the full obligation.
+		 *
 		 * Deliberately NOT marked `sensitive`. The framework's `sensitive` flag keeps a
 		 * `Woodev_Setting` value server-side (masked in the settings UI, stripped from REST
 		 * responses) — appropriate for a value that is genuinely secret. A JS map API key is

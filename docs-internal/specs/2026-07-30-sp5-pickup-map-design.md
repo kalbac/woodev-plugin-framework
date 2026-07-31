@@ -438,6 +438,20 @@ Also amended in §4.9: the "already-drawn point set is kept" rule needs a **non-
 retry constructs a **fresh provider** rather than re-`init()`ing a live one, which the contract
 (`init`/`on`/`destroy`) never defined.
 
+**10.8 `get_settings_fields()` is a plugin obligation, not framework automation** (review fix,
+2026-07-31). §4.7 said the framework "auto-registers an optional ... settings field" once a plugin
+uses the Yandex provider. What shipped is `Pickup_Handler::get_settings_fields()`, a pass-through
+to the active `Map_Provider`'s own `get_settings_fields()` — nothing calls it on the framework's
+behalf, and the field never reaches a merchant unless the plugin that owns the shipping integration
+calls it itself and merges the result into its own settings registration. The wording was wrong for
+the same reason §10.6 already gave for the fallback key: the framework does not own the plugin's
+settings provider, so it cannot register into it on the plugin's behalf. Left uncorrected, the
+natural reading of "auto-registers" invites a plugin author to assume the field appears without
+doing anything, silently leaving every install of that plugin pinned to the shared fallback key —
+exactly the quota risk §4.7 flagged as a watch item, now arriving via a documentation gap instead
+of a technical one. `Pickup_Handler::get_settings_fields()` and `Yandex_Map_Provider::get_settings_fields()`
+now say so explicitly in their docblocks.
+
 ## Related
 
 - [[2026-07-06-checkout-field-layer-design]] — §8, the layer this mounts into

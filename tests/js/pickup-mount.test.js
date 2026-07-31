@@ -150,6 +150,7 @@ function makeConfig( overrides ) {
 	const base = {
 		fieldId: FIELD_ID,
 		provider: 'testProvider',
+		strategy: 'bulk',
 		restRoot: 'https://example.test/wp-json/woodev/v1/shipping/pickup/p/points',
 		nonce: 'nonce-1',
 		i18n: phpI18n(),
@@ -199,6 +200,27 @@ function clickTrigger() {
 	const trigger = document.querySelector( '.woodev-pickup-trigger' );
 	trigger.dispatchEvent( new MouseEvent( 'click', { bubbles: true } ) );
 	return trigger;
+}
+
+/**
+ * Sets a `<select>` city field's value — `billing_city`/`shipping_city` are real
+ * `<select>` elements in {@see buildCheckoutDom}, so a bare `.value = x` assignment with
+ * no matching `<option>` silently no-ops (jsdom faithfully replicates the real DOM here —
+ * the exact bounded-option behaviour `ensureOption()` in pickup-mount.js itself works
+ * around). Adds the missing option first, mirroring that production helper.
+ */
+function setCitySelectValue( fieldId, value ) {
+	const select = document.getElementById( fieldId );
+
+	if ( ! Array.prototype.slice.call( select.options ).some( ( o ) => o.value === value ) ) {
+		const option = document.createElement( 'option' );
+
+		option.value = value;
+		option.text = value;
+		select.appendChild( option );
+	}
+
+	select.value = value;
 }
 
 function point( overrides ) {
@@ -301,9 +323,83 @@ test( 'clicking the trigger opens the shell and calls provider.init with the con
 	expect( calls.length ).toBe( 1 );
 	expect( calls[ 0 ].container ).toBeInstanceOf( HTMLElement );
 	expect( dialog.contains( calls[ 0 ].container ) ).toBe( true );
-	expect( calls[ 0 ].config ).toBe( config.mapConfig );
+	// The provider config is the MERGE buildProviderConfig() builds — mapConfig's own
+	// keys plus strategy/i18n/locality — never config.mapConfig passed through raw.
+	expect( calls[ 0 ].config ).toEqual( {
+		center: [ 55.75, 37.61 ],
+		strategy: 'bulk',
+		i18n: config.i18n,
+		locality: '',
+	} );
 	expect( typeof calls[ 0 ].dataSource.fetchPoints ).toBe( 'function' );
 	expect( typeof calls[ 0 ].dataSource.fetchDetails ).toBe( 'function' );
+} );
+
+// -------------------------------------------------------------------------
+// buildProviderConfig() — the mapConfig/strategy/i18n/locality merge handed
+// to the map provider's init(), and locality's LIVE resolution
+// -------------------------------------------------------------------------
+
+test( 'the provider config merges mapConfig with strategy, i18n, and the resolved locality', () => {
+	const config = makeConfig( {
+		strategy: 'viewport',
+		mapConfig: { scriptUrl: 'https://example.test/ymaps.js', ns: 'WoodevPickupMap', hasApiKey: true },
+	} );
+	setConfig( config );
+	mountAll();
+
+	setCitySelectValue( 'billing_city', 'Казань' );
+
+	clickTrigger();
+
+	const receivedConfig = StubProvider.instances[ 0 ].initCalls[ 0 ].config;
+	expect( receivedConfig ).toEqual( {
+		scriptUrl: 'https://example.test/ymaps.js',
+		ns: 'WoodevPickupMap',
+		hasApiKey: true,
+		strategy: 'viewport',
+		i18n: config.i18n,
+		locality: 'Казань',
+	} );
+} );
+
+test( 'locality is resolved against the LIVE ship-to-different-address target, not billing unconditionally', () => {
+	const config = makeConfig( { replaceAddress: { enabled: true, billingOnly: false } } );
+	setConfig( config );
+	document.querySelector( '[name="ship_to_different_address"]' ).checked = true;
+	setCitySelectValue( 'shipping_city', 'Новосибирск' );
+	setCitySelectValue( 'billing_city', 'Москва' ); // must be ignored — shipping is the live target
+	mountAll();
+
+	clickTrigger();
+
+	expect( StubProvider.instances[ 0 ].initCalls[ 0 ].config.locality ).toBe( 'Новосибирск' );
+} );
+
+test( 'locality is an empty string, never undefined, when the resolved city field is absent or blank', () => {
+	setConfig( makeConfig() );
+	mountAll();
+
+	clickTrigger();
+
+	expect( StubProvider.instances[ 0 ].initCalls[ 0 ].config.locality ).toBe( '' );
+} );
+
+test( 'locality is resolved fresh on EACH open, not cached from the first', () => {
+	const config = makeConfig( { replaceAddress: { enabled: false, billingOnly: true } } );
+	setConfig( config );
+	mountAll();
+
+	setCitySelectValue( 'billing_city', 'Первый Город' );
+	clickTrigger();
+	expect( StubProvider.instances[ 0 ].initCalls[ 0 ].config.locality ).toBe( 'Первый Город' );
+
+	// Close the session, change the field, and open a fresh one.
+	document.dispatchEvent( new KeyboardEvent( 'keydown', { key: 'Escape', bubbles: true } ) );
+	setCitySelectValue( 'billing_city', 'Второй Город' );
+	clickTrigger();
+
+	expect( StubProvider.instances[ 1 ].initCalls[ 0 ].config.locality ).toBe( 'Второй Город' );
 } );
 
 test( 'the modal title comes from the PHP-emitted i18n.modalTitle key', () => {
