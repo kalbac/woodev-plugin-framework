@@ -1,5 +1,34 @@
 # SP-5 Pickup Points + Map Implementation Plan
 
+> ## ⚠️ Partly superseded — read this before following any task below (s45, 2026-07-31)
+>
+> Tasks 1–12 are **done** on `feat/pickup-map`, but several diverged from the text here because the
+> plan was written against an incomplete picture of the existing tree. The authoritative record of
+> what changed and why is **§10 of the design spec** (`../specs/2026-07-30-sp5-pickup-map-design.md`).
+> Corrections that matter to the remaining tasks:
+>
+> - **Task 7 step 3 says "each point is `to_array()`ed" — this is now the exact inverse of the rule.**
+>   `to_array()` is the canonical, unescaped form that goes to order meta; the browser payload is
+>   `to_browser_array()`. Following the plan literally here reintroduces unescaped carrier strings
+>   into a checkout page.
+> - **Task 7's integration test was not written** (it cannot pass without the fixture). **Task 18 must
+>   now author `tests/integration/Shipping/PickupRouteTest.php`, not merely run it** — its step 2 says
+>   "including the three cases from Task 7", and those cases do not exist yet.
+> - **Task 9's "register the two new providers" did not happen and cannot.** `Yandex_Map_Provider`
+>   now requires a plugin-supplied fallback key, so the framework cannot construct one. It registers
+>   nothing; each plugin registers its own. See ADR-009 + addendum.
+> - **Task 16's settings-field shape** is the Woodev settings-API shape (`name`, `type`, `default`,
+>   `required`, `sensitive`, `description`) — **not** the WooCommerce `form_fields` shape
+>   (`title`/`desc_tip`) the original descriptor mixed in.
+> - **Task 17's `replaceAddress`** already emits `{ enabled, billingOnly }`. Do **not** add a
+>   server-resolved `target`; the browser re-applies the rule against the live checkbox.
+> - **Tasks 1, 2 and 4 were replacements, not creations.** `Pickup_Point` and a sourcing seam already
+>   existed from S1 with incompatible contracts, and the deletions had a wiring tail the plan did not
+>   list. See gotcha `file-deletion-tail-includes-classmap-fixtures`.
+> - **Jest runs via `npm run test:js`**, not `npx jest`.
+>
+> Everything else below still stands.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended)
 > or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax
 > for tracking.
