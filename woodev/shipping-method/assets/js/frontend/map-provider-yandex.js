@@ -520,6 +520,9 @@
 
 		this._onResize = null;
 		this._destroyed = false;
+
+		/** @type {HTMLElement|null} the "loading" overlay node — see {@see _showLoading}. */
+		this._loadingEl = null;
 	}
 
 	/**
@@ -555,6 +558,15 @@
 	 * `map_script` error and draws nothing; otherwise the map, clusterer and controls are
 	 * built and the initial point set is loaded according to `config.strategy`.
 	 *
+	 * `i18n.loading` (spec §4.9 improvement) is shown inside `container` for exactly the
+	 * span between the map being built and the INITIAL point fetch settling — not while the
+	 * script itself loads (there is nothing to draw over yet), and not for later
+	 * `boundschange` re-fetches under `viewport` (a live map with points already on it is
+	 * never worth hiding again). See {@see _showLoading}/{@see _hideLoading}. Both of
+	 * `_loadBulk()`/`_loadViewport()` always RESOLVE (never reject) their returned promise —
+	 * a dataSource rejection is turned into an `error` EMIT, not a rejection — so a single
+	 * `.then()` here is enough to hide the overlay in every case, success or failure alike.
+	 *
 	 * @param {HTMLElement} container
 	 * @param {Object}      config    the MERGED provider config `pickup-mount.js` builds
 	 *                                (`mapConfig` + `strategy` + `i18n` + `locality`).
@@ -582,8 +594,13 @@
 
 				self.ymaps = ymaps;
 				self._buildMap();
+				self._showLoading();
 
-				return self._loadInitialPoints();
+				return self._loadInitialPoints().then( function( result ) {
+					self._hideLoading();
+
+					return result;
+				} );
 			},
 			function() {
 				if ( ! self._destroyed ) {
@@ -728,6 +745,17 @@
 	 * the file docblock's "WHY THE INITIAL MAP STATE IS [0, 0]" section. Neither case emits
 	 * a provider `error`: an unresolved geocode is not a broken map, just a wider first
 	 * fetch.
+	 *
+	 * `config.locality` MUST BE A GEOCODABLE PLACE NAME, NOT AN OPAQUE CODE, for this to
+	 * resolve anything: `ymaps.geocode()` is Yandex's free-text geocoder — it has no idea
+	 * what to do with a carrier city id or a FIAS code, and a lookup it cannot parse simply
+	 * comes back empty, landing in the SAME silent fallback as no locality at all. Nothing
+	 * here can detect or warn about that case — a malformed-but-non-empty string and a
+	 * genuinely unresolvable place name are indistinguishable from this method's point of
+	 * view. `pickup-mount.js` reads this value straight off the address target's city
+	 * `<select>`'s `.value` (see its own `buildProviderConfig()` docblock); a plugin wiring
+	 * THIS provider under `strategy: 'viewport'` must keep that field's option `value` a
+	 * real place name for the initial viewport to ever center on the customer's city.
 	 *
 	 * @returns {Promise<void>}
 	 */
@@ -1220,6 +1248,46 @@
 	};
 
 	/**
+	 * Appends the `i18n.loading` overlay node into `container` — see {@see init}'s own
+	 * docblock for exactly when this is called. A no-op when `container` is gone (defensive;
+	 * `init()` only ever calls this after building the map, so `container` is always set at
+	 * that point) or when a loading node is already present (idempotent, though nothing in
+	 * this file currently calls it twice without an intervening {@see _hideLoading}).
+	 *
+	 * @returns {void}
+	 */
+	WoodevYandexMapProvider.prototype._showLoading = function() {
+		if ( ! this.container || this._loadingEl ) {
+			return;
+		}
+
+		var el = document.createElement( 'div' );
+
+		el.className = 'woodev-pickup-map-loading';
+		el.textContent = text( this.config, 'loading' );
+
+		this.container.appendChild( el );
+		this._loadingEl = el;
+	};
+
+	/**
+	 * Removes the loading overlay node added by {@see _showLoading}, if any. Idempotent —
+	 * safe to call when nothing is showing (the normal case for every code path except the
+	 * very first initial-fetch settlement) and safe to call from {@see destroy} even when
+	 * `init()` never finished, which is exactly what keeps the node from lingering on a
+	 * torn-down provider.
+	 *
+	 * @returns {void}
+	 */
+	WoodevYandexMapProvider.prototype._hideLoading = function() {
+		if ( this._loadingEl && this._loadingEl.parentNode ) {
+			this._loadingEl.parentNode.removeChild( this._loadingEl );
+		}
+
+		this._loadingEl = null;
+	};
+
+	/**
 	 * Tears the provider down: detaches the `resize` listener, removes the clusterer,
 	 * destroys the map, and resets every internal collection. Idempotent — a second call,
 	 * or a call before `init()` has settled, is a safe no-op (every async continuation
@@ -1233,6 +1301,11 @@
 		}
 
 		this._destroyed = true;
+
+		// Never let the loading overlay outlive the provider — a destroy() racing an
+		// in-flight initial fetch (see init()'s own docblock) must not leave it stuck in
+		// the DOM once nothing is left to hide it later.
+		this._hideLoading();
 
 		if ( this._onResize ) {
 			window.removeEventListener( 'resize', this._onResize );

@@ -452,6 +452,19 @@ exactly the quota risk §4.7 flagged as a watch item, now arriving via a documen
 of a technical one. `Pickup_Handler::get_settings_fields()` and `Yandex_Map_Provider::get_settings_fields()`
 now say so explicitly in their docblocks.
 
+**10.9 The map's initial state is a hardcoded technical placeholder, not `config.center`/
+`config.maxZoom`.** Task 13 step 2 said to build the map from `config.center` and `config.maxZoom`.
+Neither key exists: `Yandex_Map_Provider::get_js_config()` emits only `scriptUrl`, `ns` and
+`hasApiKey` — never a center or a zoom. `map-provider-yandex.js` instead hardcodes `[0, 0]` at zoom
+2 (max zoom 18) as the map's construction-time state, and overwrites it before the customer would
+ever notice: under `bulk`, `map.setBounds()` once points arrive; under `viewport`, a locality
+geocode when one is known. The placeholder survives only when `viewport` has no known locality and
+geocoding fails — the already-documented "fall back to the map's default state" case, not a new
+branch. Baking a `config.center` into the framework would mean baking a regional default (Moscow,
+say) into a framework meant to serve any CIS city — exactly the domain leakage §4.3's provider seam
+exists to keep out of the framework layer, so the deviation is kept rather than reconciled with the
+plan. See `map-provider-yandex.js`'s own file docblock for the full reasoning.
+
 ## Related
 
 - [[2026-07-06-checkout-field-layer-design]] — §8, the layer this mounts into

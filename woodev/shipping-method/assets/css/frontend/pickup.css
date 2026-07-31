@@ -241,6 +241,30 @@
 	min-height: 320px;
 }
 
+/* Shown over the map while the FIRST point fetch is in flight, then removed once it settles
+   (points drawn, empty, or error). Without it a drawn-but-pointless map reads as "there are no
+   points here" rather than "still loading" — spec §4.9's "never an empty rectangle" applies to
+   the loading moment too, not only to failures. Centred over the map rather than replacing it,
+   so the map is visibly already there. */
+.woodev-pickup-map-loading {
+	position: absolute;
+	top: 0;
+	right: 0;
+	bottom: 0;
+	left: 0;
+	z-index: 1;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 16px;
+	text-align: center;
+	font-size: 14px;
+	line-height: 1.5;
+	color: var(--woodev-pickup-muted, #646970);
+	background: rgba(255, 255, 255, 0.75);
+	pointer-events: none; /* Never blocks a map the customer can already see and drag. */
+}
+
 /* The embedded provider's iframe. Same height contract; the border reset stops a theme's
    global `iframe { border: 1px solid }` from drawing a frame inside the dialog. */
 .woodev-pickup-embedded-frame {

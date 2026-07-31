@@ -458,6 +458,22 @@
 	 * docblock's "THE PROVIDER CONFIG IS A MERGE" section for why this exists and why
 	 * `locality` is resolved live rather than baked into the PHP config.
 	 *
+	 * GEOCODABILITY CONSTRAINT (viewport strategy only): `locality` below is the city
+	 * field's `.value` VERBATIM. The §8 field-source contract only promises `{value,
+	 * label}` — it never promises `value` is a human-readable place name. A plugin may
+	 * legitimately use an opaque carrier city id or a FIAS code as `value` (a real fixture
+	 * does exactly this: `billing_state` ships `value: '77'`, `label: 'Москва'`). Reading
+	 * `.value` is still the right call: under `strategy: 'bulk'` the SAME plugin owns both
+	 * this field and the dataSource, so whatever shape `value` takes is internally
+	 * consistent end to end. Under `strategy: 'viewport'`, though, the Yandex provider
+	 * feeds this string straight into `ymaps.geocode()` — a free-text geocoder that expects
+	 * a place name, not a code (see `map-provider-yandex.js`'s own
+	 * `_resolveInitialViewport()` docblock). A plugin wiring the Yandex provider under
+	 * `viewport` MUST keep its city field's option `value` a geocodable place name.
+	 * Getting this wrong is SILENT: the geocode simply resolves nothing, and the map opens
+	 * at its technical `[0,0]`/zoom-2 fallback instead of the customer's city — nothing
+	 * throws, rejects, or logs.
+	 *
 	 * @param {Object} config the full mount config (`window.woodev_pickup_config_*`).
 	 * @returns {Object}
 	 */

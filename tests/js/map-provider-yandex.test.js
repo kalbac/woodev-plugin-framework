@@ -60,8 +60,19 @@ function makeProperties( initial ) {
 /**
  * Builds a hand-rolled `window[ns]` ymaps stub. See the file docblock for what it covers
  * and why each piece is shaped the way it is.
+ *
+ * @param {Object}  [options]
+ * @param {boolean} [options.resolveControls] By default a docked control's `getChildElement()`
+ *   NEVER resolves — harmless for tests that only care about the strategy/balloon orchestration,
+ *   where the drawer/filter's own built DOM is not under test. Tests that DO need that DOM (the
+ *   drawer/filter/cluster-balloon subsystem tests) pass `true`, which resolves it with a plain
+ *   `<div>` synchronously-enough that one `flushPromises()` after `init()` sees the built
+ *   `{element, teardown}` on `provider._drawerControl._builtElement` /
+ *   `provider._filterControl._builtElement`.
  */
-function createYmapsStub() {
+function createYmapsStub( options ) {
+	const resolveControls = !! ( options && options.resolveControls );
+
 	function Map( container, state ) {
 		this.container = container;
 		this.state = state;
@@ -70,16 +81,20 @@ function createYmapsStub() {
 		this.destroy = jest.fn();
 		this.geoObjects = { add: jest.fn(), remove: jest.fn() };
 
+		// Set by a test wanting `_updateDrawer()`'s `geoQuery(...).searchInside(map)` to
+		// return only a SUBSET of the clusterer's placemarks — see the stub `geoQuery` below.
+		// `null` (the default) means "everything currently in the clusterer is in view".
+		this._visibleFilter = null;
+
 		const self = this;
 
 		this.controls = {
 			add: ( control ) => {
 				if ( 'function' === typeof control.onAddToMap ) {
 					control._parent = {
-						// Deliberately never resolves in this stub — the drawer/filter's own DOM
-						// is not part of any REQUIRED test, and letting this hang is harmless (see
-						// the "what to build" section this stub does not need full fidelity for).
-						getChildElement: () => new Promise( () => {} ),
+						getChildElement: () => ( resolveControls
+							? Promise.resolve( document.createElement( 'div' ) )
+							: new Promise( () => {} ) ),
 					};
 					control.getParent = () => control._parent;
 					control.onAddToMap( self );
@@ -100,7 +115,7 @@ function createYmapsStub() {
 	Map.prototype.getBounds = function() {
 		return this._bounds;
 	};
-	Map.prototype.setCenter = function() {};
+	Map.prototype.setCenter = jest.fn();
 	Map.prototype.getZoom = function() {
 		return 10;
 	};
@@ -192,6 +207,15 @@ function createYmapsStub() {
 		return Layout;
 	}
 
+	// Captures every constructed instance's raw constructor argument, so a test can reach
+	// the `provider: { geocode: ... }` the production code wired in — see the search
+	// control test below. Fresh per `createYmapsStub()` call, so it never leaks across tests.
+	function SearchControl( ctorOptions ) {
+		this._raw = ctorOptions;
+		SearchControl.instances.push( this );
+	}
+	SearchControl.instances = [];
+
 	return {
 		ready: () => Promise.resolve(),
 		Map,
@@ -199,13 +223,26 @@ function createYmapsStub() {
 		Placemark,
 		control: {
 			ZoomControl: function() {},
-			SearchControl: function() {},
+			SearchControl,
 		},
 		templateLayoutFactory: { createClass },
 		util: { defineClass },
 		collection: { Item: CollectionItem },
-		geoQuery: () => ( { searchInside: () => ( { each: () => {} } ) } ),
-		geocode: () => Promise.resolve( { geoObjects: { get: () => null } } ),
+		// `searchInside(map)` returns only the subset `map._visibleFilter` accepts — see the
+		// `Map` constructor above. With no filter set (the default) everything passed in is
+		// reported as "in view", matching the pre-existing tests that never touch this.
+		geoQuery: ( collection ) => ( {
+			searchInside: ( map ) => ( {
+				each: ( cb ) => {
+					const items = map && 'function' === typeof map._visibleFilter
+						? collection.filter( map._visibleFilter )
+						: collection;
+
+					items.forEach( cb );
+				},
+			} ),
+		} ),
+		geocode: jest.fn( () => Promise.resolve( { geoObjects: { get: () => null } } ) ),
 	};
 }
 
@@ -231,6 +268,7 @@ function makeConfig( overrides ) {
 				detailsError: 'Не удалось загрузить детали пункта',
 				select: 'Выбрать этот пункт',
 				blocked: 'Этот пункт выдачи недоступен для вашего заказа.',
+				loading: 'Загрузка пунктов выдачи…',
 			},
 		},
 		overrides
@@ -665,4 +703,399 @@ test( 'optional fields absent from the point render no line at all', () => {
 	expect( container.querySelector( '.woodev-pickup-balloon__phone' ) ).toBeNull();
 	expect( container.querySelector( '.woodev-pickup-balloon__worktime' ) ).toBeNull();
 	expect( container.querySelector( '.woodev-pickup-balloon__weight' ) ).toBeNull();
+} );
+
+// -------------------------------------------------------------------------
+// Review fix: positive-value assertions for the nine i18n keys that only had
+// a config fixture entry before, never a rendered-output assertion.
+// -------------------------------------------------------------------------
+
+test( 'howToGet i18n renders as the "how to get there" summary label', () => {
+	const provider = new WoodevYandexMapProvider();
+
+	provider.config = makeConfig();
+	provider.dataSource = fakeDataSource( {} );
+
+	const container = document.createElement( 'div' );
+
+	provider._renderBalloon( container, point( { instruction: 'Зайти со двора' } ) );
+
+	const summary = container.querySelector( '.woodev-pickup-balloon__howto-summary' );
+
+	expect( summary.textContent ).toBe( provider.config.i18n.howToGet );
+} );
+
+test( 'paymentMethods i18n renders as the label for the payment methods line', () => {
+	const provider = new WoodevYandexMapProvider();
+
+	provider.config = makeConfig();
+	provider.dataSource = fakeDataSource( {} );
+
+	const container = document.createElement( 'div' );
+
+	provider._renderBalloon( container, point( { payment_methods: [ 'Карта', 'Наличные' ] } ) );
+
+	const label = container.querySelector( '.woodev-pickup-balloon__payments .woodev-pickup-balloon__label' );
+
+	expect( label.textContent ).toBe( provider.config.i18n.paymentMethods );
+} );
+
+test( 'workTime i18n renders as the label for the working-hours line', () => {
+	const provider = new WoodevYandexMapProvider();
+
+	provider.config = makeConfig();
+	provider.dataSource = fakeDataSource( {} );
+
+	const container = document.createElement( 'div' );
+
+	provider._renderBalloon( container, point( { work_time: 'Пн-Пт 9:00-18:00' } ) );
+
+	const label = container.querySelector( '.woodev-pickup-balloon__worktime .woodev-pickup-balloon__label' );
+
+	expect( label.textContent ).toBe( provider.config.i18n.workTime );
+} );
+
+test( 'maxWeight i18n renders as the label for the weight-limit line', () => {
+	const provider = new WoodevYandexMapProvider();
+
+	provider.config = makeConfig();
+	provider.dataSource = fakeDataSource( {} );
+
+	const container = document.createElement( 'div' );
+
+	provider._renderBalloon( container, point( { max_weight: 5000 } ) );
+
+	const label = container.querySelector( '.woodev-pickup-balloon__weight .woodev-pickup-balloon__label' );
+
+	expect( label.textContent ).toBe( provider.config.i18n.maxWeight );
+} );
+
+test( 'select i18n renders as the CTA button text', () => {
+	const provider = new WoodevYandexMapProvider();
+
+	provider.config = makeConfig();
+	provider.dataSource = fakeDataSource( {} );
+
+	const container = document.createElement( 'div' );
+
+	provider._renderBalloon( container, point() );
+
+	const button = container.querySelector( '.woodev-pickup-balloon__select' );
+
+	expect( button.textContent ).toBe( provider.config.i18n.select );
+} );
+
+test( 'blocked i18n renders as the fallback warning when a point is refused with no reason', () => {
+	const provider = new WoodevYandexMapProvider();
+
+	provider.config = makeConfig();
+	provider.dataSource = fakeDataSource( {} );
+
+	const container = document.createElement( 'div' );
+	const p = point( { selectable: { allowed: false, reason: null } } );
+
+	provider._renderBalloon( container, p );
+
+	const warning = container.querySelector( '.woodev-pickup-balloon__warning' );
+
+	expect( warning.textContent ).toBe( provider.config.i18n.blocked );
+} );
+
+test( 'search i18n is the SearchControl placeholder; its geocode provider is bounded with strictBounds '
+	+ '(mutant: dropping boundedBy/strictBounds)', async () => {
+	const config = makeConfig( { strategy: 'bulk' } );
+	const stub = createYmapsStub();
+
+	window[ config.ns ] = stub;
+
+	const provider = new WoodevYandexMapProvider();
+	const ds = fakeDataSource( { fetchPoints: () => Promise.resolve( [ point() ] ) } );
+
+	await provider.init( document.createElement( 'div' ), config, ds );
+
+	const searchControl = stub.control.SearchControl.instances[ 0 ];
+
+	expect( searchControl ).toBeDefined();
+	expect( searchControl._raw.options.placeholderContent ).toBe( config.i18n.search );
+
+	searchControl._raw.options.provider.geocode( 'ул. Тестовая, 1' );
+
+	expect( stub.geocode ).toHaveBeenCalledWith( 'ул. Тестовая, 1', {
+		boundedBy: provider.clusterer.getBounds(),
+		strictBounds: true,
+	} );
+} );
+
+test( 'drawerTitle i18n renders as the drawer control\'s header text', async () => {
+	const config = makeConfig( { strategy: 'bulk' } );
+
+	window[ config.ns ] = createYmapsStub( { resolveControls: true } );
+
+	const provider = new WoodevYandexMapProvider();
+
+	await provider.init( document.createElement( 'div' ), config, fakeDataSource( {} ) );
+	await flushPromises();
+
+	const header = provider._drawerControl._builtElement.querySelector( '.woodev-pickup-drawer__header' );
+
+	expect( header.textContent ).toBe( config.i18n.drawerTitle );
+} );
+
+test( 'allTypes i18n renders as the filter control\'s "all types" button label', async () => {
+	const config = makeConfig( { strategy: 'bulk' } );
+
+	window[ config.ns ] = createYmapsStub( { resolveControls: true } );
+
+	const provider = new WoodevYandexMapProvider();
+	const ds = fakeDataSource( {
+		fetchPoints: () => Promise.resolve( [
+			point( { id: 'A', type: { code: 'PVZ', label: 'ПВЗ' } } ),
+			point( { id: 'B', type: { code: 'POSTAMAT', label: 'Постамат' } } ),
+		] ),
+	} );
+
+	await provider.init( document.createElement( 'div' ), config, ds );
+	await flushPromises();
+
+	const allButton = provider._filterControl._builtElement.querySelector(
+		'.woodev-pickup-filter__item--active'
+	);
+
+	expect( allButton.textContent ).toBe( config.i18n.allTypes );
+} );
+
+// -------------------------------------------------------------------------
+// Type filter subsystem — render-only-when-multiple, filtering narrows the map
+// -------------------------------------------------------------------------
+
+test( 'the type filter is NOT added while only one distinct type.code has been observed', async () => {
+	const config = makeConfig( { strategy: 'bulk' } );
+
+	window[ config.ns ] = createYmapsStub( { resolveControls: true } );
+
+	const provider = new WoodevYandexMapProvider();
+	const ds = fakeDataSource( {
+		fetchPoints: () => Promise.resolve( [
+			point( { id: 'A', type: { code: 'PVZ', label: 'ПВЗ' } } ),
+			point( { id: 'B', type: { code: 'PVZ', label: 'ПВЗ' } } ),
+		] ),
+	} );
+
+	await provider.init( document.createElement( 'div' ), config, ds );
+	await flushPromises();
+
+	expect( provider._filterControlAdded ).toBe( false );
+	expect( provider._filterControl ).toBeNull();
+} );
+
+test( 'type filter: selecting a type narrows the clusterer to only the matching placemarks', async () => {
+	const config = makeConfig( { strategy: 'bulk' } );
+
+	window[ config.ns ] = createYmapsStub( { resolveControls: true } );
+
+	const provider = new WoodevYandexMapProvider();
+	const ds = fakeDataSource( {
+		fetchPoints: () => Promise.resolve( [
+			point( { id: 'A', type: { code: 'PVZ', label: 'ПВЗ' } } ),
+			point( { id: 'B', type: { code: 'POSTAMAT', label: 'Постамат' } } ),
+		] ),
+	} );
+
+	await provider.init( document.createElement( 'div' ), config, ds );
+	await flushPromises();
+
+	const pvzButton = provider._filterControl._builtElement.querySelector( '[data-type-code="PVZ"]' );
+
+	pvzButton.click();
+
+	const visible = provider.clusterer.getGeoObjects();
+
+	expect( visible.length ).toBe( 1 );
+	expect( visible[ 0 ].properties.get( 'point' ).id ).toBe( 'A' );
+} );
+
+// -------------------------------------------------------------------------
+// Drawer subsystem — in-view only, refreshed on boundschange, click pans + opens balloon
+// -------------------------------------------------------------------------
+
+test( 'drawer lists only the placemarks the map reports as currently in view', async () => {
+	const config = makeConfig( { strategy: 'bulk' } );
+
+	window[ config.ns ] = createYmapsStub( { resolveControls: true } );
+
+	const provider = new WoodevYandexMapProvider();
+	const ds = fakeDataSource( {
+		fetchPoints: () => Promise.resolve( [
+			point( { id: 'IN-VIEW', name: 'Видимая точка' } ),
+			point( { id: 'OUT-OF-VIEW', name: 'Скрытая точка' } ),
+		] ),
+	} );
+
+	await provider.init( document.createElement( 'div' ), config, ds );
+	await flushPromises();
+
+	// Simulate the map reporting only ONE of the two placemarks as in view.
+	provider.map._visibleFilter = ( placemark ) => 'IN-VIEW' === placemark.properties.get( 'point' ).id;
+	provider._updateDrawer();
+
+	const items = provider._drawerListEl.querySelectorAll( '.woodev-pickup-drawer__item' );
+
+	expect( items.length ).toBe( 1 );
+	expect( items[ 0 ].textContent ).toContain( 'Видимая точка' );
+	expect( items[ 0 ].textContent ).not.toContain( 'Скрытая точка' );
+} );
+
+test( 'drawer refreshes on boundschange under the viewport strategy', async () => {
+	const config = makeConfig( { strategy: 'viewport', locality: '' } );
+
+	window[ config.ns ] = createYmapsStub( { resolveControls: true } );
+
+	let fetchCount = 0;
+	const ds = fakeDataSource( {
+		fetchPoints: () => {
+			fetchCount += 1;
+
+			return Promise.resolve( 1 === fetchCount ? [ point( { id: 'FIRST' } ) ] : [ point( { id: 'SECOND' } ) ] );
+		},
+	} );
+	const provider = new WoodevYandexMapProvider();
+
+	await provider.init( document.createElement( 'div' ), config, ds );
+	await flushPromises();
+
+	expect( provider._drawerListEl.querySelectorAll( '.woodev-pickup-drawer__item' ).length ).toBe( 1 );
+
+	provider.map.fireBoundsChange();
+	await flushPromises();
+
+	// Both points are now known, and none is filtered out — the drawer must reflect
+	// the newly fetched SECOND point too.
+	expect( provider._drawerListEl.querySelectorAll( '.woodev-pickup-drawer__item' ).length ).toBe( 2 );
+} );
+
+test( 'drawer: clicking an item pans the map to it and opens its balloon', async () => {
+	const config = makeConfig( { strategy: 'bulk' } );
+
+	window[ config.ns ] = createYmapsStub( { resolveControls: true } );
+
+	const provider = new WoodevYandexMapProvider();
+	const ds = fakeDataSource( { fetchPoints: () => Promise.resolve( [ point( { id: 'CLICK-1' } ) ] ) } );
+
+	await provider.init( document.createElement( 'div' ), config, ds );
+	await flushPromises();
+
+	const placemark = provider._placemarksById[ 'CLICK-1' ];
+	const openSpy = jest.spyOn( placemark.balloon, 'open' );
+	const item = provider._drawerListEl.querySelector( '.woodev-pickup-drawer__item' );
+
+	item.click();
+
+	expect( provider.map.setCenter ).toHaveBeenCalledWith(
+		placemark.geometry.getCoordinates(),
+		provider.map.getZoom()
+	);
+	expect( openSpy ).toHaveBeenCalledTimes( 1 );
+} );
+
+// -------------------------------------------------------------------------
+// Cluster balloon subsystem — lists the clustered points, each opens its own balloon
+// -------------------------------------------------------------------------
+
+test( 'cluster balloon lists each clustered point\'s name; clicking one opens ITS OWN balloon', () => {
+	const provider = new WoodevYandexMapProvider();
+
+	provider.config = makeConfig();
+	provider.dataSource = fakeDataSource( {} );
+
+	const openA = jest.fn();
+	const openB = jest.fn();
+	const placemarkA = {
+		properties: makeProperties( { point: point( { id: 'A', name: 'Точка А' } ) } ),
+		balloon: { open: openA },
+	};
+	const placemarkB = {
+		properties: makeProperties( { point: point( { id: 'B', name: 'Точка Б' } ) } ),
+		balloon: { open: openB },
+	};
+	const container = document.createElement( 'div' );
+
+	provider._renderClusterBalloon( container, [ placemarkA, placemarkB ] );
+
+	const items = container.querySelectorAll( '.woodev-pickup-cluster-balloon__item' );
+
+	expect( items.length ).toBe( 2 );
+	expect( items[ 0 ].textContent ).toBe( 'Точка А' );
+	expect( items[ 1 ].textContent ).toBe( 'Точка Б' );
+
+	items[ 1 ].click();
+
+	expect( openB ).toHaveBeenCalledTimes( 1 );
+	expect( openA ).not.toHaveBeenCalled();
+} );
+
+// -------------------------------------------------------------------------
+// i18n.loading — shown while the initial fetch is in flight, cleared after (review fix)
+// -------------------------------------------------------------------------
+
+test( 'loading: i18n.loading shows in the container while the initial fetch is in flight, cleared after', async () => {
+	const config = makeConfig( { strategy: 'bulk' } );
+
+	window[ config.ns ] = createYmapsStub();
+
+	let resolveFetch;
+	const ds = fakeDataSource( {
+		fetchPoints: () => new Promise( ( resolve ) => {
+			resolveFetch = resolve;
+		} ),
+	} );
+	const provider = new WoodevYandexMapProvider();
+	const container = document.createElement( 'div' );
+
+	const initPromise = provider.init( container, config, ds );
+
+	await flushPromises();
+
+	const loadingEl = container.querySelector( '.woodev-pickup-map-loading' );
+
+	expect( loadingEl ).not.toBeNull();
+	expect( loadingEl.textContent ).toBe( config.i18n.loading );
+
+	resolveFetch( [ point() ] );
+	await initPromise;
+
+	expect( container.querySelector( '.woodev-pickup-map-loading' ) ).toBeNull();
+} );
+
+test( 'loading: a fetch failure also clears the loading node (never lingers on error)', async () => {
+	const config = makeConfig( { strategy: 'bulk' } );
+
+	window[ config.ns ] = createYmapsStub();
+
+	const ds = fakeDataSource( { fetchPoints: () => Promise.reject( { status: 502, code: 'x', message: 'y' } ) } );
+	const provider = new WoodevYandexMapProvider();
+	const container = document.createElement( 'div' );
+
+	await provider.init( container, config, ds );
+
+	expect( container.querySelector( '.woodev-pickup-map-loading' ) ).toBeNull();
+} );
+
+test( 'loading: destroy() during the initial fetch removes the loading node so it cannot linger', async () => {
+	const config = makeConfig( { strategy: 'bulk' } );
+
+	window[ config.ns ] = createYmapsStub();
+
+	const ds = fakeDataSource( { fetchPoints: () => new Promise( () => {} ) } ); // never resolves
+	const provider = new WoodevYandexMapProvider();
+	const container = document.createElement( 'div' );
+
+	provider.init( container, config, ds );
+
+	await flushPromises();
+
+	expect( container.querySelector( '.woodev-pickup-map-loading' ) ).not.toBeNull();
+
+	provider.destroy();
+
+	expect( container.querySelector( '.woodev-pickup-map-loading' ) ).toBeNull();
 } );
