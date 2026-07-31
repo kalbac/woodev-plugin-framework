@@ -1580,38 +1580,21 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 		}
 
 		/**
-		 * BLOCKING fix proof, updated for Task 12: `pickup-mount.js` has now landed
-		 * alongside `pickup-modal.js` (Task 10) and `pickup-datasource.js` (Task 11), so
-		 * `wp_enqueue_script()` is called for all three handles — including localizing the
-		 * mount config, now that the `$mount_enqueued` gate in
-		 * {@see Pickup_Handler::enqueue_assets()} is open — while the one asset that has not
-		 * landed yet (the map-provider script, Tasks 13/14) — plus the stylesheet (Task 15)
-		 * — are still skipped entirely, never enqueuing a URL that will 404. Uses the plain
-		 * {@see Pickup_Handler} (no override) — the real filesystem state on this branch IS
-		 * the fixture.
-		 *
-		 * "Enqueued" here is a PHP-level fact only: the mount handle's own dependency list
-		 * names `woodev-pickup-map-provider-yandex`, a handle that is never itself
-		 * registered on this branch (its file does not exist yet), so WordPress's real
-		 * dependency resolution will not actually PRINT the mount `<script>` tag to the page
-		 * until Task 13/14 lands that file — see {@see Pickup_Handler::enqueue_assets()}'s
-		 * own docblock.
-		 */
-		/**
 		 * Guards `enqueue_script_if_built()`/`enqueue_style_if_built()`'s "only enqueue
 		 * what exists on disk" behaviour — the real reason a vendored boot must never
-		 * register a dependency on a handle nothing ever registered. As of this fix, the
-		 * modal, datasource, mount AND the active provider's script (`map-provider-yandex.js`,
-		 * SP-5 Tasks 13/14) all exist on disk and are asserted enqueued; only the
-		 * stylesheet (`css/frontend/pickup.css`, SP-5 Task 15) does not exist yet. This
-		 * test originally asserted the provider script was NOT enqueued — that premise
-		 * died the moment Tasks 13/14 landed `map-provider-yandex.js`, which is why the
-		 * assertion below flipped from `assertArrayNotHasKey()` to `assertArrayHasKey()`.
+		 * register a dependency on a handle nothing ever registered.
 		 *
-		 * IMPORTANT: the `Functions\expect( 'wp_enqueue_style' )->never()` expectation
-		 * below must flip to an assertion that it WAS enqueued the moment Task 15 ships
-		 * `pickup.css` — do not mistake that future failure for a regression; it is this
-		 * same premise expiring again.
+		 * Every SP-5 frontend asset has now landed, so this test asserts the complete set:
+		 * the modal (Task 10), the dataSource (Task 11), the mount (Task 12), the active
+		 * provider's script (`map-provider-yandex.js`, Tasks 13/14) and the stylesheet
+		 * (`css/frontend/pickup.css`, Task 15).
+		 *
+		 * This test has now outlived TWO premises, both legitimately: it first asserted the
+		 * provider script was absent (dead once Tasks 13/14 landed the file), then that the
+		 * stylesheet was absent (dead once Task 15 landed `pickup.css`). Neither flip was a
+		 * regression — each was a deliberately-recorded expectation expiring on schedule.
+		 * What the test actually guards is unchanged throughout: an asset missing from disk
+		 * must never be enqueued.
 		 */
 		public function test_enqueue_assets_enqueues_only_the_assets_already_built(): void {
 			Functions\when( 'is_checkout' )->justReturn( true );
@@ -1630,9 +1613,12 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				}
 			);
 
-			// pickup.css (SP-5 Task 15) does not exist on disk yet — see the method
-			// docblock above for what must change here once it lands.
-			Functions\expect( 'wp_enqueue_style' )->never();
+			$styles = [];
+			Functions\when( 'wp_enqueue_style' )->alias(
+				static function ( $handle, $src, $deps, $ver ) use ( &$styles ) {
+					$styles[ $handle ] = $src;
+				}
+			);
 
 			$localized = [];
 			Functions\when( 'wp_localize_script' )->alias(
@@ -1657,8 +1643,8 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			$this->assertStringContainsString( 'pickup-datasource.js', $scripts['woodev-pickup-datasource']['src'] );
 			$this->assertSame( [], $scripts['woodev-pickup-datasource']['deps'] );
 
-			// map-provider-yandex.js (SP-5 Tasks 13/14) now exists on disk — see the
-			// method docblock above for why this flipped from assertArrayNotHasKey().
+			// map-provider-yandex.js (SP-5 Tasks 13/14) exists on disk — see the method
+			// docblock above for why this flipped from assertArrayNotHasKey().
 			$this->assertArrayHasKey( 'woodev-pickup-map-provider-yandex', $scripts );
 			$this->assertStringContainsString(
 				'map-provider-yandex.js',
@@ -1671,6 +1657,11 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				[ 'jquery', 'woodev-pickup-modal', 'woodev-pickup-datasource', 'woodev-pickup-map-provider-yandex' ],
 				$scripts['woodev-pickup-mount']['deps']
 			);
+
+			// pickup.css (SP-5 Task 15) exists on disk — see the method docblock above for
+			// why this flipped from an `expect( 'wp_enqueue_style' )->never()` expectation.
+			$this->assertArrayHasKey( 'woodev-pickup-styles', $styles );
+			$this->assertStringContainsString( 'pickup.css', $styles['woodev-pickup-styles'] );
 
 			$this->assertCount( 1, $localized );
 			[ $handle, $object_name ] = $localized[0];

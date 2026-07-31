@@ -1,0 +1,580 @@
+/**
+ * Woodev Pickup Picker — storefront styles (SP-5 Task 15).
+ *
+ * Styles the vanilla modal shell (`pickup-modal.js`), the trigger mounted into the §8 anchor
+ * (`pickup-mount.js`), and everything the map providers draw inside the shell's body — the
+ * Yandex provider's map, viewport-synced drawer, type filter and balloon
+ * (`map-provider-yandex.js`), and the embedded provider's iframe
+ * (`map-provider-embedded.js`).
+ *
+ * PLAIN CSS, NO BUILD STEP. `Pickup_Handler::enqueue_assets()` enqueues this file directly
+ * (and only when it exists on disk), so there is no preprocessor, no `@import`, no external
+ * font and no remote URL of any kind here.
+ *
+ * THIS IS STOREFRONT CSS, NOT ADMIN CSS. It loads inside a merchant's theme, which may be
+ * anything. So it assumes nothing: no `@wordpress/*` styles, and deliberately NOT the admin
+ * UI-kit tokens in `src/components/tokens.scss` — those belong to the four admin React
+ * surfaces and are not loaded on a checkout page.
+ *
+ * SPECIFICITY IS DELIBERATELY FLAT — single class selectors almost everywhere, no `!important`
+ * except the two noted at their use site. The balance being struck: a theme SHOULD be able to
+ * restyle the picker without a specificity war, but the picker must not fall apart because a
+ * theme sets a global `button { ... }` or `p { margin: 2em }`. So every rule that matters for
+ * LAYOUT (not decoration) sets its property explicitly rather than inheriting, and the dialog
+ * resets the handful of element defaults it actually depends on. Where a theme and this file
+ * disagree on decoration, the theme wins by load order; where they disagree on layout, this
+ * file states its value outright.
+ *
+ * EVERY COLOUR AND SPACING WORTH RETHEMING IS A CUSTOM PROPERTY on `.woodev-pickup-modal-backdrop`
+ * and `.woodev-pickup-balloon` (the balloon is rendered by ymaps OUTSIDE the modal subtree, so
+ * it cannot inherit from the backdrop — see its own block). A plugin retheme is a handful of
+ * property overrides, not a rule rewrite.
+ *
+ * @since 2.0.2
+ */
+
+/* -------------------------------------------------------------------------
+ * Trigger — the button mounted into the §8 `data-woodev-pickup-slot` anchor.
+ * Intentionally minimal: it carries WooCommerce's own `.button` class too, so
+ * the theme's button styling should lead. Only spacing is asserted.
+ * ---------------------------------------------------------------------- */
+
+.woodev-pickup-trigger {
+	margin-top: 0.5em;
+}
+
+/* -------------------------------------------------------------------------
+ * Scroll lock — set on <body> while the modal is open.
+ * ---------------------------------------------------------------------- */
+
+.woodev-pickup-modal-lock {
+	overflow: hidden;
+}
+
+/* -------------------------------------------------------------------------
+ * Modal shell
+ * ---------------------------------------------------------------------- */
+
+.woodev-pickup-modal-backdrop {
+	--woodev-pickup-bg: #fff;
+	--woodev-pickup-fg: #1e1e1e;
+	--woodev-pickup-muted: #646970;
+	--woodev-pickup-border: #dcdcde;
+	--woodev-pickup-accent: #06aedd;
+	--woodev-pickup-danger: #b32d2e;
+	--woodev-pickup-warning-bg: #fcf9e8;
+	--woodev-pickup-notice-bg: #f0f6fc;
+	--woodev-pickup-hover-bg: #f6f7f7;
+	--woodev-pickup-radius: 4px;
+	--woodev-pickup-gap: 16px;
+
+	position: fixed;
+	top: 0;
+	right: 0;
+	bottom: 0;
+	left: 0;
+	z-index: 999999;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 24px;
+	background: rgba(0, 0, 0, 0.6);
+	box-sizing: border-box;
+}
+
+.woodev-pickup-modal-backdrop *,
+.woodev-pickup-modal-backdrop *::before,
+.woodev-pickup-modal-backdrop *::after {
+	box-sizing: border-box;
+}
+
+.woodev-pickup-modal {
+	display: flex;
+	flex-direction: column;
+	width: 100%;
+	max-width: 1100px;
+	/* Height is asserted, not derived: the map container inside the body must resolve to a
+	   real pixel height (see `.woodev-pickup-map`). A percentage chain that bottoms out in
+	   `height: auto` collapses the map to zero and renders a blank rectangle — the single
+	   most common way a map integration "silently breaks". */
+	height: 80vh;
+	max-height: 800px;
+	background: var(--woodev-pickup-bg);
+	color: var(--woodev-pickup-fg);
+	border-radius: var(--woodev-pickup-radius);
+	box-shadow: 0 6px 30px rgba(0, 0, 0, 0.3);
+	overflow: hidden;
+}
+
+.woodev-pickup-modal__header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	flex: 0 0 auto;
+	gap: var(--woodev-pickup-gap);
+	padding: 12px 16px;
+	border-bottom: 1px solid var(--woodev-pickup-border);
+}
+
+.woodev-pickup-modal__title {
+	margin: 0;
+	padding: 0;
+	font-size: 18px;
+	line-height: 1.4;
+	font-weight: 600;
+	color: inherit;
+}
+
+.woodev-pickup-modal__close {
+	flex: 0 0 auto;
+	width: 36px;
+	height: 36px;
+	padding: 0;
+	font-size: 24px;
+	line-height: 1;
+	color: var(--woodev-pickup-muted);
+	background: none;
+	border: 1px solid transparent;
+	border-radius: var(--woodev-pickup-radius);
+	cursor: pointer;
+}
+
+.woodev-pickup-modal__close:hover {
+	background: var(--woodev-pickup-hover-bg);
+	color: var(--woodev-pickup-fg);
+}
+
+/* The provider's mount point. `position: relative` gives ymaps' absolutely-positioned
+   controls (drawer, filter, zoom) a containing block that is the map area, not the page. */
+.woodev-pickup-modal__body {
+	position: relative;
+	flex: 1 1 auto;
+	min-height: 0; /* Lets a flex child actually shrink, so the map scrolls instead of overflowing. */
+	overflow: auto;
+}
+
+/* -------------------------------------------------------------------------
+ * Degradation states.
+ *
+ * `__message--error` / `--empty` REPLACE the body (nothing was drawn yet, so replacing costs
+ * nothing). `__notice` is the non-destructive counterpart — a banner ABOVE the body, used once
+ * points are already on screen, so a later failed viewport request never wipes a map the
+ * customer has been panning. They must not look alike: the message states are centred and own
+ * the whole area; the notice is a thin strip that visibly leaves the map intact. See spec §4.9
+ * and `pickup-mount.js`'s degradation section.
+ * ---------------------------------------------------------------------- */
+
+.woodev-pickup-modal__message {
+	display: block;
+	margin: 0;
+	padding: 48px 24px 12px;
+	text-align: center;
+	font-size: 15px;
+	line-height: 1.6;
+	color: var(--woodev-pickup-muted);
+}
+
+.woodev-pickup-modal__message--error {
+	color: var(--woodev-pickup-danger);
+}
+
+.woodev-pickup-modal__retry {
+	display: block;
+	margin: 0 auto 48px;
+	padding: 8px 16px;
+	font-size: 14px;
+	color: var(--woodev-pickup-fg);
+	background: var(--woodev-pickup-bg);
+	border: 1px solid var(--woodev-pickup-border);
+	border-radius: var(--woodev-pickup-radius);
+	cursor: pointer;
+}
+
+.woodev-pickup-modal__retry:hover {
+	background: var(--woodev-pickup-hover-bg);
+}
+
+.woodev-pickup-modal__notice {
+	display: flex;
+	align-items: center;
+	flex: 0 0 auto;
+	gap: 12px;
+	padding: 10px 16px;
+	font-size: 14px;
+	line-height: 1.5;
+	background: var(--woodev-pickup-notice-bg);
+	border-bottom: 1px solid var(--woodev-pickup-border);
+	border-left: 4px solid var(--woodev-pickup-accent);
+}
+
+.woodev-pickup-modal__notice-message {
+	flex: 1 1 auto;
+	margin: 0;
+}
+
+.woodev-pickup-modal__notice-retry,
+.woodev-pickup-modal__notice-dismiss {
+	flex: 0 0 auto;
+	padding: 4px 10px;
+	font-size: 13px;
+	color: var(--woodev-pickup-fg);
+	background: var(--woodev-pickup-bg);
+	border: 1px solid var(--woodev-pickup-border);
+	border-radius: var(--woodev-pickup-radius);
+	cursor: pointer;
+}
+
+.woodev-pickup-modal__notice-retry:hover,
+.woodev-pickup-modal__notice-dismiss:hover {
+	background: var(--woodev-pickup-hover-bg);
+}
+
+/* -------------------------------------------------------------------------
+ * Map surface
+ * ---------------------------------------------------------------------- */
+
+/* The ymaps map root. Explicit 100%/100% against a parent with a resolved height — see the
+   note on `.woodev-pickup-modal`. */
+.woodev-pickup-map {
+	width: 100%;
+	height: 100%;
+	min-height: 320px;
+}
+
+/* The embedded provider's iframe. Same height contract; the border reset stops a theme's
+   global `iframe { border: 1px solid }` from drawing a frame inside the dialog. */
+.woodev-pickup-embedded-frame {
+	display: block;
+	width: 100%;
+	height: 100%;
+	min-height: 320px;
+	border: 0;
+}
+
+/* -------------------------------------------------------------------------
+ * Drawer — the viewport-synced list. Added by the provider as a ymaps map control, so ymaps
+ * owns its POSITION; this file owns its size and interior. `pointer-events` is scoped to the
+ * panel itself so the map stays draggable everywhere the drawer is not.
+ * ---------------------------------------------------------------------- */
+
+.woodev-pickup-drawer {
+	display: flex;
+	flex-direction: column;
+	width: 280px;
+	max-height: 70%;
+	background: var(--woodev-pickup-bg, #fff);
+	border: 1px solid var(--woodev-pickup-border, #dcdcde);
+	border-radius: var(--woodev-pickup-radius, 4px);
+	box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
+	pointer-events: auto;
+	overflow: hidden;
+}
+
+.woodev-pickup-drawer__header {
+	flex: 0 0 auto;
+	padding: 10px 12px;
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--woodev-pickup-muted, #646970);
+	border-bottom: 1px solid var(--woodev-pickup-border, #dcdcde);
+}
+
+.woodev-pickup-drawer__list {
+	flex: 1 1 auto;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+	overflow-y: auto;
+}
+
+.woodev-pickup-drawer__item {
+	display: block;
+	width: 100%;
+	margin: 0;
+	padding: 10px 12px;
+	text-align: left;
+	background: none;
+	border: 0;
+	border-bottom: 1px solid var(--woodev-pickup-border, #dcdcde);
+	cursor: pointer;
+}
+
+.woodev-pickup-drawer__item:hover {
+	background: var(--woodev-pickup-hover-bg, #f6f7f7);
+}
+
+.woodev-pickup-drawer__item--active {
+	background: var(--woodev-pickup-hover-bg, #f6f7f7);
+	box-shadow: inset 3px 0 0 var(--woodev-pickup-accent, #06aedd);
+}
+
+.woodev-pickup-drawer__item-name {
+	display: block;
+	font-size: 14px;
+	font-weight: 600;
+	line-height: 1.4;
+}
+
+.woodev-pickup-drawer__item-address {
+	display: block;
+	margin-top: 2px;
+	font-size: 12px;
+	line-height: 1.4;
+	color: var(--woodev-pickup-muted, #646970);
+}
+
+/* -------------------------------------------------------------------------
+ * Type filter — rendered only when more than one point type exists.
+ * ---------------------------------------------------------------------- */
+
+.woodev-pickup-filter {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+	padding: 6px;
+	background: var(--woodev-pickup-bg, #fff);
+	border: 1px solid var(--woodev-pickup-border, #dcdcde);
+	border-radius: var(--woodev-pickup-radius, 4px);
+	box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
+	pointer-events: auto;
+}
+
+.woodev-pickup-filter__item {
+	padding: 4px 10px;
+	font-size: 13px;
+	line-height: 1.4;
+	color: var(--woodev-pickup-fg, #1e1e1e);
+	background: none;
+	border: 1px solid transparent;
+	border-radius: var(--woodev-pickup-radius, 4px);
+	cursor: pointer;
+}
+
+.woodev-pickup-filter__item:hover {
+	background: var(--woodev-pickup-hover-bg, #f6f7f7);
+}
+
+.woodev-pickup-filter__item--active {
+	color: #fff;
+	background: var(--woodev-pickup-accent, #06aedd);
+}
+
+/* -------------------------------------------------------------------------
+ * Balloon.
+ *
+ * ymaps renders the balloon into its OWN overlay layer, outside `.woodev-pickup-modal-backdrop`,
+ * so it cannot inherit the custom properties declared there — it redeclares the ones it uses.
+ * ---------------------------------------------------------------------- */
+
+.woodev-pickup-balloon {
+	--woodev-pickup-fg: #1e1e1e;
+	--woodev-pickup-muted: #646970;
+	--woodev-pickup-border: #dcdcde;
+	--woodev-pickup-accent: #06aedd;
+	--woodev-pickup-danger: #b32d2e;
+	--woodev-pickup-warning-bg: #fcf9e8;
+	--woodev-pickup-radius: 4px;
+
+	max-width: 320px;
+	font-size: 13px;
+	line-height: 1.5;
+	color: var(--woodev-pickup-fg);
+}
+
+.woodev-pickup-balloon__title {
+	margin: 0 0 4px;
+	font-size: 15px;
+	font-weight: 600;
+	line-height: 1.4;
+}
+
+.woodev-pickup-balloon__postal {
+	color: var(--woodev-pickup-muted);
+}
+
+.woodev-pickup-balloon__address {
+	margin: 0 0 8px;
+}
+
+.woodev-pickup-balloon__howto {
+	margin: 0 0 8px;
+}
+
+.woodev-pickup-balloon__howto-summary {
+	color: var(--woodev-pickup-accent);
+	cursor: pointer;
+}
+
+.woodev-pickup-balloon__howto-content {
+	margin-top: 4px;
+	color: var(--woodev-pickup-muted);
+}
+
+.woodev-pickup-balloon__label {
+	display: inline;
+	margin-right: 4px;
+	color: var(--woodev-pickup-muted);
+}
+
+.woodev-pickup-balloon__value {
+	display: inline;
+}
+
+.woodev-pickup-balloon__payments,
+.woodev-pickup-balloon__phone,
+.woodev-pickup-balloon__worktime,
+.woodev-pickup-balloon__weight {
+	margin: 0 0 4px;
+}
+
+/* The server's refusal reason. Muted-but-legible on a tinted strip, deliberately NOT styled as
+   an alarm: the point is informative ("this one will not work, here is why"), and the customer
+   is expected to read it and pick another point. */
+.woodev-pickup-balloon__warning {
+	margin: 8px 0 0;
+	padding: 8px 10px;
+	color: var(--woodev-pickup-fg);
+	background: var(--woodev-pickup-warning-bg);
+	border-left: 3px solid var(--woodev-pickup-danger);
+	border-radius: 0 var(--woodev-pickup-radius) var(--woodev-pickup-radius) 0;
+}
+
+/* A failed `fetchDetails()` — selection is still possible, so this is a note, not a blocker. */
+.woodev-pickup-balloon__error {
+	margin: 8px 0 0;
+	color: var(--woodev-pickup-danger);
+}
+
+.woodev-pickup-balloon__footer {
+	margin-top: 12px;
+	padding-top: 10px;
+	border-top: 1px solid var(--woodev-pickup-border);
+}
+
+.woodev-pickup-balloon__select {
+	display: block;
+	width: 100%;
+	padding: 8px 12px;
+	font-size: 14px;
+	color: #fff;
+	background: var(--woodev-pickup-accent);
+	border: 0;
+	border-radius: var(--woodev-pickup-radius);
+	cursor: pointer;
+}
+
+/* A point the SERVER judged unselectable. Must read as unavailable at a glance — the
+   `__warning` above it explains why. `:disabled` is the only signal the provider sets, so the
+   whole appearance change hangs off it. */
+.woodev-pickup-balloon__select:disabled {
+	color: var(--woodev-pickup-muted);
+	background: var(--woodev-pickup-border);
+	cursor: not-allowed;
+	opacity: 1; /* Overrides UA/theme opacity fading, which would make the label unreadable. */
+}
+
+/* -------------------------------------------------------------------------
+ * Cluster balloon — the list shown when several points share a cluster icon.
+ * ---------------------------------------------------------------------- */
+
+.woodev-pickup-cluster-balloon {
+	max-width: 320px;
+	max-height: 260px;
+	overflow-y: auto;
+}
+
+.woodev-pickup-cluster-balloon__list {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.woodev-pickup-cluster-balloon__item {
+	display: block;
+	width: 100%;
+	padding: 8px 10px;
+	text-align: left;
+	font-size: 13px;
+	line-height: 1.4;
+	background: none;
+	border: 0;
+	border-bottom: 1px solid var(--woodev-pickup-border, #dcdcde);
+	cursor: pointer;
+}
+
+.woodev-pickup-cluster-balloon__item:hover {
+	background: var(--woodev-pickup-hover-bg, #f6f7f7);
+}
+
+/* -------------------------------------------------------------------------
+ * Focus visibility.
+ *
+ * The shell TRAPS focus, so focus is constantly moving inside the dialog — if it is not
+ * visible, keyboard use is guesswork. `:focus-visible` keeps the ring off mouse clicks.
+ * ---------------------------------------------------------------------- */
+
+.woodev-pickup-modal__close:focus-visible,
+.woodev-pickup-modal__retry:focus-visible,
+.woodev-pickup-modal__notice-retry:focus-visible,
+.woodev-pickup-modal__notice-dismiss:focus-visible,
+.woodev-pickup-drawer__item:focus-visible,
+.woodev-pickup-filter__item:focus-visible,
+.woodev-pickup-cluster-balloon__item:focus-visible,
+.woodev-pickup-balloon__select:focus-visible,
+.woodev-pickup-balloon__howto-summary:focus-visible {
+	outline: 2px solid var(--woodev-pickup-accent, #06aedd);
+	outline-offset: 1px;
+}
+
+/* -------------------------------------------------------------------------
+ * Mobile — 782px, the WordPress breakpoint (spec §4.8).
+ *
+ * The dialog goes full-screen (a centred card wastes the little space there is), and the
+ * drawer becomes a bottom sheet with a drag handle. The `--sheet` modifier is set by the
+ * provider; the media query only styles it, so a provider that never sets it degrades to the
+ * docked panel rather than to nothing.
+ * ---------------------------------------------------------------------- */
+
+@media screen and (max-width: 782px) {
+
+	.woodev-pickup-modal-backdrop {
+		padding: 0;
+	}
+
+	.woodev-pickup-modal {
+		width: 100%;
+		max-width: none;
+		height: 100%;
+		max-height: none;
+		border-radius: 0;
+	}
+
+	.woodev-pickup-drawer--sheet {
+		position: absolute;
+		right: 0;
+		bottom: 0;
+		left: 0;
+		width: auto;
+		max-height: 45%;
+		border-right: 0;
+		border-bottom: 0;
+		border-left: 0;
+		border-radius: var(--woodev-pickup-radius, 4px) var(--woodev-pickup-radius, 4px) 0 0;
+		box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.2);
+	}
+
+	/* Drag handle — decorative affordance signalling the sheet is draggable. */
+	.woodev-pickup-drawer--sheet .woodev-pickup-drawer__header::before {
+		content: "";
+		display: block;
+		width: 36px;
+		height: 4px;
+		margin: 0 auto 8px;
+		background: var(--woodev-pickup-border, #dcdcde);
+		border-radius: 2px;
+	}
+
+	.woodev-pickup-balloon {
+		max-width: none;
+	}
+}
