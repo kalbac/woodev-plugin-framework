@@ -72,6 +72,17 @@ function makeProperties( initial ) {
  */
 function createYmapsStub( options ) {
 	const resolveControls = !! ( options && options.resolveControls );
+	// Real ymaps' `setBounds()` ALWAYS returns a promise (a "vow") that resolves once the camera
+	// move actually completes — that asynchrony is exactly what Fix A (`_resolveInitialViewport`)
+	// and Fix B (`_openPlacemarkBalloon`) exist to respect. With `deferSetBounds` the promise
+	// stays pending until a test explicitly calls `resolveNextSetBounds()`/`resolveSetBoundsFor()`
+	// below, and `_bounds` updates only at THAT point — never synchronously. Defaults to false so
+	// every pre-existing test's "the move applies immediately" assumption is unaffected.
+	const deferSetBounds = !! ( options && options.deferSetBounds );
+	// Overrides the map's reported zoom — needed to exercise `_openPlacemarkBalloon()`'s
+	// MAX_ZOOM branch. Defaults to 10 (below the production MAX_ZOOM of 18), matching every
+	// pre-existing test's assumption that the map is never already at max zoom.
+	const zoom = ( options && 'number' === typeof options.zoom ) ? options.zoom : 10;
 
 	function Map( container, state ) {
 		this.container = container;
@@ -80,6 +91,12 @@ function createYmapsStub( options ) {
 		this._eventHandlers = {};
 		this.destroy = jest.fn();
 		this.geoObjects = { add: jest.fn(), remove: jest.fn() };
+		// Every `setBounds()` call under `deferSetBounds`, oldest first — see
+		// `resolveNextSetBounds()`/`resolveSetBoundsFor()` below.
+		this._pendingSetBounds = [];
+		// The `{ bounds, options }` of the MOST RECENT `setBounds()` call, resolved or not —
+		// lets a test assert on the call itself independently of when/whether it settles.
+		this._lastSetBoundsCall = null;
 
 		// Set by a test wanting `_updateDrawer()`'s `geoQuery(...).searchInside(map)` to
 		// return only a SUBSET of the clusterer's placemarks — see the stub `geoQuery` below.
@@ -109,15 +126,56 @@ function createYmapsStub( options ) {
 			},
 		};
 	}
-	Map.prototype.setBounds = function( bounds ) {
+	Map.prototype.setBounds = function( bounds, boundsOptions ) {
+		var self = this;
+
+		this._lastSetBoundsCall = { bounds: bounds, options: boundsOptions };
+
+		if ( deferSetBounds ) {
+			return new Promise( ( resolve ) => {
+				self._pendingSetBounds.push( {
+					bounds: bounds,
+					resolve: () => {
+						self._bounds = bounds;
+						resolve();
+					},
+				} );
+			} );
+		}
+
 		this._bounds = bounds;
+
+		return Promise.resolve();
+	};
+	// Resolves the OLDEST still-pending deferred `setBounds()` call — a test's hand on the
+	// "the camera move just finished" trigger when only one call is in flight.
+	Map.prototype.resolveNextSetBounds = function() {
+		const entry = this._pendingSetBounds.shift();
+
+		if ( entry ) {
+			entry.resolve();
+		}
+	};
+	// Resolves a SPECIFIC pending `setBounds()` call by its (unique) bounds argument — needed
+	// when more than one call is in flight at once and the test must resolve them OUT of the
+	// order they were made, to prove the out-of-order guard in `_openPlacemarkBalloon()`.
+	Map.prototype.resolveSetBoundsFor = function( bounds ) {
+		const index = this._pendingSetBounds.findIndex(
+			( entry ) => JSON.stringify( entry.bounds ) === JSON.stringify( bounds )
+		);
+
+		if ( -1 === index ) {
+			return;
+		}
+
+		this._pendingSetBounds.splice( index, 1 )[ 0 ].resolve();
 	};
 	Map.prototype.getBounds = function() {
 		return this._bounds;
 	};
 	Map.prototype.setCenter = jest.fn();
 	Map.prototype.getZoom = function() {
-		return 10;
+		return zoom;
 	};
 	Map.prototype.fireBoundsChange = function() {
 		( this._eventHandlers.boundschange || [] ).forEach( ( cb ) => cb() );
@@ -310,6 +368,44 @@ function point( overrides ) {
 	);
 }
 
+/**
+ * Builds a `ymaps.geocode()` resolution shaped exactly as {@see extractGeocodeBounds} (the
+ * production file) reads it: `result.geoObjects.get(0).properties.get('boundedBy')`.
+ */
+function makeGeocodeResult( bounds ) {
+	return {
+		geoObjects: {
+			get: () => ( {
+				properties: {
+					get: ( key ) => ( 'boundedBy' === key ? bounds : undefined ),
+				},
+			} ),
+		},
+	};
+}
+
+/**
+ * Builds a provider with just enough state (`.map`) to unit-test `_openPlacemarkBalloon()`
+ * directly, without going through the full `init()` flow — the method only ever touches
+ * `this.map` and the placemark it is given.
+ */
+function buildBareProviderWithMap( stubOptions ) {
+	const stub = createYmapsStub( stubOptions );
+	const provider = new WoodevYandexMapProvider();
+
+	provider.map = new stub.Map( document.createElement( 'div' ), {} );
+
+	return { provider, stub };
+}
+
+/**
+ * Builds a stub placemark at `coords` with a spy-able `balloon.open()` — the minimal shape
+ * `_openPlacemarkBalloon()` needs (`.geometry.getCoordinates()`, `.balloon.open()`).
+ */
+function buildBarePlacemark( stub, coords ) {
+	return new stub.Placemark( coords, { point: point() }, {} );
+}
+
 // -------------------------------------------------------------------------
 // Strategy-driven initial load + boundschange re-fetch
 // -------------------------------------------------------------------------
@@ -363,6 +459,48 @@ test( 'viewport strategy fetches by the current bounds, then re-fetches on bound
 	await flushPromises();
 
 	expect( calls.length ).toBe( 2 );
+} );
+
+// Fix A regression guard. `ymaps.map.setBounds()` is ASYNCHRONOUS — it resolves once the camera
+// move completes, not when it starts. `_resolveInitialViewport()` must `return` that promise so
+// `_loadViewport()`'s next step (`_fetchViewport()`, which reads `map.getBounds()`) only runs
+// AFTER the move settles. Dropping the `return` lets `_fetchViewport()` read the PRE-move bounds
+// — see the production file's own comment on this line for the full bug history.
+test( 'viewport: the initial fetch waits for setBounds() to resolve before reading the (post-move) '
+	+ 'viewport — proves the `return` in _resolveInitialViewport() is load-bearing', async () => {
+	const config = makeConfig( { strategy: 'viewport', locality: 'Казань' } );
+	const stub = createYmapsStub( { deferSetBounds: true } );
+	const preMoveBounds = [ [ 10, 20 ], [ 11, 21 ] ]; // the stub Map's own default `_bounds`
+	const postMoveBounds = [ [ 55, 37 ], [ 56, 38 ] ];
+
+	stub.geocode = jest.fn( () => Promise.resolve( makeGeocodeResult( postMoveBounds ) ) );
+	window[ config.ns ] = stub;
+
+	const calls = [];
+	const ds = fakeDataSource( {
+		fetchPoints: ( query ) => {
+			calls.push( query );
+
+			return Promise.resolve( [] );
+		},
+	} );
+	const provider = new WoodevYandexMapProvider();
+
+	const initPromise = provider.init( document.createElement( 'div' ), config, ds );
+
+	await flushPromises();
+
+	// The geocode resolved and setBounds() was CALLED with the post-move bounds, but its own
+	// promise has not resolved yet — the map itself has not moved, and neither has the fetch run.
+	expect( provider.map._lastSetBoundsCall.bounds ).toEqual( postMoveBounds );
+	expect( provider.map.getBounds() ).toEqual( preMoveBounds );
+	expect( calls.length ).toBe( 0 );
+
+	provider.map.resolveNextSetBounds(); // simulate the camera move completing
+	await initPromise;
+
+	expect( calls.length ).toBe( 1 );
+	expect( calls[ 0 ].bounds ).toEqual( [ 55, 37, 56, 38 ] ); // the POST-move bbox, flattened
 } );
 
 test( 'viewport de-duplication: panning back to an already-seen point never adds a duplicate placemark', async () => {
@@ -1023,10 +1161,17 @@ test( 'drawer refreshes on boundschange under the viewport strategy', async () =
 	expect( provider._drawerListEl.querySelectorAll( '.woodev-pickup-drawer__item' ).length ).toBe( 2 );
 } );
 
-test( 'drawer: clicking an item pans the map to it and opens its balloon', async () => {
+// Fix B regression guard. `placemark.balloon.open()` only works for a placemark the clusterer
+// draws individually; a clustered one has no balloon of its own and `.open()` throws. The fix
+// routes every open through `_openPlacemarkBalloon()`, which un-clusters the point via the
+// ASYNCHRONOUS `map.setBounds()` and opens the balloon only once that move resolves — never a
+// separate `setCenter()` (setBounds() already recentres; see the drawer's own click-handler
+// comment in the production file for why a second camera command was removed, not kept).
+test( 'drawer: clicking an item pans the map to it via setBounds and opens its balloon only '
+	+ 'once the move resolves', async () => {
 	const config = makeConfig( { strategy: 'bulk' } );
 
-	window[ config.ns ] = createYmapsStub( { resolveControls: true } );
+	window[ config.ns ] = createYmapsStub( { resolveControls: true, deferSetBounds: true } );
 
 	const provider = new WoodevYandexMapProvider();
 	const ds = fakeDataSource( { fetchPoints: () => Promise.resolve( [ point( { id: 'CLICK-1' } ) ] ) } );
@@ -1037,13 +1182,21 @@ test( 'drawer: clicking an item pans the map to it and opens its balloon', async
 	const placemark = provider._placemarksById[ 'CLICK-1' ];
 	const openSpy = jest.spyOn( placemark.balloon, 'open' );
 	const item = provider._drawerListEl.querySelector( '.woodev-pickup-drawer__item' );
+	const coords = placemark.geometry.getCoordinates();
 
 	item.click();
 
-	expect( provider.map.setCenter ).toHaveBeenCalledWith(
-		placemark.geometry.getCoordinates(),
-		provider.map.getZoom()
-	);
+	// The pan/zoom-to-un-cluster call was made (with the point's own collapsed bounds)...
+	expect( provider.map._lastSetBoundsCall ).toEqual( {
+		bounds: [ coords, coords ],
+		options: { checkZoomRange: true, zoomMargin: 0, useMapMargin: true },
+	} );
+	// ...but the balloon must NOT open before that move actually resolves.
+	expect( openSpy ).not.toHaveBeenCalled();
+
+	provider.map.resolveSetBoundsFor( [ coords, coords ] );
+	await flushPromises();
+
 	expect( openSpy ).toHaveBeenCalledTimes( 1 );
 } );
 
@@ -1051,21 +1204,28 @@ test( 'drawer: clicking an item pans the map to it and opens its balloon', async
 // Cluster balloon subsystem — lists the clustered points, each opens its own balloon
 // -------------------------------------------------------------------------
 
-test( 'cluster balloon lists each clustered point\'s name; clicking one opens ITS OWN balloon', () => {
+test( 'cluster balloon lists each clustered point\'s name; clicking one opens ITS OWN balloon '
+	+ 'only once the move resolves', async () => {
+	const stub = createYmapsStub( { deferSetBounds: true } );
 	const provider = new WoodevYandexMapProvider();
 
 	provider.config = makeConfig();
 	provider.dataSource = fakeDataSource( {} );
+	provider.map = new stub.Map( document.createElement( 'div' ), {} );
 
+	const coordsA = [ 55, 37 ];
+	const coordsB = [ 60, 40 ];
 	const openA = jest.fn();
 	const openB = jest.fn();
 	const placemarkA = {
 		properties: makeProperties( { point: point( { id: 'A', name: 'Точка А' } ) } ),
 		balloon: { open: openA },
+		geometry: { getCoordinates: () => coordsA },
 	};
 	const placemarkB = {
 		properties: makeProperties( { point: point( { id: 'B', name: 'Точка Б' } ) } ),
 		balloon: { open: openB },
+		geometry: { getCoordinates: () => coordsB },
 	};
 	const container = document.createElement( 'div' );
 
@@ -1079,8 +1239,112 @@ test( 'cluster balloon lists each clustered point\'s name; clicking one opens IT
 
 	items[ 1 ].click();
 
+	expect( openB ).not.toHaveBeenCalled(); // not before the move resolves
+	expect( provider.map._lastSetBoundsCall.bounds ).toEqual( [ coordsB, coordsB ] );
+
+	provider.map.resolveSetBoundsFor( [ coordsB, coordsB ] );
+	await flushPromises();
+
 	expect( openB ).toHaveBeenCalledTimes( 1 );
 	expect( openA ).not.toHaveBeenCalled();
+} );
+
+// -------------------------------------------------------------------------
+// _openPlacemarkBalloon() — MAX_ZOOM branch, the setBounds un-cluster path, destroy racing the
+// move, and the out-of-order-resolution guard (Fix B)
+// -------------------------------------------------------------------------
+
+test( '_openPlacemarkBalloon: already at MAX_ZOOM opens the balloon directly, without calling setBounds', () => {
+	const { provider, stub } = buildBareProviderWithMap( { zoom: 18 } );
+	const placemark = buildBarePlacemark( stub, [ 55, 37 ] );
+	const openSpy = jest.spyOn( placemark.balloon, 'open' );
+
+	provider._openPlacemarkBalloon( placemark );
+
+	expect( openSpy ).toHaveBeenCalledTimes( 1 );
+	expect( provider.map._lastSetBoundsCall ).toBeNull();
+} );
+
+test( '_openPlacemarkBalloon: one zoom level below MAX_ZOOM still takes the setBounds path '
+	+ '(boundary check for >= MAX_ZOOM, not >)', () => {
+	const { provider, stub } = buildBareProviderWithMap( { zoom: 17, deferSetBounds: true } );
+	const placemark = buildBarePlacemark( stub, [ 55, 37 ] );
+	const openSpy = jest.spyOn( placemark.balloon, 'open' );
+
+	provider._openPlacemarkBalloon( placemark );
+
+	expect( provider.map._lastSetBoundsCall ).not.toBeNull();
+	expect( openSpy ).not.toHaveBeenCalled();
+} );
+
+test( '_openPlacemarkBalloon: below MAX_ZOOM collapses the bounds to the point\'s own coordinates '
+	+ 'with checkZoomRange/zoomMargin/useMapMargin, and opens the balloon only once the move resolves',
+async () => {
+	const { provider, stub } = buildBareProviderWithMap( { zoom: 10, deferSetBounds: true } );
+	const coords = [ 55, 37 ];
+	const placemark = buildBarePlacemark( stub, coords );
+	const openSpy = jest.spyOn( placemark.balloon, 'open' );
+
+	provider._openPlacemarkBalloon( placemark );
+
+	expect( provider.map._lastSetBoundsCall ).toEqual( {
+		bounds: [ coords, coords ],
+		options: { checkZoomRange: true, zoomMargin: 0, useMapMargin: true },
+	} );
+	expect( openSpy ).not.toHaveBeenCalled();
+
+	provider.map.resolveNextSetBounds();
+	await flushPromises();
+
+	expect( openSpy ).toHaveBeenCalledTimes( 1 );
+} );
+
+test( '_openPlacemarkBalloon: destroy() before the setBounds move resolves means the balloon never opens', async () => {
+	const { provider, stub } = buildBareProviderWithMap( { zoom: 10, deferSetBounds: true } );
+	const placemark = buildBarePlacemark( stub, [ 55, 37 ] );
+	const openSpy = jest.spyOn( placemark.balloon, 'open' );
+	const map = provider.map; // keep a reference — destroy() nulls provider.map
+
+	provider._openPlacemarkBalloon( placemark );
+
+	expect( () => provider.destroy() ).not.toThrow();
+
+	map.resolveNextSetBounds();
+	await flushPromises();
+
+	expect( openSpy ).not.toHaveBeenCalled();
+} );
+
+// Defect found during review (not in the original diff): the reference implementation's
+// `isAnimating` flag prevents an analogous mix-up (see the production file docblock's "OPENING A
+// PLACEMARK'S BALLOON IS SEQUENCED" section). Without `_openSeq`, two quick clicks whose
+// `setBounds()` moves resolve out of order would let the STALE (earlier-clicked) balloon open on
+// top of the customer's actual, most recent choice.
+test( '_openPlacemarkBalloon: an earlier click\'s setBounds resolving AFTER a later click\'s does not '
+	+ 're-open the stale balloon (out-of-order promise resolution guard)', async () => {
+	const { provider, stub } = buildBareProviderWithMap( { zoom: 10, deferSetBounds: true } );
+	const coordsA = [ 55, 37 ];
+	const coordsB = [ 60, 40 ];
+	const placemarkA = buildBarePlacemark( stub, coordsA );
+	const placemarkB = buildBarePlacemark( stub, coordsB );
+	const openA = jest.spyOn( placemarkA.balloon, 'open' );
+	const openB = jest.spyOn( placemarkB.balloon, 'open' );
+
+	provider._openPlacemarkBalloon( placemarkA ); // clicked first
+	provider._openPlacemarkBalloon( placemarkB ); // clicked second (most recent)
+
+	// B's move happens to resolve FIRST (e.g. a shorter distance to travel) — out of click order.
+	provider.map.resolveSetBoundsFor( [ coordsB, coordsB ] );
+	await flushPromises();
+
+	expect( openB ).toHaveBeenCalledTimes( 1 );
+
+	// A's move resolves LAST — it must NOT stomp B's now-open balloon.
+	provider.map.resolveSetBoundsFor( [ coordsA, coordsA ] );
+	await flushPromises();
+
+	expect( openA ).not.toHaveBeenCalled();
+	expect( openB ).toHaveBeenCalledTimes( 1 );
 } );
 
 // -------------------------------------------------------------------------

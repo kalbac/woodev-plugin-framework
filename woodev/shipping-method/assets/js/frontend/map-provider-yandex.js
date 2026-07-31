@@ -95,6 +95,21 @@
  * type, since a control disappearing mid-session under the customer's cursor is worse than
  * one that stays.
  *
+ * OPENING A PLACEMARK'S BALLOON IS SEQUENCED, NOT JUST DESTROY-GUARDED: {@see
+ * _openPlacemarkBalloon} un-clusters a point via `map.setBounds()`, which is asynchronous (see
+ * that method's own docblock) — clicking one drawer/cluster-balloon item and then a second,
+ * faster-to-resolve one before the first click's move finishes must never let the FIRST click's
+ * now-stale continuation open its balloon on top of the second (most recent) click's. `_openSeq`
+ * (bumped on every call, captured as `mySeq` at call time) guards this exactly the way
+ * `_balloonSeq` guards a stale detail fetch above: only the continuation whose `mySeq` still
+ * matches the current `_openSeq` when the move resolves is allowed to call
+ * `placemark.balloon.open()`. The reference implementation solves the same problem with an
+ * `isAnimating` instance flag consumed inside a per-placemark `balloonopen` listener this file
+ * has no equivalent of (it drives a secondary `setCenter()` animation this file does not need,
+ * since `setBounds()` already recentres — see the drawer's own click-handler comment); a
+ * sequence counter is the direct translation of that same ordering guarantee into this file's
+ * shape, not a port of `isAnimating` itself.
+ *
  * DESTROY IS IDEMPOTENT AND SAFE BEFORE `init()` SETTLES: a `_destroyed` flag is checked at
  * every async continuation (script load, initial fetch, `boundschange` fetch, balloon
  * detail fetch) before touching `this.map`/DOM, so a `destroy()` racing an in-flight
@@ -518,6 +533,10 @@
 		/** @type {number} bumped on every `_renderBalloon()` call — see the file docblock. */
 		this._balloonSeq = 0;
 
+		/** @type {number} bumped on every `_openPlacemarkBalloon()` call — see the file docblock's
+		 *  "OPENING A PLACEMARK'S BALLOON IS SEQUENCED" section and {@see _openPlacemarkBalloon}. */
+		this._openSeq = 0;
+
 		this._onResize = null;
 		this._destroyed = false;
 
@@ -775,9 +794,20 @@
 
 				var bounds = extractGeocodeBounds( result );
 
-				if ( bounds ) {
-					self.map.setBounds( bounds, { checkZoomRange: true } );
+				if ( ! bounds ) {
+					return;
 				}
+
+				// RETURN the setBounds promise — do not fire and forget. ymaps' setBounds() is
+				// ASYNCHRONOUS (it animates the camera and resolves when the move completes), so
+				// dropping its promise lets this method resolve while the map is still showing its
+				// previous state. _loadViewport() then reads map.getBounds() immediately after and
+				// gets the PRE-move viewport — the whole-world default — producing a planet-wide
+				// bbox that the server's per-side cap correctly refuses, so the customer sees "no
+				// points" for a locality that has them. Observed on the rig, and reachable only
+				// with a working geocoder: with an invalid API key ymaps refuses geocoding, this
+				// branch never runs, and the same empty result arrives for an unrelated reason.
+				return self.map.setBounds( bounds, { checkZoomRange: true } );
 			},
 			function() {
 				// Geocoding failure — fall back to the already-built default state; not an error.
@@ -1085,8 +1115,10 @@
 				+ '</span>';
 
 			item.addEventListener( 'click', function() {
-				self.map.setCenter( placemark.geometry.getCoordinates(), self.map.getZoom() );
-				placemark.balloon.open();
+				// No separate `setCenter()` — `_openPlacemarkBalloon()` recentres via `setBounds()`
+				// as part of taking the placemark out of its cluster, and a second camera command
+				// issued alongside it only fights the first.
+				self._openPlacemarkBalloon( placemark );
 
 				var active = list.querySelectorAll( '.woodev-pickup-drawer__item--active' );
 
@@ -1213,7 +1245,72 @@
 	 * @param {Array}       geoObjects placemarks contained in the cluster.
 	 * @returns {void}
 	 */
+	/**
+	 * Opens one placemark's balloon, whether it is currently drawn on its own or folded into a
+	 * cluster.
+	 *
+	 * `placemark.balloon.open()` works ONLY for a placemark the clusterer is currently drawing
+	 * individually. A placemark folded into a cluster has no balloon of its own, so calling
+	 * `.open()` on it throws inside ymaps (`Cannot read properties of null (reading
+	 * 'getGlobalPixelCenter')`) and takes the whole click handler down with it — the drawer item
+	 * then does nothing at all, with only a console error to show for it.
+	 *
+	 * Whether a given point is clustered depends on zoom and on how close its neighbours happen
+	 * to be, so this is data- and viewport-dependent: the same drawer item can work at one zoom
+	 * level and throw at another. That is exactly why it survived the bulk-strategy rig pass —
+	 * the point clicked there happened to be unclustered.
+	 *
+	 * `getObjectState()` is ymaps' own documented answer: it reports whether the object is shown
+	 * and whether it is clustered, and for a clustered one the cluster's `activeObject` selects
+	 * which item its balloon shows.
+	 *
+	 * SEQUENCED against a slower-to-resolve EARLIER call: `mySeq` captures `_openSeq` at call
+	 * time; the async continuation only opens the balloon if `_openSeq` is still `mySeq` when the
+	 * move resolves. Without this, clicking drawer item A then quickly item B — both below max
+	 * zoom — could see A's `setBounds()` resolve AFTER B's (animation distance/duration are not
+	 * FIFO), opening A's balloon on top of the customer's actual, most recent choice. See the
+	 * file docblock's "OPENING A PLACEMARK'S BALLOON IS SEQUENCED" section.
+	 *
+	 * @param {Object} placemark
+	 * @returns {void}
+	 */
+	WoodevYandexMapProvider.prototype._openPlacemarkBalloon = function( placemark ) {
+		var self = this;
+		var mySeq = ++this._openSeq;
+
+		// Already as deep as the map goes: nothing clusters at max zoom, so open directly.
+		if ( this.map.getZoom() >= MAX_ZOOM ) {
+			placemark.balloon.open();
+
+			return;
+		}
+
+		// Collapse the bounds to the placemark's OWN coordinates. `checkZoomRange` then resolves
+		// that degenerate box to the deepest zoom the map allows at that spot — which is what
+		// takes the placemark out of its cluster — and awaiting the returned promise is what
+		// guarantees the clusterer has finished re-drawing before the balloon is opened. This is
+		// the reference implementation's own approach
+		// (`plugins-reference/woocommerce-yandex-delivery/.../wc-yandex-delivery-widget-map.js`,
+		// `handlePlacemarkSelect()`), and it is deterministic where polling the clusterer's state
+		// after successive zoom steps is not.
+		//
+		// `useMapMargin` keeps the result inside the area left free by `map.margin.addArea()`, so
+		// the balloon does not open underneath the drawer.
+		this.map.setBounds(
+			[ placemark.geometry.getCoordinates(), placemark.geometry.getCoordinates() ],
+			{ checkZoomRange: true, zoomMargin: 0, useMapMargin: true }
+		).then( function() {
+			if ( self._destroyed || mySeq !== self._openSeq ) {
+				return;
+			}
+
+			placemark.balloon.open();
+		} );
+	};
+
 	WoodevYandexMapProvider.prototype._renderClusterBalloon = function( container, geoObjects ) {
+		var self = this;
+
 		container.innerHTML = '';
 
 		var list = document.createElement( 'div' );
@@ -1228,7 +1325,7 @@
 			item.className = 'woodev-pickup-cluster-balloon__item';
 			item.innerHTML = safeField( point && point.name );
 			item.addEventListener( 'click', function() {
-				placemark.balloon.open();
+				self._openPlacemarkBalloon( placemark );
 			} );
 
 			list.appendChild( item );
