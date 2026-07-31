@@ -391,6 +391,7 @@
  * ---------------------------------------------------------------------- */
 
 .woodev-pickup-balloon {
+	--woodev-pickup-bg: #fff;
 	--woodev-pickup-fg: #1e1e1e;
 	--woodev-pickup-muted: #646970;
 	--woodev-pickup-border: #dcdcde;
@@ -399,10 +400,26 @@
 	--woodev-pickup-warning-bg: #fcf9e8;
 	--woodev-pickup-radius: 4px;
 
-	max-width: 320px;
+	/* THIS ELEMENT IS THE WHOLE PANEL — ymaps draws no chrome of its own here. The provider
+	   replaces the balloon LAYOUT (not just its content), so there is no `balloon__layout`
+	   element behind this one: without a background and padding the text renders directly on
+	   top of the map and is unreadable. Verified on the rig — the balloon pane contains only
+	   an overlay wrapper and this root. */
+	/* WIDTH IS EXPLICIT, NOT `max-width`. ymaps' balloon overlay ancestors are zero-sized, so
+	   a `max-width`-only rule leaves this element shrink-wrapping to nothing — measured at
+	   30px on the rig, a narrow scrolling sliver. It must not depend on a parent's width. */
+	width: 300px;
+	max-width: 90vw;
+	max-height: 320px;
+	padding: 12px 14px;
+	overflow-y: auto;
 	font-size: 13px;
 	line-height: 1.5;
 	color: var(--woodev-pickup-fg);
+	background: var(--woodev-pickup-bg);
+	border: 1px solid var(--woodev-pickup-border);
+	border-radius: var(--woodev-pickup-radius);
+	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
 }
 
 .woodev-pickup-balloon__title {

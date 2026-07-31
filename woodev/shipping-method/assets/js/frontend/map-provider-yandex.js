@@ -1130,9 +1130,22 @@
 		var config = this.config;
 		var mySeq = ++this._balloonSeq;
 
-		container.innerHTML = buildBalloonHtml( config, point );
+		// Render INTO the `.woodev-pickup-balloon` root when one is present, not over it.
+		// ymaps' `templateLayoutFactory` builds this layout's template — the root div — and
+		// then hands `getElement()` back as the element CONTAINING it, not the root itself.
+		// Writing `innerHTML` straight onto that container therefore destroys the very root
+		// the template just created, leaving the balloon body parented to a bare, class-less
+		// `<ymaps>` node. That is invisible to behaviour and to this method's own unit tests
+		// (which pass a plain `div`, so there is no root to lose) but breaks STYLING outright:
+		// `pickup.css` scopes the balloon's custom properties to `.woodev-pickup-balloon`, so
+		// without the root the select CTA renders with no accent background and the
+		// unselectable-reason warning loses its tint and rule — the two things a customer most
+		// needs to see. Falling back to the container keeps direct callers working unchanged.
+		var root = container.querySelector( '.woodev-pickup-balloon' ) || container;
 
-		var selectButton = container.querySelector( '.woodev-pickup-balloon__select' );
+		root.innerHTML = buildBalloonHtml( config, point );
+
+		var selectButton = root.querySelector( '.woodev-pickup-balloon__select' );
 
 		if ( selectButton ) {
 			selectButton.addEventListener( 'click', function() {
@@ -1178,11 +1191,18 @@
 			return;
 		}
 
+		// Resolve the same root {@see WoodevYandexMapProvider#_renderBalloon} renders into —
+		// see its comment. Inserting into `container` directly would place the banner as a
+		// SIBLING of the balloon root rather than inside it, putting it outside the scope
+		// `pickup.css` declares the balloon's custom properties on, so the banner would lose
+		// its colour exactly when it is the only thing explaining a failed detail fetch.
+		var root = container.querySelector( '.woodev-pickup-balloon' ) || container;
+
 		var banner = document.createElement( 'div' );
 
 		banner.className = 'woodev-pickup-balloon__error';
 		banner.textContent = text( config, 'detailsError' );
-		container.insertBefore( banner, container.firstChild );
+		root.insertBefore( banner, root.firstChild );
 	};
 
 	/**

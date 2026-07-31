@@ -469,6 +469,56 @@ test( 'destroy() called before init() settles never builds a map or throws', asy
 // Balloon — selectable-driven CTA, click emits select, i18n, escaping
 // -------------------------------------------------------------------------
 
+// Regression guard for a bug that ONLY appeared in a real browser. ymaps'
+// `templateLayoutFactory` builds the layout's template — `<div class="woodev-pickup-balloon">` —
+// and then hands `getElement()` back as the element CONTAINING it. `_renderBalloon()` used to
+// write `innerHTML` straight onto that container, destroying the root it had just created and
+// leaving the body parented to a bare, class-less `<ymaps>` node. Behaviour was unaffected, and
+// every other balloon test here passes a plain `div` (no root to lose), so nothing caught it —
+// but `pickup.css` scopes the balloon's custom properties to `.woodev-pickup-balloon`, so on the
+// rig the select CTA lost its accent background and the unselectable-reason warning lost its
+// tint. These two tests pin the root's survival for both writers.
+test( 'the balloon renders INTO an existing .woodev-pickup-balloon root instead of over it', () => {
+	const provider = new WoodevYandexMapProvider();
+
+	provider.config = makeConfig();
+	provider.dataSource = fakeDataSource( {} );
+
+	const container = document.createElement( 'div' );
+
+	container.innerHTML = '<div class="woodev-pickup-balloon"></div>';
+
+	const root = container.querySelector( '.woodev-pickup-balloon' );
+
+	provider._renderBalloon( container, point() );
+
+	// Same node object, still in place — not replaced, not unwrapped.
+	expect( container.querySelector( '.woodev-pickup-balloon' ) ).toBe( root );
+	expect( root.querySelector( '.woodev-pickup-balloon__title' ) ).not.toBeNull();
+	expect( root.querySelector( '.woodev-pickup-balloon__select' ) ).not.toBeNull();
+} );
+
+test( 'the details-error banner goes INSIDE the balloon root, not beside it', () => {
+	const provider = new WoodevYandexMapProvider();
+
+	provider.config = makeConfig();
+	provider.dataSource = fakeDataSource( {} );
+
+	const container = document.createElement( 'div' );
+
+	container.innerHTML = '<div class="woodev-pickup-balloon"></div>';
+
+	const root = container.querySelector( '.woodev-pickup-balloon' );
+
+	provider._renderBalloon( container, point() );
+	provider._appendBalloonDetailsError( container, provider.config );
+
+	const banner = container.querySelector( '.woodev-pickup-balloon__error' );
+
+	expect( banner ).not.toBeNull();
+	expect( banner.parentElement ).toBe( root );
+} );
+
 test( 'a blocked point renders a disabled CTA with the reason; clicking it emits nothing', () => {
 	const provider = new WoodevYandexMapProvider();
 
