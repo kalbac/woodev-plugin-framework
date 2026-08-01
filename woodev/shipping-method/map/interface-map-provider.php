@@ -125,6 +125,28 @@ if ( ! interface_exists( '\\Woodev\\Framework\\Shipping\\Map\\Map_Provider' ) ) 
 		 * @return array<string, mixed> configuration merged into `mapConfig`.
 		 */
 		public function get_js_config( array $context ): array;
+
+		/**
+		 * Declares who owns the rendering inside the container.
+		 *
+		 * `true` means the provider owns the WHOLE container: the framework renders no
+		 * panels and hands the container over untouched — the only fit for a
+		 * third-party widget/iframe that already comes with its own list, search and
+		 * selection UI (see {@see Embedded_Map_Provider}). `false` means the provider
+		 * draws ONLY the map canvas — camera, markers, clustering — while the
+		 * framework renders the list panel, the point card, the search view and the
+		 * type filter around it (see {@see Yandex_Map_Provider}).
+		 *
+		 * This narrows this interface's earlier "the provider owns everything drawn
+		 * inside the container" contract, written for a balloon-based UX. See ADR-009
+		 * and decision D-3 of the presentation rework for the rationale.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool true when the provider owns the whole container, false when it
+		 *              draws only the map canvas.
+		 */
+		public function owns_chrome(): bool;
 	}
 
 endif;

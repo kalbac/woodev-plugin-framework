@@ -269,6 +269,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Map\\Yandex_Map_Provider' )
 		}
 
 		/**
+		 * {@inheritDoc}
+		 *
+		 * Draws only the map canvas — camera, markers, clustering. The framework owns
+		 * the list panel, the point card, the search view and the type filter around
+		 * it; see the interface docblock and decision D-3.
+		 *
+		 * @since 2.0.2
+		 */
+		public function owns_chrome(): bool {
+			return false;
+		}
+
+		/**
 		 * Builds the ymaps API script URL for an already-resolved API key.
 		 *
 		 * Takes the key as a parameter (rather than re-resolving it) so

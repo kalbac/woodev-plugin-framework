@@ -168,6 +168,14 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			return [];
 		}
 
+		/**
+		 * Not exercised by {@see Pickup_Handler} yet — a fixed `false` (the "Yandex"
+		 * shape) is enough for this double to satisfy the interface.
+		 */
+		public function owns_chrome(): bool {
+			return false;
+		}
+
 		public function get_js_config( array $context ): array {
 			$this->received_context = $context;
 

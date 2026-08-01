@@ -635,4 +635,26 @@ final class MapProviderRegistryTest extends TestCase {
 
 		$this->assertSame( 'https://carrier.example', $provider->get_js_config( [] )['expectedOrigin'] );
 	}
+
+	// -------------------------------------------------------------------------
+	// owns_chrome() — who owns the container: whole widget vs. map canvas only
+	// -------------------------------------------------------------------------
+
+	/**
+	 * The Yandex provider draws only the map canvas; the framework owns the list
+	 * panel, the point card, the search view and the type filter around it (D-3).
+	 */
+	public function test_the_yandex_provider_does_not_own_the_chrome(): void {
+		$this->assertFalse( ( new Yandex_Map_Provider( '' ) )->owns_chrome() );
+	}
+
+	/**
+	 * The embedded provider's carrier widget already comes with its own list,
+	 * search and selection UI — the framework renders no panels around it (D-3).
+	 */
+	public function test_the_embedded_provider_owns_the_whole_container(): void {
+		$provider = new Embedded_Map_Provider( 'https://carrier.example/widget', 'https://carrier.example' );
+
+		$this->assertTrue( $provider->owns_chrome() );
+	}
 }

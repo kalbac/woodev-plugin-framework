@@ -160,6 +160,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Map\\Embedded_Map_Provider'
 				'expectedOrigin' => $this->expected_origin,
 			];
 		}
+
+		/**
+		 * {@inheritDoc}
+		 *
+		 * Owns the WHOLE container — the carrier's own widget/iframe already comes
+		 * with its own list, search and selection UI; the framework renders no panels
+		 * around it. See the interface docblock and decision D-3.
+		 *
+		 * @since 2.0.2
+		 */
+		public function owns_chrome(): bool {
+			return true;
+		}
 	}
 
 endif;
