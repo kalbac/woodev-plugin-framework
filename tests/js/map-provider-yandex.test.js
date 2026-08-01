@@ -58,13 +58,20 @@ function makeProperties( initial ) {
 }
 
 /**
- * Builds a `ymaps.geocode()` resolution shaped exactly as {@see extractGeocodeBounds} (the
- * production file) reads it: `result.geoObjects.get(0).properties.get('boundedBy')`.
+ * Builds a `ymaps.geocode()` resolution shaped exactly as {@see extractGeocodeBounds}/
+ * {@see extractGeocodeCoordinates} (the production file) read it:
+ * `result.geoObjects.get(0).properties.get('boundedBy')` for the bounds,
+ * `result.geoObjects.get(0).geometry.getCoordinates()` for the point coordinates
+ * `resolveAddress()` reads. `coordinates` defaults to `bounds`' own first corner when omitted —
+ * plenty for tests that only care ONE of the two shapes was read correctly.
  */
-function makeGeocodeResult( bounds ) {
+function makeGeocodeResult( bounds, coordinates ) {
 	return {
 		geoObjects: {
 			get: () => ( {
+				geometry: {
+					getCoordinates: () => coordinates || ( bounds ? bounds[ 0 ] : null ),
+				},
 				properties: {
 					get: ( key ) => ( 'boundedBy' === key ? bounds : undefined ),
 				},
@@ -94,6 +101,11 @@ function createYmapsStub( options ) {
 	// A valid, non-empty default result — tests that don't care about the geocode OUTCOME
 	// (only that it was called) never need to touch this.
 	stub.geocodeResult = makeGeocodeResult( [ [ 10, 20 ], [ 11, 21 ] ] );
+
+	// Task 19 (D-6, address search) — suggest() is called once per keystroke through the
+	// SearchControl's custom geocode provider; see the `SearchControl` stub below.
+	stub.suggestCalls = 0;
+	stub.suggestResult = [];
 
 	function Map( container, state, mapOptions ) {
 		this.container = container;
@@ -240,6 +252,30 @@ function createYmapsStub( options ) {
 		this.options = layerOptions;
 	}
 
+	// Task 19 (D-6) — only the shape `_buildSearchControl()`/`_searchGeocodeProvider()` actually
+	// touch: the constructor's own `options` (read back as `ymapsStub.lastSearchControl.options`
+	// by the given-in-spec tests) and a no-op `search()`/`getResultsCount()`/`showResult()`
+	// "engine" surface — the real `ymaps.control.SearchControl` methods this file's own docblock
+	// says are KEPT, never reimplemented by production code, so nothing more elaborate is needed
+	// here for a jest run.
+	function SearchControl( options ) {
+		this.options = options;
+		this.search = jest.fn();
+		this.getResultsCount = jest.fn( () => 0 );
+		this.showResult = jest.fn();
+
+		stub.lastSearchControl = this;
+	}
+
+	// Task 19 (D-6) — the "your address" pin. Only its constructor call shape matters to the
+	// tests in this file (that it is never a group inside the ObjectManager); no rendering
+	// surface of its own is exercised.
+	function Placemark( geometry, properties, placemarkOptions ) {
+		this.geometry = geometry;
+		this.properties = properties;
+		this.options = placemarkOptions;
+	}
+
 	function createClass( html, methods ) {
 		function Layout() {}
 		Layout.superclass = { build: () => {}, clear: () => {} };
@@ -259,14 +295,22 @@ function createYmapsStub( options ) {
 	stub.ready = () => Promise.resolve();
 	stub.Map = Map;
 	stub.ObjectManager = ObjectManager;
-	stub.control = { ZoomControl: function() {} };
+	stub.control = { ZoomControl: function() {}, SearchControl };
 	stub.Layer = Layer;
+	stub.Placemark = Placemark;
 	stub.projection = { sphericalMercator: 'stub-projection' };
 	stub.templateLayoutFactory = { createClass };
 	stub.geocode = () => {
 		stub.geocodeCalls += 1;
 
 		return Promise.resolve( stub.geocodeResult );
+	};
+	stub.suggest = ( request, options ) => {
+		stub.suggestCalls += 1;
+		stub.lastSuggestRequest = request;
+		stub.lastSuggestOptions = options;
+
+		return Promise.resolve( stub.suggestResult );
 	};
 
 	return stub;
@@ -322,6 +366,23 @@ function group( key, lat, lng, typeCode ) {
 		typeCode: typeCode || 'pvz',
 		size: 1,
 		points: [ {} ],
+	};
+}
+
+/**
+ * A single-point group fixture built AROUND one point object — unlike {@see group}, which
+ * fabricates its own empty point, this wraps the exact `point` a test hands it (its `id`,
+ * `name`, `address`, …), for the `_searchGeocodeProvider()`/`matchPoints()` tests that need
+ * real, matchable fields.
+ */
+function groupWith( point ) {
+	return {
+		key: 'string' === typeof point.id ? point.id : 'g',
+		lat: 'number' === typeof point.lat ? point.lat : 55.75,
+		lng: 'number' === typeof point.lng ? point.lng : 37.61,
+		typeCode: point.typeCode || 'pvz',
+		size: 1,
+		points: [ point ],
 	};
 }
 
@@ -1082,6 +1143,231 @@ test( 'setPoints() re-applies the ACTIVE state to the focused group when it surv
 		'a',
 		expect.objectContaining( { state: 'active' } )
 	);
+} );
+
+// -------------------------------------------------------------------------
+// Address search (Task 19, D-6) — the SearchControl's custom geocode provider,
+// resolveAddress()/focusAddress(), and the "your address" pin lifecycle
+// -------------------------------------------------------------------------
+
+test( 'returns both point matches and suggestions from the custom geocode provider', async () => {
+	const provider = await init();
+
+	provider.setPoints( [ groupWith( { id: '1', name: 'ПВЗ «Магнит»', address: 'Ленина 5' } ) ] );
+	ymapsStub.suggestResult = [ { displayName: 'Москва, Ленина 5', value: 'Москва, Ленина 5' } ];
+
+	const res = await ymapsStub.lastSearchControl.options.provider.geocode( 'ленина', {} );
+
+	expect( res.points ).toHaveLength( 1 );
+	expect( res.addresses ).toHaveLength( 1 );
+} );
+
+test( 'calls suggest, not geocode, while the customer is typing', async () => {
+	await init();
+
+	await ymapsStub.lastSearchControl.options.provider.geocode( 'ленина', {} );
+
+	expect( ymapsStub.suggestCalls ).toBe( 1 );
+	expect( ymapsStub.geocodeCalls ).toBe( 0 );
+} );
+
+test( 'suggest() is biased to the map\'s current viewport, and requests 5 results', async () => {
+	await init();
+
+	ymapsStub.lastMap.bounds = [ [ 1, 2 ], [ 3, 4 ] ];
+
+	await ymapsStub.lastSearchControl.options.provider.geocode( 'ленина', {} );
+
+	expect( ymapsStub.lastSuggestOptions ).toEqual( { results: 5, boundedBy: [ [ 1, 2 ], [ 3, 4 ] ] } );
+} );
+
+test( 'geocodes exactly once when an address result is chosen', async () => {
+	const provider = await init();
+
+	await provider.resolveAddress( 'Москва, Ленина 5' );
+
+	expect( ymapsStub.geocodeCalls ).toBe( 1 );
+} );
+
+test( 'resolveAddress() end-to-end: the geocoded coordinates drive the same fit focusAddress() '
+	+ 'would, not just a call count', async () => {
+	const provider = await init();
+
+	// Under the default `bulk` strategy setPoints() itself triggers its OWN camera fit — the
+	// count below is taken as a DELTA from here, so that fit is never mistaken for
+	// resolveAddress()'s own.
+	provider.setPoints( [ group( 'a', 55.751 ), group( 'b', 55.999 ) ] );
+	ymapsStub.geocodeResult = makeGeocodeResult( [ [ 10, 20 ], [ 11, 21 ] ], [ 55.75, 37.61 ] );
+
+	const callsBefore = ymapsStub.lastMap.setBoundsCalls.length;
+
+	await provider.resolveAddress( 'Москва, Ленина 5' );
+
+	expect( ymapsStub.lastMap.setBoundsCalls ).toHaveLength( callsBefore + 1 );
+	// group 'b' (55.999) is far outside the default nearest-3 fit's own test below — here there
+	// are only two groups, both within the default count of 3, so the fit must include 'b' too.
+	const fitted = ymapsStub.lastMap.setBoundsCalls[ ymapsStub.lastMap.setBoundsCalls.length - 1 ].bounds;
+
+	expect( fitted[ 1 ][ 0 ] ).toBeGreaterThanOrEqual( 55.999 );
+} );
+
+test( 'resolveAddress() is a silent no-op when the geocode result has no usable coordinates', async () => {
+	const provider = await init();
+
+	ymapsStub.geocodeResult = { geoObjects: { get: () => null } };
+
+	await expect( provider.resolveAddress( 'X' ) ).resolves.toBeUndefined();
+
+	expect( ymapsStub.lastMap.setBoundsCalls ).toHaveLength( 0 );
+} );
+
+test( 'fits the address plus the three nearest groups', async () => {
+	const provider = await init();
+
+	provider.setPoints( [ group( 'a', 55.751 ), group( 'b', 55.752 ), group( 'c', 55.753 ),
+		group( 'd', 55.999 ) ] );
+	await provider.focusAddress( [ 55.75, 37.61 ], 'Москва, Ленина 5' );
+
+	const fitted = ymapsStub.lastMap.setBoundsCalls.pop().bounds;
+
+	expect( fitted[ 1 ][ 0 ] ).toBeLessThan( 55.999 ); // the far group is not in frame
+} );
+
+test( 'honours the nearest-count filter value handed in by config', async () => {
+	const provider = await init( { searchNearestCount: 1 } );
+
+	provider.setPoints( [ group( 'a', 55.751 ), group( 'b', 55.9 ) ] );
+	await provider.focusAddress( [ 55.75, 37.61 ], 'X' );
+
+	expect( ymapsStub.lastMap.setBoundsCalls.pop().bounds[ 1 ][ 0 ] ).toBeLessThan( 55.9 );
+} );
+
+test( 'reports nothing-nearby instead of fitting when the nearest exceeds the threshold', async () => {
+	const seen = [];
+	const provider = await init();
+
+	provider.on( 'nothingNearby', ( info ) => seen.push( info ) );
+	provider.setPoints( [ group( 'far', 56.6 ) ] ); // ~= 95 km away
+
+	// setPoints() itself already triggered its own bulk-strategy fit above — checked as a DELTA
+	// from here, so it is never mistaken for a fit focusAddress() itself performed.
+	const callsBeforeFocus = ymapsStub.lastMap.setBoundsCalls.length;
+
+	await provider.focusAddress( [ 55.75, 37.61 ], 'X' );
+
+	expect( seen[ 0 ].distanceMeters ).toBeGreaterThan( 50000 );
+	expect( ymapsStub.lastMap.setBoundsCalls ).toHaveLength( callsBeforeFocus ); // never fits this far
+} );
+
+test( 'nothingNearby also carries the nearest group\'s own (already-escaped) point name', async () => {
+	const seen = [];
+	const provider = await init();
+
+	provider.on( 'nothingNearby', ( info ) => seen.push( info ) );
+	provider.setPoints( [ groupWith( { id: 'far', name: 'ПВЗ «Далеко»', lat: 56.6 } ) ] );
+
+	await provider.focusAddress( [ 55.75, 37.61 ], 'X' );
+
+	expect( seen[ 0 ].name ).toBe( 'ПВЗ «Далеко»' );
+} );
+
+test( 'focusAddress() with no groups loaded drops the pin but neither fits nor reports '
+	+ 'nothingNearby — there is nothing to fit to or report as nearest', async () => {
+	const seen = [];
+	const provider = await init();
+
+	// `map.geoObjects.add` was already called once during init() (for the ObjectManager
+	// itself, see _buildObjectManager()) — the pin's own call is checked as a DELTA from here,
+	// never an absolute count.
+	const geoObjectsAddCallsBefore = ymapsStub.lastMap.geoObjects.add.mock.calls.length;
+
+	provider.on( 'nothingNearby', ( info ) => seen.push( info ) );
+
+	await provider.focusAddress( [ 55.75, 37.61 ], 'X' );
+
+	expect( ymapsStub.lastMap.setBoundsCalls ).toHaveLength( 0 );
+	expect( seen ).toHaveLength( 0 );
+	// the pin is still dropped
+	expect( ymapsStub.lastMap.geoObjects.add ).toHaveBeenCalledTimes( geoObjectsAddCallsBefore + 1 );
+} );
+
+// Proves the fit is genuinely AWAITED, not fire-and-forgotten — the same s46 lesson this file's
+// docblock already documents for setPoints()'s bulk fit and _resolveInitialViewport(). A version
+// of focusAddress() that dropped the `return` in front of `this.map.setBounds(...)` would resolve
+// this promise immediately, before the camera move settles, and this test would fail.
+test( 'focusAddress(): the returned promise resolves only once the camera fit settles', async () => {
+	const provider = await init( {}, { deferSetBounds: true } );
+
+	provider.setPoints( [ group( 'a', 55.751 ), group( 'b', 55.752 ) ] );
+
+	// setPoints() itself queued its OWN deferred bulk-strategy fit — settle THAT one first so
+	// resolveNextSetBounds() below (FIFO) cannot be mistaken for focusAddress()'s own fit.
+	ymapsStub.lastMap.resolveNextSetBounds();
+	await flushPromises();
+
+	let resolved = false;
+	const focusPromise = provider.focusAddress( [ 55.75, 37.61 ], 'X' ).then( () => {
+		resolved = true;
+	} );
+
+	await flushPromises();
+	expect( resolved ).toBe( false );
+
+	ymapsStub.lastMap.resolveNextSetBounds();
+	await focusPromise;
+
+	expect( resolved ).toBe( true );
+} );
+
+test( 'the "your address" pin is never added to the ObjectManager — it cannot leak into the '
+	+ 'list, the type filter, or the nearest-N pool', async () => {
+	const provider = await init();
+
+	provider.setPoints( [ group( 'a', 55.751 ) ] );
+
+	const addedBefore = ymapsStub.lastObjectManager.added.length;
+	// See the previous test's comment: init() itself already added the ObjectManager once.
+	const geoObjectsAddCallsBefore = ymapsStub.lastMap.geoObjects.add.mock.calls.length;
+
+	await provider.focusAddress( [ 55.75, 37.61 ], 'X' );
+
+	expect( ymapsStub.lastObjectManager.added ).toHaveLength( addedBefore );
+	expect( ymapsStub.lastMap.geoObjects.add ).toHaveBeenCalledTimes( geoObjectsAddCallsBefore + 1 );
+	expect( ymapsStub.lastMap.geoObjects.add ).not.toHaveBeenLastCalledWith( ymapsStub.lastObjectManager );
+} );
+
+test( 'a second focusAddress() replaces the previous pin rather than accumulating pins', async () => {
+	const provider = await init();
+
+	provider.setPoints( [ group( 'a', 55.751 ) ] );
+	await provider.focusAddress( [ 55.75, 37.61 ], 'First' );
+
+	const addCallsAfterFirst = ymapsStub.lastMap.geoObjects.add.mock.calls.slice();
+	const firstPin = addCallsAfterFirst[ addCallsAfterFirst.length - 1 ][ 0 ];
+
+	await provider.focusAddress( [ 55.8, 37.65 ], 'Second' );
+
+	expect( ymapsStub.lastMap.geoObjects.remove ).toHaveBeenCalledWith( firstPin );
+	expect( ymapsStub.lastMap.geoObjects.add ).toHaveBeenCalledTimes( addCallsAfterFirst.length + 1 );
+} );
+
+test( 'clearAddress() removes the pin and is idempotent', async () => {
+	const provider = await init();
+
+	provider.setPoints( [ group( 'a', 55.751 ) ] );
+	await provider.focusAddress( [ 55.75, 37.61 ], 'X' );
+
+	const addCalls = ymapsStub.lastMap.geoObjects.add.mock.calls;
+	const pin = addCalls[ addCalls.length - 1 ][ 0 ];
+
+	provider.clearAddress();
+
+	expect( ymapsStub.lastMap.geoObjects.remove ).toHaveBeenCalledWith( pin );
+
+	ymapsStub.lastMap.geoObjects.remove.mockClear();
+	provider.clearAddress(); // second call: no pin left to remove — a true no-op
+
+	expect( ymapsStub.lastMap.geoObjects.remove ).not.toHaveBeenCalled();
 } );
 
 test( 'setPoints() never re-applies focus to a group that no longer exists in the new set', async () => {

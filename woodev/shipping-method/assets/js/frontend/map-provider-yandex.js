@@ -27,17 +27,21 @@
  * is free to pan/zoom themselves under `bulk` too, even though nothing needs re-fetching there.
  *
  * PUBLIC SURFACE: `init( container, config )`, `setPoints( groups )`, `focusGroup( key )`,
- * `setTypeFilter( codes )`, `getFocusedKey()`, `on( event, cb )`, `destroy()`. Events out:
+ * `setTypeFilter( codes )`, `getFocusedKey()`, `resolveAddress( displayName )`,
+ * `focusAddress( latLng, label )`, `clearAddress()`, `on( event, cb )`, `destroy()`. Events out:
  * `pointClick( key )`, `boundsChange( bbox )`, `bboxTooWide()`, `visibleChange( keys )`,
- * `error( { code, message } )`. `bbox` is the flat `[lat1,lng1,lat2,lng2]` shape
- * `pickup-datasource.js`'s `serializePointsQuery()` expects (see {@see flattenBounds}).
+ * `nothingNearby( { distanceMeters, name } )`, `error( { code, message } )`. `bbox` is the flat
+ * `[lat1,lng1,lat2,lng2]` shape `pickup-datasource.js`'s `serializePointsQuery()` expects (see
+ * {@see flattenBounds}).
  *
  * CONFIG is FLAT — the merge `pickup-mount.js`'s `buildProviderConfig()` builds from
  * `mapConfig` (`scriptUrl`, `ns`, `hasApiKey`, `lang`, `layers`, `copyrights`) plus
  * `strategy`/`locality`/`i18n`, and (Task 20) the plugin-level `defaultLocation`
  * (`{ center: [lat,lng], zoom }`, ALWAYS present — a required plugin argument),
- * `pointIcons` (`{ typeCode: { default, active } }`, `active` always filled) and
- * `accentColor`. This file reads all of these at the top level of `config` — never nested.
+ * `pointIcons` (`{ typeCode: { default, active } }`, `active` always filled),
+ * `accentColor` and `searchNearestCount` (Task 19, D-6 — the PHP-side default of 3, filterable
+ * server-side via `woodev_pickup_search_nearest_count`; see {@see focusAddress}). This file reads
+ * all of these at the top level of `config` — never nested.
  *
  * TWO LESSONS THIS FILE HAS ALREADY TAUGHT (s46 — a browser found both, green tests did not):
  *
@@ -80,6 +84,44 @@
  * only `default` (CDEK's own approach — `active` mirrors `default` server-side, see
  * `Pickup_Handler::normalized_point_icons()`) gets the SAME image drawn larger, both driven by
  * the one `data-state` attribute Task 21's CSS keys off.
+ *
+ * ADDRESS SEARCH (Task 19, D-6): the customer types THEIR OWN address — the search box's
+ * placeholder is literally "Ваш адрес" — not a pickup-point search term. None of the three
+ * reference implementations get this right: CDEK searches only the already-loaded point pool
+ * (a home address matches nothing, so search almost never finds anything); Yandex and Russian
+ * Post geocode the typed address and RECENTRE the camera on it, so a customer whose nearest point
+ * is not already in frame sees an empty map and concludes there are none. This file does neither:
+ * `ymaps.control.SearchControl` keeps its ENGINE (`search()`, `getResultsCount()`,
+ * `showResult()`) and loses its CHROME — its default view is replaced by an inert
+ * `templateLayoutFactory` layout ({@see _buildSearchControl}), because the panels own the results
+ * markup (`renderSearchResults()`), not ymaps. `options.provider.geocode` is fully custom
+ * ({@see _searchGeocodeProvider}): every keystroke filters the loaded pool for free via
+ * `pickup-geo.matchPoints()` AND queries `ymaps.suggest()` for address suggestions, returned
+ * together as `{ points, addresses }` for the panels to render as two sections. `suggest()` is
+ * called on EVERY keystroke; `ymaps.geocode()` is called from this flow EXACTLY ONCE, only when
+ * an address suggestion is actually picked ({@see resolveAddress}) — geocoding on every keystroke
+ * would burn the merchant's API quota for no benefit a free-text filter does not already give.
+ * Picking a POINT result opens its card (Task 20's job, via `searchPointPicked`); picking an
+ * ADDRESS result drops a "your address" pin and fits the camera to the address PLUS the
+ * `config.searchNearestCount` nearest groups ({@see focusAddress}) — NEVER to the address alone,
+ * which is exactly the "empty map" failure this design avoids. `N` defaults to
+ * {@see DEFAULT_SEARCH_NEAREST_COUNT} and is deliberately a geometry-based count, not a
+ * kilometre radius: network density varies between CITIES of one carrier far more than between
+ * carriers, so a fixed per-plugin radius could never track it, while fitting to N nearest points
+ * adapts automatically. When even the nearest group is farther than {@see NEARBY_THRESHOLD_M},
+ * no fit happens at all — `nothingNearby` is emitted instead, naming that nearest group's own
+ * distance, so the customer sees an explicit "nothing here", never a silently empty viewport.
+ *
+ * THE "YOUR ADDRESS" PIN IS NEVER A GROUP: it is a plain `ymaps.Placemark` added directly to
+ * `map.geoObjects` ({@see _setAddressPin}), completely outside the `ObjectManager` every group
+ * lives in — so it can never appear in the list panel (`setPoints()`/`_emitVisibleChange()` only
+ * ever read `_groupsByKey`), the type filter (`setTypeFilter()` only ever touches
+ * `objectManager`), or a `focusAddress()` nearest-N computation (which also only ever reads
+ * `_groupsByKey`). The panels' own reset control (`«Сбросить»`) emits NO event of its own — it
+ * just calls `setAnchor( null )` internally — so THIS file exposes {@see clearAddress} rather
+ * than relying on one: it is the provider that owns the pin, so it is the provider that must
+ * offer the caller (Task 20's mount) a way to guarantee the pin never outlives the search it
+ * belongs to.
  *
  * `objectManager.setFilter()`, NEVER A REBUILD, drives {@see setTypeFilter}: rebuilding the
  * manager would tear down and recreate every feature, losing the camera state this file just
@@ -169,6 +211,33 @@
 	 */
 	var ICON_BOX_ACTIVE = { size: [ 50, 70 ], offset: [ -25, -40 ] };
 
+	/**
+	 * Default number of nearest groups {@see focusAddress} fits the camera to when
+	 * `config.searchNearestCount` is absent — the framework default for the PHP-side
+	 * `woodev_pickup_search_nearest_count` filter (Task 19, D-6; see the file docblock's
+	 * "ADDRESS SEARCH" section for why this is a geometry-based count, not a kilometre radius).
+	 *
+	 * @type {number}
+	 */
+	var DEFAULT_SEARCH_NEAREST_COUNT = 3;
+
+	/**
+	 * Distance, in metres, beyond which the nearest loaded group to a searched address is
+	 * treated as "nothing nearby" — {@see focusAddress} emits `nothingNearby` instead of fitting
+	 * the camera to a point so far away the map would read as broken (Task 19, D-6).
+	 *
+	 * @type {number}
+	 */
+	var NEARBY_THRESHOLD_M = 50000;
+
+	/**
+	 * Number of address suggestions requested from `ymaps.suggest()` per keystroke
+	 * (Task 19, D-6).
+	 *
+	 * @type {number}
+	 */
+	var SUGGEST_RESULT_COUNT = 5;
+
 	// -------------------------------------------------------------------------
 	// Small pure helpers
 	// -------------------------------------------------------------------------
@@ -200,6 +269,27 @@
 		var bounds = properties && 'function' === typeof properties.get ? properties.get( 'boundedBy' ) : null;
 
 		return Array.isArray( bounds ) ? bounds : null;
+	}
+
+	/**
+	 * Extracts the first hit's own coordinates from a `ymaps.geocode()` result — used by
+	 * {@see WoodevYandexMapProvider#resolveAddress} to place the "your address" pin and anchor
+	 * the nearest-N fit, as opposed to {@see extractGeocodeBounds}'s use of the SAME shape of
+	 * result for the initial-viewport bounding box. Returns null for an empty/malformed result;
+	 * the caller degrades to doing nothing rather than throwing or guessing a location.
+	 *
+	 * @param {Object} result
+	 * @returns {Array|null} `[lat, lng]`, or null.
+	 */
+	function extractGeocodeCoordinates( result ) {
+		var geoObjects = result && result.geoObjects;
+		var first = geoObjects && 'function' === typeof geoObjects.get ? geoObjects.get( 0 ) : null;
+		var geometry = first && first.geometry;
+		var coordinates = geometry && 'function' === typeof geometry.getCoordinates
+			? geometry.getCoordinates()
+			: null;
+
+		return Array.isArray( coordinates ) ? coordinates : null;
 	}
 
 	/**
@@ -355,6 +445,7 @@
 			boundsChange: [],
 			bboxTooWide: [],
 			visibleChange: [],
+			nothingNearby: [],
 			error: [],
 		};
 
@@ -363,6 +454,15 @@
 
 		/** @type {string|null} the group key {@see focusGroup} last successfully focused. */
 		this._focusedKey = null;
+
+		/** @type {Object|null} the `ymaps.control.SearchControl` built in init() — see
+		 *  {@see _buildSearchControl}. */
+		this.searchControl = null;
+
+		/** @type {Object|null} the "your address" pin — a plain `ymaps.Placemark`, NEVER a
+		 *  group inside the ObjectManager (see the file docblock's "ADDRESS SEARCH" section).
+		 *  Null when no address search is currently active. */
+		this._addressPin = null;
 
 		/** @type {number} bumped on every {@see focusGroup} call — discards a stale
 		 *  continuation when a later call's camera move resolves before an earlier one's. */
@@ -431,6 +531,7 @@
 				self.ymaps = ymaps;
 				self._buildMap();
 				self._buildObjectManager();
+				self._buildSearchControl();
 
 				return self._resolveInitialViewport();
 			},
@@ -560,6 +661,82 @@
 		} );
 
 		this.map.geoObjects.add( this.objectManager );
+	};
+
+	/**
+	 * Builds the address-search control (Task 19, D-6). `ymaps.control.SearchControl` keeps its
+	 * ENGINE (`search()`, `getResultsCount()`, `showResult()`) and loses its default CHROME: the
+	 * panels own the results markup (`renderSearchResults()`), so the control's own view is
+	 * replaced with an inert `templateLayoutFactory` layout that renders nothing of its own.
+	 * `options.provider.geocode` is fully custom ({@see _searchGeocodeProvider}), never ymaps'
+	 * own default (address-only) provider — see the file docblock's "ADDRESS SEARCH" section.
+	 *
+	 * @returns {void}
+	 */
+	WoodevYandexMapProvider.prototype._buildSearchControl = function() {
+		var self = this;
+		var inertLayout = this.ymaps.templateLayoutFactory.createClass( '<div></div>', {} );
+
+		this.searchControl = new this.ymaps.control.SearchControl( {
+			provider: {
+				geocode: function( request, options ) {
+					return self._searchGeocodeProvider( request, options );
+				},
+			},
+			layout: inertLayout,
+			resultsLayout: inertLayout,
+			noPlacemark: true,
+		} );
+
+		this.map.controls.add( this.searchControl );
+	};
+
+	/**
+	 * The `SearchControl`'s custom geocode provider (Task 19, D-6): matches `request` against
+	 * the already-loaded point pool via `pickup-geo.matchPoints()` — instant, free, no network —
+	 * AND queries `ymaps.suggest()` for address suggestions, returned together for the panels to
+	 * render as two independent sections. `suggest()` only, NEVER `geocode()`, from this path —
+	 * see the file docblock's "ADDRESS SEARCH" section for why: geocoding on every keystroke
+	 * would burn the merchant's quota, and a suggestion is resolved to real coordinates exactly
+	 * once, on selection, by {@see resolveAddress}.
+	 *
+	 * `boundedBy` biases the suggestions to the map's CURRENT viewport — read fresh on every
+	 * call, since the customer may have panned between keystrokes — so a customer in Kazan is not
+	 * offered Moscow streets. Simply omitted before the map has ever resolved a viewport of its
+	 * own, rather than passing an undefined/degenerate box.
+	 *
+	 * @param {string} request free-text query, as typed.
+	 * @returns {Promise<{points: Array, addresses: Array}>}
+	 */
+	WoodevYandexMapProvider.prototype._searchGeocodeProvider = function( request ) {
+		var matches = geo.matchPoints( this._allPoints(), request );
+		var suggestOptions = { results: SUGGEST_RESULT_COUNT };
+
+		if ( this.map ) {
+			suggestOptions.boundedBy = this.map.getBounds();
+		}
+
+		return this.ymaps.suggest( request, suggestOptions ).then( function( addresses ) {
+			return { points: matches, addresses: addresses || [] };
+		} );
+	};
+
+	/**
+	 * Flattens every currently-loaded group's points into one array — the pool
+	 * {@see _searchGeocodeProvider} searches. Rebuilt on every call rather than cached: the pool
+	 * changes on every {@see setPoints}, and this runs once per keystroke, not once per point.
+	 *
+	 * @returns {Array}
+	 */
+	WoodevYandexMapProvider.prototype._allPoints = function() {
+		var groupsByKey = this._groupsByKey;
+		var points = [];
+
+		Object.keys( groupsByKey ).forEach( function( key ) {
+			points = points.concat( groupsByKey[ key ].points || [] );
+		} );
+
+		return points;
 	};
 
 	/**
@@ -867,6 +1044,138 @@
 		} );
 	};
 
+	// -------------------------------------------------------------------------
+	// Address search (Task 19, D-6) — see the file docblock's "ADDRESS SEARCH" section
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Resolves a chosen address SUGGESTION to real coordinates — the ONLY place this file calls
+	 * `ymaps.geocode()` from the search flow, and it does so EXACTLY ONCE per selection (see the
+	 * file docblock). `displayName` is the suggestion's own text — the caller (Task 20's mount)
+	 * holds the `addresses` array {@see _searchGeocodeProvider} returned and passes back the
+	 * entry the customer picked. An empty/malformed geocode result is a silent no-op, matching
+	 * every other "geocode degrades quietly" path in this file (see
+	 * {@see _resolveInitialViewport}) — no camera move, no pin, no `nothingNearby`.
+	 *
+	 * @param {string} displayName
+	 * @returns {Promise<void>}
+	 */
+	WoodevYandexMapProvider.prototype.resolveAddress = function( displayName ) {
+		var self = this;
+
+		return this.ymaps.geocode( displayName ).then( function( result ) {
+			if ( self._destroyed ) {
+				return undefined;
+			}
+
+			var coordinates = extractGeocodeCoordinates( result );
+
+			if ( ! coordinates ) {
+				return undefined;
+			}
+
+			return self.focusAddress( coordinates, displayName );
+		} );
+	};
+
+	/**
+	 * Frames the map on a resolved address: drops the "your address" pin
+	 * ({@see _setAddressPin}) and fits the camera to the address PLUS the
+	 * `config.searchNearestCount` nearest groups (default {@see DEFAULT_SEARCH_NEAREST_COUNT})
+	 * — NEVER to the address alone; see the file docblock's "ADDRESS SEARCH" section for why.
+	 * When the nearest group is farther than {@see NEARBY_THRESHOLD_M}, no fit happens at all —
+	 * `nothingNearby` is emitted instead, naming that nearest group's own distance and
+	 * (already-`esc_html()`-escaped) name, so the customer sees an explicit "nothing here" rather
+	 * than a silently empty viewport. With NO groups currently loaded, this is a no-op beyond
+	 * dropping the pin — there is nothing to fit to or report as "nearest".
+	 *
+	 * The nearest-N computation reads ONLY the currently loaded groups ({@see _groupsByKey}) —
+	 * the address pin itself is never a candidate; see {@see _setAddressPin}'s own docblock.
+	 *
+	 * `setBounds()` is ASYNCHRONOUS — this method RETURNS it directly, exactly like
+	 * {@see _resolveInitialViewport}'s own successful branch, so a caller that awaits this
+	 * promise sees the POST-fit camera, never the pre-fit one (the file docblock's first lesson).
+	 *
+	 * @param {number[]} latLng `[lat, lng]`, the resolved address location.
+	 * @param {string}   label  the address text, used only to place the pin.
+	 * @returns {Promise<void>}
+	 */
+	WoodevYandexMapProvider.prototype.focusAddress = function( latLng, label ) {
+		this._setAddressPin( latLng, label );
+
+		var groupsByKey = this._groupsByKey;
+		var groups = Object.keys( groupsByKey ).map( function( key ) {
+			return groupsByKey[ key ];
+		} );
+		var count = 'number' === typeof this.config.searchNearestCount
+			? this.config.searchNearestCount
+			: DEFAULT_SEARCH_NEAREST_COUNT;
+		var nearestGroups = geo.nearest( groups, latLng, count );
+
+		if ( 0 === nearestGroups.length ) {
+			return Promise.resolve();
+		}
+
+		var closest = nearestGroups[ 0 ];
+		var closestDistance = geo.distanceMeters( latLng, [ closest.lat, closest.lng ] );
+
+		if ( closestDistance > NEARBY_THRESHOLD_M ) {
+			var closestPoint = closest.points && closest.points[ 0 ];
+
+			this.emit( 'nothingNearby', {
+				distanceMeters: closestDistance,
+				name: ( closestPoint && closestPoint.name ) || '',
+			} );
+
+			return Promise.resolve();
+		}
+
+		// setBounds() is ASYNCHRONOUS — awaited (returned), exactly like every other camera
+		// move in this file. See the file docblock's first lesson.
+		return this.map.setBounds( geo.boundsFor( latLng, nearestGroups ), { checkZoomRange: true } );
+	};
+
+	/**
+	 * Drops (or moves) the "your address" pin — a plain `ymaps.Placemark` added directly to
+	 * `map.geoObjects`, NEVER a feature inside the `ObjectManager`: unlike a group, it must never
+	 * appear in the list panel ({@see setPoints}/{@see _emitVisibleChange} only ever read
+	 * `_groupsByKey`), the type filter (`setTypeFilter()` only ever touches `objectManager`), or
+	 * the nearest-N computation ({@see focusAddress} only ever reads `_groupsByKey` too). The
+	 * previous pin, if any, is removed first via {@see clearAddress} — one address search
+	 * replaces the last, it never accumulates pins from earlier searches.
+	 *
+	 * @param {number[]} latLng `[lat, lng]`.
+	 * @returns {void}
+	 */
+	WoodevYandexMapProvider.prototype._setAddressPin = function( latLng ) {
+		this.clearAddress();
+
+		if ( ! this.map || ! this.ymaps || 'function' !== typeof this.ymaps.Placemark ) {
+			return;
+		}
+
+		this._addressPin = new this.ymaps.Placemark( latLng, {}, {} );
+		this.map.geoObjects.add( this._addressPin );
+	};
+
+	/**
+	 * Removes the "your address" pin, if one is currently shown, and forgets it. The panels' own
+	 * reset control (`«Сбросить»`) emits NO event of its own — it only calls `setAnchor( null )`
+	 * internally (see the file docblock's "ADDRESS SEARCH" section) — so THIS method is what Task
+	 * 20's mount wiring calls when the customer clears the search: the provider owns the pin, so
+	 * the provider is the one that must offer a way to guarantee it never outlives the search it
+	 * belongs to. Idempotent: a call with no pin currently shown is a safe no-op.
+	 *
+	 * @returns {void}
+	 */
+	WoodevYandexMapProvider.prototype.clearAddress = function() {
+		if ( this._addressPin && this.map ) {
+			this.map.geoObjects.remove( this._addressPin );
+		}
+
+		this._addressPin = null;
+	};
+
 	/**
 	 * Focuses group `key`: marks it visually active (swaps its icon hit-box to
 	 * {@see ICON_BOX_ACTIVE}, its icon image to `iconHrefActive`, and `data-state` to
@@ -1040,7 +1349,16 @@
 		this._iconLayoutClass = null;
 		this._groupsByKey = {};
 		this._focusedKey = null;
-		this.handlers = { pointClick: [], boundsChange: [], bboxTooWide: [], visibleChange: [], error: [] };
+		this.searchControl = null;
+		this._addressPin = null;
+		this.handlers = {
+			pointClick: [],
+			boundsChange: [],
+			bboxTooWide: [],
+			visibleChange: [],
+			nothingNearby: [],
+			error: [],
+		};
 	};
 
 	// -------------------------------------------------------------------------
