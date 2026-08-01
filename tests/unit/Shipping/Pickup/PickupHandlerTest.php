@@ -828,6 +828,75 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			$this->assertStringContainsString( 'apikey=REAL-SECRET-KEY', $config['mapConfig']['scriptUrl'] );
 		}
 
+		/**
+		 * T20 wiring proof: the REAL {@see Embedded_Map_Provider}'s `mapConfig.ownsChrome` is
+		 * `true` — the exact flag `pickup-mount.js` reads to decide whether to construct the
+		 * framework's own list/card panels at all (T20). Exercised against the real provider
+		 * class, not a test double, so a mutant that de-syncs `Embedded_Map_Provider::get_js_config()`
+		 * from its own `owns_chrome()` cannot pass unnoticed.
+		 */
+		public function test_the_real_embedded_provider_config_carries_owns_chrome_true(): void {
+			require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/map/class-embedded-map-provider.php';
+
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			Functions\when( 'rest_url' )->justReturn( 'https://example.test/wp-json/woodev/v1' );
+			Functions\when( 'wp_create_nonce' )->justReturn( 'NONCE' );
+			Functions\when( 'wc_ship_to_billing_address_only' )->justReturn( false );
+			Functions\when( 'untrailingslashit' )->alias( static fn( string $value ) => rtrim( $value, '/' ) );
+
+			$provider = new \Woodev\Framework\Shipping\Map\Embedded_Map_Provider(
+				'https://carrier.example/widget',
+				'https://carrier.example'
+			);
+			$config   = ( new Pickup_Handler(
+				'p',
+				'carrier_pickup_point',
+				$this->source_returning( null ),
+				$provider,
+				$this->default_location()
+			) )->get_js_config();
+
+			$this->assertTrue( $config['mapConfig']['ownsChrome'] );
+		}
+
+		/**
+		 * The other side of the same proof: the REAL {@see Yandex_Map_Provider} carries no
+		 * `ownsChrome` key at all (it never draws the whole chrome) — `pickup-mount.js` treats
+		 * an ABSENT key as falsy, so this is the "not owning chrome" shape a real consumer
+		 * produces, not just a test double's default.
+		 */
+		public function test_the_real_yandex_provider_config_carries_no_owns_chrome_key(): void {
+			require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/map/class-yandex-map-provider.php';
+
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			Functions\when( 'rest_url' )->justReturn( 'https://example.test/wp-json/woodev/v1' );
+			Functions\when( 'wp_create_nonce' )->justReturn( 'NONCE' );
+			Functions\when( 'wc_ship_to_billing_address_only' )->justReturn( false );
+			Functions\when( 'get_locale' )->justReturn( 'ru_RU' );
+			Functions\when( 'add_query_arg' )->alias(
+				static function ( array $args, string $url ) {
+					$pairs = [];
+
+					foreach ( $args as $key => $value ) {
+						$pairs[] = $key . '=' . $value;
+					}
+
+					return $url . '?' . implode( '&', $pairs );
+				}
+			);
+
+			$provider = new \Woodev\Framework\Shipping\Map\Yandex_Map_Provider( 'REAL-SECRET-KEY' );
+			$config   = ( new Pickup_Handler(
+				'p',
+				'carrier_pickup_point',
+				$this->source_returning( null ),
+				$provider,
+				$this->default_location()
+			) )->get_js_config();
+
+			$this->assertArrayNotHasKey( 'ownsChrome', $config['mapConfig'] );
+		}
+
 		public function test_config_replace_address_carries_billing_only_and_never_a_target(): void {
 			Functions\when( 'apply_filters' )->returnArg( 2 );
 			Functions\when( 'rest_url' )->justReturn( 'https://example.test/wp-json/woodev/v1' );
@@ -3030,18 +3099,40 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			$this->assertStringContainsString( 'pickup-datasource.js', $scripts['woodev-pickup-datasource']['src'] );
 			$this->assertSame( [], $scripts['woodev-pickup-datasource']['deps'] );
 
+			// pickup-geo.js (SP-5 Task 9, T20 wiring): pure functions, no dependencies of its
+			// own.
+			$this->assertArrayHasKey( 'woodev-pickup-geo', $scripts );
+			$this->assertStringContainsString( 'pickup-geo.js', $scripts['woodev-pickup-geo']['src'] );
+			$this->assertSame( [], $scripts['woodev-pickup-geo']['deps'] );
+
+			// pickup-panels.js (SP-5 Tasks 12-16, T20 wiring): depends on pickup-geo.js for its
+			// distance/colour arithmetic.
+			$this->assertArrayHasKey( 'woodev-pickup-panels', $scripts );
+			$this->assertStringContainsString( 'pickup-panels.js', $scripts['woodev-pickup-panels']['src'] );
+			$this->assertSame( [ 'woodev-pickup-geo' ], $scripts['woodev-pickup-panels']['deps'] );
+
 			// map-provider-yandex.js (SP-5 Tasks 13/14) exists on disk — see the method
-			// docblock above for why this flipped from assertArrayNotHasKey().
+			// docblock above for why this flipped from assertArrayNotHasKey(). Now depends on
+			// pickup-geo.js too (T20): map-provider-yandex.js calls its safeColor()/nearest()/
+			// boundsFor()/matchPoints().
 			$this->assertArrayHasKey( 'woodev-pickup-map-provider-yandex', $scripts );
 			$this->assertStringContainsString(
 				'map-provider-yandex.js',
 				$scripts['woodev-pickup-map-provider-yandex']['src']
 			);
+			$this->assertSame( [ 'woodev-pickup-geo' ], $scripts['woodev-pickup-map-provider-yandex']['deps'] );
 
 			$this->assertArrayHasKey( 'woodev-pickup-mount', $scripts );
 			$this->assertStringContainsString( 'pickup-mount.js', $scripts['woodev-pickup-mount']['src'] );
 			$this->assertSame(
-				[ 'jquery', 'woodev-modal', 'woodev-pickup-datasource', 'woodev-pickup-map-provider-yandex' ],
+				[
+					'jquery',
+					'woodev-modal',
+					'woodev-pickup-datasource',
+					'woodev-pickup-geo',
+					'woodev-pickup-panels',
+					'woodev-pickup-map-provider-yandex',
+				],
 				$scripts['woodev-pickup-mount']['deps']
 			);
 
@@ -3107,16 +3198,31 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			$this->assertArrayHasKey( 'woodev-pickup-datasource', $scripts );
 			$this->assertStringContainsString( 'pickup-datasource.js', $scripts['woodev-pickup-datasource']['src'] );
 
+			$this->assertArrayHasKey( 'woodev-pickup-geo', $scripts );
+			$this->assertStringContainsString( 'pickup-geo.js', $scripts['woodev-pickup-geo']['src'] );
+
+			$this->assertArrayHasKey( 'woodev-pickup-panels', $scripts );
+			$this->assertStringContainsString( 'pickup-panels.js', $scripts['woodev-pickup-panels']['src'] );
+			$this->assertSame( [ 'woodev-pickup-geo' ], $scripts['woodev-pickup-panels']['deps'] );
+
 			$this->assertArrayHasKey( 'woodev-pickup-map-provider-yandex', $scripts );
 			$this->assertStringContainsString(
 				'map-provider-yandex.js',
 				$scripts['woodev-pickup-map-provider-yandex']['src']
 			);
+			$this->assertSame( [ 'woodev-pickup-geo' ], $scripts['woodev-pickup-map-provider-yandex']['deps'] );
 
 			$this->assertArrayHasKey( 'woodev-pickup-mount', $scripts );
 			$this->assertStringContainsString( 'pickup-mount.js', $scripts['woodev-pickup-mount']['src'] );
 			$this->assertSame(
-				[ 'jquery', 'woodev-modal', 'woodev-pickup-datasource', 'woodev-pickup-map-provider-yandex' ],
+				[
+					'jquery',
+					'woodev-modal',
+					'woodev-pickup-datasource',
+					'woodev-pickup-geo',
+					'woodev-pickup-panels',
+					'woodev-pickup-map-provider-yandex',
+				],
 				$scripts['woodev-pickup-mount']['deps']
 			);
 

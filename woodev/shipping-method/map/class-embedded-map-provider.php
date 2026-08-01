@@ -152,12 +152,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Map\\Embedded_Map_Provider'
 		/**
 		 * {@inheritDoc}
 		 *
+		 * `ownsChrome` mirrors {@see self::owns_chrome()} verbatim — Task 20's mount reads
+		 * `mapConfig.ownsChrome` to decide whether to construct the framework's own list/card
+		 * panels at all, so this provider (the one real consumer that actually owns the whole
+		 * container) is the one that must carry `true` into the browser, not just report it
+		 * over an interface method nothing JS-side ever reads.
+		 *
 		 * @since 2.0.2
 		 */
 		public function get_js_config( array $context ): array {
 			return [
 				'embedUrl'       => $this->embed_url,
 				'expectedOrigin' => $this->expected_origin,
+				'ownsChrome'     => $this->owns_chrome(),
 			];
 		}
 

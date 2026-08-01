@@ -741,6 +741,9 @@ final class MapProviderRegistryTest extends TestCase {
 			[
 				'embedUrl'       => 'https://carrier.example/widget.js',
 				'expectedOrigin' => 'https://carrier.example',
+				// Task 20: mirrors owns_chrome() verbatim — pickup-mount.js reads this to decide
+				// whether to construct the framework's own list/card panels at all.
+				'ownsChrome'     => true,
 			],
 			$provider->get_js_config( [] )
 		);

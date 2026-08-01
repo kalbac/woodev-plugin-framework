@@ -46,6 +46,18 @@
  * matches a plain DOM-style emitter and avoids a caller silently losing a
  * handler it registered earlier; Task 20 (the mount wiring) relies on this.
  *
+ * `anchorCleared` (Task 20, D-6): the reset control (`«Сбросить»`) calls
+ * `setAnchor( null )` internally and, before this event existed, emitted
+ * NOTHING of its own — a caller polling for "did the customer just clear
+ * their search" had no signal to poll. `setAnchor( null )` now emits this
+ * event EVERY time (whether triggered by the reset control or called
+ * directly), so the mount can drop whatever provider-side state belongs to
+ * the search (Task 20's mount wires this straight to the map provider's own
+ * `clearAddress()`, which is what actually removes the "your address" pin —
+ * see `map-provider-yandex.js`'s own docblock on why THAT file, not this
+ * one, owns dropping it). `setAnchor( latLng )` with a non-null value never
+ * fires it.
+ *
  * SORTING HAS ONE RULE, NOT TWO MODES: both the list and any future search
  * result are ordered by distance from a SINGLE anchor point set via
  * `setAnchor()` — the map centre by default, a searched address when a
@@ -1142,6 +1154,9 @@
 	 * single-argument callers (the map-centre case) are unaffected: no label
 	 * means the plain header, exactly as before this parameter existed.
 	 *
+	 * `anchorCleared` fires whenever this call CLEARS the anchor (`latLng` is
+	 * null/falsy) — see the file docblock's "EVENT SEMANTICS" note.
+	 *
 	 * @param {number[]|null} latLng `[lat, lng]`, or null to clear.
 	 * @param {string}        [label] the searched address, for the `nearestTo` header.
 	 * @returns {void}
@@ -1152,6 +1167,10 @@
 
 		if ( this.root ) {
 			renderList( this );
+		}
+
+		if ( ! this._anchor ) {
+			this._emit( 'anchorCleared', null );
 		}
 	};
 

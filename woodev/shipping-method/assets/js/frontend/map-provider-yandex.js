@@ -27,8 +27,9 @@
  * is free to pan/zoom themselves under `bulk` too, even though nothing needs re-fetching there.
  *
  * PUBLIC SURFACE: `init( container, config )`, `setPoints( groups )`, `focusGroup( key )`,
- * `setTypeFilter( codes )`, `getFocusedKey()`, `resolveAddress( displayName )`,
- * `focusAddress( latLng, label )`, `clearAddress()`, `on( event, cb )`, `destroy()`. Events out:
+ * `setTypeFilter( codes )`, `setMargin( open, width )`, `getFocusedKey()`,
+ * `resolveAddress( displayName )`, `focusAddress( latLng, label )`, `clearAddress()`,
+ * `on( event, cb )`, `destroy()`. Events out:
  * `pointClick( key )`, `boundsChange( bbox )`, `bboxTooWide()`, `visibleChange( keys )`,
  * `nothingNearby( { distanceMeters, name } )`, `searchResults( { points, addresses } )`,
  * `error( { code, message } )`. `bbox` is the flat `[lat1,lng1,lat2,lng2]` shape
@@ -478,6 +479,10 @@
 		/** @type {number} bumped on every {@see focusGroup} call — discards a stale
 		 *  continuation when a later call's camera move resolves before an earlier one's. */
 		this._focusSeq = 0;
+
+		/** @type {*} the area id {@see setMargin} last got back from `map.margin.addArea()`,
+		 *  or null when nothing is currently reserved — see that method's own docblock. */
+		this._marginAreaId = null;
 
 		this._destroyed = false;
 	}
@@ -1071,6 +1076,41 @@
 		} );
 	};
 
+	/**
+	 * Reserves (or releases) the screen area the framework's own sidebar panel covers, via
+	 * ymaps' native `map.margin.addArea()`/`removeArea()` (Task 20) — never a plain
+	 * `map.margin = [...]` array assignment, which is not this API's shape (see ADR-010 and
+	 * the design spec's own sidebar geometry: `map.margin.addArea({ right: <width>, top: 0,
+	 * height: '100%' })`). Task 20's mount calls this from the panels' own `listToggle`
+	 * event; every `setBounds()` camera move in this file that passes `useMapMargin: true`
+	 * (see {@see focusGroup}) already reads whatever THIS method most recently reserved, so
+	 * an un-clustered point ends up clear of the open panel instead of centred underneath it.
+	 *
+	 * The previous reservation, if any, is always released FIRST — opening twice in a row,
+	 * or closing when nothing is reserved, never leaks a stale area. A no-op before `init()`
+	 * has built a map, or once `destroy()` has torn it down (`this.map`/`this.map.margin` is
+	 * then null/absent) — mirrors every other post-destroy guard in this file.
+	 *
+	 * @param {boolean} open  whether the sidebar panel is now open.
+	 * @param {number}  width the panel's current width, in CSS pixels — ignored when `open`
+	 *                        is false.
+	 * @returns {void}
+	 */
+	WoodevYandexMapProvider.prototype.setMargin = function( open, width ) {
+		if ( ! this.map || ! this.map.margin ) {
+			return;
+		}
+
+		if ( null !== this._marginAreaId ) {
+			this.map.margin.removeArea( this._marginAreaId );
+			this._marginAreaId = null;
+		}
+
+		if ( open ) {
+			this._marginAreaId = this.map.margin.addArea( { right: width, top: 0, height: '100%' } );
+		}
+	};
+
 	// -------------------------------------------------------------------------
 	// Address search (Task 19, D-6) — see the file docblock's "ADDRESS SEARCH" section
 	// -------------------------------------------------------------------------
@@ -1149,7 +1189,12 @@
 		if ( closestDistance > NEARBY_THRESHOLD_M ) {
 			var closestPoint = closest.points && closest.points[ 0 ];
 
+			// `key` (Task 20): lets the mount focus/open THIS exact group when the
+			// customer accepts the "show it anyway" offer — the group's own identity
+			// token, never its (display-only, non-unique) name. See
+			// pickup-panels.js's own note on `showNearestRequested`.
 			this.emit( 'nothingNearby', {
+				key: closest.key,
 				distanceMeters: closestDistance,
 				name: ( closestPoint && closestPoint.name ) || '',
 			} );
@@ -1401,6 +1446,7 @@
 		this._focusedKey = null;
 		this.searchControl = null;
 		this._addressPin = null;
+		this._marginAreaId = null;
 		this.handlers = {
 			pointClick: [],
 			boundsChange: [],

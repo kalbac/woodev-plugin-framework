@@ -1,23 +1,27 @@
 /**
  * Tests for pickup-mount.js
  *
- * Covers SP-5 Task 12: idempotent trigger placement, the click → modal →
- * provider → dataSource wiring, writing a selection THROUGH the field's OWN
- * owning store (never straight to the DOM, and never through a store that
- * does not manage that field), firing `change`/`change.select2` after every
- * write, address replacement target resolution, missing-option handling for
- * the city select, dataSource error/empty mapping, the non-destructive
- * degrade-to-notice once a point set is drawn, retry always rebuilding the
- * provider from scratch, i18n keys read from the SHAPE the PHP side actually
- * emits, and the no-duplicate-session guarantee across a slot recreated
- * mid-session.
+ * Covers SP-5 Task 12's original wiring (idempotent trigger placement, the click → modal →
+ * provider → dataSource plumbing, writing a selection THROUGH the field's OWN owning store,
+ * firing `change`/`change.select2` after every write, address replacement target resolution,
+ * missing-option handling for the city select, the non-destructive degrade-to-notice once a
+ * point set is drawn, retry always rebuilding the provider from scratch, i18n keys read from
+ * the SHAPE the PHP side actually emits, and the no-duplicate-session guarantee) PLUS Task 20's
+ * own wiring: this file, not the provider, now owns fetching (bulk fetches once on `init()`
+ * resolve, viewport fetches per `boundsChange`); the `ownsChrome` branch (no panels at all for
+ * an embedded-style provider); provider↔panels event bridging both ways; the four
+ * `woodev_pickup_*` `document.body` events; `refresh()`; the trigger's `i18n.trigger`/
+ * `i18n.triggerChange` label toggle; and the "your address" pin cannot outlive the search that
+ * created it (the panels' own `anchorCleared` event → `provider.clearAddress()`).
  *
  * `jest.useFakeTimers()` is installed BEFORE pickup-mount.js is required, so
  * the module's own top-level `setTimeout()` calls (initial mount +
  * `updated_checkout` defer) are captured under fake-timer control from the
  * very first require — a real timer registered before fake timers are
  * installed would otherwise fire uncontrolled, mid test, with whatever
- * `window` state happened to exist at that moment.
+ * `window` state happened to exist at that moment. Fake timers never affect
+ * native Promise microtasks, so `await`-ing a chain of `.then()`s (see
+ * {@see flushAsync}) works identically regardless.
  *
  * No real jQuery is loaded in this environment (none is a project
  * dependency), so `window.jQuery` is undefined and pickup-mount.js's
@@ -25,6 +29,15 @@
  * on `document.body` — exactly the fallback its own docblock documents. The
  * `change.select2`-firing branch is likewise unreachable without jQuery, so a
  * dedicated tiny jQuery stub is installed for the ONE test that needs it.
+ *
+ * PANELS ARE A STUB (`StubPanels`, not the real `pickup-panels.js`), installed as
+ * `window.WoodevPickupPanels` in `beforeEach` — this file tests the WIRING contract mount.js
+ * establishes with whatever panels object it is handed, not the panels' own rendering (that is
+ * `pickup-panels.test.js`'s job). `StubPanels.render()` still builds the minimal REAL DOM markup
+ * (`.woodev-pickup-list`/`.woodev-pickup-card`) the `ownsChrome` branch tests check for, and
+ * exposes `emit()` so a test can drive it exactly like `StubProvider`. One dedicated test near
+ * the end uses the REAL `Panels` class instead, to prove `buildPanelsConfig()` actually produces
+ * a shape the real class accepts.
  *
  * @see woodev/shipping-method/assets/js/frontend/pickup-mount.js
  */
@@ -35,21 +48,30 @@ jest.useFakeTimers();
 
 const { createStore } = require( '../../woodev/shipping-method/assets/js/frontend/checkout-field-store' );
 require( '../../woodev/assets/js/frontend/woodev-modal' ); // side effect: window.WoodevModal
-const { mountAll } = require( '../../woodev/shipping-method/assets/js/frontend/pickup-mount' );
+const { mountAll, getSession } = require( '../../woodev/shipping-method/assets/js/frontend/pickup-mount' );
+const RealPanels = require( '../../woodev/shipping-method/assets/js/frontend/pickup-panels' );
 
 const FIELD_ID = 'carrier_pickup_point';
 
 /**
- * A minimal, test-controlled `Map_Provider` double. Records every `init()`
- * call and lets a test `emit()` `select`/`error` as if the (not-yet-built)
- * real provider had. Every constructed instance is pushed onto
- * `StubProvider.instances` so a test can assert how many concurrently-live
- * providers ever existed and which of them were destroyed.
+ * A test-controlled `Map_Provider` double covering the FULL Task 20 contract (`init/on/destroy`
+ * plus `setPoints`/`setTypeFilter`/`focusGroup`/`getFocusedKey`/`resolveAddress`/`focusAddress`/
+ * `clearAddress`/`setMargin`) — every call is recorded so a test can assert exactly what mount.js
+ * sent it. `on()` accepts ANY event name (not a fixed list) so this one double serves every
+ * provider event this file wires. Every constructed instance is pushed onto
+ * `StubProvider.instances` so a test can assert how many concurrently-live providers ever
+ * existed and which were destroyed.
  */
 function StubProvider() {
-	this.handlers = { select: [], error: [] };
+	this.handlers = {};
 	this.destroyed = false;
 	this.initCalls = [];
+	this.setPointsCalls = [];
+	this.setTypeFilterCalls = [];
+	this.focusGroupCalls = [];
+	this.resolveAddressCalls = [];
+	this.clearAddressCalls = 0;
+	this.setMarginCalls = [];
 	StubProvider.instances.push( this );
 }
 
@@ -60,6 +82,10 @@ StubProvider.prototype.init = function( container, config, dataSource ) {
 };
 
 StubProvider.prototype.on = function( event, cb ) {
+	if ( ! this.handlers[ event ] ) {
+		this.handlers[ event ] = [];
+	}
+
 	this.handlers[ event ].push( cb );
 };
 
@@ -73,34 +99,108 @@ StubProvider.prototype.destroy = function() {
 	this.destroyed = true;
 };
 
+StubProvider.prototype.setPoints = function( groups ) {
+	this.setPointsCalls.push( groups );
+};
+
+StubProvider.prototype.setTypeFilter = function( codes ) {
+	this.setTypeFilterCalls.push( codes );
+};
+
+StubProvider.prototype.focusGroup = function( key ) {
+	this.focusGroupCalls.push( key );
+};
+
+StubProvider.prototype.getFocusedKey = function() {
+	return null;
+};
+
+StubProvider.prototype.resolveAddress = function( displayName ) {
+	this.resolveAddressCalls.push( displayName );
+
+	return Promise.resolve();
+};
+
+StubProvider.prototype.focusAddress = function() {
+	return Promise.resolve();
+};
+
+StubProvider.prototype.clearAddress = function() {
+	this.clearAddressCalls += 1;
+};
+
+StubProvider.prototype.setMargin = function( open, width ) {
+	this.setMarginCalls.push( { open: open, width: width } );
+};
+
 /**
- * A provider double that EAGERLY calls `dataSource.fetchPoints()` from
- * `init()`, the way a real bulk-strategy provider's initial load would —
- * lets a test drive pickup-mount.js's own error/empty mapping (which lives in
- * front of whatever the dataSource resolves/rejects with) without needing a
- * real map library. `pending` is the settled-or-not promise a test can
- * `await` to know the microtask chain has flushed. Re-implements `init()`
- * fully on every construction (rather than delegating to StubProvider's),
- * since a retry constructs a brand NEW instance each time — exactly the
- * behaviour under test.
+ * A minimal `window.WoodevPickupPanels` double — see the file docblock's "PANELS ARE A STUB"
+ * note. `render()` builds just enough REAL DOM (`.woodev-pickup-list`/`.woodev-pickup-card`) for
+ * the `ownsChrome` branch tests to query for; every other method just records its last call.
  */
-function EagerStubProvider() {
-	StubProvider.call( this );
+function StubPanels( container, config ) {
+	this.container = container;
+	this.config = config;
+	this._listeners = {};
+	this.root = null;
+	StubPanels.instances.push( this );
 }
 
-EagerStubProvider.prototype = Object.create( StubProvider.prototype );
+StubPanels.instances = [];
 
-EagerStubProvider.prototype.init = function( container, config, dataSource ) {
-	StubProvider.prototype.init.call( this, container, config, dataSource );
-	this.pending = dataSource.fetchPoints( {} ).then(
-		function( points ) {
-			this.lastPoints = points;
-		}.bind( this ),
-		function( reason ) {
-			this.lastError = reason;
-		}.bind( this )
-	);
+StubPanels.prototype.render = function() {
+	this.root = document.createElement( 'div' );
+	this.root.className = 'woodev-pickup-panels';
+
+	const list = document.createElement( 'div' );
+	list.className = 'woodev-pickup-list';
+	const card = document.createElement( 'div' );
+	card.className = 'woodev-pickup-card';
+
+	this.root.appendChild( list );
+	this.root.appendChild( card );
+	this.container.appendChild( this.root );
 };
+
+StubPanels.prototype.on = function( event, cb ) {
+	( this._listeners[ event ] = this._listeners[ event ] || [] ).push( cb );
+};
+
+StubPanels.prototype.emit = function( event, payload ) {
+	( this._listeners[ event ] || [] ).forEach( function( cb ) {
+		cb( payload );
+	} );
+};
+
+StubPanels.prototype.setVisible = function( groups ) {
+	this.lastVisible = groups;
+};
+
+StubPanels.prototype.setTypes = function( types ) {
+	this.lastTypes = types;
+};
+
+StubPanels.prototype.showNothingNearby = function( info ) {
+	this.lastNothingNearby = info;
+};
+
+StubPanels.prototype.renderSearchResults = function( results ) {
+	this.lastSearchResults = results;
+};
+
+StubPanels.prototype.openCard = function( group, pointId ) {
+	this.lastOpenCard = { group: group, pointId: pointId };
+};
+
+StubPanels.prototype.closeCard = function() {
+	this.closeCardCalls = ( this.closeCardCalls || 0 ) + 1;
+};
+
+StubPanels.prototype.setSelectedId = function( id ) {
+	this.lastSelectedId = id;
+};
+
+StubPanels.prototype.toggleList = function() {};
 
 /**
  * Builds a fake `WoodevPickupDataSource` factory whose `fetchPoints()`
@@ -122,6 +222,18 @@ function fakeDataSourceFactory( impl ) {
 }
 
 /**
+ * Awaits several microtask hops — enough for pickup-mount.js's own
+ * `provider.init().then()` → `fetchAndSetPoints()`'s `dataSource.fetchPoints().then()` chain
+ * (and anything a test drives on top of it) to fully settle. Native Promise microtasks are
+ * NEVER affected by `jest.useFakeTimers()` — only macrotask APIs (`setTimeout`, …) are faked.
+ */
+async function flushAsync() {
+	for ( let i = 0; i < 6; i++ ) {
+		await Promise.resolve();
+	}
+}
+
+/**
  * The i18n shape `Pickup_Handler::get_js_config()` ACTUALLY emits (see
  * class-pickup-handler.php) — used as the default so a test proves the mount
  * reads the real key names, not a hypothetical/convenient one.
@@ -137,10 +249,12 @@ function phpI18n( overrides ) {
 			noResults: 'Пункты выдачи не найдены.',
 			blocked: 'Этот пункт выдачи недоступен для вашего заказа.',
 			trigger: 'Выбрать пункт выдачи',
+			triggerChange: 'Выбрать другой пункт выдачи',
 			retry: 'Повторить',
 			upstreamError: 'Сервис пунктов выдачи временно недоступен. Попробуйте ещё раз позже.',
 			rateLimited: 'Слишком много запросов. Подождите немного и попробуйте снова.',
 			notFound: 'Этот пункт выдачи больше не найден. Пожалуйста, выберите другой.',
+			zoomIn: 'Приблизьте карту, чтобы увидеть пункты выдачи',
 		},
 		overrides
 	);
@@ -159,6 +273,27 @@ function makeConfig( overrides ) {
 	};
 
 	return Object.assign( {}, base, overrides );
+}
+
+/**
+ * Spec-style config helper (matches the T20 spec's own `configWith( overrides )` calls):
+ * `{ ownsChrome }` is a convenience TOP-LEVEL key that maps onto `mapConfig.ownsChrome` — the
+ * actual field `pickup-mount.js` reads — never a real top-level config key of its own.
+ *
+ * @param {Object} [overrides]
+ */
+function configWith( overrides ) {
+	const opts = Object.assign( {}, overrides );
+	const mapConfig = Object.assign( { center: [ 55.75, 37.61 ] }, opts.mapConfig );
+
+	if ( undefined !== opts.ownsChrome ) {
+		mapConfig.ownsChrome = opts.ownsChrome;
+	}
+
+	delete opts.ownsChrome;
+	delete opts.mapConfig;
+
+	return makeConfig( Object.assign( { mapConfig: mapConfig }, opts ) );
 }
 
 function buildCheckoutDom() {
@@ -223,24 +358,58 @@ function setCitySelectValue( fieldId, value ) {
 	select.value = value;
 }
 
+/**
+ * A normalized point, with valid `lat`/`lng`/`type` by default (Task 20's `groupByPosition()`
+ * wiring needs a real position; earlier tasks' fixtures never carried one).
+ */
 function point( overrides ) {
 	return Object.assign(
 		{
 			id: 'PVZ-1',
 			name: 'Точка',
 			address: 'ул. Ленина, 1',
+			short_address: 'Ленина, 1',
 			locality: 'Москва',
 			postal_code: '101000',
+			lat: 55.75,
+			lng: 37.61,
+			type: { code: 'pvz', label: 'ПВЗ' },
 		},
 		overrides
 	);
 }
 
+/**
+ * Spec-style session helper: sets the config, mounts, clicks the trigger, and flushes the
+ * `init()` → initial-fetch microtask chain — matching the T20 spec's own `openSession( config )`
+ * calls. Returns the most recently constructed provider/panels doubles plus the session's own
+ * `refresh()`, exactly the shape the spec's literal test bodies use
+ * (`session.panels.emit(...)`, `session.provider.emit(...)`, `session.refresh`).
+ *
+ * @param {Object} config
+ */
+async function openSession( config ) {
+	setConfig( config );
+	mountAll();
+	clickTrigger();
+	await flushAsync();
+
+	const session = getSession( config.fieldId );
+
+	return {
+		provider: StubProvider.instances[ StubProvider.instances.length - 1 ],
+		panels: StubPanels.instances.length ? StubPanels.instances[ StubPanels.instances.length - 1 ] : null,
+		refresh: session ? session.refresh : null,
+	};
+}
+
 beforeEach( () => {
 	StubProvider.instances = [];
+	StubPanels.instances = [];
 	buildCheckoutDom();
 	window.WoodevPickupMapProviders = { testProvider: StubProvider };
 	window.WoodevPickupDataSource = fakeDataSourceFactory( () => Promise.resolve( [] ) );
+	window.WoodevPickupPanels = StubPanels;
 } );
 
 afterEach( () => {
@@ -248,6 +417,7 @@ afterEach( () => {
 	delete window.woodev_pickup_config_p;
 	delete window.WoodevPickupMapProviders;
 	delete window.WoodevPickupDataSource;
+	delete window.WoodevPickupPanels;
 	delete window.jQuery;
 } );
 
@@ -305,7 +475,39 @@ test( 'hooks `updated_checkout`, deferred by EXACTLY 60ms, and re-mounts through
 } );
 
 // -------------------------------------------------------------------------
-// Click → modal → provider → dataSource
+// Trigger label toggle: i18n.trigger vs i18n.triggerChange
+// -------------------------------------------------------------------------
+
+test( 'the trigger reads i18n.trigger when the field has no value yet', () => {
+	setConfig( makeConfig() );
+	mountAll();
+
+	expect( document.querySelector( '.woodev-pickup-trigger' ).textContent ).toBe( 'Выбрать пункт выдачи' );
+} );
+
+test( 'a re-mount with an already-selected field value shows i18n.triggerChange immediately', () => {
+	document.getElementById( FIELD_ID ).value = 'PVZ-EXISTING';
+	setConfig( makeConfig() );
+	mountAll();
+
+	expect( document.querySelector( '.woodev-pickup-trigger' ).textContent )
+		.toBe( 'Выбрать другой пункт выдачи' );
+} );
+
+test( 'the trigger switches to i18n.triggerChange right after a NEW selection is applied', () => {
+	makeStore();
+	setConfig( makeConfig( { replaceAddress: { enabled: false, billingOnly: true } } ) );
+	mountAll();
+	clickTrigger();
+
+	StubProvider.instances[ 0 ].emit( 'select', point( { id: 'PVZ-9' } ) );
+
+	expect( document.querySelector( '.woodev-pickup-trigger' ).textContent )
+		.toBe( 'Выбрать другой пункт выдачи' );
+} );
+
+// -------------------------------------------------------------------------
+// Click → modal → provider
 // -------------------------------------------------------------------------
 
 test( 'clicking the trigger opens the shell and calls provider.init with the container, config, dataSource', () => {
@@ -331,6 +533,9 @@ test( 'clicking the trigger opens the shell and calls provider.init with the con
 		i18n: config.i18n,
 		locality: '',
 	} );
+	// Task 20: the provider contract dropped fetching, but the raw dataSource is still
+	// passed as the 3rd arg for a provider that (like Embedded_Map_Provider) still declares
+	// it, unused, in its own signature.
 	expect( typeof calls[ 0 ].dataSource.fetchPoints ).toBe( 'function' );
 	expect( typeof calls[ 0 ].dataSource.fetchDetails ).toBe( 'function' );
 } );
@@ -356,6 +561,7 @@ test( 'the session tags its modal with the documented pickup modalId on every mo
 
 	expect( closed ).toHaveLength( 1 );
 	expect( closed[ 0 ].modalId ).toBe( 'woodev-pickup-map' );
+	expect( closed[ 0 ].reason ).toBe( 'button' );
 } );
 
 // -------------------------------------------------------------------------
@@ -448,7 +654,7 @@ test( 'an unresolvable provider id shows the generic error without throwing', ()
 } );
 
 // -------------------------------------------------------------------------
-// select → write THROUGH the field's OWN owning store, fire change, close
+// select → write THROUGH the field's OWN owning store, fire change, close with reason 'select'
 // -------------------------------------------------------------------------
 
 test( 'select writes the point id through the store (not the DOM directly) and fires change on the field', () => {
@@ -470,13 +676,23 @@ test( 'select writes the point id through the store (not the DOM directly) and f
 	expect( changeSpy.mock.calls[ 0 ][ 0 ].bubbles ).toBe( true );
 } );
 
-test( 'select closes the shell', () => {
+test( 'select fires woodev_pickup_point_selected and closes the shell with reason "select"', () => {
 	makeStore();
 	setConfig( makeConfig() );
 	mountAll();
 	clickTrigger();
 
-	StubProvider.instances[ 0 ].emit( 'select', point() );
+	const selected = [];
+	const closed = [];
+	document.body.addEventListener( 'woodev_pickup_point_selected', ( e ) => selected.push( e.detail ) );
+	document.body.addEventListener( 'woodev_modal_closed', ( e ) => closed.push( e.detail ) );
+
+	StubProvider.instances[ 0 ].emit( 'select', point( { id: 'PVZ-1' } ) );
+
+	expect( selected ).toHaveLength( 1 );
+	expect( selected[ 0 ].fieldId ).toBe( FIELD_ID );
+	expect( selected[ 0 ].point.id ).toBe( 'PVZ-1' );
+	expect( closed[ 0 ].reason ).toBe( 'select' );
 
 	expect( document.querySelector( '[role="dialog"]' ) ).toBeNull();
 	expect( StubProvider.instances[ 0 ].destroyed ).toBe( true );
@@ -657,9 +873,8 @@ test( 'a plain (non-select2) address field does NOT get change.select2', () => {
 } );
 
 // -------------------------------------------------------------------------
-// dataSource error/empty mapping (this file's own responsibility — see its
-// docblock for why the provider cannot call showError()/showEmpty() itself),
-// keyed by the i18n shape the PHP side actually emits
+// dataSource error/empty mapping (Task 20: THIS FILE now calls fetchPoints()
+// itself, right after provider.init() resolves under strategy: 'bulk')
 // -------------------------------------------------------------------------
 
 test.each( [
@@ -672,11 +887,10 @@ test.each( [
 	);
 	const config = makeConfig();
 	setConfig( config );
-	window.WoodevPickupMapProviders = { testProvider: EagerStubProvider };
 	mountAll();
 	clickTrigger();
 
-	await StubProvider.instances[ 0 ].pending;
+	await flushAsync();
 
 	const dialog = document.querySelector( '[role="dialog"]' );
 	expect( dialog.textContent ).toContain( config.i18n[ i18nKey ] );
@@ -688,40 +902,43 @@ test( 'an unmapped/unknown code falls back to the generic error message, never t
 		Promise.reject( { status: 500, code: 'something_else', message: 'raw' } )
 	);
 	setConfig( makeConfig() );
-	window.WoodevPickupMapProviders = { testProvider: EagerStubProvider };
 	mountAll();
 	clickTrigger();
 
-	await StubProvider.instances[ 0 ].pending;
+	await flushAsync();
 
 	const dialog = document.querySelector( '[role="dialog"]' );
 	expect( dialog.textContent ).toContain( 'Не удалось загрузить пункты выдачи' );
 	expect( dialog.textContent ).not.toContain( 'something_else' );
 } );
 
-test( 'a genuinely empty result (nothing drawn yet) shows the EMPTY state, not the error state', async () => {
+test( 'a genuinely empty result shows the message as a NON-destructive notice, keeping the panels chrome '
+	+ '(Task 20: panels share modal.getContainer() with the map — a destructive showEmpty() would wipe '
+	+ 'them out for no reason a dataSource hiccup justifies)', async () => {
 	window.WoodevPickupDataSource = fakeDataSourceFactory( () => Promise.resolve( [] ) );
 	setConfig( makeConfig() );
-	window.WoodevPickupMapProviders = { testProvider: EagerStubProvider };
 	mountAll();
 	clickTrigger();
 
-	await StubProvider.instances[ 0 ].pending;
+	await flushAsync();
 
 	const dialog = document.querySelector( '[role="dialog"]' );
 	expect( dialog.textContent ).toContain( 'Пункты выдачи не найдены' );
 	expect( dialog.querySelector( '.woodev-modal__message--error' ) ).toBeNull();
-	expect( dialog.querySelector( '.woodev-modal__message--empty' ) ).not.toBeNull();
+	expect( dialog.querySelector( '.woodev-modal__message--empty' ) ).toBeNull();
+	expect( dialog.querySelector( '.woodev-modal__notice' ) ).not.toBeNull();
+	// The panels chrome survived — it lives in the SAME container the empty state would
+	// otherwise have wiped.
+	expect( dialog.querySelector( '.woodev-pickup-list' ) ).not.toBeNull();
 } );
 
 test( 'a non-empty result shows neither the error nor the empty state', async () => {
 	window.WoodevPickupDataSource = fakeDataSourceFactory( () => Promise.resolve( [ point() ] ) );
 	setConfig( makeConfig() );
-	window.WoodevPickupMapProviders = { testProvider: EagerStubProvider };
 	mountAll();
 	clickTrigger();
 
-	await StubProvider.instances[ 0 ].pending;
+	await flushAsync();
 
 	const dialog = document.querySelector( '[role="dialog"]' );
 	expect( dialog.querySelector( '.woodev-modal__message--error' ) ).toBeNull();
@@ -729,42 +946,47 @@ test( 'a non-empty result shows neither the error nor the empty state', async ()
 } );
 
 // -------------------------------------------------------------------------
-// C1 — non-destructive degradation once a point set has been drawn, and
-// retry always destroying the live provider and constructing a fresh one
+// C1 — non-destructive degradation once a point set has been drawn (Task 20:
+// the SECOND fetch within a bulk session now comes from refresh(), the only
+// way to re-fetch without a real viewport/type-filter change), and retry
+// always destroying the live provider and constructing a fresh one
 // -------------------------------------------------------------------------
 
-test( 'once a set is drawn, a SUBSEQUENT empty result shows a NOTICE, keeping the drawn content', async () => {
+/**
+ * A provider double that marks its container as "drawn" on init() — shared by the two C1 tests
+ * below to prove drawn content survives a subsequent empty/failed fetch.
+ */
+function DrawingProvider() {
+	StubProvider.call( this );
+}
+DrawingProvider.prototype = Object.create( StubProvider.prototype );
+DrawingProvider.prototype.init = function( container, config, dataSource ) {
+	StubProvider.prototype.init.call( this, container, config, dataSource );
+
+	if ( ! container.querySelector( '.drawn-map-marker' ) ) {
+		const marker = document.createElement( 'div' );
+		marker.className = 'drawn-map-marker';
+		container.appendChild( marker );
+	}
+};
+
+test( 'once a set is drawn, a SUBSEQUENT empty refresh() shows a NOTICE, keeping the drawn content', async () => {
 	let resolveWith = [ point() ];
 	window.WoodevPickupDataSource = fakeDataSourceFactory( () => Promise.resolve( resolveWith ) );
 	setConfig( makeConfig() );
-
-	function DrawingProvider() {
-		StubProvider.call( this );
-	}
-	DrawingProvider.prototype = Object.create( StubProvider.prototype );
-	DrawingProvider.prototype.init = function( container, config, dataSource ) {
-		StubProvider.prototype.init.call( this, container, config, dataSource );
-		if ( ! container.querySelector( '.drawn-map-marker' ) ) {
-			const marker = document.createElement( 'div' );
-			marker.className = 'drawn-map-marker';
-			container.appendChild( marker );
-		}
-		this.dataSource = dataSource;
-		// The initial load — this is what actually sets hasDrawnPoints inside pickup-mount.js.
-		this.pending = dataSource.fetchPoints( {} );
-	};
 	window.WoodevPickupMapProviders = { testProvider: DrawingProvider };
 
 	mountAll();
 	clickTrigger();
-	await StubProvider.instances[ 0 ].pending;
+	await flushAsync();
 
 	const dialog = document.querySelector( '[role="dialog"]' );
 	expect( dialog.querySelector( '.drawn-map-marker' ) ).not.toBeNull();
 
-	// Now a subsequent fetch (e.g. the customer panning) comes back empty.
+	// A changed viewport/payment method, via refresh() — the only re-fetch trigger under
+	// `strategy: 'bulk'` with no real provider driving boundsChange.
 	resolveWith = [];
-	await StubProvider.instances[ 0 ].dataSource.fetchPoints( {} );
+	await getSession( FIELD_ID ).refresh();
 
 	expect( dialog.querySelector( '.drawn-map-marker' ) ).not.toBeNull(); // still there!
 	expect( dialog.querySelector( '.woodev-modal__message--empty' ) ).toBeNull();
@@ -772,7 +994,7 @@ test( 'once a set is drawn, a SUBSEQUENT empty result shows a NOTICE, keeping th
 	expect( dialog.textContent ).toContain( 'Пункты выдачи не найдены' );
 } );
 
-test( 'once a set is drawn, a SUBSEQUENT error shows a NOTICE with retry, keeping the drawn content', async () => {
+test( 'once drawn, a failed refresh() shows a NOTICE with retry, keeping the drawn content', async () => {
 	let shouldFail = false;
 	window.WoodevPickupDataSource = fakeDataSourceFactory( () =>
 		shouldFail
@@ -780,33 +1002,17 @@ test( 'once a set is drawn, a SUBSEQUENT error shows a NOTICE with retry, keepin
 			: Promise.resolve( [ point() ] )
 	);
 	setConfig( makeConfig() );
-
-	function DrawingProvider() {
-		StubProvider.call( this );
-	}
-	DrawingProvider.prototype = Object.create( StubProvider.prototype );
-	DrawingProvider.prototype.init = function( container, config, dataSource ) {
-		StubProvider.prototype.init.call( this, container, config, dataSource );
-		if ( ! container.querySelector( '.drawn-map-marker' ) ) {
-			const marker = document.createElement( 'div' );
-			marker.className = 'drawn-map-marker';
-			container.appendChild( marker );
-		}
-		this.dataSource = dataSource;
-		// The initial load — this is what actually sets hasDrawnPoints inside pickup-mount.js.
-		this.pending = dataSource.fetchPoints( {} ).catch( () => {} );
-	};
 	window.WoodevPickupMapProviders = { testProvider: DrawingProvider };
 
 	mountAll();
 	clickTrigger();
-	await StubProvider.instances[ 0 ].pending;
+	await flushAsync();
 
 	const dialog = document.querySelector( '[role="dialog"]' );
 	expect( dialog.querySelector( '.drawn-map-marker' ) ).not.toBeNull();
 
 	shouldFail = true;
-	await StubProvider.instances[ 0 ].dataSource.fetchPoints( {} ).catch( () => {} );
+	await getSession( FIELD_ID ).refresh();
 
 	expect( dialog.querySelector( '.drawn-map-marker' ) ).not.toBeNull(); // still there!
 	expect( dialog.querySelector( '.woodev-modal__message--error' ) ).toBeNull();
@@ -816,19 +1022,20 @@ test( 'once a set is drawn, a SUBSEQUENT error shows a NOTICE with retry, keepin
 
 	// Retry on the notice destroys the OLD provider and builds a fresh one — never
 	// re-init()s the live instance.
-	const oldProvider = StubProvider.instances[ 0 ];
+	const oldProvider = StubProvider.instances[ StubProvider.instances.length - 1 ];
 	const retryButton = notice.querySelector( '.woodev-modal__notice-retry' );
 	expect( retryButton ).not.toBeNull();
 
 	shouldFail = false;
 	retryButton.dispatchEvent( new MouseEvent( 'click', { bubbles: true } ) );
+	await flushAsync();
 
 	expect( oldProvider.destroyed ).toBe( true );
 	expect( StubProvider.instances.length ).toBe( 2 );
 	expect( StubProvider.instances[ 1 ] ).not.toBe( oldProvider );
 } );
 
-test( 'BEFORE anything is drawn, an error still uses the destructive showError (nothing to lose)', () => {
+test( 'BEFORE anything is drawn, a provider-level error still uses the destructive showError (nothing to lose)', () => {
 	setConfig( makeConfig() );
 	mountAll();
 	clickTrigger();
@@ -863,10 +1070,11 @@ test( 'a provider-emitted error retry destroys the old provider and constructs a
 } );
 
 // -------------------------------------------------------------------------
-// No stacked sessions — including across a slot recreated mid-session (I2)
+// No stacked sessions — including across a slot recreated mid-session (I2) —
+// and NO panels/providers left alive either (Task 20)
 // -------------------------------------------------------------------------
 
-test( 'clicking the trigger twice in a row never leaves two providers alive at once', () => {
+test( 'clicking the trigger twice in a row never leaves two providers or two panels alive', () => {
 	setConfig( makeConfig() );
 	mountAll();
 
@@ -877,6 +1085,12 @@ test( 'clicking the trigger twice in a row never leaves two providers alive at o
 	expect( StubProvider.instances[ 0 ].destroyed ).toBe( true );
 	expect( StubProvider.instances[ 1 ].destroyed ).toBe( false );
 	expect( document.querySelectorAll( '[role="dialog"]' ).length ).toBe( 1 );
+
+	// Task 20: one panels instance is constructed per SESSION (not per retry), and a second
+	// click opens a second, independent one — the old session's panels DOM went with its
+	// (destroyed) modal.
+	expect( StubPanels.instances.length ).toBe( 2 );
+	expect( document.querySelectorAll( '.woodev-pickup-list' ).length ).toBe( 1 );
 } );
 
 test( 'closing via Escape, then clicking again, opens a clean new session', () => {
@@ -930,4 +1144,391 @@ test( 'I2: a session opened before §8 recreates the anchor is still torn down w
 	expect( StubProvider.instances.length ).toBe( 2 );
 	expect( StubProvider.instances[ 0 ].destroyed ).toBe( true );
 	expect( document.querySelectorAll( '[role="dialog"]' ).length ).toBe( 1 );
+} );
+
+// =========================================================================
+// Task 20 — the wiring that makes the feature actually work
+// =========================================================================
+
+// -------------------------------------------------------------------------
+// The ownsChrome branch (D-3): no panels at all for a provider that owns
+// the whole container — not merely hidden
+// -------------------------------------------------------------------------
+
+test( 'renders panels for a provider that does not own the chrome', async () => {
+	await openSession( configWith( { ownsChrome: false } ) );
+
+	expect( document.querySelector( '.woodev-pickup-list' ) ).not.toBeNull();
+	expect( StubPanels.instances.length ).toBe( 1 );
+} );
+
+test( 'renders no panels for a provider that owns the chrome', async () => {
+	await openSession( configWith( { ownsChrome: true } ) );
+
+	expect( document.querySelector( '.woodev-pickup-list' ) ).toBeNull();
+	// Never constructed — not just hidden/unrendered.
+	expect( StubPanels.instances.length ).toBe( 0 );
+} );
+
+// -------------------------------------------------------------------------
+// The four woodev_pickup_* document.body events
+// -------------------------------------------------------------------------
+
+test( 'fires woodev_pickup_map_ready once the provider init resolves', async () => {
+	const seen = [];
+	document.body.addEventListener( 'woodev_pickup_map_ready', ( e ) => seen.push( e.detail ) );
+	await openSession( configWith() );
+
+	expect( seen[ 0 ].fieldId ).toBe( FIELD_ID );
+} );
+
+test( 'fires woodev_pickup_map_ready for an ownsChrome provider too', async () => {
+	const seen = [];
+	document.body.addEventListener( 'woodev_pickup_map_ready', ( e ) => seen.push( e.detail ) );
+	await openSession( configWith( { ownsChrome: true } ) );
+
+	expect( seen[ 0 ].fieldId ).toBe( FIELD_ID );
+} );
+
+test( 'fires woodev_pickup_points_loaded with the count and strategy', async () => {
+	window.WoodevPickupDataSource = fakeDataSourceFactory( () =>
+		Promise.resolve( [ point( { id: 'p1', lat: 1, lng: 2 } ), point( { id: 'p2', lat: 3, lng: 4 } ) ] )
+	);
+	const seen = [];
+	document.body.addEventListener( 'woodev_pickup_points_loaded', ( e ) => seen.push( e.detail ) );
+	await openSession( configWith( { strategy: 'bulk' } ) );
+
+	expect( seen[ 0 ] ).toEqual( { fieldId: FIELD_ID, count: 2, strategy: 'bulk' } );
+} );
+
+test( 'never fires woodev_pickup_points_loaded for an ownsChrome provider (it never fetches)', async () => {
+	const seen = [];
+	document.body.addEventListener( 'woodev_pickup_points_loaded', ( e ) => seen.push( e.detail ) );
+	await openSession( configWith( { ownsChrome: true } ) );
+
+	expect( seen ).toHaveLength( 0 );
+} );
+
+test( 'fires woodev_pickup_point_selected and closes the modal with reason select', async () => {
+	const selected = [];
+	const closed = [];
+	document.body.addEventListener( 'woodev_pickup_point_selected', ( e ) => selected.push( e.detail ) );
+	document.body.addEventListener( 'woodev_modal_closed', ( e ) => closed.push( e.detail ) );
+
+	const session = await openSession( configWith() );
+	session.panels.emit( 'select', point( { id: 'p1' } ) );
+
+	expect( selected[ 0 ].point.id ).toBe( 'p1' );
+	expect( closed[ 0 ].reason ).toBe( 'select' );
+	// The default config's address replacement writes billing_address_1/postcode too, which
+	// no §8 store in this test manages — an expected, acknowledged warn (see C2 above).
+	expect( console ).toHaveWarned();
+} );
+
+test( 'fires woodev_pickup_error when the provider reports a fatal error', async () => {
+	const seen = [];
+	document.body.addEventListener( 'woodev_pickup_error', ( e ) => seen.push( e.detail ) );
+
+	const session = await openSession( configWith() );
+	session.provider.emit( 'error', { code: 'map_script', message: '' } );
+
+	expect( seen[ 0 ].code ).toBe( 'map_script' );
+} );
+
+test( 'does NOT fire woodev_pickup_error for a transient (non-fatal) dataSource fetch failure', async () => {
+	window.WoodevPickupDataSource = fakeDataSourceFactory( () =>
+		Promise.reject( { status: 502, code: 'woodev_pickup_upstream_error', message: 'x' } )
+	);
+	const seen = [];
+	document.body.addEventListener( 'woodev_pickup_error', ( e ) => seen.push( e.detail ) );
+
+	await openSession( configWith() );
+
+	expect( seen ).toHaveLength( 0 );
+} );
+
+// -------------------------------------------------------------------------
+// refresh()
+// -------------------------------------------------------------------------
+
+test( 'exposes refresh() on the open session', async () => {
+	const session = await openSession( configWith() );
+
+	expect( typeof session.refresh ).toBe( 'function' );
+} );
+
+test( 'refresh() re-runs the bulk fetch and fires a fresh points_loaded', async () => {
+	let fetchCalls = 0;
+	window.WoodevPickupDataSource = fakeDataSourceFactory( () => {
+		fetchCalls += 1;
+		return Promise.resolve( [] );
+	} );
+	const seen = [];
+	document.body.addEventListener( 'woodev_pickup_points_loaded', ( e ) => seen.push( e.detail ) );
+
+	const session = await openSession( configWith( { strategy: 'bulk' } ) );
+	const callsBeforeRefresh = fetchCalls;
+	const seenBeforeRefresh = seen.length;
+
+	await session.refresh();
+
+	expect( fetchCalls ).toBe( callsBeforeRefresh + 1 );
+	expect( seen.length ).toBe( seenBeforeRefresh + 1 );
+} );
+
+test( 'refresh() is safe to call twice in a row', async () => {
+	const session = await openSession( configWith() );
+
+	await expect( Promise.all( [ session.refresh(), session.refresh() ] ) ).resolves.toBeDefined();
+} );
+
+test( 'refresh() is safe to call after the session has been fully torn down', async () => {
+	const config = configWith();
+	const session = await openSession( config );
+
+	session.provider.emit( 'select', point() ); // tears the session down via handleSelection
+	// The default config's address replacement writes billing_address_1/postcode too, which
+	// no §8 store in this test manages — an expected, acknowledged warn (see C2 above).
+	expect( console ).toHaveWarned();
+
+	await expect( session.refresh() ).resolves.toBeUndefined();
+} );
+
+test( 'refresh() is a no-op for an ownsChrome provider (nothing here ever fetches for it)', async () => {
+	const session = await openSession( configWith( { ownsChrome: true } ) );
+
+	await expect( session.refresh() ).resolves.toBeUndefined();
+} );
+
+// -------------------------------------------------------------------------
+// Provider → panels wiring
+// -------------------------------------------------------------------------
+
+test( 'provider pointClick opens the card for the matching group', async () => {
+	window.WoodevPickupDataSource = fakeDataSourceFactory( () =>
+		Promise.resolve( [ point( { id: 'p1', lat: 1, lng: 2 } ) ] )
+	);
+	const session = await openSession( configWith() );
+
+	session.provider.emit( 'pointClick', '1.0000,2.0000' );
+
+	expect( session.panels.lastOpenCard.group.key ).toBe( '1.0000,2.0000' );
+} );
+
+test( 'provider visibleChange resolves keys to groups and calls panels.setVisible', async () => {
+	window.WoodevPickupDataSource = fakeDataSourceFactory( () => Promise.resolve( [
+		point( { id: 'a', lat: 1, lng: 2 } ),
+		point( { id: 'b', lat: 3, lng: 4 } ),
+	] ) );
+	const session = await openSession( configWith() );
+
+	session.provider.emit( 'visibleChange', [ '1.0000,2.0000' ] );
+
+	expect( session.panels.lastVisible ).toHaveLength( 1 );
+	expect( session.panels.lastVisible[ 0 ].key ).toBe( '1.0000,2.0000' );
+} );
+
+test( 'provider nothingNearby calls panels.showNothingNearby with the same payload', async () => {
+	const session = await openSession( configWith() );
+	const info = { key: 'x', distanceMeters: 999, name: 'Y' };
+
+	session.provider.emit( 'nothingNearby', info );
+
+	expect( session.panels.lastNothingNearby ).toBe( info );
+} );
+
+test( 'provider bboxTooWide degrades with the i18n.zoomIn message', async () => {
+	const session = await openSession( configWith() );
+
+	session.provider.emit( 'bboxTooWide', null );
+
+	const dialog = document.querySelector( '[role="dialog"]' );
+	expect( dialog.textContent ).toContain( 'Приблизьте карту, чтобы увидеть пункты выдачи' );
+} );
+
+test( 'provider searchResults forwards to panels.renderSearchResults verbatim', async () => {
+	const session = await openSession( configWith() );
+	const results = { points: [ point() ], addresses: [ { displayName: 'Тверская 1' } ] };
+
+	session.provider.emit( 'searchResults', results );
+
+	expect( session.panels.lastSearchResults ).toBe( results );
+} );
+
+// -------------------------------------------------------------------------
+// Panels → provider wiring
+// -------------------------------------------------------------------------
+
+test( 'panels listToggle calls provider.setMargin with the open state and width', async () => {
+	const session = await openSession( configWith() );
+
+	session.panels.emit( 'listToggle', { open: true, width: 320 } );
+
+	expect( session.provider.setMarginCalls ).toEqual( [ { open: true, width: 320 } ] );
+} );
+
+test( 'panels searchAddressPicked resolves the address AT THAT INDEX against the provider', async () => {
+	const session = await openSession( configWith() );
+	session.provider.emit( 'searchResults', { points: [], addresses: [ { displayName: 'A' }, { displayName: 'B' } ] } );
+
+	session.panels.emit( 'searchAddressPicked', 1 );
+
+	expect( session.provider.resolveAddressCalls ).toEqual( [ 'B' ] );
+} );
+
+test( 'panels searchPointPicked focuses the owning group and opens its card on the exact point', async () => {
+	window.WoodevPickupDataSource = fakeDataSourceFactory( () =>
+		Promise.resolve( [ point( { id: 'p9', lat: 10, lng: 20 } ) ] )
+	);
+	const session = await openSession( configWith() );
+
+	session.panels.emit( 'searchPointPicked', 'p9' );
+
+	expect( session.provider.focusGroupCalls ).toEqual( [ '10.0000,20.0000' ] );
+	expect( session.panels.lastOpenCard.pointId ).toBe( 'p9' );
+} );
+
+test( 'panels showNearestRequested focuses the group named by info.key and opens its card', async () => {
+	window.WoodevPickupDataSource = fakeDataSourceFactory( () =>
+		Promise.resolve( [ point( { id: 'p1', lat: 55.8, lng: 37.7 } ) ] )
+	);
+	const session = await openSession( configWith() );
+
+	session.panels.emit( 'showNearestRequested', { key: '55.8000,37.7000', distanceMeters: 100, name: 'X' } );
+
+	expect( session.provider.focusGroupCalls ).toEqual( [ '55.8000,37.7000' ] );
+	expect( session.panels.lastOpenCard.group.key ).toBe( '55.8000,37.7000' );
+} );
+
+test( 'panels showNearestRequested is a no-op when info.key names a group that is no longer loaded', async () => {
+	const session = await openSession( configWith() );
+
+	expect( () => session.panels.emit( 'showNearestRequested', { key: 'ghost', distanceMeters: 1, name: 'X' } ) )
+		.not.toThrow();
+	expect( session.provider.focusGroupCalls ).toEqual( [] );
+} );
+
+test( 'panels anchorCleared clears the address — the "your address" pin cannot outlive its search', async () => {
+	const session = await openSession( configWith() );
+
+	session.panels.emit( 'anchorCleared', null );
+
+	expect( session.provider.clearAddressCalls ).toBe( 1 );
+} );
+
+test( 'panels.setSelectedId is seeded from the field\'s current value at session-open time', async () => {
+	document.getElementById( FIELD_ID ).value = 'PVZ-EXISTING';
+
+	const session = await openSession( configWith() );
+
+	expect( session.panels.lastSelectedId ).toBe( 'PVZ-EXISTING' );
+} );
+
+test( 'panels.setSelectedId is never called when the field has no value yet', async () => {
+	const session = await openSession( configWith() );
+
+	expect( session.panels.lastSelectedId ).toBeUndefined();
+} );
+
+// -------------------------------------------------------------------------
+// The strategy-dependent type-filter destination (D-10) — getting this
+// backwards is invisible under a loosely-stubbed dataSource, so both sides
+// are pinned by VALUE, not just "some branch was taken"
+// -------------------------------------------------------------------------
+
+test( 'typeFilterChange under bulk calls provider.setTypeFilter and does NOT refetch', async () => {
+	let fetchCalls = 0;
+	window.WoodevPickupDataSource = fakeDataSourceFactory( () => {
+		fetchCalls += 1;
+		return Promise.resolve( [] );
+	} );
+
+	const session = await openSession( configWith( { strategy: 'bulk' } ) );
+	const callsBefore = fetchCalls;
+
+	session.panels.emit( 'typeFilterChange', [ 'pvz' ] );
+	await flushAsync();
+
+	expect( session.provider.setTypeFilterCalls ).toEqual( [ [ 'pvz' ] ] );
+	expect( fetchCalls ).toBe( callsBefore ); // client-side filter only — a refetch would be waste
+} );
+
+test( 'typeFilterChange under viewport refetches the SAME bbox + new types, never setTypeFilter', async () => {
+	const queries = [];
+	window.WoodevPickupDataSource = fakeDataSourceFactory( ( query ) => {
+		queries.push( query );
+		return Promise.resolve( [] );
+	} );
+
+	const session = await openSession( configWith( { strategy: 'viewport' } ) );
+
+	session.provider.emit( 'boundsChange', [ 1, 2, 3, 4 ] );
+	await flushAsync();
+
+	session.panels.emit( 'typeFilterChange', [ 'pvz' ] );
+	await flushAsync();
+
+	expect( session.provider.setTypeFilterCalls ).toEqual( [] ); // never a client-side filter under viewport
+	expect( queries[ queries.length - 1 ] ).toEqual( { bounds: [ 1, 2, 3, 4 ], types: [ 'pvz' ] } );
+} );
+
+test( 'typeFilterChange under viewport, before any boundsChange, does not throw and does not fetch', async () => {
+	let fetchCalls = 0;
+	window.WoodevPickupDataSource = fakeDataSourceFactory( () => {
+		fetchCalls += 1;
+		return Promise.resolve( [] );
+	} );
+
+	const session = await openSession( configWith( { strategy: 'viewport' } ) );
+	const callsBefore = fetchCalls;
+
+	expect( () => session.panels.emit( 'typeFilterChange', [ 'pvz' ] ) ).not.toThrow();
+	await flushAsync();
+
+	expect( fetchCalls ).toBe( callsBefore );
+} );
+
+// -------------------------------------------------------------------------
+// boundsChange (viewport) drives the fetch → setPoints() → panels.setTypes()
+// chain end to end
+// -------------------------------------------------------------------------
+
+test( 'a viewport boundsChange fetches, groups, and hands the groups to provider.setPoints()', async () => {
+	window.WoodevPickupDataSource = fakeDataSourceFactory( () => Promise.resolve( [
+		point( { id: 'a', lat: 1, lng: 2 } ),
+		point( { id: 'b', lat: 1, lng: 2 } ), // co-located with 'a' — folds into the SAME group
+	] ) );
+
+	const session = await openSession( configWith( { strategy: 'viewport' } ) );
+
+	session.provider.emit( 'boundsChange', [ 1, 2, 3, 4 ] );
+	await flushAsync();
+
+	const lastGroups = session.provider.setPointsCalls[ session.provider.setPointsCalls.length - 1 ];
+	expect( lastGroups ).toHaveLength( 1 );
+	expect( lastGroups[ 0 ].points ).toHaveLength( 2 );
+	expect( session.panels.lastTypes ).toEqual( [ { code: 'pvz', label: 'ПВЗ' } ] );
+} );
+
+// -------------------------------------------------------------------------
+// A real Panels integration smoke test — proves buildPanelsConfig() actually
+// produces a shape the REAL pickup-panels.js class accepts and renders from
+// -------------------------------------------------------------------------
+
+test( 'INTEGRATION: the real Panels class renders correctly from buildPanelsConfig()\'s output', async () => {
+	window.WoodevPickupPanels = RealPanels;
+
+	const config = configWith( {
+		mapConfig: { center: [ 55.75, 37.61 ], lang: 'ru_RU' },
+		i18n: phpI18n( { drawerTitle: 'Пункты выдачи в этой области' } ),
+	} );
+	setConfig( config );
+	mountAll();
+	clickTrigger();
+	await flushAsync();
+
+	const dialog = document.querySelector( '[role="dialog"]' );
+	const header = dialog.querySelector( '.woodev-pickup-list__header' );
+	expect( header ).not.toBeNull();
+	expect( header.textContent ).toContain( 'Пункты выдачи в этой области' );
 } );

@@ -996,10 +996,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 * Enqueues the picker's frontend assets on the checkout page.
 		 *
 		 * Registers handles for JS/CSS files owned by SP-5 tasks — the dataSource
-		 * (`pickup-datasource.js`, Task 11), the mount script (`pickup-mount.js`, Task 12),
-		 * the active provider's script (`map-provider-{$provider}.js`, Tasks 13/14) and the
-		 * pickup panels' own stylesheet (`pickup.css`, Task 15). Any of these is still skipped
-		 * entirely via {@see self::enqueue_style_if_built()}/{@see self::enqueue_script_if_built()}'s
+		 * (`pickup-datasource.js`, Task 11), the geometry/colour helpers
+		 * (`pickup-geo.js`, Task 9, no dependencies of its own — pure functions), the
+		 * framework-owned panels (`pickup-panels.js`, Tasks 12-16, depends on `pickup-geo.js`
+		 * for its distance/colour arithmetic), the mount script (`pickup-mount.js`, Task 12),
+		 * the active provider's script (`map-provider-{$provider}.js`, Tasks 13/14 — depends on
+		 * `pickup-geo.js` too: `map-provider-yandex.js` calls its `safeColor()`/`nearest()`/
+		 * `boundsFor()`/`matchPoints()`) and the pickup panels' own stylesheet (`pickup.css`,
+		 * Task 15). Any of these is still skipped entirely via
+		 * {@see self::enqueue_style_if_built()}/{@see self::enqueue_script_if_built()}'s
 		 * {@see self::asset_exists()} check rather than enqueueing a `href`/`src` that would
 		 * 404 — a missing tag is invisible, but a 404ing one next to fully wired assets is a
 		 * live checkout regression. (The modal shell — `woodev-modal.js` AND its chrome
@@ -1011,9 +1016,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 * a script/style dependency, same as any other subsystem that needs a dialog would,
 		 * never re-registers it.) The mount config is therefore localized only when the mount
 		 * script itself was actually enqueued (it now always is, since every one of its
-		 * declared dependencies — including the provider handle — is a registered handle as of
-		 * this fix; see
+		 * declared dependencies — including `pickup-geo.js`, `pickup-panels.js` and the provider
+		 * handle — is a registered handle as of this fix; see
 		 * {@see PickupHandlerTest::test_enqueue_assets_enqueues_only_the_assets_already_built()}).
+		 *
+		 * LOAD ORDER (Task 20): a UMD-ish file that reads `window.WoodevPickupGeo`/
+		 * `window.WoodevPickupPanels` at CALL time (not require time — see those files' own
+		 * docblocks) still needs the script actually present in the DOM before the mount runs
+		 * — WP's own dependency resolution is what guarantees that, which is why `pickup-mount`
+		 * declares `woodev-pickup-geo`/`woodev-pickup-panels`/the provider handle as real
+		 * dependencies here rather than relying on enqueue ORDER (WP does not guarantee
+		 * source order matches enqueue-call order; only the `deps` array does).
 		 *
 		 * @internal
 		 *
@@ -1029,10 +1042,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 			$provider_handle = $this->map_provider->get_script_handle();
 
 			$this->enqueue_script_if_built( 'woodev-pickup-datasource', 'js/frontend/pickup-datasource.js', [] );
+			$this->enqueue_script_if_built( 'woodev-pickup-geo', 'js/frontend/pickup-geo.js', [] );
+			$this->enqueue_script_if_built(
+				'woodev-pickup-panels',
+				'js/frontend/pickup-panels.js',
+				[ 'woodev-pickup-geo' ]
+			);
 			$this->enqueue_script_if_built(
 				$provider_handle,
 				'js/frontend/map-provider-' . $this->map_provider->get_id() . '.js',
-				[]
+				[ 'woodev-pickup-geo' ]
 			);
 
 			// `jquery`: the mount script binds `updated_checkout` through jQuery when it is
@@ -1041,7 +1060,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 			$mount_enqueued = $this->enqueue_script_if_built(
 				'woodev-pickup-mount',
 				'js/frontend/pickup-mount.js',
-				[ 'jquery', 'woodev-modal', 'woodev-pickup-datasource', $provider_handle ]
+				[
+					'jquery',
+					'woodev-modal',
+					'woodev-pickup-datasource',
+					'woodev-pickup-geo',
+					'woodev-pickup-panels',
+					$provider_handle,
+				]
 			);
 
 			// `woodev-modal`: the framework-registered chrome stylesheet (D-13) — declared as a

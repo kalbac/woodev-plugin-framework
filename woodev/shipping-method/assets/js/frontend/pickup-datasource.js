@@ -129,12 +129,15 @@
 	 * Emits, in order, `locality`, `bbox` (the bounds array joined as
 	 * `lat1,lng1,lat2,lng2` — the EXACT format
 	 * `Point_Query::from_request()` parses; any other separator or field
-	 * order is silently rejected server-side) and `q`. Omits a param
-	 * entirely rather than sending it empty/malformed, so the server's own
-	 * "no addressing mode" empty-result branch decides what an omitted param
-	 * means, not this module.
+	 * order is silently rejected server-side), `q`, and `types` (the codes
+	 * comma-joined — the EXACT format `Point_Query::parse_types()` parses,
+	 * same separator convention as `bbox`; Task 20's mount is the first
+	 * caller to ever pass this). Omits a param entirely rather than sending
+	 * it empty/malformed, so the server's own "no addressing mode"/"no
+	 * types" empty-result branch decides what an omitted param means, not
+	 * this module.
 	 *
-	 * @param {Object} query `{ locality, bounds, q }` — all optional.
+	 * @param {Object} query `{ locality, bounds, q, types }` — all optional.
 	 * @returns {string}
 	 */
 	function serializePointsQuery( query ) {
@@ -151,6 +154,10 @@
 
 		if ( 'string' === typeof q.q && q.q.length > 0 ) {
 			parts.push( 'q=' + encodeURIComponent( q.q.substring( 0, MAX_Q_LENGTH ) ) );
+		}
+
+		if ( Array.isArray( q.types ) && q.types.length > 0 ) {
+			parts.push( 'types=' + encodeURIComponent( q.types.join( ',' ) ) );
 		}
 
 		return parts.join( '&' );
@@ -423,7 +430,7 @@
 		 * file-level docblock for what happens when this request is later superseded by
 		 * a subsequent, out-of-order-delivered one.
 		 *
-		 * @param {Object} query `{ locality, bounds, q }` — all optional.
+		 * @param {Object} query `{ locality, bounds, q, types }` — all optional.
 		 * @returns {Promise<Array>}
 		 */
 		function fetchPoints( query ) {

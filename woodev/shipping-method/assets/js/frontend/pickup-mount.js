@@ -107,17 +107,17 @@
  * one), and WooCommerce's own `update_checkout` — which refreshes totals and
  * the WC session address — never fires without a real `change` either.
  *
- * WHY THIS FILE — NOT THE (FUTURE) MAP PROVIDER — OWNS THE MODAL'S
- * ERROR/EMPTY/NOTICE STATES: a provider's `init()` only ever receives a bare
- * `container` DOM node (see below), never the modal instance — it has no way
- * to call `showError()`/`showEmpty()`/`showNotice()` itself. This file
- * therefore wraps the `dataSource` it hands to `init()` (see
- * {@see wrapDataSource}): a `fetchPoints()` rejection is mapped from the
+ * WHY THIS FILE — NOT THE MAP PROVIDER — OWNS THE MODAL'S ERROR/EMPTY/NOTICE
+ * STATES: a provider's `init()` only ever receives a bare `container` DOM
+ * node (see below), never the modal instance — it has no way to call
+ * `showError()`/`showEmpty()`/`showNotice()` itself. This file therefore
+ * calls `dataSource.fetchPoints()` itself (see {@see fetchAndSetPoints} — the
+ * ONE place this session ever does, per the file docblock's "THIS FILE, NOT
+ * THE PROVIDER, NOW OWNS FETCHING" section): a rejection is mapped from the
  * dataSource's `{status, code, message}` shape to an i18n message (never the
  * raw code); a genuinely empty resolution (`[]`) is NOT an error — see
- * `pickup-datasource.js`'s own docblock. Both are still returned/rejected to
- * the caller unchanged, so a provider that wants to react further (e.g.
- * clearing a drawer) still can.
+ * `pickup-datasource.js`'s own docblock — it degrades through the SAME
+ * `degrade()` helper instead.
  *
  * NON-DESTRUCTIVE DEGRADATION ONCE A SET IS DRAWN: `showError()`/`showEmpty()`
  * REPLACE the modal body wholesale (see their own docblocks in
@@ -134,13 +134,77 @@
  * `init / on / destroy` — re-`init()`ing an instance that already holds a map
  * handle bound to a (possibly now-orphaned) container is undefined by that
  * contract. A retry therefore always destroys the current provider, constructs
- * a FRESH one, re-wires `select`/`error` on it, and only then calls `init()`.
+ * a FRESH one, re-wires every event on it, and only then calls `init()`. The
+ * framework's own {@see window.WoodevPickupPanels} shell, in contrast, is
+ * constructed ONCE per session (never per retry) — a map-provider failure has
+ * nothing to do with the list/card chrome around it, so retrying rebuilds only
+ * what actually failed.
+ *
+ * THIS FILE, NOT THE PROVIDER, NOW OWNS FETCHING (Task 20): the provider
+ * contract shrank to `init( container, config )` — it draws whatever
+ * `setPoints( groups )` hands it and reports camera/selection events, but
+ * never calls the REST layer itself any more (see `map-provider-yandex.js`'s
+ * own docblock, "THIS FILE NO LONGER FETCHES ANYTHING ITSELF"). This file is
+ * therefore the fetch ORCHESTRATOR: under `strategy: 'bulk'` it fetches once,
+ * right after `init()` resolves; under `strategy: 'viewport'` it waits for the
+ * provider's own `boundsChange( bbox )` and fetches per-bbox from there. Every
+ * fetch is funnelled through one place ({@see fetchAndSetPoints}) so the
+ * "group, hand to the provider, tell the panels the types, fire the loaded
+ * event, degrade on empty/error" sequence never has two competing
+ * implementations. `Embedded_Map_Provider` (`mapConfig.ownsChrome: true`) is
+ * the one exception — its carrier iframe loads its own points invisibly to
+ * this file, so NONE of this fetch orchestration, and no
+ * {@see window.WoodevPickupPanels} instance at all, is ever constructed for
+ * it (D-3: the whole point of `ownsChrome` is that the framework renders
+ * nothing of its own around a provider that already owns the full picker UI).
+ *
+ * THE FOUR `woodev_pickup_*` EVENTS are native, bubbling `CustomEvent`s fired
+ * on `document.body` — exactly like `woodev-modal.js`'s own `woodev_modal_*`
+ * events (see that file's docblock for why `jQuery.trigger()` would be
+ * invisible to a plain `addEventListener`, and this file's own docblock above
+ * on `updated_checkout` for the identical asymmetry): `woodev_pickup_map_ready`
+ * once a session's `init()` resolves, `woodev_pickup_points_loaded` after
+ * EVERY successful fetch this file makes (the initial bulk load, every
+ * viewport refetch, every type-filter refetch, every {@see refresh()} call —
+ * never just the first), `woodev_pickup_point_selected` right before the modal
+ * is asked to close, and `woodev_pickup_error` specifically for a PROVIDER-level
+ * `error` (map script failed to load, embed failed to load) — the kind that
+ * breaks the whole map, not a transient dataSource fetch failure the existing
+ * degrade-to-notice machinery already recovers from without needing to alarm
+ * an external error reporter.
+ *
+ * `refresh()`, EXPOSED PER SESSION VIA {@see getSession}: re-runs whatever
+ * fetch the CURRENT strategy/viewport/type-filter state describes — the hook a
+ * payment-method change elsewhere on the page uses to get a fresh
+ * server-computed `selectable` verdict on the SAME points without the
+ * customer touching the map. Safe to call twice (each call is an independent
+ * fetch; `pickup-datasource.js`'s own debounce collapses a rapid double-call
+ * into one request) and safe to call after the session has already closed (a
+ * no-op, guarded the same way every other post-close continuation in this
+ * file is).
+ *
+ * EVERY LISTENER THIS FILE ATTACHS DIES WITH THE SESSION: the provider's own
+ * event handlers are re-registered fresh on every `start()` (initial open AND
+ * every retry) and go away when that provider instance is destroyed (a real
+ * provider's own `destroy()` empties its handler arrays — see
+ * `map-provider-yandex.js`/`map-provider-embedded.js`); the
+ * {@see window.WoodevPickupPanels} handlers are registered exactly ONCE per
+ * session and become unreachable once {@see closeSession} drops this file's
+ * only reference to that `panels` instance (its DOM root is detached along
+ * with the rest of the modal body). No handler here is ever bound to
+ * `document.body` or any other long-lived, session-independent target — only
+ * `provider`/`panels`, both torn down (or dereferenced) together — so the
+ * existing "two clicks never leave two providers alive" guarantee extends to
+ * the panels and every event wired through them, unchanged.
  *
  * UMD-ish dual export (matches woodev-modal.js/pickup-datasource.js), plus a
  * `mountAll()` re-export purely so a test can drive one mount pass directly
- * instead of only through the deferred event hooks:
- *   - Browser global: window.WoodevPickupMount = { mountAll: mountAll }
- *   - CommonJS:       module.exports = { mountAll: mountAll }  (for jest)
+ * instead of only through the deferred event hooks, and `getSession( fieldId )`
+ * (Task 20) so external code (e.g. a payment-method-change listener) can reach
+ * the currently open session's {@see refresh()} without this file knowing
+ * anything about payment methods itself:
+ *   - Browser global: window.WoodevPickupMount = { mountAll, getSession }
+ *   - CommonJS:       module.exports = { mountAll, getSession }  (for jest)
  *
  * @file
  * @since 2.0.2
@@ -148,6 +212,18 @@
 
 ( function() {
 	'use strict';
+
+	/**
+	 * `pickup-geo.js`'s exports — read off `window` when it was loaded as a sibling
+	 * `<script>` (the real, enqueued browser case: `Pickup_Handler::enqueue_assets()`
+	 * declares it a hard dependency of this file), otherwise required directly by
+	 * relative path — the case a jest test exercises. Mirrors the identical fallback
+	 * in `pickup-panels.js`/`map-provider-yandex.js`.
+	 *
+	 * @type {Object}
+	 */
+	var geo = ( 'undefined' !== typeof window && window.WoodevPickupGeo ) ||
+		( 'function' === typeof require ? require( './pickup-geo' ) : null );
 
 	/** @type {string} prefix of every `woodev_pickup_config_{suffix}` JS config global. */
 	var CONFIG_PREFIX = 'woodev_pickup_config_';
@@ -157,6 +233,18 @@
 
 	/** @type {number} defer, in ms, after `updated_checkout` before re-mounting — see the file docblock. */
 	var MOUNT_DEFER_MS = 60;
+
+	/**
+	 * The four `document.body` `CustomEvent` names this file fires — see the file
+	 * docblock's own section on them. Native, bubbling events, never a jQuery
+	 * `.trigger()` — see {@see fireDocumentEvent}.
+	 *
+	 * @type {string}
+	 */
+	var EVENT_MAP_READY = 'woodev_pickup_map_ready';
+	var EVENT_POINTS_LOADED = 'woodev_pickup_points_loaded';
+	var EVENT_POINT_SELECTED = 'woodev_pickup_point_selected';
+	var EVENT_ERROR = 'woodev_pickup_error';
 
 	/**
 	 * Identifies this modal on every `woodev_modal_*` event, so a consumer can filter the
@@ -191,13 +279,28 @@
 	 * open, and this map is what lets the NEXT click — on whichever button is
 	 * currently mounted — still find and tear down the SAME session.
 	 *
-	 * @type {Object.<string, {modal: Object, destroy: Function}>}
+	 * @type {Object.<string, {modal: Object, refresh: Function, destroy: Function}>}
 	 */
 	var sessions = {};
 
 	// -------------------------------------------------------------------------
 	// Small helpers
 	// -------------------------------------------------------------------------
+
+	/**
+	 * Fires one of the four `woodev_pickup_*` events (see the file docblock) — a native,
+	 * bubbling `CustomEvent` on `document.body`, exactly matching `woodev-modal.js`'s own
+	 * `emit()`. Seen by both `addEventListener` and jQuery `.on()`; NEVER a jQuery
+	 * `.trigger()`, which would be invisible to a plain `addEventListener` (see the file
+	 * docblock's note on `updated_checkout` for the identical asymmetry).
+	 *
+	 * @param {string} type
+	 * @param {Object} detail
+	 * @returns {void}
+	 */
+	function fireDocumentEvent( type, detail ) {
+		document.body.dispatchEvent( new CustomEvent( type, { detail: detail, bubbles: true } ) );
+	}
 
 	/**
 	 * Reads an i18n string off a config — empty string when absent/blank, NEVER
@@ -304,6 +407,46 @@
 		option.value = value;
 		option.text = label;
 		select.appendChild( option );
+	}
+
+	/**
+	 * Reads a field's current `.value` — `''` when the field does not exist, mirroring
+	 * {@see text}'s "absent means blank, never undefined" discipline. Used both to decide
+	 * the trigger button's label ({@see syncTriggerLabel}) and to seed the panels' own
+	 * `setSelectedId()` at session-open time, so a re-entrant picker (the customer already
+	 * chose a point earlier) reads correctly from the very first render, not only after a
+	 * NEW selection is made.
+	 *
+	 * @param {string} fieldId
+	 * @returns {string}
+	 */
+	function fieldValue( fieldId ) {
+		var field = document.getElementById( fieldId );
+
+		return field && 'string' === typeof field.value ? field.value : '';
+	}
+
+	/**
+	 * Syncs the trigger button's label to whether `config.fieldId` currently holds a value —
+	 * `i18n.triggerChange` ("Выбрать другой пункт выдачи") once a point is already selected,
+	 * `i18n.trigger` otherwise. Called at mount time (a checkout reload after an earlier
+	 * selection) and again right after a NEW selection is applied — see
+	 * {@see Pickup_Handler::get_js_config()}'s own docblock note on `triggerChange` being
+	 * this file's responsibility. A no-op when no trigger is currently mounted for this field
+	 * (defensive — §8 can discard/recreate the anchor between calls, see the file docblock).
+	 *
+	 * @param {Object} config
+	 * @returns {void}
+	 */
+	function syncTriggerLabel( config ) {
+		var slot = document.querySelector( '[data-woodev-pickup-slot="' + config.fieldId + '"]' );
+		var button = slot && slot.querySelector( '.' + TRIGGER_CLASS );
+
+		if ( ! button ) {
+			return;
+		}
+
+		button.textContent = text( config, fieldValue( config.fieldId ) ? 'triggerChange' : 'trigger' );
 	}
 
 	/**
@@ -500,6 +643,54 @@
 	}
 
 	/**
+	 * Builds the config object handed to {@see window.WoodevPickupPanels}'s constructor —
+	 * the panels read `i18n`/`lang`/`accentColor` at the TOP level of their own config (see
+	 * that file's docblock), but the outer mount config only carries `i18n`/`accentColor`
+	 * there directly; `lang` sits inside `config.mapConfig.lang` (the active provider's own
+	 * locale, see `map-provider-yandex.js`'s docblock). This merge is the ONE place that
+	 * reconciles the two shapes — never duplicated inline at the panels' construction site.
+	 *
+	 * @param {Object} config the full mount config (`window.woodev_pickup_config_*`).
+	 * @returns {Object}
+	 */
+	function buildPanelsConfig( config ) {
+		var mapConfig = config.mapConfig || {};
+
+		return shallowMerge( config, {
+			lang: 'string' === typeof mapConfig.lang ? mapConfig.lang : '',
+		} );
+	}
+
+	/**
+	 * Extracts the distinct `{ code, label }` point types present in `points`, first-seen
+	 * order — the shape {@see window.WoodevPickupPanels}'s own `setTypes()` accumulates
+	 * across calls (see that file's docblock: it never forgets a type once seen, even when a
+	 * LATER call reports fewer). This file calls `setTypes()` after every successful fetch —
+	 * {@see fetchAndSetPoints} — since a point's `type` is the only place that information
+	 * exists; neither the provider nor the panels themselves have any other way to learn it.
+	 *
+	 * @param {Array} points
+	 * @returns {Array}
+	 */
+	function extractTypes( points ) {
+		var seen = {};
+		var types = [];
+
+		( points || [] ).forEach( function( point ) {
+			var type = point && point.type;
+
+			if ( ! type || 'string' !== typeof type.code || Object.prototype.hasOwnProperty.call( seen, type.code ) ) {
+				return;
+			}
+
+			seen[ type.code ] = true;
+			types.push( { code: type.code, label: type.label } );
+		} );
+
+		return types;
+	}
+
+	/**
 	 * Writes a selected point's address/locality/postal code into the resolved
 	 * fieldset — a no-op when `replaceAddress` is disabled.
 	 *
@@ -540,46 +731,6 @@
 	}
 
 	// -------------------------------------------------------------------------
-	// dataSource wrapping — see the file docblock for why THIS file, not the
-	// provider, owns the error/empty/notice modal states.
-	// -------------------------------------------------------------------------
-
-	/**
-	 * Wraps a real dataSource so this file can observe a `fetchPoints()`
-	 * outcome, while still handing the provider the SAME resolved value or
-	 * rejection reason it would have gotten from the unwrapped dataSource — a
-	 * provider that wants to react further (e.g. clear its own drawer) still
-	 * can. `fetchDetails()` passes through untouched: a balloon-detail failure
-	 * is the provider's own concern.
-	 *
-	 * @param {Object}   dataSource real `{ fetchPoints, fetchDetails }`.
-	 * @param {Function} onPoints   called with the resolved point array.
-	 * @param {Function} onError    called with the rejection reason.
-	 * @returns {Object}
-	 */
-	function wrapDataSource( dataSource, onPoints, onError ) {
-		return {
-			fetchPoints: function( query ) {
-				return dataSource.fetchPoints( query ).then(
-					function( points ) {
-						onPoints( points );
-
-						return points;
-					},
-					function( reason ) {
-						onError( reason );
-
-						return Promise.reject( reason );
-					}
-				);
-			},
-			fetchDetails: function( pointId ) {
-				return dataSource.fetchDetails( pointId );
-			},
-		};
-	}
-
-	// -------------------------------------------------------------------------
 	// Trigger + picker session
 	// -------------------------------------------------------------------------
 
@@ -604,17 +755,26 @@
 	}
 
 	/**
-	 * Opens the picker for one config: the modal shell, the resolved provider,
-	 * and the wrapped dataSource. Tracks, across any number of retries within
-	 * this one session, whether the provider has EVER resolved a non-empty
-	 * point set (`hasDrawnPoints`) — see the file docblock's "NON-DESTRUCTIVE
-	 * DEGRADATION" section for why that gates `showError()`/`showEmpty()`
-	 * (nothing drawn yet, replacing the body is fine) against `showNotice()`
-	 * (something IS drawn; only a non-destructive banner is acceptable).
+	 * Opens the picker for one config: the modal shell, the resolved provider, and — unless
+	 * `mapConfig.ownsChrome` — the framework's own {@see window.WoodevPickupPanels} shell,
+	 * wired to the provider BOTH ways (see the file docblock's "THIS FILE, NOT THE PROVIDER,
+	 * NOW OWNS FETCHING" and the four `woodev_pickup_*` events sections). Tracks, across any
+	 * number of retries within this one session, whether a non-empty point set has EVER been
+	 * drawn (`hasDrawnPoints`) — see the file docblock's "NON-DESTRUCTIVE DEGRADATION" section
+	 * for why that gates `showError()`/`showEmpty()` (nothing drawn yet, replacing the body is
+	 * fine) against `showNotice()` (something IS drawn; only a non-destructive banner is
+	 * acceptable).
+	 *
+	 * `panels` is constructed ONCE here, never inside {@see start} — a map-provider retry has
+	 * nothing to do with the list/card chrome around it (see the file docblock). `provider`,
+	 * `groupsByKey`, `lastAddresses`, `currentTypeFilter` and `lastBbox` are all session-level
+	 * state closed over by every function below, including the ones wired onto `panels`, so a
+	 * retry's fresh `provider` is always the one those panel handlers act on — no stale
+	 * reference to a destroyed instance is possible.
 	 *
 	 * @param {Object}      config
 	 * @param {HTMLElement} triggerEl element focus returns to on close.
-	 * @returns {{modal: Object, destroy: Function}}
+	 * @returns {{modal: Object, refresh: Function, destroy: Function}}
 	 */
 	function openSession( config, triggerEl ) {
 		var Modal = window.WoodevModal;
@@ -630,11 +790,12 @@
 
 		var providers = window.WoodevPickupMapProviders || {};
 		var ProviderCtor = config && providers[ config.provider ];
+		var noopRefresh = function() { return Promise.resolve(); };
 
 		if ( 'function' !== typeof ProviderCtor ) {
 			modal.showError( text( config, 'error' ) );
 
-			return { modal: modal, destroy: function() { modal.destroy(); } };
+			return { modal: modal, refresh: noopRefresh, destroy: function() { modal.destroy(); } };
 		}
 
 		var DataSourceFactory = window.WoodevPickupDataSource;
@@ -642,16 +803,49 @@
 		if ( 'function' !== typeof DataSourceFactory ) {
 			modal.showError( text( config, 'error' ) );
 
-			return { modal: modal, destroy: function() { modal.destroy(); } };
+			return { modal: modal, refresh: noopRefresh, destroy: function() { modal.destroy(); } };
 		}
 
 		var realDataSource = DataSourceFactory( { restRoot: config.restRoot, nonce: config.nonce } );
 
-		/** @type {boolean} has the provider EVER resolved a non-empty point set this session? */
+		// Resolved fresh from `window` on every open, exactly like ProviderCtor/DataSourceFactory
+		// above — never a module-load-time constant — so a test can swap it, and so a real page
+		// (where Pickup_Handler::enqueue_assets() now declares `woodev-pickup-panels` a hard
+		// dependency of this script — see that method's own "LOAD ORDER" note) always sees it set.
+		var PanelsCtor = window.WoodevPickupPanels;
+
+		/** @type {boolean} true when the active provider owns the WHOLE container — see D-3. */
+		var ownsChrome = !! ( config.mapConfig && config.mapConfig.ownsChrome );
+
+		/** @type {boolean} has a non-empty point set EVER been drawn this session? */
 		var hasDrawnPoints = false;
+
+		/** @type {boolean} true once this session has been torn down — guards every async
+		 *  continuation below against acting on a dead session (a fetch/init resolving after
+		 *  Escape/backdrop close, or after {@see refresh} is called post-close). */
+		var destroyed = false;
 
 		/** @type {Object|null} the CURRENT live provider instance — reassigned on every (re-)start(). */
 		var provider = null;
+
+		/** @type {Object|null} the framework's own panels shell — null when `ownsChrome`
+		 *  (constructed at most ONCE per session; see the docblock above). */
+		var panels = null;
+
+		/** @type {Object.<string, Object>} the last full-fetch groups, by key — resolves a
+		 *  provider event's bare key/point-id back to the group object the panels need. */
+		var groupsByKey = {};
+
+		/** @type {Array} the address suggestions from the LAST `searchResults` event — what
+		 *  `searchAddressPicked( index )` indexes into. */
+		var lastAddresses = [];
+
+		/** @type {Array|null} the currently selected type-filter codes, or null for "all". */
+		var currentTypeFilter = null;
+
+		/** @type {Array|null} the last viewport bbox reported via `boundsChange` (`strategy:
+		 *  'viewport'` only) — what a type-filter change or {@see refresh} re-fetches against. */
+		var lastBbox = null;
 
 		/**
 		 * Shows a message in whichever degradation state is appropriate: a
@@ -679,9 +873,236 @@
 		}
 
 		/**
-		 * Destroys the current provider (when one exists) and constructs +
-		 * wires + `init()`s a fresh one. NEVER re-`init()`s the same instance —
-		 * see the file docblock.
+		 * The degrade path for a `fetchAndSetPoints()` outcome specifically — see that
+		 * function's own call sites. A dataSource fetch failing or coming back empty NEVER
+		 * implies the map/provider itself is broken: once `panels` exist (`!ownsChrome`), the
+		 * customer can still pan/search/filter — the map canvas and the framework's own list/
+		 * search/filter chrome both stay fully live regardless of what one fetch returned. The
+		 * destructive `showError()`/`showEmpty()` path (via {@see degrade}) would replace
+		 * `modal.getContainer()`'s WHOLE body — which is where `panels`' own DOM root ALSO
+		 * lives (see the docblock above) — wiping that chrome out from under the customer for
+		 * no reason a dataSource hiccup justifies. This is therefore ALWAYS a non-destructive
+		 * `showNotice()` once panels exist; only a genuine PROVIDER-level `error` (the map/embed
+		 * itself failing — nothing at all is usable then) still goes through {@see degrade}'s
+		 * `hasDrawnPoints`-gated escalation. With no panels (`ownsChrome`), this never runs at
+		 * all — `fetchAndSetPoints` is never called for that branch — so the fallback to
+		 * {@see degrade} below is defensive only.
+		 *
+		 * @param {string}        message
+		 * @param {Function|null} onRetry
+		 * @returns {void}
+		 */
+		function degradeFetch( message, onRetry ) {
+			if ( panels ) {
+				modal.showNotice( message, onRetry || undefined );
+
+				return;
+			}
+
+			degrade( message, onRetry );
+		}
+
+		/**
+		 * Finds the group (from the last full fetch) that owns point `pointId`, or null.
+		 * Backs `searchPointPicked` — a list/search click only ever hands back a bare point
+		 * id, never the group it belongs to.
+		 *
+		 * @param {string|number} pointId
+		 * @returns {Object|null}
+		 */
+		function findGroupByPointId( pointId ) {
+			var key;
+
+			for ( key in groupsByKey ) {
+				if ( Object.prototype.hasOwnProperty.call( groupsByKey, key )
+					&& groupsByKey[ key ].points.some( function( point ) {
+						return String( point.id ) === String( pointId );
+					} )
+				) {
+					return groupsByKey[ key ];
+				}
+			}
+
+			return null;
+		}
+
+		/**
+		 * The ONE place this session ever calls `dataSource.fetchPoints()` — see the file
+		 * docblock's "THIS FILE, NOT THE PROVIDER, NOW OWNS FETCHING" section. Groups the
+		 * result, hands it to the provider, tells the panels which types are now known, fires
+		 * `woodev_pickup_points_loaded`, and degrades on an empty/failed result — every caller
+		 * below (`start()`'s initial load, a `boundsChange`/type-filter refetch, {@see refresh})
+		 * goes through this instead of re-implementing any part of that sequence. Never called
+		 * when `ownsChrome` (that branch never fetches at all — the embed loads its own points).
+		 *
+		 * @param {Object} query passed straight to `dataSource.fetchPoints()`.
+		 * @returns {Promise<Array>} the built groups, or a rejection already fully handled
+		 *                           (shown to the customer) by this function itself.
+		 */
+		function fetchAndSetPoints( query ) {
+			return realDataSource.fetchPoints( query ).then(
+				function( points ) {
+					if ( destroyed ) {
+						return points;
+					}
+
+					var groups = geo.groupByPosition( points );
+					var byKey = {};
+
+					groups.forEach( function( group ) {
+						byKey[ group.key ] = group;
+					} );
+					groupsByKey = byKey;
+
+					provider.setPoints( groups );
+
+					if ( panels ) {
+						panels.setTypes( extractTypes( points ) );
+					}
+
+					fireDocumentEvent( EVENT_POINTS_LOADED, {
+						fieldId: config.fieldId,
+						count: points.length,
+						strategy: config.strategy,
+					} );
+
+					if ( points.length > 0 ) {
+						hasDrawnPoints = true;
+					} else {
+						degradeFetch( text( config, 'noResults' ), null );
+					}
+
+					return points;
+				},
+				function( reason ) {
+					if ( ! destroyed ) {
+						degradeFetch( errorMessage( config, reason ), start );
+					}
+
+					return Promise.reject( reason );
+				}
+			);
+		}
+
+		/**
+		 * Applies a selection regardless of WHICH side reported it (the panels' card CTA under
+		 * `!ownsChrome`, or the provider's own `select` under `ownsChrome` — an embed reports
+		 * its own selection directly, see `map-provider-embedded.js`): writes the field
+		 * (§8/DOM), re-syncs the trigger button's label, fires `woodev_pickup_point_selected`,
+		 * then closes the modal with reason `'select'` — the fourth close reason the modal
+		 * already supports (D-14) — and only tears the session down when the close actually
+		 * took (a `before_close` listener COULD veto it; `closeSession` must not run against a
+		 * modal that is still open).
+		 *
+		 * @param {Object} point
+		 * @returns {void}
+		 */
+		function handleSelection( point ) {
+			applySelection( config, point );
+			syncTriggerLabel( config );
+
+			fireDocumentEvent( EVENT_POINT_SELECTED, { fieldId: config.fieldId, point: point } );
+
+			if ( modal.close( 'select' ) ) {
+				closeSession( config.fieldId );
+			}
+		}
+
+		if ( ! ownsChrome ) {
+			panels = new PanelsCtor( modal.getContainer(), buildPanelsConfig( config ) );
+			panels.render();
+
+			var alreadySelected = fieldValue( config.fieldId );
+
+			if ( alreadySelected ) {
+				panels.setSelectedId( alreadySelected );
+			}
+
+			panels.on( 'select', handleSelection );
+
+			panels.on( 'typeFilterChange', function( codes ) {
+				currentTypeFilter = codes;
+
+				if ( 'bulk' === config.strategy ) {
+					provider.setTypeFilter( codes );
+
+					return;
+				}
+
+				// viewport: a client-side filter would show stale points outside the current
+				// bbox — refetch with the SAME bbox and the new types instead (see the file
+				// docblock's judgement-call note on getting this backwards).
+				if ( lastBbox ) {
+					fetchAndSetPoints( { bounds: lastBbox, types: codes } ).catch( function() {} );
+				}
+			} );
+
+			panels.on( 'listToggle', function( state ) {
+				if ( provider && 'function' === typeof provider.setMargin ) {
+					provider.setMargin( state.open, state.width );
+				}
+			} );
+
+			panels.on( 'searchAddressPicked', function( index ) {
+				var address = lastAddresses[ index ];
+
+				if ( address && 'string' === typeof address.displayName
+					&& provider && 'function' === typeof provider.resolveAddress
+				) {
+					provider.resolveAddress( address.displayName );
+				}
+			} );
+
+			panels.on( 'searchPointPicked', function( pointId ) {
+				var group = findGroupByPointId( pointId );
+
+				if ( ! group ) {
+					return;
+				}
+
+				if ( provider && 'function' === typeof provider.focusGroup ) {
+					provider.focusGroup( group.key );
+				}
+
+				panels.openCard( group, pointId );
+			} );
+
+			// showNearestRequested (extra wiring, D-6): the "show it anyway" button on the
+			// panels' own "nothing nearby" state — `info.key` identifies the nearest group (see
+			// map-provider-yandex.js's own `focusAddress()`).
+			panels.on( 'showNearestRequested', function( info ) {
+				var group = info && info.key ? groupsByKey[ info.key ] : null;
+
+				if ( ! group ) {
+					return;
+				}
+
+				if ( provider && 'function' === typeof provider.focusGroup ) {
+					provider.focusGroup( group.key );
+				}
+
+				panels.openCard( group );
+			} );
+
+			// anchorCleared (extra wiring, D-6): the panels' own reset control calls
+			// `setAnchor( null )` internally, which now emits this — see pickup-panels.js's own
+			// docblock. The provider is the sole owner of BOTH the "your address" pin and the
+			// searchResults state (`clearAddress()` drops both in one call) — see
+			// map-provider-yandex.js's own docblock on why THIS file only has to make ONE call,
+			// never track the pin itself.
+			panels.on( 'anchorCleared', function() {
+				if ( provider && 'function' === typeof provider.clearAddress ) {
+					provider.clearAddress();
+				}
+			} );
+		}
+
+		/**
+		 * Destroys the current provider (when one exists) and constructs + wires + `init()`s a
+		 * fresh one. NEVER re-`init()`s the same instance — see the file docblock. Re-wires
+		 * EVERY provider-side event fresh (the OLD instance's handlers die with it), including
+		 * the `!ownsChrome`-only ones that call into `panels` — `panels` itself is untouched by
+		 * a retry (constructed once, see the docblock above).
 		 *
 		 * @returns {void}
 		 */
@@ -691,40 +1112,108 @@
 			}
 
 			provider = new ProviderCtor();
+			lastBbox = null;
 
-			provider.on( 'select', function( point ) {
-				applySelection( config, point );
-				closeSession( config.fieldId );
-			} );
+			provider.on( 'select', handleSelection );
 
 			provider.on( 'error', function( reason ) {
+				// A provider-level error breaks the WHOLE map — the framework's own error
+				// reporter needs to know, not just the customer-facing degrade UI below (see
+				// the file docblock's note on this event).
+				fireDocumentEvent( EVENT_ERROR, {
+					fieldId: config.fieldId,
+					code: reason && reason.code,
+					message: reason && reason.message,
+				} );
+
 				degrade( errorMessage( config, reason ), start );
 			} );
 
-			var dataSource = wrapDataSource(
-				realDataSource,
-				function( points ) {
-					if ( points.length > 0 ) {
-						hasDrawnPoints = true;
+			if ( ! ownsChrome ) {
+				provider.on( 'pointClick', function( key ) {
+					var group = groupsByKey[ key ];
 
-						return;
+					if ( group ) {
+						panels.openCard( group );
 					}
+				} );
 
-					degrade( text( config, 'noResults' ), null );
-				},
-				function( reason ) {
-					degrade( errorMessage( config, reason ), start );
+				provider.on( 'visibleChange', function( keys ) {
+					var groups = ( keys || [] )
+						.map( function( key ) { return groupsByKey[ key ]; } )
+						.filter( function( group ) { return !! group; } );
+
+					panels.setVisible( groups );
+				} );
+
+				provider.on( 'boundsChange', function( bbox ) {
+					lastBbox = bbox;
+					fetchAndSetPoints( { bounds: bbox, types: currentTypeFilter } ).catch( function() {} );
+				} );
+
+				provider.on( 'nothingNearby', function( info ) {
+					panels.showNothingNearby( info );
+				} );
+
+				provider.on( 'bboxTooWide', function() {
+					degrade( text( config, 'zoomIn' ), null );
+				} );
+
+				provider.on( 'searchResults', function( results ) {
+					lastAddresses = ( results && results.addresses ) || [];
+					panels.renderSearchResults( results );
+				} );
+			}
+
+			var initResult = provider.init( modal.getContainer(), buildProviderConfig( config ), realDataSource );
+
+			Promise.resolve( initResult ).then( function() {
+				if ( destroyed ) {
+					return;
 				}
-			);
 
-			provider.init( modal.getContainer(), buildProviderConfig( config ), dataSource );
+				fireDocumentEvent( EVENT_MAP_READY, { fieldId: config.fieldId } );
+
+				// bulk fetches once, right here; viewport waits for the provider's own
+				// boundsChange (wired above) — see the file docblock.
+				if ( ! ownsChrome && 'bulk' === config.strategy ) {
+					fetchAndSetPoints( { types: currentTypeFilter } ).catch( function() {} );
+				}
+			} );
+		}
+
+		/**
+		 * Re-runs whatever fetch the CURRENT strategy/viewport/type-filter state describes —
+		 * see the file docblock. A no-op once `ownsChrome` (nothing here ever fetches) or once
+		 * the session is destroyed; otherwise always returns a settled-or-settling promise,
+		 * never throws.
+		 *
+		 * @returns {Promise<void>}
+		 */
+		function refresh() {
+			if ( destroyed || ownsChrome ) {
+				return Promise.resolve();
+			}
+
+			if ( 'bulk' === config.strategy ) {
+				return fetchAndSetPoints( { types: currentTypeFilter } ).catch( function() {} );
+			}
+
+			if ( lastBbox ) {
+				return fetchAndSetPoints( { bounds: lastBbox, types: currentTypeFilter } ).catch( function() {} );
+			}
+
+			return Promise.resolve();
 		}
 
 		start();
 
 		return {
 			modal: modal,
+			refresh: refresh,
 			destroy: function() {
+				destroyed = true;
+
 				if ( provider && 'function' === typeof provider.destroy ) {
 					provider.destroy();
 				}
@@ -761,7 +1250,6 @@
 
 		button.type = 'button';
 		button.className = 'button ' + TRIGGER_CLASS;
-		button.textContent = text( config, 'trigger' );
 
 		button.addEventListener( 'click', function( event ) {
 			event.preventDefault();
@@ -770,6 +1258,11 @@
 		} );
 
 		slot.appendChild( button );
+
+		// A re-mount after an earlier selection (a full checkout reload, or §8 recreating
+		// the anchor mid-session) must read `i18n.triggerChange`, not always `i18n.trigger` —
+		// see {@see syncTriggerLabel}.
+		syncTriggerLabel( config );
 	}
 
 	/**
@@ -781,6 +1274,19 @@
 	 */
 	function mountAll() {
 		collectConfigs().forEach( mountOne );
+	}
+
+	/**
+	 * Returns the currently open session for a field id, or null when none is open — the
+	 * external hook onto {@see refresh()} (Task 20's own docblock: e.g. a payment-method
+	 * change elsewhere on the page) without that caller needing to know anything about
+	 * `sessions` being module-private.
+	 *
+	 * @param {string} fieldId
+	 * @returns {{modal: Object, refresh: Function, destroy: Function}|null}
+	 */
+	function getSession( fieldId ) {
+		return sessions[ fieldId ] || null;
 	}
 
 	// -------------------------------------------------------------------------
@@ -801,7 +1307,7 @@
 	// UMD-ish dual export
 	// -------------------------------------------------------------------------
 
-	var api = { mountAll: mountAll };
+	var api = { mountAll: mountAll, getSession: getSession };
 
 	// Browser global
 	if ( typeof window !== 'undefined' ) {
