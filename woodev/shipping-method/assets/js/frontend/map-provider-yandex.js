@@ -478,6 +478,11 @@
 		 *  Null when no address search is currently active. */
 		this._addressPin = null;
 
+		/** @type {HTMLElement|null} the map's OWN element inside the shared container — see
+		 *  {@see WoodevYandexMapProvider#_buildMap} for why ymaps does not get the container
+		 *  itself. Null until `init()` builds the map, and again after `destroy()`. */
+		this.canvasEl = null;
+
 		/** @type {number} bumped on every {@see focusGroup} call — discards a stale
 		 *  continuation when a later call's camera move resolves before an earlier one's. */
 		this._focusSeq = 0;
@@ -595,8 +600,18 @@
 		var config = this.config;
 		var defaultLocation = config.defaultLocation || { center: DEFAULT_CENTER, zoom: DEFAULT_ZOOM };
 
+		// The map gets its OWN element rather than being built straight into the container.
+		// Two reasons, both found the hard way: the container is the modal body, which the
+		// framework's panels also populate — handing that same node to ymaps means two owners
+		// for one element's children. And `pickup.css` sizes the map through
+		// `.woodev-pickup-map`; with no element carrying that class the rule matched nothing
+		// and the map had no height at all, so it rendered as a zero-pixel strip.
+		this.canvasEl = document.createElement( 'div' );
+		this.canvasEl.className = 'woodev-pickup-map';
+		this.container.appendChild( this.canvasEl );
+
 		this.map = new ymaps.Map(
-			this.container,
+			this.canvasEl,
 			{ center: defaultLocation.center, zoom: defaultLocation.zoom, controls: [] },
 			{ suppressMapOpenBlock: true, minZoom: MIN_ZOOM, maxZoom: MAX_ZOOM }
 		);
@@ -1450,6 +1465,11 @@
 			}
 		}
 
+		if ( this.canvasEl && this.canvasEl.parentNode ) {
+			this.canvasEl.parentNode.removeChild( this.canvasEl );
+		}
+
+		this.canvasEl = null;
 		this.map = null;
 		this.objectManager = null;
 		this.ymaps = null;

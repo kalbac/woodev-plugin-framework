@@ -416,6 +416,29 @@ test( 'hasApiKey: false emits a map_script error and never constructs a map', as
 	expect( provider.map ).toBeNull();
 } );
 
+test( 'builds the map into its OWN .woodev-pickup-map element, not the shared container', async () => {
+	const container = document.createElement( 'div' );
+	const config = makeConfig();
+
+	window[ config.ns ] = ymapsStub;
+
+	const provider = new WoodevYandexMapProvider();
+	await provider.init( container, config );
+
+	// The container is the modal body, which the framework's panels also populate — ymaps
+	// must not be handed that node. And `pickup.css` sizes the map through this exact class:
+	// with nothing carrying it the rule matched nothing and the map had no height at all.
+	const canvas = container.querySelector( '.woodev-pickup-map' );
+
+	expect( canvas ).not.toBeNull();
+	expect( ymapsStub.lastMap.container ).toBe( canvas );
+	expect( ymapsStub.lastMap.container ).not.toBe( container );
+
+	provider.destroy();
+
+	expect( container.querySelector( '.woodev-pickup-map' ) ).toBeNull();
+} );
+
 test( 'destroy() is idempotent', async () => {
 	const provider = await init();
 

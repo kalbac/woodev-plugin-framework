@@ -140,7 +140,7 @@
 	var LIST_CAP = 300;
 
 	/** @type {string} fallback text colour, used only when `config.accentColor` is absent/unsafe. */
-	var DEFAULT_ACCENT = '#7f54b3';
+	var DEFAULT_ACCENT = '#06aedd';
 
 	// -------------------------------------------------------------------------
 	// Small pure helpers

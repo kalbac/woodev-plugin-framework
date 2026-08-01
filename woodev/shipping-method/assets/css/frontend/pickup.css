@@ -46,11 +46,13 @@
  * Every accent-background rule below pairs the two: fill with `--woodev-pickup-accent`, its
  * text/icon with `--woodev-pickup-accent-contrast` — never a third, independently-invented
  * colour (the CTA, the open toggle, the active card tab, the selected filter checkbox, the
- * focus ring). `var( --woodev-pickup-accent, #7f54b3 )` / `var( --woodev-pickup-accent-contrast,
- * #fff )` are the ONLY two fallback pairs this file declares: `#7f54b3` mirrors
- * `pickup-panels.js`'s own `DEFAULT_ACCENT` constant exactly — a fallback that disagreed with
- * the JS default would be visibly wrong the one moment the CSS fallback actually had to fire
- * (JS failing before it sets the property) — and `#fff` reads on that specific purple. Every
+ * focus ring). `var( --woodev-pickup-accent, #06aedd )` / `var( --woodev-pickup-accent-contrast,
+ * #fff )` are the ONLY two fallback pairs this file declares: `#06aedd` is the framework's
+ * canonical accent — the same value `Pickup_Handler::DEFAULT_ACCENT_COLOR` resolves to and
+ * `pickup-panels.js`'s own `DEFAULT_ACCENT` constant carries. All three must agree: a fallback
+ * that disagreed would be visibly wrong the one moment it actually fires (JS failing before it
+ * sets the property), and it would not be the colour the merchant sees anywhere else in the
+ * plugin's admin. `#fff` reads on that cyan. Every
  * OTHER colour below (panel background, body text, borders, the warning strip) is a plain
  * hardcoded value matching `woodev-modal.css`'s own neutral chrome palette (`#fff` / `#1e1e1e` /
  * `#646970` / `#dcdcde`) for one consistent dialog look, because D-15 draws the merchant-override
@@ -196,7 +198,7 @@
 	margin: 0 16px 8px;
 	padding: 0;
 	font-size: 13px;
-	color: var( --woodev-pickup-accent, #7f54b3 );
+	color: var( --woodev-pickup-accent, #06aedd );
 	background: none;
 	border: 0;
 	cursor: pointer;
@@ -344,7 +346,7 @@
 	height: 44px;
 	padding: 0;
 	color: var( --woodev-pickup-accent-contrast, #fff );
-	background: var( --woodev-pickup-accent, #7f54b3 );
+	background: var( --woodev-pickup-accent, #06aedd );
 	border: 0;
 	border-radius: 50%;
 	box-shadow: 0 2px 10px rgba( 0, 0, 0, 0.25 );
@@ -460,7 +462,7 @@
 	font-weight: 700;
 	line-height: 1;
 	color: var( --woodev-pickup-accent-contrast, #fff );
-	background: var( --woodev-pickup-accent, #7f54b3 );
+	background: var( --woodev-pickup-accent, #06aedd );
 	border-radius: 8px;
 }
 
@@ -479,7 +481,7 @@
 	/* Themes the native control's own tick/box colour — no extra markup, no custom checkbox
 	   built from scratch, and it happens to be the same "colour a control by the accent"
 	   pairing every other interactive element in this file uses. */
-	accent-color: var( --woodev-pickup-accent, #7f54b3 );
+	accent-color: var( --woodev-pickup-accent, #06aedd );
 }
 
 .woodev-pickup-filter__label {
@@ -544,7 +546,7 @@
 
 .woodev-pickup-card__tab.is-active {
 	color: var( --woodev-pickup-accent-contrast, #fff );
-	background: var( --woodev-pickup-accent, #7f54b3 );
+	background: var( --woodev-pickup-accent, #06aedd );
 	border-color: transparent;
 }
 
@@ -597,7 +599,7 @@
 }
 
 .woodev-pickup-card__howto > summary {
-	color: var( --woodev-pickup-accent, #7f54b3 );
+	color: var( --woodev-pickup-accent, #06aedd );
 	cursor: pointer;
 }
 
@@ -678,7 +680,7 @@
 	font-size: 14px;
 	font-weight: 600;
 	color: var( --woodev-pickup-accent-contrast, #fff );
-	background: var( --woodev-pickup-accent, #7f54b3 );
+	background: var( --woodev-pickup-accent, #06aedd );
 	border: 0;
 	border-radius: 4px;
 	cursor: pointer;
@@ -720,7 +722,7 @@
    invisible or unclickable one (see `_renderMarker()`'s own docblock): no `<img>` is appended
    for it, so this modifier draws a plain filled pin instead of leaving an empty box. */
 .woodev-pickup-marker--unknown {
-	background: var( --woodev-pickup-accent, #7f54b3 );
+	background: var( --woodev-pickup-accent, #06aedd );
 	border: 2px solid #fff;
 	border-radius: 50% 50% 50% 0;
 	box-shadow: 0 1px 4px rgba( 0, 0, 0, 0.35 );
@@ -743,7 +745,7 @@
 	font-weight: 700;
 	line-height: 1;
 	color: var( --woodev-pickup-accent-contrast, #fff );
-	background: var( --woodev-pickup-accent, #7f54b3 );
+	background: var( --woodev-pickup-accent, #06aedd );
 	border: 1px solid #fff;
 	border-radius: 8px;
 }
@@ -766,6 +768,6 @@
 .woodev-pickup-card__close:focus-visible,
 .woodev-pickup-card__cta:focus-visible,
 .woodev-pickup-card__howto > summary:focus-visible {
-	outline: 2px solid var( --woodev-pickup-accent, #7f54b3 );
+	outline: 2px solid var( --woodev-pickup-accent, #06aedd );
 	outline-offset: 1px;
 }
