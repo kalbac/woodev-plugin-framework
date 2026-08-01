@@ -135,6 +135,14 @@ it( 'never executes markup smuggled through an i18n label — the header renders
 	expect( header.textContent ).toBe( '<img src=x>' );
 } );
 
+it( 'names the toggle button after the drawer it opens, since no dedicated i18n key exists for it', () => {
+	const panels = new Panels( document.createElement( 'div' ), config );
+	panels.render();
+
+	expect( panels.root.querySelector( '.woodev-pickup-list__toggle' ).getAttribute( 'aria-label' ) )
+		.toBe( 'Пункты выдачи в этой области' );
+} );
+
 it( 'toggles closed again on a second call, with open:false in the event', () => {
 	const seen = [];
 	const panels = new Panels( document.createElement( 'div' ), config );

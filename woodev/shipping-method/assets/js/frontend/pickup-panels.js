@@ -709,10 +709,15 @@
 		var header = document.createElement( 'div' );
 		header.className = 'woodev-pickup-list__header';
 
+		// No dedicated i18n key exists for this control (the PHP handler's own
+		// `get_js_config()` i18n array does not carry one) — it is a purely
+		// visual chevron affordance (Task 21 styles it), accessibly NAMED by
+		// the drawer it opens/closes, `drawerTitle`, rather than inventing an
+		// untested key that would render permanently blank (I1).
 		var toggle = document.createElement( 'button' );
 		toggle.type = 'button';
 		toggle.className = 'woodev-pickup-list__toggle';
-		toggle.textContent = text( this._config, 'toggleList' );
+		toggle.setAttribute( 'aria-label', text( this._config, 'drawerTitle' ) );
 
 		var body = document.createElement( 'div' );
 		body.className = 'woodev-pickup-list__body';
