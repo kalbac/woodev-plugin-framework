@@ -1334,6 +1334,59 @@ test( 'honours the nearest-count filter value handed in by config', async () => 
 // e.g. shrinks NEARBY_THRESHOLD_M to 1 would still make the FAR case below assert
 // `> 50000` correctly, so that assertion alone cannot catch it — only a NEAR case that must
 // still FIT proves the threshold itself, not just "some threshold exists".
+// addressFocused (Task 20 follow-up, D-6): the panels' distance anchor moves through this seam —
+// it must fire UNCONDITIONALLY, right when the pin drops, regardless of what the nearest-N
+// computation decides afterwards.
+test( 'focusAddress() emits addressFocused with the exact latLng/label, before any nearest-N fit', async () => {
+	const seen = [];
+	const provider = await init();
+	const anchor = [ 55.75, 37.61 ];
+
+	provider.on( 'addressFocused', ( info ) => seen.push( info ) );
+	provider.setPoints( [ group( 'near', 55.8 ) ] );
+
+	await provider.focusAddress( anchor, 'Тверская 1' );
+
+	expect( seen ).toEqual( [ { latLng: anchor, label: 'Тверская 1' } ] );
+} );
+
+test( 'focusAddress() emits addressFocused even when nothingNearby fires (the pin still dropped)', async () => {
+	const seen = [];
+	const provider = await init();
+	const anchor = [ 55.75, 37.61 ];
+	const farGroup = groupWith( { id: 'far', name: 'ПВЗ «Далеко»', lat: 56.6 } ); // beyond threshold
+
+	provider.on( 'addressFocused', ( info ) => seen.push( info ) );
+	provider.setPoints( [ farGroup ] );
+
+	await provider.focusAddress( anchor, 'Y' );
+
+	expect( seen ).toEqual( [ { latLng: anchor, label: 'Y' } ] );
+} );
+
+test( 'focusAddress() emits addressFocused even with no groups loaded at all', async () => {
+	const seen = [];
+	const provider = await init();
+
+	provider.on( 'addressFocused', ( info ) => seen.push( info ) );
+
+	await provider.focusAddress( [ 1, 2 ], 'Z' );
+
+	expect( seen ).toEqual( [ { latLng: [ 1, 2 ], label: 'Z' } ] );
+} );
+
+test( 'resolveAddress() (the real search-pick flow) triggers addressFocused via focusAddress()', async () => {
+	const seen = [];
+	const provider = await init();
+
+	provider.on( 'addressFocused', ( info ) => seen.push( info ) );
+	ymapsStub.geocodeResult = makeGeocodeResult( null, [ 3, 4 ] );
+
+	await provider.resolveAddress( 'Some Address' );
+
+	expect( seen ).toEqual( [ { latLng: [ 3, 4 ], label: 'Some Address' } ] );
+} );
+
 test( 'a nearest point comfortably inside the threshold FITS and reports no nothingNearby', async () => {
 	const seen = [];
 	const provider = await init();

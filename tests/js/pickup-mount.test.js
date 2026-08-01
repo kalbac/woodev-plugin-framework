@@ -200,6 +200,11 @@ StubPanels.prototype.setSelectedId = function( id ) {
 	this.lastSelectedId = id;
 };
 
+StubPanels.prototype.setAnchor = function( latLng, label ) {
+	this.setAnchorCalls = this.setAnchorCalls || [];
+	this.setAnchorCalls.push( { latLng: latLng, label: label } );
+};
+
 StubPanels.prototype.toggleList = function() {};
 
 /**
@@ -1174,20 +1179,42 @@ test( 'renders no panels for a provider that owns the chrome', async () => {
 // The four woodev_pickup_* document.body events
 // -------------------------------------------------------------------------
 
-test( 'fires woodev_pickup_map_ready once the provider init resolves', async () => {
+test( 'fires woodev_pickup_map_ready once the provider init resolves, naming fieldId AND provider (D-14)', async () => {
 	const seen = [];
 	document.body.addEventListener( 'woodev_pickup_map_ready', ( e ) => seen.push( e.detail ) );
 	await openSession( configWith() );
 
-	expect( seen[ 0 ].fieldId ).toBe( FIELD_ID );
+	// Exact equality — pins the full D-14 payload shape, not just one field of it. `provider`
+	// is the whole point of this event for an integrator hooking a SPECIFIC map: without it
+	// there is no way to tell which provider just initialised.
+	expect( seen[ 0 ] ).toEqual( { fieldId: FIELD_ID, provider: 'testProvider' } );
 } );
 
-test( 'fires woodev_pickup_map_ready for an ownsChrome provider too', async () => {
+test( 'fires woodev_pickup_map_ready for an ownsChrome provider too, still naming the provider', async () => {
 	const seen = [];
 	document.body.addEventListener( 'woodev_pickup_map_ready', ( e ) => seen.push( e.detail ) );
 	await openSession( configWith( { ownsChrome: true } ) );
 
-	expect( seen[ 0 ].fieldId ).toBe( FIELD_ID );
+	expect( seen[ 0 ] ).toEqual( { fieldId: FIELD_ID, provider: 'testProvider' } );
+} );
+
+test( 'every woodev_pickup_* event bubbles (jQuery delegation relies on it, see the file docblock)', async () => {
+	const seenOnDocument = [];
+	// Listening on `document` — the PARENT of `document.body`, where these events are
+	// actually dispatched — only sees them if `bubbles: true` was set; a non-bubbling event
+	// dispatched on `document.body` would never reach here.
+	[ 'woodev_pickup_map_ready', 'woodev_pickup_points_loaded', 'woodev_pickup_point_selected', 'woodev_pickup_error' ]
+		.forEach( ( type ) => document.addEventListener( type, ( e ) => seenOnDocument.push( e.type ) ) );
+
+	const session = await openSession(
+		configWith( { strategy: 'bulk', replaceAddress: { enabled: false, billingOnly: true } } )
+	);
+	session.provider.emit( 'error', { code: 'x', message: 'y' } );
+	session.panels.emit( 'select', point( { id: 'p1' } ) );
+
+	expect( seenOnDocument ).toEqual( expect.arrayContaining( [
+		'woodev_pickup_map_ready', 'woodev_pickup_points_loaded', 'woodev_pickup_error', 'woodev_pickup_point_selected',
+	] ) );
 } );
 
 test( 'fires woodev_pickup_points_loaded with the count and strategy', async () => {
@@ -1209,16 +1236,18 @@ test( 'never fires woodev_pickup_points_loaded for an ownsChrome provider (it ne
 	expect( seen ).toHaveLength( 0 );
 } );
 
-test( 'fires woodev_pickup_point_selected and closes the modal with reason select', async () => {
+test( 'fires woodev_pickup_point_selected (fieldId + point) and closes with reason select', async () => {
 	const selected = [];
 	const closed = [];
 	document.body.addEventListener( 'woodev_pickup_point_selected', ( e ) => selected.push( e.detail ) );
 	document.body.addEventListener( 'woodev_modal_closed', ( e ) => closed.push( e.detail ) );
 
+	const selectedPoint = point( { id: 'p1' } );
 	const session = await openSession( configWith() );
-	session.panels.emit( 'select', point( { id: 'p1' } ) );
+	session.panels.emit( 'select', selectedPoint );
 
-	expect( selected[ 0 ].point.id ).toBe( 'p1' );
+	// Exact equality — pins fieldId AND the point object, not just one of the two.
+	expect( selected[ 0 ] ).toEqual( { fieldId: FIELD_ID, point: selectedPoint } );
 	expect( closed[ 0 ].reason ).toBe( 'select' );
 	// The default config's address replacement writes billing_address_1/postcode too, which
 	// no §8 store in this test manages — an expected, acknowledged warn (see C2 above).
@@ -1230,9 +1259,14 @@ test( 'fires woodev_pickup_error when the provider reports a fatal error', async
 	document.body.addEventListener( 'woodev_pickup_error', ( e ) => seen.push( e.detail ) );
 
 	const session = await openSession( configWith() );
-	session.provider.emit( 'error', { code: 'map_script', message: '' } );
+	session.provider.emit( 'error', { code: 'map_script', message: 'ymaps script failed to load' } );
 
-	expect( seen[ 0 ].code ).toBe( 'map_script' );
+	// Exact equality — pins fieldId AND message, not just code.
+	expect( seen[ 0 ] ).toEqual( {
+		fieldId: FIELD_ID,
+		code: 'map_script',
+		message: 'ymaps script failed to load',
+	} );
 } );
 
 test( 'does NOT fire woodev_pickup_error for a transient (non-fatal) dataSource fetch failure', async () => {
@@ -1337,13 +1371,20 @@ test( 'provider nothingNearby calls panels.showNothingNearby with the same paylo
 	expect( session.panels.lastNothingNearby ).toBe( info );
 } );
 
-test( 'provider bboxTooWide degrades with the i18n.zoomIn message', async () => {
+test( 'provider bboxTooWide shows the i18n.zoomIn message WITHOUT destroying the map/panels the '
+	+ 'customer is being asked to zoom', async () => {
 	const session = await openSession( configWith() );
 
 	session.provider.emit( 'bboxTooWide', null );
 
 	const dialog = document.querySelector( '[role="dialog"]' );
 	expect( dialog.textContent ).toContain( 'Приблизьте карту, чтобы увидеть пункты выдачи' );
+	// NON-destructive: a notice, never the whole-body showError()/showEmpty() replacement —
+	// wiping the map/panels here would make the "zoom in" instruction impossible to follow.
+	expect( dialog.querySelector( '.woodev-modal__message--error' ) ).toBeNull();
+	expect( dialog.querySelector( '.woodev-modal__message--empty' ) ).toBeNull();
+	expect( dialog.querySelector( '.woodev-modal__notice' ) ).not.toBeNull();
+	expect( dialog.querySelector( '.woodev-pickup-list' ) ).not.toBeNull();
 } );
 
 test( 'provider searchResults forwards to panels.renderSearchResults verbatim', async () => {
@@ -1374,6 +1415,27 @@ test( 'panels searchAddressPicked resolves the address AT THAT INDEX against the
 	session.panels.emit( 'searchAddressPicked', 1 );
 
 	expect( session.provider.resolveAddressCalls ).toEqual( [ 'B' ] );
+} );
+
+test( 'provider addressFocused moves the panels\' distance anchor to the SAME latLng/label (D-6)', async () => {
+	const session = await openSession( configWith() );
+
+	session.provider.emit( 'addressFocused', { latLng: [ 55.75, 37.61 ], label: 'Москва, Тверская 1' } );
+
+	expect( session.panels.setAnchorCalls ).toEqual( [
+		{ latLng: [ 55.75, 37.61 ], label: 'Москва, Тверская 1' },
+	] );
+} );
+
+test( 'provider addressFocused moves the anchor even when nothing turns out to be nearby '
+	+ '(the pin still dropped)', async () => {
+	const session = await openSession( configWith() );
+
+	session.provider.emit( 'addressFocused', { latLng: [ 1, 2 ], label: 'Далеко' } );
+	session.provider.emit( 'nothingNearby', { key: 'g', distanceMeters: 99999, name: 'X' } );
+
+	expect( session.panels.setAnchorCalls ).toEqual( [ { latLng: [ 1, 2 ], label: 'Далеко' } ] );
+	expect( session.panels.lastNothingNearby ).toEqual( { key: 'g', distanceMeters: 99999, name: 'X' } );
 } );
 
 test( 'panels searchPointPicked focuses the owning group and opens its card on the exact point', async () => {

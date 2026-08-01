@@ -31,8 +31,9 @@
  * `resolveAddress( displayName )`, `focusAddress( latLng, label )`, `clearAddress()`,
  * `on( event, cb )`, `destroy()`. Events out:
  * `pointClick( key )`, `boundsChange( bbox )`, `bboxTooWide()`, `visibleChange( keys )`,
- * `nothingNearby( { distanceMeters, name } )`, `searchResults( { points, addresses } )`,
- * `error( { code, message } )`. `bbox` is the flat `[lat1,lng1,lat2,lng2]` shape
+ * `nothingNearby( { key, distanceMeters, name } )`, `searchResults( { points, addresses } )`,
+ * `addressFocused( { latLng, label } )`, `error( { code, message } )`. `bbox` is the flat
+ * `[lat1,lng1,lat2,lng2]` shape
  * `pickup-datasource.js`'s `serializePointsQuery()` expects (see {@see flattenBounds}).
  *
  * CONFIG is FLAT — the merge `pickup-mount.js`'s `buildProviderConfig()` builds from
@@ -458,6 +459,7 @@
 			visibleChange: [],
 			nothingNearby: [],
 			searchResults: [],
+			addressFocused: [],
 			error: [],
 		};
 
@@ -1163,12 +1165,23 @@
 	 * {@see _resolveInitialViewport}'s own successful branch, so a caller that awaits this
 	 * promise sees the POST-fit camera, never the pre-fit one (the file docblock's first lesson).
 	 *
+	 * `addressFocused( { latLng, label } )` fires UNCONDITIONALLY, right after the pin drops —
+	 * before the nearest-N computation below decides whether a fit or a `nothingNearby` follows.
+	 * This is the seam the panels' own distance anchor moves through (Task 20's mount wires
+	 * `provider.on( 'addressFocused', ( info ) => panels.setAnchor( info.latLng, info.label ) )`):
+	 * the pin dropping IS the address becoming the sidebar's new sort anchor and the
+	 * `nearestTo` header, regardless of whether any group turns out to be near it — matching
+	 * the `searchResults` event's own "this file never calls into pickup-panels.js directly"
+	 * discipline (D-3).
+	 *
 	 * @param {number[]} latLng `[lat, lng]`, the resolved address location.
-	 * @param {string}   label  the address text, used only to place the pin.
+	 * @param {string}   label  the address text — used to place the pin AND (via
+	 *                          `addressFocused`) as the panels' `nearestTo` header label.
 	 * @returns {Promise<void>}
 	 */
 	WoodevYandexMapProvider.prototype.focusAddress = function( latLng, label ) {
 		this._setAddressPin( latLng, label );
+		this.emit( 'addressFocused', { latLng: latLng, label: label } );
 
 		var groupsByKey = this._groupsByKey;
 		var groups = Object.keys( groupsByKey ).map( function( key ) {
@@ -1454,6 +1467,7 @@
 			visibleChange: [],
 			nothingNearby: [],
 			searchResults: [],
+			addressFocused: [],
 			error: [],
 		};
 	};

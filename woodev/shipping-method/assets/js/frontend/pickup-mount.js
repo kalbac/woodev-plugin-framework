@@ -163,7 +163,9 @@
  * events (see that file's docblock for why `jQuery.trigger()` would be
  * invisible to a plain `addEventListener`, and this file's own docblock above
  * on `updated_checkout` for the identical asymmetry): `woodev_pickup_map_ready`
- * once a session's `init()` resolves, `woodev_pickup_points_loaded` after
+ * (`{ fieldId, provider }` — D-14 names both: `provider` is the ACTIVE provider's
+ * id, the only way an integrator hooking a specific map can tell which one just
+ * initialised) once a session's `init()` resolves, `woodev_pickup_points_loaded` after
  * EVERY successful fetch this file makes (the initial bulk load, every
  * viewport refetch, every type-filter refetch, every {@see refresh()} call —
  * never just the first), `woodev_pickup_point_selected` right before the modal
@@ -1156,12 +1158,27 @@
 				} );
 
 				provider.on( 'bboxTooWide', function() {
-					degrade( text( config, 'zoomIn' ), null );
+					// A too-wide bbox is a normal, transient viewport state — not an error, and
+					// not something the destructive path (via degrade()) may ever answer with:
+					// wiping the map/panels would destroy the very thing the "zoom in" message
+					// is asking the customer to use. See degradeFetch()'s own docblock for the
+					// identical shared-container reasoning.
+					degradeFetch( text( config, 'zoomIn' ), null );
 				} );
 
 				provider.on( 'searchResults', function( results ) {
 					lastAddresses = ( results && results.addresses ) || [];
 					panels.renderSearchResults( results );
+				} );
+
+				// addressFocused: the provider's own confirmation that the "your address" pin
+				// just dropped (see map-provider-yandex.js's own docblock on this event) — the
+				// panels' distance anchor and `nearestTo` header move to the SAME address, so
+				// the sidebar sorts from where the customer searched, not the map centre
+				// (D-6). Fires whether or not any group turned out to be near it; the
+				// `nothingNearby` state (wired above) is a SEPARATE, list-body-level concern.
+				provider.on( 'addressFocused', function( info ) {
+					panels.setAnchor( info.latLng, info.label );
 				} );
 			}
 
@@ -1172,7 +1189,7 @@
 					return;
 				}
 
-				fireDocumentEvent( EVENT_MAP_READY, { fieldId: config.fieldId } );
+				fireDocumentEvent( EVENT_MAP_READY, { fieldId: config.fieldId, provider: config.provider } );
 
 				// bulk fetches once, right here; viewport waits for the provider's own
 				// boundsChange (wired above) — see the file docblock.
