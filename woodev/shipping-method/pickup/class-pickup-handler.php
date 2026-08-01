@@ -449,6 +449,23 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 				);
 			}
 
+			// NAN fails EVERY comparison (including against itself), so `$lat < -90.0` and
+			// `$lat > 90.0` are both false for it — the range check below would silently let
+			// a NaN latitude through. INF/-INF pass `is_float()` but fail the range check
+			// anyway; `is_finite()` catches both in one place before either value can reach
+			// `wp_json_encode()`, which cannot represent NAN/INF at all.
+			if ( ! is_finite( (float) $lat ) ) {
+				throw new \InvalidArgumentException(
+					'$default_location["center"][0] (latitude) must be a finite number.'
+				);
+			}
+
+			if ( ! is_finite( (float) $lng ) ) {
+				throw new \InvalidArgumentException(
+					'$default_location["center"][1] (longitude) must be a finite number.'
+				);
+			}
+
 			if ( $lat < -90.0 || $lat > 90.0 ) {
 				throw new \InvalidArgumentException(
 					'$default_location["center"][0] (latitude) must be between -90 and 90.'

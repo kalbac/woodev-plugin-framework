@@ -1000,6 +1000,16 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				'latitude below -90'         => [ [ 'center' => [ -95.0, 37.61 ], 'zoom' => 10 ] ],
 				'longitude above 180'        => [ [ 'center' => [ 55.75, 185.0 ], 'zoom' => 10 ] ],
 				'longitude below -180'       => [ [ 'center' => [ 55.75, -185.0 ], 'zoom' => 10 ] ],
+				// NAN fails every ordinary comparison (including `< -90`/`> 90`), so it would
+				// silently sail through a range check alone — is_finite() is what catches it.
+				// INF/-INF are legitimate `is_float()` values too, and would otherwise reach
+				// wp_json_encode(), which cannot represent either.
+				'latitude is NAN'            => [ [ 'center' => [ NAN, 37.61 ], 'zoom' => 10 ] ],
+				'latitude is INF'            => [ [ 'center' => [ INF, 37.61 ], 'zoom' => 10 ] ],
+				'latitude is -INF'           => [ [ 'center' => [ -INF, 37.61 ], 'zoom' => 10 ] ],
+				'longitude is NAN'           => [ [ 'center' => [ 55.75, NAN ], 'zoom' => 10 ] ],
+				'longitude is INF'           => [ [ 'center' => [ 55.75, INF ], 'zoom' => 10 ] ],
+				'longitude is -INF'          => [ [ 'center' => [ 55.75, -INF ], 'zoom' => 10 ] ],
 				'zoom as a float'            => [ [ 'center' => [ 55.75, 37.61 ], 'zoom' => 10.5 ] ],
 				'zoom as a numeric string'   => [ [ 'center' => [ 55.75, 37.61 ], 'zoom' => '10' ] ],
 				'zoom below the map minimum' => [ [ 'center' => [ 55.75, 37.61 ], 'zoom' => 7 ] ],
@@ -1114,6 +1124,35 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 
 			$this->assertStringContainsString( '&y=2', $handler->get_js_config()['pointIcons']['pvz']['default'] );
 			$this->assertStringNotContainsString( '&amp;', $handler->get_js_config()['pointIcons']['pvz']['default'] );
+		}
+
+		/**
+		 * The previous test only proves `default` is escaped with `esc_url_raw()` — a
+		 * mutation that dropped escaping for `active` specifically would survive it, since
+		 * every OTHER icon test either omits `active` entirely or uses a URL with no `&` to
+		 * reveal the difference. This uses an `active` URL whose `&` would visibly become
+		 * `&amp;` under the wrong (`esc_url()`) function, proving BOTH URLs go through
+		 * `esc_url_raw()`, not just whichever one the other tests happened to check.
+		 */
+		public function test_the_active_icon_url_is_escaped_too_not_only_default(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			Functions\when( 'rest_url' )->justReturn( 'https://example.test/wp-json/woodev/v1' );
+			Functions\when( 'wp_create_nonce' )->justReturn( 'NONCE' );
+			Functions\when( 'wc_ship_to_billing_address_only' )->justReturn( false );
+
+			$handler = $this->make_handler( [
+				'point_icons' => [
+					'pvz' => [
+						'default' => 'https://example.test/a.svg',
+						'active'  => 'https://example.test/a-active.svg?x=1&y=2',
+					],
+				],
+			] );
+
+			$active = $handler->get_js_config()['pointIcons']['pvz']['active'];
+
+			$this->assertStringContainsString( '&y=2', $active );
+			$this->assertStringNotContainsString( '&amp;', $active );
 		}
 
 		/**
@@ -1323,15 +1362,29 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 		 * `'controlType' => $control->get_type()`). `default` carries the PLUGIN's own
 		 * accent colour, not the framework's.
 		 */
+		/**
+		 * Pins the WHOLE field descriptor, not just `type`/`controlType`/`default` — the
+		 * Russian `name` and `description` and `required => false` were previously
+		 * unpinned, so a mutation to any one of them (e.g. flipping `required` to `true`,
+		 * or blanking `description`) would have survived the suite green.
+		 */
 		public function test_the_accent_is_offered_as_a_colour_setting_field(): void {
 			require_once dirname( __DIR__, 4 ) . '/woodev/settings-api/class-setting.php';
 			require_once dirname( __DIR__, 4 ) . '/woodev/settings-api/class-control.php';
 
 			$fields = $this->make_handler( [ 'accent_color' => '#FCE000' ] )->get_settings_fields();
 
-			$this->assertSame( \Woodev_Setting::TYPE_STRING, $fields['pickup_accent_color']['type'] );
-			$this->assertSame( \Woodev_Control::TYPE_COLOR, $fields['pickup_accent_color']['controlType'] );
-			$this->assertSame( '#FCE000', $fields['pickup_accent_color']['default'] );
+			$this->assertSame(
+				[
+					'name'        => 'Акцентный цвет карты',
+					'type'        => \Woodev_Setting::TYPE_STRING,
+					'controlType' => \Woodev_Control::TYPE_COLOR,
+					'description' => 'Цвет кнопок, активных пунктов и кластеров на карте пунктов выдачи.',
+					'default'     => '#FCE000',
+					'required'    => false,
+				],
+				$fields['pickup_accent_color']
+			);
 		}
 
 		public function test_config_contains_no_object_or_closure_anywhere(): void {
@@ -1420,6 +1473,80 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 					$i18n,
 					"i18n is missing the \"{$key}\" key the map provider reads by name"
 				);
+				$this->assertSame(
+					$value,
+					$i18n[ $key ],
+					"i18n[\"{$key}\"] must be the exact expected Russian string, not a swapped/blank one"
+				);
+			}
+		}
+
+		/**
+		 * The panels (Tasks 12-15) read twelve i18n keys by name (Task 8) and the checkout
+		 * trigger reads a thirteenth, `triggerChange` (Task 8B) — none of these were pinned
+		 * anywhere: the existing i18n test above only covers the ORIGINAL nine map-provider
+		 * keys, so a typo in any of these thirteen would ship a BLANK label to the customer
+		 * with the full suite still green. This asserts the COMPLETE i18n map — every key,
+		 * exact value, exact key SET (`assertSame` on `array_keys`, not just presence) — so
+		 * a missing, extra, or renamed key fails loudly, and pins the full non-Russian-
+		 * fallback contract in one place rather than leaving the newest keys as the only
+		 * unpinned ones.
+		 */
+		public function test_config_i18n_carries_every_key_with_its_exact_value(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			Functions\when( 'rest_url' )->justReturn( 'https://example.test/wp-json/woodev/v1' );
+			Functions\when( 'wp_create_nonce' )->justReturn( 'NONCE' );
+			Functions\when( 'wc_ship_to_billing_address_only' )->justReturn( false );
+
+			$i18n = $this->make_handler()->get_js_config()['i18n'];
+
+			$expected = [
+				'modalTitle'       => 'Выберите пункт выдачи',
+				'close'            => 'Закрыть',
+				'select'           => 'Выбрать этот пункт',
+				'loading'          => 'Загрузка пунктов выдачи…',
+				'error'            => 'Не удалось загрузить пункты выдачи. Попробуйте ещё раз.',
+				'noResults'        => 'Пункты выдачи не найдены.',
+				'blocked'          => 'Этот пункт выдачи недоступен для вашего заказа.',
+				'trigger'          => 'Выбрать пункт выдачи',
+				'retry'            => 'Повторить',
+				'upstreamError'    => 'Сервис пунктов выдачи временно недоступен. Попробуйте ещё раз позже.',
+				'rateLimited'      => 'Слишком много запросов. Подождите немного и попробуйте снова.',
+				'notFound'         => 'Этот пункт выдачи больше не найден. Пожалуйста, выберите другой.',
+				'search'           => 'Поиск по адресу',
+				'drawerTitle'      => 'Пункты выдачи в этой области',
+				'howToGet'         => 'Как добраться',
+				'paymentMethods'   => 'Способы оплаты',
+				'workTime'         => 'Часы работы',
+				'phone'            => 'Телефон',
+				'maxWeight'        => 'Максимальный вес',
+				'allTypes'         => 'Все типы пунктов',
+				'detailsError'     => 'Не удалось загрузить подробности о пункте выдачи.'
+					. ' Вы всё ещё можете его выбрать.',
+				// The twelve Task 8 panel keys.
+				'services'         => 'Услуги',
+				'yourAddress'      => 'Ваш адрес',
+				'nearestTo'        => 'Ближайшие к «%s»',
+				'resetSearch'      => 'Сбросить',
+				'nothingNearby'    => 'Рядом с этим адресом пунктов выдачи нет.',
+				'showNearest'      => 'Показать ближайший',
+				'continueCheckout' => 'Продолжить оформление заказа',
+				'zoomIn'           => 'Приблизьте карту, чтобы увидеть пункты выдачи',
+				'sectionPoints'    => 'Пункты выдачи',
+				'sectionAddresses' => 'Адреса',
+				'filterTypes'      => 'Тип пунктов',
+				'emptyInView'      => 'В этой области пунктов выдачи нет',
+				// The Task 8B trigger-state key.
+				'triggerChange'    => 'Выбрать другой пункт выдачи',
+			];
+
+			$this->assertSame(
+				array_keys( $expected ),
+				array_keys( $i18n ),
+				'the i18n key SET must match exactly -- a missing or extra key must fail loudly'
+			);
+
+			foreach ( $expected as $key => $value ) {
 				$this->assertSame(
 					$value,
 					$i18n[ $key ],

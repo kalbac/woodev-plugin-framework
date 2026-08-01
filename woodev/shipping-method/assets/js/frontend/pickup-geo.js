@@ -84,19 +84,22 @@
 	}
 
 	/**
-	 * Picks black or white for text drawn on `hex`, by luminance — so a
-	 * merchant who chooses yellow is not asked to also choose a text colour
-	 * and get it wrong (spec D-15).
+	 * Picks black or white for text drawn on `hex`, by WCAG relative
+	 * luminance — so a merchant who chooses yellow is not asked to also
+	 * choose a text colour and get it wrong (spec D-15).
 	 *
-	 * Each channel is gamma-linearized exactly per the WCAG relative
-	 * luminance formula, then combined with the classic ITU-R BT.601 luma
-	 * weights (0.299 / 0.587 / 0.114) — NOT WCAG's own Rec.709 weights
-	 * (0.2126 / 0.7152 / 0.0722). This is a deliberate choice, not a
-	 * simplification: with the strict Rec.709 weights, CDEK's green
-	 * (`#0a8c37`) computes to ~0.191, just ABOVE the 0.179 threshold, calling
-	 * for black text on a background most people read as dark enough for
-	 * white. The BT.601 weights put the same colour at ~0.159, below the
-	 * threshold, matching how it actually reads. Threshold 0.179 throughout.
+	 * Each channel is gamma-linearized per the WCAG formula, then combined
+	 * with WCAG's OWN Rec.709 luma weights (0.2126 / 0.7152 / 0.0722) — the
+	 * standard, auditable relative-luminance formula, not a bespoke variant.
+	 * The 0.179 threshold is not arbitrary: it is the luminance at which
+	 * black and white text give an EQUAL contrast ratio against the
+	 * background (`sqrt(1.05 * 0.05) - 0.05`); above it, black measurably
+	 * wins, below it, white does. This is why CDEK's own green (`#0a8c37`,
+	 * L ~= 0.1909, just above the threshold) gets BLACK text here — the
+	 * contrast ratio is 4.82:1 with black against 4.36:1 with white, so
+	 * black is the objectively more readable choice even though CDEK's own
+	 * site uses white. Do not "fix" this back to white on that basis; see
+	 * the boundary-pinning tests in pickup-geo.test.js.
 	 *
 	 * @param {string} hex a validated 3/6/8-digit hex colour.
 	 * @returns {string} '#000000' or '#ffffff'.
@@ -106,7 +109,7 @@
 		var r = linearize( rgb[ 0 ] );
 		var g = linearize( rgb[ 1 ] );
 		var b = linearize( rgb[ 2 ] );
-		var luminance = 0.299 * r + 0.587 * g + 0.114 * b;
+		var luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
 
 		return luminance > 0.179 ? '#000000' : '#ffffff';
 	}
