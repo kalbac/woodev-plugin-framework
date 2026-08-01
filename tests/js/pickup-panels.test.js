@@ -286,3 +286,135 @@ it( 'never executes markup smuggled through selectable.reason — rendered as pl
 	expect( warning.querySelector( 'b' ) ).toBeNull();
 	expect( warning.textContent ).toBe( '<b>нет</b>' );
 } );
+
+// -----------------------------------------------------------------------
+// Task 14: the tab bar for co-located points (D-4)
+// -----------------------------------------------------------------------
+
+const two = {
+	key: 'k', size: 2,
+	points: [
+		point( { id: 'a', name: 'ПВЗ «Магнит»', type: { code: 'pvz', label: 'ПВЗ' } } ),
+		point( { id: 'b', name: 'Постамат №4', type: { code: 'postamat', label: 'Постамат' } } ),
+	],
+};
+
+it( 'renders no tab bar for a single-point group', () => {
+	const panels = mount( cardConfig );
+	panels.openCard( { key: 'k', size: 1, points: [ point() ] } );
+
+	expect( panels.root.querySelector( '.woodev-pickup-card__tabs' ) ).toBeNull();
+} );
+
+it( 'renders one tab per point, labelled by type, first active', () => {
+	const panels = mount( cardConfig );
+	panels.openCard( two );
+
+	const tabs = [ ...panels.root.querySelectorAll( '.woodev-pickup-card__tab' ) ];
+
+	expect( tabs.map( ( t ) => t.textContent ) ).toEqual( [ 'ПВЗ', 'Постамат' ] );
+	expect( tabs[ 0 ].classList.contains( 'is-active' ) ).toBe( true );
+} );
+
+it( 'swaps the body when a tab is clicked', () => {
+	const panels = mount( cardConfig );
+	panels.openCard( two );
+	panels.root.querySelectorAll( '.woodev-pickup-card__tab' )[ 1 ].click();
+
+	expect( panels.root.querySelector( '.woodev-pickup-card__title' ).textContent ).toBe( 'Постамат №4' );
+} );
+
+it( 'falls back to the point name when two points in a group share a type', () => {
+	const panels = mount( cardConfig );
+	panels.openCard( { key: 'k', size: 2, points: [
+		point( { id: 'a', name: 'ПВЗ «Магнит»' } ),
+		point( { id: 'b', name: 'ПВЗ «Пятёрочка»' } ),
+	] } );
+
+	expect( [ ...panels.root.querySelectorAll( '.woodev-pickup-card__tab' ) ].map( ( t ) => t.textContent ) )
+		.toEqual( [ 'ПВЗ «Магнит»', 'ПВЗ «Пятёрочка»' ] );
+} );
+
+it( 'opens on the requested point when the list drove the click', () => {
+	const panels = mount( cardConfig );
+	panels.openCard( two, 'b' );
+
+	expect( panels.root.querySelector( '.woodev-pickup-card__title' ).textContent ).toBe( 'Постамат №4' );
+} );
+
+it( 'emits select for the ACTIVE tab, not the first point', () => {
+	const seen = [];
+	const panels = mount( cardConfig );
+	panels.on( 'select', ( p ) => seen.push( p ) );
+	panels.openCard( two );
+	panels.root.querySelectorAll( '.woodev-pickup-card__tab' )[ 1 ].click();
+	panels.root.querySelector( '.woodev-pickup-card__cta' ).click();
+
+	expect( seen[ 0 ].id ).toBe( 'b' );
+} );
+
+// -----------------------------------------------------------------------
+// Extra coverage beyond the plan's own spec
+// -----------------------------------------------------------------------
+
+it( 'moves is-active off the previous tab when switching, never leaving two active at once', () => {
+	const panels = mount( cardConfig );
+	panels.openCard( two );
+	panels.root.querySelectorAll( '.woodev-pickup-card__tab' )[ 1 ].click();
+
+	const tabs = [ ...panels.root.querySelectorAll( '.woodev-pickup-card__tab' ) ];
+
+	expect( tabs[ 0 ].classList.contains( 'is-active' ) ).toBe( false );
+	expect( tabs[ 1 ].classList.contains( 'is-active' ) ).toBe( true );
+} );
+
+it( 'keeps each point in a 3-point group addressable by its own tab, in order', () => {
+	const three = {
+		key: 'k', size: 3,
+		points: [
+			point( { id: 'a', name: 'A', type: { code: 'pvz', label: 'ПВЗ' } } ),
+			point( { id: 'b', name: 'B', type: { code: 'postamat', label: 'Постамат' } } ),
+			point( { id: 'c', name: 'C', type: { code: 'locker', label: 'Локер' } } ),
+		],
+	};
+	const panels = mount( cardConfig );
+	panels.openCard( three, 'c' );
+
+	expect( panels.root.querySelector( '.woodev-pickup-card__title' ).textContent ).toBe( 'C' );
+
+	panels.root.querySelectorAll( '.woodev-pickup-card__tab' )[ 1 ].click();
+
+	expect( panels.root.querySelector( '.woodev-pickup-card__title' ).textContent ).toBe( 'B' );
+} );
+
+it( 'reflects the ACTIVE point\'s own selectable state, not the first point\'s, after a tab switch', () => {
+	const mixed = {
+		key: 'k', size: 2,
+		points: [
+			point( { id: 'a', name: 'A', selectable: { allowed: true, reason: null } } ),
+			point( { id: 'b', name: 'B', selectable: { allowed: false, reason: 'Блокировано' } } ),
+		],
+	};
+	const panels = mount( cardConfig );
+	panels.openCard( mixed );
+
+	expect( panels.root.querySelector( '.woodev-pickup-card__cta' ).disabled ).toBe( false );
+
+	panels.root.querySelectorAll( '.woodev-pickup-card__tab' )[ 1 ].click();
+
+	expect( panels.root.querySelector( '.woodev-pickup-card__cta' ).disabled ).toBe( true );
+	expect( panels.root.querySelector( '.woodev-pickup-card__warning' ).textContent ).toBe( 'Блокировано' );
+} );
+
+it( 'shows continueCheckout on the specific tab matching the selected id, not just the first tab', () => {
+	const panels = mount( cardConfig );
+	panels.setSelectedId( 'b' );
+	panels.openCard( two );
+
+	expect( panels.root.querySelector( '.woodev-pickup-card__cta' ).textContent ).toBe( 'Забрать здесь' );
+
+	panels.root.querySelectorAll( '.woodev-pickup-card__tab' )[ 1 ].click();
+
+	const cta = panels.root.querySelector( '.woodev-pickup-card__cta' );
+	expect( cta.textContent ).toBe( 'Продолжить оформление заказа' );
+} );
