@@ -354,6 +354,12 @@ const pool = [
 describe( 'matchPoints', () => {
 	it( 'matches on the point name, case-insensitively', () => {
 		expect( matchPoints( pool, 'магнит' ).map( ( p ) => p.id ) ).toEqual( [ '1' ] );
+		// Mixed case on the QUERY side: with every query lowercased, dropping the
+		// toLowerCase() on the query survives the assertion above.
+		expect( matchPoints( pool, 'МаГнИт' ).map( ( p ) => p.id ) ).toEqual( [ '1' ] );
+		// And on the FIELD side: the pool's name is capitalised, so a query that is
+		// lowercase only matches if the field is folded too.
+		expect( matchPoints( pool, 'пвз' ).map( ( p ) => p.id ) ).toEqual( [ '1' ] );
 	} );
 
 	it( 'matches on the address', () => {
@@ -378,6 +384,15 @@ describe( 'matchPoints', () => {
 		                    instruction: '', postal_code: '' } ];
 
 		expect( matchPoints( escaped, 'ромашка' ).map( ( p ) => p.id ) ).toEqual( [ '3' ] );
+
+		// The assertion above passes even if decoding is skipped entirely — `ромашка` sits
+		// inside `&quot;Ромашка&quot;` untouched. Only a query containing the DECODED
+		// character proves the round-trip actually happened.
+		expect( matchPoints( escaped, '"Ромашка"' ).map( ( p ) => p.id ) ).toEqual( [ '3' ] );
+
+		// The inverse, so a "decode" that merely strips the entity rather than resolving it
+		// cannot pass either: the raw entity text must NOT match once decoding is in place.
+		expect( matchPoints( escaped, 'quot' ) ).toEqual( [] );
 	} );
 
 	// --- Extra tests beyond the spec, closing mutation-sweep holes ---------
@@ -402,7 +417,12 @@ describe( 'matchPoints', () => {
 	} );
 
 	it( 'requires an EXACT postal-code match, not a substring one', () => {
-		expect( matchPoints( pool, '2500' ) ).toEqual( [] );
+		// `2500` is not a substring of `125009` in the way that matters — it IS one, but a
+		// prefix query is the shape a naive `indexOf` would accept, so pin both ends.
+		expect( matchPoints( pool, '125' ) ).toEqual( [] );
+		expect( matchPoints( pool, '12500' ) ).toEqual( [] );
+		expect( matchPoints( pool, '25009' ) ).toEqual( [] );
+		expect( matchPoints( pool, '125009' ).map( ( p ) => p.id ) ).toEqual( [ '2' ] );
 	} );
 
 	it( 'does not cross-contaminate two points: a query unique to one never returns the other', () => {
