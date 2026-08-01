@@ -69,6 +69,20 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Point_Query' ) ) :
 		private string $search;
 
 		/**
+		 * Point-type codes narrowing either addressing mode. An empty array means "all
+		 * types" — the filter UI forbids deselecting its last checkbox (T16), so an
+		 * explicit "no types" is not a state that can arise and must not be representable
+		 * here either.
+		 *
+		 * Codes are opaque strings owned by the plugin/carrier (e.g. `pvz`, `postamat`) and
+		 * are compared byte-for-byte — see {@see self::get_types()} for why case is not
+		 * folded.
+		 *
+		 * @var string[]
+		 */
+		private array $types;
+
+		/**
 		 * Constructor. Use {@see from_request()} — it validates.
 		 *
 		 * @since 2.0.2
@@ -76,11 +90,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Point_Query' ) ) :
 		 * @param string|null                                        $locality Locality name, or null.
 		 * @param array{0: float, 1: float, 2: float, 3: float}|null $bounds Bounding box, or null.
 		 * @param string                                             $search   Free-text search term.
+		 * @param string[]                                           $types    Point-type codes, or an empty
+		 *                                                                     array meaning "all types".
 		 */
-		private function __construct( ?string $locality, ?array $bounds, string $search ) {
+		private function __construct( ?string $locality, ?array $bounds, string $search, array $types ) {
 			$this->locality = $locality;
 			$this->bounds   = $bounds;
 			$this->search   = $search;
+			$this->types    = $types;
 		}
 
 		/**
@@ -99,9 +116,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Point_Query' ) ) :
 		 * `locality`; see {@see parse_bbox()}.
 		 *
 		 * Returns null when the request names neither `locality` nor `bbox` (there is
-		 * nothing to address by), when `locality`/`bbox`/`q` is present but not a string,
-		 * or when a non-empty `bbox` fails validation. Values are rejected rather than
-		 * coerced: a non-scalar `q` must not silently become the literal string `"Array"`.
+		 * nothing to address by), when `locality`/`bbox`/`q`/`types` is present but not a
+		 * string, or when a non-empty `bbox` fails validation. Values are rejected rather
+		 * than coerced: a non-scalar `q` must not silently become the literal string
+		 * `"Array"`. `types` narrows a query, the same as `q` — it is never itself an
+		 * addressing mode, so a request naming only `types` (with neither `locality` nor
+		 * `bbox`) is still refused.
 		 *
 		 * @since 2.0.2
 		 *
@@ -115,6 +135,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Point_Query' ) ) :
 			}
 
 			$search = $params['q'] ?? '';
+
+			if ( isset( $params['types'] ) && ! is_string( $params['types'] ) ) {
+				return null;
+			}
+
+			$types = isset( $params['types'] ) ? self::parse_types( $params['types'] ) : [];
 
 			if ( isset( $params['locality'] ) && ! is_string( $params['locality'] ) ) {
 				return null;
@@ -139,7 +165,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Point_Query' ) ) :
 				return null;
 			}
 
-			return new self( $locality, $bounds, $search );
+			return new self( $locality, $bounds, $search, $types );
 		}
 
 		/**
@@ -202,6 +228,38 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Point_Query' ) ) :
 		}
 
 		/**
+		 * Parses a comma-separated `types` request parameter into a deduplicated list of
+		 * type codes, preserving first-seen order.
+		 *
+		 * Each comma-separated segment is trimmed; blank segments (a leading, trailing, or
+		 * doubled comma, or a whitespace-only segment) are dropped. `array_unique()`
+		 * preserves the KEYS of the first occurrence of each value, which leaves gaps where
+		 * a later duplicate was dropped — `array_values()` closes those gaps. Skipping it
+		 * would leave a sparse array that `wp_json_encode()` serializes as a JSON object,
+		 * not an array, breaking the map's client-side rendering (the same trap documented
+		 * on {@see \Woodev\Framework\Shipping\Rest_Api\Pickup_Controller::get_points_data()}).
+		 *
+		 * No case-folding: see {@see self::get_types()} for why.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $raw Raw `types` request parameter.
+		 *
+		 * @return string[]
+		 */
+		private static function parse_types( string $raw ): array {
+			$parts = array_map( 'trim', explode( ',', $raw ) );
+			$parts = array_filter(
+				$parts,
+				static function ( string $part ): bool {
+					return '' !== $part;
+				}
+			);
+
+			return array_values( array_unique( $parts ) );
+		}
+
+		/**
 		 * Gets the locality, or null when the request addresses by bounding box only.
 		 *
 		 * @since 2.0.2
@@ -233,6 +291,25 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Point_Query' ) ) :
 		 */
 		public function get_search(): string {
 			return $this->search;
+		}
+
+		/**
+		 * Gets the point-type codes narrowing this query, or an empty array meaning "all
+		 * types".
+		 *
+		 * Comparison is case-sensitive: `PVZ` and `pvz` are different codes. Type codes are
+		 * opaque strings owned by the plugin/carrier — the framework has no vocabulary of
+		 * its own to normalize against, and folding case would risk silently merging two
+		 * codes the carrier deliberately kept distinct. A {@see Point_Source} must compare
+		 * against these codes exactly as received, and the filter UI must send back exactly
+		 * the code string the source originally returned.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string[]
+		 */
+		public function get_types(): array {
+			return $this->types;
 		}
 	}
 

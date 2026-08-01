@@ -590,6 +590,96 @@ final class PickupControllerTest extends TestCase {
 		);
 	}
 
+	// ---- `types` (D-10) is plumbed through to the query handed to fetch_points() ----
+
+	public function test_the_types_param_reaches_the_query_handed_to_fetch_points(): void {
+		$captured = null;
+		$source   = new Pickup_Controller_Test_Source(
+			Point_Source::STRATEGY_VIEWPORT,
+			static function ( Point_Query $query ) use ( &$captured ) {
+				$captured = $query;
+				return [];
+			},
+			static fn( string $id ) => null
+		);
+		$controller = new Pickup_Controller( 'test-plugin', $source, static fn() => 0, static fn() => 'bacs' );
+
+		$controller->get_points_data( [ 'bbox' => '0,0,1,1', 'types' => 'pvz,postamat' ] );
+
+		$this->assertInstanceOf( Point_Query::class, $captured );
+		$this->assertSame(
+			[ 'pvz', 'postamat' ],
+			$captured->get_types(),
+			'the types param must reach the query passed to fetch_points()'
+		);
+	}
+
+	public function test_handle_points_request_reads_the_types_param_off_the_request(): void {
+		// register_rest_route() is not called here, so rest_ensure_response() never runs
+		// either — Brain Monkey has no built-in WP stub for it and the other
+		// handle_points_request() tests in this file only ever exercise the exception
+		// paths, which return before reaching it. Functions\when() stubs the symbol just
+		// for this test rather than adding an unrelated global fixture.
+		Functions\when( 'rest_ensure_response' )->returnArg();
+
+		$captured = null;
+		$source   = new Pickup_Controller_Test_Source(
+			Point_Source::STRATEGY_VIEWPORT,
+			static function ( Point_Query $query ) use ( &$captured ) {
+				$captured = $query;
+				return [];
+			},
+			static fn( string $id ) => null
+		);
+		$controller = new Pickup_Controller_Probe( 'test-plugin', $source, static fn() => 0, static fn() => 'bacs' );
+
+		$controller->handle_points_request( new WP_REST_Request( [ 'bbox' => '0,0,1,1', 'types' => 'pvz' ] ) );
+
+		$this->assertInstanceOf( Point_Query::class, $captured );
+		$this->assertSame( [ 'pvz' ], $captured->get_types() );
+	}
+
+	public function test_types_is_capped_to_the_max_param_length(): void {
+		$probe = new Pickup_Controller_Probe(
+			'test-plugin',
+			$this->source(),
+			static fn() => 0,
+			static fn() => 'bacs'
+		);
+
+		$long   = str_repeat( 'a,', 100 );
+		$params = $probe->normalize_points_params_public( [ 'types' => $long ] );
+
+		$this->assertSame( 128, strlen( $params['types'] ) );
+	}
+
+	public function test_register_routes_declares_types_as_a_sanitized_string_arg(): void {
+		$registered = [];
+
+		Functions\when( 'register_rest_route' )->alias(
+			static function ( $namespace, $route, $args ) use ( &$registered ) {
+				$registered[ $route ] = $args;
+			}
+		);
+
+		$controller = new Pickup_Controller( 'test-plugin', $this->source(), static fn() => 0, static fn() => 'bacs' );
+		$controller->register_routes();
+
+		$points_route = null;
+
+		foreach ( $registered as $route => $endpoints ) {
+			if ( false !== strpos( $route, '/points' ) && false === strpos( $route, '(?P<id>' ) ) {
+				$points_route = $endpoints[0];
+				break;
+			}
+		}
+
+		$this->assertNotNull( $points_route, 'the points collection route must be registered' );
+		$this->assertArrayHasKey( 'types', $points_route['args'] );
+		$this->assertSame( 'string', $points_route['args']['types']['type'] );
+		$this->assertSame( 'sanitize_text_field', $points_route['args']['types']['sanitize_callback'] );
+	}
+
 	// ---- the detail route caps `id` before it reaches the source ----
 
 	public function test_the_detail_route_id_is_capped_before_reaching_the_source(): void {

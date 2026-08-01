@@ -251,6 +251,21 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 								'type'              => 'string',
 								'validate_callback' => 'rest_validate_request_arg',
 							],
+
+							/*
+							 * Comma-separated point-type codes (D-10) — a viewport carrier is
+							 * queried per pan/zoom, so filtering by type belongs on the server;
+							 * see Point_Query::get_types() and the Point_Source contract.
+							 * sanitize_callback here is belt-and-suspenders alongside
+							 * normalize_points_params()'s own wc_clean()+cap_length() pass —
+							 * Point_Query::from_request() does the actual comma-splitting, the
+							 * one parser for this param.
+							 */
+							'types'    => [
+								'type'              => 'string',
+								'validate_callback' => 'rest_validate_request_arg',
+								'sanitize_callback' => 'sanitize_text_field',
+							],
 						],
 					],
 				]
@@ -312,6 +327,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 					'locality' => $request->get_param( 'locality' ),
 					'bbox'     => $request->get_param( 'bbox' ),
 					'q'        => $request->get_param( 'q' ),
+					'types'    => $request->get_param( 'types' ),
 				]
 			);
 
@@ -387,7 +403,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 		 *
 		 * @since 2.0.2
 		 *
-		 * @param array<string, mixed> $params raw query params (`locality`, `bbox`, `q`).
+		 * @param array<string, mixed> $params raw query params (`locality`, `bbox`, `q`, `types`).
 		 *
 		 * @return array{points: array<int, array<string, mixed>>}
 		 *
@@ -522,11 +538,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 		 * A genuine string is still sanitized and capped to {@see MAX_PARAM_LENGTH}
 		 * characters. `bbox`'s shape (arity, numeric range, span cap) is validated by
 		 * {@see Point_Query} itself and is NOT re-implemented here — only its length is
-		 * capped, so a malformed value cannot bypass that cap before reaching it.
+		 * capped, so a malformed value cannot bypass that cap before reaching it. `types`
+		 * is treated identically: its comma-splitting is {@see Point_Query}'s job alone.
 		 *
 		 * @since 2.0.2
 		 *
-		 * @param array<string, mixed> $raw raw request params (`locality`, `bbox`, `q`).
+		 * @param array<string, mixed> $raw raw request params (`locality`, `bbox`, `q`, `types`).
 		 *
 		 * @return array<string, mixed> normalized params — capped strings, or an
 		 *                              unchanged non-string value for
@@ -538,6 +555,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 				'locality' => $this->clean_and_cap( $raw['locality'] ?? '' ),
 				'bbox'     => $this->clean_and_cap( $raw['bbox'] ?? '' ),
 				'q'        => $this->clean_and_cap( $raw['q'] ?? '' ),
+				'types'    => $this->clean_and_cap( $raw['types'] ?? '' ),
 			];
 		}
 

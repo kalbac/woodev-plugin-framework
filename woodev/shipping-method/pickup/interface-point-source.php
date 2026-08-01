@@ -51,6 +51,16 @@ if ( ! interface_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Point_Source' )
 		 * always handed a query with non-null {@see Point_Query::get_bounds()}. A source
 		 * need not defend against the other addressing mode arriving instead.
 		 *
+		 * TYPE FILTER (D-10): a `STRATEGY_VIEWPORT` source MUST honour
+		 * {@see Point_Query::get_types()} and return only points whose type matches one of
+		 * the given codes; an empty array means "all types". This is not optional — the
+		 * whole point of filtering at the viewport strategy is to not fetch what will not
+		 * be shown, and a source that ignores the filter defeats that. A `STRATEGY_BULK`
+		 * source MAY ignore {@see Point_Query::get_types()}: the whole locality is already
+		 * loaded in the browser, and the framework applies the filter client-side instead
+		 * (see the D-10 design decision) — a bulk source is free to return every point
+		 * regardless of what `get_types()` reports.
+		 *
 		 * Implementations must return already-normalized points. A malformed entry (one
 		 * that fails carrier-side mapping) should be skipped rather than aborting the whole
 		 * fetch — one bad point must not empty the map. A failed fetch is a different case

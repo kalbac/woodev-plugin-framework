@@ -229,4 +229,84 @@ final class PointQueryTest extends TestCase {
 			)
 		);
 	}
+
+	// ---- `types` (D-10): server-side type filter for the viewport strategy ----
+	//
+	// NOTE on a deliberate deviation from the plan's literal snippet: the plan's three
+	// given test bodies call from_request() with ONLY a `types` param (or no params at
+	// all) and expect a non-null query back. That contradicts a PRE-EXISTING, out-of-scope
+	// invariant this suite already pins (test_rejects_an_empty_request,
+	// test_rejects_a_request_carrying_only_a_search_term): from_request() refuses any
+	// request naming neither `locality` nor `bbox` — there is nothing to address by.
+	// `types` narrows a query exactly like `q` already does; it must not become a third
+	// way to satisfy that rule (see
+	// test_a_request_naming_only_types_and_no_addressing_mode_is_still_refused below,
+	// which pins the invariant this reasoning preserves). Each test below therefore pairs
+	// its `types` param with a valid `locality`, keeping the plan's exact intent and
+	// assertions while producing a query that is actually reachable in production.
+
+	public function test_types_default_to_an_empty_array_meaning_all_types(): void {
+		$query = Point_Query::from_request( [ 'locality' => 'Москва' ] );
+
+		$this->assertNotNull( $query );
+		$this->assertSame( [], $query->get_types() );
+	}
+
+	public function test_types_are_parsed_from_a_comma_separated_list(): void {
+		$query = Point_Query::from_request( [ 'locality' => 'Москва', 'types' => 'pvz,postamat' ] );
+
+		$this->assertNotNull( $query );
+		$this->assertSame( [ 'pvz', 'postamat' ], $query->get_types() );
+	}
+
+	public function test_blank_and_duplicate_type_codes_are_dropped(): void {
+		$query = Point_Query::from_request( [ 'locality' => 'Москва', 'types' => 'pvz,,pvz, postamat ' ] );
+
+		$this->assertNotNull( $query );
+		$this->assertSame( [ 'pvz', 'postamat' ], $query->get_types() );
+	}
+
+	public function test_type_codes_are_compared_case_sensitively(): void {
+		// Type codes are opaque strings owned by the plugin/carrier, not framework
+		// vocabulary — folding case would presume an ASCII convention the framework has
+		// no business assuming, and could wrongly merge two carrier-distinct codes.
+		// 'PVZ' and 'pvz' must therefore survive as two distinct entries, not one.
+		$query = Point_Query::from_request( [ 'locality' => 'Москва', 'types' => 'PVZ,pvz' ] );
+
+		$this->assertNotNull( $query );
+		$this->assertSame( [ 'PVZ', 'pvz' ], $query->get_types() );
+	}
+
+	public function test_a_request_naming_only_types_and_no_addressing_mode_is_still_refused(): void {
+		// `types` narrows a query, it does not address one — it must not become a third
+		// way to satisfy from_request()'s "name at least one addressing mode" rule.
+		$this->assertNull( Point_Query::from_request( [ 'types' => 'pvz' ] ) );
+	}
+
+	public function test_rejects_a_non_string_types(): void {
+		// Mirrors the is_string() guard already applied to locality/bbox/q — a non-scalar
+		// `types` (e.g. a repeated `types[]=a&types[]=b` query key) must be rejected, not
+		// coerced into the literal string "Array".
+		$this->assertNull(
+			Point_Query::from_request(
+				[
+					'locality' => 'Москва',
+					'types'    => [ 'pvz' ],
+				]
+			)
+		);
+	}
+
+	public function test_types_do_not_disturb_an_otherwise_valid_bbox_query(): void {
+		$query = Point_Query::from_request(
+			[
+				'bbox'  => '55.70,37.50,55.80,37.70',
+				'types' => 'pvz,postamat',
+			]
+		);
+
+		$this->assertNotNull( $query );
+		$this->assertSame( [ 55.70, 37.50, 55.80, 37.70 ], $query->get_bounds() );
+		$this->assertSame( [ 'pvz', 'postamat' ], $query->get_types() );
+	}
 }
