@@ -53,6 +53,40 @@ An earlier attempt here polled `clusterer.getObjectState()` after successive `+2
 a timer. It worked, and it was still wrong: non-deterministic, its timers outlived `destroy()`,
 and rapid clicks overlapped their own loops.
 
+## The degenerate case the fix above cannot solve: identical coordinates (s47)
+
+Collapsing the bounds onto the point works because zooming in eventually separates neighbours. When
+two points share the **same** coordinates it never does. Clustering in 2.1 is by **pixel grid**, so
+identical coordinates fall in one cell at *every* zoom level, `checkZoomRange` resolves to max zoom
+and the placemark is still clustered, `.then()` fires, `.balloon.open()` throws. The customer cannot
+select either point — reported live in the CDEK plugin, where a PVZ and a postamat regularly share a
+building.
+
+Russian Post's widget (`https://widget.pochta.ru/map/main.*.js`) guards it before attempting the move:
+
+```js
+var st = om.getObjectState( id );
+
+if ( st.isClustered ) {
+    var same = st.cluster.features
+        .map( f => f.geometry.coordinates.join( '' ) )
+        .every( ( c, _, all ) => c === all[ 0 ] );
+
+    // at max zoom, or all features on one coordinate → zooming cannot help
+    if ( map.getZoom() === map.zoomRange.getCurrent()[ 1 ] || same ) { … }
+}
+```
+
+They also **re-read `getObjectState()` after the move** and branch again: still clustered → open the
+*cluster's* balloon with `clusters.state.set('activeObject', …)`; no longer clustered → open the
+object's own. One check before the move is not enough.
+
+The structural fix, taken in the s47 rework, is to stop depending on ymaps balloons at all: group
+points by rounded position, draw one marker per position, and render the detail panel as our own DOM
+with a tab bar. Then `setBounds()` only *frames* a point and nothing breaks when it stays clustered.
+Do **not** solve this by nudging coordinates apart — the pin then lies about where the building is,
+and no single offset is correct at more than one zoom level.
+
 ## Sequence the continuations, don't just guard `destroy()`
 
 Two `setBounds()` promises are **not** guaranteed to resolve in the order they were issued —

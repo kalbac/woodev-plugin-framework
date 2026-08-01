@@ -1844,6 +1844,22 @@ a panel.
 - Modify: `woodev/shipping-method/assets/js/frontend/map-provider-yandex.js`
 - Test: `tests/js/map-provider-yandex.test.js`
 
+- [ ] **Step 0: Confirm `ObjectManager` is actually in the loaded package**
+
+The script URL pins `load=package.standard` (inherited from the reference). The default is
+`package.full`, and the documentation does not publish either package's contents, so **nothing so far
+proves `ObjectManager` is in `standard`**. Check before writing code against it — on the rig, with a
+real key, in the console:
+
+```js
+typeof window.WoodevPickupMap.ObjectManager   // expected: 'function'
+```
+
+If it is `undefined`, drop the `load` parameter from `Yandex_Map_Provider::build_script_url()` so the
+default `package.full` applies, and note the size cost in the commit message. Do not add
+`load=package.full` explicitly — an omitted parameter and the explicit default are the same thing,
+and one fewer pinned value is one fewer thing to be wrong later.
+
 - [ ] **Step 1: Write the failing tests**
 
 Keep the existing ymaps stub in the test file and extend it with `ObjectManager`. Assert the new

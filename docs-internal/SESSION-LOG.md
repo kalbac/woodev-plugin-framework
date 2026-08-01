@@ -1,3 +1,35 @@
+## Session 47 (2026-08-01) — Pickup map rework: brainstorm, spec, plan, ADR (no code)
+
+- **Mandate:** the operator rejected the s46 map on the rig in five seconds — "направление правильное, но визуально и функционально нет". Task-minimum: reproduce the reference map under our universal structure, and do it better. Not a defect list.
+- **Method:** `superpowers:brainstorming`, grounded only on verified facts. Three working reference implementations read in full, all on Yandex Maps JS API 2.1 — Yandex.Delivery (620-line widget + template + 416-line CSS), CDEK (`woodev-yandex-map-plugin.js`), and the Russian Post widget bundle downloaded and decompiled (73 KB minified). Yandex's own 2.1 and v3 documentation re-checked rather than recalled.
+- **Result:** spec `specs/2026-08-01-sp5-pickup-map-rework-design.md` (15 decisions), plan `plans/2026-08-01-sp5-pickup-map-rework-plan.md` (23 TDD tasks, six phases), `adr/010-yandex-maps-js-api-2-1-not-3-0.md`. Three commits, tree clean. **No production code touched.**
+
+### What the reference teardown changed
+
+- **The Yandex reference has no floating balloon at all.** It drags the ymaps balloon *pane* into a full-height right panel by overriding `ymaps[class*=-balloon-pane]` with `!important`. That is how it achieves "information in the sidebar" — a CSS override of undocumented internals. **Decision: we render both panels as our own DOM and do not use the ymaps balloon at all** (D-2), which also retires a whole class of clustering bugs.
+- **CDEK already uses `ObjectManager` with `clusterize: true`, and already has the co-located-point tab bar** — but its grouping counter is broken: `mapper.get( elem.hash )` where `elem` is the container-id *string*, so `undefined + 1 = NaN` for every duplicate after the first. A second defect in the same block pushes `undefined` into `objectManager.add()`. Reported in the handoff; that repo has no board.
+- **Russian Post's search placeholder is literally «Ваш адрес»** — confirming the operator's diagnosis that customers type their *own* address, not a PVZ name. It also keeps `SearchControl`'s engine and replaces only its chrome via `templateLayoutFactory`, which is the model we adopted.
+- **Russian Post guards co-located points properly:** before attempting to zoom it checks whether all cluster features share one coordinate, and it re-reads `getObjectState()` *after* the move. Adopted verbatim (spec §7.5).
+- **None of the three references solves the real search failure** — all of them zoom to the address and leave the customer looking at an empty map when nothing is nearby. Our model fits the address plus the three nearest points and shows an explicit empty state (D-6). This is the one place the rework is ahead of every reference.
+
+### Documentation actualisation (the operator asked for it explicitly)
+
+- Nothing the references rely on is deprecated in 2.1. Last release is **2.1.79 (03.06.2021)** — frozen, in maintenance.
+- **v3 rejected (ADR-010):** no clustering in core, no pop-ups, no `SearchControl`, a separate API key for `search()`/`suggest()`, LngLat inversion, `setLocation()` returning `void`. The **Map Style Editor is v3/MapKit only** — the single capability 2.1 cannot offer, and the reason CDEK layers 2GIS tiles. The balance genuinely shifted mid-discussion (two of three objections were neutralised by our own decisions) and that is recorded honestly in the ADR rather than hidden.
+- **`lang` region selects units** — `RU`/`UA`/`TR` kilometres, `US` miles. New gotcha.
+
+### Decisions worth remembering
+
+Provider narrowed to map/markers/camera, panels owned by the framework (D-3) · grouping by 4-decimal position + tab bar, never coordinate jitter (D-4) · plugin supplies icon URLs, framework owns the two boxes and anchors taken from CDEK's live values (D-5) · buyer's city then a plugin-hardcoded default, no geolocation — a VPN would send the customer to Amsterdam (D-7) · `services` added to `Pickup_Point`, structured schedules deferred (D-9) · type filter UI shared, filtering location chosen by strategy (D-10) · modal extracted to `woodev/assets/js/frontend/woodev-modal.js` with WooCommerce's responsive breakpoint (D-13) · a public two-layer event surface, `before_close` the only cancelable one (D-14) · one accent colour, contrast derived, sanitised twice and after the filter (D-15).
+
+### Board
+
+Filed straight to `Бэклог`: **#151** viewport pagination (Russian Post uses `pageSize: 200`), **#152** structured schedule, **#153** mixed i18n source languages — the framework catalogue has English msgids while new code writes Russian ones, and `AGENTS.md` claims Russian. Commented on **#130**: its `window.onerror` scope cannot see `woodev_pickup_error`, because we catch those failures and render a message instead of letting anything propagate.
+
+### Corrections taken during the session
+
+Two of mine, both factual: the framework *does* ship translations (`woodev/languages/`, loaded by `Translation_Handler`), and `en_EN` is not a locale — WordPress's default is `en_US`. Recorded because the first one nearly went into the spec as "no catalogues exist".
+
 ## Session 46 (2026-07-31) — SP-5 pickup map: T13–T19 built, rig-verified end to end (branch `feat/pickup-map`, NOT merged)
 
 - **Method:** same as s45 — fresh Sonnet 5 implementer per task, then an adversarial review, then fixes. **Review again found something substantive on every task**, and this session added a second lesson: the reviews were right that mutation sweeps must mutate *values and content*, and even that was not enough. The three worst defects of the session were found by **running the thing in a browser**, not by any test.
