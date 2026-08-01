@@ -453,13 +453,27 @@ final class MapProviderRegistryTest extends TestCase {
 	 * resolved value, so the two cannot silently drift apart.
 	 */
 	public function test_the_lang_in_the_script_url_matches_the_lang_field(): void {
-		Functions\when( 'get_locale' )->justReturn( 'de_DE' );
 		Functions\when( 'apply_filters' )->returnArg( 2 );
+
+		// An ACCEPTED, non-default locale is the only case that proves anything here. With
+		// `de_DE` both sides land on the default `en_US`, so a build_script_url() that ignored
+		// the resolved value and hardcoded `en_US` would pass — and the two computations
+		// drifting apart is exactly what this test exists to catch.
+		Functions\when( 'get_locale' )->justReturn( 'ru_RU' );
 
 		$config = ( new Yandex_Map_Provider( '' ) )->get_js_config( [] );
 
-		$this->assertStringContainsString( 'lang=en_US', $config['scriptUrl'] );
-		$this->assertSame( 'en_US', $config['lang'] );
+		$this->assertStringContainsString( 'lang=ru_RU', $config['scriptUrl'] );
+		$this->assertSame( 'ru_RU', $config['lang'] );
+		$this->assertStringNotContainsString( 'lang=en_US', $config['scriptUrl'] );
+
+		// And the fallback path agrees too, so neither side special-cases the default.
+		Functions\when( 'get_locale' )->justReturn( 'de_DE' );
+
+		$fallback = ( new Yandex_Map_Provider( '' ) )->get_js_config( [] );
+
+		$this->assertStringContainsString( 'lang=en_US', $fallback['scriptUrl'] );
+		$this->assertSame( 'en_US', $fallback['lang'] );
 	}
 
 	/**

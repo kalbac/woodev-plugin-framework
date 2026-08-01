@@ -93,6 +93,8 @@ final class Woodev_Yandex_Pilot_Map_Provider implements Map_Provider {
 	 * Own-rendered map, mirroring {@see \Woodev\Framework\Shipping\Map\Yandex_Map_Provider}:
 	 * draws only the map canvas, the framework owns the surrounding panels.
 	 *
+	 * @since 2.0.2
+	 *
 	 * @return bool
 	 */
 	public function owns_chrome(): bool {
