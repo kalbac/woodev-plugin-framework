@@ -774,6 +774,209 @@ git commit -m "feat(shipping): require a default viewport and accept plugin poin
 
 ---
 
+### Task 8B: accent colour — plugin default, merchant override, derived contrast (D-15)
+
+Numbered 8B because it belongs with Task 8: both add config the later phases consume. Do it before
+Phase C.
+
+**Files:**
+- Modify: `woodev/shipping-method/pickup/class-pickup-handler.php`
+- Test: `tests/unit/Shipping/Pickup/PickupHandlerTest.php`
+
+- [ ] **Step 1: Write the failing tests**
+
+```php
+public function test_the_plugin_default_accent_reaches_the_browser_config(): void {
+    $handler = $this->make_handler( [ 'accent_color' => '#FCE000' ] );
+
+    $this->assertSame( '#fce000', $handler->get_js_config()['accentColor'] );
+}
+
+public function test_a_merchant_setting_overrides_the_plugin_default(): void {
+    $handler = $this->make_handler( [ 'accent_color' => '#FCE000', 'setting_accent' => '#0a8c37' ] );
+
+    $this->assertSame( '#0a8c37', $handler->get_js_config()['accentColor'] );
+}
+
+public function test_an_empty_merchant_setting_leaves_the_plugin_default_alone(): void {
+    $handler = $this->make_handler( [ 'accent_color' => '#FCE000', 'setting_accent' => '' ] );
+
+    $this->assertSame( '#fce000', $handler->get_js_config()['accentColor'] );
+}
+
+public function test_a_malformed_colour_falls_back_instead_of_reaching_css(): void {
+    $handler = $this->make_handler( [
+        'accent_color'    => '#FCE000',
+        'setting_accent'  => 'red; } body { display:none } .x {',
+    ] );
+
+    $this->assertSame( '#fce000', $handler->get_js_config()['accentColor'] );
+}
+
+public function test_a_filter_overrides_everything(): void {
+    Filters\expectApplied( 'woodev_pickup_accent_color' )->andReturn( '#1937ff' );
+    $handler = $this->make_handler( [ 'accent_color' => '#FCE000' ] );
+
+    $this->assertSame( '#1937ff', $handler->get_js_config()['accentColor'] );
+}
+
+public function test_a_filter_returning_garbage_is_sanitised_too(): void {
+    Filters\expectApplied( 'woodev_pickup_accent_color' )->andReturn( 'javascript:alert(1)' );
+    $handler = $this->make_handler( [ 'accent_color' => '#FCE000' ] );
+
+    $this->assertSame( '#fce000', $handler->get_js_config()['accentColor'] );
+}
+
+public function test_the_accent_is_offered_as_a_colour_setting_field(): void {
+    $fields = $this->make_handler( [ 'accent_color' => '#FCE000' ] )->get_settings_fields();
+
+    $this->assertSame( \Woodev_Control::TYPE_COLOR, $fields['pickup_accent_color']['type'] );
+    $this->assertSame( '#FCE000', $fields['pickup_accent_color']['default'] );
+}
+```
+
+The two sanitisation tests are the ones that matter. This value is interpolated into CSS, so a
+merchant-editable string reaching `setProperty()` unvalidated is not a cosmetic bug. Sanitising the
+**filter's** return value as well is the non-obvious half: the filter is the one input a site owner
+controls that no settings-page validation ever sees.
+
+- [ ] **Step 2: Run to verify they fail**
+
+Run: `./vendor/bin/phpunit tests/unit/Shipping/Pickup/PickupHandlerTest.php`
+Expected: FAIL — no `accentColor` key.
+
+- [ ] **Step 3: Implement**
+
+```php
+/** @var string framework fallback when neither the merchant nor the plugin supplies one. */
+private const DEFAULT_ACCENT_COLOR = '#06aedd';
+
+/**
+ * Resolves the map's accent colour: the merchant's setting, else the plugin's default, else the
+ * framework's. Filterable, and sanitised AFTER the filter — a filter is an untrusted input on a
+ * path that ends in CSS. See spec D-15.
+ *
+ * @since 2.0.2
+ *
+ * @return string a valid hex colour, never an empty string.
+ */
+private function resolve_accent_color(): string {
+    $candidate = '' !== $this->setting_accent_color ? $this->setting_accent_color : $this->accent_color;
+
+    /**
+     * Filters the pickup map's accent colour.
+     *
+     * @since 2.0.2
+     *
+     * @param string $colour resolved colour, before sanitisation.
+     */
+    $filtered = (string) apply_filters( 'woodev_pickup_accent_color', $candidate );
+
+    return sanitize_hex_color( $filtered )
+        ?: ( sanitize_hex_color( $this->accent_color ) ?: self::DEFAULT_ACCENT_COLOR );
+}
+```
+
+`get_js_config()` emits `'accentColor' => $this->resolve_accent_color()` at the **top level**, not
+inside `mapConfig` — the checkout trigger button lives outside the modal and needs it too.
+
+`get_settings_fields()` stops being a pure pass-through to the provider: it merges the provider's
+fields with a framework-owned one.
+
+```php
+'pickup_accent_color' => [
+    'name'        => __( 'Акцентный цвет карты', 'woodev-plugin-framework' ),
+    'type'        => \Woodev_Setting::TYPE_STRING,
+    'controlType' => \Woodev_Control::TYPE_COLOR,
+    'description' => __(
+        'Цвет кнопок, активных пунктов и кластеров на карте пунктов выдачи.',
+        'woodev-plugin-framework'
+    ),
+    'default'     => $this->accent_color,
+    'required'    => false,
+],
+```
+
+Add the second trigger label to the i18n block:
+
+```php
+'triggerChange' => __( 'Выбрать другой пункт выдачи', 'woodev-plugin-framework' ),
+```
+
+- [ ] **Step 4: Run the full unit suite**
+
+Run: `composer test:unit`
+Expected: PASS.
+
+- [ ] **Step 5: Add the JS side — validation and CSS custom properties**
+
+In `pickup-geo.js` (it is the home of pure helpers), add two functions and their tests:
+
+```js
+/** @type {RegExp} the only shapes allowed to reach CSS. Server-sanitised too — see spec D-15. */
+var HEX_COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
+
+/**
+ * Returns `colour` when it is a hex colour safe to write into CSS, `fallback` otherwise.
+ *
+ * @param {*}      colour
+ * @param {string} fallback
+ * @returns {string}
+ */
+function safeColor( colour, fallback ) {
+	return 'string' === typeof colour && HEX_COLOR.test( colour ) ? colour : fallback;
+}
+
+/**
+ * Picks black or white for text drawn on `hex`, by relative luminance — so a merchant who
+ * chooses yellow is not asked to also choose a text colour and get it wrong.
+ *
+ * @param {string} hex a validated 3- or 6-digit hex colour.
+ * @returns {string} '#000000' or '#ffffff'.
+ */
+function contrastFor( hex ) { /* WCAG relative luminance, threshold 0.179 */ }
+```
+
+Tests to write alongside them:
+
+```js
+it( 'rejects anything that is not a hex colour', () => {
+	expect( safeColor( 'red; } body {', '#06aedd' ) ).toBe( '#06aedd' );
+	expect( safeColor( 'rgb(1,2,3)', '#06aedd' ) ).toBe( '#06aedd' );
+	expect( safeColor( undefined, '#06aedd' ) ).toBe( '#06aedd' );
+	expect( safeColor( '#FCE000', '#06aedd' ) ).toBe( '#FCE000' );
+	expect( safeColor( '#fff', '#06aedd' ) ).toBe( '#fff' );
+} );
+
+it( 'picks dark text on a light accent and light text on a dark one', () => {
+	expect( contrastFor( '#FCE000' ) ).toBe( '#000000' );   // Yandex yellow
+	expect( contrastFor( '#1937ff' ) ).toBe( '#ffffff' );   // Pochta blue
+	expect( contrastFor( '#0a8c37' ) ).toBe( '#ffffff' );   // CDEK green
+} );
+```
+
+- [ ] **Step 6: Run to verify they pass**
+
+Run: `npm run test:js`
+Expected: PASS.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add woodev/shipping-method/pickup/class-pickup-handler.php \
+        woodev/shipping-method/assets/js/frontend/pickup-geo.js \
+        tests/unit/Shipping/Pickup/PickupHandlerTest.php tests/js/pickup-geo.test.js
+git commit -m "feat(shipping): accent colour with a plugin default and a merchant override"
+```
+
+> **Consumers of the accent, to wire in their own tasks:**
+> T12 sets `--woodev-pickup-accent` / `--woodev-pickup-accent-contrast` on the panels root via
+> `setProperty()`; T17 passes it as `clusterIconColor` and to the active pin state; T20 applies it to
+> the checkout trigger button and switches that button's label to `i18n.triggerChange` once a point
+> is selected; T21 consumes both custom properties in `pickup.css` and declares no literal accent.
+
+---
+
 ## Phase C — pure geometry, no map involved
 
 ### Task 9: `pickup-geo.js` — position grouping (D-4)
@@ -2185,6 +2388,9 @@ Work through this list and record the result of each:
 - [ ] search: a point by name → its card opens
 - [ ] type filter under both strategies; the last checkbox cannot be unchecked
 - [ ] modal at ≤ 782px renders full-screen
+- [ ] accent colour: plugin default applied to CTA, active list item, cluster and trigger button
+- [ ] accent colour: merchant override in settings repaints all of the above without a rebuild
+- [ ] trigger button reads «Выбрать другой пункт выдачи» once a point has been chosen
 - [ ] `woodev_modal_*` and `woodev_pickup_*` events observed in the console via `addEventListener`
 - [ ] order placed end-to-end with the point in the order meta
 
@@ -2222,5 +2428,6 @@ Checked against the spec:
 - D-12 → T7, T10.
 - D-13 → T1, T3.
 - D-14 → T2, T20.
+- D-15 → T8B, consumed by T12, T17, T20, T21.
 - §7.6 / issue #150 → T22 step 4, both paths.
 - §9 backlog items → issues #151, #152, #153, not tasks here.

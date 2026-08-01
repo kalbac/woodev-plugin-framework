@@ -384,6 +384,51 @@ Side effect worth recording: this plus a public `refresh()` on the open session 
 (the verdict going stale when the payment method changes while the map is open) without extending the
 provider contract — that was one of the three options on that card.
 
+### D-15. One accent colour, plugin default plus merchant override
+
+Today every plugin ships its own map, hardcodes its own element colours and exposes its own
+colorpicker setting. That mechanism has to survive the move into the framework.
+
+**One colour, not a palette.** The accent drives the card's CTA, the active list item, the drawer
+toggle, the cluster icon and the checkout trigger button. All three references use a single brand hue
+for exactly these (`#FCE000` Yandex, `#0a8c37` CDEK, `#1937ff` Russian Post), so a second knob would
+be surface nobody asked for. The **contrast colour is derived**, not configured: relative luminance
+decides black or white text, because a merchant who picks yellow and is then asked to pick a text
+colour will pick wrong.
+
+Resolution mirrors the API key, which already has this exact shape:
+
+```
+merchant setting (non-empty)  →  plugin default  →  framework default
+```
+
+with a `woodev_pickup_accent_color` filter as the site-level override. The merchant-facing field is a
+framework-owned `Woodev_Control::TYPE_COLOR` control contributed through
+`Pickup_Handler::get_settings_fields()`, next to the provider's own `map_api_key`.
+
+**The accent lives at the top level of the pickup config, not inside `mapConfig`.** The checkout
+trigger button — which is rendered into §8's anchor, outside the modal entirely — needs it too, and
+"brand accent" is not a ymaps concept. The provider merely reads it for `clusterIconColor`.
+
+**Delivery is CSS custom properties set through the CSSOM**, never a generated `<style>` block and
+never a string-built `style=` attribute:
+
+```js
+root.style.setProperty( '--woodev-pickup-accent', accent );
+root.style.setProperty( '--woodev-pickup-accent-contrast', contrastFor( accent ) );
+```
+
+**This value is validated twice, and that is deliberate.** It arrives from a merchant-editable
+setting and ends up inside CSS, so it is untrusted input on a path where a malformed value is not
+merely ugly. Server side: `sanitize_hex_color()`, falling back to the plugin default when it returns
+null. Client side: refuse anything not matching `/^#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i`
+before it reaches `setProperty()`. Neither check alone is enough — the server one can be bypassed by
+a filter returning garbage, and the client one is not authoritative.
+
+Related, and part of the same operator remark: the checkout trigger button has **two states** and
+currently only one label. It gains a second i18n key, so a customer who has already chosen a point
+sees «Выбрать другой пункт выдачи» rather than the same «Выбрать пункт выдачи» as before choosing.
+
 ## 4. Architecture
 
 ```
@@ -451,7 +496,14 @@ new Pickup_Config(
         'pvz'      => [ 'default' => '…/pvz.svg',      'active' => '…/pvz-active.svg' ],
         'postamat' => [ 'default' => '…/postamat.svg' ],   // active falls back to default
     ],
+    accent_color: '#FCE000',      // plugin default; the merchant may override it in settings
 );
+```
+
+Top-level browser config (outside `mapConfig`, because the checkout trigger button needs it too):
+
+```php
+'accentColor' => '#fce000',       // resolved: merchant → plugin → framework, then sanitize_hex_color()
 ```
 
 `mapConfig` shape:
