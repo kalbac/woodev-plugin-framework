@@ -64,6 +64,29 @@
  * two points in it share a `type.label` — never a per-point decision, or the
  * tabs of one group would read inconsistently (spec).
  *
+ * THE SEARCH VIEW (Task 15, D-6): `renderSearchResults( { points, addresses } )`
+ * renders TWO independent sections — matching points from the already-loaded
+ * pool, and address suggestions from the geocoder — each OMITTED ENTIRELY
+ * (not shown as an empty heading) when its own list is empty. Picking a point
+ * emits `searchPointPicked` with the point id; picking an address emits
+ * `searchAddressPicked` with its INDEX into the caller's own result array,
+ * never the address object itself, because the caller (Task 19's
+ * `SearchControl` wiring) is the one holding the geocoder response and
+ * resolving it. A geocoder `displayName` is untrusted, runtime, third-party
+ * text — UNLIKE a point field, it is NOT pre-escaped — so it is written via
+ * `textContent`, never `innerHTML`; point fields inside the same results
+ * stay on the usual already-escaped/`innerHTML` side of the split.
+ * `setAnchor( latLng, label )`'s second argument switches the list header
+ * from the plain `drawerTitle` to the `nearestTo` ( `%s` ) label — built by
+ * substituting into the template and assigning the WHOLE result via
+ * `textContent` (never an HTML string), so the untrusted label can never
+ * inject markup regardless of its content — and shows a reset control that
+ * clears both back to the plain header on `setAnchor( null )`.
+ * `showNothingNearby( { distanceMeters, name } )` is the explicit "empty map"
+ * state (never a silently empty result): it names the nearest point and its
+ * distance and offers to show it anyway, rather than leaving the customer to
+ * conclude there are no points at all.
+ *
  * UMD-ish dual export (matches every sibling SP-5 frontend file):
  *   - Browser global: window.WoodevPickupPanels = Panels
  *   - CommonJS:       module.exports = Panels  (for jest)
@@ -215,18 +238,60 @@
 	}
 
 	/**
-	 * Rebuilds the list header's text: the `drawerTitle` i18n label, plus a
+	 * Builds the `nearestTo` header label for a searched address: the `%s`
+	 * template with `label` substituted in, the WHOLE result then assigned
+	 * via `textContent` — never built as an HTML string and set through
+	 * `innerHTML`. `label` is untrusted, runtime, third-party text (a
+	 * geocoder result, or whatever the caller passed), so this is the
+	 * "build it as DOM text rather than markup" choice from the file
+	 * docblock: `textContent` never interprets its argument as markup, so
+	 * the substitution needs no separate escaping step to be safe — unlike
+	 * `innerHTML`, there is no entity/tag parsing for an injected string to
+	 * exploit.
+	 *
+	 * @param {Object} config
+	 * @param {string} label
+	 * @returns {string}
+	 */
+	function anchorHeaderText( config, label ) {
+		var template = text( config, 'nearestTo' );
+
+		return template.indexOf( '%s' ) !== -1 ? template.replace( '%s', label ) : template;
+	}
+
+	/**
+	 * Rebuilds the list header's text and the reset control's presence.
+	 *
+	 * Two states, never mixed: with a searched-address label active
+	 * (`setAnchor( latLng, label )`, Task 15) the header reads the
+	 * `nearestTo` template and the `.woodev-pickup-list__reset` control is
+	 * attached; otherwise the header is the `drawerTitle` i18n label plus a
 	 * `(count)` suffix once a viewport has actually been reported at least
 	 * once via `setVisible()` — never before, so a config with no groups yet
 	 * set reads as JUST the title (see the "blank i18n key" test: with an
-	 * empty title AND no `setVisible()` call, the header must read `''`).
-	 * Assigned via `textContent` — an i18n label containing markup renders
-	 * as literal text, never executes.
+	 * empty title AND no `setVisible()` call, the header must read `''`) —
+	 * and the reset control is detached. Both branches assign the header via
+	 * `textContent` — an i18n label (or the untrusted address label) that
+	 * happens to contain markup renders as literal text, never executes.
 	 *
 	 * @param {Panels} self
 	 * @returns {void}
 	 */
 	function renderListHeader( self ) {
+		if ( self._anchorLabel ) {
+			self._listHeaderEl.textContent = anchorHeaderText( self._config, self._anchorLabel );
+
+			if ( ! self._resetEl.parentNode ) {
+				self._listEl.insertBefore( self._resetEl, self._listHeaderEl.nextSibling );
+			}
+
+			return;
+		}
+
+		if ( self._resetEl.parentNode ) {
+			self._resetEl.parentNode.removeChild( self._resetEl );
+		}
+
 		var title = text( self._config, 'drawerTitle' );
 		var parts = [];
 
@@ -388,6 +453,110 @@
 	function renderList( self ) {
 		renderListHeader( self );
 		renderListBody( self );
+	}
+
+	// -------------------------------------------------------------------------
+	// Search view (Task 15, D-6)
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Builds one clickable row for a matching POOL point in the search
+	 * results: name and short address, both written via `innerHTML` — these
+	 * are the same already-`esc_html()`-escaped point fields the list panel
+	 * renders, not new/untrusted strings. Clicking emits `searchPointPicked`
+	 * with the point's id, so the caller can open its card the same way a
+	 * list-row click does.
+	 *
+	 * @param {Panels} self
+	 * @param {Object} point
+	 * @returns {HTMLElement}
+	 */
+	function buildSearchPointItem( self, point ) {
+		var item = document.createElement( 'div' );
+		item.className = 'woodev-pickup-search__item woodev-pickup-search__item--point';
+		item.dataset.pointId = String( point.id );
+
+		var nameEl = document.createElement( 'span' );
+		nameEl.className = 'woodev-pickup-search__name';
+		nameEl.innerHTML = fieldValue( point.name ); // eslint-disable-line -- server-escaped, see file docblock.
+
+		var addressEl = document.createElement( 'span' );
+		addressEl.className = 'woodev-pickup-search__address';
+		addressEl.innerHTML = fieldValue( point.short_address ); // eslint-disable-line -- server-escaped.
+
+		item.appendChild( nameEl );
+		item.appendChild( addressEl );
+
+		item.addEventListener( 'click', function() {
+			self._emit( 'searchPointPicked', point.id );
+		} );
+
+		return item;
+	}
+
+	/**
+	 * Builds one clickable row for a geocoder address suggestion:
+	 * `address.displayName`, written via `textContent` — UNLIKE a point
+	 * field, this string arrives at runtime from a third-party geocoder and
+	 * is NOT pre-escaped, so `innerHTML` here would open exactly the markup
+	 * hole the file docblock's escaping rule exists to prevent (see the
+	 * "THE SEARCH VIEW" note). Clicking emits `searchAddressPicked` with
+	 * `index` — the position in the caller's OWN results array — never the
+	 * address object itself, since the caller (Task 19) is the one holding
+	 * that array and resolving it.
+	 *
+	 * @param {Panels} self
+	 * @param {Object} address `{ displayName, ... }`, untrusted geocoder shape.
+	 * @param {number} index
+	 * @returns {HTMLElement}
+	 */
+	function buildSearchAddressItem( self, address, index ) {
+		var item = document.createElement( 'div' );
+		item.className = 'woodev-pickup-search__item woodev-pickup-search__item--address';
+		item.dataset.index = String( index );
+
+		var nameEl = document.createElement( 'span' );
+		nameEl.className = 'woodev-pickup-search__display-name';
+		nameEl.textContent = ( address && 'string' === typeof address.displayName ) ? address.displayName : '';
+
+		item.appendChild( nameEl );
+
+		item.addEventListener( 'click', function() {
+			self._emit( 'searchAddressPicked', index );
+		} );
+
+		return item;
+	}
+
+	/**
+	 * Builds one search-results section — a heading plus its items — or
+	 * returns `null` when `items` is empty, so a section with no results is
+	 * OMITTED ENTIRELY rather than rendered as an empty heading (spec).
+	 *
+	 * @param {string}   modifier   BEM modifier, e.g. 'points' or 'addresses'.
+	 * @param {string}   heading    i18n section label.
+	 * @param {Array}    items
+	 * @param {Function} buildItem  `function( item, index ): HTMLElement`.
+	 * @returns {HTMLElement|null}
+	 */
+	function buildSearchSection( modifier, heading, items, buildItem ) {
+		if ( ! items || 0 === items.length ) {
+			return null;
+		}
+
+		var section = document.createElement( 'div' );
+		section.className = 'woodev-pickup-search__section woodev-pickup-search__section--' + modifier;
+
+		var title = document.createElement( 'div' );
+		title.className = 'woodev-pickup-search__section-title';
+		title.textContent = heading;
+		section.appendChild( title );
+
+		items.forEach( function( item, index ) {
+			section.appendChild( buildItem( item, index ) );
+		} );
+
+		return section;
 	}
 
 	// -------------------------------------------------------------------------
@@ -683,6 +852,7 @@
 		this._config = config || {};
 		this._groups = [];
 		this._anchor = null;
+		this._anchorLabel = null;
 		this._hasViewport = false;
 		this._selectedId = null;
 		this._activeGroup = null;
@@ -755,9 +925,24 @@
 		var body = document.createElement( 'div' );
 		body.className = 'woodev-pickup-list__body';
 
+		// Task 15: the reset control shown next to the header once a searched
+		// address is active — attached/detached by {@see renderListHeader},
+		// never destroyed and recreated, so the SAME element (and its one
+		// listener) survives every header re-render.
+		var reset = document.createElement( 'button' );
+		reset.type = 'button';
+		reset.className = 'woodev-pickup-list__reset';
+		reset.textContent = text( this._config, 'resetSearch' );
+
+		// Task 15: the search results view — a sibling of the plain viewport
+		// list body, populated only by `renderSearchResults()`.
+		var search = document.createElement( 'div' );
+		search.className = 'woodev-pickup-search';
+
 		list.appendChild( header );
 		list.appendChild( toggle );
 		list.appendChild( body );
+		list.appendChild( search );
 
 		var card = document.createElement( 'div' );
 		card.className = 'woodev-pickup-card';
@@ -772,10 +957,15 @@
 		this._listHeaderEl = header;
 		this._listBodyEl = body;
 		this._cardEl = card;
+		this._resetEl = reset;
+		this._searchEl = search;
 
 		var self = this;
 		toggle.addEventListener( 'click', function() {
 			self.toggleList();
+		} );
+		reset.addEventListener( 'click', function() {
+			self.setAnchor( null );
 		} );
 
 		renderList( this );
@@ -787,11 +977,21 @@
 	 * modes (see the file docblock). Re-renders the list immediately so an
 	 * already-open list re-sorts without waiting for the next `setVisible()`.
 	 *
+	 * `label` (Task 15) is the searched address text: when given ALONGSIDE a
+	 * non-null `latLng`, the list header switches to the `nearestTo` template
+	 * and the reset control appears; `setAnchor( null )` — with or without a
+	 * second argument — clears BOTH the anchor and the label, restoring the
+	 * plain `drawerTitle` header and removing the reset control. Existing
+	 * single-argument callers (the map-centre case) are unaffected: no label
+	 * means the plain header, exactly as before this parameter existed.
+	 *
 	 * @param {number[]|null} latLng `[lat, lng]`, or null to clear.
+	 * @param {string}        [label] the searched address, for the `nearestTo` header.
 	 * @returns {void}
 	 */
-	Panels.prototype.setAnchor = function( latLng ) {
+	Panels.prototype.setAnchor = function( latLng, label ) {
 		this._anchor = latLng || null;
+		this._anchorLabel = ( this._anchor && 'string' === typeof label && label.length > 0 ) ? label : null;
 
 		if ( this.root ) {
 			renderList( this );
@@ -811,6 +1011,106 @@
 		this._hasViewport = true;
 
 		renderList( this );
+	};
+
+	/**
+	 * Renders the search view's two independent sections (Task 15, D-6):
+	 * matching pool points and geocoder address suggestions. Each section is
+	 * OMITTED ENTIRELY (not an empty heading) when its own array is empty —
+	 * see {@see buildSearchSection}. Fully rebuilds the search container on
+	 * every call, matching every other render function in this file.
+	 *
+	 * @param {Object} results
+	 * @param {Array}  [results.points]    matching points from the loaded pool.
+	 * @param {Array}  [results.addresses] geocoder address suggestions, `{ displayName }` each.
+	 * @returns {void}
+	 */
+	Panels.prototype.renderSearchResults = function( results ) {
+		var self = this;
+		var points = ( results && results.points ) || [];
+		var addresses = ( results && results.addresses ) || [];
+
+		empty( this._searchEl );
+
+		var pointsSection = buildSearchSection(
+			'points',
+			text( this._config, 'sectionPoints' ),
+			points,
+			function( point ) {
+				return buildSearchPointItem( self, point );
+			}
+		);
+
+		if ( pointsSection ) {
+			this._searchEl.appendChild( pointsSection );
+		}
+
+		var addressesSection = buildSearchSection(
+			'addresses',
+			text( this._config, 'sectionAddresses' ),
+			addresses,
+			function( address, index ) {
+				return buildSearchAddressItem( self, address, index );
+			}
+		);
+
+		if ( addressesSection ) {
+			this._searchEl.appendChild( addressesSection );
+		}
+	};
+
+	/**
+	 * Renders the explicit "nothing nearby" empty state (Task 15, D-6): the
+	 * `nothingNearby` message, the nearest point's name and distance, and a
+	 * button offering to show it anyway — never a silently empty map, which
+	 * would read to the customer as "there are no pickup points at all".
+	 * Replaces the list body's current content; `info.name` is an
+	 * already-`esc_html()`-escaped point field (written via `innerHTML`,
+	 * matching every other point field in this file), `info.distanceMeters`
+	 * is formatted through `pickup-geo.js`'s own `formatDistance()` so it
+	 * never disagrees with the distance shown anywhere else on screen.
+	 *
+	 * @param {Object} info
+	 * @param {number} info.distanceMeters distance to the nearest point, in metres.
+	 * @param {string} info.name           the nearest point's (already-escaped) name.
+	 * @returns {void}
+	 */
+	Panels.prototype.showNothingNearby = function( info ) {
+		var self = this;
+
+		empty( this._listBodyEl );
+
+		var wrap = document.createElement( 'div' );
+		wrap.className = 'woodev-pickup-list__nothing-nearby';
+
+		var message = document.createElement( 'p' );
+		message.className = 'woodev-pickup-list__nothing-nearby-message';
+		message.textContent = text( this._config, 'nothingNearby' );
+		wrap.appendChild( message );
+
+		var detail = document.createElement( 'p' );
+		detail.className = 'woodev-pickup-list__nothing-nearby-detail';
+
+		var nameEl = document.createElement( 'span' );
+		nameEl.innerHTML = fieldValue( info && info.name ); // eslint-disable-line -- server-escaped point field.
+		detail.appendChild( nameEl );
+
+		var distanceEl = document.createElement( 'span' );
+		distanceEl.textContent = ' (' + geo.formatDistance( info && info.distanceMeters, this._config.lang ) + ')';
+		detail.appendChild( distanceEl );
+
+		wrap.appendChild( detail );
+
+		var button = document.createElement( 'button' );
+		button.type = 'button';
+		button.className = 'woodev-pickup-list__show-nearest';
+		button.textContent = text( this._config, 'showNearest' );
+		button.addEventListener( 'click', function() {
+			self._emit( 'showNearestRequested', info );
+		} );
+		wrap.appendChild( button );
+
+		this._listBodyEl.appendChild( wrap );
 	};
 
 	/**

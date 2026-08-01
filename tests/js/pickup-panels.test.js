@@ -570,3 +570,183 @@ it( 'shows continueCheckout on the specific tab matching the selected id, not ju
 	const cta = panels.root.querySelector( '.woodev-pickup-card__cta' );
 	expect( cta.textContent ).toBe( 'Продолжить оформление заказа' );
 } );
+
+// -----------------------------------------------------------------------
+// Task 15: the search view (D-6)
+// -----------------------------------------------------------------------
+
+const searchConfig = { lang: 'ru_RU', i18n: {
+	drawerTitle: 'Пункты выдачи в этой области', emptyInView: 'В этой области пунктов выдачи нет',
+	nearestTo: 'Ближайшие к «%s»', resetSearch: 'Сбросить', nothingNearby: 'Рядом с этим адресом пунктов выдачи нет.',
+	showNearest: 'Показать ближайший', sectionPoints: 'Пункты выдачи', sectionAddresses: 'Адреса',
+} };
+
+it( 'renders the point section and the address section separately', () => {
+	const panels = mount( searchConfig );
+	panels.renderSearchResults( { points: [ point() ], addresses: [ { displayName: 'Москва, Ленина 5' } ] } );
+
+	expect( panels.root.querySelector( '.woodev-pickup-search__section--points' ) ).not.toBeNull();
+	expect( panels.root.querySelector( '.woodev-pickup-search__section--addresses' ) ).not.toBeNull();
+} );
+
+it( 'omits a section that has no results rather than showing an empty heading', () => {
+	const panels = mount( searchConfig );
+	panels.renderSearchResults( { points: [], addresses: [ { displayName: 'Москва' } ] } );
+
+	expect( panels.root.querySelector( '.woodev-pickup-search__section--points' ) ).toBeNull();
+} );
+
+it( 'emits pointResult with the point id', () => {
+	const seen = [];
+	const panels = mount( searchConfig );
+	panels.on( 'searchPointPicked', ( id ) => seen.push( id ) );
+	panels.renderSearchResults( { points: [ point() ], addresses: [] } );
+	panels.root.querySelector( '.woodev-pickup-search__item' ).click();
+
+	expect( seen ).toEqual( [ 'p1' ] );
+} );
+
+it( 'emits addressResult with the index so the caller can resolve it', () => {
+	const seen = [];
+	const panels = mount( searchConfig );
+	panels.on( 'searchAddressPicked', ( i ) => seen.push( i ) );
+	panels.renderSearchResults( { points: [], addresses: [ { displayName: 'A' }, { displayName: 'B' } ] } );
+	panels.root.querySelectorAll( '.woodev-pickup-search__item' )[ 1 ].click();
+
+	expect( seen ).toEqual( [ 1 ] );
+} );
+
+it( 'shows the anchor header and a reset control once an address is active', () => {
+	const panels = mount( searchConfig );
+	panels.setAnchor( [ 55.75, 37.61 ], 'Москва, Тверская 1' );
+
+	expect( panels.root.querySelector( '.woodev-pickup-list__header' ).textContent )
+		.toBe( 'Ближайшие к «Москва, Тверская 1»' );
+	expect( panels.root.querySelector( '.woodev-pickup-list__reset' ) ).not.toBeNull();
+} );
+
+it( 'restores the plain header when the anchor is reset', () => {
+	const panels = mount( searchConfig );
+	panels.setAnchor( [ 55.75, 37.61 ], 'Москва, Тверская 1' );
+	panels.setAnchor( null );
+
+	expect( panels.root.querySelector( '.woodev-pickup-list__header' ).textContent )
+		.toBe( 'Пункты выдачи в этой области' );
+} );
+
+it( 'shows the nothing-nearby state with the nearest distance', () => {
+	const panels = mount( searchConfig );
+	panels.showNothingNearby( { distanceMeters: 87000, name: 'ПВЗ «Магнит»' } );
+
+	const empty = panels.root.querySelector( '.woodev-pickup-list__nothing-nearby' );
+
+	expect( empty.textContent ).toContain( 'Рядом с этим адресом пунктов выдачи нет.' );
+	expect( empty.textContent ).toContain( '87.0 км' );
+	expect( empty.querySelector( 'button' ) ).not.toBeNull();
+} );
+
+// -----------------------------------------------------------------------
+// Extra coverage beyond the plan's own spec — see the task report for which
+// mutation each one kills.
+// -----------------------------------------------------------------------
+
+it( 'removes the reset control once the anchor is cleared, not just the header text', () => {
+	const panels = mount( searchConfig );
+	panels.setAnchor( [ 55.75, 37.61 ], 'Москва, Тверская 1' );
+	panels.setAnchor( null );
+
+	expect( panels.root.querySelector( '.woodev-pickup-list__reset' ) ).toBeNull();
+} );
+
+it( 'a real click on the reset control clears the anchor and restores the plain header', () => {
+	const panels = mount( searchConfig );
+	panels.setAnchor( [ 55.75, 37.61 ], 'Москва, Тверская 1' );
+	panels.root.querySelector( '.woodev-pickup-list__reset' ).click();
+
+	expect( panels.root.querySelector( '.woodev-pickup-list__header' ).textContent )
+		.toBe( 'Пункты выдачи в этой области' );
+	expect( panels.root.querySelector( '.woodev-pickup-list__reset' ) ).toBeNull();
+} );
+
+it( 'a lone address argument without setAnchor never turns on the search header (single-arg callers unaffected)', () => {
+	const panels = mount( searchConfig );
+	panels.setAnchor( [ 55.75, 37.61 ] );
+
+	expect( panels.root.querySelector( '.woodev-pickup-list__header' ).textContent )
+		.toBe( 'Пункты выдачи в этой области' );
+	expect( panels.root.querySelector( '.woodev-pickup-list__reset' ) ).toBeNull();
+} );
+
+it( 'renders escaped point fields (not double-escaped) inside a search point result', () => {
+	const panels = mount( searchConfig );
+	panels.renderSearchResults( { points: [ point( { name: 'ПВЗ &quot;Ромашка&quot;' } ) ], addresses: [] } );
+
+	expect( panels.root.querySelector( '.woodev-pickup-search__name' ).textContent ).toBe( 'ПВЗ "Ромашка"' );
+} );
+
+it( 'never executes markup smuggled through a geocoder displayName', () => {
+	const panels = mount( searchConfig );
+	panels.renderSearchResults( { points: [], addresses: [ { displayName: '<img src=x onerror=alert(1)>' } ] } );
+
+	const nameEl = panels.root.querySelector( '.woodev-pickup-search__display-name' );
+
+	expect( nameEl.querySelector( 'img' ) ).toBeNull();
+	expect( nameEl.textContent ).toBe( '<img src=x onerror=alert(1)>' );
+} );
+
+it( 'never executes markup smuggled through the searched-address label in the anchor header', () => {
+	const panels = mount( searchConfig );
+	panels.setAnchor( [ 55.75, 37.61 ], '<img src=x onerror=alert(1)>' );
+
+	const header = panels.root.querySelector( '.woodev-pickup-list__header' );
+
+	expect( header.querySelector( 'img' ) ).toBeNull();
+	expect( header.textContent ).toBe( 'Ближайшие к «<img src=x onerror=alert(1)>»' );
+} );
+
+it( 'renders the exact section labels from sectionPoints/sectionAddresses, not hardcoded Russian', () => {
+	const panels = mount( searchConfig );
+	panels.renderSearchResults( { points: [ point() ], addresses: [ { displayName: 'A' } ] } );
+
+	expect( panels.root.querySelector( '.woodev-pickup-search__section--points .woodev-pickup-search__section-title' )
+		.textContent ).toBe( 'Пункты выдачи' );
+	expect( panels.root.querySelector( '.woodev-pickup-search__section--addresses .woodev-pickup-search__section-title' )
+		.textContent ).toBe( 'Адреса' );
+} );
+
+it( 'renders blank section labels, not a hardcoded default, when sectionPoints/sectionAddresses are missing', () => {
+	const panels = mount( withoutI18nKey( withoutI18nKey( searchConfig, 'sectionPoints' ), 'sectionAddresses' ) );
+	panels.renderSearchResults( { points: [ point() ], addresses: [ { displayName: 'A' } ] } );
+
+	expect( panels.root.querySelector( '.woodev-pickup-search__section--points .woodev-pickup-search__section-title' )
+		.textContent ).toBe( '' );
+	expect( panels.root.querySelector( '.woodev-pickup-search__section--addresses .woodev-pickup-search__section-title' )
+		.textContent ).toBe( '' );
+} );
+
+it( 'omits both sections when neither points nor addresses have results', () => {
+	const panels = mount( searchConfig );
+	panels.renderSearchResults( { points: [], addresses: [] } );
+
+	expect( panels.root.querySelector( '.woodev-pickup-search__section--points' ) ).toBeNull();
+	expect( panels.root.querySelector( '.woodev-pickup-search__section--addresses' ) ).toBeNull();
+} );
+
+it( 'rebuilds the search results fully on a second call, not appending to the first', () => {
+	const panels = mount( searchConfig );
+	panels.renderSearchResults( { points: [ point( { id: 'p1' } ) ], addresses: [] } );
+	panels.renderSearchResults( { points: [ point( { id: 'p2' } ) ], addresses: [] } );
+
+	expect( panels.root.querySelectorAll( '.woodev-pickup-search__item' ) ).toHaveLength( 1 );
+	expect( panels.root.querySelector( '.woodev-pickup-search__item' ).dataset.pointId ).toBe( 'p2' );
+} );
+
+it( 'emits showNearestRequested with the same info when the show-nearest button is clicked', () => {
+	const seen = [];
+	const panels = mount( searchConfig );
+	panels.on( 'showNearestRequested', ( info ) => seen.push( info ) );
+	panels.showNothingNearby( { distanceMeters: 87000, name: 'ПВЗ «Магнит»' } );
+	panels.root.querySelector( '.woodev-pickup-list__nothing-nearby button' ).click();
+
+	expect( seen ).toEqual( [ { distanceMeters: 87000, name: 'ПВЗ «Магнит»' } ] );
+} );
