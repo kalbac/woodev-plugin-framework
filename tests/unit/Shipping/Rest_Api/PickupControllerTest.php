@@ -647,10 +647,15 @@ final class PickupControllerTest extends TestCase {
 			static fn() => 'bacs'
 		);
 
-		$long   = str_repeat( 'a,', 100 );
+		// Distinct leading and trailing content, so the assertion below can tell a cap that
+		// truncates from the correct end apart from one that keeps the tail — a length-only
+		// assertion passes for both, and for a cap that rewrote the content entirely.
+		$long   = str_repeat( 'a,', 80 ) . str_repeat( 'z,', 80 );
 		$params = $probe->normalize_points_params_public( [ 'types' => $long ] );
 
+		$this->assertSame( substr( $long, 0, 128 ), $params['types'] );
 		$this->assertSame( 128, strlen( $params['types'] ) );
+		$this->assertStringNotContainsString( 'z', $params['types'] );
 	}
 
 	public function test_register_routes_declares_types_as_a_sanitized_string_arg(): void {
