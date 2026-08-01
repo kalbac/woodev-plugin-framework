@@ -1,5 +1,9 @@
 # Gotchas — Woodev Plugin Framework
-> **83 atomic gotchas in 20 namespaces** — update count when adding/removing.
+> **84 atomic gotchas in 21 namespaces** — update count when adding/removing.
+> Last updated: 2026-08-01 (session 48: +1 file — `modal-backdrop-opacity-dims-the-whole-dialog`
+> (CSS `opacity` on a backdrop that is the dialog's ANCESTOR dims the whole dialog; three
+> presentation defects on this branch were invisible to 391 green jest tests and visible in the
+> first rig screenshot)).
 > Last updated: 2026-08-01 (session 47: +1 file — `ymaps-locale-region-drives-units` (the ymaps `lang`
 > parameter's REGION half selects kilometres vs miles, so an `en_US` fallback silently switches the map
 > to miles while our own sidebar keeps computing kilometres); and `ymaps-camera-moves-are-async` gained
@@ -106,6 +110,9 @@
 - [admin-ui/license-page] The "Woodev → Лицензии" page enqueues ONLY `style-index.css` (the React bundle) + `wp-components`; the legacy `woodev-license-page.css` is enqueued nowhere. Styles for ANY server-rendered section on that page (e.g. `html-settings-section.php`) must live in `src/license-page/style.scss`, and `license_page()` must wrap output in `.wrap` + `<h1>` → [gotchas/license-page-css-bundle-only.md](gotchas/license-page-css-bundle-only.md) (s14)
 - [admin-ui/esc-url-raw-for-js] `esc_url()` HTML-entity-encodes `&`→`&#038;`; a URL set as a React `href` (DOM property) or inlined in a JSON payload is NOT HTML-parsed, so the literal `&#038;` breaks the URL. Use `esc_url_raw` for data (JS/REST/redirect/storage); keep `esc_url` only for URLs inside HTML output → [gotchas/esc-url-raw-for-js-consumed-urls.md](gotchas/esc-url-raw-for-js-consumed-urls.md) (s20)
 - [admin-ui/wp-nonce-url-esc-html] `wp_nonce_url()` runs its result through `esc_html()` (`&`→`&amp;`) — fine for HTML output, but a nonced URL placed into JSON / a React `href` / a redirect mangles the query keys (`amp;param`) and silently no-ops. Build it with `add_query_arg('_wpnonce', wp_create_nonce($action), $url)` + `esc_url_raw`, never `wp_nonce_url` → [gotchas/wp-nonce-url-esc-html-breaks-js-urls.md](gotchas/wp-nonce-url-esc-html-breaks-js-urls.md) (s24)
+
+### [admin-ui/modal] — Framework modal shell
+- [admin-ui/modal] A backdrop styled with `opacity` dims the DIALOG too when the dialog is its child — `woodev-modal.js` puts `.woodev-modal` and `.woodev-modal-backdrop` on ONE element and nests the content inside it, so `opacity: 0.7` (what WooCommerce's own modal uses, with a SIBLING backdrop) made the whole dialog 70% transparent and the checkout page showed through the map. Dim with `rgba()` instead — it paints only that element. Invisible to jest (jsdom does not render); the first rig screenshot showed it → [gotchas/modal-backdrop-opacity-dims-the-whole-dialog.md](gotchas/modal-backdrop-opacity-dims-the-whole-dialog.md) (s48)
 
 ### [admin-ui/react-state] — React component state
 - [admin-ui/react-state] A stateful section component swapped into ONE tree slot by a tab/router (no `key`) → React reuses the instance → its `useState` BLEEDS across tabs (the connection block's test result showed in the wrong section). Give it a section-unique `key` so it remounts; invisible in tests that mount one section at a time → [gotchas/react-missing-key-state-bleed-across-tabs.md](gotchas/react-missing-key-state-bleed-across-tabs.md) (s38)
