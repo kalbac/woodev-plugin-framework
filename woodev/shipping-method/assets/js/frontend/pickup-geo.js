@@ -7,8 +7,10 @@
  * file in this directory (see pickup-datasource.js's own docblock).
  *
  * Home of `safeColor()`/`contrastFor()` (SP-5 Task 8B, D-15) — the client
- * half of the pickup map's accent-colour pipeline — and `groupByPosition()`
- * (Task 9, D-4), which folds co-located points into one map marker.
+ * half of the pickup map's accent-colour pipeline — `groupByPosition()`
+ * (Task 9, D-4), which folds co-located points into one map marker — and
+ * `distanceMeters()` / `formatDistance()` / `nearest()` / `boundsFor()`
+ * (Task 10, D-6, D-12), the sidebar's distance math and locale-aware units.
  *
  * UMD-ish dual export (matches woodev-modal.js / pickup-datasource.js):
  *   - Browser global: window.WoodevPickupGeo = WoodevPickupGeo
@@ -200,17 +202,167 @@
 		} );
 	}
 
+	/** @type {number} Mean earth radius in metres (IUGG value), the haversine input. */
+	var EARTH_RADIUS_METERS = 6371008.8;
+
+	/** @type {number} Metres per kilometre — the metric small→large unit threshold. */
+	var METERS_PER_KM = 1000;
+
+	/**
+	 * Metres per mile. `formatDistance()` uses this SAME constant both to
+	 * decide the displayed value and, incidentally, to define what "one
+	 * mile" means here — a value pinned by test rather than left implicit,
+	 * since a drift to another common approximation (e.g. 1609.344) would
+	 * silently shift every displayed imperial distance.
+	 *
+	 * @type {number}
+	 */
+	var METERS_PER_MILE = 1609.34;
+
+	/**
+	 * Converts degrees to radians.
+	 *
+	 * @param {number} degrees
+	 * @returns {number}
+	 */
+	function toRadians( degrees ) {
+		return degrees * ( Math.PI / 180 );
+	}
+
+	/**
+	 * Great-circle distance between two `[lat, lng]` pairs (decimal degrees),
+	 * in metres, via the haversine formula. Symmetric in its two arguments;
+	 * zero for two identical points.
+	 *
+	 * @param {number[]} a `[lat, lng]`.
+	 * @param {number[]} b `[lat, lng]`.
+	 * @returns {number} distance in metres.
+	 */
+	function distanceMeters( a, b ) {
+		var lat1 = toRadians( a[ 0 ] );
+		var lat2 = toRadians( b[ 0 ] );
+		var dLat = toRadians( b[ 0 ] - a[ 0 ] );
+		var dLng = toRadians( b[ 1 ] - a[ 1 ] );
+		var sinDLat = Math.sin( dLat / 2 );
+		var sinDLng = Math.sin( dLng / 2 );
+		var h = sinDLat * sinDLat + Math.cos( lat1 ) * Math.cos( lat2 ) * sinDLng * sinDLng;
+		var c = 2 * Math.atan2( Math.sqrt( h ), Math.sqrt( 1 - h ) );
+
+		return EARTH_RADIUS_METERS * c;
+	}
+
+	/**
+	 * Formats a metre distance for display, in the units the point's
+	 * REGION uses — not its language (spec D-12). `en_RU` and `ru_RU` are
+	 * both metric (the `RU` region), they only differ in the unit WORD
+	 * (`km` vs `км`); `en_US` is the one imperial case here. This mirrors
+	 * ymaps' own `lang` parameter, which drives its UI labels the same
+	 * region-first way — disagreeing with it would put two measurement
+	 * systems on one screen.
+	 *
+	 * Below one large unit (1 km / 1 mi) a metric distance is shown as
+	 * whole metres; at/above it, one decimal of kilometres. An imperial
+	 * distance is always shown as one decimal of miles — there is no
+	 * second, smaller imperial unit in this UI (no feet), so there is no
+	 * threshold to switch at; `1609.34` metres (one `METERS_PER_MILE`)
+	 * reads as `'1.0 mi'`, not a rounded whole mile.
+	 *
+	 * @param {number} meters
+	 * @param {string} locale `{language}_{REGION}`, e.g. `ru_RU`, `en_US`.
+	 * @returns {string}
+	 */
+	function formatDistance( meters, locale ) {
+		var parts = String( locale || '' ).split( '_' );
+		var lang = ( parts[ 0 ] || '' ).toLowerCase();
+		var region = ( parts[ 1 ] || '' ).toUpperCase();
+		var isImperial = 'US' === region;
+
+		if ( isImperial ) {
+			return ( meters / METERS_PER_MILE ).toFixed( 1 ) + ' mi';
+		}
+
+		var smallWord = 'ru' === lang ? 'м' : 'm';
+		var largeWord = 'ru' === lang ? 'км' : 'km';
+
+		if ( meters < METERS_PER_KM ) {
+			return Math.round( meters ) + ' ' + smallWord;
+		}
+
+		return ( meters / METERS_PER_KM ).toFixed( 1 ) + ' ' + largeWord;
+	}
+
+	/**
+	 * Returns the `n` groups closest to `anchor`, closest first. Does not
+	 * mutate `groups` — a sidebar list re-sorted in place out from under its
+	 * own caller would silently scramble unrelated UI state (spec: nearest
+	 * must tolerate empty input and never mutate its arguments).
+	 *
+	 * @param {Array}    groups objects with numeric `lat`/`lng`.
+	 * @param {number[]} anchor `[lat, lng]`.
+	 * @param {number}   n
+	 * @returns {Array} at most `n` of `groups`' own elements (same references), nearest first.
+	 */
+	function nearest( groups, anchor, n ) {
+		return ( groups || [] )
+			.map( function( group ) {
+				return { group: group, distance: distanceMeters( anchor, [ group.lat, group.lng ] ) };
+			} )
+			.sort( function( x, y ) {
+				return x.distance - y.distance;
+			} )
+			.slice( 0, n )
+			.map( function( ranked ) {
+				return ranked.group;
+			} );
+	}
+
+	/**
+	 * Reduces an anchor point plus a list of groups to the smallest
+	 * `[[minLat, minLng], [maxLat, maxLng]]` box containing all of them —
+	 * "the address plus the N nearest points", framed for the map. The
+	 * anchor always contributes to the box, even when every group already
+	 * lies within it; with no groups the box degenerates to the anchor
+	 * point repeated twice. Never mutates `groups`.
+	 *
+	 * @param {number[]} anchor `[lat, lng]`.
+	 * @param {Array}    groups objects with numeric `lat`/`lng`.
+	 * @returns {number[][]} `[[minLat, minLng], [maxLat, maxLng]]`.
+	 */
+	function boundsFor( anchor, groups ) {
+		var minLat = anchor[ 0 ];
+		var maxLat = anchor[ 0 ];
+		var minLng = anchor[ 1 ];
+		var maxLng = anchor[ 1 ];
+
+		( groups || [] ).forEach( function( group ) {
+			minLat = Math.min( minLat, group.lat );
+			maxLat = Math.max( maxLat, group.lat );
+			minLng = Math.min( minLng, group.lng );
+			maxLng = Math.max( maxLng, group.lng );
+		} );
+
+		return [ [ minLat, minLng ], [ maxLat, maxLng ] ];
+	}
+
 	/**
 	 * @typedef {Object} WoodevPickupGeo
-	 * @property {function(*, string): string} safeColor
-	 * @property {function(string): string}     contrastFor
-	 * @property {function(Array): Array}       groupByPosition
+	 * @property {function(*, string): string}          safeColor
+	 * @property {function(string): string}              contrastFor
+	 * @property {function(Array): Array}                groupByPosition
+	 * @property {function(number[], number[]): number}  distanceMeters
+	 * @property {function(number, string): string}      formatDistance
+	 * @property {function(Array, number[], number): Array} nearest
+	 * @property {function(number[], Array): number[][]} boundsFor
 	 */
 
 	var WoodevPickupGeo = {
 		safeColor: safeColor,
 		contrastFor: contrastFor,
 		groupByPosition: groupByPosition,
+		distanceMeters: distanceMeters,
+		formatDistance: formatDistance,
+		nearest: nearest,
+		boundsFor: boundsFor,
 	};
 
 	// -------------------------------------------------------------------------

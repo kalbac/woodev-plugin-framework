@@ -3,7 +3,8 @@
  *
  * Covers `safeColor()` (rejects anything that is not a hex colour) and
  * `contrastFor()` (picks black/white text by luminance) — SP-5 Task 8B, D-15 —
- * plus `groupByPosition()` (Task 9, D-4).
+ * `groupByPosition()` (Task 9, D-4), and `distanceMeters()` / `formatDistance()`
+ * / `nearest()` / `boundsFor()` (Task 10, D-6, D-12).
  *
  * @see woodev/shipping-method/assets/js/frontend/pickup-geo.js
  */
@@ -14,6 +15,10 @@ const WoodevPickupGeo = require( '../../woodev/shipping-method/assets/js/fronten
 const safeColor = WoodevPickupGeo.safeColor;
 const contrastFor = WoodevPickupGeo.contrastFor;
 const groupByPosition = WoodevPickupGeo.groupByPosition;
+const distanceMeters = WoodevPickupGeo.distanceMeters;
+const formatDistance = WoodevPickupGeo.formatDistance;
+const nearest = WoodevPickupGeo.nearest;
+const boundsFor = WoodevPickupGeo.boundsFor;
 
 test( 'rejects anything that is not a hex colour', () => {
 	expect( safeColor( 'red; } body {', '#06aedd' ) ).toBe( '#06aedd' );
@@ -176,5 +181,159 @@ describe( 'groupByPosition', () => {
 	it( 'returns an empty array for an empty or missing input, without throwing', () => {
 		expect( groupByPosition( [] ) ).toEqual( [] );
 		expect( groupByPosition( undefined ) ).toEqual( [] );
+	} );
+} );
+
+// -----------------------------------------------------------------------
+// distanceMeters / formatDistance / nearest / boundsFor — Task 10, D-6, D-12
+// -----------------------------------------------------------------------
+
+describe( 'distanceMeters', () => {
+	it( 'is zero for the same point', () => {
+		expect( distanceMeters( [ 55.75, 37.61 ], [ 55.75, 37.61 ] ) ).toBe( 0 );
+	} );
+
+	it( 'matches a known distance within 1%', () => {
+		// Red Square → Moscow City, ≈ 7.0 km
+		const d = distanceMeters( [ 55.7539, 37.6208 ], [ 55.7473, 37.5389 ] );
+
+		expect( d ).toBeGreaterThan( 5000 );
+		expect( d ).toBeLessThan( 5300 );
+	} );
+
+	it( 'is symmetric', () => {
+		const a = [ 55.75, 37.61 ], b = [ 59.93, 30.33 ];
+
+		expect( distanceMeters( a, b ) ).toBeCloseTo( distanceMeters( b, a ), 3 );
+	} );
+
+	// --- Extra tests beyond the spec, closing mutation-sweep holes ---------
+
+	it( 'pins the exact metres for one degree of latitude, catching a wrong earth-radius constant', () => {
+		// Along a meridian (same lng) the haversine central angle equals the latitude
+		// delta exactly, so the result is EARTH_RADIUS_METERS * (pi / 180) to the
+		// millimetre -- this pins the 6371008.8 m radius, not just "some plausible number".
+		expect( distanceMeters( [ 0, 0 ], [ 1, 0 ] ) ).toBeCloseTo( 111195.08023353292, 5 );
+	} );
+
+	it( 'does not swap lat/lng internally: a lng-only move and a lat-only move of the same size differ', () => {
+		// At latitude 0 a 1-degree longitude move is the same length as a 1-degree
+		// latitude move; at latitude 55 a 1-degree longitude move is shorter (cosine
+		// shrink). A lat/lng argument swap inside the formula would make these equal.
+		const latMove = distanceMeters( [ 55, 37 ], [ 56, 37 ] );
+		const lngMove = distanceMeters( [ 55, 37 ], [ 55, 38 ] );
+
+		expect( lngMove ).toBeLessThan( latMove );
+	} );
+} );
+
+describe( 'formatDistance', () => {
+	it( 'uses metres below a kilometre for a metric region', () => {
+		expect( formatDistance( 430, 'ru_RU' ) ).toBe( '430 м' );
+	} );
+
+	it( 'uses kilometres with one decimal above a kilometre for a metric region', () => {
+		expect( formatDistance( 1240, 'ru_RU' ) ).toBe( '1.2 км' );
+	} );
+
+	it( 'uses miles for the US region', () => {
+		expect( formatDistance( 1609.34, 'en_US' ) ).toBe( '1.0 mi' );
+	} );
+
+	it( 'treats en_RU as metric — the region decides, not the language', () => {
+		expect( formatDistance( 1240, 'en_RU' ) ).toBe( '1.2 km' );
+	} );
+
+	// --- Extra tests beyond the spec, closing mutation-sweep holes ---------
+
+	it( 'rounds sub-kilometre metres to a whole number, catching a dropped Math.round', () => {
+		expect( formatDistance( 430.6, 'ru_RU' ) ).toBe( '431 м' );
+	} );
+
+	it( 'uses the English metre/kilometre words for a metric non-Russian locale, not just en_RU', () => {
+		expect( formatDistance( 430, 'de_DE' ) ).toBe( '430 m' );
+	} );
+
+	it( 'pins the exact km conversion, catching a dropped /1000 or a wrong divisor', () => {
+		expect( formatDistance( 2500, 'ru_RU' ) ).toBe( '2.5 км' );
+	} );
+
+	it( 'pins the exact mile conversion for a non-boundary value, catching a wrong mile constant', () => {
+		// 3218.68 m is exactly 2 * 1609.34 m -- if the mile constant used here drifted
+		// from formatDistance's own (e.g. the common 1609.344), this would round to a
+		// visibly different value than "2.0".
+		expect( formatDistance( 3218.68, 'en_US' ) ).toBe( '2.0 mi' );
+	} );
+
+	it( 'does not use the Russian words for the US region even when the language part is ru', () => {
+		expect( formatDistance( 1609.34, 'ru_US' ) ).toBe( '1.0 mi' );
+	} );
+} );
+
+describe( 'nearest', () => {
+	const groups = [
+		{ key: 'far',  lat: 55.80, lng: 37.61 },
+		{ key: 'near', lat: 55.7501, lng: 37.61 },
+		{ key: 'mid',  lat: 55.76, lng: 37.61 },
+	];
+
+	it( 'returns the N closest, closest first', () => {
+		expect( nearest( groups, [ 55.75, 37.61 ], 2 ).map( ( g ) => g.key ) ).toEqual( [ 'near', 'mid' ] );
+	} );
+
+	it( 'returns everything when there are fewer than N', () => {
+		expect( nearest( groups, [ 55.75, 37.61 ], 99 ) ).toHaveLength( 3 );
+	} );
+
+	it( 'returns an empty array when there is nothing to rank', () => {
+		expect( nearest( [], [ 55.75, 37.61 ], 3 ) ).toEqual( [] );
+	} );
+
+	// --- Extra tests beyond the spec, closing mutation-sweep holes ---------
+
+	it( 'returns the actual group objects, not distance-wrapper copies', () => {
+		const result = nearest( groups, [ 55.75, 37.61 ], 1 );
+
+		expect( result[ 0 ] ).toBe( groups[ 1 ] ); // same reference as the 'near' group
+	} );
+
+	it( 'does not mutate or reorder the caller\'s own array', () => {
+		const original = groups.slice();
+
+		nearest( groups, [ 55.75, 37.61 ], 2 );
+
+		expect( groups ).toEqual( original );
+		expect( groups[ 0 ] ).toBe( original[ 0 ] );
+	} );
+} );
+
+describe( 'boundsFor', () => {
+	it( 'spans the anchor and every supplied group', () => {
+		const b = boundsFor( [ 55.75, 37.61 ], [ { lat: 55.80, lng: 37.70 }, { lat: 55.70, lng: 37.50 } ] );
+
+		expect( b ).toEqual( [ [ 55.70, 37.50 ], [ 55.80, 37.70 ] ] );
+	} );
+
+	it( 'returns a degenerate box when only the anchor is known', () => {
+		expect( boundsFor( [ 55.75, 37.61 ], [] ) ).toEqual( [ [ 55.75, 37.61 ], [ 55.75, 37.61 ] ] );
+	} );
+
+	// --- Extra tests beyond the spec, closing mutation-sweep holes ---------
+
+	it( 'is pulled wider by the anchor itself when the anchor is the outlier, not only by the groups', () => {
+		// If the anchor were dropped from the min/max reduction, this box would be
+		// [[55.70, 37.50], [55.80, 37.70]] -- narrower than reality.
+		const b = boundsFor( [ 55.60, 37.40 ], [ { lat: 55.80, lng: 37.70 }, { lat: 55.70, lng: 37.50 } ] );
+
+		expect( b ).toEqual( [ [ 55.60, 37.40 ], [ 55.80, 37.70 ] ] );
+	} );
+
+	it( 'does not mutate the groups array it is given', () => {
+		const groups = [ { lat: 55.80, lng: 37.70 }, { lat: 55.70, lng: 37.50 } ];
+		const snapshot = JSON.parse( JSON.stringify( groups ) );
+
+		boundsFor( [ 55.75, 37.61 ], groups );
+
+		expect( groups ).toEqual( snapshot );
 	} );
 } );
