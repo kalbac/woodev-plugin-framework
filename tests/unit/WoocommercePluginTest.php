@@ -357,6 +357,60 @@ class WoocommercePluginTest extends TestCase {
 	}
 
 	/**
+	 * frontend_enqueue_scripts() must register the generic modal shell (D-13): framework-side,
+	 * exactly once, resolving under the FRAMEWORK's own assets path — the same directory
+	 * `get_framework_assets_url()` derives from `get_framework_file()` (hardcoded to
+	 * `class-plugin.php`'s own location) — never a shipping-module or other subsystem path.
+	 * `Pickup_Handler` (see PickupHandlerTest) only ever DECLARES `woodev-modal` as a script
+	 * dependency; this is the one and only place that registers the handle.
+	 *
+	 * @return void
+	 */
+	public function test_frontend_enqueue_scripts_registers_the_generic_modal_handle(): void {
+		$this->mock_wordpress_plugin_construction_functions();
+
+		$plugin = new Testable_Wordpress_Plugin( 'test-wordpress-plugin', '1.0.0' );
+
+		// Echoes $file's own directory (normalized, anchored at "/woodev/") back into the URL
+		// instead of discarding it, so the assertions below can tell "resolved from
+		// class-plugin.php's own directory" apart from any other subsystem's asset root.
+		Functions\when( 'plugins_url' )->alias(
+			static function ( $path, $file ) {
+				$normalized = str_replace( '\\', '/', (string) $file );
+				$marker     = strpos( $normalized, '/woodev/' );
+				$relative   = false !== $marker ? substr( $normalized, $marker ) : $normalized;
+
+				return 'https://example.test/wp-content/plugins/x' . dirname( $relative ) . $path;
+			}
+		);
+
+		$registered = [];
+		Functions\when( 'wp_register_script' )->alias(
+			static function ( $handle, $src, $deps, $ver ) use ( &$registered ) {
+				$registered[ $handle ] = [ 'src' => $src, 'deps' => $deps, 'ver' => $ver ];
+			}
+		);
+
+		$plugin->frontend_enqueue_scripts();
+
+		$this->assertArrayHasKey( 'woodev-modal', $registered );
+		$this->assertStringContainsString(
+			'/woodev/assets/js/frontend/woodev-modal.js',
+			$registered['woodev-modal']['src']
+		);
+		$this->assertStringNotContainsString( 'shipping-method', $registered['woodev-modal']['src'] );
+		// Vanilla ES5, no jQuery/Backbone — see woodev-modal.js's own docblock. Do not copy
+		// `jquery` in by reflex; the modal genuinely has zero script dependencies.
+		$this->assertSame( [], $registered['woodev-modal']['deps'] );
+		$this->assertSame( \Woodev_Plugin::VERSION, $registered['woodev-modal']['ver'] );
+
+		// The two pre-existing framework registrations in the same method must survive
+		// untouched — this test guards against the modal's addition breaking its neighbours.
+		$this->assertArrayHasKey( 'jquery-suggestions', $registered );
+		$this->assertArrayHasKey( 'woodev-dadata-suggestions', $registered );
+	}
+
+	/**
 	 * Specialized WooCommerce plugin bases should inherit WooCommerce platform behavior.
 	 *
 	 * @return void

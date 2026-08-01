@@ -513,6 +513,13 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 
 			wp_register_script( 'jquery-suggestions', $this->get_framework_assets_url() . '/js/frontend/jquery.suggestions.js', [ 'jquery' ], '22.6.0' );
 			wp_register_script( 'woodev-dadata-suggestions', $this->get_framework_assets_url() . '/js/frontend/woodev-dadata-suggestions.js', [ 'jquery-suggestions' ], self::VERSION );
+
+			// The generic modal shell (D-13): registered here, framework-side, exactly once,
+			// so every subsystem that needs a dialog (Pickup_Handler today, others later) only
+			// ever DECLARES it as a script dependency rather than each re-registering its own
+			// copy of the handle. Vanilla ES5, no jQuery/Backbone dependency — see the file's
+			// own docblock.
+			wp_register_script( 'woodev-modal', $this->get_framework_assets_url() . '/js/frontend/woodev-modal.js', [], self::VERSION );
 		}
 
 		/**
