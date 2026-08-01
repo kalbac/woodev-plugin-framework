@@ -11,6 +11,11 @@
 
 const WoodevModal = require( '../../woodev/assets/js/frontend/woodev-modal' );
 
+// Real jQuery (not a hand-rolled fake) — needed to prove the native/jQuery bridge
+// documented in D-14: a native CustomEvent dispatched on document.body is seen by
+// BOTH addEventListener and jQuery's .on(), but the reverse does not hold.
+global.window.jQuery = require( 'jquery' );
+
 /**
  * Build a trigger button appended to the document, so returnFocusTo has a
  * real, focusable element to return to.
@@ -371,4 +376,135 @@ test( 'title text is escaped as text, not injected as markup', () => {
 	expect( dialog.querySelector( 'img' ) ).toBeNull();
 
 	modal.destroy();
+} );
+
+describe( 'WoodevModal events', () => {
+	const listen = ( type ) => {
+		const seen = [];
+		document.body.addEventListener( type, ( e ) => seen.push( e ) );
+		return seen;
+	};
+
+	it( 'fires woodev_modal_opened with modalId and context', () => {
+		const seen = listen( 'woodev_modal_opened' );
+		const modal = new WoodevModal( { modalId: 'test-modal', title: 'T', context: { a: 1 } } );
+		modal.open();
+
+		expect( seen ).toHaveLength( 1 );
+		expect( seen[ 0 ].detail ).toEqual( { modalId: 'test-modal', context: { a: 1 } } );
+		expect( seen[ 0 ].bubbles ).toBe( true );
+
+		modal.destroy();
+	} );
+
+	it( 'defaults context to an empty object when omitted', () => {
+		const seen = listen( 'woodev_modal_opened' );
+		const modal = new WoodevModal( { modalId: 'test-modal', title: 'T' } );
+		modal.open();
+
+		expect( seen[ 0 ].detail ).toEqual( { modalId: 'test-modal', context: {} } );
+
+		modal.destroy();
+	} );
+
+	it( 'fires before_close then closed, carrying the reason', () => {
+		const before = listen( 'woodev_modal_before_close' );
+		const closed = listen( 'woodev_modal_closed' );
+		const modal = new WoodevModal( { modalId: 'test-modal', title: 'T' } );
+
+		modal.open();
+		modal.close( 'escape' );
+
+		expect( before ).toHaveLength( 1 );
+		expect( before[ 0 ].detail ).toEqual( { modalId: 'test-modal', reason: 'escape' } );
+		expect( before[ 0 ].cancelable ).toBe( true );
+
+		expect( closed ).toHaveLength( 1 );
+		expect( closed[ 0 ].detail ).toEqual( { modalId: 'test-modal', reason: 'escape' } );
+		expect( closed[ 0 ].cancelable ).toBe( false );
+
+		modal.destroy();
+	} );
+
+	it( 'defaults the reason to button when close() is called with no argument', () => {
+		const closed = listen( 'woodev_modal_closed' );
+		const modal = new WoodevModal( { modalId: 'test-modal', title: 'T' } );
+
+		modal.open();
+		modal.close();
+
+		expect( closed[ 0 ].detail ).toEqual( { modalId: 'test-modal', reason: 'button' } );
+
+		modal.destroy();
+	} );
+
+	it( 'routes Escape, backdrop click, and the header close button through their own reasons', () => {
+		const closed = listen( 'woodev_modal_closed' );
+
+		const escModal = new WoodevModal( { modalId: 'esc-modal', title: 'T' } );
+		escModal.open();
+		document.dispatchEvent( new KeyboardEvent( 'keydown', { key: 'Escape', bubbles: true } ) );
+		expect( closed[ closed.length - 1 ].detail ).toEqual( { modalId: 'esc-modal', reason: 'escape' } );
+		escModal.destroy();
+
+		const backdropModal = new WoodevModal( { modalId: 'backdrop-modal', title: 'T' } );
+		backdropModal.open();
+		const backdrop = document.querySelector( '.woodev-modal-backdrop' );
+		backdrop.dispatchEvent( new MouseEvent( 'click', { bubbles: true } ) );
+		expect( closed[ closed.length - 1 ].detail ).toEqual( { modalId: 'backdrop-modal', reason: 'backdrop' } );
+		backdropModal.destroy();
+
+		const buttonModal = new WoodevModal( { modalId: 'button-modal', title: 'T' } );
+		buttonModal.open();
+		document.querySelector( '.woodev-modal__close' ).dispatchEvent( new MouseEvent( 'click', { bubbles: true } ) );
+		expect( closed[ closed.length - 1 ].detail ).toEqual( { modalId: 'button-modal', reason: 'button' } );
+		buttonModal.destroy();
+
+		expect( closed ).toHaveLength( 3 );
+	} );
+
+	it( 'aborts the close when before_close is prevented, tearing nothing down', () => {
+		const modal = new WoodevModal( { modalId: 'test-modal', title: 'T' } );
+		const closed = listen( 'woodev_modal_closed' );
+
+		document.body.addEventListener( 'woodev_modal_before_close', ( e ) => e.preventDefault() );
+		modal.open();
+		const result = modal.close( 'button' );
+
+		expect( result ).toBe( false );
+		expect( closed ).toHaveLength( 0 );
+		expect( document.querySelector( '.woodev-modal' ) ).not.toBeNull();
+		// Nothing was torn down: still tracked as open, scroll lock still applied,
+		// and a second close() attempt is free to try again (not short-circuited
+		// by a stale "already closed" state).
+		expect( document.body.className ).toMatch( /woodev-modal-lock/ );
+
+		document.body.innerHTML = ''; // cleanup only — no destroy(), the veto left it open
+		document.body.className = '';
+	} );
+
+	it( 'does not fire before_close/closed when destroy() tears down an open modal', () => {
+		const before = listen( 'woodev_modal_before_close' );
+		const closed = listen( 'woodev_modal_closed' );
+		const modal = new WoodevModal( { modalId: 'test-modal', title: 'T' } );
+
+		modal.open();
+		modal.destroy();
+
+		expect( before ).toHaveLength( 0 );
+		expect( closed ).toHaveLength( 0 );
+		expect( document.querySelector( '.woodev-modal' ) ).toBeNull();
+	} );
+
+	it( 'is visible to jQuery .on() as well as addEventListener', () => {
+		const calls = [];
+		window.jQuery( document.body ).on( 'woodev_modal_opened', () => calls.push( 1 ) );
+
+		const modal = new WoodevModal( { modalId: 'test-modal', title: 'T' } );
+		modal.open();
+
+		expect( calls ).toHaveLength( 1 );
+
+		modal.destroy();
+	} );
 } );

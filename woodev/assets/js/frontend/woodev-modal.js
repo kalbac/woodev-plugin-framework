@@ -104,7 +104,7 @@
 		self._body = body;
 
 		self._onCloseClick = function() {
-			self.close();
+			self.close( 'button' );
 		};
 		closeButton.addEventListener( 'click', self._onCloseClick );
 	}
@@ -159,7 +159,7 @@
 		self._onKeydown = function( event ) {
 			var key = event.key || '';
 			if ( key === 'Escape' || key === 'Esc' || 27 === event.keyCode ) {
-				self.close();
+				self.close( 'escape' );
 				return;
 			}
 			if ( key === 'Tab' || 9 === event.keyCode ) {
@@ -170,7 +170,7 @@
 
 		self._onBackdropClick = function( event ) {
 			if ( event.target === self._backdrop ) {
-				self.close();
+				self.close( 'backdrop' );
 			}
 		};
 		self._backdrop.addEventListener( 'click', self._onBackdropClick );
@@ -218,6 +218,53 @@
 	}
 
 	/**
+	 * Detach the dialog from <body>, unlock scroll, unbind the open-only
+	 * listeners, and return focus to `returnFocusTo`. The DOM-teardown half of
+	 * `close()` — split out so `destroy()` can run the same unconditional
+	 * cleanup without going through the cancelable `before_close` gate (a
+	 * forced disposal must not be vetoable by a consumer's listener).
+	 *
+	 * @param {WoodevModal} self
+	 * @returns {void}
+	 */
+	function teardownDialog( self ) {
+		unbindOpenListeners( self );
+
+		if ( self._backdrop.parentNode ) {
+			self._backdrop.parentNode.removeChild( self._backdrop );
+		}
+		document.body.classList.remove( SCROLL_LOCK_CLASS );
+		self._isOpen = false;
+
+		if ( self._returnFocusTo && typeof self._returnFocusTo.focus === 'function' ) {
+			self._returnFocusTo.focus();
+		}
+	}
+
+	/**
+	 * Dispatches a framework modal event on `document.body`.
+	 *
+	 * A native CustomEvent with `bubbles: true` is seen by BOTH `addEventListener` and jQuery's
+	 * `.on()`. The reverse does not hold: `jQuery.trigger()` on a custom type creates no native
+	 * event, so a jQuery-dispatched event would be invisible to `addEventListener`. See
+	 * `pickup-mount.js`'s docblock on `updated_checkout` for the same asymmetry.
+	 *
+	 * @param {string}  type       event name.
+	 * @param {Object}  detail     event payload.
+	 * @param {boolean} cancelable whether `preventDefault()` is honoured by the caller.
+	 * @returns {boolean} false when a listener cancelled a cancelable event.
+	 */
+	function emit( type, detail, cancelable ) {
+		var event = new CustomEvent( type, {
+			detail: detail,
+			bubbles: true,
+			cancelable: !! cancelable,
+		} );
+
+		return document.body.dispatchEvent( event );
+	}
+
+	/**
 	 * Removes the current dismissible notice (see {@see WoodevModal#showNotice}),
 	 * if one is showing. A harmless no-op otherwise — used both by the notice's own
 	 * dismiss button and by showNotice() itself so a second call never stacks a
@@ -236,10 +283,17 @@
 
 	/**
 	 * @typedef {Object} WoodevModalOptions
+	 * @property {string}      [modalId]       Public id carried on every emitted event's
+	 *                                         `detail.modalId` (D-14) so listeners can filter
+	 *                                         by instance — WooCommerce's `target` argument.
 	 * @property {string}      [title]         Dialog title (rendered as text, never markup).
 	 * @property {string}      [closeLabel]    Accessible label for the close button.
 	 * @property {string}      [retryLabel]    Label for the retry control in showError().
 	 * @property {HTMLElement} [returnFocusTo] Element to refocus when the modal closes.
+	 * @property {Object}      [context]       Arbitrary payload forwarded verbatim on
+	 *                                         `woodev_modal_opened`'s `detail.context` (D-14).
+	 *                                         Defaults to `{}` so the payload shape is stable
+	 *                                         even when a caller omits it.
 	 */
 
 	/**
@@ -249,10 +303,12 @@
 	function WoodevModal( options ) {
 		var opts = options || {};
 
+		this._modalId = opts.modalId || '';
 		this._title = opts.title || '';
 		this._closeLabel = opts.closeLabel || 'Закрыть';
 		this._retryLabel = opts.retryLabel || 'Повторить';
 		this._returnFocusTo = opts.returnFocusTo || null;
+		this._context = opts.context || {};
 
 		this._isOpen = false;
 		this._isDestroyed = false;
@@ -267,6 +323,9 @@
 	 * open() while already open is a no-op, so it can never produce two
 	 * dialogs in the DOM.
 	 *
+	 * Fires `woodev_modal_opened` last, after the DOM is in place and focus is
+	 * trapped, so a listener can safely query the rendered tree (D-14).
+	 *
 	 * @returns {void}
 	 */
 	WoodevModal.prototype.open = function() {
@@ -280,6 +339,8 @@
 		this._isOpen = true;
 
 		this._closeButton.focus();
+
+		emit( 'woodev_modal_opened', { modalId: this._modalId, context: this._context } );
 	};
 
 	/**
@@ -288,24 +349,36 @@
 	 * no-op when the modal is not currently open (never opened, already
 	 * closed, or destroyed).
 	 *
-	 * @returns {void}
+	 * Fires the cancelable `woodev_modal_before_close` event first (D-14) — a
+	 * listener that calls `preventDefault()` aborts the close before any
+	 * teardown happens: nothing is detached, no focus is released, no scroll
+	 * lock is removed. Only when the event is not cancelled does teardown run
+	 * and `woodev_modal_closed` fire, both carrying `{ modalId, reason }`.
+	 *
+	 * Every internal close path (Esc, backdrop click, header close button)
+	 * calls this method with its own reason; there is no second teardown path.
+	 *
+	 * @param {string} [reason] Why the dialog is closing — 'escape' | 'backdrop' |
+	 *                          'button' | 'select' (T18) | any caller-supplied value.
+	 *                          Defaults to 'button'.
+	 * @returns {boolean} true once the dialog is closed (or already was); false
+	 *                     when a `before_close` listener vetoed the close.
 	 */
-	WoodevModal.prototype.close = function() {
+	WoodevModal.prototype.close = function( reason ) {
 		if ( this._isDestroyed || ! this._isOpen ) {
-			return;
+			return false;
 		}
 
-		unbindOpenListeners( this );
+		var payload = { modalId: this._modalId, reason: reason || 'button' };
 
-		if ( this._backdrop.parentNode ) {
-			this._backdrop.parentNode.removeChild( this._backdrop );
+		if ( ! emit( 'woodev_modal_before_close', payload, true ) ) {
+			return false;
 		}
-		document.body.classList.remove( SCROLL_LOCK_CLASS );
-		this._isOpen = false;
 
-		if ( this._returnFocusTo && typeof this._returnFocusTo.focus === 'function' ) {
-			this._returnFocusTo.focus();
-		}
+		teardownDialog( this );
+		emit( 'woodev_modal_closed', payload );
+
+		return true;
 	};
 
 	/**
@@ -430,6 +503,11 @@
 	 * destroy(), every other method is a no-op — reopening a destroyed
 	 * instance is not supported; callers construct a new one.
 	 *
+	 * Deliberately bypasses `close()`'s cancelable `before_close` gate and
+	 * calls the same `teardownDialog()` helper directly: destroy() is a
+	 * forced, permanent disposal, not one of the D-14 dismissal reasons, and
+	 * a consumer's `before_close` listener must not be able to veto it.
+	 *
 	 * @returns {void}
 	 */
 	WoodevModal.prototype.destroy = function() {
@@ -437,7 +515,9 @@
 			return;
 		}
 
-		this.close();
+		if ( this._isOpen ) {
+			teardownDialog( this );
+		}
 
 		if ( this._onCloseClick ) {
 			this._closeButton.removeEventListener( 'click', this._onCloseClick );
