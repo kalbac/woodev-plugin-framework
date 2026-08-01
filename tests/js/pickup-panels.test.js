@@ -146,3 +146,143 @@ it( 'toggles closed again on a second call, with open:false in the event', () =>
 	expect( seen[ 1 ].open ).toBe( false );
 	expect( panels.root.querySelector( '.woodev-pickup-list' ).classList.contains( 'is-open' ) ).toBe( false );
 } );
+
+// -----------------------------------------------------------------------
+// Task 13: the point card, with services and CTA states
+// -----------------------------------------------------------------------
+
+function mount( cfg ) {
+	const panels = new Panels( document.createElement( 'div' ), cfg );
+	panels.render();
+
+	return panels;
+}
+
+const cardConfig = { lang: 'ru_RU', i18n: {
+	select: 'Забрать здесь', continueCheckout: 'Продолжить оформление заказа',
+	services: 'Услуги', paymentMethods: 'Способы оплаты', howToGet: 'Как добраться',
+	phone: 'Телефон', workTime: 'Часы работы', maxWeight: 'Максимальный вес', blocked: 'Недоступен',
+} };
+
+const point = ( over ) => Object.assign( {
+	id: 'p1', name: 'ПВЗ «Магнит»', address: 'Москва, Ленина 5', short_address: 'Ленина, 5',
+	postal_code: '101000', phone: '', instruction: '', work_time: '', max_weight: null,
+	payment_methods: [], services: [], type: { code: 'pvz', label: 'ПВЗ' },
+	selectable: { allowed: true, reason: null },
+}, over );
+
+it( 'renders services as chips', () => {
+	const panels = mount( cardConfig );
+	panels.openCard( { key: 'k', size: 1, points: [ point( { services: [ 'Примерка', 'Частичный выкуп' ] } ) ] } );
+
+	expect( [ ...panels.root.querySelectorAll( '.woodev-pickup-card__service' ) ].map( ( n ) => n.textContent ) )
+		.toEqual( [ 'Примерка', 'Частичный выкуп' ] );
+} );
+
+it( 'omits the services section entirely when there are none', () => {
+	const panels = mount( cardConfig );
+	panels.openCard( { key: 'k', size: 1, points: [ point() ] } );
+
+	expect( panels.root.querySelector( '.woodev-pickup-card__services' ) ).toBeNull();
+} );
+
+it( 'disables the CTA and shows the reason when the point is not selectable', () => {
+	const panels = mount( cardConfig );
+	panels.openCard( { key: 'k', size: 1, points: [
+		point( { selectable: { allowed: false, reason: 'Оплата при получении недоступна' } } ) ] } );
+
+	expect( panels.root.querySelector( '.woodev-pickup-card__cta' ).disabled ).toBe( true );
+	expect( panels.root.querySelector( '.woodev-pickup-card__warning' ).textContent )
+		.toBe( 'Оплата при получении недоступна' );
+} );
+
+it( 'switches the CTA when this point is already the selected one', () => {
+	const panels = mount( cardConfig );
+	panels.setSelectedId( 'p1' );
+	panels.openCard( { key: 'k', size: 1, points: [ point() ] } );
+
+	expect( panels.root.querySelector( '.woodev-pickup-card__cta' ).textContent )
+		.toBe( 'Продолжить оформление заказа' );
+} );
+
+it( 'emits select with the point when the CTA is pressed', () => {
+	const seen = [];
+	const panels = mount( cardConfig );
+	panels.on( 'select', ( p ) => seen.push( p ) );
+	panels.openCard( { key: 'k', size: 1, points: [ point() ] } );
+	panels.root.querySelector( '.woodev-pickup-card__cta' ).click();
+
+	expect( seen[ 0 ].id ).toBe( 'p1' );
+} );
+
+it( 'never emits select from a disabled CTA', () => {
+	const seen = [];
+	const panels = mount( cardConfig );
+	panels.on( 'select', ( p ) => seen.push( p ) );
+	panels.openCard( { key: 'k', size: 1, points: [
+		point( { selectable: { allowed: false, reason: 'нет' } } ) ] } );
+	panels.root.querySelector( '.woodev-pickup-card__cta' ).click();
+
+	expect( seen ).toHaveLength( 0 );
+} );
+
+it( 'renders escaped point text without double-escaping it', () => {
+	const panels = mount( cardConfig );
+	panels.openCard( { key: 'k', size: 1, points: [ point( { name: 'ПВЗ &quot;Ромашка&quot;' } ) ] } );
+
+	expect( panels.root.querySelector( '.woodev-pickup-card__title' ).textContent ).toBe( 'ПВЗ "Ромашка"' );
+} );
+
+// -----------------------------------------------------------------------
+// Extra coverage beyond the plan's own spec
+// -----------------------------------------------------------------------
+
+it( 'hides the warning entirely when the point is selectable', () => {
+	const panels = mount( cardConfig );
+	panels.openCard( { key: 'k', size: 1, points: [ point() ] } );
+
+	expect( panels.root.querySelector( '.woodev-pickup-card__warning' ) ).toBeNull();
+} );
+
+it( 'falls back to the blocked i18n label when selectable.reason is empty', () => {
+	const panels = mount( cardConfig );
+	panels.openCard( { key: 'k', size: 1, points: [ point( { selectable: { allowed: false, reason: '' } } ) ] } );
+
+	expect( panels.root.querySelector( '.woodev-pickup-card__warning' ).textContent ).toBe( 'Недоступен' );
+} );
+
+it( 'omits phone/work-time/weight rows individually when each field is blank', () => {
+	const panels = mount( cardConfig );
+	panels.openCard( { key: 'k', size: 1, points: [ point() ] } );
+
+	expect( panels.root.querySelector( '.woodev-pickup-card__phone' ) ).toBeNull();
+	expect( panels.root.querySelector( '.woodev-pickup-card__worktime' ) ).toBeNull();
+	expect( panels.root.querySelector( '.woodev-pickup-card__weight' ) ).toBeNull();
+	expect( panels.root.querySelector( '.woodev-pickup-card__payments' ) ).toBeNull();
+} );
+
+it( 'renders phone, work time and a 2-decimal kilogram weight when present', () => {
+	const panels = mount( cardConfig );
+	panels.openCard( { key: 'k', size: 1, points: [ point( {
+		phone: '+7 495 000-00-00', work_time: 'ежедневно 9:00-21:00', max_weight: 5000,
+		payment_methods: [ 'Картой', 'Наличными' ],
+	} ) ] } );
+
+	expect( panels.root.querySelector( '.woodev-pickup-card__phone-value' ).textContent ).toBe( '+7 495 000-00-00' );
+	expect( panels.root.querySelector( '.woodev-pickup-card__worktime-value' ).textContent )
+		.toBe( 'ежедневно 9:00-21:00' );
+	expect( panels.root.querySelector( '.woodev-pickup-card__weight-value' ).textContent ).toBe( '5.00' );
+	expect( panels.root.querySelector( '.woodev-pickup-card__payments-value' ).textContent )
+		.toBe( 'Картой, Наличными' );
+} );
+
+it( 'never executes markup smuggled through selectable.reason — rendered as plain text', () => {
+	const panels = mount( cardConfig );
+	panels.openCard( { key: 'k', size: 1, points: [
+		point( { selectable: { allowed: false, reason: '<b>нет</b>' } } ) ] } );
+
+	const warning = panels.root.querySelector( '.woodev-pickup-card__warning' );
+
+	expect( warning.querySelector( 'b' ) ).toBeNull();
+	expect( warning.textContent ).toBe( '<b>нет</b>' );
+} );

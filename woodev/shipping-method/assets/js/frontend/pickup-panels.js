@@ -391,6 +391,252 @@
 	}
 
 	// -------------------------------------------------------------------------
+	// Point card
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Formats a GRAMS weight limit as kilograms with two decimals — matches
+	 * `map-provider-yandex.js`'s own `formatWeightKg()` exactly, so the two
+	 * places a weight limit can appear on screen never disagree. No unit
+	 * suffix: the `maxWeight` i18n label is expected to carry it.
+	 *
+	 * @param {number} grams
+	 * @returns {string}
+	 */
+	function formatWeightKg( grams ) {
+		return ( grams / 1000 ).toFixed( 2 );
+	}
+
+	/**
+	 * Builds the card's tab bar for a co-located group, or `null` for a
+	 * single-point one (D-4: no tab bar when there is nothing to switch
+	 * between). Tabs are labelled by `type.label`; the WHOLE group falls
+	 * back to `name` the moment ANY two points in it share a label — never a
+	 * per-point decision (see the file docblock).
+	 *
+	 * @param {Panels} self
+	 * @param {Object} group
+	 * @returns {HTMLElement|null}
+	 */
+	function buildTabs( self, group ) {
+		if ( group.points.length <= 1 ) {
+			return null;
+		}
+
+		var typeLabels = group.points.map( function( point ) {
+			return ( point.type && 'string' === typeof point.type.label ) ? point.type.label : '';
+		} );
+		var seen = {};
+		var hasCollision = false;
+
+		typeLabels.forEach( function( label ) {
+			if ( Object.prototype.hasOwnProperty.call( seen, label ) ) {
+				hasCollision = true;
+			}
+
+			seen[ label ] = true;
+		} );
+
+		var labels = hasCollision
+			? group.points.map( function( point ) {
+				return fieldValue( point.name );
+			} )
+			: typeLabels;
+
+		var tabs = document.createElement( 'div' );
+		tabs.className = 'woodev-pickup-card__tabs';
+
+		group.points.forEach( function( point, index ) {
+			var tab = document.createElement( 'button' );
+			tab.type = 'button';
+			tab.className = 'woodev-pickup-card__tab' + ( index === self._activeIndex ? ' is-active' : '' );
+			tab.innerHTML = labels[ index ]; // eslint-disable-line -- server-escaped point field, see file docblock.
+			tab.addEventListener( 'click', function() {
+				self._activeIndex = index;
+				renderCard( self );
+			} );
+			tabs.appendChild( tab );
+		} );
+
+		return tabs;
+	}
+
+	/**
+	 * Builds the card body for one point: title, optional postal code and
+	 * address, an optional "how to get there" detail, services as chips
+	 * (omitted entirely when there are none), payment methods, phone, work
+	 * time and a formatted weight limit — each optional section rendered
+	 * only when its field is actually present (mirrors the balloon builder
+	 * `map-provider-yandex.js` is being retired in favour of).
+	 *
+	 * @param {Object} config
+	 * @param {Object} point
+	 * @returns {HTMLElement}
+	 */
+	function buildCardBody( config, point ) {
+		var body = document.createElement( 'div' );
+		body.className = 'woodev-pickup-card__body';
+
+		var title = document.createElement( 'div' );
+		title.className = 'woodev-pickup-card__title';
+		title.innerHTML = fieldValue( point.name ); // eslint-disable-line -- server-escaped.
+		body.appendChild( title );
+
+		if ( fieldValue( point.postal_code ) ) {
+			var postal = document.createElement( 'div' );
+			postal.className = 'woodev-pickup-card__postal';
+			postal.innerHTML = fieldValue( point.postal_code ); // eslint-disable-line -- server-escaped.
+			body.appendChild( postal );
+		}
+
+		if ( fieldValue( point.address ) ) {
+			var address = document.createElement( 'div' );
+			address.className = 'woodev-pickup-card__address';
+			address.innerHTML = fieldValue( point.address ); // eslint-disable-line -- server-escaped.
+			body.appendChild( address );
+		}
+
+		if ( fieldValue( point.instruction ) ) {
+			var howto = document.createElement( 'details' );
+			howto.className = 'woodev-pickup-card__howto';
+
+			var summary = document.createElement( 'summary' );
+			summary.textContent = text( config, 'howToGet' );
+
+			var content = document.createElement( 'div' );
+			content.innerHTML = fieldValue( point.instruction ); // eslint-disable-line -- server-escaped.
+
+			howto.appendChild( summary );
+			howto.appendChild( content );
+			body.appendChild( howto );
+		}
+
+		if ( Array.isArray( point.services ) && point.services.length > 0 ) {
+			var services = document.createElement( 'div' );
+			services.className = 'woodev-pickup-card__services';
+
+			var servicesLabel = document.createElement( 'span' );
+			servicesLabel.className = 'woodev-pickup-card__services-label';
+			servicesLabel.textContent = text( config, 'services' );
+			services.appendChild( servicesLabel );
+
+			point.services.forEach( function( service ) {
+				var chip = document.createElement( 'span' );
+				chip.className = 'woodev-pickup-card__service';
+				chip.innerHTML = fieldValue( service ); // eslint-disable-line -- server-escaped.
+				services.appendChild( chip );
+			} );
+
+			body.appendChild( services );
+		}
+
+		if ( Array.isArray( point.payment_methods ) && point.payment_methods.length > 0 ) {
+			var paymentsValue = point.payment_methods.map( fieldValue ).join( ', ' );
+			var paymentsLabel = text( config, 'paymentMethods' );
+			body.appendChild( labelledRow( 'woodev-pickup-card__payments', paymentsLabel, paymentsValue ) );
+		}
+
+		if ( fieldValue( point.phone ) ) {
+			var phoneLabel = text( config, 'phone' );
+			body.appendChild( labelledRow( 'woodev-pickup-card__phone', phoneLabel, fieldValue( point.phone ) ) );
+		}
+
+		if ( fieldValue( point.work_time ) ) {
+			var workTimeLabel = text( config, 'workTime' );
+			var workTimeValue = fieldValue( point.work_time );
+			body.appendChild( labelledRow( 'woodev-pickup-card__worktime', workTimeLabel, workTimeValue ) );
+		}
+
+		if ( null !== point.max_weight && undefined !== point.max_weight ) {
+			var weightLabel = text( config, 'maxWeight' );
+			var weightValue = formatWeightKg( point.max_weight );
+			body.appendChild( labelledRow( 'woodev-pickup-card__weight', weightLabel, weightValue ) );
+		}
+
+		return body;
+	}
+
+	/**
+	 * Builds the card's sticky footer: the "not selectable" warning (omitted
+	 * entirely when the point IS selectable) and the CTA, whose label
+	 * depends on whether this point is already the caller's selected one.
+	 * `selectable.reason` is NOT a pre-escaped point field (see the file
+	 * docblock) — it and the `blocked` i18n fallback are both written via
+	 * `textContent`, never concatenated into markup.
+	 *
+	 * A disabled CTA is genuinely inert: the click listener itself checks
+	 * `allowed` before emitting, so a disabled button can never emit
+	 * `select` even if something external clicked it programmatically —
+	 * `disabled` on the element and "the handler refuses" are two different
+	 * guarantees, and both are needed (spec).
+	 *
+	 * @param {Panels} self
+	 * @param {Object} point
+	 * @returns {HTMLElement}
+	 */
+	function buildCardFooter( self, point ) {
+		var footer = document.createElement( 'div' );
+		footer.className = 'woodev-pickup-card__footer';
+
+		var selectable = point.selectable || { allowed: true, reason: null };
+
+		if ( ! selectable.allowed ) {
+			var warning = document.createElement( 'div' );
+			warning.className = 'woodev-pickup-card__warning';
+			warning.textContent = selectable.reason || text( self._config, 'blocked' );
+			footer.appendChild( warning );
+		}
+
+		var isSelected = null !== self._selectedId && String( point.id ) === self._selectedId;
+
+		var cta = document.createElement( 'button' );
+		cta.type = 'button';
+		cta.className = 'woodev-pickup-card__cta';
+		cta.textContent = isSelected ? text( self._config, 'continueCheckout' ) : text( self._config, 'select' );
+		cta.disabled = ! selectable.allowed;
+		cta.addEventListener( 'click', function() {
+			if ( ! selectable.allowed ) {
+				return;
+			}
+
+			self._emit( 'select', point );
+		} );
+		footer.appendChild( cta );
+
+		return footer;
+	}
+
+	/**
+	 * Fully rebuilds the card from `self`'s current `_activeGroup`/
+	 * `_activeIndex`/`_selectedId` — a no-op when no group is open. Called on
+	 * every `openCard()`, tab click, and `setSelectedId()` while a card is
+	 * open, so the CTA/warning/tabs always reflect the CURRENTLY active
+	 * point, never a stale one left over from a previous render.
+	 *
+	 * @param {Panels} self
+	 * @returns {void}
+	 */
+	function renderCard( self ) {
+		empty( self._cardEl );
+
+		var group = self._activeGroup;
+
+		if ( ! group ) {
+			return;
+		}
+
+		var point = group.points[ self._activeIndex ] || group.points[ 0 ];
+		var tabs = buildTabs( self, group );
+
+		if ( tabs ) {
+			self._cardEl.appendChild( tabs );
+		}
+
+		self._cardEl.appendChild( buildCardBody( self._config, point ) );
+		self._cardEl.appendChild( buildCardFooter( self, point ) );
+	}
+
+	// -------------------------------------------------------------------------
 	// Panels constructor
 	// -------------------------------------------------------------------------
 
@@ -542,6 +788,62 @@
 		this._listEl.classList.toggle( 'is-open', open );
 
 		this._emit( 'listToggle', { open: open, width: this._listEl.offsetWidth } );
+	};
+
+	/**
+	 * Opens the card on one group, showing `pointId` when given (and found
+	 * in the group), otherwise the group's first point. This is what a click
+	 * on the SECOND point of a co-located list row must do — always the
+	 * REQUESTED point, never always the first (spec).
+	 *
+	 * @param {Object}      group
+	 * @param {string|number} [pointId]
+	 * @returns {void}
+	 */
+	Panels.prototype.openCard = function( group, pointId ) {
+		var index = 0;
+
+		if ( undefined !== pointId && null !== pointId ) {
+			for ( var i = 0; i < group.points.length; i++ ) {
+				if ( String( group.points[ i ].id ) === String( pointId ) ) {
+					index = i;
+					break;
+				}
+			}
+		}
+
+		this._activeGroup = group;
+		this._activeIndex = index;
+
+		renderCard( this );
+		this._cardEl.classList.add( 'is-open' );
+	};
+
+	/**
+	 * Closes the card, covering it back with the list (the card sits ABOVE
+	 * the list at a higher `z-index` rather than replacing it — spec).
+	 *
+	 * @returns {void}
+	 */
+	Panels.prototype.closeCard = function() {
+		this._cardEl.classList.remove( 'is-open' );
+		this._activeGroup = null;
+	};
+
+	/**
+	 * Records the caller's currently selected point id, so a later
+	 * `openCard()` (or an already-open card, re-rendered here) shows the
+	 * CTA's `continueCheckout` label instead of `select` for that one point.
+	 *
+	 * @param {string|number|null} id
+	 * @returns {void}
+	 */
+	Panels.prototype.setSelectedId = function( id ) {
+		this._selectedId = ( undefined !== id && null !== id ) ? String( id ) : null;
+
+		if ( this._activeGroup ) {
+			renderCard( this );
+		}
 	};
 
 	// -------------------------------------------------------------------------
