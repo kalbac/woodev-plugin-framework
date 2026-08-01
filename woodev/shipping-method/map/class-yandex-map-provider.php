@@ -65,17 +65,33 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Map\\Yandex_Map_Provider' )
 		private const JS_NAMESPACE = 'WoodevPickupMap';
 
 		/**
-		 * Locales the ymaps `lang` query parameter actually accepts verbatim. Any other
-		 * site locale falls back through {@see self::resolve_lang()}'s `en_*` prefix
-		 * check, then to {@see self::DEFAULT_LANG}.
+		 * Locales the ymaps `lang` query parameter actually accepts verbatim (D-12). Any
+		 * other site locale falls back to {@see self::DEFAULT_LANG} — see
+		 * {@see self::resolve_lang()}.
+		 *
+		 * Known, accepted consequence: the REGION half of `lang` drives the UNITS ymaps
+		 * shows distances in, not just the language — `RU`/`UA`/`TR` give kilometres,
+		 * `US` gives miles. A store whose site locale is not in this list therefore falls
+		 * back to `en_US` and gets a map labelled in miles, even though our own distances
+		 * (sidebar, search results) are computed by us and always formatted from the SAME
+		 * region, so the two never disagree on screen.
 		 *
 		 * @since 2.0.2
 		 * @var string[]
 		 */
 		private const ACCEPTED_LANGS = [ 'ru_RU', 'en_US', 'en_RU', 'ru_UA', 'uk_UA', 'tr_TR' ];
 
-		/** @var string default `lang` when the site locale is not in {@see self::ACCEPTED_LANGS}. */
-		private const DEFAULT_LANG = 'ru_RU';
+		/**
+		 * Default `lang` when the site locale is not in {@see self::ACCEPTED_LANGS}.
+		 *
+		 * `en_US` is WordPress's own default locale (D-12), so this fallback is only
+		 * reached for genuinely foreign locales — deliberately NOT `ru_RU`; there is no
+		 * `en_*` -> `en_RU` remapping.
+		 *
+		 * @since 2.0.2
+		 * @var string
+		 */
+		private const DEFAULT_LANG = 'en_US';
 
 		/**
 		 * The plugin's own shared fallback Yandex Maps API key.
@@ -117,25 +133,68 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Map\\Yandex_Map_Provider' )
 		private string $key_docs_url;
 
 		/**
+		 * Optional custom ymaps tile layers to draw over the base map (D-8), e.g. to
+		 * layer 2GIS tiles the way the reference CDEK plugin does
+		 * (`map.layers.add(...)`). Empty by default — Yandex's own tiles. Each entry is
+		 * an arbitrary ymaps layer descriptor (array); this class does not interpret its
+		 * shape, only validates that it IS an array — see {@see self::sanitize_layers()}.
+		 * Choosing what to layer, and whether the terms of use of both parties permit
+		 * it, is the PLUGIN's decision.
+		 *
+		 * @since 2.0.2
+		 * @var array<int, array<string, mixed>>
+		 */
+		private array $layers;
+
+		/**
+		 * Optional custom map copyright/attribution strings (D-8), e.g. `'© 2Gis'`
+		 * alongside a custom tile layer. Empty by default. Rendered by ymaps' own
+		 * `copyrights.add()`, NOT by our JS via `innerHTML` — and supplied by the PLUGIN
+		 * AUTHOR at construction time, not by a carrier API or customer input — so this
+		 * class deliberately does NOT `esc_html()` these values; see
+		 * {@see self::get_js_config()}.
+		 *
+		 * @since 2.0.2
+		 * @var string[]
+		 */
+		private array $copyrights;
+
+		/**
 		 * Constructor.
 		 *
 		 * @since 2.0.2
 		 *
-		 * @param string $fallback_key the plugin's own shared fallback Yandex Maps API key —
-		 *                             REQUIRED, see this class's docblock and
-		 *                             {@see self::get_fallback_map_key()}.
-		 * @param string $api_key      the plugin's own `map_api_key` setting value, or `''`
-		 *                             when the merchant has not configured one — in which
-		 *                             case {@see self::resolve_api_key()} falls back to
-		 *                             `$fallback_key` (filterable via
-		 *                             `woodev_shipping_map_fallback_api_key`).
-		 * @param string $key_docs_url URL to instructions for obtaining a key, or `''` to
-		 *                             omit the link from the settings-field description.
+		 * @param string                   $fallback_key the plugin's own shared fallback Yandex Maps
+		 *                                               API key — REQUIRED, see this class's docblock
+		 *                                               and {@see self::get_fallback_map_key()}.
+		 * @param string                   $api_key      the plugin's own `map_api_key` setting value,
+		 *                                               or `''` when the merchant has not configured
+		 *                                               one — in which case
+		 *                                               {@see self::resolve_api_key()} falls back to
+		 *                                               `$fallback_key` (filterable via
+		 *                                               `woodev_shipping_map_fallback_api_key`).
+		 * @param string                   $key_docs_url URL to instructions for obtaining a key, or
+		 *                                               `''` to omit the link from the settings-field
+		 *                                               description.
+		 * @param array<int, array<mixed>> $layers       optional custom ymaps tile layers (D-8);
+		 *                                               non-array entries are dropped, see
+		 *                                               {@see self::sanitize_layers()}.
+		 * @param string[]                 $copyrights   optional custom map copyright/attribution
+		 *                                               strings (D-8); non-string entries are dropped,
+		 *                                               see {@see self::sanitize_copyrights()}.
 		 */
-		public function __construct( string $fallback_key, string $api_key = '', string $key_docs_url = '' ) {
+		public function __construct(
+			string $fallback_key,
+			string $api_key = '',
+			string $key_docs_url = '',
+			array $layers = [],
+			array $copyrights = []
+		) {
 			$this->fallback_key = $fallback_key;
 			$this->api_key      = $api_key;
 			$this->key_docs_url = $key_docs_url;
+			$this->layers       = self::sanitize_layers( $layers );
+			$this->copyrights   = self::sanitize_copyrights( $copyrights );
 		}
 
 		/**
@@ -256,15 +315,27 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Map\\Yandex_Map_Provider' )
 		 * boolean — not credential-shaped — so the JS provider can detect a missing key
 		 * directly instead of inferring one from a load failure.
 		 *
+		 * `lang` is resolved exactly ONCE here, via {@see self::resolve_lang()}, and the
+		 * SAME value is handed to both {@see self::build_script_url()} (baked into
+		 * `scriptUrl`) and emitted as the top-level `lang` field the panels read for
+		 * distance formatting (D-12) — a single source of truth, so the two can never
+		 * silently drift apart. `layers`/`copyrights` are this provider's own optional,
+		 * already-sanitized construction values (D-8); see
+		 * {@see self::sanitize_layers()}/{@see self::sanitize_copyrights()}.
+		 *
 		 * @since 2.0.2
 		 */
 		public function get_js_config( array $context ): array {
 			$api_key = $this->resolve_api_key();
+			$lang    = self::resolve_lang();
 
 			return [
-				'scriptUrl' => $this->build_script_url( $api_key ),
-				'ns'        => self::JS_NAMESPACE,
-				'hasApiKey' => '' !== $api_key,
+				'scriptUrl'  => $this->build_script_url( $api_key, $lang ),
+				'ns'         => self::JS_NAMESPACE,
+				'hasApiKey'  => '' !== $api_key,
+				'lang'       => $lang,
+				'layers'     => $this->layers,
+				'copyrights' => $this->copyrights,
 			];
 		}
 
@@ -282,23 +353,27 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Map\\Yandex_Map_Provider' )
 		}
 
 		/**
-		 * Builds the ymaps API script URL for an already-resolved API key.
+		 * Builds the ymaps API script URL for an already-resolved API key and lang.
 		 *
-		 * Takes the key as a parameter (rather than re-resolving it) so
-		 * {@see self::get_js_config()} applies the `woodev_shipping_map_fallback_api_key`
-		 * filter exactly once per call.
+		 * Takes both as parameters (rather than re-resolving them) so
+		 * {@see self::get_js_config()} is the ONE place that calls
+		 * {@see self::resolve_api_key()} (applying the
+		 * `woodev_shipping_map_fallback_api_key` filter exactly once per call) and
+		 * {@see self::resolve_lang()} — keeping this method's `lang` query param and
+		 * `get_js_config()`'s top-level `lang` field reading the SAME resolved value.
 		 *
 		 * @since 2.0.2
 		 *
 		 * @param string $api_key the already-resolved API key (see {@see self::resolve_api_key()}).
+		 * @param string $lang    the already-resolved `lang` (see {@see self::resolve_lang()}).
 		 *
 		 * @return string
 		 */
-		private function build_script_url( string $api_key ): string {
+		private function build_script_url( string $api_key, string $lang ): string {
 			return add_query_arg(
 				[
 					'load'   => 'package.standard',
-					'lang'   => self::resolve_lang(),
+					'lang'   => $lang,
 					'ns'     => self::JS_NAMESPACE,
 					'apikey' => rawurlencode( $api_key ),
 				],
@@ -308,12 +383,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Map\\Yandex_Map_Provider' )
 
 		/**
 		 * Resolves the ymaps `lang` parameter from the site locale, restricted to
-		 * the set ymaps actually accepts.
+		 * the set ymaps actually accepts (D-12).
 		 *
-		 * An exact match wins; otherwise any `en_*` locale (e.g. `en_GB`, `en_CA`) falls
-		 * back to `en_US` rather than straight to {@see self::DEFAULT_LANG} — ymaps has no
-		 * British/Canadian English variant, and `en_US` is the closer match than Russian.
-		 * Anything else falls back to {@see self::DEFAULT_LANG}.
+		 * An exact match in {@see self::ACCEPTED_LANGS} wins; otherwise
+		 * {@see self::DEFAULT_LANG}. No `en_*` prefix special-case: with `en_US` as the
+		 * default, a dedicated branch for `en_GB`/`en_CA`/etc. would only have obscured
+		 * the rule while producing the identical result.
 		 *
 		 * @since 2.0.2
 		 *
@@ -326,11 +401,47 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Map\\Yandex_Map_Provider' )
 				return $locale;
 			}
 
-			if ( 'en' === $locale || 0 === strpos( $locale, 'en_' ) ) {
-				return 'en_US';
-			}
-
 			return self::DEFAULT_LANG;
+		}
+
+		/**
+		 * Sanitizes the optional custom ymaps tile layers (D-8): keeps only entries
+		 * that are themselves arrays (an arbitrary ymaps layer descriptor), dropping
+		 * anything else rather than passing junk into `wp_json_encode()`.
+		 *
+		 * Reindexes with `array_values()` — `array_filter()` preserves keys, so a
+		 * gap-y list would `wp_json_encode()` as a JSON OBJECT instead of an array the
+		 * moment one entry is dropped (see gotcha `php-stdlib-traps-that-survive-tests`).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<int, mixed> $layers raw constructor argument.
+		 *
+		 * @return array<int, array<mixed>>
+		 */
+		private static function sanitize_layers( array $layers ): array {
+			return array_values( array_filter( $layers, 'is_array' ) );
+		}
+
+		/**
+		 * Sanitizes the optional custom map copyright/attribution strings (D-8): keeps
+		 * only string entries, dropping anything else. Reindexed for the same
+		 * `array_filter()`-preserves-keys reason as {@see self::sanitize_layers()}.
+		 *
+		 * Deliberately does NOT `esc_html()` the surviving strings — see
+		 * {@see self::get_js_config()}'s docblock and the `$copyrights` property
+		 * docblock for why: these are rendered by ymaps' own `copyrights.add()`, not by
+		 * our JS via `innerHTML`, and are supplied by the PLUGIN AUTHOR at construction
+		 * time, not by a carrier API or customer input.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<int, mixed> $copyrights raw constructor argument.
+		 *
+		 * @return string[]
+		 */
+		private static function sanitize_copyrights( array $copyrights ): array {
+			return array_values( array_filter( $copyrights, 'is_string' ) );
 		}
 
 		/**

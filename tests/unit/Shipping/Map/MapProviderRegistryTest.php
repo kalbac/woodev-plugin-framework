@@ -368,35 +368,20 @@ final class MapProviderRegistryTest extends TestCase {
 
 	/**
 	 * Value-mutant guard on the fallback default itself: an unaccepted locale must fall
-	 * back to EXACTLY `ru_RU`, not any other accepted value.
+	 * back to EXACTLY `en_US` (D-12) — `en_US` is WordPress's own default locale, so the
+	 * fallback is only reached for genuinely foreign locales.
 	 */
-	public function test_an_unaccepted_locale_falls_back_to_ru_ru(): void {
+	public function test_an_unaccepted_locale_falls_back_to_en_us(): void {
 		Functions\when( 'get_locale' )->justReturn( 'de_DE' );
 		Functions\when( 'apply_filters' )->returnArg( 2 );
 
 		$params = $this->query_params_of( ( new Yandex_Map_Provider( '' ) )->get_js_config( [] )['scriptUrl'] );
 
-		$this->assertSame( 'ru_RU', $params['lang'] );
+		$this->assertSame( 'en_US', $params['lang'] );
 	}
 
-	public function test_an_empty_locale_falls_back_to_ru_ru(): void {
+	public function test_an_empty_locale_falls_back_to_en_us(): void {
 		Functions\when( 'get_locale' )->justReturn( '' );
-		Functions\when( 'apply_filters' )->returnArg( 2 );
-
-		$params = $this->query_params_of( ( new Yandex_Map_Provider( '' ) )->get_js_config( [] )['scriptUrl'] );
-
-		$this->assertSame( 'ru_RU', $params['lang'] );
-	}
-
-	// -------------------------------------------------------------------------
-	// Yandex_Map_Provider — en_* locale prefix fallback
-	// -------------------------------------------------------------------------
-
-	/**
-	 * @dataProvider provide_en_variant_locales
-	 */
-	public function test_an_en_variant_locale_falls_back_to_en_us( string $locale ): void {
-		Functions\when( 'get_locale' )->justReturn( $locale );
 		Functions\when( 'apply_filters' )->returnArg( 2 );
 
 		$params = $this->query_params_of( ( new Yandex_Map_Provider( '' ) )->get_js_config( [] )['scriptUrl'] );
@@ -405,27 +390,145 @@ final class MapProviderRegistryTest extends TestCase {
 	}
 
 	/**
-	 * @return array<string, string[]>
+	 * `en_GB`/`en_CA` used to hit a dedicated `en_*` prefix branch that special-cased
+	 * them to `en_US` before falling through to a Russian default. That branch is now
+	 * dead code — `en_US` IS the default — and was removed (D-12); these locales still
+	 * resolve to `en_US`, but via the SAME generic "not accepted -> default" rule as
+	 * `de_DE`, not a separate code path.
 	 */
-	public function provide_en_variant_locales(): array {
-		return [
-			'en_GB' => [ 'en_GB' ],
-			'en_CA' => [ 'en_CA' ],
-			'en'    => [ 'en' ],
-		];
-	}
-
-	/**
-	 * A locale merely starting with "en" as a WORD, not a language prefix (e.g. a
-	 * hypothetical `enx_XX`), must not accidentally match the `en_*` fallback.
-	 */
-	public function test_a_locale_that_only_looks_like_it_starts_with_en_does_not_false_match(): void {
-		Functions\when( 'get_locale' )->justReturn( 'enx_XX' );
+	public function test_a_near_english_locale_falls_back_to_en_us_via_the_generic_default(): void {
+		Functions\when( 'get_locale' )->justReturn( 'en_GB' );
 		Functions\when( 'apply_filters' )->returnArg( 2 );
 
 		$params = $this->query_params_of( ( new Yandex_Map_Provider( '' ) )->get_js_config( [] )['scriptUrl'] );
 
-		$this->assertSame( 'ru_RU', $params['lang'] );
+		$this->assertSame( 'en_US', $params['lang'] );
+	}
+
+	// -------------------------------------------------------------------------
+	// Yandex_Map_Provider — Task 7: resolved locale (single source), layers, copyrights
+	// -------------------------------------------------------------------------
+
+	/**
+	 * @dataProvider provide_locales
+	 */
+	public function test_locale_resolution( string $site_locale, string $expected ): void {
+		Functions\when( 'get_locale' )->justReturn( $site_locale );
+		Functions\when( 'apply_filters' )->returnArg( 2 );
+
+		$this->assertSame( $expected, ( new Yandex_Map_Provider( '' ) )->get_js_config( [] )['lang'] );
+	}
+
+	/**
+	 * @return array<string, string[]>
+	 */
+	public function provide_locales(): array {
+		return [
+			'exact ru_RU'       => [ 'ru_RU', 'ru_RU' ],
+			'exact en_US'       => [ 'en_US', 'en_US' ],
+			'exact en_RU'       => [ 'en_RU', 'en_RU' ],
+			'exact ru_UA'       => [ 'ru_UA', 'ru_UA' ],
+			'exact uk_UA'       => [ 'uk_UA', 'uk_UA' ],
+			'exact tr_TR'       => [ 'tr_TR', 'tr_TR' ],
+			'unsupported de_DE' => [ 'de_DE', 'en_US' ],
+			'unsupported en_GB' => [ 'en_GB', 'en_US' ],
+			'empty'             => [ '', 'en_US' ],
+		];
+	}
+
+	public function test_layers_and_copyrights_default_to_empty(): void {
+		Functions\when( 'get_locale' )->justReturn( 'ru_RU' );
+		Functions\when( 'apply_filters' )->returnArg( 2 );
+
+		$config = ( new Yandex_Map_Provider( '' ) )->get_js_config( [] );
+
+		$this->assertSame( [], $config['layers'] );
+		$this->assertSame( [], $config['copyrights'] );
+	}
+
+	/**
+	 * `scriptUrl`'s `lang` query param and the top-level `lang` field are computed by
+	 * two different CONSUMERS ({@see Yandex_Map_Provider::build_script_url()} and
+	 * {@see Yandex_Map_Provider::get_js_config()}) — this pins that both read the SAME
+	 * resolved value, so the two cannot silently drift apart.
+	 */
+	public function test_the_lang_in_the_script_url_matches_the_lang_field(): void {
+		Functions\when( 'get_locale' )->justReturn( 'de_DE' );
+		Functions\when( 'apply_filters' )->returnArg( 2 );
+
+		$config = ( new Yandex_Map_Provider( '' ) )->get_js_config( [] );
+
+		$this->assertStringContainsString( 'lang=en_US', $config['scriptUrl'] );
+		$this->assertSame( 'en_US', $config['lang'] );
+	}
+
+	/**
+	 * `layers` is a list of arrays (each an arbitrary ymaps tile-layer descriptor). A
+	 * malformed (non-array) entry is dropped rather than passed through to
+	 * `wp_json_encode()`, and the surviving entries are reindexed with
+	 * `array_values()` — `array_filter()` preserves keys, so without reindexing a
+	 * gap-y list JSON-encodes as an object, not an array (see gotcha
+	 * `php-stdlib-traps-that-survive-tests`).
+	 */
+	public function test_layers_passes_through_valid_entries_and_drops_malformed_ones(): void {
+		Functions\when( 'get_locale' )->justReturn( 'ru_RU' );
+		Functions\when( 'apply_filters' )->returnArg( 2 );
+
+		$provider = new Yandex_Map_Provider(
+			'',
+			'',
+			'',
+			[ [ 'type' => 'tile#tile', 'zIndex' => 1 ], 'not-an-array', [ 'type' => 'other' ] ]
+		);
+
+		$config = $provider->get_js_config( [] );
+
+		$this->assertSame(
+			[
+				[ 'type' => 'tile#tile', 'zIndex' => 1 ],
+				[ 'type' => 'other' ],
+			],
+			$config['layers']
+		);
+		$this->assertSame( [ 0, 1 ], array_keys( $config['layers'] ), 'must be reindexed, not gap-y' );
+	}
+
+	/**
+	 * `copyrights` is a list of strings. A malformed (non-string) entry is dropped and
+	 * the rest reindexed, for the same `array_filter()`-preserves-keys reason as
+	 * `layers`.
+	 */
+	public function test_copyrights_passes_through_valid_entries_and_drops_malformed_ones(): void {
+		Functions\when( 'get_locale' )->justReturn( 'ru_RU' );
+		Functions\when( 'apply_filters' )->returnArg( 2 );
+
+		$provider = new Yandex_Map_Provider( '', '', '', [], [ '© 2Gis', 42, '© Test' ] );
+
+		$config = $provider->get_js_config( [] );
+
+		$this->assertSame( [ '© 2Gis', '© Test' ], $config['copyrights'] );
+		$this->assertSame( [ 0, 1 ], array_keys( $config['copyrights'] ), 'must be reindexed, not gap-y' );
+	}
+
+	/**
+	 * `copyrights` is rendered by ymaps' own `copyrights.add()`, not by our JS via
+	 * `innerHTML` — and, unlike a carrier API's point data, its values are supplied by
+	 * the PLUGIN AUTHOR at construction time (config, not third-party/customer input).
+	 * PHP therefore does NOT `esc_html()` it: doing so would corrupt any markup the
+	 * plugin author deliberately includes (e.g. a link to the tile provider's terms),
+	 * producing a visible `&amp;`/`&lt;` in the map's copyright corner instead of the
+	 * intended link — the exact "backwards" failure this decision is pinned against.
+	 */
+	public function test_copyrights_are_not_html_escaped(): void {
+		Functions\when( 'get_locale' )->justReturn( 'ru_RU' );
+		Functions\when( 'apply_filters' )->returnArg( 2 );
+
+		$provider = new Yandex_Map_Provider( '', '', '', [], [ '<a href="https://example.test">© Example</a>' ] );
+
+		$this->assertSame(
+			[ '<a href="https://example.test">© Example</a>' ],
+			$provider->get_js_config( [] )['copyrights']
+		);
 	}
 
 	// -------------------------------------------------------------------------
@@ -522,7 +625,10 @@ final class MapProviderRegistryTest extends TestCase {
 
 		$config = ( new Yandex_Map_Provider( '', 'SOME-KEY' ) )->get_js_config( [] );
 
-		$this->assertSame( [ 'scriptUrl', 'ns', 'hasApiKey' ], array_keys( $config ) );
+		$this->assertSame(
+			[ 'scriptUrl', 'ns', 'hasApiKey', 'lang', 'layers', 'copyrights' ],
+			array_keys( $config )
+		);
 
 		// hasApiKey is a plain boolean, not the credential itself — explicitly confirm it
 		// is not a string that could carry a leaked key value.
