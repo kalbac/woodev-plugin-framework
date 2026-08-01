@@ -379,11 +379,27 @@ test( 'title text is escaped as text, not injected as markup', () => {
 } );
 
 describe( 'WoodevModal events', () => {
+	// Every listener a test attaches to document.body is tracked here and torn down in
+	// afterEach — a listener left behind by one test (e.g. an unconditional preventDefault()
+	// on woodev_modal_before_close) would otherwise silently veto or double-count events in
+	// every later test in this file, since jest gives the FILE a fresh jsdom, not each test.
+	const bodyListeners = [];
+
+	const onBody = ( type, handler ) => {
+		document.body.addEventListener( type, handler );
+		bodyListeners.push( { type: type, handler: handler } );
+	};
+
 	const listen = ( type ) => {
 		const seen = [];
-		document.body.addEventListener( type, ( e ) => seen.push( e ) );
+		onBody( type, ( e ) => seen.push( e ) );
 		return seen;
 	};
+
+	afterEach( () => {
+		bodyListeners.forEach( ( entry ) => document.body.removeEventListener( entry.type, entry.handler ) );
+		bodyListeners.length = 0;
+	} );
 
 	it( 'fires woodev_modal_opened with modalId and context', () => {
 		const seen = listen( 'woodev_modal_opened' );
@@ -418,10 +434,12 @@ describe( 'WoodevModal events', () => {
 		expect( before ).toHaveLength( 1 );
 		expect( before[ 0 ].detail ).toEqual( { modalId: 'test-modal', reason: 'escape' } );
 		expect( before[ 0 ].cancelable ).toBe( true );
+		expect( before[ 0 ].bubbles ).toBe( true );
 
 		expect( closed ).toHaveLength( 1 );
 		expect( closed[ 0 ].detail ).toEqual( { modalId: 'test-modal', reason: 'escape' } );
 		expect( closed[ 0 ].cancelable ).toBe( false );
+		expect( closed[ 0 ].bubbles ).toBe( true );
 
 		modal.destroy();
 	} );
@@ -467,7 +485,10 @@ describe( 'WoodevModal events', () => {
 		const modal = new WoodevModal( { modalId: 'test-modal', title: 'T' } );
 		const closed = listen( 'woodev_modal_closed' );
 
-		document.body.addEventListener( 'woodev_modal_before_close', ( e ) => e.preventDefault() );
+		// Tracked via onBody(), not a raw addEventListener() — removed in afterEach so this
+		// permanent preventDefault() can never veto a later test's close() (regression-guarded
+		// by the next test).
+		onBody( 'woodev_modal_before_close', ( e ) => e.preventDefault() );
 		modal.open();
 		const result = modal.close( 'button' );
 
@@ -479,8 +500,27 @@ describe( 'WoodevModal events', () => {
 		// by a stale "already closed" state).
 		expect( document.body.className ).toMatch( /woodev-modal-lock/ );
 
-		document.body.innerHTML = ''; // cleanup only — no destroy(), the veto left it open
-		document.body.className = '';
+		// destroy() is the forced, unconditional teardown (bypasses the still-active veto by
+		// design, see woodev-modal.js) — the correct way to dispose of a modal a test is done
+		// with, rather than hand-clearing body.innerHTML/className.
+		modal.destroy();
+	} );
+
+	it( 'a normal close still fires closed after a previous test\'s before_close listener is cleaned up', () => {
+		// Regression guard for the veto test above: if onBody()'s afterEach cleanup ever
+		// stopped removing that permanent preventDefault() listener, this modal's close()
+		// would be silently vetoed too and `closed` would stay empty.
+		const closed = listen( 'woodev_modal_closed' );
+		const modal = new WoodevModal( { modalId: 'post-veto-modal', title: 'T' } );
+
+		modal.open();
+		const result = modal.close( 'button' );
+
+		expect( result ).toBe( true );
+		expect( closed ).toHaveLength( 1 );
+		expect( closed[ 0 ].detail ).toEqual( { modalId: 'post-veto-modal', reason: 'button' } );
+
+		modal.destroy();
 	} );
 
 	it( 'does not fire before_close/closed when destroy() tears down an open modal', () => {
@@ -496,15 +536,23 @@ describe( 'WoodevModal events', () => {
 		expect( document.querySelector( '.woodev-modal' ) ).toBeNull();
 	} );
 
-	it( 'is visible to jQuery .on() as well as addEventListener', () => {
-		const calls = [];
-		window.jQuery( document.body ).on( 'woodev_modal_opened', () => calls.push( 1 ) );
+	it( 'one dispatch reaches BOTH addEventListener and jQuery .on() — the D-14 bridge', () => {
+		// Native delivery alone is already covered by other tests; what D-14 actually claims —
+		// and the reason the event is a native CustomEvent rather than a jQuery.trigger() — is
+		// that a SINGLE dispatch reaches both mechanisms at once. Assert both from one open().
+		const nativeSeen = listen( 'woodev_modal_opened' );
+
+		const jqueryCalls = [];
+		const $body = window.jQuery( document.body );
+		$body.on( 'woodev_modal_opened', () => jqueryCalls.push( 1 ) );
 
 		const modal = new WoodevModal( { modalId: 'test-modal', title: 'T' } );
 		modal.open();
 
-		expect( calls ).toHaveLength( 1 );
+		expect( nativeSeen ).toHaveLength( 1 );
+		expect( jqueryCalls ).toHaveLength( 1 );
 
+		$body.off( 'woodev_modal_opened' ); // jQuery's own binding isn't tracked by onBody()
 		modal.destroy();
 	} );
 } );
