@@ -612,20 +612,32 @@ it( 'emits pointResult with the point id', () => {
 	const seen = [];
 	const panels = mount( searchConfig );
 	panels.on( 'searchPointPicked', ( id ) => seen.push( id ) );
-	panels.renderSearchResults( { points: [ point() ], addresses: [] } );
-	panels.root.querySelector( '.woodev-pickup-search__item' ).click();
+	// Two points with NON-default ids, and the SECOND one clicked: with a single `p1`
+	// fixture an emitter hardcoded to 'p1' — or to "always the first result" — passes.
+	panels.renderSearchResults( {
+		points: [ point( { id: 'PVZ-77' } ), point( { id: 'PVZ-99' } ) ],
+		addresses: [],
+	} );
+	panels.root.querySelectorAll( '.woodev-pickup-search__item' )[ 1 ].click();
 
-	expect( seen ).toEqual( [ 'p1' ] );
+	expect( seen ).toEqual( [ 'PVZ-99' ] );
 } );
 
 it( 'emits addressResult with the index so the caller can resolve it', () => {
 	const seen = [];
 	const panels = mount( searchConfig );
 	panels.on( 'searchAddressPicked', ( i ) => seen.push( i ) );
-	panels.renderSearchResults( { points: [], addresses: [ { displayName: 'A' }, { displayName: 'B' } ] } );
-	panels.root.querySelectorAll( '.woodev-pickup-search__item' )[ 1 ].click();
+	panels.renderSearchResults( {
+		points: [],
+		addresses: [ { displayName: 'A' }, { displayName: 'B' }, { displayName: 'C' } ],
+	} );
 
-	expect( seen ).toEqual( [ 1 ] );
+	// Click the third, then the first: a hardcoded `1`, an always-zero, or an
+	// always-last emitter each survive a single click on index 1.
+	panels.root.querySelectorAll( '.woodev-pickup-search__item' )[ 2 ].click();
+	panels.root.querySelectorAll( '.woodev-pickup-search__item' )[ 0 ].click();
+
+	expect( seen ).toEqual( [ 2, 0 ] );
 } );
 
 it( 'shows the anchor header and a reset control once an address is active', () => {
@@ -654,7 +666,11 @@ it( 'shows the nothing-nearby state with the nearest distance', () => {
 
 	expect( empty.textContent ).toContain( 'Рядом с этим адресом пунктов выдачи нет.' );
 	expect( empty.textContent ).toContain( '87.0 км' );
+	// The point's own name is the reason this state is useful rather than just apologetic —
+	// without it the customer is told a distance to something unnamed.
+	expect( empty.textContent ).toContain( 'ПВЗ «Магнит»' );
 	expect( empty.querySelector( 'button' ) ).not.toBeNull();
+	expect( empty.querySelector( 'button' ).textContent ).toBe( searchConfig.i18n.showNearest );
 } );
 
 // -----------------------------------------------------------------------
