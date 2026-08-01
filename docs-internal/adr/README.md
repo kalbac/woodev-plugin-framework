@@ -11,6 +11,7 @@
 | 007 | [React Admin Stack — @wordpress/scripts](007-react-admin-stack-wordpress-scripts.md) | accepted | 2026-06-11 |
 | 008 | [Conditional-Fields `show_if` Operator Set & Evaluation Contract](008-conditional-fields-operator-set.md) | accepted | 2026-07-05 |
 | 009 | [`Map_Provider` Seam Re-Pointed to Map Source, Not Rendering Library](009-map-provider-seam-source-not-library.md) | accepted | 2026-07-31 |
+| 010 | [Pickup Map Stays on Yandex Maps JS API 2.1; Version 3.0 Rejected](010-yandex-maps-js-api-2-1-not-3-0.md) | accepted | 2026-08-01 |
 
 ## Creating an ADR
 
