@@ -8,9 +8,10 @@
  *
  * Home of `safeColor()`/`contrastFor()` (SP-5 Task 8B, D-15) — the client
  * half of the pickup map's accent-colour pipeline — `groupByPosition()`
- * (Task 9, D-4), which folds co-located points into one map marker — and
+ * (Task 9, D-4), which folds co-located points into one map marker —
  * `distanceMeters()` / `formatDistance()` / `nearest()` / `boundsFor()`
- * (Task 10, D-6, D-12), the sidebar's distance math and locale-aware units.
+ * (Task 10, D-6, D-12), the sidebar's distance math and locale-aware units —
+ * and `matchPoints()` (Task 11, D-6), free-text search over the loaded pool.
  *
  * UMD-ish dual export (matches woodev-modal.js / pickup-datasource.js):
  *   - Browser global: window.WoodevPickupGeo = WoodevPickupGeo
@@ -344,6 +345,133 @@
 		return [ [ minLat, minLng ], [ maxLat, maxLng ] ];
 	}
 
+	/** @type {number} minimum query length (after trimming) that triggers a search. */
+	var MIN_QUERY_LENGTH = 3;
+
+	/**
+	 * A single detached element reused by `decodeEntities()`. Created once
+	 * (not per field, not per call) — only its `innerHTML` is written and
+	 * `textContent` read, it is never attached to the document.
+	 *
+	 * `null` outside a DOM environment (this file is required in that
+	 * position too, e.g. a future non-browser tool); `decodeEntities()`
+	 * degrades to returning the input unchanged rather than throwing.
+	 *
+	 * @type {HTMLElement|null}
+	 */
+	var decodeEl = 'undefined' !== typeof document ? document.createElement( 'div' ) : null;
+
+	/**
+	 * Decodes HTML entities in a string (`&quot;` -> `"`, etc.) via a
+	 * detached element's `innerHTML`/`textContent` round-trip — the same
+	 * technique the browser itself uses to interpret markup, so it is
+	 * correct for every entity the server can emit, not just a hand-picked
+	 * subset. A non-string or empty input decodes to `''`.
+	 *
+	 * @param {*} value
+	 * @returns {string}
+	 */
+	function decodeEntities( value ) {
+		if ( 'string' !== typeof value || 0 === value.length ) {
+			return '';
+		}
+
+		if ( ! decodeEl ) {
+			return value;
+		}
+
+		decodeEl.innerHTML = value;
+
+		return decodeEl.textContent || '';
+	}
+
+	/**
+	 * Per-point cache of decoded, lower-cased searchable fields, keyed by
+	 * point object identity. `matchPoints()` is called once per keystroke
+	 * over a pool that does not change between keystrokes, so decoding
+	 * every field of every point on every call would be a repeated
+	 * O(pool size) DOM round-trip for no new information — this cache
+	 * makes each point's fields decode exactly once for as long as that
+	 * point object is reused across calls (a fresh pool, e.g. after a
+	 * dataSource refetch, simply misses the cache and decodes again).
+	 *
+	 * `undefined` in a environment without `WeakMap` — `getDecodedFields()`
+	 * falls back to decoding on every call rather than throwing.
+	 *
+	 * @type {WeakMap|undefined}
+	 */
+	var decodedFieldsCache = 'undefined' !== typeof WeakMap ? new WeakMap() : undefined;
+
+	/**
+	 * Returns `point`'s decoded, lower-cased searchable fields, computing
+	 * and caching them on first use (see {@see decodedFieldsCache}).
+	 *
+	 * @param {Object} point
+	 * @returns {{name: string, address: string, shortAddress: string, instruction: string, postalCode: string}}
+	 */
+	function getDecodedFields( point ) {
+		if ( decodedFieldsCache && decodedFieldsCache.has( point ) ) {
+			return decodedFieldsCache.get( point );
+		}
+
+		var fields = {
+			name: decodeEntities( point.name ).toLowerCase(),
+			address: decodeEntities( point.address ).toLowerCase(),
+			shortAddress: decodeEntities( point.short_address ).toLowerCase(),
+			instruction: decodeEntities( point.instruction ).toLowerCase(),
+			postalCode: decodeEntities( point.postal_code ).toLowerCase(),
+		};
+
+		if ( decodedFieldsCache ) {
+			decodedFieldsCache.set( point, fields );
+		}
+
+		return fields;
+	}
+
+	/**
+	 * Filters `points` down to those matching free-text `query`, for the
+	 * search box's "matches from the already-loaded pool" section (spec
+	 * D-6). A query shorter than {@see MIN_QUERY_LENGTH} characters AFTER
+	 * trimming returns no results — 3 raw characters padded with spaces
+	 * must NOT match, and exactly 3 non-space characters must.
+	 *
+	 * Point fields arrive already `esc_html()`-escaped by the server (they
+	 * are written into `innerHTML` as-is by the panels), so a point named
+	 * `ПВЗ "Ромашка"` is carried as `ПВЗ &quot;Ромашка&quot;`. Matching the
+	 * raw escaped string would silently break both a search for the literal
+	 * quote character and one for a word next to the entity, so every
+	 * candidate field is decoded (see {@see decodeEntities}) before
+	 * comparison, never the other way around.
+	 *
+	 * `name`, `address`, `short_address` and `instruction` are matched as
+	 * case-insensitive substrings; `postal_code` is matched exactly (a
+	 * partial postal code is not a useful match on its own).
+	 *
+	 * @param {Array}  points normalized points, fields already `esc_html()`-escaped.
+	 * @param {string} query free-text query, not yet escaped.
+	 * @returns {Array} the matching points, in their original order.
+	 */
+	function matchPoints( points, query ) {
+		var trimmed = String( query || '' ).trim();
+
+		if ( trimmed.length < MIN_QUERY_LENGTH ) {
+			return [];
+		}
+
+		var needle = trimmed.toLowerCase();
+
+		return ( points || [] ).filter( function( point ) {
+			var fields = getDecodedFields( point );
+
+			return needle === fields.postalCode ||
+				fields.name.indexOf( needle ) !== -1 ||
+				fields.address.indexOf( needle ) !== -1 ||
+				fields.shortAddress.indexOf( needle ) !== -1 ||
+				fields.instruction.indexOf( needle ) !== -1;
+		} );
+	}
+
 	/**
 	 * @typedef {Object} WoodevPickupGeo
 	 * @property {function(*, string): string}          safeColor
@@ -353,6 +481,7 @@
 	 * @property {function(number, string): string}      formatDistance
 	 * @property {function(Array, number[], number): Array} nearest
 	 * @property {function(number[], Array): number[][]} boundsFor
+	 * @property {function(Array, string): Array}        matchPoints
 	 */
 
 	var WoodevPickupGeo = {
@@ -363,6 +492,7 @@
 		formatDistance: formatDistance,
 		nearest: nearest,
 		boundsFor: boundsFor,
+		matchPoints: matchPoints,
 	};
 
 	// -------------------------------------------------------------------------

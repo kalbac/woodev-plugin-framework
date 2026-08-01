@@ -3,8 +3,9 @@
  *
  * Covers `safeColor()` (rejects anything that is not a hex colour) and
  * `contrastFor()` (picks black/white text by luminance) — SP-5 Task 8B, D-15 —
- * `groupByPosition()` (Task 9, D-4), and `distanceMeters()` / `formatDistance()`
- * / `nearest()` / `boundsFor()` (Task 10, D-6, D-12).
+ * `groupByPosition()` (Task 9, D-4), `distanceMeters()` / `formatDistance()`
+ * / `nearest()` / `boundsFor()` (Task 10, D-6, D-12), and `matchPoints()`
+ * (Task 11, D-6).
  *
  * @see woodev/shipping-method/assets/js/frontend/pickup-geo.js
  */
@@ -19,6 +20,7 @@ const distanceMeters = WoodevPickupGeo.distanceMeters;
 const formatDistance = WoodevPickupGeo.formatDistance;
 const nearest = WoodevPickupGeo.nearest;
 const boundsFor = WoodevPickupGeo.boundsFor;
+const matchPoints = WoodevPickupGeo.matchPoints;
 
 test( 'rejects anything that is not a hex colour', () => {
 	expect( safeColor( 'red; } body {', '#06aedd' ) ).toBe( '#06aedd' );
@@ -335,5 +337,107 @@ describe( 'boundsFor', () => {
 		boundsFor( [ 55.75, 37.61 ], groups );
 
 		expect( groups ).toEqual( snapshot );
+	} );
+} );
+
+// -----------------------------------------------------------------------
+// matchPoints — Task 11, D-6
+// -----------------------------------------------------------------------
+
+const pool = [
+	{ id: '1', name: 'ПВЗ «Магнит»', address: 'Москва, Ленина 5', short_address: 'Ленина, 5',
+	  instruction: 'вход со двора', postal_code: '101000' },
+	{ id: '2', name: 'Постамат №4', address: 'Москва, Тверская 12', short_address: 'Тверская, 12',
+	  instruction: '', postal_code: '125009' },
+];
+
+describe( 'matchPoints', () => {
+	it( 'matches on the point name, case-insensitively', () => {
+		expect( matchPoints( pool, 'магнит' ).map( ( p ) => p.id ) ).toEqual( [ '1' ] );
+	} );
+
+	it( 'matches on the address', () => {
+		expect( matchPoints( pool, 'тверская' ).map( ( p ) => p.id ) ).toEqual( [ '2' ] );
+	} );
+
+	it( 'matches on the postal code exactly', () => {
+		expect( matchPoints( pool, '125009' ).map( ( p ) => p.id ) ).toEqual( [ '2' ] );
+	} );
+
+	it( 'matches on the how-to-get-there instruction', () => {
+		expect( matchPoints( pool, 'со двора' ).map( ( p ) => p.id ) ).toEqual( [ '1' ] );
+	} );
+
+	it( 'returns nothing for a blank or too-short query', () => {
+		expect( matchPoints( pool, '' ) ).toEqual( [] );
+		expect( matchPoints( pool, 'ул' ) ).toEqual( [] );
+	} );
+
+	it( 'ignores the HTML entities that server-side escaping introduces', () => {
+		const escaped = [ { id: '3', name: 'ПВЗ &quot;Ромашка&quot;', address: '', short_address: '',
+		                    instruction: '', postal_code: '' } ];
+
+		expect( matchPoints( escaped, 'ромашка' ).map( ( p ) => p.id ) ).toEqual( [ '3' ] );
+	} );
+
+	// --- Extra tests beyond the spec, closing mutation-sweep holes ---------
+
+	it( 'matches on short_address too, not only the full address', () => {
+		const short = [ { id: '4', name: 'ПВЗ', address: 'Не совпадёт', short_address: 'Арбат, 1',
+		                  instruction: '', postal_code: '' } ];
+
+		expect( matchPoints( short, 'арбат' ).map( ( p ) => p.id ) ).toEqual( [ '4' ] );
+	} );
+
+	it( 'requires a query of exactly 3 characters after trimming, not before', () => {
+		// 5 raw characters, only 2 non-space -- must still be rejected as too short,
+		// which only happens if the length check runs AFTER trim(), not before it.
+		expect( matchPoints( pool, '  ул  ' ) ).toEqual( [] );
+		// Exactly 3 non-space characters after trimming a padded query must match.
+		expect( matchPoints( pool, '  тве  ' ).map( ( p ) => p.id ) ).toEqual( [ '2' ] );
+	} );
+
+	it( 'treats a 3-character query as the minimum accepted length, not a lower bound that excludes it', () => {
+		expect( matchPoints( pool, 'тве' ).map( ( p ) => p.id ) ).toEqual( [ '2' ] );
+	} );
+
+	it( 'requires an EXACT postal-code match, not a substring one', () => {
+		expect( matchPoints( pool, '2500' ) ).toEqual( [] );
+	} );
+
+	it( 'does not cross-contaminate two points: a query unique to one never returns the other', () => {
+		const ids = matchPoints( pool, 'магнит' ).map( ( p ) => p.id );
+
+		expect( ids ).not.toContain( '2' );
+	} );
+
+	it( 'matches against unescaped, pre-decoded fields the same way as the escaped ones', () => {
+		// The decoding path must be a genuine no-op for a field with nothing to decode,
+		// not something that only works when an entity is actually present.
+		const plain = [ { id: '5', name: 'ПВЗ Ромашка', address: '', short_address: '',
+		                  instruction: '', postal_code: '' } ];
+
+		expect( matchPoints( plain, 'ромашка' ).map( ( p ) => p.id ) ).toEqual( [ '5' ] );
+	} );
+
+	it( 'decodes each field once and reuses it across calls, instead of re-decoding every keystroke', () => {
+		// A pool of FRESH objects, never seen by matchPoints() before this test, so the
+		// per-point decode cache is guaranteed empty going in.
+		const freshPool = [
+			{ id: '9', name: 'ПВЗ «Свежий»', address: 'Москва, Свежая 1', short_address: 'Свежая, 1',
+			  instruction: '', postal_code: '111111' },
+		];
+		const setter = jest.spyOn( Element.prototype, 'innerHTML', 'set' );
+
+		matchPoints( freshPool, 'свежий' );
+		const writesAfterFirstCall = setter.mock.calls.length;
+
+		matchPoints( freshPool, 'свежая' );
+		const writesAfterSecondCall = setter.mock.calls.length;
+
+		expect( writesAfterFirstCall ).toBeGreaterThan( 0 );
+		expect( writesAfterSecondCall ).toBe( writesAfterFirstCall );
+
+		setter.mockRestore();
 	} );
 } );
