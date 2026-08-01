@@ -2098,10 +2098,18 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				}
 			);
 
+			// D-13: the chrome stylesheet is registered ONCE, framework-side, by
+			// Woodev_Plugin::frontend_enqueue_scripts() — Pickup_Handler must never register it
+			// itself, only depend on it (checked below via woodev-pickup-styles' own deps).
+			Functions\expect( 'wp_register_style' )->never();
+
 			$styles = [];
 			Functions\when( 'wp_enqueue_style' )->alias(
 				static function ( $handle, $src, $deps, $ver ) use ( &$styles ) {
-					$styles[ $handle ] = $src;
+					$styles[ $handle ] = [
+						'src'  => $src,
+						'deps' => $deps,
+					];
 				}
 			);
 
@@ -2150,7 +2158,10 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			// pickup.css (SP-5 Task 15) exists on disk — see the method docblock above for
 			// why this flipped from an `expect( 'wp_enqueue_style' )->never()` expectation.
 			$this->assertArrayHasKey( 'woodev-pickup-styles', $styles );
-			$this->assertStringContainsString( 'pickup.css', $styles['woodev-pickup-styles'] );
+			$this->assertStringContainsString( 'pickup.css', $styles['woodev-pickup-styles']['src'] );
+			// D-13: declares the framework-registered chrome stylesheet as a dependency,
+			// exactly like the mount script's own 'woodev-modal' script dependency above.
+			$this->assertSame( [ 'woodev-modal' ], $styles['woodev-pickup-styles']['deps'] );
 
 			$this->assertCount( 1, $localized );
 			[ $handle, $object_name ] = $localized[0];
@@ -2175,10 +2186,15 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				}
 			);
 
+			Functions\expect( 'wp_register_style' )->never();
+
 			$styles = [];
 			Functions\when( 'wp_enqueue_style' )->alias(
 				static function ( $handle, $src, $deps, $ver ) use ( &$styles ) {
-					$styles[ $handle ] = $src;
+					$styles[ $handle ] = [
+						'src'  => $src,
+						'deps' => $deps,
+					];
 				}
 			);
 
@@ -2214,7 +2230,8 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			);
 
 			$this->assertArrayHasKey( 'woodev-pickup-styles', $styles );
-			$this->assertStringContainsString( 'pickup.css', $styles['woodev-pickup-styles'] );
+			$this->assertStringContainsString( 'pickup.css', $styles['woodev-pickup-styles']['src'] );
+			$this->assertSame( [ 'woodev-modal' ], $styles['woodev-pickup-styles']['deps'] );
 		}
 
 		public function test_enqueue_assets_localizes_the_config_onto_the_mount_handle_once_built(): void {

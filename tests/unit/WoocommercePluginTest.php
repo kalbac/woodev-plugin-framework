@@ -393,6 +393,9 @@ class WoocommercePluginTest extends TestCase {
 				$calls[] = [ 'handle' => $handle, 'src' => $src, 'deps' => $deps, 'ver' => $ver ];
 			}
 		);
+		// The method also registers the modal's chrome stylesheet (D-13) — irrelevant to this
+		// test's assertions, but the function must still be mocked or Brain Monkey errors out.
+		Functions\when( 'wp_register_style' )->justReturn( true );
 
 		$plugin->frontend_enqueue_scripts();
 
@@ -422,6 +425,76 @@ class WoocommercePluginTest extends TestCase {
 		// untouched — this test guards against the modal's addition breaking its neighbours.
 		$this->assertArrayHasKey( 'jquery-suggestions', $registered );
 		$this->assertArrayHasKey( 'woodev-dadata-suggestions', $registered );
+	}
+
+	/**
+	 * frontend_enqueue_scripts() must register the generic modal's CHROME STYLESHEET (D-13) the
+	 * same way it registers the script: framework-side, exactly once, resolving under the
+	 * FRAMEWORK's own assets path — never `shipping-method/`. `Pickup_Handler` (see
+	 * PickupHandlerTest) only ever DECLARES `woodev-modal` as a style dependency; this is the
+	 * one and only place that registers the handle. Unlike the script (versioned by
+	 * `self::VERSION`), the style is versioned by its own `filemtime()` — a CSS-only tweak must
+	 * bust the browser cache without a framework version bump (gotcha
+	 * wp-scripts-css-enqueue-version-by-mtime).
+	 *
+	 * @return void
+	 */
+	public function test_frontend_enqueue_scripts_registers_the_generic_modal_style_handle(): void {
+		$this->mock_wordpress_plugin_construction_functions();
+
+		$plugin = new Testable_Wordpress_Plugin( 'test-wordpress-plugin', '1.0.0' );
+
+		Functions\when( 'plugins_url' )->alias(
+			static function ( $path, $file ) {
+				$normalized = str_replace( '\\', '/', (string) $file );
+				$marker     = strpos( $normalized, '/woodev/' );
+				$relative   = false !== $marker ? substr( $normalized, $marker ) : $normalized;
+
+				return 'https://example.test/wp-content/plugins/x' . dirname( $relative ) . $path;
+			}
+		);
+
+		// Recorded as a LIST, not keyed by handle: a keyed map would let a second
+		// wp_register_style( 'woodev-modal', ... ) overwrite the first and go unnoticed, while
+		// D-13 requires the handle to be registered exactly once framework-side.
+		$calls = [];
+		Functions\when( 'wp_register_style' )->alias(
+			static function ( $handle, $src, $deps, $ver ) use ( &$calls ) {
+				$calls[] = [ 'handle' => $handle, 'src' => $src, 'deps' => $deps, 'ver' => $ver ];
+			}
+		);
+		// The method also registers the modal's script handle — irrelevant to this test's
+		// assertions, but the function must still be mocked or Brain Monkey errors out.
+		Functions\when( 'wp_register_script' )->justReturn( true );
+
+		$plugin->frontend_enqueue_scripts();
+
+		$registered = [];
+
+		foreach ( $calls as $call ) {
+			$registered[ $call['handle'] ] = $call;
+		}
+
+		$this->assertCount(
+			1,
+			array_filter( $calls, static fn( array $call ): bool => 'woodev-modal' === $call['handle'] ),
+			'The generic modal style handle must be registered exactly once.'
+		);
+		$this->assertArrayHasKey( 'woodev-modal', $registered );
+		$this->assertStringContainsString(
+			'/woodev/assets/css/frontend/woodev-modal.css',
+			$registered['woodev-modal']['src']
+		);
+		$this->assertStringNotContainsString( 'shipping-method', $registered['woodev-modal']['src'] );
+		$this->assertSame( [], $registered['woodev-modal']['deps'] );
+
+		$style_path = dirname( __DIR__, 2 ) . '/woodev/assets/css/frontend/woodev-modal.css';
+		$this->assertFileExists( $style_path, 'The chrome stylesheet created by this task must exist on disk.' );
+		$this->assertSame(
+			(string) filemtime( $style_path ),
+			$registered['woodev-modal']['ver'],
+			'Must be versioned by the stylesheet\'s own filemtime, not self::VERSION.'
+		);
 	}
 
 	/**

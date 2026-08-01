@@ -1,12 +1,16 @@
 /**
  * Woodev Pickup Picker — storefront styles (SP-5 Task 15).
  *
- * Styles the vanilla modal shell (`woodev-modal.js`, now framework-level — see
- * `woodev/assets/js/frontend/woodev-modal.js`), the trigger mounted into the §8 anchor
- * (`pickup-mount.js`), and everything the map providers draw inside the shell's body — the
- * Yandex provider's map, viewport-synced drawer, type filter and balloon
- * (`map-provider-yandex.js`), and the embedded provider's iframe
- * (`map-provider-embedded.js`).
+ * Styles the trigger mounted into the §8 anchor (`pickup-mount.js`) and everything the map
+ * providers draw INSIDE the generic modal shell's body — the Yandex provider's map,
+ * viewport-synced drawer, type filter and balloon (`map-provider-yandex.js`), and the
+ * embedded provider's iframe (`map-provider-embedded.js`).
+ *
+ * THE DIALOG CHROME ITSELF (the dimmed overlay, dialog frame, header, close button, scroll
+ * lock, the shell's own error/notice furniture) IS NOT HERE — it moved to
+ * `woodev/assets/css/frontend/woodev-modal.css`, registered once framework-side (D-13), for
+ * the same reason `woodev-modal.js` itself is framework-level: any subsystem that opens a
+ * `WoodevModal` needs that chrome, not just this one.
  *
  * PLAIN CSS, NO BUILD STEP. `Pickup_Handler::enqueue_assets()` enqueues this file directly
  * (and only when it exists on disk), so there is no preprocessor, no `@import`, no external
@@ -26,10 +30,14 @@
  * disagree on decoration, the theme wins by load order; where they disagree on layout, this
  * file states its value outright.
  *
- * EVERY COLOUR AND SPACING WORTH RETHEMING IS A CUSTOM PROPERTY on `.woodev-modal-backdrop`
- * and `.woodev-pickup-balloon` (the balloon is rendered by ymaps OUTSIDE the modal subtree, so
- * it cannot inherit from the backdrop — see its own block). A plugin retheme is a handful of
- * property overrides, not a rule rewrite.
+ * The custom properties referenced below (`var(--woodev-pickup-*, fallback)`) no longer have a
+ * declaring ancestor in this file — the dialog's dimmed overlay that used to declare them moved
+ * to `woodev-modal.css` as plain hardcoded chrome colours (D-13), so every reference here always
+ * resolves to its own fallback value now. `.woodev-pickup-balloon` is the one exception: it is
+ * rendered by ymaps in its own overlay layer OUTSIDE the modal subtree entirely, so it always had
+ * to (and still does) redeclare the full token set on itself — see its own block. Retheming via
+ * property override is therefore no longer live for anything except the balloon; Task 21's
+ * panel rewrite is expected to revisit this.
  *
  * @since 2.0.2
  */
@@ -45,197 +53,11 @@
 }
 
 /* -------------------------------------------------------------------------
- * Scroll lock — set on <body> while the modal is open.
- * ---------------------------------------------------------------------- */
-
-.woodev-modal-lock {
-	overflow: hidden;
-}
-
-/* -------------------------------------------------------------------------
- * Modal shell
- * ---------------------------------------------------------------------- */
-
-.woodev-modal-backdrop {
-	--woodev-pickup-bg: #fff;
-	--woodev-pickup-fg: #1e1e1e;
-	--woodev-pickup-muted: #646970;
-	--woodev-pickup-border: #dcdcde;
-	--woodev-pickup-accent: #06aedd;
-	--woodev-pickup-danger: #b32d2e;
-	--woodev-pickup-warning-bg: #fcf9e8;
-	--woodev-pickup-notice-bg: #f0f6fc;
-	--woodev-pickup-hover-bg: #f6f7f7;
-	--woodev-pickup-radius: 4px;
-	--woodev-pickup-gap: 16px;
-
-	position: fixed;
-	top: 0;
-	right: 0;
-	bottom: 0;
-	left: 0;
-	z-index: 999999;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	padding: 24px;
-	background: rgba(0, 0, 0, 0.6);
-	box-sizing: border-box;
-}
-
-.woodev-modal *,
-.woodev-modal *::before,
-.woodev-modal *::after {
-	box-sizing: border-box;
-}
-
-.woodev-modal__content {
-	display: flex;
-	flex-direction: column;
-	width: 100%;
-	max-width: 1100px;
-	/* Height is asserted, not derived: the map container inside the body must resolve to a
-	   real pixel height (see `.woodev-pickup-map`). A percentage chain that bottoms out in
-	   `height: auto` collapses the map to zero and renders a blank rectangle — the single
-	   most common way a map integration "silently breaks". */
-	height: 80vh;
-	max-height: 800px;
-	background: var(--woodev-pickup-bg);
-	color: var(--woodev-pickup-fg);
-	border-radius: var(--woodev-pickup-radius);
-	box-shadow: 0 6px 30px rgba(0, 0, 0, 0.3);
-	overflow: hidden;
-}
-
-.woodev-modal__header {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	flex: 0 0 auto;
-	gap: var(--woodev-pickup-gap);
-	padding: 12px 16px;
-	border-bottom: 1px solid var(--woodev-pickup-border);
-}
-
-.woodev-modal__title {
-	margin: 0;
-	padding: 0;
-	font-size: 18px;
-	line-height: 1.4;
-	font-weight: 600;
-	color: inherit;
-}
-
-.woodev-modal__close {
-	flex: 0 0 auto;
-	width: 36px;
-	height: 36px;
-	padding: 0;
-	font-size: 24px;
-	line-height: 1;
-	color: var(--woodev-pickup-muted);
-	background: none;
-	border: 1px solid transparent;
-	border-radius: var(--woodev-pickup-radius);
-	cursor: pointer;
-}
-
-.woodev-modal__close:hover {
-	background: var(--woodev-pickup-hover-bg);
-	color: var(--woodev-pickup-fg);
-}
-
-/* The provider's mount point. `position: relative` gives ymaps' absolutely-positioned
-   controls (drawer, filter, zoom) a containing block that is the map area, not the page. */
-.woodev-modal__body {
-	position: relative;
-	flex: 1 1 auto;
-	min-height: 0; /* Lets a flex child actually shrink, so the map scrolls instead of overflowing. */
-	overflow: auto;
-}
-
-/* -------------------------------------------------------------------------
- * Degradation states.
- *
- * `__message--error` / `--empty` REPLACE the body (nothing was drawn yet, so replacing costs
- * nothing). `__notice` is the non-destructive counterpart — a banner ABOVE the body, used once
- * points are already on screen, so a later failed viewport request never wipes a map the
- * customer has been panning. They must not look alike: the message states are centred and own
- * the whole area; the notice is a thin strip that visibly leaves the map intact. See spec §4.9
- * and `pickup-mount.js`'s degradation section.
- * ---------------------------------------------------------------------- */
-
-.woodev-modal__message {
-	display: block;
-	margin: 0;
-	padding: 48px 24px 12px;
-	text-align: center;
-	font-size: 15px;
-	line-height: 1.6;
-	color: var(--woodev-pickup-muted);
-}
-
-.woodev-modal__message--error {
-	color: var(--woodev-pickup-danger);
-}
-
-.woodev-modal__retry {
-	display: block;
-	margin: 0 auto 48px;
-	padding: 8px 16px;
-	font-size: 14px;
-	color: var(--woodev-pickup-fg);
-	background: var(--woodev-pickup-bg);
-	border: 1px solid var(--woodev-pickup-border);
-	border-radius: var(--woodev-pickup-radius);
-	cursor: pointer;
-}
-
-.woodev-modal__retry:hover {
-	background: var(--woodev-pickup-hover-bg);
-}
-
-.woodev-modal__notice {
-	display: flex;
-	align-items: center;
-	flex: 0 0 auto;
-	gap: 12px;
-	padding: 10px 16px;
-	font-size: 14px;
-	line-height: 1.5;
-	background: var(--woodev-pickup-notice-bg);
-	border-bottom: 1px solid var(--woodev-pickup-border);
-	border-left: 4px solid var(--woodev-pickup-accent);
-}
-
-.woodev-modal__notice-message {
-	flex: 1 1 auto;
-	margin: 0;
-}
-
-.woodev-modal__notice-retry,
-.woodev-modal__notice-dismiss {
-	flex: 0 0 auto;
-	padding: 4px 10px;
-	font-size: 13px;
-	color: var(--woodev-pickup-fg);
-	background: var(--woodev-pickup-bg);
-	border: 1px solid var(--woodev-pickup-border);
-	border-radius: var(--woodev-pickup-radius);
-	cursor: pointer;
-}
-
-.woodev-modal__notice-retry:hover,
-.woodev-modal__notice-dismiss:hover {
-	background: var(--woodev-pickup-hover-bg);
-}
-
-/* -------------------------------------------------------------------------
  * Map surface
  * ---------------------------------------------------------------------- */
 
 /* The ymaps map root. Explicit 100%/100% against a parent with a resolved height — see the
-   note on `.woodev-modal__content`. */
+   height note on the dialog frame's rule in `woodev-modal.css`. */
 .woodev-pickup-map {
 	width: 100%;
 	height: 100%;
@@ -387,8 +209,8 @@
 /* -------------------------------------------------------------------------
  * Balloon.
  *
- * ymaps renders the balloon into its OWN overlay layer, outside `.woodev-modal-backdrop`,
- * so it cannot inherit the custom properties declared there — it redeclares the ones it uses.
+ * ymaps renders the balloon into its OWN overlay layer, outside the dialog's DOM subtree
+ * entirely, so it cannot inherit any custom property from it — it redeclares the ones it uses.
  * ---------------------------------------------------------------------- */
 
 .woodev-pickup-balloon {
@@ -560,12 +382,10 @@
  *
  * The shell TRAPS focus, so focus is constantly moving inside the dialog — if it is not
  * visible, keyboard use is guesswork. `:focus-visible` keeps the ring off mouse clicks.
+ * The shell's OWN controls (close/retry/notice buttons) have their matching rule in
+ * `woodev-modal.css`; only this module's own interactive elements are listed here.
  * ---------------------------------------------------------------------- */
 
-.woodev-modal__close:focus-visible,
-.woodev-modal__retry:focus-visible,
-.woodev-modal__notice-retry:focus-visible,
-.woodev-modal__notice-dismiss:focus-visible,
 .woodev-pickup-drawer__item:focus-visible,
 .woodev-pickup-filter__item:focus-visible,
 .woodev-pickup-cluster-balloon__item:focus-visible,
@@ -585,18 +405,6 @@
  * ---------------------------------------------------------------------- */
 
 @media screen and (max-width: 782px) {
-
-	.woodev-modal-backdrop {
-		padding: 0;
-	}
-
-	.woodev-modal__content {
-		width: 100%;
-		max-width: none;
-		height: 100%;
-		max-height: none;
-		border-radius: 0;
-	}
 
 	.woodev-pickup-drawer--sheet {
 		position: absolute;

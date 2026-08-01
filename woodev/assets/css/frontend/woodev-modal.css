@@ -1,0 +1,249 @@
+/**
+ * Woodev Modal — generic dialog chrome (D-13).
+ *
+ * Styles ONLY the shell built by `woodev-modal.js`: backdrop, dialog frame, header, title,
+ * close button, body scroll area, and the generic error/empty/notice degradation furniture
+ * the shell itself renders (see `WoodevModal.prototype.showError/showEmpty/showNotice`).
+ *
+ * OWNERSHIP BOUNDARY: nothing in this file knows about pickup points, maps, or any other
+ * consumer's content. Everything a consumer mounts INSIDE `getContainer()` (`.woodev-modal__body`)
+ * is that consumer's own concern — see e.g. `woodev/shipping-method/assets/css/frontend/pickup.css`
+ * for the pickup map's own panels/markers/balloon. The test applied throughout: would a framework
+ * subsystem opening a `WoodevModal` with completely unrelated content need this rule? If yes, it
+ * lives here.
+ *
+ * Follows the WooCommerce `wc-backbone-modal` responsive pattern (same 782px breakpoint, same
+ * fixed + transform centering) — see
+ * `plugins-reference/woocommerce-yandex-delivery/assets/css/frontend/backbone-modal.css`.
+ * Deliberately flat/hardcoded colours: this file is consumed by every subsystem that opens a
+ * dialog, not just the pickup map, so it carries no pickup-prefixed theming tokens.
+ *
+ * PLAIN CSS, NO BUILD STEP — registered directly by `Woodev_Plugin::frontend_enqueue_scripts()`,
+ * versioned by its own `filemtime()` (not the JS bundle's hash — see gotcha
+ * `wp-scripts-css-enqueue-version-by-mtime`).
+ *
+ * @since 2.0.2
+ */
+
+.woodev-modal *,
+.woodev-modal *::before,
+.woodev-modal *::after {
+	box-sizing: border-box;
+}
+
+/* -------------------------------------------------------------------------
+ * Scroll lock — set on <body> while the modal is open (see SCROLL_LOCK_CLASS
+ * in woodev-modal.js).
+ * ---------------------------------------------------------------------- */
+
+.woodev-modal-lock {
+	overflow: hidden;
+}
+
+/* -------------------------------------------------------------------------
+ * Backdrop — the full-viewport dimmer. Same element also carries `.woodev-modal`,
+ * the root marker the box-sizing reset above and any consumer-side query hang off.
+ * ---------------------------------------------------------------------- */
+
+.woodev-modal-backdrop {
+	position: fixed;
+	inset: 0;
+	min-height: 360px;
+	z-index: 99900;
+	background: #000;
+	opacity: 0.7;
+}
+
+/* -------------------------------------------------------------------------
+ * Dialog frame.
+ *
+ * `height`/`max-height`/`overflow: hidden` plus the header/body flex split below are not
+ * in the plain WC reference (a simple form-sized WC modal has no need of them), but they
+ * are generic chrome all the same: ANY consumer whose content can be taller than the
+ * viewport needs a dialog that stops growing and a body that scrolls internally instead —
+ * not just the pickup map. Without a resolved height here, `.woodev-modal__body`'s height
+ * is `auto`, and a consumer relying on `height: 100%` inside it (the pickup map does)
+ * collapses to zero — the classic "silently blank" failure.
+ * ---------------------------------------------------------------------- */
+
+.woodev-modal__content {
+	position: fixed;
+	left: 50%;
+	top: 50%;
+	transform: translate( -50%, -50% );
+	z-index: 100000;
+	display: flex;
+	flex-direction: column;
+	width: 100%;
+	height: 80vh;
+	background: #fff;
+	color: #1e1e1e;
+	max-width: 100%;
+	min-width: 920px;
+	max-height: 800px;
+	border-radius: 4px;
+	box-shadow: 0 6px 30px rgba( 0, 0, 0, 0.3 );
+	overflow: hidden;
+}
+
+.woodev-modal__header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	flex: 0 0 auto;
+	padding: 5px 10px;
+	background: #fcfcfc;
+	border-bottom: 1px solid #ddd;
+}
+
+.woodev-modal__title {
+	margin: 0;
+	padding: 0;
+	font-size: 18px;
+	font-weight: 700;
+	line-height: 1.5em;
+	color: inherit;
+}
+
+.woodev-modal__close {
+	flex: 0 0 auto;
+	height: 38px;
+	width: 38px;
+	padding: 0;
+	border: 0;
+	border-left: 1px solid #ddd;
+	background-color: transparent;
+	color: #777;
+	cursor: pointer;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	transition: color 0.1s ease-in-out, background 0.1s ease-in-out;
+}
+
+.woodev-modal__close:hover,
+.woodev-modal__close:focus {
+	background: #ddd;
+	border-color: #ccc;
+	color: #000;
+}
+
+.woodev-modal__close:focus {
+	outline: none;
+}
+
+/* The provider's mount point. `position: relative` gives absolutely-positioned children
+   (a map's controls, for instance) a containing block that is the body area, not the page. */
+.woodev-modal__body {
+	display: block;
+	position: relative;
+	flex: 1 1 auto;
+	min-height: 0; /* Lets a flex child actually shrink, so content scrolls instead of overflowing. */
+	overflow: auto;
+}
+
+/* -------------------------------------------------------------------------
+ * Degradation states — rendered by the shell itself (showError/showEmpty/showNotice),
+ * not by any consumer, so they are chrome regardless of what a consumer mounts.
+ *
+ * `__message` (with its `--error`/`--empty` modifiers) REPLACES the body — nothing was
+ * drawn yet, so replacing costs nothing. `__notice` is the non-destructive counterpart, a
+ * banner ABOVE the body, so a later failure never wipes content the consumer already drew.
+ * ---------------------------------------------------------------------- */
+
+.woodev-modal__message {
+	display: block;
+	margin: 0;
+	padding: 48px 24px 12px;
+	text-align: center;
+	font-size: 15px;
+	line-height: 1.6;
+	color: #646970;
+}
+
+.woodev-modal__message--error {
+	color: #b32d2e;
+}
+
+.woodev-modal__retry {
+	display: block;
+	margin: 0 auto 48px;
+	padding: 8px 16px;
+	font-size: 14px;
+	color: #1e1e1e;
+	background: #fff;
+	border: 1px solid #dcdcde;
+	border-radius: 4px;
+	cursor: pointer;
+}
+
+.woodev-modal__retry:hover {
+	background: #f6f7f7;
+}
+
+.woodev-modal__notice {
+	display: flex;
+	align-items: center;
+	flex: 0 0 auto;
+	gap: 12px;
+	padding: 10px 16px;
+	font-size: 14px;
+	line-height: 1.5;
+	background: #f0f6fc;
+	border-bottom: 1px solid #dcdcde;
+	border-left: 4px solid #06aedd;
+}
+
+.woodev-modal__notice-message {
+	flex: 1 1 auto;
+	margin: 0;
+}
+
+.woodev-modal__notice-retry,
+.woodev-modal__notice-dismiss {
+	flex: 0 0 auto;
+	padding: 4px 10px;
+	font-size: 13px;
+	color: #1e1e1e;
+	background: #fff;
+	border: 1px solid #dcdcde;
+	border-radius: 4px;
+	cursor: pointer;
+}
+
+.woodev-modal__notice-retry:hover,
+.woodev-modal__notice-dismiss:hover {
+	background: #f6f7f7;
+}
+
+/* -------------------------------------------------------------------------
+ * Focus visibility — the shell traps focus, so focus is constantly moving inside the
+ * dialog; if it is not visible, keyboard use is guesswork. `:focus-visible` keeps the
+ * ring off mouse clicks. Only the shell's OWN interactive elements are covered here — a
+ * consumer's own controls (e.g. the pickup map's drawer/filter/balloon items) keep their
+ * focus-visible rules in the consumer's own stylesheet.
+ * ---------------------------------------------------------------------- */
+
+.woodev-modal__close:focus-visible,
+.woodev-modal__retry:focus-visible,
+.woodev-modal__notice-retry:focus-visible,
+.woodev-modal__notice-dismiss:focus-visible {
+	outline: 2px solid #06aedd;
+	outline-offset: 1px;
+}
+
+/* -------------------------------------------------------------------------
+ * Mobile — 782px, the WordPress breakpoint (also used by pickup.css, so the feature has
+ * one breakpoint, not two).
+ * ---------------------------------------------------------------------- */
+
+@media screen and ( max-width: 782px ) {
+
+	.woodev-modal__content {
+		width: 100%;
+		height: 100%;
+		min-width: 100%;
+		max-height: none;
+		border-radius: 0;
+	}
+}

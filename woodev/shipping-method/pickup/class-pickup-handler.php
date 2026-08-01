@@ -600,23 +600,24 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		/**
 		 * Enqueues the picker's frontend assets on the checkout page.
 		 *
-		 * Registers handles for JS files owned by SP-5 tasks — the dataSource
-		 * (`pickup-datasource.js`, Task 11), the mount script (`pickup-mount.js`, Task 12)
-		 * and the active provider's script (`map-provider-{$provider}.js`, Tasks 13/14)
-		 * have all LANDED; only the stylesheet (`pickup.css`, Task 15) has NOT. (The modal
-		 * shell, `woodev-modal.js`, is a framework-level asset since the pickup-map
-		 * presentation rework's Task 1 moved it out of this module entirely — it is
-		 * registered ONCE, framework-side, by {@see \Woodev_Plugin::frontend_enqueue_scripts()};
-		 * this method only ever lists `woodev-modal` as a dependency, same as any other
-		 * subsystem that needs a dialog would, never re-registers it.) That
-		 * still-pending file is skipped
-		 * entirely via {@see self::enqueue_style_if_built()}'s {@see self::asset_exists()}
-		 * check rather than enqueueing a `href` that will 404 — a missing style tag is
-		 * invisible, but a 404ing one next to fully wired JS is a live checkout regression
-		 * waiting for Task 15 to land. The mount config is therefore localized only when
-		 * the mount script itself was actually enqueued (it now always is, since every one
-		 * of its declared dependencies — including the provider handle — is a registered
-		 * handle as of this fix; see
+		 * Registers handles for JS/CSS files owned by SP-5 tasks — the dataSource
+		 * (`pickup-datasource.js`, Task 11), the mount script (`pickup-mount.js`, Task 12),
+		 * the active provider's script (`map-provider-{$provider}.js`, Tasks 13/14) and the
+		 * pickup panels' own stylesheet (`pickup.css`, Task 15). Any of these is still skipped
+		 * entirely via {@see self::enqueue_style_if_built()}/{@see self::enqueue_script_if_built()}'s
+		 * {@see self::asset_exists()} check rather than enqueueing a `href`/`src` that would
+		 * 404 — a missing tag is invisible, but a 404ing one next to fully wired assets is a
+		 * live checkout regression. (The modal shell — `woodev-modal.js` AND its chrome
+		 * stylesheet `woodev-modal.css` — is a framework-level asset pair since the pickup-map
+		 * presentation rework's Tasks 1/3 moved both out of this module entirely; each is
+		 * registered ONCE, framework-side, by {@see \Woodev_Plugin::frontend_enqueue_scripts()}
+		 * under the shared `woodev-modal` handle (scripts and styles are separate WP registries,
+		 * so the shared name is not a collision). This method only ever lists `woodev-modal` as
+		 * a script/style dependency, same as any other subsystem that needs a dialog would,
+		 * never re-registers it.) The mount config is therefore localized only when the mount
+		 * script itself was actually enqueued (it now always is, since every one of its
+		 * declared dependencies — including the provider handle — is a registered handle as of
+		 * this fix; see
 		 * {@see PickupHandlerTest::test_enqueue_assets_enqueues_only_the_assets_already_built()}).
 		 *
 		 * @internal
@@ -648,7 +649,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 				[ 'jquery', 'woodev-modal', 'woodev-pickup-datasource', $provider_handle ]
 			);
 
-			$this->enqueue_style_if_built( 'woodev-pickup-styles', 'css/frontend/pickup.css' );
+			// `woodev-modal`: the framework-registered chrome stylesheet (D-13) — declared as a
+			// dependency here, exactly like the mount script does above, never re-registered.
+			$this->enqueue_style_if_built( 'woodev-pickup-styles', 'css/frontend/pickup.css', [ 'woodev-modal' ] );
 
 			if ( $mount_enqueued ) {
 				wp_localize_script(
@@ -687,19 +690,22 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 *
 		 * @since 2.0.2
 		 *
-		 * @param string $handle   the style handle to register.
-		 * @param string $relative path relative to the assets directory.
+		 * @param string   $handle   the style handle to register.
+		 * @param string   $relative path relative to the assets directory.
+		 * @param string[] $deps     style dependencies — e.g. the framework-registered
+		 *                           `woodev-modal` chrome stylesheet (D-13). Never re-registers
+		 *                           a dependency handle, only declares it; see class docblock.
 		 *
 		 * @return bool true when the style was enqueued; false when its file is missing.
 		 */
-		private function enqueue_style_if_built( string $handle, string $relative ): bool {
+		private function enqueue_style_if_built( string $handle, string $relative, array $deps = [] ): bool {
 			$path = self::asset_path( $relative );
 
 			if ( ! static::asset_exists( $path ) ) {
 				return false;
 			}
 
-			wp_enqueue_style( $handle, self::asset_url( $relative ), [], self::asset_version( $path ) );
+			wp_enqueue_style( $handle, self::asset_url( $relative ), $deps, self::asset_version( $path ) );
 
 			return true;
 		}
