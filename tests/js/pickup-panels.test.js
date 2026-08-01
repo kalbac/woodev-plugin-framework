@@ -225,9 +225,21 @@ it( 'toggles closed again on a second call, with open:false in the event', () =>
 // Task 13: the point card, with services and CTA states
 // -----------------------------------------------------------------------
 
+// The checkbox `change` event (Task 16's type filter) only fires from a real
+// `.click()` when the element is connected to `document` — jsdom's default
+// activation behaviour toggles `.checked` either way, but skips dispatching
+// `change` for a detached tree. `mount()` therefore attaches `panels.root` to
+// `document.body`; `afterEach` below sweeps it back out so one test's nodes
+// never leak into the next (every assertion still scopes its own lookups to
+// `panels.root`, never a bare `document.querySelector`).
+afterEach( () => {
+	document.body.innerHTML = '';
+} );
+
 function mount( cfg ) {
 	const panels = new Panels( document.createElement( 'div' ), cfg );
 	panels.render();
+	document.body.appendChild( panels.root );
 
 	return panels;
 }
@@ -668,7 +680,7 @@ it( 'a real click on the reset control clears the anchor and restores the plain 
 	expect( panels.root.querySelector( '.woodev-pickup-list__reset' ) ).toBeNull();
 } );
 
-it( 'a lone address argument without setAnchor never turns on the search header (single-arg callers unaffected)', () => {
+it( 'a lone anchor argument without a label never turns on the search header (single-arg callers unaffected)', () => {
 	const panels = mount( searchConfig );
 	panels.setAnchor( [ 55.75, 37.61 ] );
 
@@ -710,7 +722,8 @@ it( 'renders the exact section labels from sectionPoints/sectionAddresses, not h
 
 	expect( panels.root.querySelector( '.woodev-pickup-search__section--points .woodev-pickup-search__section-title' )
 		.textContent ).toBe( 'Пункты выдачи' );
-	expect( panels.root.querySelector( '.woodev-pickup-search__section--addresses .woodev-pickup-search__section-title' )
+	expect( panels.root
+		.querySelector( '.woodev-pickup-search__section--addresses .woodev-pickup-search__section-title' )
 		.textContent ).toBe( 'Адреса' );
 } );
 
@@ -720,7 +733,8 @@ it( 'renders blank section labels, not a hardcoded default, when sectionPoints/s
 
 	expect( panels.root.querySelector( '.woodev-pickup-search__section--points .woodev-pickup-search__section-title' )
 		.textContent ).toBe( '' );
-	expect( panels.root.querySelector( '.woodev-pickup-search__section--addresses .woodev-pickup-search__section-title' )
+	expect( panels.root
+		.querySelector( '.woodev-pickup-search__section--addresses .woodev-pickup-search__section-title' )
 		.textContent ).toBe( '' );
 } );
 
@@ -749,4 +763,143 @@ it( 'emits showNearestRequested with the same info when the show-nearest button 
 	panels.root.querySelector( '.woodev-pickup-list__nothing-nearby button' ).click();
 
 	expect( seen ).toEqual( [ { distanceMeters: 87000, name: 'ПВЗ «Магнит»' } ] );
+} );
+
+// -----------------------------------------------------------------------
+// Task 16: the type filter menu (D-10)
+// -----------------------------------------------------------------------
+
+const filterConfig = { lang: 'ru_RU', i18n: {
+	drawerTitle: 'Пункты выдачи в этой области', emptyInView: 'В этой области пунктов выдачи нет',
+	filterTypes: 'Тип пунктов',
+} };
+
+it( 'does not render the filter until a second type appears', () => {
+	const panels = mount( filterConfig );
+	panels.setTypes( [ { code: 'pvz', label: 'ПВЗ' } ] );
+
+	expect( panels.root.querySelector( '.woodev-pickup-filter' ) ).toBeNull();
+} );
+
+it( 'renders one checkbox per type, all checked, once there are two', () => {
+	const panels = mount( filterConfig );
+	panels.setTypes( [ { code: 'pvz', label: 'ПВЗ' }, { code: 'postamat', label: 'Постамат' } ] );
+
+	const boxes = [ ...panels.root.querySelectorAll( '.woodev-pickup-filter__checkbox' ) ];
+
+	expect( boxes ).toHaveLength( 2 );
+	expect( boxes.every( ( b ) => b.checked ) ).toBe( true );
+} );
+
+it( 'never disappears again once shown', () => {
+	const panels = mount( filterConfig );
+	panels.setTypes( [ { code: 'pvz', label: 'ПВЗ' }, { code: 'postamat', label: 'Постамат' } ] );
+	panels.setTypes( [ { code: 'pvz', label: 'ПВЗ' } ] );
+
+	expect( panels.root.querySelector( '.woodev-pickup-filter' ) ).not.toBeNull();
+} );
+
+it( 'refuses to uncheck the last checked type', () => {
+	const panels = mount( filterConfig );
+	panels.setTypes( [ { code: 'pvz', label: 'ПВЗ' }, { code: 'postamat', label: 'Постамат' } ] );
+
+	const boxes = [ ...panels.root.querySelectorAll( '.woodev-pickup-filter__checkbox' ) ];
+	boxes[ 0 ].click();
+	boxes[ 1 ].click();
+
+	expect( boxes[ 1 ].checked ).toBe( true );
+} );
+
+it( 'shows the badge only when the selection is partial', () => {
+	const panels = mount( filterConfig );
+	panels.setTypes( [ { code: 'pvz', label: 'ПВЗ' }, { code: 'postamat', label: 'Постамат' } ] );
+
+	expect( panels.root.querySelector( '.woodev-pickup-filter__badge' ) ).toBeNull();
+
+	panels.root.querySelectorAll( '.woodev-pickup-filter__checkbox' )[ 0 ].click();
+
+	expect( panels.root.querySelector( '.woodev-pickup-filter__badge' ).textContent ).toBe( '1' );
+} );
+
+it( 'emits the selected codes on change', () => {
+	const seen = [];
+	const panels = mount( filterConfig );
+	panels.on( 'typeFilterChange', ( codes ) => seen.push( codes ) );
+	panels.setTypes( [ { code: 'pvz', label: 'ПВЗ' }, { code: 'postamat', label: 'Постамат' } ] );
+	panels.root.querySelectorAll( '.woodev-pickup-filter__checkbox' )[ 0 ].click();
+
+	expect( seen ).toEqual( [ [ 'postamat' ] ] );
+} );
+
+// -----------------------------------------------------------------------
+// Extra coverage beyond the plan's own spec — see the task report for which
+// mutation each one kills.
+// -----------------------------------------------------------------------
+
+it( 'never emits typeFilterChange when the last-checked uncheck is refused', () => {
+	const seen = [];
+	const panels = mount( filterConfig );
+	panels.on( 'typeFilterChange', ( codes ) => seen.push( codes ) );
+	panels.setTypes( [ { code: 'pvz', label: 'ПВЗ' }, { code: 'postamat', label: 'Постамат' } ] );
+
+	const boxes = [ ...panels.root.querySelectorAll( '.woodev-pickup-filter__checkbox' ) ];
+	boxes[ 0 ].click();
+	seen.length = 0;
+	boxes[ 1 ].click();
+
+	expect( seen ).toHaveLength( 0 );
+} );
+
+it( 'keeps both checkboxes present after a later call reports only one type, not shrinking the list', () => {
+	const panels = mount( filterConfig );
+	panels.setTypes( [ { code: 'pvz', label: 'ПВЗ' }, { code: 'postamat', label: 'Постамат' } ] );
+	panels.setTypes( [ { code: 'pvz', label: 'ПВЗ' } ] );
+
+	const codes = [ ...panels.root.querySelectorAll( '.woodev-pickup-filter__checkbox' ) ]
+		.map( ( b ) => b.dataset.code );
+
+	expect( codes ).toEqual( [ 'pvz', 'postamat' ] );
+} );
+
+it( 'shows the exact partial count (not the excluded count) for a 2-of-3 selection', () => {
+	const panels = mount( filterConfig );
+	panels.setTypes( [
+		{ code: 'pvz', label: 'ПВЗ' }, { code: 'postamat', label: 'Постамат' }, { code: 'locker', label: 'Локер' },
+	] );
+
+	panels.root.querySelectorAll( '.woodev-pickup-filter__checkbox' )[ 0 ].click();
+
+	expect( panels.root.querySelector( '.woodev-pickup-filter__badge' ).textContent ).toBe( '2' );
+} );
+
+it( 'shows the filter title from the filterTypes i18n key', () => {
+	const panels = mount( filterConfig );
+	panels.setTypes( [ { code: 'pvz', label: 'ПВЗ' }, { code: 'postamat', label: 'Постамат' } ] );
+
+	expect( panels.root.querySelector( '.woodev-pickup-filter__title' ).textContent ).toBe( 'Тип пунктов' );
+} );
+
+it( 'renders blank, not a hardcoded default, filter title when filterTypes is missing', () => {
+	const panels = mount( withoutI18nKey( filterConfig, 'filterTypes' ) );
+	panels.setTypes( [ { code: 'pvz', label: 'ПВЗ' }, { code: 'postamat', label: 'Постамат' } ] );
+
+	expect( panels.root.querySelector( '.woodev-pickup-filter__title' ).textContent ).toBe( '' );
+} );
+
+it( 'renders escaped type labels (not double-escaped) in the checkbox rows', () => {
+	const panels = mount( filterConfig );
+	panels.setTypes( [
+		{ code: 'pvz', label: 'ПВЗ &quot;А&quot;' }, { code: 'postamat', label: 'Постамат' },
+	] );
+
+	const labels = [ ...panels.root.querySelectorAll( '.woodev-pickup-filter__label' ) ].map( ( l ) => l.textContent );
+
+	expect( labels ).toEqual( [ 'ПВЗ "А"', 'Постамат' ] );
+} );
+
+it( 'ignores a type whose code is missing/non-string rather than crashing or rendering a blank row', () => {
+	const panels = mount( filterConfig );
+	panels.setTypes( [ { code: 'pvz', label: 'ПВЗ' }, { label: 'no code' }, { code: 'postamat', label: 'Постамат' } ] );
+
+	expect( panels.root.querySelectorAll( '.woodev-pickup-filter__checkbox' ) ).toHaveLength( 2 );
 } );

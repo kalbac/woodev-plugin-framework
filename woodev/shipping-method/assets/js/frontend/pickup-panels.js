@@ -87,6 +87,20 @@
  * distance and offers to show it anyway, rather than leaving the customer to
  * conclude there are no points at all.
  *
+ * THE TYPE FILTER (Task 16, D-10): `setTypes( types )` accumulates distinct
+ * `{ code, label }` pairs FIRST-SEEN across every call and renders the
+ * checkbox menu once a SECOND distinct type has ever been seen — and, once
+ * shown, the menu never disappears again, even if a later call reports only
+ * one type (a momentary single-type viewport must not flicker the control
+ * away). The last CHECKED type cannot be unchecked (the Yandex reference's
+ * own rule): the click is silently refused — the checkbox is reverted and no
+ * `typeFilterChange` fires — because an empty selection would read to the
+ * customer as "no pickup points exist". The count badge shows only while the
+ * selection is PARTIAL (never for "all selected", never as a plain type
+ * count) and carries the number of types currently SELECTED. `typeFilterChange`
+ * carries the selected codes; whether that becomes a client-side filter or a
+ * server refetch is the caller's decision (Task 20), not this file's.
+ *
  * UMD-ish dual export (matches every sibling SP-5 frontend file):
  *   - Browser global: window.WoodevPickupPanels = Panels
  *   - CommonJS:       module.exports = Panels  (for jest)
@@ -839,6 +853,124 @@
 	}
 
 	// -------------------------------------------------------------------------
+	// Type filter menu (Task 16, D-10)
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Rebuilds the filter's checkbox rows from `self._filterOrder` — every
+	 * type ever seen, in first-seen order, never fewer even when the LATEST
+	 * `setTypes()` call reported only some of them (see the file docblock's
+	 * "THE TYPE FILTER" note). Only the `.woodev-pickup-filter__row` elements
+	 * are torn down and rebuilt here — the title and badge are separate,
+	 * longer-lived children of `self._filterEl` and are left alone.
+	 *
+	 * `label` is the same already-escaped shape a point's `type.label` is
+	 * elsewhere in this file (it originates from the very same field), so it
+	 * is written via `innerHTML` here too, not `textContent`.
+	 *
+	 * @param {Panels} self
+	 * @returns {void}
+	 */
+	function renderFilterRows( self ) {
+		var rows = self._filterEl.querySelectorAll( '.woodev-pickup-filter__row' );
+
+		Array.prototype.forEach.call( rows, function( row ) {
+			row.parentNode.removeChild( row );
+		} );
+
+		self._filterOrder.forEach( function( code ) {
+			var row = document.createElement( 'label' );
+			row.className = 'woodev-pickup-filter__row';
+
+			var checkbox = document.createElement( 'input' );
+			checkbox.type = 'checkbox';
+			checkbox.className = 'woodev-pickup-filter__checkbox';
+			checkbox.checked = Boolean( self._filterSelected[ code ] );
+			checkbox.dataset.code = code;
+			checkbox.addEventListener( 'change', function() {
+				handleFilterCheckboxChange( self, code, checkbox );
+			} );
+
+			var labelEl = document.createElement( 'span' );
+			labelEl.className = 'woodev-pickup-filter__label';
+			labelEl.innerHTML = fieldValue( self._filterLabels[ code ] ); // eslint-disable-line -- server-escaped.
+
+			row.appendChild( checkbox );
+			row.appendChild( labelEl );
+			self._filterEl.appendChild( row );
+		} );
+	}
+
+	/**
+	 * Shows or hides the partial-selection count badge: present only while
+	 * the selection is PARTIAL (strictly fewer selected types than known
+	 * types) — never for "all selected" (there would be nothing to call out)
+	 * and never as a plain count of types (spec). Its text is the number of
+	 * types CURRENTLY SELECTED, not the number excluded.
+	 *
+	 * @param {Panels} self
+	 * @returns {void}
+	 */
+	function updateFilterBadge( self ) {
+		var selectedCount = self._filterOrder.filter( function( code ) {
+			return Boolean( self._filterSelected[ code ] );
+		} ).length;
+
+		if ( selectedCount < self._filterOrder.length ) {
+			self._badgeEl.textContent = String( selectedCount );
+
+			if ( ! self._badgeEl.parentNode ) {
+				self._filterEl.insertBefore( self._badgeEl, self._filterEl.firstChild );
+			}
+
+			return;
+		}
+
+		if ( self._badgeEl.parentNode ) {
+			self._badgeEl.parentNode.removeChild( self._badgeEl );
+		}
+	}
+
+	/**
+	 * Handles one checkbox's native `change` event.
+	 *
+	 * Refuses to leave the selection empty: unchecking the LAST currently
+	 * selected type reverts the checkbox back to checked and returns without
+	 * emitting `typeFilterChange` — silently re-checking the box is the
+	 * Yandex reference's own rule (see the file docblock), because an empty
+	 * selection would read to the customer as "there are no pickup points
+	 * at all". Every other change is accepted, updates the badge, and emits
+	 * the full list of currently selected codes.
+	 *
+	 * @param {Panels}       self
+	 * @param {string}       code
+	 * @param {HTMLInputElement} checkbox
+	 * @returns {void}
+	 */
+	function handleFilterCheckboxChange( self, code, checkbox ) {
+		if ( ! checkbox.checked ) {
+			var stillSelected = self._filterOrder.some( function( otherCode ) {
+				return otherCode !== code && Boolean( self._filterSelected[ otherCode ] );
+			} );
+
+			if ( ! stillSelected ) {
+				checkbox.checked = true;
+
+				return;
+			}
+		}
+
+		self._filterSelected[ code ] = checkbox.checked;
+		updateFilterBadge( self );
+
+		var selected = self._filterOrder.filter( function( otherCode ) {
+			return Boolean( self._filterSelected[ otherCode ] );
+		} );
+
+		self._emit( 'typeFilterChange', selected );
+	}
+
+	// -------------------------------------------------------------------------
 	// Panels constructor
 	// -------------------------------------------------------------------------
 
@@ -858,6 +990,14 @@
 		this._activeGroup = null;
 		this._activeIndex = 0;
 		this._listeners = {};
+
+		// Task 16: the type filter menu accumulates first-seen types across
+		// every `setTypes()` call and never forgets one — see the file
+		// docblock's "THE TYPE FILTER" note.
+		this._filterOrder = [];
+		this._filterLabels = {};
+		this._filterSelected = {};
+		this._filterShown = false;
 
 		this.root = null;
 	}
@@ -939,6 +1079,21 @@
 		var search = document.createElement( 'div' );
 		search.className = 'woodev-pickup-search';
 
+		// Task 16: the type filter menu — title always present once the
+		// element itself is attached; rows/badge are (re)built by
+		// `setTypes()`/`updateFilterBadge()`. Not attached to `list` until
+		// a second distinct type has ever been seen (see the file docblock).
+		var filter = document.createElement( 'div' );
+		filter.className = 'woodev-pickup-filter';
+
+		var filterTitle = document.createElement( 'div' );
+		filterTitle.className = 'woodev-pickup-filter__title';
+		filterTitle.textContent = text( this._config, 'filterTypes' );
+		filter.appendChild( filterTitle );
+
+		var badge = document.createElement( 'span' );
+		badge.className = 'woodev-pickup-filter__badge';
+
 		list.appendChild( header );
 		list.appendChild( toggle );
 		list.appendChild( body );
@@ -959,6 +1114,8 @@
 		this._cardEl = card;
 		this._resetEl = reset;
 		this._searchEl = search;
+		this._filterEl = filter;
+		this._badgeEl = badge;
 
 		var self = this;
 		toggle.addEventListener( 'click', function() {
@@ -1111,6 +1268,51 @@
 		wrap.appendChild( button );
 
 		this._listBodyEl.appendChild( wrap );
+	};
+
+	/**
+	 * Reports the point types currently known to the caller (Task 16, D-10).
+	 * Accumulates every distinct `{ code, label }` pair FIRST-SEEN across
+	 * every call — a type once seen is never forgotten, even when a later
+	 * call reports fewer — and shows the filter once a SECOND distinct type
+	 * has ever been seen. Once shown, the filter is never detached again
+	 * (see the file docblock's "THE TYPE FILTER" note). A newly-seen type
+	 * defaults to selected; a type already known keeps its current selection
+	 * state across repeated calls.
+	 *
+	 * @param {Array} types `{ code, label }` pairs.
+	 * @returns {void}
+	 */
+	Panels.prototype.setTypes = function( types ) {
+		var self = this;
+
+		( types || [] ).forEach( function( type ) {
+			if ( ! type || 'string' !== typeof type.code ) {
+				return;
+			}
+
+			if ( ! Object.prototype.hasOwnProperty.call( self._filterLabels, type.code ) ) {
+				self._filterOrder.push( type.code );
+				self._filterSelected[ type.code ] = true;
+			}
+
+			self._filterLabels[ type.code ] = type.label;
+		} );
+
+		if ( ! self._filterShown && self._filterOrder.length >= 2 ) {
+			self._filterShown = true;
+		}
+
+		if ( ! self._filterShown ) {
+			return;
+		}
+
+		if ( ! self._filterEl.parentNode ) {
+			self._listEl.appendChild( self._filterEl );
+		}
+
+		renderFilterRows( self );
+		updateFilterBadge( self );
 	};
 
 	/**
