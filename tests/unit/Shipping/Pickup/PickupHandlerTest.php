@@ -2087,8 +2087,20 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			Functions\when( 'rest_url' )->justReturn( 'https://example.test/wp-json/woodev/v1' );
 			Functions\when( 'wp_create_nonce' )->justReturn( 'NONCE' );
 			Functions\when( 'wc_ship_to_billing_address_only' )->justReturn( false );
+			// Echoes back $file's own directory (normalized to forward slashes and anchored at
+			// "/woodev/") rather than discarding it — a mutant that resolved `woodev-modal` from
+			// the SHIPPING module's own assets dir (i.e. registered it via
+			// `enqueue_script_if_built()` instead of the new `enqueue_framework_script_if_built()`)
+			// would still produce a URL containing "woodev-modal.js", but under
+			// ".../shipping-method/assets/..." rather than ".../woodev/assets/...".
 			Functions\when( 'plugins_url' )->alias(
-				static fn( $path, $file ) => 'https://example.test/wp-content/plugins/x/' . $path
+				static function ( $path, $file ) {
+					$normalized = str_replace( '\\', '/', (string) $file );
+					$marker     = strpos( $normalized, '/woodev/' );
+					$relative   = false !== $marker ? substr( $normalized, $marker ) : $normalized;
+
+					return 'https://example.test/wp-content/plugins/x' . dirname( $relative ) . '/' . $path;
+				}
 			);
 
 			$scripts = [];
@@ -2121,8 +2133,18 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			$handler->enqueue_assets();
 
 			$this->assertArrayHasKey( 'woodev-modal', $scripts );
-			$this->assertStringContainsString( 'woodev-modal.js', $scripts['woodev-modal']['src'] );
+			$this->assertStringContainsString(
+				'/woodev/assets/js/frontend/woodev-modal.js',
+				$scripts['woodev-modal']['src']
+			);
+			// The registration must resolve under the FRAMEWORK's own assets root, never the
+			// shipping module's — see enqueue_framework_script_if_built()'s own docblock.
+			$this->assertStringNotContainsString( 'shipping-method', $scripts['woodev-modal']['src'] );
 			$this->assertSame( [], $scripts['woodev-modal']['deps'] );
+			// The OLD handle must be gone entirely, not merely superseded — a mutant that kept
+			// registering `woodev-pickup-modal` ALONGSIDE the new `woodev-modal` handle would
+			// otherwise pass every assertion above unnoticed.
+			$this->assertArrayNotHasKey( 'woodev-pickup-modal', $scripts );
 
 			$this->assertArrayHasKey( 'woodev-pickup-datasource', $scripts );
 			$this->assertStringContainsString( 'pickup-datasource.js', $scripts['woodev-pickup-datasource']['src'] );
@@ -2160,8 +2182,16 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			Functions\when( 'rest_url' )->justReturn( 'https://example.test/wp-json/woodev/v1' );
 			Functions\when( 'wp_create_nonce' )->justReturn( 'NONCE' );
 			Functions\when( 'wc_ship_to_billing_address_only' )->justReturn( false );
+			// See test_enqueue_assets_enqueues_only_the_assets_already_built()'s own docblock for
+			// why $file is echoed back rather than discarded.
 			Functions\when( 'plugins_url' )->alias(
-				static fn( $path, $file ) => 'https://example.test/wp-content/plugins/x/' . $path
+				static function ( $path, $file ) {
+					$normalized = str_replace( '\\', '/', (string) $file );
+					$marker     = strpos( $normalized, '/woodev/' );
+					$relative   = false !== $marker ? substr( $normalized, $marker ) : $normalized;
+
+					return 'https://example.test/wp-content/plugins/x' . dirname( $relative ) . '/' . $path;
+				}
 			);
 
 			$scripts = [];
@@ -2189,7 +2219,12 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			$handler->enqueue_assets();
 
 			$this->assertArrayHasKey( 'woodev-modal', $scripts );
-			$this->assertStringContainsString( 'woodev-modal.js', $scripts['woodev-modal']['src'] );
+			$this->assertStringContainsString(
+				'/woodev/assets/js/frontend/woodev-modal.js',
+				$scripts['woodev-modal']['src']
+			);
+			$this->assertStringNotContainsString( 'shipping-method', $scripts['woodev-modal']['src'] );
+			$this->assertArrayNotHasKey( 'woodev-pickup-modal', $scripts );
 
 			$this->assertArrayHasKey( 'woodev-pickup-datasource', $scripts );
 			$this->assertStringContainsString( 'pickup-datasource.js', $scripts['woodev-pickup-datasource']['src'] );

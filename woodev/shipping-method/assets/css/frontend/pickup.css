@@ -26,7 +26,7 @@
  * disagree on decoration, the theme wins by load order; where they disagree on layout, this
  * file states its value outright.
  *
- * EVERY COLOUR AND SPACING WORTH RETHEMING IS A CUSTOM PROPERTY on `.woodev-pickup-modal-backdrop`
+ * EVERY COLOUR AND SPACING WORTH RETHEMING IS A CUSTOM PROPERTY on `.woodev-modal-backdrop`
  * and `.woodev-pickup-balloon` (the balloon is rendered by ymaps OUTSIDE the modal subtree, so
  * it cannot inherit from the backdrop — see its own block). A plugin retheme is a handful of
  * property overrides, not a rule rewrite.
@@ -48,7 +48,7 @@
  * Scroll lock — set on <body> while the modal is open.
  * ---------------------------------------------------------------------- */
 
-.woodev-pickup-modal-lock {
+.woodev-modal-lock {
 	overflow: hidden;
 }
 
@@ -56,7 +56,7 @@
  * Modal shell
  * ---------------------------------------------------------------------- */
 
-.woodev-pickup-modal-backdrop {
+.woodev-modal-backdrop {
 	--woodev-pickup-bg: #fff;
 	--woodev-pickup-fg: #1e1e1e;
 	--woodev-pickup-muted: #646970;
@@ -83,13 +83,13 @@
 	box-sizing: border-box;
 }
 
-.woodev-pickup-modal-backdrop *,
-.woodev-pickup-modal-backdrop *::before,
-.woodev-pickup-modal-backdrop *::after {
+.woodev-modal *,
+.woodev-modal *::before,
+.woodev-modal *::after {
 	box-sizing: border-box;
 }
 
-.woodev-pickup-modal {
+.woodev-modal__content {
 	display: flex;
 	flex-direction: column;
 	width: 100%;
@@ -107,7 +107,7 @@
 	overflow: hidden;
 }
 
-.woodev-pickup-modal__header {
+.woodev-modal__header {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
@@ -117,7 +117,7 @@
 	border-bottom: 1px solid var(--woodev-pickup-border);
 }
 
-.woodev-pickup-modal__title {
+.woodev-modal__title {
 	margin: 0;
 	padding: 0;
 	font-size: 18px;
@@ -126,7 +126,7 @@
 	color: inherit;
 }
 
-.woodev-pickup-modal__close {
+.woodev-modal__close {
 	flex: 0 0 auto;
 	width: 36px;
 	height: 36px;
@@ -140,14 +140,14 @@
 	cursor: pointer;
 }
 
-.woodev-pickup-modal__close:hover {
+.woodev-modal__close:hover {
 	background: var(--woodev-pickup-hover-bg);
 	color: var(--woodev-pickup-fg);
 }
 
 /* The provider's mount point. `position: relative` gives ymaps' absolutely-positioned
    controls (drawer, filter, zoom) a containing block that is the map area, not the page. */
-.woodev-pickup-modal__body {
+.woodev-modal__body {
 	position: relative;
 	flex: 1 1 auto;
 	min-height: 0; /* Lets a flex child actually shrink, so the map scrolls instead of overflowing. */
@@ -165,7 +165,7 @@
  * and `pickup-mount.js`'s degradation section.
  * ---------------------------------------------------------------------- */
 
-.woodev-pickup-modal__message {
+.woodev-modal__message {
 	display: block;
 	margin: 0;
 	padding: 48px 24px 12px;
@@ -175,11 +175,11 @@
 	color: var(--woodev-pickup-muted);
 }
 
-.woodev-pickup-modal__message--error {
+.woodev-modal__message--error {
 	color: var(--woodev-pickup-danger);
 }
 
-.woodev-pickup-modal__retry {
+.woodev-modal__retry {
 	display: block;
 	margin: 0 auto 48px;
 	padding: 8px 16px;
@@ -191,11 +191,11 @@
 	cursor: pointer;
 }
 
-.woodev-pickup-modal__retry:hover {
+.woodev-modal__retry:hover {
 	background: var(--woodev-pickup-hover-bg);
 }
 
-.woodev-pickup-modal__notice {
+.woodev-modal__notice {
 	display: flex;
 	align-items: center;
 	flex: 0 0 auto;
@@ -208,13 +208,13 @@
 	border-left: 4px solid var(--woodev-pickup-accent);
 }
 
-.woodev-pickup-modal__notice-message {
+.woodev-modal__notice-message {
 	flex: 1 1 auto;
 	margin: 0;
 }
 
-.woodev-pickup-modal__notice-retry,
-.woodev-pickup-modal__notice-dismiss {
+.woodev-modal__notice-retry,
+.woodev-modal__notice-dismiss {
 	flex: 0 0 auto;
 	padding: 4px 10px;
 	font-size: 13px;
@@ -225,8 +225,8 @@
 	cursor: pointer;
 }
 
-.woodev-pickup-modal__notice-retry:hover,
-.woodev-pickup-modal__notice-dismiss:hover {
+.woodev-modal__notice-retry:hover,
+.woodev-modal__notice-dismiss:hover {
 	background: var(--woodev-pickup-hover-bg);
 }
 
@@ -235,7 +235,7 @@
  * ---------------------------------------------------------------------- */
 
 /* The ymaps map root. Explicit 100%/100% against a parent with a resolved height — see the
-   note on `.woodev-pickup-modal`. */
+   note on `.woodev-modal__content`. */
 .woodev-pickup-map {
 	width: 100%;
 	height: 100%;
@@ -387,7 +387,7 @@
 /* -------------------------------------------------------------------------
  * Balloon.
  *
- * ymaps renders the balloon into its OWN overlay layer, outside `.woodev-pickup-modal-backdrop`,
+ * ymaps renders the balloon into its OWN overlay layer, outside `.woodev-modal-backdrop`,
  * so it cannot inherit the custom properties declared there — it redeclares the ones it uses.
  * ---------------------------------------------------------------------- */
 
@@ -407,7 +407,7 @@
 	   top of the map and is unreadable. Verified on the rig — the balloon pane contains only
 	   an overlay wrapper and this root. */
 	/* `box-sizing` is set HERE, not inherited. The reset above is scoped to
-	   `.woodev-pickup-modal-backdrop *`, and ymaps renders the balloon into its own overlay
+	   `.woodev-modal *`, and ymaps renders the balloon into its own overlay
 	   layer OUTSIDE that subtree — so without this the padding and border are added OUTSIDE
 	   the `max-width` below, and the panel can exceed the viewport on a narrow screen while
 	   appearing to obey a 90vw cap. */
@@ -562,10 +562,10 @@
  * visible, keyboard use is guesswork. `:focus-visible` keeps the ring off mouse clicks.
  * ---------------------------------------------------------------------- */
 
-.woodev-pickup-modal__close:focus-visible,
-.woodev-pickup-modal__retry:focus-visible,
-.woodev-pickup-modal__notice-retry:focus-visible,
-.woodev-pickup-modal__notice-dismiss:focus-visible,
+.woodev-modal__close:focus-visible,
+.woodev-modal__retry:focus-visible,
+.woodev-modal__notice-retry:focus-visible,
+.woodev-modal__notice-dismiss:focus-visible,
 .woodev-pickup-drawer__item:focus-visible,
 .woodev-pickup-filter__item:focus-visible,
 .woodev-pickup-cluster-balloon__item:focus-visible,
@@ -586,11 +586,11 @@
 
 @media screen and (max-width: 782px) {
 
-	.woodev-pickup-modal-backdrop {
+	.woodev-modal-backdrop {
 		padding: 0;
 	}
 
-	.woodev-pickup-modal {
+	.woodev-modal__content {
 		width: 100%;
 		max-width: none;
 		height: 100%;

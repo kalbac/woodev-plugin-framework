@@ -34,7 +34,7 @@
 	var idSeq = 0;
 
 	/** @type {string} class toggled on <body> while any instance is open. */
-	var SCROLL_LOCK_CLASS = 'woodev-pickup-modal-lock';
+	var SCROLL_LOCK_CLASS = 'woodev-modal-lock';
 
 	/** @type {string} selector for elements the focus trap considers tabbable. */
 	var FOCUSABLE_SELECTOR = [
@@ -59,33 +59,37 @@
 	 */
 	function buildDom( self ) {
 		idSeq += 1;
-		var titleId = 'woodev-pickup-modal-title-' + idSeq;
+		var titleId = 'woodev-modal-title-' + idSeq;
 
+		// `woodev-modal` is the shell's ROOT marker — the ancestor every descendant's
+		// box-sizing reset and any consumer-side `.woodev-modal` query hang off — while
+		// `woodev-modal-backdrop` styles this SAME node as the fixed, full-screen overlay.
+		// One element, two roles, both real classes on it (see woodev-modal.css, D-13).
 		var backdrop = document.createElement( 'div' );
-		backdrop.className = 'woodev-pickup-modal-backdrop';
+		backdrop.className = 'woodev-modal woodev-modal-backdrop';
 
 		var dialog = document.createElement( 'div' );
-		dialog.className = 'woodev-pickup-modal';
+		dialog.className = 'woodev-modal__content';
 		dialog.setAttribute( 'role', 'dialog' );
 		dialog.setAttribute( 'aria-modal', 'true' );
 		dialog.setAttribute( 'aria-labelledby', titleId );
 
 		var header = document.createElement( 'div' );
-		header.className = 'woodev-pickup-modal__header';
+		header.className = 'woodev-modal__header';
 
 		var title = document.createElement( 'h2' );
 		title.id = titleId;
-		title.className = 'woodev-pickup-modal__title';
+		title.className = 'woodev-modal__title';
 		title.textContent = self._title;
 
 		var closeButton = document.createElement( 'button' );
 		closeButton.type = 'button';
-		closeButton.className = 'woodev-pickup-modal__close';
+		closeButton.className = 'woodev-modal__close';
 		closeButton.setAttribute( 'aria-label', self._closeLabel );
 		closeButton.textContent = '×'; // '×' — decorative, aria-label carries the meaning.
 
 		var body = document.createElement( 'div' );
-		body.className = 'woodev-pickup-modal__body';
+		body.className = 'woodev-modal__body';
 
 		header.appendChild( title );
 		header.appendChild( closeButton );
@@ -206,7 +210,7 @@
 		self._body.innerHTML = ''; // safe: clears children only, no untrusted markup is inserted.
 
 		var p = document.createElement( 'p' );
-		p.className = 'woodev-pickup-modal__message ' + modifierClass;
+		p.className = 'woodev-modal__message ' + modifierClass;
 		p.textContent = message;
 		self._body.appendChild( p );
 
@@ -332,12 +336,12 @@
 			return;
 		}
 
-		renderMessage( this, message, 'woodev-pickup-modal__message--error' );
+		renderMessage( this, message, 'woodev-modal__message--error' );
 
 		if ( typeof onRetry === 'function' ) {
 			var retryButton = document.createElement( 'button' );
 			retryButton.type = 'button';
-			retryButton.className = 'woodev-pickup-modal__retry';
+			retryButton.className = 'woodev-modal__retry';
 			retryButton.textContent = this._retryLabel;
 			retryButton.addEventListener( 'click', onRetry );
 			this._body.appendChild( retryButton );
@@ -357,7 +361,7 @@
 			return;
 		}
 
-		renderMessage( this, message, 'woodev-pickup-modal__message--empty' );
+		renderMessage( this, message, 'woodev-modal__message--empty' );
 	};
 
 	/**
@@ -388,18 +392,18 @@
 		dismissNotice( this );
 
 		var notice = document.createElement( 'div' );
-		notice.className = 'woodev-pickup-modal__notice';
+		notice.className = 'woodev-modal__notice';
 		notice.setAttribute( 'role', 'alert' );
 
 		var text = document.createElement( 'span' );
-		text.className = 'woodev-pickup-modal__notice-message';
+		text.className = 'woodev-modal__notice-message';
 		text.textContent = message;
 		notice.appendChild( text );
 
 		if ( typeof onRetry === 'function' ) {
 			var retryButton = document.createElement( 'button' );
 			retryButton.type = 'button';
-			retryButton.className = 'woodev-pickup-modal__notice-retry';
+			retryButton.className = 'woodev-modal__notice-retry';
 			retryButton.textContent = this._retryLabel;
 			retryButton.addEventListener( 'click', onRetry );
 			notice.appendChild( retryButton );
@@ -408,7 +412,7 @@
 		var self = this;
 		var dismissButton = document.createElement( 'button' );
 		dismissButton.type = 'button';
-		dismissButton.className = 'woodev-pickup-modal__notice-dismiss';
+		dismissButton.className = 'woodev-modal__notice-dismiss';
 		dismissButton.setAttribute( 'aria-label', this._closeLabel );
 		dismissButton.textContent = '×'; // '×' — decorative, aria-label carries the meaning.
 		dismissButton.addEventListener( 'click', function() {

@@ -46,6 +46,24 @@ test( 'open() renders a dialog with the aria contract', () => {
 	modal.destroy();
 } );
 
+test( 'open() carries the D-13 BEM class contract: root, backdrop, and content box', () => {
+	const modal = new WoodevModal( { title: 'T' } );
+	modal.open();
+
+	// `.woodev-modal` is the shell's ROOT marker — Task 2's event surface and Task 3's
+	// woodev-modal.css box-sizing reset both hang off it, so it must be queryable on the
+	// same node that also carries the overlay's own `.woodev-modal-backdrop` class.
+	const root = document.querySelector( '.woodev-modal' );
+	expect( root ).not.toBeNull();
+	expect( root.classList.contains( 'woodev-modal-backdrop' ) ).toBe( true );
+
+	const dialog = document.querySelector( '[role="dialog"]' );
+	expect( dialog.classList.contains( 'woodev-modal__content' ) ).toBe( true );
+	expect( root.contains( dialog ) ).toBe( true );
+
+	modal.destroy();
+} );
+
 test( 'Escape closes it', () => {
 	const modal = new WoodevModal( { title: 'T' } );
 	modal.open();
@@ -135,7 +153,7 @@ test( 'showNotice() renders a banner ALONGSIDE the body, never replacing its con
 	const dialog = document.querySelector( '[role="dialog"]' );
 	expect( dialog.textContent ).toContain( 'Не удалось обновить пункты выдачи' );
 
-	const notice = dialog.querySelector( '.woodev-pickup-modal__notice' );
+	const notice = dialog.querySelector( '.woodev-modal__notice' );
 	expect( notice ).not.toBeNull();
 	expect( container.contains( notice ) ).toBe( false ); // sibling of the body, not a child
 
@@ -147,10 +165,10 @@ test( 'showNotice() with no onRetry renders no retry control (the empty-after-dr
 	modal.open();
 	modal.showNotice( 'Пункты выдачи не найдены в этой области' );
 
-	const notice = document.querySelector( '.woodev-pickup-modal__notice' );
-	expect( notice.querySelector( '.woodev-pickup-modal__notice-retry' ) ).toBeNull();
+	const notice = document.querySelector( '.woodev-modal__notice' );
+	expect( notice.querySelector( '.woodev-modal__notice-retry' ) ).toBeNull();
 	// Still has its own dismiss control.
-	expect( notice.querySelector( '.woodev-pickup-modal__notice-dismiss' ) ).not.toBeNull();
+	expect( notice.querySelector( '.woodev-modal__notice-dismiss' ) ).not.toBeNull();
 
 	modal.destroy();
 } );
@@ -162,7 +180,7 @@ test( 'showNotice() retry control invokes the callback', () => {
 	const onRetry = jest.fn();
 	modal.showNotice( 'Ошибка обновления', onRetry );
 
-	const retryBtn = document.querySelector( '.woodev-pickup-modal__notice-retry' );
+	const retryBtn = document.querySelector( '.woodev-modal__notice-retry' );
 	expect( retryBtn ).not.toBeNull();
 	expect( retryBtn.textContent ).toBe( 'Повторить' );
 
@@ -180,10 +198,10 @@ test( 'showNotice() dismiss control removes the banner without touching the body
 	modal.open();
 	modal.showNotice( 'Что-то пошло не так' );
 
-	const dismissBtn = document.querySelector( '.woodev-pickup-modal__notice-dismiss' );
+	const dismissBtn = document.querySelector( '.woodev-modal__notice-dismiss' );
 	dismissBtn.dispatchEvent( new MouseEvent( 'click', { bubbles: true } ) );
 
-	expect( document.querySelector( '.woodev-pickup-modal__notice' ) ).toBeNull();
+	expect( document.querySelector( '.woodev-modal__notice' ) ).toBeNull();
 	expect( container.children.length ).toBe( 1 ); // the pre-existing content is untouched
 
 	modal.destroy();
@@ -196,7 +214,7 @@ test( 'showNotice() called twice replaces the first banner rather than stacking 
 	modal.showNotice( 'Первое сообщение' );
 	modal.showNotice( 'Второе сообщение' );
 
-	const notices = document.querySelectorAll( '.woodev-pickup-modal__notice' );
+	const notices = document.querySelectorAll( '.woodev-modal__notice' );
 	expect( notices.length ).toBe( 1 );
 	expect( notices[ 0 ].textContent ).toContain( 'Второе сообщение' );
 
@@ -277,13 +295,13 @@ test( 'Shift+Tab wraps backward from the first focusable element to the last', (
 
 test( 'body gets a scroll-lock class while open, removed on close', () => {
 	const modal = new WoodevModal( { title: 'T' } );
-	expect( document.body.className ).not.toMatch( /woodev-pickup-modal-lock/ );
+	expect( document.body.className ).not.toMatch( /woodev-modal-lock/ );
 
 	modal.open();
-	expect( document.body.className ).toMatch( /woodev-pickup-modal-lock/ );
+	expect( document.body.className ).toMatch( /woodev-modal-lock/ );
 
 	modal.close();
-	expect( document.body.className ).not.toMatch( /woodev-pickup-modal-lock/ );
+	expect( document.body.className ).not.toMatch( /woodev-modal-lock/ );
 
 	modal.destroy();
 } );
@@ -310,7 +328,7 @@ test( 'destroy() removes the node and every listener it owns', () => {
 
 	expect( document.querySelector( '[role="dialog"]' ) ).toBeNull();
 	expect( document.body.contains( backdrop ) ).toBe( false );
-	expect( document.body.className ).not.toMatch( /woodev-pickup-modal-lock/ );
+	expect( document.body.className ).not.toMatch( /woodev-modal-lock/ );
 
 	// A subsequent Escape must be a no-op — no document-level listener survives.
 	document.dispatchEvent( new KeyboardEvent( 'keydown', { key: 'Escape', bubbles: true } ) );
@@ -326,7 +344,7 @@ test( 'destroy() removes the close-button click listener too', () => {
 	const modal = new WoodevModal( { title: 'T' } );
 	modal.open();
 
-	const closeButton = document.querySelector( '.woodev-pickup-modal__close' );
+	const closeButton = document.querySelector( '.woodev-modal__close' );
 	modal.destroy();
 
 	// Detect whether the listener created at construction time is still

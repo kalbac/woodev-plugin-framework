@@ -687,8 +687,8 @@ test( 'a genuinely empty result (nothing drawn yet) shows the EMPTY state, not t
 
 	const dialog = document.querySelector( '[role="dialog"]' );
 	expect( dialog.textContent ).toContain( 'Пункты выдачи не найдены' );
-	expect( dialog.querySelector( '.woodev-pickup-modal__message--error' ) ).toBeNull();
-	expect( dialog.querySelector( '.woodev-pickup-modal__message--empty' ) ).not.toBeNull();
+	expect( dialog.querySelector( '.woodev-modal__message--error' ) ).toBeNull();
+	expect( dialog.querySelector( '.woodev-modal__message--empty' ) ).not.toBeNull();
 } );
 
 test( 'a non-empty result shows neither the error nor the empty state', async () => {
@@ -701,8 +701,8 @@ test( 'a non-empty result shows neither the error nor the empty state', async ()
 	await StubProvider.instances[ 0 ].pending;
 
 	const dialog = document.querySelector( '[role="dialog"]' );
-	expect( dialog.querySelector( '.woodev-pickup-modal__message--error' ) ).toBeNull();
-	expect( dialog.querySelector( '.woodev-pickup-modal__message--empty' ) ).toBeNull();
+	expect( dialog.querySelector( '.woodev-modal__message--error' ) ).toBeNull();
+	expect( dialog.querySelector( '.woodev-modal__message--empty' ) ).toBeNull();
 } );
 
 // -------------------------------------------------------------------------
@@ -744,8 +744,8 @@ test( 'once a set is drawn, a SUBSEQUENT empty result shows a NOTICE, keeping th
 	await StubProvider.instances[ 0 ].dataSource.fetchPoints( {} );
 
 	expect( dialog.querySelector( '.drawn-map-marker' ) ).not.toBeNull(); // still there!
-	expect( dialog.querySelector( '.woodev-pickup-modal__message--empty' ) ).toBeNull();
-	expect( dialog.querySelector( '.woodev-pickup-modal__notice' ) ).not.toBeNull();
+	expect( dialog.querySelector( '.woodev-modal__message--empty' ) ).toBeNull();
+	expect( dialog.querySelector( '.woodev-modal__notice' ) ).not.toBeNull();
 	expect( dialog.textContent ).toContain( 'Пункты выдачи не найдены' );
 } );
 
@@ -786,15 +786,15 @@ test( 'once a set is drawn, a SUBSEQUENT error shows a NOTICE with retry, keepin
 	await StubProvider.instances[ 0 ].dataSource.fetchPoints( {} ).catch( () => {} );
 
 	expect( dialog.querySelector( '.drawn-map-marker' ) ).not.toBeNull(); // still there!
-	expect( dialog.querySelector( '.woodev-pickup-modal__message--error' ) ).toBeNull();
-	const notice = dialog.querySelector( '.woodev-pickup-modal__notice' );
+	expect( dialog.querySelector( '.woodev-modal__message--error' ) ).toBeNull();
+	const notice = dialog.querySelector( '.woodev-modal__notice' );
 	expect( notice ).not.toBeNull();
 	expect( notice.textContent ).toContain( 'Сервис пунктов выдачи временно недоступен' );
 
 	// Retry on the notice destroys the OLD provider and builds a fresh one — never
 	// re-init()s the live instance.
 	const oldProvider = StubProvider.instances[ 0 ];
-	const retryButton = notice.querySelector( '.woodev-pickup-modal__notice-retry' );
+	const retryButton = notice.querySelector( '.woodev-modal__notice-retry' );
 	expect( retryButton ).not.toBeNull();
 
 	shouldFail = false;
@@ -814,8 +814,8 @@ test( 'BEFORE anything is drawn, an error still uses the destructive showError (
 	provider.emit( 'error', { status: 502, code: 'woodev_pickup_upstream_error', message: 'x' } );
 
 	const dialog = document.querySelector( '[role="dialog"]' );
-	expect( dialog.querySelector( '.woodev-pickup-modal__message--error' ) ).not.toBeNull();
-	expect( dialog.querySelector( '.woodev-pickup-modal__notice' ) ).toBeNull();
+	expect( dialog.querySelector( '.woodev-modal__message--error' ) ).not.toBeNull();
+	expect( dialog.querySelector( '.woodev-modal__notice' ) ).toBeNull();
 } );
 
 test( 'a provider-emitted error retry destroys the old provider and constructs a fresh one, never re-init()ing', () => {
@@ -829,7 +829,7 @@ test( 'a provider-emitted error retry destroys the old provider and constructs a
 	const dialog = document.querySelector( '[role="dialog"]' );
 	expect( dialog.textContent ).toContain( 'Слишком много запросов' );
 
-	const retryButton = dialog.querySelector( '.woodev-pickup-modal__retry' );
+	const retryButton = dialog.querySelector( '.woodev-modal__retry' );
 	expect( retryButton ).not.toBeNull();
 	retryButton.dispatchEvent( new MouseEvent( 'click', { bubbles: true } ) );
 
