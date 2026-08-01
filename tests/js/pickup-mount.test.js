@@ -597,6 +597,50 @@ test( 'the provider config merges mapConfig with strategy, i18n, and the resolve
 	} );
 } );
 
+test( 'the BULK points query carries the live locality, not just the type filter', async () => {
+	// The bug this pins shipped green: the bulk fetch sent only `{ types }`, so the server
+	// got a query naming neither a locality nor a bbox, correctly refused it, and the
+	// customer saw an empty map in a city full of points — with no error anywhere. Found on
+	// the rig, invisible to every test in this file at the time.
+	const queries = [];
+	window.WoodevPickupDataSource = fakeDataSourceFactory( ( query ) => {
+		queries.push( query );
+
+		return Promise.resolve( [] );
+	} );
+
+	setConfig( makeConfig( { strategy: 'bulk' } ) );
+	mountAll();
+	setCitySelectValue( 'billing_city', 'Москва' );
+
+	clickTrigger();
+	await flushAsync();
+
+	expect( queries ).toHaveLength( 1 );
+	expect( queries[ 0 ].locality ).toBe( 'Москва' );
+} );
+
+test( 'refresh() re-reads the city, so a locality changed while the map is open is used', async () => {
+	const queries = [];
+	window.WoodevPickupDataSource = fakeDataSourceFactory( ( query ) => {
+		queries.push( query );
+
+		return Promise.resolve( [] );
+	} );
+
+	setConfig( makeConfig( { strategy: 'bulk' } ) );
+	mountAll();
+	setCitySelectValue( 'billing_city', 'Москва' );
+
+	clickTrigger();
+	await flushAsync();
+
+	setCitySelectValue( 'billing_city', 'Казань' );
+	await getSession( FIELD_ID ).refresh();
+
+	expect( queries.map( ( q ) => q.locality ) ).toEqual( [ 'Москва', 'Казань' ] );
+} );
+
 test( 'locality is resolved against the LIVE ship-to-different-address target, not billing unconditionally', () => {
 	const config = makeConfig( { replaceAddress: { enabled: true, billingOnly: false } } );
 	setConfig( config );

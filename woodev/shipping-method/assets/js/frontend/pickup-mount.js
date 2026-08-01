@@ -633,15 +633,35 @@
 	 * @returns {Object}
 	 */
 	function buildProviderConfig( config ) {
-		var target = resolveAddressTarget( config );
-		var cityField = document.getElementById( target + '_city' );
-		var locality = cityField && 'string' === typeof cityField.value ? cityField.value : '';
-
 		return shallowMerge( config.mapConfig || {}, {
 			strategy: config.strategy,
 			i18n: config.i18n,
-			locality: locality,
+			locality: resolveLocality( config ),
 		} );
+	}
+
+	/**
+	 * Reads the customer's CURRENT city off the resolved address target.
+	 *
+	 * Live on every call, never cached: the customer can edit the city field or tick "ship to
+	 * a different address" after the page rendered, and `refresh()` exists precisely so a
+	 * stale answer is never reused. Returns `''`, never `undefined`, when the field is absent
+	 * or blank — a provider reads that as "no known locality" and degrades, rather than having
+	 * to guard against a missing key.
+	 *
+	 * Both the provider config AND the bulk points query read through here, and that is the
+	 * point: the bulk strategy addresses its query by locality, so the two answers must come
+	 * from one place. They did not once — the bulk fetch omitted the locality entirely and the
+	 * server, given a query naming neither a locality nor a bbox, correctly returned nothing.
+	 * The customer saw an empty map in a city full of points, with no error anywhere.
+	 *
+	 * @param {Object} config the full mount config (`window.woodev_pickup_config_*`).
+	 * @returns {string}
+	 */
+	function resolveLocality( config ) {
+		var cityField = document.getElementById( resolveAddressTarget( config ) + '_city' );
+
+		return cityField && 'string' === typeof cityField.value ? cityField.value : '';
 	}
 
 	/**
@@ -941,6 +961,21 @@
 		 * @returns {Promise<Array>} the built groups, or a rejection already fully handled
 		 *                           (shown to the customer) by this function itself.
 		 */
+		/**
+		 * Builds the BULK strategy's points query.
+		 *
+		 * Bulk addresses its query by locality — there is no bbox yet when it runs, and
+		 * `Point_Query` refuses a request naming neither. The locality is read LIVE on every
+		 * call rather than captured once at open time, so `refresh()` (which exists exactly
+		 * because the customer can change things while the map is open) re-reads a city they
+		 * edited since.
+		 *
+		 * @returns {Object}
+		 */
+		function bulkQuery() {
+			return { locality: resolveLocality( config ), types: currentTypeFilter };
+		}
+
 		function fetchAndSetPoints( query ) {
 			return realDataSource.fetchPoints( query ).then(
 				function( points ) {
@@ -1194,7 +1229,7 @@
 				// bulk fetches once, right here; viewport waits for the provider's own
 				// boundsChange (wired above) — see the file docblock.
 				if ( ! ownsChrome && 'bulk' === config.strategy ) {
-					fetchAndSetPoints( { types: currentTypeFilter } ).catch( function() {} );
+					fetchAndSetPoints( bulkQuery() ).catch( function() {} );
 				}
 			} );
 		}
@@ -1213,7 +1248,7 @@
 			}
 
 			if ( 'bulk' === config.strategy ) {
-				return fetchAndSetPoints( { types: currentTypeFilter } ).catch( function() {} );
+				return fetchAndSetPoints( bulkQuery() ).catch( function() {} );
 			}
 
 			if ( lastBbox ) {
