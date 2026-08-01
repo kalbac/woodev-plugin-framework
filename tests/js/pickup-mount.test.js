@@ -335,6 +335,29 @@ test( 'clicking the trigger opens the shell and calls provider.init with the con
 	expect( typeof calls[ 0 ].dataSource.fetchDetails ).toBe( 'function' );
 } );
 
+test( 'the session tags its modal with the documented pickup modalId on every modal event', () => {
+	const opened = [];
+	const closed = [];
+	document.body.addEventListener( 'woodev_modal_opened', ( e ) => opened.push( e.detail ) );
+	document.body.addEventListener( 'woodev_modal_closed', ( e ) => closed.push( e.detail ) );
+
+	setConfig( makeConfig() );
+	mountAll();
+	clickTrigger();
+
+	// D-14 fixes this literal value: a consumer filters the pickup dialog out of the
+	// framework's generic modal stream by it, exactly as the reference integrations filter
+	// WooCommerce's backbone modal by its `target`. An empty modalId reaches every listener
+	// and matches none of them — green code, dead feature.
+	expect( opened ).toHaveLength( 1 );
+	expect( opened[ 0 ].modalId ).toBe( 'woodev-pickup-map' );
+
+	document.querySelector( '.woodev-modal__close' ).click();
+
+	expect( closed ).toHaveLength( 1 );
+	expect( closed[ 0 ].modalId ).toBe( 'woodev-pickup-map' );
+} );
+
 // -------------------------------------------------------------------------
 // buildProviderConfig() — the mapConfig/strategy/i18n/locality merge handed
 // to the map provider's init(), and locality's LIVE resolution

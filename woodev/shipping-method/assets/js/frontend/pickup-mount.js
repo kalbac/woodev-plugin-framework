@@ -159,6 +159,16 @@
 	var MOUNT_DEFER_MS = 60;
 
 	/**
+	 * Identifies this modal on every `woodev_modal_*` event, so a consumer can filter the
+	 * pickup dialog out of the framework's generic modal stream — the role WooCommerce's own
+	 * backbone modal gives its `target` argument. Spec D-14 fixes the literal value; changing
+	 * it silently breaks every listener written against the documented name.
+	 *
+	 * @type {string}
+	 */
+	var PICKUP_MODAL_ID = 'woodev-pickup-map';
+
+	/**
 	 * Maps a dataSource error `code` to the i18n key `Pickup_Handler::get_js_config()`
 	 * emits for it. A config missing the key (a wiring bug, not a normal runtime
 	 * state — the PHP side emits all of these) falls back to the generic
@@ -609,6 +619,7 @@
 	function openSession( config, triggerEl ) {
 		var Modal = window.WoodevModal;
 		var modal = new Modal( {
+			modalId: PICKUP_MODAL_ID,
 			title: text( config, 'modalTitle' ),
 			closeLabel: text( config, 'close' ),
 			retryLabel: text( config, 'retry' ),
