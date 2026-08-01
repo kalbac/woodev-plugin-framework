@@ -1,27 +1,27 @@
 /**
- * Woodev Pickup Modal — vanilla modal shell.
+ * Woodev Modal — vanilla generic dialog shell.
  *
  * Plain constructor, ES5-safe, no jQuery, no Backbone, no build step — this
- * file is enqueued directly (see `woodev-pickup-modal` in
- * class-pickup-handler.php), never bundled.
+ * file is enqueued directly (see `woodev-modal` in class-pickup-handler.php,
+ * its first consumer), never bundled.
  *
  * Why vanilla instead of `wc-backbone-modal`:
- *   - The blocks checkout adapter (a later task in this programme) needs the
- *     same picker inside WooCommerce's React checkout, where
- *     `wc-backbone-modal` is not available. One shell serves both surfaces.
+ *   - A WC blocks checkout adapter needs the same dialog inside WooCommerce's
+ *     React checkout, where `wc-backbone-modal` is not available. One shell
+ *     serves both surfaces.
  *   - It puts no Backbone/underscore dependency on the storefront.
  *   - It survives stores where `wc-backbone-modal` (or one of its
  *     dependencies) is not loaded — a case hit in production before.
  *
  * The shell owns the dialog chrome only: aria contract, focus trap/return,
  * scroll lock, backdrop/Escape dismissal, and the error/empty degradation
- * states. Everything *inside* `getContainer()` belongs to the map provider
- * (see the `Map_Provider` JS seam) — `destroy()` tears the whole subtree
- * down so a provider never has to worry about stale nodes on reopen.
+ * states. Everything *inside* `getContainer()` belongs to whatever consumer
+ * mounts into it — `destroy()` tears the whole subtree down so a consumer
+ * never has to worry about stale nodes on reopen.
  *
  * UMD-ish dual export (matches checkout-field-store.js):
- *   - Browser global: window.WoodevPickupModal = WoodevPickupModal
- *   - CommonJS:       module.exports = WoodevPickupModal  (for jest)
+ *   - Browser global: window.WoodevModal = WoodevModal
+ *   - CommonJS:       module.exports = WoodevModal  (for jest)
  *
  * @file
  * @since 2.0.2
@@ -54,7 +54,7 @@
 	 * recreate it. That keeps `getContainer()`'s return value stable across
 	 * an open/close cycle, which is the contract the map provider relies on.
 	 *
-	 * @param {WoodevPickupModal} self
+	 * @param {WoodevModal} self
 	 * @returns {void}
 	 */
 	function buildDom( self ) {
@@ -108,7 +108,7 @@
 	/**
 	 * Return the currently tabbable elements inside the dialog, in DOM order.
 	 *
-	 * @param {WoodevPickupModal} self
+	 * @param {WoodevModal} self
 	 * @returns {HTMLElement[]}
 	 */
 	function focusableElements( self ) {
@@ -119,8 +119,8 @@
 	 * Keep Tab from ever leaving the dialog. Forward from the last focusable
 	 * element goes to the first; Shift+Tab from the first goes to the last.
 	 *
-	 * @param {WoodevPickupModal} self
-	 * @param {KeyboardEvent}     event
+	 * @param {WoodevModal} self
+	 * @param {KeyboardEvent} event
 	 * @returns {void}
 	 */
 	function trapTab( self, event ) {
@@ -148,7 +148,7 @@
 	 * Attach the listeners that only make sense while the dialog is open:
 	 * Escape/Tab handling on `document`, and backdrop-click dismissal.
 	 *
-	 * @param {WoodevPickupModal} self
+	 * @param {WoodevModal} self
 	 * @returns {void}
 	 */
 	function bindOpenListeners( self ) {
@@ -175,7 +175,7 @@
 	/**
 	 * Remove the listeners bound in {@see bindOpenListeners}.
 	 *
-	 * @param {WoodevPickupModal} self
+	 * @param {WoodevModal} self
 	 * @returns {void}
 	 */
 	function unbindOpenListeners( self ) {
@@ -196,9 +196,9 @@
 	 * because a stale, half-drawn provider state next to an error message
 	 * is exactly the confusing half-state this shell exists to avoid.
 	 *
-	 * @param {WoodevPickupModal} self
-	 * @param {string}            message
-	 * @param {string}            modifierClass BEM modifier, e.g. '--error'.
+	 * @param {WoodevModal} self
+	 * @param {string} message
+	 * @param {string} modifierClass BEM modifier, e.g. '--error'.
 	 * @returns {HTMLElement} the created message paragraph, for callers that
 	 *                        want to append a retry control after it.
 	 */
@@ -214,12 +214,12 @@
 	}
 
 	/**
-	 * Removes the current dismissible notice (see {@see WoodevPickupModal#showNotice}),
+	 * Removes the current dismissible notice (see {@see WoodevModal#showNotice}),
 	 * if one is showing. A harmless no-op otherwise — used both by the notice's own
 	 * dismiss button and by showNotice() itself so a second call never stacks a
 	 * second banner alongside the first.
 	 *
-	 * @param {WoodevPickupModal} self
+	 * @param {WoodevModal} self
 	 * @returns {void}
 	 */
 	function dismissNotice( self ) {
@@ -231,7 +231,7 @@
 	}
 
 	/**
-	 * @typedef {Object} WoodevPickupModalOptions
+	 * @typedef {Object} WoodevModalOptions
 	 * @property {string}      [title]         Dialog title (rendered as text, never markup).
 	 * @property {string}      [closeLabel]    Accessible label for the close button.
 	 * @property {string}      [retryLabel]    Label for the retry control in showError().
@@ -239,10 +239,10 @@
 	 */
 
 	/**
-	 * @param {WoodevPickupModalOptions} [options]
+	 * @param {WoodevModalOptions} [options]
 	 * @constructor
 	 */
-	function WoodevPickupModal( options ) {
+	function WoodevModal( options ) {
 		var opts = options || {};
 
 		this._title = opts.title || '';
@@ -265,7 +265,7 @@
 	 *
 	 * @returns {void}
 	 */
-	WoodevPickupModal.prototype.open = function() {
+	WoodevModal.prototype.open = function() {
 		if ( this._isDestroyed || this._isOpen ) {
 			return;
 		}
@@ -286,7 +286,7 @@
 	 *
 	 * @returns {void}
 	 */
-	WoodevPickupModal.prototype.close = function() {
+	WoodevModal.prototype.close = function() {
 		if ( this._isDestroyed || ! this._isOpen ) {
 			return;
 		}
@@ -312,7 +312,7 @@
 	 *
 	 * @returns {HTMLElement|null}
 	 */
-	WoodevPickupModal.prototype.getContainer = function() {
+	WoodevModal.prototype.getContainer = function() {
 		return this._isDestroyed ? null : this._body;
 	};
 
@@ -327,7 +327,7 @@
 	 * @param {Function} [onRetry]
 	 * @returns {void}
 	 */
-	WoodevPickupModal.prototype.showError = function( message, onRetry ) {
+	WoodevModal.prototype.showError = function( message, onRetry ) {
 		if ( this._isDestroyed ) {
 			return;
 		}
@@ -352,7 +352,7 @@
 	 * @param {string} message
 	 * @returns {void}
 	 */
-	WoodevPickupModal.prototype.showEmpty = function( message ) {
+	WoodevModal.prototype.showEmpty = function( message ) {
 		if ( this._isDestroyed ) {
 			return;
 		}
@@ -380,7 +380,7 @@
 	 *                             to retry (e.g. a genuinely empty viewport).
 	 * @returns {void}
 	 */
-	WoodevPickupModal.prototype.showNotice = function( message, onRetry ) {
+	WoodevModal.prototype.showNotice = function( message, onRetry ) {
 		if ( this._isDestroyed ) {
 			return;
 		}
@@ -428,7 +428,7 @@
 	 *
 	 * @returns {void}
 	 */
-	WoodevPickupModal.prototype.destroy = function() {
+	WoodevModal.prototype.destroy = function() {
 		if ( this._isDestroyed ) {
 			return;
 		}
@@ -456,12 +456,12 @@
 
 	// Browser global
 	if ( typeof window !== 'undefined' ) {
-		window.WoodevPickupModal = WoodevPickupModal;
+		window.WoodevModal = WoodevModal;
 	}
 
 	// CommonJS (jest)
 	if ( typeof module !== 'undefined' && module.exports ) {
-		module.exports = WoodevPickupModal;
+		module.exports = WoodevModal;
 	}
 
 }() );

@@ -601,10 +601,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 * Enqueues the picker's frontend assets on the checkout page.
 		 *
 		 * Registers handles for JS files owned by SP-5 tasks — the modal shell
-		 * (`pickup-modal.js`, Task 10), the dataSource (`pickup-datasource.js`, Task 11),
-		 * the mount script (`pickup-mount.js`, Task 12) and the active provider's script
-		 * (`map-provider-{$provider}.js`, Tasks 13/14) have all LANDED; only the
-		 * stylesheet (`pickup.css`, Task 15) has NOT. That still-pending file is skipped
+		 * (`woodev-modal.js`, a framework-level asset since the pickup-map presentation
+		 * rework's Task 1 moved it out of this module), the dataSource
+		 * (`pickup-datasource.js`, Task 11), the mount script (`pickup-mount.js`, Task 12)
+		 * and the active provider's script (`map-provider-{$provider}.js`, Tasks 13/14)
+		 * have all LANDED; only the stylesheet (`pickup.css`, Task 15) has NOT. That
+		 * still-pending file is skipped
 		 * entirely via {@see self::enqueue_style_if_built()}'s {@see self::asset_exists()}
 		 * check rather than enqueueing a `href` that will 404 — a missing style tag is
 		 * invisible, but a 404ing one next to fully wired JS is a live checkout regression
@@ -627,7 +629,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 
 			$provider_handle = $this->map_provider->get_script_handle();
 
-			$this->enqueue_script_if_built( 'woodev-pickup-modal', 'js/frontend/pickup-modal.js', [] );
+			$this->enqueue_framework_script_if_built( 'woodev-modal', 'js/frontend/woodev-modal.js', [] );
 			$this->enqueue_script_if_built( 'woodev-pickup-datasource', 'js/frontend/pickup-datasource.js', [] );
 			$this->enqueue_script_if_built(
 				$provider_handle,
@@ -641,7 +643,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 			$mount_enqueued = $this->enqueue_script_if_built(
 				'woodev-pickup-mount',
 				'js/frontend/pickup-mount.js',
-				[ 'jquery', 'woodev-pickup-modal', 'woodev-pickup-datasource', $provider_handle ]
+				[ 'jquery', 'woodev-modal', 'woodev-pickup-datasource', $provider_handle ]
 			);
 
 			$this->enqueue_style_if_built( 'woodev-pickup-styles', 'css/frontend/pickup.css' );
@@ -696,6 +698,35 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 			}
 
 			wp_enqueue_style( $handle, self::asset_url( $relative ), [], self::asset_version( $path ) );
+
+			return true;
+		}
+
+		/**
+		 * Enqueues one script handle from the FRAMEWORK's own assets directory (`woodev/assets/`),
+		 * not this module's — but only when its file actually exists on disk.
+		 *
+		 * A sibling of {@see self::enqueue_script_if_built()}, needed because a handful of assets
+		 * are shared framework-level scripts rather than shipping-owned ones — the modal shell
+		 * (`woodev-modal.js`) is the first: it moved out of the shipping module entirely so any
+		 * framework subsystem can enqueue it, not just this handler.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string   $handle   the script handle to register.
+		 * @param string   $relative path relative to the FRAMEWORK assets directory.
+		 * @param string[] $deps     script dependencies.
+		 *
+		 * @return bool true when the script was enqueued; false when its file is missing.
+		 */
+		private function enqueue_framework_script_if_built( string $handle, string $relative, array $deps ): bool {
+			$path = self::framework_asset_path( $relative );
+
+			if ( ! static::asset_exists( $path ) ) {
+				return false;
+			}
+
+			wp_enqueue_script( $handle, self::framework_asset_url( $relative ), $deps, self::asset_version( $path ), true );
 
 			return true;
 		}
@@ -1154,16 +1185,55 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		}
 
 		/**
+		 * Resolves the filesystem path to a FRAMEWORK-root asset — one that lives under
+		 * `woodev/assets/`, the same directory {@see \Woodev_Plugin::get_framework_assets_path()}
+		 * resolves to, rather than under this module's own `assets/` directory
+		 * {@see self::asset_path()} is scoped to.
+		 *
+		 * `Pickup_Handler` holds no {@see \Woodev_Plugin} instance (it is constructed
+		 * standalone by the consuming plugin, with no dependency on the framework's own
+		 * bootstrap), so it cannot call `get_framework_assets_path()` directly. This mirrors
+		 * that helper's own path arithmetic instead: two directories up from THIS file
+		 * (`shipping-method/pickup/` → `shipping-method/` → `woodev/`) is the framework root.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $relative path relative to the framework assets directory.
+		 *
+		 * @return string absolute filesystem path to the asset.
+		 */
+		private static function framework_asset_path( string $relative ): string {
+			return dirname( __DIR__, 2 ) . '/assets/' . ltrim( $relative, '/' );
+		}
+
+		/**
+		 * Resolves a URL within the FRAMEWORK's own assets directory — see
+		 * {@see self::framework_asset_path()} for why this is a separate root from
+		 * {@see self::asset_url()}.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $relative path relative to the framework assets directory.
+		 *
+		 * @return string absolute URL to the asset.
+		 */
+		private static function framework_asset_url( string $relative ): string {
+			$file = self::framework_asset_path( $relative );
+
+			return plugins_url( basename( $file ), $file );
+		}
+
+		/**
 		 * Reports whether an asset file exists on disk.
 		 *
 		 * `protected static`, not `private`, purely so a test subclass can force it `true`
-		 * to exercise {@see self::enqueue_script_if_built()}/{@see self::enqueue_style_if_built()}'s
-		 * "built" branch without writing a real file into the assets directory. The real
-		 * (default) implementation is a plain `file_exists()` — each SP-5 asset reports
-		 * `true`/`false` independently as its own task lands (`pickup-modal.js` as of
-		 * Task 10, `pickup-datasource.js` as of Task 11; `pickup-mount.js`, the
-		 * map-provider script, and the stylesheet still report `false` until Tasks 12–15
-		 * build them), which is exactly the "skip a not-yet-built asset" behaviour
+		 * to exercise {@see self::enqueue_script_if_built()}/{@see self::enqueue_style_if_built()}/
+		 * {@see self::enqueue_framework_script_if_built()}'s "built" branch without writing a
+		 * real file into the assets directory. The real (default) implementation is a plain
+		 * `file_exists()` — each SP-5 asset reports `true`/`false` independently as its own
+		 * task lands (`woodev-modal.js` as of Task 10, `pickup-datasource.js` as of Task 11;
+		 * `pickup-mount.js`, the map-provider script, and the stylesheet as of Tasks 12–15),
+		 * which is exactly the "skip a not-yet-built asset" behaviour
 		 * {@see self::enqueue_assets()} exists to get right.
 		 *
 		 * @since 2.0.2

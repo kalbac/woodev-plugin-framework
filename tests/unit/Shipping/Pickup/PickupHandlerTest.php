@@ -2120,9 +2120,9 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			);
 			$handler->enqueue_assets();
 
-			$this->assertArrayHasKey( 'woodev-pickup-modal', $scripts );
-			$this->assertStringContainsString( 'pickup-modal.js', $scripts['woodev-pickup-modal']['src'] );
-			$this->assertSame( [], $scripts['woodev-pickup-modal']['deps'] );
+			$this->assertArrayHasKey( 'woodev-modal', $scripts );
+			$this->assertStringContainsString( 'woodev-modal.js', $scripts['woodev-modal']['src'] );
+			$this->assertSame( [], $scripts['woodev-modal']['deps'] );
 
 			$this->assertArrayHasKey( 'woodev-pickup-datasource', $scripts );
 			$this->assertStringContainsString( 'pickup-datasource.js', $scripts['woodev-pickup-datasource']['src'] );
@@ -2139,7 +2139,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			$this->assertArrayHasKey( 'woodev-pickup-mount', $scripts );
 			$this->assertStringContainsString( 'pickup-mount.js', $scripts['woodev-pickup-mount']['src'] );
 			$this->assertSame(
-				[ 'jquery', 'woodev-pickup-modal', 'woodev-pickup-datasource', 'woodev-pickup-map-provider-yandex' ],
+				[ 'jquery', 'woodev-modal', 'woodev-pickup-datasource', 'woodev-pickup-map-provider-yandex' ],
 				$scripts['woodev-pickup-mount']['deps']
 			);
 
@@ -2188,8 +2188,8 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			);
 			$handler->enqueue_assets();
 
-			$this->assertArrayHasKey( 'woodev-pickup-modal', $scripts );
-			$this->assertStringContainsString( 'pickup-modal.js', $scripts['woodev-pickup-modal']['src'] );
+			$this->assertArrayHasKey( 'woodev-modal', $scripts );
+			$this->assertStringContainsString( 'woodev-modal.js', $scripts['woodev-modal']['src'] );
 
 			$this->assertArrayHasKey( 'woodev-pickup-datasource', $scripts );
 			$this->assertStringContainsString( 'pickup-datasource.js', $scripts['woodev-pickup-datasource']['src'] );
@@ -2203,7 +2203,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			$this->assertArrayHasKey( 'woodev-pickup-mount', $scripts );
 			$this->assertStringContainsString( 'pickup-mount.js', $scripts['woodev-pickup-mount']['src'] );
 			$this->assertSame(
-				[ 'jquery', 'woodev-pickup-modal', 'woodev-pickup-datasource', 'woodev-pickup-map-provider-yandex' ],
+				[ 'jquery', 'woodev-modal', 'woodev-pickup-datasource', 'woodev-pickup-map-provider-yandex' ],
 				$scripts['woodev-pickup-mount']['deps']
 			);
 

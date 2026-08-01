@@ -1,15 +1,15 @@
 /**
- * Tests for pickup-modal.js
+ * Tests for woodev-modal.js
  *
  * Covers the vanilla modal shell's aria contract, focus management, scroll
  * lock, and error/empty degradation states — SP-5 Task 10.
  *
- * @see woodev/shipping-method/assets/js/frontend/pickup-modal.js
+ * @see woodev/assets/js/frontend/woodev-modal.js
  */
 
 'use strict';
 
-const WoodevPickupModal = require( '../../woodev/shipping-method/assets/js/frontend/pickup-modal' );
+const WoodevModal = require( '../../woodev/assets/js/frontend/woodev-modal' );
 
 /**
  * Build a trigger button appended to the document, so returnFocusTo has a
@@ -30,7 +30,7 @@ afterEach( () => {
 } );
 
 test( 'open() renders a dialog with the aria contract', () => {
-	const modal = new WoodevPickupModal( { title: 'Пункты выдачи' } );
+	const modal = new WoodevModal( { title: 'Пункты выдачи' } );
 	modal.open();
 
 	const dialog = document.querySelector( '[role="dialog"]' );
@@ -47,7 +47,7 @@ test( 'open() renders a dialog with the aria contract', () => {
 } );
 
 test( 'Escape closes it', () => {
-	const modal = new WoodevPickupModal( { title: 'T' } );
+	const modal = new WoodevModal( { title: 'T' } );
 	modal.open();
 	expect( document.querySelector( '[role="dialog"]' ) ).not.toBeNull();
 
@@ -59,7 +59,7 @@ test( 'Escape closes it', () => {
 
 test( 'focus returns to the trigger on close', () => {
 	const trigger = makeTrigger();
-	const modal = new WoodevPickupModal( { title: 'T', returnFocusTo: trigger } );
+	const modal = new WoodevModal( { title: 'T', returnFocusTo: trigger } );
 
 	modal.open();
 	expect( document.activeElement ).not.toBe( trigger );
@@ -71,7 +71,7 @@ test( 'focus returns to the trigger on close', () => {
 } );
 
 test( 'getContainer() gives the provider its mount point', () => {
-	const modal = new WoodevPickupModal( { title: 'T' } );
+	const modal = new WoodevModal( { title: 'T' } );
 	const container = modal.getContainer();
 
 	expect( container ).toBeInstanceOf( HTMLElement );
@@ -90,7 +90,7 @@ test( 'getContainer() gives the provider its mount point', () => {
 } );
 
 test( 'showError() replaces the body instead of leaving it blank', () => {
-	const modal = new WoodevPickupModal( { title: 'T' } );
+	const modal = new WoodevModal( { title: 'T' } );
 	const container = modal.getContainer();
 	container.appendChild( document.createElement( 'div' ) ); // pretend the provider drew something
 
@@ -106,7 +106,7 @@ test( 'showError() replaces the body instead of leaving it blank', () => {
 } );
 
 test( 'showEmpty() renders an explicit empty state', () => {
-	const modal = new WoodevPickupModal( { title: 'T' } );
+	const modal = new WoodevModal( { title: 'T' } );
 	modal.open();
 	modal.showEmpty( 'Пункты выдачи не найдены' );
 
@@ -119,7 +119,7 @@ test( 'showEmpty() renders an explicit empty state', () => {
 } );
 
 test( 'showNotice() renders a banner ALONGSIDE the body, never replacing its content', () => {
-	const modal = new WoodevPickupModal( { title: 'T' } );
+	const modal = new WoodevModal( { title: 'T' } );
 	const container = modal.getContainer();
 	const marker = document.createElement( 'div' );
 	marker.className = 'provider-marker';
@@ -143,7 +143,7 @@ test( 'showNotice() renders a banner ALONGSIDE the body, never replacing its con
 } );
 
 test( 'showNotice() with no onRetry renders no retry control (the empty-after-drawn case)', () => {
-	const modal = new WoodevPickupModal( { title: 'T' } );
+	const modal = new WoodevModal( { title: 'T' } );
 	modal.open();
 	modal.showNotice( 'Пункты выдачи не найдены в этой области' );
 
@@ -156,7 +156,7 @@ test( 'showNotice() with no onRetry renders no retry control (the empty-after-dr
 } );
 
 test( 'showNotice() retry control invokes the callback', () => {
-	const modal = new WoodevPickupModal( { title: 'T', retryLabel: 'Повторить' } );
+	const modal = new WoodevModal( { title: 'T', retryLabel: 'Повторить' } );
 	modal.open();
 
 	const onRetry = jest.fn();
@@ -173,7 +173,7 @@ test( 'showNotice() retry control invokes the callback', () => {
 } );
 
 test( 'showNotice() dismiss control removes the banner without touching the body', () => {
-	const modal = new WoodevPickupModal( { title: 'T' } );
+	const modal = new WoodevModal( { title: 'T' } );
 	const container = modal.getContainer();
 	container.appendChild( document.createElement( 'div' ) );
 
@@ -190,7 +190,7 @@ test( 'showNotice() dismiss control removes the banner without touching the body
 } );
 
 test( 'showNotice() called twice replaces the first banner rather than stacking a second', () => {
-	const modal = new WoodevPickupModal( { title: 'T' } );
+	const modal = new WoodevModal( { title: 'T' } );
 	modal.open();
 
 	modal.showNotice( 'Первое сообщение' );
@@ -204,7 +204,7 @@ test( 'showNotice() called twice replaces the first banner rather than stacking 
 } );
 
 test( 'showError() retry control invokes the callback', () => {
-	const modal = new WoodevPickupModal( { title: 'T', retryLabel: 'Повторить' } );
+	const modal = new WoodevModal( { title: 'T', retryLabel: 'Повторить' } );
 	modal.open();
 
 	const onRetry = jest.fn();
@@ -221,7 +221,7 @@ test( 'showError() retry control invokes the callback', () => {
 } );
 
 test( 'backdrop click closes, but a click inside the dialog does not', () => {
-	const modal = new WoodevPickupModal( { title: 'T' } );
+	const modal = new WoodevModal( { title: 'T' } );
 	modal.open();
 
 	const dialog = document.querySelector( '[role="dialog"]' );
@@ -236,7 +236,7 @@ test( 'backdrop click closes, but a click inside the dialog does not', () => {
 } );
 
 test( 'Tab wraps forward from the last focusable element to the first', () => {
-	const modal = new WoodevPickupModal( { title: 'T' } );
+	const modal = new WoodevModal( { title: 'T' } );
 	modal.open();
 	modal.showError( 'Ошибка', jest.fn() ); // adds a second focusable (retry) after the close button
 
@@ -257,7 +257,7 @@ test( 'Tab wraps forward from the last focusable element to the first', () => {
 } );
 
 test( 'Shift+Tab wraps backward from the first focusable element to the last', () => {
-	const modal = new WoodevPickupModal( { title: 'T' } );
+	const modal = new WoodevModal( { title: 'T' } );
 	modal.open();
 	modal.showError( 'Ошибка', jest.fn() );
 
@@ -276,7 +276,7 @@ test( 'Shift+Tab wraps backward from the first focusable element to the last', (
 } );
 
 test( 'body gets a scroll-lock class while open, removed on close', () => {
-	const modal = new WoodevPickupModal( { title: 'T' } );
+	const modal = new WoodevModal( { title: 'T' } );
 	expect( document.body.className ).not.toMatch( /woodev-pickup-modal-lock/ );
 
 	modal.open();
@@ -289,7 +289,7 @@ test( 'body gets a scroll-lock class while open, removed on close', () => {
 } );
 
 test( 'open() twice does not produce two dialogs', () => {
-	const modal = new WoodevPickupModal( { title: 'T' } );
+	const modal = new WoodevModal( { title: 'T' } );
 	modal.open();
 	modal.open();
 
@@ -300,7 +300,7 @@ test( 'open() twice does not produce two dialogs', () => {
 
 test( 'destroy() removes the node and every listener it owns', () => {
 	const trigger = makeTrigger();
-	const modal = new WoodevPickupModal( { title: 'T', returnFocusTo: trigger } );
+	const modal = new WoodevModal( { title: 'T', returnFocusTo: trigger } );
 	modal.open();
 
 	const dialog = document.querySelector( '[role="dialog"]' );
@@ -323,7 +323,7 @@ test( 'destroy() removes the node and every listener it owns', () => {
 } );
 
 test( 'destroy() removes the close-button click listener too', () => {
-	const modal = new WoodevPickupModal( { title: 'T' } );
+	const modal = new WoodevModal( { title: 'T' } );
 	modal.open();
 
 	const closeButton = document.querySelector( '.woodev-pickup-modal__close' );
@@ -340,13 +340,13 @@ test( 'destroy() removes the close-button click listener too', () => {
 } );
 
 test( 'close() before any open() is a harmless no-op', () => {
-	const modal = new WoodevPickupModal( { title: 'T' } );
+	const modal = new WoodevModal( { title: 'T' } );
 	expect( () => modal.close() ).not.toThrow();
 	modal.destroy();
 } );
 
 test( 'title text is escaped as text, not injected as markup', () => {
-	const modal = new WoodevPickupModal( { title: '<img src=x onerror=alert(1)>' } );
+	const modal = new WoodevModal( { title: '<img src=x onerror=alert(1)>' } );
 	modal.open();
 
 	const dialog = document.querySelector( '[role="dialog"]' );

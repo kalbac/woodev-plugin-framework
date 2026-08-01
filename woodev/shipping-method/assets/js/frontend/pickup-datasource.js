@@ -54,7 +54,7 @@
  * older burst's promise pending forever, and it guarantees a caller never
  * sees a viewport result older than the one it already has.
  *
- * UMD-ish dual export (matches pickup-modal.js):
+ * UMD-ish dual export (matches woodev-modal.js):
  *   - Browser global: window.WoodevPickupDataSource = WoodevPickupDataSource
  *   - CommonJS:       module.exports = WoodevPickupDataSource  (for jest)
  *

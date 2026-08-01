@@ -34,7 +34,7 @@
 jest.useFakeTimers();
 
 const { createStore } = require( '../../woodev/shipping-method/assets/js/frontend/checkout-field-store' );
-require( '../../woodev/shipping-method/assets/js/frontend/pickup-modal' ); // side effect: window.WoodevPickupModal
+require( '../../woodev/assets/js/frontend/woodev-modal' ); // side effect: window.WoodevModal
 const { mountAll } = require( '../../woodev/shipping-method/assets/js/frontend/pickup-mount' );
 
 const FIELD_ID = 'carrier_pickup_point';

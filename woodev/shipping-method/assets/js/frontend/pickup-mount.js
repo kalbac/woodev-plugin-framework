@@ -6,7 +6,7 @@
  * `woodev-pickup-mount` in class-pickup-handler.php) as the final assembly
  * point of SP-5: it places a trigger button inside the anchor §8 deliberately
  * leaves empty (`[data-woodev-pickup-slot="<fieldId>"]`), and on click opens
- * {@link WoodevPickupModal}, resolves a {@link window.WoodevPickupMapProviders}
+ * {@link WoodevModal}, resolves a {@link window.WoodevPickupMapProviders}
  * entry, and hands it a {@link WoodevPickupDataSource}. This file is the
  * CLASSIC checkout (`[woocommerce_checkout]`) mount — a later task in this
  * programme builds the equivalent for the WC blocks checkout, reusing the same
@@ -121,7 +121,7 @@
  *
  * NON-DESTRUCTIVE DEGRADATION ONCE A SET IS DRAWN: `showError()`/`showEmpty()`
  * REPLACE the modal body wholesale (see their own docblocks in
- * `pickup-modal.js`) — correct the FIRST time, when there is nothing yet worth
+ * `woodev-modal.js`) — correct the FIRST time, when there is nothing yet worth
  * keeping, wrong afterwards: a customer who has already panned to a drawn map
  * must not lose it because a SUBSEQUENT viewport request 502s or comes back
  * empty (spec §4.9). Each session therefore tracks whether the provider has
@@ -136,7 +136,7 @@
  * contract. A retry therefore always destroys the current provider, constructs
  * a FRESH one, re-wires `select`/`error` on it, and only then calls `init()`.
  *
- * UMD-ish dual export (matches pickup-modal.js/pickup-datasource.js), plus a
+ * UMD-ish dual export (matches woodev-modal.js/pickup-datasource.js), plus a
  * `mountAll()` re-export purely so a test can drive one mount pass directly
  * instead of only through the deferred event hooks:
  *   - Browser global: window.WoodevPickupMount = { mountAll: mountAll }
@@ -607,7 +607,7 @@
 	 * @returns {{modal: Object, destroy: Function}}
 	 */
 	function openSession( config, triggerEl ) {
-		var Modal = window.WoodevPickupModal;
+		var Modal = window.WoodevModal;
 		var modal = new Modal( {
 			title: text( config, 'modalTitle' ),
 			closeLabel: text( config, 'close' ),

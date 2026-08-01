@@ -1,7 +1,8 @@
 /**
  * Woodev Pickup Picker — storefront styles (SP-5 Task 15).
  *
- * Styles the vanilla modal shell (`pickup-modal.js`), the trigger mounted into the §8 anchor
+ * Styles the vanilla modal shell (`woodev-modal.js`, now framework-level — see
+ * `woodev/assets/js/frontend/woodev-modal.js`), the trigger mounted into the §8 anchor
  * (`pickup-mount.js`), and everything the map providers draw inside the shell's body — the
  * Yandex provider's map, viewport-synced drawer, type filter and balloon
  * (`map-provider-yandex.js`), and the embedded provider's iframe
