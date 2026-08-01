@@ -206,6 +206,7 @@ function createYmapsStub( options ) {
 				},
 			},
 			setObjectOptions: jest.fn(),
+			setObjectProperties: jest.fn(),
 		};
 		this.fireObjectClick = ( id ) => {
 			clickHandlers.forEach( ( cb ) => cb( { get: ( k ) => ( 'objectId' === k ? id : undefined ) } ) );
@@ -386,13 +387,18 @@ test( 'builds the map with minZoom 8 and maxZoom 18', async () => {
 	expect( ymapsStub.lastMap.options.maxZoom ).toBe( 18 );
 } );
 
-test( 'adds the plugin tile layers and copyrights when supplied', async () => {
+test( 'adds the plugin tile layers, pinning the tile URL and the RESOLVED projection object '
+	+ '(not the raw string), and the copyrights', async () => {
 	await init( {
 		layers: [ { url: 'https://tiles.test/%c.png', projection: 'sphericalMercator' } ],
 		copyrights: [ '© Test' ],
 	} );
 
 	expect( ymapsStub.lastMap.layers ).toHaveLength( 1 );
+	expect( ymapsStub.lastMap.layers[ 0 ].url ).toBe( 'https://tiles.test/%c.png' );
+	// 'stub-projection' is what the stub's `ymaps.projection.sphericalMercator` resolves to —
+	// pinning THAT proves the raw string was looked up, not passed through verbatim.
+	expect( ymapsStub.lastMap.layers[ 0 ].options.projection ).toBe( 'stub-projection' );
 	expect( ymapsStub.lastMap.copyrights ).toEqual( [ '© Test' ] );
 } );
 
@@ -420,7 +426,7 @@ test( 'an invalid accentColor falls back to the framework default cluster colour
 // setPoints() — one ObjectManager feature per group
 // -------------------------------------------------------------------------
 
-test( 'adds every group to the object manager as one feature each', async () => {
+test( 'adds every group to the object manager as one feature each, pinning its id and coordinates', async () => {
 	const provider = await init();
 
 	provider.setPoints( [
@@ -428,7 +434,13 @@ test( 'adds every group to the object manager as one feature each', async () => 
 		{ key: 'b', lat: 55.76, lng: 37.62, typeCode: 'pvz', size: 2, points: [ { id: '2' }, { id: '3' } ] },
 	] );
 
+	const [ a, b ] = ymapsStub.lastObjectManager.added;
+
 	expect( ymapsStub.lastObjectManager.added ).toHaveLength( 2 );
+	expect( a.id ).toBe( 'a' );
+	expect( a.geometry ).toEqual( { type: 'Point', coordinates: [ 55.75, 37.61 ] } );
+	expect( b.id ).toBe( 'b' );
+	expect( b.geometry ).toEqual( { type: 'Point', coordinates: [ 55.76, 37.62 ] } );
 } );
 
 test( 'uses the plugin icon for the group type and falls back when the type is unknown', async () => {
@@ -556,17 +568,123 @@ test( 'the marker renders no <img> and adds the unknown modifier class when the 
 	expect( container.querySelector( '.woodev-pickup-marker__badge' ) ).toBeNull();
 } );
 
+// Review follow-up (MEDIUM, D-5): the active state must actually be RENDERED — a distinct
+// active image when the plugin supplies one, `data-state="active"` always, for Task 21's CSS to
+// key off — not just a bigger hit-box with the same resting image forever.
+test( 'restingly-drawn marker: data-state is "resting" and the DEFAULT image is used', () => {
+	const provider = new WoodevYandexMapProvider();
+	const container = document.createElement( 'div' );
+
+	container.innerHTML = '<div class="woodev-pickup-marker"></div>';
+
+	provider._renderMarker( container, { properties: makeProperties( {
+		groupSize: 1, state: 'resting', iconHref: '/rest.svg', iconHrefActive: '/active.svg',
+	} ) } );
+
+	const root = container.querySelector( '.woodev-pickup-marker' );
+
+	expect( root.getAttribute( 'data-state' ) ).toBe( 'resting' );
+	expect( container.querySelector( 'img' ).src ).toContain( '/rest.svg' );
+} );
+
+test( 'active marker with two distinct images (Yandex-reference style): data-state is "active" '
+	+ 'and the ACTIVE image is used, not the resting one', () => {
+	const provider = new WoodevYandexMapProvider();
+	const container = document.createElement( 'div' );
+
+	container.innerHTML = '<div class="woodev-pickup-marker"></div>';
+
+	provider._renderMarker( container, { properties: makeProperties( {
+		groupSize: 1, state: 'active', iconHref: '/rest.svg', iconHrefActive: '/active.svg',
+	} ) } );
+
+	const root = container.querySelector( '.woodev-pickup-marker' );
+
+	expect( root.getAttribute( 'data-state' ) ).toBe( 'active' );
+	expect( container.querySelector( 'img' ).src ).toContain( '/active.svg' );
+} );
+
+test( 'active marker with only ONE image supplied (CDEK-style): data-state is "active" and the '
+	+ 'SAME (mirrored) image renders in the larger box, never a broken one', () => {
+	const provider = new WoodevYandexMapProvider();
+	const container = document.createElement( 'div' );
+
+	container.innerHTML = '<div class="woodev-pickup-marker"></div>';
+
+	// Mirrors Pickup_Handler::normalized_point_icons(): `active` falls back to `default` when
+	// the plugin supplied only one image, so iconHrefActive is never actually empty for a known
+	// type — this test still exercises _renderMarker's OWN fallback independently of that
+	// server-side guarantee.
+	provider._renderMarker( container, { properties: makeProperties( {
+		groupSize: 1, state: 'active', iconHref: '/only.svg', iconHrefActive: '/only.svg',
+	} ) } );
+
+	const root = container.querySelector( '.woodev-pickup-marker' );
+
+	expect( root.getAttribute( 'data-state' ) ).toBe( 'active' );
+	expect( container.querySelector( 'img' ).src ).toContain( '/only.svg' );
+	expect( container.querySelector( '.woodev-pickup-marker--unknown' ) ).toBeNull();
+} );
+
 // -------------------------------------------------------------------------
 // Camera — initial viewport per strategy (Task 18, D-7)
 // -------------------------------------------------------------------------
 
-test( 'fits to the loaded points under bulk without geocoding', async () => {
+test( 'fits to the loaded points under bulk without geocoding, and the bounds actually contain them', async () => {
 	const provider = await init( { strategy: 'bulk', locality: 'Москва' } );
 
 	provider.setPoints( [ group( 'a', 55.70, 37.60 ), group( 'b', 55.80, 37.70 ) ] );
 
 	expect( ymapsStub.geocodeCalls ).toBe( 0 );
 	expect( ymapsStub.lastMap.setBoundsCalls ).toHaveLength( 1 );
+
+	const bounds = ymapsStub.lastMap.setBoundsCalls[ 0 ].bounds;
+
+	expect( bounds[ 0 ][ 0 ] ).toBeLessThanOrEqual( 55.70 );
+	expect( bounds[ 0 ][ 1 ] ).toBeLessThanOrEqual( 37.60 );
+	expect( bounds[ 1 ][ 0 ] ).toBeGreaterThanOrEqual( 55.80 );
+	expect( bounds[ 1 ][ 1 ] ).toBeGreaterThanOrEqual( 37.70 );
+} );
+
+// Review follow-up (HIGH): the bulk fit's setBounds() was fire-and-forget and visibleChange was
+// emitted from the map's PRE-fit bounds — the s46 failure verbatim, reproduced INSIDE this
+// rewrite. Points sitting outside the technical placeholder viewport used to report an empty (or
+// stale) visible-key list that nothing ever corrected, since bulk has no fetch-driven refresh
+// cycle. A test that only checks setBounds() was CALLED cannot see this — it has to assert the
+// emitted keys, before and after the move settles.
+test( 'bulk: visibleChange reflects the POST-fit viewport — points sitting outside the pre-fit '
+	+ 'viewport are correctly reported once the fit completes, not before', async () => {
+	const provider = await init( { strategy: 'bulk' }, { deferSetBounds: true } );
+	const seen = [];
+
+	provider.on( 'visibleChange', ( keys ) => seen.push( keys ) );
+
+	// Far outside the stub Map's default pre-fit bounds ([[10,20],[11,21]]).
+	provider.setPoints( [ group( 'a', 55.70, 37.60 ), group( 'b', 55.80, 37.70 ) ] );
+
+	// The fit's setBounds() was called but has not resolved yet — nothing emitted so far.
+	expect( seen ).toHaveLength( 0 );
+
+	ymapsStub.lastMap.resolveNextSetBounds();
+	await flushPromises();
+
+	expect( seen ).toHaveLength( 1 );
+	expect( seen[ 0 ].sort() ).toEqual( [ 'a', 'b' ] );
+} );
+
+test( 'bulk: a destroy() racing the in-flight fit never emits visibleChange afterwards', async () => {
+	const provider = await init( { strategy: 'bulk' }, { deferSetBounds: true } );
+	const seen = [];
+
+	provider.on( 'visibleChange', ( keys ) => seen.push( keys ) );
+
+	provider.setPoints( [ group( 'a', 55.70, 37.60 ) ] );
+	provider.destroy();
+
+	ymapsStub.lastMap.resolveNextSetBounds();
+	await flushPromises();
+
+	expect( seen ).toHaveLength( 0 );
 } );
 
 test( 'geocodes the locality under viewport', async () => {
@@ -598,10 +716,28 @@ test( 'uses the plugin default without geocoding when there is no locality', asy
 	expect( ymapsStub.lastMap.setCenterCalls ).toHaveLength( 1 );
 } );
 
-test( 'bulk strategy never registers a boundschange listener (no viewport refetching)', async () => {
-	await init( { strategy: 'bulk' } );
+// Review follow-up (HIGH): bulk DOES need a boundschange listener — the customer can pan/zoom
+// under bulk too, and the panel's "points currently in the viewport" list must track that, even
+// though nothing needs re-fetching (the whole locality is already loaded). It must never emit
+// boundsChange/bboxTooWide, though — bulk never re-fetches by viewport.
+test( 'bulk: a boundschange listener recomputes visibleChange only — never emits '
+	+ 'boundsChange/bboxTooWide (bulk never re-fetches by viewport)', async () => {
+	const provider = await init( { strategy: 'bulk' } );
+	const seenVisible = [];
+	const seenBoundsChange = [];
+	const seenTooWide = [];
 
-	expect( ( ymapsStub.lastMap._eventHandlers.boundschange || [] ).length ).toBe( 0 );
+	provider.setPoints( [ group( 'a', 5, 5 ), group( 'b', 50, 50 ) ] );
+	provider.on( 'visibleChange', ( keys ) => seenVisible.push( keys ) );
+	provider.on( 'boundsChange', () => seenBoundsChange.push( 1 ) );
+	provider.on( 'bboxTooWide', () => seenTooWide.push( 1 ) );
+
+	ymapsStub.lastMap.bounds = [ [ 0, 0 ], [ 10, 10 ] ];
+	ymapsStub.lastMap.fireBoundsChange();
+
+	expect( seenVisible[ 0 ] ).toEqual( [ 'a' ] );
+	expect( seenBoundsChange ).toHaveLength( 0 );
+	expect( seenTooWide ).toHaveLength( 0 );
 } );
 
 test( 'viewport: emits boundsChange once for the initial (already-resolved) viewport, before any pan', async () => {
@@ -715,9 +851,12 @@ test( 'does not try to zoom a group whose points all share one coordinate', asyn
 		},
 	};
 
-	provider.focusGroup( 'a' );
+	await provider.focusGroup( 'a' );
 
 	expect( ymapsStub.lastMap.setBoundsCalls ).toHaveLength( 0 );
+	// The card must still open even though the marker itself stays visually clustered forever —
+	// "do not try to zoom" is not "refuse to focus".
+	expect( provider.getFocusedKey() ).toBe( 'a' );
 } );
 
 test( 'zooms a genuine cluster and awaits the move before reporting', async () => {
@@ -735,8 +874,36 @@ test( 'zooms a genuine cluster and awaits the move before reporting', async () =
 
 	await provider.focusGroup( 'a' );
 
+	// Spec §7.5's call verbatim — zoomMargin/useMapMargin are not decoration: without
+	// useMapMargin the focused point can end up centred underneath the open sidebar's own
+	// map.margin area, where the customer cannot see it.
 	expect( ymapsStub.lastMap.setBoundsCalls ).toHaveLength( 1 );
-	expect( ymapsStub.lastMap.setBoundsCalls[ 0 ].options.checkZoomRange ).toBe( true );
+	expect( ymapsStub.lastMap.setBoundsCalls[ 0 ] ).toEqual( {
+		bounds: [ [ 55.75, 37.61 ], [ 55.75, 37.61 ] ],
+		options: { checkZoomRange: true, zoomMargin: 0, useMapMargin: true },
+	} );
+	expect( provider.getFocusedKey() ).toBe( 'a' );
+} );
+
+// Review follow-up (MEDIUM): zooming further is impossible once the map is already at MAX_ZOOM,
+// so the guard is the same shape as the co-located one — do not attempt a pointless camera move,
+// but still apply focus directly (the card must still open).
+test( 'at MAX_ZOOM, focusGroup applies focus directly without attempting a pointless camera move', async () => {
+	const provider = await init( {}, { zoom: 18 } );
+
+	ymapsStub.lastObjectManager.state = {
+		isClustered: true,
+		cluster: {
+			features: [
+				{ geometry: { coordinates: [ 1, 1 ] } },
+				{ geometry: { coordinates: [ 2, 2 ] } },
+			],
+		},
+	};
+
+	await provider.focusGroup( 'a' );
+
+	expect( ymapsStub.lastMap.setBoundsCalls ).toHaveLength( 0 );
 	expect( provider.getFocusedKey() ).toBe( 'a' );
 } );
 
@@ -857,4 +1024,80 @@ test( 'focusGroup switches the icon box to ACTIVE for the newly focused group an
 		iconImageSize: [ 50, 70 ],
 		iconImageOffset: [ -25, -40 ],
 	} );
+} );
+
+// Review follow-up (MEDIUM, D-5): focusing must also push the ACTIVE state (and therefore the
+// active image) onto the feature's properties, via setObjectProperties() — not just resize its
+// hit-box. This is the wiring half; _renderMarker's own state-driven rendering is pinned
+// directly above.
+test( 'focusGroup pushes state="active"/iconHrefActive via setObjectProperties, and reverts the '
+	+ 'previous group to state="resting"', async () => {
+	const provider = await init( { pointIcons: { pvz: { default: '/d.svg', active: '/a.svg' } } } );
+
+	provider.setPoints( [ group( 'x', 1, 1, 'pvz' ), group( 'y', 2, 2, 'pvz' ) ] );
+	ymapsStub.lastObjectManager.state = { isClustered: false, cluster: null };
+
+	await provider.focusGroup( 'x' );
+
+	expect( ymapsStub.lastObjectManager.objects.setObjectProperties ).toHaveBeenLastCalledWith(
+		'x',
+		expect.objectContaining( { state: 'active', iconHref: '/d.svg', iconHrefActive: '/a.svg' } )
+	);
+
+	await provider.focusGroup( 'y' );
+
+	expect( ymapsStub.lastObjectManager.objects.setObjectProperties ).toHaveBeenCalledWith(
+		'x',
+		expect.objectContaining( { state: 'resting' } )
+	);
+	expect( ymapsStub.lastObjectManager.objects.setObjectProperties ).toHaveBeenLastCalledWith(
+		'y',
+		expect.objectContaining( { state: 'active' } )
+	);
+} );
+
+// -------------------------------------------------------------------------
+// setPoints() rebuild vs. an already-focused group (review follow-up, MEDIUM)
+// -------------------------------------------------------------------------
+
+test( 'setPoints() re-applies the ACTIVE state to the focused group when it survives the rebuild '
+	+ '(a rebuild resets every feature to resting)', async () => {
+	const provider = await init();
+
+	provider.setPoints( [ group( 'a', 1, 1 ), group( 'b', 2, 2 ) ] );
+	ymapsStub.lastObjectManager.state = { isClustered: false, cluster: null };
+	await provider.focusGroup( 'a' );
+
+	ymapsStub.lastObjectManager.objects.setObjectOptions.mockClear();
+	ymapsStub.lastObjectManager.objects.setObjectProperties.mockClear();
+
+	provider.setPoints( [ group( 'a', 1, 1 ), group( 'b', 2, 2 ) ] ); // refetch, 'a' still present
+
+	expect( provider.getFocusedKey() ).toBe( 'a' );
+	expect( ymapsStub.lastObjectManager.objects.setObjectOptions ).toHaveBeenCalledWith( 'a', {
+		iconImageSize: [ 50, 70 ],
+		iconImageOffset: [ -25, -40 ],
+	} );
+	expect( ymapsStub.lastObjectManager.objects.setObjectProperties ).toHaveBeenCalledWith(
+		'a',
+		expect.objectContaining( { state: 'active' } )
+	);
+} );
+
+test( 'setPoints() never re-applies focus to a group that no longer exists in the new set', async () => {
+	const provider = await init();
+
+	provider.setPoints( [ group( 'a', 1, 1 ), group( 'b', 2, 2 ) ] );
+	ymapsStub.lastObjectManager.state = { isClustered: false, cluster: null };
+	await provider.focusGroup( 'a' );
+
+	ymapsStub.lastObjectManager.objects.setObjectProperties.mockClear();
+
+	provider.setPoints( [ group( 'b', 2, 2 ) ] ); // 'a' is gone
+
+	expect( provider.getFocusedKey() ).toBeNull();
+	expect( ymapsStub.lastObjectManager.objects.setObjectProperties ).not.toHaveBeenCalledWith(
+		'a',
+		expect.anything()
+	);
 } );

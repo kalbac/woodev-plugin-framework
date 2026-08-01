@@ -22,7 +22,9 @@
  * viewport resolves and again on every `boundschange` — and the caller decides when/how to
  * fetch and hands the result back through `setPoints( groups )`. Under `strategy: 'bulk'` no
  * bbox is ever emitted; the caller fetches once by `config.locality` on its own schedule, same
- * as before.
+ * as before. BOTH strategies still register a `boundschange` listener, though: the panel's
+ * "points currently in the viewport" list (`visibleChange`) has to track a camera the customer
+ * is free to pan/zoom themselves under `bulk` too, even though nothing needs re-fetching there.
  *
  * PUBLIC SURFACE: `init( container, config )`, `setPoints( groups )`, `focusGroup( key )`,
  * `setTypeFilter( codes )`, `getFocusedKey()`, `on( event, cb )`, `destroy()`. Events out:
@@ -43,7 +45,11 @@
  *    move COMPLETES, not when it starts. Reading `map.getBounds()` right after calling
  *    `setBounds()` without awaiting its promise returns the PRE-move viewport — which once
  *    produced a planet-wide bbox the server's cap correctly refused, reporting "no points" for
- *    a locality that had them. Every `setBounds()` call in this file is awaited. Two moves are
+ *    a locality that had them. This lesson recurred once already inside THIS rewrite, in
+ *    {@see setPoints}'s own `bulk` camera fit: an un-awaited fit let `visibleChange` read the
+ *    map's PRE-fit bounds, so a locality whose points sit outside the technical placeholder
+ *    viewport reported an empty sidebar over a map that was actually full of pins — see that
+ *    method's own comment. Every `setBounds()` call in this file is awaited. Two moves are
  *    also not guaranteed to resolve in call order (animation duration depends on distance), so
  *    concurrent camera commands need sequencing — see {@see focusGroup}'s `_focusSeq`.
  * 2. A PLACEMARK FOLDED INTO A CLUSTER HAS NO BALLOON OF ITS OWN, and whether a group is
@@ -66,7 +72,14 @@
  * disagrees with the CSS (`pickup.css`), clicks land in the wrong place — the CSS must use the
  * SAME pixel values. A group whose `typeCode` has no entry in `config.pointIcons` still gets a
  * marker — {@see WoodevYandexMapProvider#_renderMarker} adds a `--unknown` modifier class
- * instead of leaving an empty/broken `<img>`; it is never invisible or unclickable.
+ * instead of leaving an empty/broken `<img>`; it is never invisible or unclickable. D-5's full
+ * contract is up to FOUR urls per type (default/active × the plugin's own choice of which it
+ * actually supplies) — {@see focusGroup} writes `data-state="active"|"resting"` onto the
+ * marker root AND swaps in `pointIcons[type].active` for the image, so a plugin that supplies
+ * distinct images (the Yandex reference) gets a real image swap, and a plugin that supplies
+ * only `default` (CDEK's own approach — `active` mirrors `default` server-side, see
+ * `Pickup_Handler::normalized_point_icons()`) gets the SAME image drawn larger, both driven by
+ * the one `data-state` attribute Task 21's CSS keys off.
  *
  * `objectManager.setFilter()`, NEVER A REBUILD, drives {@see setTypeFilter}: rebuilding the
  * manager would tear down and recreate every feature, losing the camera state this file just
@@ -427,16 +440,27 @@
 				}
 			}
 		).then( function() {
-			if ( self._destroyed || ! self.map || 'viewport' !== self.config.strategy ) {
+			if ( self._destroyed || ! self.map ) {
 				return;
 			}
 
-			// Fire once for the viewport just resolved, THEN start listening — in that order,
-			// so this initial call is never immediately followed by a redundant second one from
-			// a listener that was not registered yet.
-			self._checkAndEmitBounds();
-			self.map.events.add( 'boundschange', function() {
+			if ( 'viewport' === self.config.strategy ) {
+				// Fire once for the viewport just resolved, THEN start listening — in that
+				// order, so this initial call is never immediately followed by a redundant
+				// second one from a listener that was not registered yet.
 				self._checkAndEmitBounds();
+				self.map.events.add( 'boundschange', function() {
+					self._checkAndEmitBounds();
+				} );
+
+				return;
+			}
+
+			// bulk: nothing to (re)fetch on pan/zoom — the whole locality is already loaded —
+			// but the panel's own "points currently in the viewport" list must still track a
+			// camera the customer is free to move themselves. See the file docblock.
+			self.map.events.add( 'boundschange', function() {
+				self._emitVisibleChange();
 			} );
 		} );
 	};
@@ -635,9 +659,18 @@
 	 * Replaces the drawn groups with `groups` — a full rebuild (`removeAll()` then `add()`),
 	 * never an incremental diff: the caller (Task 20's mount) is the one that decides what the
 	 * current full set is (including any cross-fetch de-duplication), so this file always draws
-	 * exactly what it was handed. Under `strategy: 'bulk'` a non-empty set also fits the camera
-	 * to it via {@see geo}'s `boundsFor()` — the ONLY place this file fits the camera to loaded
-	 * data, matching the previous version's `bulk` behaviour.
+	 * exactly what it was handed.
+	 *
+	 * Under `strategy: 'bulk'` a non-empty set also fits the camera to it via {@see geo}'s
+	 * `boundsFor()` — the ONLY place this file fits the camera to loaded data, matching the
+	 * previous version's `bulk` behaviour. That fit is AWAITED before `visibleChange` is
+	 * emitted — see the file docblock's first lesson: emitting it from the map's PRE-fit bounds
+	 * would report an empty (or stale) visible set for a locality whose points sit outside the
+	 * technical placeholder viewport, and `bulk` has no fetch-driven refresh cycle to correct it
+	 * later the way `viewport` does. A rebuild also resets every feature back to its resting
+	 * options/properties, so a group that is STILL the focused one after this call gets its
+	 * active state re-applied; a focused group that is GONE from the new set clears
+	 * `getFocusedKey()` instead — see {@see _setMarkerState}.
 	 *
 	 * @param {Array} groups
 	 * @returns {void}
@@ -657,44 +690,76 @@
 		this.objectManager.removeAll();
 		this.objectManager.add( features );
 
-		// A refetch that no longer contains the currently focused group must not leave a stale
-		// key behind — the caller has nothing left to visually mark as active.
 		if ( this._focusedKey && ! Object.prototype.hasOwnProperty.call( this._groupsByKey, this._focusedKey ) ) {
+			// A refetch that no longer contains the currently focused group must not leave a
+			// stale key behind — the caller has nothing left to visually mark as active.
 			this._focusedKey = null;
+		} else if ( this._focusedKey ) {
+			this._setMarkerState( this._focusedKey, 'active' );
 		}
-
-		this._emitVisibleChange();
 
 		if ( 'bulk' === this.config.strategy && list.length > 0 ) {
 			var anchor = [ list[ 0 ].lat, list[ 0 ].lng ];
 
-			this.map.setBounds( geo.boundsFor( anchor, list ), { checkZoomRange: true } );
+			// setBounds() is ASYNCHRONOUS — awaited, exactly like _resolveInitialViewport()'s
+			// own call. See the docblock comment above and the file docblock's first lesson.
+			this.map.setBounds( geo.boundsFor( anchor, list ), { checkZoomRange: true } ).then( function() {
+				if ( self._destroyed ) {
+					return;
+				}
+
+				self._emitVisibleChange();
+			} );
+
+			return;
 		}
+
+		this._emitVisibleChange();
 	};
 
 	/**
-	 * Builds one ObjectManager feature for a group. The icon URL is resolved from
-	 * `config.pointIcons[group.typeCode]` — absent for an unrecognised type, in which case
-	 * {@see WoodevYandexMapProvider#_renderMarker} still draws a (modifier-classed) marker, never
-	 * an invisible/broken one. `options.iconImageHref` is deliberately never set anywhere in
-	 * this file — see the file docblock's "ICONS ARE AN HTML LAYOUT" section.
+	 * Builds a feature's `properties` bag from a group — shared by {@see _buildFeature} (the
+	 * initial `add()`) and {@see _setMarkerState} (an in-place `setObjectProperties()` update),
+	 * so the two never drift into building this shape two different ways. `state` defaults to
+	 * `'resting'`; {@see _setMarkerState} overwrites it when re-sending this same shape for a
+	 * focus change.
+	 *
+	 * `iconHref`/`iconHrefActive` are resolved from `config.pointIcons[group.typeCode]` — both
+	 * empty for an unrecognised type, in which case {@see _renderMarker} still draws a
+	 * (modifier-classed) marker, never an invisible/broken one. `active` is guaranteed filled
+	 * server-side whenever the type is known at all (mirroring `default` when the plugin
+	 * supplied only one image — D-5, `Pickup_Handler::normalized_point_icons()`), so
+	 * `iconHrefActive` is never a broken/empty URL for a KNOWN type.
+	 *
+	 * @param {Object} group
+	 * @returns {Object}
+	 */
+	WoodevYandexMapProvider.prototype._buildProperties = function( group ) {
+		var icons = ( this.config.pointIcons && this.config.pointIcons[ group.typeCode ] ) || null;
+
+		return {
+			groupSize: group.size,
+			typeCode: group.typeCode,
+			iconHref: icons ? icons.default : '',
+			iconHrefActive: icons ? icons.active : '',
+			state: 'resting',
+		};
+	};
+
+	/**
+	 * Builds one ObjectManager feature for a group. `options.iconImageHref` is deliberately
+	 * never set anywhere in this file — see the file docblock's "ICONS ARE AN HTML LAYOUT"
+	 * section.
 	 *
 	 * @param {Object} group
 	 * @returns {Object} a GeoJSON-ish ObjectManager feature.
 	 */
 	WoodevYandexMapProvider.prototype._buildFeature = function( group ) {
-		var icons = ( this.config.pointIcons && this.config.pointIcons[ group.typeCode ] ) || null;
-
 		return {
 			type: 'Feature',
 			id: group.key,
 			geometry: { type: 'Point', coordinates: [ group.lat, group.lng ] },
-			properties: {
-				groupSize: group.size,
-				typeCode: group.typeCode,
-				iconHref: icons ? icons.default : '',
-				iconHrefActive: icons ? icons.active : '',
-			},
+			properties: this._buildProperties( group ),
 			options: {
 				iconLayout: this._iconLayoutClass,
 				iconImageSize: ICON_BOX.size,
@@ -704,9 +769,12 @@
 	};
 
 	/**
-	 * Renders one marker's DOM: an `<img>` for a known type's icon (omitted, with a
-	 * `--unknown` modifier class, for an unrecognised `typeCode`), plus a count badge for a
-	 * group of more than one point. Deliberately independent of ymaps' own layout `build()`
+	 * Renders one marker's DOM: an `<img>` for the icon matching the CURRENT `state`
+	 * (`iconHrefActive` when `'active'`, `iconHref` otherwise — omitted, with a `--unknown`
+	 * modifier class, when that URL is empty), plus a count badge for a group of more than one
+	 * point. `data-state` is written onto the root so Task 21's CSS can key off
+	 * `[data-state="active"]` for the size/style change {@see ICON_BOX_ACTIVE}'s hit-box
+	 * already reserves room for (D-5). Deliberately independent of ymaps' own layout `build()`
 	 * machinery — directly unit-testable, matching the pattern the previous version of this
 	 * file used for its balloon body.
 	 *
@@ -718,10 +786,13 @@
 	WoodevYandexMapProvider.prototype._renderMarker = function( container, data ) {
 		var properties = data.properties;
 		var groupSize = properties.get( 'groupSize' );
-		var iconHref = properties.get( 'iconHref' );
+		var state = properties.get( 'state' ) || 'resting';
+		var isActive = 'active' === state;
+		var iconHref = isActive ? properties.get( 'iconHrefActive' ) : properties.get( 'iconHref' );
 		var root = container.querySelector( '.woodev-pickup-marker' ) || container;
 		var isGroup = groupSize > 1;
 
+		root.setAttribute( 'data-state', state );
 		root.classList.toggle( 'woodev-pickup-marker--group', isGroup );
 		root.classList.toggle( 'woodev-pickup-marker--unknown', ! iconHref );
 		root.innerHTML = '';
@@ -798,11 +869,25 @@
 
 	/**
 	 * Focuses group `key`: marks it visually active (swaps its icon hit-box to
-	 * {@see ICON_BOX_ACTIVE} and the previously focused group's back to {@see ICON_BOX}) and,
-	 * when it is currently folded into a ymaps cluster, moves the camera to un-cluster it —
-	 * unless every feature in that cluster shares one coordinate, in which case no move could
-	 * ever separate them and none is attempted (the "Russian Post" guard, spec §7.5; see the
-	 * file docblock's second lesson).
+	 * {@see ICON_BOX_ACTIVE}, its icon image to `iconHrefActive`, and `data-state` to
+	 * `'active'` — see {@see _setMarkerState} — reverting the previously focused group, if any,
+	 * back to resting) and, when it is currently folded into a ymaps cluster, moves the camera
+	 * to un-cluster it. The move is skipped — focus still applies directly, exactly like the
+	 * `MAX_ZOOM` case below — when every feature in that cluster shares one coordinate, since no
+	 * move could ever separate them (the "Russian Post" guard, spec §7.5; see the file
+	 * docblock's second lesson), or when the map is ALREADY at `MAX_ZOOM`, since a group cannot
+	 * be zoomed in on any further — a pointless camera command the customer would only see as a
+	 * stutter. `setBounds()` is called with the exact options spec §7.5 gives: `zoomMargin: 0`
+	 * and `useMapMargin: true` keep the un-clustered point inside the area the panels leave free
+	 * via `map.margin`, so it does not end up centred underneath the open sidebar where the
+	 * customer cannot see it.
+	 *
+	 * `attemptedMove` gates the POST-move re-check: it only matters (and only runs) when a real
+	 * camera move was actually attempted — a group focused WITHOUT moving (co-located, or
+	 * already at max zoom) applies immediately, it is never re-evaluated against a "did the
+	 * move actually un-cluster it" check that never had a move to evaluate. When a move WAS
+	 * attempted and ymaps still reports the SAME degenerate state once it settles, focus is not
+	 * applied — see the file docblock's second lesson.
 	 *
 	 * SEQUENCED against a slower-to-resolve EARLIER call via `_focusSeq`: two ymaps camera moves
 	 * are not guaranteed to resolve in the order they were started (animation duration depends
@@ -810,11 +895,6 @@
 	 * focus on top of a more recent call's. `mySeq` captures `_focusSeq` at call time; the
 	 * continuation only proceeds if `_focusSeq` is still `mySeq` once the move (or the
 	 * synchronous "nothing to move" case) settles.
-	 *
-	 * The cluster check runs TWICE: once before moving (to decide whether to move at all), and
-	 * again on the SETTLED state once the move resolves — ymaps' own report of what is
-	 * clustered at `key` can change once the camera actually settles, and a still-degenerate
-	 * result after moving must not apply focus either.
 	 *
 	 * @param {string} key
 	 * @returns {Promise<void>}
@@ -824,12 +904,18 @@
 		var mySeq = ++this._focusSeq;
 		var state = this.objectManager.getObjectState( key );
 		var mover = Promise.resolve();
+		var attemptedMove = false;
 
-		if ( state && state.isClustered && ! isSingleCoordinateCluster( state.cluster ) ) {
+		if ( state && state.isClustered && ! isSingleCoordinateCluster( state.cluster )
+			&& this.map.getZoom() < MAX_ZOOM ) {
 			var target = clusterAnchorCoordinates( state.cluster );
 
 			if ( target ) {
-				mover = this.map.setBounds( [ target, target ], { checkZoomRange: true } );
+				attemptedMove = true;
+				mover = this.map.setBounds(
+					[ target, target ],
+					{ checkZoomRange: true, zoomMargin: 0, useMapMargin: true }
+				);
 			}
 		}
 
@@ -838,10 +924,12 @@
 				return;
 			}
 
-			var settled = self.objectManager.getObjectState( key );
+			if ( attemptedMove ) {
+				var settled = self.objectManager.getObjectState( key );
 
-			if ( settled && settled.isClustered && isSingleCoordinateCluster( settled.cluster ) ) {
-				return;
+				if ( settled && settled.isClustered && isSingleCoordinateCluster( settled.cluster ) ) {
+					return;
+				}
 			}
 
 			self._applyFocus( key );
@@ -850,7 +938,7 @@
 
 	/**
 	 * Applies the visual "focused" state to `key` and reverts the previously focused group (if
-	 * any, and if different) back to its resting icon box.
+	 * any, and if different) back to its resting state.
 	 *
 	 * @param {string} key
 	 * @returns {void}
@@ -859,30 +947,52 @@
 		var previous = this._focusedKey;
 
 		if ( previous && previous !== key ) {
-			this._setIconBox( previous, ICON_BOX );
+			this._setMarkerState( previous, 'resting' );
 		}
 
-		this._setIconBox( key, ICON_BOX_ACTIVE );
+		this._setMarkerState( key, 'active' );
 		this._focusedKey = key;
 	};
 
 	/**
-	 * Sets one feature's `iconImageSize`/`iconImageOffset` via `objectManager.objects.setObjectOptions()`
-	 * — the documented way to update a single already-added feature's options in place, without
-	 * a `removeAll()`/`add()` rebuild.
+	 * Sets one feature's icon hit-box AND, when the group's own data is still known
+	 * (`_groupsByKey`), its rendered state (`data-state` and which icon URL is shown — D-5),
+	 * via `objectManager.objects.setObjectOptions()`/`setObjectProperties()` — the documented
+	 * way to update an already-added feature in place, without a `removeAll()`/`add()` rebuild.
 	 *
-	 * @param {string}                       key
-	 * @param {{size: number[], offset: number[]}} box
+	 * The hit-box updates UNCONDITIONALLY (it needs no group data, only the fixed box
+	 * constants); the properties update is skipped when the group is unknown — defensive only,
+	 * `setPoints()` always populates `_groupsByKey` before any `focusGroup()` a real caller
+	 * would issue.
+	 *
+	 * @param {string} key
+	 * @param {string} state `'active'` or `'resting'`.
 	 * @returns {void}
 	 */
-	WoodevYandexMapProvider.prototype._setIconBox = function( key, box ) {
+	WoodevYandexMapProvider.prototype._setMarkerState = function( key, state ) {
 		var objects = this.objectManager && this.objectManager.objects;
 
-		if ( objects && 'function' === typeof objects.setObjectOptions ) {
+		if ( ! objects ) {
+			return;
+		}
+
+		var box = 'active' === state ? ICON_BOX_ACTIVE : ICON_BOX;
+
+		if ( 'function' === typeof objects.setObjectOptions ) {
 			objects.setObjectOptions( key, {
 				iconImageSize: box.size,
 				iconImageOffset: box.offset,
 			} );
+		}
+
+		var group = this._groupsByKey[ key ];
+
+		if ( group && 'function' === typeof objects.setObjectProperties ) {
+			var properties = this._buildProperties( group );
+
+			properties.state = state;
+
+			objects.setObjectProperties( key, properties );
 		}
 	};
 
