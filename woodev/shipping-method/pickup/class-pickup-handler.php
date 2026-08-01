@@ -189,6 +189,49 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		private array $fetch_failures = [];
 
 		/**
+		 * The plugin's hardcoded default viewport (Moscow for CDEK/Yandex.Delivery, etc.),
+		 * used when the geocoder cascade cannot yet centre the map on the buyer's own city
+		 * (spec D-7). REQUIRED — a shared, load-bearing value must never be something an
+		 * author can forget, the same reasoning behind
+		 * {@see \Woodev\Framework\Shipping\Map\Yandex_Map_Provider}'s required fallback
+		 * key. Validated once, on construction, by {@see self::validate_default_location()}.
+		 *
+		 * @since 2.0.2
+		 * @var array{center: array{0: float|int, 1: float|int}, zoom: int}
+		 */
+		private array $default_location;
+
+		/**
+		 * Plugin-supplied icon URLs, keyed by point type code, each holding up to a
+		 * `default` and an `active` URL (spec D-5). Stored RAW — normalisation (dropping an
+		 * unusable type, filling `active` from `default`, escaping every URL) happens once,
+		 * at config-build time, in {@see self::normalized_point_icons()}, never here.
+		 *
+		 * @since 2.0.2
+		 * @var array<string, array{default?: string, active?: string}>
+		 */
+		private array $point_icons;
+
+		/**
+		 * The minimum zoom level {@see self::validate_default_location()} accepts,
+		 * matching the map provider's own configured `minZoom` (spec D-7). A default
+		 * viewport the map itself refuses to render at is not a usable obligation.
+		 *
+		 * @since 2.0.2
+		 * @var int
+		 */
+		private const MIN_ZOOM = 8;
+
+		/**
+		 * The maximum zoom level {@see self::validate_default_location()} accepts,
+		 * matching the map provider's own configured `maxZoom` (spec D-7).
+		 *
+		 * @since 2.0.2
+		 * @var int
+		 */
+		private const MAX_ZOOM = 18;
+
+		/**
 		 * Constructor.
 		 *
 		 * `$order_handler` and `$point_field_logical` are optional and go together: when
@@ -210,6 +253,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 *                                                          class docblock's first
 		 *                                                          deviation.
 		 * @param Map_Provider                $map_provider        the active map provider.
+		 * @param array                       $default_location    the plugin's hardcoded
+		 *                                                          default viewport — REQUIRED,
+		 *                                                          see {@see self::$default_location}.
+		 *                                                          Shape: `[ 'center' => [ float|int
+		 *                                                          $lat, float|int $lng ], 'zoom' =>
+		 *                                                          int ]`. Validated on
+		 *                                                          construction; see
+		 *                                                          {@see self::validate_default_location()}.
 		 * @param Shipping_Order_Handler|null $order_handler   the plugin's order-meta
 		 *                                                      accessor, holding its own
 		 *                                                      logical→real key map. Omit to
@@ -231,23 +282,166 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 *                                                          anything for it, including every
 		 *                                                          caller that DOES wire full-point
 		 *                                                          persistence.
+		 * @param array                       $point_icons         plugin-supplied icon URLs per
+		 *                                                          point type (spec D-5); see
+		 *                                                          {@see self::$point_icons}. Optional
+		 *                                                          — a plugin that supplies none gets
+		 *                                                          the framework's generic pin.
+		 *
+		 * @throws \InvalidArgumentException when `$default_location` does not have a valid
+		 *                                    `center` (two floats/ints, lat within ±90, lng
+		 *                                    within ±180) and a valid `zoom` (an int between
+		 *                                    {@see self::MIN_ZOOM} and {@see self::MAX_ZOOM}).
 		 */
 		public function __construct(
 			string $plugin_id,
 			string $field_id,
 			Point_Source $source,
 			Map_Provider $map_provider,
+			array $default_location,
 			?Shipping_Order_Handler $order_handler = null,
 			?string $point_field_logical = null,
-			bool $replace_address = true
+			bool $replace_address = true,
+			array $point_icons = []
 		) {
+			self::validate_default_location( $default_location );
+
 			$this->plugin_id           = $plugin_id;
 			$this->field_id            = $field_id;
 			$this->source              = $source;
 			$this->map_provider        = $map_provider;
+			$this->default_location    = $default_location;
 			$this->order_handler       = $order_handler;
 			$this->point_field_logical = $point_field_logical;
 			$this->replace_address     = $replace_address;
+			$this->point_icons         = $point_icons;
+		}
+
+		/**
+		 * Validates a plugin's default-viewport argument, throwing when it is not
+		 * something the map can actually render — an obligation that silently accepts
+		 * nonsense is not an obligation (spec D-7).
+		 *
+		 * `center` accepts an int OR a float for each coordinate — a whole-degree city
+		 * centre (e.g. `56`) is just as valid a latitude as `55.75` — but the VALUE must be
+		 * a real number, not a numeric string. `zoom` must be an `int` (not a numeric
+		 * string, not a float) within {@see self::MIN_ZOOM}..{@see self::MAX_ZOOM}
+		 * inclusive — the same range the map provider itself is configured with, so a
+		 * default the map would refuse to honour can never be constructed.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array $default_location the raw constructor argument to validate.
+		 *
+		 * @throws \InvalidArgumentException on any of the failures documented above.
+		 *
+		 * @return void
+		 */
+		private static function validate_default_location( array $default_location ): void {
+			if ( ! array_key_exists( 'center', $default_location )
+				|| ! array_key_exists( 'zoom', $default_location ) ) {
+				throw new \InvalidArgumentException(
+					'$default_location must have both a "center" and a "zoom" key.'
+				);
+			}
+
+			$center = $default_location['center'];
+
+			if ( ! is_array( $center ) || 2 !== count( $center )
+				|| ! array_key_exists( 0, $center ) || ! array_key_exists( 1, $center ) ) {
+				throw new \InvalidArgumentException(
+					'$default_location["center"] must be a two-element [ lat, lng ] array.'
+				);
+			}
+
+			[ $lat, $lng ] = array_values( $center );
+
+			if ( ! is_int( $lat ) && ! is_float( $lat ) ) {
+				throw new \InvalidArgumentException(
+					'$default_location["center"][0] (latitude) must be an int or a float.'
+				);
+			}
+
+			if ( ! is_int( $lng ) && ! is_float( $lng ) ) {
+				throw new \InvalidArgumentException(
+					'$default_location["center"][1] (longitude) must be an int or a float.'
+				);
+			}
+
+			if ( $lat < -90.0 || $lat > 90.0 ) {
+				throw new \InvalidArgumentException(
+					'$default_location["center"][0] (latitude) must be between -90 and 90.'
+				);
+			}
+
+			if ( $lng < -180.0 || $lng > 180.0 ) {
+				throw new \InvalidArgumentException(
+					'$default_location["center"][1] (longitude) must be between -180 and 180.'
+				);
+			}
+
+			$zoom = $default_location['zoom'];
+
+			if ( ! is_int( $zoom ) ) {
+				throw new \InvalidArgumentException( '$default_location["zoom"] must be an int.' );
+			}
+
+			if ( $zoom < self::MIN_ZOOM || $zoom > self::MAX_ZOOM ) {
+				throw new \InvalidArgumentException(
+					sprintf(
+						'$default_location["zoom"] must be between %d and %d.',
+						self::MIN_ZOOM,
+						self::MAX_ZOOM
+					)
+				);
+			}
+		}
+
+		/**
+		 * Normalises {@see self::$point_icons} into the shape the browser receives, once,
+		 * at config-build time (spec D-5):
+		 *
+		 * - a type whose `default` is missing entirely is dropped — the framework never
+		 *   invents a placeholder icon;
+		 * - every URL is run through `esc_url_raw()` — this is a JSON payload, not HTML,
+		 *   so `esc_url_raw()`, never `esc_url()` (which would turn a querystring `&` into
+		 *   `&#038;`);
+		 * - a `default` that survives escaping as an empty string (e.g. a `javascript:`
+		 *   URL, which WordPress's own bad-protocol stripping collapses to `''`) drops the
+		 *   whole type too — an icon pointing at `""` is not a usable icon;
+		 * - `active` falls back to the (already-escaped) `default` when the plugin supplied
+		 *   only one image per type (CDEK's shape: active state expressed by CSS size
+		 *   alone, see the class docblock's D-5 reference).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array<string, array{default: string, active: string}>
+		 */
+		private function normalized_point_icons(): array {
+			$normalized = [];
+
+			foreach ( $this->point_icons as $type => $urls ) {
+				if ( ! is_array( $urls ) || empty( $urls['default'] ) || ! is_string( $urls['default'] ) ) {
+					continue;
+				}
+
+				$default = esc_url_raw( $urls['default'] );
+
+				if ( '' === $default ) {
+					continue;
+				}
+
+				$active = ( ! empty( $urls['active'] ) && is_string( $urls['active'] ) )
+					? esc_url_raw( $urls['active'] )
+					: $default;
+
+				$normalized[ $type ] = [
+					'default' => $default,
+					'active'  => '' !== $active ? $active : $default,
+				];
+			}
+
+			return $normalized;
 		}
 
 		/**
@@ -270,6 +464,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 *     restRoot: string,
 		 *     nonce: string,
 		 *     i18n: array<string, string>,
+		 *     defaultLocation: array{center: array{0: float|int, 1: float|int}, zoom: int},
+		 *     pointIcons: array<string, array{default: string, active: string}>,
 		 *     mapConfig: array<string, mixed>,
 		 *     replaceAddress: array{enabled: bool, billingOnly: bool}
 		 * }
@@ -327,7 +523,32 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 						'Не удалось загрузить подробности о пункте выдачи. Вы всё ещё можете его выбрать.',
 						'woodev-plugin-framework'
 					),
+					// Consumed by the panels (Tasks 12-15), not by this handler or the modal
+					// shell — same "renders blank, never a hardcoded fallback" contract as the
+					// nine keys above.
+					'services'         => __( 'Услуги', 'woodev-plugin-framework' ),
+					'yourAddress'      => __( 'Ваш адрес', 'woodev-plugin-framework' ),
+					/* translators: %s: the searched address. */
+					'nearestTo'        => __( 'Ближайшие к «%s»', 'woodev-plugin-framework' ),
+					'resetSearch'      => __( 'Сбросить', 'woodev-plugin-framework' ),
+					'nothingNearby'    => __(
+						'Рядом с этим адресом пунктов выдачи нет.',
+						'woodev-plugin-framework'
+					),
+					'showNearest'      => __( 'Показать ближайший', 'woodev-plugin-framework' ),
+					'continueCheckout' => __( 'Продолжить оформление заказа', 'woodev-plugin-framework' ),
+					'zoomIn'           => __(
+						'Приблизьте карту, чтобы увидеть пункты выдачи',
+						'woodev-plugin-framework'
+					),
+					'sectionPoints'    => __( 'Пункты выдачи', 'woodev-plugin-framework' ),
+					'sectionAddresses' => __( 'Адреса', 'woodev-plugin-framework' ),
+					'filterTypes'      => __( 'Тип пунктов', 'woodev-plugin-framework' ),
+					'emptyInView'      => __( 'В этой области пунктов выдачи нет', 'woodev-plugin-framework' ),
 				],
+
+				'defaultLocation' => $this->default_location,
+				'pointIcons'      => $this->normalized_point_icons(),
 
 				'mapConfig'      => $this->map_provider->get_js_config( [ 'plugin_id' => $this->plugin_id ] ),
 

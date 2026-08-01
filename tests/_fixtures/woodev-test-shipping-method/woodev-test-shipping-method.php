@@ -548,11 +548,38 @@ function woodev_test_shipping_method_plugin_init(): void {
 				// copy of this placeholder.
 				$map_provider = new \Woodev\Framework\Shipping\Map\Yandex_Map_Provider( 'FIXTURE-FAKE-YANDEX-KEY' );
 
+				// SP-5 Task 8 (D-7): a hardcoded default viewport is now a REQUIRED
+				// constructor argument — Moscow, matching every point this fixture serves,
+				// so the rig's map opens centred on the fixture's own data instead of the
+				// whole world.
+				$default_location = [ 'center' => [ 55.76, 37.64 ], 'zoom' => 12 ];
+
+				// SP-5 Task 8 (D-5): plugin-supplied icon URLs per point type. `pvz` supplies
+				// BOTH states (the Yandex reference's two-image shape); `postamat` supplies
+				// only `default` (the CDEK shape — `active` falls back to it, expressed by
+				// the framework's own size-only CSS instead). A type this fixture never uses
+				// (`group`) is intentionally absent, exercising the framework's own group
+				// badge fallback on the rig.
+				$point_icons = [
+					'pvz'      => [
+						'default' => 'https://carrier.example/icons/pvz.svg',
+						'active'  => 'https://carrier.example/icons/pvz-active.svg',
+					],
+					'postamat' => [
+						'default' => 'https://carrier.example/icons/postamat.svg',
+					],
+				];
+
 				$this->pickup_handler = new \Woodev\Framework\Shipping\Pickup\Pickup_Handler(
 					self::PLUGIN_ID,
 					'carrier_pickup_point',
 					$point_source,
-					$map_provider
+					$map_provider,
+					$default_location,
+					null,
+					null,
+					true,
+					$point_icons
 				);
 				$this->pickup_handler->register();
 			}

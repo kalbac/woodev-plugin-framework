@@ -258,9 +258,10 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			string $field_id,
 			Point_Source $source,
 			Map_Provider $map_provider,
+			array $default_location,
 			int $forced_weight
 		) {
-			parent::__construct( $plugin_id, $field_id, $source, $map_provider );
+			parent::__construct( $plugin_id, $field_id, $source, $map_provider, $default_location );
 			$this->forced_weight = $forced_weight;
 		}
 
@@ -332,11 +333,12 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			string $field_id,
 			Point_Source $source,
 			Map_Provider $map_provider,
+			array $default_location,
 			$cart,
 			bool $load_cart_available = false,
 			$cart_after_load = null
 		) {
-			parent::__construct( $plugin_id, $field_id, $source, $map_provider );
+			parent::__construct( $plugin_id, $field_id, $source, $map_provider, $default_location );
 			$this->cart                = $cart;
 			$this->load_cart_available = $load_cart_available;
 			$this->cart_after_load     = $cart_after_load;
@@ -375,9 +377,10 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			string $field_id,
 			Point_Source $source,
 			Map_Provider $map_provider,
+			array $default_location,
 			$session_value
 		) {
-			parent::__construct( $plugin_id, $field_id, $source, $map_provider );
+			parent::__construct( $plugin_id, $field_id, $source, $map_provider, $default_location );
 			$this->session_value = $session_value;
 		}
 
@@ -415,10 +418,11 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			string $field_id,
 			Point_Source $source,
 			Map_Provider $map_provider,
+			array $default_location,
 			int $forced_weight,
 			$session_value
 		) {
-			parent::__construct( $plugin_id, $field_id, $source, $map_provider );
+			parent::__construct( $plugin_id, $field_id, $source, $map_provider, $default_location );
 			$this->forced_weight = $forced_weight;
 			$this->session_value = $session_value;
 		}
@@ -520,6 +524,47 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 		}
 
 		/**
+		 * A representative, valid default viewport (Moscow) — Task 8 made this constructor
+		 * argument mandatory, so every test that does not itself examine `defaultLocation`
+		 * needs SOME valid value to pass; this is that value, kept in one place so a future
+		 * change to what "valid" means only has to happen here.
+		 *
+		 * @return array{center: array{0: float, 1: float}, zoom: int}
+		 */
+		private function default_location(): array {
+			return [ 'center' => [ 55.75, 37.61 ], 'zoom' => 10 ];
+		}
+
+		/**
+		 * Builds a {@see Pickup_Handler} with sensible defaults for every constructor
+		 * argument Task 8/8B added, overridable via `$overrides`. Introduced for the
+		 * accent-colour and viewport/icon tests, which would otherwise each have to restate
+		 * every unrelated constructor argument; pre-existing tests keep constructing
+		 * {@see Pickup_Handler} directly.
+		 *
+		 * Deliberately does NOT stub any WordPress function — every test using this helper
+		 * still stubs `apply_filters()`/`rest_url()`/`wp_create_nonce()`/
+		 * `wc_ship_to_billing_address_only()` itself, exactly like every other test in this
+		 * file, so a test that needs `Filters\expectApplied()` (a specific expectation) is
+		 * never fighting a generic stub this helper set up behind its back.
+		 *
+		 * @param array<string, mixed> $overrides
+		 */
+		private function make_handler( array $overrides = [] ): Pickup_Handler {
+			return new Pickup_Handler(
+				$overrides['plugin_id'] ?? 'p',
+				$overrides['field_id'] ?? 'carrier_pickup_point',
+				$overrides['source'] ?? $this->source_returning( null ),
+				$overrides['map_provider'] ?? $this->yandex_provider(),
+				$overrides['default_location'] ?? $this->default_location(),
+				$overrides['order_handler'] ?? null,
+				$overrides['point_field_logical'] ?? null,
+				$overrides['replace_address'] ?? true,
+				$overrides['point_icons'] ?? []
+			);
+		}
+
+		/**
 		 * Recursively asserts an array contains no object/closure value, and no key shaped
 		 * like a carrier/provider credential (e.g. `apiKey`, `api_key`, `secret`, `token`)
 		 * anywhere in its tree — the guard SP-5 Task 9 strengthens once `mapConfig` stops
@@ -566,7 +611,8 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				'p',
 				'carrier_pickup_point',
 				$source,
-				$this->yandex_provider()
+				$this->yandex_provider(),
+				$this->default_location()
 			) )->get_js_config();
 
 			$this->assertSame( 'viewport', $config['strategy'] );
@@ -590,7 +636,8 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				'p',
 				'carrier_pickup_point',
 				$source,
-				$this->yandex_provider()
+				$this->yandex_provider(),
+				$this->default_location()
 			) )->get_js_config();
 
 			$this->assertSame( 'bulk', $config['strategy'] );
@@ -612,7 +659,8 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				'p',
 				'carrier_pickup_point',
 				$source,
-				$this->embedded_provider()
+				$this->embedded_provider(),
+				$this->default_location()
 			) )->get_js_config();
 
 			$this->assertSame( 'embedded', $config['provider'] );
@@ -633,7 +681,8 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				'p',
 				'carrier_pickup_point',
 				$source,
-				$this->yandex_provider()
+				$this->yandex_provider(),
+				$this->default_location()
 			) )->get_js_config();
 
 			$this->assertSame( [], $config['mapConfig'] );
@@ -654,7 +703,13 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 
 			$source   = $this->source_returning( null );
 			$provider = $this->yandex_provider( [ 'scriptUrl' => 'https://api-maps.yandex.ru/2.1/?apikey=TEST' ] );
-			$config   = ( new Pickup_Handler( 'p', 'carrier_pickup_point', $source, $provider ) )->get_js_config();
+			$config   = ( new Pickup_Handler(
+				'p',
+				'carrier_pickup_point',
+				$source,
+				$provider,
+				$this->default_location()
+			) )->get_js_config();
 
 			$this->assertSame(
 				[ 'scriptUrl' => 'https://api-maps.yandex.ru/2.1/?apikey=TEST' ],
@@ -677,7 +732,13 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			$source   = $this->source_returning( null );
 			$provider = new Pickup_Handler_Test_Map_Provider( 'yandex' );
 
-			( new Pickup_Handler( 'carrier-x', 'carrier_pickup_point', $source, $provider ) )->get_js_config();
+			( new Pickup_Handler(
+				'carrier-x',
+				'carrier_pickup_point',
+				$source,
+				$provider,
+				$this->default_location()
+			) )->get_js_config();
 
 			$this->assertSame( [ 'plugin_id' => 'carrier-x' ], $provider->received_context );
 		}
@@ -713,7 +774,13 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 
 			$source   = $this->source_returning( null );
 			$provider = new \Woodev\Framework\Shipping\Map\Yandex_Map_Provider( 'REAL-SECRET-KEY' );
-			$config   = ( new Pickup_Handler( 'p', 'carrier_pickup_point', $source, $provider ) )->get_js_config();
+			$config   = ( new Pickup_Handler(
+				'p',
+				'carrier_pickup_point',
+				$source,
+				$provider,
+				$this->default_location()
+			) )->get_js_config();
 
 			$this->assertConfigHasNoObjectsOrClosures( $config );
 			$this->assertStringContainsString( 'apikey=REAL-SECRET-KEY', $config['mapConfig']['scriptUrl'] );
@@ -730,7 +797,8 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				'p',
 				'carrier_pickup_point',
 				$source,
-				$this->yandex_provider()
+				$this->yandex_provider(),
+				$this->default_location()
 			) )->get_js_config();
 
 			$this->assertSame( [ 'enabled' => true, 'billingOnly' => true ], $config['replaceAddress'] );
@@ -748,7 +816,8 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				'p',
 				'carrier_pickup_point',
 				$source,
-				$this->yandex_provider()
+				$this->yandex_provider(),
+				$this->default_location()
 			) )->get_js_config();
 
 			$this->assertFalse( $config['replaceAddress']['billingOnly'] );
@@ -763,7 +832,13 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			Functions\when( 'wc_ship_to_billing_address_only' )->justReturn( false );
 
 			$source  = $this->source_returning( null );
-			$handler = new Pickup_Handler( 'carrier!!!', 'carrier_pickup_point', $source, $this->yandex_provider() );
+			$handler = new Pickup_Handler(
+				'carrier!!!',
+				'carrier_pickup_point',
+				$source,
+				$this->yandex_provider(),
+				$this->default_location()
+			);
 			$config  = $handler->get_js_config();
 
 			$this->assertSame(
@@ -785,7 +860,8 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				'!!!',
 				'carrier_pickup_point',
 				$source,
-				$this->yandex_provider()
+				$this->yandex_provider(),
+				$this->default_location()
 			) )->get_js_config();
 
 			$this->assertSame(
@@ -812,13 +888,258 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				'p',
 				'carrier_pickup_point',
 				$source,
-				$this->yandex_provider()
+				$this->yandex_provider(),
+				$this->default_location()
 			) )->get_js_config();
 
 			$this->assertSame(
-				[ 'fieldId', 'strategy', 'provider', 'restRoot', 'nonce', 'i18n', 'mapConfig', 'replaceAddress' ],
+				[
+					'fieldId',
+					'strategy',
+					'provider',
+					'restRoot',
+					'nonce',
+					'i18n',
+					'defaultLocation',
+					'pointIcons',
+					'mapConfig',
+					'replaceAddress',
+				],
 				array_keys( $config )
 			);
+		}
+
+		// -------------------------------------------------------------------------
+		// get_js_config() — defaultLocation (Task 8 / D-7) and pointIcons (Task 8 / D-5)
+		// -------------------------------------------------------------------------
+
+		/**
+		 * The required `$default_location` constructor argument reaches the browser
+		 * verbatim under `defaultLocation` — the fallback the client uses when the
+		 * geocoder cascade (viewport strategy) or the initial bulk load cannot yet centre
+		 * the map on the buyer's own city (D-7).
+		 */
+		public function test_the_default_location_reaches_the_browser_config(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			Functions\when( 'rest_url' )->justReturn( 'https://example.test/wp-json/woodev/v1' );
+			Functions\when( 'wp_create_nonce' )->justReturn( 'NONCE' );
+			Functions\when( 'wc_ship_to_billing_address_only' )->justReturn( false );
+
+			$handler = $this->make_handler( [ 'default_location' => [ 'center' => [ 55.76, 37.64 ], 'zoom' => 12 ] ] );
+
+			$this->assertSame(
+				[ 'center' => [ 55.76, 37.64 ], 'zoom' => 12 ],
+				$handler->get_js_config()['defaultLocation']
+			);
+		}
+
+		/**
+		 * @param mixed $default_location
+		 *
+		 * @dataProvider provide_invalid_default_locations
+		 */
+		public function test_an_invalid_default_location_is_rejected_on_construction( $default_location ): void {
+			$this->expectException( \InvalidArgumentException::class );
+
+			$this->make_handler( [ 'default_location' => $default_location ] );
+		}
+
+		/**
+		 * @return array<string, array{0: array<string, mixed>}>
+		 */
+		public function provide_invalid_default_locations(): array {
+			return [
+				'missing center key'         => [ [ 'zoom' => 10 ] ],
+				'missing zoom key'           => [ [ 'center' => [ 55.75, 37.61 ] ] ],
+				'center with three elements' => [ [ 'center' => [ 55.75, 37.61, 0 ], 'zoom' => 10 ] ],
+				'center as a string'         => [ [ 'center' => '55.75,37.61', 'zoom' => 10 ] ],
+				'latitude above 90'          => [ [ 'center' => [ 95.0, 37.61 ], 'zoom' => 10 ] ],
+				'latitude below -90'         => [ [ 'center' => [ -95.0, 37.61 ], 'zoom' => 10 ] ],
+				'longitude above 180'        => [ [ 'center' => [ 55.75, 185.0 ], 'zoom' => 10 ] ],
+				'longitude below -180'       => [ [ 'center' => [ 55.75, -185.0 ], 'zoom' => 10 ] ],
+				'zoom as a float'            => [ [ 'center' => [ 55.75, 37.61 ], 'zoom' => 10.5 ] ],
+				'zoom as a numeric string'   => [ [ 'center' => [ 55.75, 37.61 ], 'zoom' => '10' ] ],
+				'zoom below the map minimum' => [ [ 'center' => [ 55.75, 37.61 ], 'zoom' => 7 ] ],
+				'zoom above the map maximum' => [ [ 'center' => [ 55.75, 37.61 ], 'zoom' => 19 ] ],
+			];
+		}
+
+		/**
+		 * A latitude/longitude expressed as an INT (e.g. a whole-degree city centre) is
+		 * just as valid as a float — "two floats" in the spec means "two real numbers",
+		 * not "must already be typed float".
+		 */
+		public function test_default_location_accepts_integer_latitude_and_longitude(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			Functions\when( 'rest_url' )->justReturn( 'https://example.test/wp-json/woodev/v1' );
+			Functions\when( 'wp_create_nonce' )->justReturn( 'NONCE' );
+			Functions\when( 'wc_ship_to_billing_address_only' )->justReturn( false );
+
+			$handler = $this->make_handler( [ 'default_location' => [ 'center' => [ 56, 38 ], 'zoom' => 10 ] ] );
+
+			$this->assertSame( [ 'center' => [ 56, 38 ], 'zoom' => 10 ], $handler->get_js_config()['defaultLocation'] );
+		}
+
+		/**
+		 * The zoom bounds are inclusive at both ends — 8 and 18 (the map's own
+		 * `minZoom`/`maxZoom`, see D-7) must both be accepted, not just the interior range.
+		 */
+		public function test_default_location_accepts_zoom_at_the_inclusive_bounds(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			Functions\when( 'rest_url' )->justReturn( 'https://example.test/wp-json/woodev/v1' );
+			Functions\when( 'wp_create_nonce' )->justReturn( 'NONCE' );
+			Functions\when( 'wc_ship_to_billing_address_only' )->justReturn( false );
+
+			$min = $this->make_handler( [ 'default_location' => [ 'center' => [ 55.75, 37.61 ], 'zoom' => 8 ] ] );
+			$max = $this->make_handler( [ 'default_location' => [ 'center' => [ 55.75, 37.61 ], 'zoom' => 18 ] ] );
+
+			$this->assertSame( 8, $min->get_js_config()['defaultLocation']['zoom'] );
+			$this->assertSame( 18, $max->get_js_config()['defaultLocation']['zoom'] );
+		}
+
+		/**
+		 * Icons are passed through with `active` falling back to `default` when a plugin
+		 * supplies only one image per type (D-5) — reproduces CDEK's single-image,
+		 * size-only active state.
+		 */
+		public function test_icons_are_passed_through_with_active_falling_back_to_default(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			Functions\when( 'rest_url' )->justReturn( 'https://example.test/wp-json/woodev/v1' );
+			Functions\when( 'wp_create_nonce' )->justReturn( 'NONCE' );
+			Functions\when( 'wc_ship_to_billing_address_only' )->justReturn( false );
+
+			$handler = $this->make_handler( [
+				'point_icons' => [ 'postamat' => [ 'default' => 'https://example.test/pm.svg' ] ],
+			] );
+
+			$this->assertSame(
+				[
+					'postamat' => [
+						'default' => 'https://example.test/pm.svg',
+						'active'  => 'https://example.test/pm.svg',
+					],
+				],
+				$handler->get_js_config()['pointIcons']
+			);
+		}
+
+		/**
+		 * A plugin supplying BOTH images per type (the Yandex reference's shape) must see
+		 * both come through unchanged, not collapsed to the default-falls-back-to-active
+		 * shape {@see self::test_icons_are_passed_through_with_active_falling_back_to_default()}
+		 * exercises.
+		 */
+		public function test_icons_with_both_states_keep_both_states_distinct(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			Functions\when( 'rest_url' )->justReturn( 'https://example.test/wp-json/woodev/v1' );
+			Functions\when( 'wp_create_nonce' )->justReturn( 'NONCE' );
+			Functions\when( 'wc_ship_to_billing_address_only' )->justReturn( false );
+
+			$handler = $this->make_handler( [
+				'point_icons' => [
+					'pvz' => [
+						'default' => 'https://example.test/pvz.svg',
+						'active'  => 'https://example.test/pvz-active.svg',
+					],
+				],
+			] );
+
+			$this->assertSame(
+				[
+					'pvz' => [
+						'default' => 'https://example.test/pvz.svg',
+						'active'  => 'https://example.test/pvz-active.svg',
+					],
+				],
+				$handler->get_js_config()['pointIcons']
+			);
+		}
+
+		/**
+		 * @see esc-url-raw-for-js-consumed-urls — this is JSON, not HTML: `esc_url_raw()`,
+		 * never `esc_url()`, or `&` in a querystring would come through as `&#038;`.
+		 */
+		public function test_icon_urls_are_escaped_for_a_json_payload(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			Functions\when( 'rest_url' )->justReturn( 'https://example.test/wp-json/woodev/v1' );
+			Functions\when( 'wp_create_nonce' )->justReturn( 'NONCE' );
+			Functions\when( 'wc_ship_to_billing_address_only' )->justReturn( false );
+
+			$handler = $this->make_handler( [
+				'point_icons' => [ 'pvz' => [ 'default' => 'https://example.test/a.svg?x=1&y=2' ] ],
+			] );
+
+			$this->assertStringContainsString( '&y=2', $handler->get_js_config()['pointIcons']['pvz']['default'] );
+			$this->assertStringNotContainsString( '&amp;', $handler->get_js_config()['pointIcons']['pvz']['default'] );
+		}
+
+		/**
+		 * A type with no `default` at all is dropped entirely — the framework refuses to
+		 * invent a placeholder icon, and an `active`-only entry is not a usable type.
+		 */
+		public function test_icon_normalization_drops_a_type_with_no_default_key(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			Functions\when( 'rest_url' )->justReturn( 'https://example.test/wp-json/woodev/v1' );
+			Functions\when( 'wp_create_nonce' )->justReturn( 'NONCE' );
+			Functions\when( 'wc_ship_to_billing_address_only' )->justReturn( false );
+
+			$handler = $this->make_handler( [
+				'point_icons' => [
+					'orphan_active_only' => [ 'active' => 'https://example.test/orphan-active.svg' ],
+					'pvz'                => [ 'default' => 'https://example.test/pvz.svg' ],
+				],
+			] );
+
+			$icons = $handler->get_js_config()['pointIcons'];
+
+			$this->assertArrayNotHasKey( 'orphan_active_only', $icons );
+			$this->assertArrayHasKey( 'pvz', $icons );
+		}
+
+		/**
+		 * A `default` URL that survives `esc_url_raw()` as an empty string — a
+		 * `javascript:` URL is exactly the case WordPress's own escaping strips to nothing
+		 * — must drop the whole type, not emit an icon pointing at `""`.
+		 */
+		public function test_icon_normalization_drops_a_type_whose_default_becomes_empty_after_escaping(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			Functions\when( 'rest_url' )->justReturn( 'https://example.test/wp-json/woodev/v1' );
+			Functions\when( 'wp_create_nonce' )->justReturn( 'NONCE' );
+			Functions\when( 'wc_ship_to_billing_address_only' )->justReturn( false );
+			// Faithful-enough stand-in for esc_url_raw()'s real bad-protocol stripping
+			// (wp_kses_bad_protocol()) for the one case this test needs: a disallowed
+			// scheme collapses to the empty string, exactly like the real function.
+			Functions\when( 'esc_url_raw' )->alias(
+				static function ( $url ) {
+					return 0 === stripos( ltrim( (string) $url ), 'javascript:' ) ? '' : $url;
+				}
+			);
+
+			$handler = $this->make_handler( [
+				'point_icons' => [
+					'malicious' => [ 'default' => 'javascript:alert(1)' ],
+					'pvz'       => [ 'default' => 'https://example.test/pvz.svg' ],
+				],
+			] );
+
+			$icons = $handler->get_js_config()['pointIcons'];
+
+			$this->assertArrayNotHasKey( 'malicious', $icons );
+			$this->assertArrayHasKey( 'pvz', $icons );
+		}
+
+		/**
+		 * No plugin-supplied icons at all is a legitimate, common case (a plugin that
+		 * hasn't opted into custom pins yet) — `pointIcons` must be an empty array, never
+		 * missing or null.
+		 */
+		public function test_point_icons_defaults_to_an_empty_array(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			Functions\when( 'rest_url' )->justReturn( 'https://example.test/wp-json/woodev/v1' );
+			Functions\when( 'wp_create_nonce' )->justReturn( 'NONCE' );
+			Functions\when( 'wc_ship_to_billing_address_only' )->justReturn( false );
+
+			$this->assertSame( [], $this->make_handler()->get_js_config()['pointIcons'] );
 		}
 
 		public function test_config_contains_no_object_or_closure_anywhere(): void {
@@ -832,7 +1153,8 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				'p',
 				'carrier_pickup_point',
 				$source,
-				$this->yandex_provider()
+				$this->yandex_provider(),
+				$this->default_location()
 			) )->get_js_config();
 
 			$this->assertConfigHasNoObjectsOrClosures( $config );
@@ -854,7 +1176,8 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				'p',
 				'carrier_pickup_point',
 				$this->source_returning( null ),
-				$this->yandex_provider()
+				$this->yandex_provider(),
+				$this->default_location()
 			) )->get_js_config();
 		}
 
@@ -878,7 +1201,8 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				'p',
 				'carrier_pickup_point',
 				$this->source_returning( null ),
-				$this->yandex_provider()
+				$this->yandex_provider(),
+				$this->default_location()
 			) )->get_js_config()['i18n'];
 
 			// Exact expected VALUES, not just key presence — two adjacent keys (e.g.
@@ -936,7 +1260,13 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			Functions\when( 'apply_filters' )->returnArg( 2 );
 
 			$provider = new \Woodev\Framework\Shipping\Map\Yandex_Map_Provider( 'FALLBACK-KEY' );
-			$handler  = new Pickup_Handler( 'p', 'carrier_pickup_point', $this->source_returning( null ), $provider );
+			$handler  = new Pickup_Handler(
+				'p',
+				'carrier_pickup_point',
+				$this->source_returning( null ),
+				$provider,
+				$this->default_location()
+			);
 
 			$this->assertArrayHasKey( 'map_api_key', $handler->get_settings_fields() );
 			$this->assertSame( $provider->get_settings_fields(), $handler->get_settings_fields() );
@@ -956,7 +1286,13 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				'https://carrier.example/widget',
 				'https://carrier.example'
 			);
-			$handler = new Pickup_Handler( 'p', 'carrier_pickup_point', $this->source_returning( null ), $provider );
+			$handler = new Pickup_Handler(
+				'p',
+				'carrier_pickup_point',
+				$this->source_returning( null ),
+				$provider,
+				$this->default_location()
+			);
 
 			$this->assertSame( [], $handler->get_settings_fields() );
 			$this->assertArrayNotHasKey( 'map_api_key', $handler->get_settings_fields() );
@@ -981,7 +1317,8 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				'p',
 				'carrier_pickup_point',
 				$this->source_returning( null ),
-				$this->yandex_provider()
+				$this->yandex_provider(),
+				$this->default_location()
 			);
 
 			$this->assertTrue( $handler->get_js_config()['replaceAddress']['enabled'] );
@@ -1004,6 +1341,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				'carrier_pickup_point',
 				$this->source_returning( null ),
 				$this->yandex_provider(),
+				$this->default_location(),
 				null,
 				null,
 				false
@@ -1029,6 +1367,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				'carrier_pickup_point',
 				$this->source_returning( null ),
 				$this->yandex_provider(),
+				$this->default_location(),
 				null,
 				null,
 				false
@@ -1058,6 +1397,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				'carrier_pickup_point',
 				$this->source_returning( null ),
 				$this->yandex_provider(),
+				$this->default_location(),
 				$order_handler,
 				'pickup_full'
 			);
@@ -1078,7 +1418,13 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			$point  = $this->point( [ 'accepts_cod' => false ] );
 			$source = $this->source_returning( $point );
 
-			$handler = new Pickup_Handler( 'p', 'carrier_pickup_point', $source, $this->yandex_provider() );
+			$handler = new Pickup_Handler(
+				'p',
+				'carrier_pickup_point',
+				$source,
+				$this->yandex_provider(),
+				$this->default_location()
+			);
 
 			$this->assertFalse( $handler->validate_selected_point( $point, 'cod', 0 ) );
 			$this->assertTrue( $handler->validate_selected_point( $point, 'bacs', 0 ) );
@@ -1097,7 +1443,13 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			);
 
 			$point   = $this->point( [ 'accepts_cod' => false ] );
-			$handler = new Pickup_Handler( 'p', 'f', $this->source_returning( $point ), $this->yandex_provider() );
+			$handler = new Pickup_Handler(
+				'p',
+				'f',
+				$this->source_returning( $point ),
+				$this->yandex_provider(),
+				$this->default_location()
+			);
 
 			$handler->validate_selected_point( $point, 'cod', 0 );
 
@@ -1118,7 +1470,13 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			Functions\expect( 'wc_add_notice' )->never();
 
 			$point   = $this->point();
-			$handler = new Pickup_Handler( 'p', 'f', $this->source_returning( $point ), $this->yandex_provider() );
+			$handler = new Pickup_Handler(
+				'p',
+				'f',
+				$this->source_returning( $point ),
+				$this->yandex_provider(),
+				$this->default_location()
+			);
 
 			$this->assertTrue( $handler->validate_selected_point( $point, 'bacs', 0 ) );
 		}
@@ -1131,7 +1489,13 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			Functions\when( 'apply_filters' )->returnArg( 2 );
 
 			$point   = $this->point();
-			$handler = new Pickup_Handler( 'p', 'f', $this->source_returning( $point ), $this->yandex_provider() );
+			$handler = new Pickup_Handler(
+				'p',
+				'f',
+				$this->source_returning( $point ),
+				$this->yandex_provider(),
+				$this->default_location()
+			);
 
 			$this->assertTrue( $handler->validate_posted_point( 'P1', 'bacs', 0 ) );
 		}
@@ -1143,7 +1507,13 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			Functions\when( 'wc_add_notice' )->justReturn( true );
 
 			$point   = $this->point( [ 'accepts_cod' => false ] );
-			$handler = new Pickup_Handler( 'p', 'f', $this->source_returning( $point ), $this->yandex_provider() );
+			$handler = new Pickup_Handler(
+				'p',
+				'f',
+				$this->source_returning( $point ),
+				$this->yandex_provider(),
+				$this->default_location()
+			);
 
 			$this->assertFalse( $handler->validate_posted_point( 'P1', 'cod', 0 ) );
 		}
@@ -1158,7 +1528,13 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				}
 			);
 
-			$handler = new Pickup_Handler( 'p', 'f', $this->source_returning( null ), $this->yandex_provider() );
+			$handler = new Pickup_Handler(
+				'p',
+				'f',
+				$this->source_returning( null ),
+				$this->yandex_provider(),
+				$this->default_location()
+			);
 
 			$this->assertFalse( $handler->validate_posted_point( 'unknown', 'bacs', 0 ) );
 			$this->assertCount( 1, $captured );
@@ -1176,7 +1552,8 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				'p',
 				'f',
 				$this->source_throwing( new \Woodev_API_Exception( 'carrier down' ) ),
-				$this->yandex_provider()
+				$this->yandex_provider(),
+				$this->default_location()
 			);
 
 			// No apply_filters stub attached at all — simulates the real "no merchant
@@ -1201,7 +1578,8 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				'p',
 				'f',
 				$this->source_throwing( new \RuntimeException( 'the carrier SDK blew up' ) ),
-				$this->yandex_provider()
+				$this->yandex_provider(),
+				$this->default_location()
 			);
 
 			Functions\when( 'apply_filters' )->returnArg( 2 );
@@ -1230,7 +1608,8 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				'p',
 				'f',
 				$this->source_throwing( new \Woodev_API_Exception( 'carrier down' ) ),
-				$this->yandex_provider()
+				$this->yandex_provider(),
+				$this->default_location()
 			);
 
 			$probe->validate_posted_point( 'P1', 'bacs', 0 );
@@ -1257,7 +1636,8 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				'p',
 				'f',
 				$this->source_throwing( new \Woodev_API_Exception( 'carrier down' ) ),
-				$this->yandex_provider()
+				$this->yandex_provider(),
+				$this->default_location()
 			);
 
 			$this->assertFalse( $probe->validate_posted_point( 'P1', 'bacs', 0 ) );
@@ -1284,7 +1664,8 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				'p',
 				'f',
 				$this->source_throwing( new \TypeError( 'unexpected argument shape' ) ),
-				$this->yandex_provider()
+				$this->yandex_provider(),
+				$this->default_location()
 			);
 
 			$this->assertFalse( $probe->validate_posted_point( 'P1', 'bacs', 0 ) );
@@ -1307,7 +1688,8 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				'p',
 				'f',
 				$this->source_throwing( new \Woodev_API_Exception( 'https://carrier.example/secret?token=abc' ) ),
-				$this->yandex_provider()
+				$this->yandex_provider(),
+				$this->default_location()
 			);
 
 			$probe->validate_posted_point( 'P1', 'bacs', 0 );
@@ -1336,7 +1718,8 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				'p',
 				'f',
 				$this->source_throwing( new \Woodev_API_Exception( 'down' ) ),
-				$this->yandex_provider()
+				$this->yandex_provider(),
+				$this->default_location()
 			);
 			$handler->validate_posted_point( 'P1', 'bacs', 0 );
 		}
@@ -1357,7 +1740,8 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				'p',
 				'f',
 				$this->source_throwing( new \RuntimeException( 'boom' ) ),
-				$this->yandex_provider()
+				$this->yandex_provider(),
+				$this->default_location()
 			);
 			$handler->validate_posted_point( 'P1', 'bacs', 0 );
 		}
@@ -1379,6 +1763,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				'pickup_point',
 				$source,
 				$this->yandex_provider(),
+				$this->default_location(),
 				$order_handler,
 				'pickup_full'
 			);
@@ -1403,7 +1788,13 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			Functions\when( 'error_log' )->justReturn( true );
 
 			$source  = $this->source_throwing( new \Woodev_API_Exception( 'down' ) );
-			$handler = new Pickup_Handler( 'p', 'pickup_point', $source, $this->yandex_provider() );
+			$handler = new Pickup_Handler(
+				'p',
+				'pickup_point',
+				$source,
+				$this->yandex_provider(),
+				$this->default_location()
+			);
 
 			$handler->validate_posted_point( 'P1', 'bacs', 0 );
 			$handler->validate_posted_point( 'P1', 'bacs', 0 );
@@ -1423,7 +1814,13 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				Point_Source::STRATEGY_BULK,
 				fn( string $id ) => $this->point( [ 'id' => $id ] )
 			);
-			$handler = new Pickup_Handler( 'p', 'pickup_point', $source, $this->yandex_provider() );
+			$handler = new Pickup_Handler(
+				'p',
+				'pickup_point',
+				$source,
+				$this->yandex_provider(),
+				$this->default_location()
+			);
 
 			$handler->validate_posted_point( 'P1', 'bacs', 0 );
 			$handler->validate_posted_point( 'P2', 'bacs', 0 );
@@ -1439,7 +1836,13 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			$source = $this->source_returning( $this->point() );
 			$_POST  = [ 'payment_method' => 'bacs' ];
 
-			$handler = new Pickup_Handler( 'p', 'pickup_point', $source, $this->yandex_provider() );
+			$handler = new Pickup_Handler(
+				'p',
+				'pickup_point',
+				$source,
+				$this->yandex_provider(),
+				$this->default_location()
+			);
 			$handler->handle_checkout_process();
 
 			$this->assertSame( 0, $source->fetch_details_calls, 'a blank posted field must never trigger a fetch' );
@@ -1454,7 +1857,13 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			$source = $this->source_returning( $this->point() );
 			$_POST  = [ 'pickup_point' => [ 'a', 'b' ], 'payment_method' => 'bacs' ];
 
-			$handler = new Pickup_Handler( 'p', 'pickup_point', $source, $this->yandex_provider() );
+			$handler = new Pickup_Handler(
+				'p',
+				'pickup_point',
+				$source,
+				$this->yandex_provider(),
+				$this->default_location()
+			);
 			$handler->handle_checkout_process();
 
 			$this->assertSame( 0, $source->fetch_details_calls, 'an array-valued field must never trigger a fetch' );
@@ -1476,7 +1885,14 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			$source = $this->source_returning( $point );
 			$_POST  = [ 'pickup_point' => 'P1', 'payment_method' => 'cod' ];
 
-			$handler = new Pickup_Handler_Weight_Probe( 'p', 'pickup_point', $source, $this->yandex_provider(), 0 );
+			$handler = new Pickup_Handler_Weight_Probe(
+				'p',
+				'pickup_point',
+				$source,
+				$this->yandex_provider(),
+				$this->default_location(),
+				0
+			);
 			$handler->handle_checkout_process();
 
 			$this->assertCount( 1, $captured, 'cod payment method must trigger the COD-blocked notice' );
@@ -1491,7 +1907,14 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			$source = $this->source_returning( $point );
 			$_POST  = [ 'pickup_point' => 'P1', 'payment_method' => 'bacs' ];
 
-			$handler = new Pickup_Handler_Weight_Probe( 'p', 'pickup_point', $source, $this->yandex_provider(), 2500 );
+			$handler = new Pickup_Handler_Weight_Probe(
+				'p',
+				'pickup_point',
+				$source,
+				$this->yandex_provider(),
+				$this->default_location(),
+				2500
+			);
 
 			Functions\expect( 'wc_add_notice' )->once();
 			$handler->handle_checkout_process();
@@ -1504,7 +1927,14 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			$source = $this->source_returning( $point );
 			$_POST  = [ 'pickup_point' => 'P1', 'payment_method' => 'bacs' ];
 
-			$handler = new Pickup_Handler_Weight_Probe( 'p', 'pickup_point', $source, $this->yandex_provider(), 1500 );
+			$handler = new Pickup_Handler_Weight_Probe(
+				'p',
+				'pickup_point',
+				$source,
+				$this->yandex_provider(),
+				$this->default_location(),
+				1500
+			);
 
 			Functions\expect( 'wc_add_notice' )->never();
 			$handler->handle_checkout_process();
@@ -1549,6 +1979,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				'pickup_point',
 				$source,
 				$this->yandex_provider(),
+				$this->default_location(),
 				0,
 				'cod'
 			);
@@ -1578,6 +2009,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				'pickup_point',
 				$source,
 				$this->yandex_provider(),
+				$this->default_location(),
 				0,
 				'cod'
 			);
@@ -1610,6 +2042,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				'f',
 				$this->source_returning( null ),
 				$this->yandex_provider(),
+				$this->default_location(),
 				'cod'
 			);
 
@@ -1630,6 +2063,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				'f',
 				$this->source_returning( null ),
 				$this->yandex_provider(),
+				$this->default_location(),
 				'cod'
 			);
 
@@ -1649,6 +2083,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				'f',
 				$this->source_returning( null ),
 				$this->yandex_provider(),
+				$this->default_location(),
 				'bacs'
 			);
 
@@ -1669,6 +2104,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				'f',
 				$this->source_returning( null ),
 				$this->yandex_provider(),
+				$this->default_location(),
 				null
 			);
 
@@ -1689,6 +2125,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				'f',
 				$this->source_returning( null ),
 				$this->yandex_provider(),
+				$this->default_location(),
 				[ 'unexpected' => 'array' ]
 			);
 
@@ -1704,7 +2141,13 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 		 * relies on for the cart seam.
 		 */
 		public function test_wc_session_chosen_payment_method_is_null_when_wc_is_unavailable(): void {
-			$handler = new Pickup_Handler_Probe( 'p', 'f', $this->source_returning( null ), $this->yandex_provider() );
+			$handler = new Pickup_Handler_Probe(
+				'p',
+				'f',
+				$this->source_returning( null ),
+				$this->yandex_provider(),
+				$this->default_location()
+			);
 
 			$this->assertNull( $handler->wc_session_chosen_payment_method_public() );
 		}
@@ -1722,7 +2165,13 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 		public function test_current_cart_weight_grams_defaults_to_zero_when_wc_is_unavailable(): void {
 			// WC() genuinely does not exist in this unit-test process — a truthful exercise
 			// of the "cart not loaded" branch, not a simulation.
-			$probe = new Pickup_Handler_Probe( 'p', 'f', $this->source_returning( null ), $this->yandex_provider() );
+			$probe = new Pickup_Handler_Probe(
+				'p',
+				'f',
+				$this->source_returning( null ),
+				$this->yandex_provider(),
+				$this->default_location()
+			);
 
 			$this->assertSame( 0, $probe->current_cart_weight_grams_public() );
 		}
@@ -1732,7 +2181,13 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 		 * degrades to `null`, not a fatal, when WC() genuinely does not exist.
 		 */
 		public function test_wc_cart_is_null_when_wc_is_unavailable(): void {
-			$handler = new Pickup_Handler_Probe( 'p', 'f', $this->source_returning( null ), $this->yandex_provider() );
+			$handler = new Pickup_Handler_Probe(
+				'p',
+				'f',
+				$this->source_returning( null ),
+				$this->yandex_provider(),
+				$this->default_location()
+			);
 
 			$this->assertNull( $handler->wc_cart_public() );
 		}
@@ -1750,6 +2205,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				'f',
 				$this->source_returning( null ),
 				$this->yandex_provider(),
+				$this->default_location(),
 				new Pickup_Handler_Test_Cart( 1.5 )
 			);
 
@@ -1774,6 +2230,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				'f',
 				$this->source_returning( null ),
 				$this->yandex_provider(),
+				$this->default_location(),
 				null,
 				true,
 				new Pickup_Handler_Test_Cart( 2.5 )
@@ -1794,6 +2251,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				'f',
 				$this->source_returning( null ),
 				$this->yandex_provider(),
+				$this->default_location(),
 				null,
 				false
 			);
@@ -1814,6 +2272,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				'f',
 				$this->source_returning( null ),
 				$this->yandex_provider(),
+				$this->default_location(),
 				null,
 				true,
 				null
@@ -1856,6 +2315,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				'pickup_point',
 				$source,
 				$this->yandex_provider(),
+				$this->default_location(),
 				$order_handler,
 				'pickup_full'
 			);
@@ -1894,6 +2354,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				'pickup_point',
 				$this->source_returning( $point ),
 				$this->yandex_provider(),
+				$this->default_location(),
 				new Shipping_Order_Handler( [ 'pickup_full' => 'cdek_full_point' ] ),
 				'pickup_full'
 			);
@@ -1904,6 +2365,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				'pickup_point',
 				$this->source_returning( $point ),
 				$this->yandex_provider(),
+				$this->default_location(),
 				new Shipping_Order_Handler( [ 'pickup_full' => 'yandex_delivery_point_data' ] ),
 				'pickup_full'
 			);
@@ -1925,7 +2387,13 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			Functions\expect( 'update_post_meta' )->never();
 
 			// The 4-arg constructor — no Shipping_Order_Handler, no logical field name.
-			$handler = new Pickup_Handler( 'p', 'pickup_point', $source, $this->yandex_provider() );
+			$handler = new Pickup_Handler(
+				'p',
+				'pickup_point',
+				$source,
+				$this->yandex_provider(),
+				$this->default_location()
+			);
 			$handler->handle_checkout_order_processed( 1, [], new \WC_Order() );
 
 			$this->assertSame( 0, $source->fetch_details_calls, 'must skip before ever fetching the point' );
@@ -1943,6 +2411,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				'pickup_point',
 				$source,
 				$this->yandex_provider(),
+				$this->default_location(),
 				$order_handler,
 				'pickup_full'
 			);
@@ -1963,6 +2432,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				'pickup_point',
 				$source,
 				$this->yandex_provider(),
+				$this->default_location(),
 				$order_handler,
 				'pickup_full'
 			);
@@ -1985,6 +2455,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				'pickup_point',
 				$source,
 				$this->yandex_provider(),
+				$this->default_location(),
 				$order_handler,
 				'pickup_full'
 			);
@@ -2023,7 +2494,8 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				'p',
 				'pickup_point',
 				$this->source_returning( null ),
-				$this->yandex_provider()
+				$this->yandex_provider(),
+				$this->default_location()
 			);
 			$handler->register();
 		}
@@ -2044,7 +2516,8 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				'carrier',
 				'pickup_point',
 				$this->source_returning( null ),
-				$this->yandex_provider()
+				$this->yandex_provider(),
+				$this->default_location()
 			);
 			$handler->register_rest();
 
@@ -2067,7 +2540,8 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				'p',
 				'pickup_point',
 				$this->source_returning( null ),
-				$this->yandex_provider()
+				$this->yandex_provider(),
+				$this->default_location()
 			);
 			$handler->enqueue_assets();
 		}
@@ -2132,7 +2606,8 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				'p',
 				'pickup_point',
 				$this->source_returning( null ),
-				$this->yandex_provider()
+				$this->yandex_provider(),
+				$this->default_location()
 			);
 			$handler->enqueue_assets();
 
@@ -2212,7 +2687,8 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				'p',
 				'pickup_point',
 				$this->source_returning( null ),
-				$this->yandex_provider()
+				$this->yandex_provider(),
+				$this->default_location()
 			);
 			$handler->enqueue_assets();
 
@@ -2265,7 +2741,8 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				'carrier-x',
 				'pickup_point',
 				$this->source_returning( null ),
-				$this->yandex_provider()
+				$this->yandex_provider(),
+				$this->default_location()
 			);
 			$handler->enqueue_assets();
 
