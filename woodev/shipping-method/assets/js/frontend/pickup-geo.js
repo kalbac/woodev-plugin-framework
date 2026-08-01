@@ -395,7 +395,7 @@
 	 * point object is reused across calls (a fresh pool, e.g. after a
 	 * dataSource refetch, simply misses the cache and decodes again).
 	 *
-	 * `undefined` in a environment without `WeakMap` — `getDecodedFields()`
+	 * `undefined` in an environment without `WeakMap` — `getDecodedFields()`
 	 * falls back to decoding on every call rather than throwing.
 	 *
 	 * @type {WeakMap|undefined}
