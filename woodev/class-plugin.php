@@ -519,7 +519,12 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 			// ever DECLARES it as a script dependency rather than each re-registering its own
 			// copy of the handle. Vanilla ES5, no jQuery/Backbone dependency — see the file's
 			// own docblock.
-			wp_register_script( 'woodev-modal', $this->get_framework_assets_url() . '/js/frontend/woodev-modal.js', [], self::VERSION );
+			wp_register_script(
+				'woodev-modal',
+				$this->get_framework_assets_url() . '/js/frontend/woodev-modal.js',
+				[],
+				self::VERSION
+			);
 
 			// The modal's chrome stylesheet follows the same D-13 rule: registered once here,
 			// framework-side, sharing the `woodev-modal` handle with the script above (scripts
