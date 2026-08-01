@@ -56,11 +56,15 @@
  * Map surface
  * ---------------------------------------------------------------------- */
 
-/* The ymaps map root. Explicit 100%/100% against a parent with a resolved height — see the
-   height note on the dialog frame's rule in `woodev-modal.css`. */
+/* The ymaps map root. The dialog frame in `woodev-modal.css` deliberately declares NO height
+   of its own (D-13 — that would be this module's sizing leaking into shared chrome), so THIS
+   rule is the one that must resolve to a real pixel height, not `height: 100%` against an
+   ancestor that may never define one. `min( 80vh, 800px )` reproduces the height this module
+   used to force onto the dialog itself, just owned by the right file now — an interim number,
+   not a final one: Task 21 rewrites this whole file's panels and is expected to settle it. */
 .woodev-pickup-map {
 	width: 100%;
-	height: 100%;
+	height: min( 80vh, 800px );
 	min-height: 320px;
 }
 
@@ -88,12 +92,13 @@
 	pointer-events: none; /* Never blocks a map the customer can already see and drag. */
 }
 
-/* The embedded provider's iframe. Same height contract; the border reset stops a theme's
-   global `iframe { border: 1px solid }` from drawing a frame inside the dialog. */
+/* The embedded provider's iframe. Same height contract as `.woodev-pickup-map` above — the
+   dialog resolves no height of its own, so this rule owns it; the border reset stops a
+   theme's global `iframe { border: 1px solid }` from drawing a frame inside the dialog. */
 .woodev-pickup-embedded-frame {
 	display: block;
 	width: 100%;
-	height: 100%;
+	height: min( 80vh, 800px );
 	min-height: 320px;
 	border: 0;
 }

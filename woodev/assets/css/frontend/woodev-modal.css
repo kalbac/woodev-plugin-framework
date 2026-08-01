@@ -57,13 +57,18 @@
 /* -------------------------------------------------------------------------
  * Dialog frame.
  *
- * `height`/`max-height`/`overflow: hidden` plus the header/body flex split below are not
- * in the plain WC reference (a simple form-sized WC modal has no need of them), but they
- * are generic chrome all the same: ANY consumer whose content can be taller than the
- * viewport needs a dialog that stops growing and a body that scrolls internally instead —
- * not just the pickup map. Without a resolved height here, `.woodev-modal__body`'s height
- * is `auto`, and a consumer relying on `height: 100%` inside it (the pickup map does)
- * collapses to zero — the classic "silently blank" failure.
+ * NO fixed `height` here — that would be one consumer's sizing (the pickup map's) leaking
+ * into shared chrome, and it collides with `.woodev-pickup-map`'s own height in pickup.css
+ * (see the note there). The box shrink-wraps to whatever a consumer's content resolves to,
+ * per D-13 — this is genuinely generic chrome: NO `width` either, so `min-width`/`max-width`
+ * do the sizing, not a forced 100%. Only ONE height-related rule is generic enough to live
+ * here: `max-height` caps the dialog so it can never exceed the viewport, whatever a
+ * consumer puts inside it (the actual pixel height is still the consumer's own concern —
+ * see `.woodev-pickup-map`).
+ *
+ * The header/body flex split (`display: flex; flex-direction: column` here, `flex: 1 1 auto`
+ * on the body) IS still generic: it is what makes the header sticky and the body scrollable
+ * whenever a consumer's content is tall enough to need it, and costs nothing when it is not.
  * ---------------------------------------------------------------------- */
 
 .woodev-modal__content {
@@ -74,13 +79,11 @@
 	z-index: 100000;
 	display: flex;
 	flex-direction: column;
-	width: 100%;
-	height: 80vh;
 	background: #fff;
 	color: #1e1e1e;
 	max-width: 100%;
 	min-width: 920px;
-	max-height: 800px;
+	max-height: calc( 100vh - 40px );
 	border-radius: 4px;
 	box-shadow: 0 6px 30px rgba( 0, 0, 0, 0.3 );
 	overflow: hidden;
