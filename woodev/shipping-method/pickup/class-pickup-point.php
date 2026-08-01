@@ -88,6 +88,26 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Point' ) ) :
 				? array_map( 'strval', (array) $payload['photos'] )
 				: [];
 
+			// Unlike payment_methods/photos above (which strval-cast every element), services
+			// are filtered rather than coerced: a non-string element (an un-flattened object, an
+			// array a carrier adapter forgot to map) is dropped instead of becoming the literal
+			// string "Array" — esc_html() in to_browser_array() would fatal on an actual array.
+			// A whitespace-only entry ('   ') is treated as absent and dropped via trim(); the
+			// string '0' is a legitimate service label and is deliberately kept — it is truthy
+			// via trim() !== '' but would be silently eaten by a naive `if ( $service )` filter.
+			// array_values() re-indexes so wp_json_encode() emits a JSON array, not an object
+			// (see gotcha: php-stdlib-traps-that-survive-tests).
+			$services = isset( $payload['services'] )
+				? array_values(
+					array_filter(
+						(array) $payload['services'],
+						static function ( $service ): bool {
+							return is_string( $service ) && '' !== trim( $service );
+						}
+					)
+				)
+				: [];
+
 			return new self(
 				[
 					'id'              => (string) $payload['id'],
@@ -107,6 +127,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Point' ) ) :
 					'work_time'       => isset( $payload['work_time'] ) ? (string) $payload['work_time'] : '',
 					'payment_methods' => $payment_methods,
 					'photos'          => $photos,
+					'services'        => $services,
 					'accepts_cod'     => isset( $payload['accepts_cod'] ) ? (bool) $payload['accepts_cod'] : null,
 					'max_weight'      => isset( $payload['max_weight'] ) ? (int) $payload['max_weight'] : null,
 				]
@@ -252,6 +273,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Point' ) ) :
 			$out['type']['code']    = esc_html( $out['type']['code'] );
 			$out['type']['label']   = esc_html( $out['type']['label'] );
 			$out['payment_methods'] = array_map( 'esc_html', $out['payment_methods'] );
+			$out['services']        = array_map( 'esc_html', $out['services'] );
 
 			// esc_url_raw, not esc_url: this is a JSON payload, not HTML. esc_url_raw still
 			// strips dangerous schemes like `javascript:`, but esc_url additionally

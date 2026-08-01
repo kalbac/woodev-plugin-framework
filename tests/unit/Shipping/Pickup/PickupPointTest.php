@@ -29,6 +29,18 @@ final class PickupPointTest extends TestCase {
 		];
 	}
 
+	/**
+	 * Builds a point from the valid() payload with the given overrides merged in.
+	 *
+	 * @param array<string, mixed> $overrides Payload keys to merge over the valid baseline.
+	 */
+	private function make_point( array $overrides ): Pickup_Point {
+		$point = Pickup_Point::from_array( array_merge( $this->valid(), $overrides ) );
+		$this->assertNotNull( $point, 'test payload must build a valid point' );
+
+		return $point;
+	}
+
 	public function test_builds_from_a_complete_payload(): void {
 		$point = Pickup_Point::from_array( $this->valid() );
 		$this->assertNotNull( $point, 'a complete, valid payload must build a point' );
@@ -170,5 +182,35 @@ final class PickupPointTest extends TestCase {
 		$payload['id'] = 'PVZ-1&2';
 		$array         = Pickup_Point::from_array( $payload )->to_browser_array();
 		$this->assertSame( 'PVZ-1&2', $array['id'], 'id is an identity token, not display text' );
+	}
+
+	public function test_services_default_to_an_empty_array(): void {
+		$point = $this->make_point( [] );
+
+		$this->assertSame( [], $point->to_array()['services'] );
+	}
+
+	public function test_services_are_escaped_for_the_browser(): void {
+		$point = $this->make_point( [ 'services' => [ 'Примерка', 'A & B' ] ] );
+
+		$this->assertSame( [ 'Примерка', 'A &amp; B' ], $point->to_browser_array()['services'] );
+	}
+
+	public function test_non_string_services_are_dropped(): void {
+		$point = $this->make_point( [ 'services' => [ 'Примерка', [ 'x' ], null, 5 ] ] );
+
+		$this->assertSame( [ 'Примерка' ], $point->to_array()['services'] );
+	}
+
+	public function test_whitespace_only_services_are_dropped(): void {
+		$point = $this->make_point( [ 'services' => [ 'Примерка', '   ', '' ] ] );
+
+		$this->assertSame( [ 'Примерка' ], $point->to_array()['services'] );
+	}
+
+	public function test_the_string_zero_is_a_legitimate_service(): void {
+		$point = $this->make_point( [ 'services' => [ '0' ] ] );
+
+		$this->assertSame( [ '0' ], $point->to_array()['services'] );
 	}
 }
