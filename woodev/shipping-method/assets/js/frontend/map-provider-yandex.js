@@ -30,9 +30,9 @@
  * `setTypeFilter( codes )`, `getFocusedKey()`, `resolveAddress( displayName )`,
  * `focusAddress( latLng, label )`, `clearAddress()`, `on( event, cb )`, `destroy()`. Events out:
  * `pointClick( key )`, `boundsChange( bbox )`, `bboxTooWide()`, `visibleChange( keys )`,
- * `nothingNearby( { distanceMeters, name } )`, `error( { code, message } )`. `bbox` is the flat
- * `[lat1,lng1,lat2,lng2]` shape `pickup-datasource.js`'s `serializePointsQuery()` expects (see
- * {@see flattenBounds}).
+ * `nothingNearby( { distanceMeters, name } )`, `searchResults( { points, addresses } )`,
+ * `error( { code, message } )`. `bbox` is the flat `[lat1,lng1,lat2,lng2]` shape
+ * `pickup-datasource.js`'s `serializePointsQuery()` expects (see {@see flattenBounds}).
  *
  * CONFIG is FLAT — the merge `pickup-mount.js`'s `buildProviderConfig()` builds from
  * `mapConfig` (`scriptUrl`, `ns`, `hasApiKey`, `lang`, `layers`, `copyrights`) plus
@@ -93,24 +93,33 @@
  * is not already in frame sees an empty map and concludes there are none. This file does neither:
  * `ymaps.control.SearchControl` keeps its ENGINE (`search()`, `getResultsCount()`,
  * `showResult()`) and loses its CHROME — its default view is replaced by an inert
- * `templateLayoutFactory` layout ({@see _buildSearchControl}), because the panels own the results
- * markup (`renderSearchResults()`), not ymaps. `options.provider.geocode` is fully custom
+ * `templateLayoutFactory` layout ({@see _buildSearchControl}), so ymaps' own dropdown never
+ * appears; the panels are the only results surface. `options.provider.geocode` is fully custom
  * ({@see _searchGeocodeProvider}): every keystroke filters the loaded pool for free via
- * `pickup-geo.matchPoints()` AND queries `ymaps.suggest()` for address suggestions, returned
- * together as `{ points, addresses }` for the panels to render as two sections. `suggest()` is
- * called on EVERY keystroke; `ymaps.geocode()` is called from this flow EXACTLY ONCE, only when
- * an address suggestion is actually picked ({@see resolveAddress}) — geocoding on every keystroke
- * would burn the merchant's API quota for no benefit a free-text filter does not already give.
- * Picking a POINT result opens its card (Task 20's job, via `searchPointPicked`); picking an
- * ADDRESS result drops a "your address" pin and fits the camera to the address PLUS the
- * `config.searchNearestCount` nearest groups ({@see focusAddress}) — NEVER to the address alone,
- * which is exactly the "empty map" failure this design avoids. `N` defaults to
- * {@see DEFAULT_SEARCH_NEAREST_COUNT} and is deliberately a geometry-based count, not a
- * kilometre radius: network density varies between CITIES of one carrier far more than between
- * carriers, so a fixed per-plugin radius could never track it, while fitting to N nearest points
- * adapts automatically. When even the nearest group is farther than {@see NEARBY_THRESHOLD_M},
- * no fit happens at all — `nothingNearby` is emitted instead, naming that nearest group's own
- * distance, so the customer sees an explicit "nothing here", never a silently empty viewport.
+ * `pickup-geo.matchPoints()` AND queries `ymaps.suggest()` for address suggestions.
+ *
+ * THIS FILE DOES NOT RENDER THE RESULTS OR KNOW THE PANELS EXIST (D-3: no map-library file
+ * renders point information) — `{ points, addresses }` is handed to the `SearchControl` engine
+ * as the geocode provider's RETURN value (so `search()`/`getResultsCount()`/`showResult()` keep
+ * working) AND, separately, emitted as a `searchResults` EVENT carrying the identical object —
+ * that event is the seam: Task 20's mount wires `provider.on( 'searchResults', panels.renderSearchResults )`,
+ * so this file never calls into `pickup-panels.js` itself. `searchResults` fires on EVERY
+ * resolved keystroke, including one that matches nothing — an empty `{ points: [], addresses: [] }`
+ * still has to reach the panels, or a narrowed-down query leaves the PREVIOUS (now stale) results
+ * on screen. `suggest()` is called on EVERY keystroke; `ymaps.geocode()` is called from this flow
+ * EXACTLY ONCE, only when an address suggestion is actually picked ({@see resolveAddress}) —
+ * geocoding on every keystroke would burn the merchant's API quota for no benefit a free-text
+ * filter does not already give. Picking a POINT result opens its card (Task 20's job, via the
+ * panels' own `searchPointPicked`); picking an ADDRESS result drops a "your address" pin and fits
+ * the camera to the address PLUS the `config.searchNearestCount` nearest groups
+ * ({@see focusAddress}) — NEVER to the address alone, which is exactly the "empty map" failure
+ * this design avoids. `N` defaults to {@see DEFAULT_SEARCH_NEAREST_COUNT} and is deliberately a
+ * geometry-based count, not a kilometre radius: network density varies between CITIES of one
+ * carrier far more than between carriers, so a fixed per-plugin radius could never track it,
+ * while fitting to N nearest points adapts automatically. When even the nearest group is farther
+ * than {@see NEARBY_THRESHOLD_M}, no fit happens at all — `nothingNearby` is emitted instead,
+ * naming that nearest group's own distance, so the customer sees an explicit "nothing here",
+ * never a silently empty viewport.
  *
  * THE "YOUR ADDRESS" PIN IS NEVER A GROUP: it is a plain `ymaps.Placemark` added directly to
  * `map.geoObjects` ({@see _setAddressPin}), completely outside the `ObjectManager` every group
@@ -119,9 +128,10 @@
  * `objectManager`), or a `focusAddress()` nearest-N computation (which also only ever reads
  * `_groupsByKey`). The panels' own reset control (`«Сбросить»`) emits NO event of its own — it
  * just calls `setAnchor( null )` internally — so THIS file exposes {@see clearAddress} rather
- * than relying on one: it is the provider that owns the pin, so it is the provider that must
- * offer the caller (Task 20's mount) a way to guarantee the pin never outlives the search it
- * belongs to.
+ * than relying on one: it is the provider that owns BOTH the pin and the `searchResults` state,
+ * so it is the provider that must guarantee neither outlives the search it belongs to —
+ * {@see clearAddress} drops the pin AND emits an empty `searchResults`, in one call, so Task 20's
+ * mount does not have to remember two separate "clear" calls.
  *
  * `objectManager.setFilter()`, NEVER A REBUILD, drives {@see setTypeFilter}: rebuilding the
  * manager would tear down and recreate every feature, losing the camera state this file just
@@ -446,6 +456,7 @@
 			bboxTooWide: [],
 			visibleChange: [],
 			nothingNearby: [],
+			searchResults: [],
 			error: [],
 		};
 
@@ -694,11 +705,22 @@
 	/**
 	 * The `SearchControl`'s custom geocode provider (Task 19, D-6): matches `request` against
 	 * the already-loaded point pool via `pickup-geo.matchPoints()` — instant, free, no network —
-	 * AND queries `ymaps.suggest()` for address suggestions, returned together for the panels to
-	 * render as two independent sections. `suggest()` only, NEVER `geocode()`, from this path —
-	 * see the file docblock's "ADDRESS SEARCH" section for why: geocoding on every keystroke
-	 * would burn the merchant's quota, and a suggestion is resolved to real coordinates exactly
-	 * once, on selection, by {@see resolveAddress}.
+	 * AND queries `ymaps.suggest()` for address suggestions, returned together for the
+	 * `SearchControl` engine (`search()`/`getResultsCount()`/`showResult()` — kept, never
+	 * reimplemented here) to consume. `suggest()` only, NEVER `geocode()`, from this path — see
+	 * the file docblock's "ADDRESS SEARCH" section for why: geocoding on every keystroke would
+	 * burn the merchant's quota, and a suggestion is resolved to real coordinates exactly once,
+	 * on selection, by {@see resolveAddress}.
+	 *
+	 * ALSO emits `searchResults` with the SAME `{ points, addresses }` object — this is the seam
+	 * to the panels (Task 20's mount wires `provider.on( 'searchResults', panels.renderSearchResults )`),
+	 * kept as an event rather than a direct call so this file stays ignorant of the panels'
+	 * existence (D-3: no map-library file renders point information). Both the `resultsLayout`
+	 * (an inert `templateLayoutFactory` layout, see {@see _buildSearchControl}) and this event
+	 * exist for the SAME reason: ymaps' own dropdown must never appear, because the panels are
+	 * the only results surface. Emitted EVERY time this resolves, including a query that matches
+	 * nothing — an empty `{ points: [], addresses: [] }` must still reach the panels, or a
+	 * narrowed-down search leaves the PREVIOUS (now stale) results on screen.
 	 *
 	 * `boundedBy` biases the suggestions to the map's CURRENT viewport — read fresh on every
 	 * call, since the customer may have panned between keystrokes — so a customer in Kazan is not
@@ -709,6 +731,7 @@
 	 * @returns {Promise<{points: Array, addresses: Array}>}
 	 */
 	WoodevYandexMapProvider.prototype._searchGeocodeProvider = function( request ) {
+		var self = this;
 		var matches = geo.matchPoints( this._allPoints(), request );
 		var suggestOptions = { results: SUGGEST_RESULT_COUNT };
 
@@ -717,7 +740,11 @@
 		}
 
 		return this.ymaps.suggest( request, suggestOptions ).then( function( addresses ) {
-			return { points: matches, addresses: addresses || [] };
+			var results = { points: matches, addresses: addresses || [] };
+
+			self.emit( 'searchResults', results );
+
+			return results;
 		} );
 	};
 
@@ -1141,14 +1168,19 @@
 	 * appear in the list panel ({@see setPoints}/{@see _emitVisibleChange} only ever read
 	 * `_groupsByKey`), the type filter (`setTypeFilter()` only ever touches `objectManager`), or
 	 * the nearest-N computation ({@see focusAddress} only ever reads `_groupsByKey` too). The
-	 * previous pin, if any, is removed first via {@see clearAddress} — one address search
+	 * previous pin, if any, is removed first via {@see _removeAddressPin} — one address search
 	 * replaces the last, it never accumulates pins from earlier searches.
+	 *
+	 * Deliberately calls {@see _removeAddressPin}, NOT the public {@see clearAddress}: the latter
+	 * also emits an EMPTY `searchResults` (see its own docblock), which must fire only when the
+	 * customer actually clears a search, never as a side effect of PICKING one — this method runs
+	 * on every successful pick.
 	 *
 	 * @param {number[]} latLng `[lat, lng]`.
 	 * @returns {void}
 	 */
 	WoodevYandexMapProvider.prototype._setAddressPin = function( latLng ) {
-		this.clearAddress();
+		this._removeAddressPin();
 
 		if ( ! this.map || ! this.ymaps || 'function' !== typeof this.ymaps.Placemark ) {
 			return;
@@ -1159,21 +1191,39 @@
 	};
 
 	/**
-	 * Removes the "your address" pin, if one is currently shown, and forgets it. The panels' own
-	 * reset control (`«Сбросить»`) emits NO event of its own — it only calls `setAnchor( null )`
-	 * internally (see the file docblock's "ADDRESS SEARCH" section) — so THIS method is what Task
-	 * 20's mount wiring calls when the customer clears the search: the provider owns the pin, so
-	 * the provider is the one that must offer a way to guarantee it never outlives the search it
-	 * belongs to. Idempotent: a call with no pin currently shown is a safe no-op.
+	 * Removes the "your address" pin from the map, if one is currently shown, and forgets it —
+	 * the shared primitive {@see _setAddressPin} (replacing a pin) and {@see clearAddress}
+	 * (clearing the search entirely) both build on. Idempotent: a call with no pin currently
+	 * shown is a safe no-op.
 	 *
 	 * @returns {void}
 	 */
-	WoodevYandexMapProvider.prototype.clearAddress = function() {
+	WoodevYandexMapProvider.prototype._removeAddressPin = function() {
 		if ( this._addressPin && this.map ) {
 			this.map.geoObjects.remove( this._addressPin );
 		}
 
 		this._addressPin = null;
+	};
+
+	/**
+	 * Clears the address search entirely: removes the "your address" pin ({@see _removeAddressPin})
+	 * AND emits an EMPTY `searchResults` (`{ points: [], addresses: [] }`). The panels' own reset
+	 * control (`«Сбросить»`) emits NO event of its own — it only calls `setAnchor( null )`
+	 * internally (see the file docblock's "ADDRESS SEARCH" section) — so THIS method is what Task
+	 * 20's mount wiring calls when the customer clears the search: the provider is the sole
+	 * producer of BOTH the pin and the `searchResults` state ({@see _searchGeocodeProvider}), so
+	 * the provider is the one that must guarantee neither outlives the search it belongs to — a
+	 * caller that only dropped the pin would still leave stale search rows on screen. Idempotent:
+	 * a call with nothing currently shown (no pin, no prior results) is a safe no-op beyond the
+	 * unconditional `searchResults` emit, which every caller can rely on firing every time.
+	 *
+	 * @returns {void}
+	 */
+	WoodevYandexMapProvider.prototype.clearAddress = function() {
+		this._removeAddressPin();
+
+		this.emit( 'searchResults', { points: [], addresses: [] } );
 	};
 
 	/**
@@ -1357,6 +1407,7 @@
 			bboxTooWide: [],
 			visibleChange: [],
 			nothingNearby: [],
+			searchResults: [],
 			error: [],
 		};
 	};

@@ -28,6 +28,11 @@
 'use strict';
 
 const WoodevYandexMapProvider = require( '../../woodev/shipping-method/assets/js/frontend/map-provider-yandex' );
+// Used directly (not just by the production file under test) so the Task 19 address-search
+// tests below can pin EXACT expected bounds/distances via the same arithmetic focusAddress()
+// itself uses, rather than a weaker branch-only assertion (e.g. "the far group is excluded")
+// that a mutant returning just the single closest group would still pass.
+const geo = require( '../../woodev/shipping-method/assets/js/frontend/pickup-geo' );
 
 let nsCounter = 0;
 let ymapsStub;
@@ -1150,16 +1155,21 @@ test( 'setPoints() re-applies the ACTIVE state to the focused group when it surv
 // resolveAddress()/focusAddress(), and the "your address" pin lifecycle
 // -------------------------------------------------------------------------
 
-test( 'returns both point matches and suggestions from the custom geocode provider', async () => {
+test( 'returns both point matches and suggestions from the custom geocode provider, matching '
+	+ 'the query and excluding a non-matching point from the same pool', async () => {
 	const provider = await init();
 
-	provider.setPoints( [ groupWith( { id: '1', name: 'ПВЗ «Магнит»', address: 'Ленина 5' } ) ] );
+	provider.setPoints( [
+		groupWith( { id: '1', name: 'ПВЗ «Магнит»', address: 'Ленина 5' } ),
+		groupWith( { id: '2', name: 'ПВЗ «Пятёрочка»', address: 'Гагарина 10' } ), // must NOT match
+	] );
 	ymapsStub.suggestResult = [ { displayName: 'Москва, Ленина 5', value: 'Москва, Ленина 5' } ];
 
 	const res = await ymapsStub.lastSearchControl.options.provider.geocode( 'ленина', {} );
 
 	expect( res.points ).toHaveLength( 1 );
-	expect( res.addresses ).toHaveLength( 1 );
+	expect( res.points[ 0 ].id ).toBe( '1' ); // NOT '2' — a mutant returning the whole pool fails here
+	expect( res.addresses ).toEqual( [ { displayName: 'Москва, Ленина 5', value: 'Москва, Ленина 5' } ] );
 } );
 
 test( 'calls suggest, not geocode, while the customer is typing', async () => {
@@ -1187,6 +1197,71 @@ test( 'geocodes exactly once when an address result is chosen', async () => {
 	await provider.resolveAddress( 'Москва, Ленина 5' );
 
 	expect( ymapsStub.geocodeCalls ).toBe( 1 );
+} );
+
+// -------------------------------------------------------------------------
+// searchResults — the seam to the panels (Codex review follow-up, HIGH): the geocode provider's
+// RETURN value feeds the SearchControl engine, but nothing renders it on screen unless this file
+// ALSO hands the same object to whoever is listening — Task 20's mount wires
+// `provider.on( 'searchResults', panels.renderSearchResults )`.
+// -------------------------------------------------------------------------
+
+test( 'emits searchResults with the SAME points/addresses the geocode provider returns', async () => {
+	const seen = [];
+	const provider = await init();
+
+	provider.on( 'searchResults', ( results ) => seen.push( results ) );
+	provider.setPoints( [ groupWith( { id: '1', name: 'ПВЗ «Магнит»', address: 'Ленина 5' } ) ] );
+	ymapsStub.suggestResult = [ { displayName: 'Москва, Ленина 5', value: 'Москва, Ленина 5' } ];
+
+	const res = await ymapsStub.lastSearchControl.options.provider.geocode( 'ленина', {} );
+
+	expect( seen ).toHaveLength( 1 );
+	expect( seen[ 0 ] ).toEqual( res );
+} );
+
+test( 'emits searchResults with EMPTY arrays for a query that matches nothing — a narrowed-down '
+	+ 'search must not leave the previous (stale) results on screen', async () => {
+	const seen = [];
+	const provider = await init();
+
+	provider.on( 'searchResults', ( results ) => seen.push( results ) );
+	provider.setPoints( [ groupWith( { id: '1', name: 'ПВЗ «Магнит»', address: 'Ленина 5' } ) ] );
+	ymapsStub.suggestResult = [];
+
+	await ymapsStub.lastSearchControl.options.provider.geocode( 'несуществующийзапрос', {} );
+
+	expect( seen ).toHaveLength( 1 );
+	expect( seen[ 0 ] ).toEqual( { points: [], addresses: [] } );
+} );
+
+test( 'clearAddress() emits an empty searchResults alongside dropping the pin — the reset '
+	+ 'control must not leave stale search rows behind', async () => {
+	const seen = [];
+	const provider = await init();
+
+	provider.setPoints( [ group( 'a', 55.751 ) ] );
+	await provider.focusAddress( [ 55.75, 37.61 ], 'X' ); // picking a result must NOT itself clear
+
+	provider.on( 'searchResults', ( results ) => seen.push( results ) );
+	provider.clearAddress();
+
+	expect( seen ).toHaveLength( 1 );
+	expect( seen[ 0 ] ).toEqual( { points: [], addresses: [] } );
+} );
+
+test( 'picking an address result (focusAddress) never emits searchResults as a side effect of '
+	+ 'dropping the pin — only clearAddress() clears the search results state', async () => {
+	const seen = [];
+	const provider = await init();
+
+	provider.setPoints( [ group( 'a', 55.751 ) ] );
+	provider.on( 'searchResults', ( results ) => seen.push( results ) );
+
+	await provider.focusAddress( [ 55.75, 37.61 ], 'First' );
+	await provider.focusAddress( [ 55.8, 37.65 ], 'Second' ); // replaces the pin
+
+	expect( seen ).toHaveLength( 0 );
 } );
 
 test( 'resolveAddress() end-to-end: the geocoded coordinates drive the same fit focusAddress() '
@@ -1221,54 +1296,81 @@ test( 'resolveAddress() is a silent no-op when the geocode result has no usable 
 	expect( ymapsStub.lastMap.setBoundsCalls ).toHaveLength( 0 );
 } );
 
-test( 'fits the address plus the three nearest groups', async () => {
+test( 'fits the address plus the three nearest groups — the fitted bounds are the EXACT box '
+	+ 'containing all three, not just the single closest one, and the fourth is excluded', async () => {
 	const provider = await init();
+	const anchor = [ 55.75, 37.61 ];
+	const groups = [ group( 'a', 55.751 ), group( 'b', 55.752 ), group( 'c', 55.753 ),
+		group( 'd', 55.999 ) ];
 
-	provider.setPoints( [ group( 'a', 55.751 ), group( 'b', 55.752 ), group( 'c', 55.753 ),
-		group( 'd', 55.999 ) ] );
-	await provider.focusAddress( [ 55.75, 37.61 ], 'Москва, Ленина 5' );
+	provider.setPoints( groups );
+	await provider.focusAddress( anchor, 'Москва, Ленина 5' );
 
 	const fitted = ymapsStub.lastMap.setBoundsCalls.pop().bounds;
+	// The exact box built from the anchor + a, b, c (NOT d) — a mutant that fit to only the
+	// single closest group ('a') would produce a smaller, DIFFERENT box and fail this equality.
+	const expected = geo.boundsFor( anchor, [ groups[ 0 ], groups[ 1 ], groups[ 2 ] ] );
 
+	expect( fitted ).toEqual( expected );
 	expect( fitted[ 1 ][ 0 ] ).toBeLessThan( 55.999 ); // the far group is not in frame
 } );
 
 test( 'honours the nearest-count filter value handed in by config', async () => {
 	const provider = await init( { searchNearestCount: 1 } );
+	const anchor = [ 55.75, 37.61 ];
+	const groups = [ group( 'a', 55.751 ), group( 'b', 55.9 ) ];
 
-	provider.setPoints( [ group( 'a', 55.751 ), group( 'b', 55.9 ) ] );
-	await provider.focusAddress( [ 55.75, 37.61 ], 'X' );
+	provider.setPoints( groups );
+	await provider.focusAddress( anchor, 'X' );
 
-	expect( ymapsStub.lastMap.setBoundsCalls.pop().bounds[ 1 ][ 0 ] ).toBeLessThan( 55.9 );
+	const fitted = ymapsStub.lastMap.setBoundsCalls.pop().bounds;
+	// count: 1 — the box must be built from 'a' ALONE, never both groups.
+	const expected = geo.boundsFor( anchor, [ groups[ 0 ] ] );
+
+	expect( fitted ).toEqual( expected );
 } );
 
-test( 'reports nothing-nearby instead of fitting when the nearest exceeds the threshold', async () => {
+// The threshold's two sides, pinned together (Codex review follow-up, MEDIUM): a mutant that
+// e.g. shrinks NEARBY_THRESHOLD_M to 1 would still make the FAR case below assert
+// `> 50000` correctly, so that assertion alone cannot catch it — only a NEAR case that must
+// still FIT proves the threshold itself, not just "some threshold exists".
+test( 'a nearest point comfortably inside the threshold FITS and reports no nothingNearby', async () => {
 	const seen = [];
 	const provider = await init();
+	const anchor = [ 55.75, 37.61 ];
+	const groups = [ group( 'near', 55.8 ) ]; // ~5.6 km away — well inside NEARBY_THRESHOLD_M
 
 	provider.on( 'nothingNearby', ( info ) => seen.push( info ) );
-	provider.setPoints( [ group( 'far', 56.6 ) ] ); // ~= 95 km away
+	provider.setPoints( groups );
+
+	await provider.focusAddress( anchor, 'X' );
+
+	expect( seen ).toHaveLength( 0 );
+	expect( ymapsStub.lastMap.setBoundsCalls.pop().bounds ).toEqual( geo.boundsFor( anchor, groups ) );
+} );
+
+test( 'a nearest point beyond the threshold reports nothingNearby with its EXACT distance and '
+	+ 'name, and never fits', async () => {
+	const seen = [];
+	const provider = await init();
+	const anchor = [ 55.75, 37.61 ];
+	const farGroup = groupWith( { id: 'far', name: 'ПВЗ «Далеко»', lat: 56.6 } ); // ~94.5 km away
+	const expectedDistance = geo.distanceMeters( anchor, [ farGroup.lat, farGroup.lng ] );
+
+	provider.on( 'nothingNearby', ( info ) => seen.push( info ) );
+	provider.setPoints( [ farGroup ] );
 
 	// setPoints() itself already triggered its own bulk-strategy fit above — checked as a DELTA
 	// from here, so it is never mistaken for a fit focusAddress() itself performed.
 	const callsBeforeFocus = ymapsStub.lastMap.setBoundsCalls.length;
 
-	await provider.focusAddress( [ 55.75, 37.61 ], 'X' );
+	await provider.focusAddress( anchor, 'X' );
 
-	expect( seen[ 0 ].distanceMeters ).toBeGreaterThan( 50000 );
-	expect( ymapsStub.lastMap.setBoundsCalls ).toHaveLength( callsBeforeFocus ); // never fits this far
-} );
-
-test( 'nothingNearby also carries the nearest group\'s own (already-escaped) point name', async () => {
-	const seen = [];
-	const provider = await init();
-
-	provider.on( 'nothingNearby', ( info ) => seen.push( info ) );
-	provider.setPoints( [ groupWith( { id: 'far', name: 'ПВЗ «Далеко»', lat: 56.6 } ) ] );
-
-	await provider.focusAddress( [ 55.75, 37.61 ], 'X' );
-
+	expect( expectedDistance ).toBeGreaterThan( 50000 ); // sanity: the fixture IS beyond threshold
+	expect( seen ).toHaveLength( 1 );
+	expect( seen[ 0 ].distanceMeters ).toBeCloseTo( expectedDistance, 6 );
 	expect( seen[ 0 ].name ).toBe( 'ПВЗ «Далеко»' );
+	expect( ymapsStub.lastMap.setBoundsCalls ).toHaveLength( callsBeforeFocus ); // never fits this far
 } );
 
 test( 'focusAddress() with no groups loaded drops the pin but neither fits nor reports '
