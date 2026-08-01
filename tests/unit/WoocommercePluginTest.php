@@ -384,15 +384,29 @@ class WoocommercePluginTest extends TestCase {
 			}
 		);
 
-		$registered = [];
+		// Recorded as a LIST, not keyed by handle: a keyed map would let a second
+		// wp_register_script( 'woodev-modal', ... ) overwrite the first and go unnoticed, while
+		// D-13 requires the handle to be registered exactly once framework-side.
+		$calls = [];
 		Functions\when( 'wp_register_script' )->alias(
-			static function ( $handle, $src, $deps, $ver ) use ( &$registered ) {
-				$registered[ $handle ] = [ 'src' => $src, 'deps' => $deps, 'ver' => $ver ];
+			static function ( $handle, $src, $deps, $ver ) use ( &$calls ) {
+				$calls[] = [ 'handle' => $handle, 'src' => $src, 'deps' => $deps, 'ver' => $ver ];
 			}
 		);
 
 		$plugin->frontend_enqueue_scripts();
 
+		$registered = [];
+
+		foreach ( $calls as $call ) {
+			$registered[ $call['handle'] ] = $call;
+		}
+
+		$this->assertCount(
+			1,
+			array_filter( $calls, static fn( array $call ): bool => 'woodev-modal' === $call['handle'] ),
+			'The generic modal handle must be registered exactly once.'
+		);
 		$this->assertArrayHasKey( 'woodev-modal', $registered );
 		$this->assertStringContainsString(
 			'/woodev/assets/js/frontend/woodev-modal.js',
