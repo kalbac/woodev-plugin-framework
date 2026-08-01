@@ -202,6 +202,17 @@ final class PickupPointTest extends TestCase {
 		$this->assertSame( [ 'Примерка' ], $point->to_array()['services'] );
 	}
 
+	public function test_surviving_services_are_reindexed_from_zero(): void {
+		// array_filter() PRESERVES keys, so without array_values() a dropped entry leaves a
+		// sparse array and wp_json_encode() emits a JSON OBJECT instead of an array — the JS
+		// then iterates nothing. Every other fixture here happens to keep key 0, so removing
+		// array_values() would survive them all. This is the one that kills that mutant.
+		$point = $this->make_point( [ 'services' => [ [ 'x' ], 'Примерка', null, 'Выкуп' ] ] );
+
+		$this->assertSame( [ 0, 1 ], array_keys( $point->to_array()['services'] ) );
+		$this->assertSame( [ 'Примерка', 'Выкуп' ], $point->to_array()['services'] );
+	}
+
 	public function test_whitespace_only_services_are_dropped(): void {
 		$point = $this->make_point( [ 'services' => [ 'Примерка', '   ', '' ] ] );
 
