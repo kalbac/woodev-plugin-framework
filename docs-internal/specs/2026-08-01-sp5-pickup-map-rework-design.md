@@ -32,7 +32,10 @@ Verified live on the rig in s46, architecture holds:
 - both loading strategies, the 10°-per-side bbox cap, lazy details with verdict recomputation;
 - REST `woodev/v1`, point persistence into order meta, A2 gate release, address replacement (§8);
 - the server backstop on `woocommerce_checkout_process`;
-- the modal shell (`pickup-modal.js`: focus trap, Esc, focus return) and `pickup-datasource.js`.
+- `pickup-datasource.js` (debounce, de-duplication).
+
+The modal shell's **behaviour** (focus trap, Esc, focus return) is also proven and is preserved
+verbatim — but the file itself moves and generalises, see D-13.
 
 ## 3. Decisions
 
@@ -295,12 +298,98 @@ from the same region, so the two never disagree on screen.
 `lang` is emitted as an explicit `mapConfig` field in addition to being baked into `scriptUrl`,
 because the panels read it for distance formatting.
 
+### D-13. The modal becomes a general framework component, not a pickup one
+
+`pickup-modal.js` is a generic dialog that happens to have been written for the map: shell, backdrop,
+focus trap, Esc, focus return. Nothing in it is about pickup points. It moves out of the shipping
+module and becomes reusable framework furniture:
+
+| Before | After |
+|---|---|
+| `woodev/shipping-method/assets/js/frontend/pickup-modal.js` | `woodev/assets/js/frontend/woodev-modal.js` |
+| `window.WoodevPickupModal` | `window.WoodevModal` |
+| handle `woodev-pickup-modal`, registered by `Pickup_Handler` | handle `woodev-modal`, registered once framework-side; `Pickup_Handler` only declares the dependency |
+| styles inside `pickup.css` | `woodev/assets/css/frontend/woodev-modal.css` |
+
+Everything pickup-specific leaves it. The component takes a title, a content element (or a render
+callback), and a `modalId`; the pickup layer supplies its own. BEM: `.woodev-modal`,
+`.woodev-modal__content`, `.woodev-modal__header`, `.woodev-modal__body`, `.woodev-modal__close`,
+`.woodev-modal-backdrop`.
+
+**Responsive behaviour follows WooCommerce's own backbone modal**, which is what merchants and
+integrators already recognise:
+
+```css
+.woodev-modal__content {
+    position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    max-width: 100%; min-width: 920px;          /* wide, because a map lives here */
+}
+@media screen and (max-width: 782px) {
+    .woodev-modal__content { width: 100%; height: 100%; min-width: 100%; }   /* full screen */
+}
+```
+
+782px is WooCommerce's own breakpoint (see the vendored copy of its modal CSS at
+`plugins-reference/woocommerce-yandex-delivery/assets/css/frontend/backbone-modal.css`), and it is
+the same number the map's own layout uses, so there is one breakpoint in the feature, not two.
+
+### D-14. A public event surface, in two layers
+
+Today the modal fires **nothing**. A plugin consuming the framework cannot hook the lifecycle of the
+map at all — the only public symbol is the constructor. That is a gap, not a simplification: the
+reference integrations are built entirely on WooCommerce's five modal events
+(`wc_backbone_modal_loaded`, `_before_remove`, `_removed`, `_response`, `_validation`).
+`wc-yandex-delivery-modal-standard-map.js` does all of its map initialisation inside
+`wc_backbone_modal_loaded` and destroys the map in `wc_backbone_modal_before_remove`.
+
+Because the modal is now generic (D-13), the events split into two layers. Generic events carry a
+`modalId` so listeners can filter — exactly WooCommerce's `target` argument, which the reference uses
+as `if ( 'wc-modal-yandex-delivery-map' === target )`.
+
+**Modal layer** (`woodev-modal.js`):
+
+| Event | Payload | When |
+|---|---|---|
+| `woodev_modal_opened` | `{ modalId, context }` | DOM in place, focus trapped |
+| `woodev_modal_before_close` | `{ modalId, reason }` | **cancelable** — `preventDefault()` aborts the close |
+| `woodev_modal_closed` | `{ modalId, reason }` | `reason`: `select` / `escape` / `backdrop` / `button` |
+
+**Pickup layer** (`pickup-mount.js` / `pickup-panels.js`), `modalId: 'woodev-pickup-map'`:
+
+| Event | Payload | When |
+|---|---|---|
+| `woodev_pickup_map_ready` | `{ fieldId, provider }` | the provider's `init()` resolved |
+| `woodev_pickup_points_loaded` | `{ fieldId, count, strategy }` | after each point load |
+| `woodev_pickup_point_selected` | `{ fieldId, point }` | the customer pressed the CTA |
+| `woodev_pickup_error` | `{ fieldId, code, message }` | an error that breaks the whole map |
+
+Two rules inside this:
+
+**Dispatch is a native `CustomEvent` with `bubbles: true` on `document.body`**, so both
+`addEventListener` and jQuery `.on()` receive it. The reverse does not hold — `jQuery.trigger()` on a
+custom type creates no native event and `addEventListener` never sees it. That asymmetry is already
+documented in `pickup-mount.js`'s own docblock for `updated_checkout`, so this is not a style choice.
+
+**Only `before_close` is cancelable.** `point_selected` deliberately is not: the availability verdict
+is server-authoritative, and a client-side veto would create a second source of truth.
+
+`woodev_pickup_error` is explicitly a **reporting hook for #130** (the framework's own error
+reporter), not only a UI signal. #130's JS scope is `window.onerror` plus a script-URL filter, which
+cannot see these failures by construction: we catch them and turn them into a message on screen, so
+nothing ever propagates to `window.onerror`. A handled map failure — script blocked, key rejected,
+upstream 5xx — is exactly the class of event that reporter exists for, and it must subscribe to this
+event separately. Recorded on #130 as well, since that is where the implementer will look.
+
+Side effect worth recording: this plus a public `refresh()` on the open session answers **#148**
+(the verdict going stale when the payment method changes while the map is open) without extending the
+provider contract — that was one of the three options on that card.
+
 ## 4. Architecture
 
 ```
 FRAMEWORK                              PROVIDER (yandex)
 ─────────────────────────────          ──────────────────────────
-pickup-modal.js    shell               init( canvasEl, config )
+woodev-modal.js    generic shell       init( canvasEl, config )
 pickup-panels.js   list                setPoints( groups )
                    card + tab bar      focusGroup( key )
                    position grouping   setTypeFilter( codes )
@@ -320,6 +409,8 @@ only each group's size (for the badge).
 
 | File | Change |
 |---|---|
+| `woodev/assets/js/frontend/woodev-modal.js` | **moved** from `shipping-method/…/pickup-modal.js`, generalised, gains events (D-13, D-14) |
+| `woodev/assets/css/frontend/woodev-modal.css` | **new** — modal chrome + WC-pattern responsive, extracted from `pickup.css` |
 | `woodev/shipping-method/assets/js/frontend/map-provider-yandex.js` | rewritten, ~1477 → ~400 lines |
 | `woodev/shipping-method/assets/js/frontend/pickup-panels.js` | **new**, ~500–600 lines |
 | `woodev/shipping-method/assets/css/frontend/pickup.css` | rewritten |
@@ -331,6 +422,12 @@ only each group's size (for the badge).
 | `woodev/shipping-method/pickup/class-pickup-point.php` | `services` |
 | `woodev/shipping-method/pickup/class-point-query.php` | `types` |
 | `woodev/shipping-method/rest-api/class-pickup-controller.php` | `types` |
+| `woodev/class-map.php` | regenerated if any PHP class moves (`bin/generate-class-map.php`) |
+
+Moving the modal out of `shipping-method/` changes who registers it. The handle `woodev-modal` is
+registered once framework-side so any subsystem can depend on it; `Pickup_Handler::enqueue_assets()`
+stops registering `woodev-pickup-modal` at `js/frontend/pickup-modal.js` and simply lists
+`woodev-modal` as a dependency.
 
 ## 5. PHP contracts
 
@@ -517,12 +614,17 @@ degenerate case in §7.5.
 - **jest**: grouping (identical, near-identical, three-way, rounding boundary), haversine and
   formatting per region, nearest-N selection, locale resolution, search result merging (points +
   geocoder), sidebar sorting and the 300 cap, icon-set fallback (`active` missing → `default`).
+- **jest (modal)**: every event fires once with the documented payload; `before_close` is cancelable
+  and `preventDefault()` genuinely aborts the close; `modalId` is carried on all three modal events;
+  events reach both `addEventListener` and jQuery `.on()`; focus trap, Esc and focus return still
+  behave exactly as before the move.
 - **PHPUnit**: `services` escaping in `to_browser_array()`, `types` parsing in `Point_Query`, required
-  `default_location`, `lang` resolution, `layers`/`copyrights` passthrough, `owns_chrome()`.
+  `default_location`, `lang` resolution, `layers`/`copyrights` passthrough, `owns_chrome()`, and the
+  `woodev-modal` handle being registered framework-side with `Pickup_Handler` depending on it.
 - **Rig (chrome-devtools MCP, real Yandex Maps key, ports 8973/8974)**: both strategies; sidebar
   closed → open → full height; card with and without a tab bar; co-located points; search by own
   address including the "nothing nearby" empty state; type filter under both strategies; **#150 on
-  both the initial-fit and click-driven paths**.
+  both the initial-fit and click-driven paths**; the modal at ≤ 782px rendering full-screen.
 
 Mutation testing must cover **values and content**, not only branches — see gotcha
 `mutation-sweep-branch-only-false-confidence`. Line length must be measured by hand: `phpcs` does not
@@ -545,3 +647,5 @@ enforce it and does not scan `tests/`.
 - `docs-internal/gotchas/mutation-sweep-branch-only-false-confidence.md`
 - `docs-internal/gotchas/phpcs-does-not-enforce-line-length.md`
 - Issue #150 — single-point city zoom breaks tiles
+- Issue #148 — the verdict going stale while the map is open; D-14 answers it
+- Issue #130 — the framework error reporter; must subscribe to `woodev_pickup_error` (D-14)
