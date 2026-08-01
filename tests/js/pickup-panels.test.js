@@ -13,6 +13,7 @@
 'use strict';
 
 const Panels = require( '../../woodev/shipping-method/assets/js/frontend/pickup-panels' );
+const WoodevPickupGeo = require( '../../woodev/shipping-method/assets/js/frontend/pickup-geo' );
 
 const config = {
 	lang: 'ru_RU',
@@ -23,6 +24,19 @@ const group = ( id, lat, lng, name ) => ( {
 	key: id, lat, lng, size: 1,
 	points: [ { id, name, short_address: name + ' addr', locality: 'Москва' } ],
 } );
+
+/**
+ * Returns a shallow copy of `cfg` with `key` removed from its `i18n` object —
+ * used to prove rule I1 (a missing i18n key renders BLANK, never a
+ * hardcoded-but-plausible Russian default) for keys beyond the one the plan's
+ * own spec happened to test.
+ */
+function withoutI18nKey( cfg, key ) {
+	const i18n = Object.assign( {}, cfg.i18n );
+	delete i18n[ key ];
+
+	return Object.assign( {}, cfg, { i18n } );
+}
 
 it( 'starts closed', () => {
 	const panels = new Panels( document.createElement( 'div' ), config );
@@ -135,6 +149,58 @@ it( 'never executes markup smuggled through an i18n label — the header renders
 	expect( header.textContent ).toBe( '<img src=x>' );
 } );
 
+it( 'never executes markup smuggled through the empty-state i18n label', () => {
+	const panels = new Panels( document.createElement( 'div' ), {
+		lang: 'ru_RU',
+		i18n: { emptyInView: '<img src=x>' },
+	} );
+	panels.render();
+	panels.setVisible( [] );
+
+	const emptyEl = panels.root.querySelector( '.woodev-pickup-list__empty' );
+
+	expect( emptyEl.querySelector( 'img' ) ).toBeNull();
+	expect( emptyEl.textContent ).toBe( '<img src=x>' );
+} );
+
+it( 'renders the empty state blank, not a hardcoded default, when emptyInView is missing', () => {
+	const panels = new Panels( document.createElement( 'div' ), { lang: 'ru_RU', i18n: {} } );
+	panels.render();
+	panels.setVisible( [] );
+
+	expect( panels.root.querySelector( '.woodev-pickup-list__empty' ).textContent ).toBe( '' );
+} );
+
+it( 'renders the exact formatted distance from the anchor, and omits it entirely without one', () => {
+	const anchor = [ 55.75, 37.61 ];
+	const g = group( 'near', 55.7501, 37.61 );
+	const expectedDistance = WoodevPickupGeo.formatDistance(
+		WoodevPickupGeo.distanceMeters( anchor, [ g.lat, g.lng ] ),
+		config.lang
+	);
+
+	const withAnchor = new Panels( document.createElement( 'div' ), config );
+	withAnchor.render();
+	withAnchor.setAnchor( anchor );
+	withAnchor.setVisible( [ g ] );
+
+	expect( withAnchor.root.querySelector( '.woodev-pickup-list__distance' ).textContent ).toBe( expectedDistance );
+
+	const withoutAnchor = new Panels( document.createElement( 'div' ), config );
+	withoutAnchor.render();
+	withoutAnchor.setVisible( [ g ] );
+
+	expect( withoutAnchor.root.querySelector( '.woodev-pickup-list__distance' ) ).toBeNull();
+} );
+
+it( 'toggles the list open via a REAL click on the toggle button, not just the method', () => {
+	const panels = new Panels( document.createElement( 'div' ), config );
+	panels.render();
+	panels.root.querySelector( '.woodev-pickup-list__toggle' ).click();
+
+	expect( panels.root.querySelector( '.woodev-pickup-list' ).classList.contains( 'is-open' ) ).toBe( true );
+} );
+
 it( 'names the toggle button after the drawer it opens, since no dedicated i18n key exists for it', () => {
 	const panels = new Panels( document.createElement( 'div' ), config );
 	panels.render();
@@ -170,6 +236,7 @@ const cardConfig = { lang: 'ru_RU', i18n: {
 	select: 'Забрать здесь', continueCheckout: 'Продолжить оформление заказа',
 	services: 'Услуги', paymentMethods: 'Способы оплаты', howToGet: 'Как добраться',
 	phone: 'Телефон', workTime: 'Часы работы', maxWeight: 'Максимальный вес', blocked: 'Недоступен',
+	close: 'Закрыть',
 } };
 
 const point = ( over ) => Object.assign( {
@@ -234,6 +301,23 @@ it( 'never emits select from a disabled CTA', () => {
 	expect( seen ).toHaveLength( 0 );
 } );
 
+it( 'the handler itself refuses to emit select even when the disabled attribute is bypassed', () => {
+	// `.click()` on a genuinely `disabled` native button never reaches any listener (the DOM
+	// itself suppresses it) — the test above only proves THAT guard. This proves the SECOND,
+	// independent guard inside the click handler: force the attribute off and click again.
+	const seen = [];
+	const panels = mount( cardConfig );
+	panels.on( 'select', ( p ) => seen.push( p ) );
+	panels.openCard( { key: 'k', size: 1, points: [
+		point( { selectable: { allowed: false, reason: 'нет' } } ) ] } );
+
+	const cta = panels.root.querySelector( '.woodev-pickup-card__cta' );
+	cta.disabled = false;
+	cta.click();
+
+	expect( seen ).toHaveLength( 0 );
+} );
+
 it( 'renders escaped point text without double-escaping it', () => {
 	const panels = mount( cardConfig );
 	panels.openCard( { key: 'k', size: 1, points: [ point( { name: 'ПВЗ &quot;Ромашка&quot;' } ) ] } );
@@ -293,6 +377,66 @@ it( 'never executes markup smuggled through selectable.reason — rendered as pl
 
 	expect( warning.querySelector( 'b' ) ).toBeNull();
 	expect( warning.textContent ).toBe( '<b>нет</b>' );
+} );
+
+it( 'renders blank, not a hardcoded default, when select is missing', () => {
+	const panels = mount( withoutI18nKey( cardConfig, 'select' ) );
+	panels.openCard( { key: 'k', size: 1, points: [ point() ] } );
+
+	expect( panels.root.querySelector( '.woodev-pickup-card__cta' ).textContent ).toBe( '' );
+} );
+
+it( 'renders blank, not a hardcoded default, when continueCheckout is missing', () => {
+	const panels = mount( withoutI18nKey( cardConfig, 'continueCheckout' ) );
+	panels.setSelectedId( 'p1' );
+	panels.openCard( { key: 'k', size: 1, points: [ point() ] } );
+
+	expect( panels.root.querySelector( '.woodev-pickup-card__cta' ).textContent ).toBe( '' );
+} );
+
+it( 'renders blank, not a hardcoded default, when blocked is missing and reason is empty', () => {
+	const panels = mount( withoutI18nKey( cardConfig, 'blocked' ) );
+	panels.openCard( { key: 'k', size: 1, points: [ point( { selectable: { allowed: false, reason: '' } } ) ] } );
+
+	expect( panels.root.querySelector( '.woodev-pickup-card__warning' ).textContent ).toBe( '' );
+} );
+
+it( 'shows a close control in the card header, named from the EXISTING close i18n key', () => {
+	const panels = mount( cardConfig );
+	panels.openCard( { key: 'k', size: 1, points: [ point() ] } );
+
+	const close = panels.root.querySelector( '.woodev-pickup-card__close' );
+
+	expect( close ).not.toBeNull();
+	expect( close.getAttribute( 'aria-label' ) ).toBe( 'Закрыть' );
+} );
+
+it( 'renders the close control whether or not the tab bar is present', () => {
+	const single = mount( cardConfig );
+	single.openCard( { key: 'k', size: 1, points: [ point() ] } );
+	expect( single.root.querySelector( '.woodev-pickup-card__close' ) ).not.toBeNull();
+
+	const multi = mount( cardConfig );
+	multi.openCard( { key: 'k', size: 2, points: [
+		point( { id: 'a', type: { code: 'pvz', label: 'ПВЗ' } } ),
+		point( { id: 'b', type: { code: 'postamat', label: 'Постамат' } } ),
+	] } );
+	expect( multi.root.querySelector( '.woodev-pickup-card__close' ) ).not.toBeNull();
+	expect( multi.root.querySelector( '.woodev-pickup-card__tabs' ) ).not.toBeNull();
+} );
+
+it( 'closing via a real click on the close control removes the open state, leaving the list usable', () => {
+	const panels = mount( cardConfig );
+	panels.openCard( { key: 'k', size: 1, points: [ point() ] } );
+	expect( panels.root.querySelector( '.woodev-pickup-card' ).classList.contains( 'is-open' ) ).toBe( true );
+
+	panels.root.querySelector( '.woodev-pickup-card__close' ).click();
+
+	expect( panels.root.querySelector( '.woodev-pickup-card' ).classList.contains( 'is-open' ) ).toBe( false );
+
+	// The list underneath was never touched by opening/closing the card on top of it.
+	panels.setVisible( [ { key: 'g', lat: 1, lng: 1, size: 1, points: [ point( { id: 'g1', name: 'G' } ) ] } ] );
+	expect( panels.root.querySelectorAll( '.woodev-pickup-list__item' ) ).toHaveLength( 1 );
 } );
 
 // -----------------------------------------------------------------------

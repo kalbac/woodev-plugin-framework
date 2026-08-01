@@ -462,6 +462,43 @@
 	}
 
 	/**
+	 * Builds the card's header row: the tab bar (only for a co-located
+	 * group — {@see buildTabs} returns `null` for a single-point one) plus a
+	 * close control that ALWAYS renders, tabs or not — this is the
+	 * customer's only way back to the list without dismissing the whole
+	 * modal (spec §6, STATE 3). Named via the EXISTING `close` i18n key (the
+	 * same one the modal shell's own close button already uses), not an
+	 * invented one — see the file docblock's I1 note and the toggle
+	 * button's own `aria-label` for the identical discipline.
+	 *
+	 * @param {Panels} self
+	 * @param {Object} group
+	 * @returns {HTMLElement}
+	 */
+	function buildCardHeader( self, group ) {
+		var header = document.createElement( 'div' );
+		header.className = 'woodev-pickup-card__header';
+
+		var tabs = buildTabs( self, group );
+
+		if ( tabs ) {
+			header.appendChild( tabs );
+		}
+
+		var close = document.createElement( 'button' );
+		close.type = 'button';
+		close.className = 'woodev-pickup-card__close';
+		close.setAttribute( 'aria-label', text( self._config, 'close' ) );
+		close.textContent = '✕'; // decorative; aria-label carries the meaning (matches woodev-modal.js's close button).
+		close.addEventListener( 'click', function() {
+			self.closeCard();
+		} );
+		header.appendChild( close );
+
+		return header;
+	}
+
+	/**
 	 * Builds the card body for one point: title, optional postal code and
 	 * address, an optional "how to get there" detail, services as chips
 	 * (omitted entirely when there are none), payment methods, phone, work
@@ -626,12 +663,8 @@
 		}
 
 		var point = group.points[ self._activeIndex ] || group.points[ 0 ];
-		var tabs = buildTabs( self, group );
 
-		if ( tabs ) {
-			self._cardEl.appendChild( tabs );
-		}
-
+		self._cardEl.appendChild( buildCardHeader( self, group ) );
 		self._cardEl.appendChild( buildCardBody( self._config, point ) );
 		self._cardEl.appendChild( buildCardFooter( self, point ) );
 	}
