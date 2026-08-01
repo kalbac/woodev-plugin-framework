@@ -45,6 +45,7 @@ namespace {
 
 namespace Woodev\Tests\Unit\Shipping\Pickup {
 
+	use Brain\Monkey\Filters;
 	use Brain\Monkey\Functions;
 	use Woodev\Framework\Shipping\Map\Map_Provider;
 	use Woodev\Framework\Shipping\Order\Shipping_Order_Handler;
@@ -143,6 +144,16 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 		public ?array $received_context = null;
 
 		/**
+		 * What {@see self::get_settings_fields()} returns — public so a collision test
+		 * (a provider naming its own field the same as the framework's `pickup_accent_color`)
+		 * can set it directly without a constructor argument every other test would have
+		 * to pass a default for.
+		 *
+		 * @var array<string, array<string, mixed>>
+		 */
+		public array $settings_fields_to_return = [];
+
+		/**
 		 * @param string               $id        provider id {@see Pickup_Handler} reads via
 		 *                                         {@see self::get_id()}.
 		 * @param array<string, mixed> $js_config what {@see self::get_js_config()} returns.
@@ -165,7 +176,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 		}
 
 		public function get_settings_fields(): array {
-			return [];
+			return $this->settings_fields_to_return;
 		}
 
 		/**
@@ -449,6 +460,12 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			Functions\when( 'wc_clean' )->alias(
 				static fn( $value ) => is_string( $value ) ? trim( $value ) : $value
 			);
+
+			// get_js_config() now calls resolve_accent_color() -> sanitize_hex_color()
+			// UNCONDITIONALLY (Task 8B), so every single test that builds a config needs
+			// this stubbed, not just the accent-colour-focused ones — global, like the two
+			// stubs above, rather than repeated in ~40 call sites.
+			$this->stub_sanitize_hex_color();
 		}
 
 		protected function tearDown(): void {
@@ -560,7 +577,32 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				$overrides['order_handler'] ?? null,
 				$overrides['point_field_logical'] ?? null,
 				$overrides['replace_address'] ?? true,
-				$overrides['point_icons'] ?? []
+				$overrides['point_icons'] ?? [],
+				$overrides['accent_color'] ?? '#06aedd',
+				$overrides['setting_accent'] ?? ''
+			);
+		}
+
+		/**
+		 * Installs a faithful-enough Brain Monkey stand-in for `sanitize_hex_color()` —
+		 * NOT currently stubbed anywhere else in this codebase. Verified against real
+		 * WordPress core (`wp-includes/formatting.php`): returns the input UNCHANGED (no
+		 * lower-casing) when it is `#` followed by exactly 3 or 6 hex digits, `''` for an
+		 * empty-string input, `null` for anything else (including an 8-digit/alpha hex —
+		 * real `sanitize_hex_color()` does not support those). Lower-casing is
+		 * {@see Pickup_Handler::resolve_accent_color()}'s own job, done exactly once, AFTER
+		 * this function runs — this stub must not pre-empt that or the two responsibilities
+		 * would be impossible to tell apart in a test.
+		 */
+		private function stub_sanitize_hex_color(): void {
+			Functions\when( 'sanitize_hex_color' )->alias(
+				static function ( $color ) {
+					if ( '' === $color ) {
+						return '';
+					}
+
+					return 1 === preg_match( '/^#([A-Fa-f0-9]{3}){1,2}$/', (string) $color ) ? $color : null;
+				}
 			);
 		}
 
@@ -904,6 +946,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 					'pointIcons',
 					'mapConfig',
 					'replaceAddress',
+					'accentColor',
 				],
 				array_keys( $config )
 			);
@@ -1142,6 +1185,155 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			$this->assertSame( [], $this->make_handler()->get_js_config()['pointIcons'] );
 		}
 
+		// -------------------------------------------------------------------------
+		// accentColor (Task 8B / D-15) — merchant setting -> plugin default ->
+		// framework default, sanitised on BOTH ends (server + filter output)
+		// -------------------------------------------------------------------------
+
+		/**
+		 * Stubs the four WP functions every `get_js_config()` call needs, EXCEPT
+		 * `apply_filters` — a test using `Filters\expectApplied()` sets that up itself, and
+		 * stubbing it here too would leave two competing expectations on the same
+		 * mocked function.
+		 */
+		private function stub_config_dependencies_except_filters(): void {
+			Functions\when( 'rest_url' )->justReturn( 'https://example.test/wp-json/woodev/v1' );
+			Functions\when( 'wp_create_nonce' )->justReturn( 'NONCE' );
+			Functions\when( 'wc_ship_to_billing_address_only' )->justReturn( false );
+		}
+
+		public function test_the_plugin_default_accent_reaches_the_browser_config(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			$this->stub_config_dependencies_except_filters();
+
+			$handler = $this->make_handler( [ 'accent_color' => '#FCE000' ] );
+
+			$this->assertSame( '#fce000', $handler->get_js_config()['accentColor'] );
+		}
+
+		public function test_a_merchant_setting_overrides_the_plugin_default(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			$this->stub_config_dependencies_except_filters();
+
+			$handler = $this->make_handler( [ 'accent_color' => '#FCE000', 'setting_accent' => '#0a8c37' ] );
+
+			$this->assertSame( '#0a8c37', $handler->get_js_config()['accentColor'] );
+		}
+
+		public function test_an_empty_merchant_setting_leaves_the_plugin_default_alone(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			$this->stub_config_dependencies_except_filters();
+
+			$handler = $this->make_handler( [ 'accent_color' => '#FCE000', 'setting_accent' => '' ] );
+
+			$this->assertSame( '#fce000', $handler->get_js_config()['accentColor'] );
+		}
+
+		/**
+		 * The value is interpolated into CSS on the client, so a merchant-editable string
+		 * reaching `setProperty()` unsanitised is not a cosmetic bug — this and the next
+		 * test are the two that matter most in this section.
+		 */
+		public function test_a_malformed_colour_falls_back_instead_of_reaching_css(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			$this->stub_config_dependencies_except_filters();
+
+			$handler = $this->make_handler( [
+				'accent_color'   => '#FCE000',
+				'setting_accent' => 'red; } body { display:none } .x {',
+			] );
+
+			$this->assertSame( '#fce000', $handler->get_js_config()['accentColor'] );
+		}
+
+		public function test_a_filter_overrides_everything(): void {
+			Filters\expectApplied( 'woodev_pickup_accent_color' )->andReturn( '#1937ff' );
+			$this->stub_config_dependencies_except_filters();
+
+			$handler = $this->make_handler( [ 'accent_color' => '#FCE000' ] );
+
+			$this->assertSame( '#1937ff', $handler->get_js_config()['accentColor'] );
+		}
+
+		/**
+		 * The non-obvious half: the filter is the one input a site owner controls that no
+		 * settings-page validation ever sees, so its return value must be sanitised exactly
+		 * like the merchant setting and the plugin default are.
+		 */
+		public function test_a_filter_returning_garbage_is_sanitised_too(): void {
+			Filters\expectApplied( 'woodev_pickup_accent_color' )->andReturn( 'javascript:alert(1)' );
+			$this->stub_config_dependencies_except_filters();
+
+			$handler = $this->make_handler( [ 'accent_color' => '#FCE000' ] );
+
+			$this->assertSame( '#fce000', $handler->get_js_config()['accentColor'] );
+		}
+
+		/**
+		 * A filter returning garbage falls back to the PLUGIN's own default, not straight
+		 * to the framework's — the framework default is the last resort, reached only when
+		 * the plugin's own default is ALSO unusable (see the next test).
+		 */
+		public function test_a_filter_returning_garbage_falls_back_to_the_plugin_default_not_the_framework_one(): void {
+			Filters\expectApplied( 'woodev_pickup_accent_color' )->andReturn( 'not-a-colour' );
+			$this->stub_config_dependencies_except_filters();
+
+			$handler = $this->make_handler( [ 'accent_color' => '#0a8c37' ] );
+
+			$this->assertSame( '#0a8c37', $handler->get_js_config()['accentColor'] );
+		}
+
+		/**
+		 * When NEITHER the filtered value NOR the plugin's own default sanitises cleanly,
+		 * the framework's own hardcoded default is the final backstop — `accentColor` must
+		 * never be empty or malformed.
+		 */
+		public function test_the_framework_default_is_the_final_fallback(): void {
+			Filters\expectApplied( 'woodev_pickup_accent_color' )->andReturn( 'also-not-a-colour' );
+			$this->stub_config_dependencies_except_filters();
+
+			// The PLUGIN's own default is itself malformed here (a plugin bug) — proves the
+			// fallback chain does not stop at a value that never made it to CSS anyway.
+			$handler = $this->make_handler( [ 'accent_color' => 'not-a-colour-either' ] );
+
+			$this->assertSame( '#06aedd', $handler->get_js_config()['accentColor'] );
+		}
+
+		/**
+		 * `resolve_accent_color()` lower-cases the resolved value regardless of which of
+		 * the three sources produced it, so this pins the merchant-setting branch too, not
+		 * only the plugin-default branch {@see self::test_the_plugin_default_accent_reaches_the_browser_config()}
+		 * already covers.
+		 */
+		public function test_a_merchant_setting_is_lower_cased_too(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			$this->stub_config_dependencies_except_filters();
+
+			$handler = $this->make_handler( [ 'accent_color' => '#06aedd', 'setting_accent' => '#1937FF' ] );
+
+			$this->assertSame( '#1937ff', $handler->get_js_config()['accentColor'] );
+		}
+
+		/**
+		 * The `pickup_accent_color` field's `type` is the setting's underlying VALUE type
+		 * (`Woodev_Setting::TYPE_STRING`) and its `controlType` is the UI widget
+		 * (`Woodev_Control::TYPE_COLOR`) — two distinct keys, matching the established
+		 * shape {@see \Woodev\Framework\Settings\Field_Schema::from_handler()} already uses
+		 * for every other settings field in this codebase (`'type' => $setting->get_type()`,
+		 * `'controlType' => $control->get_type()`). `default` carries the PLUGIN's own
+		 * accent colour, not the framework's.
+		 */
+		public function test_the_accent_is_offered_as_a_colour_setting_field(): void {
+			require_once dirname( __DIR__, 4 ) . '/woodev/settings-api/class-setting.php';
+			require_once dirname( __DIR__, 4 ) . '/woodev/settings-api/class-control.php';
+
+			$fields = $this->make_handler( [ 'accent_color' => '#FCE000' ] )->get_settings_fields();
+
+			$this->assertSame( \Woodev_Setting::TYPE_STRING, $fields['pickup_accent_color']['type'] );
+			$this->assertSame( \Woodev_Control::TYPE_COLOR, $fields['pickup_accent_color']['controlType'] );
+			$this->assertSame( '#FCE000', $fields['pickup_accent_color']['default'] );
+		}
+
 		public function test_config_contains_no_object_or_closure_anywhere(): void {
 			Functions\when( 'apply_filters' )->returnArg( 2 );
 			Functions\when( 'rest_url' )->justReturn( 'https://example.test/wp-json/woodev/v1' );
@@ -1237,24 +1429,27 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 		}
 
 		// -------------------------------------------------------------------------
-		// get_settings_fields() (SP-5 Task 16) — pure pass-through to the active
-		// Map_Provider's own get_settings_fields(), never reshaped
+		// get_settings_fields() (SP-5 Task 16, merged with `pickup_accent_color` as of
+		// Task 8B / D-15) — the provider's own fields, plus the framework's accent field
 		// -------------------------------------------------------------------------
 
 		/**
 		 * Coordination proof with the REAL Yandex_Map_Provider (not the test double, which
-		 * hardcodes `[]`): proves the handler passes the descriptor through UNCHANGED —
-		 * `assertSame()` against the same live `$provider` instance's own return value
-		 * means both sides move together, so this test cannot see a reshape that mutates
-		 * the provider's own field content (e.g. dropping `description`, flipping
+		 * hardcodes `[]`): proves the handler passes the PROVIDER's descriptor through
+		 * UNCHANGED — comparing against the same live `$provider` instance's own return
+		 * value means both sides move together, so this test cannot see a reshape that
+		 * mutates the provider's own field content (e.g. dropping `description`, flipping
 		 * `required`, or rebuilding the field in the WooCommerce `form_fields` shape) —
 		 * such a mutation would corrupt both sides identically and still compare equal.
 		 * That content is genuinely pinned, just not here: see
 		 * `tests/unit/Shipping/Map/MapProviderRegistryTest.php` for the assertions against
-		 * the descriptor's actual shape and values.
+		 * the descriptor's actual shape and values. The handler's OWN merged-in
+		 * `pickup_accent_color` field is asserted separately below, and by
+		 * {@see self::test_the_accent_is_offered_as_a_colour_setting_field()}.
 		 */
 		public function test_get_settings_fields_passes_the_yandex_providers_descriptor_through_unmodified(): void {
 			require_once dirname( __DIR__, 4 ) . '/woodev/settings-api/class-setting.php';
+			require_once dirname( __DIR__, 4 ) . '/woodev/settings-api/class-control.php';
 			require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/map/class-yandex-map-provider.php';
 
 			Functions\when( 'apply_filters' )->returnArg( 2 );
@@ -1268,15 +1463,26 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				$this->default_location()
 			);
 
-			$this->assertArrayHasKey( 'map_api_key', $handler->get_settings_fields() );
-			$this->assertSame( $provider->get_settings_fields(), $handler->get_settings_fields() );
+			$fields = $handler->get_settings_fields();
+
+			$this->assertArrayHasKey( 'map_api_key', $fields );
+			$this->assertArrayHasKey( 'pickup_accent_color', $fields );
+			$this->assertSame(
+				$provider->get_settings_fields(),
+				array_diff_key( $fields, [ 'pickup_accent_color' => null ] ),
+				"the provider's own fields must pass through unmodified alongside the framework's field"
+			);
 		}
 
 		/**
-		 * A plugin using the embedded provider gains no field at all — the handler must
-		 * not invent one nor merge in a placeholder shape of its own.
+		 * A plugin using the embedded provider gains no PROVIDER field at all, but still
+		 * gets the framework's own `pickup_accent_color` — the handler must not invent a
+		 * provider field of its own, but the accent field is framework-owned, not
+		 * provider-owned, so it is never conditional on which provider is active.
 		 */
-		public function test_get_settings_fields_is_empty_for_the_embedded_provider(): void {
+		public function test_get_settings_fields_has_only_the_accent_field_for_the_embedded_provider(): void {
+			require_once dirname( __DIR__, 4 ) . '/woodev/settings-api/class-setting.php';
+			require_once dirname( __DIR__, 4 ) . '/woodev/settings-api/class-control.php';
 			require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/map/class-embedded-map-provider.php';
 
 			Functions\when( 'apply_filters' )->returnArg( 2 );
@@ -1294,8 +1500,32 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				$this->default_location()
 			);
 
-			$this->assertSame( [], $handler->get_settings_fields() );
-			$this->assertArrayNotHasKey( 'map_api_key', $handler->get_settings_fields() );
+			$fields = $handler->get_settings_fields();
+
+			$this->assertSame( [ 'pickup_accent_color' ], array_keys( $fields ) );
+			$this->assertArrayNotHasKey( 'map_api_key', $fields );
+		}
+
+		/**
+		 * Collision guard: a (misbehaving) provider that names one of ITS OWN fields
+		 * `pickup_accent_color` must never win — the framework's own field is merged in
+		 * LAST and always wins, so a provider accidentally reusing this key can never
+		 * silently shadow the framework's accent setting.
+		 */
+		public function test_a_provider_field_cannot_shadow_the_frameworks_accent_field(): void {
+			require_once dirname( __DIR__, 4 ) . '/woodev/settings-api/class-setting.php';
+			require_once dirname( __DIR__, 4 ) . '/woodev/settings-api/class-control.php';
+
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+
+			$provider = new Pickup_Handler_Test_Map_Provider( 'yandex' );
+			$provider->settings_fields_to_return = [
+				'pickup_accent_color' => [ 'type' => 'string', 'default' => '#deadbf' ],
+			];
+
+			$handler = $this->make_handler( [ 'map_provider' => $provider, 'accent_color' => '#FCE000' ] );
+
+			$this->assertSame( '#FCE000', $handler->get_settings_fields()['pickup_accent_color']['default'] );
 		}
 
 		// -------------------------------------------------------------------------

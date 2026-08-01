@@ -232,6 +232,38 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		private const MAX_ZOOM = 18;
 
 		/**
+		 * Framework fallback accent colour, used only when NEITHER the merchant setting
+		 * NOR the plugin default survives sanitisation (spec D-15). The framework itself
+		 * knows no carrier's brand — this exists purely so `resolve_accent_color()` always
+		 * has a valid hex colour to fall back to.
+		 *
+		 * @since 2.0.2
+		 * @var string
+		 */
+		private const DEFAULT_ACCENT_COLOR = '#06aedd';
+
+		/**
+		 * The plugin's default accent colour (spec D-15) — drives the map's CTA, the
+		 * active list item, the drawer toggle, the cluster icon, and the checkout trigger
+		 * button. Overridden by {@see self::$setting_accent_color} when the merchant has
+		 * set one.
+		 *
+		 * @since 2.0.2
+		 * @var string
+		 */
+		private string $accent_color;
+
+		/**
+		 * The merchant's own accent-colour setting, or `''` when unset — resolution order
+		 * is merchant setting → plugin default → framework default (spec D-15), the same
+		 * shape as the API-key fallback.
+		 *
+		 * @since 2.0.2
+		 * @var string
+		 */
+		private string $setting_accent_color;
+
+		/**
 		 * Constructor.
 		 *
 		 * `$order_handler` and `$point_field_logical` are optional and go together: when
@@ -287,6 +319,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 *                                                          {@see self::$point_icons}. Optional
 		 *                                                          — a plugin that supplies none gets
 		 *                                                          the framework's generic pin.
+		 * @param string                      $accent_color        the plugin's default accent
+		 *                                                          colour (spec D-15); see
+		 *                                                          {@see self::$accent_color}.
+		 *                                                          Optional — a plugin that supplies
+		 *                                                          none inherits the framework's own
+		 *                                                          default.
+		 * @param string                      $setting_accent_color the merchant's own accent-colour
+		 *                                                          setting (spec D-15); see
+		 *                                                          {@see self::$setting_accent_color}.
+		 *                                                          Optional, empty when unset.
 		 *
 		 * @throws \InvalidArgumentException when `$default_location` does not have a valid
 		 *                                    `center` (two floats/ints, lat within ±90, lng
@@ -302,19 +344,58 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 			?Shipping_Order_Handler $order_handler = null,
 			?string $point_field_logical = null,
 			bool $replace_address = true,
-			array $point_icons = []
+			array $point_icons = [],
+			string $accent_color = self::DEFAULT_ACCENT_COLOR,
+			string $setting_accent_color = ''
 		) {
 			self::validate_default_location( $default_location );
 
-			$this->plugin_id           = $plugin_id;
-			$this->field_id            = $field_id;
-			$this->source              = $source;
-			$this->map_provider        = $map_provider;
-			$this->default_location    = $default_location;
-			$this->order_handler       = $order_handler;
-			$this->point_field_logical = $point_field_logical;
-			$this->replace_address     = $replace_address;
-			$this->point_icons         = $point_icons;
+			$this->plugin_id            = $plugin_id;
+			$this->field_id             = $field_id;
+			$this->source               = $source;
+			$this->map_provider         = $map_provider;
+			$this->default_location     = $default_location;
+			$this->order_handler        = $order_handler;
+			$this->point_field_logical  = $point_field_logical;
+			$this->replace_address      = $replace_address;
+			$this->point_icons          = $point_icons;
+			$this->accent_color         = $accent_color;
+			$this->setting_accent_color = $setting_accent_color;
+		}
+
+		/**
+		 * Resolves the map's accent colour: the merchant's setting, else the plugin's
+		 * default, else the framework's (spec D-15). Filterable, and sanitised AFTER the
+		 * filter — a filter is an untrusted input on a path that ends in CSS; sanitising
+		 * only the merchant setting and the plugin default would let a filter returning
+		 * garbage reach `setProperty()` unvalidated.
+		 *
+		 * Lowercasing happens HERE, exactly once, on the final resolved value — regardless
+		 * of which branch produced it — and nowhere else. `sanitize_hex_color()` (verified
+		 * against WordPress core) does NOT itself lower-case; it returns a matching value
+		 * byte-for-byte and `null` otherwise. Without this explicit step, a plugin default
+		 * of `#FCE000` would reach the browser uppercase.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string a valid, lower-cased hex colour, never an empty string.
+		 */
+		private function resolve_accent_color(): string {
+			$candidate = '' !== $this->setting_accent_color ? $this->setting_accent_color : $this->accent_color;
+
+			/**
+			 * Filters the pickup map's accent colour.
+			 *
+			 * @since 2.0.2
+			 *
+			 * @param string $colour resolved colour, before sanitisation.
+			 */
+			$filtered = (string) apply_filters( 'woodev_pickup_accent_color', $candidate );
+
+			$sanitized = sanitize_hex_color( $filtered )
+				?: ( sanitize_hex_color( $this->accent_color ) ?: self::DEFAULT_ACCENT_COLOR );
+
+			return strtolower( $sanitized );
 		}
 
 		/**
@@ -467,7 +548,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 *     defaultLocation: array{center: array{0: float|int, 1: float|int}, zoom: int},
 		 *     pointIcons: array<string, array{default: string, active: string}>,
 		 *     mapConfig: array<string, mixed>,
-		 *     replaceAddress: array{enabled: bool, billingOnly: bool}
+		 *     replaceAddress: array{enabled: bool, billingOnly: bool},
+		 *     accentColor: string
 		 * }
 		 */
 		public function get_js_config(): array {
@@ -545,6 +627,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 					'sectionAddresses' => __( 'Адреса', 'woodev-plugin-framework' ),
 					'filterTypes'      => __( 'Тип пунктов', 'woodev-plugin-framework' ),
 					'emptyInView'      => __( 'В этой области пунктов выдачи нет', 'woodev-plugin-framework' ),
+					// The checkout trigger's second state (Task 20) — a customer who has
+					// already chosen a point sees this instead of `trigger`.
+					'triggerChange'    => __( 'Выбрать другой пункт выдачи', 'woodev-plugin-framework' ),
 				],
 
 				'defaultLocation' => $this->default_location,
@@ -556,37 +641,64 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 					'enabled'     => $this->replace_address,
 					'billingOnly' => (bool) wc_ship_to_billing_address_only(),
 				],
+
+				// Top level, NOT inside `mapConfig`: the checkout trigger button lives
+				// outside the modal entirely and needs this too (spec D-15).
+				'accentColor' => $this->resolve_accent_color(),
 			];
 		}
 
 		/**
-		 * Gets the settings fields the active map provider needs, if any.
+		 * Gets the settings fields the active map provider needs, if any, merged with the
+		 * framework's own `pickup_accent_color` field (spec D-15).
 		 *
-		 * A pure pass-through to {@see Map_Provider::get_settings_fields()} — this handler
-		 * does not know what a map key IS, only that the active provider may want one (SP-5
-		 * Task 16).
+		 * Stopped being a pure pass-through to {@see Map_Provider::get_settings_fields()}
+		 * as of Task 8B — the accent colour is a framework-owned field, not something any
+		 * provider knows about (a provider merely READS the resolved colour via
+		 * {@see self::resolve_accent_color()} for e.g. `clusterIconColor`; see spec D-15).
+		 * The FRAMEWORK's field is added LAST, after the provider's own fields — a provider
+		 * field named `pickup_accent_color` would otherwise silently win, and a provider
+		 * accidentally shadowing the framework's own settings key is a much stranger bug to
+		 * chase than "the framework's key always wins"; see
+		 * {@see PickupHandlerTest::test_a_provider_field_cannot_shadow_the_frameworks_accent_field()}.
 		 *
 		 * This is NOT automatic. Nothing on the framework side calls this method — the
 		 * plugin that owns the shipping integration MUST call it itself and merge the
 		 * result into its own settings registration for the merchant-facing
-		 * `map_api_key` field to exist at all. Spec §10.8 amends §4.7's "auto-registers"
-		 * wording, which described the field as something a plugin "automatically gains";
-		 * the framework cannot register a field into a plugin's own settings provider
-		 * without owning it, the same boundary §10.6 already drew for the fallback key.
-		 * Skip the call and every install of the plugin stays pinned to the plugin's
-		 * shared fallback key — exactly the quota risk §4.7 flagged as a watch item.
+		 * `map_api_key` and `pickup_accent_color` fields to exist at all. Spec §10.8
+		 * amends §4.7's "auto-registers" wording, which described the field as something a
+		 * plugin "automatically gains"; the framework cannot register a field into a
+		 * plugin's own settings provider without owning it, the same boundary §10.6 already
+		 * drew for the fallback key. Skip the call and every install of the plugin stays
+		 * pinned to the plugin's shared fallback key and default accent colour — exactly
+		 * the quota risk §4.7 flagged as a watch item.
 		 *
-		 * The descriptor is returned UNMODIFIED — in the Woodev settings-API
-		 * `register_setting()` args shape (`name`, `type`, `default`, `required`,
-		 * `sensitive`, `description`), not the WooCommerce `form_fields` shape — so the
-		 * caller merges it into the shipping integration's own settings as-is.
+		 * The provider's own descriptors are passed through UNMODIFIED — in the Woodev
+		 * settings-API `register_setting()` args shape (`name`, `type`, `default`,
+		 * `required`, `sensitive`, `description`), not the WooCommerce `form_fields` shape
+		 * — so the caller merges it into the shipping integration's own settings as-is.
 		 *
 		 * @since 2.0.2
 		 *
 		 * @return array<string, array<string, mixed>> settings field definitions keyed by field id.
 		 */
 		public function get_settings_fields(): array {
-			return $this->map_provider->get_settings_fields();
+			return array_merge(
+				$this->map_provider->get_settings_fields(),
+				[
+					'pickup_accent_color' => [
+						'name'        => __( 'Акцентный цвет карты', 'woodev-plugin-framework' ),
+						'type'        => \Woodev_Setting::TYPE_STRING,
+						'controlType' => \Woodev_Control::TYPE_COLOR,
+						'description' => __(
+							'Цвет кнопок, активных пунктов и кластеров на карте пунктов выдачи.',
+							'woodev-plugin-framework'
+						),
+						'default'     => $this->accent_color,
+						'required'    => false,
+					],
+				]
+			);
 		}
 
 		/**
