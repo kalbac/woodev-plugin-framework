@@ -7,8 +7,8 @@
  * file in this directory (see pickup-datasource.js's own docblock).
  *
  * Home of `safeColor()`/`contrastFor()` (SP-5 Task 8B, D-15) — the client
- * half of the pickup map's accent-colour pipeline. Task 9 adds
- * `groupByPosition()` to this same file.
+ * half of the pickup map's accent-colour pipeline — and `groupByPosition()`
+ * (Task 9, D-4), which folds co-located points into one map marker.
  *
  * UMD-ish dual export (matches woodev-modal.js / pickup-datasource.js):
  *   - Browser global: window.WoodevPickupGeo = WoodevPickupGeo
@@ -115,14 +115,102 @@
 	}
 
 	/**
+	 * Number of decimal digits kept in a `groupByPosition()` key — 4 decimal
+	 * degrees is roughly 11 metres at the equator, well inside ymaps' own
+	 * pixel-clustering radius, so two points closer than that can never be
+	 * separated by zooming and are grouped up front instead (spec D-4).
+	 *
+	 * @type {number}
+	 */
+	var POSITION_PRECISION = 4;
+
+	/**
+	 * True for a finite JS `number` — i.e. safe to feed to `toFixed()`.
+	 *
+	 * Deliberately narrower than a "looks numeric" check: `null`/`undefined`
+	 * coerce to `0`/`NaN`, `NaN` and `±Infinity` are numbers but not usable
+	 * coordinates, and a numeric STRING (`'55.7558'`) is rejected too — the
+	 * dataSource contract is that `lat`/`lng` are already JS numbers
+	 * ({@see pickup-datasource.js}), so a string in that slot means the
+	 * upstream shape broke and the point should be skipped, not silently
+	 * coerced into a location that may or may not be right.
+	 *
+	 * @param {*} value
+	 * @returns {boolean}
+	 */
+	function isFiniteNumber( value ) {
+		return 'number' === typeof value && isFinite( value );
+	}
+
+	/**
+	 * Groups points that share a map position, so co-located points (e.g. a
+	 * PVZ and a postamat in the same building) render as ONE marker with a
+	 * count badge and a tab bar on the point card, instead of a placemark
+	 * permanently clustered by ymaps that nobody can ever open (spec D-4).
+	 *
+	 * The grouping key rounds `lat`/`lng` to {@see POSITION_PRECISION}
+	 * decimals — rounding, not truncation (`toFixed()`'s own behaviour),
+	 * so two coordinates a hair below a rounding boundary correctly land in
+	 * the same bucket while two a hair above the SAME nominal value land in
+	 * different ones. This also folds carrier float noise
+	 * (`55.7558` vs `55.75580001` for the same building) into one group.
+	 *
+	 * A point with a missing/non-numeric/NaN/Infinite `lat` or `lng` is
+	 * skipped entirely rather than grouped — `Number( null )` is `0`, so
+	 * without this guard every broken point would silently cluster at
+	 * `0,0`, off the coast of Africa (see {@see isFiniteNumber}).
+	 *
+	 * Groups are returned in first-seen order (stable sidebar ordering) and
+	 * take their `lat`/`lng`/`typeCode` (icon) from the FIRST point of the
+	 * group — later points in the same group only add to `points`/`size`.
+	 *
+	 * @param {Array} points normalized points from the dataSource.
+	 * @returns {Array} `{ key, lat, lng, typeCode, size, points }`, one per
+	 *                  distinct rounded position, in first-seen order.
+	 */
+	function groupByPosition( points ) {
+		var byKey = {};
+		var order = [];
+
+		( points || [] ).forEach( function( point ) {
+			if ( ! point || ! isFiniteNumber( point.lat ) || ! isFiniteNumber( point.lng ) ) {
+				return;
+			}
+
+			var key = point.lat.toFixed( POSITION_PRECISION ) + ',' + point.lng.toFixed( POSITION_PRECISION );
+
+			if ( ! Object.prototype.hasOwnProperty.call( byKey, key ) ) {
+				byKey[ key ] = {
+					key: key,
+					lat: point.lat,
+					lng: point.lng,
+					typeCode: ( point.type && point.type.code ) || '',
+					size: 0,
+					points: [],
+				};
+				order.push( key );
+			}
+
+			byKey[ key ].points.push( point );
+			byKey[ key ].size = byKey[ key ].points.length;
+		} );
+
+		return order.map( function( key ) {
+			return byKey[ key ];
+		} );
+	}
+
+	/**
 	 * @typedef {Object} WoodevPickupGeo
 	 * @property {function(*, string): string} safeColor
 	 * @property {function(string): string}     contrastFor
+	 * @property {function(Array): Array}       groupByPosition
 	 */
 
 	var WoodevPickupGeo = {
 		safeColor: safeColor,
 		contrastFor: contrastFor,
+		groupByPosition: groupByPosition,
 	};
 
 	// -------------------------------------------------------------------------
