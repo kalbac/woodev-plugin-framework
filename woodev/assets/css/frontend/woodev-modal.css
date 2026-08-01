@@ -45,13 +45,22 @@
  * the root marker the box-sizing reset above and any consumer-side query hang off.
  * ---------------------------------------------------------------------- */
 
+/*
+ * The dim is an ALPHA BACKGROUND, never `opacity`.
+ *
+ * `woodev-modal.js` puts both `.woodev-modal` and `.woodev-modal-backdrop` on ONE element and
+ * nests `.woodev-modal__content` inside it. CSS `opacity` applies to the whole subtree, so
+ * `opacity: 0.7` here — which is what WooCommerce's own backbone modal can afford, because its
+ * backdrop is a SEPARATE element — made the entire dialog 70% transparent: the checkout page
+ * showed straight through the map. No test can see this (jsdom does not render); the rig
+ * screenshot did. `rgba()` dims only this element's own paint and leaves children opaque.
+ */
 .woodev-modal-backdrop {
 	position: fixed;
 	inset: 0;
 	min-height: 360px;
 	z-index: 99900;
-	background: #000;
-	opacity: 0.7;
+	background: rgba( 0, 0, 0, 0.7 );
 }
 
 /* -------------------------------------------------------------------------

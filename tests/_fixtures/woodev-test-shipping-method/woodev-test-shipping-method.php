@@ -560,13 +560,21 @@ function woodev_test_shipping_method_plugin_init(): void {
 				// the framework's own size-only CSS instead). A type this fixture never uses
 				// (`group`) is intentionally absent, exercising the framework's own group
 				// badge fallback on the rig.
+				// Keys are the EXACT `type.code` this fixture's own points carry — the framework
+				// compares type codes case-sensitively, so `pvz` would never match a point
+				// emitting `PVZ` and every marker would silently fall back to the no-icon state.
+				// URLs are real files served by this plugin, not a placeholder host: an icon that
+				// 404s renders as a broken image, which looks identical to "the framework never
+				// applied the icon" and makes rig verification prove nothing.
+				$icons_url = plugins_url( 'assets/images', __FILE__ );
+
 				$point_icons = [
-					'pvz'      => [
-						'default' => 'https://carrier.example/icons/pvz.svg',
-						'active'  => 'https://carrier.example/icons/pvz-active.svg',
+					'PVZ'      => [
+						'default' => $icons_url . '/pvz.svg',
+						'active'  => $icons_url . '/pvz-active.svg',
 					],
-					'postamat' => [
-						'default' => 'https://carrier.example/icons/postamat.svg',
+					'POSTAMAT' => [
+						'default' => $icons_url . '/postamat.svg',
 					],
 				];
 
