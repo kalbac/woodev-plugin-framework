@@ -1,23 +1,26 @@
 /**
  * @jest-environment jsdom
  *
- * Tests for map-provider-yandex.js (SP-5 Task 17 — the ObjectManager/groups rewrite).
+ * Tests for map-provider-yandex.js (SP-5 Tasks 17/18 — the ObjectManager/groups rewrite).
  *
  * The real Yandex Maps JS API is not loadable in jest, so this file hand-rolls a minimal
- * `window[ns]` stub covering exactly the surface the provider uses at this stage: `Map`,
- * `ObjectManager`, `control.ZoomControl`, `Layer`, `projection`, `templateLayoutFactory.createClass`.
+ * `window[ns]` stub covering exactly the surface the provider uses: `Map`, `ObjectManager`,
+ * `control.ZoomControl`, `Layer`, `projection`, `templateLayoutFactory.createClass`, `geocode`.
  * Setting `window[ns]` to a working stub BEFORE calling `init()` makes {@see loadYmapsScript}'s
  * "already loaded" branch fire immediately.
  *
- * Camera control (initial viewport, focusing/un-clustering a group, the bbox cap) is Task 18 —
- * this file grows a `geocode`/`setBounds`/`setCenter`-aware stub and the matching tests in that
- * follow-up commit.
+ * `ymapsStub` is a module-level variable, reset by a fresh `createYmapsStub()` in `beforeEach()`
+ * — the given-in-spec test bodies read/mutate it directly (`ymapsStub.lastMap`,
+ * `ymapsStub.lastObjectManager`, `ymapsStub.geocodeCalls`, `ymapsStub.geocodeResult`, …) the way
+ * the SP-5 Task 17/18 plan text itself does. The {@see init} helper below reuses that SAME
+ * object unless a test needs different stub behaviour (e.g. `deferSetBounds`), in which case it
+ * passes a second `stubOptions` argument and gets a fresh one.
  *
  * Every balloon/drawer/type-filter-CONTROL/cluster-balloon test that used to live here is GONE:
  * that presentation moved to `pickup-panels.js` (the list panel, the point card, the tab bar,
  * the search view, the type filter MENU) and is covered by `pickup-panels.test.js`. This file
  * only tests what the provider itself still owns: the map canvas, one ObjectManager feature per
- * group, and the click event out.
+ * group, the camera, and the events out.
  *
  * @see woodev/shipping-method/assets/js/frontend/map-provider-yandex.js
  */
@@ -28,6 +31,14 @@ const WoodevYandexMapProvider = require( '../../woodev/shipping-method/assets/js
 
 let nsCounter = 0;
 let ymapsStub;
+
+/**
+ * Waits one macrotask — enough for any chain of already-settled promises the production code
+ * builds (script load → map/object-manager build → initial viewport resolution) to fully flush.
+ */
+function flushPromises() {
+	return new Promise( ( resolve ) => setTimeout( resolve, 0 ) );
+}
 
 /**
  * A `properties`-shaped wrapper matching ymaps' real `IDataManager`-ish `get`/`set`/`getAll`
@@ -47,19 +58,54 @@ function makeProperties( initial ) {
 }
 
 /**
- * Builds a hand-rolled `window[ns]` ymaps stub. See the file docblock for what it covers.
+ * Builds a `ymaps.geocode()` resolution shaped exactly as {@see extractGeocodeBounds} (the
+ * production file) reads it: `result.geoObjects.get(0).properties.get('boundedBy')`.
  */
-function createYmapsStub() {
+function makeGeocodeResult( bounds ) {
+	return {
+		geoObjects: {
+			get: () => ( {
+				properties: {
+					get: ( key ) => ( 'boundedBy' === key ? bounds : undefined ),
+				},
+			} ),
+		},
+	};
+}
+
+/**
+ * Builds a hand-rolled `window[ns]` ymaps stub. See the file docblock for what it covers.
+ *
+ * @param {Object}  [options]
+ * @param {boolean} [options.deferSetBounds] By default `Map#setBounds()` resolves (and applies
+ *   the new bounds) SYNCHRONOUSLY-ish — fine for tests that don't care about camera-move
+ *   ordering. `deferSetBounds: true` leaves the returned promise pending until a test explicitly
+ *   calls `resolveNextSetBounds()`/`resolveSetBoundsFor()` — needed to prove the s46
+ *   "setBounds() is asynchronous" lesson and the `_focusSeq` out-of-order guard.
+ * @param {number}  [options.zoom] `Map#getZoom()`'s fixed return value. Defaults to 10.
+ */
+function createYmapsStub( options ) {
+	const opts = options || {};
+	const deferSetBounds = !! opts.deferSetBounds;
+	const zoom = 'number' === typeof opts.zoom ? opts.zoom : 10;
 	const stub = {};
+
+	stub.geocodeCalls = 0;
+	// A valid, non-empty default result — tests that don't care about the geocode OUTCOME
+	// (only that it was called) never need to touch this.
+	stub.geocodeResult = makeGeocodeResult( [ [ 10, 20 ], [ 11, 21 ] ] );
 
 	function Map( container, state, mapOptions ) {
 		this.container = container;
 		this.state = state;
 		this.options = mapOptions;
-		this.layers = [];
+		this.bounds = [ [ 10, 20 ], [ 11, 21 ] ];
+		this.setBoundsCalls = [];
+		this.setCenterCalls = [];
 		// `add` is defined non-enumerable so `toEqual( [ '© Test' ] )` against a plain array
 		// literal still passes — an ENUMERABLE own `add` property would make the received
 		// array structurally unequal to a plain array even with identical indexed contents.
+		this.layers = [];
 		Object.defineProperty( this.layers, 'add', {
 			value: ( layer ) => {
 				this.layers.push( layer );
@@ -74,15 +120,80 @@ function createYmapsStub() {
 		this.geoObjects = { add: jest.fn(), remove: jest.fn() };
 		this.controls = { add: jest.fn() };
 		this.destroy = jest.fn();
+		this._eventHandlers = {};
+		this._pendingSetBounds = [];
+
+		const self = this;
+
+		this.events = {
+			add: ( name, cb ) => {
+				self._eventHandlers[ name ] = self._eventHandlers[ name ] || [];
+				self._eventHandlers[ name ].push( cb );
+			},
+		};
 
 		stub.lastMap = this;
 	}
+	Map.prototype.getBounds = function() {
+		return this.bounds;
+	};
+	Map.prototype.getZoom = function() {
+		return zoom;
+	};
+	Map.prototype.setCenter = function( center, mapZoom ) {
+		this.setCenterCalls.push( [ center, mapZoom ] );
+	};
+	Map.prototype.setBounds = function( bounds, boundsOptions ) {
+		const self = this;
+
+		this.setBoundsCalls.push( { bounds, options: boundsOptions } );
+
+		if ( deferSetBounds ) {
+			return new Promise( ( resolve ) => {
+				self._pendingSetBounds.push( {
+					bounds,
+					resolve: () => {
+						self.bounds = bounds;
+						resolve();
+					},
+				} );
+			} );
+		}
+
+		this.bounds = bounds;
+
+		return Promise.resolve();
+	};
+	// Resolves the OLDEST still-pending deferred setBounds() call.
+	Map.prototype.resolveNextSetBounds = function() {
+		const entry = this._pendingSetBounds.shift();
+
+		if ( entry ) {
+			entry.resolve();
+		}
+	};
+	// Resolves a SPECIFIC pending setBounds() call by its (unique) bounds argument — needed to
+	// resolve two concurrent calls OUT of the order they were made.
+	Map.prototype.resolveSetBoundsFor = function( bounds ) {
+		const index = this._pendingSetBounds.findIndex(
+			( entry ) => JSON.stringify( entry.bounds ) === JSON.stringify( bounds )
+		);
+
+		if ( -1 !== index ) {
+			this._pendingSetBounds.splice( index, 1 )[ 0 ].resolve();
+		}
+	};
+	Map.prototype.fireBoundsChange = function() {
+		( this._eventHandlers.boundschange || [] ).forEach( ( cb ) => cb() );
+	};
 
 	function ObjectManager( omOptions ) {
 		this.options = omOptions;
 		this.added = [];
 		this.removeAllCalls = 0;
 		this.filter = null;
+		// Settable directly by a test — see getObjectState() below.
+		this.state = undefined;
 
 		const clickHandlers = [];
 
@@ -111,6 +222,16 @@ function createYmapsStub() {
 	};
 	ObjectManager.prototype.setFilter = function( fn ) {
 		this.filter = fn;
+	};
+	ObjectManager.prototype.getObjectState = function( id ) {
+		// Most tests only need ONE shared state regardless of which key is queried — set
+		// `.state` directly. A test that needs two DIFFERENT keys to resolve to different
+		// (e.g. differently-anchored) states sets `.stateFor( id )` instead.
+		if ( 'function' === typeof this.stateFor ) {
+			return this.stateFor( id );
+		}
+
+		return this.state;
 	};
 
 	function Layer( url, layerOptions ) {
@@ -141,6 +262,11 @@ function createYmapsStub() {
 	stub.Layer = Layer;
 	stub.projection = { sphericalMercator: 'stub-projection' };
 	stub.templateLayoutFactory = { createClass };
+	stub.geocode = () => {
+		stub.geocodeCalls += 1;
+
+		return Promise.resolve( stub.geocodeResult );
+	};
 
 	return stub;
 }
@@ -167,8 +293,16 @@ function makeConfig( overrides ) {
 	);
 }
 
-/** Builds a fresh provider, `window[ns] = ymapsStub`, and awaits `init()`. */
-function init( overrides ) {
+/**
+ * Builds a fresh provider, `window[ns] = ymapsStub`, and awaits `init()`. Reuses the
+ * `beforeEach()`-created `ymapsStub` unless `stubOptions` is given, in which case it replaces
+ * `ymapsStub` with a freshly configured one first (needed for `deferSetBounds`/`zoom`).
+ */
+function init( overrides, stubOptions ) {
+	if ( stubOptions ) {
+		ymapsStub = createYmapsStub( stubOptions );
+	}
+
 	const config = makeConfig( overrides );
 
 	window[ config.ns ] = ymapsStub;
@@ -242,8 +376,15 @@ test( 'destroy() called before init() settles never builds a map or throws', asy
 } );
 
 // -------------------------------------------------------------------------
-// Map construction — layers/copyrights, object manager options
+// Map construction — zoom range, layers/copyrights, object manager options
 // -------------------------------------------------------------------------
+
+test( 'builds the map with minZoom 8 and maxZoom 18', async () => {
+	await init();
+
+	expect( ymapsStub.lastMap.options.minZoom ).toBe( 8 );
+	expect( ymapsStub.lastMap.options.maxZoom ).toBe( 18 );
+} );
 
 test( 'adds the plugin tile layers and copyrights when supplied', async () => {
 	await init( {
@@ -321,7 +462,7 @@ test( 'marks a group of more than one point so the badge renders', async () => {
 	expect( ymapsStub.lastObjectManager.added[ 0 ].properties.groupSize ).toBe( 3 );
 } );
 
-test( 'every feature is registered with the marker icon hit-box dimensions', async () => {
+test( 'every feature is registered with the RESTING (non-active) icon hit-box dimensions', async () => {
 	const provider = await init();
 
 	provider.setPoints( [ group( 'a', 1, 1 ) ] );
@@ -341,6 +482,19 @@ test( 'emits pointClick with the group key', async () => {
 	ymapsStub.lastObjectManager.fireObjectClick( 'a' );
 
 	expect( seen ).toEqual( [ 'a' ] );
+} );
+
+test( 'a refetch that drops the focused group clears getFocusedKey()', async () => {
+	const provider = await init();
+
+	provider.setPoints( [ group( 'a', 1, 1 ), group( 'b', 2, 2 ) ] );
+	await provider.focusGroup( 'a' );
+
+	expect( provider.getFocusedKey() ).toBe( 'a' );
+
+	provider.setPoints( [ group( 'b', 2, 2 ) ] ); // 'a' is gone from the new set
+
+	expect( provider.getFocusedKey() ).toBeNull();
 } );
 
 // -------------------------------------------------------------------------
@@ -400,4 +554,307 @@ test( 'the marker renders no <img> and adds the unknown modifier class when the 
 	expect( container.querySelector( 'img' ) ).toBeNull();
 	expect( container.querySelector( '.woodev-pickup-marker--unknown' ) ).not.toBeNull();
 	expect( container.querySelector( '.woodev-pickup-marker__badge' ) ).toBeNull();
+} );
+
+// -------------------------------------------------------------------------
+// Camera — initial viewport per strategy (Task 18, D-7)
+// -------------------------------------------------------------------------
+
+test( 'fits to the loaded points under bulk without geocoding', async () => {
+	const provider = await init( { strategy: 'bulk', locality: 'Москва' } );
+
+	provider.setPoints( [ group( 'a', 55.70, 37.60 ), group( 'b', 55.80, 37.70 ) ] );
+
+	expect( ymapsStub.geocodeCalls ).toBe( 0 );
+	expect( ymapsStub.lastMap.setBoundsCalls ).toHaveLength( 1 );
+} );
+
+test( 'geocodes the locality under viewport', async () => {
+	await init( { strategy: 'viewport', locality: 'Москва' } );
+
+	expect( ymapsStub.geocodeCalls ).toBe( 1 );
+} );
+
+test( 'falls back to the plugin default when the geocode is empty', async () => {
+	ymapsStub.geocodeResult = null;
+
+	await init( {
+		strategy: 'viewport',
+		locality: 'Нетакогогорода',
+		defaultLocation: { center: [ 55.76, 37.64 ], zoom: 12 },
+	} );
+
+	expect( ymapsStub.lastMap.setCenterCalls[ 0 ] ).toEqual( [ [ 55.76, 37.64 ], 12 ] );
+} );
+
+test( 'uses the plugin default without geocoding when there is no locality', async () => {
+	await init( {
+		strategy: 'viewport',
+		locality: '',
+		defaultLocation: { center: [ 55.76, 37.64 ], zoom: 12 },
+	} );
+
+	expect( ymapsStub.geocodeCalls ).toBe( 0 );
+	expect( ymapsStub.lastMap.setCenterCalls ).toHaveLength( 1 );
+} );
+
+test( 'bulk strategy never registers a boundschange listener (no viewport refetching)', async () => {
+	await init( { strategy: 'bulk' } );
+
+	expect( ( ymapsStub.lastMap._eventHandlers.boundschange || [] ).length ).toBe( 0 );
+} );
+
+test( 'viewport: emits boundsChange once for the initial (already-resolved) viewport, before any pan', async () => {
+	const seen = [];
+	const config = makeConfig( { strategy: 'viewport', locality: '' } );
+
+	window[ config.ns ] = ymapsStub;
+
+	const provider = new WoodevYandexMapProvider();
+
+	provider.on( 'boundsChange', ( bbox ) => seen.push( bbox ) );
+
+	await provider.init( document.createElement( 'div' ), config );
+
+	expect( seen ).toHaveLength( 1 );
+} );
+
+// Fix A regression guard, adapted from the previous version of this file. ymaps' setBounds() is
+// ASYNCHRONOUS — it resolves once the camera move completes, not when it starts.
+// _resolveInitialViewport() must RETURN that promise so the boundsChange this file emits right
+// after reflects the POST-move viewport, not the pre-move one. Dropping the `return` there would
+// let the emit fire with whatever `map.getBounds()` reports BEFORE the move settles.
+test( 'viewport: the boundsChange emitted for the initial viewport reflects the POST-move bounds — '
+	+ 'proves the setBounds() promise in _resolveInitialViewport() is awaited, not dropped', async () => {
+	ymapsStub = createYmapsStub( { deferSetBounds: true } );
+
+	const postMoveBounds = [ [ 55, 37 ], [ 56, 38 ] ];
+
+	ymapsStub.geocodeResult = makeGeocodeResult( postMoveBounds );
+
+	const config = makeConfig( { strategy: 'viewport', locality: 'Казань' } );
+
+	window[ config.ns ] = ymapsStub;
+
+	const provider = new WoodevYandexMapProvider();
+	const seen = [];
+
+	provider.on( 'boundsChange', ( bbox ) => seen.push( bbox ) );
+
+	const initPromise = provider.init( document.createElement( 'div' ), config );
+
+	await flushPromises();
+
+	// The geocode resolved and setBounds() was CALLED with the post-move bounds, but its own
+	// promise has not resolved yet — nothing has been emitted yet.
+	expect( seen ).toHaveLength( 0 );
+	expect( ymapsStub.lastMap.setBoundsCalls[ 0 ].bounds ).toEqual( postMoveBounds );
+
+	ymapsStub.lastMap.resolveNextSetBounds(); // simulate the camera move completing
+	await initPromise;
+
+	expect( seen[ 0 ] ).toEqual( [ 55, 37, 56, 38 ] ); // the POST-move bbox, flattened
+} );
+
+// -------------------------------------------------------------------------
+// bbox cap (D-4) — emit bboxTooWide instead of fetching when the viewport is too wide
+// -------------------------------------------------------------------------
+
+test( 'emits bboxTooWide instead of boundsChange when the bbox exceeds the server cap', async () => {
+	const seen = [];
+	const provider = await init( { strategy: 'viewport' } );
+
+	provider.on( 'bboxTooWide', () => seen.push( 1 ) );
+	ymapsStub.lastMap.bounds = [ [ 40, 20 ], [ 60, 60 ] ]; // 40° wide, cap is 10°
+	ymapsStub.lastMap.fireBoundsChange();
+
+	expect( seen ).toHaveLength( 1 );
+} );
+
+test( 'emits boundsChange with the flattened bbox when the viewport is within the cap', async () => {
+	const seen = [];
+	const provider = await init( { strategy: 'viewport', locality: '' } );
+
+	provider.on( 'boundsChange', ( bbox ) => seen.push( bbox ) );
+	ymapsStub.lastMap.bounds = [ [ 10, 20 ], [ 11, 22 ] ];
+	ymapsStub.lastMap.fireBoundsChange();
+
+	expect( seen[ 0 ] ).toEqual( [ 10, 20, 11, 22 ] );
+} );
+
+// -------------------------------------------------------------------------
+// visibleChange — the keys of the currently-loaded groups inside the current bounds
+// -------------------------------------------------------------------------
+
+test( 'visibleChange carries only the keys of groups inside the current bounds', async () => {
+	const seen = [];
+	const provider = await init( { strategy: 'viewport', locality: '' } );
+
+	ymapsStub.lastMap.bounds = [ [ 0, 0 ], [ 10, 10 ] ];
+	provider.on( 'visibleChange', ( keys ) => seen.push( keys ) );
+
+	provider.setPoints( [ group( 'inside', 5, 5 ), group( 'outside', 50, 50 ) ] );
+
+	expect( seen[ seen.length - 1 ] ).toEqual( [ 'inside' ] );
+} );
+
+// -------------------------------------------------------------------------
+// focusGroup() — the co-located ("Russian Post") guard, camera un-clustering, sequencing
+// -------------------------------------------------------------------------
+
+test( 'does not try to zoom a group whose points all share one coordinate', async () => {
+	const provider = await init();
+
+	ymapsStub.lastObjectManager.state = {
+		isClustered: true,
+		cluster: {
+			features: [
+				{ geometry: { coordinates: [ 55.75, 37.61 ] } },
+				{ geometry: { coordinates: [ 55.75, 37.61 ] } },
+			],
+		},
+	};
+
+	provider.focusGroup( 'a' );
+
+	expect( ymapsStub.lastMap.setBoundsCalls ).toHaveLength( 0 );
+} );
+
+test( 'zooms a genuine cluster and awaits the move before reporting', async () => {
+	const provider = await init();
+
+	ymapsStub.lastObjectManager.state = {
+		isClustered: true,
+		cluster: {
+			features: [
+				{ geometry: { coordinates: [ 55.75, 37.61 ] } },
+				{ geometry: { coordinates: [ 55.76, 37.62 ] } },
+			],
+		},
+	};
+
+	await provider.focusGroup( 'a' );
+
+	expect( ymapsStub.lastMap.setBoundsCalls ).toHaveLength( 1 );
+	expect( ymapsStub.lastMap.setBoundsCalls[ 0 ].options.checkZoomRange ).toBe( true );
+	expect( provider.getFocusedKey() ).toBe( 'a' );
+} );
+
+test( 'a group that is not currently clustered focuses without ever calling setBounds', async () => {
+	const provider = await init();
+
+	ymapsStub.lastObjectManager.state = { isClustered: false, cluster: null };
+
+	await provider.focusGroup( 'a' );
+
+	expect( ymapsStub.lastMap.setBoundsCalls ).toHaveLength( 0 );
+	expect( provider.getFocusedKey() ).toBe( 'a' );
+} );
+
+test( 're-checks getObjectState AFTER the move and does not apply focus if it is still a '
+	+ 'degenerate cluster post-move', async () => {
+	const provider = await init();
+
+	ymapsStub.lastObjectManager.state = {
+		isClustered: true,
+		cluster: {
+			features: [
+				{ geometry: { coordinates: [ 1, 1 ] } },
+				{ geometry: { coordinates: [ 2, 2 ] } },
+			],
+		},
+	};
+
+	const focusPromise = provider.focusGroup( 'a' );
+
+	// Simulate ymaps reporting, once the camera settles, that 'a' is STILL folded into a
+	// single-coordinate cluster — the move failed to separate it.
+	ymapsStub.lastObjectManager.state = {
+		isClustered: true,
+		cluster: {
+			features: [
+				{ geometry: { coordinates: [ 5, 5 ] } },
+				{ geometry: { coordinates: [ 5, 5 ] } },
+			],
+		},
+	};
+
+	await focusPromise;
+
+	expect( provider.getFocusedKey() ).toBeNull();
+} );
+
+test( 'ignores a stale focus continuation when a second focus started first', async () => {
+	const provider = await init();
+	const slow = provider.focusGroup( 'a' );
+	const fast = provider.focusGroup( 'b' );
+
+	await Promise.all( [ slow, fast ] );
+
+	expect( provider.getFocusedKey() ).toBe( 'b' );
+} );
+
+// The adversarial version of the test above: TRUE out-of-order promise resolution (the earlier
+// call's camera move settles AFTER the later call's), which is the only way to actually exercise
+// `_focusSeq` — with both moves resolving synchronously in call order (as the test above does),
+// a naive implementation with no sequencing guard at all would coincidentally produce the same
+// result. See the file docblock's second lesson and `focusGroup()`'s own docblock.
+test( 'focusGroup: an earlier focus\'s camera move resolving AFTER a later focus\'s does not leave the '
+	+ 'stale group focused (out-of-order resolution guard for _focusSeq)', async () => {
+	const provider = await init( {}, { deferSetBounds: true } );
+
+	// Each key resolves to a DIFFERENT cluster anchor, so the two setBounds() calls below are
+	// distinguishable by their bounds argument — required to resolve them out of order.
+	ymapsStub.lastObjectManager.stateFor = ( key ) => ( {
+		isClustered: true,
+		cluster: {
+			features: [
+				{ geometry: { coordinates: 'a' === key ? [ 1, 1 ] : [ 2, 2 ] } },
+				{ geometry: { coordinates: [ 9, 9 ] } },
+			],
+		},
+	} );
+
+	provider.focusGroup( 'a' ); // clicked first
+	provider.focusGroup( 'b' ); // clicked second (most recent)
+
+	const boundsA = ymapsStub.lastMap.setBoundsCalls[ 0 ].bounds;
+	const boundsB = ymapsStub.lastMap.setBoundsCalls[ 1 ].bounds;
+
+	// B's move resolves FIRST (e.g. a shorter distance to travel) — out of click order.
+	ymapsStub.lastMap.resolveSetBoundsFor( boundsB );
+	await flushPromises();
+
+	expect( provider.getFocusedKey() ).toBe( 'b' );
+
+	// A's move resolves LAST — it must NOT stomp B's now-focused group.
+	ymapsStub.lastMap.resolveSetBoundsFor( boundsA );
+	await flushPromises();
+
+	expect( provider.getFocusedKey() ).toBe( 'b' );
+} );
+
+test( 'focusGroup switches the icon box to ACTIVE for the newly focused group and back to '
+	+ 'RESTING for the previously focused one', async () => {
+	const provider = await init();
+
+	ymapsStub.lastObjectManager.state = { isClustered: false, cluster: null };
+
+	await provider.focusGroup( 'a' );
+
+	expect( ymapsStub.lastObjectManager.objects.setObjectOptions ).toHaveBeenLastCalledWith( 'a', {
+		iconImageSize: [ 50, 70 ],
+		iconImageOffset: [ -25, -40 ],
+	} );
+
+	await provider.focusGroup( 'b' );
+
+	expect( ymapsStub.lastObjectManager.objects.setObjectOptions ).toHaveBeenCalledWith( 'a', {
+		iconImageSize: [ 45, 45 ],
+		iconImageOffset: [ -22, -23 ],
+	} );
+	expect( ymapsStub.lastObjectManager.objects.setObjectOptions ).toHaveBeenLastCalledWith( 'b', {
+		iconImageSize: [ 50, 70 ],
+		iconImageOffset: [ -25, -40 ],
+	} );
 } );
