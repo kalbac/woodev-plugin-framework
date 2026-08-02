@@ -824,6 +824,7 @@
 		} );
 
 		modal.open();
+		modal.showLoading( text( config, 'loading' ) );
 
 		var providers = window.WoodevPickupMapProviders || {};
 		var ProviderCtor = config && providers[ config.provider ];
@@ -1238,6 +1239,11 @@
 				if ( destroyed ) {
 					return;
 				}
+
+				// The map is drawable now, so the "loading" overlay opened with the dialog has
+				// done its job. Without it the customer got 1-2 seconds of an empty dialog
+				// carrying nothing but its own title while the map script downloaded.
+				modal.hideLoading();
 
 				fireDocumentEvent( EVENT_MAP_READY, { fieldId: config.fieldId, provider: config.provider } );
 

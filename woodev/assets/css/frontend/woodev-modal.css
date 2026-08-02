@@ -259,3 +259,23 @@
 		border-radius: 0;
 	}
 }
+
+/*
+ * Loading overlay — an ADDITIVE layer over the body, never a replacement for it: the consumer
+ * is usually building its content into the body at the very moment this shows (a map provider
+ * appends its canvas, then spends a second or two fetching a third-party script). Replacing the
+ * body here would delete the node that content is being drawn into.
+ */
+.woodev-modal__loading {
+	position: absolute;
+	inset: 0;
+	z-index: 5;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 16px;
+	background: #fff;
+	color: #646970;
+	font-size: 14px;
+	text-align: center;
+}

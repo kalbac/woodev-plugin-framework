@@ -378,6 +378,49 @@ test( 'title text is escaped as text, not injected as markup', () => {
 	modal.destroy();
 } );
 
+describe( 'WoodevModal loading overlay', () => {
+	it( 'shows the message WITHOUT removing what a consumer already mounted', () => {
+		const modal = new WoodevModal( { modalId: 'test-modal', title: 'T' } );
+		modal.open();
+
+		// A consumer's content, mounted the way a map provider mounts its canvas.
+		const mounted = document.createElement( 'div' );
+		mounted.className = 'consumer-canvas';
+		modal.getContainer().appendChild( mounted );
+
+		modal.showLoading( 'Загрузка…' );
+
+		// Additive, not a replacement: showError()/showEmpty() wipe the body, and doing that
+		// here would delete the node the consumer is drawing into while it loads.
+		expect( modal.getContainer().querySelector( '.consumer-canvas' ) ).not.toBeNull();
+		expect( modal.getContainer().querySelector( '.woodev-modal__loading' ).textContent ).toBe( 'Загрузка…' );
+
+		modal.hideLoading();
+
+		expect( modal.getContainer().querySelector( '.woodev-modal__loading' ) ).toBeNull();
+		expect( modal.getContainer().querySelector( '.consumer-canvas' ) ).not.toBeNull();
+
+		modal.destroy();
+	} );
+
+	it( 'keeps a single overlay when shown twice, and hiding twice is a no-op', () => {
+		const modal = new WoodevModal( { modalId: 'test-modal', title: 'T' } );
+		modal.open();
+
+		modal.showLoading( 'a' );
+		modal.showLoading( 'b' );
+
+		expect( modal.getContainer().querySelectorAll( '.woodev-modal__loading' ) ).toHaveLength( 1 );
+		expect( modal.getContainer().querySelector( '.woodev-modal__loading' ).textContent ).toBe( 'b' );
+
+		modal.hideLoading();
+
+		expect( () => modal.hideLoading() ).not.toThrow();
+
+		modal.destroy();
+	} );
+} );
+
 describe( 'WoodevModal events', () => {
 	// Every listener a test attaches to document.body is tracked here and torn down in
 	// afterEach — a listener left behind by one test (e.g. an unconditional preventDefault()

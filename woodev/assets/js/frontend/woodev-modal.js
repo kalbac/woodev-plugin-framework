@@ -438,6 +438,53 @@
 	};
 
 	/**
+	 * Shows a loading overlay ON TOP of the body, without touching the body's own children.
+	 *
+	 * Additive on purpose: the consumer's content is usually being built into
+	 * `getContainer()` at the very moment this is showing — a map provider appends its canvas
+	 * and then spends a second or two loading a third-party script. Replacing the body the way
+	 * showError()/showEmpty() do would delete the node that content is being drawn into.
+	 *
+	 * Idempotent: calling it twice keeps one overlay.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @param {string} message
+	 * @returns {void}
+	 */
+	WoodevModal.prototype.showLoading = function( message ) {
+		if ( this._isDestroyed || ! this._body ) {
+			return;
+		}
+
+		this.hideLoading();
+
+		var overlay = document.createElement( 'div' );
+
+		overlay.className = 'woodev-modal__loading';
+		overlay.setAttribute( 'role', 'status' );
+		overlay.textContent = message || '';
+
+		this._loadingEl = overlay;
+		this._body.appendChild( overlay );
+	};
+
+	/**
+	 * Removes the loading overlay, if one is showing. Safe to call when none is.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @returns {void}
+	 */
+	WoodevModal.prototype.hideLoading = function() {
+		if ( this._loadingEl && this._loadingEl.parentNode ) {
+			this._loadingEl.parentNode.removeChild( this._loadingEl );
+		}
+
+		this._loadingEl = null;
+	};
+
+	/**
 	 * Shows a dismissible banner ALONGSIDE the body — a sibling of
 	 * `getContainer()`'s node, never inside it — so whatever a map provider has
 	 * already drawn into its container (a live map, a viewport's worth of
