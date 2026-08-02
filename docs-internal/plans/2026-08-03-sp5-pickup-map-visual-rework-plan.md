@@ -184,14 +184,14 @@ Expected: PASS. The fixture is loaded by other tests; a changed shape must not b
 
 - [ ] **Step 7: Add the POSTAMAT icons**
 
-The fixture already declares `'POSTAMAT' => [...]` icon paths at
-`woodev-test-shipping-method.php:576`. Confirm both files exist under
-`tests/_fixtures/woodev-test-shipping-method/assets/images/`; if either is missing, add a real SVG
-(a locker glyph, 45×45 viewBox, single colour) — a missing file renders a broken image, not a
-fallback.
+The fixture declares **three** icon URLs around `woodev-test-shipping-method.php:571-579`: `PVZ`
+supplies `default` + `active`, `POSTAMAT` supplies `default` only. That asymmetry is deliberate — it
+is the CDEK shape, and it exercises D-5's "a plugin that omits `active` gets `default` rendered in
+the larger box". Do not add a fourth file to make it symmetrical.
 
 Run: `ls tests/_fixtures/woodev-test-shipping-method/assets/images/`
-Expected: four files — default and active for each of `PVZ` and `POSTAMAT`.
+Expected: `pvz.svg`, `pvz-active.svg`, `postamat.svg` all present. A missing file renders a broken
+image, not a fallback.
 
 - [ ] **Step 8: Commit**
 
