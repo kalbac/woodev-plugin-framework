@@ -633,10 +633,25 @@
 	 * @returns {Object}
 	 */
 	function buildProviderConfig( config ) {
+		// Everything the provider reads off the config it is handed. `mapConfig` carries only
+		// what the ACTIVE PROVIDER contributed PHP-side (`scriptUrl`, `ns`, `hasApiKey`, `lang`,
+		// `layers`, `copyrights`); the four keys below sit at the TOP level of the mount config
+		// — `accentColor` deliberately so (D-15: the checkout trigger button needs it too, and
+		// "brand accent" is not a ymaps concept) — and must be forwarded explicitly.
+		//
+		// Omitting them was silent and total: with no `defaultLocation` the map opened at its
+		// technical [0,0]/zoom-2 placeholder in the Atlantic instead of the buyer's city, and
+		// because ObjectManager creates overlays ONLY for visible objects, there were no markers
+		// — and the sidebar, driven by the same bounds test, was empty too. With no `pointIcons`
+		// every marker that did render was an empty box.
 		return shallowMerge( config.mapConfig || {}, {
 			strategy: config.strategy,
 			i18n: config.i18n,
 			locality: resolveLocality( config ),
+			defaultLocation: config.defaultLocation,
+			pointIcons: config.pointIcons,
+			accentColor: config.accentColor,
+			searchNearestCount: config.searchNearestCount,
 		} );
 	}
 

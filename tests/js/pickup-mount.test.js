@@ -275,6 +275,17 @@ function makeConfig( overrides ) {
 		i18n: phpI18n(),
 		mapConfig: { center: [ 55.75, 37.61 ] },
 		replaceAddress: { enabled: true, billingOnly: false },
+		// TOP-LEVEL keys `Pickup_Handler::get_js_config()` really emits and the map provider
+		// really reads. They were missing from this fixture, which is exactly why nothing here
+		// noticed that buildProviderConfig() never forwarded them: the map opened at its
+		// technical [0,0]/zoom-2 fallback instead of the buyer's city, ObjectManager creates
+		// overlays only for VISIBLE objects, so there were no markers and — through the same
+		// bounds test — no sidebar entries either. Keep this fixture shaped like the real
+		// config; a fixture poorer than production hides production's bugs.
+		defaultLocation: { center: [ 55.76, 37.64 ], zoom: 12 },
+		pointIcons: { PVZ: { default: 'https://example.test/pvz.svg', active: 'https://example.test/pvz-a.svg' } },
+		accentColor: '#06aedd',
+		searchNearestCount: 3,
 	};
 
 	return Object.assign( {}, base, overrides );
@@ -537,6 +548,10 @@ test( 'clicking the trigger opens the shell and calls provider.init with the con
 		strategy: 'bulk',
 		i18n: config.i18n,
 		locality: '',
+		defaultLocation: config.defaultLocation,
+		pointIcons: config.pointIcons,
+		accentColor: config.accentColor,
+		searchNearestCount: config.searchNearestCount,
 	} );
 	// Task 20: the provider contract dropped fetching, but the raw dataSource is still
 	// passed as the 3rd arg for a provider that (like Embedded_Map_Provider) still declares
@@ -594,7 +609,34 @@ test( 'the provider config merges mapConfig with strategy, i18n, and the resolve
 		strategy: 'viewport',
 		i18n: config.i18n,
 		locality: 'Казань',
+		// Everything below is a TOP-LEVEL key of the mount config that the provider reads off
+		// the config it is handed. `toEqual` is deliberate: it fails on a MISSING key as loudly
+		// as on a wrong one, which a per-key `toMatchObject` would not.
+		defaultLocation: config.defaultLocation,
+		pointIcons: config.pointIcons,
+		accentColor: config.accentColor,
+		searchNearestCount: config.searchNearestCount,
 	} );
+} );
+
+test( 'every top-level key the provider reads survives the provider-config merge', () => {
+	// The regression this pins was silent and total: with `defaultLocation` missing the map
+	// opened on the Atlantic instead of the buyer's city, and with `pointIcons` missing every
+	// marker rendered as an empty box. Neither threw, neither logged.
+	setConfig( makeConfig() );
+	mountAll();
+	clickTrigger();
+
+	const received = StubProvider.instances[ 0 ].initCalls[ 0 ].config;
+
+	[ 'defaultLocation', 'pointIcons', 'accentColor', 'searchNearestCount', 'strategy', 'i18n' ]
+		.forEach( ( key ) => {
+			expect( received[ key ] ).toBeDefined();
+		} );
+
+	expect( received.defaultLocation ).toEqual( { center: [ 55.76, 37.64 ], zoom: 12 } );
+	expect( received.pointIcons.PVZ.default ).toBe( 'https://example.test/pvz.svg' );
+	expect( received.accentColor ).toBe( '#06aedd' );
 } );
 
 test( 'the BULK points query carries the live locality, not just the type filter', async () => {

@@ -420,6 +420,33 @@
 	 * @param {WoodevYandexMapProvider} provider
 	 * @returns {Function}
 	 */
+	/**
+	 * Returns a reader for one feature's properties, tolerating BOTH shapes ymaps hands a
+	 * layout.
+	 *
+	 * A `Placemark`'s layout receives a data-manager with `.get( key )`. An `ObjectManager`
+	 * overlay's layout receives the feature's `properties` as a PLAIN OBJECT — the JSON the
+	 * feature was added with. Calling `.get()` on that threw
+	 * `properties.get is not a function` inside ymaps' own (cross-origin) script, where the
+	 * browser reports it only as a bare "Script error." with no stack: every marker rendered as
+	 * an empty box, the click bindings never attached, and dragging the map then span forever on
+	 * `map.action.Continuous: ticking while inactive`.
+	 *
+	 * @param {Object} properties
+	 * @returns {function(string): *}
+	 */
+	function readProperty( properties ) {
+		if ( properties && 'function' === typeof properties.get ) {
+			return function( key ) {
+				return properties.get( key );
+			};
+		}
+
+		return function( key ) {
+			return properties ? properties[ key ] : undefined;
+		};
+	}
+
 	function buildMarkerLayoutClass( ymaps, provider ) {
 		return ymaps.templateLayoutFactory.createClass(
 			'<div class="woodev-pickup-marker"></div>',
@@ -487,9 +514,10 @@
 		 *  continuation when a later call's camera move resolves before an earlier one's. */
 		this._focusSeq = 0;
 
-		/** @type {*} the area id {@see setMargin} last got back from `map.margin.addArea()`,
-		 *  or null when nothing is currently reserved — see that method's own docblock. */
-		this._marginAreaId = null;
+		/** @type {*} the ACCESSOR {@see setMargin} last got back from `map.margin.addArea()`
+		 *  — removal goes through its own `remove()`, there is no `margin.removeArea()`.
+		 *  Null when nothing is currently reserved. */
+		this._marginArea = null;
 
 		this._destroyed = false;
 	}
@@ -1010,13 +1038,18 @@
 	 * @returns {void}
 	 */
 	WoodevYandexMapProvider.prototype._renderMarker = function( container, data ) {
-		var properties = data.properties;
-		var groupSize = properties.get( 'groupSize' );
-		var state = properties.get( 'state' ) || 'resting';
+		var properties = ( data && data.properties ) || {};
+		var read = readProperty( properties );
+		var groupSize = read( 'groupSize' );
+		var state = read( 'state' ) || 'resting';
 		var isActive = 'active' === state;
-		var iconHref = isActive ? properties.get( 'iconHrefActive' ) : properties.get( 'iconHref' );
-		var root = container.querySelector( '.woodev-pickup-marker' ) || container;
+		var iconHref = isActive ? read( 'iconHrefActive' ) : read( 'iconHref' );
+		var root = ( container && container.querySelector( '.woodev-pickup-marker' ) ) || container;
 		var isGroup = groupSize > 1;
+
+		if ( ! root ) {
+			return;
+		}
 
 		root.setAttribute( 'data-state', state );
 		root.classList.toggle( 'woodev-pickup-marker--group', isGroup );
@@ -1118,13 +1151,21 @@
 			return;
 		}
 
-		if ( null !== this._marginAreaId ) {
-			this.map.margin.removeArea( this._marginAreaId );
-			this._marginAreaId = null;
+		// `map.margin.addArea()` returns an ACCESSOR, and the accessor is what removes the area
+		// — there is no `map.margin.removeArea( id )`. Calling one threw
+		// `this.map.margin.removeArea is not a function` on the very first sidebar toggle, which
+		// killed the toggle handler and left the map in a half-initialised drag state
+		// (`map.action.Continuous: ticking while inactive`, repeating forever).
+		if ( this._marginArea ) {
+			if ( 'function' === typeof this._marginArea.remove ) {
+				this._marginArea.remove();
+			}
+
+			this._marginArea = null;
 		}
 
 		if ( open ) {
-			this._marginAreaId = this.map.margin.addArea( { right: width, top: 0, height: '100%' } );
+			this._marginArea = this.map.margin.addArea( { right: width, top: 0, height: '100%' } );
 		}
 	};
 
@@ -1479,7 +1520,7 @@
 		this._focusedKey = null;
 		this.searchControl = null;
 		this._addressPin = null;
-		this._marginAreaId = null;
+		this._marginArea = null;
 		this.handlers = {
 			pointClick: [],
 			boundsChange: [],

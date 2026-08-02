@@ -644,6 +644,30 @@ test( 'the marker shows the group-size badge only when the group has more than o
 	expect( container.querySelector( '.woodev-pickup-marker--group' ) ).not.toBeNull();
 } );
 
+test( 'the marker renders from PLAIN feature properties, the shape ObjectManager actually passes', () => {
+	// `makeProperties()` models a Placemark's data-manager, which has `.get()`. An
+	// ObjectManager overlay's layout receives `properties` as the PLAIN JSON the feature was
+	// added with — no `.get` at all. Reading it with `.get()` threw
+	// `properties.get is not a function` inside ymaps' cross-origin script, where the browser
+	// reports only a bare "Script error." with no stack: every marker rendered as an empty box
+	// and dragging the map then span forever on `map.action.Continuous: ticking while inactive`.
+	// Every test in this block used the data-manager shape, so none of them could see it.
+	const provider = new WoodevYandexMapProvider();
+	const container = document.createElement( 'div' );
+
+	container.innerHTML = '<div class="woodev-pickup-marker"></div>';
+
+	expect( () => provider._renderMarker( container, {
+		properties: { groupSize: 2, state: 'active', iconHref: '/x.svg', iconHrefActive: '/x-a.svg' },
+	} ) ).not.toThrow();
+
+	const marker = container.querySelector( '.woodev-pickup-marker' );
+
+	expect( marker.getAttribute( 'data-state' ) ).toBe( 'active' );
+	expect( marker.querySelector( 'img' ).getAttribute( 'src' ) ).toBe( '/x-a.svg' );
+	expect( marker.querySelector( '.woodev-pickup-marker__badge' ).textContent ).toBe( '2' );
+} );
+
 test( 'the marker renders no <img> and adds the unknown modifier class when the type has no icon', () => {
 	const provider = new WoodevYandexMapProvider();
 	const container = document.createElement( 'div' );
