@@ -42,7 +42,11 @@ it( 'starts closed', () => {
 	const panels = new Panels( document.createElement( 'div' ), config );
 	panels.render();
 
-	expect( panels.root.querySelector( '.woodev-pickup-list' ).classList.contains( 'is-open' ) ).toBe( false );
+	// Re-pointed at the stage (Task 6): the open state used to live on
+	// `.woodev-pickup-list` itself, but now lives on `.woodev-pickup-stage`
+	// (root's own parent) so a single class removal hides the list AND the
+	// card together — see the "sidebar toggle" describe block below.
+	expect( panels.root.parentNode.classList.contains( 'is-open' ) ).toBe( false );
 } );
 
 it( 'sorts by distance from the anchor', () => {
@@ -198,7 +202,8 @@ it( 'toggles the list open via a REAL click on the toggle button, not just the m
 	panels.render();
 	panels.root.querySelector( '.woodev-pickup-list__toggle' ).click();
 
-	expect( panels.root.querySelector( '.woodev-pickup-list' ).classList.contains( 'is-open' ) ).toBe( true );
+	// Re-pointed at the stage (Task 6) — see the "starts closed" test above.
+	expect( panels.root.parentNode.classList.contains( 'is-open' ) ).toBe( true );
 } );
 
 it( 'names the toggle button after the drawer it opens, since no dedicated i18n key exists for it', () => {
@@ -218,7 +223,71 @@ it( 'toggles closed again on a second call, with open:false in the event', () =>
 	panels.toggleList();
 
 	expect( seen[ 1 ].open ).toBe( false );
-	expect( panels.root.querySelector( '.woodev-pickup-list' ).classList.contains( 'is-open' ) ).toBe( false );
+
+	// Re-pointed at the stage (Task 6) — see the "starts closed" test above.
+	expect( panels.root.parentNode.classList.contains( 'is-open' ) ).toBe( false );
+} );
+
+// -----------------------------------------------------------------------
+// Sidebar toggle (spec V-3, П-7): one open state lives on the STAGE, not on
+// the list and the card independently — before this, collapsing the list
+// while a card was open left the card on screen with no way to dismiss it,
+// because the card had its own, unrelated `is-open` state.
+// -----------------------------------------------------------------------
+
+describe( 'sidebar toggle (spec V-3, П-7)', () => {
+	it( 'hides the card as well as the list', () => {
+		const container = document.createElement( 'div' );
+		const panels = new Panels( container, config );
+		const g = group( 'g1', 55.75, 37.61, 'ПВЗ' );
+
+		panels.render();
+		panels.setVisible( [ g ] );
+		panels.openCard( g, g.points[ 0 ].id );
+
+		const stage = container.querySelector( '.woodev-pickup-stage' );
+
+		expect( stage.className ).toContain( 'is-open' );
+		expect( stage.className ).toContain( 'is-card' );
+
+		panels.toggleList();
+
+		expect( stage.className ).not.toContain( 'is-open' );
+		expect( stage.className ).not.toContain( 'is-card' );
+	} );
+
+	it( 'reopens to the list, not to the card that was collapsed', () => {
+		const container = document.createElement( 'div' );
+		const panels = new Panels( container, config );
+		const g = group( 'g1', 55.75, 37.61, 'ПВЗ' );
+
+		panels.render();
+		panels.setVisible( [ g ] );
+		panels.openCard( g, g.points[ 0 ].id );
+		panels.toggleList();
+		panels.toggleList();
+
+		const stage = container.querySelector( '.woodev-pickup-stage' );
+
+		expect( stage.className ).toContain( 'is-open' );
+		expect( stage.className ).not.toContain( 'is-card' );
+	} );
+
+	it( 'closing the card leaves the list open', () => {
+		const container = document.createElement( 'div' );
+		const panels = new Panels( container, config );
+		const g = group( 'g1', 55.75, 37.61, 'ПВЗ' );
+
+		panels.render();
+		panels.setVisible( [ g ] );
+		panels.openCard( g, g.points[ 0 ].id );
+		panels.closeCard();
+
+		const stage = container.querySelector( '.woodev-pickup-stage' );
+
+		expect( stage.className ).toContain( 'is-open' );
+		expect( stage.className ).not.toContain( 'is-card' );
+	} );
 } );
 
 // -----------------------------------------------------------------------
@@ -228,10 +297,13 @@ it( 'toggles closed again on a second call, with open:false in the event', () =>
 // The checkbox `change` event (Task 16's type filter) only fires from a real
 // `.click()` when the element is connected to `document` — jsdom's default
 // activation behaviour toggles `.checked` either way, but skips dispatching
-// `change` for a detached tree. `mount()` therefore attaches `panels.root` to
-// `document.body`; `afterEach` below sweeps it back out so one test's nodes
-// never leak into the next (every assertion still scopes its own lookups to
-// `panels.root`, never a bare `document.querySelector`).
+// `change` for a detached tree. `mount()` therefore attaches `panels._stage`
+// (root's own parent, see Task 6) to `document.body` — `panels.root` stays
+// nested inside it exactly as it is in production, so `panels.root.parentNode`
+// still resolves to the stage for tests that need to assert its open state.
+// `afterEach` below sweeps it back out so one test's nodes never leak into
+// the next (every assertion still scopes its own lookups to `panels.root`,
+// never a bare `document.querySelector`).
 afterEach( () => {
 	document.body.innerHTML = '';
 } );
@@ -239,7 +311,7 @@ afterEach( () => {
 function mount( cfg ) {
 	const panels = new Panels( document.createElement( 'div' ), cfg );
 	panels.render();
-	document.body.appendChild( panels.root );
+	document.body.appendChild( panels._stage );
 
 	return panels;
 }
@@ -440,11 +512,19 @@ it( 'renders the close control whether or not the tab bar is present', () => {
 it( 'closing via a real click on the close control removes the open state, leaving the list usable', () => {
 	const panels = mount( cardConfig );
 	panels.openCard( { key: 'k', size: 1, points: [ point() ] } );
-	expect( panels.root.querySelector( '.woodev-pickup-card' ).classList.contains( 'is-open' ) ).toBe( true );
+
+	// Re-pointed at the stage (Task 6): `is-card` (not a per-element `is-open`)
+	// is what the card's own visibility is now driven by — see the "sidebar
+	// toggle" describe block above.
+	expect( panels.root.parentNode.classList.contains( 'is-card' ) ).toBe( true );
 
 	panels.root.querySelector( '.woodev-pickup-card__close' ).click();
 
-	expect( panels.root.querySelector( '.woodev-pickup-card' ).classList.contains( 'is-open' ) ).toBe( false );
+	expect( panels.root.parentNode.classList.contains( 'is-card' ) ).toBe( false );
+
+	// Closing the card must NOT also close the list underneath it — see
+	// {@see Panels.prototype.closeCard}'s docblock.
+	expect( panels.root.parentNode.classList.contains( 'is-open' ) ).toBe( true );
 
 	// The list underneath was never touched by opening/closing the card on top of it.
 	panels.setVisible( [ { key: 'g', lat: 1, lng: 1, size: 1, points: [ point( { id: 'g1', name: 'G' } ) ] } ] );

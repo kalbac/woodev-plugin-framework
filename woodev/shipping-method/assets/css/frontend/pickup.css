@@ -82,6 +82,17 @@
  * the framework backlog board) since the cleaner fix is still moving the toggle to a true
  * sibling of `.woodev-pickup-list`/`.woodev-pickup-card`, not a CSS concern.
  *
+ * ONE OPEN STATE, ON THE STAGE (Task 6, D-6/П-7): before this task, `.woodev-pickup-list` carried
+ * its OWN `is-open` and `.woodev-pickup-card` carried a SEPARATE one — collapsing the sidebar while
+ * a card was open removed only the list's class, so the card stayed on screen with no toggle left
+ * to dismiss it (its own toggle button lives on the list, see the quirk above). Both panels'
+ * visibility is now driven from `.woodev-pickup-stage`'s classes instead: `is-open` shows the list
+ * (the `visibility` mechanism above is UNCHANGED — only what sets the class moved, from
+ * `pickup-panels.js`'s `toggleList()` toggling `.woodev-pickup-list` directly to it toggling
+ * `.woodev-pickup-stage`), `is-open` + `is-card` together show the card. A single class removal
+ * (`is-open`, on collapse) hides both at once; there is exactly one source of truth for "is a
+ * right-hand panel showing", never two.
+ *
  * @since 2.0.2
  */
 
@@ -187,6 +198,10 @@
  * is set explicitly on both states too, belt-and-suspenders alongside the (already
  * non-interactive-when-hidden) `visibility` behaviour, so the closed panel's full-height fixed
  * box never intercepts a click meant for the map underneath it.
+ *
+ * Gated by `.woodev-pickup-stage.is-open`, NOT a class on this element itself (Task 6 — see the
+ * file docblock's "ONE OPEN STATE, ON THE STAGE" note): collapsing the sidebar clears `is-open` on
+ * the stage, which closes the list AND (together with `is-card`) the card in one step.
  * ---------------------------------------------------------------------- */
 
 .woodev-pickup-list {
@@ -205,7 +220,7 @@
 	pointer-events: none;
 }
 
-.woodev-pickup-list.is-open {
+.woodev-pickup-stage.is-open .woodev-pickup-list {
 	visibility: visible;
 	pointer-events: auto;
 }
@@ -354,15 +369,18 @@
 	background: #f6f7f7;
 }
 
-/* The toggle affordance (Task 21 owns its whole visual — no i18n label exists for it, only an
-   `aria-label`; see pickup-panels.js's own docblock). Overrides the list's `visibility: hidden`
-   for exactly this one element — see the file docblock's "KNOWN DOM-STRUCTURE QUIRK" note — so
-   it stays visible and clickable while the list itself is closed. `position: absolute` (spec
-   V-3) resolves against `.woodev-pickup-list`'s own box — a DOM child, not a sibling, of it (see
-   the file docblock) — which is correct here ONLY because the list's box is itself pinned flush
-   to the stage's right/top/bottom edges; being a fixed-viewport element used to make this
-   irrelevant, now it does not. Accent-filled with contrast text/icon — the "sidebar toggle" case
-   the accent-contrast pairing exists for. */
+/* The toggle affordance (Task 21 owns its whole visual, Task 6 squares it off — no i18n label
+   exists for it, only an `aria-label`; see pickup-panels.js's own docblock). Overrides the list's
+   `visibility: hidden` for exactly this one element — see the file docblock's "KNOWN DOM-STRUCTURE
+   QUIRK" note — so it stays visible and clickable while the list itself is closed. `position:
+   absolute` (spec V-3) resolves against `.woodev-pickup-list`'s own box — a DOM child, not a
+   sibling, of it (see the file docblock) — which is correct here ONLY because the list's box is
+   itself pinned flush to the stage's right/top/bottom edges; being a fixed-viewport element used
+   to make this irrelevant, now it does not. Accent-filled with contrast text/icon — the "sidebar
+   toggle" case the accent-contrast pairing exists for. Square with an 8px radius (Task 6) — a
+   round button read as an accidental blue circle rather than the merchant's own accent colour;
+   the shadow drops to a subtler two-layer one to match a flat control instead of a floating round
+   FAB. */
 .woodev-pickup-list__toggle {
 	position: absolute;
 	right: 16px;
@@ -377,8 +395,8 @@
 	color: var( --woodev-pickup-accent-contrast, #fff );
 	background: var( --woodev-pickup-accent, #06aedd );
 	border: 0;
-	border-radius: 50%;
-	box-shadow: 0 2px 10px rgba( 0, 0, 0, 0.25 );
+	border-radius: 8px;
+	box-shadow: 0 1px 2px rgba( 0, 0, 0, 0.04 ), 0 4px 8px rgba( 0, 0, 0, 0.06 );
 	cursor: pointer;
 	pointer-events: auto;
 }
@@ -389,11 +407,14 @@
 	line-height: 1;
 }
 
-.woodev-pickup-list.is-open .woodev-pickup-list__toggle {
+/* Keyed off the STAGE's `is-open`, not a class on `.woodev-pickup-list` itself (Task 6 — see the
+   file docblock's "ONE OPEN STATE, ON THE STAGE" note): the toggle's own position/chevron still
+   need to react to open/closed even though the toggle is never hidden itself. */
+.woodev-pickup-stage.is-open .woodev-pickup-list__toggle {
 	right: calc( min( 320px, 100% - 48px ) + 16px );
 }
 
-.woodev-pickup-list.is-open .woodev-pickup-list__toggle::before {
+.woodev-pickup-stage.is-open .woodev-pickup-list__toggle::before {
 	content: '\203A'; /* › — invites closing, mirrored once the list is open beside it. */
 }
 
@@ -521,9 +542,16 @@
  * Point card — occupies the SAME screen region as the list and covers it at a higher
  * `z-index`, exactly matching the reference (its own info-panel counterpart sitting over its
  * own sliding list panel). Closed by default: `pickup-panels.js` builds this element once,
- * empty, at construction time and only ever fills/empties it via `openCard()`/`closeCard()`
- * (`.is-open` toggled alongside), so — unlike the list — a plain `display: none` default is
- * correct here; there is no nested always-visible control that needs a `visibility` escape.
+ * empty, at construction time and only ever fills/empties it via `openCard()`/`closeCard()`, so —
+ * unlike the list — a plain `display: none` default is correct here; there is no nested
+ * always-visible control that needs a `visibility` escape.
+ *
+ * Shown by `.woodev-pickup-stage.is-open.is-card`, NOT a class on this element itself (Task 6 —
+ * see the file docblock's "ONE OPEN STATE, ON THE STAGE" note): `openCard()` sets both classes on
+ * the stage, `closeCard()` clears `is-card` only (the list stays open underneath), and collapsing
+ * the sidebar (`toggleList()`) clears BOTH — so the card can never be left stranded on screen with
+ * no toggle able to reach it, which is exactly what happened before this task, when the card
+ * carried its own independent `is-open`.
  * ---------------------------------------------------------------------- */
 
 .woodev-pickup-card {
@@ -540,7 +568,7 @@
 	background: #fff;
 }
 
-.woodev-pickup-card.is-open {
+.woodev-pickup-stage.is-open.is-card .woodev-pickup-card {
 	display: flex;
 }
 

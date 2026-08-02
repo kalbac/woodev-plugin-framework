@@ -1365,18 +1365,33 @@
 	};
 
 	/**
-	 * Flips the list panel open/closed and emits `listToggle` with the new
+	 * Flips the STAGE's open/closed state and emits `listToggle` with the new
 	 * state plus the list's own current width, so a caller (the map
 	 * provider) can size the map's margin to avoid the panel covering it.
+	 *
+	 * The open/closed state lives on `_stage`, not on `_listEl`/`_cardEl`
+	 * independently — see the file's Task 6 note (D-6/П-7): `is-open` means
+	 * "a right-hand panel is showing", `is-card` means "that panel is the
+	 * card". Collapsing (`open` was true) always clears BOTH classes, so a
+	 * card left open when the customer collapses the sidebar is dismissed
+	 * along with it — before this, the card had its own independent
+	 * `is-open` state and stayed on screen with no way to dismiss it once the
+	 * toggle button (which sits on the list, not the card) slid away.
+	 * Reopening always returns to the LIST, never back to the card that was
+	 * showing when it got collapsed (`is-card` is never restored here).
 	 *
 	 * @returns {void}
 	 */
 	Panels.prototype.toggleList = function() {
-		var open = ! this._listEl.classList.contains( 'is-open' );
+		var open = this._stage.classList.contains( 'is-open' );
 
-		this._listEl.classList.toggle( 'is-open', open );
+		this._stage.classList.toggle( 'is-open', ! open );
 
-		this._emit( 'listToggle', { open: open, width: this._listEl.offsetWidth } );
+		if ( open ) {
+			this._stage.classList.remove( 'is-card' );
+		}
+
+		this._emit( 'listToggle', { open: ! open, width: this._listEl.offsetWidth } );
 	};
 
 	/**
@@ -1384,6 +1399,11 @@
 	 * in the group), otherwise the group's first point. This is what a click
 	 * on the SECOND point of a co-located list row must do — always the
 	 * REQUESTED point, never always the first (spec).
+	 *
+	 * Adds BOTH `is-open` and `is-card` to `_stage` — see {@see toggleList}'s
+	 * docblock for why the open state lives there rather than on `_cardEl`
+	 * itself: a single class removal (a sidebar collapse) then hides the
+	 * card along with the list, instead of leaving it stranded on screen.
 	 *
 	 * @param {Object}      group
 	 * @param {string|number} [pointId]
@@ -1405,17 +1425,22 @@
 		this._activeIndex = index;
 
 		renderCard( this );
-		this._cardEl.classList.add( 'is-open' );
+		this._stage.classList.add( 'is-open' );
+		this._stage.classList.add( 'is-card' );
 	};
 
 	/**
 	 * Closes the card, covering it back with the list (the card sits ABOVE
 	 * the list at a higher `z-index` rather than replacing it — spec).
 	 *
+	 * Removes `is-card` ONLY — `is-open` is left alone, so the list (which
+	 * was underneath the card the whole time) stays visible rather than
+	 * closing the whole sidebar as a side effect of dismissing the card.
+	 *
 	 * @returns {void}
 	 */
 	Panels.prototype.closeCard = function() {
-		this._cardEl.classList.remove( 'is-open' );
+		this._stage.classList.remove( 'is-card' );
 		this._activeGroup = null;
 	};
 
