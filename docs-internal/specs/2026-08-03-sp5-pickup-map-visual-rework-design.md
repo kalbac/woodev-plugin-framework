@@ -136,23 +136,27 @@ into that body at the same moment (settled in s48, kept). The close button, the 
 work in every stage: a customer who changes their mind must not have to wait for a third-party
 script.
 
-### V-5. Message texts are a plugin-overridable set
+### V-5. Every customer-facing string is plugin-overridable
 
 An empty result is domain language, not framework language: Russian Post has no pickup points, it has
-post offices. The framework ships defaults and the plugin overrides any of them.
+post offices, so "В выбранном населённом пункте нет пунктов выдачи" is wrong text for it.
+
+`Pickup_Handler::get_js_config()` already carries the full string map under `i18n` — 30-odd keys, all
+framework defaults. Rather than growing a second, parallel `messages` array beside it, the existing
+map becomes the override surface: the assembled array passes through
 
 ```php
-'messages' => [
-    'empty'          => 'В выбранном населённом пункте нет пунктов выдачи',
-    'error'          => 'Не удалось загрузить пункты выдачи. Попробуйте ещё раз',
-    'bbox_too_wide'  => 'Приблизьте карту, чтобы увидеть пункты выдачи',
-    'no_results'     => 'Ничего не найдено',
-]
+apply_filters( 'woodev_pickup_map_i18n', $strings, $this->plugin_id );
 ```
 
-Also filterable: `woodev_pickup_map_messages` (per plugin id). The empty/error state renders as a
-centred card over the map, not as a replacement for the interface — panels and controls keep working
-so the customer can search or change the filter.
+before it is emitted, and a plugin overrides any key it disagrees with. One string system, not two.
+
+One key is genuinely missing today and is added: **`emptyLocality`** — "there are no points in the
+locality you asked for", which is distinct from the existing `emptyInView` ("none in *this view*",
+a viewport-strategy statement) and from `noResults` (search found nothing).
+
+The empty/error state renders as a centred card over the map, never as a replacement for the
+interface — panels and controls keep working so the customer can search or change the filter.
 
 ### V-6. Search is entirely ours. `ymaps.control.SearchControl` is dropped
 
