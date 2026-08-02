@@ -1,10 +1,15 @@
 # Gotchas — Woodev Plugin Framework
-> **84 atomic gotchas in 21 namespaces** — update count when adding/removing.
-> Last updated: 2026-08-01 (session 48: +1 file — `modal-backdrop-opacity-dims-the-whole-dialog`
+> **85 atomic gotchas in 21 namespaces** — update count when adding/removing.
+> Last updated: 2026-08-02 (session 49: +1 file — `ymaps-objectmanager-properties-are-plain`
+> (an ObjectManager layout receives feature `properties` as PLAIN JSON while a Placemark layout
+> receives a data manager; calling `.get()` threw inside ymaps' cross-origin script, which the
+> browser masks as a bare `Script error.` — every marker rendered empty and dragging span forever.
+> The test helper modelled the Placemark shape, so 393 green tests saw nothing)).
+> Prior: 2026-08-01 (session 48: +1 file — `modal-backdrop-opacity-dims-the-whole-dialog`
 > (CSS `opacity` on a backdrop that is the dialog's ANCESTOR dims the whole dialog; three
 > presentation defects on this branch were invisible to 391 green jest tests and visible in the
 > first rig screenshot)).
-> Last updated: 2026-08-01 (session 47: +1 file — `ymaps-locale-region-drives-units` (the ymaps `lang`
+> Prior: 2026-08-01 (session 47: +1 file — `ymaps-locale-region-drives-units` (the ymaps `lang`
 > parameter's REGION half selects kilometres vs miles, so an `en_US` fallback silently switches the map
 > to miles while our own sidebar keeps computing kilometres); and `ymaps-camera-moves-are-async` gained
 > the degenerate case its own fix cannot solve — points on IDENTICAL coordinates cluster at every zoom,
@@ -127,6 +132,8 @@
 - [shipping/checkout] `window.WoodevCheckoutFieldStore` exposes only the **factory**; the classic adapter keeps its instances in a local IIFE array. A second module that calls `createStore()` again gets a divergent instance — it writes the chosen pickup point into one store while the A2 gate reads the other, and the order stays blocked with «выберите пункт выдачи» while the customer can see they selected one. Symptom reads as "the gate is broken". Fix: an instance registry keyed on **field ownership** (`getStoreForField()`), not plugin id — ids already collapse via `config_object_suffix()` → [gotchas/js-store-instance-registry-cross-module.md](gotchas/js-store-instance-registry-cross-module.md) (s45)
 
 - [shipping/pickup] ymaps camera moves are ASYNC: `setBounds()` animates and resolves later, so dropping its promise makes the next `getBounds()` read the PRE-move viewport (→ a planet-wide bbox the server's cap refuses → "no points" for a locality that has them). Separately, a placemark folded into a cluster has no balloon — `placemark.balloon.open()` throws `getGlobalPixelCenter` of null and kills the click handler, and whether a point is clustered depends on zoom, so the same item works at one zoom and throws at another. Collapse the bounds to the point and await the promise (the reference's move); sequence the continuations, since two moves need not resolve in click order. **A placeholder API key hides all of it** — ymaps refuses geocoding but still serves tiles. **s47 adds the degenerate case the fix cannot solve:** two points on IDENTICAL coordinates share a pixel-grid cell at EVERY zoom, so `checkZoomRange` never un-clusters them and `.balloon.open()` throws forever (reported live in СДЭК, where a PVZ and a postamat share a building) — guard with "all features on one coordinate → do not try", re-read `getObjectState()` after the move, and prefer owning the detail panel's DOM so balloons stop mattering → [gotchas/ymaps-camera-moves-are-async.md](gotchas/ymaps-camera-moves-are-async.md) (s46, extended s47)
+
+- [shipping/pickup] `templateLayoutFactory` hands a layout its feature data in TWO different shapes: a `Placemark`'s layout gets a data manager (`properties.get( key )`), an `ObjectManager`'s gets the PLAIN JSON the feature was added with (`properties[ key ]`). Calling `.get()` on the plain one throws INSIDE ymaps' cross-origin script, where the browser reports only `Script error.` at `:0` — markers render as empty boxes, clicks never bind, and dragging then spams `map.action.Continuous: ticking while inactive` forever. Read through a shape-tolerant accessor. Also the general lesson: a test fixture (or config fixture) poorer than production hides production's bugs → [gotchas/ymaps-objectmanager-properties-are-plain.md](gotchas/ymaps-objectmanager-properties-are-plain.md) (s49)
 
 - [shipping/pickup] The ymaps `lang` parameter is `language_REGION` and the **REGION half selects the unit system** — `RU`/`UA`/`TR` give kilometres, `US` gives miles. An `en_US` fallback (WordPress's own default locale) therefore switches the map to miles while a sidebar computing its own distances keeps showing kilometres — two measurement systems on one screen. Six locales are accepted (`ru_RU`, `en_US`, `en_RU`, `ru_UA`, `uk_UA`, `tr_TR`), and the RU and EN doc pages disagree about that list → [gotchas/ymaps-locale-region-drives-units.md](gotchas/ymaps-locale-region-drives-units.md) (s47)
 
