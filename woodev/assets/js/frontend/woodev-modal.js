@@ -91,6 +91,20 @@
 		var body = document.createElement( 'div' );
 		body.className = 'woodev-modal__body';
 
+		// The dialog sizes itself at construction, not when a consumer mounts content (spec V-1).
+		// An empty modal is the same box as a full one — before this, the only source of height in
+		// the whole tree was the consumer's content, so the dialog opened as a header-tall strip and
+		// every positioned child landed inside the header.
+		if ( self._width ) {
+			dialog.style.minWidth = 'number' === typeof self._width ? self._width + 'px' : self._width;
+		}
+
+		if ( self._bodyHeight ) {
+			body.style.height = 'number' === typeof self._bodyHeight
+				? self._bodyHeight + 'px'
+				: self._bodyHeight;
+		}
+
 		header.appendChild( title );
 		header.appendChild( closeButton );
 		dialog.appendChild( header );
@@ -294,6 +308,14 @@
 	 *                                         `woodev_modal_opened`'s `detail.context` (D-14).
 	 *                                         Defaults to `{}` so the payload shape is stable
 	 *                                         even when a caller omits it.
+	 * @property {number|string} [width]       Dialog width, applied as `min-width` at construction
+	 *                                         (spec V-1) — a number is treated as pixels, a string
+	 *                                         is used as a raw CSS length (e.g. '60rem'). Omitted
+	 *                                         means no inline width is set.
+	 * @property {number|string} [bodyHeight]  Body height, applied as `height` at construction
+	 *                                         (spec V-1) — same number/string convention as
+	 *                                         `width`. This is what keeps the dialog a full-size
+	 *                                         box before any consumer content is mounted.
 	 */
 
 	/**
@@ -309,6 +331,8 @@
 		this._retryLabel = opts.retryLabel || 'Повторить';
 		this._returnFocusTo = opts.returnFocusTo || null;
 		this._context = opts.context || {};
+		this._width = opts.width || null;
+		this._bodyHeight = opts.bodyHeight || null;
 
 		this._isOpen = false;
 		this._isDestroyed = false;

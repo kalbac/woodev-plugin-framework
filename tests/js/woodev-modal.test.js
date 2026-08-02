@@ -599,3 +599,45 @@ describe( 'WoodevModal events', () => {
 		modal.destroy();
 	} );
 } );
+
+describe( 'dialog sizing (spec V-1)', () => {
+	it( 'applies the supplied size before any content is mounted', () => {
+		const modal = new WoodevModal( {
+			title: 'Выберите пункт выдачи',
+			width: 920,
+			bodyHeight: 'min(80vh, 800px)',
+		} );
+
+		modal.open();
+
+		const dialog = document.querySelector( '.woodev-modal__content' );
+		const body = document.querySelector( '.woodev-modal__body' );
+
+		expect( dialog.style.minWidth ).toBe( '920px' );
+		expect( body.style.height ).toBe( 'min(80vh, 800px)' );
+		expect( body.children ).toHaveLength( 0 );
+
+		modal.destroy();
+	} );
+
+	it( 'accepts a CSS length string for the width', () => {
+		const modal = new WoodevModal( { title: 'x', width: '60rem' } );
+
+		modal.open();
+
+		expect( document.querySelector( '.woodev-modal__content' ).style.minWidth ).toBe( '60rem' );
+
+		modal.destroy();
+	} );
+
+	it( 'sets no inline size when none is supplied', () => {
+		const modal = new WoodevModal( { title: 'x' } );
+
+		modal.open();
+
+		expect( document.querySelector( '.woodev-modal__content' ).style.minWidth ).toBe( '' );
+		expect( document.querySelector( '.woodev-modal__body' ).style.height ).toBe( '' );
+
+		modal.destroy();
+	} );
+} );
