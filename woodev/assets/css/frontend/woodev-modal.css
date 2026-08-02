@@ -133,6 +133,14 @@
 	transition: color 0.1s ease-in-out, background 0.1s ease-in-out;
 }
 
+/* The glyph is an inline SVG (see buildDom) — sized here so a theme's own `svg` rules cannot
+   stretch it. `display: block` kills the inline baseline gap that would offset it in its box. */
+.woodev-modal__close svg {
+	display: block;
+	width: 24px;
+	height: 24px;
+}
+
 .woodev-modal__close:hover,
 .woodev-modal__close:focus {
 	background: #ddd;
@@ -151,7 +159,14 @@
 	position: relative;
 	flex: 1 1 auto;
 	min-height: 0; /* Lets a flex child actually shrink, so content scrolls instead of overflowing. */
-	overflow: auto;
+
+	/*
+	 * `hidden`, not `auto`: nothing a consumer mounts may escape the frame. A consumer that needs
+	 * scrolling scrolls its OWN inner element — the map's sidebar does exactly that. With `auto`
+	 * here, an absolutely-positioned child that overshoots grows a scrollbar on the dialog itself
+	 * and the frame stops being a frame.
+	 */
+	overflow: hidden;
 }
 
 /* -------------------------------------------------------------------------
@@ -271,11 +286,44 @@
 	inset: 0;
 	z-index: 5;
 	display: flex;
+	flex-direction: column;
 	align-items: center;
 	justify-content: center;
+	gap: 12px;
 	padding: 16px;
-	background: #fff;
+
+	/*
+	 * Translucent, not solid: the consumer is usually drawing into the body underneath at this
+	 * very moment, and seeing the frame fill in reads as progress rather than as a stall.
+	 */
+	background: rgba( 255, 255, 255, 0.9 );
 	color: #646970;
 	font-size: 14px;
 	text-align: center;
+}
+
+.woodev-modal__spinner {
+	display: block;
+	width: 28px;
+	height: 28px;
+	border: 2px solid rgba( 0, 0, 0, 0.12 );
+	border-top-color: #06aedd;
+	border-radius: 50%;
+	animation: woodev-modal-spin 0.8s linear infinite;
+}
+
+@keyframes woodev-modal-spin {
+
+	to {
+		transform: rotate( 360deg );
+	}
+}
+
+/* Slowed rather than stopped: a frozen spinner reads as a hang, which is the opposite of what it
+   is there to say. */
+@media ( prefers-reduced-motion: reduce ) {
+
+	.woodev-modal__spinner {
+		animation-duration: 3s;
+	}
 }
