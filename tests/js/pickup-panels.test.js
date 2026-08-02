@@ -919,3 +919,46 @@ it( 'ignores a type whose code is missing/non-string rather than crashing or ren
 
 	expect( panels.root.querySelectorAll( '.woodev-pickup-filter__checkbox' ) ).toHaveLength( 2 );
 } );
+
+// -----------------------------------------------------------------------
+// Task 5 (spec V-3): the modal's `transform`-centred dialog frame makes
+// `position: fixed` panels resolve against the WHOLE dialog, header
+// included, instead of the viewport. Every panel now lives inside one
+// `.woodev-pickup-stage` element that begins below the header, so none of
+// them can reach it.
+// -----------------------------------------------------------------------
+
+describe( 'stage geometry (spec V-3)', () => {
+	it( 'wraps every panel in a single stage element', () => {
+		const container = document.createElement( 'div' );
+		const panels = new Panels( container, config );
+
+		panels.render();
+
+		const stage = container.querySelector( '.woodev-pickup-stage' );
+
+		expect( stage ).not.toBeNull();
+		expect( stage.querySelector( '.woodev-pickup-map' ) ).not.toBeNull();
+		expect( stage.querySelector( '.woodev-pickup-list' ) ).not.toBeNull();
+		expect( stage.querySelector( '.woodev-pickup-card' ) ).not.toBeNull();
+		expect( stage.querySelector( '.woodev-pickup-list__toggle' ) ).not.toBeNull();
+	} );
+
+	it( 'puts nothing directly in the container except the stage', () => {
+		const container = document.createElement( 'div' );
+
+		new Panels( container, config ).render();
+
+		expect( container.children ).toHaveLength( 1 );
+		expect( container.firstElementChild.className ).toContain( 'woodev-pickup-stage' );
+	} );
+
+	it( 'exposes the map element through getMapElement()', () => {
+		const container = document.createElement( 'div' );
+		const panels = new Panels( container, config );
+
+		panels.render();
+
+		expect( panels.getMapElement().className ).toContain( 'woodev-pickup-map' );
+	} );
+} );

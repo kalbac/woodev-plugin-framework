@@ -1045,14 +1045,27 @@
 	};
 
 	/**
-	 * Builds the panels' DOM subtree (list + card) and appends it to the
-	 * container supplied at construction. Idempotent in the sense that this
-	 * project never calls it twice on the same instance; a second call would
-	 * append a second subtree, so callers must not do that.
+	 * Builds the panels' DOM subtree — a single `.woodev-pickup-stage` wrapping a map mount
+	 * point (see {@see getMapElement}) and the list/card panels — and appends the STAGE, never
+	 * the panels directly, to the container supplied at construction (spec V-3). The stage is
+	 * the positioning context every panel is `position: absolute` against; it begins BELOW the
+	 * modal header, so no panel can reach it the way the old `position: fixed` panels did once
+	 * `.woodev-modal__content` grew a centring `transform` — see `pickup.css`'s own docblock.
+	 * Idempotent in the sense that this project never calls it twice on the same instance; a
+	 * second call would append a second subtree, so callers must not do that.
 	 *
 	 * @returns {void}
 	 */
 	Panels.prototype.render = function() {
+		var stage = document.createElement( 'div' );
+		stage.className = 'woodev-pickup-stage';
+
+		// The map mount point — this task only builds the DOM/CSS plumbing for it; a later
+		// task rewires the caller to hand `getMapElement()` to the map provider's `init()`
+		// instead of the raw modal container. Painted first so every panel draws over it.
+		var map = document.createElement( 'div' );
+		map.className = 'woodev-pickup-map';
+
 		var root = document.createElement( 'div' );
 		root.className = 'woodev-pickup-panels';
 
@@ -1117,9 +1130,15 @@
 		root.appendChild( list );
 		root.appendChild( card );
 
-		this._container.appendChild( root );
+		stage.appendChild( map );
+		stage.appendChild( root );
+
+		empty( this._container );
+		this._container.appendChild( stage );
 
 		this.root = root;
+		this._stage = stage;
+		this._mapEl = map;
 		this._listEl = list;
 		this._listHeaderEl = header;
 		this._listBodyEl = body;
@@ -1138,6 +1157,17 @@
 		} );
 
 		renderList( this );
+	};
+
+	/**
+	 * The element the map provider mounts its canvas into — a child of the stage (see
+	 * {@see render}), painted first so every panel draws over it.
+	 *
+	 * @since 2.0.2
+	 * @returns {HTMLElement}
+	 */
+	Panels.prototype.getMapElement = function() {
+		return this._mapEl;
 	};
 
 	/**

@@ -73,10 +73,14 @@
  * with it, leaving no way to ever open a closed list. `visibility` is used instead of `display`
  * for exactly this reason: a `visibility: hidden` ancestor's descendant CAN restore its own
  * visibility (the toggle does, below), but nothing can un-hide a `display: none` one. See
- * `.woodev-pickup-list` / `.woodev-pickup-list__toggle`. The toggle's `position: fixed` geometry
- * does not depend on where it sits in the DOM, so this costs nothing visually — filed as a JS
- * follow-up (issue tracked on the framework backlog board) since the cleaner fix is moving the
- * toggle to a true sibling of `.woodev-pickup-list`/`.woodev-pickup-card`, not a CSS concern.
+ * `.woodev-pickup-list` / `.woodev-pickup-list__toggle`. Both are now `position: absolute` (spec
+ * V-3, Task 5 — see the stage rule below) rather than `fixed`, so the toggle's `right`/`bottom`
+ * offsets resolve against `.woodev-pickup-list`'s OWN box, not the stage directly — this reads
+ * correctly only because the list's `top: 0; right: 0; bottom: 0` pins its box flush to the
+ * stage's own edges, making the two equivalent for THIS geometry. That is a coincidence of the
+ * current rules, not a structural guarantee — filed as the same JS follow-up (issue tracked on
+ * the framework backlog board) since the cleaner fix is still moving the toggle to a true
+ * sibling of `.woodev-pickup-list`/`.woodev-pickup-card`, not a CSS concern.
  *
  * @since 2.0.2
  */
@@ -92,23 +96,47 @@
 }
 
 /* -------------------------------------------------------------------------
+ * Stage — the positioning context for EVERYTHING this feature draws (spec V-3, Task 5). The
+ * list/card/toggle used to be `position: fixed`, which resolves against `.woodev-modal__content`
+ * because that element carries a centring `transform` — so the sidebar covered the modal header
+ * (the close button became unreachable) and the toggle button sat on top of it. The stage fills
+ * `WoodevModal#getContainer()` and begins BELOW the header, so no panel positioned against it can
+ * ever reach the header at all — the fix is structural, not a matter of tuning offsets.
+ * `pickup-panels.js`'s `render()` appends every panel (map mount point, list, card, toggle) INTO
+ * the stage and appends only the stage to the container; it is also the ONE element `overflow:
+ * hidden` here, so nothing a panel draws can bleed past the modal body's own rounded corners.
+ * ---------------------------------------------------------------------- */
+
+.woodev-pickup-stage {
+	position: absolute;
+	inset: 0;
+	overflow: hidden;
+}
+
+/* -------------------------------------------------------------------------
  * Map surface — the ymaps map root and the embedded provider's iframe.
  *
- * BOTH are mounted DIRECTLY into `WoodevModal#getContainer()` — the shared dialog's own body
- * area — which deliberately declares NO height of its own (D-13 — that would be one consumer's
- * sizing leaking into shared chrome), so ONE of these two rules is always the thing that
- * resolves a real pixel height, not `height: 100%` against an ancestor that may never define
- * one. `min( 80vh, 800px )` is the settled value (not the reference's own `height: 100vh`, which
- * would overflow the shared dialog's own `calc( 100vh - 40px )` cap the instant the header's
- * height is added on top of it): comfortably tall on a real viewport, capped so it never outgrows
- * the screen, and small enough that the body area's own scroll (woodev-modal.css) only ever has
- * to step in on a genuinely short viewport.
+ * `.woodev-pickup-map` is a child of the stage above (`pickup-panels.js`'s `render()` builds it
+ * as the map's mount point) and now simply fills that stage — `position: absolute; inset: 0`
+ * inherits its size from there instead of carrying a height of its own. The shared dialog's own
+ * body area (`WoodevModal#getContainer()`) deliberately declares NO height (D-13 — that would be
+ * one consumer's sizing leaking into shared chrome); the modal itself now sizes the dialog via
+ * `width`/`bodyHeight` options (Task 2), so the stage — not this rule — is what resolves a real
+ * pixel height today.
+ *
+ * `.woodev-pickup-embedded-frame` is a DIFFERENT case: `Embedded_Map_Provider` (`ownsChrome:
+ * true`) is mounted DIRECTLY into `WoodevModal#getContainer()` by `pickup-mount.js` — no
+ * `Panels` instance, and therefore no stage, is ever constructed for it (D-3: the whole point of
+ * `ownsChrome` is that the provider owns the full picker UI itself). It keeps the OLD
+ * `min( 80vh, 800px )` height contract unchanged; it is not this task's concern.
  * ---------------------------------------------------------------------- */
 
 .woodev-pickup-map {
-	width: 100%;
-	height: min( 80vh, 800px );
-	min-height: 320px;
+	position: absolute;
+	inset: 0;
+	width: auto;
+	height: auto;
+	min-height: 0;
 }
 
 /* Shown over the map while the FIRST point fetch is in flight, then removed once it settles
@@ -162,7 +190,7 @@
  * ---------------------------------------------------------------------- */
 
 .woodev-pickup-list {
-	position: fixed;
+	position: absolute;
 	top: 0;
 	right: 0;
 	bottom: 0;
@@ -329,13 +357,14 @@
 /* The toggle affordance (Task 21 owns its whole visual — no i18n label exists for it, only an
    `aria-label`; see pickup-panels.js's own docblock). Overrides the list's `visibility: hidden`
    for exactly this one element — see the file docblock's "KNOWN DOM-STRUCTURE QUIRK" note — so
-   it stays visible and clickable while the list itself is closed. `position: fixed` computes
-   against the nearest transformed ancestor (the shared dialog frame's own centering
-   `transform`), not against `.woodev-pickup-list`'s box, so its geometry is correct regardless
-   of being a DOM child of an otherwise-hidden element. Accent-filled with contrast text/icon —
-   the "sidebar toggle" case the accent-contrast pairing exists for. */
+   it stays visible and clickable while the list itself is closed. `position: absolute` (spec
+   V-3) resolves against `.woodev-pickup-list`'s own box — a DOM child, not a sibling, of it (see
+   the file docblock) — which is correct here ONLY because the list's box is itself pinned flush
+   to the stage's right/top/bottom edges; being a fixed-viewport element used to make this
+   irrelevant, now it does not. Accent-filled with contrast text/icon — the "sidebar toggle" case
+   the accent-contrast pairing exists for. */
 .woodev-pickup-list__toggle {
-	position: fixed;
+	position: absolute;
 	right: 16px;
 	bottom: 16px;
 	visibility: visible;
@@ -498,7 +527,7 @@
  * ---------------------------------------------------------------------- */
 
 .woodev-pickup-card {
-	position: fixed;
+	position: absolute;
 	top: 0;
 	right: 0;
 	bottom: 0;
