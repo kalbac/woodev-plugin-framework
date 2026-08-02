@@ -1233,7 +1233,15 @@
 				} );
 			}
 
-			var initResult = provider.init( modal.getContainer(), buildProviderConfig( config ), realDataSource );
+			// Under `ownsChrome` the provider IS the whole interface and gets the dialog body.
+			// Otherwise it gets the panels' own map element — a child of `.woodev-pickup-stage`
+			// (spec V-3). Handing it the body instead would make its canvas a SIBLING of the
+			// stage, so the page would carry two `.woodev-pickup-map` elements: the panels'
+			// (empty, sized by the stage) and the provider's (unsized, outside the stage's
+			// positioning context, and therefore not covered by any of the panels' geometry).
+			var mapHost = ownsChrome ? modal.getContainer() : panels.getMapElement();
+
+			var initResult = provider.init( mapHost, buildProviderConfig( config ), realDataSource );
 
 			Promise.resolve( initResult ).then( function() {
 				if ( destroyed ) {

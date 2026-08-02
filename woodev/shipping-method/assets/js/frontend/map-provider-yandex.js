@@ -505,10 +505,15 @@
 		 *  Null when no address search is currently active. */
 		this._addressPin = null;
 
-		/** @type {HTMLElement|null} the map's OWN element inside the shared container — see
-		 *  {@see WoodevYandexMapProvider#_buildMap} for why ymaps does not get the container
-		 *  itself. Null until `init()` builds the map, and again after `destroy()`. */
+		/** @type {HTMLElement|null} the element ymaps draws into — either the container itself,
+		 *  when the caller handed us the panels' `.woodev-pickup-map`, or one this file created
+		 *  inside it. See {@see WoodevYandexMapProvider#_buildMap}. Null until `init()` builds
+		 *  the map, and again after `destroy()`. */
 		this.canvasEl = null;
+
+		/** @type {boolean} true only when `init()` CREATED `canvasEl`, which is the only case in
+		 *  which `destroy()` may remove it from the DOM. */
+		this.ownsCanvasEl = false;
 
 		/** @type {number} bumped on every {@see focusGroup} call — discards a stale
 		 *  continuation when a later call's camera move resolves before an earlier one's. */
@@ -628,15 +633,25 @@
 		var config = this.config;
 		var defaultLocation = config.defaultLocation || { center: DEFAULT_CENTER, zoom: DEFAULT_ZOOM };
 
-		// The map gets its OWN element rather than being built straight into the container.
-		// Two reasons, both found the hard way: the container is the modal body, which the
-		// framework's panels also populate — handing that same node to ymaps means two owners
-		// for one element's children. And `pickup.css` sizes the map through
-		// `.woodev-pickup-map`; with no element carrying that class the rule matched nothing
-		// and the map had no height at all, so it rendered as a zero-pixel strip.
-		this.canvasEl = document.createElement( 'div' );
-		this.canvasEl.className = 'woodev-pickup-map';
-		this.container.appendChild( this.canvasEl );
+		// The canvas host is whatever we were handed, when that element is already the panels'
+		// map element (spec V-3: `.woodev-pickup-map` inside `.woodev-pickup-stage`, sized by the
+		// stage). Creating a second one here — which this file used to do unconditionally — put
+		// TWO `.woodev-pickup-map` nodes on the page: the panels' inside the stage, and ymaps'
+		// nested within it, so every rule written against that class matched twice.
+		//
+		// The fallback still creates one, because a caller may legitimately hand us a bare
+		// container: `Embedded_Map_Provider`'s `ownsChrome` branch has no panels at all, and the
+		// class is what `pickup.css` sizes the map through — without an element carrying it the
+		// map has no height and renders as a zero-pixel strip.
+		if ( this.container.classList && this.container.classList.contains( 'woodev-pickup-map' ) ) {
+			this.canvasEl = this.container;
+			this.ownsCanvasEl = false;
+		} else {
+			this.canvasEl = document.createElement( 'div' );
+			this.canvasEl.className = 'woodev-pickup-map';
+			this.container.appendChild( this.canvasEl );
+			this.ownsCanvasEl = true;
+		}
 
 		this.map = new ymaps.Map(
 			this.canvasEl,
@@ -1506,11 +1521,14 @@
 			}
 		}
 
-		if ( this.canvasEl && this.canvasEl.parentNode ) {
+		// Only remove the node when this provider created it. When the panels own it, tearing it
+		// out would delete the stage's map element and a reopen would mount into nothing.
+		if ( this.ownsCanvasEl && this.canvasEl && this.canvasEl.parentNode ) {
 			this.canvasEl.parentNode.removeChild( this.canvasEl );
 		}
 
 		this.canvasEl = null;
+		this.ownsCanvasEl = false;
 		this.map = null;
 		this.objectManager = null;
 		this.ymaps = null;

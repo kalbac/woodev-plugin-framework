@@ -157,9 +157,20 @@ StubPanels.prototype.render = function() {
 	const card = document.createElement( 'div' );
 	card.className = 'woodev-pickup-card';
 
+	// The panels own the map element now (spec V-3) — the provider mounts INTO it instead of
+	// creating a sibling canvas in the dialog body. The stub has to carry it too, or the mount
+	// hands `provider.init()` an undefined host.
+	this.mapEl = document.createElement( 'div' );
+	this.mapEl.className = 'woodev-pickup-map';
+
+	this.root.appendChild( this.mapEl );
 	this.root.appendChild( list );
 	this.root.appendChild( card );
 	this.container.appendChild( this.root );
+};
+
+StubPanels.prototype.getMapElement = function() {
+	return this.mapEl;
 };
 
 StubPanels.prototype.on = function( event, cb ) {
@@ -541,6 +552,10 @@ test( 'clicking the trigger opens the shell and calls provider.init with the con
 	expect( calls.length ).toBe( 1 );
 	expect( calls[ 0 ].container ).toBeInstanceOf( HTMLElement );
 	expect( dialog.contains( calls[ 0 ].container ) ).toBe( true );
+	// Specifically the PANELS' map element, not the dialog body: a canvas built as a sibling of
+	// the stage sits outside the stage's positioning context, and the page then carries two
+	// `.woodev-pickup-map` nodes (spec V-3).
+	expect( calls[ 0 ].container ).toBe( StubPanels.instances[ 0 ].getMapElement() );
 	// The provider config is the MERGE buildProviderConfig() builds — mapConfig's own
 	// keys plus strategy/i18n/locality — never config.mapConfig passed through raw.
 	expect( calls[ 0 ].config ).toEqual( {
