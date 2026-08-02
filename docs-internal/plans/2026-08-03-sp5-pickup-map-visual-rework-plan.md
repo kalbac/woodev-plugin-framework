@@ -29,8 +29,8 @@ disagree, the newer one wins for presentation. **Put both specs in the critic's 
 |---|---|
 | `woodev/assets/js/frontend/woodev-modal.js` | Dialog chrome only. Now also applies a consumer-supplied size at construction and renders a spinner in its loading overlay. |
 | `woodev/assets/css/frontend/woodev-modal.css` | Dialog chrome styling at `wc-backbone-modal` parity. |
-| `woodev/shipping-method/assets/js/frontend/pickup-panels.js` | Owns the stage and every piece of DOM inside it: controls row (search + filter), zoom, sidebar list, point card, overlay. |
-| `woodev/shipping-method/assets/js/frontend/map-provider-yandex.js` | The map only: canvas, `ObjectManager`, features, camera moves, geocoding calls. No control chrome, no balloon. |
+| `woodev/shipping-method/assets/js/frontend/pickup-panels.js` | Owns the stage and the DOM inside it: zoom, sidebar list, point card, overlay. Also builds the search/filter layout that the provider hands to `SearchControl` — the panels render point information, the provider never does (D-3). |
+| `woodev/shipping-method/assets/js/frontend/map-provider-yandex.js` | The map: canvas, `ObjectManager`, features, camera moves, the `SearchControl` host with our layout and our bounded geocode provider, the filter state + `ymaps.Monitor`. No balloon, no point markup of its own. |
 | `woodev/shipping-method/assets/css/frontend/pickup.css` | Everything inside the stage, plus the style-isolation contract. |
 | `woodev/shipping-method/pickup/class-pickup-handler.php` | Emits modal size, the `search` flag and the filtered `i18n` map. |
 | `tests/_fixtures/woodev-test-shipping-method/woodev-test-shipping-method.php` | A fixture rich enough to exercise the filter, the group tab bar, clusters, a long list and an unavailable point. |
@@ -1271,62 +1271,64 @@ git commit -m "feat(pickup): marker and sidebar clicks both move the camera and 
 
 ## Phase 4 — the controls
 
-### Task 11: Our own search field
+### Task 11: The search + filter layout for `SearchControl`
+
+The layout is ours; the control that hosts it is ymaps'. This is the Russian Post construction,
+verified in its bundle: one `SearchControl` whose custom layout renders the input, the reset button,
+the results menu **and** the filter menu with its badge.
+
+This task builds the layout's markup and behaviour as a plain factory on the panels — testable
+without ymaps in the room. Task 12 mounts it on the control; Task 13 adds the filter half.
 
 **Files:**
-- Modify: `woodev/shipping-method/assets/js/frontend/pickup-panels.js` (controls row)
+- Modify: `woodev/shipping-method/assets/js/frontend/pickup-panels.js`
 - Modify: `woodev/shipping-method/assets/css/frontend/pickup.css:377`
 - Test: `tests/js/pickup-panels.test.js`
 
 - [ ] **Step 1: Write the failing test**
 
 ```js
-describe( 'search field (spec V-6)', () => {
-	it( 'renders a search form with a placeholder from i18n', () => {
-		const container = document.createElement( 'div' );
+describe( 'search layout (spec V-6)', () => {
+	const build = ( overrides = {} ) =>
+		new Panels( document.createElement( 'div' ), { ...config, ...overrides } ).buildSearchLayout();
 
-		new Panels( container, config ).render();
-
-		const form = container.querySelector( 'form.woodev-pickup-search__form' );
+	it( 'renders a search form with the placeholder from i18n', () => {
+		const el = build();
+		const form = el.querySelector( 'form.woodev-pickup-search__form' );
 		const input = form.querySelector( 'input.woodev-pickup-search__input' );
 
 		expect( form.getAttribute( 'role' ) ).toBe( 'search' );
 		expect( input.getAttribute( 'placeholder' ) ).toBe( config.i18n.yourAddress );
 	} );
 
-	it( 'shows the clear button only when the input is non-empty', () => {
-		const container = document.createElement( 'div' );
-		const panels = new Panels( container, config );
+	it( 'shows the reset button only when the input is non-empty', () => {
+		const el = build();
+		const reset = el.querySelector( '.woodev-pickup-search__reset' );
+		const input = el.querySelector( '.woodev-pickup-search__input' );
 
-		panels.render();
-
-		const clear = container.querySelector( '.woodev-pickup-search__clear' );
-		const input = container.querySelector( '.woodev-pickup-search__input' );
-
-		expect( clear.hidden ).toBe( true );
+		expect( reset.hidden ).toBe( true );
 
 		input.value = 'Тверская';
 		input.dispatchEvent( new Event( 'input' ) );
 
-		expect( clear.hidden ).toBe( false );
+		expect( reset.hidden ).toBe( false );
 	} );
 
-	it( 'emits searchQuery once per debounce window, from 3 characters', () => {
+	it( 'matches loaded points while typing, debounced, from 3 characters', () => {
 		jest.useFakeTimers();
 
-		const container = document.createElement( 'div' );
-		const panels = new Panels( container, config );
-		const onQuery = jest.fn();
+		const panels = new Panels( document.createElement( 'div' ), config );
+		const el = panels.buildSearchLayout();
+		const onType = jest.fn();
 
-		panels.render();
-		panels.on( 'searchQuery', onQuery );
+		panels.on( 'searchType', onType );
 
-		const input = container.querySelector( '.woodev-pickup-search__input' );
+		const input = el.querySelector( '.woodev-pickup-search__input' );
 
 		input.value = 'Тв';
 		input.dispatchEvent( new Event( 'input' ) );
 		jest.advanceTimersByTime( 400 );
-		expect( onQuery ).not.toHaveBeenCalled();
+		expect( onType ).not.toHaveBeenCalled();
 
 		input.value = 'Твер';
 		input.dispatchEvent( new Event( 'input' ) );
@@ -1334,56 +1336,106 @@ describe( 'search field (spec V-6)', () => {
 		input.dispatchEvent( new Event( 'input' ) );
 		jest.advanceTimersByTime( 400 );
 
-		expect( onQuery ).toHaveBeenCalledTimes( 1 );
-		expect( onQuery ).toHaveBeenCalledWith( { query: 'Тверс' } );
+		expect( onType ).toHaveBeenCalledTimes( 1 );
+		expect( onType ).toHaveBeenCalledWith( { query: 'Тверс' } );
 
 		jest.useRealTimers();
 	} );
 
-	it( 'clearing resets the results and the anchor', () => {
-		const container = document.createElement( 'div' );
-		const panels = new Panels( container, config );
+	it( 'queries addresses only on submit, never while typing', () => {
+		jest.useFakeTimers();
+
+		const panels = new Panels( document.createElement( 'div' ), config );
+		const el = panels.buildSearchLayout();
+		const onSubmit = jest.fn();
+
+		panels.on( 'searchSubmit', onSubmit );
+
+		const input = el.querySelector( '.woodev-pickup-search__input' );
+		input.value = 'Тверская 5';
+		input.dispatchEvent( new Event( 'input' ) );
+		jest.advanceTimersByTime( 1000 );
+
+		expect( onSubmit ).not.toHaveBeenCalled();
+
+		el.querySelector( 'form' ).dispatchEvent( new Event( 'submit', { cancelable: true } ) );
+
+		expect( onSubmit ).toHaveBeenCalledWith( { query: 'Тверская 5' } );
+
+		jest.useRealTimers();
+	} );
+
+	it( 'does not navigate the checkout away on submit', () => {
+		const el = build();
+		const event = new Event( 'submit', { cancelable: true } );
+
+		el.querySelector( 'form' ).dispatchEvent( event );
+
+		expect( event.defaultPrevented ).toBe( true );
+	} );
+
+	it( 'resetting clears the value, the results and the anchor', () => {
+		const panels = new Panels( document.createElement( 'div' ), config );
+		const el = panels.buildSearchLayout();
 		const onReset = jest.fn();
 
-		panels.render();
 		panels.on( 'searchReset', onReset );
 
-		const input = container.querySelector( '.woodev-pickup-search__input' );
+		const input = el.querySelector( '.woodev-pickup-search__input' );
 		input.value = 'Тверская';
 		input.dispatchEvent( new Event( 'input' ) );
-		container.querySelector( '.woodev-pickup-search__clear' ).click();
+		el.querySelector( '.woodev-pickup-search__reset' ).click();
 
 		expect( input.value ).toBe( '' );
 		expect( onReset ).toHaveBeenCalled();
 	} );
 
-	it( 'renders nothing when the plugin disabled search', () => {
-		const container = document.createElement( 'div' );
-
-		new Panels( container, { ...config, search: false } ).render();
-
-		expect( container.querySelector( '.woodev-pickup-search' ) ).toBeNull();
+	it( 'builds nothing when the plugin disabled search', () => {
+		expect( build( { search: false } ) ).toBeNull();
 	} );
 } );
 ```
 
 - [ ] **Step 2: Run it to verify it fails**
 
-Run: `npx wp-scripts test-unit-js --testPathPattern=pickup-panels -t "search field"`
-Expected: FAIL — no form is rendered.
+Run: `npx wp-scripts test-unit-js --testPathPattern=pickup-panels -t "search layout"`
+Expected: FAIL — `buildSearchLayout is not a function`.
 
-- [ ] **Step 3: Implement the control**
-
-Build it in a new `buildSearchControl( self )` called from `render()` when
-`false !== self._config.search`:
+- [ ] **Step 3: Implement the layout factory**
 
 ```js
 	var SEARCH_DEBOUNCE_MS = 300;
 	var SEARCH_MIN_CHARS = 3;
 
-	function buildSearchControl( self ) {
+	/**
+	 * Builds the DOM and handlers for the `SearchControl`'s custom layout (spec V-6).
+	 *
+	 * Returns a detached element rather than mounting it: the map provider hands it to ymaps
+	 * through `options.layout`, and ymaps decides where it lives. Keeping construction here
+	 * keeps D-3 intact — no map-library file renders point information — and lets this be
+	 * tested without ymaps.
+	 *
+	 * Two different events, deliberately:
+	 *   - `searchType`   — debounced, while typing. Filters the ALREADY LOADED pool. Free.
+	 *   - `searchSubmit` — on Enter or the magnifier. Runs the geocoder, which costs the
+	 *                      merchant quota, so it never fires per keystroke. Russian Post does
+	 *                      the same; D-6's `ymaps.suggest()` existed only to dodge that cost.
+	 *
+	 * @since 2.0.2
+	 * @returns {HTMLElement|null} null when the plugin disabled search.
+	 */
+	Panels.prototype.buildSearchLayout = function() {
+		var self = this;
+
+		if ( false === this._config.search ) {
+			return null;
+		}
+
 		var wrap = document.createElement( 'div' );
-		wrap.className = 'woodev-pickup-search';
+		wrap.className = 'woodev-pickup-controls';
+
+		var search = document.createElement( 'div' );
+		search.className = 'woodev-pickup-search';
 
 		var form = document.createElement( 'form' );
 		form.className = 'woodev-pickup-search__form';
@@ -1392,33 +1444,46 @@ Build it in a new `buildSearchControl( self )` called from `render()` when
 		var input = document.createElement( 'input' );
 		input.type = 'search';
 		input.className = 'woodev-pickup-search__input';
-		input.setAttribute( 'placeholder', text( self._config, 'yourAddress' ) );
-		input.setAttribute( 'aria-label', text( self._config, 'yourAddress' ) );
+		input.setAttribute( 'placeholder', text( this._config, 'yourAddress' ) );
+		input.setAttribute( 'aria-label', text( this._config, 'yourAddress' ) );
 
-		var clear = document.createElement( 'button' );
-		clear.type = 'button';
-		clear.className = 'woodev-pickup-search__clear';
-		clear.hidden = true;
-		clear.setAttribute( 'aria-label', text( self._config, 'resetSearch' ) );
+		var reset = document.createElement( 'button' );
+		reset.type = 'button';
+		reset.className = 'woodev-pickup-search__reset';
+		reset.hidden = true;
+		reset.setAttribute( 'aria-label', text( this._config, 'resetSearch' ) );
+
+		var submit = document.createElement( 'button' );
+		submit.type = 'submit';
+		submit.className = 'woodev-pickup-search__submit';
+		submit.setAttribute( 'aria-label', text( this._config, 'search' ) );
 
 		var results = document.createElement( 'div' );
 		results.className = 'woodev-pickup-search__results';
 		results.hidden = true;
 
 		form.appendChild( input );
-		form.appendChild( clear );
-		wrap.appendChild( form );
-		wrap.appendChild( results );
+		form.appendChild( reset );
+		form.appendChild( submit );
+		search.appendChild( form );
+		search.appendChild( results );
+		wrap.appendChild( search );
 
-		// The browser's own submit would reload the checkout page.
 		form.addEventListener( 'submit', function( event ) {
+			// Without this the browser submits the CHECKOUT form the modal was opened from.
 			event.preventDefault();
+
+			var value = input.value.trim();
+
+			if ( value.length ) {
+				self._emit( 'searchSubmit', { query: value } );
+			}
 		} );
 
 		input.addEventListener( 'input', function() {
 			var value = input.value.trim();
 
-			clear.hidden = 0 === value.length;
+			reset.hidden = 0 === value.length;
 
 			window.clearTimeout( self._searchTimer );
 
@@ -1427,54 +1492,48 @@ Build it in a new `buildSearchControl( self )` called from `render()` when
 			}
 
 			self._searchTimer = window.setTimeout( function() {
-				self._emit( 'searchQuery', { query: value } );
+				self._emit( 'searchType', { query: value } );
 			}, SEARCH_DEBOUNCE_MS );
 		} );
 
-		clear.addEventListener( 'click', function() {
+		reset.addEventListener( 'click', function() {
 			window.clearTimeout( self._searchTimer );
 			input.value = '';
-			clear.hidden = true;
+			reset.hidden = true;
 			results.hidden = true;
 			empty( results );
 			self._emit( 'searchReset', {} );
 		} );
 
-		self._searchInput = input;
-		self._searchResults = results;
+		this._searchInput = input;
+		this._searchResults = results;
+		this._controlsEl = wrap;
 
 		return wrap;
-	}
+	};
 ```
 
-`renderSearchResults()` keeps its existing two-section markup but now fills `self._searchResults`
-and un-hides it; an empty result renders `text( config, 'noResults' )` instead of an empty box.
+`renderSearchResults()` keeps its two-section markup, now filling `this._searchResults` and
+un-hiding it; an empty result renders `text( config, 'noResults' )` rather than an empty box.
 
 - [ ] **Step 4: Style it (Russian Post's look)**
 
 ```css
 .woodev-pickup-controls {
-	position: absolute;
-	top: 16px;
-	left: 16px;
-	right: 16px;
-	z-index: 5;
 	display: flex;
 	gap: 8px;
 	align-items: flex-start;
-	pointer-events: none;          /* the map stays draggable between the controls */
+	width: min( 480px, calc( 100vw - 32px ) );
 }
 
-.woodev-pickup-controls > * { pointer-events: auto; }
-
-.woodev-pickup-search { width: min( 420px, 100% ); }
+.woodev-pickup-search { flex: 1 1 auto; min-width: 0; }
 
 .woodev-pickup-search__form {
 	display: flex;
 	align-items: center;
 	gap: 4px;
-	padding: 0 8px 0 16px;
 	height: 48px;
+	padding: 0 8px 0 16px;
 	background: #fff;
 	border-radius: 8px;
 	box-shadow: 0 1px 2px rgba( 0, 0, 0, 0.04 ), 0 4px 8px rgba( 0, 0, 0, 0.06 );
@@ -1488,6 +1547,16 @@ and un-hides it; an empty result renders `text( config, 'noResults' )` instead o
 	background: none;
 	font-size: 14px;
 	outline: none;
+}
+
+.woodev-pickup-search__input::-webkit-search-cancel-button { display: none; }
+
+.woodev-pickup-search__reset,
+.woodev-pickup-search__submit {
+	width: 32px;
+	height: 32px;
+	border-radius: 4px;
+	color: rgba( 0, 0, 0, 0.54 );
 }
 
 .woodev-pickup-search__results {
@@ -1509,116 +1578,207 @@ Expected: PASS.
 
 ```bash
 git add woodev/shipping-method/assets/js/frontend/pickup-panels.js woodev/shipping-method/assets/css/frontend/pickup.css tests/js/pickup-panels.test.js
-git commit -m "feat(pickup): own search field with debounce, clear button and two-section results"
+git commit -m "feat(pickup): search layout with instant point matching and submit-driven geocoding"
 ```
 
 ---
 
-### Task 12: Drop `SearchControl`, call `suggest`/`geocode` directly
+### Task 12: Build the `SearchControl` correctly and bound it to the loaded points
+
+The control was constructed with `provider`, `layout`, `resultsLayout` and `noPlacemark` at the root
+of its argument. ymaps controls take `{ data, options, state }`, so all four were ignored: the
+default chrome rendered and, worse, the default worldwide geocoder ran. That single nesting mistake
+is the whole of the operator's П-3.
 
 **Files:**
-- Modify: `woodev/shipping-method/assets/js/frontend/map-provider-yandex.js:737` (`_buildSearchControl`, deleted), `:783` (`_searchGeocodeProvider`)
+- Modify: `woodev/shipping-method/assets/js/frontend/map-provider-yandex.js:737` (`_buildSearchControl`), `:783` (`_searchGeocodeProvider`)
+- Modify: `woodev/shipping-method/assets/js/frontend/pickup-mount.js`
 - Test: `tests/js/map-provider-yandex.test.js`
 
 - [ ] **Step 1: Write the failing test**
 
 ```js
-describe( 'address search (spec V-6, V-7)', () => {
-	it( 'adds no ymaps SearchControl', async () => {
+describe( 'search control (spec V-6, V-7)', () => {
+	it( 'passes layout and provider under options, where ymaps reads them', async () => {
 		const provider = await initProvider();
+		const args = ymaps.control.SearchControl.mock.calls[ 0 ][ 0 ];
 
-		expect( ymaps.control.SearchControl ).not.toHaveBeenCalled();
+		expect( args.options.layout ).toBeDefined();
+		expect( typeof args.options.provider.geocode ).toBe( 'function' );
+		expect( args.options.noPlacemark ).toBe( true );
+		expect( args.layout ).toBeUndefined();
+		expect( args.provider ).toBeUndefined();
 	} );
 
-	it( 'bounds suggestions to the loaded point set, strictly', async () => {
+	it( 'positions the control top-left, floating free', async () => {
+		const provider = await initProvider();
+		const args = ymaps.control.SearchControl.mock.calls[ 0 ][ 0 ];
+
+		expect( args.options.float ).toBe( 'none' );
+		expect( args.options.position ).toEqual( { left: '16px', right: 'auto', top: '16px' } );
+	} );
+
+	it( 'bounds the geocode strictly to the loaded point set', async () => {
 		const provider = await initProvider();
 
 		provider.setPoints( pointsInMoscow );
-		await provider.search( 'Тверская' );
 
-		expect( ymaps.suggest ).toHaveBeenCalledWith( 'Тверская', expect.objectContaining( {
+		const geocode = ymaps.control.SearchControl.mock.calls[ 0 ][ 0 ].options.provider.geocode;
+		await geocode( 'Тверская' );
+
+		expect( ymaps.geocode ).toHaveBeenCalledWith( 'Тверская', expect.objectContaining( {
 			boundedBy: provider.objectManager.getBounds(),
 			strictBounds: true,
 		} ) );
 	} );
 
-	it( 'omits the bounds when nothing is loaded yet', async () => {
+	it( 'omits the bounds before anything is loaded', async () => {
 		const provider = await initProvider();
+		const geocode = ymaps.control.SearchControl.mock.calls[ 0 ][ 0 ].options.provider.geocode;
 
-		await provider.search( 'Тверская' );
+		await geocode( 'Тверская' );
 
-		expect( ymaps.suggest.mock.calls[ 0 ][ 1 ].boundedBy ).toBeUndefined();
-		expect( ymaps.suggest.mock.calls[ 0 ][ 1 ].strictBounds ).toBeUndefined();
+		const options = ymaps.geocode.mock.calls[ 0 ][ 1 ];
+		expect( options.boundedBy ).toBeUndefined();
+		expect( options.strictBounds ).toBeUndefined();
 	} );
 
-	it( 'emits both sections, points first, even when both are empty', async () => {
+	it( 'tags every result so the layout can branch on kind', async () => {
+		const provider = await initProvider();
+
+		provider.setPoints( pointsInMoscow );
+
+		const geocode = ymaps.control.SearchControl.mock.calls[ 0 ][ 0 ].options.provider.geocode;
+		const result = await geocode( 'Тверская' );
+
+		const kinds = result.geoObjects.toArray().map( ( o ) => o.properties.get( 'woodevKind' ) );
+
+		expect( kinds ).toContain( 'point' );
+		expect( kinds ).toContain( 'address' );
+		expect( kinds.indexOf( 'point' ) ).toBeLessThan( kinds.lastIndexOf( 'address' ) );
+	} );
+
+	it( 'emits searchResults for the panels on every resolution, empty included', async () => {
 		const provider = await initProvider();
 		const onResults = jest.fn();
 
 		provider.on( 'searchResults', onResults );
-		ymaps.suggest.mockResolvedValue( [] );
+		ymaps.geocode.mockResolvedValue( emptyGeocodeResult() );
 
-		await provider.search( 'ничего' );
+		const geocode = ymaps.control.SearchControl.mock.calls[ 0 ][ 0 ].options.provider.geocode;
+		await geocode( 'ничего' );
 
 		expect( onResults ).toHaveBeenCalledWith( { points: [], addresses: [] } );
-	} );
-
-	it( 'geocodes only on selection, never per keystroke', async () => {
-		const provider = await initProvider();
-
-		await provider.search( 'Тверская' );
-		expect( ymaps.geocode ).not.toHaveBeenCalled();
-
-		await provider.resolveAddress( { value: 'Москва, Тверская 5' } );
-		expect( ymaps.geocode ).toHaveBeenCalledTimes( 1 );
 	} );
 } );
 ```
 
 - [ ] **Step 2: Run it to verify it fails**
 
-Run: `npx wp-scripts test-unit-js --testPathPattern=map-provider-yandex -t "address search"`
-Expected: FAIL — `SearchControl` is still constructed.
+Run: `npx wp-scripts test-unit-js --testPathPattern=map-provider-yandex -t "search control"`
+Expected: FAIL — the options sit at the root.
 
-- [ ] **Step 3: Implement**
-
-Delete `_buildSearchControl()` and its call in `init()`. Rename `_searchGeocodeProvider` to a public
-`search( query )` that the mount calls on the panels' `searchQuery` event:
+- [ ] **Step 3: Implement the control**
 
 ```js
 	/**
-	 * Runs one search: the loaded point pool (free, instant) plus ymaps address suggestions.
+	 * Builds the address-search control (D-6, V-6).
 	 *
-	 * `ymaps.control.SearchControl` used to wrap this and is gone (V-6). It contributed only its
-	 * engine, and its options were being passed at the wrong nesting level — controls take
-	 * `{ data, options, state }`, so `provider`, `layout` and `noPlacemark` were silently
-	 * ignored, leaving ymaps' default chrome and, worse, its default worldwide geocoder.
+	 * EVERY option goes under `options`. ymaps controls take `{ data, options, state }` and
+	 * silently ignore anything else — the previous version passed `provider`, `layout`,
+	 * `resultsLayout` and `noPlacemark` at the root, so ymaps kept its own chrome AND its own
+	 * worldwide geocoder. That one mistake is the whole of the operator's search complaint.
 	 *
-	 * @param {string} query
-	 * @returns {Promise<{points: Array, addresses: Array}>}
+	 * The layout is the panels' (D-3: no map-library file renders point information); the
+	 * provider is ours and is what bounds results to the loaded pool (V-7).
+	 *
+	 * @returns {void}
 	 */
-	WoodevYandexMapProvider.prototype.search = function( query ) {
+	WoodevYandexMapProvider.prototype._buildSearchControl = function() {
 		var self = this;
-		var options = { results: SUGGEST_RESULT_COUNT };
+		var layoutEl = this.panels.buildSearchLayout();
+
+		if ( ! layoutEl ) {
+			return;
+		}
+
+		var layout = this.ymaps.templateLayoutFactory.createClass( '<div></div>', {
+			build: function() {
+				this.constructor.superclass.build.call( this );
+				this.getElement().appendChild( layoutEl );
+			},
+			clear: function() {
+				if ( layoutEl.parentNode ) {
+					layoutEl.parentNode.removeChild( layoutEl );
+				}
+
+				this.constructor.superclass.clear.call( this );
+			},
+		} );
+
+		this.searchControl = new this.ymaps.control.SearchControl( {
+			options: {
+				layout: layout,
+				noPlacemark: true,
+				float: 'none',
+				position: { left: '16px', right: 'auto', top: '16px' },
+				provider: {
+					geocode: function( request, options ) {
+						return self._searchProvider( request, options );
+					},
+				},
+			},
+			state: { filters: this._defaultTypeFilters() },
+		} );
+
+		this.map.controls.add( this.searchControl );
+	};
+```
+
+- [ ] **Step 4: Implement the provider**
+
+```js
+	/**
+	 * The control's geocode provider: matched points from the loaded pool, then geocoded
+	 * addresses, in one collection with each result tagged `woodevKind`.
+	 *
+	 * The engine (`search()`, `getResultsCount()`, `showResult()`) needs one indexed result set,
+	 * so both kinds live in one collection; the layout's click handler branches on the tag
+	 * instead of always calling `showResult()`.
+	 *
+	 * @param {string} request
+	 * @returns {Promise<{geoObjects: Object, metaData: Object}>}
+	 */
+	WoodevYandexMapProvider.prototype._searchProvider = function( request ) {
+		var self = this;
+		var matches = geo.matchPoints( this._allPoints(), request );
+		var options = { results: SEARCH_RESULT_COUNT };
 		var bounds = this._loadedBounds();
 
 		if ( bounds ) {
 			// Hard-bounded to the loaded points (V-7): under bulk that is exactly the buyer's
-			// locality, so a same-named street in another region never appears; under viewport the
-			// loaded set follows the viewport, so one rule serves both strategies.
+			// locality, so a same-named street in another region never appears; under viewport
+			// the loaded set follows the viewport, so one rule serves both strategies.
 			options.boundedBy = bounds;
 			options.strictBounds = true;
 		}
 
-		return this.ymaps.suggest( query, options ).then( function( addresses ) {
-			var results = {
-				points: geo.matchPoints( self._allPoints(), query ),
-				addresses: addresses || [],
-			};
+		return this.ymaps.geocode( request, options ).then( function( response ) {
+			var addresses = response.geoObjects.toArray();
+			var collection = new self.ymaps.GeoObjectCollection();
 
-			self.emit( 'searchResults', results );
+			matches.forEach( function( point ) {
+				collection.add( self._searchResultForPoint( point ) );
+			} );
 
-			return results;
+			addresses.forEach( function( object ) {
+				object.properties.set( 'woodevKind', 'address' );
+				collection.add( object );
+			} );
+
+			self.emit( 'searchResults', { points: matches, addresses: addresses } );
+
+			return { geoObjects: collection, metaData: response.metaData };
 		} );
 	};
 
@@ -1636,40 +1796,54 @@ Delete `_buildSearchControl()` and its call in `init()`. Rename `_searchGeocodeP
 	};
 ```
 
-`resolveAddress()` (already written for D-6) keeps calling `ymaps.geocode()` once on selection.
+`_searchResultForPoint( point )` returns a `ymaps.Placemark` at the point's coordinates with
+`woodevKind: 'point'` and the point id in its properties, so `showResult()` on it moves the camera
+correctly and the layout can open the card instead.
 
-- [ ] **Step 4: Wire it in `pickup-mount.js`**
+- [ ] **Step 5: Wire the two events in `pickup-mount.js`**
 
 ```js
-	panels.on( 'searchQuery', function( payload ) {
-		provider.search( payload.query );
+	panels.on( 'searchType', function( payload ) {
+		// Free, local: no control call, so nothing is geocoded.
+		panels.renderSearchResults( {
+			points: provider.matchLoadedPoints( payload.query ),
+			addresses: [],
+		} );
 	} );
 
-	provider.on( 'searchResults', function( results ) {
-		panels.renderSearchResults( results );
+	panels.on( 'searchSubmit', function( payload ) {
+		provider.searchControl.search( payload.query );
+	} );
+
+	panels.on( 'searchReset', function() {
+		provider.clearSearchAnchor();
 	} );
 ```
 
-- [ ] **Step 5: Run the tests**
+- [ ] **Step 6: Run the tests**
 
 Run: `npm run test:js`
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add woodev/shipping-method/assets/js/frontend/map-provider-yandex.js woodev/shipping-method/assets/js/frontend/pickup-mount.js tests/js
-git commit -m "fix(pickup): own the address search instead of wrapping ymaps SearchControl"
+git add woodev/shipping-method/assets/js tests/js
+git commit -m "fix(pickup): pass SearchControl its options where ymaps reads them, bounded to the loaded points"
 ```
 
 ---
 
-### Task 13: The type filter, Russian Post's menu
+### Task 13: The type filter, inside the same control
+
+Russian Post hangs the filter off the search control's own `state` and watches it with
+`ymaps.Monitor`. We do the same: one control, two menus, one state object.
 
 **Files:**
-- Modify: `woodev/shipping-method/assets/js/frontend/pickup-panels.js:1305` (`setTypes`)
+- Modify: `woodev/shipping-method/assets/js/frontend/pickup-panels.js` (`buildSearchLayout`, `setTypes`)
+- Modify: `woodev/shipping-method/assets/js/frontend/map-provider-yandex.js`
 - Modify: `woodev/shipping-method/assets/css/frontend/pickup.css:435`
-- Test: `tests/js/pickup-panels.test.js`
+- Test: `tests/js/pickup-panels.test.js`, `tests/js/map-provider-yandex.test.js`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1680,53 +1854,47 @@ describe( 'type filter (spec V-8)', () => {
 		{ code: 'POSTAMAT', label: 'Постамат' },
 	];
 
-	it( 'renders nothing for a single type', () => {
-		const container = document.createElement( 'div' );
-		const panels = new Panels( container, config );
+	const layoutWith = ( types ) => {
+		const panels = new Panels( document.createElement( 'div' ), config );
+		const el = panels.buildSearchLayout();
 
-		panels.render();
-		panels.setTypes( [ { code: 'PVZ', label: 'Пункт выдачи' } ] );
+		panels.setTypes( types );
 
-		expect( container.querySelector( '.woodev-pickup-filter' ) ).toBeNull();
+		return { panels, el };
+	};
+
+	it( 'renders no filter button for a single type', () => {
+		const { el } = layoutWith( [ twoTypes[ 0 ] ] );
+
+		expect( el.querySelector( '.woodev-pickup-filter' ) ).toBeNull();
 	} );
 
-	it( 'renders a toggle button and a checkbox per type for two types', () => {
-		const container = document.createElement( 'div' );
-		const panels = new Panels( container, config );
+	it( 'renders a button and a checkbox per type for two types', () => {
+		const { el } = layoutWith( twoTypes );
 
-		panels.render();
-		panels.setTypes( twoTypes );
-
-		expect( container.querySelectorAll( '.woodev-pickup-filter__checkbox' ) ).toHaveLength( 2 );
-		expect( container.querySelector( '.woodev-pickup-filter__toggle' ) ).not.toBeNull();
+		expect( el.querySelectorAll( '.woodev-pickup-filter__checkbox' ) ).toHaveLength( 2 );
+		expect( el.querySelector( '.woodev-pickup-filter__toggle' ) ).not.toBeNull();
 	} );
 
-	it( 'hides the badge while everything is selected and shows the count otherwise', () => {
-		const container = document.createElement( 'div' );
-		const panels = new Panels( container, config );
+	it( 'hides the badge while everything is selected and counts otherwise', () => {
+		const { el } = layoutWith( twoTypes );
+		const badge = el.querySelector( '.woodev-pickup-filter__badge' );
 
-		panels.render();
-		panels.setTypes( twoTypes );
-
-		const badge = container.querySelector( '.woodev-pickup-filter__badge' );
 		expect( badge.hidden ).toBe( true );
 
-		container.querySelectorAll( '.woodev-pickup-filter__checkbox' )[ 0 ].click();
+		el.querySelectorAll( '.woodev-pickup-filter__checkbox' )[ 0 ].click();
 
 		expect( badge.hidden ).toBe( false );
 		expect( badge.textContent ).toBe( '1' );
 	} );
 
 	it( 'refuses to uncheck the last remaining type', () => {
-		const container = document.createElement( 'div' );
-		const panels = new Panels( container, config );
+		const { panels, el } = layoutWith( twoTypes );
 		const onFilter = jest.fn();
 
-		panels.render();
-		panels.setTypes( twoTypes );
 		panels.on( 'typeFilter', onFilter );
 
-		const boxes = container.querySelectorAll( '.woodev-pickup-filter__checkbox' );
+		const boxes = el.querySelectorAll( '.woodev-pickup-filter__checkbox' );
 		boxes[ 0 ].click();
 		boxes[ 1 ].click();
 
@@ -1734,27 +1902,60 @@ describe( 'type filter (spec V-8)', () => {
 		expect( onFilter ).toHaveBeenCalledTimes( 1 );
 		expect( onFilter ).toHaveBeenLastCalledWith( { types: [ 'POSTAMAT' ] } );
 	} );
+
+	it( 'closes the results menu when the filter menu opens', () => {
+		const { el } = layoutWith( twoTypes );
+
+		el.querySelector( '.woodev-pickup-search__results' ).hidden = false;
+		el.querySelector( '.woodev-pickup-filter__toggle' ).click();
+
+		expect( el.querySelector( '.woodev-pickup-search__results' ).hidden ).toBe( true );
+		expect( el.querySelector( '.woodev-pickup-filter__menu' ).hidden ).toBe( false );
+	} );
 } );
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+And on the provider side:
 
-Run: `npx wp-scripts test-unit-js --testPathPattern=pickup-panels -t "type filter"`
+```js
+it( 'drives the ObjectManager filter from the control state (spec V-8)', async () => {
+	const provider = await initProvider();
+
+	provider.setTypeFilter( [ 'PVZ' ] );
+
+	expect( provider.searchControl.state.set ).toHaveBeenCalledWith(
+		'filters',
+		{ PVZ: true, POSTAMAT: false }
+	);
+	expect( provider.objectManager.setFilter ).toHaveBeenCalled();
+} );
+```
+
+- [ ] **Step 2: Run them to verify they fail**
+
+Run: `npm run test:js -- -t "type filter"`
 Expected: FAIL.
 
-- [ ] **Step 3: Implement**
+- [ ] **Step 3: Implement the filter half of the layout**
 
-`setTypes( types )` renders into the controls row: an icon button carrying a hidden badge, and a
-panel of checkboxes titled by `text( config, 'filterTypes' )`. Gate the whole control on
-`types.length > 1`. In the change handler:
+`setTypes( types )` appends to the controls wrapper, and only when `types.length > 1`:
+
+- `<button class="woodev-pickup-filter__toggle">` with an inline filter glyph and a
+  `<span class="woodev-pickup-filter__badge" hidden>`;
+- `<div class="woodev-pickup-filter__menu" hidden>` titled `text( config, 'filterTypes' )`, one
+  `<label>` + `<input type="checkbox" class="woodev-pickup-filter__checkbox">` per type, all
+  checked initially.
+
+Opening either menu closes the other — Russian Post's `menu--open` behaviour. In the change handler:
 
 ```js
 		checkbox.addEventListener( 'change', function() {
 			var selected = self._selectedTypes();
 
 			if ( 0 === selected.length ) {
-				// An empty map is not a reachable state — the reference does the same
-				// (re-select and return).
+				// The operator's rule: an empty selection must not be reachable, because a map
+				// with no points reads as broken. (Russian Post instead treats "nothing checked"
+				// as "no filtering" — same guarantee, but checkbox semantics that read as a bug.)
 				checkbox.checked = true;
 
 				return;
@@ -1767,32 +1968,68 @@ panel of checkboxes titled by `text( config, 'filterTypes' )`. Gate the whole co
 		} );
 ```
 
-`pickup-mount.js` routes the event by strategy (spec D-10):
+- [ ] **Step 4: Put the state on the control and monitor it**
+
+```js
+	/**
+	 * Applies a type selection.
+	 *
+	 * The selection lives on the SEARCH CONTROL's state and is watched with `ymaps.Monitor` —
+	 * Russian Post's own plumbing, and the reason the filter and the search field are one
+	 * control rather than two overlapping ones.
+	 *
+	 * @param {Array<string>} types
+	 * @returns {void}
+	 */
+	WoodevYandexMapProvider.prototype.setTypeFilter = function( types ) {
+		var filters = {};
+
+		this._types.forEach( function( type ) {
+			filters[ type.code ] = -1 !== types.indexOf( type.code );
+		} );
+
+		this.searchControl.state.set( 'filters', filters );
+	};
+```
+
+and, once, in `init()`:
+
+```js
+		new this.ymaps.Monitor( this.searchControl.state ).add( 'filters', function( filters ) {
+			self.objectManager.setFilter( function( feature ) {
+				return true === filters[ feature.properties.typeCode ];
+			} );
+		} );
+```
+
+- [ ] **Step 5: Route by strategy in `pickup-mount.js`**
 
 ```js
 	panels.on( 'typeFilter', function( payload ) {
 		if ( 'viewport' === config.strategy ) {
-			dataSource.setTypes( payload.types );   // goes into the query
+			// Do not fetch what will not be shown (D-10).
+			dataSource.setTypes( payload.types );
 		} else {
-			provider.setTypeFilter( payload.types ); // objectManager.setFilter, client-side
+			provider.setTypeFilter( payload.types );
 		}
 	} );
 ```
 
-- [ ] **Step 4: Style the control**
+If `dataSource.setTypes()` does not exist yet, add it here: `types` is already part of `Point_Query`,
+so this is a client-side gap only. The filter is dead on the viewport strategy without it.
+
+- [ ] **Step 6: Style the control**
 
 ```css
-.woodev-pickup-filter { position: relative; }
+.woodev-pickup-filter { position: relative; flex: 0 0 auto; }
 
 .woodev-pickup-filter__toggle {
 	position: relative;
 	width: 48px;
 	height: 48px;
-	border: 0;
 	border-radius: 8px;
 	background: #fff;
 	color: #333;
-	cursor: pointer;
 	box-shadow: 0 1px 2px rgba( 0, 0, 0, 0.04 ), 0 4px 8px rgba( 0, 0, 0, 0.06 );
 }
 
@@ -1815,24 +2052,31 @@ panel of checkboxes titled by `text( config, 'filterTypes' )`. Gate the whole co
 	position: absolute;
 	top: calc( 100% + 8px );
 	right: 0;
-	min-width: 240px;
+	min-width: 260px;
 	padding: 12px 16px;
 	background: #fff;
 	border-radius: 8px;
 	box-shadow: 0 1px 2px rgba( 0, 0, 0, 0.04 ), 0 4px 8px rgba( 0, 0, 0, 0.06 );
 }
+
+.woodev-pickup-filter__row {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 8px 0;
+}
 ```
 
-- [ ] **Step 5: Run the tests**
+- [ ] **Step 7: Run the tests**
 
 Run: `npm run test:js`
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
-git add woodev/shipping-method/assets/js/frontend/pickup-panels.js woodev/shipping-method/assets/js/frontend/pickup-mount.js woodev/shipping-method/assets/css/frontend/pickup.css tests/js
-git commit -m "feat(pickup): checkbox type filter with a count badge, gated on two or more types"
+git add woodev/shipping-method/assets/js woodev/shipping-method/assets/css/frontend/pickup.css tests/js
+git commit -m "feat(pickup): type filter hosted on the search control, Russian Post's plumbing"
 ```
 
 ---
@@ -2620,12 +2864,20 @@ git commit -m "chore: drop the visual-review artefacts, folded into the spec"
   V-7 → T12; V-8 → T13; V-9 → T8/T9; V-10 → T10; V-11 → T7; V-12 → T15; V-13 → T14; V-14 → T18;
   V-15 → T19; V-16 → T1. Verification (spec §7) → T20.
 - **Naming consistency.** `getMapElement()` (T5) is what T16 mounts into; `setBusy`/`isBusy` (T16)
-  are used only there; `focusPoint` (T10) is called by both click paths; `search()` (T12) replaces
-  `_searchGeocodeProvider`; `showMessage( key )` (T17) is the only message entry point;
-  `iconShapeFor()` (T8) is used by `_buildFeature` only.
-- **Open risk.** T13's `dataSource.setTypes()` assumes the viewport query already accepts `types`
-  (D-10 says it should). If it does not exist, add it inside T13 rather than deferring — the filter
-  is dead on the viewport strategy without it.
+  are used only there; `focusPoint` (T10) is called by both click paths; `buildSearchLayout()` (T11)
+  is called once by `_buildSearchControl()` (T12) and extended by `setTypes()` (T13);
+  `_searchProvider()` (T12) replaces `_searchGeocodeProvider`; `setTypeFilter()` (T13) writes the
+  control state that the `ymaps.Monitor` reads; `showMessage( key )` (T17) is the only message entry
+  point; `iconShapeFor()` (T8) is used by `_buildFeature` only.
+- **Open risks.**
+  - T13's `dataSource.setTypes()` assumes the viewport query already accepts `types` (D-10 says it
+    should). If it does not exist, add it inside T13 rather than deferring — the filter is dead on
+    the viewport strategy without it.
+  - T12 assumes `_searchResultForPoint()` can build a `ymaps.Placemark` the control's engine accepts
+    alongside real geocode results. If `showResult()` chokes on it, fall back to giving the layout's
+    click handler the whole branch (open the card for a `point` result, call `showResult()` only for
+    an `address` one) and let the engine index addresses alone. Do **not** respond by dropping the
+    control — that was tried on paper and was wrong; see the spec's deviation table.
 
 ## Related
 

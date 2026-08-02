@@ -158,13 +158,48 @@ a viewport-strategy statement) and from `noResults` (search found nothing).
 The empty/error state renders as a centred card over the map, never as a replacement for the
 interface — panels and controls keep working so the customer can search or change the filter.
 
-### V-6. Search is entirely ours. `ymaps.control.SearchControl` is dropped
+### V-6. `SearchControl` with our own layout — Russian Post's chrome, Yandex.Delivery's bounding
 
-**Deviation from D-6.** D-6 kept the control's engine (`search()`, `getResultsCount()`,
-`showResult()`) and replaced only its chrome. In practice we supply our own input, our own dropdown,
-our own geocode provider and our own result-click branching — the engine contributes nothing but a
-surface for options to get lost on, which is precisely defect 3 above. We call `ymaps.suggest()` and
-`ymaps.geocode()` directly and own the control end to end.
+D-6 stands unchanged. An earlier draft of this document proposed dropping the control entirely; that
+was a wrong inference from defect 3 — the control behaved like the default one because its options
+were at the wrong nesting level, not because the control is unsuitable.
+
+Verified against the Russian Post bundle
+(`https://widget.pochta.ru/map/main.a7d147fb5267ec1f0932.js`, read 2026-08-03):
+
+```js
+new ymaps.control.SearchControl( {
+    data:    { showRussianPostofficeBranches, showPostamat, showPartnerOffices },
+    state:   { filters: { russian_post: false, postamat: false, additional_pvz: false } },
+    options: { float: 'none', layout: <custom>, position: { left: '0px', top: '16px' } },
+} )
+```
+
+Its custom layout renders the input, the reset button, the results menu **and the filter menu with
+its badge**; the layout calls `control.search( value )` on submit and `control.showResult( index )` on
+a result click, and reads `control.getResultsCount()`. Filter state lives on the control and is
+watched with `ymaps.Monitor`, which calls `objectManager.setFilter()`.
+
+Two facts from that bundle correct earlier assumptions: Russian Post uses **no** `ymaps.suggest` and
+passes **no** custom provider — which is why its search returns Tolyatti and Orenburg for a Moscow
+customer typing «Цветной бульвар» (visible in the operator's own screenshot). Separately it calls
+`ymaps.geocode( query, { results: 1 } )` to resolve a locality to a centre.
+
+So we take Russian Post's chrome and Yandex.Delivery's bounded `options.provider.geocode` (V-7) —
+the hybrid the operator described. Concretely:
+
+- `options.layout` is ours, `options.provider.geocode` is ours, and **both live under `options`** —
+  the control constructor takes `{ data, options, state }` and silently ignores anything else.
+- The engine is kept: `search()`, `getResultsCount()`, `showResult()`, the `load` event.
+- **The address query runs on submit, not per keystroke** (Enter or the magnifier), as Russian Post
+  does. This replaces D-6's "typing queries `ymaps.suggest()`" and removes the reason D-6 preferred
+  `suggest` over `geocode` in the first place — nothing is geocoded until the customer asks for it,
+  so the merchant's quota is spent once per deliberate search rather than once per keystroke.
+- **Point matches stay instant while typing**, filtered from the loaded pool — free, no network.
+  Russian Post does not do this; the operator asked for "the same and better".
+- Our provider returns one result set carrying both kinds, each tagged, so `getResultsCount()` and
+  `showResult()` still work; the layout's own results-click handler branches on the tag instead of
+  always calling `showResult()`.
 
 The visual target is Russian Post's:
 
@@ -183,11 +218,12 @@ The visual target is Russian Post's:
 └──────────────────────────────────────────────────────┘
 ```
 
-- `<form role="search">` with an `<input>`, a clear button that appears only on a non-empty value,
-  and a magnifier icon. The filter button sits immediately to its right, sharing the row.
-- Debounce 300 ms, minimum 3 characters.
-- Two sections in one dropdown: matched points first (free, from the loaded pool), then address
-  suggestions. An empty result renders the `no_results` message rather than an empty box.
+- A `<form role="search">` with an `<input>`, a reset button that appears only on a non-empty value,
+  and a magnifier that submits. The filter button sits immediately to its right, **inside the same
+  control layout** — one `SearchControl`, two menus, as in the reference.
+- Point matching is debounced 300 ms from 3 characters. The address query fires on submit.
+- Two sections in one dropdown: matched points first (free, from the loaded pool), then addresses.
+  An empty result renders the `no_results` message rather than an empty box.
 - Picking a point → zoom to it and open its card.
 - Picking an address → geocode once, drop a "your address" pin, fit the camera to the address plus
   the 3 nearest points, open the sidebar sorted by distance from that address (D-6, kept).
@@ -208,12 +244,20 @@ happens, because stage 2 has the map blocked anyway.
 
 ### V-8. The type filter is Russian Post's menu, gated on the number of types
 
-- An icon button next to the search field, carrying a count badge when the selection is not "all".
-- Opens a panel titled «Тип» with one checkbox per type; type labels come from the plugin.
-- Rendered **only when the plugin supplies two or more types**. One type → no control at all, as in
-  the reference (`if ( point_types.length > 1 )`).
-- The last checked type cannot be unchecked — re-check it and return, exactly as the reference does.
-  An empty map is never a reachable state.
+- An icon button carrying a count badge, **inside the same `SearchControl` layout as the search
+  field** — that is how Russian Post builds it, and it is why the two controls share a row without
+  either owning the other's geometry.
+- Filter state lives on the control (`state: { filters: {…} }`) and is watched with
+  `new ymaps.Monitor( control.state ).add( 'filters', … )`, exactly as the reference does. Under the
+  bulk strategy the monitor calls `objectManager.setFilter()`.
+- Opens a menu titled «Тип» with one checkbox per type; type labels come from the plugin.
+- Rendered **only when the plugin supplies two or more types**. One type → no filter button at all,
+  as in Yandex.Delivery (`if ( point_types.length > 1 )`).
+- The last checked type cannot be unchecked — re-check it and return. Note that Russian Post solves
+  the same problem differently: its filters start all-false and an empty selection means "no
+  filtering", so the map is never empty either. We follow the operator's explicit instruction
+  ("нельзя не выбрать ни один фильтр") rather than the reference here, because checkbox semantics
+  where *nothing checked* shows *everything* read as a bug to a customer.
 - Where filtering happens still follows D-10: bulk → `objectManager.setFilter()`; viewport → `types`
   in the query.
 
@@ -333,9 +377,10 @@ surfaces blind, which is how the previous two rounds were rejected.
         │                                              height: min(80vh, 800px)   ← from V-1
         └── .woodev-pickup-stage                       absolute inset 0           ← containing block
             ├── .woodev-pickup-map                     absolute inset 0           (ymaps canvas)
-            ├── .woodev-pickup-controls                absolute top 16 left 16    (search + filter)
-            │   ├── .woodev-pickup-search
-            │   └── .woodev-pickup-filter
+            │   └── (ymaps control pane)
+            │       └── .woodev-pickup-controls        SearchControl layout, ymaps-positioned
+            │           ├── .woodev-pickup-search          top 16, left 16
+            │           └── .woodev-pickup-filter          same row, its own menu
             ├── .woodev-pickup-zoom                    absolute left 12 bottom 70
             ├── .woodev-pickup-list                    absolute top/right/bottom 0, width 320
             ├── .woodev-pickup-card                    absolute top/right/bottom 0, width 320, above list
@@ -352,8 +397,8 @@ ymaps' own auto-pan never puts a point under our chrome — this already works a
 |---|---|
 | `WoodevModal` | `width`/`bodyHeight` options applied at construction; SVG close icon; `overflow: hidden` on body; spinner in the loading overlay |
 | `woodev-modal.css` | Restyled to `wc-backbone-modal` parity (V-2) |
-| `pickup-panels.js` | Owns the stage; all panels absolute; list header removed; card resectioned; search + filter + zoom controls are its DOM |
-| `map-provider-yandex.js` | `SearchControl` removed in favour of direct `suggest`/`geocode`; `iconShape` on every feature; inline-SVG default icons; camera move on marker click; zoom control removed from ymaps |
+| `pickup-panels.js` | Owns the stage; all panels absolute; list header removed; card resectioned; owns the zoom control and the search/filter layout's markup and handlers |
+| `map-provider-yandex.js` | `SearchControl` rebuilt with its options at the right nesting level, our layout and our bounded provider; type filter state + `ymaps.Monitor` on that control; `iconShape` on every feature; inline-SVG default icons; camera move on marker click; ymaps' own `ZoomControl` removed |
 | `pickup.css` | Rewritten around the stage; explicit element styling; `font-family: inherit` throughout |
 | `class-pickup-handler.php` | Emits `messages`, `search` flag, modal size |
 | test fixture | V-16 |
@@ -388,7 +433,9 @@ the browser on the rig (chrome-devtools MCP, port 8973, real Yandex key), at des
 
 | Was | Now | Why |
 |---|---|---|
-| D-6: keep `SearchControl`'s engine, replace its view | Drop `SearchControl` entirely; call `suggest`/`geocode` directly | We supply the input, the dropdown, the provider and the click branching; the engine adds only a surface for options to get lost on — which is exactly what happened |
+| D-6: typing queries `ymaps.suggest()` | Point matches are instant while typing; the **address** query runs on submit, via the control's own `search()` | Russian Post's actual model, read from its bundle. `suggest` existed in D-6 only to avoid geocoding on every keystroke — submit-driven search removes that pressure entirely, and Russian Post uses no `suggest` at all |
+| D-6: `SearchControl` keeps its engine, we replace its view | **Unchanged** — an earlier draft of this document proposed dropping the control and was wrong | The control misbehaved because its options sat at the wrong nesting level (defect 3), not because it is unsuitable. The reference is built on it, filter menu included |
+| D-10: the type filter is its own control | It lives inside the `SearchControl` layout, with its state on that control | Same reason: that is how the reference builds it, and it is what makes the two share a row cleanly |
 | D-5: framework owns geometry, plugin owns images | Unchanged, plus a framework default icon pair as inline SVG | A plugin shipping no icons currently gets nothing drawable |
 | D-13: modal is generic chrome | Unchanged, plus size is part of that chrome | A dialog that cannot size itself is not self-sufficient |
 
