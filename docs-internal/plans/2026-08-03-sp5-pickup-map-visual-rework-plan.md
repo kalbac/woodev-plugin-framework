@@ -2401,12 +2401,17 @@ describe( 'loading stages (spec V-4)', () => {
 		expect( document.querySelector( '.woodev-pickup-overlay' ).hidden ).toBe( true );
 	} );
 
-	it( 'keeps the modal closable in every stage', async () => {
-		const { modal } = openFeature();
+	it( 'keeps the modal closable in every stage', () => {
+		openFeature();
+
 		const onClose = jest.fn();
 
-		modal.on( 'close', onClose );
+		// `WoodevModal` has NO `.on()` method — it dispatches native CustomEvents on
+		// document.body (`woodev_modal_closed` and friends). Every event test in
+		// woodev-modal.test.js uses this idiom; follow it, and remove the listener yourself.
+		document.body.addEventListener( 'woodev_modal_closed', onClose );
 		document.querySelector( '.woodev-modal__close' ).click();
+		document.body.removeEventListener( 'woodev_modal_closed', onClose );
 
 		expect( onClose ).toHaveBeenCalled();
 	} );
