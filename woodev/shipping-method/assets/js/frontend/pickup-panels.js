@@ -1120,7 +1120,6 @@
 		badge.className = 'woodev-pickup-filter__badge';
 
 		list.appendChild( header );
-		list.appendChild( toggle );
 		list.appendChild( body );
 		list.appendChild( search );
 
@@ -1132,6 +1131,20 @@
 
 		stage.appendChild( map );
 		stage.appendChild( root );
+
+		// The toggle is a SIBLING of the panels, on the stage — never a child of the list it
+		// controls. Two reasons, both learned by getting it wrong first:
+		//
+		// 1. Geometry. `right`/`bottom` on an absolutely-positioned element resolve against its
+		//    nearest positioned ancestor. Inside the list, `right: calc( min( 320px, 100% - 48px )
+		//    + 16px )` measured `100%` against the LIST's own 320px box, not the stage's — the
+		//    open-state offset came out 288px instead of 336px and the button sat on top of the
+		//    panel it was supposed to stand beside.
+		// 2. Visibility. A control that opens a hidden panel must not live inside it. As a child
+		//    it could only survive `visibility: hidden` (a descendant can restore its own
+		//    visibility; nothing survives `display: none`), which forced the panels to be hidden
+		//    the weaker way and left their full-height boxes swallowing clicks meant for the map.
+		stage.appendChild( toggle );
 
 		empty( this._container );
 		this._container.appendChild( stage );

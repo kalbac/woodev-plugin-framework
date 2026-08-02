@@ -200,7 +200,7 @@ it( 'renders the exact formatted distance from the anchor, and omits it entirely
 it( 'toggles the list open via a REAL click on the toggle button, not just the method', () => {
 	const panels = new Panels( document.createElement( 'div' ), config );
 	panels.render();
-	panels.root.querySelector( '.woodev-pickup-list__toggle' ).click();
+	panels.root.parentNode.querySelector( '.woodev-pickup-list__toggle' ).click();
 
 	// Re-pointed at the stage (Task 6) — see the "starts closed" test above.
 	expect( panels.root.parentNode.classList.contains( 'is-open' ) ).toBe( true );
@@ -210,7 +210,7 @@ it( 'names the toggle button after the drawer it opens, since no dedicated i18n 
 	const panels = new Panels( document.createElement( 'div' ), config );
 	panels.render();
 
-	expect( panels.root.querySelector( '.woodev-pickup-list__toggle' ).getAttribute( 'aria-label' ) )
+	expect( panels.root.parentNode.querySelector( '.woodev-pickup-list__toggle' ).getAttribute( 'aria-label' ) )
 		.toBe( 'Пункты выдачи в этой области' );
 } );
 

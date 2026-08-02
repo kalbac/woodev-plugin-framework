@@ -67,27 +67,22 @@
  * file's `_buildObjectManager()`) — CSS has no hook into it and does not need one.
  *
  * A KNOWN DOM-STRUCTURE QUIRK THIS FILE WORKS AROUND, NOT AROUND SILENTLY: `pickup-panels.js`'s
- * `render()` appends `.woodev-pickup-list__toggle` as a CHILD of `.woodev-pickup-list`, not as a
- * sibling the way the reference's own toggle-adjacent-to-panel markup is. Hiding the closed list
- * with `display: none` — the task spec's own illustrative snippet — would hide the toggle right along
- * with it, leaving no way to ever open a closed list. `visibility` is used instead of `display`
- * for exactly this reason: a `visibility: hidden` ancestor's descendant CAN restore its own
- * visibility (the toggle does, below), but nothing can un-hide a `display: none` one. See
- * `.woodev-pickup-list` / `.woodev-pickup-list__toggle`. Both are now `position: absolute` (spec
- * V-3, Task 5 — see the stage rule below) rather than `fixed`, so the toggle's `right`/`bottom`
- * offsets resolve against `.woodev-pickup-list`'s OWN box, not the stage directly — this reads
- * correctly only because the list's `top: 0; right: 0; bottom: 0` pins its box flush to the
- * stage's own edges, making the two equivalent for THIS geometry. That is a coincidence of the
- * current rules, not a structural guarantee — filed as the same JS follow-up (issue tracked on
- * the framework backlog board) since the cleaner fix is still moving the toggle to a true
- * sibling of `.woodev-pickup-list`/`.woodev-pickup-card`, not a CSS concern.
+ * `render()` appends `.woodev-pickup-list__toggle` to the STAGE, as a sibling of both panels —
+ * matching the reference's own toggle-adjacent-to-panel markup. It was briefly a child of
+ * `.woodev-pickup-list`, which cost twice: the open-state offset `calc( min( 320px, 100% - 48px )
+ * + 16px )` measured `100%` against the list's own 320px box (288px, so the button sat ON the
+ * panel), and hiding the closed list could only use `visibility` rather than `display`, leaving a
+ * full-height box over the map that swallowed drags. Both are gone: the toggle, the list and the
+ * card are all `position: absolute` children of `.woodev-pickup-stage` (spec V-3, Task 5) rather
+ * than `fixed`, so every offset below resolves against the stage — the one box whose edges the
+ * geometry is actually described against.
  *
  * ONE OPEN STATE, ON THE STAGE (Task 6, D-6/П-7): before this task, `.woodev-pickup-list` carried
  * its OWN `is-open` and `.woodev-pickup-card` carried a SEPARATE one — collapsing the sidebar while
  * a card was open removed only the list's class, so the card stayed on screen with no toggle left
  * to dismiss it (its own toggle button lives on the list, see the quirk above). Both panels'
  * visibility is now driven from `.woodev-pickup-stage`'s classes instead: `is-open` shows the list
- * (the `visibility` mechanism above is UNCHANGED — only what sets the class moved, from
+ * (only what sets the class moved, from
  * `pickup-panels.js`'s `toggleList()` toggling `.woodev-pickup-list` directly to it toggling
  * `.woodev-pickup-stage`), `is-open` + `is-card` together show the card. A single class removal
  * (`is-open`, on collapse) hides both at once; there is exactly one source of truth for "is a
@@ -192,12 +187,8 @@
  * shifts by `map.margin` while this is open (`pickup-mount.js`'s `listToggle` → `setMargin()`),
  * so the panel never covers points the customer could otherwise see.
  *
- * `visibility`, NOT `display`, gates open/closed — see the file docblock's "KNOWN DOM-STRUCTURE
- * QUIRK" note: `.woodev-pickup-list__toggle` is a CHILD of this element, and only a
- * `visibility: hidden` ancestor lets a descendant restore its own visibility. `pointer-events`
- * is set explicitly on both states too, belt-and-suspenders alongside the (already
- * non-interactive-when-hidden) `visibility` behaviour, so the closed panel's full-height fixed
- * box never intercepts a click meant for the map underneath it.
+ * `display` gates open/closed, so a closed panel occupies nothing at all and cannot intercept a
+ * drag meant for the map behind it.
  *
  * Gated by `.woodev-pickup-stage.is-open`, NOT a class on this element itself (Task 6 — see the
  * file docblock's "ONE OPEN STATE, ON THE STAGE" note): collapsing the sidebar clears `is-open` on
@@ -216,13 +207,17 @@
 	max-width: min( 320px, calc( 100% - 48px ) );
 	overflow: auto;
 	background: #fff;
-	visibility: hidden;
-	pointer-events: none;
+
+	/* `display`, not `visibility`: a hidden-but-laid-out panel still occupies a full-height box
+	   over the map, and that box swallowed drags meant for the map underneath it. The toggle used
+	   to live INSIDE this element, which forced the weaker `visibility` gate (a descendant can
+	   restore its own visibility, nothing survives `display: none`); it is a sibling on the stage
+	   now, so the strong gate is available and correct. */
+	display: none;
 }
 
 .woodev-pickup-stage.is-open .woodev-pickup-list {
-	visibility: visible;
-	pointer-events: auto;
+	display: flex;
 }
 
 .woodev-pickup-list__header {
@@ -372,20 +367,21 @@
 /* The toggle affordance (Task 21 owns its whole visual, Task 6 squares it off — no i18n label
    exists for it, only an `aria-label`; see pickup-panels.js's own docblock). Overrides the list's
    `visibility: hidden` for exactly this one element — see the file docblock's "KNOWN DOM-STRUCTURE
-   QUIRK" note — so it stays visible and clickable while the list itself is closed. `position:
-   absolute` (spec V-3) resolves against `.woodev-pickup-list`'s own box — a DOM child, not a
-   sibling, of it (see the file docblock) — which is correct here ONLY because the list's box is
-   itself pinned flush to the stage's right/top/bottom edges; being a fixed-viewport element used
-   to make this irrelevant, now it does not. Accent-filled with contrast text/icon — the "sidebar
-   toggle" case the accent-contrast pairing exists for. Square with an 8px radius (Task 6) — a
-   round button read as an accidental blue circle rather than the merchant's own accent colour;
-   the shadow drops to a subtler two-layer one to match a flat control instead of a floating round
-   FAB. */
+/* A SIBLING of the panels on the stage, never a child of the list it controls — `render()`
+   explains both reasons in full. The one that matters here: `right` resolves against the nearest
+   positioned ancestor, so inside the list `100%` meant the list's own 320px box and the open-state
+   offset came out 288px, putting the button ON the panel instead of beside it. On the stage,
+   `100%` is the stage.
+
+   Accent-filled with contrast text/icon — the "sidebar toggle" case the accent-contrast pairing
+   exists for. Square with an 8px radius (Task 6): a round button read as an accidental blue circle
+   rather than the merchant's own accent colour, and the shadow drops to a subtler two-layer one to
+   match a flat control instead of a floating round FAB. */
 .woodev-pickup-list__toggle {
 	position: absolute;
 	right: 16px;
 	bottom: 16px;
-	visibility: visible;
+	z-index: 4;
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
