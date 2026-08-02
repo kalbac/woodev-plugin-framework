@@ -86,7 +86,17 @@
 		closeButton.type = 'button';
 		closeButton.className = 'woodev-modal__close';
 		closeButton.setAttribute( 'aria-label', self._closeLabel );
-		closeButton.textContent = '×'; // '×' — decorative, aria-label carries the meaning.
+		// Reference icon (wc-backbone-modal, html-modal-map.php) — decorative, aria-hidden;
+		// the button's aria-label above carries the meaning.
+		closeButton.innerHTML =
+			'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">' +
+			'<path d="M18.2951 7.11498C18.6845 6.72562 18.6845 6.09435 18.2951 5.70498C17.9057 5.31562 ' +
+			'17.2745 5.31562 16.8851 5.70498L12.0001 10.59L7.11511 5.70498C6.72575 5.31562 6.09447 ' +
+			'5.31562 5.70511 5.70498C5.31575 6.09435 5.31575 6.72562 5.70511 7.11498L10.5901 12L5.70511 ' +
+			'16.885C5.31575 17.2743 5.31575 17.9056 5.70511 18.295C6.09447 18.6843 6.72575 18.6843 ' +
+			'7.11511 18.295L12.0001 13.41L16.8851 18.295C17.2745 18.6843 17.9057 18.6843 18.2951 ' +
+			'18.295C18.6845 17.9056 18.6845 17.2743 18.2951 16.885L13.4101 12L18.2951 7.11498Z" ' +
+			'fill="currentColor"/></svg>';
 
 		var body = document.createElement( 'div' );
 		body.className = 'woodev-modal__body';
@@ -487,7 +497,16 @@
 
 		overlay.className = 'woodev-modal__loading';
 		overlay.setAttribute( 'role', 'status' );
-		overlay.textContent = message || '';
+
+		var spinner = document.createElement( 'span' );
+		spinner.className = 'woodev-modal__spinner';
+		spinner.setAttribute( 'aria-hidden', 'true' );
+		overlay.appendChild( spinner );
+
+		var text = document.createElement( 'span' );
+		text.className = 'woodev-modal__loading-text';
+		text.textContent = message || '';
+		overlay.appendChild( text );
 
 		this._loadingEl = overlay;
 		this._body.appendChild( overlay );

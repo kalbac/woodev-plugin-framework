@@ -641,3 +641,44 @@ describe( 'dialog sizing (spec V-1)', () => {
 		modal.destroy();
 	} );
 } );
+
+describe( 'modal chrome (spec V-2, V-4)', () => {
+	it( 'renders an SVG close icon, not a text glyph', () => {
+		new WoodevModal( { title: 'x' } ).open();
+
+		const close = document.querySelector( '.woodev-modal__close' );
+
+		expect( close.querySelector( 'svg' ) ).not.toBeNull();
+		expect( close.textContent.trim() ).toBe( '' );
+		expect( close.getAttribute( 'aria-label' ) ).toBeTruthy();
+	} );
+
+	it( 'renders a spinner element in the loading overlay', () => {
+		const modal = new WoodevModal( { title: 'x' } );
+
+		modal.open();
+		modal.showLoading( 'Загрузка…' );
+
+		const overlay = document.querySelector( '.woodev-modal__loading' );
+
+		expect( overlay.querySelector( '.woodev-modal__spinner' ) ).not.toBeNull();
+		expect( overlay.textContent ).toContain( 'Загрузка…' );
+	} );
+
+	it( 'keeps the close button usable while loading', () => {
+		// WoodevModal has no `.on()` — every other test in this file listens for the
+		// native `woodev_modal_closed` CustomEvent on document.body (D-14), so this one
+		// does too, cleaning its own listener up rather than relying on afterEach.
+		const modal = new WoodevModal( { title: 'x' } );
+		const onClose = jest.fn();
+
+		document.body.addEventListener( 'woodev_modal_closed', onClose );
+		modal.open();
+		modal.showLoading( 'Загрузка…' );
+		document.querySelector( '.woodev-modal__close' ).click();
+
+		expect( onClose ).toHaveBeenCalled();
+
+		document.body.removeEventListener( 'woodev_modal_closed', onClose );
+	} );
+} );
