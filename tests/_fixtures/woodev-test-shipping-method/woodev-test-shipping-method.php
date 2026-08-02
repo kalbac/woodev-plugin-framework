@@ -247,103 +247,19 @@ function woodev_test_shipping_method_plugin_init(): void {
 			}
 
 			/**
-			 * The 5 static Moscow points, every field populated.
+			 * The fixture's Moscow points — every field populated.
+			 *
+			 * SP-map Task 1: the fixture was grown from the original 5 static points
+			 * (still present, ids included, as the first 5 entries) to ~49 points
+			 * across 2 types, including a co-located pair on identical coordinates —
+			 * see the docblock in fixture-points.php for why. Delegated to a standalone
+			 * data file so the unit suite can assert on its shape without loading the
+			 * whole plugin.
 			 *
 			 * @return array<int, array<string, mixed>>
 			 */
 			private function all_points(): array {
-				return [
-					[
-						'id'              => 'FIX-BULK-1',
-						'name'            => 'ПВЗ «Тверская»',
-						'lat'             => 55.7602,
-						'lng'             => 37.6055,
-						'address'         => 'Москва, ул. Тверская, д. 5',
-						'short_address'   => 'Тверская, 5',
-						'locality'        => 'Москва',
-						'postal_code'     => '125009',
-						'phone'           => '+7 495 100-00-01',
-						'instruction'     => 'Вход со двора, 2 этаж.',
-						'work_time'       => 'Пн-Вс 09:00-21:00',
-						'payment_methods' => [ 'card', 'cod' ],
-						'photos'          => [],
-						'type'            => [ 'code' => 'PVZ', 'label' => 'Пункт выдачи заказов' ],
-						'accepts_cod'     => true,
-						'max_weight'      => null,
-					],
-					[
-						'id'              => self::COD_REFUSING_POINT_ID,
-						'name'            => 'ПВЗ «Арбатская — без оплаты при получении»',
-						'lat'             => 55.7522,
-						'lng'             => 37.5994,
-						'address'         => 'Москва, ул. Арбат, д. 12',
-						'short_address'   => 'Арбат, 12',
-						'locality'        => 'Москва',
-						'postal_code'     => '119002',
-						'phone'           => '+7 495 100-00-02',
-						'instruction'     => 'Отдельный вход с торца здания.',
-						'work_time'       => 'Пн-Сб 10:00-20:00',
-						'payment_methods' => [ 'card' ],
-						'photos'          => [],
-						'type'            => [ 'code' => 'PVZ', 'label' => 'Пункт выдачи заказов' ],
-						'accepts_cod'     => false,
-						'max_weight'      => null,
-					],
-					[
-						'id'              => 'FIX-BULK-3',
-						'name'            => 'ПВЗ «Красная Пресня»',
-						'lat'             => 55.7607,
-						'lng'             => 37.5717,
-						'address'         => 'Москва, ул. Красная Пресня, д. 24',
-						'short_address'   => 'Красная Пресня, 24',
-						'locality'        => 'Москва',
-						'postal_code'     => '123242',
-						'phone'           => '+7 495 100-00-03',
-						'instruction'     => 'Цоколь, вход со стороны парковки.',
-						'work_time'       => 'Пн-Вс 08:00-22:00',
-						'payment_methods' => [ 'card', 'cod' ],
-						'photos'          => [],
-						'type'            => [ 'code' => 'PVZ', 'label' => 'Пункт выдачи заказов' ],
-						'accepts_cod'     => true,
-						'max_weight'      => null,
-					],
-					[
-						'id'              => self::WEIGHT_LIMITED_POINT_ID,
-						'name'            => 'ПВЗ «Сокольники — лимит 1 кг»',
-						'lat'             => 55.7887,
-						'lng'             => 37.6789,
-						'address'         => 'Москва, ул. Сокольнический Вал, д. 8',
-						'short_address'   => 'Сокольнический Вал, 8',
-						'locality'        => 'Москва',
-						'postal_code'     => '107113',
-						'phone'           => '+7 495 100-00-04',
-						'instruction'     => 'Небольшой пункт — только лёгкие посылки.',
-						'work_time'       => 'Пн-Пт 10:00-19:00',
-						'payment_methods' => [ 'card', 'cod' ],
-						'photos'          => [],
-						'type'            => [ 'code' => 'PVZ', 'label' => 'Пункт выдачи заказов' ],
-						'accepts_cod'     => true,
-						'max_weight'      => 1000,
-					],
-					[
-						'id'              => 'FIX-BULK-5',
-						'name'            => 'ПВЗ «Строгино»',
-						'lat'             => 55.8027,
-						'lng'             => 37.4092,
-						'address'         => 'Москва, Строгинский б-р, д. 15',
-						'short_address'   => 'Строгинский б-р, 15',
-						'locality'        => 'Москва',
-						'postal_code'     => '123592',
-						'phone'           => '+7 495 100-00-05',
-						'instruction'     => '',
-						'work_time'       => 'Пн-Вс 09:00-21:00',
-						'payment_methods' => [ 'card', 'cod' ],
-						'photos'          => [],
-						'type'            => [ 'code' => 'PVZ', 'label' => 'Пункт выдачи заказов' ],
-						'accepts_cod'     => true,
-						'max_weight'      => null,
-					],
-				];
+				return require __DIR__ . '/fixture-points.php';
 			}
 		}
 	}
