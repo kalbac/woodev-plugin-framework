@@ -1261,3 +1261,71 @@
 	outline: 2px solid var( --woodev-pickup-accent, #06aedd );
 	outline-offset: 1px;
 }
+
+/* -------------------------------------------------------------------------
+ * Mobile — 782px, the WordPress admin breakpoint, the SAME one `woodev-modal.css` already uses
+ * for its own full-screen dialog rule (spec V-15: one breakpoint for the whole feature, not two).
+ * That file's mobile block is what makes the dialog fill the screen; everything below adapts
+ * THIS file's panels/controls to that full-bleed stage instead of the desktop's centred dialog
+ * with its generous margins — a designed layout, not merely an unbroken one.
+ * ---------------------------------------------------------------------- */
+
+@media screen and ( max-width: 782px ) {
+
+	/* A 320px-capped column is unusable once the dialog itself is full-screen — both panels take
+	   the whole stage width instead. */
+	.woodev-pickup-list,
+	.woodev-pickup-card {
+		max-width: none;
+	}
+
+	/* The toggle's open-state offset normally pushes it to sit BESIDE the list's own 320px cap
+	   (`calc( min( 320px, 100% - 48px ) + 16px )` — see the file docblock's "A SIBLING of the
+	   panels" note). With the list now full-width there is no "beside" left: that formula would
+	   land the button ~40px in from the panel's own edge, stranded over list content instead of
+	   anchored to a corner. Falling back to the SAME offset as the closed state puts it back in a
+	   predictable corner, floating over the (now full-bleed) list like a standard mobile FAB — its
+	   own `z-index: 4` and drop shadow already read as "in front of", not "part of", the panel
+	   beneath it. */
+	.woodev-pickup-stage.is-open .woodev-pickup-list__toggle {
+		right: 16px;
+		bottom: 16px;
+	}
+
+	/*
+	 * Every tap target reaches the 44px accessible minimum. `.woodev-pickup-list__toggle` and the
+	 * search-bar home of `.woodev-pickup-filter__toggle` are NOT listed here because they already
+	 * clear it at their desktop size (44×44 and 48×48 respectively, see both above) — only the
+	 * filter toggle's fallback list-home (32×32, used when the plugin disables search), the zoom
+	 * buttons (36×36) and the card close button (32×32) are still under the minimum.
+	 */
+	.woodev-pickup-list .woodev-pickup-filter__toggle,
+	.woodev-pickup-zoom__button,
+	.woodev-pickup-card__close {
+		width: 44px;
+		height: 44px;
+	}
+
+	/* The results dropdown gets a screen-appropriate cap instead of the desktop's flat 320px.
+	   (The search field itself needs no override: `.woodev-pickup-search` is already `flex: 1 1
+	   auto` inside `.woodev-pickup-controls`, so it already fills whatever width that row has —
+	   full width of the row on a narrow screen, same as desktop, no cap ever stood in its way.) */
+	.woodev-pickup-search__results {
+		max-height: 50vh;
+	}
+
+	/* Above the copyright line, not on it. Narrower viewports make ymaps' own copyright string
+	   more likely to wrap onto a second line than the desktop width does — the same real-estate
+	   concern `.woodev-pickup-list__body`'s own `padding-bottom: 28px` already reserves for below
+	   — so the safety margin under the zoom control grows to match. */
+	.woodev-pickup-zoom {
+		bottom: 88px;
+	}
+
+	/* Extra clearance for the sticky CTA at the very bottom edge of the now full-bleed dialog
+	   (`woodev-modal.css`'s mobile `height: 100%`) — on a real phone that edge is where the
+	   gesture bar/home indicator lives, real estate the boxed desktop dialog never reaches. */
+	.woodev-pickup-card__footer {
+		padding-bottom: 24px;
+	}
+}

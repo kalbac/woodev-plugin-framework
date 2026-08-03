@@ -339,6 +339,22 @@
 		max-height: none;
 		border-radius: 0;
 	}
+
+	/*
+	 * `!important` — the one exception in this file, and a real one: `woodev-modal.js`'s
+	 * `_render()` applies a consumer's `bodyHeight` option (the pickup map passes
+	 * `Pickup_Handler`'s `min(80vh, 800px)`, a DESKTOP-shaped value — see that file's own
+	 * `.woodev-pickup-map` note) as an INLINE `body.style.height`. An inline style always
+	 * outranks any class selector regardless of specificity, so no selector strength here —
+	 * only `!important` in an author stylesheet — can stop that desktop value from surviving
+	 * onto this full-screen mobile dialog. `auto` hands sizing back to the header/body flex
+	 * split immediately above (`.woodev-modal__content { display: flex; flex-direction: column }`,
+	 * body `flex: 1 1 auto`), which already fills whatever height `.woodev-modal__content`
+	 * itself resolves to.
+	 */
+	.woodev-modal__body {
+		height: auto !important;
+	}
 }
 
 /*
