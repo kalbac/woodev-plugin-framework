@@ -300,6 +300,23 @@ StubPanels.prototype.isBusy = function() {
 };
 
 /**
+ * Task 17 (spec V-5): records every `showMessage( key )`/`hideMessage()` call — this file's own
+ * tests assert on `panels.showMessageCalls`/`panels.hideMessageCalls` rather than any modal-level
+ * DOM, since the real `Panels.prototype.showMessage()`'s own DOM contract is `pickup-panels.test.js`'s
+ * job (spec V-5's centred card lives on the panels, not the dialog).
+ */
+StubPanels.prototype.showMessage = function( key ) {
+	this.showMessageCalls = this.showMessageCalls || [];
+	this.showMessageCalls.push( key );
+};
+
+StubPanels.prototype.hideMessageCalls = 0;
+
+StubPanels.prototype.hideMessage = function() {
+	this.hideMessageCalls = ( this.hideMessageCalls || 0 ) + 1;
+};
+
+/**
  * Builds a fake `WoodevPickupDataSource` factory whose `fetchPoints()`
  * resolves/rejects with whatever `impl` returns — no real `fetch`, no
  * debounce, fully synchronous-microtask-controlled so tests stay fast and
@@ -1073,23 +1090,25 @@ test.each( [
 	[ 'woodev_pickup_upstream_error', 'upstreamError' ],
 	[ 'woodev_pickup_rate_limited', 'rateLimited' ],
 	[ 'woodev_pickup_point_not_found', 'notFound' ],
-] )( 'dataSource code %s maps to the PHP-emitted i18n.%s message', async ( code, i18nKey ) => {
+] )( 'dataSource code %s calls panels.showMessage( %s ) — the i18n KEY, not a pre-resolved string '
+	+ '(Task 17, spec V-5: showMessage() resolves its own text, so a plugin\'s '
+	+ '`woodev_pickup_map_i18n` override applies here exactly like everywhere else)',
+async ( code, i18nKey ) => {
 	window.WoodevPickupDataSource = fakeDataSourceFactory( () =>
 		Promise.reject( { status: 502, code: code, message: 'raw ' + code } )
 	);
-	const config = makeConfig();
-	setConfig( config );
+	setConfig( makeConfig() );
 	mountAll();
 	clickTrigger();
 
 	await flushAsync();
 
-	const dialog = document.querySelector( '[role="dialog"]' );
-	expect( dialog.textContent ).toContain( config.i18n[ i18nKey ] );
-	expect( dialog.textContent ).not.toContain( code );
+	const panels = StubPanels.instances[ StubPanels.instances.length - 1 ];
+	expect( panels.showMessageCalls ).toEqual( [ i18nKey ] );
 } );
 
-test( 'an unmapped/unknown code falls back to the generic error message, never the raw code', async () => {
+test( 'an unmapped/unknown code calls panels.showMessage( \'error\' ) — the generic key, never the '
+	+ 'raw code', async () => {
 	window.WoodevPickupDataSource = fakeDataSourceFactory( () =>
 		Promise.reject( { status: 500, code: 'something_else', message: 'raw' } )
 	);
@@ -1099,38 +1118,62 @@ test( 'an unmapped/unknown code falls back to the generic error message, never t
 
 	await flushAsync();
 
-	const dialog = document.querySelector( '[role="dialog"]' );
-	expect( dialog.textContent ).toContain( 'Не удалось загрузить пункты выдачи' );
-	expect( dialog.textContent ).not.toContain( 'something_else' );
+	const panels = StubPanels.instances[ StubPanels.instances.length - 1 ];
+	expect( panels.showMessageCalls ).toEqual( [ 'error' ] );
 } );
 
-test( 'a genuinely empty result shows the message as a NON-destructive notice, keeping the panels chrome '
-	+ '(Task 20: panels share modal.getContainer() with the map — a destructive showEmpty() would wipe '
-	+ 'them out for no reason a dataSource hiccup justifies)', async () => {
+test( 'a genuinely empty BULK result calls panels.showMessage( \'emptyLocality\' ) — never the '
+	+ 'generic `noResults` (reserved for the search view finding nothing, spec V-5) — and never '
+	+ 'a destructive modal state (Task 20: panels share modal.getContainer() with the map — a '
+	+ 'destructive showEmpty() would wipe them out for no reason a dataSource hiccup justifies)',
+async () => {
 	window.WoodevPickupDataSource = fakeDataSourceFactory( () => Promise.resolve( [] ) );
-	setConfig( makeConfig() );
+	setConfig( makeConfig( { strategy: 'bulk' } ) );
 	mountAll();
 	clickTrigger();
 
 	await flushAsync();
 
+	const panels = StubPanels.instances[ StubPanels.instances.length - 1 ];
+	expect( panels.showMessageCalls ).toEqual( [ 'emptyLocality' ] );
+
 	const dialog = document.querySelector( '[role="dialog"]' );
-	expect( dialog.textContent ).toContain( 'Пункты выдачи не найдены' );
 	expect( dialog.querySelector( '.woodev-modal__message--error' ) ).toBeNull();
 	expect( dialog.querySelector( '.woodev-modal__message--empty' ) ).toBeNull();
-	expect( dialog.querySelector( '.woodev-modal__notice' ) ).not.toBeNull();
-	// The panels chrome survived — it lives in the SAME container the empty state would
-	// otherwise have wiped.
+	expect( dialog.querySelector( '.woodev-modal__notice' ) ).toBeNull();
+	// The panels chrome survived — it lives in the SAME container the destructive empty state
+	// would otherwise have wiped.
 	expect( dialog.querySelector( '.woodev-pickup-list' ) ).not.toBeNull();
 } );
 
-test( 'a non-empty result shows neither the error nor the empty state', async () => {
+test( 'a genuinely empty VIEWPORT (boundsChange) result calls panels.showMessage( \'emptyInView\' ), '
+	+ 'never `emptyLocality` (that key is bulk-only) or the generic `noResults` (spec V-5)', async () => {
+	window.WoodevPickupDataSource = fakeDataSourceFactory( () => Promise.resolve( [] ) );
+	setConfig( makeConfig( { strategy: 'viewport' } ) );
+	mountAll();
+	clickTrigger();
+	await flushAsync();
+
+	const panels = StubPanels.instances[ StubPanels.instances.length - 1 ];
+	const provider = StubProvider.instances[ StubProvider.instances.length - 1 ];
+
+	provider.emit( 'boundsChange', [ 1, 2, 3, 4 ] );
+	await flushAsync();
+
+	expect( panels.showMessageCalls ).toEqual( [ 'emptyInView' ] );
+} );
+
+test( 'a non-empty result calls neither showMessage() (nothing to show) nor leaves any destructive '
+	+ 'modal state', async () => {
 	window.WoodevPickupDataSource = fakeDataSourceFactory( () => Promise.resolve( [ point() ] ) );
 	setConfig( makeConfig() );
 	mountAll();
 	clickTrigger();
 
 	await flushAsync();
+
+	const panels = StubPanels.instances[ StubPanels.instances.length - 1 ];
+	expect( panels.showMessageCalls ).toBeUndefined();
 
 	const dialog = document.querySelector( '[role="dialog"]' );
 	expect( dialog.querySelector( '.woodev-modal__message--error' ) ).toBeNull();
@@ -1162,7 +1205,9 @@ DrawingProvider.prototype.init = function( container, config, dataSource ) {
 	}
 };
 
-test( 'once a set is drawn, a SUBSEQUENT empty refresh() shows a NOTICE, keeping the drawn content', async () => {
+test( 'once a set is drawn, a SUBSEQUENT empty refresh() calls panels.showMessage( \'emptyLocality\' ), '
+	+ 'keeping the drawn content — the card never destroys anything (spec V-5), so this no longer '
+	+ 'needs the OLD hasDrawnPoints-gated notice-vs-destructive-replace distinction', async () => {
 	let resolveWith = [ point() ];
 	window.WoodevPickupDataSource = fakeDataSourceFactory( () => Promise.resolve( resolveWith ) );
 	setConfig( makeConfig() );
@@ -1178,15 +1223,16 @@ test( 'once a set is drawn, a SUBSEQUENT empty refresh() shows a NOTICE, keeping
 	// A changed viewport/payment method, via refresh() — the only re-fetch trigger under
 	// `strategy: 'bulk'` with no real provider driving boundsChange.
 	resolveWith = [];
+	const panels = StubPanels.instances[ StubPanels.instances.length - 1 ];
 	await getSession( FIELD_ID ).refresh();
 
 	expect( dialog.querySelector( '.drawn-map-marker' ) ).not.toBeNull(); // still there!
-	expect( dialog.querySelector( '.woodev-modal__message--empty' ) ).toBeNull();
-	expect( dialog.querySelector( '.woodev-modal__notice' ) ).not.toBeNull();
-	expect( dialog.textContent ).toContain( 'Пункты выдачи не найдены' );
+	expect( panels.showMessageCalls ).toEqual( [ 'emptyLocality' ] );
 } );
 
-test( 'once drawn, a failed refresh() shows a NOTICE with retry, keeping the drawn content', async () => {
+test( 'once drawn, a failed refresh() calls panels.showMessage( \'upstreamError\' ), keeping the '
+	+ 'drawn content, and the card\'s own retryRequested event destroys the OLD provider and '
+	+ 'builds a fresh one, never re-init()ing the live instance', async () => {
 	let shouldFail = false;
 	window.WoodevPickupDataSource = fakeDataSourceFactory( () =>
 		shouldFail
@@ -1204,27 +1250,43 @@ test( 'once drawn, a failed refresh() shows a NOTICE with retry, keeping the dra
 	expect( dialog.querySelector( '.drawn-map-marker' ) ).not.toBeNull();
 
 	shouldFail = true;
+	const panels = StubPanels.instances[ StubPanels.instances.length - 1 ];
 	await getSession( FIELD_ID ).refresh();
 
 	expect( dialog.querySelector( '.drawn-map-marker' ) ).not.toBeNull(); // still there!
-	expect( dialog.querySelector( '.woodev-modal__message--error' ) ).toBeNull();
-	const notice = dialog.querySelector( '.woodev-modal__notice' );
-	expect( notice ).not.toBeNull();
-	expect( notice.textContent ).toContain( 'Сервис пунктов выдачи временно недоступен' );
+	expect( panels.showMessageCalls ).toEqual( [ 'upstreamError' ] );
 
-	// Retry on the notice destroys the OLD provider and builds a fresh one — never
-	// re-init()s the live instance.
+	// Retrying — the card's own `retryRequested` event in the real class, `panels.emit()` here —
+	// destroys the OLD provider and builds a fresh one, never re-init()s the live instance.
 	const oldProvider = StubProvider.instances[ StubProvider.instances.length - 1 ];
-	const retryButton = notice.querySelector( '.woodev-modal__notice-retry' );
-	expect( retryButton ).not.toBeNull();
 
 	shouldFail = false;
-	retryButton.dispatchEvent( new MouseEvent( 'click', { bubbles: true } ) );
+	panels.emit( 'retryRequested' );
 	await flushAsync();
 
 	expect( oldProvider.destroyed ).toBe( true );
 	expect( StubProvider.instances.length ).toBe( 2 );
 	expect( StubProvider.instances[ 1 ] ).not.toBe( oldProvider );
+} );
+
+test( 'a successful refresh() after an empty/failed one calls panels.hideMessage(), so the card '
+	+ 'never lingers over a map that has since drawn real points', async () => {
+	let resolveWith = [];
+	window.WoodevPickupDataSource = fakeDataSourceFactory( () => Promise.resolve( resolveWith ) );
+	setConfig( makeConfig() );
+
+	mountAll();
+	clickTrigger();
+	await flushAsync();
+
+	const panels = StubPanels.instances[ StubPanels.instances.length - 1 ];
+	expect( panels.showMessageCalls ).toEqual( [ 'emptyLocality' ] );
+	expect( panels.hideMessageCalls || 0 ).toBe( 0 );
+
+	resolveWith = [ point() ];
+	await getSession( FIELD_ID ).refresh();
+
+	expect( panels.hideMessageCalls ).toBe( 1 );
 } );
 
 test( 'BEFORE anything is drawn, a provider-level error still uses the destructive showError (nothing to lose)', () => {
@@ -1586,19 +1648,24 @@ test( 'provider nothingNearby calls panels.showNothingNearby with the same paylo
 	expect( session.panels.lastNothingNearby ).toBe( info );
 } );
 
-test( 'provider bboxTooWide shows the i18n.zoomIn message WITHOUT destroying the map/panels the '
-	+ 'customer is being asked to zoom', async () => {
-	const session = await openSession( configWith() );
+test( 'provider bboxTooWide calls panels.showMessage( \'zoomIn\' ) WITHOUT destroying the map/panels '
+	+ 'the customer is being asked to zoom', async () => {
+	// `strategy: 'viewport'` — bboxTooWide is a viewport-only concept, and the bulk strategy's own
+	// initial fetch (the default `beforeEach` dataSource resolves `[]`) would otherwise push its
+	// OWN `emptyLocality` call before this test ever gets to bboxTooWide.
+	const session = await openSession( configWith( { strategy: 'viewport' } ) );
 
 	session.provider.emit( 'bboxTooWide', null );
 
+	// NON-destructive: `panels.showMessage()` (spec V-5), never the whole-body
+	// showError()/showEmpty() replacement — wiping the map/panels here would make the "zoom in"
+	// instruction impossible to follow, and the search/filter controls must stay usable too.
+	expect( session.panels.showMessageCalls ).toEqual( [ 'zoomIn' ] );
+
 	const dialog = document.querySelector( '[role="dialog"]' );
-	expect( dialog.textContent ).toContain( 'Приблизьте карту, чтобы увидеть пункты выдачи' );
-	// NON-destructive: a notice, never the whole-body showError()/showEmpty() replacement —
-	// wiping the map/panels here would make the "zoom in" instruction impossible to follow.
 	expect( dialog.querySelector( '.woodev-modal__message--error' ) ).toBeNull();
 	expect( dialog.querySelector( '.woodev-modal__message--empty' ) ).toBeNull();
-	expect( dialog.querySelector( '.woodev-modal__notice' ) ).not.toBeNull();
+	expect( dialog.querySelector( '.woodev-modal__notice' ) ).toBeNull();
 	expect( dialog.querySelector( '.woodev-pickup-list' ) ).not.toBeNull();
 } );
 

@@ -339,6 +339,26 @@
 	}
 
 	/**
+	 * The i18n KEY counterpart to {@see errorMessage} above — used by callers that hand a key to
+	 * `panels.showMessage()` (Task 17, spec V-5) rather than a pre-resolved string. `showMessage()`
+	 * looks the string up itself (same as every other label this file reads), so resolving a KEY
+	 * here — not text — is what lets a plugin's `woodev_pickup_map_i18n` override apply to a
+	 * mapped error exactly the same way it applies to the generic one. Falls back to the generic
+	 * `'error'` key in exactly the same two cases `errorMessage()` falls back to its generic
+	 * string: an unmapped code, or a mapped key a plugin's filter blanked out.
+	 *
+	 * @param {Object}      config
+	 * @param {Object|null} reason `{ status, code, message }`, or null/undefined.
+	 * @returns {string}
+	 */
+	function errorMessageKey( config, reason ) {
+		var code = reason && reason.code;
+		var key = code ? ERROR_MESSAGE_KEYS[ code ] : null;
+
+		return ( key && text( config, key ) ) ? key : 'error';
+	}
+
+	/**
 	 * Binds a handler for WooCommerce's `updated_checkout` — through jQuery when
 	 * present (every real checkout page), a plain native event of the same name
 	 * otherwise (keeps this file testable without a real jQuery build loaded).
@@ -962,33 +982,32 @@
 		}
 
 		/**
-		 * The degrade path for a `fetchAndSetPoints()` outcome specifically — see that
-		 * function's own call sites. A dataSource fetch failing or coming back empty NEVER
-		 * implies the map/provider itself is broken: once `panels` exist (`!ownsChrome`), the
-		 * customer can still pan/search/filter — the map canvas and the framework's own list/
-		 * search/filter chrome both stay fully live regardless of what one fetch returned. The
-		 * destructive `showError()`/`showEmpty()` path (via {@see degrade}) would replace
-		 * `modal.getContainer()`'s WHOLE body — which is where `panels`' own DOM root ALSO
-		 * lives (see the docblock above) — wiping that chrome out from under the customer for
-		 * no reason a dataSource hiccup justifies. This is therefore ALWAYS a non-destructive
-		 * `showNotice()` once panels exist; only a genuine PROVIDER-level `error` (the map/embed
-		 * itself failing — nothing at all is usable then) still goes through {@see degrade}'s
-		 * `hasDrawnPoints`-gated escalation. With no panels (`ownsChrome`), this never runs at
-		 * all — `fetchAndSetPoints` is never called for that branch — so the fallback to
-		 * {@see degrade} below is defensive only.
+		 * The degrade path for a `fetchAndSetPoints()`/`bboxTooWide` outcome specifically (Task
+		 * 17, spec V-5) — see those call sites below. A dataSource fetch failing, coming back
+		 * empty, or a bbox too wide to fetch at all NEVER implies the map/provider itself is
+		 * broken: once `panels` exist (`!ownsChrome`), the customer can still pan/search/filter
+		 * regardless of what one fetch returned — the map canvas and the framework's own list/
+		 * search/filter chrome both stay fully live. `panels.showMessage()` is non-destructive BY
+		 * CONSTRUCTION (a small card over the map, never a replacement for the interface — see
+		 * that method's own docblock), so unlike the OLD `modal.showNotice()`-based version of
+		 * this function, there is no `hasDrawnPoints`-gated choice to make any more: the card
+		 * shows every time, drawn content or not. Only a genuine PROVIDER-level `error` (the map/
+		 * embed itself failing — nothing at all is usable then) still goes through {@see degrade}'s
+		 * destructive/non-destructive split. With no panels (`ownsChrome`), neither
+		 * `fetchAndSetPoints` nor the `bboxTooWide` handler ever runs (see their own docblocks) —
+		 * the fallback to {@see degrade} below is defensive only.
 		 *
-		 * @param {string}        message
-		 * @param {Function|null} onRetry
+		 * @param {string} key an i18n key `panels.showMessage()` resolves itself.
 		 * @returns {void}
 		 */
-		function degradeFetch( message, onRetry ) {
+		function showFetchMessage( key ) {
 			if ( panels ) {
-				modal.showNotice( message, onRetry || undefined );
+				panels.showMessage( key );
 
 				return;
 			}
 
-			degrade( message, onRetry );
+			degrade( text( config, key ), null );
 		}
 
 		/**
@@ -1077,20 +1096,32 @@
 
 					if ( points.length > 0 ) {
 						hasDrawnPoints = true;
+
+						// Task 17 (spec V-5): a LATER fetch settling with real points must not leave
+						// an earlier empty/error card sitting over a map that has since drawn them.
+						if ( panels ) {
+							panels.hideMessage();
+						}
 					} else {
-						degradeFetch( text( config, 'noResults' ), null );
+						// `emptyLocality` (a locality genuinely has none) vs `emptyInView` (the
+						// current viewport does) — the SAME shared function backs both the bulk
+						// strategy's one-shot fetch and the viewport strategy's per-bbox
+						// `boundsChange` fetch (see the call sites below), so the key is chosen from
+						// `config.strategy`, not hardcoded to either. Distinct from `noResults`,
+						// which stays reserved for the search view finding nothing (spec V-5).
+						showFetchMessage( 'bulk' === config.strategy ? 'emptyLocality' : 'emptyInView' );
 					}
 
 					return points;
 				},
 				function( reason ) {
 					// See the resolve branch above — a failed fetch settles stage 2 exactly like a
-					// successful one does; the customer gets the error/notice state, not a map stuck
+					// successful one does; the customer gets the error card, not a map stuck
 					// non-interactive forever over a request that will never come back.
 					clearInitialBusy();
 
 					if ( ! destroyed ) {
-						degradeFetch( errorMessage( config, reason ), start );
+						showFetchMessage( errorMessageKey( config, reason ) );
 					}
 
 					return Promise.reject( reason );
@@ -1285,6 +1316,16 @@
 					provider.clearAddress();
 				}
 			} );
+
+			// Task 17 (spec V-5): the message card's own retry control (an empty/failed fetch —
+			// see `showFetchMessage()`) — wired ONCE here, like every other `panels.on(...)` call
+			// in this block, never inside `start()` itself (a retry re-runs `start()`, it does not
+			// re-wire the panels, which are constructed exactly once per session; see the docblock
+			// above). `start()` is a function DECLARATION, hoisted above this call, so referencing
+			// it here — before its own definition further down — is safe.
+			panels.on( 'retryRequested', function() {
+				start();
+			} );
 		}
 
 		/**
@@ -1356,7 +1397,7 @@
 					// A too-wide bbox is a normal, transient viewport state — not an error, and
 					// not something the destructive path (via degrade()) may ever answer with:
 					// wiping the map/panels would destroy the very thing the "zoom in" message
-					// is asking the customer to use. See degradeFetch()'s own docblock for the
+					// is asking the customer to use. See showFetchMessage()'s own docblock for the
 					// identical shared-container reasoning.
 					//
 					// Task 16 (spec V-4): this can be the FIRST thing the provider ever reports
@@ -1365,7 +1406,7 @@
 					// this call the overlay would sit there forever, blocking the very "zoom in" the
 					// message asks for.
 					clearInitialBusy();
-					degradeFetch( text( config, 'zoomIn' ), null );
+					showFetchMessage( 'zoomIn' );
 				} );
 
 				provider.on( 'searchResults', function( results ) {

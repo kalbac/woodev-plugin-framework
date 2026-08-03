@@ -187,6 +187,12 @@
 	 */
 	var SEARCH_DEBOUNCE_MS = 300;
 
+	/**
+	 * @type {string[]} the `showMessage()` keys with nothing to retry — see that method's own
+	 * docblock for why these three are the exception rather than the rule.
+	 */
+	var NO_RETRY_MESSAGE_KEYS = [ 'emptyLocality', 'emptyInView', 'zoomIn' ];
+
 	/** @type {number} minimum query length before point matching fires at all (spec V-6). */
 	var SEARCH_MIN_CHARS = 3;
 
@@ -1226,6 +1232,13 @@
 		this._busy = false;
 		this._overlayEl = null;
 
+		// Task 17 (spec V-5): the message card {@see Panels.prototype.showMessage} shows/hides —
+		// null until `render()` builds it, exactly like `_overlayEl` above.
+		this._messageEl = null;
+		this._messageCardEl = null;
+		this._messageTextEl = null;
+		this._messageRetryEl = null;
+
 		this.root = null;
 	}
 
@@ -1376,6 +1389,31 @@
 
 		stage.appendChild( overlay );
 
+		// Task 17 (spec V-5): built once here, always present, HIDDEN by default — same
+		// node-reuse discipline as the busy overlay above. Deliberately a SEPARATE element from
+		// it, not a second use of `_overlayEl`: the busy overlay covers the WHOLE stage and its
+		// `is-busy` companion class hides the search/filter controls on purpose (nothing has
+		// loaded yet, see that overlay's own docblock) — this message must do neither, since
+		// the customer can still search or change the filter while it shows (s48 decision, see
+		// {@see Panels.prototype.showMessage}). The wrapper itself is `pointer-events: none`
+		// (`pickup.css`) so it never blocks clicks anywhere except the small centred card inside
+		// it, which is what actually paints over the map (spec V-5's "centred card over the
+		// map, never a replacement for the interface").
+		var message = document.createElement( 'div' );
+		message.className = 'woodev-pickup-message';
+		message.setAttribute( 'role', 'status' );
+		message.hidden = true;
+
+		var messageCard = document.createElement( 'div' );
+		messageCard.className = 'woodev-pickup-message__card';
+
+		var messageText = document.createElement( 'p' );
+		messageText.className = 'woodev-pickup-message__text';
+		messageCard.appendChild( messageText );
+
+		message.appendChild( messageCard );
+		stage.appendChild( message );
+
 		// Removes a STALE stage only — never the whole container (Task 16 fix; this used to be a
 		// blind `empty( this._container )`). `pickup-mount.js` calls `modal.showLoading()` BEFORE
 		// constructing this instance at all (spec V-4 stage 1), appending its spinner overlay
@@ -1397,6 +1435,10 @@
 		this._listEl = list;
 		this._listBodyEl = body;
 		this._cardEl = card;
+		this._messageEl = message;
+		this._messageCardEl = messageCard;
+		this._messageTextEl = messageText;
+		this._messageRetryEl = null;
 		this._overlayEl = overlay;
 
 		var self = this;
@@ -1463,6 +1505,83 @@
 	 */
 	Panels.prototype.isBusy = function() {
 		return this._busy;
+	};
+
+	/**
+	 * Shows the plugin's own i18n text as a small centred card over the map (Task 17, spec V-5) —
+	 * the framework's answer to "the pool is genuinely empty" or "the last request failed",
+	 * looked up the SAME way every other label in this file is (see the file docblock's rule I1:
+	 * a missing key renders BLANK, never a hardcoded Russian fallback that would mask a PHP/JS
+	 * i18n-key mismatch). Deliberately NOT `setBusy()`'s stage-wide overlay: that one hides the
+	 * search/filter controls and disables the map on purpose (nothing has loaded yet); this one
+	 * must not, because the customer can still search or change the filter while an empty/error
+	 * card is showing (s48 decision) — see {@see Panels.prototype.render}'s own note on why the
+	 * card is a SEPARATE element from the busy overlay, never a second use of it.
+	 *
+	 * Every key grows a retry control EXCEPT the three in {@see NO_RETRY_MESSAGE_KEYS}: an empty
+	 * bulk/viewport result and a too-wide bbox have nothing to retry, only a different
+	 * search/zoom to try — matching `WoodevModal#showError()` vs `#showEmpty()`'s identical
+	 * split. Every OTHER key — the generic `'error'` and the mount's own specific
+	 * `upstreamError`/`rateLimited`/`notFound` mappings alike — is a failed REQUEST, which is
+	 * always worth retrying. Clicking retry emits `retryRequested` (no payload) rather than
+	 * calling a caller-supplied function directly — this file never holds a reference to the
+	 * mount's own `start()`, exactly like every other cross-file action here (`zoom`,
+	 * `showNearestRequested`, …).
+	 *
+	 * Idempotent and replaceable: calling this again — with the same key or a different one —
+	 * overwrites the previous text/retry state rather than stacking a second card. A no-op
+	 * before `render()` (nothing to show it over yet).
+	 *
+	 * @since 2.0.2
+	 *
+	 * @param {string} key an i18n key, e.g. `'emptyLocality'`, `'emptyInView'`, `'error'`, `'zoomIn'`,
+	 *                     or one of the mount's own specific error keys (`'upstreamError'`, …).
+	 * @returns {void}
+	 */
+	Panels.prototype.showMessage = function( key ) {
+		if ( ! this._messageEl ) {
+			return;
+		}
+
+		this._messageTextEl.textContent = text( this._config, key );
+
+		if ( this._messageRetryEl ) {
+			this._messageCardEl.removeChild( this._messageRetryEl );
+			this._messageRetryEl = null;
+		}
+
+		if ( -1 === NO_RETRY_MESSAGE_KEYS.indexOf( key ) ) {
+			var self = this;
+			var retryButton = document.createElement( 'button' );
+
+			retryButton.type = 'button'; // Never omit: inside a checkout page a type-less button submits it.
+			retryButton.className = 'woodev-pickup-message__retry';
+			retryButton.textContent = text( this._config, 'retry' );
+			retryButton.addEventListener( 'click', function() {
+				self._emit( 'retryRequested', null );
+			} );
+
+			this._messageCardEl.appendChild( retryButton );
+			this._messageRetryEl = retryButton;
+		}
+
+		this._messageEl.hidden = false;
+	};
+
+	/**
+	 * Hides whatever {@see Panels.prototype.showMessage} last showed, if anything — called once a
+	 * later fetch settles with a non-empty result, so the empty/error card never lingers over a
+	 * map that has since drawn real points. The same node is reused on the next `showMessage()`
+	 * call, matching `setBusy()`'s own "toggle `hidden`, never rebuild" discipline. A no-op
+	 * before `render()`, and a harmless no-op when no message is currently showing.
+	 *
+	 * @since 2.0.2
+	 * @returns {void}
+	 */
+	Panels.prototype.hideMessage = function() {
+		if ( this._messageEl ) {
+			this._messageEl.hidden = true;
+		}
 	};
 
 	/**

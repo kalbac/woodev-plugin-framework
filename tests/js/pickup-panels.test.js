@@ -26,6 +26,13 @@ const config = {
 		// Task 14 (spec V-13): the zoom control's two `aria-label`s — distinct from `zoomIn`,
 		// which labels the unrelated "zoom in to see points" bbox-too-wide message.
 		zoomInLabel: 'Приблизить карту', zoomOutLabel: 'Отдалить карту',
+		// Task 17 (spec V-5): `showMessage()`'s own keys — the two OTHER empty/error states
+		// (`emptyInView` above already existed) plus the generic error text and the retry
+		// control's label.
+		emptyLocality: 'В выбранном населённом пункте нет пунктов выдачи',
+		error: 'Не удалось загрузить пункты выдачи. Попробуйте ещё раз.',
+		zoomIn: 'Приблизьте карту, чтобы увидеть пункты выдачи',
+		retry: 'Повторить',
 	},
 };
 
@@ -1740,5 +1747,142 @@ describe( 'setBusy()/isBusy() (spec V-4)', () => {
 
 		expect( () => panels.setBusy( true ) ).not.toThrow();
 		expect( panels.isBusy() ).toBe( true );
+	} );
+} );
+
+// -----------------------------------------------------------------------
+// Task 17 (spec V-5): showMessage()/hideMessage() — the plugin's own empty/error text as a
+// centred card over the map. NEVER a replacement for the whole interface (s48 decision, kept
+// here): unlike setBusy()'s stage-wide overlay above, this must not toggle `is-busy` — the list,
+// search and filter controls stay usable so the customer can still search or change the filter
+// while the card is showing. `pickup-mount.js`'s own wiring of WHEN to call this is that file's
+// test's job; this file only proves the method's own DOM contract.
+// -----------------------------------------------------------------------
+describe( 'showMessage()/hideMessage() (spec V-5)', () => {
+	it( 'is hidden right after render()', () => {
+		const container = document.createElement( 'div' );
+		const panels = new Panels( container, config );
+
+		panels.render();
+
+		expect( container.querySelector( '.woodev-pickup-message' ) ).not.toBeNull();
+		expect( container.querySelector( '.woodev-pickup-message' ).hidden ).toBe( true );
+	} );
+
+	it( 'un-hides the card with the resolved i18n text for the key', () => {
+		const container = document.createElement( 'div' );
+		const panels = new Panels( container, config );
+
+		panels.render();
+		panels.showMessage( 'emptyLocality' );
+
+		const message = container.querySelector( '.woodev-pickup-message' );
+
+		expect( message.hidden ).toBe( false );
+		expect( message.textContent ).toContain( 'В выбранном населённом пункте нет пунктов выдачи' );
+	} );
+
+	it( 'never toggles is-busy or hides the search/filter controls (controls stay usable)', () => {
+		const container = document.createElement( 'div' );
+		const panels = new Panels( container, config );
+
+		panels.render();
+		panels.showMessage( 'zoomIn' );
+
+		expect( panels._stage.className ).not.toContain( 'is-busy' );
+	} );
+
+	it( 'renders NO retry control for a non-error key', () => {
+		const container = document.createElement( 'div' );
+		const panels = new Panels( container, config );
+
+		panels.render();
+		panels.showMessage( 'emptyInView' );
+
+		expect( container.querySelector( '.woodev-pickup-message__retry' ) ).toBeNull();
+	} );
+
+	it( "renders a retry control for the mount's own SPECIFIC error keys too "
+		+ '(e.g. `upstreamError`), not just the literal `error` key — every failed-request key '
+		+ 'is retryable, only the three empty/zoom states are not', () => {
+		const container = document.createElement( 'div' );
+		const withUpstreamError = Object.assign( {}, config, {
+			i18n: Object.assign( {}, config.i18n, {
+				upstreamError: 'Сервис пунктов выдачи временно недоступен. Попробуйте ещё раз позже.',
+			} ),
+		} );
+		const panels = new Panels( container, withUpstreamError );
+
+		panels.render();
+		panels.showMessage( 'upstreamError' );
+
+		const retryButton = container.querySelector( '.woodev-pickup-message__retry' );
+		expect( retryButton ).not.toBeNull();
+		expect( container.querySelector( '.woodev-pickup-message__text' ).textContent )
+			.toBe( 'Сервис пунктов выдачи временно недоступен. Попробуйте ещё раз позже.' );
+	} );
+
+	it( "renders a retry control for the 'error' key, and clicking it emits retryRequested", () => {
+		const container = document.createElement( 'div' );
+		const panels = new Panels( container, config );
+		const onRetry = jest.fn();
+
+		panels.render();
+		panels.on( 'retryRequested', onRetry );
+		panels.showMessage( 'error' );
+
+		const retryButton = container.querySelector( '.woodev-pickup-message__retry' );
+
+		expect( retryButton ).not.toBeNull();
+		expect( retryButton.textContent ).toBe( 'Повторить' );
+
+		retryButton.dispatchEvent( new MouseEvent( 'click', { bubbles: true } ) );
+
+		expect( onRetry ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	it( 'a later non-error showMessage() call removes a previously-rendered retry control', () => {
+		const container = document.createElement( 'div' );
+		const panels = new Panels( container, config );
+
+		panels.render();
+		panels.showMessage( 'error' );
+		panels.showMessage( 'emptyInView' );
+
+		expect( container.querySelector( '.woodev-pickup-message__retry' ) ).toBeNull();
+		expect( container.querySelector( '.woodev-pickup-message' ).textContent )
+			.toContain( 'В этой области пунктов выдачи нет' );
+	} );
+
+	it( 'renders BLANK, never a hardcoded Russian fallback, for a missing i18n key (rule I1)', () => {
+		const container = document.createElement( 'div' );
+		const panels = new Panels( container, withoutI18nKey( config, 'emptyLocality' ) );
+
+		panels.render();
+		panels.showMessage( 'emptyLocality' );
+
+		const textEl = container.querySelector( '.woodev-pickup-message__text' );
+
+		expect( textEl.textContent ).toBe( '' );
+	} );
+
+	it( 'hideMessage() hides the card again without removing it from the DOM', () => {
+		const container = document.createElement( 'div' );
+		const panels = new Panels( container, config );
+
+		panels.render();
+		panels.showMessage( 'error' );
+		const message = container.querySelector( '.woodev-pickup-message' );
+		panels.hideMessage();
+
+		expect( container.querySelector( '.woodev-pickup-message' ) ).toBe( message );
+		expect( message.hidden ).toBe( true );
+	} );
+
+	it( 'does not throw when called before render()', () => {
+		const panels = new Panels( document.createElement( 'div' ), config );
+
+		expect( () => panels.showMessage( 'error' ) ).not.toThrow();
+		expect( () => panels.hideMessage() ).not.toThrow();
 	} );
 } );

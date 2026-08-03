@@ -610,93 +610,121 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 * }
 		 */
 		public function get_js_config(): array {
+			$strings = [
+				'modalTitle'     => __( 'Выберите пункт выдачи', 'woodev-plugin-framework' ),
+				'close'          => __( 'Закрыть', 'woodev-plugin-framework' ),
+				'select'         => __( 'Выбрать этот пункт', 'woodev-plugin-framework' ),
+				'loading'        => __( 'Загрузка пунктов выдачи…', 'woodev-plugin-framework' ),
+				'error'          => __(
+					'Не удалось загрузить пункты выдачи. Попробуйте ещё раз.',
+					'woodev-plugin-framework'
+				),
+				'noResults'      => __( 'Пункты выдачи не найдены.', 'woodev-plugin-framework' ),
+				'blocked'        => __(
+					'Этот пункт выдачи недоступен для вашего заказа.',
+					'woodev-plugin-framework'
+				),
+				// Consumed by the mount script (Task 12), not by the modal shell or the map
+				// provider — see Pickup_Mount's own docblock for why it reads these keys.
+				'trigger'        => __( 'Выбрать пункт выдачи', 'woodev-plugin-framework' ),
+				'retry'          => __( 'Повторить', 'woodev-plugin-framework' ),
+				'upstreamError'  => __(
+					'Сервис пунктов выдачи временно недоступен. Попробуйте ещё раз позже.',
+					'woodev-plugin-framework'
+				),
+				'rateLimited'    => __(
+					'Слишком много запросов. Подождите немного и попробуйте снова.',
+					'woodev-plugin-framework'
+				),
+				'notFound'       => __(
+					'Этот пункт выдачи больше не найден. Пожалуйста, выберите другой.',
+					'woodev-plugin-framework'
+				),
+				// Consumed by the map provider scripts (Tasks 13/14), not by this handler or
+				// the modal shell — a missing key here renders BLANK in the provider's UI
+				// rather than throwing, so every one of these nine must stay exact: the
+				// provider reads them by name, never falls back to a hardcoded default.
+				'search'         => __( 'Поиск по адресу', 'woodev-plugin-framework' ),
+				'drawerTitle'    => __( 'Пункты выдачи в этой области', 'woodev-plugin-framework' ),
+				'howToGet'       => __( 'Как добраться', 'woodev-plugin-framework' ),
+				'paymentMethods' => __( 'Способы оплаты', 'woodev-plugin-framework' ),
+				'workTime'       => __( 'Часы работы', 'woodev-plugin-framework' ),
+				'phone'          => __( 'Телефон', 'woodev-plugin-framework' ),
+				'maxWeight'      => __( 'Максимальный вес', 'woodev-plugin-framework' ),
+				'allTypes'       => __( 'Все типы пунктов', 'woodev-plugin-framework' ),
+				'detailsError'   => __(
+					'Не удалось загрузить подробности о пункте выдачи. Вы всё ещё можете его выбрать.',
+					'woodev-plugin-framework'
+				),
+				// Consumed by the panels (Tasks 12-15), not by this handler or the modal
+				// shell — same "renders blank, never a hardcoded fallback" contract as the
+				// nine keys above.
+				// Task 15 (spec V-12): the point card's "Адрес" section title. Distinct
+				// from `yourAddress` below, which labels the SEARCH field, not a card section.
+				'address'          => __( 'Адрес', 'woodev-plugin-framework' ),
+				'services'         => __( 'Услуги', 'woodev-plugin-framework' ),
+				'yourAddress'      => __( 'Ваш адрес', 'woodev-plugin-framework' ),
+				/* translators: %s: the searched address. */
+				'nearestTo'        => __( 'Ближайшие к «%s»', 'woodev-plugin-framework' ),
+				'resetSearch'      => __( 'Сбросить', 'woodev-plugin-framework' ),
+				'nothingNearby'    => __(
+					'Рядом с этим адресом пунктов выдачи нет.',
+					'woodev-plugin-framework'
+				),
+				'showNearest'      => __( 'Показать ближайший', 'woodev-plugin-framework' ),
+				'continueCheckout' => __( 'Продолжить оформление заказа', 'woodev-plugin-framework' ),
+				'zoomIn'           => __(
+					'Приблизьте карту, чтобы увидеть пункты выдачи',
+					'woodev-plugin-framework'
+				),
+				'sectionPoints'    => __( 'Пункты выдачи', 'woodev-plugin-framework' ),
+				'sectionAddresses' => __( 'Адреса', 'woodev-plugin-framework' ),
+				'filterTypes'      => __( 'Тип пунктов', 'woodev-plugin-framework' ),
+				'emptyInView'      => __( 'В этой области пунктов выдачи нет', 'woodev-plugin-framework' ),
+				// Task 17 (spec V-5): a genuinely empty LOCALITY, distinct from `emptyInView`
+				// (a viewport-strategy "none in THIS VIEW" statement) and from `noResults`
+				// (a search found nothing) — an empty result is domain language (Russian Post
+				// has no pickup points, it has post offices), which is exactly why this whole
+				// map passes through the filter below rather than the framework guessing at
+				// carrier-specific wording itself.
+				'emptyLocality'    => __(
+					'В выбранном населённом пункте нет пунктов выдачи',
+					'woodev-plugin-framework'
+				),
+				// The checkout trigger's second state (Task 20) — a customer who has
+				// already chosen a point sees this instead of `trigger`.
+				'triggerChange'    => __( 'Выбрать другой пункт выдачи', 'woodev-plugin-framework' ),
+				// Task 14 (spec V-13): the zoom control's two `aria-label`s. Distinct from
+				// `zoomIn` above, which labels the unrelated "zoom in to see points" bbox
+				// message — reusing it here would have mislabelled the button with a full
+				// sentence about a different situation.
+				'zoomInLabel'      => __( 'Приблизить карту', 'woodev-plugin-framework' ),
+				'zoomOutLabel'     => __( 'Отдалить карту', 'woodev-plugin-framework' ),
+			];
+
+			/**
+			 * Filters every customer-facing string the pickup map renders.
+			 *
+			 * An empty result is domain language, not framework language — Russian Post has no
+			 * pickup points, it has post offices, so `emptyLocality`'s framework default above
+			 * is wrong text for it. Rather than growing a second, parallel `messages` array
+			 * beside this one, the assembled string map IS the override surface: a plugin
+			 * overrides any key it disagrees with (spec V-5). One string system, not two.
+			 *
+			 * @since 2.0.2
+			 *
+			 * @param array<string, string> $strings   The framework's default strings.
+			 * @param string                $plugin_id The plugin the map belongs to.
+			 */
+			$strings = apply_filters( 'woodev_pickup_map_i18n', $strings, $this->plugin_id );
+
 			return [
 				'fieldId'  => $this->field_id,
 				'strategy' => $this->source->get_strategy(),
 				'provider' => $this->map_provider->get_id(),
 				'restRoot' => $this->rest_root(),
 				'nonce'    => wp_create_nonce( 'wp_rest' ),
-				'i18n'     => [
-					'modalTitle'     => __( 'Выберите пункт выдачи', 'woodev-plugin-framework' ),
-					'close'          => __( 'Закрыть', 'woodev-plugin-framework' ),
-					'select'         => __( 'Выбрать этот пункт', 'woodev-plugin-framework' ),
-					'loading'        => __( 'Загрузка пунктов выдачи…', 'woodev-plugin-framework' ),
-					'error'          => __(
-						'Не удалось загрузить пункты выдачи. Попробуйте ещё раз.',
-						'woodev-plugin-framework'
-					),
-					'noResults'      => __( 'Пункты выдачи не найдены.', 'woodev-plugin-framework' ),
-					'blocked'        => __(
-						'Этот пункт выдачи недоступен для вашего заказа.',
-						'woodev-plugin-framework'
-					),
-					// Consumed by the mount script (Task 12), not by the modal shell or the map
-					// provider — see Pickup_Mount's own docblock for why it reads these keys.
-					'trigger'        => __( 'Выбрать пункт выдачи', 'woodev-plugin-framework' ),
-					'retry'          => __( 'Повторить', 'woodev-plugin-framework' ),
-					'upstreamError'  => __(
-						'Сервис пунктов выдачи временно недоступен. Попробуйте ещё раз позже.',
-						'woodev-plugin-framework'
-					),
-					'rateLimited'    => __(
-						'Слишком много запросов. Подождите немного и попробуйте снова.',
-						'woodev-plugin-framework'
-					),
-					'notFound'       => __(
-						'Этот пункт выдачи больше не найден. Пожалуйста, выберите другой.',
-						'woodev-plugin-framework'
-					),
-					// Consumed by the map provider scripts (Tasks 13/14), not by this handler or
-					// the modal shell — a missing key here renders BLANK in the provider's UI
-					// rather than throwing, so every one of these nine must stay exact: the
-					// provider reads them by name, never falls back to a hardcoded default.
-					'search'         => __( 'Поиск по адресу', 'woodev-plugin-framework' ),
-					'drawerTitle'    => __( 'Пункты выдачи в этой области', 'woodev-plugin-framework' ),
-					'howToGet'       => __( 'Как добраться', 'woodev-plugin-framework' ),
-					'paymentMethods' => __( 'Способы оплаты', 'woodev-plugin-framework' ),
-					'workTime'       => __( 'Часы работы', 'woodev-plugin-framework' ),
-					'phone'          => __( 'Телефон', 'woodev-plugin-framework' ),
-					'maxWeight'      => __( 'Максимальный вес', 'woodev-plugin-framework' ),
-					'allTypes'       => __( 'Все типы пунктов', 'woodev-plugin-framework' ),
-					'detailsError'   => __(
-						'Не удалось загрузить подробности о пункте выдачи. Вы всё ещё можете его выбрать.',
-						'woodev-plugin-framework'
-					),
-					// Consumed by the panels (Tasks 12-15), not by this handler or the modal
-					// shell — same "renders blank, never a hardcoded fallback" contract as the
-					// nine keys above.
-					// Task 15 (spec V-12): the point card's "Адрес" section title. Distinct
-					// from `yourAddress` below, which labels the SEARCH field, not a card section.
-					'address'          => __( 'Адрес', 'woodev-plugin-framework' ),
-					'services'         => __( 'Услуги', 'woodev-plugin-framework' ),
-					'yourAddress'      => __( 'Ваш адрес', 'woodev-plugin-framework' ),
-					/* translators: %s: the searched address. */
-					'nearestTo'        => __( 'Ближайшие к «%s»', 'woodev-plugin-framework' ),
-					'resetSearch'      => __( 'Сбросить', 'woodev-plugin-framework' ),
-					'nothingNearby'    => __(
-						'Рядом с этим адресом пунктов выдачи нет.',
-						'woodev-plugin-framework'
-					),
-					'showNearest'      => __( 'Показать ближайший', 'woodev-plugin-framework' ),
-					'continueCheckout' => __( 'Продолжить оформление заказа', 'woodev-plugin-framework' ),
-					'zoomIn'           => __(
-						'Приблизьте карту, чтобы увидеть пункты выдачи',
-						'woodev-plugin-framework'
-					),
-					'sectionPoints'    => __( 'Пункты выдачи', 'woodev-plugin-framework' ),
-					'sectionAddresses' => __( 'Адреса', 'woodev-plugin-framework' ),
-					'filterTypes'      => __( 'Тип пунктов', 'woodev-plugin-framework' ),
-					'emptyInView'      => __( 'В этой области пунктов выдачи нет', 'woodev-plugin-framework' ),
-					// The checkout trigger's second state (Task 20) — a customer who has
-					// already chosen a point sees this instead of `trigger`.
-					'triggerChange'    => __( 'Выбрать другой пункт выдачи', 'woodev-plugin-framework' ),
-					// Task 14 (spec V-13): the zoom control's two `aria-label`s. Distinct from
-					// `zoomIn` above, which labels the unrelated "zoom in to see points" bbox
-					// message — reusing it here would have mislabelled the button with a full
-					// sentence about a different situation.
-					'zoomInLabel'      => __( 'Приблизить карту', 'woodev-plugin-framework' ),
-					'zoomOutLabel'     => __( 'Отдалить карту', 'woodev-plugin-framework' ),
-				],
+				'i18n'     => $strings,
 
 				'defaultLocation' => $this->default_location,
 				'pointIcons'      => $this->normalized_point_icons(),

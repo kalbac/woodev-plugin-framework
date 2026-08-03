@@ -1664,6 +1664,9 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				'sectionAddresses' => 'Адреса',
 				'filterTypes'      => 'Тип пунктов',
 				'emptyInView'      => 'В этой области пунктов выдачи нет',
+				// The Task 17 (spec V-5) key: a genuinely empty LOCALITY, distinct from
+				// `emptyInView` (a viewport statement) and `noResults` (search found nothing).
+				'emptyLocality'    => 'В выбранном населённом пункте нет пунктов выдачи',
 				// The Task 8B trigger-state key.
 				'triggerChange'    => 'Выбрать другой пункт выдачи',
 				// The Task 14 (spec V-13) zoom control keys.
@@ -1684,6 +1687,55 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 					"i18n[\"{$key}\"] must be the exact expected Russian string, not a swapped/blank one"
 				);
 			}
+		}
+
+		/**
+		 * Task 17 (spec V-5): the whole i18n map passes through a filter before it is returned,
+		 * so a plugin can reword ANY key -- not just override a generic set -- because an empty
+		 * result is domain language (Russian Post has no pickup points, it has post offices),
+		 * not framework language. Rather than a second, parallel `messages` array beside this
+		 * one, the existing map IS the override surface: one string system, not two.
+		 */
+		public function test_i18n_passes_through_a_filter_so_a_plugin_can_reword_it(): void {
+			Functions\when( 'rest_url' )->justReturn( 'https://example.test/wp-json/woodev/v1' );
+			Functions\when( 'wp_create_nonce' )->justReturn( 'NONCE' );
+			Functions\when( 'wc_ship_to_billing_address_only' )->justReturn( false );
+
+			Functions\when( 'apply_filters' )->alias(
+				static function ( string $hook, $value, $plugin_id = null ) {
+					if ( 'woodev_pickup_map_i18n' !== $hook ) {
+						return $value;
+					}
+
+					$value['emptyLocality'] = 'В данном населённом пункте нет отделений Почты России';
+
+					return $value;
+				}
+			);
+
+			$config = $this->make_handler()->get_js_config();
+
+			$this->assertSame(
+				'В данном населённом пункте нет отделений Почты России',
+				$config['i18n']['emptyLocality']
+			);
+		}
+
+		/**
+		 * The framework's own default for the newly-added key -- distinct from `emptyInView`
+		 * (a viewport-strategy "none in this view" statement) and from `noResults` (search found
+		 * nothing): "there are no points in the locality you asked for" is neither of those.
+		 */
+		public function test_i18n_ships_a_default_empty_locality_string(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			Functions\when( 'rest_url' )->justReturn( 'https://example.test/wp-json/woodev/v1' );
+			Functions\when( 'wp_create_nonce' )->justReturn( 'NONCE' );
+			Functions\when( 'wc_ship_to_billing_address_only' )->justReturn( false );
+
+			$config = $this->make_handler()->get_js_config();
+
+			$this->assertArrayHasKey( 'emptyLocality', $config['i18n'] );
+			$this->assertNotSame( '', $config['i18n']['emptyLocality'] );
 		}
 
 		// -------------------------------------------------------------------------

@@ -215,6 +215,65 @@
 	display: none;
 }
 
+/* -------------------------------------------------------------------------
+ * Message card (Task 17, spec V-5) — the plugin's own empty/error text (`pickup-panels.js`'s
+ * `showMessage()`) as a small centred card over the map, DELIBERATELY NOT the busy overlay
+ * above: it carries no `is-busy`-equivalent companion class, so the search/filter controls and
+ * the map's own interactivity stay live while it shows — the customer can still search or
+ * change the filter (s48 decision). The wrapper spans the whole stage but is `pointer-events:
+ * none`, so it only ever intercepts clicks on the card itself; everything else (map drags, the
+ * list/search/filter/zoom controls sitting at their own positions) passes straight through it.
+ *
+ * The `[hidden]` rule is REQUIRED, not decoration: an author `display` declaration on the same
+ * selector otherwise wins over the UA stylesheet's own `[hidden]` default (see this file's
+ * identical note on `.woodev-pickup-filter__badge`/`__menu` below) — the busy overlay above
+ * predates that lesson and gets away with it only because `setBusy()` toggles `is-busy`
+ * alongside it; this element has no such companion class to lean on.
+ * ---------------------------------------------------------------------- */
+
+.woodev-pickup-message {
+	position: absolute;
+	inset: 0;
+	z-index: 5;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 24px;
+	pointer-events: none;
+}
+
+.woodev-pickup-message[hidden] {
+	display: none;
+}
+
+.woodev-pickup-message__card {
+	pointer-events: auto;
+	max-width: 320px;
+	padding: 16px 20px;
+	background: #fff;
+	border: 1px solid #dcdcde;
+	border-radius: 8px;
+	box-shadow: 0 2px 12px rgba( 0, 0, 0, 0.15 );
+	text-align: center;
+}
+
+.woodev-pickup-message__text {
+	display: block;
+	margin: 0;
+	color: #1e1e1e;
+}
+
+.woodev-pickup-message__retry {
+	display: inline-block;
+	margin-top: 12px;
+	padding: 6px 16px;
+	border: 0;
+	border-radius: 4px;
+	background: var( --woodev-pickup-accent, #06aedd );
+	color: var( --woodev-pickup-accent-contrast, #fff );
+	cursor: pointer;
+}
+
 /* The embedded provider's iframe. Same height contract as `.woodev-pickup-map` above; the
    border reset stops a theme's global `iframe { border: 1px solid }` from drawing a frame
    inside the dialog. */
