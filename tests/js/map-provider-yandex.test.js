@@ -86,6 +86,28 @@ function makeGeocodeResult( bounds, coordinates ) {
 }
 
 /**
+ * Builds a `ymaps.geocode()` resolution shaped for the Task 12 search-provider path
+ * (`_searchGeocodeProvider()`'s own `.toArray()`/`.properties.set()`/`.properties.get('text')`
+ * reads) — as opposed to {@see makeGeocodeResult}'s single-`.get(0)` shape, which
+ * `_resolveInitialViewport()`/`resolveAddress()` read instead. Each entry's `properties` is a
+ * REAL get/set data manager ({@see makeProperties}) so a test can assert `_searchGeocodeProvider()`
+ * actually tagged it (`properties.get( 'woodevKind' )`) after the fact.
+ *
+ * @param {string[]} texts one `properties.get( 'text' )` value per hit, in order.
+ */
+function makeSearchGeocodeResult( texts ) {
+	const hits = ( texts || [] ).map( ( text ) => ( { properties: makeProperties( { text } ) } ) );
+
+	return {
+		geoObjects: {
+			toArray: () => hits,
+			getLength: () => hits.length,
+		},
+		metaData: {},
+	};
+}
+
+/**
  * Builds a hand-rolled `window[ns]` ymaps stub. See the file docblock for what it covers.
  *
  * @param {Object}  [options]
@@ -104,13 +126,11 @@ function createYmapsStub( options ) {
 
 	stub.geocodeCalls = 0;
 	// A valid, non-empty default result — tests that don't care about the geocode OUTCOME
-	// (only that it was called) never need to touch this.
+	// (only that it was called) never need to touch this. Shaped for the single-hit
+	// `.get(0)`-style consumers (`_resolveInitialViewport()`/`resolveAddress()`) by default; the
+	// Task 12 search-provider tests below override this per-test with `makeSearchGeocodeResult()`,
+	// shaped for the multi-hit `.toArray()`-style consumer instead.
 	stub.geocodeResult = makeGeocodeResult( [ [ 10, 20 ], [ 11, 21 ] ] );
-
-	// Task 19 (D-6, address search) — suggest() is called once per keystroke through the
-	// SearchControl's custom geocode provider; see the `SearchControl` stub below.
-	stub.suggestCalls = 0;
-	stub.suggestResult = [];
 
 	function Map( container, state, mapOptions ) {
 		this.container = container;
@@ -257,14 +277,21 @@ function createYmapsStub( options ) {
 		this.options = layerOptions;
 	}
 
-	// Task 19 (D-6) — only the shape `_buildSearchControl()`/`_searchGeocodeProvider()` actually
-	// touch: the constructor's own `options` (read back as `ymapsStub.lastSearchControl.options`
-	// by the given-in-spec tests) and a no-op `search()`/`getResultsCount()`/`showResult()`
-	// "engine" surface — the real `ymaps.control.SearchControl` methods this file's own docblock
-	// says are KEPT, never reimplemented by production code, so nothing more elaborate is needed
-	// here for a jest run.
-	function SearchControl( options ) {
-		this.options = options;
+	// Task 12 (spec V-6/V-7, gotcha `ymaps-control-options-must-be-nested.md`) — `this.options`
+	// deliberately reads `ctorArgs.options`, the REAL nested sub-object ymaps itself would read,
+	// NOT the whole constructor argument — a stub that stored the whole argument under `.options`
+	// would make a test asserting `.options.provider.geocode` pass even on the OLD buggy
+	// production code (which put `provider` at the ROOT), since the whole root object happens to
+	// have a `provider` key too. `rootArgs` keeps the raw constructor argument available
+	// separately, for the tests that assert the ROOT carries nothing but `options` (proving a
+	// stray `layout`/`provider` at the root — the exact bug this file's gotcha documents — would
+	// be caught). `search()`/`getResultsCount()`/`showResult()` are a no-op "engine" surface — the
+	// real methods this file's own docblock says are KEPT, never reimplemented by production
+	// code, so nothing more elaborate is needed here for a jest run.
+	function SearchControl( ctorArgs ) {
+		this.rootArgs = ctorArgs;
+		this.options = ( ctorArgs && ctorArgs.options ) || {};
+		this.state = ( ctorArgs && ctorArgs.state ) || {};
 		this.search = jest.fn();
 		this.getResultsCount = jest.fn( () => 0 );
 		this.showResult = jest.fn();
@@ -305,17 +332,12 @@ function createYmapsStub( options ) {
 	stub.Placemark = Placemark;
 	stub.projection = { sphericalMercator: 'stub-projection' };
 	stub.templateLayoutFactory = { createClass };
-	stub.geocode = () => {
+	stub.geocode = ( request, options ) => {
 		stub.geocodeCalls += 1;
+		stub.lastGeocodeRequest = request;
+		stub.lastGeocodeOptions = options;
 
 		return Promise.resolve( stub.geocodeResult );
-	};
-	stub.suggest = ( request, options ) => {
-		stub.suggestCalls += 1;
-		stub.lastSuggestRequest = request;
-		stub.lastSuggestOptions = options;
-
-		return Promise.resolve( stub.suggestResult );
 	};
 
 	return stub;
@@ -338,6 +360,10 @@ function makeConfig( overrides ) {
 			defaultLocation: { center: [ 55.75, 37.61 ], zoom: 10 },
 			pointIcons: {},
 			accentColor: '#06aedd',
+			// A truthy default so `_buildSearchControl()` builds a control for every test that
+			// doesn't care about search — a test proving the OPPOSITE (`searchLayoutEl: null` →
+			// no control at all, spec V-6) overrides this explicitly.
+			searchLayoutEl: 'undefined' !== typeof document ? document.createElement( 'div' ) : null,
 		},
 		overrides
 	);
@@ -1294,44 +1320,142 @@ test( 'setPoints() re-applies the ACTIVE state to the focused group when it surv
 } );
 
 // -------------------------------------------------------------------------
-// Address search (Task 19, D-6) — the SearchControl's custom geocode provider,
-// resolveAddress()/focusAddress(), and the "your address" pin lifecycle
+// Address search (Task 12/19, D-6, spec V-6/V-7) — the SearchControl's custom geocode
+// provider, resolveAddress()/focusAddress(), and the "your address" pin lifecycle
 // -------------------------------------------------------------------------
 
-test( 'returns both point matches and suggestions from the custom geocode provider, matching '
-	+ 'the query and excluding a non-matching point from the same pool', async () => {
+// Gotcha `ymaps-control-options-must-be-nested.md`: ymaps controls read exactly
+// `{ data, options, state }` at the root and silently drop anything else. The whole of the
+// operator's original search complaint was `provider`/`layout`/`resultsLayout`/`noPlacemark`
+// sitting at the ROOT of the constructor argument — asserting the root is CLEAN (not merely
+// that `options.x` exists) is the only way to catch that regression: the OLD buggy code also
+// happened to have `.provider` reachable, just via a different (wrong) path.
+test( 'passes layout, noPlacemark, float and the bounded provider under `options` — the ROOT of '
+	+ 'the constructor argument carries nothing else', async () => {
+	await init();
+
+	expect( ymapsStub.lastSearchControl.rootArgs.layout ).toBeUndefined();
+	expect( ymapsStub.lastSearchControl.rootArgs.provider ).toBeUndefined();
+	expect( ymapsStub.lastSearchControl.rootArgs.noPlacemark ).toBeUndefined();
+	expect( ymapsStub.lastSearchControl.rootArgs.float ).toBeUndefined();
+	expect( ymapsStub.lastSearchControl.rootArgs.position ).toBeUndefined();
+
+	expect( ymapsStub.lastSearchControl.options.layout ).toBeDefined();
+	expect( ymapsStub.lastSearchControl.options.noPlacemark ).toBe( true );
+	expect( typeof ymapsStub.lastSearchControl.options.provider.geocode ).toBe( 'function' );
+} );
+
+test( 'positions the control top-left, floating free (Russian Post\'s chrome, spec V-6)', async () => {
+	await init();
+
+	expect( ymapsStub.lastSearchControl.options.float ).toBe( 'none' );
+	expect( ymapsStub.lastSearchControl.options.position ).toEqual( { left: '16px', right: 'auto', top: '16px' } );
+} );
+
+test( 'builds no SearchControl at all when the plugin disabled search (searchLayoutEl is null, '
+	+ 'spec V-6 visibility)', async () => {
+	const provider = await init( { searchLayoutEl: null } );
+
+	expect( ymapsStub.lastSearchControl ).toBeUndefined();
+	expect( provider.searchControl ).toBeNull();
+} );
+
+test( 'returns point matches from the loaded pool, excluding a non-matching point from the same '
+	+ 'pool, alongside the geocoded addresses', async () => {
 	const provider = await init();
 
 	provider.setPoints( [
 		groupWith( { id: '1', name: 'ПВЗ «Магнит»', address: 'Ленина 5' } ),
 		groupWith( { id: '2', name: 'ПВЗ «Пятёрочка»', address: 'Гагарина 10' } ), // must NOT match
 	] );
-	ymapsStub.suggestResult = [ { displayName: 'Москва, Ленина 5', value: 'Москва, Ленина 5' } ];
+	ymapsStub.geocodeResult = makeSearchGeocodeResult( [ 'Москва, Ленина 5' ] );
 
-	const res = await ymapsStub.lastSearchControl.options.provider.geocode( 'ленина', {} );
+	const seen = [];
+	provider.on( 'searchResults', ( results ) => seen.push( results ) );
 
-	expect( res.points ).toHaveLength( 1 );
-	expect( res.points[ 0 ].id ).toBe( '1' ); // NOT '2' — a mutant returning the whole pool fails here
-	expect( res.addresses ).toEqual( [ { displayName: 'Москва, Ленина 5', value: 'Москва, Ленина 5' } ] );
+	await ymapsStub.lastSearchControl.options.provider.geocode( 'ленина' );
+
+	expect( seen[ 0 ].points ).toHaveLength( 1 );
+	expect( seen[ 0 ].points[ 0 ].id ).toBe( '1' ); // NOT '2' — a mutant returning the whole pool fails here
+	expect( seen[ 0 ].addresses ).toEqual( [ { displayName: 'Москва, Ленина 5' } ] );
 } );
 
-test( 'calls suggest, not geocode, while the customer is typing', async () => {
+test( 'geocodes (never suggests) on every call — this path is only ever reached via '
+	+ 'control.search(), which the mount wires to a DELIBERATE submit, never a keystroke', async () => {
 	await init();
 
-	await ymapsStub.lastSearchControl.options.provider.geocode( 'ленина', {} );
+	await ymapsStub.lastSearchControl.options.provider.geocode( 'ленина' );
 
-	expect( ymapsStub.suggestCalls ).toBe( 1 );
+	expect( ymapsStub.geocodeCalls ).toBe( 1 );
+} );
+
+test( 'bounds the geocode strictly to the loaded point set once something has loaded (spec V-7)', async () => {
+	const provider = await init();
+
+	provider.setPoints( [ group( 'a', 55.70, 37.60 ), group( 'b', 55.80, 37.70 ) ] );
+
+	await ymapsStub.lastSearchControl.options.provider.geocode( 'Тверская' );
+
+	const expectedBounds = geo.boundsFor( [ 55.70, 37.60 ], [ group( 'a', 55.70, 37.60 ), group( 'b', 55.80, 37.70 ) ] );
+
+	expect( ymapsStub.lastGeocodeOptions ).toEqual( {
+		results: 5,
+		boundedBy: expectedBounds,
+		strictBounds: true,
+	} );
+} );
+
+test( 'omits the bounds before anything has ever loaded (spec V-7 — no degenerate box)', async () => {
+	await init();
+
+	await ymapsStub.lastSearchControl.options.provider.geocode( 'Тверская' );
+
+	expect( ymapsStub.lastGeocodeOptions ).toEqual( { results: 5 } );
+	expect( ymapsStub.lastGeocodeOptions.boundedBy ).toBeUndefined();
+	expect( ymapsStub.lastGeocodeOptions.strictBounds ).toBeUndefined();
+} );
+
+test( 'tags each geocoded address\'s OWN properties with woodevKind, and returns the real '
+	+ 'geocode geoObjects untouched for the control\'s engine — no synthetic Placemark is ever '
+	+ 'mixed in (see the file docblock\'s "WHY A MATCHED POINT IS NEVER MIXED IN" note)', async () => {
+	await init();
+
+	ymapsStub.geocodeResult = makeSearchGeocodeResult( [ 'Москва, Тверская 1' ] );
+
+	const resolved = await ymapsStub.lastSearchControl.options.provider.geocode( 'Тверская' );
+	const hit = resolved.geoObjects.toArray()[ 0 ];
+
+	expect( hit.properties.get( 'woodevKind' ) ).toBe( 'address' );
+	expect( resolved.geoObjects ).toBe( ymapsStub.geocodeResult.geoObjects ); // passed through, not rebuilt
+} );
+
+test( 'emits searchResults with EMPTY arrays for a query that matches nothing — a narrowed-down '
+	+ 'search must not leave the previous (stale) results on screen', async () => {
+	const seen = [];
+	const provider = await init();
+
+	provider.on( 'searchResults', ( results ) => seen.push( results ) );
+	ymapsStub.geocodeResult = makeSearchGeocodeResult( [] );
+
+	await ymapsStub.lastSearchControl.options.provider.geocode( 'несуществующийзапрос' );
+
+	expect( seen ).toHaveLength( 1 );
+	expect( seen[ 0 ] ).toEqual( { points: [], addresses: [] } );
+} );
+
+test( 'matchLoadedPoints() matches the loaded pool for free, without ever touching the geocoder '
+	+ '— the public half of the same matching the debounced searchType event uses', async () => {
+	const provider = await init();
+
+	provider.setPoints( [
+		groupWith( { id: '1', name: 'ПВЗ «Магнит»', address: 'Ленина 5' } ),
+		groupWith( { id: '2', name: 'ПВЗ «Пятёрочка»', address: 'Гагарина 10' } ),
+	] );
+
+	const matches = provider.matchLoadedPoints( 'ленина' );
+
+	expect( matches.map( ( p ) => p.id ) ).toEqual( [ '1' ] );
 	expect( ymapsStub.geocodeCalls ).toBe( 0 );
-} );
-
-test( 'suggest() is biased to the map\'s current viewport, and requests 5 results', async () => {
-	await init();
-
-	ymapsStub.lastMap.bounds = [ [ 1, 2 ], [ 3, 4 ] ];
-
-	await ymapsStub.lastSearchControl.options.provider.geocode( 'ленина', {} );
-
-	expect( ymapsStub.lastSuggestOptions ).toEqual( { results: 5, boundedBy: [ [ 1, 2 ], [ 3, 4 ] ] } );
 } );
 
 test( 'geocodes exactly once when an address result is chosen', async () => {
@@ -1343,41 +1467,6 @@ test( 'geocodes exactly once when an address result is chosen', async () => {
 } );
 
 // -------------------------------------------------------------------------
-// searchResults — the seam to the panels (Codex review follow-up, HIGH): the geocode provider's
-// RETURN value feeds the SearchControl engine, but nothing renders it on screen unless this file
-// ALSO hands the same object to whoever is listening — Task 20's mount wires
-// `provider.on( 'searchResults', panels.renderSearchResults )`.
-// -------------------------------------------------------------------------
-
-test( 'emits searchResults with the SAME points/addresses the geocode provider returns', async () => {
-	const seen = [];
-	const provider = await init();
-
-	provider.on( 'searchResults', ( results ) => seen.push( results ) );
-	provider.setPoints( [ groupWith( { id: '1', name: 'ПВЗ «Магнит»', address: 'Ленина 5' } ) ] );
-	ymapsStub.suggestResult = [ { displayName: 'Москва, Ленина 5', value: 'Москва, Ленина 5' } ];
-
-	const res = await ymapsStub.lastSearchControl.options.provider.geocode( 'ленина', {} );
-
-	expect( seen ).toHaveLength( 1 );
-	expect( seen[ 0 ] ).toEqual( res );
-} );
-
-test( 'emits searchResults with EMPTY arrays for a query that matches nothing — a narrowed-down '
-	+ 'search must not leave the previous (stale) results on screen', async () => {
-	const seen = [];
-	const provider = await init();
-
-	provider.on( 'searchResults', ( results ) => seen.push( results ) );
-	provider.setPoints( [ groupWith( { id: '1', name: 'ПВЗ «Магнит»', address: 'Ленина 5' } ) ] );
-	ymapsStub.suggestResult = [];
-
-	await ymapsStub.lastSearchControl.options.provider.geocode( 'несуществующийзапрос', {} );
-
-	expect( seen ).toHaveLength( 1 );
-	expect( seen[ 0 ] ).toEqual( { points: [], addresses: [] } );
-} );
-
 test( 'clearAddress() emits an empty searchResults alongside dropping the pin — the reset '
 	+ 'control must not leave stale search rows behind', async () => {
 	const seen = [];

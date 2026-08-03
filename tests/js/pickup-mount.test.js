@@ -81,6 +81,14 @@ function StubProvider() {
 	this.resolveAddressCalls = [];
 	this.clearAddressCalls = 0;
 	this.setMarginCalls = [];
+	this.matchLoadedPointsCalls = [];
+	this.matchLoadedPointsResult = [];
+	// The real `map-provider-yandex.js` only builds this once `init()` has run and
+	// `config.searchLayoutEl` was truthy — the stub builds it unconditionally up front since no
+	// test in this file exercises the "search disabled" provider-side branch (that is
+	// `map-provider-yandex.test.js`'s own job); every test here only cares that pickup-mount.js
+	// calls `provider.searchControl.search( query )` on submit.
+	this.searchControl = { search: jest.fn() };
 	StubProvider.instances.push( this );
 }
 
@@ -151,6 +159,12 @@ StubProvider.prototype.setMargin = function( open, width ) {
 	this.setMarginCalls.push( { open: open, width: width } );
 };
 
+StubProvider.prototype.matchLoadedPoints = function( query ) {
+	this.matchLoadedPointsCalls.push( query );
+
+	return this.matchLoadedPointsResult;
+};
+
 /**
  * A minimal `window.WoodevPickupPanels` double — see the file docblock's "PANELS ARE A STUB"
  * note. `render()` builds just enough REAL DOM (`.woodev-pickup-list`/`.woodev-pickup-card`) for
@@ -189,6 +203,23 @@ StubPanels.prototype.render = function() {
 
 StubPanels.prototype.getMapElement = function() {
 	return this.mapEl;
+};
+
+/**
+ * Mirrors the real `Panels.prototype.buildSearchLayout()`'s one externally-observable contract
+ * (Task 12, spec V-6): a detached element, or `null` when the config disabled search
+ * (`config.search === false`) — this file's own wiring test for THAT branch needs the stub to
+ * honour it, not just always return an element.
+ */
+StubPanels.prototype.buildSearchLayout = function() {
+	if ( false === this.config.search ) {
+		return null;
+	}
+
+	this.builtSearchLayoutEl = document.createElement( 'div' );
+	this.builtSearchLayoutEl.className = 'stub-search-layout';
+
+	return this.builtSearchLayoutEl;
 };
 
 StubPanels.prototype.on = function( event, cb ) {
@@ -597,6 +628,9 @@ test( 'clicking the trigger opens the shell and calls provider.init with the con
 		pointIcons: config.pointIcons,
 		accentColor: config.accentColor,
 		searchNearestCount: config.searchNearestCount,
+		// Task 12, spec V-6: the search layout panels.buildSearchLayout() built ONCE, handed
+		// through as a plain DOM element — never a reference to the panels instance itself.
+		searchLayoutEl: StubPanels.instances[ 0 ].builtSearchLayoutEl,
 	} );
 	// Task 20: the provider contract dropped fetching, but the raw dataSource is still
 	// passed as the 3rd arg for a provider that (like Embedded_Map_Provider) still declares
@@ -661,6 +695,7 @@ test( 'the provider config merges mapConfig with strategy, i18n, and the resolve
 		pointIcons: config.pointIcons,
 		accentColor: config.accentColor,
 		searchNearestCount: config.searchNearestCount,
+		searchLayoutEl: StubPanels.instances[ 0 ].builtSearchLayoutEl,
 	} );
 } );
 
@@ -674,7 +709,7 @@ test( 'every top-level key the provider reads survives the provider-config merge
 
 	const received = StubProvider.instances[ 0 ].initCalls[ 0 ].config;
 
-	[ 'defaultLocation', 'pointIcons', 'accentColor', 'searchNearestCount', 'strategy', 'i18n' ]
+	[ 'defaultLocation', 'pointIcons', 'accentColor', 'searchNearestCount', 'strategy', 'i18n', 'searchLayoutEl' ]
 		.forEach( ( key ) => {
 			expect( received[ key ] ).toBeDefined();
 		} );
@@ -1574,6 +1609,67 @@ test( 'panels searchAddressPicked resolves the address AT THAT INDEX against the
 	session.panels.emit( 'searchAddressPicked', 1 );
 
 	expect( session.provider.resolveAddressCalls ).toEqual( [ 'B' ] );
+} );
+
+// -------------------------------------------------------------------------
+// searchType/searchSubmit/searchReset (Task 12, spec V-6) — the layout `pickup-panels.js`
+// builds ONCE via `buildSearchLayout()`, and the two-events-two-costs wiring to the provider
+// -------------------------------------------------------------------------
+
+test( 'the search layout is built ONCE, at session-open time, and handed to provider.init() as '
+	+ 'searchLayoutEl — not built by, or handed through, the provider itself', async () => {
+	const session = await openSession( configWith() );
+
+	expect( session.panels.builtSearchLayoutEl ).toBeInstanceOf( HTMLElement );
+	expect( session.provider.initCalls[ 0 ].config.searchLayoutEl ).toBe( session.panels.builtSearchLayoutEl );
+} );
+
+test( 'an ownsChrome provider never builds a search layout at all (no panels exist to build one)', async () => {
+	const session = await openSession( configWith( { ownsChrome: true } ) );
+
+	expect( session.provider.initCalls[ 0 ].config.searchLayoutEl ).toBeNull();
+} );
+
+test( 'a plugin that disabled search (config.search: false) gets searchLayoutEl: null — '
+	+ 'buildSearchLayout() itself returned null', async () => {
+	const session = await openSession( configWith( { search: false } ) );
+
+	expect( session.panels.builtSearchLayoutEl ).toBeUndefined();
+	expect( session.provider.initCalls[ 0 ].config.searchLayoutEl ).toBeNull();
+} );
+
+test( 'panels searchType filters the ALREADY LOADED pool via provider.matchLoadedPoints() and '
+	+ 'renders it — free, no provider.searchControl.search() call', async () => {
+	const session = await openSession( configWith() );
+
+	session.provider.matchLoadedPointsResult = [ point( { id: 'p1' } ) ];
+
+	session.panels.emit( 'searchType', { query: 'Тверская' } );
+
+	expect( session.provider.matchLoadedPointsCalls ).toEqual( [ 'Тверская' ] );
+	expect( session.panels.lastSearchResults ).toEqual( {
+		points: [ point( { id: 'p1' } ) ],
+		addresses: [],
+	} );
+	expect( session.provider.searchControl.search ).not.toHaveBeenCalled();
+} );
+
+test( 'panels searchSubmit runs the SearchControl\'s own search() — the ONLY path that spends '
+	+ 'the merchant\'s geocoding quota (spec V-6)', async () => {
+	const session = await openSession( configWith() );
+
+	session.panels.emit( 'searchSubmit', { query: 'Тверская 5' } );
+
+	expect( session.provider.searchControl.search ).toHaveBeenCalledWith( 'Тверская 5' );
+} );
+
+test( 'panels searchReset clears the provider\'s address state via clearAddress(), same as '
+	+ 'anchorCleared', async () => {
+	const session = await openSession( configWith() );
+
+	session.panels.emit( 'searchReset', {} );
+
+	expect( session.provider.clearAddressCalls ).toBe( 1 );
 } );
 
 test( 'provider addressFocused moves the panels\' distance anchor to the SAME latLng/label (D-6)', async () => {

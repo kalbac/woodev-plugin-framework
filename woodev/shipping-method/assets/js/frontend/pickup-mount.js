@@ -629,10 +629,19 @@
 	 * at its technical `[0,0]`/zoom-2 fallback instead of the customer's city — nothing
 	 * throws, rejects, or logs.
 	 *
-	 * @param {Object} config the full mount config (`window.woodev_pickup_config_*`).
+	 * `searchLayoutEl` (Task 12, spec V-6) is the ONE argument here that is not read straight off
+	 * `config` — it is a DOM element `openSession()` builds ONCE, via `panels.buildSearchLayout()`
+	 * (null under `ownsChrome`, or when the plugin disabled search), and hands in explicitly.
+	 * Building it is the panels' job (D-3: no map-library file renders point information); handing
+	 * the already-built ELEMENT through this flat merge — rather than the map provider reaching
+	 * into `panels` itself — is what keeps `map-provider-yandex.js` ignorant of the panels'
+	 * existence, exactly like every other plugin-author-facing value this function forwards.
+	 *
+	 * @param {Object}           config         the full mount config (`window.woodev_pickup_config_*`).
+	 * @param {HTMLElement|null} searchLayoutEl see above.
 	 * @returns {Object}
 	 */
-	function buildProviderConfig( config ) {
+	function buildProviderConfig( config, searchLayoutEl ) {
 		// Everything the provider reads off the config it is handed. `mapConfig` carries only
 		// what the ACTIVE PROVIDER contributed PHP-side (`scriptUrl`, `ns`, `hasApiKey`, `lang`,
 		// `layers`, `copyrights`); the four keys below sit at the TOP level of the mount config
@@ -652,6 +661,7 @@
 			pointIcons: config.pointIcons,
 			accentColor: config.accentColor,
 			searchNearestCount: config.searchNearestCount,
+			searchLayoutEl: searchLayoutEl || null,
 		} );
 	}
 
@@ -869,6 +879,14 @@
 		/** @type {Object|null} the framework's own panels shell — null when `ownsChrome`
 		 *  (constructed at most ONCE per session; see the docblock above). */
 		var panels = null;
+
+		/** @type {HTMLElement|null} the `SearchControl` layout element (Task 12, spec V-6),
+		 *  built ONCE from `panels.buildSearchLayout()` — see the docblock above and
+		 *  `buildProviderConfig()`'s own note on why THIS file builds it, never the provider.
+		 *  Null under `ownsChrome`, or when the plugin disabled search. Reused across every
+		 *  retry within this session (a retry rebuilds the map provider, never the panels — the
+		 *  layout is the panels' own DOM and a fresh provider simply mounts it again). */
+		var searchLayoutEl = null;
 
 		/** @type {Object.<string, Object>} the last full-fetch groups, by key — resolves a
 		 *  provider event's bare key/point-id back to the group object the panels need. */
@@ -1091,6 +1109,11 @@
 			panels = new PanelsCtor( modal.getContainer(), buildPanelsConfig( config ) );
 			panels.render();
 
+			// Built ONCE here, never inside start() — see searchLayoutEl's own docblock above.
+			// null when the plugin disabled search (`config.search === false`); `_buildSearchControl()`
+			// then skips building a control at all (Task 12, spec V-6).
+			searchLayoutEl = panels.buildSearchLayout();
+
 			// The camera follows whatever became the subject, from wherever the customer asked:
 			// a marker, a sidebar row, a search result, "show the nearest". `cardOpened` is the
 			// single funnel every one of those already passes through, so one listener covers
@@ -1176,6 +1199,36 @@
 			// map-provider-yandex.js's own docblock on why THIS file only has to make ONE call,
 			// never track the pin itself.
 			panels.on( 'anchorCleared', function() {
+				if ( provider && 'function' === typeof provider.clearAddress ) {
+					provider.clearAddress();
+				}
+			} );
+
+			// searchType/searchSubmit/searchReset (Task 12, spec V-6): the two-events-two-costs
+			// design `map-provider-yandex.js`'s own docblock documents under "ADDRESS SEARCH".
+			// `searchType` fires on every debounced keystroke and must NEVER touch the geocoder —
+			// it only filters the already-loaded pool, free and local.
+			panels.on( 'searchType', function( payload ) {
+				if ( panels && provider && 'function' === typeof provider.matchLoadedPoints ) {
+					panels.renderSearchResults( { points: provider.matchLoadedPoints( payload.query ), addresses: [] } );
+				}
+			} );
+
+			// `searchSubmit` (Enter/the magnifier) is the ONLY path that spends the merchant's
+			// geocoding quota — it runs the control's own `search()`, which invokes
+			// `map-provider-yandex.js`'s bounded geocode provider and, on resolution, emits
+			// `searchResults` (wired above) with the fresh `{ points, addresses }`.
+			panels.on( 'searchSubmit', function( payload ) {
+				if ( provider && provider.searchControl && 'function' === typeof provider.searchControl.search ) {
+					provider.searchControl.search( payload.query );
+				}
+			} );
+
+			// `searchReset` clears the input/results DOM itself (pickup-panels.js's own job) —
+			// this file's half is dropping whatever provider-side search state belongs to it: the
+			// "your address" pin and the stale `searchResults`, both owned by `clearAddress()`
+			// (see map-provider-yandex.js's own docblock on why that file, not this one, owns it).
+			panels.on( 'searchReset', function() {
 				if ( provider && 'function' === typeof provider.clearAddress ) {
 					provider.clearAddress();
 				}
@@ -1275,7 +1328,7 @@
 			// positioning context, and therefore not covered by any of the panels' geometry).
 			var mapHost = ownsChrome ? modal.getContainer() : panels.getMapElement();
 
-			var initResult = provider.init( mapHost, buildProviderConfig( config ), realDataSource );
+			var initResult = provider.init( mapHost, buildProviderConfig( config, searchLayoutEl ), realDataSource );
 
 			Promise.resolve( initResult ).then( function() {
 				if ( destroyed ) {
