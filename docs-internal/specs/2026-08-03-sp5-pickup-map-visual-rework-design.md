@@ -246,10 +246,15 @@ happens, because stage 2 has the map blocked anyway.
 
 - An icon button carrying a count badge, **inside the same `SearchControl` layout as the search
   field** — that is how Russian Post builds it, and it is why the two controls share a row without
-  either owning the other's geometry.
-- Filter state lives on the control (`state: { filters: {…} }`) and is watched with
-  `new ymaps.Monitor( control.state ).add( 'filters', … )`, exactly as the reference does. Under the
-  bulk strategy the monitor calls `objectManager.setFilter()`.
+  either owning the other's geometry. When the plugin disables search there is no such layout, and
+  the filter falls back to the list panel, styled flat rather than as a floating pill; "search off,
+  two point types" is a real combination.
+- Filter state stays where it already was: the panels own the selection and emit
+  `typeFilterChange`, and `Map_Provider::setTypeFilter()` calls `objectManager.setFilter()`.
+  Russian Post instead parks the selection on the control (`state: { filters: {…} }`) and watches it
+  with `ymaps.Monitor`; copying that would have added a second filtering mechanism beside a working
+  one, so the reference is followed for the **chrome** here and not for the plumbing. One source of
+  truth for "which types are showing".
 - Opens a menu titled «Тип» with one checkbox per type; type labels come from the plugin.
 - Rendered **only when the plugin supplies two or more types**. One type → no filter button at all,
   as in Yandex.Delivery (`if ( point_types.length > 1 )`).
@@ -435,7 +440,7 @@ the browser on the rig (chrome-devtools MCP, port 8973, real Yandex key), at des
 |---|---|---|
 | D-6: typing queries `ymaps.suggest()` | Point matches are instant while typing; the **address** query runs on submit, via the control's own `search()` | Russian Post's actual model, read from its bundle. `suggest` existed in D-6 only to avoid geocoding on every keystroke — submit-driven search removes that pressure entirely, and Russian Post uses no `suggest` at all |
 | D-6: `SearchControl` keeps its engine, we replace its view | **Unchanged** — an earlier draft of this document proposed dropping the control and was wrong | The control misbehaved because its options sat at the wrong nesting level (defect 3), not because it is unsuitable. The reference is built on it, filter menu included |
-| D-10: the type filter is its own control | It lives inside the `SearchControl` layout, with its state on that control | Same reason: that is how the reference builds it, and it is what makes the two share a row cleanly |
+| D-10: the type filter is its own control | Its chrome lives inside the `SearchControl` layout; its state does not | The reference shares the layout, which is what makes the two sit in one row cleanly. Its `state` + `ymaps.Monitor` plumbing was not copied: `setTypeFilter()` already drives `objectManager.setFilter()`, and a second mechanism beside a working one is worse than an unmatched reference |
 | D-5: framework owns geometry, plugin owns images | Unchanged, plus a framework default icon pair as inline SVG | A plugin shipping no icons currently gets nothing drawable |
 | D-13: modal is generic chrome | Unchanged, plus size is part of that chrome | A dialog that cannot size itself is not self-sufficient |
 
