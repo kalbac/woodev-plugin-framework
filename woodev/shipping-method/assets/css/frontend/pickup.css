@@ -220,36 +220,20 @@
 	display: flex;
 }
 
-.woodev-pickup-list__header {
-	flex: 0 0 auto;
-	padding: 14px 16px 10px;
-	font-size: 14px;
-	font-weight: 600;
-	line-height: 1.4;
-	color: #1e1e1e;
-}
-
-/* The "«Сбросить»" control — a sibling of the header inside the list (Task 15), attached only
-   while a searched-address anchor is active. */
-.woodev-pickup-list__reset {
-	align-self: flex-start;
-	margin: 0 16px 8px;
-	padding: 0;
-	font-size: 13px;
-	color: var( --woodev-pickup-accent, #06aedd );
-	background: none;
-	border: 0;
-	cursor: pointer;
-}
-
-.woodev-pickup-list__reset:hover {
-	text-decoration: underline;
-}
+/* No `.woodev-pickup-list__header` rule any more (Task 7, spec V-11): the "«Пункты выдачи в этой
+   области (5)»" header — and the "«Сбросить»" reset control it carried — was deleted outright.
+   Neither reference has a header, and it stated a count the customer could already see by
+   scanning the rows below it. The reset control's replacement (the search field's own clear
+   button) does not exist until Task 11. */
 
 .woodev-pickup-list__body {
 	flex: 1 1 auto;
 	min-height: 0; /* Lets this flex child actually shrink/scroll instead of stretching the panel. */
 	overflow-y: auto;
+
+	/* The last row must not sit under the map's copyright line — the reference reserves this and
+	   Russian Post does not, which is the flaw the operator named explicitly (spec V-11). */
+	padding-bottom: 28px;
 }
 
 .woodev-pickup-list__empty {
@@ -260,73 +244,66 @@
 	color: #646970;
 }
 
-.woodev-pickup-list__item {
-	border-bottom: 1px solid #dcdcde;
-}
-
-/* A single-point group: the item itself is the clickable row (no nested `.woodev-pickup-list__point`
-   buttons — see {@see buildListItem} in pickup-panels.js). A co-located group's item has no
-   padding/cursor of its own; each point inside it is its OWN clickable row instead — see
-   `.woodev-pickup-list__point` below. */
-.woodev-pickup-list__item:not( :has( .woodev-pickup-list__point ) ) {
-	display: block;
-	padding: 10px 16px;
-	cursor: pointer;
-}
-
-.woodev-pickup-list__item:not( :has( .woodev-pickup-list__point ) ):hover {
-	background: #f6f7f7;
-}
-
-.woodev-pickup-list__item:has( .woodev-pickup-list__point ) {
-	border-bottom: 0;
-}
-
-/* One point of a co-located group (a PVZ and a postamat sharing one marker) — its OWN clickable
-   row, opening the card on that exact point (never always the first). */
+/* One row (spec V-11): the plugin's own type icon (omitted when it supplies none), address in
+   bold, name/description in muted grey underneath, separated from the next row by a bottom
+   border — icon → address → name is a CSS grid, not a flow layout, so the icon can span two text
+   rows without extra markup. Targets BOTH shapes a row can take: a single-point group's item IS
+   the row (no nested `.woodev-pickup-list__point` — see `buildListItem()` in pickup-panels.js),
+   while one point of a co-located group gets its OWN `.woodev-pickup-list__point` button instead. */
+.woodev-pickup-list__item:not( :has( .woodev-pickup-list__point ) ),
 .woodev-pickup-list__point {
-	display: block;
+	display: grid;
+	grid-template-columns: auto 1fr;
+	grid-template-areas: 'icon address' 'icon name' 'icon distance';
+	column-gap: 8px;
+	row-gap: 4px;
 	width: 100%;
-	padding: 10px 16px;
+	padding: 16px;
 	text-align: left;
 	font: inherit;
 	color: inherit;
 	background: none;
 	border: 0;
-	border-bottom: 1px solid #dcdcde;
+	border-bottom: 1px solid rgba( 0, 0, 0, 0.08 );
 	cursor: pointer;
 }
 
-.woodev-pickup-list__point:last-child {
-	border-bottom: 0;
-}
-
+.woodev-pickup-list__item:not( :has( .woodev-pickup-list__point ) ):hover,
 .woodev-pickup-list__point:hover {
 	background: #f6f7f7;
 }
 
-.woodev-pickup-list__name {
-	display: block;
-	font-size: 14px;
-	font-weight: 600;
-	line-height: 1.4;
-	color: #1e1e1e;
+.woodev-pickup-list__icon {
+	grid-area: icon;
+	width: 20px;
+	height: 20px;
+	align-self: start;
 }
 
 .woodev-pickup-list__address {
-	display: block;
-	margin-top: 2px;
+	grid-area: address;
+	font-size: 15px;
+	font-weight: 600;
+	color: #333;
+}
+
+.woodev-pickup-list__name {
+	grid-area: name;
 	font-size: 12px;
-	line-height: 1.4;
-	color: #646970;
+	color: rgba( 0, 0, 0, 0.38 );
 }
 
 .woodev-pickup-list__distance {
-	display: block;
-	margin-top: 2px;
+	grid-area: distance;
 	font-size: 12px;
-	line-height: 1.4;
-	color: #646970;
+	color: rgba( 0, 0, 0, 0.54 );
+}
+
+.woodev-pickup-list__address,
+.woodev-pickup-list__name {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 
 /* The explicit "nothing nearby" state (Task 15, D-6) — replaces the list body wholesale; never a
@@ -813,7 +790,6 @@
  * ---------------------------------------------------------------------- */
 
 .woodev-pickup-list__toggle:focus-visible,
-.woodev-pickup-list__reset:focus-visible,
 .woodev-pickup-list__point:focus-visible,
 .woodev-pickup-list__show-nearest:focus-visible,
 .woodev-pickup-filter__checkbox:focus-visible,

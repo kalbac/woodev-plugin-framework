@@ -1691,7 +1691,18 @@ test( 'INTEGRATION: the real Panels class renders correctly from buildPanelsConf
 	await flushAsync();
 
 	const dialog = document.querySelector( '[role="dialog"]' );
-	const header = dialog.querySelector( '.woodev-pickup-list__header' );
-	expect( header ).not.toBeNull();
-	expect( header.textContent ).toContain( 'Пункты выдачи в этой области' );
+
+	// The real class builds its whole structure from that config: the stage, the map element the
+	// provider mounts into, and both panels.
+	const stage = dialog.querySelector( '.woodev-pickup-stage' );
+	expect( stage ).not.toBeNull();
+	expect( stage.querySelector( '.woodev-pickup-map' ) ).not.toBeNull();
+	expect( stage.querySelector( '.woodev-pickup-list' ) ).not.toBeNull();
+	expect( stage.querySelector( '.woodev-pickup-card' ) ).not.toBeNull();
+
+	// And the i18n map reached it. This used to be asserted through the list header's text; Task 7
+	// (spec V-11) deleted that header — neither reference has one and it stated something the
+	// customer can see — so `drawerTitle` now names the control that opens the drawer instead.
+	expect( stage.querySelector( '.woodev-pickup-list__toggle' ).getAttribute( 'aria-label' ) )
+		.toBe( 'Пункты выдачи в этой области' );
 } );

@@ -91,10 +91,14 @@ it( 'reports its open state and width so the caller can set the map margin', () 
 } );
 
 it( 'renders a blank label rather than a Russian default when an i18n key is missing', () => {
+	// Re-pointed (Task 7, spec V-11): the list header this test used to check is gone —
+	// `drawerTitle`'s only remaining home is the toggle button's `aria-label`, so the I1 rule
+	// (a missing key renders blank, never a hardcoded Russian default) is proven there instead.
 	const panels = new Panels( document.createElement( 'div' ), { lang: 'ru_RU', i18n: {} } );
 	panels.render();
 
-	expect( panels.root.querySelector( '.woodev-pickup-list__header' ).textContent ).toBe( '' );
+	expect( panels.root.parentNode.querySelector( '.woodev-pickup-list__toggle' ).getAttribute( 'aria-label' ) )
+		.toBe( '' );
 } );
 
 // -----------------------------------------------------------------------
@@ -102,23 +106,29 @@ it( 'renders a blank label rather than a Russian default when an i18n key is mis
 // mutation each one kills.
 // -----------------------------------------------------------------------
 
-it( 'shows the plain in-view count in the header once a viewport has been reported', () => {
+it( 'renders exactly one list item per reported group once a viewport has been reported', () => {
+	// Re-pointed (Task 7, spec V-11): the header used to surface this count as literal `(2)`
+	// text; with the header gone, the count is only ever observable as the number of rows.
 	const panels = new Panels( document.createElement( 'div' ), config );
 	panels.render();
 	panels.setVisible( [ group( 'a', 55.75, 37.61 ), group( 'b', 55.76, 37.61 ) ] );
 
-	expect( panels.root.querySelector( '.woodev-pickup-list__header' ).textContent )
-		.toBe( 'Пункты выдачи в этой области (2)' );
+	expect( panels.root.querySelectorAll( '.woodev-pickup-list__item' ) ).toHaveLength( 2 );
 } );
 
-it( 'shows a 300+ count, never the raw 400, once the viewport exceeds the render cap', () => {
+it( 'keeps the first 300 groups in caller order, silently dropping only the tail', () => {
+	// Re-pointed (Task 7, spec V-11): the header used to surface the `300+` distinction; with no
+	// header left to read it from, what actually matters is verified directly — the cap keeps
+	// the HEAD of the list, never an arbitrary or re-ordered subset of it.
 	const many = Array.from( { length: 400 }, ( _, i ) => group( 'g' + i, 55.75 + i / 10000, 37.61 ) );
 	const panels = new Panels( document.createElement( 'div' ), config );
 	panels.render();
 	panels.setVisible( many );
 
-	expect( panels.root.querySelector( '.woodev-pickup-list__header' ).textContent )
-		.toBe( 'Пункты выдачи в этой области (300+)' );
+	const items = [ ...panels.root.querySelectorAll( '.woodev-pickup-list__item' ) ];
+
+	expect( items[ 0 ].dataset.groupKey ).toBe( 'g0' );
+	expect( items[ items.length - 1 ].dataset.groupKey ).toBe( 'g299' );
 } );
 
 it( 'keeps the caller-supplied order when no anchor is set, rather than reshuffling', () => {
@@ -140,17 +150,19 @@ it( 'decodes an already-escaped point name in a list row rather than showing the
 	expect( panels.root.querySelector( '.woodev-pickup-list__name' ).textContent ).toBe( 'ПВЗ "Ромашка"' );
 } );
 
-it( 'never executes markup smuggled through an i18n label — the header renders it as plain text', () => {
+it( 'never executes markup smuggled through an i18n label — the toggle carries it as a literal attribute', () => {
+	// Re-pointed (Task 7, spec V-11): `drawerTitle` no longer feeds a header; it only reaches the
+	// toggle's `aria-label` now, so this proves the SAME string survives there verbatim.
 	const panels = new Panels( document.createElement( 'div' ), {
 		lang: 'ru_RU',
 		i18n: { drawerTitle: '<img src=x>', emptyInView: '' },
 	} );
 	panels.render();
 
-	const header = panels.root.querySelector( '.woodev-pickup-list__header' );
+	const toggle = panels.root.parentNode.querySelector( '.woodev-pickup-list__toggle' );
 
-	expect( header.querySelector( 'img' ) ).toBeNull();
-	expect( header.textContent ).toBe( '<img src=x>' );
+	expect( toggle.querySelector( 'img' ) ).toBeNull();
+	expect( toggle.getAttribute( 'aria-label' ) ).toBe( '<img src=x>' );
 } );
 
 it( 'never executes markup smuggled through the empty-state i18n label', () => {
@@ -720,22 +732,37 @@ it( 'emits addressResult with the index so the caller can resolve it', () => {
 	expect( seen ).toEqual( [ 2, 0 ] );
 } );
 
-it( 'shows the anchor header and a reset control once an address is active', () => {
+it( 'setAnchor with a label sorts the list exactly like without one, and stays silent', () => {
+	// Re-pointed (Task 7, spec V-11): the header + reset control this test used to check are
+	// gone — `renderListHeader()` was deleted outright, and its replacement (the search field's
+	// own clear button) does not exist until Task 11. What's left of `setAnchor( latLng, label )`
+	// is purely its distance-sort effect; the label itself has no DOM effect any more, and
+	// setting a non-null anchor must never fire `anchorCleared` (see the file docblock).
+	const seen = [];
 	const panels = mount( searchConfig );
+	panels.on( 'anchorCleared', () => seen.push( 1 ) );
 	panels.setAnchor( [ 55.75, 37.61 ], 'Москва, Тверская 1' );
+	panels.setVisible( [ group( 'far', 55.90, 37.61 ), group( 'near', 55.7501, 37.61 ) ] );
 
-	expect( panels.root.querySelector( '.woodev-pickup-list__header' ).textContent )
-		.toBe( 'Ближайшие к «Москва, Тверская 1»' );
-	expect( panels.root.querySelector( '.woodev-pickup-list__reset' ) ).not.toBeNull();
+	const ids = [ ...panels.root.querySelectorAll( '.woodev-pickup-list__item' ) ]
+		.map( ( el ) => el.dataset.groupKey );
+
+	expect( ids ).toEqual( [ 'near', 'far' ] );
+	expect( seen ).toHaveLength( 0 );
 } );
 
-it( 'restores the plain header when the anchor is reset', () => {
+it( 'restores the caller-supplied order when the anchor is reset', () => {
+	// Re-pointed (Task 7, spec V-11): "restores the plain header" meant nothing more than "the
+	// distance sort is gone" — the header itself no longer exists to restore.
 	const panels = mount( searchConfig );
+	panels.setVisible( [ group( 'b', 55.90, 37.61 ), group( 'a', 55.75, 37.61 ) ] );
 	panels.setAnchor( [ 55.75, 37.61 ], 'Москва, Тверская 1' );
 	panels.setAnchor( null );
 
-	expect( panels.root.querySelector( '.woodev-pickup-list__header' ).textContent )
-		.toBe( 'Пункты выдачи в этой области' );
+	const ids = [ ...panels.root.querySelectorAll( '.woodev-pickup-list__item' ) ]
+		.map( ( el ) => el.dataset.groupKey );
+
+	expect( ids ).toEqual( [ 'b', 'a' ] );
 } );
 
 it( 'shows the nothing-nearby state with the nearest distance', () => {
@@ -758,31 +785,48 @@ it( 'shows the nothing-nearby state with the nearest distance', () => {
 // mutation each one kills.
 // -----------------------------------------------------------------------
 
-it( 'removes the reset control once the anchor is cleared, not just the header text', () => {
+it( 'fires anchorCleared exactly once when an active anchor is cleared', () => {
+	// Re-pointed (Task 7, spec V-11): the reset control this test used to check is gone —
+	// deleted along with `renderListHeader()`. What's left to verify is the ONE signal a caller
+	// (the mount — see `pickup-mount.js`) still relies on: `anchorCleared` firing when the anchor
+	// is cleared (this event had no dedicated test of its own before this re-point).
+	const seen = [];
 	const panels = mount( searchConfig );
+	panels.on( 'anchorCleared', () => seen.push( 1 ) );
 	panels.setAnchor( [ 55.75, 37.61 ], 'Москва, Тверская 1' );
 	panels.setAnchor( null );
 
-	expect( panels.root.querySelector( '.woodev-pickup-list__reset' ) ).toBeNull();
+	expect( seen ).toHaveLength( 1 );
 } );
 
-it( 'a real click on the reset control clears the anchor and restores the plain header', () => {
+it( 'fires anchorCleared on every clearing call, not just the first', () => {
+	// Re-pointed (Task 7, spec V-11): there is no reset control left to click — its only caller
+	// (`renderListHeader()`) was deleted. The file docblock is explicit that `setAnchor( null )`
+	// emits `anchorCleared` EVERY time it clears, not just on the first transition into
+	// "cleared" — a flag-guarded ("only once") implementation would satisfy the test above but
+	// fail this one.
+	const seen = [];
 	const panels = mount( searchConfig );
+	panels.on( 'anchorCleared', () => seen.push( 1 ) );
 	panels.setAnchor( [ 55.75, 37.61 ], 'Москва, Тверская 1' );
-	panels.root.querySelector( '.woodev-pickup-list__reset' ).click();
+	panels.setAnchor( null );
+	panels.setAnchor( null );
 
-	expect( panels.root.querySelector( '.woodev-pickup-list__header' ).textContent )
-		.toBe( 'Пункты выдачи в этой области' );
-	expect( panels.root.querySelector( '.woodev-pickup-list__reset' ) ).toBeNull();
+	expect( seen ).toHaveLength( 2 );
 } );
 
-it( 'a lone anchor argument without a label never turns on the search header (single-arg callers unaffected)', () => {
+it( 'a lone anchor argument without a label still sorts the list (single-arg callers unaffected)', () => {
+	// Re-pointed (Task 7, spec V-11): this used to prove the single-arg (map-centre) call shape
+	// left the header alone; with the header gone entirely, what remains to prove is that the
+	// single-arg form still does its one real job — sorting — identically to the two-arg form.
 	const panels = mount( searchConfig );
 	panels.setAnchor( [ 55.75, 37.61 ] );
+	panels.setVisible( [ group( 'far', 55.90, 37.61 ), group( 'near', 55.7501, 37.61 ) ] );
 
-	expect( panels.root.querySelector( '.woodev-pickup-list__header' ).textContent )
-		.toBe( 'Пункты выдачи в этой области' );
-	expect( panels.root.querySelector( '.woodev-pickup-list__reset' ) ).toBeNull();
+	const ids = [ ...panels.root.querySelectorAll( '.woodev-pickup-list__item' ) ]
+		.map( ( el ) => el.dataset.groupKey );
+
+	expect( ids ).toEqual( [ 'near', 'far' ] );
 } );
 
 it( 'renders escaped point fields (not double-escaped) inside a search point result', () => {
@@ -802,14 +846,15 @@ it( 'never executes markup smuggled through a geocoder displayName', () => {
 	expect( nameEl.textContent ).toBe( '<img src=x onerror=alert(1)>' );
 } );
 
-it( 'never executes markup smuggled through the searched-address label in the anchor header', () => {
+it( 'a malicious searched-address label produces no DOM side effect now that the header is gone', () => {
+	// Re-pointed (Task 7, spec V-11): the header this test used to check render the label safely
+	// via `textContent` was deleted; `label` now has NO DOM effect at all (see `setAnchor()`'s own
+	// docblock), so what remains to prove is that a malicious value doesn't leak into the DOM
+	// through some other path either.
 	const panels = mount( searchConfig );
 	panels.setAnchor( [ 55.75, 37.61 ], '<img src=x onerror=alert(1)>' );
 
-	const header = panels.root.querySelector( '.woodev-pickup-list__header' );
-
-	expect( header.querySelector( 'img' ) ).toBeNull();
-	expect( header.textContent ).toBe( 'Ближайшие к «<img src=x onerror=alert(1)>»' );
+	expect( panels.root.parentNode.querySelector( 'img' ) ).toBeNull();
 } );
 
 it( 'renders the exact section labels from sectionPoints/sectionAddresses, not hardcoded Russian', () => {
@@ -1040,5 +1085,67 @@ describe( 'stage geometry (spec V-3)', () => {
 		panels.render();
 
 		expect( panels.getMapElement().className ).toContain( 'woodev-pickup-map' );
+	} );
+} );
+
+// -----------------------------------------------------------------------
+// Task 7 (spec V-11): the sidebar list is Russian Post's, without a header —
+// address first in bold, name as the muted subtitle, the plugin's own type
+// icon only when it supplies one. The plan's own test snippet queries
+// `.woodev-pickup-list__point` for a SINGLE-point group, but `buildListItem()`
+// only wraps a `.woodev-pickup-list__point` button around each point of a
+// CO-LOCATED group — a single-point group's row is the `.woodev-pickup-list__item`
+// itself (see that function's own docblock), so the tests below query
+// `.woodev-pickup-list__item` for a solo group instead; `pickup.css` styles
+// both selectors identically so a solo row and a co-located row look the same.
+// -----------------------------------------------------------------------
+
+describe( 'sidebar list (spec V-11)', () => {
+	it( 'renders no list header', () => {
+		const container = document.createElement( 'div' );
+		const panels = new Panels( container, config );
+
+		panels.render();
+		panels.setVisible( [ group( 'g1', 55.75, 37.61, 'ПВЗ' ) ] );
+
+		expect( container.querySelector( '.woodev-pickup-list__header' ) ).toBeNull();
+	} );
+
+	it( 'renders address first in bold and the name as the subtitle', () => {
+		const container = document.createElement( 'div' );
+		const panels = new Panels( container, config );
+		const g = group( 'g1', 55.75, 37.61, 'ПВЗ «Магнит»' );
+		g.points[ 0 ].address = 'Москва, Ленина, 5, корп. 2';
+
+		panels.render();
+		panels.setVisible( [ g ] );
+
+		const row = container.querySelector( '.woodev-pickup-list__item' );
+		const address = row.querySelector( '.woodev-pickup-list__address' );
+		const name = row.querySelector( '.woodev-pickup-list__name' );
+
+		expect( row.firstElementChild ).toBe( address );
+		expect( address.textContent ).toBe( g.points[ 0 ].short_address );
+		expect( name.textContent ).toBe( g.points[ 0 ].name );
+		expect( address.getAttribute( 'title' ) ).toBe( g.points[ 0 ].address );
+	} );
+
+	it( 'renders the plugin type icon when one is configured, and none otherwise', () => {
+		const g = group( 'g1', 55.75, 37.61, 'ПВЗ' );
+		g.points[ 0 ].type = { code: 'PVZ' };
+
+		const withIcon = new Panels( document.createElement( 'div' ), {
+			...config,
+			pointIcons: { PVZ: { default: '/pvz.svg', active: '/pvz-active.svg' } },
+		} );
+		const withoutIcon = new Panels( document.createElement( 'div' ), { ...config, pointIcons: {} } );
+
+		withIcon.render();
+		withIcon.setVisible( [ g ] );
+		withoutIcon.render();
+		withoutIcon.setVisible( [ g ] );
+
+		expect( withIcon.root.parentNode.querySelector( '.woodev-pickup-list__icon' ) ).not.toBeNull();
+		expect( withoutIcon.root.parentNode.querySelector( '.woodev-pickup-list__icon' ) ).toBeNull();
 	} );
 } );

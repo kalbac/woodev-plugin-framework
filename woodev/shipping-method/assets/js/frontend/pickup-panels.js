@@ -46,17 +46,17 @@
  * matches a plain DOM-style emitter and avoids a caller silently losing a
  * handler it registered earlier; Task 20 (the mount wiring) relies on this.
  *
- * `anchorCleared` (Task 20, D-6): the reset control (`«Сбросить»`) calls
- * `setAnchor( null )` internally and, before this event existed, emitted
- * NOTHING of its own — a caller polling for "did the customer just clear
- * their search" had no signal to poll. `setAnchor( null )` now emits this
- * event EVERY time (whether triggered by the reset control or called
- * directly), so the mount can drop whatever provider-side state belongs to
- * the search (Task 20's mount wires this straight to the map provider's own
- * `clearAddress()`, which is what actually removes the "your address" pin —
- * see `map-provider-yandex.js`'s own docblock on why THAT file, not this
- * one, owns dropping it). `setAnchor( latLng )` with a non-null value never
- * fires it.
+ * `anchorCleared` (Task 20, D-6): before this event existed, `setAnchor( null )` emitted NOTHING
+ * of its own — a caller polling for "did the customer just clear their search" had no signal to
+ * poll (the reset control that used to call `setAnchor( null )` for the customer was deleted in
+ * Task 7, spec V-11, along with the header it lived in; nothing currently calls `setAnchor( null )`
+ * from the UI until Task 11 gives search its own affordance, but the event contract itself does
+ * not depend on where the call comes from). `setAnchor( null )` emits this event EVERY time it is
+ * called with a falsy `latLng`, so the mount can drop whatever provider-side state belongs to the
+ * search (Task 20's mount wires this straight to the map provider's own `clearAddress()`, which is
+ * what actually removes the "your address" pin — see `map-provider-yandex.js`'s own docblock on
+ * why THAT file, not this one, owns dropping it). `setAnchor( latLng )` with a non-null value
+ * never fires it.
  *
  * SORTING HAS ONE RULE, NOT TWO MODES: both the list and any future search
  * result are ordered by distance from a SINGLE anchor point set via
@@ -66,10 +66,10 @@
  * order verbatim (deterministic — it never reshuffles on its own between
  * calls with the same input).
  *
- * THE RENDERED LIST IS CAPPED AT {@see LIST_CAP} ITEMS — silently dropping
- * the tail is not acceptable (spec), so the header's own count reads
- * `{cap}+` (e.g. `300+`) whenever the viewport holds more than the cap,
- * rather than the true count or the capped one.
+ * THE RENDERED LIST IS CAPPED AT {@see LIST_CAP} ITEMS — silently dropping the tail is not
+ * acceptable (spec), so the cap keeps the HEAD of the caller-supplied/sorted order, never an
+ * arbitrary subset of it; there is no header left to surface a `{cap}+` count through (Task 7,
+ * spec V-11), so this is now purely a rendering-cost guard, not a customer-visible statement.
  *
  * TAB LABELS (co-located groups, D-4): one tab per point, labelled by
  * `type.label`; the WHOLE group falls back to `name` labels the moment ANY
@@ -88,12 +88,12 @@
  * text — UNLIKE a point field, it is NOT pre-escaped — so it is written via
  * `textContent`, never `innerHTML`; point fields inside the same results
  * stay on the usual already-escaped/`innerHTML` side of the split.
- * `setAnchor( latLng, label )`'s second argument switches the list header
- * from the plain `drawerTitle` to the `nearestTo` ( `%s` ) label — built by
- * substituting into the template and assigning the WHOLE result via
- * `textContent` (never an HTML string), so the untrusted label can never
- * inject markup regardless of its content — and shows a reset control that
- * clears both back to the plain header on `setAnchor( null )`.
+ * `setAnchor( latLng, label )`'s second argument no longer has any DOM effect (Task 7, spec
+ * V-11, deleted the list header it used to feed, along with the reset control the header
+ * carried — neither reference has one, and the header stated something the customer could
+ * already see). The call shape is kept as-is because Task 11 gives the searched-address state a
+ * new, real affordance inside `SearchControl`'s own layout instead; until then `label` is stored
+ * only so the anchor itself keeps sorting the list.
  * `showNothingNearby( { distanceMeters, name } )` is the explicit "empty map"
  * state (never a silently empty result): it names the nearest point and its
  * distance and offers to show it anyway, rather than leaving the customer to
@@ -142,6 +142,16 @@
 	/** @type {string} fallback text colour, used only when `config.accentColor` is absent/unsafe. */
 	var DEFAULT_ACCENT = '#06aedd';
 
+	/**
+	 * A single detached element reused by {@see decodeForTitle} — same technique, same
+	 * once-created/never-attached lifetime as `pickup-geo.js`'s own `decodeEl`. `null` outside a
+	 * DOM environment; `decodeForTitle()` degrades to returning its input unchanged rather than
+	 * throwing.
+	 *
+	 * @type {HTMLElement|null}
+	 */
+	var titleDecodeEl = ( 'undefined' !== typeof document ) ? document.createElement( 'div' ) : null;
+
 	// -------------------------------------------------------------------------
 	// Small pure helpers
 	// -------------------------------------------------------------------------
@@ -170,6 +180,31 @@
 	 */
 	function fieldValue( value ) {
 		return 'string' === typeof value ? value : '';
+	}
+
+	/**
+	 * Decodes HTML entities in an already-escaped point field for use in a PLAIN-TEXT ATTRIBUTE
+	 * (`title`) — `innerHTML`, this file's usual write target for these fields (see the file
+	 * docblock), is what actually decodes an entity; `setAttribute()` never re-parses its
+	 * argument as markup, so writing the raw escaped string straight into `title` would show the
+	 * customer a literal `&quot;` in a tooltip instead of `"`. `pickup-geo.js` has the identical
+	 * round-trip in its own `decodeEntities()`, but that helper is module-private there (never
+	 * part of the `WoodevPickupGeo` export), so this is a small local duplicate for the one place
+	 * this file needs it.
+	 *
+	 * @param {*} value
+	 * @returns {string}
+	 */
+	function decodeForTitle( value ) {
+		var raw = fieldValue( value );
+
+		if ( '' === raw || ! titleDecodeEl ) {
+			return raw;
+		}
+
+		titleDecodeEl.innerHTML = raw; // eslint-disable-line -- server-escaped; read back via textContent below.
+
+		return titleDecodeEl.textContent;
 	}
 
 	/**
@@ -251,88 +286,6 @@
 	// -------------------------------------------------------------------------
 
 	/**
-	 * Formats the list header's in-view count — the plain number, or
-	 * `{cap}+` once the viewport holds more groups than {@see LIST_CAP}
-	 * actually renders. Never the raw over-cap count (spec: silently
-	 * dropping the tail without saying so is not acceptable).
-	 *
-	 * @param {number} total
-	 * @returns {string}
-	 */
-	function countLabel( total ) {
-		return total > LIST_CAP ? LIST_CAP + '+' : String( total );
-	}
-
-	/**
-	 * Builds the `nearestTo` header label for a searched address: the `%s`
-	 * template with `label` substituted in, the WHOLE result then assigned
-	 * via `textContent` — never built as an HTML string and set through
-	 * `innerHTML`. `label` is untrusted, runtime, third-party text (a
-	 * geocoder result, or whatever the caller passed), so this is the
-	 * "build it as DOM text rather than markup" choice from the file
-	 * docblock: `textContent` never interprets its argument as markup, so
-	 * the substitution needs no separate escaping step to be safe — unlike
-	 * `innerHTML`, there is no entity/tag parsing for an injected string to
-	 * exploit.
-	 *
-	 * @param {Object} config
-	 * @param {string} label
-	 * @returns {string}
-	 */
-	function anchorHeaderText( config, label ) {
-		var template = text( config, 'nearestTo' );
-
-		return template.indexOf( '%s' ) !== -1 ? template.replace( '%s', label ) : template;
-	}
-
-	/**
-	 * Rebuilds the list header's text and the reset control's presence.
-	 *
-	 * Two states, never mixed: with a searched-address label active
-	 * (`setAnchor( latLng, label )`, Task 15) the header reads the
-	 * `nearestTo` template and the `.woodev-pickup-list__reset` control is
-	 * attached; otherwise the header is the `drawerTitle` i18n label plus a
-	 * `(count)` suffix once a viewport has actually been reported at least
-	 * once via `setVisible()` — never before, so a config with no groups yet
-	 * set reads as JUST the title (see the "blank i18n key" test: with an
-	 * empty title AND no `setVisible()` call, the header must read `''`) —
-	 * and the reset control is detached. Both branches assign the header via
-	 * `textContent` — an i18n label (or the untrusted address label) that
-	 * happens to contain markup renders as literal text, never executes.
-	 *
-	 * @param {Panels} self
-	 * @returns {void}
-	 */
-	function renderListHeader( self ) {
-		if ( self._anchorLabel ) {
-			self._listHeaderEl.textContent = anchorHeaderText( self._config, self._anchorLabel );
-
-			if ( ! self._resetEl.parentNode ) {
-				self._listEl.insertBefore( self._resetEl, self._listHeaderEl.nextSibling );
-			}
-
-			return;
-		}
-
-		if ( self._resetEl.parentNode ) {
-			self._resetEl.parentNode.removeChild( self._resetEl );
-		}
-
-		var title = text( self._config, 'drawerTitle' );
-		var parts = [];
-
-		if ( title ) {
-			parts.push( title );
-		}
-
-		if ( self._hasViewport ) {
-			parts.push( '(' + countLabel( self._groups.length ) + ')' );
-		}
-
-		self._listHeaderEl.textContent = parts.join( ' ' );
-	}
-
-	/**
 	 * Orders `groups` for display: by ascending distance from `anchor` when
 	 * one is set, otherwise left in the caller's own order (see the file
 	 * docblock's "SORTING HAS ONE RULE" note) — never mutates its argument.
@@ -359,28 +312,63 @@
 	}
 
 	/**
-	 * Builds one list row for a single-point group: name, short address, and
-	 * (when an anchor is set) the formatted distance. Point fields are
-	 * written via `innerHTML` (already escaped, see the file docblock).
+	 * The plugin's icon URL for a point's type, or `''` when the plugin supplies none.
+	 * The sidebar shows the PLUGIN's icon only — the framework's own default marker (V-9) is
+	 * map furniture and would read as decoration in a list.
 	 *
-	 * @param {Object}   point
+	 * @param {Object} config
+	 * @param {Object} point
+	 * @returns {string}
+	 */
+	function pointIconUrl( config, point ) {
+		var icons = ( config && config.pointIcons ) || {};
+		var code = ( point && point.type && point.type.code ) || '';
+
+		return ( icons[ code ] && icons[ code ].default ) || '';
+	}
+
+	/**
+	 * Builds one list row for a single-point group (spec V-11): the plugin's type icon (only
+	 * when {@see pointIconUrl} finds one), address in bold, name/description as the muted
+	 * subtitle, and — when an anchor is set — the formatted distance. Icon, then address, then
+	 * name is the order the spec asks for: the address is what the customer scans the list FOR,
+	 * the name/description is secondary detail. `short_address`/`address`/`name` are
+	 * already-escaped point fields (see the file docblock) and are written via `innerHTML` here,
+	 * same as everywhere else in this file; the `title` attributes carry the DECODED text
+	 * instead (see {@see decodeForTitle}) because an HTML attribute value is never re-parsed as
+	 * markup the way `innerHTML` is, so the raw escaped string would show literal entities on
+	 * hover.
+	 *
+	 * @param {Object}        point
 	 * @param {number[]|null} anchor
-	 * @param {Object}   group
-	 * @param {string}   locale
+	 * @param {Object}        group
+	 * @param {string}        locale
+	 * @param {Object}        config
 	 * @returns {HTMLElement}
 	 */
-	function buildSinglePointRow( point, anchor, group, locale ) {
-		var nameEl = document.createElement( 'span' );
-		nameEl.className = 'woodev-pickup-list__name';
-		nameEl.innerHTML = fieldValue( point.name ); // eslint-disable-line -- server-escaped.
+	function buildSinglePointRow( point, anchor, group, locale, config ) {
+		var wrap = document.createDocumentFragment();
+		var iconUrl = pointIconUrl( config, point );
+
+		if ( iconUrl ) {
+			var icon = document.createElement( 'img' );
+			icon.className = 'woodev-pickup-list__icon';
+			icon.src = iconUrl;
+			icon.alt = '';
+			wrap.appendChild( icon );
+		}
 
 		var addressEl = document.createElement( 'span' );
 		addressEl.className = 'woodev-pickup-list__address';
-		addressEl.innerHTML = fieldValue( point.short_address ); // eslint-disable-line -- server-escaped.
-
-		var wrap = document.createDocumentFragment();
-		wrap.appendChild( nameEl );
+		addressEl.innerHTML = fieldValue( point.short_address ) || fieldValue( point.address ); // eslint-disable-line -- server-escaped.
+		addressEl.setAttribute( 'title', decodeForTitle( point.address ) );
 		wrap.appendChild( addressEl );
+
+		var nameEl = document.createElement( 'span' );
+		nameEl.className = 'woodev-pickup-list__name';
+		nameEl.innerHTML = fieldValue( point.name ); // eslint-disable-line -- server-escaped.
+		nameEl.setAttribute( 'title', decodeForTitle( point.name ) );
+		wrap.appendChild( nameEl );
 
 		if ( anchor ) {
 			var meters = geo.distanceMeters( anchor, [ group.lat, group.lng ] );
@@ -424,7 +412,7 @@
 				button.type = 'button';
 				button.className = 'woodev-pickup-list__point';
 				button.dataset.pointId = String( point.id );
-				button.appendChild( buildSinglePointRow( point, anchor, group, locale ) );
+				button.appendChild( buildSinglePointRow( point, anchor, group, locale, self._config ) );
 				button.addEventListener( 'click', function() {
 					self.openCard( group, point.id );
 				} );
@@ -435,7 +423,7 @@
 		}
 
 		var onlyPoint = group.points[ 0 ];
-		item.appendChild( buildSinglePointRow( onlyPoint, anchor, group, locale ) );
+		item.appendChild( buildSinglePointRow( onlyPoint, anchor, group, locale, self._config ) );
 		item.addEventListener( 'click', function() {
 			self.openCard( group, onlyPoint.id );
 		} );
@@ -471,13 +459,16 @@
 	}
 
 	/**
-	 * Rebuilds the whole list panel (header + body) from current state.
+	 * Rebuilds the list panel's body from current state. A thin alias today — kept as its own
+	 * function (rather than inlined at each of its three call sites: `render()`, `setAnchor()`,
+	 * `setVisible()`) because it used to also rebuild the header (Task 7, spec V-11, deleted
+	 * that half outright: no reference has one, and it stated something the customer could
+	 * already see) and is the natural place for Task 11 to hook the search-view swap back in.
 	 *
 	 * @param {Panels} self
 	 * @returns {void}
 	 */
 	function renderList( self ) {
-		renderListHeader( self );
 		renderListBody( self );
 	}
 
@@ -997,7 +988,6 @@
 		this._groups = [];
 		this._anchor = null;
 		this._anchorLabel = null;
-		this._hasViewport = false;
 		this._selectedId = null;
 		this._activeGroup = null;
 		this._activeIndex = 0;
@@ -1074,14 +1064,14 @@
 		var list = document.createElement( 'div' );
 		list.className = 'woodev-pickup-list';
 
-		var header = document.createElement( 'div' );
-		header.className = 'woodev-pickup-list__header';
-
 		// No dedicated i18n key exists for this control (the PHP handler's own
 		// `get_js_config()` i18n array does not carry one) — it is a purely
 		// visual chevron affordance (Task 21 styles it), accessibly NAMED by
 		// the drawer it opens/closes, `drawerTitle`, rather than inventing an
-		// untested key that would render permanently blank (I1).
+		// untested key that would render permanently blank (I1). This is also
+		// `drawerTitle`'s ONLY remaining home: Task 7 (spec V-11) deleted the
+		// list header the key used to feed, since neither reference has one
+		// and it stated something the customer could already see.
 		var toggle = document.createElement( 'button' );
 		toggle.type = 'button';
 		toggle.className = 'woodev-pickup-list__toggle';
@@ -1089,15 +1079,6 @@
 
 		var body = document.createElement( 'div' );
 		body.className = 'woodev-pickup-list__body';
-
-		// Task 15: the reset control shown next to the header once a searched
-		// address is active — attached/detached by {@see renderListHeader},
-		// never destroyed and recreated, so the SAME element (and its one
-		// listener) survives every header re-render.
-		var reset = document.createElement( 'button' );
-		reset.type = 'button';
-		reset.className = 'woodev-pickup-list__reset';
-		reset.textContent = text( this._config, 'resetSearch' );
 
 		// Task 15: the search results view — a sibling of the plain viewport
 		// list body, populated only by `renderSearchResults()`.
@@ -1119,7 +1100,6 @@
 		var badge = document.createElement( 'span' );
 		badge.className = 'woodev-pickup-filter__badge';
 
-		list.appendChild( header );
 		list.appendChild( body );
 		list.appendChild( search );
 
@@ -1153,10 +1133,8 @@
 		this._stage = stage;
 		this._mapEl = map;
 		this._listEl = list;
-		this._listHeaderEl = header;
 		this._listBodyEl = body;
 		this._cardEl = card;
-		this._resetEl = reset;
 		this._searchEl = search;
 		this._filterEl = filter;
 		this._badgeEl = badge;
@@ -1164,9 +1142,6 @@
 		var self = this;
 		toggle.addEventListener( 'click', function() {
 			self.toggleList();
-		} );
-		reset.addEventListener( 'click', function() {
-			self.setAnchor( null );
 		} );
 
 		renderList( this );
@@ -1189,19 +1164,19 @@
 	 * modes (see the file docblock). Re-renders the list immediately so an
 	 * already-open list re-sorts without waiting for the next `setVisible()`.
 	 *
-	 * `label` (Task 15) is the searched address text: when given ALONGSIDE a
-	 * non-null `latLng`, the list header switches to the `nearestTo` template
-	 * and the reset control appears; `setAnchor( null )` — with or without a
-	 * second argument — clears BOTH the anchor and the label, restoring the
-	 * plain `drawerTitle` header and removing the reset control. Existing
-	 * single-argument callers (the map-centre case) are unaffected: no label
-	 * means the plain header, exactly as before this parameter existed.
+	 * `label` (Task 15) is the searched address text; it used to switch the list header to the
+	 * `nearestTo` template and show a reset control, both DELETED in Task 7 (spec V-11) along
+	 * with the plain header they shared an element with. `label` still has no OTHER effect today
+	 * — it is stored purely so this call shape survives until Task 11 gives the searched-address
+	 * state its own affordance inside `SearchControl`'s layout. Existing single-argument callers
+	 * (the map-centre case) are unaffected either way: with or without a label, only the anchor
+	 * itself drives the list's sort order.
 	 *
 	 * `anchorCleared` fires whenever this call CLEARS the anchor (`latLng` is
 	 * null/falsy) — see the file docblock's "EVENT SEMANTICS" note.
 	 *
 	 * @param {number[]|null} latLng `[lat, lng]`, or null to clear.
-	 * @param {string}        [label] the searched address, for the `nearestTo` header.
+	 * @param {string}        [label] the searched address; stored for Task 11, no DOM effect yet.
 	 * @returns {void}
 	 */
 	Panels.prototype.setAnchor = function( latLng, label ) {
@@ -1218,16 +1193,13 @@
 	};
 
 	/**
-	 * Sets the groups currently in the map's viewport and re-renders the
-	 * list. Marks that a viewport has been reported at least once — see
-	 * {@see renderListHeader} for why that gate exists.
+	 * Sets the groups currently in the map's viewport and re-renders the list.
 	 *
 	 * @param {Array} groups
 	 * @returns {void}
 	 */
 	Panels.prototype.setVisible = function( groups ) {
 		this._groups = groups || [];
-		this._hasViewport = true;
 
 		renderList( this );
 	};
