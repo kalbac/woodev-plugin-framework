@@ -25,6 +25,72 @@
  * @since 2.0.2
  */
 
+/* -------------------------------------------------------------------------
+ * STYLE ISOLATION (Task 18, spec V-14) — the shell's own elements.
+ *
+ * Same contract, and same `:where()` specificity reasoning, as the equivalent block at the top of
+ * `woodev/shipping-method/assets/css/frontend/pickup.css` — see that file's own docblock for the
+ * full rationale. In short: `:where()` carries zero specificity, so `.woodev-modal :where( h2 )` /
+ * `.woodev-modal :where( p )` etc. tie exactly with every single-class component rule later in
+ * THIS file (`.woodev-modal__message { display: block }` is (0,1,0) too), so source order decides
+ * and the later, real rule always wins — while still outranking a theme's bare `button {}` /
+ * `h1 {}` (0,0,1) outright on class count alone.
+ *
+ * ROOTED ON `.woodev-modal`, NOT `.woodev-modal__header`/`__body` separately: `showNotice()`
+ * (below) inserts `.woodev-modal__notice` as a SIBLING of header/body — `this._dialog.insertBefore(
+ * notice, this._body )` — never nested inside either, so a reset scoped to just those two roots
+ * would silently miss the notice banner's own span/buttons. `.woodev-modal` is the outer marker
+ * already used for exactly this "reach everything the shell renders" purpose by the box-sizing
+ * reset directly below (`.woodev-modal *`), so this block matches that existing convention instead
+ * of inventing a narrower one that has a gap.
+ * ---------------------------------------------------------------------- */
+
+.woodev-modal :where( div, span, p, ul, li, form, details, summary, img, svg ),
+.woodev-modal :where( h1, h2, h3, h4, h5, h6 ),
+.woodev-modal :where( button, input ) {
+	font-family: inherit;
+	margin: 0;
+	padding: 0;
+	border: 0;
+	background: none;
+	color: inherit;
+	font-size: 14px;
+	font-weight: 400;
+	font-style: normal;
+	line-height: 1.4;
+	letter-spacing: normal;
+	text-align: left;
+	text-transform: none;
+	box-shadow: none;
+	min-width: 0;
+	min-height: 0;
+	max-width: none;
+	float: none;
+	visibility: visible;
+}
+
+.woodev-modal :where( div, p, form, details, ul ) { display: block; }
+.woodev-modal :where( span, img, svg )            { display: inline-block; }
+.woodev-modal :where( li )                        { display: list-item; list-style: none; }
+
+.woodev-modal :where( button ) {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	cursor: pointer;
+	appearance: none;
+}
+
+.woodev-modal :where( input ) {
+	display: block;
+	width: auto;
+	height: auto;
+	appearance: none;
+}
+
+.woodev-modal :where( summary ) { display: list-item; cursor: pointer; }
+.woodev-modal :where( img )     { max-width: none; height: auto; }
+
 .woodev-modal *,
 .woodev-modal *::before,
 .woodev-modal *::after {

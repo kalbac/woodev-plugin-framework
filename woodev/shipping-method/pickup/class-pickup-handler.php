@@ -277,6 +277,22 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		private string $setting_accent_color;
 
 		/**
+		 * Whether the map offers an address search (Task 18, spec V-6), plugin-settable,
+		 * default `true`. Deliberately a `Pickup_Handler` property, never a
+		 * {@see Map_Provider} method: whether a carrier wants an address search is the
+		 * plugin's decision, not the map library's, and `Map_Provider` currently declares
+		 * only `get_id`/`get_label`/`get_script_handle`/`get_settings_fields`/
+		 * `get_js_config`/`owns_chrome` — adding a seventh method would oblige both
+		 * providers and every fixture to answer a question neither of them owns. Read by
+		 * {@see self::get_js_config()}, which applies the
+		 * `woodev_pickup_map_search_enabled` filter on top before emitting it.
+		 *
+		 * @since 2.0.2
+		 * @var bool
+		 */
+		private bool $search_enabled;
+
+		/**
 		 * Constructor.
 		 *
 		 * `$order_handler` and `$point_field_logical` are optional and go together: when
@@ -342,6 +358,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 *                                                          setting (spec D-15); see
 		 *                                                          {@see self::$setting_accent_color}.
 		 *                                                          Optional, empty when unset.
+		 * @param bool                        $search_enabled       whether the map offers an address
+		 *                                                          search (Task 18, spec V-6); see
+		 *                                                          {@see self::$search_enabled}.
+		 *                                                          Optional, default `true`.
 		 *
 		 * @throws \InvalidArgumentException when `$default_location` does not have a valid
 		 *                                    `center` (two floats/ints, lat within ±90, lng
@@ -359,7 +379,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 			bool $replace_address = true,
 			array $point_icons = [],
 			string $accent_color = self::DEFAULT_ACCENT_COLOR,
-			string $setting_accent_color = ''
+			string $setting_accent_color = '',
+			bool $search_enabled = true
 		) {
 			self::validate_default_location( $default_location );
 
@@ -374,6 +395,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 			$this->point_icons          = $point_icons;
 			$this->accent_color         = $accent_color;
 			$this->setting_accent_color = $setting_accent_color;
+			$this->search_enabled       = $search_enabled;
 		}
 
 		/**
@@ -606,7 +628,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 *     mapConfig: array<string, mixed>,
 		 *     replaceAddress: array{enabled: bool, billingOnly: bool},
 		 *     accentColor: string,
-		 *     searchNearestCount: int
+		 *     searchNearestCount: int,
+		 *     modal: array{width: int, bodyHeight: string},
+		 *     search: bool
 		 * }
 		 */
 		public function get_js_config(): array {
@@ -718,6 +742,20 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 			 */
 			$strings = apply_filters( 'woodev_pickup_map_i18n', $strings, $this->plugin_id );
 
+			/**
+			 * Filters whether the pickup map offers an address search (Task 18, spec V-6).
+			 *
+			 * @since 2.0.2
+			 *
+			 * @param bool   $search_enabled the plugin's own constructor-supplied default.
+			 * @param string $plugin_id      The plugin the map belongs to.
+			 */
+			$search_enabled = (bool) apply_filters(
+				'woodev_pickup_map_search_enabled',
+				$this->search_enabled,
+				$this->plugin_id
+			);
+
 			return [
 				'fieldId'  => $this->field_id,
 				'strategy' => $this->source->get_strategy(),
@@ -744,6 +782,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 				// self::resolve_search_nearest_count()'s own docblock for why this is a
 				// framework-filterable constant rather than a plugin constructor argument.
 				'searchNearestCount' => $this->resolve_search_nearest_count(),
+
+				// The dialog sizes itself before any content exists (spec V-1); these two
+				// values used to live only in CSS, on the MAP element, which is why the
+				// modal opened as a header-tall strip until the map mounted.
+				'modal' => [
+					'width'      => 920,
+					'bodyHeight' => 'min(80vh, 800px)',
+				],
+
+				// Top level, NOT inside `mapConfig`: see self::$search_enabled's own
+				// docblock for why this is a handler property, not a Map_Provider method.
+				'search' => $search_enabled,
 			];
 		}
 

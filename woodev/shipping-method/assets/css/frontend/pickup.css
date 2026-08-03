@@ -92,6 +92,80 @@
  */
 
 /* -------------------------------------------------------------------------
+ * STYLE ISOLATION (Task 18, spec V-14).
+ *
+ * A storefront theme's global element rules (`button { display: none }`, `h1 { text-transform:
+ * uppercase }`) land inside our modal too, because it loads on a real theme's page. Every element
+ * type this feature emits therefore declares its own box and typography here, up front. The ONE
+ * thing never declared is `font-family`: the map must read as part of the shop, not a second
+ * typeface pasted onto it — including on `button`/`input`, which do NOT inherit it by default.
+ *
+ * SPECIFICITY, DELIBERATELY `:where()`, NOT `:is()`: a plain `.woodev-pickup-stage :is( div, ... )`
+ * would carry a class PLUS a type — (0,1,1) — which outranks every single-class component rule
+ * below it in this same file (`.woodev-pickup-list { display: none }` is (0,1,0)), and a reset that
+ * wins over the component that owns the element is exactly backwards: `.woodev-pickup-list` would
+ * always render `display: block`, never `none`. `:where()` carries ZERO specificity by spec, so
+ * `.woodev-pickup-stage :where( div, ... )` is (0,1,0) — an exact TIE with every single-class rule
+ * later in this file, so normal cascade order decides (this block sits at the top, so any later,
+ * more specific — or equally-specific-but-later — component rule always wins), while still
+ * outranking a theme's bare `button {}` (0,0,1) outright on class count alone. This is also why the
+ * `.woodev-pickup-overlay[hidden]` / `.woodev-pickup-message[hidden]` / `.woodev-pickup-filter__
+ * badge[hidden]` / `.woodev-pickup-filter__menu[hidden]` rules (issue #160) are untouched: each is
+ * (0,2,0) — a class plus an attribute — which already beats this reset's (0,1,0) outright.
+ *
+ * Every rule written in Tasks 4-17 comes AFTER this block in source order, so — combined with the
+ * specificity tie above — it always wins for any element it actually addresses; this reset exists
+ * for the elements nothing later touches, and as the correct default the instant a theme's global
+ * rule would otherwise leak in.
+ * ---------------------------------------------------------------------- */
+
+.woodev-pickup-stage :where( div, span, p, ul, li, form, details, summary, img, svg ),
+.woodev-pickup-stage :where( h1, h2, h3, h4, h5, h6 ),
+.woodev-pickup-stage :where( button, input ) {
+	font-family: inherit;
+	margin: 0;
+	padding: 0;
+	border: 0;
+	background: none;
+	color: inherit;
+	font-size: 14px;
+	font-weight: 400;
+	font-style: normal;
+	line-height: 1.4;
+	letter-spacing: normal;
+	text-align: left;
+	text-transform: none;
+	box-shadow: none;
+	min-width: 0;
+	min-height: 0;
+	max-width: none;
+	float: none;
+	visibility: visible;
+}
+
+.woodev-pickup-stage :where( div, p, form, details, ul ) { display: block; }
+.woodev-pickup-stage :where( span, img, svg )            { display: inline-block; }
+.woodev-pickup-stage :where( li )                        { display: list-item; list-style: none; }
+
+.woodev-pickup-stage :where( button ) {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	cursor: pointer;
+	appearance: none;
+}
+
+.woodev-pickup-stage :where( input ) {
+	display: block;
+	width: auto;
+	height: auto;
+	appearance: none;
+}
+
+.woodev-pickup-stage :where( summary ) { display: list-item; cursor: pointer; }
+.woodev-pickup-stage :where( img )     { max-width: none; height: auto; }
+
+/* -------------------------------------------------------------------------
  * Trigger — the button mounted into the §8 `data-woodev-pickup-slot` anchor.
  * Intentionally minimal: it carries WooCommerce's own `.button` class too, so
  * the theme's button styling should lead. Only spacing is asserted.

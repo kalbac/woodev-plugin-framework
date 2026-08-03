@@ -395,6 +395,8 @@ function makeConfig( overrides ) {
 		pointIcons: { PVZ: { default: 'https://example.test/pvz.svg', active: 'https://example.test/pvz-a.svg' } },
 		accentColor: '#06aedd',
 		searchNearestCount: 3,
+		modal: { width: 920, bodyHeight: 'min(80vh, 800px)' },
+		search: true,
 	};
 
 	return Object.assign( {}, base, overrides );
@@ -699,6 +701,18 @@ test( 'the session tags its modal with the documented pickup modalId on every mo
 	expect( closed ).toHaveLength( 1 );
 	expect( closed[ 0 ].modalId ).toBe( 'woodev-pickup-map' );
 	expect( closed[ 0 ].reason ).toBe( 'button' );
+} );
+
+test( 'config.modal.width/bodyHeight reach the real WoodevModal dialog and body (spec V-1, Task 18)', () => {
+	setConfig( makeConfig( { modal: { width: 920, bodyHeight: 'min(80vh, 800px)' } } ) );
+	mountAll();
+	clickTrigger();
+
+	const dialog = document.querySelector( '[role="dialog"]' );
+	const body = dialog.querySelector( '.woodev-modal__body' );
+
+	expect( dialog.style.minWidth ).toBe( '920px' );
+	expect( body.style.height ).toBe( 'min(80vh, 800px)' );
 } );
 
 // -------------------------------------------------------------------------

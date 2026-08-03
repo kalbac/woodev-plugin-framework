@@ -579,7 +579,8 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				$overrides['replace_address'] ?? true,
 				$overrides['point_icons'] ?? [],
 				$overrides['accent_color'] ?? '#06aedd',
-				$overrides['setting_accent'] ?? ''
+				$overrides['setting_accent'] ?? '',
+				$overrides['search_enabled'] ?? true
 			);
 		}
 
@@ -1017,9 +1018,54 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 					'replaceAddress',
 					'accentColor',
 					'searchNearestCount',
+					'modal',
+					'search',
 				],
 				array_keys( $config )
 			);
+		}
+
+		// -------------------------------------------------------------------------
+		// modal size + search flag (Task 18, spec V-1 / V-6)
+		// -------------------------------------------------------------------------
+
+		/**
+		 * The dialog sizes itself before any content exists (spec V-1) — these two values
+		 * used to live only in CSS, on the map element, which is why the modal opened as a
+		 * header-tall strip until the map mounted. `search` defaults to `true` — see
+		 * {@see Pickup_Handler::$search_enabled}'s own docblock for why it is a handler
+		 * property rather than a `Map_Provider` method.
+		 */
+		public function test_config_carries_the_modal_size_and_the_search_flag(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			$this->stub_config_dependencies_except_filters();
+
+			$config = $this->make_handler()->get_js_config();
+
+			$this->assertSame( 920, $config['modal']['width'] );
+			$this->assertSame( 'min(80vh, 800px)', $config['modal']['bodyHeight'] );
+			$this->assertTrue( $config['search'] );
+		}
+
+		public function test_search_can_be_disabled_via_the_constructor(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			$this->stub_config_dependencies_except_filters();
+
+			$config = $this->make_handler( [ 'search_enabled' => false ] )->get_js_config();
+
+			$this->assertFalse( $config['search'] );
+		}
+
+		public function test_a_filter_overrides_the_search_flag(): void {
+			Filters\expectApplied( 'woodev_pickup_map_search_enabled' )
+				->once()
+				->with( true, 'p' )
+				->andReturn( false );
+			$this->stub_config_dependencies_except_filters();
+
+			$config = $this->make_handler()->get_js_config();
+
+			$this->assertFalse( $config['search'] );
 		}
 
 		// -------------------------------------------------------------------------

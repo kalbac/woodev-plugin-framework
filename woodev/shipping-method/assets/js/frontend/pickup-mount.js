@@ -844,6 +844,11 @@
 	 * @returns {{modal: Object, refresh: Function, destroy: Function}}
 	 */
 	function openSession( config, triggerEl ) {
+		// `config.modal` sizes the dialog before any content exists (spec V-1) — the PHP
+		// handler emits it ({@see Pickup_Handler::get_js_config()}); this file only forwards
+		// it, exactly like every other config value it never invents a default for.
+		var modalSize = ( config && config.modal ) || {};
+
 		var Modal = window.WoodevModal;
 		var modal = new Modal( {
 			modalId: PICKUP_MODAL_ID,
@@ -851,6 +856,8 @@
 			closeLabel: text( config, 'close' ),
 			retryLabel: text( config, 'retry' ),
 			returnFocusTo: triggerEl,
+			width: modalSize.width,
+			bodyHeight: modalSize.bodyHeight,
 		} );
 
 		modal.open();
