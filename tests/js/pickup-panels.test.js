@@ -1678,3 +1678,67 @@ describe( 'zoom control (spec V-13)', () => {
 		expect( panels.root.querySelector( '.woodev-pickup-zoom' ) ).toBeNull();
 	} );
 } );
+
+// -----------------------------------------------------------------------
+// Task 16 (spec V-4 stage 2/3): setBusy()/isBusy() — the stage-wide overlay + non-interactive
+// map that covers the gap between "the map is drawn" and "the first points fetch settled". The
+// sequencing itself (pickup-mount.js calling this at the right times) is `pickup-mount.test.js`'s
+// job; this file only proves the API's own DOM contract.
+// -----------------------------------------------------------------------
+describe( 'setBusy()/isBusy() (spec V-4)', () => {
+	it( 'is not busy, and the overlay is hidden, right after render()', () => {
+		const container = document.createElement( 'div' );
+		const panels = new Panels( container, config );
+
+		panels.render();
+
+		expect( panels.isBusy() ).toBe( false );
+		expect( container.querySelector( '.woodev-pickup-overlay' ) ).not.toBeNull();
+		expect( container.querySelector( '.woodev-pickup-overlay' ).hidden ).toBe( true );
+	} );
+
+	it( 'setBusy( true ) marks the stage is-busy and un-hides the overlay', () => {
+		const container = document.createElement( 'div' );
+		const panels = new Panels( container, config );
+
+		panels.render();
+		panels.setBusy( true );
+
+		expect( panels.isBusy() ).toBe( true );
+		expect( panels._stage.className ).toContain( 'is-busy' );
+		expect( container.querySelector( '.woodev-pickup-overlay' ).hidden ).toBe( false );
+	} );
+
+	it( 'setBusy( false ) clears is-busy and hides the overlay again — the same node, not a new one', () => {
+		const container = document.createElement( 'div' );
+		const panels = new Panels( container, config );
+
+		panels.render();
+		panels.setBusy( true );
+		const overlay = container.querySelector( '.woodev-pickup-overlay' );
+		panels.setBusy( false );
+
+		expect( panels.isBusy() ).toBe( false );
+		expect( panels._stage.className ).not.toContain( 'is-busy' );
+		expect( container.querySelector( '.woodev-pickup-overlay' ) ).toBe( overlay );
+		expect( overlay.hidden ).toBe( true );
+	} );
+
+	it( 'is idempotent: calling setBusy( true ) twice keeps exactly one overlay', () => {
+		const container = document.createElement( 'div' );
+		const panels = new Panels( container, config );
+
+		panels.render();
+		panels.setBusy( true );
+		panels.setBusy( true );
+
+		expect( container.querySelectorAll( '.woodev-pickup-overlay' ) ).toHaveLength( 1 );
+	} );
+
+	it( 'does not throw when called before render()', () => {
+		const panels = new Panels( document.createElement( 'div' ), config );
+
+		expect( () => panels.setBusy( true ) ).not.toThrow();
+		expect( panels.isBusy() ).toBe( true );
+	} );
+} );

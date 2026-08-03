@@ -1219,6 +1219,13 @@
 		this._searchInput = null;
 		this._searchResults = null;
 
+		// Task 16 (spec V-4 stage 2): whether the stage is currently blocked on the FIRST points
+		// fetch after the map was drawn — see {@see Panels.prototype.setBusy}. False until `render()`
+		// builds the overlay `setBusy()` toggles; a caller asking before `render()` gets the correct
+		// "not busy" answer regardless.
+		this._busy = false;
+		this._overlayEl = null;
+
 		this.root = null;
 	}
 
@@ -1259,8 +1266,10 @@
 	 * the positioning context every panel is `position: absolute` against; it begins BELOW the
 	 * modal header, so no panel can reach it the way the old `position: fixed` panels did once
 	 * `.woodev-modal__content` grew a centring `transform` — see `pickup.css`'s own docblock.
-	 * Idempotent in the sense that this project never calls it twice on the same instance; a
-	 * second call would append a second subtree, so callers must not do that.
+	 * This project never calls it twice on the same instance, but a second call would not
+	 * duplicate the subtree either way: a pre-existing `.woodev-pickup-stage` is removed first
+	 * (Task 16 fix — see that removal's own comment below for why this can no longer be a blind
+	 * "clear everything" on the whole container).
 	 *
 	 * @returns {void}
 	 */
@@ -1350,7 +1359,36 @@
 
 		stage.appendChild( zoom );
 
-		empty( this._container );
+		// Task 16 (spec V-4 stage 2): built once here, always present, HIDDEN by default — never
+		// created/destroyed by `setBusy()` itself, matching `WoodevModal#showLoading()`'s own
+		// "idempotent, additive" node-reuse discipline (see that file's docblock). A stage sibling,
+		// appended LAST so it paints over the map/panels/zoom regardless of DOM order (the actual
+		// stacking is `pickup.css`'s `z-index: 6` — the highest this file uses).
+		var overlay = document.createElement( 'div' );
+		overlay.className = 'woodev-pickup-overlay';
+		overlay.setAttribute( 'role', 'status' );
+		overlay.hidden = true;
+
+		var spinner = document.createElement( 'span' );
+		spinner.className = 'woodev-pickup-spinner';
+		spinner.setAttribute( 'aria-hidden', 'true' );
+		overlay.appendChild( spinner );
+
+		stage.appendChild( overlay );
+
+		// Removes a STALE stage only — never the whole container (Task 16 fix; this used to be a
+		// blind `empty( this._container )`). `pickup-mount.js` calls `modal.showLoading()` BEFORE
+		// constructing this instance at all (spec V-4 stage 1), appending its spinner overlay
+		// straight into this SAME container; wiping every child here deleted that overlay the
+		// instant the panels rendered, so the modal's "map not ready yet" spinner was visible for
+		// effectively zero time. This project still only ever calls `render()` once per instance
+		// (see the docblock above) — this guard is for a hypothetical re-render, not the common case.
+		var existingStage = this._container.querySelector( '.woodev-pickup-stage' );
+
+		if ( existingStage ) {
+			this._container.removeChild( existingStage );
+		}
+
 		this._container.appendChild( stage );
 
 		this.root = root;
@@ -1359,6 +1397,7 @@
 		this._listEl = list;
 		this._listBodyEl = body;
 		this._cardEl = card;
+		this._overlayEl = overlay;
 
 		var self = this;
 		toggle.addEventListener( 'click', function() {
@@ -1387,6 +1426,43 @@
 	 */
 	Panels.prototype.getMapElement = function() {
 		return this._mapEl;
+	};
+
+	/**
+	 * Toggles the busy state (Task 16, spec V-4 stage 2): a stage-wide spinner overlay and a
+	 * non-interactive map, shown from the moment the map is drawn until the FIRST points fetch
+	 * settles. Marks `.woodev-pickup-stage` with `is-busy` — `pickup.css`'s own rule off that class
+	 * is what actually disables the map (`pointer-events: none`) and hides the search/filter
+	 * controls (searching a pool that has not loaded yet is meaningless); this method only owns the
+	 * class and the overlay's `hidden` flag, never the map's interactivity directly, so a map
+	 * provider never has to know this state exists.
+	 *
+	 * A no-op on the class/overlay when called before `render()` — `isBusy()` still answers
+	 * correctly either way, since `_busy` itself is always tracked.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @param {boolean} busy
+	 * @returns {void}
+	 */
+	Panels.prototype.setBusy = function( busy ) {
+		this._busy = !! busy;
+
+		if ( this._stage ) {
+			this._stage.classList.toggle( 'is-busy', this._busy );
+		}
+
+		if ( this._overlayEl ) {
+			this._overlayEl.hidden = ! this._busy;
+		}
+	};
+
+	/**
+	 * @since 2.0.2
+	 * @returns {boolean}
+	 */
+	Panels.prototype.isBusy = function() {
+		return this._busy;
 	};
 
 	/**

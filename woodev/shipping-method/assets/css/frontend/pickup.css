@@ -145,28 +145,74 @@
 	min-height: 0;
 }
 
-/* Shown over the map while the FIRST point fetch is in flight, then removed once it settles
-   (points drawn, empty, or error). Without it a drawn-but-pointless map reads as "there are no
-   points here" rather than "still loading" — spec §4.9's "never an empty rectangle" applies to
-   the loading moment too, not only to failures. Centred over the map rather than replacing it,
-   so the map is visibly already there. */
-.woodev-pickup-map-loading {
+/* -------------------------------------------------------------------------
+ * Busy overlay (Task 16, spec V-4 stage 2) — shown over the STAGE (map + panels + zoom, the
+ * whole thing, hence the highest z-index this file uses) from the moment the map is drawn until
+ * the FIRST points fetch settles, then hidden again (never removed — `pickup-panels.js`'s
+ * `setBusy()` toggles `.hidden`, matching `WoodevModal#showLoading()`'s own reuse-the-node
+ * discipline). `is-busy` also makes the map non-interactive below: a customer dragging/zooming a
+ * map with no points on it yet is dragging nothing meaningful, and a viewport-strategy drag would
+ * fire a SECOND `boundsChange` fetch racing the first.
+ *
+ * Additive, not a replacement for the stage's own content — the map provider already drew its
+ * canvas into `.woodev-pickup-map` by the time this shows (stage 1's spinner, on the MODAL body,
+ * is what covers the gap before that); see `woodev-modal.js`'s `showLoading()` docblock for the
+ * identical "additive because something is being drawn underneath" reasoning.
+ * ---------------------------------------------------------------------- */
+
+.woodev-pickup-overlay {
 	position: absolute;
-	top: 0;
-	right: 0;
-	bottom: 0;
-	left: 0;
-	z-index: 1;
+	inset: 0;
+	z-index: 6;
 	display: flex;
+	flex-direction: column;
 	align-items: center;
 	justify-content: center;
-	padding: 16px;
-	text-align: center;
-	font-size: 14px;
-	line-height: 1.5;
-	color: #646970;
+	gap: 12px;
 	background: rgba( 255, 255, 255, 0.75 );
-	pointer-events: none; /* Never blocks a map the customer can already see and drag. */
+}
+
+/* Same shape as `woodev-modal.css`'s `.woodev-modal__spinner` — this file owns everything inside
+   the stage (see the file docblock), so it gets its own rule rather than reaching into that one. */
+.woodev-pickup-spinner {
+	display: block;
+	width: 28px;
+	height: 28px;
+	border: 2px solid rgba( 0, 0, 0, 0.12 );
+	border-top-color: #06aedd;
+	border-radius: 50%;
+	animation: woodev-pickup-spin 0.8s linear infinite;
+}
+
+@keyframes woodev-pickup-spin {
+
+	to {
+		transform: rotate( 360deg );
+	}
+}
+
+/* Slowed rather than stopped — a frozen spinner reads as a hang, the opposite of its purpose. */
+@media ( prefers-reduced-motion: reduce ) {
+
+	.woodev-pickup-spinner {
+		animation-duration: 3s;
+	}
+}
+
+/* The map itself stops accepting drags/clicks while busy — see the overlay's own docblock above
+   for why (nothing meaningful to pan to yet, and a viewport drag would race the first fetch). */
+.woodev-pickup-stage.is-busy .woodev-pickup-map {
+	pointer-events: none;
+}
+
+/* Searching/filtering a pool that has not loaded yet is meaningless, so both controls are hidden
+   — never merely disabled — while busy. `.woodev-pickup-filter` is listed on its own too: it is
+   ONLY a descendant of `.woodev-pickup-controls` when search is enabled (see
+   `pickup-panels.js`'s `attachFilterEl()`); with search disabled it attaches straight to the list
+   panel instead, so this selector is what still reaches it in that case. */
+.woodev-pickup-stage.is-busy .woodev-pickup-controls,
+.woodev-pickup-stage.is-busy .woodev-pickup-filter {
+	display: none;
 }
 
 /* The embedded provider's iframe. Same height contract as `.woodev-pickup-map` above; the

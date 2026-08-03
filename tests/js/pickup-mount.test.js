@@ -284,6 +284,22 @@ StubPanels.prototype.setAnchor = function( latLng, label ) {
 StubPanels.prototype.toggleList = function() {};
 
 /**
+ * Task 16 (spec V-4): the real `Panels.prototype.setBusy()`/`isBusy()` contract, minimally —
+ * every OTHER test in this file constructs a session through the stub, and pickup-mount.js now
+ * calls `panels.setBusy()` unconditionally whenever `panels` is truthy (matching how it already
+ * calls `setTypes()`/`setVisible()` etc. with no feature-detection — see those call sites). The
+ * stub has to carry the method or every test in this file that never opted into the `RealPanels`
+ * swap (see the "loading stages" describe block below) would throw.
+ */
+StubPanels.prototype.setBusy = function( busy ) {
+	this._busy = !! busy;
+};
+
+StubPanels.prototype.isBusy = function() {
+	return !! this._busy;
+};
+
+/**
  * Builds a fake `WoodevPickupDataSource` factory whose `fetchPoints()`
  * resolves/rejects with whatever `impl` returns — no real `fetch`, no
  * debounce, fully synchronous-microtask-controlled so tests stay fast and
@@ -1898,4 +1914,188 @@ test( 'INTEGRATION: a REAL click on a sidebar list row reaches focusGroup() exac
 	dialog.querySelector( '.woodev-pickup-list__item' ).click();
 
 	expect( provider.focusGroupCalls ).toEqual( [ '1.0000,2.0000' ] );
+} );
+
+// -------------------------------------------------------------------------
+// Task 16 (spec V-4): three loading stages, and the modal stays closable in every one of them.
+// `window.WoodevPickupPanels = RealPanels` throughout — the `.woodev-pickup-stage`/
+// `.woodev-pickup-overlay` DOM these tests assert on is a REAL Panels artifact the StubPanels
+// double used everywhere else in this file never builds (see that double's own docblock).
+// -------------------------------------------------------------------------
+describe( 'loading stages (spec V-4)', () => {
+	beforeEach( () => {
+		window.WoodevPickupPanels = RealPanels;
+	} );
+
+	/**
+	 * Swaps in a dataSource whose `fetchPoints()` never settles until the test calls the
+	 * returned `resolve()`/`reject()` — the only way to observe stage 2 (map drawn, first fetch
+	 * still in flight) as a state distinct from stage 3. `flushAsync()` alone cannot do this: it
+	 * only drains ALREADY-SCHEDULED microtasks, never forces an unsettled Promise to settle.
+	 *
+	 * @returns {{resolve: Function, reject: Function}}
+	 */
+	function pendingDataSource() {
+		let settle;
+
+		window.WoodevPickupDataSource = fakeDataSourceFactory( () => new Promise( ( resolve, reject ) => {
+			settle = { resolve, reject };
+		} ) );
+
+		return {
+			resolve: ( points ) => settle.resolve( points || [] ),
+			reject: ( reason ) => settle.reject( reason ),
+		};
+	}
+
+	test( 'stage 1: the modal spinner shows before the map is ready; the stage is not yet busy', () => {
+		pendingDataSource();
+		setConfig( configWith() );
+		mountAll();
+		clickTrigger();
+
+		// No `await` at all — `provider.init()`'s OWN `Promise.resolve( initResult ).then()` has not
+		// had a microtask turn to run yet, so this is still exactly stage 1.
+		const dialog = document.querySelector( '[role="dialog"]' );
+
+		expect( dialog.querySelector( '.woodev-modal__loading' ) ).not.toBeNull();
+		expect( dialog.querySelector( '.woodev-pickup-stage' ).className ).not.toContain( 'is-busy' );
+		expect( dialog.querySelector( '.woodev-pickup-overlay' ).hidden ).toBe( true );
+	} );
+
+	test( 'stage 2: once the map is drawn the modal spinner is gone and the stage is busy '
+		+ 'until the first fetch settles', async () => {
+		pendingDataSource();
+		setConfig( configWith() );
+		mountAll();
+		clickTrigger();
+
+		await flushAsync();
+
+		const dialog = document.querySelector( '[role="dialog"]' );
+
+		expect( dialog.querySelector( '.woodev-modal__loading' ) ).toBeNull();
+		expect( dialog.querySelector( '.woodev-pickup-stage' ).className ).toContain( 'is-busy' );
+		expect( dialog.querySelector( '.woodev-pickup-overlay' ).hidden ).toBe( false );
+	} );
+
+	test( 'stage 3: once points arrive the busy state clears and the map is interactive again', async () => {
+		const fetch = pendingDataSource();
+		setConfig( configWith() );
+		mountAll();
+		clickTrigger();
+		await flushAsync();
+
+		fetch.resolve( [ point() ] );
+		await flushAsync();
+
+		const dialog = document.querySelector( '[role="dialog"]' );
+
+		expect( dialog.querySelector( '.woodev-pickup-stage' ).className ).not.toContain( 'is-busy' );
+		expect( dialog.querySelector( '.woodev-pickup-overlay' ).hidden ).toBe( true );
+	} );
+
+	test( 'a FAILED first fetch still clears the busy state — the map must not stay stuck '
+		+ 'non-interactive over a request that will never come back', async () => {
+		const fetch = pendingDataSource();
+		setConfig( configWith() );
+		mountAll();
+		clickTrigger();
+		await flushAsync();
+
+		fetch.reject( { status: 0, code: 'woodev_pickup_upstream_error', message: 'offline' } );
+		await flushAsync();
+
+		const dialog = document.querySelector( '[role="dialog"]' );
+
+		expect( dialog.querySelector( '.woodev-pickup-stage' ).className ).not.toContain( 'is-busy' );
+	} );
+
+	test( 'an initial viewport too wide to fetch at all still clears the busy state', async () => {
+		pendingDataSource();
+		setConfig( configWith( { strategy: 'viewport' } ) );
+		mountAll();
+		clickTrigger();
+		await flushAsync();
+
+		const provider = StubProvider.instances[ StubProvider.instances.length - 1 ];
+
+		provider.emit( 'bboxTooWide' );
+		await flushAsync();
+
+		const dialog = document.querySelector( '[role="dialog"]' );
+
+		expect( dialog.querySelector( '.woodev-pickup-stage' ).className ).not.toContain( 'is-busy' );
+	} );
+
+	test( 'a later viewport refetch never re-arms the busy overlay once stage 3 was reached', async () => {
+		let fetchCalls = 0;
+		let secondFetchSettle = null;
+
+		window.WoodevPickupDataSource = fakeDataSourceFactory( () => {
+			fetchCalls += 1;
+
+			// The FIRST fetch (the opening one this describe block is about) settles immediately;
+			// the SECOND is left deliberately pending, so the test can prove the overlay stays
+			// down while it is in flight.
+			return 1 === fetchCalls
+				? Promise.resolve( [ point() ] )
+				: new Promise( ( resolve ) => { secondFetchSettle = resolve; } );
+		} );
+
+		setConfig( configWith( { strategy: 'viewport' } ) );
+		mountAll();
+		clickTrigger();
+		await flushAsync();
+
+		const provider = StubProvider.instances[ StubProvider.instances.length - 1 ];
+		const dialog = document.querySelector( '[role="dialog"]' );
+
+		provider.emit( 'boundsChange', [ 1, 2, 3, 4 ] );
+		await flushAsync();
+
+		expect( dialog.querySelector( '.woodev-pickup-stage' ).className ).not.toContain( 'is-busy' );
+
+		provider.emit( 'boundsChange', [ 5, 6, 7, 8 ] );
+		await flushAsync();
+
+		expect( dialog.querySelector( '.woodev-pickup-stage' ).className ).not.toContain( 'is-busy' );
+		expect( secondFetchSettle ).not.toBeNull(); // proves the 2nd fetch really is still pending
+	} );
+
+	test( 'the modal stays closable while stage 1 (the modal spinner) is showing', () => {
+		pendingDataSource();
+		setConfig( configWith() );
+		mountAll();
+		clickTrigger();
+
+		const onClose = jest.fn();
+
+		// `WoodevModal` has no `.on()` method — it dispatches native CustomEvents on
+		// `document.body` (`woodev_modal_closed` and friends); every event test in
+		// woodev-modal.test.js follows this same idiom.
+		document.body.addEventListener( 'woodev_modal_closed', onClose );
+		document.querySelector( '.woodev-modal__close' ).click();
+		document.body.removeEventListener( 'woodev_modal_closed', onClose );
+
+		expect( onClose ).toHaveBeenCalled();
+	} );
+
+	test( 'the modal stays closable while the stage is busy (stage 2)', async () => {
+		pendingDataSource();
+		setConfig( configWith() );
+		mountAll();
+		clickTrigger();
+		await flushAsync();
+
+		expect( document.querySelector( '.woodev-pickup-stage' ).className ).toContain( 'is-busy' );
+
+		const onClose = jest.fn();
+
+		document.body.addEventListener( 'woodev_modal_closed', onClose );
+		document.querySelector( '.woodev-modal__close' ).click();
+		document.body.removeEventListener( 'woodev_modal_closed', onClose );
+
+		expect( onClose ).toHaveBeenCalled();
+	} );
 } );

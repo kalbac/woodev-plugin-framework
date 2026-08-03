@@ -903,6 +903,39 @@
 		 *  'viewport'` only) — what a type-filter change or {@see refresh} re-fetches against. */
 		var lastBbox = null;
 
+		/** @type {boolean} Task 16 (spec V-4 stage 2/3): has THIS start() cycle's busy overlay
+		 *  already been cleared? Reset at the top of every {@see start} call (initial open AND
+		 *  every retry — each re-runs the FULL "map drawn → points in flight → points in" sequence —
+		 *  see the file docblock's "RETRY NEVER RE-init()S" section), and flipped true by
+		 *  {@see clearInitialBusy} the first time this cycle's opening fetch (or the "bbox too
+		 *  wide" terminal state, which never fetches at all) settles — never again after that, so a
+		 *  LATER refetch (a type-filter change, `refresh()`, a subsequent viewport pan) never
+		 *  re-shows or re-hides the overlay a customer has already moved past. */
+		var busyClearedThisStart = false;
+
+		/**
+		 * Clears the stage-wide busy overlay {@see start} opened once the map was drawn — the
+		 * stage 2 → stage 3 transition (spec V-4). Idempotent per {@see start} cycle via
+		 * `busyClearedThisStart` (see that flag's own docblock), so calling it from more than one
+		 * settle path (a successful fetch, a failed one, and the `bboxTooWide` terminal state all
+		 * call it — see their own call sites below) never toggles the overlay back on after a LATER
+		 * fetch. A no-op under `ownsChrome` (no `panels` ever exists there) and once the session is
+		 * destroyed (the panels' own DOM may already be gone).
+		 *
+		 * @returns {void}
+		 */
+		function clearInitialBusy() {
+			if ( busyClearedThisStart ) {
+				return;
+			}
+
+			busyClearedThisStart = true;
+
+			if ( panels && ! destroyed ) {
+				panels.setBusy( false );
+			}
+		}
+
 		/**
 		 * Shows a message in whichever degradation state is appropriate: a
 		 * dismissible notice (nothing lost) once a set has been drawn, otherwise
@@ -1013,6 +1046,11 @@
 		function fetchAndSetPoints( query ) {
 			return realDataSource.fetchPoints( query ).then(
 				function( points ) {
+					// Task 16 (spec V-4): THIS fetch is the one stage 2's overlay was waiting on —
+					// win, lose, or empty, the customer gets an answer and the map becomes usable.
+					// A no-op past the first settle of this start() cycle (see the flag's own docblock).
+					clearInitialBusy();
+
 					if ( destroyed ) {
 						return points;
 					}
@@ -1046,6 +1084,11 @@
 					return points;
 				},
 				function( reason ) {
+					// See the resolve branch above — a failed fetch settles stage 2 exactly like a
+					// successful one does; the customer gets the error/notice state, not a map stuck
+					// non-interactive forever over a request that will never come back.
+					clearInitialBusy();
+
 					if ( ! destroyed ) {
 						degradeFetch( errorMessage( config, reason ), start );
 					}
@@ -1261,6 +1304,11 @@
 			provider = new ProviderCtor();
 			lastBbox = null;
 
+			// Task 16 (spec V-4): every start() — the initial open AND every retry — runs through
+			// the full "map drawn → points in flight → points in" sequence again, so the flag that
+			// gates {@see clearInitialBusy} resets here too, not just once per session.
+			busyClearedThisStart = false;
+
 			provider.on( 'select', handleSelection );
 
 			provider.on( 'error', function( reason ) {
@@ -1310,6 +1358,13 @@
 					// wiping the map/panels would destroy the very thing the "zoom in" message
 					// is asking the customer to use. See degradeFetch()'s own docblock for the
 					// identical shared-container reasoning.
+					//
+					// Task 16 (spec V-4): this can be the FIRST thing the provider ever reports
+					// after init() resolves — no fetch happens for a bbox this wide, so
+					// fetchAndSetPoints() (the usual place stage 2 clears) never runs at all. Without
+					// this call the overlay would sit there forever, blocking the very "zoom in" the
+					// message asks for.
+					clearInitialBusy();
 					degradeFetch( text( config, 'zoomIn' ), null );
 				} );
 
@@ -1349,10 +1404,22 @@
 				// carrying nothing but its own title while the map script downloaded.
 				modal.hideLoading();
 
+				// Task 16 (spec V-4 stage 2): the modal's spinner just came down, but the pool the
+				// map/list/search would act on has not arrived yet — a bare canvas with nothing to
+				// show reads as "there are no points here", not "still loading". `panels` is null
+				// under `ownsChrome`; an embed loads its own points invisibly to this file and has no
+				// stage of its own to mark busy (see the file docblock's "THIS FILE, NOT THE
+				// PROVIDER, NOW OWNS FETCHING" section).
+				if ( panels ) {
+					panels.setBusy( true );
+				}
+
 				fireDocumentEvent( EVENT_MAP_READY, { fieldId: config.fieldId, provider: config.provider } );
 
 				// bulk fetches once, right here; viewport waits for the provider's own
-				// boundsChange (wired above) — see the file docblock.
+				// boundsChange (wired above) — see the file docblock. Either way, whatever settles
+				// first (a fetch resolving/rejecting, or a viewport starting out `bboxTooWide`) is
+				// what clears stage 2 via {@see clearInitialBusy} — see those call sites.
 				if ( ! ownsChrome && 'bulk' === config.strategy ) {
 					fetchAndSetPoints( bulkQuery() ).catch( function() {} );
 				}
