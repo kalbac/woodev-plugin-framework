@@ -574,6 +574,24 @@ test( 'every feature is registered with the RESTING (non-active) icon hit-box di
 	expect( feature.options.iconImageOffset ).toEqual( [ -22, -23 ] );
 } );
 
+// Spec V-9 / gotcha `ymaps-html-icon-layout-needs-iconshape.md`: `iconImageSize`/
+// `iconImageOffset` are options of the `default#image` layout, which this file never uses — the
+// custom HTML layout's hit area comes from `iconShape` alone. Without it, clicks fell through to
+// the map's own POI layer and Yandex's organisation card opened instead of ours.
+test( 'declares an iconShape matching the RESTING icon hit-box, so clicks actually hit the '
+	+ 'marker instead of falling through to the map\'s own POI layer (spec V-9)', async () => {
+	const provider = await init();
+
+	provider.setPoints( [ group( 'a', 1, 1 ) ] );
+
+	const feature = ymapsStub.lastObjectManager.added[ 0 ];
+
+	expect( feature.options.iconShape ).toEqual( {
+		type: 'Rectangle',
+		coordinates: [ [ -22, -23 ], [ 23, 22 ] ],
+	} );
+} );
+
 test( 'emits pointClick with the group key', async () => {
 	const seen = [];
 	const provider = await init();
@@ -1125,6 +1143,7 @@ test( 'focusGroup switches the icon box to ACTIVE for the newly focused group an
 	expect( ymapsStub.lastObjectManager.objects.setObjectOptions ).toHaveBeenLastCalledWith( 'a', {
 		iconImageSize: [ 50, 70 ],
 		iconImageOffset: [ -25, -40 ],
+		iconShape: { type: 'Rectangle', coordinates: [ [ -25, -40 ], [ 25, 30 ] ] },
 	} );
 
 	await provider.focusGroup( 'b' );
@@ -1132,10 +1151,33 @@ test( 'focusGroup switches the icon box to ACTIVE for the newly focused group an
 	expect( ymapsStub.lastObjectManager.objects.setObjectOptions ).toHaveBeenCalledWith( 'a', {
 		iconImageSize: [ 45, 45 ],
 		iconImageOffset: [ -22, -23 ],
+		iconShape: { type: 'Rectangle', coordinates: [ [ -22, -23 ], [ 23, 22 ] ] },
 	} );
 	expect( ymapsStub.lastObjectManager.objects.setObjectOptions ).toHaveBeenLastCalledWith( 'b', {
 		iconImageSize: [ 50, 70 ],
 		iconImageOffset: [ -25, -40 ],
+		iconShape: { type: 'Rectangle', coordinates: [ [ -25, -40 ], [ 25, 30 ] ] },
+	} );
+} );
+
+// Spec V-9: the hit area must follow the CURRENT state's box, not just its own default — a
+// focused marker whose `iconShape` still described the small resting box would be clickable
+// only across part of its own (now larger) artwork. See gotcha
+// `ymaps-html-icon-layout-needs-iconshape.md`.
+test( 'declares the larger iconShape for a focused group (spec V-9)', async () => {
+	const provider = await init();
+
+	ymapsStub.lastObjectManager.state = { isClustered: false, cluster: null };
+
+	await provider.focusGroup( 'a' );
+
+	const call = ymapsStub.lastObjectManager.objects.setObjectOptions.mock.calls.find(
+		( args ) => 'a' === args[ 0 ]
+	);
+
+	expect( call[ 1 ].iconShape ).toEqual( {
+		type: 'Rectangle',
+		coordinates: [ [ -25, -40 ], [ 25, 30 ] ],
 	} );
 } );
 
@@ -1190,6 +1232,7 @@ test( 'setPoints() re-applies the ACTIVE state to the focused group when it surv
 	expect( ymapsStub.lastObjectManager.objects.setObjectOptions ).toHaveBeenCalledWith( 'a', {
 		iconImageSize: [ 50, 70 ],
 		iconImageOffset: [ -25, -40 ],
+		iconShape: { type: 'Rectangle', coordinates: [ [ -25, -40 ], [ 25, 30 ] ] },
 	} );
 	expect( ymapsStub.lastObjectManager.objects.setObjectProperties ).toHaveBeenCalledWith(
 		'a',

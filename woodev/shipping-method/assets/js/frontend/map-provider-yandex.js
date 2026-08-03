@@ -72,11 +72,15 @@
  * ICONS ARE AN HTML LAYOUT, NOT `iconLayout: 'default#image'` (D-5): a plain image marker
  * cannot show the group-count badge or express focused/unfocused state as a CSS class, so
  * every feature gets a custom `templateLayoutFactory` layout ({@see buildMarkerLayoutClass}).
- * ymaps cannot read pixel sizes from CSS and needs them for hit-testing, so `iconImageSize` /
- * `iconImageOffset` are passed alongside — {@see ICON_BOX} for the resting state,
- * {@see ICON_BOX_ACTIVE} for the group {@see focusGroup} last focused. If either box ever
- * disagrees with the CSS (`pickup.css`), clicks land in the wrong place — the CSS must use the
- * SAME pixel values. A group whose `typeCode` has no entry in `config.pointIcons` still gets a
+ * ymaps cannot read pixel sizes from CSS, so `iconImageSize`/`iconImageOffset` are passed
+ * alongside for `getShape()`/auto-pan to read — {@see ICON_BOX} for the resting state,
+ * {@see ICON_BOX_ACTIVE} for the group {@see focusGroup} last focused. THOSE TWO OPTIONS ARE NOT
+ * WHAT MAKES A CUSTOM LAYOUT CLICKABLE, THOUGH (spec V-9) — a custom `templateLayoutFactory`
+ * layout takes its hit area from `iconShape` alone, computed from the same box by
+ * {@see iconShapeFor}; without it clicks fall through to the map's own POI layer (gotcha
+ * `ymaps-html-icon-layout-needs-iconshape.md`). If either box ever disagrees with the CSS
+ * (`pickup.css`), clicks land in the wrong place — the CSS must use the SAME pixel values. A
+ * group whose `typeCode` has no entry in `config.pointIcons` still gets a
  * marker — {@see WoodevYandexMapProvider#_renderMarker} adds a `--unknown` modifier class
  * instead of leaving an empty/broken `<img>`; it is never invisible or unclickable. D-5's full
  * contract is up to FOUR urls per type (default/active × the plugin's own choice of which it
@@ -222,6 +226,29 @@
 	 * @type {{size: number[], offset: number[]}}
 	 */
 	var ICON_BOX_ACTIVE = { size: [ 50, 70 ], offset: [ -25, -40 ] };
+
+	/**
+	 * The clickable region for one feature (spec V-9; see gotcha
+	 * `ymaps-html-icon-layout-needs-iconshape.md`). `iconImageSize`/`iconImageOffset` are options
+	 * of the `default#image` layout only — this file's custom `templateLayoutFactory` layout
+	 * (D-5) does not consume them at all, and takes its hit area from `iconShape` alone. Without
+	 * one the overlay has no clickable region whatsoever: clicks pass straight through the
+	 * marker onto the map's own POI layer, and Yandex's organisation card opens instead of ours.
+	 *
+	 * @since 2.0.2
+	 * @param {Array<number>} offset `[ x, y ]`, negative — the icon's top-left relative to the anchor.
+	 * @param {Array<number>} size   `[ width, height ]`.
+	 * @returns {{type: string, coordinates: Array<Array<number>>}}
+	 */
+	function iconShapeFor( offset, size ) {
+		return {
+			type: 'Rectangle',
+			coordinates: [
+				[ offset[ 0 ], offset[ 1 ] ],
+				[ offset[ 0 ] + size[ 0 ], offset[ 1 ] + size[ 1 ] ],
+			],
+		};
+	}
 
 	/**
 	 * Default number of nearest groups {@see focusAddress} fits the camera to when
@@ -1018,7 +1045,13 @@
 	/**
 	 * Builds one ObjectManager feature for a group. `options.iconImageHref` is deliberately
 	 * never set anywhere in this file — see the file docblock's "ICONS ARE AN HTML LAYOUT"
-	 * section.
+	 * section. Every newly-added feature starts in the RESTING box/shape — {@see setPoints}
+	 * re-applies the active box (via {@see _setMarkerState}) to the currently focused group,
+	 * if any, right after this rebuild, so a feature is never stuck resting while its own
+	 * `data-state` reads active.
+	 *
+	 * `options.iconShape` (spec V-9) is what actually gives the custom HTML layout a hit area —
+	 * see {@see iconShapeFor}'s own docblock.
 	 *
 	 * @param {Object} group
 	 * @returns {Object} a GeoJSON-ish ObjectManager feature.
@@ -1033,6 +1066,7 @@
 				iconLayout: this._iconLayoutClass,
 				iconImageSize: ICON_BOX.size,
 				iconImageOffset: ICON_BOX.offset,
+				iconShape: iconShapeFor( ICON_BOX.offset, ICON_BOX.size ),
 			},
 		};
 	};
@@ -1453,6 +1487,11 @@
 	 * `setPoints()` always populates `_groupsByKey` before any `focusGroup()` a real caller
 	 * would issue.
 	 *
+	 * `iconShape` (spec V-9) is re-sent alongside the box on every call — the active box is a
+	 * different rectangle than the resting one, so a shape left describing the small box would
+	 * leave a focused marker clickable only across part of its own (now larger) artwork. See
+	 * gotcha `ymaps-html-icon-layout-needs-iconshape.md`.
+	 *
 	 * @param {string} key
 	 * @param {string} state `'active'` or `'resting'`.
 	 * @returns {void}
@@ -1470,6 +1509,7 @@
 			objects.setObjectOptions( key, {
 				iconImageSize: box.size,
 				iconImageOffset: box.offset,
+				iconShape: iconShapeFor( box.offset, box.size ),
 			} );
 		}
 
