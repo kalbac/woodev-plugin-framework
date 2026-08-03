@@ -686,7 +686,8 @@ test( 'the marker renders from PLAIN feature properties, the shape ObjectManager
 	expect( marker.querySelector( '.woodev-pickup-marker__badge' ).textContent ).toBe( '2' );
 } );
 
-test( 'the marker renders no <img> and adds the unknown modifier class when the type has no icon', () => {
+test( 'the marker renders no <img> and draws the framework default pin (spec V-9), not the '
+	+ 'deleted unknown modifier, when the type has no icon', () => {
 	const provider = new WoodevYandexMapProvider();
 	const container = document.createElement( 'div' );
 
@@ -695,8 +696,60 @@ test( 'the marker renders no <img> and adds the unknown modifier class when the 
 	provider._renderMarker( container, { properties: makeProperties( { groupSize: 1, iconHref: '' } ) } );
 
 	expect( container.querySelector( 'img' ) ).toBeNull();
-	expect( container.querySelector( '.woodev-pickup-marker--unknown' ) ).not.toBeNull();
+	expect( container.querySelector( '.woodev-pickup-marker--unknown' ) ).toBeNull();
+	expect( container.querySelector( 'svg.woodev-pickup-marker__pin' ) ).not.toBeNull();
 	expect( container.querySelector( '.woodev-pickup-marker__badge' ) ).toBeNull();
+} );
+
+// -------------------------------------------------------------------------
+// Default marker icon (spec V-9) — the framework's own inline SVG pin, drawn only when the
+// plugin supplies no icon for the group's type.
+// -------------------------------------------------------------------------
+
+test( 'renders the framework default pin (map-pin) for the resting state when the plugin '
+	+ 'supplies no icon', () => {
+	const provider = new WoodevYandexMapProvider();
+	const container = document.createElement( 'div' );
+
+	container.innerHTML = '<div class="woodev-pickup-marker"></div>';
+
+	provider._renderMarker( container, { properties: makeProperties( {
+		groupSize: 1, state: 'resting', iconHref: '', iconHrefActive: '',
+	} ) } );
+
+	const svg = container.querySelector( 'svg.woodev-pickup-marker__pin' );
+
+	expect( container.querySelector( 'img' ) ).toBeNull();
+	expect( svg ).not.toBeNull();
+	expect( svg.getAttribute( 'data-pin' ) ).toBe( 'resting' );
+} );
+
+test( 'renders the check pin (map-pin-check) for the active state when the plugin supplies no '
+	+ 'icon', () => {
+	const provider = new WoodevYandexMapProvider();
+	const container = document.createElement( 'div' );
+
+	container.innerHTML = '<div class="woodev-pickup-marker"></div>';
+
+	provider._renderMarker( container, { properties: makeProperties( {
+		groupSize: 1, state: 'active', iconHref: '', iconHrefActive: '',
+	} ) } );
+
+	expect( container.querySelector( 'svg' ).getAttribute( 'data-pin' ) ).toBe( 'active' );
+} );
+
+test( 'still prefers the plugin image over the framework default pin when one is configured', () => {
+	const provider = new WoodevYandexMapProvider();
+	const container = document.createElement( 'div' );
+
+	container.innerHTML = '<div class="woodev-pickup-marker"></div>';
+
+	provider._renderMarker( container, { properties: makeProperties( {
+		groupSize: 1, state: 'resting', iconHref: '/pvz.svg', iconHrefActive: '/a.svg',
+	} ) } );
+
+	expect( container.querySelector( 'img' ).getAttribute( 'src' ) ).toBe( '/pvz.svg' );
+	expect( container.querySelector( 'svg.woodev-pickup-marker__pin' ) ).toBeNull();
 } );
 
 // Review follow-up (MEDIUM, D-5): the active state must actually be RENDERED — a distinct

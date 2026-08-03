@@ -748,14 +748,18 @@
 	object-fit: contain;
 }
 
-/* A group whose `typeCode` has no entry in `config.pointIcons` still gets a marker — never an
-   invisible or unclickable one (see `_renderMarker()`'s own docblock): no `<img>` is appended
-   for it, so this modifier draws a plain filled pin instead of leaving an empty box. */
-.woodev-pickup-marker--unknown {
-	background: var( --woodev-pickup-accent, #06aedd );
-	border: 2px solid #fff;
-	border-radius: 50% 50% 50% 0;
-	box-shadow: 0 1px 4px rgba( 0, 0, 0, 0.35 );
+/* The framework's own default marker (spec V-9): a filled map-pin (map-pin-check when active),
+   drawn inline by `_renderMarker()` only when the group's type has no `iconHref` configured —
+   never an invisible or unclickable empty box. `color` is what the inline SVG's `currentColor`
+   fill picks up, so a merchant's `--woodev-pickup-accent` reaches a plugin that ships no icons
+   of its own. The pin fills `.woodev-pickup-marker`'s own box exactly — it must never resize it,
+   since ymaps was told THAT box's pixels for hit-testing (see the file-level comment above). */
+.woodev-pickup-marker__pin {
+	display: block;
+	width: 100%;
+	height: 100%;
+	color: var( --woodev-pickup-accent, #06aedd );
+	filter: drop-shadow( 0 1px 1px rgba( 0, 0, 0, 0.3 ) );
 }
 
 /* The group-count bubble for a marker holding more than one co-located point. Positioned

@@ -81,8 +81,9 @@
  * `ymaps-html-icon-layout-needs-iconshape.md`). If either box ever disagrees with the CSS
  * (`pickup.css`), clicks land in the wrong place — the CSS must use the SAME pixel values. A
  * group whose `typeCode` has no entry in `config.pointIcons` still gets a
- * marker — {@see WoodevYandexMapProvider#_renderMarker} adds a `--unknown` modifier class
- * instead of leaving an empty/broken `<img>`; it is never invisible or unclickable. D-5's full
+ * marker — {@see WoodevYandexMapProvider#_renderMarker} draws the framework's own inline SVG pin
+ * (spec V-9; {@see PIN_DEFAULT}/{@see PIN_ACTIVE}) instead of leaving an empty/broken `<img>`; it
+ * is never invisible or unclickable. D-5's full
  * contract is up to FOUR urls per type (default/active × the plugin's own choice of which it
  * actually supplies) — {@see focusGroup} writes `data-state="active"|"resting"` onto the
  * marker root AND swaps in `pointIcons[type].active` for the image, so a plugin that supplies
@@ -1021,8 +1022,8 @@
 	 * focus change.
 	 *
 	 * `iconHref`/`iconHrefActive` are resolved from `config.pointIcons[group.typeCode]` — both
-	 * empty for an unrecognised type, in which case {@see _renderMarker} still draws a
-	 * (modifier-classed) marker, never an invisible/broken one. `active` is guaranteed filled
+	 * empty for an unrecognised type, in which case {@see _renderMarker} still draws the
+	 * framework's own default pin, never an invisible/broken one. `active` is guaranteed filled
 	 * server-side whenever the type is known at all (mirroring `default` when the plugin
 	 * supplied only one image — D-5, `Pickup_Handler::normalized_point_icons()`), so
 	 * `iconHrefActive` is never a broken/empty URL for a KNOWN type.
@@ -1072,14 +1073,46 @@
 	};
 
 	/**
+	 * Filled `map-pin` silhouette (Lucide's geometry, ISC-licensed, redrawn as one path) — the
+	 * framework's own default marker for the RESTING state (spec V-9), drawn by {@see _renderMarker}
+	 * only when the group's type has no `iconHref` configured. Inline SVG, not a file, so
+	 * `.woodev-pickup-marker__pin`'s CSS `color` (the merchant's `--woodev-pickup-accent`) reaches
+	 * it via `currentColor` — a plugin that ships no icons of its own still gets the merchant's
+	 * colour on the map. Filled rather than Lucide's own stroke original: a 1.5px stroke is
+	 * invisible against map tiles at 45px.
+	 *
+	 * @since 2.0.2
+	 * @type {string}
+	 */
+	var PIN_DEFAULT =
+		'<svg class="woodev-pickup-marker__pin" data-pin="resting" viewBox="0 0 24 24" ' +
+		'aria-hidden="true" focusable="false">' +
+		'<path fill="currentColor" d="M12 2a7 7 0 0 0-7 7c0 5.25 7 13 7 13s7-7.75 7-13a7 7 0 0 0-7-7z"/>' +
+		'<circle cx="12" cy="9" r="2.6" fill="#fff"/></svg>';
+
+	/**
+	 * The same pin with a tick in the head (`map-pin-check`) — the framework default for the
+	 * ACTIVE state, drawn under the same no-icon condition as {@see PIN_DEFAULT}.
+	 *
+	 * @since 2.0.2
+	 * @type {string}
+	 */
+	var PIN_ACTIVE =
+		'<svg class="woodev-pickup-marker__pin" data-pin="active" viewBox="0 0 24 24" ' +
+		'aria-hidden="true" focusable="false">' +
+		'<path fill="currentColor" d="M12 2a7 7 0 0 0-7 7c0 5.25 7 13 7 13s7-7.75 7-13a7 7 0 0 0-7-7z"/>' +
+		'<path d="M9.2 9.1l1.9 1.9 3.7-3.7" stroke="#fff" stroke-width="1.8" fill="none" ' +
+		'stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+	/**
 	 * Renders one marker's DOM: an `<img>` for the icon matching the CURRENT `state`
-	 * (`iconHrefActive` when `'active'`, `iconHref` otherwise — omitted, with a `--unknown`
-	 * modifier class, when that URL is empty), plus a count badge for a group of more than one
-	 * point. `data-state` is written onto the root so Task 21's CSS can key off
-	 * `[data-state="active"]` for the size/style change {@see ICON_BOX_ACTIVE}'s hit-box
-	 * already reserves room for (D-5). Deliberately independent of ymaps' own layout `build()`
-	 * machinery — directly unit-testable, matching the pattern the previous version of this
-	 * file used for its balloon body.
+	 * (`iconHrefActive` when `'active'`, `iconHref` otherwise), or the framework's own inline SVG
+	 * pin — {@see PIN_DEFAULT}/{@see PIN_ACTIVE} — when that URL is empty (spec V-9), plus a
+	 * count badge for a group of more than one point. `data-state` is written onto the root so
+	 * Task 21's CSS can key off `[data-state="active"]` for the size/style change
+	 * {@see ICON_BOX_ACTIVE}'s hit-box already reserves room for (D-5). Deliberately independent
+	 * of ymaps' own layout `build()` machinery — directly unit-testable, matching the pattern the
+	 * previous version of this file used for its balloon body.
 	 *
 	 * @param {HTMLElement} container
 	 * @param {Object}      data the layout's `getData()` result (`.properties` is a ymaps
@@ -1102,7 +1135,6 @@
 
 		root.setAttribute( 'data-state', state );
 		root.classList.toggle( 'woodev-pickup-marker--group', isGroup );
-		root.classList.toggle( 'woodev-pickup-marker--unknown', ! iconHref );
 		root.innerHTML = '';
 
 		if ( iconHref ) {
@@ -1112,6 +1144,10 @@
 			img.src = iconHref;
 			img.alt = '';
 			root.appendChild( img );
+		} else {
+			// The framework's own default (spec V-9) — never an empty box (see file docblock's
+			// "ICONS ARE AN HTML LAYOUT" section).
+			root.insertAdjacentHTML( 'beforeend', isActive ? PIN_ACTIVE : PIN_DEFAULT );
 		}
 
 		if ( isGroup ) {
