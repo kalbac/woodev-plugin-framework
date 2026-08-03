@@ -1667,23 +1667,36 @@
 	 * Focuses group `key`: marks it visually active (swaps its icon hit-box to
 	 * {@see ICON_BOX_ACTIVE}, its icon image to `iconHrefActive`, and `data-state` to
 	 * `'active'` — see {@see _setMarkerState} — reverting the previously focused group, if any,
-	 * back to resting) and, when it is currently folded into a ymaps cluster, moves the camera
-	 * to un-cluster it. The move is skipped — focus still applies directly, exactly like the
-	 * `MAX_ZOOM` case below — when every feature in that cluster shares one coordinate, since no
-	 * move could ever separate them (the "Russian Post" guard, spec §7.5; see the file
-	 * docblock's second lesson), or when the map is ALREADY at `MAX_ZOOM`, since a group cannot
-	 * be zoomed in on any further — a pointless camera command the customer would only see as a
-	 * stutter. `setBounds()` is called with the exact options spec §7.5 gives: `zoomMargin: 0`
-	 * and `useMapMargin: true` keep the un-clustered point inside the area the panels leave free
-	 * via `map.margin`, so it does not end up centred underneath the open sidebar where the
+	 * back to resting) and moves the camera onto it (spec V-10: a marker click and a sidebar
+	 * row click must behave identically, and the reference always recentres/zooms to the
+	 * clicked point, clustered or not).
+	 *
+	 * TWO DIFFERENT TARGETS, same camera call. When `key` is currently folded into a ymaps
+	 * cluster, the target is the CLUSTER's anchor (its first feature's coordinates) — moving
+	 * there is what un-clusters it, which is this method's original job (spec §7.5). When it is
+	 * NOT clustered — the common case, a single visible marker — the target is the GROUP's own
+	 * `lat`/`lng` from {@see _groupsByKey}, so the camera still recentres/zooms to it exactly as
+	 * clicking that same point in the sidebar does. Earlier versions of this method moved the
+	 * camera ONLY in the clustered branch, which is why a plain marker click visibly did nothing
+	 * on the rig — this bug was invisible to every test that exercised it, because none of them
+	 * ever gave the group its own coordinates via `setPoints()` first.
+	 *
+	 * The move is skipped — focus still applies directly — in three cases: every feature in a
+	 * cluster shares one coordinate, since no move could ever separate them (the "Russian Post"
+	 * guard, spec §7.5; see the file docblock's second lesson); the map is ALREADY at
+	 * `MAX_ZOOM`, since a group cannot be zoomed in on any further — a pointless camera command
+	 * the customer would only see as a stutter; or `key` has no known group (defensive — should
+	 * not happen in practice, since a click always names a group this provider itself drew).
+	 * `setBounds()` is called with the exact options spec §7.5 gives: `zoomMargin: 0` and
+	 * `useMapMargin: true` keep the point inside the area the panels leave free via
+	 * `map.margin`, so it does not end up centred underneath the open sidebar where the
 	 * customer cannot see it.
 	 *
-	 * `attemptedMove` gates the POST-move re-check: it only matters (and only runs) when a real
-	 * camera move was actually attempted — a group focused WITHOUT moving (co-located, or
-	 * already at max zoom) applies immediately, it is never re-evaluated against a "did the
-	 * move actually un-cluster it" check that never had a move to evaluate. When a move WAS
-	 * attempted and ymaps still reports the SAME degenerate state once it settles, focus is not
-	 * applied — see the file docblock's second lesson.
+	 * `attemptedMove` gates the POST-move re-check, and ONLY when the move was an un-clustering
+	 * attempt (`wasClustered`): a group focused WITHOUT moving (co-located, already at max zoom,
+	 * or unknown) applies immediately, never re-evaluated against a "did the move actually
+	 * un-cluster it" check that only makes sense for the clustered branch — recentring on an
+	 * already-solo point has nothing to re-check.
 	 *
 	 * SEQUENCED against a slower-to-resolve EARLIER call via `_focusSeq`: two ymaps camera moves
 	 * are not guaranteed to resolve in the order they were started (animation duration depends
@@ -1699,12 +1712,24 @@
 		var self = this;
 		var mySeq = ++this._focusSeq;
 		var state = this.objectManager.getObjectState( key );
+		var wasClustered = !! ( state && state.isClustered );
 		var mover = Promise.resolve();
 		var attemptedMove = false;
 
-		if ( state && state.isClustered && ! isSingleCoordinateCluster( state.cluster )
-			&& this.map.getZoom() < MAX_ZOOM ) {
-			var target = clusterAnchorCoordinates( state.cluster );
+		if ( this.map.getZoom() < MAX_ZOOM ) {
+			var target = null;
+
+			if ( wasClustered ) {
+				if ( ! isSingleCoordinateCluster( state.cluster ) ) {
+					target = clusterAnchorCoordinates( state.cluster );
+				}
+			} else {
+				var group = this._groupsByKey[ key ];
+
+				if ( group ) {
+					target = [ group.lat, group.lng ];
+				}
+			}
 
 			if ( target ) {
 				attemptedMove = true;
@@ -1720,7 +1745,7 @@
 				return;
 			}
 
-			if ( attemptedMove ) {
+			if ( attemptedMove && wasClustered ) {
 				var settled = self.objectManager.getObjectState( key );
 
 				if ( settled && settled.isClustered && isSingleCoordinateCluster( settled.cluster ) ) {

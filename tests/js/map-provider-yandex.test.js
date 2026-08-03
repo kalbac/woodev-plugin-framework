@@ -1178,15 +1178,49 @@ test( 'at MAX_ZOOM, focusGroup applies focus directly without attempting a point
 	expect( provider.getFocusedKey() ).toBe( 'a' );
 } );
 
-test( 'a group that is not currently clustered focuses without ever calling setBounds', async () => {
+test( 'a group that is not currently clustered STILL recentres the camera onto its own point '
+	+ '(spec V-10 — a plain marker click must behave like a sidebar row click)', async () => {
 	const provider = await init();
 
+	provider.setPoints( [ group( 'a', 55.75, 37.61 ) ] );
+	// setPoints() itself fits the camera to the loaded set under `bulk` (a separate, already
+	// covered behaviour) — clear that call so this test asserts only what focusGroup() does.
+	ymapsStub.lastMap.setBoundsCalls.length = 0;
+	ymapsStub.lastObjectManager.state = { isClustered: false, cluster: null };
+
+	await provider.focusGroup( 'a' );
+
+	expect( ymapsStub.lastMap.setBoundsCalls ).toHaveLength( 1 );
+	expect( ymapsStub.lastMap.setBoundsCalls[ 0 ] ).toEqual( {
+		bounds: [ [ 55.75, 37.61 ], [ 55.75, 37.61 ] ],
+		options: { checkZoomRange: true, zoomMargin: 0, useMapMargin: true },
+	} );
+	expect( provider.getFocusedKey() ).toBe( 'a' );
+} );
+
+test( 'a not-clustered group already at MAX_ZOOM applies focus without a pointless camera move', async () => {
+	const provider = await init( {}, { zoom: 18 } );
+
+	provider.setPoints( [ group( 'a', 55.75, 37.61 ) ] );
+	ymapsStub.lastMap.setBoundsCalls.length = 0;
 	ymapsStub.lastObjectManager.state = { isClustered: false, cluster: null };
 
 	await provider.focusGroup( 'a' );
 
 	expect( ymapsStub.lastMap.setBoundsCalls ).toHaveLength( 0 );
 	expect( provider.getFocusedKey() ).toBe( 'a' );
+} );
+
+test( 'an unknown group (no coordinates on record) applies focus without attempting a move — '
+	+ 'defensive only, since a real click always names a group this provider drew itself', async () => {
+	const provider = await init();
+
+	ymapsStub.lastObjectManager.state = { isClustered: false, cluster: null };
+
+	await provider.focusGroup( 'ghost' );
+
+	expect( ymapsStub.lastMap.setBoundsCalls ).toHaveLength( 0 );
+	expect( provider.getFocusedKey() ).toBe( 'ghost' );
 } );
 
 test( 're-checks getObjectState AFTER the move and does not apply focus if it is still a '
