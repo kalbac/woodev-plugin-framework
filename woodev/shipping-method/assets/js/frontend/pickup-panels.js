@@ -1463,6 +1463,12 @@
 
 			var value = input.value.trim();
 
+			// Submitting supersedes whatever the customer was mid-typing: without this, pressing
+			// Enter inside the debounce window runs BOTH paths for one query, and the local
+			// keystroke result lands after the geocoder's and overwrites the richer answer with
+			// the poorer one.
+			window.clearTimeout( self._searchTimer );
+
 			if ( value.length ) {
 				self._emit( 'searchSubmit', { query: value } );
 			}
@@ -1778,6 +1784,34 @@
 
 		if ( this._activeGroup ) {
 			renderCard( this );
+		}
+	};
+
+	/**
+	 * Tears the panels down: cancels anything pending and drops every listener.
+	 *
+	 * The picker is destroyed and rebuilt on every reopen, and the search debounce outlives the
+	 * DOM it belongs to — a customer who types three characters and closes the dialog inside the
+	 * debounce window leaves a timer that fires against a dead instance, keeping it (and its whole
+	 * element tree) alive until it does. Dropping the listener map matters for the same reason:
+	 * the mount registers fresh callbacks on the new instance every time, and a retained old
+	 * instance would answer with the previous session's closures.
+	 *
+	 * Idempotent, and safe to call before `render()` ever ran.
+	 *
+	 * @since 2.0.2
+	 * @returns {void}
+	 */
+	Panels.prototype.destroy = function() {
+		if ( this._searchTimer ) {
+			window.clearTimeout( this._searchTimer );
+			this._searchTimer = null;
+		}
+
+		this._listeners = {};
+
+		if ( this._stage && this._stage.parentNode ) {
+			this._stage.parentNode.removeChild( this._stage );
 		}
 	};
 

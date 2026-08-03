@@ -946,6 +946,77 @@ it( 'emits showNearestRequested with the same info when the show-nearest button 
 // Task 11: the search + filter layout for `SearchControl` (spec V-6)
 // -----------------------------------------------------------------------
 
+describe( 'search lifecycle (Codex critic findings)', () => {
+	it( 'submitting cancels a debounce still in flight, so one query runs one path', () => {
+		jest.useFakeTimers();
+
+		const panels = new Panels( document.createElement( 'div' ), config );
+		const el = panels.buildSearchLayout();
+		const onType = jest.fn();
+		const onSubmit = jest.fn();
+
+		panels.on( 'searchType', onType );
+		panels.on( 'searchSubmit', onSubmit );
+
+		const input = el.querySelector( '.woodev-pickup-search__input' );
+		input.value = 'Тверская';
+		input.dispatchEvent( new Event( 'input' ) );
+
+		// Enter, inside the debounce window.
+		el.querySelector( 'form' ).dispatchEvent( new Event( 'submit', { cancelable: true } ) );
+		jest.advanceTimersByTime( 1000 );
+
+		expect( onSubmit ).toHaveBeenCalledTimes( 1 );
+		// The local keystroke result would otherwise land AFTER the geocoder's and overwrite the
+		// richer answer with the poorer one.
+		expect( onType ).not.toHaveBeenCalled();
+
+		jest.useRealTimers();
+	} );
+
+	it( 'destroy() cancels a pending debounce so it never fires against a dead instance', () => {
+		jest.useFakeTimers();
+
+		const panels = new Panels( document.createElement( 'div' ), config );
+		const el = panels.buildSearchLayout();
+		const onType = jest.fn();
+
+		panels.on( 'searchType', onType );
+
+		const input = el.querySelector( '.woodev-pickup-search__input' );
+		input.value = 'Тверская';
+		input.dispatchEvent( new Event( 'input' ) );
+
+		panels.destroy();
+		jest.advanceTimersByTime( 1000 );
+
+		expect( onType ).not.toHaveBeenCalled();
+
+		jest.useRealTimers();
+	} );
+
+	it( 'destroy() drops the listeners and detaches the stage, and is idempotent', () => {
+		const container = document.createElement( 'div' );
+		const panels = new Panels( container, config );
+		const onToggle = jest.fn();
+
+		panels.render();
+		panels.on( 'listToggle', onToggle );
+		panels.destroy();
+
+		expect( container.children ).toHaveLength( 0 );
+
+		panels.toggleList();
+		expect( onToggle ).not.toHaveBeenCalled();
+
+		expect( () => panels.destroy() ).not.toThrow();
+	} );
+
+	it( 'destroy() is safe before render() ever ran', () => {
+		expect( () => new Panels( document.createElement( 'div' ), config ).destroy() ).not.toThrow();
+	} );
+} );
+
 describe( 'search layout (spec V-6)', () => {
 	const build = ( overrides = {} ) =>
 		new Panels( document.createElement( 'div' ), { ...config, ...overrides } ).buildSearchLayout();

@@ -1395,6 +1395,14 @@
 					provider.destroy();
 				}
 
+				// The panels hold a pending search debounce and the listener map this session
+				// registered on them. `modal.destroy()` takes the DOM away but not the timer,
+				// which would then fire against a dead instance — and, on a fast reopen, past a
+				// live one built from the same trigger.
+				if ( panels && 'function' === typeof panels.destroy ) {
+					panels.destroy();
+				}
+
 				modal.destroy();
 			},
 		};

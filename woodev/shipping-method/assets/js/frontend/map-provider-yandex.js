@@ -313,6 +313,23 @@
 	 */
 	var SEARCH_RESULT_COUNT = 5;
 
+	/**
+	 * Half-height/half-width, in degrees, of the smallest box an address search may be bounded to
+	 * (Task 12, spec V-7).
+	 *
+	 * `strictBounds: true` against a ZERO-AREA box matches nothing, and the box collapses whenever
+	 * every loaded point sits on one coordinate — a city served by a single pickup point, or a
+	 * pickup point and a postamat sharing a building. The customer could then type their own
+	 * address forever and never get a result.
+	 *
+	 * 0.05° is roughly 5.5 km north-south, and less east-west the further from the equator (~3 km
+	 * at Moscow's latitude) — a city-district-sized frame around the one point we know about,
+	 * which is the honest answer to "what is near this point" when that point is all there is.
+	 *
+	 * @type {number}
+	 */
+	var MIN_SEARCH_BOUNDS_DEGREES = 0.05;
+
 	// -------------------------------------------------------------------------
 	// Small pure helpers
 	// -------------------------------------------------------------------------
@@ -327,6 +344,35 @@
 	 */
 	function flattenBounds( bounds ) {
 		return [ bounds[ 0 ][ 0 ], bounds[ 0 ][ 1 ], bounds[ 1 ][ 0 ], bounds[ 1 ][ 1 ] ];
+	}
+
+	/**
+	 * Grows a bounds pair so each side spans at least `2 * minHalfSpan` degrees, keeping its
+	 * centre. A box already wider than that is returned untouched.
+	 *
+	 * Exists for the degenerate case: every loaded point on ONE coordinate collapses the box to
+	 * zero area, and a zero-area box under `strictBounds: true` matches nothing (see
+	 * {@see MIN_SEARCH_BOUNDS_DEGREES}). Latitude is clamped to the poles; longitude is
+	 * deliberately NOT wrapped at ±180 — ymaps accepts out-of-range longitudes in a bounds pair
+	 * and normalises them itself, whereas wrapping here would invert the box (min > max) for a
+	 * point near the meridian and match everything except the intended area.
+	 *
+	 * @param {Array}  bounds      `[[Number, Number], [Number, Number]]`.
+	 * @param {number} minHalfSpan Half the minimum span, in degrees.
+	 * @returns {Array} `[[Number, Number], [Number, Number]]`.
+	 */
+	function padBounds( bounds, minHalfSpan ) {
+		var minLat = bounds[ 0 ][ 0 ];
+		var minLng = bounds[ 0 ][ 1 ];
+		var maxLat = bounds[ 1 ][ 0 ];
+		var maxLng = bounds[ 1 ][ 1 ];
+		var latPad = Math.max( 0, minHalfSpan - ( maxLat - minLat ) / 2 );
+		var lngPad = Math.max( 0, minHalfSpan - ( maxLng - minLng ) / 2 );
+
+		return [
+			[ Math.max( -90, minLat - latPad ), minLng - lngPad ],
+			[ Math.min( 90, maxLat + latPad ), maxLng + lngPad ],
+		];
 	}
 
 	/**
@@ -909,6 +955,14 @@
 		}
 
 		return this.ymaps.geocode( request, geocodeOptions ).then( function( response ) {
+			if ( self._destroyed ) {
+				// The customer closed the dialog while the request was in flight. Emitting now
+				// would push results at a torn-down panels instance — or, worse, at the FRESH one
+				// a reopen has already built, which would show them results for a query they
+				// abandoned. Resolve with the empty shape the engine tolerates instead.
+				return { geoObjects: null, metaData: null };
+			}
+
 			var hits = ( response && response.geoObjects && 'function' === typeof response.geoObjects.toArray )
 				? response.geoObjects.toArray()
 				: [];
@@ -930,6 +984,15 @@
 			self.emit( 'searchResults', { points: matches, addresses: addresses } );
 
 			return { geoObjects: response.geoObjects, metaData: response.metaData };
+		} ).catch( function() {
+			// A refused or failed geocode must not leave the customer staring at the results they
+			// had before they searched. The locally-matched points still stand — they cost no
+			// network — so publish those with an empty address section rather than nothing.
+			if ( ! self._destroyed ) {
+				self.emit( 'searchResults', { points: matches, addresses: [] } );
+			}
+
+			return { geoObjects: null, metaData: null };
 		} );
 	};
 
@@ -973,7 +1036,14 @@
 			return groupsByKey[ key ];
 		} );
 
-		return geo.boundsFor( [ groups[ 0 ].lat, groups[ 0 ].lng ], groups );
+		var bounds = geo.boundsFor( [ groups[ 0 ].lat, groups[ 0 ].lng ], groups );
+
+		// A single loaded group — or several in one building — yields a ZERO-AREA box, and
+		// `strictBounds: true` against zero area matches nothing at all: in a city served by one
+		// pickup point the customer could type their own address forever and never see a result
+		// (the same one-point city that issue #150 is about). Pad any box thinner than the
+		// minimum so there is something to search inside.
+		return padBounds( bounds, MIN_SEARCH_BOUNDS_DEGREES );
 	};
 
 	/**

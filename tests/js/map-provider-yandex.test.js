@@ -125,6 +125,7 @@ function createYmapsStub( options ) {
 	const stub = {};
 
 	stub.geocodeCalls = 0;
+	stub.geocodeImpl = null;
 	// A valid, non-empty default result — tests that don't care about the geocode OUTCOME
 	// (only that it was called) never need to touch this. Shaped for the single-hit
 	// `.get(0)`-style consumers (`_resolveInitialViewport()`/`resolveAddress()`) by default; the
@@ -343,6 +344,13 @@ function createYmapsStub( options ) {
 		stub.geocodeCalls += 1;
 		stub.lastGeocodeRequest = request;
 		stub.lastGeocodeOptions = options;
+
+		// `geocodeImpl` lets one test own the timing or the outcome — a rejection (quota, network)
+		// or a promise it releases by hand to model "resolves after the customer closed the
+		// dialog". Unset for every other test, which just wants `geocodeResult` back.
+		if ( stub.geocodeImpl ) {
+			return stub.geocodeImpl( request, options );
+		}
 
 		return Promise.resolve( stub.geocodeResult );
 	};
@@ -1466,6 +1474,78 @@ test( 'omits the bounds before anything has ever loaded (spec V-7 — no degener
 	expect( ymapsStub.lastGeocodeOptions ).toEqual( { results: 5 } );
 	expect( ymapsStub.lastGeocodeOptions.boundedBy ).toBeUndefined();
 	expect( ymapsStub.lastGeocodeOptions.strictBounds ).toBeUndefined();
+} );
+
+test( 'pads a ZERO-AREA box so a one-point city can still be searched (Codex critic)', async () => {
+	const provider = await init();
+
+	// One loaded group — or several sharing a building — collapses the box to a point, and
+	// `strictBounds: true` against zero area matches NOTHING: the customer could type their own
+	// address forever and never see a result. This is issue #150's city.
+	provider.setPoints( [ group( 'only', 55.75, 37.61 ) ] );
+
+	await ymapsStub.lastSearchControl.options.provider.geocode( 'Тверская' );
+
+	const bounds = ymapsStub.lastGeocodeOptions.boundedBy;
+
+	expect( bounds[ 1 ][ 0 ] - bounds[ 0 ][ 0 ] ).toBeCloseTo( 0.1, 10 );
+	expect( bounds[ 1 ][ 1 ] - bounds[ 0 ][ 1 ] ).toBeCloseTo( 0.1, 10 );
+
+	// Still centred on the point it was grown from.
+	expect( ( bounds[ 0 ][ 0 ] + bounds[ 1 ][ 0 ] ) / 2 ).toBeCloseTo( 55.75, 10 );
+	expect( ( bounds[ 0 ][ 1 ] + bounds[ 1 ][ 1 ] ) / 2 ).toBeCloseTo( 37.61, 10 );
+} );
+
+test( 'leaves a box that is already wide enough alone (Codex critic)', async () => {
+	const provider = await init();
+
+	provider.setPoints( [ group( 'a', 55.50, 37.30 ), group( 'b', 56.10, 37.95 ) ] );
+
+	await ymapsStub.lastSearchControl.options.provider.geocode( 'Тверская' );
+
+	expect( ymapsStub.lastGeocodeOptions.boundedBy ).toEqual( [ [ 55.50, 37.30 ], [ 56.10, 37.95 ] ] );
+} );
+
+test( 'a refused geocode still publishes the locally matched points (Codex critic)', async () => {
+	const provider = await init();
+	const seen = [];
+
+	provider.setPoints( [ groupWith( { id: '1', name: 'ПВЗ «Ленина»', address: 'Ленина 5', lat: 55.70, lng: 37.60 } ) ] );
+	provider.on( 'searchResults', ( payload ) => seen.push( payload ) );
+
+	ymapsStub.geocodeImpl = () => Promise.reject( new Error( 'quota exceeded' ) );
+
+	await ymapsStub.lastSearchControl.options.provider.geocode( 'ленина' );
+
+	// A failed geocode must not leave the customer staring at whatever was on screen before they
+	// searched — the local matches cost no network and still stand.
+	expect( seen ).toHaveLength( 1 );
+	expect( seen[ 0 ].points ).toHaveLength( 1 );
+	expect( seen[ 0 ].addresses ).toEqual( [] );
+} );
+
+test( 'a geocode that resolves after destroy() emits nothing (Codex critic)', async () => {
+	const provider = await init();
+	const seen = [];
+
+	provider.setPoints( [ groupWith( { id: '1', name: 'ПВЗ «Ленина»', address: 'Ленина 5', lat: 55.70, lng: 37.60 } ) ] );
+	provider.on( 'searchResults', ( payload ) => seen.push( payload ) );
+
+	let release;
+	ymapsStub.geocodeImpl = () => new Promise( ( resolve ) => {
+		release = resolve;
+	} );
+
+	const pending = ymapsStub.lastSearchControl.options.provider.geocode( 'ленина' );
+
+	// The customer closes the dialog while the request is in flight.
+	provider.destroy();
+	release( makeSearchGeocodeResult( [ 'Москва, Ленина 5' ] ) );
+	await pending;
+
+	// Emitting now would push results at a torn-down panels instance — or at the fresh one a
+	// reopen already built, showing results for a query the customer abandoned.
+	expect( seen ).toHaveLength( 0 );
 } );
 
 test( 'tags each geocoded address\'s OWN properties with woodevKind, and returns the real '
