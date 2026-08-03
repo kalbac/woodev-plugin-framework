@@ -1061,9 +1061,48 @@
 			}
 		}
 
+		/**
+		 * Wraps `panels.openCard()` so EVERY caller reaches the map through the exact same two
+		 * steps, in the exact same order (spec V-10): `provider.focusGroup()` first — which
+		 * un-clusters the point when needed and swaps its icon to the active state, see that
+		 * method's own docblock and the gotcha `ymaps-camera-moves-are-async` — then the
+		 * ORIGINAL `openCard()`.
+		 *
+		 * This overrides the INSTANCE property, never `Panels.prototype` — `pickup-panels.js` is
+		 * not touched by this file. That is exactly what makes it intercept `openCard()` calls
+		 * `pickup-panels.js` makes INTERNALLY too: its own sidebar list-row click handler calls
+		 * `self.openCard(...)`, and `self` IS this instance, so the call resolves the wrapped own
+		 * property before it would ever reach the prototype's original. A marker click
+		 * (`pointClick`, wired below) and a search/"show nearest" pick (`searchPointPicked`/
+		 * `showNearestRequested`, wired below) already call `panels.openCard()` too — wrapping it
+		 * ONCE here, rather than repeating the `focusGroup()` call at every site, is what
+		 * guarantees a marker click and a sidebar row click can never drift apart again, and is
+		 * the single source of truth for "focus, then open" this file's docblock requires (no
+		 * second, parallel camera-facing method).
+		 *
+		 * `focusGroup()`'s returned promise is deliberately NOT awaited: the card is this file's
+		 * own DOM, unrelated to the map viewport, so making the customer wait on a ~400ms camera
+		 * animation before the card appears would be a regression, not a fix (spec V-10).
+		 *
+		 * @param {Object} panelsInstance
+		 * @returns {void}
+		 */
+		function wireFocusOnOpenCard( panelsInstance ) {
+			var original = panelsInstance.openCard;
+
+			panelsInstance.openCard = function( group, pointId ) {
+				if ( group && provider && 'function' === typeof provider.focusGroup ) {
+					provider.focusGroup( group.key );
+				}
+
+				original.call( panelsInstance, group, pointId );
+			};
+		}
+
 		if ( ! ownsChrome ) {
 			panels = new PanelsCtor( modal.getContainer(), buildPanelsConfig( config ) );
 			panels.render();
+			wireFocusOnOpenCard( panels );
 
 			var alreadySelected = fieldValue( config.fieldId );
 
@@ -1113,10 +1152,8 @@
 					return;
 				}
 
-				if ( provider && 'function' === typeof provider.focusGroup ) {
-					provider.focusGroup( group.key );
-				}
-
+				// focusGroup() runs inside the wrapped openCard() itself — see
+				// wireFocusOnOpenCard() above.
 				panels.openCard( group, pointId );
 			} );
 
@@ -1130,10 +1167,8 @@
 					return;
 				}
 
-				if ( provider && 'function' === typeof provider.focusGroup ) {
-					provider.focusGroup( group.key );
-				}
-
+				// focusGroup() runs inside the wrapped openCard() itself — see
+				// wireFocusOnOpenCard() above.
 				panels.openCard( group );
 			} );
 
@@ -1183,6 +1218,8 @@
 			} );
 
 			if ( ! ownsChrome ) {
+				// A marker click reaches the exact same focus-then-open path a sidebar row click
+				// does — see wireFocusOnOpenCard() (spec V-10).
 				provider.on( 'pointClick', function( key ) {
 					var group = groupsByKey[ key ];
 

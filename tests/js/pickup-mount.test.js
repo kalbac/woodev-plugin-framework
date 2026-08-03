@@ -46,6 +46,15 @@
 
 jest.useFakeTimers();
 
+/**
+ * Records `focusGroup()`/`openCard()` calls in the order the STUBS actually saw them — the only
+ * way to prove `pickup-mount.js` calls them in the sequence spec V-10 requires (focus, THEN open)
+ * rather than merely calling both somewhere. Reset in `beforeEach()`.
+ *
+ * @type {Array<string>}
+ */
+let callOrder = [];
+
 const { createStore } = require( '../../woodev/shipping-method/assets/js/frontend/checkout-field-store' );
 require( '../../woodev/assets/js/frontend/woodev-modal' ); // side effect: window.WoodevModal
 const { mountAll, getSession } = require( '../../woodev/shipping-method/assets/js/frontend/pickup-mount' );
@@ -107,8 +116,17 @@ StubProvider.prototype.setTypeFilter = function( codes ) {
 	this.setTypeFilterCalls.push( codes );
 };
 
+/**
+ * Returns a promise that NEVER resolves — deliberately. Spec V-10 requires the camera move NOT
+ * be awaited before the card opens (the card is our own DOM, unrelated to the viewport); a
+ * never-resolving stub is what makes a test that awaits nothing after `emit()` prove that, since
+ * an (incorrect) `.then( openCard )` chain here would leave `openCard()` forever uncalled.
+ */
 StubProvider.prototype.focusGroup = function( key ) {
 	this.focusGroupCalls.push( key );
+	callOrder.push( 'focusGroup:' + key );
+
+	return new Promise( function() {} );
 };
 
 StubProvider.prototype.getFocusedKey = function() {
@@ -201,6 +219,7 @@ StubPanels.prototype.renderSearchResults = function( results ) {
 
 StubPanels.prototype.openCard = function( group, pointId ) {
 	this.lastOpenCard = { group: group, pointId: pointId };
+	callOrder.push( 'openCard:' + ( group && group.key ) );
 };
 
 StubPanels.prototype.closeCard = function() {
@@ -433,6 +452,7 @@ async function openSession( config ) {
 beforeEach( () => {
 	StubProvider.instances = [];
 	StubPanels.instances = [];
+	callOrder = [];
 	buildCheckoutDom();
 	window.WoodevPickupMapProviders = { testProvider: StubProvider };
 	window.WoodevPickupDataSource = fakeDataSourceFactory( () => Promise.resolve( [] ) );
@@ -1450,6 +1470,34 @@ test( 'provider pointClick opens the card for the matching group', async () => {
 	expect( session.panels.lastOpenCard.group.key ).toBe( '1.0000,2.0000' );
 } );
 
+test( 'a marker click focuses the group BEFORE opening its card, in that order (spec V-10)', async () => {
+	window.WoodevPickupDataSource = fakeDataSourceFactory( () =>
+		Promise.resolve( [ point( { id: 'p1', lat: 1, lng: 2 } ) ] )
+	);
+	const session = await openSession( configWith() );
+
+	session.provider.emit( 'pointClick', '1.0000,2.0000' );
+
+	expect( session.provider.focusGroupCalls ).toEqual( [ '1.0000,2.0000' ] );
+	expect( callOrder ).toEqual( [ 'focusGroup:1.0000,2.0000', 'openCard:1.0000,2.0000' ] );
+} );
+
+test( 'a marker click opens the card WITHOUT waiting for focusGroup()\'s camera move to settle '
+	+ '(spec V-10 — the card is our own DOM, not the viewport)', async () => {
+	window.WoodevPickupDataSource = fakeDataSourceFactory( () =>
+		Promise.resolve( [ point( { id: 'p1', lat: 1, lng: 2 } ) ] )
+	);
+	const session = await openSession( configWith() );
+
+	session.provider.emit( 'pointClick', '1.0000,2.0000' );
+
+	// `StubProvider.focusGroup()` returns a promise that NEVER resolves. No `await`/flush
+	// happens between the `emit()` above and this assertion — if `pickup-mount.js` chained the
+	// card open off that promise, `lastOpenCard` would still be unset here, forever.
+	expect( session.panels.lastOpenCard ).toBeDefined();
+	expect( session.panels.lastOpenCard.group.key ).toBe( '1.0000,2.0000' );
+} );
+
 test( 'provider visibleChange resolves keys to groups and calls panels.setVisible', async () => {
 	window.WoodevPickupDataSource = fakeDataSourceFactory( () => Promise.resolve( [
 		point( { id: 'a', lat: 1, lng: 2 } ),
@@ -1705,4 +1753,29 @@ test( 'INTEGRATION: the real Panels class renders correctly from buildPanelsConf
 	// customer can see — so `drawerTitle` now names the control that opens the drawer instead.
 	expect( stage.querySelector( '.woodev-pickup-list__toggle' ).getAttribute( 'aria-label' ) )
 		.toBe( 'Пункты выдачи в этой области' );
+} );
+
+test( 'INTEGRATION: a REAL click on a sidebar list row reaches focusGroup() exactly like a marker '
+	+ 'click does (spec V-10) — pickup-panels.js itself is never touched by this file', async () => {
+	window.WoodevPickupPanels = RealPanels;
+	window.WoodevPickupDataSource = fakeDataSourceFactory( () =>
+		Promise.resolve( [ point( { id: 'p1', lat: 1, lng: 2 } ) ] )
+	);
+
+	const config = configWith();
+	setConfig( config );
+	mountAll();
+	clickTrigger();
+	await flushAsync();
+
+	// The real Panels' list only ever shows what the provider last reported visible — the stub
+	// provider never emits that on its own, so this drives it exactly like a real one would once
+	// its viewport settles.
+	const provider = StubProvider.instances[ StubProvider.instances.length - 1 ];
+	provider.emit( 'visibleChange', [ '1.0000,2.0000' ] );
+
+	const dialog = document.querySelector( '[role="dialog"]' );
+	dialog.querySelector( '.woodev-pickup-list__item' ).click();
+
+	expect( provider.focusGroupCalls ).toEqual( [ '1.0000,2.0000' ] );
 } );
