@@ -1395,13 +1395,21 @@
 	 * rebuild; see the file docblock. `codes` of `null`/an empty array clears the filter (every
 	 * group matches).
 	 *
+	 * ymaps calls the filter with ONE argument — the feature itself — not `(objectId, object)`.
+	 * Reading a second parameter left `object` permanently `undefined`, so `typeCode` was always
+	 * `undefined` too: any non-empty `codes` list filtered out EVERY marker, not just the ones
+	 * that did not match. Invisible to every existing test, because the jest stub's own tests
+	 * called the stored function with the same wrong two-argument shape the code expected —
+	 * matching production's bug rather than ymaps' real signature. Confirmed against a live
+	 * `ymaps.ObjectManager` on the rig, not assumed.
+	 *
 	 * @param {Array|null} codes `type.code`s to show, or `null`/empty for "all types".
 	 * @returns {void}
 	 */
 	WoodevYandexMapProvider.prototype.setTypeFilter = function( codes ) {
 		var list = Array.isArray( codes ) && codes.length > 0 ? codes : null;
 
-		this.objectManager.setFilter( function( objectId, object ) {
+		this.objectManager.setFilter( function( object ) {
 			if ( ! list ) {
 				return true;
 			}

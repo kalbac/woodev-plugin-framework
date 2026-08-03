@@ -716,21 +716,23 @@ test( 'filters by type through setFilter, not by rebuilding the manager', async 
 	expect( ymapsStub.lastObjectManager.removeAllCalls ).toBe( 0 );
 } );
 
-test( 'the stored filter function matches only the requested codes, and matches everything once cleared', async () => {
+test( 'the stored filter function matches only the requested codes, and matches everything once '
+	+ 'cleared — called with ONE argument, the feature itself, matching real ymaps (not the '
+	+ '(objectId, object) shape a real bug on this branch assumed)', async () => {
 	const provider = await init();
 
 	provider.setTypeFilter( [ 'pvz', 'postamat' ] );
 
 	const filterFn = ymapsStub.lastObjectManager.filter;
 
-	expect( filterFn( 'a', { properties: { typeCode: 'pvz' } } ) ).toBe( true );
-	expect( filterFn( 'b', { properties: { typeCode: 'other' } } ) ).toBe( false );
+	expect( filterFn( { properties: { typeCode: 'pvz' } } ) ).toBe( true );
+	expect( filterFn( { properties: { typeCode: 'other' } } ) ).toBe( false );
 
 	provider.setTypeFilter( null );
 
 	const clearedFilter = ymapsStub.lastObjectManager.filter;
 
-	expect( clearedFilter( 'c', { properties: { typeCode: 'anything' } } ) ).toBe( true );
+	expect( clearedFilter( { properties: { typeCode: 'anything' } } ) ).toBe( true );
 } );
 
 // -------------------------------------------------------------------------
