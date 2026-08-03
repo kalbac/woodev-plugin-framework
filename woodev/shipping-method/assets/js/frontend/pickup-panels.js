@@ -117,19 +117,40 @@
  * distance and offers to show it anyway, rather than leaving the customer to
  * conclude there are no points at all.
  *
- * THE TYPE FILTER (Task 16, D-10): `setTypes( types )` accumulates distinct
- * `{ code, label }` pairs FIRST-SEEN across every call and renders the
- * checkbox menu once a SECOND distinct type has ever been seen — and, once
- * shown, the menu never disappears again, even if a later call reports only
- * one type (a momentary single-type viewport must not flicker the control
- * away). The last CHECKED type cannot be unchecked (the Yandex reference's
- * own rule): the click is silently refused — the checkbox is reverted and no
- * `typeFilterChange` fires — because an empty selection would read to the
- * customer as "no pickup points exist". The count badge shows only while the
- * selection is PARTIAL (never for "all selected", never as a plain type
- * count) and carries the number of types currently SELECTED. `typeFilterChange`
- * carries the selected codes; whether that becomes a client-side filter or a
- * server refetch is the caller's decision (Task 20), not this file's.
+ * THE TYPE FILTER (Task 16, reworked Task 13, D-10/V-8): `setTypes( types )` accumulates distinct
+ * `{ code, label }` pairs FIRST-SEEN across every call and renders the filter control once a
+ * SECOND distinct type has ever been seen — and, once shown, it never disappears again, even if a
+ * later call reports only one type (a momentary single-type viewport must not flicker the control
+ * away). The last CHECKED type cannot be unchecked (the Yandex reference's own rule): the click is
+ * silently refused — the checkbox is reverted and no `typeFilterChange` fires — because an empty
+ * selection would read to the customer as "no pickup points exist" (see the file docblock's own
+ * operator-instruction note, immediately below the reference's opposite "empty means unfiltered"
+ * behaviour is deliberately NOT copied). The count badge shows only while the selection is PARTIAL
+ * (never for "all selected", never as a plain type count) and carries the number of types
+ * currently SELECTED. `typeFilterChange` carries the selected codes as a plain array; whether that
+ * becomes a client-side filter or a server refetch is the caller's decision (Task 20), not this
+ * file's.
+ *
+ * THE CONTROL'S HOME (Task 13, spec V-8): the filter is one button (`.woodev-pickup-filter__toggle`,
+ * carrying the badge) plus one hidden dropdown menu (`.woodev-pickup-filter__menu`) — Russian
+ * Post's own shape — and it is built LAZILY, the first time `setTypes()` ever sees a second
+ * distinct type, never eagerly in `render()`. Where it attaches depends on whether
+ * {@see Panels.prototype.buildSearchLayout} ever ran and actually built a control (it returns
+ * `null` when the plugin disabled search, spec V-6): when it did, the filter becomes a SIBLING of
+ * `.woodev-pickup-search` inside that SAME detached layout — one `SearchControl`, two menus,
+ * neither owning the other's geometry — because that is genuinely how the reference wires it
+ * (`state`, not two independently-positioned ymaps controls). When search is disabled the filter
+ * has no search layout to live beside, so it falls back to being appended to the list panel
+ * instead (its Task 16 home) — a carrier with a locked-down geocoding budget but two-or-more point
+ * types is a real combination (spec), and "no control at all" is worse than "the control lives
+ * somewhere slightly different". Opening either menu closes the other, matching the reference's
+ * `menu--open` behaviour — see `buildSearchLayout()`'s toggle handler and `renderSearchResults()`.
+ *
+ * TWO i18n KEYS, TWO DIFFERENT JOBS: `allTypes` labels the TOGGLE BUTTON itself (an
+ * always-present, accessible name for "the point-type filter control" — PHP already reserves this
+ * key for the Task 13/14 map-provider scripts, see `class-pickup-handler.php`), `filterTypes`
+ * titles the MENU once it opens (Task 16's original, unchanged key/string). Neither is a fallback
+ * for the other; a missing key still renders blank per rule I1.
  *
  * UMD-ish dual export (matches every sibling SP-5 frontend file):
  *   - Browser global: window.WoodevPickupPanels = Panels
@@ -168,6 +189,19 @@
 
 	/** @type {number} minimum query length before point matching fires at all (spec V-6). */
 	var SEARCH_MIN_CHARS = 3;
+
+	/**
+	 * Lucide's `filter` glyph (ISC-licensed), used as-is — the same "redraw/reuse a Lucide shape"
+	 * convention `map-provider-yandex.js` established for the marker pins (spec V-9). Purely
+	 * decorative: `currentColor` inherits the toggle button's own text colour, and the button
+	 * carries its own `aria-label` (see {@see Panels.prototype.buildSearchLayout}) rather than
+	 * relying on the glyph to convey meaning.
+	 *
+	 * @type {string}
+	 */
+	var FILTER_ICON_SVG = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">' +
+		'<path fill="currentColor" d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z"/>' +
+		'</svg>';
 
 	/**
 	 * A single detached element reused by {@see decodeForTitle} — same technique, same
@@ -884,16 +918,110 @@
 	}
 
 	// -------------------------------------------------------------------------
-	// Type filter menu (Task 16, D-10)
+	// Type filter menu (Task 16, moved into the search control by Task 13, D-10/V-8)
 	// -------------------------------------------------------------------------
+
+	/**
+	 * Builds the filter's toggle/badge/menu DOM exactly ONCE per `Panels` instance — a no-op on a
+	 * second call (guarded on `self._filterWrapEl`). Deferred until `setTypes()` actually needs it
+	 * (a second distinct type has been seen) rather than built eagerly in `render()`, because
+	 * whether a Panels instance ever needs a filter at all depends on data this constructor does
+	 * not have yet (see the file docblock's "THE CONTROL'S HOME" note).
+	 *
+	 * The toggle and the menu are two independent, permanent children of the returned wrap — the
+	 * badge is a permanent child of the TOGGLE (never inserted/removed the way Task 16's original
+	 * version did), toggled purely via `.hidden`, matching every other optional-visibility element
+	 * in this file (`{@see Panels.prototype.buildSearchLayout}`'s own reset button, for instance).
+	 *
+	 * @param {Panels} self
+	 * @returns {void}
+	 */
+	function ensureFilterEl( self ) {
+		if ( self._filterWrapEl ) {
+			return;
+		}
+
+		var wrap = document.createElement( 'div' );
+		wrap.className = 'woodev-pickup-filter';
+
+		var toggle = document.createElement( 'button' );
+		toggle.type = 'button';
+		toggle.className = 'woodev-pickup-filter__toggle';
+		// `allTypes`, not `filterTypes` — see the file docblock's "TWO i18n KEYS" note; the menu
+		// itself is titled separately, below.
+		toggle.setAttribute( 'aria-label', text( self._config, 'allTypes' ) );
+		toggle.innerHTML = FILTER_ICON_SVG; // eslint-disable-line -- static, framework-authored markup, no user input.
+
+		var badge = document.createElement( 'span' );
+		badge.className = 'woodev-pickup-filter__badge';
+		badge.hidden = true;
+		toggle.appendChild( badge );
+
+		var menu = document.createElement( 'div' );
+		menu.className = 'woodev-pickup-filter__menu';
+		menu.hidden = true;
+
+		var title = document.createElement( 'div' );
+		title.className = 'woodev-pickup-filter__title';
+		title.textContent = text( self._config, 'filterTypes' );
+		menu.appendChild( title );
+
+		// "Opening either menu closes the other" (spec V-8, Russian Post's own `menu--open`
+		// behaviour): opening the filter menu hides the search results dropdown built by
+		// `buildSearchLayout()`, when one exists (it does not when search is disabled). The
+		// opposite direction — a results dropdown opening closes THIS menu — lives in
+		// `renderSearchResults()`, the one place results actually become visible.
+		toggle.addEventListener( 'click', function() {
+			var opening = menu.hidden;
+
+			menu.hidden = ! opening;
+
+			if ( opening && self._searchResults ) {
+				self._searchResults.hidden = true;
+			}
+		} );
+
+		wrap.appendChild( toggle );
+		wrap.appendChild( menu );
+
+		self._filterWrapEl = wrap;
+		self._filterToggleEl = toggle;
+		self._filterMenuEl = menu;
+		self._badgeEl = badge;
+	}
+
+	/**
+	 * Attaches the (already-built) filter wrap to its home, exactly once: a SIBLING of
+	 * `.woodev-pickup-search` inside the search control's own layout when
+	 * {@see Panels.prototype.buildSearchLayout} built one (`self._controlsEl`), or the list panel
+	 * otherwise — see the file docblock's "THE CONTROL'S HOME" note for why there are two homes at
+	 * all. A no-op once already attached, and a no-op (rather than a throw) when NEITHER host
+	 * exists yet, which cannot happen via the real call order (`render()` always runs before any
+	 * `setTypes()` call) but costs nothing to guard.
+	 *
+	 * @param {Panels} self
+	 * @returns {void}
+	 */
+	function attachFilterEl( self ) {
+		if ( self._filterWrapEl.parentNode ) {
+			return;
+		}
+
+		var host = self._controlsEl || self._listEl;
+
+		if ( host ) {
+			host.appendChild( self._filterWrapEl );
+		}
+	}
 
 	/**
 	 * Rebuilds the filter's checkbox rows from `self._filterOrder` — every
 	 * type ever seen, in first-seen order, never fewer even when the LATEST
 	 * `setTypes()` call reported only some of them (see the file docblock's
 	 * "THE TYPE FILTER" note). Only the `.woodev-pickup-filter__row` elements
-	 * are torn down and rebuilt here — the title and badge are separate,
-	 * longer-lived children of `self._filterEl` and are left alone.
+	 * are torn down and rebuilt here — the title lives in the same menu but is
+	 * a separate, longer-lived child, appended once by {@see ensureFilterEl}
+	 * and left alone here.
 	 *
 	 * `label` is the same already-escaped shape a point's `type.label` is
 	 * elsewhere in this file (it originates from the very same field), so it
@@ -903,7 +1031,7 @@
 	 * @returns {void}
 	 */
 	function renderFilterRows( self ) {
-		var rows = self._filterEl.querySelectorAll( '.woodev-pickup-filter__row' );
+		var rows = self._filterMenuEl.querySelectorAll( '.woodev-pickup-filter__row' );
 
 		Array.prototype.forEach.call( rows, function( row ) {
 			row.parentNode.removeChild( row );
@@ -928,16 +1056,19 @@
 
 			row.appendChild( checkbox );
 			row.appendChild( labelEl );
-			self._filterEl.appendChild( row );
+			self._filterMenuEl.appendChild( row );
 		} );
 	}
 
 	/**
-	 * Shows or hides the partial-selection count badge: present only while
+	 * Shows or hides the partial-selection count badge: visible only while
 	 * the selection is PARTIAL (strictly fewer selected types than known
 	 * types) — never for "all selected" (there would be nothing to call out)
 	 * and never as a plain count of types (spec). Its text is the number of
-	 * types CURRENTLY SELECTED, not the number excluded.
+	 * types CURRENTLY SELECTED, not the number excluded. Task 13 changed this
+	 * from attach/detach to a plain `.hidden` flip — the badge is now a
+	 * permanent child of the toggle (see {@see ensureFilterEl}), never
+	 * inserted into or removed from the menu.
 	 *
 	 * @param {Panels} self
 	 * @returns {void}
@@ -947,18 +1078,12 @@
 			return Boolean( self._filterSelected[ code ] );
 		} ).length;
 
-		if ( selectedCount < self._filterOrder.length ) {
+		var partial = selectedCount < self._filterOrder.length;
+
+		self._badgeEl.hidden = ! partial;
+
+		if ( partial ) {
 			self._badgeEl.textContent = String( selectedCount );
-
-			if ( ! self._badgeEl.parentNode ) {
-				self._filterEl.insertBefore( self._badgeEl, self._filterEl.firstChild );
-			}
-
-			return;
-		}
-
-		if ( self._badgeEl.parentNode ) {
-			self._badgeEl.parentNode.removeChild( self._badgeEl );
 		}
 	}
 
@@ -1028,6 +1153,16 @@
 		this._filterLabels = {};
 		this._filterSelected = {};
 		this._filterShown = false;
+
+		// Task 13 (spec V-8): the filter's own DOM — built lazily by `setTypes()` (see the file
+		// docblock's "THE CONTROL'S HOME" note), never here. `_controlsEl` is set only when
+		// `buildSearchLayout()` actually builds a control (null when search is disabled), which is
+		// exactly the signal `setTypes()` uses to decide where the filter attaches.
+		this._controlsEl = null;
+		this._filterWrapEl = null;
+		this._filterToggleEl = null;
+		this._filterMenuEl = null;
+		this._badgeEl = null;
 
 		// Task 11 (spec V-6): set only once `buildSearchLayout()` actually runs — a Panels instance
 		// the caller never asks for a search layout (e.g. `config.search === false`) never gets
@@ -1115,21 +1250,6 @@
 		var body = document.createElement( 'div' );
 		body.className = 'woodev-pickup-list__body';
 
-		// Task 16: the type filter menu — title always present once the
-		// element itself is attached; rows/badge are (re)built by
-		// `setTypes()`/`updateFilterBadge()`. Not attached to `list` until
-		// a second distinct type has ever been seen (see the file docblock).
-		var filter = document.createElement( 'div' );
-		filter.className = 'woodev-pickup-filter';
-
-		var filterTitle = document.createElement( 'div' );
-		filterTitle.className = 'woodev-pickup-filter__title';
-		filterTitle.textContent = text( this._config, 'filterTypes' );
-		filter.appendChild( filterTitle );
-
-		var badge = document.createElement( 'span' );
-		badge.className = 'woodev-pickup-filter__badge';
-
 		list.appendChild( body );
 
 		var card = document.createElement( 'div' );
@@ -1164,8 +1284,6 @@
 		this._listEl = list;
 		this._listBodyEl = body;
 		this._cardEl = card;
-		this._filterEl = filter;
-		this._badgeEl = badge;
 
 		var self = this;
 		toggle.addEventListener( 'click', function() {
@@ -1357,6 +1475,12 @@
 	 * A no-op when `buildSearchLayout()` has never been called (`_searchResults` unset) — the
 	 * layout is built on demand and this method must not throw just because it ran first.
 	 *
+	 * Task 13 (spec V-8): this un-hiding is also the OTHER half of "opening either menu closes the
+	 * other" — see `buildSearchLayout()`'s filter toggle handler for the reverse direction. A
+	 * filter menu left open while a search result appears would sit on top of it or beside it
+	 * fighting for the same corner of screen, so this is the one place results actually become
+	 * visible and the one place that needs to close it.
+	 *
 	 * @param {Object} results
 	 * @param {Array}  [results.points]    matching points from the loaded pool.
 	 * @param {Array}  [results.addresses] geocoder address suggestions, `{ displayName }` each.
@@ -1369,6 +1493,10 @@
 
 		if ( ! this._searchResults ) {
 			return;
+		}
+
+		if ( this._filterMenuEl ) {
+			this._filterMenuEl.hidden = true;
 		}
 
 		empty( this._searchResults );
@@ -1463,14 +1591,17 @@
 	};
 
 	/**
-	 * Reports the point types currently known to the caller (Task 16, D-10).
-	 * Accumulates every distinct `{ code, label }` pair FIRST-SEEN across
-	 * every call — a type once seen is never forgotten, even when a later
-	 * call reports fewer — and shows the filter once a SECOND distinct type
-	 * has ever been seen. Once shown, the filter is never detached again
-	 * (see the file docblock's "THE TYPE FILTER" note). A newly-seen type
-	 * defaults to selected; a type already known keeps its current selection
-	 * state across repeated calls.
+	 * Reports the point types currently known to the caller (Task 16, D-10; relocated by Task 13,
+	 * spec V-8). Accumulates every distinct `{ code, label }` pair FIRST-SEEN across every call —
+	 * a type once seen is never forgotten, even when a later call reports fewer — and builds/shows
+	 * the filter once a SECOND distinct type has ever been seen. Once shown, the filter is never
+	 * detached again (see the file docblock's "THE TYPE FILTER" note). A newly-seen type defaults
+	 * to selected; a type already known keeps its current selection state across repeated calls.
+	 *
+	 * The DOM itself is built and attached HERE, lazily, on whichever call first reaches 2+ types —
+	 * never in `render()` — because where it attaches (see {@see attachFilterEl}) depends on
+	 * whether `buildSearchLayout()` ever ran, which this method has no control over and must not
+	 * assume either way.
 	 *
 	 * @param {Array} types `{ code, label }` pairs.
 	 * @returns {void}
@@ -1499,9 +1630,8 @@
 			return;
 		}
 
-		if ( ! self._filterEl.parentNode ) {
-			self._listEl.appendChild( self._filterEl );
-		}
+		ensureFilterEl( self );
+		attachFilterEl( self );
 
 		renderFilterRows( self );
 		updateFilterBadge( self );

@@ -1110,7 +1110,7 @@ describe( 'search layout (spec V-6)', () => {
 
 const filterConfig = { lang: 'ru_RU', i18n: {
 	drawerTitle: 'Пункты выдачи в этой области', emptyInView: 'В этой области пунктов выдачи нет',
-	filterTypes: 'Тип пунктов',
+	filterTypes: 'Тип пунктов', allTypes: 'Все типы пунктов',
 } };
 
 it( 'does not render the filter until a second type appears', () => {
@@ -1153,11 +1153,17 @@ it( 'shows the badge only when the selection is partial', () => {
 	const panels = mount( filterConfig );
 	panels.setTypes( [ { code: 'pvz', label: 'ПВЗ' }, { code: 'postamat', label: 'Постамат' } ] );
 
-	expect( panels.root.querySelector( '.woodev-pickup-filter__badge' ) ).toBeNull();
+	// Task 13 (spec V-8): the badge is now a permanent child of the toggle, hidden via `.hidden`
+	// rather than attached/detached from the DOM — see the toggle+menu rewrite below. `querySelector`
+	// still finds a `hidden` element, so the assertion is on the property, not on presence.
+	const badge = panels.root.querySelector( '.woodev-pickup-filter__badge' );
+
+	expect( badge.hidden ).toBe( true );
 
 	panels.root.querySelectorAll( '.woodev-pickup-filter__checkbox' )[ 0 ].click();
 
-	expect( panels.root.querySelector( '.woodev-pickup-filter__badge' ).textContent ).toBe( '1' );
+	expect( badge.hidden ).toBe( false );
+	expect( badge.textContent ).toBe( '1' );
 } );
 
 it( 'emits the selected codes on change', () => {
@@ -1241,6 +1247,134 @@ it( 'ignores a type whose code is missing/non-string rather than crashing or ren
 	panels.setTypes( [ { code: 'pvz', label: 'ПВЗ' }, { label: 'no code' }, { code: 'postamat', label: 'Постамат' } ] );
 
 	expect( panels.root.querySelectorAll( '.woodev-pickup-filter__checkbox' ) ).toHaveLength( 2 );
+} );
+
+// -----------------------------------------------------------------------
+// Task 13 (spec V-8): the filter moves into the SAME control as search — one `SearchControl`
+// layout, two menus (the button/menu pair below, and the search field's own results dropdown),
+// rather than the filter living in the list panel as it did above. `buildSearchLayout()` must be
+// called before `setTypes()` for the filter to land inside its returned tree — real usage
+// (`pickup-mount.js`) always calls them in that order. Kept event name/payload: `typeFilterChange`
+// with a plain array of codes — the plan's own draft used `typeFilter`/`{ types }`, but that would
+// require rewiring `pickup-mount.js`'s already-tested routing (bulk vs viewport, D-10) for no
+// behavioural gain, so this file keeps the shape the mount already speaks.
+// -----------------------------------------------------------------------
+
+const twoTypes = [
+	{ code: 'pvz', label: 'ПВЗ' },
+	{ code: 'postamat', label: 'Постамат' },
+];
+
+/**
+ * Builds a fresh `Panels`, calls `buildSearchLayout()` (search enabled), then `setTypes()` — the
+ * exact call order `pickup-mount.js` uses, and the order every test below relies on for the filter
+ * to land inside the returned layout element rather than falling back to the list panel.
+ *
+ * Appends the returned layout to `document.body` — same reason `mount()` above appends `_stage`:
+ * a detached checkbox's `.click()` flips its own `.checked` (the browser's native default action)
+ * but jsdom does not dispatch the follow-up `change` event unless the element is connected to a
+ * document, and `handleFilterCheckboxChange()` (the refuse-the-last-uncheck rule, the emit) is
+ * wired to `change`, not `click`.
+ */
+function layoutWith( types ) {
+	const panels = new Panels( document.createElement( 'div' ), filterConfig );
+	const el = panels.buildSearchLayout();
+
+	if ( el ) {
+		document.body.appendChild( el );
+	}
+
+	panels.setTypes( types );
+
+	return { panels, el };
+}
+
+it( 'renders no filter button for a single type, inside the search layout', () => {
+	const { el } = layoutWith( [ twoTypes[ 0 ] ] );
+
+	expect( el.querySelector( '.woodev-pickup-filter' ) ).toBeNull();
+} );
+
+it( 'renders a toggle and a checkbox per type for two types, inside the search layout', () => {
+	const { el } = layoutWith( twoTypes );
+
+	expect( el.querySelectorAll( '.woodev-pickup-filter__checkbox' ) ).toHaveLength( 2 );
+	expect( el.querySelector( '.woodev-pickup-filter__toggle' ) ).not.toBeNull();
+} );
+
+it( 'labels the toggle from allTypes and the menu title from filterTypes — two different i18n keys', () => {
+	const { el } = layoutWith( twoTypes );
+
+	expect( el.querySelector( '.woodev-pickup-filter__toggle' ).getAttribute( 'aria-label' ) )
+		.toBe( 'Все типы пунктов' );
+	expect( el.querySelector( '.woodev-pickup-filter__title' ).textContent ).toBe( 'Тип пунктов' );
+} );
+
+it( 'refuses to uncheck the last remaining type and emits typeFilterChange only for accepted changes', () => {
+	const { panels, el } = layoutWith( twoTypes );
+	const onFilter = jest.fn();
+
+	panels.on( 'typeFilterChange', onFilter );
+
+	const boxes = [ ...el.querySelectorAll( '.woodev-pickup-filter__checkbox' ) ];
+	boxes[ 0 ].click();
+	boxes[ 1 ].click();
+
+	expect( boxes[ 1 ].checked ).toBe( true );
+	expect( onFilter ).toHaveBeenCalledTimes( 1 );
+	expect( onFilter ).toHaveBeenLastCalledWith( [ 'postamat' ] );
+} );
+
+it( 'closes the results menu when the filter menu opens', () => {
+	const { el } = layoutWith( twoTypes );
+
+	el.querySelector( '.woodev-pickup-search__results' ).hidden = false;
+	el.querySelector( '.woodev-pickup-filter__toggle' ).click();
+
+	expect( el.querySelector( '.woodev-pickup-search__results' ).hidden ).toBe( true );
+	expect( el.querySelector( '.woodev-pickup-filter__menu' ).hidden ).toBe( false );
+} );
+
+it( 'closes the filter menu when the results menu opens', () => {
+	const { panels, el } = layoutWith( twoTypes );
+
+	el.querySelector( '.woodev-pickup-filter__toggle' ).click();
+	panels.renderSearchResults( { points: [], addresses: [ { displayName: 'Somewhere' } ] } );
+
+	expect( el.querySelector( '.woodev-pickup-filter__menu' ).hidden ).toBe( true );
+} );
+
+it( 'toggle click closes the menu again on a second click', () => {
+	const { el } = layoutWith( twoTypes );
+	const toggle = el.querySelector( '.woodev-pickup-filter__toggle' );
+	const menu = el.querySelector( '.woodev-pickup-filter__menu' );
+
+	toggle.click();
+	expect( menu.hidden ).toBe( false );
+
+	toggle.click();
+	expect( menu.hidden ).toBe( true );
+} );
+
+it( 'falls back to the list panel when the plugin disabled search entirely', () => {
+	// A carrier without a geocoding budget (config.search === false) still gets two point types —
+	// buildSearchLayout() returns null (spec V-6) and has nowhere to hand the filter, so it must
+	// still have SOME home rather than vanishing (see the task report for this decision).
+	const panels = mount( { ...filterConfig, search: false } );
+
+	expect( panels.buildSearchLayout() ).toBeNull();
+
+	const seen = [];
+	panels.on( 'typeFilterChange', ( codes ) => seen.push( codes ) );
+	panels.setTypes( twoTypes );
+
+	const filterEl = panels.root.querySelector( '.woodev-pickup-filter' );
+
+	expect( filterEl ).not.toBeNull();
+
+	panels.root.querySelectorAll( '.woodev-pickup-filter__checkbox' )[ 0 ].click();
+
+	expect( seen ).toEqual( [ [ 'postamat' ] ] );
 } );
 
 // -----------------------------------------------------------------------

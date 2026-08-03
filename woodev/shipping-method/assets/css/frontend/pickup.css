@@ -556,17 +556,114 @@
 }
 
 /* -------------------------------------------------------------------------
- * Type filter (Task 16, D-10) — appended as the LAST child of `.woodev-pickup-list` once a
- * second distinct point type has ever been seen; closes with the list along with everything
- * else inside it (unlike the toggle, this control makes no sense while the list is closed, so
- * no visibility override is needed here).
+ * Type filter (Task 16, D-10; MOVED into the search control by Task 13, spec V-8) — one small
+ * icon button (`__toggle`, carrying the count badge) and the dropdown `__menu` it opens/closes,
+ * built and shown by `pickup-panels.js`'s `setTypes()` once a second distinct point type has ever
+ * been seen. Normally a SIBLING of `.woodev-pickup-search` inside `.woodev-pickup-controls` —
+ * Russian Post's own "one control, two menus" shape (see the file's own docblock, "THE CONTROL'S
+ * HOME") — `position: relative` on `.woodev-pickup-filter` is what lets `__menu` anchor to the
+ * TOGGLE rather than the page.
+ *
+ * FALLBACK HOME: when the plugin disables search (`config.search === false`, spec V-6),
+ * `buildSearchLayout()` never runs and there is no `.woodev-pickup-controls` to sit beside, so
+ * `pickup-panels.js` appends this control to the end of `.woodev-pickup-list` instead — its
+ * original Task 16 home, kept alive for exactly this case. The `.woodev-pickup-list` variants
+ * below give it the list's own top-border/padding rhythm and a flatter, borderless button that
+ * reads as part of the sidebar rather than a floating card sitting inside it.
  * ---------------------------------------------------------------------- */
 
 .woodev-pickup-filter {
 	position: relative;
 	flex: 0 0 auto;
+}
+
+.woodev-pickup-list .woodev-pickup-filter {
 	padding: 10px 16px;
 	border-top: 1px solid #dcdcde;
+}
+
+.woodev-pickup-filter__toggle {
+	display: inline-flex;
+	position: relative; /* positions the badge, pinned to this button's own corner. */
+	align-items: center;
+	justify-content: center;
+	width: 48px;
+	height: 48px;
+	margin: 0;
+	padding: 0;
+	color: rgba( 0, 0, 0, 0.54 );
+	background: #fff;
+	border: 0;
+	border-radius: 8px;
+	box-shadow: 0 1px 2px rgba( 0, 0, 0, 0.04 ), 0 4px 8px rgba( 0, 0, 0, 0.06 );
+	cursor: pointer;
+}
+
+.woodev-pickup-filter__toggle:hover {
+	background: #f6f7f7;
+}
+
+.woodev-pickup-filter__toggle svg {
+	width: 18px;
+	height: 18px;
+}
+
+/* Fallback home: a flat, borderless 32px icon button — matching the sidebar's own controls
+   instead of the search bar's floating white pill, which would look out of place mid-list. */
+.woodev-pickup-list .woodev-pickup-filter__toggle {
+	width: 32px;
+	height: 32px;
+	background: none;
+	box-shadow: none;
+}
+
+.woodev-pickup-list .woodev-pickup-filter__toggle:hover {
+	background: #f6f7f7;
+}
+
+/* The partial-selection count badge (never shown for "all selected") — the accent/contrast
+   pairing again, a small filled pill pinned to the toggle's corner. Task 13 changed this from an
+   attach/detach element to a PERMANENT child of the toggle, shown/hidden via `.hidden` only (see
+   `pickup-panels.js`'s `updateFilterBadge()`) — the `[hidden]` rule below is required because an
+   author `display` declaration otherwise wins over the UA stylesheet's own `[hidden]` default. */
+.woodev-pickup-filter__badge {
+	position: absolute;
+	top: 2px;
+	right: 2px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 16px;
+	height: 16px;
+	padding: 0 4px;
+	font-size: 10px;
+	font-weight: 700;
+	line-height: 1;
+	color: var( --woodev-pickup-accent-contrast, #fff );
+	background: var( --woodev-pickup-accent, #06aedd );
+	border-radius: 8px;
+}
+
+.woodev-pickup-filter__badge[hidden] {
+	display: none;
+}
+
+/* The dropdown menu — anchored to the toggle via the wrap's own `position: relative`, never the
+   page. Same reasoning applies to `[hidden]` here as the badge above. */
+.woodev-pickup-filter__menu {
+	position: absolute;
+	top: calc( 100% + 8px );
+	right: 0;
+	z-index: 1;
+	width: 200px;
+	padding: 10px 16px;
+	background: #fff;
+	border-radius: 8px;
+	box-shadow: 0 1px 2px rgba( 0, 0, 0, 0.04 ), 0 4px 8px rgba( 0, 0, 0, 0.06 );
+}
+
+.woodev-pickup-filter__menu[hidden] {
+	display: none;
 }
 
 .woodev-pickup-filter__title {
@@ -576,24 +673,6 @@
 	text-transform: uppercase;
 	letter-spacing: 0.03em;
 	color: #646970;
-}
-
-/* The partial-selection count badge (never shown for "all selected") — the accent/contrast
-   pairing again, a small filled pill next to the title. */
-.woodev-pickup-filter__badge {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	min-width: 16px;
-	height: 16px;
-	margin-left: 6px;
-	padding: 0 4px;
-	font-size: 10px;
-	font-weight: 700;
-	line-height: 1;
-	color: var( --woodev-pickup-accent-contrast, #fff );
-	background: var( --woodev-pickup-accent, #06aedd );
-	border-radius: 8px;
 }
 
 .woodev-pickup-filter__row {
@@ -903,6 +982,7 @@
 .woodev-pickup-list__toggle:focus-visible,
 .woodev-pickup-list__point:focus-visible,
 .woodev-pickup-list__show-nearest:focus-visible,
+.woodev-pickup-filter__toggle:focus-visible,
 .woodev-pickup-filter__checkbox:focus-visible,
 .woodev-pickup-card__tab:focus-visible,
 .woodev-pickup-card__close:focus-visible,
