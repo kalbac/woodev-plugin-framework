@@ -1087,22 +1087,19 @@
 		 * @param {Object} panelsInstance
 		 * @returns {void}
 		 */
-		function wireFocusOnOpenCard( panelsInstance ) {
-			var original = panelsInstance.openCard;
-
-			panelsInstance.openCard = function( group, pointId ) {
-				if ( group && provider && 'function' === typeof provider.focusGroup ) {
-					provider.focusGroup( group.key );
-				}
-
-				original.call( panelsInstance, group, pointId );
-			};
-		}
-
 		if ( ! ownsChrome ) {
 			panels = new PanelsCtor( modal.getContainer(), buildPanelsConfig( config ) );
 			panels.render();
-			wireFocusOnOpenCard( panels );
+
+			// The camera follows whatever became the subject, from wherever the customer asked:
+			// a marker, a sidebar row, a search result, "show the nearest". `cardOpened` is the
+			// single funnel every one of those already passes through, so one listener covers
+			// them all and marker-click and row-click cannot drift apart again (spec V-10).
+			panels.on( 'cardOpened', function( payload ) {
+				if ( payload.group && provider && 'function' === typeof provider.focusGroup ) {
+					provider.focusGroup( payload.group.key );
+				}
+			} );
 
 			var alreadySelected = fieldValue( config.fieldId );
 

@@ -46,6 +46,13 @@
  * matches a plain DOM-style emitter and avoids a caller silently losing a
  * handler it registered earlier; Task 20 (the mount wiring) relies on this.
  *
+ * `cardOpened` (Task 10, spec V-10): emitted by `openCard()` for EVERY route to a card — a marker
+ * click, a sidebar row, a search result, "show the nearest" — carrying `{ group, pointId }`. It
+ * exists so a listener can react to "this point became the subject" without caring who asked; the
+ * mount uses it to move the camera, which is what keeps a marker click and a sidebar-row click
+ * behaving identically. Emitted BEFORE the card renders, so the asynchronous camera flight and the
+ * synchronous DOM land together rather than the map lurching after the card is already readable.
+ *
  * `anchorCleared` (Task 20, D-6): before this event existed, `setAnchor( null )` emitted NOTHING
  * of its own — a caller polling for "did the customer just clear their search" had no signal to
  * poll (the reset control that used to call `setAnchor( null )` for the customer was deleted in
@@ -1408,6 +1415,17 @@
 
 		this._activeGroup = group;
 		this._activeIndex = index;
+
+		// EVERY route to a card passes through here — a marker click, a sidebar row, a search
+		// result, "show the nearest" — so this is the one place a listener can learn that a
+		// point became the subject, whoever asked. The mount uses it to move the camera, which
+		// is what makes a marker click and a sidebar-row click behave identically (spec V-10).
+		//
+		// Emitted BEFORE the card renders, in that order deliberately: the camera move is a
+		// ~400ms animation and the card is synchronous DOM, so starting the flight first means
+		// the two land together instead of the map lurching after the card is already readable.
+		// Nothing here awaits the move — the card owes the viewport nothing.
+		this._emit( 'cardOpened', { group: group, pointId: group.points[ index ].id } );
 
 		renderCard( this );
 		this._stage.classList.add( 'is-open' );

@@ -219,6 +219,16 @@ StubPanels.prototype.renderSearchResults = function( results ) {
 
 StubPanels.prototype.openCard = function( group, pointId ) {
 	this.lastOpenCard = { group: group, pointId: pointId };
+
+	// The real class emits this from `openCard()`, BEFORE it renders — the single funnel every
+	// route to a card passes through, and what the mount listens to in order to move the camera
+	// (spec V-10). The stub has to model both the event and its position, or every camera
+	// assertion here silently tests nothing and the documented focus-then-card order goes unchecked.
+	this.emit( 'cardOpened', {
+		group: group,
+		pointId: undefined === pointId ? group.points[ 0 ].id : pointId,
+	} );
+
 	callOrder.push( 'openCard:' + ( group && group.key ) );
 };
 
