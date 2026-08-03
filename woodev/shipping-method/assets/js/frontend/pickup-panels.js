@@ -56,9 +56,10 @@
  * `anchorCleared` (Task 20, D-6): before this event existed, `setAnchor( null )` emitted NOTHING
  * of its own — a caller polling for "did the customer just clear their search" had no signal to
  * poll (the reset control that used to call `setAnchor( null )` for the customer was deleted in
- * Task 7, spec V-11, along with the header it lived in; nothing currently calls `setAnchor( null )`
- * from the UI until Task 11 gives search its own affordance, but the event contract itself does
- * not depend on where the call comes from). `setAnchor( null )` emits this event EVERY time it is
+ * Task 7, spec V-11, along with the header it lived in). Task 11's search layout reset button
+ * (below) does NOT call `setAnchor( null )` itself — it only emits `searchReset`; translating that
+ * into an actual `setAnchor( null )` call is the mount's job (Task 20), so the event contract here
+ * still does not depend on where the call comes from. `setAnchor( null )` emits this event EVERY time it is
  * called with a falsy `latLng`, so the mount can drop whatever provider-side state belongs to the
  * search (Task 20's mount wires this straight to the map provider's own `clearAddress()`, which is
  * what actually removes the "your address" pin — see `map-provider-yandex.js`'s own docblock on
@@ -83,24 +84,34 @@
  * two points in it share a `type.label` — never a per-point decision, or the
  * tabs of one group would read inconsistently (spec).
  *
- * THE SEARCH VIEW (Task 15, D-6): `renderSearchResults( { points, addresses } )`
- * renders TWO independent sections — matching points from the already-loaded
- * pool, and address suggestions from the geocoder — each OMITTED ENTIRELY
- * (not shown as an empty heading) when its own list is empty. Picking a point
- * emits `searchPointPicked` with the point id; picking an address emits
- * `searchAddressPicked` with its INDEX into the caller's own result array,
- * never the address object itself, because the caller (Task 19's
- * `SearchControl` wiring) is the one holding the geocoder response and
- * resolving it. A geocoder `displayName` is untrusted, runtime, third-party
- * text — UNLIKE a point field, it is NOT pre-escaped — so it is written via
- * `textContent`, never `innerHTML`; point fields inside the same results
- * stay on the usual already-escaped/`innerHTML` side of the split.
- * `setAnchor( latLng, label )`'s second argument no longer has any DOM effect (Task 7, spec
- * V-11, deleted the list header it used to feed, along with the reset control the header
- * carried — neither reference has one, and the header stated something the customer could
- * already see). The call shape is kept as-is because Task 11 gives the searched-address state a
- * new, real affordance inside `SearchControl`'s own layout instead; until then `label` is stored
- * only so the anchor itself keeps sorting the list.
+ * THE SEARCH VIEW (Task 15, D-6; layout by Task 11, spec V-6): `renderSearchResults( { points,
+ * addresses } )` renders TWO independent sections — matching points from the already-loaded
+ * pool, and address suggestions from the geocoder — each OMITTED ENTIRELY (not shown as an empty
+ * heading) when its own list is empty; when BOTH are empty it renders `text( config, 'noResults' )`
+ * instead of an empty box. Picking a point emits `searchPointPicked` with the point id; picking an
+ * address emits `searchAddressPicked` with its INDEX into the caller's own result array, never the
+ * address object itself, because the caller (Task 12's `SearchControl` wiring) is the one holding
+ * the geocoder response and resolving it. A geocoder `displayName` is untrusted, runtime,
+ * third-party text — UNLIKE a point field, it is NOT pre-escaped — so it is written via
+ * `textContent`, never `innerHTML`; point fields inside the same results stay on the usual
+ * already-escaped/`innerHTML` side of the split.
+ *
+ * The results container itself (`this._searchResults`) is NOT built by `render()` any more — it is
+ * one of the elements {@see Panels.prototype.buildSearchLayout} builds inside its own detached
+ * `SearchControl` layout (Task 11 REPLACED the plain `.woodev-pickup-search` div `render()` used to
+ * append as a sibling of the list body: two parallel search UIs would have meant two things a
+ * customer could type into). `renderSearchResults()` is therefore a no-op until
+ * `buildSearchLayout()` has been called at least once — the layout is built on demand (Task 12
+ * hands it to ymaps, which decides where it actually lives), so calling it before that must not
+ * throw.
+ *
+ * `setAnchor( latLng, label )`'s second argument still has no DOM effect (Task 7, spec V-11, deleted
+ * the list header it used to feed, along with the reset control the header carried — neither
+ * reference has one, and the header stated something the customer could already see). V-11's
+ * replacement for that reset control is Task 11's search-field reset button (below), which clears
+ * the INPUT, not the anchor label; feeding `label` back into the input's own displayed value (so a
+ * searched address re-shows there) is left to the mount (Task 20) — `label` today is stored only so
+ * the anchor itself keeps sorting the list.
  * `showNothingNearby( { distanceMeters, name } )` is the explicit "empty map"
  * state (never a silently empty result): it names the nearest point and its
  * distance and offers to show it anyway, rather than leaving the customer to
@@ -148,6 +159,15 @@
 
 	/** @type {string} fallback text colour, used only when `config.accentColor` is absent/unsafe. */
 	var DEFAULT_ACCENT = '#06aedd';
+
+	/**
+	 * @type {number} debounce (ms) between the last keystroke and the `searchType` event —
+	 * {@see Panels.prototype.buildSearchLayout}.
+	 */
+	var SEARCH_DEBOUNCE_MS = 300;
+
+	/** @type {number} minimum query length before point matching fires at all (spec V-6). */
+	var SEARCH_MIN_CHARS = 3;
 
 	/**
 	 * A single detached element reused by {@see decodeForTitle} — same technique, same
@@ -470,7 +490,8 @@
 	 * function (rather than inlined at each of its three call sites: `render()`, `setAnchor()`,
 	 * `setVisible()`) because it used to also rebuild the header (Task 7, spec V-11, deleted
 	 * that half outright: no reference has one, and it stated something the customer could
-	 * already see) and is the natural place for Task 11 to hook the search-view swap back in.
+	 * already see). The search view (Task 11) does not hook in here — it lives in its own
+	 * detached `SearchControl` layout, not inside the list panel this function rebuilds.
 	 *
 	 * @param {Panels} self
 	 * @returns {void}
@@ -526,7 +547,7 @@
 	 * hole the file docblock's escaping rule exists to prevent (see the
 	 * "THE SEARCH VIEW" note). Clicking emits `searchAddressPicked` with
 	 * `index` — the position in the caller's OWN results array — never the
-	 * address object itself, since the caller (Task 19) is the one holding
+	 * address object itself, since the caller (Task 12) is the one holding
 	 * that array and resolving it.
 	 *
 	 * @param {Panels} self
@@ -1008,6 +1029,13 @@
 		this._filterSelected = {};
 		this._filterShown = false;
 
+		// Task 11 (spec V-6): set only once `buildSearchLayout()` actually runs — a Panels instance
+		// the caller never asks for a search layout (e.g. `config.search === false`) never gets
+		// these, which is exactly why `renderSearchResults()` guards on `_searchResults` being unset.
+		this._searchTimer = null;
+		this._searchInput = null;
+		this._searchResults = null;
+
 		this.root = null;
 	}
 
@@ -1087,11 +1115,6 @@
 		var body = document.createElement( 'div' );
 		body.className = 'woodev-pickup-list__body';
 
-		// Task 15: the search results view — a sibling of the plain viewport
-		// list body, populated only by `renderSearchResults()`.
-		var search = document.createElement( 'div' );
-		search.className = 'woodev-pickup-search';
-
 		// Task 16: the type filter menu — title always present once the
 		// element itself is attached; rows/badge are (re)built by
 		// `setTypes()`/`updateFilterBadge()`. Not attached to `list` until
@@ -1108,7 +1131,6 @@
 		badge.className = 'woodev-pickup-filter__badge';
 
 		list.appendChild( body );
-		list.appendChild( search );
 
 		var card = document.createElement( 'div' );
 		card.className = 'woodev-pickup-card';
@@ -1142,7 +1164,6 @@
 		this._listEl = list;
 		this._listBodyEl = body;
 		this._cardEl = card;
-		this._searchEl = search;
 		this._filterEl = filter;
 		this._badgeEl = badge;
 
@@ -1174,16 +1195,17 @@
 	 * `label` (Task 15) is the searched address text; it used to switch the list header to the
 	 * `nearestTo` template and show a reset control, both DELETED in Task 7 (spec V-11) along
 	 * with the plain header they shared an element with. `label` still has no OTHER effect today
-	 * — it is stored purely so this call shape survives until Task 11 gives the searched-address
-	 * state its own affordance inside `SearchControl`'s layout. Existing single-argument callers
-	 * (the map-centre case) are unaffected either way: with or without a label, only the anchor
-	 * itself drives the list's sort order.
+	 * — Task 11 gave the search its own real affordance ({@see Panels.prototype.buildSearchLayout}),
+	 * but that layout does not read `label` back into the input's displayed value; `label` is
+	 * stored purely so this call shape survives, and so the anchor itself keeps driving the list's
+	 * sort order. Existing single-argument callers (the map-centre case) are unaffected either way.
 	 *
 	 * `anchorCleared` fires whenever this call CLEARS the anchor (`latLng` is
 	 * null/falsy) — see the file docblock's "EVENT SEMANTICS" note.
 	 *
 	 * @param {number[]|null} latLng `[lat, lng]`, or null to clear.
-	 * @param {string}        [label] the searched address; stored for Task 11, no DOM effect yet.
+	 * @param {string}        [label] the searched address; stored for the anchor's sort order, no
+	 *                                DOM effect (see above).
 	 * @returns {void}
 	 */
 	Panels.prototype.setAnchor = function( latLng, label ) {
@@ -1212,11 +1234,128 @@
 	};
 
 	/**
-	 * Renders the search view's two independent sections (Task 15, D-6):
-	 * matching pool points and geocoder address suggestions. Each section is
-	 * OMITTED ENTIRELY (not an empty heading) when its own array is empty —
-	 * see {@see buildSearchSection}. Fully rebuilds the search container on
-	 * every call, matching every other render function in this file.
+	 * Builds the DOM and handlers for the `SearchControl`'s custom layout (Task 11, spec V-6).
+	 *
+	 * Returns a DETACHED element rather than mounting it: the map provider hands it to ymaps
+	 * through `options.layout`, and ymaps decides where it actually lives (Task 12). Keeping
+	 * construction here — rather than in the map-provider file — keeps D-3 intact (no map-library
+	 * file renders point information) and lets this be tested without ymaps in the room.
+	 *
+	 * Two different events, deliberately — see the file docblock's "THE SEARCH VIEW" note:
+	 *   - `searchType`   — debounced {@see SEARCH_DEBOUNCE_MS}ms, from {@see SEARCH_MIN_CHARS}
+	 *                      characters, while typing. Filters the ALREADY LOADED pool. Free, local,
+	 *                      no network.
+	 *   - `searchSubmit` — on Enter or the magnifier only. Runs the geocoder, which spends the
+	 *                      merchant's quota, so it never fires per keystroke — Russian Post's own
+	 *                      model (verified in its bundle): it calls `control.search( value )` on
+	 *                      submit and never uses `ymaps.suggest`.
+	 *
+	 * `renderSearchResults()` fills the `.woodev-pickup-search__results` element built here — see
+	 * that method's own docblock for what happens when it is called before this one.
+	 *
+	 * @since 2.0.2
+	 * @returns {HTMLElement|null} null when the plugin disabled search (`config.search === false`).
+	 */
+	Panels.prototype.buildSearchLayout = function() {
+		var self = this;
+
+		if ( false === this._config.search ) {
+			return null;
+		}
+
+		var wrap = document.createElement( 'div' );
+		wrap.className = 'woodev-pickup-controls';
+
+		var search = document.createElement( 'div' );
+		search.className = 'woodev-pickup-search';
+
+		var form = document.createElement( 'form' );
+		form.className = 'woodev-pickup-search__form';
+		form.setAttribute( 'role', 'search' );
+
+		var input = document.createElement( 'input' );
+		input.type = 'search';
+		input.className = 'woodev-pickup-search__input';
+		input.setAttribute( 'placeholder', text( this._config, 'yourAddress' ) );
+		input.setAttribute( 'aria-label', text( this._config, 'yourAddress' ) );
+
+		var reset = document.createElement( 'button' );
+		reset.type = 'button';
+		reset.className = 'woodev-pickup-search__reset';
+		reset.hidden = true;
+		reset.setAttribute( 'aria-label', text( this._config, 'resetSearch' ) );
+
+		var submit = document.createElement( 'button' );
+		submit.type = 'submit';
+		submit.className = 'woodev-pickup-search__submit';
+		submit.setAttribute( 'aria-label', text( this._config, 'search' ) );
+
+		var results = document.createElement( 'div' );
+		results.className = 'woodev-pickup-search__results';
+		results.hidden = true;
+
+		form.appendChild( input );
+		form.appendChild( reset );
+		form.appendChild( submit );
+		search.appendChild( form );
+		search.appendChild( results );
+		wrap.appendChild( search );
+
+		form.addEventListener( 'submit', function( event ) {
+			// Without this the browser submits the CHECKOUT form the modal was opened from —
+			// see the task report/docblock note on why this line cannot be skipped.
+			event.preventDefault();
+
+			var value = input.value.trim();
+
+			if ( value.length ) {
+				self._emit( 'searchSubmit', { query: value } );
+			}
+		} );
+
+		input.addEventListener( 'input', function() {
+			var value = input.value.trim();
+
+			reset.hidden = 0 === value.length;
+
+			window.clearTimeout( self._searchTimer );
+
+			if ( value.length < SEARCH_MIN_CHARS ) {
+				return;
+			}
+
+			self._searchTimer = window.setTimeout( function() {
+				self._emit( 'searchType', { query: value } );
+			}, SEARCH_DEBOUNCE_MS );
+		} );
+
+		reset.addEventListener( 'click', function() {
+			window.clearTimeout( self._searchTimer );
+			input.value = '';
+			reset.hidden = true;
+			results.hidden = true;
+			empty( results );
+			self._emit( 'searchReset', {} );
+		} );
+
+		this._searchInput = input;
+		this._searchResults = results;
+		this._controlsEl = wrap;
+
+		return wrap;
+	};
+
+	/**
+	 * Renders the search view's two independent sections (Task 15, D-6) into the results
+	 * container {@see Panels.prototype.buildSearchLayout} builds: matching pool points and
+	 * geocoder address suggestions. Each section is OMITTED ENTIRELY (not an empty heading) when
+	 * its own array is empty — see {@see buildSearchSection} — and when BOTH are empty, renders
+	 * `text( config, 'noResults' )` instead of an empty box (Task 11, spec V-6). Fully rebuilds
+	 * the results container on every call, matching every other render function in this file, and
+	 * un-hides it (the layout starts with `results.hidden = true`).
+	 *
+	 * A no-op when `buildSearchLayout()` has never been called (`_searchResults` unset) — the
+	 * layout is built on demand and this method must not throw just because it ran first.
 	 *
 	 * @param {Object} results
 	 * @param {Array}  [results.points]    matching points from the loaded pool.
@@ -1228,7 +1367,12 @@
 		var points = ( results && results.points ) || [];
 		var addresses = ( results && results.addresses ) || [];
 
-		empty( this._searchEl );
+		if ( ! this._searchResults ) {
+			return;
+		}
+
+		empty( this._searchResults );
+		this._searchResults.hidden = false;
 
 		var pointsSection = buildSearchSection(
 			'points',
@@ -1240,7 +1384,7 @@
 		);
 
 		if ( pointsSection ) {
-			this._searchEl.appendChild( pointsSection );
+			this._searchResults.appendChild( pointsSection );
 		}
 
 		var addressesSection = buildSearchSection(
@@ -1253,7 +1397,14 @@
 		);
 
 		if ( addressesSection ) {
-			this._searchEl.appendChild( addressesSection );
+			this._searchResults.appendChild( addressesSection );
+		}
+
+		if ( ! pointsSection && ! addressesSection ) {
+			var noResults = document.createElement( 'div' );
+			noResults.className = 'woodev-pickup-search__empty';
+			noResults.textContent = text( this._config, 'noResults' );
+			this._searchResults.appendChild( noResults );
 		}
 	};
 

@@ -17,7 +17,13 @@ const WoodevPickupGeo = require( '../../woodev/shipping-method/assets/js/fronten
 
 const config = {
 	lang: 'ru_RU',
-	i18n: { drawerTitle: 'Пункты выдачи в этой области', emptyInView: 'В этой области пунктов выдачи нет' },
+	i18n: {
+		drawerTitle: 'Пункты выдачи в этой области', emptyInView: 'В этой области пунктов выдачи нет',
+		// Task 11 (spec V-6): the search layout's own strings — added here (rather than only on a
+		// one-off object) so `buildSearchLayout()`'s tests can merge overrides onto this shared config.
+		yourAddress: 'Ваш адрес', resetSearch: 'Сбросить поиск', search: 'Найти', noResults: 'Ничего не найдено',
+		sectionPoints: 'Пункты выдачи', sectionAddresses: 'Адреса',
+	},
 };
 
 const group = ( id, lat, lng, name ) => ( {
@@ -683,26 +689,34 @@ const searchConfig = { lang: 'ru_RU', i18n: {
 	drawerTitle: 'Пункты выдачи в этой области', emptyInView: 'В этой области пунктов выдачи нет',
 	nearestTo: 'Ближайшие к «%s»', resetSearch: 'Сбросить', nothingNearby: 'Рядом с этим адресом пунктов выдачи нет.',
 	showNearest: 'Показать ближайший', sectionPoints: 'Пункты выдачи', sectionAddresses: 'Адреса',
+	noResults: 'Ничего не найдено',
 } };
 
+// Re-pointed (Task 11, spec V-6): `renderSearchResults()` used to fill a `.woodev-pickup-search`
+// div `render()` built directly inside the sidebar list. That div is gone — the results container
+// is now owned by `buildSearchLayout()`'s DETACHED layout (ymaps decides where it lives, Task 12),
+// so these tests build that layout first and query it directly, rather than `panels.root`.
 it( 'renders the point section and the address section separately', () => {
 	const panels = mount( searchConfig );
+	const layout = panels.buildSearchLayout();
 	panels.renderSearchResults( { points: [ point() ], addresses: [ { displayName: 'Москва, Ленина 5' } ] } );
 
-	expect( panels.root.querySelector( '.woodev-pickup-search__section--points' ) ).not.toBeNull();
-	expect( panels.root.querySelector( '.woodev-pickup-search__section--addresses' ) ).not.toBeNull();
+	expect( layout.querySelector( '.woodev-pickup-search__section--points' ) ).not.toBeNull();
+	expect( layout.querySelector( '.woodev-pickup-search__section--addresses' ) ).not.toBeNull();
 } );
 
 it( 'omits a section that has no results rather than showing an empty heading', () => {
 	const panels = mount( searchConfig );
+	const layout = panels.buildSearchLayout();
 	panels.renderSearchResults( { points: [], addresses: [ { displayName: 'Москва' } ] } );
 
-	expect( panels.root.querySelector( '.woodev-pickup-search__section--points' ) ).toBeNull();
+	expect( layout.querySelector( '.woodev-pickup-search__section--points' ) ).toBeNull();
 } );
 
 it( 'emits pointResult with the point id', () => {
 	const seen = [];
 	const panels = mount( searchConfig );
+	const layout = panels.buildSearchLayout();
 	panels.on( 'searchPointPicked', ( id ) => seen.push( id ) );
 	// Two points with NON-default ids, and the SECOND one clicked: with a single `p1`
 	// fixture an emitter hardcoded to 'p1' — or to "always the first result" — passes.
@@ -710,7 +724,7 @@ it( 'emits pointResult with the point id', () => {
 		points: [ point( { id: 'PVZ-77' } ), point( { id: 'PVZ-99' } ) ],
 		addresses: [],
 	} );
-	panels.root.querySelectorAll( '.woodev-pickup-search__item' )[ 1 ].click();
+	layout.querySelectorAll( '.woodev-pickup-search__item' )[ 1 ].click();
 
 	expect( seen ).toEqual( [ 'PVZ-99' ] );
 } );
@@ -718,6 +732,7 @@ it( 'emits pointResult with the point id', () => {
 it( 'emits addressResult with the index so the caller can resolve it', () => {
 	const seen = [];
 	const panels = mount( searchConfig );
+	const layout = panels.buildSearchLayout();
 	panels.on( 'searchAddressPicked', ( i ) => seen.push( i ) );
 	panels.renderSearchResults( {
 		points: [],
@@ -726,8 +741,8 @@ it( 'emits addressResult with the index so the caller can resolve it', () => {
 
 	// Click the third, then the first: a hardcoded `1`, an always-zero, or an
 	// always-last emitter each survive a single click on index 1.
-	panels.root.querySelectorAll( '.woodev-pickup-search__item' )[ 2 ].click();
-	panels.root.querySelectorAll( '.woodev-pickup-search__item' )[ 0 ].click();
+	layout.querySelectorAll( '.woodev-pickup-search__item' )[ 2 ].click();
+	layout.querySelectorAll( '.woodev-pickup-search__item' )[ 0 ].click();
 
 	expect( seen ).toEqual( [ 2, 0 ] );
 } );
@@ -831,16 +846,18 @@ it( 'a lone anchor argument without a label still sorts the list (single-arg cal
 
 it( 'renders escaped point fields (not double-escaped) inside a search point result', () => {
 	const panels = mount( searchConfig );
+	const layout = panels.buildSearchLayout();
 	panels.renderSearchResults( { points: [ point( { name: 'ПВЗ &quot;Ромашка&quot;' } ) ], addresses: [] } );
 
-	expect( panels.root.querySelector( '.woodev-pickup-search__name' ).textContent ).toBe( 'ПВЗ "Ромашка"' );
+	expect( layout.querySelector( '.woodev-pickup-search__name' ).textContent ).toBe( 'ПВЗ "Ромашка"' );
 } );
 
 it( 'never executes markup smuggled through a geocoder displayName', () => {
 	const panels = mount( searchConfig );
+	const layout = panels.buildSearchLayout();
 	panels.renderSearchResults( { points: [], addresses: [ { displayName: '<img src=x onerror=alert(1)>' } ] } );
 
-	const nameEl = panels.root.querySelector( '.woodev-pickup-search__display-name' );
+	const nameEl = layout.querySelector( '.woodev-pickup-search__display-name' );
 
 	expect( nameEl.querySelector( 'img' ) ).toBeNull();
 	expect( nameEl.textContent ).toBe( '<img src=x onerror=alert(1)>' );
@@ -859,41 +876,57 @@ it( 'a malicious searched-address label produces no DOM side effect now that the
 
 it( 'renders the exact section labels from sectionPoints/sectionAddresses, not hardcoded Russian', () => {
 	const panels = mount( searchConfig );
+	const layout = panels.buildSearchLayout();
 	panels.renderSearchResults( { points: [ point() ], addresses: [ { displayName: 'A' } ] } );
 
-	expect( panels.root.querySelector( '.woodev-pickup-search__section--points .woodev-pickup-search__section-title' )
+	expect( layout.querySelector( '.woodev-pickup-search__section--points .woodev-pickup-search__section-title' )
 		.textContent ).toBe( 'Пункты выдачи' );
-	expect( panels.root
+	expect( layout
 		.querySelector( '.woodev-pickup-search__section--addresses .woodev-pickup-search__section-title' )
 		.textContent ).toBe( 'Адреса' );
 } );
 
 it( 'renders blank section labels, not a hardcoded default, when sectionPoints/sectionAddresses are missing', () => {
 	const panels = mount( withoutI18nKey( withoutI18nKey( searchConfig, 'sectionPoints' ), 'sectionAddresses' ) );
+	const layout = panels.buildSearchLayout();
 	panels.renderSearchResults( { points: [ point() ], addresses: [ { displayName: 'A' } ] } );
 
-	expect( panels.root.querySelector( '.woodev-pickup-search__section--points .woodev-pickup-search__section-title' )
+	expect( layout.querySelector( '.woodev-pickup-search__section--points .woodev-pickup-search__section-title' )
 		.textContent ).toBe( '' );
-	expect( panels.root
+	expect( layout
 		.querySelector( '.woodev-pickup-search__section--addresses .woodev-pickup-search__section-title' )
 		.textContent ).toBe( '' );
 } );
 
-it( 'omits both sections when neither points nor addresses have results', () => {
+it( 'omits both sections and shows noResults when neither points nor addresses have results', () => {
+	// Re-pointed (Task 11, spec V-6): "an empty result renders the noResults message rather than
+	// an empty box" is new behaviour that only makes sense now that there IS a results container
+	// to show/hide (`buildSearchLayout()`'s `.woodev-pickup-search__results`).
 	const panels = mount( searchConfig );
+	const layout = panels.buildSearchLayout();
 	panels.renderSearchResults( { points: [], addresses: [] } );
 
-	expect( panels.root.querySelector( '.woodev-pickup-search__section--points' ) ).toBeNull();
-	expect( panels.root.querySelector( '.woodev-pickup-search__section--addresses' ) ).toBeNull();
+	expect( layout.querySelector( '.woodev-pickup-search__section--points' ) ).toBeNull();
+	expect( layout.querySelector( '.woodev-pickup-search__section--addresses' ) ).toBeNull();
+	expect( layout.querySelector( '.woodev-pickup-search__results' ).textContent ).toBe( searchConfig.i18n.noResults );
 } );
 
 it( 'rebuilds the search results fully on a second call, not appending to the first', () => {
 	const panels = mount( searchConfig );
+	const layout = panels.buildSearchLayout();
 	panels.renderSearchResults( { points: [ point( { id: 'p1' } ) ], addresses: [] } );
 	panels.renderSearchResults( { points: [ point( { id: 'p2' } ) ], addresses: [] } );
 
-	expect( panels.root.querySelectorAll( '.woodev-pickup-search__item' ) ).toHaveLength( 1 );
-	expect( panels.root.querySelector( '.woodev-pickup-search__item' ).dataset.pointId ).toBe( 'p2' );
+	expect( layout.querySelectorAll( '.woodev-pickup-search__item' ) ).toHaveLength( 1 );
+	expect( layout.querySelector( '.woodev-pickup-search__item' ).dataset.pointId ).toBe( 'p2' );
+} );
+
+it( 'is a no-op when called before the search layout has ever been built', () => {
+	// The layout is DETACHED and only built on demand (Task 12 hands it to ymaps) — a caller that
+	// calls `renderSearchResults()` without ever calling `buildSearchLayout()` first must not throw.
+	const panels = mount( searchConfig );
+
+	expect( () => panels.renderSearchResults( { points: [ point() ], addresses: [] } ) ).not.toThrow();
 } );
 
 it( 'emits showNearestRequested with the same info when the show-nearest button is clicked', () => {
@@ -904,6 +937,171 @@ it( 'emits showNearestRequested with the same info when the show-nearest button 
 	panels.root.querySelector( '.woodev-pickup-list__nothing-nearby button' ).click();
 
 	expect( seen ).toEqual( [ { distanceMeters: 87000, name: 'ПВЗ «Магнит»' } ] );
+} );
+
+// -----------------------------------------------------------------------
+// Task 11: the search + filter layout for `SearchControl` (spec V-6)
+// -----------------------------------------------------------------------
+
+describe( 'search layout (spec V-6)', () => {
+	const build = ( overrides = {} ) =>
+		new Panels( document.createElement( 'div' ), { ...config, ...overrides } ).buildSearchLayout();
+
+	it( 'renders a search form with the placeholder from i18n', () => {
+		const el = build();
+		const form = el.querySelector( 'form.woodev-pickup-search__form' );
+		const input = form.querySelector( 'input.woodev-pickup-search__input' );
+
+		expect( form.getAttribute( 'role' ) ).toBe( 'search' );
+		expect( input.getAttribute( 'placeholder' ) ).toBe( config.i18n.yourAddress );
+	} );
+
+	it( 'shows the reset button only when the input is non-empty', () => {
+		const el = build();
+		const reset = el.querySelector( '.woodev-pickup-search__reset' );
+		const input = el.querySelector( '.woodev-pickup-search__input' );
+
+		expect( reset.hidden ).toBe( true );
+
+		input.value = 'Тверская';
+		input.dispatchEvent( new Event( 'input' ) );
+
+		expect( reset.hidden ).toBe( false );
+	} );
+
+	it( 'matches loaded points while typing, debounced, from 3 characters', () => {
+		jest.useFakeTimers();
+
+		const panels = new Panels( document.createElement( 'div' ), config );
+		const el = panels.buildSearchLayout();
+		const onType = jest.fn();
+
+		panels.on( 'searchType', onType );
+
+		const input = el.querySelector( '.woodev-pickup-search__input' );
+
+		input.value = 'Тв';
+		input.dispatchEvent( new Event( 'input' ) );
+		jest.advanceTimersByTime( 400 );
+		expect( onType ).not.toHaveBeenCalled();
+
+		input.value = 'Твер';
+		input.dispatchEvent( new Event( 'input' ) );
+		input.value = 'Тверс';
+		input.dispatchEvent( new Event( 'input' ) );
+		jest.advanceTimersByTime( 400 );
+
+		expect( onType ).toHaveBeenCalledTimes( 1 );
+		expect( onType ).toHaveBeenCalledWith( { query: 'Тверс' } );
+
+		jest.useRealTimers();
+	} );
+
+	it( 'queries addresses only on submit, never while typing', () => {
+		jest.useFakeTimers();
+
+		const panels = new Panels( document.createElement( 'div' ), config );
+		const el = panels.buildSearchLayout();
+		const onSubmit = jest.fn();
+
+		panels.on( 'searchSubmit', onSubmit );
+
+		const input = el.querySelector( '.woodev-pickup-search__input' );
+		input.value = 'Тверская 5';
+		input.dispatchEvent( new Event( 'input' ) );
+		jest.advanceTimersByTime( 1000 );
+
+		expect( onSubmit ).not.toHaveBeenCalled();
+
+		el.querySelector( 'form' ).dispatchEvent( new Event( 'submit', { cancelable: true } ) );
+
+		expect( onSubmit ).toHaveBeenCalledWith( { query: 'Тверская 5' } );
+
+		jest.useRealTimers();
+	} );
+
+	it( 'does not navigate the checkout away on submit', () => {
+		const el = build();
+		const event = new Event( 'submit', { cancelable: true } );
+
+		el.querySelector( 'form' ).dispatchEvent( event );
+
+		expect( event.defaultPrevented ).toBe( true );
+	} );
+
+	it( 'resetting clears the value, the results and the anchor', () => {
+		const panels = new Panels( document.createElement( 'div' ), config );
+		const el = panels.buildSearchLayout();
+		const onReset = jest.fn();
+
+		panels.on( 'searchReset', onReset );
+
+		const input = el.querySelector( '.woodev-pickup-search__input' );
+		input.value = 'Тверская';
+		input.dispatchEvent( new Event( 'input' ) );
+		el.querySelector( '.woodev-pickup-search__reset' ).click();
+
+		expect( input.value ).toBe( '' );
+		expect( onReset ).toHaveBeenCalled();
+	} );
+
+	it( 'builds nothing when the plugin disabled search', () => {
+		expect( build( { search: false } ) ).toBeNull();
+	} );
+
+	// -------------------------------------------------------------------
+	// Extra coverage beyond the plan's own spec
+	// -------------------------------------------------------------------
+
+	it( 'labels the reset and submit buttons from i18n, not a hardcoded default', () => {
+		const el = build();
+
+		expect( el.querySelector( '.woodev-pickup-search__reset' ).getAttribute( 'aria-label' ) )
+			.toBe( config.i18n.resetSearch );
+		expect( el.querySelector( '.woodev-pickup-search__submit' ).getAttribute( 'aria-label' ) )
+			.toBe( config.i18n.search );
+	} );
+
+	it( 'renders blank aria-labels, not a hardcoded Russian default, when the i18n keys are missing', () => {
+		const el = build( { i18n: {} } );
+
+		expect( el.querySelector( '.woodev-pickup-search__input' ).getAttribute( 'placeholder' ) ).toBe( '' );
+		expect( el.querySelector( '.woodev-pickup-search__reset' ).getAttribute( 'aria-label' ) ).toBe( '' );
+		expect( el.querySelector( '.woodev-pickup-search__submit' ).getAttribute( 'aria-label' ) ).toBe( '' );
+	} );
+
+	it( 'never submits fewer than 1 non-whitespace character — a blank/whitespace-only query is refused', () => {
+		const panels = new Panels( document.createElement( 'div' ), config );
+		const el = panels.buildSearchLayout();
+		const onSubmit = jest.fn();
+
+		panels.on( 'searchSubmit', onSubmit );
+
+		const input = el.querySelector( '.woodev-pickup-search__input' );
+		input.value = '   ';
+		el.querySelector( 'form' ).dispatchEvent( new Event( 'submit', { cancelable: true } ) );
+
+		expect( onSubmit ).not.toHaveBeenCalled();
+	} );
+
+	it( 'hides the reset button again after it is used to clear the input', () => {
+		const el = build();
+		const input = el.querySelector( '.woodev-pickup-search__input' );
+		const reset = el.querySelector( '.woodev-pickup-search__reset' );
+
+		input.value = 'Тверская';
+		input.dispatchEvent( new Event( 'input' ) );
+		expect( reset.hidden ).toBe( false );
+
+		reset.click();
+		expect( reset.hidden ).toBe( true );
+	} );
+
+	it( 'returns a fresh, independent element on every call — never the same detached node twice', () => {
+		const panels = new Panels( document.createElement( 'div' ), config );
+
+		expect( panels.buildSearchLayout() ).not.toBe( panels.buildSearchLayout() );
+	} );
 } );
 
 // -----------------------------------------------------------------------

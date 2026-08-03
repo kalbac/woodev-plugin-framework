@@ -223,8 +223,8 @@
 /* No `.woodev-pickup-list__header` rule any more (Task 7, spec V-11): the "«Пункты выдачи в этой
    области (5)»" header — and the "«Сбросить»" reset control it carried — was deleted outright.
    Neither reference has a header, and it stated a count the customer could already see by
-   scanning the rows below it. The reset control's replacement (the search field's own clear
-   button) does not exist until Task 11. */
+   scanning the rows below it. The reset control's replacement is the search field's own clear
+   button, `.woodev-pickup-search__reset` below (Task 11, spec V-6). */
 
 .woodev-pickup-list__body {
 	flex: 1 1 auto;
@@ -392,13 +392,107 @@
 }
 
 /* -------------------------------------------------------------------------
- * Search view (Task 15, D-6) — a sibling of the plain viewport list body inside the SAME list
- * panel, populated only by `renderSearchResults()`. Two independent, individually-omittable
- * sections: matching pool points, and geocoder address suggestions.
+ * Search + filter layout for `SearchControl` (Task 11, spec V-6) — Russian Post's chrome: a
+ * rounded white pill (`.woodev-pickup-search__form`) holding the input, a reset button shown only
+ * for a non-empty value, and a magnifier that submits. `.woodev-pickup-controls` is the DETACHED
+ * root `pickup-panels.js`'s `buildSearchLayout()` returns; ymaps decides where it actually lives
+ * (Task 12), so nothing here assumes a parent — geometry is self-contained via `width: min(...)`.
+ *
+ * `.woodev-pickup-search__results` (Task 15, D-6) is the dropdown directly under the form: two
+ * independent, individually-omittable sections — matching pool points, and geocoder address
+ * suggestions — populated only by `renderSearchResults()`. It used to be a plain sibling of the
+ * list body, styled `flex: 0 0 auto` inside `.woodev-pickup-list`'s column flow; Task 11 moved the
+ * results container into this control's own layout (one search UI, not two), so `.woodev-pickup-
+ * search` now sizes itself as a flex ROW child of `.woodev-pickup-controls` instead.
  * ---------------------------------------------------------------------- */
 
+.woodev-pickup-controls {
+	display: flex;
+	gap: 8px;
+	align-items: flex-start;
+	width: min( 480px, calc( 100vw - 32px ) );
+}
+
 .woodev-pickup-search {
+	flex: 1 1 auto;
+	min-width: 0; /* Lets the pill actually shrink instead of overflowing its flex row. */
+}
+
+.woodev-pickup-search__form {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	height: 48px;
+	margin: 0;
+	padding: 0 8px 0 16px;
+	background: #fff;
+	border: 0;
+	border-radius: 8px;
+	box-shadow: 0 1px 2px rgba( 0, 0, 0, 0.04 ), 0 4px 8px rgba( 0, 0, 0, 0.06 );
+}
+
+.woodev-pickup-search__input {
+	flex: 1 1 auto;
+	min-width: 0;
+	height: 100%;
+	margin: 0;
+	padding: 0;
+	border: 0;
+	background: none;
+	font-family: inherit; /* D-14/V-14: the map reads as part of the shop, never a second typeface. */
+	font-size: 14px;
+	line-height: 1.4;
+	color: #1e1e1e;
+	outline: none;
+}
+
+/* Native search inputs draw their own "×" clear icon in WebKit — ours (`__reset`) already covers
+   that job, so the browser's duplicate is switched off rather than showing two clear affordances. */
+.woodev-pickup-search__input::-webkit-search-cancel-button {
+	display: none;
+}
+
+.woodev-pickup-search__reset,
+.woodev-pickup-search__submit {
+	display: inline-flex;
 	flex: 0 0 auto;
+	align-items: center;
+	justify-content: center;
+	width: 32px;
+	height: 32px;
+	margin: 0;
+	padding: 0;
+	color: rgba( 0, 0, 0, 0.54 );
+	background: none;
+	border: 0;
+	border-radius: 4px;
+	cursor: pointer;
+}
+
+.woodev-pickup-search__reset:hover,
+.woodev-pickup-search__submit:hover {
+	background: #f6f7f7;
+}
+
+.woodev-pickup-search__reset::before {
+	content: '\2715'; /* ✕ — decorative; the JS-set aria-label carries the meaning. */
+	font-size: 14px;
+	line-height: 1;
+}
+
+.woodev-pickup-search__submit::before {
+	content: '\1F50D'; /* 🔍 — the ONE control that spends the merchant's geocoding quota (spec V-6). */
+	font-size: 14px;
+	line-height: 1;
+}
+
+.woodev-pickup-search__results {
+	margin-top: 8px;
+	max-height: 320px;
+	overflow-y: auto;
+	background: #fff;
+	border-radius: 8px;
+	box-shadow: 0 1px 2px rgba( 0, 0, 0, 0.04 ), 0 4px 8px rgba( 0, 0, 0, 0.06 );
 }
 
 .woodev-pickup-search__section {
@@ -417,6 +511,7 @@
 .woodev-pickup-search__item {
 	display: block;
 	width: 100%;
+	margin: 0;
 	padding: 10px 16px;
 	text-align: left;
 	font: inherit;
@@ -445,6 +540,18 @@
 	margin-top: 2px;
 	font-size: 12px;
 	line-height: 1.4;
+	color: #646970;
+}
+
+/* The "empty result" state (Task 11, spec V-6): rendered instead of an empty box when BOTH
+   sections have nothing — matches `.woodev-pickup-list__empty`'s own look, the same statement
+   made in the same place a customer would expect it. */
+.woodev-pickup-search__empty {
+	margin: 0;
+	padding: 16px;
+	text-align: center;
+	font-size: 13px;
+	line-height: 1.5;
 	color: #646970;
 }
 
