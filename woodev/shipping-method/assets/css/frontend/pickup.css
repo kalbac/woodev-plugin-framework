@@ -160,6 +160,19 @@
  * identical "additive because something is being drawn underneath" reasoning.
  * ---------------------------------------------------------------------- */
 
+/*
+ * `[hidden]` MUST be repeated here — an author `.woodev-pickup-overlay { display: flex }` rule
+ * and the UA stylesheet's `[hidden] { display: none }` are BOTH 0-1-0 specificity, and an author
+ * rule beats a UA one at equal specificity regardless of source order. Without this override the
+ * overlay rendered `display: flex` PERMANENTLY: `setBusy( false )` set `overlay.hidden = true` on
+ * the DOM property and nothing changed on screen, because `.is-busy` gates the map's
+ * `pointer-events` and the controls' visibility but never this element's own — `hidden` is its
+ * ONLY visibility switch. Issue #160.
+ */
+.woodev-pickup-overlay[hidden] {
+	display: none;
+}
+
 .woodev-pickup-overlay {
 	position: absolute;
 	inset: 0;
@@ -224,11 +237,10 @@
  * none`, so it only ever intercepts clicks on the card itself; everything else (map drags, the
  * list/search/filter/zoom controls sitting at their own positions) passes straight through it.
  *
- * The `[hidden]` rule is REQUIRED, not decoration: an author `display` declaration on the same
- * selector otherwise wins over the UA stylesheet's own `[hidden]` default (see this file's
- * identical note on `.woodev-pickup-filter__badge`/`__menu` below) — the busy overlay above
- * predates that lesson and gets away with it only because `setBusy()` toggles `is-busy`
- * alongside it; this element has no such companion class to lean on.
+ * The `[hidden]` rule below is REQUIRED, not decoration: an author `display` declaration on the
+ * same selector otherwise wins over the UA stylesheet's own `[hidden]` default (see the busy
+ * overlay's own note above, where the identical mistake — found while wiring this element — was
+ * fixed as issue #160).
  * ---------------------------------------------------------------------- */
 
 .woodev-pickup-message {
