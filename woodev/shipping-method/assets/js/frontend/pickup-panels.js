@@ -284,34 +284,52 @@
 	}
 
 	/**
-	 * Builds one labelled element: a wrapper `div.{cls}` containing a
-	 * `textContent`-safe label and an `innerHTML` value carrying an
-	 * ALREADY-escaped point field. Used for every optional point-detail row
-	 * (phone, work time, weight, payment methods, …) so the label/value
-	 * escaping split from the file docblock is applied in exactly one place.
+	 * Builds one card section: an i18n title over its content, separated from the section above
+	 * it by a rule (spec V-12).
 	 *
-	 * @param {string} cls   BEM block/element class, e.g. 'woodev-pickup-card__phone'.
-	 * @param {string} label i18n label text (unescaped; written via textContent).
-	 * @param {string} value ALREADY-escaped point field HTML (written via innerHTML).
+	 * Replaces the previous inline label-then-value row, which ran every detail together as one
+	 * unbroken block of small text — the operator's whole complaint about the card ("сейчас всё
+	 * одним сплошным текстом, всё ужато"). Both references give each fact its own titled block.
+	 *
+	 * The escaping split from the file docblock lives here, in one place: `title` is an i18n
+	 * string — plain, unescaped, `textContent` — while `content` is an element the caller has
+	 * already built from ALREADY-escaped point fields.
+	 *
+	 * @since 2.0.2
+	 * @param {string}      title   i18n label (unescaped; written via textContent).
+	 * @param {HTMLElement} content the section's body element.
 	 * @returns {HTMLElement}
 	 */
-	function labelledRow( cls, label, value ) {
-		var row = document.createElement( 'div' );
-		row.className = cls;
+	function cardSection( title, content ) {
+		var section = document.createElement( 'div' );
+		section.className = 'woodev-pickup-card__section';
 
-		var labelEl = document.createElement( 'span' );
-		labelEl.className = cls + '-label';
-		labelEl.textContent = label;
+		var titleEl = document.createElement( 'div' );
+		titleEl.className = 'woodev-pickup-card__section-title';
+		titleEl.textContent = title;
 
-		var valueEl = document.createElement( 'span' );
-		valueEl.className = cls + '-value';
-		valueEl.innerHTML = value; // eslint-disable-line -- value is server-escaped, see file docblock.
+		content.className = 'woodev-pickup-card__section-content ' + content.className;
 
-		row.appendChild( labelEl );
-		row.appendChild( document.createTextNode( ' ' ) );
-		row.appendChild( valueEl );
+		section.appendChild( titleEl );
+		section.appendChild( content );
 
-		return row;
+		return section;
+	}
+
+	/**
+	 * Wraps ALREADY-escaped point-field HTML in a plain element, for {@see cardSection}'s content.
+	 *
+	 * @since 2.0.2
+	 * @param {string} cls  modifier class for the value element.
+	 * @param {string} html already-escaped point field.
+	 * @returns {HTMLElement}
+	 */
+	function cardValue( cls, html ) {
+		var el = document.createElement( 'div' );
+		el.className = cls;
+		el.innerHTML = html; // eslint-disable-line -- server-escaped, see file docblock.
+
+		return el;
 	}
 
 	// -------------------------------------------------------------------------
@@ -719,13 +737,34 @@
 	 * invented one — see the file docblock's I1 note and the toggle
 	 * button's own `aria-label` for the identical discipline.
 	 *
+	 * Also carries the icon chip (Task 15, spec V-12) — rendered only when the plugin supplies
+	 * one for `point`'s type, via the SAME {@see pointIconUrl} lookup the sidebar row uses.
+	 *
 	 * @param {Panels} self
 	 * @param {Object} group
+	 * @param {Object} point the point currently shown in the body (the active tab, if any).
 	 * @returns {HTMLElement}
 	 */
-	function buildCardHeader( self, group ) {
+	function buildCardHeader( self, group, point ) {
 		var header = document.createElement( 'div' );
 		header.className = 'woodev-pickup-card__header';
+
+		// The chip (spec V-12) — only when the PLUGIN supplies an icon for this point's type.
+		// It shares {@see pointIconUrl} with the sidebar row builder rather than a second lookup,
+		// so both surfaces agree on what "this point has no icon" means.
+		var iconUrl = pointIconUrl( self._config, point );
+
+		if ( iconUrl ) {
+			var chip = document.createElement( 'div' );
+			chip.className = 'woodev-pickup-card__chip';
+
+			var chipIcon = document.createElement( 'img' );
+			chipIcon.src = iconUrl;
+			chipIcon.alt = '';
+			chip.appendChild( chipIcon );
+
+			header.appendChild( chip );
+		}
 
 		var tabs = buildTabs( self, group );
 
@@ -747,12 +786,15 @@
 	}
 
 	/**
-	 * Builds the card body for one point: title, optional postal code and
-	 * address, an optional "how to get there" detail, services as chips
-	 * (omitted entirely when there are none), payment methods, phone, work
-	 * time and a formatted weight limit — each optional section rendered
-	 * only when its field is actually present (mirrors the balloon builder
-	 * `map-provider-yandex.js` is being retired in favour of).
+	 * Builds the card body for one point: title, optional postal code, then one titled section
+	 * per populated field, IN THIS FIXED ORDER (spec V-12) — Адрес (with "how to get there" as a
+	 * `<details>` inside it, not its own section), Способы оплаты, Услуги, Телефон, Часы работы,
+	 * Ограничение веса. A field that is empty means its whole section is OMITTED, never rendered
+	 * with a blank body — see {@see cardSection}'s own callers, each guarding its own `if`.
+	 *
+	 * Replaces the previous flat label-then-value rows this ran together as one unbroken block
+	 * of small text — the operator's own words on the card before this task: "всё одним сплошным
+	 * текстом, всё ужато".
 	 *
 	 * @param {Object} config
 	 * @param {Object} point
@@ -774,36 +816,43 @@
 			body.appendChild( postal );
 		}
 
+		// Fixed order, spec V-12: Адрес → Способы оплаты → Услуги → Телефон → Часы работы →
+		// Ограничение веса. A section whose value is empty is OMITTED entirely — never rendered
+		// with a blank body — which is `cardSection()`'s callers each guarding their own `if`.
 		if ( fieldValue( point.address ) ) {
-			var address = document.createElement( 'div' );
-			address.className = 'woodev-pickup-card__address';
-			address.innerHTML = fieldValue( point.address ); // eslint-disable-line -- server-escaped.
-			body.appendChild( address );
+			var addressContent = cardValue( 'woodev-pickup-card__address', fieldValue( point.address ) );
+
+			if ( fieldValue( point.instruction ) ) {
+				var howto = document.createElement( 'details' );
+				howto.className = 'woodev-pickup-card__howto';
+
+				var summary = document.createElement( 'summary' );
+				summary.className = 'woodev-pickup-card__howto-summary';
+				summary.textContent = text( config, 'howToGet' );
+
+				var howtoContent = document.createElement( 'div' );
+				howtoContent.innerHTML = fieldValue( point.instruction ); // eslint-disable-line -- server-escaped.
+
+				howto.appendChild( summary );
+				howto.appendChild( howtoContent );
+				addressContent.appendChild( howto );
+			}
+
+			body.appendChild( cardSection( text( config, 'address' ), addressContent ) );
 		}
 
-		if ( fieldValue( point.instruction ) ) {
-			var howto = document.createElement( 'details' );
-			howto.className = 'woodev-pickup-card__howto';
+		if ( Array.isArray( point.payment_methods ) && point.payment_methods.length > 0 ) {
+			var paymentsValue = point.payment_methods.map( fieldValue ).join( ', ' );
 
-			var summary = document.createElement( 'summary' );
-			summary.textContent = text( config, 'howToGet' );
-
-			var content = document.createElement( 'div' );
-			content.innerHTML = fieldValue( point.instruction ); // eslint-disable-line -- server-escaped.
-
-			howto.appendChild( summary );
-			howto.appendChild( content );
-			body.appendChild( howto );
+			body.appendChild( cardSection(
+				text( config, 'paymentMethods' ),
+				cardValue( 'woodev-pickup-card__payments', paymentsValue )
+			) );
 		}
 
 		if ( Array.isArray( point.services ) && point.services.length > 0 ) {
 			var services = document.createElement( 'div' );
 			services.className = 'woodev-pickup-card__services';
-
-			var servicesLabel = document.createElement( 'span' );
-			servicesLabel.className = 'woodev-pickup-card__services-label';
-			servicesLabel.textContent = text( config, 'services' );
-			services.appendChild( servicesLabel );
 
 			point.services.forEach( function( service ) {
 				var chip = document.createElement( 'span' );
@@ -812,30 +861,29 @@
 				services.appendChild( chip );
 			} );
 
-			body.appendChild( services );
-		}
-
-		if ( Array.isArray( point.payment_methods ) && point.payment_methods.length > 0 ) {
-			var paymentsValue = point.payment_methods.map( fieldValue ).join( ', ' );
-			var paymentsLabel = text( config, 'paymentMethods' );
-			body.appendChild( labelledRow( 'woodev-pickup-card__payments', paymentsLabel, paymentsValue ) );
+			body.appendChild( cardSection( text( config, 'services' ), services ) );
 		}
 
 		if ( fieldValue( point.phone ) ) {
-			var phoneLabel = text( config, 'phone' );
-			body.appendChild( labelledRow( 'woodev-pickup-card__phone', phoneLabel, fieldValue( point.phone ) ) );
+			body.appendChild( cardSection(
+				text( config, 'phone' ),
+				cardValue( 'woodev-pickup-card__phone', fieldValue( point.phone ) )
+			) );
 		}
 
 		if ( fieldValue( point.work_time ) ) {
-			var workTimeLabel = text( config, 'workTime' );
-			var workTimeValue = fieldValue( point.work_time );
-			body.appendChild( labelledRow( 'woodev-pickup-card__worktime', workTimeLabel, workTimeValue ) );
+			body.appendChild( cardSection(
+				text( config, 'workTime' ),
+				cardValue( 'woodev-pickup-card__worktime', fieldValue( point.work_time ) )
+			) );
 		}
 
 		if ( null !== point.max_weight && undefined !== point.max_weight ) {
-			var weightLabel = text( config, 'maxWeight' );
-			var weightValue = formatWeightKg( point.max_weight );
-			body.appendChild( labelledRow( 'woodev-pickup-card__weight', weightLabel, weightValue ) );
+			var weightValue = document.createElement( 'div' );
+			weightValue.className = 'woodev-pickup-card__weight';
+			weightValue.textContent = formatWeightKg( point.max_weight ); // computed, plain text — not a point field.
+
+			body.appendChild( cardSection( text( config, 'maxWeight' ), weightValue ) );
 		}
 
 		return body;
@@ -912,7 +960,7 @@
 
 		var point = group.points[ self._activeIndex ] || group.points[ 0 ];
 
-		self._cardEl.appendChild( buildCardHeader( self, group ) );
+		self._cardEl.appendChild( buildCardHeader( self, group, point ) );
 		self._cardEl.appendChild( buildCardBody( self._config, point ) );
 		self._cardEl.appendChild( buildCardFooter( self, point ) );
 	}

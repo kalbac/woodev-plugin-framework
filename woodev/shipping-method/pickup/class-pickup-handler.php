@@ -665,6 +665,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 					// Consumed by the panels (Tasks 12-15), not by this handler or the modal
 					// shell — same "renders blank, never a hardcoded fallback" contract as the
 					// nine keys above.
+					// Task 15 (spec V-12): the point card's "Адрес" section title. Distinct
+					// from `yourAddress` below, which labels the SEARCH field, not a card section.
+					'address'          => __( 'Адрес', 'woodev-plugin-framework' ),
 					'services'         => __( 'Услуги', 'woodev-plugin-framework' ),
 					'yourAddress'      => __( 'Ваш адрес', 'woodev-plugin-framework' ),
 					/* translators: %s: the searched address. */

@@ -339,7 +339,7 @@ function mount( cfg ) {
 
 const cardConfig = { lang: 'ru_RU', i18n: {
 	select: 'Забрать здесь', continueCheckout: 'Продолжить оформление заказа',
-	services: 'Услуги', paymentMethods: 'Способы оплаты', howToGet: 'Как добраться',
+	address: 'Адрес', services: 'Услуги', paymentMethods: 'Способы оплаты', howToGet: 'Как добраться',
 	phone: 'Телефон', workTime: 'Часы работы', maxWeight: 'Максимальный вес', blocked: 'Недоступен',
 	close: 'Закрыть',
 } };
@@ -465,12 +465,76 @@ it( 'renders phone, work time and a 2-decimal kilogram weight when present', () 
 		payment_methods: [ 'Картой', 'Наличными' ],
 	} ) ] } );
 
-	expect( panels.root.querySelector( '.woodev-pickup-card__phone-value' ).textContent ).toBe( '+7 495 000-00-00' );
-	expect( panels.root.querySelector( '.woodev-pickup-card__worktime-value' ).textContent )
+	expect( panels.root.querySelector( '.woodev-pickup-card__phone' ).textContent ).toBe( '+7 495 000-00-00' );
+	expect( panels.root.querySelector( '.woodev-pickup-card__worktime' ).textContent )
 		.toBe( 'ежедневно 9:00-21:00' );
-	expect( panels.root.querySelector( '.woodev-pickup-card__weight-value' ).textContent ).toBe( '5.00' );
-	expect( panels.root.querySelector( '.woodev-pickup-card__payments-value' ).textContent )
+	expect( panels.root.querySelector( '.woodev-pickup-card__weight' ).textContent ).toBe( '5.00' );
+	expect( panels.root.querySelector( '.woodev-pickup-card__payments' ).textContent )
 		.toBe( 'Картой, Наличными' );
+} );
+
+describe( 'sectioned card body (spec V-12)', () => {
+	it( 'renders one titled section per populated field, in the fixed order', () => {
+		const panels = mount( cardConfig );
+
+		panels.openCard( { key: 'k', size: 1, points: [ point( {
+			address: 'Москва, ул. Тверская, д. 5',
+			payment_methods: [ 'Картой' ],
+			services: [ 'Примерка' ],
+			phone: '+7 495 000-00-00',
+			work_time: 'ежедневно 9:00-21:00',
+			max_weight: 5000,
+		} ) ] } );
+
+		const titles = [ ...panels.root.querySelectorAll( '.woodev-pickup-card__section-title' ) ]
+			.map( ( el ) => el.textContent );
+
+		expect( titles ).toEqual( [
+			cardConfig.i18n.address,
+			cardConfig.i18n.paymentMethods,
+			cardConfig.i18n.services,
+			cardConfig.i18n.phone,
+			cardConfig.i18n.workTime,
+			cardConfig.i18n.maxWeight,
+		] );
+	} );
+
+	it( 'omits a section whose field is empty, keeping the rest', () => {
+		const panels = mount( cardConfig );
+
+		panels.openCard( { key: 'k', size: 1, points: [ point( { address: 'Москва, Тверская 5' } ) ] } );
+
+		const titles = [ ...panels.root.querySelectorAll( '.woodev-pickup-card__section-title' ) ]
+			.map( ( el ) => el.textContent );
+
+		expect( titles ).toEqual( [ cardConfig.i18n.address ] );
+	} );
+
+	it( 'puts «Как добраться» inside the Адрес section, not as its own section', () => {
+		const panels = mount( cardConfig );
+
+		panels.openCard( { key: 'k', size: 1, points: [ point( {
+			address: 'Москва, Тверская 5', instruction: 'Вход со двора',
+		} ) ] } );
+
+		const addressSection = panels.root.querySelector( '.woodev-pickup-card__section' );
+
+		expect( addressSection.querySelector( '.woodev-pickup-card__howto' ) ).not.toBeNull();
+		expect( panels.root.querySelectorAll( '.woodev-pickup-card__section' ) ).toHaveLength( 1 );
+	} );
+
+	it( 'renders the chip only when the plugin supplies an icon for this point\'s type', () => {
+		const withIcon = mount( { ...cardConfig, pointIcons: { PVZ: { default: '/pvz.svg' } } } );
+		const withoutIcon = mount( { ...cardConfig, pointIcons: {} } );
+
+		const p = point( { type: { code: 'PVZ', label: 'ПВЗ' } } );
+
+		withIcon.openCard( { key: 'k', size: 1, points: [ p ] } );
+		withoutIcon.openCard( { key: 'k', size: 1, points: [ p ] } );
+
+		expect( withIcon.root.querySelector( '.woodev-pickup-card__chip img' ) ).not.toBeNull();
+		expect( withoutIcon.root.querySelector( '.woodev-pickup-card__chip' ) ).toBeNull();
+	} );
 } );
 
 it( 'never executes markup smuggled through selectable.reason — rendered as plain text', () => {

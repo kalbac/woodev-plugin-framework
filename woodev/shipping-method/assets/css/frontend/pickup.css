@@ -789,8 +789,27 @@
 	justify-content: space-between;
 	flex: 0 0 auto;
 	gap: 8px;
-	padding: 8px 8px 0 16px;
+	padding: 12px 8px 8px 16px;
 	border-bottom: 1px solid #dcdcde;
+}
+
+/* The chip (spec V-12) — only when the PLUGIN supplies an icon for the point's type; the
+   framework's own default marker pin (V-9) is map furniture and would read as decoration here. */
+.woodev-pickup-card__chip {
+	display: flex;
+	flex: 0 0 auto;
+	align-items: center;
+	justify-content: center;
+	width: 40px;
+	height: 40px;
+	border: 1px solid rgba( 0, 0, 0, 0.12 );
+	border-radius: 8px;
+	background: var( --woodev-pickup-accent, #06aedd );
+}
+
+.woodev-pickup-card__chip img {
+	width: 22px;
+	height: 22px;
 }
 
 /* One tab per point of a co-located group — omitted entirely for a single-point group (D-4). */
@@ -840,30 +859,56 @@
 .woodev-pickup-card__body {
 	flex: 1 1 auto;
 	min-height: 0; /* Lets this flex child scroll instead of forcing the card taller than the dialog. */
-	padding: 12px 16px 16px;
+	padding: 0 0 4px;
 	overflow-y: auto;
-	font-size: 13px;
-	line-height: 1.5;
+	font-size: 14px;
+	line-height: 1.4;
 	color: #1e1e1e;
 }
 
 .woodev-pickup-card__title {
-	margin: 0 0 4px;
+	margin: 0;
+	padding: 12px 16px 0;
 	font-size: 16px;
 	font-weight: 600;
 	line-height: 1.4;
+	letter-spacing: 0.5px;
 }
 
 .woodev-pickup-card__postal {
+	padding: 0 16px;
+	font-size: 12px;
+	line-height: 1.4;
 	color: #646970;
 }
 
-.woodev-pickup-card__address {
-	margin: 2px 0 8px;
+/*
+ * One section per populated field (spec V-12) — this is the whole of the operator's complaint
+ * about the card ("сейчас всё одним сплошным текстом. Всё ужато"). Sections are separated by a
+ * rule and give each fact its own titled block instead of running everything together as one
+ * paragraph of small text.
+ */
+.woodev-pickup-card__section {
+	padding: 8px 16px 12px;
+	border-top: 1px solid #dcdcde;
+}
+
+.woodev-pickup-card__section-title {
+	padding: 4px 0;
+	font-size: 14px;
+	font-weight: 500;
+	line-height: 1.4;
+}
+
+.woodev-pickup-card__section-content {
+	padding: 2px 0 4px;
+	font-size: 14px;
+	line-height: 1.4;
+	color: #1e1e1e;
 }
 
 .woodev-pickup-card__howto {
-	margin: 0 0 8px;
+	margin-top: 6px;
 }
 
 .woodev-pickup-card__howto > summary {
@@ -881,38 +926,19 @@
 }
 
 .woodev-pickup-card__services {
-	margin: 0 0 8px;
-}
-
-.woodev-pickup-card__services-label {
-	display: block;
-	margin-bottom: 4px;
-	color: #646970;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
 }
 
 .woodev-pickup-card__service {
 	display: inline-block;
-	margin: 0 4px 4px 0;
 	padding: 3px 8px;
 	font-size: 12px;
 	line-height: 1.4;
 	background: #f6f7f7;
 	border: 1px solid #dcdcde;
 	border-radius: 12px;
-}
-
-.woodev-pickup-card__payments,
-.woodev-pickup-card__phone,
-.woodev-pickup-card__worktime,
-.woodev-pickup-card__weight {
-	margin: 0 0 4px;
-}
-
-.woodev-pickup-card__payments-label,
-.woodev-pickup-card__phone-label,
-.woodev-pickup-card__worktime-label,
-.woodev-pickup-card__weight-label {
-	color: #646970;
 }
 
 /* The card's sticky footer — the "not selectable" warning (omitted when the point IS

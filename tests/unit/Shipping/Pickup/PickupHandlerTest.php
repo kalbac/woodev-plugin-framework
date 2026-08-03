@@ -1614,6 +1614,9 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 		 * `zoomInLabel`/`zoomOutLabel` (Task 14, spec V-13) were added later, for the zoom
 		 * control's two `aria-label`s — kept in this one COMPLETE assertion rather than a second
 		 * one-off test, for the same reason the rest of this docblock gives.
+		 *
+		 * `address` (Task 15, spec V-12) was added later still: the point card's sectioned body
+		 * gained an "Адрес" section title distinct from `yourAddress` (the search field's label).
 		 */
 		public function test_config_i18n_carries_every_key_with_its_exact_value(): void {
 			Functions\when( 'apply_filters' )->returnArg( 2 );
@@ -1647,6 +1650,8 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				'detailsError'     => 'Не удалось загрузить подробности о пункте выдачи.'
 					. ' Вы всё ещё можете его выбрать.',
 				// The twelve Task 8 panel keys.
+				// The Task 15 (spec V-12) card-section key.
+				'address'          => 'Адрес',
 				'services'         => 'Услуги',
 				'yourAddress'      => 'Ваш адрес',
 				'nearestTo'        => 'Ближайшие к «%s»',
