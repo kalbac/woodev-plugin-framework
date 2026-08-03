@@ -1155,6 +1155,15 @@
 				}
 			} );
 
+			// zoom (Task 14, spec V-13): our own zoom control's two buttons emit a signed step;
+			// the provider owns the actual camera zoom (`zoomBy()`), matching every other
+			// map-behaviour call this file forwards rather than implements itself.
+			panels.on( 'zoom', function( payload ) {
+				if ( provider && 'function' === typeof provider.zoomBy ) {
+					provider.zoomBy( payload.step );
+				}
+			} );
+
 			panels.on( 'searchAddressPicked', function( index ) {
 				var address = lastAddresses[ index ];
 

@@ -81,6 +81,7 @@ function StubProvider() {
 	this.resolveAddressCalls = [];
 	this.clearAddressCalls = 0;
 	this.setMarginCalls = [];
+	this.zoomByCalls = [];
 	this.matchLoadedPointsCalls = [];
 	this.matchLoadedPointsResult = [];
 	// The real `map-provider-yandex.js` only builds this once `init()` has run and
@@ -157,6 +158,10 @@ StubProvider.prototype.clearAddress = function() {
 
 StubProvider.prototype.setMargin = function( open, width ) {
 	this.setMarginCalls.push( { open: open, width: width } );
+};
+
+StubProvider.prototype.zoomBy = function( step ) {
+	this.zoomByCalls.push( step );
 };
 
 StubProvider.prototype.matchLoadedPoints = function( query ) {
@@ -1600,6 +1605,15 @@ test( 'panels listToggle calls provider.setMargin with the open state and width'
 	session.panels.emit( 'listToggle', { open: true, width: 320 } );
 
 	expect( session.provider.setMarginCalls ).toEqual( [ { open: true, width: 320 } ] );
+} );
+
+test( 'panels zoom calls provider.zoomBy with the signed step (Task 14, spec V-13)', async () => {
+	const session = await openSession( configWith() );
+
+	session.panels.emit( 'zoom', { step: 1 } );
+	session.panels.emit( 'zoom', { step: -1 } );
+
+	expect( session.provider.zoomByCalls ).toEqual( [ 1, -1 ] );
 } );
 
 test( 'panels searchAddressPicked resolves the address AT THAT INDEX against the provider', async () => {

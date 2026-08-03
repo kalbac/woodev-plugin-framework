@@ -1610,6 +1610,10 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 		 * a missing, extra, or renamed key fails loudly, and pins the full non-Russian-
 		 * fallback contract in one place rather than leaving the newest keys as the only
 		 * unpinned ones.
+		 *
+		 * `zoomInLabel`/`zoomOutLabel` (Task 14, spec V-13) were added later, for the zoom
+		 * control's two `aria-label`s — kept in this one COMPLETE assertion rather than a second
+		 * one-off test, for the same reason the rest of this docblock gives.
 		 */
 		public function test_config_i18n_carries_every_key_with_its_exact_value(): void {
 			Functions\when( 'apply_filters' )->returnArg( 2 );
@@ -1657,6 +1661,9 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				'emptyInView'      => 'В этой области пунктов выдачи нет',
 				// The Task 8B trigger-state key.
 				'triggerChange'    => 'Выбрать другой пункт выдачи',
+				// The Task 14 (spec V-13) zoom control keys.
+				'zoomInLabel'      => 'Приблизить карту',
+				'zoomOutLabel'     => 'Отдалить карту',
 			];
 
 			$this->assertSame(

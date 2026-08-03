@@ -722,8 +722,6 @@
 			{ suppressMapOpenBlock: true, minZoom: MIN_ZOOM, maxZoom: MAX_ZOOM }
 		);
 
-		this.map.controls.add( new ymaps.control.ZoomControl(), { position: { left: 70, bottom: 70 } } );
-
 		this._addLayers( config.layers );
 		this._addCopyrights( config.copyrights );
 	};
@@ -1343,6 +1341,42 @@
 
 			return -1 !== list.indexOf( typeCode );
 		} );
+	};
+
+	/**
+	 * Steps the map's zoom by a signed amount (Task 14, spec V-13) — the provider-side half of
+	 * our own zoom control: two square buttons the panels render at the stage's bottom-left
+	 * (Russian Post's look, Yandex.Delivery's position), replacing ymaps' own `ZoomControl`
+	 * (deleted from {@see _buildMap}, never re-added — `controls: []` stays). The panels emit
+	 * the signed `step` on click; this method owns the actual camera move so map-library
+	 * behaviour stays out of the panels file (D-3).
+	 *
+	 * Clamped to `[MIN_ZOOM, MAX_ZOOM]` — the SAME range `_buildMap()` already constrains ymaps'
+	 * own drag/scroll-wheel zoom to — so a spam-click past either edge is a harmless no-op
+	 * instead of an out-of-range value ymaps would otherwise reject or clamp itself less
+	 * predictably. Animated via `{ duration: 200 }`, matching a native zoom nudge rather than a
+	 * jump cut; no other camera move in this file uses this option ({@see focusGroup}'s
+	 * `setBounds()` calls animate on their own terms), so the duration is written here, not
+	 * pulled from a shared constant nothing else would reference.
+	 *
+	 * A no-op once `destroy()` has torn the map down (`this.map` is then null) — mirrors every
+	 * other post-destroy guard in this file (see {@see setMargin}); a button click racing
+	 * `destroy()` must not throw.
+	 *
+	 * @since 2.0.2
+	 * @param {number} step Signed step — the panels only ever emit `+1` (zoom in) or `-1`
+	 *                      (zoom out), but any signed integer clamps the same way.
+	 * @returns {void}
+	 */
+	WoodevYandexMapProvider.prototype.zoomBy = function( step ) {
+		if ( ! this.map ) {
+			return;
+		}
+
+		var target = this.map.getZoom() + step;
+		var clamped = Math.min( MAX_ZOOM, Math.max( MIN_ZOOM, target ) );
+
+		this.map.setZoom( clamped, { duration: 200 } );
 	};
 
 	/**

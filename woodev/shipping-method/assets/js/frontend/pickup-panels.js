@@ -1275,6 +1275,33 @@
 		//    the weaker way and left their full-height boxes swallowing clicks meant for the map.
 		stage.appendChild( toggle );
 
+		// Task 14 (spec V-13): our own zoom control — two square 36×36 buttons, «+» over «−», at
+		// `left: 12px; bottom: 70px`. A stage sibling for the SAME two reasons the toggle above
+		// is (geometry resolves against the stage, not a panel; a control fixed to a screen
+		// corner must not live inside something that can go `display: none`). ymaps' own
+		// `ZoomControl` is deleted from map-provider-yandex.js's `_buildMap()` in its favour —
+		// Russian Post's square-button look at Yandex.Delivery's bottom-left position, replacing
+		// the default slider that used to sit adrift at `left: 70` in the middle of the map.
+		var zoom = document.createElement( 'div' );
+		zoom.className = 'woodev-pickup-zoom';
+
+		var zoomIn = document.createElement( 'button' );
+		zoomIn.type = 'button'; // Never omit: inside a checkout page a type-less button submits it.
+		zoomIn.className = 'woodev-pickup-zoom__button woodev-pickup-zoom__button--in';
+		zoomIn.setAttribute( 'aria-label', text( this._config, 'zoomInLabel' ) );
+		zoomIn.textContent = '+';
+
+		var zoomOut = document.createElement( 'button' );
+		zoomOut.type = 'button';
+		zoomOut.className = 'woodev-pickup-zoom__button woodev-pickup-zoom__button--out';
+		zoomOut.setAttribute( 'aria-label', text( this._config, 'zoomOutLabel' ) );
+		zoomOut.textContent = '−'; // U+2212 MINUS SIGN — a true minus, not a hyphen glyph.
+
+		zoom.appendChild( zoomIn );
+		zoom.appendChild( zoomOut );
+
+		stage.appendChild( zoom );
+
 		empty( this._container );
 		this._container.appendChild( stage );
 
@@ -1288,6 +1315,16 @@
 		var self = this;
 		toggle.addEventListener( 'click', function() {
 			self.toggleList();
+		} );
+
+		// The panels only emit the signed step (Task 14) — the map provider owns the actual
+		// camera zoom (`WoodevYandexMapProvider#zoomBy`), keeping map-library behaviour out of
+		// this file (D-3); the mount is what wires this event to that method.
+		zoomIn.addEventListener( 'click', function() {
+			self._emit( 'zoom', { step: 1 } );
+		} );
+		zoomOut.addEventListener( 'click', function() {
+			self._emit( 'zoom', { step: -1 } );
 		} );
 
 		renderList( this );

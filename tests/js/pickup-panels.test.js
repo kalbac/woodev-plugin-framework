@@ -23,6 +23,9 @@ const config = {
 		// one-off object) so `buildSearchLayout()`'s tests can merge overrides onto this shared config.
 		yourAddress: 'Ваш адрес', resetSearch: 'Сбросить поиск', search: 'Найти', noResults: 'Ничего не найдено',
 		sectionPoints: 'Пункты выдачи', sectionAddresses: 'Адреса',
+		// Task 14 (spec V-13): the zoom control's two `aria-label`s — distinct from `zoomIn`,
+		// which labels the unrelated "zoom in to see points" bbox-too-wide message.
+		zoomInLabel: 'Приблизить карту', zoomOutLabel: 'Отдалить карту',
 	},
 };
 
@@ -1479,5 +1482,64 @@ describe( 'sidebar list (spec V-11)', () => {
 
 		expect( withIcon.root.parentNode.querySelector( '.woodev-pickup-list__icon' ) ).not.toBeNull();
 		expect( withoutIcon.root.parentNode.querySelector( '.woodev-pickup-list__icon' ) ).toBeNull();
+	} );
+} );
+
+// -----------------------------------------------------------------------
+// Task 14 (spec V-13): our own zoom control replaces ymaps' `ZoomControl` — two square
+// buttons, «+» over «−», a stage sibling exactly like the list toggle (see `render()`'s own
+// docblock on why a control that must stay fixed to a screen corner cannot live inside a panel
+// that hides/resizes). The provider owns the actual zooming ({@see map-provider-yandex.test.js});
+// this file only proves the DOM and the signed `step` the panels emit on click.
+// -----------------------------------------------------------------------
+describe( 'zoom control (spec V-13)', () => {
+	it( 'renders two buttons and emits a signed step', () => {
+		const container = document.createElement( 'div' );
+		const panels = new Panels( container, config );
+		const onZoom = jest.fn();
+
+		panels.render();
+		panels.on( 'zoom', onZoom );
+
+		const buttons = container.querySelectorAll( '.woodev-pickup-zoom__button' );
+		expect( buttons ).toHaveLength( 2 );
+
+		buttons[ 0 ].click();
+		buttons[ 1 ].click();
+
+		expect( onZoom ).toHaveBeenNthCalledWith( 1, { step: 1 } );
+		expect( onZoom ).toHaveBeenNthCalledWith( 2, { step: -1 } );
+	} );
+
+	it( 'types both buttons "button" so a checkout form never submits on click', () => {
+		const container = document.createElement( 'div' );
+
+		new Panels( container, config ).render();
+
+		const buttons = container.querySelectorAll( '.woodev-pickup-zoom__button' );
+
+		expect( buttons[ 0 ].type ).toBe( 'button' );
+		expect( buttons[ 1 ].type ).toBe( 'button' );
+	} );
+
+	it( 'names each button from its own i18n key, not the unrelated bbox "zoomIn" message', () => {
+		const container = document.createElement( 'div' );
+
+		new Panels( container, config ).render();
+
+		const buttons = container.querySelectorAll( '.woodev-pickup-zoom__button' );
+
+		expect( buttons[ 0 ].getAttribute( 'aria-label' ) ).toBe( config.i18n.zoomInLabel );
+		expect( buttons[ 1 ].getAttribute( 'aria-label' ) ).toBe( config.i18n.zoomOutLabel );
+	} );
+
+	it( 'is a sibling of the panels on the stage, not a child of a hidden/resizing panel', () => {
+		const container = document.createElement( 'div' );
+		const panels = new Panels( container, config );
+
+		panels.render();
+
+		expect( panels._stage.querySelector( '.woodev-pickup-zoom' ) ).not.toBeNull();
+		expect( panels.root.querySelector( '.woodev-pickup-zoom' ) ).toBeNull();
 	} );
 } );

@@ -139,6 +139,13 @@ function createYmapsStub( options ) {
 		this.bounds = [ [ 10, 20 ], [ 11, 21 ] ];
 		this.setBoundsCalls = [];
 		this.setCenterCalls = [];
+		// Task 14 (spec V-13) — `getZoom` a jest.fn (not a plain prototype method) so a test
+		// proving `zoomBy()`'s clamp can override its return value per call via
+		// `mockReturnValue()`; every OTHER test gets the same fixed `options.zoom` default it
+		// always did. `setZoom` is the camera-move call `zoomBy()` makes; no production code
+		// calls it anywhere else, so a bare spy is enough — nothing here needs to track state.
+		this.getZoom = jest.fn( () => zoom );
+		this.setZoom = jest.fn();
 		// `add` is defined non-enumerable so `toEqual( [ '© Test' ] )` against a plain array
 		// literal still passes — an ENUMERABLE own `add` property would make the received
 		// array structurally unequal to a plain array even with identical indexed contents.
@@ -173,9 +180,6 @@ function createYmapsStub( options ) {
 	}
 	Map.prototype.getBounds = function() {
 		return this.bounds;
-	};
-	Map.prototype.getZoom = function() {
-		return zoom;
 	};
 	Map.prototype.setCenter = function( center, mapZoom ) {
 		this.setCenterCalls.push( [ center, mapZoom ] );
@@ -327,7 +331,10 @@ function createYmapsStub( options ) {
 	stub.ready = () => Promise.resolve();
 	stub.Map = Map;
 	stub.ObjectManager = ObjectManager;
-	stub.control = { ZoomControl: function() {}, SearchControl };
+	// Task 14 (spec V-13) — `ZoomControl` is a jest.fn, not a plain constructor stand-in: this
+	// file now proves the PRODUCTION code never calls it any more (the control was deleted from
+	// `_buildMap()` in favour of the panels' own DOM), which needs `.not.toHaveBeenCalled()`.
+	stub.control = { ZoomControl: jest.fn(), SearchControl };
 	stub.Layer = Layer;
 	stub.Placemark = Placemark;
 	stub.projection = { sphericalMercator: 'stub-projection' };
@@ -500,6 +507,52 @@ test( 'builds the map with minZoom 8 and maxZoom 18', async () => {
 
 	expect( ymapsStub.lastMap.options.minZoom ).toBe( 8 );
 	expect( ymapsStub.lastMap.options.maxZoom ).toBe( 18 );
+} );
+
+// -------------------------------------------------------------------------
+// Task 14 (spec V-13) — our own zoom control replaces ymaps' `ZoomControl`; `zoomBy()` is the
+// provider-side half the panels' two buttons drive (see pickup-panels.test.js for the DOM half).
+// -------------------------------------------------------------------------
+
+test( 'adds no ymaps ZoomControl (spec V-13)', async () => {
+	await init();
+
+	expect( ymapsStub.control.ZoomControl ).not.toHaveBeenCalled();
+} );
+
+test( 'clamps zoomBy to the configured range', async () => {
+	const provider = await init();
+
+	provider.map.getZoom.mockReturnValue( 18 );
+	provider.zoomBy( 1 );
+
+	expect( provider.map.setZoom ).toHaveBeenCalledWith( 18, { duration: 200 } );
+} );
+
+test( 'clamps zoomBy at the bottom of the range too', async () => {
+	const provider = await init();
+
+	provider.map.getZoom.mockReturnValue( 8 );
+	provider.zoomBy( -1 );
+
+	expect( provider.map.setZoom ).toHaveBeenCalledWith( 8, { duration: 200 } );
+} );
+
+test( 'zoomBy steps by exactly the signed amount inside the range', async () => {
+	const provider = await init();
+
+	provider.map.getZoom.mockReturnValue( 12 );
+	provider.zoomBy( 1 );
+
+	expect( provider.map.setZoom ).toHaveBeenCalledWith( 13, { duration: 200 } );
+} );
+
+test( 'zoomBy is a safe no-op once destroy() has torn the map down', async () => {
+	const provider = await init();
+
+	provider.destroy();
+
+	expect( () => provider.zoomBy( 1 ) ).not.toThrow();
 } );
 
 test( 'adds the plugin tile layers, pinning the tile URL and the RESOLVED projection object '

@@ -392,6 +392,58 @@
 }
 
 /* -------------------------------------------------------------------------
+ * Our own zoom control (Task 14, spec V-13) — replaces ymaps' own `ZoomControl` slider, which
+ * `map-provider-yandex.js`'s `_buildMap()` no longer adds at all. Two square 36×36 buttons, «+»
+ * over «−», white on a soft two-layer shadow (the same shadow recipe as the search pill and the
+ * list toggle) — Russian Post's look, at Yandex.Delivery's bottom-left position, which is what
+ * the operator asked for after the default slider sat adrift at `left: 70` in the middle of the
+ * map. A stage sibling for the same geometry/visibility reasons the list toggle is (see
+ * `pickup-panels.js`'s `render()`), so it stays pinned to the viewport corner regardless of
+ * which panel is open.
+ * ---------------------------------------------------------------------- */
+
+.woodev-pickup-zoom {
+	position: absolute;
+	left: 12px;
+	bottom: 70px;
+	z-index: 5;
+	display: flex;
+	flex-direction: column;
+	margin: 0;
+	padding: 0;
+	border-radius: 4px;
+	overflow: hidden;
+	box-shadow: 0 1px 2px rgba( 0, 0, 0, 0.04 ), 0 4px 8px rgba( 0, 0, 0, 0.06 );
+}
+
+.woodev-pickup-zoom__button {
+	width: 36px;
+	height: 36px;
+	margin: 0;
+	padding: 0;
+	border: 0;
+	border-radius: 0;
+	background: #fff;
+	color: #333;
+	font-family: inherit; /* D-14/V-14: the map reads as part of the shop, never a second typeface. */
+	font-size: 18px;
+	font-weight: 400;
+	line-height: 1;
+	letter-spacing: normal;
+	text-align: center;
+	text-transform: none;
+	cursor: pointer;
+}
+
+.woodev-pickup-zoom__button:hover {
+	background: #f6f7f7;
+}
+
+.woodev-pickup-zoom__button + .woodev-pickup-zoom__button {
+	border-top: 1px solid rgba( 0, 0, 0, 0.08 );
+}
+
+/* -------------------------------------------------------------------------
  * Search + filter layout for `SearchControl` (Task 11, spec V-6) — Russian Post's chrome: a
  * rounded white pill (`.woodev-pickup-search__form`) holding the input, a reset button shown only
  * for a non-empty value, and a magnifier that submits. `.woodev-pickup-controls` is the DETACHED
@@ -980,6 +1032,7 @@
  * ---------------------------------------------------------------------- */
 
 .woodev-pickup-list__toggle:focus-visible,
+.woodev-pickup-zoom__button:focus-visible,
 .woodev-pickup-list__point:focus-visible,
 .woodev-pickup-list__show-nearest:focus-visible,
 .woodev-pickup-filter__toggle:focus-visible,

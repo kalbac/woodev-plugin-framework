@@ -687,6 +687,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 					// The checkout trigger's second state (Task 20) — a customer who has
 					// already chosen a point sees this instead of `trigger`.
 					'triggerChange'    => __( 'Выбрать другой пункт выдачи', 'woodev-plugin-framework' ),
+					// Task 14 (spec V-13): the zoom control's two `aria-label`s. Distinct from
+					// `zoomIn` above, which labels the unrelated "zoom in to see points" bbox
+					// message — reusing it here would have mislabelled the button with a full
+					// sentence about a different situation.
+					'zoomInLabel'      => __( 'Приблизить карту', 'woodev-plugin-framework' ),
+					'zoomOutLabel'     => __( 'Отдалить карту', 'woodev-plugin-framework' ),
 				],
 
 				'defaultLocation' => $this->default_location,
