@@ -1,6 +1,11 @@
 # Gotchas — Woodev Plugin Framework
-> **91 atomic gotchas in 21 namespaces** — update count when adding/removing.
-> Last updated: 2026-08-04 (session 50, rig verification continued: +1 file —
+> **92 atomic gotchas in 21 namespaces** — update count when adding/removing.
+> Last updated: 2026-08-04 (session 50, mobile pass: +1 file —
+> `mobile-inline-min-width-and-floating-control-stacking` (two defects only reachable by actually
+> resizing a live page: an inline `minWidth` beating the mobile media query, and a z-index ordering
+> that only mattered once the panels went full-width and started sharing screen space with the
+> zoom control)).
+> Prior: 2026-08-04 (session 50, rig verification continued: +1 file —
 > `setanchor-resorts-but-never-shows-the-sidebar` (picking an address re-sorted the list correctly
 > but never opened it, so a card left open from an earlier click stayed on screen over it — a new
 > `openList()` makes visibility deterministic instead of riding along on a content update)).
@@ -157,6 +162,8 @@
 - [shipping/pickup] ymaps camera moves are ASYNC: `setBounds()` animates and resolves later, so dropping its promise makes the next `getBounds()` read the PRE-move viewport (→ a planet-wide bbox the server's cap refuses → "no points" for a locality that has them). Separately, a placemark folded into a cluster has no balloon — `placemark.balloon.open()` throws `getGlobalPixelCenter` of null and kills the click handler, and whether a point is clustered depends on zoom, so the same item works at one zoom and throws at another. Collapse the bounds to the point and await the promise (the reference's move); sequence the continuations, since two moves need not resolve in click order. **A placeholder API key hides all of it** — ymaps refuses geocoding but still serves tiles. **s47 adds the degenerate case the fix cannot solve:** two points on IDENTICAL coordinates share a pixel-grid cell at EVERY zoom, so `checkZoomRange` never un-clusters them and `.balloon.open()` throws forever (reported live in СДЭК, where a PVZ and a postamat share a building) — guard with "all features on one coordinate → do not try", re-read `getObjectState()` after the move, and prefer owning the detail panel's DOM so balloons stop mattering → [gotchas/ymaps-camera-moves-are-async.md](gotchas/ymaps-camera-moves-are-async.md) (s46, extended s47)
 
 - [shipping/pickup] `templateLayoutFactory` hands a layout its feature data in TWO different shapes: a `Placemark`'s layout gets a data manager (`properties.get( key )`), an `ObjectManager`'s gets the PLAIN JSON the feature was added with (`properties[ key ]`). Calling `.get()` on the plain one throws INSIDE ymaps' cross-origin script, where the browser reports only `Script error.` at `:0` — markers render as empty boxes, clicks never bind, and dragging then spams `map.action.Continuous: ticking while inactive` forever. Read through a shape-tolerant accessor. Also the general lesson: a test fixture (or config fixture) poorer than production hides production's bugs → [gotchas/ymaps-objectmanager-properties-are-plain.md](gotchas/ymaps-objectmanager-properties-are-plain.md) (s49)
+
+- [shipping/pickup] Two mobile-only defects found only by resizing a real page: (1) the modal's inline `dialog.style.minWidth = '920px'` beats the `@media (max-width:782px)` stylesheet rule regardless of specificity — the mobile block needed `!important`, same collision T19 already fixed for `.woodev-modal__body`'s inline `height` but missed for this sibling property; (2) `.woodev-pickup-zoom`'s `z-index:5` sat above the card's `z-index:3` by desktop-geometry accident (they never overlapped there) — once the panels went full-width at the breakpoint, the zoom buttons floated visibly over blank card space → [gotchas/mobile-inline-min-width-and-floating-control-stacking.md](gotchas/mobile-inline-min-width-and-floating-control-stacking.md) (s50)
 
 - [shipping/pickup] `setAnchor()` re-sorts the sidebar list's CONTENT by distance from a searched address but never touches which panel is VISIBLE — if a point's card happened to be open, picking an address left it on screen, hiding the correctly-sorted list behind it. New `openList()` deterministically shows the list and drops any open card, called right after `setAnchor()`. Every existing test asserted only the re-sort, never the visibility, because none started from "a card is already open" → [gotchas/setanchor-resorts-but-never-shows-the-sidebar.md](gotchas/setanchor-resorts-but-never-shows-the-sidebar.md) (s50)
 

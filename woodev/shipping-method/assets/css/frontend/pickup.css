@@ -597,7 +597,16 @@
 	position: absolute;
 	left: 12px;
 	bottom: 70px;
-	z-index: 5;
+
+	/*
+	 * BELOW the list/card (z-index 2/3), not above them — on desktop the two never overlap (the
+	 * zoom sits bottom-LEFT, the panels occupy the right column), so this had no visible effect
+	 * until the panels went full-width on a real narrow screen (spec V-15): the zoom buttons then
+	 * floated on top of an otherwise blank stretch of the open card, because a bare `z-index: 5`
+	 * outranked the card's `z-index: 3`. A stage sibling used to be higher than the panels it
+	 * shares the stage with only by coincidence of desktop geometry, not by design.
+	 */
+	z-index: 1;
 	display: flex;
 	flex-direction: column;
 	margin: 0;
