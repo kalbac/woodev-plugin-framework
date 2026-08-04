@@ -148,7 +148,16 @@
 .woodev-pickup-stage :where( li )                        { display: list-item; list-style: none; }
 
 .woodev-pickup-stage :where( button ) {
-	display: inline-flex;
+	/*
+	 * `!important` — a theme's own global `button { display: none !important }` rule (not
+	 * hypothetical: the T20 rig checklist injects exactly this) beats a plain `display:
+	 * inline-flex` regardless of specificity, `!important` only loses to `!important`. Every
+	 * button inside the modal — close, filter, zoom, the CTA — would vanish with no way to
+	 * dismiss or use the dialog at all. This is the one property worth breaking the file's own
+	 * "no `!important`" convention for: a theme winning the FONT or COLOUR of a button is
+	 * decoration; a theme winning whether it EXISTS on screen is a broken feature.
+	 */
+	display: inline-flex !important;
 	align-items: center;
 	justify-content: center;
 	cursor: pointer;

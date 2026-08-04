@@ -74,7 +74,11 @@
 .woodev-modal :where( li )                        { display: list-item; list-style: none; }
 
 .woodev-modal :where( button ) {
-	display: inline-flex;
+	/* `!important` — same exception, same reason, as `pickup.css`'s own `:where( button )` rule:
+	   a theme's `button { display: none !important }` (the T20 rig checklist injects exactly
+	   this) beats a plain `display: inline-flex` regardless of specificity, and the close
+	   button vanishing leaves no way to dismiss the dialog at all. */
+	display: inline-flex !important;
 	align-items: center;
 	justify-content: center;
 	cursor: pointer;
