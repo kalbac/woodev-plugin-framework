@@ -1954,6 +1954,26 @@
 	};
 
 	/**
+	 * Shows the list, DETERMINISTICALLY — unlike {@see toggleList}, which flips whatever is
+	 * showing now, this always ends in the list state: `is-open` on, `is-card` off, whatever a
+	 * card was showing dismissed.
+	 *
+	 * Exists for picking an address (spec V-6, D-6): "the sidebar opens automatically, sorted
+	 * by distance from the searched address" is not conditional on nothing else being open. The
+	 * mount's `setAnchor()` call re-sorts the list body, but does not touch which panel is
+	 * VISIBLE — before this method existed, picking an address while a point's card happened to
+	 * be open left that stale card on screen, with the newly-sorted list invisible behind it.
+	 *
+	 * @since 2.0.2
+	 * @returns {void}
+	 */
+	Panels.prototype.openList = function() {
+		this._stage.classList.add( 'is-open' );
+		this._stage.classList.remove( 'is-card' );
+		this._activeGroup = null;
+	};
+
+	/**
 	 * Opens the card on one group, showing `pointId` when given (and found
 	 * in the group), otherwise the group's first point. This is what a click
 	 * on the SECOND point of a co-located list row must do — always the

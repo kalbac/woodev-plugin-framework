@@ -1402,8 +1402,15 @@
 				// the sidebar sorts from where the customer searched, not the map centre
 				// (D-6). Fires whether or not any group turned out to be near it; the
 				// `nothingNearby` state (wired above) is a SEPARATE, list-body-level concern.
+				//
+				// `openList()` alongside it: `setAnchor()` only re-sorts the list BODY, it does
+				// not touch which panel is visible. Without this, picking an address while a
+				// point's card happened to be open left that stale card on screen — the newly
+				// sorted list existed, just invisible behind it. Spec: "the sidebar opens
+				// automatically" is not conditional on nothing else being open.
 				provider.on( 'addressFocused', function( info ) {
 					panels.setAnchor( info.latLng, info.label );
+					panels.openList();
 				} );
 			}
 

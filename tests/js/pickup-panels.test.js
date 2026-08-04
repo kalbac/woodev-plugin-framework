@@ -319,6 +319,49 @@ describe( 'sidebar toggle (spec V-3, П-7)', () => {
 } );
 
 // -----------------------------------------------------------------------
+// openList() (rig verification finding): picking an address must show the
+// sidebar regardless of what was on screen before — a stale card must never
+// survive it. setAnchor() only re-sorts the list BODY; it never touched
+// which panel was visible, so a card left open before an address search
+// stayed open, invisible sorted list and all, behind it.
+// -----------------------------------------------------------------------
+
+describe( 'openList() (spec V-6/D-6 — the sidebar opens automatically on an address pick)', () => {
+	it( 'shows the list and dismisses a card that was open', () => {
+		const container = document.createElement( 'div' );
+		const panels = new Panels( container, config );
+		const g = group( 'g1', 55.75, 37.61, 'ПВЗ' );
+
+		panels.render();
+		panels.setVisible( [ g ] );
+		panels.openCard( g, g.points[ 0 ].id );
+
+		panels.openList();
+
+		const stage = container.querySelector( '.woodev-pickup-stage' );
+
+		expect( stage.className ).toContain( 'is-open' );
+		expect( stage.className ).not.toContain( 'is-card' );
+	} );
+
+	it( 'is a no-op on the state itself when the list was already open', () => {
+		const container = document.createElement( 'div' );
+		const panels = new Panels( container, config );
+
+		panels.render();
+		panels.setVisible( [ group( 'g1', 55.75, 37.61, 'ПВЗ' ) ] );
+		panels.toggleList();
+
+		panels.openList();
+
+		const stage = container.querySelector( '.woodev-pickup-stage' );
+
+		expect( stage.className ).toContain( 'is-open' );
+		expect( stage.className ).not.toContain( 'is-card' );
+	} );
+} );
+
+// -----------------------------------------------------------------------
 // Task 13: the point card, with services and CTA states
 // -----------------------------------------------------------------------
 

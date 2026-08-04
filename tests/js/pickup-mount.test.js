@@ -283,6 +283,10 @@ StubPanels.prototype.setAnchor = function( latLng, label ) {
 
 StubPanels.prototype.toggleList = function() {};
 
+StubPanels.prototype.openList = function() {
+	this.openListCalls = ( this.openListCalls || 0 ) + 1;
+};
+
 /**
  * Task 16 (spec V-4): the real `Panels.prototype.setBusy()`/`isBusy()` contract, minimally —
  * every OTHER test in this file constructs a session through the stub, and pickup-mount.js now
@@ -1791,6 +1795,15 @@ test( 'provider addressFocused moves the panels\' distance anchor to the SAME la
 	expect( session.panels.setAnchorCalls ).toEqual( [
 		{ latLng: [ 55.75, 37.61 ], label: 'Москва, Тверская 1' },
 	] );
+} );
+
+test( 'provider addressFocused also opens the list — a stale open card must not survive an '
+	+ 'address pick (rig verification finding)', async () => {
+	const session = await openSession( configWith() );
+
+	session.provider.emit( 'addressFocused', { latLng: [ 55.75, 37.61 ], label: 'Москва, Тверская 1' } );
+
+	expect( session.panels.openListCalls ).toBe( 1 );
 } );
 
 test( 'provider addressFocused moves the anchor even when nothing turns out to be nearby '
