@@ -10,7 +10,10 @@
 
 'use strict';
 
-const { createStore } = require( '../../woodev/shipping-method/assets/js/frontend/checkout-field-store' );
+const {
+	createStore,
+	getStoreForField,
+} = require( '../../woodev/shipping-method/assets/js/frontend/checkout-field-store' );
 
 const config = {
 	fields: {
@@ -64,4 +67,44 @@ test( 'setChosenMethod strips the :instance suffix for condition matching', () =
 	} );
 	s.setChosenMethod( 'carrier_pickup:3' );
 	expect( s.evaluateRequired( 'pvz' ) ).toBe( true );
+} );
+
+// -------------------------------------------------------------------------
+// getStoreForField() — the instance registry SP-5 Task 12 adds so the pickup
+// mount can reach the SAME store instance the §8 gate reads, instead of
+// building a second one from the same config global (see the module docblock
+// on _registry for why that would silently diverge).
+// -------------------------------------------------------------------------
+
+test( 'getStoreForField() finds the store that declares the field (hit)', () => {
+	const s = createStore( { fields: { registry_hit_field: { id: 'registry_hit_field' } } } );
+
+	expect( getStoreForField( 'registry_hit_field' ) ).toBe( s );
+} );
+
+test( 'getStoreForField() returns null when no registered store declares the field (miss)', () => {
+	createStore( { fields: { registry_miss_owned_field: { id: 'registry_miss_owned_field' } } } );
+
+	expect( getStoreForField( 'registry_miss_totally_unknown_field' ) ).toBeNull();
+} );
+
+test( 'getStoreForField() picks the store that actually owns the field, not just any registered store', () => {
+	const other = createStore( { fields: { registry_other_field: { id: 'registry_other_field' } } } );
+	const owner = createStore( { fields: { registry_owned_field: { id: 'registry_owned_field' } } } );
+
+	expect( getStoreForField( 'registry_owned_field' ) ).toBe( owner );
+	expect( getStoreForField( 'registry_owned_field' ) ).not.toBe( other );
+	expect( getStoreForField( 'registry_other_field' ) ).toBe( other );
+} );
+
+test( 'getStoreForField() pins the newest-first tie-break when two stores collide on the SAME field id', () => {
+	// A genuine collision (two DIFFERENT configs declaring the same field id) is a
+	// misconfiguration, not a supported scenario — but the tie-break must still be
+	// DETERMINISTIC rather than accidentally return whichever store happens to be first
+	// in registration order. See getStoreForField()'s own docblock.
+	const first = createStore( { fields: { registry_collision_field: { id: 'registry_collision_field' } } } );
+	const second = createStore( { fields: { registry_collision_field: { id: 'registry_collision_field' } } } );
+
+	expect( getStoreForField( 'registry_collision_field' ) ).toBe( second );
+	expect( getStoreForField( 'registry_collision_field' ) ).not.toBe( first );
 } );

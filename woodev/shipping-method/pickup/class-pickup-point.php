@@ -1,17 +1,11 @@
 <?php
 /**
- * Woodev Pickup Point Value Object
+ * Woodev Pickup Point
  *
- * Immutable, WooCommerce-free value object describing a single pickup point
- * (PVZ — пункт выдачи заказов) returned by a carrier. It carries a fixed core
- * schema common to every carrier plus a `raw` escape hatch (decision §6b) that
- * preserves the original provider payload so carrier-specific fields are never
- * lost in the abstraction.
+ * The normalized carrier pickup point. Plugins translate their carrier's payload into
+ * this shape; neither the framework nor a map provider ever sees a raw carrier response.
  *
- * Pure PHP — no WooCommerce calls. See
- * docs-internal/platform-v2-s1-shipping-spec.md §4.1.i.
- *
- * @since 1.5.0
+ * @since 2.0.2
  */
 
 namespace Woodev\Framework\Shipping\Pickup;
@@ -23,324 +17,271 @@ if ( ! defined( 'ABSPATH' ) ) {
 if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Point' ) ) :
 
 	/**
-	 * Carrier pickup point.
+	 * Immutable value object describing one pickup point.
 	 *
-	 * Constructed once and never mutated; all state is exposed through typed
-	 * getters. Build from a carrier array with {@see Pickup_Point::from_array()}
-	 * and serialize back with {@see Pickup_Point::to_array()} — the two are exact
-	 * inverses, including the `raw` escape hatch.
-	 *
-	 * @since 1.5.0
+	 * @since 2.0.2
 	 */
-	class Pickup_Point implements \JsonSerializable {
+	class Pickup_Point {
 
-		/** @var string carrier-unique pickup point code */
-		private string $code;
-
-		/** @var string pickup point type (e.g. 'pvz', 'postamat') */
-		private string $type;
-
-		/** @var string human-readable name */
-		private string $name;
-
-		/** @var string full one-line postal address */
-		private string $address_full;
-
-		/** @var array structured address parts keyed by component */
-		private array $address;
-
-		/** @var float latitude in decimal degrees */
-		private float $lat;
-
-		/** @var float longitude in decimal degrees */
-		private float $lng;
-
-		/** @var array working-hours descriptors */
-		private array $work_hours;
-
-		/** @var array accepted payment methods */
-		private array $payment_methods;
-
-		/** @var float maximum accepted parcel weight */
-		private float $max_weight;
-
-		/** @var string maximum accepted parcel dimensions (carrier-defined, e.g. '120x60x60') */
-		private string $max_dimensions;
-
-		/** @var string contact phone */
-		private string $phone;
-
-		/** @var array original carrier payload — escape hatch for carrier-specific fields */
-		private array $raw;
+		/** @var array<string, mixed> normalized data */
+		private array $data;
 
 		/**
-		 * Constructor.
+		 * Constructor. Use {@see from_array()} — it validates.
 		 *
-		 * @since 1.5.0
+		 * @since 2.0.2
 		 *
-		 * @param string $code            carrier-unique pickup point code
-		 * @param string $type            pickup point type
-		 * @param string $name            human-readable name
-		 * @param string $address_full    full one-line postal address
-		 * @param array  $address         structured address parts
-		 * @param float  $lat             latitude in decimal degrees
-		 * @param float  $lng             longitude in decimal degrees
-		 * @param array  $work_hours      working-hours descriptors
-		 * @param array  $payment_methods accepted payment methods
-		 * @param float  $max_weight      maximum accepted parcel weight
-		 * @param string $max_dimensions  maximum accepted parcel dimensions
-		 * @param string $phone           contact phone
-		 * @param array  $raw             original carrier payload
+		 * @param array<string, mixed> $data Pre-validated normalized data.
 		 */
-		public function __construct(
-			string $code = '',
-			string $type = '',
-			string $name = '',
-			string $address_full = '',
-			array $address = [],
-			float $lat = 0.0,
-			float $lng = 0.0,
-			array $work_hours = [],
-			array $payment_methods = [],
-			float $max_weight = 0.0,
-			string $max_dimensions = '',
-			string $phone = '',
-			array $raw = []
-		) {
-			$this->code            = $code;
-			$this->type            = $type;
-			$this->name            = $name;
-			$this->address_full    = $address_full;
-			$this->address         = $address;
-			$this->lat             = $lat;
-			$this->lng             = $lng;
-			$this->work_hours      = $work_hours;
-			$this->payment_methods = $payment_methods;
-			$this->max_weight      = $max_weight;
-			$this->max_dimensions  = $max_dimensions;
-			$this->phone           = $phone;
-			$this->raw             = $raw;
+		private function __construct( array $data ) {
+			$this->data = $data;
 		}
 
 		/**
-		 * Builds a pickup point from a carrier array.
+		 * Builds a point from a plugin-supplied payload.
 		 *
-		 * Unknown keys are ignored by the core schema but should be preserved by
-		 * the caller under the `raw` key; values are cast to the declared types so
-		 * the resulting object is always well-formed.
+		 * Returns null when a required field is missing, empty, or the wrong shape (a
+		 * non-scalar `id`/`name`/`lat`/`lng`/`address`, a non-numeric `lat`/`lng`, or a
+		 * `type` that is not an array with `code` and `label`), or when a coordinate is
+		 * out of range — a malformed point must never reach the map, and a carrier
+		 * returning junk for one point must not break the whole list. Values are
+		 * rejected rather than coerced: a non-numeric `lat` must not silently become
+		 * `0.0` and render in the wrong place.
 		 *
-		 * @since 1.5.0
+		 * @since 2.0.2
 		 *
-		 * @param array $data carrier data keyed by core-schema field name
+		 * @param array<string, mixed> $payload Raw normalized payload from the plugin.
 		 *
-		 * @return self
+		 * @return self|null
 		 */
-		public static function from_array( array $data ): self {
+		public static function from_array( array $payload ): ?self {
+			foreach ( [ 'id', 'name', 'lat', 'lng', 'address', 'type' ] as $required ) {
+				if ( ! isset( $payload[ $required ] ) || '' === $payload[ $required ] ) {
+					return null;
+				}
+
+				if ( 'type' !== $required && ! is_scalar( $payload[ $required ] ) ) {
+					return null;
+				}
+			}
+
+			if ( ! is_array( $payload['type'] ) || ! isset( $payload['type']['code'], $payload['type']['label'] ) ) {
+				return null;
+			}
+
+			if ( ! is_numeric( $payload['lat'] ) || ! is_numeric( $payload['lng'] ) ) {
+				return null;
+			}
+
+			$lat = (float) $payload['lat'];
+			$lng = (float) $payload['lng'];
+
+			if ( $lat < -90.0 || $lat > 90.0 || $lng < -180.0 || $lng > 180.0 ) {
+				return null;
+			}
+
+			$payment_methods = isset( $payload['payment_methods'] )
+				? array_map( 'strval', (array) $payload['payment_methods'] )
+				: [];
+
+			$photos = isset( $payload['photos'] )
+				? array_map( 'strval', (array) $payload['photos'] )
+				: [];
+
+			// Unlike payment_methods/photos above (which strval-cast every element), services
+			// are filtered rather than coerced: a non-string element (an un-flattened object, an
+			// array a carrier adapter forgot to map) is dropped instead of becoming the literal
+			// string "Array" — esc_html() in to_browser_array() would fatal on an actual array.
+			// A whitespace-only entry ('   ') is treated as absent and dropped via trim(); the
+			// string '0' is a legitimate service label and is deliberately kept — it is truthy
+			// via trim() !== '' but would be silently eaten by a naive `if ( $service )` filter.
+			// array_values() re-indexes so wp_json_encode() emits a JSON array, not an object
+			// (see gotcha: php-stdlib-traps-that-survive-tests).
+			$services = isset( $payload['services'] )
+				? array_values(
+					array_filter(
+						(array) $payload['services'],
+						static function ( $service ): bool {
+							return is_string( $service ) && '' !== trim( $service );
+						}
+					)
+				)
+				: [];
+
 			return new self(
-				(string) ( $data['code'] ?? $data['id'] ?? '' ),
-				(string) ( $data['type'] ?? '' ),
-				(string) ( $data['name'] ?? '' ),
-				(string) ( $data['address_full'] ?? '' ),
-				(array) ( $data['address'] ?? [] ),
-				(float) ( $data['lat'] ?? 0.0 ),
-				(float) ( $data['lng'] ?? 0.0 ),
-				(array) ( $data['work_hours'] ?? [] ),
-				(array) ( $data['payment_methods'] ?? [] ),
-				(float) ( $data['max_weight'] ?? 0.0 ),
-				(string) ( $data['max_dimensions'] ?? '' ),
-				(string) ( $data['phone'] ?? '' ),
-				(array) ( $data['raw'] ?? [] )
+				[
+					'id'              => (string) $payload['id'],
+					'name'            => (string) $payload['name'],
+					'lat'             => $lat,
+					'lng'             => $lng,
+					'address'         => (string) $payload['address'],
+					'type'            => [
+						'code'  => (string) $payload['type']['code'],
+						'label' => (string) $payload['type']['label'],
+					],
+					'short_address'   => isset( $payload['short_address'] ) ? (string) $payload['short_address'] : '',
+					'locality'        => isset( $payload['locality'] ) ? (string) $payload['locality'] : '',
+					'postal_code'     => isset( $payload['postal_code'] ) ? (string) $payload['postal_code'] : '',
+					'phone'           => isset( $payload['phone'] ) ? (string) $payload['phone'] : '',
+					'instruction'     => isset( $payload['instruction'] ) ? (string) $payload['instruction'] : '',
+					'work_time'       => isset( $payload['work_time'] ) ? (string) $payload['work_time'] : '',
+					'payment_methods' => $payment_methods,
+					'photos'          => $photos,
+					'services'        => $services,
+					'accepts_cod'     => isset( $payload['accepts_cod'] ) ? (bool) $payload['accepts_cod'] : null,
+					'max_weight'      => isset( $payload['max_weight'] ) ? (int) $payload['max_weight'] : null,
+				]
 			);
 		}
 
 		/**
-		 * Exports the pickup point as a plain array.
+		 * Gets the carrier point id.
 		 *
-		 * The exact inverse of {@see Pickup_Point::from_array()}: feeding the
-		 * result back reproduces an identical object, `raw` escape hatch included.
-		 *
-		 * @since 1.5.0
-		 *
-		 * @return array canonical representation keyed by core-schema field name
-		 */
-		public function to_array(): array {
-			return [
-				// `id` is the generic wire identity the shipped pickup-map.js consumes
-				// (it reads `point.id` and posts `point_id`); its value is the
-				// carrier-unique `code` (e.g. for CDEK the point's own `code`). `code`
-				// is kept for carrier-specific consumers.
-				'id'              => $this->code,
-				'code'            => $this->code,
-				'type'            => $this->type,
-				'name'            => $this->name,
-				'address_full'    => $this->address_full,
-				'address'         => $this->address,
-				'lat'             => $this->lat,
-				'lng'             => $this->lng,
-				'work_hours'      => $this->work_hours,
-				'payment_methods' => $this->payment_methods,
-				'max_weight'      => $this->max_weight,
-				'max_dimensions'  => $this->max_dimensions,
-				'phone'           => $this->phone,
-				'raw'             => $this->raw,
-			];
-		}
-
-		/**
-		 * Specifies data for JSON serialization.
-		 *
-		 * @since 1.5.0
-		 *
-		 * @return array the canonical representation
-		 */
-		public function jsonSerialize(): array {
-			return $this->to_array();
-		}
-
-		/**
-		 * Gets the carrier-unique pickup point code.
-		 *
-		 * @since 1.5.0
+		 * @since 2.0.2
 		 *
 		 * @return string
 		 */
-		public function get_code(): string {
-			return $this->code;
+		public function get_id(): string {
+			return $this->data['id'];
 		}
 
 		/**
-		 * Gets the pickup point type.
+		 * Gets the latitude.
 		 *
-		 * @since 1.5.0
-		 *
-		 * @return string
-		 */
-		public function get_type(): string {
-			return $this->type;
-		}
-
-		/**
-		 * Gets the human-readable name.
-		 *
-		 * @since 1.5.0
-		 *
-		 * @return string
-		 */
-		public function get_name(): string {
-			return $this->name;
-		}
-
-		/**
-		 * Gets the full one-line postal address.
-		 *
-		 * @since 1.5.0
-		 *
-		 * @return string
-		 */
-		public function get_address_full(): string {
-			return $this->address_full;
-		}
-
-		/**
-		 * Gets the structured address parts.
-		 *
-		 * @since 1.5.0
-		 *
-		 * @return array
-		 */
-		public function get_address(): array {
-			return $this->address;
-		}
-
-		/**
-		 * Gets the latitude in decimal degrees.
-		 *
-		 * @since 1.5.0
+		 * @since 2.0.2
 		 *
 		 * @return float
 		 */
 		public function get_lat(): float {
-			return $this->lat;
+			return $this->data['lat'];
 		}
 
 		/**
-		 * Gets the longitude in decimal degrees.
+		 * Gets the longitude.
 		 *
-		 * @since 1.5.0
+		 * @since 2.0.2
 		 *
 		 * @return float
 		 */
 		public function get_lng(): float {
-			return $this->lng;
+			return $this->data['lng'];
 		}
 
 		/**
-		 * Gets the working-hours descriptors.
+		 * Gets the full address.
 		 *
-		 * @since 1.5.0
-		 *
-		 * @return array
-		 */
-		public function get_work_hours(): array {
-			return $this->work_hours;
-		}
-
-		/**
-		 * Gets the accepted payment methods.
-		 *
-		 * @since 1.5.0
-		 *
-		 * @return array
-		 */
-		public function get_payment_methods(): array {
-			return $this->payment_methods;
-		}
-
-		/**
-		 * Gets the maximum accepted parcel weight.
-		 *
-		 * @since 1.5.0
-		 *
-		 * @return float
-		 */
-		public function get_max_weight(): float {
-			return $this->max_weight;
-		}
-
-		/**
-		 * Gets the maximum accepted parcel dimensions.
-		 *
-		 * @since 1.5.0
+		 * @since 2.0.2
 		 *
 		 * @return string
 		 */
-		public function get_max_dimensions(): string {
-			return $this->max_dimensions;
+		public function get_address(): string {
+			return $this->data['address'];
 		}
 
 		/**
-		 * Gets the contact phone.
+		 * Gets the locality, or an empty string.
 		 *
-		 * @since 1.5.0
+		 * @since 2.0.2
 		 *
 		 * @return string
 		 */
-		public function get_phone(): string {
-			return $this->phone;
+		public function get_locality(): string {
+			return $this->data['locality'];
 		}
 
 		/**
-		 * Gets the original carrier payload.
+		 * Gets the postal code, or an empty string.
 		 *
-		 * The escape hatch (decision §6b) holding carrier-specific fields outside
-		 * the core schema.
+		 * @since 2.0.2
 		 *
-		 * @since 1.5.0
-		 *
-		 * @return array
+		 * @return string
 		 */
-		public function get_raw(): array {
-			return $this->raw;
+		public function get_postal_code(): string {
+			return $this->data['postal_code'];
+		}
+
+		/**
+		 * Whether the point accepts cash on delivery. Null means the carrier did not say.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool|null
+		 */
+		public function get_accepts_cod(): ?bool {
+			return $this->data['accepts_cod'];
+		}
+
+		/**
+		 * Maximum accepted weight in GRAMS, or null when the carrier did not say.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return int|null
+		 */
+		public function get_max_weight(): ?int {
+			return $this->data['max_weight'];
+		}
+
+		/**
+		 * Returns the canonical, unescaped normalized representation.
+		 *
+		 * This is what gets persisted: {@see \Woodev\Framework\Shipping\Order\Shipping_Order_Handler}
+		 * writes it into installed-site order meta. The un-mangled value must reach that
+		 * destination — an address containing `"` or `&` must not be permanently
+		 * HTML-entity-encoded in the database. Escaping happens only at the browser
+		 * boundary; see {@see self::to_browser_array()}.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array<string, mixed>
+		 */
+		public function to_array(): array {
+			return $this->data;
+		}
+
+		/**
+		 * Returns the browser-safe representation.
+		 *
+		 * Every display string is escaped here, once, server-side, immediately before the
+		 * point reaches the browser — the same rule the checkout field-source controller
+		 * applies to option labels. `id` is deliberately NOT escaped: it is an identity
+		 * token, not display text, and round-trips back from the browser as `point_id` to
+		 * a carrier lookup and into order meta — an escaped `&` would corrupt the lookup.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array<string, mixed>
+		 */
+		public function to_browser_array(): array {
+			$out = $this->to_array();
+
+			$escaped_keys = [
+				'name',
+				'address',
+				'short_address',
+				'locality',
+				'postal_code',
+				'phone',
+				'instruction',
+				'work_time',
+			];
+
+			foreach ( $escaped_keys as $key ) {
+				$out[ $key ] = esc_html( $out[ $key ] );
+			}
+
+			$out['type']['code']    = esc_html( $out['type']['code'] );
+			$out['type']['label']   = esc_html( $out['type']['label'] );
+			$out['payment_methods'] = array_map( 'esc_html', $out['payment_methods'] );
+			$out['services']        = array_map( 'esc_html', $out['services'] );
+
+			// esc_url_raw, not esc_url: this is a JSON payload, not HTML. esc_url_raw still
+			// strips dangerous schemes like `javascript:`, but esc_url additionally
+			// HTML-entity-encodes '&' to '&#038;', which is correct for an HTML attribute
+			// and wrong for a JSON string a client will use as a URL.
+			$out['photos'] = array_map( 'esc_url_raw', $out['photos'] );
+
+			return $out;
 		}
 	}
 

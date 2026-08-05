@@ -132,7 +132,62 @@
 	// -------------------------------------------------------------------------
 
 	/**
+	 * Registry of every store instance createStore() has ever built, in creation
+	 * order — additive to the factory, never a replacement for it. Exists so a
+	 * consumer that only has a field id (the pickup mount, Task 12) can reach the
+	 * SAME store instance §8's own adapter reads/writes, instead of building a
+	 * second instance from the same config global whose state would silently
+	 * diverge from the one the A2 gate actually recomputes against. See
+	 * getStoreForField() below.
+	 *
+	 * @type {Object[]}
+	 */
+	var _registry = [];
+
+	/**
+	 * Finds the registered store that owns the given field id.
+	 *
+	 * Deliberately keyed by FIELD OWNERSHIP, not by plugin id: several plugin ids
+	 * can sanitize down to the same JS global name (see
+	 * config_object_suffix()/PREFIX collisions in checkout-field-classic.js), so a
+	 * plugin-id lookup can silently resolve to the wrong store. A field id is
+	 * unique to the store whose config declared it, which is exactly what
+	 * entryForField() in checkout-field-classic.js already does locally — this
+	 * hoists the same rule into the module so any consumer can use it without
+	 * reaching into that adapter's private `stores` array.
+	 *
+	 * Searches most-recently-created store first. This is a TIE-BREAK, not a
+	 * claim that the newest registration is the "correct" one: two DIFFERENT
+	 * plugins' configs both declaring the same field id is a misconfiguration,
+	 * not a supported scenario, and in production "creation order" only ever
+	 * reduces to whatever order `checkout-field-classic.js` iterates
+	 * `window` keys in — itself dependent on `wp_localize_script()` print
+	 * order, which is arbitrary and not something a plugin author controls.
+	 * The tie-break exists so behaviour is at least DETERMINISTIC (and, in a
+	 * test re-registering the same field id against a fresh store, picks the
+	 * instance actually wired to the current page/session) rather than to
+	 * imply a real collision resolves sensibly.
+	 *
+	 * @param {string} fieldId
+	 * @returns {Object|null} the owning store, or null when no registered store
+	 *                        declares this field.
+	 */
+	function getStoreForField( fieldId ) {
+		for ( var i = _registry.length - 1; i >= 0; i-- ) {
+			if ( _registry[ i ].getField( fieldId ) ) {
+				return _registry[ i ];
+			}
+		}
+
+		return null;
+	}
+
+	/**
 	 * Create a checkout field store bound to the given config.
+	 *
+	 * Every instance this factory builds is registered (see _registry above) the
+	 * moment it is created — a caller never opts out, and never needs to; it is
+	 * additive bookkeeping, not a change to what createStore() returns.
 	 *
 	 * @param {Object} config
 	 * @param {Object.<string, Object>} config.fields   Field descriptors keyed by field id.
@@ -286,7 +341,7 @@
 			return _config.nonce;
 		}
 
-		return {
+		var store = {
 			setValue:        setValue,
 			getValue:        getValue,
 			setChosenMethod: setChosenMethod,
@@ -299,13 +354,17 @@
 			getEndpoint:     getEndpoint,
 			getNonce:        getNonce,
 		};
+
+		_registry.push( store );
+
+		return store;
 	}
 
 	// -------------------------------------------------------------------------
 	// UMD-ish dual export
 	// -------------------------------------------------------------------------
 
-	var api = { createStore: createStore };
+	var api = { createStore: createStore, getStoreForField: getStoreForField };
 
 	// Browser global
 	if ( typeof window !== 'undefined' ) {

@@ -18,6 +18,7 @@
     "test:js": "wp-scripts test-unit-js"
   },
   "devDependencies": {
-    "@wordpress/scripts": "32.4.0"
+    "@wordpress/scripts": "32.4.0",
+    "jquery": "^4.0.0"
   }
 }

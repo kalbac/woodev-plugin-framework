@@ -1,0 +1,469 @@
+/**
+ * Woodev Modal — generic dialog chrome (D-13).
+ *
+ * Styles ONLY the shell built by `woodev-modal.js`: backdrop, dialog frame, header, title,
+ * close button, body scroll area, and the generic error/empty/notice degradation furniture
+ * the shell itself renders (see `WoodevModal.prototype.showError/showEmpty/showNotice`).
+ *
+ * OWNERSHIP BOUNDARY: nothing in this file knows about pickup points, maps, or any other
+ * consumer's content. Everything a consumer mounts INSIDE `getContainer()` (`.woodev-modal__body`)
+ * is that consumer's own concern — see e.g. `woodev/shipping-method/assets/css/frontend/pickup.css`
+ * for the pickup map's own panels/markers/balloon. The test applied throughout: would a framework
+ * subsystem opening a `WoodevModal` with completely unrelated content need this rule? If yes, it
+ * lives here.
+ *
+ * Follows the WooCommerce `wc-backbone-modal` responsive pattern (same 782px breakpoint, same
+ * fixed + transform centering) — see
+ * `plugins-reference/woocommerce-yandex-delivery/assets/css/frontend/backbone-modal.css`.
+ * Deliberately flat/hardcoded colours: this file is consumed by every subsystem that opens a
+ * dialog, not just the pickup map, so it carries no pickup-prefixed theming tokens.
+ *
+ * PLAIN CSS, NO BUILD STEP — registered directly by `Woodev_Plugin::frontend_enqueue_scripts()`,
+ * versioned by its own `filemtime()` (not the JS bundle's hash — see gotcha
+ * `wp-scripts-css-enqueue-version-by-mtime`).
+ *
+ * @since 2.0.2
+ */
+
+/* -------------------------------------------------------------------------
+ * STYLE ISOLATION (Task 18, spec V-14) — the shell's own elements.
+ *
+ * Same contract, and same `:where()` specificity reasoning, as the equivalent block at the top of
+ * `woodev/shipping-method/assets/css/frontend/pickup.css` — see that file's own docblock for the
+ * full rationale. In short: `:where()` carries zero specificity, so `.woodev-modal :where( h2 )` /
+ * `.woodev-modal :where( p )` etc. tie exactly with every single-class component rule later in
+ * THIS file (`.woodev-modal__message { display: block }` is (0,1,0) too), so source order decides
+ * and the later, real rule always wins — while still outranking a theme's bare `button {}` /
+ * `h1 {}` (0,0,1) outright on class count alone.
+ *
+ * ROOTED ON `.woodev-modal`, NOT `.woodev-modal__header`/`__body` separately: `showNotice()`
+ * (below) inserts `.woodev-modal__notice` as a SIBLING of header/body — `this._dialog.insertBefore(
+ * notice, this._body )` — never nested inside either, so a reset scoped to just those two roots
+ * would silently miss the notice banner's own span/buttons. `.woodev-modal` is the outer marker
+ * already used for exactly this "reach everything the shell renders" purpose by the box-sizing
+ * reset directly below (`.woodev-modal *`), so this block matches that existing convention instead
+ * of inventing a narrower one that has a gap.
+ * ---------------------------------------------------------------------- */
+
+.woodev-modal :where( div, span, p, ul, li, form, details, summary, img, svg ),
+.woodev-modal :where( h1, h2, h3, h4, h5, h6 ),
+.woodev-modal :where( button, input ) {
+	font-family: inherit;
+	margin: 0;
+	padding: 0;
+	border: 0;
+	background: none;
+	color: inherit;
+	font-size: 14px;
+	font-weight: 400;
+	font-style: normal;
+	line-height: 1.4;
+	letter-spacing: normal;
+	text-align: left;
+	text-transform: none;
+	box-shadow: none;
+	min-width: 0;
+	min-height: 0;
+	max-width: none;
+	float: none;
+	visibility: visible;
+}
+
+.woodev-modal :where( div, p, form, details, ul ) { display: block; }
+.woodev-modal :where( span, img, svg )            { display: inline-block; }
+.woodev-modal :where( li )                        { display: list-item; list-style: none; }
+
+.woodev-modal :where( button ) {
+	/* `!important` — same exception, same reason, as `pickup.css`'s own `:where( button )` rule:
+	   a theme's `button { display: none !important }` (the T20 rig checklist injects exactly
+	   this) beats a plain `display: inline-flex` regardless of specificity, and the close
+	   button vanishing leaves no way to dismiss the dialog at all. */
+	display: inline-flex !important;
+	align-items: center;
+	justify-content: center;
+	cursor: pointer;
+	appearance: none;
+}
+
+.woodev-modal :where( input ) {
+	display: block;
+	width: auto;
+	height: auto;
+	appearance: none;
+}
+
+.woodev-modal :where( summary ) { display: list-item; cursor: pointer; }
+.woodev-modal :where( img )     { max-width: none; height: auto; }
+
+.woodev-modal *,
+.woodev-modal *::before,
+.woodev-modal *::after {
+	box-sizing: border-box;
+}
+
+/* -------------------------------------------------------------------------
+ * Scroll lock — set on <body> while the modal is open (see SCROLL_LOCK_CLASS
+ * in woodev-modal.js).
+ * ---------------------------------------------------------------------- */
+
+.woodev-modal-lock {
+	overflow: hidden;
+}
+
+/* -------------------------------------------------------------------------
+ * Backdrop — the full-viewport dimmer. Same element also carries `.woodev-modal`,
+ * the root marker the box-sizing reset above and any consumer-side query hang off.
+ * ---------------------------------------------------------------------- */
+
+/*
+ * The dim is an ALPHA BACKGROUND, never `opacity`.
+ *
+ * `woodev-modal.js` puts both `.woodev-modal` and `.woodev-modal-backdrop` on ONE element and
+ * nests `.woodev-modal__content` inside it. CSS `opacity` applies to the whole subtree, so
+ * `opacity: 0.7` here — which is what WooCommerce's own backbone modal can afford, because its
+ * backdrop is a SEPARATE element — made the entire dialog 70% transparent: the checkout page
+ * showed straight through the map. No test can see this (jsdom does not render); the rig
+ * screenshot did. `rgba()` dims only this element's own paint and leaves children opaque.
+ */
+.woodev-modal-backdrop {
+	position: fixed;
+	inset: 0;
+	min-height: 360px;
+	z-index: 99900;
+	background: rgba( 0, 0, 0, 0.7 );
+}
+
+/* -------------------------------------------------------------------------
+ * Dialog frame.
+ *
+ * NO fixed `height` here — that would be one consumer's sizing (the pickup map's) leaking
+ * into shared chrome, and it collides with `.woodev-pickup-map`'s own height in pickup.css
+ * (see the note there). The box shrink-wraps to whatever a consumer's content resolves to,
+ * per D-13 — this is genuinely generic chrome: NO `width` either, so `min-width`/`max-width`
+ * do the sizing, not a forced 100%. Only ONE height-related rule is generic enough to live
+ * here: `max-height` caps the dialog so it can never exceed the viewport, whatever a
+ * consumer puts inside it (the actual pixel height is still the consumer's own concern —
+ * see `.woodev-pickup-map`).
+ *
+ * The header/body flex split (`display: flex; flex-direction: column` here, `flex: 1 1 auto`
+ * on the body) IS still generic: it is what makes the header sticky and the body scrollable
+ * whenever a consumer's content is tall enough to need it, and costs nothing when it is not.
+ * ---------------------------------------------------------------------- */
+
+.woodev-modal__content {
+	position: fixed;
+	left: 50%;
+	top: 50%;
+	transform: translate( -50%, -50% );
+	z-index: 100000;
+	display: flex;
+	flex-direction: column;
+	background: #fff;
+	color: #1e1e1e;
+	max-width: 100%;
+	min-width: 1024px; /* Live-review round: 920px left "почти ничего" of map visible once the
+	                       sidebar opened (operator). Matches `class-pickup-handler.php`'s own
+	                       `'width' => 1024` inline value — see the mobile block below for why the
+	                       two numbers have to agree even though the inline one usually wins. */
+	max-height: calc( 100vh - 40px );
+	border-radius: 4px;
+	box-shadow: 0 6px 30px rgba( 0, 0, 0, 0.3 );
+	overflow: hidden;
+}
+
+/* Live-review round: the close button used to sit INSIDE this header's own `padding: 5px 10px`
+   like any other child, which is exactly what gave it its lopsided inset — 5px top/bottom from
+   the header's own padding, but 10px on the right too, so it read as a button floating inside the
+   bar rather than a control that IS the bar's own corner (operator's own numbers: (49-38)/2 =
+   5.5px top/bottom vs. 10px on the right — never proportional to begin with). The reference the
+   operator attached (Yandex.Delivery's own dialog) has NO gap on the top or right at all: the
+   close control is full header height, flush to the corner. Padding moves from here — a shared
+   inset that used to apply to EVERY child, close button included — onto `.woodev-modal__title`
+   alone, so only the text gets an inset and the close button is free to fill the row edge to
+   edge. `align-items: stretch` (was `center`) is what makes "full header height" automatic rather
+   than a guessed pixel match: with no `height` of its own, the title now stretches to whatever
+   height the row resolves to and centres its OWN text inside that via its own internal flex,
+   while the close button explicitly states the same height as a literal match (see its own rule)
+   rather than only relying on stretch to imply it. */
+.woodev-modal__header {
+	display: flex;
+	align-items: stretch;
+	justify-content: space-between;
+	flex: 0 0 auto;
+	height: 48px;
+	padding: 0;
+	background: #fcfcfc;
+	border-bottom: 1px solid #ddd;
+}
+
+.woodev-modal__title {
+	display: flex;
+	align-items: center;
+	margin: 0;
+	padding: 0 0 0 16px; /* The header's own former left inset, now stated here directly. */
+	font-size: 18px;
+	font-weight: 700;
+	line-height: 1.5em;
+	color: inherit;
+}
+
+/* Explicit `width`/`height`, not merely `align-items: stretch` on the header implying the second
+   one — a literal `48px`/`48px` match is what actually makes this SQUARE, matching the header's
+   own `height: 48px` above rather than trusting flex resolution to land on the same number by
+   construction alone. No padding, no border-radius, no margin on the right: this button IS the
+   header's own top-right corner now (the dialog frame's own `border-radius`/`overflow: hidden` on
+   `.woodev-modal__content` clips its square corner into that shape for free — nothing to round
+   here directly). See the `:focus-visible` rule further down for why this one control needed
+   splitting out of the shared focus-ring group once it went flush to that corner. */
+.woodev-modal__close {
+	flex: 0 0 auto;
+	width: 48px;
+	height: 48px;
+	padding: 0;
+	border: 0;
+	border-left: 1px solid #ddd;
+	background-color: transparent;
+	color: #777;
+	cursor: pointer;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	transition: color 0.1s ease-in-out, background 0.1s ease-in-out;
+}
+
+/* The glyph is an inline SVG (see buildDom) — sized here so a theme's own `svg` rules cannot
+   stretch it. `display: block` kills the inline baseline gap that would offset it in its box. */
+.woodev-modal__close svg {
+	display: block;
+	width: 24px;
+	height: 24px;
+}
+
+.woodev-modal__close:hover,
+.woodev-modal__close:focus {
+	background: #ddd;
+	border-color: #ccc;
+	color: #000;
+}
+
+.woodev-modal__close:focus {
+	outline: none;
+}
+
+/* The provider's mount point. `position: relative` gives absolutely-positioned children
+   (a map's controls, for instance) a containing block that is the body area, not the page. */
+.woodev-modal__body {
+	display: block;
+	position: relative;
+	flex: 1 1 auto;
+	min-height: 0; /* Lets a flex child actually shrink, so content scrolls instead of overflowing. */
+
+	/*
+	 * `hidden`, not `auto`: nothing a consumer mounts may escape the frame. A consumer that needs
+	 * scrolling scrolls its OWN inner element — the map's sidebar does exactly that. With `auto`
+	 * here, an absolutely-positioned child that overshoots grows a scrollbar on the dialog itself
+	 * and the frame stops being a frame.
+	 */
+	overflow: hidden;
+}
+
+/* -------------------------------------------------------------------------
+ * Degradation states — rendered by the shell itself (showError/showEmpty/showNotice),
+ * not by any consumer, so they are chrome regardless of what a consumer mounts.
+ *
+ * `__message` (with its `--error`/`--empty` modifiers) REPLACES the body — nothing was
+ * drawn yet, so replacing costs nothing. `__notice` is the non-destructive counterpart, a
+ * banner ABOVE the body, so a later failure never wipes content the consumer already drew.
+ * ---------------------------------------------------------------------- */
+
+.woodev-modal__message {
+	display: block;
+	margin: 0;
+	padding: 48px 24px 12px;
+	text-align: center;
+	font-size: 15px;
+	line-height: 1.6;
+	color: #646970;
+}
+
+.woodev-modal__message--error {
+	color: #b32d2e;
+}
+
+.woodev-modal__retry {
+	display: block;
+	margin: 0 auto 48px;
+	padding: 8px 16px;
+	font-size: 14px;
+	color: #1e1e1e;
+	background: #fff;
+	border: 1px solid #dcdcde;
+	border-radius: 4px;
+	cursor: pointer;
+}
+
+.woodev-modal__retry:hover {
+	background: #f6f7f7;
+}
+
+.woodev-modal__notice {
+	display: flex;
+	align-items: center;
+	flex: 0 0 auto;
+	gap: 12px;
+	padding: 10px 16px;
+	font-size: 14px;
+	line-height: 1.5;
+	background: #f0f6fc;
+	border-bottom: 1px solid #dcdcde;
+	border-left: 4px solid #06aedd;
+}
+
+.woodev-modal__notice-message {
+	flex: 1 1 auto;
+	margin: 0;
+}
+
+.woodev-modal__notice-retry,
+.woodev-modal__notice-dismiss {
+	flex: 0 0 auto;
+	padding: 4px 10px;
+	font-size: 13px;
+	color: #1e1e1e;
+	background: #fff;
+	border: 1px solid #dcdcde;
+	border-radius: 4px;
+	cursor: pointer;
+}
+
+.woodev-modal__notice-retry:hover,
+.woodev-modal__notice-dismiss:hover {
+	background: #f6f7f7;
+}
+
+/* -------------------------------------------------------------------------
+ * Focus visibility — the shell traps focus, so focus is constantly moving inside the
+ * dialog; if it is not visible, keyboard use is guesswork. `:focus-visible` keeps the
+ * ring off mouse clicks. Only the shell's OWN interactive elements are covered here — a
+ * consumer's own controls (e.g. the pickup map's drawer/filter/balloon items) keep their
+ * focus-visible rules in the consumer's own stylesheet.
+ * ---------------------------------------------------------------------- */
+
+.woodev-modal__retry:focus-visible,
+.woodev-modal__notice-retry:focus-visible,
+.woodev-modal__notice-dismiss:focus-visible {
+	outline: 2px solid #06aedd;
+	outline-offset: 1px;
+}
+
+/* `.woodev-modal__close` split out of the group above (B, live-review round): it is now flush to
+   `.woodev-modal__content`'s own top-right corner (no header padding stands between them any
+   more — see that rule's own note), and `.woodev-modal__content` clips its children with
+   `overflow: hidden` for its rounded corners. An OUTWARD-drawn ring, like the group above uses,
+   would extend past that edge on exactly the two sides that matter and get clipped there —
+   invisible where a keyboard user would look for it first. A NEGATIVE `outline-offset` draws the
+   ring INSIDE the button's own box instead, so it survives the clip on every side; a 48px square
+   button has plenty of room for a 2px ring 3px in from its own edge. */
+.woodev-modal__close:focus-visible {
+	outline: 2px solid #06aedd;
+	outline-offset: -3px;
+}
+
+/* -------------------------------------------------------------------------
+ * Mobile — 782px, the WordPress breakpoint (also used by pickup.css, so the feature has
+ * one breakpoint, not two).
+ * ---------------------------------------------------------------------- */
+
+@media screen and ( max-width: 782px ) {
+
+	.woodev-modal__content {
+		width: 100%;
+		height: 100%;
+
+		/*
+		 * `!important` — the mobile layout's own version of the `body.style.height` collision
+		 * documented just below. `WoodevModal`'s constructor applies a consumer's `width` option
+		 * (the pickup map passes 1024 as of the live-review width bump above, a DESKTOP value —
+		 * spec V-1; was 920 before) as an INLINE `dialog.style.minWidth`. An inline style always
+		 * outranks a class selector regardless of specificity, so this rule did nothing at all on
+		 * a real narrow screen: the dialog stayed the DESKTOP width and the layout below (found
+		 * only by resizing a live rig page, never by a unit test — jsdom has no viewport) rendered
+		 * with the header and most of the map off to the side, invisible without horizontal
+		 * scrolling. The exact pixel value passed inline never mattered to THIS rule either way —
+		 * `100% !important` beats any inline `minWidth`, 920 or 1024 alike — which is why raising
+		 * it above did not require touching this mobile override at all, only its own comment.
+		 */
+		min-width: 100% !important;
+		max-height: none;
+		border-radius: 0;
+	}
+
+	/*
+	 * `!important` — the one exception in this file, and a real one: `woodev-modal.js`'s
+	 * `_render()` applies a consumer's `bodyHeight` option (the pickup map passes
+	 * `Pickup_Handler`'s `min(80vh, 800px)`, a DESKTOP-shaped value — see that file's own
+	 * `.woodev-pickup-map` note) as an INLINE `body.style.height`. An inline style always
+	 * outranks any class selector regardless of specificity, so no selector strength here —
+	 * only `!important` in an author stylesheet — can stop that desktop value from surviving
+	 * onto this full-screen mobile dialog. `auto` hands sizing back to the header/body flex
+	 * split immediately above (`.woodev-modal__content { display: flex; flex-direction: column }`,
+	 * body `flex: 1 1 auto`), which already fills whatever height `.woodev-modal__content`
+	 * itself resolves to.
+	 */
+	.woodev-modal__body {
+		height: auto !important;
+	}
+}
+
+/*
+ * Loading overlay — an ADDITIVE layer over the body, never a replacement for it: the consumer
+ * is usually building its content into the body at the very moment this shows (a map provider
+ * appends its canvas, then spends a second or two fetching a third-party script). Replacing the
+ * body here would delete the node that content is being drawn into.
+ */
+.woodev-modal__loading {
+	position: absolute;
+	inset: 0;
+	z-index: 5;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 12px;
+	padding: 16px;
+
+	/*
+	 * Translucent, not solid: the consumer is usually drawing into the body underneath at this
+	 * very moment, and seeing the frame fill in reads as progress rather than as a stall.
+	 */
+	background: rgba( 255, 255, 255, 0.9 );
+	color: #646970;
+	font-size: 14px;
+	text-align: center;
+}
+
+.woodev-modal__spinner {
+	display: block;
+	width: 28px;
+	height: 28px;
+	border: 2px solid rgba( 0, 0, 0, 0.12 );
+	border-top-color: #06aedd;
+	border-radius: 50%;
+	animation: woodev-modal-spin 0.8s linear infinite;
+}
+
+@keyframes woodev-modal-spin {
+
+	to {
+		transform: rotate( 360deg );
+	}
+}
+
+/* Slowed rather than stopped: a frozen spinner reads as a hang, which is the opposite of what it
+   is there to say. */
+@media ( prefers-reduced-motion: reduce ) {
+
+	.woodev-modal__spinner {
+		animation-duration: 3s;
+	}
+}

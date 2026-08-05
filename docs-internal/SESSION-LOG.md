@@ -1,3 +1,367 @@
+## s51 (2026-08-05) — ЧЕТЫРЕ КРУГА LIVE-REVIEW ОПЕРАТОРА, КАРТА ПРИНЯТА И СМЕРДЖЕНА
+
+Ветка `feat/pickup-map`, PR #149. **631 jest / 1352 unit / phpcs 192 / PHPStan чисто.** Сессия
+целиком — реакция на личный live-review оператора: он проверял, называл дефекты, я диагностировал по
+коду, чинил subagent-driven и **лично перепроверял каждый пункт на живом риге** (chrome-devtools MCP,
+порт 8973, настоящий ключ Яндекс.Карт). Четыре круга правок, финальный вердикт оператора:
+«около-идеальная… всё работает очень хорошо», мердж разрешён.
+
+**Главный урок сессии — спека может быть неправа, и тогда её надо отменять явно.** Спека §7.5/«V-10»
+требовала, чтобы клик по маркеру и клик по строке списка вели себя **одинаково**. Ни один из двух
+референсов так не делает: и Yandex.Delivery, и бандл Почты РФ разводят их через флаг (`isAnimating`
+/`x`) — маркер даёт только `panTo()` без изменения зума, а зум до максимума включается лишь для
+выбора из списка. Эта одна фраза в спеке и породила дефект №6 оператора. План отменил её письменно,
+чтобы её не «восстановили» обратно.
+
+**Дефект, который не увидел никто, включая прошлую риговую проверку.** Оператор: «кликнуть можно
+только по какому-то очень маленькому пространству в самом верху иконки». `iconShape` отсчитывается от
+гео-якоря (бокс `(-22,-23)…(23,22)`, центрирован на координате), а кастомный HTML-layout ymaps ставит
+**левым верхним углом в тот же якорь** (`(0,0)…(45,45)`) — `iconImageOffset` кастомные layout'ы не
+применяет, это опция только `default#image`, которую оба референса и используют. Пересечение
+нарисованного и кликабельного — левый верхний квадрант. Побочно: каждый пин рисовался на ~22px правее
+и ~23px ниже своей настоящей точки. Найдено чтением кода, подтверждено на риге кликом в 85%/85%
+артворка.
+
+**`setMargin()` резервировал пустоту.** Замер на риге: точка вставала на x=640 (центр ВСЕЙ карты)
+вместо x=480 (центр видимой части). Причина — `addArea({ right: width, top: 0, height: '100%' })`:
+ширина панели попадала в `right` (смещение от края), а ключа `width` не было вовсе, то есть область
+не резервировала ничего. Оба референса передают `{ right: 0, width: <px> }`. **Спека
+`2026-08-01-…-rework-design.md` §6 содержит именно неверную форму — реализация честно скопировала
+неверную спеку.** Что доказало диагноз: статическая верхняя полоса 64px, добавленная в этой же
+сессии, форму имела правильную и работала — вертикаль сходилась идеально при разъезжающейся
+горизонтали.
+
+**Асимметрия фильтра — карта против списка.** Провайдер фильтровал по `typeCode` группы (тип её
+ПЕРВОЙ точки), панели — по каждой точке. У совмещённой группы (ПВЗ + постамат по одному адресу)
+отключение типа первой точки убирало маркер целиком, а список продолжал предлагать выжившую точку.
+Клик по такой строке открывал карточку над **пустой картой без единого маркера**. Нашёл Codex-критик,
+я подтвердил на риге, оператор независимо сообщил о том же. Починка: группа видна, если выжила хотя
+бы одна её точка, а иконка и счётчик показывают именно выживших.
+
+**Моя собственная ошибка, пойманная ригом.** Я увидел, что `resolveAddress()` геокодит без границ,
+счёл это дырой и попросил ограничить как остальные два вызова. Неверно: **адрес покупателя почти
+всегда вне облака пунктов выдачи — за ним и идут в поиск**. `strictBounds` вернул ноль результатов,
+метод молча вышел, выбор подсказки перестал делать что-либо вообще. Правило: ограничиваем вызовы,
+которые ПРЕДЛАГАЮТ кандидатов, и не ограничиваем тот, что РАЗРЕШАЕТ уже выбранного.
+
+**Поиск был выдуман, а не скопирован.** Оператор: «механизм поиска ты опять выдумал, хотя в эталоне
+работает именно так как должно». Прав: прошлая сессия выкинула `ymaps.suggest()` целиком (сославшись
+на бандл Почты, который его не использует) и оставила только геокодер — а геокодер ранжирует станцию
+метро выше дома. Вернули suggest для выпадашки, геокод оставили для разрешения выбранного. Плюс
+показывали поле `text` (полная форма со страной) вместо короткой.
+
+**Codex-критик** прошёл по всему диффу. Закрыл две мои неопределённости ссылками на документацию
+(`panTo`/`setCenter` возвращают `vow.Promise`; форма `clusters.getById().geometry.coordinates`
+документирована), нашёл 2 High + 2 Medium. Три починили, четвёртую (гипотеза о гонке камеры) он сам
+пометил как невоспроизведённую — не стали чинить вслепую, завели #165. Отдельно: `gpt-5.6` на
+ChatGPT-аккаунте недоступен, прогон шёл на модели по умолчанию.
+
+**Заведено 6 карточек** (все в `Бэклог`, доска №6): #163 расстояние без якоря, #164 память PHPStan,
+#165 редкая гонка подсветки маркера, #166 пустой список при фильтре, #167 слабый зум поиска,
+#168 копирайт поверх сайдбара (с замерами, почему дорого владеть).
+
+**Проверено мной на риге по каждому пункту оператора:** POI не кликаются, метка Яндекса не ставится,
+клик в любую часть иконки работает, точка центруется в видимой части (x=480=центр), маркер только
+смещает камеру а кластер зумит, постамат меняет иконку, копирайт открыт (и на 500px), фильтр виден и
+применяется к списку, крестик скрыт при пустом поле, строки совмещённых точек выровнены (245px против
+123px), «Поиск не дал результатов» при наборе не появляется, адрес центруется с точностью 4 метра,
+подсказка читается как «Chertanovskaya Street, 66к1», диалог 1024px, крестик модалки 48×48 без
+отступов, вкладки не обрезаются (180px).
+
+---
+
+## s50 продолжение (2026-08-04) — ПЛАН ИСПОЛНЕН ЦЕЛИКОМ (T2…T20), РИГ НАШЁЛ СЕМЬ ДЕФЕКТОВ ПОВЕРХ ЗЕЛЁНЫХ ТЕСТОВ
+
+Та же сессия, что и брейншторм 03.08 — после обрыва подписки продолжено автономно, пока оператор
+спал. Ветка `feat/pickup-map`, PR #149 открыт, **не смерджено**. **503 jest / 1352 unit / phpcs 192,
+21 коммит поверх T1.** Все 20 задач плана `2026-08-03-sp5-pickup-map-visual-rework-plan.md` построены
+subagent-driven (исполнители Sonnet 5), затем **я лично прогнал риговую проверку T20** в
+chrome-devtools MCP на реальном чекауте (порт 8973, настоящий ключ Яндекс.Карт) — десктоп и
+390–500px, плюс инъекция враждебной темы.
+
+**Урок сессии, ещё раз подтверждённый в T7/T16.** Дважды субагент обрывался на середине задачи из-за
+сбоя доступа (не по моей вине) — один раз оставив файл нерабочим (T7: старый билдер строки удалён,
+новый не дописан), один раз оставив дерево с непрогнанными тестами (T16). Оба раза диагностировал
+код руками и дописывал сам, не перезапуская задачу с нуля.
+
+**Codex-критик на границе фазы (после T14) нашёл пять реальных дефектов** в поиске/фильтре — ровно
+то, для чего сводное ревью и существует: submit не гасил отложенный ввод, вырожденный бокс поиска
+(0.1° minimum), отказавший геокодер не публиковал локальные совпадения, результат после `destroy()`
+всё равно эмитился, отсутствовал `Panels.prototype.destroy()` — таймер debounce переживал закрытие
+модалки.
+
+**Риг (T20) нашёл ЕЩЁ СЕМЬ дефектов, которых не увидел ни один тест** — потому что каждый требовал
+либо реального браузера, либо реального ymaps API, либо реального узкого экрана:
+
+1. **Два `.woodev-pickup-map` на странице.** T5 дал панелям собственный элемент карты внутри сцены,
+   но провайдер продолжал строить СВОЙ канвас-сиблинг в теле модалки — правило CSS совпадало дважды.
+   Мост теперь передаёт провайдеру `panels.getMapElement()`.
+2. **Кнопка сайдбара внутри списка** — `right: calc(...)` мерил `100%` от 320px-бокса списка (288px
+   вместо 336px), кнопка садилась НА панель. Стала сиблингом на сцене.
+3. **`focusGroup()` двигал камеру только для точки внутри кластера** — обычный видимый маркер клика
+   вообще не зумил. Хелпер строился под другую задачу (уйти от кластера) и был переиспользован для
+   паритета клика без проверки, что охват уже другой. Готча
+   `focusgroup-only-moved-for-clustered-points`.
+4. **`objectManager.setFilter()` берёт ОДИН аргумент, не `(objectId, object)`** — выбор конкретного
+   типа прятал ВСЕ маркеры, не только несовпадающие. Юнит-тест звал сохранённую функцию с той же
+   неверной сигнатурой, что и код — ничего не спорило. Подтверждено на живом `ymaps.ObjectManager` в
+   консоли рига. Готча `ymaps-objectmanager-setfilter-single-argument`.
+5. **`setAnchor()` пересортирует список, но не открывает его** — выбор адреса при открытой карточке
+   оставлял её на экране поверх корректно отсортированного (но невидимого) списка. Добавлен
+   `Panels.prototype.openList()`.
+6. **Два мобильных дефекта, видимых только на реальном узком экране**: инлайновый
+   `dialog.style.minWidth='920px'` бил медиа-запрос `min-width:100%` (та же коллизия, что T19 уже
+   чинил для высоты тела, только на соседнем свойстве не починил); зум-контрол (`z-index:5`) плавал
+   поверх карточки на всю ширину (`z-index:3`) — на десктопе они никогда не пересекались.
+7. **Враждебная тема `button{display:none!important}` прятала ВСЕ кнопки модалки**, включая закрытие
+   — у нашего сброса стилей намеренно нет `!important` («тема может увидеть свою декорацию»), но
+   `!important` бьёт что угодно кроме `!important`. `display` — единственное свойство, где это
+   исключение оправдано: потерять шрифт кнопки — декорация, потерять факт её существования — сломанная
+   функция.
+
+**`.woodev-pickup-overlay[hidden]` тоже не работал** (найдено при код-ревью T17, не на риге) — тот же
+класс бага, что и #6: авторское `display:flex` связано по специфичности с UA-таблицей `[hidden]`, и
+автор побеждает при равенстве. Спиннер загрузки был бы виден постоянно.
+
+**Итого в этой части сессии: 6 новых готчей** (плюс ещё 2 из диагностики перед T2 — `ymaps-control-options-must-be-nested`
+и `ymaps-html-icon-layout-needs-iconshape`, уже записанные ранее), все в `[shipping/pickup]`. Все
+найденные дефекты исправлены, отчёт по всем трём наборам тестов зелёный после каждого.
+
+**Заведено два issue**: #159 (03.08, контракт запроса — отдельный подпроект) уже был; добавлен
+**#162** (фикстура рига не фильтрует по locality — состояние «нет пунктов в городе» покрыто
+юнит-тестами, но не проверяемо визуально).
+
+**Не проверено вживую** (обоснованно): полное покрытие "пустой каталог/локальность" на риге (фикстура
+не позволяет, #162); СДЭК/Яндекс со своими каталогами (вне контракта задачи — контракт запроса #159
+отдельно). Всё остальное из чек-листа T20 пройдено.
+
+**🎯 NEXT = решение оператора.** Показать результат, дождаться его собственной финальной проверки на
+риге (протокол `feedback_operator_final_manual_verify`), затем мердж PR #149 — не автономно.
+
+## s50 (2026-08-03) — БРЕЙНШТОРМ ПО ВИЗУАЛУ, СПЕКА, ПЛАН НА 20 ЗАДАЧ, T1 СДЕЛАН
+
+Ветка `feat/pickup-map`, PR #149 открыт, **не смерджено**. **1347 unit / 395 jest / 92 integration /
+phpcs 192.** Кода карты не тронуто — только фикстура.
+
+**Вход — материалы оператора.** Он собрал `docs-internal/review/pickup-map-visual/`: подробный разбор
+по девяти пунктам плюс 14 скриншотов (риг, Яндекс.Доставка, виджет Почты РФ). Артефакты удаляются
+после приёмки, это его условие (шаг T20.6 плана).
+
+**Пять корневых причин, найденных чтением кода до всякого проектирования** — и все пять оказались
+дрейфом реализации от спеки 01.08, а не ошибками спеки. (1) У `.woodev-modal__content` нет `height`;
+единственный источник высоты — `.woodev-pickup-map`, поэтому до монтирования карты модалка = полоска
+хедера. (2) Панели `position: fixed`, а трансформ на диалоге делает его containing block — отсюда
+сайдбар поверх хедера и кнопка сайдбара поверх «закрыть». (3) Опции `SearchControl` передавались в
+корне аргумента, а контролы ymaps принимают `{ data, options, state }` — `provider`, `layout`,
+`noPlacemark` молча проигнорированы, остались дефолтная плашка и дефолтный **всемирный** геокодер.
+(4) У фич не задан `iconShape`; для кастомного HTML-layout'а область клика берётся только оттуда, а
+`iconImageSize` работает лишь для `default#image` — клик проваливался в POI-слой и открывал карточку
+организации Яндекса. (5) Зум — дефолтный слайдер на `left: 70` вместо эталонных `left: 12 / bottom: 70`.
+
+**Решение принято и тут же отменено — оператор поймал за один вопрос.** Черновик спеки предлагал
+выбросить `SearchControl` целиком. Оператор спросил «разве у Почты не через SearchControl?»; вместо
+спора был скачан и разобран её бандл (`widget.pochta.ru/map/main.a7d147fb…js`). Почта строит **один**
+`ymaps.control.SearchControl`, чей layout рисует поле, сброс, меню результатов **и меню фильтра с
+бейджем**; движок используется целиком (`search()`/`getResultsCount()`/`showResult()`), состояние
+фильтра лежит на этом же контроле и слушается `ymaps.Monitor` → `objectManager.setFilter()`. Оттуда же
+два факта: `ymaps.suggest` Почта не использует вообще и своего `provider` не передаёт — поэтому её
+собственный поиск и отдаёт Тольятти на «Цветной бульвар». Итоговая конструкция: шаблон Почты +
+ограниченный `provider.geocode` Яндекс.Доставки. Следствие — адресный запрос **по submit**, а не по
+нажатию, что снимает причину, по которой D-6 брал `suggest`. Отмена записана в спеку как отменённое
+решение с объяснением, чтобы её не «починили» обратно.
+
+**Спека** `specs/2026-08-03-sp5-pickup-map-visual-rework-design.md` — 16 решений V-1…V-16, расширяет
+D-1…D-15. **План** `plans/2026-08-03-sp5-pickup-map-visual-rework-plan.md` — 20 задач в семи фазах.
+
+**T1 сделан и проверен** (`b05225a`): фикстура выросла с 5 до 49 точек — два типа, пара на идентичных
+координатах (модель «ПВЗ и постамат в одном здании» из СДЭК), точка без COD, длинный адрес, `services`
+у части точек, три точки без телефона. Данные вынесены в `fixture-points.php`. Новый
+`TestFixturePointsTest` — 6 тестов, 13 утверждений, прогнаны лично. Закрывает #158. Обнаружено попутно:
+у `POSTAMAT` намеренно только `default`-иконка, что как раз проверяет фолбэк D-5 — план требовал
+четыре файла, исправлен.
+
+**Заведено #159** (доска №6, `Бэклог`) — контракт запроса точек: `?locality={название}` неоднозначен и
+годится только Почте, СДЭК и Яндексу нужны ID населённого пункта. Отдельный подпроект **после** визуала,
+решение оператора.
+
+**Ошибка сессии, названная оператором:** объявил, что контекст исчерпан, и предложил свежую сессию —
+по факту было потрачено 36%. Оценка на глазок вместо проверки.
+
+## s49 (2026-08-02) — КАРТА ЗАРАБОТАЛА НА РИГЕ: пять причин «пустой карты», четыре починены
+
+Ветка `feat/pickup-map`, PR #149 открыт, **не смерджено**. **1341 unit / 395 jest / 92 integration /
+phpcs 192.** Сессия целиком — отладка по `superpowers:systematic-debugging` плюс риговая проверка.
+
+**Поворотный момент — скриншот консоли от оператора.** Браузер прячет исключения из кросс-доменного
+скрипта ymaps за безликим `Script error.` без стека, поэтому `list_console_messages` показывал
+чистую консоль при полностью сломанной отрисовке. Скрин показал настоящее сообщение.
+
+**Причина №1 (корневая, #156 закрыт `067a1bc`).** `ObjectManager` отдаёт layout'у свойства фичи
+**обычным JSON-объектом**, а `Placemark` — data-менеджером с `.get()`. `_renderMarker()` звал
+`.get()` безусловно и падал внутри ymaps: метки рисовались пустыми коробками, клики не привязывались,
+а перетаскивание карты сыпало `map.action.Continuous: ticking while inactive` бесконечно (600+ раз).
+**Все тесты на `_renderMarker` использовали форму `Placemark`** — 393 зелёных теста при нуле
+работающих меток. Готча `ymaps-objectmanager-properties-are-plain`.
+
+**Причина №2.** `buildProviderConfig()` не передавал провайдеру `defaultLocation`, `pointIcons`,
+`accentColor`, `searchNearestCount` — все четыре верхнеуровневые. Без `defaultLocation` карта
+открывалась в `[0,0]` посреди Атлантики, а так как `ObjectManager` создаёт оверлеи **только для
+видимых объектов**, меток не было вовсе — и сайдбар, работающий по тому же тесту границ, был пуст.
+Тест-фикстура mount'а тоже не содержала этих ключей, поэтому пропажа была невидима. Приведена к
+реальному конфигу PHP.
+
+**Причина №3.** `map.margin.removeArea()` не существует — `addArea()` возвращает аксессор, который
+удаляет себя сам. Первое же переключение сайдбара падало и оставляло карту в полуинициализированном
+состоянии перетаскивания.
+
+**Причина №4.** Модалка 1–2 секунды показывала только заголовок, пока грузился скрипт карты.
+Добавлены `showLoading()`/`hideLoading()` — **наложением**, а не заменой тела: провайдер в этот самый
+момент дорисовывает канву, и замена содержимого её бы снесла.
+
+**Причина №5, не починена — #157.** Датасорс берёт nonce один раз при рендере; страница, простоявшая
+дольше тика, получает `403 rest_cookie_invalid_nonce`, и для покупателя это неотличимо от «точек
+нет». Дефект условный, требует нового i18n-ключа — вынесен в бэклог.
+
+**Проверено на риге** (порт 8973, реальный ключ): 5 меток с иконками и `data-state`, ноль ошибок при
+перетаскивании, карточка точки открывается, сайдбар открывается и закрывается, состояние загрузки
+показывается и снимается.
+
+**Заведено:** #157 (устаревающий nonce), #158 (фикстура не даёт проверить фильтр типов, таббар,
+кластеры и недоступную точку — все точки одного типа `PVZ`, нет совпадающих координат).
+
+**Вердикт оператора:** «стало лучше, но всё равно не то» — по UI/UX карта не дотягивает до эталона.
+Решено закрыть сессию и продолжить брейнштормом на подробных правках и скринах. **🎯 NEXT =
+визуальный этап, см. `next-session-prompt.md`.**
+
+## s48 (2026-08-01) — SP-5 ПЕРЕДЕЛКА КАРТЫ: ВСЕ 23 ЗАДАЧИ ПЛАНА ПОСТРОЕНЫ, НЕ СМЕРДЖЕНО
+
+Ветка `feat/pickup-map`, +23 коммита поверх s47 (всего 82 на ветке), PR #149 открыт, **не мерджить**.
+**1341 unit / 391 jest / 92 integration / phpcs 192 / class-map актуален.** Автономная ночная
+сессия, subagent-driven: исполнители Sonnet 5, критик Codex `gpt-5.6-luna` через inline-бандл.
+
+**Исполнено:** фаза A — модалка вынесена в `woodev/assets/js/frontend/woodev-modal.js` как общий
+`WoodevModal` с публичными событиями D-14 и своим стилем; регистрация ручки ушла на уровень
+фреймворка в `Woodev_Plugin::frontend_enqueue_scripts()`. Фаза B — `services` на `Pickup_Point`,
+`types` в `Point_Query`/REST, `owns_chrome()` на шве, локаль/слои/копирайты в `mapConfig`,
+обязательный `default_location` + иконки от плагина, акцентный цвет (мерчант → плагин → фреймворк).
+Фаза C — `pickup-geo.js`: группировка по округлённой позиции, haversine, форматирование по региону,
+nearest-N, поиск по загруженному пулу. Фаза D — `pickup-panels.js` (1403 строки, из них 619 кода):
+список, карточка, таббар, поиск, фильтр типов. Фаза E — провайдер ужат 1477 → 1430 строк, переведён
+на `ObjectManager`, камера с гвардом Почты РФ и секвенсором фокуса, `SearchControl` со своим видом.
+Фаза F — проводка, стили, верификация.
+
+**Критик находил существенное на КАЖДОЙ задаче, без исключений** — как в s45/s46. Самое ценное, чего
+не видели тесты: пустой `modalId` в проде (поймало сводное ревью фазы A, поточечные пропустили);
+отсутствие крестика на карточке точки; неотловленный промис подгона камеры под bulk — тот же баг, на
+котором ветка горела в s46. Дважды критик разворачивался на 180° и требовал противоположного —
+починено добавлением спеки и границ задачи в бандл, а не уговорами.
+
+**Риг нашёл три дефекта, которых не видел ни один из 391 зелёного jest-теста** (браузер, реальный
+ключ, порт 8973): (1) bulk-запрос точек уходил без `locality` — сервер справедливо отказывал, и
+покупатель видел пустую карту в городе, полном точек, без единой ошибки; (2) класс
+`.woodev-pickup-map`, которым `pickup.css` задаёт высоту, не вешался ни на один элемент — карта
+строилась прямо в тело модалки с нулевой высотой; (3) фон модалки затемнялся через `opacity` на
+элементе-предке диалога, из-за чего весь диалог был прозрачным на 70% и сквозь карту просвечивал
+чекаут. Все три починены и закрыты тестами там, где тест вообще способен их увидеть; третий записан
+готчей `modal-backdrop-opacity-dims-the-whole-dialog`.
+
+**Открыто и заведено:** **#156 (баг, блокирует приёмку)** — метки точек не рисуются на карте:
+данные доходят (REST 200, 5 точек в сайдбаре, карточка работает), но маркеры либо пустые
+`<div class="woodev-pickup-marker"></div>` без иконки и `data-state`, либо отсутствуют вовсе.
+Проверенная и НЕ подтвердившаяся гипотеза про `getElement()` откачена, чтобы не оставлять догадку в
+коде. **#154** — `strval()` по массиву в `payment_methods`/`photos`. **#155** — два DOM-несоответствия
+из T21.
+
+**Сознательные отступления от буквы плана, каждое с обоснованием:** в `contrastFor()` оставлен
+стандартный WCAG вместо подгонки формулы под ожидание плана (для `#0a8c37` чёрный текст даёт контраст
+4.82 против 4.36 у белого — то есть план требовал менее читаемый вариант); деградация модалки при
+пустом/сбойном ответе больше не разрушительная, потому что панели теперь живут в том же контейнере;
+`type`/`controlType` в поле настройки сделаны по конвенции кодовой базы, а не по внутренне
+противоречивому сниппету плана; шов `searchResults` добавлен, потому что план поручил разметку
+результатов T15 и их источник T19, но связать их не поручил никому.
+
+**🎯 NEXT = #156**, затем повторная риговая проверка по чек-листу T22 и живое ревью оператора.
+
+## Session 47 (2026-08-01) — Pickup map rework: brainstorm, spec, plan, ADR (no code)
+
+- **Mandate:** the operator rejected the s46 map on the rig in five seconds — "направление правильное, но визуально и функционально нет". Task-minimum: reproduce the reference map under our universal structure, and do it better. Not a defect list.
+- **Method:** `superpowers:brainstorming`, grounded only on verified facts. Three working reference implementations read in full, all on Yandex Maps JS API 2.1 — Yandex.Delivery (620-line widget + template + 416-line CSS), CDEK (`woodev-yandex-map-plugin.js`), and the Russian Post widget bundle downloaded and decompiled (73 KB minified). Yandex's own 2.1 and v3 documentation re-checked rather than recalled.
+- **Result:** spec `specs/2026-08-01-sp5-pickup-map-rework-design.md` (15 decisions), plan `plans/2026-08-01-sp5-pickup-map-rework-plan.md` (23 TDD tasks, six phases), `adr/010-yandex-maps-js-api-2-1-not-3-0.md`. Three commits, tree clean. **No production code touched.**
+
+### What the reference teardown changed
+
+- **The Yandex reference has no floating balloon at all.** It drags the ymaps balloon *pane* into a full-height right panel by overriding `ymaps[class*=-balloon-pane]` with `!important`. That is how it achieves "information in the sidebar" — a CSS override of undocumented internals. **Decision: we render both panels as our own DOM and do not use the ymaps balloon at all** (D-2), which also retires a whole class of clustering bugs.
+- **CDEK already uses `ObjectManager` with `clusterize: true`, and already has the co-located-point tab bar** — but its grouping counter is broken: `mapper.get( elem.hash )` where `elem` is the container-id *string*, so `undefined + 1 = NaN` for every duplicate after the first. A second defect in the same block pushes `undefined` into `objectManager.add()`. Reported in the handoff; that repo has no board.
+- **Russian Post's search placeholder is literally «Ваш адрес»** — confirming the operator's diagnosis that customers type their *own* address, not a PVZ name. It also keeps `SearchControl`'s engine and replaces only its chrome via `templateLayoutFactory`, which is the model we adopted.
+- **Russian Post guards co-located points properly:** before attempting to zoom it checks whether all cluster features share one coordinate, and it re-reads `getObjectState()` *after* the move. Adopted verbatim (spec §7.5).
+- **None of the three references solves the real search failure** — all of them zoom to the address and leave the customer looking at an empty map when nothing is nearby. Our model fits the address plus the three nearest points and shows an explicit empty state (D-6). This is the one place the rework is ahead of every reference.
+
+### Documentation actualisation (the operator asked for it explicitly)
+
+- Nothing the references rely on is deprecated in 2.1. Last release is **2.1.79 (03.06.2021)** — frozen, in maintenance.
+- **v3 rejected (ADR-010):** no clustering in core, no pop-ups, no `SearchControl`, a separate API key for `search()`/`suggest()`, LngLat inversion, `setLocation()` returning `void`. The **Map Style Editor is v3/MapKit only** — the single capability 2.1 cannot offer, and the reason CDEK layers 2GIS tiles. The balance genuinely shifted mid-discussion (two of three objections were neutralised by our own decisions) and that is recorded honestly in the ADR rather than hidden.
+- **`lang` region selects units** — `RU`/`UA`/`TR` kilometres, `US` miles. New gotcha.
+
+### Decisions worth remembering
+
+Provider narrowed to map/markers/camera, panels owned by the framework (D-3) · grouping by 4-decimal position + tab bar, never coordinate jitter (D-4) · plugin supplies icon URLs, framework owns the two boxes and anchors taken from CDEK's live values (D-5) · buyer's city then a plugin-hardcoded default, no geolocation — a VPN would send the customer to Amsterdam (D-7) · `services` added to `Pickup_Point`, structured schedules deferred (D-9) · type filter UI shared, filtering location chosen by strategy (D-10) · modal extracted to `woodev/assets/js/frontend/woodev-modal.js` with WooCommerce's responsive breakpoint (D-13) · a public two-layer event surface, `before_close` the only cancelable one (D-14) · one accent colour, contrast derived, sanitised twice and after the filter (D-15).
+
+### Board
+
+Filed straight to `Бэклог`: **#151** viewport pagination (Russian Post uses `pageSize: 200`), **#152** structured schedule, **#153** mixed i18n source languages — the framework catalogue has English msgids while new code writes Russian ones, and `AGENTS.md` claims Russian. Commented on **#130**: its `window.onerror` scope cannot see `woodev_pickup_error`, because we catch those failures and render a message instead of letting anything propagate.
+
+### Corrections taken during the session
+
+Two of mine, both factual: the framework *does* ship translations (`woodev/languages/`, loaded by `Translation_Handler`), and `en_EN` is not a locale — WordPress's default is `en_US`. Recorded because the first one nearly went into the spec as "no catalogues exist".
+
+## Session 46 (2026-07-31) — SP-5 pickup map: T13–T19 built, rig-verified end to end (branch `feat/pickup-map`, NOT merged)
+
+- **Method:** same as s45 — fresh Sonnet 5 implementer per task, then an adversarial review, then fixes. **Review again found something substantive on every task**, and this session added a second lesson: the reviews were right that mutation sweeps must mutate *values and content*, and even that was not enough. The three worst defects of the session were found by **running the thing in a browser**, not by any test.
+- **State:** 10 commits on top of s45, tree clean. **1258 unit / 175 jest / 92 integration / phpcs 192 / class-map current.** All 19 tasks built. Not merged.
+- **Three defects only the rig could find:**
+  - **The entire client-side constraint verdict was inert in production.** The points routes are GET, so `posted_payment_method()` read an empty `$_POST` and `current_cart_weight_grams()` found no cart — WooCommerce does not initialise one for custom REST routes, only the Store API does. Both readers returned "unknown", which the spec treats as permissive, so **every point rendered as selectable**. Unit tests inject those callables directly and integration tests pass explicit values, so nothing could see it. Fixed via a WC-session fallback and `wc_load_cart()`, behind `protected` seams. The old docblock rationalised the empty value as "unknown is permissive" — true for a carrier's sparse list, false here: the value was knowable and simply not read.
+  - **The balloon destroyed its own root.** ymaps' `templateLayoutFactory` builds the template and hands back the element *containing* it, so writing `innerHTML` onto that container wiped the `.woodev-pickup-balloon` div just created. Behaviour was unaffected — which is exactly why nothing caught it, and why the balloon's own unit tests (which pass a bare `div`) were blind — but the stylesheet scopes the balloon's custom properties to that root, so the select CTA lost its accent background and the refusal warning lost its tint.
+  - **The balloon had no panel, then collapsed to 30px.** The provider replaces the balloon *layout*, so ymaps draws no chrome behind it; without a background the text rendered on top of the map. Giving it one exposed a second problem: the ymaps overlay ancestors are zero-sized, so a `max-width`-only rule left it shrink-wrapping to a sliver. Width must be explicit.
+- **Rig e2e, bulk strategy, verified live:** trigger mounts → modal → real Yandex map (clustering, bounded search, viewport-synced drawer) → balloon → select writes through the §8 store (DOM and store agree) → A2 gate releases → address replaced → **values survive `update_checkout`** → **order #17 created** with `carrier_pickup_point = FIX-BULK-1` in meta. **Server authority proven:** client gate bypassed and `#place_order` re-enabled, the COD-refusing point creates **no order** and the customer sees the Russian reason.
+- **Viewport strategy: partially verified, and honestly so.** The bbox request path, the per-side 10° cap (a planet-wide bbox is refused in production, not just in tests) and the sparse-list → full-details verdict recomputation all work. The **initial viewport could not be verified**: the console reports `Invalid API key`, so ymaps refuses *geocoding* even though it still serves tiles, the map falls back to the world view, and the resulting planet bbox is correctly rejected. Needs the operator's real Yandex key — the same open item as the `$key_docs_url` TODO.
+- **The T13 review found more than the author disclosed.** Six unasserted i18n keys were self-reported; mutation testing found **nine**, and the three undisclosed ones (`select`, `blocked`, `howToGet`) are the CTA label, the refusal-reason fallback and the directions toggle. Four subsystems — drawer, type filter, cluster balloon, search control — had no tests at all, which let a spec-relevant mutant survive: dropping `boundedBy`/`strictBounds` silently turned the deliberately area-bounded address search into an unbounded one.
+- **A hang that no timeout catches.** T13's first draft re-triggered `fetchDetails()` on every balloon render including its own detail re-render. Unbounded microtask recursion starves the event loop's macrotask queue so completely that **jest's own per-test timeout never fires** — the suite hangs forever with zero output. Its author found and fixed it; the reviewer reproduced it by removing the guard. Nothing in CI would catch a regression, because jest is not run in CI at all → issue #146.
+- **Amendments §10.8 and §10.9** added to the design spec. §10.8: `get_settings_fields()` is a plugin obligation, not framework automation — the spec's "auto-registers" wording was wrong for the same reason §10.6 already gave for the fallback key, and left uncorrected it would leave every install pinned to the shared key. §10.9: `config.center`/`config.maxZoom` never existed, so the placeholder map state is deliberate.
+- **New/updated gotchas:** `fixture-classes-must-live-inside-plugin-init` (a fixture class implementing a framework interface fatals at file top level — that code runs before the bootstrap registers the autoloader; `implements` resolves at declaration time, so deferring the `new` does not help). Extended `brain-monkey-function-pollution` with its worst instance: **never mock `WC()`** — every WooCommerce guard in the framework is `! function_exists('WC') || ! WC()->x`, so defining it flips them all; one such mock produced 12 errors, nine in an unrelated file that was green in isolation.
+- **Backlog filed:** **#146** (jest never runs in CI; no `timeout-minutes` anywhere — the recursion hang would burn a job with a blank log), **#147** (the same silent-WC-degradation shape may remain in `Checkout_Handler::current_country()`/`wc_country_codes()`).
+- **Codex critic could not run as specified:** `gpt-5.6` returns `400 — not supported when using Codex with a ChatGPT account`. Re-run with the model unset.
+
+- **Follow-up the same day — the operator supplied a real Yandex Maps key, and it changed the verdict.** The key was borrowed from his own `woocommerce-yandex-delivery` plugin and installed on the rig via the `woodev_shipping_map_fallback_api_key` filter in an mu-plugin, so it never enters git (and the site-level override seam got exercised for free). It did not merely "unblock a check": ymaps refuses **geocoding** with an invalid key while still serving tiles, so `_resolveInitialViewport()` had never executed at all. Two real defects were hiding behind that:
+  - **`setBounds()` is asynchronous and its promise was dropped**, so `_loadViewport()` read the map's PRE-move viewport — the whole-world default — and asked the server for a planet-wide bbox that the per-side cap correctly refused. The customer saw "no points" for a locality full of them.
+  - **A placemark folded into a cluster has no balloon**, so `placemark.balloon.open()` threw `getGlobalPixelCenter` of null and killed the drawer's click handler outright. Whether a point is clustered depends on zoom and neighbour proximity — the bulk pass had simply clicked an unclustered one.
+- **Operator correction that mattered: "take the reference map as the reference".** My first fix polled `clusterer.getObjectState()` after successive zoom steps on a timer. It worked and was still wrong — non-deterministic, timers outliving `destroy()`, overlapping itself on rapid clicks. The reference's `handlePlacemarkSelect()` does it in one move: collapse the bounds to the point's own coordinates so `checkZoomRange` lands on the deepest allowed zoom (where nothing clusters), and open the balloon only after the promise resolves. Rewritten to that. Review then found a gap the reference does not cover either: two `setBounds` promises need not resolve in click order, so an earlier click could open its balloon over a later choice — added an `_openSeq` guard (the reference's `isAnimating` is not an equivalent; it drives a secondary centring animation, not ordering).
+- **Both strategies now verified live.** bulk: balloon opens with the CTA correctly disabled. viewport: Moscow-sized bbox, lazy `fetchDetails`, verdict flips to blocked. **181 jest / 1260 unit / 92 integration / phpcs 192**, PR #149 green and CLEAN. New gotcha `ymaps-camera-moves-are-async`.
+- **Standing lesson reinforced:** a placeholder API key produces a *plausible, wrong green*. Anything gated behind a third-party key cannot be called verified until the real key is in place.
+
+- **Финал сессии — оператор забраковал карту на live-review.** «За 5 секунд понял, что это не то. Направление правильное, но визуально и функционально нет.» Названо явно: карта открывает весь мир вместо города покупателя (fallback должен быть **Москва**); сайдбар должен быть **скрыт по умолчанию** и раскрываться на всю высоту карты; информация о точке должна жить **в сайдбаре, а не в балуне**; точки должны рисоваться **иконками, которые задаёт плагин** — пути svg/png, состояния активная/неактивная, по типу точки. Плюс «ещё много что другое».
+- **Это не список дефектов, а смена мандата:** повторить эталонную карту из Яндекс.Доставки **один в один** под нашу универсальную структуру. Моя ошибка по существу: я взял из эталона *перечень поведений* (кластеризация, drawer, балун) и реализовал их, вместо того чтобы сделать так же. Формулировка в моём же отчёте — «воспроизведён референсный UX» — была завышенной: воспроизведены поля, а не UX.
+- **Два следствия, которые не косметика:** (1) у `Map_Provider` **нет вообще никакого шва под иконки** — это расширение контракта, а не стилевая правка; (2) fallback-город Москва прямо отменяет решение §10.9, где я сознательно отказался зашивать региональный дефолт «чтобы не было доменной протечки» — оператор это снимает, но выразить, вероятно, надо так, чтобы дефолт задавал плагин.
+- **Что НЕ переделывать** (проверено вживую и держится): инверсия через `dataSource`, серверный вердикт `selectable`, обе стратегии, кап bbox, ленивые детали, REST `woodev/v1`, персист в мету, снятие A2-гейта, подмена адреса через стор §8, серверный бэкстоп, оболочка модалки, dataSource. Переделке подлежит презентационный слой + контракт.
+- **Отложенный тест #150 (оператор вспомнил отдельно):** если в городе **одна** точка, карта зумится до потери тайлов — серый фон. В СДЭК воспроизводится стабильно. У нас по коду защита есть (`maxZoom: 18` + `checkZoomRange: true` во всех трёх `setBounds`), но вживую не проверялась; отдельно учесть `_openPlacemarkBalloon()`, который намеренно схлопывает границы в точку. Проверять после переделки, на обеих стратегиях.
+- **PR #149 остаётся открытым и НЕ мерджится** до полного разбора карты — решение оператора.
+
+## Session 45 (2026-07-31) — SP-5 pickup map: T1–T12 of 19 built (branch `feat/pickup-map`, NOT merged)
+
+- **Method:** subagent-driven per the operator's s44 call — fresh implementer per task on Sonnet 5, then a review pass, then fixes, then the next task. **Review found something substantive on every single task.** That is the headline finding of the session, not an aside: the cost of the extra round was paid back every time.
+- **State:** 14 commits on `feat/pickup-map`, tree clean, **1240 unit / 87 jest / phpcs clean**. Whole PHP layer + three JS modules done. T13–T19 remain (ymaps provider, embedded provider, styles, two settings add-ons, both-strategy fixture, verification + rig e2e + Codex + PR).
+- **The plan's premise was wrong in a systematic way, and it cost the first four tasks.** SP-5 was described as filling an empty anchor; in fact an S1-era pickup layer *and* the June cycle both existed. `Pickup_Point` already existed at the same FQCN with an incompatible contract (`code`/`address_full`/`raw` escape hatch, permissive `from_array()`), consumed by `Abstract_Shipping_API`, `Shipping_Order_Handler`, two shipping-method bases and the yandex pilot fixture. Operator chose replacement over coexistence. T1/T2/T4 became replacements, not creations.
+- **The same trap fired four times: deleting a file has a wiring tail.** A class-name grep is clean while `require_once $path . '…'` still points at the corpse — three separate hits in `Shipping_Plugin::includes()` and one in a *fixture bootstrap*. A missing require is a fatal on every real vendored boot (no Composer autoload in production). New gotcha `file-deletion-tail-includes-classmap-fixtures`; the underlying "is `includes()` needed at all" question is issue #138.
+- **Seven spec decisions amended during implementation**, recorded in §10 of the design spec rather than edited into the text. The three that would have shipped real defects:
+  - **Escaping moved out of `to_array()` into `to_browser_array()`.** As specced, the one serializer fed both the REST response *and* order meta *and* the WC session — so `ООО "Ромашка"` would persist to the database as `ООО &quot;Ромашка&quot;` and be sent to the carrier verbatim on export at SP-7. §8 escapes in its controller, not its value object; now so do we.
+  - **The bbox cap is per-side, not per-area.** A 100 sq-deg area cap accepts `0.27° × 360°` — a strip around the whole planet, the exact abuse the cap exists to prevent.
+  - **`replaceAddress` ships `billingOnly`, not a resolved target.** `ship_to_different_address` is a live checkbox; a server-resolved target goes stale and writes the pickup address over the customer's real billing address while leaving the actual delivery fieldset untouched — defeating the spec's own guarantee.
+- **Operator decision on the map key (mid-session):** the framework ships no Yandex key. It is a **required constructor argument** on `Yandex_Map_Provider`, exposed as `get_fallback_map_key()` and wrapped as `apply_filters( 'woodev_shipping_map_fallback_api_key', $this->get_fallback_map_key() )` for site-level override. My initial proposal (optional ctor arg) was weaker — it let an author forget. Two reasons a framework-level key loses: it pools the quota across all carriers so one rate-limit kills every map, and the framework is vendored *into* each plugin, so rotating a framework constant needs every plugin re-released anyway. Consequence: the framework registers no provider by default. ADR-009 + dated addendum.
+- **Unanticipated blocker in T12:** the §8 classic adapter kept its store instances in a local IIFE array, so the mount could not reach the instance the gate reads, and a second instance diverges silently — the customer selects a point, the gate stays blocked, and the symptom reads as "the gate is broken". Added an instance registry keyed on **field ownership** (`getStoreForField()`), not plugin id, because `config_object_suffix()` already collapses distinct ids. Zero-line diff to the adapter. Gotcha `js-store-instance-registry-cross-module`.
+- **T12 review also caught a spec violation that only a rig session would otherwise have found:** `modal.showError()`/`showEmpty()` replace the container the provider drew into, so a failed *re-*fetch destroyed the map that §4.9 says to keep — and `showEmpty()` did it with no retry control, stranding a customer who panned into an empty region. Worse, the test had already codified `initCalls.length === 2`, i.e. re-`init()` on a live provider, which T13 would have been written against. Fixed: `showNotice()` banner beside the map once points are drawn, and retry constructs a fresh provider.
+- **Mutation testing was the highest-yield practice — and branch-only sweeps are a false signal.** "14/14 killed" was reported three times and three times a reviewer killed survivors by mutating *values and content*: swapped `sprintf` args telling the customer a 15 kg order exceeds a 20.5 kg limit; a dropped g→kg conversion; i18n keys the JS read that PHP never emitted, invisible because the JS carried byte-identical Russian defaults. Gotcha `mutation-sweep-branch-only-false-confidence`.
+- **`composer phpcs` does not enforce the 120-char limit** (`warning-severity 0`, `absoluteLineLimit 0`) and never scans `tests/`. "phpcs clean" is quoted as evidence in this project and for line length proves nothing. Gotcha + issue #139.
+- **Backlog protocol corrected mid-session by the operator:** findings go to GitHub issues on board #6 immediately, not into session text or `FUTURE-BACKLOG.md` (frozen). Filed #138–#144, opened #145 for SP-5 itself and moved it to «В работе», closed #133 (its file was deleted in T1) and #128 (shipped in s39 — verified against code, not the log). Rule written into `AGENTS.md` as mandatory, with the board's status option ids, since auto-add is off.
+- **Not done, deliberately:** T19's rig e2e. The operator's standing rule is that I verify in a browser myself before merge, via chrome-devtools MCP (Playwright MCP does not fire WC's checkout ajax — s44 gotcha). Context budget ran down at ~60%; stopping before context rot beat rushing the one check that matters most.
 ## Session 44 part-2 (2026-07-30) — SP-5 pickup map: brainstorm, spec, 19-task plan
 
 - Operator's pick after §8 merged: **SP-5 (map/PVZ) over SP-4**, no early pilot migration. Reason accepted: §8 left only an anchor where the pickup button belongs, so delivery checkout is non-functional, and all three target carriers are pickup-centric.

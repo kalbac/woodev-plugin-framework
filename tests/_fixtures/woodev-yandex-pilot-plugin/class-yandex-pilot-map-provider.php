@@ -2,10 +2,14 @@
 /**
  * Yandex-shaped pilot fixture map provider.
  *
- * Proves the {@see Map_Provider} seam fits an API-key provider: unlike the
- * framework-default Leaflet provider, the yandex provider ships an API-key
- * settings field and self-describes its JS adapter. Per decision §6a the real
- * provider boundary is the JS adapter contract; this PHP side is a thin descriptor.
+ * Proves the {@see Map_Provider} seam fits an own-rendered, API-key-holding
+ * provider: it contributes an API-key settings field and self-describes its own
+ * script handle. Per the SP-5 Task 9 re-point, the real provider boundary owns
+ * everything inside its own container; this PHP side is the descriptor that gets
+ * the right script and the right config to the browser. Mirrors
+ * {@see \Woodev\Framework\Shipping\Map\Yandex_Map_Provider} in shape, kept as its
+ * own fixture class so this file stays independent of the framework's concrete
+ * provider.
  *
  * @package Woodev_Yandex_Pilot_Fixture
  */
@@ -22,9 +26,6 @@ final class Woodev_Yandex_Pilot_Map_Provider implements Map_Provider {
 	/** @var string provider identifier */
 	const PROVIDER_ID = 'yandex';
 
-	/** @var string registered handle of the yandex JS adapter */
-	private const ADAPTER_HANDLE = 'woodev-pickup-map-adapter-yandex';
-
 	/**
 	 * Gets the provider id.
 	 *
@@ -35,54 +36,68 @@ final class Woodev_Yandex_Pilot_Map_Provider implements Map_Provider {
 	}
 
 	/**
-	 * Enqueues the yandex map library and adapter.
+	 * Gets the provider's human-readable label.
 	 *
-	 * @return void
+	 * @return string
 	 */
-	public function enqueue_assets(): void {
-		wp_enqueue_script(
-			self::ADAPTER_HANDLE,
-			'https://api-maps.yandex.ru/2.1/?lang=ru_RU',
-			[ 'jquery' ],
-			'2.1',
-			true
-		);
+	public function get_label(): string {
+		return 'Яндекс.Карты';
+	}
+
+	/**
+	 * Gets the registered handle of the script that implements this provider.
+	 *
+	 * @return string
+	 */
+	public function get_script_handle(): string {
+		return 'woodev-pickup-map-provider-' . self::PROVIDER_ID;
 	}
 
 	/**
 	 * Gets the yandex provider settings fields.
 	 *
-	 * A keyed provider: it contributes an API-key credential field.
+	 * A keyed provider: it contributes an API-key credential field, in the Woodev
+	 * settings-API `register_setting()` args shape — see
+	 * {@see \Woodev\Framework\Shipping\Map\Yandex_Map_Provider::get_settings_fields()},
+	 * which this fixture mirrors.
 	 *
 	 * @return array<string,mixed>
 	 */
 	public function get_settings_fields(): array {
 		return [
 			'yandex_map_api_key' => [
-				'title' => 'Yandex.Maps API key',
-				'type'  => 'text',
+				'name'      => 'Yandex.Maps API key',
+				'type'      => 'string',
+				'default'   => '',
+				'required'  => false,
+				'sensitive' => false,
 			],
 		];
 	}
 
 	/**
-	 * Gets the yandex JS adapter handle.
+	 * Gets the config handed to the browser for this provider.
 	 *
-	 * @return string
-	 */
-	public function get_js_adapter_handle(): string {
-		return self::ADAPTER_HANDLE;
-	}
-
-	/**
-	 * Gets the default yandex map configuration.
+	 * @param array<string, mixed> $context request-scoped context (unused by this fixture).
 	 *
 	 * @return array<string,mixed>
 	 */
-	public function get_localized_config(): array {
+	public function get_js_config( array $context ): array {
 		return [
 			'center' => [ 55.751244, 37.618423 ],
 			'zoom'   => 10,
 		];
+	}
+
+	/**
+	 * Own-rendered map, mirroring {@see \Woodev\Framework\Shipping\Map\Yandex_Map_Provider}:
+	 * draws only the map canvas, the framework owns the surrounding panels.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @return bool
+	 */
+	public function owns_chrome(): bool {
+		return false;
 	}
 }

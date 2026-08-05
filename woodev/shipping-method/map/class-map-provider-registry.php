@@ -3,9 +3,13 @@
  * Woodev Map Provider Registry
  *
  * Holds the set of available pickup-point map providers and resolves the one a
- * shipping plugin should use. Providers self-register (the Yandex provider ships
- * in the Yandex plugin); the framework only guarantees this registry seam plus
- * the Leaflet default returned by get_default().
+ * shipping plugin should use. The framework ships the provider CLASSES
+ * ({@see \Woodev\Framework\Shipping\Map\Yandex_Map_Provider},
+ * {@see \Woodev\Framework\Shipping\Map\Embedded_Map_Provider}), but registers
+ * neither by default — each needs plugin-supplied construction data (an API key,
+ * an embed URL) the registry cannot invent, so the owning plugin instantiates and
+ * registers whichever one it uses. An id with nothing registered under it
+ * resolves to `null` (see {@see self::get()}), never a fallback provider.
  *
  * Pure PHP — no WooCommerce calls — so it stays unit-testable. See
  * docs-internal/platform-v2-s1-shipping-spec.md and decision §6a.
@@ -30,9 +34,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Map\\Map_Provider_Registry'
 
 		/** @var array<string, Map_Provider> registered providers keyed by id */
 		private array $providers = [];
-
-		/** @var Map_Provider|null cached framework default (Leaflet) */
-		private ?Map_Provider $default = null;
 
 		/**
 		 * Registers a map provider.
@@ -59,25 +60,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Map\\Map_Provider_Registry'
 		 */
 		public function get( string $id ): ?Map_Provider {
 			return $this->providers[ $id ] ?? null;
-		}
-
-		/**
-		 * Gets the framework default provider.
-		 *
-		 * Always the no-API-key Leaflet provider — the guaranteed fallback when a
-		 * plugin configures no provider or its configured provider is absent.
-		 *
-		 * @since 1.5.0
-		 *
-		 * @return Map_Provider the Leaflet default
-		 */
-		public function get_default(): Map_Provider {
-
-			if ( ! $this->default instanceof Map_Provider ) {
-				$this->default = new Leaflet_Map_Provider();
-			}
-
-			return $this->default;
 		}
 	}
 

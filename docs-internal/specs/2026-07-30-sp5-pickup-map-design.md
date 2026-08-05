@@ -383,6 +383,88 @@ Rate calculation from the selected point (SP-6), the point shown in order admin 
 adapter (SP-11). The shell and the provider seam are built so SP-11 reuses them rather than
 reimplementing.
 
+## 10. Decisions changed during implementation (s45, 2026-07-31)
+
+Seven decisions in this document were amended while building T1–T12. Each is recorded here rather
+than edited into the text above, so the reasoning survives.
+
+**10.1 `to_array()` is canonical; escaping moved to `to_browser_array()`.** §4.4 said `Pickup_Point`
+"`esc_html`s every string server-side before it reaches the browser". Implemented inside `to_array()`,
+that corrupted **data at rest**: the same method feeds order meta (§6) and the WC session, so an
+address like `ООО "Ромашка"` would persist as `ООО &quot;Ромашка&quot;` and be sent to the carrier
+verbatim on export at SP-7. The guarantee is preserved by escaping at the boundary — which is what
+§8 already does, in its *controller*, not in its `Field` value object.
+
+**10.2 The bbox cap is per-side, not per-area.** §5 said "area-capped". A 100 sq-deg area cap accepts
+`0.27° × 360°` — a strip around the entire circumference of the planet, the exact abuse the cap
+exists to prevent. Replaced with a 10° cap on each side, which is strictly stronger and makes the
+"roughly a 10°×10° window" description literally true.
+
+**10.3 Weight is checked before COD.** The spec did not specify an order; it fell out of the sample
+implementation. Weight is **unfixable** at the picker — nothing the customer does at checkout clears
+it except removing items — while COD is fixable by switching gateway. Showing the fixable reason
+first sends the customer to change payment method and walk into a second wall.
+
+**10.4 `replaceAddress` carries `billingOnly`, not a resolved `target`.** §4.6's rule is right, but
+resolving it **server-side at render** goes stale: `ship_to_different_address` is a live checkbox.
+A stale `billing` target would write the pickup address over the customer's real billing address
+while leaving the actual delivery fieldset untouched — defeating §4.6's own guarantee. The stable
+half (`billingOnly`, a store setting) ships; the browser re-applies the rule at write time.
+
+**10.5 The full point's order-meta key comes from the plugin.** §6 says the framework hardcodes no
+contract string. A framework-coined `{field_id}_full` suffix violated that and bypassed
+`Shipping_Order_Handler::store_pickup_point()`, which exists for exactly this job and had zero
+callers. `Pickup_Handler` now delegates to it and **skips** full-point persistence when the plugin
+supplies no mapping — not storing the extra copy is better than the framework inventing a key.
+
+**10.6 The Yandex Maps fallback key is the plugin's obligation, not the framework's** (operator
+decision). §4.7 implied the framework supplies a fallback behind a filter. It does not: the key is a
+**required constructor argument** on `Yandex_Map_Provider`, exposed as `get_fallback_map_key()` and
+wrapped at the call site as `apply_filters( 'woodev_shipping_map_fallback_api_key', $this->get_fallback_map_key() )`
+so a site can still override. Two reasons: a framework-level key pools the quota across *all*
+carriers so one rate-limit kills every map at once, and the framework is vendored **into** each
+plugin, so rotating a framework constant would need every plugin re-released anyway — the stated
+benefit of a filter over a constant is not achieved. Consequence: the framework registers no provider
+by default, because it cannot construct one. See ADR-009 and its addendum.
+
+**10.7 The §8 store gained an instance registry.** Not anticipated at all. The classic adapter kept
+its store instances in a local IIFE array, so the mount could not reach the instance the gate reads,
+and a second instance would diverge silently. `getStoreForField()` resolves by field ownership.
+See gotcha `js-store-instance-registry-cross-module`.
+
+Also amended in §4.9: the "already-drawn point set is kept" rule needs a **non-destructive** state.
+`modal.showError()`/`showEmpty()` replace the container the provider drew into, so the shell gained
+`showNotice( message, onRetry )` — a banner beside the map — used once a point set exists. And a
+retry constructs a **fresh provider** rather than re-`init()`ing a live one, which the contract
+(`init`/`on`/`destroy`) never defined.
+
+**10.8 `get_settings_fields()` is a plugin obligation, not framework automation** (review fix,
+2026-07-31). §4.7 said the framework "auto-registers an optional ... settings field" once a plugin
+uses the Yandex provider. What shipped is `Pickup_Handler::get_settings_fields()`, a pass-through
+to the active `Map_Provider`'s own `get_settings_fields()` — nothing calls it on the framework's
+behalf, and the field never reaches a merchant unless the plugin that owns the shipping integration
+calls it itself and merges the result into its own settings registration. The wording was wrong for
+the same reason §10.6 already gave for the fallback key: the framework does not own the plugin's
+settings provider, so it cannot register into it on the plugin's behalf. Left uncorrected, the
+natural reading of "auto-registers" invites a plugin author to assume the field appears without
+doing anything, silently leaving every install of that plugin pinned to the shared fallback key —
+exactly the quota risk §4.7 flagged as a watch item, now arriving via a documentation gap instead
+of a technical one. `Pickup_Handler::get_settings_fields()` and `Yandex_Map_Provider::get_settings_fields()`
+now say so explicitly in their docblocks.
+
+**10.9 The map's initial state is a hardcoded technical placeholder, not `config.center`/
+`config.maxZoom`.** Task 13 step 2 said to build the map from `config.center` and `config.maxZoom`.
+Neither key exists: `Yandex_Map_Provider::get_js_config()` emits only `scriptUrl`, `ns` and
+`hasApiKey` — never a center or a zoom. `map-provider-yandex.js` instead hardcodes `[0, 0]` at zoom
+2 (max zoom 18) as the map's construction-time state, and overwrites it before the customer would
+ever notice: under `bulk`, `map.setBounds()` once points arrive; under `viewport`, a locality
+geocode when one is known. The placeholder survives only when `viewport` has no known locality and
+geocoding fails — the already-documented "fall back to the map's default state" case, not a new
+branch. Baking a `config.center` into the framework would mean baking a regional default (Moscow,
+say) into a framework meant to serve any CIS city — exactly the domain leakage §4.3's provider seam
+exists to keep out of the framework layer, so the deviation is kept rather than reconciled with the
+plan. See `map-provider-yandex.js`'s own file docblock for the full reasoning.
+
 ## Related
 
 - [[2026-07-06-checkout-field-layer-design]] — §8, the layer this mounts into

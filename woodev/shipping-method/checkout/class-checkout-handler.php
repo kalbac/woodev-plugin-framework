@@ -410,8 +410,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * Resolves a URL within the shipping-framework assets directory.
 		 *
 		 * This file lives in `checkout/`, a direct child of the shipping-method root;
-		 * `assets/` is a sibling of that root. Resolving from this file keeps the
-		 * handler self-contained — it needs no plugin instance to locate its assets.
+		 * `assets/` is ALSO a direct child of that root — a sibling of `checkout/`, not of
+		 * this file's own directory. Resolving from this file keeps the handler
+		 * self-contained — it needs no plugin instance to locate its assets.
 		 *
 		 * @since 2.0.2
 		 *

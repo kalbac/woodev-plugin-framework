@@ -16,6 +16,18 @@
 defined( 'ABSPATH' ) || exit;
 
 /**
+ * SP-5 Task 18: picks which fixture Point_Source (and loading strategy) the rig
+ * exercises — 'bulk' (Woodev_Test_Bulk_Point_Source, all points at once) or
+ * 'viewport' (Woodev_Test_Viewport_Point_Source, bbox + lazy details). Flip this
+ * to 'viewport' — e.g. via a `define( 'WOODEV_TEST_PICKUP_STRATEGY', 'viewport' );`
+ * in wp-config.php, or the `.wp-env.json` `config` block — and reload the checkout
+ * to switch strategy with no code edit. Defaults to 'bulk'.
+ */
+if ( ! defined( 'WOODEV_TEST_PICKUP_STRATEGY' ) ) {
+	define( 'WOODEV_TEST_PICKUP_STRATEGY', 'bulk' );
+}
+
+/**
  * Определяем корневую директорию фреймворка.
  *
  * В wp-env контейнере: WOODEV_FRAMEWORK_DIR задаётся через config в .wp-env.json
@@ -164,6 +176,236 @@ $woodev_test_shipping_method_bootstrap->register_loader_definition( woodev_test_
  */
 function woodev_test_shipping_method_plugin_init(): void {
 
+	// -----------------------------------------------------------------------
+	// SP-5 Task 18: fixture Point_Source implementations over static data,
+	// exercising both loading strategies (§4.5). A real shipping plugin talks to
+	// its carrier's API here instead of returning hardcoded arrays.
+	//
+	// Declared HERE (inside this callback), not at file top level: this
+	// callback runs only once the bootstrap has selected the highest-version
+	// framework copy and its autoloader is registered — declaring a class that
+	// `implements \Woodev\Framework\Shipping\Pickup\Point_Source` any earlier
+	// than that fails with "Interface ... not found", the same reason the main
+	// plugin class below is declared inside this callback rather than at file
+	// top level.
+	// -----------------------------------------------------------------------
+
+	if ( ! class_exists( 'Woodev_Test_Bulk_Point_Source' ) ) {
+
+		/**
+		 * Class Woodev_Test_Bulk_Point_Source
+		 *
+		 * STRATEGY_BULK fixture source (Yandex/CDEK shape): every point for the
+		 * requested locality is returned in one call, every field populated up front.
+		 * Two of the five points are deliberately named so a human driving the rig can
+		 * find them on the live map: one refuses cash on delivery (COD gating), one
+		 * caps the accepted parcel weight at 1 kg (weight-limit gating).
+		 */
+		class Woodev_Test_Bulk_Point_Source implements \Woodev\Framework\Shipping\Pickup\Point_Source {
+
+			/** Point id that refuses cash on delivery — exercises COD gating on the rig. */
+			public const COD_REFUSING_POINT_ID = 'FIX-BULK-2';
+
+			/** Point id capped at 1000 g — exercises the weight-limit rule on the rig. */
+			public const WEIGHT_LIMITED_POINT_ID = 'FIX-BULK-4';
+
+			/**
+			 * @inheritDoc
+			 */
+			public function get_strategy(): string {
+				return self::STRATEGY_BULK;
+			}
+
+			/**
+			 * Returns all 5 fixture points regardless of the requested locality string.
+			 *
+			 * The framework guarantees `$query->get_locality()` is non-null for a
+			 * STRATEGY_BULK source (see the Point_Source interface docblock); a real
+			 * carrier would filter server-side by that locality. The fixture has only
+			 * one static "city", so it returns the same 5 points for any locality.
+			 *
+			 * @inheritDoc
+			 */
+			public function fetch_points( \Woodev\Framework\Shipping\Pickup\Point_Query $query ): array {
+				return array_values( array_filter( array_map(
+					[ \Woodev\Framework\Shipping\Pickup\Pickup_Point::class, 'from_array' ],
+					$this->all_points()
+				) ) );
+			}
+
+			/**
+			 * @inheritDoc
+			 */
+			public function fetch_details( string $point_id ): ?\Woodev\Framework\Shipping\Pickup\Pickup_Point {
+				foreach ( $this->all_points() as $payload ) {
+					if ( $point_id === $payload['id'] ) {
+						return \Woodev\Framework\Shipping\Pickup\Pickup_Point::from_array( $payload );
+					}
+				}
+
+				return null;
+			}
+
+			/**
+			 * The fixture's Moscow points — every field populated.
+			 *
+			 * SP-map Task 1: the fixture was grown from the original 5 static points
+			 * (still present, ids included, as the first 5 entries) to ~49 points
+			 * across 2 types, including a co-located pair on identical coordinates —
+			 * see the docblock in fixture-points.php for why. Delegated to a standalone
+			 * data file so the unit suite can assert on its shape without loading the
+			 * whole plugin.
+			 *
+			 * @return array<int, array<string, mixed>>
+			 */
+			private function all_points(): array {
+				return require __DIR__ . '/fixture-points.php';
+			}
+		}
+	}
+
+	if ( ! class_exists( 'Woodev_Test_Viewport_Point_Source' ) ) {
+
+		/**
+		 * Class Woodev_Test_Viewport_Point_Source
+		 *
+		 * STRATEGY_VIEWPORT fixture source (OZON/Pochta shape): `fetch_points()` is
+		 * queried per visible bounding box and returns SPARSE points — no
+		 * `accepts_cod`, no `max_weight`, exactly what a carrier's list response
+		 * frequently omits (spec §4.5). The full record, including both constraint
+		 * inputs, is available only from `fetch_details()` — proving the lazy-detail
+		 * path and the server-side verdict recomputation on balloon-open.
+		 */
+		class Woodev_Test_Viewport_Point_Source implements \Woodev\Framework\Shipping\Pickup\Point_Source {
+
+			/**
+			 * Point id whose full record refuses COD — only visible after fetch_details().
+			 * The sparse fetch_points() entry carries no accepts_cod, so it is emitted as
+			 * selectable (unknown is permissive) until the balloon opens and re-checks.
+			 */
+			public const COD_REFUSING_POINT_ID = 'FIX-VIEW-2';
+
+			/**
+			 * @inheritDoc
+			 */
+			public function get_strategy(): string {
+				return self::STRATEGY_VIEWPORT;
+			}
+
+			/**
+			 * Returns the points inside the requested bbox, sparse (no accepts_cod, no
+			 * max_weight — see class docblock).
+			 *
+			 * @inheritDoc
+			 */
+			public function fetch_points( \Woodev\Framework\Shipping\Pickup\Point_Query $query ): array {
+				// Guaranteed non-null for a STRATEGY_VIEWPORT source — see the Point_Source
+				// interface docblock.
+				[ $min_lat, $min_lng, $max_lat, $max_lng ] = $query->get_bounds();
+
+				$sparse = [];
+
+				foreach ( $this->all_points() as $payload ) {
+					if ( $payload['lat'] < $min_lat || $payload['lat'] > $max_lat
+						|| $payload['lng'] < $min_lng || $payload['lng'] > $max_lng ) {
+						continue;
+					}
+
+					// Strip the constraint inputs — this is what makes the list response
+					// SPARSE, mirroring a carrier whose bbox listing omits them.
+					unset( $payload['accepts_cod'], $payload['max_weight'] );
+
+					$sparse[] = $payload;
+				}
+
+				return array_values( array_filter( array_map(
+					[ \Woodev\Framework\Shipping\Pickup\Pickup_Point::class, 'from_array' ],
+					$sparse
+				) ) );
+			}
+
+			/**
+			 * Returns the full record for one point, including accepts_cod/max_weight.
+			 *
+			 * @inheritDoc
+			 */
+			public function fetch_details( string $point_id ): ?\Woodev\Framework\Shipping\Pickup\Pickup_Point {
+				foreach ( $this->all_points() as $payload ) {
+					if ( $point_id === $payload['id'] ) {
+						return \Woodev\Framework\Shipping\Pickup\Pickup_Point::from_array( $payload );
+					}
+				}
+
+				return null;
+			}
+
+			/**
+			 * The static viewport points, FULL record (fetch_points() sparsifies a copy).
+			 *
+			 * @return array<int, array<string, mixed>>
+			 */
+			private function all_points(): array {
+				return [
+					[
+						'id'              => 'FIX-VIEW-1',
+						'name'            => 'ПВЗ «Маросейка»',
+						'lat'             => 55.7601,
+						'lng'             => 37.6367,
+						'address'         => 'Москва, ул. Маросейка, д. 3',
+						'short_address'   => 'Маросейка, 3',
+						'locality'        => 'Москва',
+						'postal_code'     => '101000',
+						'phone'           => '+7 495 200-00-01',
+						'instruction'     => 'Домофон 1В.',
+						'work_time'       => 'Пн-Вс 09:00-21:00',
+						'payment_methods' => [ 'card', 'cod' ],
+						'photos'          => [],
+						'type'            => [ 'code' => 'PVZ', 'label' => 'Пункт выдачи заказов' ],
+						'accepts_cod'     => true,
+						'max_weight'      => null,
+					],
+					[
+						'id'              => self::COD_REFUSING_POINT_ID,
+						'name'            => 'ПВЗ «Сокольники — детали по запросу»',
+						'lat'             => 55.7887,
+						'lng'             => 37.6789,
+						'address'         => 'Москва, ул. Сокольническая Слободка, д. 2',
+						'short_address'   => 'Сокольническая Слободка, 2',
+						'locality'        => 'Москва',
+						'postal_code'     => '107014',
+						'phone'           => '+7 495 200-00-02',
+						'instruction'     => 'Только предоплата.',
+						'work_time'       => 'Пн-Сб 10:00-20:00',
+						'payment_methods' => [ 'card' ],
+						'photos'          => [],
+						'type'            => [ 'code' => 'PVZ', 'label' => 'Пункт выдачи заказов' ],
+						'accepts_cod'     => false,
+						'max_weight'      => null,
+					],
+					[
+						// Outside the demo viewport used on the rig — proves bbox filtering.
+						'id'              => 'FIX-VIEW-3',
+						'name'            => 'ПВЗ «Бутово»',
+						'lat'             => 55.5450,
+						'lng'             => 37.5270,
+						'address'         => 'Москва, ул. Скобелевская, д. 20',
+						'short_address'   => 'Скобелевская, 20',
+						'locality'        => 'Москва',
+						'postal_code'     => '117042',
+						'phone'           => '+7 495 200-00-03',
+						'instruction'     => '',
+						'work_time'       => 'Пн-Вс 09:00-21:00',
+						'payment_methods' => [ 'card', 'cod' ],
+						'photos'          => [],
+						'type'            => [ 'code' => 'PVZ', 'label' => 'Пункт выдачи заказов' ],
+						'accepts_cod'     => true,
+						'max_weight'      => null,
+					],
+				];
+			}
+		}
+	}
+
 	if ( ! class_exists( 'Woodev_Test_Shipping_Method_Plugin' ) ) {
 
 		/**
@@ -181,6 +423,16 @@ function woodev_test_shipping_method_plugin_init(): void {
 			const VERSION = '1.0.0';
 
 			/**
+			 * SP-5 Task 18: the real pickup-point handler, replacing the pre-SP-5 demo
+			 * stub button.
+			 *
+			 * @since 2.0.2
+			 *
+			 * @var \Woodev\Framework\Shipping\Pickup\Pickup_Handler
+			 */
+			private \Woodev\Framework\Shipping\Pickup\Pickup_Handler $pickup_handler;
+
+			/**
 			 * Конструктор.
 			 */
 			public function __construct() {
@@ -195,43 +447,100 @@ function woodev_test_shipping_method_plugin_init(): void {
 					]
 				);
 
-				// DEMO ONLY (rig): §8 provides the pickup SLOT; the real "choose a point" button +
-				// map is SP-5. Mount a fake picker into the slot so the A2 gate can be exercised
-				// end-to-end on the rig without SP-5.
-				add_action( 'wp_footer', [ $this, 'render_demo_pickup_picker' ], 99 );
+				// SP-5 Task 18: WOODEV_TEST_PICKUP_STRATEGY (defined near the top of this
+				// file) selects which fixture Point_Source is active, so the rig can
+				// switch loading strategy without a code edit.
+				$viewport_strategy = \Woodev\Framework\Shipping\Pickup\Point_Source::STRATEGY_VIEWPORT;
+				$point_source      = ( $viewport_strategy === WOODEV_TEST_PICKUP_STRATEGY )
+					? new \Woodev_Test_Viewport_Point_Source()
+					: new \Woodev_Test_Bulk_Point_Source();
+
+				// The Yandex Maps fallback key is a PLUGIN obligation, never the
+				// framework's (spec §10.6) — Yandex_Map_Provider's constructor REQUIRES
+				// one. This value is an obviously-fake placeholder that only works
+				// because the rig never actually needs a live ymaps script under
+				// PHPUnit; a real shipping plugin shipping this to production supplies
+				// its OWN key here (obtained from the Yandex developer console), not a
+				// copy of this placeholder.
+				$map_provider = new \Woodev\Framework\Shipping\Map\Yandex_Map_Provider( 'FIXTURE-FAKE-YANDEX-KEY' );
+
+				// SP-5 Task 8 (D-7): a hardcoded default viewport is now a REQUIRED
+				// constructor argument — Moscow, matching every point this fixture serves,
+				// so the rig's map opens centred on the fixture's own data instead of the
+				// whole world.
+				$default_location = [ 'center' => [ 55.76, 37.64 ], 'zoom' => 12 ];
+
+				// SP-5 Task 8 (D-5), re-pointed by the live-review fix (D7, 05.08.2026): both
+				// fixture types now supply BOTH states — `pvz` mirrors the Yandex reference's
+				// two-image shape, `postamat` its own — so the rig always has at least one type
+				// showing what a real two-image active state looks like. The framework's
+				// one-image fallback (`active` mirrors `default` when a plugin supplies only one
+				// image, the CDEK shape) is still real and still covered — see
+				// `PickupHandlerTest::test_icons_are_passed_through_with_active_falling_back_to_default()`,
+				// which exercises it directly against `normalized_point_icons()` rather than via
+				// this fixture. A type this fixture never uses (`group`) is intentionally absent,
+				// exercising the framework's own group badge fallback on the rig.
+				// Keys are the EXACT `type.code` this fixture's own points carry — the framework
+				// compares type codes case-sensitively, so `pvz` would never match a point
+				// emitting `PVZ` and every marker would silently fall back to the no-icon state.
+				// URLs are real files served by this plugin, not a placeholder host: an icon that
+				// 404s renders as a broken image, which looks identical to "the framework never
+				// applied the icon" and makes rig verification prove nothing.
+				$icons_url = plugins_url( 'assets/images', __FILE__ );
+
+				$point_icons = [
+					'PVZ'      => [
+						'default' => $icons_url . '/pvz.svg',
+						'active'  => $icons_url . '/pvz-active.svg',
+					],
+					'POSTAMAT' => [
+						'default' => $icons_url . '/postamat.svg',
+						'active'  => $icons_url . '/postamat-active.svg',
+					],
+				];
+
+				$this->pickup_handler = new \Woodev\Framework\Shipping\Pickup\Pickup_Handler(
+					self::PLUGIN_ID,
+					'carrier_pickup_point',
+					$point_source,
+					$map_provider,
+					$default_location,
+					null,
+					null,
+					true,
+					$point_icons
+				);
+				$this->pickup_handler->register();
 			}
 
 			/**
-			 * DEMO ONLY: injects a fake pickup-point picker into the §8 slot on the checkout.
+			 * Returns the pickup handler wired in the constructor — used by tests.
 			 *
-			 * @internal
+			 * @since 2.0.2
 			 *
-			 * @return void
+			 * @return \Woodev\Framework\Shipping\Pickup\Pickup_Handler
 			 */
-			public function render_demo_pickup_picker(): void {
-				if ( ! function_exists( 'is_checkout' ) || ! is_checkout() ) {
-					return;
-				}
-				?>
-				<script>
-				( function( $ ) {
-					function mount() {
-						var $slot = $( '[data-woodev-pickup-slot="carrier_pickup_point"]' );
-						if ( ! $slot.length || $slot.find( '.woodev-demo-pvz' ).length ) { return; }
-						$slot.append( '<button type="button" class="button woodev-demo-pvz">Выбрать ПВЗ (демо)</button>' );
-					}
-					$( document.body ).on( 'click', '.woodev-demo-pvz', function( e ) {
-						e.preventDefault();
-						$( '#carrier_pickup_point' ).val( 'DEMO-PVZ-1' ).trigger( 'change' );
-						$( this ).text( 'ПВЗ выбран: DEMO-PVZ-1' );
-					} );
-					// Defer so it runs AFTER the adapter's own updated_checkout handler re-places the slot.
-					$( document.body ).on( 'updated_checkout', function() { setTimeout( mount, 60 ); } );
-					$( document.body ).on( 'change', 'input[name^="shipping_method"]', function() { setTimeout( mount, 60 ); } );
-					setTimeout( mount, 200 );
-				} )( jQuery );
-				</script>
-				<?php
+			public function get_pickup_handler(): \Woodev\Framework\Shipping\Pickup\Pickup_Handler {
+				return $this->pickup_handler;
+			}
+
+			/**
+			 * Demonstrates the §10.8 obligation:
+			 * {@see \Woodev\Framework\Shipping\Pickup\Pickup_Handler::get_settings_fields()}
+			 * is a pure pass-through to the active map provider, and NOTHING on the
+			 * framework side calls it automatically. A real shipping plugin MUST call
+			 * this itself and merge the result into its own settings registration
+			 * (`Woodev_Register_Settings`) — skip it and every install stays pinned to
+			 * the fallback key above, silently, forever. This fixture has no settings
+			 * page of its own to merge into, so this accessor exists only to prove the
+			 * call happens and to give tests something concrete to assert against.
+			 *
+			 * @since 2.0.2
+			 *
+			 * @return array<string, array<string, mixed>>
+			 */
+			public function get_pickup_settings_fields(): array {
+				return $this->pickup_handler->get_settings_fields();
 			}
 
 			/**
