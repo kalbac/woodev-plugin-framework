@@ -156,6 +156,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			require_once $path . '/pickup/class-warehouse.php';
 			require_once $path . '/pickup/interface-warehouse-store.php';
 			require_once $path . '/pickup/class-abstract-warehouse-store.php';
+			require_once $path . '/pickup/class-selection-result.php';
 
 			// checkout fields + handler backbone
 			require_once $path . '/checkout/class-checkout-fields.php';
