@@ -202,6 +202,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Constraint_Checker'
 		 * @return array{allowed: bool, reason: string|null}
 		 */
 		private static function sanitize_verdict( $filtered, array $computed ): array {
+			/*
+			 * {@see Selection_Result::sanitize()} carries a deliberate COPY of the four guards
+			 * below — see its own note for why the two are not shared (this method is private,
+			 * and the two validate the same keys in service of different contracts, so they are
+			 * entitled to diverge on purpose). If you change what counts as a well-formed
+			 * verdict here, go and decide explicitly whether that one should follow.
+			 */
 			if ( ! is_array( $filtered ) ) {
 				return $computed;
 			}

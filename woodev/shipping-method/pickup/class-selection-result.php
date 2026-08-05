@@ -111,6 +111,22 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Selection_Result' )
 		 * }
 		 */
 		public static function sanitize( $filtered, array $computed ): array {
+			/*
+			 * The four verdict-tier guards below are deliberately a COPY of
+			 * {@see Constraint_Checker::sanitize_verdict()}'s, not a call to it. Reviewed and
+			 * decided 2026-08-06 rather than left to chance:
+			 *
+			 * - that method is private, and sharing it would mean promoting an internal detail
+			 *   to permanent public API on Constraint_Checker to save twelve lines;
+			 * - the two guards validate the SAME two keys in service of DIFFERENT contracts —
+			 *   a two-key verdict there, a five-key result here — so they are entitled to
+			 *   diverge later (a structured `reason` here would not imply one there), and a
+			 *   shared predicate would make that legitimate divergence impossible.
+			 *
+			 * What is NOT acceptable is diverging by ACCIDENT. If you change what counts as a
+			 * well-formed verdict here, look at Constraint_Checker::sanitize_verdict() and
+			 * decide explicitly whether it should follow; it carries the mirror of this note.
+			 */
 			if ( ! is_array( $filtered ) ) {
 				return $computed;
 			}
