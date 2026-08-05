@@ -234,16 +234,57 @@ POST  woodev/v1/shipping/pickup/{plugin_segment}/select
 
 **Body:** `field_id`, `point_id`, `method_id`.
 
-**Permission:** unlike the two `GET` routes, this one is *not* a public read — it writes to
-the WC session. It is nonce-guarded with its own action (`woodev_pickup_select`), passed in
-the JS config. Guests must be able to select, so no capability check is possible or wanted.
-A failed nonce returns `WP_Error( 'woodev_pickup_invalid_nonce', …, 403 )`, which the client
-maps to the **technical-failure** branch — a retryable message, never a silent nothing.
+**Permission (D-16).** Unlike the two `GET` routes this one is not a public read: it writes to
+the WC session, and the domain seam behind it may call the carrier's API — an unguarded
+POST route is also a free way to burn the merchant's carrier quota using a visitor's browser.
+A capability check is impossible and unwanted: guests place orders.
 
-> Related open issue **#157** (a stale nonce yields a bare 403 and an unexplained empty map).
-> This design does not fix #157, but it does not extend it either: on this route a stale
-> nonce produces a visible, retryable message. A nonce-refresh-and-retry-once mechanism is
-> explicitly out of scope here.
+The route therefore keeps the **same `wp_rest` nonce the rest of the feature already uses**
+(`Pickup_Handler:764` → `X-WP-Nonce`, `pickup-datasource.js:215`), and deliberately does NOT
+invent its own action carried in the body. Two reasons, and the second is the load-bearing
+one:
+
+1. A second nonce scheme in the same feature is a second thing to keep fresh, for no gain.
+2. **A custom body nonce would only work if we stopped sending `X-WP-Nonce` entirely** — and
+   that demotes the request to anonymous at WordPress's cookie-auth layer, which puts a
+   logged-in customer's WC session identity at risk (their session is keyed on user id).
+   Writing a pickup point into the wrong session is a worse defect than the one we would be
+   solving.
+
+**The consequence that dictates the rest of this section:** an *invalid* nonce is rejected by
+`rest_cookie_check_errors()` **before any `permission_callback` runs** — see the existing
+gotcha `rest-cookie-nonce-auth-semantics` (a *missing* nonce merely demotes to anonymous;
+only an *invalid* one errors outright). That is why issue #157 reports a bare
+`403 rest_cookie_invalid_nonce` from a route declared `permission_callback => '__return_true'`:
+WordPress refused it before the framework was consulted. **We therefore cannot emit our own
+error code for a stale nonce on this route**, and any design that assumes we can — including
+an earlier draft of this section — is wrong.
+
+### 4.1.1 #157 is folded into this work (operator decision, 2026-08-06)
+
+Issue #157 was originally out of scope here. It is not separable: the select route inherits
+the identical failure, and the cost of that failure is higher. On `GET points` a stale nonce
+produces an empty map — irritating. On `POST select` it produces a **silently refused pickup
+choice at the end of checkout**.
+
+Both of #157's own proposals are in scope:
+
+1. **Read the nonce at request time from the live config**, not captured at construction
+   (`pickup-datasource.js` captures once today). `updated_checkout` re-renders the fragment,
+   so a freshly rendered nonce becomes available on its own; reading late is what picks it up.
+   This removes the cause for the ordinary long-open-page case.
+2. **Distinguish `rest_cookie_invalid_nonce` from an empty result** and say so: a new i18n key
+   alongside the existing `upstreamError` / `rateLimited` / `notFound` map in
+   `pickup-mount.js`, wording to the effect of "страница устарела — обновите её", with retry.
+
+Residual cases the freshness fix cannot cover (a login or logout mid-session invalidates the
+nonce immediately, because the session token changes) land on proposal 2's message. On the
+select route specifically, that outcome is routed to the **technical-failure** branch of §5.1
+— retryable, button alive, verdict not remembered — which is exactly correct: nothing about
+the point was refused.
+
+Still out of scope: automatic nonce refresh-and-retry. It needs an endpoint of its own and
+would be the third nonce mechanism in one feature.
 
 ### 4.2 Server-side seam
 
@@ -351,8 +392,7 @@ D-15: open normally, silently, field untouched.
 
 ## 6. Out of scope
 
-- Fixing **#157** (stale nonce → unexplained empty map) — see §4.1.
-- Nonce refresh-and-retry.
+- Automatic nonce refresh-and-retry (§4.1.1). **#157 itself is IN scope** — see §4.1.1.
 - Blocked-row styling in the sidebar (D-8).
 - A third marker state (D-12).
 - Any framework-side address-field writing (D-14) — the plugin owns it, from JS.
@@ -378,7 +418,13 @@ Beyond ordinary coverage of the new route, seam and states:
 5. **«Продолжить оформление» sends no request** (D-11).
 6. **`is-busy` is not applied** during selection — the search and filter controls stay
    visible (D-13).
-7. Rig verification, not tests, for: spinner appearance, the `close:false` +
+7. **Nonce freshness (#157)** — the datasource reads the nonce at request time, so a config
+   whose nonce changed after construction is used with the NEW value, not the captured one;
+   and a `403` carrying `rest_cookie_invalid_nonce` yields the stale-page message rather than
+   an empty result or a generic error. Note the ordinary "green suite" trap here: the bug is
+   only reachable when the nonce changes *after* construction, so any test that builds the
+   config once and never mutates it will pass against the broken code.
+8. Rig verification, not tests, for: spinner appearance, the `close:false` +
    `refresh_checkout:true` anchor re-placement under an open modal, and the restore-on-reopen
    sequence. Four sessions running, the rig has found what no test saw; treat a green suite
    as necessary and not sufficient.
