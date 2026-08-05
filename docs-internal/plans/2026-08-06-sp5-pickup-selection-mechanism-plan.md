@@ -44,9 +44,17 @@ WP test library (integration), Jest + jsdom (JS).
 (`restRoot`, `pointIcons`, `searchNearestCount`). Both conventions are already established in
 this file pair; unifying them would break one of them.
 
-**Class-map:** `class-selection-result.php` is a new framework class — `bin/generate-class-map.php`
-MUST be re-run (Task 1, step 6) or every real vendored boot fatals
-(gotcha `framework-classmap-autoload-vendored-boot`).
+**Class-map, and NOT `includes()`:** `class-selection-result.php` is a new framework class, so
+`bin/generate-class-map.php` MUST be re-run (Task 1, step 5) — a class missing from the map is a
+fatal on every real vendored boot (gotcha `framework-classmap-autoload-vendored-boot`).
+
+It must **not** be added to `Shipping_Plugin::includes()`. Verified 2026-08-06, after an earlier
+draft of this plan claimed the opposite: NOTHING in the SP-5 pickup tree is required there —
+`Constraint_Checker`, `Pickup_Handler`, `Point_Query` and `Address_Target` all resolve through the
+runtime class-map autoloader, which `class-framework-resolver.php:139` registers before any plugin
+class is parsed. Only four pre-SP-5 files (`Pickup_Point` and the warehouse trio) still carry a
+`require_once`. One more path-named require would extend the maintenance tail that gotcha
+`file-deletion-tail-includes-classmap-fixtures` exists to warn about, for no benefit.
 
 ---
 
@@ -271,32 +279,26 @@ if ( ! class_exists( '\Woodev\Framework\Shipping\Pickup\Selection_Result' ) ) {
 Run: `./vendor/bin/phpunit tests/unit/Shipping/Pickup/SelectionResultTest.php`
 Expected: PASS, 7 tests.
 
-- [ ] **Step 5: Wire the file into `includes()`**
-
-`Shipping_Plugin::includes()` names PATHS, not classes — a new file that is never `require_once`'d
-fatals on a real vendored boot even though Composer's classmap hides it in tests
-(gotcha `file-deletion-tail-includes-classmap-fixtures`). Add it beside the other `pickup/` requires
-in `woodev/shipping-method/class-shipping-plugin.php`:
-
-```php
-require_once __DIR__ . '/pickup/class-selection-result.php';
-```
-
-- [ ] **Step 6: Regenerate the class map and run the completeness test**
+- [ ] **Step 5: Regenerate the class map and run the completeness test**
 
 ```bash
 php bin/generate-class-map.php
-./vendor/bin/phpunit tests/unit/ClassMapTest.php
+./vendor/bin/phpunit tests/unit/ClassMapCompletenessTest.php
 ```
 Expected: PASS — `Selection_Result` present in `woodev/class-map.php`.
+
+Do NOT add a `require_once` to `Shipping_Plugin::includes()` — see the File-structure note above
+for why the SP-5 tree deliberately does not use it.
+
+- [ ] **Step 6: Run the FULL unit suite**
+
+Run: `composer test:unit`
+Expected: PASS, no new failures — a targeted run can hide breakage elsewhere.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add woodev/shipping-method/pickup/class-selection-result.php \
-        woodev/shipping-method/class-shipping-plugin.php \
-        woodev/class-map.php \
-        tests/unit/Shipping/Pickup/SelectionResultTest.php
+git add woodev/shipping-method/pickup/class-selection-result.php         woodev/class-map.php         tests/unit/Shipping/Pickup/SelectionResultTest.php
 git commit -m "feat(pickup): add Selection_Result verdict shape with fail-closed sanitisation"
 ```
 
