@@ -46,8 +46,38 @@ custom `display` to a theme is decoration; losing whether a button renders at al
 feature. Everything else on the isolation reset can afford to lose a specificity fight to a theme
 gracefully; `display` on an interactive control cannot.
 
+## s51 addendum — the guard has a cost of its own: it also beats plain `[hidden]`
+
+**Discovered:** s51 (2026-08-05), rig verification: the search field's clear (✕) button stayed visible
+on an empty field.
+
+`.woodev-pickup-search__reset[hidden] { display: none }` had no effect. Measured: `hidden === true`
+on the element while `getComputedStyle().display` still read `'flex'`. The cause is this very fix —
+the reset's `display: inline-flex !important` (present twice: `.woodev-pickup-stage :where(button)` and
+`.woodev-modal :where(button)`) beats a plain, non-`!important` `[hidden]` rule on the same property,
+for the same reason a theme's own `!important` had to be beaten in the first place.
+
+```css
+/* ❌ Loses to the reset's display:inline-flex !important */
+.woodev-pickup-search__reset[hidden] { display: none; }
+
+/* ✅ Matches force with force */
+.woodev-pickup-search__reset[hidden] { display: none !important; }
+```
+
+The sibling `.woodev-pickup-search__results[hidden]` needed no such flag — it's a `<div>`, and the div
+reset in this file was never promoted to `!important` in the first place.
+
+**The rule to add:** once a property is defended with `!important` for one purpose (surviving a hostile
+theme), every LATER rule that touches that same property on the same elements — even our own, even for
+an unrelated purpose like a `[hidden]` toggle — must also be `!important`, or it silently loses to our
+own guard.
+
 ## Related
 
 - `docs-internal/specs/2026-08-03-sp5-pickup-map-visual-rework-design.md` — V-14
 - [[mobile-inline-min-width-and-floating-control-stacking]] — same session, same "only a live
   browser check surfaces this" verification lesson, different cause
+- [[css-hidden-attribute-needs-explicit-override]] — the s50 root cause this addendum's symptom
+  is actually a variant of: an author `display` rule beating the `[hidden]` UA rule, except this
+  time the author rule carries `!important` too

@@ -26,14 +26,15 @@
  * "points currently in the viewport" list (`visibleChange`) has to track a camera the customer
  * is free to pan/zoom themselves under `bulk` too, even though nothing needs re-fetching there.
  *
- * PUBLIC SURFACE: `init( container, config )`, `setPoints( groups )`, `focusGroup( key )`,
+ * PUBLIC SURFACE: `init( container, config )`, `setPoints( groups )`, `focusGroup( key, options )`,
  * `setTypeFilter( codes )`, `setMargin( open, width )`, `getFocusedKey()`,
- * `resolveAddress( displayName )`, `focusAddress( latLng, label )`, `clearAddress()`,
- * `on( event, cb )`, `destroy()`. Events out:
- * `pointClick( key )`, `boundsChange( bbox )`, `bboxTooWide()`, `visibleChange( keys )`,
- * `nothingNearby( { key, distanceMeters, name } )`, `searchResults( { points, addresses } )`,
- * `addressFocused( { latLng, label } )`, `error( { code, message } )`. `bbox` is the flat
- * `[lat1,lng1,lat2,lng2]` shape
+ * `matchLoadedPoints( query )`, `suggestAddresses( query )`, `resolveAddress( displayName )`,
+ * `focusAddress( latLng, label )`, `clearAddress()`, `on( event, cb )`, `destroy()`. Events out:
+ * `pointClick( key )`, `clusterClick( { coords } )`, `boundsChange( bbox )`, `bboxTooWide()`,
+ * `visibleChange( keys )`, `nothingNearby( { key, distanceMeters, name } )`,
+ * `searchResults( { points, addresses } )`, `searchCleared()`,
+ * `addressFocused( { latLng, label } )`, `addressMatchedPoint( { key } )`,
+ * `error( { code, message } )`. `bbox` is the flat `[lat1,lng1,lat2,lng2]` shape
  * `pickup-datasource.js`'s `serializePointsQuery()` expects (see {@see flattenBounds}).
  *
  * CONFIG is FLAT — the merge `pickup-mount.js`'s `buildProviderConfig()` builds from
@@ -58,9 +59,20 @@
  *    {@see setPoints}'s own `bulk` camera fit: an un-awaited fit let `visibleChange` read the
  *    map's PRE-fit bounds, so a locality whose points sit outside the technical placeholder
  *    viewport reported an empty sidebar over a map that was actually full of pins — see that
- *    method's own comment. Every `setBounds()` call in this file is awaited. Two moves are
- *    also not guaranteed to resolve in call order (animation duration depends on distance), so
- *    concurrent camera commands need sequencing — see {@see focusGroup}'s `_focusSeq`.
+ *    method's own comment. Every `setBounds()` call in this file is awaited — and, since the
+ *    live-review pan/zoom split ({@see focusGroup}), so is every `setCenter()`/`panTo()` call:
+ *    the SAME promise-not-dropped discipline applies to all three, ymaps gives none of them a
+ *    synchronous completion signal. EVERY camera move in this file is also explicitly animated
+ *    (`duration` set — 400ms for a fit that may travel far, 200ms for a short focus/zoom hop),
+ *    matching both references: an instant cut reads as "did the map even move?", which is
+ *    exactly the operator's own live-review complaint. Two moves are also not guaranteed to
+ *    resolve in call order (animation duration depends on distance, and now every move actually
+ *    animates instead of jumping, which makes out-of-order resolution MORE likely, not less), so
+ *    concurrent camera commands need sequencing — see {@see focusGroup}'s `_focusSeq` and (Task
+ *    12/19's own address flow, live-review round 4) {@see resolveAddress}'s `_addressSeq`: a
+ *    customer who edits and re-submits a search before the FIRST `ymaps.geocode()` round-trip
+ *    resolves must never have the STALE resolution win the camera — see that method's own
+ *    docblock.
  * 2. A PLACEMARK FOLDED INTO A CLUSTER HAS NO BALLOON OF ITS OWN, and whether a group is
  *    clustered depends on the current zoom, so the same group can work at one zoom and break
  *    at another. This file owns no balloon any more, so that specific crash is gone — but the
@@ -95,32 +107,75 @@
  * `Pickup_Handler::normalized_point_icons()`) gets the SAME image drawn larger, both driven by
  * the one `data-state` attribute Task 21's CSS keys off.
  *
- * ADDRESS SEARCH (Task 12/19, D-6, spec V-6/V-7): the customer types THEIR OWN address — the
- * search box's placeholder is literally "Ваш адрес" — not a pickup-point search term.
- * `ymaps.control.SearchControl` keeps its ENGINE (`search()`, `getResultsCount()`,
- * `showResult()`) and loses its CHROME — its default view is replaced by the framework's OWN
- * layout ({@see _buildSearchControl}), built by `pickup-panels.js`'s `buildSearchLayout()` and
- * handed to this file as `config.searchLayoutEl` (a plain DOM element, never a reference to the
- * panels instance itself — see the next paragraph). `options.provider.geocode` is fully custom
- * ({@see _searchGeocodeProvider}): it matches the loaded pool for free via
- * `pickup-geo.matchPoints()` AND geocodes the query via `ymaps.geocode()`, BOUNDED to the loaded
- * point set ({@see _loadedBounds}, spec V-7) — so a Moscow buyer typing a Moscow street name is
- * never offered a same-named street in Tolyatti (gotcha `ymaps-control-options-must-be-nested.md`
- * — the whole reason this control ever misbehaved was `provider`/`layout` sitting at the ROOT of
- * the constructor argument, which ymaps silently ignores; EVERY option below is nested under
- * `options`, which is what actually configures the control). Before anything has ever loaded,
- * {@see _loadedBounds} returns null and the bound is simply omitted — there is nothing yet to
- * bound the search to, not a degenerate box.
+ * MAP MARGINS ARE TWO SEPARATE, NEVER-CONFUSED RESERVATIONS, both via ymaps' native
+ * `map.margin.addArea()` — whose RETURNED ACCESSOR is what removes it again, there is no
+ * `map.margin.removeArea()` — never a plain `map.margin = [...]` assignment, which is not this
+ * API's shape (see ADR-010). The STATIC one, {@see _buildMap}'s own top-chrome strip
+ * (`{ top: 0, left: 0, width: '100%', height: '64px' }`, kept in `this._topMarginArea`), reserves
+ * the space our own search bar occupies — added exactly ONCE, at build time, and released only by
+ * `destroy()`, because unlike the sidebar it never changes size or visibility for the life of the
+ * map; that is also why it is not exposed as a public method the way `setMargin()` is — nothing
+ * outside this file ever needs to vary it. Both references reserve the identical strip:
+ * Yandex.Delivery `widget-map.js` — `this.map.margin.addArea({ top: 0, left: 0, width: '100%',
+ * height: '64px' })`; the Russian Post bundle —
+ * `[{top:0,left:0,width:"100%",height:"64px"}].forEach(t => d.margin.addArea(t))`. Without it, a
+ * camera fit ({@see focusGroup}, {@see focusAddress}, the initial-viewport/bulk fits) is free to
+ * frame a point directly underneath the search bar, which ymaps has no other way of knowing
+ * occupies screen space. The DYNAMIC one, {@see setMargin}'s own sidebar strip
+ * (`{ right: 0, top: 0, width: <width>, height: '100%' }`, kept SEPARATELY in `this._marginArea`),
+ * toggles on and off with the panels' own list open/closed state — Task 20's mount calls it from
+ * the panels' `listToggle` event. `right: 0` anchors it to the right edge; `width` is what gives
+ * it SIZE — {@see setMargin}'s own docblock records the incident where this shape was gotten
+ * wrong (`right: <width>` with no `width` key at all, reserving zero pixels; see gotcha
+ * `ymaps-margin-area-needs-explicit-width.md`). The two fields are NEVER touched by each other's
+ * code path: `setMargin()` removes and re-adds only `this._marginArea` on every toggle, and must
+ * never remove the top strip.
  *
- * TWO DIFFERENT EVENTS, TWO DIFFERENT COSTS (spec V-6, replacing D-6's `ymaps.suggest()` design):
- * `pickup-panels.js`'s own layout emits `searchType` (debounced, while typing) and `searchSubmit`
- * (Enter/the magnifier only) — Task 20's mount wires the FORMER straight to
- * `provider.matchLoadedPoints()` (free, local, no network at all) and the LATTER to
- * `provider.searchControl.search( query )`, which is what actually invokes
- * `_searchGeocodeProvider()`/`ymaps.geocode()` above. Geocoding therefore happens once per
- * DELIBERATE search, never once per keystroke — matching the Russian Post bundle's own model
- * (verified 2026-08-03), which uses no `suggest()` at all. `ymaps.geocode()` is ALSO called from
- * {@see resolveAddress}, exactly once per picked suggestion, same as before.
+ * ADDRESS SEARCH (Task 12/19, D-6, spec V-6/V-7; live-review round 4, Finding A): the customer
+ * types THEIR OWN address — the search box's placeholder is literally "Ваш адрес" — not a
+ * pickup-point search term. `ymaps.control.SearchControl` keeps its ENGINE (`search()`,
+ * `getResultsCount()`, `showResult()`) and loses its CHROME — its default view is replaced by the
+ * framework's OWN layout ({@see _buildSearchControl}), built by `pickup-panels.js`'s
+ * `buildSearchLayout()` and handed to this file as `config.searchLayoutEl` (a plain DOM element,
+ * never a reference to the panels instance itself — see the next paragraph). Before anything has
+ * ever loaded, {@see _loadedBounds} returns null and every bound below is simply omitted — there
+ * is nothing yet to bound the search to, not a degenerate box.
+ *
+ * TWO ENGINES NOW, MATCHING THE REFERENCE'S OWN SPLIT EXACTLY (round 4 correction — an earlier
+ * round replaced `ymaps.suggest()` with `ymaps.geocode()` ENTIRELY, citing the Russian Post
+ * bundle; the operator called this out directly: "механизм поиска ты опять выдумал, хотя в
+ * эталоне «Яндекс доставка» работает именно так как должно" — typing "Чертановская 66к1" geocoded
+ * to an English-language, full-postal-form TRANSIT STATION instead of the short
+ * "Чертановская улица, 66к1" the reference returns, because `ymaps.geocode()` ranks POIs
+ * (transit stops, landmarks) alongside addresses, while `ymaps.suggest()` — the reference's OWN
+ * data source for exactly this moment, via its native `noSuggestPanel: false` widget — is
+ * address-shaped and address-ranked by design):
+ *
+ * - {@see suggestAddresses} — powers the TYPING dropdown via `ymaps.suggest()`, bounded to the
+ *   loaded point area the SAME way {@see _searchGeocodeProvider}'s geocode call already is (see
+ *   {@see _loadedBounds}, spec V-7). This is what the reference gets automatically, for free,
+ *   from ymaps' own native suggest widget — since this file replaces the control's ENTIRE chrome
+ *   with the framework's own layout (D-3), there is no native widget left to do it for us, so
+ *   this method reproduces it explicitly. `pickup-panels.js`'s own layout emits the debounced
+ *   `searchType` event on every keystroke for exactly this; wiring it to this method is Task 20's
+ *   mount's job — which RETURNS `{ points, addresses }` rather than emitting `searchResults`
+ *   (round 4, second follow-up): `searchResults` is the COMPLETED-SEARCH event, wired to the
+ *   renderer that prints "no results found", and this method runs on the TYPING path — emitting
+ *   it here would drive that verdict mid-keystroke, reopening the operator's own round-3 defect.
+ *   The mount calls `provider.suggestAddresses( query ).then( r => panels.previewSearchResults( r ) )`.
+ * - {@see _searchGeocodeProvider} — still `options.provider.geocode`, still invoked via
+ *   `control.search( query )` on a DELIBERATE `searchSubmit` (Enter/the magnifier), matches the
+ *   loaded pool for free via `pickup-geo.matchPoints()`, and geocodes via `ymaps.geocode()`,
+ *   BOUNDED the same way — so a Moscow buyer typing a Moscow street name is never offered a
+ *   same-named street in Tolyatti (gotcha `ymaps-control-options-must-be-nested.md` — the whole
+ *   reason this control ever misbehaved was `provider`/`layout` sitting at the ROOT of the
+ *   constructor argument, which ymaps silently ignores; EVERY option under `_buildSearchControl`
+ *   is nested under `options`, which is what actually configures the control).
+ *
+ * `ymaps.geocode()` is ALSO called from {@see resolveAddress}, exactly once per picked
+ * suggestion — matching the reference's own model precisely: `suggest()` powers the LIST (cheap,
+ * local-feeling, no meaningful quota cost), `geocode()` resolves ONLY the one thing the customer
+ * actually picked, never the whole list at once.
  *
  * THIS FILE DOES NOT RENDER THE RESULTS OR KNOW THE PANELS EXIST (D-3: no map-library file
  * renders point information, and this file never holds a reference to the panels object) —
@@ -150,28 +205,33 @@
  * `woodevKind: 'address'` on its own properties, for a future consumer that DOES call the engine
  * directly) — addresses alone. Matched points travel ONLY through the plain `searchResults` event.
  *
- * Picking a POINT result opens its card (Task 20's job, via the panels' own `searchPointPicked`);
- * picking an ADDRESS result drops a "your address" pin and fits the camera to the address PLUS
- * the `config.searchNearestCount` nearest groups ({@see focusAddress}) — NEVER to the address
- * alone, which is exactly the "empty map" failure this design avoids. `N` defaults to
- * {@see DEFAULT_SEARCH_NEAREST_COUNT} and is deliberately a geometry-based count, not a kilometre
- * radius: network density varies between CITIES of one carrier far more than between carriers, so
- * a fixed per-plugin radius could never track it, while fitting to N nearest points adapts
- * automatically. When even the nearest group is farther than {@see NEARBY_THRESHOLD_M}, no fit
- * happens at all — `nothingNearby` is emitted instead, naming that nearest group's own distance,
- * so the customer sees an explicit "nothing here", never a silently empty viewport.
+ * Picking a POINT result opens its card (Task 20's job, via the panels' own `searchPointPicked`).
+ * Picking an ADDRESS result resolves through {@see focusAddress}, which draws NO pin of any kind
+ * (live-review fix, D4 — an earlier version dropped a bare, unstyled `ymaps.Placemark`; both
+ * references never draw one either, `noPlacemark: true` in {@see _buildSearchControl}) and takes
+ * one of two paths depending on what the resolved coordinate actually lands on:
  *
- * THE "YOUR ADDRESS" PIN IS NEVER A GROUP: it is a plain `ymaps.Placemark` added directly to
- * `map.geoObjects` ({@see _setAddressPin}), completely outside the `ObjectManager` every group
- * lives in — so it can never appear in the list panel (`setPoints()`/`_emitVisibleChange()` only
- * ever read `_groupsByKey`), the type filter (`setTypeFilter()` only ever touches
- * `objectManager`), or a `focusAddress()` nearest-N computation (which also only ever reads
- * `_groupsByKey`). The panels' own reset control (`«Сбросить»`) emits NO event of its own — it
- * just calls `setAnchor( null )` internally — so THIS file exposes {@see clearAddress} rather
- * than relying on one: it is the provider that owns BOTH the pin and the `searchResults` state,
- * so it is the provider that must guarantee neither outlives the search it belongs to —
- * {@see clearAddress} drops the pin AND emits an empty `searchResults`, in one call, so Task 20's
- * mount does not have to remember two separate "clear" calls.
+ * - Within {@see SAME_PLACE_THRESHOLD_M} of an already-loaded group, the search is treated as
+ *   having selected that POINT, not a neighbourhood: `addressMatchedPoint( { key } )` fires and
+ *   nothing else does — no `addressFocused`, no camera move, no nearest-N fit. The mount (Task
+ *   20/T3) wires this straight to `focusGroup( key, { zoom: true } )`, which supplies the actual
+ *   camera move, the active marker state, AND the sidebar card open — this file never opens a
+ *   card itself (D-3).
+ * - Otherwise, `addressFocused( { latLng, label } )` fires and the camera CENTRES on the address
+ *   itself, at the deepest zoom that still keeps the `config.searchNearestCount` nearest groups
+ *   on screen ({@see focusAddress}, live-review round 4, Finding B) — NEVER to the address alone,
+ *   which is exactly the "empty map" failure this design avoids, and NEVER a plain bounds fit
+ *   EITHER (round 3's own version): a box fit puts the address SOMEWHERE inside the rectangle,
+ *   almost never the middle, which is precisely the operator's own report ("карта смещается не в
+ *   центр выбранного адреса а как-то с краю"). See {@see symmetricBoundsAround}'s own docblock
+ *   for how a plain `setBounds()` call is still made to CENTRE exactly on the address without any
+ *   hand-rolled zoom-from-pixel-geometry math. `N` defaults to {@see DEFAULT_SEARCH_NEAREST_COUNT}
+ *   and is deliberately a geometry-based count, not a kilometre radius: network density varies
+ *   between CITIES of one carrier far more than between carriers, so a fixed per-plugin radius
+ *   could never track it, while fitting to N nearest points adapts automatically. When even the
+ *   nearest group is farther than {@see NEARBY_THRESHOLD_M}, no fit happens at all —
+ *   `nothingNearby` is emitted instead, naming that nearest group's own distance, so the customer
+ *   sees an explicit "nothing here", never a silently empty viewport.
  *
  * `objectManager.setFilter()`, NEVER A REBUILD, drives {@see setTypeFilter}: rebuilding the
  * manager would tear down and recreate every feature, losing the camera state this file just
@@ -304,10 +364,33 @@
 	var NEARBY_THRESHOLD_M = 50000;
 
 	/**
-	 * Number of geocoded address results requested per submitted search (Task 12, spec V-6) —
-	 * `ymaps.geocode()`'s own `results` option. Renamed from the previous `SUGGEST_RESULT_COUNT`
-	 * (same value): the geocoder replaces `ymaps.suggest()` entirely, see the file docblock's
-	 * "ADDRESS SEARCH" section.
+	 * Distance, in metres, within which a resolved search address is treated as having selected
+	 * an EXISTING POINT rather than a nearby location (operator requirement, live-review round
+	 * 2, verbatim: "если из списка выбран адрес, точно совпадающая с точкой на карте (ПВЗ/
+	 * Постамат/Отделение), то фокусируемся только на этой точке и делаем её активной"). Checked
+	 * BEFORE the nearest-N fit inside {@see focusAddress}; when the nearest loaded group is this
+	 * close, the address search stops there — {@see focusAddress}'s own docblock covers what
+	 * fires instead.
+	 *
+	 * 30m, not tighter or looser: a geocoder resolves a street ADDRESS to a building footprint or
+	 * entrance, not the exact coordinate a plugin recorded for its own pickup-point counter —
+	 * tens of metres of disagreement between "the building" and "the counter inside it" is normal
+	 * and expected, so a materially tighter threshold would rarely fire at all. Materially wider
+	 * risks matching a genuinely different, adjacent building instead. This is the "same building"
+	 * case at the NEAR end of the distance check {@see focusAddress} performs; {@see NEARBY_THRESHOLD_M}
+	 * (50km) is the "nothing near here at all" case at the FAR end of the same check.
+	 *
+	 * @since 2.0.2
+	 * @type {number}
+	 */
+	var SAME_PLACE_THRESHOLD_M = 30;
+
+	/**
+	 * Number of address results requested per call, shared by BOTH engines this file now uses
+	 * (live-review round 4, Finding A): {@see _searchGeocodeProvider}'s `ymaps.geocode()` on a
+	 * deliberate submit, and {@see suggestAddresses}'s `ymaps.suggest()` on every debounced
+	 * keystroke — `results` is the option name BOTH APIs are believed to share (unconfirmed
+	 * against a real `ymaps.suggest()` call; flag on the rig if it silently ignores this option).
 	 *
 	 * @type {number}
 	 */
@@ -376,6 +459,165 @@
 	}
 
 	/**
+	 * Builds the SMALLEST bounds pair CENTRED EXACTLY on `anchor` that still contains every one of
+	 * `groups` (live-review round 4, Finding B) — the fix for "карта смещается не в центр
+	 * выбранного адреса а как-то с краю": {@see WoodevYandexMapProvider#focusAddress} used to fit
+	 * the camera to `geo.boundsFor( anchor, groups )` — the smallest box containing the anchor AND
+	 * every group — whose OWN centre is almost never the anchor itself (it is the box's centroid,
+	 * dragged toward wherever the nearest groups happen to cluster). This function instead grows
+	 * SYMMETRICALLY outward from the anchor in every direction until every group fits, so the
+	 * box's centroid IS the anchor, by construction, exactly.
+	 *
+	 * Deliberately reuses `setBounds()`'s own EXISTING `checkZoomRange` zoom-picking machinery
+	 * rather than hand-deriving a zoom level from pixel/viewport geometry (a computation this file
+	 * has no reliable way to do without knowing the map's own rendered pixel size, which ymaps
+	 * does not expose synchronously): a `setBounds()` call already fits a box by choosing the
+	 * deepest zoom the box's OWN shape allows, so building a box that is SYMMETRIC about the
+	 * anchor — as opposed to an asymmetric box that merely CONTAINS it — gets both properties
+	 * (centred on the address, deepest zoom keeping every nearest group visible) from the ONE
+	 * primitive this file already trusts elsewhere ({@see setPoints}'s bulk fit,
+	 * {@see _resolveInitialViewport}), with no new geometry math beyond this box construction.
+	 *
+	 * @since 2.0.2
+	 * @param {Array} anchor `[lat, lng]` — the geocoded address; the CENTRE the result must have.
+	 * @param {Array} groups objects with numeric `lat`/`lng` — the nearest-N groups the address
+	 *                       must still be fit alongside.
+	 * @returns {Array} `[[Number, Number], [Number, Number]]`, centred on `anchor`.
+	 */
+	function symmetricBoundsAround( anchor, groups ) {
+		var latDelta = 0;
+		var lngDelta = 0;
+
+		( groups || [] ).forEach( function( group ) {
+			latDelta = Math.max( latDelta, Math.abs( group.lat - anchor[ 0 ] ) );
+			lngDelta = Math.max( lngDelta, Math.abs( group.lng - anchor[ 1 ] ) );
+		} );
+
+		return [
+			[ anchor[ 0 ] - latDelta, anchor[ 1 ] - lngDelta ],
+			[ anchor[ 0 ] + latDelta, anchor[ 1 ] + lngDelta ],
+		];
+	}
+
+	/**
+	 * Drops the LEADING comma-separated parts of a `ymaps.suggest()` `value` string, and trims
+	 * whitespace, via TWO strategies tried in order (live-review round 4 follow-up — both
+	 * rig-measured against a REAL `ymaps.suggest()` call, not assumed).
+	 *
+	 * STRATEGY 1 (PRIMARY, exact): drop every part up to and including the one matching
+	 * `locality` by NAME. `value` for "Чертановская 66к1", requested UNBOUNDED on a Russian-locale
+	 * rig, comes back as `"Россия, Москва, Чертановская улица, 66к1"`; matching `locality`
+	 * (`"Москва"`) against the parts and keeping everything after it produces the operator's own
+	 * target, matching the Yandex.Delivery reference exactly: `"Чертановская улица, 66к1"`.
+	 * Deliberately does NOT hard-code "drop the first two parts": a region can sit between the
+	 * country and the city (`"Россия, Московская область, Москва, ..."`), and some results carry
+	 * no country at all — either would make a fixed-offset drop cut the wrong parts, or the wrong
+	 * NUMBER of parts. Matching the locality BY NAME is the only rule that survives both shapes,
+	 * and it is exact wherever it applies — always preferred when it finds a match.
+	 *
+	 * STRATEGY 2 (FALLBACK, heuristic — ONLY when strategy 1 finds nothing): drop
+	 * `min( 2, max( 0, parts.length - 2 ) )` leading parts. This exists for exactly the case
+	 * strategy 1 cannot solve: `config.locality` and the geocoder's OWN response language
+	 * disagree. Rig-measured on THIS project (live-review round 4, second follow-up): with the
+	 * rig's WordPress locale forcing `lang=en_US`, `ymaps.suggest()` for the SAME query returned
+	 * `"Russian Federation, Moscow, Chertanovskaya Street, 66к1"` — `locality` is the merchant's
+	 * own configured `"Москва"`, which never matches `"Moscow"` by string equality, so strategy 1
+	 * correctly finds nothing and falls through here. This is not only a locale mismatch, either:
+	 * a shop could spell its own city differently than ymaps does even in ONE language, so this
+	 * fallback is worth having independent of the `en_US` rig artifact that surfaced it.
+	 *
+	 * `drops` is DELIBERATELY CLAMPED TO A MAXIMUM OF TWO — NOT "keep the last two parts" (a
+	 * different rule that silently discards everything else, and is WRONG the moment a house
+	 * number carries a trailing sub-entry). Checked against every shape actually seen or
+	 * plausible for this feature:
+	 * - `"Russian Federation, Moscow, Chertanovskaya Street, 66к1"` (4 parts) → drop 2 →
+	 *   `"Chertanovskaya Street, 66к1"`. Correct.
+	 * - `"Russian Federation, Moscow, Chertanovskaya Street, 66к1, entrance 3"` (5 parts) →
+	 *   STILL drop only 2 (the `Math.min( 2, … )` clamp) → `"Chertanovskaya Street, 66к1,
+	 *   entrance 3"` — the sub-entry survives intact. "Keep the last two parts" would instead
+	 *   produce `"66к1, entrance 3"`, silently losing the street name. DO NOT "simplify" this
+	 *   into a last-N-parts rule; that is the exact regression this comment exists to prevent.
+	 * - `"Москва, Тверская улица, 5"` (3 parts, no country at all) → `max( 0, 3-2 ) = 1` → drop 1
+	 *   → `"Тверская улица, 5"`. Correct — clamping to `parts.length - 2` (never negative) is
+	 *   what keeps a short, country-less value from being over-trimmed.
+	 * - `"Тверская улица, 5"` (2 parts) → `max( 0, 2-2 ) = 0` → untouched. Correct — already as
+	 *   short as this heuristic will ever cut.
+	 *
+	 * Falls back further still to the (whitespace-trimmed, otherwise untouched) full `value` only
+	 * when `value` itself is empty — there is nothing left to drop parts FROM at that point.
+	 *
+	 * @since 2.0.2
+	 * @param {string} value    a `ymaps.suggest()` item's own `value` field, comma-separated,
+	 *                          broadest-to-narrowest (country → region → city → street → house).
+	 * @param {string} locality `config.locality` — the plugin's own configured city/locality name.
+	 * @returns {string}
+	 */
+	function trimAddressValue( value, locality ) {
+		var trimmed = 'string' === typeof value ? value.trim() : '';
+
+		if ( ! trimmed ) {
+			return trimmed;
+		}
+
+		var parts = trimmed.split( ',' ).map( function( part ) {
+			return part.trim();
+		} );
+
+		if ( locality ) {
+			var needle = String( locality ).trim().toLowerCase();
+
+			for ( var i = 0; i < parts.length; i++ ) {
+				if ( parts[ i ].toLowerCase() === needle ) {
+					// Strategy 1 — exact, preferred whenever it finds a match.
+					return parts.slice( i + 1 ).join( ', ' );
+				}
+			}
+		}
+
+		// Strategy 2 — language-independent heuristic fallback. See this function's own docblock
+		// for the exact rig measurement that motivated the `Math.min( 2, … )` clamp; do not
+		// change this to a "keep the last two parts" rule.
+		var drops = Math.min( 2, Math.max( 0, parts.length - 2 ) );
+
+		return parts.slice( drops ).join( ', ' );
+	}
+
+	/**
+	 * Projects one `ymaps.suggest()` item into `{ displayName, query }` (live-review round 4
+	 * follow-up — the coordinator's own rig measurement against a REAL `ymaps.suggest()` call).
+	 *
+	 * `item.displayName` is REVERSED (house number FIRST — `"66к1, Чертановская улица, Москва,
+	 * Россия"`) and carries the full country/locality prefix; `item.value` is broadest-to-
+	 * narrowest and geocodable AS-IS (`"Россия, Москва, Чертановская улица, 66к1 "`). BOTH
+	 * returned fields are therefore derived from `value`, never from the (differently-ordered)
+	 * `displayName`, EXCEPT when `value` is missing entirely — only then does `item.displayName`
+	 * stand in for both, since there is nothing else to project.
+	 *
+	 * `query` is the FULL, untrimmed-by-locality `value` (whitespace trimmed only) — this is what
+	 * {@see resolveAddress} must geocode, never the short `displayName`: "Чертановская улица,
+	 * 66к1" with no city is exactly the ambiguity `strictBounds` exists to prevent everywhere
+	 * else in this file. `displayName` is the SHORT, locality-trimmed form
+	 * ({@see trimAddressValue}) — what the customer actually reads in the results list, matching
+	 * the reference's own "Чертановская улица, 66к1" exactly.
+	 *
+	 * @since 2.0.2
+	 * @param {Object} item     one `ymaps.suggest()` result item (`{ type, displayName, value, hl }`).
+	 * @param {string} locality `config.locality`, passed straight through to {@see trimAddressValue}.
+	 * @returns {{displayName: string, query: string}}
+	 */
+	function projectSuggestion( item, locality ) {
+		var value = item && 'string' === typeof item.value ? item.value.trim() : '';
+
+		if ( value ) {
+			return { displayName: trimAddressValue( value, locality ), query: value };
+		}
+
+		var fallback = item && 'string' === typeof item.displayName ? item.displayName.trim() : '';
+
+		return { displayName: fallback, query: fallback };
+	}
+
+	/**
 	 * Extracts a usable bounds pair from a `ymaps.geocode()` result's first hit, or null when
 	 * the result is empty/malformed — the caller degrades to `config.defaultLocation` either
 	 * way, never throws.
@@ -394,10 +636,11 @@
 
 	/**
 	 * Extracts the first hit's own coordinates from a `ymaps.geocode()` result — used by
-	 * {@see WoodevYandexMapProvider#resolveAddress} to place the "your address" pin and anchor
-	 * the nearest-N fit, as opposed to {@see extractGeocodeBounds}'s use of the SAME shape of
-	 * result for the initial-viewport bounding box. Returns null for an empty/malformed result;
-	 * the caller degrades to doing nothing rather than throwing or guessing a location.
+	 * {@see WoodevYandexMapProvider#resolveAddress} to anchor {@see WoodevYandexMapProvider#focusAddress}'s
+	 * same-place check and nearest-N fit, as opposed to {@see extractGeocodeBounds}'s use of the
+	 * SAME shape of result for the initial-viewport bounding box. Returns null for an empty/
+	 * malformed result; the caller degrades to doing nothing rather than throwing or guessing a
+	 * location.
 	 *
 	 * @param {Object} result
 	 * @returns {Array|null} `[lat, lng]`, or null.
@@ -452,6 +695,53 @@
 
 			return coords[ 0 ] === first[ 0 ] && coords[ 1 ] === first[ 1 ];
 		} );
+	}
+
+	/**
+	 * One point's own type code — `pickup-panels.js`'s own per-point filter reads it the SAME
+	 * way (`point.type.code`), so the two files never diverge on what a point's "type" is.
+	 *
+	 * @param {Object} point
+	 * @returns {string} the code, or `''` when the point carries no usable type info.
+	 */
+	function pointTypeCode( point ) {
+		return ( point && point.type && point.type.code ) || '';
+	}
+
+	/**
+	 * Every DISTINCT point-level type code inside `group.points`, in first-seen order (live-review
+	 * round 3, Finding 1). `group.typeCode` alone is only the FIRST point's own type
+	 * (`pickup-geo.js`'s own `groupByPosition()` convention — see the file docblock's opening
+	 * paragraph) — filtering a co-located group by that ALONE hid the WHOLE marker the instant the
+	 * first point's type was unchecked, even while a second, different-typed point inside that
+	 * SAME group still passed the filter and stayed correctly listed in the sidebar (`pickup-panels.js`
+	 * filters per POINT, never per group). {@see WoodevYandexMapProvider#setTypeFilter}'s predicate
+	 * tests against this full set instead, so a group survives whenever ANY of its points does.
+	 * Falls back to `[ group.typeCode ]` only when no point carries usable type info at all
+	 * (defensive — should not happen for a real fixture).
+	 *
+	 * @since 2.0.2
+	 * @param {Object} group
+	 * @returns {Array<string>}
+	 */
+	function groupTypeCodes( group ) {
+		var seen = {};
+		var codes = [];
+
+		( group.points || [] ).forEach( function( point ) {
+			var code = pointTypeCode( point );
+
+			if ( code && ! seen[ code ] ) {
+				seen[ code ] = true;
+				codes.push( code );
+			}
+		} );
+
+		if ( 0 === codes.length && group.typeCode ) {
+			codes.push( group.typeCode );
+		}
+
+		return codes;
 	}
 
 	// -------------------------------------------------------------------------
@@ -590,12 +880,15 @@
 
 		this.handlers = {
 			pointClick: [],
+			clusterClick: [],
 			boundsChange: [],
 			bboxTooWide: [],
 			visibleChange: [],
 			nothingNearby: [],
 			searchResults: [],
+			searchCleared: [],
 			addressFocused: [],
+			addressMatchedPoint: [],
 			error: [],
 		};
 
@@ -605,14 +898,16 @@
 		/** @type {string|null} the group key {@see focusGroup} last successfully focused. */
 		this._focusedKey = null;
 
+		/** @type {Array<string>|null} the currently active type-filter code list, as
+		 *  {@see setTypeFilter} last set it — `null` means "every type shows". Consulted by
+		 *  {@see _buildProperties}/{@see _survivingPoints} so a marker's icon and badge count
+		 *  reflect the SURVIVING subset of a co-located group, not its full membership
+		 *  (live-review round 3, Finding 1) — see {@see setTypeFilter}'s own docblock. */
+		this._activeTypeFilter = null;
+
 		/** @type {Object|null} the `ymaps.control.SearchControl` built in init() — see
 		 *  {@see _buildSearchControl}. */
 		this.searchControl = null;
-
-		/** @type {Object|null} the "your address" pin — a plain `ymaps.Placemark`, NEVER a
-		 *  group inside the ObjectManager (see the file docblock's "ADDRESS SEARCH" section).
-		 *  Null when no address search is currently active. */
-		this._addressPin = null;
 
 		/** @type {HTMLElement|null} the element ymaps draws into — either the container itself,
 		 *  when the caller handed us the panels' `.woodev-pickup-map`, or one this file created
@@ -628,10 +923,25 @@
 		 *  continuation when a later call's camera move resolves before an earlier one's. */
 		this._focusSeq = 0;
 
+		/** @type {number} bumped on every {@see focusAddress} call (and captured at the start of
+		 *  every {@see resolveAddress} call) — discards a stale `resolveAddress()` continuation
+		 *  when a later address search/pick resolves before an earlier one's (live-review round 4;
+		 *  see {@see resolveAddress}'s own docblock). The address-focus equivalent of
+		 *  {@see this._focusSeq}. */
+		this._addressSeq = 0;
+
 		/** @type {*} the ACCESSOR {@see setMargin} last got back from `map.margin.addArea()`
 		 *  — removal goes through its own `remove()`, there is no `margin.removeArea()`.
 		 *  Null when nothing is currently reserved. */
 		this._marginArea = null;
+
+		/** @type {*} the ACCESSOR {@see _buildMap} got back from reserving the STATIC top-chrome
+		 *  strip — kept entirely separate from {@see this._marginArea} (the sidebar's own,
+		 *  dynamic reservation): `setMargin()` must never remove this one, and this one is never
+		 *  re-added after the first build (see {@see _buildMap}'s own docblock and the file
+		 *  docblock's "MAP MARGINS" section). Null until `init()` builds the map, and again after
+		 *  `destroy()`. */
+		this._topMarginArea = null;
 
 		this._destroyed = false;
 	}
@@ -732,8 +1042,9 @@
 	};
 
 	/**
-	 * Builds the map and adds its custom tile layers/copyrights (D-8) — everything that does
-	 * not depend on point data.
+	 * Builds the map, reserves the static top-chrome strip our own search bar occupies (see the
+	 * file docblock's "MAP MARGINS" section), and adds its custom tile layers/copyrights (D-8) —
+	 * everything that does not depend on point data.
 	 *
 	 * @returns {void}
 	 */
@@ -765,8 +1076,32 @@
 		this.map = new ymaps.Map(
 			this.canvasEl,
 			{ center: defaultLocation.center, zoom: defaultLocation.zoom, controls: [] },
-			{ suppressMapOpenBlock: true, minZoom: MIN_ZOOM, maxZoom: MAX_ZOOM }
+			{
+				suppressMapOpenBlock: true,
+				minZoom: MIN_ZOOM,
+				maxZoom: MAX_ZOOM,
+				// D3 (live-review defect): without this, Yandex's own POI layer keeps its click
+				// handlers underneath our markers and opens ITS organisation card instead of
+				// ours — this file owns click handling on this map now (see _buildObjectManager
+				// / iconShapeFor), so the map's own POI interactivity must be off.
+				yandexMapDisablePoiInteractivity: true,
+			}
 		);
+
+		// The STATIC top-chrome reservation (live-review follow-up, T1) — the space our own
+		// search bar occupies, never the sidebar's (that is {@see setMargin}'s own, DYNAMIC
+		// `this._marginArea`; the two fields are never touched by each other's code path — see
+		// the file docblock's "MAP MARGINS" section). Added exactly once, here, because unlike
+		// the sidebar this strip never changes size or visibility for the life of the map — there
+		// is nothing for a caller to vary, so this is not exposed as a public method the way
+		// `setMargin()` is. Both references reserve the identical strip: Yandex.Delivery
+		// `widget-map.js` — `this.map.margin.addArea({ top: 0, left: 0, width: '100%',
+		// height: '64px' })`; the Russian Post bundle —
+		// `[{top:0,left:0,width:"100%",height:"64px"}].forEach(t => d.margin.addArea(t))`. Without
+		// it, a camera fit (`focusGroup()`, `focusAddress()`, the initial-viewport/bulk fits) is
+		// free to frame a point directly underneath the search bar, which ymaps has no other way
+		// of knowing occupies screen space.
+		this._topMarginArea = this.map.margin.addArea( { top: 0, left: 0, width: '100%', height: '64px' } );
 
 		this._addLayers( config.layers );
 		this._addCopyrights( config.copyrights );
@@ -824,6 +1159,11 @@
 	 * `geoObjectOpenBalloonOnClick`/`clusterHasBalloon` are both `false`: the panels own the
 	 * point card's DOM, ymaps must not open anything of its own on top of it.
 	 *
+	 * Also wires the CLUSTER icon's own click ({@see _handleClusterClick}, live-review defect —
+	 * clicking a cluster used to do nothing at all, neither reference leaves it inert): a
+	 * feature click (`objects.events`) and a cluster-icon click (`clusters.events`) are two
+	 * DIFFERENT ymaps event streams on this same ObjectManager, never the same handler.
+	 *
 	 * @returns {void}
 	 */
 	WoodevYandexMapProvider.prototype._buildObjectManager = function() {
@@ -843,7 +1183,58 @@
 			self.emit( 'pointClick', e.get( 'objectId' ) );
 		} );
 
+		this.objectManager.clusters.events.add( 'click', function( e ) {
+			self._handleClusterClick( e.get( 'objectId' ) );
+		} );
+
 		this.map.geoObjects.add( this.objectManager );
+	};
+
+	/**
+	 * Handles a click on a CLUSTER icon (as opposed to a single feature — see
+	 * {@see _buildObjectManager}'s own docblock) — a live-review defect: no handler existed at
+	 * all, so clicking a cluster did nothing. Both references leave the clusterer's/cluster
+	 * layer's own default expand behaviour in place rather than owning this themselves; this
+	 * file's markers are a custom HTML layout on a bare `ObjectManager`, which has no default
+	 * expand of its own, so this method supplies one: step the zoom in by 2 (clamped to
+	 * {@see MAX_ZOOM}) centred on the cluster's own anchor coordinate.
+	 *
+	 * `objectManager.clusters.getById( objectId )` returns the SAME GeoJSON-ish shape
+	 * {@see clusterAnchorCoordinates} already reads elsewhere in this file (`geometry.coordinates`
+	 * as a plain array, not a `getCoordinates()` method) — ObjectManager clusters are POJOs, not
+	 * `Placemark` instances, so this stays consistent with every other cluster read in this file.
+	 *
+	 * `setCenter()` is asynchronous (see the file docblock's first lesson) but this method does
+	 * not await it: nothing downstream needs to know when the zoom settles, and `clusterClick` is
+	 * informational only — the mount ignores it (see the frozen contract in the SP-5 live-review
+	 * plan); it exists for a future consumer, not because this codebase currently listens for it.
+	 *
+	 * @since 2.0.2
+	 * @param {string} objectId the cluster's own id, as `clusters.events`'s `click` event carries it.
+	 * @returns {void}
+	 */
+	WoodevYandexMapProvider.prototype._handleClusterClick = function( objectId ) {
+		if ( ! this.map || ! this.objectManager || ! this.objectManager.clusters ) {
+			return;
+		}
+
+		var cluster = 'function' === typeof this.objectManager.clusters.getById
+			? this.objectManager.clusters.getById( objectId )
+			: null;
+		var coords = cluster && cluster.geometry && cluster.geometry.coordinates;
+
+		if ( ! coords ) {
+			return;
+		}
+
+		var nextZoom = Math.min( this.map.getZoom() + 2, MAX_ZOOM );
+
+		// `useMapMargin: true` (live-review round 3, Finding 3) — every OTHER camera move in this
+		// file passes it (`focusGroup()`, `focusAddress()`, the initial-viewport/bulk fits); this
+		// one was the sole exception, so a clicked cluster could zoom in centred underneath the
+		// static top strip or the sidebar's own reservation, which those margins exist to prevent.
+		this.map.setCenter( coords, nextZoom, { duration: 200, useMapMargin: true } );
+		this.emit( 'clusterClick', { coords: coords } );
 	};
 
 	/**
@@ -913,9 +1304,9 @@
 	 * against the already-loaded point pool via `pickup-geo.matchPoints()` — instant, free, no
 	 * network — AND geocodes `request` via `ymaps.geocode()`, BOUNDED to the loaded point set
 	 * (see {@see _loadedBounds}, spec V-7). Only invoked via `control.search( query )`, which
-	 * Task 20's mount wires to `searchSubmit` (Enter/the magnifier) — NEVER per keystroke; see the
-	 * file docblock's "ADDRESS SEARCH" section for the two-events-two-costs design this replaces
-	 * D-6's `ymaps.suggest()` approach with.
+	 * Task 20's mount wires to `searchSubmit` (Enter/the magnifier) — a DELIBERATE submit, never
+	 * per keystroke ({@see suggestAddresses} is what now powers the per-keystroke dropdown; see
+	 * the file docblock's "ADDRESS SEARCH" section for the full two-engine design).
 	 *
 	 * The RESOLVED VALUE is `{ geoObjects, metaData }` — the REAL `ymaps.geocode()` response,
 	 * passed straight through, matched points NEVER included (see the file docblock's "WHY A
@@ -925,6 +1316,14 @@
 	 * on them — a defensive tag for a future direct consumer of the engine, since this codebase's
 	 * OWN click handling never calls `showResult()` at all (the panels' search rows dispatch
 	 * `searchPointPicked`/`searchAddressPicked` themselves).
+	 *
+	 * `displayName` READS `properties.get( 'name' )` — the SHORT form (live-review round 4,
+	 * Finding A.2; was `'text'`, the FULL postal form INCLUDING the country, which is what
+	 * actually produced the operator's reported "Russian Federation, Moscow, ... metro station"
+	 * instead of the reference's own "Чертановская улица, 66к1" for the identical query).
+	 * `properties.get( 'description' )` is the remainder ymaps splits off `name` (typically the
+	 * city/region) — deliberately NOT appended here: the reference's own expected string for this
+	 * exact query is the bare short form, no suffix.
 	 *
 	 * ALSO emits `searchResults` with `{ points, addresses }` — `addresses` here is a LIGHTWEIGHT
 	 * `{ displayName }` projection of the same geocode hits (`pickup-panels.js`'s
@@ -974,8 +1373,9 @@
 					properties.set( 'woodevKind', 'address' );
 				}
 
+				// Finding A.2 — 'name' (short), never 'text' (full postal form incl. country).
 				var displayName = properties && 'function' === typeof properties.get
-					? properties.get( 'text' )
+					? properties.get( 'name' )
 					: '';
 
 				return { displayName: 'string' === typeof displayName ? displayName : '' };
@@ -1048,10 +1448,11 @@
 
 	/**
 	 * Matches `query` against the already-loaded point pool — free, local, no network (spec V-6).
-	 * The PUBLIC half of the same free-text matching {@see _searchGeocodeProvider} also performs
-	 * on submit; Task 20's mount wires this to the panels' own debounced `searchType` event, which
+	 * The POINT half of what powers the typing dropdown; {@see suggestAddresses} is the ADDRESS
+	 * half — Task 20's mount wires this to the panels' own debounced `searchType` event, which
 	 * fires on every keystroke and must never touch the geocoder (that would burn the merchant's
-	 * quota once per keystroke instead of once per deliberate search).
+	 * quota once per keystroke instead of once per deliberate search) — matching points cost
+	 * nothing to check locally, so this one alone never needed the suggest/geocode split at all.
 	 *
 	 * @since 2.0.2
 	 * @param {string} query free-text query, as typed.
@@ -1059,6 +1460,106 @@
 	 */
 	WoodevYandexMapProvider.prototype.matchLoadedPoints = function( query ) {
 		return geo.matchPoints( this._allPoints(), query );
+	};
+
+	/**
+	 * Powers the CUSTOM typing dropdown's ADDRESS half via `ymaps.suggest()` (live-review round 4,
+	 * Finding A.1) — the reference's OWN data source for exactly this moment: Yandex.Delivery's
+	 * `widget-map.js` keeps ymaps' NATIVE suggest widget alive (`noSuggestPanel: false`), which
+	 * calls `ymaps.suggest()` internally, automatically, for free, as the customer types. This file
+	 * replaces the control's ENTIRE chrome with the framework's own layout (D-3), so there is no
+	 * native widget left to do that for us — this method reproduces it explicitly. Task 20's mount
+	 * wires the panels' own debounced `searchType` event to this method (the point half stays
+	 * {@see matchLoadedPoints}, unchanged).
+	 *
+	 * `ymaps.suggest()`, NOT `ymaps.geocode()`, is deliberate and load-bearing, not a style choice:
+	 * `suggest()` returns short, ADDRESS-shaped strings and ranks street addresses over points of
+	 * interest; `geocode()` ranks POIs (a transit station, a landmark) alongside addresses with no
+	 * such bias, which is the entire root cause of the operator's live-review round 3 report —
+	 * typing the exact address "Чертановская 66к1" geocoded to an English-language, full-postal-
+	 * form TRANSIT STATION instead of the reference's own short "Чертановская улица, 66к1". See
+	 * the file docblock's "ADDRESS SEARCH" section for the full two-engine design this method is
+	 * one half of.
+	 *
+	 * BOUNDED to the loaded point area the SAME way {@see _searchGeocodeProvider}'s geocode call
+	 * already is (see {@see _loadedBounds}, spec V-7) — omitted before anything has ever loaded,
+	 * never a degenerate box.
+	 *
+	 * RETURNS `{ points, addresses }` — it does NOT emit `searchResults` (live-review round 4,
+	 * second follow-up: an earlier version of this method DID emit `searchResults`, which
+	 * reintroduced the operator's own round-3 defect — "начинаешь писать адрес … появляется
+	 * «Поиск не дал результатов.» и висит"). `searchResults` is the COMPLETED-SEARCH event;
+	 * `pickup-mount.js` wires it to `panels.renderSearchResults()`, the renderer that prints the
+	 * "no results" verdict. This method runs on the DEBOUNCED TYPING path — routing its output
+	 * through that same event would drive the completed-search verdict mid-keystroke, exactly the
+	 * bug the `previewSearchResults()`/`renderSearchResults()` split already exists to prevent.
+	 * The mount instead calls `provider.suggestAddresses( query ).then( r =>
+	 * panels.previewSearchResults( r ) )` — the SAME "plain return value, never an event" shape
+	 * {@see matchLoadedPoints} already has (that method just never needed a promise, being
+	 * synchronous), extended here to a method that now does network I/O.
+	 *
+	 * NEVER calls `ymaps.geocode()` — resolving a picked suggestion to real coordinates stays
+	 * {@see resolveAddress}'s own, single, deliberate job, matching the reference's "geocode once
+	 * per deliberate pick" model exactly (see the file docblock's "ADDRESS SEARCH" section).
+	 *
+	 * CONFIRMED against a REAL `ymaps.suggest()` call (live-review round 4 follow-up — no longer a
+	 * guess): `results`/`boundedBy`/`strictBounds` ARE honoured identically to `ymaps.geocode()`'s
+	 * own same-named options — a bounded call returned results on the right street only. The item
+	 * shape is `{ type, displayName, value, hl }`; each is projected to `{ displayName, query }`
+	 * via {@see projectSuggestion} — `item.displayName` is REVERSED (house number first,
+	 * `"66к1, Чертановская улица, Москва, Россия"`) and carries the full country/locality prefix,
+	 * so BOTH returned fields are derived from `item.value` instead (broadest-to-narrowest,
+	 * geocodable as-is), never from `displayName`, except when `value` is missing entirely.
+	 * `query` — the FULL, un-trimmed `value` — is what `pickup-mount.js` prefers
+	 * (`address.query || address.displayName`) when calling {@see resolveAddress}: geocoding the
+	 * SHORT `displayName` alone ("Чертановская улица, 66к1" with no city) is exactly the
+	 * ambiguity `strictBounds` exists to prevent everywhere else in this file.
+	 *
+	 * A refused/failed `suggest()` call resolves with the locally-matched points and an EMPTY
+	 * address list — never rejects — so a network hiccup degrades to the free local matches
+	 * instead of blanking the preview; a call that outlives `destroy()` resolves with nothing at
+	 * all (`{ points: [], addresses: [] }`) rather than handing the caller results to apply to a
+	 * torn-down (or freshly reopened) panels instance.
+	 *
+	 * @since 2.0.2
+	 * @param {string} query free-text query, as typed.
+	 * @returns {Promise<{points: Array, addresses: Array}>}
+	 */
+	WoodevYandexMapProvider.prototype.suggestAddresses = function( query ) {
+		var self = this;
+		var matches = geo.matchPoints( this._allPoints(), query );
+		var locality = this.config.locality;
+		var suggestOptions = { results: SEARCH_RESULT_COUNT };
+		var bounds = this._loadedBounds();
+
+		if ( bounds ) {
+			suggestOptions.boundedBy = bounds;
+			suggestOptions.strictBounds = true;
+		}
+
+		if ( ! this.ymaps || 'function' !== typeof this.ymaps.suggest ) {
+			return Promise.resolve( { points: matches, addresses: [] } );
+		}
+
+		return this.ymaps.suggest( query, suggestOptions ).then( function( items ) {
+			if ( self._destroyed ) {
+				// A stale in-flight request resolves with nothing meaningful rather than handing
+				// the caller results to apply to a torn-down (or freshly reopened) panels
+				// instance — see _searchGeocodeProvider()'s own note on the same discipline.
+				return { points: [], addresses: [] };
+			}
+
+			var addresses = ( Array.isArray( items ) ? items : [] ).map( function( item ) {
+				return projectSuggestion( item, locality );
+			} );
+
+			return { points: matches, addresses: addresses };
+		} ).catch( function() {
+			// A refused/failed suggest() call must not leave the customer staring at nothing —
+			// the locally-matched points still stand, same fallback discipline as
+			// _searchGeocodeProvider()'s own catch, just as a resolved value instead of an emit.
+			return { points: matches, addresses: [] };
+		} );
 	};
 
 	/**
@@ -1108,8 +1609,9 @@
 				// setBounds() is ASYNCHRONOUS — always RETURNED/awaited, never fire-and-forgotten.
 				// See the file docblock's first lesson: dropping this return lets the very next
 				// step (emitting boundsChange from the PRE-move viewport) run before the camera
-				// has actually moved.
-				return self.map.setBounds( bounds, { checkZoomRange: true } );
+				// has actually moved. `duration: 400` (live-review fix): an un-animated jump cut
+				// to the resolved locality read as the map silently teleporting.
+				return self.map.setBounds( bounds, { checkZoomRange: true, duration: 400 } );
 			},
 			function() {
 				if ( ! self._destroyed ) {
@@ -1202,7 +1704,9 @@
 
 			// setBounds() is ASYNCHRONOUS — awaited, exactly like _resolveInitialViewport()'s
 			// own call. See the docblock comment above and the file docblock's first lesson.
-			this.map.setBounds( geo.boundsFor( anchor, list ), { checkZoomRange: true } ).then( function() {
+			// `duration: 400` (live-review fix) — this fit can travel across the whole loaded
+			// set, so it gets the SAME "long move" duration as the initial-viewport fit above.
+			this.map.setBounds( geo.boundsFor( anchor, list ), { checkZoomRange: true, duration: 400 } ).then( function() {
 				if ( self._destroyed ) {
 					return;
 				}
@@ -1217,28 +1721,84 @@
 	};
 
 	/**
+	 * The subset of `group.points` that pass the CURRENTLY active type filter
+	 * ({@see this._activeTypeFilter}, live-review round 3, Finding 1) — `null` (no filter) returns
+	 * every point, unfiltered, same reference array. {@see _buildProperties} uses this to compute
+	 * the marker's DISPLAYED state (which icon, what badge count) from what actually survived,
+	 * never from the group's full membership, so a marker whose first point's type got unchecked
+	 * shrinks/re-icons to the surviving point instead of staying visually stuck showing a type the
+	 * sidebar no longer credits it with (or, worse, disappearing entirely — see
+	 * {@see groupTypeCodes}'s own docblock for the bug this replaces).
+	 *
+	 * @since 2.0.2
+	 * @param {Object} group
+	 * @returns {Array} `group.points`' own elements (same references), filtered.
+	 */
+	WoodevYandexMapProvider.prototype._survivingPoints = function( group ) {
+		var activeFilter = this._activeTypeFilter;
+		var points = group.points || [];
+
+		if ( ! activeFilter ) {
+			return points;
+		}
+
+		return points.filter( function( point ) {
+			return -1 !== activeFilter.indexOf( pointTypeCode( point ) );
+		} );
+	};
+
+	/**
 	 * Builds a feature's `properties` bag from a group — shared by {@see _buildFeature} (the
 	 * initial `add()`) and {@see _setMarkerState} (an in-place `setObjectProperties()` update),
 	 * so the two never drift into building this shape two different ways. `state` defaults to
 	 * `'resting'`; {@see _setMarkerState} overwrites it when re-sending this same shape for a
 	 * focus change.
 	 *
-	 * `iconHref`/`iconHrefActive` are resolved from `config.pointIcons[group.typeCode]` — both
-	 * empty for an unrecognised type, in which case {@see _renderMarker} still draws the
-	 * framework's own default pin, never an invisible/broken one. `active` is guaranteed filled
-	 * server-side whenever the type is known at all (mirroring `default` when the plugin
-	 * supplied only one image — D-5, `Pickup_Handler::normalized_point_icons()`), so
+	 * `iconHref`/`iconHrefActive` are now derived from {@see _survivingPoints} — the subset that
+	 * passes the CURRENTLY active type filter — rather than from `group`'s full membership
+	 * (live-review round 3, Finding 1): a co-located group whose FIRST point's type is the one
+	 * unchecked must re-icon to whatever DID survive, never keep showing the filtered-out type's
+	 * icon (or vanish entirely, the actual reported bug — see {@see setTypeFilter}'s own
+	 * docblock). `groupSize` follows the SAME surviving subset, but ONLY while a filter is
+	 * actually active (`this._activeTypeFilter` truthy) — with no filter it mirrors `group.size`
+	 * directly, unchanged from before this fix, so a caller whose `size` and `points.length`
+	 * legitimately disagree sees no behaviour change in the common (unfiltered) case. A group with
+	 * NO surviving points (every one of its types filtered out) falls back to its full, unfiltered
+	 * membership for the icon/type computation — harmless, since `setTypeFilter()`'s predicate
+	 * already hides such a feature from the map entirely; there is no visible marker left for
+	 * these properties to describe.
+	 *
+	 * `typeCodes` (plural — {@see groupTypeCodes}) is the group's FULL set of distinct point
+	 * types, always unfiltered: it is what {@see setTypeFilter}'s predicate itself tests against
+	 * to decide whether the feature is drawn AT ALL, so it must never shrink to only the
+	 * currently-surviving subset the way `typeCode`/`iconHref` do.
+	 *
+	 * `iconHref`/`iconHrefActive` are resolved from `config.pointIcons[ <the surviving subset's
+	 * representative type> ]` — empty for an unrecognised type, in which case {@see _renderMarker}
+	 * still draws the framework's own default pin, never an invisible/broken one. `active` is
+	 * guaranteed filled server-side whenever the type is known at all (mirroring `default` when
+	 * the plugin supplied only one image — D-5, `Pickup_Handler::normalized_point_icons()`), so
 	 * `iconHrefActive` is never a broken/empty URL for a KNOWN type.
 	 *
 	 * @param {Object} group
 	 * @returns {Object}
 	 */
 	WoodevYandexMapProvider.prototype._buildProperties = function( group ) {
-		var icons = ( this.config.pointIcons && this.config.pointIcons[ group.typeCode ] ) || null;
+		var activeFilter = this._activeTypeFilter;
+		var survivors = this._survivingPoints( group );
+		var displayPoints = survivors.length > 0 ? survivors : ( group.points || [] );
+		var displayType = pointTypeCode( displayPoints[ 0 ] ) || group.typeCode;
+		var icons = ( this.config.pointIcons && this.config.pointIcons[ displayType ] ) || null;
 
 		return {
-			groupSize: group.size,
-			typeCode: group.typeCode,
+			// Unfiltered, `groupSize` mirrors `group.size` DIRECTLY, exactly as before this fix —
+			// never derived from `points.length` in that case, so a caller whose `size` and
+			// `points` legitimately disagree (this file trusts `pickup-geo.js`'s own count) sees
+			// no behaviour change at all when no filter is active. Only WHILE a filter is active
+			// does the badge need to shrink to the surviving subset's own count.
+			groupSize: activeFilter ? displayPoints.length : group.size,
+			typeCode: displayType,
+			typeCodes: groupTypeCodes( group ),
 			iconHref: icons ? icons.default : '',
 			iconHrefActive: icons ? icons.active : '',
 			state: 'resting',
@@ -1363,15 +1923,32 @@
 
 	/**
 	 * Emits `visibleChange` with the keys of every currently-loaded group whose position falls
-	 * inside the map's CURRENT bounds — a plain point-in-rectangle test against
+	 * inside the bounds ACTUALLY VISIBLE to the customer — a plain point-in-rectangle test against
 	 * {@see WoodevYandexMapProvider#_groupsByKey}, not a query against ymaps' own object model
 	 * (ObjectManager exposes no equivalent of the previous version's `geoQuery(...).searchInside()`
 	 * over a plain Clusterer). Called after every {@see setPoints}.
 	 *
+	 * `getBounds( { useMapMargin: true } )` (live-review round 4, Finding C — operator: "когда мы
+	 * раскрываем сайдбар, видим в нём например 10 доступных точек, но на карте по факту видно
+	 * только 3 … остальные точки спрятаны за сайдбаром"): the plain `getBounds()` this method used
+	 * to call returns the map's FULL canvas rectangle, including the area the static top strip and
+	 * the sidebar's own reservation ({@see _buildMap}/{@see setMargin}) cover — so a group sitting
+	 * physically underneath either was still counted as "visible" and listed, even though the
+	 * customer cannot see it at all. `useMapMargin: true` is the SAME option every camera FIT in
+	 * this file already passes to `setBounds()`/`setCenter()`/`panTo()` to keep a MOVE clear of
+	 * those areas; passing it to `getBounds()` too asks ymaps for the SAME margin-aware rectangle
+	 * as a READ instead, which is the shape to check first — this file makes no attempt to
+	 * re-derive the reserved areas' own pixel geometry by hand, unlike a camera fit (which has to
+	 * pick a target and a zoom), a bounds READ has nothing to compute beyond asking ymaps for the
+	 * number it already knows. UNVERIFIED against a real map (flag on the rig): whether
+	 * `getBounds()` actually honours this option the way `setBounds()`/`setCenter()` do, or
+	 * silently ignores it and returns the full canvas rectangle regardless — a silent ignore would
+	 * degrade to today's (already-shipped, not a regression) full-canvas behaviour, never throw.
+	 *
 	 * @returns {void}
 	 */
 	WoodevYandexMapProvider.prototype._emitVisibleChange = function() {
-		var bounds = this.map.getBounds();
+		var bounds = this.map.getBounds( { useMapMargin: true } );
 		var minLat = Math.min( bounds[ 0 ][ 0 ], bounds[ 1 ][ 0 ] );
 		var maxLat = Math.max( bounds[ 0 ][ 0 ], bounds[ 1 ][ 0 ] );
 		var minLng = Math.min( bounds[ 0 ][ 1 ], bounds[ 1 ][ 1 ] );
@@ -1403,11 +1980,31 @@
 	 * matching production's bug rather than ymaps' real signature. Confirmed against a live
 	 * `ymaps.ObjectManager` on the rig, not assumed.
 	 *
+	 * THE PREDICATE TESTS `properties.typeCodes` (plural, {@see groupTypeCodes}) — the group's
+	 * FULL set of distinct point types — NOT the singular `properties.typeCode` (live-review
+	 * round 3, Finding 1, confirmed on the rig AND independently reported by the operator: "на
+	 * карте отображается иконка ПВЗ, если в фильтре отключить Пункт выдачи, то маркер с карты
+	 * исчезает, хотя у этой точки есть ещё и Постамат"). `typeCode` alone names only the group's
+	 * FIRST point (`pickup-geo.js`'s own `groupByPosition()` convention), so testing against it
+	 * hid a WHOLE co-located marker the instant that one point's type was unchecked, even while a
+	 * DIFFERENT type inside the SAME group still passed the filter and stayed correctly listed in
+	 * the sidebar (`pickup-panels.js` filters per POINT, never per group — the two disagreed). A
+	 * group now survives whenever the selected set intersects ANY of its distinct point types.
+	 *
+	 * `this._activeTypeFilter` is stored SEPARATELY from what the predicate closes over, so
+	 * {@see _buildProperties} (called by {@see _refreshMarkerProperties} below, and by every
+	 * later {@see setPoints}/{@see _setMarkerState} call) can consult the SAME active filter to
+	 * decide what a marker's icon/badge should DISPLAY — `setFilter()` alone only decides whether
+	 * ymaps draws a feature at all; it says nothing about what is already rendered for one that
+	 * stays visible with a SMALLER surviving subset than before.
+	 *
 	 * @param {Array|null} codes `type.code`s to show, or `null`/empty for "all types".
 	 * @returns {void}
 	 */
 	WoodevYandexMapProvider.prototype.setTypeFilter = function( codes ) {
 		var list = Array.isArray( codes ) && codes.length > 0 ? codes : null;
+
+		this._activeTypeFilter = list;
 
 		this.objectManager.setFilter( function( object ) {
 			if ( ! list ) {
@@ -1415,9 +2012,54 @@
 			}
 
 			var properties = object && object.properties;
-			var typeCode = properties ? properties.typeCode : undefined;
+			var typeCodes = properties && Array.isArray( properties.typeCodes ) ? properties.typeCodes : [];
 
-			return -1 !== list.indexOf( typeCode );
+			return typeCodes.some( function( code ) {
+				return -1 !== list.indexOf( code );
+			} );
+		} );
+
+		this._refreshMarkerProperties();
+	};
+
+	/**
+	 * Re-renders every currently-loaded feature's PROPERTIES (icon, badge count, representative
+	 * type) after a filter change (live-review round 3, Finding 1) — `setFilter()` alone only
+	 * decides whether ymaps DRAWS a feature at all; it does not touch what is already rendered
+	 * for one that stays visible with fewer surviving points than before. A co-located group
+	 * whose FIRST point's type just got unchecked must not keep showing that point's icon and the
+	 * FULL group's badge count — it must shrink/re-icon to whatever {@see _survivingPoints}
+	 * actually kept.
+	 *
+	 * Never touches the icon HIT-BOX (`setObjectOptions`) — sizing is {@see _setMarkerState}'s own
+	 * concern, driven by FOCUS, not by the filter, and a filter change alone never changes which
+	 * group is focused. The currently focused group's `state: 'active'` is explicitly preserved
+	 * here (`_buildProperties()` itself always returns `'resting'`) rather than letting a filter
+	 * change silently revert it to resting.
+	 *
+	 * A no-op before `_buildObjectManager()` has run (`this.objectManager` null) — mirrors every
+	 * other post-destroy/pre-init guard in this file.
+	 *
+	 * @since 2.0.2
+	 * @returns {void}
+	 */
+	WoodevYandexMapProvider.prototype._refreshMarkerProperties = function() {
+		var self = this;
+		var objects = this.objectManager && this.objectManager.objects;
+
+		if ( ! objects || 'function' !== typeof objects.setObjectProperties ) {
+			return;
+		}
+
+		Object.keys( this._groupsByKey ).forEach( function( key ) {
+			var group = self._groupsByKey[ key ];
+			var properties = self._buildProperties( group );
+
+			if ( key === self._focusedKey ) {
+				properties.state = 'active';
+			}
+
+			objects.setObjectProperties( key, properties );
 		} );
 	};
 
@@ -1460,17 +2102,38 @@
 	/**
 	 * Reserves (or releases) the screen area the framework's own sidebar panel covers, via
 	 * ymaps' native `map.margin.addArea()`/`removeArea()` (Task 20) — never a plain
-	 * `map.margin = [...]` array assignment, which is not this API's shape (see ADR-010 and
-	 * the design spec's own sidebar geometry: `map.margin.addArea({ right: <width>, top: 0,
-	 * height: '100%' })`). Task 20's mount calls this from the panels' own `listToggle`
-	 * event; every `setBounds()` camera move in this file that passes `useMapMargin: true`
-	 * (see {@see focusGroup}) already reads whatever THIS method most recently reserved, so
-	 * an un-clustered point ends up clear of the open panel instead of centred underneath it.
+	 * `map.margin = [...]` array assignment, which is not this API's shape (see ADR-010).
+	 * `right: 0` anchors the area to the right edge; `width` is what actually gives it SIZE —
+	 * matching both reference implementations exactly: Yandex.Delivery `widget-map.js` —
+	 * `map.margin.addArea({ right: 0, top: 0, width: 320, height: '100%' })`; the Russian Post
+	 * bundle — `{right:0,top:0,width:300,height:"100%"}`. Task 20's mount calls this from the
+	 * panels' own `listToggle` event; every `setBounds()` camera move in this file that passes
+	 * `useMapMargin: true` (see {@see focusGroup}) already reads whatever THIS method most
+	 * recently reserved, so an un-clustered point ends up clear of the open panel instead of
+	 * centred underneath it.
+	 *
+	 * GOTCHA (live-review round 2, rig-verified 2026-08-05 — see
+	 * `docs-internal/gotchas/ymaps-margin-area-needs-explicit-width.md`): the design spec this
+	 * method was originally built against (`docs-internal/specs/2026-08-01-sp5-pickup-map-rework-
+	 * design.md` §6) specified `map.margin.addArea({ right: <width>, top: 0, height: '100%' })` —
+	 * the panel's pixel WIDTH poured into `right`, which is an OFFSET, with no `width` key at all.
+	 * The spec was WRONG, and this method copied it faithfully: `right` is where the area's edge
+	 * SITS, not how big it is, so an area with no `width` reserves ZERO pixels. Every
+	 * `useMapMargin: true` camera move in this file still resolved and still looked correct in
+	 * every jest test (nothing here asserts screen pixels), because the bug is invisible off a
+	 * real map — it only shows up as "the focused point centred on the WHOLE map, sidebar or not"
+	 * and "ymaps' copyright strip sitting underneath the sidebar panel" on the actual rig. Fixed
+	 * to `{ right: 0, top: 0, width: width, height: '100%' }`.
 	 *
 	 * The previous reservation, if any, is always released FIRST — opening twice in a row,
 	 * or closing when nothing is reserved, never leaks a stale area. A no-op before `init()`
 	 * has built a map, or once `destroy()` has torn it down (`this.map`/`this.map.margin` is
 	 * then null/absent) — mirrors every other post-destroy guard in this file.
+	 *
+	 * This method owns `this._marginArea` ONLY — the STATIC top-chrome strip
+	 * {@see _buildMap} reserves for our own search bar lives in the SEPARATE
+	 * `this._topMarginArea` field and is never read, removed, or re-added here (see the file
+	 * docblock's "MAP MARGINS" section); the sidebar toggling on and off must never touch it.
 	 *
 	 * @param {boolean} open  whether the sidebar panel is now open.
 	 * @param {number}  width the panel's current width, in CSS pixels — ignored when `open`
@@ -1496,7 +2159,11 @@
 		}
 
 		if ( open ) {
-			this._marginArea = this.map.margin.addArea( { right: width, top: 0, height: '100%' } );
+			// `right` is an OFFSET from the right edge, not a size — `width` is the size. A build
+			// that put `width` INTO `right` (see this method's own docblock for the incident)
+			// declared an area with no `width` at all, which ymaps reserves as ZERO pixels: every
+			// `useMapMargin: true` camera move in this file still "worked", just against nothing.
+			this._marginArea = this.map.margin.addArea( { right: 0, top: 0, width: width, height: '100%' } );
 		}
 	};
 
@@ -1507,84 +2174,186 @@
 	/**
 	 * Resolves a chosen address SUGGESTION to real coordinates — the ONLY place this file calls
 	 * `ymaps.geocode()` from the search flow, and it does so EXACTLY ONCE per selection (see the
-	 * file docblock). `displayName` is the suggestion's own text — the caller (Task 20's mount)
-	 * holds the `addresses` array {@see _searchGeocodeProvider} returned and passes back the
-	 * entry the customer picked. An empty/malformed geocode result is a silent no-op, matching
-	 * every other "geocode degrades quietly" path in this file (see
-	 * {@see _resolveInitialViewport}) — no camera move, no pin, no `nothingNearby`.
+	 * file docblock). `displayName` is the suggestion's own resolvable text — the caller (Task
+	 * 20's mount) holds the `{ displayName, query }` entry {@see suggestAddresses}/
+	 * {@see _searchGeocodeProvider} returned and passes back `query` (the FULL, un-trimmed
+	 * string) when present, falling back to `displayName` only if `query` is absent.
 	 *
-	 * @param {string} displayName
+	 * DELIBERATELY THE LEAST CONSTRAINED GEOCODE/SUGGEST CALL IN THIS FILE — NO `boundedBy`, NO
+	 * `strictBounds` (live-review round 4, SECOND follow-up, reverting a round-4 change that made
+	 * this call `strictBounds`-bounded like the other two; that change was WRONG and the operator
+	 * caught it live: picking a suggestion for an address outside `_loadedBounds()` silently did
+	 * NOTHING — `strictBounds: true` made the geocode return ZERO hits, so
+	 * `extractGeocodeCoordinates()` saw `null` and this method quietly gave up). This is NOT an
+	 * edge case: the customer's own address is ROUTINELY outside the area the loaded pickup
+	 * points cover — that is the entire reason they are searching for it in the first place. The
+	 * other two calls in this file ({@see _searchGeocodeProvider}, {@see suggestAddresses}) are
+	 * correctly bounded because they are offering CANDIDATES near the loaded points; THIS call
+	 * resolves the ONE the customer has ALREADY picked, an entirely different job with an
+	 * entirely different area of interest — the ambiguity `strictBounds` guards against elsewhere
+	 * is already handled upstream, since `displayName` here came from a BOUNDED `suggest()` call
+	 * and carries its own full country/locality prefix (see {@see projectSuggestion}'s `query`).
+	 * DO NOT re-add `boundedBy`/`strictBounds` to this call without re-reading this paragraph.
+	 *
+	 * A geocode that resolves to NOTHING USABLE is NOT a silent no-op (round-4 fix, same
+	 * follow-up): it emits `searchResults` with EMPTY arrays — the SAME "nothing found" surface
+	 * {@see _searchGeocodeProvider}/{@see suggestAddresses} already use, already wired to
+	 * `panels.renderSearchResults()`'s own empty-state message. Reusing this EXISTING, ALREADY-
+	 * WIRED surface (rather than inventing a new event `pickup-mount.js` would need new wiring
+	 * for) closes the "customer picks a row and the map just sits there, no move, no message, no
+	 * error" gap the operator found — a REJECTED `ymaps.geocode()` call (network/quota) degrades
+	 * the SAME way, matching the graceful-degradation discipline the other two calls already
+	 * have.
+	 *
+	 * SEQUENCED via `_addressSeq` (live-review round 4 — operator: "иногда когда я пишу адрес и
+	 * потом нажимаю на лупу, карта сразу смещается, но даже не к тому адресу что я написал"):
+	 * `ymaps.geocode()` is exactly as asynchronous as every camera-adjacent call in this file (the
+	 * file docblock's first lesson), and two overlapping calls are NOT guaranteed to resolve in
+	 * the order they were issued. A customer who edits the query and submits again before the
+	 * FIRST round-trip returns must never have that stale round-trip win — `mySeq` is captured at
+	 * call time; the continuation only proceeds (to {@see focusAddress}, OR to the "nothing
+	 * found" emit) if `_addressSeq` is still `mySeq` once the geocode settles, one way or the
+	 * other. {@see focusAddress} itself also bumps `_addressSeq` on every call (including a call
+	 * NOT routed through this method), so any in-flight `resolveAddress()` that started before it
+	 * is retroactively marked stale too — one shared sequence for every path that can end in a
+	 * camera move for an address, exactly like {@see focusGroup}'s own `_focusSeq`.
+	 *
+	 * @param {string} displayName the text to geocode — the mount passes the picked suggestion's
+	 *                             `query` (preferred) or `displayName` (fallback); this method
+	 *                             itself is agnostic to which, it just geocodes whatever it gets.
 	 * @returns {Promise<void>}
 	 */
 	WoodevYandexMapProvider.prototype.resolveAddress = function( displayName ) {
 		var self = this;
+		var mySeq = ++this._addressSeq;
+
+		function stillCurrent() {
+			return ! self._destroyed && mySeq === self._addressSeq;
+		}
 
 		return this.ymaps.geocode( displayName ).then( function( result ) {
-			if ( self._destroyed ) {
+			if ( ! stillCurrent() ) {
 				return undefined;
 			}
 
 			var coordinates = extractGeocodeCoordinates( result );
 
 			if ( ! coordinates ) {
+				// Resolves to nothing usable — surface it via the SAME "nothing found" empty
+				// state _searchGeocodeProvider()/suggestAddresses() already use, rather than a
+				// silent no-op the customer reads as "did my click even register?".
+				self.emit( 'searchResults', { points: [], addresses: [] } );
+
 				return undefined;
 			}
 
 			return self.focusAddress( coordinates, displayName );
+		} ).catch( function() {
+			// A rejected geocode (network/quota) degrades the same way a resolved-but-empty one
+			// does — matching _searchGeocodeProvider()'s/suggestAddresses()'s own catch discipline.
+			if ( stillCurrent() ) {
+				self.emit( 'searchResults', { points: [], addresses: [] } );
+			}
 		} );
 	};
 
 	/**
-	 * Frames the map on a resolved address: drops the "your address" pin
-	 * ({@see _setAddressPin}) and fits the camera to the address PLUS the
-	 * `config.searchNearestCount` nearest groups (default {@see DEFAULT_SEARCH_NEAREST_COUNT})
-	 * — NEVER to the address alone; see the file docblock's "ADDRESS SEARCH" section for why.
-	 * When the nearest group is farther than {@see NEARBY_THRESHOLD_M}, no fit happens at all —
-	 * `nothingNearby` is emitted instead, naming that nearest group's own distance and
-	 * (already-`esc_html()`-escaped) name, so the customer sees an explicit "nothing here" rather
-	 * than a silently empty viewport. With NO groups currently loaded, this is a no-op beyond
-	 * dropping the pin — there is nothing to fit to or report as "nearest".
+	 * Resolves a searched address against what is actually on the map — NEVER drops a pin of its
+	 * own (D4, live-review fix: an earlier version dropped a bare, unstyled `ymaps.Placemark`;
+	 * both references never draw one either). Two outcomes, decided by distance to the nearest
+	 * currently-loaded group:
 	 *
-	 * The nearest-N computation reads ONLY the currently loaded groups ({@see _groupsByKey}) —
-	 * the address pin itself is never a candidate; see {@see _setAddressPin}'s own docblock.
+	 * - WITHIN {@see SAME_PLACE_THRESHOLD_M} of a loaded group: the address search is treated as
+	 *   having selected that exact POINT (operator requirement, live-review round 2) —
+	 *   `addressMatchedPoint( { key } )` fires and this method returns immediately. No
+	 *   `addressFocused`, no camera move, no nearest-N fit: the mount (Task 20/T3) wires this
+	 *   straight to `focusGroup( key, { zoom: true } )`, which supplies the camera move, the
+	 *   active marker state, AND opens the sidebar card — this file never opens a card itself
+	 *   (D-3), so it must not race that call with a fit of its own.
+	 * - OTHERWISE: `addressFocused( { latLng, label } )` fires and the camera CENTRES on `latLng`
+	 *   itself, at the deepest zoom that still keeps the `config.searchNearestCount` nearest
+	 *   groups (default {@see DEFAULT_SEARCH_NEAREST_COUNT}) on screen — via
+	 *   {@see symmetricBoundsAround} (live-review round 4, Finding B; see that function's own
+	 *   docblock for why a plain `geo.boundsFor()` fit put the address off-centre: "карта
+	 *   смещается не в центр выбранного адреса а как-то с краю"). NEVER to the address alone,
+	 *   which is exactly the "empty map" failure this design avoids. When even the nearest group
+	 *   is farther than {@see NEARBY_THRESHOLD_M}, no fit happens at all — `nothingNearby` is
+	 *   emitted instead, naming that nearest group's own distance and (already-`esc_html()`-
+	 *   escaped) name, so the customer sees an explicit "nothing here" rather than a silently
+	 *   empty viewport. With NO groups currently loaded, `addressFocused` still fires (the
+	 *   panels' sort anchor still moves) but nothing else does — there is nothing to match, fit,
+	 *   or report as "nearest".
+	 *
+	 * The nearest-N/same-place computation reads ONLY the currently loaded groups
+	 * ({@see _groupsByKey}) that have at least one point SURVIVING the active type filter
+	 * ({@see _survivingPoints}, live-review round 3, Finding 2) — a group every one of whose
+	 * points the filter hides is, from the customer's own point of view, not on the map at all,
+	 * so it must never be offered as a same-place match or count toward the nearest-N fit. Without
+	 * this, a search could `addressMatchedPoint` a group the sidebar has hidden: the panels would
+	 * open a card with nothing behind it on screen, and — because that path returns immediately —
+	 * `addressFocused` would never fire either, so the sidebar's own search-anchor never updates.
+	 * Same asymmetry as Finding 1: the map-side filter and the list-side filter must agree on what
+	 * currently "exists".
 	 *
 	 * `setBounds()` is ASYNCHRONOUS — this method RETURNS it directly, exactly like
 	 * {@see _resolveInitialViewport}'s own successful branch, so a caller that awaits this
 	 * promise sees the POST-fit camera, never the pre-fit one (the file docblock's first lesson).
+	 * `duration: 400` (live-review fix): this fit can travel from wherever the map currently sits
+	 * to the searched address, the same "long move" case {@see setPoints}'s bulk fit and
+	 * {@see _resolveInitialViewport} already animate. `useMapMargin: true` (live-review round 4 —
+	 * an earlier round of this exact fit MISSED this option, the same class of oversight
+	 * Finding 3 caught on the cluster-click zoom) keeps the address clear of the sidebar/top-strip
+	 * reservations, matching every other camera move in this file.
 	 *
-	 * `addressFocused( { latLng, label } )` fires UNCONDITIONALLY, right after the pin drops —
-	 * before the nearest-N computation below decides whether a fit or a `nothingNearby` follows.
-	 * This is the seam the panels' own distance anchor moves through (Task 20's mount wires
-	 * `provider.on( 'addressFocused', ( info ) => panels.setAnchor( info.latLng, info.label ) )`):
-	 * the pin dropping IS the address becoming the sidebar's new sort anchor and the
-	 * `nearestTo` header, regardless of whether any group turns out to be near it — matching
-	 * the `searchResults` event's own "this file never calls into pickup-panels.js directly"
-	 * discipline (D-3).
+	 * `addressFocused( { latLng, label } )`, when it fires, does so BEFORE the nearest-N
+	 * computation below decides whether a fit or a `nothingNearby` follows — it is the seam the
+	 * panels' own distance anchor moves through (Task 20's mount wires
+	 * `provider.on( 'addressFocused', ( info ) => panels.setAnchor( info.latLng, info.label ) )`),
+	 * matching the `searchResults` event's own "this file never calls into pickup-panels.js
+	 * directly" discipline (D-3).
+	 *
+	 * BUMPS `_addressSeq` UNCONDITIONALLY, even when this call did not arrive via
+	 * {@see resolveAddress} — see that method's own docblock for the out-of-order-resolution
+	 * this guards against. This method's OWN fit is not itself re-checked against the sequence
+	 * (there is only ever one `setBounds()` call per invocation here, nothing to race against
+	 * itself), only {@see resolveAddress}'s continuation reads the ticket back.
 	 *
 	 * @param {number[]} latLng `[lat, lng]`, the resolved address location.
-	 * @param {string}   label  the address text — used to place the pin AND (via
-	 *                          `addressFocused`) as the panels' `nearestTo` header label.
+	 * @param {string}   label  the address text — used (via `addressFocused`) as the panels'
+	 *                          `nearestTo` header label; unused in the `addressMatchedPoint` path.
 	 * @returns {Promise<void>}
 	 */
 	WoodevYandexMapProvider.prototype.focusAddress = function( latLng, label ) {
-		this._setAddressPin( latLng, label );
-		this.emit( 'addressFocused', { latLng: latLng, label: label } );
+		var self = this;
+
+		this._addressSeq += 1;
 
 		var groupsByKey = this._groupsByKey;
 		var groups = Object.keys( groupsByKey ).map( function( key ) {
 			return groupsByKey[ key ];
+		} ).filter( function( group ) {
+			// Finding 2 — a group entirely hidden by the active type filter is not a candidate,
+			// exactly matching what the sidebar list itself would offer.
+			return self._survivingPoints( group ).length > 0;
 		} );
 		var count = 'number' === typeof this.config.searchNearestCount
 			? this.config.searchNearestCount
 			: DEFAULT_SEARCH_NEAREST_COUNT;
 		var nearestGroups = geo.nearest( groups, latLng, count );
+		var closest = nearestGroups.length > 0 ? nearestGroups[ 0 ] : null;
+		var closestDistance = closest ? geo.distanceMeters( latLng, [ closest.lat, closest.lng ] ) : null;
 
-		if ( 0 === nearestGroups.length ) {
+		if ( closest && closestDistance <= SAME_PLACE_THRESHOLD_M ) {
+			this.emit( 'addressMatchedPoint', { key: closest.key } );
+
 			return Promise.resolve();
 		}
 
-		var closest = nearestGroups[ 0 ];
-		var closestDistance = geo.distanceMeters( latLng, [ closest.lat, closest.lng ] );
+		this.emit( 'addressFocused', { latLng: latLng, label: label } );
+
+		if ( ! closest ) {
+			return Promise.resolve();
+		}
 
 		if ( closestDistance > NEARBY_THRESHOLD_M ) {
 			var closestPoint = closest.points && closest.points[ 0 ];
@@ -1603,149 +2372,120 @@
 		}
 
 		// setBounds() is ASYNCHRONOUS — awaited (returned), exactly like every other camera
-		// move in this file. See the file docblock's first lesson.
-		return this.map.setBounds( geo.boundsFor( latLng, nearestGroups ), { checkZoomRange: true } );
+		// move in this file. See the file docblock's first lesson. The box is CENTRED on the
+		// address itself ({@see symmetricBoundsAround}, live-review round 4, Finding B) — never
+		// `geo.boundsFor()`, whose own centre drifts toward wherever the nearest groups happen to
+		// sit, not the address that was actually searched for.
+		return this.map.setBounds(
+			symmetricBoundsAround( latLng, nearestGroups ),
+			{ checkZoomRange: true, duration: 400, useMapMargin: true }
+		);
 	};
 
 	/**
-	 * Drops (or moves) the "your address" pin — a plain `ymaps.Placemark` added directly to
-	 * `map.geoObjects`, NEVER a feature inside the `ObjectManager`: unlike a group, it must never
-	 * appear in the list panel ({@see setPoints}/{@see _emitVisibleChange} only ever read
-	 * `_groupsByKey`), the type filter (`setTypeFilter()` only ever touches `objectManager`), or
-	 * the nearest-N computation ({@see focusAddress} only ever reads `_groupsByKey` too). The
-	 * previous pin, if any, is removed first via {@see _removeAddressPin} — one address search
-	 * replaces the last, it never accumulates pins from earlier searches.
-	 *
-	 * Deliberately calls {@see _removeAddressPin}, NOT the public {@see clearAddress}: the latter
-	 * also emits an EMPTY `searchResults` (see its own docblock), which must fire only when the
-	 * customer actually clears a search, never as a side effect of PICKING one — this method runs
-	 * on every successful pick.
-	 *
-	 * @param {number[]} latLng `[lat, lng]`.
-	 * @returns {void}
-	 */
-	WoodevYandexMapProvider.prototype._setAddressPin = function( latLng ) {
-		this._removeAddressPin();
-
-		if ( ! this.map || ! this.ymaps || 'function' !== typeof this.ymaps.Placemark ) {
-			return;
-		}
-
-		this._addressPin = new this.ymaps.Placemark( latLng, {}, {} );
-		this.map.geoObjects.add( this._addressPin );
-	};
-
-	/**
-	 * Removes the "your address" pin from the map, if one is currently shown, and forgets it —
-	 * the shared primitive {@see _setAddressPin} (replacing a pin) and {@see clearAddress}
-	 * (clearing the search entirely) both build on. Idempotent: a call with no pin currently
-	 * shown is a safe no-op.
-	 *
-	 * @returns {void}
-	 */
-	WoodevYandexMapProvider.prototype._removeAddressPin = function() {
-		if ( this._addressPin && this.map ) {
-			this.map.geoObjects.remove( this._addressPin );
-		}
-
-		this._addressPin = null;
-	};
-
-	/**
-	 * Clears the address search entirely: removes the "your address" pin ({@see _removeAddressPin})
-	 * AND emits an EMPTY `searchResults` (`{ points: [], addresses: [] }`). The panels' own reset
-	 * control (`«Сбросить»`) emits NO event of its own — it only calls `setAnchor( null )`
-	 * internally (see the file docblock's "ADDRESS SEARCH" section) — so THIS method is what Task
-	 * 20's mount wiring calls when the customer clears the search: the provider is the sole
-	 * producer of BOTH the pin and the `searchResults` state ({@see _searchGeocodeProvider}), so
-	 * the provider is the one that must guarantee neither outlives the search it belongs to — a
-	 * caller that only dropped the pin would still leave stale search rows on screen. Idempotent:
-	 * a call with nothing currently shown (no pin, no prior results) is a safe no-op beyond the
-	 * unconditional `searchResults` emit, which every caller can rely on firing every time.
+	 * Clears the address search entirely. The OLD behaviour — emitting an EMPTY `searchResults`
+	 * (`{ points: [], addresses: [] }`) — is GONE (D1, live-review fix): it made a genuine clear
+	 * indistinguishable from "a real search came back with zero rows", so the panels re-opened
+	 * the results box it had just closed. This method now emits a plain `searchCleared` event
+	 * instead, so the panels can tell the two apart. The panels' own reset control (`«Сбросить»`)
+	 * emits NO event of its own — it only calls `setAnchor( null )` internally (see the file
+	 * docblock's "ADDRESS SEARCH" section) — so THIS method is what Task 20's mount wiring calls
+	 * when the customer clears the search. Idempotent: a call with no prior search state is a
+	 * safe no-op beyond the unconditional `searchCleared` emit, which every caller can rely on
+	 * firing every time. Draws/removes no pin — there has never been one to remove since D4.
 	 *
 	 * @returns {void}
 	 */
 	WoodevYandexMapProvider.prototype.clearAddress = function() {
-		this._removeAddressPin();
-
-		this.emit( 'searchResults', { points: [], addresses: [] } );
+		this.emit( 'searchCleared', {} );
 	};
 
 	/**
 	 * Focuses group `key`: marks it visually active (swaps its icon hit-box to
 	 * {@see ICON_BOX_ACTIVE}, its icon image to `iconHrefActive`, and `data-state` to
 	 * `'active'` — see {@see _setMarkerState} — reverting the previously focused group, if any,
-	 * back to resting) and moves the camera onto it (spec V-10: a marker click and a sidebar
-	 * row click must behave identically, and the reference always recentres/zooms to the
-	 * clicked point, clustered or not).
+	 * back to resting) and moves the camera onto it. `options.zoom` is the live-review pan/zoom
+	 * split (D6) that REPLACES the old "a marker click and a sidebar row click behave
+	 * identically" spec §7.5/V-10 rule — that sentence turned out to be wrong for BOTH
+	 * references (see the SP-5 live-review plan's own root-cause note): a marker click only pans
+	 * (`options.zoom` falsy), a sidebar row/search/nearest-N click pans AND zooms
+	 * (`options.zoom === true`). The mount (Task 20/T3) is the one that decides which: it calls
+	 * `focusGroup( key, { zoom: 'marker' !== origin } )` from the `cardOpened` event's own
+	 * `origin` field.
 	 *
-	 * TWO DIFFERENT TARGETS, same camera call. When `key` is currently folded into a ymaps
-	 * cluster, the target is the CLUSTER's anchor (its first feature's coordinates) — moving
-	 * there is what un-clusters it, which is this method's original job (spec §7.5). When it is
-	 * NOT clustered — the common case, a single visible marker — the target is the GROUP's own
-	 * `lat`/`lng` from {@see _groupsByKey}, so the camera still recentres/zooms to it exactly as
-	 * clicking that same point in the sidebar does. Earlier versions of this method moved the
-	 * camera ONLY in the clustered branch, which is why a plain marker click visibly did nothing
-	 * on the rig — this bug was invisible to every test that exercised it, because none of them
-	 * ever gave the group its own coordinates via `setPoints()` first.
+	 * TWO DIFFERENT TARGETS, same split. When `key` is currently folded into a ymaps cluster, the
+	 * target is the CLUSTER's anchor (its first feature's coordinates); when it is NOT clustered
+	 * — the common case, a single visible marker — the target is the GROUP's own `lat`/`lng` from
+	 * {@see _groupsByKey}. Earlier versions of this method moved the camera ONLY in the clustered
+	 * branch, which is why a plain marker click visibly did nothing on the rig — this bug was
+	 * invisible to every test that exercised it, because none of them ever gave the group its own
+	 * coordinates via `setPoints()` first.
 	 *
-	 * The move is skipped — focus still applies directly — in three cases: every feature in a
-	 * cluster shares one coordinate, since no move could ever separate them (the "Russian Post"
-	 * guard, spec §7.5; see the file docblock's second lesson); the map is ALREADY at
-	 * `MAX_ZOOM`, since a group cannot be zoomed in on any further — a pointless camera command
-	 * the customer would only see as a stutter; or `key` has no known group (defensive — should
-	 * not happen in practice, since a click always names a group this provider itself drew).
-	 * `setBounds()` is called with the exact options spec §7.5 gives: `zoomMargin: 0` and
-	 * `useMapMargin: true` keep the point inside the area the panels leave free via
-	 * `map.margin`, so it does not end up centred underneath the open sidebar where the
-	 * customer cannot see it.
+	 * THE ZOOM BRANCH (`options.zoom === true`) calls `map.setCenter( target, MAX_ZOOM,
+	 * { useMapMargin: true, duration: 200 } )` — matching the reference implementations' own
+	 * sidebar-row centring call exactly (see the plan's "Reference truth" table). The move is
+	 * skipped — focus still applies directly — in two cases: every feature in a cluster shares
+	 * one coordinate, since no zoom, however deep, could ever separate them (the "Russian Post"
+	 * guard, spec §7.5; see the file docblock's second lesson); or `key` has no known group
+	 * (defensive — should not happen in practice, since a click always names a group this
+	 * provider itself drew). `useMapMargin: true` keeps the point inside the area the panels
+	 * leave free via `map.margin`, so it does not end up centred underneath the open sidebar
+	 * where the customer cannot see it.
 	 *
-	 * `attemptedMove` gates the POST-move re-check, and ONLY when the move was an un-clustering
-	 * attempt (`wasClustered`): a group focused WITHOUT moving (co-located, already at max zoom,
-	 * or unknown) applies immediately, never re-evaluated against a "did the move actually
-	 * un-cluster it" check that only makes sense for the clustered branch — recentring on an
-	 * already-solo point has nothing to re-check.
+	 * THE PAN BRANCH (`options.zoom` falsy) calls `map.panTo( target, { useMapMargin: true,
+	 * duration: 200 } )` unconditionally whenever a target exists (co-located or not) — matching
+	 * both references' marker-click behaviour exactly: pan only, zoom untouched. A pan can never
+	 * un-cluster anything (zoom is what separates co-located points, and this branch never
+	 * touches zoom), so the co-located guard does not apply here at all, and — unlike the zoom
+	 * branch — there is no POST-move re-check to gate: nothing about clustering could possibly
+	 * have changed as a result of a move that left zoom alone.
+	 *
+	 * `attemptedMove` (well, `target`) gates the POST-move re-check for the ZOOM branch only, and
+	 * ONLY when the move was an un-clustering attempt (`wasClustered`): a group focused WITHOUT
+	 * moving (co-located or unknown) applies immediately, never re-evaluated against a "did the
+	 * move actually un-cluster it" check that only makes sense there.
 	 *
 	 * SEQUENCED against a slower-to-resolve EARLIER call via `_focusSeq`: two ymaps camera moves
 	 * are not guaranteed to resolve in the order they were started (animation duration depends
 	 * on distance travelled), so a stale continuation must never apply its OWN (now outdated)
 	 * focus on top of a more recent call's. `mySeq` captures `_focusSeq` at call time; the
 	 * continuation only proceeds if `_focusSeq` is still `mySeq` once the move (or the
-	 * synchronous "nothing to move" case) settles.
+	 * synchronous "nothing to move" case) settles. `setCenter()`/`panTo()` are exactly as
+	 * asynchronous as `setBounds()` (the file docblock's first lesson) — both are awaited here.
 	 *
-	 * @param {string} key
+	 * @param {string}  key
+	 * @param {Object}  [options]
+	 * @param {boolean} [options.zoom] `true` centres AND zooms to {@see MAX_ZOOM} (a sidebar row/
+	 *                                 search/nearest-N pick); any other value (including omitted)
+	 *                                 pans only, zoom untouched (a marker click).
 	 * @returns {Promise<void>}
 	 */
-	WoodevYandexMapProvider.prototype.focusGroup = function( key ) {
+	WoodevYandexMapProvider.prototype.focusGroup = function( key, options ) {
 		var self = this;
 		var mySeq = ++this._focusSeq;
+		var opts = options || {};
+		var wantsZoom = true === opts.zoom;
 		var state = this.objectManager.getObjectState( key );
 		var wasClustered = !! ( state && state.isClustered );
 		var mover = Promise.resolve();
-		var attemptedMove = false;
+		var target = null;
 
-		if ( this.map.getZoom() < MAX_ZOOM ) {
-			var target = null;
-
-			if ( wasClustered ) {
-				if ( ! isSingleCoordinateCluster( state.cluster ) ) {
-					target = clusterAnchorCoordinates( state.cluster );
-				}
-			} else {
-				var group = this._groupsByKey[ key ];
-
-				if ( group ) {
-					target = [ group.lat, group.lng ];
-				}
+		if ( wasClustered ) {
+			if ( ! wantsZoom || ! isSingleCoordinateCluster( state.cluster ) ) {
+				target = clusterAnchorCoordinates( state.cluster );
 			}
+		} else {
+			var group = this._groupsByKey[ key ];
 
-			if ( target ) {
-				attemptedMove = true;
-				mover = this.map.setBounds(
-					[ target, target ],
-					{ checkZoomRange: true, zoomMargin: 0, useMapMargin: true }
-				);
+			if ( group ) {
+				target = [ group.lat, group.lng ];
 			}
+		}
+
+		if ( target ) {
+			mover = wantsZoom
+				? this.map.setCenter( target, MAX_ZOOM, { useMapMargin: true, duration: 200 } )
+				: this.map.panTo( target, { useMapMargin: true, duration: 200 } );
 		}
 
 		return mover.then( function() {
@@ -1753,7 +2493,7 @@
 				return;
 			}
 
-			if ( attemptedMove && wasClustered ) {
+			if ( wantsZoom && target && wasClustered ) {
 				var settled = self.objectManager.getObjectState( key );
 
 				if ( settled && settled.isClustered && isSingleCoordinateCluster( settled.cluster ) ) {
@@ -1883,17 +2623,24 @@
 		this._iconLayoutClass = null;
 		this._groupsByKey = {};
 		this._focusedKey = null;
+		this._activeTypeFilter = null;
 		this.searchControl = null;
-		this._addressPin = null;
 		this._marginArea = null;
+		// `this.map.destroy()` above already tears down every margin reservation along with the
+		// rest of the map — this just forgets the stale accessor, matching `_marginArea`'s own
+		// treatment right above; there is no separate `.remove()` call to make here either.
+		this._topMarginArea = null;
 		this.handlers = {
 			pointClick: [],
+			clusterClick: [],
 			boundsChange: [],
 			bboxTooWide: [],
 			visibleChange: [],
 			nothingNearby: [],
 			searchResults: [],
+			searchCleared: [],
 			addressFocused: [],
+			addressMatchedPoint: [],
 			error: [],
 		};
 	};

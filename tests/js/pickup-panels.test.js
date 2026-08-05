@@ -257,6 +257,156 @@ it( 'toggles closed again on a second call, with open:false in the event', () =>
 } );
 
 // -----------------------------------------------------------------------
+// Round 2 (D6): `openCard( group, pointId, origin )` — `origin` is what lets the mount tell a
+// marker click (pan only) apart from every other route (zoom in), now that the original V-10
+// "must behave identically" claim has been overruled (see the file docblock's revised
+// `cardOpened` note). Every internal call site in THIS file (the sidebar row builders) passes
+// `'list'`; a search pick and "show nearest" route through `openCard()` from the mount, outside
+// this file, so their own label is the mount's responsibility, not tested here.
+// -----------------------------------------------------------------------
+
+describe( 'origin threading on cardOpened (round 2, D6)', () => {
+	it( 'a single-point row click carries origin "list"', () => {
+		const container = document.createElement( 'div' );
+		const panels = new Panels( container, config );
+		const g = group( 'g1', 55.75, 37.61, 'ПВЗ' );
+		const seen = [];
+
+		panels.render();
+		panels.setVisible( [ g ] );
+		panels.on( 'cardOpened', ( payload ) => seen.push( payload ) );
+
+		container.querySelector( '.woodev-pickup-list__item' ).click();
+
+		expect( seen ).toEqual( [ { group: g, pointId: g.points[ 0 ].id, origin: 'list' } ] );
+	} );
+
+	it( 'a co-located group\'s per-point row click also carries origin "list"', () => {
+		const container = document.createElement( 'div' );
+		const panels = new Panels( container, config );
+		const g = {
+			key: 'g1', lat: 55.75, lng: 37.61, size: 2,
+			points: [
+				{ id: 'a', name: 'ПВЗ', short_address: 'x' },
+				{ id: 'b', name: 'Постамат', short_address: 'y' },
+			],
+		};
+		const seen = [];
+
+		panels.render();
+		panels.setVisible( [ g ] );
+		panels.on( 'cardOpened', ( payload ) => seen.push( payload ) );
+
+		container.querySelectorAll( '.woodev-pickup-list__point' )[ 1 ].click();
+
+		expect( seen[ 0 ].pointId ).toBe( 'b' );
+		expect( seen[ 0 ].origin ).toBe( 'list' );
+	} );
+
+	it( 'openCard() called directly passes its origin argument straight through to cardOpened', () => {
+		const panels = mount( cardConfig );
+		const seen = [];
+
+		panels.on( 'cardOpened', ( payload ) => seen.push( payload ) );
+		panels.openCard( { key: 'k', size: 1, points: [ point() ] }, undefined, 'marker' );
+
+		expect( seen[ 0 ].origin ).toBe( 'marker' );
+	} );
+} );
+
+// -----------------------------------------------------------------------
+// Coordinator follow-up (round 2): the sidebar could become visible without anyone being told —
+// `openList()` and `openCard()` used to flip `is-open` on WITHOUT emitting `listToggle`, the ONE
+// event the mount listens to in order to call `provider.setMargin()` (ymaps' `map.margin.addArea()`).
+// A marker click opened the sidebar, ymaps was never told, and `focusGroup()`'s camera move landed
+// the point off-centre under the panel that had just slid over it (operator defect 5, second half) —
+// and the same missing reservation let the sidebar cover ymaps' own copyright strip (defect 8).
+// `setStageOpen()` is the fix: all three open-state methods route through it, and it emits
+// `listToggle` only when the visible state actually changes.
+// -----------------------------------------------------------------------
+
+describe( 'listToggle notification on every open-state transition (round 2, defect 5+8)', () => {
+	it( 'a marker-origin openCard() on a closed sidebar emits listToggle {open:true} exactly once, before cardOpened', () => {
+		const container = document.createElement( 'div' );
+		const panels = new Panels( container, config );
+		const g = group( 'g1', 55.75, 37.61, 'ПВЗ' );
+		const seen = [];
+
+		panels.render();
+		panels.setVisible( [ g ] );
+		panels.on( 'listToggle', ( e ) => seen.push( { type: 'listToggle', payload: e } ) );
+		panels.on( 'cardOpened', ( e ) => seen.push( { type: 'cardOpened', payload: e } ) );
+
+		panels.openCard( g, g.points[ 0 ].id, 'marker' );
+
+		// Ordering is load-bearing (see `openCard()`'s own docblock): the mount turns `listToggle`
+		// into `setMargin()` and `cardOpened` into `focusGroup()`, both synchronous, so the margin
+		// reservation must land first or the camera move happens before there is anything to avoid.
+		expect( seen.map( ( s ) => s.type ) ).toEqual( [ 'listToggle', 'cardOpened' ] );
+		expect( seen[ 0 ].payload.open ).toBe( true );
+		expect( typeof seen[ 0 ].payload.width ).toBe( 'number' );
+		expect( seen.filter( ( s ) => 'listToggle' === s.type ) ).toHaveLength( 1 );
+	} );
+
+	it( 'a second openCard() while the sidebar is already open emits no further listToggle', () => {
+		const container = document.createElement( 'div' );
+		const panels = new Panels( container, config );
+		const g1 = group( 'g1', 55.75, 37.61, 'ПВЗ' );
+		const g2 = group( 'g2', 55.76, 37.62, 'Постамат' );
+		const seen = [];
+
+		panels.render();
+		panels.setVisible( [ g1, g2 ] );
+		panels.openCard( g1, g1.points[ 0 ].id, 'marker' ); // opens the sidebar first.
+
+		panels.on( 'listToggle', ( e ) => seen.push( e ) );
+		panels.openCard( g2, g2.points[ 0 ].id, 'marker' ); // sidebar already open — must stay silent.
+
+		expect( seen ).toHaveLength( 0 );
+	} );
+
+	it( 'openList() on a closed sidebar emits listToggle {open:true}', () => {
+		const panels = new Panels( document.createElement( 'div' ), config );
+		const seen = [];
+
+		panels.render();
+		panels.on( 'listToggle', ( e ) => seen.push( e ) );
+
+		panels.openList();
+
+		expect( seen ).toHaveLength( 1 );
+		expect( seen[ 0 ].open ).toBe( true );
+	} );
+
+	it( 'openList() while the sidebar is already open emits no listToggle', () => {
+		const panels = new Panels( document.createElement( 'div' ), config );
+		const seen = [];
+
+		panels.render();
+		panels.toggleList(); // opens.
+		panels.on( 'listToggle', ( e ) => seen.push( e ) );
+
+		panels.openList();
+
+		expect( seen ).toHaveLength( 0 );
+	} );
+
+	it( 'toggleList() behaves exactly as before: always emits, alternating open/closed', () => {
+		const panels = new Panels( document.createElement( 'div' ), config );
+		const seen = [];
+
+		panels.render();
+		panels.on( 'listToggle', ( e ) => seen.push( e.open ) );
+
+		panels.toggleList();
+		panels.toggleList();
+		panels.toggleList();
+
+		expect( seen ).toEqual( [ true, false, true ] );
+	} );
+} );
+
+// -----------------------------------------------------------------------
 // Sidebar toggle (spec V-3, П-7): one open state lives on the STAGE, not on
 // the list and the card independently — before this, collapsing the list
 // while a card was open left the card on screen with no way to dismiss it,
@@ -644,6 +794,71 @@ it( 'renders the close control whether or not the tab bar is present', () => {
 	expect( multi.root.querySelector( '.woodev-pickup-card__tabs' ) ).not.toBeNull();
 } );
 
+// -----------------------------------------------------------------------
+// Round 4 (operator live-review): "текст «Пункт выдачи заказов» не помещается в кнопку"
+// (a real type label doesn't fit the segmented-control button when it competes with the chip
+// and the close button for one row). Fix: chip + close share a FIRST row
+// (`.woodev-pickup-card__header-row`), the tab bar gets its own row below, full header width —
+// both still inside `.woodev-pickup-card__header`. `.woodev-pickup-card__header-row` is the only
+// new class this round introduces.
+// -----------------------------------------------------------------------
+
+describe( 'card header layout (round 4 — chip+close row, tabs on their own row below)', () => {
+	it( 'puts the chip and the close control inside one header-row, and the tabs OUTSIDE it', () => {
+		const panels = mount( { ...cardConfig, pointIcons: { pvz: { default: '/pvz.svg' }, postamat: { default: '/postamat.svg' } } } );
+
+		panels.openCard( { key: 'k', size: 2, points: [
+			point( { id: 'a', type: { code: 'pvz', label: 'ПВЗ' } } ),
+			point( { id: 'b', type: { code: 'postamat', label: 'Постамат' } } ),
+		] } );
+
+		const header = panels.root.querySelector( '.woodev-pickup-card__header' );
+		const row = header.querySelector( '.woodev-pickup-card__header-row' );
+
+		expect( row ).not.toBeNull();
+		expect( row.querySelector( '.woodev-pickup-card__chip' ) ).not.toBeNull();
+		expect( row.querySelector( '.woodev-pickup-card__close' ) ).not.toBeNull();
+
+		// The tab bar is a SIBLING of the row, not nested inside it — it gets the header's full
+		// width on its own line, which is the whole point of the fix.
+		const tabs = header.querySelector( '.woodev-pickup-card__tabs' );
+
+		expect( tabs ).not.toBeNull();
+		expect( tabs.parentNode ).toBe( header );
+		expect( row.contains( tabs ) ).toBe( false );
+	} );
+
+	it( 'still renders the header-row (holding just the close control) when there is no chip and no tab bar', () => {
+		const panels = mount( cardConfig );
+		panels.openCard( { key: 'k', size: 1, points: [ point() ] } );
+
+		const row = panels.root.querySelector( '.woodev-pickup-card__header-row' );
+
+		expect( row ).not.toBeNull();
+		expect( row.querySelector( '.woodev-pickup-card__close' ) ).not.toBeNull();
+		expect( row.querySelector( '.woodev-pickup-card__chip' ) ).toBeNull();
+		expect( panels.root.querySelector( '.woodev-pickup-card__tabs' ) ).toBeNull();
+	} );
+
+	it( 'keeps the chip inside the header-row even without a tab bar (single-point group, chip configured)', () => {
+		const panels = mount( { ...cardConfig, pointIcons: { pvz: { default: '/pvz.svg' } } } );
+		panels.openCard( { key: 'k', size: 1, points: [ point( { type: { code: 'pvz', label: 'ПВЗ' } } ) ] } );
+
+		const row = panels.root.querySelector( '.woodev-pickup-card__header-row' );
+
+		expect( row.querySelector( '.woodev-pickup-card__chip img' ) ).not.toBeNull();
+		expect( panels.root.querySelector( '.woodev-pickup-card__tabs' ) ).toBeNull();
+	} );
+
+	it( 'the close control inside the header-row still closes the card', () => {
+		const panels = mount( cardConfig );
+		panels.openCard( { key: 'k', size: 1, points: [ point() ] } );
+		panels.root.querySelector( '.woodev-pickup-card__header-row .woodev-pickup-card__close' ).click();
+
+		expect( panels.root.parentNode.className ).not.toContain( 'is-card' );
+	} );
+} );
+
 it( 'closing via a real click on the close control removes the open state, leaving the list usable', () => {
 	const panels = mount( cardConfig );
 	panels.openCard( { key: 'k', size: 1, points: [ point() ] } );
@@ -850,15 +1065,19 @@ it( 'emits addressResult with the index so the caller can resolve it', () => {
 	const seen = [];
 	const panels = mount( searchConfig );
 	const layout = panels.buildSearchLayout();
-	panels.on( 'searchAddressPicked', ( i ) => seen.push( i ) );
-	panels.renderSearchResults( {
-		points: [],
-		addresses: [ { displayName: 'A' }, { displayName: 'B' }, { displayName: 'C' } ],
-	} );
+	const addresses = [ { displayName: 'A' }, { displayName: 'B' }, { displayName: 'C' } ];
 
-	// Click the third, then the first: a hardcoded `1`, an always-zero, or an
-	// always-last emitter each survive a single click on index 1.
+	panels.on( 'searchAddressPicked', ( i ) => seen.push( i ) );
+	panels.renderSearchResults( { points: [], addresses } );
+
+	// Click the third, then re-render and click the first: a hardcoded `1`, an always-zero, or an
+	// always-last emitter each survive a single click on index 1. The re-render between clicks is
+	// round 2's own change (D1e): a pick now closes the results box
+	// ({@see Panels.prototype.hideSearchResults}), so a SECOND independent pick needs the box
+	// showing again first — exactly what the mount does before the customer can pick again.
 	layout.querySelectorAll( '.woodev-pickup-search__item' )[ 2 ].click();
+
+	panels.renderSearchResults( { points: [], addresses } );
 	layout.querySelectorAll( '.woodev-pickup-search__item' )[ 0 ].click();
 
 	expect( seen ).toEqual( [ 2, 0 ] );
@@ -1044,6 +1263,281 @@ it( 'is a no-op when called before the search layout has ever been built', () =>
 	const panels = mount( searchConfig );
 
 	expect( () => panels.renderSearchResults( { points: [ point() ], addresses: [] } ) ).not.toThrow();
+} );
+
+// -----------------------------------------------------------------------
+// Round 3 (operator live-review, defect A): "«Поиск не дал результатов.» ... висит так до тех
+// пор пока не нажмёшь иконку «лупа» или «крестик»." The debounced local match (`searchType`) is
+// a PREVIEW that has not spent the geocoding quota — matching nothing while the customer is
+// still typing is the NORMAL case, not a verdict. `previewSearchResults()` is the fix: it shares
+// `renderSearchResults()`'s painting but never shows `noResults` — an empty preview closes the
+// box outright instead. The empty/`noResults` verdict stays exclusive to `renderSearchResults()`,
+// the COMPLETED-search half of the pair (a real submit that genuinely found nothing).
+// -----------------------------------------------------------------------
+
+describe( 'previewSearchResults() (round 3, defect A)', () => {
+	it( 'shows matching points, same as a completed search', () => {
+		const panels = mount( searchConfig );
+		const layout = panels.buildSearchLayout();
+
+		panels.previewSearchResults( { points: [ point() ], addresses: [] } );
+
+		expect( layout.querySelector( '.woodev-pickup-search__section--points' ) ).not.toBeNull();
+		expect( layout.querySelector( '.woodev-pickup-search__results' ).hidden ).toBe( false );
+	} );
+
+	it( 'shows nothing at all — never the noResults verdict — when nothing matches yet', () => {
+		const panels = mount( searchConfig );
+		const layout = panels.buildSearchLayout();
+
+		panels.previewSearchResults( { points: [], addresses: [] } );
+
+		const results = layout.querySelector( '.woodev-pickup-search__results' );
+
+		expect( results.hidden ).toBe( true );
+		expect( results.textContent ).toBe( '' );
+	} );
+
+	it( 'hides an already-open preview the instant a later keystroke matches nothing', () => {
+		// The operator's own repro: results appear while typing, then the next keystroke matches
+		// nothing — the box must close immediately, not keep showing a stale (or noResults) state.
+		const panels = mount( searchConfig );
+		const layout = panels.buildSearchLayout();
+
+		panels.previewSearchResults( { points: [ point() ], addresses: [] } );
+		expect( layout.querySelector( '.woodev-pickup-search__results' ).hidden ).toBe( false );
+
+		panels.previewSearchResults( { points: [], addresses: [] } );
+
+		const results = layout.querySelector( '.woodev-pickup-search__results' );
+
+		expect( results.hidden ).toBe( true );
+		expect( results.textContent ).toBe( '' );
+	} );
+
+	it( 'never renders the noResults text, even called repeatedly with empty results', () => {
+		const panels = mount( searchConfig );
+		const layout = panels.buildSearchLayout();
+
+		panels.previewSearchResults( { points: [], addresses: [] } );
+		panels.previewSearchResults( { points: [], addresses: [] } );
+
+		expect( layout.querySelector( '.woodev-pickup-search__empty' ) ).toBeNull();
+	} );
+
+	it( 'is a no-op before buildSearchLayout() has ever run', () => {
+		const panels = mount( searchConfig );
+
+		expect( () => panels.previewSearchResults( { points: [ point() ], addresses: [] } ) ).not.toThrow();
+	} );
+
+	it( 'a completed search (renderSearchResults) still shows noResults for a genuinely empty result', () => {
+		// Regression guard: splitting the two methods must not have broken the LEGITIMATE
+		// empty-verdict case for a search that actually ran and actually found nothing.
+		const panels = mount( searchConfig );
+		const layout = panels.buildSearchLayout();
+
+		panels.renderSearchResults( { points: [], addresses: [] } );
+
+		expect( layout.querySelector( '.woodev-pickup-search__results' ).textContent )
+			.toBe( searchConfig.i18n.noResults );
+	} );
+} );
+
+// -----------------------------------------------------------------------
+// Round 2 (D1a/D1e): the results box never used to close — a clear round-trip through
+// `renderSearchResults()` re-opened it the instant it was told to close. `hideSearchResults()`
+// is the fix: empties + hides, and is the ONLY thing every closing route (a point pick, an
+// address pick, the reset button, focusout) now calls — never `renderSearchResults()` itself.
+// -----------------------------------------------------------------------
+
+describe( 'hideSearchResults() (round 2, D1a/D1e)', () => {
+	it( 'empties and hides an open results box', () => {
+		const panels = mount( searchConfig );
+		const layout = panels.buildSearchLayout();
+		panels.renderSearchResults( { points: [ point() ], addresses: [] } );
+
+		panels.hideSearchResults();
+
+		const results = layout.querySelector( '.woodev-pickup-search__results' );
+
+		expect( results.hidden ).toBe( true );
+		expect( results.children ).toHaveLength( 0 );
+	} );
+
+	it( 'never renders the noResults empty state — that stays renderSearchResults()\'s job alone', () => {
+		const panels = mount( searchConfig );
+		const layout = panels.buildSearchLayout();
+		panels.renderSearchResults( { points: [], addresses: [] } ); // a genuinely empty completed search.
+
+		expect( layout.querySelector( '.woodev-pickup-search__results' ).textContent )
+			.toBe( searchConfig.i18n.noResults );
+
+		panels.hideSearchResults();
+
+		expect( layout.querySelector( '.woodev-pickup-search__results' ).textContent ).toBe( '' );
+	} );
+
+	it( 'is a no-op before buildSearchLayout() has ever run', () => {
+		const panels = mount( searchConfig );
+
+		expect( () => panels.hideSearchResults() ).not.toThrow();
+	} );
+
+	it( 'closes the results box on a search point pick', () => {
+		const panels = mount( searchConfig );
+		const layout = panels.buildSearchLayout();
+		panels.renderSearchResults( { points: [ point() ], addresses: [] } );
+
+		layout.querySelector( '.woodev-pickup-search__item--point' ).click();
+
+		expect( layout.querySelector( '.woodev-pickup-search__results' ).hidden ).toBe( true );
+	} );
+
+	it( 'closes the results box on a search address pick', () => {
+		const panels = mount( searchConfig );
+		const layout = panels.buildSearchLayout();
+		panels.renderSearchResults( { points: [], addresses: [ { displayName: 'Москва' } ] } );
+
+		layout.querySelector( '.woodev-pickup-search__item--address' ).click();
+
+		expect( layout.querySelector( '.woodev-pickup-search__results' ).hidden ).toBe( true );
+	} );
+
+	it( 'the reset button closes the results box without reopening it', () => {
+		// Re-pointed/strengthened (round 2, D1e): "resetting clears the value, the results and the
+		// anchor" (above) already proves `input.value`/`onReset`; this proves the box specifically
+		// never shows the noResults empty state as a side effect of clearing.
+		const panels = mount( searchConfig );
+		const layout = panels.buildSearchLayout();
+		panels.renderSearchResults( { points: [ point() ], addresses: [] } );
+
+		layout.querySelector( '.woodev-pickup-search__reset' ).click();
+
+		const results = layout.querySelector( '.woodev-pickup-search__results' );
+
+		expect( results.hidden ).toBe( true );
+		expect( results.textContent ).toBe( '' );
+	} );
+
+	it( 'focusout closes the results box once focus leaves the search wrap entirely', () => {
+		const panels = mount( searchConfig );
+		const layout = panels.buildSearchLayout();
+		document.body.appendChild( layout );
+		panels.renderSearchResults( { points: [ point() ], addresses: [] } );
+
+		const search = layout.querySelector( '.woodev-pickup-search' );
+		const outside = document.createElement( 'button' );
+		document.body.appendChild( outside );
+
+		search.dispatchEvent( new FocusEvent( 'focusout', { relatedTarget: outside, bubbles: true } ) );
+
+		expect( layout.querySelector( '.woodev-pickup-search__results' ).hidden ).toBe( true );
+	} );
+
+	it( 'focusout does NOT close the box when focus only moved to another element inside the wrap', () => {
+		const panels = mount( searchConfig );
+		const layout = panels.buildSearchLayout();
+		document.body.appendChild( layout );
+		panels.renderSearchResults( { points: [ point() ], addresses: [] } );
+
+		const search = layout.querySelector( '.woodev-pickup-search' );
+		const submit = layout.querySelector( '.woodev-pickup-search__submit' );
+
+		search.dispatchEvent( new FocusEvent( 'focusout', { relatedTarget: submit, bubbles: true } ) );
+
+		expect( layout.querySelector( '.woodev-pickup-search__results' ).hidden ).toBe( false );
+	} );
+
+	it( 'focusout does NOT close the box when relatedTarget is null (focus left the document)', () => {
+		// A null relatedTarget means focus left the DOCUMENT entirely — an alt-tab, a click on
+		// browser chrome — not "the customer moved on". Treating it as a close would blank the
+		// results out from under a customer who only switched tabs mid-search.
+		const panels = mount( searchConfig );
+		const layout = panels.buildSearchLayout();
+		document.body.appendChild( layout );
+		panels.renderSearchResults( { points: [ point() ], addresses: [] } );
+
+		const search = layout.querySelector( '.woodev-pickup-search' );
+
+		search.dispatchEvent( new FocusEvent( 'focusout', { relatedTarget: null, bubbles: true } ) );
+
+		expect( layout.querySelector( '.woodev-pickup-search__results' ).hidden ).toBe( false );
+	} );
+
+	// -------------------------------------------------------------------
+	// Round 4 (operator live-review): "результат поиска (список) висит открытым пока не выбрать
+	// из списка, т.е. потеря фокуса из поля поиска не закрывает список результата поиска." The
+	// customer's actual dismissal gesture is clicking the MAP, which does not move DOM focus at
+	// all, so `focusout` alone never fired. Same pattern already proven for the filter menu: a
+	// `document`-level outside-click listener.
+	// -------------------------------------------------------------------
+
+	it( 'closes on a click outside the search wrap — the map-click case focusout alone cannot cover', () => {
+		const panels = mount( searchConfig );
+		const layout = panels.buildSearchLayout();
+		document.body.appendChild( layout );
+		panels.renderSearchResults( { points: [ point() ], addresses: [] } );
+
+		const outside = document.createElement( 'div' );
+		document.body.appendChild( outside );
+
+		outside.dispatchEvent( new MouseEvent( 'click', { bubbles: true } ) );
+
+		expect( layout.querySelector( '.woodev-pickup-search__results' ).hidden ).toBe( true );
+	} );
+
+	it( 'does NOT close on a click inside the search wrap (e.g. the input or a result row)', () => {
+		const panels = mount( searchConfig );
+		const layout = panels.buildSearchLayout();
+		document.body.appendChild( layout );
+		panels.renderSearchResults( { points: [ point() ], addresses: [] } );
+
+		const input = layout.querySelector( '.woodev-pickup-search__input' );
+
+		input.dispatchEvent( new MouseEvent( 'click', { bubbles: true } ) );
+
+		expect( layout.querySelector( '.woodev-pickup-search__results' ).hidden ).toBe( false );
+	} );
+
+	it( 'an outside click does not open/close the filter menu as a side effect', () => {
+		const panels = mount( filterConfig );
+		const layout = panels.buildSearchLayout();
+		document.body.appendChild( layout );
+		panels.setTypes( twoTypes );
+		panels.renderSearchResults( { points: [ point() ], addresses: [] } );
+
+		const menu = layout.querySelector( '.woodev-pickup-filter__menu' );
+		const outside = document.createElement( 'div' );
+		document.body.appendChild( outside );
+
+		outside.dispatchEvent( new MouseEvent( 'click', { bubbles: true } ) );
+
+		expect( layout.querySelector( '.woodev-pickup-search__results' ).hidden ).toBe( true );
+		expect( menu.hidden ).toBe( true ); // untouched — was never opened, must not become opened.
+	} );
+
+	it( 'destroy() removes the outside-click listener so a later click cannot reach a dead instance', () => {
+		const panels = mount( searchConfig );
+		const layout = panels.buildSearchLayout();
+		document.body.appendChild( layout );
+		panels.renderSearchResults( { points: [ point() ], addresses: [] } );
+
+		const results = layout.querySelector( '.woodev-pickup-search__results' );
+		const outside = document.createElement( 'div' );
+		document.body.appendChild( outside );
+
+		expect( results.hidden ).toBe( false );
+
+		panels.destroy();
+		outside.dispatchEvent( new MouseEvent( 'click', { bubbles: true } ) );
+
+		// destroy() itself never touches `results.hidden` — if the listener had survived, this
+		// click would have flipped it to `true` anyway, proving it is truly gone (same "listener
+		// outlives its instance" class of bug as the search debounce timer, see `destroy()`'s own
+		// docblock).
+		expect( results.hidden ).toBe( false );
+	} );
 } );
 
 it( 'emits showNearestRequested with the same info when the show-nearest button is clicked', () => {
@@ -1290,6 +1784,117 @@ describe( 'search layout (spec V-6)', () => {
 
 		expect( panels.buildSearchLayout() ).not.toBe( panels.buildSearchLayout() );
 	} );
+
+	// -------------------------------------------------------------------
+	// Round 2 (D1c): inline Lucide SVG icons, replacing the CSS `content` emoji the operator
+	// called "стиль аля web 2000".
+	// -------------------------------------------------------------------
+
+	it( 'draws the submit button as an inline Lucide search glyph, not text or CSS content', () => {
+		const el = build();
+		const submit = el.querySelector( '.woodev-pickup-search__submit' );
+		const svg = submit.querySelector( 'svg' );
+
+		expect( svg ).not.toBeNull();
+		expect( svg.getAttribute( 'viewBox' ) ).toBe( '0 0 24 24' );
+		expect( svg.getAttribute( 'stroke' ) ).toBe( 'currentColor' );
+		expect( svg.getAttribute( 'stroke-width' ) ).toBe( '2' );
+		expect( svg.getAttribute( 'aria-hidden' ) ).toBe( 'true' );
+		expect( svg.getAttribute( 'focusable' ) ).toBe( 'false' );
+		expect( submit.textContent.trim() ).toBe( '' ); // no emoji/text glyph left over.
+	} );
+
+	it( 'draws the reset button as an inline Lucide x glyph, not text or CSS content', () => {
+		const el = build();
+		const reset = el.querySelector( '.woodev-pickup-search__reset' );
+		const svg = reset.querySelector( 'svg' );
+
+		expect( svg ).not.toBeNull();
+		expect( svg.getAttribute( 'viewBox' ) ).toBe( '0 0 24 24' );
+		expect( svg.getAttribute( 'stroke' ) ).toBe( 'currentColor' );
+		expect( reset.textContent.trim() ).toBe( '' );
+	} );
+
+	// -------------------------------------------------------------------
+	// Round 2 (D1d): the submit button's disabled state machine.
+	// -------------------------------------------------------------------
+
+	describe( 'submit button state machine (D1d)', () => {
+		it( 'starts disabled and not is-ready', () => {
+			const el = build();
+			const submit = el.querySelector( '.woodev-pickup-search__submit' );
+
+			expect( submit.disabled ).toBe( true );
+			expect( submit.classList.contains( 'is-ready' ) ).toBe( false );
+		} );
+
+		it( 'stays disabled below SEARCH_MIN_CHARS', () => {
+			const el = build();
+			const input = el.querySelector( '.woodev-pickup-search__input' );
+			const submit = el.querySelector( '.woodev-pickup-search__submit' );
+
+			input.value = 'Тв'; // 2 chars — SEARCH_MIN_CHARS is 3.
+			input.dispatchEvent( new Event( 'input' ) );
+
+			expect( submit.disabled ).toBe( true );
+			expect( submit.classList.contains( 'is-ready' ) ).toBe( false );
+		} );
+
+		it( 'becomes enabled and is-ready once the query reaches SEARCH_MIN_CHARS', () => {
+			const el = build();
+			const input = el.querySelector( '.woodev-pickup-search__input' );
+			const submit = el.querySelector( '.woodev-pickup-search__submit' );
+
+			input.value = 'Тве';
+			input.dispatchEvent( new Event( 'input' ) );
+
+			expect( submit.disabled ).toBe( false );
+			expect( submit.classList.contains( 'is-ready' ) ).toBe( true );
+		} );
+
+		it( 'goes disabled again immediately after a submit, until the next input change', () => {
+			const el = build();
+			const input = el.querySelector( '.woodev-pickup-search__input' );
+			const submit = el.querySelector( '.woodev-pickup-search__submit' );
+
+			input.value = 'Тверская';
+			input.dispatchEvent( new Event( 'input' ) );
+			expect( submit.disabled ).toBe( false );
+
+			el.querySelector( 'form' ).dispatchEvent( new Event( 'submit', { cancelable: true } ) );
+
+			expect( submit.disabled ).toBe( true );
+			expect( submit.classList.contains( 'is-ready' ) ).toBe( false );
+
+			// Still spent even though the query itself is still long enough — only a fresh
+			// `input` event clears the "spent" reason, not the passage of time.
+			input.dispatchEvent( new Event( 'input' ) );
+			expect( submit.disabled ).toBe( false );
+		} );
+
+		it( 'setSearchBusy( true ) disables the button even while the query is ready', () => {
+			const panels = new Panels( document.createElement( 'div' ), config );
+			const el = panels.buildSearchLayout();
+			const input = el.querySelector( '.woodev-pickup-search__input' );
+			const submit = el.querySelector( '.woodev-pickup-search__submit' );
+
+			input.value = 'Тверская';
+			input.dispatchEvent( new Event( 'input' ) );
+			expect( submit.disabled ).toBe( false );
+
+			panels.setSearchBusy( true );
+			expect( submit.disabled ).toBe( true );
+
+			panels.setSearchBusy( false );
+			expect( submit.disabled ).toBe( false );
+		} );
+
+		it( 'is a no-op before buildSearchLayout() has ever built a submit button', () => {
+			const panels = new Panels( document.createElement( 'div' ), config );
+
+			expect( () => panels.setSearchBusy( true ) ).not.toThrow();
+		} );
+	} );
 } );
 
 // -----------------------------------------------------------------------
@@ -1337,21 +1942,82 @@ it( 'refuses to uncheck the last checked type', () => {
 	expect( boxes[ 1 ].checked ).toBe( true );
 } );
 
-it( 'shows the badge only when the selection is partial', () => {
+// Re-pointed (SP-5 round 2, plan D2 — the operator's own live-review finding): with exactly the
+// two types this project's own fixture ships (PVZ, POSTAMAT), "partial" can only ever mean
+// "1 of 2 selected" — a numeric badge on a two-type carrier is arithmetically incapable of ever
+// reading as anything but a permanently-stuck "1". The badge now shows a number only at 3+ known
+// types; below that, `.is-filtered` on the toggle alone carries the "something is filtered" signal.
+it( 'adds is-filtered to the toggle when partial, but keeps the numeric badge hidden with only two types', () => {
 	const panels = mount( filterConfig );
 	panels.setTypes( [ { code: 'pvz', label: 'ПВЗ' }, { code: 'postamat', label: 'Постамат' } ] );
 
-	// Task 13 (spec V-8): the badge is now a permanent child of the toggle, hidden via `.hidden`
-	// rather than attached/detached from the DOM — see the toggle+menu rewrite below. `querySelector`
-	// still finds a `hidden` element, so the assertion is on the property, not on presence.
+	const toggle = panels.root.querySelector( '.woodev-pickup-filter__toggle' );
 	const badge = panels.root.querySelector( '.woodev-pickup-filter__badge' );
 
+	expect( toggle.classList.contains( 'is-filtered' ) ).toBe( false );
 	expect( badge.hidden ).toBe( true );
 
 	panels.root.querySelectorAll( '.woodev-pickup-filter__checkbox' )[ 0 ].click();
 
+	expect( toggle.classList.contains( 'is-filtered' ) ).toBe( true );
+	expect( badge.hidden ).toBe( true );
+} );
+
+it( 'removes is-filtered again once every type is reselected', () => {
+	const panels = mount( filterConfig );
+	panels.setTypes( [ { code: 'pvz', label: 'ПВЗ' }, { code: 'postamat', label: 'Постамат' } ] );
+
+	const toggle = panels.root.querySelector( '.woodev-pickup-filter__toggle' );
+	const boxes = [ ...panels.root.querySelectorAll( '.woodev-pickup-filter__checkbox' ) ];
+
+	boxes[ 0 ].click();
+	expect( toggle.classList.contains( 'is-filtered' ) ).toBe( true );
+
+	boxes[ 0 ].click();
+	expect( toggle.classList.contains( 'is-filtered' ) ).toBe( false );
+} );
+
+it( 'shows the numeric badge once there are 3+ types and the selection is partial', () => {
+	const panels = mount( filterConfig );
+	panels.setTypes( [
+		{ code: 'pvz', label: 'ПВЗ' }, { code: 'postamat', label: 'Постамат' }, { code: 'locker', label: 'Локер' },
+	] );
+
+	const toggle = panels.root.querySelector( '.woodev-pickup-filter__toggle' );
+	const badge = panels.root.querySelector( '.woodev-pickup-filter__badge' );
+
+	panels.root.querySelectorAll( '.woodev-pickup-filter__checkbox' )[ 0 ].click();
+
+	expect( toggle.classList.contains( 'is-filtered' ) ).toBe( true );
 	expect( badge.hidden ).toBe( false );
-	expect( badge.textContent ).toBe( '1' );
+	expect( badge.textContent ).toBe( '2' );
+} );
+
+it( 'writes data-checked on each filter row, kept in sync with its own checkbox', () => {
+	const panels = mount( filterConfig );
+	panels.setTypes( [ { code: 'pvz', label: 'ПВЗ' }, { code: 'postamat', label: 'Постамат' } ] );
+
+	const rows = [ ...panels.root.querySelectorAll( '.woodev-pickup-filter__row' ) ];
+
+	expect( rows.map( ( r ) => r.dataset.checked ) ).toEqual( [ 'true', 'true' ] );
+
+	panels.root.querySelectorAll( '.woodev-pickup-filter__checkbox' )[ 0 ].click();
+
+	expect( rows[ 0 ].dataset.checked ).toBe( 'false' );
+	expect( rows[ 1 ].dataset.checked ).toBe( 'true' );
+} );
+
+it( 'leaves data-checked alone when the last-checked uncheck is refused', () => {
+	const panels = mount( filterConfig );
+	panels.setTypes( [ { code: 'pvz', label: 'ПВЗ' }, { code: 'postamat', label: 'Постамат' } ] );
+
+	const rows = [ ...panels.root.querySelectorAll( '.woodev-pickup-filter__row' ) ];
+	const boxes = [ ...panels.root.querySelectorAll( '.woodev-pickup-filter__checkbox' ) ];
+
+	boxes[ 0 ].click();
+	boxes[ 1 ].click(); // refused: pvz is the last checked type left.
+
+	expect( rows[ 1 ].dataset.checked ).toBe( 'true' );
 } );
 
 it( 'emits the selected codes on change', () => {
@@ -1544,6 +2210,106 @@ it( 'toggle click closes the menu again on a second click', () => {
 	expect( menu.hidden ).toBe( true );
 } );
 
+// -----------------------------------------------------------------------
+// Round 3 (operator live-review, defect B): "Когда фокус теряется с фильтра, список фильтров
+// должен автоматически закрыться, а не висеть постоянно открытым, пока не кликнешь на иконку
+// «Фильтр»." Fixed with the same care already applied to the search results box: `focusout`
+// (relatedTarget outside the wrap counts as leaving; `null` does not), PLUS a document-level
+// outside-click listener, since the customer's most likely dismissal gesture — clicking the
+// map — does not necessarily move DOM focus at all.
+// -----------------------------------------------------------------------
+
+describe( 'filter menu auto-closes (round 3, defect B)', () => {
+	it( 'closes on focusout once focus leaves the wrap entirely', () => {
+		const { el } = layoutWith( twoTypes );
+		const toggle = el.querySelector( '.woodev-pickup-filter__toggle' );
+		const menu = el.querySelector( '.woodev-pickup-filter__menu' );
+		const wrap = el.querySelector( '.woodev-pickup-filter' );
+		const outside = document.createElement( 'button' );
+
+		document.body.appendChild( outside );
+		toggle.click();
+		expect( menu.hidden ).toBe( false );
+
+		wrap.dispatchEvent( new FocusEvent( 'focusout', { relatedTarget: outside, bubbles: true } ) );
+
+		expect( menu.hidden ).toBe( true );
+	} );
+
+	it( 'does NOT close on focusout when focus only moved to another element inside the wrap', () => {
+		const { el } = layoutWith( twoTypes );
+		const toggle = el.querySelector( '.woodev-pickup-filter__toggle' );
+		const menu = el.querySelector( '.woodev-pickup-filter__menu' );
+		const wrap = el.querySelector( '.woodev-pickup-filter' );
+		const checkbox = el.querySelector( '.woodev-pickup-filter__checkbox' );
+
+		toggle.click();
+		wrap.dispatchEvent( new FocusEvent( 'focusout', { relatedTarget: checkbox, bubbles: true } ) );
+
+		expect( menu.hidden ).toBe( false );
+	} );
+
+	it( 'does NOT close on focusout when relatedTarget is null (focus left the document)', () => {
+		const { el } = layoutWith( twoTypes );
+		const toggle = el.querySelector( '.woodev-pickup-filter__toggle' );
+		const menu = el.querySelector( '.woodev-pickup-filter__menu' );
+		const wrap = el.querySelector( '.woodev-pickup-filter' );
+
+		toggle.click();
+		wrap.dispatchEvent( new FocusEvent( 'focusout', { relatedTarget: null, bubbles: true } ) );
+
+		expect( menu.hidden ).toBe( false );
+	} );
+
+	it( 'closes on a click outside the wrap — the map-click case focusout alone cannot cover', () => {
+		const { el } = layoutWith( twoTypes );
+		const toggle = el.querySelector( '.woodev-pickup-filter__toggle' );
+		const menu = el.querySelector( '.woodev-pickup-filter__menu' );
+		const outside = document.createElement( 'div' );
+
+		document.body.appendChild( outside );
+		toggle.click();
+		expect( menu.hidden ).toBe( false );
+
+		outside.dispatchEvent( new MouseEvent( 'click', { bubbles: true } ) );
+
+		expect( menu.hidden ).toBe( true );
+	} );
+
+	it( 'does NOT close on a click inside the wrap (e.g. a checkbox row)', () => {
+		const { el } = layoutWith( twoTypes );
+		const toggle = el.querySelector( '.woodev-pickup-filter__toggle' );
+		const menu = el.querySelector( '.woodev-pickup-filter__menu' );
+		const row = el.querySelector( '.woodev-pickup-filter__row' );
+
+		toggle.click();
+		row.dispatchEvent( new MouseEvent( 'click', { bubbles: true } ) );
+
+		expect( menu.hidden ).toBe( false );
+	} );
+
+	it( 'destroy() removes the outside-click listener so a later click cannot reach a dead instance', () => {
+		const { panels, el } = layoutWith( twoTypes );
+		const toggle = el.querySelector( '.woodev-pickup-filter__toggle' );
+		const menu = el.querySelector( '.woodev-pickup-filter__menu' );
+		const outside = document.createElement( 'div' );
+
+		document.body.appendChild( outside );
+		toggle.click();
+		expect( menu.hidden ).toBe( false );
+
+		panels.destroy();
+
+		outside.dispatchEvent( new MouseEvent( 'click', { bubbles: true } ) );
+
+		// destroy() itself never touches `menu.hidden` — if the listener had survived destroy(),
+		// this click would have flipped it to `true` anyway, proving it is truly gone rather than
+		// merely harmless (this file has already been bitten once by a listener that outlived its
+		// instance — the search debounce timer, see `destroy()`'s own docblock).
+		expect( menu.hidden ).toBe( false );
+	} );
+} );
+
 it( 'falls back to the list panel when the plugin disabled search entirely', () => {
 	// A carrier without a geocoding budget (config.search === false) still gets two point types —
 	// buildSearchLayout() returns null (spec V-6) and has nowhere to hand the filter, so it must
@@ -1563,6 +2329,180 @@ it( 'falls back to the list panel when the plugin disabled search entirely', () 
 	panels.root.querySelectorAll( '.woodev-pickup-filter__checkbox' )[ 0 ].click();
 
 	expect( seen ).toEqual( [ [ 'postamat' ] ] );
+} );
+
+// -----------------------------------------------------------------------
+// Round 3 (coordinator fix, found live on the rig): the type filter reached the map's markers
+// (provider-side, by GROUP) but not the sidebar list or an open card's tab bar — point-level
+// filtering, and this file is the only place that renders individual points. A co-located group
+// holding a PVZ and a postomat correctly stays on the map once POSTAMAT is unchecked (it still
+// has a visible PVZ), but the excluded postomat POINT inside it must stop being offered.
+// -----------------------------------------------------------------------
+
+describe( 'type filter also gates the sidebar list and card (round 3, coordinator fix)', () => {
+	const mixedGroup = () => ( {
+		key: 'mixed', lat: 55.75, lng: 37.61, size: 2,
+		points: [
+			{
+				id: 'pvz-1', name: 'ПВЗ «Магнит»', short_address: 'Б. Татарская, 9',
+				type: { code: 'pvz', label: 'ПВЗ' }, selectable: { allowed: true, reason: null },
+			},
+			{
+				id: 'postamat-1', name: 'Постамат «Замоскворечье»', short_address: 'Б. Татарская, 9',
+				type: { code: 'postamat', label: 'Постамат' }, selectable: { allowed: true, reason: null },
+			},
+		],
+	} );
+
+	const soloPostamat = () => ( {
+		key: 'solo-postamat', lat: 55.76, lng: 37.62, size: 1,
+		points: [ {
+			id: 'postamat-2', name: 'Постамат «Северный»', short_address: 'Ленина, 1',
+			type: { code: 'postamat', label: 'Постамат' }, selectable: { allowed: true, reason: null },
+		} ],
+	} );
+
+	function uncheck( panels, code ) {
+		const boxes = [ ...panels.root.querySelectorAll( '.woodev-pickup-filter__checkbox' ) ];
+
+		boxes.find( ( b ) => code === b.dataset.code ).click();
+	}
+
+	it( 'removes a solo excluded-type group from the list entirely, synchronously, with no new setVisible()', () => {
+		const panels = mount( filterConfig );
+		panels.setTypes( twoTypes );
+		panels.setVisible( [ soloPostamat() ] );
+
+		expect( panels.root.querySelectorAll( '.woodev-pickup-list__item' ) ).toHaveLength( 1 );
+
+		uncheck( panels, 'postamat' );
+
+		// No panels.setVisible() call in between — the operator's own repro was "uncheck a type
+		// and look at the list", no map movement at all.
+		expect( panels.root.querySelectorAll( '.woodev-pickup-list__item' ) ).toHaveLength( 0 );
+	} );
+
+	it( 'a mixed-type co-located group survives, but the excluded point stops being offered', () => {
+		const panels = mount( filterConfig );
+		panels.setTypes( twoTypes );
+		panels.setVisible( [ mixedGroup() ] );
+
+		expect( panels.root.querySelectorAll( '.woodev-pickup-list__point' ) ).toHaveLength( 2 );
+
+		uncheck( panels, 'postamat' );
+
+		const item = panels.root.querySelector( '.woodev-pickup-list__item' );
+
+		expect( item ).not.toBeNull(); // the group itself still renders — it still has a PVZ.
+		// Reduced to exactly one visible point: a plain single row, not a one-item sub-row list.
+		expect( item.querySelectorAll( '.woodev-pickup-list__point' ) ).toHaveLength( 0 );
+		expect( item.textContent ).toContain( 'ПВЗ «Магнит»' );
+		expect( item.textContent ).not.toContain( 'Постамат «Замоскворечье»' );
+	} );
+
+	it( 'the surviving single row opens the correct (surviving) point, not the excluded one', () => {
+		const panels = mount( filterConfig );
+		panels.setTypes( twoTypes );
+		panels.setVisible( [ mixedGroup() ] );
+		uncheck( panels, 'postamat' );
+
+		const seen = [];
+		panels.on( 'cardOpened', ( e ) => seen.push( e ) );
+		panels.root.querySelector( '.woodev-pickup-list__item' ).click();
+
+		expect( seen[ 0 ].pointId ).toBe( 'pvz-1' );
+	} );
+
+	it( 'the card tab bar drops the tab for an excluded point, and falls back off it if it was active', () => {
+		const panels = mount( filterConfig );
+		const g = mixedGroup();
+
+		panels.setTypes( twoTypes );
+		panels.setVisible( [ g ] );
+		panels.openCard( g, 'postamat-1', 'marker' ); // opens on the postomat.
+
+		expect( panels.root.querySelectorAll( '.woodev-pickup-card__tab' ) ).toHaveLength( 2 );
+		expect( panels.root.querySelector( '.woodev-pickup-card__title' ).textContent )
+			.toBe( 'Постамат «Замоскворечье»' );
+
+		uncheck( panels, 'postamat' );
+
+		// No tab bar left at all — only one point survives the filter (D-4: nothing left to
+		// switch between) — and the card fell back to the still-visible PVZ rather than staying
+		// on the point the customer just excluded.
+		expect( panels.root.querySelector( '.woodev-pickup-card__tabs' ) ).toBeNull();
+		expect( panels.root.querySelector( '.woodev-pickup-card__title' ).textContent ).toBe( 'ПВЗ «Магнит»' );
+	} );
+
+	it( 'leaves an open card on the still-visible point alone when the excluded point was never active', () => {
+		const panels = mount( filterConfig );
+		const g = mixedGroup();
+
+		panels.setTypes( twoTypes );
+		panels.setVisible( [ g ] );
+		panels.openCard( g, 'pvz-1', 'marker' ); // opens on the PVZ — never the postomat.
+
+		uncheck( panels, 'postamat' );
+
+		const stage = panels.root.parentNode;
+
+		expect( stage.className ).toContain( 'is-card' ); // still open — the ACTIVE point was never excluded.
+		expect( panels.root.querySelector( '.woodev-pickup-card__title' ).textContent ).toBe( 'ПВЗ «Магнит»' );
+	} );
+
+	it( 'closes the card outright if every point in its group ends up filtered out', () => {
+		// A 3rd type is required: BOTH of a 2-type group's points must be individually excluded
+		// while a third type elsewhere keeps the "last selected type" guarantee satisfied globally.
+		const panels = mount( filterConfig );
+		const g = mixedGroup();
+		const other = {
+			key: 'other', lat: 55.80, lng: 37.65, size: 1,
+			points: [ {
+				id: 'locker-1', name: 'Локер', short_address: 'Where',
+				type: { code: 'locker', label: 'Локер' }, selectable: { allowed: true, reason: null },
+			} ],
+		};
+
+		panels.setTypes( [
+			{ code: 'pvz', label: 'ПВЗ' }, { code: 'postamat', label: 'Постамат' }, { code: 'locker', label: 'Локер' },
+		] );
+		panels.setVisible( [ g, other ] );
+		panels.openCard( g, 'pvz-1', 'marker' );
+
+		uncheck( panels, 'pvz' ); // falls back to the still-visible postamat inside the same group.
+		uncheck( panels, 'postamat' ); // now nothing in `g` survives — locker carries the invariant.
+
+		const stage = panels.root.parentNode;
+
+		expect( stage.className ).not.toContain( 'is-card' );
+	} );
+
+	it( 're-renders the list synchronously on typeFilterChange even with the search-layout home', () => {
+		// Same fix, the OTHER home for the filter control (spec V-8: a SIBLING of the search field
+		// inside `buildSearchLayout()`'s own detached layout, rather than the list-panel fallback
+		// every other test in this block exercises) — proves the re-render is not tied to one
+		// particular attachment point. The filter DOM lands inside `layout`, not `panels.root`, in
+		// this configuration (see the file docblock's "THE CONTROL'S HOME" note), so the checkbox
+		// is queried off `layout`.
+		const panels = new Panels( document.createElement( 'div' ), filterConfig );
+
+		panels.render();
+		document.body.appendChild( panels._stage );
+
+		const layout = panels.buildSearchLayout();
+		document.body.appendChild( layout );
+
+		panels.setTypes( twoTypes );
+		panels.setVisible( [ soloPostamat() ] );
+
+		expect( panels.root.querySelectorAll( '.woodev-pickup-list__item' ) ).toHaveLength( 1 );
+
+		const boxes = [ ...layout.querySelectorAll( '.woodev-pickup-filter__checkbox' ) ];
+
+		boxes.find( ( b ) => 'postamat' === b.dataset.code ).click();
+
+		expect( panels.root.querySelectorAll( '.woodev-pickup-list__item' ) ).toHaveLength( 0 );
+	} );
 } );
 
 // -----------------------------------------------------------------------

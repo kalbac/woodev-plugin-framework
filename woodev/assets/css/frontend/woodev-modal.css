@@ -161,36 +161,64 @@
 	background: #fff;
 	color: #1e1e1e;
 	max-width: 100%;
-	min-width: 920px;
+	min-width: 1024px; /* Live-review round: 920px left "почти ничего" of map visible once the
+	                       sidebar opened (operator). Matches `class-pickup-handler.php`'s own
+	                       `'width' => 1024` inline value — see the mobile block below for why the
+	                       two numbers have to agree even though the inline one usually wins. */
 	max-height: calc( 100vh - 40px );
 	border-radius: 4px;
 	box-shadow: 0 6px 30px rgba( 0, 0, 0, 0.3 );
 	overflow: hidden;
 }
 
+/* Live-review round: the close button used to sit INSIDE this header's own `padding: 5px 10px`
+   like any other child, which is exactly what gave it its lopsided inset — 5px top/bottom from
+   the header's own padding, but 10px on the right too, so it read as a button floating inside the
+   bar rather than a control that IS the bar's own corner (operator's own numbers: (49-38)/2 =
+   5.5px top/bottom vs. 10px on the right — never proportional to begin with). The reference the
+   operator attached (Yandex.Delivery's own dialog) has NO gap on the top or right at all: the
+   close control is full header height, flush to the corner. Padding moves from here — a shared
+   inset that used to apply to EVERY child, close button included — onto `.woodev-modal__title`
+   alone, so only the text gets an inset and the close button is free to fill the row edge to
+   edge. `align-items: stretch` (was `center`) is what makes "full header height" automatic rather
+   than a guessed pixel match: with no `height` of its own, the title now stretches to whatever
+   height the row resolves to and centres its OWN text inside that via its own internal flex,
+   while the close button explicitly states the same height as a literal match (see its own rule)
+   rather than only relying on stretch to imply it. */
 .woodev-modal__header {
 	display: flex;
-	align-items: center;
+	align-items: stretch;
 	justify-content: space-between;
 	flex: 0 0 auto;
-	padding: 5px 10px;
+	height: 48px;
+	padding: 0;
 	background: #fcfcfc;
 	border-bottom: 1px solid #ddd;
 }
 
 .woodev-modal__title {
+	display: flex;
+	align-items: center;
 	margin: 0;
-	padding: 0;
+	padding: 0 0 0 16px; /* The header's own former left inset, now stated here directly. */
 	font-size: 18px;
 	font-weight: 700;
 	line-height: 1.5em;
 	color: inherit;
 }
 
+/* Explicit `width`/`height`, not merely `align-items: stretch` on the header implying the second
+   one — a literal `48px`/`48px` match is what actually makes this SQUARE, matching the header's
+   own `height: 48px` above rather than trusting flex resolution to land on the same number by
+   construction alone. No padding, no border-radius, no margin on the right: this button IS the
+   header's own top-right corner now (the dialog frame's own `border-radius`/`overflow: hidden` on
+   `.woodev-modal__content` clips its square corner into that shape for free — nothing to round
+   here directly). See the `:focus-visible` rule further down for why this one control needed
+   splitting out of the shared focus-ring group once it went flush to that corner. */
 .woodev-modal__close {
 	flex: 0 0 auto;
-	height: 38px;
-	width: 38px;
+	width: 48px;
+	height: 48px;
 	padding: 0;
 	border: 0;
 	border-left: 1px solid #ddd;
@@ -321,12 +349,24 @@
  * focus-visible rules in the consumer's own stylesheet.
  * ---------------------------------------------------------------------- */
 
-.woodev-modal__close:focus-visible,
 .woodev-modal__retry:focus-visible,
 .woodev-modal__notice-retry:focus-visible,
 .woodev-modal__notice-dismiss:focus-visible {
 	outline: 2px solid #06aedd;
 	outline-offset: 1px;
+}
+
+/* `.woodev-modal__close` split out of the group above (B, live-review round): it is now flush to
+   `.woodev-modal__content`'s own top-right corner (no header padding stands between them any
+   more — see that rule's own note), and `.woodev-modal__content` clips its children with
+   `overflow: hidden` for its rounded corners. An OUTWARD-drawn ring, like the group above uses,
+   would extend past that edge on exactly the two sides that matter and get clipped there —
+   invisible where a keyboard user would look for it first. A NEGATIVE `outline-offset` draws the
+   ring INSIDE the button's own box instead, so it survives the clip on every side; a 48px square
+   button has plenty of room for a 2px ring 3px in from its own edge. */
+.woodev-modal__close:focus-visible {
+	outline: 2px solid #06aedd;
+	outline-offset: -3px;
 }
 
 /* -------------------------------------------------------------------------
@@ -343,12 +383,15 @@
 		/*
 		 * `!important` — the mobile layout's own version of the `body.style.height` collision
 		 * documented just below. `WoodevModal`'s constructor applies a consumer's `width` option
-		 * (the pickup map passes 920, a DESKTOP value — spec V-1) as an INLINE
-		 * `dialog.style.minWidth`. An inline style always outranks a class selector regardless of
-		 * specificity, so this rule did nothing at all on a real narrow screen: the dialog stayed
-		 * 920px wide and the layout below (found only by resizing a live rig page, never by a
-		 * unit test — jsdom has no viewport) rendered with the header and most of the map off to
-		 * the side, invisible without horizontal scrolling.
+		 * (the pickup map passes 1024 as of the live-review width bump above, a DESKTOP value —
+		 * spec V-1; was 920 before) as an INLINE `dialog.style.minWidth`. An inline style always
+		 * outranks a class selector regardless of specificity, so this rule did nothing at all on
+		 * a real narrow screen: the dialog stayed the DESKTOP width and the layout below (found
+		 * only by resizing a live rig page, never by a unit test — jsdom has no viewport) rendered
+		 * with the header and most of the map off to the side, invisible without horizontal
+		 * scrolling. The exact pixel value passed inline never mattered to THIS rule either way —
+		 * `100% !important` beats any inline `minWidth`, 920 or 1024 alike — which is why raising
+		 * it above did not require touching this mobile override at all, only its own comment.
 		 */
 		min-width: 100% !important;
 		max-height: none;

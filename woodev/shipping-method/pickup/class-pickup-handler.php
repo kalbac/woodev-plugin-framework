@@ -643,7 +643,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 					'Не удалось загрузить пункты выдачи. Попробуйте ещё раз.',
 					'woodev-plugin-framework'
 				),
-				'noResults'      => __( 'Пункты выдачи не найдены.', 'woodev-plugin-framework' ),
+				'noResults'      => __( 'Поиск не дал результатов.', 'woodev-plugin-framework' ),
 				'blocked'        => __(
 					'Этот пункт выдачи недоступен для вашего заказа.',
 					'woodev-plugin-framework'
@@ -786,8 +786,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 				// The dialog sizes itself before any content exists (spec V-1); these two
 				// values used to live only in CSS, on the MAP element, which is why the
 				// modal opened as a header-tall strip until the map mounted.
+				//
+				// Raised 920 -> 1024 after the operator's live review: the sidebar takes a
+				// fixed 320px out of this width whenever it is open, so at 920 the map was
+				// left with under 600px and, in his words, "от карты почти ничего не
+				// остаётся". The sidebar's width is fixed while the dialog's is not, so the
+				// only way to give the map back usable area is to widen the dialog. 1024 is
+				// his own suggested figure and still fits a 1280-wide viewport with margin
+				// to spare; narrower viewports are unaffected, since the dialog goes
+				// full-screen below its own breakpoint (see woodev-modal.css).
 				'modal' => [
-					'width'      => 920,
+					'width'      => 1024,
 					'bodyHeight' => 'min(80vh, 800px)',
 				],
 

@@ -1169,13 +1169,20 @@
 			// then skips building a control at all (Task 12, spec V-6).
 			searchLayoutEl = panels.buildSearchLayout();
 
-			// The camera follows whatever became the subject, from wherever the customer asked:
-			// a marker, a sidebar row, a search result, "show the nearest". `cardOpened` is the
-			// single funnel every one of those already passes through, so one listener covers
-			// them all and marker-click and row-click cannot drift apart again (spec V-10).
+			// `cardOpened` is still the single funnel every route to a card passes through — a
+			// marker, a sidebar row, a search result, "show the nearest" — but, as of the
+			// live-review round 2 fix (D6), it no longer treats them identically. Spec V-10
+			// ("a marker click and a sidebar row click must behave identically") is OVERRULED:
+			// neither reference behaves that way (see the plan's "Reference truth" table) — a
+			// marker click pans only (the customer already sees roughly where it is; slamming
+			// the camera to max zoom on every tap was the operator's original bug report), every
+			// other origin centres AND zooms, since none of those started from a point already
+			// visible on screen. `origin` (threaded through `openCard()`/`cardOpened` by every
+			// caller below) is what lets this ONE listener still decide per-call instead of
+			// forking into several near-identical ones.
 			panels.on( 'cardOpened', function( payload ) {
 				if ( payload.group && provider && 'function' === typeof provider.focusGroup ) {
-					provider.focusGroup( payload.group.key );
+					provider.focusGroup( payload.group.key, { zoom: 'marker' !== payload.origin } );
 				}
 			} );
 
@@ -1219,13 +1226,27 @@
 				}
 			} );
 
+			// `query`, not `displayName` (live-review round 4). A suggestion now carries BOTH: the
+			// SHORT form the customer reads ("Чертановская улица, 66к1") and the FULL one the
+			// geocoder needs ("Россия, Москва, Чертановская улица, 66к1"). Resolving the short form
+			// would hand the geocoder a street with no city — exactly the ambiguity `strictBounds`
+			// exists to prevent everywhere else in the provider. `displayName` remains the fallback
+			// for a provider whose suggestions carry no separate `query` (see
+			// `map-provider-yandex.js`'s own `projectSuggestion()`, which falls back the same way
+			// when `value` is missing).
 			panels.on( 'searchAddressPicked', function( index ) {
 				var address = lastAddresses[ index ];
 
-				if ( address && 'string' === typeof address.displayName
-					&& provider && 'function' === typeof provider.resolveAddress
-				) {
-					provider.resolveAddress( address.displayName );
+				if ( ! address || ! provider || 'function' !== typeof provider.resolveAddress ) {
+					return;
+				}
+
+				var query = 'string' === typeof address.query && address.query.length > 0
+					? address.query
+					: address.displayName;
+
+				if ( 'string' === typeof query && query.length > 0 ) {
+					provider.resolveAddress( query );
 				}
 			} );
 
@@ -1237,8 +1258,9 @@
 				}
 
 				// focusGroup() runs via the 'cardOpened' event openCard() emits — see that
-				// listener above.
-				panels.openCard( group, pointId );
+				// listener above. origin: 'search' (D6) — a search hit, like every other
+				// non-marker origin, centres AND zooms.
+				panels.openCard( group, pointId, 'search' );
 			} );
 
 			// showNearestRequested (extra wiring, D-6): the "show it anyway" button on the
@@ -1252,8 +1274,9 @@
 				}
 
 				// focusGroup() runs via the 'cardOpened' event openCard() emits — see that
-				// listener above.
-				panels.openCard( group );
+				// listener above. origin: 'nearest' (D6) — centres AND zooms, same as every
+				// other non-marker origin.
+				panels.openCard( group, null, 'nearest' );
 			} );
 
 			// anchorCleared (extra wiring, D-6): the panels' own reset control calls
@@ -1270,20 +1293,74 @@
 
 			// searchType/searchSubmit/searchReset (Task 12, spec V-6): the two-events-two-costs
 			// design `map-provider-yandex.js`'s own docblock documents under "ADDRESS SEARCH".
-			// `searchType` fires on every debounced keystroke and must NEVER touch the geocoder —
-			// it only filters the already-loaded pool, free and local.
+			// `searchType` fires on every debounced keystroke and never touches the GEOCODER — it
+			// matches the already-loaded pool for free AND asks `ymaps.suggest()`, which is the
+			// cheap address-completion service, not the billed geocoder.
+			//
+			// `suggestAddresses()` (live-review round 4) is what makes our result list read like the
+			// reference's. The operator typed the exact address "Чертановская 66к1" and got back
+			// "Russian Federation, Moscow, Serpukhovsko-Timiryazevskaya Line, Chertanovskaya metro
+			// station" where Yandex.Delivery gives "Чертановская улица, 66к1". Two causes, both in
+			// the provider: we had dropped `suggest()` entirely and left only the geocoder — which
+			// will happily rank a metro station above a house number — and we displayed the full
+			// postal form. The reference keeps ymaps' own suggest panel alive for exactly this;
+			// since our chrome is entirely our own (D-3), the provider reproduces it explicitly.
+			//
+			// It RETURNS its results rather than emitting `searchResults` — deliberately, and the
+			// distinction is load-bearing. `searchResults` drives `renderSearchResults()`, the
+			// COMPLETED-search renderer, the one allowed to print "Поиск не дал результатов.".
+			// Routing typing through it is precisely the round-3 defect ("начинаешь писать адрес …
+			// появляется «Поиск не дал результатов.» и висит"): typing a street the geocoder has not
+			// been asked about yet is the normal case, so that verdict was usually a lie. Preview and
+			// verdict stay apart by construction here, not by convention.
 			panels.on( 'searchType', function( payload ) {
-				if ( panels && provider && 'function' === typeof provider.matchLoadedPoints ) {
-					panels.renderSearchResults( { points: provider.matchLoadedPoints( payload.query ), addresses: [] } );
+				if ( ! panels || ! provider ) {
+					return;
+				}
+
+				if ( 'function' === typeof provider.suggestAddresses ) {
+					provider.suggestAddresses( payload.query ).then( function( results ) {
+						if ( destroyed || ! panels ) {
+							return;
+						}
+
+						// `lastAddresses` must be refreshed HERE as well as in the `searchResults`
+						// listener below. That listener used to be the only writer, back when every
+						// address list arrived as an event; suggestions now arrive as a RETURN value
+						// (see this handler's own comment), so without this line
+						// `searchAddressPicked` would look the picked index up in whatever the last
+						// COMPLETED search left behind — resolving the wrong address, or none.
+						lastAddresses = ( results && results.addresses ) || [];
+
+						panels.previewSearchResults( results );
+					} ).catch( function() {} );
+
+					return;
+				}
+
+				// A provider with no `suggestAddresses()` (the embedded provider, or any future one
+				// that owns its own chrome) still gets the free local matches — the address column
+				// is simply empty rather than the whole preview being dead.
+				if ( 'function' === typeof provider.matchLoadedPoints ) {
+					panels.previewSearchResults( { points: provider.matchLoadedPoints( payload.query ), addresses: [] } );
 				}
 			} );
 
 			// `searchSubmit` (Enter/the magnifier) is the ONLY path that spends the merchant's
 			// geocoding quota — it runs the control's own `search()`, which invokes
-			// `map-provider-yandex.js`'s bounded geocode provider and, on resolution, emits
-			// `searchResults` (wired above) with the fresh `{ points, addresses }`.
+			// `map-provider-yandex.js`'s bounded geocode provider and, on resolution, emits ONE
+			// of `searchResults`/`searchCleared`/`addressMatchedPoint` (all wired below) with the
+			// outcome. `setSearchBusy( true )` marks the submit button in-flight for exactly the
+			// same reason the button exists at all (work item 5, live-review round 2): a real
+			// network round trip takes real time, and every one of those three outcomes clears it
+			// again — see their own listeners below — so the button can never be left stuck
+			// disabled regardless of which one the search actually resolves down. Only fired when
+			// a search is genuinely about to run; a provider with no `searchControl` never
+			// answers with any of the three events, and marking busy without a matching clear
+			// would strand the button forever.
 			panels.on( 'searchSubmit', function( payload ) {
 				if ( provider && provider.searchControl && 'function' === typeof provider.searchControl.search ) {
+					panels.setSearchBusy( true );
 					provider.searchControl.search( payload.query );
 				}
 			} );
@@ -1347,14 +1424,15 @@
 			} );
 
 			if ( ! ownsChrome ) {
-				// A marker click reaches the exact same focus-then-open path a sidebar row click
-				// does — see the 'cardOpened' listener above, which openCard() below fires into
-				// (spec V-10).
+				// A marker click funnels through the SAME 'cardOpened' listener a sidebar row
+				// does — but tagged `origin: 'marker'`, so that listener's pan/zoom split (D6,
+				// above) treats it as a PAN only, never a re-centre-and-zoom. Spec V-10
+				// ("identical path") is overruled — see the 'cardOpened' listener's own comment.
 				provider.on( 'pointClick', function( key ) {
 					var group = groupsByKey[ key ];
 
 					if ( group ) {
-						panels.openCard( group );
+						panels.openCard( group, null, 'marker' );
 					}
 				} );
 
@@ -1394,6 +1472,43 @@
 				provider.on( 'searchResults', function( results ) {
 					lastAddresses = ( results && results.addresses ) || [];
 					panels.renderSearchResults( results );
+					// A completed search is one of the three outcomes `searchSubmit` (above) put
+					// the button in flight for — see that listener's own comment.
+					panels.setSearchBusy( false );
+				} );
+
+				// searchCleared (D1a, live-review round 2 — the "crossik" bug): `clearAddress()`
+				// no longer round-trips through an EMPTY `searchResults` to signal "cleared" — see
+				// `map-provider-yandex.js`'s own docblock on why that used to re-open the results
+				// box the customer had just closed and print "не найдено" at them. This IS the
+				// box's actual close path now. Also releases whatever busy state `searchSubmit`
+				// may have set — a search that resolves down the clear route (rather than a
+				// completed one) must not leave the submit button stuck disabled either.
+				provider.on( 'searchCleared', function() {
+					panels.hideSearchResults();
+					panels.setSearchBusy( false );
+				} );
+
+				// addressMatchedPoint (late addition, live-review round 2): the searched address
+				// landed within SAME_PLACE_THRESHOLD_M of one of our own points
+				// (`map-provider-yandex.js`'s own `focusAddress()`) — treat the search as having
+				// selected that POINT outright, not just moved the camera near it. Routes through
+				// the SAME 'cardOpened' funnel above with `origin: 'search'`, which both opens the
+				// sidebar card AND (via the pan/zoom split, D6) centres-and-zooms the camera onto
+				// it — `focusAddress()` deliberately does neither itself in this case (see that
+				// method's own docblock), so this is the ONLY place either happens. An unknown key
+				// (defensive: `groupsByKey` is rebuilt on every fetch, so a stale key from an
+				// in-flight geocode racing a refetch is possible, however unlikely) is a silent
+				// no-op, matching every other "key not found in the current pool" guard in this
+				// block (see `showNearestRequested` above).
+				provider.on( 'addressMatchedPoint', function( info ) {
+					var group = info && info.key ? groupsByKey[ info.key ] : null;
+
+					panels.setSearchBusy( false );
+
+					if ( group ) {
+						panels.openCard( group, null, 'search' );
+					}
 				} );
 
 				// addressFocused: the provider's own confirmation that the "your address" pin
@@ -1433,6 +1548,27 @@
 				// done its job. Without it the customer got 1-2 seconds of an empty dialog
 				// carrying nothing but its own title while the map script downloaded.
 				modal.hideLoading();
+
+				// D8/п.5,п.8 (live-review round 2): `setMargin()` used to run for the FIRST time
+				// only from the panels' own `listToggle` event, so ymaps had NO margin reservation
+				// at all until the customer opened the sidebar once — the very first camera move
+				// had nothing to avoid, and ymaps' own copyright strip rendered wherever it liked
+				// (Yandex's ToS forbids covering it). The panels always start CLOSED — `render()`
+				// never adds `is-open`; see `pickup-panels.js`'s own "ONE OPEN STATE, ON THE STAGE"
+				// note — so `false`/`0` here is not a guess, it is that starting state made
+				// explicit, established BEFORE the first camera move rather than left implicit
+				// until whatever `listToggle` happens to fire first (below, unchanged).
+				//
+				// The references ALSO reserve a STATIC top-chrome strip for their search bar
+				// (`{top:0,left:0,width:'100%',height:'64px'}` — see the plan's "Reference truth"
+				// table). Doing that here would need a SECOND provider-level margin accessor:
+				// `setMargin()`/`this._marginArea` (map-provider-yandex.js) own exactly ONE, sized
+				// for the sidebar. Adding a second is a provider change — out of this file's scope
+				// (T3 touches only pickup-mount.js) — deliberately NOT implemented; flagged back
+				// as a follow-up rather than papered over from here.
+				if ( panels && provider && 'function' === typeof provider.setMargin ) {
+					provider.setMargin( false, 0 );
+				}
 
 				// Task 16 (spec V-4 stage 2): the modal's spinner just came down, but the pool the
 				// map/list/search would act on has not arrived yet — a bare canvas with nothing to

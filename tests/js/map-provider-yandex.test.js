@@ -87,16 +87,23 @@ function makeGeocodeResult( bounds, coordinates ) {
 
 /**
  * Builds a `ymaps.geocode()` resolution shaped for the Task 12 search-provider path
- * (`_searchGeocodeProvider()`'s own `.toArray()`/`.properties.set()`/`.properties.get('text')`
+ * (`_searchGeocodeProvider()`'s own `.toArray()`/`.properties.set()`/`.properties.get('name')`
  * reads) — as opposed to {@see makeGeocodeResult}'s single-`.get(0)` shape, which
  * `_resolveInitialViewport()`/`resolveAddress()` read instead. Each entry's `properties` is a
  * REAL get/set data manager ({@see makeProperties}) so a test can assert `_searchGeocodeProvider()`
- * actually tagged it (`properties.get( 'woodevKind' )`) after the fact.
+ * actually tagged it (`properties.get( 'woodevKind' )`) after the fact. `name` (SHORT form) is
+ * what production reads (live-review round 4, Finding A.2 — was `text`, the FULL postal form
+ * including the country, which is the field that actually produced the operator's reported
+ * "Russian Federation, Moscow, ..." output); `text` is still populated alongside it, prefixed,
+ * so a regression back to reading the wrong field is visibly WRONG in a test's own output rather
+ * than coincidentally passing because the two fields happen to hold identical strings.
  *
- * @param {string[]} texts one `properties.get( 'text' )` value per hit, in order.
+ * @param {string[]} names one `properties.get( 'name' )` (short form) value per hit, in order.
  */
-function makeSearchGeocodeResult( texts ) {
-	const hits = ( texts || [] ).map( ( text ) => ( { properties: makeProperties( { text } ) } ) );
+function makeSearchGeocodeResult( names ) {
+	const hits = ( names || [] ).map( ( name ) => ( {
+		properties: makeProperties( { name, text: `Russia, ${ name }` } ),
+	} ) );
 
 	return {
 		geoObjects: {
@@ -111,11 +118,14 @@ function makeSearchGeocodeResult( texts ) {
  * Builds a hand-rolled `window[ns]` ymaps stub. See the file docblock for what it covers.
  *
  * @param {Object}  [options]
- * @param {boolean} [options.deferSetBounds] By default `Map#setBounds()` resolves (and applies
- *   the new bounds) SYNCHRONOUSLY-ish — fine for tests that don't care about camera-move
- *   ordering. `deferSetBounds: true` leaves the returned promise pending until a test explicitly
- *   calls `resolveNextSetBounds()`/`resolveSetBoundsFor()` — needed to prove the s46
- *   "setBounds() is asynchronous" lesson and the `_focusSeq` out-of-order guard.
+ * @param {boolean} [options.deferSetBounds] By default `Map#setBounds()`/`setCenter()`/`panTo()`
+ *   all resolve (and apply the new camera state) SYNCHRONOUSLY-ish — fine for tests that don't
+ *   care about camera-move ordering. `deferSetBounds: true` leaves EVERY one of their returned
+ *   promises pending until a test explicitly calls `resolveNextSetBounds()`/`resolveSetBoundsFor()`
+ *   (for `setBounds()`) or `resolveNextCameraMove()`/`resolveCameraMoveFor()` (for `setCenter()`/
+ *   `panTo()`) — needed to prove the s46 "camera moves are asynchronous" lesson and the
+ *   `_focusSeq` out-of-order guard (live-review addition: now every move animates, which makes
+ *   out-of-order resolution MORE likely in production than it was before).
  * @param {number}  [options.zoom] `Map#getZoom()`'s fixed return value. Defaults to 10.
  */
 function createYmapsStub( options ) {
@@ -140,6 +150,10 @@ function createYmapsStub( options ) {
 		this.bounds = [ [ 10, 20 ], [ 11, 21 ] ];
 		this.setBoundsCalls = [];
 		this.setCenterCalls = [];
+		this.panToCalls = [];
+		this.getBoundsCalls = [];
+		// Opt-in per test (Finding C) — see getBounds()'s own comment below.
+		this.marginAwareBounds = null;
 		// Task 14 (spec V-13) — `getZoom` a jest.fn (not a plain prototype method) so a test
 		// proving `zoomBy()`'s clamp can override its return value per call via
 		// `mockReturnValue()`; every OTHER test gets the same fixed `options.zoom` default it
@@ -167,6 +181,23 @@ function createYmapsStub( options ) {
 		this.destroy = jest.fn();
 		this._eventHandlers = {};
 		this._pendingSetBounds = [];
+		this._pendingCameraMoves = [];
+
+		// Live-review follow-up (T1) — `_buildMap()`'s static top-chrome reservation AND
+		// `setMargin()`'s dynamic sidebar reservation both go through this ONE real ymaps entry
+		// point: `map.margin.addArea()`, whose RETURNED ACCESSOR is what removes it again (there
+		// is no `map.margin.removeArea()` — see setMargin()'s own docblock for the incident this
+		// stub shape guards against). `marginAddAreaCalls` records every call's own area object,
+		// in order, so a test can tell the static call (`width: '100%'`) apart from a dynamic one
+		// (`right: <width>`) without needing two different stub methods.
+		this.marginAddAreaCalls = [];
+		this.margin = {
+			addArea: ( area ) => {
+				this.marginAddAreaCalls.push( area );
+
+				return { remove: jest.fn() };
+			},
+		};
 
 		const self = this;
 
@@ -179,11 +210,76 @@ function createYmapsStub( options ) {
 
 		stub.lastMap = this;
 	}
-	Map.prototype.getBounds = function() {
+	// Live-review round 4, Finding C — `_emitVisibleChange()` now reads the MARGIN-AWARE bounds
+	// (`getBounds({ useMapMargin: true })`) instead of the full canvas rectangle. `getBoundsCalls`
+	// records every call's own `options` argument so a test can pin the EXACT shape passed, not
+	// just the resulting behaviour. Default behaviour (`marginAwareBounds` unset) returns
+	// `this.bounds` regardless of `options` — every EXISTING test that only ever sets `.bounds`
+	// keeps working unchanged; a test proving the margin-aware behaviour specifically opts in via
+	// `marginAwareBounds`.
+	Map.prototype.getBounds = function( options ) {
+		this.getBoundsCalls.push( options );
+
+		if ( options && options.useMapMargin && this.marginAwareBounds ) {
+			return this.marginAwareBounds;
+		}
+
 		return this.bounds;
 	};
-	Map.prototype.setCenter = function( center, mapZoom ) {
-		this.setCenterCalls.push( [ center, mapZoom ] );
+	// Task 20/T1 live-review split — setCenter() is the ZOOM branch of focusGroup() (and the
+	// cluster-click zoom-in-one-step move); panTo() is the PAN branch (a marker click). Both are
+	// promise-returning and, under `deferSetBounds`, deferrable exactly like setBounds() — see
+	// the `deferSetBounds` option's own docblock above and the file docblock's s46 lesson.
+	Map.prototype.setCenter = function( center, mapZoom, centerOptions ) {
+		const self = this;
+		const call = { center, zoom: mapZoom, options: centerOptions };
+
+		this.setCenterCalls.push( call );
+
+		if ( deferSetBounds ) {
+			return new Promise( ( resolve ) => {
+				self._pendingCameraMoves.push( {
+					matches: ( target ) => JSON.stringify( target ) === JSON.stringify( center ),
+					resolve,
+				} );
+			} );
+		}
+
+		return Promise.resolve();
+	};
+	Map.prototype.panTo = function( coords, panOptions ) {
+		const self = this;
+		const call = { coords, options: panOptions };
+
+		this.panToCalls.push( call );
+
+		if ( deferSetBounds ) {
+			return new Promise( ( resolve ) => {
+				self._pendingCameraMoves.push( {
+					matches: ( target ) => JSON.stringify( target ) === JSON.stringify( coords ),
+					resolve,
+				} );
+			} );
+		}
+
+		return Promise.resolve();
+	};
+	// Resolves the OLDEST still-pending deferred setCenter()/panTo() call.
+	Map.prototype.resolveNextCameraMove = function() {
+		const entry = this._pendingCameraMoves.shift();
+
+		if ( entry ) {
+			entry.resolve();
+		}
+	};
+	// Resolves a SPECIFIC pending setCenter()/panTo() call by its (unique) target coordinate —
+	// needed to resolve two concurrent calls OUT of the order they were made.
+	Map.prototype.resolveCameraMoveFor = function( target ) {
+		const index = this._pendingCameraMoves.findIndex( ( entry ) => entry.matches( target ) );
+
+		if ( -1 !== index ) {
+			this._pendingCameraMoves.splice( index, 1 )[ 0 ].resolve();
+		}
 	};
 	Map.prototype.setBounds = function( bounds, boundsOptions ) {
 		const self = this;
@@ -252,6 +348,30 @@ function createYmapsStub( options ) {
 		};
 		this.fireObjectClick = ( id ) => {
 			clickHandlers.forEach( ( cb ) => cb( { get: ( k ) => ( 'objectId' === k ? id : undefined ) } ) );
+		};
+
+		// Task 21 (live-review D6/T1) — the CLUSTER icon's own click, a DIFFERENT ymaps event
+		// stream from `objects.events` above. `clusters.getById()` returns the same GeoJSON-ish
+		// shape (`geometry.coordinates` a plain array) real ObjectManager clusters use — the
+		// SAME shape `getObjectState().cluster.features[i].geometry.coordinates` already reads
+		// elsewhere in the production file (see clusterAnchorCoordinates()), so a test that sets
+		// `clustersById[ id ] = { geometry: { coordinates: [...] } }` matches what the real API
+		// documents, not a shape convenient for the test.
+		const clusterClickHandlers = [];
+
+		this.clustersById = {};
+		this.clusters = {
+			events: {
+				add: ( type, cb ) => {
+					if ( 'click' === type ) {
+						clusterClickHandlers.push( cb );
+					}
+				},
+			},
+			getById: ( id ) => this.clustersById[ id ],
+		};
+		this.fireClusterClick = ( id ) => {
+			clusterClickHandlers.forEach( ( cb ) => cb( { get: ( k ) => ( 'objectId' === k ? id : undefined ) } ) );
 		};
 
 		stub.lastObjectManager = this;
@@ -355,6 +475,27 @@ function createYmapsStub( options ) {
 		return Promise.resolve( stub.geocodeResult );
 	};
 
+	// Live-review round 4, Finding A.1 — the typing dropdown's own address engine
+	// ({@see suggestAddresses}). `suggestResult` defaults to a couple of short, address-shaped
+	// items (unlike `geocodeResult`'s single-`.get(0)` GeoObject shape) — real `ymaps.suggest()`
+	// resolves a PLAIN ARRAY of `{ displayName, value }`, never a GeoObjectCollection.
+	stub.suggestCalls = 0;
+	stub.suggestImpl = null;
+	stub.suggestResult = [
+		{ displayName: 'Чертановская улица, 66к1', value: 'Россия, Москва, Чертановская улица, 66к1' },
+	];
+	stub.suggest = ( request, options ) => {
+		stub.suggestCalls += 1;
+		stub.lastSuggestRequest = request;
+		stub.lastSuggestOptions = options;
+
+		if ( stub.suggestImpl ) {
+			return stub.suggestImpl( request, options );
+		}
+
+		return Promise.resolve( stub.suggestResult );
+	};
+
 	return stub;
 }
 
@@ -429,6 +570,64 @@ function groupWith( point ) {
 		typeCode: point.typeCode || 'pvz',
 		size: 1,
 		points: [ point ],
+	};
+}
+
+/**
+ * Reproduces `map-provider-yandex.js`'s own PRIVATE `symmetricBoundsAround()` helper (live-review
+ * round 4, Finding B) — not exported (module-scope only), so `focusAddress()`'s fit tests pin
+ * their EXPECTED box by running the SAME formula independently, the same way this file already
+ * pins `focusAddress()`'s nearest-N distances via `geo.distanceMeters()`/`geo.nearest()` directly
+ * rather than trusting the production code's own arithmetic. Builds the smallest box CENTRED
+ * EXACTLY on `anchor` that still contains every one of `groups` — replacing `geo.boundsFor()`,
+ * whose own box is merely the smallest one that CONTAINS the anchor, with a centre that drifts
+ * toward wherever the groups happen to sit (exactly the bug Finding B fixes).
+ *
+ * @param {Array} anchor `[lat, lng]`.
+ * @param {Array} groups objects with numeric `lat`/`lng`.
+ */
+function expectedFocusAddressBounds( anchor, groups ) {
+	let latDelta = 0;
+	let lngDelta = 0;
+
+	( groups || [] ).forEach( ( group ) => {
+		latDelta = Math.max( latDelta, Math.abs( group.lat - anchor[ 0 ] ) );
+		lngDelta = Math.max( lngDelta, Math.abs( group.lng - anchor[ 1 ] ) );
+	} );
+
+	return [
+		[ anchor[ 0 ] - latDelta, anchor[ 1 ] - lngDelta ],
+		[ anchor[ 0 ] + latDelta, anchor[ 1 ] + lngDelta ],
+	];
+}
+
+/**
+ * A CO-LOCATED group fixture with DISTINCT point-level types (Finding 1, live-review round 3 —
+ * the fixture nothing else in this file builds, and the whole reason the bug shipped: a
+ * single-type group can never exhibit "unchecking the first point's type hides a marker whose
+ * OTHER point still passes the filter"). `entries` is `[ { typeCode, id?, name? }, ... ]`, in the
+ * order `pickup-geo.js`'s own `groupByPosition()` would fold real points into one group — the
+ * FIRST entry's type becomes `group.typeCode`, mirroring that file's "first point wins" rule,
+ * while every entry's own `point.type.code` is what a per-point consumer (this file's
+ * `_survivingPoints()`, `pickup-panels.js`'s own per-point filter) actually reads. `lat`/`lng`
+ * default the same way {@see group} does, so a Finding 2 test can place a mixed-type group at an
+ * arbitrary distance from a search anchor.
+ *
+ * @param {string} key
+ * @param {number} [lat]
+ * @param {number} [lng]
+ * @param {Array}  entries `[ { typeCode, id?, name? }, ... ]`.
+ */
+function mixedGroup( key, lat, lng, entries ) {
+	const points = entries.map( ( entry ) => Object.assign( {}, entry, { type: { code: entry.typeCode } } ) );
+
+	return {
+		key,
+		lat: 'number' === typeof lat ? lat : 55.75,
+		lng: 'number' === typeof lng ? lng : 37.61,
+		typeCode: points[ 0 ].type.code,
+		size: points.length,
+		points,
 	};
 }
 
@@ -515,6 +714,80 @@ test( 'builds the map with minZoom 8 and maxZoom 18', async () => {
 
 	expect( ymapsStub.lastMap.options.minZoom ).toBe( 8 );
 	expect( ymapsStub.lastMap.options.maxZoom ).toBe( 18 );
+} );
+
+// Live-review fix (D3, T1): without this flag, Yandex's own POI layer keeps its click handlers
+// underneath our markers and opens ITS organisation card instead of ours.
+test( 'disables Yandex\'s own POI interactivity so clicks land on our own markers, not the map\'s '
+	+ 'organisation card (D3)', async () => {
+	await init();
+
+	expect( ymapsStub.lastMap.options.yandexMapDisablePoiInteractivity ).toBe( true );
+} );
+
+// -------------------------------------------------------------------------
+// Static top-chrome margin (live-review follow-up, T1) — reserves the space our own search bar
+// occupies, kept strictly separate from setMargin()'s own dynamic sidebar reservation.
+// -------------------------------------------------------------------------
+
+test( 'reserves the static top-chrome strip for the search bar exactly once at build time, '
+	+ 'matching both references\' geometry', async () => {
+	await init();
+
+	expect( ymapsStub.lastMap.marginAddAreaCalls ).toEqual( [
+		{ top: 0, left: 0, width: '100%', height: '64px' },
+	] );
+} );
+
+// Regression test for the rig-found bug (live-review round 2, 2026-08-05 — see gotcha
+// `ymaps-margin-area-needs-explicit-width.md`): the design spec put the panel's pixel WIDTH into
+// `right` (an OFFSET, not a size) and declared no `width` key at all, so the area reserved ZERO
+// pixels — every test that only checked `right`/`toHaveBeenCalled()` (or nothing at all, since
+// this method had NO test before this fix) stayed green while the reservation did nothing on a
+// real map. This test pins the EXACT object passed to `addArea()`, `width` included, rather than
+// a partial/loose match, so a regression back to the wrong shape fails here first.
+test( 'setMargin( true, width ) reserves the sidebar strip with an EXPLICIT width, anchored via '
+	+ 'right: 0 — NOT the panel width poured into right with no width key at all', async () => {
+	const provider = await init();
+
+	provider.setMargin( true, 320 );
+
+	const sidebarCalls = ymapsStub.lastMap.marginAddAreaCalls.filter( ( area ) => 'number' === typeof area.width );
+
+	expect( sidebarCalls ).toHaveLength( 1 );
+	expect( sidebarCalls[ 0 ] ).toEqual( { right: 0, top: 0, width: 320, height: '100%' } );
+	// The exact defect: `right` must be the anchor (0), never the panel's own width.
+	expect( sidebarCalls[ 0 ].right ).toBe( 0 );
+	expect( sidebarCalls[ 0 ].width ).toBe( 320 );
+} );
+
+test( 'setMargin() (the sidebar\'s own dynamic reservation) never removes or re-adds the static '
+	+ 'top-chrome strip\'s accessor', async () => {
+	const provider = await init();
+	const topArea = provider._topMarginArea;
+
+	provider.setMargin( true, 300 );
+	provider.setMargin( false );
+	provider.setMargin( true, 200 );
+
+	expect( topArea.remove ).not.toHaveBeenCalled();
+	expect( provider._topMarginArea ).toBe( topArea ); // still the SAME accessor, never re-added
+
+	// setMargin() only ever adds SIDEBAR-shaped areas ({ right, top: 0, height: '100%' }) — the
+	// top-chrome ({ width: '100%' }) reservation stays the only one of its own shape.
+	const topChromeCalls = ymapsStub.lastMap.marginAddAreaCalls.filter( ( area ) => '100%' === area.width );
+
+	expect( topChromeCalls ).toHaveLength( 1 );
+} );
+
+test( 'destroy() forgets the top-chrome margin accessor alongside everything else it tears down', async () => {
+	const provider = await init();
+
+	expect( provider._topMarginArea ).not.toBeNull();
+
+	provider.destroy();
+
+	expect( provider._topMarginArea ).toBeNull();
 } );
 
 // -------------------------------------------------------------------------
@@ -704,6 +977,62 @@ test( 'a refetch that drops the focused group clears getFocusedKey()', async () 
 } );
 
 // -------------------------------------------------------------------------
+// Cluster click (T1, live-review defect): clicking a cluster used to do nothing at all — no
+// handler existed. A cluster click now zooms in one step toward the cluster's own anchor and
+// emits clusterClick — the mount ignores the event, this file self-handles the zoom.
+// -------------------------------------------------------------------------
+
+// Live-review round 3, Finding 3 (MEDIUM, confirmed by reading): every OTHER camera move in this
+// file passes `useMapMargin: true` — this call was the sole exception, so a clicked cluster could
+// zoom in centred underneath the static top strip or the sidebar's own reservation. Pinning the
+// EXACT options object (not a partial match) is what a loose assertion would have missed.
+test( 'a cluster click zooms in one step (getZoom()+2) toward the cluster anchor via setCenter, '
+	+ 'respects the map margins (useMapMargin: true), and emits clusterClick with the coords', async () => {
+	const provider = await init(); // default stub zoom is 10
+
+	const seen = [];
+
+	provider.on( 'clusterClick', ( payload ) => seen.push( payload ) );
+	ymapsStub.lastObjectManager.clustersById.cluster1 = { geometry: { coordinates: [ 10, 20 ] } };
+
+	ymapsStub.lastObjectManager.fireClusterClick( 'cluster1' );
+
+	const lastCenterCall = ymapsStub.lastMap.setCenterCalls[ ymapsStub.lastMap.setCenterCalls.length - 1 ];
+
+	expect( lastCenterCall ).toEqual( {
+		center: [ 10, 20 ],
+		zoom: 12,
+		options: { duration: 200, useMapMargin: true },
+	} );
+	expect( seen ).toEqual( [ { coords: [ 10, 20 ] } ] );
+} );
+
+test( 'a cluster click clamps the zoom-in step to MAX_ZOOM', async () => {
+	await init( {}, { zoom: 17 } );
+
+	ymapsStub.lastObjectManager.clustersById.cluster1 = { geometry: { coordinates: [ 5, 5 ] } };
+
+	ymapsStub.lastObjectManager.fireClusterClick( 'cluster1' );
+
+	const lastCenterCall = ymapsStub.lastMap.setCenterCalls[ ymapsStub.lastMap.setCenterCalls.length - 1 ];
+
+	expect( lastCenterCall.zoom ).toBe( 18 ); // 17 + 2 = 19, clamped to MAX_ZOOM (18)
+} );
+
+test( 'a cluster click for an unknown cluster id is a safe no-op — no camera move, no event', async () => {
+	const provider = await init();
+	const seen = [];
+
+	provider.on( 'clusterClick', ( payload ) => seen.push( payload ) );
+	const callsBefore = ymapsStub.lastMap.setCenterCalls.length;
+
+	expect( () => ymapsStub.lastObjectManager.fireClusterClick( 'ghost' ) ).not.toThrow();
+
+	expect( seen ).toHaveLength( 0 );
+	expect( ymapsStub.lastMap.setCenterCalls ).toHaveLength( callsBefore );
+} );
+
+// -------------------------------------------------------------------------
 // setTypeFilter() — setFilter(), never a rebuild (D-10)
 // -------------------------------------------------------------------------
 
@@ -725,14 +1054,132 @@ test( 'the stored filter function matches only the requested codes, and matches 
 
 	const filterFn = ymapsStub.lastObjectManager.filter;
 
-	expect( filterFn( { properties: { typeCode: 'pvz' } } ) ).toBe( true );
-	expect( filterFn( { properties: { typeCode: 'other' } } ) ).toBe( false );
+	expect( filterFn( { properties: { typeCodes: [ 'pvz' ] } } ) ).toBe( true );
+	expect( filterFn( { properties: { typeCodes: [ 'other' ] } } ) ).toBe( false );
 
 	provider.setTypeFilter( null );
 
 	const clearedFilter = ymapsStub.lastObjectManager.filter;
 
-	expect( clearedFilter( { properties: { typeCode: 'anything' } } ) ).toBe( true );
+	expect( clearedFilter( { properties: { typeCodes: [ 'anything' ] } } ) ).toBe( true );
+} );
+
+// Live-review round 3, Finding 1 (HIGH, confirmed on the rig AND independently reported by the
+// operator): `setTypeFilter()` used to test the singular `properties.typeCode` — the group's
+// FIRST point's type only (`pickup-geo.js`'s own `groupByPosition()` convention) — so a
+// co-located group (a PVZ + a postamat at one address) vanished from the MAP the instant the
+// FIRST point's type was unchecked, even while the sidebar (which filters per POINT, never per
+// group) correctly kept listing the surviving postamat. A single-type group fixture cannot show
+// this bug at all — that is exactly why nothing caught it — so every test below uses
+// {@see mixedGroup}.
+test( 'the stored filter function matches a mixed-type group whenever ANY of its distinct point '
+	+ 'types survives — not just the group\'s own (first-point) typeCode', async () => {
+	const provider = await init();
+
+	provider.setTypeFilter( [ 'postamat' ] ); // "Пункт выдачи" (pvz) unchecked, as the operator did
+	provider.setPoints( [ mixedGroup( 'a', 55.75, 37.61, [ { typeCode: 'pvz' }, { typeCode: 'postamat' } ] ) ] );
+
+	const feature = ymapsStub.lastObjectManager.added[ 0 ];
+	const filterFn = ymapsStub.lastObjectManager.filter;
+
+	// The bug: filtering on the OLD singular typeCode ('pvz', the group's first point) would
+	// reject this feature outright, hiding the whole marker despite the postamat surviving.
+	expect( filterFn( feature ) ).toBe( true );
+} );
+
+test( 'a group whose EVERY point is filtered out is correctly hidden', async () => {
+	const provider = await init();
+
+	provider.setTypeFilter( [ 'postamat' ] );
+	provider.setPoints( [ mixedGroup( 'a', 55.75, 37.61, [ { typeCode: 'pvz' }, { typeCode: 'office' } ] ) ] );
+
+	const feature = ymapsStub.lastObjectManager.added[ 0 ];
+	const filterFn = ymapsStub.lastObjectManager.filter;
+
+	expect( filterFn( feature ) ).toBe( false );
+} );
+
+test( '_buildProperties() carries the group\'s FULL distinct type-code set on typeCodes, '
+	+ 'independent of whichever one is chosen to represent the marker\'s icon', async () => {
+	const provider = await init();
+
+	provider.setPoints( [ mixedGroup( 'a', 55.75, 37.61, [ { typeCode: 'pvz' }, { typeCode: 'postamat' } ] ) ] );
+
+	const feature = ymapsStub.lastObjectManager.added[ 0 ];
+
+	expect( feature.properties.typeCodes ).toEqual( [ 'pvz', 'postamat' ] );
+} );
+
+test( 'setTypeFilter() re-renders every currently-loaded marker\'s icon/badge to reflect the '
+	+ 'SURVIVING subset, not the group\'s full membership — the icon and count must shrink, not '
+	+ 'stay stuck on a type the sidebar no longer credits it with', async () => {
+	const provider = await init( {
+		pointIcons: {
+			pvz: { default: '/pvz.svg', active: '/pvz-a.svg' },
+			postamat: { default: '/postamat.svg', active: '/postamat-a.svg' },
+		},
+	} );
+
+	provider.setPoints( [ mixedGroup( 'a', 55.75, 37.61, [ { typeCode: 'pvz' }, { typeCode: 'postamat' } ] ) ] );
+
+	const initial = ymapsStub.lastObjectManager.added[ 0 ];
+
+	expect( initial.properties.groupSize ).toBe( 2 );
+	expect( initial.properties.iconHref ).toBe( '/pvz.svg' ); // first point's type, unfiltered
+
+	provider.setTypeFilter( [ 'postamat' ] ); // "Пункт выдачи" unchecked
+
+	expect( ymapsStub.lastObjectManager.objects.setObjectProperties ).toHaveBeenCalledWith(
+		'a',
+		expect.objectContaining( { groupSize: 1, iconHref: '/postamat.svg', typeCode: 'postamat' } )
+	);
+} );
+
+test( 'setTypeFilter() preserves the currently FOCUSED group\'s active state while refreshing its '
+	+ 'properties — a filter change must not silently revert it to resting', async () => {
+	const provider = await init();
+
+	provider.setPoints( [ mixedGroup( 'a', 55.75, 37.61, [ { typeCode: 'pvz' }, { typeCode: 'postamat' } ] ) ] );
+	ymapsStub.lastObjectManager.state = { isClustered: false, cluster: null };
+	await provider.focusGroup( 'a', { zoom: true } );
+
+	ymapsStub.lastObjectManager.objects.setObjectProperties.mockClear();
+
+	provider.setTypeFilter( [ 'postamat' ] );
+
+	expect( ymapsStub.lastObjectManager.objects.setObjectProperties ).toHaveBeenCalledWith(
+		'a',
+		expect.objectContaining( { state: 'active' } )
+	);
+} );
+
+test( 'setTypeFilter() never touches the icon HIT-BOX — sizing stays _setMarkerState()\'s own '
+	+ 'concern, driven by focus, not by the filter', async () => {
+	const provider = await init();
+
+	provider.setPoints( [ mixedGroup( 'a', 55.75, 37.61, [ { typeCode: 'pvz' }, { typeCode: 'postamat' } ] ) ] );
+	ymapsStub.lastObjectManager.objects.setObjectOptions.mockClear();
+
+	provider.setTypeFilter( [ 'postamat' ] );
+
+	expect( ymapsStub.lastObjectManager.objects.setObjectOptions ).not.toHaveBeenCalled();
+} );
+
+test( 'clearing the filter (setTypeFilter(null)) restores the FULL group\'s icon/badge, not just '
+	+ 'the previously-surviving subset', async () => {
+	const provider = await init( {
+		pointIcons: { pvz: { default: '/pvz.svg', active: '/pvz-a.svg' } },
+	} );
+
+	provider.setPoints( [ mixedGroup( 'a', 55.75, 37.61, [ { typeCode: 'pvz' }, { typeCode: 'postamat' } ] ) ] );
+	provider.setTypeFilter( [ 'postamat' ] );
+
+	provider.setTypeFilter( null );
+
+	expect( ymapsStub.lastObjectManager.objects.setObjectProperties ).toHaveBeenLastCalledWith(
+		'a',
+		expect.objectContaining( { groupSize: 2, iconHref: '/pvz.svg' } )
+	);
 } );
 
 // -------------------------------------------------------------------------
@@ -919,6 +1366,14 @@ test( 'fits to the loaded points under bulk without geocoding, and the bounds ac
 	expect( bounds[ 1 ][ 1 ] ).toBeGreaterThanOrEqual( 37.70 );
 } );
 
+test( 'the bulk camera fit is animated (live-review fix — every camera move gets a duration now)', async () => {
+	const provider = await init( { strategy: 'bulk', locality: 'Москва' } );
+
+	provider.setPoints( [ group( 'a', 55.70, 37.60 ), group( 'b', 55.80, 37.70 ) ] );
+
+	expect( ymapsStub.lastMap.setBoundsCalls[ 0 ].options ).toEqual( { checkZoomRange: true, duration: 400 } );
+} );
+
 // Review follow-up (HIGH): the bulk fit's setBounds() was fire-and-forget and visibleChange was
 // emitted from the map's PRE-fit bounds — the s46 failure verbatim, reproduced INSIDE this
 // rewrite. Points sitting outside the technical placeholder viewport used to report an empty (or
@@ -966,6 +1421,12 @@ test( 'geocodes the locality under viewport', async () => {
 	expect( ymapsStub.geocodeCalls ).toBe( 1 );
 } );
 
+test( 'the initial-viewport fit is animated (live-review fix — every camera move gets a duration now)', async () => {
+	await init( { strategy: 'viewport', locality: 'Москва' } );
+
+	expect( ymapsStub.lastMap.setBoundsCalls[ 0 ].options ).toEqual( { checkZoomRange: true, duration: 400 } );
+} );
+
 test( 'falls back to the plugin default when the geocode is empty', async () => {
 	ymapsStub.geocodeResult = null;
 
@@ -975,7 +1436,7 @@ test( 'falls back to the plugin default when the geocode is empty', async () => 
 		defaultLocation: { center: [ 55.76, 37.64 ], zoom: 12 },
 	} );
 
-	expect( ymapsStub.lastMap.setCenterCalls[ 0 ] ).toEqual( [ [ 55.76, 37.64 ], 12 ] );
+	expect( ymapsStub.lastMap.setCenterCalls[ 0 ] ).toEqual( { center: [ 55.76, 37.64 ], zoom: 12, options: undefined } );
 } );
 
 test( 'uses the plugin default without geocoding when there is no locality', async () => {
@@ -1107,11 +1568,83 @@ test( 'visibleChange carries only the keys of groups inside the current bounds',
 	expect( seen[ seen.length - 1 ] ).toEqual( [ 'inside' ] );
 } );
 
+// Live-review round 4, Finding C — operator: "когда мы раскрываем сайдбар, видим в нём например
+// 10 доступных точек, но на карте по факту видно только 3 … остальные точки спрятаны за
+// сайдбаром". `_emitVisibleChange()` must read the MARGIN-AWARE viewport
+// (`getBounds({ useMapMargin: true })`), not the full canvas rectangle, or a group sitting
+// underneath the sidebar/top-strip reservation is still counted as "visible" and listed.
+test( 'visibleChange reads the MARGIN-AWARE bounds (getBounds({ useMapMargin: true })), excluding '
+	+ 'a group that sits only in the area the sidebar/top-strip covers', async () => {
+	const seen = [];
+	const provider = await init( { strategy: 'viewport', locality: '' } );
+
+	// The FULL canvas covers both groups; the MARGIN-AWARE (customer-visible) viewport is
+	// narrower and excludes 'behindSidebar'.
+	ymapsStub.lastMap.bounds = [ [ 0, 0 ], [ 10, 10 ] ];
+	ymapsStub.lastMap.marginAwareBounds = [ [ 0, 0 ], [ 10, 6 ] ];
+	provider.on( 'visibleChange', ( keys ) => seen.push( keys ) );
+
+	provider.setPoints( [
+		group( 'onScreen', 5, 5 ),
+		group( 'behindSidebar', 5, 8 ), // inside the FULL canvas, outside the margin-aware view
+	] );
+
+	expect( seen[ seen.length - 1 ] ).toEqual( [ 'onScreen' ] );
+} );
+
+test( 'visibleChange asks getBounds() for the margin-aware viewport explicitly, pinning the '
+	+ 'exact options object — a loose/missing option silently falls back to the full canvas', async () => {
+	const provider = await init( { strategy: 'viewport', locality: '' } );
+
+	provider.setPoints( [ group( 'a', 5, 5 ) ] );
+
+	const lastCall = ymapsStub.lastMap.getBoundsCalls[ ymapsStub.lastMap.getBoundsCalls.length - 1 ];
+
+	expect( lastCall ).toEqual( { useMapMargin: true } );
+} );
+
 // -------------------------------------------------------------------------
-// focusGroup() — the co-located ("Russian Post") guard, camera un-clustering, sequencing
+// focusGroup( key, options ) — live-review pan/zoom split (D6): a marker click
+// (`options.zoom` falsy) pans only via `panTo()`; a sidebar row/search/nearest-N pick
+// (`options.zoom: true`) centres AND zooms to MAX_ZOOM via `setCenter()`. The co-located
+// ("Russian Post") guard now protects the ZOOM branch only — a pan can never un-cluster
+// anything, so it always just pans to whatever target it has. See focusGroup()'s own docblock.
 // -------------------------------------------------------------------------
 
-test( 'does not try to zoom a group whose points all share one coordinate', async () => {
+test( 'pan branch (no options): pans to the group\'s own coordinates via panTo, zoom untouched, '
+	+ 'and applies focus', async () => {
+	const provider = await init();
+
+	provider.setPoints( [ group( 'a', 55.75, 37.61 ) ] );
+	// setPoints() itself fits the camera to the loaded set under `bulk` via setBounds — a
+	// separate, already-covered behaviour, and it never touches panToCalls anyway.
+	ymapsStub.lastObjectManager.state = { isClustered: false, cluster: null };
+
+	await provider.focusGroup( 'a' );
+
+	expect( ymapsStub.lastMap.panToCalls ).toHaveLength( 1 );
+	expect( ymapsStub.lastMap.panToCalls[ 0 ] ).toEqual( {
+		coords: [ 55.75, 37.61 ],
+		options: { useMapMargin: true, duration: 200 },
+	} );
+	expect( ymapsStub.lastMap.setCenterCalls ).toHaveLength( 0 );
+	expect( provider.getFocusedKey() ).toBe( 'a' );
+} );
+
+test( 'pan branch still pans even when the map is already at MAX_ZOOM — a pan never touches '
+	+ 'zoom either way, so there is nothing to guard', async () => {
+	const provider = await init( {}, { zoom: 18 } );
+
+	provider.setPoints( [ group( 'a', 55.75, 37.61 ) ] );
+	ymapsStub.lastObjectManager.state = { isClustered: false, cluster: null };
+
+	await provider.focusGroup( 'a' );
+
+	expect( ymapsStub.lastMap.panToCalls ).toHaveLength( 1 );
+} );
+
+test( 'pan branch pans to the cluster anchor even for a co-located (single-coordinate) cluster — '
+	+ 'the co-located guard protects the zoom branch only, a pan cannot un-cluster anything', async () => {
 	const provider = await init();
 
 	ymapsStub.lastObjectManager.state = {
@@ -1126,13 +1659,67 @@ test( 'does not try to zoom a group whose points all share one coordinate', asyn
 
 	await provider.focusGroup( 'a' );
 
-	expect( ymapsStub.lastMap.setBoundsCalls ).toHaveLength( 0 );
+	expect( ymapsStub.lastMap.panToCalls ).toHaveLength( 1 );
+	expect( ymapsStub.lastMap.panToCalls[ 0 ].coords ).toEqual( [ 55.75, 37.61 ] );
+	// The card must still open even though the marker itself stays visually clustered forever —
+	// panning there is not "un-clustering it", it is just "showing where it is".
+	expect( provider.getFocusedKey() ).toBe( 'a' );
+} );
+
+test( 'pan branch: an unknown group (no coordinates on record) applies focus without attempting '
+	+ 'a move — defensive only, since a real click always names a group this provider drew itself', async () => {
+	const provider = await init();
+
+	ymapsStub.lastObjectManager.state = { isClustered: false, cluster: null };
+
+	await provider.focusGroup( 'ghost' );
+
+	expect( ymapsStub.lastMap.panToCalls ).toHaveLength( 0 );
+	expect( provider.getFocusedKey() ).toBe( 'ghost' );
+} );
+
+test( 'zoom branch (options.zoom: true): centres AND zooms to MAX_ZOOM via setCenter, and '
+	+ 'applies focus (a sidebar row/search/nearest-N pick)', async () => {
+	const provider = await init();
+
+	provider.setPoints( [ group( 'a', 55.75, 37.61 ) ] );
+	ymapsStub.lastObjectManager.state = { isClustered: false, cluster: null };
+
+	await provider.focusGroup( 'a', { zoom: true } );
+
+	expect( ymapsStub.lastMap.setCenterCalls ).toHaveLength( 1 );
+	expect( ymapsStub.lastMap.setCenterCalls[ 0 ] ).toEqual( {
+		center: [ 55.75, 37.61 ],
+		zoom: 18,
+		options: { useMapMargin: true, duration: 200 },
+	} );
+	expect( ymapsStub.lastMap.panToCalls ).toHaveLength( 0 );
+	expect( provider.getFocusedKey() ).toBe( 'a' );
+} );
+
+test( 'zoom branch: does not try to zoom a group whose points all share one coordinate '
+	+ '("Russian Post" guard)', async () => {
+	const provider = await init();
+
+	ymapsStub.lastObjectManager.state = {
+		isClustered: true,
+		cluster: {
+			features: [
+				{ geometry: { coordinates: [ 55.75, 37.61 ] } },
+				{ geometry: { coordinates: [ 55.75, 37.61 ] } },
+			],
+		},
+	};
+
+	await provider.focusGroup( 'a', { zoom: true } );
+
+	expect( ymapsStub.lastMap.setCenterCalls ).toHaveLength( 0 );
 	// The card must still open even though the marker itself stays visually clustered forever —
 	// "do not try to zoom" is not "refuse to focus".
 	expect( provider.getFocusedKey() ).toBe( 'a' );
 } );
 
-test( 'zooms a genuine cluster and awaits the move before reporting', async () => {
+test( 'zoom branch zooms a genuine cluster via setCenter and awaits the move before reporting', async () => {
 	const provider = await init();
 
 	ymapsStub.lastObjectManager.state = {
@@ -1145,88 +1732,33 @@ test( 'zooms a genuine cluster and awaits the move before reporting', async () =
 		},
 	};
 
-	await provider.focusGroup( 'a' );
+	await provider.focusGroup( 'a', { zoom: true } );
 
-	// Spec §7.5's call verbatim — zoomMargin/useMapMargin are not decoration: without
-	// useMapMargin the focused point can end up centred underneath the open sidebar's own
-	// map.margin area, where the customer cannot see it.
-	expect( ymapsStub.lastMap.setBoundsCalls ).toHaveLength( 1 );
-	expect( ymapsStub.lastMap.setBoundsCalls[ 0 ] ).toEqual( {
-		bounds: [ [ 55.75, 37.61 ], [ 55.75, 37.61 ] ],
-		options: { checkZoomRange: true, zoomMargin: 0, useMapMargin: true },
+	// useMapMargin is not decoration: without it the focused point can end up centred underneath
+	// the open sidebar's own map.margin area, where the customer cannot see it.
+	expect( ymapsStub.lastMap.setCenterCalls ).toHaveLength( 1 );
+	expect( ymapsStub.lastMap.setCenterCalls[ 0 ] ).toEqual( {
+		center: [ 55.75, 37.61 ],
+		zoom: 18,
+		options: { useMapMargin: true, duration: 200 },
 	} );
 	expect( provider.getFocusedKey() ).toBe( 'a' );
 } );
 
-// Review follow-up (MEDIUM): zooming further is impossible once the map is already at MAX_ZOOM,
-// so the guard is the same shape as the co-located one — do not attempt a pointless camera move,
-// but still apply focus directly (the card must still open).
-test( 'at MAX_ZOOM, focusGroup applies focus directly without attempting a pointless camera move', async () => {
-	const provider = await init( {}, { zoom: 18 } );
-
-	ymapsStub.lastObjectManager.state = {
-		isClustered: true,
-		cluster: {
-			features: [
-				{ geometry: { coordinates: [ 1, 1 ] } },
-				{ geometry: { coordinates: [ 2, 2 ] } },
-			],
-		},
-	};
-
-	await provider.focusGroup( 'a' );
-
-	expect( ymapsStub.lastMap.setBoundsCalls ).toHaveLength( 0 );
-	expect( provider.getFocusedKey() ).toBe( 'a' );
-} );
-
-test( 'a group that is not currently clustered STILL recentres the camera onto its own point '
-	+ '(spec V-10 — a plain marker click must behave like a sidebar row click)', async () => {
-	const provider = await init();
-
-	provider.setPoints( [ group( 'a', 55.75, 37.61 ) ] );
-	// setPoints() itself fits the camera to the loaded set under `bulk` (a separate, already
-	// covered behaviour) — clear that call so this test asserts only what focusGroup() does.
-	ymapsStub.lastMap.setBoundsCalls.length = 0;
-	ymapsStub.lastObjectManager.state = { isClustered: false, cluster: null };
-
-	await provider.focusGroup( 'a' );
-
-	expect( ymapsStub.lastMap.setBoundsCalls ).toHaveLength( 1 );
-	expect( ymapsStub.lastMap.setBoundsCalls[ 0 ] ).toEqual( {
-		bounds: [ [ 55.75, 37.61 ], [ 55.75, 37.61 ] ],
-		options: { checkZoomRange: true, zoomMargin: 0, useMapMargin: true },
-	} );
-	expect( provider.getFocusedKey() ).toBe( 'a' );
-} );
-
-test( 'a not-clustered group already at MAX_ZOOM applies focus without a pointless camera move', async () => {
-	const provider = await init( {}, { zoom: 18 } );
-
-	provider.setPoints( [ group( 'a', 55.75, 37.61 ) ] );
-	ymapsStub.lastMap.setBoundsCalls.length = 0;
-	ymapsStub.lastObjectManager.state = { isClustered: false, cluster: null };
-
-	await provider.focusGroup( 'a' );
-
-	expect( ymapsStub.lastMap.setBoundsCalls ).toHaveLength( 0 );
-	expect( provider.getFocusedKey() ).toBe( 'a' );
-} );
-
-test( 'an unknown group (no coordinates on record) applies focus without attempting a move — '
-	+ 'defensive only, since a real click always names a group this provider drew itself', async () => {
+test( 'zoom branch: an unknown group (no coordinates on record) applies focus without attempting '
+	+ 'a move — defensive only, since a real click always names a group this provider drew itself', async () => {
 	const provider = await init();
 
 	ymapsStub.lastObjectManager.state = { isClustered: false, cluster: null };
 
-	await provider.focusGroup( 'ghost' );
+	await provider.focusGroup( 'ghost', { zoom: true } );
 
-	expect( ymapsStub.lastMap.setBoundsCalls ).toHaveLength( 0 );
+	expect( ymapsStub.lastMap.setCenterCalls ).toHaveLength( 0 );
 	expect( provider.getFocusedKey() ).toBe( 'ghost' );
 } );
 
-test( 're-checks getObjectState AFTER the move and does not apply focus if it is still a '
-	+ 'degenerate cluster post-move', async () => {
+test( 'zoom branch: re-checks getObjectState AFTER the move and does not apply focus if it is '
+	+ 'still a degenerate cluster post-move', async () => {
 	const provider = await init();
 
 	ymapsStub.lastObjectManager.state = {
@@ -1239,7 +1771,7 @@ test( 're-checks getObjectState AFTER the move and does not apply focus if it is
 		},
 	};
 
-	const focusPromise = provider.focusGroup( 'a' );
+	const focusPromise = provider.focusGroup( 'a', { zoom: true } );
 
 	// Simulate ymaps reporting, once the camera settles, that 'a' is STILL folded into a
 	// single-coordinate cluster — the move failed to separate it.
@@ -1258,6 +1790,39 @@ test( 're-checks getObjectState AFTER the move and does not apply focus if it is
 	expect( provider.getFocusedKey() ).toBeNull();
 } );
 
+test( 'pan branch never re-checks post-move — nothing about clustering could change from a move '
+	+ 'that left zoom alone', async () => {
+	const provider = await init();
+
+	ymapsStub.lastObjectManager.state = {
+		isClustered: true,
+		cluster: {
+			features: [
+				{ geometry: { coordinates: [ 1, 1 ] } },
+				{ geometry: { coordinates: [ 2, 2 ] } },
+			],
+		},
+	};
+
+	const focusPromise = provider.focusGroup( 'a' ); // pan branch
+
+	// Even if ymaps later reports 'a' as still a degenerate cluster, the pan branch never looks —
+	// it has no post-move re-check at all.
+	ymapsStub.lastObjectManager.state = {
+		isClustered: true,
+		cluster: {
+			features: [
+				{ geometry: { coordinates: [ 5, 5 ] } },
+				{ geometry: { coordinates: [ 5, 5 ] } },
+			],
+		},
+	};
+
+	await focusPromise;
+
+	expect( provider.getFocusedKey() ).toBe( 'a' );
+} );
+
 test( 'ignores a stale focus continuation when a second focus started first', async () => {
 	const provider = await init();
 	const slow = provider.focusGroup( 'a' );
@@ -1272,13 +1837,15 @@ test( 'ignores a stale focus continuation when a second focus started first', as
 // call's camera move settles AFTER the later call's), which is the only way to actually exercise
 // `_focusSeq` — with both moves resolving synchronously in call order (as the test above does),
 // a naive implementation with no sequencing guard at all would coincidentally produce the same
-// result. See the file docblock's second lesson and `focusGroup()`'s own docblock.
-test( 'focusGroup: an earlier focus\'s camera move resolving AFTER a later focus\'s does not leave the '
-	+ 'stale group focused (out-of-order resolution guard for _focusSeq)', async () => {
+// result. See the file docblock's second lesson and `focusGroup()`'s own docblock. Now that every
+// camera move is ANIMATED (live-review addition — duration set on every call), out-of-order
+// resolution is MORE likely in production, not less, which is exactly what `_focusSeq` guards.
+test( 'focusGroup: an earlier focus\'s camera move resolving AFTER a later focus\'s does not leave '
+	+ 'the stale group focused (out-of-order resolution guard for _focusSeq) — pan branch', async () => {
 	const provider = await init( {}, { deferSetBounds: true } );
 
-	// Each key resolves to a DIFFERENT cluster anchor, so the two setBounds() calls below are
-	// distinguishable by their bounds argument — required to resolve them out of order.
+	// Each key resolves to a DIFFERENT cluster anchor, so the two panTo() calls below are
+	// distinguishable by their coords argument — required to resolve them out of order.
 	ymapsStub.lastObjectManager.stateFor = ( key ) => ( {
 		isClustered: true,
 		cluster: {
@@ -1289,20 +1856,48 @@ test( 'focusGroup: an earlier focus\'s camera move resolving AFTER a later focus
 		},
 	} );
 
-	provider.focusGroup( 'a' ); // clicked first
+	provider.focusGroup( 'a' ); // clicked first (pan branch — a marker click)
 	provider.focusGroup( 'b' ); // clicked second (most recent)
 
-	const boundsA = ymapsStub.lastMap.setBoundsCalls[ 0 ].bounds;
-	const boundsB = ymapsStub.lastMap.setBoundsCalls[ 1 ].bounds;
+	const coordsA = ymapsStub.lastMap.panToCalls[ 0 ].coords;
+	const coordsB = ymapsStub.lastMap.panToCalls[ 1 ].coords;
 
 	// B's move resolves FIRST (e.g. a shorter distance to travel) — out of click order.
-	ymapsStub.lastMap.resolveSetBoundsFor( boundsB );
+	ymapsStub.lastMap.resolveCameraMoveFor( coordsB );
 	await flushPromises();
 
 	expect( provider.getFocusedKey() ).toBe( 'b' );
 
 	// A's move resolves LAST — it must NOT stomp B's now-focused group.
-	ymapsStub.lastMap.resolveSetBoundsFor( boundsA );
+	ymapsStub.lastMap.resolveCameraMoveFor( coordsA );
+	await flushPromises();
+
+	expect( provider.getFocusedKey() ).toBe( 'b' );
+} );
+
+// Same guard, proven for the ZOOM branch's setCenter() calls too (coordinator follow-up on the
+// live-review animation addition) — the pan-branch test above alone does not prove setCenter()'s
+// own promise is sequenced the same way.
+test( 'focusGroup: the out-of-order resolution guard for _focusSeq also holds for the zoom '
+	+ 'branch\'s setCenter() calls', async () => {
+	const provider = await init( {}, { deferSetBounds: true } );
+
+	provider.setPoints( [ group( 'a', 1, 1 ), group( 'b', 2, 2 ) ] );
+	ymapsStub.lastMap.setCenterCalls.length = 0;
+	ymapsStub.lastObjectManager.state = { isClustered: false, cluster: null };
+
+	provider.focusGroup( 'a', { zoom: true } ); // clicked first
+	provider.focusGroup( 'b', { zoom: true } ); // clicked second (most recent)
+
+	const centerA = ymapsStub.lastMap.setCenterCalls[ 0 ].center;
+	const centerB = ymapsStub.lastMap.setCenterCalls[ 1 ].center;
+
+	ymapsStub.lastMap.resolveCameraMoveFor( centerB );
+	await flushPromises();
+
+	expect( provider.getFocusedKey() ).toBe( 'b' );
+
+	ymapsStub.lastMap.resolveCameraMoveFor( centerA );
 	await flushPromises();
 
 	expect( provider.getFocusedKey() ).toBe( 'b' );
@@ -1418,7 +2013,9 @@ test( 'setPoints() re-applies the ACTIVE state to the focused group when it surv
 
 // -------------------------------------------------------------------------
 // Address search (Task 12/19, D-6, spec V-6/V-7) — the SearchControl's custom geocode
-// provider, resolveAddress()/focusAddress(), and the "your address" pin lifecycle
+// provider, resolveAddress()/focusAddress(). Live-review fix (D4, T1): focusAddress() draws NO
+// pin any more — the old "your address" pin lifecycle tests are GONE, replaced by the
+// addressMatchedPoint/addressFocused split below.
 // -------------------------------------------------------------------------
 
 // Gotcha `ymaps-control-options-must-be-nested.md`: ymaps controls read exactly
@@ -1478,12 +2075,34 @@ test( 'returns point matches from the loaded pool, excluding a non-matching poin
 } );
 
 test( 'geocodes (never suggests) on every call — this path is only ever reached via '
-	+ 'control.search(), which the mount wires to a DELIBERATE submit, never a keystroke', async () => {
+	+ 'control.search(), which the mount wires to a DELIBERATE submit, never a keystroke '
+	+ '(suggestAddresses() is the SEPARATE, suggest-powered typing-dropdown engine)', async () => {
 	await init();
 
 	await ymapsStub.lastSearchControl.options.provider.geocode( 'ленина' );
 
 	expect( ymapsStub.geocodeCalls ).toBe( 1 );
+	expect( ymapsStub.suggestCalls ).toBe( 0 );
+} );
+
+// Live-review round 4, Finding A.2: the operator's exact reproduction — typing "Чертановская
+// 66к1" geocoded to a metro station, in English, in FULL POSTAL FORM ("Russian Federation,
+// Moscow, ... Chertanovskaya metro station") instead of the reference's own short
+// "Чертановская улица, 66к1". Reading `.get('text')` (the full form, country included) instead
+// of `.get('name')` (the short form) was HALF of that bug — this test pins the field alone.
+test( 'reads the SHORT form (name), never the FULL postal form (text), for a geocoded address\'s '
+	+ 'displayName', async () => {
+	const seen = [];
+	const provider = await init();
+
+	provider.on( 'searchResults', ( results ) => seen.push( results ) );
+	ymapsStub.geocodeResult = makeSearchGeocodeResult( [ 'Чертановская улица, 66к1' ] );
+
+	await ymapsStub.lastSearchControl.options.provider.geocode( 'Чертановская 66к1' );
+
+	// makeSearchGeocodeResult() deliberately gives `text` a DIFFERENT ("Russia, "-prefixed) value
+	// than `name` — a mutant reading the wrong field fails this equality, not just a missing call.
+	expect( seen[ 0 ].addresses ).toEqual( [ { displayName: 'Чертановская улица, 66к1' } ] );
 } );
 
 test( 'bounds the geocode strictly to the loaded point set once something has loaded (spec V-7)', async () => {
@@ -1627,6 +2246,250 @@ test( 'matchLoadedPoints() matches the loaded pool for free, without ever touchi
 	expect( ymapsStub.geocodeCalls ).toBe( 0 );
 } );
 
+// -------------------------------------------------------------------------
+// suggestAddresses() — the typing dropdown's own ymaps.suggest()-powered engine (live-review
+// round 4, Finding A.1). Never touches the geocoder; matches the reference's own "suggest for
+// the list, geocode once per deliberate pick" model.
+// -------------------------------------------------------------------------
+
+// Live-review round 4, second follow-up (regression guard): an earlier version of this method
+// emitted `searchResults` — the COMPLETED-SEARCH event `pickup-mount.js` wires to
+// `panels.renderSearchResults()`, the renderer that prints "Поиск не дал результатов." This
+// method runs on the DEBOUNCED TYPING path; emitting `searchResults` from it reintroduced the
+// operator's own round-3 defect (the verdict appearing and sticking mid-keystroke). It must
+// RETURN its results instead, exactly like the always-synchronous {@see matchLoadedPoints}, so
+// the mount can hand them to `panels.previewSearchResults()` — a DIFFERENT renderer — by
+// construction.
+test( 'suggestAddresses() does NOT emit searchResults — the completed-search event is the wrong '
+	+ 'shape for the typing path (this is the regression this method guards against)', async () => {
+	const seen = [];
+	const provider = await init();
+
+	provider.on( 'searchResults', ( results ) => seen.push( results ) );
+
+	await provider.suggestAddresses( 'ленина' );
+
+	expect( seen ).toHaveLength( 0 );
+} );
+
+test( 'suggestAddresses() calls ymaps.suggest(), never ymaps.geocode(), and RESOLVES with the '
+	+ 'point matches AND the suggestion-derived addresses', async () => {
+	const provider = await init();
+
+	provider.setPoints( [
+		groupWith( { id: '1', name: 'ПВЗ «Магнит»', address: 'Ленина 5' } ),
+		groupWith( { id: '2', name: 'ПВЗ «Пятёрочка»', address: 'Гагарина 10' } ), // must NOT match
+	] );
+	ymapsStub.suggestResult = [ { type: 'geo', displayName: '5, Ленина улица, Москва, Россия', value: 'Россия, Москва, Ленина улица, 5' } ];
+
+	const result = await provider.suggestAddresses( 'ленина' );
+
+	expect( ymapsStub.suggestCalls ).toBe( 1 );
+	expect( ymapsStub.geocodeCalls ).toBe( 0 );
+	expect( ymapsStub.lastSuggestRequest ).toBe( 'ленина' );
+	expect( result.points ).toHaveLength( 1 );
+	expect( result.points[ 0 ].id ).toBe( '1' );
+	expect( result.addresses ).toEqual( [ { displayName: 'Ленина улица, 5', query: 'Россия, Москва, Ленина улица, 5' } ] );
+} );
+
+// -------------------------------------------------------------------------
+// projectSuggestion() — the item -> { displayName, query } projection (live-review round 4,
+// second follow-up). Tested against the EXACT shape the coordinator measured on the LIVE map —
+// a fixture inventing its own `value` format would prove nothing about the real bug.
+// -------------------------------------------------------------------------
+
+test( 'projects a REAL ymaps.suggest() item exactly as measured on the live rig: displayName is '
+	+ 'the SHORT, locality-trimmed form (not the reversed, country-prefixed `displayName` field), '
+	+ 'query is the FULL value with only whitespace trimmed', async () => {
+	const provider = await init( { locality: 'Москва' } );
+
+	// Verbatim from the coordinator's own live measurement for "Чертановская 66к1" — note the
+	// REVERSED displayName (house number first) and the trailing space on value.
+	ymapsStub.suggestResult = [ {
+		type: 'geo',
+		displayName: '66к1, Чертановская улица, Москва, Россия',
+		value: 'Россия, Москва, Чертановская улица, 66к1 ',
+		hl: [ [ 0, 3 ] ],
+	} ];
+
+	const result = await provider.suggestAddresses( 'Чертановская 66к1' );
+
+	expect( result.addresses ).toEqual( [ {
+		displayName: 'Чертановская улица, 66к1', // matches the Yandex.Delivery reference exactly
+		query: 'Россия, Москва, Чертановская улица, 66к1', // full string, whitespace trimmed, NOT locality-cut
+	} ] );
+} );
+
+test( 'a region between country and city is handled correctly — matching by LOCALITY NAME, not '
+	+ 'a fixed "drop the first two parts" offset', async () => {
+	const provider = await init( { locality: 'Москва' } );
+
+	ymapsStub.suggestResult = [ {
+		value: 'Россия, Московская область, Москва, Тверская улица, 1',
+	} ];
+
+	const result = await provider.suggestAddresses( 'Тверская' );
+
+	expect( result.addresses[ 0 ].displayName ).toBe( 'Тверская улица, 1' );
+} );
+
+// -------------------------------------------------------------------------
+// trimAddressValue()'s STRATEGY 2 — the language-independent heuristic fallback (live-review
+// round 4, second follow-up). Used ONLY when the exact locality match (strategy 1) finds
+// nothing — rig-measured root cause: config.locality is the merchant's own "Москва", but with
+// the rig's WordPress locale forcing lang=en_US, ymaps.suggest() answers in English ("Moscow"),
+// which never string-equals "Москва". Every shape below is the coordinator's own rig-checked set
+// — a fixture inventing a different `value` format would prove nothing about the real bug.
+// -------------------------------------------------------------------------
+
+test( 'heuristic fallback: 4 parts (country + city + street + house) drops exactly 2 — the '
+	+ 'EXACT rig measurement that motivated this fallback (locale mismatch: locality "Москва" '
+	+ 'vs. suggest() answering "Moscow")', async () => {
+	const provider = await init( { locality: 'Москва' } ); // never matches "Moscow" by string equality
+
+	ymapsStub.suggestResult = [ {
+		displayName: '66к1, Chertanovskaya Street, Moscow, Russian Federation',
+		value: 'Russian Federation, Moscow, Chertanovskaya Street, 66к1',
+	} ];
+
+	const result = await provider.suggestAddresses( 'Chertanovskaya 66k1' );
+
+	expect( result.addresses[ 0 ].displayName ).toBe( 'Chertanovskaya Street, 66к1' );
+	// query stays the FULL, un-trimmed value — resolveAddress() must geocode this, never the
+	// short display form, or it reintroduces the exact ambiguity strictBounds guards against.
+	expect( result.addresses[ 0 ].query ).toBe( 'Russian Federation, Moscow, Chertanovskaya Street, 66к1' );
+} );
+
+test( 'heuristic fallback: 5 parts (a house with a trailing sub-entry) STILL drops only 2 — '
+	+ 'proves the clamp is NOT a "keep the last two parts" rule, which would mangle this into '
+	+ '"66к1, entrance 3" and lose the street name', async () => {
+	const provider = await init( { locality: 'Москва' } );
+
+	ymapsStub.suggestResult = [ {
+		value: 'Russian Federation, Moscow, Chertanovskaya Street, 66к1, entrance 3',
+	} ];
+
+	const result = await provider.suggestAddresses( 'Chertanovskaya 66k1' );
+
+	expect( result.addresses[ 0 ].displayName ).toBe( 'Chertanovskaya Street, 66к1, entrance 3' );
+} );
+
+test( 'heuristic fallback: 3 parts with NO country at all drops only 1 — max( 0, parts.length - 2 ) '
+	+ 'is what prevents over-trimming a short value', async () => {
+	const provider = await init( { locality: 'Санкт-Петербург' } ); // does not appear below
+
+	ymapsStub.suggestResult = [ { value: 'Москва, Тверская улица, 5' } ];
+
+	const result = await provider.suggestAddresses( 'Тверская' );
+
+	expect( result.addresses[ 0 ].displayName ).toBe( 'Тверская улица, 5' );
+} );
+
+test( 'heuristic fallback: an already-short 2-part value is left untouched (nothing left worth '
+	+ 'dropping)', async () => {
+	const provider = await init( { locality: '' } ); // no locality configured at all
+
+	ymapsStub.suggestResult = [ { value: 'Тверская улица, 5' } ];
+
+	const result = await provider.suggestAddresses( 'Тверская' );
+
+	expect( result.addresses[ 0 ].displayName ).toBe( 'Тверская улица, 5' );
+} );
+
+test( 'strategy 1 (exact locality match) is still preferred over the heuristic whenever it finds '
+	+ 'a match — the fallback only fires when strategy 1 finds nothing', async () => {
+	const provider = await init( { locality: 'Москва' } );
+
+	// Would heuristically drop 2 (4 parts) → "Тверская улица, 1" — SAME answer here, so use a
+	// value where the two strategies would DISAGREE if the exact match were skipped: a region
+	// between country and city, which the fixed-offset heuristic alone would cut wrong (drops 2,
+	// landing on "Москва, Тверская улица, 1" instead of "Тверская улица, 1").
+	ymapsStub.suggestResult = [ { value: 'Россия, Московская область, Москва, Тверская улица, 1' } ];
+
+	const result = await provider.suggestAddresses( 'Тверская' );
+
+	expect( result.addresses[ 0 ].displayName ).toBe( 'Тверская улица, 1' );
+} );
+
+test( 'falls back to the suggestion\'s own `displayName` — for BOTH the display and the resolve '
+	+ 'query — only when `value` is missing entirely', async () => {
+	const provider = await init( { locality: 'Москва' } );
+
+	ymapsStub.suggestResult = [ { displayName: '  Тверская улица, 1  ' } ]; // no `value` at all
+
+	const result = await provider.suggestAddresses( 'тверская' );
+
+	expect( result.addresses ).toEqual( [ { displayName: 'Тверская улица, 1', query: 'Тверская улица, 1' } ] );
+} );
+
+test( 'suggestAddresses() bounds the query strictly to the loaded point set once something has '
+	+ 'loaded — the SAME rule _searchGeocodeProvider() already applies (spec V-7)', async () => {
+	const provider = await init();
+
+	provider.setPoints( [ group( 'a', 55.70, 37.60 ), group( 'b', 55.80, 37.70 ) ] );
+
+	await provider.suggestAddresses( 'Тверская' );
+
+	const expectedBounds = geo.boundsFor( [ 55.70, 37.60 ], [ group( 'a', 55.70, 37.60 ), group( 'b', 55.80, 37.70 ) ] );
+
+	expect( ymapsStub.lastSuggestOptions ).toEqual( {
+		results: 5,
+		boundedBy: expectedBounds,
+		strictBounds: true,
+	} );
+} );
+
+test( 'suggestAddresses() omits the bounds before anything has ever loaded (spec V-7 — no '
+	+ 'degenerate box)', async () => {
+	const provider = await init();
+
+	await provider.suggestAddresses( 'Тверская' );
+
+	expect( ymapsStub.lastSuggestOptions ).toEqual( { results: 5 } );
+	expect( ymapsStub.lastSuggestOptions.boundedBy ).toBeUndefined();
+	expect( ymapsStub.lastSuggestOptions.strictBounds ).toBeUndefined();
+} );
+
+test( 'suggestAddresses(): a refused/failed suggest() still RESOLVES with the locally matched '
+	+ 'points and an empty address list, never rejects', async () => {
+	const provider = await init();
+
+	provider.setPoints( [ groupWith( { id: '1', name: 'ПВЗ «Ленина»', address: 'Ленина 5', lat: 55.70, lng: 37.60 } ) ] );
+
+	ymapsStub.suggestImpl = () => Promise.reject( new Error( 'network error' ) );
+
+	const result = await provider.suggestAddresses( 'ленина' );
+
+	expect( result.points ).toHaveLength( 1 );
+	expect( result.addresses ).toEqual( [] );
+} );
+
+test( 'suggestAddresses(): a suggest() that resolves after destroy() resolves with nothing '
+	+ '({ points: [], addresses: [] }), never emits, never throws', async () => {
+	const provider = await init();
+
+	let release;
+	ymapsStub.suggestImpl = () => new Promise( ( resolve ) => {
+		release = resolve;
+	} );
+
+	const pending = provider.suggestAddresses( 'ленина' );
+
+	provider.destroy();
+	release( [ { displayName: 'X', value: 'X' } ] );
+
+	await expect( pending ).resolves.toEqual( { points: [], addresses: [] } );
+} );
+
+test( 'suggestAddresses() degrades to an empty address list, still RESOLVING (never rejecting), '
+	+ 'when ymaps has no suggest() function at all', async () => {
+	const provider = await init();
+
+	delete provider.ymaps.suggest;
+
+	await expect( provider.suggestAddresses( 'ленина' ) ).resolves.toEqual( { points: [], addresses: [] } );
+} );
+
 test( 'geocodes exactly once when an address result is chosen', async () => {
 	const provider = await init();
 
@@ -1635,34 +2498,137 @@ test( 'geocodes exactly once when an address result is chosen', async () => {
 	expect( ymapsStub.geocodeCalls ).toBe( 1 );
 } );
 
-// -------------------------------------------------------------------------
-test( 'clearAddress() emits an empty searchResults alongside dropping the pin — the reset '
-	+ 'control must not leave stale search rows behind', async () => {
+// Live-review round 4, SECOND follow-up: a round-4 change made this call `strictBounds`-bounded
+// like the other two — the coordinator's own reasoning at the time ("was the one un-bounded call
+// in the whole search flow") turned out to be WRONG, and the rig caught it live: picking a
+// suggestion for an address outside `_loadedBounds()` (the routine case — that is WHY the
+// customer is searching) made the geocode return ZERO hits, and the method silently did nothing.
+// This is the regression test for THAT incident: resolveAddress() must NEVER pass
+// `boundedBy`/`strictBounds` — the ambiguity they guard against is already handled upstream
+// (the string came from a bounded suggest() call with its own country/locality prefix).
+test( 'resolveAddress() geocodes with NO bounds at all — deliberately the LEAST constrained call '
+	+ 'in this file, so a suggestion OUTSIDE the loaded-point area still resolves and moves the '
+	+ 'camera (the routine case, not an edge one)', async () => {
+	const provider = await init();
+
+	// Fixture points sit near [55.70, 37.60]/[55.80, 37.70]; the resolved address is ~14km away
+	// (mirroring the rig's own Чертановская-vs-central-Moscow-points gap) — this must NOT be
+	// excluded by any bounding.
+	provider.setPoints( [ group( 'a', 55.70, 37.60 ), group( 'b', 55.80, 37.70 ) ] );
+	ymapsStub.geocodeResult = makeGeocodeResult( null, [ 55.60, 37.50 ] );
+
+	await provider.resolveAddress( 'Чертановская улица, 66к1' );
+
+	// No second argument at all — not even an empty options object.
+	expect( ymapsStub.lastGeocodeOptions ).toBeUndefined();
+	// And it actually moved the camera — the whole point of dropping the bound.
+	expect( ymapsStub.lastMap.setBoundsCalls.length ).toBeGreaterThan( 0 );
+} );
+
+// The other half of the same incident: an address that GENUINELY cannot be placed (not just
+// "outside our bounds" — a truly empty geocode result) must not be silent either. The operator's
+// exact symptom was "no camera move, no message, no error" — this proves the fix.
+test( 'resolveAddress(): a geocode that resolves to NOTHING USABLE emits searchResults with '
+	+ 'empty arrays instead of silently doing nothing — reuses the SAME "no results found" '
+	+ 'surface the other two search paths already use', async () => {
 	const seen = [];
+	const provider = await init();
+
+	provider.on( 'searchResults', ( results ) => seen.push( results ) );
+	ymapsStub.geocodeResult = { geoObjects: { get: () => null } };
+
+	await provider.resolveAddress( 'Несуществующий адрес' );
+
+	expect( seen ).toEqual( [ { points: [], addresses: [] } ] );
+} );
+
+test( 'resolveAddress(): a REJECTED geocode (network/quota) also emits the empty '
+	+ 'searchResults, never leaving the customer with no feedback at all', async () => {
+	const seen = [];
+	const provider = await init();
+
+	provider.on( 'searchResults', ( results ) => seen.push( results ) );
+	ymapsStub.geocodeImpl = () => Promise.reject( new Error( 'quota exceeded' ) );
+
+	await provider.resolveAddress( 'Ленина 5' );
+
+	expect( seen ).toEqual( [ { points: [], addresses: [] } ] );
+} );
+
+test( 'resolveAddress(): a STALE "nothing found" resolution is discarded like any other stale '
+	+ 'continuation — it must not emit searchResults after a newer call has already won', async () => {
+	const seen = [];
+	const provider = await init();
+	const releases = {};
+
+	provider.on( 'searchResults', ( results ) => seen.push( results ) );
+
+	ymapsStub.geocodeImpl = ( request ) => new Promise( ( resolve ) => {
+		releases[ request ] = resolve;
+	} );
+
+	const stale = provider.resolveAddress( 'Первый адрес' ); // will resolve to "nothing usable"
+	provider.resolveAddress( 'Второй адрес' ); // supersedes it before the first settles
+
+	// The stale call's OWN geocode now resolves with an empty (unresolvable) result.
+	releases[ 'Первый адрес' ]( { geoObjects: { get: () => null } } );
+	await stale;
+
+	// It must NOT have emitted the "nothing found" searchResults — that call is stale and must
+	// produce no observable effect at all, exactly like a stale successful resolution would not
+	// apply its own (now outdated) focus.
+	expect( seen ).toHaveLength( 0 );
+} );
+
+// -------------------------------------------------------------------------
+// Live-review fix (D1/D4, T1): clearAddress() emits `searchCleared`, NEVER an empty
+// `searchResults` any more — the old shape made the panels' reset handler indistinguishable
+// from "a real search came back with zero rows", which re-opened the results box it had just
+// closed. clearAddress() also draws/removes no pin (D4) — there has never been one since this fix.
+// -------------------------------------------------------------------------
+test( 'clearAddress() emits searchCleared, never searchResults', async () => {
+	const seenCleared = [];
+	const seenResults = [];
 	const provider = await init();
 
 	provider.setPoints( [ group( 'a', 55.751 ) ] );
 	await provider.focusAddress( [ 55.75, 37.61 ], 'X' ); // picking a result must NOT itself clear
 
-	provider.on( 'searchResults', ( results ) => seen.push( results ) );
+	provider.on( 'searchCleared', ( payload ) => seenCleared.push( payload ) );
+	provider.on( 'searchResults', ( results ) => seenResults.push( results ) );
 	provider.clearAddress();
 
-	expect( seen ).toHaveLength( 1 );
-	expect( seen[ 0 ] ).toEqual( { points: [], addresses: [] } );
+	expect( seenCleared ).toHaveLength( 1 );
+	expect( seenResults ).toHaveLength( 0 );
 } );
 
-test( 'picking an address result (focusAddress) never emits searchResults as a side effect of '
-	+ 'dropping the pin — only clearAddress() clears the search results state', async () => {
+test( 'clearAddress() is safely callable repeatedly — every call emits searchCleared', async () => {
 	const seen = [];
 	const provider = await init();
 
+	provider.on( 'searchCleared', ( payload ) => seen.push( payload ) );
+
+	provider.clearAddress();
+	provider.clearAddress();
+
+	expect( seen ).toHaveLength( 2 );
+} );
+
+test( 'picking an address result (focusAddress) never emits searchCleared or searchResults as a '
+	+ 'side effect — only clearAddress() clears the search results state', async () => {
+	const seenCleared = [];
+	const seenResults = [];
+	const provider = await init();
+
 	provider.setPoints( [ group( 'a', 55.751 ) ] );
-	provider.on( 'searchResults', ( results ) => seen.push( results ) );
+	provider.on( 'searchCleared', ( payload ) => seenCleared.push( payload ) );
+	provider.on( 'searchResults', ( results ) => seenResults.push( results ) );
 
 	await provider.focusAddress( [ 55.75, 37.61 ], 'First' );
-	await provider.focusAddress( [ 55.8, 37.65 ], 'Second' ); // replaces the pin
+	await provider.focusAddress( [ 55.8, 37.65 ], 'Second' );
 
-	expect( seen ).toHaveLength( 0 );
+	expect( seenCleared ).toHaveLength( 0 );
+	expect( seenResults ).toHaveLength( 0 );
 } );
 
 test( 'resolveAddress() end-to-end: the geocoded coordinates drive the same fit focusAddress() '
@@ -1687,7 +2653,11 @@ test( 'resolveAddress() end-to-end: the geocoded coordinates drive the same fit 
 	expect( fitted[ 1 ][ 0 ] ).toBeGreaterThanOrEqual( 55.999 );
 } );
 
-test( 'resolveAddress() is a silent no-op when the geocode result has no usable coordinates', async () => {
+// Renamed from "is a silent no-op" (live-review round 4, second follow-up) — it no longer is:
+// no camera move still happens, but it is NOT silent any more, see the dedicated "emits
+// searchResults" test above for that half.
+test( 'resolveAddress() never moves the camera when the geocode result has no usable '
+	+ 'coordinates', async () => {
 	const provider = await init();
 
 	ymapsStub.geocodeResult = { geoObjects: { get: () => null } };
@@ -1708,12 +2678,16 @@ test( 'fits the address plus the three nearest groups — the fitted bounds are 
 	await provider.focusAddress( anchor, 'Москва, Ленина 5' );
 
 	const fitted = ymapsStub.lastMap.setBoundsCalls.pop().bounds;
-	// The exact box built from the anchor + a, b, c (NOT d) — a mutant that fit to only the
-	// single closest group ('a') would produce a smaller, DIFFERENT box and fail this equality.
-	const expected = geo.boundsFor( anchor, [ groups[ 0 ], groups[ 1 ], groups[ 2 ] ] );
+	// The exact box CENTRED ON THE ANCHOR and built from a, b, c (NOT d) — a mutant that fit to
+	// only the single closest group ('a'), or that used geo.boundsFor()'s off-centre box instead
+	// of the anchor-centred one, would produce a DIFFERENT box and fail this equality.
+	const expected = expectedFocusAddressBounds( anchor, [ groups[ 0 ], groups[ 1 ], groups[ 2 ] ] );
 
 	expect( fitted ).toEqual( expected );
 	expect( fitted[ 1 ][ 0 ] ).toBeLessThan( 55.999 ); // the far group is not in frame
+	// The anchor itself is the box's exact centre (Finding B) — not merely inside it somewhere.
+	expect( ( fitted[ 0 ][ 0 ] + fitted[ 1 ][ 0 ] ) / 2 ).toBeCloseTo( anchor[ 0 ], 10 );
+	expect( ( fitted[ 0 ][ 1 ] + fitted[ 1 ][ 1 ] ) / 2 ).toBeCloseTo( anchor[ 1 ], 10 );
 } );
 
 test( 'honours the nearest-count filter value handed in by config', async () => {
@@ -1726,7 +2700,7 @@ test( 'honours the nearest-count filter value handed in by config', async () => 
 
 	const fitted = ymapsStub.lastMap.setBoundsCalls.pop().bounds;
 	// count: 1 — the box must be built from 'a' ALONE, never both groups.
-	const expected = geo.boundsFor( anchor, [ groups[ 0 ] ] );
+	const expected = expectedFocusAddressBounds( anchor, [ groups[ 0 ] ] );
 
 	expect( fitted ).toEqual( expected );
 } );
@@ -1800,7 +2774,7 @@ test( 'a nearest point comfortably inside the threshold FITS and reports no noth
 	await provider.focusAddress( anchor, 'X' );
 
 	expect( seen ).toHaveLength( 0 );
-	expect( ymapsStub.lastMap.setBoundsCalls.pop().bounds ).toEqual( geo.boundsFor( anchor, groups ) );
+	expect( ymapsStub.lastMap.setBoundsCalls.pop().bounds ).toEqual( expectedFocusAddressBounds( anchor, groups ) );
 } );
 
 test( 'a nearest point beyond the threshold reports nothingNearby with its EXACT distance and '
@@ -1827,15 +2801,11 @@ test( 'a nearest point beyond the threshold reports nothingNearby with its EXACT
 	expect( ymapsStub.lastMap.setBoundsCalls ).toHaveLength( callsBeforeFocus ); // never fits this far
 } );
 
-test( 'focusAddress() with no groups loaded drops the pin but neither fits nor reports '
-	+ 'nothingNearby — there is nothing to fit to or report as nearest', async () => {
+test( 'focusAddress() with no groups loaded neither fits nor reports nothingNearby — there is '
+	+ 'nothing to fit to or report as nearest (addressFocused still fires, see the dedicated '
+	+ 'test above)', async () => {
 	const seen = [];
 	const provider = await init();
-
-	// `map.geoObjects.add` was already called once during init() (for the ObjectManager
-	// itself, see _buildObjectManager()) — the pin's own call is checked as a DELTA from here,
-	// never an absolute count.
-	const geoObjectsAddCallsBefore = ymapsStub.lastMap.geoObjects.add.mock.calls.length;
 
 	provider.on( 'nothingNearby', ( info ) => seen.push( info ) );
 
@@ -1843,8 +2813,23 @@ test( 'focusAddress() with no groups loaded drops the pin but neither fits nor r
 
 	expect( ymapsStub.lastMap.setBoundsCalls ).toHaveLength( 0 );
 	expect( seen ).toHaveLength( 0 );
-	// the pin is still dropped
-	expect( ymapsStub.lastMap.geoObjects.add ).toHaveBeenCalledTimes( geoObjectsAddCallsBefore + 1 );
+} );
+
+// Live-review fix (D4): focusAddress() draws no pin any more, so `map.geoObjects.add` is called
+// EXACTLY once, ever, for the whole provider lifetime — at init(), for the ObjectManager itself
+// (see _buildObjectManager()). A version that regressed and dropped a pin again would call it a
+// second time here.
+test( 'focusAddress() adds nothing to map.geoObjects — no pin is ever drawn (D4)', async () => {
+	const provider = await init();
+
+	const geoObjectsAddCallsBefore = ymapsStub.lastMap.geoObjects.add.mock.calls.length;
+
+	provider.setPoints( [ group( 'a', 55.751 ) ] );
+	await provider.focusAddress( [ 55.75, 37.61 ], 'X' );
+	await provider.focusAddress( [ 55.8, 37.65 ], 'Second' );
+
+	expect( ymapsStub.lastMap.geoObjects.add ).toHaveBeenCalledTimes( geoObjectsAddCallsBefore );
+	expect( ymapsStub.lastMap.geoObjects.remove ).not.toHaveBeenCalled();
 } );
 
 // Proves the fit is genuinely AWAITED, not fire-and-forgotten — the same s46 lesson this file's
@@ -1875,55 +2860,234 @@ test( 'focusAddress(): the returned promise resolves only once the camera fit se
 	expect( resolved ).toBe( true );
 } );
 
-test( 'the "your address" pin is never added to the ObjectManager — it cannot leak into the '
-	+ 'list, the type filter, or the nearest-N pool', async () => {
+// -------------------------------------------------------------------------
+// resolveAddress()/focusAddress() out-of-order resolution guard (_addressSeq, live-review round
+// 4). Operator: "иногда когда я пишу адрес и потом нажимаю на лупу, карта сразу смещается, но
+// даже не к тому адресу что я написал" — two overlapping ymaps.geocode() round-trips are NOT
+// guaranteed to resolve in the order they were issued (the file's own s46 lesson), so a customer
+// who edits and resubmits before the FIRST round-trip lands must never have the stale one win.
+// -------------------------------------------------------------------------
+
+test( 'resolveAddress(): a STALE call resolving AFTER a newer one never reaches focusAddress() '
+	+ '— out-of-order resolution guard for _addressSeq', async () => {
+	const seen = [];
 	const provider = await init();
+	const releases = {};
 
-	provider.setPoints( [ group( 'a', 55.751 ) ] );
+	provider.on( 'addressFocused', ( info ) => seen.push( info ) );
 
-	const addedBefore = ymapsStub.lastObjectManager.added.length;
-	// See the previous test's comment: init() itself already added the ObjectManager once.
-	const geoObjectsAddCallsBefore = ymapsStub.lastMap.geoObjects.add.mock.calls.length;
+	ymapsStub.geocodeImpl = ( request ) => new Promise( ( resolve ) => {
+		releases[ request ] = resolve;
+	} );
 
-	await provider.focusAddress( [ 55.75, 37.61 ], 'X' );
+	const stale = provider.resolveAddress( 'Первый адрес' ); // typed first — stale by the time it resolves
+	const fresh = provider.resolveAddress( 'Второй адрес' ); // edited + resubmitted before the first landed
 
-	expect( ymapsStub.lastObjectManager.added ).toHaveLength( addedBefore );
-	expect( ymapsStub.lastMap.geoObjects.add ).toHaveBeenCalledTimes( geoObjectsAddCallsBefore + 1 );
-	expect( ymapsStub.lastMap.geoObjects.add ).not.toHaveBeenLastCalledWith( ymapsStub.lastObjectManager );
+	// The NEWER call resolves FIRST — e.g. a shorter geocode round-trip.
+	releases[ 'Второй адрес' ]( makeGeocodeResult( null, [ 2, 2 ] ) );
+	await fresh;
+
+	expect( seen ).toEqual( [ { latLng: [ 2, 2 ], label: 'Второй адрес' } ] );
+
+	// The STALE call's geocode resolves LAST — discarded entirely: no second, wrong
+	// addressFocused, and resolveAddress()'s own promise settles without touching the camera.
+	releases[ 'Первый адрес' ]( makeGeocodeResult( null, [ 1, 1 ] ) );
+	await expect( stale ).resolves.toBeUndefined();
+
+	expect( seen ).toEqual( [ { latLng: [ 2, 2 ], label: 'Второй адрес' } ] ); // unchanged
 } );
 
-test( 'a second focusAddress() replaces the previous pin rather than accumulating pins', async () => {
+test( 'a DIRECT focusAddress() call invalidates an already in-flight resolveAddress() — the '
+	+ 'newer intent always wins, regardless of which path it arrived through', async () => {
+	const seen = [];
 	const provider = await init();
 
-	provider.setPoints( [ group( 'a', 55.751 ) ] );
-	await provider.focusAddress( [ 55.75, 37.61 ], 'First' );
+	provider.on( 'addressFocused', ( info ) => seen.push( info ) );
 
-	const addCallsAfterFirst = ymapsStub.lastMap.geoObjects.add.mock.calls.slice();
-	const firstPin = addCallsAfterFirst[ addCallsAfterFirst.length - 1 ][ 0 ];
+	let release;
 
-	await provider.focusAddress( [ 55.8, 37.65 ], 'Second' );
+	ymapsStub.geocodeImpl = () => new Promise( ( resolve ) => {
+		release = resolve;
+	} );
 
-	expect( ymapsStub.lastMap.geoObjects.remove ).toHaveBeenCalledWith( firstPin );
-	expect( ymapsStub.lastMap.geoObjects.add ).toHaveBeenCalledTimes( addCallsAfterFirst.length + 1 );
+	const stale = provider.resolveAddress( 'Старый запрос' ); // still in flight
+
+	// A DIRECT focusAddress() call happens meanwhile — bumps _addressSeq, marking the in-flight
+	// resolveAddress() call stale even though it never touches resolveAddress() itself.
+	await provider.focusAddress( [ 9, 9 ], 'Прямой вызов' );
+
+	release( makeGeocodeResult( null, [ 1, 1 ] ) );
+	await stale;
+
+	expect( seen ).toEqual( [ { latLng: [ 9, 9 ], label: 'Прямой вызов' } ] ); // the stale one never landed
 } );
 
-test( 'clearAddress() removes the pin and is idempotent', async () => {
+// -------------------------------------------------------------------------
+// focusAddress() — the SAME_PLACE_THRESHOLD_M same-place check (operator requirement, live
+// review round 2, T1): an address that resolves onto (or very near) one of our own points must
+// become THAT point — addressMatchedPoint( { key } ) — not a nearest-N neighbourhood overview.
+// -------------------------------------------------------------------------
+
+test( 'an address resolving within SAME_PLACE_THRESHOLD_M of a loaded group emits '
+	+ 'addressMatchedPoint with that group\'s key, and does NOT emit addressFocused or move the camera', async () => {
+	const seenMatched = [];
+	const seenFocused = [];
+	const provider = await init();
+	const anchor = [ 55.75, 37.61 ];
+	// ~11m away (0.0001° lat) — comfortably inside the 30m threshold.
+	const groups = [ group( 'a', 55.7501, 37.61 ) ];
+
+	provider.setPoints( groups );
+	ymapsStub.lastMap.setBoundsCalls.length = 0; // clear setPoints()'s own bulk fit
+
+	provider.on( 'addressMatchedPoint', ( info ) => seenMatched.push( info ) );
+	provider.on( 'addressFocused', ( info ) => seenFocused.push( info ) );
+
+	await provider.focusAddress( anchor, 'Тверская 1' );
+
+	expect( seenMatched ).toEqual( [ { key: 'a' } ] );
+	expect( seenFocused ).toHaveLength( 0 );
+	expect( ymapsStub.lastMap.setBoundsCalls ).toHaveLength( 0 );
+} );
+
+test( 'an address just OUTSIDE SAME_PLACE_THRESHOLD_M keeps today\'s nearest-N behaviour exactly '
+	+ '— addressFocused fires, the fit happens, no addressMatchedPoint', async () => {
+	const seenMatched = [];
+	const seenFocused = [];
+	const provider = await init();
+	const anchor = [ 55.75, 37.61 ];
+	// ~111m away (0.001° lat) — outside the 30m threshold, comfortably inside the nearby one.
+	const groups = [ group( 'a', 55.751, 37.61 ) ];
+
+	provider.setPoints( groups );
+
+	provider.on( 'addressMatchedPoint', ( info ) => seenMatched.push( info ) );
+	provider.on( 'addressFocused', ( info ) => seenFocused.push( info ) );
+
+	await provider.focusAddress( anchor, 'Тверская 1' );
+
+	expect( seenMatched ).toHaveLength( 0 );
+	expect( seenFocused ).toEqual( [ { latLng: anchor, label: 'Тверская 1' } ] );
+	expect( ymapsStub.lastMap.setBoundsCalls.pop().bounds ).toEqual( expectedFocusAddressBounds( anchor, groups ) );
+} );
+
+test( 'resolveAddress() (the real search-pick flow) routes a same-place result through '
+	+ 'addressMatchedPoint too, not just focusAddress() called directly', async () => {
+	const seenMatched = [];
 	const provider = await init();
 
-	provider.setPoints( [ group( 'a', 55.751 ) ] );
-	await provider.focusAddress( [ 55.75, 37.61 ], 'X' );
+	provider.setPoints( [ group( 'a', 55.7501, 37.61 ) ] );
+	provider.on( 'addressMatchedPoint', ( info ) => seenMatched.push( info ) );
 
-	const addCalls = ymapsStub.lastMap.geoObjects.add.mock.calls;
-	const pin = addCalls[ addCalls.length - 1 ][ 0 ];
+	// The default stub geocode result resolves to coordinates [10, 20] — override so the
+	// resolved coordinate actually lands near the loaded group.
+	ymapsStub.geocodeResult = makeGeocodeResult( null, [ 55.75, 37.61 ] );
 
-	provider.clearAddress();
+	await provider.resolveAddress( 'Тверская 1' );
 
-	expect( ymapsStub.lastMap.geoObjects.remove ).toHaveBeenCalledWith( pin );
+	expect( seenMatched ).toEqual( [ { key: 'a' } ] );
+} );
 
-	ymapsStub.lastMap.geoObjects.remove.mockClear();
-	provider.clearAddress(); // second call: no pin left to remove — a true no-op
+test( 'the same-place check picks the NEAREST group, not just any loaded one, when several are '
+	+ 'within the nearest-N radius', async () => {
+	const seenMatched = [];
+	const provider = await init();
+	const anchor = [ 55.75, 37.61 ];
 
-	expect( ymapsStub.lastMap.geoObjects.remove ).not.toHaveBeenCalled();
+	provider.setPoints( [
+		group( 'far', 55.751, 37.61 ), // ~111m — outside SAME_PLACE_THRESHOLD_M
+		group( 'near', 55.7501, 37.61 ), // ~11m — inside it
+	] );
+	provider.on( 'addressMatchedPoint', ( info ) => seenMatched.push( info ) );
+
+	await provider.focusAddress( anchor, 'X' );
+
+	expect( seenMatched ).toEqual( [ { key: 'near' } ] );
+} );
+
+test( 'focusAddress()\'s nearest-N fit is animated AND respects the map margins (live-review '
+	+ 'round 3/4 — an un-animated jump cut read as "did the map even move?", and a fit with no '
+	+ 'useMapMargin can land the address underneath the sidebar/top strip)', async () => {
+	const provider = await init();
+	const anchor = [ 55.75, 37.61 ];
+	const groups = [ group( 'near', 55.8, 37.61 ) ];
+
+	provider.setPoints( groups );
+
+	await provider.focusAddress( anchor, 'X' );
+
+	expect( ymapsStub.lastMap.setBoundsCalls.pop().options ).toEqual( {
+		checkZoomRange: true,
+		duration: 400,
+		useMapMargin: true,
+	} );
+} );
+
+// -------------------------------------------------------------------------
+// focusAddress() vs the active type filter (live-review round 3, Finding 2) — a group entirely
+// hidden by the filter must never be offered as a same-place match or count toward the
+// nearest-N fit; the map-side filter and the sidebar's own list must agree on what "exists".
+// -------------------------------------------------------------------------
+
+test( 'a group entirely hidden by the active type filter is never offered as a same-place match '
+	+ '— addressMatchedPoint must not fire for a group with no surviving point', async () => {
+	const seenMatched = [];
+	const seenFocused = [];
+	const provider = await init();
+	const anchor = [ 55.75, 37.61 ];
+
+	// ~11m from the anchor — would match on distance ALONE — but its only point is 'pvz', which
+	// the active filter hides entirely.
+	provider.setPoints( [ mixedGroup( 'a', 55.7501, 37.61, [ { typeCode: 'pvz' } ] ) ] );
+	provider.setTypeFilter( [ 'postamat' ] );
+
+	provider.on( 'addressMatchedPoint', ( info ) => seenMatched.push( info ) );
+	provider.on( 'addressFocused', ( info ) => seenFocused.push( info ) );
+
+	await provider.focusAddress( anchor, 'Тверская 1' );
+
+	expect( seenMatched ).toHaveLength( 0 );
+	// With the only group filtered out, this is now the "no candidates" case: addressFocused
+	// still fires (the sidebar's own anchor still moves) but nothing else does.
+	expect( seenFocused ).toEqual( [ { latLng: anchor, label: 'Тверская 1' } ] );
+} );
+
+test( 'a group entirely hidden by the active type filter is excluded from the nearest-N fit — '
+	+ 'the camera fits only to groups the filter still shows', async () => {
+	const provider = await init();
+	const anchor = [ 55.75, 37.61 ];
+	const shown = mixedGroup( 'shown', 55.751, 37.61, [ { typeCode: 'postamat' } ] );
+	const hidden = mixedGroup( 'hidden', 55.752, 37.61, [ { typeCode: 'pvz' } ] ); // closer, but filtered
+
+	provider.setPoints( [ hidden, shown ] );
+	provider.setTypeFilter( [ 'postamat' ] );
+
+	await provider.focusAddress( anchor, 'X' );
+
+	const fitted = ymapsStub.lastMap.setBoundsCalls.pop().bounds;
+	// The fit built from `shown` ALONE — a mutant that ignored the filter would include `hidden`
+	// (the geometrically closer group) and produce a DIFFERENT, wider box.
+	const expected = expectedFocusAddressBounds( anchor, [ shown ] );
+
+	expect( fitted ).toEqual( expected );
+} );
+
+test( 'a group that survives the filter through a DIFFERENT (non-first) point is still a valid '
+	+ 'same-place match — mirrors Finding 1\'s "any surviving point" rule', async () => {
+	const seenMatched = [];
+	const provider = await init();
+	const anchor = [ 55.75, 37.61 ];
+
+	// First point ('pvz') is filtered out; the co-located postamat survives and is close enough.
+	provider.setPoints( [
+		mixedGroup( 'a', 55.7501, 37.61, [ { typeCode: 'pvz' }, { typeCode: 'postamat' } ] ),
+	] );
+	provider.setTypeFilter( [ 'postamat' ] );
+	provider.on( 'addressMatchedPoint', ( info ) => seenMatched.push( info ) );
+
+	await provider.focusAddress( anchor, 'X' );
+
+	expect( seenMatched ).toEqual( [ { key: 'a' } ] );
 } );
 
 test( 'setPoints() never re-applies focus to a group that no longer exists in the new set', async () => {

@@ -1042,7 +1042,9 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 
 			$config = $this->make_handler()->get_js_config();
 
-			$this->assertSame( 920, $config['modal']['width'] );
+			// 1024, not the original 920: the sidebar takes a fixed 320px whenever it is open,
+			// so at 920 the map was left under 600px wide (operator's live review, s51).
+			$this->assertSame( 1024, $config['modal']['width'] );
 			$this->assertSame( 'min(80vh, 800px)', $config['modal']['bodyHeight'] );
 			$this->assertTrue( $config['search'] );
 		}
@@ -1678,7 +1680,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				'select'           => 'Выбрать этот пункт',
 				'loading'          => 'Загрузка пунктов выдачи…',
 				'error'            => 'Не удалось загрузить пункты выдачи. Попробуйте ещё раз.',
-				'noResults'        => 'Пункты выдачи не найдены.',
+				'noResults'        => 'Поиск не дал результатов.',
 				'blocked'          => 'Этот пункт выдачи недоступен для вашего заказа.',
 				'trigger'          => 'Выбрать пункт выдачи',
 				'retry'            => 'Повторить',

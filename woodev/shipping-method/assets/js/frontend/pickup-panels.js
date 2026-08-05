@@ -46,12 +46,23 @@
  * matches a plain DOM-style emitter and avoids a caller silently losing a
  * handler it registered earlier; Task 20 (the mount wiring) relies on this.
  *
- * `cardOpened` (Task 10, spec V-10): emitted by `openCard()` for EVERY route to a card — a marker
- * click, a sidebar row, a search result, "show the nearest" — carrying `{ group, pointId }`. It
- * exists so a listener can react to "this point became the subject" without caring who asked; the
- * mount uses it to move the camera, which is what keeps a marker click and a sidebar-row click
- * behaving identically. Emitted BEFORE the card renders, so the asynchronous camera flight and the
- * synchronous DOM land together rather than the map lurching after the card is already readable.
+ * `cardOpened` (Task 10, spec V-10 — REVISED in the SP-5 round-2 live review, see the plan's D6):
+ * emitted by `openCard()` for EVERY route to a card — a marker click, a sidebar row, a search
+ * result, "show the nearest" — carrying `{ group, pointId, origin }`. `origin` is the caller's own
+ * label for which route this was (`'marker'|'list'|'search'|'nearest'`); every internal call site
+ * in THIS file passes `'list'` (the sidebar row builders, below) — a search-result pick and
+ * "show the nearest" route through `openCard()` from OUTSIDE this file (the mount, in response to
+ * `searchPointPicked`/`searchAddressPicked`/`showNearestRequested`), so THEIR label is that
+ * caller's responsibility, not this file's. `cardOpened` exists so a listener can react to "this
+ * point became the subject" without caring who asked, AND — this is what `origin` is actually FOR —
+ * so it can tell a marker click apart from every other route: round-2's live rig review found that
+ * neither reference treats them identically the way the original V-10 sentence claimed. A marker
+ * click only PANS the camera (zoom untouched); a sidebar row, a search pick, and "show nearest" all
+ * zoom in. `map-provider-yandex.js`'s `focusGroup( key, { zoom: 'marker' !== origin } )` is what
+ * reads this field. The original V-10 text ("a marker click and a sidebar row click must behave
+ * identically") is WRONG and this file does not restore it. Emitted BEFORE the card renders, so the
+ * asynchronous camera flight and the synchronous DOM land together rather than the map lurching
+ * after the card is already readable.
  *
  * `anchorCleared` (Task 20, D-6): before this event existed, `setAnchor( null )` emitted NOTHING
  * of its own — a caller polling for "did the customer just clear their search" had no signal to
@@ -96,6 +107,40 @@
  * `textContent`, never `innerHTML`; point fields inside the same results stay on the usual
  * already-escaped/`innerHTML` side of the split.
  *
+ * THE RESULTS BOX LIFECYCLE (SP-5 round 2, plan D1a/D1e) — it used to never close: the map
+ * provider's `clearAddress()` used to emit an EMPTY `searchResults`, which this file's own
+ * `renderSearchResults()` dutifully un-hid and filled with `noResults` — the clear round-trip
+ * re-opened the box it had just been told to close. The provider now emits `searchCleared` instead
+ * (see `map-provider-yandex.js`) and the mount wires that to {@see Panels.prototype.hideSearchResults}
+ * — a SEPARATE method from `renderSearchResults()`, never routed through it — so an empty result
+ * from a genuinely completed search (which DOES still show `noResults`, unchanged) and "the search
+ * was cleared" (which shows nothing at all) can no longer be confused for one another.
+ * `hideSearchResults()` empties and hides the box and is the ONE thing every closing route calls:
+ * picking a point, picking an address (both below), the reset button's own click handler,
+ * `focusout` of the search wrap once focus leaves it ENTIRELY — a `relatedTarget` outside the wrap
+ * (a NULL `relatedTarget`, focus leaving the document altogether — an alt-tab, a click on browser
+ * chrome — deliberately does NOT count as leaving; treating it as "leave" would blank the results
+ * out from under a customer who only switched tabs mid-search) — and, round 4, a `click` anywhere
+ * OUTSIDE the search wrap: `focusout` alone missed the customer's actual dismissal gesture, a
+ * click on the MAP, which does not move DOM focus at all. See
+ * {@see Panels.prototype.buildSearchLayout}'s own docblock for the outside-click listener, which
+ * reuses the exact pattern {@see ensureFilterEl} already established for the filter menu.
+ *
+ * THE MAGNIFIER AND CLEAR GLYPHS (round 2, D1c) are inline `<svg>` authored in THIS file
+ * ({@see SEARCH_ICON_SVG}/{@see CLEAR_ICON_SVG} — Lucide's `search`/`x` geometry, ISC-licensed,
+ * redrawn, same convention `map-provider-yandex.js` set with `PIN_DEFAULT`/`PIN_ACTIVE`) — not the
+ * CSS `content: '\1F50D'`/`'\2715'` emoji they replace, which the operator called "стиль аля
+ * web 2000".
+ *
+ * THE SUBMIT BUTTON'S DISABLED STATE (round 2, D1d) is a small state machine, not a static
+ * attribute — see {@see updateSubmitState}: inert while the query is shorter than
+ * {@see SEARCH_MIN_CHARS}, inert again the instant a submit fires ("spent", until the customer
+ * edits the query), and inert while the caller reports a search in flight
+ * ({@see Panels.prototype.setSearchBusy}). `.is-ready` is kept in EXACT agreement with `disabled`
+ * (present if and only if `disabled` is false) — before this state machine existed the button had
+ * NO disabled logic at all and always looked equally clickable, which is the operator's own
+ * complaint, verbatim: "сейчас пользователь вообще не понимает что нужно на иконку нажать".
+ *
  * The results container itself (`this._searchResults`) is NOT built by `render()` any more — it is
  * one of the elements {@see Panels.prototype.buildSearchLayout} builds inside its own detached
  * `SearchControl` layout (Task 11 REPLACED the plain `.woodev-pickup-search` div `render()` used to
@@ -117,19 +162,43 @@
  * distance and offers to show it anyway, rather than leaving the customer to
  * conclude there are no points at all.
  *
- * THE TYPE FILTER (Task 16, reworked Task 13, D-10/V-8): `setTypes( types )` accumulates distinct
- * `{ code, label }` pairs FIRST-SEEN across every call and renders the filter control once a
- * SECOND distinct type has ever been seen — and, once shown, it never disappears again, even if a
- * later call reports only one type (a momentary single-type viewport must not flicker the control
- * away). The last CHECKED type cannot be unchecked (the Yandex reference's own rule): the click is
- * silently refused — the checkbox is reverted and no `typeFilterChange` fires — because an empty
- * selection would read to the customer as "no pickup points exist" (see the file docblock's own
- * operator-instruction note, immediately below the reference's opposite "empty means unfiltered"
- * behaviour is deliberately NOT copied). The count badge shows only while the selection is PARTIAL
- * (never for "all selected", never as a plain type count) and carries the number of types
- * currently SELECTED. `typeFilterChange` carries the selected codes as a plain array; whether that
- * becomes a client-side filter or a server refetch is the caller's decision (Task 20), not this
- * file's.
+ * THE TYPE FILTER (Task 16, reworked Task 13, reworked again SP-5 round 2 — D2/D-10/V-8):
+ * `setTypes( types )` accumulates distinct `{ code, label }` pairs FIRST-SEEN across every call
+ * and renders the filter control once a SECOND distinct type has ever been seen — and, once shown,
+ * it never disappears again, even if a later call reports only one type (a momentary single-type
+ * viewport must not flicker the control away). The last CHECKED type cannot be unchecked (the
+ * Yandex reference's own rule): the click is silently refused — the checkbox is reverted and no
+ * `typeFilterChange` fires — because an empty selection would read to the customer as "no pickup
+ * points exist" (see the file docblock's own operator-instruction note, immediately below the
+ * reference's opposite "empty means unfiltered" behaviour is deliberately NOT copied). Every row
+ * (`.woodev-pickup-filter__row`) carries `data-checked="true"|"false"`, kept in sync with its own
+ * checkbox on every accepted change, for T4's styling to key off.
+ *
+ * THE BADGE'S 3+ RULE (round 2, D2 — the operator's own live-review finding): the TOGGLE
+ * (`.woodev-pickup-filter__toggle`) carries `.is-filtered` whenever the selection is PARTIAL
+ * (strictly fewer selected than known), full stop — that alone is the whole "something is
+ * filtered" signal. The numeric count badge is a SEPARATE, stricter thing: it shows only once
+ * there are 3+ known types AND the selection is partial. With exactly two known types (this
+ * plugin's own fixture: `PVZ`, `POSTAMAT`) "partial" can only ever mean "1 of 2 selected" — the
+ * badge is arithmetically incapable of ever reading as anything but a permanently-stuck "1", which
+ * is precisely what the operator saw and reported as broken. `typeFilterChange` carries the
+ * selected codes as a plain array; whether that becomes a client-side filter or a server refetch
+ * is the caller's decision (Task 20), not this file's.
+ *
+ * THE FILTER ALSO GATES WHICH POINTS THIS FILE RENDERS (round 3, coordinator fix — the rig found
+ * "the filter applies to the map but not to the sidebar list"): the map provider filters by
+ * GROUP — a group's type is its first point's type — so a co-located group holding, say, a PVZ
+ * and a postomat correctly STAYS on the map once `POSTAMAT` is unchecked (the group still has a
+ * visible PVZ); but the individual postomat POINT inside that group must stop being offered
+ * anywhere a customer could still pick it. That is point-level filtering, and this file is the
+ * only place that renders individual points, so {@see pointPassesFilter}/{@see filterGroupPoints}
+ * live here, not in the map provider. Both the sidebar list ({@see buildListItem}/
+ * {@see renderListBody} — a group with zero surviving points renders no row) and the card's tab
+ * bar ({@see buildTabs}, {@see renderCard}'s own fallback-or-close logic) apply the same rule.
+ * `handleFilterCheckboxChange()` re-renders the list body and any open card SYNCHRONOUSLY on
+ * every accepted change — never waits for the next `setVisible()` viewport update, since a
+ * customer un-checking a type with no map movement in between must see the list update
+ * immediately, not on the next pan/zoom.
  *
  * THE CONTROL'S HOME (Task 13, spec V-8): the filter is one button (`.woodev-pickup-filter__toggle`,
  * carrying the badge) plus one hidden dropdown menu (`.woodev-pickup-filter__menu`) — Russian
@@ -208,6 +277,42 @@
 	var FILTER_ICON_SVG = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">' +
 		'<path fill="currentColor" d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z"/>' +
 		'</svg>';
+
+	/**
+	 * Lucide's `search` glyph (ISC-licensed, redrawn as one inline `<svg>`) — the submit button's
+	 * icon (D1c), replacing the CSS `content: '\1F50D'` (🔍) glyph the operator called "стиль аля
+	 * web 2000" (see the file docblock's "THE MAGNIFIER AND CLEAR GLYPHS" note). `stroke`, not
+	 * `fill` — Lucide's native style, and legible at the DOM contract's fixed 20×20 render size the
+	 * way `map-provider-yandex.js`'s filled `PIN_DEFAULT` is not (that file's own docblock notes a
+	 * thin stroke disappears against map tiles at 45px; a UI button icon has no such background to
+	 * fight). `currentColor` inherits the button's own text colour, which is what flips when
+	 * `.is-ready` toggles ({@see updateSubmitState}) — no second place has to know the button's
+	 * enabled/disabled colours.
+	 *
+	 * @since 2.0.2
+	 * @type {string}
+	 */
+	var SEARCH_ICON_SVG = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" ' +
+		'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' +
+		'<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>';
+
+	/**
+	 * Lucide's `x` glyph (ISC-licensed, redrawn) — the reset button's icon (D1c), replacing the CSS
+	 * `content: '\2715'` (✕) glyph. Same register as {@see SEARCH_ICON_SVG}.
+	 *
+	 * @since 2.0.2
+	 * @type {string}
+	 */
+	var CLEAR_ICON_SVG = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" ' +
+		'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' +
+		'<path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>';
+
+	/**
+	 * @type {number} minimum number of known point types before the filter badge shows a NUMBER at
+	 * all — see the file docblock's "THE BADGE'S 3+ RULE" note (D2). Below this, `.is-filtered` on
+	 * the toggle carries the whole "something is filtered" signal by itself.
+	 */
+	var FILTER_BADGE_MIN_TYPES = 3;
 
 	/**
 	 * A single detached element reused by {@see decodeForTitle} — same technique, same
@@ -413,6 +518,51 @@
 	}
 
 	/**
+	 * Whether `point` currently PASSES the type filter (round 3 coordinator fix — "the filter
+	 * applies to the map but not to the sidebar list"). The map provider filters by GROUP — a
+	 * group's type is its first point's type, per `map-provider-yandex.js`'s own contract — so a
+	 * co-located group holding, say, a PVZ and a postomat correctly stays on the map once its type
+	 * is unchecked (the group still has a visible PVZ), but the individual EXCLUDED point inside it
+	 * must stop being offered here — that is point-level filtering, and the panels are the only
+	 * place that renders individual points, so it lives here rather than in the provider.
+	 *
+	 * A point whose type carries no code, or whose code the filter has never heard of (no
+	 * `setTypes()` call ever reported it), passes by default — there is nothing to filter it BY,
+	 * and refusing to show it would be a bug of its own (an unfilterable point silently vanishing).
+	 *
+	 * @since 2.0.2
+	 * @param {Panels} self
+	 * @param {Object} point
+	 * @returns {boolean}
+	 */
+	function pointPassesFilter( self, point ) {
+		var code = point && point.type && point.type.code;
+
+		if ( ! code || ! Object.prototype.hasOwnProperty.call( self._filterSelected, code ) ) {
+			return true;
+		}
+
+		return Boolean( self._filterSelected[ code ] );
+	}
+
+	/**
+	 * The SUBSET of `group.points` currently passing the type filter — see {@see pointPassesFilter}.
+	 * Used both by the list ({@see buildListItem}/{@see renderListBody}: a group with zero visible
+	 * points renders no row at all) and by the card's tab bar ({@see buildTabs}: no tab for an
+	 * excluded point). Never mutates `group.points` itself.
+	 *
+	 * @since 2.0.2
+	 * @param {Panels} self
+	 * @param {Object} group
+	 * @returns {Array}
+	 */
+	function filterGroupPoints( self, group ) {
+		return group.points.filter( function( point ) {
+			return pointPassesFilter( self, point );
+		} );
+	}
+
+	/**
 	 * Builds one list row for a single-point group (spec V-11): the plugin's type icon (only
 	 * when {@see pointIconUrl} finds one), address in bold, name/description as the muted
 	 * subtitle, and — when an anchor is set — the formatted distance. Icon, then address, then
@@ -479,6 +629,14 @@
 	 * does not apply to them (mirrors `map-provider-yandex.js`'s own note
 	 * that `point.id` is deliberately never rendered).
 	 *
+	 * Round 3 (coordinator fix): renders only the points that PASS the type filter (see
+	 * {@see filterGroupPoints}) — never `group.points` directly. The caller
+	 * ({@see renderListBody}) already guarantees at least one point survives the filter before
+	 * calling this, so `points[ 0 ]` below is always defined; whether the SHAPE is "one row" or
+	 * "one sub-row per point" now depends on the SURVIVING count, not the group's raw point count
+	 * — a co-located group reduced to exactly one visible point renders as a plain single row, not
+	 * a one-item sub-row list.
+	 *
 	 * @param {Panels} self
 	 * @param {Object} group
 	 * @returns {HTMLElement}
@@ -490,16 +648,17 @@
 
 		var locale = self._config.lang;
 		var anchor = self._anchor;
+		var points = filterGroupPoints( self, group );
 
-		if ( group.points.length > 1 ) {
-			group.points.forEach( function( point ) {
+		if ( points.length > 1 ) {
+			points.forEach( function( point ) {
 				var button = document.createElement( 'button' );
 				button.type = 'button';
 				button.className = 'woodev-pickup-list__point';
 				button.dataset.pointId = String( point.id );
 				button.appendChild( buildSinglePointRow( point, anchor, group, locale, self._config ) );
 				button.addEventListener( 'click', function() {
-					self.openCard( group, point.id );
+					self.openCard( group, point.id, 'list' );
 				} );
 				item.appendChild( button );
 			} );
@@ -507,10 +666,10 @@
 			return item;
 		}
 
-		var onlyPoint = group.points[ 0 ];
+		var onlyPoint = points[ 0 ];
 		item.appendChild( buildSinglePointRow( onlyPoint, anchor, group, locale, self._config ) );
 		item.addEventListener( 'click', function() {
-			self.openCard( group, onlyPoint.id );
+			self.openCard( group, onlyPoint.id, 'list' );
 		} );
 
 		return item;
@@ -519,6 +678,15 @@
 	/**
 	 * Rebuilds the list body: the empty state, or up to {@see LIST_CAP}
 	 * ordered items — never more, see the file docblock.
+	 *
+	 * Round 3 (coordinator fix): a group with ZERO points passing the type filter
+	 * ({@see filterGroupPoints}) renders NO row at all — filtered before capping, so a run of
+	 * excluded groups never squeezes a visible one out of the {@see LIST_CAP} window. This can
+	 * never make the WHOLE list empty on its own — the last selected type can never be unchecked
+	 * (see the file docblock's "THE TYPE FILTER" note), so at least one type, and therefore at
+	 * least one point somewhere in `self._groups`, always survives — which is why this function
+	 * still only shows `emptyInView` for the pre-existing "nothing in the viewport at all" case
+	 * below, never a second "everything got filtered" state that cannot occur.
 	 *
 	 * @param {Panels} self
 	 * @returns {void}
@@ -536,7 +704,10 @@
 		}
 
 		var ordered = orderGroups( self._groups, self._anchor );
-		var capped = ordered.slice( 0, LIST_CAP );
+		var visible = ordered.filter( function( group ) {
+			return filterGroupPoints( self, group ).length > 0;
+		} );
+		var capped = visible.slice( 0, LIST_CAP );
 
 		capped.forEach( function( group ) {
 			self._listBodyEl.appendChild( buildListItem( self, group ) );
@@ -568,7 +739,8 @@
 	 * are the same already-`esc_html()`-escaped point fields the list panel
 	 * renders, not new/untrusted strings. Clicking emits `searchPointPicked`
 	 * with the point's id, so the caller can open its card the same way a
-	 * list-row click does.
+	 * list-row click does, then closes the results box (round 2, D1e — see
+	 * {@see Panels.prototype.hideSearchResults}).
 	 *
 	 * @param {Panels} self
 	 * @param {Object} point
@@ -592,6 +764,10 @@
 
 		item.addEventListener( 'click', function() {
 			self._emit( 'searchPointPicked', point.id );
+
+			// Round 2, D1e: a pick closes the results box — it must not linger over the map once
+			// the customer has already told this file which point they mean.
+			self.hideSearchResults();
 		} );
 
 		return item;
@@ -606,7 +782,9 @@
 	 * "THE SEARCH VIEW" note). Clicking emits `searchAddressPicked` with
 	 * `index` — the position in the caller's OWN results array — never the
 	 * address object itself, since the caller (Task 12) is the one holding
-	 * that array and resolving it.
+	 * that array and resolving it — then closes the results box (round 2,
+	 * D1e — see {@see Panels.prototype.hideSearchResults}), same as a point
+	 * pick above.
 	 *
 	 * @param {Panels} self
 	 * @param {Object} address `{ displayName, ... }`, untrusted geocoder shape.
@@ -626,6 +804,10 @@
 
 		item.addEventListener( 'click', function() {
 			self._emit( 'searchAddressPicked', index );
+
+			// Round 2, D1e: same as a point pick, above — closes the box rather than leaving it
+			// open over the map once the customer has picked one of its suggestions.
+			self.hideSearchResults();
 		} );
 
 		return item;
@@ -680,22 +862,40 @@
 	}
 
 	/**
-	 * Builds the card's tab bar for a co-located group, or `null` for a
-	 * single-point one (D-4: no tab bar when there is nothing to switch
-	 * between). Tabs are labelled by `type.label`; the WHOLE group falls
-	 * back to `name` the moment ANY two points in it share a label — never a
-	 * per-point decision (see the file docblock).
+	 * Builds the card's tab bar for a co-located group, or `null` when there is nothing to switch
+	 * between — either a single-point group to begin with (D-4), or a co-located one reduced to a
+	 * single VISIBLE point by the type filter (round 3 coordinator fix: a tab for an excluded
+	 * point would let the customer switch straight back to the thing they just filtered out).
+	 * Tabs are labelled by `type.label`; the shown SUBSET falls back to `name` the moment ANY two
+	 * of the VISIBLE points share a label — never a per-point decision, and never influenced by a
+	 * label collision that only exists among points the filter has already hidden (see the file
+	 * docblock).
+	 *
+	 * `index` in the click handler below is the point's REAL index into `group.points` (not its
+	 * position among the visible subset) — `self._activeIndex` is that same indexing scheme
+	 * everywhere else in this file (`openCard()`'s own point-id lookup, {@see renderCard}), so this
+	 * function must not renumber it just because some points are hidden.
 	 *
 	 * @param {Panels} self
 	 * @param {Object} group
 	 * @returns {HTMLElement|null}
 	 */
 	function buildTabs( self, group ) {
-		if ( group.points.length <= 1 ) {
+		var visibleIndexes = [];
+
+		group.points.forEach( function( point, index ) {
+			if ( pointPassesFilter( self, point ) ) {
+				visibleIndexes.push( index );
+			}
+		} );
+
+		if ( visibleIndexes.length <= 1 ) {
 			return null;
 		}
 
-		var typeLabels = group.points.map( function( point ) {
+		var typeLabels = visibleIndexes.map( function( index ) {
+			var point = group.points[ index ];
+
 			return ( point.type && 'string' === typeof point.type.label ) ? point.type.label : '';
 		} );
 		var seen = {};
@@ -710,19 +910,19 @@
 		} );
 
 		var labels = hasCollision
-			? group.points.map( function( point ) {
-				return fieldValue( point.name );
+			? visibleIndexes.map( function( index ) {
+				return fieldValue( group.points[ index ].name );
 			} )
 			: typeLabels;
 
 		var tabs = document.createElement( 'div' );
 		tabs.className = 'woodev-pickup-card__tabs';
 
-		group.points.forEach( function( point, index ) {
+		visibleIndexes.forEach( function( index, position ) {
 			var tab = document.createElement( 'button' );
 			tab.type = 'button';
 			tab.className = 'woodev-pickup-card__tab' + ( index === self._activeIndex ? ' is-active' : '' );
-			tab.innerHTML = labels[ index ]; // eslint-disable-line -- server-escaped point field, see file docblock.
+			tab.innerHTML = labels[ position ]; // eslint-disable-line -- server-escaped point field, see file docblock.
 			tab.addEventListener( 'click', function() {
 				self._activeIndex = index;
 				renderCard( self );
@@ -734,17 +934,27 @@
 	}
 
 	/**
-	 * Builds the card's header row: the tab bar (only for a co-located
-	 * group — {@see buildTabs} returns `null` for a single-point one) plus a
-	 * close control that ALWAYS renders, tabs or not — this is the
-	 * customer's only way back to the list without dismissing the whole
-	 * modal (spec §6, STATE 3). Named via the EXISTING `close` i18n key (the
-	 * same one the modal shell's own close button already uses), not an
-	 * invented one — see the file docblock's I1 note and the toggle
-	 * button's own `aria-label` for the identical discipline.
+	 * Builds the card's header: a close control that ALWAYS renders (this is the customer's only
+	 * way back to the list without dismissing the whole modal, spec §6 STATE 3) plus the icon chip
+	 * (Task 15, spec V-12 — rendered only when the plugin supplies one for `point`'s type, via the
+	 * SAME {@see pointIconUrl} lookup the sidebar row uses) — both on a FIRST inner row,
+	 * `.woodev-pickup-card__header-row` — and the tab bar (only for a co-located group;
+	 * {@see buildTabs} returns `null` for a single-point one) on its OWN row below that, still
+	 * inside `.woodev-pickup-card__header`.
 	 *
-	 * Also carries the icon chip (Task 15, spec V-12) — rendered only when the plugin supplies
-	 * one for `point`'s type, via the SAME {@see pointIconUrl} lookup the sidebar row uses.
+	 * ROUND 4 (operator live-review): before this split, the chip, tabs, and close control all
+	 * competed for ONE row, and a real type label ("Пункт выдачи заказов") did not fit inside a
+	 * segmented-control button squeezed between the two — his own words: "текст «Пункт выдачи
+	 * заказов» не помещается в кнопку". Giving the tab bar the header's FULL width on its own row
+	 * fixes that; `.woodev-pickup-card__header-row` is the ONLY new class this round introduces —
+	 * every existing class (`.woodev-pickup-card__chip`, `.woodev-pickup-card__close`,
+	 * `.woodev-pickup-card__tabs`/`__tab`/`.is-active`) is unchanged, since the CSS agent is
+	 * styling those directly. This function only restructures the DOM; it does not style anything
+	 * itself — that stays the CSS agent's half.
+	 *
+	 * Named via the EXISTING `close` i18n key (the same one the modal shell's own close button
+	 * already uses), not an invented one — see the file docblock's I1 note and the toggle button's
+	 * own `aria-label` for the identical discipline.
 	 *
 	 * @param {Panels} self
 	 * @param {Object} group
@@ -754,6 +964,9 @@
 	function buildCardHeader( self, group, point ) {
 		var header = document.createElement( 'div' );
 		header.className = 'woodev-pickup-card__header';
+
+		var headerRow = document.createElement( 'div' );
+		headerRow.className = 'woodev-pickup-card__header-row';
 
 		// The chip (spec V-12) — only when the PLUGIN supplies an icon for this point's type.
 		// It shares {@see pointIconUrl} with the sidebar row builder rather than a second lookup,
@@ -769,13 +982,7 @@
 			chipIcon.alt = '';
 			chip.appendChild( chipIcon );
 
-			header.appendChild( chip );
-		}
-
-		var tabs = buildTabs( self, group );
-
-		if ( tabs ) {
-			header.appendChild( tabs );
+			headerRow.appendChild( chip );
 		}
 
 		var close = document.createElement( 'button' );
@@ -786,7 +993,17 @@
 		close.addEventListener( 'click', function() {
 			self.closeCard();
 		} );
-		header.appendChild( close );
+		headerRow.appendChild( close );
+
+		header.appendChild( headerRow );
+
+		// The tab bar (round 4) is now a SIBLING of the row above, not a child squeezed inside it
+		// between the chip and the close button — see this function's own docblock.
+		var tabs = buildTabs( self, group );
+
+		if ( tabs ) {
+			header.appendChild( tabs );
+		}
 
 		return header;
 	}
@@ -950,7 +1167,18 @@
 	 * `_activeIndex`/`_selectedId` — a no-op when no group is open. Called on
 	 * every `openCard()`, tab click, and `setSelectedId()` while a card is
 	 * open, so the CTA/warning/tabs always reflect the CURRENTLY active
-	 * point, never a stale one left over from a previous render.
+	 * point, never a stale one left over from a previous render. Also called from
+	 * `handleFilterCheckboxChange()` (round 3, coordinator fix) so an OPEN card reacts to the
+	 * customer's own filter change immediately, not only on the next `setVisible()`.
+	 *
+	 * Round 3: if the point at `_activeIndex` has since been filtered out (its type was
+	 * unchecked while the card was showing it — see {@see pointPassesFilter}), this falls back to
+	 * the first STILL-VISIBLE point in the same group, updating `_activeIndex` to match, rather
+	 * than rendering a card for a point the customer just excluded. If the group has no visible
+	 * point left at all — every one of its types deselected, which can happen to one particular
+	 * GROUP even though the LAST SELECTED TYPE GLOBALLY can never be unchecked (see the file
+	 * docblock's "THE TYPE FILTER" note: a different group can keep that last type alive) — the
+	 * card closes instead of showing an excluded point or an empty box.
 	 *
 	 * @param {Panels} self
 	 * @returns {void}
@@ -966,6 +1194,29 @@
 
 		var point = group.points[ self._activeIndex ] || group.points[ 0 ];
 
+		if ( ! pointPassesFilter( self, point ) ) {
+			var fallbackIndex = -1;
+
+			for ( var i = 0; i < group.points.length; i++ ) {
+				if ( pointPassesFilter( self, group.points[ i ] ) ) {
+					fallbackIndex = i;
+					break;
+				}
+			}
+
+			if ( -1 === fallbackIndex ) {
+				// Nothing left in this group passes the filter — close rather than show an
+				// excluded point or an empty card (see this function's own docblock).
+				self._activeGroup = null;
+				self._stage.classList.remove( 'is-card' );
+
+				return;
+			}
+
+			self._activeIndex = fallbackIndex;
+			point = group.points[ fallbackIndex ];
+		}
+
 		self._cardEl.appendChild( buildCardHeader( self, group, point ) );
 		self._cardEl.appendChild( buildCardBody( self._config, point ) );
 		self._cardEl.appendChild( buildCardFooter( self, point ) );
@@ -974,6 +1225,23 @@
 	// -------------------------------------------------------------------------
 	// Type filter menu (Task 16, moved into the search control by Task 13, D-10/V-8)
 	// -------------------------------------------------------------------------
+
+	/**
+	 * Closes the filter menu (`.hidden = true`) if a filter has ever been built — a no-op
+	 * otherwise. The one place that actually flips the menu shut, shared by the toggle's own
+	 * click handler, {@see Panels.prototype.renderSearchResults}'s "opening either menu closes the
+	 * other" half, and round 3's new auto-close listeners below ({@see ensureFilterEl}'s
+	 * `focusout` and outside-`click` handlers) — one function, so every closing path agrees.
+	 *
+	 * @since 2.0.2
+	 * @param {Panels} self
+	 * @returns {void}
+	 */
+	function closeFilterMenu( self ) {
+		if ( self._filterMenuEl ) {
+			self._filterMenuEl.hidden = true;
+		}
+	}
 
 	/**
 	 * Builds the filter's toggle/badge/menu DOM exactly ONCE per `Panels` instance — a no-op on a
@@ -986,6 +1254,25 @@
 	 * badge is a permanent child of the TOGGLE (never inserted/removed the way Task 16's original
 	 * version did), toggled purely via `.hidden`, matching every other optional-visibility element
 	 * in this file (`{@see Panels.prototype.buildSearchLayout}`'s own reset button, for instance).
+	 *
+	 * ROUND 3 (operator live-review, defect B — "фильтр... висит постоянно открытым"): the menu
+	 * now closes itself on TWO independent signals, matching the reference's own `ListBox`
+	 * (`collapseOnBlur: true`) and mirroring the exact care already applied to the search results
+	 * box (see {@see Panels.prototype.buildSearchLayout}'s own `focusout` handler):
+	 *
+	 *   - `focusout` on `wrap`, closing when focus lands OUTSIDE it (`relatedTarget` set and not a
+	 *     descendant of `wrap`) — a `null` `relatedTarget` (focus left the document entirely — an
+	 *     alt-tab, a click on browser chrome) deliberately does NOT close it, same reasoning as the
+	 *     search box: that is not "the customer moved on".
+	 *   - a `click` on `document`, closing when the click landed outside `wrap` — the customer's
+	 *     most likely dismissal gesture is clicking the MAP, and a plain map click does not
+	 *     necessarily move DOM focus at all, so `focusout` alone would miss it. This listener is
+	 *     the one thing in this file attached to `document` rather than an element THIS file
+	 *     owns, so it is also the one thing {@see Panels.prototype.destroy} must explicitly
+	 *     remove — an element-scoped listener dies with its element when the stage is detached,
+	 *     but a `document` listener does not, and this file has already been bitten once by a
+	 *     listener that outlived its instance (the search debounce timer, see `destroy()`'s own
+	 *     docblock).
 	 *
 	 * @param {Panels} self
 	 * @returns {void}
@@ -1035,6 +1322,25 @@
 			}
 		} );
 
+		// Round 3, defect B — see this function's own docblock for both signals below.
+		wrap.addEventListener( 'focusout', function( event ) {
+			var next = event.relatedTarget;
+
+			if ( null === next || wrap.contains( next ) ) {
+				return;
+			}
+
+			closeFilterMenu( self );
+		} );
+
+		self._filterOutsideClickHandler = function( event ) {
+			if ( ! menu.hidden && ! wrap.contains( event.target ) ) {
+				closeFilterMenu( self );
+			}
+		};
+
+		document.addEventListener( 'click', self._filterOutsideClickHandler );
+
 		wrap.appendChild( toggle );
 		wrap.appendChild( menu );
 
@@ -1077,6 +1383,13 @@
 	 * a separate, longer-lived child, appended once by {@see ensureFilterEl}
 	 * and left alone here.
 	 *
+	 * Each row carries `data-checked="true"|"false"` (D2) — a plain reflection of its own
+	 * checkbox's state at render time, for T4's CSS to key off without reaching for the sibling
+	 * `<input>`'s `:checked` pseudo-class (a `<label>` row wrapping the checkbox makes that
+	 * selector awkward to write correctly). {@see handleFilterCheckboxChange} keeps it in sync on
+	 * every ACCEPTED change — never touched on a refused uncheck, since the checkbox itself is
+	 * reverted and the row's true state (`true`) never actually changed.
+	 *
 	 * `label` is the same already-escaped shape a point's `type.label` is
 	 * elsewhere in this file (it originates from the very same field), so it
 	 * is written via `innerHTML` here too, not `textContent`.
@@ -1095,13 +1408,17 @@
 			var row = document.createElement( 'label' );
 			row.className = 'woodev-pickup-filter__row';
 
+			var checked = Boolean( self._filterSelected[ code ] );
+
+			row.dataset.checked = checked ? 'true' : 'false';
+
 			var checkbox = document.createElement( 'input' );
 			checkbox.type = 'checkbox';
 			checkbox.className = 'woodev-pickup-filter__checkbox';
-			checkbox.checked = Boolean( self._filterSelected[ code ] );
+			checkbox.checked = checked;
 			checkbox.dataset.code = code;
 			checkbox.addEventListener( 'change', function() {
-				handleFilterCheckboxChange( self, code, checkbox );
+				handleFilterCheckboxChange( self, code, checkbox, row );
 			} );
 
 			var labelEl = document.createElement( 'span' );
@@ -1115,14 +1432,20 @@
 	}
 
 	/**
-	 * Shows or hides the partial-selection count badge: visible only while
-	 * the selection is PARTIAL (strictly fewer selected types than known
-	 * types) — never for "all selected" (there would be nothing to call out)
-	 * and never as a plain count of types (spec). Its text is the number of
-	 * types CURRENTLY SELECTED, not the number excluded. Task 13 changed this
-	 * from attach/detach to a plain `.hidden` flip — the badge is now a
-	 * permanent child of the toggle (see {@see ensureFilterEl}), never
-	 * inserted into or removed from the menu.
+	 * Reflects the current selection onto the toggle's `.is-filtered` class and the badge's
+	 * `hidden`/text (D2, round 2 rework — see the file docblock's "THE BADGE'S 3+ RULE" note).
+	 *
+	 * `.is-filtered` on `.woodev-pickup-filter__toggle` is the WHOLE "something is filtered off"
+	 * signal for a 2-type carrier: present whenever the selection is PARTIAL (strictly fewer
+	 * selected than known types), full stop. The numeric badge is a stricter, ADDITIONAL signal —
+	 * it un-hides only once BOTH the selection is partial AND there are
+	 * {@see FILTER_BADGE_MIN_TYPES} or more known types, and its text is the number of types
+	 * CURRENTLY SELECTED, never the number excluded. Below that type count a badge can only ever
+	 * read "1" (two types, one deselected — there is no other partial state to be in), which is
+	 * arithmetically indistinguishable from useful information; `.is-filtered` alone carries the
+	 * signal instead. Task 13 changed the badge from attach/detach to a plain `.hidden` flip — it
+	 * is a permanent child of the toggle (see {@see ensureFilterEl}), never inserted into or
+	 * removed from the menu; this rework does not change that.
 	 *
 	 * @param {Panels} self
 	 * @returns {void}
@@ -1134,9 +1457,13 @@
 
 		var partial = selectedCount < self._filterOrder.length;
 
-		self._badgeEl.hidden = ! partial;
+		self._filterToggleEl.classList.toggle( 'is-filtered', partial );
 
-		if ( partial ) {
+		var showBadge = partial && self._filterOrder.length >= FILTER_BADGE_MIN_TYPES;
+
+		self._badgeEl.hidden = ! showBadge;
+
+		if ( showBadge ) {
 			self._badgeEl.textContent = String( selectedCount );
 		}
 	}
@@ -1149,15 +1476,27 @@
 	 * emitting `typeFilterChange` — silently re-checking the box is the
 	 * Yandex reference's own rule (see the file docblock), because an empty
 	 * selection would read to the customer as "there are no pickup points
-	 * at all". Every other change is accepted, updates the badge, and emits
-	 * the full list of currently selected codes.
+	 * at all". Every other change is accepted, updates `row`'s `data-checked`
+	 * and the badge/`.is-filtered` state, and emits the full list of
+	 * currently selected codes.
+	 *
+	 * Round 3 (coordinator fix — "the filter applies to the map but not to the sidebar list"):
+	 * also re-renders the LIST BODY here, synchronously, and the CARD if one is open
+	 * ({@see renderCard}'s own fallback logic) — never waits for the next `setVisible()` viewport
+	 * update. The operator's repro was exactly "uncheck a type and look at the list" with no map
+	 * movement in between; a fix that only took effect on the next viewport change would have
+	 * looked identical to the bug. Guarded on `self.root` (unset before `render()` has ever run) —
+	 * a filter built via `buildSearchLayout()` alone in a test harness that never calls `render()`
+	 * has no list body to rebuild yet, matching every other `self.root`/`self._listBodyEl` guard in
+	 * this file.
 	 *
 	 * @param {Panels}       self
 	 * @param {string}       code
 	 * @param {HTMLInputElement} checkbox
+	 * @param {HTMLElement}  row      the checkbox's own `.woodev-pickup-filter__row` (D2).
 	 * @returns {void}
 	 */
-	function handleFilterCheckboxChange( self, code, checkbox ) {
+	function handleFilterCheckboxChange( self, code, checkbox, row ) {
 		if ( ! checkbox.checked ) {
 			var stillSelected = self._filterOrder.some( function( otherCode ) {
 				return otherCode !== code && Boolean( self._filterSelected[ otherCode ] );
@@ -1171,7 +1510,16 @@
 		}
 
 		self._filterSelected[ code ] = checkbox.checked;
+		row.dataset.checked = checkbox.checked ? 'true' : 'false';
 		updateFilterBadge( self );
+
+		if ( self.root ) {
+			renderList( self );
+		}
+
+		if ( self._activeGroup ) {
+			renderCard( self );
+		}
 
 		var selected = self._filterOrder.filter( function( otherCode ) {
 			return Boolean( self._filterSelected[ otherCode ] );
@@ -1218,12 +1566,31 @@
 		this._filterMenuEl = null;
 		this._badgeEl = null;
 
+		// Round 3 (defect B): the `document`-level outside-click listener {@see ensureFilterEl}
+		// attaches — unlike every other listener in this file, it is not scoped to an element this
+		// instance owns, so `destroy()` must remove it explicitly by this same reference.
+		this._filterOutsideClickHandler = null;
+
 		// Task 11 (spec V-6): set only once `buildSearchLayout()` actually runs — a Panels instance
 		// the caller never asks for a search layout (e.g. `config.search === false`) never gets
 		// these, which is exactly why `renderSearchResults()` guards on `_searchResults` being unset.
 		this._searchTimer = null;
 		this._searchInput = null;
 		this._searchResults = null;
+
+		// Round 4: the `document`-level outside-click listener {@see Panels.prototype.buildSearchLayout}
+		// attaches for the results box, same pattern/same reason as `_filterOutsideClickHandler`
+		// above — not scoped to an element this instance owns, so `destroy()` must remove it by
+		// this same reference.
+		this._searchOutsideClickHandler = null;
+
+		// Round 2 (D1d): the submit button's own disabled state machine — see
+		// {@see updateSubmitState}. `_searchSubmitEl` follows `_searchInput`'s own lifecycle (unset
+		// until `buildSearchLayout()` runs); `_searchSubmitSpent` and `_searchBusy` are independent
+		// booleans a fresh layout call resets/keeps respectively — see that method's own docblock.
+		this._searchSubmitEl = null;
+		this._searchSubmitSpent = false;
+		this._searchBusy = false;
 
 		// Task 16 (spec V-4 stage 2): whether the stage is currently blocked on the FIRST points
 		// fetch after the map was drawn — see {@see Panels.prototype.setBusy}. False until `render()`
@@ -1632,6 +1999,32 @@
 	};
 
 	/**
+	 * Recomputes the submit button's enabled state from its three independent, orthogonal reasons
+	 * to be inert (round 2, D1d — see the file docblock's "THE SUBMIT BUTTON'S DISABLED STATE"
+	 * note): the query is shorter than {@see SEARCH_MIN_CHARS}, a submit already fired for the
+	 * CURRENT query and is "spent" until the next `input` event, or the caller has marked a search
+	 * in flight via {@see Panels.prototype.setSearchBusy}. Reflects the result onto BOTH `disabled`
+	 * (the real guarantee — a disabled `<button type="submit">` cannot trigger a form submission at
+	 * all, native browser behaviour this file does not have to police itself) and `.is-ready`, kept
+	 * in EXACT agreement with it: `.is-ready` present if and only if `disabled` is false. A no-op
+	 * before `buildSearchLayout()` has built a submit button to update.
+	 *
+	 * @param {Panels} self
+	 * @returns {void}
+	 */
+	function updateSubmitState( self ) {
+		if ( ! self._searchSubmitEl ) {
+			return;
+		}
+
+		var value = self._searchInput ? self._searchInput.value.trim() : '';
+		var ready = value.length >= SEARCH_MIN_CHARS && ! self._searchSubmitSpent && ! self._searchBusy;
+
+		self._searchSubmitEl.disabled = ! ready;
+		self._searchSubmitEl.classList.toggle( 'is-ready', ready );
+	}
+
+	/**
 	 * Builds the DOM and handlers for the `SearchControl`'s custom layout (Task 11, spec V-6).
 	 *
 	 * Returns a DETACHED element rather than mounting it: the map provider hands it to ymaps
@@ -1649,7 +2042,32 @@
 	 *                      submit and never uses `ymaps.suggest`.
 	 *
 	 * `renderSearchResults()` fills the `.woodev-pickup-search__results` element built here — see
-	 * that method's own docblock for what happens when it is called before this one.
+	 * that method's own docblock for what happens when it is called before this one; this method's
+	 * own {@see Panels.prototype.hideSearchResults} is the one that closes it again (round 2, D1e).
+	 *
+	 * `search` (the wrap containing the form and results) grows a `focusout` listener: when focus
+	 * leaves it ENTIRELY — `event.relatedTarget` is set and NOT a descendant of `search` — the
+	 * results box closes. A `relatedTarget` of `null` (focus left the document altogether — an
+	 * alt-tab, a click on browser chrome) deliberately does NOT close it: treating that as "left"
+	 * would blank the results out from under a customer who only switched tabs mid-search.
+	 *
+	 * ROUND 4 (operator live-review): `focusout` alone does not cover the customer's actual
+	 * dismissal gesture — clicking the MAP — because a plain map click does not move DOM focus at
+	 * all, so `focusout` never fires and the box stayed open ("результат поиска (список) висит
+	 * открытым пока не выбрать из списка"). Reuses the EXACT pattern {@see ensureFilterEl} already
+	 * established for the filter menu rather than inventing a second one: a `document`-level
+	 * `click` listener, stored on `self._searchOutsideClickHandler` and removed in
+	 * {@see Panels.prototype.destroy}, closing the box when the click landed outside `search`. A
+	 * click INSIDE `search` (the input, the buttons, a result row) is excluded by the same
+	 * `contains()` check, so it never fights with a result row's own pick handler or the reset
+	 * button's own click handler. This listener only ever calls
+	 * {@see Panels.prototype.hideSearchResults} — never touches the filter menu — so it cannot
+	 * open/close that as a side effect either; the filter's own outside-click listener runs
+	 * independently against its own wrap.
+	 *
+	 * The submit button starts `disabled` and grows `.is-ready` the moment the query is long
+	 * enough — see {@see updateSubmitState}, called from every place this button's readiness can
+	 * change (typing, submitting, resetting, {@see Panels.prototype.setSearchBusy}).
 	 *
 	 * @since 2.0.2
 	 * @returns {HTMLElement|null} null when the plugin disabled search (`config.search === false`).
@@ -1682,11 +2100,13 @@
 		reset.className = 'woodev-pickup-search__reset';
 		reset.hidden = true;
 		reset.setAttribute( 'aria-label', text( this._config, 'resetSearch' ) );
+		reset.innerHTML = CLEAR_ICON_SVG; // eslint-disable-line -- static, framework-authored markup, no user input.
 
 		var submit = document.createElement( 'button' );
 		submit.type = 'submit';
 		submit.className = 'woodev-pickup-search__submit';
 		submit.setAttribute( 'aria-label', text( this._config, 'search' ) );
+		submit.innerHTML = SEARCH_ICON_SVG; // eslint-disable-line -- static, framework-authored markup, no user input.
 
 		var results = document.createElement( 'div' );
 		results.className = 'woodev-pickup-search__results';
@@ -1714,6 +2134,11 @@
 
 			if ( value.length ) {
 				self._emit( 'searchSubmit', { query: value } );
+
+				// "Spent" (D1d): the magnifier goes inert again the instant it does its job, until
+				// the customer changes the query — see {@see updateSubmitState}.
+				self._searchSubmitSpent = true;
+				updateSubmitState( self );
 			}
 		} );
 
@@ -1721,6 +2146,12 @@
 			var value = input.value.trim();
 
 			reset.hidden = 0 === value.length;
+
+			// A fresh keystroke un-spends the submit button regardless of the new value's own
+			// length — {@see updateSubmitState} still keeps it disabled below SEARCH_MIN_CHARS on
+			// its own separate reason; this only clears the OTHER reason (D1d).
+			self._searchSubmitSpent = false;
+			updateSubmitState( self );
 
 			window.clearTimeout( self._searchTimer );
 
@@ -1737,60 +2168,72 @@
 			window.clearTimeout( self._searchTimer );
 			input.value = '';
 			reset.hidden = true;
-			results.hidden = true;
-			empty( results );
+			self._searchSubmitSpent = false;
+			updateSubmitState( self );
+			self.hideSearchResults();
 			self._emit( 'searchReset', {} );
 		} );
+
+		// Round 2, D1e: closes the results box the moment focus leaves the search wrap entirely —
+		// see this method's own docblock for the `relatedTarget` null-vs-outside distinction.
+		search.addEventListener( 'focusout', function( event ) {
+			var next = event.relatedTarget;
+
+			if ( null === next || search.contains( next ) ) {
+				return;
+			}
+
+			self.hideSearchResults();
+		} );
+
+		// Round 4: the map-click case `focusout` cannot cover — see this method's own docblock.
+		// Same pattern as {@see ensureFilterEl}'s outside-click listener, own reference stored so
+		// {@see Panels.prototype.destroy} can remove it.
+		self._searchOutsideClickHandler = function( event ) {
+			if ( ! results.hidden && ! search.contains( event.target ) ) {
+				self.hideSearchResults();
+			}
+		};
+
+		document.addEventListener( 'click', self._searchOutsideClickHandler );
 
 		this._searchInput = input;
 		this._searchResults = results;
 		this._controlsEl = wrap;
+		this._searchSubmitEl = submit;
+		this._searchSubmitSpent = false;
+
+		updateSubmitState( this );
 
 		return wrap;
 	};
 
 	/**
-	 * Renders the search view's two independent sections (Task 15, D-6) into the results
-	 * container {@see Panels.prototype.buildSearchLayout} builds: matching pool points and
-	 * geocoder address suggestions. Each section is OMITTED ENTIRELY (not an empty heading) when
-	 * its own array is empty — see {@see buildSearchSection} — and when BOTH are empty, renders
-	 * `text( config, 'noResults' )` instead of an empty box (Task 11, spec V-6). Fully rebuilds
-	 * the results container on every call, matching every other render function in this file, and
-	 * un-hides it (the layout starts with `results.hidden = true`).
+	 * Builds the search results' TWO independent sections (Task 15, D-6) into
+	 * `self._searchResults` — matching pool points and geocoder address suggestions, each OMITTED
+	 * ENTIRELY (not an empty heading) when its own array is empty (see {@see buildSearchSection}).
+	 * Fully rebuilds the container on every call, matching every other render function in this
+	 * file. The SHARED painting logic behind both {@see Panels.prototype.renderSearchResults} (a
+	 * COMPLETED search) and {@see Panels.prototype.previewSearchResults} (round 3, defect A — the
+	 * live, still-typing preview) — those two methods differ ONLY in what an empty result means,
+	 * which is exactly the distinction defect A was about; the painting itself is identical either
+	 * way, so it lives here once rather than twice.
 	 *
-	 * A no-op when `buildSearchLayout()` has never been called (`_searchResults` unset) — the
-	 * layout is built on demand and this method must not throw just because it ran first.
-	 *
-	 * Task 13 (spec V-8): this un-hiding is also the OTHER half of "opening either menu closes the
-	 * other" — see `buildSearchLayout()`'s filter toggle handler for the reverse direction. A
-	 * filter menu left open while a search result appears would sit on top of it or beside it
-	 * fighting for the same corner of screen, so this is the one place results actually become
-	 * visible and the one place that needs to close it.
-	 *
+	 * @param {Panels} self
 	 * @param {Object} results
 	 * @param {Array}  [results.points]    matching points from the loaded pool.
 	 * @param {Array}  [results.addresses] geocoder address suggestions, `{ displayName }` each.
-	 * @returns {void}
+	 * @returns {boolean} true when at least one section was actually painted.
 	 */
-	Panels.prototype.renderSearchResults = function( results ) {
-		var self = this;
+	function paintSearchSections( self, results ) {
 		var points = ( results && results.points ) || [];
 		var addresses = ( results && results.addresses ) || [];
 
-		if ( ! this._searchResults ) {
-			return;
-		}
-
-		if ( this._filterMenuEl ) {
-			this._filterMenuEl.hidden = true;
-		}
-
-		empty( this._searchResults );
-		this._searchResults.hidden = false;
+		empty( self._searchResults );
 
 		var pointsSection = buildSearchSection(
 			'points',
-			text( this._config, 'sectionPoints' ),
+			text( self._config, 'sectionPoints' ),
 			points,
 			function( point ) {
 				return buildSearchPointItem( self, point );
@@ -1798,12 +2241,12 @@
 		);
 
 		if ( pointsSection ) {
-			this._searchResults.appendChild( pointsSection );
+			self._searchResults.appendChild( pointsSection );
 		}
 
 		var addressesSection = buildSearchSection(
 			'addresses',
-			text( this._config, 'sectionAddresses' ),
+			text( self._config, 'sectionAddresses' ),
 			addresses,
 			function( address, index ) {
 				return buildSearchAddressItem( self, address, index );
@@ -1811,15 +2254,157 @@
 		);
 
 		if ( addressesSection ) {
-			this._searchResults.appendChild( addressesSection );
+			self._searchResults.appendChild( addressesSection );
 		}
 
-		if ( ! pointsSection && ! addressesSection ) {
+		return Boolean( pointsSection || addressesSection );
+	}
+
+	/**
+	 * Renders the results of a COMPLETED search — the deliberate submit that actually spent the
+	 * merchant's geocoding quota — into the results container
+	 * {@see Panels.prototype.buildSearchLayout} builds. When BOTH sections come back empty, renders
+	 * `text( config, 'noResults' )` instead of an empty box (Task 11, spec V-6): for a search that
+	 * genuinely ran and genuinely found nothing, that verdict is correct and stays correct until
+	 * the next submit, reset, or pick.
+	 *
+	 * Round 3, defect A: this is now explicitly the COMPLETED-search half of a two-method pair —
+	 * see {@see Panels.prototype.previewSearchResults} for the other half, the live/instant preview
+	 * while the customer is still typing, which must NEVER show this same `noResults` verdict for
+	 * a search that has not actually run. Before this split, one method served both callers and
+	 * the wrong one showed a verdict for a preview that had not finished — the operator's own
+	 * words: "«Поиск не дал результатов.» ... висит так до тех пор пока не нажмёшь иконку «лупа»
+	 * или «крестик»". Naming the two calls differently is deliberate — the distinction is made
+	 * explicit at the CALL BOUNDARY, not guessed at from the shape of `results` inside a single
+	 * renderer, so a future caller cannot mix the two up by accident.
+	 *
+	 * A no-op when `buildSearchLayout()` has never been called (`_searchResults` unset) — the
+	 * layout is built on demand and this method must not throw just because it ran first.
+	 *
+	 * Task 13 (spec V-8): un-hiding the results box is also the OTHER half of "opening either menu
+	 * closes the other" — see `buildSearchLayout()`'s filter toggle handler for the reverse
+	 * direction. A filter menu left open while a search result appears would sit on top of it or
+	 * beside it fighting for the same corner of screen, so this is one of the two places (with
+	 * {@see Panels.prototype.previewSearchResults}) that actually shows results and therefore needs
+	 * to close it.
+	 *
+	 * @param {Object} results
+	 * @param {Array}  [results.points]    matching points from the loaded pool.
+	 * @param {Array}  [results.addresses] geocoder address suggestions, `{ displayName }` each.
+	 * @returns {void}
+	 */
+	Panels.prototype.renderSearchResults = function( results ) {
+		if ( ! this._searchResults ) {
+			return;
+		}
+
+		closeFilterMenu( this );
+
+		var painted = paintSearchSections( this, results );
+
+		this._searchResults.hidden = false;
+
+		if ( ! painted ) {
 			var noResults = document.createElement( 'div' );
 			noResults.className = 'woodev-pickup-search__empty';
 			noResults.textContent = text( this._config, 'noResults' );
 			this._searchResults.appendChild( noResults );
 		}
+	};
+
+	/**
+	 * Renders the search view's live, INSTANT preview while the customer is still typing (round 3,
+	 * defect A). The debounced local match against the ALREADY-LOADED pool has not spent the
+	 * merchant's geocoding quota and the customer has not finished typing, so matching nothing YET
+	 * is the normal case, not a failure — unlike {@see Panels.prototype.renderSearchResults} (the
+	 * COMPLETED-search half of this pair), an empty preview must show NOTHING at all, never the
+	 * `noResults` verdict. Shares {@see paintSearchSections} with that method; the two differ ONLY
+	 * in what an empty result means for their respective caller.
+	 *
+	 * An empty preview calls {@see Panels.prototype.hideSearchResults} — closes the box outright,
+	 * exactly like a reset or a pick — rather than painting anything, so nothing lingers on screen
+	 * asserting a verdict about a search that was never actually run.
+	 *
+	 * A no-op when `buildSearchLayout()` has never been called, matching every other guarded method
+	 * in this section.
+	 *
+	 * @since 2.0.2
+	 * @param {Object} results
+	 * @param {Array}  [results.points]    matching points from the ALREADY-LOADED pool.
+	 * @param {Array}  [results.addresses] unused for a preview — the geocoder is never queried by
+	 *                                     `searchType`, only by `searchSubmit` — accepted anyway so
+	 *                                     the two methods share one call shape.
+	 * @returns {void}
+	 */
+	Panels.prototype.previewSearchResults = function( results ) {
+		if ( ! this._searchResults ) {
+			return;
+		}
+
+		var painted = paintSearchSections( this, results );
+
+		if ( ! painted ) {
+			this.hideSearchResults();
+
+			return;
+		}
+
+		closeFilterMenu( this );
+		this._searchResults.hidden = false;
+	};
+
+	/**
+	 * Empties and hides the search-results container WITHOUT ever rendering anything into it —
+	 * round 2's direct answer to D1e/D1a ("the clear round-trip re-opens the box it just closed"):
+	 * before this method existed, the ONLY way to close the results box was
+	 * {@see Panels.prototype.renderSearchResults} itself, and calling that with a genuinely empty
+	 * result immediately reopens it to show `noResults` — there was no way to say "close this and
+	 * show nothing" as a distinct instruction from "a search came back empty".
+	 *
+	 * Called from every place a search interaction ends without the customer wanting to see the
+	 * list any more: a point pick, an address pick (both in the "Search view" section above), the
+	 * reset button's own click handler, and a `focusout` of the search wrap once focus leaves it
+	 * entirely (all three wired in {@see Panels.prototype.buildSearchLayout}). The mount wires this
+	 * to the map provider's `searchCleared` event too (T3's side of the contract; this file does
+	 * not listen for that event itself).
+	 *
+	 * A no-op before `buildSearchLayout()` has ever run (`_searchResults` unset), matching every
+	 * other guarded method in this section — closing a box that was never built is not an error.
+	 *
+	 * @since 2.0.2
+	 * @returns {void}
+	 */
+	Panels.prototype.hideSearchResults = function() {
+		if ( ! this._searchResults ) {
+			return;
+		}
+
+		empty( this._searchResults );
+		this._searchResults.hidden = true;
+	};
+
+	/**
+	 * Marks the submit button as blocked on an in-flight search (round 2, D1d) — one of
+	 * {@see updateSubmitState}'s three independent reasons the button can be inert, alongside a
+	 * too-short query and "spent since the last submit". The caller (the mount, wiring the
+	 * geocoder's own request lifecycle — not this file, which has no network of its own) is
+	 * expected to call `setSearchBusy( true )` when a search starts and `setSearchBusy( false )`
+	 * once it settles either way; this method does not track WHY it was called or guard against an
+	 * unbalanced pair — the caller owns that discipline, same as {@see Panels.prototype.setBusy}'s
+	 * own docblock note on its `boolean` argument.
+	 *
+	 * A no-op on the button itself before `buildSearchLayout()` has built one, but the flag is
+	 * still recorded either way, so a `buildSearchLayout()` call that happens AFTER
+	 * `setSearchBusy( true )` still starts the new button in the correct blocked state.
+	 *
+	 * @since 2.0.2
+	 * @param {boolean} busy
+	 * @returns {void}
+	 */
+	Panels.prototype.setSearchBusy = function( busy ) {
+		this._searchBusy = !! busy;
+
+		updateSubmitState( this );
 	};
 
 	/**
@@ -1924,8 +2509,49 @@
 	};
 
 	/**
-	 * Flips the STAGE's open/closed state and emits `listToggle` with the new
-	 * state plus the list's own current width, so a caller (the map
+	 * Sets `.woodev-pickup-stage`'s `is-open` class to exactly `open`, and emits `listToggle`
+	 * (`{ open, width }`) — but ONLY when this call actually CHANGES the visible open state (round
+	 * 2, coordinator fix — the second half of operator defect 5, plus defect 8). `listToggle` is
+	 * the ONLY event the mount listens to in order to call `provider.setMargin( open, width )`
+	 * (ymaps' `map.margin.addArea()`), which is what reserves the sidebar's screen area so the map
+	 * knows not to centre a point underneath it. Before this helper existed, {@see
+	 * Panels.prototype.openList} and {@see Panels.prototype.openCard} flipped `is-open` on WITHOUT
+	 * telling anyone: a marker click slid the sidebar in, ymaps was never told, and
+	 * `focusGroup()`'s camera move (`useMapMargin: true`) had nothing reserved to avoid — the point
+	 * landed off-centre, under the panel that had just opened. The same missing reservation also
+	 * let the sidebar sit over ymaps' own copyright strip (defect 8), which its ToS forbids.
+	 *
+	 * {@see Panels.prototype.toggleList}, {@see Panels.prototype.openList}, and
+	 * {@see Panels.prototype.openCard} all route through this ONE place now, so `listToggle` fires
+	 * exactly once per ACTUAL transition and stays silent on a call that finds the sidebar already
+	 * in the requested state — re-opening an already-open sidebar (the common case for
+	 * `openCard()`: most card opens happen with the list already showing) must NOT re-emit, or the
+	 * mount would churn `addArea()`/`remove()` on every single card click.
+	 *
+	 * Deliberately does NOT touch `is-card` — whether a transition ALSO changes which panel is
+	 * showing (list vs. card) is each caller's own business (see their own docblocks), but whether
+	 * the sidebar itself is showing at all is not, which is exactly the one thing this helper owns.
+	 *
+	 * @param {Panels}  self
+	 * @param {boolean} open
+	 * @returns {void}
+	 */
+	function setStageOpen( self, open ) {
+		var wasOpen = self._stage.classList.contains( 'is-open' );
+
+		self._stage.classList.toggle( 'is-open', open );
+
+		if ( wasOpen === open ) {
+			return;
+		}
+
+		self._emit( 'listToggle', { open: open, width: self._listEl.offsetWidth } );
+	}
+
+	/**
+	 * Flips the STAGE's open/closed state — routes through {@see setStageOpen}, which is what
+	 * actually emits `listToggle` (unconditionally here, since a flip always changes the state by
+	 * definition) with the new state plus the list's own current width, so a caller (the map
 	 * provider) can size the map's margin to avoid the panel covering it.
 	 *
 	 * The open/closed state lives on `_stage`, not on `_listEl`/`_cardEl`
@@ -1939,18 +2565,22 @@
 	 * Reopening always returns to the LIST, never back to the card that was
 	 * showing when it got collapsed (`is-card` is never restored here).
 	 *
+	 * Round 2: `is-open` is no longer a purely visual/CSS concern — it is also what the mount
+	 * learns about through `listToggle` (see {@see setStageOpen}) in order to reserve the map's
+	 * margin, so getting the open state right here is now a correctness requirement for the
+	 * camera, not just for what the customer sees.
+	 *
 	 * @returns {void}
 	 */
 	Panels.prototype.toggleList = function() {
-		var open = this._stage.classList.contains( 'is-open' );
+		var wasOpen = this._stage.classList.contains( 'is-open' );
+		var nextOpen = ! wasOpen;
 
-		this._stage.classList.toggle( 'is-open', ! open );
-
-		if ( open ) {
+		if ( ! nextOpen ) {
 			this._stage.classList.remove( 'is-card' );
 		}
 
-		this._emit( 'listToggle', { open: ! open, width: this._listEl.offsetWidth } );
+		setStageOpen( this, nextOpen );
 	};
 
 	/**
@@ -1964,13 +2594,20 @@
 	 * VISIBLE — before this method existed, picking an address while a point's card happened to
 	 * be open left that stale card on screen, with the newly-sorted list invisible behind it.
 	 *
+	 * Round 2: routes the open-state change through {@see setStageOpen}, so this now emits
+	 * `listToggle {open:true}` exactly when it actually opens a closed sidebar (a search picking an
+	 * address behind a closed sidebar is precisely the case that used to leave the map's margin
+	 * unreserved), and stays silent when the sidebar was already open — dismissing a stale card
+	 * while the sidebar itself stays open is not a margin change, so it must not re-fire.
+	 *
 	 * @since 2.0.2
 	 * @returns {void}
 	 */
 	Panels.prototype.openList = function() {
-		this._stage.classList.add( 'is-open' );
 		this._stage.classList.remove( 'is-card' );
 		this._activeGroup = null;
+
+		setStageOpen( this, true );
 	};
 
 	/**
@@ -1979,16 +2616,35 @@
 	 * on the SECOND point of a co-located list row must do — always the
 	 * REQUESTED point, never always the first (spec).
 	 *
-	 * Adds BOTH `is-open` and `is-card` to `_stage` — see {@see toggleList}'s
-	 * docblock for why the open state lives there rather than on `_cardEl`
+	 * Adds BOTH `is-open` (via {@see setStageOpen}) and `is-card` to `_stage` — see
+	 * {@see toggleList}'s docblock for why the open state lives there rather than on `_cardEl`
 	 * itself: a single class removal (a sidebar collapse) then hides the
 	 * card along with the list, instead of leaving it stranded on screen.
 	 *
-	 * @param {Object}      group
+	 * `origin` (round 2, D6 — see the file docblock's revised `cardOpened` note) is REQUIRED at
+	 * every internal call site in this file (the sidebar row builders pass `'list'`) and is
+	 * carried verbatim into the `cardOpened` payload, unexamined — this method does not branch on
+	 * it, it only threads it through for whoever is listening (the mount) to act on. A caller from
+	 * outside this file (the mount, routing a marker click, a search pick, or "show nearest") is
+	 * responsible for its own label; omitting it is not a crash, just an `undefined` `origin` in
+	 * the payload, since jest exercises this method directly without a mount in the room.
+	 *
+	 * ORDERING IS LOAD-BEARING (round 2 coordinator fix): `listToggle` — via
+	 * {@see setStageOpen}, fired only when a CLOSED sidebar is opening — is emitted BEFORE
+	 * `cardOpened`, never after. The mount turns `listToggle` into `provider.setMargin()` and
+	 * `cardOpened` into `provider.focusGroup()`; both handlers run synchronously off these two
+	 * emits, so if `cardOpened` fired first, the camera would move BEFORE the map margin was
+	 * reserved — the exact "point lands under the panel" defect this fix exists for, just moved
+	 * one line later and harder to notice. DO NOT reorder these two emits, even to "tidy" the
+	 * method into "state first, then business event" — that instinct is what would reintroduce
+	 * the bug.
+	 *
+	 * @param {Object}        group
 	 * @param {string|number} [pointId]
+	 * @param {string}        [origin] `'marker'|'list'|'search'|'nearest'` — see the file docblock.
 	 * @returns {void}
 	 */
-	Panels.prototype.openCard = function( group, pointId ) {
+	Panels.prototype.openCard = function( group, pointId, origin ) {
 		var index = 0;
 
 		if ( undefined !== pointId && null !== pointId ) {
@@ -2003,20 +2659,26 @@
 		this._activeGroup = group;
 		this._activeIndex = index;
 
+		// listToggle (if the sidebar was closed) MUST land before cardOpened — see this method's
+		// own "ORDERING IS LOAD-BEARING" docblock note above. Do not move this below the
+		// `cardOpened` emit.
+		setStageOpen( this, true );
+		this._stage.classList.add( 'is-card' );
+
 		// EVERY route to a card passes through here — a marker click, a sidebar row, a search
-		// result, "show the nearest" — so this is the one place a listener can learn that a
-		// point became the subject, whoever asked. The mount uses it to move the camera, which
-		// is what makes a marker click and a sidebar-row click behave identically (spec V-10).
+		// result, "show the nearest" — so this is the one place a listener can learn that a point
+		// became the subject, whoever asked. `origin` is what lets that listener (the mount) tell
+		// the routes apart — see the file docblock's revised `cardOpened` note (D6): a marker click
+		// only pans the camera, everything else zooms in, and the original "must behave
+		// identically" sentence this replaced was wrong.
 		//
 		// Emitted BEFORE the card renders, in that order deliberately: the camera move is a
 		// ~400ms animation and the card is synchronous DOM, so starting the flight first means
 		// the two land together instead of the map lurching after the card is already readable.
 		// Nothing here awaits the move — the card owes the viewport nothing.
-		this._emit( 'cardOpened', { group: group, pointId: group.points[ index ].id } );
+		this._emit( 'cardOpened', { group: group, pointId: group.points[ index ].id, origin: origin } );
 
 		renderCard( this );
-		this._stage.classList.add( 'is-open' );
-		this._stage.classList.add( 'is-card' );
 	};
 
 	/**
@@ -2060,6 +2722,16 @@
 	 * the mount registers fresh callbacks on the new instance every time, and a retained old
 	 * instance would answer with the previous session's closures.
 	 *
+	 * Round 3 (defect B) adds a second "outlives its instance" hazard of the exact same shape:
+	 * {@see ensureFilterEl}'s outside-click listener is attached to `document`, not to an element
+	 * this instance owns, so removing the stage from the DOM does NOT remove it the way every
+	 * other listener in this file is removed for free — it must be un-registered by the same
+	 * function reference this stores on `_filterOutsideClickHandler`, or it keeps calling
+	 * `closeFilterMenu()` against a dead instance's detached menu on every future click anywhere
+	 * in the document, for as long as the page lives. Round 4 adds a THIRD one of the identical
+	 * shape: {@see Panels.prototype.buildSearchLayout}'s own `_searchOutsideClickHandler` for the
+	 * search results box, removed the same way for the same reason.
+	 *
 	 * Idempotent, and safe to call before `render()` ever ran.
 	 *
 	 * @since 2.0.2
@@ -2069,6 +2741,16 @@
 		if ( this._searchTimer ) {
 			window.clearTimeout( this._searchTimer );
 			this._searchTimer = null;
+		}
+
+		if ( this._searchOutsideClickHandler ) {
+			document.removeEventListener( 'click', this._searchOutsideClickHandler );
+			this._searchOutsideClickHandler = null;
+		}
+
+		if ( this._filterOutsideClickHandler ) {
+			document.removeEventListener( 'click', this._filterOutsideClickHandler );
+			this._filterOutsideClickHandler = null;
 		}
 
 		this._listeners = {};

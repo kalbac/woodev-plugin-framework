@@ -48,8 +48,11 @@ jest.useFakeTimers();
 
 /**
  * Records `focusGroup()`/`openCard()` calls in the order the STUBS actually saw them — the only
- * way to prove `pickup-mount.js` calls them in the sequence spec V-10 requires (focus, THEN open)
- * rather than merely calling both somewhere. Reset in `beforeEach()`.
+ * way to prove `pickup-mount.js` calls them in the sequence the `cardOpened` funnel requires
+ * (focus, THEN open) rather than merely calling both somewhere. This ordering is separate from,
+ * and survives, round 2's D6 pan/zoom split (spec V-10's "identical path" claim is overruled —
+ * see pickup-mount.js's own `cardOpened` comment; the SEQUENCE stays the same for every origin,
+ * only the camera's zoom option now differs). Reset in `beforeEach()`.
  *
  * @type {Array<string>}
  */
@@ -81,6 +84,7 @@ function StubProvider() {
 	this.resolveAddressCalls = [];
 	this.clearAddressCalls = 0;
 	this.setMarginCalls = [];
+	this.focusGroupOptions = [];
 	this.zoomByCalls = [];
 	this.matchLoadedPointsCalls = [];
 	this.matchLoadedPointsResult = [];
@@ -126,13 +130,19 @@ StubProvider.prototype.setTypeFilter = function( codes ) {
 };
 
 /**
- * Returns a promise that NEVER resolves — deliberately. Spec V-10 requires the camera move NOT
- * be awaited before the card opens (the card is our own DOM, unrelated to the viewport); a
- * never-resolving stub is what makes a test that awaits nothing after `emit()` prove that, since
- * an (incorrect) `.then( openCard )` chain here would leave `openCard()` forever uncalled.
+ * Returns a promise that NEVER resolves — deliberately. The camera move must NOT be awaited
+ * before the card opens (the card is our own DOM, unrelated to the viewport); a never-resolving
+ * stub is what makes a test that awaits nothing after `emit()` prove that, since an (incorrect)
+ * `.then( openCard )` chain here would leave `openCard()` forever uncalled.
+ *
+ * `options` (round 2, D6) is recorded separately in `focusGroupOptions`, parallel to
+ * `focusGroupCalls`, rather than folded into that array's own shape — every EXISTING assertion
+ * in this file already reads `focusGroupCalls` as a bare array of keys; changing its element
+ * shape would break every one of them for no reason the pan/zoom split needs.
  */
-StubProvider.prototype.focusGroup = function( key ) {
+StubProvider.prototype.focusGroup = function( key, options ) {
 	this.focusGroupCalls.push( key );
+	this.focusGroupOptions.push( options );
 	callOrder.push( 'focusGroup:' + key );
 
 	return new Promise( function() {} );
@@ -169,6 +179,32 @@ StubProvider.prototype.matchLoadedPoints = function( query ) {
 
 	return this.matchLoadedPointsResult;
 };
+
+/**
+ * Round 4 — the real provider's `ymaps.suggest()`-backed typing path. Deliberately NOT defined on
+ * the prototype: `pickup-mount.js` feature-detects it, and a provider that owns its own chrome
+ * (the embedded one) legitimately has none, so tests must be able to exercise BOTH branches.
+ * {@see withSuggest} installs it on one instance.
+ *
+ * It RESOLVES rather than emitting `searchResults` — that split is the whole point (emitting would
+ * drive the completed-search renderer and put "Поиск не дал результатов." back on screen while the
+ * customer is still typing), so a stub that emitted instead would agree with the very bug this
+ * guards.
+ *
+ * @param {StubProvider} provider
+ * @param {Object}       result   the `{ points, addresses }` the suggestion should resolve with.
+ * @returns {StubProvider}
+ */
+function withSuggest( provider, result ) {
+	provider.suggestAddressesCalls = [];
+	provider.suggestAddresses = function( query ) {
+		provider.suggestAddressesCalls.push( query );
+
+		return Promise.resolve( result );
+	};
+
+	return provider;
+}
 
 /**
  * A minimal `window.WoodevPickupPanels` double — see the file docblock's "PANELS ARE A STUB"
@@ -253,16 +289,56 @@ StubPanels.prototype.renderSearchResults = function( results ) {
 	this.lastSearchResults = results;
 };
 
-StubPanels.prototype.openCard = function( group, pointId ) {
-	this.lastOpenCard = { group: group, pointId: pointId };
+/**
+ * Round 3 — the PREVIEW half of the search pair, recorded separately from
+ * {@see StubPanels#renderSearchResults} on purpose: the whole point of the fix is that a typed
+ * keystroke and a completed search no longer reach the same renderer, so a stub that collapsed
+ * them back into one field could not tell the two apart and would agree with the bug.
+ *
+ * @param {Object} results
+ * @returns {void}
+ */
+StubPanels.prototype.previewSearchResults = function( results ) {
+	this.lastSearchPreview = results;
+};
+
+/**
+ * D1a/round 2 — records every `hideSearchResults()` call (the `searchCleared` handler's own job,
+ * replacing the old empty-`searchResults` hack). No DOM to assert on here — that is
+ * `pickup-panels.test.js`'s job; this file only proves pickup-mount.js calls it.
+ */
+StubPanels.prototype.hideSearchResultsCalls = 0;
+
+StubPanels.prototype.hideSearchResults = function() {
+	this.hideSearchResultsCalls = ( this.hideSearchResultsCalls || 0 ) + 1;
+};
+
+/**
+ * Work item 5/round 2 — records every `setSearchBusy( busy )` call, in order, so a test can
+ * assert both that it was called and with which value at which point in a sequence (busy on
+ * submit, cleared on whichever of the three outcomes actually answers).
+ */
+StubPanels.prototype.setSearchBusy = function( busy ) {
+	this.setSearchBusyCalls = this.setSearchBusyCalls || [];
+	this.setSearchBusyCalls.push( !! busy );
+};
+
+StubPanels.prototype.openCard = function( group, pointId, origin ) {
+	this.lastOpenCard = { group: group, pointId: pointId, origin: origin };
 
 	// The real class emits this from `openCard()`, BEFORE it renders — the single funnel every
-	// route to a card passes through, and what the mount listens to in order to move the camera
-	// (spec V-10). The stub has to model both the event and its position, or every camera
-	// assertion here silently tests nothing and the documented focus-then-card order goes unchecked.
+	// route to a card passes through, and what the mount listens to in order to move the camera.
+	// `origin` (round 2, D6) rides along verbatim — it is what lets that ONE listener pan-only for
+	// a marker and centre-and-zoom for everything else (spec V-10's "identical path" claim is
+	// overruled; see pickup-mount.js's own `cardOpened` listener). Mirrors the real class'
+	// `undefined`-OR-`null` defaulting (`Panels.prototype.openCard`'s own docblock), since callers
+	// now legitimately pass `null` for "no specific point" (the marker/nearest routes). The stub
+	// has to model both the event and its position, or every camera assertion here silently tests
+	// nothing and the documented focus-then-card order goes unchecked.
 	this.emit( 'cardOpened', {
 		group: group,
-		pointId: undefined === pointId ? group.points[ 0 ].id : pointId,
+		pointId: ( undefined === pointId || null === pointId ) ? group.points[ 0 ].id : pointId,
+		origin: origin,
 	} );
 
 	callOrder.push( 'openCard:' + ( group && group.key ) );
@@ -364,7 +440,7 @@ function phpI18n( overrides ) {
 			select: 'Выбрать этот пункт',
 			loading: 'Загрузка пунктов выдачи…',
 			error: 'Не удалось загрузить пункты выдачи. Попробуйте ещё раз.',
-			noResults: 'Пункты выдачи не найдены.',
+			noResults: 'Поиск не дал результатов.',
 			blocked: 'Этот пункт выдачи недоступен для вашего заказа.',
 			trigger: 'Выбрать пункт выдачи',
 			triggerChange: 'Выбрать другой пункт выдачи',
@@ -1616,7 +1692,8 @@ test( 'provider pointClick opens the card for the matching group', async () => {
 	expect( session.panels.lastOpenCard.group.key ).toBe( '1.0000,2.0000' );
 } );
 
-test( 'a marker click focuses the group BEFORE opening its card, in that order (spec V-10)', async () => {
+test( 'a marker click focuses the group BEFORE opening its card, in that order (the cardOpened '
+	+ 'funnel — unaffected by round 2\'s pan/zoom split, D6)', async () => {
 	window.WoodevPickupDataSource = fakeDataSourceFactory( () =>
 		Promise.resolve( [ point( { id: 'p1', lat: 1, lng: 2 } ) ] )
 	);
@@ -1629,7 +1706,7 @@ test( 'a marker click focuses the group BEFORE opening its card, in that order (
 } );
 
 test( 'a marker click opens the card WITHOUT waiting for focusGroup()\'s camera move to settle '
-	+ '(spec V-10 — the card is our own DOM, not the viewport)', async () => {
+	+ '(the card is our own DOM, not the viewport)', async () => {
 	window.WoodevPickupDataSource = fakeDataSourceFactory( () =>
 		Promise.resolve( [ point( { id: 'p1', lat: 1, lng: 2 } ) ] )
 	);
@@ -1642,6 +1719,79 @@ test( 'a marker click opens the card WITHOUT waiting for focusGroup()\'s camera 
 	// card open off that promise, `lastOpenCard` would still be unset here, forever.
 	expect( session.panels.lastOpenCard ).toBeDefined();
 	expect( session.panels.lastOpenCard.group.key ).toBe( '1.0000,2.0000' );
+} );
+
+// -------------------------------------------------------------------------
+// D6 (live-review round 2) — the pan/zoom split: `cardOpened`'s `origin` decides whether
+// `focusGroup()` pans only or centres-and-zooms. Spec V-10 ("a marker click and a sidebar row
+// click must behave identically") is overruled — see pickup-mount.js's own `cardOpened` comment.
+// -------------------------------------------------------------------------
+
+test( 'a MARKER click (origin "marker") pans only — focusGroup() gets { zoom: false }', async () => {
+	window.WoodevPickupDataSource = fakeDataSourceFactory( () =>
+		Promise.resolve( [ point( { id: 'p1', lat: 1, lng: 2 } ) ] )
+	);
+	const session = await openSession( configWith() );
+
+	session.provider.emit( 'pointClick', '1.0000,2.0000' );
+
+	expect( session.provider.focusGroupOptions ).toEqual( [ { zoom: false } ] );
+	expect( session.panels.lastOpenCard.origin ).toBe( 'marker' );
+	// The marker route hands no specific point id — the card falls back to the group's first
+	// point, exactly like it always has.
+	expect( session.panels.lastOpenCard.pointId ).toBeNull();
+} );
+
+test( 'a SIDEBAR ROW click (origin "list") centres AND zooms — focusGroup() gets { zoom: true }', async () => {
+	window.WoodevPickupDataSource = fakeDataSourceFactory( () =>
+		Promise.resolve( [ point( { id: 'p1', lat: 1, lng: 2 } ) ] )
+	);
+	const session = await openSession( configWith() );
+
+	// The real sidebar row builder passes 'list' — see pickup-panels.js's own renderList().
+	// This exercises the SAME 'cardOpened' funnel the mount listens on, driven directly (a
+	// dedicated REAL-Panels integration test below covers the row click itself).
+	session.panels.openCard( { key: '1.0000,2.0000', points: [ point( { id: 'p1' } ) ] }, 'p1', 'list' );
+
+	expect( session.provider.focusGroupOptions ).toEqual( [ { zoom: true } ] );
+} );
+
+test( 'a search-result pick (origin "search", via searchPointPicked) centres AND zooms', async () => {
+	window.WoodevPickupDataSource = fakeDataSourceFactory( () =>
+		Promise.resolve( [ point( { id: 'p9', lat: 10, lng: 20 } ) ] )
+	);
+	const session = await openSession( configWith() );
+
+	session.panels.emit( 'searchPointPicked', 'p9' );
+
+	expect( session.provider.focusGroupOptions ).toEqual( [ { zoom: true } ] );
+	expect( session.panels.lastOpenCard.origin ).toBe( 'search' );
+} );
+
+test( '"show the nearest" (origin "nearest", via showNearestRequested) centres AND zooms', async () => {
+	window.WoodevPickupDataSource = fakeDataSourceFactory( () =>
+		Promise.resolve( [ point( { id: 'p1', lat: 55.8, lng: 37.7 } ) ] )
+	);
+	const session = await openSession( configWith() );
+
+	session.panels.emit( 'showNearestRequested', { key: '55.8000,37.7000', distanceMeters: 100, name: 'X' } );
+
+	expect( session.provider.focusGroupOptions ).toEqual( [ { zoom: true } ] );
+	expect( session.panels.lastOpenCard.origin ).toBe( 'nearest' );
+	expect( session.panels.lastOpenCard.pointId ).toBeNull();
+} );
+
+test( 'addressMatchedPoint (origin "search") also centres AND zooms — see the dedicated '
+	+ 'addressMatchedPoint section below for the wiring itself', async () => {
+	window.WoodevPickupDataSource = fakeDataSourceFactory( () =>
+		Promise.resolve( [ point( { id: 'p1', lat: 1, lng: 2 } ) ] )
+	);
+	const session = await openSession( configWith() );
+
+	session.provider.emit( 'addressMatchedPoint', { key: '1.0000,2.0000' } );
+
+	expect( session.provider.focusGroupOptions ).toEqual( [ { zoom: true } ] );
+	expect( session.panels.lastOpenCard.origin ).toBe( 'search' );
 } );
 
 test( 'provider visibleChange resolves keys to groups and calls panels.setVisible', async () => {
@@ -1700,12 +1850,36 @@ test( 'provider searchResults forwards to panels.renderSearchResults verbatim', 
 // Panels → provider wiring
 // -------------------------------------------------------------------------
 
-test( 'panels listToggle calls provider.setMargin with the open state and width', async () => {
+test( 'panels listToggle calls provider.setMargin with the open state and width, ON TOP OF the '
+	+ 'init-time call (D8/round 2 — see the dedicated test below)', async () => {
 	const session = await openSession( configWith() );
 
 	session.panels.emit( 'listToggle', { open: true, width: 320 } );
 
-	expect( session.provider.setMarginCalls ).toEqual( [ { open: true, width: 320 } ] );
+	expect( session.provider.setMarginCalls ).toEqual( [
+		{ open: false, width: 0 }, // the init-time reservation — see below
+		{ open: true, width: 320 },
+	] );
+} );
+
+// -------------------------------------------------------------------------
+// D8/п.5,п.8 (live-review round 2): setMargin() reserved at init, not only
+// after the first listToggle — see pickup-mount.js's own comment at the call
+// site for why `false, 0` is the panels' genuine starting state, not a guess.
+// -------------------------------------------------------------------------
+
+test( 'provider.setMargin() is called once, with the panels\' closed starting state, right after '
+	+ 'init() resolves — BEFORE any listToggle ever fires', async () => {
+	const session = await openSession( configWith() );
+
+	expect( session.provider.setMarginCalls ).toEqual( [ { open: false, width: 0 } ] );
+} );
+
+test( 'an ownsChrome provider never gets an init-time setMargin() call (no panels exist to read '
+	+ 'a starting state from)', async () => {
+	const session = await openSession( configWith( { ownsChrome: true } ) );
+
+	expect( session.provider.setMarginCalls ).toEqual( [] );
 } );
 
 test( 'panels zoom calls provider.zoomBy with the signed step (Task 14, spec V-13)', async () => {
@@ -1754,7 +1928,7 @@ test( 'a plugin that disabled search (config.search: false) gets searchLayoutEl:
 } );
 
 test( 'panels searchType filters the ALREADY LOADED pool via provider.matchLoadedPoints() and '
-	+ 'renders it — free, no provider.searchControl.search() call', async () => {
+	+ 'PREVIEWS it — free, no provider.searchControl.search() call', async () => {
 	const session = await openSession( configWith() );
 
 	session.provider.matchLoadedPointsResult = [ point( { id: 'p1' } ) ];
@@ -1762,11 +1936,99 @@ test( 'panels searchType filters the ALREADY LOADED pool via provider.matchLoade
 	session.panels.emit( 'searchType', { query: 'Тверская' } );
 
 	expect( session.provider.matchLoadedPointsCalls ).toEqual( [ 'Тверская' ] );
-	expect( session.panels.lastSearchResults ).toEqual( {
+	expect( session.panels.lastSearchPreview ).toEqual( {
 		points: [ point( { id: 'p1' } ) ],
 		addresses: [],
 	} );
 	expect( session.provider.searchControl.search ).not.toHaveBeenCalled();
+} );
+
+// Live-review round 3 (operator: "начинаешь писать адрес … появляется «Поиск не дал результатов.»
+// и висит"): a keystroke must reach the PREVIEW renderer, never the completed-search one. Both
+// used to share `renderSearchResults()`, so an unmatched keystroke rendered the same "nothing
+// found" verdict a real empty search does — and typing a street the geocoder has not been asked
+// about yet is the normal case, so that verdict was usually a lie. Asserting the negative is the
+// point of this test: it is the wiring, not the renderer, that keeps the two apart.
+test( 'panels searchType NEVER reaches the completed-search renderer, even when the local pool '
+	+ 'matches nothing (round 3)', async () => {
+	const session = await openSession( configWith() );
+
+	session.provider.matchLoadedPointsResult = [];
+
+	session.panels.emit( 'searchType', { query: 'Несуществующая' } );
+
+	expect( session.panels.lastSearchPreview ).toEqual( { points: [], addresses: [] } );
+	expect( session.panels.lastSearchResults ).toBeUndefined();
+} );
+
+// Live-review round 4. The operator typed "Чертановская 66к1" and got a metro station in full
+// English postal form where Yandex.Delivery gives "Чертановская улица, 66к1". The provider now
+// answers the typing path from `ymaps.suggest()` instead of the geocoder; this file's job is
+// simply to PREFER that path when the provider offers it, and to keep the preview renderer.
+test( 'panels searchType uses provider.suggestAddresses() when the provider offers it, and '
+	+ 'previews its RESOLVED value (round 4)', async () => {
+	const session = await openSession( configWith() );
+	const suggested = {
+		points: [ point( { id: 'p1' } ) ],
+		addresses: [ { displayName: 'Чертановская улица, 66к1', query: 'Россия, Москва, Чертановская улица, 66к1' } ],
+	};
+
+	withSuggest( session.provider, suggested );
+
+	session.panels.emit( 'searchType', { query: 'Чертановская 66к1' } );
+	await flushAsync();
+
+	expect( session.provider.suggestAddressesCalls ).toEqual( [ 'Чертановская 66к1' ] );
+	expect( session.panels.lastSearchPreview ).toEqual( suggested );
+	// The verdict renderer must stay untouched — see the round-3 guard above.
+	expect( session.panels.lastSearchResults ).toBeUndefined();
+	expect( session.provider.searchControl.search ).not.toHaveBeenCalled();
+} );
+
+test( 'panels searchType still previews the local matches when the provider has no '
+	+ 'suggestAddresses() — an embedded provider keeps a working preview (round 4)', async () => {
+	const session = await openSession( configWith() );
+
+	session.provider.matchLoadedPointsResult = [ point( { id: 'p1' } ) ];
+
+	session.panels.emit( 'searchType', { query: 'Тверская' } );
+	await flushAsync();
+
+	expect( session.provider.matchLoadedPointsCalls ).toEqual( [ 'Тверская' ] );
+	expect( session.panels.lastSearchPreview ).toEqual( { points: [ point( { id: 'p1' } ) ], addresses: [] } );
+} );
+
+// A suggestion carries the SHORT form the customer reads and the FULL one the geocoder needs.
+// Resolving the short form would hand the geocoder a street with no city — the exact ambiguity
+// `strictBounds` exists to prevent everywhere else in the provider.
+test( 'searchAddressPicked resolves the FULL query string, not the short display one (round 4)', async () => {
+	const session = await openSession( configWith() );
+
+	withSuggest( session.provider, {
+		points: [],
+		addresses: [ { displayName: 'Чертановская улица, 66к1', query: 'Россия, Москва, Чертановская улица, 66к1' } ],
+	} );
+
+	session.panels.emit( 'searchType', { query: 'Чертановская 66к1' } );
+	await flushAsync();
+
+	session.panels.emit( 'searchAddressPicked', 0 );
+
+	expect( session.provider.resolveAddressCalls ).toEqual( [ 'Россия, Москва, Чертановская улица, 66к1' ] );
+} );
+
+test( 'searchAddressPicked falls back to displayName when a suggestion carries no query '
+	+ '(round 4)', async () => {
+	const session = await openSession( configWith() );
+
+	withSuggest( session.provider, { points: [], addresses: [ { displayName: 'Тверская, 5' } ] } );
+
+	session.panels.emit( 'searchType', { query: 'Тверская' } );
+	await flushAsync();
+
+	session.panels.emit( 'searchAddressPicked', 0 );
+
+	expect( session.provider.resolveAddressCalls ).toEqual( [ 'Тверская, 5' ] );
 } );
 
 test( 'panels searchSubmit runs the SearchControl\'s own search() — the ONLY path that spends '
@@ -1785,6 +2047,99 @@ test( 'panels searchReset clears the provider\'s address state via clearAddress(
 	session.panels.emit( 'searchReset', {} );
 
 	expect( session.provider.clearAddressCalls ).toBe( 1 );
+} );
+
+// -------------------------------------------------------------------------
+// Work item 5/round 2 — the submit button's busy state: on while a real search is in flight,
+// released on whichever of the three outcomes actually answers (searchResults/searchCleared/
+// addressMatchedPoint), so it can never be left stuck disabled.
+// -------------------------------------------------------------------------
+
+test( 'searchSubmit marks the panels busy BEFORE calling the SearchControl (a real round trip '
+	+ 'takes real time)', async () => {
+	const session = await openSession( configWith() );
+
+	session.panels.emit( 'searchSubmit', { query: 'Тверская 5' } );
+
+	expect( session.panels.setSearchBusyCalls ).toEqual( [ true ] );
+} );
+
+test( 'searchSubmit never marks busy when there is no SearchControl to actually call — a busy '
+	+ 'flag with no matching answer would strand the button forever', async () => {
+	const session = await openSession( configWith() );
+	session.provider.searchControl = null;
+
+	session.panels.emit( 'searchSubmit', { query: 'Тверская 5' } );
+
+	expect( session.panels.setSearchBusyCalls ).toBeUndefined();
+} );
+
+test( 'provider searchResults clears the busy state — a completed search settles the button', async () => {
+	const session = await openSession( configWith() );
+
+	session.panels.emit( 'searchSubmit', { query: 'Тверская 5' } );
+	session.provider.emit( 'searchResults', { points: [], addresses: [] } );
+
+	expect( session.panels.setSearchBusyCalls ).toEqual( [ true, false ] );
+} );
+
+// -------------------------------------------------------------------------
+// D1a/round 2 (the "crossik" bug) — searchCleared REPLACES the old empty-searchResults hack:
+// clearAddress() no longer round-trips through an empty searchResults, which used to re-open the
+// results box the customer had just closed and print "не найдено" at them.
+// -------------------------------------------------------------------------
+
+test( 'provider searchCleared hides the search results box', async () => {
+	const session = await openSession( configWith() );
+
+	session.provider.emit( 'searchCleared', {} );
+
+	expect( session.panels.hideSearchResultsCalls ).toBe( 1 );
+} );
+
+test( 'provider searchCleared also releases the busy state, in case a search resolves down the '
+	+ 'clear route rather than a completed one', async () => {
+	const session = await openSession( configWith() );
+
+	session.panels.emit( 'searchSubmit', { query: 'Тверская 5' } );
+	session.provider.emit( 'searchCleared', {} );
+
+	expect( session.panels.setSearchBusyCalls ).toEqual( [ true, false ] );
+} );
+
+// -------------------------------------------------------------------------
+// addressMatchedPoint (late addition, live-review round 2) — a searched address that resolves
+// onto one of our own points becomes that point: routes through 'cardOpened' with origin
+// 'search', which both opens the card and (D6) centres-and-zooms the camera onto it.
+// -------------------------------------------------------------------------
+
+test( 'provider addressMatchedPoint opens the matched point\'s card, origin "search"', async () => {
+	window.WoodevPickupDataSource = fakeDataSourceFactory( () =>
+		Promise.resolve( [ point( { id: 'p1', lat: 1, lng: 2 } ) ] )
+	);
+	const session = await openSession( configWith() );
+
+	session.provider.emit( 'addressMatchedPoint', { key: '1.0000,2.0000' } );
+
+	expect( session.panels.lastOpenCard.group.key ).toBe( '1.0000,2.0000' );
+	expect( session.panels.lastOpenCard.origin ).toBe( 'search' );
+} );
+
+test( 'provider addressMatchedPoint is a silent no-op when its key names a group that is not '
+	+ 'currently loaded (a stale key from an in-flight geocode racing a refetch)', async () => {
+	const session = await openSession( configWith() );
+
+	expect( () => session.provider.emit( 'addressMatchedPoint', { key: 'ghost' } ) ).not.toThrow();
+	expect( session.panels.lastOpenCard ).toBeUndefined();
+} );
+
+test( 'provider addressMatchedPoint also releases the busy state, whether or not the key matched', async () => {
+	const session = await openSession( configWith() );
+
+	session.panels.emit( 'searchSubmit', { query: 'Тверская 5' } );
+	session.provider.emit( 'addressMatchedPoint', { key: 'ghost' } );
+
+	expect( session.panels.setSearchBusyCalls ).toEqual( [ true, false ] );
 } );
 
 test( 'provider addressFocused moves the panels\' distance anchor to the SAME latLng/label (D-6)', async () => {
@@ -1985,8 +2340,9 @@ test( 'INTEGRATION: the real Panels class renders correctly from buildPanelsConf
 		.toBe( 'Пункты выдачи в этой области' );
 } );
 
-test( 'INTEGRATION: a REAL click on a sidebar list row reaches focusGroup() exactly like a marker '
-	+ 'click does (spec V-10) — pickup-panels.js itself is never touched by this file', async () => {
+test( 'INTEGRATION: a REAL click on a sidebar list row reaches focusGroup() with { zoom: true } — '
+	+ 'UNLIKE a marker click (D6, round 2: spec V-10\'s "identical path" claim is overruled) — '
+	+ 'pickup-panels.js itself is never touched by this file', async () => {
 	window.WoodevPickupPanels = RealPanels;
 	window.WoodevPickupDataSource = fakeDataSourceFactory( () =>
 		Promise.resolve( [ point( { id: 'p1', lat: 1, lng: 2 } ) ] )
@@ -2008,6 +2364,9 @@ test( 'INTEGRATION: a REAL click on a sidebar list row reaches focusGroup() exac
 	dialog.querySelector( '.woodev-pickup-list__item' ).click();
 
 	expect( provider.focusGroupCalls ).toEqual( [ '1.0000,2.0000' ] );
+	// The real Panels' own list-row builder passes origin: 'list' (pickup-panels.js's
+	// renderList()) — unlike a marker click's 'marker', so the camera centres AND zooms here.
+	expect( provider.focusGroupOptions ).toEqual( [ { zoom: true } ] );
 } );
 
 // -------------------------------------------------------------------------

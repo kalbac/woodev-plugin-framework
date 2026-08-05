@@ -470,12 +470,16 @@ function woodev_test_shipping_method_plugin_init(): void {
 				// whole world.
 				$default_location = [ 'center' => [ 55.76, 37.64 ], 'zoom' => 12 ];
 
-				// SP-5 Task 8 (D-5): plugin-supplied icon URLs per point type. `pvz` supplies
-				// BOTH states (the Yandex reference's two-image shape); `postamat` supplies
-				// only `default` (the CDEK shape — `active` falls back to it, expressed by
-				// the framework's own size-only CSS instead). A type this fixture never uses
-				// (`group`) is intentionally absent, exercising the framework's own group
-				// badge fallback on the rig.
+				// SP-5 Task 8 (D-5), re-pointed by the live-review fix (D7, 05.08.2026): both
+				// fixture types now supply BOTH states — `pvz` mirrors the Yandex reference's
+				// two-image shape, `postamat` its own — so the rig always has at least one type
+				// showing what a real two-image active state looks like. The framework's
+				// one-image fallback (`active` mirrors `default` when a plugin supplies only one
+				// image, the CDEK shape) is still real and still covered — see
+				// `PickupHandlerTest::test_icons_are_passed_through_with_active_falling_back_to_default()`,
+				// which exercises it directly against `normalized_point_icons()` rather than via
+				// this fixture. A type this fixture never uses (`group`) is intentionally absent,
+				// exercising the framework's own group badge fallback on the rig.
 				// Keys are the EXACT `type.code` this fixture's own points carry — the framework
 				// compares type codes case-sensitively, so `pvz` would never match a point
 				// emitting `PVZ` and every marker would silently fall back to the no-icon state.
@@ -491,6 +495,7 @@ function woodev_test_shipping_method_plugin_init(): void {
 					],
 					'POSTAMAT' => [
 						'default' => $icons_url . '/postamat.svg',
+						'active'  => $icons_url . '/postamat-active.svg',
 					],
 				];
 
