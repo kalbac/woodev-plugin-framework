@@ -1701,6 +1701,12 @@ test( 'zoom branch: does not try to zoom a group whose points all share one coor
 	+ '("Russian Post" guard)', async () => {
 	const provider = await init();
 
+	// setPoints() first, so the group HAS coordinates to zoom to — otherwise this test would pass
+	// for the wrong reason (an unknown group has no target either way) and could not tell the
+	// co-located guard apart from the defensive unknown-group branch.
+	provider.setPoints( [ group( 'a', 55.75, 37.61 ) ] );
+	await flushPromises();
+
 	ymapsStub.lastObjectManager.state = {
 		isClustered: true,
 		cluster: {
@@ -1719,8 +1725,20 @@ test( 'zoom branch: does not try to zoom a group whose points all share one coor
 	expect( provider.getFocusedKey() ).toBe( 'a' );
 } );
 
-test( 'zoom branch zooms a genuine cluster via setCenter and awaits the move before reporting', async () => {
+// s52 rig defect: this used to zoom to the CLUSTER ANCHOR — an arbitrary OTHER member of the
+// cluster (measured 2 km from the point the customer had picked), which left the chosen group off
+// screen, and an ObjectManager feature that is off screen gets no overlay at all, so the
+// `data-state="active"` _applyFocus() writes had nothing to land on. The zoom branch targets the
+// GROUP's OWN coordinates now, clustered or not: MAX_ZOOM there separates it from its cluster-mates
+// just as well AND leaves it visible. The group's coordinates come from setPoints() — the earlier
+// version of this test never called it, which is exactly the blind spot gotcha
+// `focusgroup-only-moved-for-clustered-points.md` records.
+test( 'zoom branch zooms a genuine cluster to the GROUP\'S OWN coordinates via setCenter (never the '
+	+ 'cluster anchor) and awaits the move before reporting', async () => {
 	const provider = await init();
+
+	provider.setPoints( [ group( 'a', 55.7602, 37.6055 ) ] );
+	await flushPromises();
 
 	ymapsStub.lastObjectManager.state = {
 		isClustered: true,
@@ -1738,7 +1756,7 @@ test( 'zoom branch zooms a genuine cluster via setCenter and awaits the move bef
 	// the open sidebar's own map.margin area, where the customer cannot see it.
 	expect( ymapsStub.lastMap.setCenterCalls ).toHaveLength( 1 );
 	expect( ymapsStub.lastMap.setCenterCalls[ 0 ] ).toEqual( {
-		center: [ 55.75, 37.61 ],
+		center: [ 55.7602, 37.6055 ],
 		zoom: 18,
 		options: { useMapMargin: true, duration: 200 },
 	} );
@@ -1760,6 +1778,13 @@ test( 'zoom branch: an unknown group (no coordinates on record) applies focus wi
 test( 'zoom branch: re-checks getObjectState AFTER the move and does not apply focus if it is '
 	+ 'still a degenerate cluster post-move', async () => {
 	const provider = await init();
+
+	// The group needs coordinates for the zoom branch to have a target at all (s52) — and the
+	// `bulk` fit setPoints() starts must be settled before focusGroup() is called, or the state
+	// swap below would land BEFORE focusGroup() read the pre-move state (it waits for the fit) and
+	// this test would prove nothing about the POST-move re-check.
+	provider.setPoints( [ group( 'a', 55.75, 37.61 ) ] );
+	await flushPromises();
 
 	ymapsStub.lastObjectManager.state = {
 		isClustered: true,
@@ -1823,6 +1848,77 @@ test( 'pan branch never re-checks post-move — nothing about clustering could c
 	expect( provider.getFocusedKey() ).toBe( 'a' );
 } );
 
+// -------------------------------------------------------------------------
+// focusGroup()'s `_cameraFit` gate (s52 defect — restore-on-reopen moved nothing).
+//
+// `pickup-mount.js`'s restoreSelection() focuses a group ~2 ms after `setPoints()`, while the
+// `bulk` fit that same call started is still in flight. On the rig that focus DID run — camera
+// centred, `data-state="active"` written, `getFocusedKey()` correct — and was then silently
+// undone: `map.setBounds()` issues its real camera command LATE (it delegates to `setCenter()`
+// only once it has resolved the bounds against the projection, ~50 ms after the call), so the fit
+// started last and won, snapping the camera back to the city-wide view and re-clustering the
+// group — and a clustered feature has no overlay to carry `data-state` at all.
+//
+// jsdom cannot reproduce that symptom: the stub's setBounds() applies its camera state at CALL
+// time and never delegates to setCenter(), so nothing here can overwrite anything. What these
+// tests pin instead is the ORDERING CONTRACT that fixes it — no camera move while a fit is in
+// flight — which is the part a future edit could regress.
+// -------------------------------------------------------------------------
+
+test( 'focusGroup() issued while setPoints()\'s bulk fit is still in flight moves nothing until '
+	+ 'that fit has settled, then moves to the group\'s own coordinates', async () => {
+	const provider = await init( {}, { deferSetBounds: true } );
+
+	provider.setPoints( [ group( 'a', 55.7602, 37.6055 ) ] );
+	ymapsStub.lastObjectManager.state = { isClustered: false, cluster: null };
+
+	provider.focusGroup( 'a', { zoom: true } ); // exactly what restoreSelection() does
+	await flushPromises();
+
+	// The fit is still animating — issuing a camera move now is what the fit would overwrite.
+	expect( ymapsStub.lastMap.setCenterCalls ).toHaveLength( 0 );
+
+	ymapsStub.lastMap.resolveNextSetBounds();
+	await flushPromises();
+
+	expect( ymapsStub.lastMap.setCenterCalls ).toHaveLength( 1 );
+	expect( ymapsStub.lastMap.setCenterCalls[ 0 ].center ).toEqual( [ 55.7602, 37.6055 ] );
+} );
+
+test( 'focusGroup(): a focus superseded WHILE it waits for the fit never moves the camera at all', async () => {
+	const provider = await init( {}, { deferSetBounds: true } );
+
+	provider.setPoints( [ group( 'a', 1, 1 ), group( 'b', 2, 2 ) ] );
+	ymapsStub.lastObjectManager.state = { isClustered: false, cluster: null };
+
+	provider.focusGroup( 'a', { zoom: true } );
+	provider.focusGroup( 'b', { zoom: true } ); // supersedes 'a' before either could move
+
+	ymapsStub.lastMap.resolveNextSetBounds();
+	await flushPromises();
+
+	expect( ymapsStub.lastMap.setCenterCalls ).toHaveLength( 1 );
+	expect( ymapsStub.lastMap.setCenterCalls[ 0 ].center ).toEqual( [ 2, 2 ] );
+} );
+
+// The gate must be a NULL (nothing in flight) check, not an unconditional `Promise.resolve()`
+// chain: a click on a settled map has to issue its camera move inside the click's own task, the
+// way every version of this method before the gate did.
+test( 'focusGroup() on a settled map still calls setCenter SYNCHRONOUSLY — the gate applies only '
+	+ 'while a fit is actually in flight', async () => {
+	const provider = await init( {}, { deferSetBounds: true } );
+
+	provider.setPoints( [ group( 'a', 55.7602, 37.6055 ) ] );
+	ymapsStub.lastMap.resolveNextSetBounds();
+	await flushPromises();
+
+	ymapsStub.lastObjectManager.state = { isClustered: false, cluster: null };
+
+	provider.focusGroup( 'a', { zoom: true } );
+
+	expect( ymapsStub.lastMap.setCenterCalls ).toHaveLength( 1 );
+} );
+
 test( 'ignores a stale focus continuation when a second focus started first', async () => {
 	const provider = await init();
 	const slow = provider.focusGroup( 'a' );
@@ -1883,6 +1979,11 @@ test( 'focusGroup: the out-of-order resolution guard for _focusSeq also holds fo
 	const provider = await init( {}, { deferSetBounds: true } );
 
 	provider.setPoints( [ group( 'a', 1, 1 ), group( 'b', 2, 2 ) ] );
+	// setPoints()'s own deferred `bulk` fit gates focusGroup() (s52) — settle it, or neither focus
+	// below ever reaches its setCenter() call. Same move the focusAddress() ordering test makes.
+	ymapsStub.lastMap.resolveNextSetBounds();
+	await flushPromises();
+
 	ymapsStub.lastMap.setCenterCalls.length = 0;
 	ymapsStub.lastObjectManager.state = { isClustered: false, cluster: null };
 

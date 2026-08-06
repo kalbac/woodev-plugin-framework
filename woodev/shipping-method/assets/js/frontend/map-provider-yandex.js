@@ -72,7 +72,12 @@
  *    12/19's own address flow, live-review round 4) {@see resolveAddress}'s `_addressSeq`: a
  *    customer who edits and re-submits a search before the FIRST `ymaps.geocode()` round-trip
  *    resolves must never have the STALE resolution win the camera — see that method's own
- *    docblock.
+ *    docblock. `setBounds()` is asynchronous in one FURTHER way this lesson originally missed
+ *    (s52): it also ISSUES its camera command late, delegating to `map.setCenter()` only once it
+ *    has resolved the bounds against the projection — ~50 ms after the call, as measured on the
+ *    rig. So "I called `setBounds()` first, then `setCenter()`" does NOT mean the `setCenter()`
+ *    wins: the fit starts last and overwrites it. Sequencing is therefore not only about which
+ *    promise RESOLVES first — see {@see focusGroup}'s `_cameraFit` gate.
  * 2. A PLACEMARK FOLDED INTO A CLUSTER HAS NO BALLOON OF ITS OWN, and whether a group is
  *    clustered depends on the current zoom, so the same group can work at one zoom and break
  *    at another. This file owns no balloon any more, so that specific crash is gone — but the
@@ -923,6 +928,13 @@
 		 *  continuation when a later call's camera move resolves before an earlier one's. */
 		this._focusSeq = 0;
 
+		/** @type {Promise|null} the {@see setPoints} `bulk` camera fit that is CURRENTLY in
+		 *  flight, or null when none is — {@see focusGroup} gates its own camera move behind it.
+		 *  Null (not a resolved promise) so a focus issued when nothing is fitting still moves the
+		 *  camera synchronously, inside the click's own task. See {@see focusGroup}'s gate for the
+		 *  race this exists to close. */
+		this._cameraFit = null;
+
 		/** @type {number} bumped on every {@see focusAddress} call (and captured at the start of
 		 *  every {@see resolveAddress} call) — discards a stale `resolveAddress()` continuation
 		 *  when a later address search/pick resolves before an earlier one's (live-review round 4;
@@ -1706,13 +1718,29 @@
 			// own call. See the docblock comment above and the file docblock's first lesson.
 			// `duration: 400` (live-review fix) — this fit can travel across the whole loaded
 			// set, so it gets the SAME "long move" duration as the initial-viewport fit above.
-			this.map.setBounds( geo.boundsFor( anchor, list ), { checkZoomRange: true, duration: 400 } ).then( function() {
-				if ( self._destroyed ) {
-					return;
-				}
+			// The continuation is ALSO published as `_cameraFit` — the gate {@see focusGroup}
+			// waits on, so a focus issued while this fit is still in flight cannot be overwritten
+			// by it. It never rejects (both handlers swallow) — it is an ordering signal, not a
+			// result — and it clears ITSELF (identity-checked, so a fit superseded by a newer
+			// `setPoints()` never clears the newer one's gate) to keep a LATER focus synchronous.
+			var fit = this.map.setBounds( geo.boundsFor( anchor, list ), { checkZoomRange: true, duration: 400 } )
+				.then( function() {
+					if ( fit === self._cameraFit ) {
+						self._cameraFit = null;
+					}
 
-				self._emitVisibleChange();
-			} );
+					if ( self._destroyed ) {
+						return;
+					}
+
+					self._emitVisibleChange();
+				}, function() {
+					if ( fit === self._cameraFit ) {
+						self._cameraFit = null;
+					}
+				} );
+
+			this._cameraFit = fit;
 
 			return;
 		}
@@ -2413,19 +2441,17 @@
 	 * `focusGroup( key, { zoom: 'marker' !== origin } )` from the `cardOpened` event's own
 	 * `origin` field.
 	 *
-	 * TWO DIFFERENT TARGETS, same split. When `key` is currently folded into a ymaps cluster, the
-	 * target is the CLUSTER's anchor (its first feature's coordinates); when it is NOT clustered
-	 * — the common case, a single visible marker — the target is the GROUP's own `lat`/`lng` from
-	 * {@see _groupsByKey}. Earlier versions of this method moved the camera ONLY in the clustered
-	 * branch, which is why a plain marker click visibly did nothing on the rig — this bug was
-	 * invisible to every test that exercised it, because none of them ever gave the group its own
-	 * coordinates via `setPoints()` first.
-	 *
-	 * THE ZOOM BRANCH (`options.zoom === true`) calls `map.setCenter( target, MAX_ZOOM,
-	 * { useMapMargin: true, duration: 200 } )` — matching the reference implementations' own
-	 * sidebar-row centring call exactly (see the plan's "Reference truth" table). The move is
-	 * skipped — focus still applies directly — in two cases: every feature in a cluster shares
-	 * one coordinate, since no zoom, however deep, could ever separate them (the "Russian Post"
+	 * THE ZOOM BRANCH (`options.zoom === true`) calls `map.setCenter( <the GROUP's own lat/lng>,
+	 * MAX_ZOOM, { useMapMargin: true, duration: 200 } )` — matching the reference implementations'
+	 * own sidebar-row centring call exactly (see the plan's "Reference truth" table). The group's
+	 * OWN coordinates are the target even when it is currently folded into a cluster: zooming to
+	 * MAX_ZOOM there separates it from its cluster-mates just as reliably as zooming to the
+	 * cluster's anchor would, and unlike the anchor (an arbitrary OTHER member of the cluster,
+	 * which s52's rig pass measured landing 2 km away from the point the customer had actually
+	 * picked) it leaves the chosen point on screen — where its marker gets an overlay at all, and
+	 * so can carry the `data-state="active"` {@see _applyFocus} writes. The move is skipped —
+	 * focus still applies directly — in two cases: every feature in the cluster shares one
+	 * coordinate, since no zoom, however deep, could ever separate them (the "Russian Post"
 	 * guard, spec §7.5; see the file docblock's second lesson); or `key` has no known group
 	 * (defensive — should not happen in practice, since a click always names a group this
 	 * provider itself drew). `useMapMargin: true` keeps the point inside the area the panels
@@ -2434,11 +2460,16 @@
 	 *
 	 * THE PAN BRANCH (`options.zoom` falsy) calls `map.panTo( target, { useMapMargin: true,
 	 * duration: 200 } )` unconditionally whenever a target exists (co-located or not) — matching
-	 * both references' marker-click behaviour exactly: pan only, zoom untouched. A pan can never
-	 * un-cluster anything (zoom is what separates co-located points, and this branch never
-	 * touches zoom), so the co-located guard does not apply here at all, and — unlike the zoom
-	 * branch — there is no POST-move re-check to gate: nothing about clustering could possibly
-	 * have changed as a result of a move that left zoom alone.
+	 * both references' marker-click behaviour exactly: pan only, zoom untouched. It keeps TWO
+	 * targets: the CLUSTER's anchor when `key` is folded into one — a pan cannot un-cluster
+	 * anything (zoom is what separates co-located points, and this branch never touches zoom), so
+	 * "show roughly where it is" is the most it can offer — and the GROUP's own `lat`/`lng`
+	 * otherwise. Earlier versions of this method moved the camera ONLY in the clustered branch,
+	 * which is why a plain marker click visibly did nothing on the rig — that bug was invisible to
+	 * every test that exercised it, because none of them ever gave the group its own coordinates
+	 * via `setPoints()` first. The co-located guard does not apply to this branch at all, and —
+	 * unlike the zoom branch — there is no POST-move re-check to gate: nothing about clustering
+	 * could possibly have changed as a result of a move that left zoom alone.
 	 *
 	 * `attemptedMove` (well, `target`) gates the POST-move re-check for the ZOOM branch only, and
 	 * ONLY when the move was an un-clustering attempt (`wasClustered`): a group focused WITHOUT
@@ -2453,6 +2484,22 @@
 	 * synchronous "nothing to move" case) settles. `setCenter()`/`panTo()` are exactly as
 	 * asynchronous as `setBounds()` (the file docblock's first lesson) — both are awaited here.
 	 *
+	 * GATED BEHIND `_cameraFit`, {@see setPoints}'s in-flight `bulk` fit (s52 defect — the
+	 * restore-on-reopen path, `pickup-mount.js`'s `restoreSelection()`, focused a group TWO
+	 * MILLISECONDS after `setPoints()` and got no visible camera move at all). `map.setBounds()`
+	 * is asynchronous in a second, sharper way than the file docblock's first lesson describes:
+	 * it does not merely RESOLVE late, it ISSUES its real camera command late — internally it
+	 * delegates to `map.setCenter()` only once it has resolved the bounds against the projection,
+	 * which the rig measured at ~50 ms after the `setBounds()` call. A `setCenter()` issued in
+	 * between therefore STARTS AND FINISHES first and is then overwritten by the fit, which the
+	 * customer sees as "the map snapped back". Worse, the snap-back re-clusters the group, and a
+	 * clustered feature has no overlay of its own, so the `data-state="active"` {@see _applyFocus}
+	 * had already written vanished with it — while `getFocusedKey()` still (correctly) named the
+	 * group, which is exactly what made the defect look like a focus that had "no effect".
+	 * Waiting for the fit is the ordering signal, never a timer. `_cameraFit` is NULL whenever no
+	 * fit is in flight, so the overwhelmingly common case — a click on a settled map — still
+	 * issues its camera move synchronously, inside the click's own task.
+	 *
 	 * @param {string}  key
 	 * @param {Object}  [options]
 	 * @param {boolean} [options.zoom] `true` centres AND zooms to {@see MAX_ZOOM} (a sidebar row/
@@ -2465,21 +2512,57 @@
 		var mySeq = ++this._focusSeq;
 		var opts = options || {};
 		var wantsZoom = true === opts.zoom;
+		var fit = this._cameraFit;
+
+		if ( ! fit ) {
+			return this._moveAndFocus( key, wantsZoom, mySeq );
+		}
+
+		return fit.then( function() {
+			// A focus superseded WHILE it was still waiting for the fit never moves the camera at
+			// all — the same staleness rule the post-move continuation applies, one step earlier.
+			if ( self._destroyed || mySeq !== self._focusSeq ) {
+				return undefined;
+			}
+
+			return self._moveAndFocus( key, wantsZoom, mySeq );
+		} );
+	};
+
+	/**
+	 * {@see focusGroup}'s body, past its `_cameraFit` gate — picks the camera target, moves, and
+	 * applies the focus. Split out purely so the gate above reads as one decision; every rule it
+	 * implements is documented on {@see focusGroup} itself.
+	 *
+	 * Reading `getObjectState()` HERE, rather than at call time, is deliberate: whether `key` is
+	 * clustered is a property of the CURRENT viewport, so the answer is only meaningful once the
+	 * fit that is moving that viewport has settled.
+	 *
+	 * @since 2.0.2
+	 * @param {string}  key
+	 * @param {boolean} wantsZoom
+	 * @param {number}  mySeq the `_focusSeq` value captured when the caller entered
+	 *                        {@see focusGroup}.
+	 * @returns {Promise<void>}
+	 */
+	WoodevYandexMapProvider.prototype._moveAndFocus = function( key, wantsZoom, mySeq ) {
+		var self = this;
 		var state = this.objectManager.getObjectState( key );
 		var wasClustered = !! ( state && state.isClustered );
+		var group = this._groupsByKey[ key ];
 		var mover = Promise.resolve();
 		var target = null;
 
-		if ( wasClustered ) {
-			if ( ! wantsZoom || ! isSingleCoordinateCluster( state.cluster ) ) {
-				target = clusterAnchorCoordinates( state.cluster );
-			}
-		} else {
-			var group = this._groupsByKey[ key ];
-
-			if ( group ) {
+		if ( wantsZoom ) {
+			// The group's OWN coordinates, clustered or not — see focusGroup()'s docblock for why
+			// the cluster anchor is the wrong place to send a customer who picked THIS point.
+			if ( group && ! ( wasClustered && isSingleCoordinateCluster( state.cluster ) ) ) {
 				target = [ group.lat, group.lng ];
 			}
+		} else if ( wasClustered ) {
+			target = clusterAnchorCoordinates( state.cluster );
+		} else if ( group ) {
+			target = [ group.lat, group.lng ];
 		}
 
 		if ( target ) {
@@ -2624,6 +2707,10 @@
 		this._groupsByKey = {};
 		this._focusedKey = null;
 		this._activeTypeFilter = null;
+		// Nothing may still be gated behind a fit belonging to a map that no longer exists — the
+		// continuations all check `_destroyed`, but a torn-down provider holding a forever-pending
+		// promise would keep any later focusGroup() waiting on it for good.
+		this._cameraFit = null;
 		this.searchControl = null;
 		this._marginArea = null;
 		// `this.map.destroy()` above already tears down every margin reservation along with the
