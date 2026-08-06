@@ -2228,8 +2228,12 @@
 	 * docblock's "MAP MARGINS" section); the sidebar toggling on and off must never touch it.
 	 *
 	 * @param {boolean} open  whether the sidebar panel is now open.
-	 * @param {number}  width the panel's current width, in CSS pixels — ignored when `open`
-	 *                        is false.
+	 * @param {number}  width the width of the strip the panel occupies MEASURED FROM THE MAP'S
+	 *                        RIGHT EDGE, in CSS pixels — since #168 that is the panel's own width
+	 *                        plus its 16px gutter, not the panel's width alone (the caller,
+	 *                        `pickup-panels.js`'s `setStageOpen()`, adds it). This method reserves
+	 *                        from that edge inwards, so it wants the covered strip, not the
+	 *                        element. Ignored when `open` is false.
 	 * @returns {void}
 	 */
 	WoodevYandexMapProvider.prototype.setMargin = function( open, width ) {

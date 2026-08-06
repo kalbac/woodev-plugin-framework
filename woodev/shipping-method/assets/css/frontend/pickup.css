@@ -396,15 +396,32 @@
  * uncover it once this panel's own opaque, full-height box was drawn on top of that corner. The
  * fix is therefore geometric, not a reservation: `bottom: 32px`, not `0` — the SAME 32px the
  * toggle button above already uses (the reference's own `--mmc-spacing-lg`, ~29px of strip plus a
- * little air), so the two numbers agree instead of being unexplained twice. The panel now reads
- * as a floating card rather than a full-bleed sheet that stopped short by accident: rounded
- * BOTTOM corners only (the top and right edges stay flush with the stage, so only the newly
- * exposed bottom edge needs to look intentional) plus the same two-layer ambient shadow every
- * other floating control in this file already uses — `.woodev-pickup-stage`'s own
- * `overflow: hidden` clips the shadow's top/right spill for free, leaving exactly the bottom edge
- * lifted. This band is uncovered in EVERY state — open, closed, at any width down to the ≤782px
- * full-bleed breakpoint below — because it is the panel's own inset, not a conditional JS
- * reservation that could fall out of sync with it.
+ * little air), so the two numbers agree instead of being unexplained twice. This band is uncovered
+ * in EVERY state — open, closed, at any width down to the ≤782px full-bleed breakpoint below —
+ * because it is the panel's own inset, not a conditional JS reservation that could fall out of
+ * sync with it.
+ *
+ * FLOATING CARD (#168, operator's decision 06.08.2026 — supersedes D8's "flush on three edges"
+ * treatment). D8 left the panel flush against the stage's top and right edges while inset 32px at
+ * the bottom, which read as a full-bleed sheet that had failed to reach the bottom rather than as
+ * a deliberate shape. The alternative considered was covering the copyright strip and hoisting it
+ * above the panel; that was rejected because it can only be done by selecting ymaps' own inner
+ * container, whose class name carries the API version (`ymaps-2-1-79-`) — a coupling this file
+ * refuses on principle (see `ymaps-copyright-pane-is-trapped-in-a-stacking-context`). Insetting
+ * the panel instead costs nothing and removes that reason entirely.
+ *
+ * `top: 16px; right: 16px` — the SAME 16px the search field already floats at
+ * (`map-provider-yandex.js`'s `_buildSearchControl`: `position: { left: '16px', top: '16px' }`),
+ * so the two floating elements share one margin rather than each having its own. `bottom` stays
+ * 32px: the copyright band below it is unrelated to this change and still needs its own clearance.
+ * `border-radius` becomes all four corners — with no edge flush any more, rounding only two would
+ * be arbitrary — and the two-layer ambient shadow every other floating control here uses now shows
+ * on all sides, because `.woodev-pickup-stage`'s `overflow: hidden` no longer has any spill to
+ * clip. Three things move WITH these insets and are wrong if left behind: `.woodev-pickup-card`
+ * (identical geometry, same rule set), the toggle's open-state offset (`+ 32px`, not `+ 16px`, or
+ * the button overlaps the panel it sits beside), and `setStageOpen()`'s reported width in
+ * `pickup-panels.js` (`offsetWidth + 16`, since ymaps reserves from the map's edge inwards and
+ * knows nothing about this gap).
  *
  * `display` gates open/closed, so a closed panel occupies nothing at all and cannot intercept a
  * drag meant for the map behind it.
@@ -416,8 +433,8 @@
 
 .woodev-pickup-list {
 	position: absolute;
-	top: 0;
-	right: 0;
+	top: 16px; /* #168 — see the FLOATING CARD note above. */
+	right: 16px; /* #168 — idem. */
 	bottom: 32px; /* D8 — see the COPYRIGHT CLEARANCE note above; matches the toggle's own 32px. */
 	z-index: 2;
 	display: flex;
@@ -426,7 +443,7 @@
 	max-width: min( 320px, calc( 100% - 48px ) );
 	overflow: auto;
 	background: #fff;
-	border-radius: 0 0 8px 8px; /* D8 — bottom corners only; see the COPYRIGHT CLEARANCE note. */
+	border-radius: 8px; /* #168 — all four corners now that no edge is flush; see the note above. */
 	box-shadow: 0 1px 2px rgba( 0, 0, 0, 0.04 ), 0 4px 8px rgba( 0, 0, 0, 0.06 );
 
 	/* `display`, not `visibility`: a hidden-but-laid-out panel still occupies a full-height box
@@ -704,8 +721,13 @@
 /* Keyed off the STAGE's `is-open`, not a class on `.woodev-pickup-list` itself (Task 6 — see the
    file docblock's "ONE OPEN STATE, ON THE STAGE" note): the toggle's own position/chevron still
    need to react to open/closed even though the toggle is never hidden itself. */
+/* `+ 32px`, not `+ 16px` (#168): this offset is measured from the STAGE's right edge, and the panel
+   no longer starts there — it starts 16px in (see `.woodev-pickup-list`'s "FLOATING CARD" note). The
+   button must clear the panel's own 320px cap PLUS that 16px gutter, and then keep its own 16px of
+   air beside it: 16 + 16 = 32. Left at the old 16, the button would sit exactly on the panel's edge
+   and overlap the list content beneath it. */
 .woodev-pickup-stage.is-open .woodev-pickup-list__toggle {
-	right: calc( min( 320px, 100% - 48px ) + 16px );
+	right: calc( min( 320px, 100% - 48px ) + 32px );
 }
 
 .woodev-pickup-stage.is-open .woodev-pickup-list__toggle::before {
@@ -1234,16 +1256,18 @@
  * no toggle able to reach it, which is exactly what happened before this task, when the card
  * carried its own independent `is-open`.
  *
- * `bottom: 32px`, rounded bottom corners, the same ambient shadow: the SAME copyright-clearance
- * treatment as `.woodev-pickup-list` above, for the SAME reason — see that rule's own "COPYRIGHT
- * CLEARANCE, THE REAL FIX" note (D8). The card occupies the identical screen region, so it sits
- * over the identical corner of the map.
+ * `top: 16px`, `right: 16px`, `bottom: 32px`, a full 8px radius, the same ambient shadow: the SAME
+ * floating-card geometry as `.woodev-pickup-list` above, for the SAME reasons — see that rule's own
+ * "COPYRIGHT CLEARANCE, THE REAL FIX" (D8) and "FLOATING CARD" (#168) notes. The card occupies the
+ * identical screen region and swaps places with the list, so any inset that is not identical on
+ * both would make the panel visibly jump as the customer opens and closes a point's card. Keep
+ * these four values in lockstep with that rule.
  * ---------------------------------------------------------------------- */
 
 .woodev-pickup-card {
 	position: absolute;
-	top: 0;
-	right: 0;
+	top: 16px; /* #168 — see .woodev-pickup-list's own note. */
+	right: 16px; /* #168 — idem. */
 	bottom: 32px; /* D8 — see .woodev-pickup-list's own note. */
 	z-index: 3;
 	display: none;
@@ -1252,7 +1276,7 @@
 	max-width: min( 320px, calc( 100% - 48px ) );
 	overflow: auto;
 	background: #fff;
-	border-radius: 0 0 8px 8px; /* D8 — see .woodev-pickup-list's own note. */
+	border-radius: 8px; /* #168 — see .woodev-pickup-list's own note. */
 	box-shadow: 0 1px 2px rgba( 0, 0, 0, 0.04 ), 0 4px 8px rgba( 0, 0, 0, 0.06 );
 }
 
@@ -1771,10 +1795,20 @@
 @media screen and ( max-width: 782px ) {
 
 	/* A 320px-capped column is unusable once the dialog itself is full-screen — both panels take
-	   the whole stage width instead. */
+	   the whole stage width instead.
+
+	   The desktop floating-card insets are explicitly zeroed here (#168): mobile keeps the
+	   full-bleed sheet it already had, unchanged by that decision. `top`/`right` go back to 0 and
+	   the radius back to bottom-corners-only, because a panel that spans the whole stage width has
+	   its top and right edges flush against it again — rounding a corner that has nothing behind
+	   it draws a notch of map through the panel's own corner. `bottom: 32px` is NOT reset: the
+	   copyright band it clears (D8) is there at every width. */
 	.woodev-pickup-list,
 	.woodev-pickup-card {
+		top: 0;
+		right: 0;
 		max-width: none;
+		border-radius: 0 0 8px 8px;
 	}
 
 	/* The toggle's open-state offset normally pushes it to sit BESIDE the list's own 320px cap

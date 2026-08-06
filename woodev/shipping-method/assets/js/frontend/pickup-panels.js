@@ -269,6 +269,24 @@
 	var SEARCH_MIN_CHARS = 3;
 
 	/**
+	 * The gap between the floating panels' right edge and the stage's own right edge (#168) —
+	 * `pickup.css`'s `right: 16px` on `.woodev-pickup-list`/`.woodev-pickup-card`, matching the
+	 * search field's own `16px` inset. Mirrored here because {@see setStageOpen} reports the strip
+	 * the panel occupies MEASURED FROM THE STAGE EDGE, which is the panel's width plus this gap;
+	 * that number becomes ymaps' `map.margin` reservation, and a reservation smaller than the thing
+	 * it stands for is the `ymaps-margin-area-needs-explicit-width` defect all over again.
+	 *
+	 * Applied unconditionally, INCLUDING below the ≤782px breakpoint where the media query zeroes
+	 * the gutter and the panel goes full-bleed again — deliberately, not by oversight. Reading the
+	 * breakpoint from JS would duplicate a number the stylesheet owns, and there is nothing to
+	 * gain: at that width the panel already covers the entire map, so the reservation is degenerate
+	 * (no usable area either way) and 16px past the map's own edge changes nothing anyone can see.
+	 *
+	 * @type {number}
+	 */
+	var PANEL_GUTTER_PX = 16;
+
+	/**
 	 * Lucide's `filter` glyph (ISC-licensed), used as-is — the same "redraw/reuse a Lucide shape"
 	 * convention `map-provider-yandex.js` established for the marker pins (spec V-9). Purely
 	 * decorative: `currentColor` inherits the toggle button's own text colour, and the button
@@ -2568,6 +2586,14 @@
 	 * `openCard()`: most card opens happen with the list already showing) must NOT re-emit, or the
 	 * mount would churn `addArea()`/`remove()` on every single card click.
 	 *
+	 * `width` is NOT the panel's own width (#168): it is the width of the strip the panel occupies
+	 * measured from the STAGE's right edge, i.e. `offsetWidth + PANEL_GUTTER_PX` — the panels float
+	 * 16px in from that edge now rather than sitting flush against it. The consumer is ymaps'
+	 * `map.margin.addArea()`, which reserves from the map's edge inwards and knows nothing about
+	 * our gap; reporting the bare `offsetWidth` would leave the reservation 16px short of the area
+	 * actually covered, which is precisely the shape of the `ymaps-margin-area-needs-explicit-width`
+	 * defect (a reservation that resolved and looked correct while standing for less than it should).
+	 *
 	 * Deliberately does NOT touch `is-card` — whether a transition ALSO changes which panel is
 	 * showing (list vs. card) is each caller's own business (see their own docblocks), but whether
 	 * the sidebar itself is showing at all is not, which is exactly the one thing this helper owns.
@@ -2585,7 +2611,7 @@
 			return;
 		}
 
-		self._emit( 'listToggle', { open: open, width: self._listEl.offsetWidth } );
+		self._emit( 'listToggle', { open: open, width: self._listEl.offsetWidth + PANEL_GUTTER_PX } );
 	}
 
 	/**

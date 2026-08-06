@@ -106,6 +106,31 @@ it( 'reports its open state and width so the caller can set the map margin', () 
 	expect( typeof seen[ 0 ].width ).toBe( 'number' );
 } );
 
+it( 'reports the panel width PLUS its 16px gutter, so the reserved strip matches what it covers', () => {
+	const seen = [];
+	const panels = new Panels( document.createElement( 'div' ), config );
+	panels.on( 'listToggle', ( e ) => seen.push( e ) );
+	panels.render();
+
+	// jsdom lays nothing out, so every `offsetWidth` is 0 — pin the CSS cap (320px) so the
+	// arithmetic this test exists for is observable at all.
+	Object.defineProperty(
+		panels.root.querySelector( '.woodev-pickup-list' ),
+		'offsetWidth',
+		{ value: 320 }
+	);
+
+	panels.toggleList();
+
+	// #168: the panel no longer sits flush against the stage's right edge — it floats 16px in
+	// from it. The strip it occupies, measured from that edge (which is what `map.margin`
+	// reserves), is therefore its own width PLUS that gutter. Reserving the bare width would
+	// under-reserve by exactly 16px, the same class of defect as
+	// `ymaps-margin-area-needs-explicit-width`, where a reservation that looked right was
+	// silently smaller than the panel it stood for.
+	expect( seen[ 0 ].width ).toBe( 336 );
+} );
+
 it( 'renders a blank label rather than a Russian default when an i18n key is missing', () => {
 	// Re-pointed (Task 7, spec V-11): the list header this test used to check is gone —
 	// `drawerTitle`'s only remaining home is the toggle button's `aria-label`, so the I1 rule
