@@ -142,7 +142,10 @@
  *
  * THIS FILE, NOT THE PROVIDER, NOW OWNS FETCHING (Task 20): the provider
  * contract shrank to `init( container, config )` — it draws whatever
- * `setPoints( groups, options )` hands it and reports camera/selection events, but
+ * `setPoints( groups, options )` hands it (`options.focus`, a group key, means
+ * "open the map AT this one, marked active, instead of fitting the whole set" —
+ * spec D-15's restore; see `map-provider-yandex.js`'s own `setPoints()` docblock
+ * for why the camera must move BEFORE the drawing) and reports camera/selection events, but
  * never calls the REST layer itself any more (see `map-provider-yandex.js`'s
  * own docblock, "THIS FILE NO LONGER FETCHES ANYTHING ITSELF"). This file is
  * therefore the fetch ORCHESTRATOR: under `strategy: 'bulk'` it fetches once,
@@ -1182,47 +1185,16 @@
 		}
 
 		/**
-		 * Restores a previously chosen point once points have actually been drawn (spec D-15).
+		 * The group this pass is about to restore (spec D-15), or null when it restores nothing:
+		 * the restore already happened this session, there are no panels, no point is stored in
+		 * the field, or the stored point is not among the groups just built.
 		 *
-		 * Called ONCE per session, gated by `selectionRestoreAttempted` at the single call site
-		 * below — see that flag's own docblock for why. It runs from the points-drawn
-		 * continuation and not at session open because it needs the drawn groups: the camera
-		 * move and the group key only exist once `setPoints()` has actually run. Three of the
-		 * four things this has to do are already primitives — `focusGroup()` writes the
-		 * marker's own `data-state="active"` as its side effect, `openList()` makes the
-		 * sidebar's visibility deterministic, and `setSelectedId()` drives both the CTA label
-		 * and the row highlight.
-		 *
-		 * A point that is no longer in the results restores NOTHING, silently: the map opens in
-		 * its ordinary default view and the field is left alone for the checkout-processing
-		 * backstop to judge (spec D-15). No fourth empty-state message — the three that exist
-		 * (`emptyLocality`/`emptyInView`/`noResults`) are deliberately distinct.
-		 *
-		 * The group lookup goes through {@see findGroupByPointId} — the SAME helper
-		 * `searchPointPicked` and the `cardOpened` listener already use for "I have a point id,
-		 * I need its group" — rather than a second, independent implementation. That helper
-		 * reads the session's own `groupsByKey` from the closure (already reassigned by the time
-		 * this runs — see {@see fetchAndSetPoints}), so this function takes no argument either.
-		 *
-		 * @returns {void}
-		 */
-		/**
-		 * The group {@see restoreSelection} is ABOUT to focus on this pass, or null when this pass
-		 * restores nothing (already attempted, no panels, no stored point, or a stored point that
-		 * is not among the drawn groups). Read BEFORE `setPoints()` for one reason only: to tell
-		 * the provider to skip its `bulk` camera fit, which would otherwise move the camera to the
-		 * whole loaded set a beat before the restore moves it again to one point.
-		 *
-		 * Two moves there is not merely wasteful. s52's rig pass measured the second one landing
-		 * while ymaps was still rebuilding its ObjectManager overlays for the first, which parks
-		 * the newly un-clustered marker at ymaps' own off-screen sentinel until some later zoom
-		 * change re-lays it out: right camera, right `data-state`, no visible pin. See
-		 * `map-provider-yandex.js`'s `setPoints()` docblock for the mechanism.
-		 *
-		 * The lookup is deliberately NOT passed on to {@see restoreSelection} — that function
-		 * stays the single source of truth for what restoring actually does, including the cases
-		 * this one returns null for (a stored point missing from the results still updates the
-		 * sidebar's selected id).
+		 * Read BEFORE `setPoints()`, because the CAMERA half of restoring is `setPoints()`'s own
+		 * job now — `setPoints( groups, { focus: key } )` settles the camera on the group first
+		 * and draws second. s52's rig pass is why: with the drawing first, the restore's camera
+		 * move (however carefully sequenced) crossed ymaps' first ObjectManager layout and left
+		 * the restored marker parked at ymaps' own off-screen sentinel — right camera, right
+		 * `data-state`, no visible pin. See `map-provider-yandex.js`'s `setPoints()` docblock.
 		 *
 		 * @returns {Object|null}
 		 */
@@ -1236,7 +1208,25 @@
 			return selectedId ? findGroupByPointId( selectedId ) : null;
 		}
 
-		function restoreSelection() {
+		/**
+		 * The PANELS half of restoring a previously chosen point (spec D-15) — the camera and the
+		 * marker's own `data-state="active"` are already done by the time this runs, by
+		 * `setPoints( groups, { focus } )` (see {@see pendingRestoreGroup}).
+		 *
+		 * Called ONCE per session, gated by `selectionRestoreAttempted` at the single call site
+		 * below — see that flag's own docblock for why. `setSelectedId()` drives both the CTA
+		 * label and the row highlight; `openList()` makes the sidebar's visibility deterministic.
+		 *
+		 * A point that is no longer in the results (`group` null) still marks the id — the map
+		 * opens in its ordinary default view, the sidebar stays closed, and the field is left
+		 * alone for the checkout-processing backstop to judge. No fourth empty-state message —
+		 * the three that exist (`emptyLocality`/`emptyInView`/`noResults`) are deliberately
+		 * distinct.
+		 *
+		 * @param {Object|null} group whatever {@see pendingRestoreGroup} resolved for this pass.
+		 * @returns {void}
+		 */
+		function restoreSelection( group ) {
 			var selectedId = fieldValue( config.fieldId );
 
 			if ( ! selectedId || ! panels ) {
@@ -1245,17 +1235,11 @@
 
 			panels.setSelectedId( selectedId );
 
-			var group = findGroupByPointId( selectedId );
-
 			if ( ! group ) {
 				return;
 			}
 
 			panels.openList();
-
-			if ( provider && 'function' === typeof provider.focusGroup ) {
-				provider.focusGroup( group.key, { zoom: true } );
-			}
 		}
 
 		/**
@@ -1306,10 +1290,13 @@
 					} );
 					groupsByKey = byKey;
 
-					// `{ fit: false }` on the pass that is about to restore a chosen point — the
-					// restore's own camera move is the only one that should happen. See
-					// {@see pendingRestoreGroup} for why two moves here are actively harmful.
-					provider.setPoints( groups, { fit: ! pendingRestoreGroup() } );
+					// Resolved BEFORE the draw: on the pass that restores a chosen point the
+					// provider opens the map AT that point (camera first, features second) rather
+					// than fitting the whole set and being moved off it a beat later — see
+					// {@see pendingRestoreGroup}.
+					var restoreGroup = pendingRestoreGroup();
+
+					provider.setPoints( groups, restoreGroup ? { focus: restoreGroup.key } : null );
 
 					if ( panels ) {
 						panels.setTypes( extractTypes( points ) );
@@ -1331,10 +1318,12 @@
 
 							// Task 12 (spec D-15): the ONE attempt this session makes to restore a
 							// previously chosen point — see `selectionRestoreAttempted`'s own docblock
-							// for why this must not run on every points-drawn continuation.
+							// for why this must not run on every points-drawn continuation. The
+							// camera/marker half already went out with `setPoints()` above; this is
+							// the panels half, and it takes the SAME group that decided it.
 							if ( ! selectionRestoreAttempted ) {
 								selectionRestoreAttempted = true;
-								restoreSelection();
+								restoreSelection( restoreGroup );
 							}
 						}
 					} else {

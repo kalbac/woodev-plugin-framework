@@ -1685,27 +1685,35 @@
 	 * active state re-applied; a focused group that is GONE from the new set clears
 	 * `getFocusedKey()` instead — see {@see _setMarkerState}.
 	 *
-	 * `options.fit: false` SUPPRESSES that fit — for a caller that is about to take the camera
-	 * itself and would only make it move twice. The mount passes it on the one pass that restores
-	 * a previously chosen point (spec D-15), and s52's rig pass is why it exists: two camera moves
-	 * issued back-to-back around the ObjectManager's own rebuild leave the newly un-clustered
-	 * feature's overlay parked at ymaps' off-screen sentinel (`left/top: -32760px`) until some
-	 * LATER zoom change re-lays it out — the camera was right, `data-state="active"` was right,
-	 * and the map showed no pin at all. ymaps rebuilds its overlays in a burst that starts AFTER
-	 * `actionend` (i.e. after the fit's own promise has already resolved), so no amount of
-	 * awaiting the fit avoids this; not making the second move is what avoids it. `visibleChange`
-	 * is then emitted immediately, from the pre-move viewport — safe, because the caller's own
-	 * camera move raises `boundschange`, which re-emits it (see {@see init}'s watcher).
+	 * `options.focus: <group key>` OPENS THE MAP AT ONE GROUP instead: no `bulk` fit, the camera
+	 * settles on that group at {@see MAX_ZOOM} FIRST, the features are drawn SECOND, and the group
+	 * is marked active third. The mount passes it on the one pass that restores a previously
+	 * chosen point (spec D-15). The order is the whole point, and s52's rig pass is what
+	 * established it: drawing first and moving after — however carefully the move is sequenced
+	 * behind the fit — leaves the newly un-clustered feature's overlay parked at ymaps' own
+	 * off-screen sentinel (`left/top: -32760px`) until some LATER zoom change re-lays it out. The
+	 * camera was right, `data-state="active"` was right, `getFocusedKey()` was right, and the map
+	 * showed no pin at all. ymaps rebuilds its ObjectManager overlays in a burst that begins AFTER
+	 * `actionend` — i.e. after the previous move's own promise has already resolved — so no
+	 * amount of awaiting a camera promise avoids the race; only not moving the camera across the
+	 * ObjectManager's first layout does. Measured on the rig: move-then-draw renders the marker
+	 * on screen every time, draw-then-move parks it every time.
 	 *
-	 * @param {Array}   groups
-	 * @param {Object}  [options]
-	 * @param {boolean} [options.fit] `false` skips the `bulk` camera fit. Defaults to fitting.
-	 * @returns {void}
+	 * A `focus` naming a group that is not in `groups` is ignored (the map opens normally) —
+	 * "the point I chose last time is gone" is exactly the case spec D-15 says must degrade
+	 * silently, and the map still has to open somewhere.
+	 *
+	 * @param {Array}  groups
+	 * @param {Object} [options]
+	 * @param {string} [options.focus] group key to open the map at, marked active, instead of
+	 *                                 fitting the camera to the whole set.
+	 * @returns {Promise<void>} resolves once the camera work this call started has settled and
+	 *                          the points are drawn.
 	 */
 	WoodevYandexMapProvider.prototype.setPoints = function( groups, options ) {
 		var self = this;
 		var list = groups || [];
-		var wantsFit = false !== ( options || {} ).fit;
+		var opts = options || {};
 
 		this._groupsByKey = {};
 
@@ -1715,18 +1723,32 @@
 			return self._buildFeature( group );
 		} );
 
-		this.objectManager.removeAll();
-		this.objectManager.add( features );
+		var focusGroup = opts.focus ? this._groupsByKey[ opts.focus ] : null;
 
-		if ( this._focusedKey && ! Object.prototype.hasOwnProperty.call( this._groupsByKey, this._focusedKey ) ) {
-			// A refetch that no longer contains the currently focused group must not leave a
-			// stale key behind — the caller has nothing left to visually mark as active.
-			this._focusedKey = null;
-		} else if ( this._focusedKey ) {
-			this._setMarkerState( this._focusedKey, 'active' );
+		if ( focusGroup ) {
+			var mySeq = ++this._focusSeq;
+
+			// CAMERA FIRST, FEATURES SECOND — see this method's docblock for the measurement
+			// behind that order. Sequenced through `_focusSeq` like every other focus, so a
+			// customer who clicks something else while this move is still travelling wins.
+			return this.map.setCenter(
+				[ focusGroup.lat, focusGroup.lng ],
+				MAX_ZOOM,
+				{ useMapMargin: true, duration: 200 }
+			).then( function() {
+				if ( self._destroyed || mySeq !== self._focusSeq ) {
+					return;
+				}
+
+				self._drawFeatures( features );
+				self._applyFocus( opts.focus );
+				self._emitVisibleChange();
+			} );
 		}
 
-		if ( wantsFit && 'bulk' === this.config.strategy && list.length > 0 ) {
+		this._drawFeatures( features );
+
+		if ( 'bulk' === this.config.strategy && list.length > 0 ) {
 			var anchor = [ list[ 0 ].lat, list[ 0 ].lng ];
 
 			// setBounds() is ASYNCHRONOUS — awaited, exactly like _resolveInitialViewport()'s
@@ -1757,10 +1779,37 @@
 
 			this._cameraFit = fit;
 
-			return;
+			return fit;
 		}
 
 		this._emitVisibleChange();
+
+		return Promise.resolve();
+	};
+
+	/**
+	 * The drawing half of {@see setPoints} — the full `removeAll()`/`add()` rebuild plus the
+	 * currently-focused group's reconciliation against the new set. Split out because the `focus`
+	 * path runs it AFTER its camera move rather than before (see {@see setPoints}'s docblock),
+	 * and the two paths must not grow two different ideas of what "draw these groups" means.
+	 *
+	 * `_groupsByKey` is already populated by the caller — this only touches the map.
+	 *
+	 * @since 2.0.2
+	 * @param {Array} features
+	 * @returns {void}
+	 */
+	WoodevYandexMapProvider.prototype._drawFeatures = function( features ) {
+		this.objectManager.removeAll();
+		this.objectManager.add( features );
+
+		if ( this._focusedKey && ! Object.prototype.hasOwnProperty.call( this._groupsByKey, this._focusedKey ) ) {
+			// A refetch that no longer contains the currently focused group must not leave a
+			// stale key behind — the caller has nothing left to visually mark as active.
+			this._focusedKey = null;
+		} else if ( this._focusedKey ) {
+			this._setMarkerState( this._focusedKey, 'active' );
+		}
 	};
 
 	/**

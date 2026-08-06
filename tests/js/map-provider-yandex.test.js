@@ -1400,28 +1400,97 @@ test( 'bulk: visibleChange reflects the POST-fit viewport — points sitting out
 	expect( seen[ 0 ].sort() ).toEqual( [ 'a', 'b' ] );
 } );
 
-// s52: the caller that is about to take the camera itself (the mount's restore pass) opts out of
-// the fit, so the camera moves ONCE. Two moves around the ObjectManager's own rebuild leave the
-// newly un-clustered marker's overlay at ymaps' off-screen sentinel — see setPoints()'s docblock.
-test( 'bulk: `{ fit: false }` draws the points without fitting the camera and emits visibleChange '
-	+ 'straight away — the caller\'s own move raises boundschange, which re-emits it', async () => {
+// -------------------------------------------------------------------------
+// setPoints( groups, { focus } ) — "open the map AT this group" (s52).
+//
+// The ORDER is the contract: camera first, features second, active state third. Drawing first and
+// moving after leaves the restored marker's overlay at ymaps' own off-screen sentinel until some
+// later zoom change re-lays it out (right camera, right data-state, no visible pin) — measured on
+// the rig, invisible to jsdom, which has no overlay layer at all. What CAN be pinned here is the
+// order, and that is what these tests do.
+// -------------------------------------------------------------------------
+
+test( 'focus: the camera move happens BEFORE the features are drawn, and no bulk fit is started', async () => {
+	const provider = await init( { strategy: 'bulk' }, { deferSetBounds: true } );
+
+	provider.setPoints( [ group( 'a', 55.70, 37.60 ), group( 'b', 55.80, 37.70 ) ], { focus: 'b' } );
+
+	expect( ymapsStub.lastMap.setBoundsCalls ).toHaveLength( 0 );
+	expect( ymapsStub.lastMap.setCenterCalls ).toEqual( [ {
+		center: [ 55.80, 37.70 ],
+		zoom: 18,
+		options: { useMapMargin: true, duration: 200 },
+	} ] );
+	// Nothing drawn yet — the move has not settled.
+	expect( ymapsStub.lastObjectManager.added ).toHaveLength( 0 );
+
+	ymapsStub.lastMap.resolveNextCameraMove();
+	await flushPromises();
+
+	expect( ymapsStub.lastObjectManager.added ).toHaveLength( 2 );
+	expect( provider.getFocusedKey() ).toBe( 'b' );
+} );
+
+test( 'focus: visibleChange is emitted once, after the draw', async () => {
 	const provider = await init( { strategy: 'bulk' }, { deferSetBounds: true } );
 	const seen = [];
 
 	provider.on( 'visibleChange', ( keys ) => seen.push( keys ) );
 
-	provider.setPoints( [ group( 'a', 55.70, 37.60 ) ], { fit: false } );
+	provider.setPoints( [ group( 'a', 55.70, 37.60 ) ], { focus: 'a' } );
 
-	expect( ymapsStub.lastMap.setBoundsCalls ).toHaveLength( 0 );
+	expect( seen ).toHaveLength( 0 );
+
+	ymapsStub.lastMap.resolveNextCameraMove();
+	await flushPromises();
+
 	expect( seen ).toHaveLength( 1 );
-	// The points are still DRAWN — only the camera move is skipped.
-	expect( ymapsStub.lastObjectManager.added ).toHaveLength( 1 );
 } );
 
-test( 'bulk: `{ fit: true }` (and an omitted options object) still fits — the opt-out is explicit', async () => {
+test( 'focus: a key that is not among the groups is ignored — the map opens normally, fit and all '
+	+ '(spec D-15: a point that is gone degrades silently)', async () => {
 	const provider = await init( { strategy: 'bulk' }, { deferSetBounds: true } );
 
-	provider.setPoints( [ group( 'a', 55.70, 37.60 ) ], { fit: true } );
+	provider.setPoints( [ group( 'a', 55.70, 37.60 ) ], { focus: 'GONE' } );
+
+	expect( ymapsStub.lastMap.setCenterCalls ).toHaveLength( 0 );
+	expect( ymapsStub.lastMap.setBoundsCalls ).toHaveLength( 1 );
+	expect( ymapsStub.lastObjectManager.added ).toHaveLength( 1 );
+	expect( provider.getFocusedKey() ).toBeNull();
+} );
+
+test( 'focus: a destroy() racing the camera move draws nothing afterwards', async () => {
+	const provider = await init( { strategy: 'bulk' }, { deferSetBounds: true } );
+
+	provider.setPoints( [ group( 'a', 55.70, 37.60 ) ], { focus: 'a' } );
+	provider.destroy();
+
+	ymapsStub.lastMap.resolveNextCameraMove();
+	await flushPromises();
+
+	expect( ymapsStub.lastObjectManager.added ).toHaveLength( 0 );
+} );
+
+test( 'focus: a focusGroup() issued while the opening move travels supersedes it — the later '
+	+ 'choice wins the camera and the active state', async () => {
+	const provider = await init( { strategy: 'bulk' }, { deferSetBounds: true } );
+
+	provider.setPoints( [ group( 'a', 55.70, 37.60 ), group( 'b', 55.80, 37.70 ) ], { focus: 'a' } );
+	ymapsStub.lastObjectManager.state = { isClustered: false, cluster: null };
+
+	provider.focusGroup( 'b', { zoom: true } );
+
+	ymapsStub.lastMap.resolveCameraMoveFor( [ 55.70, 37.60 ] ); // the superseded opening move
+	await flushPromises();
+
+	// The stale continuation neither drew nor focused — `_focusSeq` discarded it.
+	expect( provider.getFocusedKey() ).toBeNull();
+} );
+
+test( 'no focus: an omitted options object still fits — opening at a point is opt-in', async () => {
+	const provider = await init( { strategy: 'bulk' }, { deferSetBounds: true } );
+
+	provider.setPoints( [ group( 'a', 55.70, 37.60 ) ] );
 
 	expect( ymapsStub.lastMap.setBoundsCalls ).toHaveLength( 1 );
 } );

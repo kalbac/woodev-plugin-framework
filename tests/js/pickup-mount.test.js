@@ -3157,7 +3157,7 @@ describe( 'selection confirmation', () => {
 // -------------------------------------------------------------------------
 
 describe( 'restoring a previous selection', () => {
-	it( 'focuses the point, opens the sidebar and marks it selected', async () => {
+	it( 'opens the map AT the point, opens the sidebar and marks it selected', async () => {
 		const { panels, provider, drawPoints, field } = openPicker( {} );
 		field.value = 'P2';
 
@@ -3174,8 +3174,11 @@ describe( 'restoring a previous selection', () => {
 		// instead.
 		expect( panels.lastSelectedId ).toBe( 'P2' );
 		expect( panels.openListCalls ).toBe( 1 );
-		expect( provider.focusGroupCalls ).toEqual( [ g2.key ] );
-		expect( provider.focusGroupOptions ).toEqual( [ { zoom: true } ] );
+		// s52: the camera and the marker's active state are `setPoints()`'s job on this pass, not
+		// a `focusGroup()` call made after the draw — that order left the restored marker's
+		// overlay parked off screen. See map-provider-yandex.js's setPoints() docblock.
+		expect( provider.setPointsOptions ).toEqual( [ { focus: g2.key } ] );
+		expect( provider.focusGroupCalls ).toHaveLength( 0 );
 	} );
 
 	it( 'opens normally and silently when the selected point is gone', async () => {
@@ -3214,41 +3217,26 @@ describe( 'restoring a previous selection', () => {
 		expect( provider.focusGroupCalls ).toEqual( [] );
 	} );
 
-	// s52 rig defect. The restore's own camera move is not the only one that used to happen: the
-	// `bulk` fit setPoints() starts moved the camera to the WHOLE loaded set a beat earlier, and
-	// the second move landed while ymaps was still rebuilding its ObjectManager overlays for the
-	// first — which parks the newly un-clustered marker at ymaps' off-screen sentinel until some
-	// later zoom change re-lays it out (right camera, right `data-state`, no visible pin). The
-	// mount tells the provider not to fit at all on the pass that restores.
-	it( 'suppresses the provider\'s camera fit on the pass that restores a point', async () => {
-		const { provider, drawPoints, field } = openPicker( {} );
-		field.value = 'P2';
-
-		await drawPoints( [ group( 1, 2, [ 'P1' ] ), group( 3, 4, [ 'P2' ] ) ] );
-
-		expect( provider.setPointsOptions ).toEqual( [ { fit: false } ] );
-	} );
-
-	it( 'leaves the fit alone when there is nothing to restore', async () => {
+	it( 'asks for no opening focus when there is nothing to restore — the map fits normally', async () => {
 		const { provider, drawPoints, field } = openPicker( {} );
 		field.value = '';
 
 		await drawPoints( [ group( 1, 2, [ 'P1' ] ) ] );
 
-		expect( provider.setPointsOptions ).toEqual( [ { fit: true } ] );
+		expect( provider.setPointsOptions ).toEqual( [ null ] );
 	} );
 
-	it( 'leaves the fit alone when the stored point is not among the drawn groups — the map has '
-		+ 'to open SOMEWHERE, and nothing is going to take the camera afterwards', async () => {
+	it( 'asks for no opening focus when the stored point is not among the drawn groups — the map '
+		+ 'has to open SOMEWHERE', async () => {
 		const { provider, drawPoints, field } = openPicker( {} );
 		field.value = 'GONE';
 
 		await drawPoints( [ group( 1, 2, [ 'P1' ] ) ] );
 
-		expect( provider.setPointsOptions ).toEqual( [ { fit: true } ] );
+		expect( provider.setPointsOptions ).toEqual( [ null ] );
 	} );
 
-	it( 'leaves the fit alone on every LATER fetch — the restore is one-shot, so a pan or a '
+	it( 'asks for no opening focus on any LATER fetch — the restore is one-shot, so a pan or a '
 		+ 'type-filter refetch must still fit normally', async () => {
 		const { provider, drawPoints, field } = openPicker( { strategy: 'viewport' } );
 		field.value = 'P2';
@@ -3258,7 +3246,7 @@ describe( 'restoring a previous selection', () => {
 		await drawPoints( [ group( 1, 2, [ 'P1' ] ), g2 ] );
 		await drawPoints( [ g2 ] );
 
-		expect( provider.setPointsOptions ).toEqual( [ { fit: false }, { fit: true } ] );
+		expect( provider.setPointsOptions ).toEqual( [ { focus: g2.key }, null ] );
 	} );
 
 	it( 'only attempts the restore ONCE per session — a later fetch never re-triggers it '
@@ -3272,15 +3260,16 @@ describe( 'restoring a previous selection', () => {
 		// via `boundsChange` (see its own docblock), the same event a real pan fires.
 		await drawPoints( [ group( 1, 2, [ 'P1' ] ), g2 ] );
 
-		expect( provider.focusGroupCalls ).toEqual( [ g2.key ] );
+		expect( provider.setPointsOptions ).toEqual( [ { focus: g2.key } ] );
 		expect( panels.openListCalls ).toBe( 1 );
 
 		// A SECOND fetch that draws the SAME previously-selected point again — a real pan back
-		// onto it, a type-filter refetch — must not re-open the list or re-focus the camera.
+		// onto it, a type-filter refetch — must not re-open the list, nor open the map at that
+		// point again (which would yank the camera back off wherever the customer panned to).
 		// Nothing here retracts the restore; it just must not fire a second time.
 		await drawPoints( [ g2 ] );
 
-		expect( provider.focusGroupCalls ).toEqual( [ g2.key ] );
+		expect( provider.setPointsOptions ).toEqual( [ { focus: g2.key }, null ] );
 		expect( panels.openListCalls ).toBe( 1 );
 	} );
 } );
