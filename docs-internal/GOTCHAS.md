@@ -1,6 +1,13 @@
 # Gotchas — Woodev Plugin Framework
-> **100 atomic gotchas in 22 namespaces** — update count when adding/removing.
-> Last updated: 2026-08-06 (session 52: +1 file, new namespace `[testing/js]` —
+> **101 atomic gotchas in 23 namespaces** — update count when adding/removing.
+> Last updated: 2026-08-06 (session 52, SP-5 Task 11: +1 file, new namespace `[tooling/git-checkout]` —
+> `git-checkout-destroys-uncommitted-mutation-revert` (reverting a deliberate-regression mutation with
+> `git checkout <file>` restores from HEAD, not from "before the mutation" — with the implementation
+> still uncommitted that deletes the whole task's work in that file, unrecoverably, and the resulting
+> wall of failures in tests unrelated to the mutated line reads as "the mutation broke everything".
+> Commit the green implementation first, then mutate). Recovered from a `cp` backup taken minutes
+> earlier, by luck.
+> Prior: 2026-08-06 (session 52: +1 file, new namespace `[testing/js]` —
 > `npx-jest-bypasses-wp-scripts-jsdom` (this project has NO jest config of its own; JS tests run
 > through `wp-scripts test-unit-js`, which is what supplies the jsdom environment. `npx jest`
 > bypasses it and falls back to jest's node default, reporting **194 failed / 472 total** where
@@ -256,6 +263,7 @@
 - [tooling/serena-eol-flip] Serena `replace_content` rewrites the whole file as CRLF on Windows even for a 1-line edit → breaks LF source-assertion tests / Assets-parity; `git diff` hides it (EOL-normalized). Use built-in `Edit` for existing source, or `sed -i 's/\r$//'` after → [gotchas/serena-replace-content-eol-flip.md](gotchas/serena-replace-content-eol-flip.md) (s25)
 - [tooling/phpstan-windows-segfault] PHPStan exits `-1073741819` (0xC0000005 native stack overflow in its PHPDoc type resolver) NON-deterministically on Windows — crashes even on untouched single files that passed minutes earlier; not a code error, cache-clear doesn't help. Confirm by analysing a file you didn't touch; rely on Linux CI ("Run PHPStan") as the authoritative gate → [gotchas/phpstan-windows-parallel-worker-segfault.md](gotchas/phpstan-windows-parallel-worker-segfault.md) (s28)
 - [tooling/phpcs] `composer phpcs` does **not** enforce the project's 120-char limit — `phpcs.xml` sets `warning-severity 0` and `absoluteLineLimit 0`, so `Generic.Files.LineLength` is detected, downgraded to a warning, and suppressed; the ruleset also scans only `./woodev` and excludes `*/tests/*`. "phpcs clean" is quoted as evidence in this project and for line length it proves nothing. Measure with tabs expanded to 4 → [gotchas/phpcs-does-not-enforce-line-length.md](gotchas/phpcs-does-not-enforce-line-length.md) (s45; fix tracked as #139)
+- [tooling/git-checkout] `git checkout <file>` to revert a deliberate-regression MUTATION deletes the uncommitted implementation with it — it restores from HEAD, not "the last edit", and working-tree content that was never staged has no reflog entry. Reads as "the mutation broke everything" (tests unrelated to the mutated line fail too). Commit the verified-green implementation FIRST, then mutate/revert; if a mutation must precede a commit, `cp` the file out and restore with `cp` → [gotchas/git-checkout-destroys-uncommitted-mutation-revert.md](gotchas/git-checkout-destroys-uncommitted-mutation-revert.md) (s52)
 - [tooling/git-merge] A GitHub `--squash` merge bases the squash on `origin/main`; if a prior session committed docs straight to **local main and never pushed** (so origin is behind), `git pull --ff-only` post-merge fails "diverged" — yet origin/main already CONTAINS the local-only commit's content (the branch was based on top of it; squash flattens the full diff). Verify containment (`git diff --stat origin/main <sha>` empty) then `git reset --hard origin/main` (untracked files survive). Prevent: push main right after any direct-to-main commit → [gotchas/git-squash-onto-stale-origin-main-diverge.md](gotchas/git-squash-onto-stale-origin-main-diverge.md) (s33)
 
 ## Archive (resolved gotchas)

@@ -81,3 +81,6 @@ environment problem, not a regression.
 - [[mutation-sweep-branch-only-false-confidence]] — on what a green (or red) run does not prove.
 - [[wp-scripts-jsx-runtime-wp66]] — another behaviour owned by `@wordpress/scripts` rather
   than by this repo's own config.
+- [[git-checkout-destroys-uncommitted-mutation-revert]] — the OTHER way a JS run reads as "I
+  broke everything" while the code is fine; same session. Here the total does NOT drop, which
+  is what tells the two apart.
