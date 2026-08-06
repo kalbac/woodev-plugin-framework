@@ -1147,11 +1147,18 @@
 
 		var cta = document.createElement( 'button' );
 		cta.type = 'button';
-		cta.className = 'woodev-pickup-card__cta';
-		cta.textContent = isSelected ? text( self._config, 'continueCheckout' ) : text( self._config, 'select' );
-		cta.disabled = ! selectable.allowed;
+		cta.className = 'woodev-pickup-card__cta' + ( self._selectionBusy ? ' is-busy' : '' );
+		cta.textContent = self._selectionBusy
+			? text( self._config, 'confirming' )
+			: ( isSelected ? text( self._config, 'continueCheckout' ) : text( self._config, 'select' ) );
+		cta.disabled = ! selectable.allowed || self._selectionBusy;
 		cta.addEventListener( 'click', function() {
-			if ( ! selectable.allowed ) {
+			/*
+			 * Two guards, not one, exactly as the pre-existing `selectable.allowed` guard is
+			 * doubled by the `disabled` attribute: `disabled` is presentation, the refusal
+			 * here is behaviour, and a programmatic `.click()` respects only the second.
+			 */
+			if ( ! selectable.allowed || self._selectionBusy ) {
 				return;
 			}
 
@@ -1544,6 +1551,12 @@
 		this._anchor = null;
 		this._anchorLabel = null;
 		this._selectedId = null;
+
+		/**
+		 * @type {boolean} true while a selection confirmation is in flight — see
+		 * {@see Panels.prototype.setSelectionBusy}.
+		 */
+		this._selectionBusy = false;
 		this._activeGroup = null;
 		this._activeIndex = 0;
 		this._listeners = {};
@@ -2706,6 +2719,32 @@
 	 */
 	Panels.prototype.setSelectedId = function( id ) {
 		this._selectedId = ( undefined !== id && null !== id ) ? String( id ) : null;
+
+		if ( this._activeGroup ) {
+			renderCard( this );
+		}
+	};
+
+	/**
+	 * Marks a selection confirmation as in flight (or settled).
+	 *
+	 * Locking the card is not merely "do not click twice": it is what makes a SERVER-side
+	 * ordering inversion impossible. Without it a customer can confirm point A, switch to B
+	 * and confirm that too, B can reach the server first, and the server ends holding A while
+	 * the browser shows B. A second request cannot leave while this is true.
+	 *
+	 * The stage's own `is-busy` is deliberately NOT reused: it is the "no data exists yet"
+	 * state and hides the search and filter controls entirely (see `pickup.css`), which would
+	 * make the search bar vanish under a customer who is merely confirming a point.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @param {boolean} busy
+	 * @returns {void}
+	 */
+	Panels.prototype.setSelectionBusy = function( busy ) {
+		this._selectionBusy = !! busy;
+		this._cardEl.classList.toggle( 'is-locked', this._selectionBusy );
 
 		if ( this._activeGroup ) {
 			renderCard( this );

@@ -1536,6 +1536,42 @@
 	opacity: 1; /* Overrides UA/theme opacity fading, which would make the label unreadable. */
 }
 
+/* The confirmation lock (2026-08-06 spec D-9). A transparent sheet over the card only — NOT
+   the stage's own `is-busy`, which is the "nothing has loaded yet" state and hides the search
+   and filter controls outright. Clicks on the map and the sidebar still land; what this stops
+   is a second confirmation leaving before the first has settled, which is what would let two
+   writes reach the server out of order. */
+.woodev-pickup-card.is-locked::after {
+	position: absolute;
+	inset: 0;
+	z-index: 1;
+	content: '';
+}
+
+/* The spinner rides INSIDE the button rather than replacing its label: the label is what says
+   which of the two confirmations is running, and a button that changes size mid-request makes
+   the whole footer jump. Same 0.8s linear rotation as `.woodev-pickup-spinner`, at text size,
+   in the button's own colour. */
+.woodev-pickup-card__cta.is-busy::before {
+	display: inline-block;
+	width: 14px;
+	height: 14px;
+	margin-right: 8px;
+	border: 2px solid currentColor;
+	border-top-color: transparent;
+	border-radius: 50%;
+	animation: woodev-pickup-spin 0.8s linear infinite;
+	content: '';
+	vertical-align: -2px;
+}
+
+@media ( prefers-reduced-motion: reduce ) {
+
+	.woodev-pickup-card__cta.is-busy::before {
+		animation-duration: 3s;
+	}
+}
+
 /* -------------------------------------------------------------------------
  * Markers — an HTML layout `map-provider-yandex.js` builds per group (D-5), never ymaps'
  * `iconLayout: 'default#image'`. The box below MUST match `ICON_BOX`/`ICON_BOX_ACTIVE` in that

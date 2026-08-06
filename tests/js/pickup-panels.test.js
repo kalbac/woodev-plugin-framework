@@ -623,6 +623,58 @@ it( 'the handler itself refuses to emit select even when the disabled attribute 
 	expect( seen ).toHaveLength( 0 );
 } );
 
+describe( 'setSelectionBusy', () => {
+	const busyConfig = { ...cardConfig, i18n: { ...cardConfig.i18n, confirming: 'Проверяем…' } };
+
+	it( 'disables the CTA, swaps its label and locks the card', () => {
+		const panels = mount( busyConfig );
+		panels.openCard( { key: 'k', size: 1, points: [ point() ] } );
+
+		panels.setSelectionBusy( true );
+
+		const cta = panels.root.querySelector( '.woodev-pickup-card__cta' );
+
+		expect( cta.disabled ).toBe( true );
+		expect( cta.textContent ).toBe( 'Проверяем…' );
+		expect( panels.root.querySelector( '.woodev-pickup-card' ).classList.contains( 'is-locked' ) ).toBe( true );
+	} );
+
+	it( 'restores the CTA when the request settles', () => {
+		const panels = mount( busyConfig );
+		panels.openCard( { key: 'k', size: 1, points: [ point() ] } );
+
+		panels.setSelectionBusy( true );
+		panels.setSelectionBusy( false );
+
+		const cta = panels.root.querySelector( '.woodev-pickup-card__cta' );
+
+		expect( cta.disabled ).toBe( false );
+		expect( cta.textContent ).toBe( 'Забрать здесь' );
+		expect( panels.root.querySelector( '.woodev-pickup-card' ).classList.contains( 'is-locked' ) ).toBe( false );
+	} );
+
+	it( 'does not emit select while busy, even if something bypasses the disabled attribute', () => {
+		// As with the plain `selectable.allowed` guard above (see "the handler itself refuses..."),
+		// a genuinely `disabled` native button never dispatches `click` to its listeners at all —
+		// jsdom (like real browsers) suppresses it before any handler runs. Asserting against a
+		// disabled CTA alone would only re-prove that suppression, not the independent behavioural
+		// guard inside the click handler (`self._selectionBusy`). Force `disabled` off first so the
+		// click actually reaches the listener, and confirm the handler still refuses on its own.
+		const onSelect = jest.fn();
+		const panels = mount( busyConfig );
+		panels.on( 'select', onSelect );
+		panels.openCard( { key: 'k', size: 1, points: [ point() ] } );
+
+		panels.setSelectionBusy( true );
+
+		const cta = panels.root.querySelector( '.woodev-pickup-card__cta' );
+		cta.disabled = false;
+		cta.click();
+
+		expect( onSelect ).not.toHaveBeenCalled();
+	} );
+} );
+
 it( 'renders escaped point text without double-escaping it', () => {
 	const panels = mount( cardConfig );
 	panels.openCard( { key: 'k', size: 1, points: [ point( { name: 'ПВЗ &quot;Ромашка&quot;' } ) ] } );
