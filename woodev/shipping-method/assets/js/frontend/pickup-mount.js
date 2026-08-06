@@ -142,7 +142,7 @@
  *
  * THIS FILE, NOT THE PROVIDER, NOW OWNS FETCHING (Task 20): the provider
  * contract shrank to `init( container, config )` — it draws whatever
- * `setPoints( groups )` hands it and reports camera/selection events, but
+ * `setPoints( groups, options )` hands it and reports camera/selection events, but
  * never calls the REST layer itself any more (see `map-provider-yandex.js`'s
  * own docblock, "THIS FILE NO LONGER FETCHES ANYTHING ITSELF"). This file is
  * therefore the fetch ORCHESTRATOR: under `strategy: 'bulk'` it fetches once,
@@ -1206,6 +1206,36 @@
 		 *
 		 * @returns {void}
 		 */
+		/**
+		 * The group {@see restoreSelection} is ABOUT to focus on this pass, or null when this pass
+		 * restores nothing (already attempted, no panels, no stored point, or a stored point that
+		 * is not among the drawn groups). Read BEFORE `setPoints()` for one reason only: to tell
+		 * the provider to skip its `bulk` camera fit, which would otherwise move the camera to the
+		 * whole loaded set a beat before the restore moves it again to one point.
+		 *
+		 * Two moves there is not merely wasteful. s52's rig pass measured the second one landing
+		 * while ymaps was still rebuilding its ObjectManager overlays for the first, which parks
+		 * the newly un-clustered marker at ymaps' own off-screen sentinel until some later zoom
+		 * change re-lays it out: right camera, right `data-state`, no visible pin. See
+		 * `map-provider-yandex.js`'s `setPoints()` docblock for the mechanism.
+		 *
+		 * The lookup is deliberately NOT passed on to {@see restoreSelection} — that function
+		 * stays the single source of truth for what restoring actually does, including the cases
+		 * this one returns null for (a stored point missing from the results still updates the
+		 * sidebar's selected id).
+		 *
+		 * @returns {Object|null}
+		 */
+		function pendingRestoreGroup() {
+			if ( selectionRestoreAttempted || ! panels ) {
+				return null;
+			}
+
+			var selectedId = fieldValue( config.fieldId );
+
+			return selectedId ? findGroupByPointId( selectedId ) : null;
+		}
+
 		function restoreSelection() {
 			var selectedId = fieldValue( config.fieldId );
 
@@ -1276,7 +1306,10 @@
 					} );
 					groupsByKey = byKey;
 
-					provider.setPoints( groups );
+					// `{ fit: false }` on the pass that is about to restore a chosen point — the
+					// restore's own camera move is the only one that should happen. See
+					// {@see pendingRestoreGroup} for why two moves here are actively harmful.
+					provider.setPoints( groups, { fit: ! pendingRestoreGroup() } );
 
 					if ( panels ) {
 						panels.setTypes( extractTypes( points ) );

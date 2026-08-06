@@ -79,6 +79,9 @@ function StubProvider() {
 	this.destroyed = false;
 	this.initCalls = [];
 	this.setPointsCalls = [];
+	// The `options` argument of each setPoints() call, positionally paired with setPointsCalls —
+	// `{ fit: false }` is how the mount suppresses the bulk camera fit on the restore pass (s52).
+	this.setPointsOptions = [];
 	this.setTypeFilterCalls = [];
 	this.focusGroupCalls = [];
 	this.resolveAddressCalls = [];
@@ -121,8 +124,9 @@ StubProvider.prototype.destroy = function() {
 	this.destroyed = true;
 };
 
-StubProvider.prototype.setPoints = function( groups ) {
+StubProvider.prototype.setPoints = function( groups, options ) {
 	this.setPointsCalls.push( groups );
+	this.setPointsOptions.push( options );
 };
 
 StubProvider.prototype.setTypeFilter = function( codes ) {
@@ -3208,6 +3212,53 @@ describe( 'restoring a previous selection', () => {
 		await drawPoints( [ group( 1, 2, [ 'P1' ] ) ] );
 
 		expect( provider.focusGroupCalls ).toEqual( [] );
+	} );
+
+	// s52 rig defect. The restore's own camera move is not the only one that used to happen: the
+	// `bulk` fit setPoints() starts moved the camera to the WHOLE loaded set a beat earlier, and
+	// the second move landed while ymaps was still rebuilding its ObjectManager overlays for the
+	// first — which parks the newly un-clustered marker at ymaps' off-screen sentinel until some
+	// later zoom change re-lays it out (right camera, right `data-state`, no visible pin). The
+	// mount tells the provider not to fit at all on the pass that restores.
+	it( 'suppresses the provider\'s camera fit on the pass that restores a point', async () => {
+		const { provider, drawPoints, field } = openPicker( {} );
+		field.value = 'P2';
+
+		await drawPoints( [ group( 1, 2, [ 'P1' ] ), group( 3, 4, [ 'P2' ] ) ] );
+
+		expect( provider.setPointsOptions ).toEqual( [ { fit: false } ] );
+	} );
+
+	it( 'leaves the fit alone when there is nothing to restore', async () => {
+		const { provider, drawPoints, field } = openPicker( {} );
+		field.value = '';
+
+		await drawPoints( [ group( 1, 2, [ 'P1' ] ) ] );
+
+		expect( provider.setPointsOptions ).toEqual( [ { fit: true } ] );
+	} );
+
+	it( 'leaves the fit alone when the stored point is not among the drawn groups — the map has '
+		+ 'to open SOMEWHERE, and nothing is going to take the camera afterwards', async () => {
+		const { provider, drawPoints, field } = openPicker( {} );
+		field.value = 'GONE';
+
+		await drawPoints( [ group( 1, 2, [ 'P1' ] ) ] );
+
+		expect( provider.setPointsOptions ).toEqual( [ { fit: true } ] );
+	} );
+
+	it( 'leaves the fit alone on every LATER fetch — the restore is one-shot, so a pan or a '
+		+ 'type-filter refetch must still fit normally', async () => {
+		const { provider, drawPoints, field } = openPicker( { strategy: 'viewport' } );
+		field.value = 'P2';
+
+		const g2 = group( 3, 4, [ 'P2' ] );
+
+		await drawPoints( [ group( 1, 2, [ 'P1' ] ), g2 ] );
+		await drawPoints( [ g2 ] );
+
+		expect( provider.setPointsOptions ).toEqual( [ { fit: false }, { fit: true } ] );
 	} );
 
 	it( 'only attempts the restore ONCE per session — a later fetch never re-triggers it '

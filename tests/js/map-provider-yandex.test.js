@@ -1400,6 +1400,32 @@ test( 'bulk: visibleChange reflects the POST-fit viewport — points sitting out
 	expect( seen[ 0 ].sort() ).toEqual( [ 'a', 'b' ] );
 } );
 
+// s52: the caller that is about to take the camera itself (the mount's restore pass) opts out of
+// the fit, so the camera moves ONCE. Two moves around the ObjectManager's own rebuild leave the
+// newly un-clustered marker's overlay at ymaps' off-screen sentinel — see setPoints()'s docblock.
+test( 'bulk: `{ fit: false }` draws the points without fitting the camera and emits visibleChange '
+	+ 'straight away — the caller\'s own move raises boundschange, which re-emits it', async () => {
+	const provider = await init( { strategy: 'bulk' }, { deferSetBounds: true } );
+	const seen = [];
+
+	provider.on( 'visibleChange', ( keys ) => seen.push( keys ) );
+
+	provider.setPoints( [ group( 'a', 55.70, 37.60 ) ], { fit: false } );
+
+	expect( ymapsStub.lastMap.setBoundsCalls ).toHaveLength( 0 );
+	expect( seen ).toHaveLength( 1 );
+	// The points are still DRAWN — only the camera move is skipped.
+	expect( ymapsStub.lastObjectManager.added ).toHaveLength( 1 );
+} );
+
+test( 'bulk: `{ fit: true }` (and an omitted options object) still fits — the opt-out is explicit', async () => {
+	const provider = await init( { strategy: 'bulk' }, { deferSetBounds: true } );
+
+	provider.setPoints( [ group( 'a', 55.70, 37.60 ) ], { fit: true } );
+
+	expect( ymapsStub.lastMap.setBoundsCalls ).toHaveLength( 1 );
+} );
+
 test( 'bulk: a destroy() racing the in-flight fit never emits visibleChange afterwards', async () => {
 	const provider = await init( { strategy: 'bulk' }, { deferSetBounds: true } );
 	const seen = [];

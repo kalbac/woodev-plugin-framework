@@ -1685,12 +1685,27 @@
 	 * active state re-applied; a focused group that is GONE from the new set clears
 	 * `getFocusedKey()` instead — see {@see _setMarkerState}.
 	 *
-	 * @param {Array} groups
+	 * `options.fit: false` SUPPRESSES that fit — for a caller that is about to take the camera
+	 * itself and would only make it move twice. The mount passes it on the one pass that restores
+	 * a previously chosen point (spec D-15), and s52's rig pass is why it exists: two camera moves
+	 * issued back-to-back around the ObjectManager's own rebuild leave the newly un-clustered
+	 * feature's overlay parked at ymaps' off-screen sentinel (`left/top: -32760px`) until some
+	 * LATER zoom change re-lays it out — the camera was right, `data-state="active"` was right,
+	 * and the map showed no pin at all. ymaps rebuilds its overlays in a burst that starts AFTER
+	 * `actionend` (i.e. after the fit's own promise has already resolved), so no amount of
+	 * awaiting the fit avoids this; not making the second move is what avoids it. `visibleChange`
+	 * is then emitted immediately, from the pre-move viewport — safe, because the caller's own
+	 * camera move raises `boundschange`, which re-emits it (see {@see init}'s watcher).
+	 *
+	 * @param {Array}   groups
+	 * @param {Object}  [options]
+	 * @param {boolean} [options.fit] `false` skips the `bulk` camera fit. Defaults to fitting.
 	 * @returns {void}
 	 */
-	WoodevYandexMapProvider.prototype.setPoints = function( groups ) {
+	WoodevYandexMapProvider.prototype.setPoints = function( groups, options ) {
 		var self = this;
 		var list = groups || [];
+		var wantsFit = false !== ( options || {} ).fit;
 
 		this._groupsByKey = {};
 
@@ -1711,7 +1726,7 @@
 			this._setMarkerState( this._focusedKey, 'active' );
 		}
 
-		if ( 'bulk' === this.config.strategy && list.length > 0 ) {
+		if ( wantsFit && 'bulk' === this.config.strategy && list.length > 0 ) {
 			var anchor = [ list[ 0 ].lat, list[ 0 ].lng ];
 
 			// setBounds() is ASYNCHRONOUS — awaited, exactly like _resolveInitialViewport()'s
