@@ -3180,7 +3180,12 @@ describe( 'restoring a previous selection', () => {
 
 		await drawPoints( [ group( 1, 2, [ 'P1' ] ) ] );
 
-		expect( provider.focusGroupCalls ).toEqual( [] );
+		// `toHaveLength`, not `toEqual( [] )` — `toEqual` ignores `undefined` array items (a
+		// documented jest quirk: `expect( [ undefined ] ).toEqual( [] )` PASSES), so it would
+		// not have caught a regression that called `focusGroup( undefined, … )` for a vanished
+		// point instead of skipping the call outright. Caught by this task's own deliberate
+		// regression check.
+		expect( provider.focusGroupCalls ).toHaveLength( 0 );
 		expect( panels.showMessageCalls ).toBeUndefined();
 		// A stale field is left alone here — spec D-15 hands the judgement to the
 		// checkout-processing backstop, not to this restore. `toBe()` takes exactly one
