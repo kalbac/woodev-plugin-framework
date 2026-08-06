@@ -2001,6 +2001,20 @@ git commit -m "feat(pickup): confirm a selection with the server before acceptin
 
 ## Task 12: Restore the selection when the map reopens
 
+> **REVISED 06.08.2026 — the restore opens the CARD, not the list.** The snippets below are the
+> plan as written and were implemented as written; the operator then reviewed the result on the
+> rig and changed the requirement. As shipped, `restoreSelection()` ends with
+> `panels.openCard( group, selectedId, 'restore' )` instead of `panels.openList()`, because he
+> wants the chosen point's details and its «Продолжить оформление» button in front of him on
+> reopen rather than a list row he still has to click. `'restore'` is a new `origin` that the
+> mount's `cardOpened` listener returns early on, so the card-open issues no second camera move:
+> this pass's move already went out ahead of the draw, as `setPoints( groups, { focus } )`.
+> Accepted consequence: at `MAX_ZOOM` the viewport-filtered list behind the card holds one row.
+> Authoritative text: the design doc's §5.3 revision note. Two OTHER details below were already
+> superseded during implementation and are left as historical record — `focusGroup()` is not
+> called on this path at all any more (the camera moved before the draw, s52), and the helper
+> takes the resolved group rather than `groupsByKey`.
+
 **Files:**
 - Modify: `woodev/shipping-method/assets/js/frontend/pickup-mount.js` (the `alreadySelected`
   block, ~line 1189, and the points-drawn continuation, ~line 1104)
@@ -2010,14 +2024,14 @@ git commit -m "feat(pickup): confirm a selection with the server before acceptin
 
 ```js
 describe( 'restoring a previous selection', () => {
-	it( 'focuses the point, opens the sidebar and marks it selected', async () => {
+	it( 'focuses the point, opens the sidebar and marks it selected', async () => { // → "opens that point's CARD" as of 06.08.2026
 		const { panels, provider, drawPoints, field } = openPicker( {} );
 		field.value = 'P2';
 
 		await drawPoints( [ group( 'g1', [ point( 'P1' ) ] ), group( 'g2', [ point( 'P2' ) ] ) ] );
 
 		expect( panels.setSelectedId ).toHaveBeenCalledWith( 'P2' );
-		expect( panels.openList ).toHaveBeenCalled();
+		expect( panels.openList ).toHaveBeenCalled(); // SUPERSEDED 06.08.2026 → openCard(), see the banner
 		expect( provider.focusGroup ).toHaveBeenCalledWith( 'g2', { zoom: true } );
 	} );
 
@@ -2089,7 +2103,7 @@ Add beside the other session helpers:
 			return;
 		}
 
-		panels.openList();
+		panels.openList(); // SUPERSEDED 06.08.2026 → panels.openCard( group, selectedId, 'restore' )
 
 		if ( provider && 'function' === typeof provider.focusGroup ) {
 			provider.focusGroup( key, { zoom: true } );
@@ -2247,8 +2261,14 @@ Verify, by DOM measurement rather than by eye:
    click closes with **no second network request** (check the network panel).
 5. `DEMO-PVZ-REFRESH` fires `update_checkout` and the button stays busy until it settles; the §8
    anchor is re-placed underneath the open modal and the picker still works afterwards.
-6. Reopening the map focuses the chosen point, its marker reads `data-state="active"`, the
-   sidebar is open and the row carries `is-selected`.
+6. Reopening the map focuses the chosen point, its marker reads `data-state="active"` **and its
+   `getBoundingClientRect()` is inside the map's** (attributes alone lied here once — s52), that
+   point's **detail card** is open with the CTA reading «Продолжить оформление», and the row
+   behind the card carries `is-selected`. Exactly **one** camera move happens on this path —
+   instrument `map.setCenter`/`map.setBounds` and count. (Revised 06.08.2026: this item used to
+   read "the sidebar is open"; the operator changed the behaviour to the card — see the design
+   doc's §5.3 revision note.) At `MAX_ZOOM` the viewport-filtered list behind the card holds one
+   row; that is expected and accepted, not a finding.
 7. Break the nonce deliberately (`document.getElementById('woodev-pickup-nonce-…')
    .dataset.woodevPickupNonce = 'broken'`) and confirm the stale-page message appears and the
    CTA stays alive.

@@ -342,6 +342,14 @@ StubPanels.prototype.setSearchBusy = function( busy ) {
 StubPanels.prototype.openCard = function( group, pointId, origin ) {
 	this.lastOpenCard = { group: group, pointId: pointId, origin: origin };
 
+	// Whatever `setSelectedId()` had recorded by the time this card opened. The real
+	// `renderCard()` reads `_selectedId` to choose between «Выбрать» and «Продолжить оформление»,
+	// so "was the id already set?" is an ordering fact a caller can get wrong — and the
+	// reopen-restore path (06.08.2026) exists precisely to show the second label. Captured here
+	// rather than pushed onto `callOrder`, which other tests assert by exact equality.
+	this.selectedIdWhenCardOpened = this.lastSelectedId;
+	this.openCardCalls = ( this.openCardCalls || 0 ) + 1;
+
 	// The real class emits this from `openCard()`, BEFORE it renders — the single funnel every
 	// route to a card passes through, and what the mount listens to in order to move the camera.
 	// `origin` (round 2, D6) rides along verbatim — it is what lets that ONE listener pan-only for
@@ -3402,7 +3410,7 @@ describe( 'a synchronous listener on the confirmation events', () => {
 // -------------------------------------------------------------------------
 
 describe( 'restoring a previous selection', () => {
-	it( 'opens the map AT the point, opens the sidebar and marks it selected', async () => {
+	it( 'opens the map AT the point, opens that point\'s CARD and marks it selected', async () => {
 		const { panels, provider, drawPoints, field } = openPicker( {} );
 		field.value = 'P2';
 
@@ -3412,18 +3420,55 @@ describe( 'restoring a previous selection', () => {
 		await drawPoints( [ g1, g2 ] );
 
 		// This file's own StubPanels/StubProvider convention (see their constructors above):
-		// `setSelectedId`/`openList` record onto plain properties, not `jest.fn()`s — only the
+		// `setSelectedId`/`openCard` record onto plain properties, not `jest.fn()`s — only the
 		// Task 11 confirmation calls are per-instance mocks. `toHaveBeenCalledWith` therefore
 		// does not apply here; the plan's own snippet used it, but that snippet's `group()`/
 		// `point()` shapes were imaginary too (discrepancy (b)) — asserted the idiomatic way
 		// instead.
 		expect( panels.lastSelectedId ).toBe( 'P2' );
-		expect( panels.openListCalls ).toBe( 1 );
+
+		// Operator decision, 06.08.2026 (supersedes spec §5.3's `openList()`): the reopened picker
+		// shows the chosen point's DETAILS and its «Продолжить оформление» CTA, not the sidebar
+		// list. The card is opened on the STORED id, never on the group's first point — a
+		// co-located group can hold several and only one of them is the customer's.
+		// `lastOpenCard.group` is the mount's OWN regrouped object (`geo.groupByPosition()` adds
+		// `lat`/`lng`/`size`/`typeCode`), not the `group()` helper's raw literal — compared by key
+		// rather than by `toEqual( g2 )`, which is the shape mismatch this assertion first tripped on.
+		expect( panels.openListCalls ).toBeUndefined();
+		expect( panels.lastOpenCard.group.key ).toBe( g2.key );
+		expect( panels.lastOpenCard.pointId ).toBe( 'P2' );
+		expect( panels.lastOpenCard.origin ).toBe( 'restore' );
+
+		// `setSelectedId()` BEFORE the card: `renderCard()` reads `_selectedId` to pick the CTA
+		// label, so the reverse order would render «Выбрать» on the very card that exists to say
+		// «Продолжить оформление».
+		expect( panels.selectedIdWhenCardOpened ).toBe( 'P2' );
+
 		// s52: the camera and the marker's active state are `setPoints()`'s job on this pass, not
 		// a `focusGroup()` call made after the draw — that order left the restored marker's
 		// overlay parked off screen. See map-provider-yandex.js's setPoints() docblock.
+		//
+		// This is ALSO the regression guard for the 06.08.2026 change: the stub emits the real
+		// `cardOpened` event from `openCard()`, and the mount's listener answers every OTHER
+		// origin with `provider.focusGroup()`. Without the `'restore'` early return the card-open
+		// would issue a SECOND camera move here and this assertion would fail.
 		expect( provider.setPointsOptions ).toEqual( [ { focus: g2.key } ] );
 		expect( provider.focusGroupCalls ).toHaveLength( 0 );
+	} );
+
+	it( 'leaves an unrelated in-flight confirmation alone — the restore card is about the point '
+		+ 'that confirmation is already about', async () => {
+		// The `cardOpened` listener also drops a pending confirmation whose point the card has
+		// moved off (spec D-9). On the restore path there is nothing in flight, so it is a no-op —
+		// verified here rather than assumed, since the guard reads shared session state.
+		const { panels, drawPoints, field } = openPicker( {} );
+		field.value = 'P2';
+
+		await drawPoints( [ group( 1, 2, [ 'P1' ] ), group( 3, 4, [ 'P2' ] ) ] );
+
+		// `setSelectionBusy( false )` is what `invalidateSelection()` would have emitted through
+		// `releaseSelectionBusy()`. Nothing armed a token, so nothing releases one.
+		expect( panels.setSelectionBusy ).not.toHaveBeenCalled();
 	} );
 
 	it( 'opens normally and silently when the selected point is gone', async () => {
@@ -3438,12 +3483,14 @@ describe( 'restoring a previous selection', () => {
 		// point instead of skipping the call outright. Caught by this task's own deliberate
 		// regression check.
 		expect( provider.focusGroupCalls ).toHaveLength( 0 );
-		// D-15's "opens in its ordinary default view" means the LIST stays closed too, not
+		// D-15's "opens in its ordinary default view" means the SIDEBAR stays shut too, not
 		// only the camera — every `fetchAndSetPoints()` call site chains `.catch( () => {} )`,
 		// so a thrown exception inside `restoreSelection()` (e.g. a `!group` guard removed,
 		// then `group.key` accessed on `null`) is silently swallowed rather than failing loudly;
-		// `openListCalls` is the assertion that actually catches that shape of regression, since
-		// `openList()` would already have run before such a throw.
+		// `lastOpenCard` is the assertion that actually catches that shape of regression, since
+		// `openCard()` would already have run before such a throw. (Before 06.08.2026 this
+		// watched `openListCalls`; the restore opens the card now, so the tripwire moved with it.)
+		expect( panels.lastOpenCard ).toBeUndefined();
 		expect( panels.openListCalls ).toBeUndefined();
 		expect( panels.showMessageCalls ).toBeUndefined();
 		// A stale field is left alone here — spec D-15 hands the judgement to the
@@ -3506,15 +3553,15 @@ describe( 'restoring a previous selection', () => {
 		await drawPoints( [ group( 1, 2, [ 'P1' ] ), g2 ] );
 
 		expect( provider.setPointsOptions ).toEqual( [ { focus: g2.key } ] );
-		expect( panels.openListCalls ).toBe( 1 );
+		expect( panels.openCardCalls ).toBe( 1 );
 
 		// A SECOND fetch that draws the SAME previously-selected point again — a real pan back
-		// onto it, a type-filter refetch — must not re-open the list, nor open the map at that
+		// onto it, a type-filter refetch — must not re-open the card, nor open the map at that
 		// point again (which would yank the camera back off wherever the customer panned to).
 		// Nothing here retracts the restore; it just must not fire a second time.
 		await drawPoints( [ g2 ] );
 
 		expect( provider.setPointsOptions ).toEqual( [ { focus: g2.key }, null ] );
-		expect( panels.openListCalls ).toBe( 1 );
+		expect( panels.openCardCalls ).toBe( 1 );
 	} );
 } );

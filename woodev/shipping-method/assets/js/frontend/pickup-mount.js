@@ -1269,7 +1269,30 @@
 		 *
 		 * Called ONCE per session, gated by `selectionRestoreAttempted` at the single call site
 		 * below — see that flag's own docblock for why. `setSelectedId()` drives both the CTA
-		 * label and the row highlight; `openList()` makes the sidebar's visibility deterministic.
+		 * label and the row highlight, and it MUST run before the card opens: `renderCard()` reads
+		 * `_selectedId` to decide whether the CTA says «Выбрать» or «Продолжить оформление», and
+		 * the whole point of the operator's 06.08.2026 decision is that the reopened picker shows
+		 * the latter straight away.
+		 *
+		 * OPENS THE CARD, NOT THE LIST (operator decision, 06.08.2026 — supersedes spec §5.3's
+		 * `openList()`): reopening with a point already chosen must show that point's DETAILS and
+		 * its «Продолжить оформление» button immediately, not a sidebar list the customer has to
+		 * click through again. The accepted consequence is that the list behind the card holds a
+		 * single row — `setPoints( groups, { focus } )` opens the map at MAX_ZOOM and the sidebar
+		 * list is viewport-filtered (`visibleChange` → `setVisible()`), so only the restored marker
+		 * is in view. That is the zoom's doing, not a bug, and the zoom stays.
+		 *
+		 * `'restore'` IS THE ORIGIN THAT MEANS "CAMERA ALREADY HANDLED". Every other origin makes
+		 * the `cardOpened` listener below call `provider.focusGroup()`; this one must not, because
+		 * the camera half of this pass already went out with `setPoints( groups, { focus } )` —
+		 * BEFORE the draw, which is the one order that does not park the restored marker's overlay
+		 * off screen (s52; see {@see pendingRestoreGroup} and the two ymaps gotchas it cites). A
+		 * second camera move here would re-enter that race for no gain. The sidebar half is still
+		 * `openCard()`'s own `setStageOpen()` → `listToggle` → `provider.setMargin()`, unchanged.
+		 *
+		 * The card is opened on `selectedId` specifically, never on the group's first point: a
+		 * co-located group can hold several points and the one the customer chose is the one whose
+		 * tab must be showing.
 		 *
 		 * A point that is no longer in the results (`group` null) still marks the id — the map
 		 * opens in its ordinary default view, the sidebar stays closed, and the field is left
@@ -1293,7 +1316,7 @@
 				return;
 			}
 
-			panels.openList();
+			panels.openCard( group, selectedId, 'restore' );
 		}
 
 		/**
@@ -1811,9 +1834,10 @@
 			// marker click pans only (the customer already sees roughly where it is; slamming
 			// the camera to max zoom on every tap was the operator's original bug report), every
 			// other origin centres AND zooms, since none of those started from a point already
-			// visible on screen. `origin` (threaded through `openCard()`/`cardOpened` by every
-			// caller below) is what lets this ONE listener still decide per-call instead of
-			// forking into several near-identical ones.
+			// visible on screen, and `'restore'` (06.08.2026) moves the camera not at all, because
+			// its move already went out ahead of the draw. `origin` (threaded through
+			// `openCard()`/`cardOpened` by every caller below) is what lets this ONE listener still
+			// decide per-call instead of forking into several near-identical ones.
 			panels.on( 'cardOpened', function( payload ) {
 				// The staleness guard's other half (spec D-9). Locking the card stops a second
 				// confirmation from STARTING; it does not freeze the map underneath it, where a
@@ -1825,6 +1849,17 @@
 				// rather than leaving it frozen until an answer nobody wants finally lands.
 				if ( 0 !== pendingSelectionToken && String( payload.pointId ) !== pendingSelectionPointId ) {
 					invalidateSelection();
+				}
+
+				// `'restore'` is the ONE origin that moves no camera at all (operator decision,
+				// 06.08.2026 — the reopened picker shows the chosen point's CARD now, not the
+				// list). Its camera move already went out, ahead of the draw, as
+				// `setPoints( groups, { focus } )` — see {@see restoreSelection}. Falling through
+				// to `focusGroup()` here would issue a SECOND move on top of it, re-entering the
+				// s52 draw-vs-move race the ordering exists to avoid, for a camera that is already
+				// exactly where this move would put it.
+				if ( 'restore' === payload.origin ) {
+					return;
 				}
 
 				if ( payload.group && provider && 'function' === typeof provider.focusGroup ) {

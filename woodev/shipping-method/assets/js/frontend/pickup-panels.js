@@ -48,8 +48,9 @@
  *
  * `cardOpened` (Task 10, spec V-10 — REVISED in the SP-5 round-2 live review, see the plan's D6):
  * emitted by `openCard()` for EVERY route to a card — a marker click, a sidebar row, a search
- * result, "show the nearest" — carrying `{ group, pointId, origin }`. `origin` is the caller's own
- * label for which route this was (`'marker'|'list'|'search'|'nearest'`); every internal call site
+ * result, "show the nearest", the reopen-restore — carrying `{ group, pointId, origin }`. `origin`
+ * is the caller's own label for which route this was
+ * (`'marker'|'list'|'search'|'nearest'|'restore'`); every internal call site
  * in THIS file passes `'list'` (the sidebar row builders, below) — a search-result pick and
  * "show the nearest" route through `openCard()` from OUTSIDE this file (the mount, in response to
  * `searchPointPicked`/`searchAddressPicked`/`showNearestRequested`), so THEIR label is that
@@ -58,7 +59,9 @@
  * so it can tell a marker click apart from every other route: round-2's live rig review found that
  * neither reference treats them identically the way the original V-10 sentence claimed. A marker
  * click only PANS the camera (zoom untouched); a sidebar row, a search pick, and "show nearest" all
- * zoom in. `map-provider-yandex.js`'s `focusGroup( key, { zoom: 'marker' !== origin } )` is what
+ * zoom in; `'restore'` (the mount reopening on a previously chosen point, 06.08.2026) moves the
+ * camera not at all, since `setPoints( groups, { focus } )` already did that BEFORE the draw.
+ * `map-provider-yandex.js`'s `focusGroup( key, { zoom: 'marker' !== origin } )` is what
  * reads this field. The original V-10 text ("a marker click and a sidebar row click must behave
  * identically") is WRONG and this file does not restore it. Emitted BEFORE the card renders, so the
  * asynchronous camera flight and the synchronous DOM land together rather than the map lurching
@@ -2678,7 +2681,8 @@
 	 *
 	 * @param {Object}        group
 	 * @param {string|number} [pointId]
-	 * @param {string}        [origin] `'marker'|'list'|'search'|'nearest'` — see the file docblock.
+	 * @param {string}        [origin] `'marker'|'list'|'search'|'nearest'|'restore'` — see the file
+	 *                                 docblock.
 	 * @returns {void}
 	 */
 	Panels.prototype.openCard = function( group, pointId, origin ) {
