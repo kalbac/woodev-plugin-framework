@@ -188,6 +188,39 @@ class Pickup_Controller_Probe extends Pickup_Controller {
 }
 
 /**
+ * Probe whose rate limiter is always TRIPPED, and which records the prefix and budget it
+ * was asked for. The inverse of {@see Pickup_Controller_Probe}, which never limits — a
+ * route's guard cannot be proven to exist by a probe that disables it, so the only way to
+ * assert the guard actually fires (and fires with its OWN bucket, not a sibling's) is a
+ * second probe that forces the other branch.
+ */
+final class Pickup_Controller_Limited_Probe extends Pickup_Controller {
+
+	/**
+	 * Every ( prefix, max ) pair the controller asked the limiter about.
+	 *
+	 * @var array<int, array{prefix: string, max: int}>
+	 */
+	public array $limit_checks = [];
+
+	/**
+	 * @param string $key_prefix transient key prefix.
+	 * @param int    $max        requests allowed per window.
+	 * @param int    $window     window length in seconds (unused).
+	 *
+	 * @return bool
+	 */
+	protected function is_rate_limited( string $key_prefix, int $max, int $window = 60 ): bool {
+		$this->limit_checks[] = [
+			'prefix' => $key_prefix,
+			'max'    => $max,
+		];
+
+		return true;
+	}
+}
+
+/**
  * @covers \Woodev\Framework\Shipping\Rest_Api\Pickup_Controller
  */
 final class PickupControllerTest extends TestCase {
@@ -1132,6 +1165,64 @@ final class PickupControllerTest extends TestCase {
 		$this->assertSame( 502, $result->get_error_data()['status'] );
 		$this->assertStringNotContainsString( 'carrier.example', $result->get_error_message() );
 		$this->assertCount( 1, $controller->logged_failures );
+	}
+
+	/**
+	 * The guard must fire BEFORE the point lookup — a 429 that has already spent a carrier
+	 * call has protected nothing. Asserted by the source's own call counter, not just by
+	 * the returned error, so a guard moved below the lookup fails here.
+	 */
+	public function test_a_throttled_selection_never_reaches_the_carrier(): void {
+		$fetches = 0;
+		$source  = new Pickup_Controller_Test_Source(
+			Point_Source::STRATEGY_BULK,
+			static fn( Point_Query $query ) => [],
+			function ( string $id ) use ( &$fetches ) {
+				++$fetches;
+
+				return $this->point();
+			}
+		);
+		$controller = new Pickup_Controller_Limited_Probe(
+			'test-plugin',
+			$source,
+			static fn() => 0,
+			static fn() => 'bacs',
+			static fn() => 'carrier_pickup'
+		);
+
+		$result = $controller->handle_select_request(
+			new WP_REST_Request( [ 'field_id' => 'pvz', 'point_id' => 'P1' ] )
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'woodev_pickup_rate_limited', $result->get_error_code() );
+		$this->assertSame( 429, $result->get_error_data()['status'] );
+		$this->assertSame( 0, $fetches, 'a throttled selection must not reach fetch_details()' );
+	}
+
+	/**
+	 * The selection route must draw on its OWN bucket and its OWN budget — sharing a
+	 * sibling's prefix would let map panning exhaust the confirmation allowance (or the
+	 * reverse), which is the failure the trait's per-workload prefixes exist to prevent.
+	 */
+	public function test_the_selection_route_uses_its_own_rate_limit_bucket(): void {
+		$controller = new Pickup_Controller_Limited_Probe(
+			'test-plugin',
+			$this->details_source( $this->point() ),
+			static fn() => 0,
+			static fn() => 'bacs',
+			static fn() => 'carrier_pickup'
+		);
+
+		$controller->handle_select_request( new WP_REST_Request( [ 'field_id' => 'pvz', 'point_id' => 'P1' ] ) );
+
+		$this->assertCount( 1, $controller->limit_checks );
+		$this->assertSame( 'woodev_pickup_sel_rl_', $controller->limit_checks[0]['prefix'] );
+
+		// Tighter than the detail read's 60 — see SELECT_RATE_LIMIT_MAX's own docblock.
+		$this->assertSame( 15, $controller->limit_checks[0]['max'] );
+		$this->assertLessThan( 60, $controller->limit_checks[0]['max'] );
 	}
 
 	public function test_the_filter_context_carries_the_injected_method_id_never_a_request_param(): void {

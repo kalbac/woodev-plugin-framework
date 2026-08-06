@@ -110,6 +110,30 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 		protected const DETAILS_RATE_LIMIT_MAX = 60;
 
 		/**
+		 * Rate-limit budget for the selection (POST) route.
+		 *
+		 * Deliberately a quarter of {@see DETAILS_RATE_LIMIT_MAX} rather than a copy of it,
+		 * because the two workloads are nothing alike. A detail request is one per balloon
+		 * OPENED — a customer comparing points clicks through many of them — whereas a
+		 * selection is one per point CONFIRMED, of which a real checkout produces a handful
+		 * at the very most, and the picker locks the card while a confirmation is in flight,
+		 * so a legitimate customer cannot issue them concurrently either.
+		 *
+		 * 15/min is one confirmation every four seconds, sustained for a full minute: roughly
+		 * five times the worst honest case (a customer who confirms, changes their mind, and
+		 * re-confirms a few times) and still far under anything that would let a scripted
+		 * client with a valid nonce pump the carrier. This route is the ONLY one whose
+		 * `woodev_shipping_pickup_point_selection` seam is documented as allowed to call the
+		 * carrier, so its budget buys more protection per unit than either read's does —
+		 * which is exactly why it is the tightest of the three, not the loosest.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var int
+		 */
+		protected const SELECT_RATE_LIMIT_MAX = 15;
+
+		/**
 		 * The owning plugin id this controller answers for.
 		 *
 		 * @since 2.0.2
@@ -430,6 +454,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 		 * @return \WP_REST_Response|\WP_Error
 		 */
 		public function handle_select_request( $request ) {
+
+			// FIRST, before the point lookup: a throttled request must not reach
+			// Point_Source::fetch_details() — nor the domain seam behind it, which is the one
+			// hook in this flow documented as allowed to call the carrier. Guarding any later
+			// would still answer 429 while having already spent the merchant's quota, which
+			// is the whole thing this budget exists to protect. The nonce stops a third-party
+			// site; it does not stop a scripted client holding a valid one.
+			if ( $this->is_rate_limited( 'woodev_pickup_sel_rl_', self::SELECT_RATE_LIMIT_MAX ) ) {
+				return $this->rate_limited_error();
+			}
 
 			$field_id = $this->cap_length(
 				(string) wc_clean( wp_unslash( $request->get_param( 'field_id' ) ) ),
