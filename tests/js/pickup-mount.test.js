@@ -402,17 +402,29 @@ StubPanels.prototype.hideMessage = function() {
  * debounce, fully synchronous-microtask-controlled so tests stay fast and
  * deterministic. `fetchDetails()` is unused by this file and stubbed trivially.
  *
+ * The returned factory records the `options` object `openSession()` calls it with, on
+ * `factory.lastOptions` — needed so a test can invoke `options.nonce()` itself and prove
+ * `pickup-mount.js`'s live-nonce-reader closure (issue #157, {@see currentNonce} in
+ * pickup-mount.js) is the ACTUAL function wired into the datasource, not just a helper
+ * that exists somewhere unreferenced. Every OTHER test in this file already ignored the
+ * factory's argument entirely (the returned object never changes shape), so recording it
+ * here is additive only.
+ *
  * @param {Function} impl `function( query ) { return Promise }`
  */
 function fakeDataSourceFactory( impl ) {
-	return function() {
+	function factory( options ) {
+		factory.lastOptions = options;
+
 		return {
 			fetchPoints: impl,
 			fetchDetails: function() {
 				return Promise.resolve( {} );
 			},
 		};
-	};
+	}
+
+	return factory;
 }
 
 /**
@@ -464,6 +476,10 @@ function makeConfig( overrides ) {
 		strategy: 'bulk',
 		restRoot: 'https://example.test/wp-json/woodev/v1/shipping/pickup/p/points',
 		nonce: 'nonce-1',
+		// #157: the DOM id of the fragment node `Pickup_Handler::print_nonce_node()`/
+		// `inject_nonce_fragment()` both target — real value shape, see that class'
+		// `nonce_node_id()`.
+		nonceNodeId: 'woodev-pickup-nonce-p',
 		i18n: phpI18n(),
 		mapConfig: { center: [ 55.75, 37.61 ] },
 		replaceAddress: { enabled: true, billingOnly: false },
@@ -760,6 +776,41 @@ test( 'clicking the trigger opens the shell and calls provider.init with the con
 	// it, unused, in its own signature.
 	expect( typeof calls[ 0 ].dataSource.fetchPoints ).toBe( 'function' );
 	expect( typeof calls[ 0 ].dataSource.fetchDetails ).toBe( 'function' );
+} );
+
+// -------------------------------------------------------------------------
+// Live nonce reader (#157) — the datasource is handed a FUNCTION (never a
+// captured string) that reads whichever node currently holds a valid nonce,
+// so a nonce rotated by a later `update_checkout` fragment refresh is still
+// picked up. Exercises the REAL closure `openSession()` builds — via
+// `fakeDataSourceFactory`'s captured `options` (see its own docblock) —
+// rather than exporting `currentNonce()` as a second, test-only surface.
+// -------------------------------------------------------------------------
+
+test( 'the datasource nonce reader prefers the live fragment node over the page-load config.nonce', () => {
+	const config = makeConfig( { nonce: 'page-load-nonce' } );
+	setConfig( config );
+
+	const node = document.createElement( 'span' );
+	node.id = config.nonceNodeId;
+	node.setAttribute( 'data-woodev-pickup-nonce', 'fresh-fragment-nonce' );
+	document.body.appendChild( node );
+
+	mountAll();
+	clickTrigger();
+
+	expect( window.WoodevPickupDataSource.lastOptions.nonce() ).toBe( 'fresh-fragment-nonce' );
+} );
+
+test( 'the datasource nonce reader falls back to config.nonce when the fragment node is absent', () => {
+	const config = makeConfig( { nonce: 'page-load-nonce' } );
+	setConfig( config );
+
+	mountAll();
+	clickTrigger();
+
+	expect( document.getElementById( config.nonceNodeId ) ).toBeNull();
+	expect( window.WoodevPickupDataSource.lastOptions.nonce() ).toBe( 'page-load-nonce' );
 } );
 
 test( 'the session tags its modal with the documented pickup modalId on every modal event', () => {
