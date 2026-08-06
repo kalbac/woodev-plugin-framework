@@ -1140,7 +1140,6 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 					'replaceAddress',
 					'selection',
 					'accentColor',
-					'searchNearestCount',
 					'modal',
 					'search',
 				],
@@ -1629,54 +1628,6 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 		}
 
 		// -------------------------------------------------------------------------
-		// searchNearestCount (Task 19, D-6) — framework default, filterable, sanitised
-		// -------------------------------------------------------------------------
-
-		public function test_search_nearest_count_defaults_to_three(): void {
-			Functions\when( 'apply_filters' )->returnArg( 2 );
-			$this->stub_config_dependencies_except_filters();
-
-			$this->assertSame( 3, $this->make_handler()->get_js_config()['searchNearestCount'] );
-		}
-
-		public function test_a_filter_overrides_the_search_nearest_count(): void {
-			Filters\expectApplied( 'woodev_pickup_search_nearest_count' )->andReturn( 5 );
-			$this->stub_config_dependencies_except_filters();
-
-			$this->assertSame( 5, $this->make_handler()->get_js_config()['searchNearestCount'] );
-		}
-
-		/**
-		 * The filter is untrusted input on a path that ends in a camera fit — a zero,
-		 * negative, or non-integer return value falls back to the framework default rather
-		 * than reaching the browser as a count that would fit the camera to nothing (or
-		 * throw client-side), same discipline as `resolve_accent_color()`'s own filter.
-		 *
-		 * @dataProvider garbage_search_nearest_count_provider
-		 * @param mixed $garbage
-		 */
-		public function test_a_filter_returning_garbage_falls_back_to_the_default_search_nearest_count(
-			$garbage
-		): void {
-			Filters\expectApplied( 'woodev_pickup_search_nearest_count' )->andReturn( $garbage );
-			$this->stub_config_dependencies_except_filters();
-
-			$this->assertSame( 3, $this->make_handler()->get_js_config()['searchNearestCount'] );
-		}
-
-		/**
-		 * @return array<string, array{0: mixed}>
-		 */
-		public static function garbage_search_nearest_count_provider(): array {
-			return [
-				'zero'     => [ 0 ],
-				'negative' => [ -1 ],
-				'string'   => [ '5' ],
-				'float'    => [ 2.5 ],
-				'null'     => [ null ],
-			];
-		}
-
 		public function test_config_contains_no_object_or_closure_anywhere(): void {
 			Functions\when( 'apply_filters' )->returnArg( 2 );
 			Functions\when( 'rest_url' )->justReturn( 'https://example.test/wp-json/woodev/v1' );

@@ -814,7 +814,6 @@
 			defaultLocation: config.defaultLocation,
 			pointIcons: config.pointIcons,
 			accentColor: config.accentColor,
-			searchNearestCount: config.searchNearestCount,
 			searchLayoutEl: searchLayoutEl || null,
 		} );
 	}
@@ -2064,30 +2063,86 @@
 				}
 			} );
 
-			// `searchSubmit` (Enter/the magnifier) is the ONLY path that spends the merchant's
-			// geocoding quota — it runs the control's own `search()`, which invokes
-			// `map-provider-yandex.js`'s bounded geocode provider and, on resolution, emits ONE
-			// of `searchResults`/`searchCleared`/`addressMatchedPoint` (all wired below) with the
-			// outcome. `setSearchBusy( true )` marks the submit button in-flight for exactly the
-			// same reason the button exists at all (work item 5, live-review round 2): a real
-			// network round trip takes real time, and every one of those three outcomes clears it
-			// again — see their own listeners below — so the button can never be left stuck
-			// disabled regardless of which one the search actually resolves down. Only fired when
-			// a search is genuinely about to run; a provider with no `searchControl` never
-			// answers with any of the three events, and marking busy without a matching clear
-			// would strand the button forever.
+			// `searchSubmit` (Enter/the magnifier) RESOLVES what the dropdown is already showing —
+			// it does not start a search of its own (#179). It used to call the SearchControl's
+			// `search()`, which ran `map-provider-yandex.js`'s bounded GEOCODE provider, while the
+			// list the customer was looking at had come from `suggest()`. Two services, one
+			// question, and the geocoder ranks POIs above street addresses: typing «Чертановская
+			// 66» offered five house numbers, pressing the magnifier replaced them with
+			// «Chertanovskaya metro station». That is the same defect the gotcha
+			// `ymaps-suggest-not-geocode-for-address-lists` recorded in s51 — its fix moved the
+			// TYPING path onto `suggest()` and left this one behind.
+			//
+			// So: re-ask `suggestAddresses()` (free, and authoritative for what is on screen),
+			// take its best hit, and hand it to the SAME `resolveAddress()` a click on a row uses.
+			// One geocode is still spent — on RESOLVING a chosen address, which is the one role
+			// `bounding-the-address-resolve-breaks-the-normal-case` says it should have.
+			//
+			// The busy flag is owned by this chain from end to end rather than by whichever event
+			// happens to answer (work item 5, live-review round 2): the flag goes up
+			// synchronously, and comes down in the tail of the chain whatever the outcome —
+			// resolved, nothing suggested, or a rejected round trip. Nothing can strand it.
+			// Guarded on the provider actually being able to do both halves; the embedded
+			// provider owns its own chrome and offers neither, and raising a flag nothing will
+			// ever lower is exactly the bug this guard exists for.
 			panels.on( 'searchSubmit', function( payload ) {
-				if ( provider && provider.searchControl && 'function' === typeof provider.searchControl.search ) {
-					panels.setSearchBusy( true );
-					provider.searchControl.search( payload.query );
+				if ( ! provider
+					|| 'function' !== typeof provider.suggestAddresses
+					|| 'function' !== typeof provider.resolveAddress ) {
+					return;
 				}
+
+				panels.setSearchBusy( true );
+
+				provider.suggestAddresses( payload.query ).then( function( results ) {
+					if ( destroyed || ! panels ) {
+						return undefined;
+					}
+
+					var addresses = ( results && results.addresses ) || [];
+
+					// Keep `lastAddresses` in step for the same reason the `searchType` handler
+					// does — `searchAddressPicked` indexes into it, and a submit that refreshed
+					// the dropdown without refreshing this would resolve the wrong row next.
+					lastAddresses = addresses;
+
+					if ( ! addresses.length ) {
+						// Say so through the SAME preview the typing path renders into, rather
+						// than leaving the customer's list untouched and the map still.
+						panels.previewSearchResults( {
+							points: ( results && results.points ) || [],
+							addresses: [],
+						} );
+
+						return undefined;
+					}
+
+					// The FULL `query` form, never the trimmed `displayName` — see the
+					// `searchAddressPicked` handler above for why the trimmed one re-geocodes
+					// ambiguously.
+					return provider.resolveAddress( addresses[ 0 ].query || addresses[ 0 ].displayName );
+				} ).catch( function() {} ).then( function() {
+					if ( ! destroyed && panels ) {
+						panels.setSearchBusy( false );
+					}
+				} );
 			} );
 
 			// `searchReset` clears the input/results DOM itself (pickup-panels.js's own job) —
 			// this file's half is dropping whatever provider-side search state belongs to it: the
 			// "your address" pin and the stale `searchResults`, both owned by `clearAddress()`
 			// (see map-provider-yandex.js's own docblock on why that file, not this one, owns it).
+			//
+			// Also drops the submit button's busy flag (#179). The flag is owned end-to-end by
+			// the `searchSubmit` chain above, which always lowers it in its own tail — but a
+			// customer who hits reset mid-flight has cancelled, and should get the control back
+			// now rather than when a round trip they no longer care about finishes. This is the
+			// only OTHER place that touches the flag, and it is a user action, not a provider
+			// event: the three provider listeners below used to lower it too, back when the
+			// SearchControl answered through them, and were removed with that path.
 			panels.on( 'searchReset', function() {
+				panels.setSearchBusy( false );
+
 				if ( provider && 'function' === typeof provider.clearAddress ) {
 					provider.clearAddress();
 				}
@@ -2190,21 +2245,15 @@
 				provider.on( 'searchResults', function( results ) {
 					lastAddresses = ( results && results.addresses ) || [];
 					panels.renderSearchResults( results );
-					// A completed search is one of the three outcomes `searchSubmit` (above) put
-					// the button in flight for — see that listener's own comment.
-					panels.setSearchBusy( false );
 				} );
 
 				// searchCleared (D1a, live-review round 2 — the "crossik" bug): `clearAddress()`
 				// no longer round-trips through an EMPTY `searchResults` to signal "cleared" — see
 				// `map-provider-yandex.js`'s own docblock on why that used to re-open the results
 				// box the customer had just closed and print "не найдено" at them. This IS the
-				// box's actual close path now. Also releases whatever busy state `searchSubmit`
-				// may have set — a search that resolves down the clear route (rather than a
-				// completed one) must not leave the submit button stuck disabled either.
+				// box's actual close path now.
 				provider.on( 'searchCleared', function() {
 					panels.hideSearchResults();
-					panels.setSearchBusy( false );
 				} );
 
 				// addressMatchedPoint (late addition, live-review round 2): the searched address
@@ -2221,8 +2270,6 @@
 				// block (see `showNearestRequested` above).
 				provider.on( 'addressMatchedPoint', function( info ) {
 					var group = info && info.key ? groupsByKey[ info.key ] : null;
-
-					panels.setSearchBusy( false );
 
 					if ( group ) {
 						panels.openCard( group, null, 'search' );

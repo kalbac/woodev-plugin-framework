@@ -579,7 +579,6 @@ function makeConfig( overrides ) {
 		defaultLocation: { center: [ 55.76, 37.64 ], zoom: 12 },
 		pointIcons: { PVZ: { default: 'https://example.test/pvz.svg', active: 'https://example.test/pvz-a.svg' } },
 		accentColor: '#06aedd',
-		searchNearestCount: 3,
 		modal: { width: 920, bodyHeight: 'min(80vh, 800px)' },
 		search: true,
 		// The PRODUCTION defaults, verbatim from `Pickup_Handler::get_js_config()`: both are
@@ -1070,7 +1069,6 @@ test( 'clicking the trigger opens the shell and calls provider.init with the con
 		defaultLocation: config.defaultLocation,
 		pointIcons: config.pointIcons,
 		accentColor: config.accentColor,
-		searchNearestCount: config.searchNearestCount,
 		// Task 12, spec V-6: the search layout panels.buildSearchLayout() built ONCE, handed
 		// through as a plain DOM element — never a reference to the panels instance itself.
 		searchLayoutEl: StubPanels.instances[ 0 ].builtSearchLayoutEl,
@@ -1184,7 +1182,6 @@ test( 'the provider config merges mapConfig with strategy, i18n, and the resolve
 		defaultLocation: config.defaultLocation,
 		pointIcons: config.pointIcons,
 		accentColor: config.accentColor,
-		searchNearestCount: config.searchNearestCount,
 		searchLayoutEl: StubPanels.instances[ 0 ].builtSearchLayoutEl,
 	} );
 } );
@@ -1199,7 +1196,7 @@ test( 'every top-level key the provider reads survives the provider-config merge
 
 	const received = StubProvider.instances[ 0 ].initCalls[ 0 ].config;
 
-	[ 'defaultLocation', 'pointIcons', 'accentColor', 'searchNearestCount', 'strategy', 'i18n', 'searchLayoutEl' ]
+	[ 'defaultLocation', 'pointIcons', 'accentColor', 'strategy', 'i18n', 'searchLayoutEl' ]
 		.forEach( ( key ) => {
 			expect( received[ key ] ).toBeDefined();
 		} );
@@ -2432,13 +2429,55 @@ test( 'searchAddressPicked falls back to displayName when a suggestion carries n
 	expect( session.provider.resolveAddressCalls ).toEqual( [ 'Тверская, 5' ] );
 } );
 
-test( 'panels searchSubmit runs the SearchControl\'s own search() — the ONLY path that spends '
-	+ 'the merchant\'s geocoding quota (spec V-6)', async () => {
+// #179 — the magnifier used to run `provider.searchControl.search()`, i.e. a SECOND search, on
+// the POI-ranking geocoder, while the dropdown the customer was looking at had come from
+// `suggest()`. Typing «Чертановская 66» offered five house numbers; pressing the magnifier
+// replaced them with «Chertanovskaya metro station». The button now resolves what is already on
+// screen instead of asking a different service the same question.
+test( 'panels searchSubmit resolves the TOP SUGGESTION and never starts a second search (#179)', async () => {
 	const session = await openSession( configWith() );
 
-	session.panels.emit( 'searchSubmit', { query: 'Тверская 5' } );
+	withSuggest( session.provider, {
+		points: [],
+		addresses: [
+			{ displayName: 'Чертановская улица, 66к1', query: 'Россия, Москва, Чертановская улица, 66к1' },
+			{ displayName: 'Чертановская улица, 66к2', query: 'Россия, Москва, Чертановская улица, 66к2' },
+		],
+	} );
 
-	expect( session.provider.searchControl.search ).toHaveBeenCalledWith( 'Тверская 5' );
+	session.panels.emit( 'searchSubmit', { query: 'Чертановская 66' } );
+	await flushAsync();
+
+	// The FULL `query` form, not the trimmed `displayName` — the same rule the click-a-row path
+	// already follows, because the trimmed text drops the city and re-geocodes ambiguously.
+	expect( session.provider.resolveAddressCalls ).toEqual( [ 'Россия, Москва, Чертановская улица, 66к1' ] );
+	expect( session.provider.searchControl.search ).not.toHaveBeenCalled();
+} );
+
+test( 'searchSubmit on a query with no suggestions resolves nothing and releases the button', async () => {
+	const session = await openSession( configWith() );
+
+	withSuggest( session.provider, { points: [], addresses: [] } );
+
+	session.panels.emit( 'searchSubmit', { query: 'йцукен' } );
+	await flushAsync();
+
+	expect( session.provider.resolveAddressCalls ).toEqual( [] );
+	expect( session.panels.setSearchBusyCalls ).toEqual( [ true, false ] );
+} );
+
+test( 'searchSubmit releases the button once the address has been resolved', async () => {
+	const session = await openSession( configWith() );
+
+	withSuggest( session.provider, {
+		points: [],
+		addresses: [ { displayName: 'Тверская, 5', query: 'Москва, Тверская, 5' } ],
+	} );
+
+	session.panels.emit( 'searchSubmit', { query: 'Тверская 5' } );
+	await flushAsync();
+
+	expect( session.panels.setSearchBusyCalls ).toEqual( [ true, false ] );
 } );
 
 test( 'panels searchReset clears the provider\'s address state via clearAddress(), same as '
@@ -2456,32 +2495,30 @@ test( 'panels searchReset clears the provider\'s address state via clearAddress(
 // addressMatchedPoint), so it can never be left stuck disabled.
 // -------------------------------------------------------------------------
 
-test( 'searchSubmit marks the panels busy BEFORE calling the SearchControl (a real round trip '
-	+ 'takes real time)', async () => {
+test( 'searchSubmit marks the panels busy BEFORE the round trip starts (it takes real time)', async () => {
 	const session = await openSession( configWith() );
+
+	withSuggest( session.provider, {
+		points: [],
+		addresses: [ { displayName: 'Тверская, 5', query: 'Москва, Тверская, 5' } ],
+	} );
 
 	session.panels.emit( 'searchSubmit', { query: 'Тверская 5' } );
 
+	// Synchronously, before any await — the flag is up while the suggest/resolve pair is in flight.
 	expect( session.panels.setSearchBusyCalls ).toEqual( [ true ] );
 } );
 
-test( 'searchSubmit never marks busy when there is no SearchControl to actually call — a busy '
-	+ 'flag with no matching answer would strand the button forever', async () => {
+test( 'searchSubmit never marks busy on a provider that cannot suggest — a busy flag with no '
+	+ 'matching answer would strand the button forever', async () => {
 	const session = await openSession( configWith() );
-	session.provider.searchControl = null;
+
+	// The embedded provider owns its own chrome and offers no suggestAddresses() at all.
+	session.provider.suggestAddresses = undefined;
 
 	session.panels.emit( 'searchSubmit', { query: 'Тверская 5' } );
 
 	expect( session.panels.setSearchBusyCalls ).toBeUndefined();
-} );
-
-test( 'provider searchResults clears the busy state — a completed search settles the button', async () => {
-	const session = await openSession( configWith() );
-
-	session.panels.emit( 'searchSubmit', { query: 'Тверская 5' } );
-	session.provider.emit( 'searchResults', { points: [], addresses: [] } );
-
-	expect( session.panels.setSearchBusyCalls ).toEqual( [ true, false ] );
 } );
 
 // -------------------------------------------------------------------------
@@ -2498,13 +2535,21 @@ test( 'provider searchCleared hides the search results box', async () => {
 	expect( session.panels.hideSearchResultsCalls ).toBe( 1 );
 } );
 
-test( 'provider searchCleared also releases the busy state, in case a search resolves down the '
-	+ 'clear route rather than a completed one', async () => {
+// #179 moved the busy flag's ownership to the `searchSubmit` chain itself, which always lowers it
+// in its own tail — so the provider events no longer touch it. Reset does, because a customer who
+// cancels mid-flight should get the control back now, not when a round trip they abandoned ends.
+test( 'panels searchReset releases the busy state — an explicit cancel frees the button at once', async () => {
 	const session = await openSession( configWith() );
 
-	session.panels.emit( 'searchSubmit', { query: 'Тверская 5' } );
-	session.provider.emit( 'searchCleared', {} );
+	withSuggest( session.provider, {
+		points: [],
+		addresses: [ { displayName: 'Тверская, 5', query: 'Москва, Тверская, 5' } ],
+	} );
 
+	session.panels.emit( 'searchSubmit', { query: 'Тверская 5' } );
+	session.panels.emit( 'searchReset', {} );
+
+	// Synchronously, WITHOUT awaiting the in-flight chain — that is the whole point.
 	expect( session.panels.setSearchBusyCalls ).toEqual( [ true, false ] );
 } );
 
@@ -2532,15 +2577,6 @@ test( 'provider addressMatchedPoint is a silent no-op when its key names a group
 
 	expect( () => session.provider.emit( 'addressMatchedPoint', { key: 'ghost' } ) ).not.toThrow();
 	expect( session.panels.lastOpenCard ).toBeUndefined();
-} );
-
-test( 'provider addressMatchedPoint also releases the busy state, whether or not the key matched', async () => {
-	const session = await openSession( configWith() );
-
-	session.panels.emit( 'searchSubmit', { query: 'Тверская 5' } );
-	session.provider.emit( 'addressMatchedPoint', { key: 'ghost' } );
-
-	expect( session.panels.setSearchBusyCalls ).toEqual( [ true, false ] );
 } );
 
 test( 'provider addressFocused moves the panels\' distance anchor to the SAME latLng/label (D-6)', async () => {

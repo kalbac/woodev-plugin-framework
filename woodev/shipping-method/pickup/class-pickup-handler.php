@@ -277,19 +277,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		private const DEFAULT_ACCENT_COLOR = '#06aedd';
 
 		/**
-		 * Framework default number of nearest groups an address search fits the camera to
-		 * (Task 19, D-6) — see {@see self::resolve_search_nearest_count()}. Deliberately NOT
-		 * a constructor argument: what varies between installs is network DENSITY, and that
-		 * varies between cities of one carrier far more than between carriers, so a single
-		 * per-plugin number could never track it — fitting to the N nearest points adapts
-		 * automatically, because it works in geometry rather than in kilometres.
-		 *
-		 * @since 2.0.2
-		 * @var int
-		 */
-		private const DEFAULT_SEARCH_NEAREST_COUNT = 3;
-
-		/**
 		 * The plugin's default accent colour (spec D-15) — drives the map's CTA, the
 		 * active list item, the drawer toggle, the cluster icon, and the checkout trigger
 		 * button. Overridden by {@see self::$setting_accent_color} when the merchant has
@@ -480,32 +467,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		}
 
 		/**
-		 * Resolves the number of nearest pickup points an address search fits the camera to
-		 * (Task 19, D-6) — filterable via `woodev_pickup_search_nearest_count`, sanitised
-		 * AFTER the filter, same discipline as {@see self::resolve_accent_color()}: a filter
-		 * is untrusted input on a path that ends in a camera fit, so a filtered value that is
-		 * not a positive integer falls back to {@see self::DEFAULT_SEARCH_NEAREST_COUNT}
-		 * rather than reaching the browser as zero, negative, or non-numeric — any of which
-		 * would make an address search fit the camera to nothing.
-		 *
-		 * @since 2.0.2
-		 *
-		 * @return int
-		 */
-		private function resolve_search_nearest_count(): int {
-			/**
-			 * Filters the number of nearest pickup points an address search fits the camera to.
-			 *
-			 * @since 2.0.2
-			 *
-			 * @param int $count default {@see Pickup_Handler::DEFAULT_SEARCH_NEAREST_COUNT}.
-			 */
-			$filtered = apply_filters( 'woodev_pickup_search_nearest_count', self::DEFAULT_SEARCH_NEAREST_COUNT );
-
-			return is_int( $filtered ) && $filtered > 0 ? $filtered : self::DEFAULT_SEARCH_NEAREST_COUNT;
-		}
-
-		/**
 		 * Validates a plugin's default-viewport argument, throwing when it is not
 		 * something the map can actually render — an obligation that silently accepts
 		 * nonsense is not an obligation (spec D-7).
@@ -676,7 +637,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 *     replaceAddress: array{enabled: bool, billingOnly: bool},
 		 *     selection: array{close: bool, refreshCheckout: bool},
 		 *     accentColor: string,
-		 *     searchNearestCount: int,
 		 *     modal: array{width: int, bodyHeight: string},
 		 *     search: bool
 		 * }
@@ -870,9 +830,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 				'accentColor' => $this->resolve_accent_color(),
 
 				// Consumed by the map provider's own address-search fit (Task 19, D-6) — see
-				// self::resolve_search_nearest_count()'s own docblock for why this is a
-				// framework-filterable constant rather than a plugin constructor argument.
-				'searchNearestCount' => $this->resolve_search_nearest_count(),
 
 				// The dialog sizes itself before any content exists (spec V-1); these two
 				// values used to live only in CSS, on the MAP element, which is why the
