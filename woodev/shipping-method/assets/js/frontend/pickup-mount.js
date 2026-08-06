@@ -1012,6 +1012,17 @@
 		/** @type {boolean} has a non-empty point set EVER been drawn this session? */
 		var hasDrawnPoints = false;
 
+		/** @type {boolean} true once this session has made its ONE attempt to restore a
+		 *  previously chosen point ({@see restoreSelection}) — set on the FIRST points-drawn
+		 *  continuation and never reset (not even by a retry's fresh `start()`). Without this
+		 *  gate, calling {@see restoreSelection} from inside {@see fetchAndSetPoints} would run
+		 *  it on EVERY successful fetch — under `strategy: 'viewport'` that is every pan
+		 *  (`boundsChange`), every type-filter change, and every {@see refresh()} call, not just
+		 *  the session's opening draw. That would re-open the sidebar and yank the camera back
+		 *  to the restored point after every one of them, fighting a customer who panned away on
+		 *  purpose. See Task 12's discrepancy (a). */
+		var selectionRestoreAttempted = false;
+
 		/** @type {boolean} true once this session has been torn down — guards every async
 		 *  continuation below against acting on a dead session (a fetch/init resolving after
 		 *  Escape/backdrop close, or after {@see refresh} is called post-close). */
@@ -1171,6 +1182,52 @@
 		}
 
 		/**
+		 * Restores a previously chosen point once points have actually been drawn (spec D-15).
+		 *
+		 * Called ONCE per session, gated by `selectionRestoreAttempted` at the single call site
+		 * below — see that flag's own docblock for why. It runs from the points-drawn
+		 * continuation and not at session open because it needs the drawn groups: the camera
+		 * move and the group key only exist once `setPoints()` has actually run. Three of the
+		 * four things this has to do are already primitives — `focusGroup()` writes the
+		 * marker's own `data-state="active"` as its side effect, `openList()` makes the
+		 * sidebar's visibility deterministic, and `setSelectedId()` drives both the CTA label
+		 * and the row highlight.
+		 *
+		 * A point that is no longer in the results restores NOTHING, silently: the map opens in
+		 * its ordinary default view and the field is left alone for the checkout-processing
+		 * backstop to judge (spec D-15). No fourth empty-state message — the three that exist
+		 * (`emptyLocality`/`emptyInView`/`noResults`) are deliberately distinct.
+		 *
+		 * @param {Object.<string, Object>} groupsByKey the just-built groups this fetch drew.
+		 * @returns {void}
+		 */
+		function restoreSelection( groupsByKey ) {
+			var selectedId = fieldValue( config.fieldId );
+
+			if ( ! selectedId || ! panels ) {
+				return;
+			}
+
+			panels.setSelectedId( selectedId );
+
+			var key = Object.keys( groupsByKey ).filter( function( groupKey ) {
+				return ( groupsByKey[ groupKey ].points || [] ).some( function( point ) {
+					return String( point.id ) === selectedId;
+				} );
+			} )[ 0 ];
+
+			if ( ! key ) {
+				return;
+			}
+
+			panels.openList();
+
+			if ( provider && 'function' === typeof provider.focusGroup ) {
+				provider.focusGroup( key, { zoom: true } );
+			}
+		}
+
+		/**
 		 * The ONE place this session ever calls `dataSource.fetchPoints()` — see the file
 		 * docblock's "THIS FILE, NOT THE PROVIDER, NOW OWNS FETCHING" section. Groups the
 		 * result, hands it to the provider, tells the panels which types are now known, fires
@@ -1237,6 +1294,14 @@
 						// an earlier empty/error card sitting over a map that has since drawn them.
 						if ( panels ) {
 							panels.hideMessage();
+
+							// Task 12 (spec D-15): the ONE attempt this session makes to restore a
+							// previously chosen point — see `selectionRestoreAttempted`'s own docblock
+							// for why this must not run on every points-drawn continuation.
+							if ( ! selectionRestoreAttempted ) {
+								selectionRestoreAttempted = true;
+								restoreSelection( groupsByKey );
+							}
 						}
 					} else {
 						// `emptyLocality` (a locality genuinely has none) vs `emptyInView` (the

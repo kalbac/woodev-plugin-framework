@@ -643,6 +643,31 @@ function point( overrides ) {
 }
 
 /**
+ * Task 12: a single map-position "group" of points for {@see openPicker}'s `drawPoints()`.
+ *
+ * The plan's own illustrative snippet called this `group( 'g1', [ point( 'P1' ) ] )` — an
+ * imaginary named-group shape. The REAL `groupByPosition()` (`pickup-geo.js`) has no such
+ * concept: its key is literally `lat.toFixed(4) + ',' + lng.toFixed(4)`, computed from the
+ * points' own coordinates (see that function's own docblock). This helper builds real points at
+ * one shared `[lat, lng]` and returns the key `groupByPosition()` will actually produce for
+ * them, so a test can assert `provider.focusGroup()` was called with a value that is really
+ * reachable rather than a label that only exists in the test.
+ *
+ * @param {number} lat
+ * @param {number} lng
+ * @param {Array<string>} pointIds
+ * @returns {{ key: string, points: Array<Object> }}
+ */
+function group( lat, lng, pointIds ) {
+	return {
+		key: lat.toFixed( 4 ) + ',' + lng.toFixed( 4 ),
+		points: pointIds.map( function( id ) {
+			return point( { id: id, lat: lat, lng: lng } );
+		} ),
+	};
+}
+
+/**
  * Spec-style session helper: sets the config, mounts, clicks the trigger, and flushes the
  * `init()` → initial-fetch microtask chain — matching the T20 spec's own `openSession( config )`
  * calls. Returns the most recently constructed provider/panels doubles plus the session's own
@@ -720,7 +745,12 @@ function openPicker( overrides ) {
 		} );
 	} );
 
-	const factory = fakeDataSourceFactory( () => Promise.resolve( [] ) );
+	// Task 12: `drawPoints()` (added to the returned object below) points this at a fresh array
+	// before flushing, so the session's PENDING opening fetch — `openPicker()`, unlike
+	// {@see openSession}, never awaits past `clickTrigger()` — resolves with whatever a test
+	// wants drawn instead of the default empty result.
+	let nextPoints = [];
+	const factory = fakeDataSourceFactory( () => Promise.resolve( nextPoints ) );
 	factory.selectPoint = selectPoint;
 	window.WoodevPickupDataSource = factory;
 
@@ -764,6 +794,7 @@ function openPicker( overrides ) {
 	return {
 		config,
 		panels,
+		provider,
 		modal: session.modal,
 		jq,
 		dataSource: { selectPoint },
@@ -778,6 +809,31 @@ function openPicker( overrides ) {
 		 */
 		emitSelect( pointOverrides ) {
 			( panels || provider ).emit( 'select', point( pointOverrides ) );
+		},
+
+		/**
+		 * Task 12: resolves ONE fetch with the given {@see group}s' points and settles every
+		 * microtask this causes — the mount's `restoreSelection()` reads `groupsByKey`, which
+		 * only exists once `fetchAndSetPoints()` has actually run against them.
+		 *
+		 * Under `strategy: 'bulk'` (the default) the session's own ONE automatic fetch — on
+		 * `init()` resolve — is still pending the first time a test calls this, so a flush alone
+		 * reaches it. Under `'viewport'` nothing ever fetches on its own; a real pan is what
+		 * reports a bbox, so this drives one via `boundsChange` — which also makes THIS call
+		 * reusable for a SECOND, THIRD, … fetch within the same session (a real pan back onto
+		 * a point, a type-filter refetch), the exact repeated-fetch shape discrepancy (a) is
+		 * about.
+		 *
+		 * @param {Array<{ key: string, points: Array<Object> }>} groups
+		 */
+		async drawPoints( groups ) {
+			nextPoints = groups.reduce( ( all, g ) => all.concat( g.points ), [] );
+
+			if ( 'viewport' === config.strategy ) {
+				provider.emit( 'boundsChange', [ 0, 0, 1, 1 ] );
+			}
+
+			await flushAsync();
 		},
 
 		/**
@@ -3089,5 +3145,79 @@ describe( 'selection confirmation', () => {
 		await resolveSelect( { allowed: true, reason: null, close: null, refresh_checkout: null } );
 
 		expect( field.value ).toBe( '' );
+	} );
+} );
+
+// -------------------------------------------------------------------------
+// Task 12 (spec D-15): restoring a previously chosen point when the map reopens
+// -------------------------------------------------------------------------
+
+describe( 'restoring a previous selection', () => {
+	it( 'focuses the point, opens the sidebar and marks it selected', async () => {
+		const { panels, provider, drawPoints, field } = openPicker( {} );
+		field.value = 'P2';
+
+		const g1 = group( 1, 2, [ 'P1' ] );
+		const g2 = group( 3, 4, [ 'P2' ] );
+
+		await drawPoints( [ g1, g2 ] );
+
+		// This file's own StubPanels/StubProvider convention (see their constructors above):
+		// `setSelectedId`/`openList` record onto plain properties, not `jest.fn()`s — only the
+		// Task 11 confirmation calls are per-instance mocks. `toHaveBeenCalledWith` therefore
+		// does not apply here; the plan's own snippet used it, but that snippet's `group()`/
+		// `point()` shapes were imaginary too (discrepancy (b)) — asserted the idiomatic way
+		// instead.
+		expect( panels.lastSelectedId ).toBe( 'P2' );
+		expect( panels.openListCalls ).toBe( 1 );
+		expect( provider.focusGroupCalls ).toEqual( [ g2.key ] );
+		expect( provider.focusGroupOptions ).toEqual( [ { zoom: true } ] );
+	} );
+
+	it( 'opens normally and silently when the selected point is gone', async () => {
+		const { panels, provider, drawPoints, field } = openPicker( {} );
+		field.value = 'GONE';
+
+		await drawPoints( [ group( 1, 2, [ 'P1' ] ) ] );
+
+		expect( provider.focusGroupCalls ).toEqual( [] );
+		expect( panels.showMessageCalls ).toBeUndefined();
+		// A stale field is left alone here — spec D-15 hands the judgement to the
+		// checkout-processing backstop, not to this restore. `toBe()` takes exactly one
+		// argument; jest silently ignores a second, so the reasoning above lives in this
+		// comment rather than a (no-op) assertion message.
+		expect( field.value ).toBe( 'GONE' );
+	} );
+
+	it( 'does nothing at all when no point was ever selected', async () => {
+		const { provider, drawPoints, field } = openPicker( {} );
+		field.value = '';
+
+		await drawPoints( [ group( 1, 2, [ 'P1' ] ) ] );
+
+		expect( provider.focusGroupCalls ).toEqual( [] );
+	} );
+
+	it( 'only attempts the restore ONCE per session — a later fetch never re-triggers it '
+		+ '(discrepancy (a): the plan\'s call site would otherwise fire on every pan/refetch)', async () => {
+		const { panels, provider, drawPoints, field } = openPicker( { strategy: 'viewport' } );
+		field.value = 'P2';
+
+		const g2 = group( 3, 4, [ 'P2' ] );
+
+		// Under `viewport` nothing fetches until a bbox is reported — `drawPoints()` drives that
+		// via `boundsChange` (see its own docblock), the same event a real pan fires.
+		await drawPoints( [ group( 1, 2, [ 'P1' ] ), g2 ] );
+
+		expect( provider.focusGroupCalls ).toEqual( [ g2.key ] );
+		expect( panels.openListCalls ).toBe( 1 );
+
+		// A SECOND fetch that draws the SAME previously-selected point again — a real pan back
+		// onto it, a type-filter refetch — must not re-open the list or re-focus the camera.
+		// Nothing here retracts the restore; it just must not fire a second time.
+		await drawPoints( [ g2 ] );
+
+		expect( provider.focusGroupCalls ).toEqual( [ g2.key ] );
+		expect( panels.openListCalls ).toBe( 1 );
 	} );
 } );
