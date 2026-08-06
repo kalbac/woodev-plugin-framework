@@ -1132,6 +1132,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 					'provider',
 					'restRoot',
 					'nonce',
+					'nonceNodeId',
 					'i18n',
 					'defaultLocation',
 					'pointIcons',
@@ -3304,6 +3305,16 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				->once()
 				->with( 'woocommerce_checkout_order_processed', \Mockery::type( 'array' ), 10, 3 );
 
+			// Issue #157: the nonce-refresh channel — the footer node and the fragment that
+			// replaces it on every update_checkout.
+			Functions\expect( 'add_action' )
+				->once()
+				->with( 'wp_footer', \Mockery::type( 'array' ) );
+
+			Functions\expect( 'add_filter' )
+				->once()
+				->with( 'woocommerce_update_order_review_fragments', \Mockery::type( 'array' ) );
+
 			$handler = new Pickup_Handler(
 				'p',
 				'pickup_point',
@@ -3337,6 +3348,103 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 
 			$this->assertContains( '/shipping/pickup/carrier/points', $registered );
 			$this->assertContains( '/shipping/pickup/carrier/points/(?P<id>[^/]+)', $registered );
+		}
+
+		// -------------------------------------------------------------------------
+		// nonce refresh through a checkout fragment (issue #157)
+		// -------------------------------------------------------------------------
+
+		/**
+		 * Returns a `wp_create_nonce` stub minting a DIFFERENT value on every call, so a
+		 * test can tell a freshly-minted nonce from the one baked into an earlier
+		 * `get_js_config()` — the entire point of the fragment. A `justReturn('NONCE')`
+		 * stub cannot distinguish the two and would pass against the very bug #157 is about.
+		 */
+		private function stub_incrementing_nonce(): void {
+			$calls = 0;
+			Functions\when( 'wp_create_nonce' )->alias(
+				static function () use ( &$calls ) {
+					++$calls;
+
+					return 'NONCE-' . $calls;
+				}
+			);
+		}
+
+		public function test_the_nonce_node_id_is_derived_from_the_config_object_suffix(): void {
+			$sanitized = $this->make_handler( [ 'plugin_id' => 'carrier!!!' ] )->nonce_node_id();
+			$plain     = $this->make_handler( [ 'plugin_id' => 'carrier' ] )->nonce_node_id();
+
+			// The id must be unique per config object — two handlers on one checkout page
+			// (two shipping plugins) would otherwise fight over one node and one fragment.
+			$this->assertNotSame( $plain, $sanitized );
+			$this->assertStringContainsString( 'carrier', $plain );
+		}
+
+		public function test_config_carries_the_nonce_node_id_the_handler_prints(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			$this->stub_config_dependencies_except_filters();
+
+			$handler = $this->make_handler( [ 'plugin_id' => 'carrier' ] );
+
+			$this->assertSame( $handler->nonce_node_id(), $handler->get_js_config()['nonceNodeId'] );
+		}
+
+		public function test_print_nonce_node_prints_a_hidden_span_carrying_a_fresh_nonce(): void {
+			Functions\when( 'is_checkout' )->justReturn( true );
+			$this->stub_incrementing_nonce();
+
+			$handler = $this->make_handler( [ 'plugin_id' => 'carrier' ] );
+
+			ob_start();
+			$handler->print_nonce_node();
+			$html = (string) ob_get_clean();
+
+			$this->assertStringContainsString( 'id="' . $handler->nonce_node_id() . '"', $html );
+			$this->assertStringContainsString( 'data-woodev-pickup-nonce="NONCE-1"', $html );
+			$this->assertStringContainsString( 'hidden', $html );
+		}
+
+		public function test_the_nonce_fragment_is_keyed_by_the_node_id_and_carries_a_fresh_nonce(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			Functions\when( 'rest_url' )->justReturn( 'https://example.test/wp-json/woodev/v1' );
+			Functions\when( 'wc_ship_to_billing_address_only' )->justReturn( false );
+			$this->stub_incrementing_nonce();
+
+			$handler = $this->make_handler( [ 'plugin_id' => 'carrier' ] );
+
+			// The page-load config takes NONCE-1; the fragment must not repeat it.
+			$page_nonce = $handler->get_js_config()['nonce'];
+			$fragments  = $handler->inject_nonce_fragment( [] );
+
+			$key = '#' . $handler->nonce_node_id();
+
+			$this->assertArrayHasKey( $key, $fragments );
+			$this->assertStringContainsString( 'id="' . $handler->nonce_node_id() . '"', $fragments[ $key ] );
+			$this->assertStringContainsString( 'data-woodev-pickup-nonce="NONCE-2"', $fragments[ $key ] );
+			$this->assertStringNotContainsString( $page_nonce . '"', $fragments[ $key ] );
+		}
+
+		/**
+		 * `woocommerce_update_order_review_fragments` is a SHARED array — WooCommerce's own
+		 * order-review fragment lives in it, and so does every other plugin's. Replacing the
+		 * array instead of adding one key silently blanks the checkout totals.
+		 */
+		public function test_the_nonce_fragment_leaves_every_other_fragment_untouched(): void {
+			$this->stub_incrementing_nonce();
+
+			$handler = $this->make_handler( [ 'plugin_id' => 'carrier' ] );
+
+			$fragments = $handler->inject_nonce_fragment(
+				[
+					'.woocommerce-checkout-review-order-table' => '<table>totals</table>',
+					'#other-plugin-node'                       => '<span>other</span>',
+				]
+			);
+
+			$this->assertCount( 3, $fragments );
+			$this->assertSame( '<table>totals</table>', $fragments['.woocommerce-checkout-review-order-table'] );
+			$this->assertSame( '<span>other</span>', $fragments['#other-plugin-node'] );
 		}
 
 		// -------------------------------------------------------------------------

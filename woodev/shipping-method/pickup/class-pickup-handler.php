@@ -668,6 +668,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 *     provider: string,
 		 *     restRoot: string,
 		 *     nonce: string,
+		 *     nonceNodeId: string,
 		 *     i18n: array<string, string>,
 		 *     defaultLocation: array{center: array{0: float|int, 1: float|int}, zoom: int},
 		 *     pointIcons: array<string, array{default: string, active: string}>,
@@ -825,6 +826,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 				'provider' => $this->map_provider->get_id(),
 				'restRoot' => $this->rest_root(),
 				'nonce'    => wp_create_nonce( 'wp_rest' ),
+
+				// The DOM id of the refreshable nonce node (issue #157) — `nonce` above is
+				// only ever the PAGE-LOAD value and cannot be refreshed in place; see
+				// self::print_nonce_node() for why. Emitted so the browser knows what to
+				// look for; the read itself is a later task.
+				'nonceNodeId' => $this->nonce_node_id(),
+
 				'i18n'     => $strings,
 
 				'defaultLocation' => $this->default_location,
@@ -1116,6 +1124,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 * reasoning for why persisting any earlier silently drops the meta on classic
 		 * storage.
 		 *
+		 * The last pair is the REST-nonce refresh channel (issue #157): the footer node and
+		 * the checkout fragment that replaces it — see {@see self::print_nonce_node()} for
+		 * why the localized config's own nonce cannot be refreshed in place.
+		 *
 		 * @since 2.0.2
 		 *
 		 * @return void
@@ -1125,6 +1137,120 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 			add_action( 'rest_api_init', [ $this, 'register_rest' ] );
 			add_action( 'woocommerce_checkout_process', [ $this, 'handle_checkout_process' ] );
 			add_action( 'woocommerce_checkout_order_processed', [ $this, 'handle_checkout_order_processed' ], 10, 3 );
+			add_action( 'wp_footer', [ $this, 'print_nonce_node' ] );
+			add_filter( 'woocommerce_update_order_review_fragments', [ $this, 'inject_nonce_fragment' ] );
+		}
+
+		/**
+		 * The DOM id of this handler's REST-nonce node (issue #157).
+		 *
+		 * Derived from the SAME suffix the JS config global uses
+		 * ({@see self::config_object_suffix()}), so the node, the fragment key and the
+		 * `nonceNodeId` config value can never drift apart, and two shipping plugins on one
+		 * checkout page get two distinct nodes instead of fighting over one.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string
+		 */
+		public function nonce_node_id(): string {
+			return 'woodev-pickup-nonce-' . $this->config_object_suffix();
+		}
+
+		/**
+		 * Prints the REST-nonce node into the footer (issue #157).
+		 *
+		 * WHY THIS EXISTS. `get_js_config()` emits `nonce` through
+		 * {@see self::enqueue_assets()}'s `wp_localize_script()` call, which runs ONCE per
+		 * page load, on `wp_enqueue_scripts`, and prints the config global outside the
+		 * checkout fragment `update_checkout` re-renders. `window.woodev_pickup_config_*`
+		 * therefore never changes for the life of the page: a nonce baked into it cannot
+		 * become fresh again no matter how late the browser reads it. A checkout page left
+		 * open past the nonce's life then answers the select route with
+		 * `403 rest_cookie_invalid_nonce`. This node is the refresh channel — it lives in a
+		 * fragment WooCommerce replaces on every `update_checkout`, so a page the customer
+		 * is actively using keeps a nonce minted seconds ago.
+		 *
+		 * WHY THE FOOTER, not the checkout form. WooCommerce applies fragments by
+		 * document-wide selector match, so the node does not have to live inside the
+		 * order-review markup for the replacement to work. Keeping it out of the form avoids
+		 * competing with the §8 checkout-field layer, which re-places its own anchors inside
+		 * the form on `updated_checkout`.
+		 *
+		 * WHAT THIS DOES NOT COVER. A login or a logout invalidates every nonce IMMEDIATELY
+		 * — the session token changes — and no amount of refreshing helps a nonce minted for
+		 * a session that no longer exists. A page nobody touches never fires
+		 * `update_checkout` at all, so its node is never replaced. Both cases still end in a
+		 * 403, and belong to the browser-side «страница устарела» message (the `stalePage`
+		 * string) rather than here. This narrows the window; it does not close it.
+		 *
+		 * Gated on `is_checkout()` for the same reason {@see self::enqueue_assets()} is: the
+		 * picker only ever mounts there, and a stray hidden node (plus a needlessly minted
+		 * nonce) in every page's footer is not something a vendored framework should print.
+		 * The FRAGMENT below is deliberately NOT gated — `update_order_review` is a WC-ajax
+		 * request where `is_checkout()` is false, so the same guard there would silently
+		 * disable the whole channel.
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		public function print_nonce_node(): void {
+			if ( ! function_exists( 'is_checkout' ) || ! is_checkout() ) {
+				return;
+			}
+
+			$markup = $this->nonce_node_markup();
+
+			// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped at build time.
+			echo $markup;
+		}
+
+		/**
+		 * Replaces the nonce node on every checkout refresh (issue #157).
+		 *
+		 * Keyed by `'#' . nonce_node_id()` — the selector WooCommerce matches against the
+		 * live document — and carries a nonce minted during THIS request, which is the
+		 * entire point: see {@see self::print_nonce_node()} for why the localized config's
+		 * own `nonce` can never be refreshed, and for what this still does not cover.
+		 *
+		 * Adds exactly one key and returns the array it was given; the fragment array is
+		 * shared with WooCommerce's own order-review fragment and with every other plugin's.
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<string, string> $fragments the checkout fragments collected so far.
+		 *
+		 * @return array<string, string>
+		 */
+		public function inject_nonce_fragment( array $fragments ): array {
+			$fragments[ '#' . $this->nonce_node_id() ] = $this->nonce_node_markup();
+
+			return $fragments;
+		}
+
+		/**
+		 * Builds the nonce node's markup.
+		 *
+		 * Shared by {@see self::print_nonce_node()} and {@see self::inject_nonce_fragment()}
+		 * so the initially printed node and its replacement cannot diverge in id, attribute
+		 * name, or shape — a fragment whose markup no longer matches the node it replaces is
+		 * a silently dead channel, not a visible error.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string escaped, ready to echo.
+		 */
+		private function nonce_node_markup(): string {
+			return sprintf(
+				'<span id="%1$s" data-woodev-pickup-nonce="%2$s" hidden></span>',
+				esc_attr( $this->nonce_node_id() ),
+				esc_attr( wp_create_nonce( 'wp_rest' ) )
+			);
 		}
 
 		/**
