@@ -229,6 +229,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 		 *                                      `.../select` route cannot answer correctly
 		 *                                      without it, and a value an author can forget
 		 *                                      to wire fails silently rather than loudly.
+		 *
+		 * SMELL, recorded rather than acted on: `$cart_weight`, `$payment_method` and
+		 * `$shipping_method` are three consecutive `callable`s, so nothing at the type level
+		 * catches a caller transposing two of them — they would simply feed the wrong values
+		 * to the verdict and the domain seam, and no test outside this class would notice.
+		 * Not worth refactoring at three: doing so would ripple through every construction
+		 * site for no present benefit. TRIGGER: if a FOURTH request-context callable is ever
+		 * needed, bundle all of them into a request-context object (named accessors, one
+		 * argument) instead of extending this list again.
 		 */
 		public function __construct(
 			string $plugin_id,
@@ -372,6 +381,21 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 								'validate_callback' => 'rest_validate_request_arg',
 								'sanitize_callback' => 'sanitize_text_field',
 							],
+
+							/*
+							 * No `sanitize_callback`, unlike `field_id` above — deliberate, not an
+							 * oversight. `field_id` is a FRAMEWORK-owned identifier whose alphabet
+							 * this framework defines (the field-source route captures it as
+							 * `[\w-]+`), so narrowing it at the schema level costs nothing. A point
+							 * id is an OPAQUE CARRIER token: some carriers embed `:` or `.` in one,
+							 * which is why the sibling detail route captures it as the looser
+							 * `[^/]+`. Declaring a sanitizer here would be the framework quietly
+							 * deciding what a carrier id may contain — harmless with today's
+							 * `sanitize_text_field`, silently lossy the day someone "tightens" it to
+							 * `sanitize_key`. The id is cleaned in exactly one place instead,
+							 * `handle_select_request()`'s `wc_clean` + `cap_length`, matching how
+							 * the detail route treats its own `id`.
+							 */
 							'point_id' => [
 								'type'              => 'string',
 								'required'          => true,
@@ -535,6 +559,23 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 			 * never re-read as the unspoken `null`, which would hand control straight back to
 			 * the default you just overrode.
 			 *
+			 * `point` is a CORRECTED POINT, not a flag. The browser replaces the point it is
+			 * holding with whatever comes back here, so it must be the same shape
+			 * {@see self::to_response_point()} emits on the two read routes — i.e.
+			 * {@see Pickup_Point::to_browser_array()} (`id`, `name`, `address`,
+			 * `short_address`, `locality`, `postal_code`, `phone`, `instruction`, `work_time`,
+			 * `lat`, `lng`, `type` => `{ code, label }`, `payment_methods`, `services`,
+			 * `photos`, `accepts_cod`, `max_weight`) plus a `selectable` => `{ allowed, reason }`
+			 * entry. The easy, correct way to build one is to mutate the freshly-resolved
+			 * `$point` and call `to_browser_array()` on it yourself rather than assembling the
+			 * keys by hand — every display string in that shape is already escaped, and the
+			 * browser does not re-escape.
+			 *
+			 * Populate it when confirmation taught the domain something the listing did not
+			 * know — the carrier returned a refined address or a corrected postcode for this
+			 * point, say. Leave it `null` (the default) to mean "nothing to update, keep the
+			 * point you already have"; `null` is not "clear the point".
+			 *
 			 * @since 2.0.2
 			 *
 			 * @param array{
@@ -556,6 +597,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 			 * }                    $context  The checkout field, the chosen shipping method
 			 *                                (from the framework, never from the request), the
 			 *                                chosen gateway, and the cart weight in GRAMS.
+			 *                                `method_id` is the BARE method id, `:instance_id`
+			 *                                already stripped — and it is `''` whenever
+			 *                                WooCommerce cannot yet tell us (no session
+			 *                                started, no rate chosen); a domain keying off it
+			 *                                must treat `''` as "unknown", never match it
+			 *                                against a real method id. Same for
+			 *                                `payment_method`, and `cart_weight` is `0` on a
+			 *                                cart that is not loaded — see
+			 *                                {@see self::$cart_weight}.
 			 */
 			$filtered = apply_filters( 'woodev_shipping_pickup_point_selection', $computed, $point, $context );
 
