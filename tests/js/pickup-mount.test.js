@@ -3153,6 +3153,251 @@ describe( 'selection confirmation', () => {
 } );
 
 // -------------------------------------------------------------------------
+// The staleness guard is a GENERATION, not a point id (adversarial review, findings 1+2)
+//
+// Tracking only the point id makes the guard an ABA test: a confirmation dropped by the guard
+// and a LATER one for the SAME point are indistinguishable, so the first one's answer is applied
+// as though it were the second's — and clears the second's marker on the way out, so the answer
+// the customer is actually waiting for is the one that gets thrown away. Both halves below are
+// one design: every confirmation is minted a unique, monotonic token, and the card's busy lock
+// belongs to whichever token currently holds it.
+//
+// TWO INVARIANTS, and they pull in opposite directions — which is why "always release" (what
+// this file did) and "release only when the answer is applied" (what the original plan did) are
+// both wrong:
+//
+//   1. A discarded answer never leaves the card locked. Whatever DROPS a pending confirmation
+//      releases the lock it was holding, at the moment it drops it — the card moving on, the
+//      dialog being dismissed, the session being destroyed.
+//   2. A live confirmation's lock is never released by a stale one settling. A settling answer
+//      touches the lock ONLY while it still owns it.
+// -------------------------------------------------------------------------
+
+describe( 'the staleness guard is a generation, not a point id', () => {
+	it( 'discards a superseded answer for the point a NEW confirmation is in flight for (ABA)', async () => {
+		const { emitSelect, resolveSelect, dataSource, panels, field, setActivePoint } = openPicker( {} );
+
+		// A leaves for P1.
+		emitSelect( { id: 'P1' } );
+
+		// The card moves off P1 and back onto it — the marker-click path the lock cannot
+		// intercept. A is dropped by the guard here; nothing about the card says so afterwards.
+		setActivePoint( 'P2' );
+		setActivePoint( 'P1' );
+
+		// B leaves for the SAME point. Under an id-only guard, A and B are now indistinguishable.
+		emitSelect( { id: 'P1' } );
+
+		expect( dataSource.selectPoint ).toHaveBeenCalledTimes( 2 );
+
+		// A answers first, and its verdict is about a confirmation the customer walked away from.
+		await resolveSelect( { allowed: false, reason: 'Устаревший ответ', close: null, refresh_checkout: null } );
+
+		expect( panels.setPointVerdict ).not.toHaveBeenCalled();
+		expect( field.value ).toBe( '' );
+
+		// ...and B's real answer must still land, rather than being discarded because A cleared
+		// the pending marker on its way through.
+		await resolveSelect( { allowed: true, reason: null, close: null, refresh_checkout: null } );
+
+		expect( field.value ).toBe( 'P1' );
+	} );
+
+	it( 'never unlocks the card a LIVE confirmation holds when a stale one settles', async () => {
+		const { emitSelect, resolveSelect, panels, setActivePoint } = openPicker( {} );
+
+		emitSelect( { id: 'P1' } );  // A
+		setActivePoint( 'P2' );      // A dropped — its lock is released right here
+		emitSelect( { id: 'P2' } );  // B, live, re-locks the card
+
+		panels.setSelectionBusy.mockClear();
+
+		await resolveSelect( { allowed: true, reason: null, close: null, refresh_checkout: null } );
+
+		// The lock belongs to B now. A settling must not hand the customer a live CTA over a
+		// confirmation that is still out — that is the overlapping-submit hole.
+		expect( panels.setSelectionBusy ).not.toHaveBeenCalledWith( false );
+	} );
+
+	it( 'releases the card the moment the confirmation holding it is dropped, not when it answers', () => {
+		const { emitSelect, panels, setActivePoint } = openPicker( {} );
+
+		emitSelect( { id: 'P1' } );
+
+		expect( panels.setSelectionBusy ).toHaveBeenLastCalledWith( true );
+
+		// Invariant 1. Nothing is in flight FOR THE CARD any more, so it must be usable for the
+		// point it now shows — not left reading «Проверяем…» until an answer nobody wants lands.
+		setActivePoint( 'P2' );
+
+		expect( panels.setSelectionBusy ).toHaveBeenLastCalledWith( false );
+	} );
+
+	it( 'releases the card when the dialog is dismissed out from under a confirmation', () => {
+		const { emitSelect, panels } = openPicker( {} );
+
+		emitSelect( { id: 'P1' } );
+		document.querySelector( '.woodev-modal__close' ).click();
+
+		expect( panels.setSelectionBusy ).toHaveBeenLastCalledWith( false );
+	} );
+
+	it( 'releases the card lock when the session is destroyed mid-confirmation', () => {
+		const { emitSelect, panels } = openPicker( {} );
+
+		emitSelect( { id: 'P1' } );
+
+		expect( panels.setSelectionBusy ).toHaveBeenLastCalledWith( true );
+
+		// A fresh trigger click destroys this session. `setSelectionBusy()` does not track why it
+		// was called and never self-balances (see its own docblock) — an unpaired `true` locks
+		// every card the instance opens afterwards, and nothing else would ever pair it.
+		clickTrigger();
+
+		expect( panels.setSelectionBusy ).toHaveBeenLastCalledWith( false );
+	} );
+
+	it( 'releases the lock a checkout refresh was holding when the session is destroyed', async () => {
+		const { emitSelect, resolveSelect, panels } = openPicker( {
+			selection: { close: false, refreshCheckout: true },
+		} );
+
+		emitSelect( { id: 'P1' } );
+		await resolveSelect( { allowed: true, reason: null, close: null, refresh_checkout: null } );
+
+		expect( panels.setSelectionBusy ).toHaveBeenLastCalledWith( true );
+
+		clickTrigger();
+
+		expect( panels.setSelectionBusy ).toHaveBeenLastCalledWith( false );
+	} );
+} );
+
+// -------------------------------------------------------------------------
+// A checkout refresh that never answers (adversarial review, finding 3)
+//
+// `refreshCheckout()` locks the card and waits for WooCommerce's `updated_checkout`. That event
+// is not guaranteed: the checkout ajax can fail, be aborted by a newer one, or be answered by a
+// build that never fires it. With the `one()` waiter as the ONLY release, the CTA stays dead for
+// the rest of the session and the waiter stays bound to `document.body` holding the whole panels
+// graph alive. The timeout below is a bounded last resort, not a UX timer.
+// -------------------------------------------------------------------------
+
+describe( 'a checkout refresh that never answers', () => {
+	it( 'unlocks the card and unbinds the waiter when `updated_checkout` never fires', async () => {
+		const { emitSelect, resolveSelect, panels, jq } = openPicker( {
+			selection: { close: false, refreshCheckout: true },
+		} );
+
+		emitSelect( { id: 'P1' } );
+		await resolveSelect( { allowed: true, reason: null, close: null, refresh_checkout: null } );
+
+		expect( jq.triggered ).toContain( 'update_checkout' );
+		expect( panels.setSelectionBusy ).toHaveBeenLastCalledWith( true );
+
+		// Still held right up to the bound — the timeout must not cut a refresh that is merely
+		// slow, only one that is never going to answer.
+		jest.advanceTimersByTime( 9999 );
+
+		expect( panels.setSelectionBusy ).toHaveBeenLastCalledWith( true );
+		expect( jq.off ).toHaveLength( 0 );
+
+		jest.advanceTimersByTime( 1 );
+
+		expect( panels.setSelectionBusy ).toHaveBeenLastCalledWith( false );
+		expect( jq.off ).toHaveLength( 1 );
+		expect( jq.off[ 0 ].handler ).toBe( jq.one[ 0 ].handler );
+	} );
+
+	it( 'never fires the timeout release once `updated_checkout` has answered', async () => {
+		const { emitSelect, resolveSelect, panels, jq } = openPicker( {
+			selection: { close: false, refreshCheckout: true },
+		} );
+
+		emitSelect( { id: 'P1' } );
+		await resolveSelect( { allowed: true, reason: null, close: null, refresh_checkout: null } );
+
+		jq.one[ 0 ].handler();
+
+		expect( panels.setSelectionBusy ).toHaveBeenLastCalledWith( false );
+
+		panels.setSelectionBusy.mockClear();
+		jest.advanceTimersByTime( 60000 );
+
+		// A stale timer firing against a card the customer has since re-locked (a second
+		// confirmation) would unlock it under a live request — the same hole finding 2 is about.
+		expect( panels.setSelectionBusy ).not.toHaveBeenCalled();
+	} );
+} );
+
+// -------------------------------------------------------------------------
+// Synchronous listeners on the two confirmation events (adversarial review, finding 5)
+//
+// `fireDocumentEvent()` is `dispatchEvent()`, which runs every listener INLINE before it returns
+// — a listener is free to dismiss the dialog or tear the session down in the middle of the
+// function that fired the event. Both events are observational (D-2: no waiting, no veto), so
+// nothing here lets a listener change the outcome; what it must not do is leave the guard
+// describing a picker that no longer exists.
+// -------------------------------------------------------------------------
+
+describe( 'a synchronous listener on the confirmation events', () => {
+	it( 'still has its answer discarded when a `_requested` listener dismisses the dialog', async () => {
+		const { emitSelect, resolveSelect, dataSource, panels, field } = openPicker( {} );
+		const dismiss = () => document.querySelector( '.woodev-modal__close' ).click();
+
+		document.body.addEventListener( 'woodev_pickup_point_select_requested', dismiss );
+		emitSelect( { id: 'P1' } );
+		document.body.removeEventListener( 'woodev_pickup_point_select_requested', dismiss );
+
+		// The request still leaves — `_requested` is observational and grants no veto (the veto
+		// path is `woodev_modal_before_close`). It is the ANSWER that must be thrown away.
+		expect( dataSource.selectPoint ).toHaveBeenCalledTimes( 1 );
+
+		await resolveSelect( { allowed: true, reason: null, close: null, refresh_checkout: null } );
+
+		expect( field.value ).toBe( '' );
+		expect( panels.setPointVerdict ).not.toHaveBeenCalled();
+	} );
+
+	it( 'applies nothing when a `_resolved` listener dismisses the dialog', async () => {
+		const { emitSelect, resolveSelect, panels, field, jq } = openPicker( {
+			selection: { close: false, refreshCheckout: true },
+		} );
+		const dismiss = () => document.querySelector( '.woodev-modal__close' ).click();
+
+		document.body.addEventListener( 'woodev_pickup_point_select_resolved', dismiss );
+
+		emitSelect( { id: 'P1' } );
+		await resolveSelect( { allowed: true, reason: null, close: null, refresh_checkout: null } );
+
+		document.body.removeEventListener( 'woodev_pickup_point_select_resolved', dismiss );
+
+		// The guard is re-run AFTER the event, not only before it: a dialog the customer is no
+		// longer looking at gets neither the field write nor the checkout refresh behind it.
+		expect( field.value ).toBe( '' );
+		expect( panels.lastSelectedId ).toBeUndefined();
+		expect( jq.triggered ).not.toContain( 'update_checkout' );
+	} );
+
+	it( 'applies nothing when a `_resolved` listener destroys the session', async () => {
+		const { emitSelect, resolveSelect, field, jq } = openPicker( {
+			selection: { close: false, refreshCheckout: true },
+		} );
+		const tearDown = () => getSession( FIELD_ID ).destroy();
+
+		document.body.addEventListener( 'woodev_pickup_point_select_resolved', tearDown );
+
+		emitSelect( { id: 'P1' } );
+		await resolveSelect( { allowed: true, reason: null, close: null, refresh_checkout: null } );
+
+		document.body.removeEventListener( 'woodev_pickup_point_select_resolved', tearDown );
+
+		expect( field.value ).toBe( '' );
+		expect( jq.triggered ).not.toContain( 'update_checkout' );
+	} );
+} );
+
+// -------------------------------------------------------------------------
 // Task 12 (spec D-15): restoring a previously chosen point when the map reopens
 // -------------------------------------------------------------------------
 

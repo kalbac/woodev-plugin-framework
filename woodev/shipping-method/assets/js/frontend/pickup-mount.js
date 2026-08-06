@@ -210,7 +210,9 @@
  * flight and holding the card's busy state until it settles (see
  * {@see refreshCheckout}/{@see dropRefreshWaiter} — `one()` self-cleans ONLY
  * if the event actually fires, which a failed checkout ajax, or a session torn
- * down mid-round-trip, is free not to do). Everything else hangs off
+ * down mid-round-trip, is free not to do; that waiter is therefore paired with a
+ * {@see REFRESH_TIMEOUT_MS} timer, so the hold is bounded even when WooCommerce
+ * never answers at all). Everything else hangs off
  * `provider`/`panels`, both torn down (or dereferenced) together. So the
  * existing "two clicks never leave two providers alive" guarantee extends to
  * the panels, to every event wired through them, and to both of those
@@ -252,6 +254,23 @@
 
 	/** @type {number} defer, in ms, after `updated_checkout` before re-mounting — see the file docblock. */
 	var MOUNT_DEFER_MS = 60;
+
+	/**
+	 * How long, in ms, a post-selection checkout refresh may hold the card's busy lock before it is
+	 * released regardless — see {@see refreshCheckout}.
+	 *
+	 * NOT a UX timer: the release the customer normally gets is WooCommerce's own
+	 * `updated_checkout`, which lands in well under a second. This is the bound on the case where
+	 * that event never arrives at all — the checkout ajax failed, was aborted by a newer one, or
+	 * the build simply does not fire it — where the only alternative is a CTA reading «Проверяем…»
+	 * for the rest of the session over a refresh that already gave up, and a `one()` waiter left
+	 * bound to `document.body` holding the whole panels graph alive with it. Generous on purpose:
+	 * cutting a refresh that is merely slow would unlock the CTA in the middle of a totals update,
+	 * which is the exact thing the lock exists to prevent (spec §5.2).
+	 *
+	 * @type {number}
+	 */
+	var REFRESH_TIMEOUT_MS = 10000;
 
 	/**
 	 * The six `document.body` `CustomEvent` names this file fires — see the file
@@ -1061,17 +1080,52 @@
 		 *  'viewport'` only) — what a type-filter change or {@see refresh} re-fetches against. */
 		var lastBbox = null;
 
-		/** @type {string|null} the point id a confirmation is currently in flight for — the
-		 *  staleness guard's whole state (spec D-9). Set when the request leaves, cleared when
-		 *  its answer is applied AND whenever the thing it was about stops being current (the
-		 *  card moving to another point; see the `cardOpened` listener). {@see finishSelection}
-		 *  applies an answer only while this still names the point that answer is about. */
-		var pendingSelectionId = null;
+		/** @type {number} mints one unique, monotonic token per confirmation this session sends.
+		 *  Never reset, never reused — that is the whole point (see `pendingSelectionToken`). */
+		var selectionTokens = 0;
+
+		/** @type {number} the token of the confirmation the staleness guard (spec D-9) currently
+		 *  holds — `0` when none is in flight for the card.
+		 *
+		 *  A GENERATION, NOT A POINT ID. The guard used to store the point id alone, which made it
+		 *  an ABA test: a confirmation the guard had already dropped and a LATER one for the SAME
+		 *  point were indistinguishable, so the first one's answer was applied as though it were
+		 *  the second's — and cleared the second's marker on the way out, so the answer the
+		 *  customer was actually waiting on was the one thrown away. A token is unique per
+		 *  request, so "is this answer still the one the card is waiting for?" has exactly one
+		 *  true answer no matter how many confirmations name the same point.
+		 *
+		 *  IT ALSO OWNS THE CARD'S BUSY LOCK. `setSelectionBusy()` never self-balances (see its
+		 *  own docblock in `pickup-panels.js`), and the two obvious disciplines are both wrong:
+		 *  releasing on EVERY settlement lets a stale answer unlock the card a LIVE confirmation
+		 *  still holds, allowing a second overlapping submit; releasing only on the applied paths
+		 *  leaves a card that took a discarded answer locked forever, with a dead CTA reading
+		 *  «Проверяем…» over a request that already came back. The rule that satisfies both: the
+		 *  lock belongs to the token, and it is released by whoever ENDS that token's ownership —
+		 *  {@see invalidateSelection} when something drops it (the card moving on, the dialog
+		 *  being dismissed, the session being destroyed), {@see finishSelection} when the answer
+		 *  it owns actually settles. A token that no longer owns the lock never touches it. */
+		var pendingSelectionToken = 0;
+
+		/** @type {string|null} the point id `pendingSelectionToken`'s confirmation is about — read
+		 *  ONLY by the `cardOpened` listener, to tell "the card moved onto another point" from
+		 *  "the card re-rendered on the same one". Never the guard's identity; see above. */
+		var pendingSelectionPointId = null;
 
 		/** @type {Function|null} the pending `updated_checkout` handler {@see refreshCheckout}
 		 *  bound through jQuery, held only so {@see dropRefreshWaiter} can take it off again —
 		 *  the second (and last) long-lived binding a session makes; see the file docblock. */
 		var refreshWaiter = null;
+
+		/** @type {number|null} the {@see REFRESH_TIMEOUT_MS} timer backing that waiter — the
+		 *  bounded failure path for a refresh WooCommerce never answers. */
+		var refreshTimer = null;
+
+		/** @type {Object|null} the panels whose card lock the in-flight checkout refresh is
+		 *  holding, so {@see dropRefreshWaiter} can release it without re-deriving which object
+		 *  was locked (it may not be `panels` — the refresh is skipped entirely when the modal
+		 *  has just closed; see {@see finishSelection}'s own call site). */
+		var refreshBusyPanels = null;
 
 		/** @type {boolean} Task 16 (spec V-4 stage 2/3): has THIS start() cycle's busy overlay
 		 *  already been cleared? Reset at the top of every {@see start} call (initial open AND
@@ -1379,6 +1433,54 @@
 		 * @param {Object} point
 		 * @returns {void}
 		 */
+		/**
+		 * Releases the card's confirmation lock. A no-op with no card to release — no panels at
+		 * all (`ownsChrome`), or a session already torn down, whose panels have been destroyed
+		 * along with their DOM.
+		 *
+		 * @returns {void}
+		 */
+		function releaseSelectionBusy() {
+			if ( panels && ! destroyed ) {
+				panels.setSelectionBusy( false );
+			}
+		}
+
+		/**
+		 * Drops whatever confirmation the staleness guard currently holds, releasing the card lock
+		 * that came with it — the single entry point for every path that makes an in-flight
+		 * confirmation stop being about anything current (spec D-9): the card moving to another
+		 * point, the dialog being dismissed, the session being destroyed.
+		 *
+		 * Releasing the lock HERE rather than when the dropped answer eventually lands is
+		 * invariant 1 of `pendingSelectionToken`'s docblock: the card must be usable for whatever
+		 * it shows now, immediately, not after a round trip whose answer is going to be thrown
+		 * away. It is also what makes invariant 2 affordable — {@see finishSelection} can then
+		 * leave the lock strictly alone unless it still owns it.
+		 *
+		 * @returns {void}
+		 */
+		function invalidateSelection() {
+			if ( 0 === pendingSelectionToken ) {
+				return;
+			}
+
+			pendingSelectionToken = 0;
+			pendingSelectionPointId = null;
+
+			releaseSelectionBusy();
+		}
+
+		/**
+		 * Whether `token`'s answer is still the one this session's card is waiting for.
+		 *
+		 * @param {number} token
+		 * @returns {boolean}
+		 */
+		function ownsSelection( token ) {
+			return ! destroyed && pendingSelectionToken === token;
+		}
+
 		function handleSelection( point ) {
 			var pointId = String( point && point.id );
 
@@ -1397,23 +1499,38 @@
 				return;
 			}
 
-			fireDocumentEvent( EVENT_SELECT_REQUESTED, { fieldId: config.fieldId, point: point } );
+			var token = ++selectionTokens;
+
+			/*
+			 * THE GUARD IS ARMED BEFORE THE EVENT GOES OUT, NOT AFTER. `fireDocumentEvent()` is
+			 * `dispatchEvent()`, which runs every listener INLINE before it returns — a listener
+			 * is free to dismiss the dialog (or open another card) from inside this call, and both
+			 * of those reach {@see invalidateSelection}. Assigning the guard afterwards would
+			 * overwrite that invalidation with a marker for a picker the customer has already
+			 * walked away from, and the answer would then be applied to it.
+			 */
+			pendingSelectionToken = token;
+			pendingSelectionPointId = pointId;
 
 			if ( panels ) {
 				panels.setSelectionBusy( true );
 			}
 
-			pendingSelectionId = pointId;
+			fireDocumentEvent( EVENT_SELECT_REQUESTED, { fieldId: config.fieldId, point: point } );
 
+			// The request leaves even when a `_requested` listener just invalidated it: the event
+			// is OBSERVATIONAL and grants no veto (D-2 — the veto path is
+			// `woodev_modal_before_close`). What the invalidation buys is that the ANSWER is
+			// discarded, exactly as it is for every other D-9 path.
 			realDataSource.selectPoint( {
 				pointId: pointId,
 				fieldId: config.fieldId,
 			} ).then(
 				function( result ) {
-					finishSelection( point, result, null );
+					finishSelection( token, point, result, null );
 				},
 				function( reason ) {
-					finishSelection( point, null, reason );
+					finishSelection( token, point, null, reason );
 				}
 			);
 		}
@@ -1422,48 +1539,49 @@
 		 * Applies one settled confirmation — success or failure, both land here so the busy
 		 * state is released in exactly one place.
 		 *
-		 * THE STALENESS GUARD. An answer is applied only while it is still about something
-		 * current: this session is alive, and the card still shows the point the request was
-		 * sent for. Locking the card stops a customer from starting a SECOND confirmation, but
-		 * it cannot stop the paths that are not clicks inside it, and spec D-9 requires all of
-		 * them covered: the map underneath the lock stays live (a marker click swaps the card
-		 * to another point through `pointClick` → `openCard()`); Escape, the backdrop and the
-		 * close button dismiss the dialog out from under the request (see
-		 * {@see handleModalClosed}); and a fresh click on the checkout trigger tears this whole
-		 * session down and opens another. An answer that outlives what it was about is
+		 * THE STALENESS GUARD. An answer is applied only while it is still the one this session's
+		 * card is waiting for — {@see ownsSelection}, matched on the unique token
+		 * {@see handleSelection} minted for THIS request, never on the point id (see
+		 * `pendingSelectionToken`'s own docblock for the ABA race an id-only guard is). Locking
+		 * the card stops a customer from starting a SECOND confirmation, but it cannot stop the
+		 * paths that are not clicks inside it, and spec D-9 requires all of them covered: the map
+		 * underneath the lock stays live (a marker click swaps the card to another point through
+		 * `pointClick` → `openCard()`); Escape, the backdrop and the close button dismiss the
+		 * dialog out from under the request (see {@see handleModalClosed}); and a fresh click on
+		 * the checkout trigger tears this whole session down and opens another. Every one of them
+		 * runs through {@see invalidateSelection}. An answer that outlives what it was about is
 		 * discarded, never applied to whatever happens to be on screen now (spec D-9/D-10: the
 		 * request is not aborted — the server may already have written the point into the WC
 		 * session, and aborting would stop us listening without undoing any of that. The client
 		 * and the server can therefore end up disagreeing; D-10 accepts that explicitly and
 		 * still says to ignore the answer).
 		 *
-		 * The busy release is deliberately OUTSIDE that guard: it is the caller's obligation on
-		 * all three settlement paths — accepted, refused, and discarded-as-stale (see
-		 * `Panels.prototype.setSelectionBusy`'s own docblock). Releasing it only on the two
-		 * applied paths would leave a card that took a stale answer locked for the rest of the
-		 * session, with a dead CTA reading «Проверяем…» over a request that already came back.
+		 * THE GUARD IS RUN TWICE, once on each side of `woodev_pickup_point_select_resolved`.
+		 * That event is dispatched synchronously — every listener runs INLINE before
+		 * `fireDocumentEvent()` returns — so a listener is free to dismiss the dialog or destroy
+		 * the session between the check and the apply. Re-running the same check afterwards is
+		 * what stops the field write, the trigger relabel, the panels calls and the checkout
+		 * refresh from all landing on a picker that stopped existing mid-function.
 		 *
+		 * THE BUSY RELEASE IS INSIDE THE GUARD, and that is not the same as the old "release only
+		 * on the applied paths" mistake this file already fixed once. The lock belongs to the
+		 * TOKEN: whoever ends a token's ownership releases it, so an answer this function
+		 * discards has already had its lock released by whatever discarded it
+		 * ({@see invalidateSelection}), while a LIVE confirmation's lock is never released by a
+		 * stale one settling. Both of `setSelectionBusy()`'s obligations hold — no discarded
+		 * answer leaves a dead CTA reading «Проверяем…», and no overlapping submit becomes
+		 * possible while a request is still out.
+		 *
+		 * @param {number}      token  the confirmation's own token, from {@see handleSelection}.
 		 * @param {Object}      point
 		 * @param {Object|null} result the server's verdict, or null when the request failed.
 		 * @param {Object|null} reason the transport failure, or null on success.
 		 * @returns {void}
 		 */
-		function finishSelection( point, result, reason ) {
+		function finishSelection( token, point, result, reason ) {
 			var pointId = String( point && point.id );
-			var current = ! destroyed && pendingSelectionId === pointId;
 
-			if ( pendingSelectionId === pointId ) {
-				pendingSelectionId = null;
-			}
-
-			// Not under `current`: see the docblock. Skipped only when there is no card to
-			// release — no panels at all (`ownsChrome`), or a session already torn down, whose
-			// panels have been destroyed along with their DOM.
-			if ( panels && ! destroyed ) {
-				panels.setSelectionBusy( false );
-			}
-
-			if ( ! current ) {
+			if ( ! ownsSelection( token ) ) {
 				return;
 			}
 
@@ -1473,6 +1591,17 @@
 				result: result,
 				error: reason,
 			} );
+
+			// A synchronous `_resolved` listener may have dismissed the dialog or torn the session
+			// down while the event was being dispatched — see the docblock.
+			if ( ! ownsSelection( token ) ) {
+				return;
+			}
+
+			pendingSelectionToken = 0;
+			pendingSelectionPointId = null;
+
+			releaseSelectionBusy();
 
 			if ( ! result ) {
 				// Transport failure: nothing about the point was refused, so nothing is
@@ -1540,6 +1669,15 @@
 		 * event is jQuery-only — see the file docblock's note on the identical asymmetry for
 		 * `updated_checkout`).
 		 *
+		 * THE HOLD IS BOUNDED. `updated_checkout` is the release the customer normally gets, and
+		 * it is NOT guaranteed to arrive: the checkout ajax can fail, be aborted by a newer one,
+		 * or be answered by a build that never fires it. With that event as the only release, the
+		 * CTA stays locked for the rest of the session over a refresh that already gave up, and
+		 * the `one()` waiter stays bound to `document.body` holding the whole panels graph alive.
+		 * A {@see REFRESH_TIMEOUT_MS} timer is therefore armed alongside the waiter, and both
+		 * settle through the SAME {@see dropRefreshWaiter} — whichever gets there first cancels
+		 * the other, so the lock is released exactly once either way.
+		 *
 		 * @param {Object|null} openPanels the panels to hold busy, or null when nothing is on
 		 *                                 screen to hold.
 		 * @returns {void}
@@ -1550,34 +1688,36 @@
 			}
 
 			if ( openPanels ) {
-				openPanels.setSelectionBusy( true );
-
 				// Superseded before it ever fired (WooCommerce answered the previous refresh
-				// with an ajax error, say — `updated_checkout` is not guaranteed on every
-				// build). Drop it rather than stack a second one on the same target.
+				// with an ajax error, say). Drop it — releasing whatever lock it still held —
+				// rather than stack a second one on the same target. Before this refresh takes
+				// the lock, so the release below never cancels the acquire above it.
 				dropRefreshWaiter();
 
-				refreshWaiter = function() {
-					refreshWaiter = null;
+				refreshBusyPanels = openPanels;
+				openPanels.setSelectionBusy( true );
 
-					// The session can be torn down between `update_checkout` and
-					// `updated_checkout` — WooCommerce's round trip is real network time, and a
-					// customer is free to dismiss the dialog or re-open the picker during it.
-					// `dropRefreshWaiter()` in destroy() normally means this never runs at all;
-					// this guard is what covers the one case it cannot (jQuery gone by then).
-					if ( ! destroyed ) {
-						openPanels.setSelectionBusy( false );
-					}
+				// Both settle paths are the same call: `one()` self-cleans when it actually
+				// fires, and `dropRefreshWaiter()` is idempotent, so running it from inside the
+				// handler only releases the lock and cancels the timer.
+				refreshWaiter = function() {
+					dropRefreshWaiter();
 				};
 
 				window.jQuery( document.body ).one( 'updated_checkout', refreshWaiter );
+
+				refreshTimer = window.setTimeout( function() {
+					refreshTimer = null;
+					dropRefreshWaiter();
+				}, REFRESH_TIMEOUT_MS );
 			}
 
 			window.jQuery( document.body ).trigger( 'update_checkout' );
 		}
 
 		/**
-		 * Unbinds the pending `updated_checkout` waiter, if any.
+		 * Settles the pending checkout refresh, if any: cancels its timeout, unbinds its
+		 * `updated_checkout` waiter, and releases the card lock it was holding.
 		 *
 		 * A `one()` handler that never fires is not self-cleaning: it stays on `document.body`
 		 * holding this closure — and the whole `panels`/DOM graph it captures — alive for the
@@ -1585,14 +1725,35 @@
 		 * ajax, or a session torn down before the round trip returns), so the binding has to be
 		 * dropped by hand.
 		 *
+		 * The lock is released here rather than only in the waiter for the same reason it is
+		 * released in {@see invalidateSelection} rather than only in {@see finishSelection}: this
+		 * IS the settle point, and `setSelectionBusy()` never self-balances (see its own docblock
+		 * in `pickup-panels.js`). `destroy()` calls this BEFORE flipping `destroyed`, so a session
+		 * torn down mid-refresh hands its panels back unlocked instead of frozen.
+		 *
 		 * @returns {void}
 		 */
 		function dropRefreshWaiter() {
+			if ( null !== refreshTimer ) {
+				window.clearTimeout( refreshTimer );
+				refreshTimer = null;
+			}
+
 			if ( refreshWaiter && window.jQuery ) {
 				window.jQuery( document.body ).off( 'updated_checkout', refreshWaiter );
 			}
 
 			refreshWaiter = null;
+
+			if ( refreshBusyPanels ) {
+				var held = refreshBusyPanels;
+
+				refreshBusyPanels = null;
+
+				if ( ! destroyed ) {
+					held.setSelectionBusy( false );
+				}
+			}
 		}
 
 		/**
@@ -1614,7 +1775,7 @@
 		 * would discard THIS confirmation's answer, never apply a wrong one.
 		 *
 		 * Our own successful close reaches this too — harmlessly: {@see finishSelection} clears
-		 * the pending id before it ever asks the modal to close.
+		 * the pending token before it ever asks the modal to close.
 		 *
 		 * @param {CustomEvent} event
 		 * @returns {void}
@@ -1624,7 +1785,7 @@
 				return;
 			}
 
-			pendingSelectionId = null;
+			invalidateSelection();
 		}
 
 		// The ONE `document.body` listener this file's sessions register — see the file
@@ -1659,9 +1820,11 @@
 				// marker click still routes through `pointClick` → `openCard()` and swaps the
 				// card to a different point while the first one's answer is still in flight.
 				// From that moment the answer is about a point the card no longer shows, and
-				// dropping the pending id here is what makes {@see finishSelection} see that.
-				if ( null !== pendingSelectionId && String( payload.pointId ) !== pendingSelectionId ) {
-					pendingSelectionId = null;
+				// dropping the pending confirmation here is what makes {@see finishSelection}
+				// see that — and what hands the card back UNLOCKED for the point it now shows,
+				// rather than leaving it frozen until an answer nobody wants finally lands.
+				if ( 0 !== pendingSelectionToken && String( payload.pointId ) !== pendingSelectionPointId ) {
+					invalidateSelection();
 				}
 
 				if ( payload.group && provider && 'function' === typeof provider.focusGroup ) {
@@ -2105,6 +2268,17 @@
 			modal: modal,
 			refresh: refresh,
 			destroy: function() {
+				// BOTH card locks a session can be holding — an in-flight confirmation's and an
+				// in-flight checkout refresh's — are released HERE, while `destroyed` is still
+				// false and the panels are still alive to hear it. `setSelectionBusy()` does not
+				// track why it was called and never self-balances (see its own docblock in
+				// `pickup-panels.js`); a `true` left unpaired locks every card the instance opens
+				// afterwards, and nothing else in this file would ever pair it. Cheap insurance
+				// against a panels object that outlives its session — a plugin holding its own
+				// reference, or a future reuse of the instance.
+				invalidateSelection();
+				dropRefreshWaiter();
+
 				destroyed = true;
 
 				// The TWO long-lived targets a session binds to (see {@see handleModalClosed}
@@ -2113,7 +2287,6 @@
 				// opened on this page would keep a listener, and its whole closure, alive for
 				// the life of the document.
 				document.body.removeEventListener( 'woodev_modal_closed', handleModalClosed );
-				dropRefreshWaiter();
 
 				if ( provider && 'function' === typeof provider.destroy ) {
 					provider.destroy();
