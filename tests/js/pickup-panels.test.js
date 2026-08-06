@@ -257,6 +257,67 @@ it( 'toggles closed again on a second call, with open:false in the event', () =>
 } );
 
 // -----------------------------------------------------------------------
+// Task 10: the sidebar's persistent record of "which one did I choose". Until now the only trace
+// of a selection was the card CTA's label flipping to `continueCheckout` (Task 8) — invisible
+// once the customer scrolls the list away from the open card. The row (or, for a co-located
+// group, the per-point button inside it) carries its own `is-selected` marker, computed at BUILD
+// time from `self._selectedId` so it is correct regardless of call order.
+// -----------------------------------------------------------------------
+
+describe( 'selected row highlight (Task 10)', () => {
+	it( 'marks the selected point row', () => {
+		const panels = new Panels( document.createElement( 'div' ), config );
+		panels.render();
+		panels.setSelectedId( 'p2' );
+		panels.setVisible( [ group( 'p1', 55.75, 37.61, 'ПВЗ 1' ), group( 'p2', 55.76, 37.61, 'ПВЗ 2' ) ] );
+
+		const rows = panels.root.querySelectorAll( '.woodev-pickup-list__item' );
+
+		expect( rows[ 0 ].classList.contains( 'is-selected' ) ).toBe( false );
+		expect( rows[ 1 ].classList.contains( 'is-selected' ) ).toBe( true );
+	} );
+
+	it( 'marks only the selected point inside a co-located group', () => {
+		const panels = new Panels( document.createElement( 'div' ), config );
+		panels.render();
+		panels.setSelectedId( 'b' );
+		panels.setVisible( [ {
+			key: 'g1', lat: 55.75, lng: 37.61, size: 2,
+			points: [
+				{ id: 'a', name: 'ПВЗ', short_address: 'x' },
+				{ id: 'b', name: 'Постамат', short_address: 'y' },
+			],
+		} ] );
+
+		const buttons = panels.root.querySelectorAll( '.woodev-pickup-list__point' );
+
+		expect( buttons[ 0 ].classList.contains( 'is-selected' ) ).toBe( false );
+		expect( buttons[ 1 ].classList.contains( 'is-selected' ) ).toBe( true );
+	} );
+
+	it( 'moves the highlight when the selection changes', () => {
+		const panels = new Panels( document.createElement( 'div' ), config );
+		panels.render();
+		panels.setVisible( [ group( 'g1', 55.75, 37.61, 'ПВЗ 1' ), group( 'g2', 55.76, 37.61, 'ПВЗ 2' ) ] );
+
+		panels.setSelectedId( 'g1' );
+
+		expect( panels.root.querySelectorAll( '.woodev-pickup-list__item.is-selected' ) ).toHaveLength( 1 );
+		expect( panels.root.querySelector( '.woodev-pickup-list__item.is-selected' ).dataset.groupKey )
+			.toBe( 'g1' );
+	} );
+
+	// Matching the sibling guard already proven for `setSelectionBusy`/`showSelectionError` (Task
+	// 8/9, both above `mount()`'s own definition) — `setSelectedId()` now touches the list, not
+	// only the card, so it needs the same before-`render()` guard those two already carry.
+	it( 'does not throw when called before render()', () => {
+		const panels = new Panels( document.createElement( 'div' ), config );
+
+		expect( () => panels.setSelectedId( 'p1' ) ).not.toThrow();
+	} );
+} );
+
+// -----------------------------------------------------------------------
 // Round 2 (D6): `openCard( group, pointId, origin )` — `origin` is what lets the mount tell a
 // marker click (pan only) apart from every other route (zoom in), now that the original V-10
 // "must behave identically" claim has been overruled (see the file docblock's revised

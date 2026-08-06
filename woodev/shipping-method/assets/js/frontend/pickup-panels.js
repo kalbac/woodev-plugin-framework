@@ -650,11 +650,21 @@
 		var anchor = self._anchor;
 		var points = filterGroupPoints( self, group );
 
+		/*
+		 * "Selected" lives HERE and in the CTA's label — never as a third marker state on the
+		 * map. The plugin-facing icon contract is exactly two images per type
+		 * (`pointIcons: { typeCode: { default, active } }`); a third would oblige every plugin
+		 * to draw one for every point type, a breaking change to an outward contract for a
+		 * nuance this row already carries permanently. On the map, `active` means FOCUSED.
+		 */
+		var selectedId = self._selectedId;
+
 		if ( points.length > 1 ) {
 			points.forEach( function( point ) {
 				var button = document.createElement( 'button' );
 				button.type = 'button';
-				button.className = 'woodev-pickup-list__point';
+				button.className = 'woodev-pickup-list__point'
+					+ ( null !== selectedId && String( point.id ) === selectedId ? ' is-selected' : '' );
 				button.dataset.pointId = String( point.id );
 				button.appendChild( buildSinglePointRow( point, anchor, group, locale, self._config ) );
 				button.addEventListener( 'click', function() {
@@ -671,6 +681,10 @@
 		item.addEventListener( 'click', function() {
 			self.openCard( group, onlyPoint.id, 'list' );
 		} );
+
+		if ( null !== selectedId && String( onlyPoint.id ) === selectedId ) {
+			item.classList.add( 'is-selected' );
+		}
 
 		return item;
 	}
@@ -2729,6 +2743,17 @@
 	 */
 	Panels.prototype.setSelectedId = function( id ) {
 		this._selectedId = ( undefined !== id && null !== id ) ? String( id ) : null;
+
+		// The list carries the highlight too now (Task 10), so it must be rebuilt as well — not
+		// only the card, which is all this method used to touch when `_selectedId` affected
+		// nothing but the CTA's label. Guarded the same way `setAnchor()`/
+		// `handleFilterCheckboxChange()` guard their own `renderList()` call: `self._listBodyEl`
+		// does not exist before `render()` builds it, and `renderListBody()`'s `empty()` call has
+		// no null-check, so an unconditional call here would throw for a caller that sets the
+		// selection before the list has ever been rendered.
+		if ( this.root ) {
+			renderList( this );
+		}
 
 		if ( this._activeGroup ) {
 			renderCard( this );

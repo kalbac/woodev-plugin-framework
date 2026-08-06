@@ -508,6 +508,28 @@
 	background: #f6f7f7;
 }
 
+/* The selected point's row (Task 10) — the sidebar's only persistent trace of "which one did I
+   choose"; the card CTA's label flip (Task 8) is invisible once the customer scrolls the list
+   away from the open card. A left accent bar plus a tinted background — deliberately quieter than
+   the card's own selection affordances, since this must read as "this is the one you chose" at a
+   glance while scrolling, not compete with `:hover` above.
+   Two `background` declarations, not one: `rgba( 6, 174, 221, 0.06 )` is a literal fallback for a
+   browser without `color-mix()` support — it happens to equal this file's own default accent
+   (`#06aedd`) at 6% opacity, the same number the file docblock's D-15 contract would compute for
+   the DEFAULT merchant. The second declaration is what D-15 actually requires and overrides the
+   first wherever `color-mix()` is supported: a tint derived from `--woodev-pickup-accent` itself,
+   not a hardcoded colour, so a merchant who set a red accent gets a red tint, not this file's own
+   cyan frozen in place. No other rule in this file blends the accent to a soft/tinted surface
+   (every other `--woodev-pickup-accent` background below is a solid, opaque fill) — `color-mix()`
+   is the only mechanism a plain custom-property value (`#rrggbb`, not a channel triplet) can be
+   alpha-blended through without a second, independently-invented CSS variable for the channels. */
+.woodev-pickup-list__item.is-selected,
+.woodev-pickup-list__point.is-selected {
+	background: rgba( 6, 174, 221, 0.06 );
+	background: color-mix( in srgb, var( --woodev-pickup-accent, #06aedd ) 6%, transparent );
+	box-shadow: inset 3px 0 0 var( --woodev-pickup-accent, #06aedd );
+}
+
 /* Live-review follow-up: a co-located group's row silently lost the grid above. Unlike
    `.woodev-pickup-list__item` (a plain `<div>`), `.woodev-pickup-list__point` is a real
    `<button>` (`pickup-panels.js`'s `buildListItem()`), so it ALSO matches the stage's own button
