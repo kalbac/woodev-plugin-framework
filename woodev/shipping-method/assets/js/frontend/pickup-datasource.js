@@ -204,15 +204,16 @@
 	 * with the parsed JSON body, or rejects with the error shape documented
 	 * at the top of this file.
 	 *
-	 * @param {string} url
-	 * @param {string} nonce
+	 * @param {string}   url
+	 * @param {Function} readNonce reads the CURRENT nonce — see {@see WoodevPickupDataSource}'s
+	 *                             own docblock for why this is a provider, not a value.
 	 * @returns {Promise<*>}
 	 */
-	function request( url, nonce ) {
+	function request( url, readNonce ) {
 		return fetch( url, {
 			method: 'GET',
 			credentials: 'same-origin',
-			headers: { 'X-WP-Nonce': nonce },
+			headers: { 'X-WP-Nonce': readNonce() },
 		} ).then(
 			function( response ) {
 				return response.json().then(
@@ -252,16 +253,16 @@
 	 * de-duplicated point list. `{ points: [] }` resolves to `[]` — a
 	 * genuinely empty result is never an error (see the file-level docblock).
 	 *
-	 * @param {string} restRoot
-	 * @param {string} nonce
-	 * @param {Object} query
+	 * @param {string}   restRoot
+	 * @param {Function} readNonce
+	 * @param {Object}   query
 	 * @returns {Promise<Array>}
 	 */
-	function fetchPointsOnce( restRoot, nonce, query ) {
+	function fetchPointsOnce( restRoot, readNonce, query ) {
 		var qs = serializePointsQuery( query );
 		var url = restRoot + ( qs.length > 0 ? '?' + qs : '' );
 
-		return request( url, nonce ).then( function( body ) {
+		return request( url, readNonce ).then( function( body ) {
 			var points = body && Array.isArray( body.points ) ? body.points : [];
 
 			return dedupeById( points );
@@ -271,15 +272,15 @@
 	/**
 	 * Issues a single point detail request.
 	 *
-	 * @param {string} restRoot
-	 * @param {string} nonce
-	 * @param {string} pointId
+	 * @param {string}   restRoot
+	 * @param {Function} readNonce
+	 * @param {string}   pointId
 	 * @returns {Promise<Object>}
 	 */
-	function fetchDetailsOnce( restRoot, nonce, pointId ) {
+	function fetchDetailsOnce( restRoot, readNonce, pointId ) {
 		var url = restRoot.replace( /\/+$/, '' ) + '/' + encodeURIComponent( pointId );
 
-		return request( url, nonce );
+		return request( url, readNonce );
 	}
 
 	/**
@@ -312,14 +313,19 @@
 
 	/**
 	 * @typedef {Object} WoodevPickupDataSourceOptions
-	 * @property {string} restRoot          Points collection REST URL (details is
-	 *                                       `{restRoot}/{id}`, see
-	 *                                       {@see Pickup_Handler::rest_root()}).
-	 * @property {string} nonce             `X-WP-Nonce` value (`wp_create_nonce( 'wp_rest' )`).
-	 * @property {number} [debounceMs=300]  `fetchPoints()` debounce interval — see
-	 *                                       {@see DEBOUNCE_MS} for why 300 is the default and
-	 *                                       must not be lowered without also raising the
-	 *                                       controller's rate-limit budget.
+	 * @property {string}          restRoot         Points collection REST URL (details is
+	 *                                               `{restRoot}/{id}`, see
+	 *                                               {@see Pickup_Handler::rest_root()}).
+	 * @property {string|Function} nonce            `X-WP-Nonce` value (`wp_create_nonce( 'wp_rest' )`),
+	 *                                               or a zero-arg function returning the CURRENT one —
+	 *                                               see {@see WoodevPickupDataSource}'s own docblock for
+	 *                                               why a function, not a captured string, is what makes
+	 *                                               a fragment-refreshed nonce (issue #157) actually reach
+	 *                                               the request.
+	 * @property {number}          [debounceMs=300] `fetchPoints()` debounce interval — see
+	 *                                               {@see DEBOUNCE_MS} for why 300 is the default and
+	 *                                               must not be lowered without also raising the
+	 *                                               controller's rate-limit budget.
 	 */
 
 	/**
@@ -331,7 +337,20 @@
 	function WoodevPickupDataSource( options ) {
 		var opts = options || {};
 		var restRoot = String( opts.restRoot || '' );
-		var nonce = String( opts.nonce || '' );
+
+		/*
+		 * A PROVIDER, not a value. `wp_localize_script()` prints the JS config once per page
+		 * load, outside the fragment `update_checkout` refreshes, so a nonce captured here could
+		 * never become fresh again — issue #157. Callers pass a function reading whichever node
+		 * currently holds a valid nonce; a plain string is still accepted so nothing else in the
+		 * codebase has to change at once.
+		 */
+		var readNonce = 'function' === typeof opts.nonce
+			? opts.nonce
+			: function() {
+				return String( opts.nonce || '' );
+			};
+
 		var debounceMs = 'number' === typeof opts.debounceMs ? opts.debounceMs : DEBOUNCE_MS;
 
 		/** @type {number|null} pending debounce timer id. */
@@ -373,7 +392,7 @@
 			latestSeq += 1;
 			mySeq = latestSeq;
 
-			latestPromise = fetchPointsOnce( restRoot, nonce, args ).then(
+			latestPromise = fetchPointsOnce( restRoot, readNonce, args ).then(
 				function( points ) {
 					if ( mySeq === latestSeq ) {
 						resolveAll( waiters, points );
@@ -454,7 +473,7 @@
 		 * @returns {Promise<Object>}
 		 */
 		function fetchDetails( pointId ) {
-			return fetchDetailsOnce( restRoot, nonce, pointId );
+			return fetchDetailsOnce( restRoot, readNonce, pointId );
 		}
 
 		return {

@@ -272,6 +272,16 @@
 		woodev_pickup_upstream_error: 'upstreamError',
 		woodev_pickup_rate_limited: 'rateLimited',
 		woodev_pickup_point_not_found: 'notFound',
+
+		/*
+		 * Two codes, one message. `rest_cookie_invalid_nonce` is WordPress's own, raised by
+		 * `rest_cookie_check_errors()` BEFORE any permission_callback runs — which is why a
+		 * route declared `__return_true` can still 403 (#157). `woodev_pickup_invalid_nonce`
+		 * is ours, from the select route's permission callback, for the cases WordPress lets
+		 * through (no nonce header at all).
+		 */
+		rest_cookie_invalid_nonce: 'stalePage',
+		woodev_pickup_invalid_nonce: 'stalePage',
 	};
 
 	/**
@@ -469,6 +479,22 @@
 		}
 
 		button.textContent = text( config, fieldValue( config.fieldId ) ? 'triggerChange' : 'trigger' );
+	}
+
+	/**
+	 * The freshest REST nonce available: the node WooCommerce replaces on every
+	 * `update_checkout` (see `Pickup_Handler::print_nonce_node()`), falling back to the one
+	 * baked into the page-load config when that node is absent — a plugin on a non-checkout
+	 * surface, or a theme that dropped `wp_footer`.
+	 *
+	 * @param {Object} config
+	 * @returns {string}
+	 */
+	function currentNonce( config ) {
+		var node = config.nonceNodeId ? document.getElementById( config.nonceNodeId ) : null;
+		var live = node && node.dataset ? node.dataset.woodevPickupNonce : '';
+
+		return live || String( config.nonce || '' );
 	}
 
 	/**
@@ -881,7 +907,12 @@
 			return { modal: modal, refresh: noopRefresh, destroy: function() { modal.destroy(); } };
 		}
 
-		var realDataSource = DataSourceFactory( { restRoot: config.restRoot, nonce: config.nonce } );
+		var realDataSource = DataSourceFactory( {
+			restRoot: config.restRoot,
+			nonce: function() {
+				return currentNonce( config );
+			},
+		} );
 
 		// Resolved fresh from `window` on every open, exactly like ProviderCtor/DataSourceFactory
 		// above — never a module-load-time constant — so a test can swap it, and so a real page

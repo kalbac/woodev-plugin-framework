@@ -162,6 +162,34 @@ test( 'fetchDetails() sends the REST nonce as the X-WP-Nonce header too', async 
 } );
 
 // -----------------------------------------------------------------------
+// Nonce freshness (issue #157) — the nonce is read at REQUEST time, not
+// captured once at construction, since a fragment refresh elsewhere on the
+// page can rotate it after the dataSource was built.
+// -----------------------------------------------------------------------
+
+test( 'reads the nonce at request time, not at construction', async () => {
+	const fetchMock = mockFetchOnce( 200, { points: [] } );
+
+	let current = 'stale';
+	const ds = WoodevPickupDataSource( { restRoot: REST_ROOT, nonce: () => current, debounceMs: 0 } );
+
+	current = 'fresh';
+	await ds.fetchPoints( { locality: 'Москва' } );
+
+	expect( fetchMock.mock.calls[ 0 ][ 1 ].headers[ 'X-WP-Nonce' ] ).toBe( 'fresh' );
+} );
+
+test( 'still accepts a plain string nonce', async () => {
+	const fetchMock = mockFetchOnce( 200, { points: [] } );
+
+	const ds = WoodevPickupDataSource( { restRoot: REST_ROOT, nonce: 'plain', debounceMs: 0 } );
+
+	await ds.fetchPoints( {} );
+
+	expect( fetchMock.mock.calls[ 0 ][ 1 ].headers[ 'X-WP-Nonce' ] ).toBe( 'plain' );
+} );
+
+// -----------------------------------------------------------------------
 // De-duplication
 // -----------------------------------------------------------------------
 

@@ -449,6 +449,9 @@ function phpI18n( overrides ) {
 			rateLimited: 'Слишком много запросов. Подождите немного и попробуйте снова.',
 			notFound: 'Этот пункт выдачи больше не найден. Пожалуйста, выберите другой.',
 			zoomIn: 'Приблизьте карту, чтобы увидеть пункты выдачи',
+			// #157: a 403 on ANY pickup route — points fetch included — means the page's nonce
+			// has outlived the session it was minted for, not a normal fetch failure.
+			stalePage: 'Страница устарела. Обновите её и выберите пункт выдачи заново.',
 		},
 		overrides
 	);
@@ -1214,6 +1217,36 @@ test( 'an unmapped/unknown code calls panels.showMessage( \'error\' ) — the ge
 
 	const panels = StubPanels.instances[ StubPanels.instances.length - 1 ];
 	expect( panels.showMessageCalls ).toEqual( [ 'error' ] );
+} );
+
+// -------------------------------------------------------------------------
+// Stale nonce (#157b) — a 403 on the points fetch itself maps to the same
+// "page is stale" message a stale select-route nonce does, not the generic
+// fetch-error text. Two distinct codes collapse to one message: WordPress's
+// own `rest_cookie_check_errors()` rejects an INVALID nonce before any
+// `permission_callback` runs (`rest_cookie_invalid_nonce`), while a MISSING
+// nonce header falls through to our own select-route permission callback
+// (`woodev_pickup_invalid_nonce`) — see pickup-mount.js's ERROR_MESSAGE_KEYS
+// docblock. Exercised the same observable way as the mappings above: a
+// dataSource rejection reaching `panels.showMessage()` with the resolved
+// i18n KEY, never a synthetic test-only export.
+// -------------------------------------------------------------------------
+
+test.each( [
+	[ 'rest_cookie_invalid_nonce' ],
+	[ 'woodev_pickup_invalid_nonce' ],
+] )( 'dataSource code %s calls panels.showMessage( \'stalePage\' ), not the generic error', async ( code ) => {
+	window.WoodevPickupDataSource = fakeDataSourceFactory( () =>
+		Promise.reject( { status: 403, code: code, message: 'raw ' + code } )
+	);
+	setConfig( makeConfig() );
+	mountAll();
+	clickTrigger();
+
+	await flushAsync();
+
+	const panels = StubPanels.instances[ StubPanels.instances.length - 1 ];
+	expect( panels.showMessageCalls ).toEqual( [ 'stalePage' ] );
 } );
 
 test( 'a genuinely empty BULK result calls panels.showMessage( \'emptyLocality\' ) — never the '
