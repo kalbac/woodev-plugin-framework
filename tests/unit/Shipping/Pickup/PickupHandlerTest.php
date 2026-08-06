@@ -240,6 +240,17 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 		public function wc_session_chosen_payment_method_public() {
 			return $this->wc_session_chosen_payment_method();
 		}
+
+		/**
+		 * Exposes the protected wc_session_chosen_shipping_methods() seam's OWN
+		 * default body for direct assertions — same reasoning as
+		 * {@see self::wc_cart_public()}.
+		 *
+		 * @return mixed
+		 */
+		public function wc_session_chosen_shipping_methods_public() {
+			return $this->wc_session_chosen_shipping_methods();
+		}
 	}
 
 	/**
@@ -396,6 +407,37 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 		}
 
 		protected function wc_session_chosen_payment_method() {
+			return $this->session_value;
+		}
+	}
+
+	/**
+	 * Probe exercising the REAL rest_shipping_method() reading of
+	 * `WC()->session->get( 'chosen_shipping_methods' )` while overriding only
+	 * {@see Pickup_Handler::wc_session_chosen_shipping_methods()} — for the same
+	 * "never mock WC() itself" reason {@see Pickup_Handler_Session_Probe} documents.
+	 */
+	final class Pickup_Handler_Shipping_Session_Probe extends Pickup_Handler {
+
+		/** @var mixed */
+		private $session_value;
+
+		/**
+		 * @param mixed $session_value what wc_session_chosen_shipping_methods() returns.
+		 */
+		public function __construct(
+			string $plugin_id,
+			string $field_id,
+			Point_Source $source,
+			Map_Provider $map_provider,
+			array $default_location,
+			$session_value
+		) {
+			parent::__construct( $plugin_id, $field_id, $source, $map_provider, $default_location );
+			$this->session_value = $session_value;
+		}
+
+		protected function wc_session_chosen_shipping_methods() {
 			return $this->session_value;
 		}
 	}
@@ -2738,6 +2780,104 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			);
 
 			$this->assertNull( $handler->wc_session_chosen_payment_method_public() );
+		}
+
+		// -------------------------------------------------------------------------
+		// rest_shipping_method() — the fifth callable Pickup_Controller is built
+		// with, feeding the `.../select` route's domain seam. Session-only: the
+		// selection request is a standalone POST from the modal, so the checkout
+		// form's own shipping_method[0] is never part of it.
+		// -------------------------------------------------------------------------
+
+		/**
+		 * The `:instance_id` suffix must be stripped — the rest of the framework
+		 * (condition specs, `requires_pickup`, the JS store) speaks the BARE method
+		 * id, so a domain seam handed `carrier_pickup:3` would fail every comparison
+		 * made against `carrier_pickup`. A mutant returning the raw session value
+		 * fails here, not on any of the tests below.
+		 */
+		public function test_rest_shipping_method_strips_the_instance_id_suffix(): void {
+			$handler = new Pickup_Handler_Shipping_Session_Probe(
+				'p',
+				'f',
+				$this->source_returning( null ),
+				$this->yandex_provider(),
+				$this->default_location(),
+				[ 'carrier_pickup:3' ]
+			);
+
+			$this->assertSame( 'carrier_pickup', $handler->rest_shipping_method() );
+		}
+
+		/**
+		 * Package 0 is the primary method, matching Checkout_Handler's own reading of
+		 * the posted value — a mutant taking the last package instead answers
+		 * 'flat_rate'.
+		 */
+		public function test_rest_shipping_method_reads_the_first_package(): void {
+			$handler = new Pickup_Handler_Shipping_Session_Probe(
+				'p',
+				'f',
+				$this->source_returning( null ),
+				$this->yandex_provider(),
+				$this->default_location(),
+				[ 'carrier_pickup', 'flat_rate' ]
+			);
+
+			$this->assertSame( 'carrier_pickup', $handler->rest_shipping_method() );
+		}
+
+		/**
+		 * No session, no packages, or a non-scalar entry (defensive — nothing stops a
+		 * plugin writing junk under this key) must degrade to `''`, never fatal on the
+		 * `(string)` cast. `''` is a method no plugin matches, so the domain seam simply
+		 * cannot key off it.
+		 *
+		 * @dataProvider provide_unusable_shipping_session_values
+		 *
+		 * @param mixed $session_value what the seam returns.
+		 */
+		public function test_rest_shipping_method_is_empty_for_an_unusable_session_value( $session_value ): void {
+			$handler = new Pickup_Handler_Shipping_Session_Probe(
+				'p',
+				'f',
+				$this->source_returning( null ),
+				$this->yandex_provider(),
+				$this->default_location(),
+				$session_value
+			);
+
+			$this->assertSame( '', $handler->rest_shipping_method() );
+		}
+
+		/**
+		 * @return array<string, array{0: mixed}>
+		 */
+		public function provide_unusable_shipping_session_values(): array {
+			return [
+				'no session at all'   => [ null ],
+				'not an array'        => [ 'carrier_pickup' ],
+				'empty package list'  => [ [] ],
+				'non-scalar package'  => [ [ [ 'unexpected' => 'array' ] ] ],
+			];
+		}
+
+		/**
+		 * `wc_session_chosen_shipping_methods()`'s OWN default body (not the probe) —
+		 * proves the seam itself degrades to `null`, not a fatal, when WC() genuinely
+		 * does not exist in this unit-test process. Same reasoning as
+		 * {@see self::test_wc_session_chosen_payment_method_is_null_when_wc_is_unavailable()}.
+		 */
+		public function test_wc_session_chosen_shipping_methods_is_null_when_wc_is_unavailable(): void {
+			$handler = new Pickup_Handler_Probe(
+				'p',
+				'f',
+				$this->source_returning( null ),
+				$this->yandex_provider(),
+				$this->default_location()
+			);
+
+			$this->assertNull( $handler->wc_session_chosen_shipping_methods_public() );
 		}
 
 		// -------------------------------------------------------------------------

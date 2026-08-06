@@ -47,6 +47,7 @@ use Woodev\Framework\Shipping\Pickup\Constraint_Checker;
 use Woodev\Framework\Shipping\Pickup\Pickup_Point;
 use Woodev\Framework\Shipping\Pickup\Point_Query;
 use Woodev\Framework\Shipping\Pickup\Point_Source;
+use Woodev\Framework\Shipping\Pickup\Selection_Result;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -157,6 +158,27 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 		private $payment_method;
 
 		/**
+		 * Returns the shipping method id the order will be placed with.
+		 *
+		 * A callable for the same reason {@see self::$cart_weight} and
+		 * {@see self::$payment_method} are: this controller reads no WooCommerce global at
+		 * all, which is exactly what lets its whole dispatch core be unit-tested without
+		 * WooCommerce loaded. Reading `WC()->session` here would trade that away.
+		 *
+		 * Only the `.../select` route's domain seam consumes it — a plugin refusing a point
+		 * usually refuses it FOR A METHOD (a carrier's postamats taking no oversized parcel
+		 * on the express tariff, say), so a seam handed no method can only answer half the
+		 * question. It deliberately does NOT come from the request: see
+		 * {@see self::register_routes()} for why the browser must not get to assert which
+		 * method the customer is checking out with.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var callable
+		 */
+		private $shipping_method;
+
+		/**
 		 * The constraint checker, constructed internally so plugins customise the
 		 * verdict only through its `woodev_shipping_pickup_point_selectable` filter.
 		 *
@@ -171,30 +193,39 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 		 *
 		 * @since 2.0.2
 		 *
-		 * @param string       $plugin_id      the plugin id this controller routes for.
-		 * @param Point_Source $source         the carrier's pickup-point source.
-		 * @param callable     $cart_weight    `fn(): int` current cart weight in GRAMS; see
-		 *                                     {@see self::$cart_weight} for why `0` is a
-		 *                                     legitimate, permissive answer.
-		 * @param callable     $payment_method `fn(): string` the chosen gateway id.
+		 * @param string       $plugin_id       the plugin id this controller routes for.
+		 * @param Point_Source $source          the carrier's pickup-point source.
+		 * @param callable     $cart_weight     `fn(): int` current cart weight in GRAMS; see
+		 *                                      {@see self::$cart_weight} for why `0` is a
+		 *                                      legitimate, permissive answer.
+		 * @param callable     $payment_method  `fn(): string` the chosen gateway id.
+		 * @param callable     $shipping_method `fn(): string` the chosen shipping method id;
+		 *                                      see {@see self::$shipping_method}. Required,
+		 *                                      not optional: the domain seam behind the
+		 *                                      `.../select` route cannot answer correctly
+		 *                                      without it, and a value an author can forget
+		 *                                      to wire fails silently rather than loudly.
 		 */
 		public function __construct(
 			string $plugin_id,
 			Point_Source $source,
 			callable $cart_weight,
-			callable $payment_method
+			callable $payment_method,
+			callable $shipping_method
 		) {
-			$this->plugin_id      = $plugin_id;
-			$this->source         = $source;
-			$this->cart_weight    = $cart_weight;
-			$this->payment_method = $payment_method;
-			$this->checker        = new Constraint_Checker();
+			$this->plugin_id       = $plugin_id;
+			$this->source          = $source;
+			$this->cart_weight     = $cart_weight;
+			$this->payment_method  = $payment_method;
+			$this->shipping_method = $shipping_method;
+			$this->checker         = new Constraint_Checker();
 		}
 
 		/**
-		 * Registers the pickup-points collection and single-point detail routes.
+		 * Registers the pickup-points collection, single-point detail and selection routes.
 		 *
-		 * Read-only: two `GET` endpoints under `woodev/v1`, both intentionally public.
+		 * Two `GET` reads under `woodev/v1`, both intentionally public, plus one `POST`
+		 * selection route which is NOT — see {@see self::check_select_permission()}.
 		 * Every declared arg carries `validate_callback => rest_validate_request_arg`, so
 		 * WordPress itself rejects a wrongly-shaped param (e.g. an array-valued `locality`
 		 * from a repeated query key) before the callback ever runs — a defense-in-depth
@@ -291,6 +322,210 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 					],
 				]
 			);
+
+			register_rest_route(
+				'woodev/v1',
+				'/shipping/pickup/' . $plugin_segment . '/select',
+				[
+					[
+						'methods'  => 'POST',
+						'callback' => [ $this, 'handle_select_request' ],
+
+						/*
+						 * NOT `__return_true`, unlike the two reads above. This route is the
+						 * customer CONFIRMING a point, so it drives a write (the browser commits
+						 * the point to the checkout field on its answer) and the domain seam
+						 * behind it is explicitly allowed to call the carrier — which makes an
+						 * unguarded POST a way to burn the merchant's carrier quota through a
+						 * visitor's browser. A capability check is impossible here (guests place
+						 * orders), so the nonce is the whole barrier.
+						 */
+						'permission_callback' => [ $this, 'check_select_permission' ],
+						'args'                => [
+							'field_id' => [
+								'type'              => 'string',
+								'required'          => true,
+								'validate_callback' => 'rest_validate_request_arg',
+								'sanitize_callback' => 'sanitize_text_field',
+							],
+							'point_id' => [
+								'type'              => 'string',
+								'required'          => true,
+								'validate_callback' => 'rest_validate_request_arg',
+							],
+						],
+
+						/*
+						 * There is deliberately NO `method_id` arg. The chosen shipping method
+						 * reaches the domain seam from {@see self::$shipping_method} instead: a
+						 * browser able to assert which method it is checking out with could talk
+						 * a domain filter into approving a point for a method the customer never
+						 * chose — and the seam's whole job is to answer that question truthfully.
+						 */
+					],
+				]
+			);
+		}
+
+		/**
+		 * Guards the selection route with the REST cookie nonce.
+		 *
+		 * NON-OBVIOUS, and the reason this looks like dead code at a glance: WordPress's own
+		 * `rest_cookie_check_errors()` rejects an INVALID nonce (a stale one from a cached
+		 * page, say) before ANY `permission_callback` runs, so this callback never sees that
+		 * case. What it does catch is the rest: no `X-WP-Nonce` header at all (a cross-site
+		 * script POSTing directly), or a well-formed nonce minted for a DIFFERENT action.
+		 * That asymmetry is also why a route declared `__return_true` can still answer 403 —
+		 * the 403 came from core, not from the route — which is the confusion behind issue
+		 * #157; do not "simplify" this callback away on the grounds that core already checks.
+		 *
+		 * `$request` is left without a native `\WP_REST_Request` type-hint for the same
+		 * reason every other callback here is — see {@see self::handle_points_request()}.
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WP_REST_Request $request request object.
+		 *
+		 * @return true|\WP_Error
+		 */
+		public function check_select_permission( $request ) {
+
+			$nonce = $request->get_header( 'X-WP-Nonce' );
+
+			if ( ! is_string( $nonce ) || '' === $nonce || ! wp_verify_nonce( $nonce, 'wp_rest' ) ) {
+				return new \WP_Error(
+					'woodev_pickup_invalid_nonce',
+					__(
+						'Страница оформления заказа устарела. Обновите её и попробуйте снова.',
+						'woodev-plugin-framework'
+					),
+					[ 'status' => 403 ]
+				);
+			}
+
+			return true;
+		}
+
+		/**
+		 * Handles a pickup-point selection request — the server round-trip that lets the
+		 * plugin's domain refuse a point the framework itself has no way to judge.
+		 *
+		 * The verdict is RECOMPUTED here against the live cart rather than trusted from
+		 * whatever the browser last drew: the cart can change between the map being drawn
+		 * and a point being confirmed, and the drawn verdict is UX only.
+		 *
+		 * A carrier failure is translated the same way the two read routes translate it —
+		 * a `502` with a customer-safe Russian message (see the class docblock's CARRIER
+		 * FAILURE section). Letting it propagate here instead would be a PHP fatal on the
+		 * one request the customer is actively waiting on.
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WP_REST_Request $request request object.
+		 *
+		 * @return \WP_REST_Response|\WP_Error
+		 */
+		public function handle_select_request( $request ) {
+
+			$field_id = $this->cap_length(
+				(string) wc_clean( wp_unslash( $request->get_param( 'field_id' ) ) ),
+				self::MAX_PARAM_LENGTH
+			);
+
+			$point_id = $this->cap_length(
+				(string) wc_clean( wp_unslash( $request->get_param( 'point_id' ) ) ),
+				self::MAX_PARAM_LENGTH
+			);
+
+			try {
+				$point = $this->source->fetch_details( $point_id );
+			} catch ( \Woodev_API_Exception $e ) {
+				$this->log_carrier_failure( $e, 'point selection' );
+				return $this->upstream_error();
+			}
+
+			if ( null === $point ) {
+				return new \WP_Error(
+					'woodev_pickup_point_not_found',
+					__( 'Пункт выдачи не найден.', 'woodev-plugin-framework' ),
+					[ 'status' => 404 ]
+				);
+			}
+
+			$cart_weight    = ( $this->cart_weight )();
+			$payment_method = ( $this->payment_method )();
+
+			$computed = Selection_Result::from_verdict(
+				$this->checker->check( $point, $payment_method, $cart_weight )
+			);
+
+			$context = [
+				'field_id'       => $field_id,
+				'method_id'      => (string) ( $this->shipping_method )(),
+				'payment_method' => $payment_method,
+
+				// GRAMS, like every other cart weight crossing this framework's seams — see
+				// Constraint_Checker::check()'s own contract.
+				'cart_weight'    => $cart_weight,
+			];
+
+			/**
+			 * Filters the result of confirming one pickup point.
+			 *
+			 * This runs ONCE per confirmation, not once per drawn point, and it is therefore
+			 * the one place in the pickup flow a plugin MAY call the carrier. Its sibling
+			 * `woodev_shipping_pickup_point_selectable` runs while DRAWING the list — once per
+			 * point, on every map pan — and must stay cheap; do not confuse the two.
+			 *
+			 * It is also the last cheap moment to catch a constraint only the carrier knows.
+			 * {@see Constraint_Checker} treats unknown constraint data as PERMISSIVE by design
+			 * (a carrier's list response routinely omits `accepts_cod`/`max_weight`), so a
+			 * point the framework reports as selectable may still be one this carrier refuses
+			 * for this order. After this, the next gate is the checkout POST itself.
+			 *
+			 * MALFORMED RETURNS FAIL CLOSED, SILENTLY: a return that is not an array, or whose
+			 * `allowed`/`reason` pair is missing or wrongly typed, reverts to `$computed`
+			 * entirely — no warning, no notice. Nothing tells you your filter was ignored, so
+			 * match the documented shape exactly; see
+			 * {@see \Woodev\Framework\Shipping\Pickup\Selection_Result::sanitize()} for the
+			 * two-tier rule (verdict all-or-nothing, advice normalised key by key).
+			 *
+			 * `close` and `refresh_checkout` are THREE-STATE, not booleans:
+			 * - leave them `null` (or omit them) to DEFER to the plugin's configured default;
+			 * - return an explicit `true`/`false` to decide this one selection.
+			 * An explicit `false` is preserved as `false` — it is a decision ("do not close"),
+			 * never re-read as the unspoken `null`, which would hand control straight back to
+			 * the default you just overrode.
+			 *
+			 * @since 2.0.2
+			 *
+			 * @param array{
+			 *     allowed: bool,
+			 *     reason: string|null,
+			 *     close: bool|null,
+			 *     refresh_checkout: bool|null,
+			 *     point: array<string, mixed>|null,
+			 * }                    $computed The framework's own result: its
+			 *                                {@see Constraint_Checker} verdict, with all three
+			 *                                advice fields still unspoken.
+			 * @param Pickup_Point   $point    The point being confirmed, freshly resolved from
+			 *                                 the carrier.
+			 * @param array{
+			 *     field_id: string,
+			 *     method_id: string,
+			 *     payment_method: string,
+			 *     cart_weight: int,
+			 * }                    $context  The checkout field, the chosen shipping method
+			 *                                (from the framework, never from the request), the
+			 *                                chosen gateway, and the cart weight in GRAMS.
+			 */
+			$filtered = apply_filters( 'woodev_shipping_pickup_point_selection', $computed, $point, $context );
+
+			return rest_ensure_response( Selection_Result::sanitize( $filtered, $computed ) );
 		}
 
 		/**

@@ -1084,7 +1084,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 				$this->plugin_id,
 				$this->source,
 				[ $this, 'current_cart_weight_grams' ],
-				[ $this, 'rest_payment_method' ]
+				[ $this, 'rest_payment_method' ],
+				[ $this, 'rest_shipping_method' ]
 			) )->register_routes();
 		}
 
@@ -1260,6 +1261,64 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 			return is_scalar( $chosen ) ? wc_clean( (string) $chosen ) : '';
 		}
 
+		/**
+		 * Returns the shipping method id the customer is checking out with — the fifth
+		 * callable {@see Pickup_Controller} is constructed with, consumed only by its
+		 * `.../select` route's domain seam.
+		 *
+		 * `public`, not `protected`, for the same reason
+		 * {@see self::current_cart_weight_grams()} is: it is handed over as a callable array
+		 * and invoked from OUTSIDE this class's scope.
+		 *
+		 * Reads WooCommerce's own record of the live choice —
+		 * `WC()->session->get( 'chosen_shipping_methods' )`, a per-package array WooCommerce
+		 * rewrites on every `update_order_review` ajax call — rather than `$_POST`, which
+		 * {@see self::rest_payment_method()} can still try first: the selection request is a
+		 * standalone POST fired from the modal, so the checkout form's own
+		 * `shipping_method[0]` is simply not part of it. Package 0 is the primary method,
+		 * matching {@see \Woodev\Framework\Shipping\Checkout\Checkout_Handler}'s reading of
+		 * the posted value.
+		 *
+		 * The `:instance_id` suffix is stripped for the reason that class's own
+		 * `normalize_method_id()` documents: condition specs, the `requires_pickup` list and
+		 * the JS store all speak the BARE method id, so a domain seam handed
+		 * `carrier_pickup:3` would fail every comparison the rest of the framework makes
+		 * against `carrier_pickup`.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string bare method id, or empty string when WooCommerce cannot tell us.
+		 */
+		public function rest_shipping_method(): string {
+			$chosen = $this->wc_session_chosen_shipping_methods();
+
+			if ( ! is_array( $chosen ) || ! isset( $chosen[0] ) || ! is_scalar( $chosen[0] ) ) {
+				return '';
+			}
+
+			return explode( ':', (string) wc_clean( (string) $chosen[0] ) )[0];
+		}
+
+		/**
+		 * Reads WooCommerce's own record of the customer's live shipping-method choice —
+		 * `WC()->session->get( 'chosen_shipping_methods' )` — or `null` when WooCommerce is
+		 * unavailable or no session has been started yet.
+		 *
+		 * `protected` for the same test-seam reason as
+		 * {@see self::wc_session_chosen_payment_method()}: a probe overrides this single line
+		 * rather than `WC()` having to be a real function in the unit-test process.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return mixed the raw session value, or null when unavailable.
+		 */
+		protected function wc_session_chosen_shipping_methods() {
+			if ( ! function_exists( 'WC' ) || ! WC()->session ) {
+				return null;
+			}
+
+			return WC()->session->get( 'chosen_shipping_methods' );
+		}
 
 		protected function checkout_payment_method(): string {
 			// phpcs:ignore WordPress.Security.NonceVerification.Missing -- WC verifies the nonce before hooks fire.

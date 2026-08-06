@@ -157,7 +157,8 @@ class PickupRouteTest extends TestCase {
 			'pickup-cap-guard',
 			new \Woodev_Test_Viewport_Point_Source(),
 			static fn(): int => 0,
-			static fn(): string => 'bacs'
+			static fn(): string => 'bacs',
+			static fn(): string => 'carrier_pickup'
 		);
 
 		add_action(
@@ -264,9 +265,10 @@ class PickupRouteTest extends TestCase {
 		$weight_free = static fn(): int => 0;
 		$cod         = static fn(): string => 'cod';
 		$bacs        = static fn(): string => 'bacs';
+		$method      = static fn(): string => 'carrier_pickup';
 
-		$cod_controller  = new Pickup_Controller( 'pickup-cod-guard', $source, $weight_free, $cod );
-		$bacs_controller = new Pickup_Controller( 'pickup-cod-guard', $source, $weight_free, $bacs );
+		$cod_controller  = new Pickup_Controller( 'pickup-cod-guard', $source, $weight_free, $cod, $method );
+		$bacs_controller = new Pickup_Controller( 'pickup-cod-guard', $source, $weight_free, $bacs, $method );
 
 		$blocked = $cod_controller->get_point_data( $cod_id );
 		$allowed = $bacs_controller->get_point_data( $cod_id );
@@ -294,9 +296,22 @@ class PickupRouteTest extends TestCase {
 		$source    = new \Woodev_Test_Bulk_Point_Source();
 		$weight_id = \Woodev_Test_Bulk_Point_Source::WEIGHT_LIMITED_POINT_ID;
 		$bacs      = static fn(): string => 'bacs';
+		$method    = static fn(): string => 'carrier_pickup';
 
-		$heavy_controller = new Pickup_Controller( 'pickup-weight-guard', $source, static fn(): int => 1500, $bacs );
-		$light_controller = new Pickup_Controller( 'pickup-weight-guard', $source, static fn(): int => 500, $bacs );
+		$heavy_controller = new Pickup_Controller(
+			'pickup-weight-guard',
+			$source,
+			static fn(): int => 1500,
+			$bacs,
+			$method
+		);
+		$light_controller = new Pickup_Controller(
+			'pickup-weight-guard',
+			$source,
+			static fn(): int => 500,
+			$bacs,
+			$method
+		);
 
 		$blocked = $heavy_controller->get_point_data( $weight_id );
 		$allowed = $light_controller->get_point_data( $weight_id );
@@ -355,7 +370,8 @@ class PickupRouteTest extends TestCase {
 			'pickup-viewport-guard',
 			$source,
 			static fn(): int => 0,
-			static fn(): string => 'cod'
+			static fn(): string => 'cod',
+			static fn(): string => 'carrier_pickup'
 		);
 
 		$list_data = $controller->get_points_data( [ 'bbox' => self::VIEWPORT_BBOX ] );
