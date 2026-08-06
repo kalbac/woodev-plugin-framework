@@ -197,11 +197,15 @@
  * {@see window.WoodevPickupPanels} handlers are registered exactly ONCE per
  * session and become unreachable once {@see closeSession} drops this file's
  * only reference to that `panels` instance (its DOM root is detached along
- * with the rest of the modal body). No handler here is ever bound to
- * `document.body` or any other long-lived, session-independent target — only
- * `provider`/`panels`, both torn down (or dereferenced) together — so the
- * existing "two clicks never leave two providers alive" guarantee extends to
- * the panels and every event wired through them, unchanged.
+ * with the rest of the modal body). Exactly ONE handler is bound to a
+ * long-lived, session-independent target — `woodev_modal_closed` on
+ * `document.body`, which the staleness guard needs because a dismissed dialog
+ * is not otherwise reported to this file at all (see {@see handleModalClosed})
+ * — and it is the one thing `destroy()` has to unbind by hand; everything else
+ * hangs off `provider`/`panels`, both torn down (or dereferenced) together. So
+ * the existing "two clicks never leave two providers alive" guarantee extends
+ * to the panels, to every event wired through them, and to that one listener,
+ * unchanged.
  *
  * UMD-ish dual export (matches woodev-modal.js/pickup-datasource.js), plus a
  * `mountAll()` re-export purely so a test can drive one mount pass directly
@@ -1304,13 +1308,17 @@
 		 * THE STALENESS GUARD. An answer is applied only while it is still about something
 		 * current: this session is alive, and the card still shows the point the request was
 		 * sent for. Locking the card stops a customer from starting a SECOND confirmation, but
-		 * it cannot stop the paths that are not clicks inside it — the map underneath stays
-		 * live (a marker click swaps the card to another point through `pointClick` →
-		 * `openCard()`), and a fresh click on the checkout trigger tears this whole session
-		 * down and opens another. An answer that outlives what it was about is discarded, never
-		 * applied to whatever happens to be on screen now (spec D-9/D-10: the request is not
-		 * aborted — the server may already have written the point into the WC session, and
-		 * aborting would stop us listening without undoing any of that).
+		 * it cannot stop the paths that are not clicks inside it, and spec D-9 requires all of
+		 * them covered: the map underneath the lock stays live (a marker click swaps the card
+		 * to another point through `pointClick` → `openCard()`); Escape, the backdrop and the
+		 * close button dismiss the dialog out from under the request (see
+		 * {@see handleModalClosed}); and a fresh click on the checkout trigger tears this whole
+		 * session down and opens another. An answer that outlives what it was about is
+		 * discarded, never applied to whatever happens to be on screen now (spec D-9/D-10: the
+		 * request is not aborted — the server may already have written the point into the WC
+		 * session, and aborting would stop us listening without undoing any of that. The client
+		 * and the server can therefore end up disagreeing; D-10 accepts that explicitly and
+		 * still says to ignore the answer).
 		 *
 		 * The busy release is deliberately OUTSIDE that guard: it is the caller's obligation on
 		 * all three settlement paths — accepted, refused, and discarded-as-stale (see
@@ -1434,6 +1442,44 @@
 
 			window.jQuery( document.body ).trigger( 'update_checkout' );
 		}
+
+		/**
+		 * The staleness guard's last three paths (spec D-9 names four: a card moved onto
+		 * another point — handled by the `cardOpened` listener below — plus Escape, the
+		 * backdrop and the close button, all three of which land HERE).
+		 *
+		 * None of them is a click inside the card, so the lock cannot intercept any of them,
+		 * and none of them tells this file anything on its own: `closeSession()` is NOT called
+		 * when the customer dismisses the dialog, so `destroyed` stays false and the session
+		 * stays registered until the next trigger click. `woodev_modal_closed` is the one
+		 * signal all three share — `WoodevModal.prototype.close()` emits it whatever asked for
+		 * the close, ours included.
+		 *
+		 * Filtered by `modalId` only, since the event carries no reference to the instance that
+		 * fired it. Two pickup dialogs open at once is not a reachable state (the dialog is
+		 * modal, with a backdrop over the trigger that would open the second), and were it ever
+		 * to become one, the failure direction is the safe one: another pickup dialog closing
+		 * would discard THIS confirmation's answer, never apply a wrong one.
+		 *
+		 * Our own successful close reaches this too — harmlessly: {@see finishSelection} clears
+		 * the pending id before it ever asks the modal to close.
+		 *
+		 * @param {CustomEvent} event
+		 * @returns {void}
+		 */
+		function handleModalClosed( event ) {
+			if ( ! event.detail || PICKUP_MODAL_ID !== event.detail.modalId ) {
+				return;
+			}
+
+			pendingSelectionId = null;
+		}
+
+		// The ONE `document.body` listener this file's sessions register — see the file
+		// docblock's "EVERY LISTENER THIS FILE ATTACHES DIES WITH THE SESSION" section for why
+		// that is otherwise avoided, and `destroy()` below for the removal that keeps the
+		// guarantee intact.
+		document.body.addEventListener( 'woodev_modal_closed', handleModalClosed );
 
 		if ( ! ownsChrome ) {
 			panels = new PanelsCtor( modal.getContainer(), buildPanelsConfig( config ) );
@@ -1908,6 +1954,12 @@
 			refresh: refresh,
 			destroy: function() {
 				destroyed = true;
+
+				// The one long-lived target a session binds to (see {@see handleModalClosed}) —
+				// and therefore the one this file has to unbind by hand, since nothing else
+				// takes it away. Left attached, every session ever opened on this page would
+				// keep a listener, and its whole closure, alive for the life of the document.
+				document.body.removeEventListener( 'woodev_modal_closed', handleModalClosed );
 
 				if ( provider && 'function' === typeof provider.destroy ) {
 					provider.destroy();

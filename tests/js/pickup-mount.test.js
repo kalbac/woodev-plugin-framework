@@ -3004,6 +3004,31 @@ describe( 'selection confirmation', () => {
 		expect( modal.close ).toHaveBeenCalledWith( 'select' );
 	} );
 
+	// The three dialog-dismissal paths spec D-9 names alongside the card moving to another
+	// point. Driven through the REAL DOM interactions rather than `modal.close( reason )`,
+	// because the thing under test is that each of them reaches the guard at all — a test that
+	// called `close()` itself would pass even if the modal's own Escape/backdrop bindings had
+	// been the ones to go missing.
+	it.each( [
+		[ 'Escape', () => document.dispatchEvent( new KeyboardEvent( 'keydown', { key: 'Escape' } ) ) ],
+		[ 'the backdrop', () => document.querySelector( '[role="dialog"]' ).parentNode
+			.dispatchEvent( new MouseEvent( 'click', { bubbles: true } ) ) ],
+		[ 'the close button', () => document.querySelector( '.woodev-modal__close' ).click() ],
+	] )( 'discards an answer for a dialog %s had already dismissed', async ( _label, dismiss ) => {
+		const { emitSelect, resolveSelect, panels, field } = openPicker( {} );
+
+		emitSelect( { id: 'P1' } );
+		dismiss();
+
+		await resolveSelect( { allowed: true, reason: null, close: null, refresh_checkout: null } );
+
+		// Nothing is applied to a picker the customer has already walked away from — not the
+		// field, and not the point's stored verdict. The server may well hold P1 by now; D-10
+		// accepts that divergence explicitly and still says to ignore the answer.
+		expect( field.value ).toBe( '' );
+		expect( panels.setPointVerdict ).not.toHaveBeenCalled();
+	} );
+
 	it( 'discards an answer whose whole session was torn down while it was in flight', async () => {
 		const { emitSelect, resolveSelect, field } = openPicker( {} );
 
