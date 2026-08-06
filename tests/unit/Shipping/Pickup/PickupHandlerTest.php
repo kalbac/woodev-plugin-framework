@@ -1812,6 +1812,10 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				'notFound'         => 'Этот пункт выдачи больше не найден. Пожалуйста, выберите другой.',
 				'search'           => 'Поиск по адресу',
 				'drawerTitle'      => 'Пункты выдачи в этой области',
+				// #168: the sidebar toggle's second name — `drawerTitle` names it while the
+				// drawer is closed, this one while it is open (and it is the visible text of
+				// the mobile open-list bar, the one state that renders a label at all).
+				'showMap'          => 'Показать карту',
 				'howToGet'         => 'Как добраться',
 				'paymentMethods'   => 'Способы оплаты',
 				'workTime'         => 'Часы работы',

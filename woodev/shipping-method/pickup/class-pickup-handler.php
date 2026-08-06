@@ -718,6 +718,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 				// provider reads them by name, never falls back to a hardcoded default.
 				'search'         => __( 'Поиск по адресу', 'woodev-plugin-framework' ),
 				'drawerTitle'    => __( 'Пункты выдачи в этой области', 'woodev-plugin-framework' ),
+				// The sidebar toggle's SECOND name (#168): it opens the drawer when closed
+				// (`drawerTitle` above) and collapses it back to the map when open. Also the
+				// visible text of the mobile open-list bar, the one state that renders it.
+				'showMap'        => __( 'Показать карту', 'woodev-plugin-framework' ),
 				'howToGet'       => __( 'Как добраться', 'woodev-plugin-framework' ),
 				'paymentMethods' => __( 'Способы оплаты', 'woodev-plugin-framework' ),
 				'workTime'       => __( 'Часы работы', 'woodev-plugin-framework' ),

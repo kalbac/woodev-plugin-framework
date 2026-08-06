@@ -1723,18 +1723,32 @@
 		var list = document.createElement( 'div' );
 		list.className = 'woodev-pickup-list';
 
-		// No dedicated i18n key exists for this control (the PHP handler's own
-		// `get_js_config()` i18n array does not carry one) — it is a purely
-		// visual chevron affordance (Task 21 styles it), accessibly NAMED by
-		// the drawer it opens/closes, `drawerTitle`, rather than inventing an
-		// untested key that would render permanently blank (I1). This is also
-		// `drawerTitle`'s ONLY remaining home: Task 7 (spec V-11) deleted the
-		// list header the key used to feed, since neither reference has one
-		// and it stated something the customer could already see.
+		// Two names, because this ONE control does two opposite things: closed it opens the
+		// drawer (`drawerTitle`), open it collapses the drawer back to the map (`showMap`).
+		// {@see setStageOpen} swaps the `aria-label` between them on every transition; the
+		// initial state is closed, so it starts on `drawerTitle`.
+		//
+		// `drawerTitle` is also this key's ONLY remaining home: Task 7 (spec V-11) deleted the
+		// list header it used to feed, since neither reference has one and it stated something
+		// the customer could already see.
 		var toggle = document.createElement( 'button' );
 		toggle.type = 'button';
 		toggle.className = 'woodev-pickup-list__toggle';
 		toggle.setAttribute( 'aria-label', text( this._config, 'drawerTitle' ) );
+
+		// The VISIBLE label (#168). Rendered in exactly one state — the mobile open-list bar,
+		// where the control spans the panel's full width and a bare chevron would read as
+		// decoration; `pickup.css` hides it everywhere else, where the button is a 44×44 icon.
+		// `aria-hidden` because the button's own `aria-label` above is already its accessible
+		// name (and matches this text whenever it is on screen), same convention as the filter
+		// toggle's decorative SVG. Blank, never a hardcoded Russian default, if the key is
+		// absent — rule I1.
+		var toggleLabel = document.createElement( 'span' );
+		toggleLabel.className = 'woodev-pickup-list__toggle-label';
+		toggleLabel.setAttribute( 'aria-hidden', 'true' );
+		toggleLabel.textContent = text( this._config, 'showMap' );
+
+		toggle.appendChild( toggleLabel );
 
 		var body = document.createElement( 'div' );
 		body.className = 'woodev-pickup-list__body';
@@ -1859,6 +1873,7 @@
 		this._messageTextEl = messageText;
 		this._messageRetryEl = null;
 		this._overlayEl = overlay;
+		this._toggleEl = toggle;
 
 		var self = this;
 		toggle.addEventListener( 'click', function() {
@@ -2606,6 +2621,17 @@
 		var wasOpen = self._stage.classList.contains( 'is-open' );
 
 		self._stage.classList.toggle( 'is-open', open );
+
+		// The toggle's accessible name follows the state, because pressing it does the opposite
+		// thing in each (#168): open → collapse back to the map, closed → open the drawer. This
+		// is also what keeps WCAG 2.5.3 (Label in Name) satisfied once the mobile bar renders
+		// «Показать карту» visibly — a fixed `drawerTitle` name would no longer contain the
+		// visible text. Set OUTSIDE the `wasOpen === open` early return below on purpose: that
+		// guard exists to stop `listToggle` re-firing, and the name must be correct even on a
+		// call that changes nothing.
+		if ( self._toggleEl ) {
+			self._toggleEl.setAttribute( 'aria-label', text( self._config, open ? 'showMap' : 'drawerTitle' ) );
+		}
 
 		if ( wasOpen === open ) {
 			return;

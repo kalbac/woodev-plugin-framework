@@ -33,6 +33,9 @@ const config = {
 		error: 'Не удалось загрузить пункты выдачи. Попробуйте ещё раз.',
 		zoomIn: 'Приблизьте карту, чтобы увидеть пункты выдачи',
 		retry: 'Повторить',
+		// #168: the sidebar toggle's own label — the only state that RENDERS it is the mobile
+		// open-list bar, but it is also the control's accessible name whenever the sidebar is open.
+		showMap: 'Показать карту',
 	},
 };
 
@@ -129,6 +132,43 @@ it( 'reports the panel width PLUS its 16px gutter, so the reserved strip matches
 	// `ymaps-margin-area-needs-explicit-width`, where a reservation that looked right was
 	// silently smaller than the panel it stood for.
 	expect( seen[ 0 ].width ).toBe( 336 );
+} );
+
+describe( 'sidebar toggle label (#168 — the mobile open-list bar)', () => {
+	const toggleOf = ( panels ) => panels.root.parentNode.querySelector( '.woodev-pickup-list__toggle' );
+
+	it( 'carries a visible label taken from the showMap i18n key', () => {
+		const panels = new Panels( document.createElement( 'div' ), config );
+		panels.render();
+
+		expect( toggleOf( panels ).querySelector( '.woodev-pickup-list__toggle-label' ).textContent )
+			.toBe( 'Показать карту' );
+	} );
+
+	it( 'renders that label BLANK rather than a Russian default when showMap is missing (rule I1)', () => {
+		const panels = new Panels( document.createElement( 'div' ), withoutI18nKey( config, 'showMap' ) );
+		panels.render();
+
+		expect( toggleOf( panels ).querySelector( '.woodev-pickup-list__toggle-label' ).textContent )
+			.toBe( '' );
+	} );
+
+	// WCAG 2.5.3 (Label in Name): once the bar shows «Показать карту», an accessible name that
+	// still said «Пункты выдачи в этой области» would not contain the visible text. The name
+	// tracks the state instead — which is also simply truer, since the control does two opposite
+	// things depending on it.
+	it( 'names itself by what pressing it will do — showMap while open, drawerTitle while closed', () => {
+		const panels = new Panels( document.createElement( 'div' ), config );
+		panels.render();
+
+		expect( toggleOf( panels ).getAttribute( 'aria-label' ) ).toBe( 'Пункты выдачи в этой области' );
+
+		panels.toggleList();
+		expect( toggleOf( panels ).getAttribute( 'aria-label' ) ).toBe( 'Показать карту' );
+
+		panels.toggleList();
+		expect( toggleOf( panels ).getAttribute( 'aria-label' ) ).toBe( 'Пункты выдачи в этой области' );
+	} );
 } );
 
 it( 'renders a blank label rather than a Russian default when an i18n key is missing', () => {

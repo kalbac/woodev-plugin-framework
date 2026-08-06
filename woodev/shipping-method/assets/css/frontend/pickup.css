@@ -718,6 +718,15 @@
 	line-height: 1;
 }
 
+/* Hidden everywhere except the mobile open-list bar (#168 round 2) — at every other size and state
+   this control is a 44×44 icon button, and its accessible name (`aria-label`, swapped per state by
+   `pickup-panels.js`'s `setStageOpen()`) is what carries the meaning. `display: none` rather than a
+   visually-hidden class on purpose: the text must not affect the icon button's layout, and it is
+   already redundant with the `aria-label` for assistive tech. */
+.woodev-pickup-list__toggle-label {
+	display: none;
+}
+
 /* Keyed off the STAGE's `is-open`, not a class on `.woodev-pickup-list` itself (Task 6 — see the
    file docblock's "ONE OPEN STATE, ON THE STAGE" note): the toggle's own position/chevron still
    need to react to open/closed even though the toggle is never hidden itself. */
@@ -1794,37 +1803,93 @@
 
 @media screen and ( max-width: 782px ) {
 
+	/* Height of the mobile open-list bar the sidebar toggle becomes (#168 round 2). Declared once,
+	   consumed twice — by the bar itself and by the list body's bottom padding, which is what keeps
+	   the last row scrollable clear of it. Two literals would drift the moment either changes. */
+	.woodev-pickup-stage {
+		--woodev-pickup-mobile-bar-h: 48px;
+	}
+
 	/* A 320px-capped column is unusable once the dialog itself is full-screen — both panels take
 	   the whole stage width instead.
 
-	   The desktop floating-card insets are explicitly zeroed here (#168): mobile keeps the
-	   full-bleed sheet it already had, unchanged by that decision. `top`/`right` go back to 0 and
-	   the radius back to bottom-corners-only, because a panel that spans the whole stage width has
-	   its top and right edges flush against it again — rounding a corner that has nothing behind
-	   it draws a notch of map through the panel's own corner. `bottom: 32px` is NOT reset: the
-	   copyright band it clears (D8) is there at every width. */
+	   FULL VISIBLE AREA, INCLUDING THE COPYRIGHT BAND (#168 round 2, operator 07.08.2026). The
+	   desktop floating-card insets are zeroed AND `bottom` drops from D8's 32px to 0, so an open
+	   panel owns the entire stage. That 32px existed solely to keep ymaps' copyright strip visible,
+	   and Yandex's ToS attaches that obligation to a VISIBLE map — here the panel covers the map
+	   completely, so there is no map on screen to attribute and nothing to reserve. (The obligation
+	   is untouched in the CLOSED state at this width, where the map IS visible: the toggle's own
+	   `bottom: 32px` and the zoom control's `bottom: 88px` both stay exactly as they were.)
+	   Radius goes to 0 for the same reason it went to bottom-only before — every edge is flush
+	   again, and a rounded corner with nothing behind it just draws a notch of map through the
+	   panel. */
 	.woodev-pickup-list,
 	.woodev-pickup-card {
 		top: 0;
 		right: 0;
+		bottom: 0;
 		max-width: none;
-		border-radius: 0 0 8px 8px;
+		border-radius: 0;
 	}
 
-	/* The toggle's open-state offset normally pushes it to sit BESIDE the list's own 320px cap
-	   (`calc( min( 320px, 100% - 48px ) + 16px )` — see the file docblock's "A SIBLING of the
-	   panels" note). With the list now full-width there is no "beside" left: that formula would
-	   land the button ~40px in from the panel's own edge, stranded over list content instead of
-	   anchored to a corner. Falling back to the SAME offset as the closed state puts it back in a
-	   predictable corner, floating over the (now full-bleed) list like a standard mobile FAB — its
-	   own `z-index: 4` and drop shadow already read as "in front of", not "part of", the panel
-	   beneath it. `bottom` matches the closed-state 32px above (D8, copyright clearance) rather
-	   than the 16px this fallback used to repeat — the reference keeps that same 32px offset at
-	   every width, no separate mobile value of its own (`wc-yandex-delivery-pickup-point-modal-
-	   map.css` — no media query touches `.drawer-control__button`'s `bottom` at all). */
+	/* Room for the bar below, so the last row can scroll clear of it instead of hiding under it —
+	   the panel is `bottom: 0` now and the bar floats over its own bottom edge. The reference
+	   reserves the same way (`.drawer-control__drawer { padding-bottom: 28px }`,
+	   `wc-yandex-delivery-pickup-point-modal-map.css`), sized to its own control. */
+	.woodev-pickup-list__body {
+		padding-bottom: var( --woodev-pickup-mobile-bar-h );
+	}
+
+	/* THE OPEN-STATE TOGGLE BECOMES A BAR (#168 round 2, operator 07.08.2026). Every previous
+	   placement failed the same way: with the panel full-bleed there is no free corner left. A FAB
+	   at `right: 16px; bottom: 32px` (what this rule used to say) lands squarely on the card's CTA
+	   — «Выбрать этот пункт» spans the panel's full width at the bottom — and, in the list state,
+	   over the last rows. Top-right is the card's own ✕, top-left its type chip.
+
+	   So it stops floating: full width, pinned to the panel's bottom edge, with its label visible
+	   («Показать карту», the `showMap` key `pickup-panels.js` renders into
+	   `.woodev-pickup-list__toggle-label`). Paired with `.woodev-pickup-list__body`'s bottom
+	   padding above, it covers nothing — the last row scrolls clear of it.
+
+	   The reference cannot be copied here: its drawer is NOT full-width on mobile
+	   (`max-width: min( var(--mmc-drawer-width), calc(100% - 48px) )`), so it keeps a 48px strip of
+	   map to park the button in. We cover the map completely by the operator's explicit call, which
+	   is what removes that strip and forces a different answer. What IS taken from the reference is
+	   the card state below — there the button simply disappears under the panel (`.balloon-layout`
+	   `z-index: 3` over a button with no `z-index` at all). */
 	.woodev-pickup-stage.is-open .woodev-pickup-list__toggle {
-		right: 16px;
-		bottom: 32px;
+		right: 0;
+		bottom: 0;
+		left: 0;
+		gap: 8px;
+		width: 100%;
+		height: var( --woodev-pickup-mobile-bar-h );
+		font-size: 15px;
+		font-weight: 500;
+		border-radius: 0;
+	}
+
+	.woodev-pickup-stage.is-open .woodev-pickup-list__toggle-label {
+		display: inline;
+	}
+
+	/* The card carries its own way back — ✕ in its header returns to the list, and the bar there
+	   returns to the map — so a second control stacked on its CTA would be one affordance too many
+	   for a screen this size. Hidden rather than pushed below the panel by `z-index` (the
+	   reference's mechanism) because this file's toggle deliberately sits at `z-index: 4` to stay
+	   above BOTH panels on desktop; re-ordering that for one breakpoint would make the desktop
+	   stacking depend on a mobile rule.
+
+	   `!important` is NOT decoration here — without it this rule silently does nothing. The button
+	   reset near the top of this file defends `display: inline-flex !important` against a hostile
+	   theme's `button { display: none !important }`, and `!important` only ever loses to another
+	   `!important`, whatever the specificity: rig-measured, the toggle stayed at computed `flex`
+	   and `document.elementFromPoint()` over the CTA still returned it. Same trap, same fix, as
+	   `.woodev-pickup-search__reset[hidden]` further up — see the gotcha
+	   `hostile-theme-button-display-none-needs-important` and its s51 addendum, whose whole point
+	   is that every LATER rule touching an `!important`-defended property needs the flag in kind. */
+	.woodev-pickup-stage.is-open.is-card .woodev-pickup-list__toggle {
+		display: none !important;
 	}
 
 	/*
