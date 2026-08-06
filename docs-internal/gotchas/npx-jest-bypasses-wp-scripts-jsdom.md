@@ -84,3 +84,6 @@ environment problem, not a regression.
 - [[git-checkout-destroys-uncommitted-mutation-revert]] — the OTHER way a JS run reads as "I
   broke everything" while the code is fine; same session. Here the total does NOT drop, which
   is what tells the two apart.
+- [[jest-toequal-empty-array-ignores-undefined]] — the opposite failure shape, same session: a
+  bad invocation makes tests look broken when they are not; this one makes a broken guard look
+  covered when it is not.

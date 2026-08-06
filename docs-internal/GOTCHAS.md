@@ -1,6 +1,12 @@
 # Gotchas — Woodev Plugin Framework
-> **101 atomic gotchas in 23 namespaces** — update count when adding/removing.
-> Last updated: 2026-08-06 (session 52, SP-5 Task 11: +1 file, new namespace `[tooling/git-checkout]` —
+> **102 atomic gotchas in 23 namespaces** — update count when adding/removing.
+> Last updated: 2026-08-06 (session 52, SP-5 Task 12: +1 file, existing namespace `[testing/js]` —
+> `jest-toequal-empty-array-ignores-undefined` (Jest's `toEqual` ignores `undefined` array items, so
+> `expect( someCallsArray ).toEqual( [] )` against one of this repo's plain-array call recorders PASSES
+> even when a call happened with an `undefined` argument — found by deliberately removing a "point not
+> found" guard in `restoreSelection()` and watching a "was never called" assertion stay green anyway.
+> Use `toHaveLength( 0 )` instead; only a deliberate mutation reveals the gap, a normal run never does).
+> Prior: 2026-08-06 (session 52, SP-5 Task 11: +1 file, new namespace `[tooling/git-checkout]` —
 > `git-checkout-destroys-uncommitted-mutation-revert` (reverting a deliberate-regression mutation with
 > `git checkout <file>` restores from HEAD, not from "before the mutation" — with the implementation
 > still uncommitted that deletes the whole task's work in that file, unrecoverably, and the resulting
@@ -165,8 +171,9 @@
 
 - [testing/unit] A mutation sweep over **branch conditions only** reads as complete and is not — "14/14 killed" was reported three times on one branch and three times a reviewer then killed survivors by mutating **values and content**: swapped `sprintf` args telling the customer a 15 kg order exceeds a 20.5 kg limit, a dropped unit conversion, i18n keys the JS read that PHP never emitted (invisible because the JS carried byte-identical Russian defaults). Also: a mutant killed by an *unrelated* guard is not covered, and boundary-**acceptance** needs pinning as much as rejection → [gotchas/mutation-sweep-branch-only-false-confidence.md](gotchas/mutation-sweep-branch-only-false-confidence.md) (s45)
 
-### [testing/js] — JavaScript test invocation
+### [testing/js] — JavaScript testing pitfalls
 - [testing/js] `npx jest` is NOT how this project runs JS tests — there is no jest config here at all; `wp-scripts test-unit-js` (`npm run test:js`) owns it and supplies jsdom. `npx jest` falls back to the node environment: 194 phantom failures, and a TOTAL of 472 instead of 631 because failed-to-load suites contribute nothing. A changed total means a bad invocation, not a regression → [gotchas/npx-jest-bypasses-wp-scripts-jsdom.md](gotchas/npx-jest-bypasses-wp-scripts-jsdom.md) (s52)
+- [testing/js] `expect( callsArray ).toEqual( [] )` PASSES even when a call happened with an `undefined` argument — Jest's `toEqual` ignores `undefined` array items, so `[ undefined ]` reads as equal to `[]`. This repo's test doubles mostly record calls onto plain arrays (`provider.focusGroupCalls` etc.), not `jest.fn()` mocks, so a "was never called" assertion written this way silently misses a guard that regressed to calling with `undefined`. Use `toHaveLength( 0 )` instead; only a deliberate mutation reveals the gap → [gotchas/jest-toequal-empty-array-ignores-undefined.md](gotchas/jest-toequal-empty-array-ignores-undefined.md) (s52)
 
 ### [api/*] — API layer
 - [api/rest-not-for-browser-auth] A REST route can't back a browser-facing screen gated on `is_user_logged_in()` — a plain cookie browser navigation to `/wp-json/` has no `X-WP-Nonce`, so REST treats it as logged-out → endless wp-login loop. Use a `parse_request` query-var endpoint in normal WP context (the WC_Auth pattern) → [gotchas/rest-endpoint-not-for-browser-cookie-auth.md](gotchas/rest-endpoint-not-for-browser-cookie-auth.md) (s24)
