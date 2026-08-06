@@ -1036,7 +1036,8 @@
 
 		/** @type {boolean} true once this session has made its ONE attempt to restore a
 		 *  previously chosen point ({@see restoreSelection}) — set on the FIRST points-drawn
-		 *  continuation and never reset (not even by a retry's fresh `start()`). Without this
+		 *  continuation (from whichever of that continuation's two restore call sites actually
+		 *  fires; see them both) and never reset (not even by a retry's fresh `start()`). Without this
 		 *  gate, calling {@see restoreSelection} from inside {@see fetchAndSetPoints} would run
 		 *  it on EVERY successful fetch — under `strategy: 'viewport'` that is every pan
 		 *  (`boundsChange`), every type-filter change, and every {@see refresh()} call, not just
@@ -1264,11 +1265,18 @@
 
 		/**
 		 * The PANELS half of restoring a previously chosen point (spec D-15) — the camera and the
-		 * marker's own `data-state="active"` are already done by the time this runs, by
-		 * `setPoints( groups, { focus } )` (see {@see pendingRestoreGroup}).
+		 * marker's own `data-state="active"` are `setPoints( groups, { focus } )`'s job, not this
+		 * function's (see {@see pendingRestoreGroup}).
 		 *
-		 * Called ONCE per session, gated by `selectionRestoreAttempted` at the single call site
-		 * below — see that flag's own docblock for why. `setSelectedId()` drives both the CTA
+		 * RUNS BEFORE THAT `setPoints()` CALL, NOT AFTER IT, whenever there is a group to restore.
+		 * `openCard()` below is what reserves the sidebar's screen area on its way in
+		 * (`setStageOpen()` → `listToggle` → `provider.setMargin()`), and the focus move
+		 * `setPoints()` issues passes `useMapMargin: true` — so this has to have happened already
+		 * or that option reads an empty reservation and centres the point on the WHOLE map,
+		 * half of it under the panel this call is opening. The call site carries the measurements.
+		 *
+		 * Called ONCE per session, gated by `selectionRestoreAttempted` at both call sites — see
+		 * that flag's own docblock for why. `setSelectedId()` drives both the CTA
 		 * label and the row highlight, and it MUST run before the card opens: `renderCard()` reads
 		 * `_selectedId` to decide whether the CTA says «Выбрать» or «Продолжить оформление», and
 		 * the whole point of the operator's 06.08.2026 decision is that the reopened picker shows
@@ -1282,13 +1290,15 @@
 		 * list is viewport-filtered (`visibleChange` → `setVisible()`), so only the restored marker
 		 * is in view. That is the zoom's doing, not a bug, and the zoom stays.
 		 *
-		 * `'restore'` IS THE ORIGIN THAT MEANS "CAMERA ALREADY HANDLED". Every other origin makes
-		 * the `cardOpened` listener below call `provider.focusGroup()`; this one must not, because
-		 * the camera half of this pass already went out with `setPoints( groups, { focus } )` —
+		 * `'restore'` IS THE ORIGIN THAT MEANS "THE CAMERA IS SOMEBODY ELSE'S JOB". Every other
+		 * origin makes the `cardOpened` listener below call `provider.focusGroup()`; this one must
+		 * not, because the camera half of this pass goes out as `setPoints( groups, { focus } )` —
 		 * BEFORE the draw, which is the one order that does not park the restored marker's overlay
 		 * off screen (s52; see {@see pendingRestoreGroup} and the two ymaps gotchas it cites). A
 		 * second camera move here would re-enter that race for no gain. The sidebar half is still
-		 * `openCard()`'s own `setStageOpen()` → `listToggle` → `provider.setMargin()`, unchanged.
+		 * `openCard()`'s own `setStageOpen()` → `listToggle` → `provider.setMargin()`, unchanged —
+		 * and now that this whole function runs ahead of `setPoints()`, that reservation is what
+		 * the single move reads through `useMapMargin: true`.
 		 *
 		 * The card is opened on `selectedId` specifically, never on the group's first point: a
 		 * co-located group can hold several points and the one the customer chose is the one whose
@@ -1373,6 +1383,27 @@
 					// {@see pendingRestoreGroup}.
 					var restoreGroup = pendingRestoreGroup();
 
+					// THE PANELS HALF RUNS FIRST ON THE RESTORE PASS, and only there. Opening the
+					// card is also what RESERVES the sidebar's screen area — `openCard()` →
+					// `setStageOpen()` → `listToggle` → `provider.setMargin()` — and the ONE camera
+					// move this pass makes goes out from the `setPoints()` call immediately below,
+					// carrying `useMapMargin: true`. Issued before the reservation existed, that
+					// option had nothing to read: the restored point centred on the map's GEOMETRIC
+					// middle, half of it underneath the panel about to slide over it. Rig-measured
+					// on a 1024px map with a 320px panel: marker centre x=640 (the full map's
+					// midpoint) before this ordering, x=480 (the midpoint of the strip still
+					// visible beside the panel) after it — see {@see restoreSelection}.
+					//
+					// The one-shot flag is claimed HERE rather than in the `points.length > 0`
+					// branch below, whose own guarded call now only ever sees the `null` group (the
+					// stored point is gone) — that case reserves nothing, moves no camera, and must
+					// keep its position under `points.length > 0` so an empty fetch cannot burn the
+					// session's single restore attempt on nothing.
+					if ( restoreGroup ) {
+						selectionRestoreAttempted = true;
+						restoreSelection( restoreGroup );
+					}
+
 					provider.setPoints( groups, restoreGroup ? { focus: restoreGroup.key } : null );
 
 					if ( panels ) {
@@ -1395,9 +1426,15 @@
 
 							// Task 12 (spec D-15): the ONE attempt this session makes to restore a
 							// previously chosen point — see `selectionRestoreAttempted`'s own docblock
-							// for why this must not run on every points-drawn continuation. The
-							// camera/marker half already went out with `setPoints()` above; this is
-							// the panels half, and it takes the SAME group that decided it.
+							// for why this must not run on every points-drawn continuation.
+							//
+							// By the time this runs, `restoreGroup` is necessarily NULL: a non-null
+							// one already restored above, ahead of `setPoints()`, and claimed the
+							// flag on its way past (see that block for why it has to go first). What
+							// is left for here is the "stored point is gone" case — mark the id and
+							// nothing else — which has no card to open, no margin to reserve and no
+							// camera move to precede, and which must stay gated behind
+							// `points.length > 0` so an empty fetch does not consume the attempt.
 							if ( ! selectionRestoreAttempted ) {
 								selectionRestoreAttempted = true;
 								restoreSelection( restoreGroup );

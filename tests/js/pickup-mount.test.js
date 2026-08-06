@@ -82,6 +82,13 @@ function StubProvider() {
 	// The `options` argument of each setPoints() call, positionally paired with setPointsCalls —
 	// `{ fit: false }` is how the mount suppresses the bulk camera fit on the restore pass (s52).
 	this.setPointsOptions = [];
+	// The sidebar reservation that was in force at the MOMENT of each `setPoints()` call, paired
+	// positionally with the two arrays above. The restore pass's focus move carries
+	// `useMapMargin: true`, so "was the panel's area reserved yet?" is the whole difference
+	// between the restored point centring on the visible strip and centring on the full map —
+	// an ordering fact no "were both called?" assertion can see. `null` before the first
+	// `setMargin()` of a session (there is one at init, so in practice only if that regressed).
+	this.marginAtSetPoints = [];
 	this.setTypeFilterCalls = [];
 	this.focusGroupCalls = [];
 	this.resolveAddressCalls = [];
@@ -127,6 +134,7 @@ StubProvider.prototype.destroy = function() {
 StubProvider.prototype.setPoints = function( groups, options ) {
 	this.setPointsCalls.push( groups );
 	this.setPointsOptions.push( options );
+	this.marginAtSetPoints.push( this.setMarginCalls[ this.setMarginCalls.length - 1 ] || null );
 };
 
 StubProvider.prototype.setTypeFilter = function( codes ) {
@@ -339,8 +347,40 @@ StubPanels.prototype.setSearchBusy = function( busy ) {
 	this.setSearchBusyCalls.push( !! busy );
 };
 
+/**
+ * Models the real `setStageOpen()` — the ONE place `Panels` flips the sidebar's open state and,
+ * only when that state actually CHANGES, emits `listToggle` with the list's own current width.
+ * The mount turns that event into `provider.setMargin()`, so a stub whose `openCard()` opened the
+ * sidebar silently would let a test believe the map's margin had been reserved when nothing had
+ * reserved it.
+ *
+ * The width is a fixed 320 rather than a measured `offsetWidth`: jsdom lays nothing out and
+ * reports 0 for every element, and 320 is what the real panel measures on the rig
+ * (`max-width: min( 320px, calc( 100% - 48px ) )` in `pickup.css`). A stub reporting 0 would make
+ * every margin assertion in this file agree with a reservation of zero pixels — precisely the
+ * shape of the bug `ymaps-margin-area-needs-explicit-width` records.
+ *
+ * @param {StubPanels} self
+ * @param {boolean}    open
+ * @returns {void}
+ */
+function stubStageOpen( self, open ) {
+	if ( !! self._stageOpen === !! open ) {
+		return;
+	}
+
+	self._stageOpen = !! open;
+	self.emit( 'listToggle', { open: !! open, width: open ? 320 : 0 } );
+}
+
 StubPanels.prototype.openCard = function( group, pointId, origin ) {
 	this.lastOpenCard = { group: group, pointId: pointId, origin: origin };
+
+	// The real `openCard()` opens the sidebar through `setStageOpen()` BEFORE it emits
+	// `cardOpened` — an ordering its own docblock marks load-bearing, because the mount answers
+	// the first with `provider.setMargin()` and the second with `provider.focusGroup()`, and a
+	// camera move that precedes its own margin reservation lands the point under the panel.
+	stubStageOpen( this, true );
 
 	// Whatever `setSelectedId()` had recorded by the time this card opened. The real
 	// `renderCard()` reads `_selectedId` to choose between «Выбрать» and «Продолжить оформление»,
@@ -385,6 +425,10 @@ StubPanels.prototype.toggleList = function() {};
 
 StubPanels.prototype.openList = function() {
 	this.openListCalls = ( this.openListCalls || 0 ) + 1;
+
+	// Same `setStageOpen()` funnel as `openCard()` above — the real `openList()` routes through it
+	// too, so a search picking an address behind a CLOSED sidebar reserves the margin here.
+	stubStageOpen( this, true );
 };
 
 /**
@@ -3454,6 +3498,50 @@ describe( 'restoring a previous selection', () => {
 		// would issue a SECOND camera move here and this assertion would fail.
 		expect( provider.setPointsOptions ).toEqual( [ { focus: g2.key } ] );
 		expect( provider.focusGroupCalls ).toHaveLength( 0 );
+	} );
+
+	it( 'reserves the sidebar\'s map margin BEFORE the focus move, not after it', async () => {
+		const { provider, drawPoints, field } = openPicker( {} );
+		field.value = 'P2';
+
+		const g2 = group( 3, 4, [ 'P2' ] );
+
+		await drawPoints( [ group( 1, 2, [ 'P1' ] ), g2 ] );
+
+		// The restore pass makes exactly ONE camera move, and it is `setPoints()`'s own
+		// `useMapMargin: true` focus move (see `map-provider-yandex.js`). That option can only
+		// read a reservation that ALREADY EXISTS, and the thing that makes the reservation is the
+		// card opening (`openCard()` → `setStageOpen()` → `listToggle` → `setMargin()`). With the
+		// panels half running after `setPoints()` — as it did until 06.08.2026 — the move went out
+		// 8ms ahead of the `addArea()` call (rig-measured) and the restored point centred on the
+		// map's geometric middle: x=640 on a 1024px map, instead of x=480, the midpoint of the
+		// strip still visible beside the 320px panel. Both numbers were measured on the rig before
+		// and after this ordering; jsdom can see neither, which is exactly why the assertion is on
+		// the ORDER rather than on any pixel.
+		//
+		// Asserted through the margin state captured AT the `setPoints()` call rather than by
+		// comparing two call counts: `{ open: false, width: 0 }` here would mean the mount had
+		// only ever made the init-time reservation, which is the regression.
+		expect( provider.marginAtSetPoints ).toEqual( [ { open: true, width: 320 } ] );
+
+		// …and it is still ONE move, from `setPoints()` alone. Reserving the margin earlier must
+		// not have been paid for with a second, post-open `focusGroup()` — that is the s52 race
+		// that parks the restored marker's overlay off screen.
+		expect( provider.setPointsOptions ).toEqual( [ { focus: g2.key } ] );
+		expect( provider.focusGroupCalls ).toHaveLength( 0 );
+	} );
+
+	it( 'reserves nothing ahead of an ordinary, non-restoring draw — the map still fits normally', async () => {
+		const { provider, drawPoints, field } = openPicker( {} );
+		field.value = '';
+
+		await drawPoints( [ group( 1, 2, [ 'P1' ] ) ] );
+
+		// The mirror of the test above: with nothing to restore there is no card, so the sidebar
+		// stays shut and the only reservation in force is the closed one made at init. A change
+		// that reserved the panel's width unconditionally would fit the bulk camera to a strip of
+		// map the customer has no panel covering.
+		expect( provider.marginAtSetPoints ).toEqual( [ { open: false, width: 0 } ] );
 	} );
 
 	it( 'leaves an unrelated in-flight confirmation alone — the restore card is about the point '
