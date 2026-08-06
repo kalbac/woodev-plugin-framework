@@ -622,7 +622,9 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				$overrides['point_icons'] ?? [],
 				$overrides['accent_color'] ?? '#06aedd',
 				$overrides['setting_accent'] ?? '',
-				$overrides['search_enabled'] ?? true
+				$overrides['search_enabled'] ?? true,
+				$overrides['close_on_select'] ?? false,
+				$overrides['refresh_checkout'] ?? false
 			);
 		}
 
@@ -977,6 +979,83 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			$this->assertFalse( $config['replaceAddress']['billingOnly'] );
 		}
 
+		// -------------------------------------------------------------------------
+		// get_js_config() — the `selection` block (Task 4): what the browser falls
+		// back to when the domain's verdict says nothing about a flag
+		// -------------------------------------------------------------------------
+
+		/**
+		 * Both flags are `false` by default, and that is a decision, not an accident —
+		 * see {@see Pickup_Handler::$close_on_select} / {@see Pickup_Handler::$refresh_checkout}
+		 * for why. Pinned here so a "harmless" default flip (which would silently close the
+		 * modal on every carrier, or bill every carrier for a checkout refresh) cannot land
+		 * with the suite green.
+		 */
+		public function test_config_selection_flags_both_default_to_false(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			$this->stub_config_dependencies_except_filters();
+
+			$config = $this->make_handler()->get_js_config();
+
+			$this->assertSame(
+				[ 'close' => false, 'refreshCheckout' => false ],
+				$config['selection']
+			);
+		}
+
+		public function test_config_selection_flags_come_from_the_constructor(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			$this->stub_config_dependencies_except_filters();
+
+			$config = $this->make_handler(
+				[ 'close_on_select' => true, 'refresh_checkout' => true ]
+			)->get_js_config();
+
+			$this->assertSame(
+				[ 'close' => true, 'refreshCheckout' => true ],
+				$config['selection']
+			);
+		}
+
+		/**
+		 * The two flags are independent switches, not one setting under two names — a
+		 * carrier that wants the modal to close on select does not thereby want a checkout
+		 * refresh, and vice versa. A mutant assigning one property from the other argument
+		 * survives both tests above; it does not survive this one.
+		 */
+		public function test_config_selection_flags_are_independent(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			$this->stub_config_dependencies_except_filters();
+
+			$close_only = $this->make_handler( [ 'close_on_select' => true ] )->get_js_config();
+			$refresh    = $this->make_handler( [ 'refresh_checkout' => true ] )->get_js_config();
+
+			$this->assertSame( [ 'close' => true, 'refreshCheckout' => false ], $close_only['selection'] );
+			$this->assertSame( [ 'close' => false, 'refreshCheckout' => true ], $refresh['selection'] );
+		}
+
+		/**
+		 * The three confirmation strings (Task 4) the CTA's busy/failure states read by name.
+		 * A missing key here renders BLANK under a button the customer just pressed, so
+		 * presence AND non-emptiness are both asserted — the same contract the panel keys
+		 * carry.
+		 */
+		public function test_config_i18n_carries_the_three_confirmation_strings(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			$this->stub_config_dependencies_except_filters();
+
+			$i18n = $this->make_handler()->get_js_config()['i18n'];
+
+			foreach ( [ 'confirming', 'selectFailed', 'stalePage' ] as $key ) {
+				$this->assertArrayHasKey( $key, $i18n, "i18n is missing the \"{$key}\" confirmation key" );
+				$this->assertNotSame( '', $i18n[ $key ], "i18n[\"{$key}\"] must not be empty" );
+			}
+
+			// `selectFailed` is deliberately NOT the generic `error` string: that one is
+			// written for a failed points FETCH and would be misleading under a confirm button.
+			$this->assertNotSame( $i18n['error'], $i18n['selectFailed'] );
+		}
+
 		public function test_config_rest_root_uses_the_sanitized_plugin_segment(): void {
 			Functions\when( 'apply_filters' )->returnArg( 2 );
 			Functions\when( 'rest_url' )->alias(
@@ -1058,6 +1137,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 					'pointIcons',
 					'mapConfig',
 					'replaceAddress',
+					'selection',
 					'accentColor',
 					'searchNearestCount',
 					'modal',
@@ -1762,6 +1842,12 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				// The Task 14 (spec V-13) zoom control keys.
 				'zoomInLabel'      => 'Приблизить карту',
 				'zoomOutLabel'     => 'Отдалить карту',
+				// The Task 4 confirmation keys — the server round-trip's three states.
+				// `selectFailed` is deliberately not `error`: that one describes a failed
+				// points FETCH, not a refused confirmation.
+				'confirming'       => 'Проверяем…',
+				'selectFailed'     => 'Не удалось подтвердить выбор. Попробуйте ещё раз.',
+				'stalePage'        => 'Страница устарела. Обновите её и выберите пункт выдачи заново.',
 			];
 
 			$this->assertSame(

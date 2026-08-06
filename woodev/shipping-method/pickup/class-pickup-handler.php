@@ -170,6 +170,40 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		private bool $replace_address;
 
 		/**
+		 * Whether a confirmed selection closes the picker outright.
+		 *
+		 * Default `false`, and that is the framework's OWN behaviour rather than an absent
+		 * setting: a confirmed point leaves the customer in the map with the CTA relabelled
+		 * «Продолжить оформление» (the `continueCheckout` string), so the choice can still be
+		 * inspected and changed before committing. Closing on select throws that second step
+		 * away, which is a carrier's decision to make, not a default to inherit.
+		 *
+		 * Travels to the browser as `selection.close`; see {@see self::get_js_config()} for
+		 * the `??` reading rule that makes an explicit `false` from the domain win over this.
+		 *
+		 * @since 2.0.2
+		 * @var bool
+		 */
+		private bool $close_on_select;
+
+		/**
+		 * Whether a confirmed selection triggers a WooCommerce checkout refresh.
+		 *
+		 * Default `false`. A refresh nobody asked for is a full `update_order_review` round
+		 * trip — shipping recalculated, fragments re-rendered — paid on EVERY selection. A
+		 * carrier whose price cannot change within a locality (CDEK: the rate is the
+		 * locality's, not the point's) must never pay it; a carrier whose price DOES move
+		 * with the point type (Yandex) opts in explicitly.
+		 *
+		 * Travels to the browser as `selection.refreshCheckout`; same `??` reading rule as
+		 * {@see self::$close_on_select}.
+		 *
+		 * @since 2.0.2
+		 * @var bool
+		 */
+		private bool $refresh_checkout;
+
+		/**
 		 * Per-request memoization of {@see Point_Source::fetch_details()}, keyed by point
 		 * id — see {@see self::fetch_point()}.
 		 *
@@ -362,6 +396,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 *                                                          search (Task 18, spec V-6); see
 		 *                                                          {@see self::$search_enabled}.
 		 *                                                          Optional, default `true`.
+		 * @param bool                        $close_on_select      whether a confirmed selection
+		 *                                                          closes the picker; see
+		 *                                                          {@see self::$close_on_select} for
+		 *                                                          why the default is `false`.
+		 * @param bool                        $refresh_checkout     whether a confirmed selection
+		 *                                                          refreshes the checkout; see
+		 *                                                          {@see self::$refresh_checkout} for
+		 *                                                          why the default is `false`.
 		 *
 		 * @throws \InvalidArgumentException when `$default_location` does not have a valid
 		 *                                    `center` (two floats/ints, lat within ±90, lng
@@ -380,7 +422,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 			array $point_icons = [],
 			string $accent_color = self::DEFAULT_ACCENT_COLOR,
 			string $setting_accent_color = '',
-			bool $search_enabled = true
+			bool $search_enabled = true,
+			bool $close_on_select = false,
+			bool $refresh_checkout = false
 		) {
 			self::validate_default_location( $default_location );
 
@@ -396,6 +440,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 			$this->accent_color         = $accent_color;
 			$this->setting_accent_color = $setting_accent_color;
 			$this->search_enabled       = $search_enabled;
+			$this->close_on_select      = $close_on_select;
+			$this->refresh_checkout     = $refresh_checkout;
 		}
 
 		/**
@@ -627,6 +673,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 *     pointIcons: array<string, array{default: string, active: string}>,
 		 *     mapConfig: array<string, mixed>,
 		 *     replaceAddress: array{enabled: bool, billingOnly: bool},
+		 *     selection: array{close: bool, refreshCheckout: bool},
 		 *     accentColor: string,
 		 *     searchNearestCount: int,
 		 *     modal: array{width: int, bodyHeight: string},
@@ -724,6 +771,22 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 				// sentence about a different situation.
 				'zoomInLabel'      => __( 'Приблизить карту', 'woodev-plugin-framework' ),
 				'zoomOutLabel'     => __( 'Отдалить карту', 'woodev-plugin-framework' ),
+				// Task 4: the three states of the server round-trip behind a confirmed
+				// selection. `selectFailed` is deliberately NOT the generic `error` string
+				// above: that one is worded for a failed points FETCH ("не удалось загрузить
+				// пункты") and, shown under a button the customer has just pressed to CONFIRM
+				// a point, would describe the wrong operation entirely.
+				'confirming'       => __( 'Проверяем…', 'woodev-plugin-framework' ),
+				'selectFailed'     => __(
+					'Не удалось подтвердить выбор. Попробуйте ещё раз.',
+					'woodev-plugin-framework'
+				),
+				// A 403 on the select route is not the customer's fault and not retryable in
+				// place — the page's nonce has outlived the session it was minted for.
+				'stalePage'        => __(
+					'Страница устарела. Обновите её и выберите пункт выдачи заново.',
+					'woodev-plugin-framework'
+				),
 			];
 
 			/**
@@ -772,6 +835,22 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 				'replaceAddress' => [
 					'enabled'     => $this->replace_address,
 					'billingOnly' => (bool) wc_ship_to_billing_address_only(),
+				],
+
+				// What happens AFTER the server confirms a selection — the fallback half of
+				// the contract only. The select route's own response may carry `close` and
+				// `refreshCheckout` per selection (see Selection_Result), and the browser
+				// reads `response.close ?? config.selection.close`: `??`, never `||`, because
+				// an explicit `false` from the domain must WIN over a `true` default here,
+				// and `||` would silently discard it. A flag the domain says nothing about
+				// falls back to these values.
+				//
+				// See self::$close_on_select / self::$refresh_checkout for why both defaults
+				// are `false` — neither is an unset setting, both are the framework's own
+				// deliberate behaviour.
+				'selection' => [
+					'close'           => (bool) $this->close_on_select,
+					'refreshCheckout' => (bool) $this->refresh_checkout,
 				],
 
 				// Top level, NOT inside `mapConfig`: the checkout trigger button lives
