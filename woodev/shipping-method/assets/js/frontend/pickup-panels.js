@@ -1126,6 +1126,10 @@
 	 * `disabled` on the element and "the handler refuses" are two different
 	 * guarantees, and both are needed (spec).
 	 *
+	 * NOT the only writer of `.woodev-pickup-card__warning` any more —
+	 * {@see Panels.prototype.showSelectionError} writes into this same slot directly, for a
+	 * transient transport failure, without going through a full render.
+	 *
 	 * @param {Panels} self
 	 * @param {Object} point
 	 * @returns {HTMLElement}
@@ -2001,6 +2005,12 @@
 
 	/**
 	 * Sets the groups currently in the map's viewport and re-renders the list.
+	 *
+	 * Stores `groups` BY REFERENCE, not a copy — the group and point objects inside it stay
+	 * shared with whoever handed them to us (the mount builds them once and also hands them to
+	 * the map provider). `panels` holds no private copy, so {@see Panels.prototype.setPointVerdict}
+	 * mutating a point in place is visible to every other holder of that same object, not just
+	 * this instance.
 	 *
 	 * @param {Array} groups
 	 * @returns {void}
