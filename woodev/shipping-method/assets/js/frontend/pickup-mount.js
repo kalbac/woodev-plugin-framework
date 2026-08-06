@@ -1198,10 +1198,15 @@
 		 * backstop to judge (spec D-15). No fourth empty-state message — the three that exist
 		 * (`emptyLocality`/`emptyInView`/`noResults`) are deliberately distinct.
 		 *
-		 * @param {Object.<string, Object>} groupsByKey the just-built groups this fetch drew.
+		 * The group lookup goes through {@see findGroupByPointId} — the SAME helper
+		 * `searchPointPicked` and the `cardOpened` listener already use for "I have a point id,
+		 * I need its group" — rather than a second, independent implementation. That helper
+		 * reads the session's own `groupsByKey` from the closure (already reassigned by the time
+		 * this runs — see {@see fetchAndSetPoints}), so this function takes no argument either.
+		 *
 		 * @returns {void}
 		 */
-		function restoreSelection( groupsByKey ) {
+		function restoreSelection() {
 			var selectedId = fieldValue( config.fieldId );
 
 			if ( ! selectedId || ! panels ) {
@@ -1210,20 +1215,16 @@
 
 			panels.setSelectedId( selectedId );
 
-			var key = Object.keys( groupsByKey ).filter( function( groupKey ) {
-				return ( groupsByKey[ groupKey ].points || [] ).some( function( point ) {
-					return String( point.id ) === selectedId;
-				} );
-			} )[ 0 ];
+			var group = findGroupByPointId( selectedId );
 
-			if ( ! key ) {
+			if ( ! group ) {
 				return;
 			}
 
 			panels.openList();
 
 			if ( provider && 'function' === typeof provider.focusGroup ) {
-				provider.focusGroup( key, { zoom: true } );
+				provider.focusGroup( group.key, { zoom: true } );
 			}
 		}
 
@@ -1300,7 +1301,7 @@
 							// for why this must not run on every points-drawn continuation.
 							if ( ! selectionRestoreAttempted ) {
 								selectionRestoreAttempted = true;
-								restoreSelection( groupsByKey );
+								restoreSelection();
 							}
 						}
 					} else {
