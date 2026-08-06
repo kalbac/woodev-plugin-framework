@@ -23,6 +23,15 @@ WP test library (integration), Jest + jsdom (JS).
 **Spec:** `docs-internal/specs/2026-08-06-sp5-pickup-selection-mechanism-design.md`
 **Card:** #169 (folds in #157)
 
+> ⚠️ **Run JS tests with `npm run test:js`, never `npx jest`.** This repo has no jest config of
+> its own — `wp-scripts test-unit-js` owns it and is what supplies jsdom. `npx jest` falls back to
+> jest's node default and reports **194 failed / 472 total** against a tree whose real state is
+> **631 passed / 631 total**. The dropped TOTAL is the tell: suites that fail to load contribute
+> no tests. Every JS task below said `npx jest` until 2026-08-06; it was corrected only because a
+> PHP-only session ran it and a sudden 194-test failure was impossible to believe. Forward jest
+> flags after `--`: `npm run test:js -- tests/js/x.test.js -t "name"`.
+> Gotcha: `npx-jest-bypasses-wp-scripts-jsdom`.
+
 ---
 
 ## File structure
@@ -925,7 +934,7 @@ it( 'maps our own nonce error code to the same message', () => {
 
 - [ ] **Step 2: Run them and confirm they fail**
 
-Run: `npx jest tests/js/pickup-datasource.test.js tests/js/pickup-mount.test.js`
+Run: `npm run test:js -- tests/js/pickup-datasource.test.js tests/js/pickup-mount.test.js`
 Expected: FAIL — the header carries `stale`; the key resolves to `error`.
 
 - [ ] **Step 3: Make the datasource read the nonce late**
@@ -1016,7 +1025,7 @@ Emit `nonceNodeId` from `get_js_config()` alongside `nonce` (one line, same task
 
 - [ ] **Step 6: Run the tests and confirm they pass**
 
-Run: `npx jest tests/js/pickup-datasource.test.js tests/js/pickup-mount.test.js`
+Run: `npm run test:js -- tests/js/pickup-datasource.test.js tests/js/pickup-mount.test.js`
 Expected: PASS.
 
 - [ ] **Step 7: Commit**
@@ -1086,7 +1095,7 @@ describe( 'selectPoint', () => {
 
 - [ ] **Step 2: Run it and confirm it fails**
 
-Run: `npx jest tests/js/pickup-datasource.test.js -t selectPoint`
+Run: `npm run test:js -- tests/js/pickup-datasource.test.js -t selectPoint`
 Expected: FAIL — `ds.selectPoint is not a function`.
 
 - [ ] **Step 3: Implement**
@@ -1127,7 +1136,7 @@ Return `selectPoint` from the factory alongside `fetchPoints` and `fetchDetails`
 
 - [ ] **Step 4: Run the tests and confirm they pass**
 
-Run: `npx jest tests/js/pickup-datasource.test.js`
+Run: `npm run test:js -- tests/js/pickup-datasource.test.js`
 Expected: PASS, including the pre-existing cases.
 
 - [ ] **Step 5: Commit**
@@ -1196,7 +1205,7 @@ describe( 'setSelectionBusy', () => {
 
 - [ ] **Step 2: Run it and confirm it fails**
 
-Run: `npx jest tests/js/pickup-panels.test.js -t setSelectionBusy`
+Run: `npm run test:js -- tests/js/pickup-panels.test.js -t setSelectionBusy`
 Expected: FAIL — `panels.setSelectionBusy is not a function`.
 
 - [ ] **Step 3: Implement the state on the instance**
@@ -1309,7 +1318,7 @@ Append to `pickup.css`, beside the existing `.woodev-pickup-card__cta:disabled` 
 
 - [ ] **Step 5: Run the tests and confirm they pass**
 
-Run: `npx jest tests/js/pickup-panels.test.js`
+Run: `npm run test:js -- tests/js/pickup-panels.test.js`
 Expected: PASS.
 
 - [ ] **Step 6: Commit**
@@ -1388,7 +1397,7 @@ describe( 'showSelectionError', () => {
 
 - [ ] **Step 2: Run it and confirm it fails**
 
-Run: `npx jest tests/js/pickup-panels.test.js -t "setPointVerdict|showSelectionError"`
+Run: `npm run test:js -- tests/js/pickup-panels.test.js -t "setPointVerdict|showSelectionError"`
 Expected: FAIL — both methods undefined.
 
 - [ ] **Step 3: Implement**
@@ -1467,7 +1476,7 @@ Expected: FAIL — both methods undefined.
 
 - [ ] **Step 4: Run the tests and confirm they pass**
 
-Run: `npx jest tests/js/pickup-panels.test.js`
+Run: `npm run test:js -- tests/js/pickup-panels.test.js`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -1527,7 +1536,7 @@ describe( 'selected row highlight', () => {
 
 - [ ] **Step 2: Run it and confirm it fails**
 
-Run: `npx jest tests/js/pickup-panels.test.js -t "selected row"`
+Run: `npm run test:js -- tests/js/pickup-panels.test.js -t "selected row"`
 Expected: FAIL — no `is-selected` class anywhere.
 
 - [ ] **Step 3: Mark the rows**
@@ -1604,7 +1613,7 @@ per-point button:
 
 - [ ] **Step 6: Run the tests and confirm they pass**
 
-Run: `npx jest tests/js/pickup-panels.test.js`
+Run: `npm run test:js -- tests/js/pickup-panels.test.js`
 Expected: PASS.
 
 - [ ] **Step 7: Commit**
@@ -1758,7 +1767,7 @@ describe( 'selection confirmation', () => {
 
 - [ ] **Step 2: Run them and confirm they fail**
 
-Run: `npx jest tests/js/pickup-mount.test.js -t "selection confirmation"`
+Run: `npm run test:js -- tests/js/pickup-mount.test.js -t "selection confirmation"`
 Expected: FAIL across the block — `handleSelection` still closes synchronously.
 
 - [ ] **Step 3: Add the two event names**
@@ -1978,7 +1987,7 @@ Declare `pendingSelectionId` beside the session's other closed-over state
 
 - [ ] **Step 5: Run the tests and confirm they pass**
 
-Run: `npx jest tests/js/pickup-mount.test.js`
+Run: `npm run test:js -- tests/js/pickup-mount.test.js`
 Expected: PASS.
 
 - [ ] **Step 6: Commit**
@@ -2036,7 +2045,7 @@ describe( 'restoring a previous selection', () => {
 
 - [ ] **Step 2: Run it and confirm it fails**
 
-Run: `npx jest tests/js/pickup-mount.test.js -t "restoring a previous"`
+Run: `npm run test:js -- tests/js/pickup-mount.test.js -t "restoring a previous"`
 Expected: FAIL — nothing focuses or opens the list.
 
 - [ ] **Step 3: Implement**
@@ -2106,7 +2115,7 @@ fetch settles.
 
 - [ ] **Step 4: Run the tests and confirm they pass**
 
-Run: `npx jest tests/js/pickup-mount.test.js`
+Run: `npm run test:js -- tests/js/pickup-mount.test.js`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -2187,7 +2196,7 @@ git commit -m "test(pickup): fixture seam covering refusal, immediate close and 
 
 ```bash
 composer test:unit
-npx jest
+npm run test:js
 composer phpcs
 composer phpstan -- --memory-limit=4G
 ```

@@ -1,6 +1,14 @@
 # Gotchas — Woodev Plugin Framework
-> **99 atomic gotchas in 21 namespaces** — update count when adding/removing.
-> Last updated: 2026-08-05 (session 51, operator manual-test pass on the pickup map: +4 files —
+> **100 atomic gotchas in 22 namespaces** — update count when adding/removing.
+> Last updated: 2026-08-06 (session 52: +1 file, new namespace `[testing/js]` —
+> `npx-jest-bypasses-wp-scripts-jsdom` (this project has NO jest config of its own; JS tests run
+> through `wp-scripts test-unit-js`, which is what supplies the jsdom environment. `npx jest`
+> bypasses it and falls back to jest's node default, reporting **194 failed / 472 total** where
+> the truth is **631 passed / 631 total** — and the dropped TOTAL is the tell, because suites
+> that fail to load never contribute their tests. The failure names your own files and shows
+> plausible diffs, so it reads as "I broke the JS layer"; it had been written into all seven JS
+> tasks of the s52 plan before being caught).
+> Prior: 2026-08-05 (session 51, operator manual-test pass on the pickup map: +4 files —
 > `ymaps-html-icon-layout-anchors-at-its-top-left` (a custom HTML icon layout draws with its top-left
 > corner AT the geo anchor while `iconShape` is measured CENTRED on it, so the drawn artwork and the
 > clickable rectangle overlap only in one quadrant — the direct sequel to s50's `iconShape` fix, which
@@ -149,6 +157,9 @@
 - [testing/integration] Integration tests: never `do_action('admin_menu')` (or other broad global admin hooks) — it fires WooCommerce's callbacks, which PRINT a PHP deprecation on some WC versions → PHPUnit "unexpected output" → red on part of the matrix only. Also `$menu`/`$submenu` globals accumulate across `WP_UnitTestCase` tests (stale entries leak). Call the specific method directly + `unset()` the global key before asserting → [gotchas/integration-test-global-admin-hooks-output-and-submenu-accumulation.md](gotchas/integration-test-global-admin-hooks-output-and-submenu-accumulation.md) (s34)
 
 - [testing/unit] A mutation sweep over **branch conditions only** reads as complete and is not — "14/14 killed" was reported three times on one branch and three times a reviewer then killed survivors by mutating **values and content**: swapped `sprintf` args telling the customer a 15 kg order exceeds a 20.5 kg limit, a dropped unit conversion, i18n keys the JS read that PHP never emitted (invisible because the JS carried byte-identical Russian defaults). Also: a mutant killed by an *unrelated* guard is not covered, and boundary-**acceptance** needs pinning as much as rejection → [gotchas/mutation-sweep-branch-only-false-confidence.md](gotchas/mutation-sweep-branch-only-false-confidence.md) (s45)
+
+### [testing/js] — JavaScript test invocation
+- [testing/js] `npx jest` is NOT how this project runs JS tests — there is no jest config here at all; `wp-scripts test-unit-js` (`npm run test:js`) owns it and supplies jsdom. `npx jest` falls back to the node environment: 194 phantom failures, and a TOTAL of 472 instead of 631 because failed-to-load suites contribute nothing. A changed total means a bad invocation, not a regression → [gotchas/npx-jest-bypasses-wp-scripts-jsdom.md](gotchas/npx-jest-bypasses-wp-scripts-jsdom.md) (s52)
 
 ### [api/*] — API layer
 - [api/rest-not-for-browser-auth] A REST route can't back a browser-facing screen gated on `is_user_logged_in()` — a plain cookie browser navigation to `/wp-json/` has no `X-WP-Nonce`, so REST treats it as logged-out → endless wp-login loop. Use a `parse_request` query-var endpoint in normal WP context (the WC_Auth pattern) → [gotchas/rest-endpoint-not-for-browser-cookie-auth.md](gotchas/rest-endpoint-not-for-browser-cookie-auth.md) (s24)
