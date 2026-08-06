@@ -3381,6 +3381,58 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			$this->assertStringContainsString( 'carrier', $plain );
 		}
 
+		/**
+		 * @dataProvider provide_colliding_plugin_ids
+		 *
+		 * @param string $first  one plugin id.
+		 * @param string $second another plugin id that used to sanitise to the same suffix.
+		 */
+		public function test_two_plugin_ids_that_differ_only_in_punctuation_do_not_collide(
+			string $first,
+			string $second
+		): void {
+			// REGRESSION (Codex finding 7 / issue #142): `preg_replace( '/[^a-z0-9_]/i', '_' )`
+			// mapped `carrier-a`, `carrier_a` and `carrier.a` onto ONE suffix, so two shipping
+			// plugins on one checkout page shared a nonce node, a checkout-fragment key and a
+			// JS config global — the second silently overwriting the first's REST nonce and
+			// pickup field id.
+			$this->assertNotSame(
+				$this->make_handler( [ 'plugin_id' => $first ] )->nonce_node_id(),
+				$this->make_handler( [ 'plugin_id' => $second ] )->nonce_node_id()
+			);
+		}
+
+		/**
+		 * @return array<string, array{0: string, 1: string}>
+		 */
+		public function provide_colliding_plugin_ids(): array {
+			return [
+				'hyphen vs underscore' => [ 'carrier-a', 'carrier_a' ],
+				'dot vs underscore'    => [ 'carrier.a', 'carrier_a' ],
+				'dot vs hyphen'        => [ 'carrier.a', 'carrier-a' ],
+				'slash vs underscore'  => [ 'carrier/a', 'carrier_a' ],
+			];
+		}
+
+		public function test_a_plugin_id_that_is_already_a_js_identifier_keeps_its_plain_suffix(): void {
+			// The suffix stays readable for the overwhelmingly common case — only an id that
+			// had to be rewritten pays for the disambiguator.
+			$this->assertSame(
+				'woodev-pickup-nonce-carrier_a',
+				$this->make_handler( [ 'plugin_id' => 'carrier_a' ] )->nonce_node_id()
+			);
+		}
+
+		public function test_a_rewritten_suffix_is_still_a_valid_js_identifier(): void {
+			$id = $this->make_handler( [ 'plugin_id' => 'carrier.a!' ] )->nonce_node_id();
+
+			$this->assertMatchesRegularExpression(
+				'/^woodev-pickup-nonce-[A-Za-z0-9_]+$/',
+				$id,
+				'the suffix also names a JS global, so it must stay identifier-safe'
+			);
+		}
+
 		public function test_config_carries_the_nonce_node_id_the_handler_prints(): void {
 			Functions\when( 'apply_filters' )->returnArg( 2 );
 			$this->stub_config_dependencies_except_filters();
@@ -3708,7 +3760,10 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			$this->assertCount( 1, $localized );
 			[ $handle, $object_name, $data ] = $localized[0];
 			$this->assertSame( 'woodev-pickup-mount', $handle );
-			$this->assertSame( 'woodev_pickup_config_carrier_x', $object_name );
+			// `carrier-x` is not a valid JS identifier, so the suffix is the rewritten form
+			// plus the disambiguator that keeps it distinct from a plugin genuinely called
+			// `carrier_x` — see Pickup_Handler::config_object_suffix() and issue #142.
+			$this->assertStringStartsWith( 'woodev_pickup_config_carrier_x_', $object_name );
 			$this->assertSame( 'pickup_point', $data['fieldId'] );
 		}
 	}

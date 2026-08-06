@@ -260,12 +260,33 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * so the name is always a valid JS identifier regardless of what the plugin
 		 * supplies as its id token.
 		 *
+		 * COLLAPSING IS THE BUG THIS GUARDS (issue #142). Replacing every character outside
+		 * `[a-z0-9_]` with `_` is not injective: `carrier-a`, `carrier.a` and `carrier_a` all
+		 * produce `carrier_a`, so two shipping plugins with ids that near on one checkout page
+		 * share ONE config global and the second `wp_localize_script()` silently overwrites
+		 * the first's field descriptors and REST endpoint. An id that already is a valid
+		 * identifier is returned untouched (the common case keeps a readable name); only a
+		 * REWRITTEN id pays for a short digest of the original, which is what keeps two
+		 * different originals on two different suffixes.
+		 *
+		 * The suffix is never read by the browser as a literal — `checkout-field-classic.js`
+		 * discovers configs by scanning `window` for the `woodev_checkout_field_config_`
+		 * PREFIX — so its exact spelling is a framework-internal detail, not a contract.
+		 * Mirrored, deliberately, in
+		 * {@see \Woodev\Framework\Shipping\Pickup\Pickup_Handler::config_object_suffix()},
+		 * which carries the longer version of this note; change one and look at the other.
+		 *
 		 * @since 2.0.2
 		 *
 		 * @return string
 		 */
 		public function config_object_suffix(): string {
-			return preg_replace( '/[^a-z0-9_]/i', '_', $this->plugin_id() );
+			$plugin_id = $this->plugin_id();
+			$sanitized = (string) preg_replace( '/[^a-z0-9_]/i', '_', $plugin_id );
+
+			return $sanitized === $plugin_id
+				? $sanitized
+				: $sanitized . '_' . substr( md5( $plugin_id ), 0, 8 );
 		}
 
 		/**

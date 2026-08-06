@@ -1900,14 +1900,44 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 
 		/**
 		 * Returns a JS-identifier-safe version of the plugin id, used as the suffix in the
-		 * `woodev_pickup_config_{suffix}` JS config global name.
+		 * `woodev_pickup_config_{suffix}` JS config global name and — through
+		 * {@see self::nonce_node_id()} — in the nonce node's DOM id and its checkout-fragment
+		 * key.
+		 *
+		 * COLLAPSING IS THE BUG THIS GUARDS (issue #142). Replacing every character outside
+		 * `[a-z0-9_]` with `_` is not injective: `carrier-a`, `carrier.a` and `carrier_a` all
+		 * produce `carrier_a`. Two shipping plugins with ids that near on one checkout page
+		 * then share a config global (the second `wp_localize_script()` wins outright), a
+		 * nonce node, and a fragment key — so one plugin's picker reads the other's REST
+		 * nonce and pickup field id. Nothing about that failure looks like an id collision
+		 * from the browser, which is what makes it worth spending a few characters to
+		 * prevent.
+		 *
+		 * An id that already IS a valid identifier is returned untouched, so the common case
+		 * keeps a readable global name; only a REWRITTEN id pays for a short digest of the
+		 * ORIGINAL, which is what makes two different originals land on two different
+		 * suffixes. Collision-resistant rather than provably injective: a raw id could in
+		 * principle be spelled to match another id's digest, but that is a 32-bit coincidence
+		 * an author would have to construct deliberately, not something two carrier plugins
+		 * stumble into.
+		 *
+		 * The suffix is never read by the browser as a literal — `pickup-mount.js` discovers
+		 * configs by scanning `window` for the `woodev_pickup_config_` PREFIX, and takes the
+		 * nonce node's id from the config's own `nonceNodeId` — so its exact spelling is a
+		 * framework-internal detail, not a contract. Mirrored, deliberately, in
+		 * {@see \Woodev\Framework\Shipping\Checkout\Checkout_Handler::config_object_suffix()};
+		 * change one and look at the other.
 		 *
 		 * @since 2.0.2
 		 *
 		 * @return string
 		 */
 		private function config_object_suffix(): string {
-			return preg_replace( '/[^a-z0-9_]/i', '_', $this->plugin_id );
+			$sanitized = (string) preg_replace( '/[^a-z0-9_]/i', '_', $this->plugin_id );
+
+			return $sanitized === $this->plugin_id
+				? $sanitized
+				: $sanitized . '_' . substr( md5( $this->plugin_id ), 0, 8 );
 		}
 
 		/**
