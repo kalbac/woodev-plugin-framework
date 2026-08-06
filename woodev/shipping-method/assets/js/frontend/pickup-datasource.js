@@ -200,21 +200,17 @@
 	}
 
 	/**
-	 * Performs one GET request against the pickup REST surface and resolves
-	 * with the parsed JSON body, or rejects with the error shape documented
-	 * at the top of this file.
+	 * Performs one request against the pickup REST surface and resolves with
+	 * the parsed JSON body, or rejects with the error shape documented at the
+	 * top of this file. Shared by every verb (`request()`'s GETs and
+	 * `selectPoint()`'s POST) so all of them fail the same way.
 	 *
-	 * @param {string}   url
-	 * @param {Function} readNonce reads the CURRENT nonce — see {@see WoodevPickupDataSource}'s
-	 *                             own docblock for why this is a provider, not a value.
+	 * @param {string} url
+	 * @param {Object} init `fetch()`'s own second argument (method, headers, body, …).
 	 * @returns {Promise<*>}
 	 */
-	function request( url, readNonce ) {
-		return fetch( url, {
-			method: 'GET',
-			credentials: 'same-origin',
-			headers: { 'X-WP-Nonce': readNonce() },
-		} ).then(
+	function requestJson( url, init ) {
+		return fetch( url, init ).then(
 			function( response ) {
 				return response.json().then(
 					function( body ) {
@@ -246,6 +242,23 @@
 				);
 			}
 		);
+	}
+
+	/**
+	 * Performs one GET request against the pickup REST surface. Thin wrapper
+	 * around {@see requestJson} that supplies the GET-specific `init`.
+	 *
+	 * @param {string}   url
+	 * @param {Function} readNonce reads the CURRENT nonce — see {@see WoodevPickupDataSource}'s
+	 *                             own docblock for why this is a provider, not a value.
+	 * @returns {Promise<*>}
+	 */
+	function request( url, readNonce ) {
+		return requestJson( url, {
+			method: 'GET',
+			credentials: 'same-origin',
+			headers: { 'X-WP-Nonce': readNonce() },
+		} );
 	}
 
 	/**
@@ -332,7 +345,7 @@
 	 * Builds a pickup dataSource bound to one REST root.
 	 *
 	 * @param {WoodevPickupDataSourceOptions} options
-	 * @returns {{fetchPoints: function(Object): Promise<Array>, fetchDetails: function(string): Promise<Object>}}
+	 * @returns {{fetchPoints: function(Object): Promise<Array>, fetchDetails: function(string): Promise<Object>, selectPoint: function({pointId: string, fieldId: string}): Promise<Object>}}
 	 */
 	function WoodevPickupDataSource( options ) {
 		var opts = options || {};
@@ -476,9 +489,37 @@
 			return fetchDetailsOnce( restRoot, readNonce, pointId );
 		}
 
+		/**
+		 * Confirms one point with the server.
+		 *
+		 * Never debounced and never superseded, unlike `fetchPoints()`: a confirmation is a
+		 * single deliberate act, and the card is locked while it is in flight (spec D-9), so
+		 * there is no burst to collapse and no newer result to adopt.
+		 *
+		 * @param {{pointId: string, fieldId: string}} args
+		 * @returns {Promise<Object>}
+		 */
+		function selectPoint( args ) {
+			var url = restRoot.replace( /\/points\/*$/, '' ) + '/select';
+
+			return requestJson( url, {
+				method: 'POST',
+				credentials: 'same-origin',
+				headers: {
+					'X-WP-Nonce': readNonce(),
+					'Content-Type': 'application/json',
+				},
+				body: JSON.stringify( {
+					point_id: String( args.pointId ),
+					field_id: String( args.fieldId ),
+				} ),
+			} );
+		}
+
 		return {
 			fetchPoints: fetchPoints,
 			fetchDetails: fetchDetails,
+			selectPoint: selectPoint,
 		};
 	}
 

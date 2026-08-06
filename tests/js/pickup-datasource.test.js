@@ -487,3 +487,58 @@ test( 'in-order delivery (no race) still resolves each burst with its own result
 
 	expect( resultB ).toEqual( [ { id: 'B1' } ] );
 } );
+
+// -----------------------------------------------------------------------
+// selectPoint — confirms one point with the server (Task 7)
+// -----------------------------------------------------------------------
+
+describe( 'selectPoint', () => {
+	it( 'POSTs to the select route beside the points root, with the live nonce', async () => {
+		mockFetchOnce( 200, { ok: true } );
+
+		const ds = WoodevPickupDataSource( {
+			restRoot: '/wp-json/woodev/v1/shipping/pickup/demo/points',
+			nonce: () => 'fresh',
+		} );
+
+		await ds.selectPoint( { pointId: 'DEMO-PVZ-1', fieldId: 'carrier_pickup_point' } );
+
+		const [ url, init ] = fetch.mock.calls[ 0 ];
+
+		expect( url ).toBe( '/wp-json/woodev/v1/shipping/pickup/demo/select' );
+		expect( init.method ).toBe( 'POST' );
+		expect( init.headers[ 'X-WP-Nonce' ] ).toBe( 'fresh' );
+		expect( JSON.parse( init.body ) ).toEqual( {
+			point_id: 'DEMO-PVZ-1',
+			field_id: 'carrier_pickup_point',
+		} );
+	} );
+
+	it( 'rejects with the shared error shape on a 403', async () => {
+		global.fetch = jest.fn( function() {
+			return Promise.resolve( response( 403, { code: 'rest_cookie_invalid_nonce', message: 'bad' }, false ) );
+		} );
+
+		const ds = WoodevPickupDataSource( { restRoot: '/a/points', nonce: 'n' } );
+
+		await expect(
+			ds.selectPoint( { pointId: 'X', fieldId: 'f' } )
+		).rejects.toMatchObject( { status: 403, code: 'rest_cookie_invalid_nonce' } );
+	} );
+
+	it( 'is never debounced — a confirmation is one deliberate act', async () => {
+		mockFetchOnce( 200, { ok: true } );
+
+		const ds = WoodevPickupDataSource( { restRoot: '/a/points', nonce: 'n', debounceMs: 5000 } );
+
+		// No timer of any kind is started, real or fake: if selectPoint() were routed
+		// through the fetchPoints() debounce/flush machinery, this call would need a
+		// pending timer to ever settle, and the assertion below (made BEFORE awaiting
+		// anything) would still see zero fetch() calls.
+		const promise = ds.selectPoint( { pointId: 'X', fieldId: 'f' } );
+
+		expect( fetch ).toHaveBeenCalledTimes( 1 );
+
+		await promise;
+	} );
+} );
