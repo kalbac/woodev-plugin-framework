@@ -681,6 +681,68 @@ describe( 'setSelectionBusy', () => {
 	} );
 } );
 
+// -----------------------------------------------------------------------
+// Task 9 (spec D-6/D-7): a domain refusal is remembered on the held point (so a re-render or a
+// later tab switch still shows it); a transport failure is shown once and forgotten on the next
+// render. `setPointVerdict()`/`showSelectionError()` are the two primitives that draw that line.
+// -----------------------------------------------------------------------
+
+describe( 'setPointVerdict', () => {
+	it( 'writes the refusal into the held point so it survives a re-render', () => {
+		const panels = mount( cardConfig );
+		const g = { key: 'k', size: 1, points: [ point() ] };
+		panels.setVisible( [ g ] );
+		panels.openCard( g, 'p1', 'list' );
+
+		panels.setPointVerdict( 'p1', { allowed: false, reason: 'Слишком тяжело' } );
+		panels.openCard( g, 'p1', 'list' ); // full re-render, as a second click would do.
+
+		expect( panels.root.querySelector( '.woodev-pickup-card__warning' ).textContent ).toBe( 'Слишком тяжело' );
+		expect( panels.root.querySelector( '.woodev-pickup-card__cta' ).disabled ).toBe( true );
+	} );
+
+	it( 'leaves other points in the same group alone', () => {
+		const panels = mount( cardConfig );
+		const g = { key: 'k', size: 2, points: [ point( { id: 'a' } ), point( { id: 'b' } ) ] };
+		panels.setVisible( [ g ] );
+
+		panels.setPointVerdict( 'a', { allowed: false, reason: 'Нет' } );
+		panels.openCard( g, 'b', 'list' );
+
+		expect( panels.root.querySelector( '.woodev-pickup-card__cta' ).disabled ).toBe( false );
+	} );
+} );
+
+describe( 'showSelectionError', () => {
+	it( 'shows a transient message without disabling the CTA', () => {
+		const panels = mount( cardConfig );
+		panels.openCard( { key: 'k', size: 1, points: [ point() ] } );
+
+		panels.showSelectionError( 'Не удалось. Попробуйте ещё раз.' );
+
+		expect( panels.root.querySelector( '.woodev-pickup-card__warning' ).textContent )
+			.toBe( 'Не удалось. Попробуйте ещё раз.' );
+		expect( panels.root.querySelector( '.woodev-pickup-card__cta' ).disabled ).toBe( false );
+	} );
+
+	it( 'clears on the next card render — a failure is not a verdict', () => {
+		const panels = mount( cardConfig );
+		const g = { key: 'k', size: 1, points: [ point() ] };
+		panels.openCard( g );
+
+		panels.showSelectionError( 'Не удалось' );
+		panels.openCard( g );
+
+		expect( panels.root.querySelector( '.woodev-pickup-card__warning' ) ).toBeNull();
+	} );
+
+	it( 'does not throw when called before render()', () => {
+		const panels = new Panels( document.createElement( 'div' ), cardConfig );
+
+		expect( () => panels.showSelectionError( 'Не удалось' ) ).not.toThrow();
+	} );
+} );
+
 it( 'renders escaped point text without double-escaping it', () => {
 	const panels = mount( cardConfig );
 	panels.openCard( { key: 'k', size: 1, points: [ point( { name: 'ПВЗ &quot;Ромашка&quot;' } ) ] } );

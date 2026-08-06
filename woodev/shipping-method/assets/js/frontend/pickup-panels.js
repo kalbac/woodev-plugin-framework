@@ -2768,6 +2768,89 @@
 	};
 
 	/**
+	 * Records a domain verdict against one point, so a refusal SURVIVES a card re-render (spec
+	 * D-6/D-7). The framework's own fetch-time `selectable` verdict ({@see Constraint_Checker})
+	 * is deliberately permissive about data a carrier's list response omits — a selection
+	 * confirmation is where the real answer arrives. Writing it into the point object
+	 * `self._groups` already holds needs no new rendering path: {@see buildCardFooter} already
+	 * draws a warning and a dead CTA whenever `selectable.allowed === false`, so this render and
+	 * every later one do the right thing on their own.
+	 *
+	 * Deliberately NOT reflected in the sidebar row (spec D-8): the list has no notion of a
+	 * blocked point today, and giving it one would be new UI surface with new states.
+	 *
+	 * A no-op on the current card's DOM when the verdict's point is not the one currently
+	 * shown — the write still lands on the held point, and the next `openCard()`/tab switch to
+	 * it will read it correctly.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @param {string|number}                             pointId
+	 * @param {{allowed: boolean, reason: (string|null)}} verdict
+	 * @returns {void}
+	 */
+	Panels.prototype.setPointVerdict = function( pointId, verdict ) {
+		var id = String( pointId );
+
+		this._groups.forEach( function( group ) {
+			group.points.forEach( function( point ) {
+				if ( String( point.id ) === id ) {
+					point.selectable = {
+						allowed: !! verdict.allowed,
+						reason: 'string' === typeof verdict.reason ? verdict.reason : null,
+					};
+				}
+			} );
+		} );
+
+		if ( this._activeGroup ) {
+			renderCard( this );
+		}
+	};
+
+	/**
+	 * Shows a TRANSIENT selection failure — a dropped request, a timeout, a stale page — in the
+	 * card's existing `.woodev-pickup-card__warning` slot (spec D-6/D-7). Deliberately NOT
+	 * stored anywhere, unlike {@see Panels.prototype.setPointVerdict}: nothing about the point
+	 * was refused, so the very next render (a re-render, a tab switch, a card close/reopen)
+	 * must forget this message entirely and leave the CTA alive. Conflating the two would grey
+	 * out a perfectly good point because one request happened to drop.
+	 *
+	 * A no-op when called before `render()` (no card element exists yet) or before any card has
+	 * been opened (no footer to append into) — matching
+	 * {@see Panels.prototype.setSelectionBusy}'s own guard shape.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @param {string} message already-resolved text — the caller owns the i18n lookup.
+	 * @returns {void}
+	 */
+	Panels.prototype.showSelectionError = function( message ) {
+		if ( ! this._cardEl ) {
+			return;
+		}
+
+		var footer = this._cardEl.querySelector( '.woodev-pickup-card__footer' );
+
+		if ( ! footer ) {
+			return;
+		}
+
+		var existing = footer.querySelector( '.woodev-pickup-card__warning' );
+
+		if ( existing ) {
+			existing.textContent = message;
+
+			return;
+		}
+
+		var warning = document.createElement( 'div' );
+		warning.className = 'woodev-pickup-card__warning';
+		warning.textContent = message;
+		footer.insertBefore( warning, footer.firstChild );
+	};
+
+	/**
 	 * Tears the panels down: cancels anything pending and drops every listener.
 	 *
 	 * The picker is destroyed and rebuilt on every reopen, and the search debounce outlives the
