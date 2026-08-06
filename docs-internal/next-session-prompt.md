@@ -17,7 +17,21 @@ PR #177 стоит с пустым `statusCheckRollup` при `mergeStateStatus:
 requests are not triggering workflow runs». Три попытки перевыпустить событие (close/reopen PR,
 пустой коммит, обычный пуш) утонули там же — **это не признак поломки в репозитории**.
 
-**Первым делом проверь, закрыт ли инцидент:**
+**⚡ Обновление на конец s54: запуски ПОШЛИ.** Последний пуш (`cf06da0`, 06.08 23:41 UTC) породил
+все три воркфлоу — CI, Integration Tests, Markdown Lint, — хотя компонент Actions на статус-странице
+всё ещё `major_outage`; вебхуки к тому моменту стали `operational`. На момент конца сессии они были
+`in_progress`, результат не дождался. **Первым делом посмотри их исход:**
+
+```bash
+gh run list --branch feat/pickup-selection --limit 5
+gh pr view 177 --json statusCheckRollup --jq '.statusCheckRollup[] | "\(.name): \(.conclusion)"'
+```
+
+Если какая-то джоба не породилась или упала по инфраструктуре — перевыпусти пустым коммитом, это
+всё ещё последствия аварии, а не наш код. Критерий прежний: **pass по каждой джобе отдельно**, потом
+squash-мердж.
+
+**Если запуски снова пропали — проверь, закрыт ли инцидент:**
 
 ```bash
 curl -s https://www.githubstatus.com/api/v2/summary.json | python -c "import json,sys; d=json.load(sys.stdin); print([c['name']+': '+c['status'] for c in d['components'] if 'Action' in c['name']])"
