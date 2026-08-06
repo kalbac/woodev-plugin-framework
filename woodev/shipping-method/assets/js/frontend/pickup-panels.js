@@ -2738,6 +2738,13 @@
 	 * `openCard()` (or an already-open card, re-rendered here) shows the
 	 * CTA's `continueCheckout` label instead of `select` for that one point.
 	 *
+	 * Also rebuilds the list (Task 10): the sidebar row carries its own persistent `is-selected`
+	 * marker, since the CTA's label flip alone is invisible once the customer scrolls the open
+	 * card's row out of view. That rebuild is a FULL `renderListBody()` — up to {@see LIST_CAP}
+	 * DOM nodes recreated and every row's click listener re-attached, just to move one class — and
+	 * only runs once `render()` exists (`this.root`); called before that, this method still only
+	 * updates `_selectedId` and, if a card is open, `renderCard()`.
+	 *
 	 * @param {string|number|null} id
 	 * @returns {void}
 	 */
