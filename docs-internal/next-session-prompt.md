@@ -108,9 +108,16 @@ wordpress: `docker start de59f74e6d3d19d18a7f7b6608fda7e7-mysql-1
 de59f74e6d3d19d18a7f7b6608fda7e7-tests-mysql-1 de59f74e6d3d19d18a7f7b6608fda7e7-wordpress-1
 de59f74e6d3d19d18a7f7b6608fda7e7-tests-wordpress-1`
 
-**Интеграционные тесты за s52 не гонялись** — construction sites в них обновлены, но проверены
-только статически. Прогнать до PR:
-`MSYS_NO_PATHCONV=1 npx wp-env run tests-cli --env-cwd=wp-content/plugins/woodev-framework ./vendor/bin/phpunit --testsuite integration`
+**Интеграционные тесты прогнаны в s53 — 92/92.** Команда, которая работает (та, что стояла здесь
+раньше, не работает — `--env-cwd=wp-content/plugins/woodev-framework` в контейнере не существует,
+`.wp-env.json` монтирует корень репозитория в `/var/www/html/woodev-framework`):
+
+```bash
+npx wp-env run tests-cli bash -c "cd /var/www/html/woodev-framework && TEST_SUITE=integration WP_TESTS_DIR=/wordpress-phpunit php vendor/bin/phpunit --testsuite=Integration"
+```
+
+Если контейнер не найден — `npx wp-env start`; их шесть, и `tests-cli` часто лежит, когда
+`wordpress` уже поднят.
 
 # Решение оператора, ждущее реализации (не карта выбора)
 

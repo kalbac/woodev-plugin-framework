@@ -2178,8 +2178,17 @@ with coordinates distinct from the existing points so they are individually clic
 
 - [ ] **Step 3: Run the integration suite**
 
-Run: `MSYS_NO_PATHCONV=1 npx wp-env run tests-cli --env-cwd=wp-content/plugins/woodev-framework ./vendor/bin/phpunit --testsuite integration`
-Expected: PASS.
+Run:
+```bash
+npx wp-env run tests-cli bash -c "cd /var/www/html/woodev-framework && TEST_SUITE=integration WP_TESTS_DIR=/wordpress-phpunit php vendor/bin/phpunit --testsuite=Integration"
+```
+Expected: PASS (92/92 as of 2026-08-06).
+
+> The `--env-cwd=wp-content/plugins/woodev-framework` form this step carried until 2026-08-06 does
+> NOT work: `.wp-env.json` mounts the repo root at `/var/www/html/woodev-framework`, not under
+> `wp-content/plugins/`, so it fails with `chdir … no such file or directory`. Use the `bash -c`
+> form above (gotcha `wpenv-windows-gitbash-path-mangling`). If the run cannot find the container,
+> `npx wp-env start` — there are six of them, and `tests-cli` is often down while `wordpress` is up.
 
 - [ ] **Step 4: Commit**
 
@@ -2229,7 +2238,7 @@ Verify, by DOM measurement rather than by eye:
    two-step — proving `close` overrides the default.
 4. An ordinary point leaves the modal open and the CTA reads «Продолжить оформление»; a second
    click closes with **no second network request** (check the network panel).
-5. `DEMO-POSTAMAT-1` fires `update_checkout` and the button stays busy until it settles; the §8
+5. `FIX-BULK-POSTAMAT-1` fires `update_checkout` and the button stays busy until it settles; the §8
    anchor is re-placed underneath the open modal and the picker still works afterwards.
 6. Reopening the map focuses the chosen point, its marker reads `data-state="active"`, the
    sidebar is open and the row carries `is-selected`.
