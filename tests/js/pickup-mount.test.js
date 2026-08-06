@@ -216,6 +216,18 @@ function StubPanels( container, config ) {
 	this.config = config;
 	this._listeners = {};
 	this.root = null;
+
+	// Task 11's three selection-confirmation calls, as PER-INSTANCE `jest.fn()`s rather than
+	// recording arrays: the confirmation tests assert on the ARGUMENTS of a specific call
+	// (`toHaveBeenCalledWith( 'P1', { allowed: false, reason: … } )`) and on which call came
+	// LAST (`toHaveBeenLastCalledWith( false )` — the busy state must be released on every
+	// settlement path), both of which jest's own matchers say far more precisely than a
+	// hand-rolled array would. Per instance, not on the prototype, so one session's calls can
+	// never bleed into the next one's expectations.
+	this.setSelectionBusy = jest.fn();
+	this.setPointVerdict = jest.fn();
+	this.showSelectionError = jest.fn();
+
 	StubPanels.instances.push( this );
 }
 
@@ -410,6 +422,13 @@ StubPanels.prototype.hideMessage = function() {
  * factory's argument entirely (the returned object never changes shape), so recording it
  * here is additive only.
  *
+ * `selectPoint()` (Task 11) resolves, by default, with the shape the select route emits when
+ * the domain accepted the point and volunteered no advice at all — `close`/`refresh_checkout`
+ * both `null`, i.e. "defer to the plugin's configured default". That default keeps every test
+ * whose subject is the WRITE (the store, the address fields, the trigger label) able to drive a
+ * selection through without restating the response shape; the tests whose subject IS the
+ * response drive it themselves through {@see openPicker}.
+ *
  * @param {Function} impl `function( query ) { return Promise }`
  */
 function fakeDataSourceFactory( impl ) {
@@ -421,8 +440,13 @@ function fakeDataSourceFactory( impl ) {
 			fetchDetails: function() {
 				return Promise.resolve( {} );
 			},
+			selectPoint: factory.selectPoint,
 		};
 	}
+
+	factory.selectPoint = jest.fn( function() {
+		return Promise.resolve( { allowed: true, reason: null, close: null, refresh_checkout: null } );
+	} );
 
 	return factory;
 }
@@ -464,6 +488,12 @@ function phpI18n( overrides ) {
 			// #157: a 403 on ANY pickup route — points fetch included — means the page's nonce
 			// has outlived the session it was minted for, not a normal fetch failure.
 			stalePage: 'Страница устарела. Обновите её и выберите пункт выдачи заново.',
+			// Task 4's three confirmation strings. `selectFailed` is deliberately NOT `error`
+			// above — that one is worded for a failed points FETCH and would describe the wrong
+			// operation entirely under a button just pressed to CONFIRM a point.
+			continueCheckout: 'Продолжить оформление заказа',
+			confirming: 'Проверяем…',
+			selectFailed: 'Не удалось подтвердить выбор. Попробуйте ещё раз.',
 		},
 		overrides
 	);
@@ -496,6 +526,13 @@ function makeConfig( overrides ) {
 		searchNearestCount: 3,
 		modal: { width: 920, bodyHeight: 'min(80vh, 800px)' },
 		search: true,
+		// The PRODUCTION defaults, verbatim from `Pickup_Handler::get_js_config()`: both are
+		// `false`, and both are the framework's own deliberate behaviour rather than an unset
+		// setting. A fixture that quietly defaulted `close` to `true` — because most of this
+		// file's older tests happen to want a closing modal — would be a fixture RICHER than
+		// production in exactly the direction that hides the `?? not ||` bug this task exists
+		// to prevent. Tests that want the modal to close say so explicitly instead.
+		selection: { close: false, refreshCheckout: false },
 	};
 
 	return Object.assign( {}, base, overrides );
@@ -629,6 +666,158 @@ async function openSession( config ) {
 	};
 }
 
+/**
+ * Drives one selection all the way through the server round trip, for the tests whose subject
+ * is what the mount WRITES (the §8 store, the address fields, the trigger label, the public
+ * events) rather than the round trip itself. Task 11 made `handleSelection()` asynchronous —
+ * nothing is written until `dataSource.selectPoint()` answers — so every one of those tests now
+ * has to let that answer land before it looks. The default fake datasource resolves with
+ * "accepted, no advice" ({@see fakeDataSourceFactory}).
+ *
+ * @param {Object} emitter a `StubProvider` or `StubPanels` instance — either side may report a
+ *                        selection (the panels' card CTA normally, the provider itself under
+ *                        `ownsChrome`), and both funnel into the same `handleSelection()`.
+ * @param {Object} chosen  the point object to report.
+ */
+async function selectAndConfirm( emitter, chosen ) {
+	emitter.emit( 'select', chosen );
+
+	await flushAsync();
+}
+
+/**
+ * The selection-confirmation harness: one open picker whose `selectPoint()` round trip is held
+ * OPEN so a test can decide, statement by statement, when and how it answers.
+ *
+ * It is a distinct helper from {@see openSession} rather than an extension of it because the
+ * two want opposite things from the datasource. `openSession()` exists to get a session past
+ * its opening fetch and hand back the doubles; this one exists to freeze a confirmation
+ * mid-flight — `emitSelect()` starts it and NOTHING settles until the test calls
+ * `resolveSelect()`/`rejectSelect()`, which is the only way to assert on the in-flight state
+ * (the busy lock, the request payload) at all. It is deliberately SYNCHRONOUS: the opening
+ * `init()`/fetch chain is irrelevant to a confirmation, and awaiting it here would mean every
+ * test in the block awaiting a promise it does not care about.
+ *
+ * `overrides.selection` and `overrides.i18n` are MERGED onto the production-shaped defaults
+ * rather than replacing them (a test naming one i18n key must not blank out the other thirty);
+ * everything else passes straight through to {@see configWith}.
+ *
+ * @param {Object} [overrides]
+ */
+function openPicker( overrides ) {
+	const opts = Object.assign( {}, overrides );
+	const selection = Object.assign( { close: false, refreshCheckout: false }, opts.selection );
+	const i18n = phpI18n( opts.i18n );
+
+	delete opts.selection;
+	delete opts.i18n;
+
+	/** @type {Array<{resolve: Function, reject: Function}>} one entry per in-flight confirmation. */
+	const inFlight = [];
+	const selectPoint = jest.fn( function() {
+		return new Promise( ( resolve, reject ) => {
+			inFlight.push( { resolve, reject } );
+		} );
+	} );
+
+	const factory = fakeDataSourceFactory( () => Promise.resolve( [] ) );
+	factory.selectPoint = selectPoint;
+	window.WoodevPickupDataSource = factory;
+
+	// A jQuery double, because `update_checkout` is a jQuery custom event and unreachable
+	// without one (see pickup-mount.js's own docblock on the identical asymmetry for
+	// `updated_checkout`). `one()` is recorded rather than executed so a test can prove the
+	// busy state is HELD until the refresh settles, not released immediately.
+	const jq = { triggered: [], one: [] };
+	window.jQuery = () => ( {
+		one: ( type, handler ) => jq.one.push( { type, handler } ),
+		trigger: ( type ) => jq.triggered.push( type ),
+	} );
+
+	makeStore();
+
+	// Address replacement is another task's subject, and every field it writes that no §8
+	// store owns logs a `console.warn` the WP jest preset turns into a failure — an
+	// acknowledgement in twelve tests that are not about it would be pure noise.
+	const config = configWith( Object.assign(
+		{ selection, i18n, replaceAddress: { enabled: false, billingOnly: true } },
+		opts
+	) );
+
+	setConfig( config );
+	mountAll();
+	clickTrigger();
+
+	const session = getSession( config.fieldId );
+	const provider = StubProvider.instances[ StubProvider.instances.length - 1 ];
+	// null under `ownsChrome` — the framework builds no chrome of its own for an embedded
+	// provider, so there is no card to lock and the provider reports its own selections.
+	const panels = StubPanels.instances.length ? StubPanels.instances[ StubPanels.instances.length - 1 ] : null;
+
+	// Spied on the INSTANCE (the real `WoodevModal` still runs — `close()` must really close,
+	// or the vetoed/not-vetoed distinction the mount branches on would be fiction).
+	jest.spyOn( session.modal, 'close' );
+
+	return {
+		config,
+		panels,
+		modal: session.modal,
+		jq,
+		dataSource: { selectPoint },
+		field: document.getElementById( config.fieldId ),
+
+		/**
+		 * Reports a selection the way the card's CTA does — or, with no card of ours in play
+		 * (`ownsChrome`), the way the embedded provider reports its own. Both funnel into the
+		 * same `handleSelection()`.
+		 *
+		 * @param {Object} pointOverrides merged onto the standard {@see point} fixture.
+		 */
+		emitSelect( pointOverrides ) {
+			( panels || provider ).emit( 'select', point( pointOverrides ) );
+		},
+
+		/**
+		 * Answers the OLDEST in-flight confirmation with a server verdict, then drains the
+		 * microtask queue so the mount has fully applied it by the time the caller asserts.
+		 *
+		 * @param {Object} result the select route's response body.
+		 */
+		async resolveSelect( result ) {
+			inFlight.shift().resolve( result );
+
+			await flushAsync();
+		},
+
+		/**
+		 * Fails the OLDEST in-flight confirmation the way the datasource reports a transport
+		 * failure — the `{ status, code, message }` shape, never an `Error`.
+		 *
+		 * @param {Object} reason
+		 */
+		async rejectSelect( reason ) {
+			inFlight.shift().reject( reason );
+
+			await flushAsync();
+		},
+
+		/**
+		 * Moves the card onto a DIFFERENT point while a confirmation is in flight — a marker
+		 * click on the map, which the card lock cannot intercept (it locks the card, not the
+		 * map). Drives the real `cardOpened` event the panels emit from `openCard()`.
+		 *
+		 * @param {string} pointId
+		 */
+		setActivePoint( pointId ) {
+			panels.emit( 'cardOpened', {
+				group: { key: 'g-' + pointId, points: [ point( { id: pointId } ) ] },
+				pointId,
+				origin: 'marker',
+			} );
+		},
+	};
+}
+
 beforeEach( () => {
 	StubProvider.instances = [];
 	StubPanels.instances = [];
@@ -721,13 +910,13 @@ test( 'a re-mount with an already-selected field value shows i18n.triggerChange 
 		.toBe( 'Выбрать другой пункт выдачи' );
 } );
 
-test( 'the trigger switches to i18n.triggerChange right after a NEW selection is applied', () => {
+test( 'the trigger switches to i18n.triggerChange right after a NEW selection is applied', async () => {
 	makeStore();
 	setConfig( makeConfig( { replaceAddress: { enabled: false, billingOnly: true } } ) );
 	mountAll();
 	clickTrigger();
 
-	StubProvider.instances[ 0 ].emit( 'select', point( { id: 'PVZ-9' } ) );
+	await selectAndConfirm( StubProvider.instances[ 0 ], point( { id: 'PVZ-9' } ) );
 
 	expect( document.querySelector( '.woodev-pickup-trigger' ).textContent )
 		.toBe( 'Выбрать другой пункт выдачи' );
@@ -1014,7 +1203,7 @@ test( 'an unresolvable provider id shows the generic error without throwing', ()
 // select → write THROUGH the field's OWN owning store, fire change, close with reason 'select'
 // -------------------------------------------------------------------------
 
-test( 'select writes the point id through the store (not the DOM directly) and fires change on the field', () => {
+test( 'select writes the point id through the store (not the DOM directly) and fires change on the field', async () => {
 	const store = makeStore();
 	setConfig( makeConfig( { replaceAddress: { enabled: false, billingOnly: true } } ) );
 	mountAll();
@@ -1024,7 +1213,7 @@ test( 'select writes the point id through the store (not the DOM directly) and f
 	const changeSpy = jest.fn();
 	field.addEventListener( 'change', changeSpy );
 
-	StubProvider.instances[ 0 ].emit( 'select', point( { id: 'PVZ-42' } ) );
+	await selectAndConfirm( StubProvider.instances[ 0 ], point( { id: 'PVZ-42' } ) );
 
 	expect( store.getValue( FIELD_ID ) ).toBe( 'PVZ-42' );
 	expect( changeSpy ).toHaveBeenCalledTimes( 1 );
@@ -1033,9 +1222,12 @@ test( 'select writes the point id through the store (not the DOM directly) and f
 	expect( changeSpy.mock.calls[ 0 ][ 0 ].bubbles ).toBe( true );
 } );
 
-test( 'select fires woodev_pickup_point_selected and closes the shell with reason "select"', () => {
+test( 'select fires woodev_pickup_point_selected and closes the shell with reason "select"', async () => {
 	makeStore();
-	setConfig( makeConfig() );
+	// `selection.close: true` is stated, not assumed: the framework's own default is `false`
+	// (the customer stays in the map and gets a «Продолжить оформление» CTA — Task 11/D-3), so
+	// a test about the CLOSING path has to be the plugin that configured closing.
+	setConfig( makeConfig( { selection: { close: true, refreshCheckout: false } } ) );
 	mountAll();
 	clickTrigger();
 
@@ -1044,7 +1236,7 @@ test( 'select fires woodev_pickup_point_selected and closes the shell with reaso
 	document.body.addEventListener( 'woodev_pickup_point_selected', ( e ) => selected.push( e.detail ) );
 	document.body.addEventListener( 'woodev_modal_closed', ( e ) => closed.push( e.detail ) );
 
-	StubProvider.instances[ 0 ].emit( 'select', point( { id: 'PVZ-1' } ) );
+	await selectAndConfirm( StubProvider.instances[ 0 ], point( { id: 'PVZ-1' } ) );
 
 	expect( selected ).toHaveLength( 1 );
 	expect( selected[ 0 ].fieldId ).toBe( FIELD_ID );
@@ -1063,13 +1255,13 @@ test( 'select fires woodev_pickup_point_selected and closes the shell with reaso
 // written to the DOM, but NOT through a fabricated store no §8 consumer reads
 // -------------------------------------------------------------------------
 
-test( 'a field with no owning §8 store (billing_address_1) is written to the DOM but not through any store', () => {
+test( 'a field with no owning §8 store (billing_address_1) is written to the DOM but not through any store', async () => {
 	const store = makeStore(); // manages carrier_pickup_point + billing_city only
 	setConfig( makeConfig( { replaceAddress: { enabled: true, billingOnly: true } } ) );
 	mountAll();
 	clickTrigger();
 
-	StubProvider.instances[ 0 ].emit( 'select', point() );
+	await selectAndConfirm( StubProvider.instances[ 0 ], point() );
 
 	// The DOM is authoritative for the unmanaged field...
 	expect( document.getElementById( 'billing_address_1' ).value ).toBe( 'ул. Ленина, 1' );
@@ -1080,13 +1272,13 @@ test( 'a field with no owning §8 store (billing_address_1) is written to the DO
 	expect( console ).toHaveWarned();
 } );
 
-test( 'a field WITH an owning §8 store (billing_city) is written through that store', () => {
+test( 'a field WITH an owning §8 store (billing_city) is written through that store', async () => {
 	const store = makeStore();
 	setConfig( makeConfig( { replaceAddress: { enabled: true, billingOnly: true } } ) );
 	mountAll();
 	clickTrigger();
 
-	StubProvider.instances[ 0 ].emit( 'select', point() );
+	await selectAndConfirm( StubProvider.instances[ 0 ], point() );
 
 	expect( store.getValue( 'billing_city' ) ).toBe( 'Москва' );
 	expect( document.getElementById( 'billing_city' ).value ).toBe( 'Москва' );
@@ -1098,14 +1290,14 @@ test( 'a field WITH an owning §8 store (billing_city) is written through that s
 // Address replacement — target resolution + missing option
 // -------------------------------------------------------------------------
 
-test( 'address replacement writes to billing_* when billingOnly is true, regardless of the checkbox', () => {
+test( 'address replacement writes to billing_* when billingOnly is true, regardless of the checkbox', async () => {
 	makeStore();
 	setConfig( makeConfig( { replaceAddress: { enabled: true, billingOnly: true } } ) );
 	document.querySelector( '[name="ship_to_different_address"]' ).checked = true; // must be ignored
 	mountAll();
 	clickTrigger();
 
-	StubProvider.instances[ 0 ].emit( 'select', point() );
+	await selectAndConfirm( StubProvider.instances[ 0 ], point() );
 
 	expect( document.getElementById( 'billing_address_1' ).value ).toBe( 'ул. Ленина, 1' );
 	expect( document.getElementById( 'billing_city' ).value ).toBe( 'Москва' );
@@ -1115,28 +1307,28 @@ test( 'address replacement writes to billing_* when billingOnly is true, regardl
 	expect( console ).toHaveWarned(); // address_1/postcode are unmanaged — acknowledge.
 } );
 
-test( 'address replacement writes to billing_* when the "ship to a different address" checkbox is UNCHECKED', () => {
+test( 'address replacement writes to billing_* when the "ship to a different address" checkbox is UNCHECKED', async () => {
 	makeStore();
 	setConfig( makeConfig( { replaceAddress: { enabled: true, billingOnly: false } } ) );
 	document.querySelector( '[name="ship_to_different_address"]' ).checked = false;
 	mountAll();
 	clickTrigger();
 
-	StubProvider.instances[ 0 ].emit( 'select', point() );
+	await selectAndConfirm( StubProvider.instances[ 0 ], point() );
 
 	expect( document.getElementById( 'billing_city' ).value ).toBe( 'Москва' );
 	expect( document.getElementById( 'shipping_city' ).value ).toBe( '' );
 	expect( console ).toHaveWarned(); // address_1/postcode are unmanaged — acknowledge.
 } );
 
-test( 'address replacement writes to shipping_* when the "ship to a different address" checkbox IS checked', () => {
+test( 'address replacement writes to shipping_* when the "ship to a different address" checkbox IS checked', async () => {
 	makeStore();
 	setConfig( makeConfig( { replaceAddress: { enabled: true, billingOnly: false } } ) );
 	document.querySelector( '[name="ship_to_different_address"]' ).checked = true;
 	mountAll();
 	clickTrigger();
 
-	StubProvider.instances[ 0 ].emit( 'select', point() );
+	await selectAndConfirm( StubProvider.instances[ 0 ], point() );
 
 	expect( document.getElementById( 'shipping_address_1' ).value ).toBe( 'ул. Ленина, 1' );
 	expect( document.getElementById( 'shipping_city' ).value ).toBe( 'Москва' );
@@ -1146,7 +1338,7 @@ test( 'address replacement writes to shipping_* when the "ship to a different ad
 	expect( console ).toHaveWarned(); // shipping_* fields are unmanaged — acknowledge.
 } );
 
-test( 'a city with no matching <option> gets one added before the value is set', () => {
+test( 'a city with no matching <option> gets one added before the value is set', async () => {
 	const store = makeStore();
 	setConfig( makeConfig( { replaceAddress: { enabled: true, billingOnly: true } } ) );
 	mountAll();
@@ -1155,7 +1347,7 @@ test( 'a city with no matching <option> gets one added before the value is set',
 	const citySelect = document.getElementById( 'billing_city' );
 	expect( Array.prototype.slice.call( citySelect.options ).some( ( o ) => o.value === 'Казань' ) ).toBe( false );
 
-	StubProvider.instances[ 0 ].emit( 'select', point( { locality: 'Казань' } ) );
+	await selectAndConfirm( StubProvider.instances[ 0 ], point( { locality: 'Казань' } ) );
 
 	expect( Array.prototype.slice.call( citySelect.options ).some( ( o ) => o.value === 'Казань' ) ).toBe( true );
 	expect( citySelect.value ).toBe( 'Казань' );
@@ -1163,13 +1355,13 @@ test( 'a city with no matching <option> gets one added before the value is set',
 	expect( console ).toHaveWarned(); // address_1/postcode are unmanaged — acknowledge.
 } );
 
-test( 'replaceAddress.enabled: false writes no address field at all', () => {
+test( 'replaceAddress.enabled: false writes no address field at all', async () => {
 	const store = makeStore();
 	setConfig( makeConfig( { replaceAddress: { enabled: false, billingOnly: true } } ) );
 	mountAll();
 	clickTrigger();
 
-	StubProvider.instances[ 0 ].emit( 'select', point() );
+	await selectAndConfirm( StubProvider.instances[ 0 ], point() );
 
 	expect( document.getElementById( 'billing_address_1' ).value ).toBe( '' );
 	expect( document.getElementById( 'billing_city' ).value ).toBe( '' );
@@ -1183,7 +1375,7 @@ test( 'replaceAddress.enabled: false writes no address field at all', () => {
 // when it is select2-enhanced (a tiny jQuery stub is needed for this one)
 // -------------------------------------------------------------------------
 
-test( 'a select2-enhanced address field gets change.select2 fired through jQuery, mirroring §8', () => {
+test( 'a select2-enhanced address field gets change.select2 fired through jQuery, mirroring §8', async () => {
 	makeStore();
 	setConfig( makeConfig( { replaceAddress: { enabled: true, billingOnly: true } } ) );
 
@@ -1205,13 +1397,13 @@ test( 'a select2-enhanced address field gets change.select2 fired through jQuery
 	mountAll();
 	clickTrigger();
 
-	StubProvider.instances[ 0 ].emit( 'select', point() );
+	await selectAndConfirm( StubProvider.instances[ 0 ], point() );
 
 	expect( namespacedCalls ).toContain( 'change.select2' );
 	expect( console ).toHaveWarned(); // address_1/postcode are unmanaged — acknowledge.
 } );
 
-test( 'a plain (non-select2) address field does NOT get change.select2', () => {
+test( 'a plain (non-select2) address field does NOT get change.select2', async () => {
 	makeStore();
 	setConfig( makeConfig( { replaceAddress: { enabled: true, billingOnly: true } } ) );
 
@@ -1223,7 +1415,7 @@ test( 'a plain (non-select2) address field does NOT get change.select2', () => {
 	mountAll();
 	clickTrigger();
 
-	StubProvider.instances[ 0 ].emit( 'select', point() );
+	await selectAndConfirm( StubProvider.instances[ 0 ], point() );
 
 	expect( calls.length ).toBe( 0 );
 	expect( console ).toHaveWarned(); // address_1/postcode are unmanaged — acknowledge.
@@ -1630,17 +1822,23 @@ test( 'every woodev_pickup_* event bubbles (jQuery delegation relies on it, see 
 	// Listening on `document` — the PARENT of `document.body`, where these events are
 	// actually dispatched — only sees them if `bubbles: true` was set; a non-bubbling event
 	// dispatched on `document.body` would never reach here.
-	[ 'woodev_pickup_map_ready', 'woodev_pickup_points_loaded', 'woodev_pickup_point_selected', 'woodev_pickup_error' ]
+	[
+		'woodev_pickup_map_ready', 'woodev_pickup_points_loaded', 'woodev_pickup_point_selected', 'woodev_pickup_error',
+		// Task 11's two confirmation events are held to the same rule — see the constants'
+		// own comment in pickup-mount.js.
+		'woodev_pickup_point_select_requested', 'woodev_pickup_point_select_resolved',
+	]
 		.forEach( ( type ) => document.addEventListener( type, ( e ) => seenOnDocument.push( e.type ) ) );
 
 	const session = await openSession(
 		configWith( { strategy: 'bulk', replaceAddress: { enabled: false, billingOnly: true } } )
 	);
 	session.provider.emit( 'error', { code: 'x', message: 'y' } );
-	session.panels.emit( 'select', point( { id: 'p1' } ) );
+	await selectAndConfirm( session.panels, point( { id: 'p1' } ) );
 
 	expect( seenOnDocument ).toEqual( expect.arrayContaining( [
 		'woodev_pickup_map_ready', 'woodev_pickup_points_loaded', 'woodev_pickup_error', 'woodev_pickup_point_selected',
+		'woodev_pickup_point_select_requested', 'woodev_pickup_point_select_resolved',
 	] ) );
 } );
 
@@ -1670,8 +1868,9 @@ test( 'fires woodev_pickup_point_selected (fieldId + point) and closes with reas
 	document.body.addEventListener( 'woodev_modal_closed', ( e ) => closed.push( e.detail ) );
 
 	const selectedPoint = point( { id: 'p1' } );
-	const session = await openSession( configWith() );
-	session.panels.emit( 'select', selectedPoint );
+	// Explicitly the closing plugin — the framework's own default is to stay open (D-3).
+	const session = await openSession( configWith( { selection: { close: true, refreshCheckout: false } } ) );
+	await selectAndConfirm( session.panels, selectedPoint );
 
 	// Exact equality — pins fieldId AND the point object, not just one of the two.
 	expect( selected[ 0 ] ).toEqual( { fieldId: FIELD_ID, point: selectedPoint } );
@@ -1744,10 +1943,13 @@ test( 'refresh() is safe to call twice in a row', async () => {
 } );
 
 test( 'refresh() is safe to call after the session has been fully torn down', async () => {
-	const config = configWith();
+	const config = configWith( { selection: { close: true, refreshCheckout: false } } );
 	const session = await openSession( config );
 
-	session.provider.emit( 'select', point() ); // tears the session down via handleSelection
+	// Tears the session down via handleSelection — but only once the server has CONFIRMED the
+	// point and the configured `close` has taken effect (Task 11); a selection no longer closes
+	// anything on its own.
+	await selectAndConfirm( session.provider, point() );
 	// The default config's address replacement writes billing_address_1/postcode too, which
 	// no §8 store in this test manages — an expected, acknowledged warn (see C2 above).
 	expect( console ).toHaveWarned();
@@ -2634,5 +2836,186 @@ describe( 'loading stages (spec V-4)', () => {
 		document.body.removeEventListener( 'woodev_modal_closed', onClose );
 
 		expect( onClose ).toHaveBeenCalled();
+	} );
+} );
+
+// -------------------------------------------------------------------------
+// Task 11 — the selection is confirmed with the server BEFORE it is accepted
+// (spec §5, D-2/D-5/D-6/D-7/D-9/D-11)
+// -------------------------------------------------------------------------
+
+describe( 'selection confirmation', () => {
+	it( 'fires the requested event, locks the card and posts the point', async () => {
+		const { panels, dataSource, emitSelect } = openPicker( { selection: { close: false } } );
+		const seen = [];
+		document.body.addEventListener( 'woodev_pickup_point_select_requested', ( e ) => seen.push( e.detail ) );
+
+		emitSelect( { id: 'P1' } );
+
+		expect( panels.setSelectionBusy ).toHaveBeenCalledWith( true );
+		expect( seen[ 0 ].point.id ).toBe( 'P1' );
+		expect( dataSource.selectPoint ).toHaveBeenCalledWith(
+			expect.objectContaining( { pointId: 'P1' } )
+		);
+	} );
+
+	it( 'writes the field and shows continueCheckout when close is false', async () => {
+		const { emitSelect, resolveSelect, modal, field } = openPicker( { selection: { close: false } } );
+
+		emitSelect( { id: 'P1' } );
+		await resolveSelect( { allowed: true, reason: null, close: null, refresh_checkout: null } );
+
+		expect( field.value ).toBe( 'P1' );
+		expect( modal.close ).not.toHaveBeenCalled();
+	} );
+
+	it( 'closes immediately when the domain says so, overriding a false config default', async () => {
+		const { emitSelect, resolveSelect, modal } = openPicker( { selection: { close: false } } );
+
+		emitSelect( { id: 'P1' } );
+		await resolveSelect( { allowed: true, reason: null, close: true, refresh_checkout: null } );
+
+		expect( modal.close ).toHaveBeenCalledWith( 'select' );
+	} );
+
+	it( 'honours an explicit false over a true config default — ?? not ||', async () => {
+		const { emitSelect, resolveSelect, modal } = openPicker( { selection: { close: true } } );
+
+		emitSelect( { id: 'P1' } );
+		await resolveSelect( { allowed: true, reason: null, close: false, refresh_checkout: null } );
+
+		expect( modal.close ).not.toHaveBeenCalled();
+	} );
+
+	it( 'records a refusal on the point and does not write the field', async () => {
+		const { emitSelect, resolveSelect, panels, field } = openPicker( {} );
+
+		emitSelect( { id: 'P1' } );
+		await resolveSelect( { allowed: false, reason: 'Тяжело', close: null, refresh_checkout: null } );
+
+		expect( panels.setPointVerdict ).toHaveBeenCalledWith( 'P1', { allowed: false, reason: 'Тяжело' } );
+		expect( field.value ).toBe( '' );
+	} );
+
+	it( 'shows a transient error on a transport failure and keeps the point usable', async () => {
+		const { emitSelect, rejectSelect, panels } = openPicker( {
+			i18n: { selectFailed: 'Не удалось', stalePage: 'Устарела' },
+		} );
+
+		emitSelect( { id: 'P1' } );
+		await rejectSelect( { status: 500, code: 'woodev_pickup_upstream_error' } );
+
+		expect( panels.showSelectionError ).toHaveBeenCalledWith( 'Не удалось' );
+		expect( panels.setPointVerdict ).not.toHaveBeenCalled();
+	} );
+
+	it( 'names a stale page instead of the generic failure', async () => {
+		const { emitSelect, rejectSelect, panels } = openPicker( {
+			i18n: { selectFailed: 'Не удалось', stalePage: 'Устарела' },
+		} );
+
+		emitSelect( { id: 'P1' } );
+		await rejectSelect( { status: 403, code: 'rest_cookie_invalid_nonce' } );
+
+		expect( panels.showSelectionError ).toHaveBeenCalledWith( 'Устарела' );
+	} );
+
+	it( 'discards an answer for a point the card no longer shows', async () => {
+		const { emitSelect, resolveSelect, panels, field, setActivePoint } = openPicker( {} );
+
+		emitSelect( { id: 'P1' } );
+		setActivePoint( 'P2' );
+		await resolveSelect( { allowed: true, reason: null, close: null, refresh_checkout: null } );
+
+		expect( field.value ).toBe( '' );
+		expect( panels.setPointVerdict ).not.toHaveBeenCalled();
+	} );
+
+	it( 'always clears the busy state, on every outcome', async () => {
+		const { emitSelect, rejectSelect, panels } = openPicker( {} );
+
+		emitSelect( { id: 'P1' } );
+		await rejectSelect( { status: 500, code: 'woodev_pickup_upstream_error' } );
+
+		expect( panels.setSelectionBusy ).toHaveBeenLastCalledWith( false );
+	} );
+
+	it( 'triggers update_checkout only when asked', async () => {
+		const { emitSelect, resolveSelect, jq } = openPicker( { selection: { refreshCheckout: false } } );
+
+		emitSelect( { id: 'P1' } );
+		await resolveSelect( { allowed: true, reason: null, close: null, refresh_checkout: true } );
+
+		expect( jq.triggered ).toContain( 'update_checkout' );
+	} );
+
+	it( 'does not trigger update_checkout when nobody asked', async () => {
+		const { emitSelect, resolveSelect, jq } = openPicker( { selection: { refreshCheckout: false } } );
+
+		emitSelect( { id: 'P1' } );
+		await resolveSelect( { allowed: true, reason: null, close: null, refresh_checkout: null } );
+
+		expect( jq.triggered ).not.toContain( 'update_checkout' );
+	} );
+
+	it( 'a second click on continueCheckout closes without a second request', async () => {
+		const { emitSelect, resolveSelect, dataSource, modal } = openPicker( { selection: { close: false } } );
+
+		emitSelect( { id: 'P1' } );
+		await resolveSelect( { allowed: true, reason: null, close: null, refresh_checkout: null } );
+
+		emitSelect( { id: 'P1' } ); // the CTA now reads continueCheckout
+
+		expect( dataSource.selectPoint ).toHaveBeenCalledTimes( 1 );
+		expect( modal.close ).toHaveBeenCalledWith( 'select' );
+	} );
+
+	// The three below are additions to the plan's own twelve, covering what settles against
+	// something that is NOT an ordinary open card: a discarded answer (the busy release is the
+	// one thing that still has to happen), no card at all (`ownsChrome`), and a card whose
+	// whole session has been destroyed. None of the twelve reaches any of them, and the first
+	// is the plan's own ordering bug — it released the busy state only AFTER the staleness
+	// guard's early return, which leaves the card locked forever on a discarded answer.
+
+	it( 'releases the card even for an answer it then discards as stale', async () => {
+		const { emitSelect, resolveSelect, panels, setActivePoint } = openPicker( {} );
+
+		emitSelect( { id: 'P1' } );
+		setActivePoint( 'P2' );
+		await resolveSelect( { allowed: true, reason: null, close: null, refresh_checkout: null } );
+
+		// The third of `setSelectionBusy()`'s own documented settlement paths (see its docblock
+		// in pickup-panels.js): accepted, refused, AND discarded-as-stale. A card left locked
+		// here has a dead CTA reading «Проверяем…» over a request that already came back.
+		expect( panels.setSelectionBusy ).toHaveBeenLastCalledWith( false );
+	} );
+
+	it( 'confirms an embedded provider\'s selection with no card of ours to lock (ownsChrome)', async () => {
+		const { emitSelect, resolveSelect, dataSource, modal, field } = openPicker( {
+			ownsChrome: true,
+			selection: { close: true },
+		} );
+
+		emitSelect( { id: 'P1' } );
+		await resolveSelect( { allowed: true, reason: null, close: null, refresh_checkout: null } );
+
+		expect( dataSource.selectPoint ).toHaveBeenCalledWith( expect.objectContaining( { pointId: 'P1' } ) );
+		expect( field.value ).toBe( 'P1' );
+		expect( modal.close ).toHaveBeenCalledWith( 'select' );
+	} );
+
+	it( 'discards an answer whose whole session was torn down while it was in flight', async () => {
+		const { emitSelect, resolveSelect, field } = openPicker( {} );
+
+		emitSelect( { id: 'P1' } );
+
+		// A fresh click on the checkout trigger — the one path that destroys a live session
+		// outright (`mountOne()` closes whatever session the field currently has before opening
+		// another). The answer below is about a picker that no longer exists.
+		clickTrigger();
+
+		await resolveSelect( { allowed: true, reason: null, close: null, refresh_checkout: null } );
+
+		expect( field.value ).toBe( '' );
 	} );
 } );

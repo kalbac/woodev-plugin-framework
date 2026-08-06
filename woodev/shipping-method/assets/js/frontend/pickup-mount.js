@@ -158,7 +158,7 @@
  * it (D-3: the whole point of `ownsChrome` is that the framework renders
  * nothing of its own around a provider that already owns the full picker UI).
  *
- * THE FOUR `woodev_pickup_*` EVENTS are native, bubbling `CustomEvent`s fired
+ * THE SIX `woodev_pickup_*` EVENTS are native, bubbling `CustomEvent`s fired
  * on `document.body` — exactly like `woodev-modal.js`'s own `woodev_modal_*`
  * events (see that file's docblock for why `jQuery.trigger()` would be
  * invisible to a plain `addEventListener`, and this file's own docblock above
@@ -168,8 +168,12 @@
  * initialised) once a session's `init()` resolves, `woodev_pickup_points_loaded` after
  * EVERY successful fetch this file makes (the initial bulk load, every
  * viewport refetch, every type-filter refetch, every {@see refresh()} call —
- * never just the first), `woodev_pickup_point_selected` right before the modal
- * is asked to close, and `woodev_pickup_error` specifically for a PROVIDER-level
+ * never just the first), `woodev_pickup_point_select_requested` when a
+ * confirmation leaves for the server and `woodev_pickup_point_select_resolved`
+ * when its answer lands (see {@see handleSelection}/{@see finishSelection} —
+ * BOTH fire on a refusal and on a transport failure too, not only on the happy
+ * path), `woodev_pickup_point_selected` once an ACCEPTED point has actually
+ * been applied, and `woodev_pickup_error` specifically for a PROVIDER-level
  * `error` (map script failed to load, embed failed to load) — the kind that
  * breaks the whole map, not a transient dataSource fetch failure the existing
  * degrade-to-notice machinery already recovers from without needing to alarm
@@ -237,7 +241,7 @@
 	var MOUNT_DEFER_MS = 60;
 
 	/**
-	 * The four `document.body` `CustomEvent` names this file fires — see the file
+	 * The six `document.body` `CustomEvent` names this file fires — see the file
 	 * docblock's own section on them. Native, bubbling events, never a jQuery
 	 * `.trigger()` — see {@see fireDocumentEvent}.
 	 *
@@ -247,6 +251,23 @@
 	var EVENT_POINTS_LOADED = 'woodev_pickup_points_loaded';
 	var EVENT_POINT_SELECTED = 'woodev_pickup_point_selected';
 	var EVENT_ERROR = 'woodev_pickup_error';
+
+	/*
+	 * The two confirmation events (2026-08-06 spec D-2). OBSERVATIONAL: the framework neither
+	 * waits for a listener nor lets one veto — the veto path is `woodev_modal_before_close`,
+	 * which already exists. `_resolved` is what a plugin listens to in order to write the
+	 * chosen point's street/house/postcode into the checkout address fields when the merchant
+	 * enabled that (spec D-14) — the framework never does it and offers no switch for it.
+	 *
+	 * `_resolved` means "the server answered", NOT "the point was applied": it fires on all
+	 * three outcomes (accepted, refused, request failed), before this file has written
+	 * anything, and carries the outcome — `result` for a verdict, `error` for a transport
+	 * failure, exactly one of them non-null. A listener that only cares about an ACCEPTED
+	 * point, applied, wants `woodev_pickup_point_selected` instead, which still fires exactly
+	 * where it always did: after the field is written and before the modal is asked to close.
+	 */
+	var EVENT_SELECT_REQUESTED = 'woodev_pickup_point_select_requested';
+	var EVENT_SELECT_RESOLVED  = 'woodev_pickup_point_select_resolved';
 
 	/**
 	 * Identifies this modal on every `woodev_modal_*` event, so a consumer can filter the
@@ -366,6 +387,50 @@
 		var key = code ? ERROR_MESSAGE_KEYS[ code ] : null;
 
 		return ( key && text( config, key ) ) ? key : 'error';
+	}
+
+	/**
+	 * Reads a three-state flag: the domain's answer when it gave one, the plugin's configured
+	 * default when it did not.
+	 *
+	 * NEVER `||` — an explicit `false` from the domain is a DECISION ("do not close this one"),
+	 * and `||` would silently convert it into a `true` default, handing control straight back
+	 * to the setting the domain had just overridden. Only `null`/`undefined` mean "the domain
+	 * said nothing"; the select route serialises an unspoken flag as JSON `null` and this
+	 * treats both spellings identically, so the server never has to prune keys (spec D-5, §4.2
+	 * — the identical trap fixed in s40's fail-closed parity work).
+	 *
+	 * Written as an explicit null/undefined test rather than `??`: these files ship to a
+	 * shopper's browser VERBATIM (no bundler, no transpile — see the file docblock), and an
+	 * unsupported operator is a parse error that kills the whole script, not a degraded
+	 * behaviour. The semantics below are `??`'s, exactly.
+	 *
+	 * @param {*}       spoken   the response's own value: bool, null, or undefined.
+	 * @param {boolean} fallback the plugin's configured default.
+	 * @returns {boolean}
+	 */
+	function resolveFlag( spoken, fallback ) {
+		if ( undefined === spoken || null === spoken ) {
+			return true === fallback;
+		}
+
+		return true === spoken;
+	}
+
+	/**
+	 * The i18n key for a failed CONFIRMATION — the stale-page message when the failure was a
+	 * nonce one, the confirmation-specific failure otherwise.
+	 *
+	 * Deliberately not {@see errorMessageKey}: that one falls back to the generic `error`
+	 * string, which is written for a failed points FETCH ("не удалось загрузить пункты") and
+	 * would be actively misleading under a button the customer just pressed to confirm one.
+	 *
+	 * @param {Object}      config
+	 * @param {Object|null} reason `{ status, code, message }`.
+	 * @returns {string}
+	 */
+	function selectionErrorKey( config, reason ) {
+		return 'stalePage' === errorMessageKey( config, reason ) ? 'stalePage' : 'selectFailed';
 	}
 
 	/**
@@ -961,6 +1026,13 @@
 		 *  'viewport'` only) — what a type-filter change or {@see refresh} re-fetches against. */
 		var lastBbox = null;
 
+		/** @type {string|null} the point id a confirmation is currently in flight for — the
+		 *  staleness guard's whole state (spec D-9). Set when the request leaves, cleared when
+		 *  its answer is applied AND whenever the thing it was about stops being current (the
+		 *  card moving to another point; see the `cardOpened` listener). {@see finishSelection}
+		 *  applies an answer only while this still names the point that answer is about. */
+		var pendingSelectionId = null;
+
 		/** @type {boolean} Task 16 (spec V-4 stage 2/3): has THIS start() cycle's busy overlay
 		 *  already been cleared? Reset at the top of every {@see start} call (initial open AND
 		 *  every retry — each re-runs the FULL "map drawn → points in flight → points in" sequence —
@@ -1168,27 +1240,199 @@
 		}
 
 		/**
-		 * Applies a selection regardless of WHICH side reported it (the panels' card CTA under
-		 * `!ownsChrome`, or the provider's own `select` under `ownsChrome` — an embed reports
-		 * its own selection directly, see `map-provider-embedded.js`): writes the field
-		 * (§8/DOM), re-syncs the trigger button's label, fires `woodev_pickup_point_selected`,
-		 * then closes the modal with reason `'select'` — the fourth close reason the modal
-		 * already supports (D-14) — and only tears the session down when the close actually
-		 * took (a `before_close` listener COULD veto it; `closeSession` must not run against a
-		 * modal that is still open).
+		 * Confirms a selection with the server, then applies whatever the domain decided
+		 * ({@see finishSelection}). Entered regardless of WHICH side reported the selection:
+		 * the panels' card CTA under `!ownsChrome`, or the provider's own `select` under
+		 * `ownsChrome` — an embed reports its own selection directly, see
+		 * `map-provider-embedded.js`.
+		 *
+		 * NOTHING IS APPLIED BEFORE THE SERVER ANSWERS (2026-08-06 spec, D-1): the field, the
+		 * trigger label, `woodev_pickup_point_selected` and the close all wait for the round
+		 * trip, because the domain may refuse this point for this cart — and a field written
+		 * first and retracted afterwards is worse than one written a beat later.
+		 *
+		 * Under `ownsChrome` (an embedded provider reports its own selection and there is no
+		 * card of ours to lock or re-render) the round trip still happens, but every panels
+		 * call below is skipped — see the guards.
 		 *
 		 * @param {Object} point
 		 * @returns {void}
 		 */
 		function handleSelection( point ) {
-			applySelection( config, point );
+			var pointId = String( point && point.id );
+
+			/*
+			 * Already confirmed: this is the «Продолжить оформление» click, not a new choice.
+			 * Nothing is asked again — the point is accepted, the field already holds it, and
+			 * the only thing left is to close (spec D-11). The same is true of a REOPENED
+			 * picker showing the previously chosen point, whose CTA reads that way from the
+			 * first render.
+			 */
+			if ( fieldValue( config.fieldId ) === pointId ) {
+				if ( modal.close( 'select' ) ) {
+					closeSession( config.fieldId );
+				}
+
+				return;
+			}
+
+			fireDocumentEvent( EVENT_SELECT_REQUESTED, { fieldId: config.fieldId, point: point } );
+
+			if ( panels ) {
+				panels.setSelectionBusy( true );
+			}
+
+			pendingSelectionId = pointId;
+
+			realDataSource.selectPoint( {
+				pointId: pointId,
+				fieldId: config.fieldId,
+			} ).then(
+				function( result ) {
+					finishSelection( point, result, null );
+				},
+				function( reason ) {
+					finishSelection( point, null, reason );
+				}
+			);
+		}
+
+		/**
+		 * Applies one settled confirmation — success or failure, both land here so the busy
+		 * state is released in exactly one place.
+		 *
+		 * THE STALENESS GUARD. An answer is applied only while it is still about something
+		 * current: this session is alive, and the card still shows the point the request was
+		 * sent for. Locking the card stops a customer from starting a SECOND confirmation, but
+		 * it cannot stop the paths that are not clicks inside it — the map underneath stays
+		 * live (a marker click swaps the card to another point through `pointClick` →
+		 * `openCard()`), and a fresh click on the checkout trigger tears this whole session
+		 * down and opens another. An answer that outlives what it was about is discarded, never
+		 * applied to whatever happens to be on screen now (spec D-9/D-10: the request is not
+		 * aborted — the server may already have written the point into the WC session, and
+		 * aborting would stop us listening without undoing any of that).
+		 *
+		 * The busy release is deliberately OUTSIDE that guard: it is the caller's obligation on
+		 * all three settlement paths — accepted, refused, and discarded-as-stale (see
+		 * `Panels.prototype.setSelectionBusy`'s own docblock). Releasing it only on the two
+		 * applied paths would leave a card that took a stale answer locked for the rest of the
+		 * session, with a dead CTA reading «Проверяем…» over a request that already came back.
+		 *
+		 * @param {Object}      point
+		 * @param {Object|null} result the server's verdict, or null when the request failed.
+		 * @param {Object|null} reason the transport failure, or null on success.
+		 * @returns {void}
+		 */
+		function finishSelection( point, result, reason ) {
+			var pointId = String( point && point.id );
+			var current = ! destroyed && pendingSelectionId === pointId;
+
+			if ( pendingSelectionId === pointId ) {
+				pendingSelectionId = null;
+			}
+
+			// Not under `current`: see the docblock. Skipped only when there is no card to
+			// release — no panels at all (`ownsChrome`), or a session already torn down, whose
+			// panels have been destroyed along with their DOM.
+			if ( panels && ! destroyed ) {
+				panels.setSelectionBusy( false );
+			}
+
+			if ( ! current ) {
+				return;
+			}
+
+			fireDocumentEvent( EVENT_SELECT_RESOLVED, {
+				fieldId: config.fieldId,
+				point: point,
+				result: result,
+				error: reason,
+			} );
+
+			if ( ! result ) {
+				// Transport failure: nothing about the point was refused, so nothing is
+				// remembered and the CTA stays alive (spec D-6/D-7).
+				if ( panels ) {
+					panels.showSelectionError( text( config, selectionErrorKey( config, reason ) ) );
+				}
+
+				return;
+			}
+
+			if ( ! result.allowed ) {
+				if ( panels ) {
+					panels.setPointVerdict( pointId, {
+						allowed: false,
+						reason: 'string' === typeof result.reason ? result.reason : null,
+					} );
+				}
+
+				return;
+			}
+
+			// `result.point` is a CORRECTED point, not a flag — the domain learned something
+			// during confirmation that the listing did not know (a refined address, a fixed
+			// postcode). Absent means "keep the point you already have", never "clear it".
+			var accepted = result.point && 'object' === typeof result.point ? result.point : point;
+			var defaults = config.selection || {};
+
+			applySelection( config, accepted );
 			syncTriggerLabel( config );
 
-			fireDocumentEvent( EVENT_POINT_SELECTED, { fieldId: config.fieldId, point: point } );
-
-			if ( modal.close( 'select' ) ) {
-				closeSession( config.fieldId );
+			if ( panels ) {
+				panels.setSelectedId( pointId );
 			}
+
+			fireDocumentEvent( EVENT_POINT_SELECTED, { fieldId: config.fieldId, point: accepted } );
+
+			// Close BEFORE refresh (spec §5.2): the customer gets immediate feedback and the
+			// recalculation runs behind a closed modal. Only tear the session down when the
+			// close actually TOOK — a `woodev_modal_before_close` listener may veto it, and
+			// `closeSession` must not run against a modal that is still open.
+			var closed = false;
+
+			if ( resolveFlag( result.close, defaults.close ) ) {
+				closed = modal.close( 'select' );
+
+				if ( closed ) {
+					closeSession( config.fieldId );
+				}
+			}
+
+			if ( resolveFlag( result.refresh_checkout, defaults.refreshCheckout ) ) {
+				// `panels` only while the modal is still open. When we have just closed, they
+				// are already destroyed with the rest of the session — re-locking a card the
+				// customer cannot see, and waiting on an `updated_checkout` to unlock it again,
+				// would be work against a dead object for no visible effect.
+				refreshCheckout( closed ? null : panels );
+			}
+		}
+
+		/**
+		 * Fires WooCommerce's `update_checkout` and, when a card is still on screen, holds its
+		 * busy state until the ajax settles — otherwise «Продолжить оформление» is clickable in
+		 * the middle of a totals update (spec §5.2). A no-op without jQuery (WooCommerce's own
+		 * event is jQuery-only — see the file docblock's note on the identical asymmetry for
+		 * `updated_checkout`).
+		 *
+		 * @param {Object|null} openPanels the panels to hold busy, or null when nothing is on
+		 *                                 screen to hold.
+		 * @returns {void}
+		 */
+		function refreshCheckout( openPanels ) {
+			if ( ! window.jQuery ) {
+				return;
+			}
+
+			if ( openPanels ) {
+				openPanels.setSelectionBusy( true );
+
+				window.jQuery( document.body ).one( 'updated_checkout', function() {
+					openPanels.setSelectionBusy( false );
+				} );
+			}
+
+			window.jQuery( document.body ).trigger( 'update_checkout' );
 		}
 
 		if ( ! ownsChrome ) {
@@ -1212,6 +1456,16 @@
 			// caller below) is what lets this ONE listener still decide per-call instead of
 			// forking into several near-identical ones.
 			panels.on( 'cardOpened', function( payload ) {
+				// The staleness guard's other half (spec D-9). Locking the card stops a second
+				// confirmation from STARTING; it does not freeze the map underneath it, where a
+				// marker click still routes through `pointClick` → `openCard()` and swaps the
+				// card to a different point while the first one's answer is still in flight.
+				// From that moment the answer is about a point the card no longer shows, and
+				// dropping the pending id here is what makes {@see finishSelection} see that.
+				if ( null !== pendingSelectionId && String( payload.pointId ) !== pendingSelectionId ) {
+					pendingSelectionId = null;
+				}
+
 				if ( payload.group && provider && 'function' === typeof provider.focusGroup ) {
 					provider.focusGroup( payload.group.key, { zoom: 'marker' !== payload.origin } );
 				}
