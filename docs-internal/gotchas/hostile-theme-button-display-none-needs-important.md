@@ -73,6 +73,31 @@ theme), every LATER rule that touches that same property on the same elements �
 an unrelated purpose like a `[hidden]` toggle — must also be `!important`, or it silently loses to our
 own guard.
 
+## s54 addendum — the THIRD occurrence, and why it is now a rule and not an anecdote
+
+Session 54 (2026-08-07) hit it again, in a third place with a third purpose. #168's mobile work
+needed the sidebar toggle hidden while the point CARD is open:
+
+```css
+/* ❌ Reads correct, does nothing */
+.woodev-pickup-stage.is-open.is-card .woodev-pickup-list__toggle { display: none; }
+
+/* ✅ */
+.woodev-pickup-stage.is-open.is-card .woodev-pickup-list__toggle { display: none !important; }
+```
+
+Specificity here is (0,4,0) against the reset's (0,2,0), so every instinct says it wins. It does
+not: the reset carries `!important`, and nothing but `!important` beats `!important`, whatever the
+specificity. Measured on the rig — the toggle stayed at computed `flex` and
+`document.elementFromPoint()` over the card's CTA kept returning the toggle, which is exactly the
+defect the rule was written to fix.
+
+**What generalises after three hits:** the failure is invisible to review, because the CSS reads
+correct and the selector genuinely matches. Both times it was caught only by asking the browser
+what is actually on top (`getComputedStyle().display`, `document.elementFromPoint()`), never by
+reading the rule. In this file, treat `display` on any element inside `.woodev-pickup-stage` as an
+`!important`-only property, and verify by measurement rather than by re-reading the selector.
+
 ## Related
 
 - `docs-internal/specs/2026-08-03-sp5-pickup-map-visual-rework-design.md` — V-14

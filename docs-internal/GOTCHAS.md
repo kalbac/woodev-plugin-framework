@@ -1,5 +1,11 @@
 # Gotchas — Woodev Plugin Framework
 > **104 atomic gotchas in 23 namespaces** — update count when adding/removing.
+> Last updated: 2026-08-07 (session 54, #168 mobile pass: no new file, but
+> `hostile-theme-button-display-none-needs-important` gained its **s54 addendum** — the THIRD
+> occurrence of the same trap, this time on the sidebar toggle's card-state hide at specificity
+> (0,4,0) against a (0,2,0) reset. After three hits the lesson is promoted from anecdote to rule:
+> inside `.woodev-pickup-stage`, treat `display` as an `!important`-only property, and verify with
+> `getComputedStyle()`/`document.elementFromPoint()` rather than by re-reading the selector).
 > Last updated: 2026-08-07 (session 54, PR #177's missing CI: +1 file, existing namespace `[build/ci]` —
 > `empty-status-rollup-can-be-a-github-actions-outage` (an empty `statusCheckRollup` next to
 > `mergeStateStatus: CLEAN` is not automatically a repo misconfiguration — triggers, workflow diff vs
