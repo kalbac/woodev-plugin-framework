@@ -3186,6 +3186,13 @@ describe( 'restoring a previous selection', () => {
 		// point instead of skipping the call outright. Caught by this task's own deliberate
 		// regression check.
 		expect( provider.focusGroupCalls ).toHaveLength( 0 );
+		// D-15's "opens in its ordinary default view" means the LIST stays closed too, not
+		// only the camera — every `fetchAndSetPoints()` call site chains `.catch( () => {} )`,
+		// so a thrown exception inside `restoreSelection()` (e.g. a `!group` guard removed,
+		// then `group.key` accessed on `null`) is silently swallowed rather than failing loudly;
+		// `openListCalls` is the assertion that actually catches that shape of regression, since
+		// `openList()` would already have run before such a throw.
+		expect( panels.openListCalls ).toBeUndefined();
 		expect( panels.showMessageCalls ).toBeUndefined();
 		// A stale field is left alone here — spec D-15 hands the judgement to the
 		// checkout-processing backstop, not to this restore. `toBe()` takes exactly one
