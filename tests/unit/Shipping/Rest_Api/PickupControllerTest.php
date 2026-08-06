@@ -1038,6 +1038,81 @@ final class PickupControllerTest extends TestCase {
 		$this->assertArrayNotHasKey( 'method_id', $endpoint['args'] );
 	}
 
+	public function test_the_select_route_declares_both_ids_as_non_empty(): void {
+		// REGRESSION (Codex finding 5): `required => true, type => string` accepts `''`,
+		// which sailed through to fetch_details( '' ) — a carrier call for nothing.
+		$endpoint = $this->registered_routes(
+			$this->select_controller( $this->point() )
+		)['/shipping/pickup/test-plugin/select'][0];
+
+		$this->assertSame( 1, $endpoint['args']['point_id']['minLength'] );
+		$this->assertSame( 1, $endpoint['args']['field_id']['minLength'] );
+	}
+
+	/**
+	 * @dataProvider provide_empty_select_ids
+	 *
+	 * @param array<string, mixed> $params the select route's two params.
+	 */
+	public function test_an_empty_id_is_refused_before_the_carrier_is_called( array $params ): void {
+		// The schema's `minLength` is WordPress's own gate and only applies to a REST-dispatched
+		// request; this is the controller's own, which also catches a value that survives the
+		// schema but cleans down to nothing (a whitespace-only or control-character id).
+		$called = 0;
+
+		$controller = new Pickup_Controller_Probe(
+			'test-plugin',
+			new Pickup_Controller_Test_Source(
+				Point_Source::STRATEGY_BULK,
+				static fn( Point_Query $query ) => [],
+				function ( string $id ) use ( &$called ) {
+					++$called;
+					return $this->point();
+				}
+			),
+			static fn() => 0,
+			static fn() => 'bacs',
+			static fn() => 'carrier_pickup'
+		);
+
+		$result = $controller->handle_select_request( new WP_REST_Request( $params ) );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'woodev_pickup_invalid_selection', $result->get_error_code() );
+		$this->assertSame( 400, $result->get_error_data()['status'] );
+		$this->assertSame( 0, $called, 'the carrier must not be called for an empty id' );
+	}
+
+	/**
+	 * @return array<string, array{0: array<string, mixed>}>
+	 */
+	public function provide_empty_select_ids(): array {
+		return [
+			'empty point id'          => [ [ 'field_id' => 'pvz', 'point_id' => '' ] ],
+			'whitespace-only point id' => [ [ 'field_id' => 'pvz', 'point_id' => '   ' ] ],
+			'missing point id'        => [ [ 'field_id' => 'pvz' ] ],
+			'empty field id'          => [ [ 'field_id' => '', 'point_id' => 'P1' ] ],
+			'missing field id'        => [ [ 'point_id' => 'P1' ] ],
+			'both missing'            => [ [] ],
+		];
+	}
+
+	public function test_the_empty_id_guard_runs_after_the_rate_limit_check(): void {
+		// Ordering matters: a throttled caller must read 429, not 400, or the budget it just
+		// exhausted becomes invisible to it.
+		$probe  = new Pickup_Controller_Limited_Probe(
+			'test-plugin',
+			$this->details_source( $this->point() ),
+			static fn() => 0,
+			static fn() => 'bacs',
+			static fn() => 'carrier_pickup'
+		);
+		$result = $probe->handle_select_request( new WP_REST_Request( [] ) );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'woodev_pickup_rate_limited', $result->get_error_code() );
+	}
+
 	public function test_a_missing_nonce_header_is_refused(): void {
 		// wp_verify_nonce() is deliberately NOT stubbed: reaching it with no header at all
 		// would be a call to an undefined function, so this also pins the short-circuit.

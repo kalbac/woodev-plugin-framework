@@ -375,9 +375,23 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 						 */
 						'permission_callback' => [ $this, 'check_select_permission' ],
 						'args'                => [
+
+							/*
+							 * `minLength => 1` alongside `required => true`, on both ids: they say
+							 * different things and only the pair says what is meant. `required`
+							 * rejects an ABSENT param; it has nothing to say about a param that is
+							 * present and empty, so `point_id=` satisfied it and `''` reached
+							 * `fetch_details()` — a carrier round-trip for a point that cannot
+							 * exist, spent out of the merchant's quota. WordPress applies this
+							 * through the declared `validate_callback`, so it only guards a genuinely
+							 * REST-dispatched request; {@see self::handle_select_request()} carries
+							 * the same check for everything else, including a value that passes the
+							 * schema but cleans down to nothing.
+							 */
 							'field_id' => [
 								'type'              => 'string',
 								'required'          => true,
+								'minLength'         => 1,
 								'validate_callback' => 'rest_validate_request_arg',
 								'sanitize_callback' => 'sanitize_text_field',
 							],
@@ -399,6 +413,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 							'point_id' => [
 								'type'              => 'string',
 								'required'          => true,
+								'minLength'         => 1,
 								'validate_callback' => 'rest_validate_request_arg',
 							],
 						],
@@ -469,6 +484,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 		 * FAILURE section). Letting it propagate here instead would be a PHP fatal on the
 		 * one request the customer is actively waiting on.
 		 *
+		 * GUARD ORDER is load-bearing and the two guards below are not interchangeable: the
+		 * rate limit runs first (a throttled caller must read `429`, not a `400` about its
+		 * params), then the empty-id check, and only then the carrier. Every gate that can
+		 * reject a request cheaply sits in front of the one call in this flow that costs the
+		 * merchant money.
+		 *
 		 * @internal
 		 *
 		 * @since 2.0.2
@@ -498,6 +519,21 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 				(string) wc_clean( wp_unslash( $request->get_param( 'point_id' ) ) ),
 				self::MAX_PARAM_LENGTH
 			);
+
+			// SECOND, still before the point lookup: neither id may be empty. The route's own
+			// `minLength => 1` schema (see register_routes()) is WordPress's gate and only
+			// applies to a REST-dispatched request; this one also catches what the schema
+			// cannot — a value that is a non-empty string when validated but cleans down to
+			// nothing here (whitespace, control characters, a stripped tag). Either way the
+			// point is that `fetch_details( '' )` is a carrier round-trip for a point that
+			// cannot exist, paid for out of the merchant's quota.
+			if ( '' === $point_id || '' === $field_id ) {
+				return new \WP_Error(
+					'woodev_pickup_invalid_selection',
+					__( 'Пункт выдачи не указан.', 'woodev-plugin-framework' ),
+					[ 'status' => 400 ]
+				);
+			}
 
 			try {
 				$point = $this->source->fetch_details( $point_id );
