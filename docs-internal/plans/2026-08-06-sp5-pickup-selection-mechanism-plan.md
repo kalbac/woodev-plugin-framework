@@ -2160,7 +2160,11 @@ add_filter(
 		}
 
 		// A point that asks for a checkout refresh, so the ordering can be watched live.
-		if ( 'DEMO-POSTAMAT-1' === $id ) {
+		// s52: this named 'DEMO-POSTAMAT-1', which does not exist in the fixture; a
+		// substitution to the real FIX-BULK-POSTAMAT-1 then made the branch unreachable on
+		// the rig (that point is `accepts_cod: false` and COD is the rig's only gateway, so
+		// Constraint_Checker refused it and the CTA never fired). It has its own demo point.
+		if ( 'DEMO-PVZ-REFRESH' === $id ) {
 			$result['refresh_checkout'] = true;
 		}
 
@@ -2171,10 +2175,13 @@ add_filter(
 );
 ```
 
-- [ ] **Step 2: Add the two extra points to the fixture point source**
+- [ ] **Step 2: Add the three extra points to the fixture point source**
 
-Add `DEMO-PVZ-REFUSE` and `DEMO-PVZ-FAST` to the fixture's point list, both in Moscow, both
-with coordinates distinct from the existing points so they are individually clickable.
+Add `DEMO-PVZ-REFUSE`, `DEMO-PVZ-FAST` and `DEMO-PVZ-REFRESH` to the fixture's point list, all in
+Moscow, all with coordinates distinct from the existing points (past 4 decimal places — that is the
+grouping key) so they are individually clickable. All three must be `accepts_cod: true` PVZ points:
+the rig has exactly one enabled gateway (COD), so a demo point that does not take COD is refused by
+`Constraint_Checker` before the domain filter can demonstrate anything.
 
 - [ ] **Step 3: Run the integration suite**
 
@@ -2238,7 +2245,7 @@ Verify, by DOM measurement rather than by eye:
    two-step — proving `close` overrides the default.
 4. An ordinary point leaves the modal open and the CTA reads «Продолжить оформление»; a second
    click closes with **no second network request** (check the network panel).
-5. `FIX-BULK-POSTAMAT-1` fires `update_checkout` and the button stays busy until it settles; the §8
+5. `DEMO-PVZ-REFRESH` fires `update_checkout` and the button stays busy until it settles; the §8
    anchor is re-placed underneath the open modal and the picker still works afterwards.
 6. Reopening the map focuses the chosen point, its marker reads `data-state="active"`, the
    sidebar is open and the row carries `is-selected`.

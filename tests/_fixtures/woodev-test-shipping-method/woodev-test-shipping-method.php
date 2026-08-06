@@ -771,10 +771,14 @@ function woodev_test_shipping_method_plugin_init(): void {
 			}
 
 			// A point that asks for a checkout refresh, so the ordering can be watched live.
-			// Real id, not the plan's placeholder 'DEMO-POSTAMAT-1' — no such point exists in
-			// this fixture; FIX-BULK-POSTAMAT-1 ("Постамат «Ходынский бульвар»") is the
-			// closest existing POSTAMAT-type point.
-			if ( 'FIX-BULK-POSTAMAT-1' === $id ) {
+			// Its own demo point (id 'DEMO-PVZ-REFRESH'), like the two branches above, rather
+			// than the plan's placeholder 'DEMO-POSTAMAT-1' (no such point) or the substitute
+			// FIX-BULK-POSTAMAT-1 this branch first carried: that one is a POSTAMAT with
+			// `accepts_cod: false`, so on a rig whose only enabled gateway is COD,
+			// Constraint_Checker refused it before this filter could matter — dead CTA, no
+			// request, branch unreachable outside PHP unit tests (s52). See the demo points'
+			// own block in fixture-points.php.
+			if ( 'DEMO-PVZ-REFRESH' === $id ) {
 				$result['refresh_checkout'] = true;
 			}
 

@@ -347,17 +347,24 @@ $long_address_point = [
 ];
 
 // -----------------------------------------------------------------------------
-// SP-5 Task 13: two points wired to the fixture's
+// SP-5 Task 13: three points wired to the fixture's
 // `woodev_shipping_pickup_point_selection` filter (see the plugin init callback in
 // woodev-test-shipping-method.php) — DEMO-PVZ-REFUSE always refuses on confirmation
-// (the rig's remembered-refusal path) and DEMO-PVZ-FAST forces an immediate close,
+// (the rig's remembered-refusal path), DEMO-PVZ-FAST forces an immediate close,
 // overriding this fixture's own two-step default (close_on_select is left at the
 // Pickup_Handler constructor's own `false` — the fixture never passes that
-// argument). Coordinates are distinct from every point above at well past 4
-// decimal places so both are individually clickable on the rig map.
+// argument), and DEMO-PVZ-REFRESH asks for a checkout refresh. Coordinates are
+// distinct from every point above at well past 4 decimal places so all three are
+// individually clickable on the rig map.
 // `accepts_cod` is deliberately `true` and `max_weight` is deliberately `null` on
-// both: the demo behaviour comes from the domain filter overriding the verdict,
+// all three: the demo behaviour comes from the domain filter overriding the verdict,
 // not from Constraint_Checker independently refusing them for an unrelated reason.
+// That is not decoration — the refresh branch was originally attached to
+// FIX-BULK-POSTAMAT-1, whose own record carries `accepts_cod: false` /
+// `payment_methods: [ 'card' ]`; with COD the rig's only enabled gateway,
+// Constraint_Checker refused that point before the filter could matter, the CTA was
+// dead and the click handler self-guarded, so no request ever left the browser and
+// the branch was unreachable through genuine interaction (s52).
 // -----------------------------------------------------------------------------
 
 $domain_seam_points = [
@@ -390,6 +397,25 @@ $domain_seam_points = [
 		'locality'        => 'Москва',
 		'postal_code'     => '115093',
 		'phone'           => '+7 495 100-00-98',
+		'instruction'     => '',
+		'work_time'       => 'Пн-Вс 09:00-21:00',
+		'payment_methods' => [ 'card', 'cod' ],
+		'photos'          => [],
+		'type'            => [ 'code' => 'PVZ', 'label' => 'Пункт выдачи заказов' ],
+		'accepts_cod'     => true,
+		'max_weight'      => null,
+		'services'        => [],
+	],
+	[
+		'id'              => 'DEMO-PVZ-REFRESH',
+		'name'            => 'ПВЗ «Варшавское шоссе — обновление корзины»',
+		'lat'             => 55.7040,
+		'lng'             => 37.6210,
+		'address'         => 'Москва, Варшавское шоссе, д. 9',
+		'short_address'   => 'Варшавское шоссе, 9',
+		'locality'        => 'Москва',
+		'postal_code'     => '117105',
+		'phone'           => '+7 495 100-00-96',
 		'instruction'     => '',
 		'work_time'       => 'Пн-Вс 09:00-21:00',
 		'payment_methods' => [ 'card', 'cod' ],
