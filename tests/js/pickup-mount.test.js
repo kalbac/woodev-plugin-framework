@@ -2486,32 +2486,6 @@ test( 'searchSubmit leaves the list open when nothing was suggested — that is 
 	expect( session.panels.hideSearchResultsCalls ).toBe( 0 );
 } );
 
-test( 'searchSubmit on a query with no suggestions resolves nothing and releases the button', async () => {
-	const session = await openSession( configWith() );
-
-	withSuggest( session.provider, { points: [], addresses: [] } );
-
-	session.panels.emit( 'searchSubmit', { query: 'йцукен' } );
-	await flushAsync();
-
-	expect( session.provider.resolveAddressCalls ).toEqual( [] );
-	expect( session.panels.setSearchBusyCalls ).toEqual( [ true, false ] );
-} );
-
-test( 'searchSubmit releases the button once the address has been resolved', async () => {
-	const session = await openSession( configWith() );
-
-	withSuggest( session.provider, {
-		points: [],
-		addresses: [ { displayName: 'Тверская, 5', query: 'Москва, Тверская, 5' } ],
-	} );
-
-	session.panels.emit( 'searchSubmit', { query: 'Тверская 5' } );
-	await flushAsync();
-
-	expect( session.panels.setSearchBusyCalls ).toEqual( [ true, false ] );
-} );
-
 test( 'panels searchReset clears the provider\'s address state via clearAddress(), same as '
 	+ 'anchorCleared', async () => {
 	const session = await openSession( configWith() );
@@ -2523,34 +2497,54 @@ test( 'panels searchReset clears the provider\'s address state via clearAddress(
 
 // -------------------------------------------------------------------------
 // Work item 5/round 2 — the submit button's busy state: on while a real search is in flight,
-// released on whichever of the three outcomes actually answers (searchResults/searchCleared/
-// addressMatchedPoint), so it can never be left stuck disabled.
+// released on whichever of the three outcomes actually answers. Both the button and that flag are
+// gone (operator, 07.08.2026 — see pickup-panels.js's "NO SUBMIT BUTTON" note); what survives is
+// the reason they existed: a submit spends a geocode, so a second one must not start while the
+// first is still in flight. The mount owns that guard now, because the mount owns the round trip.
 // -------------------------------------------------------------------------
 
-test( 'searchSubmit marks the panels busy BEFORE the round trip starts (it takes real time)', async () => {
-	const session = await openSession( configWith() );
-
-	withSuggest( session.provider, {
-		points: [],
-		addresses: [ { displayName: 'Тверская, 5', query: 'Москва, Тверская, 5' } ],
-	} );
-
-	session.panels.emit( 'searchSubmit', { query: 'Тверская 5' } );
-
-	// Synchronously, before any await — the flag is up while the suggest/resolve pair is in flight.
-	expect( session.panels.setSearchBusyCalls ).toEqual( [ true ] );
-} );
-
-test( 'searchSubmit never marks busy on a provider that cannot suggest — a busy flag with no '
-	+ 'matching answer would strand the button forever', async () => {
+test( 'searchSubmit is a no-op on a provider that cannot suggest — nothing to resolve, and no '
+	+ 'state left raised behind it', async () => {
 	const session = await openSession( configWith() );
 
 	// The embedded provider owns its own chrome and offers no suggestAddresses() at all.
 	session.provider.suggestAddresses = undefined;
 
 	session.panels.emit( 'searchSubmit', { query: 'Тверская 5' } );
+	await flushAsync();
 
-	expect( session.panels.setSearchBusyCalls ).toBeUndefined();
+	expect( session.provider.resolveAddressCalls ).toEqual( [] );
+} );
+
+test( 'a second searchSubmit while the first is still in flight is ignored — one Enter, one '
+	+ 'geocode', async () => {
+	const session = await openSession( configWith() );
+	let release;
+
+	session.provider.suggestAddressesCalls = [];
+	session.provider.suggestAddresses = function( query ) {
+		session.provider.suggestAddressesCalls.push( query );
+
+		return new Promise( ( resolve ) => {
+			release = () => resolve( {
+				points: [],
+				addresses: [ { displayName: 'Тверская, 5', query: 'Москва, Тверская, 5' } ],
+			} );
+		} );
+	};
+
+	session.panels.emit( 'searchSubmit', { query: 'Тверская 5' } );
+	session.panels.emit( 'searchSubmit', { query: 'Тверская 5' } );
+
+	expect( session.provider.suggestAddressesCalls ).toEqual( [ 'Тверская 5' ] );
+
+	release();
+	await flushAsync();
+
+	// ...and the guard lifts once it settles, so the field is not dead afterwards.
+	session.panels.emit( 'searchSubmit', { query: 'Тверская 5' } );
+
+	expect( session.provider.suggestAddressesCalls ).toHaveLength( 2 );
 } );
 
 // -------------------------------------------------------------------------
@@ -2565,24 +2559,6 @@ test( 'provider searchCleared hides the search results box', async () => {
 	session.provider.emit( 'searchCleared', {} );
 
 	expect( session.panels.hideSearchResultsCalls ).toBe( 1 );
-} );
-
-// #179 moved the busy flag's ownership to the `searchSubmit` chain itself, which always lowers it
-// in its own tail — so the provider events no longer touch it. Reset does, because a customer who
-// cancels mid-flight should get the control back now, not when a round trip they abandoned ends.
-test( 'panels searchReset releases the busy state — an explicit cancel frees the button at once', async () => {
-	const session = await openSession( configWith() );
-
-	withSuggest( session.provider, {
-		points: [],
-		addresses: [ { displayName: 'Тверская, 5', query: 'Москва, Тверская, 5' } ],
-	} );
-
-	session.panels.emit( 'searchSubmit', { query: 'Тверская 5' } );
-	session.panels.emit( 'searchReset', {} );
-
-	// Synchronously, WITHOUT awaiting the in-flight chain — that is the whole point.
-	expect( session.panels.setSearchBusyCalls ).toEqual( [ true, false ] );
 } );
 
 // -------------------------------------------------------------------------

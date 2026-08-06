@@ -2063,6 +2063,8 @@
 				}
 			} );
 
+			var searchSubmitInFlight = false;
+
 			// `searchSubmit` (Enter/the magnifier) RESOLVES what the dropdown is already showing —
 			// it does not start a search of its own (#179). It used to call the SearchControl's
 			// `search()`, which ran `map-provider-yandex.js`'s bounded GEOCODE provider, while the
@@ -2086,13 +2088,14 @@
 			// provider owns its own chrome and offers neither, and raising a flag nothing will
 			// ever lower is exactly the bug this guard exists for.
 			panels.on( 'searchSubmit', function( payload ) {
-				if ( ! provider
+				if ( searchSubmitInFlight
+					|| ! provider
 					|| 'function' !== typeof provider.suggestAddresses
 					|| 'function' !== typeof provider.resolveAddress ) {
 					return;
 				}
 
-				panels.setSearchBusy( true );
+				searchSubmitInFlight = true;
 
 				provider.suggestAddresses( payload.query ).then( function( results ) {
 					if ( destroyed || ! panels ) {
@@ -2131,9 +2134,7 @@
 					// ambiguously.
 					return provider.resolveAddress( addresses[ 0 ].query || addresses[ 0 ].displayName );
 				} ).catch( function() {} ).then( function() {
-					if ( ! destroyed && panels ) {
-						panels.setSearchBusy( false );
-					}
+					searchSubmitInFlight = false;
 				} );
 			} );
 
@@ -2142,16 +2143,7 @@
 			// "your address" pin and the stale `searchResults`, both owned by `clearAddress()`
 			// (see map-provider-yandex.js's own docblock on why that file, not this one, owns it).
 			//
-			// Also drops the submit button's busy flag (#179). The flag is owned end-to-end by
-			// the `searchSubmit` chain above, which always lowers it in its own tail — but a
-			// customer who hits reset mid-flight has cancelled, and should get the control back
-			// now rather than when a round trip they no longer care about finishes. This is the
-			// only OTHER place that touches the flag, and it is a user action, not a provider
-			// event: the three provider listeners below used to lower it too, back when the
-			// SearchControl answered through them, and were removed with that path.
 			panels.on( 'searchReset', function() {
-				panels.setSearchBusy( false );
-
 				if ( provider && 'function' === typeof provider.clearAddress ) {
 					provider.clearAddress();
 				}

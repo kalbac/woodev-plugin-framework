@@ -129,20 +129,20 @@
  * {@see Panels.prototype.buildSearchLayout}'s own docblock for the outside-click listener, which
  * reuses the exact pattern {@see ensureFilterEl} already established for the filter menu.
  *
- * THE MAGNIFIER AND CLEAR GLYPHS (round 2, D1c) are inline `<svg>` authored in THIS file
- * ({@see SEARCH_ICON_SVG}/{@see CLEAR_ICON_SVG} — Lucide's `search`/`x` geometry, ISC-licensed,
- * redrawn, same convention `map-provider-yandex.js` set with `PIN_DEFAULT`/`PIN_ACTIVE`) — not the
- * CSS `content: '\1F50D'`/`'\2715'` emoji they replace, which the operator called "стиль аля
- * web 2000".
+ * THE CLEAR GLYPH (round 2, D1c) is an inline `<svg>` authored in THIS file
+ * ({@see CLEAR_ICON_SVG} — Lucide's `x` geometry, ISC-licensed, redrawn, same convention
+ * `map-provider-yandex.js` set with `PIN_DEFAULT`/`PIN_ACTIVE`) — not the CSS `content: '\2715'`
+ * emoji it replaces, which the operator called "стиль аля web 2000".
  *
- * THE SUBMIT BUTTON'S DISABLED STATE (round 2, D1d) is a small state machine, not a static
- * attribute — see {@see updateSubmitState}: inert while the query is shorter than
- * {@see SEARCH_MIN_CHARS}, inert again the instant a submit fires ("spent", until the customer
- * edits the query), and inert while the caller reports a search in flight
- * ({@see Panels.prototype.setSearchBusy}). `.is-ready` is kept in EXACT agreement with `disabled`
- * (present if and only if `disabled` is false) — before this state machine existed the button had
- * NO disabled logic at all and always looked equally clickable, which is the operator's own
- * complaint, verbatim: "сейчас пользователь вообще не понимает что нужно на иконку нажать".
+ * NO SUBMIT BUTTON (operator, 07.08.2026). The field used to carry a magnifier, kept sane by a
+ * three-reason disabled state machine. With live suggestions on screen its only job was "guess the
+ * best match for me", which is strictly weaker than picking the row you actually want — and it was
+ * never the only way in, because the magnifier and Enter were ONE path (the form's `submit`
+ * event). Removing the button removed a control, not a capability: Enter still resolves the top
+ * suggestion, and a phone keyboard's own "Перейти" key submits the form the same way. The
+ * `updateSubmitState`/`_searchSubmitSpent`/`setSearchBusy` machinery existed only to service the
+ * button and went with it; re-entry while a round trip is in flight is guarded by the mount, which
+ * is what owns that round trip.
  *
  * The results container itself (`this._searchResults`) is NOT built by `render()` any more — it is
  * one of the elements {@see Panels.prototype.buildSearchLayout} builds inside its own detached
@@ -300,26 +300,8 @@
 		'</svg>';
 
 	/**
-	 * Lucide's `search` glyph (ISC-licensed, redrawn as one inline `<svg>`) — the submit button's
-	 * icon (D1c), replacing the CSS `content: '\1F50D'` (🔍) glyph the operator called "стиль аля
-	 * web 2000" (see the file docblock's "THE MAGNIFIER AND CLEAR GLYPHS" note). `stroke`, not
-	 * `fill` — Lucide's native style, and legible at the DOM contract's fixed 20×20 render size the
-	 * way `map-provider-yandex.js`'s filled `PIN_DEFAULT` is not (that file's own docblock notes a
-	 * thin stroke disappears against map tiles at 45px; a UI button icon has no such background to
-	 * fight). `currentColor` inherits the button's own text colour, which is what flips when
-	 * `.is-ready` toggles ({@see updateSubmitState}) — no second place has to know the button's
-	 * enabled/disabled colours.
-	 *
-	 * @since 2.0.2
-	 * @type {string}
-	 */
-	var SEARCH_ICON_SVG = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" ' +
-		'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' +
-		'<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>';
-
-	/**
 	 * Lucide's `x` glyph (ISC-licensed, redrawn) — the reset button's icon (D1c), replacing the CSS
-	 * `content: '\2715'` (✕) glyph. Same register as {@see SEARCH_ICON_SVG}.
+	 * `content: '\2715'` (✕) glyph.
 	 *
 	 * @since 2.0.2
 	 * @type {string}
@@ -1636,14 +1618,6 @@
 		// this same reference.
 		this._searchOutsideClickHandler = null;
 
-		// Round 2 (D1d): the submit button's own disabled state machine — see
-		// {@see updateSubmitState}. `_searchSubmitEl` follows `_searchInput`'s own lifecycle (unset
-		// until `buildSearchLayout()` runs); `_searchSubmitSpent` and `_searchBusy` are independent
-		// booleans a fresh layout call resets/keeps respectively — see that method's own docblock.
-		this._searchSubmitEl = null;
-		this._searchSubmitSpent = false;
-		this._searchBusy = false;
-
 		// Task 16 (spec V-4 stage 2): whether the stage is currently blocked on the FIRST points
 		// fetch after the map was drawn — see {@see Panels.prototype.setBusy}. False until `render()`
 		// builds the overlay `setBusy()` toggles; a caller asking before `render()` gets the correct
@@ -2072,32 +2046,6 @@
 	};
 
 	/**
-	 * Recomputes the submit button's enabled state from its three independent, orthogonal reasons
-	 * to be inert (round 2, D1d — see the file docblock's "THE SUBMIT BUTTON'S DISABLED STATE"
-	 * note): the query is shorter than {@see SEARCH_MIN_CHARS}, a submit already fired for the
-	 * CURRENT query and is "spent" until the next `input` event, or the caller has marked a search
-	 * in flight via {@see Panels.prototype.setSearchBusy}. Reflects the result onto BOTH `disabled`
-	 * (the real guarantee — a disabled `<button type="submit">` cannot trigger a form submission at
-	 * all, native browser behaviour this file does not have to police itself) and `.is-ready`, kept
-	 * in EXACT agreement with it: `.is-ready` present if and only if `disabled` is false. A no-op
-	 * before `buildSearchLayout()` has built a submit button to update.
-	 *
-	 * @param {Panels} self
-	 * @returns {void}
-	 */
-	function updateSubmitState( self ) {
-		if ( ! self._searchSubmitEl ) {
-			return;
-		}
-
-		var value = self._searchInput ? self._searchInput.value.trim() : '';
-		var ready = value.length >= SEARCH_MIN_CHARS && ! self._searchSubmitSpent && ! self._searchBusy;
-
-		self._searchSubmitEl.disabled = ! ready;
-		self._searchSubmitEl.classList.toggle( 'is-ready', ready );
-	}
-
-	/**
 	 * Builds the DOM and handlers for the `SearchControl`'s custom layout (Task 11, spec V-6).
 	 *
 	 * Returns a DETACHED element rather than mounting it: the map provider hands it to ymaps
@@ -2138,9 +2086,8 @@
 	 * open/close that as a side effect either; the filter's own outside-click listener runs
 	 * independently against its own wrap.
 	 *
-	 * The submit button starts `disabled` and grows `.is-ready` the moment the query is long
-	 * enough — see {@see updateSubmitState}, called from every place this button's readiness can
-	 * change (typing, submitting, resetting, {@see Panels.prototype.setSearchBusy}).
+	 * There is no submit button — see the file docblock's "NO SUBMIT BUTTON" note. The form's own
+	 * `submit` event (Enter, or a phone keyboard's "Перейти") is the whole of that path.
 	 *
 	 * @since 2.0.2
 	 * @returns {HTMLElement|null} null when the plugin disabled search (`config.search === false`).
@@ -2175,19 +2122,12 @@
 		reset.setAttribute( 'aria-label', text( this._config, 'resetSearch' ) );
 		reset.innerHTML = CLEAR_ICON_SVG; // eslint-disable-line -- static, framework-authored markup, no user input.
 
-		var submit = document.createElement( 'button' );
-		submit.type = 'submit';
-		submit.className = 'woodev-pickup-search__submit';
-		submit.setAttribute( 'aria-label', text( this._config, 'search' ) );
-		submit.innerHTML = SEARCH_ICON_SVG; // eslint-disable-line -- static, framework-authored markup, no user input.
-
 		var results = document.createElement( 'div' );
 		results.className = 'woodev-pickup-search__results';
 		results.hidden = true;
 
 		form.appendChild( input );
 		form.appendChild( reset );
-		form.appendChild( submit );
 		search.appendChild( form );
 		search.appendChild( results );
 		wrap.appendChild( search );
@@ -2207,11 +2147,6 @@
 
 			if ( value.length ) {
 				self._emit( 'searchSubmit', { query: value } );
-
-				// "Spent" (D1d): the magnifier goes inert again the instant it does its job, until
-				// the customer changes the query — see {@see updateSubmitState}.
-				self._searchSubmitSpent = true;
-				updateSubmitState( self );
 			}
 		} );
 
@@ -2219,12 +2154,6 @@
 			var value = input.value.trim();
 
 			reset.hidden = 0 === value.length;
-
-			// A fresh keystroke un-spends the submit button regardless of the new value's own
-			// length — {@see updateSubmitState} still keeps it disabled below SEARCH_MIN_CHARS on
-			// its own separate reason; this only clears the OTHER reason (D1d).
-			self._searchSubmitSpent = false;
-			updateSubmitState( self );
 
 			window.clearTimeout( self._searchTimer );
 
@@ -2241,8 +2170,6 @@
 			window.clearTimeout( self._searchTimer );
 			input.value = '';
 			reset.hidden = true;
-			self._searchSubmitSpent = false;
-			updateSubmitState( self );
 			self.hideSearchResults();
 			self._emit( 'searchReset', {} );
 		} );
@@ -2273,11 +2200,6 @@
 		this._searchInput = input;
 		this._searchResults = results;
 		this._controlsEl = wrap;
-		this._searchSubmitEl = submit;
-		this._searchSubmitSpent = false;
-
-		updateSubmitState( this );
-
 		return wrap;
 	};
 
@@ -2454,30 +2376,6 @@
 
 		empty( this._searchResults );
 		this._searchResults.hidden = true;
-	};
-
-	/**
-	 * Marks the submit button as blocked on an in-flight search (round 2, D1d) — one of
-	 * {@see updateSubmitState}'s three independent reasons the button can be inert, alongside a
-	 * too-short query and "spent since the last submit". The caller (the mount, wiring the
-	 * geocoder's own request lifecycle — not this file, which has no network of its own) is
-	 * expected to call `setSearchBusy( true )` when a search starts and `setSearchBusy( false )`
-	 * once it settles either way; this method does not track WHY it was called or guard against an
-	 * unbalanced pair — the caller owns that discipline, same as {@see Panels.prototype.setBusy}'s
-	 * own docblock note on its `boolean` argument.
-	 *
-	 * A no-op on the button itself before `buildSearchLayout()` has built one, but the flag is
-	 * still recorded either way, so a `buildSearchLayout()` call that happens AFTER
-	 * `setSearchBusy( true )` still starts the new button in the correct blocked state.
-	 *
-	 * @since 2.0.2
-	 * @param {boolean} busy
-	 * @returns {void}
-	 */
-	Panels.prototype.setSearchBusy = function( busy ) {
-		this._searchBusy = !! busy;
-
-		updateSubmitState( this );
 	};
 
 	/**
@@ -2841,7 +2739,7 @@
 	 * domain accepts the point, the domain refuses it, and — per spec D-9's staleness guard — an
 	 * answer arrives for a point the card no longer shows and is discarded. This method does not
 	 * track WHY it was called or guard against an unbalanced pair — the caller owns that
-	 * discipline, same as {@see Panels.prototype.setSearchBusy}'s own docblock note. Leaving a
+	 * discipline, same as {@see Panels.prototype.setBusy}'s own docblock note. Leaving a
 	 * `true` unpaired locks every card this instance opens afterward, forever.
 	 *
 	 * A no-op on the class/re-render when called before `render()` — matching

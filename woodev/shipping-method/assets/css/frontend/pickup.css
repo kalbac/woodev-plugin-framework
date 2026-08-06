@@ -865,12 +865,13 @@
 	display: none;
 }
 
-/* Round-2 live review (D1c): both icons used to be CSS `content` emoji (magnifier / ✕) — the
-   "web 2000" look the operator called out. `pickup-panels.js` now draws each as a real inline
-   `<svg>` (Lucide's `search`/`x` geometry, `stroke="currentColor"`), so no `::before` glyph rule
-   exists here any more; the svg simply inherits `color` below like any other icon in this file. */
-.woodev-pickup-search__reset,
-.woodev-pickup-search__submit {
+/* Round-2 live review (D1c): the clear icon used to be a CSS `content` emoji (✕) — the
+   "web 2000" look the operator called out. `pickup-panels.js` now draws it as a real inline
+   `<svg>` (Lucide's `x` geometry, `stroke="currentColor"`), so no `::before` glyph rule exists
+   here any more; the svg simply inherits `color` below like any other icon in this file.
+   (The magnifier this rule used to share was removed with the submit button — operator,
+   07.08.2026; see `pickup-panels.js`'s "NO SUBMIT BUTTON" note.) */
+.woodev-pickup-search__reset {
 	display: inline-flex;
 	flex: 0 0 auto;
 	align-items: center;
@@ -892,8 +893,6 @@
    specificity — author rules always outrank user-agent ones regardless of `!important`. Measured
    on the rig with an empty search field: `.woodev-pickup-search__reset` had `hidden === true` but
    `getComputedStyle().display === 'flex'`, so the ✕ stayed visible with nothing to clear.
-   `.woodev-pickup-search__submit` never gets `hidden` toggled by `pickup-panels.js` (only
-   `disabled`/`.is-ready`), so it needs no guard of its own — only the reset does.
 
    `!important` IS REQUIRED HERE and is not a specificity shortcut. This is a `<button>`, so TWO
    author rules already claim its `display` with `!important` — `.woodev-pickup-stage :where(button)`
@@ -910,33 +909,8 @@
 	display: none !important;
 }
 
-.woodev-pickup-search__reset:hover,
-.woodev-pickup-search__submit:hover {
+.woodev-pickup-search__reset:hover {
 	background: #f6f7f7;
-}
-
-/* The submit button's new state machine (D1d): it starts `disabled` and stays that way until the
- * query clears `SEARCH_MIN_CHARS` — before this task it had NO disabled styling at all and
- * looked equally clickable in every state, which is exactly the operator's own complaint
- * ("сейчас пользователь вообще не понимает что нужно на иконку нажать"). `[disabled]` reads as
- * plainly inert (dimmed icon, no pointer, no hover feedback); `.is-ready` — kept by
- * `pickup-panels.js` in EXACT agreement with `disabled`, never both at once — fills the button
- * with the merchant's own accent colour so the ONE moment the click actually does something
- * (spends the merchant's geocoding quota, spec V-6) is the one moment it visibly invites a click.
- */
-.woodev-pickup-search__submit[disabled] {
-	color: rgba( 0, 0, 0, 0.26 );
-	cursor: not-allowed;
-	pointer-events: none; /* Suppresses the shared :hover rule above — a disabled control must never look interactive. */
-}
-
-.woodev-pickup-search__submit.is-ready {
-	color: var( --woodev-pickup-accent-contrast, #fff );
-	background: var( --woodev-pickup-accent, #06aedd );
-}
-
-.woodev-pickup-search__submit.is-ready:hover {
-	filter: brightness( 1.08 );
 }
 
 /* Same `[hidden]` exposure as the reset button above, one step removed: this element has no

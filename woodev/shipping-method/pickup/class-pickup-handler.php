@@ -674,9 +674,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 				),
 				// Consumed by the map provider scripts (Tasks 13/14), not by this handler or
 				// the modal shell — a missing key here renders BLANK in the provider's UI
-				// rather than throwing, so every one of these nine must stay exact: the
-				// provider reads them by name, never falls back to a hardcoded default.
-				'search'         => __( 'Поиск по адресу', 'woodev-plugin-framework' ),
+				// rather than throwing, so every one must stay exact: the provider reads them
+				// by name, never falls back to a hardcoded default.
 				'drawerTitle'    => __( 'Пункты выдачи в этой области', 'woodev-plugin-framework' ),
 				// The sidebar toggle's SECOND name (#168): it opens the drawer when closed
 				// (`drawerTitle` above) and collapses it back to the map when open. Also the
@@ -694,7 +693,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 				),
 				// Consumed by the panels (Tasks 12-15), not by this handler or the modal
 				// shell — same "renders blank, never a hardcoded fallback" contract as the
-				// nine keys above.
+				// keys above.
 				// Task 15 (spec V-12): the point card's "Адрес" section title. Distinct
 				// from `yourAddress` below, which labels the SEARCH field, not a card section.
 				'address'          => __( 'Адрес', 'woodev-plugin-framework' ),

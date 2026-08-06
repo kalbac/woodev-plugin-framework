@@ -1981,13 +1981,21 @@ describe( 'search layout (spec V-6)', () => {
 	// Extra coverage beyond the plan's own spec
 	// -------------------------------------------------------------------
 
-	it( 'labels the reset and submit buttons from i18n, not a hardcoded default', () => {
+	it( 'labels the reset button from i18n, not a hardcoded default', () => {
 		const el = build();
 
 		expect( el.querySelector( '.woodev-pickup-search__reset' ).getAttribute( 'aria-label' ) )
 			.toBe( config.i18n.resetSearch );
-		expect( el.querySelector( '.woodev-pickup-search__submit' ).getAttribute( 'aria-label' ) )
-			.toBe( config.i18n.search );
+	} );
+
+	// The magnifier was removed (operator, 07.08.2026) — Enter and a phone's "Перейти" key submit
+	// the form, which was always the same path the button used. A regression that brought the
+	// button back would also bring back the `search` i18n key it was the only consumer of.
+	it( 'has no submit button at all — the form itself is the whole submit path', () => {
+		const el = build();
+
+		expect( el.querySelector( '.woodev-pickup-search__submit' ) ).toBeNull();
+		expect( el.querySelector( 'button[type="submit"]' ) ).toBeNull();
 	} );
 
 	it( 'renders blank aria-labels, not a hardcoded Russian default, when the i18n keys are missing', () => {
@@ -1995,7 +2003,6 @@ describe( 'search layout (spec V-6)', () => {
 
 		expect( el.querySelector( '.woodev-pickup-search__input' ).getAttribute( 'placeholder' ) ).toBe( '' );
 		expect( el.querySelector( '.woodev-pickup-search__reset' ).getAttribute( 'aria-label' ) ).toBe( '' );
-		expect( el.querySelector( '.woodev-pickup-search__submit' ).getAttribute( 'aria-label' ) ).toBe( '' );
 	} );
 
 	it( 'never submits fewer than 1 non-whitespace character — a blank/whitespace-only query is refused', () => {
@@ -2036,20 +2043,6 @@ describe( 'search layout (spec V-6)', () => {
 	// called "стиль аля web 2000".
 	// -------------------------------------------------------------------
 
-	it( 'draws the submit button as an inline Lucide search glyph, not text or CSS content', () => {
-		const el = build();
-		const submit = el.querySelector( '.woodev-pickup-search__submit' );
-		const svg = submit.querySelector( 'svg' );
-
-		expect( svg ).not.toBeNull();
-		expect( svg.getAttribute( 'viewBox' ) ).toBe( '0 0 24 24' );
-		expect( svg.getAttribute( 'stroke' ) ).toBe( 'currentColor' );
-		expect( svg.getAttribute( 'stroke-width' ) ).toBe( '2' );
-		expect( svg.getAttribute( 'aria-hidden' ) ).toBe( 'true' );
-		expect( svg.getAttribute( 'focusable' ) ).toBe( 'false' );
-		expect( submit.textContent.trim() ).toBe( '' ); // no emoji/text glyph left over.
-	} );
-
 	it( 'draws the reset button as an inline Lucide x glyph, not text or CSS content', () => {
 		const el = build();
 		const reset = el.querySelector( '.woodev-pickup-search__reset' );
@@ -2065,82 +2058,6 @@ describe( 'search layout (spec V-6)', () => {
 	// Round 2 (D1d): the submit button's disabled state machine.
 	// -------------------------------------------------------------------
 
-	describe( 'submit button state machine (D1d)', () => {
-		it( 'starts disabled and not is-ready', () => {
-			const el = build();
-			const submit = el.querySelector( '.woodev-pickup-search__submit' );
-
-			expect( submit.disabled ).toBe( true );
-			expect( submit.classList.contains( 'is-ready' ) ).toBe( false );
-		} );
-
-		it( 'stays disabled below SEARCH_MIN_CHARS', () => {
-			const el = build();
-			const input = el.querySelector( '.woodev-pickup-search__input' );
-			const submit = el.querySelector( '.woodev-pickup-search__submit' );
-
-			input.value = 'Тв'; // 2 chars — SEARCH_MIN_CHARS is 3.
-			input.dispatchEvent( new Event( 'input' ) );
-
-			expect( submit.disabled ).toBe( true );
-			expect( submit.classList.contains( 'is-ready' ) ).toBe( false );
-		} );
-
-		it( 'becomes enabled and is-ready once the query reaches SEARCH_MIN_CHARS', () => {
-			const el = build();
-			const input = el.querySelector( '.woodev-pickup-search__input' );
-			const submit = el.querySelector( '.woodev-pickup-search__submit' );
-
-			input.value = 'Тве';
-			input.dispatchEvent( new Event( 'input' ) );
-
-			expect( submit.disabled ).toBe( false );
-			expect( submit.classList.contains( 'is-ready' ) ).toBe( true );
-		} );
-
-		it( 'goes disabled again immediately after a submit, until the next input change', () => {
-			const el = build();
-			const input = el.querySelector( '.woodev-pickup-search__input' );
-			const submit = el.querySelector( '.woodev-pickup-search__submit' );
-
-			input.value = 'Тверская';
-			input.dispatchEvent( new Event( 'input' ) );
-			expect( submit.disabled ).toBe( false );
-
-			el.querySelector( 'form' ).dispatchEvent( new Event( 'submit', { cancelable: true } ) );
-
-			expect( submit.disabled ).toBe( true );
-			expect( submit.classList.contains( 'is-ready' ) ).toBe( false );
-
-			// Still spent even though the query itself is still long enough — only a fresh
-			// `input` event clears the "spent" reason, not the passage of time.
-			input.dispatchEvent( new Event( 'input' ) );
-			expect( submit.disabled ).toBe( false );
-		} );
-
-		it( 'setSearchBusy( true ) disables the button even while the query is ready', () => {
-			const panels = new Panels( document.createElement( 'div' ), config );
-			const el = panels.buildSearchLayout();
-			const input = el.querySelector( '.woodev-pickup-search__input' );
-			const submit = el.querySelector( '.woodev-pickup-search__submit' );
-
-			input.value = 'Тверская';
-			input.dispatchEvent( new Event( 'input' ) );
-			expect( submit.disabled ).toBe( false );
-
-			panels.setSearchBusy( true );
-			expect( submit.disabled ).toBe( true );
-
-			panels.setSearchBusy( false );
-			expect( submit.disabled ).toBe( false );
-		} );
-
-		it( 'is a no-op before buildSearchLayout() has ever built a submit button', () => {
-			const panels = new Panels( document.createElement( 'div' ), config );
-
-			expect( () => panels.setSearchBusy( true ) ).not.toThrow();
-		} );
-	} );
 } );
 
 // -----------------------------------------------------------------------

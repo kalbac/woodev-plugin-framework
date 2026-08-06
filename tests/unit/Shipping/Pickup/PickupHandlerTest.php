@@ -1677,7 +1677,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 		 * here is a silent UI hole nothing else would catch. Assert every key is present
 		 * AND non-empty; the exact-set list also fails loudly the instant one is renamed.
 		 */
-		public function test_config_i18n_carries_all_nine_map_provider_keys_non_empty(): void {
+		public function test_config_i18n_carries_all_map_provider_keys_non_empty(): void {
 			Functions\when( 'apply_filters' )->returnArg( 2 );
 			Functions\when( 'rest_url' )->justReturn( 'https://example.test/wp-json/woodev/v1' );
 			Functions\when( 'wp_create_nonce' )->justReturn( 'NONCE' );
@@ -1696,7 +1696,6 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			// and non-empty, so a presence-only check cannot catch it. Pinning the exact
 			// string per key is what does.
 			$expected = [
-				'search'         => 'Поиск по адресу',
 				'drawerTitle'    => 'Пункты выдачи в этой области',
 				'howToGet'       => 'Как добраться',
 				'paymentMethods' => 'Способы оплаты',
@@ -1761,7 +1760,6 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				'upstreamError'    => 'Сервис пунктов выдачи временно недоступен. Попробуйте ещё раз позже.',
 				'rateLimited'      => 'Слишком много запросов. Подождите немного и попробуйте снова.',
 				'notFound'         => 'Этот пункт выдачи больше не найден. Пожалуйста, выберите другой.',
-				'search'           => 'Поиск по адресу',
 				'drawerTitle'      => 'Пункты выдачи в этой области',
 				// #168: the sidebar toggle's second name — `drawerTitle` names it while the
 				// drawer is closed, this one while it is open (and it is the visible text of
