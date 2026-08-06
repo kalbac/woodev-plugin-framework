@@ -346,10 +346,66 @@ $long_address_point = [
 	],
 ];
 
+// -----------------------------------------------------------------------------
+// SP-5 Task 13: two points wired to the fixture's
+// `woodev_shipping_pickup_point_selection` filter (see the plugin init callback in
+// woodev-test-shipping-method.php) — DEMO-PVZ-REFUSE always refuses on confirmation
+// (the rig's remembered-refusal path) and DEMO-PVZ-FAST forces an immediate close,
+// overriding this fixture's own two-step default (close_on_select is left at the
+// Pickup_Handler constructor's own `false` — the fixture never passes that
+// argument). Coordinates are distinct from every point above at well past 4
+// decimal places so both are individually clickable on the rig map.
+// `accepts_cod` is deliberately `true` and `max_weight` is deliberately `null` on
+// both: the demo behaviour comes from the domain filter overriding the verdict,
+// not from Constraint_Checker independently refusing them for an unrelated reason.
+// -----------------------------------------------------------------------------
+
+$domain_seam_points = [
+	[
+		'id'              => 'DEMO-PVZ-REFUSE',
+		'name'            => 'ПВЗ «Каланчёвская — временно не принимает заказы»',
+		'lat'             => 55.7150,
+		'lng'             => 37.6600,
+		'address'         => 'Москва, Каланчёвская улица, д. 11',
+		'short_address'   => 'Каланчёвская, 11',
+		'locality'        => 'Москва',
+		'postal_code'     => '107078',
+		'phone'           => '+7 495 100-00-97',
+		'instruction'     => '',
+		'work_time'       => 'Пн-Вс 09:00-21:00',
+		'payment_methods' => [ 'card', 'cod' ],
+		'photos'          => [],
+		'type'            => [ 'code' => 'PVZ', 'label' => 'Пункт выдачи заказов' ],
+		'accepts_cod'     => true,
+		'max_weight'      => null,
+		'services'        => [],
+	],
+	[
+		'id'              => 'DEMO-PVZ-FAST',
+		'name'            => 'ПВЗ «Люсиновская — мгновенное закрытие»',
+		'lat'             => 55.6900,
+		'lng'             => 37.5450,
+		'address'         => 'Москва, Люсиновская улица, д. 4',
+		'short_address'   => 'Люсиновская, 4',
+		'locality'        => 'Москва',
+		'postal_code'     => '115093',
+		'phone'           => '+7 495 100-00-98',
+		'instruction'     => '',
+		'work_time'       => 'Пн-Вс 09:00-21:00',
+		'payment_methods' => [ 'card', 'cod' ],
+		'photos'          => [],
+		'type'            => [ 'code' => 'PVZ', 'label' => 'Пункт выдачи заказов' ],
+		'accepts_cod'     => true,
+		'max_weight'      => null,
+		'services'        => [],
+	],
+];
+
 return array_merge(
 	$original_five,
 	$grid_points,
 	$postamat_points,
 	$colocated_points,
-	$long_address_point
+	$long_address_point,
+	$domain_seam_points
 );
