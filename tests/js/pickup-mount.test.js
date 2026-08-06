@@ -2454,6 +2454,38 @@ test( 'panels searchSubmit resolves the TOP SUGGESTION and never starts a second
 	expect( session.provider.searchControl.search ).not.toHaveBeenCalled();
 } );
 
+// Operator, 07.08.2026: pressing the magnifier moved the camera but left the suggestion list
+// hanging open over the map, while clicking a row closed it — the row path calls
+// `hideSearchResults()` inside `pickup-panels.js`, the submit path went through the mount and
+// nobody closed anything. Same outcome, so the same closing behaviour.
+test( 'searchSubmit closes the suggestion list once the address resolves, same as a row click', async () => {
+	const session = await openSession( configWith() );
+
+	withSuggest( session.provider, {
+		points: [],
+		addresses: [ { displayName: 'Цветной бульвар', query: 'Москва, Цветной бульвар' } ],
+	} );
+
+	session.panels.emit( 'searchSubmit', { query: 'Цветной бульвар' } );
+	await flushAsync();
+
+	expect( session.panels.hideSearchResultsCalls ).toBe( 1 );
+} );
+
+// ...but NOT when there was nothing to resolve: that path renders "ничего не найдено" into the
+// very box this would close, and closing it would swallow the only answer the customer gets.
+test( 'searchSubmit leaves the list open when nothing was suggested — that is where the '
+	+ '"nothing found" answer is rendered', async () => {
+	const session = await openSession( configWith() );
+
+	withSuggest( session.provider, { points: [], addresses: [] } );
+
+	session.panels.emit( 'searchSubmit', { query: 'йцукен' } );
+	await flushAsync();
+
+	expect( session.panels.hideSearchResultsCalls ).toBe( 0 );
+} );
+
 test( 'searchSubmit on a query with no suggestions resolves nothing and releases the button', async () => {
 	const session = await openSession( configWith() );
 

@@ -2117,6 +2117,15 @@
 						return undefined;
 					}
 
+					// Close the list, exactly as clicking a row does (`pickup-panels.js`'s own
+					// address-row handler calls `hideSearchResults()` itself). Both routes end in
+					// the same place — an address resolved, the camera moving — so leaving the box
+					// hanging open over the map on one of them was simply an omission, reported by
+					// the operator 07.08.2026. NOT done on the no-suggestions branch above: that
+					// one renders "ничего не найдено" INTO this box, and closing it would swallow
+					// the only answer the customer gets.
+					panels.hideSearchResults();
+
 					// The FULL `query` form, never the trimmed `displayName` — see the
 					// `searchAddressPicked` handler above for why the trimmed one re-geocodes
 					// ambiguously.
