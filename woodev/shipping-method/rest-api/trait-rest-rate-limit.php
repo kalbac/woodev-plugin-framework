@@ -36,36 +36,45 @@ if ( ! trait_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Rest_Rate_Limit_T
 		 * install shares this one budget. See {@see self::is_rate_limited()} for the bug
 		 * this replaced.
 		 *
+		 * A method rather than the `const` this obviously wants to be: constants in a TRAIT
+		 * are PHP 8.2+, and this framework targets PHP 7.4. Same for the two below.
+		 *
 		 * @since 2.0.2
 		 *
-		 * @var string
+		 * @return string
 		 */
-		protected const RATE_LIMIT_UNKNOWN_IDENTITY = 'unknown';
+		protected function rate_limit_unknown_identity(): string {
+			return 'unknown';
+		}
 
 		/**
 		 * How much larger the coarse (connection-address) budget is than the fine
 		 * (client-address) one — see {@see self::is_rate_limited()}'s TWO BUCKETS section.
 		 *
-		 * `protected`, so a consumer whose workload needs a different ratio can override it;
-		 * 10 is chosen so that a store behind a reverse proxy — where every customer shares
-		 * one connection address — can run roughly ten concurrent customers at full budget
-		 * before the coarse bound engages, while an attacker forging a fresh client address
-		 * per request is bounded at ten times the budget rather than at nothing.
+		 * Overridable, so a consumer whose workload needs a different ratio can say so; 10 is
+		 * chosen so that a store behind a reverse proxy — where every customer shares one
+		 * connection address — can run roughly ten concurrent customers at full budget before
+		 * the coarse bound engages, while an attacker forging a fresh client address per
+		 * request is bounded at ten times the budget rather than at nothing.
 		 *
 		 * @since 2.0.2
 		 *
-		 * @var int
+		 * @return int
 		 */
-		protected const RATE_LIMIT_EDGE_MULTIPLIER = 10;
+		protected function rate_limit_edge_multiplier(): int {
+			return 10;
+		}
 
 		/**
 		 * Object-cache group the counters live in on an install with a persistent cache.
 		 *
 		 * @since 2.0.2
 		 *
-		 * @var string
+		 * @return string
 		 */
-		protected const RATE_LIMIT_CACHE_GROUP = 'woodev_rate_limit';
+		protected function rate_limit_cache_group(): string {
+			return 'woodev_rate_limit';
+		}
 
 		/**
 		 * Best-effort per-address rate limit (bar-raiser), fixed-window.
@@ -111,7 +120,7 @@ if ( ! trait_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Rest_Rate_Limit_T
 		 *
 		 * So both are enforced: the client address gets the stated budget (fairness), and the
 		 * connection address — which the caller cannot choose — gets
-		 * {@see self::RATE_LIMIT_EDGE_MULTIPLIER} times it (the bound). The coarse bucket is
+		 * {@see self::rate_limit_edge_multiplier()} times it (the bound). The coarse bucket is
 		 * only spent when the two identities actually differ, i.e. when a forwarding header
 		 * was involved at all, so a plain direct request still costs exactly one bucket.
 		 *
@@ -149,7 +158,7 @@ if ( ! trait_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Rest_Rate_Limit_T
 				&& $this->bucket_exhausted(
 					$key_prefix . 'edge_',
 					$edge,
-					$max * static::RATE_LIMIT_EDGE_MULTIPLIER,
+					$max * $this->rate_limit_edge_multiplier(),
 					$window
 				) ) {
 				return true;
@@ -164,7 +173,7 @@ if ( ! trait_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Rest_Rate_Limit_T
 		 * @since 2.0.2
 		 *
 		 * @param string $key_prefix storage key prefix for this bucket.
-		 * @param string $identity   the address (or {@see self::RATE_LIMIT_UNKNOWN_IDENTITY})
+		 * @param string $identity   the address (or {@see self::rate_limit_unknown_identity()})
 		 *                           the bucket is keyed on.
 		 * @param int    $max        requests allowed within `$window`.
 		 * @param int    $window     window length, in seconds.
@@ -212,9 +221,9 @@ if ( ! trait_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Rest_Rate_Limit_T
 
 			if ( function_exists( 'wp_using_ext_object_cache' ) && wp_using_ext_object_cache() ) {
 
-				wp_cache_add( $key, 0, static::RATE_LIMIT_CACHE_GROUP, $ttl );
+				wp_cache_add( $key, 0, $this->rate_limit_cache_group(), $ttl );
 
-				$count = wp_cache_incr( $key, 1, static::RATE_LIMIT_CACHE_GROUP );
+				$count = wp_cache_incr( $key, 1, $this->rate_limit_cache_group() );
 
 				if ( false !== $count ) {
 					return (int) $count;
@@ -248,6 +257,14 @@ if ( ! trait_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Rest_Rate_Limit_T
 
 			global $wpdb;
 
+			/**
+			 * Duck-typed rather than `instanceof \wpdb`, deliberately: the installed-site type
+			 * is always `\wpdb`, but a drop-in (`db.php`) may substitute its own, and this
+			 * trait's unit tests drive the SQL path through a lightweight double instead of
+			 * standing up a database. The `@var` tells the analyser what the real one is.
+			 *
+			 * @var \wpdb $wpdb
+			 */
 			if ( ! is_object( $wpdb ) || ! method_exists( $wpdb, 'query' ) ) {
 
 				$count = (int) get_transient( $key ) + 1;
@@ -317,12 +334,12 @@ if ( ! trait_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Rest_Rate_Limit_T
 		 * so this is a coarse identity — but it is an honest one, which is why
 		 * {@see self::is_rate_limited()} uses it as the bound that cannot be rotated away.
 		 *
-		 * Falls back to {@see self::RATE_LIMIT_UNKNOWN_IDENTITY} — a real, shared bucket —
+		 * Falls back to {@see self::rate_limit_unknown_identity()} — a real, shared bucket —
 		 * when there is no usable address, never to a value that disables the limit.
 		 *
 		 * @since 2.0.2
 		 *
-		 * @return string a validated IP address, or {@see self::RATE_LIMIT_UNKNOWN_IDENTITY}.
+		 * @return string a validated IP address, or {@see self::rate_limit_unknown_identity()}.
 		 */
 		protected function get_edge_ip(): string {
 
@@ -330,7 +347,7 @@ if ( ! trait_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Rest_Rate_Limit_T
 				? (string) wc_clean( wp_unslash( $_SERVER['REMOTE_ADDR'] ) )
 				: '';
 
-			return self::valid_ip( $remote ) ?? static::RATE_LIMIT_UNKNOWN_IDENTITY;
+			return self::valid_ip( $remote ) ?? $this->rate_limit_unknown_identity();
 		}
 
 		/**
