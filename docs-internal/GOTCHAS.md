@@ -1,6 +1,13 @@
 # Gotchas — Woodev Plugin Framework
-> **103 atomic gotchas in 23 namespaces** — update count when adding/removing.
-> Last updated: 2026-08-06 (session 52, rig defect on the restore path: +1 file, existing namespace
+> **104 atomic gotchas in 23 namespaces** — update count when adding/removing.
+> Last updated: 2026-08-07 (session 54, PR #177's missing CI: +1 file, existing namespace `[build/ci]` —
+> `empty-status-rollup-can-be-a-github-actions-outage` (an empty `statusCheckRollup` next to
+> `mergeStateStatus: CLEAN` is not automatically a repo misconfiguration — triggers, workflow diff vs
+> base, `gh workflow list` and `actions/permissions` were all clean, and the real cause was GitHub's
+> 2026-08-06 Actions outage throttling webhooks to ~15%. The sting: because events are DROPPED, both
+> re-trigger tricks — close/reopen and an empty commit — also silently produce nothing, which reads as
+> a deeper repo problem)).
+> Prior: 2026-08-06 (session 52, rig defect on the restore path: +1 file, existing namespace
 > `[shipping/pickup]` — `ymaps-draw-then-move-parks-the-overlay` (`setBounds()` also ISSUES its camera
 > command ~40 ms late, so a `setCenter()` sent in between is overwritten by the fit; and a camera move
 > made across the ObjectManager's FIRST layout parks the marker's overlay at ymaps' off-screen sentinel
@@ -197,6 +204,7 @@
 - [build/ci] A failing early CI job (e.g. Lint) silently SKIPS jobs that `needs:` it — skipped ≠ failed, so the suite looks green while dependent jobs (the whole Unit matrix here) never run; fixing the gate REVEALS masked failures → [gotchas/ci-failing-gate-skips-dependent-jobs.md](gotchas/ci-failing-gate-skips-dependent-jobs.md) (2026-06-08)
 - [build/ci] `composer audit --no-dev` errors "No installed packages found" for a library with no runtime deps — use `composer audit --locked` → [gotchas/composer-audit-no-prod-deps.md](gotchas/composer-audit-no-prod-deps.md) (2026-06-08)
 - [build/ci] markdownlint-cli2 ignores `.markdownlintignore` when globs are passed as CLI args — manage exclusions in the workflow glob; MD051 disabled (can't validate Cyrillic anchors) → [gotchas/markdownlint-ignorefile-vs-globs.md](gotchas/markdownlint-ignorefile-vs-globs.md) (2026-06-08)
+- [build/ci] Zero runs for a PR whose `on:` triggers you already verified can be a **GitHub Actions outage**, not your repo — during the 2026-08-06 incident webhooks were throttled to ~15% and "many events such as pushes and pull requests are not triggering workflow runs", so PR #177 sat at `statusCheckRollup: []` with `mergeStateStatus: CLEAN`, and BOTH re-triggers (close/reopen, empty commit) were silently dropped too. Check `githubstatus.com/api/v2/summary.json` after the cheap local checks, before suspecting the workflow files → [gotchas/empty-status-rollup-can-be-a-github-actions-outage.md](gotchas/empty-status-rollup-can-be-a-github-actions-outage.md) (s54)
 - [build/ci] A PR that conflicts with base (`mergeStateStatus: DIRTY`) runs NO `pull_request` CI — only `pull_request_target`; "all green" can mean the matrix never ran. Check `gh pr view --json mergeable,mergeStateStatus`; rebase onto the new base after a squash-merge → [gotchas/pr-conflict-skips-pull-request-ci.md](gotchas/pr-conflict-skips-pull-request-ci.md) (session 2)
 - [build/js] `@wordpress/scripts` default (automatic) JSX runtime depends on the `react-jsx-runtime` script handle — registered only in WP ≥ 6.6; for WP 6.3+ support force the classic runtime via `babel.config.js` and import `createElement`/`Fragment` in every JSX file → [gotchas/wp-scripts-jsx-runtime-wp66.md](gotchas/wp-scripts-jsx-runtime-wp66.md) (s8)
 - [build/assets-eol] Rebuilding the license-page bundle on Windows can commit CRLF while Linux CI rebuilds LF → "Assets build parity" fails on identical content. `.gitattributes` pins `woodev/assets/build/** text eol=lf` → [gotchas/build-artifacts-eol-lf-windows-parity.md](gotchas/build-artifacts-eol-lf-windows-parity.md) (s14)
