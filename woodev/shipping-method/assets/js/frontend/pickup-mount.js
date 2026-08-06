@@ -197,15 +197,21 @@
  * {@see window.WoodevPickupPanels} handlers are registered exactly ONCE per
  * session and become unreachable once {@see closeSession} drops this file's
  * only reference to that `panels` instance (its DOM root is detached along
- * with the rest of the modal body). Exactly ONE handler is bound to a
- * long-lived, session-independent target — `woodev_modal_closed` on
- * `document.body`, which the staleness guard needs because a dismissed dialog
- * is not otherwise reported to this file at all (see {@see handleModalClosed})
- * — and it is the one thing `destroy()` has to unbind by hand; everything else
- * hangs off `provider`/`panels`, both torn down (or dereferenced) together. So
- * the existing "two clicks never leave two providers alive" guarantee extends
- * to the panels, to every event wired through them, and to that one listener,
- * unchanged.
+ * with the rest of the modal body). Exactly TWO handlers are bound to
+ * long-lived, session-independent targets, and they are exactly the two
+ * `destroy()` unbinds by hand — nothing else takes them away:
+ * `woodev_modal_closed` on `document.body`, which the staleness guard needs
+ * because a dismissed dialog is not otherwise reported to this file at all
+ * (see {@see handleModalClosed}); and a jQuery `updated_checkout` waiter on
+ * the same node, bound only while a post-selection checkout refresh is in
+ * flight and holding the card's busy state until it settles (see
+ * {@see refreshCheckout}/{@see dropRefreshWaiter} — `one()` self-cleans ONLY
+ * if the event actually fires, which a failed checkout ajax, or a session torn
+ * down mid-round-trip, is free not to do). Everything else hangs off
+ * `provider`/`panels`, both torn down (or dereferenced) together. So the
+ * existing "two clicks never leave two providers alive" guarantee extends to
+ * the panels, to every event wired through them, and to both of those
+ * listeners, unchanged.
  *
  * UMD-ish dual export (matches woodev-modal.js/pickup-datasource.js), plus a
  * `mountAll()` re-export purely so a test can drive one mount pass directly
@@ -263,12 +269,23 @@
 	 * chosen point's street/house/postcode into the checkout address fields when the merchant
 	 * enabled that (spec D-14) — the framework never does it and offers no switch for it.
 	 *
-	 * `_resolved` means "the server answered", NOT "the point was applied": it fires on all
-	 * three outcomes (accepted, refused, request failed), before this file has written
-	 * anything, and carries the outcome — `result` for a verdict, `error` for a transport
-	 * failure, exactly one of them non-null. A listener that only cares about an ACCEPTED
-	 * point, applied, wants `woodev_pickup_point_selected` instead, which still fires exactly
-	 * where it always did: after the field is written and before the modal is asked to close.
+	 * `_resolved` means "the server answered AND the answer still applies", NOT "the point was
+	 * applied": it fires on all three outcomes the customer can still see (accepted, refused,
+	 * request failed), before this file has written anything, and carries the outcome —
+	 * `result` for a verdict, `error` for a transport failure, exactly one of them non-null. A
+	 * listener that only cares about an ACCEPTED point, applied, wants
+	 * `woodev_pickup_point_selected` instead, which still fires exactly where it always did:
+	 * after the field is written and before the modal is asked to close.
+	 *
+	 * THERE IS A FOURTH, SILENT OUTCOME, AND `_requested` IS THEREFORE NOT ALWAYS PAIRED: an
+	 * answer discarded by the staleness guard (spec D-9 — the card moved on, the dialog was
+	 * dismissed, the session was torn down) fires NOTHING. `_requested` has already gone out
+	 * for that confirmation, so anything pairing the two — analytics, a plugin tracking
+	 * in-flight confirmations — must treat a `_requested` with no `_resolved` as a normal,
+	 * expected state and not wait on it forever. Deliberate, and the alternative is worse: a
+	 * plugin acting on `_resolved` writes the chosen point's address into the checkout fields
+	 * (D-14), and doing that for a point the framework has just thrown away would leave the
+	 * customer with an address for somewhere they are not collecting from.
 	 */
 	var EVENT_SELECT_REQUESTED = 'woodev_pickup_point_select_requested';
 	var EVENT_SELECT_RESOLVED  = 'woodev_pickup_point_select_resolved';
@@ -1037,6 +1054,11 @@
 		 *  applies an answer only while this still names the point that answer is about. */
 		var pendingSelectionId = null;
 
+		/** @type {Function|null} the pending `updated_checkout` handler {@see refreshCheckout}
+		 *  bound through jQuery, held only so {@see dropRefreshWaiter} can take it off again —
+		 *  the second (and last) long-lived binding a session makes; see the file docblock. */
+		var refreshWaiter = null;
+
 		/** @type {boolean} Task 16 (spec V-4 stage 2/3): has THIS start() cycle's busy overlay
 		 *  already been cleared? Reset at the top of every {@see start} call (initial open AND
 		 *  every retry — each re-runs the FULL "map drawn → points in flight → points in" sequence —
@@ -1259,6 +1281,13 @@
 		 * card of ours to lock or re-render) the round trip still happens, but every panels
 		 * call below is skipped — see the guards.
 		 *
+		 * A consequence, deliberate: with no card there is no lock, so nothing here stops an
+		 * embedded provider reporting a SECOND selection while the first is still in flight —
+		 * both round trips would run, and the later answer would win. Debouncing its own
+		 * confirm UI is that provider's job, exactly as rendering it is (D-3: the framework
+		 * draws no chrome of its own around a provider that already owns the whole picker, and
+		 * cannot lock a button it never drew).
+		 *
 		 * @param {Object} point
 		 * @returns {void}
 		 */
@@ -1435,12 +1464,47 @@
 			if ( openPanels ) {
 				openPanels.setSelectionBusy( true );
 
-				window.jQuery( document.body ).one( 'updated_checkout', function() {
-					openPanels.setSelectionBusy( false );
-				} );
+				// Superseded before it ever fired (WooCommerce answered the previous refresh
+				// with an ajax error, say — `updated_checkout` is not guaranteed on every
+				// build). Drop it rather than stack a second one on the same target.
+				dropRefreshWaiter();
+
+				refreshWaiter = function() {
+					refreshWaiter = null;
+
+					// The session can be torn down between `update_checkout` and
+					// `updated_checkout` — WooCommerce's round trip is real network time, and a
+					// customer is free to dismiss the dialog or re-open the picker during it.
+					// `dropRefreshWaiter()` in destroy() normally means this never runs at all;
+					// this guard is what covers the one case it cannot (jQuery gone by then).
+					if ( ! destroyed ) {
+						openPanels.setSelectionBusy( false );
+					}
+				};
+
+				window.jQuery( document.body ).one( 'updated_checkout', refreshWaiter );
 			}
 
 			window.jQuery( document.body ).trigger( 'update_checkout' );
+		}
+
+		/**
+		 * Unbinds the pending `updated_checkout` waiter, if any.
+		 *
+		 * A `one()` handler that never fires is not self-cleaning: it stays on `document.body`
+		 * holding this closure — and the whole `panels`/DOM graph it captures — alive for the
+		 * life of the document. `updated_checkout` firing is NOT guaranteed (a failed checkout
+		 * ajax, or a session torn down before the round trip returns), so the binding has to be
+		 * dropped by hand.
+		 *
+		 * @returns {void}
+		 */
+		function dropRefreshWaiter() {
+			if ( refreshWaiter && window.jQuery ) {
+				window.jQuery( document.body ).off( 'updated_checkout', refreshWaiter );
+			}
+
+			refreshWaiter = null;
 		}
 
 		/**
@@ -1955,11 +2019,13 @@
 			destroy: function() {
 				destroyed = true;
 
-				// The one long-lived target a session binds to (see {@see handleModalClosed}) —
-				// and therefore the one this file has to unbind by hand, since nothing else
-				// takes it away. Left attached, every session ever opened on this page would
-				// keep a listener, and its whole closure, alive for the life of the document.
+				// The TWO long-lived targets a session binds to (see {@see handleModalClosed}
+				// and {@see refreshCheckout}) — and therefore the two this file has to unbind by
+				// hand, since nothing else takes either away. Left attached, every session ever
+				// opened on this page would keep a listener, and its whole closure, alive for
+				// the life of the document.
 				document.body.removeEventListener( 'woodev_modal_closed', handleModalClosed );
+				dropRefreshWaiter();
 
 				if ( provider && 'function' === typeof provider.destroy ) {
 					provider.destroy();

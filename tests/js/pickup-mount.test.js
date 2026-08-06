@@ -727,10 +727,13 @@ function openPicker( overrides ) {
 	// A jQuery double, because `update_checkout` is a jQuery custom event and unreachable
 	// without one (see pickup-mount.js's own docblock on the identical asymmetry for
 	// `updated_checkout`). `one()` is recorded rather than executed so a test can prove the
-	// busy state is HELD until the refresh settles, not released immediately.
-	const jq = { triggered: [], one: [] };
+	// busy state is HELD until the refresh settles, not released immediately — and `off()` is
+	// recorded so a test can prove the waiter is UNBOUND when the session dies before
+	// WooCommerce ever answers (a `one()` that never fires never cleans itself up).
+	const jq = { triggered: [], one: [], off: [] };
 	window.jQuery = () => ( {
 		one: ( type, handler ) => jq.one.push( { type, handler } ),
+		off: ( type, handler ) => jq.off.push( { type, handler } ),
 		trigger: ( type ) => jq.triggered.push( type ),
 	} );
 
@@ -3016,6 +3019,10 @@ describe( 'selection confirmation', () => {
 		[ 'the close button', () => document.querySelector( '.woodev-modal__close' ).click() ],
 	] )( 'discards an answer for a dialog %s had already dismissed', async ( _label, dismiss ) => {
 		const { emitSelect, resolveSelect, panels, field } = openPicker( {} );
+		const requested = [];
+		const resolved = [];
+		document.body.addEventListener( 'woodev_pickup_point_select_requested', () => requested.push( 1 ) );
+		document.body.addEventListener( 'woodev_pickup_point_select_resolved', () => resolved.push( 1 ) );
 
 		emitSelect( { id: 'P1' } );
 		dismiss();
@@ -3027,6 +3034,46 @@ describe( 'selection confirmation', () => {
 		// accepts that divergence explicitly and still says to ignore the answer.
 		expect( field.value ).toBe( '' );
 		expect( panels.setPointVerdict ).not.toHaveBeenCalled();
+
+		// The discarded outcome is SILENT, and the two confirmation events are therefore not
+		// always paired: `_requested` went out, `_resolved` never follows. Pinned here because
+		// a plugin listening to `_resolved` writes the point's address into the checkout fields
+		// (D-14) — firing it for a point we just threw away would leave the customer with the
+		// address of somewhere they are not collecting from.
+		expect( requested ).toHaveLength( 1 );
+		expect( resolved ).toHaveLength( 0 );
+	} );
+
+	it( 'unbinds its updated_checkout waiter when the session dies before WooCommerce answers', async () => {
+		const { emitSelect, resolveSelect, panels, jq } = openPicker( {
+			selection: { close: false, refreshCheckout: true },
+		} );
+
+		emitSelect( { id: 'P1' } );
+		await resolveSelect( { allowed: true, reason: null, close: null, refresh_checkout: null } );
+
+		// The modal stayed open, so the card is HELD busy until the totals settle — otherwise
+		// «Продолжить оформление» is clickable in the middle of a checkout update (spec §5.2).
+		expect( jq.triggered ).toContain( 'update_checkout' );
+		expect( jq.one ).toHaveLength( 1 );
+		expect( panels.setSelectionBusy ).toHaveBeenLastCalledWith( true );
+
+		// A fresh trigger click destroys this session mid-refresh. `updated_checkout` may now
+		// never fire at all (a failed checkout ajax is free not to fire it), and a `one()` only
+		// cleans itself up if it DOES — so an unbound waiter would keep the panels and their
+		// whole DOM graph alive for the life of the document.
+		clickTrigger();
+
+		expect( jq.off ).toHaveLength( 1 );
+		expect( jq.off[ 0 ].type ).toBe( 'updated_checkout' );
+		expect( jq.off[ 0 ].handler ).toBe( jq.one[ 0 ].handler );
+
+		// And belt-and-braces: even reached anyway — jQuery gone by teardown, so the `off()`
+		// above could not run — it no longer touches the dead session's panels.
+		panels.setSelectionBusy.mockClear();
+		jq.one[ 0 ].handler();
+
+		expect( panels.setSelectionBusy ).not.toHaveBeenCalled();
 	} );
 
 	it( 'discards an answer whose whole session was torn down while it was in flight', async () => {
