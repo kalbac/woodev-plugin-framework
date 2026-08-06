@@ -2737,6 +2737,19 @@
 	 * state and hides the search and filter controls entirely (see `pickup.css`), which would
 	 * make the search bar vanish under a customer who is merely confirming a point.
 	 *
+	 * The caller (Task 11's mount, wiring `dataSource.selectPoint()` — not this file, which has
+	 * no network of its own) is expected to call `setSelectionBusy( true )` when a confirmation
+	 * starts and `setSelectionBusy( false )` once it settles, on ALL THREE of its outcomes: the
+	 * domain accepts the point, the domain refuses it, and — per spec D-9's staleness guard — an
+	 * answer arrives for a point the card no longer shows and is discarded. This method does not
+	 * track WHY it was called or guard against an unbalanced pair — the caller owns that
+	 * discipline, same as {@see Panels.prototype.setSearchBusy}'s own docblock note. Leaving a
+	 * `true` unpaired locks every card this instance opens afterward, forever.
+	 *
+	 * A no-op on the class/re-render when called before `render()` — matching
+	 * {@see Panels.prototype.setBusy}'s own guard shape — but `_selectionBusy` itself is always
+	 * tracked, so a card opened later still starts locked if the flag was set early.
+	 *
 	 * @since 2.0.2
 	 *
 	 * @param {boolean} busy
@@ -2744,7 +2757,10 @@
 	 */
 	Panels.prototype.setSelectionBusy = function( busy ) {
 		this._selectionBusy = !! busy;
-		this._cardEl.classList.toggle( 'is-locked', this._selectionBusy );
+
+		if ( this._cardEl ) {
+			this._cardEl.classList.toggle( 'is-locked', this._selectionBusy );
+		}
 
 		if ( this._activeGroup ) {
 			renderCard( this );

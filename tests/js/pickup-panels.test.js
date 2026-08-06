@@ -673,6 +673,12 @@ describe( 'setSelectionBusy', () => {
 
 		expect( onSelect ).not.toHaveBeenCalled();
 	} );
+
+	it( 'does not throw when called before render()', () => {
+		const panels = new Panels( document.createElement( 'div' ), busyConfig );
+
+		expect( () => panels.setSelectionBusy( true ) ).not.toThrow();
+	} );
 } );
 
 it( 'renders escaped point text without double-escaping it', () => {
