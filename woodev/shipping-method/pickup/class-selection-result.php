@@ -143,15 +143,83 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Selection_Result' )
 				return $computed;
 			}
 
-			$point = $filtered['point'] ?? null;
-
 			return [
 				'allowed'          => $filtered['allowed'],
 				'reason'           => $filtered['reason'],
 				'close'            => self::sanitize_flag( $filtered['close'] ?? null ),
 				'refresh_checkout' => self::sanitize_flag( $filtered['refresh_checkout'] ?? null ),
-				'point'            => is_array( $point ) ? $point : null,
+				'point'            => self::sanitize_point(
+					$filtered['point'] ?? null,
+					$filtered['allowed'],
+					$filtered['reason']
+				),
 			];
+		}
+
+		/**
+		 * Rebuilds a domain filter's corrected point through the framework's OWN point
+		 * serializer, or drops it.
+		 *
+		 * This used to be `is_array( $point ) ? $point : null` — any array at all was
+		 * forwarded verbatim, with no shape, no field types and no escaping. That is a
+		 * reflected-XSS hole rather than a tidiness problem, because of what the
+		 * `woodev_shipping_pickup_point_selection` contract promises on the other side: the
+		 * browser REPLACES the point it is holding with this one and renders its strings
+		 * without re-escaping them, on the explicit grounds that everything reaching it that
+		 * way is already escaped server-side. A domain filter forwarding a carrier's raw
+		 * `name`/`address` — the exact thing the "populate it when confirmation taught the
+		 * domain something the listing did not know" advice invites — therefore put whatever
+		 * the carrier returned straight into the checkout page.
+		 *
+		 * Validating INDEPENDENTLY here would mean a second, drifting copy of the point shape
+		 * and its escaping rules. So the point is run back through the two methods that
+		 * already own both — {@see Pickup_Point::from_array()} for the shape (required
+		 * fields, scalar types, numeric and in-range coordinates, a `code`/`label` type pair)
+		 * and {@see Pickup_Point::to_browser_array()} for the escaping — which is the same
+		 * pipeline the two READ routes put every listed point through. Three consequences,
+		 * all deliberate:
+		 *
+		 * - a corrected point that does not validate is DROPPED (`null`, "nothing to update"),
+		 *   not half-adopted, and the verdict beside it still stands — the advice tier's rule;
+		 * - a key the framework's point shape does not know is dropped, so a filter cannot
+		 *   smuggle an unescaped field through under a name nothing validates;
+		 * - a plugin that followed the documented recipe (mutate the resolved point, call
+		 *   `to_browser_array()`) is unaffected, because `esc_html()` does not double-encode:
+		 *   WordPress's `_wp_specialchars()` takes `$double_encode = false`, so re-escaping an
+		 *   already-escaped string is a no-op. Verified against core, not assumed — an
+		 *   escaper that double-encoded would turn every corrected address into `&amp;amp;`.
+		 *
+		 * `selectable` is not read from the input at all. The contract asks for it, but a
+		 * point whose own verdict disagreed with the result carrying it would be a genuine
+		 * ambiguity for the browser (which one wins?), so it is DERIVED from the result's
+		 * already-validated verdict instead. A filter cannot make them disagree.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param mixed       $point   the filter's corrected-point value.
+		 * @param bool        $allowed the result's validated verdict.
+		 * @param string|null $reason  the result's validated reason.
+		 *
+		 * @return array<string, mixed>|null the escaped browser shape, or null.
+		 */
+		private static function sanitize_point( $point, bool $allowed, ?string $reason ): ?array {
+			if ( ! is_array( $point ) ) {
+				return null;
+			}
+
+			$rebuilt = Pickup_Point::from_array( $point );
+
+			if ( null === $rebuilt ) {
+				return null;
+			}
+
+			$data               = $rebuilt->to_browser_array();
+			$data['selectable'] = [
+				'allowed' => $allowed,
+				'reason'  => $reason,
+			];
+
+			return $data;
 		}
 
 		/**

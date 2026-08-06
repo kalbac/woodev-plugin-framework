@@ -565,11 +565,21 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 			 * {@see Pickup_Point::to_browser_array()} (`id`, `name`, `address`,
 			 * `short_address`, `locality`, `postal_code`, `phone`, `instruction`, `work_time`,
 			 * `lat`, `lng`, `type` => `{ code, label }`, `payment_methods`, `services`,
-			 * `photos`, `accepts_cod`, `max_weight`) plus a `selectable` => `{ allowed, reason }`
-			 * entry. The easy, correct way to build one is to mutate the freshly-resolved
-			 * `$point` and call `to_browser_array()` on it yourself rather than assembling the
-			 * keys by hand — every display string in that shape is already escaped, and the
-			 * browser does not re-escape.
+			 * `photos`, `accepts_cod`, `max_weight`). The easy, correct way to build one is to
+			 * mutate the freshly-resolved `$point` and call `to_browser_array()` on it yourself
+			 * rather than assembling the keys by hand.
+			 *
+			 * Whatever you return is REBUILT through {@see Pickup_Point::from_array()} and
+			 * re-serialized before it leaves this route, so the browser never receives an
+			 * unescaped or unknown field regardless of what a filter hands over — the browser
+			 * does not re-escape these strings, so nothing else would. Three things follow:
+			 * a point that does not satisfy `from_array()`'s own validation is dropped as if
+			 * you had returned `null` (the verdict beside it still stands); a key the point
+			 * shape does not know is dropped; and the `selectable` entry is derived from this
+			 * result's own `allowed`/`reason` rather than read from your array, so the two can
+			 * never disagree. Returning an already-escaped `to_browser_array()` shape is safe —
+			 * `esc_html()` does not double-encode. See
+			 * {@see \Woodev\Framework\Shipping\Pickup\Selection_Result::sanitize_point()}.
 			 *
 			 * Populate it when confirmation taught the domain something the listing did not
 			 * know — the carrier returned a refined address or a corrected postcode for this
