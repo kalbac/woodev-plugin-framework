@@ -181,88 +181,20 @@ function woodev_test_shipping_method_plugin_init(): void {
 	// exercising both loading strategies (§4.5). A real shipping plugin talks to
 	// its carrier's API here instead of returning hardcoded arrays.
 	//
-	// Declared HERE (inside this callback), not at file top level: this
+	// Required/declared HERE (inside this callback), not at file top level: this
 	// callback runs only once the bootstrap has selected the highest-version
 	// framework copy and its autoloader is registered — declaring a class that
 	// `implements \Woodev\Framework\Shipping\Pickup\Point_Source` any earlier
 	// than that fails with "Interface ... not found", the same reason the main
 	// plugin class below is declared inside this callback rather than at file
 	// top level.
+	//
+	// Woodev_Test_Bulk_Point_Source lives in its own file (see the docblock there)
+	// specifically so a unit test can `require_once` it directly, bypassing the
+	// Woodev_Plugin_Bootstrap singleton's process-wide, one-shot load latch.
 	// -----------------------------------------------------------------------
 
-	if ( ! class_exists( 'Woodev_Test_Bulk_Point_Source' ) ) {
-
-		/**
-		 * Class Woodev_Test_Bulk_Point_Source
-		 *
-		 * STRATEGY_BULK fixture source (Yandex/CDEK shape): every point for the
-		 * requested locality is returned in one call, every field populated up front.
-		 * Two of the five points are deliberately named so a human driving the rig can
-		 * find them on the live map: one refuses cash on delivery (COD gating), one
-		 * caps the accepted parcel weight at 1 kg (weight-limit gating).
-		 */
-		class Woodev_Test_Bulk_Point_Source implements \Woodev\Framework\Shipping\Pickup\Point_Source {
-
-			/** Point id that refuses cash on delivery — exercises COD gating on the rig. */
-			public const COD_REFUSING_POINT_ID = 'FIX-BULK-2';
-
-			/** Point id capped at 1000 g — exercises the weight-limit rule on the rig. */
-			public const WEIGHT_LIMITED_POINT_ID = 'FIX-BULK-4';
-
-			/**
-			 * @inheritDoc
-			 */
-			public function get_strategy(): string {
-				return self::STRATEGY_BULK;
-			}
-
-			/**
-			 * Returns all 5 fixture points regardless of the requested locality string.
-			 *
-			 * The framework guarantees `$query->get_locality()` is non-null for a
-			 * STRATEGY_BULK source (see the Point_Source interface docblock); a real
-			 * carrier would filter server-side by that locality. The fixture has only
-			 * one static "city", so it returns the same 5 points for any locality.
-			 *
-			 * @inheritDoc
-			 */
-			public function fetch_points( \Woodev\Framework\Shipping\Pickup\Point_Query $query ): array {
-				return array_values( array_filter( array_map(
-					[ \Woodev\Framework\Shipping\Pickup\Pickup_Point::class, 'from_array' ],
-					$this->all_points()
-				) ) );
-			}
-
-			/**
-			 * @inheritDoc
-			 */
-			public function fetch_details( string $point_id ): ?\Woodev\Framework\Shipping\Pickup\Pickup_Point {
-				foreach ( $this->all_points() as $payload ) {
-					if ( $point_id === $payload['id'] ) {
-						return \Woodev\Framework\Shipping\Pickup\Pickup_Point::from_array( $payload );
-					}
-				}
-
-				return null;
-			}
-
-			/**
-			 * The fixture's Moscow points — every field populated.
-			 *
-			 * SP-map Task 1: the fixture was grown from the original 5 static points
-			 * (still present, ids included, as the first 5 entries) to ~49 points
-			 * across 2 types, including a co-located pair on identical coordinates —
-			 * see the docblock in fixture-points.php for why. Delegated to a standalone
-			 * data file so the unit suite can assert on its shape without loading the
-			 * whole plugin.
-			 *
-			 * @return array<int, array<string, mixed>>
-			 */
-			private function all_points(): array {
-				return require __DIR__ . '/fixture-points.php';
-			}
-		}
-	}
+	require_once __DIR__ . '/class-test-bulk-point-source.php';
 
 	if ( ! class_exists( 'Woodev_Test_Viewport_Point_Source' ) ) {
 
@@ -470,9 +402,10 @@ function woodev_test_shipping_method_plugin_init(): void {
 				// whole world.
 				$default_location = [ 'center' => [ 55.76, 37.64 ], 'zoom' => 12 ];
 
-				// SP-5 Task 8 (D-5), re-pointed by the live-review fix (D7, 05.08.2026): both
-				// fixture types now supply BOTH states — `pvz` mirrors the Yandex reference's
-				// two-image shape, `postamat` its own — so the rig always has at least one type
+				// SP-5 Task 8 (D-5), re-pointed by the live-review fix (D7, 05.08.2026), and
+				// swapped for the REAL reference icons by issue #162's companion task: both
+				// fixture types supply BOTH states — `PVZ` mirrors the Yandex reference's
+				// two-image shape, `POSTAMAT` its own — so the rig always has at least one type
 				// showing what a real two-image active state looks like. The framework's
 				// one-image fallback (`active` mirrors `default` when a plugin supplies only one
 				// image, the CDEK shape) is still real and still covered — see
@@ -486,16 +419,21 @@ function woodev_test_shipping_method_plugin_init(): void {
 				// URLs are real files served by this plugin, not a placeholder host: an icon that
 				// 404s renders as a broken image, which looks identical to "the framework never
 				// applied the icon" and makes rig verification prove nothing.
+				// The four SVGs themselves are copies of `plugins-reference/woocommerce-yandex-delivery`'s
+				// own `yandex-delivery-map-pin-{office,terminal}[-active].svg` (WooDev's own
+				// icons for its Yandex.Delivery integration, not hotlinked — see each file's own
+				// attribution comment) — "office" is this fixture's `PVZ`, "terminal" its
+				// `POSTAMAT`.
 				$icons_url = plugins_url( 'assets/images', __FILE__ );
 
 				$point_icons = [
 					'PVZ'      => [
-						'default' => $icons_url . '/pvz.svg',
-						'active'  => $icons_url . '/pvz-active.svg',
+						'default' => $icons_url . '/yandex-delivery-map-pin-office.svg',
+						'active'  => $icons_url . '/yandex-delivery-map-pin-office-active.svg',
 					],
 					'POSTAMAT' => [
-						'default' => $icons_url . '/postamat.svg',
-						'active'  => $icons_url . '/postamat-active.svg',
+						'default' => $icons_url . '/yandex-delivery-map-pin-terminal.svg',
+						'active'  => $icons_url . '/yandex-delivery-map-pin-terminal-active.svg',
 					],
 				];
 

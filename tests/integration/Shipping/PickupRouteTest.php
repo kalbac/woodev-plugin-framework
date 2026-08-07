@@ -111,6 +111,35 @@ class PickupRouteTest extends TestCase {
 		);
 	}
 
+	/**
+	 * A locality OTHER than the fixture's own city ("Москва") must return zero
+	 * points, HTTP 200 — issue #162. Before this fix, `Woodev_Test_Bulk_Point_Source`
+	 * ignored `locality` entirely and returned every fixture point regardless, so the
+	 * checkout's `emptyLocality` state (spec V-5) could never be seen on the rig by
+	 * setting the checkout city to e.g. «Новосибирск», only exercised in unit/jest
+	 * tests.
+	 *
+	 * @return void
+	 */
+	public function test_a_foreign_locality_returns_no_points(): void {
+		wp_set_current_user( 0 );
+
+		$request = new WP_REST_Request(
+			'GET',
+			'/woodev/v1/shipping/pickup/woodev-test-shipping-method/points'
+		);
+		$request->set_param( 'locality', 'Новосибирск' );
+
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame(
+			[],
+			$response->get_data()['points'],
+			'A locality other than the fixture\'s own city must yield zero points.'
+		);
+	}
+
 	// -------------------------------------------------------------------------
 	// 3. Unusable query still 200s
 	// -------------------------------------------------------------------------
