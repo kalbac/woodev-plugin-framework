@@ -471,6 +471,28 @@ function woodev_test_shipping_method_plugin_init(): void {
 					],
 				];
 
+				// `close_on_select` (13th argument) is the CONFIG half of the two-level close
+				// contract, and until now the rig only ever exercised the other half. The
+				// framework's own default is `false` — a confirmed point leaves the customer in
+				// the map with the CTA relabelled «Продолжить оформление заказа» — so the config
+				// path had no live coverage at all: everything on the rig went through a domain
+				// filter answering `close => true` per point.
+				//
+				// Turning it on here is not only "what the rig should demo". It is what makes the
+				// override direction TESTABLE. The browser reads
+				// `resolveFlag( result.close, defaults.close )`, whose contract is `??` and
+				// explicitly NEVER `||`: an explicit `false` from the domain is a DECISION ("do
+				// not close THIS one") and must beat a `true` config. With the config at `false`
+				// and a point answering `true`, `??` and `||` return the SAME value — so the
+				// fixture could not have caught that regression. With the config at `true`, a
+				// point answering `false` separates them: `??` keeps the picker open, `||` closes
+				// it. See DEMO-PVZ-STAY in fixture-points.php, which is that point.
+				//
+				// Arguments 10-12 are the framework's own defaults, restated only because the
+				// constructor is positional and PHP 7.4 (which CI checks) has no named arguments.
+				// The accent colour is duplicated as a literal because `DEFAULT_ACCENT_COLOR` is
+				// a `private const` the fixture cannot reference — exactly the friction issue
+				// #170 tracks.
 				$this->pickup_handler = new \Woodev\Framework\Shipping\Pickup\Pickup_Handler(
 					self::PLUGIN_ID,
 					'carrier_pickup_point',
@@ -480,7 +502,11 @@ function woodev_test_shipping_method_plugin_init(): void {
 					null,
 					null,
 					true,
-					$point_icons
+					$point_icons,
+					'#06aedd',
+					'',
+					true,
+					true
 				);
 				$this->pickup_handler->register();
 			}
@@ -732,12 +758,23 @@ function woodev_test_shipping_method_plugin_init(): void {
 				return $result;
 			}
 
-			// A point that closes immediately, overriding the fixture's two-step default
-			// (Pickup_Handler is constructed above without a `close_on_select` argument, so
-			// it keeps the constructor's own `false`) — the rig's way to see `close` actually
-			// override the config.
-			if ( 'DEMO-PVZ-FAST' === $id ) {
-				$result['close'] = true;
+			// A point that REFUSES to close, against a config that says close (the handler is
+			// constructed above with `close_on_select = true`). This is the direction that
+			// actually proves something.
+			//
+			// The browser resolves the flag as `resolveFlag( result.close, defaults.close )`,
+			// whose contract is `??` and explicitly never `||`, because an explicit `false`
+			// from the domain is a DECISION — "do not close THIS one" — and has to beat a
+			// `true` config. Under the previous arrangement (config `false`, point answering
+			// `true`) both operators return the same value, so the rig could not tell a correct
+			// implementation from a regressed one. Here they diverge: `??` keeps the picker
+			// open, `||` closes it.
+			//
+			// A real carrier reaches this branch whenever confirmation returns something the
+			// customer still has to see — a point that needs a code collected at the counter,
+			// say — which is why the framework offers the per-point override at all.
+			if ( 'DEMO-PVZ-STAY' === $id ) {
+				$result['close'] = false;
 
 				return $result;
 			}

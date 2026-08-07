@@ -350,12 +350,18 @@ $long_address_point = [
 // SP-5 Task 13: three points wired to the fixture's
 // `woodev_shipping_pickup_point_selection` filter (see the plugin init callback in
 // woodev-test-shipping-method.php) — DEMO-PVZ-REFUSE always refuses on confirmation
-// (the rig's remembered-refusal path), DEMO-PVZ-FAST forces an immediate close,
-// overriding this fixture's own two-step default (close_on_select is left at the
-// Pickup_Handler constructor's own `false` — the fixture never passes that
-// argument), and DEMO-PVZ-REFRESH asks for a checkout refresh. Coordinates are
-// distinct from every point above at well past 4 decimal places so all three are
-// individually clickable on the rig map.
+// (the rig's remembered-refusal path), DEMO-PVZ-STAY refuses to CLOSE against a
+// config that says close (the fixture now passes `close_on_select = true`, so every
+// ordinary point closes on confirmation and this one deliberately does not), and
+// DEMO-PVZ-REFRESH asks for a checkout refresh. Coordinates are distinct from every
+// point above at well past 4 decimal places so all three are individually clickable
+// on the rig map.
+// DEMO-PVZ-STAY replaced the earlier DEMO-PVZ-FAST, which did the opposite (config
+// `false`, point answering `true`). That direction demonstrated the override without
+// TESTING it: the browser reads `resolveFlag( result.close, defaults.close )`, whose
+// contract is `??` and never `||`, and for `false`-config/`true`-point the two
+// operators return the same value. The reversed direction separates them — `??` keeps
+// this point's picker open, `||` would close it.
 // `accepts_cod` is deliberately `true` and `max_weight` is deliberately `null` on
 // all three: the demo behaviour comes from the domain filter overriding the verdict,
 // not from Constraint_Checker independently refusing them for an unrelated reason.
@@ -388,8 +394,8 @@ $domain_seam_points = [
 		'services'        => [],
 	],
 	[
-		'id'              => 'DEMO-PVZ-FAST',
-		'name'            => 'ПВЗ «Люсиновская — мгновенное закрытие»',
+		'id'              => 'DEMO-PVZ-STAY',
+		'name'            => 'ПВЗ «Люсиновская — карта остаётся открытой»',
 		'lat'             => 55.6900,
 		'lng'             => 37.5450,
 		'address'         => 'Москва, Люсиновская улица, д. 4',
