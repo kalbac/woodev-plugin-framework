@@ -28,6 +28,20 @@ if ( ! defined( 'WOODEV_TEST_PICKUP_STRATEGY' ) ) {
 }
 
 /**
+ * Issue #185: opt-in switch to the LIVE Yandex.Delivery sandbox Point_Source
+ * (`Woodev_Test_Live_Yandex_Point_Source`, calling Yandex's own TEST host) instead of the
+ * static fixture data. Defaults to `false` — neither the unit suite, the integration suite,
+ * nor CI ever defines this, so no test makes a network call. Flip via
+ * `define( 'WOODEV_TEST_PICKUP_LIVE_YANDEX', true );` in wp-config.php or the `.wp-env.json`
+ * `config` block, same idiom as `WOODEV_TEST_PICKUP_STRATEGY` above. Yandex only exposes a
+ * bulk/geo_id-addressed endpoint, so when this is on it WINS over `WOODEV_TEST_PICKUP_STRATEGY`
+ * regardless of that constant's value — see the point-source selection below.
+ */
+if ( ! defined( 'WOODEV_TEST_PICKUP_LIVE_YANDEX' ) ) {
+	define( 'WOODEV_TEST_PICKUP_LIVE_YANDEX', false );
+}
+
+/**
  * Определяем корневую директорию фреймворка.
  *
  * В wp-env контейнере: WOODEV_FRAMEWORK_DIR задаётся через config в .wp-env.json
@@ -195,6 +209,11 @@ function woodev_test_shipping_method_plugin_init(): void {
 	// -----------------------------------------------------------------------
 
 	require_once __DIR__ . '/class-test-bulk-point-source.php';
+
+	// Issue #185: declared unconditionally, same reasoning as Woodev_Test_Viewport_Point_Source
+	// just below — declaring a class is free (no I/O), only INSTANTIATING it below does
+	// anything, and that only happens when WOODEV_TEST_PICKUP_LIVE_YANDEX is truthy.
+	require_once __DIR__ . '/class-test-live-yandex-point-source.php';
 
 	if ( ! class_exists( 'Woodev_Test_Viewport_Point_Source' ) ) {
 
@@ -382,10 +401,20 @@ function woodev_test_shipping_method_plugin_init(): void {
 				// SP-5 Task 18: WOODEV_TEST_PICKUP_STRATEGY (defined near the top of this
 				// file) selects which fixture Point_Source is active, so the rig can
 				// switch loading strategy without a code edit.
+				//
+				// Issue #185: WOODEV_TEST_PICKUP_LIVE_YANDEX (also defined near the top of
+				// this file, default false) wins over WOODEV_TEST_PICKUP_STRATEGY when
+				// truthy — Yandex only offers a bulk/geo_id-addressed endpoint, so "live"
+				// and "viewport" are not a combination that exists to choose between.
 				$viewport_strategy = \Woodev\Framework\Shipping\Pickup\Point_Source::STRATEGY_VIEWPORT;
-				$point_source      = ( $viewport_strategy === WOODEV_TEST_PICKUP_STRATEGY )
-					? new \Woodev_Test_Viewport_Point_Source()
-					: new \Woodev_Test_Bulk_Point_Source();
+
+				if ( WOODEV_TEST_PICKUP_LIVE_YANDEX ) {
+					$point_source = new \Woodev_Test_Live_Yandex_Point_Source();
+				} else {
+					$point_source = ( $viewport_strategy === WOODEV_TEST_PICKUP_STRATEGY )
+						? new \Woodev_Test_Viewport_Point_Source()
+						: new \Woodev_Test_Bulk_Point_Source();
+				}
 
 				// D-8: custom tile layers + their attribution are a PLUGIN decision, and
 				// this fixture exercises that seam on purpose. Before this, `layers` and
