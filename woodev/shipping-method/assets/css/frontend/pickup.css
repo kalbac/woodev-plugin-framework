@@ -200,6 +200,13 @@
 	position: absolute;
 	inset: 0;
 	overflow: hidden;
+
+	/* The sidebar row's address type size, shared with the row's type glyph so the two cannot
+	   drift apart. The glyph is deliberately sized to the ADDRESS, not to a round icon number:
+	   at 24px it out-weighed the line it labels and read as the row's subject rather than its
+	   annotation (operator review, 08.08.2026). The point card's own chip is a different
+	   element with a different job and keeps its own size. */
+	--woodev-pickup-list-address-size: 15px;
 }
 
 /* -------------------------------------------------------------------------
@@ -610,20 +617,26 @@
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	width: 24px;
-	height: 24px;
+	/* Sized in `em` off the ADDRESS type size, so the two cannot drift apart. The BOX is one
+	   line tall (`1.4em` — the stage reset's own line-height ratio, line 134) while the glyph
+	   inside stays square at `1em`: with a 1em-tall box and `align-self: start` the glyph rides
+	   ~3px above the address's optical centre, because the text sits centred in its 1.4em line
+	   box and the glyph does not. Measured, not eyeballed. */
+	font-size: var( --woodev-pickup-list-address-size, 15px );
+	width: 1em;
+	height: 1.4em;
 	align-self: start;
 	color: #646970;
 }
 
 .woodev-pickup-list__icon svg {
-	width: 100%;
-	height: 100%;
+	width: 1em;
+	height: 1em;
 }
 
 .woodev-pickup-list__address {
 	grid-area: address;
-	font-size: 15px;
+	font-size: var( --woodev-pickup-list-address-size, 15px );
 	font-weight: 600;
 	color: #333;
 }

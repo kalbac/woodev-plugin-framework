@@ -55,6 +55,18 @@ was partly made of tests that no longer exist on `main`.
 
 - **Never quote a local jest total while agent worktrees exist.** Run `git worktree list`
   first, or check `ls .claude/worktrees/`.
+- **You do not have to wait for the worktrees to clear.** Scoping the run to this repo's own
+  suite gives a trustworthy total immediately:
+
+  ```bash
+  npm run test:js -- --roots "<rootDir>/tests/js"
+  ```
+
+  Observed s55 with three sibling worktrees alive: the bare command reported
+  `24 suites / 2109 tests, 2 failed`; the scoped command reported `8 suites / 701 tests, all
+  passing`. **Both failures belonged to another agent's worktree, mid-edit.** Without scoping,
+  the honest reading of that run is "something is broken and I do not know whose" — and the
+  tempting reading is "I broke it", which sends you debugging code you never touched.
 - Remove worktrees when their agent finishes: `git worktree remove --force .claude/worktrees/<dir>`.
   On Windows this can fail with `Permission denied` while a process still holds the files;
   the worktree gets deregistered from `git worktree list` but the **directory survives on
