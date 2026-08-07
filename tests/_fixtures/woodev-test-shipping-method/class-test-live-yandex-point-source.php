@@ -70,7 +70,8 @@
  * `available_for_c2c_dropoff`, `pickup_services{is_fitting_allowed,is_partial_refuse_allowed,
  * is_paperless_pickup_allowed,is_unboxing_allowed}`. No `max_weight`/weight-limit field
  * anywhere in the payload, so `Pickup_Point::get_max_weight()` stays null for every live
- * point — this is an honest "the carrier did not say", not a mapping gap.
+ * point — this is an honest "the carrier did not say", not a mapping gap. The `address.house`
+ * string is DIRTY for one operator — see {@see self::strip_stringified_boolean()} (issue #210).
  *
  * SCOPE: like `Woodev_Test_Bulk_Point_Source`, this fixture serves exactly one city
  * (Moscow, Yandex `geo_id` 213) — `MOSCOW_GEO_ID` is hardcoded rather than resolved from
@@ -128,6 +129,16 @@
  * оплаты" title already says, so the redundant word is dropped:
  * `'Оплата картой при получении'` -> `'Картой при получении'`. `bound_card`/`postpay` were
  * already short nouns in the same register as the other two — left unchanged.
+ *
+ * SHORT NAME (issue #207): Yandex's payload carries no short/abbreviated name — the observed
+ * record shape below has `name` (the branch's own name, e.g. "Пятёрочка") and nothing else in
+ * that register — so the tab label for co-located points fell through to `type.label` and read
+ * "Пункт выдачи заказов 1" / "Пункт выдачи заказов 2", which does not fit a tab. `TYPE_MAP`
+ * therefore carries a `short` string per type, fed into `point_short_name`: the framework
+ * numbers co-located tabs, the domain names them (`buildTabs()` in `pickup-panels.js`).
+ * `type.label` itself deliberately stays LONG — it is rendered only in the type-filter chips,
+ * which have a full row to themselves and where "ПВЗ" would be needlessly terse. The two are
+ * different surfaces, not two names for the same slot.
  *
  * Declared inside the plugin's init callback (`require_once`d from
  * `woodev-test-shipping-method.php`, same arrangement as `class-test-bulk-point-source.php`
@@ -194,15 +205,23 @@ if ( ! class_exists( 'Woodev_Test_Live_Yandex_Point_Source' ) ) {
 		 * existing point icons (registered in `woodev-test-shipping-method.php` under
 		 * exactly these `PVZ`/`POSTAMAT` keys) keep working — the framework compares type
 		 * codes case-sensitively.
+		 *
+		 * `short` is this fixture's own tab wording (issue #207), NOT part of the framework's
+		 * type shape: `Pickup_Point::from_array()` whitelists `code`/`label` out of the `type`
+		 * array, so the extra key never reaches the point. It is fed separately into
+		 * `point_short_name` by {@see self::map_point()} — see the file docblock's SHORT NAME
+		 * section for why the label itself stays long.
 		 */
 		private const TYPE_MAP = [
 			'pickup_point' => [
 				'code'  => 'PVZ',
 				'label' => 'Пункт выдачи заказов',
+				'short' => 'ПВЗ',
 			],
 			'terminal'     => [
 				'code'  => 'POSTAMAT',
 				'label' => 'Постамат',
+				'short' => 'Постамат',
 			],
 		];
 
@@ -412,25 +431,62 @@ if ( ! class_exists( 'Woodev_Test_Live_Yandex_Point_Source' ) ) {
 
 			return \Woodev\Framework\Shipping\Pickup\Pickup_Point::from_array(
 				[
-					'id'              => $raw_point['id'] ?? '',
-					'name'            => $raw_point['name'] ?? '',
-					'lat'             => $position['latitude'] ?? null,
-					'lng'             => $position['longitude'] ?? null,
-					'address'         => $address['full_address'] ?? '',
-					'type'            => $type,
-					'locality'        => $address['locality'] ?? '',
-					'postal_code'     => $address['postal_code'] ?? '',
-					'phone'           => $contact['phone'] ?? '',
-					'instruction'     => $raw_point['instruction'] ?? '',
-					'work_time'       => $this->flatten_schedule( $schedule ),
-					'payment_methods' => $this->map_payment_methods(
+					'id'               => $raw_point['id'] ?? '',
+					'name'             => $raw_point['name'] ?? '',
+					'lat'              => $position['latitude'] ?? null,
+					'lng'              => $position['longitude'] ?? null,
+					'address'          => self::strip_stringified_boolean( $address['full_address'] ?? '' ),
+					'type'             => $type,
+					// Issue #207 — the domain names the tab, the framework numbers it. Yandex's
+					// payload carries no short name of its own (see the file docblock's SHORT
+					// NAME section), so the fixture supplies one per type.
+					'point_short_name' => $type['short'],
+					'locality'         => $address['locality'] ?? '',
+					'postal_code'      => $address['postal_code'] ?? '',
+					'phone'            => $contact['phone'] ?? '',
+					'instruction'      => $raw_point['instruction'] ?? '',
+					'work_time'        => $this->flatten_schedule( $schedule ),
+					'payment_methods'  => $this->map_payment_methods(
 						is_array( $raw_point['payment_methods'] ?? null ) ? $raw_point['payment_methods'] : []
 					),
-					'services'        => $this->map_services( $services ),
-					'photos'          => [],
-					'icons'           => $this->icons_for_operator( $raw_point['operator_id'] ?? null ),
+					'services'         => $this->map_services( $services ),
+					'photos'           => [],
+					'icons'            => $this->icons_for_operator( $raw_point['operator_id'] ?? null ),
 				]
 			);
+		}
+
+		/**
+		 * Removes an upstream stringified boolean from the address (issue #210).
+		 *
+		 * The `5post` operator composes its `house` field upstream as
+		 * `{house} к{housing} стр{building}` and renders a MISSING value as the literal
+		 * `false`, so the customer is shown "Островитянова ул 19/22 кfalse". Yandex passes the
+		 * string through untouched — its own structured `housing`/`building` keys arrive EMPTY,
+		 * which is how we know the composition happened before Yandex, not here.
+		 *
+		 * Measured on the live sandbox, `geo_id: 213`, 812 points (08.08.2026): 679 affected,
+		 * every one of them `operator_id: 5post`; the artefact is always the exact substring
+		 * " кfalse" (space + Cyrillic `к` U+043A + `false`), always inside `house`; zero
+		 * occurrences of `true`, `стрfalse`, or any other form. The `стр` slot is covered here
+		 * anyway because the SAME composition can put the same literal there — that is the
+		 * shape of the upstream bug, not speculation about a future one.
+		 *
+		 * Deliberately narrow: only a boolean literal directly behind one of those two
+		 * prefixes is removed, so a real housing value ("17 к6") and any word that merely
+		 * contains the letters ("Falsettoвая") survive. This lives in the FIXTURE, not the
+		 * framework: the framework must never guess at the meaning of an address string, and a
+		 * real carrier plugin owns the hygiene of the data it hands over — the same division
+		 * of labour as `point_short_name` in issue #207.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param mixed $address Raw `address.full_address` from the API.
+		 *
+		 * @return string
+		 */
+		private static function strip_stringified_boolean( $address ): string {
+			return (string) preg_replace( '/\s(?:к|стр)(?:false|true)\b/iu', '', (string) $address );
 		}
 
 		/**

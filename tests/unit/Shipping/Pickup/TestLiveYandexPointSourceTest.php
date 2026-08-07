@@ -224,6 +224,91 @@ final class TestLiveYandexPointSourceTest extends TestCase {
 		$this->assertSame( [ 'code' => 'POSTAMAT', 'label' => 'Постамат' ], $postamat->to_array()['type'] );
 	}
 
+	/**
+	 * Issue #207: Yandex's payload carries no short name, so co-located tabs fell back to
+	 * `type.label` and read "Пункт выдачи заказов 1/2" — too long for a tab. The fixture now
+	 * supplies a per-type short name; the framework still does the numbering.
+	 *
+	 * The assertion on `type` above is what pins the other half of this: `TYPE_MAP`'s extra
+	 * `short` key must NOT leak into the point's `type` array (`from_array()` whitelists
+	 * `code`/`label`), or the browser would receive a shape the contract never declared.
+	 */
+	public function test_each_type_carries_its_own_short_name_for_the_tab_label(): void {
+		$this->stub_successful_transport( [ $this->real_pickup_point_record(), $this->real_terminal_record() ] );
+		Functions\when( 'set_transient' )->justReturn( true );
+
+		$source = new \Woodev_Test_Live_Yandex_Point_Source();
+		$points = $source->fetch_points( Point_Query::from_request( [ 'locality' => 'Москва' ] ) );
+
+		$short_by_code = [];
+		foreach ( $points as $point ) {
+			$short_by_code[ $point->to_array()['type']['code'] ] = $point->to_array()['point_short_name'];
+		}
+
+		$this->assertSame( 'ПВЗ', $short_by_code['PVZ'] );
+		$this->assertSame( 'Постамат', $short_by_code['POSTAMAT'] );
+	}
+
+	/**
+	 * Issue #210 — the `5post` operator composes `house` upstream as
+	 * `{house} к{housing} стр{building}` and stringifies a MISSING value as the boolean
+	 * `false`, so 679 of the 812 live Moscow points carry a literal " кfalse" in the address
+	 * shown to the customer. The addresses below are byte-preserved from the live payload.
+	 *
+	 * @dataProvider provide_addresses_with_the_stringified_boolean
+	 */
+	public function test_a_stringified_boolean_is_stripped_from_the_address( string $raw, string $expected ): void {
+		$record                            = $this->real_pickup_point_record();
+		$record['address']['full_address'] = $raw;
+
+		$this->stub_successful_transport( [ $record ] );
+		Functions\when( 'set_transient' )->justReturn( true );
+
+		$source = new \Woodev_Test_Live_Yandex_Point_Source();
+		$points = $source->fetch_points( Point_Query::from_request( [ 'locality' => 'Москва' ] ) );
+
+		$this->assertSame( $expected, $points[0]->get_address() );
+	}
+
+	/**
+	 * @return array<string, array{0: string, 1: string}>
+	 */
+	public function provide_addresses_with_the_stringified_boolean(): array {
+		return [
+			// The plain majority — the artefact sits at the very end.
+			'trailing housing'        => [
+				'г.Москва Островитянова ул 19/22 кfalse',
+				'г.Москва Островитянова ул 19/22',
+			],
+			// A real building value follows it, so the strip must not eat the tail.
+			'housing before building' => [
+				'г.Москва Привольная ул 3 кfalse стрк.1',
+				'г.Москва Привольная ул 3 стрк.1',
+			],
+			// The operator's own screenshot.
+			'operator screenshot'     => [
+				'г.Москва, п.Вороновское п.ЛМС 7 кfalse стробъект №1',
+				'г.Москва, п.Вороновское п.ЛМС 7 стробъект №1',
+			],
+			// The building slot can carry the same stringified boolean by construction, even
+			// though the live Moscow payload happens to show zero of them.
+			'building slot'           => [
+				'г.Москва Тестовая ул 5 к2 стрfalse',
+				'г.Москва Тестовая ул 5 к2',
+			],
+			// A REAL housing value must survive untouched — this is the over-strip guard.
+			'real housing kept'       => [
+				'Москва Новокосинская 17 к6',
+				'Москва Новокосинская 17 к6',
+			],
+			// "false" as part of a longer word is not the artefact.
+			'word containing false'   => [
+				'Москва Falsettoвая ул 1',
+				'Москва Falsettoвая ул 1',
+			],
+		];
+	}
+
 	public function test_unrecognised_type_is_skipped_not_fatal(): void {
 		$foreign_type_record         = $this->real_pickup_point_record();
 		$foreign_type_record['type'] = 'a_future_yandex_type_this_fixture_does_not_know';
