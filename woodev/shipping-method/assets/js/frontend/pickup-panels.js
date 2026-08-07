@@ -586,7 +586,20 @@
 	 * are pinned LITERALS, not a client-side fallback computation, for the same
 	 * no-mirrored-evaluator reason.
 	 *
-	 * @param {HTMLElement} root
+	 * THE HOST MUST BE THE STAGE, NOT THE PANELS ELEMENT (issue #212). Custom properties
+	 * only reach DESCENDANTS, and five pickup surfaces are SIBLINGS of
+	 * `.woodev-pickup-panels` under `.woodev-pickup-stage`, not children of it: the sidebar
+	 * toggle strip, the zoom control, the busy overlay's spinner, the message strip, and —
+	 * via ymaps' own controls pane inside `.woodev-pickup-map` — the whole search/filter bar.
+	 * Every rule in `pickup.css` is written `var( --woodev-pickup-accent-fill, #047a9b )`, so
+	 * a surface outside the host does not break: it silently falls back to the LITERAL. That
+	 * literal is `#06aedd` darkened 30%, i.e. numerically identical to what the default accent
+	 * derives to — which is why hosting on the panels element looked correct for as long as
+	 * the accent stayed `#06aedd`, and showed a teal filter badge and a teal toggle strip on a
+	 * yellow-accented map the first time a merchant colour was rig-tested. The literals stay
+	 * in the CSS on purpose: they are what paints before this function runs at all.
+	 *
+	 * @param {HTMLElement} root the accent host — `.woodev-pickup-stage`, see above.
 	 * @param {Object}      config
 	 * @returns {void}
 	 */
@@ -1851,6 +1864,12 @@
 		var stage = document.createElement( 'div' );
 		stage.className = 'woodev-pickup-stage';
 
+		// The accent host is the STAGE, not the panels element — the map (and so ymaps' own
+		// controls pane, which carries the search/filter bar), the sidebar toggle, the zoom
+		// control, the overlay and the message strip are all siblings of `panels`, and a
+		// custom property only reaches descendants. See {@see applyAccentColor} (issue #212).
+		applyAccentColor( stage, this._config );
+
 		// The map mount point — this task only builds the DOM/CSS plumbing for it; a later
 		// task rewires the caller to hand `getMapElement()` to the map provider's `init()`
 		// instead of the raw modal container. Painted first so every panel draws over it.
@@ -1859,8 +1878,6 @@
 
 		var root = document.createElement( 'div' );
 		root.className = 'woodev-pickup-panels';
-
-		applyAccentColor( root, this._config );
 
 		var list = document.createElement( 'div' );
 		list.className = 'woodev-pickup-list';

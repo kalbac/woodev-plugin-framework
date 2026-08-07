@@ -191,13 +191,51 @@ describe( 'accent colours (issue #203 — brand identity split from the filled-t
 	// would be exactly the mirrored-evaluator duplication the framework avoids elsewhere (see
 	// `pickup-panels.js`'s own `applyAccentColor()` docblock).
 
+	// The accent host is the STAGE, not `panels.root` (issue #212) — reached through the DOM
+	// rather than through `panels._stage` on purpose: a private field renamed tomorrow would
+	// quietly re-point these assertions, while the element's own class name is the contract
+	// `pickup.css` is written against.
+	const accentHostOf = ( panels ) => panels.root.closest( '.woodev-pickup-stage' );
+
+	// The defect this whole block moved for: custom properties only reach DESCENDANTS, and
+	// five pickup surfaces are siblings of `panels.root`, not children of it — so hosting the
+	// triplet on `panels.root` left every one of them on `pickup.css`'s literal fallback.
+	// Invisible while the accent stayed `#06aedd`, because that literal IS what `#06aedd`
+	// derives to; a yellow accent showed a teal filter badge on a yellow map.
+	it( 'hosts the triplet where every pickup surface inherits it, not just the panels', () => {
+		const panels = new Panels( document.createElement( 'div' ), config );
+		panels.render();
+
+		const host = accentHostOf( panels );
+
+		expect( host ).not.toBeNull();
+		expect( host.style.getPropertyValue( '--woodev-pickup-accent' ) ).toBe( '#06aedd' );
+		expect( panels.root.style.getPropertyValue( '--woodev-pickup-accent' ) ).toBe( '' );
+
+		// `.woodev-pickup-map` stands in for the search/filter bar: ymaps builds its controls
+		// pane inside the map element, so the bar is only ever reachable through it.
+		[
+			'.woodev-pickup-panels',
+			'.woodev-pickup-map',
+			'.woodev-pickup-list__toggle',
+			'.woodev-pickup-zoom',
+			'.woodev-pickup-overlay',
+			'.woodev-pickup-message',
+		].forEach( ( selector ) => {
+			const surface = host.querySelector( selector );
+
+			expect( surface ).not.toBeNull();
+			expect( host.contains( surface ) ).toBe( true );
+		} );
+	} );
+
 	it( 'writes the framework default triplet when the config carries none', () => {
 		const panels = new Panels( document.createElement( 'div' ), config );
 		panels.render();
 
-		expect( panels.root.style.getPropertyValue( '--woodev-pickup-accent' ) ).toBe( '#06aedd' );
-		expect( panels.root.style.getPropertyValue( '--woodev-pickup-accent-fill' ) ).toBe( '#047a9b' );
-		expect( panels.root.style.getPropertyValue( '--woodev-pickup-accent-contrast' ) ).toBe( '#ffffff' );
+		expect( accentHostOf( panels ).style.getPropertyValue( '--woodev-pickup-accent' ) ).toBe( '#06aedd' );
+		expect( accentHostOf( panels ).style.getPropertyValue( '--woodev-pickup-accent-fill' ) ).toBe( '#047a9b' );
+		expect( accentHostOf( panels ).style.getPropertyValue( '--woodev-pickup-accent-contrast' ) ).toBe( '#ffffff' );
 	} );
 
 	it( 'applies a server-resolved triplet verbatim, including a BLACK contrast', () => {
@@ -211,9 +249,9 @@ describe( 'accent colours (issue #203 — brand identity split from the filled-t
 		} ) );
 		panels.render();
 
-		expect( panels.root.style.getPropertyValue( '--woodev-pickup-accent' ) ).toBe( '#ffeb3b' );
-		expect( panels.root.style.getPropertyValue( '--woodev-pickup-accent-fill' ) ).toBe( '#ffeb3b' );
-		expect( panels.root.style.getPropertyValue( '--woodev-pickup-accent-contrast' ) ).toBe( '#000000' );
+		expect( accentHostOf( panels ).style.getPropertyValue( '--woodev-pickup-accent' ) ).toBe( '#ffeb3b' );
+		expect( accentHostOf( panels ).style.getPropertyValue( '--woodev-pickup-accent-fill' ) ).toBe( '#ffeb3b' );
+		expect( accentHostOf( panels ).style.getPropertyValue( '--woodev-pickup-accent-contrast' ) ).toBe( '#000000' );
 	} );
 
 	it( 'falls back to the default accent ALONE when only accentColor is unsafe', () => {
@@ -224,9 +262,9 @@ describe( 'accent colours (issue #203 — brand identity split from the filled-t
 		} ) );
 		panels.render();
 
-		expect( panels.root.style.getPropertyValue( '--woodev-pickup-accent' ) ).toBe( '#06aedd' );
-		expect( panels.root.style.getPropertyValue( '--woodev-pickup-accent-fill' ) ).toBe( '#098534' );
-		expect( panels.root.style.getPropertyValue( '--woodev-pickup-accent-contrast' ) ).toBe( '#ffffff' );
+		expect( accentHostOf( panels ).style.getPropertyValue( '--woodev-pickup-accent' ) ).toBe( '#06aedd' );
+		expect( accentHostOf( panels ).style.getPropertyValue( '--woodev-pickup-accent-fill' ) ).toBe( '#098534' );
+		expect( accentHostOf( panels ).style.getPropertyValue( '--woodev-pickup-accent-contrast' ) ).toBe( '#ffffff' );
 	} );
 
 	it( 'falls back to the default fill ALONE when only accentFillColor is missing', () => {
@@ -236,9 +274,9 @@ describe( 'accent colours (issue #203 — brand identity split from the filled-t
 		} ) );
 		panels.render();
 
-		expect( panels.root.style.getPropertyValue( '--woodev-pickup-accent' ) ).toBe( '#0a8c37' );
-		expect( panels.root.style.getPropertyValue( '--woodev-pickup-accent-fill' ) ).toBe( '#047a9b' );
-		expect( panels.root.style.getPropertyValue( '--woodev-pickup-accent-contrast' ) ).toBe( '#ffffff' );
+		expect( accentHostOf( panels ).style.getPropertyValue( '--woodev-pickup-accent' ) ).toBe( '#0a8c37' );
+		expect( accentHostOf( panels ).style.getPropertyValue( '--woodev-pickup-accent-fill' ) ).toBe( '#047a9b' );
+		expect( accentHostOf( panels ).style.getPropertyValue( '--woodev-pickup-accent-contrast' ) ).toBe( '#ffffff' );
 	} );
 
 	it( 'falls back to the default contrast ALONE when only accentContrastColor is unsafe', () => {
@@ -249,9 +287,9 @@ describe( 'accent colours (issue #203 — brand identity split from the filled-t
 		} ) );
 		panels.render();
 
-		expect( panels.root.style.getPropertyValue( '--woodev-pickup-accent' ) ).toBe( '#0a8c37' );
-		expect( panels.root.style.getPropertyValue( '--woodev-pickup-accent-fill' ) ).toBe( '#098534' );
-		expect( panels.root.style.getPropertyValue( '--woodev-pickup-accent-contrast' ) ).toBe( '#ffffff' );
+		expect( accentHostOf( panels ).style.getPropertyValue( '--woodev-pickup-accent' ) ).toBe( '#0a8c37' );
+		expect( accentHostOf( panels ).style.getPropertyValue( '--woodev-pickup-accent-fill' ) ).toBe( '#098534' );
+		expect( accentHostOf( panels ).style.getPropertyValue( '--woodev-pickup-accent-contrast' ) ).toBe( '#ffffff' );
 	} );
 } );
 
