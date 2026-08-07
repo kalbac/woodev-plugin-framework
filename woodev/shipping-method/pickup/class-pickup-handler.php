@@ -292,10 +292,48 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		private const DEFAULT_ACCENT_COLOR = '#06aedd';
 
 		/**
-		 * The plugin's default accent colour (spec D-15) — drives the map's CTA, the
-		 * active list item, the drawer toggle, the cluster icon, and the checkout trigger
-		 * button. Overridden by {@see self::$setting_accent_color} when the merchant has
-		 * set one.
+		 * The WCAG contrast ratio the accent-FILL surface must clear against white text
+		 * (issue #203) — `4.5:1`, the "normal text" threshold, not the `3:1` large-text
+		 * allowance, because the smallest text drawn on the fill is a 10px counter badge.
+		 *
+		 * @since 2.0.2
+		 * @var float
+		 */
+		private const FILL_TEXT_CONTRAST_MIN = 4.5;
+
+		/**
+		 * The darkening step {@see self::derive_accent_fill()} tries between 0% and
+		 * {@see self::FILL_DARKEN_MAX_PERCENT} while white still fails
+		 * {@see self::FILL_TEXT_CONTRAST_MIN} (issue #203).
+		 *
+		 * @since 2.0.2
+		 * @var int
+		 */
+		private const FILL_DARKEN_STEP_PERCENT = 5;
+
+		/**
+		 * The darkening ceiling {@see self::derive_accent_fill()} gives up at, falling back
+		 * to black on the UNDARKENED accent instead (issue #203). A colour that still fails
+		 * white at 30% darkening is, by definition, light — black already reads excellently
+		 * on a light colour, and darkening further would start destroying the brand colour
+		 * itself (the issue's own example: `#ffeb3b` needs -50% for white, and the result is
+		 * khaki, not yellow) for no readability gain over just using black. A sweep of
+		 * 140,608 colours (issue #203) found zero colours where neither branch reaches
+		 * {@see self::FILL_TEXT_CONTRAST_MIN} — this ceiling is not a compromise, every
+		 * colour resolves one way or the other.
+		 *
+		 * @since 2.0.2
+		 * @var int
+		 */
+		private const FILL_DARKEN_MAX_PERCENT = 30;
+
+		/**
+		 * The plugin's default accent colour (spec D-15) — drives the map's markers,
+		 * outlines, focus ring and the active list item's own selection bar directly; the
+		 * CTA, the drawer toggle, counter badges and the card chip draw on
+		 * {@see self::resolve_accent_fill_color()}'s DERIVED fill instead, not this value
+		 * raw (issue #203 split the brand colour from the filled-text surface). Overridden
+		 * by {@see self::$setting_accent_color} when the merchant has set one.
 		 *
 		 * @since 2.0.2
 		 * @var string
@@ -479,6 +517,228 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 				?: ( sanitize_hex_color( $this->accent_color ) ?: self::DEFAULT_ACCENT_COLOR );
 
 			return strtolower( $sanitized );
+		}
+
+		/**
+		 * Resolves the surface colour text is drawn ON — the CTA, the counter badges, the
+		 * filter chip — derived from {@see self::resolve_accent_color()} via
+		 * {@see self::derive_accent_fill()} (issue #203), then filterable and sanitised
+		 * exactly like the accent itself.
+		 *
+		 * Computed server-side, once, and shipped as a literal hex value — never mirrored as
+		 * a second formula in `pickup-geo.js`. This repo already rejected a mirrored-evaluator
+		 * shape for the pickup feature once (SP-5's `Constraint_Checker`: the client renders
+		 * the server's verdict, it never re-implements COD/weight rules) specifically to avoid
+		 * the maintenance a mirrored evaluator carries; the same reasoning applies here. The
+		 * client (`pickup-panels.js`'s `applyAccentColor()`) only re-validates this value via
+		 * `safeColor()` before writing it to the CSSOM — the exact same defense-in-depth
+		 * re-validation `accentColor` itself already gets, never a second darken/contrast-ratio
+		 * implementation.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string a valid, lower-cased hex colour, never an empty string.
+		 */
+		private function resolve_accent_fill_color(): string {
+			$accent  = $this->resolve_accent_color();
+			$derived = self::derive_accent_fill( $accent );
+
+			/**
+			 * Filters the pickup map's accent FILL colour — the surface under
+			 * contrast-coloured text (issue #203).
+			 *
+			 * @since 2.0.2
+			 *
+			 * @param string $fill_color the derived fill, before sanitisation.
+			 * @param string $accent     the resolved accent colour it was derived from.
+			 */
+			$filtered = (string) apply_filters( 'woodev_pickup_accent_fill_color', $derived['fill'], $accent );
+
+			$sanitized = sanitize_hex_color( $filtered ) ?: $derived['fill'];
+
+			return strtolower( $sanitized );
+		}
+
+		/**
+		 * Resolves the text/icon colour paired with
+		 * {@see self::resolve_accent_fill_color()} — white or black, whichever
+		 * {@see self::derive_accent_fill()} chose (issue #203). Filterable and sanitised the
+		 * same way, and independently overridable: a plugin/merchant may override just the
+		 * contrast without touching the fill, or vice versa.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string a valid, lower-cased hex colour, never an empty string.
+		 */
+		private function resolve_accent_contrast_color(): string {
+			$accent  = $this->resolve_accent_color();
+			$derived = self::derive_accent_fill( $accent );
+
+			/**
+			 * Filters the pickup map's accent-fill CONTRAST colour — the text/icon colour
+			 * drawn on {@see self::resolve_accent_fill_color()} (issue #203).
+			 *
+			 * @since 2.0.2
+			 *
+			 * @param string $contrast_color the derived contrast, before sanitisation.
+			 * @param string $accent         the resolved accent colour it was derived from.
+			 */
+			$filtered = (string) apply_filters( 'woodev_pickup_accent_contrast_color', $derived['contrast'], $accent );
+
+			$sanitized = sanitize_hex_color( $filtered ) ?: $derived['contrast'];
+
+			return strtolower( $sanitized );
+		}
+
+		/**
+		 * Expands a 3- or 6-digit hex colour (`#` optional) to its `[ R, G, B ]` byte
+		 * triplet — the same shorthand expansion `wc_hex_darker()`'s own `wc_rgb_from_hex()`
+		 * performs (`wc-formatting-functions.php`, verified against WooCommerce core), so a
+		 * value already sanitised by {@see self::resolve_accent_color()} (which preserves
+		 * shorthand rather than expanding it) darkens and measures identically to how
+		 * WooCommerce itself would.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $hex a 3- or 6-digit hex colour, `#` optional.
+		 * @return int[] `[ R, G, B ]`, each 0-255.
+		 */
+		private static function hex_to_rgb( string $hex ): array {
+			$hex = str_replace( '#', '', $hex );
+			$hex = (string) preg_replace( '/^(.)(.)(.)$/', '$1$1$2$2$3$3', $hex );
+
+			return [
+				hexdec( substr( $hex, 0, 2 ) ),
+				hexdec( substr( $hex, 2, 2 ) ),
+				hexdec( substr( $hex, 4, 2 ) ),
+			];
+		}
+
+		/**
+		 * Darkens `$hex` by `$percent`, channel-by-channel — a byte-for-byte port of
+		 * `wc_hex_darker()` (`wc-formatting-functions.php`, verified against WooCommerce
+		 * core): each channel loses `round( ( $v / 100 ) * $percent )` of itself, PHP's own
+		 * half-away-from-zero rounding. A port rather than a call to the real function
+		 * because this class has no runtime dependency on WooCommerce being loaded elsewhere
+		 * ({@see self::wc_cart()} probes for WC() lazily for the same reason).
+		 *
+		 * MUST stay byte-for-byte identical to `wc_hex_darker()` — issue #203 is explicit
+		 * that the framework's own darkening curve must match WooCommerce's, not invent a
+		 * different one; a future WC update changing that function's rounding would need this
+		 * one updated to match.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $hex     a 3- or 6-digit hex colour, `#` optional.
+		 * @param int    $percent 0-100.
+		 * @return string a 6-digit hex colour (lower-cased, leading `#`).
+		 */
+		private static function darken_hex_color( string $hex, int $percent ): string {
+			[ $r, $g, $b ] = self::hex_to_rgb( $hex );
+			$color         = '#';
+
+			foreach ( [ $r, $g, $b ] as $channel ) {
+				$darkened = $channel - (int) round( ( $channel / 100 ) * $percent );
+				$color   .= str_pad( dechex( $darkened ), 2, '0', STR_PAD_LEFT );
+			}
+
+			return $color;
+		}
+
+		/**
+		 * WCAG relative luminance of `$hex` — gamma-linearized channels combined with the
+		 * Rec.709 luma weights, the SAME formula `pickup-geo.js`'s `contrastFor()` uses
+		 * client-side for the IDENTITY contrast decision (spec D-15). This does not
+		 * duplicate `contrastFor()`'s own logic: `contrastFor()` picks whichever of
+		 * black/white wins a luminance-crossover comparison (correct for identity — "which
+		 * reads better"), which is a DIFFERENT question from "does this reach an actual
+		 * 4.5:1 ratio" (both options can lose that, or both can win it) — the question
+		 * {@see self::contrast_ratio()} answers for the fill.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $hex a 3- or 6-digit hex colour, `#` optional.
+		 * @return float 0.0-1.0.
+		 */
+		private static function relative_luminance( string $hex ): float {
+			$linearize = static function ( int $channel ): float {
+				$s = $channel / 255;
+
+				return $s <= 0.03928 ? $s / 12.92 : ( ( $s + 0.055 ) / 1.055 ) ** 2.4;
+			};
+
+			[ $r, $g, $b ] = self::hex_to_rgb( $hex );
+
+			return 0.2126 * $linearize( $r ) + 0.7152 * $linearize( $g ) + 0.0722 * $linearize( $b );
+		}
+
+		/**
+		 * WCAG contrast ratio between two colours: `( L_lighter + 0.05 ) / ( L_darker + 0.05 )`
+		 * — always >= 1.0, regardless of argument order.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $hex_a a 3- or 6-digit hex colour, `#` optional.
+		 * @param string $hex_b a 3- or 6-digit hex colour, `#` optional.
+		 * @return float
+		 */
+		private static function contrast_ratio( string $hex_a, string $hex_b ): float {
+			$luminance_a = self::relative_luminance( $hex_a );
+			$luminance_b = self::relative_luminance( $hex_b );
+
+			$lighter = max( $luminance_a, $luminance_b );
+			$darker  = min( $luminance_a, $luminance_b );
+
+			return ( $lighter + 0.05 ) / ( $darker + 0.05 );
+		}
+
+		/**
+		 * Derives the fill/contrast pair for text drawn ON the accent (issue #203):
+		 *
+		 * 1. White already clears {@see self::FILL_TEXT_CONTRAST_MIN} on `$accent` -> white
+		 *    on the accent, unchanged.
+		 * 2. Else darken `$accent` in {@see self::FILL_DARKEN_STEP_PERCENT} steps up to
+		 *    {@see self::FILL_DARKEN_MAX_PERCENT} ({@see self::darken_hex_color()}) until
+		 *    white clears the threshold on the darkened colour -> white on that.
+		 * 3. Else -> black on the UNDARKENED accent (see {@see self::FILL_DARKEN_MAX_PERCENT}'s
+		 *    own docblock for why 30% is the right ceiling, not a compromise).
+		 *
+		 * Pure and static — output depends only on `$accent` — per this codebase's own
+		 * convention for pure methods.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $accent a sanitised, already-resolved accent colour (see
+		 *                       {@see self::resolve_accent_color()}).
+		 * @return array{fill: string, contrast: string} lower-cased hex colours.
+		 */
+		private static function derive_accent_fill( string $accent ): array {
+			if ( self::contrast_ratio( '#ffffff', $accent ) >= self::FILL_TEXT_CONTRAST_MIN ) {
+				return [
+					'fill'     => strtolower( $accent ),
+					'contrast' => '#ffffff',
+				];
+			}
+
+			for (
+				$percent = self::FILL_DARKEN_STEP_PERCENT;
+				$percent <= self::FILL_DARKEN_MAX_PERCENT;
+				$percent += self::FILL_DARKEN_STEP_PERCENT
+			) {
+				$darkened = self::darken_hex_color( $accent, $percent );
+
+				if ( self::contrast_ratio( '#ffffff', $darkened ) >= self::FILL_TEXT_CONTRAST_MIN ) {
+					return [
+						'fill'     => strtolower( $darkened ),
+						'contrast' => '#ffffff',
+					];
+				}
+			}
+
+			return [
+				'fill'     => strtolower( $accent ),
+				'contrast' => '#000000',
+			];
 		}
 
 		/**
@@ -818,6 +1078,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 *     replaceAddress: array{enabled: bool, billingOnly: bool},
 		 *     selection: array{close: bool, refreshCheckout: bool},
 		 *     accentColor: string,
+		 *     accentFillColor: string,
+		 *     accentContrastColor: string,
 		 *     modal: array{width: int, bodyHeight: string},
 		 *     search: bool
 		 * }
@@ -1013,7 +1275,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 
 				// Top level, NOT inside `mapConfig`: the checkout trigger button lives
 				// outside the modal entirely and needs this too (spec D-15).
-				'accentColor' => $this->resolve_accent_color(),
+				//
+				// `accentFillColor`/`accentContrastColor` (issue #203) split the brand
+				// colour from the surface a filled CTA/badge/chip draws text ON — see
+				// self::resolve_accent_fill_color()'s own docblock for why the derivation
+				// runs HERE, server-side, and is never mirrored in JS.
+				'accentColor'         => $this->resolve_accent_color(),
+				'accentFillColor'     => $this->resolve_accent_fill_color(),
+				'accentContrastColor' => $this->resolve_accent_contrast_color(),
 
 				// Consumed by the map provider's own address-search fit (Task 19, D-6) — see
 

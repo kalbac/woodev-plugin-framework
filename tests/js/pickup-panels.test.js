@@ -182,6 +182,79 @@ it( 'renders a blank label rather than a Russian default when an i18n key is mis
 		.toBe( '' );
 } );
 
+describe( 'accent colours (issue #203 — brand identity split from the filled-text surface)', () => {
+	// The derivation (darken-to-30%-then-black WCAG algorithm) runs server-side, once
+	// (`Pickup_Handler::resolve_accent_fill_color()`/`resolve_accent_contrast_color()`) — these
+	// tests prove the CLIENT half only: it applies whatever the config carries verbatim (through
+	// `safeColor()`), and falls back to a pinned literal PER PROPERTY when the config is missing
+	// or unsafe. They deliberately do NOT re-derive fill/contrast from an accent value — that
+	// would be exactly the mirrored-evaluator duplication the framework avoids elsewhere (see
+	// `pickup-panels.js`'s own `applyAccentColor()` docblock).
+
+	it( 'writes the framework default triplet when the config carries none', () => {
+		const panels = new Panels( document.createElement( 'div' ), config );
+		panels.render();
+
+		expect( panels.root.style.getPropertyValue( '--woodev-pickup-accent' ) ).toBe( '#06aedd' );
+		expect( panels.root.style.getPropertyValue( '--woodev-pickup-accent-fill' ) ).toBe( '#047a9b' );
+		expect( panels.root.style.getPropertyValue( '--woodev-pickup-accent-contrast' ) ).toBe( '#ffffff' );
+	} );
+
+	it( 'applies a server-resolved triplet verbatim, including a BLACK contrast', () => {
+		// `#ffeb3b` (issue #203's own light-colour example): the server would resolve fill
+		// unchanged and contrast to black — proves the client does not assume contrast is
+		// always white.
+		const panels = new Panels( document.createElement( 'div' ), Object.assign( {}, config, {
+			accentColor: '#ffeb3b',
+			accentFillColor: '#ffeb3b',
+			accentContrastColor: '#000000',
+		} ) );
+		panels.render();
+
+		expect( panels.root.style.getPropertyValue( '--woodev-pickup-accent' ) ).toBe( '#ffeb3b' );
+		expect( panels.root.style.getPropertyValue( '--woodev-pickup-accent-fill' ) ).toBe( '#ffeb3b' );
+		expect( panels.root.style.getPropertyValue( '--woodev-pickup-accent-contrast' ) ).toBe( '#000000' );
+	} );
+
+	it( 'falls back to the default accent ALONE when only accentColor is unsafe', () => {
+		const panels = new Panels( document.createElement( 'div' ), Object.assign( {}, config, {
+			accentColor: 'javascript:alert(1)',
+			accentFillColor: '#098534',
+			accentContrastColor: '#ffffff',
+		} ) );
+		panels.render();
+
+		expect( panels.root.style.getPropertyValue( '--woodev-pickup-accent' ) ).toBe( '#06aedd' );
+		expect( panels.root.style.getPropertyValue( '--woodev-pickup-accent-fill' ) ).toBe( '#098534' );
+		expect( panels.root.style.getPropertyValue( '--woodev-pickup-accent-contrast' ) ).toBe( '#ffffff' );
+	} );
+
+	it( 'falls back to the default fill ALONE when only accentFillColor is missing', () => {
+		const panels = new Panels( document.createElement( 'div' ), Object.assign( {}, config, {
+			accentColor: '#0a8c37',
+			accentContrastColor: '#ffffff',
+		} ) );
+		panels.render();
+
+		expect( panels.root.style.getPropertyValue( '--woodev-pickup-accent' ) ).toBe( '#0a8c37' );
+		expect( panels.root.style.getPropertyValue( '--woodev-pickup-accent-fill' ) ).toBe( '#047a9b' );
+		expect( panels.root.style.getPropertyValue( '--woodev-pickup-accent-contrast' ) ).toBe( '#ffffff' );
+	} );
+
+	it( 'falls back to the default contrast ALONE when only accentContrastColor is unsafe', () => {
+		const panels = new Panels( document.createElement( 'div' ), Object.assign( {}, config, {
+			accentColor: '#0a8c37',
+			accentFillColor: '#098534',
+			accentContrastColor: 'not-a-colour',
+		} ) );
+		panels.render();
+
+		expect( panels.root.style.getPropertyValue( '--woodev-pickup-accent' ) ).toBe( '#0a8c37' );
+		expect( panels.root.style.getPropertyValue( '--woodev-pickup-accent-fill' ) ).toBe( '#098534' );
+		expect( panels.root.style.getPropertyValue( '--woodev-pickup-accent-contrast' ) ).toBe( '#ffffff' );
+	} );
+} );
+
 // -----------------------------------------------------------------------
 // Extra coverage beyond the plan's own spec — see the task report for which
 // mutation each one kills.

@@ -33,13 +33,16 @@
  * a PHP/JS i18n-key mismatch instead of surfacing it (the same I1 rule
  * `pickup-mount.js` and `map-provider-yandex.js` already carry).
  *
- * ACCENT COLOUR is delivered on `config.accentColor` (top level, not inside
- * `mapConfig` — Task 8B/D-15) and applied through the CSSOM via
- * `pickup-geo.js`'s `safeColor()`/`contrastFor()`, never a generated
- * `<style>` block or a string-built `style=` attribute — see {@see applyAccentColor}.
- * The value is already sanitised server-side; the client re-validates too,
- * deliberately, because a filter can return garbage and the server check is
- * not authoritative on the client.
+ * ACCENT COLOURS are delivered on `config.accentColor`/`accentFillColor`/
+ * `accentContrastColor` (top level, not inside `mapConfig` — Task 8B/D-15, split into
+ * three by issue #203) and applied through the CSSOM via `pickup-geo.js`'s `safeColor()`,
+ * never a generated `<style>` block or a string-built `style=` attribute — see
+ * {@see applyAccentColor}. Every value is already DERIVED and sanitised server-side
+ * (`Pickup_Handler::resolve_accent_fill_color()`/`resolve_accent_contrast_color()`, issue
+ * #203); the client re-validates via `safeColor()` too, deliberately, because a filter can
+ * return garbage and the server check is not authoritative on the client — but never
+ * recomputes the derivation itself. `contrastFor()` still exists in `pickup-geo.js` (and is
+ * still tested) for the identity contrast decision; it is not part of this pipeline.
  *
  * EVENT SEMANTICS: `on( event, cb )` ADDS a listener — a second `on()` call
  * for the same event fires BOTH callbacks, it never replaces the first. This
@@ -255,6 +258,28 @@
 
 	/** @type {string} fallback text colour, used only when `config.accentColor` is absent/unsafe. */
 	var DEFAULT_ACCENT = '#06aedd';
+
+	/**
+	 * Fallback fill colour, used only when `config.accentFillColor` is absent/unsafe — the
+	 * darkened surface {@see DEFAULT_ACCENT} resolves to on the server (issue #203,
+	 * `Pickup_Handler::derive_accent_fill()`). A pinned LITERAL, not a client-side
+	 * recomputation: the derivation (darken-to-30%-then-black WCAG algorithm) runs
+	 * server-side exactly once and ships its result — see {@see applyAccentColor}'s own
+	 * docblock for why. Must agree with `Pickup_Handler::DEFAULT_ACCENT_COLOR`'s own derived
+	 * fill, the same "all three must agree" contract `pickup.css`'s file docblock already
+	 * documents for the accent/contrast pair.
+	 *
+	 * @type {string}
+	 */
+	var DEFAULT_ACCENT_FILL = '#047a9b';
+
+	/**
+	 * Fallback contrast colour paired with {@see DEFAULT_ACCENT_FILL} — see that constant's
+	 * own docblock.
+	 *
+	 * @type {string}
+	 */
+	var DEFAULT_ACCENT_CONTRAST = '#ffffff';
 
 	/**
 	 * @type {number} debounce (ms) between the last keystroke and the `searchType` event —
@@ -539,13 +564,27 @@
 	// -------------------------------------------------------------------------
 
 	/**
-	 * Sets the two accent CSS custom properties on `root`, through the CSSOM
+	 * Sets the three accent CSS custom properties on `root`, through the CSSOM
 	 * (`style.setProperty`) — never a generated `<style>` block, never a
-	 * string-built `style=` attribute (D-15). Re-validates `config.accentColor`
-	 * client-side via `pickup-geo.js`'s `safeColor()` even though the server
-	 * already sanitised it: a filter returning garbage bypasses the server
-	 * check, and this client check is not authoritative on its own either —
-	 * both layers are deliberate.
+	 * string-built `style=` attribute (D-15). Re-validates every one of
+	 * `config.accentColor`/`accentFillColor`/`accentContrastColor` client-side via
+	 * `pickup-geo.js`'s `safeColor()` even though the server already sanitised them: a
+	 * filter returning garbage bypasses the server check, and this client check is not
+	 * authoritative on its own either — both layers are deliberate.
+	 *
+	 * `accentFillColor`/`accentContrastColor` (issue #203) split the brand colour
+	 * (`--woodev-pickup-accent`, identity — markers, outlines, focus ring, the selected-row
+	 * bar) from the surface a filled CTA/badge/chip draws TEXT on
+	 * (`--woodev-pickup-accent-fill` + `--woodev-pickup-accent-contrast`). The darken/WCAG
+	 * derivation itself runs ONCE, server-side (`Pickup_Handler::resolve_accent_fill_color()`
+	 * / `resolve_accent_contrast_color()`) and ships here as literal hex values — this
+	 * function does NOT recompute it. `contrastFor()` (below, still exported and tested) is
+	 * a DIFFERENT, still-valid decision (identity contrast, a two-way luminance-crossover
+	 * comparison) and is deliberately not called here any more; it answers "which of
+	 * black/white reads better on this colour", not "does white clear an actual 4.5:1 ratio",
+	 * which is what the fill needs. {@see DEFAULT_ACCENT_FILL}/{@see DEFAULT_ACCENT_CONTRAST}
+	 * are pinned LITERALS, not a client-side fallback computation, for the same
+	 * no-mirrored-evaluator reason.
 	 *
 	 * @param {HTMLElement} root
 	 * @param {Object}      config
@@ -557,9 +596,12 @@
 		}
 
 		var accent = geo.safeColor( config && config.accentColor, DEFAULT_ACCENT );
+		var fill = geo.safeColor( config && config.accentFillColor, DEFAULT_ACCENT_FILL );
+		var contrast = geo.safeColor( config && config.accentContrastColor, DEFAULT_ACCENT_CONTRAST );
 
 		root.style.setProperty( '--woodev-pickup-accent', accent );
-		root.style.setProperty( '--woodev-pickup-accent-contrast', geo.contrastFor( accent ) );
+		root.style.setProperty( '--woodev-pickup-accent-fill', fill );
+		root.style.setProperty( '--woodev-pickup-accent-contrast', contrast );
 	}
 
 	// -------------------------------------------------------------------------
