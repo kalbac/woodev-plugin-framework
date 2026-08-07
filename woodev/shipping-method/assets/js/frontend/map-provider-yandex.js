@@ -145,38 +145,41 @@
  * ever loaded, {@see _loadedBounds} returns null and every bound below is simply omitted — there
  * is nothing yet to bound the search to, not a degenerate box.
  *
- * TWO ENGINES NOW, MATCHING THE REFERENCE'S OWN SPLIT EXACTLY (round 4 correction — an earlier
- * round replaced `ymaps.suggest()` with `ymaps.geocode()` ENTIRELY, citing the Russian Post
- * bundle; the operator called this out directly: "механизм поиска ты опять выдумал, хотя в
- * эталоне «Яндекс доставка» работает именно так как должно" — typing "Чертановская 66к1" geocoded
- * to an English-language, full-postal-form TRANSIT STATION instead of the short
- * "Чертановская улица, 66к1" the reference returns, because `ymaps.geocode()` ranks POIs
- * (transit stops, landmarks) alongside addresses, while `ymaps.suggest()` — the reference's OWN
- * data source for exactly this moment, via its native `noSuggestPanel: false` widget — is
- * address-shaped and address-ranked by design):
+ * ONE ENGINE NOW (issue #180 — an earlier round replaced `ymaps.suggest()` with `ymaps.geocode()`
+ * ENTIRELY, citing the Russian Post bundle; the operator called this out directly: "механизм
+ * поиска ты опять выдумал, хотя в эталоне «Яндекс доставка» работает именно так как должно" —
+ * typing "Чертановская 66к1" geocoded to an English-language, full-postal-form TRANSIT STATION
+ * instead of the short "Чертановская улица, 66к1" the reference returns, because
+ * `ymaps.geocode()` ranks POIs (transit stops, landmarks) alongside addresses, while
+ * `ymaps.suggest()` — the reference's OWN data source for exactly this moment, via its native
+ * `noSuggestPanel: false` widget — is address-shaped and address-ranked by design):
  *
  * - {@see suggestAddresses} — powers the TYPING dropdown via `ymaps.suggest()`, bounded to the
- *   loaded point area the SAME way {@see _searchGeocodeProvider}'s geocode call already is (see
- *   {@see _loadedBounds}, spec V-7). This is what the reference gets automatically, for free,
- *   from ymaps' own native suggest widget — since this file replaces the control's ENTIRE chrome
- *   with the framework's own layout (D-3), there is no native widget left to do it for us, so
- *   this method reproduces it explicitly. `pickup-panels.js`'s own layout emits the debounced
- *   `searchType` event on every keystroke for exactly this; wiring it to this method is Task 20's
- *   mount's job — which RETURNS `{ points, addresses }` rather than emitting `searchResults`
- *   (round 4, second follow-up): `searchResults` is the COMPLETED-SEARCH event, wired to the
- *   renderer that prints "no results found", and this method runs on the TYPING path — emitting
- *   it here would drive that verdict mid-keystroke, reopening the operator's own round-3 defect.
- *   The mount calls `provider.suggestAddresses( query ).then( r => panels.previewSearchResults( r ) )`.
- * - {@see _searchGeocodeProvider} — still `options.provider.geocode`, still invoked via
- *   `control.search( query )` on a DELIBERATE `searchSubmit` (Enter/the magnifier), matches the
- *   loaded pool for free via `pickup-geo.matchPoints()`, and geocodes via `ymaps.geocode()`,
- *   BOUNDED the same way — so a Moscow buyer typing a Moscow street name is never offered a
- *   same-named street in Tolyatti (gotcha `ymaps-control-options-must-be-nested.md` — the whole
- *   reason this control ever misbehaved was `provider`/`layout` sitting at the ROOT of the
- *   constructor argument, which ymaps silently ignores; EVERY option under `_buildSearchControl`
- *   is nested under `options`, which is what actually configures the control).
+ *   loaded point area (see {@see _loadedBounds}, spec V-7, and that method's own docblock for WHY
+ *   it is bounded — a Moscow buyer typing a Moscow street name must never be offered a same-named
+ *   street in Tolyatti; gotcha `ymaps-control-options-must-be-nested.md`). This is what the
+ *   reference gets automatically, for free, from ymaps' own native suggest widget — since this
+ *   file replaces the control's ENTIRE chrome with the framework's own layout (D-3), there is no
+ *   native widget left to do it for us, so this method reproduces it explicitly.
+ *   `pickup-panels.js`'s own layout emits the debounced `searchType` event on every keystroke for
+ *   exactly this; wiring it to this method is Task 20's mount's job — which RETURNS
+ *   `{ points, addresses }` rather than emitting `searchResults` (round 4, second follow-up):
+ *   `searchResults` is the COMPLETED-SEARCH event, wired to the renderer that prints "no results
+ *   found", and this method runs on the TYPING path — emitting it here would drive that verdict
+ *   mid-keystroke, reopening the operator's own round-3 defect. The mount calls
+ *   `provider.suggestAddresses( query ).then( r => panels.previewSearchResults( r ) )` on every
+ *   keystroke AND, again, once per deliberate `searchSubmit` (Enter/the magnifier) — #179 made the
+ *   submit handler simply re-ask THIS SAME method for what is already on screen and resolve its
+ *   top hit via {@see resolveAddress}, rather than running a second, differently-ranked search of
+ *   its own (`pickup-mount.js`'s own `searchSubmit` handler carries that history; gotcha
+ *   `ymaps-suggest-not-geocode-for-address-lists`). `SearchControl` itself is, as of #180, purely
+ *   a DOM HOST for `config.searchLayoutEl` ({@see _buildSearchControl}) — its OWN
+ *   `search()`/`getResultsCount()`/`showResult()` engine is never configured with a geocode
+ *   provider and is never called by this codebase either: #179 removed `control.search()`'s only
+ *   caller, which made `_searchGeocodeProvider()` — the geocode provider that used to back that
+ *   engine — unreachable, and #180 deleted it.
  *
- * `ymaps.geocode()` is ALSO called from {@see resolveAddress}, exactly once per picked
+ * `ymaps.geocode()` is called from {@see resolveAddress} alone, exactly once per picked
  * suggestion — matching the reference's own model precisely: `suggest()` powers the LIST (cheap,
  * local-feeling, no meaningful quota cost), `geocode()` resolves ONLY the one thing the customer
  * actually picked, never the whole list at once.
@@ -184,30 +187,33 @@
  * THIS FILE DOES NOT RENDER THE RESULTS OR KNOW THE PANELS EXIST (D-3: no map-library file
  * renders point information, and this file never holds a reference to the panels object) —
  * `config.searchLayoutEl` is as far as that goes: a bare element this file mounts into an inert
- * `templateLayoutFactory` wrapper and otherwise never touches. `{ points, addresses }` is handed
- * to the `SearchControl` engine as the geocode provider's RETURN value (so
- * `search()`/`getResultsCount()`/`showResult()` keep working for the REAL geocoded addresses —
- * see the next paragraph for why matched POINTS are deliberately never part of that collection)
- * AND, separately, emitted as a `searchResults` EVENT carrying `{ points, addresses }` — that
- * event is the seam: Task 20's mount wires
- * `provider.on( 'searchResults', panels.renderSearchResults )`. `searchResults` fires on EVERY
- * resolved submit, including one that matches nothing — an empty `{ points: [], addresses: [] }`
- * still has to reach the panels, or a narrowed-down query leaves the PREVIOUS (now stale) results
- * on screen.
+ * `templateLayoutFactory` wrapper and otherwise never touches. `{ points, addresses }` never
+ * reaches the `SearchControl`'s OWN engine at all (as of #180 there is no geocode provider left to
+ * feed it — see the "ONE ENGINE NOW" paragraph above — and `search()`/`getResultsCount()`/
+ * `showResult()` are never called by this codebase either way; see the next paragraph for why a
+ * matched POINT was never mixed into that engine even before). The typing/submit preview reaches
+ * the panels as {@see suggestAddresses}'s own RETURN value instead — Task 20's mount calls
+ * `provider.suggestAddresses( query ).then( r => panels.previewSearchResults( r ) )`, as the "ONE
+ * ENGINE NOW" paragraph above describes. The ONLY thing this file still emits as a `searchResults`
+ * EVENT is {@see resolveAddress}'s own two FAILURE states — a geocode that resolves to nothing
+ * usable, or one that is rejected outright — carrying an empty `{ points: [], addresses: [] }`;
+ * Task 20's mount wires `provider.on( 'searchResults', panels.renderSearchResults )` for exactly
+ * that, so a narrowed-down query that resolves to nothing does not leave the PREVIOUS (now stale)
+ * results on screen. The SUCCESS path never emits it — {@see resolveAddress} calls
+ * {@see focusAddress} instead — because `searchResults` is the COMPLETED-SEARCH verdict event and
+ * a resolved address is not a "no results" verdict.
  *
- * WHY A MATCHED POINT IS NEVER MIXED INTO THE CONTROL'S OWN GEO-OBJECT COLLECTION: an earlier
- * draft of this design (spec V-6) proposed wrapping each matched point in a synthetic
- * `ymaps.Placemark`, tagged, alongside the real geocoded addresses, so the control's own
- * `showResult()` could resolve either kind. That was never actually needed: `pickup-panels.js`'s
- * search-result rows already attach their OWN click handlers (`searchPointPicked`/
- * `searchAddressPicked`), which Task 20's mount wires directly to `panels.openCard()`/
- * `provider.resolveAddress()` — `control.showResult()` is never called by this codebase at all.
- * Mixing a synthetic Placemark into a collection the control expects to hold real geocode results
- * would only add untested risk (its internal book-keeping is not documented for a foreign object
- * type) for zero behavioural benefit, so the provider's returned `geoObjects` collection is the
- * REAL `ymaps.geocode()` response, passed through unmodified (each address tagged
- * `woodevKind: 'address'` on its own properties, for a future consumer that DOES call the engine
- * directly) — addresses alone. Matched points travel ONLY through the plain `searchResults` event.
+ * WHY A MATCHED POINT WAS NEVER MIXED INTO THE CONTROL'S OWN GEO-OBJECT COLLECTION (historical —
+ * the collection itself no longer exists after #180, but the reasoning is why it never grew a
+ * point-carrying variant in the first place): an earlier draft of this design (spec V-6) proposed
+ * wrapping each matched point in a synthetic `ymaps.Placemark`, tagged, alongside the real
+ * geocoded addresses, so the control's own `showResult()` could resolve either kind. That was
+ * never actually needed: `pickup-panels.js`'s search-result rows already attach their OWN click
+ * handlers (`searchPointPicked`/`searchAddressPicked`), which Task 20's mount wires directly to
+ * `panels.openCard()`/`provider.resolveAddress()` — `control.showResult()` is never called by this
+ * codebase at all. Mixing a synthetic Placemark into a collection the control expected to hold
+ * real geocode results would only have added untested risk (its internal book-keeping is not
+ * documented for a foreign object type) for zero behavioural benefit.
  *
  * Picking a POINT result opens its card (Task 20's job, via the panels' own `searchPointPicked`).
  * Picking an ADDRESS result resolves through {@see focusAddress}, which draws NO pin of any kind
@@ -390,11 +396,11 @@
 	var SAME_PLACE_THRESHOLD_M = 30;
 
 	/**
-	 * Number of address results requested per call, shared by BOTH engines this file now uses
-	 * (live-review round 4, Finding A): {@see _searchGeocodeProvider}'s `ymaps.geocode()` on a
-	 * deliberate submit, and {@see suggestAddresses}'s `ymaps.suggest()` on every debounced
-	 * keystroke — `results` is the option name BOTH APIs are believed to share (unconfirmed
-	 * against a real `ymaps.suggest()` call; flag on the rig if it silently ignores this option).
+	 * Number of address results requested per call — {@see suggestAddresses}'s `ymaps.suggest()`
+	 * call, its only remaining consumer since issue #180 deleted the geocode-on-submit engine that
+	 * used to share this constant. `results` is CONFIRMED to work identically to `ymaps.geocode()`'s
+	 * own same-named option (live-review round 4 follow-up, rig-measured — see that method's own
+	 * docblock).
 	 *
 	 * @type {number}
 	 */
@@ -1217,11 +1223,20 @@
 	 * itself (D-3).
 	 *
 	 * EVERY option below is nested under `options` — `layout`, `noPlacemark`, `float`,
-	 * `position`, `provider`. ymaps controls take exactly `{ data, options, state }` at the root
+	 * `position`. ymaps controls take exactly `{ data, options, state }` at the root
 	 * and silently drop anything else; the previous version of this file passed `provider`/
 	 * `layout`/`resultsLayout`/`noPlacemark` at the ROOT, so ymaps kept its own default (English,
 	 * worldwide-geocoding) chrome and none of this file's configuration ever took effect. See the
 	 * gotcha file for the full incident.
+	 *
+	 * NO `provider` OPTION HERE (issue #180) — the control's own `search()`/`getResultsCount()`/
+	 * `showResult()` engine is deliberately left unconfigured. It used to run a bounded
+	 * `ymaps.geocode()` via `_searchGeocodeProvider()`, triggered by `control.search()` on the
+	 * magnifier; #179 replaced that call with `resolveAddress()` on the top {@see suggestAddresses}
+	 * hit instead, which left `control.search()` with no caller and its geocode provider
+	 * unreachable. `SearchControl` survives in this file purely as a DOM HOST: `searchLayoutEl` is
+	 * injected into its layout below, which is where its 16/16 position on the map comes from
+	 * (`options.position`) — it is not, any more, a search engine this file calls.
 	 *
 	 * `config.searchLayoutEl` is null when the plugin disabled search (`config.search === false`
 	 * — `pickup-panels.js`'s own `buildSearchLayout()` returns null in that case) — this method
@@ -1258,11 +1273,6 @@
 				noPlacemark: true,
 				float: 'none',
 				position: { left: '16px', right: 'auto', top: '16px' },
-				provider: {
-					geocode: function( request ) {
-						return self._searchGeocodeProvider( request );
-					},
-				},
 			},
 		} );
 
@@ -1270,105 +1280,8 @@
 	};
 
 	/**
-	 * The `SearchControl`'s custom geocode provider (Task 12, spec V-6/V-7): matches `request`
-	 * against the already-loaded point pool via `pickup-geo.matchPoints()` — instant, free, no
-	 * network — AND geocodes `request` via `ymaps.geocode()`, BOUNDED to the loaded point set
-	 * (see {@see _loadedBounds}, spec V-7). Only invoked via `control.search( query )`, which
-	 * Task 20's mount wires to `searchSubmit` (Enter/the magnifier) — a DELIBERATE submit, never
-	 * per keystroke ({@see suggestAddresses} is what now powers the per-keystroke dropdown; see
-	 * the file docblock's "ADDRESS SEARCH" section for the full two-engine design).
-	 *
-	 * The RESOLVED VALUE is `{ geoObjects, metaData }` — the REAL `ymaps.geocode()` response,
-	 * passed straight through, matched points NEVER included (see the file docblock's "WHY A
-	 * MATCHED POINT IS NEVER MIXED IN" section) — so the `SearchControl` engine
-	 * (`search()`/`getResultsCount()`/`showResult()`, kept, never reimplemented here) only ever
-	 * indexes real geocode results. Each address's own properties get `woodevKind: 'address'` set
-	 * on them — a defensive tag for a future direct consumer of the engine, since this codebase's
-	 * OWN click handling never calls `showResult()` at all (the panels' search rows dispatch
-	 * `searchPointPicked`/`searchAddressPicked` themselves).
-	 *
-	 * `displayName` READS `properties.get( 'name' )` — the SHORT form (live-review round 4,
-	 * Finding A.2; was `'text'`, the FULL postal form INCLUDING the country, which is what
-	 * actually produced the operator's reported "Russian Federation, Moscow, ... metro station"
-	 * instead of the reference's own "Чертановская улица, 66к1" for the identical query).
-	 * `properties.get( 'description' )` is the remainder ymaps splits off `name` (typically the
-	 * city/region) — deliberately NOT appended here: the reference's own expected string for this
-	 * exact query is the bare short form, no suffix.
-	 *
-	 * ALSO emits `searchResults` with `{ points, addresses }` — `addresses` here is a LIGHTWEIGHT
-	 * `{ displayName }` projection of the same geocode hits (`pickup-panels.js`'s
-	 * `buildSearchAddressItem()` only ever reads `.displayName`), not the raw `GeoObject`s — this
-	 * is the seam to the panels (Task 20's mount wires
-	 * `provider.on( 'searchResults', panels.renderSearchResults )`), kept as an event rather than
-	 * a direct call so this file stays ignorant of the panels' existence (D-3). Emitted EVERY time
-	 * this resolves, including a query that matches nothing — an empty
-	 * `{ points: [], addresses: [] }` must still reach the panels, or a narrowed-down search
-	 * leaves the PREVIOUS (now stale) results on screen.
-	 *
-	 * @param {string} request free-text query, as typed.
-	 * @returns {Promise<{geoObjects: Object, metaData: Object}>}
-	 */
-	WoodevYandexMapProvider.prototype._searchGeocodeProvider = function( request ) {
-		var self = this;
-		var matches = geo.matchPoints( this._allPoints(), request );
-		var geocodeOptions = { results: SEARCH_RESULT_COUNT };
-		var bounds = this._loadedBounds();
-
-		if ( bounds ) {
-			// Hard-bounded to the loaded points (spec V-7): under `bulk` that is exactly the
-			// buyer's own locality, so a same-named street in another region never appears; under
-			// `viewport` the loaded set follows the viewport, so one rule serves both strategies.
-			// Simply omitted before anything has ever loaded — see {@see _loadedBounds}.
-			geocodeOptions.boundedBy = bounds;
-			geocodeOptions.strictBounds = true;
-		}
-
-		return this.ymaps.geocode( request, geocodeOptions ).then( function( response ) {
-			if ( self._destroyed ) {
-				// The customer closed the dialog while the request was in flight. Emitting now
-				// would push results at a torn-down panels instance — or, worse, at the FRESH one
-				// a reopen has already built, which would show them results for a query they
-				// abandoned. Resolve with the empty shape the engine tolerates instead.
-				return { geoObjects: null, metaData: null };
-			}
-
-			var hits = ( response && response.geoObjects && 'function' === typeof response.geoObjects.toArray )
-				? response.geoObjects.toArray()
-				: [];
-
-			var addresses = hits.map( function( object ) {
-				var properties = object && object.properties;
-
-				if ( properties && 'function' === typeof properties.set ) {
-					properties.set( 'woodevKind', 'address' );
-				}
-
-				// Finding A.2 — 'name' (short), never 'text' (full postal form incl. country).
-				var displayName = properties && 'function' === typeof properties.get
-					? properties.get( 'name' )
-					: '';
-
-				return { displayName: 'string' === typeof displayName ? displayName : '' };
-			} );
-
-			self.emit( 'searchResults', { points: matches, addresses: addresses } );
-
-			return { geoObjects: response.geoObjects, metaData: response.metaData };
-		} ).catch( function() {
-			// A refused or failed geocode must not leave the customer staring at the results they
-			// had before they searched. The locally-matched points still stand — they cost no
-			// network — so publish those with an empty address section rather than nothing.
-			if ( ! self._destroyed ) {
-				self.emit( 'searchResults', { points: matches, addresses: [] } );
-			}
-
-			return { geoObjects: null, metaData: null };
-		} );
-	};
-
-	/**
 	 * Flattens every currently-loaded group's points into one array — the pool
-	 * {@see _searchGeocodeProvider}/{@see matchLoadedPoints} search. Rebuilt on every call rather
+	 * {@see suggestAddresses}/{@see matchLoadedPoints} search. Rebuilt on every call rather
 	 * than cached: the pool changes on every {@see setPoints}, and this runs once per search, not
 	 * once per point.
 	 *
@@ -1451,9 +1364,25 @@
 	 * the file docblock's "ADDRESS SEARCH" section for the full two-engine design this method is
 	 * one half of.
 	 *
-	 * BOUNDED to the loaded point area the SAME way {@see _searchGeocodeProvider}'s geocode call
-	 * already is (see {@see _loadedBounds}, spec V-7) — omitted before anything has ever loaded,
-	 * never a degenerate box.
+	 * BOUNDED to the loaded point area (see {@see _loadedBounds}, spec V-7) — omitted before
+	 * anything has ever loaded, never a degenerate box.
+	 *
+	 * WHY BOUNDED HERE BUT NOT IN {@see resolveAddress} — gotcha
+	 * `bounding-the-address-resolve-breaks-the-normal-case` (s51, self-inflicted): this call
+	 * OFFERS candidates, so bounding it to the loaded points is correct — under `bulk` the loaded
+	 * set is exactly the buyer's own locality, so a Moscow shopper typing a Moscow street name is
+	 * never offered a same-named street in Tolyatti; under `viewport` the loaded set follows the
+	 * viewport, so one rule serves both strategies. `resolveAddress()` RESOLVES the one suggestion
+	 * already picked — there is nothing left to disambiguate by then, the picked string already
+	 * carries its own full country/locality prefix (see {@see projectSuggestion}'s `query`) — and
+	 * bounding it the SAME way is a DIFFERENT, WRONG rule: the customer's own address is routinely
+	 * OUTSIDE the area the loaded pickup points cover, which is the entire reason they are
+	 * searching for it. Measured live against the fixture: with `resolveAddress()` bounded like
+	 * this call, an address ~14km from the fixture's Moscow-cluster points made `geocode()` return
+	 * zero hits, and the click silently did nothing — no camera move, no error, no fallback,
+	 * nothing observable at all, indistinguishable from the click never registering. Bound the
+	 * calls that OFFER candidates ({@see suggestAddresses}, here); never the call that RESOLVES an
+	 * already-chosen one ({@see resolveAddress}).
 	 *
 	 * RETURNS `{ points, addresses }` — it does NOT emit `searchResults` (live-review round 4,
 	 * second follow-up: an earlier version of this method DID emit `searchResults`, which
@@ -1515,7 +1444,8 @@
 			if ( self._destroyed ) {
 				// A stale in-flight request resolves with nothing meaningful rather than handing
 				// the caller results to apply to a torn-down (or freshly reopened) panels
-				// instance — see _searchGeocodeProvider()'s own note on the same discipline.
+				// instance — same discipline every async continuation in this file follows once
+				// `_destroyed` is set (see the file docblock's "DESTROY IS IDEMPOTENT" section).
 				return { points: [], addresses: [] };
 			}
 
@@ -1526,8 +1456,8 @@
 			return { points: matches, addresses: addresses };
 		} ).catch( function() {
 			// A refused/failed suggest() call must not leave the customer staring at nothing —
-			// the locally-matched points still stand, same fallback discipline as
-			// _searchGeocodeProvider()'s own catch, just as a resolved value instead of an emit.
+			// the locally-matched points still stand, so they're still returned, with an empty
+			// address list rather than a rejection.
 			return { points: matches, addresses: [] };
 		} );
 	};
@@ -2254,35 +2184,36 @@
 	 * Resolves a chosen address SUGGESTION to real coordinates — the ONLY place this file calls
 	 * `ymaps.geocode()` from the search flow, and it does so EXACTLY ONCE per selection (see the
 	 * file docblock). `displayName` is the suggestion's own resolvable text — the caller (Task
-	 * 20's mount) holds the `{ displayName, query }` entry {@see suggestAddresses}/
-	 * {@see _searchGeocodeProvider} returned and passes back `query` (the FULL, un-trimmed
-	 * string) when present, falling back to `displayName` only if `query` is absent.
+	 * 20's mount) holds the `{ displayName, query }` entry {@see suggestAddresses} returned and
+	 * passes back `query` (the FULL, un-trimmed string) when present, falling back to
+	 * `displayName` only if `query` is absent.
 	 *
 	 * DELIBERATELY THE LEAST CONSTRAINED GEOCODE/SUGGEST CALL IN THIS FILE — NO `boundedBy`, NO
 	 * `strictBounds` (live-review round 4, SECOND follow-up, reverting a round-4 change that made
-	 * this call `strictBounds`-bounded like the other two; that change was WRONG and the operator
-	 * caught it live: picking a suggestion for an address outside `_loadedBounds()` silently did
-	 * NOTHING — `strictBounds: true` made the geocode return ZERO hits, so
+	 * this call `strictBounds`-bounded like {@see suggestAddresses}; that change was WRONG and the
+	 * operator caught it live: picking a suggestion for an address outside `_loadedBounds()`
+	 * silently did NOTHING — `strictBounds: true` made the geocode return ZERO hits, so
 	 * `extractGeocodeCoordinates()` saw `null` and this method quietly gave up). This is NOT an
 	 * edge case: the customer's own address is ROUTINELY outside the area the loaded pickup
 	 * points cover — that is the entire reason they are searching for it in the first place. The
-	 * other two calls in this file ({@see _searchGeocodeProvider}, {@see suggestAddresses}) are
-	 * correctly bounded because they are offering CANDIDATES near the loaded points; THIS call
-	 * resolves the ONE the customer has ALREADY picked, an entirely different job with an
-	 * entirely different area of interest — the ambiguity `strictBounds` guards against elsewhere
-	 * is already handled upstream, since `displayName` here came from a BOUNDED `suggest()` call
-	 * and carries its own full country/locality prefix (see {@see projectSuggestion}'s `query`).
-	 * DO NOT re-add `boundedBy`/`strictBounds` to this call without re-reading this paragraph.
+	 * other call in this file ({@see suggestAddresses}) is correctly bounded because it is
+	 * offering CANDIDATES near the loaded points; THIS call resolves the ONE the customer has
+	 * ALREADY picked, an entirely different job with an entirely different area of interest — the
+	 * ambiguity `strictBounds` guards against elsewhere is already handled upstream, since
+	 * `displayName` here came from a BOUNDED `suggest()` call and carries its own full
+	 * country/locality prefix (see {@see projectSuggestion}'s `query`). See
+	 * {@see suggestAddresses}'s own docblock for the full incident (gotcha
+	 * `bounding-the-address-resolve-breaks-the-normal-case`) — DO NOT re-add `boundedBy`/
+	 * `strictBounds` to this call without re-reading it.
 	 *
 	 * A geocode that resolves to NOTHING USABLE is NOT a silent no-op (round-4 fix, same
-	 * follow-up): it emits `searchResults` with EMPTY arrays — the SAME "nothing found" surface
-	 * {@see _searchGeocodeProvider}/{@see suggestAddresses} already use, already wired to
+	 * follow-up): it emits `searchResults` with EMPTY arrays, already wired to
 	 * `panels.renderSearchResults()`'s own empty-state message. Reusing this EXISTING, ALREADY-
 	 * WIRED surface (rather than inventing a new event `pickup-mount.js` would need new wiring
 	 * for) closes the "customer picks a row and the map just sits there, no move, no message, no
 	 * error" gap the operator found — a REJECTED `ymaps.geocode()` call (network/quota) degrades
-	 * the SAME way, matching the graceful-degradation discipline the other two calls already
-	 * have.
+	 * the SAME way, matching {@see suggestAddresses}'s own graceful-degradation discipline (an
+	 * empty `addresses` array on failure, never a rejection).
 	 *
 	 * SEQUENCED via `_addressSeq` (live-review round 4 — operator: "иногда когда я пишу адрес и
 	 * потом нажимаю на лупу, карта сразу смещается, но даже не к тому адресу что я написал"):
@@ -2318,9 +2249,9 @@
 			var coordinates = extractGeocodeCoordinates( result );
 
 			if ( ! coordinates ) {
-				// Resolves to nothing usable — surface it via the SAME "nothing found" empty
-				// state _searchGeocodeProvider()/suggestAddresses() already use, rather than a
-				// silent no-op the customer reads as "did my click even register?".
+				// Resolves to nothing usable — surface it via searchResults' own "nothing found"
+				// empty state, rather than a silent no-op the customer reads as "did my click
+				// even register?".
 				self.emit( 'searchResults', { points: [], addresses: [] } );
 
 				return undefined;
@@ -2332,7 +2263,7 @@
 			return self.focusAddress( coordinates, displayName, extractGeocodeBounds( result ) );
 		} ).catch( function() {
 			// A rejected geocode (network/quota) degrades the same way a resolved-but-empty one
-			// does — matching _searchGeocodeProvider()'s/suggestAddresses()'s own catch discipline.
+			// does — matching suggestAddresses()'s own catch discipline.
 			if ( stillCurrent() ) {
 				self.emit( 'searchResults', { points: [], addresses: [] } );
 			}
