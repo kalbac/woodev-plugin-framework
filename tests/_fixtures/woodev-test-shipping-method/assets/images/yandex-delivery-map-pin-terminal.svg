@@ -1,0 +1,30 @@
+<!-- Issue #162 companion (Task B): copied from plugins-reference/woocommerce-yandex-delivery/assets/images/yandex-delivery-map-pin-terminal.svg — WooDev's own map-pin icon for its "Яндекс доставка для Woocommerce" plugin (Yandex.Delivery integration), not a Yandex LLC brand asset. Used here, unmodified, as the rig's real POSTAMAT (terminal) marker icon in place of the previous framework-drawn placeholder. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="42" height="42" fill="none">
+ <defs>
+  <clipPath id="clip0">
+   <path d="m0,0l42,0l0,42l-42,0l0,-42z" fill="#fff"/>
+  </clipPath>
+  <filter color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse" height="42.53" id="filter0_d" width="35.28" x="3.36" y="0">
+   <feFlood flood-opacity="0" result="BackgroundImageFix"/>
+   <feColorMatrix in="SourceAlpha" result="hardAlpha" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0"/>
+   <feOffset dy="1.68"/>
+   <feGaussianBlur stdDeviation="0.84"/>
+   <feColorMatrix values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.25 0"/>
+   <feBlend in2="BackgroundImageFix"/>
+   <feBlend in="SourceGraphic" in2="effect1_dropShadow"/>
+  </filter>
+ </defs>
+ <g clip-path="url(#clip0)">
+   <g filter="url(#filter0_d)">
+    <path clip-rule="evenodd" d="m23.41,32.24a15.96,15.96 0 1 0 -4.83,0l1.6,6.78c0.2,0.87 1.43,0.87 1.64,0l1.6,-6.78l-0.01,0z" fill="#FCE000" fill-rule="evenodd"/>
+   </g>
+   <g>
+    <g opacity="0.5">
+     <path d="m26.53,9.25c0.4,0 0.72,0.33 0.72,0.74l0,5.19l-13,0l0,-5.19c0,-0.41 0.33,-0.74 0.72,-0.74l11.55,0z" fill="#222" />
+     <path d="m15.7,16.67l-1.45,0l0,5.93l5.02,3.71l1.48,0l0,-5.92c0,-0.54 -0.28,-1.04 -0.75,-1.3l-4.31,-2.42z" fill="#222" />
+    </g>
+    <path d="m25.08,11.48l-2.88,0l0,1.49l2.88,0l0,-1.49z" fill="#222"/>
+    <path d="m15.7,16.67l11.55,0l0,5.19c0,0.41 -0.33,0.74 -0.72,0.74l-5.78,0l0,-2.21c0,-0.54 -0.28,-1.04 -0.75,-1.3l-4.31,-2.42z" fill="#222" />
+   </g>
+  </g>
+</svg>
