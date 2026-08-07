@@ -16,7 +16,7 @@
  * ESCAPING (two rules, opposite directions — see the project's own gotcha on
  * this): point display fields (`name`, `address`, `short_address`,
  * `locality`, `instruction`, `work_time`, `payment_methods`, `services`,
- * `type.label`, …) arrive from PHP ALREADY `esc_html()`-escaped
+ * `type.label`, `point_short_name`, …) arrive from PHP ALREADY `esc_html()`-escaped
  * (`Pickup_Point::to_browser_array()`) and are written into `innerHTML`
  * AS-IS, so the browser's own parser decodes the entity (a point named
  * `ПВЗ "Ромашка"` round-trips correctly). i18n labels and
@@ -93,10 +93,13 @@
  * arbitrary subset of it; there is no header left to surface a `{cap}+` count through (Task 7,
  * spec V-11), so this is now purely a rendering-cost guard, not a customer-visible statement.
  *
- * TAB LABELS (co-located groups, D-4): one tab per point, labelled by
- * `type.label`; the WHOLE group falls back to `name` labels the moment ANY
- * two points in it share a `type.label` — never a per-point decision, or the
- * tabs of one group would read inconsistently (spec).
+ * TAB LABELS (co-located groups, D-4; renumbered issue #199): one tab per VISIBLE point
+ * (never a filtered-out one). Each point's BASE label is `point.point_short_name` when the
+ * domain supplied one, else `type.label` — the framework's own numbering then applies ONLY
+ * where two or more VISIBLE points resolve to the SAME base label, appending ' N' (1-based,
+ * in visible order) to just that colliding subset; a base label unique among the visible
+ * points renders bare. See {@see buildTabs} for the full algorithm and why it replaced the
+ * old whole-group name fallback.
  *
  * THE SEARCH VIEW (Task 15, D-6; layout by Task 11, spec V-6): `renderSearchResults( { points,
  * addresses } )` renders TWO independent sections — matching points from the already-loaded
@@ -501,6 +504,34 @@
 		el.innerHTML = html; // eslint-disable-line -- server-escaped, see file docblock.
 
 		return el;
+	}
+
+	/**
+	 * Builds a chip-list container for a set of already-escaped point-field strings — shared by
+	 * the "Способы оплаты" and "Услуги" sections (issue #200: payment methods used to render as
+	 * a bare `', '`-joined string while services next to it were already chips — "два разных
+	 * языка для двух однотипных списков", the operator's own words). Reuses services' EXISTING
+	 * markup/classes rather than adding a second near-identical pair, per the issue's own
+	 * instruction — `.woodev-pickup-card__services`/`__service` predate this reuse but renaming
+	 * them for one more caller would only be CSS/test churn with no behavioural upside, so both
+	 * lists share the same two classes verbatim.
+	 *
+	 * @since 2.0.2
+	 * @param {string[]} items already-escaped point-field strings (`payment_methods`, `services`).
+	 * @returns {HTMLElement}
+	 */
+	function buildChipList( items ) {
+		var wrap = document.createElement( 'div' );
+		wrap.className = 'woodev-pickup-card__services';
+
+		items.forEach( function( item ) {
+			var chip = document.createElement( 'span' );
+			chip.className = 'woodev-pickup-card__service';
+			chip.innerHTML = fieldValue( item ); // eslint-disable-line -- server-escaped, see file docblock.
+			wrap.appendChild( chip );
+		} );
+
+		return wrap;
 	}
 
 	// -------------------------------------------------------------------------
@@ -958,10 +989,39 @@
 	 * between — either a single-point group to begin with (D-4), or a co-located one reduced to a
 	 * single VISIBLE point by the type filter (round 3 coordinator fix: a tab for an excluded
 	 * point would let the customer switch straight back to the thing they just filtered out).
-	 * Tabs are labelled by `type.label`; the shown SUBSET falls back to `name` the moment ANY two
-	 * of the VISIBLE points share a label — never a per-point decision, and never influenced by a
-	 * label collision that only exists among points the filter has already hidden (see the file
-	 * docblock).
+	 *
+	 * LABEL RESOLUTION (issue #199 — replaces the old whole-group-falls-back-to-`name` rule):
+	 * each VISIBLE point's BASE label is `point.point_short_name` when the domain supplied one,
+	 * else `point.type.label` — the same division of responsibility as the rest of this file:
+	 * the framework owns the card and therefore NUMBERS it (below); the domain owns naming. An
+	 * EMPTY `point_short_name` falls back to `type.label` exactly like an ABSENT one — `||`, not
+	 * `??`. This is the deliberate OPPOSITE of #192's `close` flag, where an explicit `false` is
+	 * a real decision that must beat a `true` config default: a boolean's `false` is data, but a
+	 * blank display string is never a meaningful "explicitly render nothing" the way it is for a
+	 * flag — there is no such thing as a deliberately empty tab. It is the SAME choice this file
+	 * already makes one screenful up for `short_address` falling back to `address`
+	 * ({@see buildSinglePointRow}: `fieldValue( point.short_address ) || fieldValue( point.address )`),
+	 * and the conclusion issue #193's point-icon-URL cascade reaches for the identical reason.
+	 *
+	 * NUMBERING (the framework's own half): base labels are grouped BY VALUE among the VISIBLE
+	 * subset ONLY — never the whole group, and never influenced by a point the type filter has
+	 * already hidden (round 3's own rule, unchanged by this round). A base label unique in that
+	 * visible set renders bare — `ПВЗ` / `Постамат`, today's non-collision behaviour, untouched.
+	 * A base label shared by 2+ visible points gets ' N' appended, N counted 1-based in
+	 * `visibleIndexes` order AMONG ONLY the points sharing that label — so excluding one member
+	 * of a same-label pair always renumbers the survivor back down (to bare, if it is alone now,
+	 * or to ' 1'), never leaves a lone ' 2' with no ' 1' beside it on screen (the operator's own
+	 * words: "«ПВЗ 2» без «ПВЗ 1» на экране будет выглядеть сломанным").
+	 *
+	 * ACCESSIBLE NAME: a numbered tab's visible text ("ПВЗ 2") does not by itself tell a
+	 * screen-reader user what makes it different from its sibling the way it does a sighted one,
+	 * who sees both tabs side by side. A NUMBERED tab (and ONLY a numbered one — a bare "ПВЗ" vs
+	 * "Постамат" pair is already unambiguous, and overriding it too would be unrequested scope
+	 * with no accessibility gain) therefore also gets `aria-label` set to the point's own
+	 * (entity-decoded — {@see decodeForTitle}, the same plain-text-attribute rule this file
+	 * already applies to `title`) `name` — the very string this tab used to show everyone
+	 * visually before this fix, now reserved for assistive tech on exactly the tabs where the
+	 * short label needs it.
 	 *
 	 * `index` in the click handler below is the point's REAL index into `group.points` (not its
 	 * position among the visible subset) — `self._activeIndex` is that same indexing scheme
@@ -985,36 +1045,44 @@
 			return null;
 		}
 
-		var typeLabels = visibleIndexes.map( function( index ) {
+		var baseLabels = visibleIndexes.map( function( index ) {
 			var point = group.points[ index ];
+			var typeLabel = ( point.type && 'string' === typeof point.type.label ) ? point.type.label : '';
 
-			return ( point.type && 'string' === typeof point.type.label ) ? point.type.label : '';
+			return fieldValue( point.point_short_name ) || typeLabel;
 		} );
-		var seen = {};
-		var hasCollision = false;
 
-		typeLabels.forEach( function( label ) {
-			if ( Object.prototype.hasOwnProperty.call( seen, label ) ) {
-				hasCollision = true;
+		var counts = {};
+
+		baseLabels.forEach( function( label ) {
+			counts[ label ] = ( counts[ label ] || 0 ) + 1;
+		} );
+
+		var ordinals = {};
+		var labels = baseLabels.map( function( label ) {
+			if ( counts[ label ] <= 1 ) {
+				return label;
 			}
 
-			seen[ label ] = true;
-		} );
+			ordinals[ label ] = ( ordinals[ label ] || 0 ) + 1;
 
-		var labels = hasCollision
-			? visibleIndexes.map( function( index ) {
-				return fieldValue( group.points[ index ].name );
-			} )
-			: typeLabels;
+			return label + ' ' + ordinals[ label ];
+		} );
 
 		var tabs = document.createElement( 'div' );
 		tabs.className = 'woodev-pickup-card__tabs';
 
 		visibleIndexes.forEach( function( index, position ) {
+			var point = group.points[ index ];
 			var tab = document.createElement( 'button' );
 			tab.type = 'button';
 			tab.className = 'woodev-pickup-card__tab' + ( index === self._activeIndex ? ' is-active' : '' );
-			tab.innerHTML = labels[ position ]; // eslint-disable-line -- server-escaped point field, see file docblock.
+			tab.innerHTML = labels[ position ]; // eslint-disable-line -- server-escaped point field/framework label + a plain numeral, see this function's own docblock.
+
+			if ( counts[ baseLabels[ position ] ] > 1 ) {
+				tab.setAttribute( 'aria-label', decodeForTitle( point.name ) );
+			}
+
 			tab.addEventListener( 'click', function() {
 				self._activeIndex = index;
 				renderCard( self );
@@ -1155,26 +1223,11 @@
 		}
 
 		if ( Array.isArray( point.payment_methods ) && point.payment_methods.length > 0 ) {
-			var paymentsValue = point.payment_methods.map( fieldValue ).join( ', ' );
-
-			body.appendChild( cardSection(
-				text( config, 'paymentMethods' ),
-				cardValue( 'woodev-pickup-card__payments', paymentsValue )
-			) );
+			body.appendChild( cardSection( text( config, 'paymentMethods' ), buildChipList( point.payment_methods ) ) );
 		}
 
 		if ( Array.isArray( point.services ) && point.services.length > 0 ) {
-			var services = document.createElement( 'div' );
-			services.className = 'woodev-pickup-card__services';
-
-			point.services.forEach( function( service ) {
-				var chip = document.createElement( 'span' );
-				chip.className = 'woodev-pickup-card__service';
-				chip.innerHTML = fieldValue( service ); // eslint-disable-line -- server-escaped.
-				services.appendChild( chip );
-			} );
-
-			body.appendChild( cardSection( text( config, 'services' ), services ) );
+			body.appendChild( cardSection( text( config, 'services' ), buildChipList( point.services ) ) );
 		}
 
 		if ( fieldValue( point.phone ) ) {

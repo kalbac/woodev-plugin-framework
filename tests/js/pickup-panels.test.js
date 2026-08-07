@@ -775,6 +775,22 @@ const point = ( over ) => Object.assign( {
 	selectable: { allowed: true, reason: null },
 }, over );
 
+/**
+ * Finds the "Способы оплаты" card section by its title text (issue #200: payment methods now
+ * share the exact same container/chip classes as services — `.woodev-pickup-card__services`/
+ * `__service` — so scoping by class alone can no longer tell the two sections apart; scoping by
+ * the section's own title, the way a sighted customer would, is what a query needs instead).
+ *
+ * @returns {HTMLElement|null}
+ */
+function paymentsSection( panels ) {
+	const sections = [ ...panels.root.querySelectorAll( '.woodev-pickup-card__section' ) ];
+
+	return sections.find(
+		( s ) => s.querySelector( '.woodev-pickup-card__section-title' ).textContent === cardConfig.i18n.paymentMethods
+	) || null;
+}
+
 it( 'renders services as chips', () => {
 	const panels = mount( cardConfig );
 	panels.openCard( { key: 'k', size: 1, points: [ point( { services: [ 'Примерка', 'Частичный выкуп' ] } ) ] } );
@@ -999,22 +1015,53 @@ it( 'omits phone/work-time/weight rows individually when each field is blank', (
 	expect( panels.root.querySelector( '.woodev-pickup-card__phone' ) ).toBeNull();
 	expect( panels.root.querySelector( '.woodev-pickup-card__worktime' ) ).toBeNull();
 	expect( panels.root.querySelector( '.woodev-pickup-card__weight' ) ).toBeNull();
-	expect( panels.root.querySelector( '.woodev-pickup-card__payments' ) ).toBeNull();
+	expect( paymentsSection( panels ) ).toBeNull();
 } );
 
 it( 'renders phone, work time and a 2-decimal kilogram weight when present', () => {
 	const panels = mount( cardConfig );
 	panels.openCard( { key: 'k', size: 1, points: [ point( {
 		phone: '+7 495 000-00-00', work_time: 'ежедневно 9:00-21:00', max_weight: 5000,
-		payment_methods: [ 'Картой', 'Наличными' ],
 	} ) ] } );
 
 	expect( panels.root.querySelector( '.woodev-pickup-card__phone' ).textContent ).toBe( '+7 495 000-00-00' );
 	expect( panels.root.querySelector( '.woodev-pickup-card__worktime' ).textContent )
 		.toBe( 'ежедневно 9:00-21:00' );
 	expect( panels.root.querySelector( '.woodev-pickup-card__weight' ).textContent ).toBe( '5.00' );
-	expect( panels.root.querySelector( '.woodev-pickup-card__payments' ).textContent )
-		.toBe( 'Картой, Наличными' );
+} );
+
+// -----------------------------------------------------------------------
+// Issue #200: payment methods used to render as a bare `', '`-joined string while the
+// neighbouring "Услуги" block was already chips — "два разных языка для двух однотипных
+// списков" in the operator's own words. Both lists now share the SAME chip markup/classes
+// (`buildChipList()`), so these tests mirror the existing "renders services as chips" one,
+// scoped through {@see paymentsSection} since the classes alone no longer distinguish them.
+// -----------------------------------------------------------------------
+
+it( 'renders payment methods as chips, the same presentation as services', () => {
+	const panels = mount( cardConfig );
+	panels.openCard( { key: 'k', size: 1, points: [ point( { payment_methods: [ 'Картой', 'Наличными' ] } ) ] } );
+
+	const section = paymentsSection( panels );
+
+	expect( section ).not.toBeNull();
+	expect( [ ...section.querySelectorAll( '.woodev-pickup-card__service' ) ].map( ( n ) => n.textContent ) )
+		.toEqual( [ 'Картой', 'Наличными' ] );
+} );
+
+it( 'keeps payment and service chips in their own sections when both are present', () => {
+	const panels = mount( cardConfig );
+	panels.openCard( { key: 'k', size: 1, points: [ point( {
+		payment_methods: [ 'Картой' ], services: [ 'Примерка', 'Частичный выкуп' ],
+	} ) ] } );
+
+	const paymentChips = [ ...paymentsSection( panels ).querySelectorAll( '.woodev-pickup-card__service' ) ]
+		.map( ( n ) => n.textContent );
+
+	expect( paymentChips ).toEqual( [ 'Картой' ] );
+	// Total chips on the card = 1 payment + 2 services — proves the shared class did not merge
+	// the two sections into one, only their MARKUP.
+	expect( panels.root.querySelectorAll( '.woodev-pickup-card__service' ) ).toHaveLength( 3 );
 } );
 
 describe( 'sectioned card body (spec V-12)', () => {
@@ -1298,7 +1345,16 @@ it( 'swaps the body when a tab is clicked', () => {
 	expect( panels.root.querySelector( '.woodev-pickup-card__title' ).textContent ).toBe( 'Постамат №4' );
 } );
 
-it( 'falls back to the point name when two points in a group share a type', () => {
+// -----------------------------------------------------------------------
+// Issue #199: co-located points sharing a type label used to fall back to the point's full
+// NAME as the tab text ("Пункт выдачи заказов Яндекс Маркета" on live data — does not fit,
+// gets clipped). The framework now NUMBERS the colliding labels instead
+// ("ПВЗ 1"/"ПВЗ 2"); the domain may still override the base label per point via the optional
+// `point_short_name` field. See `buildTabs()`'s own docblock for the full algorithm and the
+// `??`-vs-`||` reasoning.
+// -----------------------------------------------------------------------
+
+it( 'numbers the tabs when two points in a group share a type label (types identical)', () => {
 	const panels = mount( cardConfig );
 	panels.openCard( { key: 'k', size: 2, points: [
 		point( { id: 'a', name: 'ПВЗ «Магнит»' } ),
@@ -1306,7 +1362,108 @@ it( 'falls back to the point name when two points in a group share a type', () =
 	] } );
 
 	expect( [ ...panels.root.querySelectorAll( '.woodev-pickup-card__tab' ) ].map( ( t ) => t.textContent ) )
-		.toEqual( [ 'ПВЗ «Магнит»', 'ПВЗ «Пятёрочка»' ] );
+		.toEqual( [ 'ПВЗ 1', 'ПВЗ 2' ] );
+} );
+
+it( 'uses the domain-supplied point_short_name as the base label instead of the type label', () => {
+	const panels = mount( cardConfig );
+	panels.openCard( { key: 'k', size: 2, points: [
+		point( { id: 'a', name: 'A', point_short_name: 'У метро' } ),
+		point( { id: 'b', name: 'B', point_short_name: 'У дома' } ),
+	] } );
+
+	// Distinct short names -> distinct labels -> no numbering needed (types differ in effect).
+	expect( [ ...panels.root.querySelectorAll( '.woodev-pickup-card__tab' ) ].map( ( t ) => t.textContent ) )
+		.toEqual( [ 'У метро', 'У дома' ] );
+} );
+
+it( 'numbers colliding point_short_name values the same way it numbers type labels', () => {
+	const panels = mount( cardConfig );
+	panels.openCard( { key: 'k', size: 2, points: [
+		point( { id: 'a', name: 'A', point_short_name: 'Терминал' } ),
+		point( { id: 'b', name: 'B', point_short_name: 'Терминал' } ),
+	] } );
+
+	expect( [ ...panels.root.querySelectorAll( '.woodev-pickup-card__tab' ) ].map( ( t ) => t.textContent ) )
+		.toEqual( [ 'Терминал 1', 'Терминал 2' ] );
+} );
+
+it( 'falls back to the type label when point_short_name is absent — same as an explicit empty string', () => {
+	const absent = { key: 'k', size: 2, points: [
+		point( { id: 'a', name: 'A' } ), // no point_short_name at all
+		point( { id: 'b', name: 'B' } ),
+	] };
+	const empty = { key: 'k', size: 2, points: [
+		point( { id: 'a', name: 'A', point_short_name: '' } ), // explicit '' — treated the same
+		point( { id: 'b', name: 'B', point_short_name: '' } ),
+	] };
+
+	const withAbsent = mount( cardConfig );
+	withAbsent.openCard( absent );
+	const withEmpty = mount( cardConfig );
+	withEmpty.openCard( empty );
+
+	const labelsOf = ( p ) => [ ...p.root.querySelectorAll( '.woodev-pickup-card__tab' ) ].map( ( t ) => t.textContent );
+
+	expect( labelsOf( withAbsent ) ).toEqual( [ 'ПВЗ 1', 'ПВЗ 2' ] );
+	expect( labelsOf( withEmpty ) ).toEqual( labelsOf( withAbsent ) );
+} );
+
+it( 'renumbers over the VISIBLE subset only when the type filter hides a colliding tab', () => {
+	// Three points sharing the SAME display label but DIFFERENT type codes (the exact live
+	// shape #199 documents: 5post and Yandex Market both show as "ПВЗ" but are different
+	// operators/codes underneath) — filtering out the middle one must renumber the survivors
+	// down to 1/2, never leave a "ПВЗ 1"/"ПВЗ 3" gap.
+	const panels = mount( filterConfig );
+	const g = {
+		key: 'k', size: 3,
+		points: [
+			point( { id: 'a', name: 'A', type: { code: 'pvz-a', label: 'ПВЗ' } } ),
+			point( { id: 'b', name: 'B', type: { code: 'pvz-b', label: 'ПВЗ' } } ),
+			point( { id: 'c', name: 'C', type: { code: 'pvz-c', label: 'ПВЗ' } } ),
+		],
+	};
+
+	panels.setTypes( [
+		{ code: 'pvz-a', label: 'ПВЗ' }, { code: 'pvz-b', label: 'ПВЗ' }, { code: 'pvz-c', label: 'ПВЗ' },
+	] );
+	panels.openCard( g );
+
+	expect( [ ...panels.root.querySelectorAll( '.woodev-pickup-card__tab' ) ].map( ( t ) => t.textContent ) )
+		.toEqual( [ 'ПВЗ 1', 'ПВЗ 2', 'ПВЗ 3' ] );
+
+	panels.root.querySelectorAll( '.woodev-pickup-filter__checkbox' )
+		.forEach( ( box ) => {
+			if ( 'pvz-b' === box.dataset.code ) {
+				box.click();
+			}
+		} );
+
+	expect( [ ...panels.root.querySelectorAll( '.woodev-pickup-card__tab' ) ].map( ( t ) => t.textContent ) )
+		.toEqual( [ 'ПВЗ 1', 'ПВЗ 2' ] );
+} );
+
+it( 'gives a numbered tab an aria-label with the point\'s own name, distinguishing it for a screen reader', () => {
+	const panels = mount( cardConfig );
+	panels.openCard( { key: 'k', size: 2, points: [
+		point( { id: 'a', name: 'ПВЗ «Магнит»' } ),
+		point( { id: 'b', name: 'ПВЗ «Пятёрочка»' } ),
+	] } );
+
+	const tabs = [ ...panels.root.querySelectorAll( '.woodev-pickup-card__tab' ) ];
+
+	expect( tabs[ 0 ].getAttribute( 'aria-label' ) ).toBe( 'ПВЗ «Магнит»' );
+	expect( tabs[ 1 ].getAttribute( 'aria-label' ) ).toBe( 'ПВЗ «Пятёрочка»' );
+} );
+
+it( 'does not add an aria-label override to a non-colliding tab (types already unambiguous)', () => {
+	const panels = mount( cardConfig );
+	panels.openCard( two );
+
+	const tabs = [ ...panels.root.querySelectorAll( '.woodev-pickup-card__tab' ) ];
+
+	expect( tabs[ 0 ].hasAttribute( 'aria-label' ) ).toBe( false );
+	expect( tabs[ 1 ].hasAttribute( 'aria-label' ) ).toBe( false );
 } );
 
 it( 'opens on the requested point when the list drove the click', () => {

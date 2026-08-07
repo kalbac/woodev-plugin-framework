@@ -109,11 +109,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Point' ) ) :
 					'phone'           => isset( $payload['phone'] ) ? (string) $payload['phone'] : '',
 					'instruction'     => isset( $payload['instruction'] ) ? (string) $payload['instruction'] : '',
 					'work_time'       => isset( $payload['work_time'] ) ? (string) $payload['work_time'] : '',
-					'payment_methods' => $payment_methods,
-					'photos'          => $photos,
-					'services'        => $services,
-					'accepts_cod'     => isset( $payload['accepts_cod'] ) ? (bool) $payload['accepts_cod'] : null,
-					'max_weight'      => isset( $payload['max_weight'] ) ? (int) $payload['max_weight'] : null,
+					// Card tab label override (issue #199) — the framework numbers co-located
+					// tabs, the domain names them; an absent value falls back to `type.label`
+					// (`pickup-panels.js`'s `buildTabs()`), same `isset() ? … : ''` cascade every
+					// other optional display string on this list already uses.
+					'point_short_name' => isset( $payload['point_short_name'] ) ? (string) $payload['point_short_name'] : '',
+					'payment_methods'  => $payment_methods,
+					'photos'           => $photos,
+					'services'         => $services,
+					'accepts_cod'      => isset( $payload['accepts_cod'] ) ? (bool) $payload['accepts_cod'] : null,
+					'max_weight'       => isset( $payload['max_weight'] ) ? (int) $payload['max_weight'] : null,
 				]
 			);
 		}
@@ -297,6 +302,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Point' ) ) :
 				'phone',
 				'instruction',
 				'work_time',
+				'point_short_name',
 			];
 
 			foreach ( $escaped_keys as $key ) {

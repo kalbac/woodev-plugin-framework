@@ -600,8 +600,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 			 * {@see self::to_response_point()} emits on the two read routes — i.e.
 			 * {@see Pickup_Point::to_browser_array()} (`id`, `name`, `address`,
 			 * `short_address`, `locality`, `postal_code`, `phone`, `instruction`, `work_time`,
-			 * `lat`, `lng`, `type` => `{ code, label }`, `payment_methods`, `services`,
-			 * `photos`, `accepts_cod`, `max_weight`). The easy, correct way to build one is to
+			 * `point_short_name`, `lat`, `lng`, `type` => `{ code, label }`, `payment_methods`,
+			 * `services`, `photos`, `accepts_cod`, `max_weight`). The easy, correct way to build one is to
 			 * mutate the freshly-resolved `$point` and call `to_browser_array()` on it yourself
 			 * rather than assembling the keys by hand.
 			 *

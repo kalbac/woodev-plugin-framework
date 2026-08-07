@@ -250,8 +250,12 @@ final class TestLiveYandexPointSourceTest extends TestCase {
 		$source = new \Woodev_Test_Live_Yandex_Point_Source();
 		$points = $source->fetch_points( Point_Query::from_request( [ 'locality' => 'Москва' ] ) );
 
+		// Issue #200 wording pass: 'already_paid' -> 'Предоплата' (the old "Товар уже
+		// оплачен" read as "the item is already paid for", not "pay in advance"),
+		// 'card_on_receipt' -> 'Картой при получении' (dropped the "Оплата" that the chip's
+		// own section title, "Способы оплаты", already says).
 		$this->assertSame(
-			[ 'Товар уже оплачен', 'Оплата картой при получении' ],
+			[ 'Предоплата', 'Картой при получении' ],
 			$points[0]->to_array()['payment_methods']
 		);
 	}
