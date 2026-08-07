@@ -487,6 +487,13 @@ function woodev_test_shipping_method_plugin_init(): void {
 				// icons for its Yandex.Delivery integration, not hotlinked — see each file's own
 				// attribution comment) — "office" is this fixture's `PVZ`, "terminal" its
 				// `POSTAMAT`.
+				//
+				// This is cascade tier 2 only (domain icons BY TYPE CODE — issue #193). Under
+				// WOODEV_TEST_PICKUP_LIVE_YANDEX, tier 1 (a POINT's own icon) is wired
+				// separately, in `Woodev_Test_Live_Yandex_Point_Source::icons_for_operator()`:
+				// a `5post` point gets its own icon by `operator_id`, reusing these SAME
+				// terminal SVGs, because 5post and Yandex.Market points otherwise share this
+				// fixture's `PVZ` type code (`pickup_point`) and would draw identically.
 				$icons_url = plugins_url( 'assets/images', __FILE__ );
 
 				$point_icons = [

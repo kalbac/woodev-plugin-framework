@@ -41,7 +41,9 @@
  * `mapConfig` (`scriptUrl`, `ns`, `hasApiKey`, `lang`, `layers`, `copyrights`) plus
  * `strategy`/`locality`/`i18n`, and (Task 20) the plugin-level `defaultLocation`
  * (`{ center: [lat,lng], zoom }`, ALWAYS present — a required plugin argument),
- * `pointIcons` (`{ typeCode: { default, active } }`, `active` always filled),
+ * `pointIcons` (`{ typeCode: { default, active } }`, `active` always filled — cascade
+ * tier 2, see the "ICONS ARE AN HTML LAYOUT" section below for tier 1, a POINT's own
+ * `icons`),
  * `accentColor`, and
  * `searchLayoutEl` (Task 12, spec V-6 — a DETACHED `HTMLElement` built by
  * `pickup-panels.js`'s `buildSearchLayout()`, or `null` when the plugin disabled search; see
@@ -110,6 +112,28 @@
  * only `default` (CDEK's own approach — `active` mirrors `default` server-side, see
  * `Pickup_Handler::normalized_point_icons()`) gets the SAME image drawn larger, both driven by
  * the one `data-state` attribute Task 21's CSS keys off.
+ *
+ * ICON RESOLUTION IS A THREE-TIER CASCADE (issue #193): a POINT's own icon
+ * ({@see pointOwnIcons}, `group.points[n].icons`) beats `config.pointIcons[ typeCode ]`
+ * (the tier described above), which beats the framework's default pin. This exists because
+ * a type CODE is not always enough to tell branded networks apart — Yandex.Delivery mixes
+ * points from different operators in one response under the SAME type code (a live,
+ * 812-point Moscow sample measured 679 `5post` + 129 `market_l4g` points, both reporting
+ * `type: "pickup_point"`), so resolving by type code alone draws them identically even
+ * though they are visually distinct networks. {@see WoodevYandexMapProvider#_buildProperties}
+ * resolves both tiers with `??`, never `||` — see {@see pointOwnIcons}'s own docblock for
+ * why an empty icon URL at either tier means "keep falling through", the opposite decision
+ * from the `close` flag's `??` (PR #192), and why that is still the correct, deliberate
+ * choice for a URL rather than an oversight. The per-point tier is resolved from the
+ * group's REPRESENTATIVE point (`displayPoints[0]`, the SAME point that decides
+ * `typeCode`) — a co-located group (`pickup-geo.js`'s `groupByPosition()`) therefore shows
+ * only the representative's own icon, never a blend of its members'; a marker sitting at
+ * one coordinate that folds a 5post point together with a Yandex-branded one draws
+ * whichever sorts first. This is a consequence of the existing grouping, not a defect this
+ * tier introduces. SCOPE: this cascade is the MAP marker's own icon resolution only — the
+ * sidebar list row and the point card keep the framework's own glyphs regardless (issue
+ * #195/PR #196, `woodev_pickup_map_point_glyphs`); a point's own `icons` never reaches
+ * those surfaces.
  *
  * MAP MARGINS ARE TWO SEPARATE, NEVER-CONFUSED RESERVATIONS, both via ymaps' native
  * `map.margin.addArea()` — whose RETURNED ACCESSOR is what removes it again, there is no
@@ -675,6 +699,37 @@
 	 */
 	function pointTypeCode( point ) {
 		return ( point && point.type && point.type.code ) || '';
+	}
+
+	/**
+	 * A single point's own icon override (issue #193 — cascade tier 1: the point's own icon
+	 * beats the domain's type-keyed icon, which beats the framework's default pin).
+	 * `{ default, active }`, or `null` when the point carries no usable icon of its own.
+	 *
+	 * `??`, never `||` — the SAME discipline `pickup-mount.js`'s `resolveFlag()` established
+	 * for the `close` flag (PR #192), but the DECISION here is the opposite of that flag's:
+	 * `resolveFlag()` must preserve an explicit `false` as distinct from "unspoken", because a
+	 * boolean's `false` is itself a meaningful state. A URL has no such state — a blank string
+	 * can never be rendered as an image, so an explicitly empty `default` carries no more
+	 * information than an absent `icons` key, and both fall through to the next cascade tier
+	 * identically. `Pickup_Point::sanitize_icons()` already guarantees the server never emits
+	 * an `icons` object with an empty `default`; the truthy check below is defensive, for a
+	 * point object built directly (a test, or a future caller bypassing that sanitisation).
+	 *
+	 * @since 2.0.2
+	 * @param {Object} point
+	 * @returns {{default: string, active: string}|null}
+	 */
+	function pointOwnIcons( point ) {
+		var icons = ( point && point.icons ) ?? null;
+
+		if ( ! icons || 'string' !== typeof icons.default || '' === icons.default ) {
+			return null;
+		}
+
+		var active = 'string' === typeof icons.active && icons.active ? icons.active : icons.default;
+
+		return { default: icons.default, active: active };
 	}
 
 	/**
@@ -1753,12 +1808,23 @@
 	 * to decide whether the feature is drawn AT ALL, so it must never shrink to only the
 	 * currently-surviving subset the way `typeCode`/`iconHref` do.
 	 *
-	 * `iconHref`/`iconHrefActive` are resolved from `config.pointIcons[ <the surviving subset's
-	 * representative type> ]` — empty for an unrecognised type, in which case {@see _renderMarker}
-	 * still draws the framework's own default pin, never an invisible/broken one. `active` is
-	 * guaranteed filled server-side whenever the type is known at all (mirroring `default` when
-	 * the plugin supplied only one image — D-5, `Pickup_Handler::normalized_point_icons()`), so
-	 * `iconHrefActive` is never a broken/empty URL for a KNOWN type.
+	 * `iconHref`/`iconHrefActive` are resolved through the FULL three-tier cascade (issue
+	 * #193): the representative point's own icon ({@see pointOwnIcons}), else
+	 * `config.pointIcons[ <the surviving subset's representative type> ]`, else empty — in
+	 * which case {@see _renderMarker} still draws the framework's own default pin, never an
+	 * invisible/broken one. Both tiers are resolved with `??`, never `||` — see
+	 * {@see pointOwnIcons}'s own docblock for why an empty value at either tier means "keep
+	 * falling through", not "stop here with nothing". `active` is guaranteed filled whenever
+	 * `default` is (mirroring it when only one image was supplied — D-5, applied identically
+	 * at both tiers: {@see pointOwnIcons} for the point, `Pickup_Handler::normalized_point_icons()`
+	 * for the type), so `iconHrefActive` is never a broken/empty URL whenever `iconHref` isn't.
+	 *
+	 * The representative point is the SAME one that decides `typeCode` — `displayPoints[0]`.
+	 * A co-located group (`pickup-geo.js`'s `groupByPosition()`) therefore shows only the
+	 * REPRESENTATIVE's own icon resolution, never a blend of its members': a group folding a
+	 * 5post point and a Yandex-branded point onto one coordinate draws whichever one sorts
+	 * first, exactly as it already does for the type-code badge. This is a consequence of the
+	 * existing grouping, not a defect introduced here.
 	 *
 	 * @param {Object} group
 	 * @returns {Object}
@@ -1768,7 +1834,8 @@
 		var survivors = this._survivingPoints( group );
 		var displayPoints = survivors.length > 0 ? survivors : ( group.points || [] );
 		var displayType = pointTypeCode( displayPoints[ 0 ] ) || group.typeCode;
-		var icons = ( this.config.pointIcons && this.config.pointIcons[ displayType ] ) || null;
+		var typeIcons = ( this.config.pointIcons && this.config.pointIcons[ displayType ] ) || null;
+		var icons = pointOwnIcons( displayPoints[ 0 ] ) ?? typeIcons ?? null;
 
 		return {
 			// Unfiltered, `groupSize` mirrors `group.size` DIRECTLY, exactly as before this fix —

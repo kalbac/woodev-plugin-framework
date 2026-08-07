@@ -887,6 +887,115 @@ test( 'a known type resolves its icon URLs onto the feature properties; an unkno
 	expect( unknown.properties.iconHrefActive ).toBe( '' );
 } );
 
+// -------------------------------------------------------------------------
+// Cascade tier 1 (issue #193): a POINT's own icon beats the domain's type-keyed icon,
+// which beats the framework's default pin. Yandex.Delivery mixes 5post and Yandex.Market
+// points under the identical type code `pickup_point` (812-point live sample: 679 5post +
+// 129 market_l4g, both `pickup_point`) — the type-code tier alone cannot tell them apart;
+// only a per-point field can.
+// -------------------------------------------------------------------------
+
+test( 'a point\'s own icon overrides the domain\'s type-keyed icon', async () => {
+	const provider = await init( { pointIcons: { pvz: { default: '/pvz.svg', active: '/pvz-a.svg' } } } );
+
+	provider.setPoints( [ {
+		key: 'a', lat: 55.75, lng: 37.61, typeCode: 'pvz', size: 1,
+		points: [ { type: { code: 'pvz' }, icons: { default: '/5post.svg', active: '/5post-a.svg' } } ],
+	} ] );
+
+	const feature = ymapsStub.lastObjectManager.added[ 0 ];
+
+	expect( feature.properties.iconHref ).toBe( '/5post.svg' );
+	expect( feature.properties.iconHrefActive ).toBe( '/5post-a.svg' );
+} );
+
+test( 'a point\'s own icon is used even when the domain has no icon at all for that type', async () => {
+	const provider = await init(); // no pointIcons configured
+
+	provider.setPoints( [ {
+		key: 'a', lat: 55.75, lng: 37.61, typeCode: 'other', size: 1,
+		points: [ { type: { code: 'other' }, icons: { default: '/5post.svg', active: '/5post-a.svg' } } ],
+	} ] );
+
+	const feature = ymapsStub.lastObjectManager.added[ 0 ];
+
+	expect( feature.properties.iconHref ).toBe( '/5post.svg' );
+	expect( feature.properties.iconHrefActive ).toBe( '/5post-a.svg' );
+} );
+
+test( 'a point with no icon of its own falls back to the domain\'s type-keyed icon', async () => {
+	const provider = await init( { pointIcons: { pvz: { default: '/pvz.svg', active: '/pvz-a.svg' } } } );
+
+	provider.setPoints( [ {
+		key: 'a', lat: 55.75, lng: 37.61, typeCode: 'pvz', size: 1,
+		points: [ { type: { code: 'pvz' } } ], // no `icons` key at all
+	} ] );
+
+	const feature = ymapsStub.lastObjectManager.added[ 0 ];
+
+	expect( feature.properties.iconHref ).toBe( '/pvz.svg' );
+	expect( feature.properties.iconHrefActive ).toBe( '/pvz-a.svg' );
+} );
+
+test( 'a point whose own icon has only a default gets active mirrored from it (D-5, per-point tier)', async () => {
+	const provider = await init();
+
+	provider.setPoints( [ {
+		key: 'a', lat: 55.75, lng: 37.61, typeCode: 'pvz', size: 1,
+		points: [ { type: { code: 'pvz' }, icons: { default: '/5post.svg' } } ], // no `active`
+	} ] );
+
+	const feature = ymapsStub.lastObjectManager.added[ 0 ];
+
+	expect( feature.properties.iconHref ).toBe( '/5post.svg' );
+	expect( feature.properties.iconHrefActive ).toBe( '/5post.svg' );
+} );
+
+/**
+ * `??`, never `||` (same discipline as `resolveFlag()`'s `close` flag, PR #192) — but the
+ * DECISION here is the opposite of that flag's: an empty icon URL carries no meaningful
+ * information distinct from "absent" (a blank string can never be an image), so it falls
+ * through to the next cascade tier exactly like an absent `icons` key would, rather than
+ * being honoured as an explicit "no icon" that stops the cascade. A server-sanitized point
+ * (`Pickup_Point::sanitize_icons()`) never actually emits this shape — this guards a point
+ * object built directly, bypassing that sanitisation (a test, or a future caller).
+ */
+test( 'an empty-string default on a point\'s own icon is treated as absent, not honoured', async () => {
+	const provider = await init( { pointIcons: { pvz: { default: '/pvz.svg', active: '/pvz-a.svg' } } } );
+
+	provider.setPoints( [ {
+		key: 'a', lat: 55.75, lng: 37.61, typeCode: 'pvz', size: 1,
+		points: [ { type: { code: 'pvz' }, icons: { default: '', active: '' } } ],
+	} ] );
+
+	const feature = ymapsStub.lastObjectManager.added[ 0 ];
+
+	expect( feature.properties.iconHref ).toBe( '/pvz.svg' );
+	expect( feature.properties.iconHrefActive ).toBe( '/pvz-a.svg' );
+} );
+
+/**
+ * Documents a consequence of the EXISTING grouping behaviour (`_buildProperties()` always
+ * reads `displayPoints[0]`), not a new defect introduced by this tier: a co-located group
+ * mixing a 5post point (own icon) with a plain point (no icon) shows only the
+ * REPRESENTATIVE's own resolution. Order matters — the representative is whichever point
+ * survived filtering and sorts first, exactly as it already does for `typeCode`.
+ */
+test( 'a co-located group shows only the REPRESENTATIVE point\'s own icon, never a blend', async () => {
+	const provider = await init( { pointIcons: { pvz: { default: '/pvz.svg', active: '/pvz-a.svg' } } } );
+
+	provider.setPoints( [ mixedGroup( 'a', 55.75, 37.61, [
+		{ typeCode: 'pvz' }, // no icon of its own — the representative (first)
+		{ typeCode: 'pvz', icons: { default: '/5post.svg', active: '/5post-a.svg' } },
+	] ) ] );
+
+	const feature = ymapsStub.lastObjectManager.added[ 0 ];
+
+	// The representative (points[0]) has no own icon, so the group falls to the domain's
+	// type-keyed icon — the second point's own icon is never consulted.
+	expect( feature.properties.iconHref ).toBe( '/pvz.svg' );
+} );
+
 test( 'marks a group of more than one point so the badge renders', async () => {
 	const provider = await init();
 
