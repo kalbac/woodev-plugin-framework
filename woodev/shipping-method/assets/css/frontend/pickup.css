@@ -396,15 +396,32 @@
  * uncover it once this panel's own opaque, full-height box was drawn on top of that corner. The
  * fix is therefore geometric, not a reservation: `bottom: 32px`, not `0` — the SAME 32px the
  * toggle button above already uses (the reference's own `--mmc-spacing-lg`, ~29px of strip plus a
- * little air), so the two numbers agree instead of being unexplained twice. The panel now reads
- * as a floating card rather than a full-bleed sheet that stopped short by accident: rounded
- * BOTTOM corners only (the top and right edges stay flush with the stage, so only the newly
- * exposed bottom edge needs to look intentional) plus the same two-layer ambient shadow every
- * other floating control in this file already uses — `.woodev-pickup-stage`'s own
- * `overflow: hidden` clips the shadow's top/right spill for free, leaving exactly the bottom edge
- * lifted. This band is uncovered in EVERY state — open, closed, at any width down to the ≤782px
- * full-bleed breakpoint below — because it is the panel's own inset, not a conditional JS
- * reservation that could fall out of sync with it.
+ * little air), so the two numbers agree instead of being unexplained twice. This band is uncovered
+ * in EVERY state — open, closed, at any width down to the ≤782px full-bleed breakpoint below —
+ * because it is the panel's own inset, not a conditional JS reservation that could fall out of
+ * sync with it.
+ *
+ * FLOATING CARD (#168, operator's decision 06.08.2026 — supersedes D8's "flush on three edges"
+ * treatment). D8 left the panel flush against the stage's top and right edges while inset 32px at
+ * the bottom, which read as a full-bleed sheet that had failed to reach the bottom rather than as
+ * a deliberate shape. The alternative considered was covering the copyright strip and hoisting it
+ * above the panel; that was rejected because it can only be done by selecting ymaps' own inner
+ * container, whose class name carries the API version (`ymaps-2-1-79-`) — a coupling this file
+ * refuses on principle (see `ymaps-copyright-pane-is-trapped-in-a-stacking-context`). Insetting
+ * the panel instead costs nothing and removes that reason entirely.
+ *
+ * `top: 16px; right: 16px` — the SAME 16px the search field already floats at
+ * (`map-provider-yandex.js`'s `_buildSearchControl`: `position: { left: '16px', top: '16px' }`),
+ * so the two floating elements share one margin rather than each having its own. `bottom` stays
+ * 32px: the copyright band below it is unrelated to this change and still needs its own clearance.
+ * `border-radius` becomes all four corners — with no edge flush any more, rounding only two would
+ * be arbitrary — and the two-layer ambient shadow every other floating control here uses now shows
+ * on all sides, because `.woodev-pickup-stage`'s `overflow: hidden` no longer has any spill to
+ * clip. Three things move WITH these insets and are wrong if left behind: `.woodev-pickup-card`
+ * (identical geometry, same rule set), the toggle's open-state offset (`+ 32px`, not `+ 16px`, or
+ * the button overlaps the panel it sits beside), and `setStageOpen()`'s reported width in
+ * `pickup-panels.js` (`offsetWidth + 16`, since ymaps reserves from the map's edge inwards and
+ * knows nothing about this gap).
  *
  * `display` gates open/closed, so a closed panel occupies nothing at all and cannot intercept a
  * drag meant for the map behind it.
@@ -416,8 +433,8 @@
 
 .woodev-pickup-list {
 	position: absolute;
-	top: 0;
-	right: 0;
+	top: 16px; /* #168 — see the FLOATING CARD note above. */
+	right: 16px; /* #168 — idem. */
 	bottom: 32px; /* D8 — see the COPYRIGHT CLEARANCE note above; matches the toggle's own 32px. */
 	z-index: 2;
 	display: flex;
@@ -426,7 +443,7 @@
 	max-width: min( 320px, calc( 100% - 48px ) );
 	overflow: auto;
 	background: #fff;
-	border-radius: 0 0 8px 8px; /* D8 — bottom corners only; see the COPYRIGHT CLEARANCE note. */
+	border-radius: 8px; /* #168 — all four corners now that no edge is flush; see the note above. */
 	box-shadow: 0 1px 2px rgba( 0, 0, 0, 0.04 ), 0 4px 8px rgba( 0, 0, 0, 0.06 );
 
 	/* `display`, not `visibility`: a hidden-but-laid-out panel still occupies a full-height box
@@ -506,6 +523,50 @@
 .woodev-pickup-list__item:not( :has( .woodev-pickup-list__point ) ):hover,
 .woodev-pickup-list__point:hover {
 	background: #f6f7f7;
+}
+
+/* The selected point's row (Task 10) — the sidebar's only persistent trace of "which one did I
+   choose"; the card CTA's label flip (Task 8) is invisible once the customer scrolls the list
+   away from the open card. A left accent bar plus a tinted background — deliberately quieter than
+   the card's own selection affordances, since this must read as "this is the one you chose" at a
+   glance while scrolling, not compete with `:hover` above. `currentColor` is not used: the row's
+   text colour is content, this is chrome.
+   Two `background` declarations, not one: `rgba( 6, 174, 221, 0.06 )` is a literal fallback for a
+   browser without `color-mix()` support — it happens to equal this file's own default accent
+   (`#06aedd`) at 6% opacity, the same number the file docblock's D-15 contract would compute for
+   the DEFAULT merchant. The second declaration is what D-15 actually requires and overrides the
+   first wherever `color-mix()` is supported: a tint derived from `--woodev-pickup-accent` itself,
+   not a hardcoded colour, so a merchant who set a red accent gets a red tint, not this file's own
+   cyan frozen in place. No other rule in this file blends the accent to a soft/tinted surface
+   (every other `--woodev-pickup-accent` background below is a solid, opaque fill) — `color-mix()`
+   is the only mechanism a plain custom-property value (`#rrggbb`, not a channel triplet) can be
+   alpha-blended through without a second, independently-invented CSS variable for the channels. */
+.woodev-pickup-list__item.is-selected,
+.woodev-pickup-list__point.is-selected {
+	background: rgba( 6, 174, 221, 0.06 );
+	background: color-mix( in srgb, var( --woodev-pickup-accent, #06aedd ) 6%, transparent );
+	box-shadow: inset 3px 0 0 var( --woodev-pickup-accent, #06aedd );
+}
+
+/* Coordinator review follow-up: hand-computed specificity caught a shape-dependent regression the
+   rule above alone can't survive. `.woodev-pickup-list__item:not( :has( .woodev-pickup-list__point
+   ) ):hover` (above, single-point shape) is 3 classes deep — the `:not()`'s own `:has()` argument
+   counts as if written bare — so it OUTRANKS `.is-selected` (2 classes) outright and wins on
+   specificity alone, wiping the tint back to plain grey on hover regardless of source order.
+   `.woodev-pickup-list__point:hover` (co-located shape) is only 2 classes, so it ties `.is-selected`
+   there and loses on source order instead (the `.is-selected` rule above is later) — same user
+   action, two different outcomes depending on row shape, purely from how each shape's hover
+   selector happens to be written. Fixed with an explicit tie/override rather than `!important`
+   (this file's own no-specificity-war stance, and the `!important` on `.woodev-pickup-list__point`
+   below already shows how one `!important` on a property forces every later rule touching that
+   SAME property to carry it too — not a trade worth making for a `background` value). Both halves
+   below sit at 3 classes: the item half exactly ties the single-point `:hover` rule above and wins
+   on source order (this rule comes later); the point half already outranks its own 2-class `:hover`
+   rule outright, so it only needs to exist here for symmetry/readability, not to win anything new. */
+.woodev-pickup-list__item.is-selected:hover,
+.woodev-pickup-list__point.is-selected:hover {
+	background: rgba( 6, 174, 221, 0.06 );
+	background: color-mix( in srgb, var( --woodev-pickup-accent, #06aedd ) 6%, transparent );
 }
 
 /* Live-review follow-up: a co-located group's row silently lost the grid above. Unlike
@@ -657,11 +718,25 @@
 	line-height: 1;
 }
 
+/* Hidden everywhere except the mobile open-list bar (#168 round 2) — at every other size and state
+   this control is a 44×44 icon button, and its accessible name (`aria-label`, swapped per state by
+   `pickup-panels.js`'s `setStageOpen()`) is what carries the meaning. `display: none` rather than a
+   visually-hidden class on purpose: the text must not affect the icon button's layout, and it is
+   already redundant with the `aria-label` for assistive tech. */
+.woodev-pickup-list__toggle-label {
+	display: none;
+}
+
 /* Keyed off the STAGE's `is-open`, not a class on `.woodev-pickup-list` itself (Task 6 — see the
    file docblock's "ONE OPEN STATE, ON THE STAGE" note): the toggle's own position/chevron still
    need to react to open/closed even though the toggle is never hidden itself. */
+/* `+ 32px`, not `+ 16px` (#168): this offset is measured from the STAGE's right edge, and the panel
+   no longer starts there — it starts 16px in (see `.woodev-pickup-list`'s "FLOATING CARD" note). The
+   button must clear the panel's own 320px cap PLUS that 16px gutter, and then keep its own 16px of
+   air beside it: 16 + 16 = 32. Left at the old 16, the button would sit exactly on the panel's edge
+   and overlap the list content beneath it. */
 .woodev-pickup-stage.is-open .woodev-pickup-list__toggle {
-	right: calc( min( 320px, 100% - 48px ) + 16px );
+	right: calc( min( 320px, 100% - 48px ) + 32px );
 }
 
 .woodev-pickup-stage.is-open .woodev-pickup-list__toggle::before {
@@ -790,12 +865,13 @@
 	display: none;
 }
 
-/* Round-2 live review (D1c): both icons used to be CSS `content` emoji (magnifier / ✕) — the
-   "web 2000" look the operator called out. `pickup-panels.js` now draws each as a real inline
-   `<svg>` (Lucide's `search`/`x` geometry, `stroke="currentColor"`), so no `::before` glyph rule
-   exists here any more; the svg simply inherits `color` below like any other icon in this file. */
-.woodev-pickup-search__reset,
-.woodev-pickup-search__submit {
+/* Round-2 live review (D1c): the clear icon used to be a CSS `content` emoji (✕) — the
+   "web 2000" look the operator called out. `pickup-panels.js` now draws it as a real inline
+   `<svg>` (Lucide's `x` geometry, `stroke="currentColor"`), so no `::before` glyph rule exists
+   here any more; the svg simply inherits `color` below like any other icon in this file.
+   (The magnifier this rule used to share was removed with the submit button — operator,
+   07.08.2026; see `pickup-panels.js`'s "NO SUBMIT BUTTON" note.) */
+.woodev-pickup-search__reset {
 	display: inline-flex;
 	flex: 0 0 auto;
 	align-items: center;
@@ -817,8 +893,6 @@
    specificity — author rules always outrank user-agent ones regardless of `!important`. Measured
    on the rig with an empty search field: `.woodev-pickup-search__reset` had `hidden === true` but
    `getComputedStyle().display === 'flex'`, so the ✕ stayed visible with nothing to clear.
-   `.woodev-pickup-search__submit` never gets `hidden` toggled by `pickup-panels.js` (only
-   `disabled`/`.is-ready`), so it needs no guard of its own — only the reset does.
 
    `!important` IS REQUIRED HERE and is not a specificity shortcut. This is a `<button>`, so TWO
    author rules already claim its `display` with `!important` — `.woodev-pickup-stage :where(button)`
@@ -835,33 +909,8 @@
 	display: none !important;
 }
 
-.woodev-pickup-search__reset:hover,
-.woodev-pickup-search__submit:hover {
+.woodev-pickup-search__reset:hover {
 	background: #f6f7f7;
-}
-
-/* The submit button's new state machine (D1d): it starts `disabled` and stays that way until the
- * query clears `SEARCH_MIN_CHARS` — before this task it had NO disabled styling at all and
- * looked equally clickable in every state, which is exactly the operator's own complaint
- * ("сейчас пользователь вообще не понимает что нужно на иконку нажать"). `[disabled]` reads as
- * plainly inert (dimmed icon, no pointer, no hover feedback); `.is-ready` — kept by
- * `pickup-panels.js` in EXACT agreement with `disabled`, never both at once — fills the button
- * with the merchant's own accent colour so the ONE moment the click actually does something
- * (spends the merchant's geocoding quota, spec V-6) is the one moment it visibly invites a click.
- */
-.woodev-pickup-search__submit[disabled] {
-	color: rgba( 0, 0, 0, 0.26 );
-	cursor: not-allowed;
-	pointer-events: none; /* Suppresses the shared :hover rule above — a disabled control must never look interactive. */
-}
-
-.woodev-pickup-search__submit.is-ready {
-	color: var( --woodev-pickup-accent-contrast, #fff );
-	background: var( --woodev-pickup-accent, #06aedd );
-}
-
-.woodev-pickup-search__submit.is-ready:hover {
-	filter: brightness( 1.08 );
 }
 
 /* Same `[hidden]` exposure as the reset button above, one step removed: this element has no
@@ -1190,16 +1239,18 @@
  * no toggle able to reach it, which is exactly what happened before this task, when the card
  * carried its own independent `is-open`.
  *
- * `bottom: 32px`, rounded bottom corners, the same ambient shadow: the SAME copyright-clearance
- * treatment as `.woodev-pickup-list` above, for the SAME reason — see that rule's own "COPYRIGHT
- * CLEARANCE, THE REAL FIX" note (D8). The card occupies the identical screen region, so it sits
- * over the identical corner of the map.
+ * `top: 16px`, `right: 16px`, `bottom: 32px`, a full 8px radius, the same ambient shadow: the SAME
+ * floating-card geometry as `.woodev-pickup-list` above, for the SAME reasons — see that rule's own
+ * "COPYRIGHT CLEARANCE, THE REAL FIX" (D8) and "FLOATING CARD" (#168) notes. The card occupies the
+ * identical screen region and swaps places with the list, so any inset that is not identical on
+ * both would make the panel visibly jump as the customer opens and closes a point's card. Keep
+ * these four values in lockstep with that rule.
  * ---------------------------------------------------------------------- */
 
 .woodev-pickup-card {
 	position: absolute;
-	top: 0;
-	right: 0;
+	top: 16px; /* #168 — see .woodev-pickup-list's own note. */
+	right: 16px; /* #168 — idem. */
 	bottom: 32px; /* D8 — see .woodev-pickup-list's own note. */
 	z-index: 3;
 	display: none;
@@ -1208,7 +1259,7 @@
 	max-width: min( 320px, calc( 100% - 48px ) );
 	overflow: auto;
 	background: #fff;
-	border-radius: 0 0 8px 8px; /* D8 — see .woodev-pickup-list's own note. */
+	border-radius: 8px; /* #168 — see .woodev-pickup-list's own note. */
 	box-shadow: 0 1px 2px rgba( 0, 0, 0, 0.04 ), 0 4px 8px rgba( 0, 0, 0, 0.06 );
 }
 
@@ -1536,6 +1587,42 @@
 	opacity: 1; /* Overrides UA/theme opacity fading, which would make the label unreadable. */
 }
 
+/* The confirmation lock (2026-08-06 spec D-9). A transparent sheet over the card only — NOT
+   the stage's own `is-busy`, which is the "nothing has loaded yet" state and hides the search
+   and filter controls outright. Clicks on the map and the sidebar still land; what this stops
+   is a second confirmation leaving before the first has settled, which is what would let two
+   writes reach the server out of order. */
+.woodev-pickup-card.is-locked::after {
+	position: absolute;
+	inset: 0;
+	z-index: 1;
+	content: '';
+}
+
+/* The spinner rides INSIDE the button rather than replacing its label: the label is what says
+   which of the two confirmations is running, and a button that changes size mid-request makes
+   the whole footer jump. Same 0.8s linear rotation as `.woodev-pickup-spinner`, at text size,
+   in the button's own colour. */
+.woodev-pickup-card__cta.is-busy::before {
+	display: inline-block;
+	width: 14px;
+	height: 14px;
+	margin-right: 8px;
+	border: 2px solid currentColor;
+	border-top-color: transparent;
+	border-radius: 50%;
+	animation: woodev-pickup-spin 0.8s linear infinite;
+	content: '';
+	vertical-align: -2px;
+}
+
+@media ( prefers-reduced-motion: reduce ) {
+
+	.woodev-pickup-card__cta.is-busy::before {
+		animation-duration: 3s;
+	}
+}
+
 /* -------------------------------------------------------------------------
  * Markers — an HTML layout `map-provider-yandex.js` builds per group (D-5), never ymaps'
  * `iconLayout: 'default#image'`. The box below MUST match `ICON_BOX`/`ICON_BOX_ACTIVE` in that
@@ -1690,27 +1777,93 @@
 
 @media screen and ( max-width: 782px ) {
 
-	/* A 320px-capped column is unusable once the dialog itself is full-screen — both panels take
-	   the whole stage width instead. */
-	.woodev-pickup-list,
-	.woodev-pickup-card {
-		max-width: none;
+	/* Height of the mobile open-list bar the sidebar toggle becomes (#168 round 2). Declared once,
+	   consumed twice — by the bar itself and by the list body's bottom padding, which is what keeps
+	   the last row scrollable clear of it. Two literals would drift the moment either changes. */
+	.woodev-pickup-stage {
+		--woodev-pickup-mobile-bar-h: 48px;
 	}
 
-	/* The toggle's open-state offset normally pushes it to sit BESIDE the list's own 320px cap
-	   (`calc( min( 320px, 100% - 48px ) + 16px )` — see the file docblock's "A SIBLING of the
-	   panels" note). With the list now full-width there is no "beside" left: that formula would
-	   land the button ~40px in from the panel's own edge, stranded over list content instead of
-	   anchored to a corner. Falling back to the SAME offset as the closed state puts it back in a
-	   predictable corner, floating over the (now full-bleed) list like a standard mobile FAB — its
-	   own `z-index: 4` and drop shadow already read as "in front of", not "part of", the panel
-	   beneath it. `bottom` matches the closed-state 32px above (D8, copyright clearance) rather
-	   than the 16px this fallback used to repeat — the reference keeps that same 32px offset at
-	   every width, no separate mobile value of its own (`wc-yandex-delivery-pickup-point-modal-
-	   map.css` — no media query touches `.drawer-control__button`'s `bottom` at all). */
+	/* A 320px-capped column is unusable once the dialog itself is full-screen — both panels take
+	   the whole stage width instead.
+
+	   FULL VISIBLE AREA, INCLUDING THE COPYRIGHT BAND (#168 round 2, operator 07.08.2026). The
+	   desktop floating-card insets are zeroed AND `bottom` drops from D8's 32px to 0, so an open
+	   panel owns the entire stage. That 32px existed solely to keep ymaps' copyright strip visible,
+	   and Yandex's ToS attaches that obligation to a VISIBLE map — here the panel covers the map
+	   completely, so there is no map on screen to attribute and nothing to reserve. (The obligation
+	   is untouched in the CLOSED state at this width, where the map IS visible: the toggle's own
+	   `bottom: 32px` and the zoom control's `bottom: 88px` both stay exactly as they were.)
+	   Radius goes to 0 for the same reason it went to bottom-only before — every edge is flush
+	   again, and a rounded corner with nothing behind it just draws a notch of map through the
+	   panel. */
+	.woodev-pickup-list,
+	.woodev-pickup-card {
+		top: 0;
+		right: 0;
+		bottom: 0;
+		max-width: none;
+		border-radius: 0;
+	}
+
+	/* Room for the bar below, so the last row can scroll clear of it instead of hiding under it —
+	   the panel is `bottom: 0` now and the bar floats over its own bottom edge. The reference
+	   reserves the same way (`.drawer-control__drawer { padding-bottom: 28px }`,
+	   `wc-yandex-delivery-pickup-point-modal-map.css`), sized to its own control. */
+	.woodev-pickup-list__body {
+		padding-bottom: var( --woodev-pickup-mobile-bar-h );
+	}
+
+	/* THE OPEN-STATE TOGGLE BECOMES A BAR (#168 round 2, operator 07.08.2026). Every previous
+	   placement failed the same way: with the panel full-bleed there is no free corner left. A FAB
+	   at `right: 16px; bottom: 32px` (what this rule used to say) lands squarely on the card's CTA
+	   — «Выбрать этот пункт» spans the panel's full width at the bottom — and, in the list state,
+	   over the last rows. Top-right is the card's own ✕, top-left its type chip.
+
+	   So it stops floating: full width, pinned to the panel's bottom edge, with its label visible
+	   («Показать карту», the `showMap` key `pickup-panels.js` renders into
+	   `.woodev-pickup-list__toggle-label`). Paired with `.woodev-pickup-list__body`'s bottom
+	   padding above, it covers nothing — the last row scrolls clear of it.
+
+	   The reference cannot be copied here: its drawer is NOT full-width on mobile
+	   (`max-width: min( var(--mmc-drawer-width), calc(100% - 48px) )`), so it keeps a 48px strip of
+	   map to park the button in. We cover the map completely by the operator's explicit call, which
+	   is what removes that strip and forces a different answer. What IS taken from the reference is
+	   the card state below — there the button simply disappears under the panel (`.balloon-layout`
+	   `z-index: 3` over a button with no `z-index` at all). */
 	.woodev-pickup-stage.is-open .woodev-pickup-list__toggle {
-		right: 16px;
-		bottom: 32px;
+		right: 0;
+		bottom: 0;
+		left: 0;
+		gap: 8px;
+		width: 100%;
+		height: var( --woodev-pickup-mobile-bar-h );
+		font-size: 15px;
+		font-weight: 500;
+		border-radius: 0;
+	}
+
+	.woodev-pickup-stage.is-open .woodev-pickup-list__toggle-label {
+		display: inline;
+	}
+
+	/* The card carries its own way back — ✕ in its header returns to the list, and the bar there
+	   returns to the map — so a second control stacked on its CTA would be one affordance too many
+	   for a screen this size. Hidden rather than pushed below the panel by `z-index` (the
+	   reference's mechanism) because this file's toggle deliberately sits at `z-index: 4` to stay
+	   above BOTH panels on desktop; re-ordering that for one breakpoint would make the desktop
+	   stacking depend on a mobile rule.
+
+	   `!important` is NOT decoration here — without it this rule silently does nothing. The button
+	   reset near the top of this file defends `display: inline-flex !important` against a hostile
+	   theme's `button { display: none !important }`, and `!important` only ever loses to another
+	   `!important`, whatever the specificity: rig-measured, the toggle stayed at computed `flex`
+	   and `document.elementFromPoint()` over the CTA still returned it. Same trap, same fix, as
+	   `.woodev-pickup-search__reset[hidden]` further up — see the gotcha
+	   `hostile-theme-button-display-none-needs-important` and its s51 addendum, whose whole point
+	   is that every LATER rule touching an `!important`-defended property needs the flag in kind. */
+	.woodev-pickup-stage.is-open.is-card .woodev-pickup-list__toggle {
+		display: none !important;
 	}
 
 	/*

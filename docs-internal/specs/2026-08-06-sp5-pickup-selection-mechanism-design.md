@@ -41,8 +41,12 @@ domain owns.**
 - the map does not close itself on selection
 - an ajax step runs, with a spinner on the button
 - on success the button becomes «Продолжить оформление», and *that* click closes
-- on reopening the map: camera on the selected point, marker `active`, sidebar open, the
-  point highlighted in the list
+- on reopening the map: camera on the selected point, marker `active`, that point's **detail
+  card** open, the point highlighted in the row behind it
+  - *originally* "sidebar open, the point highlighted in the list". **Revised by the operator
+    on 06.08.2026**, after seeing the shipped behaviour on the rig: he wants the chosen point's
+    details and its «Продолжить оформление» button visible immediately on reopen, not a list he
+    has to click through to reach them. See §5.3.
 - **the plugin decides** whether to close immediately instead
 
 ---
@@ -379,14 +383,38 @@ about on this feature.
 
 | Requirement | Mechanism | New? |
 |---|---|---|
-| camera on the selected point | `focusGroup( key )` | exists |
-| marker `active` | side effect of `focusGroup()` | exists |
-| sidebar open | `openList()` | exists |
-| row highlighted in the list | `is-selected` on the row | **new** |
-| CTA reads «Продолжить оформление» | `setSelectedId()` + existing label logic | exists |
+| camera on the selected point | `setPoints( groups, { focus: key } )` — camera BEFORE the draw | exists |
+| marker `active` | side effect of that same focus pass | exists |
+| **that point's detail card open** | `openCard( group, selectedId, 'restore' )` | **revised 06.08.2026** |
+| row highlighted in the list *behind* the card | `is-selected` on the row | **new** |
+| CTA reads «Продолжить оформление» | `setSelectedId()` (before the card) + existing label logic | exists |
 
 The only new work is the row highlight. If the point is absent from the current results, see
 D-15: open normally, silently, field untouched.
+
+**Revision, 06.08.2026 — the card, not the list (operator decision).** This row previously read
+`sidebar open | openList() | exists`. The operator reviewed the shipped behaviour on the rig and
+decided the reopened picker must show the chosen point's **detail card**: he wants its details and
+its «Продолжить оформление» button in front of him immediately, rather than a sidebar list whose
+highlighted row he still has to click. `restoreSelection()` calls `openCard()` accordingly.
+
+Two consequences, both accepted:
+
+- **The list behind the card holds exactly one row.** `setPoints( …, { focus } )` opens the map at
+  `MAX_ZOOM` (18) and the sidebar list is viewport-filtered (the provider emits `visibleChange`,
+  the mount answers with `panels.setVisible( groups )`), so at that zoom only the restored marker
+  is in view. Closing the card reveals a one-row list. This is the zoom's doing, not a defect —
+  the operator kept zoom 18 knowingly and this is not to be "improved".
+- **The card-open must not move the camera a second time.** `openCard()` emits `cardOpened`, and
+  the mount answers that event with `provider.focusGroup()` for every other route to a card. The
+  restore passes `origin: 'restore'`, the one origin that listener returns early on: this pass's
+  camera move already went out ahead of the draw, and that ordering is load-bearing (moving the
+  camera across the ObjectManager's first layout parks the marker's overlay off screen — s52; see
+  `docs-internal/gotchas/ymaps-draw-then-move-parks-the-overlay.md`). The sidebar half is
+  unchanged: `openCard()` still opens a closed stage through `setStageOpen()`, so `listToggle` →
+  `provider.setMargin()` still fires exactly as `openList()` made it.
+
+The row highlight stays required — it is simply behind the card until the customer dismisses it.
 
 ---
 

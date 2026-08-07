@@ -42,8 +42,7 @@
  * `strategy`/`locality`/`i18n`, and (Task 20) the plugin-level `defaultLocation`
  * (`{ center: [lat,lng], zoom }`, ALWAYS present — a required plugin argument),
  * `pointIcons` (`{ typeCode: { default, active } }`, `active` always filled),
- * `accentColor` and `searchNearestCount` (Task 19, D-6 — the PHP-side default of 3, filterable
- * server-side via `woodev_pickup_search_nearest_count`; see {@see focusAddress}), and
+ * `accentColor`, and
  * `searchLayoutEl` (Task 12, spec V-6 — a DETACHED `HTMLElement` built by
  * `pickup-panels.js`'s `buildSearchLayout()`, or `null` when the plugin disabled search; see
  * {@see _buildSearchControl}). This file reads all of these at the top level of `config` —
@@ -72,7 +71,12 @@
  *    12/19's own address flow, live-review round 4) {@see resolveAddress}'s `_addressSeq`: a
  *    customer who edits and re-submits a search before the FIRST `ymaps.geocode()` round-trip
  *    resolves must never have the STALE resolution win the camera — see that method's own
- *    docblock.
+ *    docblock. `setBounds()` is asynchronous in one FURTHER way this lesson originally missed
+ *    (s52): it also ISSUES its camera command late, delegating to `map.setCenter()` only once it
+ *    has resolved the bounds against the projection — ~50 ms after the call, as measured on the
+ *    rig. So "I called `setBounds()` first, then `setCenter()`" does NOT mean the `setCenter()`
+ *    wins: the fit starts last and overwrites it. Sequencing is therefore not only about which
+ *    promise RESOLVES first — see {@see focusGroup}'s `_cameraFit` gate.
  * 2. A PLACEMARK FOLDED INTO A CLUSTER HAS NO BALLOON OF ITS OWN, and whether a group is
  *    clustered depends on the current zoom, so the same group can work at one zoom and break
  *    at another. This file owns no balloon any more, so that specific crash is gone — but the
@@ -217,21 +221,27 @@
  *   20/T3) wires this straight to `focusGroup( key, { zoom: true } )`, which supplies the actual
  *   camera move, the active marker state, AND the sidebar card open — this file never opens a
  *   card itself (D-3).
- * - Otherwise, `addressFocused( { latLng, label } )` fires and the camera CENTRES on the address
- *   itself, at the deepest zoom that still keeps the `config.searchNearestCount` nearest groups
- *   on screen ({@see focusAddress}, live-review round 4, Finding B) — NEVER to the address alone,
- *   which is exactly the "empty map" failure this design avoids, and NEVER a plain bounds fit
- *   EITHER (round 3's own version): a box fit puts the address SOMEWHERE inside the rectangle,
- *   almost never the middle, which is precisely the operator's own report ("карта смещается не в
- *   центр выбранного адреса а как-то с краю"). See {@see symmetricBoundsAround}'s own docblock
- *   for how a plain `setBounds()` call is still made to CENTRE exactly on the address without any
- *   hand-rolled zoom-from-pixel-geometry math. `N` defaults to {@see DEFAULT_SEARCH_NEAREST_COUNT}
- *   and is deliberately a geometry-based count, not a kilometre radius: network density varies
- *   between CITIES of one carrier far more than between carriers, so a fixed per-plugin radius
- *   could never track it, while fitting to N nearest points adapts automatically. When even the
- *   nearest group is farther than {@see NEARBY_THRESHOLD_M}, no fit happens at all —
- *   `nothingNearby` is emitted instead, naming that nearest group's own distance, so the customer
- *   sees an explicit "nothing here", never a silently empty viewport.
+ * - Otherwise, `addressFocused( { latLng, label } )` fires and the camera frames the FOUND
+ *   OBJECT'S OWN BOUNDS — the geocoder's `boundedBy` for the hit, threaded in by
+ *   {@see resolveAddress} ({@see focusAddress}, #167). A house gives a house-sized frame, a
+ *   street a street, a city a city: the granularity comes free from what was actually searched
+ *   for, and this file owns no zoom number for it at all ({@see ADDRESS_FALLBACK_ZOOM} covers
+ *   only a hit with no bounds).
+ *
+ *   This is the reference's own policy, arrived at by deleting ours: Yandex.Delivery hands search
+ *   to ymaps' `SearchControl`, which frames the result itself, and has no notion of keeping
+ *   nearby points in shot anywhere in its file. Ours used to fit a box containing the address AND
+ *   its N nearest groups, which meant an address 14km from the loaded points produced a ~28km
+ *   frame — "half of Moscow, and you still have to find the address" (operator, 07.08.2026). Note
+ *   what the reference DOES use its point cloud for: `boundedBy` on the geocode call, i.e. which
+ *   candidates to OFFER. Never which frame to land on. That split is the same one the gotcha
+ *   `bounding-the-address-resolve-breaks-the-normal-case` records.
+ *
+ *   When the settled frame turns out to contain no point at all, `nothingNearby` is emitted
+ *   naming the nearest group and its distance, so the customer gets an explicit "nothing here"
+ *   rather than a silently empty viewport. That test is GEOMETRIC — {@see _groupsInsideBounds}
+ *   against the margin-aware viewport, evaluated after the move settles — replacing a 50km
+ *   constant that also, wrongly, decided whether to move the camera AT ALL.
  *
  * `objectManager.setFilter()`, NEVER A REBUILD, drives {@see setTypeFilter}: rebuilding the
  * manager would tear down and recreate every feature, losing the camera state this file just
@@ -345,30 +355,24 @@
 	}
 
 	/**
-	 * Default number of nearest groups {@see focusAddress} fits the camera to when
-	 * `config.searchNearestCount` is absent — the framework default for the PHP-side
-	 * `woodev_pickup_search_nearest_count` filter (Task 19, D-6; see the file docblock's
-	 * "ADDRESS SEARCH" section for why this is a geometry-based count, not a kilometre radius).
+	 * Zoom {@see focusAddress} centres on when a geocoder hit carries no `boundedBy` of its own —
+	 * the only case where this file picks a zoom NUMBER rather than framing the found object
+	 * (#167). Street level: close enough to be useful, wide enough not to strand the customer in
+	 * a courtyard. A degenerate box under `checkZoomRange: true` is deliberately NOT used as the
+	 * fallback — that resolves to the deepest zoom the map allows, which for an address is far too
+	 * close (it is the right answer for a chosen POINT, which is why {@see focusGroup} uses it).
 	 *
+	 * @since 2.0.2
 	 * @type {number}
 	 */
-	var DEFAULT_SEARCH_NEAREST_COUNT = 3;
-
-	/**
-	 * Distance, in metres, beyond which the nearest loaded group to a searched address is
-	 * treated as "nothing nearby" — {@see focusAddress} emits `nothingNearby` instead of fitting
-	 * the camera to a point so far away the map would read as broken (Task 19, D-6).
-	 *
-	 * @type {number}
-	 */
-	var NEARBY_THRESHOLD_M = 50000;
+	var ADDRESS_FALLBACK_ZOOM = 16;
 
 	/**
 	 * Distance, in metres, within which a resolved search address is treated as having selected
 	 * an EXISTING POINT rather than a nearby location (operator requirement, live-review round
 	 * 2, verbatim: "если из списка выбран адрес, точно совпадающая с точкой на карте (ПВЗ/
 	 * Постамат/Отделение), то фокусируемся только на этой точке и делаем её активной"). Checked
-	 * BEFORE the nearest-N fit inside {@see focusAddress}; when the nearest loaded group is this
+	 * BEFORE any camera move inside {@see focusAddress}; when the nearest loaded group is this
 	 * close, the address search stops there — {@see focusAddress}'s own docblock covers what
 	 * fires instead.
 	 *
@@ -377,8 +381,8 @@
 	 * tens of metres of disagreement between "the building" and "the counter inside it" is normal
 	 * and expected, so a materially tighter threshold would rarely fire at all. Materially wider
 	 * risks matching a genuinely different, adjacent building instead. This is the "same building"
-	 * case at the NEAR end of the distance check {@see focusAddress} performs; {@see NEARBY_THRESHOLD_M}
-	 * (50km) is the "nothing near here at all" case at the FAR end of the same check.
+	 * case; its opposite number, "nothing near here at all", is no longer a distance at all but a
+	 * geometric fact about the settled frame (#167) — see {@see _groupsInsideBounds}.
 	 *
 	 * @since 2.0.2
 	 * @type {number}
@@ -455,47 +459,6 @@
 		return [
 			[ Math.max( -90, minLat - latPad ), minLng - lngPad ],
 			[ Math.min( 90, maxLat + latPad ), maxLng + lngPad ],
-		];
-	}
-
-	/**
-	 * Builds the SMALLEST bounds pair CENTRED EXACTLY on `anchor` that still contains every one of
-	 * `groups` (live-review round 4, Finding B) — the fix for "карта смещается не в центр
-	 * выбранного адреса а как-то с краю": {@see WoodevYandexMapProvider#focusAddress} used to fit
-	 * the camera to `geo.boundsFor( anchor, groups )` — the smallest box containing the anchor AND
-	 * every group — whose OWN centre is almost never the anchor itself (it is the box's centroid,
-	 * dragged toward wherever the nearest groups happen to cluster). This function instead grows
-	 * SYMMETRICALLY outward from the anchor in every direction until every group fits, so the
-	 * box's centroid IS the anchor, by construction, exactly.
-	 *
-	 * Deliberately reuses `setBounds()`'s own EXISTING `checkZoomRange` zoom-picking machinery
-	 * rather than hand-deriving a zoom level from pixel/viewport geometry (a computation this file
-	 * has no reliable way to do without knowing the map's own rendered pixel size, which ymaps
-	 * does not expose synchronously): a `setBounds()` call already fits a box by choosing the
-	 * deepest zoom the box's OWN shape allows, so building a box that is SYMMETRIC about the
-	 * anchor — as opposed to an asymmetric box that merely CONTAINS it — gets both properties
-	 * (centred on the address, deepest zoom keeping every nearest group visible) from the ONE
-	 * primitive this file already trusts elsewhere ({@see setPoints}'s bulk fit,
-	 * {@see _resolveInitialViewport}), with no new geometry math beyond this box construction.
-	 *
-	 * @since 2.0.2
-	 * @param {Array} anchor `[lat, lng]` — the geocoded address; the CENTRE the result must have.
-	 * @param {Array} groups objects with numeric `lat`/`lng` — the nearest-N groups the address
-	 *                       must still be fit alongside.
-	 * @returns {Array} `[[Number, Number], [Number, Number]]`, centred on `anchor`.
-	 */
-	function symmetricBoundsAround( anchor, groups ) {
-		var latDelta = 0;
-		var lngDelta = 0;
-
-		( groups || [] ).forEach( function( group ) {
-			latDelta = Math.max( latDelta, Math.abs( group.lat - anchor[ 0 ] ) );
-			lngDelta = Math.max( lngDelta, Math.abs( group.lng - anchor[ 1 ] ) );
-		} );
-
-		return [
-			[ anchor[ 0 ] - latDelta, anchor[ 1 ] - lngDelta ],
-			[ anchor[ 0 ] + latDelta, anchor[ 1 ] + lngDelta ],
 		];
 	}
 
@@ -922,6 +885,13 @@
 		/** @type {number} bumped on every {@see focusGroup} call — discards a stale
 		 *  continuation when a later call's camera move resolves before an earlier one's. */
 		this._focusSeq = 0;
+
+		/** @type {Promise|null} the {@see setPoints} `bulk` camera fit that is CURRENTLY in
+		 *  flight, or null when none is — {@see focusGroup} gates its own camera move behind it.
+		 *  Null (not a resolved promise) so a focus issued when nothing is fitting still moves the
+		 *  camera synchronously, inside the click's own task. See {@see focusGroup}'s gate for the
+		 *  race this exists to close. */
+		this._cameraFit = null;
 
 		/** @type {number} bumped on every {@see focusAddress} call (and captured at the start of
 		 *  every {@see resolveAddress} call) — discards a stale `resolveAddress()` continuation
@@ -1673,12 +1643,35 @@
 	 * active state re-applied; a focused group that is GONE from the new set clears
 	 * `getFocusedKey()` instead — see {@see _setMarkerState}.
 	 *
-	 * @param {Array} groups
-	 * @returns {void}
+	 * `options.focus: <group key>` OPENS THE MAP AT ONE GROUP instead: no `bulk` fit, the camera
+	 * settles on that group at {@see MAX_ZOOM} FIRST, the features are drawn SECOND, and the group
+	 * is marked active third. The mount passes it on the one pass that restores a previously
+	 * chosen point (spec D-15). The order is the whole point, and s52's rig pass is what
+	 * established it: drawing first and moving after — however carefully the move is sequenced
+	 * behind the fit — leaves the newly un-clustered feature's overlay parked at ymaps' own
+	 * off-screen sentinel (`left/top: -32760px`) until some LATER zoom change re-lays it out. The
+	 * camera was right, `data-state="active"` was right, `getFocusedKey()` was right, and the map
+	 * showed no pin at all. ymaps rebuilds its ObjectManager overlays in a burst that begins AFTER
+	 * `actionend` — i.e. after the previous move's own promise has already resolved — so no
+	 * amount of awaiting a camera promise avoids the race; only not moving the camera across the
+	 * ObjectManager's first layout does. Measured on the rig: move-then-draw renders the marker
+	 * on screen every time, draw-then-move parks it every time.
+	 *
+	 * A `focus` naming a group that is not in `groups` is ignored (the map opens normally) —
+	 * "the point I chose last time is gone" is exactly the case spec D-15 says must degrade
+	 * silently, and the map still has to open somewhere.
+	 *
+	 * @param {Array}  groups
+	 * @param {Object} [options]
+	 * @param {string} [options.focus] group key to open the map at, marked active, instead of
+	 *                                 fitting the camera to the whole set.
+	 * @returns {Promise<void>} resolves once the camera work this call started has settled and
+	 *                          the points are drawn.
 	 */
-	WoodevYandexMapProvider.prototype.setPoints = function( groups ) {
+	WoodevYandexMapProvider.prototype.setPoints = function( groups, options ) {
 		var self = this;
 		var list = groups || [];
+		var opts = options || {};
 
 		this._groupsByKey = {};
 
@@ -1688,6 +1681,83 @@
 			return self._buildFeature( group );
 		} );
 
+		var focusGroup = opts.focus ? this._groupsByKey[ opts.focus ] : null;
+
+		if ( focusGroup ) {
+			var mySeq = ++this._focusSeq;
+
+			// CAMERA FIRST, FEATURES SECOND — see this method's docblock for the measurement
+			// behind that order. Sequenced through `_focusSeq` like every other focus, so a
+			// customer who clicks something else while this move is still travelling wins.
+			return this.map.setCenter(
+				[ focusGroup.lat, focusGroup.lng ],
+				MAX_ZOOM,
+				{ useMapMargin: true, duration: 200 }
+			).then( function() {
+				if ( self._destroyed || mySeq !== self._focusSeq ) {
+					return;
+				}
+
+				self._drawFeatures( features );
+				self._applyFocus( opts.focus );
+				self._emitVisibleChange();
+			} );
+		}
+
+		this._drawFeatures( features );
+
+		if ( 'bulk' === this.config.strategy && list.length > 0 ) {
+			var anchor = [ list[ 0 ].lat, list[ 0 ].lng ];
+
+			// setBounds() is ASYNCHRONOUS — awaited, exactly like _resolveInitialViewport()'s
+			// own call. See the docblock comment above and the file docblock's first lesson.
+			// `duration: 400` (live-review fix) — this fit can travel across the whole loaded
+			// set, so it gets the SAME "long move" duration as the initial-viewport fit above.
+			// The continuation is ALSO published as `_cameraFit` — the gate {@see focusGroup}
+			// waits on, so a focus issued while this fit is still in flight cannot be overwritten
+			// by it. It never rejects (both handlers swallow) — it is an ordering signal, not a
+			// result — and it clears ITSELF (identity-checked, so a fit superseded by a newer
+			// `setPoints()` never clears the newer one's gate) to keep a LATER focus synchronous.
+			var fit = this.map.setBounds( geo.boundsFor( anchor, list ), { checkZoomRange: true, duration: 400 } )
+				.then( function() {
+					if ( fit === self._cameraFit ) {
+						self._cameraFit = null;
+					}
+
+					if ( self._destroyed ) {
+						return;
+					}
+
+					self._emitVisibleChange();
+				}, function() {
+					if ( fit === self._cameraFit ) {
+						self._cameraFit = null;
+					}
+				} );
+
+			this._cameraFit = fit;
+
+			return fit;
+		}
+
+		this._emitVisibleChange();
+
+		return Promise.resolve();
+	};
+
+	/**
+	 * The drawing half of {@see setPoints} — the full `removeAll()`/`add()` rebuild plus the
+	 * currently-focused group's reconciliation against the new set. Split out because the `focus`
+	 * path runs it AFTER its camera move rather than before (see {@see setPoints}'s docblock),
+	 * and the two paths must not grow two different ideas of what "draw these groups" means.
+	 *
+	 * `_groupsByKey` is already populated by the caller — this only touches the map.
+	 *
+	 * @since 2.0.2
+	 * @param {Array} features
+	 * @returns {void}
+	 */
+	WoodevYandexMapProvider.prototype._drawFeatures = function( features ) {
 		this.objectManager.removeAll();
 		this.objectManager.add( features );
 
@@ -1698,26 +1768,6 @@
 		} else if ( this._focusedKey ) {
 			this._setMarkerState( this._focusedKey, 'active' );
 		}
-
-		if ( 'bulk' === this.config.strategy && list.length > 0 ) {
-			var anchor = [ list[ 0 ].lat, list[ 0 ].lng ];
-
-			// setBounds() is ASYNCHRONOUS — awaited, exactly like _resolveInitialViewport()'s
-			// own call. See the docblock comment above and the file docblock's first lesson.
-			// `duration: 400` (live-review fix) — this fit can travel across the whole loaded
-			// set, so it gets the SAME "long move" duration as the initial-viewport fit above.
-			this.map.setBounds( geo.boundsFor( anchor, list ), { checkZoomRange: true, duration: 400 } ).then( function() {
-				if ( self._destroyed ) {
-					return;
-				}
-
-				self._emitVisibleChange();
-			} );
-
-			return;
-		}
-
-		this._emitVisibleChange();
 	};
 
 	/**
@@ -1948,23 +1998,48 @@
 	 * @returns {void}
 	 */
 	WoodevYandexMapProvider.prototype._emitVisibleChange = function() {
+		var groupsByKey = this._groupsByKey;
+		var groups = Object.keys( groupsByKey ).map( function( key ) {
+			return groupsByKey[ key ];
+		} );
+
+		this.emit( 'visibleChange', this._groupsInsideBounds( groups ).map( function( group ) {
+			return group.key;
+		} ) );
+	};
+
+	/**
+	 * The groups currently inside the map's MARGIN-AWARE viewport — the one definition of "in
+	 * frame" this file has, shared by {@see _emitVisibleChange} (which turns it into the sidebar's
+	 * list) and {@see focusAddress} (which turns "none of them" into `nothingNearby`). Extracted
+	 * when the second caller appeared (#167) rather than copied: two independent inequality chains
+	 * over the same rectangle would be two chances to disagree about what the customer can see.
+	 *
+	 * `useMapMargin: true` is what makes it the VISIBLE area rather than the full canvas — the
+	 * sidebar covers the right-hand strip, and a point hidden under it is not one the customer can
+	 * see on the map (they can still read it in the list beside them, which is the list this very
+	 * method feeds).
+	 *
+	 * @since 2.0.2
+	 * @param {Array} groups
+	 * @returns {Array} the subset of `groups` inside the viewport; never null.
+	 */
+	WoodevYandexMapProvider.prototype._groupsInsideBounds = function( groups ) {
 		var bounds = this.map.getBounds( { useMapMargin: true } );
+
+		if ( ! Array.isArray( bounds ) || 2 !== bounds.length ) {
+			return [];
+		}
+
 		var minLat = Math.min( bounds[ 0 ][ 0 ], bounds[ 1 ][ 0 ] );
 		var maxLat = Math.max( bounds[ 0 ][ 0 ], bounds[ 1 ][ 0 ] );
 		var minLng = Math.min( bounds[ 0 ][ 1 ], bounds[ 1 ][ 1 ] );
 		var maxLng = Math.max( bounds[ 0 ][ 1 ], bounds[ 1 ][ 1 ] );
-		var groupsByKey = this._groupsByKey;
-		var keys = [];
 
-		Object.keys( groupsByKey ).forEach( function( key ) {
-			var group = groupsByKey[ key ];
-
-			if ( group.lat >= minLat && group.lat <= maxLat && group.lng >= minLng && group.lng <= maxLng ) {
-				keys.push( key );
-			}
+		return ( groups || [] ).filter( function( group ) {
+			return group.lat >= minLat && group.lat <= maxLat
+				&& group.lng >= minLng && group.lng <= maxLng;
 		} );
-
-		this.emit( 'visibleChange', keys );
 	};
 
 	/**
@@ -2136,8 +2211,12 @@
 	 * docblock's "MAP MARGINS" section); the sidebar toggling on and off must never touch it.
 	 *
 	 * @param {boolean} open  whether the sidebar panel is now open.
-	 * @param {number}  width the panel's current width, in CSS pixels — ignored when `open`
-	 *                        is false.
+	 * @param {number}  width the width of the strip the panel occupies MEASURED FROM THE MAP'S
+	 *                        RIGHT EDGE, in CSS pixels — since #168 that is the panel's own width
+	 *                        plus its 16px gutter, not the panel's width alone (the caller,
+	 *                        `pickup-panels.js`'s `setStageOpen()`, adds it). This method reserves
+	 *                        from that edge inwards, so it wants the covered strip, not the
+	 *                        element. Ignored when `open` is false.
 	 * @returns {void}
 	 */
 	WoodevYandexMapProvider.prototype.setMargin = function( open, width ) {
@@ -2247,7 +2326,10 @@
 				return undefined;
 			}
 
-			return self.focusAddress( coordinates, displayName );
+			// The hit's own `boundedBy` is what the camera frames (#167) — the SAME extractor the
+			// initial-viewport resolve already uses on the same shape of result, not a second
+			// reader of ymaps' geo-object shape.
+			return self.focusAddress( coordinates, displayName, extractGeocodeBounds( result ) );
 		} ).catch( function() {
 			// A rejected geocode (network/quota) degrades the same way a resolved-but-empty one
 			// does — matching _searchGeocodeProvider()'s/suggestAddresses()'s own catch discipline.
@@ -2270,19 +2352,21 @@
 	 *   straight to `focusGroup( key, { zoom: true } )`, which supplies the camera move, the
 	 *   active marker state, AND opens the sidebar card — this file never opens a card itself
 	 *   (D-3), so it must not race that call with a fit of its own.
-	 * - OTHERWISE: `addressFocused( { latLng, label } )` fires and the camera CENTRES on `latLng`
-	 *   itself, at the deepest zoom that still keeps the `config.searchNearestCount` nearest
-	 *   groups (default {@see DEFAULT_SEARCH_NEAREST_COUNT}) on screen — via
-	 *   {@see symmetricBoundsAround} (live-review round 4, Finding B; see that function's own
-	 *   docblock for why a plain `geo.boundsFor()` fit put the address off-centre: "карта
-	 *   смещается не в центр выбранного адреса а как-то с краю"). NEVER to the address alone,
-	 *   which is exactly the "empty map" failure this design avoids. When even the nearest group
-	 *   is farther than {@see NEARBY_THRESHOLD_M}, no fit happens at all — `nothingNearby` is
-	 *   emitted instead, naming that nearest group's own distance and (already-`esc_html()`-
+	 * - OTHERWISE: `addressFocused( { latLng, label } )` fires and the camera frames `bounds` —
+	 *   the geocoder's own `boundedBy` for the hit, so the zoom matches the granularity of what
+	 *   was searched for (#167). A hit with no bounds degrades to `latLng` at
+	 *   {@see ADDRESS_FALLBACK_ZOOM}. The loaded points do not enter this decision at all; see the
+	 *   file docblock's "ADDRESS SEARCH" section for why the previous nearest-N fit was deleted
+	 *   rather than tuned.
+	 *
+	 *   AFTER the move settles, if the frame contains no loaded group ({@see _groupsInsideBounds}),
+	 *   `nothingNearby` fires naming the nearest group's distance and (already-`esc_html()`-
 	 *   escaped) name, so the customer sees an explicit "nothing here" rather than a silently
-	 *   empty viewport. With NO groups currently loaded, `addressFocused` still fires (the
-	 *   panels' sort anchor still moves) but nothing else does — there is nothing to match, fit,
-	 *   or report as "nearest".
+	 *   empty viewport. Note the ordering: the camera ALWAYS moves to the address first — the old
+	 *   50km threshold decided not to move at all, leaving the customer on the previous viewport
+	 *   with no explanation on the map itself. With NO groups currently loaded, `addressFocused`
+	 *   and the camera move still happen (the panels' sort anchor still moves) but nothing is
+	 *   reported — there is nothing to match or name as "nearest".
 	 *
 	 * The nearest-N/same-place computation reads ONLY the currently loaded groups
 	 * ({@see _groupsByKey}) that have at least one point SURVIVING the active type filter
@@ -2323,7 +2407,7 @@
 	 *                          `nearestTo` header label; unused in the `addressMatchedPoint` path.
 	 * @returns {Promise<void>}
 	 */
-	WoodevYandexMapProvider.prototype.focusAddress = function( latLng, label ) {
+	WoodevYandexMapProvider.prototype.focusAddress = function( latLng, label, bounds ) {
 		var self = this;
 
 		this._addressSeq += 1;
@@ -2336,10 +2420,7 @@
 			// exactly matching what the sidebar list itself would offer.
 			return self._survivingPoints( group ).length > 0;
 		} );
-		var count = 'number' === typeof this.config.searchNearestCount
-			? this.config.searchNearestCount
-			: DEFAULT_SEARCH_NEAREST_COUNT;
-		var nearestGroups = geo.nearest( groups, latLng, count );
+		var nearestGroups = geo.nearest( groups, latLng, 1 );
 		var closest = nearestGroups.length > 0 ? nearestGroups[ 0 ] : null;
 		var closestDistance = closest ? geo.distanceMeters( latLng, [ closest.lat, closest.lng ] ) : null;
 
@@ -2351,35 +2432,49 @@
 
 		this.emit( 'addressFocused', { latLng: latLng, label: label } );
 
-		if ( ! closest ) {
-			return Promise.resolve();
-		}
+		// The camera frames the FOUND OBJECT, and nothing else (#167). `bounds` is the geocoder's
+		// own `boundedBy` for the hit — a house gives a house-sized box, a street a street, a city
+		// a city — so the zoom matches what was actually searched for without this file owning a
+		// single zoom number or knowing anything about the points. That is the reference's whole
+		// policy: Yandex.Delivery hands search to ymaps' `SearchControl`, which frames the result
+		// itself, and has no nearest-N notion anywhere in its file.
+		//
+		// setBounds() is ASYNCHRONOUS — awaited, exactly like every other camera move here (the
+		// file docblock's first lesson). The fallback exists only for a hit with no `boundedBy`
+		// at all; a degenerate box under `checkZoomRange` would slam to the deepest zoom the map
+		// allows, so a plain centre + street-level zoom is the safer degradation.
+		var move = Array.isArray( bounds ) && 2 === bounds.length
+			? this.map.setBounds( bounds, { checkZoomRange: true, duration: 400, useMapMargin: true } )
+			: this.map.setCenter( latLng, ADDRESS_FALLBACK_ZOOM, { duration: 400, useMapMargin: true } );
 
-		if ( closestDistance > NEARBY_THRESHOLD_M ) {
+		return move.then( function() {
+			if ( self._destroyed || ! closest ) {
+				return;
+			}
+
+			// "Nothing nearby" is a GEOMETRIC fact, decided AFTER the camera settles: can the
+			// customer see a point from here or not. It replaced a 50km constant that no one could
+			// justify and that, worse, decided whether to MOVE AT ALL — so an address 40km from
+			// the nearest point counted as "nearby" and dragged the frame out to contain both.
+			// Read through the same margin-aware bounds `_emitVisibleChange()` uses, so "in frame"
+			// means the same thing in both places: what is visible BESIDE the sidebar, not what is
+			// hidden underneath it.
+			if ( self._groupsInsideBounds( groups ).length > 0 ) {
+				return;
+			}
+
 			var closestPoint = closest.points && closest.points[ 0 ];
 
 			// `key` (Task 20): lets the mount focus/open THIS exact group when the
 			// customer accepts the "show it anyway" offer — the group's own identity
 			// token, never its (display-only, non-unique) name. See
 			// pickup-panels.js's own note on `showNearestRequested`.
-			this.emit( 'nothingNearby', {
+			self.emit( 'nothingNearby', {
 				key: closest.key,
 				distanceMeters: closestDistance,
 				name: ( closestPoint && closestPoint.name ) || '',
 			} );
-
-			return Promise.resolve();
-		}
-
-		// setBounds() is ASYNCHRONOUS — awaited (returned), exactly like every other camera
-		// move in this file. See the file docblock's first lesson. The box is CENTRED on the
-		// address itself ({@see symmetricBoundsAround}, live-review round 4, Finding B) — never
-		// `geo.boundsFor()`, whose own centre drifts toward wherever the nearest groups happen to
-		// sit, not the address that was actually searched for.
-		return this.map.setBounds(
-			symmetricBoundsAround( latLng, nearestGroups ),
-			{ checkZoomRange: true, duration: 400, useMapMargin: true }
-		);
+		} );
 	};
 
 	/**
@@ -2413,19 +2508,17 @@
 	 * `focusGroup( key, { zoom: 'marker' !== origin } )` from the `cardOpened` event's own
 	 * `origin` field.
 	 *
-	 * TWO DIFFERENT TARGETS, same split. When `key` is currently folded into a ymaps cluster, the
-	 * target is the CLUSTER's anchor (its first feature's coordinates); when it is NOT clustered
-	 * — the common case, a single visible marker — the target is the GROUP's own `lat`/`lng` from
-	 * {@see _groupsByKey}. Earlier versions of this method moved the camera ONLY in the clustered
-	 * branch, which is why a plain marker click visibly did nothing on the rig — this bug was
-	 * invisible to every test that exercised it, because none of them ever gave the group its own
-	 * coordinates via `setPoints()` first.
-	 *
-	 * THE ZOOM BRANCH (`options.zoom === true`) calls `map.setCenter( target, MAX_ZOOM,
-	 * { useMapMargin: true, duration: 200 } )` — matching the reference implementations' own
-	 * sidebar-row centring call exactly (see the plan's "Reference truth" table). The move is
-	 * skipped — focus still applies directly — in two cases: every feature in a cluster shares
-	 * one coordinate, since no zoom, however deep, could ever separate them (the "Russian Post"
+	 * THE ZOOM BRANCH (`options.zoom === true`) calls `map.setCenter( <the GROUP's own lat/lng>,
+	 * MAX_ZOOM, { useMapMargin: true, duration: 200 } )` — matching the reference implementations'
+	 * own sidebar-row centring call exactly (see the plan's "Reference truth" table). The group's
+	 * OWN coordinates are the target even when it is currently folded into a cluster: zooming to
+	 * MAX_ZOOM there separates it from its cluster-mates just as reliably as zooming to the
+	 * cluster's anchor would, and unlike the anchor (an arbitrary OTHER member of the cluster,
+	 * which s52's rig pass measured landing 2 km away from the point the customer had actually
+	 * picked) it leaves the chosen point on screen — where its marker gets an overlay at all, and
+	 * so can carry the `data-state="active"` {@see _applyFocus} writes. The move is skipped —
+	 * focus still applies directly — in two cases: every feature in the cluster shares one
+	 * coordinate, since no zoom, however deep, could ever separate them (the "Russian Post"
 	 * guard, spec §7.5; see the file docblock's second lesson); or `key` has no known group
 	 * (defensive — should not happen in practice, since a click always names a group this
 	 * provider itself drew). `useMapMargin: true` keeps the point inside the area the panels
@@ -2434,11 +2527,16 @@
 	 *
 	 * THE PAN BRANCH (`options.zoom` falsy) calls `map.panTo( target, { useMapMargin: true,
 	 * duration: 200 } )` unconditionally whenever a target exists (co-located or not) — matching
-	 * both references' marker-click behaviour exactly: pan only, zoom untouched. A pan can never
-	 * un-cluster anything (zoom is what separates co-located points, and this branch never
-	 * touches zoom), so the co-located guard does not apply here at all, and — unlike the zoom
-	 * branch — there is no POST-move re-check to gate: nothing about clustering could possibly
-	 * have changed as a result of a move that left zoom alone.
+	 * both references' marker-click behaviour exactly: pan only, zoom untouched. It keeps TWO
+	 * targets: the CLUSTER's anchor when `key` is folded into one — a pan cannot un-cluster
+	 * anything (zoom is what separates co-located points, and this branch never touches zoom), so
+	 * "show roughly where it is" is the most it can offer — and the GROUP's own `lat`/`lng`
+	 * otherwise. Earlier versions of this method moved the camera ONLY in the clustered branch,
+	 * which is why a plain marker click visibly did nothing on the rig — that bug was invisible to
+	 * every test that exercised it, because none of them ever gave the group its own coordinates
+	 * via `setPoints()` first. The co-located guard does not apply to this branch at all, and —
+	 * unlike the zoom branch — there is no POST-move re-check to gate: nothing about clustering
+	 * could possibly have changed as a result of a move that left zoom alone.
 	 *
 	 * `attemptedMove` (well, `target`) gates the POST-move re-check for the ZOOM branch only, and
 	 * ONLY when the move was an un-clustering attempt (`wasClustered`): a group focused WITHOUT
@@ -2453,6 +2551,22 @@
 	 * synchronous "nothing to move" case) settles. `setCenter()`/`panTo()` are exactly as
 	 * asynchronous as `setBounds()` (the file docblock's first lesson) — both are awaited here.
 	 *
+	 * GATED BEHIND `_cameraFit`, {@see setPoints}'s in-flight `bulk` fit (s52 defect — the
+	 * restore-on-reopen path, `pickup-mount.js`'s `restoreSelection()`, focused a group TWO
+	 * MILLISECONDS after `setPoints()` and got no visible camera move at all). `map.setBounds()`
+	 * is asynchronous in a second, sharper way than the file docblock's first lesson describes:
+	 * it does not merely RESOLVE late, it ISSUES its real camera command late — internally it
+	 * delegates to `map.setCenter()` only once it has resolved the bounds against the projection,
+	 * which the rig measured at ~50 ms after the `setBounds()` call. A `setCenter()` issued in
+	 * between therefore STARTS AND FINISHES first and is then overwritten by the fit, which the
+	 * customer sees as "the map snapped back". Worse, the snap-back re-clusters the group, and a
+	 * clustered feature has no overlay of its own, so the `data-state="active"` {@see _applyFocus}
+	 * had already written vanished with it — while `getFocusedKey()` still (correctly) named the
+	 * group, which is exactly what made the defect look like a focus that had "no effect".
+	 * Waiting for the fit is the ordering signal, never a timer. `_cameraFit` is NULL whenever no
+	 * fit is in flight, so the overwhelmingly common case — a click on a settled map — still
+	 * issues its camera move synchronously, inside the click's own task.
+	 *
 	 * @param {string}  key
 	 * @param {Object}  [options]
 	 * @param {boolean} [options.zoom] `true` centres AND zooms to {@see MAX_ZOOM} (a sidebar row/
@@ -2465,21 +2579,57 @@
 		var mySeq = ++this._focusSeq;
 		var opts = options || {};
 		var wantsZoom = true === opts.zoom;
+		var fit = this._cameraFit;
+
+		if ( ! fit ) {
+			return this._moveAndFocus( key, wantsZoom, mySeq );
+		}
+
+		return fit.then( function() {
+			// A focus superseded WHILE it was still waiting for the fit never moves the camera at
+			// all — the same staleness rule the post-move continuation applies, one step earlier.
+			if ( self._destroyed || mySeq !== self._focusSeq ) {
+				return undefined;
+			}
+
+			return self._moveAndFocus( key, wantsZoom, mySeq );
+		} );
+	};
+
+	/**
+	 * {@see focusGroup}'s body, past its `_cameraFit` gate — picks the camera target, moves, and
+	 * applies the focus. Split out purely so the gate above reads as one decision; every rule it
+	 * implements is documented on {@see focusGroup} itself.
+	 *
+	 * Reading `getObjectState()` HERE, rather than at call time, is deliberate: whether `key` is
+	 * clustered is a property of the CURRENT viewport, so the answer is only meaningful once the
+	 * fit that is moving that viewport has settled.
+	 *
+	 * @since 2.0.2
+	 * @param {string}  key
+	 * @param {boolean} wantsZoom
+	 * @param {number}  mySeq the `_focusSeq` value captured when the caller entered
+	 *                        {@see focusGroup}.
+	 * @returns {Promise<void>}
+	 */
+	WoodevYandexMapProvider.prototype._moveAndFocus = function( key, wantsZoom, mySeq ) {
+		var self = this;
 		var state = this.objectManager.getObjectState( key );
 		var wasClustered = !! ( state && state.isClustered );
+		var group = this._groupsByKey[ key ];
 		var mover = Promise.resolve();
 		var target = null;
 
-		if ( wasClustered ) {
-			if ( ! wantsZoom || ! isSingleCoordinateCluster( state.cluster ) ) {
-				target = clusterAnchorCoordinates( state.cluster );
-			}
-		} else {
-			var group = this._groupsByKey[ key ];
-
-			if ( group ) {
+		if ( wantsZoom ) {
+			// The group's OWN coordinates, clustered or not — see focusGroup()'s docblock for why
+			// the cluster anchor is the wrong place to send a customer who picked THIS point.
+			if ( group && ! ( wasClustered && isSingleCoordinateCluster( state.cluster ) ) ) {
 				target = [ group.lat, group.lng ];
 			}
+		} else if ( wasClustered ) {
+			target = clusterAnchorCoordinates( state.cluster );
+		} else if ( group ) {
+			target = [ group.lat, group.lng ];
 		}
 
 		if ( target ) {
@@ -2624,6 +2774,10 @@
 		this._groupsByKey = {};
 		this._focusedKey = null;
 		this._activeTypeFilter = null;
+		// Nothing may still be gated behind a fit belonging to a map that no longer exists — the
+		// continuations all check `_destroyed`, but a torn-down provider holding a forever-pending
+		// promise would keep any later focusGroup() waiting on it for good.
+		this._cameraFit = null;
 		this.searchControl = null;
 		this._marginArea = null;
 		// `this.map.destroy()` above already tears down every margin reservation along with the

@@ -142,7 +142,10 @@
  *
  * THIS FILE, NOT THE PROVIDER, NOW OWNS FETCHING (Task 20): the provider
  * contract shrank to `init( container, config )` — it draws whatever
- * `setPoints( groups )` hands it and reports camera/selection events, but
+ * `setPoints( groups, options )` hands it (`options.focus`, a group key, means
+ * "open the map AT this one, marked active, instead of fitting the whole set" —
+ * spec D-15's restore; see `map-provider-yandex.js`'s own `setPoints()` docblock
+ * for why the camera must move BEFORE the drawing) and reports camera/selection events, but
  * never calls the REST layer itself any more (see `map-provider-yandex.js`'s
  * own docblock, "THIS FILE NO LONGER FETCHES ANYTHING ITSELF"). This file is
  * therefore the fetch ORCHESTRATOR: under `strategy: 'bulk'` it fetches once,
@@ -158,7 +161,7 @@
  * it (D-3: the whole point of `ownsChrome` is that the framework renders
  * nothing of its own around a provider that already owns the full picker UI).
  *
- * THE FOUR `woodev_pickup_*` EVENTS are native, bubbling `CustomEvent`s fired
+ * THE SIX `woodev_pickup_*` EVENTS are native, bubbling `CustomEvent`s fired
  * on `document.body` — exactly like `woodev-modal.js`'s own `woodev_modal_*`
  * events (see that file's docblock for why `jQuery.trigger()` would be
  * invisible to a plain `addEventListener`, and this file's own docblock above
@@ -168,8 +171,12 @@
  * initialised) once a session's `init()` resolves, `woodev_pickup_points_loaded` after
  * EVERY successful fetch this file makes (the initial bulk load, every
  * viewport refetch, every type-filter refetch, every {@see refresh()} call —
- * never just the first), `woodev_pickup_point_selected` right before the modal
- * is asked to close, and `woodev_pickup_error` specifically for a PROVIDER-level
+ * never just the first), `woodev_pickup_point_select_requested` when a
+ * confirmation leaves for the server and `woodev_pickup_point_select_resolved`
+ * when its answer lands (see {@see handleSelection}/{@see finishSelection} —
+ * BOTH fire on a refusal and on a transport failure too, not only on the happy
+ * path), `woodev_pickup_point_selected` once an ACCEPTED point has actually
+ * been applied, and `woodev_pickup_error` specifically for a PROVIDER-level
  * `error` (map script failed to load, embed failed to load) — the kind that
  * breaks the whole map, not a transient dataSource fetch failure the existing
  * degrade-to-notice machinery already recovers from without needing to alarm
@@ -193,11 +200,23 @@
  * {@see window.WoodevPickupPanels} handlers are registered exactly ONCE per
  * session and become unreachable once {@see closeSession} drops this file's
  * only reference to that `panels` instance (its DOM root is detached along
- * with the rest of the modal body). No handler here is ever bound to
- * `document.body` or any other long-lived, session-independent target — only
- * `provider`/`panels`, both torn down (or dereferenced) together — so the
+ * with the rest of the modal body). Exactly TWO handlers are bound to
+ * long-lived, session-independent targets, and they are exactly the two
+ * `destroy()` unbinds by hand — nothing else takes them away:
+ * `woodev_modal_closed` on `document.body`, which the staleness guard needs
+ * because a dismissed dialog is not otherwise reported to this file at all
+ * (see {@see handleModalClosed}); and a jQuery `updated_checkout` waiter on
+ * the same node, bound only while a post-selection checkout refresh is in
+ * flight and holding the card's busy state until it settles (see
+ * {@see refreshCheckout}/{@see dropRefreshWaiter} — `one()` self-cleans ONLY
+ * if the event actually fires, which a failed checkout ajax, or a session torn
+ * down mid-round-trip, is free not to do; that waiter is therefore paired with a
+ * {@see REFRESH_TIMEOUT_MS} timer, so the hold is bounded even when WooCommerce
+ * never answers at all). Everything else hangs off
+ * `provider`/`panels`, both torn down (or dereferenced) together. So the
  * existing "two clicks never leave two providers alive" guarantee extends to
- * the panels and every event wired through them, unchanged.
+ * the panels, to every event wired through them, and to both of those
+ * listeners, unchanged.
  *
  * UMD-ish dual export (matches woodev-modal.js/pickup-datasource.js), plus a
  * `mountAll()` re-export purely so a test can drive one mount pass directly
@@ -237,7 +256,24 @@
 	var MOUNT_DEFER_MS = 60;
 
 	/**
-	 * The four `document.body` `CustomEvent` names this file fires — see the file
+	 * How long, in ms, a post-selection checkout refresh may hold the card's busy lock before it is
+	 * released regardless — see {@see refreshCheckout}.
+	 *
+	 * NOT a UX timer: the release the customer normally gets is WooCommerce's own
+	 * `updated_checkout`, which lands in well under a second. This is the bound on the case where
+	 * that event never arrives at all — the checkout ajax failed, was aborted by a newer one, or
+	 * the build simply does not fire it — where the only alternative is a CTA reading «Проверяем…»
+	 * for the rest of the session over a refresh that already gave up, and a `one()` waiter left
+	 * bound to `document.body` holding the whole panels graph alive with it. Generous on purpose:
+	 * cutting a refresh that is merely slow would unlock the CTA in the middle of a totals update,
+	 * which is the exact thing the lock exists to prevent (spec §5.2).
+	 *
+	 * @type {number}
+	 */
+	var REFRESH_TIMEOUT_MS = 10000;
+
+	/**
+	 * The six `document.body` `CustomEvent` names this file fires — see the file
 	 * docblock's own section on them. Native, bubbling events, never a jQuery
 	 * `.trigger()` — see {@see fireDocumentEvent}.
 	 *
@@ -247,6 +283,34 @@
 	var EVENT_POINTS_LOADED = 'woodev_pickup_points_loaded';
 	var EVENT_POINT_SELECTED = 'woodev_pickup_point_selected';
 	var EVENT_ERROR = 'woodev_pickup_error';
+
+	/*
+	 * The two confirmation events (2026-08-06 spec D-2). OBSERVATIONAL: the framework neither
+	 * waits for a listener nor lets one veto — the veto path is `woodev_modal_before_close`,
+	 * which already exists. `_resolved` is what a plugin listens to in order to write the
+	 * chosen point's street/house/postcode into the checkout address fields when the merchant
+	 * enabled that (spec D-14) — the framework never does it and offers no switch for it.
+	 *
+	 * `_resolved` means "the server answered AND the answer still applies", NOT "the point was
+	 * applied": it fires on all three outcomes the customer can still see (accepted, refused,
+	 * request failed), before this file has written anything, and carries the outcome —
+	 * `result` for a verdict, `error` for a transport failure, exactly one of them non-null. A
+	 * listener that only cares about an ACCEPTED point, applied, wants
+	 * `woodev_pickup_point_selected` instead, which still fires exactly where it always did:
+	 * after the field is written and before the modal is asked to close.
+	 *
+	 * THERE IS A FOURTH, SILENT OUTCOME, AND `_requested` IS THEREFORE NOT ALWAYS PAIRED: an
+	 * answer discarded by the staleness guard (spec D-9 — the card moved on, the dialog was
+	 * dismissed, the session was torn down) fires NOTHING. `_requested` has already gone out
+	 * for that confirmation, so anything pairing the two — analytics, a plugin tracking
+	 * in-flight confirmations — must treat a `_requested` with no `_resolved` as a normal,
+	 * expected state and not wait on it forever. Deliberate, and the alternative is worse: a
+	 * plugin acting on `_resolved` writes the chosen point's address into the checkout fields
+	 * (D-14), and doing that for a point the framework has just thrown away would leave the
+	 * customer with an address for somewhere they are not collecting from.
+	 */
+	var EVENT_SELECT_REQUESTED = 'woodev_pickup_point_select_requested';
+	var EVENT_SELECT_RESOLVED  = 'woodev_pickup_point_select_resolved';
 
 	/**
 	 * Identifies this modal on every `woodev_modal_*` event, so a consumer can filter the
@@ -272,6 +336,16 @@
 		woodev_pickup_upstream_error: 'upstreamError',
 		woodev_pickup_rate_limited: 'rateLimited',
 		woodev_pickup_point_not_found: 'notFound',
+
+		/*
+		 * Two codes, one message. `rest_cookie_invalid_nonce` is WordPress's own, raised by
+		 * `rest_cookie_check_errors()` BEFORE any permission_callback runs — which is why a
+		 * route declared `__return_true` can still 403 (#157). `woodev_pickup_invalid_nonce`
+		 * is ours, from the select route's permission callback, for the cases WordPress lets
+		 * through (no nonce header at all).
+		 */
+		rest_cookie_invalid_nonce: 'stalePage',
+		woodev_pickup_invalid_nonce: 'stalePage',
 	};
 
 	/**
@@ -356,6 +430,50 @@
 		var key = code ? ERROR_MESSAGE_KEYS[ code ] : null;
 
 		return ( key && text( config, key ) ) ? key : 'error';
+	}
+
+	/**
+	 * Reads a three-state flag: the domain's answer when it gave one, the plugin's configured
+	 * default when it did not.
+	 *
+	 * NEVER `||` — an explicit `false` from the domain is a DECISION ("do not close this one"),
+	 * and `||` would silently convert it into a `true` default, handing control straight back
+	 * to the setting the domain had just overridden. Only `null`/`undefined` mean "the domain
+	 * said nothing"; the select route serialises an unspoken flag as JSON `null` and this
+	 * treats both spellings identically, so the server never has to prune keys (spec D-5, §4.2
+	 * — the identical trap fixed in s40's fail-closed parity work).
+	 *
+	 * Written as an explicit null/undefined test rather than `??`: these files ship to a
+	 * shopper's browser VERBATIM (no bundler, no transpile — see the file docblock), and an
+	 * unsupported operator is a parse error that kills the whole script, not a degraded
+	 * behaviour. The semantics below are `??`'s, exactly.
+	 *
+	 * @param {*}       spoken   the response's own value: bool, null, or undefined.
+	 * @param {boolean} fallback the plugin's configured default.
+	 * @returns {boolean}
+	 */
+	function resolveFlag( spoken, fallback ) {
+		if ( undefined === spoken || null === spoken ) {
+			return true === fallback;
+		}
+
+		return true === spoken;
+	}
+
+	/**
+	 * The i18n key for a failed CONFIRMATION — the stale-page message when the failure was a
+	 * nonce one, the confirmation-specific failure otherwise.
+	 *
+	 * Deliberately not {@see errorMessageKey}: that one falls back to the generic `error`
+	 * string, which is written for a failed points FETCH ("не удалось загрузить пункты") and
+	 * would be actively misleading under a button the customer just pressed to confirm one.
+	 *
+	 * @param {Object}      config
+	 * @param {Object|null} reason `{ status, code, message }`.
+	 * @returns {string}
+	 */
+	function selectionErrorKey( config, reason ) {
+		return 'stalePage' === errorMessageKey( config, reason ) ? 'stalePage' : 'selectFailed';
 	}
 
 	/**
@@ -469,6 +587,22 @@
 		}
 
 		button.textContent = text( config, fieldValue( config.fieldId ) ? 'triggerChange' : 'trigger' );
+	}
+
+	/**
+	 * The freshest REST nonce available: the node WooCommerce replaces on every
+	 * `update_checkout` (see `Pickup_Handler::print_nonce_node()`), falling back to the one
+	 * baked into the page-load config when that node is absent — a plugin on a non-checkout
+	 * surface, or a theme that dropped `wp_footer`.
+	 *
+	 * @param {Object} config
+	 * @returns {string}
+	 */
+	function currentNonce( config ) {
+		var node = config.nonceNodeId ? document.getElementById( config.nonceNodeId ) : null;
+		var live = node && node.dataset ? node.dataset.woodevPickupNonce : '';
+
+		return live || String( config.nonce || '' );
 	}
 
 	/**
@@ -680,7 +814,6 @@
 			defaultLocation: config.defaultLocation,
 			pointIcons: config.pointIcons,
 			accentColor: config.accentColor,
-			searchNearestCount: config.searchNearestCount,
 			searchLayoutEl: searchLayoutEl || null,
 		} );
 	}
@@ -881,7 +1014,12 @@
 			return { modal: modal, refresh: noopRefresh, destroy: function() { modal.destroy(); } };
 		}
 
-		var realDataSource = DataSourceFactory( { restRoot: config.restRoot, nonce: config.nonce } );
+		var realDataSource = DataSourceFactory( {
+			restRoot: config.restRoot,
+			nonce: function() {
+				return currentNonce( config );
+			},
+		} );
 
 		// Resolved fresh from `window` on every open, exactly like ProviderCtor/DataSourceFactory
 		// above — never a module-load-time constant — so a test can swap it, and so a real page
@@ -894,6 +1032,18 @@
 
 		/** @type {boolean} has a non-empty point set EVER been drawn this session? */
 		var hasDrawnPoints = false;
+
+		/** @type {boolean} true once this session has made its ONE attempt to restore a
+		 *  previously chosen point ({@see restoreSelection}) — set on the FIRST points-drawn
+		 *  continuation (from whichever of that continuation's two restore call sites actually
+		 *  fires; see them both) and never reset (not even by a retry's fresh `start()`). Without this
+		 *  gate, calling {@see restoreSelection} from inside {@see fetchAndSetPoints} would run
+		 *  it on EVERY successful fetch — under `strategy: 'viewport'` that is every pan
+		 *  (`boundsChange`), every type-filter change, and every {@see refresh()} call, not just
+		 *  the session's opening draw. That would re-open the sidebar and yank the camera back
+		 *  to the restored point after every one of them, fighting a customer who panned away on
+		 *  purpose. See Task 12's discrepancy (a). */
+		var selectionRestoreAttempted = false;
 
 		/** @type {boolean} true once this session has been torn down — guards every async
 		 *  continuation below against acting on a dead session (a fetch/init resolving after
@@ -929,6 +1079,53 @@
 		/** @type {Array|null} the last viewport bbox reported via `boundsChange` (`strategy:
 		 *  'viewport'` only) — what a type-filter change or {@see refresh} re-fetches against. */
 		var lastBbox = null;
+
+		/** @type {number} mints one unique, monotonic token per confirmation this session sends.
+		 *  Never reset, never reused — that is the whole point (see `pendingSelectionToken`). */
+		var selectionTokens = 0;
+
+		/** @type {number} the token of the confirmation the staleness guard (spec D-9) currently
+		 *  holds — `0` when none is in flight for the card.
+		 *
+		 *  A GENERATION, NOT A POINT ID. The guard used to store the point id alone, which made it
+		 *  an ABA test: a confirmation the guard had already dropped and a LATER one for the SAME
+		 *  point were indistinguishable, so the first one's answer was applied as though it were
+		 *  the second's — and cleared the second's marker on the way out, so the answer the
+		 *  customer was actually waiting on was the one thrown away. A token is unique per
+		 *  request, so "is this answer still the one the card is waiting for?" has exactly one
+		 *  true answer no matter how many confirmations name the same point.
+		 *
+		 *  IT ALSO OWNS THE CARD'S BUSY LOCK. `setSelectionBusy()` never self-balances (see its
+		 *  own docblock in `pickup-panels.js`), and the two obvious disciplines are both wrong:
+		 *  releasing on EVERY settlement lets a stale answer unlock the card a LIVE confirmation
+		 *  still holds, allowing a second overlapping submit; releasing only on the applied paths
+		 *  leaves a card that took a discarded answer locked forever, with a dead CTA reading
+		 *  «Проверяем…» over a request that already came back. The rule that satisfies both: the
+		 *  lock belongs to the token, and it is released by whoever ENDS that token's ownership —
+		 *  {@see invalidateSelection} when something drops it (the card moving on, the dialog
+		 *  being dismissed, the session being destroyed), {@see finishSelection} when the answer
+		 *  it owns actually settles. A token that no longer owns the lock never touches it. */
+		var pendingSelectionToken = 0;
+
+		/** @type {string|null} the point id `pendingSelectionToken`'s confirmation is about — read
+		 *  ONLY by the `cardOpened` listener, to tell "the card moved onto another point" from
+		 *  "the card re-rendered on the same one". Never the guard's identity; see above. */
+		var pendingSelectionPointId = null;
+
+		/** @type {Function|null} the pending `updated_checkout` handler {@see refreshCheckout}
+		 *  bound through jQuery, held only so {@see dropRefreshWaiter} can take it off again —
+		 *  the second (and last) long-lived binding a session makes; see the file docblock. */
+		var refreshWaiter = null;
+
+		/** @type {number|null} the {@see REFRESH_TIMEOUT_MS} timer backing that waiter — the
+		 *  bounded failure path for a refresh WooCommerce never answers. */
+		var refreshTimer = null;
+
+		/** @type {Object|null} the panels whose card lock the in-flight checkout refresh is
+		 *  holding, so {@see dropRefreshWaiter} can release it without re-deriving which object
+		 *  was locked (it may not be `panels` — the refresh is skipped entirely when the modal
+		 *  has just closed; see {@see finishSelection}'s own call site). */
+		var refreshBusyPanels = null;
 
 		/** @type {boolean} Task 16 (spec V-4 stage 2/3): has THIS start() cycle's busy overlay
 		 *  already been cleared? Reset at the top of every {@see start} call (initial open AND
@@ -1042,6 +1239,96 @@
 		}
 
 		/**
+		 * The group this pass is about to restore (spec D-15), or null when it restores nothing:
+		 * the restore already happened this session, there are no panels, no point is stored in
+		 * the field, or the stored point is not among the groups just built.
+		 *
+		 * Read BEFORE `setPoints()`, because the CAMERA half of restoring is `setPoints()`'s own
+		 * job now — `setPoints( groups, { focus: key } )` settles the camera on the group first
+		 * and draws second. s52's rig pass is why: with the drawing first, the restore's camera
+		 * move (however carefully sequenced) crossed ymaps' first ObjectManager layout and left
+		 * the restored marker parked at ymaps' own off-screen sentinel — right camera, right
+		 * `data-state`, no visible pin. See `map-provider-yandex.js`'s `setPoints()` docblock.
+		 *
+		 * @returns {Object|null}
+		 */
+		function pendingRestoreGroup() {
+			if ( selectionRestoreAttempted || ! panels ) {
+				return null;
+			}
+
+			var selectedId = fieldValue( config.fieldId );
+
+			return selectedId ? findGroupByPointId( selectedId ) : null;
+		}
+
+		/**
+		 * The PANELS half of restoring a previously chosen point (spec D-15) — the camera and the
+		 * marker's own `data-state="active"` are `setPoints( groups, { focus } )`'s job, not this
+		 * function's (see {@see pendingRestoreGroup}).
+		 *
+		 * RUNS BEFORE THAT `setPoints()` CALL, NOT AFTER IT, whenever there is a group to restore.
+		 * `openCard()` below is what reserves the sidebar's screen area on its way in
+		 * (`setStageOpen()` → `listToggle` → `provider.setMargin()`), and the focus move
+		 * `setPoints()` issues passes `useMapMargin: true` — so this has to have happened already
+		 * or that option reads an empty reservation and centres the point on the WHOLE map,
+		 * half of it under the panel this call is opening. The call site carries the measurements.
+		 *
+		 * Called ONCE per session, gated by `selectionRestoreAttempted` at both call sites — see
+		 * that flag's own docblock for why. `setSelectedId()` drives both the CTA
+		 * label and the row highlight, and it MUST run before the card opens: `renderCard()` reads
+		 * `_selectedId` to decide whether the CTA says «Выбрать» or «Продолжить оформление», and
+		 * the whole point of the operator's 06.08.2026 decision is that the reopened picker shows
+		 * the latter straight away.
+		 *
+		 * OPENS THE CARD, NOT THE LIST (operator decision, 06.08.2026 — supersedes spec §5.3's
+		 * `openList()`): reopening with a point already chosen must show that point's DETAILS and
+		 * its «Продолжить оформление» button immediately, not a sidebar list the customer has to
+		 * click through again. The accepted consequence is that the list behind the card holds a
+		 * single row — `setPoints( groups, { focus } )` opens the map at MAX_ZOOM and the sidebar
+		 * list is viewport-filtered (`visibleChange` → `setVisible()`), so only the restored marker
+		 * is in view. That is the zoom's doing, not a bug, and the zoom stays.
+		 *
+		 * `'restore'` IS THE ORIGIN THAT MEANS "THE CAMERA IS SOMEBODY ELSE'S JOB". Every other
+		 * origin makes the `cardOpened` listener below call `provider.focusGroup()`; this one must
+		 * not, because the camera half of this pass goes out as `setPoints( groups, { focus } )` —
+		 * BEFORE the draw, which is the one order that does not park the restored marker's overlay
+		 * off screen (s52; see {@see pendingRestoreGroup} and the two ymaps gotchas it cites). A
+		 * second camera move here would re-enter that race for no gain. The sidebar half is still
+		 * `openCard()`'s own `setStageOpen()` → `listToggle` → `provider.setMargin()`, unchanged —
+		 * and now that this whole function runs ahead of `setPoints()`, that reservation is what
+		 * the single move reads through `useMapMargin: true`.
+		 *
+		 * The card is opened on `selectedId` specifically, never on the group's first point: a
+		 * co-located group can hold several points and the one the customer chose is the one whose
+		 * tab must be showing.
+		 *
+		 * A point that is no longer in the results (`group` null) still marks the id — the map
+		 * opens in its ordinary default view, the sidebar stays closed, and the field is left
+		 * alone for the checkout-processing backstop to judge. No fourth empty-state message —
+		 * the three that exist (`emptyLocality`/`emptyInView`/`noResults`) are deliberately
+		 * distinct.
+		 *
+		 * @param {Object|null} group whatever {@see pendingRestoreGroup} resolved for this pass.
+		 * @returns {void}
+		 */
+		function restoreSelection( group ) {
+			var selectedId = fieldValue( config.fieldId );
+
+			if ( ! selectedId || ! panels ) {
+				return;
+			}
+
+			panels.setSelectedId( selectedId );
+
+			if ( ! group ) {
+				return;
+			}
+
+			panels.openCard( group, selectedId, 'restore' );
+		}
+
+		/**
 		 * The ONE place this session ever calls `dataSource.fetchPoints()` — see the file
 		 * docblock's "THIS FILE, NOT THE PROVIDER, NOW OWNS FETCHING" section. Groups the
 		 * result, hands it to the provider, tells the panels which types are now known, fires
@@ -1089,7 +1376,34 @@
 					} );
 					groupsByKey = byKey;
 
-					provider.setPoints( groups );
+					// Resolved BEFORE the draw: on the pass that restores a chosen point the
+					// provider opens the map AT that point (camera first, features second) rather
+					// than fitting the whole set and being moved off it a beat later — see
+					// {@see pendingRestoreGroup}.
+					var restoreGroup = pendingRestoreGroup();
+
+					// THE PANELS HALF RUNS FIRST ON THE RESTORE PASS, and only there. Opening the
+					// card is also what RESERVES the sidebar's screen area — `openCard()` →
+					// `setStageOpen()` → `listToggle` → `provider.setMargin()` — and the ONE camera
+					// move this pass makes goes out from the `setPoints()` call immediately below,
+					// carrying `useMapMargin: true`. Issued before the reservation existed, that
+					// option had nothing to read: the restored point centred on the map's GEOMETRIC
+					// middle, half of it underneath the panel about to slide over it. Rig-measured
+					// on a 1024px map with a 320px panel: marker centre x=640 (the full map's
+					// midpoint) before this ordering, x=480 (the midpoint of the strip still
+					// visible beside the panel) after it — see {@see restoreSelection}.
+					//
+					// The one-shot flag is claimed HERE rather than in the `points.length > 0`
+					// branch below, whose own guarded call now only ever sees the `null` group (the
+					// stored point is gone) — that case reserves nothing, moves no camera, and must
+					// keep its position under `points.length > 0` so an empty fetch cannot burn the
+					// session's single restore attempt on nothing.
+					if ( restoreGroup ) {
+						selectionRestoreAttempted = true;
+						restoreSelection( restoreGroup );
+					}
+
+					provider.setPoints( groups, restoreGroup ? { focus: restoreGroup.key } : null );
 
 					if ( panels ) {
 						panels.setTypes( extractTypes( points ) );
@@ -1108,6 +1422,22 @@
 						// an earlier empty/error card sitting over a map that has since drawn them.
 						if ( panels ) {
 							panels.hideMessage();
+
+							// Task 12 (spec D-15): the ONE attempt this session makes to restore a
+							// previously chosen point — see `selectionRestoreAttempted`'s own docblock
+							// for why this must not run on every points-drawn continuation.
+							//
+							// By the time this runs, `restoreGroup` is necessarily NULL: a non-null
+							// one already restored above, ahead of `setPoints()`, and claimed the
+							// flag on its way past (see that block for why it has to go first). What
+							// is left for here is the "stored point is gone" case — mark the id and
+							// nothing else — which has no card to open, no margin to reserve and no
+							// camera move to precede, and which must stay gated behind
+							// `points.length > 0` so an empty fetch does not consume the attempt.
+							if ( ! selectionRestoreAttempted ) {
+								selectionRestoreAttempted = true;
+								restoreSelection( restoreGroup );
+							}
 						}
 					} else {
 						// `emptyLocality` (a locality genuinely has none) vs `emptyInView` (the
@@ -1137,28 +1467,391 @@
 		}
 
 		/**
-		 * Applies a selection regardless of WHICH side reported it (the panels' card CTA under
-		 * `!ownsChrome`, or the provider's own `select` under `ownsChrome` — an embed reports
-		 * its own selection directly, see `map-provider-embedded.js`): writes the field
-		 * (§8/DOM), re-syncs the trigger button's label, fires `woodev_pickup_point_selected`,
-		 * then closes the modal with reason `'select'` — the fourth close reason the modal
-		 * already supports (D-14) — and only tears the session down when the close actually
-		 * took (a `before_close` listener COULD veto it; `closeSession` must not run against a
-		 * modal that is still open).
+		 * Confirms a selection with the server, then applies whatever the domain decided
+		 * ({@see finishSelection}). Entered regardless of WHICH side reported the selection:
+		 * the panels' card CTA under `!ownsChrome`, or the provider's own `select` under
+		 * `ownsChrome` — an embed reports its own selection directly, see
+		 * `map-provider-embedded.js`.
+		 *
+		 * NOTHING IS APPLIED BEFORE THE SERVER ANSWERS (2026-08-06 spec, D-1): the field, the
+		 * trigger label, `woodev_pickup_point_selected` and the close all wait for the round
+		 * trip, because the domain may refuse this point for this cart — and a field written
+		 * first and retracted afterwards is worse than one written a beat later.
+		 *
+		 * Under `ownsChrome` (an embedded provider reports its own selection and there is no
+		 * card of ours to lock or re-render) the round trip still happens, but every panels
+		 * call below is skipped — see the guards.
+		 *
+		 * A consequence, deliberate: with no card there is no lock, so nothing here stops an
+		 * embedded provider reporting a SECOND selection while the first is still in flight —
+		 * both round trips would run, and the later answer would win. Debouncing its own
+		 * confirm UI is that provider's job, exactly as rendering it is (D-3: the framework
+		 * draws no chrome of its own around a provider that already owns the whole picker, and
+		 * cannot lock a button it never drew).
 		 *
 		 * @param {Object} point
 		 * @returns {void}
 		 */
-		function handleSelection( point ) {
-			applySelection( config, point );
-			syncTriggerLabel( config );
-
-			fireDocumentEvent( EVENT_POINT_SELECTED, { fieldId: config.fieldId, point: point } );
-
-			if ( modal.close( 'select' ) ) {
-				closeSession( config.fieldId );
+		/**
+		 * Releases the card's confirmation lock. A no-op with no card to release — no panels at
+		 * all (`ownsChrome`), or a session already torn down, whose panels have been destroyed
+		 * along with their DOM.
+		 *
+		 * @returns {void}
+		 */
+		function releaseSelectionBusy() {
+			if ( panels && ! destroyed ) {
+				panels.setSelectionBusy( false );
 			}
 		}
+
+		/**
+		 * Drops whatever confirmation the staleness guard currently holds, releasing the card lock
+		 * that came with it — the single entry point for every path that makes an in-flight
+		 * confirmation stop being about anything current (spec D-9): the card moving to another
+		 * point, the dialog being dismissed, the session being destroyed.
+		 *
+		 * Releasing the lock HERE rather than when the dropped answer eventually lands is
+		 * invariant 1 of `pendingSelectionToken`'s docblock: the card must be usable for whatever
+		 * it shows now, immediately, not after a round trip whose answer is going to be thrown
+		 * away. It is also what makes invariant 2 affordable — {@see finishSelection} can then
+		 * leave the lock strictly alone unless it still owns it.
+		 *
+		 * @returns {void}
+		 */
+		function invalidateSelection() {
+			if ( 0 === pendingSelectionToken ) {
+				return;
+			}
+
+			pendingSelectionToken = 0;
+			pendingSelectionPointId = null;
+
+			releaseSelectionBusy();
+		}
+
+		/**
+		 * Whether `token`'s answer is still the one this session's card is waiting for.
+		 *
+		 * @param {number} token
+		 * @returns {boolean}
+		 */
+		function ownsSelection( token ) {
+			return ! destroyed && pendingSelectionToken === token;
+		}
+
+		function handleSelection( point ) {
+			var pointId = String( point && point.id );
+
+			/*
+			 * Already confirmed: this is the «Продолжить оформление» click, not a new choice.
+			 * Nothing is asked again — the point is accepted, the field already holds it, and
+			 * the only thing left is to close (spec D-11). The same is true of a REOPENED
+			 * picker showing the previously chosen point, whose CTA reads that way from the
+			 * first render.
+			 */
+			if ( fieldValue( config.fieldId ) === pointId ) {
+				if ( modal.close( 'select' ) ) {
+					closeSession( config.fieldId );
+				}
+
+				return;
+			}
+
+			var token = ++selectionTokens;
+
+			/*
+			 * THE GUARD IS ARMED BEFORE THE EVENT GOES OUT, NOT AFTER. `fireDocumentEvent()` is
+			 * `dispatchEvent()`, which runs every listener INLINE before it returns — a listener
+			 * is free to dismiss the dialog (or open another card) from inside this call, and both
+			 * of those reach {@see invalidateSelection}. Assigning the guard afterwards would
+			 * overwrite that invalidation with a marker for a picker the customer has already
+			 * walked away from, and the answer would then be applied to it.
+			 */
+			pendingSelectionToken = token;
+			pendingSelectionPointId = pointId;
+
+			if ( panels ) {
+				panels.setSelectionBusy( true );
+			}
+
+			fireDocumentEvent( EVENT_SELECT_REQUESTED, { fieldId: config.fieldId, point: point } );
+
+			// The request leaves even when a `_requested` listener just invalidated it: the event
+			// is OBSERVATIONAL and grants no veto (D-2 — the veto path is
+			// `woodev_modal_before_close`). What the invalidation buys is that the ANSWER is
+			// discarded, exactly as it is for every other D-9 path.
+			realDataSource.selectPoint( {
+				pointId: pointId,
+				fieldId: config.fieldId,
+			} ).then(
+				function( result ) {
+					finishSelection( token, point, result, null );
+				},
+				function( reason ) {
+					finishSelection( token, point, null, reason );
+				}
+			);
+		}
+
+		/**
+		 * Applies one settled confirmation — success or failure, both land here so the busy
+		 * state is released in exactly one place.
+		 *
+		 * THE STALENESS GUARD. An answer is applied only while it is still the one this session's
+		 * card is waiting for — {@see ownsSelection}, matched on the unique token
+		 * {@see handleSelection} minted for THIS request, never on the point id (see
+		 * `pendingSelectionToken`'s own docblock for the ABA race an id-only guard is). Locking
+		 * the card stops a customer from starting a SECOND confirmation, but it cannot stop the
+		 * paths that are not clicks inside it, and spec D-9 requires all of them covered: the map
+		 * underneath the lock stays live (a marker click swaps the card to another point through
+		 * `pointClick` → `openCard()`); Escape, the backdrop and the close button dismiss the
+		 * dialog out from under the request (see {@see handleModalClosed}); and a fresh click on
+		 * the checkout trigger tears this whole session down and opens another. Every one of them
+		 * runs through {@see invalidateSelection}. An answer that outlives what it was about is
+		 * discarded, never applied to whatever happens to be on screen now (spec D-9/D-10: the
+		 * request is not aborted — the server may already have written the point into the WC
+		 * session, and aborting would stop us listening without undoing any of that. The client
+		 * and the server can therefore end up disagreeing; D-10 accepts that explicitly and
+		 * still says to ignore the answer).
+		 *
+		 * THE GUARD IS RUN TWICE, once on each side of `woodev_pickup_point_select_resolved`.
+		 * That event is dispatched synchronously — every listener runs INLINE before
+		 * `fireDocumentEvent()` returns — so a listener is free to dismiss the dialog or destroy
+		 * the session between the check and the apply. Re-running the same check afterwards is
+		 * what stops the field write, the trigger relabel, the panels calls and the checkout
+		 * refresh from all landing on a picker that stopped existing mid-function.
+		 *
+		 * THE BUSY RELEASE IS INSIDE THE GUARD, and that is not the same as the old "release only
+		 * on the applied paths" mistake this file already fixed once. The lock belongs to the
+		 * TOKEN: whoever ends a token's ownership releases it, so an answer this function
+		 * discards has already had its lock released by whatever discarded it
+		 * ({@see invalidateSelection}), while a LIVE confirmation's lock is never released by a
+		 * stale one settling. Both of `setSelectionBusy()`'s obligations hold — no discarded
+		 * answer leaves a dead CTA reading «Проверяем…», and no overlapping submit becomes
+		 * possible while a request is still out.
+		 *
+		 * @param {number}      token  the confirmation's own token, from {@see handleSelection}.
+		 * @param {Object}      point
+		 * @param {Object|null} result the server's verdict, or null when the request failed.
+		 * @param {Object|null} reason the transport failure, or null on success.
+		 * @returns {void}
+		 */
+		function finishSelection( token, point, result, reason ) {
+			var pointId = String( point && point.id );
+
+			if ( ! ownsSelection( token ) ) {
+				return;
+			}
+
+			fireDocumentEvent( EVENT_SELECT_RESOLVED, {
+				fieldId: config.fieldId,
+				point: point,
+				result: result,
+				error: reason,
+			} );
+
+			// A synchronous `_resolved` listener may have dismissed the dialog or torn the session
+			// down while the event was being dispatched — see the docblock.
+			if ( ! ownsSelection( token ) ) {
+				return;
+			}
+
+			pendingSelectionToken = 0;
+			pendingSelectionPointId = null;
+
+			releaseSelectionBusy();
+
+			if ( ! result ) {
+				// Transport failure: nothing about the point was refused, so nothing is
+				// remembered and the CTA stays alive (spec D-6/D-7).
+				if ( panels ) {
+					panels.showSelectionError( text( config, selectionErrorKey( config, reason ) ) );
+				}
+
+				return;
+			}
+
+			if ( ! result.allowed ) {
+				if ( panels ) {
+					panels.setPointVerdict( pointId, {
+						allowed: false,
+						reason: 'string' === typeof result.reason ? result.reason : null,
+					} );
+				}
+
+				return;
+			}
+
+			// `result.point` is a CORRECTED point, not a flag — the domain learned something
+			// during confirmation that the listing did not know (a refined address, a fixed
+			// postcode). Absent means "keep the point you already have", never "clear it".
+			var accepted = result.point && 'object' === typeof result.point ? result.point : point;
+			var defaults = config.selection || {};
+
+			applySelection( config, accepted );
+			syncTriggerLabel( config );
+
+			if ( panels ) {
+				panels.setSelectedId( pointId );
+			}
+
+			fireDocumentEvent( EVENT_POINT_SELECTED, { fieldId: config.fieldId, point: accepted } );
+
+			// Close BEFORE refresh (spec §5.2): the customer gets immediate feedback and the
+			// recalculation runs behind a closed modal. Only tear the session down when the
+			// close actually TOOK — a `woodev_modal_before_close` listener may veto it, and
+			// `closeSession` must not run against a modal that is still open.
+			var closed = false;
+
+			if ( resolveFlag( result.close, defaults.close ) ) {
+				closed = modal.close( 'select' );
+
+				if ( closed ) {
+					closeSession( config.fieldId );
+				}
+			}
+
+			if ( resolveFlag( result.refresh_checkout, defaults.refreshCheckout ) ) {
+				// `panels` only while the modal is still open. When we have just closed, they
+				// are already destroyed with the rest of the session — re-locking a card the
+				// customer cannot see, and waiting on an `updated_checkout` to unlock it again,
+				// would be work against a dead object for no visible effect.
+				refreshCheckout( closed ? null : panels );
+			}
+		}
+
+		/**
+		 * Fires WooCommerce's `update_checkout` and, when a card is still on screen, holds its
+		 * busy state until the ajax settles — otherwise «Продолжить оформление» is clickable in
+		 * the middle of a totals update (spec §5.2). A no-op without jQuery (WooCommerce's own
+		 * event is jQuery-only — see the file docblock's note on the identical asymmetry for
+		 * `updated_checkout`).
+		 *
+		 * THE HOLD IS BOUNDED. `updated_checkout` is the release the customer normally gets, and
+		 * it is NOT guaranteed to arrive: the checkout ajax can fail, be aborted by a newer one,
+		 * or be answered by a build that never fires it. With that event as the only release, the
+		 * CTA stays locked for the rest of the session over a refresh that already gave up, and
+		 * the `one()` waiter stays bound to `document.body` holding the whole panels graph alive.
+		 * A {@see REFRESH_TIMEOUT_MS} timer is therefore armed alongside the waiter, and both
+		 * settle through the SAME {@see dropRefreshWaiter} — whichever gets there first cancels
+		 * the other, so the lock is released exactly once either way.
+		 *
+		 * @param {Object|null} openPanels the panels to hold busy, or null when nothing is on
+		 *                                 screen to hold.
+		 * @returns {void}
+		 */
+		function refreshCheckout( openPanels ) {
+			if ( ! window.jQuery ) {
+				return;
+			}
+
+			if ( openPanels ) {
+				// Superseded before it ever fired (WooCommerce answered the previous refresh
+				// with an ajax error, say). Drop it — releasing whatever lock it still held —
+				// rather than stack a second one on the same target. Before this refresh takes
+				// the lock, so the release below never cancels the acquire above it.
+				dropRefreshWaiter();
+
+				refreshBusyPanels = openPanels;
+				openPanels.setSelectionBusy( true );
+
+				// Both settle paths are the same call: `one()` self-cleans when it actually
+				// fires, and `dropRefreshWaiter()` is idempotent, so running it from inside the
+				// handler only releases the lock and cancels the timer.
+				refreshWaiter = function() {
+					dropRefreshWaiter();
+				};
+
+				window.jQuery( document.body ).one( 'updated_checkout', refreshWaiter );
+
+				refreshTimer = window.setTimeout( function() {
+					refreshTimer = null;
+					dropRefreshWaiter();
+				}, REFRESH_TIMEOUT_MS );
+			}
+
+			window.jQuery( document.body ).trigger( 'update_checkout' );
+		}
+
+		/**
+		 * Settles the pending checkout refresh, if any: cancels its timeout, unbinds its
+		 * `updated_checkout` waiter, and releases the card lock it was holding.
+		 *
+		 * A `one()` handler that never fires is not self-cleaning: it stays on `document.body`
+		 * holding this closure — and the whole `panels`/DOM graph it captures — alive for the
+		 * life of the document. `updated_checkout` firing is NOT guaranteed (a failed checkout
+		 * ajax, or a session torn down before the round trip returns), so the binding has to be
+		 * dropped by hand.
+		 *
+		 * The lock is released here rather than only in the waiter for the same reason it is
+		 * released in {@see invalidateSelection} rather than only in {@see finishSelection}: this
+		 * IS the settle point, and `setSelectionBusy()` never self-balances (see its own docblock
+		 * in `pickup-panels.js`). `destroy()` calls this BEFORE flipping `destroyed`, so a session
+		 * torn down mid-refresh hands its panels back unlocked instead of frozen.
+		 *
+		 * @returns {void}
+		 */
+		function dropRefreshWaiter() {
+			if ( null !== refreshTimer ) {
+				window.clearTimeout( refreshTimer );
+				refreshTimer = null;
+			}
+
+			if ( refreshWaiter && window.jQuery ) {
+				window.jQuery( document.body ).off( 'updated_checkout', refreshWaiter );
+			}
+
+			refreshWaiter = null;
+
+			if ( refreshBusyPanels ) {
+				var held = refreshBusyPanels;
+
+				refreshBusyPanels = null;
+
+				if ( ! destroyed ) {
+					held.setSelectionBusy( false );
+				}
+			}
+		}
+
+		/**
+		 * The staleness guard's last three paths (spec D-9 names four: a card moved onto
+		 * another point — handled by the `cardOpened` listener below — plus Escape, the
+		 * backdrop and the close button, all three of which land HERE).
+		 *
+		 * None of them is a click inside the card, so the lock cannot intercept any of them,
+		 * and none of them tells this file anything on its own: `closeSession()` is NOT called
+		 * when the customer dismisses the dialog, so `destroyed` stays false and the session
+		 * stays registered until the next trigger click. `woodev_modal_closed` is the one
+		 * signal all three share — `WoodevModal.prototype.close()` emits it whatever asked for
+		 * the close, ours included.
+		 *
+		 * Filtered by `modalId` only, since the event carries no reference to the instance that
+		 * fired it. Two pickup dialogs open at once is not a reachable state (the dialog is
+		 * modal, with a backdrop over the trigger that would open the second), and were it ever
+		 * to become one, the failure direction is the safe one: another pickup dialog closing
+		 * would discard THIS confirmation's answer, never apply a wrong one.
+		 *
+		 * Our own successful close reaches this too — harmlessly: {@see finishSelection} clears
+		 * the pending token before it ever asks the modal to close.
+		 *
+		 * @param {CustomEvent} event
+		 * @returns {void}
+		 */
+		function handleModalClosed( event ) {
+			if ( ! event.detail || PICKUP_MODAL_ID !== event.detail.modalId ) {
+				return;
+			}
+
+			invalidateSelection();
+		}
+
+		// The ONE `document.body` listener this file's sessions register — see the file
+		// docblock's "EVERY LISTENER THIS FILE ATTACHES DIES WITH THE SESSION" section for why
+		// that is otherwise avoided, and `destroy()` below for the removal that keeps the
+		// guarantee intact.
+		document.body.addEventListener( 'woodev_modal_closed', handleModalClosed );
 
 		if ( ! ownsChrome ) {
 			panels = new PanelsCtor( modal.getContainer(), buildPanelsConfig( config ) );
@@ -1177,10 +1870,34 @@
 			// marker click pans only (the customer already sees roughly where it is; slamming
 			// the camera to max zoom on every tap was the operator's original bug report), every
 			// other origin centres AND zooms, since none of those started from a point already
-			// visible on screen. `origin` (threaded through `openCard()`/`cardOpened` by every
-			// caller below) is what lets this ONE listener still decide per-call instead of
-			// forking into several near-identical ones.
+			// visible on screen, and `'restore'` (06.08.2026) moves the camera not at all, because
+			// its move already went out ahead of the draw. `origin` (threaded through
+			// `openCard()`/`cardOpened` by every caller below) is what lets this ONE listener still
+			// decide per-call instead of forking into several near-identical ones.
 			panels.on( 'cardOpened', function( payload ) {
+				// The staleness guard's other half (spec D-9). Locking the card stops a second
+				// confirmation from STARTING; it does not freeze the map underneath it, where a
+				// marker click still routes through `pointClick` → `openCard()` and swaps the
+				// card to a different point while the first one's answer is still in flight.
+				// From that moment the answer is about a point the card no longer shows, and
+				// dropping the pending confirmation here is what makes {@see finishSelection}
+				// see that — and what hands the card back UNLOCKED for the point it now shows,
+				// rather than leaving it frozen until an answer nobody wants finally lands.
+				if ( 0 !== pendingSelectionToken && String( payload.pointId ) !== pendingSelectionPointId ) {
+					invalidateSelection();
+				}
+
+				// `'restore'` is the ONE origin that moves no camera at all (operator decision,
+				// 06.08.2026 — the reopened picker shows the chosen point's CARD now, not the
+				// list). Its camera move already went out, ahead of the draw, as
+				// `setPoints( groups, { focus } )` — see {@see restoreSelection}. Falling through
+				// to `focusGroup()` here would issue a SECOND move on top of it, re-entering the
+				// s52 draw-vs-move race the ordering exists to avoid, for a camera that is already
+				// exactly where this move would put it.
+				if ( 'restore' === payload.origin ) {
+					return;
+				}
+
 				if ( payload.group && provider && 'function' === typeof provider.focusGroup ) {
 					provider.focusGroup( payload.group.key, { zoom: 'marker' !== payload.origin } );
 				}
@@ -1346,29 +2063,86 @@
 				}
 			} );
 
-			// `searchSubmit` (Enter/the magnifier) is the ONLY path that spends the merchant's
-			// geocoding quota — it runs the control's own `search()`, which invokes
-			// `map-provider-yandex.js`'s bounded geocode provider and, on resolution, emits ONE
-			// of `searchResults`/`searchCleared`/`addressMatchedPoint` (all wired below) with the
-			// outcome. `setSearchBusy( true )` marks the submit button in-flight for exactly the
-			// same reason the button exists at all (work item 5, live-review round 2): a real
-			// network round trip takes real time, and every one of those three outcomes clears it
-			// again — see their own listeners below — so the button can never be left stuck
-			// disabled regardless of which one the search actually resolves down. Only fired when
-			// a search is genuinely about to run; a provider with no `searchControl` never
-			// answers with any of the three events, and marking busy without a matching clear
-			// would strand the button forever.
+			var searchSubmitInFlight = false;
+
+			// `searchSubmit` (Enter/the magnifier) RESOLVES what the dropdown is already showing —
+			// it does not start a search of its own (#179). It used to call the SearchControl's
+			// `search()`, which ran `map-provider-yandex.js`'s bounded GEOCODE provider, while the
+			// list the customer was looking at had come from `suggest()`. Two services, one
+			// question, and the geocoder ranks POIs above street addresses: typing «Чертановская
+			// 66» offered five house numbers, pressing the magnifier replaced them with
+			// «Chertanovskaya metro station». That is the same defect the gotcha
+			// `ymaps-suggest-not-geocode-for-address-lists` recorded in s51 — its fix moved the
+			// TYPING path onto `suggest()` and left this one behind.
+			//
+			// So: re-ask `suggestAddresses()` (free, and authoritative for what is on screen),
+			// take its best hit, and hand it to the SAME `resolveAddress()` a click on a row uses.
+			// One geocode is still spent — on RESOLVING a chosen address, which is the one role
+			// `bounding-the-address-resolve-breaks-the-normal-case` says it should have.
+			//
+			// The busy flag is owned by this chain from end to end rather than by whichever event
+			// happens to answer (work item 5, live-review round 2): the flag goes up
+			// synchronously, and comes down in the tail of the chain whatever the outcome —
+			// resolved, nothing suggested, or a rejected round trip. Nothing can strand it.
+			// Guarded on the provider actually being able to do both halves; the embedded
+			// provider owns its own chrome and offers neither, and raising a flag nothing will
+			// ever lower is exactly the bug this guard exists for.
 			panels.on( 'searchSubmit', function( payload ) {
-				if ( provider && provider.searchControl && 'function' === typeof provider.searchControl.search ) {
-					panels.setSearchBusy( true );
-					provider.searchControl.search( payload.query );
+				if ( searchSubmitInFlight
+					|| ! provider
+					|| 'function' !== typeof provider.suggestAddresses
+					|| 'function' !== typeof provider.resolveAddress ) {
+					return;
 				}
+
+				searchSubmitInFlight = true;
+
+				provider.suggestAddresses( payload.query ).then( function( results ) {
+					if ( destroyed || ! panels ) {
+						return undefined;
+					}
+
+					var addresses = ( results && results.addresses ) || [];
+
+					// Keep `lastAddresses` in step for the same reason the `searchType` handler
+					// does — `searchAddressPicked` indexes into it, and a submit that refreshed
+					// the dropdown without refreshing this would resolve the wrong row next.
+					lastAddresses = addresses;
+
+					if ( ! addresses.length ) {
+						// Say so through the SAME preview the typing path renders into, rather
+						// than leaving the customer's list untouched and the map still.
+						panels.previewSearchResults( {
+							points: ( results && results.points ) || [],
+							addresses: [],
+						} );
+
+						return undefined;
+					}
+
+					// Close the list, exactly as clicking a row does (`pickup-panels.js`'s own
+					// address-row handler calls `hideSearchResults()` itself). Both routes end in
+					// the same place — an address resolved, the camera moving — so leaving the box
+					// hanging open over the map on one of them was simply an omission, reported by
+					// the operator 07.08.2026. NOT done on the no-suggestions branch above: that
+					// one renders "ничего не найдено" INTO this box, and closing it would swallow
+					// the only answer the customer gets.
+					panels.hideSearchResults();
+
+					// The FULL `query` form, never the trimmed `displayName` — see the
+					// `searchAddressPicked` handler above for why the trimmed one re-geocodes
+					// ambiguously.
+					return provider.resolveAddress( addresses[ 0 ].query || addresses[ 0 ].displayName );
+				} ).catch( function() {} ).then( function() {
+					searchSubmitInFlight = false;
+				} );
 			} );
 
 			// `searchReset` clears the input/results DOM itself (pickup-panels.js's own job) —
 			// this file's half is dropping whatever provider-side search state belongs to it: the
 			// "your address" pin and the stale `searchResults`, both owned by `clearAddress()`
 			// (see map-provider-yandex.js's own docblock on why that file, not this one, owns it).
+			//
 			panels.on( 'searchReset', function() {
 				if ( provider && 'function' === typeof provider.clearAddress ) {
 					provider.clearAddress();
@@ -1472,21 +2246,15 @@
 				provider.on( 'searchResults', function( results ) {
 					lastAddresses = ( results && results.addresses ) || [];
 					panels.renderSearchResults( results );
-					// A completed search is one of the three outcomes `searchSubmit` (above) put
-					// the button in flight for — see that listener's own comment.
-					panels.setSearchBusy( false );
 				} );
 
 				// searchCleared (D1a, live-review round 2 — the "crossik" bug): `clearAddress()`
 				// no longer round-trips through an EMPTY `searchResults` to signal "cleared" — see
 				// `map-provider-yandex.js`'s own docblock on why that used to re-open the results
 				// box the customer had just closed and print "не найдено" at them. This IS the
-				// box's actual close path now. Also releases whatever busy state `searchSubmit`
-				// may have set — a search that resolves down the clear route (rather than a
-				// completed one) must not leave the submit button stuck disabled either.
+				// box's actual close path now.
 				provider.on( 'searchCleared', function() {
 					panels.hideSearchResults();
-					panels.setSearchBusy( false );
 				} );
 
 				// addressMatchedPoint (late addition, live-review round 2): the searched address
@@ -1503,8 +2271,6 @@
 				// block (see `showNearestRequested` above).
 				provider.on( 'addressMatchedPoint', function( info ) {
 					var group = info && info.key ? groupsByKey[ info.key ] : null;
-
-					panels.setSearchBusy( false );
 
 					if ( group ) {
 						panels.openCard( group, null, 'search' );
@@ -1622,7 +2388,25 @@
 			modal: modal,
 			refresh: refresh,
 			destroy: function() {
+				// BOTH card locks a session can be holding — an in-flight confirmation's and an
+				// in-flight checkout refresh's — are released HERE, while `destroyed` is still
+				// false and the panels are still alive to hear it. `setSelectionBusy()` does not
+				// track why it was called and never self-balances (see its own docblock in
+				// `pickup-panels.js`); a `true` left unpaired locks every card the instance opens
+				// afterwards, and nothing else in this file would ever pair it. Cheap insurance
+				// against a panels object that outlives its session — a plugin holding its own
+				// reference, or a future reuse of the instance.
+				invalidateSelection();
+				dropRefreshWaiter();
+
 				destroyed = true;
+
+				// The TWO long-lived targets a session binds to (see {@see handleModalClosed}
+				// and {@see refreshCheckout}) — and therefore the two this file has to unbind by
+				// hand, since nothing else takes either away. Left attached, every session ever
+				// opened on this page would keep a listener, and its whole closure, alive for
+				// the life of the document.
+				document.body.removeEventListener( 'woodev_modal_closed', handleModalClosed );
 
 				if ( provider && 'function' === typeof provider.destroy ) {
 					provider.destroy();

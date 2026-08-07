@@ -138,8 +138,10 @@ class CheckoutHandlerRegisterTest extends TestCase {
 
 	public function test_config_object_suffix_is_alphanumeric_with_underscores(): void {
 		$handler = new Checkout_Handler( Checkout_Fields::from_array( [] ), 'my-carrier.plugin' );
-		// hyphens and dots replaced with underscores
-		$this->assertSame( 'my_carrier_plugin', $handler->config_object_suffix() );
+		// Hyphens and dots replaced with underscores, plus the disambiguator every REWRITTEN
+		// id now carries — see test_two_plugin_ids_that_differ_only_in_punctuation_do_not_collide().
+		$this->assertStringStartsWith( 'my_carrier_plugin_', $handler->config_object_suffix() );
+		$this->assertMatchesRegularExpression( '/^[A-Za-z0-9_]+$/', $handler->config_object_suffix() );
 	}
 
 	public function test_config_object_suffix_keeps_valid_identifier_unchanged(): void {
@@ -150,6 +152,43 @@ class CheckoutHandlerRegisterTest extends TestCase {
 	public function test_config_object_suffix_for_empty_prefix_is_shipping(): void {
 		$handler = new Checkout_Handler( Checkout_Fields::from_array( [] ) );
 		$this->assertSame( 'shipping', $handler->config_object_suffix() );
+	}
+
+	/**
+	 * @dataProvider provide_colliding_plugin_ids
+	 *
+	 * @param string $first  one plugin id.
+	 * @param string $second another plugin id that used to sanitise to the same suffix.
+	 */
+	public function test_two_plugin_ids_that_differ_only_in_punctuation_do_not_collide(
+		string $first,
+		string $second
+	): void {
+		// REGRESSION (issue #142): `preg_replace( '/[^a-z0-9_]/i', '_' )` mapped `carrier-a`,
+		// `carrier_a` and `carrier.a` onto one JS config global name, so two shipping plugins
+		// with near-identical ids on one checkout page silently overwrote each other's field
+		// descriptors and REST endpoint. The same defect, same line, in Pickup_Handler.
+		$this->assertNotSame(
+			( new Checkout_Handler( Checkout_Fields::from_array( [] ), $first ) )->config_object_suffix(),
+			( new Checkout_Handler( Checkout_Fields::from_array( [] ), $second ) )->config_object_suffix()
+		);
+	}
+
+	/**
+	 * @return array<string, array{0: string, 1: string}>
+	 */
+	public function provide_colliding_plugin_ids(): array {
+		return [
+			'hyphen vs underscore' => [ 'carrier-a', 'carrier_a' ],
+			'dot vs underscore'    => [ 'carrier.a', 'carrier_a' ],
+			'dot vs hyphen'        => [ 'carrier.a', 'carrier-a' ],
+		];
+	}
+
+	public function test_a_rewritten_config_object_suffix_is_still_a_valid_js_identifier(): void {
+		$handler = new Checkout_Handler( Checkout_Fields::from_array( [] ), 'my carrier plugin!' );
+
+		$this->assertMatchesRegularExpression( '/^[A-Za-z0-9_]+$/', $handler->config_object_suffix() );
 	}
 
 	// -------------------------------------------------------------------------

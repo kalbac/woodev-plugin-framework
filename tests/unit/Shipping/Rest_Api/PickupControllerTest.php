@@ -15,6 +15,7 @@
 
 namespace Woodev\Tests\Unit\Shipping\Rest_Api;
 
+use Brain\Monkey\Filters;
 use Brain\Monkey\Functions;
 use Woodev\Framework\Shipping\Pickup\Pickup_Point;
 use Woodev\Framework\Shipping\Pickup\Point_Query;
@@ -28,6 +29,7 @@ require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/pickup/class-picku
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/pickup/class-point-query.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/pickup/interface-point-source.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/pickup/class-constraint-checker.php';
+require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/pickup/class-selection-result.php';
 
 if ( ! class_exists( '\\WP_REST_Controller' ) ) {
 	require_once __DIR__ . '/wp-rest-controller-stub.php';
@@ -51,11 +53,22 @@ if ( ! class_exists( __NAMESPACE__ . '\\WP_REST_Request', false ) ) {
 		/** @var array<string, mixed> */
 		private array $params;
 
+		/** @var array<string, string> */
+		private array $headers;
+
 		/**
-		 * @param array<string, mixed> $params request params.
+		 * @param array<string, mixed>  $params  request params.
+		 * @param array<string, string> $headers request headers, keyed exactly as
+		 *                                       {@see self::get_header()} is asked for them —
+		 *                                       the real \WP_REST_Request normalises the key,
+		 *                                       this double deliberately does not, so a
+		 *                                       production caller asking for a differently-cased
+		 *                                       header than the browser sends is a MISS here and
+		 *                                       the test fails rather than passing by luck.
 		 */
-		public function __construct( array $params = [] ) {
-			$this->params = $params;
+		public function __construct( array $params = [], array $headers = [] ) {
+			$this->params  = $params;
+			$this->headers = $headers;
 		}
 
 		/**
@@ -65,6 +78,15 @@ if ( ! class_exists( __NAMESPACE__ . '\\WP_REST_Request', false ) ) {
 		 */
 		public function get_param( $key ) {
 			return $this->params[ $key ] ?? null;
+		}
+
+		/**
+		 * @param string $key header name.
+		 *
+		 * @return string|null
+		 */
+		public function get_header( $key ) {
+			return $this->headers[ $key ] ?? null;
 		}
 	}
 }
@@ -166,6 +188,39 @@ class Pickup_Controller_Probe extends Pickup_Controller {
 }
 
 /**
+ * Probe whose rate limiter is always TRIPPED, and which records the prefix and budget it
+ * was asked for. The inverse of {@see Pickup_Controller_Probe}, which never limits — a
+ * route's guard cannot be proven to exist by a probe that disables it, so the only way to
+ * assert the guard actually fires (and fires with its OWN bucket, not a sibling's) is a
+ * second probe that forces the other branch.
+ */
+final class Pickup_Controller_Limited_Probe extends Pickup_Controller {
+
+	/**
+	 * Every ( prefix, max ) pair the controller asked the limiter about.
+	 *
+	 * @var array<int, array{prefix: string, max: int}>
+	 */
+	public array $limit_checks = [];
+
+	/**
+	 * @param string $key_prefix transient key prefix.
+	 * @param int    $max        requests allowed per window.
+	 * @param int    $window     window length in seconds (unused).
+	 *
+	 * @return bool
+	 */
+	protected function is_rate_limited( string $key_prefix, int $max, int $window = 60 ): bool {
+		$this->limit_checks[] = [
+			'prefix' => $key_prefix,
+			'max'    => $max,
+		];
+
+		return true;
+	}
+}
+
+/**
  * @covers \Woodev\Framework\Shipping\Rest_Api\Pickup_Controller
  */
 final class PickupControllerTest extends TestCase {
@@ -238,7 +293,8 @@ final class PickupControllerTest extends TestCase {
 			'test-plugin',
 			$this->source( [ $this->point() ] ),
 			static fn() => 0,
-			static fn() => 'bacs'
+			static fn() => 'bacs',
+			static fn() => 'carrier_pickup'
 		);
 
 		$data = $controller->get_points_data( [ 'locality' => 'Москва' ] );
@@ -252,14 +308,21 @@ final class PickupControllerTest extends TestCase {
 			'test-plugin',
 			$this->source( [ $this->point() ] ),
 			static fn() => 0,
-			static fn() => 'bacs'
+			static fn() => 'bacs',
+			static fn() => 'carrier_pickup'
 		);
 
 		$this->assertSame( [ 'points' => [] ], $controller->get_points_data( [] ) );
 	}
 
 	public function test_details_returns_null_for_an_unknown_point(): void {
-		$controller = new Pickup_Controller( 'test-plugin', $this->source(), static fn() => 0, static fn() => 'bacs' );
+		$controller = new Pickup_Controller(
+			'test-plugin',
+			$this->source(),
+			static fn() => 0,
+			static fn() => 'bacs',
+			static fn() => 'carrier_pickup'
+		);
 
 		$this->assertNull( $controller->get_point_data( 'unknown' ) );
 	}
@@ -276,7 +339,13 @@ final class PickupControllerTest extends TestCase {
 			},
 			static fn( string $id ) => null
 		);
-		$controller = new Pickup_Controller( 'test-plugin', $source, static fn() => 0, static fn() => 'bacs' );
+		$controller = new Pickup_Controller(
+			'test-plugin',
+			$source,
+			static fn() => 0,
+			static fn() => 'bacs',
+			static fn() => 'carrier_pickup'
+		);
 
 		$data = $controller->get_points_data( [ 'bbox' => '0,0,1,1' ] );
 
@@ -294,7 +363,13 @@ final class PickupControllerTest extends TestCase {
 			},
 			static fn( string $id ) => null
 		);
-		$controller = new Pickup_Controller( 'test-plugin', $source, static fn() => 0, static fn() => 'bacs' );
+		$controller = new Pickup_Controller(
+			'test-plugin',
+			$source,
+			static fn() => 0,
+			static fn() => 'bacs',
+			static fn() => 'carrier_pickup'
+		);
 
 		$data = $controller->get_points_data( [ 'locality' => 'Москва' ] );
 
@@ -308,7 +383,8 @@ final class PickupControllerTest extends TestCase {
 			'test-plugin',
 			$this->source( [ $this->point() ] ),
 			static fn() => 0,
-			static fn() => 'bacs'
+			static fn() => 'bacs',
+			static fn() => 'carrier_pickup'
 		);
 
 		$data = $controller->get_points_data( [ 'locality' => 'Москва', 'bbox' => '0,0,1,1' ] );
@@ -326,7 +402,13 @@ final class PickupControllerTest extends TestCase {
 			},
 			static fn( string $id ) => null
 		);
-		$controller = new Pickup_Controller( 'test-plugin', $source, static fn() => 0, static fn() => 'bacs' );
+		$controller = new Pickup_Controller(
+			'test-plugin',
+			$source,
+			static fn() => 0,
+			static fn() => 'bacs',
+			static fn() => 'carrier_pickup'
+		);
 
 		$this->expectException( \Woodev_API_Exception::class );
 		$controller->get_points_data( [ 'locality' => 'Москва' ] );
@@ -340,7 +422,13 @@ final class PickupControllerTest extends TestCase {
 				throw new \Woodev_API_Exception( 'carrier down' );
 			}
 		);
-		$controller = new Pickup_Controller( 'test-plugin', $source, static fn() => 0, static fn() => 'bacs' );
+		$controller = new Pickup_Controller(
+			'test-plugin',
+			$source,
+			static fn() => 0,
+			static fn() => 'bacs',
+			static fn() => 'carrier_pickup'
+		);
 
 		$this->expectException( \Woodev_API_Exception::class );
 		$controller->get_point_data( 'P1' );
@@ -354,7 +442,13 @@ final class PickupControllerTest extends TestCase {
 			},
 			static fn( string $id ) => null
 		);
-		$controller = new Pickup_Controller_Probe( 'test-plugin', $source, static fn() => 0, static fn() => 'bacs' );
+		$controller = new Pickup_Controller_Probe(
+			'test-plugin',
+			$source,
+			static fn() => 0,
+			static fn() => 'bacs',
+			static fn() => 'carrier_pickup'
+		);
 
 		$result = $controller->handle_points_request( new WP_REST_Request( [ 'locality' => 'Москва' ] ) );
 
@@ -377,7 +471,13 @@ final class PickupControllerTest extends TestCase {
 				throw new \Woodev_API_Exception( 'https://carrier.example/secret?token=abc123' );
 			}
 		);
-		$controller = new Pickup_Controller_Probe( 'test-plugin', $source, static fn() => 0, static fn() => 'bacs' );
+		$controller = new Pickup_Controller_Probe(
+			'test-plugin',
+			$source,
+			static fn() => 0,
+			static fn() => 'bacs',
+			static fn() => 'carrier_pickup'
+		);
 
 		$result = $controller->handle_point_request( new WP_REST_Request( [ 'id' => 'P1' ] ) );
 
@@ -391,7 +491,8 @@ final class PickupControllerTest extends TestCase {
 			'test-plugin',
 			$this->source(),
 			static fn() => 0,
-			static fn() => 'bacs'
+			static fn() => 'bacs',
+			static fn() => 'carrier_pickup'
 		);
 
 		$result = $controller->handle_point_request( new WP_REST_Request( [ 'id' => 'unknown' ] ) );
@@ -408,7 +509,8 @@ final class PickupControllerTest extends TestCase {
 			'test-plugin',
 			$this->source( [ $point ] ),
 			static fn() => 0,
-			static fn() => 'bacs'
+			static fn() => 'bacs',
+			static fn() => 'carrier_pickup'
 		);
 
 		$data = $controller->get_points_data( [ 'locality' => 'Москва' ] );
@@ -426,7 +528,13 @@ final class PickupControllerTest extends TestCase {
 			static fn( Point_Query $query ) => [],
 			static fn( string $id ) => $point
 		);
-		$controller = new Pickup_Controller( 'test-plugin', $source, static fn() => 0, static fn() => 'bacs' );
+		$controller = new Pickup_Controller(
+			'test-plugin',
+			$source,
+			static fn() => 0,
+			static fn() => 'bacs',
+			static fn() => 'carrier_pickup'
+		);
 
 		$data = $controller->get_point_data( 'P1' );
 
@@ -454,7 +562,13 @@ final class PickupControllerTest extends TestCase {
 			static fn( Point_Query $query ) => [ 5 => $first, 10 => $second ],
 			static fn( string $id ) => null
 		);
-		$controller = new Pickup_Controller( 'test-plugin', $source, static fn() => 0, static fn() => 'bacs' );
+		$controller = new Pickup_Controller(
+			'test-plugin',
+			$source,
+			static fn() => 0,
+			static fn() => 'bacs',
+			static fn() => 'carrier_pickup'
+		);
 
 		$data = $controller->get_points_data( [ 'locality' => 'Москва' ] );
 
@@ -468,7 +582,13 @@ final class PickupControllerTest extends TestCase {
 			static fn( Point_Query $query ) => [ 'not-a-point', $good ],
 			static fn( string $id ) => null
 		);
-		$controller = new Pickup_Controller( 'test-plugin', $source, static fn() => 0, static fn() => 'bacs' );
+		$controller = new Pickup_Controller(
+			'test-plugin',
+			$source,
+			static fn() => 0,
+			static fn() => 'bacs',
+			static fn() => 'carrier_pickup'
+		);
 
 		$data = $controller->get_points_data( [ 'locality' => 'Москва' ] );
 
@@ -484,7 +604,8 @@ final class PickupControllerTest extends TestCase {
 			'test-plugin',
 			$this->source( [ $point ] ),
 			static fn() => 0,
-			static fn() => 'cod'
+			static fn() => 'cod',
+			static fn() => 'carrier_pickup'
 		);
 
 		$data = $controller->get_points_data( [ 'locality' => 'Москва' ] );
@@ -500,7 +621,13 @@ final class PickupControllerTest extends TestCase {
 			static fn( Point_Query $query ) => [],
 			static fn( string $id ) => $point
 		);
-		$controller = new Pickup_Controller( 'test-plugin', $source, static fn() => 2000, static fn() => 'bacs' );
+		$controller = new Pickup_Controller(
+			'test-plugin',
+			$source,
+			static fn() => 2000,
+			static fn() => 'bacs',
+			static fn() => 'carrier_pickup'
+		);
 
 		$data = $controller->get_point_data( 'P1' );
 
@@ -515,7 +642,8 @@ final class PickupControllerTest extends TestCase {
 			'test-plugin',
 			$this->source( [ $point ] ),
 			static fn() => 0,
-			static fn() => 'bacs'
+			static fn() => 'bacs',
+			static fn() => 'carrier_pickup'
 		);
 
 		$data = $controller->get_points_data( [ 'locality' => 'Москва' ] );
@@ -530,7 +658,8 @@ final class PickupControllerTest extends TestCase {
 			'test-plugin',
 			$this->source(),
 			static fn() => 0,
-			static fn() => 'bacs'
+			static fn() => 'bacs',
+			static fn() => 'carrier_pickup'
 		);
 
 		$long   = str_repeat( 'a', 200 );
@@ -558,7 +687,13 @@ final class PickupControllerTest extends TestCase {
 			},
 			static fn( string $id ) => null
 		);
-		$controller = new Pickup_Controller( 'test-plugin', $source, static fn() => 0, static fn() => 'bacs' );
+		$controller = new Pickup_Controller(
+			'test-plugin',
+			$source,
+			static fn() => 0,
+			static fn() => 'bacs',
+			static fn() => 'carrier_pickup'
+		);
 
 		$data = $controller->get_points_data( [ 'locality' => 'Москва', 'bbox' => '0,0,1,1' ] );
 
@@ -578,7 +713,13 @@ final class PickupControllerTest extends TestCase {
 			},
 			static fn( string $id ) => null
 		);
-		$controller = new Pickup_Controller( 'test-plugin', $source, static fn() => 0, static fn() => 'bacs' );
+		$controller = new Pickup_Controller(
+			'test-plugin',
+			$source,
+			static fn() => 0,
+			static fn() => 'bacs',
+			static fn() => 'carrier_pickup'
+		);
 
 		$controller->get_points_data( [ 'locality' => 'Москва', 'q' => 'твер' ] );
 
@@ -602,7 +743,13 @@ final class PickupControllerTest extends TestCase {
 			},
 			static fn( string $id ) => null
 		);
-		$controller = new Pickup_Controller( 'test-plugin', $source, static fn() => 0, static fn() => 'bacs' );
+		$controller = new Pickup_Controller(
+			'test-plugin',
+			$source,
+			static fn() => 0,
+			static fn() => 'bacs',
+			static fn() => 'carrier_pickup'
+		);
 
 		$controller->get_points_data( [ 'bbox' => '0,0,1,1', 'types' => 'pvz,postamat' ] );
 
@@ -631,7 +778,13 @@ final class PickupControllerTest extends TestCase {
 			},
 			static fn( string $id ) => null
 		);
-		$controller = new Pickup_Controller_Probe( 'test-plugin', $source, static fn() => 0, static fn() => 'bacs' );
+		$controller = new Pickup_Controller_Probe(
+			'test-plugin',
+			$source,
+			static fn() => 0,
+			static fn() => 'bacs',
+			static fn() => 'carrier_pickup'
+		);
 
 		$controller->handle_points_request( new WP_REST_Request( [ 'bbox' => '0,0,1,1', 'types' => 'pvz' ] ) );
 
@@ -644,7 +797,8 @@ final class PickupControllerTest extends TestCase {
 			'test-plugin',
 			$this->source(),
 			static fn() => 0,
-			static fn() => 'bacs'
+			static fn() => 'bacs',
+			static fn() => 'carrier_pickup'
 		);
 
 		// Distinct leading and trailing content, so the assertion below can tell a cap that
@@ -667,7 +821,13 @@ final class PickupControllerTest extends TestCase {
 			}
 		);
 
-		$controller = new Pickup_Controller( 'test-plugin', $this->source(), static fn() => 0, static fn() => 'bacs' );
+		$controller = new Pickup_Controller(
+			'test-plugin',
+			$this->source(),
+			static fn() => 0,
+			static fn() => 'bacs',
+			static fn() => 'carrier_pickup'
+		);
 		$controller->register_routes();
 
 		$points_route = null;
@@ -697,7 +857,13 @@ final class PickupControllerTest extends TestCase {
 				return null;
 			}
 		);
-		$controller = new Pickup_Controller_Probe( 'test-plugin', $source, static fn() => 0, static fn() => 'bacs' );
+		$controller = new Pickup_Controller_Probe(
+			'test-plugin',
+			$source,
+			static fn() => 0,
+			static fn() => 'bacs',
+			static fn() => 'carrier_pickup'
+		);
 
 		$long = str_repeat( 'a', 200 );
 		$controller->handle_point_request( new WP_REST_Request( [ 'id' => $long ] ) );
@@ -718,7 +884,8 @@ final class PickupControllerTest extends TestCase {
 			'test-plugin',
 			$this->source( [ $this->point() ] ),
 			static fn() => 0,
-			static fn() => 'bacs'
+			static fn() => 'bacs',
+			static fn() => 'carrier_pickup'
 		);
 
 		$params = $probe->normalize_points_params_public( [ 'locality' => [ 'a', 'b' ] ] );
@@ -736,7 +903,8 @@ final class PickupControllerTest extends TestCase {
 			'test-plugin',
 			$this->source( [ $this->point() ] ),
 			static fn() => 0,
-			static fn() => 'bacs'
+			static fn() => 'bacs',
+			static fn() => 'carrier_pickup'
 		);
 
 		$params = $probe->normalize_points_params_public( [ 'locality' => 'Москва', 'q' => [ 'a', 'b' ] ] );
@@ -756,10 +924,16 @@ final class PickupControllerTest extends TestCase {
 			}
 		);
 
-		$controller = new Pickup_Controller( 'test-plugin', $this->source(), static fn() => 0, static fn() => 'bacs' );
+		$controller = new Pickup_Controller(
+			'test-plugin',
+			$this->source(),
+			static fn() => 0,
+			static fn() => 'bacs',
+			static fn() => 'carrier_pickup'
+		);
 		$controller->register_routes();
 
-		$this->assertCount( 2, $registered );
+		$this->assertCount( 3, $registered );
 
 		foreach ( $registered as $route => $endpoints ) {
 			foreach ( $endpoints as $endpoint ) {
@@ -777,5 +951,383 @@ final class PickupControllerTest extends TestCase {
 				}
 			}
 		}
+	}
+
+	// ---- POST .../select — the selection round-trip and its domain seam ----
+
+	/**
+	 * A source that resolves exactly one point by id and lists nothing — the shape every
+	 * select-route test needs, since the select route never lists.
+	 *
+	 * @param Pickup_Point|null $point what fetch_details() returns for any id.
+	 */
+	private function details_source( ?Pickup_Point $point ): Point_Source {
+		return new Pickup_Controller_Test_Source(
+			Point_Source::STRATEGY_BULK,
+			static fn( Point_Query $query ) => [],
+			static fn( string $id ) => $point
+		);
+	}
+
+	/**
+	 * Builds a controller over {@see self::details_source()} with each injected callable
+	 * pinned to a distinguishable value, so a test asserting on the filter context can tell
+	 * which callable produced which key.
+	 *
+	 * @param Pickup_Point|null $point          what the source resolves.
+	 * @param int               $cart_weight    what the cart-weight callable returns (GRAMS).
+	 * @param string            $payment_method what the payment-method callable returns.
+	 * @param string            $method_id      what the shipping-method callable returns.
+	 */
+	private function select_controller(
+		?Pickup_Point $point,
+		int $cart_weight = 0,
+		string $payment_method = 'bacs',
+		string $method_id = 'carrier_pickup'
+	): Pickup_Controller_Probe {
+		return new Pickup_Controller_Probe(
+			'test-plugin',
+			$this->details_source( $point ),
+			static fn() => $cart_weight,
+			static fn() => $payment_method,
+			static fn() => $method_id
+		);
+	}
+
+	/**
+	 * Captures the routes register_routes() declares, keyed by route path.
+	 *
+	 * @return array<string, array<int, array<string, mixed>>>
+	 */
+	private function registered_routes( Pickup_Controller $controller ): array {
+		$registered = [];
+
+		Functions\when( 'register_rest_route' )->alias(
+			static function ( $namespace, $route, $args ) use ( &$registered ) {
+				$registered[ $route ] = $args;
+			}
+		);
+
+		$controller->register_routes();
+
+		return $registered;
+	}
+
+	public function test_the_select_route_is_a_post_behind_a_real_permission_callback(): void {
+		$controller = $this->select_controller( $this->point() );
+		$registered = $this->registered_routes( $controller );
+
+		$this->assertArrayHasKey( '/shipping/pickup/test-plugin/select', $registered );
+
+		$endpoint = $registered['/shipping/pickup/test-plugin/select'][0];
+
+		$this->assertSame( 'POST', $endpoint['methods'] );
+		$this->assertSame( [ $controller, 'handle_select_request' ], $endpoint['callback'] );
+
+		// The two GET reads are declared `__return_true`; this one must NOT be — an
+		// unguarded POST is a way to burn the merchant's carrier quota through a
+		// visitor's browser (see Pickup_Controller::check_select_permission()).
+		$this->assertNotSame( '__return_true', $endpoint['permission_callback'] );
+		$this->assertSame( [ $controller, 'check_select_permission' ], $endpoint['permission_callback'] );
+
+		$this->assertTrue( $endpoint['args']['field_id']['required'] );
+		$this->assertTrue( $endpoint['args']['point_id']['required'] );
+
+		// The browser must not be able to ASSERT which shipping method it is checking out
+		// with — that comes from the injected callable, never from a request param.
+		$this->assertArrayNotHasKey( 'method_id', $endpoint['args'] );
+	}
+
+	public function test_the_select_route_declares_both_ids_as_non_empty(): void {
+		// REGRESSION (Codex finding 5): `required => true, type => string` accepts `''`,
+		// which sailed through to fetch_details( '' ) — a carrier call for nothing.
+		$endpoint = $this->registered_routes(
+			$this->select_controller( $this->point() )
+		)['/shipping/pickup/test-plugin/select'][0];
+
+		$this->assertSame( 1, $endpoint['args']['point_id']['minLength'] );
+		$this->assertSame( 1, $endpoint['args']['field_id']['minLength'] );
+	}
+
+	/**
+	 * @dataProvider provide_empty_select_ids
+	 *
+	 * @param array<string, mixed> $params the select route's two params.
+	 */
+	public function test_an_empty_id_is_refused_before_the_carrier_is_called( array $params ): void {
+		// The schema's `minLength` is WordPress's own gate and only applies to a REST-dispatched
+		// request; this is the controller's own, which also catches a value that survives the
+		// schema but cleans down to nothing (a whitespace-only or control-character id).
+		$called = 0;
+
+		$controller = new Pickup_Controller_Probe(
+			'test-plugin',
+			new Pickup_Controller_Test_Source(
+				Point_Source::STRATEGY_BULK,
+				static fn( Point_Query $query ) => [],
+				function ( string $id ) use ( &$called ) {
+					++$called;
+					return $this->point();
+				}
+			),
+			static fn() => 0,
+			static fn() => 'bacs',
+			static fn() => 'carrier_pickup'
+		);
+
+		$result = $controller->handle_select_request( new WP_REST_Request( $params ) );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'woodev_pickup_invalid_selection', $result->get_error_code() );
+		$this->assertSame( 400, $result->get_error_data()['status'] );
+		$this->assertSame( 0, $called, 'the carrier must not be called for an empty id' );
+	}
+
+	/**
+	 * @return array<string, array{0: array<string, mixed>}>
+	 */
+	public function provide_empty_select_ids(): array {
+		return [
+			'empty point id'          => [ [ 'field_id' => 'pvz', 'point_id' => '' ] ],
+			'whitespace-only point id' => [ [ 'field_id' => 'pvz', 'point_id' => '   ' ] ],
+			'missing point id'        => [ [ 'field_id' => 'pvz' ] ],
+			'empty field id'          => [ [ 'field_id' => '', 'point_id' => 'P1' ] ],
+			'missing field id'        => [ [ 'point_id' => 'P1' ] ],
+			'both missing'            => [ [] ],
+		];
+	}
+
+	public function test_the_empty_id_guard_runs_after_the_rate_limit_check(): void {
+		// Ordering matters: a throttled caller must read 429, not 400, or the budget it just
+		// exhausted becomes invisible to it.
+		$probe  = new Pickup_Controller_Limited_Probe(
+			'test-plugin',
+			$this->details_source( $this->point() ),
+			static fn() => 0,
+			static fn() => 'bacs',
+			static fn() => 'carrier_pickup'
+		);
+		$result = $probe->handle_select_request( new WP_REST_Request( [] ) );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'woodev_pickup_rate_limited', $result->get_error_code() );
+	}
+
+	public function test_a_missing_nonce_header_is_refused(): void {
+		// wp_verify_nonce() is deliberately NOT stubbed: reaching it with no header at all
+		// would be a call to an undefined function, so this also pins the short-circuit.
+		$result = $this->select_controller( $this->point() )->check_select_permission( new WP_REST_Request() );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'woodev_pickup_invalid_nonce', $result->get_error_code() );
+		$this->assertSame( 403, $result->get_error_data()['status'] );
+	}
+
+	public function test_a_nonce_for_the_wrong_action_is_refused(): void {
+		Functions\when( 'wp_verify_nonce' )->justReturn( false );
+
+		$request = new WP_REST_Request( [], [ 'X-WP-Nonce' => 'nonce-for-another-action' ] );
+		$result  = $this->select_controller( $this->point() )->check_select_permission( $request );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'woodev_pickup_invalid_nonce', $result->get_error_code() );
+	}
+
+	public function test_a_valid_nonce_passes_the_permission_gate(): void {
+		Functions\when( 'wp_verify_nonce' )->justReturn( 1 );
+
+		$request = new WP_REST_Request( [], [ 'X-WP-Nonce' => 'good' ] );
+
+		$this->assertTrue( $this->select_controller( $this->point() )->check_select_permission( $request ) );
+	}
+
+	public function test_with_no_filter_attached_the_response_is_the_framework_verdict_alone(): void {
+		Functions\when( 'rest_ensure_response' )->returnArg();
+		Functions\when( 'apply_filters' )->returnArg( 2 );
+
+		$result = $this->select_controller( $this->point() )->handle_select_request(
+			new WP_REST_Request( [ 'field_id' => 'pvz', 'point_id' => 'P1' ] )
+		);
+
+		$this->assertSame(
+			[
+				'allowed'          => true,
+				'reason'           => null,
+				'close'            => null,
+				'refresh_checkout' => null,
+				'point'            => null,
+			],
+			$result,
+			'an unspoken flag must be null — "the domain did not speak", not a decision'
+		);
+	}
+
+	public function test_the_verdict_is_recomputed_against_the_current_cart_not_what_the_browser_saw(): void {
+		Functions\when( 'rest_ensure_response' )->returnArg();
+		Functions\when( 'apply_filters' )->returnArg( 2 );
+
+		// The cart grew past the point's limit between drawing the map and confirming.
+		$controller = $this->select_controller( $this->point( [ 'max_weight' => 1000 ] ), 2000 );
+
+		$result = $controller->handle_select_request(
+			new WP_REST_Request( [ 'field_id' => 'pvz', 'point_id' => 'P1' ] )
+		);
+
+		$this->assertFalse( $result['allowed'] );
+		$this->assertNotNull( $result['reason'] );
+	}
+
+	/**
+	 * The load-bearing case. `close`/`refresh_checkout` are THREE-STATE, and an explicit
+	 * `false` is a decision the browser must honour — collapsing it into `null` would hand
+	 * control back to the plugin's configured default the domain just overrode. Asserted
+	 * with assertSame(), never assertFalse()/assertEmpty(), so a mutant that returns `null`
+	 * here fails instead of passing.
+	 */
+	public function test_a_filter_can_refuse_and_an_explicit_false_survives_as_false(): void {
+		Functions\when( 'rest_ensure_response' )->returnArg();
+
+		Filters\expectApplied( 'woodev_shipping_pickup_point_selection' )->once()->andReturn(
+			[
+				'allowed'          => false,
+				'reason'           => 'Этот пункт не принимает негабаритные отправления.',
+				'close'            => false,
+				'refresh_checkout' => false,
+			]
+		);
+
+		$result = $this->select_controller( $this->point() )->handle_select_request(
+			new WP_REST_Request( [ 'field_id' => 'pvz', 'point_id' => 'P1' ] )
+		);
+
+		$this->assertFalse( $result['allowed'] );
+		$this->assertSame( 'Этот пункт не принимает негабаритные отправления.', $result['reason'] );
+		$this->assertSame( false, $result['close'], 'an explicit false must not collapse into null' );
+		$this->assertSame( false, $result['refresh_checkout'], 'an explicit false must not collapse into null' );
+	}
+
+	public function test_an_unknown_point_id_yields_a_404(): void {
+		$result = $this->select_controller( null )->handle_select_request(
+			new WP_REST_Request( [ 'field_id' => 'pvz', 'point_id' => 'gone' ] )
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'woodev_pickup_point_not_found', $result->get_error_code() );
+		$this->assertSame( 404, $result->get_error_data()['status'] );
+	}
+
+	public function test_a_carrier_failure_becomes_a_502_not_a_fatal(): void {
+		$source = new Pickup_Controller_Test_Source(
+			Point_Source::STRATEGY_BULK,
+			static fn( Point_Query $query ) => [],
+			static function ( string $id ) {
+				throw new \Woodev_API_Exception( 'https://carrier.example/secret?token=abc123' );
+			}
+		);
+		$controller = new Pickup_Controller_Probe(
+			'test-plugin',
+			$source,
+			static fn() => 0,
+			static fn() => 'bacs',
+			static fn() => 'carrier_pickup'
+		);
+
+		$result = $controller->handle_select_request(
+			new WP_REST_Request( [ 'field_id' => 'pvz', 'point_id' => 'P1' ] )
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 502, $result->get_error_data()['status'] );
+		$this->assertStringNotContainsString( 'carrier.example', $result->get_error_message() );
+		$this->assertCount( 1, $controller->logged_failures );
+	}
+
+	/**
+	 * The guard must fire BEFORE the point lookup — a 429 that has already spent a carrier
+	 * call has protected nothing. Asserted by the source's own call counter, not just by
+	 * the returned error, so a guard moved below the lookup fails here.
+	 */
+	public function test_a_throttled_selection_never_reaches_the_carrier(): void {
+		$fetches = 0;
+		$source  = new Pickup_Controller_Test_Source(
+			Point_Source::STRATEGY_BULK,
+			static fn( Point_Query $query ) => [],
+			function ( string $id ) use ( &$fetches ) {
+				++$fetches;
+
+				return $this->point();
+			}
+		);
+		$controller = new Pickup_Controller_Limited_Probe(
+			'test-plugin',
+			$source,
+			static fn() => 0,
+			static fn() => 'bacs',
+			static fn() => 'carrier_pickup'
+		);
+
+		$result = $controller->handle_select_request(
+			new WP_REST_Request( [ 'field_id' => 'pvz', 'point_id' => 'P1' ] )
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'woodev_pickup_rate_limited', $result->get_error_code() );
+		$this->assertSame( 429, $result->get_error_data()['status'] );
+		$this->assertSame( 0, $fetches, 'a throttled selection must not reach fetch_details()' );
+	}
+
+	/**
+	 * The selection route must draw on its OWN bucket and its OWN budget — sharing a
+	 * sibling's prefix would let map panning exhaust the confirmation allowance (or the
+	 * reverse), which is the failure the trait's per-workload prefixes exist to prevent.
+	 */
+	public function test_the_selection_route_uses_its_own_rate_limit_bucket(): void {
+		$controller = new Pickup_Controller_Limited_Probe(
+			'test-plugin',
+			$this->details_source( $this->point() ),
+			static fn() => 0,
+			static fn() => 'bacs',
+			static fn() => 'carrier_pickup'
+		);
+
+		$controller->handle_select_request( new WP_REST_Request( [ 'field_id' => 'pvz', 'point_id' => 'P1' ] ) );
+
+		$this->assertCount( 1, $controller->limit_checks );
+		$this->assertSame( 'woodev_pickup_sel_rl_', $controller->limit_checks[0]['prefix'] );
+
+		// Tighter than the detail read's 60 — see SELECT_RATE_LIMIT_MAX's own docblock.
+		$this->assertSame( 15, $controller->limit_checks[0]['max'] );
+		$this->assertLessThan( 60, $controller->limit_checks[0]['max'] );
+	}
+
+	public function test_the_filter_context_carries_the_injected_method_id_never_a_request_param(): void {
+		Functions\when( 'rest_ensure_response' )->returnArg();
+
+		$captured = null;
+
+		Filters\expectApplied( 'woodev_shipping_pickup_point_selection' )->once()->andReturnUsing(
+			static function ( $computed, $point, $context ) use ( &$captured ) {
+				$captured = $context;
+
+				return $computed;
+			}
+		);
+
+		$controller = $this->select_controller( $this->point(), 750, 'cod', 'carrier_pickup' );
+
+		// `method_id` IS posted — and must be ignored. A browser that could assert which
+		// method it is checking out with could talk the domain filter into approving a
+		// point for a method the customer never chose.
+		$controller->handle_select_request(
+			new WP_REST_Request(
+				[ 'field_id' => 'pvz', 'point_id' => 'P1', 'method_id' => 'attacker_method' ]
+			)
+		);
+
+		$this->assertIsArray( $captured );
+		$this->assertSame( 'carrier_pickup', $captured['method_id'] );
+		$this->assertSame( 'pvz', $captured['field_id'] );
+		$this->assertSame( 'cod', $captured['payment_method'] );
+		$this->assertSame( 750, $captured['cart_weight'] );
 	}
 }

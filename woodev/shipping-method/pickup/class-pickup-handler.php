@@ -170,6 +170,40 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		private bool $replace_address;
 
 		/**
+		 * Whether a confirmed selection closes the picker outright.
+		 *
+		 * Default `false`, and that is the framework's OWN behaviour rather than an absent
+		 * setting: a confirmed point leaves the customer in the map with the CTA relabelled
+		 * «Продолжить оформление» (the `continueCheckout` string), so the choice can still be
+		 * inspected and changed before committing. Closing on select throws that second step
+		 * away, which is a carrier's decision to make, not a default to inherit.
+		 *
+		 * Travels to the browser as `selection.close`; see {@see self::get_js_config()} for
+		 * the `??` reading rule that makes an explicit `false` from the domain win over this.
+		 *
+		 * @since 2.0.2
+		 * @var bool
+		 */
+		private bool $close_on_select;
+
+		/**
+		 * Whether a confirmed selection triggers a WooCommerce checkout refresh.
+		 *
+		 * Default `false`. A refresh nobody asked for is a full `update_order_review` round
+		 * trip — shipping recalculated, fragments re-rendered — paid on EVERY selection. A
+		 * carrier whose price cannot change within a locality (CDEK: the rate is the
+		 * locality's, not the point's) must never pay it; a carrier whose price DOES move
+		 * with the point type (Yandex) opts in explicitly.
+		 *
+		 * Travels to the browser as `selection.refreshCheckout`; same `??` reading rule as
+		 * {@see self::$close_on_select}.
+		 *
+		 * @since 2.0.2
+		 * @var bool
+		 */
+		private bool $refresh_checkout;
+
+		/**
 		 * Per-request memoization of {@see Point_Source::fetch_details()}, keyed by point
 		 * id — see {@see self::fetch_point()}.
 		 *
@@ -241,19 +275,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 * @var string
 		 */
 		private const DEFAULT_ACCENT_COLOR = '#06aedd';
-
-		/**
-		 * Framework default number of nearest groups an address search fits the camera to
-		 * (Task 19, D-6) — see {@see self::resolve_search_nearest_count()}. Deliberately NOT
-		 * a constructor argument: what varies between installs is network DENSITY, and that
-		 * varies between cities of one carrier far more than between carriers, so a single
-		 * per-plugin number could never track it — fitting to the N nearest points adapts
-		 * automatically, because it works in geometry rather than in kilometres.
-		 *
-		 * @since 2.0.2
-		 * @var int
-		 */
-		private const DEFAULT_SEARCH_NEAREST_COUNT = 3;
 
 		/**
 		 * The plugin's default accent colour (spec D-15) — drives the map's CTA, the
@@ -362,6 +383,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 *                                                          search (Task 18, spec V-6); see
 		 *                                                          {@see self::$search_enabled}.
 		 *                                                          Optional, default `true`.
+		 * @param bool                        $close_on_select      whether a confirmed selection
+		 *                                                          closes the picker; see
+		 *                                                          {@see self::$close_on_select} for
+		 *                                                          why the default is `false`.
+		 * @param bool                        $refresh_checkout     whether a confirmed selection
+		 *                                                          refreshes the checkout; see
+		 *                                                          {@see self::$refresh_checkout} for
+		 *                                                          why the default is `false`.
 		 *
 		 * @throws \InvalidArgumentException when `$default_location` does not have a valid
 		 *                                    `center` (two floats/ints, lat within ±90, lng
@@ -380,7 +409,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 			array $point_icons = [],
 			string $accent_color = self::DEFAULT_ACCENT_COLOR,
 			string $setting_accent_color = '',
-			bool $search_enabled = true
+			bool $search_enabled = true,
+			bool $close_on_select = false,
+			bool $refresh_checkout = false
 		) {
 			self::validate_default_location( $default_location );
 
@@ -396,6 +427,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 			$this->accent_color         = $accent_color;
 			$this->setting_accent_color = $setting_accent_color;
 			$this->search_enabled       = $search_enabled;
+			$this->close_on_select      = $close_on_select;
+			$this->refresh_checkout     = $refresh_checkout;
 		}
 
 		/**
@@ -431,32 +464,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 				?: ( sanitize_hex_color( $this->accent_color ) ?: self::DEFAULT_ACCENT_COLOR );
 
 			return strtolower( $sanitized );
-		}
-
-		/**
-		 * Resolves the number of nearest pickup points an address search fits the camera to
-		 * (Task 19, D-6) — filterable via `woodev_pickup_search_nearest_count`, sanitised
-		 * AFTER the filter, same discipline as {@see self::resolve_accent_color()}: a filter
-		 * is untrusted input on a path that ends in a camera fit, so a filtered value that is
-		 * not a positive integer falls back to {@see self::DEFAULT_SEARCH_NEAREST_COUNT}
-		 * rather than reaching the browser as zero, negative, or non-numeric — any of which
-		 * would make an address search fit the camera to nothing.
-		 *
-		 * @since 2.0.2
-		 *
-		 * @return int
-		 */
-		private function resolve_search_nearest_count(): int {
-			/**
-			 * Filters the number of nearest pickup points an address search fits the camera to.
-			 *
-			 * @since 2.0.2
-			 *
-			 * @param int $count default {@see Pickup_Handler::DEFAULT_SEARCH_NEAREST_COUNT}.
-			 */
-			$filtered = apply_filters( 'woodev_pickup_search_nearest_count', self::DEFAULT_SEARCH_NEAREST_COUNT );
-
-			return is_int( $filtered ) && $filtered > 0 ? $filtered : self::DEFAULT_SEARCH_NEAREST_COUNT;
 		}
 
 		/**
@@ -622,13 +629,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 *     provider: string,
 		 *     restRoot: string,
 		 *     nonce: string,
+		 *     nonceNodeId: string,
 		 *     i18n: array<string, string>,
 		 *     defaultLocation: array{center: array{0: float|int, 1: float|int}, zoom: int},
 		 *     pointIcons: array<string, array{default: string, active: string}>,
 		 *     mapConfig: array<string, mixed>,
 		 *     replaceAddress: array{enabled: bool, billingOnly: bool},
+		 *     selection: array{close: bool, refreshCheckout: bool},
 		 *     accentColor: string,
-		 *     searchNearestCount: int,
 		 *     modal: array{width: int, bodyHeight: string},
 		 *     search: bool
 		 * }
@@ -666,10 +674,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 				),
 				// Consumed by the map provider scripts (Tasks 13/14), not by this handler or
 				// the modal shell — a missing key here renders BLANK in the provider's UI
-				// rather than throwing, so every one of these nine must stay exact: the
-				// provider reads them by name, never falls back to a hardcoded default.
-				'search'         => __( 'Поиск по адресу', 'woodev-plugin-framework' ),
+				// rather than throwing, so every one must stay exact: the provider reads them
+				// by name, never falls back to a hardcoded default.
 				'drawerTitle'    => __( 'Пункты выдачи в этой области', 'woodev-plugin-framework' ),
+				// The sidebar toggle's SECOND name (#168): it opens the drawer when closed
+				// (`drawerTitle` above) and collapses it back to the map when open. Also the
+				// visible text of the mobile open-list bar, the one state that renders it.
+				'showMap'        => __( 'Показать карту', 'woodev-plugin-framework' ),
 				'howToGet'       => __( 'Как добраться', 'woodev-plugin-framework' ),
 				'paymentMethods' => __( 'Способы оплаты', 'woodev-plugin-framework' ),
 				'workTime'       => __( 'Часы работы', 'woodev-plugin-framework' ),
@@ -682,7 +693,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 				),
 				// Consumed by the panels (Tasks 12-15), not by this handler or the modal
 				// shell — same "renders blank, never a hardcoded fallback" contract as the
-				// nine keys above.
+				// keys above.
 				// Task 15 (spec V-12): the point card's "Адрес" section title. Distinct
 				// from `yourAddress` below, which labels the SEARCH field, not a card section.
 				'address'          => __( 'Адрес', 'woodev-plugin-framework' ),
@@ -724,6 +735,22 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 				// sentence about a different situation.
 				'zoomInLabel'      => __( 'Приблизить карту', 'woodev-plugin-framework' ),
 				'zoomOutLabel'     => __( 'Отдалить карту', 'woodev-plugin-framework' ),
+				// Task 4: the three states of the server round-trip behind a confirmed
+				// selection. `selectFailed` is deliberately NOT the generic `error` string
+				// above: that one is worded for a failed points FETCH ("не удалось загрузить
+				// пункты") and, shown under a button the customer has just pressed to CONFIRM
+				// a point, would describe the wrong operation entirely.
+				'confirming'       => __( 'Проверяем…', 'woodev-plugin-framework' ),
+				'selectFailed'     => __(
+					'Не удалось подтвердить выбор. Попробуйте ещё раз.',
+					'woodev-plugin-framework'
+				),
+				// A 403 on the select route is not the customer's fault and not retryable in
+				// place — the page's nonce has outlived the session it was minted for.
+				'stalePage'        => __(
+					'Страница устарела. Обновите её и выберите пункт выдачи заново.',
+					'woodev-plugin-framework'
+				),
 			];
 
 			/**
@@ -762,6 +789,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 				'provider' => $this->map_provider->get_id(),
 				'restRoot' => $this->rest_root(),
 				'nonce'    => wp_create_nonce( 'wp_rest' ),
+
+				// The DOM id of the refreshable nonce node (issue #157) — `nonce` above is
+				// only ever the PAGE-LOAD value and cannot be refreshed in place; see
+				// self::print_nonce_node() for why. Emitted so the browser knows what to
+				// look for; the read itself is a later task.
+				'nonceNodeId' => $this->nonce_node_id(),
+
 				'i18n'     => $strings,
 
 				'defaultLocation' => $this->default_location,
@@ -774,14 +808,27 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 					'billingOnly' => (bool) wc_ship_to_billing_address_only(),
 				],
 
+				// What happens AFTER the server confirms a selection — the fallback half of
+				// the contract only. The select route's own response may carry `close` and
+				// `refreshCheckout` per selection (see Selection_Result), and the browser
+				// reads `response.close ?? config.selection.close`: `??`, never `||`, because
+				// an explicit `false` from the domain must WIN over a `true` default here,
+				// and `||` would silently discard it. A flag the domain says nothing about
+				// falls back to these values.
+				//
+				// See self::$close_on_select / self::$refresh_checkout for why both defaults
+				// are `false` — neither is an unset setting, both are the framework's own
+				// deliberate behaviour.
+				'selection' => [
+					'close'           => (bool) $this->close_on_select,
+					'refreshCheckout' => (bool) $this->refresh_checkout,
+				],
+
 				// Top level, NOT inside `mapConfig`: the checkout trigger button lives
 				// outside the modal entirely and needs this too (spec D-15).
 				'accentColor' => $this->resolve_accent_color(),
 
 				// Consumed by the map provider's own address-search fit (Task 19, D-6) — see
-				// self::resolve_search_nearest_count()'s own docblock for why this is a
-				// framework-filterable constant rather than a plugin constructor argument.
-				'searchNearestCount' => $this->resolve_search_nearest_count(),
 
 				// The dialog sizes itself before any content exists (spec V-1); these two
 				// values used to live only in CSS, on the MAP element, which is why the
@@ -1037,6 +1084,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 * reasoning for why persisting any earlier silently drops the meta on classic
 		 * storage.
 		 *
+		 * The last pair is the REST-nonce refresh channel (issue #157): the footer node and
+		 * the checkout fragment that replaces it — see {@see self::print_nonce_node()} for
+		 * why the localized config's own nonce cannot be refreshed in place.
+		 *
 		 * @since 2.0.2
 		 *
 		 * @return void
@@ -1046,6 +1097,120 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 			add_action( 'rest_api_init', [ $this, 'register_rest' ] );
 			add_action( 'woocommerce_checkout_process', [ $this, 'handle_checkout_process' ] );
 			add_action( 'woocommerce_checkout_order_processed', [ $this, 'handle_checkout_order_processed' ], 10, 3 );
+			add_action( 'wp_footer', [ $this, 'print_nonce_node' ] );
+			add_filter( 'woocommerce_update_order_review_fragments', [ $this, 'inject_nonce_fragment' ] );
+		}
+
+		/**
+		 * The DOM id of this handler's REST-nonce node (issue #157).
+		 *
+		 * Derived from the SAME suffix the JS config global uses
+		 * ({@see self::config_object_suffix()}), so the node, the fragment key and the
+		 * `nonceNodeId` config value can never drift apart, and two shipping plugins on one
+		 * checkout page get two distinct nodes instead of fighting over one.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string
+		 */
+		public function nonce_node_id(): string {
+			return 'woodev-pickup-nonce-' . $this->config_object_suffix();
+		}
+
+		/**
+		 * Prints the REST-nonce node into the footer (issue #157).
+		 *
+		 * WHY THIS EXISTS. `get_js_config()` emits `nonce` through
+		 * {@see self::enqueue_assets()}'s `wp_localize_script()` call, which runs ONCE per
+		 * page load, on `wp_enqueue_scripts`, and prints the config global outside the
+		 * checkout fragment `update_checkout` re-renders. `window.woodev_pickup_config_*`
+		 * therefore never changes for the life of the page: a nonce baked into it cannot
+		 * become fresh again no matter how late the browser reads it. A checkout page left
+		 * open past the nonce's life then answers the select route with
+		 * `403 rest_cookie_invalid_nonce`. This node is the refresh channel — it lives in a
+		 * fragment WooCommerce replaces on every `update_checkout`, so a page the customer
+		 * is actively using keeps a nonce minted seconds ago.
+		 *
+		 * WHY THE FOOTER, not the checkout form. WooCommerce applies fragments by
+		 * document-wide selector match, so the node does not have to live inside the
+		 * order-review markup for the replacement to work. Keeping it out of the form avoids
+		 * competing with the §8 checkout-field layer, which re-places its own anchors inside
+		 * the form on `updated_checkout`.
+		 *
+		 * WHAT THIS DOES NOT COVER. A login or a logout invalidates every nonce IMMEDIATELY
+		 * — the session token changes — and no amount of refreshing helps a nonce minted for
+		 * a session that no longer exists. A page nobody touches never fires
+		 * `update_checkout` at all, so its node is never replaced. Both cases still end in a
+		 * 403, and belong to the browser-side «страница устарела» message (the `stalePage`
+		 * string) rather than here. This narrows the window; it does not close it.
+		 *
+		 * Gated on `is_checkout()` for the same reason {@see self::enqueue_assets()} is: the
+		 * picker only ever mounts there, and a stray hidden node (plus a needlessly minted
+		 * nonce) in every page's footer is not something a vendored framework should print.
+		 * The FRAGMENT below is deliberately NOT gated — `update_order_review` is a WC-ajax
+		 * request where `is_checkout()` is false, so the same guard there would silently
+		 * disable the whole channel.
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		public function print_nonce_node(): void {
+			if ( ! function_exists( 'is_checkout' ) || ! is_checkout() ) {
+				return;
+			}
+
+			$markup = $this->nonce_node_markup();
+
+			// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped at build time.
+			echo $markup;
+		}
+
+		/**
+		 * Replaces the nonce node on every checkout refresh (issue #157).
+		 *
+		 * Keyed by `'#' . nonce_node_id()` — the selector WooCommerce matches against the
+		 * live document — and carries a nonce minted during THIS request, which is the
+		 * entire point: see {@see self::print_nonce_node()} for why the localized config's
+		 * own `nonce` can never be refreshed, and for what this still does not cover.
+		 *
+		 * Adds exactly one key and returns the array it was given; the fragment array is
+		 * shared with WooCommerce's own order-review fragment and with every other plugin's.
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<string, string> $fragments the checkout fragments collected so far.
+		 *
+		 * @return array<string, string>
+		 */
+		public function inject_nonce_fragment( array $fragments ): array {
+			$fragments[ '#' . $this->nonce_node_id() ] = $this->nonce_node_markup();
+
+			return $fragments;
+		}
+
+		/**
+		 * Builds the nonce node's markup.
+		 *
+		 * Shared by {@see self::print_nonce_node()} and {@see self::inject_nonce_fragment()}
+		 * so the initially printed node and its replacement cannot diverge in id, attribute
+		 * name, or shape — a fragment whose markup no longer matches the node it replaces is
+		 * a silently dead channel, not a visible error.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string escaped, ready to echo.
+		 */
+		private function nonce_node_markup(): string {
+			return sprintf(
+				'<span id="%1$s" data-woodev-pickup-nonce="%2$s" hidden></span>',
+				esc_attr( $this->nonce_node_id() ),
+				esc_attr( wp_create_nonce( 'wp_rest' ) )
+			);
 		}
 
 		/**
@@ -1084,7 +1249,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 				$this->plugin_id,
 				$this->source,
 				[ $this, 'current_cart_weight_grams' ],
-				[ $this, 'rest_payment_method' ]
+				[ $this, 'rest_payment_method' ],
+				[ $this, 'rest_shipping_method' ]
 			) )->register_routes();
 		}
 
@@ -1260,6 +1426,64 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 			return is_scalar( $chosen ) ? wc_clean( (string) $chosen ) : '';
 		}
 
+		/**
+		 * Returns the shipping method id the customer is checking out with — the fifth
+		 * callable {@see Pickup_Controller} is constructed with, consumed only by its
+		 * `.../select` route's domain seam.
+		 *
+		 * `public`, not `protected`, for the same reason
+		 * {@see self::current_cart_weight_grams()} is: it is handed over as a callable array
+		 * and invoked from OUTSIDE this class's scope.
+		 *
+		 * Reads WooCommerce's own record of the live choice —
+		 * `WC()->session->get( 'chosen_shipping_methods' )`, a per-package array WooCommerce
+		 * rewrites on every `update_order_review` ajax call — rather than `$_POST`, which
+		 * {@see self::rest_payment_method()} can still try first: the selection request is a
+		 * standalone POST fired from the modal, so the checkout form's own
+		 * `shipping_method[0]` is simply not part of it. Package 0 is the primary method,
+		 * matching {@see \Woodev\Framework\Shipping\Checkout\Checkout_Handler}'s reading of
+		 * the posted value.
+		 *
+		 * The `:instance_id` suffix is stripped for the reason that class's own
+		 * `normalize_method_id()` documents: condition specs, the `requires_pickup` list and
+		 * the JS store all speak the BARE method id, so a domain seam handed
+		 * `carrier_pickup:3` would fail every comparison the rest of the framework makes
+		 * against `carrier_pickup`.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string bare method id, or empty string when WooCommerce cannot tell us.
+		 */
+		public function rest_shipping_method(): string {
+			$chosen = $this->wc_session_chosen_shipping_methods();
+
+			if ( ! is_array( $chosen ) || ! isset( $chosen[0] ) || ! is_scalar( $chosen[0] ) ) {
+				return '';
+			}
+
+			return explode( ':', (string) wc_clean( (string) $chosen[0] ) )[0];
+		}
+
+		/**
+		 * Reads WooCommerce's own record of the customer's live shipping-method choice —
+		 * `WC()->session->get( 'chosen_shipping_methods' )` — or `null` when WooCommerce is
+		 * unavailable or no session has been started yet.
+		 *
+		 * `protected` for the same test-seam reason as
+		 * {@see self::wc_session_chosen_payment_method()}: a probe overrides this single line
+		 * rather than `WC()` having to be a real function in the unit-test process.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return mixed the raw session value, or null when unavailable.
+		 */
+		protected function wc_session_chosen_shipping_methods() {
+			if ( ! function_exists( 'WC' ) || ! WC()->session ) {
+				return null;
+			}
+
+			return WC()->session->get( 'chosen_shipping_methods' );
+		}
 
 		protected function checkout_payment_method(): string {
 			// phpcs:ignore WordPress.Security.NonceVerification.Missing -- WC verifies the nonce before hooks fire.
@@ -1636,14 +1860,44 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 
 		/**
 		 * Returns a JS-identifier-safe version of the plugin id, used as the suffix in the
-		 * `woodev_pickup_config_{suffix}` JS config global name.
+		 * `woodev_pickup_config_{suffix}` JS config global name and — through
+		 * {@see self::nonce_node_id()} — in the nonce node's DOM id and its checkout-fragment
+		 * key.
+		 *
+		 * COLLAPSING IS THE BUG THIS GUARDS (issue #142). Replacing every character outside
+		 * `[a-z0-9_]` with `_` is not injective: `carrier-a`, `carrier.a` and `carrier_a` all
+		 * produce `carrier_a`. Two shipping plugins with ids that near on one checkout page
+		 * then share a config global (the second `wp_localize_script()` wins outright), a
+		 * nonce node, and a fragment key — so one plugin's picker reads the other's REST
+		 * nonce and pickup field id. Nothing about that failure looks like an id collision
+		 * from the browser, which is what makes it worth spending a few characters to
+		 * prevent.
+		 *
+		 * An id that already IS a valid identifier is returned untouched, so the common case
+		 * keeps a readable global name; only a REWRITTEN id pays for a short digest of the
+		 * ORIGINAL, which is what makes two different originals land on two different
+		 * suffixes. Collision-resistant rather than provably injective: a raw id could in
+		 * principle be spelled to match another id's digest, but that is a 32-bit coincidence
+		 * an author would have to construct deliberately, not something two carrier plugins
+		 * stumble into.
+		 *
+		 * The suffix is never read by the browser as a literal — `pickup-mount.js` discovers
+		 * configs by scanning `window` for the `woodev_pickup_config_` PREFIX, and takes the
+		 * nonce node's id from the config's own `nonceNodeId` — so its exact spelling is a
+		 * framework-internal detail, not a contract. Mirrored, deliberately, in
+		 * {@see \Woodev\Framework\Shipping\Checkout\Checkout_Handler::config_object_suffix()};
+		 * change one and look at the other.
 		 *
 		 * @since 2.0.2
 		 *
 		 * @return string
 		 */
 		private function config_object_suffix(): string {
-			return preg_replace( '/[^a-z0-9_]/i', '_', $this->plugin_id );
+			$sanitized = (string) preg_replace( '/[^a-z0-9_]/i', '_', $this->plugin_id );
+
+			return $sanitized === $this->plugin_id
+				? $sanitized
+				: $sanitized . '_' . substr( md5( $this->plugin_id ), 0, 8 );
 		}
 
 		/**

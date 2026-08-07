@@ -1400,6 +1400,101 @@ test( 'bulk: visibleChange reflects the POST-fit viewport — points sitting out
 	expect( seen[ 0 ].sort() ).toEqual( [ 'a', 'b' ] );
 } );
 
+// -------------------------------------------------------------------------
+// setPoints( groups, { focus } ) — "open the map AT this group" (s52).
+//
+// The ORDER is the contract: camera first, features second, active state third. Drawing first and
+// moving after leaves the restored marker's overlay at ymaps' own off-screen sentinel until some
+// later zoom change re-lays it out (right camera, right data-state, no visible pin) — measured on
+// the rig, invisible to jsdom, which has no overlay layer at all. What CAN be pinned here is the
+// order, and that is what these tests do.
+// -------------------------------------------------------------------------
+
+test( 'focus: the camera move happens BEFORE the features are drawn, and no bulk fit is started', async () => {
+	const provider = await init( { strategy: 'bulk' }, { deferSetBounds: true } );
+
+	provider.setPoints( [ group( 'a', 55.70, 37.60 ), group( 'b', 55.80, 37.70 ) ], { focus: 'b' } );
+
+	expect( ymapsStub.lastMap.setBoundsCalls ).toHaveLength( 0 );
+	expect( ymapsStub.lastMap.setCenterCalls ).toEqual( [ {
+		center: [ 55.80, 37.70 ],
+		zoom: 18,
+		options: { useMapMargin: true, duration: 200 },
+	} ] );
+	// Nothing drawn yet — the move has not settled.
+	expect( ymapsStub.lastObjectManager.added ).toHaveLength( 0 );
+
+	ymapsStub.lastMap.resolveNextCameraMove();
+	await flushPromises();
+
+	expect( ymapsStub.lastObjectManager.added ).toHaveLength( 2 );
+	expect( provider.getFocusedKey() ).toBe( 'b' );
+} );
+
+test( 'focus: visibleChange is emitted once, after the draw', async () => {
+	const provider = await init( { strategy: 'bulk' }, { deferSetBounds: true } );
+	const seen = [];
+
+	provider.on( 'visibleChange', ( keys ) => seen.push( keys ) );
+
+	provider.setPoints( [ group( 'a', 55.70, 37.60 ) ], { focus: 'a' } );
+
+	expect( seen ).toHaveLength( 0 );
+
+	ymapsStub.lastMap.resolveNextCameraMove();
+	await flushPromises();
+
+	expect( seen ).toHaveLength( 1 );
+} );
+
+test( 'focus: a key that is not among the groups is ignored — the map opens normally, fit and all '
+	+ '(spec D-15: a point that is gone degrades silently)', async () => {
+	const provider = await init( { strategy: 'bulk' }, { deferSetBounds: true } );
+
+	provider.setPoints( [ group( 'a', 55.70, 37.60 ) ], { focus: 'GONE' } );
+
+	expect( ymapsStub.lastMap.setCenterCalls ).toHaveLength( 0 );
+	expect( ymapsStub.lastMap.setBoundsCalls ).toHaveLength( 1 );
+	expect( ymapsStub.lastObjectManager.added ).toHaveLength( 1 );
+	expect( provider.getFocusedKey() ).toBeNull();
+} );
+
+test( 'focus: a destroy() racing the camera move draws nothing afterwards', async () => {
+	const provider = await init( { strategy: 'bulk' }, { deferSetBounds: true } );
+
+	provider.setPoints( [ group( 'a', 55.70, 37.60 ) ], { focus: 'a' } );
+	provider.destroy();
+
+	ymapsStub.lastMap.resolveNextCameraMove();
+	await flushPromises();
+
+	expect( ymapsStub.lastObjectManager.added ).toHaveLength( 0 );
+} );
+
+test( 'focus: a focusGroup() issued while the opening move travels supersedes it — the later '
+	+ 'choice wins the camera and the active state', async () => {
+	const provider = await init( { strategy: 'bulk' }, { deferSetBounds: true } );
+
+	provider.setPoints( [ group( 'a', 55.70, 37.60 ), group( 'b', 55.80, 37.70 ) ], { focus: 'a' } );
+	ymapsStub.lastObjectManager.state = { isClustered: false, cluster: null };
+
+	provider.focusGroup( 'b', { zoom: true } );
+
+	ymapsStub.lastMap.resolveCameraMoveFor( [ 55.70, 37.60 ] ); // the superseded opening move
+	await flushPromises();
+
+	// The stale continuation neither drew nor focused — `_focusSeq` discarded it.
+	expect( provider.getFocusedKey() ).toBeNull();
+} );
+
+test( 'no focus: an omitted options object still fits — opening at a point is opt-in', async () => {
+	const provider = await init( { strategy: 'bulk' }, { deferSetBounds: true } );
+
+	provider.setPoints( [ group( 'a', 55.70, 37.60 ) ] );
+
+	expect( ymapsStub.lastMap.setBoundsCalls ).toHaveLength( 1 );
+} );
+
 test( 'bulk: a destroy() racing the in-flight fit never emits visibleChange afterwards', async () => {
 	const provider = await init( { strategy: 'bulk' }, { deferSetBounds: true } );
 	const seen = [];
@@ -1701,6 +1796,12 @@ test( 'zoom branch: does not try to zoom a group whose points all share one coor
 	+ '("Russian Post" guard)', async () => {
 	const provider = await init();
 
+	// setPoints() first, so the group HAS coordinates to zoom to — otherwise this test would pass
+	// for the wrong reason (an unknown group has no target either way) and could not tell the
+	// co-located guard apart from the defensive unknown-group branch.
+	provider.setPoints( [ group( 'a', 55.75, 37.61 ) ] );
+	await flushPromises();
+
 	ymapsStub.lastObjectManager.state = {
 		isClustered: true,
 		cluster: {
@@ -1719,8 +1820,20 @@ test( 'zoom branch: does not try to zoom a group whose points all share one coor
 	expect( provider.getFocusedKey() ).toBe( 'a' );
 } );
 
-test( 'zoom branch zooms a genuine cluster via setCenter and awaits the move before reporting', async () => {
+// s52 rig defect: this used to zoom to the CLUSTER ANCHOR — an arbitrary OTHER member of the
+// cluster (measured 2 km from the point the customer had picked), which left the chosen group off
+// screen, and an ObjectManager feature that is off screen gets no overlay at all, so the
+// `data-state="active"` _applyFocus() writes had nothing to land on. The zoom branch targets the
+// GROUP's OWN coordinates now, clustered or not: MAX_ZOOM there separates it from its cluster-mates
+// just as well AND leaves it visible. The group's coordinates come from setPoints() — the earlier
+// version of this test never called it, which is exactly the blind spot gotcha
+// `focusgroup-only-moved-for-clustered-points.md` records.
+test( 'zoom branch zooms a genuine cluster to the GROUP\'S OWN coordinates via setCenter (never the '
+	+ 'cluster anchor) and awaits the move before reporting', async () => {
 	const provider = await init();
+
+	provider.setPoints( [ group( 'a', 55.7602, 37.6055 ) ] );
+	await flushPromises();
 
 	ymapsStub.lastObjectManager.state = {
 		isClustered: true,
@@ -1738,7 +1851,7 @@ test( 'zoom branch zooms a genuine cluster via setCenter and awaits the move bef
 	// the open sidebar's own map.margin area, where the customer cannot see it.
 	expect( ymapsStub.lastMap.setCenterCalls ).toHaveLength( 1 );
 	expect( ymapsStub.lastMap.setCenterCalls[ 0 ] ).toEqual( {
-		center: [ 55.75, 37.61 ],
+		center: [ 55.7602, 37.6055 ],
 		zoom: 18,
 		options: { useMapMargin: true, duration: 200 },
 	} );
@@ -1760,6 +1873,13 @@ test( 'zoom branch: an unknown group (no coordinates on record) applies focus wi
 test( 'zoom branch: re-checks getObjectState AFTER the move and does not apply focus if it is '
 	+ 'still a degenerate cluster post-move', async () => {
 	const provider = await init();
+
+	// The group needs coordinates for the zoom branch to have a target at all (s52) — and the
+	// `bulk` fit setPoints() starts must be settled before focusGroup() is called, or the state
+	// swap below would land BEFORE focusGroup() read the pre-move state (it waits for the fit) and
+	// this test would prove nothing about the POST-move re-check.
+	provider.setPoints( [ group( 'a', 55.75, 37.61 ) ] );
+	await flushPromises();
 
 	ymapsStub.lastObjectManager.state = {
 		isClustered: true,
@@ -1823,6 +1943,77 @@ test( 'pan branch never re-checks post-move — nothing about clustering could c
 	expect( provider.getFocusedKey() ).toBe( 'a' );
 } );
 
+// -------------------------------------------------------------------------
+// focusGroup()'s `_cameraFit` gate (s52 defect — restore-on-reopen moved nothing).
+//
+// `pickup-mount.js`'s restoreSelection() focuses a group ~2 ms after `setPoints()`, while the
+// `bulk` fit that same call started is still in flight. On the rig that focus DID run — camera
+// centred, `data-state="active"` written, `getFocusedKey()` correct — and was then silently
+// undone: `map.setBounds()` issues its real camera command LATE (it delegates to `setCenter()`
+// only once it has resolved the bounds against the projection, ~50 ms after the call), so the fit
+// started last and won, snapping the camera back to the city-wide view and re-clustering the
+// group — and a clustered feature has no overlay to carry `data-state` at all.
+//
+// jsdom cannot reproduce that symptom: the stub's setBounds() applies its camera state at CALL
+// time and never delegates to setCenter(), so nothing here can overwrite anything. What these
+// tests pin instead is the ORDERING CONTRACT that fixes it — no camera move while a fit is in
+// flight — which is the part a future edit could regress.
+// -------------------------------------------------------------------------
+
+test( 'focusGroup() issued while setPoints()\'s bulk fit is still in flight moves nothing until '
+	+ 'that fit has settled, then moves to the group\'s own coordinates', async () => {
+	const provider = await init( {}, { deferSetBounds: true } );
+
+	provider.setPoints( [ group( 'a', 55.7602, 37.6055 ) ] );
+	ymapsStub.lastObjectManager.state = { isClustered: false, cluster: null };
+
+	provider.focusGroup( 'a', { zoom: true } ); // exactly what restoreSelection() does
+	await flushPromises();
+
+	// The fit is still animating — issuing a camera move now is what the fit would overwrite.
+	expect( ymapsStub.lastMap.setCenterCalls ).toHaveLength( 0 );
+
+	ymapsStub.lastMap.resolveNextSetBounds();
+	await flushPromises();
+
+	expect( ymapsStub.lastMap.setCenterCalls ).toHaveLength( 1 );
+	expect( ymapsStub.lastMap.setCenterCalls[ 0 ].center ).toEqual( [ 55.7602, 37.6055 ] );
+} );
+
+test( 'focusGroup(): a focus superseded WHILE it waits for the fit never moves the camera at all', async () => {
+	const provider = await init( {}, { deferSetBounds: true } );
+
+	provider.setPoints( [ group( 'a', 1, 1 ), group( 'b', 2, 2 ) ] );
+	ymapsStub.lastObjectManager.state = { isClustered: false, cluster: null };
+
+	provider.focusGroup( 'a', { zoom: true } );
+	provider.focusGroup( 'b', { zoom: true } ); // supersedes 'a' before either could move
+
+	ymapsStub.lastMap.resolveNextSetBounds();
+	await flushPromises();
+
+	expect( ymapsStub.lastMap.setCenterCalls ).toHaveLength( 1 );
+	expect( ymapsStub.lastMap.setCenterCalls[ 0 ].center ).toEqual( [ 2, 2 ] );
+} );
+
+// The gate must be a NULL (nothing in flight) check, not an unconditional `Promise.resolve()`
+// chain: a click on a settled map has to issue its camera move inside the click's own task, the
+// way every version of this method before the gate did.
+test( 'focusGroup() on a settled map still calls setCenter SYNCHRONOUSLY — the gate applies only '
+	+ 'while a fit is actually in flight', async () => {
+	const provider = await init( {}, { deferSetBounds: true } );
+
+	provider.setPoints( [ group( 'a', 55.7602, 37.6055 ) ] );
+	ymapsStub.lastMap.resolveNextSetBounds();
+	await flushPromises();
+
+	ymapsStub.lastObjectManager.state = { isClustered: false, cluster: null };
+
+	provider.focusGroup( 'a', { zoom: true } );
+
+	expect( ymapsStub.lastMap.setCenterCalls ).toHaveLength( 1 );
+} );
+
 test( 'ignores a stale focus continuation when a second focus started first', async () => {
 	const provider = await init();
 	const slow = provider.focusGroup( 'a' );
@@ -1883,6 +2074,11 @@ test( 'focusGroup: the out-of-order resolution guard for _focusSeq also holds fo
 	const provider = await init( {}, { deferSetBounds: true } );
 
 	provider.setPoints( [ group( 'a', 1, 1 ), group( 'b', 2, 2 ) ] );
+	// setPoints()'s own deferred `bulk` fit gates focusGroup() (s52) — settle it, or neither focus
+	// below ever reaches its setCenter() call. Same move the focusAddress() ordering test makes.
+	ymapsStub.lastMap.resolveNextSetBounds();
+	await flushPromises();
+
 	ymapsStub.lastMap.setCenterCalls.length = 0;
 	ymapsStub.lastObjectManager.state = { isClustered: false, cluster: null };
 
@@ -2639,18 +2835,27 @@ test( 'resolveAddress() end-to-end: the geocoded coordinates drive the same fit 
 	// count below is taken as a DELTA from here, so that fit is never mistaken for
 	// resolveAddress()'s own.
 	provider.setPoints( [ group( 'a', 55.751 ), group( 'b', 55.999 ) ] );
-	ymapsStub.geocodeResult = makeGeocodeResult( [ [ 10, 20 ], [ 11, 21 ] ], [ 55.75, 37.61 ] );
+
+	// The two halves of ONE geocoder hit, deliberately disjoint so a swap cannot pass: the
+	// BOUNDS frame the camera, the COORDINATES anchor everything else (addressFocused, the
+	// same-place check, the sidebar's distance sort). Reading one where the other belongs is the
+	// easiest possible mistake here — both are read off `geoObjects.get(0)`.
+	const resultBounds = [ [ 10, 20 ], [ 11, 21 ] ];
+	const resultCoordinates = [ 55.75, 37.61 ];
+
+	ymapsStub.geocodeResult = makeGeocodeResult( resultBounds, resultCoordinates );
+
+	const seenFocused = [];
+
+	provider.on( 'addressFocused', ( info ) => seenFocused.push( info ) );
 
 	const callsBefore = ymapsStub.lastMap.setBoundsCalls.length;
 
 	await provider.resolveAddress( 'Москва, Ленина 5' );
 
 	expect( ymapsStub.lastMap.setBoundsCalls ).toHaveLength( callsBefore + 1 );
-	// group 'b' (55.999) is far outside the default nearest-3 fit's own test below — here there
-	// are only two groups, both within the default count of 3, so the fit must include 'b' too.
-	const fitted = ymapsStub.lastMap.setBoundsCalls[ ymapsStub.lastMap.setBoundsCalls.length - 1 ].bounds;
-
-	expect( fitted[ 1 ][ 0 ] ).toBeGreaterThanOrEqual( 55.999 );
+	expect( ymapsStub.lastMap.setBoundsCalls[ callsBefore ].bounds ).toEqual( resultBounds );
+	expect( seenFocused ).toEqual( [ { latLng: resultCoordinates, label: 'Москва, Ленина 5' } ] );
 } );
 
 // Renamed from "is a silent no-op" (live-review round 4, second follow-up) — it no longer is:
@@ -2667,42 +2872,45 @@ test( 'resolveAddress() never moves the camera when the geocode result has no us
 	expect( ymapsStub.lastMap.setBoundsCalls ).toHaveLength( 0 );
 } );
 
-test( 'fits the address plus the three nearest groups — the fitted bounds are the EXACT box '
-	+ 'containing all three, not just the single closest one, and the fourth is excluded', async () => {
+// #167: the camera policy is the REFERENCE's — Yandex.Delivery hands search to ymaps'
+// own SearchControl, which frames the found object's own bounds, and has no notion of
+// "keep the N nearest points in shot" anywhere in its file. Ours used to build a box that had
+// to contain the address AND its three nearest groups, so an address 14km from the loaded
+// points produced a ~28km frame: "half of Moscow, and you still have to find the address".
+test( 'the frame is the FOUND OBJECT\'s own bounds — the loaded points play no part (#167)', async () => {
 	const provider = await init();
-	const anchor = [ 55.75, 37.61 ];
-	const groups = [ group( 'a', 55.751 ), group( 'b', 55.752 ), group( 'c', 55.753 ),
-		group( 'd', 55.999 ) ];
 
-	provider.setPoints( groups );
-	await provider.focusAddress( anchor, 'Москва, Ленина 5' );
+	// A deliberately far group. Under the old policy the frame had to stretch to contain it;
+	// under this one its position is irrelevant to the camera.
+	provider.setPoints( [ group( 'far', 55.999 ) ] );
 
-	const fitted = ymapsStub.lastMap.setBoundsCalls.pop().bounds;
-	// The exact box CENTRED ON THE ANCHOR and built from a, b, c (NOT d) — a mutant that fit to
-	// only the single closest group ('a'), or that used geo.boundsFor()'s off-centre box instead
-	// of the anchor-centred one, would produce a DIFFERENT box and fail this equality.
-	const expected = expectedFocusAddressBounds( anchor, [ groups[ 0 ], groups[ 1 ], groups[ 2 ] ] );
+	const houseBounds = [ [ 55.7400, 37.6000 ], [ 55.7405, 37.6005 ] ];
 
-	expect( fitted ).toEqual( expected );
-	expect( fitted[ 1 ][ 0 ] ).toBeLessThan( 55.999 ); // the far group is not in frame
-	// The anchor itself is the box's exact centre (Finding B) — not merely inside it somewhere.
-	expect( ( fitted[ 0 ][ 0 ] + fitted[ 1 ][ 0 ] ) / 2 ).toBeCloseTo( anchor[ 0 ], 10 );
-	expect( ( fitted[ 0 ][ 1 ] + fitted[ 1 ][ 1 ] ) / 2 ).toBeCloseTo( anchor[ 1 ], 10 );
+	ymapsStub.geocodeResult = makeGeocodeResult( houseBounds, [ 55.7402, 37.6002 ] );
+
+	// setPoints() fires its OWN bulk fit, so the count is taken as a delta from here.
+	const before = ymapsStub.lastMap.setBoundsCalls.length;
+
+	await provider.resolveAddress( 'Чертановская 66к1' );
+
+	expect( ymapsStub.lastMap.setBoundsCalls ).toHaveLength( before + 1 );
+	expect( ymapsStub.lastMap.setBoundsCalls[ before ].bounds ).toEqual( houseBounds );
 } );
 
-test( 'honours the nearest-count filter value handed in by config', async () => {
-	const provider = await init( { searchNearestCount: 1 } );
-	const anchor = [ 55.75, 37.61 ];
-	const groups = [ group( 'a', 55.751 ), group( 'b', 55.9 ) ];
+// The granularity comes free with the geocoder's own answer: a house gives a house-sized box,
+// a city gives a city-sized one. That is the whole reason for framing the RESULT rather than
+// picking a zoom number ourselves — no rule of ours has to guess what was searched for.
+test( 'a city-sized result frames the city, a house-sized one the house — same code path', async () => {
+	const provider = await init();
+	const cityBounds = [ [ 55.49, 37.32 ], [ 56.01, 37.96 ] ];
 
-	provider.setPoints( groups );
-	await provider.focusAddress( anchor, 'X' );
+	ymapsStub.geocodeResult = makeGeocodeResult( cityBounds, [ 55.75, 37.61 ] );
 
-	const fitted = ymapsStub.lastMap.setBoundsCalls.pop().bounds;
-	// count: 1 — the box must be built from 'a' ALONE, never both groups.
-	const expected = expectedFocusAddressBounds( anchor, [ groups[ 0 ] ] );
+	const before = ymapsStub.lastMap.setBoundsCalls.length;
 
-	expect( fitted ).toEqual( expected );
+	await provider.resolveAddress( 'Москва' );
+
+	expect( ymapsStub.lastMap.setBoundsCalls[ before ].bounds ).toEqual( cityBounds );
 } );
 
 // The threshold's two sides, pinned together (Codex review follow-up, MEDIUM): a mutant that
@@ -2762,43 +2970,72 @@ test( 'resolveAddress() (the real search-pick flow) triggers addressFocused via 
 	expect( seen ).toEqual( [ { latLng: [ 3, 4 ], label: 'Some Address' } ] );
 } );
 
-test( 'a nearest point comfortably inside the threshold FITS and reports no nothingNearby', async () => {
+// "Nothing nearby" is now a GEOMETRIC fact, not a distance constant (#167): after the camera
+// settles on the address, either the customer can see a point in the frame or they cannot. The
+// old 50km threshold was a number nobody could justify — under it, a point 40km away counted as
+// "nearby" and got fitted, which is exactly the zoomed-out frame the operator reported.
+test( 'a point inside the settled frame reports no nothingNearby', async () => {
 	const seen = [];
 	const provider = await init();
-	const anchor = [ 55.75, 37.61 ];
-	const groups = [ group( 'near', 55.8 ) ]; // ~5.6 km away — well inside NEARBY_THRESHOLD_M
+	// ~420m from the address: inside the frame below, and comfortably past the 30m
+	// "this address IS the point" threshold, which would otherwise short-circuit the whole flow.
+	const near = groupWith( { id: 'near', name: 'ПВЗ «Рядом»', lat: 55.7440, lng: 37.6040 } );
 
 	provider.on( 'nothingNearby', ( info ) => seen.push( info ) );
-	provider.setPoints( groups );
+	provider.setPoints( [ near ] );
 
-	await provider.focusAddress( anchor, 'X' );
+	ymapsStub.geocodeResult = makeGeocodeResult(
+		[ [ 55.735, 37.595 ], [ 55.745, 37.605 ] ],
+		[ 55.7402, 37.6002 ]
+	);
+
+	await provider.resolveAddress( 'дом рядом с пунктом' );
 
 	expect( seen ).toHaveLength( 0 );
-	expect( ymapsStub.lastMap.setBoundsCalls.pop().bounds ).toEqual( expectedFocusAddressBounds( anchor, groups ) );
 } );
 
-test( 'a nearest point beyond the threshold reports nothingNearby with its EXACT distance and '
-	+ 'name, and never fits', async () => {
+test( 'a frame containing no point at all reports nothingNearby with the nearest one\'s EXACT '
+	+ 'distance and name', async () => {
 	const seen = [];
 	const provider = await init();
-	const anchor = [ 55.75, 37.61 ];
-	const farGroup = groupWith( { id: 'far', name: 'ПВЗ «Далеко»', lat: 56.6 } ); // ~94.5 km away
-	const expectedDistance = geo.distanceMeters( anchor, [ farGroup.lat, farGroup.lng ] );
+	const address = [ 55.7402, 37.6002 ];
+	const far = groupWith( { id: 'far', name: 'ПВЗ «Далеко»', lat: 55.999 } );
+	const expectedDistance = geo.distanceMeters( address, [ far.lat, far.lng ] );
 
 	provider.on( 'nothingNearby', ( info ) => seen.push( info ) );
-	provider.setPoints( [ farGroup ] );
+	provider.setPoints( [ far ] );
 
-	// setPoints() itself already triggered its own bulk-strategy fit above — checked as a DELTA
-	// from here, so it is never mistaken for a fit focusAddress() itself performed.
-	const callsBeforeFocus = ymapsStub.lastMap.setBoundsCalls.length;
+	ymapsStub.geocodeResult = makeGeocodeResult(
+		[ [ 55.7400, 37.6000 ], [ 55.7405, 37.6005 ] ],
+		address
+	);
 
-	await provider.focusAddress( anchor, 'X' );
+	await provider.resolveAddress( 'дом без пунктов вокруг' );
 
-	expect( expectedDistance ).toBeGreaterThan( 50000 ); // sanity: the fixture IS beyond threshold
+	// Well under the old 50km threshold — proving the rule really is the frame and not a
+	// shrunken constant: this case used to FIT the far point instead of reporting anything.
+	expect( expectedDistance ).toBeLessThan( 50000 );
 	expect( seen ).toHaveLength( 1 );
+	expect( seen[ 0 ].key ).toBe( far.key );
 	expect( seen[ 0 ].distanceMeters ).toBeCloseTo( expectedDistance, 6 );
 	expect( seen[ 0 ].name ).toBe( 'ПВЗ «Далеко»' );
-	expect( ymapsStub.lastMap.setBoundsCalls ).toHaveLength( callsBeforeFocus ); // never fits this far
+} );
+
+// The camera still moves in the far case — that is the difference from the old policy, which
+// refused to move at all beyond its threshold and left the customer looking at the previous
+// viewport with no explanation on the map itself.
+test( 'the camera still frames the address even when nothing is nearby', async () => {
+	const provider = await init();
+	const houseBounds = [ [ 55.7400, 37.6000 ], [ 55.7405, 37.6005 ] ];
+
+	provider.setPoints( [ groupWith( { id: 'far', name: 'ПВЗ «Далеко»', lat: 55.999 } ) ] );
+	ymapsStub.geocodeResult = makeGeocodeResult( houseBounds, [ 55.7402, 37.6002 ] );
+
+	const before = ymapsStub.lastMap.setBoundsCalls.length;
+
+	await provider.resolveAddress( 'дом без пунктов вокруг' );
+
+	expect( ymapsStub.lastMap.setBoundsCalls[ before ].bounds ).toEqual( houseBounds );
 } );
 
 test( 'focusAddress() with no groups loaded neither fits nor reports nothingNearby — there is '
@@ -2847,7 +3084,11 @@ test( 'focusAddress(): the returned promise resolves only once the camera fit se
 	await flushPromises();
 
 	let resolved = false;
-	const focusPromise = provider.focusAddress( [ 55.75, 37.61 ], 'X' ).then( () => {
+	const focusPromise = provider.focusAddress(
+		[ 55.75, 37.61 ],
+		'X',
+		[ [ 55.74, 37.60 ], [ 55.76, 37.62 ] ]
+	).then( () => {
 		resolved = true;
 	} );
 
@@ -2950,25 +3191,26 @@ test( 'an address resolving within SAME_PLACE_THRESHOLD_M of a loaded group emit
 	expect( ymapsStub.lastMap.setBoundsCalls ).toHaveLength( 0 );
 } );
 
-test( 'an address just OUTSIDE SAME_PLACE_THRESHOLD_M keeps today\'s nearest-N behaviour exactly '
-	+ '— addressFocused fires, the fit happens, no addressMatchedPoint', async () => {
+test( 'an address just OUTSIDE SAME_PLACE_THRESHOLD_M is treated as an ADDRESS — addressFocused '
+	+ 'fires, the camera frames the result, no addressMatchedPoint', async () => {
 	const seenMatched = [];
 	const seenFocused = [];
 	const provider = await init();
 	const anchor = [ 55.75, 37.61 ];
-	// ~111m away (0.001° lat) — outside the 30m threshold, comfortably inside the nearby one.
+	// ~111m away (0.001° lat) — outside the 30m "this address IS the point" threshold.
 	const groups = [ group( 'a', 55.751, 37.61 ) ];
+	const resultBounds = [ [ 55.749, 37.609 ], [ 55.752, 37.612 ] ];
 
 	provider.setPoints( groups );
 
 	provider.on( 'addressMatchedPoint', ( info ) => seenMatched.push( info ) );
 	provider.on( 'addressFocused', ( info ) => seenFocused.push( info ) );
 
-	await provider.focusAddress( anchor, 'Тверская 1' );
+	await provider.focusAddress( anchor, 'Тверская 1', resultBounds );
 
 	expect( seenMatched ).toHaveLength( 0 );
 	expect( seenFocused ).toEqual( [ { latLng: anchor, label: 'Тверская 1' } ] );
-	expect( ymapsStub.lastMap.setBoundsCalls.pop().bounds ).toEqual( expectedFocusAddressBounds( anchor, groups ) );
+	expect( ymapsStub.lastMap.setBoundsCalls.pop().bounds ).toEqual( resultBounds );
 } );
 
 test( 'resolveAddress() (the real search-pick flow) routes a same-place result through '
@@ -3005,22 +3247,45 @@ test( 'the same-place check picks the NEAREST group, not just any loaded one, wh
 	expect( seenMatched ).toEqual( [ { key: 'near' } ] );
 } );
 
-test( 'focusAddress()\'s nearest-N fit is animated AND respects the map margins (live-review '
+test( 'focusAddress()\'s frame is animated AND respects the map margins (live-review '
 	+ 'round 3/4 — an un-animated jump cut read as "did the map even move?", and a fit with no '
 	+ 'useMapMargin can land the address underneath the sidebar/top strip)', async () => {
 	const provider = await init();
 	const anchor = [ 55.75, 37.61 ];
-	const groups = [ group( 'near', 55.8, 37.61 ) ];
 
-	provider.setPoints( groups );
+	provider.setPoints( [ group( 'near', 55.8, 37.61 ) ] );
 
-	await provider.focusAddress( anchor, 'X' );
+	await provider.focusAddress( anchor, 'X', [ [ 55.74, 37.60 ], [ 55.76, 37.62 ] ] );
 
 	expect( ymapsStub.lastMap.setBoundsCalls.pop().options ).toEqual( {
 		checkZoomRange: true,
 		duration: 400,
 		useMapMargin: true,
 	} );
+} );
+
+// The fallback path (#167) — a geocoder hit with no `boundedBy` of its own. It must still animate
+// and still respect the margins, or the one degraded case becomes the one jarring case.
+test( 'a hit with no bounds centres on the address at the fallback zoom, animated and '
+	+ 'margin-aware', async () => {
+	const provider = await init();
+	const anchor = [ 55.75, 37.61 ];
+
+	provider.setPoints( [ group( 'near', 55.8, 37.61 ) ] );
+
+	const beforeBounds = ymapsStub.lastMap.setBoundsCalls.length;
+	const beforeCentre = ymapsStub.lastMap.setCenterCalls.length;
+
+	await provider.focusAddress( anchor, 'X' );
+
+	expect( ymapsStub.lastMap.setBoundsCalls ).toHaveLength( beforeBounds ); // no box to fit
+	expect( ymapsStub.lastMap.setCenterCalls ).toHaveLength( beforeCentre + 1 );
+
+	const call = ymapsStub.lastMap.setCenterCalls[ beforeCentre ];
+
+	expect( call.center ).toEqual( anchor );
+	expect( call.zoom ).toBe( 16 );
+	expect( call.options ).toEqual( { duration: 400, useMapMargin: true } );
 } );
 
 // -------------------------------------------------------------------------
@@ -3052,24 +3317,35 @@ test( 'a group entirely hidden by the active type filter is never offered as a s
 	expect( seenFocused ).toEqual( [ { latLng: anchor, label: 'Тверская 1' } ] );
 } );
 
-test( 'a group entirely hidden by the active type filter is excluded from the nearest-N fit — '
-	+ 'the camera fits only to groups the filter still shows', async () => {
+// The filter no longer touches the CAMERA (that was the nearest-N fit, deleted in #167), but it
+// still decides what counts as a point at all — so a frame whose only occupant is filtered out is
+// an EMPTY frame, and must say so.
+test( 'a group hidden by the active type filter does not count as being in frame — nothingNearby '
+	+ 'still fires even though it is geometrically inside', async () => {
+	const seen = [];
 	const provider = await init();
-	const anchor = [ 55.75, 37.61 ];
-	const shown = mixedGroup( 'shown', 55.751, 37.61, [ { typeCode: 'postamat' } ] );
-	const hidden = mixedGroup( 'hidden', 55.752, 37.61, [ { typeCode: 'pvz' } ] ); // closer, but filtered
+	const address = [ 55.7402, 37.6002 ];
+	// Inside the frame below, but its only point is filtered away — so the frame is EMPTY.
+	const hidden = mixedGroup( 'hidden', 55.7404, 37.6004, [ { typeCode: 'pvz' } ] );
+	// Far outside the frame, and the only group the filter still shows — so it is what gets named.
+	const shownFar = mixedGroup( 'shown-far', 55.999, 37.6004, [ { typeCode: 'postamat' } ] );
 
-	provider.setPoints( [ hidden, shown ] );
+	provider.setPoints( [ hidden, shownFar ] );
 	provider.setTypeFilter( [ 'postamat' ] );
+	provider.on( 'nothingNearby', ( info ) => seen.push( info ) );
 
-	await provider.focusAddress( anchor, 'X' );
+	ymapsStub.geocodeResult = makeGeocodeResult(
+		[ [ 55.7400, 37.6000 ], [ 55.7410, 37.6010 ] ],
+		address
+	);
 
-	const fitted = ymapsStub.lastMap.setBoundsCalls.pop().bounds;
-	// The fit built from `shown` ALONE — a mutant that ignored the filter would include `hidden`
-	// (the geometrically closer group) and produce a DIFFERENT, wider box.
-	const expected = expectedFocusAddressBounds( anchor, [ shown ] );
+	await provider.resolveAddress( 'дом, где единственный ближний пункт отфильтрован' );
 
-	expect( fitted ).toEqual( expected );
+	// Named `shown-far`, NOT the geometrically closer `hidden`: offering a point the customer
+	// has just filtered out would contradict the filter, and the sidebar list beside them does
+	// not contain it either.
+	expect( seen ).toHaveLength( 1 );
+	expect( seen[ 0 ].key ).toBe( shownFar.key );
 } );
 
 test( 'a group that survives the filter through a DIFFERENT (non-first) point is still a valid '

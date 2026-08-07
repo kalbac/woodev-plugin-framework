@@ -240,6 +240,17 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 		public function wc_session_chosen_payment_method_public() {
 			return $this->wc_session_chosen_payment_method();
 		}
+
+		/**
+		 * Exposes the protected wc_session_chosen_shipping_methods() seam's OWN
+		 * default body for direct assertions — same reasoning as
+		 * {@see self::wc_cart_public()}.
+		 *
+		 * @return mixed
+		 */
+		public function wc_session_chosen_shipping_methods_public() {
+			return $this->wc_session_chosen_shipping_methods();
+		}
 	}
 
 	/**
@@ -396,6 +407,37 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 		}
 
 		protected function wc_session_chosen_payment_method() {
+			return $this->session_value;
+		}
+	}
+
+	/**
+	 * Probe exercising the REAL rest_shipping_method() reading of
+	 * `WC()->session->get( 'chosen_shipping_methods' )` while overriding only
+	 * {@see Pickup_Handler::wc_session_chosen_shipping_methods()} — for the same
+	 * "never mock WC() itself" reason {@see Pickup_Handler_Session_Probe} documents.
+	 */
+	final class Pickup_Handler_Shipping_Session_Probe extends Pickup_Handler {
+
+		/** @var mixed */
+		private $session_value;
+
+		/**
+		 * @param mixed $session_value what wc_session_chosen_shipping_methods() returns.
+		 */
+		public function __construct(
+			string $plugin_id,
+			string $field_id,
+			Point_Source $source,
+			Map_Provider $map_provider,
+			array $default_location,
+			$session_value
+		) {
+			parent::__construct( $plugin_id, $field_id, $source, $map_provider, $default_location );
+			$this->session_value = $session_value;
+		}
+
+		protected function wc_session_chosen_shipping_methods() {
 			return $this->session_value;
 		}
 	}
@@ -580,7 +622,9 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				$overrides['point_icons'] ?? [],
 				$overrides['accent_color'] ?? '#06aedd',
 				$overrides['setting_accent'] ?? '',
-				$overrides['search_enabled'] ?? true
+				$overrides['search_enabled'] ?? true,
+				$overrides['close_on_select'] ?? false,
+				$overrides['refresh_checkout'] ?? false
 			);
 		}
 
@@ -935,6 +979,83 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			$this->assertFalse( $config['replaceAddress']['billingOnly'] );
 		}
 
+		// -------------------------------------------------------------------------
+		// get_js_config() — the `selection` block (Task 4): what the browser falls
+		// back to when the domain's verdict says nothing about a flag
+		// -------------------------------------------------------------------------
+
+		/**
+		 * Both flags are `false` by default, and that is a decision, not an accident —
+		 * see {@see Pickup_Handler::$close_on_select} / {@see Pickup_Handler::$refresh_checkout}
+		 * for why. Pinned here so a "harmless" default flip (which would silently close the
+		 * modal on every carrier, or bill every carrier for a checkout refresh) cannot land
+		 * with the suite green.
+		 */
+		public function test_config_selection_flags_both_default_to_false(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			$this->stub_config_dependencies_except_filters();
+
+			$config = $this->make_handler()->get_js_config();
+
+			$this->assertSame(
+				[ 'close' => false, 'refreshCheckout' => false ],
+				$config['selection']
+			);
+		}
+
+		public function test_config_selection_flags_come_from_the_constructor(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			$this->stub_config_dependencies_except_filters();
+
+			$config = $this->make_handler(
+				[ 'close_on_select' => true, 'refresh_checkout' => true ]
+			)->get_js_config();
+
+			$this->assertSame(
+				[ 'close' => true, 'refreshCheckout' => true ],
+				$config['selection']
+			);
+		}
+
+		/**
+		 * The two flags are independent switches, not one setting under two names — a
+		 * carrier that wants the modal to close on select does not thereby want a checkout
+		 * refresh, and vice versa. A mutant assigning one property from the other argument
+		 * survives both tests above; it does not survive this one.
+		 */
+		public function test_config_selection_flags_are_independent(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			$this->stub_config_dependencies_except_filters();
+
+			$close_only = $this->make_handler( [ 'close_on_select' => true ] )->get_js_config();
+			$refresh    = $this->make_handler( [ 'refresh_checkout' => true ] )->get_js_config();
+
+			$this->assertSame( [ 'close' => true, 'refreshCheckout' => false ], $close_only['selection'] );
+			$this->assertSame( [ 'close' => false, 'refreshCheckout' => true ], $refresh['selection'] );
+		}
+
+		/**
+		 * The three confirmation strings (Task 4) the CTA's busy/failure states read by name.
+		 * A missing key here renders BLANK under a button the customer just pressed, so
+		 * presence AND non-emptiness are both asserted — the same contract the panel keys
+		 * carry.
+		 */
+		public function test_config_i18n_carries_the_three_confirmation_strings(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			$this->stub_config_dependencies_except_filters();
+
+			$i18n = $this->make_handler()->get_js_config()['i18n'];
+
+			foreach ( [ 'confirming', 'selectFailed', 'stalePage' ] as $key ) {
+				$this->assertArrayHasKey( $key, $i18n, "i18n is missing the \"{$key}\" confirmation key" );
+				$this->assertNotSame( '', $i18n[ $key ], "i18n[\"{$key}\"] must not be empty" );
+			}
+
+			// `selectFailed` is deliberately NOT the generic `error` string: that one is
+			// written for a failed points FETCH and would be misleading under a confirm button.
+			$this->assertNotSame( $i18n['error'], $i18n['selectFailed'] );
+		}
+
 		public function test_config_rest_root_uses_the_sanitized_plugin_segment(): void {
 			Functions\when( 'apply_filters' )->returnArg( 2 );
 			Functions\when( 'rest_url' )->alias(
@@ -1011,13 +1132,14 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 					'provider',
 					'restRoot',
 					'nonce',
+					'nonceNodeId',
 					'i18n',
 					'defaultLocation',
 					'pointIcons',
 					'mapConfig',
 					'replaceAddress',
+					'selection',
 					'accentColor',
-					'searchNearestCount',
 					'modal',
 					'search',
 				],
@@ -1506,54 +1628,6 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 		}
 
 		// -------------------------------------------------------------------------
-		// searchNearestCount (Task 19, D-6) — framework default, filterable, sanitised
-		// -------------------------------------------------------------------------
-
-		public function test_search_nearest_count_defaults_to_three(): void {
-			Functions\when( 'apply_filters' )->returnArg( 2 );
-			$this->stub_config_dependencies_except_filters();
-
-			$this->assertSame( 3, $this->make_handler()->get_js_config()['searchNearestCount'] );
-		}
-
-		public function test_a_filter_overrides_the_search_nearest_count(): void {
-			Filters\expectApplied( 'woodev_pickup_search_nearest_count' )->andReturn( 5 );
-			$this->stub_config_dependencies_except_filters();
-
-			$this->assertSame( 5, $this->make_handler()->get_js_config()['searchNearestCount'] );
-		}
-
-		/**
-		 * The filter is untrusted input on a path that ends in a camera fit — a zero,
-		 * negative, or non-integer return value falls back to the framework default rather
-		 * than reaching the browser as a count that would fit the camera to nothing (or
-		 * throw client-side), same discipline as `resolve_accent_color()`'s own filter.
-		 *
-		 * @dataProvider garbage_search_nearest_count_provider
-		 * @param mixed $garbage
-		 */
-		public function test_a_filter_returning_garbage_falls_back_to_the_default_search_nearest_count(
-			$garbage
-		): void {
-			Filters\expectApplied( 'woodev_pickup_search_nearest_count' )->andReturn( $garbage );
-			$this->stub_config_dependencies_except_filters();
-
-			$this->assertSame( 3, $this->make_handler()->get_js_config()['searchNearestCount'] );
-		}
-
-		/**
-		 * @return array<string, array{0: mixed}>
-		 */
-		public static function garbage_search_nearest_count_provider(): array {
-			return [
-				'zero'     => [ 0 ],
-				'negative' => [ -1 ],
-				'string'   => [ '5' ],
-				'float'    => [ 2.5 ],
-				'null'     => [ null ],
-			];
-		}
-
 		public function test_config_contains_no_object_or_closure_anywhere(): void {
 			Functions\when( 'apply_filters' )->returnArg( 2 );
 			Functions\when( 'rest_url' )->justReturn( 'https://example.test/wp-json/woodev/v1' );
@@ -1603,7 +1677,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 		 * here is a silent UI hole nothing else would catch. Assert every key is present
 		 * AND non-empty; the exact-set list also fails loudly the instant one is renamed.
 		 */
-		public function test_config_i18n_carries_all_nine_map_provider_keys_non_empty(): void {
+		public function test_config_i18n_carries_all_map_provider_keys_non_empty(): void {
 			Functions\when( 'apply_filters' )->returnArg( 2 );
 			Functions\when( 'rest_url' )->justReturn( 'https://example.test/wp-json/woodev/v1' );
 			Functions\when( 'wp_create_nonce' )->justReturn( 'NONCE' );
@@ -1622,7 +1696,6 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			// and non-empty, so a presence-only check cannot catch it. Pinning the exact
 			// string per key is what does.
 			$expected = [
-				'search'         => 'Поиск по адресу',
 				'drawerTitle'    => 'Пункты выдачи в этой области',
 				'howToGet'       => 'Как добраться',
 				'paymentMethods' => 'Способы оплаты',
@@ -1687,8 +1760,11 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				'upstreamError'    => 'Сервис пунктов выдачи временно недоступен. Попробуйте ещё раз позже.',
 				'rateLimited'      => 'Слишком много запросов. Подождите немного и попробуйте снова.',
 				'notFound'         => 'Этот пункт выдачи больше не найден. Пожалуйста, выберите другой.',
-				'search'           => 'Поиск по адресу',
 				'drawerTitle'      => 'Пункты выдачи в этой области',
+				// #168: the sidebar toggle's second name — `drawerTitle` names it while the
+				// drawer is closed, this one while it is open (and it is the visible text of
+				// the mobile open-list bar, the one state that renders a label at all).
+				'showMap'          => 'Показать карту',
 				'howToGet'         => 'Как добраться',
 				'paymentMethods'   => 'Способы оплаты',
 				'workTime'         => 'Часы работы',
@@ -1720,6 +1796,12 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				// The Task 14 (spec V-13) zoom control keys.
 				'zoomInLabel'      => 'Приблизить карту',
 				'zoomOutLabel'     => 'Отдалить карту',
+				// The Task 4 confirmation keys — the server round-trip's three states.
+				// `selectFailed` is deliberately not `error`: that one describes a failed
+				// points FETCH, not a refused confirmation.
+				'confirming'       => 'Проверяем…',
+				'selectFailed'     => 'Не удалось подтвердить выбор. Попробуйте ещё раз.',
+				'stalePage'        => 'Страница устарела. Обновите её и выберите пункт выдачи заново.',
 			];
 
 			$this->assertSame(
@@ -2741,6 +2823,104 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 		}
 
 		// -------------------------------------------------------------------------
+		// rest_shipping_method() — the fifth callable Pickup_Controller is built
+		// with, feeding the `.../select` route's domain seam. Session-only: the
+		// selection request is a standalone POST from the modal, so the checkout
+		// form's own shipping_method[0] is never part of it.
+		// -------------------------------------------------------------------------
+
+		/**
+		 * The `:instance_id` suffix must be stripped — the rest of the framework
+		 * (condition specs, `requires_pickup`, the JS store) speaks the BARE method
+		 * id, so a domain seam handed `carrier_pickup:3` would fail every comparison
+		 * made against `carrier_pickup`. A mutant returning the raw session value
+		 * fails here, not on any of the tests below.
+		 */
+		public function test_rest_shipping_method_strips_the_instance_id_suffix(): void {
+			$handler = new Pickup_Handler_Shipping_Session_Probe(
+				'p',
+				'f',
+				$this->source_returning( null ),
+				$this->yandex_provider(),
+				$this->default_location(),
+				[ 'carrier_pickup:3' ]
+			);
+
+			$this->assertSame( 'carrier_pickup', $handler->rest_shipping_method() );
+		}
+
+		/**
+		 * Package 0 is the primary method, matching Checkout_Handler's own reading of
+		 * the posted value — a mutant taking the last package instead answers
+		 * 'flat_rate'.
+		 */
+		public function test_rest_shipping_method_reads_the_first_package(): void {
+			$handler = new Pickup_Handler_Shipping_Session_Probe(
+				'p',
+				'f',
+				$this->source_returning( null ),
+				$this->yandex_provider(),
+				$this->default_location(),
+				[ 'carrier_pickup', 'flat_rate' ]
+			);
+
+			$this->assertSame( 'carrier_pickup', $handler->rest_shipping_method() );
+		}
+
+		/**
+		 * No session, no packages, or a non-scalar entry (defensive — nothing stops a
+		 * plugin writing junk under this key) must degrade to `''`, never fatal on the
+		 * `(string)` cast. `''` is a method no plugin matches, so the domain seam simply
+		 * cannot key off it.
+		 *
+		 * @dataProvider provide_unusable_shipping_session_values
+		 *
+		 * @param mixed $session_value what the seam returns.
+		 */
+		public function test_rest_shipping_method_is_empty_for_an_unusable_session_value( $session_value ): void {
+			$handler = new Pickup_Handler_Shipping_Session_Probe(
+				'p',
+				'f',
+				$this->source_returning( null ),
+				$this->yandex_provider(),
+				$this->default_location(),
+				$session_value
+			);
+
+			$this->assertSame( '', $handler->rest_shipping_method() );
+		}
+
+		/**
+		 * @return array<string, array{0: mixed}>
+		 */
+		public function provide_unusable_shipping_session_values(): array {
+			return [
+				'no session at all'   => [ null ],
+				'not an array'        => [ 'carrier_pickup' ],
+				'empty package list'  => [ [] ],
+				'non-scalar package'  => [ [ [ 'unexpected' => 'array' ] ] ],
+			];
+		}
+
+		/**
+		 * `wc_session_chosen_shipping_methods()`'s OWN default body (not the probe) —
+		 * proves the seam itself degrades to `null`, not a fatal, when WC() genuinely
+		 * does not exist in this unit-test process. Same reasoning as
+		 * {@see self::test_wc_session_chosen_payment_method_is_null_when_wc_is_unavailable()}.
+		 */
+		public function test_wc_session_chosen_shipping_methods_is_null_when_wc_is_unavailable(): void {
+			$handler = new Pickup_Handler_Probe(
+				'p',
+				'f',
+				$this->source_returning( null ),
+				$this->yandex_provider(),
+				$this->default_location()
+			);
+
+			$this->assertNull( $handler->wc_session_chosen_shipping_methods_public() );
+		}
+
+		// -------------------------------------------------------------------------
 		// current_cart_weight_grams() — the grams conversion is now Constraint_Checker's;
 		// see ConstraintCheckerTest for the wc_get_weight()-target-unit mutation guard.
 		// SP-5 rig e2e BLOCKING fix: the points/detail REST routes never had a
@@ -3078,6 +3258,16 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				->once()
 				->with( 'woocommerce_checkout_order_processed', \Mockery::type( 'array' ), 10, 3 );
 
+			// Issue #157: the nonce-refresh channel — the footer node and the fragment that
+			// replaces it on every update_checkout.
+			Functions\expect( 'add_action' )
+				->once()
+				->with( 'wp_footer', \Mockery::type( 'array' ) );
+
+			Functions\expect( 'add_filter' )
+				->once()
+				->with( 'woocommerce_update_order_review_fragments', \Mockery::type( 'array' ) );
+
 			$handler = new Pickup_Handler(
 				'p',
 				'pickup_point',
@@ -3111,6 +3301,155 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 
 			$this->assertContains( '/shipping/pickup/carrier/points', $registered );
 			$this->assertContains( '/shipping/pickup/carrier/points/(?P<id>[^/]+)', $registered );
+		}
+
+		// -------------------------------------------------------------------------
+		// nonce refresh through a checkout fragment (issue #157)
+		// -------------------------------------------------------------------------
+
+		/**
+		 * Returns a `wp_create_nonce` stub minting a DIFFERENT value on every call, so a
+		 * test can tell a freshly-minted nonce from the one baked into an earlier
+		 * `get_js_config()` — the entire point of the fragment. A `justReturn('NONCE')`
+		 * stub cannot distinguish the two and would pass against the very bug #157 is about.
+		 */
+		private function stub_incrementing_nonce(): void {
+			$calls = 0;
+			Functions\when( 'wp_create_nonce' )->alias(
+				static function () use ( &$calls ) {
+					++$calls;
+
+					return 'NONCE-' . $calls;
+				}
+			);
+		}
+
+		public function test_the_nonce_node_id_is_derived_from_the_config_object_suffix(): void {
+			$sanitized = $this->make_handler( [ 'plugin_id' => 'carrier!!!' ] )->nonce_node_id();
+			$plain     = $this->make_handler( [ 'plugin_id' => 'carrier' ] )->nonce_node_id();
+
+			// The id must be unique per config object — two handlers on one checkout page
+			// (two shipping plugins) would otherwise fight over one node and one fragment.
+			$this->assertNotSame( $plain, $sanitized );
+			$this->assertStringContainsString( 'carrier', $plain );
+		}
+
+		/**
+		 * @dataProvider provide_colliding_plugin_ids
+		 *
+		 * @param string $first  one plugin id.
+		 * @param string $second another plugin id that used to sanitise to the same suffix.
+		 */
+		public function test_two_plugin_ids_that_differ_only_in_punctuation_do_not_collide(
+			string $first,
+			string $second
+		): void {
+			// REGRESSION (Codex finding 7 / issue #142): `preg_replace( '/[^a-z0-9_]/i', '_' )`
+			// mapped `carrier-a`, `carrier_a` and `carrier.a` onto ONE suffix, so two shipping
+			// plugins on one checkout page shared a nonce node, a checkout-fragment key and a
+			// JS config global — the second silently overwriting the first's REST nonce and
+			// pickup field id.
+			$this->assertNotSame(
+				$this->make_handler( [ 'plugin_id' => $first ] )->nonce_node_id(),
+				$this->make_handler( [ 'plugin_id' => $second ] )->nonce_node_id()
+			);
+		}
+
+		/**
+		 * @return array<string, array{0: string, 1: string}>
+		 */
+		public function provide_colliding_plugin_ids(): array {
+			return [
+				'hyphen vs underscore' => [ 'carrier-a', 'carrier_a' ],
+				'dot vs underscore'    => [ 'carrier.a', 'carrier_a' ],
+				'dot vs hyphen'        => [ 'carrier.a', 'carrier-a' ],
+				'slash vs underscore'  => [ 'carrier/a', 'carrier_a' ],
+			];
+		}
+
+		public function test_a_plugin_id_that_is_already_a_js_identifier_keeps_its_plain_suffix(): void {
+			// The suffix stays readable for the overwhelmingly common case — only an id that
+			// had to be rewritten pays for the disambiguator.
+			$this->assertSame(
+				'woodev-pickup-nonce-carrier_a',
+				$this->make_handler( [ 'plugin_id' => 'carrier_a' ] )->nonce_node_id()
+			);
+		}
+
+		public function test_a_rewritten_suffix_is_still_a_valid_js_identifier(): void {
+			$id = $this->make_handler( [ 'plugin_id' => 'carrier.a!' ] )->nonce_node_id();
+
+			$this->assertMatchesRegularExpression(
+				'/^woodev-pickup-nonce-[A-Za-z0-9_]+$/',
+				$id,
+				'the suffix also names a JS global, so it must stay identifier-safe'
+			);
+		}
+
+		public function test_config_carries_the_nonce_node_id_the_handler_prints(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			$this->stub_config_dependencies_except_filters();
+
+			$handler = $this->make_handler( [ 'plugin_id' => 'carrier' ] );
+
+			$this->assertSame( $handler->nonce_node_id(), $handler->get_js_config()['nonceNodeId'] );
+		}
+
+		public function test_print_nonce_node_prints_a_hidden_span_carrying_a_fresh_nonce(): void {
+			Functions\when( 'is_checkout' )->justReturn( true );
+			$this->stub_incrementing_nonce();
+
+			$handler = $this->make_handler( [ 'plugin_id' => 'carrier' ] );
+
+			ob_start();
+			$handler->print_nonce_node();
+			$html = (string) ob_get_clean();
+
+			$this->assertStringContainsString( 'id="' . $handler->nonce_node_id() . '"', $html );
+			$this->assertStringContainsString( 'data-woodev-pickup-nonce="NONCE-1"', $html );
+			$this->assertStringContainsString( 'hidden', $html );
+		}
+
+		public function test_the_nonce_fragment_is_keyed_by_the_node_id_and_carries_a_fresh_nonce(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			Functions\when( 'rest_url' )->justReturn( 'https://example.test/wp-json/woodev/v1' );
+			Functions\when( 'wc_ship_to_billing_address_only' )->justReturn( false );
+			$this->stub_incrementing_nonce();
+
+			$handler = $this->make_handler( [ 'plugin_id' => 'carrier' ] );
+
+			// The page-load config takes NONCE-1; the fragment must not repeat it.
+			$page_nonce = $handler->get_js_config()['nonce'];
+			$fragments  = $handler->inject_nonce_fragment( [] );
+
+			$key = '#' . $handler->nonce_node_id();
+
+			$this->assertArrayHasKey( $key, $fragments );
+			$this->assertStringContainsString( 'id="' . $handler->nonce_node_id() . '"', $fragments[ $key ] );
+			$this->assertStringContainsString( 'data-woodev-pickup-nonce="NONCE-2"', $fragments[ $key ] );
+			$this->assertStringNotContainsString( $page_nonce . '"', $fragments[ $key ] );
+		}
+
+		/**
+		 * `woocommerce_update_order_review_fragments` is a SHARED array — WooCommerce's own
+		 * order-review fragment lives in it, and so does every other plugin's. Replacing the
+		 * array instead of adding one key silently blanks the checkout totals.
+		 */
+		public function test_the_nonce_fragment_leaves_every_other_fragment_untouched(): void {
+			$this->stub_incrementing_nonce();
+
+			$handler = $this->make_handler( [ 'plugin_id' => 'carrier' ] );
+
+			$fragments = $handler->inject_nonce_fragment(
+				[
+					'.woocommerce-checkout-review-order-table' => '<table>totals</table>',
+					'#other-plugin-node'                       => '<span>other</span>',
+				]
+			);
+
+			$this->assertCount( 3, $fragments );
+			$this->assertSame( '<table>totals</table>', $fragments['.woocommerce-checkout-review-order-table'] );
+			$this->assertSame( '<span>other</span>', $fragments['#other-plugin-node'] );
 		}
 
 		// -------------------------------------------------------------------------
@@ -3374,7 +3713,10 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			$this->assertCount( 1, $localized );
 			[ $handle, $object_name, $data ] = $localized[0];
 			$this->assertSame( 'woodev-pickup-mount', $handle );
-			$this->assertSame( 'woodev_pickup_config_carrier_x', $object_name );
+			// `carrier-x` is not a valid JS identifier, so the suffix is the rewritten form
+			// plus the disambiguator that keeps it distinct from a plugin genuinely called
+			// `carrier_x` — see Pickup_Handler::config_object_suffix() and issue #142.
+			$this->assertStringStartsWith( 'woodev_pickup_config_carrier_x_', $object_name );
 			$this->assertSame( 'pickup_point', $data['fieldId'] );
 		}
 	}

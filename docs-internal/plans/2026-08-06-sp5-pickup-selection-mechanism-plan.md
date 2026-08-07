@@ -23,6 +23,15 @@ WP test library (integration), Jest + jsdom (JS).
 **Spec:** `docs-internal/specs/2026-08-06-sp5-pickup-selection-mechanism-design.md`
 **Card:** #169 (folds in #157)
 
+> ⚠️ **Run JS tests with `npm run test:js`, never `npx jest`.** This repo has no jest config of
+> its own — `wp-scripts test-unit-js` owns it and is what supplies jsdom. `npx jest` falls back to
+> jest's node default and reports **194 failed / 472 total** against a tree whose real state is
+> **631 passed / 631 total**. The dropped TOTAL is the tell: suites that fail to load contribute
+> no tests. Every JS task below said `npx jest` until 2026-08-06; it was corrected only because a
+> PHP-only session ran it and a sudden 194-test failure was impossible to believe. Forward jest
+> flags after `--`: `npm run test:js -- tests/js/x.test.js -t "name"`.
+> Gotcha: `npx-jest-bypasses-wp-scripts-jsdom`.
+
 ---
 
 ## File structure
@@ -44,9 +53,17 @@ WP test library (integration), Jest + jsdom (JS).
 (`restRoot`, `pointIcons`, `searchNearestCount`). Both conventions are already established in
 this file pair; unifying them would break one of them.
 
-**Class-map:** `class-selection-result.php` is a new framework class — `bin/generate-class-map.php`
-MUST be re-run (Task 1, step 6) or every real vendored boot fatals
-(gotcha `framework-classmap-autoload-vendored-boot`).
+**Class-map, and NOT `includes()`:** `class-selection-result.php` is a new framework class, so
+`bin/generate-class-map.php` MUST be re-run (Task 1, step 5) — a class missing from the map is a
+fatal on every real vendored boot (gotcha `framework-classmap-autoload-vendored-boot`).
+
+It must **not** be added to `Shipping_Plugin::includes()`. Verified 2026-08-06, after an earlier
+draft of this plan claimed the opposite: NOTHING in the SP-5 pickup tree is required there —
+`Constraint_Checker`, `Pickup_Handler`, `Point_Query` and `Address_Target` all resolve through the
+runtime class-map autoloader, which `class-framework-resolver.php:139` registers before any plugin
+class is parsed. Only four pre-SP-5 files (`Pickup_Point` and the warehouse trio) still carry a
+`require_once`. One more path-named require would extend the maintenance tail that gotcha
+`file-deletion-tail-includes-classmap-fixtures` exists to warn about, for no benefit.
 
 ---
 
@@ -271,32 +288,26 @@ if ( ! class_exists( '\Woodev\Framework\Shipping\Pickup\Selection_Result' ) ) {
 Run: `./vendor/bin/phpunit tests/unit/Shipping/Pickup/SelectionResultTest.php`
 Expected: PASS, 7 tests.
 
-- [ ] **Step 5: Wire the file into `includes()`**
-
-`Shipping_Plugin::includes()` names PATHS, not classes — a new file that is never `require_once`'d
-fatals on a real vendored boot even though Composer's classmap hides it in tests
-(gotcha `file-deletion-tail-includes-classmap-fixtures`). Add it beside the other `pickup/` requires
-in `woodev/shipping-method/class-shipping-plugin.php`:
-
-```php
-require_once __DIR__ . '/pickup/class-selection-result.php';
-```
-
-- [ ] **Step 6: Regenerate the class map and run the completeness test**
+- [ ] **Step 5: Regenerate the class map and run the completeness test**
 
 ```bash
 php bin/generate-class-map.php
-./vendor/bin/phpunit tests/unit/ClassMapTest.php
+./vendor/bin/phpunit tests/unit/ClassMapCompletenessTest.php
 ```
 Expected: PASS — `Selection_Result` present in `woodev/class-map.php`.
+
+Do NOT add a `require_once` to `Shipping_Plugin::includes()` — see the File-structure note above
+for why the SP-5 tree deliberately does not use it.
+
+- [ ] **Step 6: Run the FULL unit suite**
+
+Run: `composer test:unit`
+Expected: PASS, no new failures — a targeted run can hide breakage elsewhere.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add woodev/shipping-method/pickup/class-selection-result.php \
-        woodev/shipping-method/class-shipping-plugin.php \
-        woodev/class-map.php \
-        tests/unit/Shipping/Pickup/SelectionResultTest.php
+git add woodev/shipping-method/pickup/class-selection-result.php         woodev/class-map.php         tests/unit/Shipping/Pickup/SelectionResultTest.php
 git commit -m "feat(pickup): add Selection_Result verdict shape with fail-closed sanitisation"
 ```
 
@@ -923,7 +934,7 @@ it( 'maps our own nonce error code to the same message', () => {
 
 - [ ] **Step 2: Run them and confirm they fail**
 
-Run: `npx jest tests/js/pickup-datasource.test.js tests/js/pickup-mount.test.js`
+Run: `npm run test:js -- tests/js/pickup-datasource.test.js tests/js/pickup-mount.test.js`
 Expected: FAIL — the header carries `stale`; the key resolves to `error`.
 
 - [ ] **Step 3: Make the datasource read the nonce late**
@@ -1014,7 +1025,7 @@ Emit `nonceNodeId` from `get_js_config()` alongside `nonce` (one line, same task
 
 - [ ] **Step 6: Run the tests and confirm they pass**
 
-Run: `npx jest tests/js/pickup-datasource.test.js tests/js/pickup-mount.test.js`
+Run: `npm run test:js -- tests/js/pickup-datasource.test.js tests/js/pickup-mount.test.js`
 Expected: PASS.
 
 - [ ] **Step 7: Commit**
@@ -1084,7 +1095,7 @@ describe( 'selectPoint', () => {
 
 - [ ] **Step 2: Run it and confirm it fails**
 
-Run: `npx jest tests/js/pickup-datasource.test.js -t selectPoint`
+Run: `npm run test:js -- tests/js/pickup-datasource.test.js -t selectPoint`
 Expected: FAIL — `ds.selectPoint is not a function`.
 
 - [ ] **Step 3: Implement**
@@ -1125,7 +1136,7 @@ Return `selectPoint` from the factory alongside `fetchPoints` and `fetchDetails`
 
 - [ ] **Step 4: Run the tests and confirm they pass**
 
-Run: `npx jest tests/js/pickup-datasource.test.js`
+Run: `npm run test:js -- tests/js/pickup-datasource.test.js`
 Expected: PASS, including the pre-existing cases.
 
 - [ ] **Step 5: Commit**
@@ -1194,7 +1205,7 @@ describe( 'setSelectionBusy', () => {
 
 - [ ] **Step 2: Run it and confirm it fails**
 
-Run: `npx jest tests/js/pickup-panels.test.js -t setSelectionBusy`
+Run: `npm run test:js -- tests/js/pickup-panels.test.js -t setSelectionBusy`
 Expected: FAIL — `panels.setSelectionBusy is not a function`.
 
 - [ ] **Step 3: Implement the state on the instance**
@@ -1307,7 +1318,7 @@ Append to `pickup.css`, beside the existing `.woodev-pickup-card__cta:disabled` 
 
 - [ ] **Step 5: Run the tests and confirm they pass**
 
-Run: `npx jest tests/js/pickup-panels.test.js`
+Run: `npm run test:js -- tests/js/pickup-panels.test.js`
 Expected: PASS.
 
 - [ ] **Step 6: Commit**
@@ -1386,7 +1397,7 @@ describe( 'showSelectionError', () => {
 
 - [ ] **Step 2: Run it and confirm it fails**
 
-Run: `npx jest tests/js/pickup-panels.test.js -t "setPointVerdict|showSelectionError"`
+Run: `npm run test:js -- tests/js/pickup-panels.test.js -t "setPointVerdict|showSelectionError"`
 Expected: FAIL — both methods undefined.
 
 - [ ] **Step 3: Implement**
@@ -1465,7 +1476,7 @@ Expected: FAIL — both methods undefined.
 
 - [ ] **Step 4: Run the tests and confirm they pass**
 
-Run: `npx jest tests/js/pickup-panels.test.js`
+Run: `npm run test:js -- tests/js/pickup-panels.test.js`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -1525,7 +1536,7 @@ describe( 'selected row highlight', () => {
 
 - [ ] **Step 2: Run it and confirm it fails**
 
-Run: `npx jest tests/js/pickup-panels.test.js -t "selected row"`
+Run: `npm run test:js -- tests/js/pickup-panels.test.js -t "selected row"`
 Expected: FAIL — no `is-selected` class anywhere.
 
 - [ ] **Step 3: Mark the rows**
@@ -1602,7 +1613,7 @@ per-point button:
 
 - [ ] **Step 6: Run the tests and confirm they pass**
 
-Run: `npx jest tests/js/pickup-panels.test.js`
+Run: `npm run test:js -- tests/js/pickup-panels.test.js`
 Expected: PASS.
 
 - [ ] **Step 7: Commit**
@@ -1756,7 +1767,7 @@ describe( 'selection confirmation', () => {
 
 - [ ] **Step 2: Run them and confirm they fail**
 
-Run: `npx jest tests/js/pickup-mount.test.js -t "selection confirmation"`
+Run: `npm run test:js -- tests/js/pickup-mount.test.js -t "selection confirmation"`
 Expected: FAIL across the block — `handleSelection` still closes synchronously.
 
 - [ ] **Step 3: Add the two event names**
@@ -1976,7 +1987,7 @@ Declare `pendingSelectionId` beside the session's other closed-over state
 
 - [ ] **Step 5: Run the tests and confirm they pass**
 
-Run: `npx jest tests/js/pickup-mount.test.js`
+Run: `npm run test:js -- tests/js/pickup-mount.test.js`
 Expected: PASS.
 
 - [ ] **Step 6: Commit**
@@ -1990,6 +2001,20 @@ git commit -m "feat(pickup): confirm a selection with the server before acceptin
 
 ## Task 12: Restore the selection when the map reopens
 
+> **REVISED 06.08.2026 — the restore opens the CARD, not the list.** The snippets below are the
+> plan as written and were implemented as written; the operator then reviewed the result on the
+> rig and changed the requirement. As shipped, `restoreSelection()` ends with
+> `panels.openCard( group, selectedId, 'restore' )` instead of `panels.openList()`, because he
+> wants the chosen point's details and its «Продолжить оформление» button in front of him on
+> reopen rather than a list row he still has to click. `'restore'` is a new `origin` that the
+> mount's `cardOpened` listener returns early on, so the card-open issues no second camera move:
+> this pass's move already went out ahead of the draw, as `setPoints( groups, { focus } )`.
+> Accepted consequence: at `MAX_ZOOM` the viewport-filtered list behind the card holds one row.
+> Authoritative text: the design doc's §5.3 revision note. Two OTHER details below were already
+> superseded during implementation and are left as historical record — `focusGroup()` is not
+> called on this path at all any more (the camera moved before the draw, s52), and the helper
+> takes the resolved group rather than `groupsByKey`.
+
 **Files:**
 - Modify: `woodev/shipping-method/assets/js/frontend/pickup-mount.js` (the `alreadySelected`
   block, ~line 1189, and the points-drawn continuation, ~line 1104)
@@ -1999,14 +2024,14 @@ git commit -m "feat(pickup): confirm a selection with the server before acceptin
 
 ```js
 describe( 'restoring a previous selection', () => {
-	it( 'focuses the point, opens the sidebar and marks it selected', async () => {
+	it( 'focuses the point, opens the sidebar and marks it selected', async () => { // → "opens that point's CARD" as of 06.08.2026
 		const { panels, provider, drawPoints, field } = openPicker( {} );
 		field.value = 'P2';
 
 		await drawPoints( [ group( 'g1', [ point( 'P1' ) ] ), group( 'g2', [ point( 'P2' ) ] ) ] );
 
 		expect( panels.setSelectedId ).toHaveBeenCalledWith( 'P2' );
-		expect( panels.openList ).toHaveBeenCalled();
+		expect( panels.openList ).toHaveBeenCalled(); // SUPERSEDED 06.08.2026 → openCard(), see the banner
 		expect( provider.focusGroup ).toHaveBeenCalledWith( 'g2', { zoom: true } );
 	} );
 
@@ -2034,7 +2059,7 @@ describe( 'restoring a previous selection', () => {
 
 - [ ] **Step 2: Run it and confirm it fails**
 
-Run: `npx jest tests/js/pickup-mount.test.js -t "restoring a previous"`
+Run: `npm run test:js -- tests/js/pickup-mount.test.js -t "restoring a previous"`
 Expected: FAIL — nothing focuses or opens the list.
 
 - [ ] **Step 3: Implement**
@@ -2078,7 +2103,7 @@ Add beside the other session helpers:
 			return;
 		}
 
-		panels.openList();
+		panels.openList(); // SUPERSEDED 06.08.2026 → panels.openCard( group, selectedId, 'restore' )
 
 		if ( provider && 'function' === typeof provider.focusGroup ) {
 			provider.focusGroup( key, { zoom: true } );
@@ -2104,7 +2129,7 @@ fetch settles.
 
 - [ ] **Step 4: Run the tests and confirm they pass**
 
-Run: `npx jest tests/js/pickup-mount.test.js`
+Run: `npm run test:js -- tests/js/pickup-mount.test.js`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -2149,7 +2174,11 @@ add_filter(
 		}
 
 		// A point that asks for a checkout refresh, so the ordering can be watched live.
-		if ( 'DEMO-POSTAMAT-1' === $id ) {
+		// s52: this named 'DEMO-POSTAMAT-1', which does not exist in the fixture; a
+		// substitution to the real FIX-BULK-POSTAMAT-1 then made the branch unreachable on
+		// the rig (that point is `accepts_cod: false` and COD is the rig's only gateway, so
+		// Constraint_Checker refused it and the CTA never fired). It has its own demo point.
+		if ( 'DEMO-PVZ-REFRESH' === $id ) {
 			$result['refresh_checkout'] = true;
 		}
 
@@ -2160,15 +2189,27 @@ add_filter(
 );
 ```
 
-- [ ] **Step 2: Add the two extra points to the fixture point source**
+- [ ] **Step 2: Add the three extra points to the fixture point source**
 
-Add `DEMO-PVZ-REFUSE` and `DEMO-PVZ-FAST` to the fixture's point list, both in Moscow, both
-with coordinates distinct from the existing points so they are individually clickable.
+Add `DEMO-PVZ-REFUSE`, `DEMO-PVZ-FAST` and `DEMO-PVZ-REFRESH` to the fixture's point list, all in
+Moscow, all with coordinates distinct from the existing points (past 4 decimal places — that is the
+grouping key) so they are individually clickable. All three must be `accepts_cod: true` PVZ points:
+the rig has exactly one enabled gateway (COD), so a demo point that does not take COD is refused by
+`Constraint_Checker` before the domain filter can demonstrate anything.
 
 - [ ] **Step 3: Run the integration suite**
 
-Run: `MSYS_NO_PATHCONV=1 npx wp-env run tests-cli --env-cwd=wp-content/plugins/woodev-framework ./vendor/bin/phpunit --testsuite integration`
-Expected: PASS.
+Run:
+```bash
+npx wp-env run tests-cli bash -c "cd /var/www/html/woodev-framework && TEST_SUITE=integration WP_TESTS_DIR=/wordpress-phpunit php vendor/bin/phpunit --testsuite=Integration"
+```
+Expected: PASS (92/92 as of 2026-08-06).
+
+> The `--env-cwd=wp-content/plugins/woodev-framework` form this step carried until 2026-08-06 does
+> NOT work: `.wp-env.json` mounts the repo root at `/var/www/html/woodev-framework`, not under
+> `wp-content/plugins/`, so it fails with `chdir … no such file or directory`. Use the `bash -c`
+> form above (gotcha `wpenv-windows-gitbash-path-mangling`). If the run cannot find the container,
+> `npx wp-env start` — there are six of them, and `tests-cli` is often down while `wordpress` is up.
 
 - [ ] **Step 4: Commit**
 
@@ -2185,7 +2226,7 @@ git commit -m "test(pickup): fixture seam covering refusal, immediate close and 
 
 ```bash
 composer test:unit
-npx jest
+npm run test:js
 composer phpcs
 composer phpstan -- --memory-limit=4G
 ```
@@ -2218,10 +2259,16 @@ Verify, by DOM measurement rather than by eye:
    two-step — proving `close` overrides the default.
 4. An ordinary point leaves the modal open and the CTA reads «Продолжить оформление»; a second
    click closes with **no second network request** (check the network panel).
-5. `DEMO-POSTAMAT-1` fires `update_checkout` and the button stays busy until it settles; the §8
+5. `DEMO-PVZ-REFRESH` fires `update_checkout` and the button stays busy until it settles; the §8
    anchor is re-placed underneath the open modal and the picker still works afterwards.
-6. Reopening the map focuses the chosen point, its marker reads `data-state="active"`, the
-   sidebar is open and the row carries `is-selected`.
+6. Reopening the map focuses the chosen point, its marker reads `data-state="active"` **and its
+   `getBoundingClientRect()` is inside the map's** (attributes alone lied here once — s52), that
+   point's **detail card** is open with the CTA reading «Продолжить оформление», and the row
+   behind the card carries `is-selected`. Exactly **one** camera move happens on this path —
+   instrument `map.setCenter`/`map.setBounds` and count. (Revised 06.08.2026: this item used to
+   read "the sidebar is open"; the operator changed the behaviour to the card — see the design
+   doc's §5.3 revision note.) At `MAX_ZOOM` the viewport-filtered list behind the card holds one
+   row; that is expected and accepted, not a finding.
 7. Break the nonce deliberately (`document.getElementById('woodev-pickup-nonce-…')
    .dataset.woodevPickupNonce = 'broken'`) and confirm the stale-page message appears and the
    CTA stays alive.

@@ -33,6 +33,9 @@ const config = {
 		error: 'Не удалось загрузить пункты выдачи. Попробуйте ещё раз.',
 		zoomIn: 'Приблизьте карту, чтобы увидеть пункты выдачи',
 		retry: 'Повторить',
+		// #168: the sidebar toggle's own label — the only state that RENDERS it is the mobile
+		// open-list bar, but it is also the control's accessible name whenever the sidebar is open.
+		showMap: 'Показать карту',
 	},
 };
 
@@ -104,6 +107,68 @@ it( 'reports its open state and width so the caller can set the map margin', () 
 
 	expect( seen[ 0 ].open ).toBe( true );
 	expect( typeof seen[ 0 ].width ).toBe( 'number' );
+} );
+
+it( 'reports the panel width PLUS its 16px gutter, so the reserved strip matches what it covers', () => {
+	const seen = [];
+	const panels = new Panels( document.createElement( 'div' ), config );
+	panels.on( 'listToggle', ( e ) => seen.push( e ) );
+	panels.render();
+
+	// jsdom lays nothing out, so every `offsetWidth` is 0 — pin the CSS cap (320px) so the
+	// arithmetic this test exists for is observable at all.
+	Object.defineProperty(
+		panels.root.querySelector( '.woodev-pickup-list' ),
+		'offsetWidth',
+		{ value: 320 }
+	);
+
+	panels.toggleList();
+
+	// #168: the panel no longer sits flush against the stage's right edge — it floats 16px in
+	// from it. The strip it occupies, measured from that edge (which is what `map.margin`
+	// reserves), is therefore its own width PLUS that gutter. Reserving the bare width would
+	// under-reserve by exactly 16px, the same class of defect as
+	// `ymaps-margin-area-needs-explicit-width`, where a reservation that looked right was
+	// silently smaller than the panel it stood for.
+	expect( seen[ 0 ].width ).toBe( 336 );
+} );
+
+describe( 'sidebar toggle label (#168 — the mobile open-list bar)', () => {
+	const toggleOf = ( panels ) => panels.root.parentNode.querySelector( '.woodev-pickup-list__toggle' );
+
+	it( 'carries a visible label taken from the showMap i18n key', () => {
+		const panels = new Panels( document.createElement( 'div' ), config );
+		panels.render();
+
+		expect( toggleOf( panels ).querySelector( '.woodev-pickup-list__toggle-label' ).textContent )
+			.toBe( 'Показать карту' );
+	} );
+
+	it( 'renders that label BLANK rather than a Russian default when showMap is missing (rule I1)', () => {
+		const panels = new Panels( document.createElement( 'div' ), withoutI18nKey( config, 'showMap' ) );
+		panels.render();
+
+		expect( toggleOf( panels ).querySelector( '.woodev-pickup-list__toggle-label' ).textContent )
+			.toBe( '' );
+	} );
+
+	// WCAG 2.5.3 (Label in Name): once the bar shows «Показать карту», an accessible name that
+	// still said «Пункты выдачи в этой области» would not contain the visible text. The name
+	// tracks the state instead — which is also simply truer, since the control does two opposite
+	// things depending on it.
+	it( 'names itself by what pressing it will do — showMap while open, drawerTitle while closed', () => {
+		const panels = new Panels( document.createElement( 'div' ), config );
+		panels.render();
+
+		expect( toggleOf( panels ).getAttribute( 'aria-label' ) ).toBe( 'Пункты выдачи в этой области' );
+
+		panels.toggleList();
+		expect( toggleOf( panels ).getAttribute( 'aria-label' ) ).toBe( 'Показать карту' );
+
+		panels.toggleList();
+		expect( toggleOf( panels ).getAttribute( 'aria-label' ) ).toBe( 'Пункты выдачи в этой области' );
+	} );
 } );
 
 it( 'renders a blank label rather than a Russian default when an i18n key is missing', () => {
@@ -254,6 +319,67 @@ it( 'toggles closed again on a second call, with open:false in the event', () =>
 
 	// Re-pointed at the stage (Task 6) — see the "starts closed" test above.
 	expect( panels.root.parentNode.classList.contains( 'is-open' ) ).toBe( false );
+} );
+
+// -----------------------------------------------------------------------
+// Task 10: the sidebar's persistent record of "which one did I choose". Until now the only trace
+// of a selection was the card CTA's label flipping to `continueCheckout` (Task 8) — invisible
+// once the customer scrolls the list away from the open card. The row (or, for a co-located
+// group, the per-point button inside it) carries its own `is-selected` marker, computed at BUILD
+// time from `self._selectedId` so it is correct regardless of call order.
+// -----------------------------------------------------------------------
+
+describe( 'selected row highlight (Task 10)', () => {
+	it( 'marks the selected point row', () => {
+		const panels = new Panels( document.createElement( 'div' ), config );
+		panels.render();
+		panels.setSelectedId( 'p2' );
+		panels.setVisible( [ group( 'p1', 55.75, 37.61, 'ПВЗ 1' ), group( 'p2', 55.76, 37.61, 'ПВЗ 2' ) ] );
+
+		const rows = panels.root.querySelectorAll( '.woodev-pickup-list__item' );
+
+		expect( rows[ 0 ].classList.contains( 'is-selected' ) ).toBe( false );
+		expect( rows[ 1 ].classList.contains( 'is-selected' ) ).toBe( true );
+	} );
+
+	it( 'marks only the selected point inside a co-located group', () => {
+		const panels = new Panels( document.createElement( 'div' ), config );
+		panels.render();
+		panels.setSelectedId( 'b' );
+		panels.setVisible( [ {
+			key: 'g1', lat: 55.75, lng: 37.61, size: 2,
+			points: [
+				{ id: 'a', name: 'ПВЗ', short_address: 'x' },
+				{ id: 'b', name: 'Постамат', short_address: 'y' },
+			],
+		} ] );
+
+		const buttons = panels.root.querySelectorAll( '.woodev-pickup-list__point' );
+
+		expect( buttons[ 0 ].classList.contains( 'is-selected' ) ).toBe( false );
+		expect( buttons[ 1 ].classList.contains( 'is-selected' ) ).toBe( true );
+	} );
+
+	it( 'moves the highlight when the selection changes', () => {
+		const panels = new Panels( document.createElement( 'div' ), config );
+		panels.render();
+		panels.setVisible( [ group( 'g1', 55.75, 37.61, 'ПВЗ 1' ), group( 'g2', 55.76, 37.61, 'ПВЗ 2' ) ] );
+
+		panels.setSelectedId( 'g1' );
+
+		expect( panels.root.querySelectorAll( '.woodev-pickup-list__item.is-selected' ) ).toHaveLength( 1 );
+		expect( panels.root.querySelector( '.woodev-pickup-list__item.is-selected' ).dataset.groupKey )
+			.toBe( 'g1' );
+	} );
+
+	// Matching the sibling guard already proven for `setSelectionBusy`/`showSelectionError` (Task
+	// 8/9, both above `mount()`'s own definition) — `setSelectedId()` now touches the list, not
+	// only the card, so it needs the same before-`render()` guard those two already carry.
+	it( 'does not throw when called before render()', () => {
+		const panels = new Panels( document.createElement( 'div' ), config );
+
+		expect( () => panels.setSelectedId( 'p1' ) ).not.toThrow();
+	} );
 } );
 
 // -----------------------------------------------------------------------
@@ -621,6 +747,126 @@ it( 'the handler itself refuses to emit select even when the disabled attribute 
 	cta.click();
 
 	expect( seen ).toHaveLength( 0 );
+} );
+
+describe( 'setSelectionBusy', () => {
+	const busyConfig = { ...cardConfig, i18n: { ...cardConfig.i18n, confirming: 'Проверяем…' } };
+
+	it( 'disables the CTA, swaps its label and locks the card', () => {
+		const panels = mount( busyConfig );
+		panels.openCard( { key: 'k', size: 1, points: [ point() ] } );
+
+		panels.setSelectionBusy( true );
+
+		const cta = panels.root.querySelector( '.woodev-pickup-card__cta' );
+
+		expect( cta.disabled ).toBe( true );
+		expect( cta.textContent ).toBe( 'Проверяем…' );
+		expect( panels.root.querySelector( '.woodev-pickup-card' ).classList.contains( 'is-locked' ) ).toBe( true );
+	} );
+
+	it( 'restores the CTA when the request settles', () => {
+		const panels = mount( busyConfig );
+		panels.openCard( { key: 'k', size: 1, points: [ point() ] } );
+
+		panels.setSelectionBusy( true );
+		panels.setSelectionBusy( false );
+
+		const cta = panels.root.querySelector( '.woodev-pickup-card__cta' );
+
+		expect( cta.disabled ).toBe( false );
+		expect( cta.textContent ).toBe( 'Забрать здесь' );
+		expect( panels.root.querySelector( '.woodev-pickup-card' ).classList.contains( 'is-locked' ) ).toBe( false );
+	} );
+
+	it( 'does not emit select while busy, even if something bypasses the disabled attribute', () => {
+		// As with the plain `selectable.allowed` guard above (see "the handler itself refuses..."),
+		// a genuinely `disabled` native button never dispatches `click` to its listeners at all —
+		// jsdom (like real browsers) suppresses it before any handler runs. Asserting against a
+		// disabled CTA alone would only re-prove that suppression, not the independent behavioural
+		// guard inside the click handler (`self._selectionBusy`). Force `disabled` off first so the
+		// click actually reaches the listener, and confirm the handler still refuses on its own.
+		const onSelect = jest.fn();
+		const panels = mount( busyConfig );
+		panels.on( 'select', onSelect );
+		panels.openCard( { key: 'k', size: 1, points: [ point() ] } );
+
+		panels.setSelectionBusy( true );
+
+		const cta = panels.root.querySelector( '.woodev-pickup-card__cta' );
+		cta.disabled = false;
+		cta.click();
+
+		expect( onSelect ).not.toHaveBeenCalled();
+	} );
+
+	it( 'does not throw when called before render()', () => {
+		const panels = new Panels( document.createElement( 'div' ), busyConfig );
+
+		expect( () => panels.setSelectionBusy( true ) ).not.toThrow();
+	} );
+} );
+
+// -----------------------------------------------------------------------
+// Task 9 (spec D-6/D-7): a domain refusal is remembered on the held point (so a re-render or a
+// later tab switch still shows it); a transport failure is shown once and forgotten on the next
+// render. `setPointVerdict()`/`showSelectionError()` are the two primitives that draw that line.
+// -----------------------------------------------------------------------
+
+describe( 'setPointVerdict', () => {
+	it( 'writes the refusal into the held point so it survives a re-render', () => {
+		const panels = mount( cardConfig );
+		const g = { key: 'k', size: 1, points: [ point() ] };
+		panels.setVisible( [ g ] );
+		panels.openCard( g, 'p1', 'list' );
+
+		panels.setPointVerdict( 'p1', { allowed: false, reason: 'Слишком тяжело' } );
+		panels.openCard( g, 'p1', 'list' ); // full re-render, as a second click would do.
+
+		expect( panels.root.querySelector( '.woodev-pickup-card__warning' ).textContent ).toBe( 'Слишком тяжело' );
+		expect( panels.root.querySelector( '.woodev-pickup-card__cta' ).disabled ).toBe( true );
+	} );
+
+	it( 'leaves other points in the same group alone', () => {
+		const panels = mount( cardConfig );
+		const g = { key: 'k', size: 2, points: [ point( { id: 'a' } ), point( { id: 'b' } ) ] };
+		panels.setVisible( [ g ] );
+
+		panels.setPointVerdict( 'a', { allowed: false, reason: 'Нет' } );
+		panels.openCard( g, 'b', 'list' );
+
+		expect( panels.root.querySelector( '.woodev-pickup-card__cta' ).disabled ).toBe( false );
+	} );
+} );
+
+describe( 'showSelectionError', () => {
+	it( 'shows a transient message without disabling the CTA', () => {
+		const panels = mount( cardConfig );
+		panels.openCard( { key: 'k', size: 1, points: [ point() ] } );
+
+		panels.showSelectionError( 'Не удалось. Попробуйте ещё раз.' );
+
+		expect( panels.root.querySelector( '.woodev-pickup-card__warning' ).textContent )
+			.toBe( 'Не удалось. Попробуйте ещё раз.' );
+		expect( panels.root.querySelector( '.woodev-pickup-card__cta' ).disabled ).toBe( false );
+	} );
+
+	it( 'clears on the next card render — a failure is not a verdict', () => {
+		const panels = mount( cardConfig );
+		const g = { key: 'k', size: 1, points: [ point() ] };
+		panels.openCard( g );
+
+		panels.showSelectionError( 'Не удалось' );
+		panels.openCard( g );
+
+		expect( panels.root.querySelector( '.woodev-pickup-card__warning' ) ).toBeNull();
+	} );
+
+	it( 'does not throw when called before render()', () => {
+		const panels = new Panels( document.createElement( 'div' ), cardConfig );
+
+		expect( () => panels.showSelectionError( 'Не удалось' ) ).not.toThrow();
+	} );
 } );
 
 it( 'renders escaped point text without double-escaping it', () => {
@@ -1735,13 +1981,21 @@ describe( 'search layout (spec V-6)', () => {
 	// Extra coverage beyond the plan's own spec
 	// -------------------------------------------------------------------
 
-	it( 'labels the reset and submit buttons from i18n, not a hardcoded default', () => {
+	it( 'labels the reset button from i18n, not a hardcoded default', () => {
 		const el = build();
 
 		expect( el.querySelector( '.woodev-pickup-search__reset' ).getAttribute( 'aria-label' ) )
 			.toBe( config.i18n.resetSearch );
-		expect( el.querySelector( '.woodev-pickup-search__submit' ).getAttribute( 'aria-label' ) )
-			.toBe( config.i18n.search );
+	} );
+
+	// The magnifier was removed (operator, 07.08.2026) — Enter and a phone's "Перейти" key submit
+	// the form, which was always the same path the button used. A regression that brought the
+	// button back would also bring back the `search` i18n key it was the only consumer of.
+	it( 'has no submit button at all — the form itself is the whole submit path', () => {
+		const el = build();
+
+		expect( el.querySelector( '.woodev-pickup-search__submit' ) ).toBeNull();
+		expect( el.querySelector( 'button[type="submit"]' ) ).toBeNull();
 	} );
 
 	it( 'renders blank aria-labels, not a hardcoded Russian default, when the i18n keys are missing', () => {
@@ -1749,7 +2003,6 @@ describe( 'search layout (spec V-6)', () => {
 
 		expect( el.querySelector( '.woodev-pickup-search__input' ).getAttribute( 'placeholder' ) ).toBe( '' );
 		expect( el.querySelector( '.woodev-pickup-search__reset' ).getAttribute( 'aria-label' ) ).toBe( '' );
-		expect( el.querySelector( '.woodev-pickup-search__submit' ).getAttribute( 'aria-label' ) ).toBe( '' );
 	} );
 
 	it( 'never submits fewer than 1 non-whitespace character — a blank/whitespace-only query is refused', () => {
@@ -1790,20 +2043,6 @@ describe( 'search layout (spec V-6)', () => {
 	// called "стиль аля web 2000".
 	// -------------------------------------------------------------------
 
-	it( 'draws the submit button as an inline Lucide search glyph, not text or CSS content', () => {
-		const el = build();
-		const submit = el.querySelector( '.woodev-pickup-search__submit' );
-		const svg = submit.querySelector( 'svg' );
-
-		expect( svg ).not.toBeNull();
-		expect( svg.getAttribute( 'viewBox' ) ).toBe( '0 0 24 24' );
-		expect( svg.getAttribute( 'stroke' ) ).toBe( 'currentColor' );
-		expect( svg.getAttribute( 'stroke-width' ) ).toBe( '2' );
-		expect( svg.getAttribute( 'aria-hidden' ) ).toBe( 'true' );
-		expect( svg.getAttribute( 'focusable' ) ).toBe( 'false' );
-		expect( submit.textContent.trim() ).toBe( '' ); // no emoji/text glyph left over.
-	} );
-
 	it( 'draws the reset button as an inline Lucide x glyph, not text or CSS content', () => {
 		const el = build();
 		const reset = el.querySelector( '.woodev-pickup-search__reset' );
@@ -1819,82 +2058,6 @@ describe( 'search layout (spec V-6)', () => {
 	// Round 2 (D1d): the submit button's disabled state machine.
 	// -------------------------------------------------------------------
 
-	describe( 'submit button state machine (D1d)', () => {
-		it( 'starts disabled and not is-ready', () => {
-			const el = build();
-			const submit = el.querySelector( '.woodev-pickup-search__submit' );
-
-			expect( submit.disabled ).toBe( true );
-			expect( submit.classList.contains( 'is-ready' ) ).toBe( false );
-		} );
-
-		it( 'stays disabled below SEARCH_MIN_CHARS', () => {
-			const el = build();
-			const input = el.querySelector( '.woodev-pickup-search__input' );
-			const submit = el.querySelector( '.woodev-pickup-search__submit' );
-
-			input.value = 'Тв'; // 2 chars — SEARCH_MIN_CHARS is 3.
-			input.dispatchEvent( new Event( 'input' ) );
-
-			expect( submit.disabled ).toBe( true );
-			expect( submit.classList.contains( 'is-ready' ) ).toBe( false );
-		} );
-
-		it( 'becomes enabled and is-ready once the query reaches SEARCH_MIN_CHARS', () => {
-			const el = build();
-			const input = el.querySelector( '.woodev-pickup-search__input' );
-			const submit = el.querySelector( '.woodev-pickup-search__submit' );
-
-			input.value = 'Тве';
-			input.dispatchEvent( new Event( 'input' ) );
-
-			expect( submit.disabled ).toBe( false );
-			expect( submit.classList.contains( 'is-ready' ) ).toBe( true );
-		} );
-
-		it( 'goes disabled again immediately after a submit, until the next input change', () => {
-			const el = build();
-			const input = el.querySelector( '.woodev-pickup-search__input' );
-			const submit = el.querySelector( '.woodev-pickup-search__submit' );
-
-			input.value = 'Тверская';
-			input.dispatchEvent( new Event( 'input' ) );
-			expect( submit.disabled ).toBe( false );
-
-			el.querySelector( 'form' ).dispatchEvent( new Event( 'submit', { cancelable: true } ) );
-
-			expect( submit.disabled ).toBe( true );
-			expect( submit.classList.contains( 'is-ready' ) ).toBe( false );
-
-			// Still spent even though the query itself is still long enough — only a fresh
-			// `input` event clears the "spent" reason, not the passage of time.
-			input.dispatchEvent( new Event( 'input' ) );
-			expect( submit.disabled ).toBe( false );
-		} );
-
-		it( 'setSearchBusy( true ) disables the button even while the query is ready', () => {
-			const panels = new Panels( document.createElement( 'div' ), config );
-			const el = panels.buildSearchLayout();
-			const input = el.querySelector( '.woodev-pickup-search__input' );
-			const submit = el.querySelector( '.woodev-pickup-search__submit' );
-
-			input.value = 'Тверская';
-			input.dispatchEvent( new Event( 'input' ) );
-			expect( submit.disabled ).toBe( false );
-
-			panels.setSearchBusy( true );
-			expect( submit.disabled ).toBe( true );
-
-			panels.setSearchBusy( false );
-			expect( submit.disabled ).toBe( false );
-		} );
-
-		it( 'is a no-op before buildSearchLayout() has ever built a submit button', () => {
-			const panels = new Panels( document.createElement( 'div' ), config );
-
-			expect( () => panels.setSearchBusy( true ) ).not.toThrow();
-		} );
-	} );
 } );
 
 // -----------------------------------------------------------------------

@@ -1,6 +1,45 @@
 # Gotchas — Woodev Plugin Framework
-> **99 atomic gotchas in 21 namespaces** — update count when adding/removing.
-> Last updated: 2026-08-05 (session 51, operator manual-test pass on the pickup map: +4 files —
+> **104 atomic gotchas in 23 namespaces** — update count when adding/removing.
+> Last updated: 2026-08-07 (session 54, #168 mobile pass: no new file, but
+> `hostile-theme-button-display-none-needs-important` gained its **s54 addendum** — the THIRD
+> occurrence of the same trap, this time on the sidebar toggle's card-state hide at specificity
+> (0,4,0) against a (0,2,0) reset. After three hits the lesson is promoted from anecdote to rule:
+> inside `.woodev-pickup-stage`, treat `display` as an `!important`-only property, and verify with
+> `getComputedStyle()`/`document.elementFromPoint()` rather than by re-reading the selector).
+> Last updated: 2026-08-07 (session 54, PR #177's missing CI: +1 file, existing namespace `[build/ci]` —
+> `empty-status-rollup-can-be-a-github-actions-outage` (an empty `statusCheckRollup` next to
+> `mergeStateStatus: CLEAN` is not automatically a repo misconfiguration — triggers, workflow diff vs
+> base, `gh workflow list` and `actions/permissions` were all clean, and the real cause was GitHub's
+> 2026-08-06 Actions outage throttling webhooks to ~15%. The sting: because events are DROPPED, both
+> re-trigger tricks — close/reopen and an empty commit — also silently produce nothing, which reads as
+> a deeper repo problem)).
+> Prior: 2026-08-06 (session 52, rig defect on the restore path: +1 file, existing namespace
+> `[shipping/pickup]` — `ymaps-draw-then-move-parks-the-overlay` (`setBounds()` also ISSUES its camera
+> command ~40 ms late, so a `setCenter()` sent in between is overwritten by the fit; and a camera move
+> made across the ObjectManager's FIRST layout parks the marker's overlay at ymaps' off-screen sentinel
+> `-32760px` — move the camera BEFORE drawing, and measure a marker's rect, not just its attributes)).
+> Prior: 2026-08-06 (session 52, SP-5 Task 12: +1 file, existing namespace `[testing/js]` —
+> `jest-toequal-empty-array-ignores-undefined` (Jest's `toEqual` ignores `undefined` array items, so
+> `expect( someCallsArray ).toEqual( [] )` against one of this repo's plain-array call recorders PASSES
+> even when a call happened with an `undefined` argument — found by deliberately removing a "point not
+> found" guard in `restoreSelection()` and watching a "was never called" assertion stay green anyway.
+> Use `toHaveLength( 0 )` instead; only a deliberate mutation reveals the gap, a normal run never does).
+> Prior: 2026-08-06 (session 52, SP-5 Task 11: +1 file, new namespace `[tooling/git-checkout]` —
+> `git-checkout-destroys-uncommitted-mutation-revert` (reverting a deliberate-regression mutation with
+> `git checkout <file>` restores from HEAD, not from "before the mutation" — with the implementation
+> still uncommitted that deletes the whole task's work in that file, unrecoverably, and the resulting
+> wall of failures in tests unrelated to the mutated line reads as "the mutation broke everything".
+> Commit the green implementation first, then mutate). Recovered from a `cp` backup taken minutes
+> earlier, by luck.
+> Prior: 2026-08-06 (session 52: +1 file, new namespace `[testing/js]` —
+> `npx-jest-bypasses-wp-scripts-jsdom` (this project has NO jest config of its own; JS tests run
+> through `wp-scripts test-unit-js`, which is what supplies the jsdom environment. `npx jest`
+> bypasses it and falls back to jest's node default, reporting **194 failed / 472 total** where
+> the truth is **631 passed / 631 total** — and the dropped TOTAL is the tell, because suites
+> that fail to load never contribute their tests. The failure names your own files and shows
+> plausible diffs, so it reads as "I broke the JS layer"; it had been written into all seven JS
+> tasks of the s52 plan before being caught).
+> Prior: 2026-08-05 (session 51, operator manual-test pass on the pickup map: +4 files —
 > `ymaps-html-icon-layout-anchors-at-its-top-left` (a custom HTML icon layout draws with its top-left
 > corner AT the geo anchor while `iconShape` is measured CENTRED on it, so the drawn artwork and the
 > clickable rectangle overlap only in one quadrant — the direct sequel to s50's `iconShape` fix, which
@@ -150,6 +189,10 @@
 
 - [testing/unit] A mutation sweep over **branch conditions only** reads as complete and is not — "14/14 killed" was reported three times on one branch and three times a reviewer then killed survivors by mutating **values and content**: swapped `sprintf` args telling the customer a 15 kg order exceeds a 20.5 kg limit, a dropped unit conversion, i18n keys the JS read that PHP never emitted (invisible because the JS carried byte-identical Russian defaults). Also: a mutant killed by an *unrelated* guard is not covered, and boundary-**acceptance** needs pinning as much as rejection → [gotchas/mutation-sweep-branch-only-false-confidence.md](gotchas/mutation-sweep-branch-only-false-confidence.md) (s45)
 
+### [testing/js] — JavaScript testing pitfalls
+- [testing/js] `npx jest` is NOT how this project runs JS tests — there is no jest config here at all; `wp-scripts test-unit-js` (`npm run test:js`) owns it and supplies jsdom. `npx jest` falls back to the node environment: 194 phantom failures, and a TOTAL of 472 instead of 631 because failed-to-load suites contribute nothing. A changed total means a bad invocation, not a regression → [gotchas/npx-jest-bypasses-wp-scripts-jsdom.md](gotchas/npx-jest-bypasses-wp-scripts-jsdom.md) (s52)
+- [testing/js] `expect( callsArray ).toEqual( [] )` PASSES even when a call happened with an `undefined` argument — Jest's `toEqual` ignores `undefined` array items, so `[ undefined ]` reads as equal to `[]`. This repo's test doubles mostly record calls onto plain arrays (`provider.focusGroupCalls` etc.), not `jest.fn()` mocks, so a "was never called" assertion written this way silently misses a guard that regressed to calling with `undefined`. Use `toHaveLength( 0 )` instead; only a deliberate mutation reveals the gap → [gotchas/jest-toequal-empty-array-ignores-undefined.md](gotchas/jest-toequal-empty-array-ignores-undefined.md) (s52)
+
 ### [api/*] — API layer
 - [api/rest-not-for-browser-auth] A REST route can't back a browser-facing screen gated on `is_user_logged_in()` — a plain cookie browser navigation to `/wp-json/` has no `X-WP-Nonce`, so REST treats it as logged-out → endless wp-login loop. Use a `parse_request` query-var endpoint in normal WP context (the WC_Auth pattern) → [gotchas/rest-endpoint-not-for-browser-cookie-auth.md](gotchas/rest-endpoint-not-for-browser-cookie-auth.md) (s24)
 - [api/catalog-fetch-timeout] `Woodev_REST_API_Extensions` fetched the store catalog with `wp_safe_remote_get`'s DEFAULT 5s timeout; the issuer `edd-api/v2/products` (~252KB enriched) takes ~8.6s cold → timeout → `stale`, uncached, fails every load until warm. Masked in prod by the week-long transient. **Fixed s26** (`FETCH_TIMEOUT = 20`) → [gotchas/extensions-catalog-fetch-5s-timeout.md](gotchas/extensions-catalog-fetch-5s-timeout.md) (s25; fixed s26)
@@ -167,6 +210,7 @@
 - [build/ci] A failing early CI job (e.g. Lint) silently SKIPS jobs that `needs:` it — skipped ≠ failed, so the suite looks green while dependent jobs (the whole Unit matrix here) never run; fixing the gate REVEALS masked failures → [gotchas/ci-failing-gate-skips-dependent-jobs.md](gotchas/ci-failing-gate-skips-dependent-jobs.md) (2026-06-08)
 - [build/ci] `composer audit --no-dev` errors "No installed packages found" for a library with no runtime deps — use `composer audit --locked` → [gotchas/composer-audit-no-prod-deps.md](gotchas/composer-audit-no-prod-deps.md) (2026-06-08)
 - [build/ci] markdownlint-cli2 ignores `.markdownlintignore` when globs are passed as CLI args — manage exclusions in the workflow glob; MD051 disabled (can't validate Cyrillic anchors) → [gotchas/markdownlint-ignorefile-vs-globs.md](gotchas/markdownlint-ignorefile-vs-globs.md) (2026-06-08)
+- [build/ci] Zero runs for a PR whose `on:` triggers you already verified can be a **GitHub Actions outage**, not your repo — during the 2026-08-06 incident webhooks were throttled to ~15% and "many events such as pushes and pull requests are not triggering workflow runs", so PR #177 sat at `statusCheckRollup: []` with `mergeStateStatus: CLEAN`, and BOTH re-triggers (close/reopen, empty commit) were silently dropped too. Check `githubstatus.com/api/v2/summary.json` after the cheap local checks, before suspecting the workflow files → [gotchas/empty-status-rollup-can-be-a-github-actions-outage.md](gotchas/empty-status-rollup-can-be-a-github-actions-outage.md) (s54)
 - [build/ci] A PR that conflicts with base (`mergeStateStatus: DIRTY`) runs NO `pull_request` CI — only `pull_request_target`; "all green" can mean the matrix never ran. Check `gh pr view --json mergeable,mergeStateStatus`; rebase onto the new base after a squash-merge → [gotchas/pr-conflict-skips-pull-request-ci.md](gotchas/pr-conflict-skips-pull-request-ci.md) (session 2)
 - [build/js] `@wordpress/scripts` default (automatic) JSX runtime depends on the `react-jsx-runtime` script handle — registered only in WP ≥ 6.6; for WP 6.3+ support force the classic runtime via `babel.config.js` and import `createElement`/`Fragment` in every JSX file → [gotchas/wp-scripts-jsx-runtime-wp66.md](gotchas/wp-scripts-jsx-runtime-wp66.md) (s8)
 - [build/assets-eol] Rebuilding the license-page bundle on Windows can commit CRLF while Linux CI rebuilds LF → "Assets build parity" fails on identical content. `.gitattributes` pins `woodev/assets/build/** text eol=lf` → [gotchas/build-artifacts-eol-lf-windows-parity.md](gotchas/build-artifacts-eol-lf-windows-parity.md) (s14)
@@ -193,6 +237,8 @@
 - [shipping/checkout] `window.WoodevCheckoutFieldStore` exposes only the **factory**; the classic adapter keeps its instances in a local IIFE array. A second module that calls `createStore()` again gets a divergent instance — it writes the chosen pickup point into one store while the A2 gate reads the other, and the order stays blocked with «выберите пункт выдачи» while the customer can see they selected one. Symptom reads as "the gate is broken". Fix: an instance registry keyed on **field ownership** (`getStoreForField()`), not plugin id — ids already collapse via `config_object_suffix()` → [gotchas/js-store-instance-registry-cross-module.md](gotchas/js-store-instance-registry-cross-module.md) (s45)
 
 - [shipping/pickup] ymaps camera moves are ASYNC: `setBounds()` animates and resolves later, so dropping its promise makes the next `getBounds()` read the PRE-move viewport (→ a planet-wide bbox the server's cap refuses → "no points" for a locality that has them). Separately, a placemark folded into a cluster has no balloon — `placemark.balloon.open()` throws `getGlobalPixelCenter` of null and kills the click handler, and whether a point is clustered depends on zoom, so the same item works at one zoom and throws at another. Collapse the bounds to the point and await the promise (the reference's move); sequence the continuations, since two moves need not resolve in click order. **A placeholder API key hides all of it** — ymaps refuses geocoding but still serves tiles. **s47 adds the degenerate case the fix cannot solve:** two points on IDENTICAL coordinates share a pixel-grid cell at EVERY zoom, so `checkZoomRange` never un-clusters them and `.balloon.open()` throws forever (reported live in СДЭК, where a PVZ and a postamat share a building) — guard with "all features on one coordinate → do not try", re-read `getObjectState()` after the move, and prefer owning the detail panel's DOM so balloons stop mattering → [gotchas/ymaps-camera-moves-are-async.md](gotchas/ymaps-camera-moves-are-async.md) (s46, extended s47)
+
+- [shipping/pickup] Two more ymaps timing traps, both hit by the restore-on-reopen path (s52). (1) `setBounds()` also ISSUES its camera command late — internally it delegates to `map.setCenter()` only once it has resolved the bounds against the projection, ~40 ms after the call — so a `setCenter()` issued in between starts AND finishes first and is then overwritten by the fit; the snap-back re-clusters the group, and a clustered feature has no overlay, so the `data-state="active"` already written vanishes while `getFocusedKey()` still names it (reads as "the focus had no effect"). Gate concurrent moves on the in-flight fit, not on call order. (2) A camera move made across the ObjectManager's FIRST layout parks the newly un-clustered marker's overlay at ymaps' off-screen sentinel `left/top: -32760px` until some LATER zoom change re-lays it out — right camera, right `data-state`, no pin on screen. The overlay rebuild burst begins AFTER `actionend`, so no camera promise marks its end: **move the camera first, draw second** (`setPoints( groups, { focus } )`). Measure a marker's `getBoundingClientRect()`, not just its attributes → [gotchas/ymaps-draw-then-move-parks-the-overlay.md](gotchas/ymaps-draw-then-move-parks-the-overlay.md) (s52)
 
 - [shipping/pickup] `templateLayoutFactory` hands a layout its feature data in TWO different shapes: a `Placemark`'s layout gets a data manager (`properties.get( key )`), an `ObjectManager`'s gets the PLAIN JSON the feature was added with (`properties[ key ]`). Calling `.get()` on the plain one throws INSIDE ymaps' cross-origin script, where the browser reports only `Script error.` at `:0` — markers render as empty boxes, clicks never bind, and dragging then spams `map.action.Continuous: ticking while inactive` forever. Read through a shape-tolerant accessor. Also the general lesson: a test fixture (or config fixture) poorer than production hides production's bugs → [gotchas/ymaps-objectmanager-properties-are-plain.md](gotchas/ymaps-objectmanager-properties-are-plain.md) (s49)
 
@@ -245,6 +291,7 @@
 - [tooling/serena-eol-flip] Serena `replace_content` rewrites the whole file as CRLF on Windows even for a 1-line edit → breaks LF source-assertion tests / Assets-parity; `git diff` hides it (EOL-normalized). Use built-in `Edit` for existing source, or `sed -i 's/\r$//'` after → [gotchas/serena-replace-content-eol-flip.md](gotchas/serena-replace-content-eol-flip.md) (s25)
 - [tooling/phpstan-windows-segfault] PHPStan exits `-1073741819` (0xC0000005 native stack overflow in its PHPDoc type resolver) NON-deterministically on Windows — crashes even on untouched single files that passed minutes earlier; not a code error, cache-clear doesn't help. Confirm by analysing a file you didn't touch; rely on Linux CI ("Run PHPStan") as the authoritative gate → [gotchas/phpstan-windows-parallel-worker-segfault.md](gotchas/phpstan-windows-parallel-worker-segfault.md) (s28)
 - [tooling/phpcs] `composer phpcs` does **not** enforce the project's 120-char limit — `phpcs.xml` sets `warning-severity 0` and `absoluteLineLimit 0`, so `Generic.Files.LineLength` is detected, downgraded to a warning, and suppressed; the ruleset also scans only `./woodev` and excludes `*/tests/*`. "phpcs clean" is quoted as evidence in this project and for line length it proves nothing. Measure with tabs expanded to 4 → [gotchas/phpcs-does-not-enforce-line-length.md](gotchas/phpcs-does-not-enforce-line-length.md) (s45; fix tracked as #139)
+- [tooling/git-checkout] `git checkout <file>` to revert a deliberate-regression MUTATION deletes the uncommitted implementation with it — it restores from HEAD, not "the last edit", and working-tree content that was never staged has no reflog entry. Reads as "the mutation broke everything" (tests unrelated to the mutated line fail too). Commit the verified-green implementation FIRST, then mutate/revert; if a mutation must precede a commit, `cp` the file out and restore with `cp` → [gotchas/git-checkout-destroys-uncommitted-mutation-revert.md](gotchas/git-checkout-destroys-uncommitted-mutation-revert.md) (s52)
 - [tooling/git-merge] A GitHub `--squash` merge bases the squash on `origin/main`; if a prior session committed docs straight to **local main and never pushed** (so origin is behind), `git pull --ff-only` post-merge fails "diverged" — yet origin/main already CONTAINS the local-only commit's content (the branch was based on top of it; squash flattens the full diff). Verify containment (`git diff --stat origin/main <sha>` empty) then `git reset --hard origin/main` (untracked files survive). Prevent: push main right after any direct-to-main commit → [gotchas/git-squash-onto-stale-origin-main-diverge.md](gotchas/git-squash-onto-stale-origin-main-diverge.md) (s33)
 
 ## Archive (resolved gotchas)

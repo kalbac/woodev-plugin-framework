@@ -723,6 +723,71 @@ function woodev_test_shipping_method_plugin_init(): void {
 		}
 	}
 
+	// -----------------------------------------------------------------------
+	// SP-5 Task 13: a domain seam over `woodev_shipping_pickup_point_selection`
+	// (see class-pickup-controller.php:610), so the rig can see three behaviours
+	// no test can show and the framework's own accept-and-stay-open path never
+	// exercises: a remembered refusal, an immediate close overriding this
+	// fixture's own two-step default, and a checkout refresh.
+	//
+	// Registered HERE (inside this callback), same reason as the Point_Source
+	// classes above: this callback runs only once the bootstrap has selected the
+	// highest-version framework copy and registered its autoloader. Strictly, a
+	// bare `add_filter()` call is not itself at risk the way a `class ... implements
+	// Woodev\Framework\...` declaration is — a closure's parameter type hint is
+	// resolved lazily, at call time, not when the closure is declared, so this
+	// would not fatal even at file top level. It stays here anyway: this is where
+	// every other piece of this fixture's plugin-specific wiring already lives,
+	// and `apply_filters()` will not invoke the closure until long after the
+	// autoloader is registered regardless.
+	//
+	// $point is never anything other than a resolved Pickup_Point here: the
+	// controller returns 404 before this filter runs when fetch_details() finds
+	// nothing (class-pickup-controller.php ~line 509), so it is typed directly
+	// rather than hedged with method_exists().
+	// -----------------------------------------------------------------------
+
+	add_filter(
+		'woodev_shipping_pickup_point_selection',
+		function ( array $result, \Woodev\Framework\Shipping\Pickup\Pickup_Point $point, array $context ): array {
+			$id = $point->get_id();
+
+			// A point that always refuses — the rig's way to see the remembered-refusal path.
+			if ( 'DEMO-PVZ-REFUSE' === $id ) {
+				$result['allowed'] = false;
+				$result['reason']  = 'Этот пункт временно не принимает заказы.';
+
+				return $result;
+			}
+
+			// A point that closes immediately, overriding the fixture's two-step default
+			// (Pickup_Handler is constructed above without a `close_on_select` argument, so
+			// it keeps the constructor's own `false`) — the rig's way to see `close` actually
+			// override the config.
+			if ( 'DEMO-PVZ-FAST' === $id ) {
+				$result['close'] = true;
+
+				return $result;
+			}
+
+			// A point that asks for a checkout refresh, so the ordering can be watched live.
+			// Its own demo point (id 'DEMO-PVZ-REFRESH'), like the two branches above, rather
+			// than the plan's placeholder 'DEMO-POSTAMAT-1' (no such point) or the substitute
+			// FIX-BULK-POSTAMAT-1 this branch first carried: that one is a POSTAMAT with
+			// `accepts_cod: false`, so on a rig whose only enabled gateway is COD,
+			// Constraint_Checker refused it before this filter could matter — dead CTA, no
+			// request, branch unreachable outside PHP unit tests (s52). See the demo points'
+			// own block in fixture-points.php.
+			if ( 'DEMO-PVZ-REFRESH' === $id ) {
+				$result['refresh_checkout'] = true;
+			}
+
+			return $result;
+		},
+		10,
+		3
+	);
+
 	/**
 	 * Глобальный хелпер для доступа к тестовому плагину из тестов.
 	 *
