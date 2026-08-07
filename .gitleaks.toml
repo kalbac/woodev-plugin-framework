@@ -1,0 +1,77 @@
+# Gitleaks configuration — secret scanning in CI.
+#
+# WHY THIS EXISTS. GitHub's own secret scanning is enabled on this repository, together with
+# push protection, but on a FREE PUBLIC repo it only matches PROVIDER patterns (AWS, Stripe,
+# GitHub tokens and the like). Matching arbitrary vendor tokens needs "non-provider patterns",
+# which is part of paid GitHub Secret Protection and is not available here — the toggle does
+# not exist in the UI and the API refuses to set it.
+#
+# That gap is not hypothetical: in s55 a Yandex.Delivery bearer token was committed and pushed
+# to this public repository, and nothing stopped it. See
+# docs-internal/gotchas/public-repo-third-party-credentials.md.
+#
+# This config is the free half of that protection — it runs on every pull request, so a leak
+# is caught before it reaches `main` rather than after.
+
+# Start from gitleaks' own maintained rule set and ADD to it, rather than replacing it: their
+# provider rules are broad, actively maintained, and we have no reason to re-litigate them.
+[extend]
+useDefault = true
+
+[[rules]]
+id = "yandex-b2b-oauth-token"
+description = "Yandex OAuth / B2B bearer token (y0_/y1_/y2_… prefix)"
+# The shape of the token that actually leaked: a `y` + digit + underscore prefix followed by a
+# long base64url body. Anchored on that prefix rather than on generic entropy, because an
+# entropy rule over this repository would fire on minified assets, class-map hashes and build
+# artefacts until someone silenced the whole job.
+regex = '''\by[0-9]_[A-Za-z0-9_-]{20,}'''
+keywords = ["y0_", "y1_", "y2_"]
+
+[[rules]]
+id = "cdek-oauth-client-secret"
+description = "CDEK API client_secret assigned inline"
+# The other carrier this framework targets authenticates with client_id/client_secret
+# (OAuth client_credentials). A secret belongs in a constant, never in a literal here.
+regex = '''(?i)client_secret['"\s]*[:=]['"\s]*[A-Za-z0-9]{20,}'''
+keywords = ["client_secret"]
+
+[allowlist]
+description = "Paths and values that are deliberately not secrets"
+
+# Every entry here is a path that is ALREADY gitignored, so nothing it hides could reach a
+# commit in the first place. They are listed because CI is not the only place this runs: a
+# local `gitleaks detect --no-git` walks the working directory, ignored paths included, and
+# without these a developer's first run returns ~18 findings — all of them phpstan.phar
+# internals and tool caches. A scanner whose first impression is noise is a scanner someone
+# switches off. Measured before writing this list, not guessed.
+paths = [
+  # Vendored reference plugins: third-party source, never shipped from this repo.
+  '''^plugins-reference/''',
+  # Build output and dependencies — nothing here is authored by us.
+  '''^woodev/assets/build/''',
+  '''^node_modules/''',
+  '''^vendor/''',
+  # Subagent git worktrees. Absent in CI; locally they carry a full copy of vendor/, whose
+  # phpstan.phar trips the generic-api-key rule on PHP function names like
+  # `sodium_crypto_aead_chacha20poly1305_decrypt`.
+  '''^\.claude/''',
+  # Serena's symbol cache. Note it genuinely DOES contain the token from the s55 incident —
+  # excluded because the cache is gitignored and rebuilt, not because it is uninteresting.
+  '''^\.serena/''',
+]
+
+# DELIBERATELY NOT EXCLUDED: `opencode.json`. A local `--no-git` run reports two findings in
+# it, and they are TRUE positives — the file holds a real Context7 API key. It is gitignored
+# and absent from CI's checkout, so it can never fail a build; silencing it here would instead
+# create a blind spot around an actual live credential, which is the opposite of the point.
+# Between that key and a `git add -A` there is exactly one line of .gitignore.
+
+regexes = [
+  # The obvious-placeholder token the fixture's own unit tests define. It authenticates with
+  # nothing; the test that uses it asserts the transport is never called.
+  '''dummy-token-for-tests''',
+  # The fixture's deliberately fake map key — it exists to prove the rig never needs a live
+  # ymaps script under PHPUnit.
+  '''FIXTURE-FAKE-YANDEX-KEY''',
+]

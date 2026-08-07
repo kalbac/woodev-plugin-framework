@@ -206,6 +206,51 @@ jobs:
         run: npm run test:js
 
   # ===========================================================================
+  # Поиск секретов в коде.
+  #
+  # Зачем, если у репозитория уже включены secret scanning и push protection:
+  # на БЕСПЛАТНОМ публичном репозитории GitHub сопоставляет только ПРОВАЙДЕРСКИЕ
+  # паттерны (AWS, Stripe, токены GitHub). Произвольные вендорские ключи ловит
+  # опция "non-provider patterns" — часть платного Secret Protection, её нет
+  # ни в UI, ни через API.
+  #
+  # Дыра не гипотетическая: в s55 в этот публичный репозиторий был закоммичен и
+  # запушен bearer-токен Яндекс.Доставки, и ничто этого не остановило.
+  # См. docs-internal/gotchas/public-repo-third-party-credentials.md.
+  #
+  # Джоба намеренно НЕ ставит зависимости: чем меньше в дереве чужого кода, тем
+  # меньше ложных срабатываний, а vendor/ и node_modules/ и так в allowlist.
+  # ===========================================================================
+  secrets:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      # Бинарь напрямую, а не gitleaks-action: у официального экшена платная
+      # лицензия для организаций, и упереться в это на живом CI мы не хотим.
+      # Версия закреплена — та же, на которой конфиг проверен локально.
+      - name: Install gitleaks
+        env:
+          GITLEAKS_VERSION: 8.30.1
+        run: |
+          URL="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -sSfL -o /tmp/gitleaks.tar.gz "$URL"
+          tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
+          /tmp/gitleaks version
+
+      # `--no-git`: проверяем ДЕРЕВО, а не историю. Отвечает на вопрос «есть ли
+      # секрет в коде, который уедет в main», и не зависит от глубины клона.
+      # `--redact`: находка не должна печатать сам секрет в публичный лог сборки.
+      - name: Scan for secrets
+        run: /tmp/gitleaks detect --no-git --config .gitleaks.toml --redact --verbose
+
+  # ===========================================================================
   # Сборка JS-бандла и проверка паритета с закоммиченным woodev/assets/build/
   # Независимый job: node-сбой не должен маскировать PHP-матрицу
   # ===========================================================================
@@ -263,7 +308,7 @@ jobs:
     name: Publish Release v${{ needs.version.outputs.current }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    needs: [version, lint, unit-tests, test-js, assets]
+    needs: [version, lint, unit-tests, test-js, assets, secrets]
     permissions:
       contents: write
 
