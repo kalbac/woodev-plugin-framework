@@ -133,6 +133,23 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Point' ) ) :
 		 * re-indexes so `wp_json_encode()` emits a JSON array, not an object, the moment any
 		 * record is dropped (see gotcha: php-stdlib-traps-that-survive-tests).
 		 *
+		 * DELIBERATELY STRICT, not just non-empty-after-cast: an `int`, `float`, or `bool`
+		 * element is DROPPED, not `strval()`-coerced into a string that happens to look
+		 * plausible. This narrows the old `payment_methods`/`photos` behaviour (which used
+		 * `array_map( 'strval', ... )` and so kept a coerced `5` as `'5'`) rather than merely
+		 * closing the "Array" hole while leaving scalar coercion in place — checked against
+		 * both reference carriers in `plugins-reference/` (issue #154 follow-up, 2026-08-07):
+		 * CDEK (`woocommerce-edostavka`) never emits a `payment_methods` list at all — its API
+		 * reports `have_cashless`/`have_cash`/`allowed_cod` booleans, which an adapter targeting
+		 * this contract would map to STRING codes, not carry through as numbers; Yandex Delivery
+		 * (`woocommerce-yandex-delivery`) emits string codes directly (`'cash_on_receipt'`,
+		 * `'card_on_receipt'`). Every in-repo pickup fixture agrees (`'card'`, `'cod'`; `photos`
+		 * always `[]` — no real carrier this framework targets populates it yet). A numeric
+		 * element here is therefore not a plausible carrier shape to accommodate; it is far more
+		 * likely a broken adapter leaking an internal id/enum, and silently stringifying it would
+		 * put a meaningless "5" in front of the customer exactly as confusingly as "Array" did —
+		 * dropping it is the correct failure mode, matching `services`, which never coerced.
+		 *
 		 * @since 2.0.2
 		 *
 		 * @param array<int|string, mixed> $list Raw list from a carrier payload.

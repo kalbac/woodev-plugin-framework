@@ -247,6 +247,23 @@ final class PickupPointTest extends TestCase {
 		$this->assertSame( [ 'Наличные' ], $point->to_array()['payment_methods'] );
 	}
 
+	/**
+	 * Pins a deliberate behaviour change (issue #154 follow-up, 2026-08-07): the pre-fix
+	 * `array_map( 'strval', ... )` coerced scalars, so an integer element used to SURVIVE as
+	 * its stringified form ('5'). `sanitize_string_list()` requires `is_string()` and drops
+	 * it instead. See that method's docblock for why: neither reference carrier
+	 * (`plugins-reference/woocommerce-edostavka`, `plugins-reference/woocommerce-yandex-delivery`)
+	 * nor any in-repo fixture ever produces a numeric `payment_methods` element, so this is not
+	 * a real shape to accommodate — it is far more likely a broken adapter leaking an internal
+	 * id, and displaying that id as a payment method would be exactly the "Array" bug's failure
+	 * mode wearing a different number.
+	 */
+	public function test_integer_payment_methods_are_dropped_not_stringified(): void {
+		$point = $this->make_point( [ 'payment_methods' => [ 'Наличные', 5 ] ] );
+
+		$this->assertSame( [ 'Наличные' ], $point->to_array()['payment_methods'] );
+	}
+
 	public function test_non_string_photos_are_dropped(): void {
 		$point = $this->make_point( [ 'photos' => [ 'https://example.test/a.jpg', [ 'x' ], null, 5 ] ] );
 
@@ -267,6 +284,20 @@ final class PickupPointTest extends TestCase {
 
 	public function test_whitespace_only_photos_are_dropped(): void {
 		$point = $this->make_point( [ 'photos' => [ 'https://example.test/a.jpg', '   ', '' ] ] );
+
+		$this->assertSame( [ 'https://example.test/a.jpg' ], $point->to_array()['photos'] );
+	}
+
+	/**
+	 * Pins the same deliberate change as
+	 * {@see self::test_integer_payment_methods_are_dropped_not_stringified()} for `photos`: an
+	 * integer element is dropped, not `strval()`-coerced into a fabricated "URL". No reference
+	 * carrier populates `photos` at all yet (always `[]` in every in-repo fixture), so there is
+	 * no real shape being narrowed here — only a hypothetical one that would be equally wrong to
+	 * accommodate silently.
+	 */
+	public function test_integer_photos_are_dropped_not_stringified(): void {
+		$point = $this->make_point( [ 'photos' => [ 'https://example.test/a.jpg', 5 ] ] );
 
 		$this->assertSame( [ 'https://example.test/a.jpg' ], $point->to_array()['photos'] );
 	}
