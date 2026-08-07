@@ -1,6 +1,14 @@
 # Gotchas — Woodev Plugin Framework
-> **104 atomic gotchas in 23 namespaces** — update count when adding/removing.
-> Last updated: 2026-08-07 (session 54, #168 mobile pass: no new file, but
+> **105 atomic gotchas in 23 namespaces** — update count when adding/removing.
+> Last updated: 2026-08-07 (session 55, baseline numbers on a merged `main`: +1 file, existing
+> namespace `[testing/js]` — `jest-scans-agent-worktrees-inside-the-repo` (a local
+> `npm run test:js` counts EVERY subagent worktree under `.claude/worktrees/`, because jest walks
+> the filesystem and does not read `.gitignore` — 56 suites / 4889 tests reported against a true
+> 8 / 690, all green, so nothing looks wrong. The ignore entry is what keeps it quiet: the extra
+> checkouts never show in `git status`. Worse than a wrong number — a worktree pinned to an older
+> base runs tests that no longer exist on `main` and reports them passing. CI is unaffected, which
+> is exactly why it only ever corrupts the local baselines quoted in handoffs)).
+> Prior: 2026-08-07 (session 54, #168 mobile pass: no new file, but
 > `hostile-theme-button-display-none-needs-important` gained its **s54 addendum** — the THIRD
 > occurrence of the same trap, this time on the sidebar toggle's card-state hide at specificity
 > (0,4,0) against a (0,2,0) reset. After three hits the lesson is promoted from anecdote to rule:
@@ -191,6 +199,7 @@
 
 ### [testing/js] — JavaScript testing pitfalls
 - [testing/js] `npx jest` is NOT how this project runs JS tests — there is no jest config here at all; `wp-scripts test-unit-js` (`npm run test:js`) owns it and supplies jsdom. `npx jest` falls back to the node environment: 194 phantom failures, and a TOTAL of 472 instead of 631 because failed-to-load suites contribute nothing. A changed total means a bad invocation, not a regression → [gotchas/npx-jest-bypasses-wp-scripts-jsdom.md](gotchas/npx-jest-bypasses-wp-scripts-jsdom.md) (s52)
+- [testing/js] A local `npm run test:js` counts every subagent worktree under `.claude/worktrees/` — jest walks the filesystem and ignores `.gitignore`, so each live worktree contributes a full copy of the suite (56 suites / 4889 tests against a true 8 / 690, all green). The gitignore entry is what hides it: the checkouts never appear in `git status`. A worktree on an older base also reports deleted tests as passing. CI never sees this, so it corrupts exactly the local baselines that get quoted in handoffs. `git worktree remove` can fail on Windows and leave the directory — verify with `ls`, not `git worktree list` → [gotchas/jest-scans-agent-worktrees-inside-the-repo.md](gotchas/jest-scans-agent-worktrees-inside-the-repo.md) (s55)
 - [testing/js] `expect( callsArray ).toEqual( [] )` PASSES even when a call happened with an `undefined` argument — Jest's `toEqual` ignores `undefined` array items, so `[ undefined ]` reads as equal to `[]`. This repo's test doubles mostly record calls onto plain arrays (`provider.focusGroupCalls` etc.), not `jest.fn()` mocks, so a "was never called" assertion written this way silently misses a guard that regressed to calling with `undefined`. Use `toHaveLength( 0 )` instead; only a deliberate mutation reveals the gap → [gotchas/jest-toequal-empty-array-ignores-undefined.md](gotchas/jest-toequal-empty-array-ignores-undefined.md) (s52)
 
 ### [api/*] — API layer
