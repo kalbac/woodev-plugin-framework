@@ -383,6 +383,104 @@ describe( 'selected row highlight (Task 10)', () => {
 } );
 
 // -----------------------------------------------------------------------
+// #172: `setSelectedId()` used to rebuild the whole list (`renderListBody()` — up to LIST_CAP
+// DOM nodes recreated, every row's click listener re-attached) EVERY time it was called, even
+// when the id it was handed is the exact one already recorded. `pickup-mount.js`'s restore pass
+// does exactly that on session open under `strategy: 'viewport'`: `alreadySelected` seeds
+// `_selectedId` before the first fetch, then `restoreSelection()` calls `setSelectedId()` again
+// with the SAME value once the map is ready — a second full rebuild that moves no class and
+// changes nothing on screen. Reproduced here at the row-identity level (a real rebuild replaces
+// every row with a fresh node; an unchanged id must leave the existing ones alone), the smallest
+// place the redundant work is directly observable — `pickup-mount.js`'s own tests use a
+// `StubPanels` double that records calls onto plain properties, never real DOM, so the
+// duplicate rebuild is invisible from there.
+// -----------------------------------------------------------------------
+
+describe( 'setSelectedId does not rebuild the list for an unchanged id (#172)', () => {
+	it( 'leaves the existing row nodes alone when called twice with the same id', () => {
+		const panels = new Panels( document.createElement( 'div' ), config );
+		panels.render();
+		panels.setVisible( [ group( 'p1', 55.75, 37.61, 'ПВЗ 1' ), group( 'p2', 55.76, 37.61, 'ПВЗ 2' ) ] );
+		panels.setSelectedId( 'p2' );
+
+		const before = [ ...panels.root.querySelectorAll( '.woodev-pickup-list__item' ) ];
+
+		// The exact scenario #172 traces: a second call with the id already in force — nothing
+		// about the selection changed, so nothing about the list should either.
+		panels.setSelectedId( 'p2' );
+
+		const after = [ ...panels.root.querySelectorAll( '.woodev-pickup-list__item' ) ];
+
+		// `renderListBody()` always does `empty( self._listBodyEl )` then rebuilds every row from
+		// scratch — a real rebuild therefore hands back BRAND NEW nodes, never the same
+		// references. Same references here is exactly "the second call did no list work".
+		expect( after ).toHaveLength( before.length );
+		expect( after[ 0 ] ).toBe( before[ 0 ] );
+		expect( after[ 1 ] ).toBe( before[ 1 ] );
+	} );
+
+	it( 'still rebuilds the list body the FIRST time an id is recorded, even with no group data yet', () => {
+		// Mirrors `pickup-mount.js`'s own opening sequence: `setSelectedId()` is seeded before
+		// `setVisible()` ever runs (session open, before the first fetch). `_selectedId` moves
+		// from `null` to a real value here — a genuine change — so this must NOT be skipped, or
+		// a customer reopening the picker on an already-chosen point would never get the
+		// highlight once the real groups do arrive without ANOTHER unrelated change first.
+		const panels = new Panels( document.createElement( 'div' ), config );
+		panels.render();
+
+		expect( () => panels.setSelectedId( 'p2' ) ).not.toThrow();
+
+		panels.setVisible( [ group( 'p1', 55.75, 37.61, 'ПВЗ 1' ), group( 'p2', 55.76, 37.61, 'ПВЗ 2' ) ] );
+
+		const rows = panels.root.querySelectorAll( '.woodev-pickup-list__item' );
+
+		expect( rows[ 1 ].classList.contains( 'is-selected' ) ).toBe( true );
+	} );
+
+	it( 'still rebuilds the list body when the id actually changes', () => {
+		// Regression guard alongside the skip above — normal customer-driven reselection (a
+		// different sidebar row, a different marker) must keep rebuilding exactly as before.
+		const panels = new Panels( document.createElement( 'div' ), config );
+		panels.render();
+		panels.setVisible( [ group( 'p1', 55.75, 37.61, 'ПВЗ 1' ), group( 'p2', 55.76, 37.61, 'ПВЗ 2' ) ] );
+		panels.setSelectedId( 'p1' );
+
+		const before = [ ...panels.root.querySelectorAll( '.woodev-pickup-list__item' ) ];
+
+		panels.setSelectedId( 'p2' );
+
+		const after = [ ...panels.root.querySelectorAll( '.woodev-pickup-list__item' ) ];
+
+		expect( after[ 0 ] ).not.toBe( before[ 0 ] );
+		expect( after[ 1 ] ).not.toBe( before[ 1 ] );
+		expect( after[ 1 ].classList.contains( 'is-selected' ) ).toBe( true );
+	} );
+
+	it( 'still updates the open card\'s CTA when setSelectedId is called with the unchanged id', () => {
+		// The trap the brief calls out: `setSelectedId()` also drives `renderCard()` (the CTA's
+		// `continueCheckout`/`select` label). Gating the LIST rebuild on "id changed" must not
+		// gate the card too — proven by opening a card, THEN calling `setSelectedId()` again with
+		// the id already in force, and checking the CTA still reflects it correctly.
+		const cfg = {
+			...config,
+			i18n: { ...config.i18n, select: 'Забрать здесь', continueCheckout: 'Продолжить оформление заказа' },
+		};
+		const panels = new Panels( document.createElement( 'div' ), cfg );
+		panels.render();
+		panels.setSelectedId( 'p1' );
+		panels.openCard( { key: 'g1', size: 1, points: [ { id: 'p1', name: 'ПВЗ 1', short_address: 'x' } ] } );
+
+		expect( panels.root.querySelector( '.woodev-pickup-card__cta' ).textContent )
+			.toBe( 'Продолжить оформление заказа' );
+
+		panels.setSelectedId( 'p1' );
+
+		expect( panels.root.querySelector( '.woodev-pickup-card__cta' ).textContent )
+			.toBe( 'Продолжить оформление заказа' );
+	} );
+} );
+
+// -----------------------------------------------------------------------
 // Round 2 (D6): `openCard( group, pointId, origin )` — `origin` is what lets the mount tell a
 // marker click (pan only) apart from every other route (zoom in), now that the original V-10
 // "must behave identically" claim has been overruled (see the file docblock's revised

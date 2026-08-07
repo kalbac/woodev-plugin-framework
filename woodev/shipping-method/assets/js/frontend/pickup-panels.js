@@ -2699,11 +2699,47 @@
 	 * only runs once `render()` exists (`this.root`); called before that, this method still only
 	 * updates `_selectedId` and, if a card is open, `renderCard()`.
 	 *
+	 * SKIPS THAT REBUILD WHEN THE NORMALIZED ID HASN'T ACTUALLY CHANGED (#172).
+	 * `pickup-mount.js`'s restore pass (spec D-15) calls this method TWICE with the exact same
+	 * value for one session open under `strategy: 'viewport'`: `alreadySelected` seeds
+	 * `_selectedId` before the first fetch even starts, and `restoreSelection()` calls this again,
+	 * once the map is ready, with the SAME id read off the SAME field — nothing about the
+	 * selection moved between the two calls, so the second `renderListBody()` recreates every row
+	 * only to reproduce the identical `is-selected` class the first render already painted. Every
+	 * OTHER reason the list might need rebuilding already goes through its own method
+	 * (`setVisible()` when the groups change, `setAnchor()` when the sort anchor moves, the type
+	 * filter's own handler) — this method's contract is "reflect a selection CHANGE", and a
+	 * repeated call carrying the CHANGED id (a customer picking a different row, or the mount's
+	 * own restore call finding a DIFFERENT current value than what was seeded) still rebuilds
+	 * exactly as before; only the no-op repeat is now free.
+	 *
+	 * `renderCard()` stays UNCONDITIONAL, gated only on `this._activeGroup`, never on whether the
+	 * id changed — it is NOT redundant work the way the list rebuild is. Two real call paths rely
+	 * on it running even when `_selectedId` itself did not just move in THIS call:
+	 *
+	 * - `pickup-mount.js`'s `finishSelection()` (a confirmed selection) clears the busy lock via
+	 *   `setSelectionBusy( false )` — which reruns `renderCard()` against the STILL-OLD
+	 *   `_selectedId` — BEFORE this method ever runs with the point's real id. This call is
+	 *   therefore the one that actually flips the CTA from `confirming` to `continueCheckout`; it
+	 *   never sees an "unchanged id" in that flow (the id is genuinely new), but the causality
+	 *   matters here: it is proof this method's OWN `renderCard()` call, not
+	 *   `setSelectionBusy()`'s, is what paints the label a customer actually sees, so it cannot be
+	 *   the one gated.
+	 * - `restoreSelection()` itself calls this method with a value already seeded, then opens the
+	 *   card on that SAME id via `openCard()` — which calls `renderCard()` unconditionally on its
+	 *   own, so the card is covered there regardless of what this method does. But a caller that
+	 *   re-asserts the CTA state without going through `openCard()` (an already-open card, e.g. a
+	 *   confirmation that lands while the customer is still looking at the same point) must not
+	 *   silently stop working just because the id happens to already match.
+	 *
 	 * @param {string|number|null} id
 	 * @returns {void}
 	 */
 	Panels.prototype.setSelectedId = function( id ) {
-		this._selectedId = ( undefined !== id && null !== id ) ? String( id ) : null;
+		var normalized = ( undefined !== id && null !== id ) ? String( id ) : null;
+		var changed = normalized !== this._selectedId;
+
+		this._selectedId = normalized;
 
 		// The list carries the highlight too now (Task 10), so it must be rebuilt as well — not
 		// only the card, which is all this method used to touch when `_selectedId` affected
@@ -2711,8 +2747,10 @@
 		// `handleFilterCheckboxChange()` guard their own `renderList()` call: `self._listBodyEl`
 		// does not exist before `render()` builds it, and `renderListBody()`'s `empty()` call has
 		// no null-check, so an unconditional call here would throw for a caller that sets the
-		// selection before the list has ever been rendered.
-		if ( this.root ) {
+		// selection before the list has ever been rendered. `changed` is checked FIRST (see this
+		// method's own docblock on #172) so a repeat call carrying the same id neither throws nor
+		// rebuilds — both guards independently gate the SAME call, not two alternatives.
+		if ( changed && this.root ) {
 			renderList( this );
 		}
 
