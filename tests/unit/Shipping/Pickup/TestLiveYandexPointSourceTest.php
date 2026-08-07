@@ -224,6 +224,31 @@ final class TestLiveYandexPointSourceTest extends TestCase {
 		$this->assertSame( [ 'code' => 'POSTAMAT', 'label' => 'Постамат' ], $postamat->to_array()['type'] );
 	}
 
+	/**
+	 * Issue #207: Yandex's payload carries no short name, so co-located tabs fell back to
+	 * `type.label` and read "Пункт выдачи заказов 1/2" — too long for a tab. The fixture now
+	 * supplies a per-type short name; the framework still does the numbering.
+	 *
+	 * The assertion on `type` above is what pins the other half of this: `TYPE_MAP`'s extra
+	 * `short` key must NOT leak into the point's `type` array (`from_array()` whitelists
+	 * `code`/`label`), or the browser would receive a shape the contract never declared.
+	 */
+	public function test_each_type_carries_its_own_short_name_for_the_tab_label(): void {
+		$this->stub_successful_transport( [ $this->real_pickup_point_record(), $this->real_terminal_record() ] );
+		Functions\when( 'set_transient' )->justReturn( true );
+
+		$source = new \Woodev_Test_Live_Yandex_Point_Source();
+		$points = $source->fetch_points( Point_Query::from_request( [ 'locality' => 'Москва' ] ) );
+
+		$short_by_code = [];
+		foreach ( $points as $point ) {
+			$short_by_code[ $point->to_array()['type']['code'] ] = $point->to_array()['point_short_name'];
+		}
+
+		$this->assertSame( 'ПВЗ', $short_by_code['PVZ'] );
+		$this->assertSame( 'Постамат', $short_by_code['POSTAMAT'] );
+	}
+
 	public function test_unrecognised_type_is_skipped_not_fatal(): void {
 		$foreign_type_record         = $this->real_pickup_point_record();
 		$foreign_type_record['type'] = 'a_future_yandex_type_this_fixture_does_not_know';
