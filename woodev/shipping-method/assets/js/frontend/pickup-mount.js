@@ -1943,6 +1943,12 @@
 				}
 			} );
 
+			// The RETURN leg of this pair — the provider reporting that the camera has reached
+			// either end of its zoom range — cannot be wired here: `provider` is still null at
+			// this point (only `start()` constructs one), and `start()` REPLACES it on every
+			// retry, so a subscription made once out here would be dropped by the first retry
+			// anyway. It lives beside the other `provider.on()` calls in `start()`.
+
 			// `query`, not `displayName` (live-review round 4). A suggestion now carries BOTH: the
 			// SHORT form the customer reads ("Чертановская улица, 66к1") and the FULL one the
 			// geocoder needs ("Россия, Москва, Чертановская улица, 66к1"). Resolving the short form
@@ -2183,6 +2189,19 @@
 			busyClearedThisStart = false;
 
 			provider.on( 'select', handleSelection );
+
+			// The return leg of the zoom control: the panels emit a signed step and know nothing
+			// about map-library zoom levels (D-3), so the provider — which owns the camera — is
+			// what decides a limit has been reached, and the panels only dim the button it names.
+			// Registered HERE rather than beside the `panels.on( 'zoom' )` forward leg because
+			// `start()` builds a fresh provider on every retry; a subscription made once outside
+			// would be silently dropped by the first one. The fail-open is that a provider which
+			// never emits this simply leaves both buttons live.
+			provider.on( 'zoomChange', function( limits ) {
+				if ( panels ) {
+					panels.setZoomLimits( limits );
+				}
+			} );
 
 			provider.on( 'error', function( reason ) {
 				// A provider-level error breaks the WHOLE map — the framework's own error

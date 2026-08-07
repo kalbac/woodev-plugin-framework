@@ -240,6 +240,9 @@ function StubPanels( container, config ) {
 	this.setPointVerdict = jest.fn();
 	this.showSelectionError = jest.fn();
 
+	/** @type {Array} every `setZoomLimits()` payload, in order. */
+	this.setZoomLimitsCalls = [];
+
 	StubPanels.instances.push( this );
 }
 
@@ -445,6 +448,15 @@ StubPanels.prototype.setBusy = function( busy ) {
 
 StubPanels.prototype.isBusy = function() {
 	return !! this._busy;
+};
+
+/**
+ * Records every `setZoomLimits()` call — the return leg of the zoom wiring (the provider
+ * reports a reached limit, the panels dim that button). The real method's DOM contract is
+ * `pickup-panels.test.js`'s job; this file only proves the forwarding.
+ */
+StubPanels.prototype.setZoomLimits = function( limits ) {
+	this.setZoomLimitsCalls.push( limits );
 };
 
 /**
@@ -2287,6 +2299,28 @@ test( 'panels zoom calls provider.zoomBy with the signed step (Task 14, spec V-1
 	session.panels.emit( 'zoom', { step: -1 } );
 
 	expect( session.provider.zoomByCalls ).toEqual( [ 1, -1 ] );
+} );
+
+// The return leg of the same wiring: the provider owns the zoom RANGE (it owns the camera), so
+// it is what decides a limit has been reached; the panels only dim the button it names.
+test( 'provider zoomChange forwards to panels.setZoomLimits', async () => {
+	const session = await openSession( configWith() );
+
+	session.provider.emit( 'zoomChange', { canZoomIn: false, canZoomOut: true } );
+
+	expect( session.panels.setZoomLimitsCalls ).toEqual( [ { canZoomIn: false, canZoomOut: true } ] );
+} );
+
+// Where the fail-open actually lives. `on()` is part of the provider contract proper (`start()`
+// calls it bare for `select`/`error`), so the degradation worth pinning is not "a provider with
+// no event surface" — that one cannot mount at all — but a provider that registers and simply
+// never reports a limit. Both buttons must then stay untouched, i.e. live.
+test( 'a provider that never emits zoomChange leaves the buttons alone', async () => {
+	const session = await openSession( configWith() );
+
+	// `toHaveLength( 0 )`, not `toEqual( [] )` — see the project's own
+	// `jest-toequal-empty-array-ignores-undefined` gotcha.
+	expect( session.panels.setZoomLimitsCalls ).toHaveLength( 0 );
 } );
 
 test( 'panels searchAddressPicked resolves the address AT THAT INDEX against the provider', async () => {

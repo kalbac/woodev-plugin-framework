@@ -1813,6 +1813,11 @@
 		this._messageTextEl = null;
 		this._messageRetryEl = null;
 
+		// The two zoom buttons {@see Panels.prototype.setZoomLimits} disables at either end of
+		// the map's zoom range — null until `render()` builds them, exactly like the two above.
+		this._zoomInEl = null;
+		this._zoomOutEl = null;
+
 		this.root = null;
 	}
 
@@ -2033,6 +2038,8 @@
 		this._messageRetryEl = null;
 		this._overlayEl = overlay;
 		this._toggleEl = toggle;
+		this._zoomInEl = zoomIn;
+		this._zoomOutEl = zoomOut;
 
 		var self = this;
 		toggle.addEventListener( 'click', function() {
@@ -2050,6 +2057,40 @@
 		} );
 
 		renderList( this );
+	};
+
+	/**
+	 * Disables «+» and/or «−» when the camera has reached that end of the map's zoom range
+	 * (operator's call, 08.08.2026: a button that stays clickable while doing nothing reads as
+	 * a bug). `pickup.css` dims a disabled button, so the state is visible and not merely
+	 * inert; `disabled` is the real attribute, not a class, so the button also stops taking
+	 * focus and announces itself correctly to a screen reader.
+	 *
+	 * FAILS OPEN, deliberately. Both buttons are enabled at render and only ever change when
+	 * something REPORTS a limit — a missing or non-boolean field leaves that button alone
+	 * rather than guessing. A map provider that never emits `zoomChange` (the embedded one, or
+	 * a third-party one written later against this same seam) therefore keeps two working
+	 * buttons, which is the correct degradation: a live button at a limit is a harmless no-op,
+	 * a dead button that should have worked is not. The RANGE itself is never known here —
+	 * this file emits a signed step and nothing else about zoom (D-3); the provider owns both
+	 * the range and the decision, exactly as it owns the camera.
+	 *
+	 * @since 2.0.2
+	 * @param {Object}  limits
+	 * @param {boolean} limits.canZoomIn  whether «+» still has somewhere to go.
+	 * @param {boolean} limits.canZoomOut whether «−» still has somewhere to go.
+	 * @returns {void}
+	 */
+	Panels.prototype.setZoomLimits = function( limits ) {
+		var state = limits || {};
+
+		if ( this._zoomInEl && 'boolean' === typeof state.canZoomIn ) {
+			this._zoomInEl.disabled = ! state.canZoomIn;
+		}
+
+		if ( this._zoomOutEl && 'boolean' === typeof state.canZoomOut ) {
+			this._zoomOutEl.disabled = ! state.canZoomOut;
+		}
 	};
 
 	/**

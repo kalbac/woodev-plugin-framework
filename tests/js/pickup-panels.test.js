@@ -3271,6 +3271,69 @@ describe( 'zoom control (spec V-13)', () => {
 		expect( onZoom ).toHaveBeenNthCalledWith( 2, { step: -1 } );
 	} );
 
+	// Operator's call, 08.08.2026: a button that stays clickable at the end of the zoom range
+	// while doing nothing reads as a bug. The RANGE is the provider's — this file only proves
+	// that a reported limit lands on the right button.
+	it( 'starts with both buttons enabled', () => {
+		const container = document.createElement( 'div' );
+
+		new Panels( container, config ).render();
+
+		const buttons = container.querySelectorAll( '.woodev-pickup-zoom__button' );
+
+		expect( buttons[ 0 ].disabled ).toBe( false );
+		expect( buttons[ 1 ].disabled ).toBe( false );
+	} );
+
+	it( 'disables only the button whose end of the range has been reached', () => {
+		const container = document.createElement( 'div' );
+		const panels = new Panels( container, config );
+
+		panels.render();
+
+		const buttons = container.querySelectorAll( '.woodev-pickup-zoom__button' );
+
+		panels.setZoomLimits( { canZoomIn: false, canZoomOut: true } );
+		expect( buttons[ 0 ].disabled ).toBe( true );
+		expect( buttons[ 1 ].disabled ).toBe( false );
+
+		panels.setZoomLimits( { canZoomIn: true, canZoomOut: false } );
+		expect( buttons[ 0 ].disabled ).toBe( false );
+		expect( buttons[ 1 ].disabled ).toBe( true );
+
+		panels.setZoomLimits( { canZoomIn: true, canZoomOut: true } );
+		expect( buttons[ 0 ].disabled ).toBe( false );
+		expect( buttons[ 1 ].disabled ).toBe( false );
+	} );
+
+	// Fail-open: a live button at a limit is a harmless no-op, a dead button that should have
+	// worked is not — so anything short of an explicit boolean leaves that button alone. This is
+	// what keeps a provider that never reports (the embedded one, or a third-party one written
+	// later against the same seam) fully usable.
+	it( 'leaves a button untouched when nothing reported its end of the range', () => {
+		const container = document.createElement( 'div' );
+		const panels = new Panels( container, config );
+
+		panels.render();
+
+		const buttons = container.querySelectorAll( '.woodev-pickup-zoom__button' );
+
+		panels.setZoomLimits( { canZoomIn: false, canZoomOut: false } );
+
+		panels.setZoomLimits( {} );
+		panels.setZoomLimits();
+		panels.setZoomLimits( { canZoomIn: 'yes', canZoomOut: 1 } );
+
+		expect( buttons[ 0 ].disabled ).toBe( true );
+		expect( buttons[ 1 ].disabled ).toBe( true );
+	} );
+
+	it( 'survives setZoomLimits() before render(), when the buttons do not exist yet', () => {
+		const panels = new Panels( document.createElement( 'div' ), config );
+
+		expect( () => panels.setZoomLimits( { canZoomIn: false, canZoomOut: false } ) ).not.toThrow();
+	} );
+
 	it( 'types both buttons "button" so a checkout form never submits on click', () => {
 		const container = document.createElement( 'div' );
 

@@ -31,7 +31,8 @@
  * `matchLoadedPoints( query )`, `suggestAddresses( query )`, `resolveAddress( displayName )`,
  * `focusAddress( latLng, label )`, `clearAddress()`, `on( event, cb )`, `destroy()`. Events out:
  * `pointClick( key )`, `clusterClick( { coords } )`, `boundsChange( bbox )`, `bboxTooWide()`,
- * `visibleChange( keys )`, `nothingNearby( { key, distanceMeters, name } )`,
+ * `visibleChange( keys )`, `zoomChange( { canZoomIn, canZoomOut } )`,
+ * `nothingNearby( { key, distanceMeters, name } )`,
  * `searchResults( { points, addresses } )`, `searchCleared()`,
  * `addressFocused( { latLng, label } )`, `addressMatchedPoint( { key } )`,
  * `error( { code, message } )`. `bbox` is the flat `[lat1,lng1,lat2,lng2]` shape
@@ -908,6 +909,7 @@
 			boundsChange: [],
 			bboxTooWide: [],
 			visibleChange: [],
+			zoomChange: [],
 			nothingNearby: [],
 			searchResults: [],
 			searchCleared: [],
@@ -915,6 +917,11 @@
 			addressMatchedPoint: [],
 			error: [],
 		};
+
+		/** @type {Object|null} the last `{ canZoomIn, canZoomOut }` pair reported through
+		 *  `zoomChange` — the dedupe baseline in {@see _emitZoomChange}. `null` means "nothing
+		 *  reported yet", which is why the first call always emits. */
+		this._zoomLimits = null;
 
 		/** @type {Object.<string, Object>} the current groups, by key — see {@see setPoints}. */
 		this._groupsByKey = {};
@@ -1051,6 +1058,13 @@
 				return;
 			}
 
+			// Strategy-independent, unlike everything below it: the zoom range is reached the
+			// same way whether or not a pan refetches. Fired once for the viewport the map
+			// settled on, so the buttons start out already correct — a map that opens AT
+			// `MAX_ZOOM` (what `focusGroup()` does on a restored selection) must not show a
+			// live «+» until the customer first moves the camera.
+			self._emitZoomChange();
+
 			if ( 'viewport' === self.config.strategy ) {
 				// Fire once for the viewport just resolved, THEN start listening — in that
 				// order, so this initial call is never immediately followed by a redundant
@@ -1058,6 +1072,7 @@
 				self._checkAndEmitBounds();
 				self.map.events.add( 'boundschange', function() {
 					self._checkAndEmitBounds();
+					self._emitZoomChange();
 				} );
 
 				return;
@@ -1068,6 +1083,7 @@
 			// camera the customer is free to move themselves. See the file docblock.
 			self.map.events.add( 'boundschange', function() {
 				self._emitVisibleChange();
+				self._emitZoomChange();
 			} );
 		} );
 	};
@@ -1597,6 +1613,50 @@
 	 *
 	 * @returns {void}
 	 */
+	/**
+	 * Reports whether the camera can still move IN and OUT, as `zoomChange`
+	 * `{ canZoomIn, canZoomOut }` — what lets the panels' own zoom buttons show a disabled
+	 * state at either end of the range instead of staying clickable no-ops (operator's call,
+	 * 08.08.2026: a permanently-clickable button that does nothing reads as a bug).
+	 *
+	 * The RANGE lives here, not in the panels, for the same D-3 reason `zoomBy()` does: the
+	 * panels emit a signed step and know nothing about map-library zoom levels. `MIN_ZOOM`/
+	 * `MAX_ZOOM` are the same two constants `_buildMap()` constrains ymaps' own drag/wheel
+	 * zoom to and `zoomBy()` clamps against, so the button's disabled state and the camera's
+	 * actual refusal to move can never disagree.
+	 *
+	 * Emitted on BOTH strategies, unlike `boundsChange` — that one is `viewport`-only because
+	 * it drives refetching, whereas a zoom limit is reached identically under `bulk`. Emitted
+	 * only when the pair CHANGES: ymaps fires `boundschange` throughout an animated move, and
+	 * a listener that re-wrote the same two booleans on every frame would be pure noise.
+	 *
+	 * @since 2.0.2
+	 * @returns {void}
+	 */
+	WoodevYandexMapProvider.prototype._emitZoomChange = function() {
+		if ( ! this.map ) {
+			return;
+		}
+
+		var zoom = this.map.getZoom();
+		var next = {
+			canZoomIn: zoom < MAX_ZOOM,
+			canZoomOut: zoom > MIN_ZOOM,
+		};
+
+		if (
+			this._zoomLimits &&
+			this._zoomLimits.canZoomIn === next.canZoomIn &&
+			this._zoomLimits.canZoomOut === next.canZoomOut
+		) {
+			return;
+		}
+
+		this._zoomLimits = next;
+
+		this.emit( 'zoomChange', next );
+	};
+
 	WoodevYandexMapProvider.prototype._checkAndEmitBounds = function() {
 		var bounds = this.map.getBounds();
 		var latSpan = Math.abs( bounds[ 1 ][ 0 ] - bounds[ 0 ][ 0 ] );
@@ -2782,12 +2842,14 @@
 		// rest of the map — this just forgets the stale accessor, matching `_marginArea`'s own
 		// treatment right above; there is no separate `.remove()` call to make here either.
 		this._topMarginArea = null;
+		this._zoomLimits = null;
 		this.handlers = {
 			pointClick: [],
 			clusterClick: [],
 			boundsChange: [],
 			bboxTooWide: [],
 			visibleChange: [],
+			zoomChange: [],
 			nothingNearby: [],
 			searchResults: [],
 			searchCleared: [],
