@@ -336,4 +336,153 @@ final class PickupPointTest extends TestCase {
 
 		$this->assertSame( [ 'https://example.test/a.jpg' ], $point->to_array()['photos'] );
 	}
+
+	// -----------------------------------------------------------------------------
+	// icons (issue #193) — cascade tier 1: the point's OWN icon, ahead of the domain's
+	// type-keyed icons and the framework's default pin.
+	// -----------------------------------------------------------------------------
+
+	public function test_icons_default_to_null_when_the_key_is_absent(): void {
+		$point = $this->make_point( [] );
+
+		$this->assertNull( $point->to_array()['icons'] );
+	}
+
+	/**
+	 * An explicit `null` and an absent key must resolve identically — both mean "this
+	 * point carries no icon of its own", not two different states worth telling apart.
+	 */
+	public function test_icons_default_to_null_when_explicitly_null(): void {
+		$point = $this->make_point( [ 'icons' => null ] );
+
+		$this->assertNull( $point->to_array()['icons'] );
+	}
+
+	public function test_icons_are_kept_when_both_states_are_supplied(): void {
+		$point = $this->make_point(
+			[
+				'icons' => [
+					'default' => 'https://example.test/5post.svg',
+					'active'  => 'https://example.test/5post-active.svg',
+				],
+			]
+		);
+
+		$this->assertSame(
+			[
+				'default' => 'https://example.test/5post.svg',
+				'active'  => 'https://example.test/5post-active.svg',
+			],
+			$point->to_array()['icons']
+		);
+	}
+
+	/**
+	 * D-5's rule, applied to the per-point tier too (mirrors
+	 * {@see \Woodev\Framework\Shipping\Pickup\Pickup_Handler::normalized_point_icons()}):
+	 * a domain that supplies only one image gets it mirrored into `active`, never a blank.
+	 */
+	public function test_icons_active_falls_back_to_default_when_only_default_is_supplied(): void {
+		$point = $this->make_point( [ 'icons' => [ 'default' => 'https://example.test/5post.svg' ] ] );
+
+		$this->assertSame(
+			[ 'default' => 'https://example.test/5post.svg', 'active' => 'https://example.test/5post.svg' ],
+			$point->to_array()['icons']
+		);
+	}
+
+	/**
+	 * An empty `default` carries no more information than an absent one — a blank string
+	 * can never be rendered as an image, so it is treated the SAME as "no icon" rather than
+	 * a distinct third state. This is deliberately not the `close`-flag trap (PR #192): that
+	 * flag is a boolean, where an explicit `false` is itself a meaningful decision distinct
+	 * from "unspoken". A URL has no equivalent meaningful-but-empty state.
+	 */
+	public function test_icons_with_an_empty_default_are_dropped_to_null(): void {
+		$point = $this->make_point( [ 'icons' => [ 'default' => '', 'active' => 'https://example.test/a.svg' ] ] );
+
+		$this->assertNull( $point->to_array()['icons'] );
+	}
+
+	public function test_icons_with_a_non_array_value_are_dropped_to_null(): void {
+		$point = $this->make_point( [ 'icons' => 'https://example.test/5post.svg' ] );
+
+		$this->assertNull( $point->to_array()['icons'] );
+	}
+
+	public function test_icons_with_a_non_string_default_are_dropped_to_null(): void {
+		$point = $this->make_point( [ 'icons' => [ 'default' => [ 'x' ] ] ] );
+
+		$this->assertNull( $point->to_array()['icons'] );
+	}
+
+	public function test_icons_with_a_non_string_active_fall_back_to_default(): void {
+		$point = $this->make_point(
+			[ 'icons' => [ 'default' => 'https://example.test/5post.svg', 'active' => [ 'x' ] ] ]
+		);
+
+		$this->assertSame(
+			[ 'default' => 'https://example.test/5post.svg', 'active' => 'https://example.test/5post.svg' ],
+			$point->to_array()['icons']
+		);
+	}
+
+	public function test_to_array_does_not_escape_icons(): void {
+		$point = $this->make_point( [ 'icons' => [ 'default' => 'https://example.test/a.svg?x=1&y=2' ] ] );
+
+		$this->assertStringNotContainsString( '&amp;', $point->to_array()['icons']['default'] );
+	}
+
+	public function test_to_browser_array_escapes_icons_via_esc_url_raw_not_esc_url(): void {
+		// The stubbed esc_url_raw() from stubEscapeFunctions() is a pass-through, which is
+		// enough to prove the VALUE is untouched (no HTML-entity-encoding of the querystring
+		// '&') — the same JSON-payload rule `photos` already documents.
+		$point = $this->make_point( [ 'icons' => [ 'default' => 'https://example.test/a.svg?x=1&y=2' ] ] );
+
+		$this->assertSame(
+			'https://example.test/a.svg?x=1&y=2',
+			$point->to_browser_array()['icons']['default']
+		);
+	}
+
+	public function test_to_browser_array_escapes_the_active_icon_url_too(): void {
+		$point = $this->make_point(
+			[
+				'icons' => [
+					'default' => 'https://example.test/a.svg',
+					'active'  => 'https://example.test/a-active.svg?x=1&y=2',
+				],
+			]
+		);
+
+		$this->assertSame(
+			'https://example.test/a-active.svg?x=1&y=2',
+			$point->to_browser_array()['icons']['active']
+		);
+	}
+
+	public function test_to_browser_array_icons_are_null_when_absent(): void {
+		$point = $this->make_point( [] );
+
+		$this->assertNull( $point->to_browser_array()['icons'] );
+	}
+
+	/**
+	 * A `default` that survives `esc_url_raw()` as an empty string (a `javascript:` URL,
+	 * which WordPress's own bad-protocol stripping collapses to `''`) drops the whole icon
+	 * override at the browser boundary — mirrors
+	 * {@see \Woodev\Framework\Shipping\Pickup\Pickup_Handler::normalized_point_icons()}'s
+	 * own rule for the type-level tier.
+	 */
+	public function test_to_browser_array_drops_icons_whose_default_becomes_empty_after_escaping(): void {
+		\Brain\Monkey\Functions\when( 'esc_url_raw' )->alias(
+			static function ( $url ) {
+				return 0 === stripos( ltrim( (string) $url ), 'javascript:' ) ? '' : $url;
+			}
+		);
+
+		$point = $this->make_point( [ 'icons' => [ 'default' => 'javascript:alert(1)' ] ] );
+
+		$this->assertNull( $point->to_browser_array()['icons'] );
+	}
 }

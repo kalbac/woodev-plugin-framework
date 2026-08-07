@@ -5,6 +5,13 @@
  * proving the framework's `Point_Source` contract against a live carrier response instead
  * of a static array (issue #185).
  *
+ * PER-POINT ICONS BY OPERATOR (issue #193): {@see self::icons_for_operator()} gives every
+ * `5post` point its own icon, keyed off the raw record's `operator_id` — the field the
+ * type-level tier cannot read at all, and the only one that separates a 5post point from a
+ * Yandex.Market one when both report the SAME `type: "pickup_point"` (see PAYLOAD below).
+ * This is `Pickup_Point`'s new per-point `icons` override (cascade tier 1) wired to a real
+ * consumer on real data.
+ *
  * ACTIVATION: never on by default. `woodev-test-shipping-method.php` only constructs this
  * class when `WOODEV_TEST_PICKUP_LIVE_YANDEX` is truthy (defined near
  * `WOODEV_TEST_PICKUP_STRATEGY` at the top of that file, default `false`). Neither
@@ -159,6 +166,12 @@ if ( ! class_exists( 'Woodev_Test_Live_Yandex_Point_Source' ) ) {
 
 		/** Yandex `geo_id` for Moscow — see the file docblock's SCOPE section. */
 		private const MOSCOW_GEO_ID = 213;
+
+		/**
+		 * The `operator_id` this fixture singles out for its own per-point icon (issue
+		 * #193) — see {@see self::icons_for_operator()}.
+		 */
+		private const FIVE_POST_OPERATOR_ID = '5post';
 
 		/**
 		 * The fixture's one static "city" — mirrors
@@ -415,8 +428,47 @@ if ( ! class_exists( 'Woodev_Test_Live_Yandex_Point_Source' ) ) {
 					),
 					'services'        => $this->map_services( $services ),
 					'photos'          => [],
+					'icons'           => $this->icons_for_operator( $raw_point['operator_id'] ?? null ),
 				]
 			);
+		}
+
+		/**
+		 * This fixture's consumer of {@see \Woodev\Framework\Shipping\Pickup\Pickup_Point}'s
+		 * new per-point icon override (issue #193, cascade tier 1). Only a `5post` point
+		 * gets one — every other operator (`market_l4g`, or the field absent entirely) falls
+		 * through to the existing `PVZ`/`POSTAMAT` TYPE-level tier, unchanged.
+		 *
+		 * Live measurement, `geo_id: 213` (Moscow), 812 points: `5post`/`pickup_point`: 679,
+		 * `market_l4g`/`pickup_point`: 129, `market_l4g`/`terminal`: 4. The type code alone
+		 * cannot separate the 679 5post points from the 129 Yandex.Market ones — both report
+		 * `type: "pickup_point"` — so this is the real-data case the whole cascade tier
+		 * exists for, wired to the fixture's own live consumer.
+		 *
+		 * Reuses the fixture's EXISTING terminal SVGs — `yandex-delivery-map-pin-terminal
+		 * [-active].svg`, already shipped for the `POSTAMAT` type-level icon just below in
+		 * `woodev-test-shipping-method.php` — rather than adding new artwork: the office pin
+		 * already draws every OTHER `pickup_point` (the type tier), so the terminal pin
+		 * reused here is immediately visually distinguishable on the rig without a new file.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param mixed $operator_id Raw `operator_id` value from the API, or null when the
+		 *                            record carries none.
+		 *
+		 * @return array{default: string, active: string}|null
+		 */
+		private function icons_for_operator( $operator_id ): ?array {
+			if ( self::FIVE_POST_OPERATOR_ID !== $operator_id ) {
+				return null;
+			}
+
+			$icons_url = plugins_url( 'assets/images', __FILE__ );
+
+			return [
+				'default' => $icons_url . '/yandex-delivery-map-pin-terminal.svg',
+				'active'  => $icons_url . '/yandex-delivery-map-pin-terminal-active.svg',
+			];
 		}
 
 		/**
