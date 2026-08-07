@@ -496,12 +496,13 @@
 	color: #646970;
 }
 
-/* One row (spec V-11): the plugin's own type icon (omitted when it supplies none), address in
-   bold, name/description in muted grey underneath, separated from the next row by a bottom
-   border — icon → address → name is a CSS grid, not a flow layout, so the icon can span two text
-   rows without extra markup. Targets BOTH shapes a row can take: a single-point group's item IS
-   the row (no nested `.woodev-pickup-list__point` — see `buildListItem()` in pickup-panels.js),
-   while one point of a co-located group gets its OWN `.woodev-pickup-list__point` button instead. */
+/* One row (spec V-11): the framework's own type glyph (issue #171 — ALWAYS rendered now, never
+   omitted; see pickup-panels.js's pointGlyphMarkup()), address in bold, name/description in
+   muted grey underneath, separated from the next row by a bottom border — icon → address → name
+   is a CSS grid, not a flow layout, so the icon can span two text rows without extra markup.
+   Targets BOTH shapes a row can take: a single-point group's item IS the row (no nested
+   `.woodev-pickup-list__point` — see `buildListItem()` in pickup-panels.js), while one point of
+   a co-located group gets its OWN `.woodev-pickup-list__point` button instead. */
 .woodev-pickup-list__item:not( :has( .woodev-pickup-list__point ) ),
 .woodev-pickup-list__point {
 	display: grid;
@@ -594,11 +595,30 @@
 	justify-content: normal;
 }
 
+/* Issue #171: 20px was the OLD size for a plugin-supplied `<img>`, optional and shown only when
+   configured. The framework's own glyph is a plain `<span>` holding inline SVG now — 24px (a
+   clean 1:1 with the glyph's own 24x24 viewBox, no scaling artefact) instead, legible on its
+   own rather than relying on the customer already knowing what a 20px teardrop meant. `color`
+   is the SAME muted chrome tone `.woodev-pickup-list__name`/`__distance` already use below —
+   decoration, not the D-15 accent pairing (that stays reserved for the CTA/toggle/selected-row/
+   badge, see the file docblock). `display: flex` centres the svg child regardless of whatever
+   intrinsic size a CUSTOM plugin-supplied markup override might carry — the child rule below is
+   what actually forces the fill, this is the belt-and-braces centring for anything that slips
+   through with an odd aspect ratio. */
 .woodev-pickup-list__icon {
 	grid-area: icon;
-	width: 20px;
-	height: 20px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 24px;
+	height: 24px;
 	align-self: start;
+	color: #646970;
+}
+
+.woodev-pickup-list__icon svg {
+	width: 100%;
+	height: 100%;
 }
 
 .woodev-pickup-list__address {
@@ -1291,23 +1311,25 @@
 	border-bottom: 1px solid #dcdcde;
 }
 
-/* The chip + close row (round 4) — always renders (the close control has no other way back to
-   the list, spec §6 STATE 3); the chip is conditional (spec V-12, only when the plugin supplies
-   an icon for the point's type). `align-items: center` — nothing competes for extra height in
-   this row any more (the tab bar moved to its own row below), so the old `flex-start` that used
-   to top-align the chip against a possibly-taller, wrapped tab group has nothing left to justify
-   it; centring the chip against the close button is the natural read for a plain icon-and-button
-   pair. See `.woodev-pickup-card__close`'s own `margin-left: auto` for how the close button stays
-   pinned to the right edge with or without the chip — deliberately NOT `justify-content:
-   space-between` here, which treats a single remaining child (the chip-less case) as
-   `flex-start` and would strand the close button on the LEFT instead. */
+/* The chip + close row (round 4) — the close control has no other way back to the list (spec §6
+   STATE 3), and the chip now ALSO always renders (issue #171: the framework's own type glyph,
+   never conditional on a plugin supplying one any more — see `.woodev-pickup-card__chip`'s own
+   note below). `align-items: center` — nothing competes for extra height in this row any more
+   (the tab bar moved to its own row below), so the old `flex-start` that used to top-align the
+   chip against a possibly-taller, wrapped tab group has nothing left to justify it; centring the
+   chip against the close button is the natural read for a plain icon-and-button pair. See
+   `.woodev-pickup-card__close`'s own `margin-left: auto` for how the close button stays pinned
+   to the right edge regardless. */
 .woodev-pickup-card__header-row {
 	display: flex;
 	align-items: center;
 }
 
-/* The chip (spec V-12) — only when the PLUGIN supplies an icon for the point's type; the
-   framework's own default marker pin (V-9) is map furniture and would read as decoration here. */
+/* The chip (spec V-12; issue #171 — ALWAYS renders now, the framework's own type glyph, never
+   conditional on a plugin-supplied icon any more). Background/border unchanged from the old
+   plugin-`<img>` chip: an accent-filled square, matching the D-15 accent pairing every other
+   accent-background rule in this file follows — see `.woodev-pickup-card__chip-icon`'s own
+   `color` below, which is the paired accent-CONTRAST half of that same rule. */
 .woodev-pickup-card__chip {
 	display: flex;
 	flex: 0 0 auto;
@@ -1320,9 +1342,18 @@
 	background: var( --woodev-pickup-accent, #06aedd );
 }
 
-.woodev-pickup-card__chip img {
+.woodev-pickup-card__chip-icon {
+	display: flex;
+	align-items: center;
+	justify-content: center;
 	width: 22px;
 	height: 22px;
+	color: var( --woodev-pickup-accent-contrast, #fff );
+}
+
+.woodev-pickup-card__chip-icon svg {
+	width: 100%;
+	height: 100%;
 }
 
 /* One tab per point of a co-located group — omitted entirely for a single-point group (D-4);

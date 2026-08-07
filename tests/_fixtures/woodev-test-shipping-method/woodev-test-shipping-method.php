@@ -797,6 +797,29 @@ function woodev_test_shipping_method_plugin_init(): void {
 		3
 	);
 
+	// -----------------------------------------------------------------------
+	// Issue #171: a domain seam over `woodev_pickup_map_point_glyphs`
+	// (class-pickup-handler.php's normalized_point_glyphs()) — the framework refuses to
+	// guess a glyph from a carrier's type CODE, so a plugin whose `POSTAMAT` type reads as
+	// a parcel locker has to say so explicitly, here. `PVZ` needs no entry at all: the
+	// framework's own default is `warehouse` for every type it was never told about, which
+	// is exactly what a staffed pickup point should show. Gives the seam a real consumer on
+	// the rig (rather than shipping it speculative, s32 YAGNI) and lets the operator see two
+	// visibly different, legible glyphs in the sidebar list and the point card side by side.
+	// Same placement reasoning as the `woodev_shipping_pickup_point_selection` filter above:
+	// registering the closure does not INVOKE it, so it is safe here regardless of whether
+	// `plugin_init()`'s own deferred callback has run yet.
+	// -----------------------------------------------------------------------
+
+	add_filter(
+		'woodev_pickup_map_point_glyphs',
+		static function ( array $glyphs ): array {
+			$glyphs['POSTAMAT'] = 'package';
+
+			return $glyphs;
+		}
+	);
+
 	/**
 	 * Глобальный хелпер для доступа к тестовому плагину из тестов.
 	 *

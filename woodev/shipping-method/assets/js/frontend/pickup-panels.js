@@ -311,6 +311,63 @@
 		'<path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>';
 
 	/**
+	 * The framework's own built-in point-type glyphs (issue #171, operator decision) — the
+	 * sidebar list row and the point card's chip now ALWAYS show one of these, replacing the
+	 * old "plugin supplies a marker URL or nothing renders" contract (see {@see pointGlyphMarkup}).
+	 * A teardrop marker pin is a POINTER AT A COORDINATE; shrunk into a list row there is
+	 * nothing left to point at, so the framework draws two flat, square glyphs instead —
+	 * `warehouse` (a staffed point) and `package` (a parcel locker) — geometry taken verbatim
+	 * from Lucide (ISC-licensed: https://lucide.dev/icons/warehouse,
+	 * https://lucide.dev/icons/package; https://github.com/lucide-icons/lucide, `icons/
+	 * warehouse.svg` / `icons/package.svg`), matching the "redraw/reuse a Lucide shape"
+	 * convention {@see FILTER_ICON_SVG}/{@see CLEAR_ICON_SVG} above and the map's own marker
+	 * pins already established.
+	 *
+	 * Deliberately carry NO `width`/`height` attribute of their own, unlike the two constants
+	 * above — this pair renders at TWO different sizes (the list row's icon, the card's larger
+	 * chip), so the CONSUMING element's own CSS sizes the svg (`width: 100%; height: 100%` on
+	 * `.woodev-pickup-list__icon svg` / `.woodev-pickup-card__chip-icon svg`, pickup.css) rather
+	 * than a fixed intrinsic size baked into shared markup that would be wrong for one of the two.
+	 * `stroke="currentColor"`, `fill="none"` — square, transparent background, and readable in
+	 * whatever text colour the consuming element sets, exactly like every other icon in this file.
+	 *
+	 * @since 2.0.2
+	 * @type {Object<string, string>}
+	 */
+	var GLYPH_SVG = {
+		warehouse: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
+			'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' +
+			'<path d="M18 21V10a1 1 0 0 0-1-1H7a1 1 0 0 0-1 1v11"/>' +
+			'<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 1.132-1.803l7.95-3.974a2 2 0 0 1 ' +
+			'1.837 0l7.948 3.974A2 2 0 0 1 22 8z"/>' +
+			'<path d="M6 13h12"/>' +
+			'<path d="M6 17h12"/>' +
+			'</svg>',
+		'package': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
+			'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' +
+			'<path d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 ' +
+			'4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z"/>' +
+			'<path d="M12 22V12"/>' +
+			'<polyline points="3.29 7 12 12 20.71 7"/>' +
+			'<path d="m7.5 4.27 9 5.15"/>' +
+			'</svg>'
+	};
+
+	/**
+	 * The glyph key {@see pointGlyphMarkup} falls back to for every type unless a plugin says
+	 * otherwise (issue #171) — a carrier's type CODE (`PVZ`, `POSTAMAT`, whatever a carrier
+	 * invents) is arbitrary domain vocabulary, and sniffing it for a substring like
+	 * "POSTAMAT"/"LOCKER"/"TERMINAL" is exactly the kind of guess over someone else's naming
+	 * this framework refuses to make (mirrors the file docblock's "framework owns mechanism,
+	 * plugin owns domain" line). Every type reads as a staffed pickup point unless
+	 * `Pickup_Handler`'s `woodev_pickup_map_point_glyphs` filter names it otherwise.
+	 *
+	 * @since 2.0.2
+	 * @type {string}
+	 */
+	var DEFAULT_GLYPH = 'warehouse';
+
+	/**
 	 * @type {number} minimum number of known point types before the filter badge shows a NUMBER at
 	 * all — see the file docblock's "THE BADGE'S 3+ RULE" note (D2). Below this, `.is-filtered` on
 	 * the toggle carries the whole "something is filtered" signal by itself.
@@ -505,19 +562,40 @@
 	}
 
 	/**
-	 * The plugin's icon URL for a point's type, or `''` when the plugin supplies none.
-	 * The sidebar shows the PLUGIN's icon only — the framework's own default marker (V-9) is
-	 * map furniture and would read as decoration in a list.
+	 * The framework-owned glyph markup for a point's type, for the sidebar list row and the
+	 * point card's chip (issue #171, replacing the old `pointIconUrl()` this function used to
+	 * be) — ALWAYS returns something renderable, never `''`. `config.pointIcons` (a
+	 * plugin-supplied MARKER url) is deliberately never read here any more: that map drives
+	 * the MAP's own pins (map furniture, spec V-9) and stays exactly that; this surface is a
+	 * SEPARATE contract, `config.pointGlyphs` (`Pickup_Handler::normalized_point_glyphs()`).
 	 *
+	 * `pointGlyphs[ code ].markup`, when present, is ALREADY sanitised server-side
+	 * ({@see wp_kses()} on the PHP side) and is written via `innerHTML` verbatim by this
+	 * function's two callers — same discipline as every other server-escaped field this file
+	 * writes (see the file docblock's escaping rule). `pointGlyphs[ code ].glyph` selects the
+	 * framework's OTHER built-in ({@see GLYPH_SVG}) instead. A type with no override, or whose
+	 * override the server dropped as unsafe/unusable, falls back to {@see DEFAULT_GLYPH} —
+	 * never a guess at the carrier's own type-code vocabulary.
+	 *
+	 * @since 2.0.2
 	 * @param {Object} config
 	 * @param {Object} point
-	 * @returns {string}
+	 * @returns {string} SVG markup, safe to assign to `innerHTML` as-is.
 	 */
-	function pointIconUrl( config, point ) {
-		var icons = ( config && config.pointIcons ) || {};
+	function pointGlyphMarkup( config, point ) {
 		var code = ( point && point.type && point.type.code ) || '';
+		var glyphs = ( config && config.pointGlyphs ) || {};
+		var override = Object.prototype.hasOwnProperty.call( glyphs, code ) ? glyphs[ code ] : null;
 
-		return ( icons[ code ] && icons[ code ].default ) || '';
+		if ( override && 'string' === typeof override.markup && override.markup.length > 0 ) {
+			return override.markup;
+		}
+
+		var key = ( override && 'string' === typeof override.glyph && override.glyph.length > 0 )
+			? override.glyph
+			: DEFAULT_GLYPH;
+
+		return GLYPH_SVG[ key ] || GLYPH_SVG[ DEFAULT_GLYPH ];
 	}
 
 	/**
@@ -566,16 +644,16 @@
 	}
 
 	/**
-	 * Builds one list row for a single-point group (spec V-11): the plugin's type icon (only
-	 * when {@see pointIconUrl} finds one), address in bold, name/description as the muted
-	 * subtitle, and — when an anchor is set — the formatted distance. Icon, then address, then
-	 * name is the order the spec asks for: the address is what the customer scans the list FOR,
-	 * the name/description is secondary detail. `short_address`/`address`/`name` are
-	 * already-escaped point fields (see the file docblock) and are written via `innerHTML` here,
-	 * same as everywhere else in this file; the `title` attributes carry the DECODED text
-	 * instead (see {@see decodeForTitle}) because an HTML attribute value is never re-parsed as
-	 * markup the way `innerHTML` is, so the raw escaped string would show literal entities on
-	 * hover.
+	 * Builds one list row for a single-point group (spec V-11): the framework's own type glyph
+	 * (issue #171 — ALWAYS rendered now, see {@see pointGlyphMarkup}), address in bold,
+	 * name/description as the muted subtitle, and — when an anchor is set — the formatted
+	 * distance. Icon, then address, then name is the order the spec asks for: the address is
+	 * what the customer scans the list FOR, the name/description is secondary detail.
+	 * `short_address`/`address`/`name` are already-escaped point fields (see the file
+	 * docblock) and are written via `innerHTML` here, same as everywhere else in this file; the
+	 * `title` attributes carry the DECODED text instead (see {@see decodeForTitle}) because an
+	 * HTML attribute value is never re-parsed as markup the way `innerHTML` is, so the raw
+	 * escaped string would show literal entities on hover.
 	 *
 	 * @param {Object}        point
 	 * @param {number[]|null} anchor
@@ -586,15 +664,12 @@
 	 */
 	function buildSinglePointRow( point, anchor, group, locale, config ) {
 		var wrap = document.createDocumentFragment();
-		var iconUrl = pointIconUrl( config, point );
 
-		if ( iconUrl ) {
-			var icon = document.createElement( 'img' );
-			icon.className = 'woodev-pickup-list__icon';
-			icon.src = iconUrl;
-			icon.alt = '';
-			wrap.appendChild( icon );
-		}
+		var icon = document.createElement( 'span' );
+		icon.className = 'woodev-pickup-list__icon';
+		icon.setAttribute( 'aria-hidden', 'true' );
+		icon.innerHTML = pointGlyphMarkup( config, point ); // eslint-disable-line -- framework constant or server-sanitised markup, see pointGlyphMarkup's own docblock.
+		wrap.appendChild( icon );
 
 		var addressEl = document.createElement( 'span' );
 		addressEl.className = 'woodev-pickup-list__address';
@@ -953,9 +1028,10 @@
 	/**
 	 * Builds the card's header: a close control that ALWAYS renders (this is the customer's only
 	 * way back to the list without dismissing the whole modal, spec §6 STATE 3) plus the icon chip
-	 * (Task 15, spec V-12 — rendered only when the plugin supplies one for `point`'s type, via the
-	 * SAME {@see pointIconUrl} lookup the sidebar row uses) — both on a FIRST inner row,
-	 * `.woodev-pickup-card__header-row` — and the tab bar (only for a co-located group;
+	 * (Task 15, spec V-12 — issue #171: now ALSO ALWAYS renders, via the SAME
+	 * {@see pointGlyphMarkup} lookup the sidebar row uses, so both surfaces agree on what glyph
+	 * a point's type gets) — both on a FIRST inner row, `.woodev-pickup-card__header-row` — and
+	 * the tab bar (only for a co-located group;
 	 * {@see buildTabs} returns `null` for a single-point one) on its OWN row below that, still
 	 * inside `.woodev-pickup-card__header`.
 	 *
@@ -985,22 +1061,19 @@
 		var headerRow = document.createElement( 'div' );
 		headerRow.className = 'woodev-pickup-card__header-row';
 
-		// The chip (spec V-12) — only when the PLUGIN supplies an icon for this point's type.
-		// It shares {@see pointIconUrl} with the sidebar row builder rather than a second lookup,
-		// so both surfaces agree on what "this point has no icon" means.
-		var iconUrl = pointIconUrl( self._config, point );
+		// The chip (spec V-12, issue #171: ALWAYS renders now). It shares {@see pointGlyphMarkup}
+		// with the sidebar row builder rather than a second lookup, so both surfaces agree on
+		// exactly which glyph a point's type gets.
+		var chip = document.createElement( 'div' );
+		chip.className = 'woodev-pickup-card__chip';
+		chip.setAttribute( 'aria-hidden', 'true' );
 
-		if ( iconUrl ) {
-			var chip = document.createElement( 'div' );
-			chip.className = 'woodev-pickup-card__chip';
+		var chipIcon = document.createElement( 'span' );
+		chipIcon.className = 'woodev-pickup-card__chip-icon';
+		chipIcon.innerHTML = pointGlyphMarkup( self._config, point ); // eslint-disable-line -- framework constant or server-sanitised markup, see pointGlyphMarkup's own docblock.
+		chip.appendChild( chipIcon );
 
-			var chipIcon = document.createElement( 'img' );
-			chipIcon.src = iconUrl;
-			chipIcon.alt = '';
-			chip.appendChild( chipIcon );
-
-			headerRow.appendChild( chip );
-		}
+		headerRow.appendChild( chip );
 
 		var close = document.createElement( 'button' );
 		close.type = 'button';

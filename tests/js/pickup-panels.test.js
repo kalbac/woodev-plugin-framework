@@ -1067,17 +1067,50 @@ describe( 'sectioned card body (spec V-12)', () => {
 		expect( panels.root.querySelectorAll( '.woodev-pickup-card__section' ) ).toHaveLength( 1 );
 	} );
 
-	it( 'renders the chip only when the plugin supplies an icon for this point\'s type', () => {
-		const withIcon = mount( { ...cardConfig, pointIcons: { PVZ: { default: '/pvz.svg' } } } );
-		const withoutIcon = mount( { ...cardConfig, pointIcons: {} } );
+	// Issue #171: the chip is the framework's OWN glyph now, never conditional on a
+	// plugin-supplied icon — it always renders, defaulting to the `warehouse` glyph, and a
+	// plugin reaches the two override outcomes via `config.pointGlyphs`, not `pointIcons`
+	// (that map still exists, but it now drives only the MAP's own marker pins).
+	it( 'always renders the chip, defaulting to the warehouse glyph', () => {
+		const panels = mount( cardConfig );
+		panels.openCard( { key: 'k', size: 1, points: [ point( { type: { code: 'PVZ', label: 'ПВЗ' } } ) ] } );
 
-		const p = point( { type: { code: 'PVZ', label: 'ПВЗ' } } );
+		const chip = panels.root.querySelector( '.woodev-pickup-card__chip' );
 
-		withIcon.openCard( { key: 'k', size: 1, points: [ p ] } );
-		withoutIcon.openCard( { key: 'k', size: 1, points: [ p ] } );
+		expect( chip ).not.toBeNull();
+		expect( chip.querySelector( '.woodev-pickup-card__chip-icon svg' ) ).not.toBeNull();
+	} );
 
-		expect( withIcon.root.querySelector( '.woodev-pickup-card__chip img' ) ).not.toBeNull();
-		expect( withoutIcon.root.querySelector( '.woodev-pickup-card__chip' ) ).toBeNull();
+	it( 'a plugin-supplied pointIcons map has no effect on the card chip any more', () => {
+		const panels = mount( { ...cardConfig, pointIcons: { PVZ: { default: '/pvz.svg' } } } );
+		panels.openCard( { key: 'k', size: 1, points: [ point( { type: { code: 'PVZ', label: 'ПВЗ' } } ) ] } );
+
+		expect( panels.root.querySelector( '.woodev-pickup-card__chip img' ) ).toBeNull();
+		expect( panels.root.querySelector( '.woodev-pickup-card__chip-icon svg' ) ).not.toBeNull();
+	} );
+
+	it( 'swaps in the OTHER built-in glyph via config.pointGlyphs', () => {
+		const panels = mount( { ...cardConfig, pointGlyphs: { POSTAMAT: { glyph: 'package', markup: null } } } );
+		panels.openCard( { key: 'k', size: 1, points: [ point( { type: { code: 'POSTAMAT', label: 'Постамат' } } ) ] } );
+
+		const warehouseDefault = mount( cardConfig );
+		warehouseDefault.openCard( { key: 'k', size: 1, points: [ point( { type: { code: 'PVZ', label: 'ПВЗ' } } ) ] } );
+
+		const swapped = panels.root.querySelector( '.woodev-pickup-card__chip-icon svg' ).outerHTML;
+		const defaulted = warehouseDefault.root.querySelector( '.woodev-pickup-card__chip-icon svg' ).outerHTML;
+
+		expect( swapped ).not.toBe( defaulted );
+	} );
+
+	it( 'renders a plugin-supplied raw markup override verbatim, already sanitised server-side', () => {
+		// jsdom's own innerHTML serializer re-emits a self-closing `<path/>` as `<path></path>`
+		// on read-back — this is written with an explicit closing tag from the start so the
+		// assertion below compares like with like rather than tripping over that normalisation.
+		const customSvg = '<svg viewBox="0 0 24 24"><path d="M1 1"></path></svg>';
+		const panels = mount( { ...cardConfig, pointGlyphs: { CUSTOM: { glyph: null, markup: customSvg } } } );
+		panels.openCard( { key: 'k', size: 1, points: [ point( { type: { code: 'CUSTOM', label: 'Свой' } } ) ] } );
+
+		expect( panels.root.querySelector( '.woodev-pickup-card__chip-icon' ).innerHTML ).toBe( customSvg );
 	} );
 } );
 
@@ -1149,7 +1182,7 @@ it( 'renders the close control whether or not the tab bar is present', () => {
 
 describe( 'card header layout (round 4 — chip+close row, tabs on their own row below)', () => {
 	it( 'puts the chip and the close control inside one header-row, and the tabs OUTSIDE it', () => {
-		const panels = mount( { ...cardConfig, pointIcons: { pvz: { default: '/pvz.svg' }, postamat: { default: '/postamat.svg' } } } );
+		const panels = mount( cardConfig );
 
 		panels.openCard( { key: 'k', size: 2, points: [
 			point( { id: 'a', type: { code: 'pvz', label: 'ПВЗ' } } ),
@@ -1172,7 +1205,10 @@ describe( 'card header layout (round 4 — chip+close row, tabs on their own row
 		expect( row.contains( tabs ) ).toBe( false );
 	} );
 
-	it( 'still renders the header-row (holding just the close control) when there is no chip and no tab bar', () => {
+	// Issue #171: the chip is no longer conditional (see the "always renders the chip" test
+	// above), so this now proves the header-row holds BOTH the chip and the close control even
+	// with no tab bar — the "no chip" half of the old title is gone along with the behaviour.
+	it( 'renders the header-row (chip + close, no tab bar) for a single-point group', () => {
 		const panels = mount( cardConfig );
 		panels.openCard( { key: 'k', size: 1, points: [ point() ] } );
 
@@ -1180,17 +1216,17 @@ describe( 'card header layout (round 4 — chip+close row, tabs on their own row
 
 		expect( row ).not.toBeNull();
 		expect( row.querySelector( '.woodev-pickup-card__close' ) ).not.toBeNull();
-		expect( row.querySelector( '.woodev-pickup-card__chip' ) ).toBeNull();
+		expect( row.querySelector( '.woodev-pickup-card__chip' ) ).not.toBeNull();
 		expect( panels.root.querySelector( '.woodev-pickup-card__tabs' ) ).toBeNull();
 	} );
 
-	it( 'keeps the chip inside the header-row even without a tab bar (single-point group, chip configured)', () => {
-		const panels = mount( { ...cardConfig, pointIcons: { pvz: { default: '/pvz.svg' } } } );
+	it( 'keeps the chip inside the header-row even without a tab bar (single-point group)', () => {
+		const panels = mount( cardConfig );
 		panels.openCard( { key: 'k', size: 1, points: [ point( { type: { code: 'pvz', label: 'ПВЗ' } } ) ] } );
 
 		const row = panels.root.querySelector( '.woodev-pickup-card__header-row' );
 
-		expect( row.querySelector( '.woodev-pickup-card__chip img' ) ).not.toBeNull();
+		expect( row.querySelector( '.woodev-pickup-card__chip-icon svg' ) ).not.toBeNull();
 		expect( panels.root.querySelector( '.woodev-pickup-card__tabs' ) ).toBeNull();
 	} );
 
@@ -2832,7 +2868,7 @@ describe( 'sidebar list (spec V-11)', () => {
 		expect( container.querySelector( '.woodev-pickup-list__header' ) ).toBeNull();
 	} );
 
-	it( 'renders address first in bold and the name as the subtitle', () => {
+	it( 'renders the glyph first, then address in bold, then the name as the subtitle', () => {
 		const container = document.createElement( 'div' );
 		const panels = new Panels( container, config );
 		const g = group( 'g1', 55.75, 37.61, 'ПВЗ «Магнит»' );
@@ -2842,32 +2878,102 @@ describe( 'sidebar list (spec V-11)', () => {
 		panels.setVisible( [ g ] );
 
 		const row = container.querySelector( '.woodev-pickup-list__item' );
+		const icon = row.querySelector( '.woodev-pickup-list__icon' );
 		const address = row.querySelector( '.woodev-pickup-list__address' );
 		const name = row.querySelector( '.woodev-pickup-list__name' );
 
-		expect( row.firstElementChild ).toBe( address );
+		// Issue #171: the framework's own glyph is now always the row's first element (grid
+		// places it in its own 'icon' area spanning every text row — see pickup.css); address
+		// is the first TEXT element, immediately after it.
+		expect( row.firstElementChild ).toBe( icon );
+		expect( icon.nextElementSibling ).toBe( address );
 		expect( address.textContent ).toBe( g.points[ 0 ].short_address );
 		expect( name.textContent ).toBe( g.points[ 0 ].name );
 		expect( address.getAttribute( 'title' ) ).toBe( g.points[ 0 ].address );
 	} );
 
-	it( 'renders the plugin type icon when one is configured, and none otherwise', () => {
-		const g = group( 'g1', 55.75, 37.61, 'ПВЗ' );
-		g.points[ 0 ].type = { code: 'PVZ' };
+	// Issue #171 (operator decision): a teardrop map pin is a pointer at a coordinate — shrunk
+	// into a list row there is nothing left to point at, so the framework now draws its OWN
+	// square glyph here, ALWAYS, regardless of whether the plugin configured a MAP marker via
+	// `config.pointIcons` (that map still exists, but only the map reads it now).
+	describe( 'the framework-owned type glyph (issue #171)', () => {
+		function pointOfType( code ) {
+			const g = group( 'g1', 55.75, 37.61, 'ПВЗ' );
+			g.points[ 0 ].type = { code: code };
 
-		const withIcon = new Panels( document.createElement( 'div' ), {
-			...config,
-			pointIcons: { PVZ: { default: '/pvz.svg', active: '/pvz-active.svg' } },
+			return g;
+		}
+
+		it( 'always renders a glyph, even with no plugin configuration at all', () => {
+			const panels = new Panels( document.createElement( 'div' ), config );
+			panels.render();
+			panels.setVisible( [ pointOfType( 'PVZ' ) ] );
+
+			expect( panels.root.parentNode.querySelector( '.woodev-pickup-list__icon svg' ) ).not.toBeNull();
 		} );
-		const withoutIcon = new Panels( document.createElement( 'div' ), { ...config, pointIcons: {} } );
 
-		withIcon.render();
-		withIcon.setVisible( [ g ] );
-		withoutIcon.render();
-		withoutIcon.setVisible( [ g ] );
+		it( 'a plugin-supplied pointIcons map (the MAP marker contract) has no effect here', () => {
+			const panels = new Panels( document.createElement( 'div' ), {
+				...config,
+				pointIcons: { PVZ: { default: '/pvz.svg', active: '/pvz-active.svg' } },
+			} );
+			panels.render();
+			panels.setVisible( [ pointOfType( 'PVZ' ) ] );
 
-		expect( withIcon.root.parentNode.querySelector( '.woodev-pickup-list__icon' ) ).not.toBeNull();
-		expect( withoutIcon.root.parentNode.querySelector( '.woodev-pickup-list__icon' ) ).toBeNull();
+			expect( panels.root.parentNode.querySelector( '.woodev-pickup-list__icon img' ) ).toBeNull();
+			expect( panels.root.parentNode.querySelector( '.woodev-pickup-list__icon svg' ) ).not.toBeNull();
+		} );
+
+		it( 'defaults an unrecognised type to the warehouse glyph, never a POSTAMAT/LOCKER string guess', () => {
+			const withUnknownType = new Panels( document.createElement( 'div' ), config );
+			withUnknownType.render();
+			withUnknownType.setVisible( [ pointOfType( 'SOME_CARRIER_SPECIFIC_LOCKER_CODE' ) ] );
+
+			const defaultPanels = new Panels( document.createElement( 'div' ), config );
+			defaultPanels.render();
+			defaultPanels.setVisible( [ pointOfType( 'PVZ' ) ] );
+
+			// Same markup either way — the framework never sniffs the type code's own text for
+			// carrier vocabulary, it only ever consults config.pointGlyphs (absent here).
+			expect(
+				withUnknownType.root.parentNode.querySelector( '.woodev-pickup-list__icon' ).innerHTML
+			).toBe(
+				defaultPanels.root.parentNode.querySelector( '.woodev-pickup-list__icon' ).innerHTML
+			);
+		} );
+
+		it( 'swaps in the OTHER built-in glyph via config.pointGlyphs', () => {
+			const swapped = new Panels( document.createElement( 'div' ), {
+				...config,
+				pointGlyphs: { POSTAMAT: { glyph: 'package', markup: null } },
+			} );
+			swapped.render();
+			swapped.setVisible( [ pointOfType( 'POSTAMAT' ) ] );
+
+			const defaulted = new Panels( document.createElement( 'div' ), config );
+			defaulted.render();
+			defaulted.setVisible( [ pointOfType( 'PVZ' ) ] );
+
+			expect(
+				swapped.root.parentNode.querySelector( '.woodev-pickup-list__icon' ).innerHTML
+			).not.toBe(
+				defaulted.root.parentNode.querySelector( '.woodev-pickup-list__icon' ).innerHTML
+			);
+		} );
+
+		it( 'renders a plugin-supplied raw markup override verbatim', () => {
+			// See the identical note in the card-chip version of this test, above: jsdom
+			// re-serialises a self-closing `<path/>` as `<path></path>` on innerHTML read-back.
+			const customSvg = '<svg viewBox="0 0 24 24"><path d="M1 1"></path></svg>';
+			const panels = new Panels( document.createElement( 'div' ), {
+				...config,
+				pointGlyphs: { CUSTOM: { glyph: null, markup: customSvg } },
+			} );
+			panels.render();
+			panels.setVisible( [ pointOfType( 'CUSTOM' ) ] );
+
+			expect( panels.root.parentNode.querySelector( '.woodev-pickup-list__icon' ).innerHTML ).toBe( customSvg );
+		} );
 	} );
 } );
 

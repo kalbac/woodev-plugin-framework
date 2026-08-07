@@ -1136,6 +1136,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 					'i18n',
 					'defaultLocation',
 					'pointIcons',
+					'pointGlyphs',
 					'mapConfig',
 					'replaceAddress',
 					'selection',
@@ -1462,6 +1463,119 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			Functions\when( 'wc_ship_to_billing_address_only' )->justReturn( false );
 
 			$this->assertSame( [], $this->make_handler()->get_js_config()['pointIcons'] );
+		}
+
+		// -------------------------------------------------------------------------
+		// pointGlyphs (issue #171) — sidebar list / point card glyph overrides, via the
+		// `woodev_pickup_map_point_glyphs` filter. Separate map from pointIcons above: that one
+		// drives the MAP's own marker pins, this one drives the list row and card chip.
+		// -------------------------------------------------------------------------
+
+		/**
+		 * No plugin override at all is the common case — `pointGlyphs` must be an empty
+		 * array, never missing or null; the CLIENT is what supplies the `warehouse` default
+		 * for every type this map says nothing about (see `pickup-panels.js`'s
+		 * `pointGlyphMarkup()`), never this method fabricating an entry.
+		 */
+		public function test_point_glyphs_defaults_to_an_empty_array(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			$this->stub_config_dependencies_except_filters();
+
+			$this->assertSame( [], $this->make_handler()->get_js_config()['pointGlyphs'] );
+		}
+
+		/**
+		 * A plugin naming one of the framework's two built-in glyphs for a type gets back
+		 * `{ glyph: '<name>', markup: null }` — the client picks the OTHER built-in
+		 * ({@see GLYPH_SVG} in pickup-panels.js) rather than treating the string as markup.
+		 */
+		public function test_a_builtin_glyph_key_is_passed_through(): void {
+			Filters\expectApplied( 'woodev_pickup_map_point_glyphs' )
+				->once()
+				->with( [], 'p' )
+				->andReturn( [ 'POSTAMAT' => 'package' ] );
+			$this->stub_config_dependencies_except_filters();
+
+			$this->assertSame(
+				[ 'POSTAMAT' => [ 'glyph' => 'package', 'markup' => null ] ],
+				$this->make_handler()->get_js_config()['pointGlyphs']
+			);
+		}
+
+		/**
+		 * A type the filter never mentions is simply absent — never filled in with a
+		 * `warehouse` entry the client already defaults to on its own.
+		 */
+		public function test_a_type_the_filter_does_not_mention_is_absent_not_defaulted(): void {
+			Filters\expectApplied( 'woodev_pickup_map_point_glyphs' )
+				->once()
+				->andReturn( [ 'POSTAMAT' => 'package' ] );
+			$this->stub_config_dependencies_except_filters();
+
+			$this->assertArrayNotHasKey( 'PVZ', $this->make_handler()->get_js_config()['pointGlyphs'] );
+		}
+
+		/**
+		 * Raw SVG markup (anything that is not one of the two built-in glyph keys) survives
+		 * sanitisation as `{ glyph: null, markup: '<sanitised svg>' }` — the client writes
+		 * `markup` straight into `innerHTML` when present, so this proves BOTH override
+		 * outcomes a plugin can reach are wired: swapping the built-in, and supplying its own.
+		 */
+		public function test_raw_svg_markup_is_sanitised_and_passed_through_as_markup(): void {
+			Functions\when( 'wp_kses' )->alias(
+				static function ( $html ) {
+					// Faithful-enough stand-in for this test's own needs: strip <script>…</script>
+					// like real wp_kses() would against an allowlist that excludes it — same
+					// technique the richtext-setting test in SettingUpdateValueTest.php uses.
+					return preg_replace( '#<script\b[^>]*>.*?</script>#is', '', (string) $html );
+				}
+			);
+			Filters\expectApplied( 'woodev_pickup_map_point_glyphs' )
+				->once()
+				->andReturn( [ 'CUSTOM' => '<svg viewBox="0 0 24 24"><path d="M1 1"/></svg>' ] );
+			$this->stub_config_dependencies_except_filters();
+
+			$this->assertSame(
+				[ 'CUSTOM' => [ 'glyph' => null, 'markup' => '<svg viewBox="0 0 24 24"><path d="M1 1"/></svg>' ] ],
+				$this->make_handler()->get_js_config()['pointGlyphs']
+			);
+		}
+
+		/**
+		 * Markup that sanitises down to something with no `<svg` tag left at all (a plugin
+		 * trying to smuggle a `<script>`, or simply returning plain, non-SVG text) drops the
+		 * whole type entirely — the framework never ships a broken/empty override; the
+		 * client's own `warehouse` default still applies for it.
+		 */
+		public function test_unsafe_markup_is_dropped_entirely(): void {
+			Functions\when( 'wp_kses' )->alias(
+				static function ( $html ) {
+					return preg_replace( '#<script\b[^>]*>.*?</script>#is', '', (string) $html );
+				}
+			);
+			Filters\expectApplied( 'woodev_pickup_map_point_glyphs' )
+				->once()
+				->andReturn( [
+					'MALICIOUS' => '<script>alert(1)</script>',
+					'PVZ'       => 'package',
+				] );
+			$this->stub_config_dependencies_except_filters();
+
+			$glyphs = $this->make_handler()->get_js_config()['pointGlyphs'];
+
+			$this->assertArrayNotHasKey( 'MALICIOUS', $glyphs );
+			$this->assertArrayHasKey( 'PVZ', $glyphs );
+		}
+
+		/**
+		 * A non-array return from the filter (a plugin mistake) is defensively treated as
+		 * "no overrides" rather than fataling on the `foreach` below.
+		 */
+		public function test_a_non_array_filter_return_is_treated_as_no_overrides(): void {
+			Filters\expectApplied( 'woodev_pickup_map_point_glyphs' )->once()->andReturn( 'not-an-array' );
+			$this->stub_config_dependencies_except_filters();
+
+			$this->assertSame( [], $this->make_handler()->get_js_config()['pointGlyphs'] );
 		}
 
 		// -------------------------------------------------------------------------
