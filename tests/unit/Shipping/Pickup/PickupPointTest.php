@@ -224,4 +224,50 @@ final class PickupPointTest extends TestCase {
 
 		$this->assertSame( [ '0' ], $point->to_array()['services'] );
 	}
+
+	public function test_non_string_payment_methods_are_dropped(): void {
+		$point = $this->make_point( [ 'payment_methods' => [ 'Наличные', [ 'x' ], null, 5 ] ] );
+
+		$this->assertSame( [ 'Наличные' ], $point->to_array()['payment_methods'] );
+	}
+
+	public function test_surviving_payment_methods_are_reindexed_from_zero(): void {
+		// Same array_filter()-preserves-keys trap as services (see the note on that field's
+		// fixture): every other case here happens to keep key 0, so this is the one that
+		// kills the mutant that would drop array_values() and leave a sparse array.
+		$point = $this->make_point( [ 'payment_methods' => [ [ 'x' ], 'Наличные', null, 'Картой' ] ] );
+
+		$this->assertSame( [ 0, 1 ], array_keys( $point->to_array()['payment_methods'] ) );
+		$this->assertSame( [ 'Наличные', 'Картой' ], $point->to_array()['payment_methods'] );
+	}
+
+	public function test_whitespace_only_payment_methods_are_dropped(): void {
+		$point = $this->make_point( [ 'payment_methods' => [ 'Наличные', '   ', '' ] ] );
+
+		$this->assertSame( [ 'Наличные' ], $point->to_array()['payment_methods'] );
+	}
+
+	public function test_non_string_photos_are_dropped(): void {
+		$point = $this->make_point( [ 'photos' => [ 'https://example.test/a.jpg', [ 'x' ], null, 5 ] ] );
+
+		$this->assertSame( [ 'https://example.test/a.jpg' ], $point->to_array()['photos'] );
+	}
+
+	public function test_surviving_photos_are_reindexed_from_zero(): void {
+		$point = $this->make_point(
+			[ 'photos' => [ [ 'x' ], 'https://example.test/a.jpg', null, 'https://example.test/b.jpg' ] ]
+		);
+
+		$this->assertSame( [ 0, 1 ], array_keys( $point->to_array()['photos'] ) );
+		$this->assertSame(
+			[ 'https://example.test/a.jpg', 'https://example.test/b.jpg' ],
+			$point->to_array()['photos']
+		);
+	}
+
+	public function test_whitespace_only_photos_are_dropped(): void {
+		$point = $this->make_point( [ 'photos' => [ 'https://example.test/a.jpg', '   ', '' ] ] );
+
+		$this->assertSame( [ 'https://example.test/a.jpg' ], $point->to_array()['photos'] );
+	}
 }

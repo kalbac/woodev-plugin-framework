@@ -81,31 +81,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Point' ) ) :
 			}
 
 			$payment_methods = isset( $payload['payment_methods'] )
-				? array_map( 'strval', (array) $payload['payment_methods'] )
+				? self::sanitize_string_list( (array) $payload['payment_methods'] )
 				: [];
 
 			$photos = isset( $payload['photos'] )
-				? array_map( 'strval', (array) $payload['photos'] )
+				? self::sanitize_string_list( (array) $payload['photos'] )
 				: [];
 
-			// Unlike payment_methods/photos above (which strval-cast every element), services
-			// are filtered rather than coerced: a non-string element (an un-flattened object, an
-			// array a carrier adapter forgot to map) is dropped instead of becoming the literal
-			// string "Array" — esc_html() in to_browser_array() would fatal on an actual array.
-			// A whitespace-only entry ('   ') is treated as absent and dropped via trim(); the
-			// string '0' is a legitimate service label and is deliberately kept — it is truthy
-			// via trim() !== '' but would be silently eaten by a naive `if ( $service )` filter.
-			// array_values() re-indexes so wp_json_encode() emits a JSON array, not an object
-			// (see gotcha: php-stdlib-traps-that-survive-tests).
 			$services = isset( $payload['services'] )
-				? array_values(
-					array_filter(
-						(array) $payload['services'],
-						static function ( $service ): bool {
-							return is_string( $service ) && '' !== trim( $service );
-						}
-					)
-				)
+				? self::sanitize_string_list( (array) $payload['services'] )
 				: [];
 
 			return new self(
@@ -131,6 +115,38 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Point' ) ) :
 					'accepts_cod'     => isset( $payload['accepts_cod'] ) ? (bool) $payload['accepts_cod'] : null,
 					'max_weight'      => isset( $payload['max_weight'] ) ? (int) $payload['max_weight'] : null,
 				]
+			);
+		}
+
+		/**
+		 * Filters a raw carrier list down to non-empty strings, re-indexed from zero.
+		 *
+		 * Shared by `payment_methods`, `photos`, and `services`. Elements are FILTERED, not
+		 * coerced: a non-string element (an un-flattened carrier object, a nested array a
+		 * carrier adapter forgot to map) is dropped instead of becoming the literal string
+		 * "Array" — `strval()`/`(string)` on an array in PHP 8 does not fatal, it emits a
+		 * warning and returns "Array", which would otherwise reach the customer as a payment
+		 * method or photo literally named "Array" (see issue #154). A whitespace-only entry
+		 * ('   ') is treated as absent and dropped via `trim()`; the string '0' is a
+		 * legitimate label and is deliberately kept — it is truthy via `trim() !== ''` but
+		 * would be silently eaten by a naive `if ( $value )` filter. `array_values()`
+		 * re-indexes so `wp_json_encode()` emits a JSON array, not an object, the moment any
+		 * record is dropped (see gotcha: php-stdlib-traps-that-survive-tests).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<int|string, mixed> $list Raw list from a carrier payload.
+		 *
+		 * @return string[] Non-empty string values, re-indexed from zero.
+		 */
+		private static function sanitize_string_list( array $list ): array {
+			return array_values(
+				array_filter(
+					$list,
+					static function ( $value ): bool {
+						return is_string( $value ) && '' !== trim( $value );
+					}
+				)
 			);
 		}
 
