@@ -35,28 +35,51 @@
  * a specificity war, while every property that matters for LAYOUT states its own value outright
  * rather than inheriting one a theme might have overridden globally.
  *
- * ACCENT COLOUR — D-15, ONE KNOB, NO SECOND COLOUR. `pickup-panels.js`'s `applyAccentColor()`
- * sets exactly two custom properties on `.woodev-pickup-panels` (the panels' own root, appended
- * as a sibling of the ymaps map surface inside the SAME modal body) through the CSSOM — never a
- * generated `<style>` block, never a string-built `style=` attribute:
+ * ACCENT COLOURS — D-15, split into THREE knobs by issue #203 (was two: a single accent
+ * doubled as both brand identity AND the surface under contrast text, which is why
+ * `#06aedd`'s honestly-computed black text read badly on saturated cyan). `pickup-panels.js`'s
+ * `applyAccentColor()` sets exactly three custom properties on `.woodev-pickup-panels` (the
+ * panels' own root, appended as a sibling of the ymaps map surface inside the SAME modal body)
+ * through the CSSOM — never a generated `<style>` block, never a string-built `style=` attribute:
  *
- *   --woodev-pickup-accent           the merchant/plugin colour, or its own safe fallback
- *   --woodev-pickup-accent-contrast  black or white — whichever actually reads on the accent
+ *   --woodev-pickup-accent           the merchant/plugin BRAND colour, unchanged — identity
+ *                                     only: map markers, outlines, focus ring, the selected-row
+ *                                     bar. Contrast is against the PAGE, never against text
+ *                                     drawn on it.
+ *   --woodev-pickup-accent-fill      the SURFACE a filled CTA/badge/chip draws text on — the
+ *                                     accent unchanged when white already clears 4.5:1 on it,
+ *                                     else the accent darkened (mirroring `wc_hex_darker()`) up
+ *                                     to 30% until white does, else the UNDARKENED accent (see
+ *                                     `Pickup_Handler::derive_accent_fill()`).
+ *   --woodev-pickup-accent-contrast  white or black — whichever `derive_accent_fill()` paired
+ *                                     with `--woodev-pickup-accent-fill` above. Despite the
+ *                                     name, this is NEVER paired with `--woodev-pickup-accent`
+ *                                     directly any more — every rule below pairs it with
+ *                                     `--woodev-pickup-accent-fill`.
  *
- * Every accent-background rule below pairs the two: fill with `--woodev-pickup-accent`, its
- * text/icon with `--woodev-pickup-accent-contrast` — never a third, independently-invented
- * colour (the CTA, the open toggle, the active card tab, the selected filter checkbox, the
- * focus ring). `var( --woodev-pickup-accent, #06aedd )` / `var( --woodev-pickup-accent-contrast,
- * #fff )` are the ONLY two fallback pairs this file declares: `#06aedd` is the framework's
- * canonical accent — the same value `Pickup_Handler::DEFAULT_ACCENT_COLOR` resolves to and
- * `pickup-panels.js`'s own `DEFAULT_ACCENT` constant carries. All three must agree: a fallback
- * that disagreed would be visibly wrong the one moment it actually fires (JS failing before it
- * sets the property), and it would not be the colour the merchant sees anywhere else in the
- * plugin's admin. `#fff` reads on that cyan. Every
- * OTHER colour below (panel background, body text, borders, the warning strip) is a plain
- * hardcoded value matching `woodev-modal.css`'s own neutral chrome palette (`#fff` / `#1e1e1e` /
- * `#646970` / `#dcdcde`) for one consistent dialog look, because D-15 draws the merchant-override
- * line at exactly that one property pair, not at "every colour the feature uses".
+ * Every filled-text rule below (the CTA, the list/mobile toggle, the filter badge and its
+ * "filtered" toggle state, the checked filter checkbox, the card chip, the active card tab) pairs
+ * fill with `--woodev-pickup-accent-fill` and its text/icon with `--woodev-pickup-accent-contrast`
+ * — never `--woodev-pickup-accent` itself, and never a third, independently-invented colour.
+ * Every IDENTITY rule (markers, the marker halo, the selected-row tint/bar, the native checkbox
+ * tint, the `howto` summary link colour, the focus ring) uses `--woodev-pickup-accent` alone —
+ * no text is drawn ON these, so no contrast partner is needed.
+ *
+ * `var( --woodev-pickup-accent, #06aedd )` / `var( --woodev-pickup-accent-fill, #047a9b )` /
+ * `var( --woodev-pickup-accent-contrast, #fff )` are the ONLY THREE fallback values this file
+ * declares: `#06aedd` is the framework's canonical accent — the same value
+ * `Pickup_Handler::DEFAULT_ACCENT_COLOR` resolves to and `pickup-panels.js`'s own
+ * `DEFAULT_ACCENT` constant carries; `#047a9b` is `#06aedd` darkened the full 30% (it needs the
+ * cap), the same value `Pickup_Handler::derive_accent_fill()` computes for it and
+ * `pickup-panels.js`'s own `DEFAULT_ACCENT_FILL` constant carries; `#fff` is the contrast that
+ * pairs with it. All four (this file, both JS constants, the PHP default) must agree: a
+ * fallback that disagreed would be visibly wrong the one moment it actually fires (JS failing
+ * before it sets the properties), and it would not be the colour the merchant sees anywhere
+ * else in the plugin's admin. Every OTHER colour below (panel background, body text, borders,
+ * the warning strip) is a plain hardcoded value matching `woodev-modal.css`'s own neutral
+ * chrome palette (`#fff` / `#1e1e1e` / `#646970` / `#dcdcde`) for one consistent dialog look,
+ * because D-15 draws the merchant-override line at exactly those three properties, not at
+ * "every colour the feature uses".
  *
  * MARKERS ARE NOT STYLED VIA ymaps INTERNALS. `map-provider-yandex.js` draws every marker as an
  * HTML `templateLayoutFactory` layout THIS project owns (`<div class="woodev-pickup-marker">`,
@@ -364,7 +387,7 @@
 	padding: 6px 16px;
 	border: 0;
 	border-radius: 4px;
-	background: var( --woodev-pickup-accent, #06aedd );
+	background: var( --woodev-pickup-accent-fill, #047a9b );
 	color: var( --woodev-pickup-accent-contrast, #fff );
 	cursor: pointer;
 }
@@ -538,10 +561,13 @@
    the DEFAULT merchant. The second declaration is what D-15 actually requires and overrides the
    first wherever `color-mix()` is supported: a tint derived from `--woodev-pickup-accent` itself,
    not a hardcoded colour, so a merchant who set a red accent gets a red tint, not this file's own
-   cyan frozen in place. No other rule in this file blends the accent to a soft/tinted surface
-   (every other `--woodev-pickup-accent` background below is a solid, opaque fill) — `color-mix()`
-   is the only mechanism a plain custom-property value (`#rrggbb`, not a channel triplet) can be
-   alpha-blended through without a second, independently-invented CSS variable for the channels. */
+   cyan frozen in place. Deliberately `--woodev-pickup-accent`, not `--woodev-pickup-accent-fill`
+   (issue #203): no text sits ON this tint (the row's own text stays its normal dark colour, see
+   above), so this is an IDENTITY use — "which row is selected", read against the page — not a
+   filled-text surface. No other rule in this file blends the accent to a soft/tinted surface —
+   `color-mix()` is the only mechanism a plain custom-property value (`#rrggbb`, not a channel
+   triplet) can be alpha-blended through without a second, independently-invented CSS variable for
+   the channels. */
 .woodev-pickup-list__item.is-selected,
 .woodev-pickup-list__point.is-selected {
 	background: rgba( 6, 174, 221, 0.06 );
@@ -724,7 +750,7 @@
 	height: 44px;
 	padding: 0;
 	color: var( --woodev-pickup-accent-contrast, #fff );
-	background: var( --woodev-pickup-accent, #06aedd );
+	background: var( --woodev-pickup-accent-fill, #047a9b );
 	border: 0;
 	border-radius: 8px;
 	box-shadow: 0 1px 2px rgba( 0, 0, 0, 0.04 ), 0 4px 8px rgba( 0, 0, 0, 0.06 );
@@ -1091,7 +1117,7 @@
 .woodev-pickup-filter__toggle.is-filtered,
 .woodev-pickup-list .woodev-pickup-filter__toggle.is-filtered {
 	color: var( --woodev-pickup-accent-contrast, #fff );
-	background: var( --woodev-pickup-accent, #06aedd );
+	background: var( --woodev-pickup-accent-fill, #047a9b );
 	box-shadow: 0 1px 2px rgba( 0, 0, 0, 0.04 ), 0 4px 8px rgba( 0, 0, 0, 0.06 );
 }
 
@@ -1119,7 +1145,7 @@
 	font-weight: 700;
 	line-height: 1;
 	color: var( --woodev-pickup-accent-contrast, #fff );
-	background: var( --woodev-pickup-accent, #06aedd );
+	background: var( --woodev-pickup-accent-fill, #047a9b );
 	border-radius: 8px;
 }
 
@@ -1220,13 +1246,14 @@
 }
 
 .woodev-pickup-filter__checkbox:checked {
-	background: var( --woodev-pickup-accent, #06aedd );
-	border-color: var( --woodev-pickup-accent, #06aedd );
+	background: var( --woodev-pickup-accent-fill, #047a9b );
+	border-color: var( --woodev-pickup-accent-fill, #047a9b );
 }
 
 /* The tick — the classic two-border-sides-rotated-45deg technique (no image, no build step,
-   matching this file's own "plain CSS, no preprocessor" rule). Drawn in the accent's own
-   CONTRAST colour, never a hard-coded white, so it keeps reading against any accent a merchant
+   matching this file's own "plain CSS, no preprocessor" rule). Drawn in the FILL's own
+   CONTRAST colour (issue #203 — this box is a filled surface a graphic mark is drawn on, not
+   brand identity), never a hard-coded white, so it keeps reading against any accent a merchant
    picks, light or dark — the same pairing every other accent-filled control in this file uses. */
 .woodev-pickup-filter__checkbox:checked::after {
 	content: '';
@@ -1327,9 +1354,10 @@
 
 /* The chip (spec V-12; issue #171 — ALWAYS renders now, the framework's own type glyph, never
    conditional on a plugin-supplied icon any more). Background/border unchanged from the old
-   plugin-`<img>` chip: an accent-filled square, matching the D-15 accent pairing every other
-   accent-background rule in this file follows — see `.woodev-pickup-card__chip-icon`'s own
-   `color` below, which is the paired accent-CONTRAST half of that same rule. */
+   plugin-`<img>` chip: a FILLED square (issue #203 — a filled surface an icon is drawn on, not
+   brand identity), matching the D-15 fill/contrast pairing every other filled-text rule in this
+   file follows — see `.woodev-pickup-card__chip-icon`'s own `color` below, which is the paired
+   accent-CONTRAST half of that same rule. */
 .woodev-pickup-card__chip {
 	display: flex;
 	flex: 0 0 auto;
@@ -1339,7 +1367,7 @@
 	height: 40px;
 	border: 1px solid rgba( 0, 0, 0, 0.12 );
 	border-radius: 8px;
-	background: var( --woodev-pickup-accent, #06aedd );
+	background: var( --woodev-pickup-accent-fill, #047a9b );
 }
 
 .woodev-pickup-card__chip-icon {
@@ -1454,7 +1482,7 @@
 
 .woodev-pickup-card__tab.is-active {
 	color: var( --woodev-pickup-accent-contrast, #fff );
-	background: var( --woodev-pickup-accent, #06aedd );
+	background: var( --woodev-pickup-accent-fill, #047a9b );
 }
 
 /* `margin-left: auto` (round 4) pins this to `.woodev-pickup-card__header-row`'s right edge
@@ -1605,7 +1633,7 @@
 	font-size: 14px;
 	font-weight: 600;
 	color: var( --woodev-pickup-accent-contrast, #fff );
-	background: var( --woodev-pickup-accent, #06aedd );
+	background: var( --woodev-pickup-accent-fill, #047a9b );
 	border: 0;
 	border-radius: 4px;
 	cursor: pointer;
@@ -1715,7 +1743,9 @@
 
 /* The group-count bubble for a marker holding more than one co-located point. Positioned
    ABSOLUTELY inside the pin — it must never change `.woodev-pickup-marker`'s own box, which is
-   the exact size/offset ymaps was already told for hit-testing (see the file docblock). */
+   the exact size/offset ymaps was already told for hit-testing (see the file docblock). A FILLED
+   surface carrying 10px text (issue #203 — the exact "counter badge" the issue's own problem
+   statement names), same as `.woodev-pickup-filter__badge` — not brand identity. */
 .woodev-pickup-marker__badge {
 	position: absolute;
 	top: -4px;
@@ -1730,7 +1760,7 @@
 	font-weight: 700;
 	line-height: 1;
 	color: var( --woodev-pickup-accent-contrast, #fff );
-	background: var( --woodev-pickup-accent, #06aedd );
+	background: var( --woodev-pickup-accent-fill, #047a9b );
 	border: 1px solid #fff;
 	border-radius: 8px;
 }

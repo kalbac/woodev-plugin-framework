@@ -1141,6 +1141,8 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 					'replaceAddress',
 					'selection',
 					'accentColor',
+					'accentFillColor',
+					'accentContrastColor',
 					'modal',
 					'search',
 				],
@@ -1705,6 +1707,151 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			$handler = $this->make_handler( [ 'accent_color' => '#06aedd', 'setting_accent' => '#1937FF' ] );
 
 			$this->assertSame( '#1937ff', $handler->get_js_config()['accentColor'] );
+		}
+
+		// -------------------------------------------------------------------------
+		// accentFillColor / accentContrastColor (issue #203) — the surface under
+		// contrast-coloured text, split from the brand-identity accent above.
+		// Derivation: white on the accent unchanged if it already clears 4.5:1;
+		// else darken 5%-30% (mirroring wc_hex_darker()) until white does; else
+		// black on the undarkened accent. Computed server-side ONCE and shipped as
+		// literal hex values — never mirrored in JS (see
+		// Pickup_Handler::resolve_accent_fill_color()'s own docblock).
+		// -------------------------------------------------------------------------
+
+		/**
+		 * White already clears 4.5:1 on WordPress's own blue (5.17:1, issue #203's own
+		 * measurement table) — no darkening needed, fill is the accent unchanged.
+		 */
+		public function test_white_direct_needs_no_darkening(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			$this->stub_config_dependencies_except_filters();
+
+			$config = $this->make_handler( [ 'accent_color' => '#2271b1' ] )->get_js_config();
+
+			$this->assertSame( '#2271b1', $config['accentFillColor'] );
+			$this->assertSame( '#ffffff', $config['accentContrastColor'] );
+		}
+
+		/**
+		 * CDEK's own green (`#0a8c37`) fails white directly (4.36:1, issue #203's own table)
+		 * but clears it after only a SINGLE 5% darkening step (~4.76:1) — proves the loop
+		 * tries intermediate steps, not just the 30% ceiling. Notably DIFFERENT from what the
+		 * IDENTITY decision (`contrastFor()`, client-side, spec D-15) picks for the same raw
+		 * colour (black — 4.82:1 beats white's 4.36:1 undarkened): the two algorithms answer
+		 * different questions on purpose, and this is the case that proves it.
+		 */
+		public function test_white_after_a_single_darkening_step(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			$this->stub_config_dependencies_except_filters();
+
+			$config = $this->make_handler( [ 'accent_color' => '#0a8c37' ] )->get_js_config();
+
+			$this->assertSame( '#098534', $config['accentFillColor'] );
+			$this->assertSame( '#ffffff', $config['accentContrastColor'] );
+		}
+
+		/**
+		 * The exact case the operator noticed (issue #203): `#06aedd` needs the FULL 30%
+		 * ceiling before white clears 4.5:1 (~4.93:1) — pins the boundary, not just an
+		 * interior step. `make_handler()`'s own default accent is already `#06aedd`.
+		 */
+		public function test_white_after_darkening_to_the_full_thirty_percent_cap(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			$this->stub_config_dependencies_except_filters();
+
+			$config = $this->make_handler()->get_js_config();
+
+			$this->assertSame( '#047a9b', $config['accentFillColor'] );
+			$this->assertSame( '#ffffff', $config['accentContrastColor'] );
+		}
+
+		/**
+		 * `#ffeb3b` (issue #203's own light-colour example) still fails white even at the
+		 * full 30% darkening ceiling (2.55:1) — falls back to black on the UNDARKENED accent
+		 * (17.20:1), not the 30%-darkened "khaki" the issue explicitly rejects.
+		 */
+		public function test_black_fallback_on_the_undarkened_accent_for_a_light_colour(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			$this->stub_config_dependencies_except_filters();
+
+			$config = $this->make_handler( [ 'accent_color' => '#ffeb3b' ] )->get_js_config();
+
+			$this->assertSame( '#ffeb3b', $config['accentFillColor'] );
+			$this->assertSame( '#000000', $config['accentContrastColor'] );
+		}
+
+		/**
+		 * The fill/contrast derivation reads {@see Pickup_Handler::resolve_accent_color()}'s
+		 * FINAL resolved value (merchant setting wins over the plugin default), not the raw
+		 * constructor `accent_color` — a plugin defaulting to `#06aedd` but a merchant
+		 * overriding to `#ffeb3b` must derive from `#ffeb3b`.
+		 */
+		public function test_fill_and_contrast_derive_from_the_resolved_accent_not_the_plugin_default(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			$this->stub_config_dependencies_except_filters();
+
+			$config = $this->make_handler( [
+				'accent_color'   => '#06aedd',
+				'setting_accent' => '#ffeb3b',
+			] )->get_js_config();
+
+			$this->assertSame( '#ffeb3b', $config['accentFillColor'] );
+			$this->assertSame( '#000000', $config['accentContrastColor'] );
+		}
+
+		/**
+		 * A filter overrides the derived FILL — independently of contrast, which stays the
+		 * DERIVED default for the (untouched) resolved accent.
+		 */
+		public function test_a_filter_overrides_the_fill_color(): void {
+			Filters\expectApplied( 'woodev_pickup_accent_fill_color' )->andReturn( '#123456' );
+			$this->stub_config_dependencies_except_filters();
+
+			$config = $this->make_handler( [ 'accent_color' => '#06aedd' ] )->get_js_config();
+
+			$this->assertSame( '#123456', $config['accentFillColor'] );
+			$this->assertSame( '#ffffff', $config['accentContrastColor'] );
+		}
+
+		/**
+		 * A filter overrides the derived CONTRAST — independently of fill, which stays the
+		 * DERIVED default for the (untouched) resolved accent.
+		 */
+		public function test_a_filter_overrides_the_contrast_color(): void {
+			Filters\expectApplied( 'woodev_pickup_accent_contrast_color' )->andReturn( '#123456' );
+			$this->stub_config_dependencies_except_filters();
+
+			$config = $this->make_handler( [ 'accent_color' => '#06aedd' ] )->get_js_config();
+
+			$this->assertSame( '#123456', $config['accentContrastColor'] );
+			$this->assertSame( '#047a9b', $config['accentFillColor'] );
+		}
+
+		/**
+		 * Same discipline as the accent's own filter (spec D-15): the fill value is
+		 * interpolated into CSS on the client, so a filter returning garbage falls back to
+		 * the derived default instead of reaching `setProperty()` unsanitised.
+		 */
+		public function test_a_fill_filter_returning_garbage_is_sanitised_too(): void {
+			Filters\expectApplied( 'woodev_pickup_accent_fill_color' )->andReturn( 'javascript:alert(1)' );
+			$this->stub_config_dependencies_except_filters();
+
+			$config = $this->make_handler( [ 'accent_color' => '#06aedd' ] )->get_js_config();
+
+			$this->assertSame( '#047a9b', $config['accentFillColor'] );
+		}
+
+		/**
+		 * Same discipline for the contrast filter.
+		 */
+		public function test_a_contrast_filter_returning_garbage_is_sanitised_too(): void {
+			Filters\expectApplied( 'woodev_pickup_accent_contrast_color' )->andReturn( 'javascript:alert(1)' );
+			$this->stub_config_dependencies_except_filters();
+
+			$config = $this->make_handler( [ 'accent_color' => '#06aedd' ] )->get_js_config();
+
+			$this->assertSame( '#ffffff', $config['accentContrastColor'] );
 		}
 
 		/**
