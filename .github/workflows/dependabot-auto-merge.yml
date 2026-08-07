@@ -20,6 +20,7 @@ jobs:
   auto-merge:
     name: Merge Dependabot PR when all checks pass
     runs-on: ubuntu-latest
+    timeout-minutes: 5
 
     # Only proceed if the triggering workflow succeeded and the actor is Dependabot.
     if: >

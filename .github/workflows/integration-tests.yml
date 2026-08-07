@@ -21,6 +21,7 @@ jobs:
   integration:
     name: WP ${{ matrix.wp }} / WC ${{ matrix.wc }} / PHP ${{ matrix.php }}
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     env:
       WP_ENV_HOME: /tmp/wp-env
 
