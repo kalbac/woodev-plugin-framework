@@ -226,6 +226,41 @@ final class SelectionResultTest extends TestCase {
 		$this->assertArrayNotHasKey( 'carrier_raw', $point );
 	}
 
+	/**
+	 * Issue #193's own regression target: `Pickup_Point::from_array()` is load-bearing on
+	 * THIS path — a domain filter's corrected point is rebuilt through it before it ever
+	 * reaches the browser (see {@see \Woodev\Framework\Shipping\Pickup\Selection_Result::sanitize_point()}'s
+	 * own docblock). A field `from_array()` does not know is silently dropped, which for
+	 * `icons` would mean a point's own icon override vanishing at EXACTLY the moment the
+	 * customer confirms a selection — the one place a domain most plausibly wants to say
+	 * "actually, THIS point gets its own pin" (e.g. after resolving which operator a
+	 * co-located group's representative actually belongs to).
+	 */
+	public function test_a_corrected_points_own_icon_survives_the_confirmation_path(): void {
+		$this->stub_real_esc_html();
+
+		$computed          = Selection_Result::from_verdict( [ 'allowed' => true, 'reason' => null ] );
+		$filtered          = $computed;
+		$filtered['point'] = $this->corrected_point(
+			[
+				'icons' => [
+					'default' => 'https://example.test/5post.svg',
+					'active'  => 'https://example.test/5post-active.svg?x=1&y=2',
+				],
+			]
+		);
+
+		$point = Selection_Result::sanitize( $filtered, $computed )['point'];
+
+		$this->assertSame(
+			[
+				'default' => 'https://example.test/5post.svg',
+				'active'  => 'https://example.test/5post-active.svg?x=1&y=2',
+			],
+			$point['icons']
+		);
+	}
+
 	public function test_the_corrected_points_verdict_mirrors_the_results_own(): void {
 		// A point whose `selectable` disagreed with the result carrying it would let a
 		// domain hand the browser a refusal and a point that says it is fine, so the entry

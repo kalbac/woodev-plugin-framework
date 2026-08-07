@@ -114,8 +114,57 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Point' ) ) :
 					'services'        => $services,
 					'accepts_cod'     => isset( $payload['accepts_cod'] ) ? (bool) $payload['accepts_cod'] : null,
 					'max_weight'      => isset( $payload['max_weight'] ) ? (int) $payload['max_weight'] : null,
+					'icons'           => self::sanitize_icons( $payload['icons'] ?? null ),
 				]
 			);
+		}
+
+		/**
+		 * Sanitizes the point's own icon override — cascade tier 1 (issue #193): the
+		 * point's own icon beats the domain's type-keyed icons, which beat the framework's
+		 * default pin. Resolution itself happens client-side, in `map-provider-yandex.js`'s
+		 * `_buildProperties()`; this method only decides what SURVIVES onto `to_array()`.
+		 *
+		 * An ABSENT `icons` key and an explicit `null` both mean "this point carries no icon
+		 * of its own" — fall through to the next cascade tier. So does a `default` that is
+		 * missing, non-string, or empty. This is DELIBERATELY not the trap `close` fell into
+		 * before PR #192 (`Pickup_Handler`/`pickup-mount.js`'s `resolveFlag()`), which treats
+		 * an explicit `false` as a decision distinct from "the domain said nothing" and must
+		 * beat a truthy default: there the value is a BOOLEAN, and `false` is itself a
+		 * meaningful, distinct state worth preserving. An icon is a URL — a blank string can
+		 * never be rendered as an image, so it has no equivalent meaningful-but-empty state
+		 * to protect. Treating "empty" the same as "absent" here loses no information the
+		 * cascade could otherwise have honoured; it IS the correct, and only sensible,
+		 * reading.
+		 *
+		 * `active` mirrors `default` when the domain supplies only one image — the same D-5
+		 * rule {@see \Woodev\Framework\Shipping\Pickup\Pickup_Handler::normalized_point_icons()}
+		 * already applies to the type-level tier, so a point supplying its own icon never
+		 * reaches the browser with a broken/empty `active` URL.
+		 *
+		 * Values are kept RAW here, matching `to_array()`'s unescaped, canonical contract
+		 * (the same split `photos` already establishes) — escaping via `esc_url_raw()`, and
+		 * the post-escape "did this collapse to an unusable empty string" recheck, happen
+		 * once, in {@see self::to_browser_array()}.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param mixed $icons Raw `icons` payload value.
+		 *
+		 * @return array{default: string, active: string}|null
+		 */
+		private static function sanitize_icons( $icons ): ?array {
+			if ( ! is_array( $icons ) || empty( $icons['default'] ) || ! is_string( $icons['default'] ) ) {
+				return null;
+			}
+
+			$default = $icons['default'];
+			$active  = ( ! empty( $icons['active'] ) && is_string( $icons['active'] ) ) ? $icons['active'] : $default;
+
+			return [
+				'default' => $default,
+				'active'  => $active,
+			];
 		}
 
 		/**
@@ -313,6 +362,26 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Point' ) ) :
 			// HTML-entity-encodes '&' to '&#038;', which is correct for an HTML attribute
 			// and wrong for a JSON string a client will use as a URL.
 			$out['photos'] = array_map( 'esc_url_raw', $out['photos'] );
+
+			// Same esc_url_raw rule as `photos`, plus the post-escape recheck
+			// `Pickup_Handler::normalized_point_icons()` already applies to the type-level
+			// tier: a `default` that survives escaping as an empty string (a `javascript:`
+			// URL, which WordPress's bad-protocol stripping collapses to `''`) drops the
+			// whole override rather than reaching the browser as an icon pointing at `""`.
+			if ( null !== $out['icons'] ) {
+				$default = esc_url_raw( $out['icons']['default'] );
+
+				if ( '' === $default ) {
+					$out['icons'] = null;
+				} else {
+					$active = esc_url_raw( $out['icons']['active'] );
+
+					$out['icons'] = [
+						'default' => $default,
+						'active'  => '' !== $active ? $active : $default,
+					];
+				}
+			}
 
 			return $out;
 		}
