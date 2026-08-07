@@ -387,6 +387,34 @@ function woodev_test_shipping_method_plugin_init(): void {
 					? new \Woodev_Test_Viewport_Point_Source()
 					: new \Woodev_Test_Bulk_Point_Source();
 
+				// D-8: custom tile layers + their attribution are a PLUGIN decision, and
+				// this fixture exercises that seam on purpose. Before this, `layers` and
+				// `copyrights` were reachable only from unit tests — no rig traffic ever
+				// went through `_addLayers()`/`_addCopyrights()`, and a fixture poorer
+				// than production is exactly how s49 hid two of its four map defects.
+				//
+				// The 2GIS tile source and its `sphericalMercator` projection are copied
+				// from the reference plugin (`plugins-reference/woocommerce-edostavka`,
+				// `assets/js/frontend/woodev-yandex-map-plugin.js`), which is the real
+				// consumer this seam was designed for. `projection` travels as the STRING
+				// name — `_addLayers()` resolves it against `ymaps.projection.*` and
+				// silently omits it if unrecognised, so the descriptor stays JSON-safe.
+				//
+				// The copyright line is NOT decoration and not optional in practice:
+				// swapping the base tiles away from Yandex without attributing whoever
+				// actually served them is a terms-of-use problem for both parties. The
+				// framework deliberately ENABLES this rather than enforcing it (nothing
+				// requires a plugin passing `layers` to also pass `copyrights`), so the
+				// fixture demonstrates the correct pairing rather than the minimum.
+				$map_layers = [
+					[
+						'url'        => 'https://tile%d|4.maps.2gis.com/tiles?%c&v=4.png',
+						'projection' => 'sphericalMercator',
+					],
+				];
+
+				$map_copyrights = [ '© 2ГИС' ];
+
 				// The Yandex Maps fallback key is a PLUGIN obligation, never the
 				// framework's (spec §10.6) — Yandex_Map_Provider's constructor REQUIRES
 				// one. This value is an obviously-fake placeholder that only works
@@ -394,7 +422,13 @@ function woodev_test_shipping_method_plugin_init(): void {
 				// PHPUnit; a real shipping plugin shipping this to production supplies
 				// its OWN key here (obtained from the Yandex developer console), not a
 				// copy of this placeholder.
-				$map_provider = new \Woodev\Framework\Shipping\Map\Yandex_Map_Provider( 'FIXTURE-FAKE-YANDEX-KEY' );
+				$map_provider = new \Woodev\Framework\Shipping\Map\Yandex_Map_Provider(
+					'FIXTURE-FAKE-YANDEX-KEY',
+					'',
+					'',
+					$map_layers,
+					$map_copyrights
+				);
 
 				// SP-5 Task 8 (D-7): a hardcoded default viewport is now a REQUIRED
 				// constructor argument — Moscow, matching every point this fixture serves,
