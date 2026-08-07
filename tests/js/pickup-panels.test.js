@@ -2896,7 +2896,7 @@ describe( 'sidebar list (spec V-11)', () => {
 	// into a list row there is nothing left to point at, so the framework now draws its OWN
 	// square glyph here, ALWAYS, regardless of whether the plugin configured a MAP marker via
 	// `config.pointIcons` (that map still exists, but only the map reads it now).
-	describe( 'the framework-owned type glyph (issue #171)', () => {
+	describe( 'the framework-owned type glyph (issue #195)', () => {
 		function pointOfType( code ) {
 			const g = group( 'g1', 55.75, 37.61, 'ПВЗ' );
 			g.points[ 0 ].type = { code: code };

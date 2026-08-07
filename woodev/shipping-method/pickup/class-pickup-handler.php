@@ -249,7 +249,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		/**
 		 * The two glyphs the framework itself ships for the sidebar list row and the point
 		 * card's chip — never the map, which keeps drawing {@see self::$point_icons}/its own
-		 * teardrop pins unchanged (issue #171, operator decision: a teardrop is a pointer at a
+		 * teardrop pins unchanged (issue #195, operator decision: a teardrop is a pointer at a
 		 * coordinate, illegible once shrunk into a list row; the framework now owns a pair of
 		 * square, transparent-background glyphs for exactly that surface). A carrier's type
 		 * CODE (`PVZ`, `POSTAMAT`, ...) is arbitrary domain vocabulary the framework never
@@ -655,7 +655,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		private function normalized_point_glyphs(): array {
 			/**
 			 * Filters the per-type glyph overrides for the pickup point sidebar list and card
-			 * (issue #171). The framework's own default for every type is `warehouse` — it
+			 * (issue #195). The framework's own default for every type is `warehouse` — it
 			 * never guesses a glyph from a carrier's type CODE, so a plugin whose points read
 			 * as parcel lockers (a `POSTAMAT`, a `LOCKER`, ...) must say so explicitly here.
 			 *
@@ -982,7 +982,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 				'defaultLocation' => $this->default_location,
 				'pointIcons'      => $this->normalized_point_icons(),
 
-				// Sidebar list / point card glyph overrides (issue #171) — deliberately a
+				// Sidebar list / point card glyph overrides (issue #195) — deliberately a
 				// SEPARATE map from `pointIcons` above: that one drives the map's own marker
 				// pins, this one drives the list row and card chip, and the two surfaces are
 				// no longer the same picture (see {@see self::normalized_point_glyphs()}).

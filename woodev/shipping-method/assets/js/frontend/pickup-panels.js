@@ -311,7 +311,7 @@
 		'<path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>';
 
 	/**
-	 * The framework's own built-in point-type glyphs (issue #171, operator decision) — the
+	 * The framework's own built-in point-type glyphs (issue #195, operator decision) — the
 	 * sidebar list row and the point card's chip now ALWAYS show one of these, replacing the
 	 * old "plugin supplies a marker URL or nothing renders" contract (see {@see pointGlyphMarkup}).
 	 * A teardrop marker pin is a POINTER AT A COORDINATE; shrunk into a list row there is
@@ -355,7 +355,7 @@
 
 	/**
 	 * The glyph key {@see pointGlyphMarkup} falls back to for every type unless a plugin says
-	 * otherwise (issue #171) — a carrier's type CODE (`PVZ`, `POSTAMAT`, whatever a carrier
+	 * otherwise (issue #195) — a carrier's type CODE (`PVZ`, `POSTAMAT`, whatever a carrier
 	 * invents) is arbitrary domain vocabulary, and sniffing it for a substring like
 	 * "POSTAMAT"/"LOCKER"/"TERMINAL" is exactly the kind of guess over someone else's naming
 	 * this framework refuses to make (mirrors the file docblock's "framework owns mechanism,
@@ -563,7 +563,7 @@
 
 	/**
 	 * The framework-owned glyph markup for a point's type, for the sidebar list row and the
-	 * point card's chip (issue #171, replacing the old `pointIconUrl()` this function used to
+	 * point card's chip (issue #195, replacing the old `pointIconUrl()` this function used to
 	 * be) — ALWAYS returns something renderable, never `''`. `config.pointIcons` (a
 	 * plugin-supplied MARKER url) is deliberately never read here any more: that map drives
 	 * the MAP's own pins (map furniture, spec V-9) and stays exactly that; this surface is a
@@ -645,7 +645,7 @@
 
 	/**
 	 * Builds one list row for a single-point group (spec V-11): the framework's own type glyph
-	 * (issue #171 — ALWAYS rendered now, see {@see pointGlyphMarkup}), address in bold,
+	 * (issue #195 — ALWAYS rendered now, see {@see pointGlyphMarkup}), address in bold,
 	 * name/description as the muted subtitle, and — when an anchor is set — the formatted
 	 * distance. Icon, then address, then name is the order the spec asks for: the address is
 	 * what the customer scans the list FOR, the name/description is secondary detail.
@@ -1028,7 +1028,7 @@
 	/**
 	 * Builds the card's header: a close control that ALWAYS renders (this is the customer's only
 	 * way back to the list without dismissing the whole modal, spec §6 STATE 3) plus the icon chip
-	 * (Task 15, spec V-12 — issue #171: now ALSO ALWAYS renders, via the SAME
+	 * (Task 15, spec V-12 — issue #195: now ALSO ALWAYS renders, via the SAME
 	 * {@see pointGlyphMarkup} lookup the sidebar row uses, so both surfaces agree on what glyph
 	 * a point's type gets) — both on a FIRST inner row, `.woodev-pickup-card__header-row` — and
 	 * the tab bar (only for a co-located group;
@@ -1061,7 +1061,7 @@
 		var headerRow = document.createElement( 'div' );
 		headerRow.className = 'woodev-pickup-card__header-row';
 
-		// The chip (spec V-12, issue #171: ALWAYS renders now). It shares {@see pointGlyphMarkup}
+		// The chip (spec V-12, issue #195: ALWAYS renders now). It shares {@see pointGlyphMarkup}
 		// with the sidebar row builder rather than a second lookup, so both surfaces agree on
 		// exactly which glyph a point's type gets.
 		var chip = document.createElement( 'div' );

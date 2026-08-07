@@ -1466,7 +1466,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 		}
 
 		// -------------------------------------------------------------------------
-		// pointGlyphs (issue #171) — sidebar list / point card glyph overrides, via the
+		// pointGlyphs (issue #195) — sidebar list / point card glyph overrides, via the
 		// `woodev_pickup_map_point_glyphs` filter. Separate map from pointIcons above: that one
 		// drives the MAP's own marker pins, this one drives the list row and card chip.
 		// -------------------------------------------------------------------------
