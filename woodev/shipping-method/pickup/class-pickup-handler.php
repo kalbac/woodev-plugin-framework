@@ -247,6 +247,21 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		private array $point_icons;
 
 		/**
+		 * The two glyphs the framework itself ships for the sidebar list row and the point
+		 * card's chip — never the map, which keeps drawing {@see self::$point_icons}/its own
+		 * teardrop pins unchanged (issue #195, operator decision: a teardrop is a pointer at a
+		 * coordinate, illegible once shrunk into a list row; the framework now owns a pair of
+		 * square, transparent-background glyphs for exactly that surface). A carrier's type
+		 * CODE (`PVZ`, `POSTAMAT`, ...) is arbitrary domain vocabulary the framework never
+		 * sniffs — see {@see self::normalized_point_glyphs()} for why every type defaults to
+		 * `warehouse` rather than a string heuristic over someone else's naming.
+		 *
+		 * @since 2.0.2
+		 * @var string[]
+		 */
+		private const BUILTIN_GLYPHS = [ 'warehouse', 'package' ];
+
+		/**
 		 * The minimum zoom level {@see self::validate_default_location()} accepts,
 		 * matching the map provider's own configured `minZoom` (spec D-7). A default
 		 * viewport the map itself refuses to render at is not a usable obligation.
@@ -611,6 +626,171 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		}
 
 		/**
+		 * Builds the sidebar-list/point-card glyph overrides, keyed by point type code (issue
+		 * #171). Applies `woodev_pickup_map_point_glyphs` ONCE, over a plugin-declared static
+		 * map — the SAME travel path {@see self::normalized_point_icons()} already established
+		 * for `pointIcons` (a plugin knows its own carrier's type-code vocabulary ahead of
+		 * time; which SPECIFIC points arrive per request is dynamic, but the vocabulary of
+		 * TYPES is not) — rather than a per-point filter re-run for every point in a list of up
+		 * to 300.
+		 *
+		 * A returned value is normalised into exactly one of two shapes the client can act on
+		 * without sniffing:
+		 * - one of {@see self::BUILTIN_GLYPHS} ('warehouse'|'package') — the OTHER built-in
+		 *   glyph, `{ glyph: <key>, markup: null }`;
+		 * - any other non-empty string — treated as raw SVG markup, sanitised through
+		 *   {@see self::sanitize_glyph_markup()} and emitted as `{ glyph: null, markup:
+		 *   <sanitised> }`. A value that sanitises down to nothing usable (no `<svg` tag
+		 *   survived) drops the whole type — the client's own `warehouse` default still
+		 *   applies, the framework never emits a broken/empty override.
+		 *
+		 * A type this filter never mentions is simply absent from the result — the client
+		 * defaults it to `warehouse` on its own (see `pickup-panels.js`'s `pointGlyphMarkup()`);
+		 * this method never fabricates an entry.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array<string, array{glyph: string|null, markup: string|null}>
+		 */
+		private function normalized_point_glyphs(): array {
+			/**
+			 * Filters the per-type glyph overrides for the pickup point sidebar list and card
+			 * (issue #195). The framework's own default for every type is `warehouse` — it
+			 * never guesses a glyph from a carrier's type CODE, so a plugin whose points read
+			 * as parcel lockers (a `POSTAMAT`, a `LOCKER`, ...) must say so explicitly here.
+			 *
+			 * Two ways to reach the two outcomes a plugin can want:
+			 * - `'PACKAGE_TYPE_CODE' => 'package'` swaps in the framework's OTHER built-in
+			 *   glyph;
+			 * - `'CUSTOM_TYPE_CODE' => '<svg viewBox="0 0 24 24">...</svg>'` supplies raw
+			 *   markup of its own, run through {@see self::sanitize_glyph_markup()} before it
+			 *   ever reaches the browser.
+			 *
+			 * @since 2.0.2
+			 *
+			 * @param array<string, string> $glyphs   Empty by default — the framework declares
+			 *                                         no overrides of its own. Keyed by point
+			 *                                         type code; each value is either a
+			 *                                         {@see self::BUILTIN_GLYPHS} key or raw
+			 *                                         SVG markup.
+			 * @param string                $plugin_id The plugin the map belongs to.
+			 */
+			$raw = apply_filters( 'woodev_pickup_map_point_glyphs', [], $this->plugin_id );
+
+			$normalized = [];
+
+			if ( ! is_array( $raw ) ) {
+				return $normalized;
+			}
+
+			foreach ( $raw as $type => $value ) {
+				if ( ! is_string( $type ) || '' === $type || ! is_string( $value ) || '' === $value ) {
+					continue;
+				}
+
+				if ( in_array( $value, self::BUILTIN_GLYPHS, true ) ) {
+					$normalized[ $type ] = [
+						'glyph'  => $value,
+						'markup' => null,
+					];
+
+					continue;
+				}
+
+				$markup = self::sanitize_glyph_markup( $value );
+
+				if ( '' === $markup ) {
+					continue; // Nothing safe/usable survived — the client's own `warehouse` default still applies.
+				}
+
+				$normalized[ $type ] = [
+					'glyph'  => null,
+					'markup' => $markup,
+				];
+			}
+
+			return $normalized;
+		}
+
+		/**
+		 * Sanitises a plugin-supplied raw SVG glyph override.
+		 *
+		 * `wp_kses_post()`'s own default allowlist has no `<svg>` element at all — every tag
+		 * inside a genuine icon would be stripped, leaving nothing — so this runs
+		 * {@see wp_kses()} against a small, deliberately narrow SVG-shape allowlist instead
+		 * (the handful of elements/attributes a simple icon actually uses: `svg`, `path`,
+		 * `circle`, `ellipse`, `rect`, `line`, `polyline`, `polygon`, `g`). No scripting
+		 * surface is allowed in either direction: no `<script>`, no `on*` event attributes, no
+		 * `href`/`xlink:href` (which could carry a `javascript:` URI via `<use>`) — an icon
+		 * glyph has no legitimate need for any of the three.
+		 *
+		 * Returns `''`, never the unsanitised input, whenever the result carries no `<svg` tag
+		 * at all — a plugin returning plain text, or markup `wp_kses()` stripped down to
+		 * nothing, is not a usable icon; the caller ({@see self::normalized_point_glyphs()})
+		 * drops the whole override rather than shipping a broken/empty chip to the browser.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $markup raw candidate markup from `woodev_pickup_map_point_glyphs`.
+		 *
+		 * @return string Sanitised markup, or `''` when nothing safe/usable survived.
+		 */
+		private static function sanitize_glyph_markup( string $markup ): string {
+			$core_presentation_attrs = [
+				'fill'            => true,
+				'stroke'          => true,
+				'stroke-width'    => true,
+				'stroke-linecap'  => true,
+				'stroke-linejoin' => true,
+				'class'           => true,
+			];
+
+			$allowed_svg_html = [
+				'svg'      => $core_presentation_attrs + [
+					'xmlns'       => true,
+					'viewbox'     => true,
+					'width'       => true,
+					'height'      => true,
+					'aria-hidden' => true,
+					'focusable'   => true,
+				],
+				'path'     => $core_presentation_attrs + [ 'd' => true ],
+				'circle'   => $core_presentation_attrs + [
+					'cx' => true,
+					'cy' => true,
+					'r' => true,
+				],
+				'ellipse'  => $core_presentation_attrs + [
+					'cx' => true,
+					'cy' => true,
+					'rx' => true,
+					'ry' => true,
+				],
+				'rect'     => $core_presentation_attrs + [
+					'x'      => true,
+					'y'      => true,
+					'width'  => true,
+					'height' => true,
+					'rx'     => true,
+					'ry'     => true,
+				],
+				'line'     => $core_presentation_attrs + [
+					'x1' => true,
+					'y1' => true,
+					'x2' => true,
+					'y2' => true,
+				],
+				'polyline' => $core_presentation_attrs + [ 'points' => true ],
+				'polygon'  => $core_presentation_attrs + [ 'points' => true ],
+				'g'        => $core_presentation_attrs + [ 'transform' => true ],
+			];
+
+			$sanitized = wp_kses( $markup, $allowed_svg_html );
+
+			return ( false !== stripos( $sanitized, '<svg' ) ) ? $sanitized : '';
+		}
+
+		/**
 		 * Builds the JS-safe config the browser mounts the picker from.
 		 *
 		 * Never emits a carrier credential, a callable, or the {@see Point_Source} instance
@@ -633,6 +813,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 *     i18n: array<string, string>,
 		 *     defaultLocation: array{center: array{0: float|int, 1: float|int}, zoom: int},
 		 *     pointIcons: array<string, array{default: string, active: string}>,
+		 *     pointGlyphs: array<string, array{glyph: string|null, markup: string|null}>,
 		 *     mapConfig: array<string, mixed>,
 		 *     replaceAddress: array{enabled: bool, billingOnly: bool},
 		 *     selection: array{close: bool, refreshCheckout: bool},
@@ -800,6 +981,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 
 				'defaultLocation' => $this->default_location,
 				'pointIcons'      => $this->normalized_point_icons(),
+
+				// Sidebar list / point card glyph overrides (issue #195) — deliberately a
+				// SEPARATE map from `pointIcons` above: that one drives the map's own marker
+				// pins, this one drives the list row and card chip, and the two surfaces are
+				// no longer the same picture (see {@see self::normalized_point_glyphs()}).
+				'pointGlyphs' => $this->normalized_point_glyphs(),
 
 				'mapConfig'      => $this->map_provider->get_js_config( [ 'plugin_id' => $this->plugin_id ] ),
 
