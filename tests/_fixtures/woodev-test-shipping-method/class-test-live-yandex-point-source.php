@@ -70,7 +70,8 @@
  * `available_for_c2c_dropoff`, `pickup_services{is_fitting_allowed,is_partial_refuse_allowed,
  * is_paperless_pickup_allowed,is_unboxing_allowed}`. No `max_weight`/weight-limit field
  * anywhere in the payload, so `Pickup_Point::get_max_weight()` stays null for every live
- * point — this is an honest "the carrier did not say", not a mapping gap.
+ * point — this is an honest "the carrier did not say", not a mapping gap. The `address.house`
+ * string is DIRTY for one operator — see {@see self::strip_stringified_boolean()} (issue #210).
  *
  * SCOPE: like `Woodev_Test_Bulk_Point_Source`, this fixture serves exactly one city
  * (Moscow, Yandex `geo_id` 213) — `MOSCOW_GEO_ID` is hardcoded rather than resolved from
@@ -434,7 +435,7 @@ if ( ! class_exists( 'Woodev_Test_Live_Yandex_Point_Source' ) ) {
 					'name'             => $raw_point['name'] ?? '',
 					'lat'              => $position['latitude'] ?? null,
 					'lng'              => $position['longitude'] ?? null,
-					'address'          => $address['full_address'] ?? '',
+					'address'          => self::strip_stringified_boolean( $address['full_address'] ?? '' ),
 					'type'             => $type,
 					// Issue #207 — the domain names the tab, the framework numbers it. Yandex's
 					// payload carries no short name of its own (see the file docblock's SHORT
@@ -453,6 +454,39 @@ if ( ! class_exists( 'Woodev_Test_Live_Yandex_Point_Source' ) ) {
 					'icons'            => $this->icons_for_operator( $raw_point['operator_id'] ?? null ),
 				]
 			);
+		}
+
+		/**
+		 * Removes an upstream stringified boolean from the address (issue #210).
+		 *
+		 * The `5post` operator composes its `house` field upstream as
+		 * `{house} к{housing} стр{building}` and renders a MISSING value as the literal
+		 * `false`, so the customer is shown "Островитянова ул 19/22 кfalse". Yandex passes the
+		 * string through untouched — its own structured `housing`/`building` keys arrive EMPTY,
+		 * which is how we know the composition happened before Yandex, not here.
+		 *
+		 * Measured on the live sandbox, `geo_id: 213`, 812 points (08.08.2026): 679 affected,
+		 * every one of them `operator_id: 5post`; the artefact is always the exact substring
+		 * " кfalse" (space + Cyrillic `к` U+043A + `false`), always inside `house`; zero
+		 * occurrences of `true`, `стрfalse`, or any other form. The `стр` slot is covered here
+		 * anyway because the SAME composition can put the same literal there — that is the
+		 * shape of the upstream bug, not speculation about a future one.
+		 *
+		 * Deliberately narrow: only a boolean literal directly behind one of those two
+		 * prefixes is removed, so a real housing value ("17 к6") and any word that merely
+		 * contains the letters ("Falsettoвая") survive. This lives in the FIXTURE, not the
+		 * framework: the framework must never guess at the meaning of an address string, and a
+		 * real carrier plugin owns the hygiene of the data it hands over — the same division
+		 * of labour as `point_short_name` in issue #207.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param mixed $address Raw `address.full_address` from the API.
+		 *
+		 * @return string
+		 */
+		private static function strip_stringified_boolean( $address ): string {
+			return (string) preg_replace( '/\s(?:к|стр)(?:false|true)\b/iu', '', (string) $address );
 		}
 
 		/**
