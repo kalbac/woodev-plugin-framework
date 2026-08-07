@@ -215,6 +215,25 @@ final class SelectionResultTest extends TestCase {
 		}
 	}
 
+	/**
+	 * Issue #199: `point_short_name` is a KNOWN field of `Pickup_Point::from_array()`'s shape
+	 * (unlike `carrier_raw` in the sibling test below), so it must survive the confirmation
+	 * round trip — this is what makes `from_array()` load-bearing on this path: a field it
+	 * does not know about would be dropped here exactly when the customer clicks select.
+	 */
+	public function test_a_point_short_name_survives_the_confirmation_round_trip(): void {
+		$this->stub_real_esc_html();
+
+		$computed          = Selection_Result::from_verdict( [ 'allowed' => true, 'reason' => null ] );
+		$filtered          = $computed;
+		$filtered['point'] = $this->corrected_point( [ 'point_short_name' => 'ПВЗ у метро' ] );
+
+		$point = Selection_Result::sanitize( $filtered, $computed )['point'];
+
+		$this->assertIsArray( $point );
+		$this->assertSame( 'ПВЗ у метро', $point['point_short_name'] );
+	}
+
 	public function test_an_unknown_key_on_a_corrected_point_does_not_reach_the_browser(): void {
 		$computed          = Selection_Result::from_verdict( [ 'allowed' => true, 'reason' => null ] );
 		$filtered          = $computed;

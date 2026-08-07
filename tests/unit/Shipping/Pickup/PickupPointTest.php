@@ -144,6 +144,41 @@ final class PickupPointTest extends TestCase {
 		$this->assertSame( '', $point->get_postal_code() );
 	}
 
+	/**
+	 * Issue #199: `point_short_name` is the domain's optional override for the card's tab
+	 * label — absent must mean "fall back to `type.label`", same `isset() ? … : ''` cascade
+	 * as `short_address`/`locality`, never an error.
+	 */
+	public function test_point_short_name_defaults_to_empty_when_absent(): void {
+		$point = $this->make_point( [] );
+
+		$this->assertSame( '', $point->to_array()['point_short_name'] );
+	}
+
+	public function test_point_short_name_is_kept_when_present(): void {
+		$point = $this->make_point( [ 'point_short_name' => 'Терминал у метро' ] );
+
+		$this->assertSame( 'Терминал у метро', $point->to_array()['point_short_name'] );
+	}
+
+	public function test_point_short_name_is_escaped_for_the_browser(): void {
+		$point = $this->make_point( [ 'point_short_name' => '<b>ПВЗ</b>' ] );
+
+		$this->assertStringNotContainsString( '<b>', $point->to_browser_array()['point_short_name'] );
+	}
+
+	/**
+	 * `from_array()` is load-bearing on the confirmation path: `Selection_Result::sanitize_point()`
+	 * rebuilds a domain filter's corrected point through this exact method, so a field it does
+	 * not know about is silently dropped the moment the customer confirms their selection — see
+	 * {@see \Woodev\Tests\Unit\Shipping\Pickup\SelectionResultTest} for that round trip.
+	 */
+	public function test_point_short_name_is_not_a_required_field(): void {
+		$point = Pickup_Point::from_array( $this->valid() );
+
+		$this->assertNotNull( $point, 'point_short_name must stay optional — omitting it must not reject the point' );
+	}
+
 	public function test_optional_string_fields_are_kept_when_present(): void {
 		$payload               = $this->valid();
 		$payload['locality']   = 'Москва';

@@ -120,6 +120,15 @@
  * customer, the same "drop, do not coerce" rule `Pickup_Point::sanitize_string_list()`
  * already applies to a non-string element.
  *
+ * WORDING (issue #200, operator's decision, 08.08.2026): payment methods now render as
+ * CHIPS, same as services — a long label breaks a chip's layout exactly the way it broke a
+ * tab in #199, so short register matters here too. `already_paid` was flatly wrong
+ * ("Товар уже оплачен" reads as "the item is already paid for", not "pay in advance") and is
+ * now `'Предоплата'`. `card_on_receipt` repeated "Оплата" that the section's own "Способы
+ * оплаты" title already says, so the redundant word is dropped:
+ * `'Оплата картой при получении'` -> `'Картой при получении'`. `bound_card`/`postpay` were
+ * already short nouns in the same register as the other two — left unchanged.
+ *
  * Declared inside the plugin's init callback (`require_once`d from
  * `woodev-test-shipping-method.php`, same arrangement as `class-test-bulk-point-source.php`
  * — see that file's own docblock and
@@ -197,10 +206,14 @@ if ( ! class_exists( 'Woodev_Test_Live_Yandex_Point_Source' ) ) {
 			],
 		];
 
-		/** Russian display labels for the raw API payment-method codes — see file docblock. */
+		/**
+		 * Russian display labels for the raw API payment-method codes — see the file
+		 * docblock's WORDING note (issue #200) for why `already_paid`/`card_on_receipt`
+		 * changed and the other two did not.
+		 */
 		private const PAYMENT_METHOD_LABELS = [
-			'already_paid'    => 'Товар уже оплачен',
-			'card_on_receipt' => 'Оплата картой при получении',
+			'already_paid'    => 'Предоплата',
+			'card_on_receipt' => 'Картой при получении',
 			'bound_card'      => 'Привязанная карта',
 			'postpay'         => 'Постоплата',
 		];
