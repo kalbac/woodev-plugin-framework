@@ -1,5 +1,13 @@
 # Gotchas — Woodev Plugin Framework
-> **105 atomic gotchas in 23 namespaces** — update count when adding/removing.
+> **106 atomic gotchas in 23 namespaces** — update count when adding/removing.
+> Last updated: 2026-08-07 (session 55 part 2, live Yandex source: +1 file, existing namespace
+> `[build/ci]` — `public-repo-third-party-credentials` (a subagent committed and pushed Yandex's
+> sandbox token because the brief said "do not commit it AS IF it were a secret of ours", which
+> licenses committing it; the token really was public, but `plugins-reference/` is gitignored and
+> this repo is PUBLIC, so the commit was the first time a third party's credential entered a
+> public history. Deleting the branch did NOT remove the object — it stayed retrievable by SHA.
+> Also records the limit found while hardening: "non-provider patterns" needs paid GitHub Secret
+> Protection, so a custom vendor token like this one is still not caught at push time)).
 > Last updated: 2026-08-07 (session 55, baseline numbers on a merged `main`: +1 file, existing
 > namespace `[testing/js]` — `jest-scans-agent-worktrees-inside-the-repo` (a local
 > `npm run test:js` counts EVERY subagent worktree under `.claude/worktrees/`, because jest walks
@@ -219,6 +227,7 @@
 - [build/ci] A failing early CI job (e.g. Lint) silently SKIPS jobs that `needs:` it — skipped ≠ failed, so the suite looks green while dependent jobs (the whole Unit matrix here) never run; fixing the gate REVEALS masked failures → [gotchas/ci-failing-gate-skips-dependent-jobs.md](gotchas/ci-failing-gate-skips-dependent-jobs.md) (2026-06-08)
 - [build/ci] `composer audit --no-dev` errors "No installed packages found" for a library with no runtime deps — use `composer audit --locked` → [gotchas/composer-audit-no-prod-deps.md](gotchas/composer-audit-no-prod-deps.md) (2026-06-08)
 - [build/ci] markdownlint-cli2 ignores `.markdownlintignore` when globs are passed as CLI args — manage exclusions in the workflow glob; MD051 disabled (can't validate Cyrillic anchors) → [gotchas/markdownlint-ignorefile-vs-globs.md](gotchas/markdownlint-ignorefile-vs-globs.md) (2026-06-08)
+- [build/ci] A credential that is public SOMEWHERE ELSE is still not yours to commit HERE. A subagent pushed Yandex's sandbox token because the brief said "do not commit it as if it were a secret of ours" — a sentence that licenses committing it; the unconditional form is the only safe one. Severity needs TWO facts, not one: is the source dir gitignored (`plugins-reference/` is) AND is the repo public (it is) — so this was the first time a third party's credential entered a public history. Deleting the branch does NOT remove the object; it stayed retrievable by SHA. Read the token from a constant, make the guard refuse to send the request, and pin it with a `never()` transport assertion under `@runInSeparateProcess`. Note: "non-provider patterns" needs PAID Secret Protection, so custom vendor tokens are still not caught at push time → [gotchas/public-repo-third-party-credentials.md](gotchas/public-repo-third-party-credentials.md) (s55)
 - [build/ci] Zero runs for a PR whose `on:` triggers you already verified can be a **GitHub Actions outage**, not your repo — during the 2026-08-06 incident webhooks were throttled to ~15% and "many events such as pushes and pull requests are not triggering workflow runs", so PR #177 sat at `statusCheckRollup: []` with `mergeStateStatus: CLEAN`, and BOTH re-triggers (close/reopen, empty commit) were silently dropped too. Check `githubstatus.com/api/v2/summary.json` after the cheap local checks, before suspecting the workflow files → [gotchas/empty-status-rollup-can-be-a-github-actions-outage.md](gotchas/empty-status-rollup-can-be-a-github-actions-outage.md) (s54)
 - [build/ci] A PR that conflicts with base (`mergeStateStatus: DIRTY`) runs NO `pull_request` CI — only `pull_request_target`; "all green" can mean the matrix never ran. Check `gh pr view --json mergeable,mergeStateStatus`; rebase onto the new base after a squash-merge → [gotchas/pr-conflict-skips-pull-request-ci.md](gotchas/pr-conflict-skips-pull-request-ci.md) (session 2)
 - [build/js] `@wordpress/scripts` default (automatic) JSX runtime depends on the `react-jsx-runtime` script handle — registered only in WP ≥ 6.6; for WP 6.3+ support force the classic runtime via `babel.config.js` and import `createElement`/`Fragment` in every JSX file → [gotchas/wp-scripts-jsx-runtime-wp66.md](gotchas/wp-scripts-jsx-runtime-wp66.md) (s8)

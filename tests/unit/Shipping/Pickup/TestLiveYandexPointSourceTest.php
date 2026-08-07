@@ -310,6 +310,79 @@ final class TestLiveYandexPointSourceTest extends TestCase {
 		$this->assertSame( 'Постамат Яндекс.Маркет', $point->to_array()['name'] );
 	}
 
+	// -----------------------------------------------------------------------------
+	// Per-point icons by operator_id (issue #193): 5post and Yandex-branded/market
+	// points share the SAME type code (`pickup_point`) in a live response — a live
+	// 812-point Moscow sample measured 679 `5post` + 129 `market_l4g` points, both
+	// reporting `type: "pickup_point"` — so only a per-point field, `operator_id`,
+	// can tell them apart. This wires the fixture's own consumer for the framework's
+	// new cascade tier 1 (`Pickup_Point`'s `icons` field).
+	// -----------------------------------------------------------------------------
+
+	/**
+	 * A `5post` point gets its own icon override, reusing the fixture's EXISTING terminal
+	 * SVGs (already shipped for the `POSTAMAT` type-level icon) rather than new artwork —
+	 * visually distinguishable from the office pin the `PVZ` type tier already draws for
+	 * every OTHER `pickup_point`, which is exactly what a 5post point needs: it is a
+	 * DIFFERENT branded network sharing the same type code.
+	 */
+	public function test_5post_points_get_their_own_icon_by_operator_id(): void {
+		Functions\when( 'plugins_url' )->alias(
+			static fn( $path, $file ) => 'https://example.test/wp-content/plugins/woodev-test-shipping-method/' . $path
+		);
+
+		$record                 = $this->real_pickup_point_record();
+		$record['operator_id']  = '5post';
+
+		$this->stub_successful_transport( [ $record ] );
+		Functions\when( 'set_transient' )->justReturn( true );
+
+		$source = new \Woodev_Test_Live_Yandex_Point_Source();
+		$points = $source->fetch_points( Point_Query::from_request( [ 'locality' => 'Москва' ] ) );
+
+		$this->assertSame(
+			[
+				'default' => 'https://example.test/wp-content/plugins/woodev-test-shipping-method/'
+					. 'assets/images/yandex-delivery-map-pin-terminal.svg',
+				'active'  => 'https://example.test/wp-content/plugins/woodev-test-shipping-method/'
+					. 'assets/images/yandex-delivery-map-pin-terminal-active.svg',
+			],
+			$points[0]->to_array()['icons']
+		);
+	}
+
+	/**
+	 * A `market_l4g` (or any other) operator gets no icon override of its own — it falls
+	 * through to the domain's existing type-keyed tier (`PVZ`'s office icon), unchanged.
+	 */
+	public function test_non_5post_operators_get_no_icon_of_their_own(): void {
+		$record                = $this->real_pickup_point_record();
+		$record['operator_id'] = 'market_l4g';
+
+		$this->stub_successful_transport( [ $record ] );
+		Functions\when( 'set_transient' )->justReturn( true );
+
+		$source = new \Woodev_Test_Live_Yandex_Point_Source();
+		$points = $source->fetch_points( Point_Query::from_request( [ 'locality' => 'Москва' ] ) );
+
+		$this->assertNull( $points[0]->to_array()['icons'] );
+	}
+
+	/**
+	 * The captured live records above carry no `operator_id` at all — a record with the
+	 * field simply absent must not fatal, and must resolve to "no icon of its own" exactly
+	 * like an explicit non-5post value.
+	 */
+	public function test_a_record_with_no_operator_id_at_all_gets_no_icon_of_its_own(): void {
+		$this->stub_successful_transport( [ $this->real_terminal_record() ] );
+		Functions\when( 'set_transient' )->justReturn( true );
+
+		$source = new \Woodev_Test_Live_Yandex_Point_Source();
+		$points = $source->fetch_points( Point_Query::from_request( [ 'locality' => 'Москва' ] ) );
+
+		$this->assertNull( $points[0]->to_array()['icons'] );
+	}
+
 	public function test_fetch_details_returns_null_for_an_unknown_id(): void {
 		Functions\when( 'get_transient' )->justReturn( [ $this->real_pickup_point_record() ] );
 
