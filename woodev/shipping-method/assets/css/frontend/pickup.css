@@ -299,13 +299,17 @@
 }
 
 /* Same shape as `woodev-modal.css`'s `.woodev-modal__spinner` — this file owns everything inside
-   the stage (see the file docblock), so it gets its own rule rather than reaching into that one. */
+   the stage (see the file docblock), so it gets its own rule rather than reaching into that one.
+   The moving arc is IDENTITY (`--woodev-pickup-accent`), not a filled text surface: it carries no
+   text, so the fill/contrast pair has nothing to say about it. Found alongside #212 — it had been
+   left as a bare literal, which is the same "does not follow the merchant's colour" defect by a
+   different route, and equally invisible while the accent stayed the framework default. */
 .woodev-pickup-spinner {
 	display: block;
 	width: 28px;
 	height: 28px;
 	border: 2px solid rgba( 0, 0, 0, 0.12 );
-	border-top-color: #06aedd;
+	border-top-color: var( --woodev-pickup-accent, #06aedd );
 	border-radius: 50%;
 	animation: woodev-pickup-spin 0.8s linear infinite;
 }
