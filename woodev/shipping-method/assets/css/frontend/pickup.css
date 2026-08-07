@@ -62,8 +62,17 @@
  * fill with `--woodev-pickup-accent-fill` and its text/icon with `--woodev-pickup-accent-contrast`
  * — never `--woodev-pickup-accent` itself, and never a third, independently-invented colour.
  * Every IDENTITY rule (markers, the marker halo, the selected-row tint/bar, the native checkbox
- * tint, the `howto` summary link colour, the focus ring) uses `--woodev-pickup-accent` alone —
- * no text is drawn ON these, so no contrast partner is needed.
+ * tint, the busy spinner's arc, the focus ring) uses `--woodev-pickup-accent` alone — no text is
+ * drawn ON these, so no contrast partner is needed.
+ *
+ * That list once included the `howto` summary's link colour, and that was a MISCLASSIFICATION:
+ * the summary IS text, drawn on the panel's own white background, so the sentence above ("no
+ * text is drawn ON these") was simply untrue of it. Neither of the two accent properties can
+ * colour text against a surface the merchant does not control — the fill's derivation targets
+ * contrast against the text ON it, not against what is BEHIND it — so that rule now uses the
+ * neutral palette below and signals interactivity without colour. The general rule this leaves:
+ * the accent belongs on a surface, an outline or a mark, never on a glyph whose background the
+ * cascade never measured.
  *
  * `var( --woodev-pickup-accent, #06aedd )` / `var( --woodev-pickup-accent-fill, #047a9b )` /
  * `var( --woodev-pickup-accent-contrast, #fff )` are the ONLY THREE fallback values this file
@@ -299,13 +308,17 @@
 }
 
 /* Same shape as `woodev-modal.css`'s `.woodev-modal__spinner` — this file owns everything inside
-   the stage (see the file docblock), so it gets its own rule rather than reaching into that one. */
+   the stage (see the file docblock), so it gets its own rule rather than reaching into that one.
+   The moving arc is IDENTITY (`--woodev-pickup-accent`), not a filled text surface: it carries no
+   text, so the fill/contrast pair has nothing to say about it. Found alongside #212 — it had been
+   left as a bare literal, which is the same "does not follow the merchant's colour" defect by a
+   different route, and equally invisible while the accent stayed the framework default. */
 .woodev-pickup-spinner {
 	display: block;
 	width: 28px;
 	height: 28px;
 	border: 2px solid rgba( 0, 0, 0, 0.12 );
-	border-top-color: #06aedd;
+	border-top-color: var( --woodev-pickup-accent, #06aedd );
 	border-radius: 50%;
 	animation: woodev-pickup-spin 0.8s linear infinite;
 }
@@ -1582,8 +1595,23 @@
 	margin-top: 6px;
 }
 
+/* NOT accent-coloured, deliberately (operator's call, rig-verified on a yellow accent). This is
+   the ONE place the file ever drew the accent as TEXT on the panel's own white background, and
+   the cascade has no colour that can carry it: `--woodev-pickup-accent` is the merchant's raw
+   brand, unconstrained against white — a yellow one rendered this line all but invisible — and
+   `--woodev-pickup-accent-fill` cannot stand in either, because its derivation targets contrast
+   against the text drawn ON it, not against the surface behind it (on a light accent the fill is
+   returned undarkened, i.e. the same unreadable value). Inventing a fourth "accent on light"
+   derivation for a single disclosure label is not worth a fourth colour to keep in agreement
+   across PHP, JS and this file.
+   So it takes the file's own primary text colour, and its interactivity is carried by
+   colour-independent affordances instead: the native `<details>` triangle, the pointer cursor,
+   the underline, and the focus ring — which stays on the accent legitimately, being an OUTLINE
+   drawn against the panel edge rather than a glyph competing with the background. */
 .woodev-pickup-card__howto > summary {
-	color: var( --woodev-pickup-accent, #06aedd );
+	color: #1e1e1e;
+	text-decoration: underline;
+	text-underline-offset: 2px;
 	cursor: pointer;
 }
 
