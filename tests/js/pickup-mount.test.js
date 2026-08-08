@@ -243,6 +243,9 @@ function StubPanels( container, config ) {
 	/** @type {Array} every `setZoomLimits()` payload, in order. */
 	this.setZoomLimitsCalls = [];
 
+	/** @type {Array} every `updatePoint()` call, in order (issue #219). */
+	this.updatePointCalls = [];
+
 	StubPanels.instances.push( this );
 }
 
@@ -460,6 +463,15 @@ StubPanels.prototype.setZoomLimits = function( limits ) {
 };
 
 /**
+ * Issue #219: records the landing half of the viewport lazy-detail fetch. The real method's
+ * merge semantics are `pickup-panels.test.js`'s job; this file proves only WHEN the mount
+ * calls it.
+ */
+StubPanels.prototype.updatePoint = function( pointId, fields ) {
+	this.updatePointCalls.push( { pointId: pointId, fields: fields } );
+};
+
+/**
  * Task 17 (spec V-5): records every `showMessage( key )`/`hideMessage()` call — this file's own
  * tests assert on `panels.showMessageCalls`/`panels.hideMessageCalls` rather than any modal-level
  * DOM, since the real `Panels.prototype.showMessage()`'s own DOM contract is `pickup-panels.test.js`'s
@@ -505,12 +517,20 @@ function fakeDataSourceFactory( impl ) {
 
 		return {
 			fetchPoints: impl,
-			fetchDetails: function() {
-				return Promise.resolve( {} );
-			},
+			fetchDetails: factory.fetchDetails,
 			selectPoint: factory.selectPoint,
 		};
 	}
+
+	// Issue #219: resolves with the full record `Pickup_Controller::get_point_data()` returns —
+	// the same shape a listing point has, plus a freshly computed `selectable`. Overridable per
+	// test (`factory.fetchDetails = …`) for the staleness/failure paths.
+	factory.fetchDetails = jest.fn( function( pointId ) {
+		return Promise.resolve( {
+			id: pointId,
+			selectable: { allowed: false, reason: 'Только предоплата.' },
+		} );
+	} );
 
 	factory.selectPoint = jest.fn( function() {
 		return Promise.resolve( { allowed: true, reason: null, close: null, refresh_checkout: null } );
@@ -944,13 +964,23 @@ function openPicker( overrides ) {
 	};
 }
 
+/**
+ * The factory `beforeEach()` installs on `window` — held here so a test can read its
+ * `fetchDetails` spy or swap it for a controllable one (issue #219). `openPicker()` installs its
+ * OWN factory and is deliberately not covered by this handle.
+ *
+ * @type {Function}
+ */
+let dataSourceFactory;
+
 beforeEach( () => {
 	StubProvider.instances = [];
 	StubPanels.instances = [];
 	callOrder = [];
 	buildCheckoutDom();
 	window.WoodevPickupMapProviders = { testProvider: StubProvider };
-	window.WoodevPickupDataSource = fakeDataSourceFactory( () => Promise.resolve( [] ) );
+	dataSourceFactory = fakeDataSourceFactory( () => Promise.resolve( [] ) );
+	window.WoodevPickupDataSource = dataSourceFactory;
 	window.WoodevPickupPanels = StubPanels;
 } );
 
@@ -2299,6 +2329,120 @@ test( 'panels zoom calls provider.zoomBy with the signed step (Task 14, spec V-1
 	session.panels.emit( 'zoom', { step: -1 } );
 
 	expect( session.provider.zoomByCalls ).toEqual( [ 1, -1 ] );
+} );
+
+// -----------------------------------------------------------------------
+// Issue #219 — the viewport strategy's lazy detail fetch. Every piece of it existed (the REST
+// route, `Point_Source::fetch_details()`, the server-side verdict recomputation, the datasource
+// method and its own tests) except a production caller: `fetchPoints` was rewired onto the mount
+// during the Task 20 migration and `fetchDetails` was left behind. A `STRATEGY_VIEWPORT` carrier
+// may omit `accepts_cod`/`max_weight` from its bbox listing, so without this every point stayed
+// selectable and the refusal only arrived at confirmation.
+// -----------------------------------------------------------------------
+describe( 'viewport lazy detail fetch (#219)', () => {
+	const openCardOn = ( session, pointId ) => {
+		const group = { key: 'g1', lat: 55.75, lng: 37.61, points: [ { id: pointId } ] };
+
+		session.panels.emit( 'cardOpened', { group: group, pointId: pointId, origin: 'list' } );
+	};
+
+	test( 'opening a card pulls that point\'s full record and merges it in', async () => {
+		const session = await openSession( configWith( { strategy: 'viewport' } ) );
+
+		openCardOn( session, 'FIX-VIEW-2' );
+		await flushAsync();
+
+		expect( dataSourceFactory.fetchDetails ).toHaveBeenCalledWith( 'FIX-VIEW-2' );
+		expect( session.panels.updatePointCalls ).toEqual( [ {
+			pointId: 'FIX-VIEW-2',
+			fields: { id: 'FIX-VIEW-2', selectable: { allowed: false, reason: 'Только предоплата.' } },
+		} ] );
+	} );
+
+	// The bulk listing already carried the full record; a request per card open would be pure
+	// waste against the merchant's carrier quota.
+	test( 'bulk never asks — its listing already carried the full record', async () => {
+		const session = await openSession( configWith( { strategy: 'bulk' } ) );
+
+		openCardOn( session, 'P1' );
+		await flushAsync();
+
+		expect( dataSourceFactory.fetchDetails ).not.toHaveBeenCalled();
+		expect( session.panels.updatePointCalls ).toHaveLength( 0 );
+	} );
+
+	// Re-opening a card, switching tabs inside a co-located group and re-entering from the map
+	// all funnel through `cardOpened`, and none of them learn anything new.
+	test( 'asks once per point per listing, however many times the card reopens', async () => {
+		const session = await openSession( configWith( { strategy: 'viewport' } ) );
+
+		openCardOn( session, 'P1' );
+		await flushAsync();
+		openCardOn( session, 'P1' );
+		openCardOn( session, 'P1' );
+		await flushAsync();
+
+		expect( dataSourceFactory.fetchDetails ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	// …but a fresh listing carries freshly computed verdicts, because the cart weight or the
+	// payment method may be exactly what changed.
+	test( 'asks again after a new listing lands', async () => {
+		const session = await openSession( configWith( { strategy: 'viewport' } ) );
+
+		openCardOn( session, 'P1' );
+		await flushAsync();
+
+		// A pan — the ordinary way a new listing lands under this strategy.
+		session.provider.emit( 'boundsChange', [ 1, 2, 3, 4 ] );
+		await flushAsync();
+
+		openCardOn( session, 'P1' );
+		await flushAsync();
+
+		expect( dataSourceFactory.fetchDetails ).toHaveBeenCalledTimes( 2 );
+	} );
+
+	// A marker click and a sidebar row both swap the card without waiting for anything, so an
+	// answer can land about a point the customer is no longer reading.
+	test( 'a late answer is dropped when the card has moved to another point', async () => {
+		let settle;
+
+		dataSourceFactory.fetchDetails = jest.fn( () => new Promise( ( resolve ) => {
+			settle = resolve;
+		} ) );
+
+		const session = await openSession( configWith( { strategy: 'viewport' } ) );
+
+		openCardOn( session, 'P1' );
+		openCardOn( session, 'P2' );
+
+		settle( { id: 'P1', selectable: { allowed: false, reason: 'нет' } } );
+		await flushAsync();
+
+		const forP1 = session.panels.updatePointCalls.filter( ( c ) => 'P1' === c.pointId );
+
+		expect( forP1 ).toHaveLength( 0 );
+	} );
+
+	// Degrades to exactly the pre-#219 behaviour: the SELECT route runs `fetch_details()` +
+	// `Constraint_Checker` itself, so a refused point is still refused — just later. The memo
+	// must not swallow the retry, though.
+	test( 'a failed fetch is quiet and the next card open retries it', async () => {
+		dataSourceFactory.fetchDetails = jest.fn( () => Promise.reject( { status: 502 } ) );
+
+		const session = await openSession( configWith( { strategy: 'viewport' } ) );
+
+		openCardOn( session, 'P1' );
+		await flushAsync();
+
+		expect( session.panels.updatePointCalls ).toHaveLength( 0 );
+
+		openCardOn( session, 'P1' );
+		await flushAsync();
+
+		expect( dataSourceFactory.fetchDetails ).toHaveBeenCalledTimes( 2 );
+	} );
 } );
 
 // The return leg of the same wiring: the provider owns the zoom RANGE (it owns the camera), so

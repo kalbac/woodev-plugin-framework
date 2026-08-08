@@ -1080,6 +1080,17 @@
 		 *  'viewport'` only) — what a type-filter change or {@see refresh} re-fetches against. */
 		var lastBbox = null;
 
+		/** @type {string|null} the point the card currently shows, as the `cardOpened` funnel last
+		 *  reported it — the staleness guard for {@see refreshPointDetails}. A plain id, not a
+		 *  generation, because unlike a confirmation a detail fetch is idempotent and re-opening
+		 *  the SAME point is a legitimate reason to accept a late answer. */
+		var cardPointId = null;
+
+		/** @type {Object.<string, boolean>} point ids whose details have already landed this
+		 *  listing — see {@see refreshPointDetails}. Emptied on every successful listing fetch,
+		 *  because that is the moment the cart (and so the verdict) may have changed under us. */
+		var detailedPoints = {};
+
 		/** @type {number} mints one unique, monotonic token per confirmation this session sends.
 		 *  Never reset, never reused — that is the whole point (see `pendingSelectionToken`). */
 		var selectionTokens = 0;
@@ -1356,6 +1367,62 @@
 			return { locality: resolveLocality( config ), types: currentTypeFilter };
 		}
 
+		/**
+		 * Pulls one point's FULL record and merges it over the sparse one the card is showing —
+		 * the missing half of the viewport strategy (issue #219).
+		 *
+		 * A `STRATEGY_VIEWPORT` source may answer `fetch_points()` without the constraint inputs
+		 * (`accepts_cod`, `max_weight`); `Pickup_Controller::get_point_data()` re-runs
+		 * `Constraint_Checker` over the full record, so the response carries a REAL verdict where
+		 * the listing carried a permissive-by-omission one. Without this call the customer is
+		 * offered every point as selectable and only learns otherwise at confirmation.
+		 *
+		 * `bulk` never calls this: its listing already carried the full record, so a request per
+		 * card open would be pure waste against the merchant's carrier quota.
+		 *
+		 * ONCE PER POINT PER LISTING. Re-opening a card, switching tabs inside a co-located group
+		 * and re-entering from the map all funnel through `cardOpened`, and none of them learn
+		 * anything new. The memo is emptied whenever a listing fetch succeeds, because that is the
+		 * moment the cart — and therefore the verdict — may have moved underneath us.
+		 *
+		 * DEGRADES TO EXACTLY TODAY'S BEHAVIOUR ON FAILURE, which is why it stays quiet: the
+		 * SELECT route runs `fetch_details()` + `Constraint_Checker` itself
+		 * ({@see handle_select_request}), so a refused point is still refused — the refusal simply
+		 * arrives when the customer clicks rather than when the card opens. Blocking the card on a
+		 * request that only ever IMPROVES what it already shows would trade a working picker for a
+		 * spinner.
+		 *
+		 * @param {string} pointId
+		 * @returns {void}
+		 */
+		function refreshPointDetails( pointId ) {
+			var id = String( pointId );
+
+			if ( 'viewport' !== config.strategy || ! id || detailedPoints[ id ] ) {
+				return;
+			}
+
+			detailedPoints[ id ] = true;
+
+			realDataSource.fetchDetails( id ).then(
+				function( point ) {
+					// The card can move to another point while this is in flight — a marker click
+					// and a sidebar row both swap it without waiting for anything. Applying then
+					// would write one point's record over whatever the customer is now reading.
+					if ( destroyed || ! panels || id !== cardPointId ) {
+						return;
+					}
+
+					panels.updatePoint( id, point );
+				},
+				function() {
+					// Retryable: the memo is what makes the next card open ask again, and the
+					// point keeps its permissive listing verdict until something says otherwise.
+					delete detailedPoints[ id ];
+				}
+			);
+		}
+
 		function fetchAndSetPoints( query ) {
 			return realDataSource.fetchPoints( query ).then(
 				function( points ) {
@@ -1367,6 +1434,12 @@
 					if ( destroyed ) {
 						return points;
 					}
+
+					// A fresh listing carries a freshly computed verdict for every point, so
+					// whatever a detail fetch learned about the PREVIOUS listing is now history —
+					// the cart weight or the payment method may be what changed. See
+					// {@see refreshPointDetails}.
+					detailedPoints = {};
 
 					var groups = geo.groupByPosition( points );
 					var byKey = {};
@@ -1886,6 +1959,13 @@
 				if ( 0 !== pendingSelectionToken && String( payload.pointId ) !== pendingSelectionPointId ) {
 					invalidateSelection();
 				}
+
+				// Recorded BEFORE the early `'restore'` return below — a restored card shows a
+				// point like any other, and its details are just as worth having. It is also what
+				// {@see refreshPointDetails} checks its own late answer against.
+				cardPointId = String( payload.pointId );
+
+				refreshPointDetails( payload.pointId );
 
 				// `'restore'` is the ONE origin that moves no camera at all (operator decision,
 				// 06.08.2026 — the reopened picker shows the chosen point's CARD now, not the
