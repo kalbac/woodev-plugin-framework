@@ -515,15 +515,38 @@ final class TestLivePochtaPointSourceTest extends TestCase {
 		( new \Woodev_Test_Live_Pochta_Point_Source() )->fetch_points( Point_Query::from_request( [ 'bbox' => self::BBOX ] ) );
 	}
 
-	public function test_cached_response_never_hits_the_transport(): void {
-		Functions\when( 'get_transient' )->justReturn( [ $this->sparse_russian_post_record() ] );
-		Functions\expect( 'wp_safe_remote_post' )->never();
+	/**
+	 * THE LISTING IS NEVER CACHED (operator's call, 08.08.2026). Measured on the rig: one
+	 * central-Moscow bbox response is 308 676 bytes, and 30 minutes of testing from ONE browser
+	 * left 823 KB across 14 `wp_options` rows — the key space grows with every viewport a
+	 * customer explores, so no client site survives it. Pinned here so a future "optimisation"
+	 * cannot quietly reintroduce it.
+	 */
+	public function test_listing_is_never_cached(): void {
+		$this->stub_successful_listing_transport( [ $this->sparse_russian_post_record() ] );
+
+		Functions\expect( 'get_transient' )->never();
 		Functions\expect( 'set_transient' )->never();
 
-		$source = new \Woodev_Test_Live_Pochta_Point_Source();
-		$points = $source->fetch_points( Point_Query::from_request( [ 'bbox' => self::BBOX ] ) );
+		$points = ( new \Woodev_Test_Live_Pochta_Point_Source() )
+			->fetch_points( Point_Query::from_request( [ 'bbox' => self::BBOX ] ) );
 
 		$this->assertCount( 1, $points );
+	}
+
+	/**
+	 * The one thing that IS cached: a single point's record, bounded by how many cards a
+	 * customer opens rather than by how far they pan. A cache hit must not touch the network.
+	 */
+	public function test_a_cached_point_detail_never_hits_the_transport(): void {
+		Functions\when( 'get_transient' )->justReturn( $this->full_russian_post_record() );
+		Functions\expect( 'wp_safe_remote_get' )->never();
+		Functions\expect( 'set_transient' )->never();
+
+		$point = ( new \Woodev_Test_Live_Pochta_Point_Source() )->fetch_details( '62257' );
+
+		$this->assertNotNull( $point );
+		$this->assertFalse( $point->get_accepts_cod() );
 	}
 
 	// -----------------------------------------------------------------------------
@@ -531,6 +554,11 @@ final class TestLivePochtaPointSourceTest extends TestCase {
 	// -----------------------------------------------------------------------------
 
 	private function stub_successful_details_transport( array $body ): void {
+		// `fetch_details()` is now the ONLY cached path in this source (the bbox listing cache
+		// was removed — see the class's CACHING docblock), so its transient pair is part of the
+		// happy path here.
+		Functions\when( 'get_transient' )->justReturn( false );
+		Functions\when( 'set_transient' )->justReturn( true );
 		Functions\when( 'wp_safe_remote_get' )->justReturn( [ 'fake' => 'response' ] );
 		Functions\when( 'is_wp_error' )->justReturn( false );
 		Functions\when( 'wp_remote_retrieve_response_code' )->justReturn( 200 );
@@ -574,10 +602,16 @@ final class TestLivePochtaPointSourceTest extends TestCase {
 	 * nothing failed upstream, this key simply does not resolve to a record.
 	 */
 	public function test_trap_two_empty_success_body_returns_null_not_an_exception(): void {
+		Functions\when( 'get_transient' )->justReturn( false );
 		Functions\when( 'wp_safe_remote_get' )->justReturn( [ 'fake' => 'response' ] );
 		Functions\when( 'is_wp_error' )->justReturn( false );
 		Functions\when( 'wp_remote_retrieve_response_code' )->justReturn( 200 );
 		Functions\when( 'wp_remote_retrieve_body' )->justReturn( 'null' );
+
+		// TRAP 2's empty success is NEVER cached. A negative answer here is far likelier to mean
+		// "we sent the wrong key" — our bug — than "this point is gone", and caching it would
+		// hide that bug for a full TTL at a time.
+		Functions\expect( 'set_transient' )->never();
 
 		$source = new \Woodev_Test_Live_Pochta_Point_Source();
 
@@ -585,6 +619,10 @@ final class TestLivePochtaPointSourceTest extends TestCase {
 	}
 
 	public function test_fetch_details_transport_failure_throws_api_exception(): void {
+		// A cache MISS is the precondition for reaching the transport at all.
+		Functions\when( 'get_transient' )->justReturn( false );
+		// A failed detail fetch must never be cached — the next open must retry.
+		Functions\expect( 'set_transient' )->never();
 		Functions\when( 'wp_safe_remote_get' )->justReturn( new \WP_Error( 'http_request_failed', 'Connection timed out' ) );
 		Functions\when( 'is_wp_error' )->alias( static fn( $t ) => $t instanceof \WP_Error );
 
@@ -594,6 +632,10 @@ final class TestLivePochtaPointSourceTest extends TestCase {
 	}
 
 	public function test_fetch_details_non_200_throws_api_exception(): void {
+		// A cache MISS is the precondition for reaching the transport at all.
+		Functions\when( 'get_transient' )->justReturn( false );
+		// A failed detail fetch must never be cached — the next open must retry.
+		Functions\expect( 'set_transient' )->never();
 		Functions\when( 'wp_safe_remote_get' )->justReturn( [ 'fake' => 'response' ] );
 		Functions\when( 'is_wp_error' )->justReturn( false );
 		Functions\when( 'wp_remote_retrieve_response_code' )->justReturn( 404 );

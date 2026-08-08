@@ -155,6 +155,11 @@ final class TestLivePochtaPointSourceAccountGuardTest extends TestCase {
 		$this->assertFalse( defined( 'WOODEV_TEST_POCHTA_SETTINGS_ID' ) );
 		$this->assertFalse( defined( 'WOODEV_TEST_POCHTA_ACCOUNT_ID' ) );
 
+		// `fetch_details()` consults its per-point cache before the transport (the listing cache
+		// was removed — see the class's CACHING docblock). This test runs in a SEPARATE PROCESS,
+		// so nothing another test defined is present here and both halves need stubbing.
+		Functions\when( 'get_transient' )->justReturn( false );
+		Functions\when( 'set_transient' )->justReturn( true );
 		Functions\when( 'wp_safe_remote_get' )->justReturn( [ 'fake' => 'response' ] );
 		Functions\when( 'is_wp_error' )->justReturn( false );
 		Functions\when( 'wp_remote_retrieve_response_code' )->justReturn( 200 );
