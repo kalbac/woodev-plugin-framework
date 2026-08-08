@@ -2543,6 +2543,58 @@ describe( 'the card lock during a lazy detail fetch (issue #223)', () => {
 		expect( session.panels.setVerdictPending ).toHaveBeenLastCalledWith( false );
 	} );
 
+	// THE ABA CASE, and the reason this lock is keyed on a monotonic TOKEN rather than the point
+	// id it started as — the identical correction `pendingSelectionToken` already had to make.
+	//
+	// Two fetches for the SAME point overlap in an ordinary flow: one starts when the card opens,
+	// and the camera move that open causes triggers a listing whose success clears
+	// `detailedPoints` and re-asks for that same point. Keyed on the id, the FIRST fetch settling
+	// matched the stored id and released a lock the SECOND still needed — silently reopening the
+	// very window #223 exists to close — and its OLDER answer could also land over the newer one.
+	test( 'a superseded fetch for the SAME point releases nothing and applies nothing', async () => {
+		const settlers = [];
+
+		dataSourceFactory.fetchDetails = jest.fn( () => new Promise( ( resolve ) => {
+			settlers.push( resolve );
+		} ) );
+
+		const session = await openSession( configWith( { strategy: 'viewport' } ) );
+
+		// Fetch #1 — the card opening.
+		openCardOn( session, 'P1' );
+		await flushAsync();
+
+		expect( session.panels.setVerdictPending ).toHaveBeenLastCalledWith( true );
+
+		// A listing lands: it clears the memo and re-asks for the SAME still-open point, so
+		// fetch #2 starts while #1 is still travelling.
+		session.provider.emit( 'boundsChange', [ 1, 2, 3, 4 ] );
+		await flushAsync();
+
+		expect( settlers ).toHaveLength( 2 );
+
+		session.panels.setVerdictPending.mockClear();
+		session.panels.updatePointCalls.length = 0;
+
+		// #1 — now SUPERSEDED — settles first, with a stale permissive verdict.
+		settlers[ 0 ]( { id: 'P1', selectable: { allowed: true, reason: null } } );
+		await flushAsync();
+
+		// It must neither release the lock #2 still holds…
+		expect( session.panels.setVerdictPending ).not.toHaveBeenCalled();
+
+		// …nor write its older answer over what #2 is about to bring.
+		expect( session.panels.updatePointCalls ).toHaveLength( 0 );
+
+		// #2, the live one, settles with the authoritative refusal — and THAT one applies.
+		settlers[ 1 ]( { id: 'P1', selectable: { allowed: false, reason: 'too heavy' } } );
+		await flushAsync();
+
+		expect( session.panels.setVerdictPending ).toHaveBeenLastCalledWith( false );
+		expect( session.panels.updatePointCalls ).toHaveLength( 1 );
+		expect( session.panels.updatePointCalls[ 0 ].fields.selectable.allowed ).toBe( false );
+	} );
+
 	// Non-negotiable per the brief: a FAILED fetch must not leave the card locked forever either.
 	test( 'unlocks on failure too', async () => {
 		let settle;

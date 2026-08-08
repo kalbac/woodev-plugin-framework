@@ -1123,17 +1123,32 @@
 		 *  "the card re-rendered on the same one". Never the guard's identity; see above. */
 		var pendingSelectionPointId = null;
 
-		/** @type {string|null} issue #223: the point id whose {@see refreshPointDetails} fetch
-		 *  currently owns the card's `panels.setVerdictPending( true )` lock — `null` when none
-		 *  does. A SEPARATE lock owner from `pendingSelectionToken` above (see
+		/** @type {number} mints one unique, monotonic token per detail fetch this session sends —
+		 *  the same device `selectionTokens` above provides for confirmations, for the same
+		 *  reason. See `verdictPendingToken`. */
+		var verdictTokens = 0;
+
+		/** @type {number} issue #223: the token of the {@see refreshPointDetails} fetch that
+		 *  currently owns the card's `panels.setVerdictPending( true )` lock — `0` when none does.
+		 *  A SEPARATE lock owner from `pendingSelectionToken` above (see
 		 *  {@see Panels.prototype.setVerdictPending}'s own docblock for why the two locks must
 		 *  never be merged into one flag): released ONLY by whoever ends ITS OWN ownership — the
 		 *  fetch itself settling ({@see refreshPointDetails}), the card moving to a different
 		 *  point before it does (the `cardOpened` listener, below), or the session being torn
-		 *  down ({@see releaseVerdictPending}'s call in `destroy()`). A plain point id, not a
-		 *  generation/token: unlike a confirmation, a detail fetch is idempotent, and this lock
-		 *  only ever needs to answer "is the fetch I started still the one the card is showing",
-		 *  which an id already answers exactly. */
+		 *  down ({@see releaseVerdictPending}'s call in `destroy()`).
+		 *
+		 *  A TOKEN, NOT A POINT ID — this started as an id and was corrected, exactly as
+		 *  `pendingSelectionToken` had to be. Two fetches for the SAME point overlap in an
+		 *  ordinary flow: one starts when the card opens, and the camera move that open causes
+		 *  triggers a listing whose success clears `detailedPoints` and re-asks for the same
+		 *  point. Keyed on the id, the FIRST settling would match and release a lock the SECOND
+		 *  still needs, and its older answer could overwrite the newer one. */
+		var verdictPendingToken = 0;
+
+		/** @type {string|null} the point id `verdictPendingToken`'s fetch is about — read ONLY by
+		 *  the `cardOpened` listener, to tell "the card moved onto another point" from "the card
+		 *  re-rendered on the same one". Never the guard's identity; see above. Mirrors
+		 *  `pendingSelectionPointId`'s relationship to `pendingSelectionToken` exactly. */
 		var verdictPendingPointId = null;
 
 		/** @type {Function|null} the pending `updated_checkout` handler {@see refreshCheckout}
@@ -1484,12 +1499,26 @@
 			// Issue #223: locks the card's CTA for the window this fetch is in flight — the card
 			// is still showing the sparse listing's permissive-by-omission verdict, which is
 			// exactly what this request may be about to overturn. A SEPARATE lock from the
-			// confirmation one (`pendingSelectionToken`) — see `verdictPendingPointId`'s own
+			// confirmation one (`pendingSelectionToken`) — see `verdictPendingToken`'s own
 			// docblock and `Panels.prototype.setVerdictPending`'s for why the two must never be
 			// merged. Both call sites of this function (the `cardOpened` listener below, and the
 			// re-ask a successful listing triggers — see `fetchAndSetPoints()`) only ever pass the
-			// CURRENT `cardPointId`, so acquiring the lock under `id` here is always acquiring it
-			// for the point the card is showing right now.
+			// CURRENT `cardPointId`, so acquiring the lock here is always acquiring it for the
+			// point the card is showing right now.
+			//
+			// A TOKEN, NOT THE POINT ID — the same correction `pendingSelectionToken` above already
+			// had to make, for the same reason. TWO fetches for the SAME point genuinely overlap:
+			// this one starts when the card opens, then the camera move that card open causes
+			// triggers a listing, and that listing's success clears `detailedPoints` and re-asks
+			// for the very same point (see `fetchAndSetPoints()`). Keyed on the id, the FIRST
+			// fetch settling would match `verdictPendingPointId` and release a lock the SECOND one
+			// still needs held — reopening the exact window #223 exists to close — and its older
+			// answer could also be applied over the newer one. A token is unique per request, so
+			// "is the answer that just arrived still the one the card is waiting on?" has exactly
+			// one true answer no matter how many fetches name the same point.
+			var myVerdictToken = ++verdictTokens;
+
+			verdictPendingToken = myVerdictToken;
 			verdictPendingPointId = id;
 
 			if ( panels && ! destroyed ) {
@@ -1519,20 +1548,27 @@
 					dropLoading();
 
 					// Non-negotiable per issue #223: release on EVERY outcome, success included —
-					// but ONLY when this fetch still OWNS the lock. The card can have moved to
-					// ANOTHER point while this was in flight, whose own `refreshPointDetails()`
-					// call would then have re-acquired the lock under a DIFFERENT id — releasing
-					// unconditionally here would stomp that still-live lock the instant this
-					// abandoned fetch happens to settle (the exact s53 staleness-guard shape this
-					// fix is deliberately not repeating). See `releaseVerdictPending()`.
-					if ( id === verdictPendingPointId ) {
+					// but ONLY when THIS fetch still owns the lock. Two things can have taken it
+					// since: the card moving to another point (whose own `refreshPointDetails()`
+					// re-acquired it), or a listing re-asking for this SAME point. Releasing
+					// unconditionally would stomp a still-live lock the moment this abandoned
+					// fetch happens to settle — the s53 staleness-guard shape this deliberately
+					// does not repeat. See `releaseVerdictPending()`.
+					var ownsLock = myVerdictToken === verdictPendingToken;
+
+					if ( ownsLock ) {
 						releaseVerdictPending();
 					}
 
 					// The card can move to another point while this is in flight — a marker click
 					// and a sidebar row both swap it without waiting for anything. Applying then
 					// would write one point's record over whatever the customer is now reading.
-					if ( destroyed || ! panels || id !== cardPointId ) {
+					//
+					// `ownsLock` is checked too, not just the point id: a SUPERSEDED fetch for the
+					// same point (a listing re-asked while this one was still travelling) is an
+					// OLDER answer, and letting it land would overwrite the newer one whenever it
+					// happens to arrive second.
+					if ( destroyed || ! panels || id !== cardPointId || ! ownsLock ) {
 						return;
 					}
 
@@ -1543,9 +1579,15 @@
 
 					// Same non-negotiable release, same ownership guard — see the resolve branch
 					// above. A failed fetch must not leave the card locked forever either.
-					if ( id === verdictPendingPointId ) {
-						releaseVerdictPending();
+					if ( myVerdictToken !== verdictPendingToken ) {
+						// SUPERSEDED. Release nothing (a live fetch holds the lock) and, just as
+						// importantly, evict nothing: `detailedPoints[ id ]` now belongs to that
+						// LIVE request, and clearing it here would let a third fetch start for a
+						// point already being fetched.
+						return;
 					}
+
+					releaseVerdictPending();
 
 					// Retryable: the memo is what makes the next card open ask again, and the
 					// point keeps its permissive listing verdict until something says otherwise.
@@ -1771,10 +1813,11 @@
 		 * @returns {void}
 		 */
 		function releaseVerdictPending() {
-			if ( null === verdictPendingPointId ) {
+			if ( 0 === verdictPendingToken ) {
 				return;
 			}
 
+			verdictPendingToken = 0;
 			verdictPendingPointId = null;
 
 			if ( panels && ! destroyed ) {
@@ -2171,7 +2214,7 @@
 				// "release on the move" discipline `invalidateSelection()` just applied above.
 				// `refreshPointDetails()` below re-acquires the lock fresh if THIS point still
 				// needs a fetch this listing.
-				if ( null !== verdictPendingPointId && verdictPendingPointId !== String( payload.pointId ) ) {
+				if ( 0 !== verdictPendingToken && verdictPendingPointId !== String( payload.pointId ) ) {
 					releaseVerdictPending();
 				}
 
