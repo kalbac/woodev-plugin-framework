@@ -1148,6 +1148,69 @@
 		 *  re-shows or re-hides the overlay a customer has already moved past. */
 		var busyClearedThisStart = false;
 
+		/** @type {number} Issues #222/#224: count of in-flight background requests — a bbox
+		 *  refetch ({@see fetchAndSetPoints}) and a lazy point-detail fetch ({@see refreshPointDetails},
+		 *  issue #219) both bump/drop it, and they genuinely overlap (the customer can open a card
+		 *  while a pan's refetch is still in flight), so this is a COUNTER, not a boolean — the
+		 *  first of two overlapping requests to settle must not switch
+		 *  {@see window.WoodevPickupPanels}'s shared indicator ({@see Panels#setLoading}) off while
+		 *  the other is still running. UNLIKE `busyClearedThisStart` above, this is never reset
+		 *  per {@see start} cycle — it is a plain in-flight tally, and a request that outlives a
+		 *  retry's fresh `start()` call (it cannot: every request this counts is scoped to ONE
+		 *  `provider`/`panels` pair that a retry destroys and rebuilds) would need to keep counting
+		 *  down regardless. See {@see bumpLoading}/{@see dropLoading}. */
+		var loadingCount = 0;
+
+		/**
+		 * Marks one more background request as in-flight (issues #222/#224) — the 0→1 transition is
+		 * what actually turns the shared indicator on; a second, third, … overlapping request only
+		 * bumps the count, and does NOT touch `panels.setLoading()` again (it is already on).
+		 *
+		 * `panels` is null under `ownsChrome` (an embedded provider owns its own chrome, see the
+		 * file docblock) and `destroyed` once the session has been torn down — both guarded exactly
+		 * like {@see clearInitialBusy} does, so this never touches a `panels` instance that may not
+		 * exist or whose DOM may already be gone. The counter itself still increments regardless of
+		 * either guard, so {@see dropLoading} always sees the matching decrement for every
+		 * {@see bumpLoading} call, however this session ends.
+		 *
+		 * @returns {void}
+		 */
+		function bumpLoading() {
+			loadingCount += 1;
+
+			if ( 1 === loadingCount && panels && ! destroyed ) {
+				panels.setLoading( true );
+			}
+		}
+
+		/**
+		 * The counterpart to {@see bumpLoading} — called on EVERY settle path of every request
+		 * that called it (both branches of {@see fetchAndSetPoints}'s `dataSource.fetchPoints()`
+		 * chain, both branches of {@see refreshPointDetails}'s `dataSource.fetchDetails()` chain,
+		 * success AND failure alike), so the counter always returns to zero, including when a
+		 * request fails — a counter that never reaches zero would pin the indicator on forever
+		 * (the exact shape a staleness guard elsewhere in this file was once burned by). Only the
+		 * 1→0 transition actually turns the indicator off, which is the whole reason this is a
+		 * counter and not a boolean: a request that settles while ANOTHER is still in flight (the
+		 * overlap case #222/#224 exists for) must leave the indicator showing.
+		 *
+		 * Never lets the counter go negative — defensive only; every call site pairs exactly one
+		 * {@see bumpLoading} with exactly one {@see dropLoading} per request (a settled Promise
+		 * invokes exactly one of its two callbacks exactly once, so within a single request there
+		 * is no way to double-drop).
+		 *
+		 * @returns {void}
+		 */
+		function dropLoading() {
+			if ( loadingCount > 0 ) {
+				loadingCount -= 1;
+			}
+
+			if ( 0 === loadingCount && panels && ! destroyed ) {
+				panels.setLoading( false );
+			}
+		}
+
 		/**
 		 * Clears the stage-wide busy overlay {@see start} opened once the map was drawn — the
 		 * stage 2 → stage 3 transition (spec V-4). Idempotent per {@see start} cycle via
@@ -1403,9 +1466,12 @@
 			}
 
 			detailedPoints[ id ] = true;
+			bumpLoading();
 
 			realDataSource.fetchDetails( id ).then(
 				function( point ) {
+					dropLoading();
+
 					// The card can move to another point while this is in flight — a marker click
 					// and a sidebar row both swap it without waiting for anything. Applying then
 					// would write one point's record over whatever the customer is now reading.
@@ -1416,6 +1482,8 @@
 					panels.updatePoint( id, point );
 				},
 				function() {
+					dropLoading();
+
 					// Retryable: the memo is what makes the next card open ask again, and the
 					// point keeps its permissive listing verdict until something says otherwise.
 					delete detailedPoints[ id ];
@@ -1424,8 +1492,12 @@
 		}
 
 		function fetchAndSetPoints( query ) {
+			bumpLoading();
+
 			return realDataSource.fetchPoints( query ).then(
 				function( points ) {
+					dropLoading();
+
 					// Task 16 (spec V-4): THIS fetch is the one stage 2's overlay was waiting on —
 					// win, lose, or empty, the customer gets an answer and the map becomes usable.
 					// A no-op past the first settle of this start() cycle (see the flag's own docblock).
@@ -1529,6 +1601,7 @@
 					// successful one does; the customer gets the error card, not a map stuck
 					// non-interactive forever over a request that will never come back.
 					clearInitialBusy();
+					dropLoading();
 
 					if ( ! destroyed ) {
 						showFetchMessage( errorMessageKey( config, reason ) );

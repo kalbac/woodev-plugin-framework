@@ -3500,6 +3500,103 @@ describe( 'setBusy()/isBusy() (spec V-4)', () => {
 } );
 
 // -----------------------------------------------------------------------
+// Issues #222/#224: setLoading()/isLoading() — the SHARED in-flight-background-load indicator,
+// separate from `setBusy()` above (the FIRST-open, stage-wide overlay) and `setSelectionBusy()`
+// (the card's own confirmation lock, live elsewhere). Drives a top-edge progress bar (any
+// in-flight load, regardless of what the sidebar is doing) and a spinner overlay on the sidebar
+// LIST specifically — both are pure CSS, keyed off `.woodev-pickup-stage`'s `is-loading` class
+// combined with the EXISTING `is-open`/`is-card` classes, so this file only has to prove the ONE
+// class this method actually owns. `pickup-mount.js`'s own wiring of WHEN to call this (a bbox
+// refetch, a lazy detail fetch, the overlap case) is that file's test's job.
+// -----------------------------------------------------------------------
+describe( 'setLoading()/isLoading() (issues #222/#224)', () => {
+	it( 'is not loading right after render() — both indicator elements exist, built once, no is-loading class', () => {
+		const container = document.createElement( 'div' );
+		const panels = new Panels( container, config );
+
+		panels.render();
+
+		expect( panels.isLoading() ).toBe( false );
+		expect( panels._stage.className ).not.toContain( 'is-loading' );
+		expect( container.querySelector( '.woodev-pickup-progress' ) ).not.toBeNull();
+		expect( container.querySelector( '.woodev-pickup-list__loading' ) ).not.toBeNull();
+	} );
+
+	it( 'setLoading( true ) marks the stage is-loading', () => {
+		const container = document.createElement( 'div' );
+		const panels = new Panels( container, config );
+
+		panels.render();
+		panels.setLoading( true );
+
+		expect( panels.isLoading() ).toBe( true );
+		expect( panels._stage.className ).toContain( 'is-loading' );
+	} );
+
+	it( 'setLoading( false ) clears is-loading again — the same two nodes, not new ones', () => {
+		const container = document.createElement( 'div' );
+		const panels = new Panels( container, config );
+
+		panels.render();
+		panels.setLoading( true );
+		const progress = container.querySelector( '.woodev-pickup-progress' );
+		const listLoading = container.querySelector( '.woodev-pickup-list__loading' );
+		panels.setLoading( false );
+
+		expect( panels.isLoading() ).toBe( false );
+		expect( panels._stage.className ).not.toContain( 'is-loading' );
+		expect( container.querySelector( '.woodev-pickup-progress' ) ).toBe( progress );
+		expect( container.querySelector( '.woodev-pickup-list__loading' ) ).toBe( listLoading );
+	} );
+
+	it( 'does not throw when called before render(), and the flag is still tracked (matches setBusy()\'s own shape)', () => {
+		const panels = new Panels( document.createElement( 'div' ), config );
+
+		expect( () => panels.setLoading( true ) ).not.toThrow();
+		expect( panels.isLoading() ).toBe( true );
+	} );
+
+	// #224: an open CARD must stay live and uncovered during a refetch — the sidebar overlay is
+	// CSS-gated on `.is-loading.is-open:not(.is-card)`, so this pins the CLASS COMBINATION that
+	// selector depends on rather than a computed style (jsdom does not execute this project's
+	// stylesheet). With `is-card` present, that selector cannot match, so the overlay cannot show —
+	// which is the whole point: a bbox refetch must never cover the point details/select button the
+	// customer is reading.
+	it( 'opening a card while loading leaves is-card set alongside is-loading/is-open — the CSS '
+		+ 'combination the sidebar overlay selector requires is-open AND is-loading AND NOT is-card', () => {
+		const container = document.createElement( 'div' );
+		const panels = new Panels( container, config );
+
+		panels.render();
+		panels.setLoading( true );
+		panels.openCard( group( 'g1', 55.75, 37.61, 'Точка' ) );
+
+		const stage = panels._stage;
+
+		expect( stage.classList.contains( 'is-loading' ) ).toBe( true );
+		expect( stage.classList.contains( 'is-open' ) ).toBe( true );
+		expect( stage.classList.contains( 'is-card' ) ).toBe( true );
+	} );
+
+	// The list-open, no-card case — the sidebar overlay's selector CAN match here.
+	it( 'opening the list (no card) while loading leaves is-card OFF — the combination the '
+		+ 'sidebar overlay selector requires', () => {
+		const container = document.createElement( 'div' );
+		const panels = new Panels( container, config );
+
+		panels.render();
+		panels.setLoading( true );
+		panels.openList();
+
+		const stage = panels._stage;
+
+		expect( stage.classList.contains( 'is-loading' ) ).toBe( true );
+		expect( stage.classList.contains( 'is-open' ) ).toBe( true );
+		expect( stage.classList.contains( 'is-card' ) ).toBe( false );
+	} );
+} );
+
+// -----------------------------------------------------------------------
 // Task 17 (spec V-5): showMessage()/hideMessage() — the plugin's own empty/error text as a
 // centred card over the map. NEVER a replacement for the whole interface (s48 decision, kept
 // here): unlike setBusy()'s stage-wide overlay above, this must not toggle `is-busy` — the list,

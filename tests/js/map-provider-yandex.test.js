@@ -1742,6 +1742,30 @@ test( 'bulk: a boundschange listener recomputes visibleChange only — never emi
 	expect( seenTooWide ).toHaveLength( 0 );
 } );
 
+// Issue #222: under `viewport`, the `boundschange` listener used to call ONLY
+// `_checkAndEmitBounds()`/`_emitZoomChange()` — never `_emitVisibleChange()` — so the sidebar list
+// only updated once the SERVER answered the resulting `boundsChange` refetch (7-10s on the rig),
+// while the map itself (drawing whatever `setPoints()` last handed it) could show a DIFFERENT,
+// already-stale set of pins in the meantime. `_emitVisibleChange()` is a pure client-side recompute
+// over the last-drawn `_groupsByKey` — no request — so it must run on every pan/zoom exactly like
+// the `bulk` listener already does (see the test immediately above). Asserted against the listener
+// ACTUALLY REGISTERED on the map (`fireBoundsChange()`), never a direct `_emitVisibleChange()` call
+// — the whole defect was in the WIRING, not the method itself, which already had its own passing
+// tests further up this file.
+test( 'viewport: the boundschange listener ALSO recomputes visibleChange client-side, without '
+	+ 'waiting for the server-driven boundsChange refetch to answer (#222)', async () => {
+	const provider = await init( { strategy: 'viewport', locality: '' } );
+	const seenVisible = [];
+
+	provider.setPoints( [ group( 'a', 5, 5 ), group( 'b', 50, 50 ) ] );
+	provider.on( 'visibleChange', ( keys ) => seenVisible.push( keys ) );
+
+	ymapsStub.lastMap.bounds = [ [ 0, 0 ], [ 10, 10 ] ];
+	ymapsStub.lastMap.fireBoundsChange();
+
+	expect( seenVisible[ 0 ] ).toEqual( [ 'a' ] );
+} );
+
 test( 'viewport: emits boundsChange once for the initial (already-resolved) viewport, before any pan', async () => {
 	const seen = [];
 	const config = makeConfig( { strategy: 'viewport', locality: '' } );

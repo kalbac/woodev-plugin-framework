@@ -246,6 +246,9 @@ function StubPanels( container, config ) {
 	/** @type {Array} every `updatePoint()` call, in order (issue #219). */
 	this.updatePointCalls = [];
 
+	/** @type {Array<boolean>} every `setLoading()` call, in order (issues #222/#224). */
+	this.setLoadingCalls = [];
+
 	StubPanels.instances.push( this );
 }
 
@@ -451,6 +454,16 @@ StubPanels.prototype.setBusy = function( busy ) {
 
 StubPanels.prototype.isBusy = function() {
 	return !! this._busy;
+};
+
+/**
+ * Issues #222/#224: records every `setLoading()` call, in order — the shared background-load
+ * indicator. The real method's DOM contract (the `is-loading` class, the two indicator elements)
+ * is `pickup-panels.test.js`'s job; this file only proves WHEN and how many times the mount calls
+ * it, via `panels.setLoadingCalls`.
+ */
+StubPanels.prototype.setLoading = function( loading ) {
+	this.setLoadingCalls.push( !! loading );
 };
 
 /**
@@ -2442,6 +2455,140 @@ describe( 'viewport lazy detail fetch (#219)', () => {
 		await flushAsync();
 
 		expect( dataSourceFactory.fetchDetails ).toHaveBeenCalledTimes( 2 );
+	} );
+} );
+
+// -----------------------------------------------------------------------
+// Issues #222/#224 — the shared background-load indicator. `fetchAndSetPoints()` (every bbox
+// refetch) and `refreshPointDetails()` (issue #219's lazy detail fetch) both drive ONE shared
+// counter, so a later task (#223, the card CTA lock) can hang off the same counter instead of
+// racing a second spinner. A COUNTER, not a boolean: a bbox refetch and a detail fetch genuinely
+// overlap, and a boolean would let whichever settles FIRST switch the indicator off while the
+// other is still running. `panels.setLoadingCalls` (a plain array — `toHaveLength( 0 )`, never
+// `toEqual( [] )`: this repo's test doubles record onto plain arrays, and `toEqual` ignores
+// `undefined` items, so an accidental `setLoading( undefined )` call would pass a `toEqual( [] )`
+// check it should have failed) records every call, in order.
+// -----------------------------------------------------------------------
+describe( 'the shared background-load indicator (issues #222/#224)', () => {
+	const openCardOn = ( session, pointId ) => {
+		const group = { key: 'g1', lat: 55.75, lng: 37.61, points: [ { id: pointId } ] };
+
+		session.panels.emit( 'cardOpened', { group: group, pointId: pointId, origin: 'list' } );
+	};
+
+	/**
+	 * Swaps in a datasource whose `fetchPoints()` AND `fetchDetails()` both stay pending until
+	 * the test explicitly settles them — the only way to observe the two requests genuinely
+	 * OVERLAPPING (a plain `fakeDataSourceFactory()` default settles `fetchPoints()` immediately,
+	 * which is fine for every OTHER describe block in this file but useless for proving the
+	 * counter's own 0→1→2→1→0 shape).
+	 */
+	function pendingFactory() {
+		let pointsSettle;
+
+		const factory = fakeDataSourceFactory( () => new Promise( ( resolve, reject ) => {
+			pointsSettle = { resolve, reject };
+		} ) );
+
+		let detailsSettle;
+
+		factory.fetchDetails = jest.fn( () => new Promise( ( resolve, reject ) => {
+			detailsSettle = { resolve, reject };
+		} ) );
+
+		window.WoodevPickupDataSource = factory;
+
+		return {
+			resolvePoints: ( points ) => pointsSettle.resolve( points || [] ),
+			rejectPoints: ( reason ) => pointsSettle.reject( reason ),
+			resolveDetails: ( point ) => detailsSettle.resolve( point ),
+			rejectDetails: ( reason ) => detailsSettle.reject( reason ),
+		};
+	}
+
+	test( 'a bbox refetch drives setLoading( true ) then setLoading( false )', async () => {
+		const ds = pendingFactory();
+		const session = await openSession( configWith( { strategy: 'viewport' } ) );
+
+		session.provider.emit( 'boundsChange', [ 1, 2, 3, 4 ] );
+		await flushAsync();
+
+		expect( session.panels.setLoadingCalls ).toEqual( [ true ] );
+
+		ds.resolvePoints( [] );
+		await flushAsync();
+
+		expect( session.panels.setLoadingCalls ).toEqual( [ true, false ] );
+	} );
+
+	test( 'a FAILED bbox refetch still returns the indicator to false', async () => {
+		const ds = pendingFactory();
+		const session = await openSession( configWith( { strategy: 'viewport' } ) );
+
+		session.provider.emit( 'boundsChange', [ 1, 2, 3, 4 ] );
+		await flushAsync();
+
+		ds.rejectPoints( { status: 0, code: 'woodev_pickup_upstream_error', message: 'offline' } );
+		await flushAsync();
+
+		expect( session.panels.setLoadingCalls ).toEqual( [ true, false ] );
+	} );
+
+	test( 'a point-detail fetch (#219) also drives setLoading( true ) then ( false )', async () => {
+		// Immediately-resolving is enough here — this test only proves BOTH calls happen, in
+		// order; the OVERLAP shape (a settle that must NOT clear the indicator) has its own test
+		// below, where genuinely holding the promise open is what the assertion needs.
+		dataSourceFactory.fetchDetails = jest.fn( () =>
+			Promise.resolve( { id: 'P1', selectable: { allowed: true, reason: null } } ) );
+
+		const session = await openSession( configWith( { strategy: 'viewport' } ) );
+
+		openCardOn( session, 'P1' );
+		await flushAsync();
+
+		expect( session.panels.setLoadingCalls ).toEqual( [ true, false ] );
+	} );
+
+	test( 'a FAILED point-detail fetch still returns the indicator to false', async () => {
+		dataSourceFactory.fetchDetails = jest.fn( () => Promise.reject( { status: 502 } ) );
+
+		const session = await openSession( configWith( { strategy: 'viewport' } ) );
+
+		openCardOn( session, 'P1' );
+		await flushAsync();
+
+		expect( session.panels.setLoadingCalls ).toEqual( [ true, false ] );
+	} );
+
+	test( 'overlap: a detail fetch settling first must NOT clear the indicator while the bbox '
+		+ 'refetch it overlapped with is still in flight', async () => {
+		const ds = pendingFactory();
+		const session = await openSession( configWith( { strategy: 'viewport' } ) );
+
+		// Request #1: the bbox refetch — left pending.
+		session.provider.emit( 'boundsChange', [ 1, 2, 3, 4 ] );
+		await flushAsync();
+
+		expect( session.panels.setLoadingCalls ).toEqual( [ true ] );
+
+		// Request #2: the detail fetch — overlaps #1, also left pending.
+		openCardOn( session, 'P1' );
+		await flushAsync();
+
+		// Still just the ONE 0→1 transition — a second overlapping request must not re-fire it.
+		expect( session.panels.setLoadingCalls ).toEqual( [ true ] );
+
+		// #2 settles first — #1 is STILL in flight, so the indicator must stay ON.
+		ds.resolveDetails( { id: 'P1', selectable: { allowed: true, reason: null } } );
+		await flushAsync();
+
+		expect( session.panels.setLoadingCalls ).toEqual( [ true ] );
+
+		// #1 settles — NOW the counter reaches zero and the indicator clears.
+		ds.resolvePoints( [] );
+		await flushAsync();
+
+		expect( session.panels.setLoadingCalls ).toEqual( [ true, false ] );
 	} );
 } );
 
