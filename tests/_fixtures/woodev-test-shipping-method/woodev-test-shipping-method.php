@@ -42,6 +42,28 @@ if ( ! defined( 'WOODEV_TEST_PICKUP_LIVE_YANDEX' ) ) {
 }
 
 /**
+ * Issue #226: opt-in switch to the LIVE Russian Post (Почта РФ) widget-API viewport
+ * Point_Source (`Woodev_Test_Live_Pochta_Point_Source`, calling `widget.pochta.ru`) instead of
+ * the static fixture data. Defaults to `false` — neither the unit suite, the integration
+ * suite, nor CI ever defines this, so no test makes a network call. Flip via
+ * `define( 'WOODEV_TEST_PICKUP_LIVE_POCHTA', true );` in wp-config.php or the `.wp-env.json`
+ * `config` block, same idiom as the two constants above.
+ *
+ * PRECEDENCE (documented, not merely arbitrary — see the source-selection block below):
+ * `WOODEV_TEST_PICKUP_LIVE_YANDEX` still wins when BOTH live switches are truthy at once. That
+ * combination is a misconfiguration this fixture does not try to prevent (there is only one
+ * map on the rig at a time regardless), only to resolve deterministically without ever
+ * constructing two live sources — Yandex keeps its existing precedence for backward
+ * compatibility, since it was the first live switch and nothing before now depended on Pochta
+ * outranking it. When only THIS switch is truthy, it wins over `WOODEV_TEST_PICKUP_STRATEGY`
+ * the same way Yandex does: Pochta's real API is viewport-only, so "live Pochta + bulk
+ * strategy" is not a combination that exists to choose between.
+ */
+if ( ! defined( 'WOODEV_TEST_PICKUP_LIVE_POCHTA' ) ) {
+	define( 'WOODEV_TEST_PICKUP_LIVE_POCHTA', false );
+}
+
+/**
  * Определяем корневую директорию фреймворка.
  *
  * В wp-env контейнере: WOODEV_FRAMEWORK_DIR задаётся через config в .wp-env.json
@@ -214,6 +236,10 @@ function woodev_test_shipping_method_plugin_init(): void {
 	// just below — declaring a class is free (no I/O), only INSTANTIATING it below does
 	// anything, and that only happens when WOODEV_TEST_PICKUP_LIVE_YANDEX is truthy.
 	require_once __DIR__ . '/class-test-live-yandex-point-source.php';
+
+	// Issue #226: same reasoning as the live Yandex require just above — only INSTANTIATING it
+	// below does anything, and that only happens when WOODEV_TEST_PICKUP_LIVE_POCHTA is truthy.
+	require_once __DIR__ . '/class-test-live-pochta-point-source.php';
 
 	if ( ! class_exists( 'Woodev_Test_Viewport_Point_Source' ) ) {
 
@@ -403,13 +429,20 @@ function woodev_test_shipping_method_plugin_init(): void {
 				// switch loading strategy without a code edit.
 				//
 				// Issue #185: WOODEV_TEST_PICKUP_LIVE_YANDEX (also defined near the top of
-				// this file, default false) wins over WOODEV_TEST_PICKUP_STRATEGY when
-				// truthy — Yandex only offers a bulk/geo_id-addressed endpoint, so "live"
-				// and "viewport" are not a combination that exists to choose between.
+				// this file, default false) wins over everything below when truthy — Yandex
+				// only offers a bulk/geo_id-addressed endpoint, so "live Yandex" and
+				// "viewport" are not a combination that exists to choose between, and it
+				// keeps its precedence over Pochta too (see that constant's own docblock).
+				//
+				// Issue #226: WOODEV_TEST_PICKUP_LIVE_POCHTA wins over WOODEV_TEST_PICKUP_STRATEGY
+				// when truthy, same reasoning as Yandex above but for the opposite strategy —
+				// Pochta's real API is viewport-only.
 				$viewport_strategy = \Woodev\Framework\Shipping\Pickup\Point_Source::STRATEGY_VIEWPORT;
 
 				if ( WOODEV_TEST_PICKUP_LIVE_YANDEX ) {
 					$point_source = new \Woodev_Test_Live_Yandex_Point_Source();
+				} elseif ( WOODEV_TEST_PICKUP_LIVE_POCHTA ) {
+					$point_source = new \Woodev_Test_Live_Pochta_Point_Source();
 				} else {
 					$point_source = ( $viewport_strategy === WOODEV_TEST_PICKUP_STRATEGY )
 						? new \Woodev_Test_Viewport_Point_Source()
