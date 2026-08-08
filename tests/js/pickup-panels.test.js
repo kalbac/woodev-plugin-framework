@@ -3594,6 +3594,49 @@ describe( 'setLoading()/isLoading() (issues #222/#224)', () => {
 		expect( stage.classList.contains( 'is-open' ) ).toBe( true );
 		expect( stage.classList.contains( 'is-card' ) ).toBe( false );
 	} );
+
+	// The adversarial-review fix: `.woodev-pickup-list__loading` carries `role="status"` but its
+	// only OTHER child is a decorative spinner marked `aria-hidden="true"` — toggling this
+	// element's CSS `display` announced nothing at all to a screen-reader user. This pins the
+	// non-`aria-hidden` text node the live region now needs to have anything to say, sourced
+	// through `text( this._config, 'loading' )` — the SAME i18n key `Pickup_Handler::get_js_config()`
+	// already emits for the dialog's own opening spinner, never a JS-side hardcoded string.
+	it( 'the sidebar role="status" region carries non-aria-hidden text from the loading i18n key', () => {
+		const container = document.createElement( 'div' );
+		const loadingConfig = { ...config, i18n: { ...config.i18n, loading: 'Загрузка пунктов выдачи…' } };
+		const panels = new Panels( container, loadingConfig );
+
+		panels.render();
+
+		const region = container.querySelector( '.woodev-pickup-list__loading' );
+		const label = region.querySelector( '.woodev-pickup-visually-hidden' );
+
+		expect( region.getAttribute( 'role' ) ).toBe( 'status' );
+		expect( label ).not.toBeNull();
+		expect( label.getAttribute( 'aria-hidden' ) ).toBeNull();
+		expect( label.textContent ).toBe( 'Загрузка пунктов выдачи…' );
+
+		// The spinner stays decorative/silent — this fix adds a SECOND child, it does not touch
+		// the first.
+		const spinner = region.querySelector( '.woodev-pickup-spinner' );
+
+		expect( spinner.getAttribute( 'aria-hidden' ) ).toBe( 'true' );
+	} );
+
+	// Rule I1: a missing/blank i18n key renders blank, never a hardcoded Russian default that
+	// happens to read the same — see the file docblock. `config` (this describe block's shared
+	// fixture) carries no `loading` key at all, so this is the ordinary "PHP/JS key mismatch"
+	// case, not a deliberately-blanked override.
+	it( 'a missing loading i18n key leaves the region\'s text blank (rule I1)', () => {
+		const container = document.createElement( 'div' );
+		const panels = new Panels( container, config );
+
+		panels.render();
+
+		const label = container.querySelector( '.woodev-pickup-list__loading .woodev-pickup-visually-hidden' );
+
+		expect( label.textContent ).toBe( '' );
+	} );
 } );
 
 // -----------------------------------------------------------------------

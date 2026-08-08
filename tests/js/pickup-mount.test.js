@@ -2590,6 +2590,45 @@ describe( 'the shared background-load indicator (issues #222/#224)', () => {
 
 		expect( session.panels.setLoadingCalls ).toEqual( [ true, false ] );
 	} );
+
+	// Adversarial-review finding: `bumpLoading()` runs, then `realDataSource.fetchPoints()`/
+	// `fetchDetails()` is called — if THAT call throws SYNCHRONOUSLY (before ever returning a
+	// promise), neither `.then()` handler below it would run, `dropLoading()` would never fire,
+	// and the counter (and the `is-loading` class it drives) would stay pinned on forever — the
+	// exact failure mode `dropLoading()`'s own docblock rules out. Both `fetchAndSetPoints()` and
+	// `refreshPointDetails()` now wrap the dataSource call in `Promise.resolve().then( … )` so a
+	// synchronous throw lands in the SAME reject handler an async rejection already does.
+	test( 'fetchPoints() throwing SYNCHRONOUSLY still returns the indicator to false, not a leak', async () => {
+		window.WoodevPickupDataSource = fakeDataSourceFactory( () => {
+			throw new Error( 'synchronous boom' );
+		} );
+
+		const session = await openSession( configWith() );
+
+		expect( session.panels.setLoadingCalls ).toEqual( [ true, false ] );
+	} );
+
+	test( 'fetchDetails() throwing SYNCHRONOUSLY still returns the indicator to false, not a leak, '
+		+ 'and the memo is evicted so the next card open retries it', async () => {
+		dataSourceFactory.fetchDetails = jest.fn( () => {
+			throw new Error( 'synchronous boom' );
+		} );
+
+		const session = await openSession( configWith( { strategy: 'viewport' } ) );
+
+		openCardOn( session, 'P1' );
+		await flushAsync();
+
+		expect( session.panels.setLoadingCalls ).toEqual( [ true, false ] );
+
+		// Matches the async-rejection sibling test above ("a failed fetch is quiet and the next
+		// card open retries it") — the memo eviction in the reject branch runs identically whether
+		// the rejection arrived synchronously or asynchronously.
+		openCardOn( session, 'P1' );
+		await flushAsync();
+
+		expect( dataSourceFactory.fetchDetails ).toHaveBeenCalledTimes( 2 );
+	} );
 } );
 
 // The return leg of the same wiring: the provider owns the zoom RANGE (it owns the camera), so
@@ -3320,6 +3359,43 @@ describe( 'loading stages (spec V-4)', () => {
 		document.body.removeEventListener( 'woodev_modal_closed', onClose );
 
 		expect( onClose ).toHaveBeenCalled();
+	} );
+
+	// Adversarial-review finding: `dropLoading()` deliberately skips `panels.setLoading( false )`
+	// once `destroyed` is true, so IF the stage element survived teardown a request settling after
+	// `destroy()` would leave it pinned `is-loading` forever. It does not survive: this session's
+	// own `destroy()` calls `panels.destroy()`, whose own docblock states it removes `this._stage`
+	// from the DOM ("Panels.prototype.destroy" in pickup-panels.js) — SYNCHRONOUSLY, before the
+	// in-flight request ever gets a chance to settle. This test pins that invariant directly
+	// (rather than re-deriving it from the two files' docblocks on faith) so a future change to
+	// either `destroy()` cannot silently re-open the leak this finding worried about.
+	test( 'destroying the session while a fetch is in flight removes the stage from the DOM — a '
+		+ 'later settle has nothing left to leave stuck is-loading', async () => {
+		const fetch = pendingDataSource();
+
+		setConfig( configWith() );
+		mountAll();
+		clickTrigger();
+		await flushAsync();
+
+		const stage = document.querySelector( '.woodev-pickup-stage' );
+
+		expect( stage ).not.toBeNull();
+		expect( document.body.contains( stage ) ).toBe( true );
+
+		getSession( FIELD_ID ).destroy();
+
+		// The stage is gone from the document IMMEDIATELY — destroy() is synchronous end to end
+		// (panels.destroy() included), never waiting on the still-pending fetch below.
+		expect( document.body.contains( stage ) ).toBe( false );
+
+		// The request settles AFTER teardown — `dropLoading()`'s `destroyed` guard skips
+		// `setLoading( false )` here, exactly as designed, and it is harmless: there is no live
+		// `.woodev-pickup-stage` left anywhere for a stale `is-loading` class to be visible on.
+		fetch.resolve( [] );
+		await flushAsync();
+
+		expect( document.querySelectorAll( '.woodev-pickup-stage' ) ).toHaveLength( 0 );
 	} );
 } );
 

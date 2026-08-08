@@ -1468,7 +1468,25 @@
 			detailedPoints[ id ] = true;
 			bumpLoading();
 
-			realDataSource.fetchDetails( id ).then(
+			// `realDataSource.fetchDetails( id )` is still called SYNCHRONOUSLY, right here, exactly
+			// as before this fix — several call sites (this file's own tests among them) rely on the
+			// dataSource being asked THIS TICK, before anything awaits. What changed is the `try`:
+			// a dataSource that throws SYNCHRONOUSLY (before ever returning a promise) used to skip
+			// the `.then( resolve, reject )` pair below entirely — `bumpLoading()` already ran,
+			// `dropLoading()` never would, and the shared indicator would stay `is-loading` forever
+			// (the exact failure mode {@see dropLoading}'s own docblock rules out). Catching the
+			// throw and converting it to an already-rejected promise routes it through the SAME
+			// reject handler an async rejection already gets — `dropLoading()` plus the memo
+			// eviction below — rather than duplicating that cleanup a second time here.
+			var detailsPromise;
+
+			try {
+				detailsPromise = realDataSource.fetchDetails( id );
+			} catch ( error ) {
+				detailsPromise = Promise.reject( error );
+			}
+
+			detailsPromise.then(
 				function( point ) {
 					dropLoading();
 
@@ -1494,7 +1512,30 @@
 		function fetchAndSetPoints( query ) {
 			bumpLoading();
 
-			return realDataSource.fetchPoints( query ).then(
+			// `realDataSource.fetchPoints( query )` is still called SYNCHRONOUSLY, right here — see
+			// {@see refreshPointDetails}'s identical `try` immediately above for why: several
+			// callers (the provider's own `boundsChange`, this file's tests) expect the dataSource
+			// to be asked THIS TICK, and deferring the call itself (e.g. via a bare
+			// `Promise.resolve().then( function() { return realDataSource.fetchPoints( query ); } )`
+			// wrapper) would push it a microtask later than every one of them observes today.
+			// What the `try` adds is a safety net for a dataSource that throws SYNCHRONOUSLY (before
+			// ever returning a promise) — without it, `bumpLoading()`'s increment above is never
+			// balanced by a `dropLoading()`, because the exception unwinds the call stack straight
+			// past the `.then( resolve, reject )` pair below. Catching it and converting it to an
+			// already-rejected promise routes it through that SAME reject branch instead — the exact
+			// cleanup (`dropLoading()`, `clearInitialBusy()`, the degrade UI, the `Promise.reject()`
+			// re-throw) an async rejection already gets, not a second copy of it. Every existing
+			// caller of this function chains `.catch( function() {} )` onto its return value, so the
+			// settled-promise contract they observe is unchanged either way.
+			var pointsPromise;
+
+			try {
+				pointsPromise = realDataSource.fetchPoints( query );
+			} catch ( error ) {
+				pointsPromise = Promise.reject( error );
+			}
+
+			return pointsPromise.then(
 				function( points ) {
 					dropLoading();
 

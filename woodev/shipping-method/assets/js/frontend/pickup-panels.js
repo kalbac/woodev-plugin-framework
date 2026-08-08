@@ -1945,6 +1945,20 @@
 		listSpinner.setAttribute( 'aria-hidden', 'true' );
 		listLoading.appendChild( listSpinner );
 
+		// The `role="status"` region above has no accessible text without this: the spinner is its
+		// only OTHER child and is itself `aria-hidden`, so toggling the region's CSS `display`
+		// announced nothing at all to a screen-reader user — visually the loading state was
+		// obvious, non-visually it did not exist. `text( this._config, 'loading' )` is the SAME
+		// i18n key `modal.showLoading()` already uses for the dialog's own opening spinner
+		// (`Pickup_Handler::get_js_config()`'s `loading` string); a missing key still renders blank
+		// per rule I1, never a hardcoded Russian default. `.woodev-pickup-visually-hidden`
+		// (pickup.css) keeps the text out of the visual layout — the spinner alone still carries the
+		// visible affordance — while leaving it in the accessibility tree for the region to announce.
+		var listLoadingText = document.createElement( 'span' );
+		listLoadingText.className = 'woodev-pickup-visually-hidden';
+		listLoadingText.textContent = text( this._config, 'loading' );
+		listLoading.appendChild( listLoadingText );
+
 		list.appendChild( listLoading );
 
 		var card = document.createElement( 'div' );
