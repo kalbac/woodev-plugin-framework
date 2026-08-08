@@ -1,6 +1,21 @@
 # Gotchas — Woodev Plugin Framework
-> **108 atomic gotchas in 24 namespaces** — update count when adding/removing.
-> Last updated: 2026-08-08 (session 56: +2 files — `rig-serves-the-working-tree-branch-switch-reverts-fixes`
+> **110 atomic gotchas in 24 namespaces** — update count when adding/removing.
+> Last updated: 2026-08-08 (session 57, overnight: +2 files, existing namespace `[shipping/pickup]`
+> — `card-renders-from-a-snapshot-the-writers-never-touch` (`Panels` holds `_groups`, replaced
+> wholesale on every listing, AND `_activeGroup`, a snapshot captured at `openCard()`. The two
+> verdict writers walk `_groups`; `renderCard()` reads `_activeGroup`. A listing landing inside the
+> window between a card opening and its answer orphans the snapshot, so the write reports success,
+> the render reports success, and the card keeps the stale verdict — a customer could confirm a
+> point the server had already refused. Two separately-filed cards, #223 and #225, were this one
+> bug. Matching the group `key` alone when healing is NOT enough: a key is a coordinate, so a
+> same-key group can hold different points, and the first fix's `freshIndex = 0` fallback silently
+> swapped the card onto ANOTHER PVZ mid-read) and `a-per-cycle-memo-is-not-in-flight-deduplication`
+> (`detailedPoints` was doing two jobs — "landed this listing", which must be wiped on every
+> successful listing, and "already being asked", which must not. Harmless until a listing began
+> re-asking for the open card, then one detail request per pan, all for one point, all in flight.
+> Carries the corollary that bit on the way out: ownership decides who may RELEASE a lock, identity
+> decides whose answer may LAND — merging the two guards silently drops data)).
+> Prior: 2026-08-08 (session 56: +2 files — `rig-serves-the-working-tree-branch-switch-reverts-fixes`
 > (new namespace `[rig/browser]` entry: wp-env mounts the repo, so the rig runs whatever branch is
 > checked out — switching branches silently un-fixes things, and switching FIXTURES silently hides
 > symptoms. Both directions fired on one day: the operator reported a phantom regression from a
@@ -304,6 +319,10 @@
 - [shipping/pickup] Self-inflicted: bounding `resolveAddress()`'s `geocode()` call to the pickup-point coverage area (`strictBounds: true`) — the same bound correctly applied to the two candidate-OFFERING calls (`suggest()`, the search control's `geocode()`) — silently broke the normal case, because the customer's own address is routinely OUTSIDE the point coverage; that's the whole reason they're searching. Measured live: fixture points in central Moscow, a searched address ~14km south, bounded `resolveAddress()` returned zero hits and silently no-opped — no camera move, no message. Rule: bound the calls that OFFER candidates, never the call that RESOLVES an already-chosen one — there's nothing left to disambiguate. Second lesson from the same incident: an empty geocode result must produce a visible outcome, never a silent early `return` → [gotchas/bounding-the-address-resolve-breaks-the-normal-case.md](gotchas/bounding-the-address-resolve-breaks-the-normal-case.md) (s51)
 
 - [shipping/pickup] Yandex's ToS-mandated copyright strip ignores `map.margin.addArea()` even after the reservation itself is correct (see the `ymaps-margin-area-needs-explicit-width` entry above) — A/B-measured live, the strip sat at the identical `x 807…1097, y 806…830` with the sidebar open, closed, or the map narrowed to 600px. Margins move the camera, not this pane. Its z-index (5002) also looks like it should beat the sidebar's (2), but the pane is nested inside an intermediate ymaps-owned container — THAT container's z-index is what actually competes, not the pane's own, confirmed via `document.elementFromPoint()` at the strip's centre returning the sidebar. Shipped fix: the panel stops 32px short of the bottom so the strip stays visible full-width; the cosmetically-preferred full-height-panel-with-copyright-on-top would require selecting an ymaps class whose name carries the API version (`ymaps-2-1-79-`), which `pickup.css` deliberately never does — tracked as issue #168, not done → [gotchas/ymaps-copyright-pane-is-trapped-in-a-stacking-context.md](gotchas/ymaps-copyright-pane-is-trapped-in-a-stacking-context.md) (s51)
+
+- [shipping/pickup] `Panels` keeps `_groups` (the visible set, REPLACED wholesale by `setVisible()` on every listing) and `_activeGroup` (a snapshot captured at `openCard()`). `updatePoint()`/`setPointVerdict()` walk `_groups`; `renderCard()` reads `_activeGroup`. A listing landing inside the window between a card opening and its answer orphans the snapshot — so both writers FIND the point (`found` true, `renderCard()` even runs), mutate the new object, and the card re-renders from the old one. The verdict is applied and silently discarded, leaving a live CTA on a point the server had already refused. Rig-measured: `verdictInGroups: { allowed: false }` beside `verdictInActiveGroup: { allowed: true }`. Issues #223 and #225 were filed separately and were this one bug. Healing on the group `key` ALONE is not enough — a key is a coordinate, co-located points share one, and the first fix's `freshIndex = 0` fallback silently swapped the card onto a DIFFERENT PVZ mid-read; require both identities, else keep the stale object → [gotchas/card-renders-from-a-snapshot-the-writers-never-touch.md](gotchas/card-renders-from-a-snapshot-the-writers-never-touch.md) (s57)
+
+- [shipping/pickup] A memo scoped to a CYCLE cannot double as in-flight de-duplication. `detailedPoints` answered both "details already landed for this listing" (which must be wiped on every successful listing — a new listing may mean a new cart) and, accidentally, "a request is already in flight" (set before the fetch). The wipe destroys the second meaning. Latent until a successful listing began re-asking for the still-open card, then a panning customer produced one detail request per pan, all for the same point, all in flight, against the merchant's carrier quota — no error, nothing visibly wrong. Split into two maps with two lifetimes. Corollary from the same fix: **ownership decides who may RELEASE a lock, identity decides whose answer may LAND** — gating the apply path on ownership too looks symmetrical and silently discards the only verdict anyone will fetch → [gotchas/a-per-cycle-memo-is-not-in-flight-deduplication.md](gotchas/a-per-cycle-memo-is-not-in-flight-deduplication.md) (s57)
 
 ### [shipping/*] — Shipping module (S1)
 - [shipping/contracts] Session key ≠ order-meta prefix — composing one key for both checkout session and order meta breaks installed-site data (Yandex: `chosen_yandex_pickup_point` vs `_yandex_delivery_`) → [gotchas/session-key-vs-order-meta-prefix.md](gotchas/session-key-vs-order-meta-prefix.md) (2026-06-06)
