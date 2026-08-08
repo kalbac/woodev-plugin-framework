@@ -415,17 +415,28 @@
 .woodev-pickup-progress__bar {
 	position: absolute;
 	top: 0;
-	left: -40%;
+	left: 0;
 	width: 40%;
 	height: 100%;
 	background: var( --woodev-pickup-accent, #06aedd );
 	animation: woodev-pickup-progress-slide 1.2s ease-in-out infinite;
 }
 
+/* TRANSFORM, NOT `left` — the two look identical and cost differently. This indicator exists
+   precisely for the slow case (a 10-13s fetch, measured on the rig), running over a live map
+   canvas the customer is also panning; animating `left` puts a layout pass on the main thread
+   every frame for the whole duration, which is main-thread time taken from the very map the
+   spinner is apologising for. A `translateX` animation is compositor-only. Percentages here are
+   of the BAR's own width (40% of the track), not the track's — hence -100%/250%, which place its
+   trailing edge at the track's left edge and its leading edge past the right one. */
 @keyframes woodev-pickup-progress-slide {
 
+	from {
+		transform: translateX( -100% );
+	}
+
 	to {
-		left: 100%;
+		transform: translateX( 250% );
 	}
 }
 
