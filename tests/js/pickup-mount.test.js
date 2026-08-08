@@ -2406,20 +2406,50 @@ describe( 'viewport lazy detail fetch (#219)', () => {
 
 	// …but a fresh listing carries freshly computed verdicts, because the cart weight or the
 	// payment method may be exactly what changed.
-	test( 'asks again after a new listing lands', async () => {
+	// CONTRACT CHANGED IN #232. This used to assert that any new listing re-asked. It does not
+	// any more, and the old behaviour was the visible defect: a bbox refetch cannot change the
+	// cart, so re-asking on every pan only made the open card drop its own content for a beat
+	// and fetch it again. What invalidates a verdict is a CART change, which arrives as
+	// `refresh()` — see the test below.
+	test( 'a pan does NOT re-ask: a bbox refetch is not a cart change', async () => {
 		const session = await openSession( configWith( { strategy: 'viewport' } ) );
 
 		openCardOn( session, 'P1' );
 		await flushAsync();
 
-		// A pan — the ordinary way a new listing lands under this strategy.
+		expect( dataSourceFactory.fetchDetails ).toHaveBeenCalledTimes( 1 );
+
 		session.provider.emit( 'boundsChange', [ 1, 2, 3, 4 ] );
 		await flushAsync();
 
 		openCardOn( session, 'P1' );
 		await flushAsync();
 
+		expect( dataSourceFactory.fetchDetails ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	// The other half of the same contract: a checkout update CAN have changed the weight or the
+	// payment method, so every stored verdict is suspect and the open card must ask again.
+	test( 'refresh() forgets details, so the open card re-asks once', async () => {
+		const session = await openSession( configWith( { strategy: 'viewport' } ) );
+
+		openCardOn( session, 'P1' );
+		await flushAsync();
+
+		expect( dataSourceFactory.fetchDetails ).toHaveBeenCalledTimes( 1 );
+
+		// `refresh()` under viewport re-fetches the LAST bbox, so one has to exist first —
+		// otherwise it early-returns and never reaches a listing at all.
+		session.provider.emit( 'boundsChange', [ 1, 2, 3, 4 ] );
+		await flushAsync();
+
+		expect( dataSourceFactory.fetchDetails ).toHaveBeenCalledTimes( 1 );
+
+		await session.refresh();
+		await flushAsync();
+
 		expect( dataSourceFactory.fetchDetails ).toHaveBeenCalledTimes( 2 );
+		expect( dataSourceFactory.fetchDetails ).toHaveBeenLastCalledWith( 'P1' );
 	} );
 
 	// A marker click and a sidebar row both swap the card without waiting for anything, so an
@@ -2469,8 +2499,21 @@ describe( 'viewport lazy detail fetch (#219)', () => {
 	// above drives) ever re-triggered `refreshPointDetails()`. This test drives the refetch with
 	// NO further `cardOpened` in between — the card stays open on P1 throughout — proving the
 	// mount itself re-asks automatically.
-	test( 'a successful listing re-asks for the still-open card automatically, exactly once, '
-		+ 'with no reopen', async () => {
+	// REPLACES the #225 test that asserted a re-ask on every listing. #232: what an open card
+	// actually needs across a pan is not a new REQUEST but not to LOSE what it already has —
+	// `geo.groupByPosition()` rebuilds groups from the sparse listing, so without re-applying the
+	// stored detail record the card silently reverts to the permissive-by-omission verdict a
+	// detail fetch had already overturned. That revert is what the customer saw as content
+	// appearing and then vanishing.
+	test( 'a listing re-applies stored details over the rebuilt sparse groups', async () => {
+		dataSourceFactory = fakeDataSourceFactory( () => Promise.resolve( [ point( { id: 'P1' } ) ] ) );
+		dataSourceFactory.fetchDetails = jest.fn( () => Promise.resolve( {
+			id: 'P1',
+			work_time: 'Пн-Пт 10:00-19:00',
+			selectable: { allowed: false, reason: 'нет оплаты при получении' },
+		} ) );
+		window.WoodevPickupDataSource = dataSourceFactory;
+
 		const session = await openSession( configWith( { strategy: 'viewport' } ) );
 
 		openCardOn( session, 'P1' );
@@ -2478,12 +2521,19 @@ describe( 'viewport lazy detail fetch (#219)', () => {
 
 		expect( dataSourceFactory.fetchDetails ).toHaveBeenCalledTimes( 1 );
 
-		// A pan — the ordinary way a new listing lands — with no `cardOpened` of its own.
+		// A pan: a fresh SPARSE listing lands, carrying the permissive default again.
 		session.provider.emit( 'boundsChange', [ 1, 2, 3, 4 ] );
 		await flushAsync();
 
-		expect( dataSourceFactory.fetchDetails ).toHaveBeenCalledTimes( 2 );
-		expect( dataSourceFactory.fetchDetails ).toHaveBeenLastCalledWith( 'P1' );
+		// No second request — the memo survives a pan now.
+		expect( dataSourceFactory.fetchDetails ).toHaveBeenCalledTimes( 1 );
+
+		// …and the groups handed to the provider carry the DETAIL verdict, not the listing's.
+		const drawn = session.provider.setPointsCalls[ session.provider.setPointsCalls.length - 1 ];
+		const drawnPoint = drawn[ 0 ].points[ 0 ];
+
+		expect( drawnPoint.selectable.allowed ).toBe( false );
+		expect( drawnPoint.work_time ).toBe( 'Пн-Пт 10:00-19:00' );
 	} );
 
 	// The restore pass (spec D-15) is one of the two callers of `openCard()`/`cardOpened` that can
@@ -2885,21 +2935,14 @@ describe( 'the shared background-load indicator (issues #222/#224)', () => {
 
 		expect( session.panels.setLoadingCalls ).toEqual( [ true ] );
 
-		// #1 settles — the counter WOULD reach zero here, except issue #225's own fix
-		// (`fetchAndSetPoints()`'s Part 3 re-ask) fires the instant a listing succeeds while a
-		// card is open: request #3, a fresh detail fetch for the still-open card, starts before
-		// the indicator ever gets a chance to rest at zero. Both transitions — #1's own 1→0 and
-		// #3's immediate 0→1 — land inside this one flush, back to back.
+		// #1 settles — and now the counter really does reach zero. Before #232 a third request
+		// started here (the listing re-asked for the still-open card), so the indicator flicked
+		// off and straight back on inside this one flush. A pan is not a cart change, so it no
+		// longer re-asks, and the indicator simply rests.
 		ds.resolvePoints( [] );
 		await flushAsync();
 
-		expect( session.panels.setLoadingCalls ).toEqual( [ true, false, true ] );
-
-		// #3 settles — NOW the counter finally reaches zero and the indicator clears for good.
-		ds.resolveDetails( { id: 'P1', selectable: { allowed: true, reason: null } } );
-		await flushAsync();
-
-		expect( session.panels.setLoadingCalls ).toEqual( [ true, false, true, false ] );
+		expect( session.panels.setLoadingCalls ).toEqual( [ true, false ] );
 	} );
 
 	// Adversarial-review finding: `bumpLoading()` runs, then `realDataSource.fetchPoints()`/
