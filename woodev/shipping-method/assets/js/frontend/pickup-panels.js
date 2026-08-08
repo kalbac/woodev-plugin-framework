@@ -1328,6 +1328,15 @@
 	 * {@see Panels.prototype.showSelectionError} writes into this same slot directly, for a
 	 * transient transport failure, without going through a full render.
 	 *
+	 * ISSUE #223: `self._verdictPending` locks the CTA the same way `self._selectionBusy` does —
+	 * see {@see Panels.prototype.setVerdictPending}'s own docblock for why the two are tracked
+	 * (and released) independently rather than merged into one flag. `_selectionBusy` wins the
+	 * LABEL when both happen to be true at once (see that method's docblock for the one real case
+	 * where they overlap): a confirmation already on its way to the server is the more advanced,
+	 * more customer-relevant state to report than "still checking availability", and CTA text
+	 * choices elsewhere in this function already follow the same "most specific state wins"
+	 * pattern (`confirming` over `continueCheckout`/`select`).
+	 *
 	 * @param {Panels} self
 	 * @param {Object} point
 	 * @returns {HTMLElement}
@@ -1346,21 +1355,27 @@
 		}
 
 		var isSelected = null !== self._selectedId && String( point.id ) === self._selectedId;
+		var locked = self._selectionBusy || self._verdictPending;
 
 		var cta = document.createElement( 'button' );
 		cta.type = 'button';
-		cta.className = 'woodev-pickup-card__cta' + ( self._selectionBusy ? ' is-busy' : '' );
+		cta.className = 'woodev-pickup-card__cta' + ( locked ? ' is-busy' : '' );
 		cta.textContent = self._selectionBusy
 			? text( self._config, 'confirming' )
-			: ( isSelected ? text( self._config, 'continueCheckout' ) : text( self._config, 'select' ) );
-		cta.disabled = ! selectable.allowed || self._selectionBusy;
+			: ( self._verdictPending
+				? text( self._config, 'checkingAvailability' )
+				: ( isSelected ? text( self._config, 'continueCheckout' ) : text( self._config, 'select' ) ) );
+		cta.disabled = ! selectable.allowed || locked;
 		cta.addEventListener( 'click', function() {
 			/*
 			 * Two guards, not one, exactly as the pre-existing `selectable.allowed` guard is
 			 * doubled by the `disabled` attribute: `disabled` is presentation, the refusal
-			 * here is behaviour, and a programmatic `.click()` respects only the second.
+			 * here is behaviour, and a programmatic `.click()` respects only the second. Reads
+			 * `self._selectionBusy`/`self._verdictPending` directly rather than the closed-over
+			 * `locked` above, matching this handler's own pre-existing style of reading
+			 * `self._selectionBusy` fresh rather than a captured local.
 			 */
-			if ( ! selectable.allowed || self._selectionBusy ) {
+			if ( ! selectable.allowed || self._selectionBusy || self._verdictPending ) {
 				return;
 			}
 
@@ -1759,6 +1774,16 @@
 		 * {@see Panels.prototype.setSelectionBusy}.
 		 */
 		this._selectionBusy = false;
+
+		/**
+		 * @type {boolean} true while the viewport strategy's lazy detail fetch (issue #219) is
+		 * in flight FOR THE POINT THE CARD CURRENTLY SHOWS — see
+		 * {@see Panels.prototype.setVerdictPending}. A SEPARATE flag from `_selectionBusy` above
+		 * — see that method's own docblock for why the two must never be merged into one.
+		 *
+		 * @since 2.0.2
+		 */
+		this._verdictPending = false;
 		this._activeGroup = null;
 		this._activeIndex = 0;
 		this._listeners = {};
@@ -2407,11 +2432,65 @@
 	 * mutating a point in place is visible to every other holder of that same object, not just
 	 * this instance.
 	 *
+	 * HEALS `_activeGroup`'S IDENTITY AGAINST THE FRESH SET (measured #225 root cause). The
+	 * mount's `fetchAndSetPoints()` rebuilds groups via `geo.groupByPosition()` on EVERY refetch
+	 * — a listing landing while a card is open hands this method brand-new group/point objects
+	 * even when a group's `key` (its IDENTITY, not its object identity) is unchanged. Left
+	 * unrepointed, `_activeGroup` keeps referencing the OLD, now-orphaned object while `_groups`
+	 * holds the new one: {@see Panels.prototype.updatePoint}/{@see Panels.prototype.setPointVerdict}
+	 * walk `_groups` (mutating the NEW object, `found` true) while {@see renderCard} reads
+	 * `_activeGroup` (the OLD one) — a verdict that LOOKS applied is actually landing somewhere
+	 * the card never looks again. Rig-measured: `afterRefusal_CTA: { disabled: false }` with the
+	 * write landing in `_groups` while the card kept showing the pre-refusal, permissive verdict.
+	 *
 	 * @param {Array} groups
 	 * @returns {void}
 	 */
 	Panels.prototype.setVisible = function( groups ) {
 		this._groups = groups || [];
+
+		if ( this._activeGroup ) {
+			var freshActive = null;
+
+			for ( var i = 0; i < this._groups.length; i++ ) {
+				if ( this._groups[ i ].key === this._activeGroup.key ) {
+					freshActive = this._groups[ i ];
+					break;
+				}
+			}
+
+			if ( freshActive ) {
+				// Case A: the open card's group is still present in the new set (by `key`) —
+				// repoint at the fresh object so every later read (this render, the next
+				// `updatePoint()`/`setPointVerdict()`) sees LIVE data, not the orphaned one.
+				// `_activeIndex` is re-resolved by point id rather than reused as a bare number:
+				// it indexes into `points`, and nothing guarantees the fresh group's array keeps
+				// the same order as the stale one it replaces.
+				var currentPoint = this._activeGroup.points[ this._activeIndex ];
+				var currentPointId = currentPoint ? String( currentPoint.id ) : null;
+				var freshIndex = 0;
+
+				if ( null !== currentPointId ) {
+					for ( var j = 0; j < freshActive.points.length; j++ ) {
+						if ( String( freshActive.points[ j ].id ) === currentPointId ) {
+							freshIndex = j;
+							break;
+						}
+					}
+				}
+
+				this._activeGroup = freshActive;
+				this._activeIndex = freshIndex;
+				renderCard( this );
+			}
+
+			// Case B (`freshActive` stays null): the customer panned the point out of the new
+			// viewport set. Deliberately KEEP the stale object rather than clearing
+			// `_activeGroup` — an open card must not blank out or close just because its point
+			// left the viewport. `updatePoint()`/`setPointVerdict()` cover this orphaned object
+			// directly (see `activeGroupInGroups()`, below), since it is no longer reachable by
+			// walking `_groups`.
+		}
 
 		renderList( this );
 	};
@@ -3173,6 +3252,96 @@
 	};
 
 	/**
+	 * Marks the viewport strategy's lazy detail fetch (issue #219) as in flight — or settled —
+	 * FOR THE POINT THE CARD CURRENTLY SHOWS (issue #223). While that fetch is running, the card
+	 * is still displaying the sparse listing's permissive-by-omission verdict, which is exactly
+	 * what the fetch is on its way to maybe overturn; the CTA locks for that window so the
+	 * customer cannot confirm a point on a verdict already known to be provisional.
+	 *
+	 * A SEPARATE flag from {@see Panels.prototype.setSelectionBusy}, DELIBERATELY not folded into
+	 * it, even though both end up disabling the same CTA: the two states answer different
+	 * questions ("is the server confirming this point right now" vs "are we still finding out
+	 * whether this point is even offerable"), and — unlike the ONE confirmation this file ever
+	 * has in flight at a time — they CAN be true together on the SAME card. `pickup-mount.js`'s
+	 * own `refreshCheckout()` holds `setSelectionBusy( true )` on the still-open card while a
+	 * POST-confirmation checkout totals refresh is in flight (accepted-but-not-closed, spec
+	 * §5.2); if the customer opens a DIFFERENT point's card during that same window, a fresh
+	 * viewport detail fetch starts for it and this flag goes true too — two independent locks on
+	 * one `panels` instance, live at once, for two unrelated reasons. A single shared boolean
+	 * cannot represent "both reasons are live" without one release wrongly unlocking the CTA the
+	 * other still needs held — the exact defect class the whole #225 investigation this fix
+	 * belongs to is about. `pickup-mount.js` mirrors this split with two independent lock owners
+	 * (`pendingSelectionToken` / `verdictPendingPointId`), each released only by whoever ends ITS
+	 * OWN ownership.
+	 *
+	 * The card's `is-verdict-pending` class is a state marker for CSS/tests, kept separate from
+	 * `is-locked` (the confirmation lock's own overlay-bearing class, see `setSelectionBusy()`
+	 * above) — this state does not cover the card with a click-blocking sheet the way `is-locked`
+	 * does. The CTA itself reuses the EXISTING `.woodev-pickup-card__cta.is-busy` spinner/disabled
+	 * treatment {@see buildCardFooter} already applies for a confirmation — a card-local signal,
+	 * not a new spinner competing with the shared background-load indicator ({@see
+	 * Panels.prototype.setLoading}, issues #222/#224) that already counts this same fetch globally.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @param {boolean} pending
+	 * @returns {void}
+	 */
+	Panels.prototype.setVerdictPending = function( pending ) {
+		this._verdictPending = !! pending;
+
+		if ( this._cardEl ) {
+			this._cardEl.classList.toggle( 'is-verdict-pending', this._verdictPending );
+		}
+
+		if ( this._activeGroup ) {
+			renderCard( this );
+		}
+	};
+
+	/**
+	 * Whether `self._activeGroup` is one of the objects in `self._groups` right now — by
+	 * REFERENCE, not by `key`. Reference equality is the correct test given
+	 * {@see Panels.prototype.setVisible}'s own healing pass: a `key` match there repoints
+	 * `_activeGroup` at the FRESH object from the new `_groups`, so after that call "same key" and
+	 * "same object" always agree; the only way they can legitimately disagree afterwards is the
+	 * panned-out case `setVisible()` deliberately leaves unrepointed — exactly the case this
+	 * helper exists to detect for {@see Panels.prototype.updatePoint}/
+	 * {@see Panels.prototype.setPointVerdict}, so a write meant for the card's held point does not
+	 * silently land nowhere once that point's group has left `_groups` entirely.
+	 *
+	 * @since 2.0.2
+	 * @param {Panels} self
+	 * @returns {boolean}
+	 */
+	function activeGroupInGroups( self ) {
+		for ( var i = 0; i < self._groups.length; i++ ) {
+			if ( self._groups[ i ] === self._activeGroup ) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Writes one verdict onto one point object — the mutation {@see Panels.prototype.setPointVerdict}
+	 * applies, factored out so it can run against BOTH `_groups` and a panned-out `_activeGroup`
+	 * without duplicating the shape it writes.
+	 *
+	 * @since 2.0.2
+	 * @param {Object}                                     point
+	 * @param {{allowed: boolean, reason: (string|null)}} verdict
+	 * @returns {void}
+	 */
+	function applyVerdict( point, verdict ) {
+		point.selectable = {
+			allowed: !! verdict.allowed,
+			reason: 'string' === typeof verdict.reason ? verdict.reason : null,
+		};
+	}
+
+	/**
 	 * Records a domain verdict against one point, so a refusal SURVIVES a card re-render (spec
 	 * D-6/D-7). The framework's own fetch-time `selectable` verdict ({@see Constraint_Checker})
 	 * is deliberately permissive about data a carrier's list response omits — a selection
@@ -3188,6 +3357,15 @@
 	 * shown — the write still lands on the held point, and the next `openCard()`/tab switch to
 	 * it will read it correctly.
 	 *
+	 * ALSO WRITES `_activeGroup` DIRECTLY WHEN IT HAS PANNED OUT OF `_groups` (measured #225/#223
+	 * belt-and-braces): {@see Panels.prototype.setVisible}'s own identity-healing pass
+	 * deliberately leaves a panned-out `_activeGroup` unrepointed, so the loop over `_groups`
+	 * below never reaches its point at all in that case — a refusal that lands while the card is
+	 * showing a point outside the current viewport would otherwise be silently discarded, exactly
+	 * the defect this whole fix exists for. {@see activeGroupInGroups} tells the two cases apart;
+	 * when `_activeGroup` IS one of `_groups`, the loop below already covers it and this does not
+	 * run a second time.
+	 *
 	 * @since 2.0.2
 	 *
 	 * @param {string|number}                             pointId
@@ -3200,13 +3378,18 @@
 		this._groups.forEach( function( group ) {
 			group.points.forEach( function( point ) {
 				if ( String( point.id ) === id ) {
-					point.selectable = {
-						allowed: !! verdict.allowed,
-						reason: 'string' === typeof verdict.reason ? verdict.reason : null,
-					};
+					applyVerdict( point, verdict );
 				}
 			} );
 		} );
+
+		if ( this._activeGroup && ! activeGroupInGroups( this ) ) {
+			this._activeGroup.points.forEach( function( point ) {
+				if ( String( point.id ) === id ) {
+					applyVerdict( point, verdict );
+				}
+			} );
+		}
 
 		if ( this._activeGroup ) {
 			renderCard( this );
@@ -3232,6 +3415,15 @@
 	 * different id is a server/domain bug, and letting it through would silently re-key a point
 	 * inside a group — the one corruption this method could cause that nothing downstream would
 	 * detect.
+	 *
+	 * ALSO WRITES `_activeGroup` DIRECTLY WHEN IT HAS PANNED OUT OF `_groups` — same
+	 * belt-and-braces reasoning as {@see Panels.prototype.setPointVerdict}'s own note (measured
+	 * #225): {@see Panels.prototype.setVisible}'s identity-healing pass deliberately leaves a
+	 * panned-out `_activeGroup` unrepointed, so the loop over `_groups` below never reaches its
+	 * point. `found` is shared across both loops on purpose — a hit in EITHER one means the
+	 * merge landed somewhere real and the card is worth re-rendering; {@see activeGroupInGroups}
+	 * guards the second loop so an `_activeGroup` that IS already covered by `_groups` is never
+	 * walked (and therefore never merged) twice.
 	 *
 	 * @since 2.0.2
 	 *
@@ -3262,6 +3454,22 @@
 				} );
 			} );
 		} );
+
+		if ( this._activeGroup && ! activeGroupInGroups( this ) ) {
+			this._activeGroup.points.forEach( function( point ) {
+				if ( String( point.id ) !== id ) {
+					return;
+				}
+
+				found = true;
+
+				Object.keys( fields ).forEach( function( key ) {
+					if ( 'id' !== key ) {
+						point[ key ] = fields[ key ];
+					}
+				} );
+			} );
+		}
 
 		if ( found && this._activeGroup ) {
 			renderCard( this );

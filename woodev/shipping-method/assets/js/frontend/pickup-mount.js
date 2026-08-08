@@ -1123,6 +1123,19 @@
 		 *  "the card re-rendered on the same one". Never the guard's identity; see above. */
 		var pendingSelectionPointId = null;
 
+		/** @type {string|null} issue #223: the point id whose {@see refreshPointDetails} fetch
+		 *  currently owns the card's `panels.setVerdictPending( true )` lock — `null` when none
+		 *  does. A SEPARATE lock owner from `pendingSelectionToken` above (see
+		 *  {@see Panels.prototype.setVerdictPending}'s own docblock for why the two locks must
+		 *  never be merged into one flag): released ONLY by whoever ends ITS OWN ownership — the
+		 *  fetch itself settling ({@see refreshPointDetails}), the card moving to a different
+		 *  point before it does (the `cardOpened` listener, below), or the session being torn
+		 *  down ({@see releaseVerdictPending}'s call in `destroy()`). A plain point id, not a
+		 *  generation/token: unlike a confirmation, a detail fetch is idempotent, and this lock
+		 *  only ever needs to answer "is the fetch I started still the one the card is showing",
+		 *  which an id already answers exactly. */
+		var verdictPendingPointId = null;
+
 		/** @type {Function|null} the pending `updated_checkout` handler {@see refreshCheckout}
 		 *  bound through jQuery, held only so {@see dropRefreshWaiter} can take it off again —
 		 *  the second (and last) long-lived binding a session makes; see the file docblock. */
@@ -1468,6 +1481,21 @@
 			detailedPoints[ id ] = true;
 			bumpLoading();
 
+			// Issue #223: locks the card's CTA for the window this fetch is in flight — the card
+			// is still showing the sparse listing's permissive-by-omission verdict, which is
+			// exactly what this request may be about to overturn. A SEPARATE lock from the
+			// confirmation one (`pendingSelectionToken`) — see `verdictPendingPointId`'s own
+			// docblock and `Panels.prototype.setVerdictPending`'s for why the two must never be
+			// merged. Both call sites of this function (the `cardOpened` listener below, and the
+			// re-ask a successful listing triggers — see `fetchAndSetPoints()`) only ever pass the
+			// CURRENT `cardPointId`, so acquiring the lock under `id` here is always acquiring it
+			// for the point the card is showing right now.
+			verdictPendingPointId = id;
+
+			if ( panels && ! destroyed ) {
+				panels.setVerdictPending( true );
+			}
+
 			// `realDataSource.fetchDetails( id )` is still called SYNCHRONOUSLY, right here, exactly
 			// as before this fix — several call sites (this file's own tests among them) rely on the
 			// dataSource being asked THIS TICK, before anything awaits. What changed is the `try`:
@@ -1490,6 +1518,17 @@
 				function( point ) {
 					dropLoading();
 
+					// Non-negotiable per issue #223: release on EVERY outcome, success included —
+					// but ONLY when this fetch still OWNS the lock. The card can have moved to
+					// ANOTHER point while this was in flight, whose own `refreshPointDetails()`
+					// call would then have re-acquired the lock under a DIFFERENT id — releasing
+					// unconditionally here would stomp that still-live lock the instant this
+					// abandoned fetch happens to settle (the exact s53 staleness-guard shape this
+					// fix is deliberately not repeating). See `releaseVerdictPending()`.
+					if ( id === verdictPendingPointId ) {
+						releaseVerdictPending();
+					}
+
 					// The card can move to another point while this is in flight — a marker click
 					// and a sidebar row both swap it without waiting for anything. Applying then
 					// would write one point's record over whatever the customer is now reading.
@@ -1501,6 +1540,12 @@
 				},
 				function() {
 					dropLoading();
+
+					// Same non-negotiable release, same ownership guard — see the resolve branch
+					// above. A failed fetch must not leave the card locked forever either.
+					if ( id === verdictPendingPointId ) {
+						releaseVerdictPending();
+					}
 
 					// Retryable: the memo is what makes the next card open ask again, and the
 					// point keeps its permissive listing verdict until something says otherwise.
@@ -1635,6 +1680,23 @@
 						showFetchMessage( 'bulk' === config.strategy ? 'emptyLocality' : 'emptyInView' );
 					}
 
+					// Issue #225's own gap: `detailedPoints = {}` above is correct — the cart may
+					// have changed under us — but nothing ELSE re-asks for a card that is ALREADY
+					// open when this listing lands. Before this, an open card fell back to the
+					// sparse, permissive listing verdict (Part 1/2's fix keeps that card SHOWING,
+					// but showing stale data is still the bug this line closes) until the customer
+					// happened to close and reopen it. Runs LAST, after any restore pass above:
+					// `restoreSelection()`'s own `openCard()` call (when it ran) already drove
+					// `refreshPointDetails()` through the `cardOpened` listener while the memo was
+					// still fresh, so `detailedPoints[ cardPointId ]` is already `true` and this
+					// call is a harmless, guard-caught no-op for that pass — never a double fetch.
+					// Unconditional on `points.length` — an open card's point can legitimately have
+					// panned OUT of this exact listing (Part 1's "keep the stale object" case) and
+					// still deserves a fresh verdict for whatever cart change just happened.
+					if ( panels && cardPointId ) {
+						refreshPointDetails( cardPointId );
+					}
+
 					return points;
 				},
 				function( reason ) {
@@ -1689,6 +1751,34 @@
 		function releaseSelectionBusy() {
 			if ( panels && ! destroyed ) {
 				panels.setSelectionBusy( false );
+			}
+		}
+
+		/**
+		 * Releases the card's verdict-pending lock (issue #223), if this session currently holds
+		 * one — a no-op otherwise. The single entry point for every path that makes an in-flight
+		 * detail fetch stop being about the point the card currently shows: the fetch itself
+		 * settling ({@see refreshPointDetails}, both outcomes), the card moving to a different
+		 * point before it does (the `cardOpened` listener, below), and the session being torn
+		 * down.
+		 *
+		 * Mirrors {@see invalidateSelection}'s own "release on the move, not on the settle"
+		 * discipline: waiting for a stale fetch to settle before releasing would leave the card —
+		 * now showing a DIFFERENT point that may not need a fetch of its own at all — locked for
+		 * however long the abandoned request takes to come back, over a state that no longer
+		 * describes what is on screen.
+		 *
+		 * @returns {void}
+		 */
+		function releaseVerdictPending() {
+			if ( null === verdictPendingPointId ) {
+				return;
+			}
+
+			verdictPendingPointId = null;
+
+			if ( panels && ! destroyed ) {
+				panels.setVerdictPending( false );
 			}
 		}
 
@@ -2072,6 +2162,17 @@
 				// rather than leaving it frozen until an answer nobody wants finally lands.
 				if ( 0 !== pendingSelectionToken && String( payload.pointId ) !== pendingSelectionPointId ) {
 					invalidateSelection();
+				}
+
+				// Issue #223's own half of the same idea, one paragraph up: the PREVIOUS point's
+				// in-flight detail fetch, if any, is no longer about what the card shows — release
+				// its lock NOW rather than waiting for that fetch to settle (which could be
+				// seconds away — the rig measured 5-10s — or never), matching the exact
+				// "release on the move" discipline `invalidateSelection()` just applied above.
+				// `refreshPointDetails()` below re-acquires the lock fresh if THIS point still
+				// needs a fetch this listing.
+				if ( null !== verdictPendingPointId && verdictPendingPointId !== String( payload.pointId ) ) {
+					releaseVerdictPending();
 				}
 
 				// Recorded BEFORE the early `'restore'` return below — a restored card shows a
@@ -2601,15 +2702,17 @@
 			modal: modal,
 			refresh: refresh,
 			destroy: function() {
-				// BOTH card locks a session can be holding — an in-flight confirmation's and an
-				// in-flight checkout refresh's — are released HERE, while `destroyed` is still
-				// false and the panels are still alive to hear it. `setSelectionBusy()` does not
-				// track why it was called and never self-balances (see its own docblock in
-				// `pickup-panels.js`); a `true` left unpaired locks every card the instance opens
-				// afterwards, and nothing else in this file would ever pair it. Cheap insurance
-				// against a panels object that outlives its session — a plugin holding its own
-				// reference, or a future reuse of the instance.
+				// EVERY card lock a session can be holding — an in-flight confirmation's, an
+				// in-flight checkout refresh's, and (issue #223) an in-flight detail fetch's — is
+				// released HERE, while `destroyed` is still false and the panels are still alive to
+				// hear it. Neither `setSelectionBusy()` nor `setVerdictPending()` tracks why it was
+				// called and neither self-balances (see their own docblocks in `pickup-panels.js`);
+				// a `true` left unpaired locks every card the instance opens afterwards, and
+				// nothing else in this file would ever pair it. Cheap insurance against a panels
+				// object that outlives its session — a plugin holding its own reference, or a
+				// future reuse of the instance.
 				invalidateSelection();
+				releaseVerdictPending();
 				dropRefreshWaiter();
 
 				destroyed = true;

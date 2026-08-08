@@ -1184,6 +1184,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 				// пункты") and, shown under a button the customer has just pressed to CONFIRM
 				// a point, would describe the wrong operation entirely.
 				'confirming'       => __( 'Проверяем…', 'woodev-plugin-framework' ),
+				// Issue #223: a SEPARATE CTA state from `confirming` above — the card reads this
+				// while the viewport strategy's own lazy detail fetch (issue #219) is in flight for
+				// the point currently shown, checking whether the sparse listing's
+				// permissive-by-omission verdict still holds, NOT while a confirmation is already
+				// on its way to the server. See `pickup-panels.js`'s own `setVerdictPending()`
+				// docblock for why the two states are tracked, and released, independently.
+				'checkingAvailability' => __( 'Проверяем доступность…', 'woodev-plugin-framework' ),
 				'selectFailed'     => __(
 					'Не удалось подтвердить выбор. Попробуйте ещё раз.',
 					'woodev-plugin-framework'

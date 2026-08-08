@@ -1032,6 +1032,94 @@ describe( 'setSelectionBusy', () => {
 	} );
 } );
 
+// Issue #223: the CTA locks while the viewport strategy's own lazy detail fetch (#219) is in
+// flight for the point the card currently shows — a SEPARATE state from `setSelectionBusy` above
+// (see that method's own docblock, and `setVerdictPending()`'s, for why the two are never merged
+// into one flag).
+describe( 'setVerdictPending', () => {
+	const pendingConfig = {
+		...cardConfig,
+		i18n: { ...cardConfig.i18n, confirming: 'Проверяем…', checkingAvailability: 'Проверяем доступность…' },
+	};
+
+	it( 'locks the CTA and shows the checking-availability label, distinct from confirming', () => {
+		const panels = mount( pendingConfig );
+		panels.openCard( { key: 'k', size: 1, points: [ point() ] } );
+
+		panels.setVerdictPending( true );
+
+		const cta = panels.root.querySelector( '.woodev-pickup-card__cta' );
+
+		expect( cta.disabled ).toBe( true );
+		expect( cta.textContent ).toBe( 'Проверяем доступность…' );
+	} );
+
+	it( 'restores the CTA when the fetch settles', () => {
+		const panels = mount( pendingConfig );
+		panels.openCard( { key: 'k', size: 1, points: [ point() ] } );
+
+		panels.setVerdictPending( true );
+		panels.setVerdictPending( false );
+
+		const cta = panels.root.querySelector( '.woodev-pickup-card__cta' );
+
+		expect( cta.disabled ).toBe( false );
+		expect( cta.textContent ).toBe( 'Забрать здесь' );
+	} );
+
+	it( 'does not emit select while pending, even if something bypasses the disabled attribute', () => {
+		const onSelect = jest.fn();
+		const panels = mount( pendingConfig );
+		panels.on( 'select', onSelect );
+		panels.openCard( { key: 'k', size: 1, points: [ point() ] } );
+
+		panels.setVerdictPending( true );
+
+		const cta = panels.root.querySelector( '.woodev-pickup-card__cta' );
+		cta.disabled = false;
+		cta.click();
+
+		expect( onSelect ).not.toHaveBeenCalled();
+	} );
+
+	// A confirmation and a detail fetch can genuinely overlap on one card (see
+	// `setVerdictPending()`'s own docblock for the real `refreshCheckout()` scenario) — a single
+	// shared boolean would let whichever releases first wrongly unlock a CTA the other still
+	// needs held. `confirming` wins the label when both are true (the more advanced, more
+	// customer-relevant state), but the CTA stays locked either way.
+	it( 'a confirmation and a detail fetch overlapping do not stomp each other\'s lock', () => {
+		const panels = mount( pendingConfig );
+		panels.openCard( { key: 'k', size: 1, points: [ point() ] } );
+
+		panels.setSelectionBusy( true );
+		panels.setVerdictPending( true );
+
+		let cta = panels.root.querySelector( '.woodev-pickup-card__cta' );
+		expect( cta.disabled ).toBe( true );
+		expect( cta.textContent ).toBe( 'Проверяем…' ); // confirming wins the label.
+
+		// The detail fetch settles first — the confirmation is still live, so the CTA must stay
+		// locked (not fall back to `checkingAvailability`'s own release unlocking it).
+		panels.setVerdictPending( false );
+
+		cta = panels.root.querySelector( '.woodev-pickup-card__cta' );
+		expect( cta.disabled ).toBe( true );
+		expect( cta.textContent ).toBe( 'Проверяем…' );
+
+		// The confirmation settles too — NOW the CTA unlocks.
+		panels.setSelectionBusy( false );
+
+		cta = panels.root.querySelector( '.woodev-pickup-card__cta' );
+		expect( cta.disabled ).toBe( false );
+	} );
+
+	it( 'does not throw when called before render()', () => {
+		const panels = new Panels( document.createElement( 'div' ), pendingConfig );
+
+		expect( () => panels.setVerdictPending( true ) ).not.toThrow();
+	} );
+} );
+
 // -----------------------------------------------------------------------
 // Task 9 (spec D-6/D-7): a domain refusal is remembered on the held point (so a re-render or a
 // later tab switch still shows it); a transport failure is shown once and forgotten on the next
@@ -1129,6 +1217,92 @@ describe( 'updatePoint', () => {
 		expect( () => panels.updatePoint( 'nope', { phone: '+7' } ) ).not.toThrow();
 		expect( () => panels.updatePoint( 'p1', null ) ).not.toThrow();
 		expect( () => mount( cardConfig ).updatePoint( 'p1', { phone: '+7' } ) ).not.toThrow();
+	} );
+} );
+
+// Issue #225 (measured on the rig, see the file docblock's `setVisible()` note): a listing
+// refetch rebuilds `_groups` with BRAND NEW group/point objects via `geo.groupByPosition()` —
+// same `key`, different object — even while a card is open on one of them. Before this fix,
+// `_activeGroup` kept pointing at the OLD, orphaned object: `setPointVerdict()`/`updatePoint()`
+// walked `_groups` and mutated the NEW object (`found` true), while `renderCard()` read
+// `_activeGroup` (the OLD one) — the write landed somewhere the card never looked again.
+describe( 'identity healing across a listing refetch (#225)', () => {
+	it( 'setVisible() repoints _activeGroup at the fresh object by key and re-renders the card live', () => {
+		const panels = mount( cardConfig );
+		const g1 = { key: 'k', size: 1, points: [ point() ] };
+		panels.setVisible( [ g1 ] );
+		panels.openCard( g1, 'p1', 'list' );
+
+		// The refetch: same `key`, brand new objects — exactly what `fetchAndSetPoints()`'s
+		// `geo.groupByPosition()` call produces.
+		const g2 = { key: 'k', size: 1, points: [ point( { name: 'Свежее имя' } ) ] };
+		panels.setVisible( [ g2 ] );
+
+		expect( panels._activeGroup ).toBe( g2 );
+		expect( panels.root.querySelector( '.woodev-pickup-card__title' ).textContent ).toBe( 'Свежее имя' );
+	} );
+
+	// The regression test for the measured bug: without the Part 1/Part 2 fix, this verdict
+	// mutates the ORPHANED `g1` object (still referenced only by the pre-refetch `_activeGroup`
+	// this test never touches directly) while the card keeps rendering from whatever `_activeGroup`
+	// held — the CTA would stay enabled. Confirmed FAILING before the fix (reverting
+	// `setVisible()`'s healing pass and `setPointVerdict()`'s belt-and-braces write reproduces
+	// exactly that: `cta.disabled` reads `false`).
+	it( 'a verdict arriving after a listing refetch still reaches the open card (setPointVerdict)', () => {
+		const panels = mount( cardConfig );
+		const g1 = { key: 'k', size: 1, points: [ point() ] };
+		panels.setVisible( [ g1 ] );
+		panels.openCard( g1, 'p1', 'list' );
+
+		// A listing refetch lands while the card is still open — new objects, same key.
+		const g2 = { key: 'k', size: 1, points: [ point() ] };
+		panels.setVisible( [ g2 ] );
+
+		panels.setPointVerdict( 'p1', { allowed: false, reason: 'Слишком тяжело' } );
+
+		expect( panels.root.querySelector( '.woodev-pickup-card__warning' ).textContent ).toBe( 'Слишком тяжело' );
+		expect( panels.root.querySelector( '.woodev-pickup-card__cta' ).disabled ).toBe( true );
+	} );
+
+	// The #219/updatePoint half of the same measured bug — issue #223's own refusal path
+	// (`finishSelection()` → `setPointVerdict()`) is covered above; the lazy-detail-fetch landing
+	// half goes through `updatePoint()` instead, and shares the identical `_groups`-scan /
+	// `_activeGroup`-render split this whole fix exists to close.
+	it( 'a detail-fetch merge arriving after a listing refetch still reaches the open card (updatePoint)', () => {
+		const panels = mount( cardConfig );
+		const g1 = { key: 'k', size: 1, points: [ point() ] };
+		panels.setVisible( [ g1 ] );
+		panels.openCard( g1, 'p1', 'list' );
+
+		const g2 = { key: 'k', size: 1, points: [ point() ] };
+		panels.setVisible( [ g2 ] );
+
+		panels.updatePoint( 'p1', { selectable: { allowed: false, reason: 'Только предоплата.' } } );
+
+		expect( panels.root.querySelector( '.woodev-pickup-card__warning' ).textContent )
+			.toBe( 'Только предоплата.' );
+		expect( panels.root.querySelector( '.woodev-pickup-card__cta' ).disabled ).toBe( true );
+	} );
+
+	// The panned-out case (Part 1's deliberate "case B", Part 2's belt-and-braces): the new
+	// viewport set no longer contains the open card's group AT ALL (no `key` match) — the card
+	// must keep its point rather than blank out or close, and a write must still land on it.
+	it( 'a panned-out point (no key match in the new set) keeps the card open and still takes a write', () => {
+		const panels = mount( cardConfig );
+		const g1 = { key: 'k', size: 1, points: [ point() ] };
+		panels.setVisible( [ g1 ] );
+		panels.openCard( g1, 'p1', 'list' );
+
+		// A DIFFERENT group's viewport — the card's own group is nowhere in the new set.
+		panels.setVisible( [ { key: 'elsewhere', size: 1, points: [ point( { id: 'other' } ) ] } ] );
+
+		// Kept, not cleared, not blanked.
+		expect( panels._activeGroup ).toBe( g1 );
+		expect( panels.root.querySelector( '.woodev-pickup-card__cta' ) ).not.toBeNull();
+
+		panels.setPointVerdict( 'p1', { allowed: false, reason: 'Нет' } );
+
+		expect( panels.root.querySelector( '.woodev-pickup-card__cta' ).disabled ).toBe( true );
 	} );
 } );
 
