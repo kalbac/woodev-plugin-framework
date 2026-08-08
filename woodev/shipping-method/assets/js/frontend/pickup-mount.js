@@ -1091,6 +1091,19 @@
 		 *  because that is the moment the cart (and so the verdict) may have changed under us. */
 		var detailedPoints = {};
 
+		/** @type {Object.<string, Object>} the RAW detail record for every point whose details
+		 *  have landed, by id — re-applied over each rebuilt listing by {@see fetchAndSetPoints}.
+		 *
+		 *  Without this the enrichment is lost on the very next pan: `geo.groupByPosition()`
+		 *  rebuilds groups from the SPARSE listing, and `setVisible()`'s identity healing then
+		 *  re-points the open card at that sparse group — so the card's own content appeared and
+		 *  then vanished a beat later, which is exactly what the customer saw (#232). Details are
+		 *  strictly more informed than a listing, verdict included, so they win on merge.
+		 *
+		 *  Emptied together with `detailedPoints`, and for the same reason — see
+		 *  {@see forgetPointDetails}. */
+		var detailsById = {};
+
 		/** @type {number} mints one unique, monotonic token per confirmation this session sends.
 		 *  Never reset, never reused — that is the whole point (see `pendingSelectionToken`). */
 		var selectionTokens = 0;
@@ -1602,6 +1615,10 @@
 						return;
 					}
 
+					// Remembered so the next listing rebuild can re-apply it — see
+					// `detailsById`'s own docblock for the flash this prevents.
+					detailsById[ id ] = point;
+
 					panels.updatePoint( id, point );
 				},
 				function() {
@@ -1666,13 +1683,41 @@
 						return points;
 					}
 
-					// A fresh listing carries a freshly computed verdict for every point, so
-					// whatever a detail fetch learned about the PREVIOUS listing is now history —
-					// the cart weight or the payment method may be what changed. See
-					// {@see refreshPointDetails}.
-					detailedPoints = {};
+					// DELIBERATELY NOT WIPED HERE (#232). This used to clear `detailedPoints` on
+					// every successful listing, on the reasoning that a fresh listing carries a
+					// freshly computed verdict. But a bbox refetch is not a cart change: panning
+					// the map cannot alter the weight or the payment method, and wiping on every
+					// pan meant the open card re-requested its details each time, showing its own
+					// content for a beat and then losing it again. What DOES change the cart is a
+					// checkout update, and that arrives as {@see refresh} — which is where the
+					// memo is cleared now, via {@see forgetPointDetails}.
 
 					var groups = geo.groupByPosition( points );
+
+					// Re-apply what detail fetches already learned, BEFORE anything draws or
+					// renders these groups (#232). `geo.groupByPosition()` builds them from the
+					// sparse listing, so without this the map, the sidebar and the open card all
+					// fall back to the permissive-by-omission verdict a detail fetch had already
+					// overturned — visibly, as content that appears and then disappears.
+					groups.forEach( function( group ) {
+						group.points.forEach( function( point ) {
+							var stored = detailsById[ String( point.id ) ];
+
+							if ( ! stored ) {
+								return;
+							}
+
+							Object.keys( stored ).forEach( function( key ) {
+								// `id` is never overwritten, matching `Panels#updatePoint()`'s own
+								// rule: a record re-keying a point is the one corruption here that
+								// nothing downstream would detect.
+								if ( 'id' !== key ) {
+									point[ key ] = stored[ key ];
+								}
+							} );
+						} );
+					} );
+
 					var byKey = {};
 
 					groups.forEach( function( group ) {
@@ -1843,6 +1888,27 @@
 		 *
 		 * @returns {void}
 		 */
+		/**
+		 * Forgets everything learned from detail fetches — both the "already asked this listing"
+		 * memo and the stored records themselves (#232).
+		 *
+		 * Called from {@see refresh} ONLY, because a checkout update is the one event that can
+		 * actually invalidate a verdict: the cart weight or the chosen payment method may have
+		 * moved, and every stored `selectable` was computed against the old one. A bbox refetch
+		 * is explicitly NOT such an event — see the note where the old per-listing wipe used to
+		 * be, in {@see fetchAndSetPoints}.
+		 *
+		 * Clearing the memo is what makes the open card re-ask on the next listing: the re-ask
+		 * at the end of {@see fetchAndSetPoints} is guard-caught into a no-op while the memo
+		 * still holds the point, and becomes a real request once this has run.
+		 *
+		 * @returns {void}
+		 */
+		function forgetPointDetails() {
+			detailedPoints = {};
+			detailsById    = {};
+		}
+
 		function releaseVerdictPending() {
 			if ( 0 === verdictPendingToken ) {
 				return;
@@ -2758,6 +2824,10 @@
 			if ( destroyed || ownsChrome ) {
 				return Promise.resolve();
 			}
+
+			// THE cart-change event (#232) — see {@see forgetPointDetails} for why this is the
+			// only place details are forgotten, and no longer every listing.
+			forgetPointDetails();
 
 			if ( 'bulk' === config.strategy ) {
 				return fetchAndSetPoints( bulkQuery() ).catch( function() {} );
