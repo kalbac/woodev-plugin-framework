@@ -1,6 +1,17 @@
 # Gotchas — Woodev Plugin Framework
-> **106 atomic gotchas in 23 namespaces** — update count when adding/removing.
-> Last updated: 2026-08-07 (session 55 part 2, live Yandex source: +1 file, existing namespace
+> **108 atomic gotchas in 24 namespaces** — update count when adding/removing.
+> Last updated: 2026-08-08 (session 56: +2 files — `rig-serves-the-working-tree-branch-switch-reverts-fixes`
+> (new namespace `[rig/browser]` entry: wp-env mounts the repo, so the rig runs whatever branch is
+> checked out — switching branches silently un-fixes things, and switching FIXTURES silently hides
+> symptoms. Both directions fired on one day: the operator reported a phantom regression from a
+> branch that never had the fix, then nearly closed a live card because the active fixture has no
+> points that could show it. Name the branch AND the `WOODEV_TEST_*` constants before asking anyone
+> to look) and `built-on-both-sides-with-no-caller-in-the-middle` (new namespace
+> `[framework/wiring]`: the viewport lazy-detail fetch existed at every layer INCLUDING its own
+> passing unit tests, with zero production callers — a migration moved `fetchPoints` onto the mount
+> and left `fetchDetails` behind. The tell is a FOSSIL DOCBLOCK naming two things that moved when
+> only one did; grep each moved name for a caller outside `tests/`)).
+> Prior: 2026-08-07 (session 55 part 2, live Yandex source: +1 file, existing namespace
 > `[build/ci]` — `public-repo-third-party-credentials` (a subagent committed and pushed Yandex's
 > sandbox token because the brief said "do not commit it AS IF it were a secret of ours", which
 > licenses committing it; the token really was public, but `plugins-reference/` is gitignored and
@@ -186,6 +197,12 @@
 - [framework/autoload] `class_exists()`/`function_exists()` as an "init-once" flag is BROKEN under the runtime class-map autoloader: every framework class is autoloadable, so `class_exists()` (autoload on) is always true → the once-guard never runs. The top-level «Woodev» menu silently vanished for every real v2 plugin. Use a static boolean for once-init; assert with autoload ON to reproduce → [gotchas/classmap-autoload-breaks-class-exists-once-guard.md](gotchas/classmap-autoload-breaks-class-exists-once-guard.md) (s35)
 
 - [framework/autoload] Deleting a framework file has a **tail**: the wiring names the *path*, not the class, so a class-name grep misses it. Four hits on one branch — three separate `require_once` lines in `Shipping_Plugin::includes()` and one in a **fixture bootstrap**. A require on a missing file is a fatal on every real vendored boot. Checklist + why the full suite (not a targeted run) is what catches it → [gotchas/file-deletion-tail-includes-classmap-fixtures.md](gotchas/file-deletion-tail-includes-classmap-fixtures.md) (s45)
+
+### [rig/*] — Local verification rig
+- [rig/browser] wp-env mounts the repository, so the rig serves whatever branch is CHECKED OUT and whatever `WOODEV_TEST_*` constants are set — no build, no deploy. Switching branches silently reverts another branch's fixes ("you didn't fix it"); switching fixtures silently removes the data a symptom needs ("looks fixed now"). The second direction is the dangerous one. State the branch + constants before asking anyone to look, and merge/rebase so a verification tree contains every fix under discussion → [gotchas/rig-serves-the-working-tree-branch-switch-reverts-fixes.md](gotchas/rig-serves-the-working-tree-branch-switch-reverts-fixes.md) (s56)
+
+### [framework/wiring] — Responsibilities that moved
+- [framework/wiring] A feature can exist at every layer — REST route, source method, server-side recomputation, client method, and that client method's OWN passing unit tests — with no production caller in the middle. Unit tests never test wiring, and the strategy that would have exercised it was one nobody rig-ran. The tell is a FOSSIL DOCBLOCK describing an arrangement the code no longer has ("the old version pulled `fetchPoints`/`fetchDetails`… that is now the caller's job" — two names out, one back). When a responsibility moves between files, grep each moved name for a caller outside `tests/` → [gotchas/built-on-both-sides-with-no-caller-in-the-middle.md](gotchas/built-on-both-sides-with-no-caller-in-the-middle.md) (s56)
 
 ### [testing/*] — Testing patterns
 - [testing/integration] Integration fixtures need the framework mapped at the bootstrap's load path (`woodev-framework/tests/_fixtures/*/woodev` in `.wp-env.json`), not just the `wp-content/plugins/*` mount — the v2 resolver requires each fixture's bundled `woodev/class-plugin.php` → [gotchas/wpenv-resolver-fixture-mapping.md](gotchas/wpenv-resolver-fixture-mapping.md) (2026-06-08)
