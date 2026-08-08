@@ -1064,6 +1064,74 @@ describe( 'setPointVerdict', () => {
 	} );
 } );
 
+// Issue #219: the landing half of the viewport strategy's lazy detail fetch. A
+// `STRATEGY_VIEWPORT` source may answer `fetch_points()` sparsely; `get_point_data()` returns the
+// SAME shape as a listing entry plus a freshly computed `selectable`, so this merges rather than
+// parses.
+describe( 'updatePoint', () => {
+	it( 'merges the fuller record over the held point and redraws the open card', () => {
+		const panels = mount( cardConfig );
+		const g = { key: 'k', size: 1, points: [ point() ] };
+		panels.setVisible( [ g ] );
+		panels.openCard( g, 'p1', 'list' );
+
+		panels.updatePoint( 'p1', { selectable: { allowed: false, reason: 'Только предоплата.' } } );
+
+		expect( panels.root.querySelector( '.woodev-pickup-card__warning' ).textContent )
+			.toBe( 'Только предоплата.' );
+		expect( panels.root.querySelector( '.woodev-pickup-card__cta' ).disabled ).toBe( true );
+	} );
+
+	// Load-bearing: the point objects inside `_groups` are the very objects the map provider also
+	// holds (`setVisible()`'s own note — panels keeps no private copy). Swapping one would leave
+	// every other holder pointing at the old sparse record.
+	it( 'mutates in place rather than replacing the object', () => {
+		const panels = mount( cardConfig );
+		const held = point();
+		const g = { key: 'k', size: 1, points: [ held ] };
+		panels.setVisible( [ g ] );
+
+		panels.updatePoint( 'p1', { phone: '+7 495 000-00-00' } );
+
+		expect( g.points[ 0 ] ).toBe( held );
+		expect( held.phone ).toBe( '+7 495 000-00-00' );
+	} );
+
+	// A details response carrying a different id is a server/domain bug; letting it through would
+	// silently re-key a point inside a group, which nothing downstream would detect.
+	it( 'never lets the payload overwrite the id', () => {
+		const panels = mount( cardConfig );
+		const held = point();
+		panels.setVisible( [ { key: 'k', size: 1, points: [ held ] } ] );
+
+		panels.updatePoint( 'p1', { id: 'SOMETHING-ELSE', phone: '+7 000' } );
+
+		expect( held.id ).toBe( 'p1' );
+		expect( held.phone ).toBe( '+7 000' );
+	} );
+
+	it( 'leaves other points in the same group alone', () => {
+		const panels = mount( cardConfig );
+		const a = point( { id: 'a' } );
+		const b = point( { id: 'b' } );
+		panels.setVisible( [ { key: 'k', size: 2, points: [ a, b ] } ] );
+
+		panels.updatePoint( 'a', { phone: '+7 111' } );
+
+		expect( a.phone ).toBe( '+7 111' );
+		expect( b.phone ).not.toBe( '+7 111' );
+	} );
+
+	it( 'is a no-op for an unknown point, a non-object payload, or before any points arrived', () => {
+		const panels = mount( cardConfig );
+		panels.setVisible( [ { key: 'k', size: 1, points: [ point() ] } ] );
+
+		expect( () => panels.updatePoint( 'nope', { phone: '+7' } ) ).not.toThrow();
+		expect( () => panels.updatePoint( 'p1', null ) ).not.toThrow();
+		expect( () => mount( cardConfig ).updatePoint( 'p1', { phone: '+7' } ) ).not.toThrow();
+	} );
+} );
+
 describe( 'showSelectionError', () => {
 	it( 'shows a transient message without disabling the CTA', () => {
 		const panels = mount( cardConfig );

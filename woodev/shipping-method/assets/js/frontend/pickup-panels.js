@@ -3069,6 +3069,61 @@
 	};
 
 	/**
+	 * Merges a fuller record over a point this instance already holds — the landing half of the
+	 * viewport strategy's lazy detail fetch (issue #219).
+	 *
+	 * A `STRATEGY_VIEWPORT` source is explicitly allowed to answer `fetch_points()` SPARSELY:
+	 * the constraint inputs (`accepts_cod`, `max_weight`) and any display field a bbox listing
+	 * omits arrive only from `fetch_details()`. `Pickup_Controller::get_point_data()` returns the
+	 * SAME shape as a listing entry — `to_browser_array()` plus a freshly computed `selectable`
+	 * — so this merges rather than parses: whatever the server sent wins, field by field.
+	 *
+	 * MUTATES IN PLACE rather than swapping the object, which is load-bearing: the point objects
+	 * inside `this._groups` are the very objects the map provider also holds (see
+	 * {@see Panels.prototype.setVisible}'s note — `panels` keeps no private copy). Replacing one
+	 * would leave every other holder pointing at the old sparse record.
+	 *
+	 * `id` is never overwritten, whatever the payload says. A details response carrying a
+	 * different id is a server/domain bug, and letting it through would silently re-key a point
+	 * inside a group — the one corruption this method could cause that nothing downstream would
+	 * detect.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @param {string|number} pointId
+	 * @param {Object}        fields the fuller record, in the same shape a listing point has.
+	 * @returns {void}
+	 */
+	Panels.prototype.updatePoint = function( pointId, fields ) {
+		if ( ! fields || 'object' !== typeof fields ) {
+			return;
+		}
+
+		var id = String( pointId );
+		var found = false;
+
+		this._groups.forEach( function( group ) {
+			group.points.forEach( function( point ) {
+				if ( String( point.id ) !== id ) {
+					return;
+				}
+
+				found = true;
+
+				Object.keys( fields ).forEach( function( key ) {
+					if ( 'id' !== key ) {
+						point[ key ] = fields[ key ];
+					}
+				} );
+			} );
+		} );
+
+		if ( found && this._activeGroup ) {
+			renderCard( this );
+		}
+	};
+
+	/**
 	 * Shows a TRANSIENT selection failure — a dropped request, a timeout, a stale page — in the
 	 * card's existing `.woodev-pickup-card__warning` slot (spec D-6/D-7). Deliberately NOT
 	 * stored anywhere, unlike {@see Panels.prototype.setPointVerdict}: nothing about the point
