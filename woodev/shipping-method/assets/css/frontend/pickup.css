@@ -872,6 +872,23 @@
 	background: #f6f7f7;
 }
 
+/* The camera has reached that end of the map's zoom range — `pickup-panels.js`'s
+   `setZoomLimits()`, fed by the provider's `zoomChange`. Dimmed rather than hidden: the pair must
+   keep its shape, and a button that vanishes at the edge would move the other one under the
+   cursor. `:disabled` already blocks the click and the focus; this is only what makes the state
+   READABLE, which is the whole point — a permanently-live button that does nothing reads as a
+   bug. `!important` on `display`-adjacent chrome is not needed here (nothing in the hostile-theme
+   reset touches `opacity`), but the `:hover` background IS re-neutralised below, because the
+   base `:hover` rule above would otherwise still light up a dead button. */
+.woodev-pickup-zoom__button:disabled {
+	opacity: 0.4;
+	cursor: default;
+}
+
+.woodev-pickup-zoom__button:disabled:hover {
+	background: #fff;
+}
+
 .woodev-pickup-zoom__button + .woodev-pickup-zoom__button {
 	border-top: 1px solid rgba( 0, 0, 0, 0.08 );
 }

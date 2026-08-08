@@ -791,6 +791,98 @@ test( 'clamps zoomBy at the bottom of the range too', async () => {
 	expect( provider.map.setZoom ).toHaveBeenCalledWith( 8, { duration: 200 } );
 } );
 
+// Operator's call, 08.08.2026: the zoom buttons stayed clickable at either end of the range,
+// which reads as a bug. The RANGE lives here for the same D-3 reason `zoomBy()` does — the panels
+// emit a signed step and know nothing about map-library zoom levels — so this provider is what
+// reports a reached limit, against the SAME `MIN_ZOOM`/`MAX_ZOOM` pair `zoomBy()` clamps to.
+test( 'reports the zoom limits once for the viewport the map settled on, before any pan', async () => {
+	ymapsStub = createYmapsStub( { zoom: 18 } );
+
+	const config = makeConfig();
+
+	window[ config.ns ] = ymapsStub;
+
+	const provider = new WoodevYandexMapProvider();
+	const seen = [];
+
+	provider.on( 'zoomChange', ( limits ) => seen.push( limits ) );
+
+	await provider.init( document.createElement( 'div' ), config );
+
+	// A map that OPENS at the top of the range (what `focusGroup()` does on a restored
+	// selection) must not show a live «+» until the customer first moves the camera.
+	expect( seen ).toEqual( [ { canZoomIn: false, canZoomOut: true } ] );
+} );
+
+test( 'reports the bottom of the range the same way', async () => {
+	ymapsStub = createYmapsStub( { zoom: 8 } );
+
+	const config = makeConfig();
+
+	window[ config.ns ] = ymapsStub;
+
+	const provider = new WoodevYandexMapProvider();
+	const seen = [];
+
+	provider.on( 'zoomChange', ( limits ) => seen.push( limits ) );
+
+	await provider.init( document.createElement( 'div' ), config );
+
+	expect( seen ).toEqual( [ { canZoomIn: true, canZoomOut: false } ] );
+} );
+
+// The regression this one exists for: `boundsChange` is viewport-ONLY because it drives
+// refetching, and hanging the zoom report off it would have left the bulk strategy — which the
+// rig and every current consumer actually run — with permanently live buttons.
+test( 'reports a limit reached by a pan under the BULK strategy too', async () => {
+	const provider = await init( { strategy: 'bulk' } );
+	const seen = [];
+
+	provider.on( 'zoomChange', ( limits ) => seen.push( limits ) );
+
+	provider.map.getZoom.mockReturnValue( 18 );
+	ymapsStub.lastMap.fireBoundsChange();
+
+	expect( seen ).toEqual( [ { canZoomIn: false, canZoomOut: true } ] );
+} );
+
+test( 'reports a limit reached by a pan under the VIEWPORT strategy too', async () => {
+	const provider = await init( { strategy: 'viewport', locality: '' } );
+	const seen = [];
+
+	provider.on( 'zoomChange', ( limits ) => seen.push( limits ) );
+
+	provider.map.getZoom.mockReturnValue( 8 );
+	ymapsStub.lastMap.fireBoundsChange();
+
+	expect( seen ).toEqual( [ { canZoomIn: true, canZoomOut: false } ] );
+} );
+
+// ymaps fires `boundschange` throughout an animated move, so an undeduped report would rewrite
+// the same two booleans on every frame of every pan.
+test( 'never re-reports an unchanged pair', async () => {
+	const provider = await init( { strategy: 'bulk' } );
+	const seen = [];
+
+	provider.on( 'zoomChange', ( limits ) => seen.push( limits ) );
+
+	provider.map.getZoom.mockReturnValue( 18 );
+	ymapsStub.lastMap.fireBoundsChange();
+	ymapsStub.lastMap.fireBoundsChange();
+	ymapsStub.lastMap.fireBoundsChange();
+
+	expect( seen ).toHaveLength( 1 );
+
+	// …and reports again the moment it genuinely changes.
+	provider.map.getZoom.mockReturnValue( 12 );
+	ymapsStub.lastMap.fireBoundsChange();
+
+	expect( seen ).toEqual( [
+		{ canZoomIn: false, canZoomOut: true },
+		{ canZoomIn: true, canZoomOut: true },
+	] );
+} );
+
 test( 'zoomBy steps by exactly the signed amount inside the range', async () => {
 	const provider = await init();
 
