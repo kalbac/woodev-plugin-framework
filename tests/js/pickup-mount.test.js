@@ -240,6 +240,12 @@ function StubPanels( container, config ) {
 	this.setPointVerdict = jest.fn();
 	this.showSelectionError = jest.fn();
 
+	// Issue #223: the verdict-pending card lock, as a per-instance `jest.fn()` for the same
+	// reason `setSelectionBusy` above is one — tests assert on `toHaveBeenLastCalledWith()`
+	// across the whole in-flight window (start, success, failure, the card moving on), which a
+	// hand-rolled array would only say less precisely.
+	this.setVerdictPending = jest.fn();
+
 	/** @type {Array} every `setZoomLimits()` payload, in order. */
 	this.setZoomLimitsCalls = [];
 
@@ -2456,6 +2462,301 @@ describe( 'viewport lazy detail fetch (#219)', () => {
 
 		expect( dataSourceFactory.fetchDetails ).toHaveBeenCalledTimes( 2 );
 	} );
+
+	// Issue #225's own gap (Part 3, "the gap Part 1 exposes"): before this fix, NOTHING re-asked
+	// for a card that stayed OPEN across a listing refetch — `detailedPoints` was correctly wiped
+	// (the cart may have changed), but only a FRESH `cardOpened` (an explicit reopen, as the test
+	// above drives) ever re-triggered `refreshPointDetails()`. This test drives the refetch with
+	// NO further `cardOpened` in between — the card stays open on P1 throughout — proving the
+	// mount itself re-asks automatically.
+	test( 'a successful listing re-asks for the still-open card automatically, exactly once, '
+		+ 'with no reopen', async () => {
+		const session = await openSession( configWith( { strategy: 'viewport' } ) );
+
+		openCardOn( session, 'P1' );
+		await flushAsync();
+
+		expect( dataSourceFactory.fetchDetails ).toHaveBeenCalledTimes( 1 );
+
+		// A pan — the ordinary way a new listing lands — with no `cardOpened` of its own.
+		session.provider.emit( 'boundsChange', [ 1, 2, 3, 4 ] );
+		await flushAsync();
+
+		expect( dataSourceFactory.fetchDetails ).toHaveBeenCalledTimes( 2 );
+		expect( dataSourceFactory.fetchDetails ).toHaveBeenLastCalledWith( 'P1' );
+	} );
+
+	// The restore pass (spec D-15) is one of the two callers of `openCard()`/`cardOpened` that can
+	// make a card "already open" the MOMENT a listing lands — the Part 3 re-ask must not fire a
+	// SECOND time on top of what the restore's own `cardOpened` already triggered.
+	test( 'the restore pass\'s own cardOpened already covers the re-ask — no double fetch', async () => {
+		document.getElementById( FIELD_ID ).value = 'P1';
+
+		// The restore only finds a group once the listing actually carries the stored point id —
+		// the default `beforeEach()` factory resolves `[]`, which would leave nothing to restore.
+		dataSourceFactory = fakeDataSourceFactory( () => Promise.resolve( [ point( { id: 'P1' } ) ] ) );
+		window.WoodevPickupDataSource = dataSourceFactory;
+
+		const session = await openSession( configWith( { strategy: 'viewport' } ) );
+
+		session.provider.emit( 'boundsChange', [ 1, 2, 3, 4 ] );
+		await flushAsync();
+
+		expect( dataSourceFactory.fetchDetails ).toHaveBeenCalledTimes( 1 );
+		expect( dataSourceFactory.fetchDetails ).toHaveBeenCalledWith( 'P1' );
+	} );
+} );
+
+// -----------------------------------------------------------------------
+// Issue #223 — the card's CTA locks while `refreshPointDetails()`'s own detail fetch is in
+// flight for the point the card currently shows: the sparse listing verdict on screen right now
+// is exactly what the fetch may be about to overturn. `panels.setVerdictPending()` (a jest.fn()
+// on `StubPanels`, mirroring `setSelectionBusy`) is the SEPARATE lock this drives — never folded
+// into the confirmation lock, since a `refreshCheckout()` confirmation-lock and a fresh detail
+// fetch can genuinely overlap on one card (see `pickup-panels.js`'s own `setVerdictPending()`
+// docblock for the scenario).
+// -----------------------------------------------------------------------
+describe( 'the card lock during a lazy detail fetch (issue #223)', () => {
+	const openCardOn = ( session, pointId ) => {
+		const group = { key: 'g1', lat: 55.75, lng: 37.61, points: [ { id: pointId } ] };
+
+		session.panels.emit( 'cardOpened', { group: group, pointId: pointId, origin: 'list' } );
+	};
+
+	test( 'locks on fetch start and unlocks on success', async () => {
+		let settle;
+
+		dataSourceFactory.fetchDetails = jest.fn( () => new Promise( ( resolve ) => {
+			settle = resolve;
+		} ) );
+
+		const session = await openSession( configWith( { strategy: 'viewport' } ) );
+
+		openCardOn( session, 'P1' );
+		await flushAsync();
+
+		expect( session.panels.setVerdictPending ).toHaveBeenLastCalledWith( true );
+
+		settle( { id: 'P1', selectable: { allowed: true, reason: null } } );
+		await flushAsync();
+
+		expect( session.panels.setVerdictPending ).toHaveBeenLastCalledWith( false );
+	} );
+
+	// THE STORM GUARD, and the reason `detailsInFlight` exists alongside the per-listing memo.
+	//
+	// A successful listing wipes `detailedPoints` (correct — a new listing may mean a new cart) and
+	// then re-asks for the still-open card. Under a rapidly panning customer that is a listing, a
+	// wipe and another request PER PAN, all for the same point, all in flight at once. The landed-
+	// memo cannot stop it, because the wipe is what clears it. Found by the Codex critic pass.
+	test( 'a listing re-ask does NOT start a second request for a point already being fetched', async () => {
+		const settlers = [];
+
+		dataSourceFactory.fetchDetails = jest.fn( () => new Promise( ( resolve ) => {
+			settlers.push( resolve );
+		} ) );
+
+		const session = await openSession( configWith( { strategy: 'viewport' } ) );
+
+		openCardOn( session, 'P1' );
+		await flushAsync();
+
+		expect( settlers ).toHaveLength( 1 );
+		expect( session.panels.setVerdictPending ).toHaveBeenLastCalledWith( true );
+
+		// Three listings land back to back, each wiping the landed-memo and re-asking.
+		session.provider.emit( 'boundsChange', [ 1, 2, 3, 4 ] );
+		await flushAsync();
+		session.provider.emit( 'boundsChange', [ 2, 3, 4, 5 ] );
+		await flushAsync();
+		session.provider.emit( 'boundsChange', [ 3, 4, 5, 6 ] );
+		await flushAsync();
+
+		// Still exactly ONE detail request in flight for P1 — not four.
+		expect( settlers ).toHaveLength( 1 );
+
+		// And when it lands it still applies, and still releases the lock it owns.
+		settlers[ 0 ]( { id: 'P1', selectable: { allowed: false, reason: 'too heavy' } } );
+		await flushAsync();
+
+		expect( session.panels.setVerdictPending ).toHaveBeenLastCalledWith( false );
+		expect( session.panels.updatePointCalls ).toHaveLength( 1 );
+		expect( session.panels.updatePointCalls[ 0 ].fields.selectable.allowed ).toBe( false );
+	} );
+
+	// The other half of the same guard: leaving the point and coming BACK while its request is
+	// still travelling must not discard the answer. The lock was released on the way out and
+	// `detailsInFlight` starts no new request on the way back, so this answer is the ONLY verdict
+	// anyone will fetch — ownership decides who may release the lock, `cardPointId` decides whose
+	// answer may land.
+	test( 'an answer still applies after the card left the point and came back', async () => {
+		const settlers = [];
+
+		dataSourceFactory.fetchDetails = jest.fn( () => new Promise( ( resolve ) => {
+			settlers.push( resolve );
+		} ) );
+
+		const session = await openSession( configWith( { strategy: 'viewport' } ) );
+
+		openCardOn( session, 'P1' );
+		await flushAsync();
+
+		openCardOn( session, 'P2' );
+		await flushAsync();
+
+		openCardOn( session, 'P1' );
+		await flushAsync();
+
+		session.panels.updatePointCalls.length = 0;
+
+		settlers[ 0 ]( { id: 'P1', selectable: { allowed: false, reason: 'too heavy' } } );
+		await flushAsync();
+
+		expect( session.panels.updatePointCalls ).toHaveLength( 1 );
+		expect( session.panels.updatePointCalls[ 0 ].fields.selectable.allowed ).toBe( false );
+	} );
+
+	// Non-negotiable per the brief: a FAILED fetch must not leave the card locked forever either.
+	test( 'unlocks on failure too', async () => {
+		let settle;
+
+		dataSourceFactory.fetchDetails = jest.fn( () => new Promise( ( resolve, reject ) => {
+			settle = reject;
+		} ) );
+
+		const session = await openSession( configWith( { strategy: 'viewport' } ) );
+
+		openCardOn( session, 'P1' );
+		await flushAsync();
+
+		expect( session.panels.setVerdictPending ).toHaveBeenLastCalledWith( true );
+
+		settle( { status: 502 } );
+		await flushAsync();
+
+		expect( session.panels.setVerdictPending ).toHaveBeenLastCalledWith( false );
+	} );
+
+	// The card moving to another point mid-flight releases the OLD lock immediately (matching
+	// `invalidateSelection()`'s own "release on the move, not on the settle" discipline) — and the
+	// abandoned fetch, once it finally answers, must not stomp the NEW point's own, still-live
+	// lock. This is the s53 shape the brief calls out by name: a naive staleness guard that skips
+	// the RELEASE too, rather than transferring ownership at the move, leaves the wrong card
+	// locked.
+	test( 'releases on the move, not on the settle — an abandoned fetch does not stomp the new '
+		+ 'point\'s lock', async () => {
+		let settleP1;
+		let settleP2;
+
+		dataSourceFactory.fetchDetails = jest.fn( ( pointId ) => new Promise( ( resolve ) => {
+			if ( 'P1' === pointId ) {
+				settleP1 = resolve;
+			} else {
+				settleP2 = resolve;
+			}
+		} ) );
+
+		const session = await openSession( configWith( { strategy: 'viewport' } ) );
+
+		openCardOn( session, 'P1' );
+		await flushAsync();
+
+		expect( session.panels.setVerdictPending ).toHaveBeenLastCalledWith( true );
+
+		session.panels.setVerdictPending.mockClear();
+
+		// The card moves to P2 before P1's fetch ever answers.
+		openCardOn( session, 'P2' );
+		await flushAsync();
+
+		// Released for the move (P1's lock), THEN re-acquired for P2's own fresh fetch — in that
+		// order, both inside this one flush.
+		expect( session.panels.setVerdictPending.mock.calls.map( ( c ) => c[ 0 ] ) ).toEqual( [ false, true ] );
+
+		session.panels.setVerdictPending.mockClear();
+
+		// P1's abandoned fetch finally answers — it must NOT touch P2's still-live lock.
+		settleP1( { id: 'P1', selectable: { allowed: true, reason: null } } );
+		await flushAsync();
+
+		expect( session.panels.setVerdictPending ).not.toHaveBeenCalled();
+
+		// P2's own fetch settling DOES release its own, still-owned lock.
+		settleP2( { id: 'P2', selectable: { allowed: true, reason: null } } );
+		await flushAsync();
+
+		expect( session.panels.setVerdictPending ).toHaveBeenLastCalledWith( false );
+	} );
+
+	// The real overlap case `pickup-panels.js`'s own `setVerdictPending()` docblock documents:
+	// `refreshCheckout()` holds `setSelectionBusy( true )` on the still-open card while a
+	// post-confirmation totals refresh is in flight; if the customer opens a DIFFERENT point's
+	// card during that same window, a fresh detail fetch locks `_verdictPending` too — two
+	// independent locks on one `panels` instance, live at once. Neither release may stomp the
+	// other.
+	test( 'a confirmation lock (refreshCheckout) and a detail fetch overlapping do not stomp '
+		+ 'each other\'s release', async () => {
+		// A jQuery double, same minimal shape `openPicker()`'s own `jq` fixture uses — `refreshCheckout()`
+		// needs `.one()`/`.trigger()`, `dropRefreshWaiter()` needs `.off()`. `.one()` is RECORDED
+		// rather than wired to `.trigger()` (jQuery's real `.one()` self-unbinds; this double does
+		// not need to reproduce that to prove the point), so firing it is `jq.one[ 0 ].handler()`,
+		// matching every other `updated_checkout` test in this file.
+		const jq = { triggered: [], one: [], off: [] };
+
+		window.jQuery = () => ( {
+			one: ( type, handler ) => jq.one.push( { type: type, handler: handler } ),
+			off: ( type, handler ) => jq.off.push( { type: type, handler: handler } ),
+			trigger: ( type ) => jq.triggered.push( type ),
+		} );
+
+		let settleDetails;
+
+		dataSourceFactory.fetchDetails = jest.fn( () => new Promise( ( resolve ) => {
+			settleDetails = resolve;
+		} ) );
+		dataSourceFactory.selectPoint = jest.fn( () => Promise.resolve( {
+			allowed: true, reason: null, close: false, refresh_checkout: true,
+		} ) );
+
+		const session = await openSession( configWith( {
+			strategy: 'viewport',
+			selection: { close: false, refreshCheckout: true },
+			// Address replacement is not this test's subject — every field it would write that no
+			// §8 store owns logs a `console.warn` the WP jest preset turns into a failure (see
+			// `openPicker()`'s own identical override, above).
+			replaceAddress: { enabled: false, billingOnly: true },
+		} ) );
+
+		// P1 is confirmed and accepted; `refresh_checkout: true` + `close: false` leaves the
+		// card open and locked via `setSelectionBusy( true )` while WooCommerce's totals refresh
+		// is pending.
+		session.panels.emit( 'select', { id: 'P1' } );
+		await flushAsync();
+
+		expect( session.panels.setSelectionBusy ).toHaveBeenLastCalledWith( true );
+
+		// A DIFFERENT point's card opens during that same window — its own detail fetch locks
+		// `_verdictPending` independently.
+		openCardOn( session, 'P2' );
+		await flushAsync();
+
+		expect( session.panels.setVerdictPending ).toHaveBeenLastCalledWith( true );
+		// The confirmation lock is untouched by the detail fetch starting.
+		expect( session.panels.setSelectionBusy ).toHaveBeenLastCalledWith( true );
+
+		// The detail fetch settles first — the confirmation lock must survive it.
+		settleDetails( { id: 'P2', selectable: { allowed: true, reason: null } } );
+		await flushAsync();
+
+		expect( session.panels.setVerdictPending ).toHaveBeenLastCalledWith( false );
+		expect( session.panels.setSelectionBusy ).toHaveBeenLastCalledWith( true );
+
+		// WooCommerce answers the totals refresh — the confirmation lock finally releases, and
+		// the (already-released) verdict-pending lock is untouched by it.
+		jq.one[ 0 ].handler();
+
+		expect( session.panels.setSelectionBusy ).toHaveBeenLastCalledWith( false );
+	} );
 } );
 
 // -----------------------------------------------------------------------
@@ -2584,11 +2885,21 @@ describe( 'the shared background-load indicator (issues #222/#224)', () => {
 
 		expect( session.panels.setLoadingCalls ).toEqual( [ true ] );
 
-		// #1 settles — NOW the counter reaches zero and the indicator clears.
+		// #1 settles — the counter WOULD reach zero here, except issue #225's own fix
+		// (`fetchAndSetPoints()`'s Part 3 re-ask) fires the instant a listing succeeds while a
+		// card is open: request #3, a fresh detail fetch for the still-open card, starts before
+		// the indicator ever gets a chance to rest at zero. Both transitions — #1's own 1→0 and
+		// #3's immediate 0→1 — land inside this one flush, back to back.
 		ds.resolvePoints( [] );
 		await flushAsync();
 
-		expect( session.panels.setLoadingCalls ).toEqual( [ true, false ] );
+		expect( session.panels.setLoadingCalls ).toEqual( [ true, false, true ] );
+
+		// #3 settles — NOW the counter finally reaches zero and the indicator clears for good.
+		ds.resolveDetails( { id: 'P1', selectable: { allowed: true, reason: null } } );
+		await flushAsync();
+
+		expect( session.panels.setLoadingCalls ).toEqual( [ true, false, true, false ] );
 	} );
 
 	// Adversarial-review finding: `bumpLoading()` runs, then `realDataSource.fetchPoints()`/

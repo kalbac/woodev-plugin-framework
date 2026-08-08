@@ -2061,6 +2061,12 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				// `selectFailed` is deliberately not `error`: that one describes a failed
 				// points FETCH, not a refused confirmation.
 				'confirming'       => 'Проверяем…',
+				// Issue #223: a SEPARATE CTA state from `confirming` above. That one is shown
+				// while a confirmation is already travelling to the server; this one while the
+				// viewport strategy's lazy detail fetch (#219) is still deciding whether the
+				// sparse listing's permissive-by-omission verdict even holds. Two different
+				// questions, two independently released locks -- see `setVerdictPending()`.
+				'checkingAvailability' => 'Проверяем доступность…',
 				'selectFailed'     => 'Не удалось подтвердить выбор. Попробуйте ещё раз.',
 				'stalePage'        => 'Страница устарела. Обновите её и выберите пункт выдачи заново.',
 			];
