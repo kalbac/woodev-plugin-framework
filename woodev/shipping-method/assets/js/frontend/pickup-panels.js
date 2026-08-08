@@ -1806,6 +1806,15 @@
 		this._busy = false;
 		this._overlayEl = null;
 
+		// Issues #222/#224: whether ANY background load (a bbox refetch, a lazy detail fetch) is
+		// currently in flight — see {@see Panels.prototype.setLoading}. Same "false until render(),
+		// but always tracked" shape as `_busy` above; `_progressEl`/`_listLoadingEl` are the two
+		// elements {@see Panels.prototype.render} builds for it.
+		this._loading = false;
+		this._progressEl = null;
+		this._listLoadingEl = null;
+		this._loadingStatusEl = null;
+
 		// Task 17 (spec V-5): the message card {@see Panels.prototype.showMessage} shows/hides —
 		// null until `render()` builds it, exactly like `_overlayEl` above.
 		this._messageEl = null;
@@ -1919,6 +1928,34 @@
 
 		list.appendChild( body );
 
+		// Issues #222/#224: built once here, always present, HIDDEN BY DEFAULT — same "build
+		// once, never create/destroy" discipline as `.woodev-pickup-overlay`/`.woodev-pickup-message`
+		// above. A CHILD of `.woodev-pickup-list` (not a stage sibling), so it inherits the list's
+		// own `position: absolute` box and covers exactly the list panel, never the card that can sit
+		// above it (spec: an open card must stay live and uncovered during a refetch — see
+		// `pickup.css`'s own note on why this element's own visibility rule additionally requires
+		// `:not( .is-card )`).
+		//
+		// PURELY VISUAL — `aria-hidden`, deliberately NOT a `role="status"` live region. It carries
+		// only a decorative spinner, and it is `display: none` whenever idle; an element hidden that
+		// way is out of the accessibility tree entirely, so a live region here would be created
+		// empty, populated while invisible, and then merely UN-HIDDEN. That is not a reliable
+		// announcement trigger in any screen reader: what a live region announces is a change to the
+		// TEXT INSIDE IT, and no text here would ever change. The announcement is carried instead by
+		// the always-present region {@see Panels.prototype.render} builds on the stage below, whose
+		// text {@see Panels.prototype.setLoading} writes and clears. Found by the Codex re-critic
+		// pass on this branch, after a first attempt did exactly the unreliable thing.
+		var listLoading = document.createElement( 'div' );
+		listLoading.className = 'woodev-pickup-list__loading';
+		listLoading.setAttribute( 'aria-hidden', 'true' );
+
+		var listSpinner = document.createElement( 'span' );
+		listSpinner.className = 'woodev-pickup-spinner';
+		listSpinner.setAttribute( 'aria-hidden', 'true' );
+		listLoading.appendChild( listSpinner );
+
+		list.appendChild( listLoading );
+
 		var card = document.createElement( 'div' );
 		card.className = 'woodev-pickup-card';
 
@@ -1968,6 +2005,49 @@
 		zoom.appendChild( zoomOut );
 
 		stage.appendChild( zoom );
+
+		// Issues #222/#224: the top-edge progress bar — built once here, always present, HIDDEN by
+		// default, same node-reuse discipline as the overlay/message below. Spans the MAP's full
+		// width regardless of what the sidebar is doing (spec: under `viewport` the customer usually
+		// pans with the panel collapsed, so a sidebar-only indicator would be invisible exactly when
+		// it matters most). `y = 0`: the map already reserves a 64px top strip for the search bar
+		// (`map.margin`, see `map-provider-yandex.js`'s own docblock) and the bar itself sits at
+		// `top: 16px`, so this element's own few pixels at the very top lie clear above it — see
+		// `pickup.css`'s own placement note.
+		//
+		// `aria-hidden="true"`: DECORATIVE, not `role="progressbar"`. An indeterminate progress bar
+		// has no `aria-valuenow` to report (that is the whole meaning of "indeterminate" — there is
+		// no known percentage), so `role="progressbar"` here would be an accessible control with
+		// nothing correct to say about its own state. `.woodev-pickup-list__loading` above already
+		// carries `role="status"` for the SAME loading state whenever the sidebar is the panel
+		// showing; this element exists for the case that one does not cover (a collapsed sidebar
+		// under `viewport`), where the customer has no assistive-tech-relevant control to lose either
+		// way — the animation is a purely visual affordance here.
+		var progress = document.createElement( 'div' );
+		progress.className = 'woodev-pickup-progress';
+		progress.setAttribute( 'aria-hidden', 'true' );
+
+		var progressBar = document.createElement( 'span' );
+		progressBar.className = 'woodev-pickup-progress__bar';
+		progress.appendChild( progressBar );
+
+		stage.appendChild( progress );
+
+		// The ONE live region for the loading state (issues #222/#224). Permanently in the DOM and
+		// permanently in the ACCESSIBILITY TREE — visually hidden by clipping, never by `display`/
+		// `visibility`, both of which would take it back out of that tree and defeat the point.
+		//
+		// A live region announces a CHANGE TO ITS TEXT, not its own appearance, which is why this
+		// is a stage sibling rather than something inside either indicator: both of those are
+		// `display: none` while idle, and the sidebar one is additionally hidden whenever a card is
+		// open or the sidebar is collapsed — i.e. exactly when the customer most needs telling that
+		// the map is still working. This node is subject to none of that. {@see setLoading} writes
+		// the text on the way in and clears it on the way out, so a repeated load announces again.
+		var status = document.createElement( 'p' );
+		status.className = 'woodev-pickup-visually-hidden';
+		status.setAttribute( 'role', 'status' );
+
+		stage.appendChild( status );
 
 		// Task 16 (spec V-4 stage 2): built once here, always present, HIDDEN by default — never
 		// created/destroyed by `setBusy()` itself, matching `WoodevModal#showLoading()`'s own
@@ -2037,6 +2117,9 @@
 		this._messageTextEl = messageText;
 		this._messageRetryEl = null;
 		this._overlayEl = overlay;
+		this._progressEl = progress;
+		this._listLoadingEl = listLoading;
+		this._loadingStatusEl = status;
 		this._toggleEl = toggle;
 		this._zoomInEl = zoomIn;
 		this._zoomOutEl = zoomOut;
@@ -2139,6 +2222,68 @@
 	 */
 	Panels.prototype.isBusy = function() {
 		return this._busy;
+	};
+
+	/**
+	 * Toggles the SHARED in-flight-background-load indicator (issues #222/#224): a top-edge
+	 * progress bar spanning the whole map, shown for ANY background fetch regardless of what the
+	 * sidebar is doing, plus a spinner overlay on the sidebar's own LIST body — but the list overlay
+	 * only while the LIST is actually the panel showing, never while a card is open (an open card
+	 * stays live and uncovered during a refetch: it is about one specific point, and a bbox refetch
+	 * does not change its contents — covering it would hide the address/hours the customer is
+	 * reading and block the select button for the duration).
+	 *
+	 * BOTH are pure CSS, keyed off `.woodev-pickup-stage`'s `is-loading` class here COMBINED with
+	 * the EXISTING `is-open`/`is-card` classes {@see setStageOpen}/{@see Panels#openCard} already
+	 * manage — this method only ever owns `is-loading`, never `is-open`/`is-card` themselves. That
+	 * split is deliberate: the customer is free to open/close the sidebar or a card mid-load, and a
+	 * CSS combinator re-evaluates which indicator shows for that on every such toggle for free —
+	 * this method (and `pickup-mount.js`'s own caller) would otherwise have to re-run this same
+	 * decision on every `listToggle`/`openCard()`/`closeCard()` too, just to keep it in sync.
+	 *
+	 * DELIBERATELY SEPARATE FROM `setBusy()` above (the FIRST-open, stage-wide overlay — measurement
+	 * confirmed that one already works correctly and is left untouched) and `setSelectionBusy()`
+	 * (the card's own confirmation lock, unrelated to a background LOAD): this state is the
+	 * indicator for every background load AFTER the first one — a viewport pan/zoom refetch, a
+	 * type-filter refetch, a lazy point-detail fetch (issue #219) — none of which either of the
+	 * other two states cover. Showing this ALONGSIDE `setBusy()`'s own overlay during the very
+	 * first fetch is acceptable and not specially suppressed here — see `pickup-mount.js`'s own
+	 * `bumpLoading()`/`dropLoading()` docblock for why the caller does not special-case that fetch.
+	 *
+	 * Same "no-op on the class when called before `render()`, but the flag is still tracked" shape
+	 * as {@see setBusy}'s own docblock — a caller asking {@see isLoading} before `render()` still
+	 * gets the correct answer.
+	 *
+	 * @since 2.0.2
+	 * @param {boolean} loading
+	 * @returns {void}
+	 */
+	Panels.prototype.setLoading = function( loading ) {
+		this._loading = !! loading;
+
+		if ( this._stage ) {
+			this._stage.classList.toggle( 'is-loading', this._loading );
+		}
+
+		// The non-visual half. Writing the text is what actually ANNOUNCES — a live region reports
+		// a change to its contents, so un-hiding a pre-filled one says nothing (see the region's own
+		// build note in {@see render}). Cleared on the way out so the NEXT load is a change again
+		// rather than a rewrite of identical text, which some screen readers drop.
+		//
+		// Rule I1: the label comes from the plugin's own i18n bag and renders BLANK on a missing
+		// key — never a hardcoded Russian default that would mask a PHP/JS key mismatch. A blank
+		// announcement is the correct degradation here: silence, not a wrong language.
+		if ( this._loadingStatusEl ) {
+			this._loadingStatusEl.textContent = this._loading ? text( this._config, 'loading' ) : '';
+		}
+	};
+
+	/**
+	 * @since 2.0.2
+	 * @returns {boolean}
+	 */
+	Panels.prototype.isLoading = function() {
+		return this._loading;
 	};
 
 	/**

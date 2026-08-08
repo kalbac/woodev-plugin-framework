@@ -1072,6 +1072,16 @@
 				self._checkAndEmitBounds();
 				self.map.events.add( 'boundschange', function() {
 					self._checkAndEmitBounds();
+
+					// Issue #222: without this, the sidebar list only updated once the SERVER
+					// answered the `boundsChange` refetch above (7-10s on the rig) — the map could
+					// already be showing a different, freshly-drawn set of pins while the list still
+					// listed the PREVIOUS viewport's points. `_emitVisibleChange()` is a pure
+					// client-side recompute over `_groupsByKey` (the last set `setPoints()` drew) —
+					// no request — so there is no reason to wait for the refetch before the sidebar
+					// catches up with what the camera already shows. Matches the `bulk` listener
+					// below, which has called this unconditionally from day one.
+					self._emitVisibleChange();
 					self._emitZoomChange();
 				} );
 

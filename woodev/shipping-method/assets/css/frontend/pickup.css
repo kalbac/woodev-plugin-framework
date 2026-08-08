@@ -355,6 +355,153 @@
 }
 
 /* -------------------------------------------------------------------------
+ * The shared background-load indicator (issues #222/#224) — `pickup-panels.js`'s `setLoading()`,
+ * shown for every load AFTER the first one settles (a viewport pan/zoom refetch, a type-filter
+ * refetch, the lazy point-detail fetch from issue #219). The FIRST fetch of a session keeps its
+ * own, separately-measured-correct `.is-busy` overlay above, UNCHANGED; this is a DIFFERENT signal
+ * for every load after it, where that overlay never re-shows (`pickup-mount.js`'s
+ * `busyClearedThisStart` is one-shot per session).
+ *
+ * TWO ELEMENTS, ONE `is-loading` CLASS, DIFFERENT GATES — deliberately class-driven, NOT a
+ * `hidden` attribute toggled from JS. `.woodev-pickup-overlay`/`.woodev-pickup-message` above use
+ * `hidden` because a SINGLE JS call is the whole story for whether they show; these two are
+ * different — whether the SIDEBAR overlay specifically should show also depends on whether the
+ * LIST is the panel currently on screen, and the customer is free to open/close the list or a card
+ * at any moment during a load. A `hidden` attribute would need `pickup-panels.js` to re-evaluate
+ * that on every `listToggle`/`openCard()`/`closeCard()`, in addition to every `setLoading()` call;
+ * keying both off `.woodev-pickup-stage`'s classes lets the cascade do that math for free — `is-open`/
+ * `is-card` already exist and are already kept correct by every one of those calls, see the "ONE
+ * OPEN STATE, ON THE STAGE" note in this file's own docblock.
+ *
+ * - `.woodev-pickup-progress` (the top-edge bar): gated on `is-loading` ALONE — spans the whole
+ *   map regardless of what the sidebar is doing, because under `viewport` the customer usually
+ *   pans with the panel collapsed, and a sidebar-only indicator would be invisible exactly when it
+ *   matters most (a bbox refetch with no on-screen signal at all reads as a silently stuck map).
+ * - `.woodev-pickup-list__loading` (the sidebar spinner, a CHILD of `.woodev-pickup-list` — see
+ *   that element's own build in `pickup-panels.js`'s `render()`): gated on `is-loading` AND
+ *   `is-open` AND `NOT is-card` — the list must actually be the panel showing, and an open point
+ *   CARD must stay live and uncovered (spec: it is about one specific point, and a bbox refetch
+ *   does not change its contents; covering it would hide the address/hours the customer is
+ *   reading and block the select button for the duration of the refetch).
+ *
+ * `display: none !important` / `display: block|flex !important` ON BOTH THE RESTING AND THE
+ * ACTIVE RULE FOR BOTH ELEMENTS — see `docs-internal/gotchas/hostile-theme-button-display-none-
+ * needs-important.md`'s s54 addendum: three separate defects in this same file already came from
+ * a plain (non-`!important`) `display` losing to a theme's own `!important` on that property, and
+ * the addendum promotes "treat `display` on any element inside `.woodev-pickup-stage` as an
+ * `!important`-only property" from anecdote to rule after the third hit. A theme that forces
+ * `display` on generic elements (some resets/page builders do exactly this, unconditionally, not
+ * only on interactive controls) would otherwise beat whichever one of the pair here has no
+ * `!important` of its own — the ACTIVE rule without it lets the indicator silently never appear
+ * (the defect this fix exists for); the RESTING rule without it would let the SAME theme force the
+ * indicator permanently visible instead. Both directions are the identical bug, so both rules for
+ * both elements carry the flag, not just the one the original report happened to notice.
+ * ---------------------------------------------------------------------- */
+
+.woodev-pickup-progress {
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 3px;
+
+	/* Above EVERYTHING else this file stacks, including the busy overlay's own z-index: 6 — the
+	   two are allowed to show together (see `pickup-panels.js`'s `setLoading()` docblock on why
+	   the FIRST fetch is not special-cased), and this bar must still read as "something is
+	   happening" rather than sit invisibly behind the overlay's translucent white. */
+	z-index: 7;
+	overflow: hidden;
+	background: rgba( 0, 0, 0, 0.06 );
+	pointer-events: none;
+	display: none !important;
+}
+
+.woodev-pickup-stage.is-loading .woodev-pickup-progress {
+	display: block !important;
+}
+
+/* The moving sliver — INDETERMINATE (no known percentage, so no width/position ever settles):
+   a fixed-width bar sweeps left to right and loops, the same "something is happening, no ETA"
+   language `.woodev-pickup-spinner` already speaks for the busy overlay. `--woodev-pickup-accent`
+   (identity, not the fill/contrast pair — this is a moving mark, not a surface with text on it),
+   matching `.woodev-pickup-spinner`'s own identical choice immediately below in this file. */
+.woodev-pickup-progress__bar {
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 40%;
+	height: 100%;
+	background: var( --woodev-pickup-accent, #06aedd );
+	animation: woodev-pickup-progress-slide 1.2s ease-in-out infinite;
+}
+
+/* TRANSFORM, NOT `left` — the two look identical and cost differently. This indicator exists
+   precisely for the slow case (a 10-13s fetch, measured on the rig), running over a live map
+   canvas the customer is also panning; animating `left` puts a layout pass on the main thread
+   every frame for the whole duration, which is main-thread time taken from the very map the
+   spinner is apologising for. A `translateX` animation is compositor-only. Percentages here are
+   of the BAR's own width (40% of the track), not the track's — hence -100%/250%, which place its
+   trailing edge at the track's left edge and its leading edge past the right one. */
+@keyframes woodev-pickup-progress-slide {
+
+	from {
+		transform: translateX( -100% );
+	}
+
+	to {
+		transform: translateX( 250% );
+	}
+}
+
+/* Slowed rather than stopped, matching `.woodev-pickup-spinner`'s own note immediately below in
+   this file — a frozen bar reads as a hang, the opposite of what it exists to communicate. */
+@media ( prefers-reduced-motion: reduce ) {
+
+	.woodev-pickup-progress__bar {
+		animation-duration: 3.6s;
+	}
+}
+
+/* The sidebar spinner overlay — a CHILD of `.woodev-pickup-list` (not a stage sibling), so it
+   inherits the list's own `position: absolute` box/rounded corners and covers exactly the list
+   panel, never the map or the card. `z-index: 1` is relative to the LIST's own stacking context
+   (its siblings inside `.woodev-pickup-list`, e.g. `.woodev-pickup-list__body`), not the stage's. */
+.woodev-pickup-list__loading {
+	position: absolute;
+	inset: 0;
+	z-index: 1;
+	display: none !important;
+	align-items: center;
+	justify-content: center;
+	background: rgba( 255, 255, 255, 0.75 );
+}
+
+.woodev-pickup-stage.is-loading.is-open:not( .is-card ) .woodev-pickup-list__loading {
+	display: flex !important;
+}
+
+/* Visually-hidden but still screen-reader-readable — the standard clip-rect technique, scoped to
+   this component's own naming convention rather than relying on a host theme's `.screen-reader-text`
+   (WordPress core ships one, but nothing guarantees a given theme keeps it, or keeps it correct).
+   `.woodev-pickup-list__loading`'s `role="status"` region needs SOME non-`aria-hidden` content to
+   have anything to announce — its only other child is a decorative spinner marked `aria-hidden`
+   (`pickup-panels.js`'s `render()`) — so this class exists to give that region readable text without
+   drawing a visible label over the spinner. `position: absolute` (not `display: none`/`visibility:
+   hidden`, both of which would remove the text from the accessibility tree the same way they remove
+   it from layout) and a 0×0 clip box are what keep it announced but never painted. */
+.woodev-pickup-visually-hidden {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	margin: -1px;
+	padding: 0;
+	overflow: hidden;
+	clip: rect( 0, 0, 0, 0 );
+	white-space: nowrap;
+	border: 0;
+}
+
+/* -------------------------------------------------------------------------
  * Message card (Task 17, spec V-5) — the plugin's own empty/error text (`pickup-panels.js`'s
  * `showMessage()`) as a small centred card over the map, DELIBERATELY NOT the busy overlay
  * above: it carries no `is-busy`-equivalent companion class, so the search/filter controls and

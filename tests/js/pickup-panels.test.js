@@ -3500,6 +3500,180 @@ describe( 'setBusy()/isBusy() (spec V-4)', () => {
 } );
 
 // -----------------------------------------------------------------------
+// Issues #222/#224: setLoading()/isLoading() — the SHARED in-flight-background-load indicator,
+// separate from `setBusy()` above (the FIRST-open, stage-wide overlay) and `setSelectionBusy()`
+// (the card's own confirmation lock, live elsewhere). Drives a top-edge progress bar (any
+// in-flight load, regardless of what the sidebar is doing) and a spinner overlay on the sidebar
+// LIST specifically — both are pure CSS, keyed off `.woodev-pickup-stage`'s `is-loading` class
+// combined with the EXISTING `is-open`/`is-card` classes, so this file only has to prove the ONE
+// class this method actually owns. `pickup-mount.js`'s own wiring of WHEN to call this (a bbox
+// refetch, a lazy detail fetch, the overlap case) is that file's test's job.
+// -----------------------------------------------------------------------
+describe( 'setLoading()/isLoading() (issues #222/#224)', () => {
+	it( 'is not loading right after render() — both indicator elements exist, built once, no is-loading class', () => {
+		const container = document.createElement( 'div' );
+		const panels = new Panels( container, config );
+
+		panels.render();
+
+		expect( panels.isLoading() ).toBe( false );
+		expect( panels._stage.className ).not.toContain( 'is-loading' );
+		expect( container.querySelector( '.woodev-pickup-progress' ) ).not.toBeNull();
+		expect( container.querySelector( '.woodev-pickup-list__loading' ) ).not.toBeNull();
+	} );
+
+	it( 'setLoading( true ) marks the stage is-loading', () => {
+		const container = document.createElement( 'div' );
+		const panels = new Panels( container, config );
+
+		panels.render();
+		panels.setLoading( true );
+
+		expect( panels.isLoading() ).toBe( true );
+		expect( panels._stage.className ).toContain( 'is-loading' );
+	} );
+
+	it( 'setLoading( false ) clears is-loading again — the same two nodes, not new ones', () => {
+		const container = document.createElement( 'div' );
+		const panels = new Panels( container, config );
+
+		panels.render();
+		panels.setLoading( true );
+		const progress = container.querySelector( '.woodev-pickup-progress' );
+		const listLoading = container.querySelector( '.woodev-pickup-list__loading' );
+		panels.setLoading( false );
+
+		expect( panels.isLoading() ).toBe( false );
+		expect( panels._stage.className ).not.toContain( 'is-loading' );
+		expect( container.querySelector( '.woodev-pickup-progress' ) ).toBe( progress );
+		expect( container.querySelector( '.woodev-pickup-list__loading' ) ).toBe( listLoading );
+	} );
+
+	it( 'does not throw when called before render(), and the flag is still tracked (matches setBusy()\'s own shape)', () => {
+		const panels = new Panels( document.createElement( 'div' ), config );
+
+		expect( () => panels.setLoading( true ) ).not.toThrow();
+		expect( panels.isLoading() ).toBe( true );
+	} );
+
+	// #224: an open CARD must stay live and uncovered during a refetch — the sidebar overlay is
+	// CSS-gated on `.is-loading.is-open:not(.is-card)`, so this pins the CLASS COMBINATION that
+	// selector depends on rather than a computed style (jsdom does not execute this project's
+	// stylesheet). With `is-card` present, that selector cannot match, so the overlay cannot show —
+	// which is the whole point: a bbox refetch must never cover the point details/select button the
+	// customer is reading.
+	it( 'opening a card while loading leaves is-card set alongside is-loading/is-open — the CSS '
+		+ 'combination the sidebar overlay selector requires is-open AND is-loading AND NOT is-card', () => {
+		const container = document.createElement( 'div' );
+		const panels = new Panels( container, config );
+
+		panels.render();
+		panels.setLoading( true );
+		panels.openCard( group( 'g1', 55.75, 37.61, 'Точка' ) );
+
+		const stage = panels._stage;
+
+		expect( stage.classList.contains( 'is-loading' ) ).toBe( true );
+		expect( stage.classList.contains( 'is-open' ) ).toBe( true );
+		expect( stage.classList.contains( 'is-card' ) ).toBe( true );
+	} );
+
+	// The list-open, no-card case — the sidebar overlay's selector CAN match here.
+	it( 'opening the list (no card) while loading leaves is-card OFF — the combination the '
+		+ 'sidebar overlay selector requires', () => {
+		const container = document.createElement( 'div' );
+		const panels = new Panels( container, config );
+
+		panels.render();
+		panels.setLoading( true );
+		panels.openList();
+
+		const stage = panels._stage;
+
+		expect( stage.classList.contains( 'is-loading' ) ).toBe( true );
+		expect( stage.classList.contains( 'is-open' ) ).toBe( true );
+		expect( stage.classList.contains( 'is-card' ) ).toBe( false );
+	} );
+
+	// The adversarial-review fix: `.woodev-pickup-list__loading` carries `role="status"` but its
+	// only OTHER child is a decorative spinner marked `aria-hidden="true"` — toggling this
+	// element's CSS `display` announced nothing at all to a screen-reader user. This pins the
+	// non-`aria-hidden` text node the live region now needs to have anything to say, sourced
+	// through `text( this._config, 'loading' )` — the SAME i18n key `Pickup_Handler::get_js_config()`
+	// already emits for the dialog's own opening spinner, never a JS-side hardcoded string.
+	it( 'announces by WRITING the live region\'s text, and clears it again on the way out', () => {
+		const container = document.createElement( 'div' );
+		const loadingConfig = { ...config, i18n: { ...config.i18n, loading: 'Загрузка пунктов выдачи…' } };
+		const panels = new Panels( container, loadingConfig );
+
+		panels.render();
+
+		const status = container.querySelector( 'p.woodev-pickup-visually-hidden[role="status"]' );
+
+		expect( status ).not.toBeNull();
+
+		// Idle: the region EXISTS and is in the accessibility tree, but says nothing.
+		expect( status.textContent ).toBe( '' );
+
+		panels.setLoading( true );
+		expect( status.textContent ).toBe( 'Загрузка пунктов выдачи…' );
+
+		// Cleared on the way out, so a SECOND load is a text CHANGE again rather than a rewrite
+		// of identical text — which some screen readers drop entirely.
+		panels.setLoading( false );
+		expect( status.textContent ).toBe( '' );
+
+		panels.setLoading( true );
+		expect( status.textContent ).toBe( 'Загрузка пунктов выдачи…' );
+	} );
+
+	// The re-critic's finding, pinned so it cannot regress: the live region must NOT be one of the
+	// two `display: none`-while-idle indicators. An element hidden that way is out of the
+	// accessibility tree, so filling it while invisible and then un-hiding it announces nothing —
+	// what a live region reports is a change to its TEXT. Hence the region is a stage sibling, and
+	// the sidebar overlay is now purely decorative.
+	it( 'the live region is a stage sibling, and the sidebar overlay is decorative only', () => {
+		const container = document.createElement( 'div' );
+		const panels = new Panels( container, config );
+
+		panels.render();
+
+		const status = container.querySelector( 'p.woodev-pickup-visually-hidden[role="status"]' );
+		const overlay = container.querySelector( '.woodev-pickup-list__loading' );
+
+		// The region hangs off the stage itself — not off the list panel, and not off either
+		// indicator, both of which are hidden exactly when the announcement matters most (the
+		// sidebar overlay is additionally hidden whenever a card is open or the list is collapsed).
+		expect( status.parentNode ).toBe( panels._stage );
+
+		expect( overlay.getAttribute( 'role' ) ).toBeNull();
+		expect( overlay.getAttribute( 'aria-hidden' ) ).toBe( 'true' );
+		expect( overlay.querySelector( '.woodev-pickup-spinner' ).getAttribute( 'aria-hidden' ) ).toBe( 'true' );
+
+		// The progress bar stays decorative too — an indeterminate bar has no value to report.
+		expect( container.querySelector( '.woodev-pickup-progress' ).getAttribute( 'aria-hidden' ) ).toBe( 'true' );
+	} );
+
+	// Rule I1: a missing/blank i18n key renders blank, never a hardcoded Russian default that
+	// happens to read the same — see the file docblock. `config` (this describe block's shared
+	// fixture) carries no `loading` key at all, so this is the ordinary "PHP/JS key mismatch"
+	// case, not a deliberately-blanked override.
+	it( 'a missing loading i18n key announces blank, never a hardcoded default (rule I1)', () => {
+		const container = document.createElement( 'div' );
+		const panels = new Panels( container, config );
+
+		panels.render();
+		panels.setLoading( true );
+
+		const status = container.querySelector( 'p.woodev-pickup-visually-hidden[role="status"]' );
+
+		// Silence, not the wrong language: a blank announcement is the correct degradation for a
+		// PHP/JS key mismatch, and it is what makes such a mismatch findable instead of masked.
+		expect( status.textContent ).toBe( '' );
+	} );
+} );
+
+// -----------------------------------------------------------------------
 // Task 17 (spec V-5): showMessage()/hideMessage() — the plugin's own empty/error text as a
 // centred card over the map. NEVER a replacement for the whole interface (s48 decision, kept
 // here): unlike setBusy()'s stage-wide overlay above, this must not toggle `is-busy` — the list,
