@@ -180,21 +180,33 @@
  * still bounded rather than open-ended. A response whose `totalPages` is missing or
  * non-numeric defaults to `1` (this page is the only page) rather than looping.
  *
- * CACHING — unlike Yandex's ONE global transient (a single bulk/locality-addressed call covers
- * a whole city), a viewport source is queried once PER BBOX, so a naive locality-shaped cache
- * key would create an unbounded number of transients as the customer pans the map across a
- * long rig session. {@see self::cache_key_for_query()} rounds each bbox coordinate to 3 decimal
- * places (~111m at the equator — coarse enough that re-opening roughly the same viewport still
- * hits the cache, fine enough that two genuinely different viewports do not collide) and folds
- * in the sorted `pvzType` filter, so the type-filter chips do not share a cache entry with an
- * unfiltered view. TTL is `15 * MINUTE_IN_SECONDS`, much shorter than Yandex's day-long TTL:
- * that TTL was safe for exactly ONE cache key; this source's key SPACE grows with every
- * distinct viewport the operator explores, and a shorter TTL bounds both how many stale entries
- * accumulate in `wp_options` and how long any one of them can go stale, while still absorbing
- * the rapid repeated re-fetches a panning/zooming map naturally produces within one browsing
- * session. Only a SUCCESSFUL response is cached (both the points cache and the separate
- * settings-id cache skip `set_transient()` on a thrown exception), so a sandbox outage is
- * retried on the very next request rather than remembered.
+ * CACHING — THE LISTING IS NOT CACHED AT ALL. Only individual POINTS are.
+ *
+ * The first version did cache per bbox, and it was wrong in a way only live data showed.
+ * A viewport source is queried once PER BBOX, so the key space grows with every distinct
+ * viewport a customer explores — and each Pochta listing response is LARGE: measured on the rig,
+ * 308 676 bytes for one central-Moscow bbox. Thirty minutes of testing from ONE browser left
+ * **823 KB across 14 rows** in `wp_options`. Multiply by real concurrent customers, each panning
+ * a map, and no client site survives that; `autoload` being `off` bounds the per-pageload cost
+ * but not the growth, the write churn, or the row count. Operator's call, 08.08.2026: drop the
+ * bbox cache entirely, cache only per-point details.
+ *
+ * The trade is deliberate and it is the right way round: every pan now costs a live upstream
+ * call (7-13s on this rig, which is the RIG, not the API), and the existing per-IP rate limiter
+ * is what bounds abuse. Pochta's own widget does the same — no server-side listing cache at all.
+ *
+ * What IS cached, {@see self::fetch_details()}: one point's full record, ~2 KB, keyed by its
+ * numeric id, `DETAILS_CACHE_TTL`. Bounded by how many cards a customer actually opens, not by
+ * how far they pan. Safe against a stale verdict, which is the question that matters: the
+ * customer-facing `selectable` is NOT part of what is cached — `Constraint_Checker` recomputes
+ * it against the live cart on every request, outside this source (see `Pickup_Handler`), so a
+ * cached carrier record can never serve a stale "yes" to a cart that changed. TRAP 2's empty
+ * success is never cached (see that method).
+ *
+ * The settings-id transient stays: one row, one small integer, resolved rarely.
+ *
+ * Only a SUCCESSFUL response is ever cached, so an upstream outage is retried on the very next
+ * request rather than remembered.
  *
  * FAIL SOFT — same contract as the Yandex live source: every transport/HTTP/shape failure
  * throws `\Woodev_API_Exception` (never a silently empty/short result for THOSE failure modes),
@@ -298,11 +310,20 @@ if ( ! class_exists( 'Woodev_Test_Live_Pochta_Point_Source' ) ) {
 		/** A day — site/account configuration barely changes; matches Yandex's own convention. */
 		private const SETTINGS_CACHE_TTL = DAY_IN_SECONDS;
 
-		/** Prefix for the bbox+type-addressed points cache — see file docblock CACHING section. */
-		private const POINTS_CACHE_PREFIX = 'woodev_test_live_pochta_pts_';
+		/**
+		 * Per-POINT details cache prefix. There is deliberately NO bbox/listing cache — see the
+		 * file docblock's CACHING section for the measurement that removed it.
+		 */
+		private const DETAILS_CACHE_PREFIX = 'woodev_test_live_pochta_pt_';
 
-		/** See file docblock CACHING section for why this is far shorter than Yandex's day-long TTL. */
-		private const POINTS_CACHE_TTL = 15 * MINUTE_IN_SECONDS;
+		/**
+		 * One hour. A carrier's own record for ONE point (address, opening hours, whether it
+		 * takes cash) does not churn minute to minute, and the CUSTOMER-FACING VERDICT is not
+		 * cached with it: `Constraint_Checker` recomputes `selectable` against the live cart on
+		 * every request, outside this source entirely (see `Pickup_Handler`). So a cached record
+		 * can never serve a stale "yes" to a cart that has changed.
+		 */
+		private const DETAILS_CACHE_TTL = HOUR_IN_SECONDS;
 
 		/** Decimal places a bbox coordinate is rounded to before hashing into a cache key (~111m). */
 		private const CACHE_BBOX_PRECISION = 3;
@@ -362,7 +383,8 @@ if ( ! class_exists( 'Woodev_Test_Live_Pochta_Point_Source' ) ) {
 				return [];
 			}
 
-			$raw_points = $this->fetch_points_cached( $min_lat, $min_lng, $max_lat, $max_lng, $pvz_types );
+			// DELIBERATELY NOT CACHED — see the file docblock's CACHING section.
+			$raw_points = $this->request_points_paginated( $min_lat, $min_lng, $max_lat, $max_lng, $pvz_types );
 
 			return array_values( array_filter( array_map( [ $this, 'map_sparse_point' ], $raw_points ) ) );
 		}
@@ -385,11 +407,26 @@ if ( ! class_exists( 'Woodev_Test_Live_Pochta_Point_Source' ) ) {
 		 *                                 NOT one of these — see {@see self::request_point_details()}.
 		 */
 		public function fetch_details( string $point_id ): ?\Woodev\Framework\Shipping\Pickup\Pickup_Point {
+			$cache_key = self::DETAILS_CACHE_PREFIX . md5( $point_id );
+			$cached    = get_transient( $cache_key );
+
+			// THE ONLY THING THIS SOURCE CACHES — one point, ~2 KB, and only points a customer
+			// actually opened. See the file docblock's CACHING section for why the listing is
+			// not cached at all.
+			if ( is_array( $cached ) ) {
+				return $this->map_full_point( $cached );
+			}
+
 			$raw_point = $this->request_point_details( $point_id );
 
 			if ( null === $raw_point ) {
+				// TRAP 2's empty success is NOT cached: a negative answer here is far more
+				// likely to mean "wrong key" (a bug on our side) than "this point is gone", and
+				// caching it would hide the bug for an hour at a time.
 				return null;
 			}
+
+			set_transient( $cache_key, $raw_point, self::DETAILS_CACHE_TTL );
 
 			return $this->map_full_point( $raw_point );
 		}
@@ -417,60 +454,6 @@ if ( ! class_exists( 'Woodev_Test_Live_Pochta_Point_Source' ) ) {
 			}
 
 			return $pvz_types;
-		}
-
-		/**
-		 * Returns the raw sparse point records for one bbox+type-filter combination, from
-		 * cache when fresh — see the file docblock's CACHING section.
-		 *
-		 * @param float    $min_lat   Minimum latitude.
-		 * @param float    $min_lng   Minimum longitude.
-		 * @param float    $max_lat   Maximum latitude.
-		 * @param float    $max_lng   Maximum longitude.
-		 * @param string[] $pvz_types Pochta `pvzType` values to request.
-		 *
-		 * @return array<int, mixed> Raw records from the API's `data` array, across all pages.
-		 *
-		 * @throws \Woodev_API_Exception On a sandbox transport, HTTP, settings-resolution, or
-		 *                                 payload-shape failure.
-		 */
-		private function fetch_points_cached( float $min_lat, float $min_lng, float $max_lat, float $max_lng, array $pvz_types ): array {
-			$cache_key = $this->cache_key_for_query( $min_lat, $min_lng, $max_lat, $max_lng, $pvz_types );
-			$cached    = get_transient( $cache_key );
-
-			if ( is_array( $cached ) ) {
-				return $cached;
-			}
-
-			$points = $this->request_points_paginated( $min_lat, $min_lng, $max_lat, $max_lng, $pvz_types );
-
-			set_transient( $cache_key, $points, self::POINTS_CACHE_TTL );
-
-			return $points;
-		}
-
-		/**
-		 * Builds the bbox+type-addressed cache key — see the file docblock's CACHING section
-		 * for why a viewport source cannot reuse Yandex's single global transient.
-		 *
-		 * @param float    $min_lat   Minimum latitude.
-		 * @param float    $min_lng   Minimum longitude.
-		 * @param float    $max_lat   Maximum latitude.
-		 * @param float    $max_lng   Maximum longitude.
-		 * @param string[] $pvz_types Pochta `pvzType` values narrowing this request.
-		 *
-		 * @return string
-		 */
-		private function cache_key_for_query( float $min_lat, float $min_lng, float $max_lat, float $max_lng, array $pvz_types ): string {
-			$rounded = array_map(
-				static fn( float $v ): float => round( $v, self::CACHE_BBOX_PRECISION ),
-				[ $min_lat, $min_lng, $max_lat, $max_lng ]
-			);
-
-			$sorted_types = $pvz_types;
-			sort( $sorted_types );
-
-			return self::POINTS_CACHE_PREFIX . md5( implode( ',', $rounded ) . '|' . implode( ',', $sorted_types ) );
 		}
 
 		/**
