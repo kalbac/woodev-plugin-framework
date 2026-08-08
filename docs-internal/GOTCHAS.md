@@ -1,6 +1,16 @@
 # Gotchas — Woodev Plugin Framework
-> **110 atomic gotchas in 24 namespaces** — update count when adding/removing.
-> Last updated: 2026-08-08 (session 57, overnight: +2 files, existing namespace `[shipping/pickup]`
+> **111 atomic gotchas in 24 namespaces** — update count when adding/removing.
+> Last updated: 2026-08-08 (session 57, live Pochta source #226: +1 file, existing namespace
+> `[testing/unit]` — `an-invented-fixture-tests-your-assumptions-not-the-carrier` (issue #226
+> recorded the Pochta contract carefully but recorded `geo`/`address` only as top-level key NAMES,
+> never contents — a gap that is easy to miss because the card reads as exhaustive. 22 tests passed
+> against a record no carrier ever sent. ONE live capture pasted in verbatim broke four assertions
+> and corrected six assumptions, three of which are live bugs: `street` already carries its type,
+> so a composer that prepends one yields "ул. ш. Энтузиастов"; `address.id` differs from the point
+> `id` on real records, so a mapper reading the wrong one looks right on whichever record it was
+> first tested against; and `deliveryPointIndex` is a 990xxx pseudo-index for postamats, a third of
+> the map. A recorded CONTRACT is not a recorded PAYLOAD)).
+> Prior: 2026-08-08 (session 57, overnight: +2 files, existing namespace `[shipping/pickup]`
 > — `card-renders-from-a-snapshot-the-writers-never-touch` (`Panels` holds `_groups`, replaced
 > wholesale on every listing, AND `_activeGroup`, a snapshot captured at `openCard()`. The two
 > verdict writers walk `_groups`; `renderCard()` reads `_activeGroup`. A listing landing inside the
@@ -236,6 +246,8 @@
 - [testing/integration] Integration tests: never `do_action('admin_menu')` (or other broad global admin hooks) — it fires WooCommerce's callbacks, which PRINT a PHP deprecation on some WC versions → PHPUnit "unexpected output" → red on part of the matrix only. Also `$menu`/`$submenu` globals accumulate across `WP_UnitTestCase` tests (stale entries leak). Call the specific method directly + `unset()` the global key before asserting → [gotchas/integration-test-global-admin-hooks-output-and-submenu-accumulation.md](gotchas/integration-test-global-admin-hooks-output-and-submenu-accumulation.md) (s34)
 
 - [testing/unit] A mutation sweep over **branch conditions only** reads as complete and is not — "14/14 killed" was reported three times on one branch and three times a reviewer then killed survivors by mutating **values and content**: swapped `sprintf` args telling the customer a 15 kg order exceeds a 20.5 kg limit, a dropped unit conversion, i18n keys the JS read that PHP never emitted (invisible because the JS carried byte-identical Russian defaults). Also: a mutant killed by an *unrelated* guard is not covered, and boundary-**acceptance** needs pinning as much as rejection → [gotchas/mutation-sweep-branch-only-false-confidence.md](gotchas/mutation-sweep-branch-only-false-confidence.md) (s45)
+
+- [testing/unit] A hand-written API fixture tests your ASSUMPTIONS, not the carrier. A card can record a contract exhaustively (endpoints, traps, pagination, a field table) and still record a nested object only as key NAMES — and that gap does not look like a gap. One live capture pasted in verbatim broke four assertions and corrected six assumptions, three of them live bugs (a street field that already carries its type, so a composer that prepends one doubles it; an `address.id` that differs from the point `id` on real records, so the wrong read looks correct on whichever record it was first tested against; a pseudo-index treated as a postal code for a third of the points). Omitted null-valued slots are exactly where the surprises live — paste the raw response in, nulls and all, and label it verbatim with a date → [gotchas/an-invented-fixture-tests-your-assumptions-not-the-carrier.md](gotchas/an-invented-fixture-tests-your-assumptions-not-the-carrier.md) (s57)
 
 ### [testing/js] — JavaScript testing pitfalls
 - [testing/js] `npx jest` is NOT how this project runs JS tests — there is no jest config here at all; `wp-scripts test-unit-js` (`npm run test:js`) owns it and supplies jsdom. `npx jest` falls back to the node environment: 194 phantom failures, and a TOTAL of 472 instead of 631 because failed-to-load suites contribute nothing. A changed total means a bad invocation, not a regression → [gotchas/npx-jest-bypasses-wp-scripts-jsdom.md](gotchas/npx-jest-bypasses-wp-scripts-jsdom.md) (s52)
