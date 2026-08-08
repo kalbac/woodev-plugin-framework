@@ -1126,6 +1126,19 @@
 		/** @type {number} mints one unique, monotonic token per detail fetch this session sends —
 		 *  the same device `selectionTokens` above provides for confirmations, for the same
 		 *  reason. See `verdictPendingToken`. */
+		/** @type {Object.<string, boolean>} point ids whose detail fetch is IN FLIGHT right now —
+		 *  a different question from `detailedPoints` above, which records what has already
+		 *  LANDED for the current listing and is wiped on every successful one.
+		 *
+		 *  Both are needed. Wiping `detailedPoints` is correct (a new listing means a possibly
+		 *  new cart, so a landed verdict is history), but it was also the only thing stopping a
+		 *  second request for a point already being fetched — and since a successful listing now
+		 *  re-asks for the open card, a customer panning quickly produced a listing, a wipe, and
+		 *  another request, per pan, all for the same point, all in flight together. This map
+		 *  survives the wipe, so "already asking" stays true until the answer actually arrives.
+		 *  Found by the Codex critic pass on this branch. */
+		var detailsInFlight = {};
+
 		var verdictTokens = 0;
 
 		/** @type {number} issue #223: the token of the {@see refreshPointDetails} fetch that
@@ -1489,11 +1502,23 @@
 		function refreshPointDetails( pointId ) {
 			var id = String( pointId );
 
-			if ( 'viewport' !== config.strategy || ! id || detailedPoints[ id ] ) {
+			// `detailsInFlight` is checked alongside the landed-memo, and `destroyed` alongside
+			// both: the first stops a second request for a point already being asked about (see
+			// that map's own docblock — the per-listing memo cannot, because a successful listing
+			// wipes it), the second stops a listing that settles DURING teardown from acquiring a
+			// lock the session has already released on its way out.
+			if (
+				'viewport' !== config.strategy ||
+				! id ||
+				destroyed ||
+				detailedPoints[ id ] ||
+				detailsInFlight[ id ]
+			) {
 				return;
 			}
 
 			detailedPoints[ id ] = true;
+			detailsInFlight[ id ] = true;
 			bumpLoading();
 
 			// Issue #223: locks the card's CTA for the window this fetch is in flight — the card
@@ -1546,6 +1571,7 @@
 			detailsPromise.then(
 				function( point ) {
 					dropLoading();
+					delete detailsInFlight[ id ];
 
 					// Non-negotiable per issue #223: release on EVERY outcome, success included —
 					// but ONLY when THIS fetch still owns the lock. Two things can have taken it
@@ -1564,11 +1590,15 @@
 					// and a sidebar row both swap it without waiting for anything. Applying then
 					// would write one point's record over whatever the customer is now reading.
 					//
-					// `ownsLock` is checked too, not just the point id: a SUPERSEDED fetch for the
-					// same point (a listing re-asked while this one was still travelling) is an
-					// OLDER answer, and letting it land would overwrite the newer one whenever it
-					// happens to arrive second.
-					if ( destroyed || ! panels || id !== cardPointId || ! ownsLock ) {
+					// Deliberately NOT also gated on `ownsLock`. That would look symmetrical and
+					// would be wrong: a customer who leaves this point and comes BACK while the
+					// request is still travelling has released the lock on the way out and, thanks
+					// to `detailsInFlight`, starts no new request on the way back — so this answer
+					// arrives owning no lock, about the point the card is showing, with nothing
+					// else on its way. Discarding it would throw away the only verdict anyone is
+					// going to fetch. Ownership decides who may RELEASE THE LOCK; `cardPointId`
+					// decides whose answer may LAND. Two questions, two guards.
+					if ( destroyed || ! panels || id !== cardPointId ) {
 						return;
 					}
 
@@ -1576,6 +1606,7 @@
 				},
 				function() {
 					dropLoading();
+					delete detailsInFlight[ id ];
 
 					// Same non-negotiable release, same ownership guard — see the resolve branch
 					// above. A failed fetch must not leave the card locked forever either.

@@ -2468,7 +2468,7 @@
 				// the same order as the stale one it replaces.
 				var currentPoint = this._activeGroup.points[ this._activeIndex ];
 				var currentPointId = currentPoint ? String( currentPoint.id ) : null;
-				var freshIndex = 0;
+				var freshIndex = -1;
 
 				if ( null !== currentPointId ) {
 					for ( var j = 0; j < freshActive.points.length; j++ ) {
@@ -2479,9 +2479,22 @@
 					}
 				}
 
-				this._activeGroup = freshActive;
-				this._activeIndex = freshIndex;
-				renderCard( this );
+				// BOTH identities must resolve, not just the group's. A group `key` is a
+				// COORDINATE (co-located points share one), so a fresh group under the same key
+				// can legitimately contain a DIFFERENT set of points — one filtered out by a type
+				// change, one the carrier dropped, one whose tab index no longer exists. Falling
+				// back to index 0 there, as this first did, silently swapped the card onto ANOTHER
+				// PVZ under the customer while they were reading it: same card, same position on
+				// screen, different address and different verdict. Found by the Codex critic pass.
+				//
+				// So an unresolvable point is treated exactly like the panned-out case below —
+				// keep the stale object, keep showing the point the customer actually opened, and
+				// let the direct-write path in `updatePoint()`/`setPointVerdict()` reach it.
+				if ( -1 !== freshIndex ) {
+					this._activeGroup = freshActive;
+					this._activeIndex = freshIndex;
+					renderCard( this );
+				}
 			}
 
 			// Case B (`freshActive` stays null): the customer panned the point out of the new
