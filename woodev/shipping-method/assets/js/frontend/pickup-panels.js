@@ -1813,6 +1813,7 @@
 		this._loading = false;
 		this._progressEl = null;
 		this._listLoadingEl = null;
+		this._loadingStatusEl = null;
 
 		// Task 17 (spec V-5): the message card {@see Panels.prototype.showMessage} shows/hides —
 		// null until `render()` builds it, exactly like `_overlayEl` above.
@@ -1933,31 +1934,25 @@
 		// own `position: absolute` box and covers exactly the list panel, never the card that can sit
 		// above it (spec: an open card must stay live and uncovered during a refetch — see
 		// `pickup.css`'s own note on why this element's own visibility rule additionally requires
-		// `:not( .is-card )`). `role="status"` here, not on the top-edge progress bar built in
-		// {@see setLoading}'s own docblock — one live-region announcement per loading state is
-		// enough; the progress bar is purely decorative chrome for the SAME state.
+		// `:not( .is-card )`).
+		//
+		// PURELY VISUAL — `aria-hidden`, deliberately NOT a `role="status"` live region. It carries
+		// only a decorative spinner, and it is `display: none` whenever idle; an element hidden that
+		// way is out of the accessibility tree entirely, so a live region here would be created
+		// empty, populated while invisible, and then merely UN-HIDDEN. That is not a reliable
+		// announcement trigger in any screen reader: what a live region announces is a change to the
+		// TEXT INSIDE IT, and no text here would ever change. The announcement is carried instead by
+		// the always-present region {@see Panels.prototype.render} builds on the stage below, whose
+		// text {@see Panels.prototype.setLoading} writes and clears. Found by the Codex re-critic
+		// pass on this branch, after a first attempt did exactly the unreliable thing.
 		var listLoading = document.createElement( 'div' );
 		listLoading.className = 'woodev-pickup-list__loading';
-		listLoading.setAttribute( 'role', 'status' );
+		listLoading.setAttribute( 'aria-hidden', 'true' );
 
 		var listSpinner = document.createElement( 'span' );
 		listSpinner.className = 'woodev-pickup-spinner';
 		listSpinner.setAttribute( 'aria-hidden', 'true' );
 		listLoading.appendChild( listSpinner );
-
-		// The `role="status"` region above has no accessible text without this: the spinner is its
-		// only OTHER child and is itself `aria-hidden`, so toggling the region's CSS `display`
-		// announced nothing at all to a screen-reader user — visually the loading state was
-		// obvious, non-visually it did not exist. `text( this._config, 'loading' )` is the SAME
-		// i18n key `modal.showLoading()` already uses for the dialog's own opening spinner
-		// (`Pickup_Handler::get_js_config()`'s `loading` string); a missing key still renders blank
-		// per rule I1, never a hardcoded Russian default. `.woodev-pickup-visually-hidden`
-		// (pickup.css) keeps the text out of the visual layout — the spinner alone still carries the
-		// visible affordance — while leaving it in the accessibility tree for the region to announce.
-		var listLoadingText = document.createElement( 'span' );
-		listLoadingText.className = 'woodev-pickup-visually-hidden';
-		listLoadingText.textContent = text( this._config, 'loading' );
-		listLoading.appendChild( listLoadingText );
 
 		list.appendChild( listLoading );
 
@@ -2038,6 +2033,22 @@
 
 		stage.appendChild( progress );
 
+		// The ONE live region for the loading state (issues #222/#224). Permanently in the DOM and
+		// permanently in the ACCESSIBILITY TREE — visually hidden by clipping, never by `display`/
+		// `visibility`, both of which would take it back out of that tree and defeat the point.
+		//
+		// A live region announces a CHANGE TO ITS TEXT, not its own appearance, which is why this
+		// is a stage sibling rather than something inside either indicator: both of those are
+		// `display: none` while idle, and the sidebar one is additionally hidden whenever a card is
+		// open or the sidebar is collapsed — i.e. exactly when the customer most needs telling that
+		// the map is still working. This node is subject to none of that. {@see setLoading} writes
+		// the text on the way in and clears it on the way out, so a repeated load announces again.
+		var status = document.createElement( 'p' );
+		status.className = 'woodev-pickup-visually-hidden';
+		status.setAttribute( 'role', 'status' );
+
+		stage.appendChild( status );
+
 		// Task 16 (spec V-4 stage 2): built once here, always present, HIDDEN by default — never
 		// created/destroyed by `setBusy()` itself, matching `WoodevModal#showLoading()`'s own
 		// "idempotent, additive" node-reuse discipline (see that file's docblock). A stage sibling,
@@ -2108,6 +2119,7 @@
 		this._overlayEl = overlay;
 		this._progressEl = progress;
 		this._listLoadingEl = listLoading;
+		this._loadingStatusEl = status;
 		this._toggleEl = toggle;
 		this._zoomInEl = zoomIn;
 		this._zoomOutEl = zoomOut;
@@ -2251,6 +2263,18 @@
 
 		if ( this._stage ) {
 			this._stage.classList.toggle( 'is-loading', this._loading );
+		}
+
+		// The non-visual half. Writing the text is what actually ANNOUNCES — a live region reports
+		// a change to its contents, so un-hiding a pre-filled one says nothing (see the region's own
+		// build note in {@see render}). Cleared on the way out so the NEXT load is a change again
+		// rather than a rewrite of identical text, which some screen readers drop.
+		//
+		// Rule I1: the label comes from the plugin's own i18n bag and renders BLANK on a missing
+		// key — never a hardcoded Russian default that would mask a PHP/JS key mismatch. A blank
+		// announcement is the correct degradation here: silence, not a wrong language.
+		if ( this._loadingStatusEl ) {
+			this._loadingStatusEl.textContent = this._loading ? text( this._config, 'loading' ) : '';
 		}
 	};
 
