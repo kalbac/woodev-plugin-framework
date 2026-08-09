@@ -28,7 +28,7 @@ it just worked against a reservation that didn't exist.
 ## Where it came from
 
 The design spec this method was built against
-(`docs-internal/specs/2026-08-01-sp5-pickup-map-rework-design.md` §6) specified the wrong shape
+(`docs-internal/archive/specs/2026-08-01-sp5-pickup-map-rework-design.md` §6) specified the wrong shape
 verbatim. The implementation copied the spec faithfully; **the spec itself was wrong**. Both
 reference implementations get it right and agree with each other exactly:
 
@@ -98,5 +98,5 @@ invisible off a real rig.
 - [[ymaps-copyright-pane-is-trapped-in-a-stacking-context]] — the follow-up (s51): fixing this
   file's `width` bug did NOT, as assumed here, pull the copyright strip out from under the sidebar.
   Margins move the camera only; the strip's visibility needed a separate fix.
-- `docs-internal/specs/2026-08-01-sp5-pickup-map-rework-design.md` §6 — the spec paragraph that
+- `docs-internal/archive/specs/2026-08-01-sp5-pickup-map-rework-design.md` §6 — the spec paragraph that
   specified the wrong shape; correct it there too if that document is ever revised.

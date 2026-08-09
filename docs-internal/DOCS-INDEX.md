@@ -1,16 +1,18 @@
 # Docs Index — Woodev Plugin Framework
 > Navigation hub for AI agents. Read this FIRST in every new session. ~2 min read.
 > `docs-internal/` — internal technical documentation (not published).
-> Last updated: 2026-06-13 (session 13 docs audit).
+> Last updated: 2026-08-09 (s60 docs audit).
 
 ---
 
 ## Session Start (for AI agents)
 
-1. **Read `CURRENT-STATE.md`** — phase status, open bugs, next actions (lean).
-2. **Read `platform-v2-program-tracker.md`** — program-level status (stage map, gate board). Per `platform-v2-execution-protocol.md` §0.
+1. **Read `next-session-prompt.md`** — the prepared entry point for the next session.
+2. **Read `CURRENT-STATE.md`** — live status: phase/track state, open bugs, next actions.
 3. **Read `GOTCHAS.md`** — scan `[topic/*]` tags relevant to the current task.
 4. **Read task-specific docs** — pick from the tables below.
+
+(`platform-v2-program-tracker.md` is a **program-history snapshot**, not a session-start read.)
 
 ## Session End
 
@@ -25,64 +27,58 @@
 
 | File | Purpose |
 |------|---------|
-| `CURRENT-STATE.md` | Phase status, open bugs, next actions — read every session start |
-| `platform-v2-program-tracker.md` | **Live** program status: stage map (S0–S6), S0 phase board, decisions |
-| `platform-v2-execution-protocol.md` | Operating rulebook + resume protocol + authority chain |
+| `next-session-prompt.md` | Prepared entry prompt for the next session — read first |
+| `CURRENT-STATE.md` | Live status: phase/track state, open bugs, next actions — read every session start |
 | `SESSION-LOG.md` | Chronological session history — newest at top (full detail) |
-| `GOTCHAS.md` | Topic-indexed cross-session gotchas (46) → `gotchas/{slug}.md` |
-| `FUTURE-BACKLOG.md` | Deferred features, technical debt, triggered findings (B-x) |
+| `GOTCHAS.md` | Topic-indexed cross-session gotchas (count → see `GOTCHAS.md` header) → `gotchas/{slug}.md` |
 | `AGENT-RULES.md` | Workflow + architecture rules (Rule 0 = clean-break policy / ADR-005) |
 | `DOCS-SCHEMA.md` | Doc format rules, lint checklist, compilation protocol |
+| `platform-v2-execution-protocol.md` | Operating rulebook + resume protocol + authority chain |
 
 ## Architecture & Direction
 
 | File | Purpose |
 |------|---------|
 | `platform-v2-direction-audit-2026-06-03.md` | Direction source of truth — decisions D-1…D-5 |
-| `platform-v2-implementation-spec.md` | Architecture reference — resolver, loader API, platform boundaries |
-| `platform-v2-cleanbreak-plan.md` | S0 clean-break plan — **SUPERSEDED/COMPLETE** (history; tracker is authoritative) |
-| `platform-v2-base-decomposition-subplan.md` | Phase 4 base-decomposition detail |
-| `platform-v2-next-analysis.md` · `platform-v2-strategy-alignment.md` · `platform-v2-roadmap-reconciliation.md` · `platform-v2-dependency-matrix.md` | Earlier planning analysis (still cited) |
+| `platform-v2-implementation-spec.md` | Architecture reference (§5/§9/§10/§12) — resolver, loader API, platform boundaries; sequencing superseded by the direction audit |
+| `platform-v2-program-tracker.md` | **Program-history snapshot** (v2 program S0–S6, rewritten s60) — live status is `CURRENT-STATE.md` |
+| `platform-v2-s3-licensing-webhooks-spec.md` | S3.3 webhooks + Ed25519 signing — §5 is the FROZEN wire contract, pinned by `LicenseCommandContractParityTest` |
 
-## Stage Specs & Plans (record)
+## Specs / Plans / Research (live dirs — what remains after the s60 sweep)
 
 | File | Purpose |
 |------|---------|
-| `platform-v2-s1-shipping-spec.md` (+ `-queue-manifest`, `s1-shipping-spec-planning-brief`) | S1 shipping |
-| `platform-v2-s2-boxpacker-spec.md` · `platform-v2-s3-shipping-rate-packing-spec.md` | S2 box-packer + rate/packing seam |
-| `platform-v2-s3-licensing-need-license-spec.md` (+ `-plan`) | S3.1 need-license |
-| `platform-v2-s3-licensing-ui-spec.md` (+ `-plan`) | S3.2 React license page |
-| `platform-v2-s3-licensing-webhooks-spec.md` (+ `-plan`) | S3.3 webhooks + Ed25519 signing |
+| `specs/2026-06-25-shipping-module-decisions.md` | **Authoritative map of the active shipping SP-track (SP-1…SP-11)** |
+| `specs/2026-08-06-sp5-pickup-selection-mechanism-design.md` (+ `plans/2026-08-06-...-plan.md`) | SP-5 pickup-selection mechanism (current) |
+| `specs/2026-08-09-sp5-viewport-point-accumulation-design.md` (+ `plans/2026-08-09-...-plan.md`) | SP-5 viewport point accumulation (current) |
+
+Shipped-work specs/plans are moved to `archive/specs/` and `archive/plans/`; `research/` and `reviews/` are fully archived (see `archive/README.md`).
 
 ## Architecture Decision Records
 
 | File | Purpose |
 |------|---------|
 | `adr/README.md` | ADR index |
-| `adr/001` … `adr/007` | Bootstrap loader · plugin-type inheritance (002 superseded by 005) · minimal resolver · loader API · **005 clean-break policy** · capability-gated feature seam · React admin stack |
+| `adr/001` … `adr/010` | Bootstrap loader · plugin-type inheritance (002 superseded by 005) · minimal resolver · loader API · **005 clean-break policy** · capability-gated feature seam · React admin stack · conditional-fields operator set · map-provider seam (source, not library) · Yandex Maps JS API 2.1 not 3.0 |
 
-## Migration / Reviews / Wiki / Autodev
+## Migration / Wiki / Autodev
 
 | File | Purpose |
 |------|---------|
 | `migration/edostavka-data-preservation-checklist.md` · `migration/yandex-...` | Per-plugin release-blocking data contracts (enforced at rewrite time) |
-| `reviews/fable5-architecture-review-2026-06-10.md` | Fresh-eyes review → B-1…B-12 triaged into FUTURE-BACKLOG |
-| `reviews/autodev-loop-review-2026-06-11.md` · `reviews/remote-deactivation-ux-findings-2026-06-13.md` | Recent reviews |
 | `wiki/` | Deep-dive topic references (capability-gated seam, echeck-ach audit, v2 extension point) |
-| `autodev-loop-runbook.md` · `autodev-loop-implementation-prompt.md` · `fable5-autodev-orchestrator-prompt.md` · `fable5-architecture-review-prompt.md` | Autodev-loop tooling/prompts |
+| `autodev-loop-runbook.md` | Autodev loop runbook — implemented (`tools/autodev/`, `.autodev/`), dormant since 2026-06-18 |
 
 ## Historical reference (kept in place — still cited by active docs)
 
 | File | Note |
 |------|------|
-| `platform-v2-epic1-spec.md` | Stale bridge-first parts superseded by the implementation-spec; cited by ADRs/analysis |
-| `platform-v2-phase6a-*reference-contract-draft.md` · `platform-v2-phase6a-reference-gap-analysis.md` | Non-production Phase 6A reference drafts |
-| `audit-2026-06-01.md` | Independent audit; all release-blocker findings resolved (2026-06-02) |
-| `platform-v2-migration-contract-template.md` | Phase 6 contract template |
+| `audit-2026-06-01.md` | Independent audit; all release-blocker findings resolved (2026-06-02). Still linked from gotchas — kept in place |
+| `FUTURE-BACKLOG.md` | **Frozen 2026-07-23** — backlog lives on GitHub board №6; kept for B-x history only |
 
-## Archive (`archive/` — passed-gate / completed, no active inbound links)
+## Archive (`archive/`)
 
-`p2-pilot-audit-packet` · `p3-cleanbreak-audit-packet` · `p4-decomposition-audit-packet` · `p6-split-done-audit-packet` · `s1-holistic-integration-review-2026-06-07` · `shipping-pattern-conformance-audit-2026-06-10`
+Passed-gate audits, the completed platform-v2 program docs (plans/specs/prompts), triaged reviews (`archive/reviews/`), and shipped-work `archive/plans/` + `archive/specs/`. Full annotated listing: [archive/README.md](archive/README.md).
 
 ## Public Docs
 

@@ -143,7 +143,7 @@ third-party subscribers — `hooks` is a contract zone in `.autodev/INVARIANTS.m
 - License active + updater identity (EDD download id `821`) continuous.
 
 ## Related
-- `docs-internal/platform-v2-s1-shipping-spec.md` — the S1 architecture this preserves contracts for.
+- `docs-internal/archive/platform-v2-s1-shipping-spec.md` — the S1 architecture this preserves contracts for.
 - `docs-internal/migration/edostavka-data-preservation-checklist.md` — the format mirrored.
 - `.autodev/INVARIANTS.md` — these strings become guard candidates (see `guard-yandex-contracts` task).
 - `plugins-reference/woocommerce-yandex-delivery` — the read-only evidence source.

@@ -98,6 +98,6 @@ registration automatically.
 
 ## Related
 
-- [Woodev\Framework\Woocommerce_Plugin::register_woocommerce_hooks()](../../../woodev/class-woocommerce-plugin.php) (source)
-- [PlatformNeutralBaseHasNoWcMethodTest](../../../tests/unit/PlatformNeutralBaseHasNoWcMethodTest.php) — guard enforcing zero WC-named methods on the base
+- [Woodev\Framework\Woocommerce_Plugin::register_woocommerce_hooks()](../../woodev/class-woocommerce-plugin.php) (source)
+- [PlatformNeutralBaseHasNoWcMethodTest](../../tests/unit/PlatformNeutralBaseHasNoWcMethodTest.php) — guard enforcing zero WC-named methods on the base
 - [audit-2026-06-01.md §L-3](../audit-2026-06-01.md#l-3) — original observation that flagged the empty stub (now resolved by removing the seam)

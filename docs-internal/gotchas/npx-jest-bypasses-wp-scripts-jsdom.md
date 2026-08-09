@@ -59,7 +59,7 @@ npx jest tests/js/pickup-panels.test.js -t "openList"
 ## ✅ Correct
 
 ```bash
-npm run test:js                                                   # all 631
+npm run test:js                                                   # the full suite
 npm run test:js -- tests/js/pickup-geo.test.js                    # one file
 npm run test:js -- tests/js/pickup-panels.test.js -t "openList"   # one file, filtered
 ```
@@ -70,9 +70,10 @@ only the *entry point* that must be `wp-scripts`.
 ## Rule
 
 Quote a JS test result as evidence only if it came from `npm run test:js`. If a JS run
-reports a total other than the current baseline (**631** as of s52), suspect the invocation
-before suspecting the code: a changed TOTAL means suites failed to load, which is an
-environment problem, not a regression.
+reports a total other than the current baseline (which lives in the `CURRENT-STATE.md`
+header — compare against that, not a number frozen in this file; 631 was only the s52
+truth), suspect the invocation before suspecting the code: a changed TOTAL means suites
+failed to load, which is an environment problem, not a regression.
 
 ## Related
 

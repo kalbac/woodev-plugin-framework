@@ -1,6 +1,6 @@
 # RUNBOOK — Autonomous Adversarial Dev Loop (woodev-framework)
 
-> Status: DESIGN (not yet implemented). Authored 2026-06-04.
+> Status: implemented (`tools/autodev/`, `.autodev/`); dormant since 2026-06-18 — current method is subagent-driven + Codex critic. Authored 2026-06-04.
 > Purpose: a continuous, multi-model development loop where a worker model makes
 > changes, a *different* critic model adversarially verifies them, a machine gate
 > closes most commits autonomously, and only irreducible human-judgment decisions
@@ -343,7 +343,7 @@ autonomy is ever switched on.
 
 ## Related
 
-- `docs-internal/platform-v2-cleanbreak-plan.md` — Phase 3 deletions are the first
+- `docs-internal/archive/platform-v2-cleanbreak-plan.md` — Phase 3 deletions are the first
   real workload for this loop.
 - `docs-internal/platform-v2-execution-protocol.md` — operating rules.
 - `CLAUDE.md` → "Backward Compatibility — clean-break policy" — source of the

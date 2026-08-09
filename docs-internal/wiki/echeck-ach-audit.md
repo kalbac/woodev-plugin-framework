@@ -2,6 +2,17 @@
 
 > Audit date: 2026-05-10 (s3). 125+ references in 14 files across payment-gateway/.
 
+> **Note (s60, 2026-08-09):** written before the clean-break policy; every
+> deprecation-cycle mitigation below (keep-as-`@deprecated`, empty-interface-for-one-version,
+> `return false;` gate stubs) is superseded by
+> [ADR-005](../adr/005-platform-v2-clean-break-policy.md) — do **NOT** add shims.
+> Reference counts are as of the audit date; the current count is far lower
+> (~9 code references left, plus i18n catalogs) and Phases 2/4 have largely been
+> executed: the eCheck response interface file is deleted, the eCheck images
+> (`card-echeck.svg`/`.png`, `sample-check.png`) are gone, and the shared frontend
+> JS/CSS files — which still exist as shared assets — no longer contain eCheck code.
+> The WP-bump precondition ("must be preceded by" below) was satisfied in s36.
+
 ## Scope: 14 files, 6 categories
 
 | File | Category | Reference count |
@@ -55,7 +66,7 @@ PAYMENT_TYPE_ECHECK constant
 
 ---
 
-## Removal strategy: 3-phase approach
+## Removal strategy: 5-phase approach
 
 ### Phase 1: Trait extraction (non-breaking, can ship in minor version)
 
@@ -229,5 +240,6 @@ These stay because they're used by credit_card gateways too:
 ---
 
 ## Related
-- [[FUTURE-BACKLOG]] — task #2 "Remove Unused US-Specific Payment Types"
-- [[GOTCHAS]] → [compat/hpos-order-meta-safety]
+- [[../FUTURE-BACKLOG.md]] — task #2 "Remove Unused US-Specific Payment Types"
+- [[../GOTCHAS.md]] — gotcha index
+- [[../gotchas/hpos-order-meta-safety.md]] — HPOS order meta safety

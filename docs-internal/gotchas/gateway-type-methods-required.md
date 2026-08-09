@@ -27,7 +27,7 @@ The pattern, in every case, is the same as the a7da0ea bug:
 | 3 | 123 | `Woodev_Payment_Gateway_Payment_Token::get_check_number()` | **DEAD** (cleanup) | Nowhere — eCheck removed in s3 | Verified with `reportUnmatchedIgnoredErrors: true`: 0 matches. **Safe to delete.** |
 | 4 | 124 | `Invalid array key type Woodev_Payment_Gateway_Payment_Token` | LOW (docblock) | Runtime works; only docblock is imprecise | `@return array\|Woodev_Payment_Gateway_Payment_Token[]` should be `@return array<string, Woodev_Payment_Gateway_Payment_Token>`. |
 | 5 | 127 | `Woodev_Box_Packer_Item::get_product()` | **HIGH** — **FIXED 2026-06-02** | Only in `Woodev_Packer_Item_Implementation` — not in the interface contract | `box-packer/class-packer-separatly.php:38` calls `$item->get_product()` on `Woodev_Box_Packer_Item[]`. **Fix:** added `Woodev_Box_Packer_Item_With_Product` extending `Woodev_Box_Packer_Item` (`woodev/box-packer/interfaces/interface-packer-item-with-product.php`); updated `Woodev_Packer_Item_Implementation` to implement the extended interface; `Woodev_Packer_Separately::pack()` now throws a clear `Woodev_Packer_Exception` when an item does not implement the extended contract. Removed the ignore at `phpstan.neon:127`. Plugins implementing only the base interface continue to work in all other packers; they get a clear exception in `Packer_Separately` instead of a `Call to undefined method` fatal. |
-| 6 | 130-131 | `(Woodev_Shipping\|Woodev_Exportable\|not subtype of Throwable)` (scoped to `interface-shipping-api.php`) | **HIGH** (broken contract) | The 6 types in this interface **do not exist** in the framework | `Woodev_Shipping_API_Rate_Response`, `Woodev_Shipping_API_Order_Response`, `Woodev_Shipping_API_Tracking_Response`, `Woodev_Shipping_API_Pickup_Points_Response`, `Woodev_Exportable_Order`, `Woodev_Shipping_Exception` — see [gotcha: shipping-api-broken-contract](gotchas/shipping/shipping-api-broken-contract.md). 20 errors revealed when ignore removed. |
+| 6 | 130-131 | `(Woodev_Shipping\|Woodev_Exportable\|not subtype of Throwable)` (scoped to `interface-shipping-api.php`) | **HIGH** (broken contract) | The 6 types in this interface **do not exist** in the framework | `Woodev_Shipping_API_Rate_Response`, `Woodev_Shipping_API_Order_Response`, `Woodev_Shipping_API_Tracking_Response`, `Woodev_Shipping_API_Pickup_Points_Response`, `Woodev_Exportable_Order`, `Woodev_Shipping_Exception` — see [gotcha: shipping-api-broken-contract](shipping-api-broken-contract.md). 20 errors revealed when ignore removed. |
 
 ### Required fixes (release-blocking for v2.0)
 
@@ -177,5 +177,5 @@ Before deleting any method:
 3. If references remain but method is obsolete → replace body with `return false/true/null` + `@deprecated`
 
 ## Related
-- [deprecation/deprecated-which-function](gotchas/deprecated-which-function.md) — when to use `_deprecated_function()` vs WC helpers
-- [php/namespace-migration-legacy-psr4](gotchas/namespace-migration-legacy-psr4.md) — legacy naming conventions
+- [deprecation/deprecated-which-function](deprecated-which-function.md) — when to use `_deprecated_function()` vs WC helpers
+- [php/namespace-migration-legacy-psr4](namespace-migration-legacy-psr4.md) — legacy naming conventions

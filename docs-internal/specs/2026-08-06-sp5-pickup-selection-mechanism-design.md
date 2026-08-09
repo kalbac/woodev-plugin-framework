@@ -461,9 +461,9 @@ Beyond ordinary coverage of the new route, seam and states:
 
 ## Related
 
-- `docs-internal/specs/2026-08-01-sp5-pickup-map-rework-design.md` — the map rework this
+- `docs-internal/archive/specs/2026-08-01-sp5-pickup-map-rework-design.md` — the map rework this
   extends (note: its §6 contains a wrong `margin.addArea()` shape; see the gotcha below)
-- `docs-internal/specs/2026-08-03-sp5-pickup-map-visual-rework-design.md` — the visual pass
+- `docs-internal/archive/specs/2026-08-03-sp5-pickup-map-visual-rework-design.md` — the visual pass
   that produced the panels, card and CTA this design drives
 - `docs-internal/gotchas/ymaps-margin-area-needs-explicit-width.md`
 - `docs-internal/gotchas/css-hidden-attribute-needs-explicit-override.md` — relevant to the

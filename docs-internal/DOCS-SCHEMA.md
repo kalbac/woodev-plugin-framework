@@ -1,6 +1,6 @@
 # Docs Schema — Woodev Plugin Framework
 > Format and lint rules for all agent-facing documentation. Read before writing or updating any doc.
-> Applies to ALL agents. Last updated: 2026-05-09.
+> Applies to ALL agents. Last updated: 2026-08-09 (s60 docs audit).
 
 ---
 
@@ -15,6 +15,7 @@
 | `docs-internal/wiki/*.md` | English |
 | `docs-internal/adr/*.md` | English |
 | `CLAUDE.md`, `QWEN.md` | English |
+| `AGENTS.md` | English |
 
 **PHP source code strings** (i18n, admin notices) stay in **Russian**. The language rule applies only to agent-facing documentation.
 
@@ -32,11 +33,17 @@ All expected files in `docs-internal/`:
 | `CURRENT-STATE.md` | Phase status, bugs, next actions | Agent at session end |
 | `SESSION-LOG.md` | Chronological work history | Agent at session end |
 | `GOTCHAS.md` | Topic-indexed gotcha index | Agent (compilation step) |
-| `FUTURE-BACKLOG.md` | Deferred features and future work | Agent when deferring work |
+| `next-session-prompt.md` | Per-session handoff — REPLACED at every session end | Agent writes |
+| `FUTURE-BACKLOG.md` | Deferred features and future work | FROZEN 2026-07-23 — do not append; backlog lives on GitHub board №6 (AGENTS.md → Backlog rule) |
 | `adr/README.md` | ADR index | Agent when creating new ADR |
 | `adr/NNN-slug.md` | Individual ADR | Agent on major decisions |
 | `gotchas/{slug}.md` | Individual gotcha detail | Agent (compilation step) |
 | `wiki/{topic}.md` | Topic deep-dive | Agent (compilation step) |
+| `specs/*.md` | Feature specifications | Agent when specifying a feature |
+| `plans/*.md` | Implementation plans | Agent when planning multi-step work |
+| `research/*.md` | Research notes | Agent during investigations |
+| `reviews/*.md` | Review reports | Agent after review passes |
+| `migration/*.md` | Per-plugin v2 migration docs (incl. data-preservation checklists) | Agent at plugin-rewrite time |
 | `archive/*.md` | Superseded documents | Agent when archiving |
 
 ---
@@ -58,21 +65,7 @@ Rules:
 
 ### Valid Topic Namespaces
 
-| Namespace | Covers |
-|-----------|--------|
-| `[php/*]` | PHP language features, type system |
-| `[wp/*]` | WordPress core APIs, hooks, WP_Query |
-| `[wc/*]` | WooCommerce compatibility, HPOS |
-| `[bootstrap/*]` | Multi-version loading, plugin registration |
-| `[lifecycle/*]` | Install/upgrade routines, version bumps |
-| `[licensing/*]` | License validation, EDD SL integration |
-| `[api/*]` | HTTP API layer, JSON/XML requests |
-| `[settings/*]` | Settings API, WooCommerce settings pages |
-| `[gateway/*]` | Payment gateway base, admin handlers |
-| `[shipping/*]` | Shipping method plugin pattern |
-| `[testing/*]` | Brain Monkey, PHPUnit, wp-env |
-| `[compat/*]` | Backward compatibility, deprecation cycle |
-| `[naming/*]` | Class/method/function naming conventions |
+Topic namespaces are **defined by the section headers of `GOTCHAS.md`** — the index is the source of truth; do not maintain a second list here. (`[js/*]` was added in s59.)
 
 ---
 
@@ -108,7 +101,7 @@ Rules:
 Chronological, **newest at top**. Each entry:
 
 ```markdown
-## s{N} ({YYYY-MM-DD}): {1-line summary}
+## s{N} — YYYY-MM-DD — {summary}
 
 - bullet: what was done (fact, not "I tried to...")
 - bullet: key decision with brief reason
@@ -117,7 +110,8 @@ Chronological, **newest at top**. Each entry:
 ```
 
 Rules:
-- 10–20 lines per session
+- 10–90 lines per session (guideline, not a hard cap — match the session's actual weight)
+- Header form: `## s{N} — YYYY-MM-DD — {summary}` (older entries use other shapes — acceptable historically, do not rewrite them)
 - Date in ISO format: `YYYY-MM-DD`
 - New entries at the **top** of the file
 - Include PHPStan result + commit hash
@@ -197,7 +191,7 @@ Run at session end, **after** writing SESSION-LOG, **before** committing:
 
 ## Sync Rule
 
-`CLAUDE.md`, `QWEN.md`, and `AGENT-RULES.md` must NOT duplicate information that lives in `docs-internal/` files:
+`CLAUDE.md`, `QWEN.md`, `AGENTS.md`, and `AGENT-RULES.md` must NOT duplicate information that lives in `docs-internal/` files:
 - **Sprint status** → only in `CURRENT-STATE.md`. Gateway files point to it.
 - **Gotcha details** → only in `gotchas/*.md`. Gateway files point to `GOTCHAS.md`.
 - **Architecture decisions** → only in `adr/*.md`.
@@ -220,3 +214,5 @@ Before every commit touching docs:
 - [ ] `CURRENT-STATE.md` `Last updated:` date is today
 - [ ] No `[✅]` bugs older than 2 sessions (remove them)
 - [ ] New wiki articles have a `## Related` section
+- [ ] No new items appended to `FUTURE-BACKLOG.md` (frozen — backlog lives on GitHub board №6)
+- [ ] A board card exists and was moved for the session's work (`В работе` → `Готово`)

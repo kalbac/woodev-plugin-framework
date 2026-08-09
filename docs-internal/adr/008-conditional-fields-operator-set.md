@@ -10,7 +10,7 @@ Plugins need to show/hide a settings field based on other fields' values (e.g. s
 
 We deliberately shipped a **minimal** grammar and needed to lock exactly which operators exist and how edge cases evaluate, so that a future operator addition follows a written contract instead of being re-decided (and re-mirrored) from scratch.
 
-Spec: `docs-internal/specs/2026-07-05-conditional-fields-design.md`.
+Spec: `docs-internal/archive/specs/2026-07-05-conditional-fields-design.md`.
 
 ## Decision
 
@@ -53,6 +53,6 @@ These are documented limitations, not bugs: the flat grammar + scalar-list contr
 
 ## Related
 
-- [[../specs/2026-07-05-conditional-fields-design.md]] — full design spec (§5 = the mirror contract)
+- [[../archive/specs/2026-07-05-conditional-fields-design.md]] — full design spec (§5 = the mirror contract)
 - [[005-platform-v2-clean-break-policy.md]] — installed-site data contracts (option keys) preserved; `show_if` adds no new stored data
 - [[../DOCS-INDEX.md]] — docs navigation

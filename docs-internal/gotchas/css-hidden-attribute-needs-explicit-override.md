@@ -75,6 +75,6 @@ search results dropdown) does not have this problem, because that class rule is 
 
 - [[modal-backdrop-opacity-dims-the-whole-dialog]] — same session, same "invisible to jsdom, visible
   in a real browser" root class of defect
-- `docs-internal/specs/2026-08-03-sp5-pickup-map-visual-rework-design.md` — V-4 (busy overlay),
+- `docs-internal/archive/specs/2026-08-03-sp5-pickup-map-visual-rework-design.md` — V-4 (busy overlay),
   V-5 (message card)
 - Issue #160 (found by a Task 17 code-review pass, fixed same session)

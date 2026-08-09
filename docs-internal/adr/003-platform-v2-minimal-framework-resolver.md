@@ -1,10 +1,12 @@
 # ADR-003: Platform v2 Minimal Framework Resolver
-> Status: Accepted
-> Date: 2026-05-29
+
+**Status:** accepted
+
+**Date:** 2026-05-29
 
 ## Context
 
-`PLANS.md` defines the target framework as platform-first: a pure WordPress base plugin class, WooCommerce-specific subclasses, and future EDD support. `platform-v2-strategy-alignment.md` later selected a hybrid roadmap: v2.0 keeps a minimal resolver, while SkyVerge-style versioned namespaces remain a future v2.x/v3 track.
+`PLANS.md` defines the target framework as platform-first: a pure WordPress base plugin class, WooCommerce-specific subclasses, and future EDD support. `archive/platform-v2-strategy-alignment.md` later selected a hybrid roadmap: v2.0 keeps a minimal resolver, while SkyVerge-style versioned namespaces remain a future v2.x/v3 track.
 
 ADR-001 accepted keeping `bootstrap.php` as a broad platform-aware loader. That was a safe spike decision, but it now conflicts with the rewrite-first strategy because it preserves too much legacy entry-file behavior as architecture.
 
@@ -73,7 +75,7 @@ Follow-up requirements:
 
 ## Post-Implementation Verification — P5 minimization pass (2026-06-04)
 
-After the P3 clean break (legacy adapter removed) and P4 base decomposition, `Framework_Resolver` is **641 lines / 15 public + 7 protected members**. Every member maps to an ADR-sanctioned responsibility; the resolver does **none** of the "does not own" list.
+After the P3 clean break (legacy adapter removed) and P4 base decomposition, `Framework_Resolver` is **641 lines / 15 public + 7 protected members** (as of 2026-06; **595 lines / 15 public + 6 protected** as of s60, 2026-08-09). Every member maps to an ADR-sanctioned responsibility; the resolver does **none** of the "does not own" list.
 
 | Resolver member(s) | Owned responsibility (above) | Verdict |
 |---|---|---|
@@ -81,9 +83,9 @@ After the P3 clean break (legacy adapter removed) and P4 base decomposition, `Fr
 | `load_plugins` | Highest-compatible selection + invocation + final `woodev_plugins_loaded` timing | core ✓ |
 | `framework_compare`, `get_framework_version`, `get_plugin_path` | Framework version & path arbitration | core ✓ |
 | `fails_php_requirement`, `fails_wordpress_requirement`, `fails_woocommerce_requirement`, `get_wc_version` | PHP/WP/framework/platform requirement checks | core ✓ |
-| `load_early_capability_classes` | Early platform class availability before callbacks | core ✓ |
+| `load_early_capability_classes` | Early platform class availability before callbacks | core ✓ *(method later removed; early class availability is now handled by the class-map autoloader — see `archive/specs/2026-06-21-plugin-type-autoloader-design.md`)* |
 | `invoke_plugin` | Plugin callback / main-class invocation | core ✓ |
-| `get_incompatible_{framework,php,wp,wc}_plugins`, `get_invalid_loader_definitions`, `has_update_notices` | Incompatible registration tracking | core ✓ |
+| `get_incompatible_framework_plugins`, `get_incompatible_php_version_plugins`, `get_incompatible_wp_version_plugins`, `get_incompatible_wc_version_plugins`, `get_invalid_loader_definitions`, `has_update_notices` | Incompatible registration tracking | core ✓ |
 | `render_update_notices`, `maybe_deactivate_framework_plugins` | Admin notices + deactivation recovery (renderers **injected** via constructor — H2, so the resolver emits no HTML itself) | core ✓ |
 | `get_registered_plugins`, `get_active_plugins` | Registration/active state exposure | core ✓ |
 | `__construct(?callable, ?callable)` | DI of the two notice renderers (decouples admin rendering from the kernel) | core ✓ |
@@ -93,16 +95,16 @@ After the P3 clean break (legacy adapter removed) and P4 base decomposition, `Fr
 **Decisions (P5):**
 
 - **No further extraction.** The real non-core debt was the legacy adapter (`register_legacy_plugin` / `from_legacy_registration` / the `is_payment_gateway`/`load_shipping_method` flag mapping) — removed in P3. The remaining members are all ADR-sanctioned core.
-- **The compatibility-reporting cluster stays (not extracted into a `Compatibility_Report` object).** Extraction would only reorganize internal state *behind the `Woodev_Plugin_Bootstrap` facade that consumes these getters* — it would not shrink the effective public contract, and it adds indirection. Declined per `platform-v2-cleanbreak-plan.md` Step 5.2 ("if extraction adds indirection without clarity, document why the methods stay"). *Optional future internal tidy (not required for "minimal"):* collapse the four parallel `incompatible_*` arrays into one reason-keyed map — DRY only, no behavior change.
+- **The compatibility-reporting cluster stays (not extracted into a `Compatibility_Report` object).** Extraction would only reorganize internal state *behind the `Woodev_Plugin_Bootstrap` facade that consumes these getters* — it would not shrink the effective public contract, and it adds indirection. Declined per `archive/platform-v2-cleanbreak-plan.md` Step 5.2 ("if extraction adds indirection without clarity, document why the methods stay"). *Optional future internal tidy (not required for "minimal"):* collapse the four parallel `incompatible_*` arrays into one reason-keyed map — DRY only, no behavior change.
 - **Bounded exception, recorded:** early WooCommerce HPOS/Blocks feature-compatibility declaration lives in `Woodev_Plugin_Bootstrap::register_loader_definition()` (NOT the resolver). ADR-003 lists HPOS/Blocks as runtime WC behavior the resolver must not own — and it does not. The bootstrap hosts it because `before_woocommerce_init` can fire before the resolver constructs plugin instances, so the early `add_action` must be registered at registration time when only the bootstrap is loaded. It is data-driven (reads loader-definition `supported_features`) and defers `FeaturesUtil` to the hook with a `class_exists` guard — the minimal platform decision that genuinely must live in the early layer.
 
-**Kernel discipline (ADR Consequences "prevent the resolver from becoming a second framework kernel"):** the resolver-boundary negative test (resolver must not own runtime platform behavior) stays green; `composer check` green at 190 tests / 505 assertions.
+**Kernel discipline (ADR Consequences "prevent the resolver from becoming a second framework kernel"):** the resolver-boundary negative test (resolver must not own runtime platform behavior) stays green; `composer check` green at 190 tests / 505 assertions (as of the P5 pass date, 2026-06-04; the unit suite is 1520 tests as of s60, 2026-08-09).
 
 ## Related
 
 - [PLANS.md](../../PLANS.md) — target platform-first architecture and open bootstrap question.
-- [Platform v2 Strategy Alignment](../platform-v2-strategy-alignment.md) — hybrid roadmap and minimal resolver direction.
-- [Platform v2 Next Analysis](../platform-v2-next-analysis.md) — detailed resolver responsibility mapping.
-- [Platform v2 Dependency Matrix](../platform-v2-dependency-matrix.md) — current bootstrap risks and module dependency evidence.
+- [Platform v2 Strategy Alignment](../archive/platform-v2-strategy-alignment.md) — hybrid roadmap and minimal resolver direction.
+- [Platform v2 Next Analysis](../archive/platform-v2-next-analysis.md) — detailed resolver responsibility mapping.
+- [Platform v2 Dependency Matrix](../archive/platform-v2-dependency-matrix.md) — current bootstrap risks and module dependency evidence.
 - [ADR-001](001-bootstrap-platform-aware-loader.md) — previous bootstrap loader decision to supersede or reframe.
-- [Platform v2 Epic 1 Spec](../platform-v2-epic1-spec.md) — existing implementation spec requiring revision.
+- [Platform v2 Epic 1 Spec](../archive/platform-v2-epic1-spec.md) — existing implementation spec requiring revision.

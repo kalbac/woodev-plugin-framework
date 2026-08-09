@@ -30,5 +30,5 @@ Two standing rules keep this true (see `AGENT-RULES.md` Rule 3): (1) every loade
 ## Related
 
 - [[feedback_no_composer_in_shipped_plugins]]
-- Spec: `docs-internal/specs/2026-06-21-plugin-type-autoloader-design.md`
+- Spec: `docs-internal/archive/specs/2026-06-21-plugin-type-autoloader-design.md`
 - Sibling WSOD gotcha: `box-packer-interface-unwired-in-includes.md`

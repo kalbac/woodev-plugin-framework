@@ -2,8 +2,8 @@
 
 | # | Title | Status | Date |
 |---|-------|--------|------|
-| 001 | [Keep Bootstrap as Platform-Aware Loader](001-bootstrap-platform-aware-loader.md) | accepted | 2026-05-28 |
-| 002 | [Use Inheritance for Plugin Type with Metadata Bridge](002-plugin-type-inheritance-with-metadata-bridge.md) | accepted (bridge superseded) | 2026-05-28 |
+| 001 | [Keep Bootstrap as Platform-Aware Loader](001-bootstrap-platform-aware-loader.md) | accepted (superseded for planning by ADR-003) | 2026-05-28 |
+| 002 | [Use Inheritance for Plugin Type with Metadata Bridge](002-plugin-type-inheritance-with-metadata-bridge.md) | accepted (metadata-bridge portion superseded) | 2026-05-28 |
 | 003 | [Platform v2 Minimal Framework Resolver](003-platform-v2-minimal-framework-resolver.md) | accepted | 2026-05-29 |
 | 004 | [Platform v2 Explicit Plugin Loader API](004-platform-v2-plugin-loader-api.md) | accepted | 2026-05-29 |
 | 005 | [Platform v2 Clean-Break Policy](005-platform-v2-clean-break-policy.md) | accepted | 2026-06-03 |

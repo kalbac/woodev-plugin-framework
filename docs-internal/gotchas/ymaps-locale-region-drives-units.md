@@ -66,4 +66,4 @@ places computing it independently drift apart without anything failing.
 
 - [[ymaps-camera-moves-are-async]] — the other "the API does more than it looks like" case on this feature
 - [[../adr/010-yandex-maps-js-api-2-1-not-3-0.md]] — why the project is on 2.1 at all
-- [[../specs/2026-08-01-sp5-pickup-map-rework-design.md]] — D-12
+- [[../archive/specs/2026-08-01-sp5-pickup-map-rework-design.md]] — D-12

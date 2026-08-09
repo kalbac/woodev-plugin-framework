@@ -7,7 +7,7 @@
 ## Context
 
 The SP-5 pickup map is built on Yandex Maps JS API **2.1**, inherited from the reference plugin. While
-reworking the presentation layer (s47, see `specs/2026-08-01-sp5-pickup-map-rework-design.md`) the
+reworking the presentation layer (s47, see `archive/specs/2026-08-01-sp5-pickup-map-rework-design.md`) the
 operator asked whether we should move to **JS API 3.0**, which has existed for some time.
 
 Facts established against Yandex's own documentation on 2026-08-01, not from memory:
@@ -88,7 +88,7 @@ re-litigated each time the style editor is noticed.
 
 ## Related
 
-- [[../specs/2026-08-01-sp5-pickup-map-rework-design.md]] — the rework this decision belongs to
+- [[../archive/specs/2026-08-01-sp5-pickup-map-rework-design.md]] — the rework this decision belongs to
 - [[009-map-provider-seam-source-not-library.md]] — why the provider seam is "where does the map come
   from", not "which library draws it"
 - [[../gotchas/ymaps-camera-moves-are-async.md]]

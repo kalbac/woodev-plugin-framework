@@ -81,5 +81,5 @@ feature behaves like it was never configured, suspect the shape before suspectin
 - [[ymaps-objectmanager-properties-are-plain]] — the same class of silent shape mismatch
 - [[ymaps-html-icon-layout-needs-iconshape]] — found in the same session
 - [[ymaps-camera-moves-are-async]]
-- `docs-internal/specs/2026-08-03-sp5-pickup-map-visual-rework-design.md` — V-6, and why the control
+- `docs-internal/archive/specs/2026-08-03-sp5-pickup-map-visual-rework-design.md` — V-6, and why the control
   is kept rather than replaced

@@ -1,6 +1,8 @@
 # ADR-004: Platform v2 Explicit Plugin Loader API
-> Status: Accepted
-> Date: 2026-05-29
+
+**Status:** accepted
+
+**Date:** 2026-05-29
 
 ## Context
 
@@ -61,8 +63,8 @@ Follow-up requirements:
 ## Related
 
 - [PLANS.md](../../PLANS.md) — target class hierarchy and plugin type open question.
-- [Platform v2 Strategy Alignment](../platform-v2-strategy-alignment.md) — rewrite-first migration and installed-site contract policy.
-- [Platform v2 Next Analysis](../platform-v2-next-analysis.md) — proposed loader shape, metadata limits, and migration checklist.
+- [Platform v2 Strategy Alignment](../archive/platform-v2-strategy-alignment.md) — rewrite-first migration and installed-site contract policy.
+- [Platform v2 Next Analysis](../archive/platform-v2-next-analysis.md) — proposed loader shape, metadata limits, and migration checklist.
 - [ADR-002](002-plugin-type-inheritance-with-metadata-bridge.md) — previous inheritance plus metadata bridge decision to narrow.
 - [ADR-003](003-platform-v2-minimal-framework-resolver.md) — resolver boundary that consumes loader definitions.
-- [Platform v2 Epic 1 Spec](../platform-v2-epic1-spec.md) — existing spec requiring revision before implementation.
+- [Platform v2 Epic 1 Spec](../archive/platform-v2-epic1-spec.md) — existing spec requiring revision before implementation.

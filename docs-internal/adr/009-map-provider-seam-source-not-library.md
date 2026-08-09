@@ -6,7 +6,7 @@
 
 ## Context
 
-The original S1 shipping spec (`platform-v2-s1-shipping-spec.md` §6a, decision **a**) drew
+The original S1 shipping spec (`archive/platform-v2-s1-shipping-spec.md` §6a, decision **a**) drew
 the `Map_Provider` seam along the axis "which library draws the map": a thin PHP descriptor
 registered a JS **adapter** (Leaflet shipping as the framework default, a Yandex adapter
 in the yandex plugin) behind a five-method contract
@@ -39,6 +39,14 @@ public function get_script_handle(): string;
 public function get_settings_fields(): array;
 public function get_js_config( array $context ): array;
 ```
+
+> **Addendum (2026-08-09, s60):** the shipped `interface-map-provider.php` has grown a
+> **sixth** method beyond this five-method contract: `owns_chrome(): bool` — `true` when the
+> provider owns the WHOLE container (a third-party widget/iframe with its own list/search UI,
+> e.g. `Embedded_Map_Provider`); `false` when it draws only the map canvas and the framework
+> renders the list panel, point card, search and filter around it (e.g. `Yandex_Map_Provider`).
+> It narrows this ADR's "a provider owns EVERYTHING drawn inside its own container" claim —
+> see the method's docblock and decision D-3 of the presentation rework.
 
 `enqueue_assets()` and `get_js_adapter_handle()` are gone — enqueueing is
 `Pickup_Handler::enqueue_assets()`'s job (it already registers
@@ -84,8 +92,8 @@ filter wrapped around that accessor's return value rather than around `''`. This
 `new Yandex_Map_Provider()` — and therefore the just-added default registration — IMPOSSIBLE:
 the framework cannot construct the class without plugin-supplied data. The default
 registration in `get_map_provider_registry()` is reverted; the framework registers no
-provider, exactly the position the ORIGINAL registry docblock held before this ADR's Decision
-section (line 50–56 above) briefly reversed it. This addendum exists so that reversal is a
+provider, exactly the position the ORIGINAL registry docblock held before the two-provider
+paragraph in this ADR's Decision section briefly reversed it. This addendum exists so that reversal is a
 recorded correction, not a silently vanished line of reasoning.
 
 `Pickup_Handler` now takes the `Map_Provider` instance directly (not a bare id string) — its
@@ -98,13 +106,15 @@ same convention, but nothing enforces a THIRD provider following it.
 
 ## Consequences
 
-- The original §6a decision **a** in `platform-v2-s1-shipping-spec.md` is superseded by this
+- The original §6a decision **a** in `archive/platform-v2-s1-shipping-spec.md` is superseded by this
   ADR; that spec section is left as written (historical record of the reasoning at the time)
   rather than rewritten, per this project's docs convention that superseded specs are marked,
   not edited into agreement with hindsight.
 - `Yandex_Map_Provider`/`Embedded_Map_Provider` (SP-5 Task 9) are PHP descriptors only; the
   JS provider scripts that actually implement the rendering (clustering, drawer, balloon,
   bounded search) are separate, later SP-5 tasks (13/14) and are not built by this ADR.
+  (Update, s60: Tasks 13/14 have since shipped — `map-provider-yandex.js` /
+  `map-provider-embedded.js` exist under `woodev/shipping-method/assets/js/frontend/`.)
 - A future third "map source" (e.g. a second carrier's embedded widget with a different
   trust model) fits `Embedded_Map_Provider`'s shape directly; a genuinely new SOURCE axis
   member (neither "our own render" nor "embed a widget") would need a new concrete class,
@@ -113,7 +123,8 @@ same convention, but nothing enforces a THIRD provider following it.
 
 ## Related
 
-- `docs-internal/platform-v2-s1-shipping-spec.md` §6a — superseded original decision.
+- `docs-internal/archive/platform-v2-s1-shipping-spec.md` §6a — superseded original decision.
+- [ADR-010](010-yandex-maps-js-api-2-1-not-3-0.md) — constrains the Yandex provider to Yandex Maps JS API 2.1.
 - `woodev/shipping-method/map/interface-map-provider.php`
 - `woodev/shipping-method/map/class-yandex-map-provider.php`
 - `woodev/shipping-method/map/class-embedded-map-provider.php`

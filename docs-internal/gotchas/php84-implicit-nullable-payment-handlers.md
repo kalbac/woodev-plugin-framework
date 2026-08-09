@@ -57,7 +57,7 @@ The framework targets PHP 7.4+ (per `composer.json` `"php": ">=7.4 <9.0"`) and u
 **Do NOT do:** remove the test mask without fixing the underlying code. The mask is hiding a real production warning that will surface in customer sites running PHP 8.4+.
 
 ## Related
-- [php/gateway-type-methods-required](gotchas/gateway-type-methods-required.md) — adjacent base-class contract concerns
+- [php/gateway-type-methods-required](gateway-type-methods-required.md) — adjacent base-class contract concerns
 - [../CURRENT-STATE.md](../CURRENT-STATE.md) — known bugs section should track this
 - [../AGENT-RULES.md](../AGENT-RULES.md) — coding rules that may need an explicit PHP 8.4+ constraint
 - [PHP RFC: Deprecate implicit-nullable parameter types](https://wiki.php.net/rfc/deprecate-implicit-nullable-types) — upstream rationale

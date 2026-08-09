@@ -81,7 +81,7 @@ $this->add_payment_gateway_refund_data( $order, $response ); // empty by default
 ```php
 // Shipping_Method::calculate_rate() — final, called by final calculate_shipping().
 final protected function calculate_rate( array $package ): ?Shipping_Rate {
-    $packed = $this->supports( self::FEATURE_BOX_PACKING ) // capability gate
+    $packed = $this->supports_box_packing()               // capability predicate
         ? $this->pack_package( $package )                 // seam (named method)
         : null;                                           // inert-by-default
     return $this->rate_package( $package, $packed );      // seam (abstract method)
@@ -109,13 +109,13 @@ prices — that is the carrier's tariff decision. Gotcha
 - **Wrap `supports( self::FEATURE_X )` in a named predicate** (`supports_tokenization()`,
   `supports_refunds()`) when the capability is checked in more than one place. One point of
   change, a self-documenting capability surface, and guaranteed methods read as a list of
-  intent-named gates. (The s3 shipping seam uses the raw `supports( self::FEATURE_BOX_PACKING )`
-  at its single call site — acceptable, but a `supports_box_packing()` predicate is the
-  convention if it grows a second caller.)
+  intent-named gates. (Shipping now follows the convention: the capability is wrapped in a
+  `supports_box_packing()` predicate with two call sites in `class-shipping-method.php`.)
 - **Keep the guaranteed method a thin orchestrator.** Each feature's logic goes in its own
   protected method (`pack_package()`, `add_tokenization_form_fields()`), so the hot path is a
   list of gated delegations, not stacked inline blocks. This is what keeps a large class
-  (`class-payment-gateway.php`, ~2378 lines) from becoming a god-method despite its size.
+  (`class-payment-gateway.php`, ~3.5k lines and growing) from becoming a god-method despite
+  its size.
 - **Declare the capability at the right scope.** Per-instance behaviour → gate on the
   gateway/method; behaviour that applies to every gateway in a plugin (e.g. capture-charge
   admin UI) → gate on the plugin (`Woodev_Payment_Gateway_Plugin::supports_capture_charge()`).
@@ -146,6 +146,6 @@ prices — that is the carrier's tariff decision. Gotcha
 ## Related
 - [ADR-006: Capability-Gated Feature Seam](../adr/006-capability-gated-feature-seam.md) — the decision
 - [v2 Extension-Point Pattern](v2-extension-point-pattern.md) — sibling pattern; hook ownership follows the class, no flavour flags on the base
-- `docs-internal/platform-v2-s3-shipping-rate-packing-spec.md` — the shipping box-packing instance
+- `docs-internal/archive/platform-v2-s3-shipping-rate-packing-spec.md` — the shipping box-packing instance
 - [[shipping-rate-no-parcel-sum]] — the "base owns orchestration, not domain decisions" rule, in gotcha form
 - Source exemplars: `woodev/payment-gateway/class-payment-gateway.php`, `class-payment-gateway-direct.php`, `class-payment-gateway-plugin.php`

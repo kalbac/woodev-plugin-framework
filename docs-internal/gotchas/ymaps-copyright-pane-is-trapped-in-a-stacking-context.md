@@ -43,7 +43,8 @@ The operator's cosmetic preference is a full-height panel with the copyright pai
 that would require raising the stacking of an ymaps-owned element — which means selecting a class whose
 name carries the loaded API version (`ymaps-2-1-79-…`), something `pickup.css` deliberately never does
 anywhere else in this feature (a version bump silently breaks the selector, with no warning). Cheap to
-write once, expensive to own across every future ymaps update. Tracked as issue #168; not implemented.
+write once, expensive to own across every future ymaps update. Was tracked as issue #168 — closed in
+s54 (floating sidebar card; see the [[hostile-theme-button-display-none-needs-important]] s54 addendum).
 
 ## Related
 

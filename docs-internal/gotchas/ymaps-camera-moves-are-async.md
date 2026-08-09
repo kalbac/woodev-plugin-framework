@@ -118,3 +118,5 @@ a real key** — a fake one produces a plausible, wrong green.
 
 - [[playwright-mcp-does-not-fire-wc-checkout-ajax]] — the other "the harness lied to you" case on this feature
 - [[mutation-sweep-branch-only-false-confidence]] — same family: a green run that proves less than it appears to
+- [[ymaps-draw-then-move-parks-the-overlay]] — the s52 sequel: `setBounds()` also ISSUES its command late, so
+  a `setCenter()` sent in between is overwritten by the fit; move the camera before drawing

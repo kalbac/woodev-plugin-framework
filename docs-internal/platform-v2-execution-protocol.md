@@ -2,16 +2,16 @@
 
 > The single rulebook every session and every sub-agent follows while executing the Platform v2 program (S0 split → S1 shipping → … → S6 orchestration). Lean and operational by design — it references existing conventions, never duplicates them.
 >
-> **Authority:** direction = `platform-v2-direction-audit-2026-06-03.md` (D-1..D-5). Detailed work = the per-stage plans. Status = `platform-v2-program-tracker.md`. Coding conventions = `CLAUDE.md` / `AGENTS.md`.
+> **Authority:** direction = `platform-v2-direction-audit-2026-06-03.md` (D-1..D-5). Detailed work = the per-stage plans. Live status = `CURRENT-STATE.md` (`platform-v2-program-tracker.md` = program-history snapshot). Coding conventions = `CLAUDE.md` / `AGENTS.md`.
 
 ## 0. Resume protocol (start every session here)
-1. Read `platform-v2-program-tracker.md` → where we are, current front, next action.
-2. Read `CURRENT-STATE.md` (known bugs) + scan `GOTCHAS.md`.
+1. Read `CURRENT-STATE.md` → the live status doc: where we are, known bugs, next action. (`platform-v2-program-tracker.md` is a program-history snapshot, not the live tracker.)
+2. Scan `GOTCHAS.md`.
 3. Read this protocol + the **current stage's detailed plan**.
-4. Continue from the tracker's "Next action". Do not re-plan finished work.
+4. Continue from CURRENT-STATE's next actions. Do not re-plan finished work.
 
 ## 1. Branch & baseline
-- All program work lands on `refactor/platform-v2-clean-break`. **Never commit program work to `main`.**
+- Program work happens on **feature branches off `main`**, squash-merged via PR after **every CI job passes individually**. (`refactor/platform-v2-clean-break` merged 2026-06-04 and is deleted — never target it.)
 - Frozen references: `platform-v2-pivot-baseline` (v2-WIP pivot), `platform-v2-pre-refactor` (pristine pre-v2). Tag each stage gate (`platform-v2-split-done`, …).
 
 ## 2. Clean-break policy (D-2) — the prime directive
@@ -51,7 +51,8 @@ A gate passes only when: (1) `composer check` green; (2) the plan's exit-gate ch
 - Otherwise I run autonomously: routine task execution needs no check-in.
 
 ## Related
-- [platform-v2-program-tracker.md](platform-v2-program-tracker.md) — live status
-- [platform-v2-cleanbreak-plan.md](platform-v2-cleanbreak-plan.md) — S0 detail
-- [platform-v2-base-decomposition-subplan.md](platform-v2-base-decomposition-subplan.md) — S0 Phase 4 detail
+- [CURRENT-STATE.md](CURRENT-STATE.md) — live status
+- [platform-v2-program-tracker.md](platform-v2-program-tracker.md) — program-history snapshot
+- [archive/platform-v2-cleanbreak-plan.md](archive/platform-v2-cleanbreak-plan.md) — S0 detail (archived s60)
+- [archive/platform-v2-base-decomposition-subplan.md](archive/platform-v2-base-decomposition-subplan.md) — S0 Phase 4 detail (archived s60)
 - [platform-v2-direction-audit-2026-06-03.md](platform-v2-direction-audit-2026-06-03.md) — direction authority

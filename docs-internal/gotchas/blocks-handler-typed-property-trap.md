@@ -58,8 +58,8 @@ if ( ! $handler ) {
 ```
 
 ## Related
-- [php/gateway-type-methods-required](gotchas/gateway-type-methods-required.md) — same family of base-class contract lies
-- [php/namespace-migration-legacy-psr4](gotchas/namespace-migration-legacy-psr4.md) — same family of base-class contract lies
+- [php/gateway-type-methods-required](gateway-type-methods-required.md) — same family of base-class contract lies
+- [php/namespace-migration-legacy-psr4](namespace-migration-legacy-psr4.md) — same family of base-class contract lies
 - [../platform-v2-implementation-spec.md](../platform-v2-implementation-spec.md) — section 9.1 (Woodev_Plugin owner responsibilities) and 9.2 (Woocommerce_Plugin owner responsibilities)
 
 ## Resolution

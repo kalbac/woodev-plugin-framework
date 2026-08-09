@@ -9,7 +9,7 @@
 
 This checklist enumerates the installed-site data contracts that the **eventual production
 edostavka rewrite** must preserve. It is derived from the migration-contract template
-(`docs-internal/platform-v2-migration-contract-template.md`) and the edostavka installed-site
+(`docs-internal/archive/platform-v2-migration-contract-template.md`) and the edostavka installed-site
 contract data captured during Task P2.
 
 **Every item below must be preserved by the eventual rewrite — NOT enforced by this fixture.**
@@ -127,7 +127,7 @@ covered by the pilot fixture:
 
 ## Related
 
-- [Platform v2 Migration Contract Template](../platform-v2-migration-contract-template.md) — the template this checklist is filled from.
+- [Platform v2 Migration Contract Template](../archive/platform-v2-migration-contract-template.md) — the template this checklist is filled from.
 - [Platform v2 Implementation Spec](../platform-v2-implementation-spec.md) — Phase 6 gates and load-path source of truth.
 - `tests/_fixtures/woodev-edostavka-pilot-plugin/` — the edostavka-shaped pilot fixture this checklist accompanies.
 - `tests/unit/EdostavkaPilotFixtureTest.php` — validates the new load path and the two asserted contract strings.

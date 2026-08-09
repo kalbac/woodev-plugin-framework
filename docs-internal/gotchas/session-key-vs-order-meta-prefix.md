@@ -37,7 +37,7 @@ Conflating them orphans live checkout session selections and/or live order meta 
 installed site at plugin-migration time.
 
 ## Related
-- Spec corrected: `docs-internal/platform-v2-s1-shipping-spec.md` §4.1.v (session-only)
+- Spec corrected: `docs-internal/archive/platform-v2-s1-shipping-spec.md` §4.1.v (session-only)
 - Contract source of truth: `docs-internal/migration/yandex-data-preservation-checklist.md`
   ("Chosen-point session key" row)
 - `.autodev/INVARIANTS.md` — `order_session_meta` zone

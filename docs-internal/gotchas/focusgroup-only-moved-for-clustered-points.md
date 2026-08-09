@@ -86,7 +86,7 @@ accidental byproduct of incomplete test data.
 
 ## Related
 
-- `docs-internal/specs/2026-08-03-sp5-pickup-map-visual-rework-design.md` — V-10
+- `docs-internal/archive/specs/2026-08-03-sp5-pickup-map-visual-rework-design.md` — V-10
 - [[ymaps-camera-moves-are-async]] — the original problem `focusGroup()`/`_focusSeq` solve
 - [[ymaps-html-icon-layout-needs-iconshape]] — same session, same "click behaviour only verified by
   clicking a real marker" lesson

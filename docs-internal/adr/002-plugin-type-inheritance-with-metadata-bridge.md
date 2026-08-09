@@ -8,7 +8,7 @@
 
 ## Context
 
-`docs-internal/platform-v2-dependency-matrix.md` identifies plugin type declaration as a P0 spike item because loader behavior changes depending on whether payment, shipping, WooCommerce, or future platform classes must be available before plugin initialization. `PLANS.md` section 2 defines the long-term class hierarchy around platform-specific inheritance, while section 5 calls the current `is_payment_gateway` flag inconvenient and unstable.
+`docs-internal/archive/platform-v2-dependency-matrix.md` identifies plugin type declaration as a P0 spike item because loader behavior changes depending on whether payment, shipping, WooCommerce, or future platform classes must be available before plugin initialization. `PLANS.md` section 2 defines the long-term class hierarchy around platform-specific inheritance, while section 5 calls the current `is_payment_gateway` flag inconvenient and unstable.
 
 The top production risks are compatibility failures in about 12 existing production plugins whose entry files may still pass `is_payment_gateway`, `minimum_wc_version`, or `load_shipping_method` to `register_plugin()`. Removing metadata too early can prevent `Woodev_Payment_Gateway_Plugin` or shipping classes from loading before child plugin declarations, causing fatal errors during activation.
 
@@ -41,6 +41,8 @@ Negative:
 
 ## Related
 
-- [Platform v2 Dependency Matrix](../platform-v2-dependency-matrix.md) — P0 plugin type spike, metadata vs inheritance tradeoff, and top production risks.
+- [ADR-004](004-platform-v2-plugin-loader-api.md) — explicit loader definitions; narrowed this ADR (inheritance stays the runtime source of truth, the metadata bridge must not grow into a plugin type API).
+- [ADR-005](005-platform-v2-clean-break-policy.md) — clean-break policy; superseded the metadata-bridge portion of this ADR.
+- [Platform v2 Dependency Matrix](../archive/platform-v2-dependency-matrix.md) — P0 plugin type spike, metadata vs inheritance tradeoff, and top production risks.
 - [PLANS.md](../../PLANS.md) — sections 2 and 5 define the target class hierarchy and plugin type open question.
 - [FUTURE-BACKLOG.md](../FUTURE-BACKLOG.md) — framework decoupling backlog and deferred post-v2 work.

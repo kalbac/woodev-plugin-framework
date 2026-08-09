@@ -282,5 +282,5 @@ What it found that was real, and what changed as a result:
   (why §3.2's invariant is pinned by a test) · gotcha
   `a-per-cycle-memo-is-not-in-flight-deduplication` (the s57 ABA hole §3.3's generation guard is
   modelled on)
-- `docs-internal/specs/2026-08-01-sp5-pickup-map-rework-design.md` — the `dataSource` inversion this
+- `docs-internal/archive/specs/2026-08-01-sp5-pickup-map-rework-design.md` — the `dataSource` inversion this
   builds on

@@ -51,7 +51,7 @@ This is the current state. It hides 20 type errors in the framework's own shippi
 ```
 
 ## Related
-- [php/gateway-type-methods-required](gotchas/gateway-type-methods-required.md) — same root cause (blanket-ignore masking), broader scope
+- [php/gateway-type-methods-required](gateway-type-methods-required.md) — same root cause (blanket-ignore masking), broader scope
 - [shipping/multiversion-early-class-guards](../gotchas/multiversion-early-class-guards.md) — class-availability guards (separate concern)
 - [../platform-v2-implementation-spec.md](../platform-v2-implementation-spec.md) — section 9.3 names Shipping as WC-only specialized module
 - [../FUTURE-BACKLOG.md](../FUTURE-BACKLOG.md) — "Shipping Module Boilerplate" (deferred post-v2.0, but the contract is a v2.0 concern)

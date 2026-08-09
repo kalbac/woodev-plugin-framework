@@ -66,8 +66,8 @@ Supporting conventions (normative for new code that adopts the pattern):
 **Harder / watch-outs:**
 - A guaranteed method can accrete feature branches over time; the thin-orchestrator
   convention is load-bearing — without it the method drifts toward a god-method (the known
-  `class-payment-gateway.php` size, ~2378 lines, is tolerable precisely because each branch
-  delegates).
+  `class-payment-gateway.php` size, ~3.5k lines and growing, is tolerable precisely because
+  each branch delegates).
 - The pattern is a default, not a law: forcing it onto standalone subsystems with their own
   lifecycle (REST routes, cron, webhooks) is worse than a dedicated class + registration.
   Judgement is required; the wiki lists the "when NOT to use it" boundaries.
@@ -79,5 +79,5 @@ Supporting conventions (normative for new code that adopts the pattern):
 
 - [wiki/capability-gated-feature-seam.md](../wiki/capability-gated-feature-seam.md) — the pattern, examples, conventions, boundaries
 - [ADR-005: Platform v2 Clean-Break Policy](005-platform-v2-clean-break-policy.md) — internal APIs (incl. these seams) are free to break on v2
-- `docs-internal/platform-v2-s3-shipping-rate-packing-spec.md` — the s3 shipping instance that made the pattern concrete
+- `docs-internal/archive/platform-v2-s3-shipping-rate-packing-spec.md` — the s3 shipping instance that made the pattern concrete
 - [[shipping-rate-no-parcel-sum]] — the "base owns orchestration, not domain decisions" invariant in gotcha form

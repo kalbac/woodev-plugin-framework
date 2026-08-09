@@ -17,7 +17,7 @@ Inputs read in full:
 - `PLANS.md` (the original brainstorm/intent draft)
 - `docs-internal/CURRENT-STATE.md`, `docs-internal/SESSION-LOG.md`
 - `docs-internal/platform-v2-implementation-spec.md`
-- ADRs 001–004, `platform-v2-strategy-alignment.md`, `platform-v2-next-analysis.md`, `platform-v2-epic1-spec.md`, `platform-v2-dependency-matrix.md`, `platform-v2-roadmap-reconciliation.md`, `platform-v2-migration-contract-template.md`
+- ADRs 001–004, `archive/platform-v2-strategy-alignment.md`, `archive/platform-v2-next-analysis.md`, `archive/platform-v2-epic1-spec.md`, `archive/platform-v2-dependency-matrix.md`, `archive/platform-v2-roadmap-reconciliation.md`, `archive/platform-v2-migration-contract-template.md`
 - The actual current source (`bootstrap.php`, `class-framework-resolver.php`, `class-plugin.php`, `class-woocommerce-plugin.php`, shipping-method/, helper + alias files)
 - The reference shipping plugins under `plugins-reference/`
 
@@ -98,7 +98,7 @@ Under the operator's clean-break decision (§5), most of this is **debt to be de
 
 ### 4.3 Premature paperwork: migration contracts before validation
 
-Phase 6A produced a migration-contract **template** plus **two reference-contract drafts** (`edostavka`, `yandex`) — substantial documentation — *before the new architecture was ever exercised by a real plugin.* `platform-v2-roadmap-reconciliation.md` §4 admits it bluntly:
+Phase 6A produced a migration-contract **template** plus **two reference-contract drafts** (`edostavka`, `yandex`) — substantial documentation — *before the new architecture was ever exercised by a real plugin.* `archive/platform-v2-roadmap-reconciliation.md` §4 admits it bluntly:
 
 > "The new resolver + explicit loader + `Woocommerce_Plugin` inheritance path has only ever been exercised by synthetic inline unit fixtures, never by a realistic plugin shape… both sandbox copies still consume the old framework… Phase 6A produced more migration-contract paperwork than the methodology validation required."
 
@@ -156,7 +156,7 @@ A second round resolved the §9 open questions:
 **PRESERVE (release-blocking — these touch live user sites):**
 option keys & settings arrays · license key option names + activation state + instance IDs + updater state · WC payment gateway IDs · WC shipping method IDs + instance setting keys · public action/filter names · scheduled cron hooks + recurrence + payload shape · custom DB tables/schemas · REST route namespaces · AJAX action names · admin page slugs · log source names · background-job IDs · email IDs / note sources / system-status rows.
 
-The existing `platform-v2-migration-contract-template.md` is the **right checklist for this** — but reframed: it is a *data-preservation checklist applied at the moment a specific plugin is rewritten*, **not** an upfront paper artifact produced before the architecture is proven.
+The existing `archive/platform-v2-migration-contract-template.md` is the **right checklist for this** — but reframed: it is a *data-preservation checklist applied at the moment a specific plugin is rewritten*, **not** an upfront paper artifact produced before the architecture is proven.
 
 **DELETE / STOP MAINTAINING (internal-API back-compat — debt under D-2):**
 global `class_alias` shim files for internal classes · `_deprecated_function()` shims for moved/renamed internal methods + their shim-specific tests · the temporary legacy adapter (`register_legacy_plugin()`) and legacy positional `register_plugin()` path · the "early capabilities" metadata pattern if it only exists to map the legacy `is_payment_gateway`/`load_shipping_method` flags (inheritance is the truth — validate the loaded class instead).
@@ -235,7 +235,7 @@ The **`payment-gateway` module is the architectural reference** (mature: handler
 - This document **overrides the execution sequencing** of `platform-v2-implementation-spec.md` where they conflict — specifically: Phase 6 (migration contracts) is demoted from "blocking gate / paper artifact" to "data-preservation checklist at rewrite time"; the temporary legacy adapter (spec §8) is slated for deletion under D-2 rather than maintained; the "early capabilities" metadata (spec §7.4) is to be re-justified or dropped.
 - The spec's **architecture** sections (§5, §9 platform boundaries, §10 early class availability, §12 fixtures) remain valid and are the reference for "finish the split."
 - ADRs 001–004 remain valid as recorded decisions; ADR-002's "deprecated metadata bridge for ≥1 minor release" is **overruled by D-2** (clean break) and should get a short "superseded by 2026-06-03 clean-break decision" note.
-- `platform-v2-roadmap-reconciliation.md` §7 already pointed the right way ("validate against a realistic plugin shape, not more paperwork") — this document agrees and makes it the §6.4 validation gate.
+- `archive/platform-v2-roadmap-reconciliation.md` §7 already pointed the right way ("validate against a realistic plugin shape, not more paperwork") — this document agrees and makes it the §6.4 validation gate.
 
 ---
 
@@ -244,7 +244,7 @@ The **`payment-gateway` module is the architectural reference** (mature: handler
 - **O-1 — RESOLVED (D-3):** decompose the god-object inside v2.0, pragmatically (clearest handlers + DI as far as WP allows; no DI container). See §6.1.3.
 - **O-2 — RESOLVED (D-4):** keep the thin global rendezvous; it is structurally required by per-plugin vendoring, not a removable layer. See §6.6.
 - **O-3 — RESOLVED (D-5):** validation pilot = `woocommerce-edostavka`; `yandex` is the second pilot at §7. Both migrate eventually.
-- **O-4 (React admin UI — `PLANS.md` §6):** confirmed post-v2.0; uses WordPress/WooCommerce built-in React, not a separate ReactJS app. No action in v2.0.
+- **O-4 (React admin UI — `PLANS.md` §6):** confirmed post-v2.0; uses WordPress/WooCommerce built-in React, not a separate ReactJS app. No action in v2.0. *(Superseded s31-s41: shipped (ADR-007).)*
 - **O-5 (NEW — distribution model):** the only change that would let `bootstrap.php` and the whole version-arbitration layer disappear is moving from per-plugin vendored framework copies to **one shared framework install** (mu-plugin or shared Composer dependency). That changes how plugins are delivered to customers (today each plugin is self-contained in the store). Big simplification, big distribution change — **operator's call, not assumed.** Likely stays per-plugin, but worth a conscious decision before locking the entry-point design.
 
 ---
@@ -271,6 +271,6 @@ The **`payment-gateway` module is the architectural reference** (mature: handler
 
 - [PLANS.md](../PLANS.md) — original intent draft (priorities + §5 open questions)
 - [platform-v2-implementation-spec.md](platform-v2-implementation-spec.md) — architecture valid; sequencing overridden here (§8)
-- [platform-v2-roadmap-reconciliation.md](platform-v2-roadmap-reconciliation.md) — §7 already recommended real-plugin validation
-- [platform-v2-migration-contract-template.md](platform-v2-migration-contract-template.md) — keep as the §6.2 data-preservation checklist
+- [archive/platform-v2-roadmap-reconciliation.md](archive/platform-v2-roadmap-reconciliation.md) — §7 already recommended real-plugin validation
+- [archive/platform-v2-migration-contract-template.md](archive/platform-v2-migration-contract-template.md) — keep as the §6.2 data-preservation checklist
 - [CURRENT-STATE.md](CURRENT-STATE.md) — to be updated with the §5 decisions and §6.5 sequencing

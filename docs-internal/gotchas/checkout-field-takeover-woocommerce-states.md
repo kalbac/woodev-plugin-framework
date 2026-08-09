@@ -56,5 +56,5 @@ on `updated_checkout`.
 ## Related
 
 - [[classmap-autoload-breaks-class-exists-once-guard]] — another "only a real boot catches it" case.
-- Design/impl: `docs-internal/specs|plans/2026-07-06-checkout-field-layer-*`; `Checkout_Handler::inject_states()`,
+- Design/impl: `docs-internal/archive/specs|plans/2026-07-06-checkout-field-layer-*`; `Checkout_Handler::inject_states()`,
   `assets/js/frontend/checkout-field-classic.js` (`applyTakeover`/`ensureText`/`initSuggest`/`updated_checkout`).

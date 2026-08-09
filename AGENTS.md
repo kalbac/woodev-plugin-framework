@@ -1,18 +1,19 @@
 # AGENTS.md — Woodev Plugin Framework
-> For ALL AI agents (Claude, Gemini, Cursor, GPT, etc.). Keep updated. Last updated: 2026-05-09 (s0).
-> **Claude Code agents:** read `CLAUDE.md` instead — it extends this file with Serena MCP, Context7, and Supermemory rules.
+> For ALL AI agents (Claude, Gemini, Cursor, GPT, etc.). Keep updated. Last updated: 2026-08-09 (s60 docs audit).
+> **Claude Code agents:** read `CLAUDE.md` instead — it extends this file with Serena MCP, Context7, and a detailed architecture reference.
 
 ---
 
-## ⚡ Session Start (3 steps — mandatory)
+## ⚡ Session Start (mandatory — this is the CANONICAL list; CLAUDE.md and AGENT-RULES.md point here)
 
-1. **Read `docs-internal/CURRENT-STATE.md`** — phase status, known bugs, next actions (~1 min)
-2. **Scan `docs-internal/GOTCHAS.md`** — index of atomic gotcha files; scan `[topic/*]` tags relevant to your task (~1 min). Click through to detail files when needed.
-3. **Read `docs-internal/DOCS-INDEX.md`** — navigation hub, find task-specific doc (~1 min)
+1. **Read `docs-internal/next-session-prompt.md`** — the per-session handoff: what the last session left for you, plus known traps (~1 min)
+2. **Read `docs-internal/CURRENT-STATE.md`** — phase status, known bugs, next actions (~1 min)
+3. **Scan `docs-internal/GOTCHAS.md`** — index of atomic gotcha files; scan `[topic/*]` tags relevant to your task (~1 min). Click through to detail files when needed.
+4. **Area-specific docs as needed** — relevant `docs-internal/adr/` and `docs-internal/wiki/` files (navigation hub: `docs-internal/DOCS-INDEX.md`)
 
 ---
 
-## ✅ Session End (mandatory)
+## ✅ Session End (mandatory — CANONICAL list)
 
 1. Update `docs-internal/CURRENT-STATE.md` — phase table, bugs, next actions
 2. Append 10–20 line summary to `docs-internal/SESSION-LOG.md` — what was done, key decisions
@@ -21,7 +22,9 @@
    - Add index line to `docs-internal/GOTCHAS.md` under the correct `[topic/*]` section
    - Update `docs-internal/wiki/*.md` if a pattern was clarified
    - Read `docs-internal/DOCS-SCHEMA.md` for exact format rules
-4. Commit with Conventional Commits format (`feat:`, `fix:`, `docs:`, etc.)
+4. **Audit the board** — move the session's cards (`В работе` → `Готово`), close cards resolved by unrelated work, file cards for anything that surfaced but was never written down (see Backlog rule below)
+5. **Update `docs-internal/next-session-prompt.md`** — replace it with the handoff for the next session (write it for someone with zero context)
+6. Commit with Conventional Commits format (`feat:`, `fix:`, `docs:`, etc.)
 
 ---
 
@@ -107,11 +110,17 @@ woodev_framework/
 │   ├── utilities.md, compatibility.md, handlers.md
 │   └── overrides/home.html, assets/stylesheets/extra.css
 ├── docs-internal/                   # Internal docs → AI agents only
+│   ├── next-session-prompt.md       # Per-session handoff — every session starts here
 │   ├── CURRENT-STATE.md, SESSION-LOG.md, GOTCHAS.md
-│   ├── AGENT-RULES.md, DOCS-INDEX.md, DOCS-SCHEMA.md, FUTURE-BACKLOG.md
+│   ├── AGENT-RULES.md, DOCS-INDEX.md, DOCS-SCHEMA.md, FUTURE-BACKLOG.md (frozen)
 │   ├── gotchas/                     # Atomic gotcha detail files
 │   ├── adr/                         # Architecture Decision Records
 │   ├── wiki/                        # Compiled topic references
+│   ├── specs/                       # Feature specifications
+│   ├── plans/                       # Implementation plans
+│   ├── research/                    # Research notes
+│   ├── reviews/                     # Review reports
+│   ├── migration/                   # Per-plugin v2 migration docs
 │   └── archive/                     # Resolved historical docs
 ├── woodev/                          # Framework source code
 │   ├── bootstrap.php                # Singleton bootstrap loader
@@ -132,13 +141,16 @@ woodev_framework/
 ├── tests/
 │   ├── unit/                        # Brain Monkey + Mockery (no WP needed)
 │   ├── integration/                 # WP_UnitTestCase (wp-env)
-│   └── _fixtures/                   # 3 test plugins
+│   └── _fixtures/                   # 7 test plugins
 ├── .ai/                             # AI agents and skills
 │   ├── agents/                      # 5 sub-agents
 │   ├── skills/                      # 5 skill directories
 │   └── QUICK-REFERENCE.md
-└── .github/workflows/               # CI: docs.yml, markdown-lint.yml, release
+└── .github/workflows/               # CI: ci.yml, dependabot-auto-merge.yml, docs.yml,
+                                     #     integration-tests.yml, markdown-lint.yml, pr-triage.yml
 ```
+
+CI workflows: `ci.yml` (jobs: `unit-tests`, `test-js` — jest, added s55 PR #184, `secrets` — gitleaks, `assets` — build parity, `release`), `dependabot-auto-merge.yml`, `docs.yml`, `integration-tests.yml`, `markdown-lint.yml`, `pr-triage.yml`.
 
 ---
 
@@ -180,13 +192,18 @@ composer test:integration   # integration tests (requires wp-env)
 # Run single test file
 ./vendor/bin/phpunit tests/unit/BootstrapTest.php
 
+# JS tests + build
+npm run test:js -- --roots "<rootDir>/tests/js"   # jest (800 tests) — CI gate (test-js job)
+npm run build                                     # build the 5 React bundles (CI has an assets-parity job)
+
 # Docs
 mkdocs serve                # preview public docs locally
 npx markdownlint-cli2 "docs/**/*.md"  # lint public docs
 ```
 
+- Never run `npx jest` directly — it loses the wp-scripts jsdom environment and scans agent worktrees inside the repo (gotchas `npx-jest-bypasses-wp-scripts-jsdom`, `jest-scans-agent-worktrees-inside-the-repo`)
 - Integration tests require `WP_TESTS_DIR` env var or `npx wp-env start`
-- `composer check` is the CI gate — all three checks must pass before merge
+- **Merge gate:** every CI job green individually (incl. `test-js` and `assets`), each with state CLEAN — not just "`composer check` passes". `main` has no required-check gate, so verify each job yourself before merging.
 
 ---
 
@@ -208,9 +225,12 @@ npx markdownlint-cli2 "docs/**/*.md"  # lint public docs
 A task is DONE only when:
 1. Code is written (type declarations, docblocks, backward compat preserved)
 2. `composer check` passes without errors (phpcs + phpstan + unit tests)
-3. New/modified behavior is covered by tests
-4. `docs-internal/CURRENT-STATE.md` is updated
-5. `git commit` is made with Conventional Commits format
+3. Jest is green: `npm run test:js -- --roots "<rootDir>/tests/js"` (never `npx jest`)
+4. New/modified behavior is covered by tests
+5. `docs-internal/CURRENT-STATE.md` is updated
+6. A summary entry is appended to `docs-internal/SESSION-LOG.md`
+7. The board card is moved to `Готово` (see Backlog rule)
+8. `git commit` is made with Conventional Commits format
 
 ---
 
@@ -220,8 +240,8 @@ Full details + code examples in `docs-internal/gotchas/`. Scan `docs-internal/GO
 
 **Naming:** `woodev` (single d), `Woodev` prefix — `wooddev` is always wrong.
 
-**Backward compatibility — clean-break policy (v2.0 branch, D-2 2026-06-03):**
-- **Internal code is FREE TO BREAK** on `refactor/platform-v2-clean-break` — class/method names, registration shape, namespacing. Do NOT add `@deprecated`/`class_alias`/`_deprecated_function` shims for moved internal APIs; delete existing ones.
+**Backward compatibility — clean-break policy (v2 line, D-2 2026-06-03; the `refactor/platform-v2-clean-break` branch merged to `main` 2026-06-04):**
+- **Internal code is FREE TO BREAK** on the v2 line (`main`) — class/method names, registration shape, namespacing. Do NOT add `@deprecated`/`class_alias`/`_deprecated_function` shims for moved internal APIs; delete existing ones.
 - **Installed-site data contracts are RELEASE-BLOCKING** — option keys, license/instance IDs, gateway/shipping method IDs, hook names, cron, REST namespaces, AJAX actions, admin slugs, meta keys. Preserve byte-for-byte (enforced per-plugin at rewrite time).
 - Full policy: `CLAUDE.md` → Backward Compatibility; operating rules: `docs-internal/platform-v2-execution-protocol.md`.
 - Legacy namespace: `Woodev_*` classes; new code: `Woodev\Framework\*` PSR-4 (include-based, not Composer autoload at runtime).

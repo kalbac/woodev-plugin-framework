@@ -50,6 +50,6 @@ public function is_license_valid() {
 `is_license_required()` is the anti-pirate chokepoint: it reads no local option and is never influenced by `is_need_license()`. If signing (S3.1 spec §4) later makes `is_license_required()` read a **verified** server claim, the trap gets sharper — a developer "simplifying" by gating enforcement on the local `is_need_license()` would hand pirates free feature unlock. The unit test `LicenseNeedLicenseFlagTest::test_anti_pirate_flag_does_not_validate_license` locks this invariant; do not weaken it.
 
 ## Related
-- Spec: `docs-internal/platform-v2-s3-licensing-need-license-spec.md` (§2 two-layer model, §3.3, §6 anti-pirate)
+- Spec: `docs-internal/archive/platform-v2-s3-licensing-need-license-spec.md` (§2 two-layer model, §3.3, §6 anti-pirate)
 - [[contract-string-not-derivable]] — another "looks derivable but isn't" licensing/shipping trap
 - woodev-core server half: `D:\Projects\woodev_theme\docs\superpowers\specs\2026-06-10-woodev-core-license-authority-signing-spec.md`

@@ -12,7 +12,7 @@ The 2026-06-03 direction audit (§4.2) identified this contradiction as the domi
 
 ## Decision
 
-Adopt a **clean code break with data preservation**, on a dedicated branch (`refactor/platform-v2-clean-break`):
+Adopt a **clean code break with data preservation**, on a dedicated branch (`refactor/platform-v2-clean-break`) (branch merged into `main` 2026-06-04; the policy applies to the v2 line on `main`):
 
 - **Internal code is free to break:** class names, method signatures, the plugin entry/registration shape, namespacing, file layout. Do **not** add `@deprecated` shims, `class_alias` files, or `_deprecated_function()` wrappers for moved/renamed internal APIs. Delete the existing ones.
 - **Installed-site data contracts are release-blocking and must never change:** option keys & settings arrays, license key option names + activation state + instance IDs, updater identity, WC payment-gateway IDs, WC shipping-method IDs + instance setting keys, public action/filter hook names, scheduled cron hooks + recurrence + payload shape, custom DB tables/schemas, REST route namespaces, AJAX action names, admin page slugs, log source names, background-job IDs, order/session meta keys.

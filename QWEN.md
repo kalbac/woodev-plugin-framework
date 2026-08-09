@@ -7,7 +7,7 @@
 - **Type:** PHP Library / Framework
 - **License:** GPL-3.0-or-later
 - **PHP:** 7.4–8.x (platform target: 8.1)
-- **Minimum WordPress:** 6.3
+- **Minimum WordPress:** 6.6
 - **Minimum WooCommerce:** 7.0
 - **Text Domain:** `woodev-plugin-framework`
 - **Namespace:** `Woodev\Framework\*` (PSR-4), legacy code without namespace
@@ -158,32 +158,25 @@ After starting wp-env:
 - **Developer Docs:** English
 - **User Docs:** Russian
 
-### Backward Compatibility (CRITICAL)
+### Backward Compatibility (CRITICAL) — clean-break policy
 
-This framework is used by 10+ dependent plugins. Breaking changes affect all of them.
+> Policy set 2026-06-03 (ADR-005). The old "deprecation cycle for everything" rule is
+> superseded on the v2 line (`main`): this is effectively a new framework and dependent
+> plugins are rewritten onto it.
 
 **Rules:**
 
-- **NEVER** delete or rename public methods/classes without deprecation cycle
-- **ALWAYS** use `@deprecated` annotation for deprecated code
-- **ALWAYS** call `_deprecated_function()` in deprecated methods
-- Deprecation cycle: minimum one full version before removal
-- Breaking changes require major version bump (semver)
+- **Internal code — FREE TO BREAK:** class names, method signatures, entry/registration
+  shape, namespacing, file layout. Do **NOT** add `@deprecated` shims, `class_alias`
+  files, or `_deprecated_function()` wrappers for moved/renamed internal APIs.
+- **Installed-site data contracts — RELEASE-BLOCKING, never break:** option keys,
+  license/instance IDs, updater identity, gateway/shipping-method IDs + instance setting
+  keys, public hook names, cron hooks, DB tables, REST namespaces, AJAX actions, admin
+  slugs, log source names, background-job IDs, order/session meta keys. Preserve
+  byte-for-byte (enforced per plugin via
+  `docs-internal/migration/<plugin>-data-preservation-checklist.md` at rewrite time).
 
-**Example:**
-
-```php
-/**
- * Old method name.
- *
- * @deprecated 2.0.0 Use new_method_name() instead.
- * @see self::new_method_name()
- */
-public function old_method_name(): void {
-    _deprecated_function( __METHOD__, '2.0.0', __CLASS__ . '::new_method_name()' );
-    $this->new_method_name();
-}
-```
+See [docs-internal/adr/005-platform-v2-clean-break-policy.md](docs-internal/adr/005-platform-v2-clean-break-policy.md) for the full policy.
 
 ### Git Workflow
 
@@ -245,11 +238,13 @@ No manual release steps needed!
 
 ### Bootstrap & Multi-version Loading
 
-`Woodev_Plugin_Bootstrap` (singleton) is the entry point in `woodev/bootstrap.php`. Each plugin calls `register_plugin()` on the shared bootstrap instance. On `plugins_loaded`, the bootstrap:
+`Woodev_Plugin_Bootstrap` (singleton) is the entry point in `woodev/bootstrap.php` — never instantiate it directly. v2 plugins register via **`Woodev_Loader::register( __FILE__, [...] )`** (or `register_loader_definition()` directly); `register_plugin()` survives only as a v1 **tombstone** that quarantines legacy callers and never registers. Every loader definition must set `version` (the framework version the plugin bundles) and `backwards_compatible` (the oldest framework version it is compatible with). On `plugins_loaded`, the resolver:
 
-1. Sorts registered plugins by framework version (highest first)
-2. Loads the highest version's `class-plugin.php` once
-3. Initializes all compatible plugins
+1. Loads the **highest** registered framework version for the whole fleet
+2. Initializes all compatible plugins
+3. Deactivates plugins with incompatible framework, WC, or WP versions (admin notices shown)
+
+Plugin type (WP / WC / gateway / shipping) is declared solely by what the plugin class `extends` — never by a flag or capabilities array (removed in s27). Full contract: `docs-internal/AGENT-RULES.md` → Rule 3.
 
 ### Base Plugin Class
 
@@ -275,8 +270,8 @@ No manual release steps needed!
 
 ### Plugin Variants
 
-- **Payment Gateway:** `Woodev_Payment_Gateway_Plugin` — extends `Woodev_Plugin`; loaded when `is_payment_gateway` is set
-- **Shipping Method:** `Woodev\Framework\Shipping\Shipping_Plugin` — loaded when `load_shipping_method` is set
+- **Payment Gateway:** `Woodev_Payment_Gateway_Plugin` — a plugin declares the gateway type by extending this class (capability flags were removed in s27; type comes from `extends`)
+- **Shipping Method:** `Woodev\Framework\Shipping\Shipping_Plugin` — a plugin declares the shipping type by extending this class (type from `extends`, not bootstrap args)
 
 ## Testing Practices
 
@@ -304,15 +299,14 @@ Three minimal plugins in `tests/_fixtures/`:
 
 ## AI Agents Integration
 
-This project has specialized AI sub-agents in `.claude/agents/`:
+This project has specialized AI sub-agents in `.ai/agents/`:
 
 | Agent | Purpose |
 |-------|---------|
 | `woodev-framework-backend-agent` | Backend PHP development |
 | `woodev-framework-code-review-agent` | Code review and standards |
-| `woodev-framework-dev-cycle-agent` | Testing, linting, Conventional Commits |
+| `woodev-framework-dev-workflow-agent` | Testing, linting, Conventional Commits |
 | `woodev-framework-docs-agent` | Documentation |
-| `woodev-framework-env-agent` | Environment management |
 | `woodev-framework-git-agent` | Git operations and releases |
 
 See `.ai/QUICK-REFERENCE.md` for detailed usage.

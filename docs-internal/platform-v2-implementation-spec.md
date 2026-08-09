@@ -1,7 +1,8 @@
 # Platform v2 Implementation Spec
+> **Note (s60, 2026-08-09):** Sequencing superseded by the 2026-06-03 direction audit; §5/§9/§10/§12 remain the cited architecture reference.
 > Status: ready for implementation planning
 > Date: 2026-05-29
-> Supersedes: stale implementation assumptions in `platform-v2-epic1-spec.md`
+> Supersedes: stale implementation assumptions in `archive/platform-v2-epic1-spec.md`
 
 ## 1. Purpose
 
@@ -15,17 +16,17 @@ The goal is to implement a platform-first framework architecture where:
 - `woodev/bootstrap.php` remains the installed compatibility entry path but delegates real early-loading logic to a minimal resolver.
 - Production plugin internals may be rewritten for v2, but installed-site contracts are release-blocking compatibility requirements.
 
-This document is the implementation source of truth for Platform v2. It supersedes the bridge-first parts of `platform-v2-epic1-spec.md` while preserving the useful dependency evidence and class-boundary goals from that earlier spec.
+This document is the implementation source of truth for Platform v2. It supersedes the bridge-first parts of `archive/platform-v2-epic1-spec.md` while preserving the useful dependency evidence and class-boundary goals from that earlier spec.
 
 ## 2. Inputs
 
 - `PLANS.md` — strategic intent: pure WordPress base, WooCommerce subclass, future EDD support, plugin internals rewrite.
-- `platform-v2-strategy-alignment.md` — hybrid roadmap, rewrite-first migration, installed-site contract policy.
-- `platform-v2-next-analysis.md` — resolver, loader API, migration contract, and spec revision analysis.
+- `archive/platform-v2-strategy-alignment.md` — hybrid roadmap, rewrite-first migration, installed-site contract policy.
+- `archive/platform-v2-next-analysis.md` — resolver, loader API, migration contract, and spec revision analysis.
 - `adr/003-platform-v2-minimal-framework-resolver.md` — proposed minimal resolver boundary.
 - `adr/004-platform-v2-plugin-loader-api.md` — proposed explicit plugin loader API.
-- `platform-v2-epic1-spec.md` — previous platform-layer spec, now partially superseded.
-- `platform-v2-dependency-matrix.md` — module ownership and WooCommerce dependency evidence.
+- `archive/platform-v2-epic1-spec.md` — previous platform-layer spec, now partially superseded.
+- `archive/platform-v2-dependency-matrix.md` — module ownership and WooCommerce dependency evidence.
 
 ## 3. Non-Goals
 
@@ -44,7 +45,7 @@ Out of scope:
 
 ## 4. Supersession of Epic 1
 
-`platform-v2-epic1-spec.md` remains useful historical evidence, but it must not be followed as the active implementation plan where it conflicts with this spec.
+`archive/platform-v2-epic1-spec.md` remains useful historical evidence, but it must not be followed as the active implementation plan where it conflicts with this spec.
 
 Keep from Epic 1:
 
@@ -525,9 +526,9 @@ Platform v2 framework implementation is not done until:
 ## Related
 
 - [PLANS.md](../PLANS.md) — strategic source for platform-first refactoring.
-- [Platform v2 Strategy Alignment](platform-v2-strategy-alignment.md) — hybrid roadmap and rewrite-first migration policy.
-- [Platform v2 Next Analysis](platform-v2-next-analysis.md) — resolver, loader API, and migration analysis.
+- [Platform v2 Strategy Alignment](archive/platform-v2-strategy-alignment.md) — hybrid roadmap and rewrite-first migration policy.
+- [Platform v2 Next Analysis](archive/platform-v2-next-analysis.md) — resolver, loader API, and migration analysis.
 - [ADR-003](adr/003-platform-v2-minimal-framework-resolver.md) — minimal resolver decision.
 - [ADR-004](adr/004-platform-v2-plugin-loader-api.md) — explicit loader API decision.
-- [Platform v2 Epic 1 Spec](platform-v2-epic1-spec.md) — previous spec with stale bridge-first implementation assumptions.
-- [Platform v2 Dependency Matrix](platform-v2-dependency-matrix.md) — module dependency and ownership evidence.
+- [Platform v2 Epic 1 Spec](archive/platform-v2-epic1-spec.md) — previous spec with stale bridge-first implementation assumptions.
+- [Platform v2 Dependency Matrix](archive/platform-v2-dependency-matrix.md) — module dependency and ownership evidence.

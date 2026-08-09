@@ -1,12 +1,14 @@
 # ADR-001: Keep Bootstrap as Platform-Aware Loader
 
-**Status:** accepted
+**Status:** accepted (superseded for planning by ADR-003)
 
 **Date:** 2026-05-28
 
+> **Superseded for implementation planning (2026-06-01, see [ADR-003](003-platform-v2-minimal-framework-resolver.md)):** ADR-003 treats this ADR as superseded for future implementation planning — the broad platform-aware loader preserved too much legacy entry-file behavior as architecture. The core commitment that survives: `bootstrap.php` remains the compatibility entry point and multi-version framework arbitration remains a v2.0 requirement; the real logic moved behind it into the namespaced minimal resolver.
+
 ## Context
 
-`docs-internal/platform-v2-dependency-matrix.md` identifies `bootstrap.php` as a P0 spike item because it currently combines multi-version framework resolution, WooCommerce dependency checks, and conditional module loading. `PLANS.md` section 2 defines the target model as a platform-neutral `Woodev_Plugin` base with platform-specific subclasses such as `Woodev_Woocommerce_Plugin` and future `Woodev_EDD_Plugin`. `PLANS.md` section 5 leaves the fate of `bootstrap.php` open before a full implementation spec can be written.
+`docs-internal/archive/platform-v2-dependency-matrix.md` identifies `bootstrap.php` as a P0 spike item because it currently combines multi-version framework resolution, WooCommerce dependency checks, and conditional module loading. `PLANS.md` section 2 defines the target model as a platform-neutral `Woodev_Plugin` base with platform-specific subclasses such as `Woodev_Woocommerce_Plugin` and future `Woodev_EDD_Plugin`. `PLANS.md` section 5 leaves the fate of `bootstrap.php` open before a full implementation spec can be written.
 
 The top production risks are high because about 12 production plugins can load different vendored framework copies at the same time. A loader rewrite could break highest-version selection, activation order, entry-file registration, payment/shipping base availability, or WooCommerce compatibility declarations before runtime fallbacks can execute.
 
@@ -37,6 +39,7 @@ Negative:
 
 ## Related
 
-- [Platform v2 Dependency Matrix](../platform-v2-dependency-matrix.md) — P0 spike item, loader options, and top production risks.
+- [ADR-003](003-platform-v2-minimal-framework-resolver.md) — minimal framework resolver; supersedes this ADR for implementation planning.
+- [Platform v2 Dependency Matrix](../archive/platform-v2-dependency-matrix.md) — P0 spike item, loader options, and top production risks.
 - [PLANS.md](../../PLANS.md) — sections 2 and 5 define the target platform hierarchy and open loader question.
 - [FUTURE-BACKLOG.md](../FUTURE-BACKLOG.md) — framework decoupling backlog and deferred post-v2 work.

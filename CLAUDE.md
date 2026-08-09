@@ -13,14 +13,16 @@ Serena provides symbolic code navigation, cross-referencing, and safe code editi
 
 > **RULE FOR ALL AI AGENTS:** Always use Serena tools (`find_symbol`, `get_symbols_overview`, `find_referencing_symbols`, `search_for_pattern`) to read and navigate PHP source code. Never use the `Read` tool directly on `.php` files. Serena has the codebase pre-indexed and provides semantic lookup — it is faster and more accurate than raw file reads.
 
-**Configuration:** Global (`~/.qwen/mcp.json`)
+**Configuration:** configured globally (outside this repo)
 
 **Available Tools:**
-- `search_symbols` — Find classes, functions, methods, variables by name
-- `get_symbol_info` — Get detailed information about a symbol
-- `find_references` — Find all references to a symbol
-- `edit_file` — Safe code editing with symbolic awareness
-- `list_files` — List project files with filtering
+- `find_symbol` — Find classes, functions, methods by name/path
+- `get_symbols_overview` — Structure overview of a source file
+- `find_referencing_symbols` — Find who uses a symbol
+- `search_for_pattern` — Search a pattern across the codebase
+- `read_file` / `replace_symbol_body` — Read source, edit a function body
+- `insert_after_symbol` / `insert_before_symbol` — Add code around a symbol
+- `list_dir` / `find_file` — List directories, find files by name
 
 **Dashboard:** http://localhost:24282/dashboard (opens automatically when Serena starts)
 
@@ -30,7 +32,7 @@ Serena provides symbolic code navigation, cross-referencing, and safe code editi
 
 Context7 provides up-to-date documentation and context for libraries and frameworks directly in your prompts.
 
-**Configuration:** Global (`~/.qwen/mcp.json`)
+**Configuration:** configured globally (outside this repo)
 
 **Purpose:** Automatically fetches the latest documentation for any library or framework mentioned in your conversation, ensuring AI responses are based on current docs rather than training data.
 
@@ -61,6 +63,13 @@ composer test:integration     # run integration tests (requires WP_TESTS_DIR or 
 composer check                # run phpcs + phpstan + unit tests together
 ```
 
+```bash
+npm run test:js -- --roots "<rootDir>/tests/js"   # jest (800 tests) — CI gate (test-js job)
+npm run build                                     # build the 5 React bundles (CI has an assets-parity job)
+```
+
+Never run `npx jest` directly — it loses the wp-scripts jsdom environment and scans agent worktrees inside the repo (gotchas `npx-jest-bypasses-wp-scripts-jsdom`, `jest-scans-agent-worktrees-inside-the-repo`). Always use the `npm run test:js -- --roots` form above.
+
 Run a single test file:
 ```bash
 ./vendor/bin/phpunit tests/unit/BootstrapTest.php
@@ -70,10 +79,11 @@ Integration tests require a WordPress test library. Set `WP_TESTS_DIR` env var o
 
 ## Session Start Protocol
 
-At the start of every session, Claude Code agents should:
-1. Read `docs-internal/CURRENT-STATE.md` — current phase status, known bugs, next actions
-2. Read `docs-internal/GOTCHAS.md` — gotcha index (prevents repeated mistakes)
-3. If working on a specific area, read relevant files from `docs-internal/adr/`, `docs-internal/wiki/`
+The canonical session start/end lists live in [AGENTS.md](AGENTS.md) — follow those; do not maintain a diverging copy here. Quick version:
+1. Read `docs-internal/next-session-prompt.md` — the per-session handoff (start here)
+2. Read `docs-internal/CURRENT-STATE.md` — current phase status, known bugs, next actions
+3. Scan `docs-internal/GOTCHAS.md` — gotcha index (prevents repeated mistakes)
+4. If working on a specific area, read relevant files from `docs-internal/adr/`, `docs-internal/wiki/`
 
 For complete session start/end protocols and coding principles, see [AGENTS.md](AGENTS.md).
 
@@ -85,15 +95,21 @@ For complete session start/end protocols and coding principles, see [AGENTS.md](
 | `docs-internal/` | AI agents + maintainers | ❌ Not published | Session logs, gotchas, ADRs, operational state |
 
 Internal docs (`docs-internal/`):
+- `next-session-prompt.md` — per-session handoff (the doc every session actually starts from)
 - `CURRENT-STATE.md` — phase status, known bugs, next actions
 - `SESSION-LOG.md` — full session history
 - `GOTCHAS.md` — gotcha index → `gotchas/{slug}.md` atomic detail files
 - `AGENT-RULES.md` — workflow + architecture rules for AI agents
 - `DOCS-INDEX.md` — navigation hub for all internal docs
 - `DOCS-SCHEMA.md` — doc format and lint rules
-- `FUTURE-BACKLOG.md` — deferred features and technical debt
+- `FUTURE-BACKLOG.md` — deferred features and technical debt (FROZEN — backlog lives on GitHub board №6)
 - `adr/` — Architecture Decision Records
 - `wiki/` — compiled topic references
+- `specs/` — feature specifications
+- `plans/` — implementation plans
+- `research/` — research notes
+- `reviews/` — review reports
+- `migration/` — per-plugin v2 migration docs (incl. data-preservation checklists)
 - `archive/` — resolved historical documents
 
 ### Public docs (`docs/`) — GH Pages
@@ -116,7 +132,7 @@ Internal docs (`docs-internal/`):
 
 ### Bootstrap & Multi-version Loading (`woodev/bootstrap.php`)
 
-`Woodev_Plugin_Bootstrap` (singleton) is the entry point. Each plugin calls `register_plugin()` on the shared bootstrap instance. On `plugins_loaded`, the bootstrap sorts registered plugins by framework version (highest first), loads the highest version's `class-plugin.php` once, then initializes all compatible plugins. Plugins with incompatible framework, WC, or WP versions are deactivated with admin notices.
+`Woodev_Plugin_Bootstrap` (singleton) is the entry point — never instantiate it directly. v2 plugins register via **`Woodev_Loader::register( __FILE__, [...] )`** (or `register_loader_definition()` directly); `register_plugin()` survives only as a v1 **tombstone** that quarantines legacy callers and never registers (see Known Technical Debt below). Every loader definition must set `version` (the framework version the plugin bundles) and `backwards_compatible` (the oldest framework version it is compatible with). On `plugins_loaded`, the resolver loads the **highest** registered framework version for the whole fleet, then initializes all compatible plugins. Plugins with incompatible framework, WC, or WP versions are deactivated with admin notices. Plugin type (WP / WC / gateway / shipping) is declared solely by what the plugin class `extends` — never by a flag or capabilities array (removed in s27). Full contract: `docs-internal/AGENT-RULES.md` → Rule 3.
 
 ### Base Plugin Class (`woodev/class-plugin.php`)
 
@@ -151,8 +167,8 @@ The constructor auto-initializes all framework subsystems and registers WP hooks
 
 ### Plugin Variants
 
-- **`Woodev_Payment_Gateway_Plugin`** (`woodev/payment-gateway/class-payment-gateway-plugin.php`) — extends `Woodev_Plugin`; loaded only when a plugin sets `is_payment_gateway` in bootstrap args. Manages one or more `Woodev_Payment_Gateway` instances.
-- **`Woodev\Framework\Shipping\Shipping_Plugin`** (`woodev/shipping-method/class-shipping-plugin.php`) — loaded when `load_shipping_method` is set in bootstrap args. Uses PSR-4 namespaces (`Woodev\Framework\Shipping\`).
+- **`Woodev_Payment_Gateway_Plugin`** (`woodev/payment-gateway/class-payment-gateway-plugin.php`) — a payment-gateway plugin declares its type simply by extending this class (capability flags were removed in s27; type comes from `extends`). Manages one or more `Woodev_Payment_Gateway` instances.
+- **`Woodev\Framework\Shipping\Shipping_Plugin`** (`woodev/shipping-method/class-shipping-plugin.php`) — a shipping plugin declares its type by extending this class (again: type from `extends`, not bootstrap args). Uses PSR-4 namespaces (`Woodev\Framework\Shipping\`).
 - **Payment Gateway admin handlers** — order/user/token admin UI classes in `woodev/payment-gateway/admin/`
 - **Payment Gateway REST API** — gateway-specific REST endpoints in `woodev/payment-gateway/api/`
 
@@ -191,7 +207,7 @@ Self-contained shipping box-packing algorithm. Implement `Woodev_Packer_Item_Int
 
 - **Unit tests** (`tests/unit/`) use Brain Monkey + Mockery; no WordPress required.
 - **Integration tests** (`tests/integration/`) run inside a real WordPress environment.
-- Test fixtures (`tests/_fixtures/`) contain three minimal plugins: `woodev-test-plugin`, `woodev-test-payment-gateway`, `woodev-test-shipping-method`.
+- Test fixtures (`tests/_fixtures/`) contain seven plugins: `woodev-test-plugin`, `woodev-test-payment-gateway`, `woodev-test-shipping-method`, `woodev-edostavka-pilot-plugin`, `woodev-realistic-payment-plugin`, `woodev-realistic-shipping-plugin`, `woodev-yandex-pilot-plugin`.
 - Test base classes `tests/unit/TestCase.php` and `tests/integration/TestCase.php` set up Brain Monkey and WP test scaffolding respectively.
 
 ## Code Style
@@ -203,17 +219,17 @@ Self-contained shipping box-packing algorithm. Implement `Woodev_Packer_Item_Int
 - PHPCompatibility checked for PHP 7.4+, minimum WP version 6.6 (raised from 6.3 in s36 — enables the automatic JSX runtime; classic-JSX babel hack removed)
 - PHPStan level 3; `checkDynamicProperties: false` (legacy code uses dynamic properties)
 
-## Backward Compatibility — clean-break policy (v2.0 branch)
+## Backward Compatibility — clean-break policy (v2 line)
 
-> Policy set 2026-06-03 (direction audit **D-2**). Supersedes the prior "deprecation cycle for everything" rule on the `refactor/platform-v2-clean-break` branch. Rationale: this is effectively a new framework; the old one is being rewritten and the dependent plugins will be rewritten onto it (`PLANS.md` §2.4). The previous strict-deprecation mandate was generating a back-compat tax for plugins we are about to replace (audit §4.2).
+> Policy set 2026-06-03 (direction audit **D-2**). Supersedes the prior "deprecation cycle for everything" rule. Originally scoped to the `refactor/platform-v2-clean-break` branch, which merged to `main` on 2026-06-04 — the policy now applies on the v2 line (`main`). Rationale: this is effectively a new framework; the old one is being rewritten and the dependent plugins will be rewritten onto it (`PLANS.md` §2.4). The previous strict-deprecation mandate was generating a back-compat tax for plugins we are about to replace (audit §4.2).
 
 Two different rules apply depending on what you are changing:
 
-- **Internal code — FREE TO BREAK on the v2 branch:** class names, method
+- **Internal code — FREE TO BREAK on the v2 line (`main`):** class names, method
   signatures, the plugin entry/registration shape, namespacing, file layout.
   Do **NOT** add `@deprecated` shims, `class_alias` files, or
   `_deprecated_function()` wrappers for moved/renamed internal APIs. **Delete**
-  existing internal-API shims (see `docs-internal/platform-v2-cleanbreak-plan.md`
+  existing internal-API shims (see `docs-internal/archive/platform-v2-cleanbreak-plan.md`
   Phase 3).
 - **Installed-site data contracts — RELEASE-BLOCKING, never break:** option keys
   & settings arrays, license key option names + activation state + instance IDs,
@@ -248,7 +264,7 @@ Operating rules for the whole effort live in
 - All commits follow [Conventional Commits](https://www.conventionalcommits.org/) format
 - Breaking changes: add `!` after type + `BREAKING CHANGE:` footer
 - VERSION is stored in `woodev/class-plugin.php` as `Woodev_Plugin::VERSION`
-- Release is automatic via GitHub Actions: push to main → tests → tag → CHANGELOG → release
+- Release is automatic via the `release` job inside `.github/workflows/ci.yml` (not a separate workflow): push to main → tests → tag → CHANGELOG → release
 - `@since` annotations use the current `VERSION` constant value
 
 ## Notable Utilities

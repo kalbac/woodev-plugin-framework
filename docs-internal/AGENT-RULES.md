@@ -1,24 +1,31 @@
 # Agent Rules — Woodev Plugin Framework
-> For AI agents. Keep updated. Last updated: 2026-06-21 (s27 — Rule 3 rewritten for v2 loader/autoloader + multi-version conventions).
+> For AI agents. Keep updated. Last updated: 2026-08-09 (s60 docs audit).
 > Navigation → `DOCS-INDEX.md` | Current status → `CURRENT-STATE.md`
 
 ---
 
 ## Session Start Checklist
 
-1. Read `CURRENT-STATE.md` — phase status, bugs, next actions
-2. Read `GOTCHAS.md` — scan `[topic/*]` tags relevant to current task
-3. Read `DOCS-INDEX.md` — identify task-specific docs to load
-4. Load relevant skill: `kilo-config` (for Kilo config questions)
+> Canonical list: `AGENTS.md` → "Session Start". This checklist mirrors it — do not let them diverge.
+
+1. Read `next-session-prompt.md` — per-session handoff: what the last session left, plus known traps
+2. Read `CURRENT-STATE.md` — phase status, bugs, next actions
+3. Read `GOTCHAS.md` — scan `[topic/*]` tags relevant to current task
+4. Area-specific docs as needed — relevant `adr/` and `wiki/` files (navigation hub: `DOCS-INDEX.md`)
+5. Load the relevant project skill from `.ai/skills/` when the task matches one: `woodev-framework-backend-dev`, `woodev-framework-code-review`, `woodev-framework-dev-cycle`, `woodev-framework-git`, `woodev-framework-markdown`
 
 ---
 
 ## Session End Checklist
 
+> Canonical list: `AGENTS.md` → "Session End". This checklist mirrors it — do not let them diverge.
+
 1. Update `CURRENT-STATE.md` — phase status, bugs, next actions
 2. Append to `SESSION-LOG.md` — 10–20 line summary, PHPStan result + commit hash
 3. Compilation step — scan SESSION-LOG for new gotchas → `GOTCHAS.md` + `gotchas/{slug}.md`
-4. See `DOCS-SCHEMA.md` for full compilation protocol
+4. Audit the board — move the session's cards (`В работе` → `Готово`), file cards for anything unformalized (see `AGENTS.md` → "Backlog rule")
+5. Replace `next-session-prompt.md` with the handoff for the next session
+6. See `DOCS-SCHEMA.md` for full compilation protocol
 
 ---
 
@@ -55,8 +62,10 @@ After implementing each logical code block:
 2. Update `CURRENT-STATE.md` — honest current status
 3. Git commit with Conventional Commits message
 
-### Agent Teams for Parallelism
-When a task has **3+ independent workstreams each taking > 2 minutes**, use TeamCreate to spawn parallel agents. Do NOT use Teams for simple single-file edits or inherently sequential tasks.
+### Subagent-Driven Execution for Parallelism
+When a task has **3+ independent workstreams each taking > 2 minutes**, use subagent-driven execution: implementer subagents working in isolated git worktrees, with a Codex critic pass over the result (worker+critic pattern). Do NOT parallelize simple single-file edits or inherently sequential tasks.
+
+Jest caveat: worktrees under `.claude/worktrees/` are inside the repo, and a bare jest run scans them — **always** run `npm run test:js -- --roots "<rootDir>/tests/js"`, never `npx jest` (gotchas `jest-scans-agent-worktrees-inside-the-repo`, `npx-jest-bypasses-wp-scripts-jsdom`).
 
 ### Conventional Commits (REQUIRED)
 All commits must follow [Conventional Commits](https://www.conventionalcommits.org/) format:
@@ -191,11 +200,12 @@ public static function is_valid_version( string $version ): bool {
 | Layer | Tool | When |
 |-------|------|------|
 | Unit tests | Brain Monkey + Mockery | PHP logic without WP |
+| JS tests | jest — `npm run test:js -- --roots "<rootDir>/tests/js"` (800 tests). **Never `npx jest`** — two recorded gotchas (`npx-jest-bypasses-wp-scripts-jsdom`, `jest-scans-agent-worktrees-inside-the-repo`) | React admin UI / JS logic |
 | Integration tests | `wp-env` + `WP_TESTS_DIR` | Full WP stack testing |
 | Static analysis | PHPStan (level 3, PHP 7.4+) | Every commit |
 | Code style | PHPCS (WordPress + PHPCompatibility) | Every commit |
 
-Test fixtures live in `tests/_fixtures/` — three minimal plugins: `woodev-test-plugin`, `woodev-test-payment-gateway`, `woodev-test-shipping-method`.
+Test fixtures live in `tests/_fixtures/` — seven plugins: `woodev-test-plugin`, `woodev-test-payment-gateway`, `woodev-test-shipping-method`, `woodev-edostavka-pilot-plugin`, `woodev-realistic-payment-plugin`, `woodev-realistic-shipping-plugin`, `woodev-yandex-pilot-plugin`.
 
 Run a single test:
 ```bash

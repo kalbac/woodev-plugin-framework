@@ -12,8 +12,9 @@ Test Suites: 56 passed, 56 total
 Tests:       4889 passed, 4889 total
 ```
 
-against a true suite of **8 files / 690 tests**. Everything was green, so nothing looked
-wrong — the run simply reported a number ~7× too large.
+against the repo's true suite (the current true baseline lives in the `CURRENT-STATE.md`
+header — 800 jest tests as of s59; compare against THAT, not a number frozen in this file).
+Everything was green, so nothing looked wrong — the run simply reported a number ~7× too large.
 
 ## Root cause
 
@@ -63,8 +64,10 @@ was partly made of tests that no longer exist on `main`.
   ```
 
   Observed s55 with three sibling worktrees alive: the bare command reported
-  `24 suites / 2109 tests, 2 failed`; the scoped command reported `8 suites / 701 tests, all
-  passing`. **Both failures belonged to another agent's worktree, mid-edit.** Without scoping,
+  `24 suites / 2109 tests, 2 failed`; the scoped command reported this repo's own suite, all
+  passing (for the current true baseline see the `CURRENT-STATE.md` header — 800 jest as of
+  s59 — not any number frozen in this file). **Both failures belonged to another agent's
+  worktree, mid-edit.** Without scoping,
   the honest reading of that run is "something is broken and I do not know whose" — and the
   tempting reading is "I broke it", which sends you debugging code you never touched.
 - Remove worktrees when their agent finishes: `git worktree remove --force .claude/worktrees/<dir>`.

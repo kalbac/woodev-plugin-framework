@@ -64,4 +64,4 @@ it look right at 920px" says nothing about "does it look right at 390px".
 - The T19 commit already fixed the identical inline-style-vs-media-query collision for
   `.woodev-modal__body`'s `height` — this is the same lesson, applied incompletely to a sibling
   property (`min-width`) on a sibling element (`.woodev-modal__content`) in the same file.
-- `docs-internal/specs/2026-08-03-sp5-pickup-map-visual-rework-design.md` — V-1, V-15
+- `docs-internal/archive/specs/2026-08-03-sp5-pickup-map-visual-rework-design.md` — V-1, V-15

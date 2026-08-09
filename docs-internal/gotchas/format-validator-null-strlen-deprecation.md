@@ -39,4 +39,4 @@ Any validator that calls a PHP string function (`strlen`, `strpos`, `preg_match`
 
 - [[settings-api-control-save-path-pitfalls]] — the enum/kses/number-coercion save-path pitfalls (sibling validation concerns).
 - [[integration-test-global-admin-hooks-output-and-submenu-accumulation]] — why printed output during an integration test goes red on part of the matrix.
-- `docs-internal/specs/2026-06-30-sp3-field-validation-design.md` — SP-3 validation model.
+- `docs-internal/archive/specs/2026-06-30-sp3-field-validation-design.md` — SP-3 validation model.

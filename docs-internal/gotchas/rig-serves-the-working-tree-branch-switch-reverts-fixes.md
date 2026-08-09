@@ -36,8 +36,12 @@ And the second is the dangerous one — it produces false confidence, quietly.
 ## The rule
 
 **Before asking anyone to look at the rig, state what the rig is currently serving**: the branch,
-and every `WOODEV_TEST_*` constant that changes which data source is live
-(`WOODEV_TEST_PICKUP_STRATEGY`, `WOODEV_TEST_PICKUP_LIVE_YANDEX`). One line is enough.
+and every `WOODEV_TEST_*` constant that changes which data source is live —
+`WOODEV_TEST_PICKUP_STRATEGY`, `WOODEV_TEST_PICKUP_LIVE_YANDEX`, `WOODEV_TEST_PICKUP_LIVE_POCHTA`
+and `WOODEV_TEST_POCHTA_SETTINGS_ID`, with precedence `LIVE_YANDEX` > `LIVE_POCHTA` > `STRATEGY`
+(the three switches are defined in
+`tests/_fixtures/woodev-test-shipping-method/woodev-test-shipping-method.php`, the settings id in
+the same fixture's `class-test-live-pochta-point-source.php`). One line is enough.
 
 When a verification needs fixes from more than one branch, **do not ask for the check from a
 branch that only has some of them** — merge, or rebase one onto the other, so the tree the
@@ -49,8 +53,13 @@ the same question first: what is this rig actually running?
 
 ```bash
 git branch --show-current
-npx wp-env run cli wp config list --fields=name,value | grep WOODEV_TEST
+MSYS_NO_PATHCONV=1 npx wp-env run cli wp config list --fields=name,value | grep WOODEV_TEST
 ```
+
+`MSYS_NO_PATHCONV=1` is required under Git-Bash — MSYS otherwise mangles the container paths, see
+[[wpenv-windows-gitbash-path-mangling]]. And wp-env resolves the environment from the CURRENT
+WORKING DIRECTORY: run this from the repo root — from a subdirectory it fails with
+"Environment not initialized" (observed s60).
 
 ## Related
 

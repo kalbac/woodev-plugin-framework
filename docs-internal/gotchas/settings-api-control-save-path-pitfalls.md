@@ -1,6 +1,6 @@
 # gotcha: Settings-API save path — validate enums by key-or-value, coerce numbers, sanitize HTML
 
-**Namespace:** `[php/settings-api]`
+**Namespace:** `[settings-api/save-path]`
 **Discovered:** s31 (2026-06-25, Codex critic pass on the Setup Wizard)
 
 Three latent bugs in `Woodev_Setting`'s save path, surfaced when the wizard started

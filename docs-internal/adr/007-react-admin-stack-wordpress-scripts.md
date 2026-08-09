@@ -53,7 +53,22 @@ Specific choices:
    declares `wp-element` as the sole JS dependency so WordPress enqueues it before
    the bundle.
 
-5. **Classic JSX runtime** — `babel.config.js` at the project root extends
+   > **Correction (2026-08-09, s60):** the paragraph above described the initial
+   > scaffold bundle. Since s36 (automatic JSX runtime, see the superseded point 5
+   > below) JSX compiles to `jsx`/`jsxs` calls from `react/jsx-runtime`, and the
+   > license-page `index.asset.php` now declares
+   > `('react-jsx-runtime', 'wp-api-fetch', 'wp-components', 'wp-element', 'wp-i18n')`
+   > as its JS dependencies — `wp-element` is no longer the sole dependency.
+
+5. ~~**Classic JSX runtime**~~ — **Superseded (s36):** the minimum WordPress
+   version was raised 6.3 → 6.6, which registers the `react-jsx-runtime` script
+   handle in core, so the **automatic JSX runtime is now in force**.
+   `babel.config.js` was **deleted** (the project uses the stock
+   `@wordpress/babel-preset-default` behavior), and the rule below — "every JSX
+   file must import `createElement`/`Fragment`" — **no longer applies**. The
+   original decision text is kept below for the historical record only:
+
+   `babel.config.js` at the project root extends
    `@wordpress/babel-preset-default` and adds `@babel/plugin-transform-react-jsx`
    with `runtime: 'classic'`, `pragma: 'createElement'`, `pragmaFrag: 'Fragment'`
    in the `plugins` array. Babel runs plugins before presets, so the classic
@@ -74,10 +89,16 @@ Specific choices:
    consumers (plugin repos that include the framework as a subtree or ZIP) need no Node
    toolchain at deploy time.
 
+   > **Update (2026-08-09, s60):** there are now **five** committed bundles under
+   > `woodev/assets/build/<surface>/`: `license-page`, `plugins-page`,
+   > `settings-page`, `setup-wizard`, and `ui-kit-gallery`.
+
 7. **`src/`** directory is the authoring root and must not ship in release ZIPs.
-   As of this ADR the release rsync does NOT yet exclude `src/` — task **s6-p5** adds
+   As of this ADR the release rsync did NOT yet exclude `src/` — task **s6-p5**
+   (since **shipped**: `--exclude='src'` at `.github/workflows/ci.yml:385`) adds
    `--exclude='src'` to the release workflow. `woodev/assets/build/` rides inside
-   `woodev/` and IS included.
+   `woodev/` and IS included. (Note, s60: `ci.yml` still carries a stale
+   `--exclude='babel.config.js'` for a file that no longer exists — harmless.)
 
 ## Consequences
 
@@ -97,14 +118,15 @@ Specific choices:
   to refresh the committed bundle.
 - Committed CSS includes an auto-generated RTL variant (`style-index-rtl.css`); both
   must be committed even if RTL is not used initially.
-- A project-root `babel.config.js` replaces the wp-scripts fallback Babel config, so
-  `npm start` loses the conditionally-added React Fast Refresh plugin. Accepted: the
-  admin surface is small; restore `react-refresh/babel` in the config if hot reload
-  becomes worth it.
+- ~~A project-root `babel.config.js` replaces the wp-scripts fallback Babel config, so
+  `npm start` loses the conditionally-added React Fast Refresh plugin.~~ **Historical
+  (s36):** `babel.config.js` was deleted along with the classic-runtime workaround
+  (see superseded point 5), so this cost no longer exists — the stock wp-scripts
+  Babel config (including Fast Refresh) is back in effect.
 
 ## Related
 
 - [006-capability-gated-feature-seam.md](006-capability-gated-feature-seam.md) — feature seam ADR for S3 licensing UI
 - [005-platform-v2-clean-break-policy.md](005-platform-v2-clean-break-policy.md) — clean-break policy (internal code free to change)
-- `docs-internal/platform-v2-s3-licensing-ui-plan.md` — task s6-p3 (this scaffold) and s6-p4 (full UI)
-- `docs-internal/platform-v2-s3-licensing-ui-spec.md` — §5.1 toolchain spec, §6 build decisions
+- `docs-internal/archive/platform-v2-s3-licensing-ui-plan.md` — task s6-p3 (this scaffold) and s6-p4 (full UI)
+- `docs-internal/archive/platform-v2-s3-licensing-ui-spec.md` — §5.1 toolchain spec, §6 build decisions

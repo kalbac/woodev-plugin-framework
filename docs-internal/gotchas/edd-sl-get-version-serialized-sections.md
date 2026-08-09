@@ -53,4 +53,4 @@ object → stdClass (handled by `plugins_api_filter()`'s `convert_object_to_arra
 - [[updater-cache-source-stamp-not-key]] — same updater, F10 cache value-stamp.
 - [[in-plugin-update-message-arg-shape]] — same updater, F8 hook arg shape.
 - `woodev/licensing/updater/class-plugin-updater.php` — `get_version_from_remote()`.
-- `docs-internal/reviews/ob3-plugin-updater-review-2026-06-14.md` — F1/F3 + Open Qs.
+- `docs-internal/archive/reviews/ob3-plugin-updater-review-2026-06-14.md` — F1/F3 + Open Qs.

@@ -3,7 +3,7 @@
 > Written 2026-06-11 (s7, Fable orchestrator + operator fork decisions). Implements PLANS
 > §3.4.1. **Status: IMPLEMENTED (s9, 2026-06-11) — every §9 item was resolved before its
 > code landed; the resolutions are recorded in
-> `platform-v2-s3-licensing-webhooks-plan.md` → "§9 protocol resolutions" and the §5
+> `archive/platform-v2-s3-licensing-webhooks-plan.md` → "§9 protocol resolutions" and the §5
 > table below is the FROZEN contract set, pinned by
 > `tests/unit/LicenseCommandContractParityTest.php`.** Two recorded deviations from the
 > draft text: (1) execution order p1→p0 (the verifier precedes its consumers); (2) the
@@ -32,7 +32,7 @@ Two server→client scenarios; v1 implements the first:
 
 ## 2. Security model — signed command envelope
 
-Reuses the §4 primitive of `platform-v2-s3-licensing-need-license-spec.md` **unchanged**:
+Reuses the §4 primitive of `archive/platform-v2-s3-licensing-need-license-spec.md` **unchanged**:
 Ed25519 (`sodium_crypto_sign_verify_detached`), the embedded production public key, the
 canonical-JSON rule (ksort recursive, `JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE`),
 and `woodev_normalize_site()` (§4.2, B-6) for site binding.
@@ -190,7 +190,7 @@ same `License_Authority` key, TTL policy. Retry/queue robustness lives server-si
 > (including the critic-round amendments: lazy at-cap pruning with the recorded
 > store_full exception, best-effort takeover + idempotent-vocabulary registry contract,
 > soft nonce cap, `{n, t0}`-anchored inbound-only rate limiter, intersection-only ack
-> confirmation) live in `platform-v2-s3-licensing-webhooks-plan.md` → "§9 protocol
+> confirmation) live in `archive/platform-v2-s3-licensing-webhooks-plan.md` → "§9 protocol
 > resolutions"; the frozen outcomes are §5 above. Original checklist retained for
 > traceability:
 
@@ -241,7 +241,7 @@ same `License_Authority` key, TTL policy. Retry/queue robustness lives server-si
   commands*, never by flipping local license state (anti-pirate invariant intact).
 
 ## Related
-- [platform-v2-s3-licensing-need-license-spec.md](platform-v2-s3-licensing-need-license-spec.md) — §4 primitive, normalization, claim envelope
-- [platform-v2-s3-licensing-ui-spec.md](platform-v2-s3-licensing-ui-spec.md) — S3.2 (must merge first)
+- [archive/platform-v2-s3-licensing-need-license-spec.md](archive/platform-v2-s3-licensing-need-license-spec.md) — §4 primitive, normalization, claim envelope
+- [archive/platform-v2-s3-licensing-ui-spec.md](archive/platform-v2-s3-licensing-ui-spec.md) — S3.2 (must merge first)
 - [FUTURE-BACKLOG.md](FUTURE-BACKLOG.md) — deferred feature #3 (originating entry), B-2/B-3 lessons
 - PLANS.md §3.4.1
