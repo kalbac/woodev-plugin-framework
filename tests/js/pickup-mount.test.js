@@ -1706,6 +1706,120 @@ test( 'a genuinely empty VIEWPORT (boundsChange) result calls panels.showMessage
 	expect( panels.showMessageCalls ).toEqual( [ 'emptyInView' ] );
 } );
 
+// -------------------------------------------------------------------------
+// #234 — viewport point accumulation: the drawn set is the UNION of every
+// listing this session, never just the last one.
+// -------------------------------------------------------------------------
+
+test( 'viewport: two listings with disjoint points draw the UNION, not the last listing', async () => {
+	const listings = [
+		[ point( { id: 'A', lat: 55.1, lng: 37.1 } ) ],
+		[ point( { id: 'B', lat: 55.2, lng: 37.2 } ) ],
+	];
+	let call = 0;
+	window.WoodevPickupDataSource = fakeDataSourceFactory( () => Promise.resolve( listings[ call++ ] || [] ) );
+	setConfig( makeConfig( { strategy: 'viewport' } ) );
+	mountAll();
+	clickTrigger();
+	await flushAsync();
+
+	const provider = StubProvider.instances[ StubProvider.instances.length - 1 ];
+
+	provider.emit( 'boundsChange', [ 55, 37, 56, 38 ] );
+	await flushAsync();
+	provider.emit( 'boundsChange', [ 55, 37, 56, 38 ] );
+	await flushAsync();
+
+	const drawn = provider.setPointsCalls[ provider.setPointsCalls.length - 1 ];
+	const ids = drawn.reduce( ( acc, group ) => acc.concat( group.points.map( ( p ) => p.id ) ), [] ).sort();
+
+	expect( ids ).toEqual( [ 'A', 'B' ] );
+} );
+
+test( 'viewport: a point in BOTH listings appears once, carrying the SECOND listing\'s values', async () => {
+	const listings = [
+		[ point( { id: 'A', name: 'Старое имя' } ) ],
+		[ point( { id: 'A', name: 'Новое имя' } ) ],
+	];
+	let call = 0;
+	window.WoodevPickupDataSource = fakeDataSourceFactory( () => Promise.resolve( listings[ call++ ] || [] ) );
+	setConfig( makeConfig( { strategy: 'viewport' } ) );
+	mountAll();
+	clickTrigger();
+	await flushAsync();
+
+	const provider = StubProvider.instances[ StubProvider.instances.length - 1 ];
+
+	provider.emit( 'boundsChange', [ 55, 37, 56, 38 ] );
+	await flushAsync();
+	provider.emit( 'boundsChange', [ 55, 37, 56, 38 ] );
+	await flushAsync();
+
+	const drawn = provider.setPointsCalls[ provider.setPointsCalls.length - 1 ];
+	const all = drawn.reduce( ( acc, group ) => acc.concat( group.points ), [] );
+
+	expect( all ).toHaveLength( 1 );
+	expect( all[ 0 ].name ).toBe( 'Новое имя' );
+} );
+
+test( 'bulk is unaffected — its listing still REPLACES the drawn set', async () => {
+	const listings = [
+		[ point( { id: 'A' } ) ],
+		[ point( { id: 'B' } ) ],
+	];
+	let call = 0;
+	window.WoodevPickupDataSource = fakeDataSourceFactory( () => Promise.resolve( listings[ call++ ] || [] ) );
+	setConfig( makeConfig( { strategy: 'bulk' } ) );
+	mountAll();
+	clickTrigger();
+	await flushAsync();
+
+	const provider = StubProvider.instances[ StubProvider.instances.length - 1 ];
+
+	// bulk's second fetch can only come from refresh() — dispatching `updated_checkout` on
+	// `document.body` alone does NOT call it. Verified against the source: refresh() is an
+	// EXTERNAL hook exposed only via getSession() (see the file docblock, "the hook a
+	// payment-method change elsewhere on the page uses"), nothing in this file wires it to
+	// the `updated_checkout` DOM event itself, and every existing refresh() test in this
+	// file invokes it the same way.
+	await getSession( FIELD_ID ).refresh();
+
+	const drawn = provider.setPointsCalls[ provider.setPointsCalls.length - 1 ];
+	const ids = drawn.reduce( ( acc, group ) => acc.concat( group.points.map( ( p ) => p.id ) ), [] );
+
+	expect( ids ).toEqual( [ 'B' ] );
+} );
+
+test( 'retry (start()) drops the pool — a fresh session starts from nothing', async () => {
+	const listings = [
+		[ point( { id: 'A' } ) ],
+		[ point( { id: 'B' } ) ],
+	];
+	let call = 0;
+	window.WoodevPickupDataSource = fakeDataSourceFactory( () => Promise.resolve( listings[ call++ ] || [] ) );
+	setConfig( makeConfig( { strategy: 'viewport' } ) );
+	mountAll();
+	clickTrigger();
+	await flushAsync();
+
+	let provider = StubProvider.instances[ StubProvider.instances.length - 1 ];
+	provider.emit( 'boundsChange', [ 55, 37, 56, 38 ] );
+	await flushAsync();
+
+	const panels = StubPanels.instances[ StubPanels.instances.length - 1 ];
+	panels.emit( 'retryRequested' );
+	await flushAsync();
+
+	provider = StubProvider.instances[ StubProvider.instances.length - 1 ];
+	provider.emit( 'boundsChange', [ 55, 37, 56, 38 ] );
+	await flushAsync();
+
+	const drawn = provider.setPointsCalls[ provider.setPointsCalls.length - 1 ];
+	const ids = drawn.reduce( ( acc, group ) => acc.concat( group.points.map( ( p ) => p.id ) ), [] );
+
+	expect( ids ).toEqual( [ 'B' ] );
+} );
+
 test( 'a non-empty result calls neither showMessage() (nothing to show) nor leaves any destructive '
 	+ 'modal state', async () => {
 	window.WoodevPickupDataSource = fakeDataSourceFactory( () => Promise.resolve( [ point() ] ) );
