@@ -192,6 +192,31 @@
  * no-op, guarded the same way every other post-close continuation in this
  * file is).
  *
+ * `refresh()` NOW ALSO RUNS AUTOMATICALLY ON A GENUINE CART CHANGE (#238), not only through
+ * {@see getSession}: a SECOND, permanent `updated_checkout` subscriber — bound once at module
+ * scope, alongside the `mountAll()` one at the bottom of this file, never per-session — walks
+ * `sessions` on every event and calls `refresh()` on whichever ones report their modal OPEN via
+ * {@see WoodevModal#isOpen} ({@see handleCartChanged}). A DISMISSED session
+ * (`handleModalClosed()` below runs only `invalidateSelection()` — the entry survives in
+ * `sessions` until the next trigger click) is deliberately left untouched: refreshing it would
+ * fire a live carrier request for a picker the customer can no longer see, against the
+ * merchant's quota, for nothing the next trigger click would not already rebuild from scratch.
+ * The subscriber is DEBOUNCED ({@see CART_CHANGE_DEBOUNCE_MS}) — `refresh()` has no reentrancy
+ * guard of its own, so an undebounced burst (WooCommerce fires `updated_checkout` more than
+ * once per totals recalculation) would independently wipe the point pool once per event.
+ *
+ * THE SUBSCRIBER MUST ALSO IGNORE ITS OWN ECHO: {@see refreshCheckout} triggers WooCommerce's
+ * `update_checkout` after a selection that leaves the modal open, and WooCommerce answers with
+ * the very `updated_checkout` this subscriber listens for — without suppression, confirming a
+ * point would immediately wipe the pool it was just drawn into, on every single selection. Each
+ * session therefore carries a ONE-SHOT echo token ({@see consumeEcho}), set by
+ * `refreshCheckout()` at the moment it triggers `update_checkout` and consumed by the
+ * subscriber the first time it sees that session's modal open — captured at EVENT time (inside
+ * {@see handleCartChanged}, run once per raw event, undebounced), never at the debounced body's
+ * fire time: by then a `one()`-bound waiter has long since self-cleared, so a check made there
+ * could never tell an echo from a genuine change. One-shot, so a genuine cart change arriving
+ * after the echo still refreshes normally.
+ *
  * EVERY LISTENER THIS FILE ATTACHS DIES WITH THE SESSION: the provider's own
  * event handlers are re-registered fresh on every `start()` (initial open AND
  * every retry) and go away when that provider instance is destroyed (a real
@@ -254,6 +279,20 @@
 
 	/** @type {number} defer, in ms, after `updated_checkout` before re-mounting — see the file docblock. */
 	var MOUNT_DEFER_MS = 60;
+
+	/**
+	 * Debounce window, in ms, for the cart-change refresh subscriber (#238) — see
+	 * {@see handleCartChanged}. WooCommerce fires `updated_checkout` in bursts during a single
+	 * totals recalculation, and `refresh()` has no reentrancy guard of its own (see its own
+	 * docblock): every call independently wipes the point pool and detail memo. Collapsing a
+	 * burst into ONE refresh per session is this constant's whole job —
+	 * `pickup-datasource.js`'s own 300ms trailing debounce (`:80`, `:468-479`) already
+	 * collapses the resulting NETWORK calls, but only after `refresh()` has already run the
+	 * pool reset that many times.
+	 *
+	 * @type {number}
+	 */
+	var CART_CHANGE_DEBOUNCE_MS = 300;
 
 	/**
 	 * How long, in ms, a post-selection checkout refresh may hold the card's busy lock before it is
@@ -355,9 +394,28 @@
 	 * open, and this map is what lets the NEXT click — on whichever button is
 	 * currently mounted — still find and tear down the SAME session.
 	 *
-	 * @type {Object.<string, {modal: Object, refresh: Function, destroy: Function}>}
+	 * @type {Object.<string, {modal: Object, refresh: Function, consumeEcho: Function, destroy: Function}>}
 	 */
 	var sessions = {};
+
+	/**
+	 * Field ids awaiting a debounced cart-change refresh (#238) — accumulated by
+	 * {@see handleCartChanged} at EVENT time (echo suppression happens there too, per
+	 * session, via `consumeEcho()` — NOT in the debounced body), then drained together once
+	 * {@see CART_CHANGE_DEBOUNCE_MS} of quiet passes. See {@see flushCartChangeRefresh}.
+	 *
+	 * @type {Object.<string, boolean>}
+	 */
+	var pendingCartChangeRefresh = {};
+
+	/**
+	 * The debounce timer backing {@see handleCartChanged} — restarted on every raw
+	 * `updated_checkout`, so a burst of them collapses into one {@see flushCartChangeRefresh}
+	 * call. `null` when no refresh is currently pending.
+	 *
+	 * @type {number|null}
+	 */
+	var cartChangeDebounceTimer = null;
 
 	// -------------------------------------------------------------------------
 	// Small helpers
@@ -974,7 +1032,7 @@
 	 *
 	 * @param {Object}      config
 	 * @param {HTMLElement} triggerEl element focus returns to on close.
-	 * @returns {{modal: Object, refresh: Function, destroy: Function}}
+	 * @returns {{modal: Object, refresh: Function, consumeEcho: Function, destroy: Function}}
 	 */
 	function openSession( config, triggerEl ) {
 		// `config.modal` sizes the dialog before any content exists (spec V-1) — the PHP
@@ -999,11 +1057,20 @@
 		var providers = window.WoodevPickupMapProviders || {};
 		var ProviderCtor = config && providers[ config.provider ];
 		var noopRefresh = function() { return Promise.resolve(); };
+		// #238: these two degraded sessions never call refreshCheckout(), so their echo
+		// token can never be set — a permanent `false` is exactly as correct as a real
+		// closure variable would be, without needing one.
+		var noopConsumeEcho = function() { return false; };
 
 		if ( 'function' !== typeof ProviderCtor ) {
 			modal.showError( text( config, 'error' ) );
 
-			return { modal: modal, refresh: noopRefresh, destroy: function() { modal.destroy(); } };
+			return {
+				modal: modal,
+				refresh: noopRefresh,
+				consumeEcho: noopConsumeEcho,
+				destroy: function() { modal.destroy(); },
+			};
 		}
 
 		var DataSourceFactory = window.WoodevPickupDataSource;
@@ -1011,7 +1078,12 @@
 		if ( 'function' !== typeof DataSourceFactory ) {
 			modal.showError( text( config, 'error' ) );
 
-			return { modal: modal, refresh: noopRefresh, destroy: function() { modal.destroy(); } };
+			return {
+				modal: modal,
+				refresh: noopRefresh,
+				consumeEcho: noopConsumeEcho,
+				destroy: function() { modal.destroy(); },
+			};
 		}
 
 		var realDataSource = DataSourceFactory( {
@@ -1249,6 +1321,15 @@
 		 *  was locked (it may not be `panels` — the refresh is skipped entirely when the modal
 		 *  has just closed; see {@see finishSelection}'s own call site). */
 		var refreshBusyPanels = null;
+
+		/** @type {boolean} #238's one-shot echo-suppression token: true for exactly one
+		 *  `updated_checkout` after THIS session's own {@see refreshCheckout} triggers
+		 *  `update_checkout` — set there, consumed (read + cleared) by
+		 *  {@see consumeEcho}, which the module-scope cart-change subscriber calls once per
+		 *  event, at EVENT time, for every session whose modal is open (see the file
+		 *  docblock). Never set again until the NEXT confirmation-triggered refresh, so a
+		 *  genuine cart change arriving after it is never swallowed. */
+		var echoExpected = false;
 
 		/** @type {boolean} Task 16 (spec V-4 stage 2/3): has THIS start() cycle's busy overlay
 		 *  already been cleared? Reset at the top of every {@see start} call (initial open AND
@@ -2440,7 +2521,33 @@
 				}, REFRESH_TIMEOUT_MS );
 			}
 
+			// #238: marks the NEXT `updated_checkout` as THIS session's own echo, at the moment
+			// we cause it — see {@see consumeEcho} and the file docblock's "MUST ALSO IGNORE ITS
+			// OWN ECHO" section. Set unconditionally (even when `openPanels` is null, i.e. the
+			// modal already closed and `closeSession()` has already dropped this session from
+			// `sessions`): the module-scope subscriber only ever reads this for a session it can
+			// still find, so setting it on one nobody will ask again is harmless.
+			echoExpected = true;
+
 			window.jQuery( document.body ).trigger( 'update_checkout' );
+		}
+
+		/**
+		 * Reads and clears {@see echoExpected} in one step (#238) — the module-scope
+		 * cart-change subscriber ({@see handleCartChanged}) calls this, once per raw
+		 * `updated_checkout`, for every session whose modal is open, at EVENT time, before its
+		 * debounce timer ever fires. A plain read (without the clear) would suppress every
+		 * SUBSEQUENT genuine cart change too, not just the one this session's own
+		 * {@see refreshCheckout} caused.
+		 *
+		 * @returns {boolean} true when this event is this session's own echo.
+		 */
+		function consumeEcho() {
+			var wasExpected = echoExpected;
+
+			echoExpected = false;
+
+			return wasExpected;
 		}
 
 		/**
@@ -3130,6 +3237,7 @@
 		return {
 			modal: modal,
 			refresh: refresh,
+			consumeEcho: consumeEcho,
 			destroy: function() {
 				// EVERY card lock a session can be holding — an in-flight confirmation's, an
 				// in-flight checkout refresh's, and (issue #223) an in-flight detail fetch's — is
@@ -3230,10 +3338,78 @@
 	 * `sessions` being module-private.
 	 *
 	 * @param {string} fieldId
-	 * @returns {{modal: Object, refresh: Function, destroy: Function}|null}
+	 * @returns {{modal: Object, refresh: Function, consumeEcho: Function, destroy: Function}|null}
 	 */
 	function getSession( fieldId ) {
 		return sessions[ fieldId ] || null;
+	}
+
+	/**
+	 * Refreshes every session accumulated in {@see pendingCartChangeRefresh} — the debounced
+	 * half of {@see handleCartChanged}, run once {@see CART_CHANGE_DEBOUNCE_MS} of quiet has
+	 * passed since the last raw `updated_checkout`.
+	 *
+	 * Re-checks `isOpen()` here too, not just at event time in `handleCartChanged`: a session
+	 * added to the pending set can still close — or be torn down and replaced by a fresh
+	 * trigger click — before this timer fires.
+	 *
+	 * @returns {void}
+	 */
+	function flushCartChangeRefresh() {
+		cartChangeDebounceTimer = null;
+
+		var pending = pendingCartChangeRefresh;
+
+		pendingCartChangeRefresh = {};
+
+		Object.keys( pending ).forEach( function( fieldId ) {
+			var session = sessions[ fieldId ];
+
+			if ( session && session.modal.isOpen() ) {
+				session.refresh();
+			}
+		} );
+	}
+
+	/**
+	 * The module-scope `updated_checkout` subscriber that wires #232's cart-change verdict
+	 * invalidation to a real signal (#238) — see the file docblock's "REFRESH() NOW ALSO RUNS
+	 * AUTOMATICALLY ON A GENUINE CART CHANGE" section.
+	 *
+	 * Runs on EVERY raw event, undebounced — echo suppression is decided HERE, at event time,
+	 * per session, via {@see consumeEcho}, never inside {@see flushCartChangeRefresh}'s
+	 * debounced body: by the time a debounce timer fires, a session's own `refreshCheckout()`
+	 * waiter has long since self-cleared, so a check made there could never tell an echo from a
+	 * genuine change.
+	 *
+	 * A DISMISSED session (modal closed, `destroyed` still false — see
+	 * {@see handleModalClosed}) is skipped entirely: no echo check, no pending entry, nothing.
+	 * The next trigger click rebuilds it from scratch; refreshing it here would fire a live
+	 * carrier request the customer cannot see, against the merchant's quota, for a picker they
+	 * already dismissed.
+	 *
+	 * @returns {void}
+	 */
+	function handleCartChanged() {
+		Object.keys( sessions ).forEach( function( fieldId ) {
+			var session = sessions[ fieldId ];
+
+			if ( ! session.modal.isOpen() ) {
+				return;
+			}
+
+			if ( session.consumeEcho() ) {
+				return;
+			}
+
+			pendingCartChangeRefresh[ fieldId ] = true;
+		} );
+
+		if ( null !== cartChangeDebounceTimer ) {
+			window.clearTimeout( cartChangeDebounceTimer );
+		}
+
+		cartChangeDebounceTimer = window.setTimeout( flushCartChangeRefresh, CART_CHANGE_DEBOUNCE_MS );
 	}
 
 	// -------------------------------------------------------------------------
@@ -3243,6 +3419,12 @@
 	onCheckoutUpdated( function() {
 		window.setTimeout( mountAll, MOUNT_DEFER_MS );
 	} );
+
+	// #238: a second, independent, permanent `updated_checkout` subscriber — see
+	// {@see handleCartChanged}. Deliberately its own onCheckoutUpdated() registration rather
+	// than folded into the one above: the two run on unrelated schedules (a flat 60ms defer vs
+	// a restarting debounce) and over unrelated state (§8 anchors vs `sessions`).
+	onCheckoutUpdated( handleCartChanged );
 
 	// Initial mount: on a real checkout page this script runs in the footer,
 	// after §8's own ready handler has already placed every anchor, but the

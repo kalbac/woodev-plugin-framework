@@ -311,6 +311,19 @@ test( 'body gets a scroll-lock class while open, removed on close', () => {
 	modal.destroy();
 } );
 
+test( 'isOpen() reports false before open(), true while open, and false again after close() (#238)', () => {
+	const modal = new WoodevModal( { title: 'T' } );
+	expect( modal.isOpen() ).toBe( false );
+
+	modal.open();
+	expect( modal.isOpen() ).toBe( true );
+
+	modal.close();
+	expect( modal.isOpen() ).toBe( false );
+
+	modal.destroy();
+} );
+
 test( 'open() twice does not produce two dialogs', () => {
 	const modal = new WoodevModal( { title: 'T' } );
 	modal.open();
