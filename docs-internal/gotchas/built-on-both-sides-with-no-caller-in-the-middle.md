@@ -60,8 +60,39 @@ grep -rn "<name>" <source-dirs> --include=*.js | grep -v tests/
 true.** This one survived from the migration until the first rig run of that strategy, several
 sessions later.
 
+## s59 addendum — the SECOND occurrence, found the same way, one layer up (#238)
+
+Same file, same shape, three sessions later. `pickup-mount.js` exports
+`{ mountAll, getSession }`; `getSession( fieldId ).refresh()` is the documented cart-change entry
+point. Grepping the whole repository outside `tests/js/` for `getSession` returns **the definition
+and the export, and nothing else**.
+
+`refresh()` is therefore reachable only from tests — and `forgetPointDetails()`, added by #232
+precisely so a cart change invalidates every stored `selectable` verdict, is called from `refresh()`
+and nowhere else. So the invalidation mechanism has never run in production.
+
+The tell was identical: a confident docblock naming a mechanism nobody wired.
+
+> `refresh()`, EXPOSED PER SESSION VIA {@see getSession}: re-runs whatever the CURRENT
+> strategy/viewport/type-filter state describes…
+
+It says how to reach it. It does not say who does, and nobody does. `onCheckoutUpdated()` exists in
+the same file and is wired to `mountAll` only.
+
+**The addendum to the rule: an EXPORT is not a caller.** The first occurrence was found by grepping
+a moved name; this one hid from that check because nothing had moved — the export made the symbol
+look consumed. Grep for call sites (`getSession(`, `.refresh(`), not for the identifier.
+
+Second lesson, on damage assessment: the blast radius was much smaller than "the mechanism never
+runs" suggests, and saying so mattered. A fresh session (and a fresh pool, and a fresh memo) is
+built on **every** trigger click, so closing and reopening the picker already resets everything;
+the exposure is only a cart change while the picker stays open. Establish that before writing the
+card, or the card overstates and gets triaged wrong.
+
 ## Related
 
 - [[dispatcher-files-unwired-in-includes]] — the PHP shape of the same thing: a class that exists,
   is loaded by the test autoloader, and fatals in production because nothing requires it.
 - [[mutation-sweep-branch-only-false-confidence]] — another "green run proves less than it looks".
+- [[plain-object-is-not-an-insertion-ordered-map]] — the other s59 find; both came from an
+  adversarial pass rather than from the suite.
