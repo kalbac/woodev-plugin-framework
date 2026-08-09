@@ -49,7 +49,7 @@ $original_five = [
 		'phone'           => '+7 495 100-00-01',
 		'instruction'     => 'Вход со двора, 2 этаж.',
 		'work_time'       => 'Пн-Вс 09:00-21:00',
-		'payment_methods' => [ 'card', 'cod' ],
+		'payment_methods' => [ 'Картой при получении', 'Наложенный платёж' ],
 		'photos'          => [],
 		'type'            => [ 'code' => 'PVZ', 'label' => 'Пункт выдачи заказов' ],
 		'accepts_cod'     => true,
@@ -70,7 +70,7 @@ $original_five = [
 		'phone'           => '+7 495 100-00-02',
 		'instruction'     => 'Отдельный вход с торца здания.',
 		'work_time'       => 'Пн-Сб 10:00-20:00',
-		'payment_methods' => [ 'card' ],
+		'payment_methods' => [ 'Картой при получении' ],
 		'photos'          => [],
 		'type'            => [ 'code' => 'PVZ', 'label' => 'Пункт выдачи заказов' ],
 		'accepts_cod'     => false,
@@ -89,7 +89,7 @@ $original_five = [
 		'phone'           => '+7 495 100-00-03',
 		'instruction'     => 'Цоколь, вход со стороны парковки.',
 		'work_time'       => 'Пн-Вс 08:00-22:00',
-		'payment_methods' => [ 'card', 'cod' ],
+		'payment_methods' => [ 'Картой при получении', 'Наложенный платёж' ],
 		'photos'          => [],
 		'type'            => [ 'code' => 'PVZ', 'label' => 'Пункт выдачи заказов' ],
 		'accepts_cod'     => true,
@@ -109,7 +109,7 @@ $original_five = [
 		'phone'           => '+7 495 100-00-04',
 		'instruction'     => 'Небольшой пункт — только лёгкие посылки.',
 		'work_time'       => 'Пн-Пт 10:00-19:00',
-		'payment_methods' => [ 'card', 'cod' ],
+		'payment_methods' => [ 'Картой при получении', 'Наложенный платёж' ],
 		'photos'          => [],
 		'type'            => [ 'code' => 'PVZ', 'label' => 'Пункт выдачи заказов' ],
 		'accepts_cod'     => true,
@@ -128,7 +128,7 @@ $original_five = [
 		'phone'           => '+7 495 100-00-05',
 		'instruction'     => '',
 		'work_time'       => 'Пн-Вс 09:00-21:00',
-		'payment_methods' => [ 'card', 'cod' ],
+		'payment_methods' => [ 'Картой при получении', 'Наложенный платёж' ],
 		'photos'          => [],
 		'type'            => [ 'code' => 'PVZ', 'label' => 'Пункт выдачи заказов' ],
 		'accepts_cod'     => true,
@@ -183,7 +183,12 @@ $grid_streets = [
 ];
 
 // payment_methods rotate through three combinations so the fixture varies them.
-$grid_payment_methods = [ [ 'card' ], [ 'cod' ], [ 'card', 'cod' ] ];
+// These are DISPLAY STRINGS, not codes (#220): `Pickup_Point` escapes and shows this list
+// verbatim, so translating a payment method is the DOMAIN's job — the live Yandex source
+// does it through its own PAYMENT_METHOD_LABELS map. This fixture predates that rule and
+// carried raw `'card'`/`'cod'`, which put an English code in front of the customer on every
+// rig run of the viewport strategy. Same short chip register as the live source (#200).
+$grid_payment_methods = [ [ 'Картой при получении' ], [ 'Наложенный платёж' ], [ 'Картой при получении', 'Наложенный платёж' ] ];
 
 // Services are populated on exactly 5 of the 35 grid points (index 0, 5, 10, 15, 20)
 // so the fixture covers both the present and absent state at scale, on top of the
@@ -263,7 +268,7 @@ foreach ( $postamat_locations as $index => [ $street, $lat, $lng ] ) {
 		'phone'           => '',
 		'instruction'     => 'Ячейка автоматической выдачи, код из SMS.',
 		'work_time'       => 'Круглосуточно',
-		'payment_methods' => [ 'card' ],
+		'payment_methods' => [ 'Картой при получении' ],
 		'photos'          => [],
 		'type'            => [ 'code' => 'POSTAMAT', 'label' => 'Постамат' ],
 		'accepts_cod'     => false,
@@ -290,7 +295,7 @@ $colocated_points = [
 		'phone'           => '+7 495 100-00-90',
 		'instruction'     => 'Пункт выдачи и постамат в одном здании — вход общий.',
 		'work_time'       => 'Пн-Вс 09:00-21:00',
-		'payment_methods' => [ 'card', 'cod' ],
+		'payment_methods' => [ 'Картой при получении', 'Наложенный платёж' ],
 		'photos'          => [],
 		'type'            => [ 'code' => 'PVZ', 'label' => 'Пункт выдачи заказов' ],
 		'accepts_cod'     => true,
@@ -309,7 +314,7 @@ $colocated_points = [
 		'phone'           => '',
 		'instruction'     => 'Пункт выдачи и постамат в одном здании — вход общий.',
 		'work_time'       => 'Круглосуточно',
-		'payment_methods' => [ 'card' ],
+		'payment_methods' => [ 'Картой при получении' ],
 		'photos'          => [],
 		'type'            => [ 'code' => 'POSTAMAT', 'label' => 'Постамат' ],
 		'accepts_cod'     => false,
@@ -337,7 +342,7 @@ $long_address_point = [
 		'phone'           => '+7 495 100-00-99',
 		'instruction'     => 'Домофон, позвонить оператору за 10 минут.',
 		'work_time'       => 'Пн-Вс 09:00-21:00',
-		'payment_methods' => [ 'card', 'cod' ],
+		'payment_methods' => [ 'Картой при получении', 'Наложенный платёж' ],
 		'photos'          => [],
 		'type'            => [ 'code' => 'PVZ', 'label' => 'Пункт выдачи заказов' ],
 		'accepts_cod'     => true,
@@ -367,7 +372,7 @@ $long_address_point = [
 // not from Constraint_Checker independently refusing them for an unrelated reason.
 // That is not decoration — the refresh branch was originally attached to
 // FIX-BULK-POSTAMAT-1, whose own record carries `accepts_cod: false` /
-// `payment_methods: [ 'card' ]`; with COD the rig's only enabled gateway,
+// `payment_methods: [ 'Картой при получении' ]`; with COD the rig's only enabled gateway,
 // Constraint_Checker refused that point before the filter could matter, the CTA was
 // dead and the click handler self-guarded, so no request ever left the browser and
 // the branch was unreachable through genuine interaction (s52).
@@ -386,7 +391,7 @@ $domain_seam_points = [
 		'phone'           => '+7 495 100-00-97',
 		'instruction'     => '',
 		'work_time'       => 'Пн-Вс 09:00-21:00',
-		'payment_methods' => [ 'card', 'cod' ],
+		'payment_methods' => [ 'Картой при получении', 'Наложенный платёж' ],
 		'photos'          => [],
 		'type'            => [ 'code' => 'PVZ', 'label' => 'Пункт выдачи заказов' ],
 		'accepts_cod'     => true,
@@ -405,7 +410,7 @@ $domain_seam_points = [
 		'phone'           => '+7 495 100-00-98',
 		'instruction'     => '',
 		'work_time'       => 'Пн-Вс 09:00-21:00',
-		'payment_methods' => [ 'card', 'cod' ],
+		'payment_methods' => [ 'Картой при получении', 'Наложенный платёж' ],
 		'photos'          => [],
 		'type'            => [ 'code' => 'PVZ', 'label' => 'Пункт выдачи заказов' ],
 		'accepts_cod'     => true,
@@ -424,7 +429,7 @@ $domain_seam_points = [
 		'phone'           => '+7 495 100-00-96',
 		'instruction'     => '',
 		'work_time'       => 'Пн-Вс 09:00-21:00',
-		'payment_methods' => [ 'card', 'cod' ],
+		'payment_methods' => [ 'Картой при получении', 'Наложенный платёж' ],
 		'photos'          => [],
 		'type'            => [ 'code' => 'PVZ', 'label' => 'Пункт выдачи заказов' ],
 		'accepts_cod'     => true,
