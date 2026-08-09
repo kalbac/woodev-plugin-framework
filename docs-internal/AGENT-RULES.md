@@ -56,6 +56,19 @@ Before writing any new code block:
 
 Exception: `Read`, `Glob`, `Grep` built-in tools are fine for markdown, JSON, YAML, and non-PHP files.
 
+**Enforcement (operator decision, s60 / 2026-08-09):** this rule is mandatory, not best-effort —
+measured effect is fewer mistakes and fewer tokens. Three hard requirements:
+
+1. **Verify at session start** that Serena is actually connected (`find_symbol` /
+   `get_symbols_overview` present in the tool list, including deferred tools). If it is NOT
+   connected, **report it to the operator before doing any PHP work** — a missing Serena is an
+   environment defect to fix, not a license to fall back to `Read`/grep. (s45–s59 drifted exactly
+   this way: Serena silently disappeared from sessions and agents fell back without telling anyone.)
+2. **Propagate into subagent briefs:** every brief for a task that touches PHP source MUST repeat
+   this rule. A brief without it is a defective brief — the orchestrator is responsible.
+3. **Fallback is an exception, not a routine:** if Serena errors on a specific call, note it in the
+   session log and only then use built-in tools for that call.
+
 ### Document After Coding
 After implementing each logical code block:
 1. Document new gotchas immediately (Don't defer to session end)

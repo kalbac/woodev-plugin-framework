@@ -249,6 +249,10 @@ Full details + code examples in `docs-internal/gotchas/`. Scan `docs-internal/GO
 **Serena MCP (PHP navigation):**
 - Always use Serena tools for PHP source reading — never raw `Read` on `.php` files
 - Serena is pre-indexed, faster and more accurate than file reads
+- **Mandatory (operator decision, s60):** verify Serena is connected at session start; if it is
+  missing, report to the operator before any PHP work — do not silently fall back to `Read`.
+  Every subagent brief touching PHP must repeat this rule. Full enforcement text:
+  `docs-internal/AGENT-RULES.md` → "Use Serena MCP".
 
 **Type safety:**
 - Type declarations required on ALL parameters and return types
