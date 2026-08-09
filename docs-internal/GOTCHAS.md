@@ -1,6 +1,15 @@
 # Gotchas — Woodev Plugin Framework
-> **114 atomic gotchas, 21 namespaces (27 index sections)** — update when adding/removing.
-> Last updated: 2026-08-09 (session 59, viewport point accumulation #234: +1 file, **new namespace
+> **115 atomic gotchas, 21 namespaces (27 index sections)** — update when adding/removing.
+> Last updated: 2026-08-09 (session 60, docs audit + rig source switches: +1 file, existing
+> namespace `[testing/integration]` — `wpenv-resolves-environment-from-cwd` (wp-env hashes the
+> config found from the CURRENT WORKING DIRECTORY; any `npx wp-env run` from a subdirectory fails
+> with "Environment not initialized" while the containers are up. This was the real cause behind
+> s59's trap 8 "cannot extract WOODEV_TEST_YANDEX_SANDBOX_TOKEN", which wrongly blocked the #214
+> measurement — from the repo root the token prints fine. Bonus fact: `wp config set` constants
+> live in the container's wp-config.php and SURVIVE wp-env restarts, so the rig can carry state no
+> `.wp-env*.json` declares — audit rig state via `wp config list` from the root, not via the
+> config files).)
+> Prior: 2026-08-09 (session 59, viewport point accumulation #234: +1 file, **new namespace
 > `[js/*]`** — `plain-object-is-not-an-insertion-ordered-map` (a `{}` keyed by carrier ids is
 > neither ordered nor safe: `Object.keys()` returns integer-like keys in ASCENDING NUMERIC order
 > ahead of everything else, and this carrier's ids are numeric strings, so an eviction pass walking
@@ -162,6 +171,7 @@
 - [testing/integration] `rest_cookie_check_errors()` only checks the nonce when global `$wp_rest_auth_cookie === true`; nonce comes from superglobals, not the request object; missing nonce demotes to anonymous (later 401 via `rest_authorization_required_code()`), only an invalid nonce errors directly → [gotchas/rest-cookie-nonce-auth-semantics.md](gotchas/rest-cookie-nonce-auth-semantics.md) (s8)
 - [testing/unit] PHPUnit silently runs ONLY the first file argument when given several — "both files green" can mean file B never executed; run per-file or use --testsuite/--filter → [gotchas/phpunit-multiple-file-args.md](gotchas/phpunit-multiple-file-args.md) (s9)
 - [testing/integration] wp-env on Windows Git-Bash: MSYS mangles absolute container paths (`/var/www/…` → `C:/Program Files/Git/…`) — run from PowerShell or wrap in `bash -c "cd …"`; integration bootstrap also needs `TEST_SUITE=integration` → [gotchas/wpenv-windows-gitbash-path-mangling.md](gotchas/wpenv-windows-gitbash-path-mangling.md) (s9)
+- [testing/integration] wp-env resolves its environment from the CWD — any `wp-env run` from a subdirectory fails "Environment not initialized" while containers are up (blocked the #214 measurement in s59 as phantom "can't read token"); `wp config set` constants survive restarts, so audit rig state via `wp config list` from the repo root, not config files → [gotchas/wpenv-resolves-environment-from-cwd.md](gotchas/wpenv-resolves-environment-from-cwd.md) (s60)
 - [testing/unit] Patchwork redefinable internals (`function_exists`, `error_log`) need Patchwork force-loaded in bootstrap BEFORE source files — Brain Monkey loads it lazily at first setUp(), but PHPUnit compiles all required source at suite-build time → order-dependent dead stubs → [gotchas/patchwork-early-load-bootstrap.md](gotchas/patchwork-early-load-bootstrap.md) (s9)
 - [testing/wc-admin-access-403] Verifying an admin capability gate returns 403: a SUBSCRIBER can't test it — WooCommerce redirects customers/subscribers out of wp-admin before `admin_init`; use an EDITOR (has `edit_posts` → admin reachable, lacks `update_plugins`) → [gotchas/wc-blocks-subscriber-wp-admin-403-test.md](gotchas/wc-blocks-subscriber-wp-admin-403-test.md) (s19)
 - [testing/integration] Local two-stack e2e rig: `wp_safe_remote_request` (framework licensing transport) blocks private hosts (`host.docker.internal`) + non-80/443/8080 ports → silent swallowed throw, pull never runs. Stand-only fix: `http_request_host_is_external` + `http_allowed_safe_ports` filters + `woodev_licensing_api_url` + local-pubkey define; use PULL (cross-container push can't work) → [gotchas/wp-safe-remote-request-local-rig.md](gotchas/wp-safe-remote-request-local-rig.md) (s11)
