@@ -2452,6 +2452,37 @@ describe( 'viewport lazy detail fetch (#219)', () => {
 		expect( dataSourceFactory.fetchDetails ).toHaveBeenLastCalledWith( 'P1' );
 	} );
 
+	// #233: the SECOND point of a co-located group. A tab click reports `cardOpened` with origin
+	// `'tab'`, so this funnel must treat it like any other move — fetch that point's details —
+	// while skipping the camera, since every point in the group shares one coordinate.
+	test( "a tab switch fetches the new point's details and moves no camera", async () => {
+		const session = await openSession( configWith( { strategy: 'viewport' } ) );
+		const group = {
+			key: 'g1',
+			lat: 55.75,
+			lng: 37.61,
+			points: [ { id: 'OFFICE' }, { id: 'LOCKER' } ],
+		};
+
+		session.panels.emit( 'cardOpened', { group: group, pointId: 'OFFICE', origin: 'list' } );
+		await flushAsync();
+
+		expect( dataSourceFactory.fetchDetails ).toHaveBeenCalledTimes( 1 );
+		expect( dataSourceFactory.fetchDetails ).toHaveBeenLastCalledWith( 'OFFICE' );
+
+		session.provider.focusGroupCalls.length = 0;
+
+		session.panels.emit( 'cardOpened', { group: group, pointId: 'LOCKER', origin: 'tab' } );
+		await flushAsync();
+
+		// The whole defect: before this, the second point was never asked about at all.
+		expect( dataSourceFactory.fetchDetails ).toHaveBeenCalledTimes( 2 );
+		expect( dataSourceFactory.fetchDetails ).toHaveBeenLastCalledWith( 'LOCKER' );
+
+		// …and the camera stays put — same coordinate, nothing to move to.
+		expect( session.provider.focusGroupCalls ).toHaveLength( 0 );
+	} );
+
 	// A marker click and a sidebar row both swap the card without waiting for anything, so an
 	// answer can land about a point the customer is no longer reading.
 	test( 'a late answer is dropped when the card has moved to another point', async () => {

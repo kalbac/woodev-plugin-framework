@@ -546,7 +546,8 @@ final class TestLivePochtaPointSourceTest extends TestCase {
 		$point = ( new \Woodev_Test_Live_Pochta_Point_Source() )->fetch_details( '62257' );
 
 		$this->assertNotNull( $point );
-		$this->assertFalse( $point->get_accepts_cod() );
+		// A cached OFFICE record — offices take COD (#233).
+		$this->assertTrue( $point->get_accepts_cod() );
 	}
 
 	// -----------------------------------------------------------------------------
@@ -577,10 +578,12 @@ final class TestLivePochtaPointSourceTest extends TestCase {
 
 		$this->assertNotNull( $point );
 
-		// THE POINT OF THIS WHOLE CARD: the sparse listing said nothing about cash on delivery,
-		// and the live detail record says `cashPayment: false`. This is #219/#223's lazy-detail
-		// path proven against a real carrier instead of a fixture that carried it up front.
-		$this->assertFalse( $point->get_accepts_cod() );
+		// #233: COD follows the point TYPE, not `cashPayment`. This record is a `russian_post`
+		// office, and an office DOES take cash on delivery — per the operator's own production
+		// plugin (`plugins-reference/woodev-russian-post`, checkout.php), which refuses COD only
+		// for `postamat` and the ECOM_MARKETPLACE shipment type. `cashPayment` is `false` on
+		// every point measured, office and locker alike, so it cannot be the flag.
+		$this->assertTrue( $point->get_accepts_cod() );
 
 		// Live record has `cardPayment: false` and `acceptEcom: true` — so no card-on-receipt
 		// label. An invented fixture had `cardPayment: true` here and was asserting a label the
@@ -594,6 +597,24 @@ final class TestLivePochtaPointSourceTest extends TestCase {
 
 		// Every service flag is false on this real record.
 		$this->assertSame( [], $point->to_array()['services'] );
+	}
+
+	/**
+	 * The other half of the #233 rule, and the one the customer actually hits: a parcel locker
+	 * refuses cash on delivery. Sparse listings carry no payment information at all, so this
+	 * verdict can only reach the card through the detail fetch — which is exactly what #219/#223
+	 * exist for, now proven on a real carrier by a field that genuinely varies.
+	 */
+	public function test_a_parcel_locker_refuses_cash_on_delivery(): void {
+		$locker = array_merge( $this->full_russian_post_record(), $this->sparse_postamat_record() );
+
+		$this->stub_successful_details_transport( $locker );
+
+		$point = ( new \Woodev_Test_Live_Pochta_Point_Source() )->fetch_details( '66790' );
+
+		$this->assertNotNull( $point );
+		$this->assertSame( 'postamat', $locker['type'] );
+		$this->assertFalse( $point->get_accepts_cod() );
 	}
 
 	/**

@@ -1690,6 +1690,31 @@ it( 'renders one tab per point, labelled by type, first active', () => {
 	expect( tabs[ 0 ].classList.contains( 'is-active' ) ).toBe( true );
 } );
 
+// #233: a tab click moves the card onto a DIFFERENT POINT, and until this fix it only
+// re-rendered — the mount never learned, so under the viewport strategy the second tab's details
+// were never fetched and its CTA stayed live on a permissive-by-omission verdict while the first
+// tab's went correctly dead. Reported live on Pochta, where one building holds an office and a
+// parcel locker with different COD rules.
+it( 'reports the move through cardOpened when a tab is clicked', () => {
+	const panels = mount( cardConfig );
+	const seen = [];
+
+	panels.on( 'cardOpened', ( payload ) => seen.push( payload ) );
+	panels.openCard( two );
+
+	seen.length = 0;
+	panels.root.querySelectorAll( '.woodev-pickup-card__tab' )[ 1 ].click();
+
+	expect( seen ).toHaveLength( 1 );
+	expect( String( seen[ 0 ].pointId ) ).toBe( String( two.points[ 1 ].id ) );
+
+	// A dedicated origin, so the mount can skip the camera move: every point in a co-located
+	// group shares one coordinate, so a focus would move nothing and would re-enter the s52
+	// draw-vs-move race for no gain.
+	expect( seen[ 0 ].origin ).toBe( 'tab' );
+	expect( seen[ 0 ].group ).toBe( two );
+} );
+
 it( 'swaps the body when a tab is clicked', () => {
 	const panels = mount( cardConfig );
 	panels.openCard( two );

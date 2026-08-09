@@ -1498,8 +1498,13 @@
 		 * card open would be pure waste against the merchant's carrier quota.
 		 *
 		 * ONCE PER POINT PER LISTING. Re-opening a card, switching tabs inside a co-located group
-		 * and re-entering from the map all funnel through `cardOpened`, and none of them learn
-		 * anything new. The memo is emptied whenever a listing fetch succeeds, because that is the
+		 * and re-entering from the map all funnel through `cardOpened`, and re-entering the SAME
+		 * point learns nothing new.
+		 *
+		 * (That sentence was a FOSSIL until #233: a tab click only re-rendered the card and never
+		 * emitted `cardOpened`, so the second point of a co-located group was never fetched at
+		 * all and kept its permissive listing verdict forever. `buildTabs()` now reports the move
+		 * like every other route does — see its own comment.) The memo is emptied whenever a listing fetch succeeds, because that is the
 		 * moment the cart — and therefore the verdict — may have moved underneath us.
 		 *
 		 * DEGRADES TO EXACTLY TODAY'S BEHAVIOUR ON FAILURE, which is why it stays quiet: the
@@ -2329,7 +2334,13 @@
 				// to `focusGroup()` here would issue a SECOND move on top of it, re-entering the
 				// s52 draw-vs-move race the ordering exists to avoid, for a camera that is already
 				// exactly where this move would put it.
-				if ( 'restore' === payload.origin ) {
+				// `'restore'` and `'tab'` are the two origins that move no camera at all.
+				// `'restore'`'s move already went out ahead of the draw, as
+				// `setPoints( groups, { focus } )` — see {@see restoreSelection}; falling through
+				// would issue a SECOND move on top of it and re-enter the s52 draw-vs-move race.
+				// `'tab'` (#233) needs none either: every point in a co-located group shares one
+				// coordinate, so the camera is already exactly where a focus would put it.
+				if ( 'restore' === payload.origin || 'tab' === payload.origin ) {
 					return;
 				}
 
