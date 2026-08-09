@@ -1090,6 +1090,18 @@
 		 */
 		var pointPool = {};
 
+		/**
+		 * Bumped by every {@see resetPointPool}. A listing captures it when it goes out and is
+		 * DISCARDED on arrival if it moved — see {@see fetchAndSetPoints}.
+		 *
+		 * Why a counter and not a boolean "was reset": two resets can bracket one request, and a
+		 * boolean cleared by the second would let the request through. Same reason
+		 * `pendingSelectionToken` is a token rather than a point id (s57's ABA hole).
+		 *
+		 * @type {number}
+		 */
+		var poolGeneration = 0;
+
 		/** @type {Array} the address suggestions from the LAST `searchResults` event — what
 		 *  `searchAddressPicked( index )` indexes into. */
 		var lastAddresses = [];
@@ -1742,10 +1754,16 @@
 		 */
 		function resetPointPool() {
 			pointPool = {};
+			poolGeneration += 1;
 		}
 
 		function fetchAndSetPoints( query ) {
 			bumpLoading();
+
+			// #234: the generation this listing belongs to. Anything that empties the pool while
+			// this request is in flight makes its answer describe a state nobody is looking at
+			// any more — see the check in the resolve branch.
+			var myGeneration = poolGeneration;
 
 			// `realDataSource.fetchPoints( query )` is still called SYNCHRONOUSLY, right here — see
 			// {@see refreshPointDetails}'s identical `try` immediately above for why: several
@@ -1780,6 +1798,16 @@
 					clearInitialBusy();
 
 					if ( destroyed ) {
+						return points;
+					}
+
+					// #234: a reset happened while this was travelling. Merging now would put the
+					// pre-reset carrier answer back into a pool that was deliberately emptied —
+					// permanently, since nothing removes a pooled point. `dropLoading()` and
+					// `clearInitialBusy()` above have already run, so the customer's spinner state
+					// is correct; there is simply nothing here worth drawing. Viewport-only: `bulk`
+					// does not accumulate, so its late listing is still the best answer available.
+					if ( 'viewport' === config.strategy && myGeneration !== poolGeneration ) {
 						return points;
 					}
 

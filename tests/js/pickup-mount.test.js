@@ -1820,6 +1820,85 @@ test( 'retry (start()) drops the pool — a fresh session starts from nothing', 
 	expect( ids ).toEqual( [ 'B' ] );
 } );
 
+// -------------------------------------------------------------------------
+// #234 — the generation barrier: a reset must survive an in-flight listing.
+//
+// The plan this was written from drives the reset via `document.body.dispatchEvent(
+// new Event( 'updated_checkout' ) )`. Verified against the source and against every
+// other refresh() test in this file: that event alone never calls refresh() — it is an
+// EXTERNAL hook exposed only via `getSession( fieldId ).refresh()` (see the file
+// docblock, "the hook a payment-method change elsewhere on the page uses"), and
+// `refresh()` itself does not call `resetPointPool()` yet — that wiring is Task 2, which
+// this commit deliberately does not include. The only reset trigger implemented at this
+// point in the plan's own sequence is `start()` (Task 1, step 6), reached the same way
+// the "retry (start()) drops the pool" test above reaches it: a `retryRequested` event.
+// -------------------------------------------------------------------------
+
+test( '#234: a listing already in flight when the pool is reset is DROPPED on arrival', async () => {
+	let releaseFirst;
+	const first = new Promise( ( resolve ) => { releaseFirst = resolve; } );
+	const responses = [ first, Promise.resolve( [ point( { id: 'B' } ) ] ) ];
+	let call = 0;
+	window.WoodevPickupDataSource = fakeDataSourceFactory( () => responses[ call++ ] || Promise.resolve( [] ) );
+	setConfig( makeConfig( { strategy: 'viewport' } ) );
+	mountAll();
+	clickTrigger();
+	await flushAsync();
+
+	const provider = StubProvider.instances[ StubProvider.instances.length - 1 ];
+	const panels = StubPanels.instances[ StubPanels.instances.length - 1 ];
+
+	// A listing goes out and does NOT settle yet.
+	provider.emit( 'boundsChange', [ 55, 37, 56, 38 ] );
+	await flushAsync();
+
+	// A retry rebuilds the provider and resets the pool while the first listing is still
+	// travelling.
+	panels.emit( 'retryRequested' );
+	await flushAsync();
+
+	const freshProvider = StubProvider.instances[ StubProvider.instances.length - 1 ];
+
+	// A second listing goes out on the fresh provider and settles normally.
+	freshProvider.emit( 'boundsChange', [ 55, 37, 56, 38 ] );
+	await flushAsync();
+
+	// Only NOW does the stale first listing come back.
+	releaseFirst( [ point( { id: 'STALE' } ) ] );
+	await flushAsync();
+
+	const drawn = freshProvider.setPointsCalls[ freshProvider.setPointsCalls.length - 1 ];
+	const ids = drawn.reduce( ( acc, group ) => acc.concat( group.points.map( ( p ) => p.id ) ), [] );
+
+	expect( ids ).not.toContain( 'STALE' );
+} );
+
+test( '#234: a listing in flight across NO reset still lands normally — the guard is not a '
+	+ 'blanket drop', async () => {
+	let releaseFirst;
+	const first = new Promise( ( resolve ) => { releaseFirst = resolve; } );
+	let call = 0;
+	const responses = [ first ];
+	window.WoodevPickupDataSource = fakeDataSourceFactory( () => responses[ call++ ] || Promise.resolve( [] ) );
+	setConfig( makeConfig( { strategy: 'viewport' } ) );
+	mountAll();
+	clickTrigger();
+	await flushAsync();
+
+	const provider = StubProvider.instances[ StubProvider.instances.length - 1 ];
+
+	provider.emit( 'boundsChange', [ 55, 37, 56, 38 ] );
+	await flushAsync();
+
+	releaseFirst( [ point( { id: 'A' } ) ] );
+	await flushAsync();
+
+	const drawn = provider.setPointsCalls[ provider.setPointsCalls.length - 1 ];
+	const ids = drawn.reduce( ( acc, group ) => acc.concat( group.points.map( ( p ) => p.id ) ), [] );
+
+	expect( ids ).toEqual( [ 'A' ] );
+} );
+
 test( 'a non-empty result calls neither showMessage() (nothing to show) nor leaves any destructive '
 	+ 'modal state', async () => {
 	window.WoodevPickupDataSource = fakeDataSourceFactory( () => Promise.resolve( [ point() ] ) );
