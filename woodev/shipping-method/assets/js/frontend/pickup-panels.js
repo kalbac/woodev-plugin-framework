@@ -1141,6 +1141,29 @@
 			tab.addEventListener( 'click', function() {
 				self._activeIndex = index;
 				renderCard( self );
+
+				// AND TELL THE MOUNT (#233). Switching tabs moves the card onto a DIFFERENT
+				// POINT, which is exactly the event `cardOpened` exists to report — but this
+				// handler used to only re-render, so the mount never learned. Under the viewport
+				// strategy that meant the second tab's details were never fetched: it kept the
+				// sparse listing's permissive-by-omission verdict forever, and its CTA stayed
+				// live while the first tab's (correctly) went dead. Reported live on Pochta,
+				// where a building holds an office and a parcel locker with different rules.
+				//
+				// `pickup-mount.js`'s docblock claimed tab switches already funnelled through
+				// here. They did not — a FOSSIL claim of the same kind as the s56 gotcha
+				// `built-on-both-sides-with-no-caller-in-the-middle`; that comment is corrected
+				// in the same commit as this line.
+				//
+				// Origin `'tab'` (not `'list'`/`'marker'`) so the mount can skip the camera move:
+				// every point in a co-located group shares one coordinate, so the camera is
+				// already exactly where a focus would put it, and re-issuing one would re-enter
+				// the s52 draw-vs-move race for no gain.
+				self._emit( 'cardOpened', {
+					group: group,
+					pointId: point.id,
+					origin: 'tab',
+				} );
 			} );
 			tabs.appendChild( tab );
 		} );

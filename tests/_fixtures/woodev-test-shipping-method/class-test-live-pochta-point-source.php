@@ -58,8 +58,8 @@
  *     `type`, `geo`, `address`, `deliveryPointIndex`. No name, no payment methods, no hours:
  *     this is the whole reason this fixture exists, proving #219's lazy-detail fetch against a
  *     real carrier instead of three fixture points that already carried everything up front.
- *  3. `GET /api/pvz/{id}` -> the full record, adding `cashPayment` (bool — this IS
- *     `accepts_cod`), `cardPayment`, `acceptEcom`, `workTime` (list of strings), `holidays`,
+ *  3. `GET /api/pvz/{id}` -> the full record, adding `cashPayment`, `cardPayment`,
+ *     `acceptEcom`, `workTime` (list of strings), `holidays`,
  *     `closed`, `temporaryClosed`, `brandName`, `deliveryPointType`, `withFitting`,
  *     `partialRedemption`, `returnAvailable`, `contentsChecking`, `boxSize`, `typesizeVal`.
  *
@@ -127,9 +127,32 @@
  * weekday. There is nothing to reconstruct — joining them is the whole job, and inventing a
  * parser for them would be a way to introduce bugs, not remove them.
  *
- * `cashPayment: false` on this real record is the live proof the lazy-detail path (#219/#223)
- * was built for: the sparse listing says nothing about cash on delivery, the detail call says
- * "no", and the verdict flips only after that second request lands.
+ * CASH ON DELIVERY — decided by the point's TYPE, not by `cashPayment` (#233).
+ *
+ * This first mapped `cashPayment` straight onto `accepts_cod`, on the strength of issue #226's
+ * own wording ("this IS `accepts_cod`"). Live data says otherwise: `cashPayment` is `false` on
+ * EVERY point measured — 6 `russian_post` and 6 `postamat` — and so is `cardPayment`. A field
+ * that never varies carries no information, and mapping it to a customer-facing verdict made
+ * every post office refuse cash on delivery, which is backwards.
+ *
+ * The authority is the operator's own production plugin,
+ * `plugins-reference/woodev-russian-post`, in `includes/classes/checkout.php`:
+ *
+ *     if ( 'cod' == $data['payment_method']
+ *          && ( 'postamat' == $customer_delivery_point->get_type()
+ *               || $customer_delivery_point->get_mail_type() == 'ECOM_MARKETPLACE' ) ) {
+ *         // refuse: "unavailable for Postamat and ECOM shipping type"
+ *     }
+ *
+ * COD is refused for a PARCEL LOCKER (and for the ECOM_MARKETPLACE shipment type); an ordinary
+ * post office takes it. `mail_type` is a property of the SHIPMENT in his Otpravka integration
+ * and has no counterpart in this widget API, so only the type half is expressible here — and it
+ * is the half that separates the two kinds of point on the map. `acceptEcom` (true for offices,
+ * false for lockers) is a different flag and is deliberately NOT used for this.
+ *
+ * The lazy-detail path (#219/#223) is still proven on real data, just by a different field: the
+ * sparse listing carries no payment information at all, so a locker's `accepts_cod: false` can
+ * still only reach the customer once the detail call lands.
  *
  * TRAP 2 re-confirmed in the same capture: `GET /api/pvz/111543` (this point's own postal
  * index) returned HTTP 200 with the 4-byte body `null`.
@@ -884,10 +907,10 @@ if ( ! class_exists( 'Woodev_Test_Live_Pochta_Point_Source' ) ) {
 					'work_time'        => $this->format_work_time( $raw_point ),
 					'payment_methods'  => $this->map_payment_methods( $raw_point ),
 					'services'         => $this->map_services( $raw_point ),
-					// cashPayment (bool) IS accepts_cod — see file docblock PAYLOAD section.
-					// Absent entirely means "the carrier did not say", matching
-					// Pickup_Point::from_array()'s own null default.
-					'accepts_cod'      => isset( $raw_point['cashPayment'] ) ? (bool) $raw_point['cashPayment'] : null,
+					// COD IS DECIDED BY POINT TYPE, NOT BY `cashPayment` — see the file docblock's own
+					// CASH ON DELIVERY section for the measurement and for the authority (the operator's
+					// own production plugin) behind this rule.
+					'accepts_cod'      => 'postamat' !== (string) ( $raw_point['type'] ?? '' ),
 					'photos'           => [],
 				]
 			);
