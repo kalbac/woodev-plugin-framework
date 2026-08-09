@@ -197,8 +197,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Point' ) ) :
 		 * reports `have_cashless`/`have_cash`/`allowed_cod` booleans, which an adapter targeting
 		 * this contract would map to STRING codes, not carry through as numbers; Yandex Delivery
 		 * (`woocommerce-yandex-delivery`) emits string codes directly (`'cash_on_receipt'`,
-		 * `'card_on_receipt'`). Every in-repo pickup fixture agrees (`'card'`, `'cod'`; `photos`
-		 * always `[]` — no real carrier this framework targets populates it yet). A numeric
+		 * `'card_on_receipt'`). Every in-repo pickup fixture agrees — they carry display
+		 * STRINGS, and since #220 those are the customer-facing Russian labels the domain is
+		 * responsible for producing rather than raw codes (`photos` always `[]` — no real
+		 * carrier this framework targets populates it yet). A numeric
 		 * element here is therefore not a plausible carrier shape to accommodate; it is far more
 		 * likely a broken adapter leaking an internal id/enum, and silently stringifying it would
 		 * put a meaningless "5" in front of the customer exactly as confusingly as "Array" did —
