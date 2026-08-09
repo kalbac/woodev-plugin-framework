@@ -8,7 +8,9 @@
 
 **Tech Stack:** Vanilla ES5 JS (no transpilation — no `??`, no arrow functions, no `const`/`let` in the shipped files), jest via `wp-scripts test-unit-js`, PHP 7.4+ for the config seam.
 
-**Spec:** `docs-internal/specs/2026-08-09-sp5-viewport-point-accumulation-design.md`
+**Spec:** `docs-internal/specs/2026-08-09-sp5-viewport-point-accumulation-design.md` — read §3 and §7
+before starting. §7 records an adversarial review of this design and what changed because of it;
+Task 1b exists entirely because of it.
 
 ---
 
@@ -324,6 +326,154 @@ composer test:unit && composer phpcs && composer phpstan
 npm run test:js -- --roots "<rootDir>/tests/js"
 git add woodev/shipping-method/assets/js/frontend/pickup-mount.js tests/js/pickup-mount.test.js
 git commit -m "feat(pickup): draw the union of every viewport listing, not just the last (#234)"
+```
+
+---
+
+### Task 1b: The generation barrier — a reset must survive an in-flight listing
+
+**Files:**
+- Modify: `woodev/shipping-method/assets/js/frontend/pickup-mount.js`
+- Test: `tests/js/pickup-mount.test.js`
+
+**Why (adversarial review, 09.08.2026):** a listing already travelling when a reset fires settles
+afterwards and merges its stale points into the freshly emptied pool. The continuation's only guard
+today is `destroyed`, which is false here. The race exists today and is HARMLESS today — each
+listing replaces the set, so the next one overwrites the damage — and accumulation is exactly what
+makes it permanent. `fetchPoints()`'s debounce/supersede does NOT close it: supersede means an
+earlier CALLER gets the LATER result; it says nothing about a request that had already gone out.
+
+Modelled on `pendingSelectionToken`, which exists because the equivalent ABA hole was found in the
+selection lock (s57). Keep the same shape.
+
+- [ ] **Step 1: Write the failing tests**
+
+```js
+test( '#234: a listing already in flight when the pool is reset is DROPPED on arrival', async () => {
+	let releaseFirst;
+	const first = new Promise( ( resolve ) => { releaseFirst = resolve; } );
+	const responses = [ first, Promise.resolve( [ point( { id: 'B' } ) ] ) ];
+	let call = 0;
+	window.WoodevPickupDataSource = fakeDataSourceFactory( () => responses[ call++ ] || Promise.resolve( [] ) );
+	setConfig( makeConfig( { strategy: 'viewport' } ) );
+	mountAll();
+	clickTrigger();
+	await flushAsync();
+
+	const provider = StubProvider.instances[ StubProvider.instances.length - 1 ];
+
+	// A listing goes out and does NOT settle yet.
+	provider.emit( 'boundsChange', [ 55, 37, 56, 38 ] );
+	await flushAsync();
+
+	// The cart changes: the pool resets and a second listing goes out and settles.
+	document.body.dispatchEvent( new Event( 'updated_checkout' ) );
+	jest.runOnlyPendingTimers();
+	await flushAsync();
+
+	// Only NOW does the stale first listing come back.
+	releaseFirst( [ point( { id: 'STALE' } ) ] );
+	await flushAsync();
+
+	const drawn = provider.setPointsCalls[ provider.setPointsCalls.length - 1 ];
+	const ids = drawn.reduce( ( acc, group ) => acc.concat( group.points.map( ( p ) => p.id ) ), [] );
+
+	expect( ids ).not.toContain( 'STALE' );
+} );
+
+test( '#234: a listing in flight across NO reset still lands normally — the guard is not a '
+	+ 'blanket drop', async () => {
+	let releaseFirst;
+	const first = new Promise( ( resolve ) => { releaseFirst = resolve; } );
+	let call = 0;
+	const responses = [ first ];
+	window.WoodevPickupDataSource = fakeDataSourceFactory( () => responses[ call++ ] || Promise.resolve( [] ) );
+	setConfig( makeConfig( { strategy: 'viewport' } ) );
+	mountAll();
+	clickTrigger();
+	await flushAsync();
+
+	const provider = StubProvider.instances[ StubProvider.instances.length - 1 ];
+
+	provider.emit( 'boundsChange', [ 55, 37, 56, 38 ] );
+	await flushAsync();
+
+	releaseFirst( [ point( { id: 'A' } ) ] );
+	await flushAsync();
+
+	const drawn = provider.setPointsCalls[ provider.setPointsCalls.length - 1 ];
+	const ids = drawn.reduce( ( acc, group ) => acc.concat( group.points.map( ( p ) => p.id ) ), [] );
+
+	expect( ids ).toEqual( [ 'A' ] );
+} );
+```
+
+- [ ] **Step 2: Run to verify**
+
+Run: `npm run test:js -- --roots "<rootDir>/tests/js" -t "in flight"`
+Expected: the first test FAILS (`STALE` is drawn); the second PASSES.
+
+- [ ] **Step 3: Add the generation counter**
+
+Beside `var pointPool = {};`:
+
+```js
+		/**
+		 * Bumped by every {@see resetPointPool}. A listing captures it when it goes out and is
+		 * DISCARDED on arrival if it moved — see {@see fetchAndSetPoints}.
+		 *
+		 * Why a counter and not a boolean "was reset": two resets can bracket one request, and a
+		 * boolean cleared by the second would let the request through. Same reason
+		 * `pendingSelectionToken` is a token rather than a point id (s57's ABA hole).
+		 *
+		 * @type {number}
+		 */
+		var poolGeneration = 0;
+```
+
+In `resetPointPool()`, add as the last line:
+
+```js
+			poolGeneration += 1;
+```
+
+- [ ] **Step 4: Capture and check it**
+
+In `fetchAndSetPoints()`, immediately after `bumpLoading();`:
+
+```js
+			// #234: the generation this listing belongs to. Anything that empties the pool while
+			// this request is in flight makes its answer describe a state nobody is looking at
+			// any more — see the check in the resolve branch.
+			var myGeneration = poolGeneration;
+```
+
+In the resolve branch, directly after the existing `if ( destroyed ) { return points; }`:
+
+```js
+					// #234: a reset happened while this was travelling. Merging now would put the
+					// pre-reset carrier answer back into a pool that was deliberately emptied —
+					// permanently, since nothing removes a pooled point. `dropLoading()` and
+					// `clearInitialBusy()` above have already run, so the customer's spinner state
+					// is correct; there is simply nothing here worth drawing. Viewport-only: `bulk`
+					// does not accumulate, so its late listing is still the best answer available.
+					if ( 'viewport' === config.strategy && myGeneration !== poolGeneration ) {
+						return points;
+					}
+```
+
+- [ ] **Step 5: Run to verify both pass**
+
+Run: `npm run test:js -- --roots "<rootDir>/tests/js" -t "in flight"`
+Expected: PASS
+
+- [ ] **Step 6: Full set and commit**
+
+```bash
+composer test:unit && composer phpcs && composer phpstan
+npm run test:js -- --roots "<rootDir>/tests/js"
+git add woodev/shipping-method/assets/js/frontend/pickup-mount.js tests/js/pickup-mount.test.js
+git commit -m "fix(pickup): discard a listing that was in flight across a pool reset (#234)"
 ```
 
 ---
@@ -1097,6 +1247,15 @@ test( '#234: a previously chosen point is still restorable from the pool after t
 	const ids = drawn.reduce( ( acc, group ) => acc.concat( group.points.map( ( p ) => p.id ) ), [] );
 
 	expect( ids ).toContain( 'A' );
+
+	// …and the SECOND listing must not have re-focused the camera onto that pooled group.
+	// The adversarial review flagged this as a possible camera jump: with groups now built
+	// from the pool, `pendingRestoreGroup()` can find a chosen point that the current frame's
+	// listing does not contain. It is unreachable because `selectionRestoreAttempted` is
+	// claimed on the FIRST listing (which is where the pool still equals that listing), but
+	// "unreachable" is a property that must be pinned, not assumed.
+	const lastOptions = provider.setPointsOptions[ provider.setPointsOptions.length - 1 ];
+	expect( lastOptions ).toBeFalsy();
 } );
 ```
 

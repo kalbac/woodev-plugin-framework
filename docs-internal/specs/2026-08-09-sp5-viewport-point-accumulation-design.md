@@ -51,8 +51,24 @@ A session-scoped `pointPool` in `pickup-mount.js`, keyed by `point.id`, **viewpo
 
 On every successful listing:
 
-1. Merge the listing's points into the pool. **The listing wins on conflict** — it is the fresher
-   carrier record.
+1. Merge the listing's points into the pool. **The listing wins on conflict *in the pool*** — it is
+   the fresher carrier record.
+
+   **But it does not win on screen, and that is deliberate.** Step 3 below re-applies every stored
+   detail field over the freshly merged record, so where a listing field and a detail field share a
+   name, the *older* detail value is what the customer sees. This is not an oversight introduced
+   here — it is #232's fix, which stopped an open card from losing its own content on every pan —
+   and the adversarial review was right to call the flat claim "listing wins" false. Recorded
+   precisely because the two halves read as contradictory and a future reader will otherwise
+   "correct" one of them:
+
+   | layer | winner | why |
+   |---|---|---|
+   | the pool | the listing | it is the fresher carrier record |
+   | what is drawn | the stored detail | a detail fetch asked about ONE point and got the full record; a listing is sparse by construction |
+
+   The exposure is bounded by §3.2: `detailsById` is cleared on exactly the events that can
+   invalidate it, and always together with the pool.
 2. Build groups from the POOL, not the listing: `geo.groupByPosition( poolValues() )`.
 3. Re-apply `detailsById` onto those groups — unchanged, and it must keep running *after* grouping
    so a re-merged sparse record cannot overwrite what a detail fetch already learned.
@@ -78,7 +94,29 @@ objects themselves; clearing `detailsById` while keeping the pool would leave th
 with nothing left to re-derive them from. A test pins that one call clears both. (This is the s57
 lesson about two guards that look independent and are not.)
 
-### 3.3 The empty-frame message
+### 3.3 A reset must survive an in-flight listing
+
+Found by the adversarial review, and it is the one finding that needs code the design did not have.
+
+A listing request is already travelling when a reset fires (a checkout update, a type change). It
+settles afterwards and its continuation merges its now-stale points into the freshly emptied pool.
+The guard the continuation has today is `destroyed` alone, which is false here.
+
+This race exists today and is harmless today: each listing REPLACES the set, so the next listing
+overwrites the stale one wholesale. Accumulation is what makes it permanent — nothing removes a
+point once pooled.
+
+`fetchPoints()` being debounced and superseded does NOT close it. Supersede means an earlier CALLER
+receives the LATER result; it says nothing about a request that had already gone out before the
+reset.
+
+**Fix:** a monotonic `poolGeneration`, bumped by `resetPointPool()`. `fetchAndSetPoints()` captures
+it at call time and the continuation drops the listing entirely if the generation moved while the
+request was in flight — no merge, no draw. This is the same shape as `pendingSelectionToken`, which
+exists because the equivalent ABA hole was found in the selection lock in s57; the two must not
+diverge in style.
+
+### 3.4 The empty-frame message
 
 Today `points.length === 0` drives `showFetchMessage( 'emptyInView' )`. With a pool that becomes
 wrong: a listing can come back empty for a bbox in which the pool still holds points, because the
@@ -86,21 +124,29 @@ source truncates at `MAX_PAGES × PAGE_SIZE` (§4 measured this happening at `MI
 must be driven by what the customer can actually SEE — the pool's in-frame subset — not by the
 listing length. `bulk`'s `emptyLocality` path is unchanged.
 
-### 3.4 Stale points
+### 3.5 Stale points
 
-A pooled point can outlive its removal by the carrier for the length of a session. This is contained
-and must stay contained:
+A pooled point can outlive its removal — or its becoming unavailable — at the carrier, for the
+length of a session. Nothing in the three resets is triggered by a carrier-side change. This is
+contained, and the containment is worth stating precisely, because the adversarial review's sharpest
+correct point was that fail-closed selection protects *checkout integrity*, not *picker
+correctness* — being shown an option and refused it later is its own defect, just a smaller one.
 
-- the verdict is recomputed server-side on every detail fetch;
-- selection is server-authoritative — `POST …/select` recomputes and is fail-closed, so a stale
-  point cannot be silently ordered against;
-- the pool resets on cart change.
+Three layers, in the order the customer meets them:
 
-The exposure is therefore "a point that no longer exists may be shown until the customer tries to
-pick it", which is what every map with a client cache has, and it is strictly smaller than the
-alternative defect the customer reports today.
+1. **Opening the card re-asks.** `cardOpened` drives `refreshPointDetails()`, which fetches that one
+   point and recomputes its verdict server-side; a refusal locks the CTA before the customer can
+   press it. So a stale point is caught at the moment of interest, not at order time.
+2. **Selection is server-authoritative.** `POST …/select` recomputes fail-closed, so even a bypassed
+   client cannot order against a stale point.
+3. **The pool resets on cart change**, which is the invalidation we can actually observe.
 
-### 3.5 Bound on the pool
+Residual exposure: a point the carrier removed between two frames stays *visible on the map* until
+a reset. It cannot be selected, and it announces itself as unavailable as soon as it is opened.
+That is strictly smaller than the defect the customer reports today, and it is the same exposure any
+map with a client-side cache carries.
+
+### 3.6 Bound on the pool
 
 **Default: unlimited.** Justified by §4, not by argument.
 
@@ -180,6 +226,10 @@ jest, `tests/js/pickup-mount.test.js`:
 10. Bulk strategy is unaffected — its listing still replaces wholesale.
 11. Cap path: with `maxAccumulatedPoints` set, oldest-inserted are evicted first and the in-frame /
     open-card / selected points are never evicted.
+12. A listing that was already in flight when the pool was reset is DROPPED on arrival — its points
+    are not merged and nothing is redrawn from it (§3.3).
+13. A listing in flight across NO reset still lands normally — the generation guard must not be a
+    blanket "drop anything that overlaps a reset-free window".
 
 ## 6. Explicitly out of scope
 
@@ -189,10 +239,29 @@ fact. Sending them without accumulating would lose points, and now that we accum
 a bandwidth optimisation at best. We keep requesting the full frame, which is correct either way.
 If it is ever wanted, it belongs in the domain source, not here.
 
+## 7. Adversarial review (Codex, 09.08.2026)
+
+Run against this design before any code. Three of its HIGH findings were bundle artefacts — it was
+given the CURRENT code plus the design and read them as one proposed final state, so it correctly
+observed that the resets "are absent from the shown handler". They are absent because they are not
+written yet. Recorded so the same objection is not re-raised at review time.
+
+What it found that was real, and what changed as a result:
+
+| finding | verdict | change |
+|---|---|---|
+| "listing wins" is defeated by the detail re-application | **correct** — the flat claim was false | §3.1 now states the two-layer precedence explicitly |
+| a reset has no request-generation barrier | **correct, and the only new code it forced** | new §3.3 |
+| a fresh listing cannot remove a point that became invalid | **correct in kind** — fail-closed protects checkout, not the picker | §3.5 rewritten to name the residual exposure instead of implying there is none |
+| restore could focus an off-frame pooled group | **not reachable** — `selectionRestoreAttempted` is claimed on the first listing that is non-empty or carries a restore group, and the pool equals that listing at that moment; it can only be a union from listing 2 onward | no code change; pinned by a test so it stays unreachable |
+| unlimited accumulation makes redraws progressively slower | **known and measured** — 334 ms at 20 000, once per listing, against a 6–13 s fetch | no change; §3.6 already carries the seam |
+
 ## Related
 
 - Issue #234 · gotcha `built-on-both-sides-with-no-caller-in-the-middle` (why the docblock was
   re-read rather than trusted) · gotcha `card-renders-from-a-snapshot-the-writers-never-touch`
-  (why §3.2's invariant is pinned by a test)
+  (why §3.2's invariant is pinned by a test) · gotcha
+  `a-per-cycle-memo-is-not-in-flight-deduplication` (the s57 ABA hole §3.3's generation guard is
+  modelled on)
 - `docs-internal/specs/2026-08-01-sp5-pickup-map-rework-design.md` — the `dataSource` inversion this
   builds on
