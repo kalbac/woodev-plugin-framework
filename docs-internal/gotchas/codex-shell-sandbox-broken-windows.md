@@ -77,6 +77,45 @@ Two rules from this:
    sandbox is broken; review ONLY the pasted diff with reasoning and return a verdict."*
    s17's re-run did exactly this and Codex returned a clean SHIP from reasoning alone.
 
+## s61 addendum — the inline bundle itself can arrive MANGLED, and the critic blames your code
+
+The remedy above (inline bundle) has its own transport trap, hit s61 (2026-08-09) while
+reviewing #243. The bundle on disk was correct; what reached Codex had **every single-quote
+stripped**, so it saw
+
+```js
+querySelectorAll( .woodev-pickup-filter__row )     // what Codex got
+querySelectorAll( '.woodev-pickup-filter__row' )   // what the file actually contains
+```
+
+and opened with a **P0 "the added source is syntactically invalid"** — a maximum-severity
+finding against our own tooling, on code that phpcs and 2 326 passing tests had already proven
+parses. Codex hedged it correctly ("the surrounding UNCHANGED context is also unquoted, so this
+may be a transcription issue"), and that hedge is the tell worth memorising: **when a critic
+reports a syntax error in context lines you never touched, suspect the transport, not the diff.**
+
+The cost is not only the wasted finding. The rest of that run's reasoning — including its
+"no invariant break" conclusion — was performed against mangled source, so the whole review
+had to be thrown away and re-run, not just the one finding.
+
+**Cause:** passing the bundle as a command-LINE ARGUMENT through PowerShell
+(`codex exec "$(cat bundle.md)"`); the run also logged `Command failed: pwsh.exe ... exit -1`.
+Note this does NOT contradict step 3 above — that recipe pipes via **stdin** (`… | codex exec … -`),
+which is safe. Argument interpolation is what breaks.
+
+**Fix — use a transport that cannot reinterpret quoting, in this order:**
+1. `--prompt-file <path>` (verified working s61, invoked from **Bash**, not PowerShell)
+2. stdin pipe from Bash (`cat bundle.md | codex exec … -`) — the step-3 recipe
+3. a Bash heredoc
+
+**Always verify the round trip before accepting any finding.** Prepend to the bundle:
+
+> FIRST, before any analysis, echo back verbatim the single line of the diff that contains
+> `<some token>`. Reproduce it character-for-character including all quote marks. Then proceed.
+
+Pick a line carrying quotes/backslashes. If the echo comes back stripped, the findings are
+worthless — fix the transport and re-run. This costs one line and catches a whole wasted review.
+
 ## Related
 
 - [[autodev-critic-ratelimit-false-positive]] — the other codex-critic transport gotcha
