@@ -87,6 +87,25 @@ On every successful listing:
 
 Never reset on: pan, zoom, address search, opening or closing a card.
 
+**Which of these actually fire in production — checked, not assumed (09.08.2026).** A worker
+contradicted the plan here and was right, and following it up found something bigger:
+
+| trigger | fires in production? |
+|---|---|
+| `start()` | **yes, and it is the dominant one** — a fresh session is built on every trigger click (`sessions[ fieldId ] = openSession( … )`), so closing and reopening the picker already starts from an empty pool |
+| `typeFilterChange` | yes |
+| `refresh()` | **NO — it has no production caller at all.** `getSession()` is exported and never called outside `tests/js/`. `onCheckoutUpdated()` exists in this file but is wired only to `mountAll`, never to `refresh` |
+
+The third row is a pre-existing hole, not one this design opens: `forgetPointDetails()` — added by
+#232 precisely so a cart change invalidates stored verdicts — is therefore dead in production too.
+Filed as **#238**; deliberately NOT fixed here, because wiring `updated_checkout` to `refresh()`
+naively means a live carrier call (6–13 s) on an event the checkout fires often, and that needs its
+own design.
+
+What it means for #234: the pool's real-world reset is "every time the picker opens", which covers
+the common case completely. The `refresh()` reset is still implemented and still correct — it is
+the right place for it, and it starts working the moment #238 does.
+
 **Invariant — the pool and the details memo reset TOGETHER.** `refresh()` already calls
 `forgetPointDetails()`; `resetPointPool()` goes beside it and the two must never be separated.
 `geo.groupByPosition()` does not deep-copy, so re-applied detail fields land on the pooled point

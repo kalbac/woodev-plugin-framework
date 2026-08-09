@@ -518,9 +518,10 @@ test( '#234 invariant: refresh() clears the pool AND the details memo in ONE cal
 	} );
 	await flushAsync();
 
-	// The cart changes.
-	document.body.dispatchEvent( new Event( 'updated_checkout' ) );
-	jest.runOnlyPendingTimers();
+	// The cart changes. NOTE: `updated_checkout` does NOT reach refresh() — this file wires
+	// that event to mountAll() only, and getSession() has no production caller at all (#238).
+	// Every existing refresh() test in this file drives it directly, and so does this one.
+	await window.WoodevPickupMount.getSession( FIELD_ID ).refresh();
 	await flushAsync();
 
 	const drawn = provider.setPointsCalls[ provider.setPointsCalls.length - 1 ];
