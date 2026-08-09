@@ -2019,6 +2019,55 @@ test( '#234: the type chips are computed from the POOL, so they do not flicker a
 	] );
 } );
 
+// -------------------------------------------------------------------------
+// #234 — "nothing in this area" must not print over a map that shows points.
+// -------------------------------------------------------------------------
+
+test( '#234: an empty listing does NOT show emptyInView while pooled points are still in frame', async () => {
+	const listings = [
+		[ point( { id: 'A' } ) ],
+		[],
+	];
+	let call = 0;
+	window.WoodevPickupDataSource = fakeDataSourceFactory( () => Promise.resolve( listings[ call++ ] || [] ) );
+	setConfig( makeConfig( { strategy: 'viewport' } ) );
+	mountAll();
+	clickTrigger();
+	await flushAsync();
+
+	const provider = StubProvider.instances[ StubProvider.instances.length - 1 ];
+	const panels = StubPanels.instances[ StubPanels.instances.length - 1 ];
+
+	provider.emit( 'boundsChange', [ 55, 37, 56, 38 ] );
+	await flushAsync();
+
+	// The provider reports A is on screen — this is the mount's only source for "in frame".
+	const drawnKey = provider.setPointsCalls[ provider.setPointsCalls.length - 1 ][ 0 ].key;
+	provider.emit( 'visibleChange', [ drawnKey ] );
+
+	provider.emit( 'boundsChange', [ 55, 37, 56, 38 ] );
+	await flushAsync();
+
+	expect( panels.showMessageCalls ).toBeUndefined();
+} );
+
+test( '#234: an empty listing DOES show emptyInView when nothing is in frame', async () => {
+	window.WoodevPickupDataSource = fakeDataSourceFactory( () => Promise.resolve( [] ) );
+	setConfig( makeConfig( { strategy: 'viewport' } ) );
+	mountAll();
+	clickTrigger();
+	await flushAsync();
+
+	const provider = StubProvider.instances[ StubProvider.instances.length - 1 ];
+	const panels = StubPanels.instances[ StubPanels.instances.length - 1 ];
+
+	provider.emit( 'visibleChange', [] );
+	provider.emit( 'boundsChange', [ 55, 37, 56, 38 ] );
+	await flushAsync();
+
+	expect( panels.showMessageCalls ).toEqual( [ 'emptyInView' ] );
+} );
+
 test( 'a non-empty result calls neither showMessage() (nothing to show) nor leaves any destructive '
 	+ 'modal state', async () => {
 	window.WoodevPickupDataSource = fakeDataSourceFactory( () => Promise.resolve( [ point() ] ) );

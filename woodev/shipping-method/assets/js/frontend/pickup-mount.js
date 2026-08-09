@@ -1102,6 +1102,18 @@
 		 */
 		var poolGeneration = 0;
 
+		/**
+		 * How many groups the provider last reported as being inside the frame (#234).
+		 *
+		 * The mount deliberately does NOT compute this itself: `_groupsInsideBounds()` is the
+		 * ONE definition of "in frame" in this codebase, unified in #167 precisely so two
+		 * inequality chains over the same rectangle cannot disagree. This is a cached read of
+		 * that answer, not a second opinion.
+		 *
+		 * @type {number}
+		 */
+		var visibleGroupCount = 0;
+
 		/** @type {Array} the address suggestions from the LAST `searchResults` event — what
 		 *  `searchAddressPicked( index )` indexes into. */
 		var lastAddresses = [];
@@ -1926,13 +1938,21 @@
 								restoreSelection( restoreGroup );
 							}
 						}
-					} else {
+					} else if ( 'bulk' === config.strategy || 0 === visibleGroupCount ) {
 						// `emptyLocality` (a locality genuinely has none) vs `emptyInView` (the
 						// current viewport does) — the SAME shared function backs both the bulk
 						// strategy's one-shot fetch and the viewport strategy's per-bbox
-						// `boundsChange` fetch (see the call sites below), so the key is chosen from
-						// `config.strategy`, not hardcoded to either. Distinct from `noResults`,
-						// which stays reserved for the search view finding nothing (spec V-5).
+						// `boundsChange` fetch, so the key is chosen from `config.strategy`, not
+						// hardcoded to either. Distinct from `noResults`, which stays reserved for
+						// the search view finding nothing (spec V-5).
+						//
+						// #234: under `viewport` an empty listing no longer means an empty screen.
+						// A listing can come back empty for a frame the pool still has points in —
+						// rig-measured on live Russian Post, where one frame answered 0 after 16.9s
+						// while its neighbours answered 1500+. Printing "nothing here" over drawn
+						// markers is worse than printing nothing, so the message waits until the
+						// provider itself reports an empty frame. `bulk` keeps its old behaviour
+						// exactly: it has no frame-driven refetch to correct a wrong message later.
 						showFetchMessage( 'bulk' === config.strategy ? 'emptyLocality' : 'emptyInView' );
 					}
 
@@ -2775,6 +2795,7 @@
 			// stated invariant.
 			resetPointPool();
 			forgetPointDetails();
+			visibleGroupCount = 0;
 
 			// Task 16 (spec V-4): every start() — the initial open AND every retry — runs through
 			// the full "map drawn → points in flight → points in" sequence again, so the flag that
@@ -2826,6 +2847,13 @@
 					var groups = ( keys || [] )
 						.map( function( key ) { return groupsByKey[ key ]; } )
 						.filter( function( group ) { return !! group; } );
+
+					// #234: what the empty-frame message is decided from — see
+					// {@see visibleGroupCount}. Counted from the RAW keys, not the mapped
+					// groups: a key the mount cannot resolve still means the provider is
+					// drawing something there, and suppressing the message is the safe
+					// direction (a missing message beats a false one over a full map).
+					visibleGroupCount = ( keys || [] ).length;
 
 					panels.setVisible( groups );
 				} );
