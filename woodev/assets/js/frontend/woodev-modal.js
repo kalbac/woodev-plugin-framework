@@ -416,6 +416,22 @@
 	};
 
 	/**
+	 * Whether the dialog is currently open — the public read of the `_isOpen` state
+	 * `open()`/`close()`/`teardownDialog()` track privately. Added so external code (e.g.
+	 * `pickup-mount.js`'s cart-change refresh subscriber, #238) can query a session's modal
+	 * without reaching into `session.modal._isOpen` — `_isOpen` is this instance's own
+	 * implementation detail, not a contract another file should couple to. An open-state
+	 * query is a legitimate part of the modal shell's public contract.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @returns {boolean}
+	 */
+	WoodevModal.prototype.isOpen = function() {
+		return this._isOpen;
+	};
+
+	/**
 	 * The element the map provider mounts into. Stable across the instance's
 	 * whole lifecycle (same node before the first open(), while open, and
 	 * after close()) — the provider can hold this reference and rely on it
