@@ -2072,6 +2072,27 @@
 		border-radius: 0;
 	}
 
+	/* THE SIDEBAR'S OWN LOADING OVERLAY IS SUPPRESSED AT THIS WIDTH (#234 follow-up, operator
+	   09.08.2026). On desktop that overlay dims a 320px column beside a visible map. Here the
+	   panel owns the entire stage (see the rule above), so the same overlay dims the WHOLE
+	   SCREEN — rig-measured at 500x844: 500x796, 94% of the viewport, search box included, with
+	   a spinner floating in the middle of a page the customer can no longer read.
+
+	   Nothing replaces it because nothing needs to: `.woodev-pickup-progress` is already a 3px
+	   strip along the top edge of the stage at `z-index: 7`, above the list's own `z-index: 2`,
+	   and it is shown for ANY background load (#222/#224). At this width the panel starts at the
+	   same y as the map, so that strip lands exactly on the sidebar's top edge with no new
+	   element and no new state — measured on the rig at x0 y48 500x3 while the list was open.
+
+   	   Same selector as the ACTIVE rule it overrides, relying on source order rather than a
+	   specificity bump: this file's own convention is that `display` inside
+	   `.woodev-pickup-stage` is an `!important`-only property (gotcha
+	   `hostile-theme-button-display-none-needs-important`, s54 addendum), and between two
+	   equally-specific `!important` declarations the later one wins. */
+	.woodev-pickup-stage.is-loading.is-open:not( .is-card ) .woodev-pickup-list__loading {
+		display: none !important;
+	}
+
 	/* Room for the bar below, so the last row can scroll clear of it instead of hiding under it —
 	   the panel is `bottom: 0` now and the bar floats over its own bottom edge. The reference
 	   reserves the same way (`.drawer-control__drawer { padding-bottom: 28px }`,
