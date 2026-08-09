@@ -2068,6 +2068,97 @@ test( '#234: an empty listing DOES show emptyInView when nothing is in frame', a
 	expect( panels.showMessageCalls ).toEqual( [ 'emptyInView' ] );
 } );
 
+// -------------------------------------------------------------------------
+// #234 — maxAccumulatedPoints: bounding the pool, protecting what the customer can see.
+// -------------------------------------------------------------------------
+
+test( '#234 cap: with maxAccumulatedPoints set, the OLDEST-seen points are evicted first', async () => {
+	const listings = [
+		[ point( { id: 'A' } ) ],
+		[ point( { id: 'B' } ) ],
+		[ point( { id: 'C' } ) ],
+	];
+	let call = 0;
+	window.WoodevPickupDataSource = fakeDataSourceFactory( () => Promise.resolve( listings[ call++ ] || [] ) );
+	setConfig( makeConfig( { strategy: 'viewport', maxAccumulatedPoints: 2 } ) );
+	mountAll();
+	clickTrigger();
+	await flushAsync();
+
+	const provider = StubProvider.instances[ StubProvider.instances.length - 1 ];
+
+	provider.emit( 'boundsChange', [ 55, 37, 56, 38 ] );
+	await flushAsync();
+	provider.emit( 'boundsChange', [ 55, 37, 56, 38 ] );
+	await flushAsync();
+	provider.emit( 'boundsChange', [ 55, 37, 56, 38 ] );
+	await flushAsync();
+
+	const drawn = provider.setPointsCalls[ provider.setPointsCalls.length - 1 ];
+	const ids = drawn.reduce( ( acc, group ) => acc.concat( group.points.map( ( p ) => p.id ) ), [] ).sort();
+
+	expect( ids ).toEqual( [ 'B', 'C' ] );
+} );
+
+test( '#234 cap: the customer\'s CURRENT SELECTION is never evicted, however old', async () => {
+	// Seed the field with A so it is the current selection from the first listing on.
+	document.getElementById( FIELD_ID ).value = 'A';
+
+	const listings = [
+		[ point( { id: 'A' } ) ],
+		[ point( { id: 'B' } ) ],
+		[ point( { id: 'C' } ) ],
+	];
+	let call = 0;
+	window.WoodevPickupDataSource = fakeDataSourceFactory( () => Promise.resolve( listings[ call++ ] || [] ) );
+	setConfig( makeConfig( { strategy: 'viewport', maxAccumulatedPoints: 2 } ) );
+	mountAll();
+	clickTrigger();
+	await flushAsync();
+
+	const provider = StubProvider.instances[ StubProvider.instances.length - 1 ];
+
+	provider.emit( 'boundsChange', [ 55, 37, 56, 38 ] );
+	await flushAsync();
+	provider.emit( 'boundsChange', [ 55, 37, 56, 38 ] );
+	await flushAsync();
+	provider.emit( 'boundsChange', [ 55, 37, 56, 38 ] );
+	await flushAsync();
+
+	const drawn = provider.setPointsCalls[ provider.setPointsCalls.length - 1 ];
+	const ids = drawn.reduce( ( acc, group ) => acc.concat( group.points.map( ( p ) => p.id ) ), [] );
+
+	expect( ids ).toContain( 'A' );
+} );
+
+test( '#234 cap: an unset (0) cap keeps everything', async () => {
+	const listings = [
+		[ point( { id: 'A' } ) ],
+		[ point( { id: 'B' } ) ],
+		[ point( { id: 'C' } ) ],
+	];
+	let call = 0;
+	window.WoodevPickupDataSource = fakeDataSourceFactory( () => Promise.resolve( listings[ call++ ] || [] ) );
+	setConfig( makeConfig( { strategy: 'viewport' } ) );
+	mountAll();
+	clickTrigger();
+	await flushAsync();
+
+	const provider = StubProvider.instances[ StubProvider.instances.length - 1 ];
+
+	provider.emit( 'boundsChange', [ 55, 37, 56, 38 ] );
+	await flushAsync();
+	provider.emit( 'boundsChange', [ 55, 37, 56, 38 ] );
+	await flushAsync();
+	provider.emit( 'boundsChange', [ 55, 37, 56, 38 ] );
+	await flushAsync();
+
+	const drawn = provider.setPointsCalls[ provider.setPointsCalls.length - 1 ];
+	const ids = drawn.reduce( ( acc, group ) => acc.concat( group.points.map( ( p ) => p.id ) ), [] ).sort();
+
+	expect( ids ).toEqual( [ 'A', 'B', 'C' ] );
+} );
+
 test( 'a non-empty result calls neither showMessage() (nothing to show) nor leaves any destructive '
 	+ 'modal state', async () => {
 	window.WoodevPickupDataSource = fakeDataSourceFactory( () => Promise.resolve( [ point() ] ) );

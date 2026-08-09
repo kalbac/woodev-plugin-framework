@@ -1707,12 +1707,59 @@
 		}
 
 		/**
-		 * Bounds the pool when the domain asked for a bound — filled in by Task 7.
+		 * Bounds the pool to `config.maxAccumulatedPoints` when the domain asked for a bound
+		 * (#234). A missing/zero/negative value means UNLIMITED and this returns immediately —
+		 * that is the shipped default, and it is measured-safe rather than assumed: see the
+		 * design doc's measurement table.
+		 *
+		 * Evicts OLDEST-INSERTED first (plain object key order for string keys), skipping any
+		 * point the customer would notice losing:
+		 *
+		 *  - the current selection — the field's own value; losing it would strand the
+		 *    checkout on a point the map can no longer draw;
+		 *  - the open card's point — {@see cardPointId}; a card whose point vanished mid-read
+		 *    is the #232 defect wearing a different hat.
+		 *
+		 * "In frame" is deliberately NOT a third exemption: it would need a rectangle test of
+		 * our own, and the frame is exactly where a re-listing puts points back a moment later
+		 * anyway.
 		 *
 		 * @since 2.0.2
 		 * @returns {void}
 		 */
 		function trimPointPool() {
+			var max = parseInt( config.maxAccumulatedPoints, 10 );
+
+			if ( ! max || max < 1 ) {
+				return;
+			}
+
+			var ids = Object.keys( pointPool );
+			var over = ids.length - max;
+
+			if ( over < 1 ) {
+				return;
+			}
+
+			var selected = fieldValue( config.fieldId );
+			var protectedIds = {};
+
+			if ( selected ) {
+				protectedIds[ String( selected ) ] = true;
+			}
+
+			if ( cardPointId ) {
+				protectedIds[ String( cardPointId ) ] = true;
+			}
+
+			ids.forEach( function( id ) {
+				if ( over < 1 || Object.prototype.hasOwnProperty.call( protectedIds, id ) ) {
+					return;
+				}
+
+				delete pointPool[ id ];
+				over -= 1;
+			} );
 		}
 
 		/**
