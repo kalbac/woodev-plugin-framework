@@ -1129,6 +1129,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				[
 					'fieldId',
 					'strategy',
+					'maxAccumulatedPoints',
 					'provider',
 					'restRoot',
 					'nonce',
@@ -1148,6 +1149,43 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				],
 				array_keys( $config )
 			);
+		}
+
+		// -------------------------------------------------------------------------
+		// maxAccumulatedPoints (#234) — the viewport point-pool cap seam.
+		// -------------------------------------------------------------------------
+
+		public function test_js_config_defaults_max_accumulated_points_to_zero_meaning_unlimited(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			$this->stub_config_dependencies_except_filters();
+
+			$config = $this->make_handler()->get_js_config();
+
+			$this->assertSame( 0, $config['maxAccumulatedPoints'] );
+		}
+
+		public function test_js_config_max_accumulated_points_is_filterable_and_never_negative(): void {
+			Filters\expectApplied( 'woodev_pickup_max_accumulated_points' )
+				->once()
+				->with( 0, 'p' )
+				->andReturn( -5 );
+			$this->stub_config_dependencies_except_filters();
+
+			$config = $this->make_handler()->get_js_config();
+
+			$this->assertSame( 0, $config['maxAccumulatedPoints'] );
+		}
+
+		public function test_js_config_passes_a_positive_max_accumulated_points_through(): void {
+			Filters\expectApplied( 'woodev_pickup_max_accumulated_points' )
+				->once()
+				->with( 0, 'p' )
+				->andReturn( 3000 );
+			$this->stub_config_dependencies_except_filters();
+
+			$config = $this->make_handler()->get_js_config();
+
+			$this->assertSame( 3000, $config['maxAccumulatedPoints'] );
 		}
 
 		// -------------------------------------------------------------------------

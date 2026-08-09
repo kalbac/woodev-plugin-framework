@@ -1233,12 +1233,41 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 				$this->plugin_id
 			);
 
+			/**
+			 * Caps how many points the browser accumulates across viewport listings (#234).
+			 *
+			 * `0` — the default — means UNLIMITED, which is measured-safe: with the pool at
+			 * 20 000 points a full redraw costs 334 ms against a listing that takes 6-13 s to
+			 * arrive, and the one superlinear operation in the map provider is reached only by
+			 * the `bulk` strategy. A realistic session over a whole region pools ~1 300 points.
+			 *
+			 * The knob exists because point DENSITY is domain knowledge, not framework
+			 * knowledge: a carrier far denser than Russian Post can bound the pool here
+			 * without any redesign. Ignored entirely by `strategy: 'bulk'`, which never
+			 * accumulates.
+			 *
+			 * @since 2.0.2
+			 *
+			 * @param int    $max       0 for unlimited; a positive point count to bound the pool.
+			 * @param string $plugin_id the plugin the map belongs to.
+			 */
+			$max_accumulated = (int) apply_filters(
+				'woodev_pickup_max_accumulated_points',
+				0,
+				$this->plugin_id
+			);
+
+			// A negative bound is meaningless and must not reach the browser as one — it
+			// would read as "keep nothing", silently reinstating the very defect #234 fixed.
+			$max_accumulated = max( 0, $max_accumulated );
+
 			return [
-				'fieldId'  => $this->field_id,
-				'strategy' => $this->source->get_strategy(),
-				'provider' => $this->map_provider->get_id(),
-				'restRoot' => $this->rest_root(),
-				'nonce'    => wp_create_nonce( 'wp_rest' ),
+				'fieldId'              => $this->field_id,
+				'strategy'             => $this->source->get_strategy(),
+				'maxAccumulatedPoints' => $max_accumulated,
+				'provider'             => $this->map_provider->get_id(),
+				'restRoot'             => $this->rest_root(),
+				'nonce'                => wp_create_nonce( 'wp_rest' ),
 
 				// The DOM id of the refreshable nonce node (issue #157) — `nonce` above is
 				// only ever the PAGE-LOAD value and cannot be refreshed in place; see
