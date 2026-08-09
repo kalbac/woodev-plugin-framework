@@ -2138,9 +2138,6 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				'sectionPoints'    => 'Пункты выдачи',
 				'sectionAddresses' => 'Адреса',
 				'filterTypes'      => 'Тип пунктов',
-				// Issue #243: the last-remaining-checked-type lock hint (now a `disabled`
-				// checkbox + `title` attribute, not a silent revert).
-				'filterLastType'   => 'Нельзя скрыть все типы пунктов',
 				'emptyInView'      => 'В этой области пунктов выдачи нет',
 				// The Task 17 (spec V-5) key: a genuinely empty LOCALITY, distinct from
 				// `emptyInView` (a viewport statement) and `noResults` (search found nothing).

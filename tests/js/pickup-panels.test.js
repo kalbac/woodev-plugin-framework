@@ -2736,8 +2736,6 @@ describe( 'search layout (spec V-6)', () => {
 const filterConfig = { lang: 'ru_RU', i18n: {
 	drawerTitle: 'Пункты выдачи в этой области', emptyInView: 'В этой области пунктов выдачи нет',
 	filterTypes: 'Тип пунктов', allTypes: 'Все типы пунктов',
-	// Issue #243: the last-remaining-checked-type lock hint.
-	filterLastType: 'Нельзя скрыть все типы пунктов',
 } };
 
 it( 'does not render the filter until a second type appears', () => {
@@ -2866,11 +2864,16 @@ it( 'emits the selected codes on change', () => {
 
 // -----------------------------------------------------------------------
 // Issue #243: the last remaining checked type's checkbox becomes `disabled`
-// (carrying a `title` hint) instead of being silently reverted after the
-// click — the refusal is now visible BEFORE the click, not after it.
+// instead of being silently reverted after the click — the refusal is now
+// visible BEFORE the click (the control simply does not respond), not after
+// it. Follow-up operator decision («не нужно ничего показывать. Заблокирована
+// и всё»): NO explanatory text anywhere on the locked control — a `title`
+// hint was built and removed again once two independent reviews found it
+// unreachable by keyboard/assistive-tech/touch. `disabled` is the whole
+// signal; there is deliberately nothing else here to assert on.
 // -----------------------------------------------------------------------
 
-it( 'disables the last remaining checked type\'s checkbox, locks its row, and sets the hint as its title', () => {
+it( 'disables the last remaining checked type\'s checkbox and locks its row', () => {
 	const panels = mount( filterConfig );
 	panels.setTypes( [ { code: 'pvz', label: 'ПВЗ' }, { code: 'postamat', label: 'Постамат' } ] );
 
@@ -2881,8 +2884,6 @@ it( 'disables the last remaining checked type\'s checkbox, locks its row, and se
 
 	expect( boxes[ 1 ].disabled ).toBe( true );
 	expect( rows[ 1 ].dataset.locked ).toBe( 'true' );
-	expect( rows[ 1 ].getAttribute( 'title' ) ).toBe( 'Нельзя скрыть все типы пунктов' );
-	expect( boxes[ 1 ].getAttribute( 'title' ) ).toBe( 'Нельзя скрыть все типы пунктов' );
 
 	// The OTHER (unchecked) row must stay unlocked -- only the sole SELECTED type locks.
 	expect( boxes[ 0 ].disabled ).toBe( false );
@@ -2907,7 +2908,7 @@ it( 'never emits typeFilterChange and the checkbox never visibly flips when the 
 	expect( boxes[ 1 ].checked ).toBe( true );
 } );
 
-it( 'unlocks the checkbox and clears its hint once a second type is checked back on', () => {
+it( 'unlocks the checkbox once a second type is checked back on', () => {
 	const panels = mount( filterConfig );
 	panels.setTypes( [ { code: 'pvz', label: 'ПВЗ' }, { code: 'postamat', label: 'Постамат' } ] );
 
@@ -2921,7 +2922,6 @@ it( 'unlocks the checkbox and clears its hint once a second type is checked back
 
 	expect( boxes[ 1 ].disabled ).toBe( false );
 	expect( rows[ 1 ].dataset.locked ).toBe( 'false' );
-	expect( rows[ 1 ].getAttribute( 'title' ) ).toBe( '' );
 } );
 
 it( 'unlocks a previously locked checkbox when setTypes() reports a newly-seen third code', () => {
@@ -2962,21 +2962,6 @@ it( 'the refusal guard still backstops a programmatically forced uncheck of the 
 
 	expect( boxes[ 1 ].checked ).toBe( true );
 	expect( seen ).toHaveLength( 0 );
-} );
-
-it( 'renders a blank hint, not a hardcoded Russian default, when filterLastType is missing (rule I1)', () => {
-	const panels = mount( withoutI18nKey( filterConfig, 'filterLastType' ) );
-	panels.setTypes( [ { code: 'pvz', label: 'ПВЗ' }, { code: 'postamat', label: 'Постамат' } ] );
-
-	const boxes = [ ...panels.root.querySelectorAll( '.woodev-pickup-filter__checkbox' ) ];
-	const rows = [ ...panels.root.querySelectorAll( '.woodev-pickup-filter__row' ) ];
-
-	boxes[ 0 ].click();
-
-	// `disabled` alone still communicates the state to assistive tech -- only the hint TEXT is
-	// blank when the key is absent, per rule I1.
-	expect( boxes[ 1 ].disabled ).toBe( true );
-	expect( rows[ 1 ].getAttribute( 'title' ) ).toBe( '' );
 } );
 
 // -----------------------------------------------------------------------

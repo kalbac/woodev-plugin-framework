@@ -178,17 +178,25 @@
  * it never disappears again, even if a later call reports only one type (a momentary single-type
  * viewport must not flicker the control away). The last CHECKED type cannot be unchecked (the
  * Yandex reference's own rule): its checkbox is `disabled` and its row carries `data-locked="true"`
- * plus a `title` hint (the `filterLastType` i18n key) — see {@see isFilterCodeLocked}/
- * {@see syncFilterRowLocks} — so the refusal is visible BEFORE the customer even clicks, not only
- * discovered by the click silently failing. (Issue #243: a PREVIOUS version of this rule let the
- * click happen and reverted the checkbox afterwards — a permanently clickable control that visibly
- * flicks off and back on with no explanation reads as a bug; `handleFilterCheckboxChange()`'s own
- * revert-and-refuse guard survives only as defence in depth against a bypass of `disabled`, e.g. a
- * script forcing the DOM state directly.) Either way, an empty selection would read to the customer
- * as "no pickup points exist" (see the file docblock's own operator-instruction note, immediately
- * below the reference's opposite "empty means unfiltered" behaviour is deliberately NOT copied).
- * Every row (`.woodev-pickup-filter__row`) carries `data-checked="true"|"false"`, kept in sync with
- * its own checkbox on every accepted change, for T4's styling to key off.
+ * — see {@see isFilterCodeLocked}/{@see syncFilterRowLocks}. (Issue #243: a PREVIOUS version of
+ * this rule let the click happen and reverted the checkbox afterwards — a permanently clickable
+ * control that visibly flicks off and back on with no explanation reads as a bug;
+ * `handleFilterCheckboxChange()`'s own revert-and-refuse guard survives only as defence in depth
+ * against a bypass of `disabled`, e.g. a script forcing the DOM state directly.) DELIBERATELY NO
+ * EXPLANATORY TEXT anywhere on the locked control — an operator decision (issue #243 follow-up):
+ * a `title` hint was built and then removed again after two independent reviews found it
+ * unreachable by keyboard, assistive tech, or touch (a `disabled` element is out of the tab order,
+ * and `title` has no touch equivalent), and the operator's own call, verbatim, was «не нужно
+ * ничего показывать. Заблокирована и всё» — show nothing at all, blocked is blocked. Do NOT
+ * reintroduce a `title`/`aria-label`/tooltip here without a fresh operator decision to that effect
+ * — `disabled` alone is the whole signal, native and already accessible via the platform's own
+ * disabled-control semantics, and adding text back would silently reopen the exact half-solved
+ * accessibility gap this decision closed by removing the text entirely. Either way, an empty
+ * selection would read to the customer as "no pickup points exist" (see the file docblock's own
+ * operator-instruction note, immediately below the reference's opposite "empty means unfiltered"
+ * behaviour is deliberately NOT copied). Every row (`.woodev-pickup-filter__row`) carries
+ * `data-checked="true"|"false"`, kept in sync with its own checkbox on every accepted change, for
+ * T4's styling to key off.
  *
  * THE BADGE'S 3+ RULE (round 2, D2 — the operator's own live-review finding): the TOGGLE
  * (`.woodev-pickup-filter__toggle`) carries `.is-filtered` whenever the selection is PARTIAL
@@ -1653,12 +1661,12 @@
 	/**
 	 * Walks the EXISTING `.woodev-pickup-filter__row` elements (never rebuilds them — that is
 	 * {@see renderFilterRows}'s job) and, per row, sets its checkbox's `disabled` from
-	 * {@see isFilterCodeLocked}, mirrors that onto the row's own `data-locked` hook for T4's CSS
-	 * to key off (issue #243, same technique as `data-checked`, D2), and writes/clears a `title`
-	 * hint (from the `filterLastType` i18n key, rule I1 — never a JS-side hardcoded default) on
-	 * BOTH the row (hoverable) and the checkbox (contributes an accessible description) so the
-	 * refusal is legible BEFORE the click, not only inferred from the control simply not
-	 * responding. Called after every {@see renderFilterRows} rebuild (covers `setTypes()`,
+	 * {@see isFilterCodeLocked} and mirrors that onto the row's own `data-locked` hook for T4's
+	 * CSS to key off (issue #243, same technique as `data-checked`, D2) — a pure cursor/paint
+	 * affordance, never an explanatory label. Deliberately writes NO `title`/`aria-label`/tooltip
+	 * of any kind: a `title` hint was tried and removed again (operator decision, issue #243
+	 * follow-up — see the file docblock's "THE TYPE FILTER" note for the why); `disabled` is the
+	 * whole signal. Called after every {@see renderFilterRows} rebuild (covers `setTypes()`,
 	 * including a newly-seen type unlocking a previously sole-selected one) and again at the end
 	 * of an ACCEPTED {@see handleFilterCheckboxChange} change, so locking/unlocking is immediate
 	 * without a full row rebuild.
@@ -1678,12 +1686,9 @@
 			}
 
 			var locked = isFilterCodeLocked( self, checkbox.dataset.code );
-			var hint = locked ? text( self._config, 'filterLastType' ) : '';
 
 			checkbox.disabled = locked;
 			row.dataset.locked = locked ? 'true' : 'false';
-			row.setAttribute( 'title', hint );
-			checkbox.setAttribute( 'title', hint );
 		} );
 	}
 
@@ -1708,9 +1713,9 @@
 	 * is written via `innerHTML` here too, not `textContent`.
 	 *
 	 * {@see syncFilterRowLocks} runs LAST, once every row exists — it disables whichever single
-	 * checkbox is currently the sole selected type (issue #243) and writes its hint; this is what
-	 * makes a newly-seen type (freshly inserted CHECKED by `setTypes()`) unlock a previously
-	 * sole-selected one, since that call always ends up here.
+	 * checkbox is currently the sole selected type (issue #243), no explanatory text attached; this
+	 * is what makes a newly-seen type (freshly inserted CHECKED by `setTypes()`) unlock a
+	 * previously sole-selected one, since that call always ends up here.
 	 *
 	 * @param {Panels} self
 	 * @returns {void}
@@ -1792,9 +1797,10 @@
 	 * Handles one checkbox's native `change` event.
 	 *
 	 * Issue #243: the LAST currently selected type's checkbox is now `disabled` by
-	 * {@see syncFilterRowLocks} — the refusal is visible BEFORE the click (a `title` hint, and the
-	 * control simply not responding), rather than the click happening and the box flicking back on
-	 * afterwards. The block below that reverts a refused uncheck and returns without emitting
+	 * {@see syncFilterRowLocks} — the refusal is visible BEFORE the click (the control simply does
+	 * not respond; deliberately no explanatory text, see the file docblock's "THE TYPE FILTER"
+	 * note), rather than the click happening and the box flicking back on afterwards. The block
+	 * below that reverts a refused uncheck and returns without emitting
 	 * `typeFilterChange` is kept as DEFENCE IN DEPTH, not the primary mechanism any more: with the
 	 * checkbox disabled the browser no longer dispatches `change` for it at all (a user click and
 	 * even an imperative `.click()` both no-op on a disabled control), so this guard only still
