@@ -384,7 +384,6 @@ jobs:
             --exclude='package-lock.json' \
             --exclude='src' \
             --exclude='.nvmrc' \
-            --exclude='babel.config.js' \
             ./ /tmp/release/woodev-plugin-framework/
 
           cd /tmp/release && zip -r "$ZIP_NAME" woodev-plugin-framework/
