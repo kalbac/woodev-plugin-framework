@@ -3,6 +3,13 @@
 > Written s61 (2026-08-09). Supersedes the framing in issue #238 on two points — see
 > "Where the card is wrong" below. Design decisions here are grounded in a code sweep
 > (agent report, s61); every claim carries a `file:line` in the issue thread or below.
+>
+> **§3 WAS WRONG AND IS SUPERSEDED (s62, 2026-08-10).** The implementation matched this spec
+> exactly and a spec-compliance review returned "COMPLIANT, zero findings" — then a Codex pass
+> on the same code returned two HIGH defects, both inherent to the MECHANISM §3 chose, not to
+> how it was carried out. §3 is rewritten below; the rest of the document still stands. The
+> lesson is recorded because it generalises: conformance to a spec is not correctness, and a
+> compliance review cannot find a defect the spec itself specified.
 
 ## The defect
 
@@ -73,17 +80,53 @@ flight" state is the `refreshWaiter`/`refreshTimer`/`refreshBusyPanels` closure 
 (`pickup-mount.js:1238-1251`), and the object `getSession()` returns is only
 `{ modal, refresh, destroy }` (`pickup-mount.js:3130-3170`).
 
-**Mechanism: a one-shot echo token per session.** `refreshCheckout()` sets it when it triggers
-`update_checkout`; the module subscriber **consumes** it (reads and clears) and skips that session
-for that event. One-shot, so a genuine later cart change is not swallowed.
+**Mechanism (s62, corrected): read the session's existing in-flight state. No token.**
+`refreshCheckout()` already arms `refreshWaiter`/`refreshTimer` at the moment it triggers
+`update_checkout`, and `dropRefreshWaiter()` settles them on *every* path — WooCommerce
+answering, `REFRESH_TIMEOUT_MS` expiring, a newer refresh superseding this one, `destroy()`.
+`isSelfRefreshInFlight()` is a read-only predicate over that state, with no lifetime of its own.
+The module subscriber calls it per session, at event time.
 
-Do **not** implement suppression by checking `refreshWaiter !== null` at debounce-fire time: our
-module handler is bound at load, before any session's `one()` waiter, so it runs first — but the
-debounced body runs *after* the waiter has already self-cleared, and the check would read `null`
-and fail to suppress. The decision must be captured at event time, not at fire time.
+Read it **at event time, inside `handleCartChanged()`**, never in the debounced body — the
+original §3 was right about that and the reasoning is unchanged: our module handler is bound at
+load, before any session's `one()` waiter, so jQuery runs it first while the waiter is still
+outstanding; by the time the debounce fires, that waiter has settled and the state reads the same
+for an echo as for a genuine change. The binding order is invisible at the call site and is
+commented in the source for exactly that reason.
+
+**Why the one-shot token this replaced was wrong** (both found by Codex, s61):
+
+- **H1** — a bare boolean is not tied to the request that set it, so it consumed whichever
+  `updated_checkout` arrived first, whatever its origin.
+- **H2** — nothing cleared it when WooCommerce never answered at all, so it stayed armed for as
+  long as the picker stayed open and silently ate that session's next genuine cart change. The
+  file's own docblock already stated the governing fact — a `one()` self-cleans only if the event
+  fires, which is why *that* waiter is paired with `REFRESH_TIMEOUT_MS`. The token was given no
+  such pairing.
+
+**H1 is downgraded, not eliminated, and that is accepted.** An `updated_checkout` carries no
+origin; no design can separate our echo from a foreign change at the DOM. What the fix guarantees
+is the *window*: suppression lasts exactly as long as our refresh is outstanding, and the first
+event settles it either way. A foreign change landing inside the window costs one event of delay
+— a cart change always produces an `updated_checkout` — and is never dropped.
+
+**Verification note (s62):** H2 is independently observable and its regression test fails on the
+pre-fix commit (`5f0d4c8`). H1 is **not** independently observable — measured, not assumed: the
+scenario the s61 handoff proposed for it produces exactly one refresh under both the old and the
+new mechanism. Its test is therefore a characterisation test pinning "delay, not loss"; it passes
+on both. H1's fix is structural — the flag can no longer outlive the request that armed it — and
+is what the H2 test proves.
 
 Also note `refreshCheckout()` binds its waiter only when the modal stays open; when a selection
 closes the modal, `closeSession()` has already removed the session, so there is nothing to suppress.
+
+**One real gap, verified and accepted (s62).** `refreshCheckout()` is handed `panels`, which is
+`null` under `ownsChrome` — so an embedded provider triggers `update_checkout` with the modal open
+and **no waiter bound**, and its echo is not suppressed. Harmless only because `refresh()` is
+itself a no-op under `ownsChrome` (`pickup-mount.js`, `refresh()`'s first guard): the unsuppressed
+event reaches a function that does nothing. Recorded in the source so a future `ownsChrome`
+behaviour in `refresh()` does not silently turn this into a live defect. This path has never been
+rig-run at all — tracked separately.
 
 ## Out of scope — file as a separate card, do not fix here
 

@@ -208,14 +208,37 @@
  * THE SUBSCRIBER MUST ALSO IGNORE ITS OWN ECHO: {@see refreshCheckout} triggers WooCommerce's
  * `update_checkout` after a selection that leaves the modal open, and WooCommerce answers with
  * the very `updated_checkout` this subscriber listens for — without suppression, confirming a
- * point would immediately wipe the pool it was just drawn into, on every single selection. Each
- * session therefore carries a ONE-SHOT echo token ({@see consumeEcho}), set by
- * `refreshCheckout()` at the moment it triggers `update_checkout` and consumed by the
- * subscriber the first time it sees that session's modal open — captured at EVENT time (inside
- * {@see handleCartChanged}, run once per raw event, undebounced), never at the debounced body's
- * fire time: by then a `one()`-bound waiter has long since self-cleared, so a check made there
- * could never tell an echo from a genuine change. One-shot, so a genuine cart change arriving
- * after the echo still refreshes normally.
+ * point would immediately wipe the pool it was just drawn into, on every single selection.
+ *
+ * SUPPRESSION KEEPS NO STATE OF ITS OWN. A session already knows when a checkout refresh it
+ * caused is outstanding — that is exactly what `refreshWaiter`/`refreshTimer` are, and
+ * {@see dropRefreshWaiter} settles them on every path there is: WooCommerce answering,
+ * {@see REFRESH_TIMEOUT_MS} expiring, a newer refresh superseding this one, `destroy()`.
+ * {@see isSelfRefreshInFlight} is a read of that and nothing else. An earlier design used a
+ * dedicated one-shot boolean, and a separate lifetime made two defects unavoidable: the flag
+ * was not tied to the request that set it, so it consumed whichever `updated_checkout` happened
+ * to arrive first; and nothing cleared it when WooCommerce never answered AT ALL, so it stayed
+ * armed for as long as the picker stayed open and silently ate that session's next genuine cart
+ * change. Deriving the answer removes both by construction.
+ *
+ * THE READ HAPPENS AT EVENT TIME, in {@see handleCartChanged} (once per raw event, undebounced),
+ * never in {@see flushCartChangeRefresh}'s debounced body — and that rests on a BINDING ORDER
+ * nothing at the call site shows. jQuery dispatches handlers in bind order; this subscriber is
+ * bound once at module load, long before any session's `one()` waiter can be, so it runs FIRST
+ * and still sees the waiter outstanding. By the time a debounce timer fires, that waiter has
+ * settled and the state reads identically for an echo and for a genuine change. Do NOT "simplify"
+ * the check down into the debounced body.
+ *
+ * THE RESIDUAL IS ACCEPTED AND DELIBERATE: an `updated_checkout` carries no origin, so a genuine
+ * cart change landing while our own refresh is outstanding is suppressed too. It is not lost —
+ * a cart change always produces an `updated_checkout`, and the first event also settles the
+ * waiter, so the NEXT one is honoured. One event of delay, never a dropped update.
+ *
+ * UNDER `ownsChrome` NO WAITER IS EVER BOUND (`refreshCheckout()` is handed a null `panels`),
+ * so an echo is not suppressed there at all. Harmless, because {@see refresh} is itself a no-op
+ * under `ownsChrome` — the embed loads its own points and this file fetches nothing for it — so
+ * the unsuppressed event reaches a function that does nothing. If `refresh()` ever gains an
+ * `ownsChrome` behaviour, this stops being harmless and needs a waiter (or an equivalent) there.
  *
  * EVERY LISTENER THIS FILE ATTACHS DIES WITH THE SESSION: the provider's own
  * event handlers are re-registered fresh on every `start()` (initial open AND
@@ -394,15 +417,16 @@
 	 * open, and this map is what lets the NEXT click — on whichever button is
 	 * currently mounted — still find and tear down the SAME session.
 	 *
-	 * @type {Object.<string, {modal: Object, refresh: Function, consumeEcho: Function, destroy: Function}>}
+	 * @type {Object.<string, {modal: Object, refresh: Function, isSelfRefreshInFlight: Function, destroy: Function}>}
 	 */
 	var sessions = {};
 
 	/**
 	 * Field ids awaiting a debounced cart-change refresh (#238) — accumulated by
-	 * {@see handleCartChanged} at EVENT time (echo suppression happens there too, per
-	 * session, via `consumeEcho()` — NOT in the debounced body), then drained together once
-	 * {@see CART_CHANGE_DEBOUNCE_MS} of quiet passes. See {@see flushCartChangeRefresh}.
+	 * {@see handleCartChanged} at EVENT time (echo suppression is decided there too, per
+	 * session, via `isSelfRefreshInFlight()` — NOT in the debounced body, where the state it
+	 * reads has already settled), then drained together once {@see CART_CHANGE_DEBOUNCE_MS} of
+	 * quiet passes. See {@see flushCartChangeRefresh}.
 	 *
 	 * @type {Object.<string, boolean>}
 	 */
@@ -1032,7 +1056,7 @@
 	 *
 	 * @param {Object}      config
 	 * @param {HTMLElement} triggerEl element focus returns to on close.
-	 * @returns {{modal: Object, refresh: Function, consumeEcho: Function, destroy: Function}}
+	 * @returns {{modal: Object, refresh: Function, isSelfRefreshInFlight: Function, destroy: Function}}
 	 */
 	function openSession( config, triggerEl ) {
 		// `config.modal` sizes the dialog before any content exists (spec V-1) — the PHP
@@ -1057,10 +1081,10 @@
 		var providers = window.WoodevPickupMapProviders || {};
 		var ProviderCtor = config && providers[ config.provider ];
 		var noopRefresh = function() { return Promise.resolve(); };
-		// #238: these two degraded sessions never call refreshCheckout(), so their echo
-		// token can never be set — a permanent `false` is exactly as correct as a real
-		// closure variable would be, without needing one.
-		var noopConsumeEcho = function() { return false; };
+		// #238: these two degraded sessions never call refreshCheckout(), so no waiter of
+		// theirs can ever be in flight — a permanent `false` is exactly as correct as reading
+		// a closure variable that would never change.
+		var noopSelfRefreshInFlight = function() { return false; };
 
 		if ( 'function' !== typeof ProviderCtor ) {
 			modal.showError( text( config, 'error' ) );
@@ -1068,7 +1092,7 @@
 			return {
 				modal: modal,
 				refresh: noopRefresh,
-				consumeEcho: noopConsumeEcho,
+				isSelfRefreshInFlight: noopSelfRefreshInFlight,
 				destroy: function() { modal.destroy(); },
 			};
 		}
@@ -1081,7 +1105,7 @@
 			return {
 				modal: modal,
 				refresh: noopRefresh,
-				consumeEcho: noopConsumeEcho,
+				isSelfRefreshInFlight: noopSelfRefreshInFlight,
 				destroy: function() { modal.destroy(); },
 			};
 		}
@@ -1321,15 +1345,6 @@
 		 *  was locked (it may not be `panels` — the refresh is skipped entirely when the modal
 		 *  has just closed; see {@see finishSelection}'s own call site). */
 		var refreshBusyPanels = null;
-
-		/** @type {boolean} #238's one-shot echo-suppression token: true for exactly one
-		 *  `updated_checkout` after THIS session's own {@see refreshCheckout} triggers
-		 *  `update_checkout` — set there, consumed (read + cleared) by
-		 *  {@see consumeEcho}, which the module-scope cart-change subscriber calls once per
-		 *  event, at EVENT time, for every session whose modal is open (see the file
-		 *  docblock). Never set again until the NEXT confirmation-triggered refresh, so a
-		 *  genuine cart change arriving after it is never swallowed. */
-		var echoExpected = false;
 
 		/** @type {boolean} Task 16 (spec V-4 stage 2/3): has THIS start() cycle's busy overlay
 		 *  already been cleared? Reset at the top of every {@see start} call (initial open AND
@@ -2521,33 +2536,34 @@
 				}, REFRESH_TIMEOUT_MS );
 			}
 
-			// #238: marks the NEXT `updated_checkout` as THIS session's own echo, at the moment
-			// we cause it — see {@see consumeEcho} and the file docblock's "MUST ALSO IGNORE ITS
-			// OWN ECHO" section. Set unconditionally (even when `openPanels` is null, i.e. the
-			// modal already closed and `closeSession()` has already dropped this session from
-			// `sessions`): the module-scope subscriber only ever reads this for a session it can
-			// still find, so setting it on one nobody will ask again is harmless.
-			echoExpected = true;
-
+			// #238 echo suppression needs NOTHING set here: the waiter armed just above IS the
+			// "a refresh we caused is in flight" signal {@see isSelfRefreshInFlight} reads, and
+			// it is armed before the trigger below can produce anything to suppress.
 			window.jQuery( document.body ).trigger( 'update_checkout' );
 		}
 
 		/**
-		 * Reads and clears {@see echoExpected} in one step (#238) — the module-scope
-		 * cart-change subscriber ({@see handleCartChanged}) calls this, once per raw
-		 * `updated_checkout`, for every session whose modal is open, at EVENT time, before its
-		 * debounce timer ever fires. A plain read (without the clear) would suppress every
-		 * SUBSEQUENT genuine cart change too, not just the one this session's own
-		 * {@see refreshCheckout} caused.
+		 * Is a checkout refresh THIS session caused still in flight (#238)? Read-only, with no
+		 * lifetime of its own: `refreshWaiter` already IS the answer — armed by
+		 * {@see refreshCheckout} at the moment it triggers `update_checkout`, and cleared by
+		 * {@see dropRefreshWaiter} on every settle path there is (WooCommerce answering,
+		 * {@see REFRESH_TIMEOUT_MS} expiring, a newer refresh superseding this one, and
+		 * `destroy()`).
 		 *
-		 * @returns {boolean} true when this event is this session's own echo.
+		 * Deriving it is the whole fix. A dedicated token needs its own clearing rules, and the
+		 * one this replaced had no rule for "WooCommerce never answered at all" — so it stayed
+		 * armed for as long as the picker stayed open and silently ate that session's next
+		 * genuine cart change. Nothing here can outlive the request that armed it.
+		 *
+		 * Called once per raw `updated_checkout` by {@see handleCartChanged}, at EVENT time.
+		 * Never call it from the debounced body — see the file docblock on the binding order
+		 * that is what makes an event-time read able to tell the two apart at all.
+		 *
+		 * @returns {boolean} true while our own refresh is outstanding, i.e. this event may be
+		 *                    its echo.
 		 */
-		function consumeEcho() {
-			var wasExpected = echoExpected;
-
-			echoExpected = false;
-
-			return wasExpected;
+		function isSelfRefreshInFlight() {
+			return null !== refreshWaiter;
 		}
 
 		/**
@@ -3237,7 +3253,7 @@
 		return {
 			modal: modal,
 			refresh: refresh,
-			consumeEcho: consumeEcho,
+			isSelfRefreshInFlight: isSelfRefreshInFlight,
 			destroy: function() {
 				// EVERY card lock a session can be holding — an in-flight confirmation's, an
 				// in-flight checkout refresh's, and (issue #223) an in-flight detail fetch's — is
@@ -3338,7 +3354,7 @@
 	 * `sessions` being module-private.
 	 *
 	 * @param {string} fieldId
-	 * @returns {{modal: Object, refresh: Function, consumeEcho: Function, destroy: Function}|null}
+	 * @returns {{modal: Object, refresh: Function, isSelfRefreshInFlight: Function, destroy: Function}|null}
 	 */
 	function getSession( fieldId ) {
 		return sessions[ fieldId ] || null;
@@ -3377,10 +3393,12 @@
 	 * AUTOMATICALLY ON A GENUINE CART CHANGE" section.
 	 *
 	 * Runs on EVERY raw event, undebounced — echo suppression is decided HERE, at event time,
-	 * per session, via {@see consumeEcho}, never inside {@see flushCartChangeRefresh}'s
+	 * per session, via {@see isSelfRefreshInFlight}, never inside {@see flushCartChangeRefresh}'s
 	 * debounced body: by the time a debounce timer fires, a session's own `refreshCheckout()`
-	 * waiter has long since self-cleared, so a check made there could never tell an echo from a
-	 * genuine change.
+	 * waiter has already settled, so a check made there could never tell an echo from a genuine
+	 * change. The read works here, and only here, because this subscriber is bound at module
+	 * load and therefore runs BEFORE the per-session waiter jQuery dispatches next — see the
+	 * file docblock's note on that binding order.
 	 *
 	 * A DISMISSED session (modal closed, `destroyed` still false — see
 	 * {@see handleModalClosed}) is skipped entirely: no echo check, no pending entry, nothing.
@@ -3398,7 +3416,7 @@
 				return;
 			}
 
-			if ( session.consumeEcho() ) {
+			if ( session.isSelfRefreshInFlight() ) {
 				return;
 			}
 
