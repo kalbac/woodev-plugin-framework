@@ -1992,6 +1992,33 @@ test( '#234: a BULK type-filter change does not touch the pool or refetch — it
 	expect( provider.setPointsCalls.length ).toBe( drawsBefore );
 } );
 
+test( '#234: the type chips are computed from the POOL, so they do not flicker as the '
+	+ 'customer pans', async () => {
+	const listings = [
+		[ point( { id: 'A', type: { code: 'pvz', label: 'ПВЗ' } } ) ],
+		[ point( { id: 'B', type: { code: 'postamat', label: 'Постамат' } } ) ],
+	];
+	let call = 0;
+	window.WoodevPickupDataSource = fakeDataSourceFactory( () => Promise.resolve( listings[ call++ ] || [] ) );
+	setConfig( makeConfig( { strategy: 'viewport' } ) );
+	mountAll();
+	clickTrigger();
+	await flushAsync();
+
+	const provider = StubProvider.instances[ StubProvider.instances.length - 1 ];
+	const panels = StubPanels.instances[ StubPanels.instances.length - 1 ];
+
+	provider.emit( 'boundsChange', [ 55, 37, 56, 38 ] );
+	await flushAsync();
+	provider.emit( 'boundsChange', [ 55, 37, 56, 38 ] );
+	await flushAsync();
+
+	expect( panels.lastTypes ).toEqual( [
+		{ code: 'pvz', label: 'ПВЗ' },
+		{ code: 'postamat', label: 'Постамат' },
+	] );
+} );
+
 test( 'a non-empty result calls neither showMessage() (nothing to show) nor leaves any destructive '
 	+ 'modal state', async () => {
 	window.WoodevPickupDataSource = fakeDataSourceFactory( () => Promise.resolve( [ point() ] ) );

@@ -1889,7 +1889,11 @@
 					provider.setPoints( groups, restoreGroup ? { focus: restoreGroup.key } : null );
 
 					if ( panels ) {
-						panels.setTypes( extractTypes( points ) );
+						// #234: from the DRAWN set, not this listing — a chip that vanishes
+						// because the customer panned past the last point of its type, while
+						// points of that type are still drawn, is the same defect this issue
+						// is about, one surface over.
+						panels.setTypes( extractTypes( drawable ) );
 					}
 
 					fireDocumentEvent( EVENT_POINTS_LOADED, {
