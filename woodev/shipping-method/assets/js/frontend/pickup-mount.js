@@ -1069,6 +1069,64 @@
 		 *  provider event's bare key/point-id back to the group object the panels need. */
 		var groupsByKey = {};
 
+		/**
+		 * #234 — the UNION of every listing this session, by `point.id`, under
+		 * `strategy: 'viewport'` ONLY. `bulk` fetches once and its listing is authoritative,
+		 * so it never reads or writes this.
+		 *
+		 * Why the pool lives HERE and not in the provider: `setPoints()`'s own docblock
+		 * already assigns cross-fetch de-duplication to the caller ("the caller is the one
+		 * that decides what the current full set is"), so accumulating is this file's job
+		 * and the provider contract is unchanged. That also keeps every other provider —
+		 * `map-provider-embedded.js` today, anything added later — free of it.
+		 *
+		 * Insertion order is meaningful: it is what {@see trimPointPool} evicts by when a
+		 * domain has bounded the pool. Plain object key order preserves insertion order for
+		 * string keys, which every `point.id` is coerced to on the way in.
+		 *
+		 * MUST be cleared together with the detail memo — see {@see resetPointPool}.
+		 *
+		 * @type {Object.<string, Object>}
+		 */
+		var pointPool = Object.create( null );
+
+		/**
+		 * The pooled ids in TRUE INSERTION ORDER — what {@see trimPointPool} evicts by (#234).
+		 *
+		 * A separate array rather than `Object.keys( pointPool )`, because that is NOT insertion
+		 * order: JavaScript orders integer-like string keys NUMERICALLY and ahead of every other
+		 * key, and this carrier's ids are exactly that (`'111543'`). Evicting by `Object.keys()`
+		 * would therefore drop the LOWEST-numbered id — which has nothing to do with age, and on
+		 * a mixed pool can be the point the customer just panned to. Found by adversarial review.
+		 *
+		 * @type {Array.<string>}
+		 */
+		var poolOrder = [];
+
+		/**
+		 * Bumped by every {@see resetPointPool}. A listing captures it when it goes out and is
+		 * DISCARDED on arrival if it moved — see {@see fetchAndSetPoints}.
+		 *
+		 * Why a counter and not a boolean "was reset": two resets can bracket one request, and a
+		 * boolean cleared by the second would let the request through. Same reason
+		 * `pendingSelectionToken` is a token rather than a point id (s57's ABA hole).
+		 *
+		 * @type {number}
+		 */
+		var poolGeneration = 0;
+
+		/**
+		 * How many groups the provider last reported as being inside the frame (#234).
+		 *
+		 * The mount deliberately does NOT compute this itself: `_groupsInsideBounds()` is the
+		 * ONE definition of "in frame" in this codebase, unified in #167 precisely so two
+		 * inequality chains over the same rectangle cannot disagree. This is a cached read of
+		 * that answer, not a second opinion.
+		 *
+		 * @type {number}
+		 */
+		var visibleGroupCount = 0;
+
 		/** @type {Array} the address suggestions from the LAST `searchResults` event — what
 		 *  `searchAddressPicked( index )` indexes into. */
 		var lastAddresses = [];
@@ -1649,8 +1707,162 @@
 			);
 		}
 
+		/**
+		 * The pooled points, in insertion order.
+		 *
+		 * @since 2.0.2
+		 * @returns {Array} never null.
+		 */
+		function poolValues() {
+			return poolOrder.map( function( id ) {
+				return pointPool[ id ];
+			} );
+		}
+
+		/**
+		 * Bounds the pool to `config.maxAccumulatedPoints` when the domain asked for a bound
+		 * (#234). A missing/zero/negative value means UNLIMITED and this returns immediately —
+		 * that is the shipped default, and it is measured-safe rather than assumed: see the
+		 * design doc's measurement table.
+		 *
+		 * Evicts OLDEST-INSERTED first — walking {@see poolOrder}, NOT `Object.keys( pointPool )`,
+		 * which is not insertion order at all for the numeric ids this carrier uses (see that
+		 * array's own docblock). Skips any point the customer would notice losing:
+		 *
+		 *  - the current selection — the field's own value; losing it would strand the
+		 *    checkout on a point the map can no longer draw;
+		 *  - the open card's point — {@see cardPointId}; a card whose point vanished mid-read
+		 *    is the #232 defect wearing a different hat.
+		 *
+		 * The cap is a TARGET, not a guarantee: if every pooled point is protected the pool stays
+		 * above `max`, by design — evicting the point the customer has open, or the one they
+		 * already chose, to honour a number would be the worse failure. Bounded in practice by
+		 * there being at most two protected ids.
+		 *
+		 * "In frame" is deliberately NOT a third exemption: it would need a rectangle test of
+		 * our own, and the frame is exactly where a re-listing puts points back a moment later
+		 * anyway.
+		 *
+		 * @since 2.0.2
+		 * @returns {void}
+		 */
+		function trimPointPool() {
+			var max = parseInt( config.maxAccumulatedPoints, 10 );
+
+			if ( ! max || max < 1 ) {
+				return;
+			}
+
+			var over = poolOrder.length - max;
+
+			if ( over < 1 ) {
+				return;
+			}
+
+			var selected = fieldValue( config.fieldId );
+			var protectedIds = Object.create( null );
+
+			if ( selected ) {
+				protectedIds[ String( selected ) ] = true;
+			}
+
+			if ( cardPointId ) {
+				protectedIds[ String( cardPointId ) ] = true;
+			}
+
+			// Walks {@see poolOrder} — TRUE insertion order, oldest first. Rebuilds the order
+			// array in one pass rather than splicing per eviction, so trimming stays linear.
+			var kept = [];
+
+			poolOrder.forEach( function( id ) {
+				if ( over < 1 || id in protectedIds ) {
+					kept.push( id );
+
+					return;
+				}
+
+				delete pointPool[ id ];
+				over -= 1;
+			} );
+
+			poolOrder = kept;
+		}
+
+		/**
+		 * Merges one listing into the pool and returns the full set to draw (#234).
+		 *
+		 * THE LISTING WINS on conflict: it is the fresher carrier record. Whatever a detail
+		 * fetch already learned is re-applied AFTER grouping, from `detailsById`, so a sparse
+		 * re-merged record cannot erase it — that ordering is load-bearing, see
+		 * {@see fetchAndSetPoints}.
+		 *
+		 * A point with no `id` is passed through un-pooled rather than dropped: `id` is the
+		 * pool's whole identity and a record without one cannot be de-duplicated. Such a point is
+		 * therefore visible for THIS listing only and is gone on the next one — it does not join
+		 * the union. That asymmetry is deliberate and it is also unreachable in practice:
+		 * `Pickup_Point::from_array()` REQUIRES `id` and returns null without it, so no such
+		 * record can reach the browser through the framework's own contract. The branch is
+		 * defensive, not a supported shape — pooling it under a synthesised key would trade an
+		 * impossible case for a real one, re-adding an indistinguishable duplicate on every
+		 * listing forever. (Adversarial review flagged the original wording here, which claimed
+		 * union semantics this branch does not provide.)
+		 *
+		 * @since 2.0.2
+		 * @param {Array} points this listing's points.
+		 * @returns {Array} every point to draw.
+		 */
+		function mergeIntoPool( points ) {
+			var passthrough = [];
+
+			( points || [] ).forEach( function( point ) {
+				if ( ! point || null === point.id || undefined === point.id ) {
+					if ( point ) {
+						passthrough.push( point );
+					}
+
+					return;
+				}
+
+				var id = String( point.id );
+
+				if ( ! ( id in pointPool ) ) {
+					poolOrder.push( id );
+				}
+
+				pointPool[ id ] = point;
+			} );
+
+			trimPointPool();
+
+			return poolValues().concat( passthrough );
+		}
+
+		/**
+		 * Empties the pool.
+		 *
+		 * INVARIANT: every caller that clears the pool must also clear the detail memo, and
+		 * vice versa — {@see forgetPointDetails}. `geo.groupByPosition()` does not deep-copy,
+		 * so the detail fields re-applied in {@see fetchAndSetPoints} land on the pooled point
+		 * objects themselves; dropping `detailsById` while keeping the pool would strand those
+		 * fields with nothing left to re-derive them from, and dropping the pool while keeping
+		 * `detailsById` would re-apply a verdict computed against a cart that has since moved.
+		 *
+		 * @since 2.0.2
+		 * @returns {void}
+		 */
+		function resetPointPool() {
+			pointPool = Object.create( null );
+			poolOrder = [];
+			poolGeneration += 1;
+		}
+
 		function fetchAndSetPoints( query ) {
 			bumpLoading();
+
+			// #234: the generation this listing belongs to. Anything that empties the pool while
+			// this request is in flight makes its answer describe a state nobody is looking at
+			// any more — see the check in the resolve branch.
+			var myGeneration = poolGeneration;
 
 			// `realDataSource.fetchPoints( query )` is still called SYNCHRONOUSLY, right here — see
 			// {@see refreshPointDetails}'s identical `try` immediately above for why: several
@@ -1688,6 +1900,23 @@
 						return points;
 					}
 
+					// #234: a reset happened while this was travelling. Merging now would put the
+					// pre-reset carrier answer back into a pool that was deliberately emptied —
+					// permanently, since nothing removes a pooled point. `dropLoading()` and
+					// `clearInitialBusy()` above have already run, so the customer's spinner state
+					// is correct; there is simply nothing here worth drawing.
+					//
+					// NOT viewport-only, though only `viewport` accumulates (adversarial review,
+					// 09.08.2026). The first version exempted `bulk` on the reasoning that a late
+					// listing is still the best answer available — which is false once a reset has
+					// happened: the reset means a NEWER fetch went out, and if that one has already
+					// drawn, letting the older one through replaces fresh data with stale. A
+					// generation only moves when something invalidated the previous answer, so the
+					// guard is about staleness, not about which strategy is running.
+					if ( myGeneration !== poolGeneration ) {
+						return points;
+					}
+
 					// DELIBERATELY NOT WIPED HERE (#232). This used to clear `detailedPoints` on
 					// every successful listing, on the reasoning that a fresh listing carries a
 					// freshly computed verdict. But a bbox refetch is not a cart change: panning
@@ -1697,7 +1926,13 @@
 					// checkout update, and that arrives as {@see refresh} — which is where the
 					// memo is cleared now, via {@see forgetPointDetails}.
 
-					var groups = geo.groupByPosition( points );
+					// #234: under `viewport` the drawn set is the UNION of every listing this
+					// session, so the customer never loses points by zooming out and back. Under
+					// `bulk` there is one listing and it is authoritative — the pool is bypassed
+					// entirely rather than being a union of one, so `bulk` keeps its exact
+					// previous behaviour including "a later listing REPLACES the set".
+					var drawable = 'viewport' === config.strategy ? mergeIntoPool( points ) : points;
+					var groups = geo.groupByPosition( drawable );
 
 					// Re-apply what detail fetches already learned, BEFORE anything draws or
 					// renders these groups (#232). `geo.groupByPosition()` builds them from the
@@ -1760,7 +1995,11 @@
 					provider.setPoints( groups, restoreGroup ? { focus: restoreGroup.key } : null );
 
 					if ( panels ) {
-						panels.setTypes( extractTypes( points ) );
+						// #234: from the DRAWN set, not this listing — a chip that vanishes
+						// because the customer panned past the last point of its type, while
+						// points of that type are still drawn, is the same defect this issue
+						// is about, one surface over.
+						panels.setTypes( extractTypes( drawable ) );
 					}
 
 					fireDocumentEvent( EVENT_POINTS_LOADED, {
@@ -1793,13 +2032,21 @@
 								restoreSelection( restoreGroup );
 							}
 						}
-					} else {
+					} else if ( 'bulk' === config.strategy || 0 === visibleGroupCount ) {
 						// `emptyLocality` (a locality genuinely has none) vs `emptyInView` (the
 						// current viewport does) — the SAME shared function backs both the bulk
 						// strategy's one-shot fetch and the viewport strategy's per-bbox
-						// `boundsChange` fetch (see the call sites below), so the key is chosen from
-						// `config.strategy`, not hardcoded to either. Distinct from `noResults`,
-						// which stays reserved for the search view finding nothing (spec V-5).
+						// `boundsChange` fetch, so the key is chosen from `config.strategy`, not
+						// hardcoded to either. Distinct from `noResults`, which stays reserved for
+						// the search view finding nothing (spec V-5).
+						//
+						// #234: under `viewport` an empty listing no longer means an empty screen.
+						// A listing can come back empty for a frame the pool still has points in —
+						// rig-measured on live Russian Post, where one frame answered 0 after 16.9s
+						// while its neighbours answered 1500+. Printing "nothing here" over drawn
+						// markers is worse than printing nothing, so the message waits until the
+						// provider itself reports an empty frame. `bulk` keeps its old behaviour
+						// exactly: it has no frame-driven refetch to correct a wrong message later.
 						showFetchMessage( 'bulk' === config.strategy ? 'emptyLocality' : 'emptyInView' );
 					}
 
@@ -2369,6 +2616,14 @@
 				// viewport: a client-side filter would show stale points outside the current
 				// bbox — refetch with the SAME bbox and the new types instead (see the file
 				// docblock's judgement-call note on getting this backwards).
+				//
+				// #234: the pool goes first. The SERVER is what applies the type filter on this
+				// strategy, so points pooled under the previous filter are not a subset of the
+				// new answer — a union across two different filters describes no query anyone
+				// made. Paired with forgetPointDetails() per resetPointPool()'s invariant.
+				resetPointPool();
+				forgetPointDetails();
+
 				if ( lastBbox ) {
 					fetchAndSetPoints( { bounds: lastBbox, types: codes } ).catch( function() {} );
 				}
@@ -2629,6 +2884,13 @@
 			provider = new ProviderCtor();
 			lastBbox = null;
 
+			// #234: a retry rebuilds the provider from scratch, so the drawn set restarts
+			// from nothing too. Paired with forgetPointDetails() per resetPointPool()'s
+			// stated invariant.
+			resetPointPool();
+			forgetPointDetails();
+			visibleGroupCount = 0;
+
 			// Task 16 (spec V-4): every start() — the initial open AND every retry — runs through
 			// the full "map drawn → points in flight → points in" sequence again, so the flag that
 			// gates {@see clearInitialBusy} resets here too, not just once per session.
@@ -2679,6 +2941,13 @@
 					var groups = ( keys || [] )
 						.map( function( key ) { return groupsByKey[ key ]; } )
 						.filter( function( group ) { return !! group; } );
+
+					// #234: what the empty-frame message is decided from — see
+					// {@see visibleGroupCount}. Counted from the RAW keys, not the mapped
+					// groups: a key the mount cannot resolve still means the provider is
+					// drawing something there, and suppressing the message is the safe
+					// direction (a missing message beats a false one over a full map).
+					visibleGroupCount = ( keys || [] ).length;
 
 					panels.setVisible( groups );
 				} );
@@ -2838,7 +3107,12 @@
 
 			// THE cart-change event (#232) — see {@see forgetPointDetails} for why this is the
 			// only place details are forgotten, and no longer every listing.
+			//
+			// #234: the pool goes with it, ALWAYS, and the two calls must never be separated —
+			// see {@see resetPointPool}'s stated invariant. A pooled point's `selectable` was
+			// computed against the cart that just changed.
 			forgetPointDetails();
+			resetPointPool();
 
 			if ( 'bulk' === config.strategy ) {
 				return fetchAndSetPoints( bulkQuery() ).catch( function() {} );

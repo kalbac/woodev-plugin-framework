@@ -1706,6 +1706,587 @@ test( 'a genuinely empty VIEWPORT (boundsChange) result calls panels.showMessage
 	expect( panels.showMessageCalls ).toEqual( [ 'emptyInView' ] );
 } );
 
+// -------------------------------------------------------------------------
+// #234 — viewport point accumulation: the drawn set is the UNION of every
+// listing this session, never just the last one.
+// -------------------------------------------------------------------------
+
+test( 'viewport: two listings with disjoint points draw the UNION, not the last listing', async () => {
+	const listings = [
+		[ point( { id: 'A', lat: 55.1, lng: 37.1 } ) ],
+		[ point( { id: 'B', lat: 55.2, lng: 37.2 } ) ],
+	];
+	let call = 0;
+	window.WoodevPickupDataSource = fakeDataSourceFactory( () => Promise.resolve( listings[ call++ ] || [] ) );
+	setConfig( makeConfig( { strategy: 'viewport' } ) );
+	mountAll();
+	clickTrigger();
+	await flushAsync();
+
+	const provider = StubProvider.instances[ StubProvider.instances.length - 1 ];
+
+	provider.emit( 'boundsChange', [ 55, 37, 56, 38 ] );
+	await flushAsync();
+	provider.emit( 'boundsChange', [ 55, 37, 56, 38 ] );
+	await flushAsync();
+
+	const drawn = provider.setPointsCalls[ provider.setPointsCalls.length - 1 ];
+	const ids = drawn.reduce( ( acc, group ) => acc.concat( group.points.map( ( p ) => p.id ) ), [] ).sort();
+
+	expect( ids ).toEqual( [ 'A', 'B' ] );
+} );
+
+test( 'viewport: a point in BOTH listings appears once, carrying the SECOND listing\'s values', async () => {
+	const listings = [
+		[ point( { id: 'A', name: 'Старое имя' } ) ],
+		[ point( { id: 'A', name: 'Новое имя' } ) ],
+	];
+	let call = 0;
+	window.WoodevPickupDataSource = fakeDataSourceFactory( () => Promise.resolve( listings[ call++ ] || [] ) );
+	setConfig( makeConfig( { strategy: 'viewport' } ) );
+	mountAll();
+	clickTrigger();
+	await flushAsync();
+
+	const provider = StubProvider.instances[ StubProvider.instances.length - 1 ];
+
+	provider.emit( 'boundsChange', [ 55, 37, 56, 38 ] );
+	await flushAsync();
+	provider.emit( 'boundsChange', [ 55, 37, 56, 38 ] );
+	await flushAsync();
+
+	const drawn = provider.setPointsCalls[ provider.setPointsCalls.length - 1 ];
+	const all = drawn.reduce( ( acc, group ) => acc.concat( group.points ), [] );
+
+	expect( all ).toHaveLength( 1 );
+	expect( all[ 0 ].name ).toBe( 'Новое имя' );
+} );
+
+test( 'bulk is unaffected — its listing still REPLACES the drawn set', async () => {
+	const listings = [
+		[ point( { id: 'A' } ) ],
+		[ point( { id: 'B' } ) ],
+	];
+	let call = 0;
+	window.WoodevPickupDataSource = fakeDataSourceFactory( () => Promise.resolve( listings[ call++ ] || [] ) );
+	setConfig( makeConfig( { strategy: 'bulk' } ) );
+	mountAll();
+	clickTrigger();
+	await flushAsync();
+
+	const provider = StubProvider.instances[ StubProvider.instances.length - 1 ];
+
+	// bulk's second fetch can only come from refresh() — dispatching `updated_checkout` on
+	// `document.body` alone does NOT call it. Verified against the source: refresh() is an
+	// EXTERNAL hook exposed only via getSession() (see the file docblock, "the hook a
+	// payment-method change elsewhere on the page uses"), nothing in this file wires it to
+	// the `updated_checkout` DOM event itself, and every existing refresh() test in this
+	// file invokes it the same way.
+	await getSession( FIELD_ID ).refresh();
+
+	const drawn = provider.setPointsCalls[ provider.setPointsCalls.length - 1 ];
+	const ids = drawn.reduce( ( acc, group ) => acc.concat( group.points.map( ( p ) => p.id ) ), [] );
+
+	expect( ids ).toEqual( [ 'B' ] );
+} );
+
+test( 'retry (start()) drops the pool — a fresh session starts from nothing', async () => {
+	const listings = [
+		[ point( { id: 'A' } ) ],
+		[ point( { id: 'B' } ) ],
+	];
+	let call = 0;
+	window.WoodevPickupDataSource = fakeDataSourceFactory( () => Promise.resolve( listings[ call++ ] || [] ) );
+	setConfig( makeConfig( { strategy: 'viewport' } ) );
+	mountAll();
+	clickTrigger();
+	await flushAsync();
+
+	let provider = StubProvider.instances[ StubProvider.instances.length - 1 ];
+	provider.emit( 'boundsChange', [ 55, 37, 56, 38 ] );
+	await flushAsync();
+
+	const panels = StubPanels.instances[ StubPanels.instances.length - 1 ];
+	panels.emit( 'retryRequested' );
+	await flushAsync();
+
+	provider = StubProvider.instances[ StubProvider.instances.length - 1 ];
+	provider.emit( 'boundsChange', [ 55, 37, 56, 38 ] );
+	await flushAsync();
+
+	const drawn = provider.setPointsCalls[ provider.setPointsCalls.length - 1 ];
+	const ids = drawn.reduce( ( acc, group ) => acc.concat( group.points.map( ( p ) => p.id ) ), [] );
+
+	expect( ids ).toEqual( [ 'B' ] );
+} );
+
+// -------------------------------------------------------------------------
+// #234 — the generation barrier: a reset must survive an in-flight listing.
+//
+// The plan this was written from drives the reset via `document.body.dispatchEvent(
+// new Event( 'updated_checkout' ) )`. Verified against the source and against every
+// other refresh() test in this file: that event alone never calls refresh() — it is an
+// EXTERNAL hook exposed only via `getSession( fieldId ).refresh()` (see the file
+// docblock, "the hook a payment-method change elsewhere on the page uses"), and
+// `refresh()` itself does not call `resetPointPool()` yet — that wiring is Task 2, which
+// this commit deliberately does not include. The only reset trigger implemented at this
+// point in the plan's own sequence is `start()` (Task 1, step 6), reached the same way
+// the "retry (start()) drops the pool" test above reaches it: a `retryRequested` event.
+// -------------------------------------------------------------------------
+
+test( '#234: a listing already in flight when the pool is reset is DROPPED on arrival', async () => {
+	let releaseFirst;
+	const first = new Promise( ( resolve ) => { releaseFirst = resolve; } );
+	const responses = [ first, Promise.resolve( [ point( { id: 'B' } ) ] ) ];
+	let call = 0;
+	window.WoodevPickupDataSource = fakeDataSourceFactory( () => responses[ call++ ] || Promise.resolve( [] ) );
+	setConfig( makeConfig( { strategy: 'viewport' } ) );
+	mountAll();
+	clickTrigger();
+	await flushAsync();
+
+	const provider = StubProvider.instances[ StubProvider.instances.length - 1 ];
+	const panels = StubPanels.instances[ StubPanels.instances.length - 1 ];
+
+	// A listing goes out and does NOT settle yet.
+	provider.emit( 'boundsChange', [ 55, 37, 56, 38 ] );
+	await flushAsync();
+
+	// A retry rebuilds the provider and resets the pool while the first listing is still
+	// travelling.
+	panels.emit( 'retryRequested' );
+	await flushAsync();
+
+	const freshProvider = StubProvider.instances[ StubProvider.instances.length - 1 ];
+
+	// A second listing goes out on the fresh provider and settles normally.
+	freshProvider.emit( 'boundsChange', [ 55, 37, 56, 38 ] );
+	await flushAsync();
+
+	// Only NOW does the stale first listing come back.
+	releaseFirst( [ point( { id: 'STALE' } ) ] );
+	await flushAsync();
+
+	const drawn = freshProvider.setPointsCalls[ freshProvider.setPointsCalls.length - 1 ];
+	const ids = drawn.reduce( ( acc, group ) => acc.concat( group.points.map( ( p ) => p.id ) ), [] );
+
+	expect( ids ).not.toContain( 'STALE' );
+} );
+
+test( '#234: a listing in flight across NO reset still lands normally — the guard is not a '
+	+ 'blanket drop', async () => {
+	let releaseFirst;
+	const first = new Promise( ( resolve ) => { releaseFirst = resolve; } );
+	let call = 0;
+	const responses = [ first ];
+	window.WoodevPickupDataSource = fakeDataSourceFactory( () => responses[ call++ ] || Promise.resolve( [] ) );
+	setConfig( makeConfig( { strategy: 'viewport' } ) );
+	mountAll();
+	clickTrigger();
+	await flushAsync();
+
+	const provider = StubProvider.instances[ StubProvider.instances.length - 1 ];
+
+	provider.emit( 'boundsChange', [ 55, 37, 56, 38 ] );
+	await flushAsync();
+
+	releaseFirst( [ point( { id: 'A' } ) ] );
+	await flushAsync();
+
+	const drawn = provider.setPointsCalls[ provider.setPointsCalls.length - 1 ];
+	const ids = drawn.reduce( ( acc, group ) => acc.concat( group.points.map( ( p ) => p.id ) ), [] );
+
+	expect( ids ).toEqual( [ 'A' ] );
+} );
+
+test( '#234 invariant: refresh() clears the pool AND the details memo in ONE call', async () => {
+	const listings = [
+		[ point( { id: 'A' } ) ],
+		[ point( { id: 'B' } ) ],
+	];
+	let call = 0;
+	window.WoodevPickupDataSource = fakeDataSourceFactory( () => Promise.resolve( listings[ call++ ] || [] ) );
+	window.WoodevPickupDataSource.fetchDetails = () =>
+		Promise.resolve( point( { id: 'A', work_time: 'из деталей' } ) );
+
+	setConfig( makeConfig( { strategy: 'viewport' } ) );
+	mountAll();
+	clickTrigger();
+	await flushAsync();
+
+	const provider = StubProvider.instances[ StubProvider.instances.length - 1 ];
+	const panels = StubPanels.instances[ StubPanels.instances.length - 1 ];
+
+	provider.emit( 'boundsChange', [ 55, 37, 56, 38 ] );
+	await flushAsync();
+
+	// Learn a detail for A, so the memo is demonstrably non-empty. The payload shape is
+	// `{ group, pointId, origin }` — verified against this file's existing cardOpened tests,
+	// NOT guessed.
+	panels.emit( 'cardOpened', {
+		group: provider.setPointsCalls[ provider.setPointsCalls.length - 1 ][ 0 ],
+		pointId: 'A',
+		origin: 'list',
+	} );
+	await flushAsync();
+
+	// The cart changes. NOTE: `updated_checkout` does NOT reach refresh() — this file wires
+	// that event to mountAll() only, and getSession() has no production caller at all (#238).
+	// Every existing refresh() test in this file drives it directly, and so does this one.
+	await window.WoodevPickupMount.getSession( FIELD_ID ).refresh();
+	await flushAsync();
+
+	const drawn = provider.setPointsCalls[ provider.setPointsCalls.length - 1 ];
+	const all = drawn.reduce( ( acc, group ) => acc.concat( group.points ), [] );
+
+	// Pool cleared: only the refresh listing's own point is drawn.
+	expect( all.map( ( p ) => p.id ) ).toEqual( [ 'B' ] );
+	// Memo cleared: nothing carries the stale detail field.
+	expect( all.some( ( p ) => 'из деталей' === p.work_time ) ).toBe( false );
+} );
+
+test( '#234: a viewport type-filter change drops the pool — the server filters, so a union '
+	+ 'across different filters would be incoherent', async () => {
+	const listings = [
+		[ point( { id: 'A', type: { code: 'pvz', label: 'ПВЗ' } } ) ],
+		[ point( { id: 'B', type: { code: 'postamat', label: 'Постамат' } } ) ],
+	];
+	let call = 0;
+	window.WoodevPickupDataSource = fakeDataSourceFactory( () => Promise.resolve( listings[ call++ ] || [] ) );
+	setConfig( makeConfig( { strategy: 'viewport' } ) );
+	mountAll();
+	clickTrigger();
+	await flushAsync();
+
+	const provider = StubProvider.instances[ StubProvider.instances.length - 1 ];
+	const panels = StubPanels.instances[ StubPanels.instances.length - 1 ];
+
+	provider.emit( 'boundsChange', [ 55, 37, 56, 38 ] );
+	await flushAsync();
+
+	panels.emit( 'typeFilterChange', [ 'postamat' ] );
+	await flushAsync();
+
+	const drawn = provider.setPointsCalls[ provider.setPointsCalls.length - 1 ];
+	const ids = drawn.reduce( ( acc, group ) => acc.concat( group.points.map( ( p ) => p.id ) ), [] );
+
+	expect( ids ).toEqual( [ 'B' ] );
+} );
+
+test( '#234: a BULK type-filter change does not touch the pool or refetch — it still filters '
+	+ 'client-side through the provider', async () => {
+	window.WoodevPickupDataSource = fakeDataSourceFactory( () => Promise.resolve( [ point( { id: 'A' } ) ] ) );
+	setConfig( makeConfig( { strategy: 'bulk' } ) );
+	mountAll();
+	clickTrigger();
+	await flushAsync();
+
+	const provider = StubProvider.instances[ StubProvider.instances.length - 1 ];
+	const panels = StubPanels.instances[ StubPanels.instances.length - 1 ];
+	const drawsBefore = provider.setPointsCalls.length;
+
+	panels.emit( 'typeFilterChange', [ 'postamat' ] );
+	await flushAsync();
+
+	expect( provider.setTypeFilterCalls ).toEqual( [ [ 'postamat' ] ] );
+	expect( provider.setPointsCalls.length ).toBe( drawsBefore );
+} );
+
+test( '#234: the type chips are computed from the POOL, so they do not flicker as the '
+	+ 'customer pans', async () => {
+	const listings = [
+		[ point( { id: 'A', type: { code: 'pvz', label: 'ПВЗ' } } ) ],
+		[ point( { id: 'B', type: { code: 'postamat', label: 'Постамат' } } ) ],
+	];
+	let call = 0;
+	window.WoodevPickupDataSource = fakeDataSourceFactory( () => Promise.resolve( listings[ call++ ] || [] ) );
+	setConfig( makeConfig( { strategy: 'viewport' } ) );
+	mountAll();
+	clickTrigger();
+	await flushAsync();
+
+	const provider = StubProvider.instances[ StubProvider.instances.length - 1 ];
+	const panels = StubPanels.instances[ StubPanels.instances.length - 1 ];
+
+	provider.emit( 'boundsChange', [ 55, 37, 56, 38 ] );
+	await flushAsync();
+	provider.emit( 'boundsChange', [ 55, 37, 56, 38 ] );
+	await flushAsync();
+
+	expect( panels.lastTypes ).toEqual( [
+		{ code: 'pvz', label: 'ПВЗ' },
+		{ code: 'postamat', label: 'Постамат' },
+	] );
+} );
+
+// -------------------------------------------------------------------------
+// #234 — "nothing in this area" must not print over a map that shows points.
+// -------------------------------------------------------------------------
+
+test( '#234: an empty listing does NOT show emptyInView while pooled points are still in frame', async () => {
+	const listings = [
+		[ point( { id: 'A' } ) ],
+		[],
+	];
+	let call = 0;
+	window.WoodevPickupDataSource = fakeDataSourceFactory( () => Promise.resolve( listings[ call++ ] || [] ) );
+	setConfig( makeConfig( { strategy: 'viewport' } ) );
+	mountAll();
+	clickTrigger();
+	await flushAsync();
+
+	const provider = StubProvider.instances[ StubProvider.instances.length - 1 ];
+	const panels = StubPanels.instances[ StubPanels.instances.length - 1 ];
+
+	provider.emit( 'boundsChange', [ 55, 37, 56, 38 ] );
+	await flushAsync();
+
+	// The provider reports A is on screen — this is the mount's only source for "in frame".
+	const drawnKey = provider.setPointsCalls[ provider.setPointsCalls.length - 1 ][ 0 ].key;
+	provider.emit( 'visibleChange', [ drawnKey ] );
+
+	provider.emit( 'boundsChange', [ 55, 37, 56, 38 ] );
+	await flushAsync();
+
+	expect( panels.showMessageCalls ).toBeUndefined();
+} );
+
+test( '#234: an empty listing DOES show emptyInView when nothing is in frame', async () => {
+	window.WoodevPickupDataSource = fakeDataSourceFactory( () => Promise.resolve( [] ) );
+	setConfig( makeConfig( { strategy: 'viewport' } ) );
+	mountAll();
+	clickTrigger();
+	await flushAsync();
+
+	const provider = StubProvider.instances[ StubProvider.instances.length - 1 ];
+	const panels = StubPanels.instances[ StubPanels.instances.length - 1 ];
+
+	provider.emit( 'visibleChange', [] );
+	provider.emit( 'boundsChange', [ 55, 37, 56, 38 ] );
+	await flushAsync();
+
+	expect( panels.showMessageCalls ).toEqual( [ 'emptyInView' ] );
+} );
+
+// -------------------------------------------------------------------------
+// #234 — maxAccumulatedPoints: bounding the pool, protecting what the customer can see.
+// -------------------------------------------------------------------------
+
+test( '#234 cap: with maxAccumulatedPoints set, the OLDEST-seen points are evicted first', async () => {
+	const listings = [
+		[ point( { id: 'A' } ) ],
+		[ point( { id: 'B' } ) ],
+		[ point( { id: 'C' } ) ],
+	];
+	let call = 0;
+	window.WoodevPickupDataSource = fakeDataSourceFactory( () => Promise.resolve( listings[ call++ ] || [] ) );
+	setConfig( makeConfig( { strategy: 'viewport', maxAccumulatedPoints: 2 } ) );
+	mountAll();
+	clickTrigger();
+	await flushAsync();
+
+	const provider = StubProvider.instances[ StubProvider.instances.length - 1 ];
+
+	provider.emit( 'boundsChange', [ 55, 37, 56, 38 ] );
+	await flushAsync();
+	provider.emit( 'boundsChange', [ 55, 37, 56, 38 ] );
+	await flushAsync();
+	provider.emit( 'boundsChange', [ 55, 37, 56, 38 ] );
+	await flushAsync();
+
+	const drawn = provider.setPointsCalls[ provider.setPointsCalls.length - 1 ];
+	const ids = drawn.reduce( ( acc, group ) => acc.concat( group.points.map( ( p ) => p.id ) ), [] ).sort();
+
+	expect( ids ).toEqual( [ 'B', 'C' ] );
+} );
+
+// -------------------------------------------------------------------------
+// #234 — defects found by adversarial review of the finished implementation
+// (Codex, 09.08.2026). Each of these FAILED against the first implementation.
+// -------------------------------------------------------------------------
+
+test( '#234 cap: NUMERIC ids evict by age, not by numeric value — Object.keys() orders '
+	+ 'integer-like keys numerically and would drop the newest point', async () => {
+	// The live carrier's ids are numeric strings ('111543'). Seen in this order: 100, 200, 50.
+	// `Object.keys()` would report [ '50', '100', '200' ] and evict '50' — the NEWEST.
+	const listings = [
+		[ point( { id: '100' } ) ],
+		[ point( { id: '200' } ) ],
+		[ point( { id: '50' } ) ],
+	];
+	let call = 0;
+	window.WoodevPickupDataSource = fakeDataSourceFactory( () => Promise.resolve( listings[ call++ ] || [] ) );
+	setConfig( makeConfig( { strategy: 'viewport', maxAccumulatedPoints: 2 } ) );
+	mountAll();
+	clickTrigger();
+	await flushAsync();
+
+	const provider = StubProvider.instances[ StubProvider.instances.length - 1 ];
+
+	provider.emit( 'boundsChange', [ 55, 37, 56, 38 ] );
+	await flushAsync();
+	provider.emit( 'boundsChange', [ 55, 37, 56, 38 ] );
+	await flushAsync();
+	provider.emit( 'boundsChange', [ 55, 37, 56, 38 ] );
+	await flushAsync();
+
+	const drawn = provider.setPointsCalls[ provider.setPointsCalls.length - 1 ];
+	const ids = drawn.reduce( ( acc, group ) => acc.concat( group.points.map( ( p ) => p.id ) ), [] ).sort();
+
+	// The OLDEST ('100') goes; the two most recently seen survive.
+	expect( ids ).toEqual( [ '200', '50' ].sort() );
+} );
+
+test( '#234: a point whose carrier id is the string "__proto__" is pooled and drawn', async () => {
+	// On a plain `{}` pool, `pool['__proto__'] = point` mutates the prototype instead of
+	// creating an entry, and the point silently never appears.
+	window.WoodevPickupDataSource = fakeDataSourceFactory(
+		() => Promise.resolve( [ point( { id: '__proto__' } ) ] )
+	);
+	setConfig( makeConfig( { strategy: 'viewport' } ) );
+	mountAll();
+	clickTrigger();
+	await flushAsync();
+
+	const provider = StubProvider.instances[ StubProvider.instances.length - 1 ];
+
+	provider.emit( 'boundsChange', [ 55, 37, 56, 38 ] );
+	await flushAsync();
+
+	const drawn = provider.setPointsCalls[ provider.setPointsCalls.length - 1 ];
+	const ids = drawn.reduce( ( acc, group ) => acc.concat( group.points.map( ( p ) => p.id ) ), [] );
+
+	expect( ids ).toEqual( [ '__proto__' ] );
+} );
+
+test( '#234: the generation guard is NOT viewport-only — a stale BULK listing must not '
+	+ 'overwrite a newer one that already drew', async () => {
+	let releaseFirst;
+	const first = new Promise( ( resolve ) => { releaseFirst = resolve; } );
+	const responses = [ first, Promise.resolve( [ point( { id: 'FRESH' } ) ] ) ];
+	let call = 0;
+	window.WoodevPickupDataSource = fakeDataSourceFactory( () => responses[ call++ ] || Promise.resolve( [] ) );
+	setConfig( makeConfig( { strategy: 'bulk' } ) );
+	mountAll();
+	clickTrigger();
+	await flushAsync();
+
+	// The bulk session's own first fetch is in flight and has not settled.
+	// A cart change resets and refetches; the second listing settles first and draws.
+	await window.WoodevPickupMount.getSession( FIELD_ID ).refresh();
+	await flushAsync();
+
+	// Only now does the pre-reset listing come back.
+	releaseFirst( [ point( { id: 'STALE' } ) ] );
+	await flushAsync();
+
+	const provider = StubProvider.instances[ StubProvider.instances.length - 1 ];
+	const drawn = provider.setPointsCalls[ provider.setPointsCalls.length - 1 ];
+	const ids = drawn.reduce( ( acc, group ) => acc.concat( group.points.map( ( p ) => p.id ) ), [] );
+
+	expect( ids ).toEqual( [ 'FRESH' ] );
+} );
+
+test( '#234 cap: the customer\'s CURRENT SELECTION is never evicted, however old', async () => {
+	// Seed the field with A so it is the current selection from the first listing on.
+	document.getElementById( FIELD_ID ).value = 'A';
+
+	const listings = [
+		[ point( { id: 'A' } ) ],
+		[ point( { id: 'B' } ) ],
+		[ point( { id: 'C' } ) ],
+	];
+	let call = 0;
+	window.WoodevPickupDataSource = fakeDataSourceFactory( () => Promise.resolve( listings[ call++ ] || [] ) );
+	setConfig( makeConfig( { strategy: 'viewport', maxAccumulatedPoints: 2 } ) );
+	mountAll();
+	clickTrigger();
+	await flushAsync();
+
+	const provider = StubProvider.instances[ StubProvider.instances.length - 1 ];
+
+	provider.emit( 'boundsChange', [ 55, 37, 56, 38 ] );
+	await flushAsync();
+	provider.emit( 'boundsChange', [ 55, 37, 56, 38 ] );
+	await flushAsync();
+	provider.emit( 'boundsChange', [ 55, 37, 56, 38 ] );
+	await flushAsync();
+
+	const drawn = provider.setPointsCalls[ provider.setPointsCalls.length - 1 ];
+	const ids = drawn.reduce( ( acc, group ) => acc.concat( group.points.map( ( p ) => p.id ) ), [] );
+
+	expect( ids ).toContain( 'A' );
+} );
+
+test( '#234 cap: an unset (0) cap keeps everything', async () => {
+	const listings = [
+		[ point( { id: 'A' } ) ],
+		[ point( { id: 'B' } ) ],
+		[ point( { id: 'C' } ) ],
+	];
+	let call = 0;
+	window.WoodevPickupDataSource = fakeDataSourceFactory( () => Promise.resolve( listings[ call++ ] || [] ) );
+	setConfig( makeConfig( { strategy: 'viewport' } ) );
+	mountAll();
+	clickTrigger();
+	await flushAsync();
+
+	const provider = StubProvider.instances[ StubProvider.instances.length - 1 ];
+
+	provider.emit( 'boundsChange', [ 55, 37, 56, 38 ] );
+	await flushAsync();
+	provider.emit( 'boundsChange', [ 55, 37, 56, 38 ] );
+	await flushAsync();
+	provider.emit( 'boundsChange', [ 55, 37, 56, 38 ] );
+	await flushAsync();
+
+	const drawn = provider.setPointsCalls[ provider.setPointsCalls.length - 1 ];
+	const ids = drawn.reduce( ( acc, group ) => acc.concat( group.points.map( ( p ) => p.id ) ), [] ).sort();
+
+	expect( ids ).toEqual( [ 'A', 'B', 'C' ] );
+} );
+
+// -------------------------------------------------------------------------
+// #234 — restore finds a pooled point the last listing does not contain.
+// -------------------------------------------------------------------------
+
+test( '#234: a previously chosen point is still restorable from the pool after the customer '
+	+ 'panned to a frame whose listing does not contain it', async () => {
+	document.getElementById( FIELD_ID ).value = 'A';
+
+	const listings = [
+		[ point( { id: 'A', lat: 55.1, lng: 37.1 } ) ],
+		[ point( { id: 'B', lat: 60.0, lng: 30.0 } ) ],
+	];
+	let call = 0;
+	window.WoodevPickupDataSource = fakeDataSourceFactory( () => Promise.resolve( listings[ call++ ] || [] ) );
+	setConfig( makeConfig( { strategy: 'viewport' } ) );
+	mountAll();
+	clickTrigger();
+	await flushAsync();
+
+	const provider = StubProvider.instances[ StubProvider.instances.length - 1 ];
+
+	provider.emit( 'boundsChange', [ 55, 37, 56, 38 ] );
+	await flushAsync();
+	provider.emit( 'boundsChange', [ 59, 29, 61, 31 ] );
+	await flushAsync();
+
+	const drawn = provider.setPointsCalls[ provider.setPointsCalls.length - 1 ];
+	const ids = drawn.reduce( ( acc, group ) => acc.concat( group.points.map( ( p ) => p.id ) ), [] );
+
+	expect( ids ).toContain( 'A' );
+
+	// …and the SECOND listing must not have re-focused the camera onto that pooled group.
+	// The adversarial review flagged this as a possible camera jump: with groups now built
+	// from the pool, `pendingRestoreGroup()` can find a chosen point that the current frame's
+	// listing does not contain. It is unreachable because `selectionRestoreAttempted` is
+	// claimed on the FIRST listing (which is where the pool still equals that listing), but
+	// "unreachable" is a property that must be pinned, not assumed.
+	const lastOptions = provider.setPointsOptions[ provider.setPointsOptions.length - 1 ];
+	expect( lastOptions ).toBeFalsy();
+} );
+
 test( 'a non-empty result calls neither showMessage() (nothing to show) nor leaves any destructive '
 	+ 'modal state', async () => {
 	window.WoodevPickupDataSource = fakeDataSourceFactory( () => Promise.resolve( [ point() ] ) );
