@@ -1088,7 +1088,20 @@
 		 *
 		 * @type {Object.<string, Object>}
 		 */
-		var pointPool = {};
+		var pointPool = Object.create( null );
+
+		/**
+		 * The pooled ids in TRUE INSERTION ORDER — what {@see trimPointPool} evicts by (#234).
+		 *
+		 * A separate array rather than `Object.keys( pointPool )`, because that is NOT insertion
+		 * order: JavaScript orders integer-like string keys NUMERICALLY and ahead of every other
+		 * key, and this carrier's ids are exactly that (`'111543'`). Evicting by `Object.keys()`
+		 * would therefore drop the LOWEST-numbered id — which has nothing to do with age, and on
+		 * a mixed pool can be the point the customer just panned to. Found by adversarial review.
+		 *
+		 * @type {Array.<string>}
+		 */
+		var poolOrder = [];
 
 		/**
 		 * Bumped by every {@see resetPointPool}. A listing captures it when it goes out and is
@@ -1701,7 +1714,7 @@
 		 * @returns {Array} never null.
 		 */
 		function poolValues() {
-			return Object.keys( pointPool ).map( function( id ) {
+			return poolOrder.map( function( id ) {
 				return pointPool[ id ];
 			} );
 		}
@@ -1712,13 +1725,19 @@
 		 * that is the shipped default, and it is measured-safe rather than assumed: see the
 		 * design doc's measurement table.
 		 *
-		 * Evicts OLDEST-INSERTED first (plain object key order for string keys), skipping any
-		 * point the customer would notice losing:
+		 * Evicts OLDEST-INSERTED first — walking {@see poolOrder}, NOT `Object.keys( pointPool )`,
+		 * which is not insertion order at all for the numeric ids this carrier uses (see that
+		 * array's own docblock). Skips any point the customer would notice losing:
 		 *
 		 *  - the current selection — the field's own value; losing it would strand the
 		 *    checkout on a point the map can no longer draw;
 		 *  - the open card's point — {@see cardPointId}; a card whose point vanished mid-read
 		 *    is the #232 defect wearing a different hat.
+		 *
+		 * The cap is a TARGET, not a guarantee: if every pooled point is protected the pool stays
+		 * above `max`, by design — evicting the point the customer has open, or the one they
+		 * already chose, to honour a number would be the worse failure. Bounded in practice by
+		 * there being at most two protected ids.
 		 *
 		 * "In frame" is deliberately NOT a third exemption: it would need a rectangle test of
 		 * our own, and the frame is exactly where a re-listing puts points back a moment later
@@ -1734,15 +1753,14 @@
 				return;
 			}
 
-			var ids = Object.keys( pointPool );
-			var over = ids.length - max;
+			var over = poolOrder.length - max;
 
 			if ( over < 1 ) {
 				return;
 			}
 
 			var selected = fieldValue( config.fieldId );
-			var protectedIds = {};
+			var protectedIds = Object.create( null );
 
 			if ( selected ) {
 				protectedIds[ String( selected ) ] = true;
@@ -1752,14 +1770,22 @@
 				protectedIds[ String( cardPointId ) ] = true;
 			}
 
-			ids.forEach( function( id ) {
-				if ( over < 1 || Object.prototype.hasOwnProperty.call( protectedIds, id ) ) {
+			// Walks {@see poolOrder} — TRUE insertion order, oldest first. Rebuilds the order
+			// array in one pass rather than splicing per eviction, so trimming stays linear.
+			var kept = [];
+
+			poolOrder.forEach( function( id ) {
+				if ( over < 1 || id in protectedIds ) {
+					kept.push( id );
+
 					return;
 				}
 
 				delete pointPool[ id ];
 				over -= 1;
 			} );
+
+			poolOrder = kept;
 		}
 
 		/**
@@ -1771,8 +1797,15 @@
 		 * {@see fetchAndSetPoints}.
 		 *
 		 * A point with no `id` is passed through un-pooled rather than dropped: `id` is the
-		 * pool's whole identity and a record without one cannot be de-duplicated, but it is
-		 * still a point the carrier returned and the customer should see it.
+		 * pool's whole identity and a record without one cannot be de-duplicated. Such a point is
+		 * therefore visible for THIS listing only and is gone on the next one — it does not join
+		 * the union. That asymmetry is deliberate and it is also unreachable in practice:
+		 * `Pickup_Point::from_array()` REQUIRES `id` and returns null without it, so no such
+		 * record can reach the browser through the framework's own contract. The branch is
+		 * defensive, not a supported shape — pooling it under a synthesised key would trade an
+		 * impossible case for a real one, re-adding an indistinguishable duplicate on every
+		 * listing forever. (Adversarial review flagged the original wording here, which claimed
+		 * union semantics this branch does not provide.)
 		 *
 		 * @since 2.0.2
 		 * @param {Array} points this listing's points.
@@ -1790,7 +1823,13 @@
 					return;
 				}
 
-				pointPool[ String( point.id ) ] = point;
+				var id = String( point.id );
+
+				if ( ! ( id in pointPool ) ) {
+					poolOrder.push( id );
+				}
+
+				pointPool[ id ] = point;
 			} );
 
 			trimPointPool();
@@ -1812,7 +1851,8 @@
 		 * @returns {void}
 		 */
 		function resetPointPool() {
-			pointPool = {};
+			pointPool = Object.create( null );
+			poolOrder = [];
 			poolGeneration += 1;
 		}
 
@@ -1864,9 +1904,16 @@
 					// pre-reset carrier answer back into a pool that was deliberately emptied —
 					// permanently, since nothing removes a pooled point. `dropLoading()` and
 					// `clearInitialBusy()` above have already run, so the customer's spinner state
-					// is correct; there is simply nothing here worth drawing. Viewport-only: `bulk`
-					// does not accumulate, so its late listing is still the best answer available.
-					if ( 'viewport' === config.strategy && myGeneration !== poolGeneration ) {
+					// is correct; there is simply nothing here worth drawing.
+					//
+					// NOT viewport-only, though only `viewport` accumulates (adversarial review,
+					// 09.08.2026). The first version exempted `bulk` on the reasoning that a late
+					// listing is still the best answer available — which is false once a reset has
+					// happened: the reset means a NEWER fetch went out, and if that one has already
+					// drawn, letting the older one through replaces fresh data with stale. A
+					// generation only moves when something invalidated the previous answer, so the
+					// guard is about staleness, not about which strategy is running.
+					if ( myGeneration !== poolGeneration ) {
 						return points;
 					}
 

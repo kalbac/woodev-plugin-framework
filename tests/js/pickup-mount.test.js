@@ -2100,6 +2100,93 @@ test( '#234 cap: with maxAccumulatedPoints set, the OLDEST-seen points are evict
 	expect( ids ).toEqual( [ 'B', 'C' ] );
 } );
 
+// -------------------------------------------------------------------------
+// #234 — defects found by adversarial review of the finished implementation
+// (Codex, 09.08.2026). Each of these FAILED against the first implementation.
+// -------------------------------------------------------------------------
+
+test( '#234 cap: NUMERIC ids evict by age, not by numeric value — Object.keys() orders '
+	+ 'integer-like keys numerically and would drop the newest point', async () => {
+	// The live carrier's ids are numeric strings ('111543'). Seen in this order: 100, 200, 50.
+	// `Object.keys()` would report [ '50', '100', '200' ] and evict '50' — the NEWEST.
+	const listings = [
+		[ point( { id: '100' } ) ],
+		[ point( { id: '200' } ) ],
+		[ point( { id: '50' } ) ],
+	];
+	let call = 0;
+	window.WoodevPickupDataSource = fakeDataSourceFactory( () => Promise.resolve( listings[ call++ ] || [] ) );
+	setConfig( makeConfig( { strategy: 'viewport', maxAccumulatedPoints: 2 } ) );
+	mountAll();
+	clickTrigger();
+	await flushAsync();
+
+	const provider = StubProvider.instances[ StubProvider.instances.length - 1 ];
+
+	provider.emit( 'boundsChange', [ 55, 37, 56, 38 ] );
+	await flushAsync();
+	provider.emit( 'boundsChange', [ 55, 37, 56, 38 ] );
+	await flushAsync();
+	provider.emit( 'boundsChange', [ 55, 37, 56, 38 ] );
+	await flushAsync();
+
+	const drawn = provider.setPointsCalls[ provider.setPointsCalls.length - 1 ];
+	const ids = drawn.reduce( ( acc, group ) => acc.concat( group.points.map( ( p ) => p.id ) ), [] ).sort();
+
+	// The OLDEST ('100') goes; the two most recently seen survive.
+	expect( ids ).toEqual( [ '200', '50' ].sort() );
+} );
+
+test( '#234: a point whose carrier id is the string "__proto__" is pooled and drawn', async () => {
+	// On a plain `{}` pool, `pool['__proto__'] = point` mutates the prototype instead of
+	// creating an entry, and the point silently never appears.
+	window.WoodevPickupDataSource = fakeDataSourceFactory(
+		() => Promise.resolve( [ point( { id: '__proto__' } ) ] )
+	);
+	setConfig( makeConfig( { strategy: 'viewport' } ) );
+	mountAll();
+	clickTrigger();
+	await flushAsync();
+
+	const provider = StubProvider.instances[ StubProvider.instances.length - 1 ];
+
+	provider.emit( 'boundsChange', [ 55, 37, 56, 38 ] );
+	await flushAsync();
+
+	const drawn = provider.setPointsCalls[ provider.setPointsCalls.length - 1 ];
+	const ids = drawn.reduce( ( acc, group ) => acc.concat( group.points.map( ( p ) => p.id ) ), [] );
+
+	expect( ids ).toEqual( [ '__proto__' ] );
+} );
+
+test( '#234: the generation guard is NOT viewport-only — a stale BULK listing must not '
+	+ 'overwrite a newer one that already drew', async () => {
+	let releaseFirst;
+	const first = new Promise( ( resolve ) => { releaseFirst = resolve; } );
+	const responses = [ first, Promise.resolve( [ point( { id: 'FRESH' } ) ] ) ];
+	let call = 0;
+	window.WoodevPickupDataSource = fakeDataSourceFactory( () => responses[ call++ ] || Promise.resolve( [] ) );
+	setConfig( makeConfig( { strategy: 'bulk' } ) );
+	mountAll();
+	clickTrigger();
+	await flushAsync();
+
+	// The bulk session's own first fetch is in flight and has not settled.
+	// A cart change resets and refetches; the second listing settles first and draws.
+	await window.WoodevPickupMount.getSession( FIELD_ID ).refresh();
+	await flushAsync();
+
+	// Only now does the pre-reset listing come back.
+	releaseFirst( [ point( { id: 'STALE' } ) ] );
+	await flushAsync();
+
+	const provider = StubProvider.instances[ StubProvider.instances.length - 1 ];
+	const drawn = provider.setPointsCalls[ provider.setPointsCalls.length - 1 ];
+	const ids = drawn.reduce( ( acc, group ) => acc.concat( group.points.map( ( p ) => p.id ) ), [] );
+
+	expect( ids ).toEqual( [ 'FRESH' ] );
+} );
+
 test( '#234 cap: the customer\'s CURRENT SELECTION is never evicted, however old', async () => {
 	// Seed the field with A so it is the current selection from the first listing on.
 	document.getElementById( FIELD_ID ).value = 'A';

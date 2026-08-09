@@ -1251,14 +1251,23 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 			 * @param int    $max       0 for unlimited; a positive point count to bound the pool.
 			 * @param string $plugin_id the plugin the map belongs to.
 			 */
-			$max_accumulated = (int) apply_filters(
+			$max_accumulated = apply_filters(
 				'woodev_pickup_max_accumulated_points',
 				0,
 				$this->plugin_id
 			);
 
+			// NON-NUMERIC RETURNS FALL BACK TO UNLIMITED RATHER THAN BEING CAST (adversarial
+			// review, 09.08.2026). A bare `(int)` cast turns a non-empty ARRAY into `1` — so a
+			// filter that mistakenly returns its whole settings structure (`[ 'max' => 500 ]`,
+			// an easy slip) would bound the pool to a SINGLE point and silently reinstate the
+			// defect #234 exists to fix, in its worst form. `is_numeric()` first means every
+			// such mistake lands on `0` (unlimited, the shipped default) instead: a filter
+			// nobody wrote correctly should change nothing, never impose a hostile bound.
+			$max_accumulated = is_numeric( $max_accumulated ) ? (int) $max_accumulated : 0;
+
 			// A negative bound is meaningless and must not reach the browser as one — it
-			// would read as "keep nothing", silently reinstating the very defect #234 fixed.
+			// would read as "keep nothing", silently reinstating the same defect.
 			$max_accumulated = max( 0, $max_accumulated );
 
 			return [

@@ -1188,6 +1188,58 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			$this->assertSame( 3000, $config['maxAccumulatedPoints'] );
 		}
 
+		/**
+		 * Adversarial review, 09.08.2026: a bare `(int)` cast turns a NON-EMPTY ARRAY into `1`,
+		 * so a filter that mistakenly returns its whole settings structure — an easy slip —
+		 * would bound the browser's pool to a SINGLE point and silently reinstate the defect
+		 * #234 exists to fix, in its worst form. A filter nobody wrote correctly must change
+		 * nothing, never impose a hostile bound.
+		 */
+		public function test_js_config_max_accumulated_points_ignores_an_array_filter_return(): void {
+			Filters\expectApplied( 'woodev_pickup_max_accumulated_points' )
+				->once()
+				->with( 0, 'p' )
+				->andReturn( [ 'max' => 500 ] );
+			$this->stub_config_dependencies_except_filters();
+
+			$config = $this->make_handler()->get_js_config();
+
+			$this->assertSame( 0, $config['maxAccumulatedPoints'] );
+		}
+
+		/**
+		 * Same rule for a non-numeric scalar: `'unlimited'`, `null` and `false` all cast to `0`
+		 * anyway, but `is_numeric()` makes that the DECLARED behaviour rather than a coincidence
+		 * of PHP's cast table — and it is what keeps the array case above from being special.
+		 */
+		public function test_js_config_max_accumulated_points_ignores_a_non_numeric_filter_return(): void {
+			Filters\expectApplied( 'woodev_pickup_max_accumulated_points' )
+				->once()
+				->with( 0, 'p' )
+				->andReturn( 'unlimited' );
+			$this->stub_config_dependencies_except_filters();
+
+			$config = $this->make_handler()->get_js_config();
+
+			$this->assertSame( 0, $config['maxAccumulatedPoints'] );
+		}
+
+		/**
+		 * A numeric STRING is a legitimate return (options come back as strings from the DB) and
+		 * must survive — the guard rejects non-numeric input, not non-int input.
+		 */
+		public function test_js_config_max_accumulated_points_accepts_a_numeric_string(): void {
+			Filters\expectApplied( 'woodev_pickup_max_accumulated_points' )
+				->once()
+				->with( 0, 'p' )
+				->andReturn( '2500' );
+			$this->stub_config_dependencies_except_filters();
+
+			$config = $this->make_handler()->get_js_config();
+
+			$this->assertSame( 2500, $config['maxAccumulatedPoints'] );
+		}
+
 		// -------------------------------------------------------------------------
 		// modal size + search flag (Task 18, spec V-1 / V-6)
 		// -------------------------------------------------------------------------
