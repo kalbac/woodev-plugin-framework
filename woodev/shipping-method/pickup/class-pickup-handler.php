@@ -1158,6 +1158,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 				'sectionPoints'    => __( 'Пункты выдачи', 'woodev-plugin-framework' ),
 				'sectionAddresses' => __( 'Адреса', 'woodev-plugin-framework' ),
 				'filterTypes'      => __( 'Тип пунктов', 'woodev-plugin-framework' ),
+				// Issue #243: the hint shown on the last remaining checked type's now-`disabled`
+				// checkbox/row (a `title` attribute) — explains BEFORE the click why it cannot be
+				// unchecked, replacing the old silent-revert-after-the-fact behaviour.
+				'filterLastType'   => __( 'Нельзя скрыть все типы пунктов', 'woodev-plugin-framework' ),
 				'emptyInView'      => __( 'В этой области пунктов выдачи нет', 'woodev-plugin-framework' ),
 				// Task 17 (spec V-5): a genuinely empty LOCALITY, distinct from `emptyInView`
 				// (a viewport-strategy "none in THIS VIEW" statement) and from `noResults`
