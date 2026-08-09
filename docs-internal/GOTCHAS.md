@@ -1,6 +1,22 @@
 # Gotchas — Woodev Plugin Framework
-> **111 atomic gotchas in 24 namespaces** — update count when adding/removing.
-> Last updated: 2026-08-08 (session 57, live Pochta source #226: +1 file, existing namespace
+> **114 atomic gotchas in 24 namespaces** — update count when adding/removing.
+> Last updated: 2026-08-09 (session 58, live Pochta on the rig: +3 files, existing namespace
+> `[shipping/pickup]` — `a-constant-field-cannot-be-a-verdict` (`cashPayment` was mapped to
+> `accepts_cod` because issue #226 said "this IS `accepts_cod`"; measured across 12 live points it
+> is `false` on EVERY one, both types, as is `cardPayment`. A field that never varies cannot
+> distinguish anything, whatever its name promises — and the real rule lived in the operator's own
+> production plugin all along: COD follows the point TYPE, refused at a parcel locker, fine at an
+> office. Check a field's SPREAD before mapping it onto a verdict),
+> `a-control-that-changes-the-subject-must-announce-it` (a card tab click set `_activeIndex` and
+> re-rendered and that was all — no `cardOpened`, so the mount never learned the card was now
+> about a DIFFERENT point and the second point's details were never fetched, leaving its CTA live
+> on a permissive verdict. Tell: another FOSSIL DOCBLOCK claiming tab switches "funnel through
+> `cardOpened`". Second time in three sessions a confident docblock marked a wiring hole) and
+> `per-viewport-cache-is-unbounded-by-construction` (caching a listing per bbox has no bound by
+> construction — the key space grows with every viewport a customer explores; 30 min from ONE
+> browser left 823 KB across 14 `wp_options` rows. No TTL fixes a key space; cache the thing whose
+> COUNT is bounded, here the individual point: same run afterwards, 4 rows / 4 820 bytes)).
+> Prior: 2026-08-08 (session 57, live Pochta source #226: +1 file, existing namespace
 > `[testing/unit]` — `an-invented-fixture-tests-your-assumptions-not-the-carrier` (issue #226
 > recorded the Pochta contract carefully but recorded `geo`/`address` only as top-level key NAMES,
 > never contents — a gap that is easy to miss because the card reads as exhaustive. 22 tests passed
@@ -335,6 +351,12 @@
 - [shipping/pickup] `Panels` keeps `_groups` (the visible set, REPLACED wholesale by `setVisible()` on every listing) and `_activeGroup` (a snapshot captured at `openCard()`). `updatePoint()`/`setPointVerdict()` walk `_groups`; `renderCard()` reads `_activeGroup`. A listing landing inside the window between a card opening and its answer orphans the snapshot — so both writers FIND the point (`found` true, `renderCard()` even runs), mutate the new object, and the card re-renders from the old one. The verdict is applied and silently discarded, leaving a live CTA on a point the server had already refused. Rig-measured: `verdictInGroups: { allowed: false }` beside `verdictInActiveGroup: { allowed: true }`. Issues #223 and #225 were filed separately and were this one bug. Healing on the group `key` ALONE is not enough — a key is a coordinate, co-located points share one, and the first fix's `freshIndex = 0` fallback silently swapped the card onto a DIFFERENT PVZ mid-read; require both identities, else keep the stale object → [gotchas/card-renders-from-a-snapshot-the-writers-never-touch.md](gotchas/card-renders-from-a-snapshot-the-writers-never-touch.md) (s57)
 
 - [shipping/pickup] A memo scoped to a CYCLE cannot double as in-flight de-duplication. `detailedPoints` answered both "details already landed for this listing" (which must be wiped on every successful listing — a new listing may mean a new cart) and, accidentally, "a request is already in flight" (set before the fetch). The wipe destroys the second meaning. Latent until a successful listing began re-asking for the still-open card, then a panning customer produced one detail request per pan, all for the same point, all in flight, against the merchant's carrier quota — no error, nothing visibly wrong. Split into two maps with two lifetimes. Corollary from the same fix: **ownership decides who may RELEASE a lock, identity decides whose answer may LAND** — gating the apply path on ownership too looks symmetrical and silently discards the only verdict anyone will fetch → [gotchas/a-per-cycle-memo-is-not-in-flight-deduplication.md](gotchas/a-per-cycle-memo-is-not-in-flight-deduplication.md) (s57)
+
+- [shipping/pickup] A third-party field that never VARIES cannot be a verdict. `cashPayment` was mapped straight onto `accepts_cod` because issue #226 stated "this IS `accepts_cod`" — and measured across 12 live points it is `false` on every one, both types, as is `cardPayment`. The result reached the customer: every post office refused cash on delivery, backwards from reality. The real rule was in the operator's own production plugin (`plugins-reference/woodev-russian-post`, `checkout.php`): COD follows the point TYPE — refused at a `postamat`, fine at an office. Check a field's SPREAD across real records before mapping it onto a customer-facing decision; a name is a claim, not evidence, and a written contract is not a measurement → [gotchas/a-constant-field-cannot-be-a-verdict.md](gotchas/a-constant-field-cannot-be-a-verdict.md) (s58)
+
+- [shipping/pickup] A control that changes WHAT a surface is about must emit the same event every other route to that state emits. The card's tab click set `_activeIndex` and re-rendered — locally complete, and every test asserted only what it did to the DOM — but never emitted `cardOpened`, so the mount kept `cardPointId` on the FIRST point and the second point of a co-located group was never detail-fetched at all, keeping a permissive verdict and a live CTA (on live Pochta: cash on delivery offered at a parcel locker that refuses it). The tell was a FOSSIL DOCBLOCK asserting tab switches already funnel through `cardOpened` — the second time in three sessions such a comment marked the exact wiring hole. Enumerate every route into a state and check each one fires the funnel → [gotchas/a-control-that-changes-the-subject-must-announce-it.md](gotchas/a-control-that-changes-the-subject-must-announce-it.md) (s58)
+
+- [shipping/pickup] Ask what bounds a cache's KEY SPACE, not what bounds each entry's lifetime. Caching a viewport source's listing per bbox is unbounded by construction — keys accrue for as long as a customer pans. Measured: one listing 308 676 bytes, and 30 minutes from ONE browser left 823 KB across 14 `wp_options` rows; shortening the TTL (the first attempt) bounds staleness, not count. The sibling bulk source's one-global-transient shape was copied without its precondition (exactly ONE key). Cache the thing whose count is bounded instead — here the individual point, ~2 KB, bounded by cards opened rather than distance panned: 4 rows / 4 820 bytes for the same run. Two preconditions made that safe: the verdict is recomputed outside the cache, and a negative answer is never cached → [gotchas/per-viewport-cache-is-unbounded-by-construction.md](gotchas/per-viewport-cache-is-unbounded-by-construction.md) (s58)
 
 ### [shipping/*] — Shipping module (S1)
 - [shipping/contracts] Session key ≠ order-meta prefix — composing one key for both checkout session and order meta breaks installed-site data (Yandex: `chosen_yandex_pickup_point` vs `_yandex_delivery_`) → [gotchas/session-key-vs-order-meta-prefix.md](gotchas/session-key-vs-order-meta-prefix.md) (2026-06-06)
