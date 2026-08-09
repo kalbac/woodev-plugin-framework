@@ -2973,7 +2973,12 @@
 
 			// THE cart-change event (#232) — see {@see forgetPointDetails} for why this is the
 			// only place details are forgotten, and no longer every listing.
+			//
+			// #234: the pool goes with it, ALWAYS, and the two calls must never be separated —
+			// see {@see resetPointPool}'s stated invariant. A pooled point's `selectable` was
+			// computed against the cart that just changed.
 			forgetPointDetails();
+			resetPointPool();
 
 			if ( 'bulk' === config.strategy ) {
 				return fetchAndSetPoints( bulkQuery() ).catch( function() {} );

@@ -1899,6 +1899,52 @@ test( '#234: a listing in flight across NO reset still lands normally — the gu
 	expect( ids ).toEqual( [ 'A' ] );
 } );
 
+test( '#234 invariant: refresh() clears the pool AND the details memo in ONE call', async () => {
+	const listings = [
+		[ point( { id: 'A' } ) ],
+		[ point( { id: 'B' } ) ],
+	];
+	let call = 0;
+	window.WoodevPickupDataSource = fakeDataSourceFactory( () => Promise.resolve( listings[ call++ ] || [] ) );
+	window.WoodevPickupDataSource.fetchDetails = () =>
+		Promise.resolve( point( { id: 'A', work_time: 'из деталей' } ) );
+
+	setConfig( makeConfig( { strategy: 'viewport' } ) );
+	mountAll();
+	clickTrigger();
+	await flushAsync();
+
+	const provider = StubProvider.instances[ StubProvider.instances.length - 1 ];
+	const panels = StubPanels.instances[ StubPanels.instances.length - 1 ];
+
+	provider.emit( 'boundsChange', [ 55, 37, 56, 38 ] );
+	await flushAsync();
+
+	// Learn a detail for A, so the memo is demonstrably non-empty. The payload shape is
+	// `{ group, pointId, origin }` — verified against this file's existing cardOpened tests,
+	// NOT guessed.
+	panels.emit( 'cardOpened', {
+		group: provider.setPointsCalls[ provider.setPointsCalls.length - 1 ][ 0 ],
+		pointId: 'A',
+		origin: 'list',
+	} );
+	await flushAsync();
+
+	// The cart changes. NOTE: `updated_checkout` does NOT reach refresh() — this file wires
+	// that event to mountAll() only, and getSession() has no production caller at all (#238).
+	// Every existing refresh() test in this file drives it directly, and so does this one.
+	await window.WoodevPickupMount.getSession( FIELD_ID ).refresh();
+	await flushAsync();
+
+	const drawn = provider.setPointsCalls[ provider.setPointsCalls.length - 1 ];
+	const all = drawn.reduce( ( acc, group ) => acc.concat( group.points ), [] );
+
+	// Pool cleared: only the refresh listing's own point is drawn.
+	expect( all.map( ( p ) => p.id ) ).toEqual( [ 'B' ] );
+	// Memo cleared: nothing carries the stale detail field.
+	expect( all.some( ( p ) => 'из деталей' === p.work_time ) ).toBe( false );
+} );
+
 test( 'a non-empty result calls neither showMessage() (nothing to show) nor leaves any destructive '
 	+ 'modal state', async () => {
 	window.WoodevPickupDataSource = fakeDataSourceFactory( () => Promise.resolve( [ point() ] ) );
