@@ -2498,6 +2498,14 @@
 				// viewport: a client-side filter would show stale points outside the current
 				// bbox — refetch with the SAME bbox and the new types instead (see the file
 				// docblock's judgement-call note on getting this backwards).
+				//
+				// #234: the pool goes first. The SERVER is what applies the type filter on this
+				// strategy, so points pooled under the previous filter are not a subset of the
+				// new answer — a union across two different filters describes no query anyone
+				// made. Paired with forgetPointDetails() per resetPointPool()'s invariant.
+				resetPointPool();
+				forgetPointDetails();
+
 				if ( lastBbox ) {
 					fetchAndSetPoints( { bounds: lastBbox, types: codes } ).catch( function() {} );
 				}

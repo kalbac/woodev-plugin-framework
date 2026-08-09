@@ -1945,6 +1945,53 @@ test( '#234 invariant: refresh() clears the pool AND the details memo in ONE cal
 	expect( all.some( ( p ) => 'из деталей' === p.work_time ) ).toBe( false );
 } );
 
+test( '#234: a viewport type-filter change drops the pool — the server filters, so a union '
+	+ 'across different filters would be incoherent', async () => {
+	const listings = [
+		[ point( { id: 'A', type: { code: 'pvz', label: 'ПВЗ' } } ) ],
+		[ point( { id: 'B', type: { code: 'postamat', label: 'Постамат' } } ) ],
+	];
+	let call = 0;
+	window.WoodevPickupDataSource = fakeDataSourceFactory( () => Promise.resolve( listings[ call++ ] || [] ) );
+	setConfig( makeConfig( { strategy: 'viewport' } ) );
+	mountAll();
+	clickTrigger();
+	await flushAsync();
+
+	const provider = StubProvider.instances[ StubProvider.instances.length - 1 ];
+	const panels = StubPanels.instances[ StubPanels.instances.length - 1 ];
+
+	provider.emit( 'boundsChange', [ 55, 37, 56, 38 ] );
+	await flushAsync();
+
+	panels.emit( 'typeFilterChange', [ 'postamat' ] );
+	await flushAsync();
+
+	const drawn = provider.setPointsCalls[ provider.setPointsCalls.length - 1 ];
+	const ids = drawn.reduce( ( acc, group ) => acc.concat( group.points.map( ( p ) => p.id ) ), [] );
+
+	expect( ids ).toEqual( [ 'B' ] );
+} );
+
+test( '#234: a BULK type-filter change does not touch the pool or refetch — it still filters '
+	+ 'client-side through the provider', async () => {
+	window.WoodevPickupDataSource = fakeDataSourceFactory( () => Promise.resolve( [ point( { id: 'A' } ) ] ) );
+	setConfig( makeConfig( { strategy: 'bulk' } ) );
+	mountAll();
+	clickTrigger();
+	await flushAsync();
+
+	const provider = StubProvider.instances[ StubProvider.instances.length - 1 ];
+	const panels = StubPanels.instances[ StubPanels.instances.length - 1 ];
+	const drawsBefore = provider.setPointsCalls.length;
+
+	panels.emit( 'typeFilterChange', [ 'postamat' ] );
+	await flushAsync();
+
+	expect( provider.setTypeFilterCalls ).toEqual( [ [ 'postamat' ] ] );
+	expect( provider.setPointsCalls.length ).toBe( drawsBefore );
+} );
+
 test( 'a non-empty result calls neither showMessage() (nothing to show) nor leaves any destructive '
 	+ 'modal state', async () => {
 	window.WoodevPickupDataSource = fakeDataSourceFactory( () => Promise.resolve( [ point() ] ) );
