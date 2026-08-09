@@ -2159,6 +2159,47 @@ test( '#234 cap: an unset (0) cap keeps everything', async () => {
 	expect( ids ).toEqual( [ 'A', 'B', 'C' ] );
 } );
 
+// -------------------------------------------------------------------------
+// #234 — restore finds a pooled point the last listing does not contain.
+// -------------------------------------------------------------------------
+
+test( '#234: a previously chosen point is still restorable from the pool after the customer '
+	+ 'panned to a frame whose listing does not contain it', async () => {
+	document.getElementById( FIELD_ID ).value = 'A';
+
+	const listings = [
+		[ point( { id: 'A', lat: 55.1, lng: 37.1 } ) ],
+		[ point( { id: 'B', lat: 60.0, lng: 30.0 } ) ],
+	];
+	let call = 0;
+	window.WoodevPickupDataSource = fakeDataSourceFactory( () => Promise.resolve( listings[ call++ ] || [] ) );
+	setConfig( makeConfig( { strategy: 'viewport' } ) );
+	mountAll();
+	clickTrigger();
+	await flushAsync();
+
+	const provider = StubProvider.instances[ StubProvider.instances.length - 1 ];
+
+	provider.emit( 'boundsChange', [ 55, 37, 56, 38 ] );
+	await flushAsync();
+	provider.emit( 'boundsChange', [ 59, 29, 61, 31 ] );
+	await flushAsync();
+
+	const drawn = provider.setPointsCalls[ provider.setPointsCalls.length - 1 ];
+	const ids = drawn.reduce( ( acc, group ) => acc.concat( group.points.map( ( p ) => p.id ) ), [] );
+
+	expect( ids ).toContain( 'A' );
+
+	// …and the SECOND listing must not have re-focused the camera onto that pooled group.
+	// The adversarial review flagged this as a possible camera jump: with groups now built
+	// from the pool, `pendingRestoreGroup()` can find a chosen point that the current frame's
+	// listing does not contain. It is unreachable because `selectionRestoreAttempted` is
+	// claimed on the FIRST listing (which is where the pool still equals that listing), but
+	// "unreachable" is a property that must be pinned, not assumed.
+	const lastOptions = provider.setPointsOptions[ provider.setPointsOptions.length - 1 ];
+	expect( lastOptions ).toBeFalsy();
+} );
+
 test( 'a non-empty result calls neither showMessage() (nothing to show) nor leaves any destructive '
 	+ 'modal state', async () => {
 	window.WoodevPickupDataSource = fakeDataSourceFactory( () => Promise.resolve( [ point() ] ) );
