@@ -10,7 +10,12 @@
  * an empty `expectedOrigin`), point normalization mirroring
  * `Pickup_Point::from_array()`'s required-field/range rules, the invalid/
  * missing `embedUrl` guard, and `destroy()`'s listener detachment + callback
- * hook clearing + idempotency.
+ * hook clearing + idempotency. Also covers the #201 field-parity fix:
+ * `services`/`point_short_name` now normalize at all, and `payment_methods`/
+ * `photos`/`services` filter out non-string/whitespace-only elements instead
+ * of `String()`-coercing them (matching `Pickup_Point::sanitize_string_list()`),
+ * and `max_weight` falls back to `0`, never `NaN`, for a garbage value
+ * (matching PHP's `(int)` cast).
  *
  * @see woodev/shipping-method/assets/js/frontend/map-provider-embedded.js
  */
@@ -367,28 +372,91 @@ test( 'absent optional fields default to the empty-string/empty-array/null shape
 	expect( point.phone ).toBe( '' );
 	expect( point.instruction ).toBe( '' );
 	expect( point.work_time ).toBe( '' );
+	expect( point.point_short_name ).toBe( '' );
 	expect( point.payment_methods ).toEqual( [] );
 	expect( point.photos ).toEqual( [] );
+	expect( point.services ).toEqual( [] );
 	expect( point.accepts_cod ).toBeNull();
 	expect( point.max_weight ).toBeNull();
 } );
 
-test( 'payment_methods/photos containing non-strings come out String()-mapped', () => {
+test( 'point_short_name, when present, passes through as a string (issue #199/#201 card label source)', () => {
 	const { iframe, onSelect, onError } = initProvider();
 
 	const payload = validPointPayload();
-	payload.payment_methods = [ 'card', 42, true ];
-	payload.photos = [ 7, null ];
+	payload.point_short_name = 'ПВЗ у дома';
 
 	dispatchMessage( EXPECTED_ORIGIN, iframe.contentWindow, envelope( payload ) );
 
 	expect( onError ).not.toHaveBeenCalled();
 	const point = onSelect.mock.calls[ 0 ][ 0 ];
-	expect( point.payment_methods ).toEqual( [ 'card', '42', 'true' ] );
-	expect( point.photos ).toEqual( [ '7', 'null' ] );
-	point.payment_methods.forEach( ( value ) => expect( typeof value ).toBe( 'string' ) );
-	point.photos.forEach( ( value ) => expect( typeof value ).toBe( 'string' ) );
+	expect( point.point_short_name ).toBe( 'ПВЗ у дома' );
 } );
+
+test( 'point_short_name, when a non-string scalar, is coerced via String() like every other optional string field', () => {
+	const { iframe, onSelect, onError } = initProvider();
+
+	const payload = validPointPayload();
+	payload.point_short_name = 12345;
+
+	dispatchMessage( EXPECTED_ORIGIN, iframe.contentWindow, envelope( payload ) );
+
+	expect( onError ).not.toHaveBeenCalled();
+	const point = onSelect.mock.calls[ 0 ][ 0 ];
+	expect( point.point_short_name ).toBe( '12345' );
+} );
+
+test( 'services, when present with valid strings, passes through unchanged (issue #201: was never read at all)', () => {
+	const { iframe, onSelect, onError } = initProvider();
+
+	const payload = validPointPayload();
+	payload.services = [ 'Примерка', 'Хранение' ];
+
+	dispatchMessage( EXPECTED_ORIGIN, iframe.contentWindow, envelope( payload ) );
+
+	expect( onError ).not.toHaveBeenCalled();
+	const point = onSelect.mock.calls[ 0 ][ 0 ];
+	expect( point.services ).toEqual( [ 'Примерка', 'Хранение' ] );
+} );
+
+// Mirrors `Pickup_Point::sanitize_string_list()` exactly (not the old naive `.map( String )`
+// this file used to apply to `payment_methods`/`photos` before #201): non-string elements
+// are DROPPED, not coerced into "42"/"true"/"[object Object]"; a whitespace-only entry is
+// dropped too; the string '0' is a legitimate label and must survive.
+test.each( [ 'payment_methods', 'photos', 'services' ] )(
+	'%s filters out non-string and whitespace-only elements, keeps the string \'0\'',
+	( field ) => {
+		const { iframe, onSelect, onError } = initProvider();
+
+		const payload = validPointPayload();
+		payload[ field ] = [ 'Наличные', 42, true, null, [ 'nested' ], { obj: 1 }, '   ', '0', 'Карта' ];
+
+		dispatchMessage( EXPECTED_ORIGIN, iframe.contentWindow, envelope( payload ) );
+
+		expect( onError ).not.toHaveBeenCalled();
+		const point = onSelect.mock.calls[ 0 ][ 0 ];
+		expect( point[ field ] ).toEqual( [ 'Наличные', '0', 'Карта' ] );
+		point[ field ].forEach( ( value ) => expect( typeof value ).toBe( 'string' ) );
+	}
+);
+
+// A non-array value for any of the three list fields (a carrier sending an object or a
+// bare string instead of an array) must degrade to `[]`, not throw.
+test.each( [ 'payment_methods', 'photos', 'services' ] )(
+	'a non-array %s normalizes to an empty list rather than throwing',
+	( field ) => {
+		const { iframe, onSelect, onError } = initProvider();
+
+		const payload = validPointPayload();
+		payload[ field ] = 'not-an-array';
+
+		dispatchMessage( EXPECTED_ORIGIN, iframe.contentWindow, envelope( payload ) );
+
+		expect( onError ).not.toHaveBeenCalled();
+		const point = onSelect.mock.calls[ 0 ][ 0 ];
+		expect( point[ field ] ).toEqual( [] );
+	}
+);
 
 test.each( [
 	[ 1, true ],
@@ -421,6 +489,24 @@ test( 'max_weight as a numeric string normalizes to an integer', () => {
 	const point = onSelect.mock.calls[ 0 ][ 0 ];
 	expect( point.max_weight ).toBe( 15 );
 	expect( Number.isInteger( point.max_weight ) ).toBe( true );
+} );
+
+// PHP `(int) "abc"` is `0`, never a fatal or a NaN — `Pickup_Point::from_array()`'s
+// `(int) $payload['max_weight']` cast is that lenient, and `pickup-panels.js`'s
+// `formatWeightKg()` has no NaN guard of its own, so letting `NaN` through here would
+// print the literal text "NaN kg" in the confirmation card (issue #201 audit finding).
+test( 'max_weight as a non-numeric garbage string normalizes to 0, never NaN', () => {
+	const { iframe, onSelect, onError } = initProvider();
+
+	const payload = validPointPayload();
+	payload.max_weight = 'abc';
+
+	dispatchMessage( EXPECTED_ORIGIN, iframe.contentWindow, envelope( payload ) );
+
+	expect( onError ).not.toHaveBeenCalled();
+	const point = onSelect.mock.calls[ 0 ][ 0 ];
+	expect( point.max_weight ).toBe( 0 );
+	expect( Number.isNaN( point.max_weight ) ).toBe( false );
 } );
 
 // -----------------------------------------------------------------------

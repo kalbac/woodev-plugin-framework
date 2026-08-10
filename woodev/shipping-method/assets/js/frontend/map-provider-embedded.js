@@ -77,10 +77,11 @@
  * envelope, `point` is run through {@see normalizePoint}, which mirrors
  * {@see \Woodev\Framework\Shipping\Pickup\Pickup_Point::from_array()}'s rules
  * field-for-field (required `id`/`name`/`lat`/`lng`/`address`/`type.code`/
- * `type.label`, `lat` in [-90,90], `lng` in [-180,180]). Failing normalization
- * here emits `error`, NEVER a malformed `select` — a provider that forwarded
- * whatever the carrier sent verbatim would let a broken/malicious carrier page
- * write garbage straight into the order.
+ * `type.label`, `lat` in [-90,90], `lng` in [-180,180]; see that function's own
+ * docblock for the full optional-field list). Failing normalization here emits
+ * `error`, NEVER a malformed `select` — a provider that forwarded whatever the
+ * carrier sent verbatim would let a broken/malicious carrier page write
+ * garbage straight into the order.
  *
  * `selectable` IS DELIBERATELY OMITTED from every point this file emits: it is
  * a server-computed constraint verdict ({@see Constraint_Checker}) that only
@@ -98,6 +99,16 @@
  * what (if anything) this provider showed the customer. This mirrors the A2
  * lesson: a client-side gate must never be the only gate, and here there isn't
  * even a client-side one.
+ *
+ * `icons` IS ALSO DELIBERATELY OMITTED, for a narrower reason than
+ * `selectable`: {@see \Woodev\Framework\Shipping\Pickup\Pickup_Point::from_array()}'s
+ * `icons` field only ever feeds map PIN rendering — `map-provider-yandex.js`'s
+ * own `_buildProperties()` is its only reader anywhere in this codebase
+ * (neither `pickup-panels.js`'s confirmation card nor `pickup-mount.js` ever
+ * reads `point.icons`). This file draws no map of its own (see the top of
+ * this docblock), so there is no pin to skin and nothing would ever read the
+ * field if it were added — carrying it through would be dead weight, not
+ * parity.
  *
  * NO HTML IS EVER BUILT FROM A NORMALIZED POINT HERE. Unlike the `woodev/v1`
  * REST path — where every string is `esc_html`'d server-side exactly once,
@@ -279,6 +290,66 @@
 	}
 
 	/**
+	 * Reads an optional integer field off a raw payload — `null` when
+	 * absent/null, matching `Pickup_Point::from_array()`'s own
+	 * `isset(...) ? (int) ... : null` treatment of `max_weight`. Falls back to
+	 * `0` for a present-but-unparseable value (`parseInt` returning `NaN`),
+	 * mirroring PHP's lenient `(int)` cast of a non-numeric string (`(int)
+	 * "abc" === 0`) rather than letting `NaN` leak into `max_weight` and print
+	 * as the literal text "NaN" wherever `pickup-panels.js`'s
+	 * `formatWeightKg()` renders it.
+	 *
+	 * @param {Object} payload
+	 * @param {string} key
+	 * @returns {number|null}
+	 */
+	function optionalInt( payload, key ) {
+		var value = payload[ key ];
+
+		if ( undefined === value || null === value ) {
+			return null;
+		}
+
+		var parsed = parseInt( value, 10 );
+
+		return isNaN( parsed ) ? 0 : parsed;
+	}
+
+	/**
+	 * Filters a raw carrier list down to non-empty strings — mirrors
+	 * {@see \Woodev\Framework\Shipping\Pickup\Pickup_Point::sanitize_string_list()}
+	 * exactly: a non-string element (a nested object/array a carrier adapter
+	 * forgot to flatten, a stray number or boolean) is DROPPED, not coerced —
+	 * unlike a naive `.map( String )`, which would turn a nested array into the
+	 * literal text "" and an object into "[object Object]", either of which
+	 * could reach the customer as a payment method or photo URL (the JS
+	 * analogue of PHP's `(string)` "Array" bug, issue #154; see that PHP
+	 * method's docblock for the full rationale, including why this replaced
+	 * this file's own former `payment_methods`/`photos` coercion pattern). A
+	 * whitespace-only entry is treated as absent and dropped via `trim()`; the
+	 * string `'0'` is a legitimate label and is deliberately kept.
+	 *
+	 * @param {*} value Raw `payment_methods`/`photos`/`services` payload value.
+	 * @returns {string[]}
+	 */
+	function sanitizeStringList( value ) {
+		if ( ! Array.isArray( value ) ) {
+			return [];
+		}
+
+		var result = [];
+		var i;
+
+		for ( i = 0; i < value.length; i++ ) {
+			if ( 'string' === typeof value[ i ] && '' !== value[ i ].trim() ) {
+				result.push( value[ i ] );
+			}
+		}
+
+		return result;
+	}
+
+	/**
 	 * Normalizes a raw carrier payload into the framework's point shape, or
 	 * returns `null` when it cannot be — mirroring
 	 * {@see \Woodev\Framework\Shipping\Pickup\Pickup_Point::from_array()}
@@ -286,9 +357,21 @@
 	 * deliberate re-implementation, not a call into PHP, since the carrier's
 	 * embed talks to the BROWSER directly and never touches `woodev/v1`).
 	 *
+	 * Required: `id`/`name`/`lat`/`lng`/`address`/`type.code`/`type.label`.
+	 * Optional, default `''` via {@see optionalString}: `short_address`/
+	 * `locality`/`postal_code`/`phone`/`instruction`/`work_time`/
+	 * `point_short_name`. Optional, default `[]`, filtered through
+	 * {@see sanitizeStringList} exactly like `Pickup_Point::sanitize_string_list()`
+	 * — non-string and whitespace-only elements DROPPED, not coerced:
+	 * `payment_methods`/`photos`/`services`. Optional, default `null`:
+	 * `accepts_cod` (`Boolean()`-cast) and `max_weight` (via
+	 * {@see optionalInt}, PHP `(int)`-cast parity).
+	 *
 	 * `selectable` is never added — see the file docblock's "AUTHORITY for
 	 * this path" section for why the server re-check at
 	 * `Pickup_Handler::handle_checkout_process()` is what actually gates this.
+	 * `icons` is never added either — see the file docblock's "`icons` IS ALSO
+	 * DELIBERATELY OMITTED" paragraph.
 	 *
 	 * @param {*} payload
 	 * @returns {Object|null}
@@ -346,16 +429,14 @@
 			phone: optionalString( payload, 'phone' ),
 			instruction: optionalString( payload, 'instruction' ),
 			work_time: optionalString( payload, 'work_time' ),
-			payment_methods: Array.isArray( payload.payment_methods )
-				? payload.payment_methods.map( String )
-				: [],
-			photos: Array.isArray( payload.photos ) ? payload.photos.map( String ) : [],
+			point_short_name: optionalString( payload, 'point_short_name' ),
+			payment_methods: sanitizeStringList( payload.payment_methods ),
+			photos: sanitizeStringList( payload.photos ),
+			services: sanitizeStringList( payload.services ),
 			accepts_cod: undefined !== payload.accepts_cod && null !== payload.accepts_cod
 				? Boolean( payload.accepts_cod )
 				: null,
-			max_weight: undefined !== payload.max_weight && null !== payload.max_weight
-				? parseInt( payload.max_weight, 10 )
-				: null,
+			max_weight: optionalInt( payload, 'max_weight' ),
 		};
 	}
 
