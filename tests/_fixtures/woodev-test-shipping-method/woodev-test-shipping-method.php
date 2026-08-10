@@ -73,10 +73,23 @@ if ( ! defined( 'WOODEV_TEST_PICKUP_LIVE_POCHTA' ) ) {
  *
  * PRECEDENCE: wins over EVERY switch above, including `WOODEV_TEST_PICKUP_LIVE_YANDEX`/
  * `WOODEV_TEST_PICKUP_LIVE_POCHTA` — those two only choose a `Point_Source`, and under
- * `Embedded_Map_Provider` the `Point_Source` is IRRELEVANT: the provider owns the whole
- * container (`ownsChrome`) and the carrier's own embed fetches and renders its own
- * points, so this fixture's `Point_Source` selection below is constructed (a dead-
- * looking branch, deliberately) but never actually consulted by anything on the page.
+ * `Embedded_Map_Provider` the `Point_Source`'s LISTING half is irrelevant: the provider
+ * owns the whole container (`ownsChrome`) and the carrier's own embed fetches and renders
+ * its own points, so `fetch_points()` is never actually consulted by anything on the page.
+ *
+ * CORRECTED (F4, rig finding, s63): the `Point_Source`'s DETAILS half is NOT irrelevant —
+ * an earlier version of this comment claimed the whole selection below was "a dead-looking
+ * branch... never actually consulted", which was WRONG and is the reason the rig's
+ * confirmation round trip 404'd on every real Почта selection. `Pickup_Controller::
+ * handle_select_request()` always re-fetches the customer's chosen point id via
+ * `Point_Source::fetch_details()`, regardless of which map provider produced that id —
+ * that call is provider-agnostic and is the framework's one AUTHORITATIVE gate (see
+ * `map-provider-embedded.js`'s own "AUTHORITY for this path" docblock section). A real
+ * Почта id (e.g. `"43213"`) is unknown to every OTHER fixture `Point_Source`, so
+ * `WOODEV_TEST_PICKUP_EMBEDDED` swaps `$point_source` for
+ * `Woodev_Test_Embedded_Confirm_Point_Source` — a rig-only stub whose `fetch_details()`
+ * accepts ANY id — below, so the round trip can actually complete. See that class's own
+ * docblock for the obligation a REAL embedded-carrier plugin has instead.
  */
 if ( ! defined( 'WOODEV_TEST_PICKUP_EMBEDDED' ) ) {
 	define( 'WOODEV_TEST_PICKUP_EMBEDDED', false );
@@ -278,6 +291,12 @@ function woodev_test_shipping_method_plugin_init(): void {
 	// below does anything, and that only happens when WOODEV_TEST_PICKUP_LIVE_POCHTA is truthy.
 	require_once __DIR__ . '/class-test-live-pochta-point-source.php';
 
+	// Issue #251 (F4, rig finding): the confirmation-round-trip stub — see its own file
+	// docblock. Required unconditionally, same reasoning as the two requires just above:
+	// declaring the class is free, only INSTANTIATING it (below, when WOODEV_TEST_PICKUP_EMBEDDED
+	// is truthy) does anything.
+	require_once __DIR__ . '/class-test-embedded-confirm-point-source.php';
+
 	if ( ! class_exists( 'Woodev_Test_Viewport_Point_Source' ) ) {
 
 		/**
@@ -475,11 +494,15 @@ function woodev_test_shipping_method_plugin_init(): void {
 				// when truthy, same reasoning as Yandex above but for the opposite strategy —
 				// Pochta's real API is viewport-only.
 				//
-				// Issue #251: whatever this block resolves is a DEAD VALUE — never actually
-				// consulted by anything on the page — when WOODEV_TEST_PICKUP_EMBEDDED is on;
-				// see that constant's own docblock and the $map_provider branch below. Still
-				// resolved unconditionally rather than skipped, so this block's own precedence
-				// rules stay simple and this branch never has to special-case "embedded".
+				// Issue #251 (F4 correction, s63): this block's LISTING choice (fetch_points())
+				// is genuinely irrelevant once WOODEV_TEST_PICKUP_EMBEDDED overrides
+				// $point_source below — the carrier's own embed fetches and renders its own
+				// points, and this framework never calls fetch_points() on that path. It is
+				// still resolved unconditionally rather than skipped, so this block's own
+				// precedence rules stay simple. BUT the override below is NOT about a dead
+				// value — see WOODEV_TEST_PICKUP_EMBEDDED's own (corrected) docblock: the
+				// DETAILS half (fetch_details()) is very much consulted, by the provider-
+				// agnostic confirmation round trip, which is exactly why the override exists.
 				$viewport_strategy = \Woodev\Framework\Shipping\Pickup\Point_Source::STRATEGY_VIEWPORT;
 
 				if ( WOODEV_TEST_PICKUP_LIVE_YANDEX ) {
@@ -490,6 +513,16 @@ function woodev_test_shipping_method_plugin_init(): void {
 					$point_source = ( $viewport_strategy === WOODEV_TEST_PICKUP_STRATEGY )
 						? new \Woodev_Test_Viewport_Point_Source()
 						: new \Woodev_Test_Bulk_Point_Source();
+				}
+
+				// Issue #251 (F4, rig finding): WOODEV_TEST_PICKUP_EMBEDDED overrides whatever
+				// was just resolved above with a stub whose fetch_details() accepts ANY id — see
+				// Woodev_Test_Embedded_Confirm_Point_Source's own docblock for why this is
+				// required (a real Почта selection's id is unknown to every OTHER Point_Source
+				// this fixture has) and for the obligation a REAL embedded-carrier plugin has
+				// instead (a genuine carrier details lookup, not a fabricated record).
+				if ( WOODEV_TEST_PICKUP_EMBEDDED ) {
+					$point_source = new \Woodev_Test_Embedded_Confirm_Point_Source();
 				}
 
 				// D-8: custom tile layers + their attribution are a PLUGIN decision, and
@@ -521,10 +554,13 @@ function woodev_test_shipping_method_plugin_init(): void {
 				$map_copyrights = [ '© 2ГИС' ];
 
 				// Issue #251: WOODEV_TEST_PICKUP_EMBEDDED wins over everything above —
-				// see that constant's own docblock for why $point_source, resolved
-				// unconditionally just above, is a dead-looking but deliberate value
-				// under this branch. `embed_url`/`expected_origin` point straight at
-				// the live carrier widget — decision §2 of the #251 spec: no
+				// see that constant's own docblock. $point_source has ALREADY been
+				// overridden to Woodev_Test_Embedded_Confirm_Point_Source just above
+				// (F4 correction, s63) when this constant is on, so the map-provider
+				// choice below and the point-source override above agree with each
+				// other rather than one silently ignoring the other. `embed_url`/
+				// `expected_origin` point straight at the live carrier widget —
+				// decision §2 of the #251 spec: no
 				// plugin-hosted bridge page is needed, since the widget accepts a
 				// `postMessage` handshake from a foreign parent origin (M5) and the
 				// framework's own sandbox posture does not break it (M2). The two
