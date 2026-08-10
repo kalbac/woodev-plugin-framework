@@ -10,14 +10,23 @@
  * an empty `expectedOrigin`), point normalization against this file's OWN
  * required-field/range rules (a KNOWN, deliberate divergence from
  * `Pickup_Point::from_array()`'s required set — see `normalizePoint()`'s own
- * docblock and #251), the invalid/missing `embedUrl` guard, and `destroy()`'s
- * listener detachment + callback hook clearing + idempotency. Also covers the
- * #201 field-parity fix, which is scoped to OPTIONAL-field handling only:
+ * docblock), the invalid/missing `embedUrl` guard, and `destroy()`'s listener
+ * detachment + callback hook clearing + idempotency. Also covers the #201
+ * field-parity fix, which is scoped to OPTIONAL-field handling only:
  * `services`/`point_short_name` now normalize at all, and `payment_methods`/
  * `photos`/`services` filter out non-string/whitespace-only elements instead
  * of `String()`-coercing them (matching `Pickup_Point::sanitize_string_list()`),
  * and `max_weight` falls back to `0`, never `NaN`, for a garbage value
  * (matching PHP's `(int)` cast).
+ *
+ * Issue #251 (resolved by this file): `lat`/`lng` became OPTIONAL-BUT-VALIDATED
+ * (present → still numeric/in-range or rejected; absent → BOTH must be absent,
+ * one alone is a half-coordinate and is rejected; present → carried through,
+ * absent → omitted entirely, no `0.0` fallback) — see the "Optional lat/lng"
+ * section below. The same change adds `config.initAdapter`/`config.selectAdapter`,
+ * two optional dotted-global-path hooks that translate a carrier's OWN protocol
+ * message (reached only for a message that passed the origin+source gate and
+ * did not match this file's own envelope) — see the "Adapter hooks" section.
  *
  * @see woodev/shipping-method/assets/js/frontend/map-provider-embedded.js
  */
@@ -330,6 +339,51 @@ test.each( [
 	expect( onError ).not.toHaveBeenCalled();
 	expect( onSelect ).toHaveBeenCalledTimes( 1 );
 } );
+
+// -----------------------------------------------------------------------
+// Optional lat/lng (issue #251)
+// -----------------------------------------------------------------------
+//
+// `lat`/`lng` used to be REQUIRED, same as `id`/`name`/`address`; the
+// `test.each` block above (which deletes ONE field at a time) still passes
+// unchanged for `lat`/`lng` because deleting just one now trips the
+// half-coordinate rule below, not a "required field missing" rule — the
+// tests here pin the NEW rule directly: fully absent is fine, half-present
+// is not.
+
+test( 'a point with no lat/lng at all normalizes successfully and emits no coordinate keys', () => {
+	const { iframe, onSelect, onError } = initProvider();
+
+	const payload = validPointPayload();
+	delete payload.lat;
+	delete payload.lng;
+
+	dispatchMessage( EXPECTED_ORIGIN, iframe.contentWindow, envelope( payload ) );
+
+	expect( onError ).not.toHaveBeenCalled();
+	expect( onSelect ).toHaveBeenCalledTimes( 1 );
+
+	const point = onSelect.mock.calls[ 0 ][ 0 ];
+	expect( 'lat' in point ).toBe( false );
+	expect( 'lng' in point ).toBe( false );
+} );
+
+test.each( [ 'lat', 'lng' ] )(
+	'a point with only %s present (the other absent) is REJECTED as a half-coordinate',
+	( presentField ) => {
+		const { iframe, onSelect, onError } = initProvider();
+
+		const payload = validPointPayload();
+		const absentField = 'lat' === presentField ? 'lng' : 'lat';
+		delete payload[ absentField ];
+
+		dispatchMessage( EXPECTED_ORIGIN, iframe.contentWindow, envelope( payload ) );
+
+		expect( onSelect ).not.toHaveBeenCalled();
+		expect( onError ).toHaveBeenCalledTimes( 1 );
+		expect( onError.mock.calls[ 0 ][ 0 ].code ).toBe( 'woodev_pickup_embed_invalid_payload' );
+	}
+);
 
 // -----------------------------------------------------------------------
 // Normalization — TYPED, DEFAULTED output shape (not just field presence)
@@ -690,4 +744,438 @@ test( 'destroy() clears the callback hook routing — a call after destroy is a 
 
 	expect( onSelect ).not.toHaveBeenCalled();
 	expect( onError ).not.toHaveBeenCalled();
+} );
+
+// -----------------------------------------------------------------------
+// Adapter hooks (issue #251)
+// -----------------------------------------------------------------------
+//
+// `config.initAdapter`/`config.selectAdapter` are optional dotted global JS
+// paths (never a callable) that translate a carrier's OWN protocol message —
+// reached only for a message that already passed the origin+source gate AND
+// did not match this file's own `{ source: 'woodev-pickup-embedded', ... }`
+// envelope. See the file docblock's "ADAPTER HOOKS" section.
+
+function adapterConfig( overrides ) {
+	return Object.assign(
+		{ initAdapter: 'WoodevTestAdapter.onReady', selectAdapter: 'WoodevTestAdapter.toPoint' },
+		overrides
+	);
+}
+
+afterEach( () => {
+	delete window.WoodevTestAdapter;
+} );
+
+test( 'initAdapter returning a payload posts exactly one message into the iframe with expectedOrigin as targetOrigin', () => {
+	const onReady = jest.fn().mockReturnValue( { postData: { foo: 'bar' } } );
+	window.WoodevTestAdapter = { onReady: onReady, toPoint: jest.fn() };
+
+	const { iframe, onSelect, onError } = initProvider( adapterConfig() );
+	const postMessageSpy = jest.spyOn( iframe.contentWindow, 'postMessage' );
+
+	dispatchMessage( EXPECTED_ORIGIN, iframe.contentWindow, { isMapLoad: true } );
+
+	expect( onReady ).toHaveBeenCalledTimes( 1 );
+	expect( onReady ).toHaveBeenCalledWith( { isMapLoad: true } );
+	expect( postMessageSpy ).toHaveBeenCalledTimes( 1 );
+	expect( postMessageSpy ).toHaveBeenCalledWith( { postData: { foo: 'bar' } }, EXPECTED_ORIGIN );
+	expect( onSelect ).not.toHaveBeenCalled();
+	expect( onError ).not.toHaveBeenCalled();
+} );
+
+test( 'initAdapter returning null posts nothing into the iframe', () => {
+	const onReady = jest.fn().mockReturnValue( null );
+	window.WoodevTestAdapter = { onReady: onReady, toPoint: jest.fn() };
+
+	const { iframe, onSelect, onError } = initProvider( adapterConfig() );
+	const postMessageSpy = jest.spyOn( iframe.contentWindow, 'postMessage' );
+
+	dispatchMessage( EXPECTED_ORIGIN, iframe.contentWindow, { isMapLoad: true } );
+
+	expect( postMessageSpy ).not.toHaveBeenCalled();
+	expect( onSelect ).not.toHaveBeenCalled();
+	expect( onError ).not.toHaveBeenCalled();
+} );
+
+test( 'selectAdapter translating a carrier-shaped message into a valid point emits select', () => {
+	const toPoint = jest.fn().mockImplementation( ( data ) => {
+		if ( ! data || ! data.pvzData ) {
+			return null;
+		}
+
+		return {
+			id: String( data.pvzData.id ),
+			name: 'Почтомат №' + data.pvzData.indexTo,
+			address: 'Москва, тестовый адрес',
+			type: { code: data.pvzData.pvzType, label: 'Почтомат' },
+		};
+	} );
+	window.WoodevTestAdapter = { onReady: jest.fn().mockReturnValue( null ), toPoint: toPoint };
+
+	const { iframe, onSelect, onError } = initProvider( adapterConfig() );
+
+	dispatchMessage( EXPECTED_ORIGIN, iframe.contentWindow, {
+		pvzData: { id: 43213, indexTo: '918872', pvzType: 'postamat' },
+	} );
+
+	expect( toPoint ).toHaveBeenCalledTimes( 1 );
+	expect( onError ).not.toHaveBeenCalled();
+	expect( onSelect ).toHaveBeenCalledTimes( 1 );
+
+	const point = onSelect.mock.calls[ 0 ][ 0 ];
+	expect( point.id ).toBe( '43213' );
+	expect( point.name ).toBe( 'Почтомат №918872' );
+	expect( 'lat' in point ).toBe( false );
+} );
+
+test( 'selectAdapter returning null emits nothing', () => {
+	window.WoodevTestAdapter = {
+		onReady: jest.fn().mockReturnValue( null ),
+		toPoint: jest.fn().mockReturnValue( null ),
+	};
+
+	const { iframe, onSelect, onError } = initProvider( adapterConfig() );
+
+	dispatchMessage( EXPECTED_ORIGIN, iframe.contentWindow, { some: 'carrier message' } );
+
+	expect( onSelect ).not.toHaveBeenCalled();
+	expect( onError ).not.toHaveBeenCalled();
+} );
+
+test( 'initAdapter throwing is swallowed — no error, no select, selectAdapter never runs', () => {
+	window.WoodevTestAdapter = {
+		onReady: jest.fn().mockImplementation( () => {
+			throw new Error( 'boom' );
+		} ),
+		toPoint: jest.fn(),
+	};
+
+	const { iframe, onSelect, onError } = initProvider( adapterConfig() );
+
+	expect( () => {
+		dispatchMessage( EXPECTED_ORIGIN, iframe.contentWindow, { isMapLoad: true } );
+	} ).not.toThrow();
+
+	expect( onSelect ).not.toHaveBeenCalled();
+	expect( onError ).not.toHaveBeenCalled();
+	expect( window.WoodevTestAdapter.toPoint ).not.toHaveBeenCalled();
+} );
+
+test( 'selectAdapter throwing emits error, not select', () => {
+	window.WoodevTestAdapter = {
+		onReady: jest.fn().mockReturnValue( null ),
+		toPoint: jest.fn().mockImplementation( () => {
+			throw new Error( 'boom' );
+		} ),
+	};
+
+	const { iframe, onSelect, onError } = initProvider( adapterConfig() );
+
+	dispatchMessage( EXPECTED_ORIGIN, iframe.contentWindow, { some: 'carrier message' } );
+
+	expect( onSelect ).not.toHaveBeenCalled();
+	expect( onError ).toHaveBeenCalledTimes( 1 );
+	expect( onError.mock.calls[ 0 ][ 0 ].code ).toBe( 'woodev_pickup_embed_adapter_error' );
+} );
+
+test( 'an empty expectedOrigin suppresses the outbound initAdapter post AND still rejects every inbound message', () => {
+	const onReady = jest.fn().mockReturnValue( { postData: {} } );
+	window.WoodevTestAdapter = { onReady: onReady, toPoint: jest.fn() };
+
+	const { iframe, onSelect, onError } = initProvider( adapterConfig( { expectedOrigin: '' } ) );
+	const postMessageSpy = jest.spyOn( iframe.contentWindow, 'postMessage' );
+
+	dispatchMessage( EXPECTED_ORIGIN, iframe.contentWindow, { isMapLoad: true } );
+	dispatchMessage( '', iframe.contentWindow, { isMapLoad: true } );
+
+	expect( onReady ).not.toHaveBeenCalled();
+	expect( postMessageSpy ).not.toHaveBeenCalled();
+	expect( onSelect ).not.toHaveBeenCalled();
+	expect( onError ).not.toHaveBeenCalled();
+} );
+
+test( 'a message failing the origin gate never reaches either adapter', () => {
+	const onReady = jest.fn();
+	const toPoint = jest.fn();
+	window.WoodevTestAdapter = { onReady: onReady, toPoint: toPoint };
+
+	const { iframe } = initProvider( adapterConfig() );
+
+	dispatchMessage( 'https://other-carrier.ru', iframe.contentWindow, { isMapLoad: true } );
+
+	expect( onReady ).not.toHaveBeenCalled();
+	expect( toPoint ).not.toHaveBeenCalled();
+} );
+
+test( 'a message failing the source gate never reaches either adapter', () => {
+	const onReady = jest.fn();
+	const toPoint = jest.fn();
+	window.WoodevTestAdapter = { onReady: onReady, toPoint: toPoint };
+
+	initProvider( adapterConfig() );
+
+	const otherFrame = document.createElement( 'iframe' );
+	document.body.appendChild( otherFrame );
+
+	dispatchMessage( EXPECTED_ORIGIN, otherFrame.contentWindow, { isMapLoad: true } );
+
+	expect( onReady ).not.toHaveBeenCalled();
+	expect( toPoint ).not.toHaveBeenCalled();
+} );
+
+test( 'a dotted adapter path that does not resolve to a function is treated as absent, not thrown', () => {
+	window.WoodevTestAdapter = { onReady: 'not-a-function' };
+
+	const { iframe, onSelect, onError } = initProvider( {
+		initAdapter: 'WoodevTestAdapter.onReady',
+		selectAdapter: 'WoodevTestAdapter.missing.deeper',
+	} );
+
+	expect( () => {
+		dispatchMessage( EXPECTED_ORIGIN, iframe.contentWindow, { isMapLoad: true } );
+	} ).not.toThrow();
+
+	expect( onSelect ).not.toHaveBeenCalled();
+	expect( onError ).not.toHaveBeenCalled();
+} );
+
+// this file's own envelope still takes priority over any configured adapter —
+// step 1 always runs first, and adapters never see an envelope-shaped message.
+test( 'this file\'s own envelope is still handled directly and never reaches a configured adapter', () => {
+	const onReady = jest.fn();
+	const toPoint = jest.fn();
+	window.WoodevTestAdapter = { onReady: onReady, toPoint: toPoint };
+
+	const { iframe, onSelect, onError } = initProvider( adapterConfig() );
+
+	dispatchMessage( EXPECTED_ORIGIN, iframe.contentWindow, envelope( validPointPayload() ) );
+
+	expect( onReady ).not.toHaveBeenCalled();
+	expect( toPoint ).not.toHaveBeenCalled();
+	expect( onError ).not.toHaveBeenCalled();
+	expect( onSelect ).toHaveBeenCalledTimes( 1 );
+} );
+
+// -----------------------------------------------------------------------
+// F1 (Codex review, issue #251 follow-up): isNumeric()/parseFloat() must
+// agree on what "numeric" means — a hex/octal/binary literal string must be
+// REJECTED, never silently coerced to a real coordinate. Before this fix,
+// isNumeric() used `isFinite( Number( value ) )`, which ACCEPTS '0x20'
+// (Number( '0x20' ) === 32), while normalizePoint()'s conversion step used
+// parseFloat(), which reads the very same string as 0 — a hex coordinate
+// string PASSED validation and was then silently coerced to (0, 0), "null
+// island". This was a known, deliberately accepted divergence from PHP's
+// is_numeric() when #201 landed (lat/lng were still REQUIRED, so the
+// divergence was provably unreachable); making them OPTIONAL (#251) made it
+// a live defect.
+// -----------------------------------------------------------------------
+
+test.each( [
+	// Rejected: not a plain decimal numeric-string literal.
+	[ '0x20', false ],
+	[ '0X20', false ],
+	[ '0b11', false ],
+	[ '0o17', false ],
+	[ '12abc', false ],
+	[ '', false ],
+	[ '  ', false ],
+	// Accepted: exponent notation is a legitimate decimal number. Values kept inside
+	// BOTH the lat ([-90,90]) and lng ([-180,180]) ranges — this table is only about
+	// whether the STRING is numeric, not about the separate range check.
+	[ '5e1', true ], // 50
+	[ '5E1', true ], // 50
+	[ '-1.5e-2', true ], // -0.015
+] )( 'lat/lng string %j is numeric=%p, never silently coerced to a wrong value', ( raw, shouldAccept ) => {
+	const { iframe, onSelect, onError } = initProvider();
+
+	const payload = validPointPayload();
+	payload.lat = raw;
+	payload.lng = raw;
+
+	dispatchMessage( EXPECTED_ORIGIN, iframe.contentWindow, envelope( payload ) );
+
+	if ( shouldAccept ) {
+		expect( onError ).not.toHaveBeenCalled();
+		expect( onSelect ).toHaveBeenCalledTimes( 1 );
+	} else {
+		expect( onSelect ).not.toHaveBeenCalled();
+		expect( onError ).toHaveBeenCalledTimes( 1 );
+		expect( onError.mock.calls[ 0 ][ 0 ].code ).toBe( 'woodev_pickup_embed_invalid_payload' );
+	}
+} );
+
+// A hex-looking string is the whole point of this fix: it must never normalize to 0,
+// even though `Number( '0x20' )` is a real, non-NaN number. Pinned separately from the
+// table above so a regression here reads unambiguously as "null island is back".
+test( "a hex coordinate string is REJECTED, never silently normalized to 0 ('null island')", () => {
+	const { iframe, onSelect, onError } = initProvider();
+
+	const payload = validPointPayload();
+	payload.lat = '0x20';
+	payload.lng = '0x20';
+
+	dispatchMessage( EXPECTED_ORIGIN, iframe.contentWindow, envelope( payload ) );
+
+	expect( onSelect ).not.toHaveBeenCalled();
+	expect( onError ).toHaveBeenCalledTimes( 1 );
+} );
+
+test.each( [
+	[ true, false ],
+	[ [], false ],
+	[ {}, false ],
+	[ NaN, false ],
+	[ Infinity, false ],
+	[ -Infinity, false ],
+] )( 'a non-string/non-finite-number lat/lng value %j is rejected (numeric=%p)', ( raw ) => {
+	const { iframe, onSelect, onError } = initProvider();
+
+	const payload = validPointPayload();
+	payload.lat = raw;
+	payload.lng = raw;
+
+	dispatchMessage( EXPECTED_ORIGIN, iframe.contentWindow, envelope( payload ) );
+
+	expect( onSelect ).not.toHaveBeenCalled();
+	expect( onError ).toHaveBeenCalledTimes( 1 );
+} );
+
+// -----------------------------------------------------------------------
+// F2 (Codex review, issue #251 follow-up): the outbound postMessage() call
+// inside the initAdapter branch must be swallowed on a throw exactly like
+// initAdapter() itself throwing — a DataCloneError (a value the structured-
+// clone algorithm cannot handle: a function, a cyclic object) must not break
+// the picker.
+// -----------------------------------------------------------------------
+
+test( 'initAdapter returning a payload postMessage() cannot clone (a function) is swallowed, not thrown', () => {
+	const onReady = jest.fn().mockReturnValue( { fn: function () {} } );
+	window.WoodevTestAdapter = { onReady: onReady, toPoint: jest.fn() };
+
+	const { iframe, onSelect, onError } = initProvider( adapterConfig() );
+
+	expect( () => {
+		dispatchMessage( EXPECTED_ORIGIN, iframe.contentWindow, { isMapLoad: true } );
+	} ).not.toThrow();
+
+	expect( onSelect ).not.toHaveBeenCalled();
+	expect( onError ).not.toHaveBeenCalled();
+} );
+
+test( 'initAdapter returning a cyclic object postMessage() cannot clone is swallowed, not thrown', () => {
+	const cyclic = {};
+	cyclic.self = cyclic;
+
+	const onReady = jest.fn().mockReturnValue( cyclic );
+	window.WoodevTestAdapter = { onReady: onReady, toPoint: jest.fn() };
+
+	const { iframe, onSelect, onError } = initProvider( adapterConfig() );
+
+	expect( () => {
+		dispatchMessage( EXPECTED_ORIGIN, iframe.contentWindow, { isMapLoad: true } );
+	} ).not.toThrow();
+
+	expect( onSelect ).not.toHaveBeenCalled();
+	expect( onError ).not.toHaveBeenCalled();
+} );
+
+// -----------------------------------------------------------------------
+// F3 (Codex review, issue #251 follow-up): a selectAdapter that reports a
+// selection via BOTH the callback-style hook AND its own return value must
+// still produce exactly ONE select/error emission for one inbound message —
+// not two, and not two confirmation round trips on pickup-mount.js's side.
+// -----------------------------------------------------------------------
+
+test( 'a selectAdapter that calls the callback hook AND returns a point emits select exactly once', () => {
+	const toPoint = jest.fn().mockImplementation( ( data ) => {
+		window.WoodevPickupEmbedded.select( {
+			id: 'CB1',
+			name: 'Точка через колбэк',
+			address: 'Адрес',
+			type: { code: 'PVZ', label: 'ПВЗ' },
+		} );
+
+		// AND also returns a point directly — the pathological "both styles at once" case.
+		return {
+			id: 'RETURN1',
+			name: 'Точка через return',
+			address: 'Адрес',
+			type: { code: 'PVZ', label: 'ПВЗ' },
+		};
+	} );
+	window.WoodevTestAdapter = { onReady: jest.fn().mockReturnValue( null ), toPoint: toPoint };
+
+	const { iframe, onSelect, onError } = initProvider( adapterConfig() );
+
+	dispatchMessage( EXPECTED_ORIGIN, iframe.contentWindow, { some: 'carrier message' } );
+
+	expect( onError ).not.toHaveBeenCalled();
+	expect( onSelect ).toHaveBeenCalledTimes( 1 );
+	// The emission that reaches the listener is the callback-route one — the return
+	// value is ignored once the callback already fired synchronously.
+	expect( onSelect.mock.calls[ 0 ][ 0 ].id ).toBe( 'CB1' );
+} );
+
+test( 'callback-style: selectAdapter reports via the callback hook and returns null — one emission', () => {
+	const toPoint = jest.fn().mockImplementation( () => {
+		window.WoodevPickupEmbedded.select( {
+			id: 'CB2',
+			name: 'Точка через колбэк',
+			address: 'Адрес',
+			type: { code: 'PVZ', label: 'ПВЗ' },
+		} );
+
+		return null;
+	} );
+	window.WoodevTestAdapter = { onReady: jest.fn().mockReturnValue( null ), toPoint: toPoint };
+
+	const { iframe, onSelect, onError } = initProvider( adapterConfig() );
+
+	dispatchMessage( EXPECTED_ORIGIN, iframe.contentWindow, { some: 'carrier message' } );
+
+	expect( onError ).not.toHaveBeenCalled();
+	expect( onSelect ).toHaveBeenCalledTimes( 1 );
+	expect( onSelect.mock.calls[ 0 ][ 0 ].id ).toBe( 'CB2' );
+} );
+
+test( 'return-style: selectAdapter reports ONLY via its return value — still exactly one emission', () => {
+	// Baseline re-confirmation with the reentry guard in place — a selectAdapter that
+	// never touches the callback hook at all must be unaffected by the guard.
+	const toPoint = jest.fn().mockReturnValue( {
+		id: 'RETURN-ONLY',
+		name: 'Точка через return',
+		address: 'Адрес',
+		type: { code: 'PVZ', label: 'ПВЗ' },
+	} );
+	window.WoodevTestAdapter = { onReady: jest.fn().mockReturnValue( null ), toPoint: toPoint };
+
+	const { iframe, onSelect, onError } = initProvider( adapterConfig() );
+
+	dispatchMessage( EXPECTED_ORIGIN, iframe.contentWindow, { some: 'carrier message' } );
+
+	expect( onError ).not.toHaveBeenCalled();
+	expect( onSelect ).toHaveBeenCalledTimes( 1 );
+	expect( onSelect.mock.calls[ 0 ][ 0 ].id ).toBe( 'RETURN-ONLY' );
+} );
+
+test( 'a selectAdapter that calls the callback hook with an invalid payload then throws does not ALSO emit error', () => {
+	const toPoint = jest.fn().mockImplementation( () => {
+		// Invalid payload (missing required fields) — the callback route itself emits
+		// `error`, then the adapter throws on its way out.
+		window.WoodevPickupEmbedded.select( { garbage: true } );
+
+		throw new Error( 'boom after callback' );
+	} );
+	window.WoodevTestAdapter = { onReady: jest.fn().mockReturnValue( null ), toPoint: toPoint };
+
+	const { iframe, onSelect, onError } = initProvider( adapterConfig() );
+
+	dispatchMessage( EXPECTED_ORIGIN, iframe.contentWindow, { some: 'carrier message' } );
+
+	expect( onSelect ).not.toHaveBeenCalled();
+	// Exactly one error — from the callback route's failed normalization, NOT a second
+	// one from the adapter's own throw being caught downstream.
+	expect( onError ).toHaveBeenCalledTimes( 1 );
+	expect( onError.mock.calls[ 0 ][ 0 ].code ).toBe( 'woodev_pickup_embed_invalid_payload' );
 } );

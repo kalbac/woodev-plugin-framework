@@ -64,6 +64,56 @@ if ( ! defined( 'WOODEV_TEST_PICKUP_LIVE_POCHTA' ) ) {
 }
 
 /**
+ * Issue #251: opt-in switch to the carrier-EMBEDDED (widget/iframe) `Map_Provider`
+ * (`Embedded_Map_Provider`, wrapping the live Почта России widget at
+ * `https://widget.pochta.ru/map/`) instead of the framework's own Yandex map.
+ * Defaults to `false`. Flip via `define( 'WOODEV_TEST_PICKUP_EMBEDDED', true );`
+ * in wp-config.php or the `.wp-env.json` `config` block, same idiom as the
+ * constants above.
+ *
+ * PRECEDENCE: wins over EVERY switch above, including `WOODEV_TEST_PICKUP_LIVE_YANDEX`/
+ * `WOODEV_TEST_PICKUP_LIVE_POCHTA` — those two only choose a `Point_Source`, and under
+ * `Embedded_Map_Provider` the `Point_Source`'s LISTING half is irrelevant: the provider
+ * owns the whole container (`ownsChrome`) and the carrier's own embed fetches and renders
+ * its own points, so `fetch_points()` is never actually consulted by anything on the page.
+ *
+ * CORRECTED (F4, rig finding, s63): the `Point_Source`'s DETAILS half is NOT irrelevant —
+ * an earlier version of this comment claimed the whole selection below was "a dead-looking
+ * branch... never actually consulted", which was WRONG and is the reason the rig's
+ * confirmation round trip 404'd on every real Почта selection. `Pickup_Controller::
+ * handle_select_request()` always re-fetches the customer's chosen point id via
+ * `Point_Source::fetch_details()`, regardless of which map provider produced that id —
+ * that call is provider-agnostic and is the framework's one AUTHORITATIVE gate (see
+ * `map-provider-embedded.js`'s own "AUTHORITY for this path" docblock section). A real
+ * Почта id (e.g. `"43213"`) is unknown to every OTHER fixture `Point_Source`, so
+ * `WOODEV_TEST_PICKUP_EMBEDDED` swaps `$point_source` for
+ * `Woodev_Test_Embedded_Confirm_Point_Source` — a rig-only stub whose `fetch_details()`
+ * accepts ANY id — below, so the round trip can actually complete. See that class's own
+ * docblock for the obligation a REAL embedded-carrier plugin has instead.
+ */
+if ( ! defined( 'WOODEV_TEST_PICKUP_EMBEDDED' ) ) {
+	define( 'WOODEV_TEST_PICKUP_EMBEDDED', false );
+}
+
+/**
+ * Issue #251: the two-level close/refresh contract the rig has exercised only ONE
+ * side of until now — the stock config below is `close_on_select = true`,
+ * `refresh_checkout = false`, which makes the "modal stays open after a confirmed
+ * selection" path (see `pickup-mount.js`) unreachable from this fixture without a
+ * live in-browser patch (done by hand in s62). These two constants make both sides
+ * configurable without a code edit, same idiom as the constants above — flip
+ * `WOODEV_TEST_PICKUP_SELECTION_CLOSE` to `false` to reach that path. Defaults
+ * preserve today's stock rig behaviour exactly.
+ */
+if ( ! defined( 'WOODEV_TEST_PICKUP_SELECTION_CLOSE' ) ) {
+	define( 'WOODEV_TEST_PICKUP_SELECTION_CLOSE', true );
+}
+
+if ( ! defined( 'WOODEV_TEST_PICKUP_SELECTION_REFRESH_CHECKOUT' ) ) {
+	define( 'WOODEV_TEST_PICKUP_SELECTION_REFRESH_CHECKOUT', false );
+}
+
+/**
  * Определяем корневую директорию фреймворка.
  *
  * В wp-env контейнере: WOODEV_FRAMEWORK_DIR задаётся через config в .wp-env.json
@@ -240,6 +290,12 @@ function woodev_test_shipping_method_plugin_init(): void {
 	// Issue #226: same reasoning as the live Yandex require just above — only INSTANTIATING it
 	// below does anything, and that only happens when WOODEV_TEST_PICKUP_LIVE_POCHTA is truthy.
 	require_once __DIR__ . '/class-test-live-pochta-point-source.php';
+
+	// Issue #251 (F4, rig finding): the confirmation-round-trip stub — see its own file
+	// docblock. Required unconditionally, same reasoning as the two requires just above:
+	// declaring the class is free, only INSTANTIATING it (below, when WOODEV_TEST_PICKUP_EMBEDDED
+	// is truthy) does anything.
+	require_once __DIR__ . '/class-test-embedded-confirm-point-source.php';
 
 	if ( ! class_exists( 'Woodev_Test_Viewport_Point_Source' ) ) {
 
@@ -437,6 +493,16 @@ function woodev_test_shipping_method_plugin_init(): void {
 				// Issue #226: WOODEV_TEST_PICKUP_LIVE_POCHTA wins over WOODEV_TEST_PICKUP_STRATEGY
 				// when truthy, same reasoning as Yandex above but for the opposite strategy —
 				// Pochta's real API is viewport-only.
+				//
+				// Issue #251 (F4 correction, s63): this block's LISTING choice (fetch_points())
+				// is genuinely irrelevant once WOODEV_TEST_PICKUP_EMBEDDED overrides
+				// $point_source below — the carrier's own embed fetches and renders its own
+				// points, and this framework never calls fetch_points() on that path. It is
+				// still resolved unconditionally rather than skipped, so this block's own
+				// precedence rules stay simple. BUT the override below is NOT about a dead
+				// value — see WOODEV_TEST_PICKUP_EMBEDDED's own (corrected) docblock: the
+				// DETAILS half (fetch_details()) is very much consulted, by the provider-
+				// agnostic confirmation round trip, which is exactly why the override exists.
 				$viewport_strategy = \Woodev\Framework\Shipping\Pickup\Point_Source::STRATEGY_VIEWPORT;
 
 				if ( WOODEV_TEST_PICKUP_LIVE_YANDEX ) {
@@ -447,6 +513,16 @@ function woodev_test_shipping_method_plugin_init(): void {
 					$point_source = ( $viewport_strategy === WOODEV_TEST_PICKUP_STRATEGY )
 						? new \Woodev_Test_Viewport_Point_Source()
 						: new \Woodev_Test_Bulk_Point_Source();
+				}
+
+				// Issue #251 (F4, rig finding): WOODEV_TEST_PICKUP_EMBEDDED overrides whatever
+				// was just resolved above with a stub whose fetch_details() accepts ANY id — see
+				// Woodev_Test_Embedded_Confirm_Point_Source's own docblock for why this is
+				// required (a real Почта selection's id is unknown to every OTHER Point_Source
+				// this fixture has) and for the obligation a REAL embedded-carrier plugin has
+				// instead (a genuine carrier details lookup, not a fabricated record).
+				if ( WOODEV_TEST_PICKUP_EMBEDDED ) {
+					$point_source = new \Woodev_Test_Embedded_Confirm_Point_Source();
 				}
 
 				// D-8: custom tile layers + their attribution are a PLUGIN decision, and
@@ -477,20 +553,47 @@ function woodev_test_shipping_method_plugin_init(): void {
 
 				$map_copyrights = [ '© 2ГИС' ];
 
-				// The Yandex Maps fallback key is a PLUGIN obligation, never the
-				// framework's (spec §10.6) — Yandex_Map_Provider's constructor REQUIRES
-				// one. This value is an obviously-fake placeholder that only works
-				// because the rig never actually needs a live ymaps script under
-				// PHPUnit; a real shipping plugin shipping this to production supplies
-				// its OWN key here (obtained from the Yandex developer console), not a
-				// copy of this placeholder.
-				$map_provider = new \Woodev\Framework\Shipping\Map\Yandex_Map_Provider(
-					'FIXTURE-FAKE-YANDEX-KEY',
-					'',
-					'',
-					$map_layers,
-					$map_copyrights
-				);
+				// Issue #251: WOODEV_TEST_PICKUP_EMBEDDED wins over everything above —
+				// see that constant's own docblock. $point_source has ALREADY been
+				// overridden to Woodev_Test_Embedded_Confirm_Point_Source just above
+				// (F4 correction, s63) when this constant is on, so the map-provider
+				// choice below and the point-source override above agree with each
+				// other rather than one silently ignoring the other. `embed_url`/
+				// `expected_origin` point straight at the live carrier widget —
+				// decision §2 of the #251 spec: no
+				// plugin-hosted bridge page is needed, since the widget accepts a
+				// `postMessage` handshake from a foreign parent origin (M5) and the
+				// framework's own sandbox posture does not break it (M2). The two
+				// adapter hooks are dotted global JS paths resolved in the browser —
+				// see `assets/js/woodev-test-pochta-embed-adapter.js` (enqueued by
+				// `Woodev_Test_Shipping_Method_Plugin::maybe_enqueue_pochta_embed_adapter()`
+				// below only when this constant is on), which supplies
+				// `WoodevPochtaEmbed.onReady`/`.toPoint` and is the ONLY place the Почта
+				// field names/address order/type labels are known — domain knowledge
+				// stays out of the framework.
+				if ( WOODEV_TEST_PICKUP_EMBEDDED ) {
+					$map_provider = new \Woodev\Framework\Shipping\Map\Embedded_Map_Provider(
+						'https://widget.pochta.ru/map/',
+						'https://widget.pochta.ru',
+						'WoodevPochtaEmbed.onReady',
+						'WoodevPochtaEmbed.toPoint'
+					);
+				} else {
+					// The Yandex Maps fallback key is a PLUGIN obligation, never the
+					// framework's (spec §10.6) — Yandex_Map_Provider's constructor REQUIRES
+					// one. This value is an obviously-fake placeholder that only works
+					// because the rig never actually needs a live ymaps script under
+					// PHPUnit; a real shipping plugin shipping this to production supplies
+					// its OWN key here (obtained from the Yandex developer console), not a
+					// copy of this placeholder.
+					$map_provider = new \Woodev\Framework\Shipping\Map\Yandex_Map_Provider(
+						'FIXTURE-FAKE-YANDEX-KEY',
+						'',
+						'',
+						$map_layers,
+						$map_copyrights
+					);
+				}
 
 				// SP-5 Task 8 (D-7): a hardcoded default viewport is now a REQUIRED
 				// constructor argument — Moscow, matching every point this fixture serves,
@@ -561,7 +664,10 @@ function woodev_test_shipping_method_plugin_init(): void {
 				// constructor is positional and PHP 7.4 (which CI checks) has no named arguments.
 				// The accent colour is duplicated as a literal because `DEFAULT_ACCENT_COLOR` is
 				// a `private const` the fixture cannot reference — exactly the friction issue
-				// #170 tracks.
+				// #170 tracks. Arguments 13-14 (`close_on_select`/`refresh_checkout`) come from
+				// the WOODEV_TEST_PICKUP_SELECTION_* constants (issue #251) rather than literals,
+				// so the rig can reach the "modal stays open after a selection" path without a
+				// code edit — see those constants' own docblock.
 				$this->pickup_handler = new \Woodev\Framework\Shipping\Pickup\Pickup_Handler(
 					self::PLUGIN_ID,
 					'carrier_pickup_point',
@@ -575,8 +681,16 @@ function woodev_test_shipping_method_plugin_init(): void {
 					'#06aedd',
 					'',
 					true,
-					true
+					WOODEV_TEST_PICKUP_SELECTION_CLOSE,
+					WOODEV_TEST_PICKUP_SELECTION_REFRESH_CHECKOUT
 				);
+
+				// Issue #251: the fixture-owned Почта adapter script — see
+				// self::maybe_enqueue_pochta_embed_adapter() — is enqueued on its own
+				// `wp_enqueue_scripts` hook, independent of the Pickup_Handler's own
+				// enqueue pass, since the framework itself never enqueues plugin-supplied
+				// adapter scripts (they are pure domain knowledge, see the #251 spec §5).
+				add_action( 'wp_enqueue_scripts', [ $this, 'maybe_enqueue_pochta_embed_adapter' ] );
 				$this->pickup_handler->register();
 			}
 
@@ -608,6 +722,77 @@ function woodev_test_shipping_method_plugin_init(): void {
 			 */
 			public function get_pickup_settings_fields(): array {
 				return $this->pickup_handler->get_settings_fields();
+			}
+
+			/**
+			 * Issue #251: enqueues the fixture-owned Почта widget-embed adapter script
+			 * (`assets/js/woodev-test-pochta-embed-adapter.js`) that implements
+			 * `window.WoodevPochtaEmbed.onReady`/`.toPoint` — the two functions
+			 * `Embedded_Map_Provider`'s `initAdapter`/`selectAdapter` dotted paths point
+			 * at (see the map-provider construction in the constructor above). Gated on
+			 * `WOODEV_TEST_PICKUP_EMBEDDED` AND `is_checkout()`, same as
+			 * `Pickup_Handler::enqueue_assets()` itself — this script is meaningless
+			 * anywhere else, and enqueueing it unconditionally would leak a global onto
+			 * every page for no reason.
+			 *
+			 * CREDENTIALS — same rule as `Woodev_Test_Live_Pochta_Point_Source`'s own
+			 * docblock: `WOODEV_TEST_POCHTA_ACCOUNT_ID` (the SAME operator account id that
+			 * class already reads) and `WOODEV_TEST_POCHTA_ACCOUNT_TYPE` are NEVER committed
+			 * to this public repository. Read with a `defined()` guard, degrading to an
+			 * empty string, so this file never fatals when neither is set (unit/integration
+			 * test runs, which never define either). Define them in `wp-config.php`, or in
+			 * the GITIGNORED `.wp-env.override.json`:
+			 *
+			 *     define( 'WOODEV_TEST_POCHTA_ACCOUNT_ID', '…' );
+			 *     define( 'WOODEV_TEST_POCHTA_ACCOUNT_TYPE', '…' );
+			 *
+			 * `weight`/`sumoc`/`startZip`/`startAddress` (the rest of the widget's
+			 * `postData` handshake, spec §1 M3) are FIXTURE placeholders, not real cart
+			 * data — a real shipping plugin computes these from the live cart/customer,
+			 * which this demo fixture has no reason to model.
+			 *
+			 * @since 2.0.2
+			 *
+			 * @internal
+			 *
+			 * @return void
+			 */
+			public function maybe_enqueue_pochta_embed_adapter(): void {
+				if ( ! WOODEV_TEST_PICKUP_EMBEDDED || ! function_exists( 'is_checkout' ) || ! is_checkout() ) {
+					return;
+				}
+
+				$handle = 'woodev-test-pochta-embed-adapter';
+				$path   = __DIR__ . '/assets/js/woodev-test-pochta-embed-adapter.js';
+
+				if ( ! file_exists( $path ) ) {
+					return;
+				}
+
+				wp_enqueue_script(
+					$handle,
+					plugins_url( 'assets/js/woodev-test-pochta-embed-adapter.js', __FILE__ ),
+					[],
+					(string) filemtime( $path ),
+					true
+				);
+
+				wp_localize_script(
+					$handle,
+					'WoodevTestPochtaEmbedConfig',
+					[
+						'accountId'    => defined( 'WOODEV_TEST_POCHTA_ACCOUNT_ID' )
+							? (string) constant( 'WOODEV_TEST_POCHTA_ACCOUNT_ID' )
+							: '',
+						'accountType'  => defined( 'WOODEV_TEST_POCHTA_ACCOUNT_TYPE' )
+							? (string) constant( 'WOODEV_TEST_POCHTA_ACCOUNT_TYPE' )
+							: '',
+						'weight'       => 1000,
+						'sumoc'        => 1000,
+						'startZip'     => '101000',
+						'startAddress' => 'Москва, ул. Тверская, 1',
+					]
+				);
 			}
 
 			/**

@@ -741,12 +741,36 @@ final class MapProviderRegistryTest extends TestCase {
 			[
 				'embedUrl'       => 'https://carrier.example/widget.js',
 				'expectedOrigin' => 'https://carrier.example',
+				// Issue #251: null when the constructor's two optional adapter
+				// arguments are omitted — "no adapter, framework protocol only".
+				'initAdapter'    => null,
+				'selectAdapter'  => null,
 				// Task 20: mirrors owns_chrome() verbatim — pickup-mount.js reads this to decide
 				// whether to construct the framework's own list/card panels at all.
 				'ownsChrome'     => true,
 			],
 			$provider->get_js_config( [] )
 		);
+	}
+
+	/**
+	 * Issue #251: the two optional adapter-hook constructor arguments are carried
+	 * VERBATIM into `get_js_config()` as strings — never resolved, called, or
+	 * otherwise touched by PHP. They cross into the browser as JSON dotted global
+	 * paths; only `map-provider-embedded.js` resolves them.
+	 */
+	public function test_embedded_js_config_carries_the_adapter_hooks_verbatim_when_supplied(): void {
+		$provider = new Embedded_Map_Provider(
+			'https://widget.pochta.ru/map/',
+			'https://widget.pochta.ru',
+			'WoodevPochtaEmbed.onReady',
+			'WoodevPochtaEmbed.toPoint'
+		);
+
+		$config = $provider->get_js_config( [] );
+
+		$this->assertSame( 'WoodevPochtaEmbed.onReady', $config['initAdapter'] );
+		$this->assertSame( 'WoodevPochtaEmbed.toPoint', $config['selectAdapter'] );
 	}
 
 	/**

@@ -65,24 +65,87 @@
  * MESSAGE SHAPE (this file's own small protocol, not carrier-defined): once a
  * message passes the origin/source gate, only an object shaped exactly like
  *   { source: 'woodev-pickup-embedded', type: 'select', point: { ... } }
- * is recognised — `source`/`type` are OUR envelope, chosen so a carrier embed
- * only has to know it must `postMessage` that shape to the parent, and so this
- * file can tell "not for us" apart from "for us, but malformed" (see below).
- * Anything else arriving from the trusted origin/source (no envelope, wrong
- * `type`, or simply unrelated traffic the carrier's own page happens to emit)
- * is likewise ignored without throwing — the origin check proves WHO sent it,
- * not that every message they ever send is meant for this picker.
+ * is recognised as OUR envelope — `source`/`type` are chosen so a carrier
+ * embed only has to know it must `postMessage` that shape to the parent, and
+ * so this file can tell "not for us" apart from "for us, but malformed" (see
+ * below). Adapters (next section) NEVER see a message shaped like this — it
+ * is handled here, first, exactly as before #251.
+ *
+ * ADAPTER HOOKS (issue #251) — `config.initAdapter`/`config.selectAdapter`,
+ * each an OPTIONAL dotted global JS path (e.g. `'WoodevPochtaEmbed.toPoint'`),
+ * never a callable — the value crosses into the browser as JSON, and is
+ * resolved by walking `window` on `.` (never `eval`, never `new Function`); a
+ * path that does not resolve to a function is treated as absent. They exist
+ * so a plugin can point `embedUrl` straight at a carrier's OWN widget — no
+ * bridge page needed — and translate its native protocol in the browser
+ * instead of requiring it to speak this file's envelope. Only reached for a
+ * message that passed the origin+source gate AND did not match this file's
+ * own envelope above:
+ *   1. `initAdapter( data )` runs first. A non-`null`/`undefined` return is
+ *      posted back into the SAME iframe this message came from —
+ *      `iframe.contentWindow.postMessage( payload, config.expectedOrigin )`,
+ *      the expected origin as `targetOrigin`, NEVER `"*"` — and handling
+ *      stops there. Both the ADAPTER CALL and the `postMessage()` CALL are
+ *      inside the same guarded region, and a throw from EITHER is SWALLOWED
+ *      (issue #251 follow-up, Codex review: `postMessage()` itself throws
+ *      `DataCloneError` for a return value the structured-clone algorithm
+ *      cannot handle — a function, a `Symbol`, a cyclic object — and that
+ *      fault is the adapter's, not the framework's, exactly like a throw
+ *      from `initAdapter()` itself; the message bus is shared with whatever
+ *      else the carrier's page posts, so neither may break the picker).
+ *   2. `selectAdapter( data )` runs when `initAdapter` did not claim the
+ *      message. A non-`null`/`undefined` return goes through
+ *      {@see normalizePoint} and then the same success/failure emit path as
+ *      the framework's own envelope. A throw here is NOT swallowed — it
+ *      emits `error`, because the message already proved it came from this
+ *      instance's own trusted iframe, so a translation failure is a real,
+ *      reportable fault, not routine cross-talk. EXCEPTION: a throw is
+ *      swallowed too when a synchronous callback-style emission already
+ *      reported this same selection before the throw — see the RE-ENTRY
+ *      GUARD paragraph below.
+ *   3. Neither adapter is configured, or both decline (return `null`/
+ *      `undefined`) — the message is ignored silently, same as any other
+ *      unrecognised traffic from the trusted origin.
+ * An empty/missing `config.expectedOrigin` already rejects every inbound
+ * message via check 3 above (so step 1's `postMessage` is unreachable in
+ * that case regardless); the outbound post in step 1 ALSO checks it
+ * explicitly before calling `postMessage`, as a second, independent guard
+ * against ever computing a `targetOrigin` that is not a real trusted origin.
+ * ADAPTERS NEVER WIDEN THE TRUST BOUNDARY: they run strictly AFTER the
+ * origin+source gate above and only ever translate a message this file has
+ * already proven came from ITS OWN iframe at the expected origin — they are
+ * not a second way for an untrusted sender to reach the picker.
+ *
+ * RE-ENTRY GUARD — AT MOST ONE EMISSION PER INBOUND MESSAGE (issue #251
+ * follow-up, Codex review): `selectAdapter` is legal in TWO styles — it may
+ * report a selection by calling the callback-style hook
+ * (`window.WoodevPickupEmbedded.select()`, see "CALLBACK-STYLE WIDGETS"
+ * below) and return `null`, OR it may simply RETURN the point directly.
+ * Nothing stops a careless (or defensive-but-redundant) adapter from doing
+ * BOTH for the same inbound message — calling the callback synchronously
+ * AND also returning a non-null point. Without a guard, both paths reach
+ * {@see WoodevPickupMapProviderEmbedded#_handlePayload}, so one inbound
+ * carrier message would produce TWO `select`/`error` emissions, and
+ * `pickup-mount.js` would start two confirmation round trips for one
+ * customer click. The rule: once an emission has already happened
+ * SYNCHRONOUSLY during a `selectAdapter` call (via the callback route), the
+ * adapter's own return value is ignored, not processed a second time — see
+ * {@see WoodevPickupMapProviderEmbedded#_reentrantEmit}'s own docblock
+ * (constructor) for the exact mechanics. This preserves BOTH legal adapter
+ * styles unchanged (callback-then-null: one emission from the callback;
+ * return-only: one emission from the return value) and collapses the
+ * pathological both-at-once case to exactly one emission too.
  *
  * NORMALIZATION, NOT NORMALIZATION-OR-DIE: once a message IS recognised as our
- * envelope, `point` is run through {@see normalizePoint}. It is NOT a
- * field-for-field mirror of
- * {@see \Woodev\Framework\Shipping\Pickup\Pickup_Point::from_array()} — only
- * its OPTIONAL-field handling (defaults, list filtering, int/bool casts) is
- * kept deliberately aligned with that PHP method, field by field. Its
- * REQUIRED-field set is this file's OWN, currently `id`/`name`/`lat`/`lng`/
- * `address`/`type.code`/`type.label` (`lat` in [-90,90], `lng` in
- * [-180,180]) — see {@see normalizePoint}'s own docblock for why that set is
- * a KNOWN, deliberate divergence from `from_array()`, not drift. Failing
+ * envelope, or an adapter has translated one, `point`/the adapter's return
+ * value is run through {@see normalizePoint}. It is NOT a field-for-field
+ * mirror of {@see \Woodev\Framework\Shipping\Pickup\Pickup_Point::from_array()}
+ * — only its OPTIONAL-field handling (defaults, list filtering, int/bool
+ * casts) is kept deliberately aligned with that PHP method, field by field.
+ * Its REQUIRED-field set is this file's OWN, currently `id`/`name`/`address`/
+ * `type.code`/`type.label`; `lat`/`lng` are OPTIONAL-BUT-VALIDATED (issue
+ * #251 — a real carrier embed, measured, sends neither) — see
+ * {@see normalizePoint}'s own docblock for the exact rules. Failing
  * normalization here emits `error`, NEVER a malformed `select` — a provider
  * that forwarded whatever the carrier sent verbatim would let a broken/
  * malicious carrier page write garbage straight into the order.
@@ -258,10 +321,53 @@
 	}
 
 	/**
+	 * A plain decimal numeric-string literal: an optional sign, digits (with an
+	 * optional fractional part, either side of the `.` allowed to be empty as
+	 * long as at least one digit exists somewhere), and an optional exponent.
+	 * Deliberately narrower than JS's own `Number()`/`parseFloat()` coercion —
+	 * see {@see isNumeric}'s docblock for why.
+	 *
+	 * @type {RegExp}
+	 */
+	var DECIMAL_NUMBER_RE = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/;
+
+	/**
 	 * Whether `value` is numeric in the sense PHP's `is_numeric()` would accept
-	 * it for a coordinate — a finite number, or a non-empty string that parses
-	 * to one. Mirrors the guard `Pickup_Point::from_array()` applies to `lat`/
-	 * `lng` before casting to float.
+	 * it for a coordinate — a finite number, or a non-empty string that is a
+	 * plain DECIMAL numeric literal (optional sign, digits, optional fractional
+	 * part, optional exponent — see {@see DECIMAL_NUMBER_RE}). Mirrors the guard
+	 * `Pickup_Point::from_array()` applies to `lat`/`lng` before casting to
+	 * float, which itself mirrors PHP's `is_numeric()` (PHP 7+): notably, that
+	 * means a hex/octal/binary literal string (`'0x20'`, `'0b11'`, `'0o17'`) is
+	 * REJECTED here, not accepted, even though it looks "numeric" — this is the
+	 * whole point, not an oversight.
+	 *
+	 * Issue #251 follow-up (Codex review): this used to read
+	 * `isFinite( Number( value ) )`, which — unlike PHP's `is_numeric()` —
+	 * ACCEPTS a hex string (`Number( '0x20' ) === 32`), while
+	 * {@see normalizePoint}'s conversion step uses `parseFloat()`, which reads
+	 * the very same string as `0` (`parseFloat` stops at the first character it
+	 * cannot parse as a decimal digit, and `'0x20'` starts with a valid `'0'`
+	 * digit followed by non-digit `'x'`). The two disagreed silently: a hex
+	 * coordinate string PASSED validation here and was then silently coerced to
+	 * `0` — null island — by `parseFloat()`, exactly the "junk is coerced, not
+	 * rejected" outcome `normalizePoint()`'s own docblock forbids. This was a
+	 * KNOWN, deliberately accepted divergence from PHP's `is_numeric()` when
+	 * #201 landed — `lat`/`lng` were still REQUIRED then, so a hex string
+	 * still produced a number and the divergence was provably unreachable.
+	 * Making them OPTIONAL (issue #251) is what turned it into a live defect:
+	 * an adapter now controls whether `lat`/`lng` are present at all, and a
+	 * carrier/adapter bug that hands through a hex-looking id fragment as a
+	 * coordinate would previously have been silently accepted as `(0, 0)`.
+	 * Validation and conversion must agree on what "numeric" means; this
+	 * regex-based check is that single source of truth — `parseFloat()` in
+	 * `normalizePoint()` is only ever reached for a value this function has
+	 * already accepted, and never disagrees with it, because every string this
+	 * regex matches parses via `parseFloat()` to the exact same value.
+	 *
+	 * Exponent notation (`'1e2'`) IS accepted: it is a legitimate decimal
+	 * number, unlike a hex/octal/binary literal, which is a different RADIX
+	 * entirely, not an alternate way to write the same decimal value.
 	 *
 	 * @param {*} value
 	 * @returns {boolean}
@@ -271,8 +377,10 @@
 			return isFinite( value );
 		}
 
-		if ( 'string' === typeof value && value.trim().length > 0 ) {
-			return isFinite( Number( value ) );
+		if ( 'string' === typeof value ) {
+			var trimmed = value.trim();
+
+			return trimmed.length > 0 && DECIMAL_NUMBER_RE.test( trimmed );
 		}
 
 		return false;
@@ -365,20 +473,24 @@
 	 * field by field. The REQUIRED-field set is this file's own and diverges on
 	 * purpose:
 	 *
-	 * Required: `id`/`name`/`lat`/`lng`/`address`/`type.code`/`type.label`
-	 * (`lat` in [-90,90], `lng` in [-180,180]). `from_array()` requires `lat`/
-	 * `lng` too, but for a different reason — the framework's own map
-	 * (`map-provider-yandex.js`) needs coordinates to place a marker. THIS
-	 * provider draws no map of ours (see the file docblock's opening
-	 * paragraph), and a real carrier embed does not necessarily supply
-	 * coordinates at all: Почта России's widget, measured against this seam on
-	 * the rig, returns a selection payload with no `lat`/`lng` and no `name`
-	 * (`{ id, mailType, pvzType, indexTo, cashOfDelivery, regionTo, cityTo,
-	 * addressTo, weight, ... }`). Relaxing this required set to match what real
-	 * carriers actually send is tracked as #251; until that lands, requiring
-	 * `lat`/`lng`/`name` here means this function rejects that real payload.
-	 * KNOWN AND DELIBERATE, not an oversight of this pass — do not "fix" it as
-	 * a drift in isolation, it would conflict with #251's landing change.
+	 * Required: `id`/`name`/`address`/`type.code`/`type.label`. `lat`/`lng` are
+	 * OPTIONAL-BUT-VALIDATED (issue #251, resolved): present, both must be
+	 * numeric and in range (`lat` in [-90,90], `lng` in [-180,180]) — junk is
+	 * still REJECTED, never coerced; absent, BOTH must be absent (exactly one
+	 * present is a half-coordinate — an adapter bug, not a partial datum — and
+	 * is REJECTED); omitted from the emitted point when absent, with no `0.0`
+	 * fallback, ever. `from_array()` requires `lat`/`lng` unconditionally, but
+	 * for a different reason — the framework's own map (`map-provider-yandex.js`)
+	 * needs coordinates to place a marker. THIS provider draws no map of ours
+	 * (see the file docblock's opening paragraph), and a real carrier embed does
+	 * not necessarily supply coordinates at all: Почта России's widget, measured
+	 * against this seam on the rig, returns a selection payload with no `lat`/
+	 * `lng` and no `name` (`{ id, mailType, pvzType, indexTo, cashOfDelivery,
+	 * regionTo, cityTo, addressTo, weight, ... }`). `name` stays REQUIRED even
+	 * so — Почта sends none, but a name is domain knowledge the owning plugin's
+	 * adapter can build (e.g. `Почтомат №918872` from `pvzType` + `indexTo`; see
+	 * the fixture's `WoodevPochtaEmbed.toPoint`), and it is what the checkout
+	 * field and trigger label display. This function must not invent one.
 	 *
 	 * Optional, default `''` via {@see optionalString}: `short_address`/
 	 * `locality`/`postal_code`/`phone`/`instruction`/`work_time`/
@@ -403,7 +515,7 @@
 			return null;
 		}
 
-		var required = [ 'id', 'name', 'lat', 'lng', 'address' ];
+		var required = [ 'id', 'name', 'address' ];
 		var i, key, value;
 
 		for ( i = 0; i < required.length; i++ ) {
@@ -424,22 +536,37 @@
 			return null;
 		}
 
-		if ( ! isNumeric( payload.lat ) || ! isNumeric( payload.lng ) ) {
+		// Issue #251: lat/lng are OPTIONAL-BUT-VALIDATED, not required — see this
+		// function's own docblock for why (a real carrier embed, measured, sends
+		// neither). Absent means BOTH must be absent; exactly one present is a
+		// half-coordinate, which is an adapter bug, not a partial datum, and is
+		// REJECTED rather than silently dropped or defaulted.
+		var hasLat = undefined !== payload.lat && null !== payload.lat;
+		var hasLng = undefined !== payload.lng && null !== payload.lng;
+
+		if ( hasLat !== hasLng ) {
 			return null;
 		}
 
-		var lat = parseFloat( payload.lat );
-		var lng = parseFloat( payload.lng );
+		var lat = null;
+		var lng = null;
 
-		if ( lat < -90 || lat > 90 || lng < -180 || lng > 180 ) {
-			return null;
+		if ( hasLat ) {
+			if ( ! isNumeric( payload.lat ) || ! isNumeric( payload.lng ) ) {
+				return null;
+			}
+
+			lat = parseFloat( payload.lat );
+			lng = parseFloat( payload.lng );
+
+			if ( lat < -90 || lat > 90 || lng < -180 || lng > 180 ) {
+				return null;
+			}
 		}
 
-		return {
+		var point = {
 			id: String( payload.id ),
 			name: String( payload.name ),
-			lat: lat,
-			lng: lng,
 			address: String( payload.address ),
 			type: {
 				code: String( type.code ),
@@ -460,6 +587,47 @@
 				: null,
 			max_weight: optionalInt( payload, 'max_weight' ),
 		};
+
+		// No `0.0` fallback, ever — omitted from the emitted point entirely when
+		// absent, per this function's docblock.
+		if ( hasLat ) {
+			point.lat = lat;
+			point.lng = lng;
+		}
+
+		return point;
+	}
+
+	/**
+	 * Resolves a dotted global JS path (e.g. `'WoodevPochtaEmbed.toPoint'`) to a
+	 * function, by walking `window` one `.`-separated segment at a time — see
+	 * the file docblock's "ADAPTER HOOKS" section (issue #251). NEVER `eval`,
+	 * NEVER `new Function`: a segment that resolves to anything other than an
+	 * object/function part-way through, or a final value that is not itself a
+	 * function, makes the whole path resolve to `null` (treated as "no
+	 * adapter configured"), not a thrown error.
+	 *
+	 * @param {*} path
+	 * @returns {Function|null}
+	 */
+	function resolveAdapter( path ) {
+		if ( 'string' !== typeof path || '' === path ) {
+			return null;
+		}
+
+		var segments = path.split( '.' );
+		var target = window;
+		var i;
+
+		for ( i = 0; i < segments.length; i++ ) {
+			if ( ! target || ( 'object' !== typeof target && 'function' !== typeof target ) ) {
+				return null;
+			}
+
+			target = target[ segments[ i ] ];
+		}
+
+		return 'function' === typeof target ? target : null;
 	}
 
 	/**
@@ -547,6 +715,25 @@
 		 * @type {number|null}
 		 */
 		this._loadTimer = null;
+
+		/**
+		 * RE-ENTRY GUARD (issue #251 follow-up, Codex review): a `selectAdapter` is legally
+		 * allowed to report a selection EITHER by calling the callback-style hook
+		 * (`window.WoodevPickupEmbedded.select()`, routed through
+		 * {@see WoodevPickupMapProviderEmbedded#_handleExternalSelect}) OR by RETURNING the
+		 * point directly from the call `_buildMessageHandler()` makes into it — both are
+		 * documented, legal adapter styles (see the file docblock's "CALLBACK-STYLE WIDGETS"
+		 * section for the first). An adapter that does BOTH for the same inbound carrier
+		 * message must still produce exactly ONE `select`/`error` emission for it, not two.
+		 * `_buildMessageHandler()` resets this to `false` immediately before invoking
+		 * `selectAdapter`; `_handleExternalSelect()` sets it to `true` if it runs
+		 * SYNCHRONOUSLY during that call. When it reads `true` afterwards, the adapter's
+		 * return value describes a selection ALREADY emitted through the callback route, and
+		 * is ignored — see `_buildMessageHandler()`'s own comment at the check.
+		 *
+		 * @type {boolean}
+		 */
+		this._reentrantEmit = false;
 
 		/** @type {boolean} guards destroy() against a second call. */
 		this._destroyed = false;
@@ -641,16 +828,106 @@
 
 			var data = event.data;
 
-			// Not our envelope (or not meant for us) — ignore silently; `window`
-			// is a shared bus and unrelated same-origin traffic is routine.
-			if ( ! data || 'object' !== typeof data
-				|| MESSAGE_SOURCE !== data.source
-				|| MESSAGE_TYPE_SELECT !== data.type
+			// Step 1 (issue #251 numbering, see the file docblock's "ADAPTER
+			// HOOKS" section): this file's own envelope, handled exactly as
+			// before #251 — adapters never see a message shaped like this.
+			if ( data && 'object' === typeof data
+				&& MESSAGE_SOURCE === data.source
+				&& MESSAGE_TYPE_SELECT === data.type
 			) {
+				self._handlePayload( data.point, config );
+
 				return;
 			}
 
-			self._handlePayload( data.point, config );
+			// Step 2: initAdapter — answers the carrier's own handshake. A throw
+			// is swallowed: `window` is a shared bus, and a plugin-supplied
+			// adapter must never be able to break the picker for unrelated
+			// traffic it does not recognise either. Issue #251 follow-up (Codex
+			// review): the `postMessage()` call below is INSIDE this same try —
+			// it used to sit after the catch, unguarded, so an adapter return
+			// value the structured-clone algorithm cannot handle (a function, a
+			// `Symbol`, a cyclic object) threw `DataCloneError` straight out of
+			// this handler and into the page, defeating the whole "an adapter
+			// fault must not break the picker" rule this catch exists to
+			// enforce. `postMessage()` throwing is swallowed exactly like
+			// `initAdapter()` itself throwing — both are the adapter's fault,
+			// not the framework's, and neither may propagate.
+			var initAdapter = resolveAdapter( config.initAdapter );
+
+			if ( initAdapter ) {
+				var initClaimed = false;
+
+				try {
+					var initPayload = initAdapter( data );
+
+					if ( undefined !== initPayload && null !== initPayload ) {
+						initClaimed = true;
+
+						// Belt-and-suspenders alongside check 3 above: never compute a
+						// `postMessage` call without a real, non-empty targetOrigin.
+						if ( config.expectedOrigin ) {
+							self._iframe.contentWindow.postMessage( initPayload, config.expectedOrigin );
+						}
+					}
+				} catch ( e ) {
+					return;
+				}
+
+				if ( initClaimed ) {
+					return;
+				}
+			}
+
+			// Step 3: selectAdapter — translates the carrier's own selection
+			// message. Unlike initAdapter, a throw here is NOT swallowed: this
+			// message already passed the origin+source gate, so a translation
+			// failure is a real, reportable fault.
+			var selectAdapter = resolveAdapter( config.selectAdapter );
+
+			if ( selectAdapter ) {
+				var rawPoint;
+
+				// RE-ENTRY GUARD (issue #251 follow-up, Codex review) — see `_reentrantEmit`'s
+				// own docblock in the constructor. Reset immediately before the call: a stale
+				// `true` left over from some earlier, unrelated `_handleExternalSelect()` call
+				// (a genuine callback-style widget with no configured adapter at all, say) must
+				// never be mistaken for THIS call's own re-entry.
+				self._reentrantEmit = false;
+
+				try {
+					rawPoint = selectAdapter( data );
+				} catch ( e ) {
+					// A synchronous callback-style emission that happened before the throw
+					// already reported this selection (or its own failure) — do not ALSO
+					// emit `error` for the same inbound message.
+					if ( ! self._reentrantEmit ) {
+						self._emit( 'error', {
+							code: 'woodev_pickup_embed_adapter_error',
+							message: text( config, 'error' ),
+						} );
+					}
+
+					return;
+				}
+
+				// The adapter already reported this exact selection synchronously via
+				// `window.WoodevPickupEmbedded.select()` — the return value below describes
+				// the SAME selection, not a second one, and must be ignored so one inbound
+				// carrier message never produces two `select`/`error` emissions.
+				if ( self._reentrantEmit ) {
+					return;
+				}
+
+				if ( undefined !== rawPoint && null !== rawPoint ) {
+					self._handlePayload( rawPoint, config );
+
+					return;
+				}
+			}
+
+			// Neither our envelope nor an adapter claimed this message — ignore
+			// silently, same as any other unrelated same-origin traffic.
 		};
 	};
 
@@ -660,10 +937,13 @@
 	 * `error` and injects nothing — see {@see isAbsoluteHttpsUrl}.
 	 *
 	 * @param {HTMLElement} container
-	 * @param {Object}      config     `{ embedUrl, expectedOrigin, strategy, i18n, locality }` —
-	 *                                 only `embedUrl`/`expectedOrigin`/`i18n` are used; `strategy`
-	 *                                 and `locality` describe the plugin's `Point_Source` and have
-	 *                                 no meaning for a provider that never calls `woodev/v1`.
+	 * @param {Object}      config     `{ embedUrl, expectedOrigin, initAdapter, selectAdapter,
+	 *                                 strategy, i18n, locality }` — `strategy` and `locality`
+	 *                                 describe the plugin's `Point_Source` and have no meaning
+	 *                                 for a provider that never calls `woodev/v1`. `initAdapter`/
+	 *                                 `selectAdapter` (issue #251) are optional dotted global JS
+	 *                                 paths; see the file docblock's "ADAPTER HOOKS" section and
+	 *                                 {@see WoodevPickupMapProviderEmbedded#_buildMessageHandler}.
 	 * @param {Object}      dataSource unused — see the file docblock.
 	 * @returns {void}
 	 */
@@ -762,6 +1042,14 @@
 		if ( this._destroyed ) {
 			return;
 		}
+
+		// See `_reentrantEmit`'s own docblock (constructor): marks that THIS route already
+		// handled a selection, so a `selectAdapter` invocation still in progress on the call
+		// stack above this one (see `_buildMessageHandler()`) knows to ignore its own return
+		// value rather than emit the same selection a second time. Set unconditionally, not
+		// only while a `selectAdapter` call is in flight — harmless when it is not (nothing
+		// reads it until the next `selectAdapter` invocation resets it first).
+		this._reentrantEmit = true;
 
 		this._handlePayload( payload, this._config || {} );
 	};
