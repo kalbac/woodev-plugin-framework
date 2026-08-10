@@ -1457,6 +1457,28 @@
 	transform: rotate( 45deg );
 }
 
+/* Issue #243: the last remaining checked type's checkbox is now `disabled` (rather than clicked
+   and silently reverted) — `pickup-panels.js`'s `syncFilterRowLocks()` mirrors that onto the row
+   via `data-locked="true"`. The row is still `data-checked="true"` and must keep its identity
+   exactly as above (bold/dark label, filled accent checkbox, tick) — the affordance being removed
+   is the CHECKBOX's own interactivity, never the row's look; a dimmed/greyed row here would read
+   as "this whole option is unavailable", which is the wrong message. `cursor: default` on both the
+   row and the checkbox is the only visual change, plus pinning the filled state explicitly so a
+   `:disabled` repaint some browser might apply on top of `appearance: none` can never win. */
+.woodev-pickup-filter__row[data-locked="true"] {
+	cursor: default;
+}
+
+.woodev-pickup-filter__checkbox:disabled {
+	cursor: default;
+}
+
+.woodev-pickup-filter__checkbox:checked:disabled,
+.woodev-pickup-filter__checkbox:checked:disabled:hover {
+	background: var( --woodev-pickup-accent-fill, #047a9b );
+	border-color: var( --woodev-pickup-accent-fill, #047a9b );
+}
+
 .woodev-pickup-filter__label {
 	flex: 1 1 auto;
 }

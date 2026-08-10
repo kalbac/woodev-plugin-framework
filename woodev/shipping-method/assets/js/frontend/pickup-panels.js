@@ -171,17 +171,32 @@
  * distance and offers to show it anyway, rather than leaving the customer to
  * conclude there are no points at all.
  *
- * THE TYPE FILTER (Task 16, reworked Task 13, reworked again SP-5 round 2 — D2/D-10/V-8):
+ * THE TYPE FILTER (Task 16, reworked Task 13, reworked again SP-5 round 2 — D2/D-10/V-8; the
+ * last-type control reworked again issue #243):
  * `setTypes( types )` accumulates distinct `{ code, label }` pairs FIRST-SEEN across every call
  * and renders the filter control once a SECOND distinct type has ever been seen — and, once shown,
  * it never disappears again, even if a later call reports only one type (a momentary single-type
  * viewport must not flicker the control away). The last CHECKED type cannot be unchecked (the
- * Yandex reference's own rule): the click is silently refused — the checkbox is reverted and no
- * `typeFilterChange` fires — because an empty selection would read to the customer as "no pickup
- * points exist" (see the file docblock's own operator-instruction note, immediately below the
- * reference's opposite "empty means unfiltered" behaviour is deliberately NOT copied). Every row
- * (`.woodev-pickup-filter__row`) carries `data-checked="true"|"false"`, kept in sync with its own
- * checkbox on every accepted change, for T4's styling to key off.
+ * Yandex reference's own rule): its checkbox is `disabled` and its row carries `data-locked="true"`
+ * — see {@see isFilterCodeLocked}/{@see syncFilterRowLocks}. (Issue #243: a PREVIOUS version of
+ * this rule let the click happen and reverted the checkbox afterwards — a permanently clickable
+ * control that visibly flicks off and back on with no explanation reads as a bug;
+ * `handleFilterCheckboxChange()`'s own revert-and-refuse guard survives only as defence in depth
+ * against a bypass of `disabled`, e.g. a script forcing the DOM state directly.) DELIBERATELY NO
+ * EXPLANATORY TEXT anywhere on the locked control — an operator decision (issue #243 follow-up):
+ * a `title` hint was built and then removed again after two independent reviews found it
+ * unreachable by keyboard, assistive tech, or touch (a `disabled` element is out of the tab order,
+ * and `title` has no touch equivalent), and the operator's own call, verbatim, was «не нужно
+ * ничего показывать. Заблокирована и всё» — show nothing at all, blocked is blocked. Do NOT
+ * reintroduce a `title`/`aria-label`/tooltip here without a fresh operator decision to that effect
+ * — `disabled` alone is the whole signal, native and already accessible via the platform's own
+ * disabled-control semantics, and adding text back would silently reopen the exact half-solved
+ * accessibility gap this decision closed by removing the text entirely. Either way, an empty
+ * selection would read to the customer as "no pickup points exist" (see the file docblock's own
+ * operator-instruction note, immediately below the reference's opposite "empty means unfiltered"
+ * behaviour is deliberately NOT copied). Every row (`.woodev-pickup-filter__row`) carries
+ * `data-checked="true"|"false"`, kept in sync with its own checkbox on every accepted change, for
+ * T4's styling to key off.
  *
  * THE BADGE'S 3+ RULE (round 2, D2 — the operator's own live-review finding): the TOGGLE
  * (`.woodev-pickup-filter__toggle`) carries `.is-filtered` whenever the selection is PARTIAL
@@ -1622,6 +1637,62 @@
 	}
 
 	/**
+	 * True when `code` is currently SELECTED and is the ONLY selected code in
+	 * `self._filterOrder` — i.e. unchecking it next would break the "at least one checked" rule
+	 * (see the file docblock's "THE TYPE FILTER" note). Drives {@see syncFilterRowLocks}, which
+	 * disables exactly this one checkbox (issue #243) instead of letting the click happen and
+	 * silently reverting it afterwards.
+	 *
+	 * @since 2.0.2
+	 * @param {Panels} self
+	 * @param {string} code
+	 * @returns {boolean}
+	 */
+	function isFilterCodeLocked( self, code ) {
+		if ( ! Boolean( self._filterSelected[ code ] ) ) {
+			return false;
+		}
+
+		return ! self._filterOrder.some( function( otherCode ) {
+			return otherCode !== code && Boolean( self._filterSelected[ otherCode ] );
+		} );
+	}
+
+	/**
+	 * Walks the EXISTING `.woodev-pickup-filter__row` elements (never rebuilds them — that is
+	 * {@see renderFilterRows}'s job) and, per row, sets its checkbox's `disabled` from
+	 * {@see isFilterCodeLocked} and mirrors that onto the row's own `data-locked` hook for T4's
+	 * CSS to key off (issue #243, same technique as `data-checked`, D2) — a pure cursor/paint
+	 * affordance, never an explanatory label. Deliberately writes NO `title`/`aria-label`/tooltip
+	 * of any kind: a `title` hint was tried and removed again (operator decision, issue #243
+	 * follow-up — see the file docblock's "THE TYPE FILTER" note for the why); `disabled` is the
+	 * whole signal. Called after every {@see renderFilterRows} rebuild (covers `setTypes()`,
+	 * including a newly-seen type unlocking a previously sole-selected one) and again at the end
+	 * of an ACCEPTED {@see handleFilterCheckboxChange} change, so locking/unlocking is immediate
+	 * without a full row rebuild.
+	 *
+	 * @since 2.0.2
+	 * @param {Panels} self
+	 * @returns {void}
+	 */
+	function syncFilterRowLocks( self ) {
+		var rows = self._filterMenuEl.querySelectorAll( '.woodev-pickup-filter__row' );
+
+		Array.prototype.forEach.call( rows, function( row ) {
+			var checkbox = row.querySelector( '.woodev-pickup-filter__checkbox' );
+
+			if ( ! checkbox ) {
+				return;
+			}
+
+			var locked = isFilterCodeLocked( self, checkbox.dataset.code );
+
+			checkbox.disabled = locked;
+			row.dataset.locked = locked ? 'true' : 'false';
+		} );
+	}
+
+	/**
 	 * Rebuilds the filter's checkbox rows from `self._filterOrder` — every
 	 * type ever seen, in first-seen order, never fewer even when the LATEST
 	 * `setTypes()` call reported only some of them (see the file docblock's
@@ -1640,6 +1711,11 @@
 	 * `label` is the same already-escaped shape a point's `type.label` is
 	 * elsewhere in this file (it originates from the very same field), so it
 	 * is written via `innerHTML` here too, not `textContent`.
+	 *
+	 * {@see syncFilterRowLocks} runs LAST, once every row exists — it disables whichever single
+	 * checkbox is currently the sole selected type (issue #243), no explanatory text attached; this
+	 * is what makes a newly-seen type (freshly inserted CHECKED by `setTypes()`) unlock a
+	 * previously sole-selected one, since that call always ends up here.
 	 *
 	 * @param {Panels} self
 	 * @returns {void}
@@ -1676,6 +1752,8 @@
 			row.appendChild( labelEl );
 			self._filterMenuEl.appendChild( row );
 		} );
+
+		syncFilterRowLocks( self );
 	}
 
 	/**
@@ -1718,14 +1796,20 @@
 	/**
 	 * Handles one checkbox's native `change` event.
 	 *
-	 * Refuses to leave the selection empty: unchecking the LAST currently
-	 * selected type reverts the checkbox back to checked and returns without
-	 * emitting `typeFilterChange` — silently re-checking the box is the
-	 * Yandex reference's own rule (see the file docblock), because an empty
-	 * selection would read to the customer as "there are no pickup points
-	 * at all". Every other change is accepted, updates `row`'s `data-checked`
-	 * and the badge/`.is-filtered` state, and emits the full list of
-	 * currently selected codes.
+	 * Issue #243: the LAST currently selected type's checkbox is now `disabled` by
+	 * {@see syncFilterRowLocks} — the refusal is visible BEFORE the click (the control simply does
+	 * not respond; deliberately no explanatory text, see the file docblock's "THE TYPE FILTER"
+	 * note), rather than the click happening and the box flicking back on afterwards. The block
+	 * below that reverts a refused uncheck and returns without emitting
+	 * `typeFilterChange` is kept as DEFENCE IN DEPTH, not the primary mechanism any more: with the
+	 * checkbox disabled the browser no longer dispatches `change` for it at all (a user click and
+	 * even an imperative `.click()` both no-op on a disabled control), so this guard only still
+	 * matters against something that forces the DOM state directly and dispatches `change` itself
+	 * (e.g. a stray script, or a future browser that ever changes how it treats disabled controls).
+	 * The invariant it protects — never leave the selection empty, because that would read to the
+	 * customer as "there are no pickup points at all" (see the file docblock) — has not changed.
+	 * Every other change is accepted, updates `row`'s `data-checked` and the badge/`.is-filtered`
+	 * state, re-syncs which row is now locked, and emits the full list of currently selected codes.
 	 *
 	 * Round 3 (coordinator fix — "the filter applies to the map but not to the sidebar list"):
 	 * also re-renders the LIST BODY here, synchronously, and the CARD if one is open
@@ -1759,6 +1843,7 @@
 		self._filterSelected[ code ] = checkbox.checked;
 		row.dataset.checked = checkbox.checked ? 'true' : 'false';
 		updateFilterBadge( self );
+		syncFilterRowLocks( self );
 
 		if ( self.root ) {
 			renderList( self );

@@ -2863,6 +2863,108 @@ it( 'emits the selected codes on change', () => {
 } );
 
 // -----------------------------------------------------------------------
+// Issue #243: the last remaining checked type's checkbox becomes `disabled`
+// instead of being silently reverted after the click — the refusal is now
+// visible BEFORE the click (the control simply does not respond), not after
+// it. Follow-up operator decision («не нужно ничего показывать. Заблокирована
+// и всё»): NO explanatory text anywhere on the locked control — a `title`
+// hint was built and removed again once two independent reviews found it
+// unreachable by keyboard/assistive-tech/touch. `disabled` is the whole
+// signal; there is deliberately nothing else here to assert on.
+// -----------------------------------------------------------------------
+
+it( 'disables the last remaining checked type\'s checkbox and locks its row', () => {
+	const panels = mount( filterConfig );
+	panels.setTypes( [ { code: 'pvz', label: 'ПВЗ' }, { code: 'postamat', label: 'Постамат' } ] );
+
+	const boxes = [ ...panels.root.querySelectorAll( '.woodev-pickup-filter__checkbox' ) ];
+	const rows = [ ...panels.root.querySelectorAll( '.woodev-pickup-filter__row' ) ];
+
+	boxes[ 0 ].click(); // unchecks pvz -- postamat becomes the sole selected type.
+
+	expect( boxes[ 1 ].disabled ).toBe( true );
+	expect( rows[ 1 ].dataset.locked ).toBe( 'true' );
+
+	// The OTHER (unchecked) row must stay unlocked -- only the sole SELECTED type locks.
+	expect( boxes[ 0 ].disabled ).toBe( false );
+	expect( rows[ 0 ].dataset.locked ).toBe( 'false' );
+} );
+
+it( 'never emits typeFilterChange and the checkbox never visibly flips when the disabled last type is clicked', () => {
+	const seen = [];
+	const panels = mount( filterConfig );
+	panels.on( 'typeFilterChange', ( codes ) => seen.push( codes ) );
+	panels.setTypes( [ { code: 'pvz', label: 'ПВЗ' }, { code: 'postamat', label: 'Постамат' } ] );
+
+	const boxes = [ ...panels.root.querySelectorAll( '.woodev-pickup-filter__checkbox' ) ];
+	boxes[ 0 ].click();
+	seen.length = 0;
+
+	boxes[ 1 ].click(); // disabled -- the browser refuses to even dispatch `change` for this.
+
+	// Note the project trap: `expect( seen ).toEqual( [] )` would also pass if a call happened
+	// with an `undefined` argument, so length is asserted explicitly instead.
+	expect( seen ).toHaveLength( 0 );
+	expect( boxes[ 1 ].checked ).toBe( true );
+} );
+
+it( 'unlocks the checkbox once a second type is checked back on', () => {
+	const panels = mount( filterConfig );
+	panels.setTypes( [ { code: 'pvz', label: 'ПВЗ' }, { code: 'postamat', label: 'Постамат' } ] );
+
+	const boxes = [ ...panels.root.querySelectorAll( '.woodev-pickup-filter__checkbox' ) ];
+	const rows = [ ...panels.root.querySelectorAll( '.woodev-pickup-filter__row' ) ];
+
+	boxes[ 0 ].click(); // pvz off -- postamat locked.
+	expect( boxes[ 1 ].disabled ).toBe( true );
+
+	boxes[ 0 ].click(); // pvz back on -- postamat must unlock immediately.
+
+	expect( boxes[ 1 ].disabled ).toBe( false );
+	expect( rows[ 1 ].dataset.locked ).toBe( 'false' );
+} );
+
+it( 'unlocks a previously locked checkbox when setTypes() reports a newly-seen third code', () => {
+	const panels = mount( filterConfig );
+	panels.setTypes( [ { code: 'pvz', label: 'ПВЗ' }, { code: 'postamat', label: 'Постамат' } ] );
+
+	const queryBoxes = () => [ ...panels.root.querySelectorAll( '.woodev-pickup-filter__checkbox' ) ];
+
+	queryBoxes()[ 0 ].click(); // pvz off -- postamat locked.
+	expect( queryBoxes()[ 1 ].disabled ).toBe( true );
+
+	// A newly-seen code is inserted CHECKED (existing setTypes() contract) -- postamat is no
+	// longer the sole selected type and must unlock. renderFilterRows() tears down and rebuilds
+	// every row, so the elements themselves are new; re-query rather than reuse the old ones.
+	panels.setTypes( [
+		{ code: 'pvz', label: 'ПВЗ' }, { code: 'postamat', label: 'Постамат' }, { code: 'locker', label: 'Локер' },
+	] );
+
+	expect( queryBoxes()[ 1 ].disabled ).toBe( false );
+} );
+
+it( 'the refusal guard still backstops a programmatically forced uncheck of the last type (defence-in-depth)', () => {
+	const seen = [];
+	const panels = mount( filterConfig );
+	panels.on( 'typeFilterChange', ( codes ) => seen.push( codes ) );
+	panels.setTypes( [ { code: 'pvz', label: 'ПВЗ' }, { code: 'postamat', label: 'Постамат' } ] );
+
+	const boxes = [ ...panels.root.querySelectorAll( '.woodev-pickup-filter__checkbox' ) ];
+	boxes[ 0 ].click(); // pvz off -- postamat is now the sole selected + disabled type.
+	seen.length = 0;
+
+	// Bypass the native disabled-blocks-click() behaviour to prove the JS-side guard is still a
+	// backstop, not the ONLY thing preventing an empty selection -- force the DOM state directly
+	// and dispatch the same `change` event `renderFilterRows()` wires up, exactly what a stray
+	// external script (or a future browser that handles disabled controls differently) could do.
+	boxes[ 1 ].checked = false;
+	boxes[ 1 ].dispatchEvent( new Event( 'change', { bubbles: true } ) );
+
+	expect( boxes[ 1 ].checked ).toBe( true );
+	expect( seen ).toHaveLength( 0 );
+} );
+
+// -----------------------------------------------------------------------
 // Extra coverage beyond the plan's own spec — see the task report for which
 // mutation each one kills.
 // -----------------------------------------------------------------------
