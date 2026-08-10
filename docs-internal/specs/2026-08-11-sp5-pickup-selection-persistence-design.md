@@ -111,11 +111,26 @@ guard).
 | `type_for_method( string $method_id ): ?string` | which `type` code the chosen shipping method implies — a code, `TYPE_ANY`, or `null` for "no restore" (§5) | on restore |
 
 **The locality key is a domain primary key, not a place name.** Carriers do not agree on what a
-locality is — Почта РФ addresses by settlement name, СДЭК by `city_id` in its own database,
-Яндекс Доставка by `geo_id` in its own. A customer also writes one city several ways
-("Санкт-Петербург" / "Санкт Петербург" / "Питер"). The framework therefore never derives the
-key, never normalizes it and never compares it to anything but another string from the same
-scope.
+locality is, and all three of the operator's production plugins disagree with each other:
+
+| Plugin | Locality identity | Where |
+|---|---|---|
+| `woodev-russian-post` | FIAS GUID of the settlement | `includes/classes/ajax.php:180` (`'fias' => $normalize_address->get_place_guid()`) |
+| `woocommerce-edostavka` | `city_id` in СДЭК's own database | `includes/functions.php:896` |
+| `woocommerce-yandex-delivery` | `geo_id` in Яндекс Доставка's own database | — |
+
+A customer also writes one city several ways ("Санкт-Петербург" / "Санкт Петербург" / "Питер").
+The framework therefore never derives the key, never normalizes it and never compares it to
+anything but another string from the same scope.
+
+The two reference plugins also differ in SHAPE, and the difference is exactly the defect being
+fixed. `woocommerce-edostavka` keeps a map keyed `[city_id][type]`, so returning to a previously
+used locality restores that locality's point. `woodev-russian-post` keeps a **single slot**
+(`Customer_Delivery_Point_Data`) and guards it by comparing the stored `fias` against the
+current normalized address's `place_guid` (`includes/classes/checkout.php:318` and `:371`) — so
+switching locality overwrites the slot and switching back loses the point. The map generalises
+both: a Почта-shaped plugin gets the СДЭК behaviour by returning the FIAS GUID from
+`current_locality()` / `locality_for_point()`, without rewriting its own store.
 
 The two locality methods are asymmetric on purpose, and that asymmetry is taken from the
 reference implementation: `woocommerce-edostavka` writes under `$data['location']['city_code']`
