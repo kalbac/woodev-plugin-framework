@@ -25,7 +25,7 @@ The active program since s32 is the **shipping SP-track (SP-1…SP-11)**:
 ## Genuinely-open tails (pointers, not tasks)
 
 - **#245** — production `WOODEV_LICENSE_AUTHORITY_PUBKEY` is still a placeholder in the envelope verifier (fail-closed until captured). **Release-blocking.**
-- **#244** — 2 unfinished S0/P4 base-decomposition extractions (`Plugin_Action_Links_Handler`, `API_Logger`). The P4 gate passed on the WC-name-free criterion, but subplan Tasks 2/3 were never executed.
+- ~~**#244** — 2 unfinished S0/P4 base-decomposition extractions (`Plugin_Action_Links_Handler`, `API_Logger`)~~ — done (PR against `main`, closes #244). Both extractions diverge from the Task 1/4 handler-self-registration pattern: the filter/action registration stays reachable through the plugin instance (not bound to the handler directly) so `Woodev_Payment_Gateway_Plugin`'s `parent::` override and no-op still work — see `gotchas/handler-extraction-must-preserve-override-chain.md`.
 - **Payment-gateway trait extraction** — `class-payment-gateway.php` still ~3,542 lines; known debt per CLAUDE.md, no card.
 
 ## Decisions on record (unchanged)

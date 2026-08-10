@@ -1,6 +1,13 @@
 # Gotchas — Woodev Plugin Framework
-> **116 atomic gotchas, 21 namespaces (27 index sections)** — update when adding/removing.
-> Last updated: 2026-08-10 (session 62, #238 rig verification: +1 file, existing namespace
+> **117 atomic gotchas, 21 namespaces (27 index sections)** — update when adding/removing.
+> Last updated: 2026-08-10 (#244, extracting Plugin_Action_Links_Handler/API_Logger: +1 file,
+> existing namespace `[framework/*]` — `handler-extraction-must-preserve-override-chain`
+> (the general P4 handler pattern binds a self-registered hook to the handler itself; that
+> silently disables a subclass override that calls `parent::` and would double-log for
+> `Woodev_Payment_Gateway_Plugin`'s no-op'd API logging. Fixed by binding the filter to the
+> plugin instance and keeping two base methods as thin overridable/delegate wrappers rather
+> than deleting them).
+> Prior: 2026-08-10 (session 62, #238 rig verification: +1 file, existing namespace
 > `[build/*]` — `modal-script-versioned-by-version-constant-not-filemtime` (`woodev-modal.js` is
 > registered with the raw `self::VERSION`, not `get_assets_version()`, so editing it never busts
 > the browser cache between releases — while its own stylesheet three lines below IS versioned by
@@ -163,6 +170,7 @@
 - [framework/autoload] `class_exists()`/`function_exists()` as an "init-once" flag is BROKEN under the runtime class-map autoloader: every framework class is autoloadable, so `class_exists()` (autoload on) is always true → the once-guard never runs. The top-level «Woodev» menu silently vanished for every real v2 plugin. Use a static boolean for once-init; assert with autoload ON to reproduce → [gotchas/classmap-autoload-breaks-class-exists-once-guard.md](gotchas/classmap-autoload-breaks-class-exists-once-guard.md) (s35)
 
 - [framework/autoload] Deleting a framework file has a **tail**: the wiring names the *path*, not the class, so a class-name grep misses it. Four hits on one branch — three separate `require_once` lines in `Shipping_Plugin::includes()` and one in a **fixture bootstrap**. A require on a missing file is a fatal on every real vendored boot. Checklist + why the full suite (not a targeted run) is what catches it → [gotchas/file-deletion-tail-includes-classmap-fixtures.md](gotchas/file-deletion-tail-includes-classmap-fixtures.md) (s45)
+- [framework/handler-extraction] A handler that self-registers its hook bound to itself (the `Cron_Handler`/`Translation_Handler` pattern) silently disables a subclass override that calls `parent::`, and can double-fire logic a subclass deliberately no-ops — verify with `find_referencing_symbols` before binding a hook callback to the new handler instead of the plugin → [gotchas/handler-extraction-must-preserve-override-chain.md](gotchas/handler-extraction-must-preserve-override-chain.md) (#244)
 
 ### [rig/*] — Local verification rig
 - [rig/browser] wp-env mounts the repository, so the rig serves whatever branch is CHECKED OUT and whatever `WOODEV_TEST_*` constants are set (`WOODEV_TEST_PICKUP_STRATEGY`, `WOODEV_TEST_PICKUP_LIVE_YANDEX`, `WOODEV_TEST_PICKUP_LIVE_POCHTA`, `WOODEV_TEST_POCHTA_SETTINGS_ID`; precedence `LIVE_YANDEX` > `LIVE_POCHTA` > `STRATEGY` — defined in `tests/_fixtures/woodev-test-shipping-method/`) — no build, no deploy. Switching branches silently reverts another branch's fixes ("you didn't fix it"); switching fixtures silently removes the data a symptom needs ("looks fixed now"). The second direction is the dangerous one. State the branch + constants before asking anyone to look, and merge/rebase so a verification tree contains every fix under discussion → [gotchas/rig-serves-the-working-tree-branch-switch-reverts-fixes.md](gotchas/rig-serves-the-working-tree-branch-switch-reverts-fixes.md) (s56)
