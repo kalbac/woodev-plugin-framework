@@ -1,6 +1,13 @@
 # Gotchas — Woodev Plugin Framework
-> **115 atomic gotchas, 21 namespaces (27 index sections)** — update when adding/removing.
-> Last updated: 2026-08-09 (session 60, docs audit + rig source switches: +1 file, existing
+> **116 atomic gotchas, 21 namespaces (27 index sections)** — update when adding/removing.
+> Last updated: 2026-08-10 (session 62, #238 rig verification: +1 file, existing namespace
+> `[build/*]` — `modal-script-versioned-by-version-constant-not-filemtime` (`woodev-modal.js` is
+> registered with the raw `self::VERSION`, not `get_assets_version()`, so editing it never busts
+> the browser cache between releases — while its own stylesheet three lines below IS versioned by
+> `filemtime()` and states the rule in a comment. The rule was written down for one half of a
+> shared handle and not applied to the other. Cost a false verification signal: `isOpen()` was in
+> the file on disk and absent on the running prototype, so a working fix read as broken).
+> Prior: 2026-08-09 (session 60, docs audit + rig source switches: +1 file, existing
 > namespace `[testing/integration]` — `wpenv-resolves-environment-from-cwd` (wp-env hashes the
 > config found from the CURRENT WORKING DIRECTORY; any `npx wp-env run` from a subdirectory fails
 > with "Environment not initialized" while the containers are up. This was the real cause behind
@@ -214,6 +221,7 @@
 - [build/ci] A PR that conflicts with base (`mergeStateStatus: DIRTY`) runs NO `pull_request` CI — only `pull_request_target`; "all green" can mean the matrix never ran. Check `gh pr view --json mergeable,mergeStateStatus`; rebase onto the new base after a squash-merge → [gotchas/pr-conflict-skips-pull-request-ci.md](gotchas/pr-conflict-skips-pull-request-ci.md) (session 2)
 - [build/js] `@wordpress/scripts` default (automatic) JSX runtime depends on the `react-jsx-runtime` script handle — registered only in WP ≥ 6.6; for WP 6.3+ support force the classic runtime via `babel.config.js` and import `createElement`/`Fragment` in every JSX file → [gotchas/wp-scripts-jsx-runtime-wp66.md](gotchas/wp-scripts-jsx-runtime-wp66.md) (s8)
 - [build/assets-eol] Rebuilding the license-page bundle on Windows can commit CRLF while Linux CI rebuilds LF → "Assets build parity" fails on identical content. `.gitattributes` pins `woodev/assets/build/** text eol=lf` → [gotchas/build-artifacts-eol-lf-windows-parity.md](gotchas/build-artifacts-eol-lf-windows-parity.md) (s14)
+- [build/assets-version] `woodev-modal.js` is registered with the raw `self::VERSION` constant, not `get_assets_version()` — so editing it NEVER busts the browser cache between releases, while its own stylesheet three lines below IS versioned by `filemtime()` and carries the correct rule in a comment. Cost a false verification signal in s62: `isOpen()` was present in the file on disk and absent on the running prototype, and the fix looked broken. In production a patched modal ships stale to every returning visitor unless `Woodev_Plugin::VERSION` moves. Tell: a runtime symbol missing while a `cache: 'no-store'` fetch of the same URL has it → reload ignoring cache before debugging the source → [gotchas/modal-script-versioned-by-version-constant-not-filemtime.md](gotchas/modal-script-versioned-by-version-constant-not-filemtime.md) (s62)
 - [build/css-enqueue-version] wp-scripts emits `style-index.css` separately from `index.js`; enqueuing CSS with the JS bundle's `index.asset.php` hash means SCSS-only rebuilds never bust the browser cache — version the stylesheet by its own `filemtime` → [gotchas/wp-scripts-css-enqueue-version-by-mtime.md](gotchas/wp-scripts-css-enqueue-version-by-mtime.md) (s31)
 
 ### [admin-ui/*] — Admin pages / React UI

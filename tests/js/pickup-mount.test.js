@@ -868,8 +868,24 @@ function openPicker( overrides ) {
 	// WooCommerce ever answers (a `one()` that never fires never cleans itself up).
 	const jq = { triggered: [], one: [], off: [] };
 	window.jQuery = () => ( {
-		one: ( type, handler ) => jq.one.push( { type, handler } ),
-		off: ( type, handler ) => jq.off.push( { type, handler } ),
+		one: ( type, handler ) => {
+			jq.one.push( { type, handler } );
+
+			// Recorded AND bound for real (#238). `handleCartChanged` decides echo suppression
+			// by reading whether this session's own checkout refresh is still in flight, and
+			// the thing that ends that flight is THIS waiter firing. A double that only
+			// records would leave it pending forever, so every test that dispatches
+			// `updated_checkout` would silently be testing a page WooCommerce never answered
+			// on. Bound AFTER the module subscriber — that one registered at import time — so
+			// dispatch order here matches jQuery's bind order in production, which is what
+			// makes the event-time read see a waiter the debounced body no longer would.
+			jqBoundListeners.push( { type, handler } );
+			document.body.addEventListener( type, handler, { once: true } );
+		},
+		off: ( type, handler ) => {
+			jq.off.push( { type, handler } );
+			document.body.removeEventListener( type, handler );
+		},
 		trigger: ( type ) => jq.triggered.push( type ),
 	} );
 
@@ -992,6 +1008,17 @@ function openPicker( overrides ) {
  */
 let dataSourceFactory;
 
+/**
+ * Every listener {@see openPicker}'s jQuery double bound on `document.body` — cleared in
+ * `afterEach`, because `document.body.innerHTML = ''` removes the DOM under the body, never
+ * listeners on the body itself. A waiter left pending when a test ends (WooCommerce never
+ * answered, the session never torn down) would otherwise survive into a LATER test and fire
+ * there against a dead session.
+ *
+ * @type {Array<{type: string, handler: Function}>}
+ */
+let jqBoundListeners = [];
+
 beforeEach( () => {
 	StubProvider.instances = [];
 	StubPanels.instances = [];
@@ -1004,6 +1031,8 @@ beforeEach( () => {
 } );
 
 afterEach( () => {
+	jqBoundListeners.forEach( ( { type, handler } ) => document.body.removeEventListener( type, handler ) );
+	jqBoundListeners = [];
 	document.body.innerHTML = '';
 	delete window.woodev_pickup_config_p;
 	delete window.WoodevPickupMapProviders;
@@ -1776,12 +1805,10 @@ test( 'bulk is unaffected — its listing still REPLACES the drawn set', async (
 
 	const provider = StubProvider.instances[ StubProvider.instances.length - 1 ];
 
-	// bulk's second fetch can only come from refresh() — dispatching `updated_checkout` on
-	// `document.body` alone does NOT call it. Verified against the source: refresh() is an
-	// EXTERNAL hook exposed only via getSession() (see the file docblock, "the hook a
-	// payment-method change elsewhere on the page uses"), nothing in this file wires it to
-	// the `updated_checkout` DOM event itself, and every existing refresh() test in this
-	// file invokes it the same way.
+	// This test's subject is the UNION/replace behaviour itself, not the `updated_checkout`
+	// wiring — driving refresh() directly, like every other refresh() test in this file,
+	// keeps it isolated from the cart-change subscriber's debounce/echo-suppression timing
+	// (that subscriber has its own describe block, #238).
 	await getSession( FIELD_ID ).refresh();
 
 	const drawn = provider.setPointsCalls[ provider.setPointsCalls.length - 1 ];
@@ -1930,9 +1957,10 @@ test( '#234 invariant: refresh() clears the pool AND the details memo in ONE cal
 	} );
 	await flushAsync();
 
-	// The cart changes. NOTE: `updated_checkout` does NOT reach refresh() — this file wires
-	// that event to mountAll() only, and getSession() has no production caller at all (#238).
-	// Every existing refresh() test in this file drives it directly, and so does this one.
+	// The cart changes. This test's subject is refresh()'s own pool/memo invariant, not the
+	// `updated_checkout` wiring (that is the "cart-change verdict invalidation" describe
+	// block, #238) — driving refresh() directly here, like every other refresh() test in
+	// this file, keeps it isolated from that subscriber's debounce/echo-suppression timing.
 	await window.WoodevPickupMount.getSession( FIELD_ID ).refresh();
 	await flushAsync();
 
@@ -5062,5 +5090,254 @@ describe( 'restoring a previous selection', () => {
 
 		expect( provider.setPointsOptions ).toEqual( [ { focus: g2.key }, null ] );
 		expect( panels.openCardCalls ).toBe( 1 );
+	} );
+} );
+
+// -------------------------------------------------------------------------
+// #238 — the cart-change verdict invalidation built for #232 wired to a REAL signal: a
+// second, module-scope `updated_checkout` subscriber (alongside the mountAll() one) walks
+// `sessions` and calls `refresh()` on whichever ones report their modal OPEN
+// ({@see WoodevModal#isOpen}). Debounced (a burst collapses to one refresh per session), and
+// echo-suppressed (this file's OWN refreshCheckout()-triggered `update_checkout` must not
+// refetch the picker the customer just used it to confirm).
+// -------------------------------------------------------------------------
+
+describe( 'cart-change verdict invalidation wired to updated_checkout (#238)', () => {
+	test( 'an OPEN session forgets memoized details and refetches on updated_checkout', async () => {
+		const listings = [
+			[ point( { id: 'A' } ) ],
+			[ point( { id: 'B' } ) ],
+		];
+		let call = 0;
+		const fetchPoints = jest.fn( () => Promise.resolve( listings[ call++ ] || [] ) );
+		window.WoodevPickupDataSource = fakeDataSourceFactory( fetchPoints );
+		window.WoodevPickupDataSource.fetchDetails = () =>
+			Promise.resolve( point( { id: 'A', work_time: 'из деталей' } ) );
+
+		setConfig( makeConfig( { strategy: 'bulk' } ) );
+		mountAll();
+		clickTrigger();
+		await flushAsync();
+
+		const panels = StubPanels.instances[ StubPanels.instances.length - 1 ];
+		const provider = StubProvider.instances[ StubProvider.instances.length - 1 ];
+
+		expect( getSession( FIELD_ID ).modal.isOpen() ).toBe( true );
+
+		// Learn a detail for A, so the memo is demonstrably non-empty — same setup as the
+		// #234 invariant test above, which drives refresh() directly; this test drives it
+		// through the real `updated_checkout` signal instead.
+		panels.emit( 'cardOpened', {
+			group: provider.setPointsCalls[ provider.setPointsCalls.length - 1 ][ 0 ],
+			pointId: 'A',
+			origin: 'list',
+		} );
+		await flushAsync();
+
+		expect( fetchPoints ).toHaveBeenCalledTimes( 1 );
+
+		document.body.dispatchEvent( new Event( 'updated_checkout' ) );
+		jest.advanceTimersByTime( 1000 );
+		await flushAsync();
+
+		expect( fetchPoints ).toHaveBeenCalledTimes( 2 );
+
+		const drawn = provider.setPointsCalls[ provider.setPointsCalls.length - 1 ];
+		const all = drawn.reduce( ( acc, group ) => acc.concat( group.points ), [] );
+
+		// Pool cleared: only the refresh listing's own point is drawn.
+		expect( all.map( ( p ) => p.id ) ).toEqual( [ 'B' ] );
+		// Memo cleared: nothing carries the stale detail field.
+		expect( all.some( ( p ) => 'из деталей' === p.work_time ) ).toBe( false );
+	} );
+
+	test( 'a DISMISSED session (modal closed, still registered) gets NO network call and NO '
+		+ 'pool reset on updated_checkout — the regression this design exists to prevent', async () => {
+		const fetchPoints = jest.fn( () => Promise.resolve( [ point( { id: 'A' } ) ] ) );
+		window.WoodevPickupDataSource = fakeDataSourceFactory( fetchPoints );
+
+		setConfig( makeConfig( { strategy: 'bulk' } ) );
+		mountAll();
+		clickTrigger();
+		await flushAsync();
+
+		const session = getSession( FIELD_ID );
+		expect( session.modal.isOpen() ).toBe( true );
+
+		// Dismissed via Escape/backdrop/close button — handleModalClosed() runs ONLY
+		// invalidateSelection() (see the file docblock and the #238 spec): the session stays
+		// registered, `destroyed` stays false, until the next trigger click.
+		session.modal.close( 'escape' );
+
+		expect( session.modal.isOpen() ).toBe( false );
+		expect( getSession( FIELD_ID ) ).toBe( session ); // still registered, not torn down
+		expect( fetchPoints ).toHaveBeenCalledTimes( 1 ); // the opening fetch only, so far
+
+		document.body.dispatchEvent( new Event( 'updated_checkout' ) );
+		jest.advanceTimersByTime( 1000 );
+		await flushAsync();
+
+		// No refetch AT ALL. `refresh()` is the ONLY thing that would forget the memo/pool, so
+		// proving it never ran proves both halves of "no network call, no pool reset" at once.
+		expect( fetchPoints ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	test( 'a burst of updated_checkout events collapses into ONE refresh per session', async () => {
+		const listings = [
+			[ point( { id: 'A' } ) ],
+			[ point( { id: 'B' } ) ],
+			[ point( { id: 'C' } ) ],
+		];
+		let call = 0;
+		const fetchPoints = jest.fn( () => Promise.resolve( listings[ call++ ] || [] ) );
+		window.WoodevPickupDataSource = fakeDataSourceFactory( fetchPoints );
+
+		setConfig( makeConfig( { strategy: 'bulk' } ) );
+		mountAll();
+		clickTrigger();
+		await flushAsync();
+
+		expect( fetchPoints ).toHaveBeenCalledTimes( 1 );
+
+		document.body.dispatchEvent( new Event( 'updated_checkout' ) );
+		jest.advanceTimersByTime( 50 );
+		document.body.dispatchEvent( new Event( 'updated_checkout' ) );
+		jest.advanceTimersByTime( 50 );
+		document.body.dispatchEvent( new Event( 'updated_checkout' ) );
+		jest.advanceTimersByTime( 1000 );
+		await flushAsync();
+
+		// Three raw events, but the pool-reset-and-refetch work refresh() does only ran ONCE —
+		// the debounce's whole job (`refresh()` has no reentrancy guard of its own).
+		expect( fetchPoints ).toHaveBeenCalledTimes( 2 );
+	} );
+
+	test( 'a selection that keeps the modal open — the resulting update_checkout echo does '
+		+ 'NOT refresh that session', async () => {
+		const { provider, emitSelect, resolveSelect } = openPicker( {
+			selection: { close: false, refreshCheckout: true },
+		} );
+		await flushAsync();
+
+		const callsBefore = provider.setPointsCalls.length;
+
+		emitSelect( { id: 'P1' } );
+		await resolveSelect( { allowed: true, reason: null, close: null, refresh_checkout: null } );
+
+		// WooCommerce's asynchronous answer to the `update_checkout` refreshCheckout() just
+		// triggered — the SAME `updated_checkout` this file's own cart-change subscriber
+		// listens for (see the jq double's `.trigger()` recording `update_checkout`, distinct
+		// from the `updated_checkout` WooCommerce answers with).
+		document.body.dispatchEvent( new Event( 'updated_checkout' ) );
+		jest.advanceTimersByTime( 1000 );
+		await flushAsync();
+
+		expect( provider.setPointsCalls.length ).toBe( callsBefore );
+	} );
+
+	test( 'a genuine cart change AFTER that echo still refreshes — suppression ends with the '
+		+ 'refresh that opened it, it is not a permanent mute', async () => {
+		const { provider, emitSelect, resolveSelect } = openPicker( {
+			selection: { close: false, refreshCheckout: true },
+		} );
+		await flushAsync();
+
+		const callsBefore = provider.setPointsCalls.length;
+
+		emitSelect( { id: 'P1' } );
+		await resolveSelect( { allowed: true, reason: null, close: null, refresh_checkout: null } );
+
+		// The echo — suppressed, exactly like the previous test.
+		document.body.dispatchEvent( new Event( 'updated_checkout' ) );
+		jest.advanceTimersByTime( 1000 );
+		await flushAsync();
+
+		expect( provider.setPointsCalls.length ).toBe( callsBefore );
+
+		// A SECOND, genuine `updated_checkout` — nothing of this file's own caused it. Our own
+		// refresh settled on the first event, so the suppression window is already shut.
+		document.body.dispatchEvent( new Event( 'updated_checkout' ) );
+		jest.advanceTimersByTime( 1000 );
+		await flushAsync();
+
+		expect( provider.setPointsCalls.length ).toBe( callsBefore + 1 );
+	} );
+
+	// H2 (Codex, s61). Suppression must not outlive the request that armed it. A dedicated
+	// one-shot boolean had no way to learn that its refresh had given up, so a checkout ajax
+	// WooCommerce never answered left the session muted for the whole time it stayed open — the
+	// next genuine cart change vanished with no error and nothing visibly wrong. The session
+	// already carried the bounded state that fixes this: `refreshWaiter`/`refreshTimer`, settled
+	// by `dropRefreshWaiter()` on every path including REFRESH_TIMEOUT_MS.
+	test( 'WooCommerce never answering does NOT mute the session — the next genuine cart change '
+		+ 'still refreshes (H2)', async () => {
+		const { provider, emitSelect, resolveSelect, jq } = openPicker( {
+			selection: { close: false, refreshCheckout: true },
+		} );
+		await flushAsync();
+
+		const callsBefore = provider.setPointsCalls.length;
+
+		emitSelect( { id: 'P1' } );
+		await resolveSelect( { allowed: true, reason: null, close: null, refresh_checkout: null } );
+
+		// The refresh went out and its waiter is bound...
+		expect( jq.triggered ).toContain( 'update_checkout' );
+		expect( jq.one ).toHaveLength( 1 );
+		expect( jq.off ).toHaveLength( 0 );
+
+		// ...and WooCommerce never answers it. Nothing is dispatched here ON PURPOSE: a failed
+		// or superseded checkout ajax is free never to fire `updated_checkout` at all, which is
+		// precisely the case a `one()` cannot clean up after itself.
+		jest.advanceTimersByTime( 10000 );
+
+		// The bounded failure path settled it instead.
+		expect( jq.off ).toHaveLength( 1 );
+
+		// A GENUINE cart change now — a coupon applied, a quantity edited in another tab. The
+		// suppression window ended with the refresh that opened it, so this must be honoured.
+		document.body.dispatchEvent( new Event( 'updated_checkout' ) );
+		jest.advanceTimersByTime( 1000 );
+		await flushAsync();
+
+		expect( provider.setPointsCalls.length ).toBe( callsBefore + 1 );
+	} );
+
+	// H1 (Codex, s61). An `updated_checkout` carries no origin: our own echo and a real cart
+	// change are the same type on the same node, so no design can tell them apart at the DOM.
+	// What the fix guarantees is the WINDOW — suppression lasts exactly as long as our refresh
+	// is in flight, and that flight ends on the first event either way. So a foreign change
+	// landing inside the window costs one event of DELAY and is never dropped.
+	test( 'a foreign cart change landing while our own refresh is in flight is DELAYED, never '
+		+ 'lost (H1)', async () => {
+		const { provider, emitSelect, resolveSelect, jq } = openPicker( {
+			selection: { close: false, refreshCheckout: true },
+		} );
+		await flushAsync();
+
+		const callsBefore = provider.setPointsCalls.length;
+
+		emitSelect( { id: 'P1' } );
+		await resolveSelect( { allowed: true, reason: null, close: null, refresh_checkout: null } );
+
+		expect( jq.one ).toHaveLength( 1 );
+
+		// A foreign `updated_checkout` arrives BEFORE our own echo. It is suppressed — and it
+		// settles our waiter, exactly as jQuery's `one()` does for whichever event lands first.
+		document.body.dispatchEvent( new Event( 'updated_checkout' ) );
+		jest.advanceTimersByTime( 1000 );
+		await flushAsync();
+
+		expect( provider.setPointsCalls.length ).toBe( callsBefore );
+		expect( jq.off ).toHaveLength( 1 );
+
+		// Our echo lands second, with the window now closed, so it refreshes — and that is the
+		// correct outcome, not a leak: the cart really did change, and this is the first event
+		// after the window able to carry that fact to the open picker.
+		document.body.dispatchEvent( new Event( 'updated_checkout' ) );
+		jest.advanceTimersByTime( 1000 );
+		await flushAsync();
+
+		expect( provider.setPointsCalls.length ).toBe( callsBefore + 1 );
 	} );
 } );
