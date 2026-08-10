@@ -822,7 +822,17 @@
 
 			// Check 2: the message must come from THIS instance's own iframe, not
 			// merely from some other window that shares the trusted origin.
-			if ( ! self._iframe || event.source !== self._iframe.contentWindow ) {
+			//
+			// The explicit `! self._iframe.contentWindow` clause is NOT redundant
+			// (issue #259): a DETACHED iframe has no browsing context, so its
+			// `contentWindow` is `null` — and `event.source` is ALSO `null` for a
+			// message posted by a window that has since closed (this sandbox grants
+			// `allow-popups`). Without the clause those two nulls compare EQUAL and
+			// check 2 passes vacuously, pinning the message to nothing. Attaching
+			// this listener before `appendChild()` (same issue) is what makes the
+			// detached state reachable here at all — it is still zero-length at
+			// runtime today, but the gate must not depend on that.
+			if ( ! self._iframe || ! self._iframe.contentWindow || event.source !== self._iframe.contentWindow ) {
 				return;
 			}
 
@@ -1022,12 +1032,26 @@
 			} );
 		};
 
-		container.appendChild( this._iframe );
-
+		// ORDER IS LOAD-BEARING (issue #259): the `message` listener MUST be attached
+		// BEFORE the iframe enters the DOM, because `appendChild()` is what starts the
+		// carrier's load — and since #251 the carrier's FIRST message is its readiness
+		// handshake (Почта: `{ isMapLoad: true }`), which `initAdapter` has to answer
+		// with the payload the widget needs to initialise at all. Measured on the rig:
+		// without that answer the widget's map stays empty FOREVER. So missing the
+		// first message is no longer a merely-late `select` — it is a dead picker,
+		// with an empty frame and not one console error to debug from, because the
+		// load and the carrier's handshake both completed normally and simply had no
+		// listener. The pre-#259 order (append first, listen second) was safe only
+		// because both statements ran in ONE synchronous task and a `message` event is
+		// delivered in a later task; any future `await`/`setTimeout`/promise-wrapped
+		// frame construction inserted between them would have broken it silently.
+		// Attaching first removes the dependency on that reasoning entirely.
 		activeInstance = this;
 
 		this._onMessage = this._buildMessageHandler( String( cfg.expectedOrigin || '' ), cfg );
 		window.addEventListener( 'message', this._onMessage );
+
+		container.appendChild( this._iframe );
 	};
 
 	/**

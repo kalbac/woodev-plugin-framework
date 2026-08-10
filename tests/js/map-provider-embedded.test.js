@@ -647,6 +647,79 @@ test( 'onerror firing before the timeout suppresses a SECOND error from the time
 } );
 
 // -----------------------------------------------------------------------
+// init() wiring order (issue #259)
+// -----------------------------------------------------------------------
+
+// `appendChild()` is what starts the carrier's load, and since #251 the carrier's
+// FIRST message is its readiness handshake — the one `initAdapter` must answer or the
+// widget never initialises (measured: an empty map, forever, with no console error).
+// The old order (append, then listen) was safe ONLY because both statements ran in one
+// synchronous task; this test removes the dependency on that reasoning, so a future
+// refactor that puts anything asynchronous between them fails here instead of shipping
+// a silently dead picker. jsdom never loads the cross-origin frame, but the ORDER of
+// our own two calls is fully observable, which is the invariant at stake.
+test( 'the message listener is attached BEFORE the iframe enters the DOM', () => {
+	const container = document.createElement( 'div' );
+	document.body.appendChild( container );
+
+	const order = [];
+	const realAddEventListener = window.addEventListener.bind( window );
+	const realAppendChild = container.appendChild.bind( container );
+
+	window.addEventListener = function ( type, listener, options ) {
+		if ( 'message' === type ) {
+			order.push( 'listen' );
+		}
+
+		return realAddEventListener( type, listener, options );
+	};
+
+	container.appendChild = function ( node ) {
+		order.push( 'append' );
+
+		return realAppendChild( node );
+	};
+
+	const provider = new WoodevPickupMapProviderEmbedded();
+
+	try {
+		provider.init( container, baseConfig(), {} );
+	} finally {
+		delete window.addEventListener;
+		delete container.appendChild;
+	}
+
+	expect( order ).toEqual( [ 'listen', 'append' ] );
+
+	provider.destroy();
+} );
+
+// The source check must IDENTIFY the sending window, not merely fail to disagree with
+// it: an iframe with no browsing context reports `contentWindow === null`, and
+// `event.source` is `null` for a message posted by a window that has since closed, so a
+// bare `!==` comparison of the two passes VACUOUSLY and pins the message to nothing.
+// Now that the listener is attached before `appendChild()` (issue #259), the provider
+// can legitimately hold a frame in that state while a message arrives.
+//
+// The contextless frame is stubbed rather than produced by `iframe.remove()`: jsdom
+// THROWS (`Cannot read properties of null (reading '_history')`) when `contentWindow` is
+// read off a detached iframe, where a real browser simply returns `null`. That is a
+// jsdom limitation, not a shape the production code has to survive — so the stub is the
+// only way to exercise the real browser's behaviour here.
+test( 'a null-source message is rejected when the iframe has no browsing context', () => {
+	const { provider, onSelect, onError } = initProvider();
+
+	provider._iframe = { contentWindow: null };
+
+	dispatchMessage( EXPECTED_ORIGIN, null, envelope( validPointPayload() ) );
+
+	expect( onSelect ).not.toHaveBeenCalled();
+	expect( onError ).not.toHaveBeenCalled();
+
+	provider.destroy();
+} );
+
+// -----------------------------------------------------------------------
 // destroy()
 // -----------------------------------------------------------------------
 
