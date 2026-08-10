@@ -335,6 +335,35 @@
 	var REFRESH_TIMEOUT_MS = 10000;
 
 	/**
+	 * How long, in ms, the confirmation round trip runs before the dialog's busy overlay appears
+	 * under `ownsChrome` — see {@see acquireSelectionBusy}.
+	 *
+	 * The reason is not the usual one. A delay like this normally exists to stop a spinner
+	 * FLASHING on a fast answer; here it exists because of the carrier's own widget — though both
+	 * motives want the same mechanism, and an answer that beats the timer does cancel it, so a
+	 * fast confirmation shows no overlay at all. That outcome is correct rather than merely
+	 * tolerable: in that case the widget's own button-disable WAS the whole signal, and it was
+	 * enough.
+	 *
+	 * The widget disables its «Забрать здесь» button the instant it is pressed. That is the
+	 * customer's first and most local acknowledgement of their own click, right where they
+	 * clicked — and an overlay raised in the same frame paints over it before anyone can register
+	 * it (operator, on the rig: «оверлей так быстро появляется, что пользователь даже не замечает,
+	 * что кнопка стала disabled»). This window belongs to the button, not to us.
+	 *
+	 * THE COST, STATED: {@see acquireSelectionBusy}'s overlay is also what physically intercepts a
+	 * second click (issue #260's other half), so for these 500 ms that interception is not there.
+	 * What covers the gap is the same widget behaviour the delay exists for — a disabled button
+	 * cannot be clicked again. That makes the gap safe for a carrier whose widget disables its own
+	 * confirm control (measured on Почта's, s63) and merely narrow, not closed, for one that does
+	 * not. A carrier embed that leaves its button live through its own confirmation is already
+	 * offering a double submit of its own; this is bounded at half a second.
+	 *
+	 * @type {number}
+	 */
+	var SELECTION_BUSY_DELAY_MS = 500;
+
+	/**
 	 * The six `document.body` `CustomEvent` names this file fires — see the file
 	 * docblock's own section on them. Native, bubbling events, never a jQuery
 	 * `.trigger()` — see {@see fireDocumentEvent}.
@@ -1290,6 +1319,15 @@
 		 *  "the card re-rendered on the same one". Never the guard's identity; see above. */
 		var pendingSelectionPointId = null;
 
+		/** @type {number|null} the pending {@see SELECTION_BUSY_DELAY_MS} timer that will raise the
+		 *  dialog's busy overlay under `ownsChrome`, or null when none is waiting. Lives beside the
+		 *  selection token rather than inside {@see acquireSelectionBusy} because a confirmation can
+		 *  end BEFORE the overlay was ever shown — a fast answer, a dismissed dialog, a destroyed
+		 *  session — and {@see releaseSelectionBusy} is what must cancel it in every one of those
+		 *  cases. Only ever non-null under `ownsChrome`; with panels the card owns the busy state
+		 *  and there is no timer at all. */
+		var selectionBusyTimer = null;
+
 		/** @type {number} mints one unique, monotonic token per detail fetch this session sends —
 		 *  the same device `selectionTokens` above provides for confirmations, for the same
 		 *  reason. See `verdictPendingToken`. */
@@ -2197,12 +2235,16 @@
 		 * card of ours to lock or re-render) the round trip still happens, but every panels
 		 * call below is skipped — see the guards.
 		 *
-		 * A consequence, deliberate: with no card there is no lock, so nothing here stops an
-		 * embedded provider reporting a SECOND selection while the first is still in flight —
-		 * both round trips would run, and the later answer would win. Debouncing its own
-		 * confirm UI is that provider's job, exactly as rendering it is (D-3: the framework
-		 * draws no chrome of its own around a provider that already owns the whole picker, and
-		 * cannot lock a button it never drew).
+		 * Issue #260 supersedes what this docblock used to record as a deliberate consequence —
+		 * that with no card there was no lock either, so an embedded provider could report a
+		 * SECOND selection while the first was still in flight (measured: two round trips, the
+		 * later answer winning), and that debouncing its own confirm UI was the provider's job.
+		 * The real cost of that position turned out to be borne by the CUSTOMER, not the
+		 * provider: with no card there was also no sign of work at all, so the person most
+		 * likely to click twice was the one who could not tell the first click had registered.
+		 * {@see acquireSelectionBusy} now puts the dialog's own loading overlay up for the
+		 * duration, which both reports the state and physically intercepts the second click —
+		 * see that function's docblock for why this does not breach D-3.
 		 *
 		 * @param {Object} point
 		 * @returns {void}
@@ -2215,8 +2257,94 @@
 		 * @returns {void}
 		 */
 		function releaseSelectionBusy() {
-			if ( panels && ! destroyed ) {
+			// UNCONDITIONALLY FIRST, ahead of the `destroyed` guard below: a still-pending
+			// {@see SELECTION_BUSY_DELAY_MS} timer must be cancelled even when the session is
+			// already gone, or it fires into a dead session and paints an overlay onto a dialog
+			// nobody is looking at, with nothing left that would ever take it down again.
+			if ( null !== selectionBusyTimer ) {
+				window.clearTimeout( selectionBusyTimer );
+				selectionBusyTimer = null;
+			}
+
+			if ( destroyed ) {
+				return;
+			}
+
+			if ( panels ) {
 				panels.setSelectionBusy( false );
+
+				return;
+			}
+
+			if ( ownsChrome ) {
+				modal.hideLoading();
+			}
+		}
+
+		/**
+		 * Marks a confirmation round trip as started — the acquire half of
+		 * {@see releaseSelectionBusy}, and the one place that decides WHICH surface says so.
+		 *
+		 * Under `!ownsChrome` that surface is the card: `setSelectionBusy( true )` turns its CTA
+		 * into «Проверяем доступность…» and locks it, which is also what stops a second submit.
+		 *
+		 * Under `ownsChrome` there is no card — and before issue #260 that meant `panels` was null,
+		 * this call was a silent no-op, and the customer got NO sign of work at all: the carrier's
+		 * widget disables its own button, and then the map simply sits there until the modal
+		 * disappears. Rig-measured on the live Почта widget: `select_requested +1 ms` →
+		 * `select_resolved +8067 ms`, all of it our confirmation round trip, which D-1 makes
+		 * mandatory (nothing is applied before the server answers, because the domain may refuse
+		 * the point). The 8 seconds themselves are the rig, not us — that stand's own baseline is
+		 * 8.7-11.1 s for an empty `/wp-json/` — but the MISSING SIGNAL does not depend on the
+		 * speed, and it survives into production, where a real `Point_Source::fetch_details()`
+		 * goes out to the carrier's API.
+		 *
+		 * The dialog's own loading overlay is what answers it — NOT new chrome around the
+		 * provider. That distinction is what keeps D-3 intact: D-3 says the framework draws no
+		 * list and no card for a provider that owns the whole picker; it does not say the
+		 * framework may not report the state of ITS OWN request on ITS OWN dialog.
+		 * `WoodevModal#showLoading()` is additive by construction — it overlays the body without
+		 * touching the body's children (see its docblock), so the provider's iframe underneath is
+		 * untouched and keeps its own state.
+		 *
+		 * IT ALSO CLOSES THE SECOND HALF OF #260, and that is not a side effect worth losing: with
+		 * no card there is no lock either, so an embedded provider could report a SECOND selection
+		 * while the first was still travelling — measured, two round trips, the later answer
+		 * winning. The overlay is `position: absolute; inset: 0` with a background and no
+		 * `pointer-events: none`, so it physically intercepts the click that would start the
+		 * second one. A customer who cannot see that anything is happening is exactly the customer
+		 * who clicks again.
+		 *
+		 * @returns {void}
+		 */
+		function acquireSelectionBusy() {
+			if ( panels ) {
+				panels.setSelectionBusy( true );
+
+				return;
+			}
+
+			if ( ownsChrome ) {
+				// `confirming` («Проверяем…»), never `checkingAvailability` («Проверяем
+				// доступность…»): the two read almost alike but name DIFFERENT operations, and
+				// this one is the confirmation round trip. `checkingAvailability` belongs to
+				// issue #223's lazy detail fetch, a state that cannot even occur here — it is
+				// driven by the card, and under `ownsChrome` there is no card. The card's own
+				// CTA makes the same distinction, in `pickup-panels.js`'s `renderCard()`.
+				//
+				// Held back by {@see SELECTION_BUSY_DELAY_MS} so the carrier widget's own
+				// button-disable is visible first — see that constant for why, and for what the
+				// delay costs. The timer is CANCELLED, never merely ignored, by
+				// {@see releaseSelectionBusy}, which every path out of a confirmation runs through.
+				selectionBusyTimer = window.setTimeout( function() {
+					selectionBusyTimer = null;
+
+					if ( destroyed ) {
+						return;
+					}
+
+					modal.showLoading( text( config, 'confirming' ) );
+				}, SELECTION_BUSY_DELAY_MS );
 			}
 		}
 
@@ -2336,9 +2464,7 @@
 			pendingSelectionToken = token;
 			pendingSelectionPointId = pointId;
 
-			if ( panels ) {
-				panels.setSelectionBusy( true );
-			}
+			acquireSelectionBusy();
 
 			fireDocumentEvent( EVENT_SELECT_REQUESTED, { fieldId: config.fieldId, point: point } );
 
@@ -3170,6 +3296,18 @@
 				// The map is drawable now, so the "loading" overlay opened with the dialog has
 				// done its job. Without it the customer got 1-2 seconds of an empty dialog
 				// carrying nothing but its own title while the map script downloaded.
+				//
+				// Deliberately UNGUARDED against issue #260's confirmation overlay, which reuses
+				// this same single overlay element ({@see acquireSelectionBusy}). `start()` runs
+				// again on every retry, so "a retry lands while a confirmation is in flight"
+				// looks like it would hide that overlay early — but the only route to a retry is
+				// `degrade( …, start )`, and under `ownsChrome` `hasDrawnPoints` is permanently
+				// false (nothing here ever fetches for an embedded provider), so `degrade()`
+				// always takes the DESTRUCTIVE `modal.showError()` branch. That replaces the
+				// dialog body outright — the overlay is already gone, along with the provider's
+				// own iframe, before this line could ever run. A guard here would be code for a
+				// state that cannot occur. If `degrade()` ever gains a non-destructive path under
+				// `ownsChrome`, this becomes reachable and needs `if ( 0 === pendingSelectionToken )`.
 				modal.hideLoading();
 
 				// D8/п.5,п.8 (live-review round 2): `setMargin()` used to run for the FIRST time
