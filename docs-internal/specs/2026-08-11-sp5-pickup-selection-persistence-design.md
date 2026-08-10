@@ -108,7 +108,7 @@ guard).
 | `session_key(): string` | under which session key this plugin's map lives | always |
 | `locality_for_point( Pickup_Point $point ): string` | which locality **this point** belongs to | on write |
 | `current_locality(): string` | which locality the order is being placed to **now** | on restore |
-| `type_for_method( string $method_id ): ?string` | which `type` code the chosen shipping method implies; `null` when the method is not type-specific | on restore |
+| `type_for_method( string $method_id ): ?string` | which `type` code the chosen shipping method implies — a code, `TYPE_ANY`, or `null` for "no restore" (§5) | on restore |
 
 **The locality key is a domain primary key, not a place name.** Carriers do not agree on what a
 locality is — Почта РФ addresses by settlement name, СДЭК by `city_id` in its own database,
@@ -158,22 +158,24 @@ session would be a second source of truth that goes stale.
    leave the map untouched, so the selection comes back when the customer returns to pickup;
 2. `$type = scope->type_for_method( normalize_method_id( chosen ) )`;
 3. `$type` is a string → `map[ scope->current_locality() ][ $type ]`;
-4. `$type` is `null` (a pickup method that is not type-specific) → the most recently written
-   entry for that locality (§6 pins what "most recently" means).
+4. `$type` is `Selection_Scope::TYPE_ANY` → the most recently written entry for that locality
+   (§6 pins what "most recently" means); `$type` is `null` → nothing.
 
-**Step 1 needs a source of truth that is not yet wired, and this is a planning-time decision,
-not an open question for the operator.** The pickup method ids are declared by the plugin to
-`Pickup_Field::create( $id, $pickup_method_ids )` and to
-`Checkout_Handler::set_requires_pickup_methods()`; `Pickup_Handler` currently knows neither, and
-`Checkout_Handler::chosen_method_matches()` is `private static`. Three candidate resolutions, to
-be settled by reading the wiring during planning — the constraint is that **the plugin author
-must not have to repeat the method-id list a third time**:
+**Step 1 has no separate gate — `type_for_method()` IS the gate.** The pickup method ids are
+already declared twice by the plugin (`Pickup_Field::create( $id, $pickup_method_ids )` and
+`Checkout_Handler::set_requires_pickup_methods()`); `Pickup_Handler` knows neither, and
+`Checkout_Handler::chosen_method_matches()` is `private static`. Rather than wire a third copy
+of that list or couple the two handlers, the one seam answers the whole question:
 
-- expose the field's existing conditional-required evaluation on `Checkout_Handler` and read it;
-- hand `Pickup_Handler` the same `$pickup_method_ids` the plugin already passes to
-  `Pickup_Field::create()`;
-- add `applies_to_method()` to `Selection_Scope` (rejected unless the other two fail — it is the
-  option that duplicates the list).
+| Return | Meaning | Restore |
+|---|---|---|
+| a `type` code | this method wants a point of that type | `map[ locality ][ code ]` |
+| `Selection_Scope::TYPE_ANY` | a pickup method that is not type-specific | most recently written entry for that locality |
+| `null` | this method gets no restored selection (a courier method, or the plugin opting out) | nothing |
+
+`TYPE_ANY` is what preserves the fallback behaviour the operator asked for while keeping `null`
+unambiguous. A plugin whose carrier has exactly one point type can equally just return that
+code — types are domain values, so it always has one to name.
 
 Note that this gate is *not* a regression introduced here: today a customer who picks a point
 and then switches to a courier method without reloading already posts the stale id, and
