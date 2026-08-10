@@ -4,41 +4,57 @@
  *
  * A carrier's own widget or `<iframe>`, embedded inside the same modal shell —
  * the other end of the {@see Map_Provider} seam from {@see Yandex_Map_Provider}'s
- * "our own map". This class only supplies the two plugin-supplied values the JS
- * half (`map-provider-embedded.js`) needs — where to embed from, and which origin
- * to trust a message back from.
+ * "our own map". This class only supplies the plugin-supplied values the JS
+ * half (`map-provider-embedded.js`) needs — where to embed from, which origin
+ * to trust a message back from, and (optionally) the two adapter hooks that
+ * translate a carrier's OWN protocol instead of requiring it to speak ours.
  *
- * THE EMBEDDED PAGE MUST SPEAK THE FRAMEWORK'S OWN PROTOCOL, NOT THE CARRIER'S
- * NATIVE ONE. `$embed_url` is NOT simply "paste the carrier's widget URL here" —
- * a carrier's own page has no reason to know anything about Woodev and will
- * never spontaneously talk to it. Whatever page `$embed_url` points at MUST,
- * once the customer has picked a point, do ONE of:
- *   1. `postMessage` this EXACT envelope to the parent window (verbatim, every
- *      key required, `point` shaped per
- *      {@see \Woodev\Framework\Shipping\Pickup\Pickup_Point::from_array()} —
- *      `id`/`name`/`lat`/`lng`/`address`/`type.code`/`type.label` required, the
- *      rest optional):
- *      ```
- *      {
- *          source: 'woodev-pickup-embedded',
- *          type:   'select',
- *          point:  { id, name, lat, lng, address, type: { code, label }, ... }
- *      }
- *      ```
- *      — required for a cross-origin `<iframe>` (the normal case: the carrier's
- *      widget runs in an `<iframe>` whose `src` is `$embed_url`);
- *   2. call `window.WoodevPickupEmbedded.select( point )` with the same `point`
- *      shape, when the embed instead runs SAME-ORIGIN as the checkout page (a
- *      first-party `<script>` widget, not an iframe).
- * A carrier's own widget speaks neither of these — it is the CARRIER's protocol,
- * not ours. In practice this means `$embed_url` usually cannot point straight at
- * the carrier's own page: the owning plugin hosts a small bridge page (or
- * bridges an inline `<script>`) that embeds/initializes the carrier's real
- * widget and translates ITS selection callback into one of the two shapes
- * above. See `woodev/shipping-method/assets/js/frontend/map-provider-embedded.js`
+ * TWO WAYS FOR THE EMBEDDED PAGE TO REACH THE FRAMEWORK — pick one:
+ *
+ *   1. THE FRAMEWORK'S OWN PROTOCOL. `$embed_url` points at a page that,
+ *      once the customer has picked a point, does ONE of:
+ *        a. `postMessage` this EXACT envelope to the parent window (verbatim,
+ *           every key required, `point` shaped per
+ *           {@see \Woodev\Framework\Shipping\Pickup\Pickup_Point::from_array()} —
+ *           `id`/`name`/`address`/`type.code`/`type.label` required, `lat`/`lng`
+ *           optional-but-validated since issue #251, the rest optional):
+ *           ```
+ *           {
+ *               source: 'woodev-pickup-embedded',
+ *               type:   'select',
+ *               point:  { id, name, address, type: { code, label }, ... }
+ *           }
+ *           ```
+ *           — the normal shape for a cross-origin `<iframe>`;
+ *        b. call `window.WoodevPickupEmbedded.select( point )` with the same
+ *           `point` shape, when the embed instead runs SAME-ORIGIN as the
+ *           checkout page (a first-party `<script>` widget, not an iframe).
+ *      In practice this means the owning plugin hosts a small bridge page (or
+ *      inline `<script>`) that embeds/initializes the carrier's real widget
+ *      and translates ITS selection callback into one of the two shapes
+ *      above — a carrier's own widget speaks neither of these natively.
+ *
+ *   2. `$init_adapter` / `$select_adapter` (issue #251). `$embed_url` points
+ *      DIRECTLY at the carrier's own widget — no bridge page — and these two
+ *      optional dotted-global-path hooks translate the carrier's OWN protocol
+ *      messages in the browser instead. This path exists because a bridge
+ *      page turned out to buy no safety a direct embed does not already have:
+ *      measured against the live Почта России widget (see
+ *      `docs-internal/specs/2026-08-10-embedded-map-provider-adapter-seam.md`
+ *      §1), the framework's `sandbox` posture does not break the widget (M2),
+ *      the widget accepts a `postMessage` handshake from a foreign parent
+ *      origin (M5), and the framework's own origin + `event.source` trust gate
+ *      holds against it unchanged (M6). See `map-provider-embedded.js`'s
+ *      `handleMessage()` for exactly where these hooks run: strictly AFTER
+ *      the origin/source gate, so they never widen the trust boundary — they
+ *      only translate messages already proven to come from this instance's
+ *      own iframe at the expected origin.
+ *
+ * See `woodev/shipping-method/assets/js/frontend/map-provider-embedded.js`
  * for the full receiving-side contract (origin/source checks, normalization,
- * the exact rejection rules) — this class only carries the two config values;
- * the JS file is the only place that consumes them.
+ * the exact rejection rules, and the adapter resolution/throw rules) — this
+ * class only carries the config values; the JS file is the only place that
+ * consumes them.
  *
  * @since 2.0.2
  */
@@ -64,12 +80,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Map\\Embedded_Map_Provider'
 		/**
 		 * The embed URL — an `<iframe>` `src` — supplied by the owning plugin.
 		 *
-		 * NOT necessarily the carrier's own widget URL: the page this loads MUST
-		 * speak the framework's own selection protocol (see the class docblock's
-		 * "THE EMBEDDED PAGE MUST SPEAK THE FRAMEWORK'S OWN PROTOCOL" section for
-		 * the exact `postMessage` envelope / callback shape). A carrier's native
-		 * widget URL almost always needs a small plugin-hosted bridge page in
-		 * front of it, not this property pointed at it directly.
+		 * Either a page that speaks the framework's own selection protocol
+		 * directly (see the class docblock's "TWO WAYS" section, option 1 — the
+		 * exact `postMessage` envelope / callback shape), or the carrier's own
+		 * widget URL when {@see self::$init_adapter}/{@see self::$select_adapter}
+		 * translate its native protocol instead (option 2, issue #251).
 		 *
 		 * @since 2.0.2
 		 * @var string
@@ -93,21 +108,68 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Map\\Embedded_Map_Provider'
 		private string $expected_origin;
 
 		/**
+		 * Optional dotted global JS path (e.g. `'WoodevPochtaEmbed.onReady'`) to a
+		 * plugin-supplied function that translates the carrier's OWN handshake
+		 * message into a payload this provider posts back into the iframe — see
+		 * `map-provider-embedded.js`'s `handleMessage()` step 2 (issue #251). `null`
+		 * when `$embed_url` already speaks the framework's own protocol directly
+		 * (the class docblock's option 1) and needs no translation.
+		 *
+		 * Carried verbatim into {@see self::get_js_config()} as a STRING, never a
+		 * callable — the value crosses into the browser as JSON; the browser
+		 * resolves it by walking `window` on `.`, never `eval`/`new Function`.
+		 *
+		 * @since 2.0.2
+		 * @var string|null
+		 */
+		private ?string $init_adapter;
+
+		/**
+		 * Optional dotted global JS path to a plugin-supplied function that
+		 * translates the carrier's OWN selection message into this provider's raw
+		 * point payload — see `map-provider-embedded.js`'s `handleMessage()` step 3
+		 * (issue #251). `null` under the same condition as {@see self::$init_adapter}.
+		 *
+		 * @since 2.0.2
+		 * @var string|null
+		 */
+		private ?string $select_adapter;
+
+		/**
 		 * Constructor.
 		 *
 		 * @since 2.0.2
 		 *
-		 * @param string $embed_url       the embed `<iframe>` `src` — a page that
-		 *                                speaks the framework's own selection
-		 *                                protocol (see the class docblock), not
-		 *                                necessarily the carrier's own widget URL.
-		 * @param string $expected_origin the origin to trust a `postMessage` back
-		 *                                from — the origin `$embed_url` is served
-		 *                                from.
+		 * @param string      $embed_url       the embed `<iframe>` `src` — a page that
+		 *                                     speaks the framework's own selection
+		 *                                     protocol (see the class docblock's option
+		 *                                     1), or the carrier's OWN widget URL
+		 *                                     directly when `$init_adapter`/
+		 *                                     `$select_adapter` translate its native
+		 *                                     protocol instead (option 2).
+		 * @param string      $expected_origin the origin to trust a `postMessage` back
+		 *                                     from — the origin `$embed_url` is served
+		 *                                     from.
+		 * @param string|null $init_adapter    optional dotted global JS path (see
+		 *                                     {@see self::$init_adapter}) that answers
+		 *                                     the carrier's own handshake instead of the
+		 *                                     framework's envelope. Default `null`.
+		 * @param string|null $select_adapter  optional dotted global JS path (see
+		 *                                     {@see self::$select_adapter}) that
+		 *                                     translates the carrier's own selection
+		 *                                     message instead of the framework's
+		 *                                     envelope. Default `null`.
 		 */
-		public function __construct( string $embed_url, string $expected_origin ) {
+		public function __construct(
+			string $embed_url,
+			string $expected_origin,
+			?string $init_adapter = null,
+			?string $select_adapter = null
+		) {
 			$this->embed_url       = $embed_url;
 			$this->expected_origin = untrailingslashit( $expected_origin );
+			$this->init_adapter    = $init_adapter;
+			$this->select_adapter  = $select_adapter;
 		}
 
 		/**
@@ -158,12 +220,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Map\\Embedded_Map_Provider'
 		 * container) is the one that must carry `true` into the browser, not just report it
 		 * over an interface method nothing JS-side ever reads.
 		 *
+		 * `initAdapter`/`selectAdapter` (issue #251) carry {@see self::$init_adapter} and
+		 * {@see self::$select_adapter} verbatim — `null` when unset, which
+		 * `map-provider-embedded.js` treats as "no adapter, framework protocol only".
+		 *
 		 * @since 2.0.2
 		 */
 		public function get_js_config( array $context ): array {
 			return [
 				'embedUrl'       => $this->embed_url,
 				'expectedOrigin' => $this->expected_origin,
+				'initAdapter'    => $this->init_adapter,
+				'selectAdapter'  => $this->select_adapter,
 				'ownsChrome'     => $this->owns_chrome(),
 			];
 		}
