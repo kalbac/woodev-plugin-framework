@@ -145,9 +145,59 @@ final class PickupPointTest extends TestCase {
 	}
 
 	/**
+	 * Issue #263 (operator decision, 11.08.2026): `short_address` is a shortened VIEW of the
+	 * already-required `address`, so it is DERIVED at this boundary rather than left empty for
+	 * every display site to patch up on its own. That distinction is the fix: while the
+	 * fallback lived at the display sites, `pickup-panels.js` had it in the sidebar row and NOT
+	 * in the search row, so a carrier sending no short form produced search results with no
+	 * address at all — five rows of one chain's name, indistinguishable.
+	 *
+	 * Downstream may now assume `short_address` is non-empty whenever `address` is, which is
+	 * always: `address` is required and a payload without it never becomes a point.
+	 */
+	public function test_short_address_is_derived_from_address_when_absent(): void {
+		$point = $this->make_point( [] );
+
+		$this->assertSame( 'Москва, ул. Тверская, 1', $point->to_array()['short_address'] );
+	}
+
+	/**
+	 * An EMPTY string counts as absent, not as a deliberate blank: `''` is what a carrier
+	 * mapper emits for a field it has nothing for, and treating it as an explicit choice would
+	 * reinstate the very blank line this derivation exists to prevent.
+	 */
+	public function test_short_address_is_derived_when_the_supplied_value_is_empty(): void {
+		$point = $this->make_point( [ 'short_address' => '' ] );
+
+		$this->assertSame( 'Москва, ул. Тверская, 1', $point->to_array()['short_address'] );
+	}
+
+	/**
+	 * The derivation is a DEFAULT, never an override — a carrier that really does have a
+	 * shorter form still wins, which is the whole reason the field exists separately.
+	 */
+	public function test_a_supplied_short_address_is_kept(): void {
+		$point = $this->make_point( [ 'short_address' => 'Тверская, 1' ] );
+
+		$this->assertSame( 'Тверская, 1', $point->to_array()['short_address'] );
+	}
+
+	/**
+	 * The derived value crosses the browser boundary through the SAME escaping list as a
+	 * supplied one — it is produced here, in `from_array()`, long before
+	 * {@see Pickup_Point::to_browser_array()} runs, so deriving it cannot open a hole in a
+	 * consumer that writes the field as markup (`pickup-panels.js` does).
+	 */
+	public function test_a_derived_short_address_is_escaped_for_the_browser(): void {
+		$point = $this->make_point( [ 'address' => '<b>Москва</b>, ул. Тверская, 1' ] );
+
+		$this->assertStringNotContainsString( '<b>', $point->to_browser_array()['short_address'] );
+	}
+
+	/**
 	 * Issue #199: `point_short_name` is the domain's optional override for the card's tab
 	 * label — absent must mean "fall back to `type.label`", same `isset() ? … : ''` cascade
-	 * as `short_address`/`locality`, never an error.
+	 * as `locality`, never an error.
 	 */
 	public function test_point_short_name_defaults_to_empty_when_absent(): void {
 		$point = $this->make_point( [] );

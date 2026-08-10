@@ -1199,7 +1199,18 @@
 	background: #f6f7f7;
 }
 
-.woodev-pickup-search__name {
+/* Issue #263 — the two lines of a POINT result swapped roles (operator decision,
+   11.08.2026). The address is primary because it is what tells one result from another: a
+   chain's points share a name by definition, so a name-first row of five «5 Post
+   (Пятерочка)» is unreadable, which is exactly what the rig showed. The name stays,
+   secondary, because it is what the customer recognises once the address has placed the
+   point. Order in the DOM changed with it (`buildSearchPointItem()`); this pair only
+   supplies the visual hierarchy.
+
+   `.woodev-pickup-search__display-name` — the single line of an ADDRESS suggestion, a
+   different section entirely — kept the secondary treatment it already had and is split
+   out below rather than left sharing a selector whose meaning has now flipped. */
+.woodev-pickup-search__address {
 	display: block;
 	font-size: 14px;
 	font-weight: 600;
@@ -1207,7 +1218,7 @@
 	color: #1e1e1e;
 }
 
-.woodev-pickup-search__address,
+.woodev-pickup-search__name,
 .woodev-pickup-search__display-name {
 	display: block;
 	margin-top: 2px;

@@ -772,9 +772,16 @@
 		icon.innerHTML = pointGlyphMarkup( config, point ); // eslint-disable-line -- framework constant or server-sanitised markup, see pointGlyphMarkup's own docblock.
 		wrap.appendChild( icon );
 
+		// Issue #263: this used to read `fieldValue( point.short_address ) || fieldValue(
+		// point.address )`. The fallback moved to the boundary
+		// ({@see \Woodev\Framework\Shipping\Pickup\Pickup_Point::from_array()}) and is gone from
+		// here deliberately — while it lived at the display sites, the SEARCH row two functions
+		// down did not have it, and a carrier sending no short form rendered a row with no
+		// address at all. Do not re-add it: a fallback repeated per display site is exactly the
+		// shape that drifts.
 		var addressEl = document.createElement( 'span' );
 		addressEl.className = 'woodev-pickup-list__address';
-		addressEl.innerHTML = fieldValue( point.short_address ) || fieldValue( point.address ); // eslint-disable-line -- server-escaped.
+		addressEl.innerHTML = fieldValue( point.short_address ); // eslint-disable-line -- server-escaped.
 		addressEl.setAttribute( 'title', decodeForTitle( point.address ) );
 		wrap.appendChild( addressEl );
 
@@ -944,16 +951,31 @@
 		item.className = 'woodev-pickup-search__item woodev-pickup-search__item--point';
 		item.dataset.pointId = String( point.id );
 
-		var nameEl = document.createElement( 'span' );
-		nameEl.className = 'woodev-pickup-search__name';
-		nameEl.innerHTML = fieldValue( point.name ); // eslint-disable-line -- server-escaped, see file docblock.
-
+		// ADDRESS FIRST, NAME SECOND (issue #263, operator decision 11.08.2026). The
+		// old order put the name on top and, because this row read `short_address`
+		// with no fallback while the sidebar row two functions up read
+		// `short_address || address`, a carrier that sends no short form (live
+		// Yandex) produced an EMPTY address line — five results for one street, all
+		// reading «5 Post (Пятерочка)», impossible to tell apart. The fallback is
+		// gone from both rows now; `short_address` is derived from `address` at the
+		// boundary instead ({@see \Woodev\Framework\Shipping\Pickup\Pickup_Point::from_array()}),
+		// so this row can read the one field and trust it.
+		//
+		// The address is the primary line because it is what distinguishes one
+		// result from another — a chain's points share a name by definition. The
+		// name stays, smaller and muted underneath (see `pickup.css`), because it
+		// is what the customer recognises once the address has told them which
+		// point this is.
 		var addressEl = document.createElement( 'span' );
 		addressEl.className = 'woodev-pickup-search__address';
 		addressEl.innerHTML = fieldValue( point.short_address ); // eslint-disable-line -- server-escaped.
 
-		item.appendChild( nameEl );
+		var nameEl = document.createElement( 'span' );
+		nameEl.className = 'woodev-pickup-search__name';
+		nameEl.innerHTML = fieldValue( point.name ); // eslint-disable-line -- server-escaped, see file docblock.
+
 		item.appendChild( addressEl );
+		item.appendChild( nameEl );
 
 		item.addEventListener( 'click', function() {
 			self._emit( 'searchPointPicked', point.id );

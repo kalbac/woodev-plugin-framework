@@ -572,7 +572,14 @@
 				code: String( type.code ),
 				label: String( type.label ),
 			},
-			short_address: optionalString( payload, 'short_address' ),
+			// DERIVED, not merely optional (issue #263) — the JS half of the same
+			// boundary rule `Pickup_Point::from_array()` applies on the REST path,
+			// and it must not diverge from it. `short_address` is a shortened VIEW
+			// of the already-required `address`, so its absence carries no
+			// information and the display sites must never have to ask twice; a
+			// carrier with a real short form still overrides by sending one. See
+			// that PHP method's own comment for the defect this closed.
+			short_address: optionalString( payload, 'short_address' ) || String( payload.address ),
 			locality: optionalString( payload, 'locality' ),
 			postal_code: optionalString( payload, 'postal_code' ),
 			phone: optionalString( payload, 'phone' ),

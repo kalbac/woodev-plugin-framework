@@ -2103,6 +2103,51 @@ it( 'renders escaped point fields (not double-escaped) inside a search point res
 	expect( layout.querySelector( '.woodev-pickup-search__name' ).textContent ).toBe( 'ПВЗ "Ромашка"' );
 } );
 
+// Issue #263 (operator decision, 11.08.2026). The address is the PRIMARY line of a point
+// result and the name the secondary one under it: a chain's points share a name by definition,
+// so a name-first row produced five results reading «5 Post (Пятерочка)» with nothing to tell
+// them apart. The DOM order is what this pins; the visual hierarchy is `pickup.css`'s half and
+// jsdom cannot see it (no stylesheet is parsed in this suite at all).
+it( 'puts the address BEFORE the name in a search point result', () => {
+	const panels = mount( searchConfig );
+	const layout = panels.buildSearchLayout();
+	panels.renderSearchResults( { points: [ point() ], addresses: [] } );
+
+	const row = layout.querySelector( '.woodev-pickup-search__item--point' );
+	const lines = [ ...row.children ].map( ( el ) => el.className );
+
+	expect( lines ).toEqual( [ 'woodev-pickup-search__address', 'woodev-pickup-search__name' ] );
+	expect( row.querySelector( '.woodev-pickup-search__address' ).textContent ).toBe( 'Ленина, 5' );
+	expect( row.querySelector( '.woodev-pickup-search__name' ).textContent ).toBe( 'ПВЗ «Магнит»' );
+} );
+
+// The row reads ONE field and trusts it — the `short_address || address` fallback it never had
+// (and the sidebar row did) moved to `Pickup_Point::from_array()`, which derives `short_address`
+// from the required `address` whenever a carrier sends none. Re-adding a fallback here would
+// recreate the drift: two display sites, one rule, applied to one of them.
+it( 'reads short_address alone, because the boundary guarantees it is filled', () => {
+	const panels = mount( searchConfig );
+	const layout = panels.buildSearchLayout();
+
+	// What a point looks like AFTER the boundary has derived the field — never an empty one.
+	panels.renderSearchResults( {
+		points: [ point( { short_address: 'Москва, Ленина 5' } ) ],
+		addresses: [],
+	} );
+
+	expect( layout.querySelector( '.woodev-pickup-search__address' ).textContent )
+		.toBe( 'Москва, Ленина 5' );
+} );
+
+// The sidebar row lost its inline fallback in the same change and must read the one field too.
+it( 'renders the sidebar row address from short_address alone', () => {
+	const panels = mount( searchConfig );
+	panels.setVisible( [ { key: 'g1', points: [ point( { short_address: 'Ленина, 5' } ) ] } ] );
+
+	expect( panels.root.querySelector( '.woodev-pickup-list__address' ).textContent )
+		.toBe( 'Ленина, 5' );
+} );
+
 it( 'never executes markup smuggled through a geocoder displayName', () => {
 	const panels = mount( searchConfig );
 	const layout = panels.buildSearchLayout();

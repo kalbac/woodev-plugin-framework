@@ -422,7 +422,12 @@ test( 'absent optional fields default to the empty-string/empty-array/null shape
 
 	expect( onError ).not.toHaveBeenCalled();
 	const point = onSelect.mock.calls[ 0 ][ 0 ];
-	expect( point.short_address ).toBe( '' );
+	// `short_address` deliberately LEFT OUT of this group as of issue #263: it is no longer an
+	// independent optional field that blanks to `''`, but a DERIVED view of the required
+	// `address`, filled at this boundary. Its own three tests are in the "Derived short_address"
+	// section above. Every field below stays here because it has no derivation source — its
+	// absence is information («the carrier does not publish it»), and inventing a value would be
+	// worse data than an honest blank.
 	expect( point.locality ).toBe( '' );
 	expect( point.postal_code ).toBe( '' );
 	expect( point.phone ).toBe( '' );
@@ -644,6 +649,49 @@ test( 'onerror firing before the timeout suppresses a SECOND error from the time
 	jest.runOnlyPendingTimers();
 
 	expect( onError ).toHaveBeenCalledTimes( 1 );
+} );
+
+// -----------------------------------------------------------------------
+// Derived short_address (issue #263)
+// -----------------------------------------------------------------------
+
+// The JS half of the boundary rule `Pickup_Point::from_array()` applies on the REST path, and
+// it must not diverge from it: `short_address` is a shortened VIEW of the already-required
+// `address`, so a carrier that sends none gets it derived here rather than leaving every
+// display site to patch up an empty field on its own (which is how the search row ended up
+// with no address at all — see `pickup-panels.js`).
+test( 'short_address falls back to address when the carrier sends none', () => {
+	const { iframe, onSelect } = initProvider();
+	const payload = validPointPayload();
+
+	delete payload.short_address;
+
+	dispatchMessage( EXPECTED_ORIGIN, iframe.contentWindow, envelope( payload ) );
+
+	expect( onSelect ).toHaveBeenCalledTimes( 1 );
+	expect( onSelect.mock.calls[ 0 ][ 0 ].short_address ).toBe( 'Москва, ул. Тверская, 1' );
+} );
+
+test( 'an empty short_address is treated as absent, not as a deliberate blank', () => {
+	const { iframe, onSelect } = initProvider();
+
+	dispatchMessage( EXPECTED_ORIGIN, iframe.contentWindow, envelope(
+		Object.assign( validPointPayload(), { short_address: '' } )
+	) );
+
+	expect( onSelect.mock.calls[ 0 ][ 0 ].short_address ).toBe( 'Москва, ул. Тверская, 1' );
+} );
+
+// A DEFAULT, never an override — a carrier with a genuinely shorter form still wins, which is
+// the only reason the field exists apart from `address`.
+test( 'a supplied short_address is kept', () => {
+	const { iframe, onSelect } = initProvider();
+
+	dispatchMessage( EXPECTED_ORIGIN, iframe.contentWindow, envelope(
+		Object.assign( validPointPayload(), { short_address: 'Тверская, 1' } )
+	) );
+
+	expect( onSelect.mock.calls[ 0 ][ 0 ].short_address ).toBe( 'Тверская, 1' );
 } );
 
 // -----------------------------------------------------------------------
