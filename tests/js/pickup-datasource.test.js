@@ -106,6 +106,25 @@ test( 'fetchPoints() bbox is bounds joined lat1,lng1,lat2,lng2 — exact separat
 	expect( fetchMock.mock.calls[ 0 ][ 0 ] ).toBe( expectedUrl );
 } );
 
+// Issue #248: the load-bearing negative of the positive above. A `bounds` that is not a
+// 4-element array is OMITTED, never sent malformed — so a viewport query built from a
+// falsy bbox reaches the server with no addressing mode at all, and
+// `Point_Query::from_request()` refuses it (`PointQueryTest`: a request naming neither
+// `locality` nor `bbox` returns null). That refusal is what keeps a provider emitting a
+// junk bbox from ever putting points into the mount's pool — see the `#248` block in
+// `pickup-mount.test.js`.
+test( 'fetchPoints() omits bbox entirely for a bounds that is not a 4-element array', async () => {
+	jest.useFakeTimers();
+	const fetchMock = mockFetchOnce( 200, { points: [] } );
+
+	const ds = WoodevPickupDataSource( { restRoot: REST_ROOT, nonce: NONCE } );
+	const promise = ds.fetchPoints( { bounds: null, types: [ 'pvz' ] } );
+	jest.advanceTimersByTime( 300 );
+	await promise;
+
+	expect( fetchMock.mock.calls[ 0 ][ 0 ] ).toBe( REST_ROOT + '?types=' + encodeURIComponent( 'pvz' ) );
+} );
+
 test( 'fetchPoints() with locality, bounds AND q together emits all three in locality, bbox, q order', async () => {
 	jest.useFakeTimers();
 	const fetchMock = mockFetchOnce( 200, { points: [] } );
