@@ -5522,8 +5522,10 @@ describe( 'confirmation busy signal under ownsChrome (#260)', () => {
 		return document.querySelector( '.woodev-modal__loading' );
 	}
 
-	test( 'a confirmation raises the dialog\'s loading overlay and drops it when the server '
-		+ 'answers', async () => {
+	test( 'a confirmation raises the dialog busy overlay and drops it when the server answers',
+		async () => {
+		jest.useFakeTimers();
+
 		const { emitSelect, resolveSelect } = openPicker( { ownsChrome: true } );
 
 		// Past the opening `init()` chain first: the dialog raises this SAME overlay on open
@@ -5534,6 +5536,20 @@ describe( 'confirmation busy signal under ownsChrome (#260)', () => {
 		expect( loadingOverlay() ).toBeNull();
 
 		emitSelect( { id: 'P1' } );
+
+		// Deliberately NOT up yet: the carrier widget's own button-disable owns this window
+		// (SELECTION_BUSY_DELAY_MS). An overlay in the same frame paints over the customer's
+		// most local acknowledgement of their own click.
+		expect( loadingOverlay() ).toBeNull();
+
+		// Pinned on BOTH sides of the boundary, not merely "deferred": a bare
+		// `advanceTimersByTime( 500 )` after a synchronous null-check passes for any delay at all,
+		// including `0` — verified by mutation, which is how this assertion got its second half.
+		jest.advanceTimersByTime( 499 );
+
+		expect( loadingOverlay() ).toBeNull();
+
+		jest.advanceTimersByTime( 1 );
 
 		const overlay = loadingOverlay();
 
@@ -5548,14 +5564,41 @@ describe( 'confirmation busy signal under ownsChrome (#260)', () => {
 		expect( loadingOverlay() ).toBeNull();
 	} );
 
+	// The timer is CANCELLED on release, not merely ignored. An answer that beats it must leave
+	// nothing pending — otherwise the overlay appears AFTER the confirmation is already over, on
+	// a picker that has moved on, with nothing left that would ever take it down again.
+	test( 'an answer that beats the delay shows no overlay at all, and none appears later',
+		async () => {
+		jest.useFakeTimers();
+
+		const { emitSelect, resolveSelect } = openPicker( { ownsChrome: true } );
+		await flushAsync();
+
+		emitSelect( { id: 'P1' } );
+
+		jest.advanceTimersByTime( 200 );
+
+		await resolveSelect( { allowed: true, reason: null, close: null, refresh_checkout: null } );
+
+		expect( loadingOverlay() ).toBeNull();
+
+		jest.advanceTimersByTime( 5000 );
+		await flushAsync();
+
+		expect( loadingOverlay() ).toBeNull();
+	} );
+
 	// The overlay belongs to the REQUEST, not to its outcome: a transport failure leaves the
 	// picker open and usable (D-6/D-7), so an overlay released only on success would leave the
 	// map permanently veiled and unclickable — a worse failure than the one #260 fixed.
 	test( 'a transport failure drops the overlay too', async () => {
+		jest.useFakeTimers();
+
 		const { emitSelect, rejectSelect } = openPicker( { ownsChrome: true } );
 		await flushAsync();
 
 		emitSelect( { id: 'P1' } );
+		jest.advanceTimersByTime( 500 );
 
 		expect( loadingOverlay() ).not.toBeNull();
 
@@ -5569,10 +5612,13 @@ describe( 'confirmation busy signal under ownsChrome (#260)', () => {
 	// DOM with it and an absent overlay would otherwise prove nothing.
 	test( 'a dialog dismissed mid-confirmation does not leave the overlay behind for the next '
 		+ 'session', async () => {
+		jest.useFakeTimers();
+
 		const first = openPicker( { ownsChrome: true } );
 		await flushAsync();
 
 		first.emitSelect( { id: 'P1' } );
+		jest.advanceTimersByTime( 500 );
 
 		expect( loadingOverlay() ).not.toBeNull();
 
@@ -5588,10 +5634,13 @@ describe( 'confirmation busy signal under ownsChrome (#260)', () => {
 	// The other half of the branch: with a card in play the CARD reports the state, and an
 	// overlay over the whole dialog would cover the very card doing the reporting.
 	test( 'with panels in play no overlay is raised — the card owns the signal', async () => {
+		jest.useFakeTimers();
+
 		const { emitSelect, panels } = openPicker( { ownsChrome: false } );
 		await flushAsync();
 
 		emitSelect( { id: 'P1' } );
+		jest.advanceTimersByTime( 500 );
 
 		expect( panels.setSelectionBusy ).toHaveBeenLastCalledWith( true );
 		expect( loadingOverlay() ).toBeNull();

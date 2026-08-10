@@ -335,6 +335,35 @@
 	var REFRESH_TIMEOUT_MS = 10000;
 
 	/**
+	 * How long, in ms, the confirmation round trip runs before the dialog's busy overlay appears
+	 * under `ownsChrome` — see {@see acquireSelectionBusy}.
+	 *
+	 * The reason is not the usual one. A delay like this normally exists to stop a spinner
+	 * FLASHING on a fast answer; here it exists because of the carrier's own widget — though both
+	 * motives want the same mechanism, and an answer that beats the timer does cancel it, so a
+	 * fast confirmation shows no overlay at all. That outcome is correct rather than merely
+	 * tolerable: in that case the widget's own button-disable WAS the whole signal, and it was
+	 * enough.
+	 *
+	 * The widget disables its «Забрать здесь» button the instant it is pressed. That is the
+	 * customer's first and most local acknowledgement of their own click, right where they
+	 * clicked — and an overlay raised in the same frame paints over it before anyone can register
+	 * it (operator, on the rig: «оверлей так быстро появляется, что пользователь даже не замечает,
+	 * что кнопка стала disabled»). This window belongs to the button, not to us.
+	 *
+	 * THE COST, STATED: {@see acquireSelectionBusy}'s overlay is also what physically intercepts a
+	 * second click (issue #260's other half), so for these 500 ms that interception is not there.
+	 * What covers the gap is the same widget behaviour the delay exists for — a disabled button
+	 * cannot be clicked again. That makes the gap safe for a carrier whose widget disables its own
+	 * confirm control (measured on Почта's, s63) and merely narrow, not closed, for one that does
+	 * not. A carrier embed that leaves its button live through its own confirmation is already
+	 * offering a double submit of its own; this is bounded at half a second.
+	 *
+	 * @type {number}
+	 */
+	var SELECTION_BUSY_DELAY_MS = 500;
+
+	/**
 	 * The six `document.body` `CustomEvent` names this file fires — see the file
 	 * docblock's own section on them. Native, bubbling events, never a jQuery
 	 * `.trigger()` — see {@see fireDocumentEvent}.
@@ -1290,6 +1319,15 @@
 		 *  "the card re-rendered on the same one". Never the guard's identity; see above. */
 		var pendingSelectionPointId = null;
 
+		/** @type {number|null} the pending {@see SELECTION_BUSY_DELAY_MS} timer that will raise the
+		 *  dialog's busy overlay under `ownsChrome`, or null when none is waiting. Lives beside the
+		 *  selection token rather than inside {@see acquireSelectionBusy} because a confirmation can
+		 *  end BEFORE the overlay was ever shown — a fast answer, a dismissed dialog, a destroyed
+		 *  session — and {@see releaseSelectionBusy} is what must cancel it in every one of those
+		 *  cases. Only ever non-null under `ownsChrome`; with panels the card owns the busy state
+		 *  and there is no timer at all. */
+		var selectionBusyTimer = null;
+
 		/** @type {number} mints one unique, monotonic token per detail fetch this session sends —
 		 *  the same device `selectionTokens` above provides for confirmations, for the same
 		 *  reason. See `verdictPendingToken`. */
@@ -2219,6 +2257,15 @@
 		 * @returns {void}
 		 */
 		function releaseSelectionBusy() {
+			// UNCONDITIONALLY FIRST, ahead of the `destroyed` guard below: a still-pending
+			// {@see SELECTION_BUSY_DELAY_MS} timer must be cancelled even when the session is
+			// already gone, or it fires into a dead session and paints an overlay onto a dialog
+			// nobody is looking at, with nothing left that would ever take it down again.
+			if ( null !== selectionBusyTimer ) {
+				window.clearTimeout( selectionBusyTimer );
+				selectionBusyTimer = null;
+			}
+
 			if ( destroyed ) {
 				return;
 			}
@@ -2284,7 +2331,20 @@
 				// issue #223's lazy detail fetch, a state that cannot even occur here — it is
 				// driven by the card, and under `ownsChrome` there is no card. The card's own
 				// CTA makes the same distinction, in `pickup-panels.js`'s `renderCard()`.
-				modal.showLoading( text( config, 'confirming' ) );
+				//
+				// Held back by {@see SELECTION_BUSY_DELAY_MS} so the carrier widget's own
+				// button-disable is visible first — see that constant for why, and for what the
+				// delay costs. The timer is CANCELLED, never merely ignored, by
+				// {@see releaseSelectionBusy}, which every path out of a confirmation runs through.
+				selectionBusyTimer = window.setTimeout( function() {
+					selectionBusyTimer = null;
+
+					if ( destroyed ) {
+						return;
+					}
+
+					modal.showLoading( text( config, 'confirming' ) );
+				}, SELECTION_BUSY_DELAY_MS );
 			}
 		}
 
