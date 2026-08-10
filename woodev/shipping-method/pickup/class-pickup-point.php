@@ -103,7 +103,29 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Point' ) ) :
 						'code'  => (string) $payload['type']['code'],
 						'label' => (string) $payload['type']['label'],
 					],
-					'short_address'   => isset( $payload['short_address'] ) ? (string) $payload['short_address'] : '',
+					// DERIVED, not merely optional (issue #263, operator decision 11.08.2026).
+					// `short_address` is a shortened VIEW of the already-required `address`, so
+					// its absence has no information in it — unlike `phone`/`work_time`, where
+					// absence means "this carrier does not publish it" and forcing the plugin to
+					// supply something would produce invented data instead of an honest gap. A
+					// carrier with no separate short form therefore does not have to repeat
+					// itself; one with a real one still overrides by sending it.
+					//
+					// The derivation lives HERE, at the boundary, rather than at the display
+					// sites, and that is the whole point of the fix: `pickup-panels.js` carried
+					// `short_address || address` in its sidebar row and NOT in its search row, so
+					// a carrier that sends no short form (live Yandex) rendered five search
+					// results that were all just the point NAME, indistinguishable from each
+					// other. A fallback repeated at N display sites drifts; a derivation at one
+					// boundary cannot. Downstream code may now assume `short_address` is non-empty
+					// whenever `address` is — which is always, since `address` is required above.
+					// The JS half of the same boundary (`normalizePoint()` in
+					// `map-provider-embedded.js`) derives it identically; the two must not
+					// diverge, per the #201/#251 lesson about validation and conversion drifting
+					// apart when they live in different places.
+					'short_address'   => isset( $payload['short_address'] ) && '' !== $payload['short_address']
+						? (string) $payload['short_address']
+						: (string) $payload['address'],
 					'locality'        => isset( $payload['locality'] ) ? (string) $payload['locality'] : '',
 					'postal_code'     => isset( $payload['postal_code'] ) ? (string) $payload['postal_code'] : '',
 					'phone'           => isset( $payload['phone'] ) ? (string) $payload['phone'] : '',
