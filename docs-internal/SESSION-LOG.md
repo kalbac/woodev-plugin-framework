@@ -1,3 +1,85 @@
+## Session 64 — 11.08.2026 — five PRs merged, the map feature functionally closed, a contract rule decided
+
+**Mode:** interactive with the operator (not overnight). `main` `b24edd1` → `184c49f`, tree clean.
+**Tests:** 880 jest / 1550 unit, phpcs clean. **Open PR: #266 only** (#263, awaiting the operator's visual check).
+
+### Merged
+
+| PR | Issue | What |
+|---|---|---|
+| #261 | #259 | `message` listener attached BEFORE `appendChild`; source gate no longer passes vacuously on a null/null comparison |
+| #262 | #248 | closed by MEASUREMENT — the described window is unreachable; invariant recorded instead of "fixed" |
+| #255 | #252 | `muted` moved from the unchecked filter row to the DISABLED one, checkbox included |
+| #264 | #260 | dialog busy overlay during an embedded confirmation, held back 500 ms |
+
+### #259 — order became load-bearing after #251
+
+`appendChild()` starts the carrier's load, and since #251 the carrier's FIRST message is its
+readiness handshake, which `initAdapter` must answer or the widget never initialises. Missing it
+stopped being a late `select` and became a dead picker with no console error. The old order was
+safe only because both statements shared one synchronous task. Hardened the source gate in the
+same place: `event.source === iframe.contentWindow` passed VACUOUSLY when both were `null`.
+Both tests verified by mutation. **Rig-verified end to end on the live Почта widget:** handshake →
+`POST widget.pochta.ru/api/pvz 200` → selection → our `/pickup/.../select 200` → field written →
+modal closed.
+
+### #248 — a defect refuted by construction
+
+A non-empty pool implies a non-null `lastBbox`: the pool's only writer is a resolved listing, and
+every fetch reaching it comes from `boundsChange` (assigns `lastBbox` first), the type-filter
+handler (wrapped in `if ( lastBbox )`), or `refresh()`'s own conditional half. `lastBbox = null`
+happens only in `start()`, which empties the pool two lines later and bumps the generation. The
+card's proposed fix would have changed nothing observable and cost the #232/#238 invariant. The
+route the s63 analysis had NOT covered — a third-party provider emitting a falsy bbox — is closed
+one layer down: the data source omits a non-4-element `bounds`, so the query arrives with no
+addressing mode and `Point_Query::from_request()` refuses it.
+
+### #260 — and the operator's correction
+
+Overlay via the dialog's own `showLoading()` (additive: overlays the body without touching its
+children, so the carrier iframe survives). Rig measurement: overlay present across 20 samples over
+7853 ms, and `document.elementFromPoint()` at its centre returns the overlay — proving it
+physically intercepts the second click, which is #260's other half. Operator then asked for a delay
+so the widget's own button-disable is visible first; added 500 ms, cancelled (not ignored) on
+release. **The first duration test passed with the delay mutated to 0** — see the new gotcha.
+
+### Decided: where a contract is enforced (operator, accepted)
+
+> A field that is a DERIVED VIEW of a required field is derived AT THE BOUNDARY, never at the
+> display site. A field with no derivation source stays optional, because there absence IS
+> information, and forcing a value yields invented data.
+
+Making `short_address` required was considered and rejected: most carriers would write
+`'short_address' => $address` verbatim. Implemented in PR #266 across both boundary constructors.
+
+### #245 was a false alarm
+
+The production pubkey was captured and embedded on 12.06.2026 (`fdde793`); the `QSis…` value the
+card compared against is the LOCAL issuer at `:8090`, and the two MUST differ — keys are generated
+lazily per environment. One reading command left for the operator. Also corrected my own advice on
+that card: the documented `get_public_key_base64()` snippet GENERATES a keypair when the option is
+missing, so the safe check is `wp option get woodev_license_authority_keys`.
+
+### Filed / housekeeping
+
+**#263** (search row shows the name, not the address — root cause: the fallback lived at the display
+sites and was applied to one of two), **#265** (under `ownsChrome` both failure branches are silent).
+Deleted 6 stale local branches after verifying each against its PR state; `refactor/244` removed only
+after confirming its commit survives as `refs/pull/257/head`.
+
+### Lessons
+
+1. **A fallback repeated at N display sites drifts; a derivation at one boundary cannot.** The file's
+   own comment cited the fallback it had failed to apply.
+2. **A defect you cannot reproduce is worth refuting by construction** — and the refutation must
+   name the route the original analysis missed, not just restate it.
+3. **A guard for an unreachable state is speculative code.** Added one for "retry mid-confirmation",
+   then measured reachability (`hasDrawnPoints` is permanently false under `ownsChrome`, so
+   `degrade()` always destroys the body first) and removed it, leaving the analysis in its place.
+4. **A delay test that advances the whole interval passes at zero.** Pin `n - 1` and `n`.
+5. **A release-blocking card can be false.** #245 compared production against the rig's own key.
+
+
 ## s63 — 2026-08-10 — #251 решён замером: embedded-шов впервые заработал на живом карьере; две карточки закрыты проверкой, а не работой
 
 **Итог:** `main` = `a109ca5`, дерево чистое, из открытых PR только **#255** (визуальный, ждёт
