@@ -110,6 +110,14 @@ In `normalizePoint()`:
 - Absent → omitted from the emitted point. No `0.0` fallback, ever.
 - **Exactly one of the pair present → reject.** A half-coordinate is a bug in the adapter,
   not a partial datum.
+- **An explicit `null` counts as ABSENT, not as a present-but-invalid value.** The spec was
+  underspecified here and an adversarial review read it the other way, so the decision is
+  recorded with its evidence: (a) `Pickup_Point::from_array()` tests presence with `isset()`,
+  which is already `false` for `null`, and this file's stated alignment is with that method's
+  optional-field handling; (b) the live Почта payload literally sends `"areaTo": null` and
+  `"location": null` (§1 M7) — `null` is the carrier's own way of writing "no value", not
+  junk; (c) the half-coordinate rule still bites, because `{ lat: null, lng: 55.7 }` reads as
+  lat-absent + lng-present and is rejected.
 - `name` stays REQUIRED. Почта sends none, but a name is domain knowledge the plugin can
   build (`Почтомат №918872` from `pvzType` + `indexTo`), and it is what the checkout field
   and trigger label display. The framework must not invent it.
@@ -193,6 +201,30 @@ not "should work":
    that is enough, and record what actually happens.
 5. **Failure paths** — an invalid `embedUrl` must produce an error state with a retry;
    `IFRAME_LOAD_TIMEOUT_MS` (10 s) must fire for a host that accepts and never answers.
+
+## 6a. Rig verification — OBSERVED results (10.08.2026)
+
+Run on `feat/251-embedded-adapter-seam` with `WOODEV_TEST_PICKUP_EMBEDDED` on, against the
+live carrier. Every row is an observed artefact, not an absence of complaints.
+
+| # | Observed |
+|---|---|
+| 1 | `panelsPresent: 0`; the `<iframe>` is the ONLY child of `.woodev-modal__body`, with `sandbox="allow-scripts allow-same-origin allow-forms allow-popups"` and `referrerpolicy="no-referrer"`. The live widget rendered inside our modal. |
+| 2 | On `update_checkout`: WooCommerce answered (`/?wc-ajax=update_order_review` fired), `woodev/v1` calls = **0**, and the iframe's `contentWindow` was the SAME object afterwards — `refresh()` is a hard no-op and the frame is not rebuilt. Confirmed deliberate; unchanged. |
+| 3 | Same observation — `refreshCheckout()` gets `panels === null`, no waiter is bound, nothing is suppressed. Harmless only because 2 holds. |
+| 4 | Two selections back to back produced **2** `select_requested` and **1** `select_resolved` (the LATER one). The framework does not damp a second confirmation under `ownsChrome` — the documented, deliberate consequence — but the token guard discards the stale answer. Separately: the carrier disables its own «Забрать здесь» after a selection, so its own UI damps the same-point case. |
+| 5 | Non-https `embedUrl` → no iframe, error + «Повторить» immediately. Unresponsive https host → error + «Повторить» at **10 159 ms** (the 10 s `IFRAME_LOAD_TIMEOUT_MS`), iframe removed from the DOM. |
+
+Full success path, after the post-review fixes: point `35482`, address
+`г. Москва, ул. Тверская 9 стр. 5` (no duplicated locality), **no `lat`/`lng` on the emitted
+point**, server verdict `allowed: true`, field written to `35482`, modal closed, trigger
+relabelled to «Выбрать другой пункт выдачи».
+
+The 404 that this path returned BEFORE the fixture stub is worth keeping in mind: the
+confirmation round trip is server-authoritative and always calls
+`Point_Source::fetch_details()` regardless of which map provider drew the picker. A real
+embedded plugin therefore MUST implement a genuine carrier details lookup — the embed being
+self-sufficient for DISPLAY does not make it self-sufficient for CONFIRMATION.
 
 ## 7. Known gaps, deliberately not closed here
 
