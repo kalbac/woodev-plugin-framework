@@ -3234,6 +3234,37 @@
 			// #234: the pool goes with it, ALWAYS, and the two calls must never be separated —
 			// see {@see resetPointPool}'s stated invariant. A pooled point's `selectable` was
 			// computed against the cart that just changed.
+			//
+			// #248 — WHY THE DESTRUCTIVE HALF SITS ABOVE THE `viewport` CONDITION BELOW, AND
+			// MUST STAY THERE. It reads like a hole: under `viewport` with `lastBbox` still
+			// null the pool is emptied and nothing refetches it. It is not one, because
+			//
+			//     A NON-EMPTY POOL IMPLIES A NON-NULL `lastBbox`.
+			//
+			// The pool's only writer is a resolved listing ({@see mergeIntoPool}, reached only
+			// under `viewport`), and every fetch that can reach it comes from one of three
+			// places: the provider's `boundsChange` handler, which assigns `lastBbox` on the
+			// line BEFORE it fetches; the `typeFilterChange` handler, itself wrapped in
+			// `if ( lastBbox )`; and this function's own conditional half. `lastBbox = null`
+			// happens in exactly ONE place — {@see start} — which empties the pool two lines
+			// later in the same synchronous run, and bumps the pool generation, so a listing
+			// still travelling across that reset is dropped on arrival rather than
+			// repopulating the pool behind the nulled bbox.
+			//
+			// The one route that reasoning does not close here is a provider — `Map_Provider`
+			// is a documented extension point — emitting `boundsChange` with a FALSY bbox,
+			// which would leave `lastBbox` null while a fetch went out anyway. That is closed
+			// one layer down instead: `pickup-datasource.js` OMITS a `bounds` that is not a
+			// 4-element array, so the query arrives with no addressing mode and
+			// `Point_Query::from_request()` refuses it — no points come back, the pool stays
+			// empty, the implication holds.
+			//
+			// So in the window the card describes the wipe is a no-op on an empty pool, and
+			// wherever the pool is NOT empty the refetch below always runs. Moving these two
+			// calls under the condition would change nothing observable and would cost the
+			// invariant "a cart change forgets everything the old cart was verdicted against,
+			// unconditionally" — the one thing #232/#238 exist to guarantee. Pinned by the
+			// `#248` block in `tests/js/pickup-mount.test.js`.
 			forgetPointDetails();
 			resetPointPool();
 

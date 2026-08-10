@@ -5341,3 +5341,159 @@ describe( 'cart-change verdict invalidation wired to updated_checkout (#238)', (
 		expect( provider.setPointsCalls.length ).toBe( callsBefore + 1 );
 	} );
 } );
+
+// -------------------------------------------------------------------------
+// #248 — refresh() under `viewport` empties the pool UNCONDITIONALLY but refetches only
+// when `lastBbox` is set, so the card asked whether a cart change arriving before the
+// customer has panned wipes points nothing will bring back.
+//
+// It cannot: **a non-empty pool implies a non-null `lastBbox`, by construction.** The
+// pool's only writer is a resolved listing (`mergeIntoPool()`, viewport-only), and under
+// `viewport` every fetch that can reach it comes from one of three places — the
+// `boundsChange` handler, which assigns `lastBbox` on the line BEFORE it fetches; the
+// type-filter handler, itself wrapped in `if ( lastBbox )`; and `refresh()`'s own
+// conditional half. `lastBbox = null` happens in exactly ONE place, `start()`, which
+// empties the pool two lines later in the same synchronous run — and bumps the pool
+// generation, so a listing still in flight across that reset is dropped on arrival
+// instead of repopulating the pool behind it (the '#234: a listing already in flight'
+// test above pins that drop).
+//
+// The one route this reasoning did not originally cover is a provider — the
+// `Map_Provider` seam is a documented extension point — emitting `boundsChange` with a
+// FALSY bbox: `lastBbox` would stay null while a fetch went out anyway. That route is
+// closed one layer down rather than here: the data source omits a `bounds` that is not a
+// 4-element array (`pickup-datasource.test.js`), so the query reaches the server with no
+// addressing mode, and `Point_Query::from_request()` refuses it (`PointQueryTest`). No
+// points come back, so the pool stays empty and the implication survives.
+//
+// These tests therefore pin the reachable state space rather than a fix: the wipe in the
+// described window is a no-op on an empty pool, and wherever the pool is NOT empty the
+// refetch always runs.
+// -------------------------------------------------------------------------
+
+describe( 'viewport refresh(): the unconditional wipe never outruns the conditional refetch (#248)', () => {
+	/**
+	 * Installs a viewport data source that records every query it is handed and answers
+	 * them from `listings` in order; an exhausted list answers `[]`.
+	 *
+	 * @param {Array} listings
+	 * @returns {Array} the recorded queries, in order.
+	 */
+	function recordingSource( listings ) {
+		const queries = [];
+		let call = 0;
+
+		window.WoodevPickupDataSource = fakeDataSourceFactory( ( query ) => {
+			queries.push( query );
+
+			return Promise.resolve( listings[ call++ ] || [] );
+		} );
+
+		return queries;
+	}
+
+	function drawnIds( provider ) {
+		const drawn = provider.setPointsCalls[ provider.setPointsCalls.length - 1 ] || [];
+
+		return drawn.reduce( ( acc, group ) => acc.concat( group.points.map( ( p ) => p.id ) ), [] );
+	}
+
+	function openViewport() {
+		setConfig( makeConfig( { strategy: 'viewport' } ) );
+		mountAll();
+		clickTrigger();
+	}
+
+	// The card's literal window: the session is open at its initial position and the cart
+	// changes before the customer has panned. Nothing has been fetched, so nothing can be
+	// in the pool to lose — and the session recovers in full on the first bounds report.
+	test( 'a cart change before the first boundsChange wipes nothing, and the first bounds '
+		+ 'report still draws the whole listing', async () => {
+		const queries = recordingSource( [ [ point( { id: 'A' } ) ] ] );
+		openViewport();
+		await flushAsync();
+
+		const provider = StubProvider.instances[ StubProvider.instances.length - 1 ];
+
+		// The pool's only writer is a resolved listing; under viewport nothing fetches
+		// before the first `boundsChange`, so the pool is empty by construction here.
+		expect( queries ).toHaveLength( 0 );
+		expect( provider.setPointsCalls ).toHaveLength( 0 );
+
+		await window.WoodevPickupMount.getSession( FIELD_ID ).refresh();
+		await flushAsync();
+
+		// The card's complaint, confirmed: refresh() ran its destructive half and issued
+		// no fetch. It destroyed nothing, because there was nothing there.
+		expect( queries ).toHaveLength( 0 );
+		expect( provider.setPointsCalls ).toHaveLength( 0 );
+
+		provider.emit( 'boundsChange', [ 55, 37, 56, 38 ] );
+		await flushAsync();
+
+		expect( drawnIds( provider ) ).toEqual( [ 'A' ] );
+	} );
+
+	// The contrapositive, and the half that actually matters to a customer: the moment
+	// there IS something in the pool, `lastBbox` is set too, so the refetch runs and the
+	// wiped points come back re-verdicted against the new cart.
+	test( 'a pool with anything in it always comes with a bbox, so refresh() refetches', async () => {
+		const queries = recordingSource( [ [ point( { id: 'A' } ) ], [ point( { id: 'B' } ) ] ] );
+		openViewport();
+		await flushAsync();
+
+		const provider = StubProvider.instances[ StubProvider.instances.length - 1 ];
+
+		provider.emit( 'boundsChange', [ 55, 37, 56, 38 ] );
+		await flushAsync();
+
+		expect( drawnIds( provider ) ).toEqual( [ 'A' ] );
+
+		await window.WoodevPickupMount.getSession( FIELD_ID ).refresh();
+		await flushAsync();
+
+		expect( queries ).toHaveLength( 2 );
+		expect( queries[ 1 ].bounds ).toEqual( [ 55, 37, 56, 38 ] );
+		expect( drawnIds( provider ) ).toEqual( [ 'B' ] );
+	} );
+
+	// The only sequence that could produce "pool non-empty while `lastBbox` is null": a
+	// listing in flight when `start()` nulls the bbox, landing afterwards. The pool
+	// generation is what forbids it. Probed with an EMPTY listing, because under viewport
+	// an empty listing draws exactly the pool and nothing else — so this reads the pool
+	// itself, not some later fetch's answer.
+	test( 'a listing in flight across a retry cannot repopulate the pool behind the nulled '
+		+ 'bbox', async () => {
+		let releaseFirst;
+		const first = new Promise( ( resolve ) => { releaseFirst = resolve; } );
+		let call = 0;
+		const responses = [ first, Promise.resolve( [] ) ];
+
+		window.WoodevPickupDataSource = fakeDataSourceFactory(
+			() => responses[ call++ ] || Promise.resolve( [] )
+		);
+		openViewport();
+		await flushAsync();
+
+		const provider = StubProvider.instances[ StubProvider.instances.length - 1 ];
+		const panels = StubPanels.instances[ StubPanels.instances.length - 1 ];
+
+		provider.emit( 'boundsChange', [ 55, 37, 56, 38 ] );
+		await flushAsync();
+
+		// The retry nulls `lastBbox` and empties the pool in one synchronous run.
+		panels.emit( 'retryRequested' );
+		await flushAsync();
+
+		const freshProvider = StubProvider.instances[ StubProvider.instances.length - 1 ];
+
+		releaseFirst( [ point( { id: 'STALE' } ) ] );
+		await flushAsync();
+
+		// Read the pool: an empty listing under viewport draws the pool's contents verbatim.
+		freshProvider.emit( 'boundsChange', [ 55, 37, 56, 38 ] );
+		await flushAsync();
+
+		expect( drawnIds( freshProvider ) ).toEqual( [] );
+	} );
+} );
