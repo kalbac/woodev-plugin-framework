@@ -5497,3 +5497,103 @@ describe( 'viewport refresh(): the unconditional wipe never outruns the conditio
 		expect( drawnIds( freshProvider ) ).toEqual( [] );
 	} );
 } );
+
+// -------------------------------------------------------------------------
+// #260 — under `ownsChrome` the customer had NO sign that a confirmation was running.
+//
+// The round trip is mandatory (D-1: nothing is applied before the server answers), and on the
+// normal path the card reports it — `setSelectionBusy( true )` turns the CTA into «Проверяем…».
+// With no card that call was a silent no-op: the carrier's widget disables its own button and
+// then the map just sits there until the modal vanishes. Rig-measured on the live Почта widget,
+// `select_requested +1 ms` → `select_resolved +8067 ms`; the seconds are the rig's own baseline
+// (an empty `/wp-json/` answers in 8.7-11.1 s there), but the missing signal does not depend on
+// them and survives into production, where a real `fetch_details()` goes out to the carrier.
+//
+// The answer is the DIALOG's own loading overlay, not new chrome around the provider — D-3 says
+// the framework draws no list and no card for a provider that owns the picker, not that it may
+// not report its own request's state on its own dialog. It doubles as the lock that `ownsChrome`
+// never had (the overlay is `inset: 0` with a background and no `pointer-events: none`, so it
+// intercepts the second click), though THAT half is a CSS property jsdom cannot evaluate — these
+// tests pin the overlay's presence and its lifetime, which is what JS owns here.
+// -------------------------------------------------------------------------
+
+describe( 'confirmation busy signal under ownsChrome (#260)', () => {
+	function loadingOverlay() {
+		return document.querySelector( '.woodev-modal__loading' );
+	}
+
+	test( 'a confirmation raises the dialog\'s loading overlay and drops it when the server '
+		+ 'answers', async () => {
+		const { emitSelect, resolveSelect } = openPicker( { ownsChrome: true } );
+
+		// Past the opening `init()` chain first: the dialog raises this SAME overlay on open
+		// («Загрузка пунктов выдачи…») and drops it when the provider is drawable, so asserting
+		// before that resolves would read the map's loading state as the confirmation's.
+		await flushAsync();
+
+		expect( loadingOverlay() ).toBeNull();
+
+		emitSelect( { id: 'P1' } );
+
+		const overlay = loadingOverlay();
+
+		expect( overlay ).not.toBeNull();
+		// `confirming`, not `checkingAvailability` — the two read almost alike and name different
+		// operations; this one is the confirmation round trip.
+		expect( overlay.textContent ).toContain( 'Проверяем…' );
+		expect( overlay.textContent ).not.toContain( 'доступность' );
+
+		await resolveSelect( { allowed: true, reason: null, close: null, refresh_checkout: null } );
+
+		expect( loadingOverlay() ).toBeNull();
+	} );
+
+	// The overlay belongs to the REQUEST, not to its outcome: a transport failure leaves the
+	// picker open and usable (D-6/D-7), so an overlay released only on success would leave the
+	// map permanently veiled and unclickable — a worse failure than the one #260 fixed.
+	test( 'a transport failure drops the overlay too', async () => {
+		const { emitSelect, rejectSelect } = openPicker( { ownsChrome: true } );
+		await flushAsync();
+
+		emitSelect( { id: 'P1' } );
+
+		expect( loadingOverlay() ).not.toBeNull();
+
+		await rejectSelect( { status: 0, code: 'transport', message: 'нет сети' } );
+
+		expect( loadingOverlay() ).toBeNull();
+	} );
+
+	// Dismissing the dialog mid-flight runs `invalidateSelection()`, which releases through the
+	// same single point — asserted on a REOPENED picker, because the closed dialog takes its own
+	// DOM with it and an absent overlay would otherwise prove nothing.
+	test( 'a dialog dismissed mid-confirmation does not leave the overlay behind for the next '
+		+ 'session', async () => {
+		const first = openPicker( { ownsChrome: true } );
+		await flushAsync();
+
+		first.emitSelect( { id: 'P1' } );
+
+		expect( loadingOverlay() ).not.toBeNull();
+
+		first.modal.close( 'dismiss' );
+		await flushAsync();
+
+		clickTrigger();
+		await flushAsync();
+
+		expect( loadingOverlay() ).toBeNull();
+	} );
+
+	// The other half of the branch: with a card in play the CARD reports the state, and an
+	// overlay over the whole dialog would cover the very card doing the reporting.
+	test( 'with panels in play no overlay is raised — the card owns the signal', async () => {
+		const { emitSelect, panels } = openPicker( { ownsChrome: false } );
+		await flushAsync();
+
+		emitSelect( { id: 'P1' } );
+
+		expect( panels.setSelectionBusy ).toHaveBeenLastCalledWith( true );
+		expect( loadingOverlay() ).toBeNull();
+	} );
+} );

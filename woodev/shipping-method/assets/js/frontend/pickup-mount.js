@@ -2197,12 +2197,16 @@
 		 * card of ours to lock or re-render) the round trip still happens, but every panels
 		 * call below is skipped — see the guards.
 		 *
-		 * A consequence, deliberate: with no card there is no lock, so nothing here stops an
-		 * embedded provider reporting a SECOND selection while the first is still in flight —
-		 * both round trips would run, and the later answer would win. Debouncing its own
-		 * confirm UI is that provider's job, exactly as rendering it is (D-3: the framework
-		 * draws no chrome of its own around a provider that already owns the whole picker, and
-		 * cannot lock a button it never drew).
+		 * Issue #260 supersedes what this docblock used to record as a deliberate consequence —
+		 * that with no card there was no lock either, so an embedded provider could report a
+		 * SECOND selection while the first was still in flight (measured: two round trips, the
+		 * later answer winning), and that debouncing its own confirm UI was the provider's job.
+		 * The real cost of that position turned out to be borne by the CUSTOMER, not the
+		 * provider: with no card there was also no sign of work at all, so the person most
+		 * likely to click twice was the one who could not tell the first click had registered.
+		 * {@see acquireSelectionBusy} now puts the dialog's own loading overlay up for the
+		 * duration, which both reports the state and physically intercepts the second click —
+		 * see that function's docblock for why this does not breach D-3.
 		 *
 		 * @param {Object} point
 		 * @returns {void}
@@ -2215,8 +2219,72 @@
 		 * @returns {void}
 		 */
 		function releaseSelectionBusy() {
-			if ( panels && ! destroyed ) {
+			if ( destroyed ) {
+				return;
+			}
+
+			if ( panels ) {
 				panels.setSelectionBusy( false );
+
+				return;
+			}
+
+			if ( ownsChrome ) {
+				modal.hideLoading();
+			}
+		}
+
+		/**
+		 * Marks a confirmation round trip as started — the acquire half of
+		 * {@see releaseSelectionBusy}, and the one place that decides WHICH surface says so.
+		 *
+		 * Under `!ownsChrome` that surface is the card: `setSelectionBusy( true )` turns its CTA
+		 * into «Проверяем доступность…» and locks it, which is also what stops a second submit.
+		 *
+		 * Under `ownsChrome` there is no card — and before issue #260 that meant `panels` was null,
+		 * this call was a silent no-op, and the customer got NO sign of work at all: the carrier's
+		 * widget disables its own button, and then the map simply sits there until the modal
+		 * disappears. Rig-measured on the live Почта widget: `select_requested +1 ms` →
+		 * `select_resolved +8067 ms`, all of it our confirmation round trip, which D-1 makes
+		 * mandatory (nothing is applied before the server answers, because the domain may refuse
+		 * the point). The 8 seconds themselves are the rig, not us — that stand's own baseline is
+		 * 8.7-11.1 s for an empty `/wp-json/` — but the MISSING SIGNAL does not depend on the
+		 * speed, and it survives into production, where a real `Point_Source::fetch_details()`
+		 * goes out to the carrier's API.
+		 *
+		 * The dialog's own loading overlay is what answers it — NOT new chrome around the
+		 * provider. That distinction is what keeps D-3 intact: D-3 says the framework draws no
+		 * list and no card for a provider that owns the whole picker; it does not say the
+		 * framework may not report the state of ITS OWN request on ITS OWN dialog.
+		 * `WoodevModal#showLoading()` is additive by construction — it overlays the body without
+		 * touching the body's children (see its docblock), so the provider's iframe underneath is
+		 * untouched and keeps its own state.
+		 *
+		 * IT ALSO CLOSES THE SECOND HALF OF #260, and that is not a side effect worth losing: with
+		 * no card there is no lock either, so an embedded provider could report a SECOND selection
+		 * while the first was still travelling — measured, two round trips, the later answer
+		 * winning. The overlay is `position: absolute; inset: 0` with a background and no
+		 * `pointer-events: none`, so it physically intercepts the click that would start the
+		 * second one. A customer who cannot see that anything is happening is exactly the customer
+		 * who clicks again.
+		 *
+		 * @returns {void}
+		 */
+		function acquireSelectionBusy() {
+			if ( panels ) {
+				panels.setSelectionBusy( true );
+
+				return;
+			}
+
+			if ( ownsChrome ) {
+				// `confirming` («Проверяем…»), never `checkingAvailability` («Проверяем
+				// доступность…»): the two read almost alike but name DIFFERENT operations, and
+				// this one is the confirmation round trip. `checkingAvailability` belongs to
+				// issue #223's lazy detail fetch, a state that cannot even occur here — it is
+				// driven by the card, and under `ownsChrome` there is no card. The card's own
+				// CTA makes the same distinction, in `pickup-panels.js`'s `renderCard()`.
+				modal.showLoading( text( config, 'confirming' ) );
 			}
 		}
 
@@ -2336,9 +2404,7 @@
 			pendingSelectionToken = token;
 			pendingSelectionPointId = pointId;
 
-			if ( panels ) {
-				panels.setSelectionBusy( true );
-			}
+			acquireSelectionBusy();
 
 			fireDocumentEvent( EVENT_SELECT_REQUESTED, { fieldId: config.fieldId, point: point } );
 
@@ -3170,6 +3236,18 @@
 				// The map is drawable now, so the "loading" overlay opened with the dialog has
 				// done its job. Without it the customer got 1-2 seconds of an empty dialog
 				// carrying nothing but its own title while the map script downloaded.
+				//
+				// Deliberately UNGUARDED against issue #260's confirmation overlay, which reuses
+				// this same single overlay element ({@see acquireSelectionBusy}). `start()` runs
+				// again on every retry, so "a retry lands while a confirmation is in flight"
+				// looks like it would hide that overlay early — but the only route to a retry is
+				// `degrade( …, start )`, and under `ownsChrome` `hasDrawnPoints` is permanently
+				// false (nothing here ever fetches for an embedded provider), so `degrade()`
+				// always takes the DESTRUCTIVE `modal.showError()` branch. That replaces the
+				// dialog body outright — the overlay is already gone, along with the provider's
+				// own iframe, before this line could ever run. A guard here would be code for a
+				// state that cannot occur. If `degrade()` ever gains a non-destructive path under
+				// `ownsChrome`, this becomes reachable and needs `if ( 0 === pendingSelectionToken )`.
 				modal.hideLoading();
 
 				// D8/п.5,п.8 (live-review round 2): `setMargin()` used to run for the FIRST time
