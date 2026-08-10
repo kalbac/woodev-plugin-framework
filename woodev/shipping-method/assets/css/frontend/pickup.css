@@ -1464,25 +1464,41 @@
 
 /* Issue #243: the last remaining checked type's checkbox is now `disabled` (rather than clicked
    and silently reverted) — `pickup-panels.js`'s `syncFilterRowLocks()` mirrors that onto the row
-   via `data-locked="true"`. The row is still `data-checked="true"`, so the CHECKBOX keeps its
-   filled accent + tick untouched (the affordance being removed is the checkbox's own
-   interactivity, never its checked identity — a dimmed/greyed checkbox here would read as "this
-   whole option is unavailable", which is the wrong message). `cursor: default` on both the row
-   and the checkbox is the only checkbox-level change, plus pinning the filled state explicitly so
-   a `:disabled` repaint some browser might apply on top of `appearance: none` can never win.
-   Issue #252 supersedes this rule's ORIGINAL label treatment (which kept the bold/dark label
-   identical to a plain checked-and-enabled row): the operator read that pairing as inverted — the
-   disabled row looked "normal" while the freely-clickable unchecked row looked muted, exactly
-   backwards. The label below is now muted specifically because the row is locked (operator,
-   verbatim: «делать `muted` именно заблокированную, та что `disabled`») — a colour-only signal,
-   `font-weight` untouched, and still no `title`/`aria-*`/text of any kind per the standing #243
-   decision («не нужно ничего показывать. Заблокирована и всё»). */
+   via `data-locked="true"`. `cursor: default` on both the row and the checkbox removes the
+   affordance, and the `:checked:disabled` rule below pins the filled state explicitly so a
+   `:disabled` repaint some browser might apply on top of `appearance: none` can never win.
+   Issue #252 supersedes this rule's ORIGINAL treatment on BOTH halves of the row, each corrected
+   by the operator on the rig:
+     - the LABEL used to stay bold/dark, identical to a plain checked-and-enabled row, while the
+       freely-clickable UNCHECKED row was the muted one. He read that as inverted, which it was —
+       the row that looked unavailable was the only one you could actually click. The muted
+       treatment moved here, to the locked row (verbatim: «делать `muted` именно заблокированную,
+       та что `disabled`»).
+     - the CHECKBOX then kept its full-strength accent fill and tick, on this rule's own former
+       reasoning that a dimmed checkbox would read as "this whole option is unavailable". Rig
+       verification overruled that: with only the label muted the state was not legible («нужно
+       галку чекбокса тоже сделать `muted`, а то не очевидно»). The mute is applied as `opacity`
+       rather than a greyed colour so it works for ANY merchant accent — the fill, the border and
+       the tick are all painted from `--woodev-pickup-accent-*`, and a hardcoded grey would have
+       to be recomputed per accent (and would silently lose the accent identity the checked state
+       is built on). It follows the idiom this file already uses for exactly this meaning, the
+       zoom control's `:disabled { opacity: 0.4 }`; the value here is 0.45 to match the label's
+       own alpha in the same row rather than the other control across the dialog.
+   Keyed on `[data-locked="true"]` for BOTH halves — not on `:disabled` for the checkbox and the
+   attribute for the label — so the two signals read the same state source and cannot disagree if
+   `syncFilterRowLocks()` ever sets one without the other. Still no `title`/`aria-*`/text of any
+   kind, per the standing #243 decision («не нужно ничего показывать. Заблокирована и всё»).
+   `font-weight` stays untouched throughout: the signal is strength-of-ink only. */
 .woodev-pickup-filter__row[data-locked="true"] {
 	cursor: default;
 }
 
 .woodev-pickup-filter__row[data-locked="true"] .woodev-pickup-filter__label {
 	color: rgba( 0, 0, 0, 0.45 );
+}
+
+.woodev-pickup-filter__row[data-locked="true"] .woodev-pickup-filter__checkbox {
+	opacity: 0.45;
 }
 
 .woodev-pickup-filter__checkbox:disabled {
