@@ -1,7 +1,8 @@
 ## Session 64 — 11.08.2026 — five PRs merged, the map feature functionally closed, a contract rule decided
 
 **Mode:** interactive with the operator (not overnight). `main` `b24edd1` → `184c49f`, tree clean.
-**Tests:** 880 jest / 1550 unit, phpcs clean. **Open PR: #266 only** (#263, awaiting the operator's visual check).
+**Tests:** 880 jest / 1550 unit, phpcs clean. **No open PRs** — #266 (#263) was merged right after the
+save, once the operator checked it on the rig himself.
 
 ### Merged
 
@@ -11,6 +12,7 @@
 | #262 | #248 | closed by MEASUREMENT — the described window is unreachable; invariant recorded instead of "fixed" |
 | #255 | #252 | `muted` moved from the unchecked filter row to the DISABLED one, checkbox included |
 | #264 | #260 | dialog busy overlay during an embedded confirmation, held back 500 ms |
+| #266 | #263 | `short_address` derived at the boundary; search row shows the address first, name muted below |
 
 ### #259 — order became load-bearing after #251
 
