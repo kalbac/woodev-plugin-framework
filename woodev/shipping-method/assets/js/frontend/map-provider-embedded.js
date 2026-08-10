@@ -85,15 +85,24 @@
  *      posted back into the SAME iframe this message came from —
  *      `iframe.contentWindow.postMessage( payload, config.expectedOrigin )`,
  *      the expected origin as `targetOrigin`, NEVER `"*"` — and handling
- *      stops there. A throw is SWALLOWED (the message bus is shared with
- *      whatever else the carrier's page posts) and handling continues.
+ *      stops there. Both the ADAPTER CALL and the `postMessage()` CALL are
+ *      inside the same guarded region, and a throw from EITHER is SWALLOWED
+ *      (issue #251 follow-up, Codex review: `postMessage()` itself throws
+ *      `DataCloneError` for a return value the structured-clone algorithm
+ *      cannot handle — a function, a `Symbol`, a cyclic object — and that
+ *      fault is the adapter's, not the framework's, exactly like a throw
+ *      from `initAdapter()` itself; the message bus is shared with whatever
+ *      else the carrier's page posts, so neither may break the picker).
  *   2. `selectAdapter( data )` runs when `initAdapter` did not claim the
  *      message. A non-`null`/`undefined` return goes through
  *      {@see normalizePoint} and then the same success/failure emit path as
  *      the framework's own envelope. A throw here is NOT swallowed — it
  *      emits `error`, because the message already proved it came from this
  *      instance's own trusted iframe, so a translation failure is a real,
- *      reportable fault, not routine cross-talk.
+ *      reportable fault, not routine cross-talk. EXCEPTION: a throw is
+ *      swallowed too when a synchronous callback-style emission already
+ *      reported this same selection before the throw — see the RE-ENTRY
+ *      GUARD paragraph below.
  *   3. Neither adapter is configured, or both decline (return `null`/
  *      `undefined`) — the message is ignored silently, same as any other
  *      unrecognised traffic from the trusted origin.
@@ -106,6 +115,26 @@
  * origin+source gate above and only ever translate a message this file has
  * already proven came from ITS OWN iframe at the expected origin — they are
  * not a second way for an untrusted sender to reach the picker.
+ *
+ * RE-ENTRY GUARD — AT MOST ONE EMISSION PER INBOUND MESSAGE (issue #251
+ * follow-up, Codex review): `selectAdapter` is legal in TWO styles — it may
+ * report a selection by calling the callback-style hook
+ * (`window.WoodevPickupEmbedded.select()`, see "CALLBACK-STYLE WIDGETS"
+ * below) and return `null`, OR it may simply RETURN the point directly.
+ * Nothing stops a careless (or defensive-but-redundant) adapter from doing
+ * BOTH for the same inbound message — calling the callback synchronously
+ * AND also returning a non-null point. Without a guard, both paths reach
+ * {@see WoodevPickupMapProviderEmbedded#_handlePayload}, so one inbound
+ * carrier message would produce TWO `select`/`error` emissions, and
+ * `pickup-mount.js` would start two confirmation round trips for one
+ * customer click. The rule: once an emission has already happened
+ * SYNCHRONOUSLY during a `selectAdapter` call (via the callback route), the
+ * adapter's own return value is ignored, not processed a second time — see
+ * {@see WoodevPickupMapProviderEmbedded#_reentrantEmit}'s own docblock
+ * (constructor) for the exact mechanics. This preserves BOTH legal adapter
+ * styles unchanged (callback-then-null: one emission from the callback;
+ * return-only: one emission from the return value) and collapses the
+ * pathological both-at-once case to exactly one emission too.
  *
  * NORMALIZATION, NOT NORMALIZATION-OR-DIE: once a message IS recognised as our
  * envelope, or an adapter has translated one, `point`/the adapter's return
@@ -292,10 +321,53 @@
 	}
 
 	/**
+	 * A plain decimal numeric-string literal: an optional sign, digits (with an
+	 * optional fractional part, either side of the `.` allowed to be empty as
+	 * long as at least one digit exists somewhere), and an optional exponent.
+	 * Deliberately narrower than JS's own `Number()`/`parseFloat()` coercion —
+	 * see {@see isNumeric}'s docblock for why.
+	 *
+	 * @type {RegExp}
+	 */
+	var DECIMAL_NUMBER_RE = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/;
+
+	/**
 	 * Whether `value` is numeric in the sense PHP's `is_numeric()` would accept
-	 * it for a coordinate — a finite number, or a non-empty string that parses
-	 * to one. Mirrors the guard `Pickup_Point::from_array()` applies to `lat`/
-	 * `lng` before casting to float.
+	 * it for a coordinate — a finite number, or a non-empty string that is a
+	 * plain DECIMAL numeric literal (optional sign, digits, optional fractional
+	 * part, optional exponent — see {@see DECIMAL_NUMBER_RE}). Mirrors the guard
+	 * `Pickup_Point::from_array()` applies to `lat`/`lng` before casting to
+	 * float, which itself mirrors PHP's `is_numeric()` (PHP 7+): notably, that
+	 * means a hex/octal/binary literal string (`'0x20'`, `'0b11'`, `'0o17'`) is
+	 * REJECTED here, not accepted, even though it looks "numeric" — this is the
+	 * whole point, not an oversight.
+	 *
+	 * Issue #251 follow-up (Codex review): this used to read
+	 * `isFinite( Number( value ) )`, which — unlike PHP's `is_numeric()` —
+	 * ACCEPTS a hex string (`Number( '0x20' ) === 32`), while
+	 * {@see normalizePoint}'s conversion step uses `parseFloat()`, which reads
+	 * the very same string as `0` (`parseFloat` stops at the first character it
+	 * cannot parse as a decimal digit, and `'0x20'` starts with a valid `'0'`
+	 * digit followed by non-digit `'x'`). The two disagreed silently: a hex
+	 * coordinate string PASSED validation here and was then silently coerced to
+	 * `0` — null island — by `parseFloat()`, exactly the "junk is coerced, not
+	 * rejected" outcome `normalizePoint()`'s own docblock forbids. This was a
+	 * KNOWN, deliberately accepted divergence from PHP's `is_numeric()` when
+	 * #201 landed — `lat`/`lng` were still REQUIRED then, so a hex string
+	 * still produced a number and the divergence was provably unreachable.
+	 * Making them OPTIONAL (issue #251) is what turned it into a live defect:
+	 * an adapter now controls whether `lat`/`lng` are present at all, and a
+	 * carrier/adapter bug that hands through a hex-looking id fragment as a
+	 * coordinate would previously have been silently accepted as `(0, 0)`.
+	 * Validation and conversion must agree on what "numeric" means; this
+	 * regex-based check is that single source of truth — `parseFloat()` in
+	 * `normalizePoint()` is only ever reached for a value this function has
+	 * already accepted, and never disagrees with it, because every string this
+	 * regex matches parses via `parseFloat()` to the exact same value.
+	 *
+	 * Exponent notation (`'1e2'`) IS accepted: it is a legitimate decimal
+	 * number, unlike a hex/octal/binary literal, which is a different RADIX
+	 * entirely, not an alternate way to write the same decimal value.
 	 *
 	 * @param {*} value
 	 * @returns {boolean}
@@ -305,8 +377,10 @@
 			return isFinite( value );
 		}
 
-		if ( 'string' === typeof value && value.trim().length > 0 ) {
-			return isFinite( Number( value ) );
+		if ( 'string' === typeof value ) {
+			var trimmed = value.trim();
+
+			return trimmed.length > 0 && DECIMAL_NUMBER_RE.test( trimmed );
 		}
 
 		return false;
@@ -642,6 +716,25 @@
 		 */
 		this._loadTimer = null;
 
+		/**
+		 * RE-ENTRY GUARD (issue #251 follow-up, Codex review): a `selectAdapter` is legally
+		 * allowed to report a selection EITHER by calling the callback-style hook
+		 * (`window.WoodevPickupEmbedded.select()`, routed through
+		 * {@see WoodevPickupMapProviderEmbedded#_handleExternalSelect}) OR by RETURNING the
+		 * point directly from the call `_buildMessageHandler()` makes into it — both are
+		 * documented, legal adapter styles (see the file docblock's "CALLBACK-STYLE WIDGETS"
+		 * section for the first). An adapter that does BOTH for the same inbound carrier
+		 * message must still produce exactly ONE `select`/`error` emission for it, not two.
+		 * `_buildMessageHandler()` resets this to `false` immediately before invoking
+		 * `selectAdapter`; `_handleExternalSelect()` sets it to `true` if it runs
+		 * SYNCHRONOUSLY during that call. When it reads `true` afterwards, the adapter's
+		 * return value describes a selection ALREADY emitted through the callback route, and
+		 * is ignored — see `_buildMessageHandler()`'s own comment at the check.
+		 *
+		 * @type {boolean}
+		 */
+		this._reentrantEmit = false;
+
 		/** @type {boolean} guards destroy() against a second call. */
 		this._destroyed = false;
 	}
@@ -750,25 +843,38 @@
 			// Step 2: initAdapter — answers the carrier's own handshake. A throw
 			// is swallowed: `window` is a shared bus, and a plugin-supplied
 			// adapter must never be able to break the picker for unrelated
-			// traffic it does not recognise either.
+			// traffic it does not recognise either. Issue #251 follow-up (Codex
+			// review): the `postMessage()` call below is INSIDE this same try —
+			// it used to sit after the catch, unguarded, so an adapter return
+			// value the structured-clone algorithm cannot handle (a function, a
+			// `Symbol`, a cyclic object) threw `DataCloneError` straight out of
+			// this handler and into the page, defeating the whole "an adapter
+			// fault must not break the picker" rule this catch exists to
+			// enforce. `postMessage()` throwing is swallowed exactly like
+			// `initAdapter()` itself throwing — both are the adapter's fault,
+			// not the framework's, and neither may propagate.
 			var initAdapter = resolveAdapter( config.initAdapter );
 
 			if ( initAdapter ) {
-				var initPayload;
+				var initClaimed = false;
 
 				try {
-					initPayload = initAdapter( data );
+					var initPayload = initAdapter( data );
+
+					if ( undefined !== initPayload && null !== initPayload ) {
+						initClaimed = true;
+
+						// Belt-and-suspenders alongside check 3 above: never compute a
+						// `postMessage` call without a real, non-empty targetOrigin.
+						if ( config.expectedOrigin ) {
+							self._iframe.contentWindow.postMessage( initPayload, config.expectedOrigin );
+						}
+					}
 				} catch ( e ) {
 					return;
 				}
 
-				if ( undefined !== initPayload && null !== initPayload ) {
-					// Belt-and-suspenders alongside check 3 above: never compute a
-					// `postMessage` call without a real, non-empty targetOrigin.
-					if ( config.expectedOrigin ) {
-						self._iframe.contentWindow.postMessage( initPayload, config.expectedOrigin );
-					}
-
+				if ( initClaimed ) {
 					return;
 				}
 			}
@@ -782,14 +888,34 @@
 			if ( selectAdapter ) {
 				var rawPoint;
 
+				// RE-ENTRY GUARD (issue #251 follow-up, Codex review) — see `_reentrantEmit`'s
+				// own docblock in the constructor. Reset immediately before the call: a stale
+				// `true` left over from some earlier, unrelated `_handleExternalSelect()` call
+				// (a genuine callback-style widget with no configured adapter at all, say) must
+				// never be mistaken for THIS call's own re-entry.
+				self._reentrantEmit = false;
+
 				try {
 					rawPoint = selectAdapter( data );
 				} catch ( e ) {
-					self._emit( 'error', {
-						code: 'woodev_pickup_embed_adapter_error',
-						message: text( config, 'error' ),
-					} );
+					// A synchronous callback-style emission that happened before the throw
+					// already reported this selection (or its own failure) — do not ALSO
+					// emit `error` for the same inbound message.
+					if ( ! self._reentrantEmit ) {
+						self._emit( 'error', {
+							code: 'woodev_pickup_embed_adapter_error',
+							message: text( config, 'error' ),
+						} );
+					}
 
+					return;
+				}
+
+				// The adapter already reported this exact selection synchronously via
+				// `window.WoodevPickupEmbedded.select()` — the return value below describes
+				// the SAME selection, not a second one, and must be ignored so one inbound
+				// carrier message never produces two `select`/`error` emissions.
+				if ( self._reentrantEmit ) {
 					return;
 				}
 
@@ -916,6 +1042,14 @@
 		if ( this._destroyed ) {
 			return;
 		}
+
+		// See `_reentrantEmit`'s own docblock (constructor): marks that THIS route already
+		// handled a selection, so a `selectAdapter` invocation still in progress on the call
+		// stack above this one (see `_buildMessageHandler()`) knows to ignore its own return
+		// value rather than emit the same selection a second time. Set unconditionally, not
+		// only while a `selectAdapter` call is in flight — harmless when it is not (nothing
+		// reads it until the next `selectAdapter` invocation resets it first).
+		this._reentrantEmit = true;
 
 		this._handlePayload( payload, this._config || {} );
 	};
