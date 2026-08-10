@@ -90,6 +90,12 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		/** @var \Woodev\Framework\Handlers\Cron_Handler cron handler instance */
 		protected \Woodev\Framework\Handlers\Cron_Handler $cron_handler;
 
+		/** @var \Woodev\Framework\Handlers\Plugin_Action_Links_Handler plugin action links handler instance */
+		protected \Woodev\Framework\Handlers\Plugin_Action_Links_Handler $plugin_action_links_handler;
+
+		/** @var \Woodev\Framework\Handlers\API_Logger API request logger handler instance */
+		protected \Woodev\Framework\Handlers\API_Logger $api_logger;
+
 		/**
 		 * Initialize the plugin.
 		 *
@@ -148,6 +154,12 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 
 			// build the cron handler instance
 			$this->init_cron_handler();
+
+			// build the plugin action links handler instance
+			$this->init_plugin_action_links_handler();
+
+			// build the API request logger handler instance
+			$this->init_api_logger();
 
 			// build the REST API handler instance
 			$this->init_rest_api_handler();
@@ -287,6 +299,36 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		}
 
 		/**
+		 * Builds the plugin action links handler instance.
+		 *
+		 * The handler registers the `plugin_action_links_{basename}` filter,
+		 * bound to the plugin instance so a plugin_action_links() override on
+		 * the concrete plugin class keeps firing (see the handler's docblock).
+		 *
+		 * @since 2.0.1
+		 *
+		 * @return void
+		 */
+		protected function init_plugin_action_links_handler(): void {
+			$this->plugin_action_links_handler = new \Woodev\Framework\Handlers\Plugin_Action_Links_Handler( $this );
+		}
+
+		/**
+		 * Builds the API request logger handler instance.
+		 *
+		 * Registration of the `woodev_{plugin_id}_api_request_performed` listener
+		 * stays behind the overridable add_api_request_logging() (see the
+		 * handler's docblock) rather than happening unconditionally here.
+		 *
+		 * @since 2.0.1
+		 *
+		 * @return void
+		 */
+		protected function init_api_logger(): void {
+			$this->api_logger = new \Woodev\Framework\Handlers\API_Logger( $this );
+		}
+
+		/**
 		 * Builds the REST API handler instance.
 		 *
 		 * Plugins can override this to add their own data and/or routes.
@@ -411,14 +453,8 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 			// run competitor detection on admin screens (never the front end)
 			add_action( 'current_screen', array( $this, 'run_competitor_notices' ) );
 
-			// add a 'Configure' link to the plugin action links
-			add_filter(
-				'plugin_action_links_' . plugin_basename( $this->get_plugin_file() ),
-				array(
-					$this,
-					'plugin_action_links',
-				)
-			);
+			// the 'Configure'/'Docs'/'Support'/'Review'/'License' plugin action links filter
+			// is registered by Plugin_Action_Links_Handler (see init_plugin_action_links_handler()).
 
 			// automatically log HTTP requests from Woodev_API_Base
 			$this->add_api_request_logging();
@@ -655,6 +691,8 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 			require_once $framework_path . '/handlers/script-handler.php';
 			require_once $framework_path . '/handlers/class-translation-handler.php';
 			require_once $framework_path . '/handlers/class-cron-handler.php';
+			require_once $framework_path . '/handlers/class-plugin-action-links-handler.php';
+			require_once $framework_path . '/handlers/class-api-logger.php';
 			require_once $framework_path . '/class-woodev-plugin-dependencies.php';
 			require_once $framework_path . '/class-woodev-hook-deprecator.php';
 			require_once $framework_path . '/class-admin-message-handler.php';
@@ -853,93 +891,61 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		/**
 		 * Return the plugin action links.  This will only be called if the plugin is active.
 		 *
+		 * Delegates the actual link building to Plugin_Action_Links_Handler; kept as a
+		 * real method (not just a filter callback on the handler) so that
+		 * Woodev_Payment_Gateway_Plugin::plugin_action_links()'s `parent::` call keeps
+		 * working — see Plugin_Action_Links_Handler's docblock.
+		 *
 		 * @param array $actions associative array of action names to anchor tags
 		 *
 		 * @return array associative array of plugin action links
 		 */
 		public function plugin_action_links( $actions ) {
-
-			$custom_actions = [];
-
-			if ( $this->get_settings_link( $this->get_id() ) ) {
-				$custom_actions['configure'] = $this->get_settings_link( $this->get_id() );
-			}
-
-			if ( $this->get_documentation_url() ) {
-				$custom_actions['docs'] = sprintf( '<a href="%s">%s</a>', $this->get_documentation_url(), 'Документация' );
-			}
-
-			if ( $this->get_support_url() ) {
-				$custom_actions['support'] = sprintf( '<a href="%s">%s</a>', $this->get_support_url(), 'Поддержка' );
-			}
-
-			if ( $this->get_reviews_url() ) {
-				$custom_actions['review'] = sprintf( '<a href="%s">%s</a>', $this->get_reviews_url(), 'Оставить отзыв' );
-			}
-
-			if ( $this->is_need_license() && $this->get_license_instance()->get_license_settings_url() ) {
-				$license_text              = $this->get_license_instance()->is_license_valid() ? 'Лицензия' : 'Указать лицензию';
-				$custom_actions['license'] = sprintf( '<a href="%s">%s</a>', $this->get_license_instance()->get_license_settings_url(), esc_html( $license_text ) );
-			}
-
-			// add the links to the front of the actions list
-			return array_merge( $custom_actions, $actions );
+			return $this->plugin_action_links_handler->build_links( $actions );
 		}
 
 		/**
 		 * Automatically log API requests/responses when using Woodev_API_Base
 		 *
+		 * Delegates registration to API_Logger::register(). Kept as a real,
+		 * overridable method (not handler self-registration) because
+		 * Woodev_Payment_Gateway_Plugin no-ops this to log per-gateway instead —
+		 * see API_Logger's docblock.
+		 *
 		 * @see Woodev_API_Base::broadcast_request()
 		 */
 		public function add_api_request_logging() {
-
-			if ( ! has_action( 'woodev_' . $this->get_id() . '_api_request_performed' ) ) {
-				add_action(
-					'woodev_' . $this->get_id() . '_api_request_performed',
-					array(
-						$this,
-						'log_api_request',
-					),
-					10,
-					2
-				);
-			}
+			$this->api_logger->register();
 		}
 
 		/**
 		 * Log API requests/responses
+		 *
+		 * Delegates to API_Logger::log_api_request(). Kept as a real method because
+		 * Woodev_Licensing_API::broadcast_request() calls it directly on the plugin
+		 * instance, outside of the woodev_{plugin_id}_api_request_performed action.
 		 *
 		 * @param array       $request request data, see Woodev_API_Base::broadcast_request() for format
 		 * @param array       $response response data
 		 * @param string|null $log_id log to write data to
 		 */
 		public function log_api_request( $request, $response, $log_id = null ) {
-
-			$this->log( "Запрос\n" . $this->get_api_log_message( $request ), $log_id );
-
-			if ( ! empty( $response ) ) {
-				$this->log( "Ответ\n" . $this->get_api_log_message( $response ), $log_id );
-			}
+			$this->api_logger->log_api_request( $request, $response, $log_id );
 		}
 
 		/**
 		 * Transform the API request/response data into a string suitable for logging
+		 *
+		 * Delegates to API_Logger::get_api_log_message(). Kept as a real method
+		 * because Woodev_Payment_Gateway::log_api_request() calls it directly via
+		 * $this->get_plugin()->get_api_log_message().
 		 *
 		 * @param array $data
 		 *
 		 * @return string
 		 */
 		public function get_api_log_message( $data ) {
-
-			$messages = array();
-
-			$messages[] = isset( $data['uri'] ) && $data['uri'] ? 'Запрос' : 'Ответ';
-
-			foreach ( (array) $data as $key => $value ) {
-				$messages[] = sprintf( '%s: %s', $key, is_array( $value ) || ( is_object( $value ) && 'stdClass' == get_class( $value ) ) ? print_r( (array) $value, true ) : $value );
-			}
-
-			return implode( "\n", $messages );
+			return $this->api_logger->get_api_log_message( $data );
 		}
 
 		/**
