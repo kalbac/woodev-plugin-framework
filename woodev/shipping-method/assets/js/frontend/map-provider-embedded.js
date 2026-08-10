@@ -74,14 +74,18 @@
  * not that every message they ever send is meant for this picker.
  *
  * NORMALIZATION, NOT NORMALIZATION-OR-DIE: once a message IS recognised as our
- * envelope, `point` is run through {@see normalizePoint}, which mirrors
- * {@see \Woodev\Framework\Shipping\Pickup\Pickup_Point::from_array()}'s rules
- * field-for-field (required `id`/`name`/`lat`/`lng`/`address`/`type.code`/
- * `type.label`, `lat` in [-90,90], `lng` in [-180,180]; see that function's own
- * docblock for the full optional-field list). Failing normalization here emits
- * `error`, NEVER a malformed `select` — a provider that forwarded whatever the
- * carrier sent verbatim would let a broken/malicious carrier page write
- * garbage straight into the order.
+ * envelope, `point` is run through {@see normalizePoint}. It is NOT a
+ * field-for-field mirror of
+ * {@see \Woodev\Framework\Shipping\Pickup\Pickup_Point::from_array()} — only
+ * its OPTIONAL-field handling (defaults, list filtering, int/bool casts) is
+ * kept deliberately aligned with that PHP method, field by field. Its
+ * REQUIRED-field set is this file's OWN, currently `id`/`name`/`lat`/`lng`/
+ * `address`/`type.code`/`type.label` (`lat` in [-90,90], `lng` in
+ * [-180,180]) — see {@see normalizePoint}'s own docblock for why that set is
+ * a KNOWN, deliberate divergence from `from_array()`, not drift. Failing
+ * normalization here emits `error`, NEVER a malformed `select` — a provider
+ * that forwarded whatever the carrier sent verbatim would let a broken/
+ * malicious carrier page write garbage straight into the order.
  *
  * `selectable` IS DELIBERATELY OMITTED from every point this file emits: it is
  * a server-computed constraint verdict ({@see Constraint_Checker}) that only
@@ -350,14 +354,32 @@
 	}
 
 	/**
-	 * Normalizes a raw carrier payload into the framework's point shape, or
-	 * returns `null` when it cannot be — mirroring
-	 * {@see \Woodev\Framework\Shipping\Pickup\Pickup_Point::from_array()}
-	 * field-for-field (see that class for the authoritative rules; this is a
-	 * deliberate re-implementation, not a call into PHP, since the carrier's
-	 * embed talks to the BROWSER directly and never touches `woodev/v1`).
+	 * Normalizes a raw carrier payload into this provider's point shape, or
+	 * returns `null` when it cannot be. This is a deliberate re-implementation,
+	 * not a call into PHP, since the carrier's embed talks to the BROWSER
+	 * directly and never touches `woodev/v1`.
 	 *
-	 * Required: `id`/`name`/`lat`/`lng`/`address`/`type.code`/`type.label`.
+	 * NOT a field-for-field mirror of
+	 * {@see \Woodev\Framework\Shipping\Pickup\Pickup_Point::from_array()} — only
+	 * the OPTIONAL-field handling below is kept aligned with that PHP method,
+	 * field by field. The REQUIRED-field set is this file's own and diverges on
+	 * purpose:
+	 *
+	 * Required: `id`/`name`/`lat`/`lng`/`address`/`type.code`/`type.label`
+	 * (`lat` in [-90,90], `lng` in [-180,180]). `from_array()` requires `lat`/
+	 * `lng` too, but for a different reason — the framework's own map
+	 * (`map-provider-yandex.js`) needs coordinates to place a marker. THIS
+	 * provider draws no map of ours (see the file docblock's opening
+	 * paragraph), and a real carrier embed does not necessarily supply
+	 * coordinates at all: Почта России's widget, measured against this seam on
+	 * the rig, returns a selection payload with no `lat`/`lng` and no `name`
+	 * (`{ id, mailType, pvzType, indexTo, cashOfDelivery, regionTo, cityTo,
+	 * addressTo, weight, ... }`). Relaxing this required set to match what real
+	 * carriers actually send is tracked as #251; until that lands, requiring
+	 * `lat`/`lng`/`name` here means this function rejects that real payload.
+	 * KNOWN AND DELIBERATE, not an oversight of this pass — do not "fix" it as
+	 * a drift in isolation, it would conflict with #251's landing change.
+	 *
 	 * Optional, default `''` via {@see optionalString}: `short_address`/
 	 * `locality`/`postal_code`/`phone`/`instruction`/`work_time`/
 	 * `point_short_name`. Optional, default `[]`, filtered through

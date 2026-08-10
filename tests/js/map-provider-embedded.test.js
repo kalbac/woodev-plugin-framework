@@ -7,10 +7,12 @@
  *
  * Covers SP-5 Task 14: the `postMessage` origin/source security boundary
  * (exact-match, not prefix; the iframe's own `contentWindow`; fail-closed on
- * an empty `expectedOrigin`), point normalization mirroring
- * `Pickup_Point::from_array()`'s required-field/range rules, the invalid/
- * missing `embedUrl` guard, and `destroy()`'s listener detachment + callback
- * hook clearing + idempotency. Also covers the #201 field-parity fix:
+ * an empty `expectedOrigin`), point normalization against this file's OWN
+ * required-field/range rules (a KNOWN, deliberate divergence from
+ * `Pickup_Point::from_array()`'s required set — see `normalizePoint()`'s own
+ * docblock and #251), the invalid/missing `embedUrl` guard, and `destroy()`'s
+ * listener detachment + callback hook clearing + idempotency. Also covers the
+ * #201 field-parity fix, which is scoped to OPTIONAL-field handling only:
  * `services`/`point_short_name` now normalize at all, and `payment_methods`/
  * `photos`/`services` filter out non-string/whitespace-only elements instead
  * of `String()`-coercing them (matching `Pickup_Point::sanitize_string_list()`),
