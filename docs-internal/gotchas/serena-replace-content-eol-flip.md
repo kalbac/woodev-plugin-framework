@@ -1,6 +1,6 @@
-# Serena `replace_content` rewrites the whole file as CRLF on Windows
+# Serena `replace_content`/`replace_symbol_body` rewrites the whole file as CRLF on Windows
 
-**Topic:** `[tooling/*]` · **Discovered:** s25 (2026-06-20)
+**Topic:** `[tooling/*]` · **Discovered:** s25 (2026-06-20) · **Confirmed for `replace_symbol_body`:** #244 (2026-08-10)
 
 ## Symptom
 
@@ -22,12 +22,19 @@ file would also trip the **Assets-build-parity** / `.gitattributes eol=lf` guard
 ## ✅ Correct
 
 - For **existing source files**, use the built-in `Edit` tool (surgical, preserves
-  the file's existing EOL). It requires a built-in `Read` first — that's fine.
-- If you must use Serena `replace_content`, **convert the file back to LF**
-  afterwards: `sed -i 's/\r$//' <file>` and re-run the suite.
-- Serena **symbol** tools (`replace_symbol_body`, `insert_after_symbol`) and
-  `create_text_file` were not re-tested for this; assume the same risk and verify
-  EOL (`file <path>`) after any Serena write on Windows.
+  the file's existing EOL). It requires a built-in `Read` first — that's fine. On this
+  project, PHP source specifically is Serena-mandatory to *read*
+  (`find_symbol`/`get_symbols_overview`) — that mandate is about navigation, not about
+  which tool performs the write; use the built-in `Edit` for the actual edit once
+  Serena has located the symbol.
+- If you must use Serena `replace_content` **or `replace_symbol_body`**, **convert the
+  file back to LF** afterwards: `sed -i 's/\r$//' <file>` and re-run the suite.
+  `replace_symbol_body` was confirmed to have the identical CRLF-rewrite behavior
+  during #244 (2026-08-10) — the "assume the same risk" note below was correct, and is
+  no longer just an assumption.
+- `insert_after_symbol`/`insert_before_symbol` and `create_text_file` were not
+  re-tested for this; assume the same risk and verify EOL (`file <path>`) after any
+  Serena write on Windows.
 
 ## ❌ Wrong
 
