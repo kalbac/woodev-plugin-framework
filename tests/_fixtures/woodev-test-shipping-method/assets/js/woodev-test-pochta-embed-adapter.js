@@ -19,6 +19,20 @@
  * (`plugins-reference/woodev-russian-post/includes/classes/ajax.php`,
  * `set_point()`); do not reorder it.
  *
+ * F5 (rig finding, cosmetic, s63): a CONSECUTIVE-duplicate part is dropped
+ * before joining, added ON TOP of that field ORDER (not instead of it — the
+ * order above is untouched). Measured on the rig for Moscow: the carrier
+ * sends `regionTo: "г. Москва"` AND `cityTo: "г. Москва"` for the same
+ * point, so the naive `filter( Boolean ).join( ', ' )` produced
+ * `"г. Москва, г. Москва, ул. Никольская 7-9 стр. 4"`. {@see dedupeConsecutive}
+ * collapses only ADJACENT repeats (never removes a part that recurs
+ * non-consecutively, e.g. a region name that also happens to be a street
+ * name elsewhere), which is enough to fix this without reordering or
+ * dropping anything the reference plugin's own field list keeps. FIXTURE-
+ * ONLY: this stays out of `map-provider-embedded.js` and out of
+ * `Embedded_Map_Provider` — address composition is domain knowledge, exactly
+ * like the rest of this file (see the paragraph above).
+ *
  * `window.WoodevTestPochtaEmbedConfig` is localized by
  * `Woodev_Test_Shipping_Method_Plugin::maybe_enqueue_pochta_embed_adapter()`
  * in `woodev-test-shipping-method.php` — `accountId`/`accountType` come from
@@ -48,6 +62,34 @@
 	 */
 	function typeLabel( pvzType ) {
 		return 'postamat' === pvzType ? 'Почтомат' : 'Почтовое отделение';
+	}
+
+	/**
+	 * Drops a part that is IDENTICAL to the one immediately before it — F5 (rig
+	 * finding, s63), see the file docblock's own paragraph for the measured
+	 * Moscow case this fixes (`regionTo`/`cityTo` both `"г. Москва"`). Only
+	 * ADJACENT duplicates are collapsed: the field ORDER from the file docblock
+	 * (`regionTo, areaTo, cityTo, location, addressTo`) is preserved exactly,
+	 * and a value that repeats NON-consecutively (impossible with today's
+	 * measured field set, but not assumed impossible here) would survive
+	 * untouched — this is deliberately narrower than a generic "unique
+	 * values" filter, which could silently reorder-by-omission or drop a
+	 * legitimate repeat far apart in the address.
+	 *
+	 * @param {string[]} parts Already `filter( Boolean )`ed address parts.
+	 * @returns {string[]}
+	 */
+	function dedupeConsecutive( parts ) {
+		var result = [];
+		var i;
+
+		for ( i = 0; i < parts.length; i++ ) {
+			if ( 0 === result.length || result[ result.length - 1 ] !== parts[ i ] ) {
+				result.push( parts[ i ] );
+			}
+		}
+
+		return result;
 	}
 
 	window.WoodevPochtaEmbed = {
@@ -104,9 +146,9 @@
 			return {
 				id: String( p.id ),
 				name: ( 'postamat' === p.pvzType ? 'Почтомат №' : 'Отделение №' ) + p.indexTo,
-				address: [ p.regionTo, p.areaTo, p.cityTo, p.location, p.addressTo ]
-					.filter( Boolean )
-					.join( ', ' ),
+				address: dedupeConsecutive(
+					[ p.regionTo, p.areaTo, p.cityTo, p.location, p.addressTo ].filter( Boolean )
+				).join( ', ' ),
 				type: {
 					code: p.pvzType,
 					label: typeLabel( p.pvzType )
