@@ -1,6 +1,7 @@
 # Gotchas — Woodev Plugin Framework
 > **127 atomic gotchas, 22 namespaces (28 index sections)** — update when adding/removing.
-> Last updated: 2026-08-11 (session 66, #271: **+1 file, existing namespace `[js/*]`** —
+> Last updated: 2026-08-11 (session 66, brainstorm prep: **no new file** — `built-on-both-sides-with-no-caller-in-the-middle` gained its **s66 addendum**, the third occurrence and the first that is a whole public seam: `Address_Normalizer` (`suggest()`/`normalize()`), its `Null_Address_Normalizer` default and `Shipping_Plugin::get_address_normalizer()` all exist and are class-mapped with ZERO call sites, plus registered-but-never-enqueued DaData client assets. Two additions to the rule: a NULL DEFAULT is what makes an unwired seam comfortable, because it removes the only symptom — so the wiring check must be deliberate; and card #127 plans this exact shape as future work, so the drift runs BOTH ways — a card can claim absence where the code already exists.)
+> Prior: 2026-08-11 (session 66, #271: **+1 file, existing namespace `[js/*]`** —
 > `jquery-trigger-change-fires-no-native-event` (a jQuery `.trigger( 'change' )` dispatches no DOM
 > event, so a delegated `addEventListener( 'change' )` never runs — and that is how select2, i.e.
 > the locality field after §8's suggest takeover, reports a user's pick. Bind both worlds; double

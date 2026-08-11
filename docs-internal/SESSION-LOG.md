@@ -93,6 +93,31 @@ beside the id in the same session map at confirmation time (the server holds the
 **None of #272, #271, #265, #274 was on board №6 at all.** All four added and set (#272/#271 →
 Готово, #265/#274 → В работе). #143/#178 were already there and moved themselves on close.
 
+### Prepared for the next session, which opens as a BRAINSTORM (operator's decision)
+
+He will bring an idea of his own about «Населённый пункт» / регион / адрес and the providers that
+supply locality data, and expects it confirmed, rejected or extended **with evidence**. #273
+(who owns the field) + #127 (where the data comes from) + #159 (which identity travels to the
+carrier) are one problem seen from three sides; all three now cross-link to a brief written for the
+conversation: `research/2026-08-11-locality-field-brainstorm-brief.md`. Facts only, verified against
+code, **deliberately no proposal** — the point is to remove re-derivation, not to pre-empt his idea.
+
+Two findings from assembling it:
+
+- **The address-normalization seam is already built and unwired.** `Address_Normalizer`
+  (`suggest()`/`normalize()`), `Null_Address_Normalizer`, `Shipping_Plugin::get_address_normalizer()`
+  — all class-mapped, **zero call sites**, plus registered-but-never-enqueued DaData assets. #127
+  plans that exact shape as future work. Recorded as the s66 addendum to
+  `built-on-both-sides-with-no-caller-in-the-middle`, with the new half of the rule: a **Null
+  default** is what makes an unwired seam comfortable, because it removes the only symptom.
+- **A nuance correcting what the s65 handoff recorded from the operator about ФИАС.** At the query
+  boundary no carrier is addressed by ФИАС — that holds. But Почта РФ *does* carry a `fias` value
+  locally, as the guard on its single chosen-point slot. Identity and query key are two different
+  roles, and conflating them is what makes #273 look harder than it is.
+
+Board: #273 and #270 were also missing from board №6 — added (#273 → Инбокс, it is his card and
+agents never promote his; #270 → Бэклог).
+
 ### Gotchas: +3 (125 → 128), one rewritten
 
 `a-programmatic-parent-change-must-not-run-a-destructive-cascade`,
