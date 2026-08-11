@@ -84,7 +84,10 @@ function buildConfig() {
 	return {
 		endpoint: ENDPOINT,
 		nonce:    'test-nonce',
-		i18n:     { placeholder: 'Выберите…', required: 'Заполните обязательное поле.' },
+		// No `required` key: #274 removed the inline «Заполните обязательное поле.» caption
+		// and, with it, the only consumer of that string — a fixture carrying it would be
+		// richer than production in exactly the direction that hides a regression.
+		i18n:     { placeholder: 'Выберите…' },
 		fields:   {
 			billing_state: { source_kind: 'options', required: true },
 			billing_city:  { source_kind: 'suggest', depends_on: 'billing_state', required: true },

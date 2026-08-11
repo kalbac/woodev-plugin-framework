@@ -659,46 +659,18 @@
 	// ---------------------------------------------------------------------
 
 	/**
-	 * Показывает/убирает inline-ошибку рядом с полем (или его pickup-якорем).
-	 *
-	 * @param {Object}  entry   Запись { store, config }.
-	 * @param {string}  fieldId Id поля.
-	 * @param {boolean} invalid Требуется ли показать ошибку.
-	 * @returns {void}
-	 */
-	function toggleFieldError( entry, fieldId, invalid ) {
-		var field    = entry.store.getField( fieldId )
-		var errorId  = 'woodev-checkout-field-error-' + fieldId
-		var $error   = $( '#' + errorId )
-		var $anchor  = field && field.is_pickup_slot
-			? $( '[data-woodev-pickup-slot="' + fieldId + '"]' ).first()
-			: $( '#' + fieldId ).first()
-
-		if( ! invalid ) {
-			$error.remove()
-			return
-		}
-
-		if( ! $anchor.length ) {
-			return
-		}
-
-		if( ! $error.length ) {
-			$error = $( '<span id="' + errorId + '" class="woodev-checkout-field-error" role="alert"></span>' )
-			$anchor.after( $error )
-		}
-
-		var i18nRequired = ( entry.config && entry.config.i18n && entry.config.i18n.required )
-			? entry.config.i18n.required
-			: 'Заполните обязательное поле.'
-		$error.text( i18nRequired )
-	}
-
-	/**
 	 * Пересчитывает A2-гейт по ВСЕМ сторам: если хоть одно требуемое поле пусто —
-	 * блокирует «Оформить заказ» и показывает inline-ошибку; иначе разблокирует.
+	 * блокирует «Оформить заказ»; иначе разблокирует.
 	 *
 	 * Сервер остаётся авторитетом — это только UX.
+	 *
+	 * НИКАКОГО inline-текста под полем (#274). Раньше здесь рисовалась подпись
+	 * «Заполните обязательное поле.» под «Населённым пунктом» и под кнопкой выбора
+	 * ПВЗ; ни СДЭК, ни Яндекс, ни Почта так не делают, и правило оператора то же:
+	 * заблокированный контрол не поясняем — заблокирован и всё. Отключённая кнопка
+	 * «Оформить заказ» и есть сигнал, а WooCommerce всё равно скажет своё при
+	 * отправке формы. Вместе с текстом ушла и строка `i18n.required` из
+	 * `Checkout_Handler::enqueue_*` — у неё не осталось потребителя.
 	 *
 	 * @returns {void}
 	 */
@@ -712,8 +684,6 @@
 				var required = entry.store.evaluateRequired( fieldId )
 				var value    = entry.store.getValue( fieldId )
 				var invalid  = required && ( value === undefined || value === null || String( value ) === '' )
-
-				toggleFieldError( entry, fieldId, invalid )
 
 				if( invalid ) {
 					blocked = true
