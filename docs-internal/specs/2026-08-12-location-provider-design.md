@@ -39,6 +39,7 @@ mandatory adapter.
 | D12 | `suggest` returns fields **defined by our contract**, provider maps its payload into them; raw provider payload rides along as an opaque extra | Operator's explicit requirement. Adapters and cascade must not depend on any provider's dictionary. The raw extra lets e.g. the СДЭК adapter under the СДЭК provider take `city_code` with zero extra requests |
 | D13 | Postcode is a **derived, write-only field** | The operator's own pipeline: changing postcode clears nothing and has no dependents; Почта's adapter reads the index from the RECORD, not from the field |
 | D14 | The existing `Address_Normalizer` seam (zero call sites) is **superseded** by this contract; the registered-but-never-enqueued DaData assets are removed | Clean-break policy; the seam's `suggest()`/`normalize()` shape is absorbed into the provider contract |
+| D15 *(post-review amendment, approved 12.08.2026)* | Suggest support is declared **per level** (`region` / `settlement` / `address`), and for a level the chosen provider does not support the framework falls back down a **provider chain** (chosen → bundled DaData, when configured). A level no configured provider supports leaves that field native | A single all-or-nothing `suggest` capability would kill the address field for a store choosing a city-level provider: the CDEK dictionary has regions and cities but NO street data — which is why the operator's own production pairs CDEK city + DaData address inside the same mode (`address-autocomplete.js` enqueued in every СДЭК mode). The fallback chain reproduces that production behavior by construction and mirrors WC's own fallback-provider concept |
 
 ## 3. Terminology (fixed)
 
@@ -63,9 +64,13 @@ A provider declares:
 - `countries` — static ISO-3166 alpha-2 list. Static so arbitration can happen server-side as well
   as client-side (WC's `canSearch` is JS-only and thus invisible to PHP).
 - Capabilities:
-  - `suggest( query, scope )` — **required.** Query-driven lookup. `scope` = country + level
+  - `suggest( query, scope )` — **required**, with support declared **per level** (D15): the
+    provider states which of `region` / `settlement` / `address` it can answer (CDEK: region +
+    settlement only; DaData: all three). Query-driven lookup. `scope` = country + level
     + optional parent constraint (a locality key or its components: "settlements within region X",
-    "addresses within settlement Y").
+    "addresses within settlement Y"). Per level, the framework walks the provider chain
+    (chosen → bundled fallback) and uses the first that supports it; a level nobody supports
+    leaves the field native.
   - `list( scope )` — optional. Enumeration for the "related list" mode (e.g. CDEK
     `/location/regions`, `/location/cities?region_code=`).
   - `locate( ip )` — optional. Geo-IP → record (DaData `iplocate/address`).
@@ -152,7 +157,11 @@ Postcode(write-only).
 ### 4.6 Default locality (D11)
 
 Store policy: `fixed` (merchant picks a locality in admin via the active provider's search) /
-`geoip` (provider `locate`, shown only when supported) / `off`. Resolved lazily on first need
+`geoip` (provider `locate`, shown only when supported) / `off`. A fixed default is stored as a
+record under the provider's key namespace, so **switching the provider strands it**: on the first
+default resolution under a different provider the framework re-resolves it by components through
+the new provider, and if that fails the settings surface flags the default as needing re-picking
+(never silently serving a stale foreign-namespace record). Resolved lazily on first need
 (cart shipping calculator, checkout render), stored in the same slot flagged `implicit`. A real
 customer selection overwrites it and drops the flag. Implicit records participate in rate
 calculation but never suppress "please choose your locality" prompts.
