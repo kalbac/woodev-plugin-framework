@@ -121,9 +121,20 @@ if ( ! interface_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Selection_Scope
 		 * A plugin whose carrier has exactly one point type may simply always return
 		 * that one code — types are domain values, so it always has one to name.
 		 *
+		 * `$method_id` IS `''` WHENEVER WOOCOMMERCE CANNOT YET TELL US which method the
+		 * customer chose — no session started, or no shipping rate resolved for this
+		 * request. `''` means "unknown", never "no method": match it as unknown and
+		 * return `null`, and in particular never let it fall through a default branch
+		 * that answers with a real type. The same sentinel, with the same rule, is
+		 * documented on `woodev_shipping_pickup_point_selection`'s `$context['method_id']`
+		 * — an implementation written as `return 'courier' === $method_id ? null : 'PVZ';`
+		 * satisfies neither, because it answers `'PVZ'` for a method nobody has chosen.
+		 * Prefer matching your own pickup method ids positively.
+		 *
 		 * @since 2.0.2
 		 *
-		 * @param string $method_id Bare shipping-method id (no `:instance_id` suffix).
+		 * @param string $method_id Bare shipping-method id (no `:instance_id` suffix), or
+		 *                          `''` when the chosen method is not yet known — see above.
 		 *
 		 * @return string|null A type code, {@see self::TYPE_ANY}, or `null`.
 		 */
