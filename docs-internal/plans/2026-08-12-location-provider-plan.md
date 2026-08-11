@@ -200,7 +200,9 @@ interface Location_Provider {
 	public function get_name(): string;
 	/** @return string[] ISO-3166 alpha-2, static list (spec D2: server-side arbitration needs PHP visibility) */
 	public function get_countries(): array;
-	/** @return string[] subset of [ 'suggest', 'list', 'locate', 'normalize' ] */
+	/** @return string[] subset of [ 'region', 'settlement', 'address' ] — suggest support PER LEVEL (spec D15: CDEK has no street data) */
+	public function get_suggest_levels(): array;
+	/** @return string[] subset of [ 'list', 'locate', 'normalize' ] */
 	public function get_capabilities(): array;
 	/** @return Location_Record[] */
 	public function suggest( string $query, Location_Scope $scope ): array;
@@ -290,7 +292,10 @@ implement.
 - [ ] **Step 1: Write failing tests:** `is_active()` (gate + provider configured);
   `get_customer_record()` / `set_customer_record()` delegate to the store;
   `resolve_for( $plugin )` = current record → cache → adapter, null when no record;
-  `is_country_supported( 'RU' )` consults the active provider's static list.
+  `is_country_supported( 'RU' )` consults the active provider's static list;
+  **`provider_for_level( $level )` walks the chain chosen → bundled fallback (spec D15):** a fake
+  city-only provider chosen + configured DaData → `address` level served by DaData, `settlement`
+  by the chosen one; no configured provider supports a level → null (field stays native).
 - [ ] **Step 2–3: Implement** as the single entry point other framework code uses (pickup layer,
   REST, checkout config). Wire instantiation into `Shipping_Plugin` bootstrap next to the existing
   handlers (study with Serena how `get_checkout_handler()` and peers are constructed and follow
@@ -315,6 +320,8 @@ implement.
   - `suggest` at `address` level scoped by a settlement record uses street→house bounds;
   - a suggestion with no FIAS id derives the key via `Locality_Key::derive()` (Task 1 helper);
   - `locate( '1.2.3.4' )` → `iplocate/address` → settlement record or null;
+  - `get_suggest_levels()` returns all three levels (DaData serves region/settlement/address —
+    it is the universal fallback tail of the D15 chain);
   - `get_capabilities()` contains `normalize` ONLY when the "clean" secret is configured
     (DaData clean API needs token+secret; capability presence follows configuration);
   - no token configured → provider reports itself unconfigured; `Location_Service::is_active()`
@@ -365,8 +372,10 @@ implement.
 
 - [ ] **Step 1: Write failing tests:** normalized descriptor carries
   `source_kind === 'location'` + `location_level`; config block contains
-  `{ endpoints: { suggest, select }, nonce, countries: [...], mode, current: { key, level } | null, implicit: bool }`
-  and NO token/secret leak (assert the serialized config contains neither); config `current` comes
+  `{ endpoints: { suggest, select }, nonce, countries: [...], mode, levels: { region: bool, settlement: bool, address: bool }, current: { key, level } | null, implicit: bool }`
+  where `levels` reports which levels SOME configured provider serves (the D15 chain resolved
+  server-side — the client only learns supported/unsupported, never which provider); NO
+  token/secret leak (assert the serialized config contains neither); config `current` comes
   from the customer store.
 - [ ] **Step 2–3: Implement.** The location block rides inside the existing §8 localized config
   (one config object, one enqueue path). Field presence stays the plugin's field-config decision —
@@ -422,7 +431,10 @@ implement.
     double delivery is harmless by construction (test fires both for the same mutation, asserts
     single cascade application — idempotence via the remembered-value gate);
   - country switch to an unsupported country → every attached widget detached, fields left
-    native, store state kept; switch back → re-attached with state intact.
+    native, store state kept; switch back → re-attached with state intact;
+  - a field whose level is unsupported per config `levels` (D15: e.g. `address` with only a
+    city-level provider configured) never gets a widget attached and never blocks the cascade —
+    parents still clear it as a plain input, its edits clear its own descendants.
 - [ ] **Step 2: FAIL. Step 3: Implement** on top of the §8 store (`checkout-field-store.js`)
   rather than a parallel state world — the store already owns canonical values + cascade edges;
   this module adds location semantics (record objects, persist, backwards fill, attach/detach).
@@ -494,7 +506,11 @@ implement.
     failure/null → no store write, next request may retry (no failure caching here — geo-IP is
     transient); policy `geoip` offered in settings ONLY when the provider has `locate`;
   - resolution is lazy: triggered from `get_customer_record()` when empty (so cart/checkout both
-    get it with zero extra wiring — spec §4.6), NOT on every request.
+    get it with zero extra wiring — spec §4.6), NOT on every request;
+  - **provider switch strands a fixed default (spec §4.6/D15 amendment):** a stored fixed record
+    whose key namespace ≠ the current chain's providers is re-resolved by components through the
+    new provider on first use; re-resolve failure → default treated as unset AND the settings
+    surface flags it as needing re-picking — a stale foreign-namespace record is never served.
 - [ ] **Step 2: FAIL. Step 3: Implement.** IP via `WC_Geolocation::get_ip_address()`.
 - [ ] **Step 4: Green. Commit** `feat(location): store-level default locality policy`.
 
@@ -571,6 +587,7 @@ implement.
 | D12 contract-shaped suggest + raw passthrough | 1, 7 |
 | D13 postcode derived/write-only | 11 |
 | D14 Address_Normalizer + assets removal | 16 |
+| D15 per-level suggest + provider fallback chain | 2, 6, 9, 11, 14 |
 | §4.3 adapter obligation `_doing_it_wrong` | 5 |
 | §4.4 field-presence variants | 9, 11 |
 | §4.6 lazy default before cart/checkout | 14 |
