@@ -297,6 +297,11 @@ function woodev_test_shipping_method_plugin_init(): void {
 	// is truthy) does anything.
 	require_once __DIR__ . '/class-test-embedded-confirm-point-source.php';
 
+	// Issue #176: the pickup-selection-persistence fixture scope, passed as the
+	// Pickup_Handler constructor's own 15th argument below. Required unconditionally,
+	// same reasoning as the requires just above.
+	require_once __DIR__ . '/class-test-selection-scope.php';
+
 	if ( ! class_exists( 'Woodev_Test_Viewport_Point_Source' ) ) {
 
 		/**
@@ -667,7 +672,10 @@ function woodev_test_shipping_method_plugin_init(): void {
 				// #170 tracks. Arguments 13-14 (`close_on_select`/`refresh_checkout`) come from
 				// the WOODEV_TEST_PICKUP_SELECTION_* constants (issue #251) rather than literals,
 				// so the rig can reach the "modal stays open after a selection" path without a
-				// code edit — see those constants' own docblock.
+				// code edit — see those constants' own docblock. Argument 15 (issue #176) is the
+				// pickup-selection-persistence scope — see Woodev_Test_Selection_Scope's own
+				// docblock for why it deliberately speaks a different locality vocabulary than
+				// this fixture's own points.
 				$this->pickup_handler = new \Woodev\Framework\Shipping\Pickup\Pickup_Handler(
 					self::PLUGIN_ID,
 					'carrier_pickup_point',
@@ -682,7 +690,8 @@ function woodev_test_shipping_method_plugin_init(): void {
 					'',
 					true,
 					WOODEV_TEST_PICKUP_SELECTION_CLOSE,
-					WOODEV_TEST_PICKUP_SELECTION_REFRESH_CHECKOUT
+					WOODEV_TEST_PICKUP_SELECTION_REFRESH_CHECKOUT,
+					new \Woodev_Test_Selection_Scope()
 				);
 
 				// Issue #251: the fixture-owned Почта adapter script — see
