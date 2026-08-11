@@ -51,8 +51,10 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 	use Woodev\Framework\Shipping\Order\Shipping_Order_Handler;
 	use Woodev\Framework\Shipping\Pickup\Pickup_Handler;
 	use Woodev\Framework\Shipping\Pickup\Pickup_Point;
+	use Woodev\Framework\Shipping\Pickup\Pickup_Selection;
 	use Woodev\Framework\Shipping\Pickup\Point_Query;
 	use Woodev\Framework\Shipping\Pickup\Point_Source;
+	use Woodev\Framework\Shipping\Pickup\Selection_Scope;
 	use Woodev\Tests\Unit\TestCase;
 
 	require_once dirname( __DIR__, 4 ) . '/woodev/class-plugin-exception.php';
@@ -63,6 +65,8 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/pickup/class-point-query.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/pickup/class-constraint-checker.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/pickup/interface-point-source.php';
+	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/pickup/interface-selection-scope.php';
+	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/pickup/class-pickup-selection.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/order/class-shipping-order-handler.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/compatibility/class-plugin-compatibility.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/compatibility/class-order-compatibility.php';
@@ -486,6 +490,286 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 
 		protected function wc_session_chosen_payment_method() {
 			return $this->session_value;
+		}
+	}
+
+	// -------------------------------------------------------------------------
+	// Issue #176 — pickup-selection persistence test doubles
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Configurable {@see Selection_Scope} test double: every method delegates to an
+	 * injected closure, mirroring {@see Pickup_Handler_Test_Source}'s own pattern —
+	 * each test wires only the closures it actually cares about.
+	 */
+	final class Pickup_Handler_Selection_Test_Scope implements Selection_Scope {
+
+		/** @var string */
+		private string $key;
+
+		/** @var callable */
+		private $locality_for_point;
+
+		/** @var callable */
+		private $current_locality;
+
+		/** @var callable */
+		private $type_for_method;
+
+		/**
+		 * @param string   $key                session key.
+		 * @param callable $locality_for_point `fn( Pickup_Point $point ): string`.
+		 * @param callable $current_locality   `fn(): string`.
+		 * @param callable $type_for_method    `fn( string $method_id ): ?string`.
+		 */
+		public function __construct(
+			string $key,
+			callable $locality_for_point,
+			callable $current_locality,
+			callable $type_for_method
+		) {
+			$this->key                = $key;
+			$this->locality_for_point = $locality_for_point;
+			$this->current_locality   = $current_locality;
+			$this->type_for_method    = $type_for_method;
+		}
+
+		public function session_key(): string {
+			return $this->key;
+		}
+
+		public function locality_for_point( Pickup_Point $point ): string {
+			return ( $this->locality_for_point )( $point );
+		}
+
+		public function current_locality(): string {
+			return ( $this->current_locality )();
+		}
+
+		public function type_for_method( string $method_id ): ?string {
+			return ( $this->type_for_method )( $method_id );
+		}
+	}
+
+	/**
+	 * Minimal `\WC_Session` stand-in for {@see Pickup_Selection}'s own protected
+	 * `session()` seam — an array-backed get()/set() pair, nothing else.
+	 */
+	final class Pickup_Handler_Fake_Session {
+
+		/** @var array<string, mixed> */
+		private array $store = [];
+
+		/**
+		 * @param string $key     session key.
+		 * @param mixed  $default fallback when the key is absent.
+		 *
+		 * @return mixed
+		 */
+		public function get( $key, $default = null ) {
+			return $this->store[ $key ] ?? $default;
+		}
+
+		/**
+		 * @param string $key   session key.
+		 * @param mixed  $value value to store.
+		 *
+		 * @return void
+		 */
+		public function set( $key, $value ): void {
+			$this->store[ $key ] = $value;
+		}
+	}
+
+	/**
+	 * {@see Pickup_Selection} wired to a {@see Pickup_Handler_Fake_Session} instead of
+	 * the real `WC()->session` — the same "override the protected seam, never mock
+	 * WC() itself" discipline every other probe in this file already follows.
+	 */
+	final class Pickup_Handler_Selection_Probe extends Pickup_Selection {
+
+		/** @var Pickup_Handler_Fake_Session|null */
+		private ?Pickup_Handler_Fake_Session $fake_session;
+
+		public function __construct( Selection_Scope $scope, ?Pickup_Handler_Fake_Session $fake_session ) {
+			parent::__construct( $scope );
+			$this->fake_session = $fake_session;
+		}
+
+		protected function session() {
+			return $this->fake_session;
+		}
+	}
+
+	/**
+	 * Probe exercising the REAL {@see Pickup_Handler::remember_selection()} /
+	 * {@see Pickup_Handler::restore_selection()} / the `forget_all()` call inside
+	 * {@see Pickup_Handler::handle_checkout_order_processed()}, while overriding only
+	 * two seams: {@see Pickup_Handler::selection()} (substitutes a
+	 * {@see Pickup_Handler_Selection_Probe}, so no real `WC()->session` is ever
+	 * touched) and {@see Pickup_Handler::wc_session_chosen_shipping_methods()}
+	 * (supplies a forced session value for `restore_selection()`'s own method read,
+	 * the same forced-session pattern {@see Pickup_Handler_Shipping_Session_Probe}
+	 * already uses).
+	 */
+	final class Pickup_Handler_With_Selection_Probe extends Pickup_Handler {
+
+		/** @var Pickup_Selection|null */
+		private ?Pickup_Selection $forced_selection;
+
+		/** @var mixed */
+		private $chosen_shipping_methods_value;
+
+		/**
+		 * @param Selection_Scope|null $selection_scope                the scope to construct
+		 *                                                              {@see Pickup_Handler}
+		 *                                                              with.
+		 * @param Pickup_Selection|null $forced_selection               what
+		 *                                                              {@see self::selection()}
+		 *                                                              returns.
+		 * @param mixed                 $chosen_shipping_methods_value what
+		 *                                                              {@see self::wc_session_chosen_shipping_methods()}
+		 *                                                              returns.
+		 */
+		public function __construct(
+			string $plugin_id,
+			string $field_id,
+			Point_Source $source,
+			Map_Provider $map_provider,
+			array $default_location,
+			?Selection_Scope $selection_scope,
+			?Pickup_Selection $forced_selection,
+			$chosen_shipping_methods_value = null
+		) {
+			parent::__construct(
+				$plugin_id,
+				$field_id,
+				$source,
+				$map_provider,
+				$default_location,
+				null,
+				null,
+				true,
+				[],
+				'#000000',
+				'',
+				true,
+				false,
+				false,
+				$selection_scope
+			);
+			$this->forced_selection             = $forced_selection;
+			$this->chosen_shipping_methods_value = $chosen_shipping_methods_value;
+		}
+
+		protected function selection(): ?Pickup_Selection {
+			return $this->forced_selection;
+		}
+
+		protected function wc_session_chosen_shipping_methods() {
+			return $this->chosen_shipping_methods_value;
+		}
+	}
+
+	/**
+	 * {@see Pickup_Selection} whose underlying `session()` seam is ABSENT until
+	 * {@see self::make_available()} is called — lets a test prove
+	 * {@see Pickup_Handler::remember_selection()}'s `wc_load_cart()` bridge is the
+	 * thing that makes the write possible, rather than the fake session simply being
+	 * "live" from the start (which is what every OTHER selection probe in this file
+	 * does, and which is exactly what leaves the bridge unpinned).
+	 */
+	final class Pickup_Handler_Bridging_Selection_Probe extends Pickup_Selection {
+
+		/** @var Pickup_Handler_Fake_Session */
+		private Pickup_Handler_Fake_Session $fake_session;
+
+		/** @var bool */
+		private bool $available = false;
+
+		public function __construct( Selection_Scope $scope ) {
+			parent::__construct( $scope );
+			$this->fake_session = new Pickup_Handler_Fake_Session();
+		}
+
+		/**
+		 * Simulates `wc_load_cart()` having run: the session becomes readable/writable
+		 * from this point on, never before.
+		 */
+		public function make_available(): void {
+			$this->available = true;
+		}
+
+		protected function session() {
+			return $this->available ? $this->fake_session : null;
+		}
+	}
+
+	/**
+	 * Probe exercising the REAL {@see Pickup_Handler::remember_selection()} bridge
+	 * logic (`if ( ! $this->wc_cart() && $this->wc_load_cart_available() ) { $this->load_wc_cart(); }`)
+	 * end-to-end: `wc_cart()` starts absent, `wc_load_cart_available()` reports
+	 * `true`, and `load_wc_cart()` — instead of merely being counted, like
+	 * {@see Pickup_Handler_Cart_Probe} — actually flips the injected
+	 * {@see Pickup_Handler_Bridging_Selection_Probe}'s session from absent to
+	 * available. A mutant deleting the bridge call entirely leaves the session
+	 * permanently absent, so `remember()` becomes a silent no-op — the same failure
+	 * mode a real REST request would hit in production.
+	 */
+	final class Pickup_Handler_Bridge_Probe extends Pickup_Handler {
+
+		/** @var Pickup_Handler_Bridging_Selection_Probe */
+		private Pickup_Handler_Bridging_Selection_Probe $bridging_selection;
+
+		/** @var int number of times load_wc_cart() was called. */
+		public int $load_wc_cart_calls = 0;
+
+		public function __construct(
+			string $plugin_id,
+			string $field_id,
+			Point_Source $source,
+			Map_Provider $map_provider,
+			array $default_location,
+			?Selection_Scope $selection_scope,
+			Pickup_Handler_Bridging_Selection_Probe $bridging_selection
+		) {
+			parent::__construct(
+				$plugin_id,
+				$field_id,
+				$source,
+				$map_provider,
+				$default_location,
+				null,
+				null,
+				true,
+				[],
+				'#000000',
+				'',
+				true,
+				false,
+				false,
+				$selection_scope
+			);
+			$this->bridging_selection = $bridging_selection;
+		}
+
+		protected function selection(): ?Pickup_Selection {
+			return $this->bridging_selection;
+		}
+
+		protected function wc_cart() {
+			// Always absent — forces the bridge branch to be the only path to a
+			// working session.
+			return null;
+		}
+
+		protected function wc_load_cart_available(): bool {
+			return true;
+		}
+
+		protected function load_wc_cart(): void {
+			++$this->load_wc_cart_calls;
+			$this->bridging_selection->make_available();
 		}
 	}
 
@@ -3598,33 +3882,16 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 		// register() — hook wiring
 		// -------------------------------------------------------------------------
 
+		/**
+		 * Asserts not merely that a callback array is registered on each hook, but
+		 * WHICH method is bound — `\Mockery::type('array')` (the original shape of
+		 * this test) would still pass if, say, `restore_selection` were bound to
+		 * `woodev_shipping_pickup_point_selected` instead of `remember_selection`, or
+		 * `woocommerce_checkout_get_value` were wired to the wrong method entirely. The
+		 * handler is constructed FIRST so the expectations can assert the exact
+		 * `[ $handler, 'method_name' ]` pair for every hook it registers.
+		 */
 		public function test_register_wires_the_expected_hooks(): void {
-			Functions\expect( 'add_action' )
-				->once()
-				->with( 'wp_enqueue_scripts', \Mockery::type( 'array' ) );
-
-			Functions\expect( 'add_action' )
-				->once()
-				->with( 'rest_api_init', \Mockery::type( 'array' ) );
-
-			Functions\expect( 'add_action' )
-				->once()
-				->with( 'woocommerce_checkout_process', \Mockery::type( 'array' ) );
-
-			Functions\expect( 'add_action' )
-				->once()
-				->with( 'woocommerce_checkout_order_processed', \Mockery::type( 'array' ), 10, 3 );
-
-			// Issue #157: the nonce-refresh channel — the footer node and the fragment that
-			// replaces it on every update_checkout.
-			Functions\expect( 'add_action' )
-				->once()
-				->with( 'wp_footer', \Mockery::type( 'array' ) );
-
-			Functions\expect( 'add_filter' )
-				->once()
-				->with( 'woocommerce_update_order_review_fragments', \Mockery::type( 'array' ) );
-
 			$handler = new Pickup_Handler(
 				'p',
 				'pickup_point',
@@ -3632,6 +3899,44 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				$this->yandex_provider(),
 				$this->default_location()
 			);
+
+			Functions\expect( 'add_action' )
+				->once()
+				->with( 'wp_enqueue_scripts', [ $handler, 'enqueue_assets' ] );
+
+			Functions\expect( 'add_action' )
+				->once()
+				->with( 'rest_api_init', [ $handler, 'register_rest' ] );
+
+			Functions\expect( 'add_action' )
+				->once()
+				->with( 'woocommerce_checkout_process', [ $handler, 'handle_checkout_process' ] );
+
+			Functions\expect( 'add_action' )
+				->once()
+				->with( 'woocommerce_checkout_order_processed', [ $handler, 'handle_checkout_order_processed' ], 10, 3 );
+
+			// Issue #157: the nonce-refresh channel — the footer node and the fragment that
+			// replaces it on every update_checkout.
+			Functions\expect( 'add_action' )
+				->once()
+				->with( 'wp_footer', [ $handler, 'print_nonce_node' ] );
+
+			Functions\expect( 'add_filter' )
+				->once()
+				->with( 'woocommerce_update_order_review_fragments', [ $handler, 'inject_nonce_fragment' ] );
+
+			// Issue #176: pickup-selection persistence — the write side (an action, not
+			// the pre-existing woodev_shipping_pickup_point_selection filter — see
+			// Pickup_Controller::handle_select_request()) and the restore side.
+			Functions\expect( 'add_action' )
+				->once()
+				->with( 'woodev_shipping_pickup_point_selected', [ $handler, 'remember_selection' ], 10, 2 );
+
+			Functions\expect( 'add_filter' )
+				->once()
+				->with( 'woocommerce_checkout_get_value', [ $handler, 'restore_selection' ], 10, 2 );
+
 			$handler->register();
 		}
 
@@ -4075,6 +4380,472 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			// `carrier_x` — see Pickup_Handler::config_object_suffix() and issue #142.
 			$this->assertStringStartsWith( 'woodev_pickup_config_carrier_x_', $object_name );
 			$this->assertSame( 'pickup_point', $data['fieldId'] );
+		}
+
+		// -------------------------------------------------------------------------
+		// Issue #176 — pickup-selection persistence
+		// -------------------------------------------------------------------------
+
+		/**
+		 * Builds a bare, valid {@see Pickup_Point} for the persistence tests below —
+		 * none of them care about anything but `id` and `type.code`.
+		 *
+		 * @param string $id   point id.
+		 * @param string $type point type code.
+		 */
+		private function selection_point( string $id = 'P1', string $type = 'pvz' ): Pickup_Point {
+			return Pickup_Point::from_array(
+				[
+					'id'      => $id,
+					'name'    => 'Точка',
+					'lat'     => 55.75,
+					'lng'     => 37.61,
+					'address' => 'Тверская, 1',
+					'type'    => [ 'code' => $type, 'label' => 'ПВЗ' ],
+				]
+			);
+		}
+
+		// --- remember_selection() — the write side ---
+
+		public function test_remember_selection_writes_the_confirmed_point(): void {
+			$scope = new Pickup_Handler_Selection_Test_Scope(
+				'key',
+				static fn( Pickup_Point $point ) => 'msk',
+				static fn() => '',
+				static fn( string $method_id ) => null
+			);
+			$selection = new Pickup_Handler_Selection_Probe( $scope, new Pickup_Handler_Fake_Session() );
+
+			$handler = new Pickup_Handler_With_Selection_Probe(
+				'p',
+				'pickup_point',
+				$this->source_returning( null ),
+				$this->yandex_provider(),
+				$this->default_location(),
+				$scope,
+				$selection
+			);
+
+			$handler->remember_selection( $this->selection_point( 'P1', 'pvz' ), [ 'field_id' => 'pickup_point' ] );
+
+			$this->assertSame( 'P1', $selection->recall( 'msk', 'pvz' ) );
+		}
+
+		/**
+		 * The action is global (every {@see Pickup_Handler} instance listens on the
+		 * same `woodev_shipping_pickup_point_selected` hook), so a selection belonging
+		 * to a DIFFERENT pickup field must be ignored, never remembered under this
+		 * handler's own scope.
+		 */
+		public function test_remember_selection_ignores_a_selection_for_a_different_field(): void {
+			$scope = new Pickup_Handler_Selection_Test_Scope(
+				'key',
+				static fn( Pickup_Point $point ) => 'msk',
+				static fn() => '',
+				static fn( string $method_id ) => null
+			);
+			$selection = new Pickup_Handler_Selection_Probe( $scope, new Pickup_Handler_Fake_Session() );
+
+			$handler = new Pickup_Handler_With_Selection_Probe(
+				'p',
+				'pickup_point',
+				$this->source_returning( null ),
+				$this->yandex_provider(),
+				$this->default_location(),
+				$scope,
+				$selection
+			);
+
+			$handler->remember_selection( $this->selection_point(), [ 'field_id' => 'some_other_field' ] );
+
+			$this->assertNull( $selection->recall( 'msk', 'pvz' ) );
+		}
+
+		/**
+		 * "No scope → no persistence" — the same discipline
+		 * {@see Pickup_Handler::handle_checkout_order_processed()} already applies to
+		 * full-point persistence. Must not throw.
+		 */
+		public function test_remember_selection_does_nothing_without_a_scope(): void {
+			$handler = new Pickup_Handler_With_Selection_Probe(
+				'p',
+				'pickup_point',
+				$this->source_returning( null ),
+				$this->yandex_provider(),
+				$this->default_location(),
+				null,
+				null
+			);
+
+			$handler->remember_selection( $this->selection_point(), [ 'field_id' => 'pickup_point' ] );
+
+			$this->assertTrue( true );
+		}
+
+		/**
+		 * The load-bearing bridge test: {@see Pickup_Handler_Bridge_Probe} starts with
+		 * NO usable session at all (`wc_cart()` forced absent) — it becomes usable
+		 * ONLY once `remember_selection()` calls `load_wc_cart()`, exactly the way a
+		 * real `/select` REST request arrives with no cart/session bootstrapped yet.
+		 * Every OTHER `remember_selection()` test in this file injects an
+		 * already-live fake session via {@see Pickup_Handler_Selection_Probe}, which
+		 * leaves `if ( ! $this->wc_cart() && $this->wc_load_cart_available() ) {
+		 * $this->load_wc_cart(); }` completely unpinned — deleting it leaves those
+		 * tests green while a real REST request would silently persist nothing.
+		 */
+		public function test_remember_selection_bridges_to_a_freshly_loaded_cart_session(): void {
+			$scope = new Pickup_Handler_Selection_Test_Scope(
+				'key',
+				static fn( Pickup_Point $point ) => 'msk',
+				static fn() => '',
+				static fn( string $method_id ) => null
+			);
+			$selection = new Pickup_Handler_Bridging_Selection_Probe( $scope );
+
+			$handler = new Pickup_Handler_Bridge_Probe(
+				'p',
+				'pickup_point',
+				$this->source_returning( null ),
+				$this->yandex_provider(),
+				$this->default_location(),
+				$scope,
+				$selection
+			);
+
+			$handler->remember_selection( $this->selection_point( 'P1', 'pvz' ), [ 'field_id' => 'pickup_point' ] );
+
+			$this->assertSame( 1, $handler->load_wc_cart_calls, 'the cart/session bridge must actually be invoked' );
+			$this->assertSame( 'P1', $selection->recall( 'msk', 'pvz' ), 'the write must land once the session becomes available' );
+		}
+
+		// --- restore_selection() — the woocommerce_checkout_get_value read side ---
+
+		/**
+		 * A real scope AND a stored entry for THIS handler's own field — not just an
+		 * absent scope — so removing the field-id gate (`if ( $this->field_id !==
+		 * $key )`) has somewhere real to leak into. Without them, the "no scope"
+		 * short-circuit further down the method would mask the gate's removal: a
+		 * mutant reading `if ( false ) { return $value; }` instead of the real check
+		 * would fall through to that "no scope" branch too and return `$value`
+		 * unchanged by coincidence. With a live scope and a stored `(msk, pvz)` entry,
+		 * the same mutant instead restores the OTHER field's own pickup selection.
+		 */
+		public function test_restore_selection_returns_the_incoming_value_for_a_different_field(): void {
+			$scope = new Pickup_Handler_Selection_Test_Scope(
+				'key',
+				static fn( Pickup_Point $point ) => 'msk',
+				static fn() => 'msk',
+				static fn( string $method_id ) => 'pvz'
+			);
+			$selection = new Pickup_Handler_Selection_Probe( $scope, new Pickup_Handler_Fake_Session() );
+			$selection->remember( 'msk', 'pvz', 'P1' );
+
+			$handler = new Pickup_Handler_With_Selection_Probe(
+				'p',
+				'pickup_point',
+				$this->source_returning( null ),
+				$this->yandex_provider(),
+				$this->default_location(),
+				$scope,
+				$selection,
+				[ 'carrier_pickup' ]
+			);
+
+			$this->assertSame( 'incoming', $handler->restore_selection( 'incoming', 'billing_city' ) );
+		}
+
+		/**
+		 * A non-pickup shipping method — {@see Selection_Scope::type_for_method()}
+		 * returning `null` — is the whole gate spec §5 documents: nothing is restored,
+		 * and the incoming value passes through unchanged.
+		 */
+		public function test_restore_selection_leaves_the_value_untouched_for_a_non_pickup_method(): void {
+			$scope = new Pickup_Handler_Selection_Test_Scope(
+				'key',
+				static fn( Pickup_Point $point ) => 'msk',
+				static fn() => 'msk',
+				static fn( string $method_id ) => null
+			);
+			$selection = new Pickup_Handler_Selection_Probe( $scope, new Pickup_Handler_Fake_Session() );
+			$selection->remember( 'msk', 'pvz', 'P1' );
+
+			$handler = new Pickup_Handler_With_Selection_Probe(
+				'p',
+				'pickup_point',
+				$this->source_returning( null ),
+				$this->yandex_provider(),
+				$this->default_location(),
+				$scope,
+				$selection,
+				[ 'flat_rate' ]
+			);
+
+			$this->assertSame( 'incoming', $handler->restore_selection( 'incoming', 'pickup_point' ) );
+		}
+
+		/**
+		 * A typed method restores the exact `(locality, type)` entry, even when a
+		 * DIFFERENT type is also stored for the same locality — proving the restore
+		 * does not fall back to "any type" when a real type code is available.
+		 */
+		public function test_restore_selection_restores_the_matching_type_when_two_types_are_stored(): void {
+			$scope = new Pickup_Handler_Selection_Test_Scope(
+				'key',
+				static fn( Pickup_Point $point ) => 'msk',
+				static fn() => 'msk',
+				static fn( string $method_id ) => 'carrier_pickup' === $method_id ? 'postamat' : null
+			);
+			$selection = new Pickup_Handler_Selection_Probe( $scope, new Pickup_Handler_Fake_Session() );
+			$selection->remember( 'msk', 'pvz', 'P-PVZ' );
+			$selection->remember( 'msk', 'postamat', 'P-POSTAMAT' );
+
+			$handler = new Pickup_Handler_With_Selection_Probe(
+				'p',
+				'pickup_point',
+				$this->source_returning( null ),
+				$this->yandex_provider(),
+				$this->default_location(),
+				$scope,
+				$selection,
+				[ 'carrier_pickup' ]
+			);
+
+			$this->assertSame( 'P-POSTAMAT', $handler->restore_selection( '', 'pickup_point' ) );
+		}
+
+		/**
+		 * A VALID pickup method (a real type code, not `null`) with NOTHING stored for
+		 * that (locality, type) pair yet — the incoming `$value` (WooCommerce's own
+		 * resolved value) must be returned unchanged, not blanked. A mutant reading
+		 * `return $point_id ?? '';` instead of
+		 * `return null !== $point_id ? $point_id : $value;` folds the `null` recall
+		 * into an empty string and discards whatever WooCommerce already had.
+		 */
+		public function test_restore_selection_returns_the_incoming_value_for_a_valid_method_with_nothing_stored(): void {
+			$scope = new Pickup_Handler_Selection_Test_Scope(
+				'key',
+				static fn( Pickup_Point $point ) => 'msk',
+				static fn() => 'msk',
+				static fn( string $method_id ) => 'pvz'
+			);
+			$selection = new Pickup_Handler_Selection_Probe( $scope, new Pickup_Handler_Fake_Session() );
+			// Nothing remembered for (msk, pvz).
+
+			$handler = new Pickup_Handler_With_Selection_Probe(
+				'p',
+				'pickup_point',
+				$this->source_returning( null ),
+				$this->yandex_provider(),
+				$this->default_location(),
+				$scope,
+				$selection,
+				[ 'carrier_pickup' ]
+			);
+
+			$this->assertSame( 'incoming', $handler->restore_selection( 'incoming', 'pickup_point' ) );
+		}
+
+		/**
+		 * Every other restore test in this file hands `wc_session_chosen_shipping_methods()`
+		 * a bare method id. A real WooCommerce session value carries the shipping
+		 * RATE id, `method:instance_id` — spec §9 documents that
+		 * {@see Selection_Scope::type_for_method()} must receive it already stripped.
+		 * A mutant removing the `explode( ':', ... )[0]` call would hand the scope the
+		 * whole `woodev_test_shipping:7` string, which this scope's closure does not
+		 * recognise, so it would answer `null` and the stored selection would never
+		 * restore.
+		 */
+		public function test_restore_selection_strips_the_instance_id_from_the_chosen_method(): void {
+			$scope = new Pickup_Handler_Selection_Test_Scope(
+				'key',
+				static fn( Pickup_Point $point ) => 'msk',
+				static fn() => 'msk',
+				static fn( string $method_id ) => 'woodev_test_shipping' === $method_id ? 'pvz' : null
+			);
+			$selection = new Pickup_Handler_Selection_Probe( $scope, new Pickup_Handler_Fake_Session() );
+			$selection->remember( 'msk', 'pvz', 'P1' );
+
+			$handler = new Pickup_Handler_With_Selection_Probe(
+				'p',
+				'pickup_point',
+				$this->source_returning( null ),
+				$this->yandex_provider(),
+				$this->default_location(),
+				$scope,
+				$selection,
+				[ 'woodev_test_shipping:7' ]
+			);
+
+			$this->assertSame( 'P1', $handler->restore_selection( '', 'pickup_point' ) );
+		}
+
+		// --- issue #176 opacity contract: the locality/type keys are never derived,
+		// normalized, lowercased or sanitized (spec §3.2). Every OTHER selection test
+		// in this file happens to use all-lowercase keys ('msk', 'pvz', 'postamat'),
+		// so a stray strtolower()/sanitize_key() would leave every one of them green.
+
+		/**
+		 * Write side: {@see Pickup_Handler::remember_selection()} reads
+		 * `$point->to_array()['type']['code']` verbatim. A mutant lower-casing it
+		 * (`strtolower(...)`) would store `'pvz'` for a point whose real type code is
+		 * `'PVZ'` — indistinguishable from correct behaviour under any all-lowercase
+		 * fixture, which is exactly what every other test here uses.
+		 */
+		public function test_remember_selection_preserves_the_points_type_code_case_exactly(): void {
+			$scope = new Pickup_Handler_Selection_Test_Scope(
+				'key',
+				static fn( Pickup_Point $point ) => 'MSK-77',
+				static fn() => '',
+				static fn( string $method_id ) => null
+			);
+			$selection = new Pickup_Handler_Selection_Probe( $scope, new Pickup_Handler_Fake_Session() );
+
+			$handler = new Pickup_Handler_With_Selection_Probe(
+				'p',
+				'pickup_point',
+				$this->source_returning( null ),
+				$this->yandex_provider(),
+				$this->default_location(),
+				$scope,
+				$selection
+			);
+
+			$handler->remember_selection( $this->selection_point( 'P1', 'PVZ' ), [ 'field_id' => 'pickup_point' ] );
+
+			$this->assertSame( 'P1', $selection->recall( 'MSK-77', 'PVZ' ), 'the type code must be stored with its exact case' );
+			$this->assertNull( $selection->recall( 'MSK-77', 'pvz' ), 'a lower-cased type must not also incidentally match' );
+		}
+
+		/**
+		 * Restore side: {@see Pickup_Handler::restore_selection()} reads
+		 * `$scope->current_locality()` verbatim. A mutant running it through
+		 * `sanitize_key()` would lower-case `'MSK-77'` to `'msk-77'` — a DIFFERENT
+		 * string from what was stored, so the recall would silently miss.
+		 */
+		public function test_restore_selection_preserves_the_current_localitys_case_exactly(): void {
+			$scope = new Pickup_Handler_Selection_Test_Scope(
+				'key',
+				static fn( Pickup_Point $point ) => 'MSK-77',
+				static fn() => 'MSK-77',
+				static fn( string $method_id ) => 'PVZ'
+			);
+			$selection = new Pickup_Handler_Selection_Probe( $scope, new Pickup_Handler_Fake_Session() );
+			$selection->remember( 'MSK-77', 'PVZ', 'P1' );
+
+			$handler = new Pickup_Handler_With_Selection_Probe(
+				'p',
+				'pickup_point',
+				$this->source_returning( null ),
+				$this->yandex_provider(),
+				$this->default_location(),
+				$scope,
+				$selection,
+				[ 'carrier_pickup' ]
+			);
+
+			$this->assertSame( 'P1', $handler->restore_selection( '', 'pickup_point' ) );
+		}
+
+		/**
+		 * {@see Selection_Scope::TYPE_ANY} restores the most recently written entry
+		 * for the locality, regardless of type — spec §5 step 4.
+		 */
+		public function test_restore_selection_type_any_restores_the_most_recently_written_entry(): void {
+			$scope = new Pickup_Handler_Selection_Test_Scope(
+				'key',
+				static fn( Pickup_Point $point ) => 'msk',
+				static fn() => 'msk',
+				static fn( string $method_id ) => Selection_Scope::TYPE_ANY
+			);
+			$selection = new Pickup_Handler_Selection_Probe( $scope, new Pickup_Handler_Fake_Session() );
+			$selection->remember( 'msk', 'pvz', 'P-PVZ' );
+			$selection->remember( 'msk', 'postamat', 'P-POSTAMAT' );
+
+			$handler = new Pickup_Handler_With_Selection_Probe(
+				'p',
+				'pickup_point',
+				$this->source_returning( null ),
+				$this->yandex_provider(),
+				$this->default_location(),
+				$scope,
+				$selection,
+				[ 'carrier_pickup' ]
+			);
+
+			$this->assertSame( 'P-POSTAMAT', $handler->restore_selection( '', 'pickup_point' ) );
+		}
+
+		/**
+		 * "No scope → the handler behaves exactly as today" — guards every EXISTING
+		 * consumer of `woocommerce_checkout_get_value`: a plugin that has not wired
+		 * selection persistence must see the filter change nothing at all.
+		 */
+		public function test_restore_selection_without_a_scope_returns_the_incoming_value_unchanged(): void {
+			$handler = new Pickup_Handler_With_Selection_Probe(
+				'p',
+				'pickup_point',
+				$this->source_returning( null ),
+				$this->yandex_provider(),
+				$this->default_location(),
+				null,
+				null,
+				[ 'carrier_pickup' ]
+			);
+
+			$this->assertSame( 'whatever-wc-had', $handler->restore_selection( 'whatever-wc-had', 'pickup_point' ) );
+		}
+
+		// --- handle_checkout_order_processed() — clearing on order creation ---
+
+		/**
+		 * The trap the plan itself calls out: `handle_checkout_order_processed()`
+		 * returns EARLY when the plugin has not wired full-point persistence
+		 * (`$order_handler`/`$point_field_logical` both null, as every
+		 * {@see Pickup_Handler_With_Selection_Probe} in this file constructs). The
+		 * selection map must STILL be cleared — the clear must not sit behind that
+		 * early return.
+		 */
+		public function test_handle_checkout_order_processed_clears_the_selection_map_even_without_full_point_persistence(): void {
+			$scope = new Pickup_Handler_Selection_Test_Scope(
+				'key',
+				static fn( Pickup_Point $point ) => 'msk',
+				static fn() => '',
+				static fn( string $method_id ) => null
+			);
+			$selection = new Pickup_Handler_Selection_Probe( $scope, new Pickup_Handler_Fake_Session() );
+			$selection->remember( 'msk', 'pvz', 'P1' );
+
+			$handler = new Pickup_Handler_With_Selection_Probe(
+				'p',
+				'pickup_point',
+				$this->source_returning( null ),
+				$this->yandex_provider(),
+				$this->default_location(),
+				$scope,
+				$selection
+			);
+
+			$handler->handle_checkout_order_processed( 1, [], new \WC_Order() );
+
+			$this->assertNull( $selection->recall( 'msk', 'pvz' ), 'the selection map must be cleared on order creation' );
+		}
+
+		public function test_handle_checkout_order_processed_without_a_scope_does_not_crash(): void {
+			$handler = new Pickup_Handler_With_Selection_Probe(
+				'p',
+				'pickup_point',
+				$this->source_returning( null ),
+				$this->yandex_provider(),
+				$this->default_location(),
+				null,
+				null
+			);
+
+			// Must not throw.
+			$handler->handle_checkout_order_processed( 1, [], new \WC_Order() );
+
+			$this->assertTrue( true );
 		}
 	}
 }

@@ -367,6 +367,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		private bool $search_enabled;
 
 		/**
+		 * The plugin's pickup-selection scope, or null when the plugin has not wired
+		 * selection persistence (issue #176). "No scope → no persistence" — the same
+		 * discipline {@see self::$order_handler} already applies to full-point
+		 * persistence: the framework must never coin a locality/type vocabulary or a
+		 * session key of its own.
+		 *
+		 * @since 2.0.2
+		 * @var Selection_Scope|null
+		 */
+		private ?Selection_Scope $selection_scope;
+
+		/**
 		 * Constructor.
 		 *
 		 * `$order_handler` and `$point_field_logical` are optional and go together: when
@@ -444,6 +456,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 *                                                          refreshes the checkout; see
 		 *                                                          {@see self::$refresh_checkout} for
 		 *                                                          why the default is `false`.
+		 * @param Selection_Scope|null        $selection_scope      the plugin's pickup-selection
+		 *                                                          scope (issue #176); see
+		 *                                                          {@see self::$selection_scope}.
+		 *                                                          Appended LAST, after every other
+		 *                                                          parameter — this constructor is
+		 *                                                          already a known long positional
+		 *                                                          list (#170), and reordering it
+		 *                                                          here would break every existing
+		 *                                                          caller. Omit to skip selection
+		 *                                                          persistence entirely.
 		 *
 		 * @throws \InvalidArgumentException when `$default_location` does not have a valid
 		 *                                    `center` (two floats/ints, lat within ±90, lng
@@ -464,7 +486,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 			string $setting_accent_color = '',
 			bool $search_enabled = true,
 			bool $close_on_select = false,
-			bool $refresh_checkout = false
+			bool $refresh_checkout = false,
+			?Selection_Scope $selection_scope = null
 		) {
 			self::validate_default_location( $default_location );
 
@@ -482,6 +505,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 			$this->search_enabled       = $search_enabled;
 			$this->close_on_select      = $close_on_select;
 			$this->refresh_checkout     = $refresh_checkout;
+			$this->selection_scope      = $selection_scope;
 		}
 
 		/**
@@ -1589,6 +1613,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 * the checkout fragment that replaces it — see {@see self::print_nonce_node()} for
 		 * why the localized config's own nonce cannot be refreshed in place.
 		 *
+		 * Also wires pickup-selection persistence (issue #176), unconditionally: both
+		 * callbacks self-guard on {@see self::$selection_scope} being null, so a plugin
+		 * that has not wired one pays for two harmless hook registrations and nothing
+		 * else. `woodev_shipping_pickup_point_selected` is the write side — see
+		 * {@see self::remember_selection()} and
+		 * {@see \Woodev\Framework\Shipping\Rest_Api\Pickup_Controller::handle_select_request()}
+		 * for why that action, not the pre-existing
+		 * `woodev_shipping_pickup_point_selection` filter, is the write seam.
+		 * `woocommerce_checkout_get_value` is the restore side — see
+		 * {@see self::restore_selection()}.
+		 *
 		 * @since 2.0.2
 		 *
 		 * @return void
@@ -1600,6 +1635,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 			add_action( 'woocommerce_checkout_order_processed', [ $this, 'handle_checkout_order_processed' ], 10, 3 );
 			add_action( 'wp_footer', [ $this, 'print_nonce_node' ] );
 			add_filter( 'woocommerce_update_order_review_fragments', [ $this, 'inject_nonce_fragment' ] );
+			add_action( 'woodev_shipping_pickup_point_selected', [ $this, 'remember_selection' ], 10, 2 );
+			add_filter( 'woocommerce_checkout_get_value', [ $this, 'restore_selection' ], 10, 2 );
 		}
 
 		/**
@@ -2131,6 +2168,152 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		}
 
 		/**
+		 * Constructs this handler's {@see Pickup_Selection} mechanism, or `null` when
+		 * the plugin has not wired {@see self::$selection_scope}.
+		 *
+		 * `protected`, not inlined into {@see self::remember_selection()} /
+		 * {@see self::restore_selection()} — the same test-seam reason every other
+		 * accessor on this class is `protected`: a probe substitutes a
+		 * {@see Pickup_Selection} backed by a fake session, without `WC()` needing to
+		 * be a real function in the unit-test process.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return Pickup_Selection|null
+		 */
+		protected function selection(): ?Pickup_Selection {
+			if ( null === $this->selection_scope ) {
+				return null;
+			}
+
+			return new Pickup_Selection( $this->selection_scope );
+		}
+
+		/**
+		 * Handles `woodev_shipping_pickup_point_selected` — remembers a confirmed,
+		 * allowed pickup-point selection (issue #176).
+		 *
+		 * Fired by {@see \Woodev\Framework\Shipping\Rest_Api\Pickup_Controller::handle_select_request()}
+		 * only once the FINAL, post-domain-filter verdict is `allowed === true`; a
+		 * point the domain refuses through `woodev_shipping_pickup_point_selection`
+		 * never reaches this method at all, so nothing here re-checks the verdict a
+		 * second time.
+		 *
+		 * The action is global — every {@see Pickup_Handler} instance on the site
+		 * listens on the SAME hook, since a site can run more than one pickup-capable
+		 * shipping plugin — so the first real check is `$context['field_id']` against
+		 * {@see self::$field_id}: a selection belonging to a different pickup field
+		 * must not be remembered by this handler. `wc_load_cart()` bridges the
+		 * cart/session the same way {@see self::current_cart_weight_grams()} does: this
+		 * fires from a plain REST route, which WooCommerce does not initialize a
+		 * cart/session for on its own.
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param Pickup_Point         $point   The confirmed point.
+		 * @param array<string, mixed> $context Same shape documented on the
+		 *                                      `woodev_shipping_pickup_point_selection`
+		 *                                      filter; only `field_id` is read here.
+		 *
+		 * @return void
+		 */
+		public function remember_selection( Pickup_Point $point, array $context ): void {
+			$scope     = $this->selection_scope;
+			$selection = $this->selection();
+
+			if ( null === $scope || null === $selection ) {
+				return;
+			}
+
+			if ( ! isset( $context['field_id'] ) || $this->field_id !== $context['field_id'] ) {
+				return;
+			}
+
+			if ( ! $this->wc_cart() && $this->wc_load_cart_available() ) {
+				$this->load_wc_cart();
+			}
+
+			$type = $point->to_array()['type']['code'] ?? '';
+
+			if ( ! is_string( $type ) || '' === $type ) {
+				return;
+			}
+
+			$selection->remember( $scope->locality_for_point( $point ), $type, $point->get_id() );
+		}
+
+		/**
+		 * Handles `woocommerce_checkout_get_value` — restores a remembered pickup-point
+		 * selection into this handler's own field (issue #176).
+		 *
+		 * Answers ONLY for {@see self::$field_id}; every other field's `$value` is
+		 * returned untouched, or this filter would short-circuit every other field on
+		 * the checkout. WooCommerce already checks `$_POST` before ever calling this
+		 * filter, so a failed checkout submit still re-renders what the customer
+		 * posted, never a stale session value (spec §5's closing note).
+		 *
+		 * Implements spec §5's gate, in order:
+		 *
+		 * 1. {@see Selection_Scope::type_for_method()} IS the gate — no separate check
+		 *    of which methods "require pickup" exists here, deliberately: that list is
+		 *    already declared twice elsewhere by the plugin (`Pickup_Field::create()`,
+		 *    `Checkout_Handler::set_requires_pickup_methods()`), and a third copy here
+		 *    would only drift from them.
+		 * 2. a type code → the exact `(locality, type)` entry.
+		 * 3. {@see Selection_Scope::TYPE_ANY} → the most recently written entry for the
+		 *    locality.
+		 * 4. `null` → nothing is restored; `$value` is returned exactly as received.
+		 *
+		 * The chosen shipping method is read and normalized the same way
+		 * {@see self::rest_shipping_method()} does — `WC()->session`'s own record,
+		 * `:instance_id` suffix stripped — replicated rather than shared, since that
+		 * method's own docblock documents it as consumed only by
+		 * {@see \Woodev\Framework\Shipping\Rest_Api\Pickup_Controller}'s domain seam.
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param mixed  $value The value WooCommerce would otherwise return.
+		 * @param string $key   The checkout field id being resolved.
+		 *
+		 * @return mixed
+		 */
+		public function restore_selection( $value, string $key ) {
+			if ( $this->field_id !== $key ) {
+				return $value;
+			}
+
+			$scope     = $this->selection_scope;
+			$selection = $this->selection();
+
+			if ( null === $scope || null === $selection ) {
+				return $value;
+			}
+
+			$chosen = $this->wc_session_chosen_shipping_methods();
+			$method = ( is_array( $chosen ) && isset( $chosen[0] ) && is_scalar( $chosen[0] ) )
+				? explode( ':', (string) wc_clean( (string) $chosen[0] ) )[0]
+				: '';
+
+			$type = $scope->type_for_method( $method );
+
+			if ( null === $type ) {
+				return $value;
+			}
+
+			$locality = $scope->current_locality();
+
+			$point_id = Selection_Scope::TYPE_ANY === $type
+				? $selection->recall_latest( $locality )
+				: $selection->recall( $locality, $type );
+
+			return null !== $point_id ? $point_id : $value;
+		}
+
+		/**
 		 * Handles `woocommerce_checkout_process` — the server-side constraint re-check.
 		 *
 		 * A blank posted field value means nothing is our concern here — see the class
@@ -2198,6 +2381,22 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 * @return void
 		 */
 		public function handle_checkout_order_processed( int $order_id, array $posted_data, \WC_Order $order ): void {
+			// Issue #176: clears the WHOLE pickup-selection map on order creation — see
+			// spec §6's invalidation table. Deliberately BEFORE the full-point-persistence
+			// early return just below: that return is conditioned on
+			// `$order_handler`/`$point_field_logical`, which is orthogonal to whether
+			// selection persistence is wired at all. Placing the clear after it would
+			// silently skip clearing for every plugin that has not wired full-point
+			// persistence, leaving a stale selection to resurface on the NEXT cart. A
+			// missing {@see self::$selection_scope} makes {@see self::selection()}
+			// return null, and {@see Pickup_Selection::forget_all()} is itself a no-op
+			// without a live WC session — both already degrade safely.
+			$selection = $this->selection();
+
+			if ( null !== $selection ) {
+				$selection->forget_all();
+			}
+
 			if ( null === $this->order_handler || null === $this->point_field_logical ) {
 				return;
 			}
