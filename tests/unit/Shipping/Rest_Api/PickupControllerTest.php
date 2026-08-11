@@ -15,6 +15,7 @@
 
 namespace Woodev\Tests\Unit\Shipping\Rest_Api;
 
+use Brain\Monkey\Actions;
 use Brain\Monkey\Filters;
 use Brain\Monkey\Functions;
 use Woodev\Framework\Shipping\Pickup\Pickup_Point;
@@ -1329,5 +1330,104 @@ final class PickupControllerTest extends TestCase {
 		$this->assertSame( 'pvz', $captured['field_id'] );
 		$this->assertSame( 'cod', $captured['payment_method'] );
 		$this->assertSame( 750, $captured['cart_weight'] );
+	}
+
+	// -------------------------------------------------------------------------
+	// woodev_shipping_pickup_point_selected — the pickup-selection-persistence
+	// write seam (issue #176). Fired AFTER the domain filter and AFTER
+	// Selection_Result::sanitize() has resolved the FINAL verdict, and ONLY when
+	// that verdict is allowed === true.
+	// -------------------------------------------------------------------------
+
+	/**
+	 * The baseline: an allowed selection with no domain filter attached fires the
+	 * action exactly once, with the resolved point and the same context shape the
+	 * `woodev_shipping_pickup_point_selection` filter itself receives.
+	 */
+	public function test_an_allowed_selection_fires_the_selected_action(): void {
+		Functions\when( 'rest_ensure_response' )->returnArg();
+		Functions\when( 'apply_filters' )->returnArg( 2 );
+
+		$captured_point   = null;
+		$captured_context = null;
+
+		Actions\expectDone( 'woodev_shipping_pickup_point_selected' )->once()->whenHappen(
+			static function ( $point, $context ) use ( &$captured_point, &$captured_context ) {
+				$captured_point   = $point;
+				$captured_context = $context;
+			}
+		);
+
+		$this->select_controller( $this->point(), 750, 'cod', 'carrier_pickup' )->handle_select_request(
+			new WP_REST_Request( [ 'field_id' => 'pvz', 'point_id' => 'P1' ] )
+		);
+
+		$this->assertInstanceOf( Pickup_Point::class, $captured_point );
+		$this->assertSame( 'P1', $captured_point->get_id() );
+		$this->assertIsArray( $captured_context );
+		$this->assertSame( 'pvz', $captured_context['field_id'] );
+		$this->assertSame( 'carrier_pickup', $captured_context['method_id'] );
+		$this->assertSame( 'cod', $captured_context['payment_method'] );
+		$this->assertSame( 750, $captured_context['cart_weight'] );
+	}
+
+	/**
+	 * THE load-bearing case (coordinator guidance, issue #176): a point the
+	 * FRAMEWORK's own {@see \Woodev\Framework\Shipping\Pickup\Constraint_Checker}
+	 * verdict already allows, but that a domain filter on
+	 * `woodev_shipping_pickup_point_selection` FLIPS to refused, must never fire
+	 * the selected action — a persistence write gated on `$computed` (the
+	 * pre-filter verdict) instead of the sanitized, post-filter result would
+	 * remember a point the domain just refused.
+	 */
+	public function test_a_domain_filter_refusing_the_point_prevents_the_selected_action(): void {
+		Functions\when( 'rest_ensure_response' )->returnArg();
+
+		Filters\expectApplied( 'woodev_shipping_pickup_point_selection' )->once()->andReturn(
+			[
+				'allowed'          => false,
+				'reason'           => 'Этот пункт не принимает негабаритные отправления.',
+				'close'            => null,
+				'refresh_checkout' => null,
+			]
+		);
+
+		Actions\expectDone( 'woodev_shipping_pickup_point_selected' )->never();
+
+		$result = $this->select_controller( $this->point() )->handle_select_request(
+			new WP_REST_Request( [ 'field_id' => 'pvz', 'point_id' => 'P1' ] )
+		);
+
+		// Sanity: the refusal itself really did happen — a mutant that always allows
+		// would make the `never()` assertion above pass for the wrong reason.
+		$this->assertFalse( $result['allowed'] );
+	}
+
+	/**
+	 * The mirror case: the FRAMEWORK's own verdict refuses (cart too heavy for the
+	 * point), and a domain filter FLIPS it to allowed. The action must still fire —
+	 * gating must read the FINAL sanitized verdict, never `$computed`.
+	 */
+	public function test_a_domain_filter_overriding_a_refusal_to_allowed_fires_the_selected_action(): void {
+		Functions\when( 'rest_ensure_response' )->returnArg();
+
+		Filters\expectApplied( 'woodev_shipping_pickup_point_selection' )->once()->andReturn(
+			[
+				'allowed'          => true,
+				'reason'           => null,
+				'close'            => null,
+				'refresh_checkout' => null,
+			]
+		);
+
+		Actions\expectDone( 'woodev_shipping_pickup_point_selected' )->once();
+
+		// The framework's own verdict refuses: the point caps weight at 1000 g, the
+		// cart weighs 2000 g.
+		$result = $this->select_controller( $this->point( [ 'max_weight' => 1000 ] ), 2000 )->handle_select_request(
+			new WP_REST_Request( [ 'field_id' => 'pvz', 'point_id' => 'P1' ] )
+		);
+
+		$this->assertTrue( $result['allowed'] );
 	}
 }

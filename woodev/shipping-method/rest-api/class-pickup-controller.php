@@ -653,9 +653,43 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 			 *                                cart that is not loaded — see
 			 *                                {@see self::$cart_weight}.
 			 */
-			$filtered = apply_filters( 'woodev_shipping_pickup_point_selection', $computed, $point, $context );
+			$filtered  = apply_filters( 'woodev_shipping_pickup_point_selection', $computed, $point, $context );
+			$sanitized = Selection_Result::sanitize( $filtered, $computed );
 
-			return rest_ensure_response( Selection_Result::sanitize( $filtered, $computed ) );
+			// Fired AFTER the domain filter above and AFTER sanitize() has resolved the
+			// FINAL verdict — never off `$computed`, which predates whatever a domain
+			// filter just decided. A domain filter is free to FLIP `allowed`, and a
+			// point it just refused must never be remembered; gating on the sanitized,
+			// post-filter result is what makes that true regardless of what any
+			// listener here does. Not the `woodev_shipping_pickup_point_selection`
+			// filter itself: that contract is the domain VOLUNTEERING advice on top of
+			// a verdict, not a side-effect seam, and this controller stays free of
+			// WooCommerce globals either way — firing an action is not reading one.
+			if ( true === $sanitized['allowed'] ) {
+				/**
+				 * Fires after a pickup point selection has been confirmed and allowed —
+				 * the write side of pickup-selection persistence (issue #176).
+				 *
+				 * @since 2.0.2
+				 *
+				 * @param Pickup_Point         $point   The confirmed point.
+				 * @param array{
+				 *     field_id: string,
+				 *     method_id: string,
+				 *     payment_method: string,
+				 *     cart_weight: int,
+				 * }                           $context Same shape as the
+				 *                                       `woodev_shipping_pickup_point_selection`
+				 *                                       filter's own `$context` — see
+				 *                                       that filter's docblock just
+				 *                                       above for what each key means,
+				 *                                       including why `method_id` is
+				 *                                       already the bare, normalized id.
+				 */
+				do_action( 'woodev_shipping_pickup_point_selected', $point, $context );
+			}
+
+			return rest_ensure_response( $sanitized );
 		}
 
 		/**
