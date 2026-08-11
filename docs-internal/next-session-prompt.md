@@ -10,7 +10,7 @@
 | | |
 |---|---|
 | PR | **#269** (#176), CI **19/19 pass + 1 skipped (release)**, `mergeStateStatus: CLEAN`, `MERGEABLE` |
-| Тесты на ветке | **1587 unit / 4203 ассерта**, jest **880** (не менялся), phpcs чисто |
+| Тесты на ветке | **1595 unit / 4259 ассертов**, jest **880** (не менялся), phpcs чисто |
 | Тесты на `main` | 1550 unit / 880 jest |
 | Риг | поднят, `:8973`/`:8974`, **живой Яндекс** (`WOODEV_TEST_PICKUP_LIVE_YANDEX=1`) |
 | Serena | работает, требует `activate_project('woodev_framework')` |

@@ -3,7 +3,7 @@
 **Mode:** brainstorm with the operator, then overnight autonomous. Branch
 `feat/176-pickup-selection-persistence` → **PR #269, CI green (19/19 + skipped release, `CLEAN`)**,
 not merged: left for the operator.
-**Tests:** 1587 unit / 4203 assertions (from 1550), jest 880 unchanged, phpcs clean.
+**Tests:** 1595 unit / 4259 assertions (from 1550), jest 880 unchanged, phpcs clean.
 
 ### The premise was verified before any code was written
 
