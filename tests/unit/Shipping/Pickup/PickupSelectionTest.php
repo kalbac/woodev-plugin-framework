@@ -170,13 +170,22 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 		// locality. Refused on both sides so that is unreachable, not just unlikely.
 		// -------------------------------------------------------------------------
 
+		/**
+		 * Asserting the RAW stored map (not the semantic entry count) matters: a
+		 * `count_entries()` of 0 is also produced by a stray `[ '' => [] ]` bucket
+		 * (an empty per-locality array counts zero entries but is NOT "nothing was
+		 * written") — only reading the raw session value directly rules that out.
+		 */
 		public function test_an_empty_locality_is_never_written(): void {
 			$session   = new Pickup_Selection_Fake_Session();
 			$selection = $this->probe( $session );
 
 			$selection->remember( '', 'pvz', 'P1' );
 
-			$this->assertSame( 0, $this->count_entries( $session, 'woodev_test_selection_map' ) );
+			$this->assertNull(
+				$session->raw( 'woodev_test_selection_map' ),
+				'nothing must be written at all — not even an empty bucket'
+			);
 		}
 
 		public function test_an_empty_type_is_never_written(): void {
@@ -185,7 +194,10 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 
 			$selection->remember( 'msk', '', 'P1' );
 
-			$this->assertSame( 0, $this->count_entries( $session, 'woodev_test_selection_map' ) );
+			$this->assertNull(
+				$session->raw( 'woodev_test_selection_map' ),
+				'nothing must be written at all — not even an empty bucket'
+			);
 		}
 
 		public function test_an_empty_point_id_is_never_written(): void {
@@ -194,7 +206,10 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 
 			$selection->remember( 'msk', 'pvz', '' );
 
-			$this->assertSame( 0, $this->count_entries( $session, 'woodev_test_selection_map' ) );
+			$this->assertNull(
+				$session->raw( 'woodev_test_selection_map' ),
+				'nothing must be written at all — not even an empty bucket'
+			);
 		}
 
 		/**
@@ -272,11 +287,39 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 		}
 
 		// -------------------------------------------------------------------------
+		// Selection_Scope::session_key() — per-plugin isolation
+		// -------------------------------------------------------------------------
+
+		/**
+		 * Every other test in this file builds the scope through {@see self::scope()},
+		 * which always uses the SAME default key — so a {@see Pickup_Selection} that
+		 * ignored {@see Selection_Scope::session_key()} entirely and hardcoded that one
+		 * literal string would still pass every one of them. Two plugins sharing one
+		 * `WC()->session` (the real deployment shape — a site can run more than one
+		 * pickup-capable shipping plugin, spec §3.2) must not see each other's
+		 * selections.
+		 */
+		public function test_two_differently_keyed_scopes_do_not_see_each_others_selections(): void {
+			$session = new Pickup_Selection_Fake_Session();
+
+			$selection_a = new Pickup_Selection_Probe( $this->scope( 'plugin_a_selection_map' ), $session );
+			$selection_b = new Pickup_Selection_Probe( $this->scope( 'plugin_b_selection_map' ), $session );
+
+			$selection_a->remember( 'msk', 'pvz', 'A1' );
+			$selection_b->remember( 'msk', 'pvz', 'B1' );
+
+			$this->assertSame( 'A1', $selection_a->recall( 'msk', 'pvz' ), 'plugin A must not see plugin B\'s write' );
+			$this->assertSame( 'B1', $selection_b->recall( 'msk', 'pvz' ), 'plugin B must not see plugin A\'s write' );
+		}
+
+		// -------------------------------------------------------------------------
 		// forget_all()
 		// -------------------------------------------------------------------------
 
 		public function test_forget_all_clears_every_locality_and_type(): void {
-			$selection = $this->probe( new Pickup_Selection_Fake_Session() );
+			$session   = new Pickup_Selection_Fake_Session();
+			$selection = $this->probe( $session );
+			$scope     = $this->scope();
 
 			$selection->remember( 'msk', 'pvz', 'P1' );
 			$selection->remember( 'spb', 'postamat', 'P2' );
@@ -286,6 +329,10 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			$this->assertNull( $selection->recall( 'msk', 'pvz' ) );
 			$this->assertNull( $selection->recall( 'spb', 'postamat' ) );
 			$this->assertNull( $selection->recall_latest( 'msk' ) );
+
+			// The raw stored map, not just the recalls: leaving `[ 'msk' => [], 'spb'
+			// => [] ]` behind would still pass every recall assertion above.
+			$this->assertSame( [], $session->raw( $scope->session_key() ) );
 		}
 
 		// -------------------------------------------------------------------------
@@ -367,9 +414,52 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			$this->assertSame( 'P2', $selection->recall( 'b', 'pvz' ) );
 		}
 
+		/**
+		 * Reviewer's exact scenario (spec §6's own warning): distinct-keys-only
+		 * eviction tests cannot tell "evict the lowest `seq`" from "evict the array's
+		 * first entry" apart, because a re-assigned key keeps its ORIGINAL array
+		 * position. Write A, write B, then OVERWRITE A (refreshing its `seq` while it
+		 * stays at array position 0), then write C at cap 2: the correct
+		 * implementation evicts B (the genuinely oldest by `seq`); a mutant evicting
+		 * array position 0 would evict the just-refreshed A instead.
+		 */
+		public function test_eviction_follows_recency_not_array_position(): void {
+			Filters\expectApplied( 'woodev_pickup_max_remembered_selections' )
+				->times( 4 )
+				->with( 20 )
+				->andReturn( 2 );
+
+			$session   = new Pickup_Selection_Fake_Session();
+			$selection = $this->probe( $session );
+			$scope     = $this->scope();
+
+			$selection->remember( 'a', 'pvz', 'A1' );  // seq 1
+			$selection->remember( 'b', 'pvz', 'B1' );  // seq 2
+			$selection->remember( 'a', 'pvz', 'A2' );  // seq 3 — overwrite; stays at array position 0
+			$selection->remember( 'c', 'pvz', 'C1' );  // seq 4 — cap 2 must evict the lowest seq (b)
+
+			$this->assertSame( 2, $this->count_entries( $session, $scope->session_key() ) );
+			$this->assertSame(
+				'A2',
+				$selection->recall( 'a', 'pvz' ),
+				'the overwritten (and thus most recently written) A entry must survive'
+			);
+			$this->assertSame( 'C1', $selection->recall( 'c', 'pvz' ), 'the just-written entry must never be evicted' );
+			$this->assertNull( $selection->recall( 'b', 'pvz' ), 'B — the actual oldest by seq — must be the one evicted' );
+		}
+
+		/**
+		 * The original version of this test wrote exactly 25 entries and asserted
+		 * exactly 25 survived — proving the cap is AT LEAST 25, not that it is truly
+		 * unbounded: a bug resolving `cap === 0` to a hardcoded value that happened to
+		 * equal this test's own loop bound would have passed unnoticed. Writing a
+		 * count with no relationship to any constant in the implementation (37,
+		 * arbitrary), and asserting every single one of them individually recalls —
+		 * not just the aggregate count — closes that gap.
+		 */
 		public function test_cap_zero_means_unbounded(): void {
 			Filters\expectApplied( 'woodev_pickup_max_remembered_selections' )
-				->times( 25 )
+				->times( 37 )
 				->with( 20 )
 				->andReturn( 0 );
 
@@ -377,11 +467,15 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			$selection = $this->probe( $session );
 			$scope     = $this->scope();
 
-			for ( $i = 1; $i <= 25; $i++ ) {
+			for ( $i = 1; $i <= 37; $i++ ) {
 				$selection->remember( 'loc' . $i, 'pvz', 'P' . $i );
 			}
 
-			$this->assertSame( 25, $this->count_entries( $session, $scope->session_key() ) );
+			$this->assertSame( 37, $this->count_entries( $session, $scope->session_key() ) );
+
+			for ( $i = 1; $i <= 37; $i++ ) {
+				$this->assertSame( 'P' . $i, $selection->recall( 'loc' . $i, 'pvz' ), "loc{$i} must not have been evicted" );
+			}
 		}
 
 		/**
@@ -407,10 +501,35 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 
 			// Falls back to 20 (the default), so nothing is evicted at only 3 entries —
 			// this proves the fallback is NOT 0 (unbounded is indistinguishable from a
-			// large-enough default at only 3 writes); the assertion that actually pins
-			// "falls back to 20, not unbounded" is the eviction test below, which uses a
-			// filtered cap instead since the default can't practically be exhausted here.
+			// large-enough default at only 3 writes); the test below actually exhausts
+			// the fallback cap to pin "20", not just "at least 3".
 			$this->assertSame( 3, $this->count_entries( $session, $scope->session_key() ) );
+		}
+
+		/**
+		 * Exhausts the fallback cap for real: 21 writes under a non-numeric filter
+		 * return must still evict down to exactly 20 — proving the fallback is the
+		 * DEFAULT (20), not unbounded. The test above only proves "at least 3 survive
+		 * a non-numeric cap", which cannot distinguish a 20-entry fallback from an
+		 * unbounded one; this one can.
+		 */
+		public function test_non_numeric_cap_falls_back_to_exactly_the_default_cap(): void {
+			Filters\expectApplied( 'woodev_pickup_max_remembered_selections' )
+				->times( 21 )
+				->with( 20 )
+				->andReturn( 'unlimited' );
+
+			$session   = new Pickup_Selection_Fake_Session();
+			$selection = $this->probe( $session );
+			$scope     = $this->scope();
+
+			for ( $i = 1; $i <= 21; $i++ ) {
+				$selection->remember( 'loc' . $i, 'pvz', 'P' . $i );
+			}
+
+			$this->assertSame( 20, $this->count_entries( $session, $scope->session_key() ) );
+			$this->assertSame( 'P21', $selection->recall( 'loc21', 'pvz' ), 'the just-written entry must survive eviction' );
+			$this->assertNull( $selection->recall( 'loc1', 'pvz' ), 'the oldest entry must be evicted under the fallback cap' );
 		}
 
 		/**
