@@ -89,6 +89,34 @@ built on **every** trigger click, so closing and reopening the picker already re
 the exposure is only a cart change while the picker stays open. Establish that before writing the
 card, or the card overstates and gets triaged wrong.
 
+## s66 addendum — third occurrence, and this one is a whole PUBLIC SEAM
+
+Found while assembling the brainstorm brief for the locality/address cards, not while chasing a bug:
+
+- `Woodev\Framework\Shipping\Address\Address_Normalizer` — an interface with `suggest()` and
+  `normalize()`, whose own docblock says implementations "wrap an address-data provider (such as
+  DaData)".
+- `Null_Address_Normalizer` — the no-op default, so "the shipping module can always depend on an
+  `Address_Normalizer` being present".
+- `Shipping_Plugin::get_address_normalizer()` — lazily builds it, overridable per plugin.
+- Both in `woodev/class-map.php`, so they load in production too.
+- **Zero call sites.** `get_address_normalizer(` appears only at its own definition; `->suggest(` and
+  `->normalize(` appear nowhere in `woodev/` or `tests/`. Nothing in §8 or the pickup layer consults
+  it. The framework additionally *registers* the DaData client assets
+  (`jquery-suggestions`, `woodev-dadata-suggestions`, `class-plugin.php:514-515`) which the framework
+  never enqueues and no reference plugin uses — Почта ships its own copy.
+
+Two things this occurrence adds to the rule:
+
+1. **The Null Object is what makes it comfortable.** A null default is the right pattern *and* it
+   removes the only symptom an unwired seam would otherwise have: nothing is ever missing, nothing
+   throws, every consumer "works". Whenever a seam ships with a Null default, the wiring check has
+   to be deliberate — the absence of breakage proves nothing.
+2. **Card #127 says this is unbuilt.** It plans "`suggest(field, query)` / `normalize(address)` plus
+   a reusable client widget" as future work, and that shape is already on disk. So the drift runs
+   both ways: a docblock can claim a caller that does not exist, and a CARD can claim absence where
+   code exists. Check the code before planning either way — the s52 lesson, in the other direction.
+
 ## Related
 
 - [[dispatcher-files-unwired-in-includes]] — the PHP shape of the same thing: a class that exists,
