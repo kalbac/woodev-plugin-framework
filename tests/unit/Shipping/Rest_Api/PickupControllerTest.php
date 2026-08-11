@@ -1430,4 +1430,94 @@ final class PickupControllerTest extends TestCase {
 
 		$this->assertTrue( $result['allowed'] );
 	}
+
+	/**
+	 * A domain filter is contractually allowed to return a CORRECTED point, and the
+	 * browser then REPLACES the point it holds with that one — so the address
+	 * replacement, and with it whatever the checkout later reports as the current
+	 * locality, follow the CORRECTED point. The action must therefore carry the
+	 * corrected point too: a listener filing the selection under the pre-filter
+	 * point's locality would key it under a locality the checkout no longer reports,
+	 * and the restore would miss with nothing logged and nothing thrown.
+	 *
+	 * Note the deliberate divergence in BOTH `id` and `locality` — asserting only the
+	 * locality would leave a mutant that forwards `$point` but re-reads its locality
+	 * from somewhere else alive.
+	 */
+	public function test_the_selected_action_carries_a_domain_corrected_point(): void {
+		Functions\when( 'rest_ensure_response' )->returnArg();
+
+		Filters\expectApplied( 'woodev_shipping_pickup_point_selection' )->once()->andReturn(
+			[
+				'allowed'          => true,
+				'reason'           => null,
+				'close'            => null,
+				'refresh_checkout' => null,
+				'point'            => [
+					'id'       => 'P1-CORRECTED',
+					'name'     => 'Точка',
+					'lat'      => 55.75,
+					'lng'      => 37.61,
+					'address'  => 'Химки, Ленинский проспект, 1',
+					'locality' => 'Химки',
+					'type'     => [ 'code' => 'PVZ', 'label' => 'ПВЗ' ],
+				],
+			]
+		);
+
+		$captured_point = null;
+
+		Actions\expectDone( 'woodev_shipping_pickup_point_selected' )->once()->whenHappen(
+			static function ( $point ) use ( &$captured_point ) {
+				$captured_point = $point;
+			}
+		);
+
+		// The pre-filter point is 'P1' in Москва — see self::point().
+		$this->select_controller( $this->point( [ 'locality' => 'Москва' ] ) )->handle_select_request(
+			new WP_REST_Request( [ 'field_id' => 'pvz', 'point_id' => 'P1' ] )
+		);
+
+		$this->assertInstanceOf( Pickup_Point::class, $captured_point );
+		$this->assertSame( 'P1-CORRECTED', $captured_point->get_id() );
+		$this->assertSame( 'Химки', $captured_point->to_array()['locality'] );
+	}
+
+	/**
+	 * The other half of the same rule: a corrected point that does NOT validate is
+	 * dropped by {@see \Woodev\Framework\Shipping\Pickup\Selection_Result::sanitize_point()}
+	 * ("nothing to update, keep the point you already have"), so the browser keeps the
+	 * point it holds — and the action must keep the pre-filter point in step with it,
+	 * not fall through to a half-adopted correction.
+	 */
+	public function test_the_selected_action_ignores_an_invalid_domain_correction(): void {
+		Functions\when( 'rest_ensure_response' )->returnArg();
+
+		Filters\expectApplied( 'woodev_shipping_pickup_point_selection' )->once()->andReturn(
+			[
+				'allowed'          => true,
+				'reason'           => null,
+				'close'            => null,
+				'refresh_checkout' => null,
+				// No `address`, no `type` — Pickup_Point::from_array() refuses it.
+				'point'            => [ 'id' => 'P1-BROKEN', 'name' => 'Точка' ],
+			]
+		);
+
+		$captured_point = null;
+
+		Actions\expectDone( 'woodev_shipping_pickup_point_selected' )->once()->whenHappen(
+			static function ( $point ) use ( &$captured_point ) {
+				$captured_point = $point;
+			}
+		);
+
+		$this->select_controller( $this->point( [ 'locality' => 'Москва' ] ) )->handle_select_request(
+			new WP_REST_Request( [ 'field_id' => 'pvz', 'point_id' => 'P1' ] )
+		);
+
+		$this->assertInstanceOf( Pickup_Point::class, $captured_point );
+		$this->assertSame( 'P1', $captured_point->get_id() );
+		$this->assertSame( 'Москва', $captured_point->to_array()['locality'] );
+	}
 }

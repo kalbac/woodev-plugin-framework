@@ -666,13 +666,38 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 			// a verdict, not a side-effect seam, and this controller stays free of
 			// WooCommerce globals either way — firing an action is not reading one.
 			if ( true === $sanitized['allowed'] ) {
+				// The EFFECTIVE point, not the pre-filter one. The filter above may return a
+				// corrected point, and its own contract says the browser REPLACES what it is
+				// holding with that — so the address replacement, and with it whatever the
+				// checkout later reports as the current locality, follow the CORRECTED point.
+				// A listener keying off the pre-filter point would then file the selection
+				// under a locality the checkout no longer reports, and the restore would miss
+				// silently. `sanitize_point()` already validated this exact array through
+				// `Pickup_Point::from_array()`; rebuilding it here re-runs that one method
+				// rather than duplicating its rules, and a non-null `$sanitized['point']` is
+				// precisely the signal that it validated.
+				$effective_point = $point;
+
+				if ( null !== $sanitized['point'] && is_array( $filtered['point'] ?? null ) ) {
+					$corrected = Pickup_Point::from_array( $filtered['point'] );
+
+					if ( null !== $corrected ) {
+						$effective_point = $corrected;
+					}
+				}
+
 				/**
 				 * Fires after a pickup point selection has been confirmed and allowed —
 				 * the write side of pickup-selection persistence (issue #176).
 				 *
 				 * @since 2.0.2
 				 *
-				 * @param Pickup_Point         $point   The confirmed point.
+				 * @param Pickup_Point         $point   The confirmed point, INCLUDING any
+				 *                                       correction a domain filter applied
+				 *                                       above — this is the point the browser
+				 *                                       ends up holding, so a listener that
+				 *                                       derives a storage key from it agrees
+				 *                                       with what the checkout will report.
 				 * @param array{
 				 *     field_id: string,
 				 *     method_id: string,
@@ -686,7 +711,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 				 *                                       including why `method_id` is
 				 *                                       already the bare, normalized id.
 				 */
-				do_action( 'woodev_shipping_pickup_point_selected', $point, $context );
+				do_action( 'woodev_shipping_pickup_point_selected', $effective_point, $context );
 			}
 
 			return rest_ensure_response( $sanitized );
