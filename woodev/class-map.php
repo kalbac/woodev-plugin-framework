@@ -37,6 +37,8 @@ return [
 	'Woodev\\Framework\\Shipping\\Checkout\\Field' => 'woodev/shipping-method/checkout/class-field.php',
 	'Woodev\\Framework\\Shipping\\Checkout\\Presets\\Dependent_Select' => 'woodev/shipping-method/checkout/presets/class-dependent-select.php',
 	'Woodev\\Framework\\Shipping\\Checkout\\Presets\\Pickup_Field' => 'woodev/shipping-method/checkout/presets/class-pickup-field.php',
+	'Woodev\\Framework\\Shipping\\Location\\Locality_Key' => 'woodev/shipping-method/location/class-locality-key.php',
+	'Woodev\\Framework\\Shipping\\Location\\Location_Record' => 'woodev/shipping-method/location/class-location-record.php',
 	'Woodev\\Framework\\Shipping\\Map\\Embedded_Map_Provider' => 'woodev/shipping-method/map/class-embedded-map-provider.php',
 	'Woodev\\Framework\\Shipping\\Map\\Map_Provider' => 'woodev/shipping-method/map/interface-map-provider.php',
 	'Woodev\\Framework\\Shipping\\Map\\Map_Provider_Registry' => 'woodev/shipping-method/map/class-map-provider-registry.php',
