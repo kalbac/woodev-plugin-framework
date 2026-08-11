@@ -40,7 +40,16 @@
 
 		return {
 			store:  factory.createStore( config ),
-			config: config || {}
+			config: config || {},
+			// Per-child record of the PARENT value the child's own value is CONSISTENT
+			// with. A cascade is destructive (it drops the child's value), so the drop
+			// only happens when the parent actually CHANGED — see cascadeChild().
+			resolved: {},
+			// Per-child record of the PARENT value the child's OPTION SET was fetched
+			// against. Separate from `resolved` on purpose: at page load the value is
+			// already consistent with the rendered parent (nothing to drop) while the
+			// options have never been fetched (a dependent select still needs them).
+			fetched: {}
 		}
 	} ).filter( function( entry ) {
 		return entry.config && entry.config.fields
@@ -193,24 +202,56 @@
 	// ---------------------------------------------------------------------
 
 	/**
-	 * Запускает каскад для одного потомка: чистит значение, запрашивает
-	 * источник, перезаполняет `<select>` из данных, восстанавливает значение.
+	 * Нормализует значение родителя к строке для сравнения «сменился ли он».
 	 *
-	 * @param {Object} entry    Запись { store, config }.
-	 * @param {string} childId  Id поля-потомка.
-	 * @param {string} parentId Id поля-родителя.
+	 * `.val()` отдаёт `undefined` для отсутствующего элемента и `null` для
+	 * `<select>` без опций, а с сервера то же значение приходит строкой —
+	 * сравнение без нормализации объявляло бы смену там, где её нет.
+	 *
+	 * @param {*} value
+	 * @returns {string}
+	 */
+	function cascadeKey( value ) {
+		return value === undefined || value === null ? '' : String( value )
+	}
+
+	/**
+	 * Запускает каскад для одного потомка: запрашивает источник, перезаполняет
+	 * `<select>` из данных, восстанавливает значение.
+	 *
+	 * Каскад ДЕСТРУКТИВЕН — он роняет значение потомка, — поэтому чистка идёт
+	 * только когда родитель РЕАЛЬНО сменился. WooCommerce на инициализации
+	 * чекаута сам стреляет программным `change` по адресным полям (см. гейт
+	 * `meaningful` ниже: непустое значение проходит его законно), и такой
+	 * «холостой» каскад раньше синхронно обнулял и DOM, и стор. Стартовый
+	 * `update_checkout` самого WooCommerce сериализовал форму спустя ~50 мс —
+	 * то есть ЗАДОЛГО до ответа источника — и уносил пустое значение в
+	 * `WC()->customer`, после чего сервер отдавал пустое поле уже на всех
+	 * последующих загрузках. Ни одного `change` по самому потомку при этом не
+	 * происходит: значение убивает не событие, а окно между чисткой и ответом.
+	 *
+	 * @param {Object} entry       Запись { store, config, resolved }.
+	 * @param {string} childId     Id поля-потомка.
+	 * @param {string} parentId    Id поля-родителя.
+	 * @param {string} parentValue Текущее значение родителя.
 	 * @returns {void}
 	 */
-	function cascadeChild( entry, childId, parentId ) {
+	function cascadeChild( entry, childId, parentId, parentValue ) {
 		var store    = entry.store
 		var $child   = $( '#' + childId )
 		var previous = store.getValue( childId )
+		var changed  = entry.resolved[ childId ] !== parentValue
 
-		// Значение потомка теперь неактуально: чистим в сторе и в DOM.
-		store.setValue( childId, '' )
+		if( changed ) {
+			// Родитель сменился → значение потомка неактуально: чистим в сторе и в DOM.
+			store.setValue( childId, '' )
 
-		if( $child.length ) {
-			$child.val( '' )
+			if( $child.length ) {
+				$child.val( '' )
+			}
+
+			// После чистки состояние потомка согласовано с новым родителем.
+			entry.resolved[ childId ] = parentValue
 		}
 
 		var url = sourceUrl( entry.config, childId )
@@ -220,12 +261,21 @@
 			return
 		}
 
+		// Набор опций для этого значения родителя уже загружен — повторный
+		// «холостой» change не должен слать запрос ещё раз.
+		if( entry.fetched[ childId ] === parentValue ) {
+			refreshGate()
+			return
+		}
+
+		entry.fetched[ childId ] = parentValue
+
 		$.ajax( {
 			url:      url,
 			method:   'GET',
 			dataType: 'json',
 			data:     {
-				parent:  store.getValue( parentId ) !== undefined ? store.getValue( parentId ) : '',
+				parent:  parentValue !== undefined && parentValue !== null ? parentValue : '',
 				country: currentCountry()
 			},
 			beforeSend: function( xhr ) {
@@ -234,6 +284,17 @@
 				}
 			}
 		} ).done( function( response ) {
+			// Перечитываем узел: takeover мог заменить <input> на <select>
+			// (ensureSelect) пока запрос был в полёте, и захваченная ссылка
+			// указывала бы на открепленный от документа элемент — запись в него
+			// не видна ни покупателю, ни сериализации формы.
+			$child = $( '#' + childId )
+
+			if( ! $child.length ) {
+				refreshGate()
+				return
+			}
+
 			var options  = response && response.options ? response.options : []
 			var restored = fillSelect( $child, options, previous, placeholderText( entry.config ) )
 
@@ -241,14 +302,26 @@
 			// независимо от того, вернулась ли опция (спека: не «ронять» значение).
 			store.setValue( childId, previous )
 
-			if( ! restored ) {
-				// В DOM опции нет — очищаем видимый выбор, но храним в сторе.
-				$child.val( '' )
+			if( ! restored && previous !== undefined && previous !== null && previous !== '' ) {
+				if( changed ) {
+					// Родитель сменился, и в новом наборе значения нет — оно
+					// действительно устарело: убираем видимый выбор.
+					$child.val( '' )
+				} else {
+					// Родитель ТОТ ЖЕ, значит значение законно. Источник мог просто
+					// не вернуть его (усечённый/поисковый набор) — возвращаем как
+					// выбранную опцию, а не выбрасываем.
+					$child.append( new Option( previous, previous, true, true ) )
+					$child.val( previous )
+				}
 			}
 
 			maybeInitSelect2( entry, childId )
 			refreshGate()
 		} ).fail( function( xhr, status, error ) {
+			// Набор опций не получен — значение родителя НЕ считается загруженным,
+			// иначе повтор того же change больше никогда не догрузит потомка.
+			delete entry.fetched[ childId ]
 			logError( error || status || 'field-source request failed' )
 			refreshGate()
 		} )
@@ -257,13 +330,14 @@
 	/**
 	 * Прогоняет каскад для всех потомков родителя.
 	 *
-	 * @param {Object} entry    Запись { store, config }.
-	 * @param {string} parentId Id изменившегося родителя.
+	 * @param {Object} entry       Запись { store, config, resolved }.
+	 * @param {string} parentId    Id изменившегося родителя.
+	 * @param {string} parentValue Текущее значение родителя.
 	 * @returns {void}
 	 */
-	function runCascade( entry, parentId ) {
+	function runCascade( entry, parentId, parentValue ) {
 		entry.store.childrenOf( parentId ).forEach( function( childId ) {
-			cascadeChild( entry, childId, parentId )
+			cascadeChild( entry, childId, parentId, parentValue )
 		} )
 	}
 
@@ -676,6 +750,26 @@
 			}
 		} )
 
+		// Фиксируем, против какого значения родителя КАЖДЫЙ потомок уже разрешён на
+		// момент загрузки: сервер отрендерил их согласованной парой. Без этого
+		// стартовый программный `change` от WooCommerce читается как смена родителя
+		// и «холостой» каскад роняет только что отданное сервером значение.
+		Object.keys( fields ).forEach( function( fieldId ) {
+			var parentId = fields[ fieldId ] && fields[ fieldId ].depends_on
+				? fields[ fieldId ].depends_on
+				: ''
+
+			if( ! parentId ) {
+				return
+			}
+
+			var $parent = $( '#' + parentId )
+
+			if( $parent.length ) {
+				entry.resolved[ fieldId ] = cascadeKey( $parent.val() )
+			}
+		} )
+
 		store.setChosenMethod( selectedShippingMethod() )
 		store.setCountry( currentCountry() )
 	}
@@ -705,10 +799,10 @@
 	 * @param {string} parentId
 	 * @returns {void}
 	 */
-	function cascadeFromParent( parentId ) {
+	function cascadeFromParent( parentId, parentValue ) {
 		stores.forEach( function( entry ) {
 			if( entry.store.childrenOf( parentId ).length ) {
-				runCascade( entry, parentId )
+				runCascade( entry, parentId, cascadeKey( parentValue ) )
 			}
 		} )
 	}
@@ -764,7 +858,7 @@
 
 			// Изменение поля-родителя (в т.ч. нативного) → каскад потомков.
 			if( id && meaningful ) {
-				cascadeFromParent( id )
+				cascadeFromParent( id, value )
 			}
 		} )
 

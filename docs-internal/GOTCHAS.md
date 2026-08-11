@@ -1,6 +1,19 @@
 # Gotchas — Woodev Plugin Framework
-> **125 atomic gotchas, 22 namespaces (28 index sections)** — update when adding/removing.
-> Last updated: 2026-08-11 (session 65, pickup-selection persistence #176: **+5 files, no new
+> **126 atomic gotchas, 22 namespaces (28 index sections)** — update when adding/removing.
+> Last updated: 2026-08-11 (session 66, #272: **+1 file, existing namespace `[shipping/checkout]`** —
+> `a-programmatic-parent-change-must-not-run-a-destructive-cascade` (WooCommerce fires PROGRAMMATIC
+> `change` events on address fields while initialising the checkout, carrying the value the field
+> already has; they pass the adapter's `meaningful` gate legitimately, so a destructive dependent-
+> select cascade ran on EVERY load and wiped the server-rendered city in store and DOM. The harm is
+> not the wipe but the window: WooCommerce's own init `update_checkout` serialised the form ~50 ms
+> later and ~2.9 s BEFORE the source answered, writing `billing_city=''` into `WC()->customer`, so
+> the page erased its own value permanently. The card blamed the takeover conversion — it is
+> downstream and faithfully converts an already-empty field — and proposed suppressing a `change`
+> that never fires (`changes: []`). Gate destruction on a REMEMBERED previous parent value, keep
+> `resolved` (value consistency) separate from `fetched` (option set), and re-resolve the node in
+> `.done()`: the takeover replaces it mid-flight, so the late restore was landing on a DETACHED
+> element)).
+> Prior: 2026-08-11 (session 65, pickup-selection persistence #176: **+5 files, no new
 > namespace**. `custom-checkout-field-is-empty-on-reload-by-construction` (a field added through
 > `woocommerce_checkout_fields` is empty after a reload BY CONSTRUCTION — `WC_Checkout::get_value()`
 > resolves `$_POST` → `woocommerce_checkout_get_value` → a `WC_Customer` getter/meta →
@@ -299,6 +312,8 @@
 - [box-packer/virtual-box-null-best-inf-overflow] `$best=null; $best_volume=PHP_FLOAT_MAX` → if all candidate volumes overflow to INF, `INF < PHP_FLOAT_MAX = false` → `$best` never set → null dereference. Fix: initialize `$best = $candidates[0]` → [gotchas/virtual-box-null-best-inf-overflow.md](gotchas/virtual-box-null-best-inf-overflow.md) (2026-06-09)
 
 ### [shipping/checkout] — Checkout field layer (§8)
+- [shipping/checkout] A dependent-select cascade is DESTRUCTIVE, and WooCommerce fires PROGRAMMATIC `change` events on address fields while initialising the checkout — carrying the value the field already has, which passes the adapter's own `meaningful` gate legitimately (`'77'` is neither the `'*'` wildcard nor an empty-without-`originalEvent`). So a no-op cascade ran on EVERY page load and cleared the server-rendered city in both the store and the DOM. The damage is not the clearing but the WINDOW it opens: WooCommerce's own initialisation `update_checkout` serialises the form ~50 ms after the wipe and ~2.9 s BEFORE the source answers, so `billing_city=''` reaches `update_order_review()` and is written into `WC()->customer` — after which the server renders an empty field forever and the loss is self-sustaining. Two decoys: #272 blamed the takeover conversion (`options: [""]`), which is DOWNSTREAM and faithfully converts a field the cascade already emptied (`fromVal: ""`); and it proposed not firing `change` until the value is transferred, but no `change` fires on the child at all (`changes: []`), so that fix would have changed nothing. Gate destruction on a REMEMBERED previous parent value (seeded at `prefill()` from the rendered parent — the server rendered the pair together), keep `resolved` (value consistency, gates clearing) separate from `fetched` (option set, gates the request — `applyTakeover()` cannot supply options, it sends `parent: ''`), and re-resolve `$child` in `.done()`: the takeover replaces the node mid-flight, so the late restore was landing on a DETACHED element, invisible to customer and form serialization alike → [gotchas/a-programmatic-parent-change-must-not-run-a-destructive-cascade.md](gotchas/a-programmatic-parent-change-must-not-run-a-destructive-cascade.md) (s66)
+
 - [shipping/checkout] Takeover for a WC-states field (region) must use the `woocommerce_states` filter (WC renders + persists natively), NOT client DOM conversion — WC's `update_checkout` re-render fires programmatic `change('' / '*')` that wipes an external store, re-inits select2 (clearing values), etc. City (non-WC concept) stays client select2 with defensive guards (no re-init, safety-net restore, re-add value as option) → [gotchas/checkout-field-takeover-woocommerce-states.md](gotchas/checkout-field-takeover-woocommerce-states.md) (s42)
 
 - [shipping/checkout] A field added through `woocommerce_checkout_fields` is empty after a reload **by construction**, and it is not a broken restore. WooCommerce renders every field with `$checkout->get_value( $key )` (`form-shipping.php:63` for the `order` section), and that method resolves `$_POST` → the `woocommerce_checkout_get_value` filter → a `WC_Customer` getter or meta → `default_checkout_{key}`; for a key that is neither `billing_*` nor `shipping_*` and that nobody wrote to customer meta, every step yields nothing on a GET. The sanctioned restore seam is that filter, and it sits AFTER `$_POST` — so a failed submit still re-renders what the customer posted. Answer only for your own field id and return the incoming `$value` untouched for every other, or it short-circuits the whole checkout. The half-fixed state is the dangerous one: SP-5 also writes the point's address into the NATIVE address fields, which WooCommerce does persist, so the customer saw the address intact while the id was gone and the order stayed blocked. To tell this case from a broken restore, read the rendered `value` ATTRIBUTE on load, not the DOM after scripts run → [gotchas/custom-checkout-field-is-empty-on-reload-by-construction.md](gotchas/custom-checkout-field-is-empty-on-reload-by-construction.md) (s65)
