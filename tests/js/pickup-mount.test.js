@@ -23,12 +23,21 @@
  * native Promise microtasks, so `await`-ing a chain of `.then()`s (see
  * {@see flushAsync}) works identically regardless.
  *
- * No real jQuery is loaded in this environment (none is a project
- * dependency), so `window.jQuery` is undefined and pickup-mount.js's
- * `onCheckoutUpdated()` falls back to a plain native `updated_checkout` event
- * on `document.body` — exactly the fallback its own docblock documents. The
- * `change.select2`-firing branch is likewise unreachable without jQuery, so a
- * dedicated tiny jQuery stub is installed for the ONE test that needs it.
+ * Most tests here load no jQuery, so `window.jQuery` is undefined and
+ * pickup-mount.js's `onCheckoutUpdated()` falls back to a plain native
+ * `updated_checkout` event on `document.body` — exactly the fallback its own
+ * docblock documents. The `change.select2`-firing branch is likewise unreachable
+ * without jQuery, so a dedicated tiny jQuery stub is installed for the tests
+ * that need one.
+ *
+ * The reason is "these tests do not require it", NOT "it is unavailable": jQuery
+ * IS a devDependency of this repo (`package.json` → `devDependencies.jquery`),
+ * and this docblock claimed otherwise until s66. The stale claim had a cost —
+ * #271's locality watcher was covered by seven green tests that all dispatched a
+ * NATIVE `change`, and the rig then showed the watcher never fired for a
+ * select2-style jQuery `.trigger( 'change' )`, which dispatches no DOM event at
+ * all. One test in the #271 block now requires the real library on purpose. See
+ * gotcha `jquery-trigger-change-fires-no-native-event`.
  *
  * PANELS ARE A STUB (`StubPanels`, not the real `pickup-panels.js`), installed as
  * `window.WoodevPickupPanels` in `beforeEach` — this file tests the WIRING contract mount.js
