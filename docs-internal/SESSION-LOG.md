@@ -1,3 +1,78 @@
+## Session 65 — 11.08.2026 — the chosen pickup point now survives a reload, keyed by a DOMAIN locality
+
+**Mode:** brainstorm with the operator, then overnight autonomous. Branch
+`feat/176-pickup-selection-persistence` → **PR #269, CI green (19/19 + skipped release, `CLEAN`)**,
+not merged: left for the operator.
+**Tests:** 1587 unit / 4203 assertions (from 1550), jest 880 unchanged, phpcs clean.
+
+### The premise was verified before any code was written
+
+#176 suspected an unwritten persist rather than a broken restore. Confirmed by construction on
+four independent legs: the field is a plain `hidden` WC field; `WC_Checkout::get_value()` falls
+through to nothing for a key that is neither `billing_*` nor `shipping_*` (the
+`woocommerce_checkout_get_value` filter is hooked nowhere in `woodev/`); nothing writes the point
+to `WC()->session`; there is no client storage anywhere in the framework's JS. `restoreSelection()`
+was correct all along and had nothing to read.
+
+**The cost was worse than the card said.** With `replaceAddress` on (the default) the point's
+address goes into the NATIVE `billing_*`/`shipping_*` fields, which WooCommerce persists itself —
+so after a reload the customer saw the address in place while the id was gone and the A2 gate
+blocked the order anyway.
+
+**The restore UI already existed and was dead:** `syncTriggerLabel()`'s docblock says "Called at
+mount time (a checkout reload after an earlier selection)". The label logic was written expecting
+a persist nobody had built. No JS was touched in the end.
+
+### #178 was the blocker, and it is answered
+
+The card feared `WC()->session` behaves differently for guests, i.e. "a mechanism that works for
+half the buyers". Measured against WooCommerce 11.0.0: the asymmetry is real but is not where the
+card guessed. `save_data()` writes only `if ( $this->_dirty && $this->has_session() )`, and
+`has_session()` is satisfied unconditionally by `is_user_logged_in()` — a guest needs the cart
+cookie, which WooCommerce sets on a non-empty cart. **That condition is unreachable on the
+checkout**, so the pickup point is safe on the plain session; it is very much reachable for a
+locality picker on a catalog page, which is what `WC_Edostavka_Customer_Location_Data` exists for.
+Guest → login does not lose data either (`clone_session_data()` clones it).
+
+### The operator's shape, taken from his own production code
+
+He asked for `locality → type → point`, not one slot. Both reference plugins were read:
+`woocommerce-edostavka` already keeps exactly that map (`$chosen_delivery_point[ city_code ][ type ]`),
+while `woodev-russian-post` keeps a SINGLE slot guarded by comparing the stored FIAS against the
+current address's `place_guid` — which is precisely why switching city there loses the point. Three
+plugins, three incompatible locality vocabularies: FIAS GUID / `city_id` / `geo_id`. Hence the
+framework never derives, normalizes or compares the key: `Selection_Scope` supplies it.
+
+### What shipped
+
+`Selection_Scope` (plugin seam: `session_key`, `locality_for_point`, `current_locality`,
+`type_for_method`), `Pickup_Selection` (session map, explicit `seq` for recency, oldest-first
+eviction under `woodev_pickup_max_remembered_selections`), a new
+`woodev_shipping_pickup_point_selected` action, and restore through
+`woocommerce_checkout_get_value`. No scope → no persistence; the framework coins no session key,
+because both known ones are release-blocking installed-site contracts.
+
+### Review found four things, none of them cosmetic
+
+Two were mine, both with mutation proof: the action carried the PRE-FILTER point although the
+filter may return a corrected one the browser then adopts (the persist key would disagree with the
+page), and an empty domain key was stored and read as an ordinary key (every unnameable locality
+collapsing into one bucket, and an unanswerable `current_locality()` then recalling a stranger's
+point). Codex found a positive fractional cap (`0.5`) folding to `0` and silently switching the
+bound OFF. Codex's first run was **half a review** — its sandboxed shell could not launch, so it
+never read the diff, the tests or the fixtures and said so; re-running it with an inline prompt
+bundle then produced 8 hollow-assertion findings on the tests, including that every key in the
+handler tests was lowercase, so a mutant normalizing the domain keys passed the whole suite.
+
+### Rig — the operator's exact scenario
+
+`:8973/classic-checkout/`, live Yandex, on the PR branch: region 77 → point chosen → reload →
+**the id is in the server-rendered `value` attribute** (not written by JS — that is what proves
+`get_value()` ran); region 78 → reload → empty, trigger label back to "Выбрать пункт выдачи";
+back to 77 → reload → the same point restored. Not verified on the rig, and said so in the PR:
+choosing a point in СПб (both sources gate their listing on `FIXTURE_LOCALITY = 'Москва'`, so
+there are no 78 points at all) and the order-created clear (unit-tested only).
+
 ## Session 64 — 11.08.2026 — five PRs merged, the map feature functionally closed, a contract rule decided
 
 **Mode:** interactive with the operator (not overnight). `main` `b24edd1` → `184c49f`, tree clean.
