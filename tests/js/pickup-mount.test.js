@@ -5646,3 +5646,235 @@ describe( 'confirmation busy signal under ownsChrome (#260)', () => {
 		expect( loadingOverlay() ).toBeNull();
 	} );
 } );
+
+/**
+ * #271 — an applied selection must not outlive the locality it was chosen in.
+ *
+ * The picker keys a remembered point by `[locality][type]` (#176), so a value applied in one
+ * locality says nothing about another. On a RELOAD the server already got this right: it
+ * restores the value for the current locality and returns nothing for a locality with no
+ * entry. Live on the page nothing cleared the field, so `syncTriggerLabel()` honestly read a
+ * non-empty field and kept offering «Выбрать другой пункт выдачи» for a locality where the
+ * customer had chosen nothing — and, in the reported case, could not choose anything.
+ *
+ * The trap these tests exist to pin is the SELF-RESET: `applyAddressReplacement()` writes the
+ * chosen point's own locality into the address field and fires a real `change`, so a clear
+ * keyed on the EVENT rather than on the TRANSITION cancels the selection it has just applied.
+ */
+describe( 'locality change drops the applied selection (#271)', () => {
+
+	/**
+	 * Sets a city select's value and fires the real `change` a user's edit would.
+	 *
+	 * @param {string} value
+	 * @param {string} [fieldId]
+	 * @returns {void}
+	 */
+	function changeCity( value, fieldId = 'billing_city' ) {
+		setCitySelectValue( fieldId, value );
+		document.getElementById( fieldId ).dispatchEvent( new Event( 'change', { bubbles: true } ) );
+	}
+
+	/**
+	 * The mounted trigger button's current label.
+	 *
+	 * @returns {string}
+	 */
+	function triggerLabel() {
+		const trigger = document.querySelector( '.woodev-pickup-trigger' );
+
+		return trigger ? trigger.textContent : '';
+	}
+
+	it( 'clears the field and reverts the label when the customer changes locality', async () => {
+		makeStore();
+
+		const { panels } = await openSession(
+			makeConfig( { replaceAddress: { enabled: false, billingOnly: true } } )
+		);
+
+		changeCity( 'Москва' );
+		await selectAndConfirm( panels, point() );
+
+		expect( document.getElementById( FIELD_ID ).value ).toBe( 'PVZ-1' );
+		expect( triggerLabel() ).toBe( phpI18n().triggerChange );
+
+		changeCity( 'Санкт-Петербург' );
+
+		expect( document.getElementById( FIELD_ID ).value ).toBe( '' );
+		expect( triggerLabel() ).toBe( phpI18n().trigger );
+	} );
+
+	it( 'does NOT cancel the selection it has just applied through address replacement', async () => {
+		// `replaceAddress` ON is the whole point here: applying a point writes its locality
+		// into `billing_city` and fires a change, from inside applySelection().
+		makeStore();
+
+		const { panels } = await openSession( makeConfig( { replaceAddress: { enabled: true, billingOnly: false } } ) );
+
+		changeCity( 'Москва' );
+
+		// A point in a DIFFERENT locality — the largest possible transition for the watcher
+		// to mistake for a customer edit.
+		await selectAndConfirm( panels, point( { locality: 'Казань' } ) );
+
+		expect( document.getElementById( FIELD_ID ).value ).toBe( 'PVZ-1' );
+		expect( triggerLabel() ).toBe( phpI18n().triggerChange );
+		expect( document.getElementById( 'billing_city' ).value ).toBe( 'Казань' );
+
+		// …and the guard is not stuck ON: a real edit afterwards still clears.
+		changeCity( 'Москва' );
+
+		expect( document.getElementById( FIELD_ID ).value ).toBe( '' );
+
+		// `billing_address_1`/`billing_postcode` are plain WooCommerce fields no §8 store
+		// owns, so the mount logs its documented DOM-only degradation for them.
+		expect( console ).toHaveWarned();
+	} );
+
+	it( 'keeps the selection when the locality field reports the SAME value', async () => {
+		makeStore();
+
+		const { panels } = await openSession(
+			makeConfig( { replaceAddress: { enabled: false, billingOnly: true } } )
+		);
+
+		changeCity( 'Москва' );
+		await selectAndConfirm( panels, point() );
+
+		// WooCommerce's own `update_checkout` churn: a change carrying the value already held.
+		changeCity( 'Москва' );
+
+		expect( document.getElementById( FIELD_ID ).value ).toBe( 'PVZ-1' );
+		expect( triggerLabel() ).toBe( phpI18n().triggerChange );
+	} );
+
+	it( 'is a no-op when no point has been applied yet — and fires no change of its own', async () => {
+		makeStore();
+
+		await openSession( makeConfig( { replaceAddress: { enabled: false, billingOnly: true } } ) );
+
+		// Counted, not merely "value still empty": writing '' over an already-empty field
+		// would look identical while firing a real `change` on every locality edit, and that
+		// change drives §8's A2 gate and WooCommerce's own `update_checkout`. The emptiness
+		// check is what keeps a locality edit from costing a checkout round trip.
+		let changes = 0;
+		document.getElementById( FIELD_ID ).addEventListener( 'change', () => {
+			changes += 1;
+		} );
+
+		changeCity( 'Москва' );
+		changeCity( 'Санкт-Петербург' );
+
+		expect( document.getElementById( FIELD_ID ).value ).toBe( '' );
+		expect( triggerLabel() ).toBe( phpI18n().trigger );
+		expect( changes ).toBe( 0 );
+	} );
+
+	it( 'does not clear the value the server restored for the locality already on the page', () => {
+		// The #176 restore path: the page arrives with BOTH the locality and the point the
+		// customer chose in it, rendered together by the server. The first mount pass must
+		// adopt that pair as its baseline — treating "no baseline yet" as a transition would
+		// wipe a valid selection on every single page load, which is the very failure #272
+		// turned out to be on the §8 side.
+		// A field id of its own, because `appliedLocality` is MODULE state and this file
+		// requires pickup-mount.js once for the whole suite — an earlier test's baseline for
+		// `FIELD_ID` would otherwise decide this one's verdict. A fresh id is exactly what
+		// "no baseline yet" means, and it makes the test order-independent.
+		const restoredId = 'carrier_pickup_point_restored';
+
+		document.body.insertAdjacentHTML(
+			'beforeend',
+			'<div data-woodev-pickup-slot="' + restoredId + '"></div>' +
+			'<input id="' + restoredId + '" type="hidden" value="PVZ-RESTORED" />'
+		);
+
+		setCitySelectValue( 'billing_city', 'Москва' );
+
+		setConfig( makeConfig( {
+			fieldId: restoredId,
+			replaceAddress: { enabled: false, billingOnly: true },
+		} ) );
+		mountAll();
+
+		expect( document.getElementById( restoredId ).value ).toBe( 'PVZ-RESTORED' );
+		expect(
+			document.querySelector( '[data-woodev-pickup-slot="' + restoredId + '"] .woodev-pickup-trigger' ).textContent
+		).toBe( phpI18n().triggerChange );
+	} );
+
+	it( 'catches a locality change that fired no event, on the next mount pass', async () => {
+		makeStore();
+
+		const { panels } = await openSession(
+			makeConfig( { replaceAddress: { enabled: false, billingOnly: true } } )
+		);
+
+		changeCity( 'Москва' );
+		await selectAndConfirm( panels, point() );
+
+		// No event at all — WooCommerce re-rendering the address block server-side, or the
+		// ship-to-different-address toggle switching which field the locality is read from.
+		setCitySelectValue( 'billing_city', 'Санкт-Петербург' );
+		mountAll();
+
+		expect( document.getElementById( FIELD_ID ).value ).toBe( '' );
+		expect( triggerLabel() ).toBe( phpI18n().trigger );
+	} );
+
+	it( 'sees a select2-style jQuery change trigger, which fires no native event at all', async () => {
+		// The defect the rig caught and this file's own harness had hidden. jQuery's
+		// `.trigger()` dispatches NO native DOM event, and select2/selectWoo — what §8's
+		// suggest takeover turns the locality field into — reports a user's pick with exactly
+		// that call. A `document.body.addEventListener( 'change' )` therefore never saw the
+		// single most common way a customer changes locality, while a test dispatching a
+		// native `Event` passed. Real jQuery here, not the file's minimal double, because the
+		// whole point is the jQuery event system's own dispatch path.
+		window.jQuery = require( 'jquery' );
+
+		makeStore();
+
+		const { panels } = await openSession(
+			makeConfig( { replaceAddress: { enabled: false, billingOnly: true } } )
+		);
+
+		changeCity( 'Москва' );
+		await selectAndConfirm( panels, point() );
+
+		expect( document.getElementById( FIELD_ID ).value ).toBe( 'PVZ-1' );
+
+		setCitySelectValue( 'billing_city', 'Зеленоград' );
+		window.jQuery( '#billing_city' ).trigger( 'change' );
+
+		expect( document.getElementById( FIELD_ID ).value ).toBe( '' );
+		expect( triggerLabel() ).toBe( phpI18n().trigger );
+	} );
+
+	it( 'asks the server for nothing while clearing — the remembered point must survive', async () => {
+		// The clear is CLIENT-ONLY by construction: `Pickup_Selection::remember()` is called
+		// only from the selection endpoint and `forget_all()` only on order creation
+		// (`Pickup_Handler::handle_checkout_order_processed()`), so no request means no
+		// possible loss of the `[locality][type]` entry the customer must get back on
+		// returning to the previous locality (#176's agreed behaviour).
+		const queries = [];
+		window.WoodevPickupDataSource = fakeDataSourceFactory( ( query ) => {
+			queries.push( query );
+
+			return Promise.resolve( [] );
+		} );
+
+		setConfig( makeConfig( { replaceAddress: { enabled: false, billingOnly: true } } ) );
+		makeStore();
+		mountAll();
+		changeCity( 'Москва' );
+		clickTrigger();
+		await flushAsync();
+
+		const afterOpen = queries.length;
+
+		changeCity( 'Санкт-Петербург' );
+		await flushAsync();
+
+		expect( queries ).toHaveLength( afterOpen );
+	} );
+} );

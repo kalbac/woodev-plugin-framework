@@ -451,6 +451,50 @@
 	var sessions = {};
 
 	/**
+	 * The locality each field's CURRENT value was applied under, keyed by field id (#271).
+	 *
+	 * The picker's persistence keys a remembered point by `[locality][type]`
+	 * ({@see \Woodev\Framework\Shipping\Pickup\Pickup_Selection}), so a value applied in one
+	 * locality says nothing about another. On a reload the server restores the value for the
+	 * CURRENT locality, which is why a mount can seed this from the rendered pair; live on the
+	 * page, though, nothing was clearing the field when the customer changed locality, so the
+	 * trigger kept reading a non-empty field and offering «выбрать другой пункт выдачи» for a
+	 * locality where nothing had been chosen.
+	 *
+	 * This is a REMEMBERED PREVIOUS VALUE, not an event count: the locality field emits plenty
+	 * of changes that do not change it (WooCommerce's own `update_checkout` churn, and this
+	 * module's own {@see applyAddressReplacement} writing the point's locality straight back
+	 * into it), and clearing on the event rather than on the transition would have the picker
+	 * cancel its own selection the moment it applied one.
+	 *
+	 * @type {Object.<string, string>}
+	 */
+	var appliedLocality = {};
+
+	/**
+	 * Field ids whose selection is being applied RIGHT NOW — {@see applySelection} only.
+	 *
+	 * Strictly synchronous: set, used, and cleared inside one function with no `await`, no
+	 * timer, and no network call in between, so unlike #238's `echoExpected` it has no lifetime
+	 * of its own to get stuck in. It exists because {@see applyAddressReplacement} writes the
+	 * chosen point's locality into the address field and fires a real `change` — which reaches
+	 * {@see handleLocalityChanged} synchronously, while the field still holds the value being
+	 * applied and `appliedLocality` still names the previous locality. Without this the picker
+	 * would clear the selection it had just made.
+	 *
+	 * @type {Object.<string, boolean>}
+	 */
+	var applyingSelection = {};
+
+	/**
+	 * Which event worlds the #271 locality watcher is already bound in — see
+	 * {@see bindLocalityWatchers} for why it needs both, and why binding twice is safe.
+	 *
+	 * @type {{native: boolean, jquery: boolean}}
+	 */
+	var localityWatchersBound = { native: false, jquery: false };
+
+	/**
 	 * Field ids awaiting a debounced cart-change refresh (#238) — accumulated by
 	 * {@see handleCartChanged} at EVENT time (echo suppression is decided there too, per
 	 * session, via `isSelfRefreshInFlight()` — NOT in the debounced body, where the state it
@@ -1037,8 +1081,67 @@
 	function applySelection( config, point ) {
 		var pointId = point && undefined !== point.id && null !== point.id ? String( point.id ) : '';
 
-		writeAndFireChange( config.fieldId, pointId );
-		applyAddressReplacement( config, point );
+		// Guarded, not reordered: `applyAddressReplacement()` fires a real `change` on the
+		// locality field, which reaches `handleLocalityChanged()` synchronously — see
+		// {@see applyingSelection}. The write order itself is load-bearing for the A2 gate and
+		// for every listener on the §8 field, so it stays exactly as it was.
+		applyingSelection[ config.fieldId ] = true;
+
+		try {
+			writeAndFireChange( config.fieldId, pointId );
+			applyAddressReplacement( config, point );
+		} finally {
+			delete applyingSelection[ config.fieldId ];
+		}
+
+		// Read AFTER the replacement, so this records the locality the field's value now
+		// genuinely belongs to — which, with `replaceAddress` on, is the point's own.
+		appliedLocality[ config.fieldId ] = resolveLocality( config );
+	}
+
+	/**
+	 * Drops an applied selection when the customer changes locality (#271).
+	 *
+	 * The remembered point in `WC()->session` is deliberately NOT touched: the picker's agreed
+	 * behaviour (#176) is that returning to the previous locality restores the point chosen
+	 * there. Only the page's own applied state — the §8 field value and, through it, the
+	 * trigger's label and the A2 gate — is dropped, because it names a point that does not
+	 * belong to the locality now on screen. The server's `[locality][type]` map keeps every
+	 * other entry, and nothing here posts a value that could overwrite one: `remember()` is
+	 * only ever called from the selection endpoint, and `forget_all()` only on order creation.
+	 *
+	 * Clears on the TRANSITION, never on the event — see {@see appliedLocality}.
+	 *
+	 * @param {Object} config the full mount config (`window.woodev_pickup_config_*`).
+	 * @returns {void}
+	 */
+	function handleLocalityChanged( config ) {
+		if ( applyingSelection[ config.fieldId ] ) {
+			return;
+		}
+
+		var current = resolveLocality( config );
+
+		// First sighting: adopt it as the baseline. The value on the page was restored by the
+		// server for exactly this locality, so there is nothing to drop.
+		if ( ! Object.prototype.hasOwnProperty.call( appliedLocality, config.fieldId ) ) {
+			appliedLocality[ config.fieldId ] = current;
+
+			return;
+		}
+
+		if ( current === appliedLocality[ config.fieldId ] ) {
+			return;
+		}
+
+		appliedLocality[ config.fieldId ] = current;
+
+		if ( ! fieldValue( config.fieldId ) ) {
+			return;
+		}
+
+		writeAndFireChange( config.fieldId, '' );
+		syncTriggerLabel( config );
 	}
 
 	// -------------------------------------------------------------------------
@@ -3506,6 +3609,78 @@
 	}
 
 	/**
+	 * Dispatches one `change` anywhere in the document to whichever configs read their
+	 * locality off the field that changed (#271).
+	 *
+	 * Delegated on `document.body` rather than bound to the locality field itself, because
+	 * §8's takeover REPLACES that field (`<input>` → `<select>`, `ensureSelect()`) and a direct
+	 * listener would be discarded along with the old node — the same reason §8's own adapter
+	 * delegates.
+	 *
+	 * @param {Event|Object} event a native `change`, or jQuery's normalized event object.
+	 * @returns {void}
+	 */
+	function handleAddressFieldChanged( event ) {
+		var changedId = event && event.target && event.target.id ? event.target.id : '';
+
+		if ( ! changedId ) {
+			return;
+		}
+
+		collectConfigs().forEach( function( config ) {
+			if ( changedId === resolveAddressTarget( config ) + '_city' ) {
+				handleLocalityChanged( config );
+			}
+		} );
+	}
+
+	/**
+	 * Binds {@see handleAddressFieldChanged} in BOTH event worlds — idempotently, and re-tried
+	 * on every {@see mountAll} pass so jQuery is picked up whenever it appears.
+	 *
+	 * Both bindings are needed, and the rig is what proved it. A jQuery `.trigger( 'change' )`
+	 * dispatches NO native DOM event, and that is how a real city selection arrives:
+	 * select2/selectWoo — which is what §8's suggest takeover turns the locality field into —
+	 * reports a pick with exactly that call. So a plain `addEventListener` never saw the one
+	 * change that matters most, while the jest test that "proved" the watcher worked dispatched
+	 * a native `Event` and passed. Same asymmetry the file docblock already records for
+	 * `updated_checkout`, in the opposite direction: there, jQuery-only; here, both, because
+	 * this module's own {@see writeAndFireChange} fires a REAL native event that a
+	 * jQuery-only binding on a page without jQuery could not see either.
+	 *
+	 * Binding both means a native `change` reaches the handler twice when jQuery is loaded.
+	 * That is harmless BY CONSTRUCTION, not by luck: {@see handleLocalityChanged} keys off the
+	 * locality TRANSITION, so the second call finds the baseline already updated and returns
+	 * without touching anything.
+	 *
+	 * @returns {void}
+	 */
+	function bindLocalityWatchers() {
+		if ( ! localityWatchersBound.native ) {
+			localityWatchersBound.native = true;
+
+			document.body.addEventListener( 'change', handleAddressFieldChanged );
+		}
+
+		if ( localityWatchersBound.jquery || ! window.jQuery ) {
+			return;
+		}
+
+		var $body = window.jQuery( document.body );
+
+		// A jQuery double thin enough to lack `.on()` is a legitimate shape here (see the
+		// harness in `tests/js/pickup-mount.test.js`), so this is a capability check, not a
+		// paranoid one — and it must not latch `jquery` as bound when it declines.
+		if ( ! $body || 'function' !== typeof $body.on ) {
+			return;
+		}
+
+		localityWatchersBound.jquery = true;
+
+		$body.on( 'change', handleAddressFieldChanged );
+	}
+
+	/**
 	 * Mounts every currently-registered config's trigger — the single entry
 	 * point both the deferred `updated_checkout` handler and the initial boot
 	 * call below use.
@@ -3513,7 +3688,18 @@
 	 * @returns {void}
 	 */
 	function mountAll() {
-		collectConfigs().forEach( mountOne );
+		bindLocalityWatchers();
+
+		collectConfigs().forEach( function( config ) {
+			mountOne( config );
+
+			// #271's safety net, and its baseline seed on the very first pass. Covers the
+			// locality changes no `change` on the city field can report: WooCommerce
+			// re-rendering the address block server-side, and the "ship to a different
+			// address" checkbox, which switches which FIELD the locality is read from
+			// ({@see resolveAddressTarget}) without touching either field's value.
+			handleLocalityChanged( config );
+		} );
 	}
 
 	/**
