@@ -1,8 +1,7 @@
 ## Session 65 — 11.08.2026 — the chosen pickup point now survives a reload, keyed by a DOMAIN locality
 
-**Mode:** brainstorm with the operator, then overnight autonomous. Branch
-`feat/176-pickup-selection-persistence` → **PR #269, CI green (19/19 + skipped release, `CLEAN`)**,
-not merged: left for the operator.
+**Mode:** brainstorm with the operator → overnight autonomous → operator's rig pass next morning.
+PR #269 **merged** after his check; `main` = `e64c0b8`, then docs on top.
 **Tests:** 1595 unit / 4259 assertions (from 1550), jest 880 unchanged, phpcs clean.
 
 ### The premise was verified before any code was written
@@ -72,6 +71,30 @@ handler tests was lowercase, so a mutant normalizing the domain keys passed the 
 back to 77 → reload → the same point restored. Not verified on the rig, and said so in the PR:
 choosing a point in СПб (both sources gate their listing on `FIXTURE_LOCALITY = 'Москва'`, so
 there are no 78 points at all) and the order-created clear (unit-tested only).
+
+### The morning pass — five findings, and two of my own claims corrected
+
+The operator checked it on the rig and merged, then reported five things. Two were diagnosed the
+same morning and filed: **#271** (switching locality does not clear the applied point, so the
+trigger label lies until a reload) and **#272** (the takeover conversion loses the server's value
+and writes the blank back — the page wipes its own city on every load; measured by fetching the
+page without JS before and after a reload). Three are the picker's presentation and became
+**#274**. The multi-carrier locality problem behind all of it became **#273**.
+
+**I was wrong twice, in the same way.** First I read "the city is empty after a reload" as WC not
+persisting it — it does; our own client wipes it. Then I claimed WooCommerce saves a partial
+address happily, because `update_order_review()` calls `save()` unconditionally. The operator
+challenged that, and he was right: the gate is in `checkout.js`'s `maybe_update_checkout()`, which
+refuses to fire `update_checkout` while any required TEXT address field in the same block is empty
+— so the server is simply never asked. Both times the rig measurement had been taken in a state
+where the suspected gate was already open (the test customer had «Адрес» and «Индекс» filled), the
+result was consistent with both hypotheses, and I resolved it in favour of mine. Recorded as
+`wc-does-not-save-the-address-until-every-required-text-field-is-filled`, failure mode included.
+
+That correction also strengthened his design rather than weakening it: a dedicated save-on-select
+AJAX is right for **two** independent reasons — WooCommerce has nowhere to put a carrier's own
+`city_id`/`fias_guid`, *and* it never reaches the save at all on the many installs that disable the
+address fields a carrier does not need.
 
 ## Session 64 — 11.08.2026 — five PRs merged, the map feature functionally closed, a contract rule decided
 
