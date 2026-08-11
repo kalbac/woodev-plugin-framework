@@ -1609,6 +1609,37 @@
 		}
 
 		/**
+		 * Reports the outcome of OUR OWN confirmation request when the framework draws no
+		 * chrome of its own — the `ownsChrome`/embedded case, where `panels` is null (#265).
+		 *
+		 * Both refusal branches of {@see finishSelection} route their message through here,
+		 * because both were completely silent: each was written as `if ( panels ) { … }` with
+		 * the `return` immediately after, so under `ownsChrome` the customer got no word at
+		 * all — indistinguishable from «the dialog just did not close», which is exactly how it
+		 * was read while verifying #260.
+		 *
+		 * `showNotice()` deliberately, not `showError()`: the latter replaces the dialog BODY,
+		 * which under `ownsChrome` is the carrier's own widget/iframe. One point being refused
+		 * is no reason to destroy the whole picker — the customer must stay free to pick
+		 * another, and tearing the frame down would also mean re-running the carrier's
+		 * handshake. Same non-destructive/destructive split {@see degrade} already makes.
+		 *
+		 * Not a contradiction of D-3 (the framework does not draw the list or the card): saying
+		 * how OUR OWN request ended is not drawing a carrier's UI, and the framework already
+		 * reports its own outcomes this way on the {@see degrade} path.
+		 *
+		 * @param {string} message a resolved, human-readable string — never an i18n key.
+		 * @returns {void}
+		 */
+		function announceWithoutPanels( message ) {
+			if ( destroyed || ! message ) {
+				return;
+			}
+
+			modal.showNotice( message );
+		}
+
+		/**
 		 * The degrade path for a `fetchAndSetPoints()`/`bboxTooWide` outcome specifically (Task
 		 * 17, spec V-5) — see those call sites below. A dataSource fetch failing, coming back
 		 * empty, or a bbox too wide to fetch at all NEVER implies the map/provider itself is
@@ -2661,6 +2692,11 @@
 				// remembered and the CTA stays alive (spec D-6/D-7).
 				if ( panels ) {
 					panels.showSelectionError( text( config, selectionErrorKey( config, reason ) ) );
+				} else {
+					// #265: with no panels (`ownsChrome`) this branch used to be entirely
+					// silent — the customer pressed «Забрать здесь», waited out the round
+					// trip, watched #260's overlay clear, and got nothing at all.
+					announceWithoutPanels( text( config, selectionErrorKey( config, reason ) ) );
 				}
 
 				return;
@@ -2672,6 +2708,16 @@
 						allowed: false,
 						reason: 'string' === typeof result.reason ? result.reason : null,
 					} );
+				} else {
+					// #265, the other silent branch. Same precedence the panels' own verdict
+					// warning uses (`pickup-panels.js`: `selectable.reason || 'blocked'`):
+					// the domain's own words when it supplied any, the framework's generic
+					// refusal otherwise.
+					announceWithoutPanels(
+						'string' === typeof result.reason && result.reason
+							? result.reason
+							: text( config, 'blocked' )
+					);
 				}
 
 				return;
