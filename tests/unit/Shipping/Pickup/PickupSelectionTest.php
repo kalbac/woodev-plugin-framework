@@ -161,6 +161,63 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			$this->assertNull( $selection->recall( 'msk', 'postamat' ) );
 		}
 
+		// -------------------------------------------------------------------------
+		// An empty key is the scope FAILING to name one, not a key. A scope returns
+		// '' for a point whose locality it cannot map, and current_locality() returns
+		// '' when WooCommerce cannot answer yet — if both were treated as ordinary
+		// keys, every unnameable locality would collapse into one shared bucket and a
+		// later unanswerable current_locality() would recall a point from a DIFFERENT
+		// locality. Refused on both sides so that is unreachable, not just unlikely.
+		// -------------------------------------------------------------------------
+
+		public function test_an_empty_locality_is_never_written(): void {
+			$session   = new Pickup_Selection_Fake_Session();
+			$selection = $this->probe( $session );
+
+			$selection->remember( '', 'pvz', 'P1' );
+
+			$this->assertSame( 0, $this->count_entries( $session, 'woodev_test_selection_map' ) );
+		}
+
+		public function test_an_empty_type_is_never_written(): void {
+			$session   = new Pickup_Selection_Fake_Session();
+			$selection = $this->probe( $session );
+
+			$selection->remember( 'msk', '', 'P1' );
+
+			$this->assertSame( 0, $this->count_entries( $session, 'woodev_test_selection_map' ) );
+		}
+
+		public function test_an_empty_point_id_is_never_written(): void {
+			$session   = new Pickup_Selection_Fake_Session();
+			$selection = $this->probe( $session );
+
+			$selection->remember( 'msk', 'pvz', '' );
+
+			$this->assertSame( 0, $this->count_entries( $session, 'woodev_test_selection_map' ) );
+		}
+
+		/**
+		 * The load-bearing one: even with an unnameable-locality entry already in the
+		 * map (written by an older framework version, or by hand), an unanswerable
+		 * `current_locality()` must not recall it.
+		 */
+		public function test_an_empty_locality_never_recalls_a_foreign_point(): void {
+			$session = new Pickup_Selection_Fake_Session();
+
+			// Seed the map directly — the write side now refuses this shape, so the
+			// only way to have it is from outside.
+			$session->set(
+				'woodev_test_selection_map',
+				[ '' => [ 'pvz' => [ 'id' => 'FOREIGN', 'seq' => 1 ] ] ]
+			);
+
+			$selection = $this->probe( $session );
+
+			$this->assertNull( $selection->recall( '', 'pvz' ) );
+			$this->assertNull( $selection->recall_latest( '' ) );
+		}
+
 		public function test_remember_overwrites_an_existing_pair(): void {
 			$selection = $this->probe( new Pickup_Selection_Fake_Session() );
 

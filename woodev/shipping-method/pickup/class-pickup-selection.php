@@ -96,6 +96,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Selection' )
 		 * @return void
 		 */
 		public function remember( string $locality, string $type, string $point_id ): void {
+			if ( ! self::is_usable_key( $locality ) || ! self::is_usable_key( $type ) || '' === $point_id ) {
+				return;
+			}
+
 			$session = $this->session();
 
 			if ( null === $session ) {
@@ -126,6 +130,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Selection' )
 		 *                      WooCommerce/the session is unavailable).
 		 */
 		public function recall( string $locality, string $type ): ?string {
+			if ( ! self::is_usable_key( $locality ) || ! self::is_usable_key( $type ) ) {
+				return null;
+			}
+
 			$map = $this->read_map( $this->session() );
 
 			$id = $map[ $locality ][ $type ]['id'] ?? null;
@@ -148,6 +156,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Selection' )
 		 *                      WooCommerce/the session is unavailable).
 		 */
 		public function recall_latest( string $locality ): ?string {
+			if ( ! self::is_usable_key( $locality ) ) {
+				return null;
+			}
+
 			$map     = $this->read_map( $this->session() );
 			$entries = $map[ $locality ] ?? [];
 
@@ -231,6 +243,33 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Selection' )
 			$map = $session->get( $this->scope->session_key() );
 
 			return is_array( $map ) ? $map : [];
+		}
+
+		/**
+		 * Reports whether a key a {@see Selection_Scope} handed back can be used as one.
+		 *
+		 * The framework never INTERPRETS a locality or a type — that is the whole point of
+		 * the seam — but `''` is not a value in that vocabulary, it is the scope failing to
+		 * name one: a point whose locality the plugin cannot map, or a
+		 * {@see Selection_Scope::current_locality()} asked before WooCommerce could answer.
+		 * The same reading `''` already has for a shipping-method id on
+		 * {@see Selection_Scope::type_for_method()} and on
+		 * `woodev_shipping_pickup_point_selection`'s `$context['method_id']`.
+		 *
+		 * Treating it as an ordinary key is not merely untidy, it restores the WRONG POINT:
+		 * every unnameable locality collapses into one shared `''` bucket, and a later
+		 * `current_locality()` that also cannot answer would then recall a point belonging
+		 * to some other locality entirely. Refusing it on both the read and the write side
+		 * is what makes that unreachable rather than unlikely.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $key A locality key or a type code from the scope.
+		 *
+		 * @return bool
+		 */
+		private static function is_usable_key( string $key ): bool {
+			return '' !== $key;
 		}
 
 		/**
