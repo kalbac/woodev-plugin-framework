@@ -426,9 +426,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Selection' )
 			 */
 			$max = apply_filters( 'woodev_pickup_max_remembered_selections', self::DEFAULT_MAX_ENTRIES );
 
-			$max = is_numeric( $max ) ? (int) $max : self::DEFAULT_MAX_ENTRIES;
+			$max = is_numeric( $max ) ? (float) $max : (float) self::DEFAULT_MAX_ENTRIES;
 
-			return max( 0, $max );
+			// Only a value that is ITSELF zero-or-below means unbounded. Casting to int
+			// first would fold a positive fractional cap (`0.5`, `'0.5'`) into `0` and so
+			// silently switch off the bound this filter exists to impose — the one
+			// direction a malformed value must never fail in. Anything above zero is a
+			// request to bound, so it bounds, at the smallest bound that can mean
+			// anything.
+			if ( $max <= 0 ) {
+				return 0;
+			}
+
+			return max( 1, (int) $max );
 		}
 	}
 

@@ -414,6 +414,49 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 		}
 
 		/**
+		 * Codex adversarial review, issue #176: a POSITIVE fractional cap must still
+		 * bound. `is_numeric( 0.5 )` is true, and an `(int)` cast taken first folds it to
+		 * `0` — which this filter reads as "unbounded", silently switching off the very
+		 * bound the caller just asked for. A malformed value may fail in either
+		 * direction except that one, so a value above zero bounds at 1.
+		 *
+		 * Both a float and its string form: a filter reading a stored option gets the
+		 * string, and `is_numeric()` accepts both.
+		 *
+		 * @dataProvider provide_fractional_caps
+		 *
+		 * @param mixed $cap The filter's return value.
+		 */
+		public function test_a_positive_fractional_cap_still_bounds( $cap ): void {
+			Filters\expectApplied( 'woodev_pickup_max_remembered_selections' )
+				->times( 3 )
+				->with( 20 )
+				->andReturn( $cap );
+
+			$session   = new Pickup_Selection_Fake_Session();
+			$selection = $this->probe( $session );
+			$scope     = $this->scope();
+
+			$selection->remember( 'a', 'pvz', 'P1' );
+			$selection->remember( 'b', 'pvz', 'P2' );
+			$selection->remember( 'c', 'pvz', 'P3' );
+
+			// Bounded at 1, not unbounded: only the just-written entry survives.
+			$this->assertSame( 1, $this->count_entries( $session, $scope->session_key() ) );
+			$this->assertSame( 'P3', $selection->recall( 'c', 'pvz' ) );
+		}
+
+		/**
+		 * @return array<string, array{0: mixed}>
+		 */
+		public function provide_fractional_caps(): array {
+			return [
+				'float'  => [ 0.5 ],
+				'string' => [ '0.5' ],
+			];
+		}
+
+		/**
 		 * A negative filter return clips to 0 — unbounded — mirroring
 		 * `woodev_pickup_max_accumulated_points`'s own "a negative bound is
 		 * meaningless" clipping.
