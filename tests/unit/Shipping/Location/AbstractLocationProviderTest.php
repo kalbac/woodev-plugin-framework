@@ -169,6 +169,78 @@ class Typo_Level_Fixture_Provider extends Bare_Fixture_Provider {
 }
 
 /**
+ * Declares ONE required settings field and otherwise touches nothing — used to
+ * prove the honest {@see Abstract_Location_Provider::is_configured()} default
+ * fails CLOSED (reports `false`) the moment a required field exists and the
+ * provider never overrode is_configured() itself (Task 6/7 contract: the
+ * default can only see the field's SHAPE, never whether a value was actually
+ * saved).
+ */
+class Required_Field_Fixture_Provider extends Bare_Fixture_Provider {
+
+	public function get_id(): string {
+		return 'required-field';
+	}
+
+	public function get_settings_fields(): array {
+		return [
+			'token' => [
+				'name'     => 'Token',
+				'type'     => \Woodev_Setting::TYPE_STRING,
+				'required' => true,
+				'default'  => '',
+			],
+		];
+	}
+}
+
+/**
+ * Declares a settings field that is explicitly NOT required — proves the
+ * default only fails closed on an ACTUALLY required field, not on the mere
+ * presence of any declared field.
+ */
+class Optional_Field_Fixture_Provider extends Bare_Fixture_Provider {
+
+	public function get_id(): string {
+		return 'optional-field';
+	}
+
+	public function get_settings_fields(): array {
+		return [
+			'note' => [
+				'name'     => 'Note',
+				'type'     => \Woodev_Setting::TYPE_STRING,
+				'required' => false,
+				'default'  => '',
+			],
+		];
+	}
+}
+
+/**
+ * Overrides is_configured() directly to check a runtime flag instead of
+ * relying on the honest default — the Task 7 (DaData) shape: a required
+ * field exists, but the provider itself decides configuredness from the
+ * actual stored value rather than the field's mere shape.
+ */
+class Overridden_Configured_Fixture_Provider extends Required_Field_Fixture_Provider {
+
+	private bool $configured;
+
+	public function __construct( bool $configured ) {
+		$this->configured = $configured;
+	}
+
+	public function get_id(): string {
+		return 'overridden-configured';
+	}
+
+	public function is_configured(): bool {
+		return $this->configured;
+	}
+}
+
+/**
  * @covers \Woodev\Framework\Shipping\Location\Abstract_Location_Provider
  */
 final class AbstractLocationProviderTest extends TestCase {
@@ -290,5 +362,27 @@ final class AbstractLocationProviderTest extends TestCase {
 	public function test_an_unknown_declared_level_throws_rather_than_being_silently_accepted(): void {
 		$this->expectException( \UnexpectedValueException::class );
 		( new Typo_Level_Fixture_Provider() )->get_suggest_levels();
+	}
+
+	// ---- is_configured(): honest default derived from get_settings_fields() (Task 6) ----
+
+	public function test_a_provider_with_no_settings_fields_is_configured_by_default(): void {
+		$this->assertTrue( ( new Bare_Fixture_Provider() )->is_configured() );
+	}
+
+	public function test_a_provider_with_only_optional_fields_is_configured_by_default(): void {
+		$this->assertTrue( ( new Optional_Field_Fixture_Provider() )->is_configured() );
+	}
+
+	public function test_a_provider_with_a_required_field_and_no_override_fails_closed(): void {
+		$this->assertFalse( ( new Required_Field_Fixture_Provider() )->is_configured() );
+	}
+
+	public function test_a_provider_can_override_is_configured_to_report_true_despite_a_required_field(): void {
+		$this->assertTrue( ( new Overridden_Configured_Fixture_Provider( true ) )->is_configured() );
+	}
+
+	public function test_a_provider_can_override_is_configured_to_report_false(): void {
+		$this->assertFalse( ( new Overridden_Configured_Fixture_Provider( false ) )->is_configured() );
 	}
 }

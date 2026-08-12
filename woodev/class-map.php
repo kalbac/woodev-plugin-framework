@@ -46,6 +46,7 @@ return [
 	'Woodev\\Framework\\Shipping\\Location\\Location_Record' => 'woodev/shipping-method/location/class-location-record.php',
 	'Woodev\\Framework\\Shipping\\Location\\Location_Resolution_Cache' => 'woodev/shipping-method/location/class-location-resolution-cache.php',
 	'Woodev\\Framework\\Shipping\\Location\\Location_Scope' => 'woodev/shipping-method/location/class-location-scope.php',
+	'Woodev\\Framework\\Shipping\\Location\\Location_Service' => 'woodev/shipping-method/location/class-location-service.php',
 	'Woodev\\Framework\\Shipping\\Location\\Location_Settings' => 'woodev/shipping-method/location/class-location-settings.php',
 	'Woodev\\Framework\\Shipping\\Map\\Embedded_Map_Provider' => 'woodev/shipping-method/map/class-embedded-map-provider.php',
 	'Woodev\\Framework\\Shipping\\Map\\Map_Provider' => 'woodev/shipping-method/map/interface-map-provider.php',

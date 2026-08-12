@@ -40,6 +40,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		/** @var Address\Address_Normalizer|null lazily-built address normalizer */
 		private ?Address\Address_Normalizer $address_normalizer = null;
 
+		/** @var Location\Location_Service|null lazily-built location service façade */
+		private ?Location\Location_Service $location_service = null;
+
 		/**
 		 * Initializes the shipping plugin.
 		 *
@@ -169,6 +172,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			require_once $path . '/location/class-customer-location-store.php';
 			require_once $path . '/location/interface-location-adapter.php';
 			require_once $path . '/location/class-location-resolution-cache.php';
+			require_once $path . '/location/class-location-service.php';
 
 			// pickup models and warehouse persistence
 			require_once $path . '/pickup/class-pickup-point.php';
@@ -855,6 +859,37 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		 */
 		public function get_location_adapter(): ?Location\Location_Adapter {
 			return null;
+		}
+
+		/**
+		 * Gets the Location Provider layer's service façade, building it on
+		 * first use (Task 6; spec §4.1).
+		 *
+		 * {@see Location\Location_Service} is the single entry point every
+		 * other framework layer (REST, checkout config, pickup) uses to talk
+		 * to the layer — it composes {@see Location\Location_Provider_Registry::instance()}
+		 * (the shared fleet-wide singleton Task 3 owns), a fresh
+		 * {@see Location\Customer_Location_Store} and a fresh
+		 * {@see Location\Location_Resolution_Cache}, and reimplements none of
+		 * them. Unlike {@see self::get_location_adapter()} above (a per-plugin
+		 * OBLIGATION a host plugin overrides), this is a framework-owned
+		 * subsystem every plugin shares one instance of PER PLUGIN OBJECT —
+		 * same lazily-built-and-cached shape as
+		 * {@see self::get_map_provider_registry()}, not the
+		 * declare-into-a-shared-registry shape {@see self::add_hooks()} uses
+		 * for {@see Location\Location_Provider_Registry::declare_needed()}.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return Location\Location_Service
+		 */
+		public function get_location_service(): Location\Location_Service {
+
+			if ( ! $this->location_service instanceof Location\Location_Service ) {
+				$this->location_service = new Location\Location_Service();
+			}
+
+			return $this->location_service;
 		}
 
 		/**

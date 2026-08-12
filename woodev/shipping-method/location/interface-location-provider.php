@@ -178,6 +178,31 @@ if ( ! interface_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Prov
 		public function get_settings_fields(): array;
 
 		/**
+		 * Whether this provider currently has everything it needs to operate
+		 * (Task 6/7 contract) — e.g. an API token actually CONFIGURED, not
+		 * merely declared as a settings field by {@see self::get_settings_fields()}.
+		 *
+		 * This is the provider's own HONEST answer about its own credentials —
+		 * the framework never second-guesses it. {@see Location_Service::is_active()}
+		 * and the D15 provider-fallback chain
+		 * ({@see Location_Service::provider_for_level()}) both gate on this:
+		 * an unconfigured provider is treated exactly like an unregistered one
+		 * for every purpose downstream of those two call sites.
+		 *
+		 * @see Abstract_Location_Provider::is_configured() for the honest
+		 *      default derived from {@see self::get_settings_fields()} — a
+		 *      provider with a REQUIRED field (e.g. Task 7's DaData token)
+		 *      MUST override this to check the actual stored value; the
+		 *      default can only see the field's SHAPE, never whether a value
+		 *      was actually saved.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool
+		 */
+		public function is_configured(): bool;
+
+		/**
 		 * Query-driven suggestion lookup — REQUIRED of every provider.
 		 *
 		 * `$scope` names the country, the level being searched, and an optional

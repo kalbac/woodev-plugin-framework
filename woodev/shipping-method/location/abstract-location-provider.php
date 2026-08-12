@@ -147,6 +147,39 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Abstract_Location
 		}
 
 		/**
+		 * {@inheritDoc}
+		 *
+		 * Default derived HONESTLY from {@see self::get_settings_fields()}
+		 * (Task 6) rather than hardcoded `true`: when NONE of the declared
+		 * fields are marked `required` — including the common case of zero
+		 * declared fields at all, a provider needing no credential, matching
+		 * {@see \Woodev\Framework\Shipping\Map\Embedded_Map_Provider} — there
+		 * is nothing to configure, so this reports `true`. The moment ANY
+		 * declared field is `required`, this default reports `false` — FAILS
+		 * CLOSED, not open — because a subclass that forgot to override this
+		 * method with a real check of the actual stored value (e.g. "is the
+		 * token option non-empty") must never silently pass
+		 * {@see Location_Service::is_active()} and the D15 fallback chain
+		 * gate: serving suggestions through a provider that has no real
+		 * credentials is worse than leaving the field native. A provider WITH
+		 * a required field (Task 7's DaData: a required token) MUST override
+		 * this to check the actual stored value — this default can only ever
+		 * tell "does this provider's SHAPE require configuration", never "HAS
+		 * it actually been configured".
+		 *
+		 * @since 2.0.2
+		 */
+		public function is_configured(): bool {
+			foreach ( $this->get_settings_fields() as $field ) {
+				if ( ! empty( $field['required'] ) ) {
+					return false;
+				}
+			}
+
+			return true;
+		}
+
+		/**
 		 * Computes the reflection-derived capability set: an optional method is
 		 * "implemented" when its declaring class is not this abstract class itself.
 		 * See the class docblock for why comparing against `self::class` (not
