@@ -79,9 +79,31 @@
 
 /* The redundant net described above — matches ANY parent (bare `:has()`, like a bare `:hover`,
    implicitly means `*:has(…)`), so a caller attaching this module outside the classic-checkout
-   wrapper still gets a correctly positioned dropdown. */
+   wrapper still gets a correctly positioned dropdown.
+
+   `!important` here was NOT speculative: it was measured on the rig (s69). Injecting
+   `.woocommerce-input-wrapper { position: static !important }` left the panel rendering at full
+   height with all six options — and `elementFromPoint()` at an option's own centre returned
+   NOTHING, because an absolutely-positioned box whose containing block has moved up the tree lands
+   somewhere else entirely. The suggestions are then on screen but not where the customer is
+   looking, which is the same class of broken as invisible.
+
+   This is the positioning CONTEXT, not decoration: `top: 100%` is meaningless without it. A theme
+   is welcome to restyle this wrapper's spacing, borders and colour — it just cannot be allowed to
+   take away the anchor the dropdown is positioned against. */
 :has( > .woodev-location-listbox ) {
-	position: relative;
+	position: relative !important;
+}
+
+/* The compound form, and why BOTH are needed. `:has( > .woodev-location-listbox )` inherits the
+   specificity of its most specific argument, i.e. (0,1,0) — an exact TIE with a theme's own
+   `.woocommerce-input-wrapper { position: static !important }`, which source order then decides.
+   Measured: with only the bare `:has()` rule the injected theme rule still won (the panel rendered
+   at full height, and `elementFromPoint()` at an option's centre returned nothing), because the
+   injected stylesheet came later. Two classes (0,2,0) settle it independently of load order, which
+   matters precisely because we do not control whether a theme's CSS is enqueued after ours. */
+.woocommerce-input-wrapper:has( > .woodev-location-listbox ) {
+	position: relative !important;
 }
 
 /* -------------------------------------------------------------------------
@@ -193,8 +215,20 @@
  * usually much wider, checkout-field width).
  * ---------------------------------------------------------------------- */
 
-.woodev-location-option {
-	display: block;
+.woodev-location-listbox .woodev-location-option {
+	/* MEASURED on the rig (s69), not assumed. A theme rule with ordinary specificity and NO
+	 * `!important` — `.woocommerce form .form-row ul li { display: none }` (0,3,2) — beat the
+	 * flat single-class rule this used to be (0,1,0) and hid EVERY suggestion while the panel
+	 * itself stayed open: the listbox measured 10px tall with six children at computed
+	 * `display: none`, and `elementFromPoint()` over an option returned the page's `<main>`.
+	 *
+	 * This is the third hazard class, distinct from the two the sibling gotcha documents: not a
+	 * theme's `!important`, just a longer selector winning the cascade honestly. Flat `:where()`
+	 * isolation cannot defend against it by construction — it is zero-specificity by design. So
+	 * the property whose loss removes the control from the screen gets BOTH the ancestor (real
+	 * specificity, for the ordinary case) and `!important` (for a theme that also shouts).
+	 * Everything else on this rule stays plain and can lose to a theme gracefully. */
+	display: block !important;
 	padding: 9px 12px;
 	color: #1e1e1e;
 	font-size: 14px;
