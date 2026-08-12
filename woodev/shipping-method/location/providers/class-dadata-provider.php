@@ -368,6 +368,22 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 		 * here) plus the parent-constraint translation into DaData's `locations` /
 		 * `restrict_value` (spec Task 7).
 		 *
+		 * `restrict_value` is set ONLY when {@see self::build_locations_constraint()}
+		 * narrowed to an actual PARENT locality (a region/city record or its
+		 * components) — never for the bare country floor a parentless scope now
+		 * always carries (P2 review fix). The two are not the same decision:
+		 * `restrict_value` strips whatever the `locations` filter matched out of
+		 * the returned `value`/`unrestricted_value` label, which is only correct
+		 * when that filter names a real locality above the level being searched.
+		 * A country-only filter names no locality the DaData label would ever
+		 * repeat, so stripping on it would be a no-op at best — matches the
+		 * reference client's own split exactly: `fields-autocomplete.js`'s region
+		 * field sends `locations: { country_iso_code }` with NO `restrict_value`,
+		 * while its city/address constraints (a real region/city `locations`
+		 * filter) always pair one with `restrict_value: true` — see
+		 * `related-address-autocomplete.js` and the city-field fallback further
+		 * down the same file.
+		 *
 		 * @since 2.0.2
 		 *
 		 * @param Location_Scope $scope Lookup scope.
@@ -386,8 +402,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 			$locations = $this->build_locations_constraint( $scope );
 
 			if ( [] !== $locations ) {
-				$body['locations']      = $locations;
-				$body['restrict_value'] = true;
+				$body['locations'] = $locations;
+
+				if ( $scope->has_parent() ) {
+					$body['restrict_value'] = true;
+				}
 			}
 
 			return $body;
@@ -441,7 +460,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 		 */
 		private function build_locations_constraint( Location_Scope $scope ): array {
 			if ( ! $scope->has_parent() ) {
-				return [];
+				// P2 review fix: a parentless scope is the normal path for the
+				// first field the customer touches, and DaData's suggestion
+				// registry is RU-centric by default (get_countries()) — without
+				// this floor, `/location/suggest?country=XX` was not actually
+				// scoped by `XX` at all. `country_iso_code` is DaData's own
+				// documented `locations` field for this (confirmed against the
+				// reference client: `country_iso_code` inside `locations`,
+				// `fields-autocomplete.js`).
+				return [ [ 'country_iso_code' => $scope->country() ] ];
 			}
 
 			$parent = $scope->parent_record();

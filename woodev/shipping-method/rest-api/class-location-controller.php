@@ -296,21 +296,29 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 		/**
 		 * Handles a suggest request.
 		 *
-		 * Degradation (spec §4.7, D15): "the whole layer is inactive" and "no
-		 * configured provider serves THIS level" are DELIBERATELY collapsed into
-		 * the SAME outcome — `{ suggestions: [] }`, HTTP 200 — because
+		 * Degradation (spec §4.7, D15): "the whole layer is inactive", "no
+		 * configured provider serves THIS level", and "the request's country is
+		 * well-formed but not one the active provider covers" ({@see
+		 * Location_Service::is_country_supported()}) are DELIBERATELY collapsed
+		 * into the SAME outcome — `{ suggestions: [] }`, HTTP 200 — because
 		 * {@see Location_Service::provider_for_level()} itself already answers
-		 * `null` for both (its `get_active_provider()` returns `null` while the
-		 * registry gate is closed, so the D15 chain never even resolves a
-		 * fallback). A read endpoint answering "nothing to show yet" rather than
-		 * an error is this codebase's own established idiom for exactly this
-		 * shape of degradation — {@see Field_Source_Controller::get_field_source()}
+		 * `null` for the first two (its `get_active_provider()` returns `null`
+		 * while the registry gate is closed, so the D15 chain never even resolves
+		 * a fallback), and the country check exists precisely so an unsupported
+		 * country never even reaches the provider (a P2 review fix — a request
+		 * for a country the provider does not cover was otherwise still spending
+		 * upstream quota for a result that was always going to be unusable). A
+		 * read endpoint answering "nothing to show yet" rather than an error is
+		 * this codebase's own established idiom for exactly this shape of
+		 * degradation — {@see Field_Source_Controller::get_field_source()}
 		 * returns an empty list for an unknown field id, and
 		 * {@see Pickup_Controller::get_points_data()} returns an empty point list
 		 * for an unusable query — both 200, never 404/500. `/select` (a WRITE) is
 		 * the one route in this pair that DOES 404 when the layer is inactive
 		 * ({@see self::handle_select_request()}), because attempting to PERSIST
-		 * against nothing is a genuine error a read never has.
+		 * against nothing is a genuine error a read never has. A MALFORMED
+		 * country (not a well-formed ISO-3166 alpha-2 code) is a different case
+		 * entirely and keeps its own 400 — see {@see self::build_scope()}.
 		 *
 		 * @internal
 		 *
@@ -366,6 +374,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 					__( 'Некорректный код страны.', 'woodev-plugin-framework' ),
 					[ 'status' => 400 ]
 				);
+			}
+
+			/*
+			 * A well-formed but UNSUPPORTED country (the store's active provider
+			 * simply does not cover it — spec D2, Location_Service::is_country_supported())
+			 * degrades exactly like "no provider for this level" above: 200 + empty,
+			 * BEFORE the provider is ever called. Placed AFTER build_scope()'s own
+			 * format validation deliberately — a MALFORMED country keeps its own 400
+			 * above; is_country_supported() would otherwise mask that same malformed
+			 * input as an unsupported-country 200 (it degrades to false for both).
+			 */
+			if ( ! $this->service->is_country_supported( $country ) ) {
+				return rest_ensure_response( [ 'suggestions' => [] ] );
 			}
 
 			try {

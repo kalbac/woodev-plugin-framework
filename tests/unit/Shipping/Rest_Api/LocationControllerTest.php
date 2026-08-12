@@ -99,6 +99,7 @@ final class Location_Controller_Fake_Service extends Location_Service {
 	private ?Location_Provider $provider;
 	private ?array $customer_record;
 	private bool $persist_result;
+	private bool $country_supported;
 
 	/** @var array<int, array{0: Location_Record, 1: bool}> */
 	public array $set_calls = [];
@@ -106,16 +107,21 @@ final class Location_Controller_Fake_Service extends Location_Service {
 	/** @var array<int, string> */
 	public array $provider_for_level_calls = [];
 
+	/** @var array<int, string> */
+	public array $is_country_supported_calls = [];
+
 	public function __construct(
 		bool $active = true,
 		?Location_Provider $provider = null,
 		?array $customer_record = null,
-		bool $persist_result = true
+		bool $persist_result = true,
+		bool $country_supported = true
 	) {
-		$this->active          = $active;
-		$this->provider        = $provider;
-		$this->customer_record = $customer_record;
-		$this->persist_result  = $persist_result;
+		$this->active            = $active;
+		$this->provider          = $provider;
+		$this->customer_record   = $customer_record;
+		$this->persist_result    = $persist_result;
+		$this->country_supported = $country_supported;
 	}
 
 	public function is_active(): bool {
@@ -136,6 +142,12 @@ final class Location_Controller_Fake_Service extends Location_Service {
 		$this->set_calls[] = [ $record, $implicit ];
 
 		return $this->persist_result;
+	}
+
+	public function is_country_supported( string $country ): bool {
+		$this->is_country_supported_calls[] = $country;
+
+		return $this->country_supported;
 	}
 }
 
@@ -380,6 +392,54 @@ final class LocationControllerTest extends TestCase {
 
 		$this->assertNotInstanceOf( \WP_Error::class, $result );
 		$this->assertSame( [ 'suggestions' => [] ], $result );
+	}
+
+	/**
+	 * P2 review finding (the other half): a well-formed but UNSUPPORTED
+	 * country must degrade the same way "no provider for this level" already
+	 * does — 200 + empty — WITHOUT ever reaching the provider, so an
+	 * unsupported-country request never consumes upstream quota. A malformed
+	 * country keeps its own dedicated 400 (build_scope's own validation),
+	 * unaffected by this check.
+	 */
+	public function test_suggest_unsupported_country_returns_empty_200_without_calling_the_provider(): void {
+		$provider = new Location_Controller_Fake_Provider( static fn() => [ /* would-be suggestions */ ] );
+		$service  = new Location_Controller_Fake_Service( true, $provider, null, true, false );
+		$ctrl     = new Location_Controller_Probe( $service );
+
+		$request = new WP_REST_Request( [ 'q' => 'Мос', 'level' => Location_Record::LEVEL_REGION, 'country' => 'US' ] );
+		$result  = $ctrl->handle_suggest_request( $request );
+
+		$this->assertNotInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( [ 'suggestions' => [] ], $result );
+		$this->assertCount( 0, $provider->suggest_calls, 'an unsupported country must never reach the provider' );
+	}
+
+	public function test_suggest_supported_country_still_reaches_the_provider(): void {
+		$provider = new Location_Controller_Fake_Provider( static fn() => [] );
+		$service  = new Location_Controller_Fake_Service( true, $provider, null, true, true );
+		$ctrl     = new Location_Controller_Probe( $service );
+
+		$request = new WP_REST_Request( [ 'q' => 'Мос', 'level' => Location_Record::LEVEL_REGION, 'country' => 'RU' ] );
+		$ctrl->handle_suggest_request( $request );
+
+		$this->assertCount( 1, $provider->suggest_calls );
+	}
+
+	public function test_suggest_a_malformed_country_still_returns_400_not_the_unsupported_degradation(): void {
+		$provider = new Location_Controller_Fake_Provider( static fn() => [] );
+		// country_supported=false must NOT be why this 400s — is_country_supported()
+		// itself degrades to false for malformed input too, but build_scope()'s own
+		// format validation must win and return 400 before that check is even reached.
+		$service = new Location_Controller_Fake_Service( true, $provider, null, true, false );
+		$ctrl    = new Location_Controller_Probe( $service );
+
+		$request = new WP_REST_Request( [ 'q' => 'Мос', 'level' => Location_Record::LEVEL_REGION, 'country' => 'not-a-code' ] );
+		$result  = $ctrl->handle_suggest_request( $request );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 400, $result->get_error_data()['status'] );
+		$this->assertCount( 0, $provider->suggest_calls );
 	}
 
 	public function test_suggest_never_fatals_for_an_unsupported_level(): void {

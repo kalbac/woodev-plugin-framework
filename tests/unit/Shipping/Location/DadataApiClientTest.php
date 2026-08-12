@@ -8,6 +8,7 @@
 
 namespace Woodev\Tests\Unit\Shipping\Location;
 
+use Brain\Monkey\Actions;
 use Brain\Monkey\Functions;
 use Woodev\Framework\Shipping\Location\Providers\Dadata_Api_Client;
 use Woodev\Tests\Unit\TestCase;
@@ -89,6 +90,64 @@ final class DadataApiClientTest extends TestCase {
 		( new Dadata_Api_Client( 'tok', 'my-secret' ) )->suggest_address( 'q' );
 
 		$this->assertSame( 'my-secret', $this->last_request['args']['headers']['X-Secret'] );
+	}
+
+	// -------------------------------------------------------------------------
+	// Broadcast — the woodev_location_dadata_api_request_performed action must
+	// never carry the Clean secret in plaintext (P1 review finding: the base
+	// class's get_sanitized_request_headers() masks only Authorization).
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Pins the literal secret VALUE, not just the header key — a mask that
+	 * happens to leave the key present-and-starred would satisfy a
+	 * key-only assertion while the value still leaked through some other
+	 * field (e.g. a different header, or the body).
+	 */
+	public function test_the_clean_secret_never_appears_anywhere_in_the_broadcast_payload(): void {
+		$this->stub_http_response( 200, '{"suggestions":[]}' );
+
+		$secret    = 'top-secret-clean-value';
+		$broadcast = null;
+
+		Actions\expectDone( 'woodev_location_dadata_api_request_performed' )
+			->once()
+			->whenHappen(
+				function ( $request_data, $response_data, $instance ) use ( &$broadcast ) {
+					$broadcast = [ $request_data, $response_data ];
+				}
+			);
+
+		( new Dadata_Api_Client( 'tok', $secret ) )->suggest_address( 'q' );
+
+		$this->assertNotNull( $broadcast, 'the broadcast action must have fired' );
+
+		$serialized = print_r( $broadcast, true );
+		$this->assertStringNotContainsString( $secret, $serialized, 'the Clean secret leaked into the broadcast payload' );
+	}
+
+	/**
+	 * The masked X-Secret header must follow the SAME masking convention the
+	 * base class already applies to Authorization: same character, same
+	 * length (not a fixed-width placeholder, not merely absent).
+	 */
+	public function test_the_masked_x_secret_header_matches_the_authorization_masking_style(): void {
+		$this->stub_http_response( 200, '{"suggestions":[]}' );
+
+		$secret    = 'my-secret';
+		$broadcast = null;
+
+		Actions\expectDone( 'woodev_location_dadata_api_request_performed' )
+			->once()
+			->whenHappen(
+				function ( $request_data ) use ( &$broadcast ) {
+					$broadcast = $request_data;
+				}
+			);
+
+		( new Dadata_Api_Client( 'tok', $secret ) )->suggest_address( 'q' );
+
+		$this->assertSame( str_repeat( '*', strlen( $secret ) ), $broadcast['headers']['X-Secret'] );
 	}
 
 	// -------------------------------------------------------------------------

@@ -578,15 +578,35 @@ final class DadataProviderTest extends TestCase {
 		$this->assertSame( [ [ 'region_fias_id' => '0c5b2444-70a0-4932-980c-b4dc0d3f02b5' ] ], $body['locations'] );
 	}
 
-	public function test_suggest_with_no_parent_omits_locations_entirely(): void {
+	/**
+	 * P2 review finding: a country-wide suggest (no parent — the normal path
+	 * for the first field the customer touches) must still be scoped by the
+	 * scope's own country, otherwise `/location/suggest?country=XX` is not
+	 * actually restricted to `XX` at DaData. Matches the reference client's
+	 * own usage (`plugins-reference/woocommerce-edostavka/assets/js/frontend/fields-autocomplete.js`):
+	 * the region field sends `locations: { country_iso_code: countryISOCode }`
+	 * with NO `restrict_value` — that flag is reserved for an actual parent
+	 * locality constraint (region/city), which a bare country floor is not.
+	 */
+	public function test_suggest_with_no_parent_scopes_locations_by_country_without_restrict_value(): void {
 		$this->set_token( 'tok' );
 		$this->stub_http_response( 200, (string) json_encode( self::region_level_suggestion_fixture() ) );
 
 		( new Dadata_Provider() )->suggest( 'Моск', Location_Scope::for_country( 'RU', Location_Record::LEVEL_REGION ) );
 
 		$body = $this->last_request_body();
-		$this->assertArrayNotHasKey( 'locations', $body );
-		$this->assertArrayNotHasKey( 'restrict_value', $body );
+		$this->assertSame( [ [ 'country_iso_code' => 'RU' ] ], $body['locations'] );
+		$this->assertArrayNotHasKey( 'restrict_value', $body, 'a bare country floor must not strip the returned label' );
+	}
+
+	public function test_suggest_with_no_parent_scopes_by_the_scopes_own_country_not_a_hardcoded_one(): void {
+		$this->set_token( 'tok' );
+		$this->stub_http_response( 200, (string) json_encode( self::region_level_suggestion_fixture() ) );
+
+		( new Dadata_Provider() )->suggest( 'Мин', Location_Scope::for_country( 'BY', Location_Record::LEVEL_REGION ) );
+
+		$body = $this->last_request_body();
+		$this->assertSame( [ [ 'country_iso_code' => 'BY' ] ], $body['locations'] );
 	}
 
 	public function test_suggest_http_failure_degrades_to_empty_and_is_logged(): void {
