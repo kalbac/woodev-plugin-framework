@@ -50,6 +50,40 @@ class CheckoutFieldsTest extends TestCase {
 		$this->assertSame( 'suggest', $field['source_kind'] );
 	}
 
+	// -------------------------------------------------------------------------
+	// location_level — Task 9 (Location Provider layer)
+	// -------------------------------------------------------------------------
+
+	public function test_normalize_location_level_defaults_to_null(): void {
+		$field = Checkout_Fields::normalize( [ 'id' => 'x' ] );
+		$this->assertNull( $field['location_level'] );
+	}
+
+	/**
+	 * @dataProvider provide_location_levels
+	 */
+	public function test_normalize_carries_source_kind_location_and_level_for_each_cascade_level( string $level ): void {
+		$field = Checkout_Fields::normalize( Field::create( 'billing_' . $level )->source_location( $level )->to_array() );
+		$this->assertSame( 'location', $field['source_kind'] );
+		$this->assertSame( $level, $field['location_level'] );
+	}
+
+	/**
+	 * @return array<string, array{0: string}>
+	 */
+	public function provide_location_levels(): array {
+		return [
+			'region'     => [ 'region' ],
+			'settlement' => [ 'settlement' ],
+			'address'    => [ 'address' ],
+		];
+	}
+
+	public function test_normalize_coerces_location_level_to_string_and_drops_empty(): void {
+		$this->assertNull( Checkout_Fields::normalize( [ 'id' => 'x', 'location_level' => '' ] )['location_level'] );
+		$this->assertSame( 'region', Checkout_Fields::normalize( [ 'id' => 'x', 'location_level' => 'region' ] )['location_level'] );
+	}
+
 	public function test_normalize_is_pickup_slot_defaults_to_false(): void {
 		$field = Checkout_Fields::normalize( [ 'id' => 'x' ] );
 		$this->assertFalse( $field['is_pickup_slot'] );

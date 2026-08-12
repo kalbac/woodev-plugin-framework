@@ -48,6 +48,21 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		private string $hook_prefix;
 
 		/**
+		 * The Location Provider layer's service façade (location-provider layer
+		 * Task 9). `null` until {@see self::location_service()} lazily builds a
+		 * default instance — mirrors
+		 * {@see \Woodev\Framework\Shipping\Rest_Api\Location_Controller}'s own
+		 * "optional constructor collaborator, defaults to a fresh instance" test
+		 * seam. A fresh default instance is equivalent to any other: the layer's
+		 * actual state lives in `WC()->session`/user meta/store options, not in
+		 * this object, so which instance answers `is_active()` never matters.
+		 *
+		 * @since 2.0.2
+		 * @var \Woodev\Framework\Shipping\Location\Location_Service|null
+		 */
+		private ?\Woodev\Framework\Shipping\Location\Location_Service $location_service;
+
+		/**
 		 * Shipping method ids that unconditionally require a non-empty pickup field.
 		 *
 		 * Populated via {@see set_requires_pickup_methods()}. When non-empty,
@@ -76,15 +91,39 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * Constructor.
 		 *
 		 * @since 1.5.0
+		 * @since 2.0.2 Added the optional `$location_service` collaborator
+		 *              (location-provider layer Task 9).
 		 *
-		 * @param Checkout_Fields $fields      field definitions to inject and handle
-		 * @param string          $hook_prefix plugin-supplied token (e.g. the plugin id) that
-		 *        namespaces this handler's forward hooks so each plugin's hooks stay distinct;
-		 *        defaults to none, yielding bare `woodev_shipping_*` hooks
+		 * @param Checkout_Fields                                           $fields           field definitions to inject and handle
+		 * @param string                                                    $hook_prefix      plugin-supplied token (e.g. the plugin id) that
+		 *     namespaces this handler's forward hooks so each plugin's hooks stay distinct;
+		 *     defaults to none, yielding bare `woodev_shipping_*` hooks
+		 * @param \Woodev\Framework\Shipping\Location\Location_Service|null $location_service Location Provider layer façade; `null`
+		 *        (the default) lazily builds a fresh instance on first use — see
+		 *        {@see self::location_service()}.
 		 */
-		public function __construct( Checkout_Fields $fields, string $hook_prefix = '' ) {
-			$this->fields      = $fields;
-			$this->hook_prefix = $hook_prefix;
+		public function __construct(
+			Checkout_Fields $fields,
+			string $hook_prefix = '',
+			?\Woodev\Framework\Shipping\Location\Location_Service $location_service = null
+		) {
+			$this->fields           = $fields;
+			$this->hook_prefix      = $hook_prefix;
+			$this->location_service = $location_service;
+		}
+
+		/**
+		 * Gets the Location Provider layer's service façade, building a default
+		 * instance on first use (location-provider layer Task 9). See the
+		 * {@see self::$location_service} property docblock for why a lazily-built
+		 * default is equivalent to any plugin-supplied instance.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return \Woodev\Framework\Shipping\Location\Location_Service
+		 */
+		private function location_service(): \Woodev\Framework\Shipping\Location\Location_Service {
+			return $this->location_service ??= new \Woodev\Framework\Shipping\Location\Location_Service();
 		}
 
 		/**
@@ -297,7 +336,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * takeover map, i18n strings) onto the classic adapter handle so it can
 		 * bootstrap without any inline PHP.
 		 *
+		 * Location-provider layer (Task 9): the SAME config object also carries the
+		 * `location` block (via the {@see Checkout_Config} constructor's
+		 * `$location_service` collaborator) — one config object, one enqueue path.
+		 * When that block is present, ALSO enqueues the Task 10/11 client scripts
+		 * (`location-typeahead.js`, `location-cascade.js`) — but ONLY when their
+		 * files actually exist on disk ({@see self::enqueue_script_if_built()}):
+		 * those files ship in a later PR block (PR-C), so this handler is wired now
+		 * with a guard that can never 404, and needs zero further code changes once
+		 * the files land.
+		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Enqueues the location-provider client scripts, guarded on
+		 *              their files existing on disk (location-provider layer Task 9).
 		 *
 		 * @return void
 		 */
@@ -334,18 +385,102 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 				$this->plugin_id(),
 				rtrim( rest_url( 'woodev/v1' ), '/' ),
 				wp_create_nonce( 'wp_rest' ),
-				array_keys( WC()->countries->get_countries() )
+				$this->wc_country_codes(),
+				$this->location_service()
 			) )->build( $this->fields );
 			$config['i18n']  = [
 				'required'    => __( 'Заполните обязательное поле.', 'woodev-plugin-framework' ),
 				'placeholder' => $this->placeholder_label(),
 			];
 
+			if ( isset( $config['location'] ) ) {
+				$typeahead_built = $this->enqueue_script_if_built( 'woodev-location-typeahead', 'js/frontend/location-typeahead.js', [] );
+
+				$this->enqueue_script_if_built(
+					'woodev-location-cascade',
+					'js/frontend/location-cascade.js',
+					array_values(
+						array_filter(
+							[
+								'jquery',
+								'woodev-checkout-field-store',
+								'woodev-checkout-field-classic',
+								$typeahead_built ? 'woodev-location-typeahead' : null,
+							]
+						)
+					)
+				);
+			}
+
 			wp_localize_script(
 				'woodev-checkout-field-classic',
 				'woodev_checkout_field_config_' . $this->config_object_suffix(),
 				$config
 			);
+		}
+
+		/**
+		 * Enqueues one script handle, but only when its file actually exists on disk.
+		 *
+		 * The Location Provider layer's client scripts (Tasks 10-11) land in a later
+		 * PR block; calling this NOW, before those files exist, is a deliberate no-op
+		 * rather than a dead registration — mirrors
+		 * {@see \Woodev\Framework\Shipping\Pickup\Pickup_Handler::enqueue_script_if_built()}'s
+		 * own "never register a dependency on a handle nothing enqueued" discipline
+		 * (gotcha `built-on-both-sides-with-no-caller-in-the-middle`): an unconditional
+		 * `wp_enqueue_script()` pointed at a file that does not exist would 404 in the
+		 * browser the moment this layer goes active; a guarded one simply enqueues
+		 * nothing until the file is there.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string   $handle   the script handle to register.
+		 * @param string   $relative path relative to the assets directory.
+		 * @param string[] $deps     script dependencies.
+		 *
+		 * @return bool true when the script was enqueued; false when its file is missing.
+		 */
+		private function enqueue_script_if_built( string $handle, string $relative, array $deps ): bool {
+			$path = self::asset_path( $relative );
+
+			if ( ! static::asset_exists( $path ) ) {
+				return false;
+			}
+
+			wp_enqueue_script( $handle, self::asset_url( $relative ), $deps, self::asset_version( $path ), true );
+
+			return true;
+		}
+
+		/**
+		 * Whether an asset file exists on disk. A protected static seam so a test
+		 * probe can simulate "already built" without touching the real filesystem —
+		 * mirrors {@see \Woodev\Framework\Shipping\Pickup\Pickup_Handler::asset_exists()}.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $path absolute filesystem path.
+		 *
+		 * @return bool
+		 */
+		protected static function asset_exists( string $path ): bool {
+			return file_exists( $path );
+		}
+
+		/**
+		 * Resolves an asset's cache-busting version string: the file's own mtime, or
+		 * {@see \Woodev_Plugin::VERSION} as a defensive fallback for a file removed
+		 * between {@see self::asset_exists()}'s check and this call (every real call
+		 * site checks existence first via {@see self::enqueue_script_if_built()}).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $path absolute filesystem path.
+		 *
+		 * @return string
+		 */
+		private static function asset_version( string $path ): string {
+			return file_exists( $path ) ? (string) filemtime( $path ) : (string) \Woodev_Plugin::VERSION;
 		}
 
 		/**

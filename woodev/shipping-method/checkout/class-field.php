@@ -175,6 +175,41 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Field' ) ) :
 		}
 
 		/**
+		 * Declares this field as backed by the store-level Location Provider layer at
+		 * the given cascade level (location-provider spec §4.4, D1).
+		 *
+		 * Sets `source_kind` to `'location'` and records the level so
+		 * {@see Checkout_Fields::normalize()} carries both through to the checkout
+		 * config. The framework maps whichever location-kind fields the host plugin
+		 * declares onto the cascade chain country → region → settlement → address,
+		 * skipping absent links — field presence stays the plugin's own decision,
+		 * this builder only labels ONE field's place in that chain.
+		 *
+		 * Mutually exclusive with {@see self::set_source()} in practice: a
+		 * location-backed field's data comes from the framework's own Location
+		 * Provider REST seam (`woodev/v1/location/*`), never a plugin-supplied
+		 * callable — calling both simply lets the later call win, same as setting
+		 * `source_kind` twice via any other builder method.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $level One of `'region'`, `'settlement'`, `'address'` — mirrors
+		 *                      `Woodev\Framework\Shipping\Location\Location_Record::LEVELS`.
+		 *                      Not type-checked against that class here: this builder stays
+		 *                      free of any WooCommerce/location-layer dependency (class
+		 *                      docblock, "Pure PHP — no WooCommerce calls"), so an unknown
+		 *                      level string is carried through unchanged rather than
+		 *                      rejected — the consuming layers validate it.
+		 *
+		 * @return self
+		 */
+		public function source_location( string $level ): self {
+			$this->def['source_kind']    = 'location';
+			$this->def['location_level'] = $level;
+			return $this;
+		}
+
+		/**
 		 * Attaches a callable that decides whether this field should take over
 		 * native WooCommerce checkout output.
 		 *

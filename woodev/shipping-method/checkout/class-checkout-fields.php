@@ -45,7 +45,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Fields' 
 	 *                           checkout handler can evaluate it.
 	 *  - `depends_on`         — id of a parent field this field depends on, or `null`.
 	 *  - `source`             — callable producing option/suggestion items, or `null`.
-	 *  - `source_kind`        — `'options'` or `'suggest'`, or `null` when `source` is absent.
+	 *  - `source_kind`        — `'options'`, `'suggest'` or `'location'`, or `null` when `source`
+	 *                           is absent. `'location'` marks a field as backed by the store-level
+	 *                           Location Provider layer (see `location_level` below).
+	 *  - `location_level`     — one of `'region'`, `'settlement'`, `'address'` when `source_kind`
+	 *                           is `'location'` (set via {@see Field::source_location()}), or
+	 *                           `null` otherwise.
 	 *  - `takeover_condition` — callable deciding whether this field should take over native
 	 *                           WC output, or `null`.
 	 *  - `sanitize_callback`  — callable for sanitizing posted value, or `null`.
@@ -221,11 +226,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Fields' 
 		 * New generic keys added in 2.0.2: `section`, `depends_on`, `source`,
 		 * `source_kind`, `takeover_condition`. `is_pickup_slot` added in 2.0.2
 		 * (Task 4): marks a field as a pickup slot anchor for the SP-5 adapter.
+		 * `location_level` added in 2.0.2 (location-provider layer Task 9): set
+		 * alongside `source_kind === 'location'` via {@see Field::source_location()},
+		 * carrying the cascade level (`region`/`settlement`/`address`) through to the
+		 * checkout config unchanged — coerced/defaulted the same way `depends_on`
+		 * already is.
 		 *
 		 * @since 1.5.0
 		 * @since 2.0.2 Added `section`, `depends_on`, `source`, `source_kind`,
 		 *              `takeover_condition`; `required` array preserved verbatim;
 		 *              `is_pickup_slot` bool (default false).
+		 * @since 2.0.2 Added `location_level` (location-provider layer Task 9).
 		 *
 		 * @param array<string, mixed> $definition raw field definition
 		 *
@@ -238,6 +249,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Fields' 
 		 *     depends_on: string|null,
 		 *     source: callable|null,
 		 *     source_kind: string|null,
+		 *     location_level: string|null,
 		 *     takeover_condition: callable|null,
 		 *     sanitize_callback: callable|null,
 		 *     validate_callback: callable|null,
@@ -263,6 +275,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Fields' 
 				'source'             => is_callable( $source ) ? $source : null,
 				'source_kind'        => isset( $definition['source_kind'] ) && '' !== (string) $definition['source_kind']
 					? (string) $definition['source_kind']
+					: null,
+				'location_level'     => isset( $definition['location_level'] ) && '' !== (string) $definition['location_level']
+					? (string) $definition['location_level']
 					: null,
 				'takeover_condition' => is_callable( $takeover ) ? $takeover : null,
 				'sanitize_callback'  => is_callable( $sanitize ) ? $sanitize : null,
