@@ -1,6 +1,15 @@
 # Gotchas — Woodev Plugin Framework
-> **130 atomic gotchas, 22 namespaces (28 index sections)** — update when adding/removing.
-> Last updated: 2026-08-12 (session 69, location-provider Task 12: **+1 file, existing namespace
+> **131 atomic gotchas, 22 namespaces (28 index sections)** — update when adding/removing.
+> Last updated: 2026-08-12 (session 69, rig hostile-theme pass: **+1 file, existing namespace
+> `[admin-ui/*]`** — `flat-where-isolation-loses-to-a-longer-theme-selector`, the THIRD member of
+> the hostile-theme family and the one neither existing rule covered: a theme selector that is
+> merely LONGER (`.woocommerce form .form-row ul li`, (0,3,2), no `!important`) beats flat
+> `:where()` isolation honestly by the cascade, and `:has()` inherits its argument's specificity
+> so it TIES and source order — which we do not control — decides. Measured, not reasoned: every
+> suggestion at computed `display:none` inside an OPEN panel, `elementFromPoint()` returning
+> `<main>`. Also records the CONTROL-probe discipline: the first pass "found" four defects that
+> were all one closed listbox.)
+> Prior: 2026-08-12 (session 69, location-provider Task 12: **+1 file, existing namespace
 > `[woocommerce/*]`** — `wc-address-autocomplete-registry-wrap-is-not-a-documented-contract`
 > (the client-side half of D2's per-country arbitration replaces registry ENTRIES of
 > `window.wc.addressAutocomplete.providers` — an undocumented global namespace, re-verify its
@@ -344,6 +353,7 @@
 - [admin-ui/wp-nonce-url-esc-html] `wp_nonce_url()` runs its result through `esc_html()` (`&`→`&amp;`) — fine for HTML output, but a nonced URL placed into JSON / a React `href` / a redirect mangles the query keys (`amp;param`) and silently no-ops. Build it with `add_query_arg('_wpnonce', wp_create_nonce($action), $url)` + `esc_url_raw`, never `wp_nonce_url` → [gotchas/wp-nonce-url-esc-html-breaks-js-urls.md](gotchas/wp-nonce-url-esc-html-breaks-js-urls.md) (s24)
 
 ### [admin-ui/modal] — Framework modal shell
+- [admin-ui/css] Flat `:where()` style isolation loses to an ordinary LONGER theme selector — no `!important` needed on their side; and `:has()` inherits its argument's specificity, so `:has( > .x )` TIES with `.theme-class` and source order (which we do not control) decides. For any property whose loss removes the control from the screen: real specificity (container + component) AND `!important`, plus the compound form for `:has()`. Verify by measurement with a no-injection CONTROL probe → [gotchas/flat-where-isolation-loses-to-a-longer-theme-selector.md](gotchas/flat-where-isolation-loses-to-a-longer-theme-selector.md) (s69)
 - [admin-ui/modal] A backdrop styled with `opacity` dims the DIALOG too when the dialog is its child — `woodev-modal.js` puts `.woodev-modal` and `.woodev-modal-backdrop` on ONE element and nests the content inside it, so `opacity: 0.7` (what WooCommerce's own modal uses, with a SIBLING backdrop) made the whole dialog 70% transparent and the checkout page showed through the map. Dim with `rgba()` instead — it paints only that element. Invisible to jest (jsdom does not render); the first rig screenshot showed it → [gotchas/modal-backdrop-opacity-dims-the-whole-dialog.md](gotchas/modal-backdrop-opacity-dims-the-whole-dialog.md) (s48)
 
 ### [admin-ui/react-state] — React component state
