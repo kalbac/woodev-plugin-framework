@@ -326,9 +326,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		 * @return class-string[]
 		 */
 		private static function bundled_provider_classes(): array {
-			return [
+			// The assertion is deliberate and temporary: PHPStan resolves `class-string`
+			// against classes it can actually see, and the DaData provider ships in a
+			// later block, so the literal below is not yet resolvable for it. The strings
+			// ARE class names — `class_exists()` in self::collect() is what makes an
+			// unresolvable one harmless — and the moment the provider file lands this
+			// annotation becomes literally checkable rather than merely asserted.
+			/** @var class-string[] $classes */
+			$classes = [
 				'\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata_Provider',
 			];
+
+			return $classes;
 		}
 
 		/**
