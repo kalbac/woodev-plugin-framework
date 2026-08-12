@@ -83,7 +83,14 @@ jobs:
           php = "${{ matrix.php }}"
 
           override = {
-              "core": None if wp == "latest"
+              # "latest" takes the ZIP path too, never `None`. `None` leaves wp-env to
+              # resolve the newest WordPress ITSELF, which it does by git tag — and
+              # WordPress.org publishes the release zip BEFORE the tag lands in
+              # WordPress/WordPress. Measured 12.08.2026: "latest" resolved to 7.0.4 while
+              # `git ls-remote --tags` stopped at 7.0.3, so every run of this leg died on
+              # `fatal: couldn't find remote ref 7.0.4` before a single test executed. The
+              # zip is what the pinned legs already use, and it is never behind.
+              "core": "https://wordpress.org/latest.zip" if wp == "latest"
                       else f"https://wordpress.org/wordpress-{wp}.zip",
               "phpVersion": php,
               "plugins": [

@@ -5887,3 +5887,108 @@ describe( 'locality change drops the applied selection (#271)', () => {
 		expect( queries ).toHaveLength( afterOpen );
 	} );
 } );
+
+/**
+ * #265 — under `ownsChrome` both refusal branches of `finishSelection()` were completely silent.
+ *
+ * Each was written as `if ( panels ) { … }` with the `return` immediately after, and `panels` is
+ * null for an embedded provider. So the customer pressed «Забрать здесь», waited out the round
+ * trip, watched #260's overlay clear — and got nothing. Indistinguishable from «the dialog just
+ * did not close», which is precisely how it was read while verifying #260.
+ *
+ * The message goes through `modal.showNotice()`, never `showError()`: the latter replaces the
+ * dialog BODY, which here is the carrier's own widget/iframe. One refused point is no reason to
+ * destroy the picker and re-run the carrier's handshake.
+ */
+describe( 'refusal is announced under ownsChrome (#265)', () => {
+	function notice() {
+		return document.querySelector( '.woodev-modal__notice' );
+	}
+
+	function noticeText() {
+		const el = notice();
+
+		return el ? el.textContent : '';
+	}
+
+	it( 'announces a transport failure instead of saying nothing', async () => {
+		const { emitSelect, rejectSelect } = openPicker( { ownsChrome: true } );
+		await flushAsync();
+
+		emitSelect( { id: 'P1' } );
+
+		expect( notice() ).toBeNull();
+
+		await rejectSelect( { status: 0, code: 'transport', message: 'нет сети' } );
+
+		expect( noticeText() ).toContain( phpI18n().selectFailed );
+	} );
+
+	it( 'announces a domain refusal in the domain’s own words when it supplied any', async () => {
+		const { emitSelect, resolveSelect } = openPicker( { ownsChrome: true } );
+		await flushAsync();
+
+		emitSelect( { id: 'P1' } );
+		await resolveSelect( {
+			allowed: false,
+			reason: 'Пункт не принимает негабарит — выберите другой',
+			close: null,
+			refresh_checkout: null,
+		} );
+
+		expect( noticeText() ).toContain( 'выберите другой' );
+		// NOT the generic string: a domain that took the trouble to explain must not be
+		// overwritten by the framework's fallback.
+		expect( noticeText() ).not.toContain( phpI18n().blocked );
+	} );
+
+	it( 'falls back to the generic refusal string when the domain gave no reason', async () => {
+		const { emitSelect, resolveSelect } = openPicker( { ownsChrome: true } );
+		await flushAsync();
+
+		emitSelect( { id: 'P1' } );
+		await resolveSelect( { allowed: false, reason: null, close: null, refresh_checkout: null } );
+
+		expect( noticeText() ).toContain( phpI18n().blocked );
+	} );
+
+	it( 'keeps the carrier frame — a notice, never the destructive whole-body error', async () => {
+		const { emitSelect, resolveSelect, provider } = openPicker( { ownsChrome: true } );
+		await flushAsync();
+
+		emitSelect( { id: 'P1' } );
+		await resolveSelect( { allowed: false, reason: 'нельзя', close: null, refresh_checkout: null } );
+
+		expect( notice() ).not.toBeNull();
+		// `showError()`'s retry control is the tell that the body was replaced wholesale.
+		expect( document.querySelector( '.woodev-modal__retry' ) ).toBeNull();
+		// And the provider was never torn down — the customer can still pick another point.
+		// `toBe( false )`, not `not.toBe( true )`: the stub initialises the flag, so the strict
+		// form actually distinguishes "alive" from "the property was never set".
+		expect( provider.destroyed ).toBe( false );
+	} );
+
+	it( 'honours the stale-page mapping on the no-panels path too', async () => {
+		const { emitSelect, rejectSelect } = openPicker( { ownsChrome: true } );
+		await flushAsync();
+
+		emitSelect( { id: 'P1' } );
+		await rejectSelect( { status: 403, code: 'rest_cookie_invalid_nonce', message: 'nope' } );
+
+		// A 403 on any pickup route means the page outlived its nonce (#157), which is a
+		// different instruction to the customer than "try again".
+		expect( noticeText() ).toContain( phpI18n().stalePage );
+		expect( noticeText() ).not.toContain( phpI18n().selectFailed );
+	} );
+
+	it( 'does NOT double-report when panels exist — that path is unchanged', async () => {
+		const { emitSelect, resolveSelect, panels } = openPicker();
+		await flushAsync();
+
+		emitSelect( { id: 'P1' } );
+		await resolveSelect( { allowed: false, reason: 'нельзя', close: null, refresh_checkout: null } );
+
+		expect( panels.setPointVerdict ).toHaveBeenCalled();
+		expect( notice() ).toBeNull();
+	} );
+} );
