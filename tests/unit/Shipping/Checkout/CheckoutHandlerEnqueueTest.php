@@ -77,7 +77,7 @@ final class Checkout_Handler_Fake_Location_Service extends Location_Service {
 		return false;
 	}
 
-	public function provider_for_level( string $level ): ?Location_Provider {
+	public function provider_for_level( string $level, ?string $country = null ): ?Location_Provider {
 		return null;
 	}
 }

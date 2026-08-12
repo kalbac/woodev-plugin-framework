@@ -126,11 +126,24 @@ if ( ! interface_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Prov
 		 * bundled fallback) per level and uses the first that supports it; a level no
 		 * configured provider supports leaves that checkout field native.
 		 *
+		 * `$country` (optional, D15 amendment) further narrows the answer PER
+		 * COUNTRY: a provider whose real-world coverage genuinely varies by
+		 * country (DaData: `address` works in RU/BY/KZ/UZ, not in AM/AZ/KG/TJ/TM
+		 * — measured, not assumed) reports the narrower set only when a caller
+		 * asks about a specific country. Omitted: the UNNARROWED set — every
+		 * level this provider can EVER answer, for ANY of its countries — which
+		 * is what every country-blind call site (e.g. deciding whether ANY
+		 * configured provider serves a level at all) needs.
+		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Added the optional `$country` parameter.
+		 *
+		 * @param string|null $country ISO-3166 alpha-2 country code, or `null`
+		 *                              for the unnarrowed answer.
 		 *
 		 * @return string[] Subset of {@see Location_Record::LEVELS}.
 		 */
-		public function get_suggest_levels(): array;
+		public function get_suggest_levels( ?string $country = null ): array;
 
 		/**
 		 * Gets the OPTIONAL capabilities this provider actually implements.

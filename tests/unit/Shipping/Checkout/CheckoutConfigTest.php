@@ -81,7 +81,10 @@ final class Checkout_Config_Fake_Location_Service extends Location_Service {
 
 	/**
 	 * @param bool                                                             $active           is_active() return value.
-	 * @param array<string, bool>                                              $supported_levels level => whether SOME configured provider serves it.
+	 * @param array<string, bool>                                              $supported_levels level => whether SOME configured provider serves it,
+	 *                                                                                             for EVERY country in $countries (this fake does not
+	 *                                                                                             model per-country level variance — LocationServiceTest
+	 *                                                                                             covers that against the real Dadata_Provider).
 	 * @param array{record: Location_Record, implicit: bool, saved_at: int}|null $customer        get_customer_record() return value.
 	 * @param string[]                                                          $countries        the layer's own supported-country set — what
 	 *                                                                                             get_supported_countries() (D15 gate fix, block
@@ -111,7 +114,17 @@ final class Checkout_Config_Fake_Location_Service extends Location_Service {
 		return $this->countries;
 	}
 
-	public function provider_for_level( string $level ): ?Location_Provider {
+	public function get_levels_for_country( string $country ): array {
+		$levels = [];
+
+		foreach ( Location_Record::LEVELS as $level ) {
+			$levels[ $level ] = ! empty( $this->supported_levels[ $level ] );
+		}
+
+		return $levels;
+	}
+
+	public function provider_for_level( string $level, ?string $country = null ): ?Location_Provider {
 		if ( empty( $this->supported_levels[ $level ] ) ) {
 			return null;
 		}
@@ -237,10 +250,62 @@ class CheckoutConfigTest extends TestCase {
 		// not a second, differently-named one.
 		$this->assertSame( 'NONCE', $location['nonce'] );
 		$this->assertSame( $config['nonce'], $location['nonce'] );
-		$this->assertSame( [ 'region' => true, 'settlement' => true, 'address' => false ], $location['levels'] );
+		// levels is a MAP keyed by country (D15 amendment follow-up) — one entry
+		// per country in $location['countries'], never a single flat per-level
+		// answer (a single "current country" would go stale the moment the
+		// customer switches country client-side, with no round-trip to refresh).
+		$this->assertSame(
+			[
+				'RU' => [ 'region' => true, 'settlement' => true, 'address' => false ],
+				'BY' => [ 'region' => true, 'settlement' => true, 'address' => false ],
+			],
+			$location['levels']
+		);
 		$this->assertNull( $location['current'] );
 		$this->assertFalse( $location['implicit'] );
 		$this->assertIsString( $location['mode'] );
+	}
+
+	/**
+	 * D15 amendment follow-up: `levels` must genuinely vary PER COUNTRY when
+	 * the resolved provider's own per-country support does — exercised through
+	 * the REAL Location_Service + the real bundled Dadata_Provider (the fake
+	 * above cannot model this; DaData is the only provider in this codebase
+	 * whose get_suggest_levels() actually depends on country).
+	 */
+	public function test_location_levels_map_varies_per_country_for_the_real_dadata_provider(): void {
+		Location_Provider_Registry::instance()->reset_for_tests();
+		Settings_Page_Registry::instance()->reset_for_tests();
+
+		Functions\when( 'add_action' )->justReturn( true );
+		Functions\when( '__' )->returnArg( 1 );
+		Functions\when( 'wp_parse_args' )->alias(
+			static function ( $args, $defaults = [] ) {
+				return array_merge( (array) $defaults, (array) $args );
+			}
+		);
+		Functions\when( 'is_user_logged_in' )->justReturn( false );
+		Functions\when( 'apply_filters' )->returnArg( 2 );
+		Functions\when( 'get_option' )->alias(
+			static function ( $name, $default = null ) {
+				return 'woodev_location_token' === $name ? 'tok' : $default;
+			}
+		);
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$service = new Location_Service( $registry );
+		$this->assertTrue( $service->is_active() );
+
+		$config = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU', 'AM' ], $service ) )
+			->build( Checkout_Fields::from_array( [] ) );
+
+		$levels = $config['location']['levels'];
+
+		$this->assertSame( [ 'region' => true, 'settlement' => true, 'address' => true ], $levels['RU'] );
+		$this->assertSame( [ 'region' => true, 'settlement' => true, 'address' => false ], $levels['AM'], 'AM is GeoNames-tier: no address-level suggest' );
 	}
 
 	public function test_location_countries_is_the_intersection_of_wc_countries_and_provider_support(): void {

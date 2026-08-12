@@ -656,23 +656,24 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 
 		/**
 		 * False-admission direction: the chosen provider serves region only,
-		 * in `[ 'RU', 'KZ' ]`; the bundled fallback is configured but its own
-		 * country list is left at the unwidened `[ 'RU' ]` default. A `KZ`
+		 * in `[ 'RU', 'FR' ]`; the bundled fallback is configured but its own
+		 * country list is left at its (now nine-country, D15 amendment
+		 * follow-up) default, which does NOT include `FR`. An `FR`
 		 * "address" request must be gated against the FALLBACK — the provider
 		 * that will actually serve it — and therefore reported UNSUPPORTED,
-		 * even though the ACTIVE (chosen) provider alone does cover `KZ`.
+		 * even though the ACTIVE (chosen) provider alone does cover `FR`.
 		 */
 		public function test_is_country_supported_for_a_level_reports_unsupported_when_the_fallback_does_not_cover_it_even_if_the_active_provider_does(): void {
 			$chosen = new Location_Service_Fake_Provider(
 				'city-dict',
 				[ Location_Record::LEVEL_REGION ],
 				true,
-				[ 'RU', 'KZ' ]
+				[ 'RU', 'FR' ]
 			);
 
 			Functions\when( 'add_action' )->justReturn( true );
 			$this->stub_providers_filter( [ $chosen ] );
-			$this->stub_dadata_token( 'tok' ); // configured fallback, countries left at the RU-only default.
+			$this->stub_dadata_token( 'tok' ); // configured fallback, countries left at the (nine-country) default, which excludes FR.
 
 			$registry = Location_Provider_Registry::instance();
 			$registry->declare_needed();
@@ -685,12 +686,12 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$this->assertInstanceOf( Dadata_Provider::class, $service->provider_for_level( Location_Record::LEVEL_ADDRESS ) );
 
 			$this->assertFalse(
-				$service->is_country_supported( 'KZ', Location_Record::LEVEL_ADDRESS ),
-				'KZ must be reported UNSUPPORTED for "address" — the fallback that actually serves that level does not cover KZ'
+				$service->is_country_supported( 'FR', Location_Record::LEVEL_ADDRESS ),
+				'FR must be reported UNSUPPORTED for "address" — the fallback that actually serves that level does not cover FR'
 			);
 			$this->assertTrue(
-				$service->is_country_supported( 'KZ' ),
-				'sanity: the ACTIVE (chosen) provider alone DOES cover KZ — proves the level-blind answer would have wrongly admitted it'
+				$service->is_country_supported( 'FR' ),
+				'sanity: the ACTIVE (chosen) provider alone DOES cover FR — proves the level-blind answer would have wrongly admitted it'
 			);
 		}
 
@@ -874,6 +875,113 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$service = new Location_Service( $registry );
 
 			$this->assertSame( $swapped, $service->provider_for_level( Location_Record::LEVEL_REGION ) );
+		}
+
+		// -------------------------------------------------------------------
+		// provider_for_level( $level, $country ): D15 amendment follow-up —
+		// per-country suggest levels layered on top of the D15 chain. The
+		// real bundled Dadata_Provider is the only provider in this codebase
+		// whose get_suggest_levels() genuinely varies by country, so these
+		// tests exercise it directly rather than a fake.
+		// -------------------------------------------------------------------
+
+		public function test_provider_for_level_with_country_resolves_dadata_for_address_in_an_osm_tier_country(): void {
+			$this->stub_dadata_token( 'tok' );
+
+			$registry = Location_Provider_Registry::instance();
+			$registry->declare_needed();
+			$registry->collect();
+
+			$service = new Location_Service( $registry );
+
+			$this->assertInstanceOf(
+				Dadata_Provider::class,
+				$service->provider_for_level( Location_Record::LEVEL_ADDRESS, 'BY' )
+			);
+		}
+
+		/**
+		 * The Yerevan bug this whole follow-up exists to fix: without the
+		 * per-country narrowing, an "address" field would attach for AM (a
+		 * measured GeoNames-tier, city-only country) and silently always
+		 * return nothing. `provider_for_level('address', 'AM')` must resolve
+		 * to null so the field stays native instead (spec §4.7).
+		 */
+		public function test_provider_for_level_with_country_returns_null_for_address_in_a_geonames_tier_country(): void {
+			$this->stub_dadata_token( 'tok' );
+
+			$registry = Location_Provider_Registry::instance();
+			$registry->declare_needed();
+			$registry->collect();
+
+			$service = new Location_Service( $registry );
+
+			$this->assertNull( $service->provider_for_level( Location_Record::LEVEL_ADDRESS, 'AM' ) );
+			// Sanity: the SAME level, country-blind, resolves to Dadata — proving
+			// the null above is the country narrowing, not a broken chain.
+			$this->assertInstanceOf( Dadata_Provider::class, $service->provider_for_level( Location_Record::LEVEL_ADDRESS ) );
+		}
+
+		public function test_provider_for_level_with_country_still_resolves_settlement_in_a_geonames_tier_country(): void {
+			$this->stub_dadata_token( 'tok' );
+
+			$registry = Location_Provider_Registry::instance();
+			$registry->declare_needed();
+			$registry->collect();
+
+			$service = new Location_Service( $registry );
+
+			$this->assertInstanceOf(
+				Dadata_Provider::class,
+				$service->provider_for_level( Location_Record::LEVEL_SETTLEMENT, 'AM' )
+			);
+		}
+
+		// -------------------------------------------------------------------
+		// get_levels_for_country(): the per-country map Checkout_Config's
+		// `location.levels` block is built from (D15 amendment follow-up —
+		// the config cannot answer for a single "current" country without
+		// going stale the moment the customer changes country client-side,
+		// with no round trip in that path).
+		// -------------------------------------------------------------------
+
+		public function test_get_levels_for_country_reports_all_three_true_for_ru(): void {
+			$this->stub_dadata_token( 'tok' );
+
+			$registry = Location_Provider_Registry::instance();
+			$registry->declare_needed();
+			$registry->collect();
+
+			$service = new Location_Service( $registry );
+
+			$this->assertSame(
+				[ 'region' => true, 'settlement' => true, 'address' => true ],
+				$service->get_levels_for_country( 'RU' )
+			);
+		}
+
+		public function test_get_levels_for_country_reports_address_false_for_a_geonames_tier_country(): void {
+			$this->stub_dadata_token( 'tok' );
+
+			$registry = Location_Provider_Registry::instance();
+			$registry->declare_needed();
+			$registry->collect();
+
+			$service = new Location_Service( $registry );
+
+			$this->assertSame(
+				[ 'region' => true, 'settlement' => true, 'address' => false ],
+				$service->get_levels_for_country( 'AM' )
+			);
+		}
+
+		public function test_get_levels_for_country_reports_all_false_when_the_layer_has_no_active_provider(): void {
+			$service = new Location_Service( Location_Provider_Registry::instance() );
+
+			$this->assertSame(
+				[ 'region' => false, 'settlement' => false, 'address' => false ],
+				$service->get_levels_for_country( 'RU' )
+			);
 		}
 
 		// -------------------------------------------------------------------
