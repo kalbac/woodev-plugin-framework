@@ -1075,11 +1075,62 @@
 	}
 
 	/**
+	 * Clears every node GOVERNED BY `countryFieldId` — the country is the ROOT of the chain
+	 * (`country → region → settlement → address` + postcode, spec §4.4), so a real country
+	 * transition clears all of them, by the same rule any other parent transition already
+	 * follows.
+	 *
+	 * Section-aware on purpose: `#billing_country` governs only billing-section nodes and
+	 * `#shipping_country` only shipping-section ones (the same per-node `section` the
+	 * scoping and attach paths already key off), so changing the billing country never
+	 * empties a shipping address the customer entered separately.
+	 *
+	 * Why clearing is right and keeping was not: the values left behind name a locality in
+	 * the country the customer just left. "Moscow / Moscow / 101000" under Uzbekistan is not
+	 * a stale nicety — it is an address that cannot exist, it is what the shipping
+	 * calculation sees, and the confirmed records still scope the next `/suggest` by a region
+	 * of the OLD country. Observed by the operator on the rig (s70): switching RU → UZ left
+	 * every field filled with the Moscow values.
+	 *
+	 * @param {Object} entry
+	 * @param {string} countryFieldId
+	 * @returns {void}
+	 */
+	function clearCountryScope( entry, countryFieldId ) {
+		entry.allNodes.forEach( function( node ) {
+			if ( countryFieldIdFor( node ) !== countryFieldId ) {
+				return;
+			}
+
+			if ( node.level ) {
+				entry.records[ node.level ] = null;
+			}
+
+			entry.store.setValue( node.fieldId, '' );
+			entry.resolved[ node.fieldId ] = '';
+
+			var el = document.getElementById( node.fieldId );
+
+			if ( el ) {
+				el.value = '';
+			}
+		} );
+	}
+
+	/**
 	 * Delegated `change` handler for BOTH event worlds (see the file docblock). Routes a
 	 * country-field change (`#billing_country` OR `#shipping_country` — Finding 1: BOTH are
 	 * observed now, not just billing) and a "ship to a different address" toggle to
 	 * arbitration; otherwise, for every entry owning this field id, gates a destructive
 	 * downward clear on a REAL remembered-value transition.
+	 *
+	 * A country change ALSO clears that country's own section ({@see clearCountryScope}) —
+	 * but only on a REAL transition, gated on the remembered previous value exactly like
+	 * every other parent. WooCommerce fires programmatic `change` events on the country
+	 * field while initialising the checkout, carrying the value the field already has
+	 * (gotcha `a-programmatic-parent-change-must-not-run-a-destructive-cascade`); without
+	 * the gate this would wipe a restored address on every single page load, which is the
+	 * exact failure #272 already cost this project once.
 	 *
 	 * @param {Event|Object} event Native `Event` or a jQuery Event — both expose `.target`.
 	 * @returns {void}
@@ -1089,7 +1140,23 @@
 		var id = target && target.id ? target.id : '';
 		var name = target && target.name ? target.name : '';
 
-		if ( 'ship_to_different_address' === name || COUNTRY_FIELD_IDS.indexOf( id ) !== -1 ) {
+		if ( COUNTRY_FIELD_IDS.indexOf( id ) !== -1 ) {
+			var country = cascadeKey( target.value );
+
+			entries.forEach( function( entry ) {
+				if ( entry.resolved[ id ] === country ) {
+					return; // programmatic churn or a re-selection of the same country.
+				}
+
+				entry.resolved[ id ] = country;
+				clearCountryScope( entry, id );
+			} );
+
+			handleLayoutRelevantChange();
+			return;
+		}
+
+		if ( 'ship_to_different_address' === name ) {
 			handleLayoutRelevantChange();
 			return;
 		}
@@ -1262,6 +1329,19 @@
 			if ( el ) {
 				entry.store.setValue( node.fieldId, el.value );
 				entry.resolved[ node.fieldId ] = cascadeKey( el.value );
+			}
+		} );
+
+		// Seed the COUNTRY fields' remembered values too — without this, WooCommerce's own
+		// programmatic `change` on the country field during checkout init compares against
+		// `undefined`, reads as a real transition, and empties a restored address on every
+		// page load ({@see handleFieldChanged}, gotcha
+		// `a-programmatic-parent-change-must-not-run-a-destructive-cascade`).
+		COUNTRY_FIELD_IDS.forEach( function( countryFieldId ) {
+			var el = document.getElementById( countryFieldId );
+
+			if ( el ) {
+				entry.resolved[ countryFieldId ] = cascadeKey( el.value );
 			}
 		} );
 

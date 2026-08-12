@@ -238,7 +238,10 @@ function mockFetch() {
  * @returns {void}
  */
 function selectViaFake( call, item, viaJquery = false ) {
-	call.el.value = item.label;
+	// Mirrors location-typeahead.js's own `selectItem()`: the widget writes `item.value`
+	// and falls back to `item.label` only when none was supplied. A harness that always
+	// wrote the label would model a widget production no longer has.
+	call.el.value = 'string' === typeof item.value ? item.value : item.label;
 
 	if ( viaJquery ) {
 		window.jQuery( call.el ).trigger( 'change' );
@@ -284,6 +287,13 @@ function boot( configOpts ) {
 
 beforeEach( () => {
 	jest.resetModules();
+	// A FRESH <body>, not just emptied markup. `jest.resetModules()` gives the next test a new
+	// module instance, but the PREVIOUS instance's delegated listeners are still bound to the
+	// surviving `document.body` — `innerHTML = ''` removes children, never listeners. Those
+	// zombie instances keep handling events with their own stale state (a stale remembered
+	// country, say) and mutate the CURRENT test's DOM by id. Measured: nine cascade instances
+	// answered one country change in a single file run.
+	document.body.replaceWith( document.createElement( 'body' ) );
 	delete window[ CONFIG_GLOBAL ];
 	delete window.WoodevCheckoutFieldStore;
 	delete window.WoodevLocationTypeahead;
@@ -860,7 +870,13 @@ describe( 'backwards fill', () => {
 // -----------------------------------------------------------------------
 
 describe( 'country switch', () => {
-	it( 'detaches every attached widget on switch to an unsupported country, leaves fields native, keeps store state', () => {
+	it( 'detaches every attached widget on switch to an unsupported country AND empties the section', () => {
+		// CONTRADICTS spec Task 11's original wording ("store state kept ... switch back →
+		// re-attached with state intact"), on the operator's rig verdict (s70): the values left
+		// behind name a locality in the country the customer just LEFT, the shipping
+		// calculation reads them, and the confirmed records would still scope the next
+		// /suggest by a region of the old country. An address that cannot exist is worse than
+		// a re-typed one.
 		boot( { region: true, settlement: true, address: true, countries: [ 'RU' ] } );
 
 		document.getElementById( 'billing_city' ).value = 'Москва';
@@ -871,7 +887,58 @@ describe( 'country switch', () => {
 		document.getElementById( 'billing_country' ).dispatchEvent( new Event( 'change', { bubbles: true } ) );
 
 		detachSpies.forEach( ( spy ) => expect( spy ).toHaveBeenCalled() );
-		expect( document.getElementById( 'billing_city' ).value ).toBe( 'Москва' ); // state kept
+		expect( document.getElementById( 'billing_city' ).value ).toBe( '' );
+		expect( document.getElementById( 'billing_state' ).value ).toBe( '' );
+		expect( document.getElementById( 'billing_address_1' ).value ).toBe( '' );
+		expect( document.getElementById( 'billing_postcode' ).value ).toBe( '' );
+	} );
+
+	it( 'clears the section on a switch to a SUPPORTED country too — the rig case', () => {
+		// RU → UZ on the rig: both are served, so nothing detaches and the old code left every
+		// field filled with the Moscow values.
+		boot( { region: true, settlement: true, address: true, countries: [ 'RU', 'US' ] } );
+
+		document.getElementById( 'billing_city' ).value = 'Москва';
+		document.getElementById( 'billing_postcode' ).value = '101000';
+
+		document.getElementById( 'billing_country' ).value = 'US';
+		document.getElementById( 'billing_country' ).dispatchEvent( new Event( 'change', { bubbles: true } ) );
+
+		expect( document.getElementById( 'billing_city' ).value ).toBe( '' );
+		expect( document.getElementById( 'billing_postcode' ).value ).toBe( '' );
+	} );
+
+	it( 'a programmatic country change carrying the SAME value clears nothing', () => {
+		// WooCommerce fires exactly this while initialising the checkout — the gate that keeps
+		// #272 from happening again, now that the country is a destructive parent.
+		boot( { region: true, settlement: true, address: true, countries: [ 'RU' ] } );
+
+		// Through a REAL selection, so store and DOM agree — writing straight to `.value`
+		// leaves the store empty, and the re-attach pass then legitimately restores the DOM
+		// from it, which would look like this gate failing when it did not.
+		selectViaFake( callFor( 'billing_city' ), {
+			key: 'dadata:msk', label: 'г Москва', value: 'Москва', level: 'settlement',
+			record: {
+				key: 'dadata:msk', provider_id: 'dadata', level: 'settlement', country: 'RU',
+				settlement: { name: 'Москва', type: 'г' }, postcode: '101000', label: 'г Москва',
+			},
+		} );
+
+		document.getElementById( 'billing_country' ).dispatchEvent( new Event( 'change', { bubbles: true } ) );
+
+		expect( document.getElementById( 'billing_city' ).value ).toBe( 'Москва' );
+		expect( document.getElementById( 'billing_postcode' ).value ).toBe( '101000' );
+	} );
+
+	it( 'a billing-country change never empties the SHIPPING section', () => {
+		boot( { region: true, settlement: true, address: true, section: 'shipping', withShippingCountry: true, countries: [ 'RU' ] } );
+
+		document.getElementById( 'shipping_city' ).value = 'Москва';
+
+		document.getElementById( 'billing_country' ).value = 'US';
+		document.getElementById( 'billing_country' ).dispatchEvent( new Event( 'change', { bubbles: true } ) );
+
+		expect( document.getElementById( 'shipping_city' ).value ).toBe( 'Москва' );
 	} );
 
 	it( 'detaches a level the NEW country does not serve, even though the country itself is served', () => {
@@ -916,7 +983,12 @@ describe( 'country switch', () => {
 		expect( settlementAttach.detach.mock.calls.length ).toBe( settlementDetachesBefore );
 	} );
 
-	it( 're-attaches with state intact when switching back to a supported country', () => {
+	it( 're-attaches on the way back to a supported country, but the fields stay EMPTY', () => {
+		// The other half of the same reversal: the widgets come back, the values do not.
+		// Spec Task 11 promised "state intact" here; that promise dies by construction once a
+		// real country change is destructive, and the trade is deliberate — a customer who
+		// mis-clicks a country retypes an address, whereas keeping it silently ships an
+		// address belonging to another country.
 		boot( { region: true, settlement: true, address: true, countries: [ 'RU' ] } );
 
 		document.getElementById( 'billing_city' ).value = 'Москва';
@@ -930,7 +1002,7 @@ describe( 'country switch', () => {
 		document.getElementById( 'billing_country' ).dispatchEvent( new Event( 'change', { bubbles: true } ) );
 
 		expect( window.WoodevLocationTypeahead.mock.calls.length ).toBeGreaterThan( attachCountAfterDetach );
-		expect( document.getElementById( 'billing_city' ).value ).toBe( 'Москва' );
+		expect( document.getElementById( 'billing_city' ).value ).toBe( '' );
 	} );
 } );
 

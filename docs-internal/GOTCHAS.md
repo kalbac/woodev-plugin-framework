@@ -1,6 +1,14 @@
 # Gotchas — Woodev Plugin Framework
-> **132 atomic gotchas, 22 namespaces (28 index sections)** — update when adding/removing.
-> Last updated: 2026-08-12 (session 70, PR #291 red integration legs: **+1 file, existing namespace
+> **133 atomic gotchas, 22 namespaces (28 index sections)** — update when adding/removing.
+> Last updated: 2026-08-13 (session 70, country-clearing on the rig: **+1 file, existing
+> namespace `[testing/*]`** — `jest-resetmodules-leaves-listeners-on-the-surviving-body`:
+> `jest.resetModules()` gives a fresh module but `document.body` survives every test, so a
+> module binding a DELEGATED listener leaves one zombie instance per test, each answering the
+> next test's events with its own stale state. Measured: nine cascade instances handled one
+> country change, and the failure accused a gate that was provably returning correctly.
+> `document.body.replaceWith( document.createElement( 'body' ) )`. Signature: passes alone,
+> fails in the file.)
+> Prior: 2026-08-12 (session 70, PR #291 red integration legs: **+1 file, existing namespace
 > `[testing/*]`** — `hook-snapshot-restore-defeats-an-identity-based-reset`: `WP_UnitTestCase`
 > restores its one `$wp_filter` snapshot after every test, so a `plugins_loaded`-time registration
 > returns after each teardown, and a `reset_for_tests()` that removes hooks by singleton identity
@@ -328,6 +336,7 @@
 ### [testing/js] — JavaScript testing pitfalls
 - [testing/js] `npx jest` is NOT how this project runs JS tests — there is no jest config here at all; `wp-scripts test-unit-js` (`npm run test:js`) owns it and supplies jsdom. `npx jest` falls back to the node environment: 194 phantom failures, and a TOTAL of 472 instead of 631 because failed-to-load suites contribute nothing (631 was the s52 truth — the current true baseline lives in the CURRENT-STATE.md header, compare against that, not any number frozen here). A changed total means a bad invocation, not a regression → [gotchas/npx-jest-bypasses-wp-scripts-jsdom.md](gotchas/npx-jest-bypasses-wp-scripts-jsdom.md) (s52)
 - [testing/js] A local `npm run test:js` counts every subagent worktree under `.claude/worktrees/` — jest walks the filesystem and ignores `.gitignore`, so each live worktree contributes a full copy of the suite (56 suites / 4889 tests against a true 8 / 690, all green). The gitignore entry is what hides it: the checkouts never appear in `git status`. A worktree on an older base also reports deleted tests as passing. CI never sees this, so it corrupts exactly the local baselines that get quoted in handoffs. `git worktree remove` can fail on Windows and leave the directory — verify with `ls`, not `git worktree list` → [gotchas/jest-scans-agent-worktrees-inside-the-repo.md](gotchas/jest-scans-agent-worktrees-inside-the-repo.md) (s55)
+- [testing/js] `jest.resetModules()` gives a fresh MODULE, never a fresh `document.body` — and `document.body.innerHTML = ''` removes children, not listeners. A module that binds a DELEGATED listener on `document.body` therefore leaves one live instance per test, each answering the next test's events with its own stale state and mutating the current DOM by id. Measured: nine cascade instances handled ONE country change, and the failure read as a broken remembered-value gate that a probe showed returning correctly. Signature: the test PASSES ALONE and fails in the file. Fix: `document.body.replaceWith( document.createElement( 'body' ) )` → [gotchas/jest-resetmodules-leaves-listeners-on-the-surviving-body.md](gotchas/jest-resetmodules-leaves-listeners-on-the-surviving-body.md) (s70)
 - [testing/js] A delay test that asserts "absent", then `advanceTimersByTime( 500 )`, then "present" does NOT pin the delay — it passes with the constant mutated to `0`, because `setTimeout( …, 0 )` still defers past the synchronous assertion and advancing 500 ms fires a 0 ms timer too. It proves deferral, not duration. Assert at `n - 1` (must not fire) and `n` (must). Generalises: any test asserting a NUMBER — delay, cap, threshold, retry count — must be mutated against a neighbouring value before it is trusted, or it only distinguishes "some" from "none" → [gotchas/advancing-the-whole-interval-does-not-pin-a-delay.md](gotchas/advancing-the-whole-interval-does-not-pin-a-delay.md) (s64)
 - [testing/js] `expect( callsArray ).toEqual( [] )` PASSES even when a call happened with an `undefined` argument — Jest's `toEqual` ignores `undefined` array items, so `[ undefined ]` reads as equal to `[]`. This repo's test doubles mostly record calls onto plain arrays (`provider.focusGroupCalls` etc.), not `jest.fn()` mocks, so a "was never called" assertion written this way silently misses a guard that regressed to calling with `undefined`. Use `toHaveLength( 0 )` instead; only a deliberate mutation reveals the gap → [gotchas/jest-toequal-empty-array-ignores-undefined.md](gotchas/jest-toequal-empty-array-ignores-undefined.md) (s52)
 
