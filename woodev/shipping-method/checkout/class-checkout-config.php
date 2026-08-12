@@ -336,8 +336,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 					// Shown INSIDE the open listbox when a completed search returned nothing.
 					// A silent empty panel and a slow network are indistinguishable to the
 					// customer, so this one case is worth a sentence (operator, s70).
-					'noResults' => __(
+					'noResults'        => __(
 						'Поиск не дал результатов. Попробуйте изменить запрос.',
+						'woodev-plugin-framework'
+					),
+
+					// The ADDRESS level gets its own wording (operator, s70). "Nothing found"
+					// under a street field reads as "you cannot be delivered to" — and a
+					// street genuinely absent from the provider's registry is the ordinary
+					// case there, not an error. This says the field still works, which is
+					// true: a location field is a plain text input with the typeahead layered
+					// on top, so a hand-typed address was always accepted.
+					'noResultsAddress' => __(
+						'Адрес не найден — введите вручную.',
 						'woodev-plugin-framework'
 					),
 				]

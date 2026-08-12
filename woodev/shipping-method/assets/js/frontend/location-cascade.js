@@ -815,13 +815,21 @@
 
 		var i18n = entry.location.i18n || {};
 
+		// The ADDRESS level says something different when it finds nothing (operator, s70):
+		// "nothing found" under a street field reads as a delivery refusal, and a street the
+		// provider simply does not carry is the ordinary case at that level rather than a
+		// failure. Falls back to the generic string when the server did not supply one.
+		var emptyKey = 'address' === node.level && 'string' === typeof i18n.noResultsAddress
+			? i18n.noResultsAddress
+			: i18n.noResults;
+
 		var api = window.WoodevLocationTypeahead( el, {
 			fetch: fetchFor( entry, node ),
 			onSelect: onSelectFor( entry, node ),
 			// Server-supplied (translated, filterable via `woodev_location_i18n`) — never a
 			// literal here: this string reaches the customer, so it follows the same route
 			// every other user-facing string in this layer takes.
-			emptyText: 'string' === typeof i18n.noResults ? i18n.noResults : '',
+			emptyText: 'string' === typeof emptyKey ? emptyKey : '',
 		} );
 
 		entry.widgets[ node.fieldId ] = { el: el, api: api };

@@ -587,7 +587,33 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 				return [ [ 'country_iso_code' => $scope->country() ] ];
 			}
 
-			$parent = $scope->parent_record();
+			/*
+			 * The COUNTRY rides in every parent constraint too, not only the parentless one.
+			 *
+			 * MEASURED against the live API (13.08.2026), one query, four constraint shapes,
+			 * scoping a street search to Tashkent (`city_fias_id` = `relation:2216724`, the id
+			 * DaData itself returned for that city):
+			 *
+			 *   [ region_fias_id, city_fias_id ]                  → 0 suggestions
+			 *   [ country_iso_code, city_fias_id ]                → 3
+			 *   [ country_iso_code, city ]                        → 3
+			 *   [ country_iso_code ]                              → 3
+			 *
+			 * The first row is what this method used to send. Outside Russia DaData's
+			 * "fias" ids are not FIAS at all — they are OpenStreetMap-derived
+			 * (`relation:`/`way:`) or GeoNames numbers — and the `locations` filter cannot
+			 * interpret one without knowing which country's registry it belongs to. So a
+			 * customer who picked a foreign settlement got an EMPTY address list for every
+			 * query, while the same query with no settlement chosen worked fine — reported
+			 * from the rig exactly that way (operator, s70: Tashkent chosen → nothing;
+			 * Tashkent cleared → "Yunusabad 19" found immediately, and selecting it
+			 * backfilled Tashkent).
+			 *
+			 * Adding the country is a no-op for Russia — same measurement, Moscow's real
+			 * FIAS UUID: 3 suggestions with and without it, identical values.
+			 */
+			$country = [ 'country_iso_code' => $scope->country() ];
+			$parent  = $scope->parent_record();
 
 			if ( null !== $parent && self::PROVIDER_ID === $parent->provider_id() && is_array( $parent->raw() ) ) {
 				$location = [];
@@ -599,7 +625,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 				}
 
 				if ( [] !== $location ) {
-					return [ $location ];
+					return [ array_merge( $country, $location ) ];
 				}
 			}
 
@@ -619,7 +645,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 				$location['city'] = $components['settlement']['name'];
 			}
 
-			return [] !== $location ? [ $location ] : [];
+			return [] !== $location ? [ array_merge( $country, $location ) ] : [];
 		}
 
 		/**

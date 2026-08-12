@@ -796,7 +796,19 @@ final class DadataProviderTest extends TestCase {
 
 		$body = $this->last_request_body();
 		$this->assertTrue( $body['restrict_value'] );
-		$this->assertSame( [ [ 'region_fias_id' => '0c5b2444-70a0-4932-980c-b4dc0d3f02b5' ] ], $body['locations'] );
+		// The COUNTRY rides along with the parent id. Measured 13.08.2026: outside Russia the
+		// "fias" ids are OpenStreetMap-derived, and DaData's `locations` filter returns ZERO
+		// suggestions for one unless it is told which country's registry to read it in — see
+		// `build_locations_constraint()`'s own table. Harmless for RU, load-bearing elsewhere.
+		$this->assertSame(
+			[
+				[
+					'country_iso_code' => 'RU',
+					'region_fias_id'   => '0c5b2444-70a0-4932-980c-b4dc0d3f02b5',
+				],
+			],
+			$body['locations']
+		);
 	}
 
 	/**
@@ -1051,5 +1063,66 @@ final class DadataProviderTest extends TestCase {
 		$this->assertInstanceOf( Dadata_Provider::class, $registry->get_providers()['dadata'] );
 		// No store setting saved yet -> falls back to the DEFAULT_PROVIDER_ID, dadata.
 		$this->assertInstanceOf( Dadata_Provider::class, $registry->get_active_provider() );
+	}
+
+	public function test_a_foreign_parent_id_is_sent_WITH_its_country_or_dadata_matches_nothing(): void {
+		$this->set_token( 'tok' );
+
+		// A real Tashkent record as DaData itself returns it: the "fias" ids are
+		// OpenStreetMap-derived, not FIAS (measured 13.08.2026).
+		$tashkent = Location_Record::from_array(
+			[
+				'key'         => 'dadata:relation:2216724',
+				'provider_id' => 'dadata',
+				'level'       => Location_Record::LEVEL_SETTLEMENT,
+				'country'     => 'UZ',
+				'settlement'  => [ 'name' => 'Ташкент', 'type' => 'г' ],
+				'label'       => 'Узбекистан, г Ташкент',
+				'raw'         => [
+					'country_iso_code'   => 'UZ',
+					'fias_id'            => 'relation:2216724',
+					'city_fias_id'       => 'relation:2216724',
+					'region_fias_id'     => 'relation:2216724',
+					'city'               => 'Ташкент',
+				],
+			]
+		);
+
+		$this->stub_http_response( 200, '{"suggestions":[]}' );
+		( new Dadata_Provider() )->suggest( 'Юнус', Location_Scope::within( $tashkent, Location_Record::LEVEL_ADDRESS ) );
+
+		$locations = $this->last_request_body()['locations'];
+
+		// Without the country this exact constraint returns ZERO suggestions from the live
+		// API while the same query unscoped returns street after street — the defect the
+		// operator hit on the rig (s70): pick Tashkent, and the address field goes dead.
+		$this->assertSame( 'UZ', $locations[0]['country_iso_code'] );
+		$this->assertSame( 'relation:2216724', $locations[0]['city_fias_id'] );
+	}
+
+	public function test_a_components_only_parent_also_carries_its_country(): void {
+		$this->set_token( 'tok' );
+
+		// The D15 fallback path: a parent record from ANOTHER provider, so there is no
+		// DaData id to read and only names remain. It needs the country for the same reason.
+		$foreign = Location_Record::from_array(
+			[
+				'key'         => 'cdek:44',
+				'provider_id' => 'cdek',
+				'level'       => Location_Record::LEVEL_SETTLEMENT,
+				'country'     => 'KZ',
+				'region'      => [ 'name' => 'Алматинская', 'type' => 'обл' ],
+				'settlement'  => [ 'name' => 'Алматы', 'type' => 'г' ],
+				'label'       => 'Алматы',
+			]
+		);
+
+		$this->stub_http_response( 200, '{"suggestions":[]}' );
+		( new Dadata_Provider() )->suggest( 'Абая', Location_Scope::within( $foreign, Location_Record::LEVEL_ADDRESS ) );
+
+		$locations = $this->last_request_body()['locations'];
+
+		$this->assertSame( 'KZ', $locations[0]['country_iso_code'] );
+		$this->assertSame( 'Алматы', $locations[0]['city'] );
 	}
 }

@@ -179,7 +179,7 @@ function buildConfig( opts ) {
 			levels: o.levels || { RU: { region: true, settlement: true, address: true } },
 			current: o.current !== undefined ? o.current : null,
 			implicit: false,
-			i18n: o.i18n !== undefined ? o.i18n : { noResults: 'Поиск не дал результатов. Попробуйте изменить запрос.' },
+			i18n: o.i18n !== undefined ? o.i18n : { noResults: 'Поиск не дал результатов. Попробуйте изменить запрос.', noResultsAddress: 'Адрес не найден — введите вручную.' },
 		},
 	};
 }
@@ -1380,6 +1380,22 @@ describe( 'empty-result message', () => {
 
 		expect( callFor( 'billing_city' ).emptyText ).toBe( 'Поиск не дал результатов. Попробуйте изменить запрос.' );
 		expect( callFor( 'billing_state' ).emptyText ).toBe( 'Поиск не дал результатов. Попробуйте изменить запрос.' );
+	} );
+
+	it( 'gives the ADDRESS level its own wording, and the others the generic one', () => {
+		// "Nothing found" under a street field reads as "we do not deliver here"; a street the
+		// provider does not carry is ordinary at that level (operator, s70).
+		boot( { region: true, settlement: true, address: true } );
+
+		expect( callFor( 'billing_address_1' ).emptyText ).toBe( 'Адрес не найден — введите вручную.' );
+		expect( callFor( 'billing_city' ).emptyText ).toBe( 'Поиск не дал результатов. Попробуйте изменить запрос.' );
+		expect( callFor( 'billing_state' ).emptyText ).toBe( 'Поиск не дал результатов. Попробуйте изменить запрос.' );
+	} );
+
+	it( 'falls the address level back to the generic string when the server sent no address one', () => {
+		boot( { region: true, settlement: true, address: true, i18n: { noResults: 'Общий текст' } } );
+
+		expect( callFor( 'billing_address_1' ).emptyText ).toBe( 'Общий текст' );
 	} );
 
 	it( 'passes an empty string when the config carries no i18n block at all', () => {
