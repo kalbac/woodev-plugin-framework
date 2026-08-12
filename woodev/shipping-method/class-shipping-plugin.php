@@ -151,12 +151,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			require_once $path . '/map/interface-map-provider.php';
 			require_once $path . '/map/class-map-provider-registry.php';
 
-			// location provider layer (Tasks 1-3): neutral record/key/scope, provider
-			// contract, and the registry with its activation gate + store setting. The
-			// registry itself stays completely inert until a plugin declares need
-			// (see add_hooks() below) — loading these files unconditionally costs
-			// nothing, the same way map/interface-map-provider.php above is always
-			// loaded even though no default map provider ships.
+			// location provider layer (Tasks 1-5): neutral record/key/scope, provider
+			// contract, the registry with its activation gate + store setting, the dual
+			// customer-location store, and the mandatory per-plugin adapter contract +
+			// its lazy session-cached resolution. The registry itself stays completely
+			// inert until a plugin declares need (see add_hooks() below) — loading
+			// these files unconditionally costs nothing, the same way
+			// map/interface-map-provider.php above is always loaded even though no
+			// default map provider ships.
 			require_once $path . '/location/class-locality-key.php';
 			require_once $path . '/location/class-location-record.php';
 			require_once $path . '/location/class-location-scope.php';
@@ -165,6 +167,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			require_once $path . '/location/class-location-settings.php';
 			require_once $path . '/location/class-location-provider-registry.php';
 			require_once $path . '/location/class-customer-location-store.php';
+			require_once $path . '/location/interface-location-adapter.php';
+			require_once $path . '/location/class-location-resolution-cache.php';
 
 			// pickup models and warehouse persistence
 			require_once $path . '/pickup/class-pickup-point.php';
@@ -821,6 +825,36 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		 */
 		public function needs_location_provider(): bool {
 			return false;
+		}
+
+		/**
+		 * Gets this plugin's adapter for the Location Provider layer (Task 5;
+		 * spec §4.3): the per-plugin translator from a neutral
+		 * {@see Location\Location_Record} into this plugin's own carrier
+		 * identity (`city_code`, `geo_id`, a ФИАС-derived id, a postal index —
+		 * whatever the carrier's own API needs).
+		 *
+		 * Default `null` — but that default is only a valid answer for a plugin
+		 * that also returns `false` from {@see self::needs_location_provider()}.
+		 * A plugin that opts INTO the layer (`needs_location_provider() ===
+		 * true`) MUST override this to return a real adapter: it is a MANDATORY
+		 * obligation, not an optional extension point, exactly like every
+		 * participating plugin — including the one that brought the active
+		 * provider — must supply one (spec §4.3: "Minimum for a not-yet-written
+		 * plugin: one adapter + the declaration. No fields, no cascade, no UI
+		 * work."). A plugin that opts in but leaves this at the default is a
+		 * plugin bug; {@see Location\Location_Resolution_Cache::resolve_for()}
+		 * reports it via `_doing_it_wrong()` the first time resolution is
+		 * actually attempted, rather than this getter throwing itself — the
+		 * getter has no way to know at call time whether it is being asked
+		 * for informational purposes or as part of an actual resolution.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return Location\Location_Adapter|null
+		 */
+		public function get_location_adapter(): ?Location\Location_Adapter {
+			return null;
 		}
 
 		/**
