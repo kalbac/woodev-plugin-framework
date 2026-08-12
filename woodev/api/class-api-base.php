@@ -294,15 +294,70 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 			return $this->request_headers;
 		}
 
+		/**
+		 * Gets the sanitized request headers, for logging.
+		 *
+		 * Masks the VALUE of every header whose name (matched case-insensitively —
+		 * HTTP header names are case-insensitive) appears in
+		 * {@see self::get_secret_request_header_names()}, using the same convention
+		 * as before (`*` repeated to the value's original length). The original key
+		 * casing sent on the wire is preserved in the returned array; only the
+		 * comparison is case-insensitive.
+		 *
+		 * @since 2.0.2 masks every header from {@see self::get_secret_request_header_names()},
+		 *              not only `Authorization`.
+		 *
+		 * @return array<string, string>
+		 */
 		protected function get_sanitized_request_headers() {
 
 			$headers = $this->get_request_headers();
 
-			if ( ! empty( $headers['Authorization'] ) ) {
-				$headers['Authorization'] = str_repeat( '*', strlen( $headers['Authorization'] ) );
+			$secret_names = array_map( 'strtolower', $this->get_secret_request_header_names() );
+
+			foreach ( $headers as $name => $value ) {
+				if ( ! empty( $value ) && in_array( strtolower( (string) $name ), $secret_names, true ) ) {
+					$headers[ $name ] = str_repeat( '*', strlen( $value ) );
+				}
 			}
 
 			return $headers;
+		}
+
+		/**
+		 * Names of the request headers whose values carry a credential and must be
+		 * masked before {@see self::get_sanitized_request_headers()} hands the
+		 * request off to `woodev_{api_id}_api_request_performed` — the documented
+		 * action any attached request logger listens on.
+		 *
+		 * This is the extension point for an API client that authenticates with a
+		 * header other than `Authorization` (e.g. a vendor-specific API-secret
+		 * header): override this method in the subclass and return
+		 * `array_merge( parent::get_secret_request_header_names(), [ 'X-My-Header' ] )`
+		 * rather than overriding {@see self::get_sanitized_request_headers()} itself —
+		 * one extra name here is masked exactly like every other credential header,
+		 * with no risk of drifting from the shared masking logic.
+		 *
+		 * The default list covers `Authorization` (never regress this — the
+		 * payment-gateway tree shares this base class and its production request
+		 * logs depend on it staying masked) plus the header names real third-party
+		 * APIs are commonly seen using for a second credential.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array<int, string>
+		 */
+		protected function get_secret_request_header_names(): array {
+			return [
+				'Authorization',
+				'Proxy-Authorization',
+				'Api-Key',
+				'X-Api-Key',
+				'X-Api-Secret',
+				'X-Auth-Token',
+				'X-Access-Token',
+				'X-Secret',
+			];
 		}
 
 		protected function get_request_user_agent() {

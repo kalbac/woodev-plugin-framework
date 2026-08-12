@@ -147,40 +147,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 		}
 
 		/**
-		 * {@inheritDoc}
-		 *
-		 * The base class ({@see \Woodev_API_Base::get_sanitized_request_headers()})
-		 * masks only `Authorization` — it has no way to know this client also
-		 * sends the DaData "Clean" secret as a SEPARATE `X-Secret` header (see the
-		 * constructor). Left to the base implementation, that secret would ride
-		 * `woodev_{api_id}_api_request_performed`'s broadcast
-		 * ({@see \Woodev_API_Base::broadcast_request()}) in plaintext, reaching
-		 * every request logger attached to it. Masked here with the SAME
-		 * convention the base class uses for `Authorization` — same character
-		 * (`*`), same length (not a fixed-width placeholder) — rather than a
-		 * second, divergent masking style.
-		 *
-		 * This is a per-client patch, not a base-class fix: `Woodev_API_Base`
-		 * masks exactly one hard-coded header name, so any OTHER credential a
-		 * different client puts in a non-`Authorization` header has the same
-		 * hole. That base class is shared with the payment-gateway tree and is
-		 * out of this change's scope.
-		 *
-		 * @since 2.0.2
-		 *
-		 * @return array<string, string>
-		 */
-		protected function get_sanitized_request_headers() {
-			$headers = parent::get_sanitized_request_headers();
-
-			if ( ! empty( $headers['X-Secret'] ) ) {
-				$headers['X-Secret'] = str_repeat( '*', strlen( $headers['X-Secret'] ) );
-			}
-
-			return $headers;
-		}
-
-		/**
 		 * Address/locality suggestion lookup — `POST suggest/address`.
 		 *
 		 * @since 2.0.2
