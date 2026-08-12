@@ -542,8 +542,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 				$this->wc_country_codes(),
 				$this->location_service()
 			) )->build( $this->fields );
+			// No `required` string here any more (#274): the client no longer renders an
+			// inline «Заполните обязательное поле.» under the field or under the pickup
+			// trigger — none of СДЭК/Яндекс/Почта does, and a blocked control needs no
+			// caption. The disabled «Оформить заказ» button is the signal; WooCommerce
+			// still says its own piece on submit.
 			$config['i18n']  = [
-				'required'    => __( 'Заполните обязательное поле.', 'woodev-plugin-framework' ),
 				'placeholder' => $this->placeholder_label(),
 			];
 
