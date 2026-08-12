@@ -43,10 +43,19 @@
  * STALE-RESPONSE DISCARD: every debounced fetch is tagged with a
  * monotonically increasing generation number; a response is applied only
  * when its generation still matches the CURRENT one at resolution time.
- * Bumped on every new fetch issued, on the input dropping below `minChars`
- * (even with no new fetch to replace the stale one), and on `detach()` — so
- * an in-flight request from before any of those events can never paint a
- * result the customer's current input no longer describes.
+ * Bumped on every new fetch issued, and — via {@see closeListbox} — whenever
+ * the listbox closes for any reason: the input dropping below `minChars`, a
+ * completed selection (click or Enter), Escape, blur, an outside click, or
+ * `detach()`. A selection dispatches its own synthetic `input` event (see
+ * {@see selectItem}), which would otherwise schedule a fresh debounced fetch
+ * for the label just picked; closing the listbox therefore always clears any
+ * pending debounce timer too, not just the generation, so that fetch never
+ * fires at all rather than firing and being discarded on arrival. Together
+ * this guarantees an in-flight or about-to-be-scheduled request from before
+ * any of those events can never paint a result the customer's current input
+ * no longer describes — while a genuinely NEW `input` event afterwards (the
+ * customer typing again) always schedules its own fresh generation via
+ * {@see runFetch}, unaffected by this invalidation.
  *
  * XSS: every suggestion label reaches the DOM through `textContent`
  * ({@see renderItems}) — never `innerHTML` — so a label containing markup
@@ -229,6 +238,21 @@
 		 * end-state for "nothing to show" (closed by the user, empty results, a
 		 * discarded/rejected fetch).
 		 *
+		 * ALSO invalidates any pending work (PR-C review, Finding 3): clears a
+		 * scheduled-but-not-yet-fired debounce timer and bumps `generation` so an
+		 * already-in-flight fetch can never paint a result once this runs. This
+		 * matters concretely for {@see selectItem}, which dispatches a synthetic
+		 * native `input` event as part of writing the picked label into the input —
+		 * that event re-enters {@see handleInput} and schedules a fresh debounced
+		 * fetch for the label just picked, exactly like a real keystroke would.
+		 * Without this, ~250ms after a selection (or after Escape/blur/an outside
+		 * click with a request still in flight) the listbox would reopen showing
+		 * results for what the customer already chose or moved away from. Bumping
+		 * generation unconditionally is safe for the "customer types again
+		 * afterwards" case too: the very next real `input` event schedules its own
+		 * new debounce timer and {@see runFetch} mints a fresh generation for it
+		 * regardless of what this method already bumped it to.
+		 *
 		 * @returns {void}
 		 */
 		function closeListbox() {
@@ -243,6 +267,13 @@
 
 			input.setAttribute( 'aria-expanded', 'false' );
 			input.removeAttribute( 'aria-activedescendant' );
+
+			if ( null !== debounceTimer ) {
+				clearTimeout( debounceTimer );
+				debounceTimer = null;
+			}
+
+			generation += 1;
 		}
 
 		/**
@@ -379,8 +410,9 @@
 		 * `input` event handler: (re)schedules the debounced fetch for a query
 		 * at/above `minChars`, or immediately invalidates any in-flight fetch and
 		 * closes the listbox when the query drops below it — see the file
-		 * docblock's STALE-RESPONSE DISCARD section for why this path bumps
-		 * `generation` even though it issues no new fetch of its own.
+		 * docblock's STALE-RESPONSE DISCARD section for why this path invalidates
+		 * generation even though it issues no new fetch of its own ({@see
+		 * closeListbox} is what actually bumps it).
 		 *
 		 * @returns {void}
 		 */
@@ -393,7 +425,6 @@
 			}
 
 			if ( query.length < minChars ) {
-				generation += 1;
 				closeListbox();
 
 				return;

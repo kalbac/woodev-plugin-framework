@@ -44,27 +44,59 @@ async function flushMicrotasks() {
 }
 
 /**
- * Builds the classic-checkout markup for whichever location fields + postcode the test
- * needs. `billing_country`/`billing_postcode` are always present (native WC fields, never
- * declared in `config.fields`).
+ * The WC-convention field id for `level` within `section` (`'billing'` or `'shipping'`) —
+ * mirrors `location-cascade.js`'s own `LEVEL_SUFFIX` derivation exactly.
  *
- * @param {{region?: boolean, settlement?: boolean, address?: boolean}} which
+ * @param {string} level
+ * @param {string} section
+ * @returns {string}
+ */
+function fieldIdFor( level, section ) {
+	const suffix = { region: 'state', settlement: 'city', address: 'address_1' }[ level ];
+	return ( 'shipping' === section ? 'shipping_' : 'billing_' ) + suffix;
+}
+
+/**
+ * Builds the classic-checkout markup for whichever location fields + postcode the test
+ * needs. `billing_country` (and its postcode counterpart) is always present (a native WC
+ * field, never declared in `config.fields`). `#shipping_country` and the WC
+ * `ship_to_different_address` checkbox are rendered whenever `which.section === 'shipping'`
+ * (or `which.withShippingCountry` is set for a test that wants both present) — mirrors WC's
+ * OWN classic-checkout template, which always renders both country selects and the toggle
+ * checkbox together.
+ *
+ * @param {{region?: boolean, settlement?: boolean, address?: boolean, section?: string,
+ *          shippingCountry?: string, shipToDifferentAddress?: boolean,
+ *          withShippingCountry?: boolean}} which
  * @param {string} country
  * @returns {void}
  */
 function installMarkup( which, country = 'RU' ) {
 	const w = which || {};
+	const section = w.section || 'billing';
 	let inputs = '';
 
 	if ( w.region ) {
-		inputs += '<input type="text" id="billing_state" name="billing_state" value="" />';
+		inputs += `<input type="text" id="${ fieldIdFor( 'region', section ) }" name="${ fieldIdFor( 'region', section ) }" value="" />`;
 	}
 	if ( w.settlement ) {
-		inputs += '<input type="text" id="billing_city" name="billing_city" value="" />';
+		inputs += `<input type="text" id="${ fieldIdFor( 'settlement', section ) }" name="${ fieldIdFor( 'settlement', section ) }" value="" />`;
 	}
 	if ( w.address ) {
-		inputs += '<input type="text" id="billing_address_1" name="billing_address_1" value="" />';
+		inputs += `<input type="text" id="${ fieldIdFor( 'address', section ) }" name="${ fieldIdFor( 'address', section ) }" value="" />`;
 	}
+
+	const postcodeId = 'shipping' === section ? 'shipping_postcode' : 'billing_postcode';
+	const needsShippingCountry = 'shipping' === section || w.withShippingCountry;
+	const checked = false !== w.shipToDifferentAddress; // defaults to checked (true)
+
+	const shippingMarkup = needsShippingCountry ? `
+		<select id="shipping_country" name="shipping_country">
+			<option value="RU">Россия</option>
+			<option value="US">США</option>
+		</select>
+		<input type="checkbox" id="ship-to-different-address-checkbox" name="ship_to_different_address" ${ checked ? 'checked' : '' } />
+	` : '';
 
 	document.body.innerHTML = `
 		<form class="checkout woocommerce-checkout">
@@ -72,12 +104,18 @@ function installMarkup( which, country = 'RU' ) {
 				<option value="RU">Россия</option>
 				<option value="US">США</option>
 			</select>
+			${ shippingMarkup }
 			${ inputs }
-			<input type="text" id="billing_postcode" name="billing_postcode" value="" />
+			<input type="text" id="${ postcodeId }" name="${ postcodeId }" value="" />
 		</form>
 	`;
 
 	document.getElementById( 'billing_country' ).value = country;
+
+	const shippingCountryEl = document.getElementById( 'shipping_country' );
+	if ( shippingCountryEl ) {
+		shippingCountryEl.value = w.shippingCountry !== undefined ? w.shippingCountry : country;
+	}
 }
 
 /**
@@ -85,13 +123,14 @@ function installMarkup( which, country = 'RU' ) {
  * shape (`class-checkout-config.php`).
  *
  * @param {string} level
+ * @param {string} [section]
  * @returns {Object}
  */
-function locationField( level ) {
+function locationField( level, section = 'billing' ) {
 	return {
 		id: null,
 		type: 'text',
-		section: 'billing',
+		section,
 		source_kind: 'location',
 		location_level: level,
 		depends_on: null,
@@ -105,21 +144,23 @@ function locationField( level ) {
  * `Checkout_Config::build()`'s shape including the `location` block
  * (`Checkout_Config::build_location_block()`).
  *
- * @param {{region?: boolean, settlement?: boolean, address?: boolean, levels?: Object, countries?: string[], current?: Object|null}} opts
+ * @param {{region?: boolean, settlement?: boolean, address?: boolean, section?: string,
+ *          levels?: Object, countries?: string[], current?: Object|null}} opts
  * @returns {Object}
  */
 function buildConfig( opts ) {
 	const o = opts || {};
+	const section = o.section || 'billing';
 	const fields = {};
 
 	if ( o.region ) {
-		fields.billing_state = locationField( 'region' );
+		fields[ fieldIdFor( 'region', section ) ] = locationField( 'region', section );
 	}
 	if ( o.settlement ) {
-		fields.billing_city = locationField( 'settlement' );
+		fields[ fieldIdFor( 'settlement', section ) ] = locationField( 'settlement', section );
 	}
 	if ( o.address ) {
-		fields.billing_address_1 = locationField( 'address' );
+		fields[ fieldIdFor( 'address', section ) ] = locationField( 'address', section );
 	}
 
 	return {
@@ -435,6 +476,158 @@ describe( 'persist then trigger (D8)', () => {
 } );
 
 // -----------------------------------------------------------------------
+// Single-flight /select queue (Finding 2, PR-C review): a second selection made before the
+// first POST /select resolves must not race it — the server persists exactly ONE customer
+// record slot (Location_Controller::handle_select_request() → set_customer_record()), so
+// concurrent POSTs for the SAME entry can arrive out of order and let an OLDER pick win.
+// The guaranteed property: once selections stop arriving, the persisted server record equals
+// the customer's MOST RECENT selection, and update_checkout fires exactly once, for that
+// final selection only.
+// -----------------------------------------------------------------------
+
+describe( 'single-flight /select queue (Finding 2)', () => {
+	function selectRequests() {
+		return fetchCalls.filter( ( c ) => c.url === SELECT_URL );
+	}
+
+	function itemFor( key, label ) {
+		return {
+			key, label, level: 'settlement',
+			record: { key, provider_id: 'dadata', level: 'settlement', country: 'RU', settlement: { name: label, type: 'г' }, label },
+		};
+	}
+
+	it( 'a second selection made before the first /select resolves does NOT send a second concurrent request — it waits', () => {
+		boot( { settlement: true } );
+
+		const settlementCall = callFor( 'billing_city' );
+		const a = itemFor( 'dadata:a', 'Александров' );
+		const b = itemFor( 'dadata:b', 'Балашиха' );
+
+		selectViaFake( settlementCall, a );
+		expect( selectRequests().length ).toBe( 1 );
+
+		// A second, later selection arrives while A's /select is still in flight.
+		selectViaFake( settlementCall, b );
+		expect( selectRequests().length ).toBe( 1 ); // still just A's request — B waits, not fired concurrently
+	} );
+
+	it( 'once the in-flight request settles, the QUEUED (most recent) selection is sent next, and update_checkout fires only for it', async () => {
+		boot( { settlement: true } );
+
+		const triggerSpy = jest.spyOn( window.jQuery.fn, 'trigger' );
+		const settlementCall = callFor( 'billing_city' );
+		const a = itemFor( 'dadata:a', 'Александров' );
+		const b = itemFor( 'dadata:b', 'Балашиха' );
+
+		selectViaFake( settlementCall, a );
+		selectViaFake( settlementCall, b );
+		expect( selectRequests().length ).toBe( 1 );
+
+		selectRequests()[ 0 ].resolve( { current: { key: a.record.key, level: 'settlement' }, persisted: true } );
+		await flushMicrotasks();
+
+		// A's resolution must NOT have triggered update_checkout — B was already queued when
+		// it settled, so A's response is stale by construction.
+		expect( triggerSpy.mock.calls.some( ( args ) => args[ 0 ] === 'update_checkout' ) ).toBe( false );
+
+		// B is now the second request, sent automatically once A freed the single flight slot.
+		expect( selectRequests().length ).toBe( 2 );
+		expect( JSON.parse( selectRequests()[ 1 ].init.body ) ).toEqual( { record: b.record } );
+
+		selectRequests()[ 1 ].resolve( { current: { key: b.record.key, level: 'settlement' }, persisted: true } );
+		await flushMicrotasks();
+
+		// Exactly ONE trigger overall, firing for the FINAL (B) selection.
+		expect( triggerSpy.mock.calls.filter( ( args ) => args[ 0 ] === 'update_checkout' ).length ).toBe( 1 );
+
+		triggerSpy.mockRestore();
+	} );
+
+	it( 'three rapid selections while the first is in flight: the superseded MIDDLE one is never sent at all', async () => {
+		boot( { settlement: true } );
+
+		const settlementCall = callFor( 'billing_city' );
+		const a = itemFor( 'dadata:a', 'Александров' );
+		const b = itemFor( 'dadata:b', 'Балашиха' );
+		const c = itemFor( 'dadata:c', 'Верея' );
+
+		selectViaFake( settlementCall, a ); // sent immediately — the queue starts empty
+		selectViaFake( settlementCall, b ); // queued
+		selectViaFake( settlementCall, c ); // supersedes B in the queue — B is NEVER sent
+
+		expect( selectRequests().length ).toBe( 1 );
+
+		selectRequests()[ 0 ].resolve( { current: { key: a.record.key, level: 'settlement' }, persisted: true } );
+		await flushMicrotasks();
+
+		expect( selectRequests().length ).toBe( 2 );
+		expect( JSON.parse( selectRequests()[ 1 ].init.body ) ).toEqual( { record: c.record } );
+
+		// B's record body must never have been sent in ANY request.
+		selectRequests().forEach( ( req ) => {
+			expect( JSON.parse( req.init.body ) ).not.toEqual( { record: b.record } );
+		} );
+	} );
+
+	it( 'a FAILED /select does not jam the queue — the next queued selection is still sent', async () => {
+		const consoleSpy = jest.spyOn( console, 'error' ).mockImplementation( () => {} );
+
+		boot( { settlement: true } );
+
+		const settlementCall = callFor( 'billing_city' );
+		const a = itemFor( 'dadata:a', 'Александров' );
+		const b = itemFor( 'dadata:b', 'Балашиха' );
+
+		selectViaFake( settlementCall, a );
+		selectViaFake( settlementCall, b );
+
+		selectRequests()[ 0 ].reject( new Error( 'network down' ) );
+		await flushMicrotasks();
+
+		expect( selectRequests().length ).toBe( 2 ); // B was dequeued and sent despite A's failure
+		expect( JSON.parse( selectRequests()[ 1 ].init.body ) ).toEqual( { record: b.record } );
+
+		consoleSpy.mockRestore();
+	} );
+
+	it( 'a /select resolving persisted: false does not jam the queue either', async () => {
+		boot( { settlement: true } );
+
+		const settlementCall = callFor( 'billing_city' );
+		const a = itemFor( 'dadata:a', 'Александров' );
+		const b = itemFor( 'dadata:b', 'Балашиха' );
+
+		selectViaFake( settlementCall, a );
+		selectViaFake( settlementCall, b );
+
+		selectRequests()[ 0 ].resolve( { current: { key: a.record.key, level: 'settlement' }, persisted: false } );
+		await flushMicrotasks();
+
+		expect( selectRequests().length ).toBe( 2 );
+		expect( JSON.parse( selectRequests()[ 1 ].init.body ) ).toEqual( { record: b.record } );
+	} );
+
+	it( 'a solitary selection (no concurrency) behaves exactly as before — sent immediately, triggers once', async () => {
+		boot( { settlement: true } );
+
+		const triggerSpy = jest.spyOn( window.jQuery.fn, 'trigger' );
+		const settlementCall = callFor( 'billing_city' );
+		const a = itemFor( 'dadata:a', 'Александров' );
+
+		selectViaFake( settlementCall, a );
+		expect( selectRequests().length ).toBe( 1 );
+
+		selectRequests()[ 0 ].resolve( { current: { key: a.record.key, level: 'settlement' }, persisted: true } );
+		await flushMicrotasks();
+
+		expect( triggerSpy.mock.calls.filter( ( args ) => args[ 0 ] === 'update_checkout' ).length ).toBe( 1 );
+
+		triggerSpy.mockRestore();
+	} );
+} );
+
+// -----------------------------------------------------------------------
 // Dependent clearing DOWNWARD only, through the remembered-parent gate
 // -----------------------------------------------------------------------
 
@@ -585,6 +778,123 @@ describe( 'country switch', () => {
 
 		expect( window.WoodevLocationTypeahead.mock.calls.length ).toBeGreaterThan( attachCountAfterDetach );
 		expect( document.getElementById( 'billing_city' ).value ).toBe( 'Москва' );
+	} );
+} );
+
+// -----------------------------------------------------------------------
+// Per-section country resolution (Finding 1, PR-C review): a field declared in the
+// `shipping` §8 section (`field.section === 'shipping'`, the SAME convention
+// `class-checkout-fields.php::normalize()` / `Field::set_section()` already establish and
+// `checkout-field-classic.js`/`class-checkout-handler.php::inject()` already consume) must be
+// scoped by `#shipping_country`, never `#billing_country` — and must additionally respect the
+// live "ship to a different address" checkbox, since a shipping-section field is only actually
+// in play once the customer has opted into a separate shipping address.
+// -----------------------------------------------------------------------
+
+describe( 'per-section country resolution (Finding 1)', () => {
+	it( '/suggest for a shipping-section field is scoped by the SHIPPING country, not billing', () => {
+		boot( {
+			settlement: true, section: 'shipping', countries: [ 'RU' ],
+			country: 'US', shippingCountry: 'RU', // billing and shipping deliberately DIFFER
+		} );
+
+		const settlementCall = callFor( 'shipping_city' );
+		settlementCall.fetch( 'Мос' );
+
+		const req = fetchCalls[ fetchCalls.length - 1 ];
+		expect( req.url ).toContain( 'country=RU' );
+		expect( req.url ).not.toContain( 'country=US' );
+	} );
+
+	it( 'a shipping-section widget attaches when the SHIPPING country is supported, even though billing is not', () => {
+		boot( {
+			settlement: true, section: 'shipping', countries: [ 'RU' ],
+			country: 'US', shippingCountry: 'RU',
+		} );
+
+		expect( attachCalls.map( ( c ) => c.el.id ) ).toEqual( [ 'shipping_city' ] );
+	} );
+
+	it( 'a shipping-section widget does NOT attach when the shipping country is unsupported, even though billing is', () => {
+		boot( {
+			settlement: true, section: 'shipping', countries: [ 'RU' ],
+			country: 'RU', shippingCountry: 'US',
+		} );
+
+		expect( attachCalls.length ).toBe( 0 );
+	} );
+
+	it( 'changing #shipping_country (not #billing_country) drives arbitration for a shipping-section entry', () => {
+		boot( { settlement: true, section: 'shipping', countries: [ 'RU' ], shippingCountry: 'RU' } );
+
+		const detachSpy = callFor( 'shipping_city' ).detach;
+
+		// Billing country changes — must NOT affect a shipping-section entry at all.
+		document.getElementById( 'billing_country' ).value = 'US';
+		document.getElementById( 'billing_country' ).dispatchEvent( new Event( 'change', { bubbles: true } ) );
+		expect( detachSpy ).not.toHaveBeenCalled();
+
+		// Shipping country changes to an unsupported one — THIS must detach the widget.
+		document.getElementById( 'shipping_country' ).value = 'US';
+		document.getElementById( 'shipping_country' ).dispatchEvent( new Event( 'change', { bubbles: true } ) );
+		expect( detachSpy ).toHaveBeenCalled();
+	} );
+
+	it( 'a billing-section entry is unaffected by #shipping_country changes (the existing default keeps working)', () => {
+		boot( { settlement: true, withShippingCountry: true, countries: [ 'RU' ] } ); // section defaults to 'billing'
+
+		const detachSpy = callFor( 'billing_city' ).detach;
+
+		document.getElementById( 'shipping_country' ).value = 'US';
+		document.getElementById( 'shipping_country' ).dispatchEvent( new Event( 'change', { bubbles: true } ) );
+
+		expect( detachSpy ).not.toHaveBeenCalled();
+	} );
+
+	it( 'unchecking "ship to a different address" detaches a shipping-section widget even though its own country stays supported', () => {
+		boot( {
+			settlement: true, section: 'shipping', countries: [ 'RU' ], shippingCountry: 'RU',
+			shipToDifferentAddress: true,
+		} );
+
+		const detachSpy = callFor( 'shipping_city' ).detach;
+		expect( detachSpy ).not.toHaveBeenCalled();
+
+		const checkbox = document.querySelector( '[name="ship_to_different_address"]' );
+		checkbox.checked = false;
+		checkbox.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+
+		expect( detachSpy ).toHaveBeenCalled();
+	} );
+
+	it( 're-checking "ship to a different address" re-attaches the shipping-section widget with state intact', () => {
+		boot( {
+			settlement: true, section: 'shipping', countries: [ 'RU' ], shippingCountry: 'RU',
+			shipToDifferentAddress: true,
+		} );
+
+		document.getElementById( 'shipping_city' ).value = 'Москва';
+
+		const checkbox = document.querySelector( '[name="ship_to_different_address"]' );
+		checkbox.checked = false;
+		checkbox.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+
+		const attachCountAfterUncheck = window.WoodevLocationTypeahead.mock.calls.length;
+
+		checkbox.checked = true;
+		checkbox.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+
+		expect( window.WoodevLocationTypeahead.mock.calls.length ).toBeGreaterThan( attachCountAfterUncheck );
+		expect( document.getElementById( 'shipping_city' ).value ).toBe( 'Москва' ); // state kept, never cleared
+	} );
+
+	it( 'a shipping-section widget never attaches at boot when "ship to a different address" starts unchecked', () => {
+		boot( {
+			settlement: true, section: 'shipping', countries: [ 'RU' ], shippingCountry: 'RU',
+			shipToDifferentAddress: false,
+		} );
+
+		expect( attachCalls.length ).toBe( 0 );
 	} );
 } );
 

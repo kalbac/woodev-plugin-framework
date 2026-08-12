@@ -351,6 +351,95 @@ test( 'Escape closes the listbox without changing the input value', async () => 
 } );
 
 // -----------------------------------------------------------------------
+// No reopen after a completed selection (Finding 3, PR-C review)
+// -----------------------------------------------------------------------
+//
+// selectItem() writes the picked label into the input and dispatches a SYNTHETIC native
+// `input` event by design (so the cascade layer's own delegated listener sees it) — that
+// event schedules this module's OWN debounced fetch for the just-picked label, exactly like
+// a real keystroke would. closeListbox() must invalidate that scheduled work (clear the
+// timer AND bump the generation) so the listbox cannot reopen ~250ms later showing
+// suggestions for what the customer already picked. Same shape whenever the listbox closes
+// with a request in flight (Escape, blur, outside click) — a late response must never repaint.
+
+test( 'selecting an item (Enter) does not reopen the listbox ~250ms later from its own synthetic input event', async () => {
+	const onSelect = jest.fn();
+	await openWithTwoResults( onSelect );
+
+	input.dispatchEvent( new KeyboardEvent( 'keydown', { key: 'ArrowDown', bubbles: true } ) );
+	input.dispatchEvent( new KeyboardEvent( 'keydown', { key: 'Enter', bubbles: true } ) );
+
+	expect( listboxOf().hidden ).toBe( true );
+
+	// The synthetic `input` event selectItem() dispatches schedules a debounced fetch for the
+	// label just written — advancing past the debounce window is exactly what would reopen
+	// the listbox if closeListbox() failed to invalidate it.
+	jest.advanceTimersByTime( 250 );
+	await flushMicrotasks();
+
+	expect( listboxOf().hidden ).toBe( true );
+	expect( listboxOf().children.length ).toBe( 0 );
+} );
+
+test( 'selecting an item (mouse click) does not reopen the listbox ~250ms later', async () => {
+	const onSelect = jest.fn();
+	await openWithTwoResults( onSelect );
+
+	const secondOption = listboxOf().children[ 1 ];
+	secondOption.dispatchEvent( new MouseEvent( 'mousedown', { bubbles: true, cancelable: true } ) );
+
+	expect( listboxOf().hidden ).toBe( true );
+
+	jest.advanceTimersByTime( 250 );
+	await flushMicrotasks();
+
+	expect( listboxOf().hidden ).toBe( true );
+	expect( listboxOf().children.length ).toBe( 0 );
+} );
+
+test( 'blurring while a request is in flight discards its late response — no reopen', async () => {
+	jest.useFakeTimers();
+	const pending = deferred();
+	const fetchMock = jest.fn( () => pending.promise );
+
+	attachTypeahead( input, { fetch: fetchMock, onSelect: jest.fn() } );
+
+	input.value = 'ba';
+	input.dispatchEvent( new Event( 'input', { bubbles: true } ) );
+	jest.advanceTimersByTime( 250 );
+	expect( fetchMock ).toHaveBeenCalledTimes( 1 );
+
+	input.dispatchEvent( new Event( 'blur', { bubbles: true } ) );
+
+	pending.resolve( [ { label: 'Barnaul' } ] );
+	await flushMicrotasks();
+
+	expect( listboxOf().hidden ).toBe( true );
+	expect( listboxOf().children.length ).toBe( 0 );
+} );
+
+test( 'Escape invalidates pending work, but typing again still fetches fresh suggestions', () => {
+	jest.useFakeTimers();
+	const fetchMock = jest.fn( () => new Promise( () => {} ) ); // never resolves — not the point here
+
+	attachTypeahead( input, { fetch: fetchMock, onSelect: jest.fn() } );
+
+	input.value = 'ba';
+	input.dispatchEvent( new Event( 'input', { bubbles: true } ) );
+	jest.advanceTimersByTime( 250 );
+	expect( fetchMock ).toHaveBeenCalledTimes( 1 );
+
+	input.dispatchEvent( new KeyboardEvent( 'keydown', { key: 'Escape', bubbles: true } ) );
+
+	input.value = 'bar';
+	input.dispatchEvent( new Event( 'input', { bubbles: true } ) );
+	jest.advanceTimersByTime( 250 );
+
+	expect( fetchMock ).toHaveBeenCalledTimes( 2 );
+	expect( fetchMock ).toHaveBeenLastCalledWith( 'bar' );
+} );
+
+// -----------------------------------------------------------------------
 // Mouse
 // -----------------------------------------------------------------------
 

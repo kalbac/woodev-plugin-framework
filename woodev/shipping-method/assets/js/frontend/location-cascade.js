@@ -79,7 +79,22 @@
 
 	var PREFIX = 'woodev_checkout_field_config_';
 	var LOG = '[woodev-location-cascade]';
-	var COUNTRY_FIELD_ID = 'billing_country';
+
+	/**
+	 * The two §8 checkout sections that carry their OWN address/country (spec §4.4 amendment,
+	 * PR-C review Finding 1): `'billing'` (and the `'order'` default — see
+	 * `Checkout_Fields::normalize()`) reads/observes `#billing_country`; `'shipping'` reads/
+	 * observes `#shipping_country`. Every chain/postcode node remembers which of these two
+	 * ids is ITS OWN — see {@see buildChain} — so a mixed-section entry (unusual, but the §8
+	 * field API permits it field-by-field via `Field::set_section()`) is scoped correctly
+	 * node-by-node rather than by one guessed-at "the" country for the whole entry.
+	 *
+	 * @type {{billing: string, shipping: string}}
+	 */
+	var COUNTRY_FIELD_ID = { billing: 'billing_country', shipping: 'shipping_country' };
+
+	/** @type {string[]} both known country field ids — a change to EITHER re-runs arbitration. */
+	var COUNTRY_FIELD_IDS = [ COUNTRY_FIELD_ID.billing, COUNTRY_FIELD_ID.shipping ];
 
 	/** @type {string[]} the fixed cascade order (spec §4.4). */
 	var LEVELS = [ 'region', 'settlement', 'address' ];
@@ -180,16 +195,79 @@
 	}
 
 	/**
-	 * Reads the current checkout country — hardcoded to `#billing_country`, mirroring
-	 * `checkout-field-classic.js`'s own `currentCountry()` exactly (same established
-	 * convention, not a new one).
+	 * Reads a country `<select>`'s current value by field id — `''` when the field is absent
+	 * from the DOM (e.g. `#shipping_country` before WooCommerce has rendered the shipping
+	 * fieldset at all).
 	 *
+	 * @param {string} fieldId
 	 * @returns {string}
 	 */
-	function currentCountry() {
-		var el = document.getElementById( COUNTRY_FIELD_ID );
+	function countryValue( fieldId ) {
+		var el = document.getElementById( fieldId );
 
 		return el ? ( el.value || '' ) : '';
+	}
+
+	/**
+	 * The country field id `node` (or any `{section}`-carrying object) is scoped by — see
+	 * {@see COUNTRY_FIELD_ID}. `'order'` (the §8 default section — native WC fields this
+	 * framework merely enhances, e.g. a takeover on `billing_city`) and any other non-
+	 * `'shipping'` value fall back to `'billing'`, matching the convention this module
+	 * exclusively used before this section-awareness existed.
+	 *
+	 * @param {{section?: string}} node
+	 * @returns {string}
+	 */
+	function countryFieldIdFor( node ) {
+		return 'shipping' === ( node && node.section ) ? COUNTRY_FIELD_ID.shipping : COUNTRY_FIELD_ID.billing;
+	}
+
+	/**
+	 * The country currently in play for `node` — reads `#shipping_country` for a
+	 * shipping-section node, `#billing_country` for everything else (spec §4.4 amendment,
+	 * Finding 1). Read LIVE at call time, same convention as the rest of this module's own
+	 * live-scope reads (see {@see scopeKeyFor}).
+	 *
+	 * @param {{section?: string}} node
+	 * @returns {string}
+	 */
+	function countryFor( node ) {
+		return countryValue( countryFieldIdFor( node ) );
+	}
+
+	/**
+	 * Whether the live "ship to a different address" checkbox is checked — read by its stable
+	 * `name` attribute, the SAME selector `pickup-mount.js`'s own `resolveAddressTarget()`
+	 * already uses for this exact control, not a new convention. A checkout with NO such
+	 * checkbox at all (a theme/flow override without the classic WC toggle) is treated as
+	 * permissively "checked" — this module has no reason to disable a shipping-section field
+	 * that has no toggle gating it in the first place.
+	 *
+	 * @returns {boolean}
+	 */
+	function shipToDifferentAddressChecked() {
+		var checkbox = document.querySelector( '[name="ship_to_different_address"]' );
+
+		return ! checkbox || checkbox.checked;
+	}
+
+	/**
+	 * Whether `node` should currently have a typeahead widget attached: its own country must
+	 * be one the entry covers, AND — for a shipping-section node specifically — the customer
+	 * must have opted into "ship to a different address" at all (a shipping-section field
+	 * hidden behind an unchecked toggle is not actually in play, regardless of what
+	 * `#shipping_country` happens to hold).
+	 *
+	 * @param {Object} entry
+	 * @param {{level: string, fieldId: string, section?: string}} node
+	 * @returns {boolean}
+	 */
+	function isNodeActive( entry, node ) {
+		if ( 'shipping' === node.section && ! shipToDifferentAddressChecked() ) {
+			return false;
+		}
+
+		return isCountrySupported( entry, countryFor( node ) );
 	}
 
 	/**
@@ -217,10 +295,15 @@
 	 * Builds the ordered chain of location-kind fields ACTUALLY present in `fields` — one
 	 * entry per level found, in `LEVELS` order, skipping absent links (spec §4.4). The FIRST
 	 * field declaring a given level wins if more than one does (deterministic, mirrors the
-	 * tie-break precedent in `checkout-field-store.js`'s own `getStoreForField()`).
+	 * tie-break precedent in `checkout-field-store.js`'s own `getStoreForField()`). Each node
+	 * also carries its OWN `section` (Finding 1) — the field's own §8 `section` key, straight
+	 * from the SAME `class-checkout-fields.php::normalize()` value `checkout-field-classic.js`
+	 * and `class-checkout-handler.php::inject()` already key off — so a node can be scoped by
+	 * the RIGHT country field even when different nodes of the same entry live in different
+	 * sections.
 	 *
 	 * @param {Object.<string, Object>} fields
-	 * @returns {Array<{level: string, fieldId: string}>}
+	 * @returns {Array<{level: string, fieldId: string, section: string}>}
 	 */
 	function buildChain( fields ) {
 		var byLevel = {};
@@ -229,7 +312,7 @@
 			var field = fields[ id ];
 
 			if ( field && 'location' === field.source_kind && LEVELS.indexOf( field.location_level ) !== -1 && ! byLevel[ field.location_level ] ) {
-				byLevel[ field.location_level ] = id;
+				byLevel[ field.location_level ] = { fieldId: id, section: field.section };
 			}
 		} );
 
@@ -237,7 +320,7 @@
 
 		LEVELS.forEach( function( level ) {
 			if ( byLevel[ level ] ) {
-				chain.push( { level: level, fieldId: byLevel[ level ] } );
+				chain.push( { level: level, fieldId: byLevel[ level ].fieldId, section: byLevel[ level ].section } );
 			}
 		} );
 
@@ -245,14 +328,16 @@
 	}
 
 	/**
-	 * Derives the postcode field id from the DEEPEST present chain field's own WC-convention
-	 * suffix (see the file docblock) — `null` when no chain field follows that convention (a
-	 * plugin using non-standard ids simply gets no postcode participation).
+	 * Derives the postcode NODE (id + section) from the DEEPEST present chain field's own
+	 * WC-convention suffix (see the file docblock) — `null` when no chain field follows that
+	 * convention (a plugin using non-standard ids simply gets no postcode participation). The
+	 * postcode field's own section is always the SAME as the chain node it was derived from
+	 * (`shipping_address_1` → `shipping_postcode`, never a mismatched section).
 	 *
-	 * @param {Array<{level: string, fieldId: string}>} chain
-	 * @returns {string|null}
+	 * @param {Array<{level: string, fieldId: string, section: string}>} chain
+	 * @returns {{fieldId: string, section: string}|null}
 	 */
-	function derivePostcodeFieldId( chain ) {
+	function derivePostcodeNode( chain ) {
 		var i, node, suffix, fieldId;
 
 		for ( i = chain.length - 1; i >= 0; i-- ) {
@@ -261,7 +346,7 @@
 			fieldId = node.fieldId;
 
 			if ( suffix && fieldId.length > suffix.length && suffix === fieldId.slice( -suffix.length ) ) {
-				return fieldId.slice( 0, fieldId.length - suffix.length ) + 'postcode';
+				return { fieldId: fieldId.slice( 0, fieldId.length - suffix.length ) + 'postcode', section: node.section };
 			}
 		}
 
@@ -299,8 +384,9 @@
 	 */
 	function buildEntry( config ) {
 		var chain = buildChain( config.fields );
-		var postcodeFieldId = derivePostcodeFieldId( chain );
-		var allNodes = chain.concat( postcodeFieldId ? [ { level: null, fieldId: postcodeFieldId } ] : [] );
+		var postcodeNode = derivePostcodeNode( chain );
+		var postcodeFieldId = postcodeNode ? postcodeNode.fieldId : null;
+		var allNodes = chain.concat( postcodeNode ? [ { level: null, fieldId: postcodeNode.fieldId, section: postcodeNode.section } ] : [] );
 		var fieldIds = Object.keys( config.fields || {} );
 
 		return {
@@ -317,6 +403,9 @@
 			records: {},
 			// fieldId -> { el, api } for every CURRENTLY attached typeahead widget.
 			widgets: {},
+			// Single-flight /select queue state (Finding 2) — see enqueueSelect()/sendNextSelect().
+			pendingRecord: null,
+			selectInFlight: false,
 		};
 	}
 
@@ -400,7 +489,7 @@
 			var url = buildUrl( entry.location.endpoints.suggest, {
 				q: query,
 				level: node.level,
-				country: currentCountry(),
+				country: countryFor( node ),
 				within: scopeKeyFor( entry, node.level ),
 			} );
 
@@ -467,18 +556,60 @@
 	}
 
 	/**
-	 * D8: POSTs the full record to `/select`, then — ONLY once that resolves AND the server
-	 * actually persisted it — fires `jQuery(document.body).trigger('update_checkout')` itself.
-	 * A failed request or `persisted: false` (e.g. a guest whose session cookie has not
-	 * initialized yet) skips the trigger silently: the customer's visible choice (already
-	 * written to the DOM by the widget before this ever runs) is never reverted, and no
-	 * misleading "everything's fine" checkout refresh is fired.
+	 * D8 + single-flight ordering (PR-C review, Finding 2): POSTs `record` to `/select`. Only
+	 * ever ONE `/select` request is in flight per ENTRY at a time — the server holds exactly
+	 * ONE current-location slot per entry's own `Location_Service`
+	 * (`Location_Controller::handle_select_request()` → `set_customer_record()`), so two
+	 * concurrent POSTs for the SAME entry (even from DIFFERENT chain nodes/levels — a region
+	 * pick and a settlement pick race the SAME slot) can be answered out of order by the
+	 * server, letting an OLDER pick overwrite a NEWER one. This module never lets that happen:
+	 * a selection made while a request is already in flight replaces `entry.pendingRecord`
+	 * (see {@see enqueueSelect}) instead of firing a second concurrent request; a
+	 * selection queued-but-not-yet-sent is superseded again by a later one, so any selection
+	 * except the LAST one made before the in-flight request settles is never sent to the
+	 * server at all. `jQuery(document.body).trigger('update_checkout')` fires only for the
+	 * response that finds no newer pending selection waiting when it settles — i.e. only ever
+	 * for the customer's FINAL choice, never once per superseded intermediate one (see
+	 * {@see settleSelect}). A failed request or `persisted: false` (e.g. a guest whose session
+	 * cookie has not initialized yet) never fires the trigger, but — critically — never jams
+	 * the queue either: {@see settleSelect} always frees the single-flight slot and dequeues
+	 * whatever is pending, on success OR failure alike.
+	 *
+	 * GUARANTEE: once the customer stops selecting, the record persisted server-side equals
+	 * their MOST RECENT selection, and `update_checkout` fires exactly once for it.
 	 *
 	 * @param {Object} entry
 	 * @param {Object} record
 	 * @returns {void}
 	 */
-	function persistThenTrigger( entry, record ) {
+	function enqueueSelect( entry, record ) {
+		entry.pendingRecord = record;
+
+		if ( entry.selectInFlight ) {
+			return; // a request is already in flight — it will pick this up in settleSelect().
+		}
+
+		sendNextSelect( entry );
+	}
+
+	/**
+	 * Dequeues `entry.pendingRecord` (if any) and sends it — the sole place that actually
+	 * issues a `/select` POST. A no-op when nothing is queued (the single-flight slot simply
+	 * stays free until the next {@see enqueueSelect} call).
+	 *
+	 * @param {Object} entry
+	 * @returns {void}
+	 */
+	function sendNextSelect( entry ) {
+		var record = entry.pendingRecord;
+
+		if ( ! record ) {
+			return;
+		}
+
+		entry.pendingRecord = null;
+		entry.selectInFlight = true;
+
 		var url = entry.location.endpoints.select;
 		var headers = nonceHeader( entry );
 
@@ -486,18 +617,37 @@
 
 		fetchJson( url, { method: 'POST', headers: headers, body: JSON.stringify( { record: record } ) } ).then(
 			function( body ) {
-				if ( body && false === body.persisted ) {
-					return;
-				}
-
-				if ( window.jQuery ) {
-					window.jQuery( document.body ).trigger( 'update_checkout' );
-				}
+				settleSelect( entry, !! ( body && false !== body.persisted ) );
 			},
 			function( error ) {
 				logError( error );
+				settleSelect( entry, false );
 			}
 		);
+	}
+
+	/**
+	 * Frees the single-flight slot for `entry` and either forwards to the next queued
+	 * selection (a newer one arrived while this request was in flight — this response is
+	 * stale by construction, so it never fires the trigger) or, when nothing newer is queued,
+	 * treats this response as FINAL: fires `update_checkout` iff `shouldTrigger`.
+	 *
+	 * @param {Object}  entry
+	 * @param {boolean} shouldTrigger Whether THIS response, if final, should fire the trigger
+	 *                                (a successful persist with `persisted !== false`).
+	 * @returns {void}
+	 */
+	function settleSelect( entry, shouldTrigger ) {
+		entry.selectInFlight = false;
+
+		if ( entry.pendingRecord ) {
+			sendNextSelect( entry );
+			return;
+		}
+
+		if ( shouldTrigger && window.jQuery ) {
+			window.jQuery( document.body ).trigger( 'update_checkout' );
+		}
 	}
 
 	/**
@@ -518,12 +668,12 @@
 			entry.records[ node.level ] = record;
 
 			backwardsFill( entry, node.level, record );
-			persistThenTrigger( entry, record );
+			enqueueSelect( entry, record );
 		};
 	}
 
 	// -------------------------------------------------------------------------
-	// Attach / detach (per-country arbitration, D15 unsupported-level gate)
+	// Attach / detach (per-NODE country + section arbitration, D15 unsupported-level gate)
 	// -------------------------------------------------------------------------
 
 	/**
@@ -541,9 +691,11 @@
 	 * Attaches a typeahead widget to one chain node, UNLESS its level is unsupported per
 	 * `config.location.levels` (D15) — an unsupported level stays a plain native input; it
 	 * still fully participates in the clearing gate below, just with no widget of its own.
+	 * Callers are responsible for the country/section gate ({@see isNodeActive}) — this
+	 * function only knows about D15, not about which country or section `node` belongs to.
 	 *
 	 * @param {Object} entry
-	 * @param {{level: string, fieldId: string}} node
+	 * @param {{level: string, fieldId: string, section?: string}} node
 	 * @returns {void}
 	 */
 	function attachOne( entry, node ) {
@@ -565,38 +717,79 @@
 		entry.widgets[ node.fieldId ] = { el: el, api: api };
 	}
 
+	/**
+	 * Detaches the widget currently attached to `fieldId`, if any — a safe no-op when nothing
+	 * is attached there. Extracted so both a full teardown ({@see detachAll}) and a per-node
+	 * reconcile ({@see applyCountryArbitration}, {@see reconcileAfterCheckoutUpdate}) share the
+	 * exact same try/catch + registry-cleanup shape.
+	 *
+	 * @param {Object} entry
+	 * @param {string} fieldId
+	 * @returns {void}
+	 */
+	function detachOne( entry, fieldId ) {
+		var widget = entry.widgets[ fieldId ];
+
+		if ( ! widget ) {
+			return;
+		}
+
+		try {
+			widget.api.detach();
+		} catch ( e ) {
+			logError( e );
+		}
+
+		delete entry.widgets[ fieldId ];
+	}
+
+	/**
+	 * Attaches every chain node whose {@see isNodeActive} check currently passes — used only
+	 * at boot, where nothing is attached yet so there is nothing to reconcile away from.
+	 *
+	 * @param {Object} entry
+	 * @returns {void}
+	 */
 	function attachAll( entry ) {
 		entry.chain.forEach( function( node ) {
-			attachOne( entry, node );
+			if ( isNodeActive( entry, node ) ) {
+				attachOne( entry, node );
+			}
 		} );
 	}
 
 	function detachAll( entry ) {
 		Object.keys( entry.widgets ).forEach( function( fieldId ) {
-			try {
-				entry.widgets[ fieldId ].api.detach();
-			} catch ( e ) {
-				logError( e );
-			}
-
-			delete entry.widgets[ fieldId ];
+			detachOne( entry, fieldId );
 		} );
 	}
 
 	/**
-	 * Re-runs per-country arbitration for one entry: detach whatever is currently attached,
-	 * then re-attach fresh if the CURRENT country is supported. Never touches field values —
-	 * "switch back → re-attached with state intact" (Task 11 spec).
+	 * Re-runs arbitration for one entry, PER NODE (Finding 1 amendment — previously this was
+	 * one blanket detach-everything/reattach-everything pass keyed off a single guessed-at
+	 * "the" country, which is exactly why a shipping-section field used to be arbitrated
+	 * against `#billing_country`). Each chain node is now gated independently by
+	 * {@see isNodeActive}: a node whose desired attached-state already matches its actual one
+	 * is left completely untouched — attaching a node that should stay attached, or detaching
+	 * one that should stay detached, is a no-op — so e.g. a billing-country change never tears
+	 * down an unrelated, still-valid shipping-section widget's in-progress typeahead session.
+	 * Never touches field values — "switch back → re-attached with state intact" (Task 11
+	 * spec) still holds, now per node.
 	 *
 	 * @param {Object} entry
 	 * @returns {void}
 	 */
 	function applyCountryArbitration( entry ) {
-		detachAll( entry );
+		entry.chain.forEach( function( node ) {
+			var active = isNodeActive( entry, node );
+			var attached = !! entry.widgets[ node.fieldId ];
 
-		if ( isCountrySupported( entry, currentCountry() ) ) {
-			attachAll( entry );
-		}
+			if ( attached && ! active ) {
+				detachOne( entry, node.fieldId );
+			} else if ( ! attached && active ) {
+				attachOne( entry, node );
+			}
+		} );
 	}
 
 	// -------------------------------------------------------------------------
@@ -687,7 +880,7 @@
 	/**
 	 * Applies the suppression wrap once. Fenced: does nothing (and nothing throws) when
 	 * `window.wc.addressAutocomplete` is absent — the feature is off, or an older WC — leaving
-	 * `wcSuppressionApplied` false so a later call (see {@see handleCountryChanged}) can retry.
+	 * `wcSuppressionApplied` false so a later call (see {@see handleLayoutRelevantChange}) can retry.
 	 * Also does nothing, but marks itself done, when our own config carries no countries at all
 	 * (nothing to suppress).
 	 *
@@ -773,8 +966,10 @@
 
 	/**
 	 * Delegated `change` handler for BOTH event worlds (see the file docblock). Routes a
-	 * country-field change to arbitration; otherwise, for every entry owning this field id,
-	 * gates a destructive downward clear on a REAL remembered-value transition.
+	 * country-field change (`#billing_country` OR `#shipping_country` — Finding 1: BOTH are
+	 * observed now, not just billing) and a "ship to a different address" toggle to
+	 * arbitration; otherwise, for every entry owning this field id, gates a destructive
+	 * downward clear on a REAL remembered-value transition.
 	 *
 	 * @param {Event|Object} event Native `Event` or a jQuery Event — both expose `.target`.
 	 * @returns {void}
@@ -782,13 +977,14 @@
 	function handleFieldChanged( event ) {
 		var target = event && event.target;
 		var id = target && target.id ? target.id : '';
+		var name = target && target.name ? target.name : '';
 
-		if ( ! id ) {
+		if ( 'ship_to_different_address' === name || COUNTRY_FIELD_IDS.indexOf( id ) !== -1 ) {
+			handleLayoutRelevantChange();
 			return;
 		}
 
-		if ( COUNTRY_FIELD_ID === id ) {
-			handleCountryChanged();
+		if ( ! id ) {
 			return;
 		}
 
@@ -816,22 +1012,20 @@
 		} );
 	}
 
-	/** @type {string|null} module-scope remembered country — shared across every entry. */
-	var resolvedCountry = null;
-
-	function handleCountryChanged() {
-		var key = cascadeKey( currentCountry() );
-
+	/**
+	 * Re-runs arbitration for every entry — triggered by a change to `#billing_country`,
+	 * `#shipping_country`, or the "ship to a different address" checkbox (Finding 1: any of
+	 * these three can change which nodes should be active, and {@see applyCountryArbitration}
+	 * is itself a per-node no-op wherever nothing actually changed, so re-running it broadly
+	 * on any of the three is cheap and never thrashes an unaffected widget).
+	 *
+	 * @returns {void}
+	 */
+	function handleLayoutRelevantChange() {
 		// Opportunistic retry (see the suppression section's own docblock): a page whose WC
 		// autocomplete script happens to execute after this one still gets suppressed the first
 		// time the customer touches the country field — no-op once already applied.
 		suppressWcAddressAutocomplete();
-
-		if ( resolvedCountry === key ) {
-			return;
-		}
-
-		resolvedCountry = key;
 
 		entries.forEach( function( entry ) {
 			applyCountryArbitration( entry );
@@ -886,37 +1080,21 @@
 	 * @returns {void}
 	 */
 	function reconcileAfterCheckoutUpdate( entry ) {
-		if ( ! isCountrySupported( entry, currentCountry() ) ) {
-			return;
-		}
-
 		entry.chain.forEach( function( node ) {
+			if ( ! isNodeActive( entry, node ) ) {
+				return;
+			}
+
 			var live = document.getElementById( node.fieldId );
 			var current = entry.widgets[ node.fieldId ];
 
 			if ( ! live ) {
-				if ( current ) {
-					try {
-						current.api.detach();
-					} catch ( e ) {
-						logError( e );
-					}
-
-					delete entry.widgets[ node.fieldId ];
-				}
-
+				detachOne( entry, node.fieldId );
 				return;
 			}
 
 			if ( ! current || current.el !== live ) {
-				if ( current ) {
-					try {
-						current.api.detach();
-					} catch ( e ) {
-						logError( e );
-					}
-				}
-
+				detachOne( entry, node.fieldId );
 				attachOne( entry, node );
 			}
 
@@ -985,14 +1163,9 @@
 	}
 
 	function boot() {
-		resolvedCountry = cascadeKey( currentCountry() );
-
 		entries.forEach( function( entry ) {
 			prefill( entry );
-
-			if ( isCountrySupported( entry, currentCountry() ) ) {
-				attachAll( entry );
-			}
+			attachAll( entry ); // per-node gated internally via isNodeActive()
 		} );
 
 		suppressWcAddressAutocomplete();
