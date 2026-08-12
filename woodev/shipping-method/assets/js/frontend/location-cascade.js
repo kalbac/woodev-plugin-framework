@@ -280,10 +280,11 @@
 
 	/**
 	 * Formats one record component (`{ name, type }`) as display text — `type + ' ' + name`,
-	 * trimmed. Matches the SAME convention the server uses for a record's own `label`
-	 * (`Location_Record`'s own Task 1 test fixture: `region: { name: 'Москва', type: 'г' }` →
-	 * `label: 'г Москва'`), so a backwards-filled field renders exactly as a direct suggestion
-	 * pick at that level would have.
+	 * trimmed. Used for the STREET part of an address value, where the type is part of the
+	 * name in ordinary use ("ул Тверская" reads as an address, "Тверская" does not).
+	 *
+	 * Region and settlement values deliberately do NOT go through this — see
+	 * {@see fieldValueFor}.
 	 *
 	 * @param {Object} component
 	 * @returns {string}
@@ -293,6 +294,59 @@
 		var name = component && component.name ? String( component.name ) : '';
 
 		return ( type + ' ' + name ).trim();
+	}
+
+	/**
+	 * The text a location field of `level` should CARRY — derived from the record's own
+	 * components, never its `label`.
+	 *
+	 * A provider's `label` exists to tell two suggestions apart IN THE LIST, so it carries
+	 * ancestors: DaData labels a settlement `'Московская обл., г Жуковский'`. Writing that
+	 * into a "Населённый пункт" field is wrong twice over — it repeats the region the region
+	 * field already holds, and it hands the shipping carrier a locality name no carrier
+	 * dictionary contains (operator, s70 rig pass: the field must read `'Жуковский'`).
+	 *
+	 * So each level derives its own value from its own component:
+	 *
+	 * - `region` / `settlement` → the component's bare `name`. The TYPE is dropped on purpose:
+	 *   the operator's carriers reject a locality whose name carries its prefix ("г Жуковский"
+	 *   returns nothing where "Жуковский" resolves), and nothing is lost by dropping it —
+	 *   the record's `key` carries identity, this string is only what the customer and the
+	 *   carrier read. Whether a prefix should come back for particular carriers is a separate,
+	 *   still-open question (operator, same pass); it belongs to whoever maps a record onto a
+	 *   carrier's own dictionary — the plugin's `Location_Adapter`, not this field value.
+	 * - `address` → street (WITH its type, see {@see formatComponent}) plus house and block,
+	 *   joined `', '` — i.e. everything BELOW the settlement, and nothing above it.
+	 *
+	 * Falls back to the record's `label` only when the derivation yields nothing at all (a
+	 * provider returning no component at the level it was asked about). That fallback is the
+	 * lesser of two evils, not a second convention: a field left blank right after the
+	 * customer picked something in it reads as the pick having failed.
+	 *
+	 * @param {Object} record
+	 * @param {string} level
+	 * @returns {string}
+	 */
+	function fieldValueFor( record, level ) {
+		if ( ! record ) {
+			return '';
+		}
+
+		var parts;
+
+		if ( 'address' === level ) {
+			parts = [ formatComponent( record.street ), record.house, record.block ];
+		} else {
+			parts = [ record[ level ] && record[ level ].name ];
+		}
+
+		var value = parts.filter( function( part ) {
+			return part && String( part ).trim();
+		} ).map( function( part ) {
+			return String( part ).trim();
+		} ).join( ', ' );
+
+		return value || ( 'string' === typeof record.label ? record.label : '' );
 	}
 
 	// -------------------------------------------------------------------------
@@ -488,6 +542,13 @@
 	 * scope is read LIVE at call time (never captured at attach time), so a parent selection
 	 * made after attach is honoured on the very next keystroke.
 	 *
+	 * Each suggestion is given its `value` here — the string the widget writes into the input
+	 * on selection, derived for THIS node's level ({@see fieldValueFor}); the widget itself is
+	 * level-agnostic and would otherwise fall back to the provider's own list `label`, which
+	 * carries ancestors the field must not repeat. Assigned onto the parsed response object
+	 * directly: it is freshly parsed JSON owned by this closure, and `record` — the only part
+	 * that round-trips back to `/select` — is left untouched.
+	 *
 	 * @param {Object} entry
 	 * @param {{level: string, fieldId: string}} node
 	 * @returns {function(string): Promise<Array>}
@@ -502,7 +563,15 @@
 			} );
 
 			return fetchJson( url, { method: 'GET', headers: nonceHeader( entry ) } ).then( function( body ) {
-				return body && Array.isArray( body.suggestions ) ? body.suggestions : [];
+				var suggestions = body && Array.isArray( body.suggestions ) ? body.suggestions : [];
+
+				suggestions.forEach( function( suggestion ) {
+					if ( suggestion ) {
+						suggestion.value = fieldValueFor( suggestion.record, node.level );
+					}
+				} );
+
+				return suggestions;
 			} );
 		};
 	}
@@ -555,7 +624,9 @@
 				return;
 			}
 
-			writeSilently( entry, node.fieldId, formatComponent( component ) );
+			// Same derivation a direct pick at that level gets ({@see fieldValueFor}) — a
+			// backwards-filled field and a directly picked one must not read differently.
+			writeSilently( entry, node.fieldId, fieldValueFor( record, ancestorLevel ) );
 		} );
 
 		if ( record.postcode && entry.postcodeFieldId ) {

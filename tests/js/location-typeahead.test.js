@@ -531,3 +531,207 @@ test( 'a fetch that throws synchronously never throws out of the input handler',
 		jest.advanceTimersByTime( 250 );
 	} ).not.toThrow();
 } );
+
+// -----------------------------------------------------------------------
+// The value/label split — what a pick WRITES vs what the list SHOWS
+// (operator, s70 rig pass: picking "Московская обл., г Жуковский" must leave
+// "Жуковский" in a locality field, not the whole provider label)
+// -----------------------------------------------------------------------
+
+function spinnerOf() {
+	return document.querySelector( '.woodev-location-spinner' );
+}
+
+async function pickFirst( items ) {
+	const fetchMock = jest.fn( () => Promise.resolve( items ) );
+	const onSelect = jest.fn();
+
+	attachTypeahead( input, { fetch: fetchMock, onSelect } );
+
+	input.value = 'ba';
+	input.dispatchEvent( new Event( 'input', { bubbles: true } ) );
+	jest.advanceTimersByTime( 250 );
+	await flushMicrotasks();
+
+	listboxOf().children[ 0 ].dispatchEvent( new MouseEvent( 'mousedown', { bubbles: true } ) );
+
+	return onSelect;
+}
+
+test( 'a selection writes item.value into the input, not item.label', async () => {
+	jest.useFakeTimers();
+
+	const item = { label: 'Московская обл., г Жуковский', value: 'Жуковский', record: { key: 'dadata:zh' } };
+	const onSelect = await pickFirst( [ item ] );
+
+	expect( input.value ).toBe( 'Жуковский' );
+	// The raw item still reaches the caller untouched — the widget narrows the FIELD, not the data.
+	expect( onSelect ).toHaveBeenCalledWith( item );
+} );
+
+test( 'a selection falls back to item.label when no value is supplied', async () => {
+	jest.useFakeTimers();
+
+	await pickFirst( [ { label: 'г Москва' } ] );
+
+	expect( input.value ).toBe( 'г Москва' );
+} );
+
+test( 'a non-string value falls back to the label rather than stringifying it', async () => {
+	jest.useFakeTimers();
+
+	await pickFirst( [ { label: 'г Москва', value: { name: 'Москва' } } ] );
+
+	expect( input.value ).toBe( 'г Москва' );
+} );
+
+test( 'the rendered option text stays the LABEL even when a narrower value is supplied', async () => {
+	jest.useFakeTimers();
+	const fetchMock = jest.fn( () => Promise.resolve( [ { label: 'Московская обл., г Жуковский', value: 'Жуковский' } ] ) );
+
+	attachTypeahead( input, { fetch: fetchMock, onSelect: jest.fn() } );
+
+	input.value = 'ba';
+	input.dispatchEvent( new Event( 'input', { bubbles: true } ) );
+	jest.advanceTimersByTime( 250 );
+	await flushMicrotasks();
+
+	expect( listboxOf().children[ 0 ].textContent ).toBe( 'Московская обл., г Жуковский' );
+} );
+
+// -----------------------------------------------------------------------
+// Busy state — the spinner and aria-busy
+// -----------------------------------------------------------------------
+
+test( 'attach() inserts a hidden spinner; detach() removes it', () => {
+	const { detach } = attachTypeahead( input, { fetch: jest.fn(), onSelect: jest.fn() } );
+
+	expect( spinnerOf() ).not.toBeNull();
+	expect( spinnerOf().hidden ).toBe( true );
+	expect( input.hasAttribute( 'aria-busy' ) ).toBe( false );
+
+	detach();
+
+	expect( spinnerOf() ).toBeNull();
+} );
+
+test( 'the spinner shows as soon as an eligible query is SCHEDULED, before the debounce fires', () => {
+	jest.useFakeTimers();
+	const fetchMock = jest.fn( () => Promise.resolve( [] ) );
+
+	attachTypeahead( input, { fetch: fetchMock, onSelect: jest.fn() } );
+
+	input.value = 'ba';
+	input.dispatchEvent( new Event( 'input', { bubbles: true } ) );
+
+	// The 250ms the customer waits before anything is even requested is exactly the
+	// stretch that reads as "nothing is happening" — the indicator must cover it.
+	expect( fetchMock ).not.toHaveBeenCalled();
+	expect( spinnerOf().hidden ).toBe( false );
+	expect( input.getAttribute( 'aria-busy' ) ).toBe( 'true' );
+} );
+
+test( 'the spinner hides once results render', async () => {
+	jest.useFakeTimers();
+	const fetchMock = jest.fn( () => Promise.resolve( [ { label: 'г Москва' } ] ) );
+
+	attachTypeahead( input, { fetch: fetchMock, onSelect: jest.fn() } );
+
+	input.value = 'ba';
+	input.dispatchEvent( new Event( 'input', { bubbles: true } ) );
+	jest.advanceTimersByTime( 250 );
+	await flushMicrotasks();
+
+	expect( listboxOf().hidden ).toBe( false );
+	expect( spinnerOf().hidden ).toBe( true );
+	expect( input.hasAttribute( 'aria-busy' ) ).toBe( false );
+} );
+
+test( 'the spinner hides when the query drops below minChars, with no request ever issued', () => {
+	jest.useFakeTimers();
+	const fetchMock = jest.fn( () => Promise.resolve( [] ) );
+
+	attachTypeahead( input, { fetch: fetchMock, onSelect: jest.fn() } );
+
+	input.value = 'ba';
+	input.dispatchEvent( new Event( 'input', { bubbles: true } ) );
+	expect( spinnerOf().hidden ).toBe( false );
+
+	input.value = 'b';
+	input.dispatchEvent( new Event( 'input', { bubbles: true } ) );
+
+	expect( spinnerOf().hidden ).toBe( true );
+	expect( fetchMock ).not.toHaveBeenCalled();
+} );
+
+test( 'the spinner hides on a rejected fetch — it must not spin forever on a network failure', async () => {
+	jest.useFakeTimers();
+	const fetchMock = jest.fn( () => Promise.reject( new Error( 'network down' ) ) );
+
+	attachTypeahead( input, { fetch: fetchMock, onSelect: jest.fn() } );
+
+	input.value = 'ba';
+	input.dispatchEvent( new Event( 'input', { bubbles: true } ) );
+	jest.advanceTimersByTime( 250 );
+	await flushMicrotasks();
+
+	expect( spinnerOf().hidden ).toBe( true );
+} );
+
+test( 'the spinner hides when a fetch throws synchronously', () => {
+	jest.useFakeTimers();
+	const fetchMock = jest.fn( () => {
+		throw new Error( 'boom' );
+	} );
+
+	attachTypeahead( input, { fetch: fetchMock, onSelect: jest.fn() } );
+
+	input.value = 'ba';
+	input.dispatchEvent( new Event( 'input', { bubbles: true } ) );
+	jest.advanceTimersByTime( 250 );
+
+	expect( spinnerOf().hidden ).toBe( true );
+} );
+
+test( 'the spinner hides after a selection', async () => {
+	jest.useFakeTimers();
+
+	await pickFirst( [ { label: 'г Москва', value: 'Москва' } ] );
+
+	expect( spinnerOf().hidden ).toBe( true );
+	expect( input.hasAttribute( 'aria-busy' ) ).toBe( false );
+} );
+
+test( 'a STALE response does not clear the busy state a newer search owns', async () => {
+	jest.useFakeTimers();
+	const first = deferred();
+	const second = deferred();
+	const fetchMock = jest.fn()
+		.mockImplementationOnce( () => first.promise )
+		.mockImplementationOnce( () => second.promise );
+
+	attachTypeahead( input, { fetch: fetchMock, onSelect: jest.fn() } );
+
+	input.value = 'ba';
+	input.dispatchEvent( new Event( 'input', { bubbles: true } ) );
+	jest.advanceTimersByTime( 250 );
+
+	input.value = 'bar';
+	input.dispatchEvent( new Event( 'input', { bubbles: true } ) );
+	jest.advanceTimersByTime( 250 );
+
+	expect( fetchMock ).toHaveBeenCalledTimes( 2 );
+
+	// The FIRST request answers last — it is stale, and the second is still outstanding.
+	first.resolve( [ { label: 'stale' } ] );
+	await flushMicrotasks();
+
+	expect( spinnerOf().hidden ).toBe( false );
+	expect( listboxOf().hidden ).toBe( true ); // and it paints nothing, either
+
+	second.resolve( [ { label: 'fresh' } ] );
+	await flushMicrotasks();
+
+	expect( spinnerOf().hidden ).toBe( true );
+	expect( listboxOf().children[ 0 ].textContent ).toBe( 'fresh' );
+} );

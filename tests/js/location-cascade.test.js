@@ -714,6 +714,111 @@ describe( 'dependent clearing (downward only, remembered-parent gate)', () => {
 } );
 
 // -----------------------------------------------------------------------
+// Field value derivation — what a pick WRITES into the field, as opposed to
+// what the list SHOWS (operator, s70 rig pass: the locality field must carry
+// 'Жуковский', not DaData's own 'Московская обл., г Жуковский')
+// -----------------------------------------------------------------------
+
+describe( 'field value derivation', () => {
+	/**
+	 * Resolves the pending suggest request with `suggestions` and returns what the
+	 * cascade's own `fetch()` callback hands the widget.
+	 *
+	 * @param {Promise} promise
+	 * @param {Array}   suggestions
+	 * @returns {Promise<Array>}
+	 */
+	async function answerSuggest( promise, suggestions ) {
+		fetchCalls[ fetchCalls.length - 1 ].resolve( { suggestions } );
+
+		return promise;
+	}
+
+	it( 'narrows a settlement suggestion to the bare locality name, leaving the list label intact', async () => {
+		boot( { region: true, settlement: true, address: true } );
+
+		const suggestions = await answerSuggest(
+			callFor( 'billing_city' ).fetch( 'Жуко' ),
+			[ {
+				key: 'dadata:zh', label: 'Московская обл., г Жуковский', level: 'settlement',
+				record: {
+					key: 'dadata:zh', provider_id: 'dadata', level: 'settlement', country: 'RU',
+					region: { name: 'Московская', type: 'обл' },
+					settlement: { name: 'Жуковский', type: 'г' },
+					label: 'Московская обл., г Жуковский',
+				},
+			} ]
+		);
+
+		// The value written into the field: the locality and nothing else — no region prefix
+		// (it belongs to the region field) and no type prefix (carriers reject it).
+		expect( suggestions[ 0 ].value ).toBe( 'Жуковский' );
+		// The label the LIST renders is untouched — it is what tells two Жуковских apart.
+		expect( suggestions[ 0 ].label ).toBe( 'Московская обл., г Жуковский' );
+	} );
+
+	it( 'composes an address value from street + house, dropping every ancestor the label carries', async () => {
+		boot( { region: true, settlement: true, address: true } );
+
+		const suggestions = await answerSuggest(
+			callFor( 'billing_address_1' ).fetch( 'Тверская' ),
+			[ {
+				key: 'dadata:addr', label: 'г Москва, ул Тверская, д 1', level: 'address',
+				record: {
+					key: 'dadata:addr', provider_id: 'dadata', level: 'address', country: 'RU',
+					region: { name: 'Москва', type: 'г' },
+					settlement: { name: 'Москва', type: 'г' },
+					street: { name: 'Тверская', type: 'ул' },
+					house: '1',
+					label: 'г Москва, ул Тверская, д 1',
+				},
+			} ]
+		);
+
+		// Street KEEPS its type ("Тверская" alone is not an address); the city does not repeat.
+		expect( suggestions[ 0 ].value ).toBe( 'ул Тверская, 1' );
+	} );
+
+	it( 'falls back to the label when the provider returned no component at the asked-for level', async () => {
+		boot( { region: true, settlement: true, address: true } );
+
+		const suggestions = await answerSuggest(
+			callFor( 'billing_city' ).fetch( 'Мос' ),
+			[ {
+				key: 'dadata:odd', label: 'Некое место', level: 'settlement',
+				record: {
+					key: 'dadata:odd', provider_id: 'dadata', level: 'settlement', country: 'RU',
+					label: 'Некое место',
+				},
+			} ]
+		);
+
+		// Blanking the field right after the customer picked in it would read as a failed pick.
+		expect( suggestions[ 0 ].value ).toBe( 'Некое место' );
+	} );
+
+	it( 'leaves the record itself untouched — it round-trips to /select verbatim', async () => {
+		boot( { region: true, settlement: true, address: true } );
+
+		const record = {
+			key: 'dadata:zh', provider_id: 'dadata', level: 'settlement', country: 'RU',
+			settlement: { name: 'Жуковский', type: 'г' },
+			label: 'Московская обл., г Жуковский',
+		};
+
+		const suggestions = await answerSuggest(
+			callFor( 'billing_city' ).fetch( 'Жуко' ),
+			[ { key: 'dadata:zh', label: record.label, level: 'settlement', record } ]
+		);
+
+		expect( suggestions[ 0 ].record.value ).toBeUndefined();
+		expect( Object.keys( suggestions[ 0 ].record ).sort() ).toEqual(
+			[ 'country', 'key', 'label', 'level', 'provider_id', 'settlement' ]
+		);
+	} );
+} );
+
+// -----------------------------------------------------------------------
 // Backwards fill — no second lookup
 // -----------------------------------------------------------------------
 
@@ -737,8 +842,10 @@ describe( 'backwards fill', () => {
 
 		selectViaFake( addressCall, item );
 
-		expect( document.getElementById( 'billing_state' ).value ).toBe( 'г Москва' );
-		expect( document.getElementById( 'billing_city' ).value ).toBe( 'г Москва' );
+		// Bare component NAMES, not the record's own label and not `type + name`: the field
+		// carries what a carrier's locality dictionary can match (operator, s70 rig pass).
+		expect( document.getElementById( 'billing_state' ).value ).toBe( 'Москва' );
+		expect( document.getElementById( 'billing_city' ).value ).toBe( 'Москва' );
 		expect( document.getElementById( 'billing_postcode' ).value ).toBe( '101000' );
 
 		// Exactly one new fetch: the /select persist call — no extra GET suggest lookups.

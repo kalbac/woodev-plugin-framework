@@ -33,12 +33,32 @@
  *
  * THE FETCH/ONSELECT CONTRACT: `fetch( query )` returns a `Promise` (or a
  * plain value — this module wraps it in `Promise.resolve()`) resolving to an
- * ARRAY of suggestion objects, each read for exactly one field —
- * `item.label` (a string) — used both for the rendered `<li>` text and for
- * the value written into the input on selection; every other property on the
- * item is opaque to this module and passed through to `onSelect( item )`
- * UNTOUCHED. A missing/non-string `label` renders as an empty string rather
- * than `undefined` — never throws.
+ * ARRAY of suggestion objects, each read for exactly two fields — `item.label`
+ * (a string) for the rendered `<li>` text, and `item.value` (a string) for
+ * what a selection WRITES INTO THE INPUT; every other property on the item is
+ * opaque to this module and passed through to `onSelect( item )` UNTOUCHED. A
+ * missing/non-string `label` renders as an empty string rather than
+ * `undefined` — never throws; a missing/non-string `value` falls back to
+ * `label`.
+ *
+ * The two are separate because they answer different questions and a provider
+ * routinely disagrees about them: DaData labels a settlement suggestion
+ * `'Московская обл., г Жуковский'` — exactly right for telling two Жуковских
+ * apart in the list, and exactly wrong as the CONTENT of a "Населённый пункт"
+ * field, which wants `'Жуковский'` and nothing else. This module stays neutral
+ * about which is which: deriving the per-level value from the record's own
+ * components is the caller's job (`location-cascade.js`'s `fieldValueFor()`),
+ * because only the caller knows what LEVEL the field it enhanced represents.
+ *
+ * BUSY STATE: a search is not instantaneous, and between the keystroke and the
+ * first rendered suggestion the widget would otherwise look inert — no chrome,
+ * no list, nothing to say the field is working. So the module also inserts a
+ * `<span class="woodev-location-spinner">` sibling (hidden at rest, same
+ * lifecycle as the listbox: created on attach, removed on detach) and marks
+ * the input `aria-busy` while a query is outstanding. "Outstanding" starts at
+ * the moment an eligible query SCHEDULES its debounce, not when the request
+ * leaves — otherwise the first 250ms of every search, the part that feels
+ * slowest because nothing has happened yet, would still show nothing at all.
  *
  * STALE-RESPONSE DISCARD: every debounced fetch is tagged with a
  * monotonically increasing generation number; a response is applied only
@@ -200,8 +220,17 @@
 		listbox.className = 'woodev-location-listbox';
 		listbox.hidden = true;
 
+		var spinner = document.createElement( 'span' );
+		spinner.className = 'woodev-location-spinner';
+		// Decoration for a state already announced to assistive tech through the
+		// input's own `aria-busy` — so it is hidden from the accessibility tree
+		// rather than announced twice, once meaningfully and once as an empty span.
+		spinner.setAttribute( 'aria-hidden', 'true' );
+		spinner.hidden = true;
+
 		if ( input.parentNode ) {
 			input.parentNode.insertBefore( listbox, input.nextSibling );
+			input.parentNode.insertBefore( spinner, input.nextSibling );
 		}
 
 		var originalAttrs = captureAttrs( input, MANAGED_ATTRS );
@@ -232,6 +261,26 @@
 
 		/** @type {boolean} true once detach() has run — guards a second detach() call. */
 		var detached = false;
+
+		/**
+		 * Shows or hides the busy indicator — see the file docblock's BUSY STATE
+		 * section. Idempotent: called on every path that starts or ends a search,
+		 * including several that may already be in the target state (a second
+		 * keystroke while a fetch is in flight, {@see closeListbox} running when
+		 * nothing was pending).
+		 *
+		 * @param {boolean} busy
+		 * @returns {void}
+		 */
+		function setBusy( busy ) {
+			spinner.hidden = ! busy;
+
+			if ( busy ) {
+				input.setAttribute( 'aria-busy', 'true' );
+			} else {
+				input.removeAttribute( 'aria-busy' );
+			}
+		}
 
 		/**
 		 * Hides the listbox, empties it, and clears the active item — the shared
@@ -274,6 +323,12 @@
 			}
 
 			generation += 1;
+
+			// Every close is also the end of any search that was still outstanding —
+			// the debounce timer above is gone and the generation bump has just
+			// orphaned any in-flight response, so nothing is left that could ever
+			// paint. A spinner surviving that would spin forever.
+			setBusy( false );
 		}
 
 		/**
@@ -345,8 +400,10 @@
 		}
 
 		/**
-		 * Applies a selection: writes the item's label into the input as its new
-		 * value, fires real native `input`/`change` events (seen by both the
+		 * Applies a selection: writes the item's `value` (falling back to its
+		 * `label` — see the file docblock's FETCH/ONSELECT CONTRACT for why these
+		 * are two different strings) into the input as its new value, then
+		 * fires real native `input`/`change` events (seen by both the
 		 * native and jQuery event worlds — see the file docblock), closes the
 		 * listbox, then hands the raw item to `onSelect()`. Order matters: the
 		 * DOM is already consistent (value + closed listbox) by the time
@@ -358,8 +415,9 @@
 		 */
 		function selectItem( item ) {
 			var label = item && 'string' === typeof item.label ? item.label : '';
+			var value = item && 'string' === typeof item.value ? item.value : label;
 
-			input.value = label;
+			input.value = value;
 			input.dispatchEvent( new Event( 'input', { bubbles: true } ) );
 			input.dispatchEvent( new Event( 'change', { bubbles: true } ) );
 
@@ -384,16 +442,23 @@
 			try {
 				result = fetchFn( query );
 			} catch ( syncError ) {
-				// A synchronous throw is treated exactly like a rejected fetch: nothing to show.
+				// A synchronous throw is treated exactly like a rejected fetch: nothing
+				// to show — and nothing still outstanding, so the search is over.
+				setBusy( false );
+
 				return;
 			}
 
 			Promise.resolve( result ).then(
 				function( results ) {
+					// A response whose generation is stale must not clear the busy state
+					// either: a NEWER search owns it now, and this one losing the race is
+					// not that newer one finishing.
 					if ( detached || myGeneration !== generation ) {
 						return;
 					}
 
+					setBusy( false );
 					renderItems( results );
 				},
 				function() {
@@ -401,6 +466,7 @@
 						return;
 					}
 
+					// `closeListbox()` clears the busy state itself.
 					closeListbox();
 				}
 			);
@@ -429,6 +495,10 @@
 
 				return;
 			}
+
+			// Busy from the moment the search is SCHEDULED, not when it is issued —
+			// see the file docblock's BUSY STATE section.
+			setBusy( true );
 
 			debounceTimer = setTimeout( function() {
 				debounceTimer = null;
@@ -553,8 +623,9 @@
 
 		/**
 		 * Tears the whole instance down: removes every listener this attach
-		 * added, invalidates any still in-flight fetch permanently, removes the
-		 * listbox from the DOM, and restores the input's original attributes.
+		 * added, invalidates any still in-flight fetch permanently, removes both
+		 * elements it inserted (listbox and spinner) from the DOM, and restores
+		 * the input's original attributes.
 		 * Safe to call more than once — every call after the first is a no-op.
 		 *
 		 * @returns {void}
@@ -578,8 +649,14 @@
 			listbox.removeEventListener( 'mousedown', handleListboxMousedown );
 			document.removeEventListener( 'mousedown', handleDocumentMousedown );
 
+			setBusy( false );
+
 			if ( listbox.parentNode ) {
 				listbox.parentNode.removeChild( listbox );
+			}
+
+			if ( spinner.parentNode ) {
+				spinner.parentNode.removeChild( spinner );
 			}
 
 			restoreAttrs( input, originalAttrs );

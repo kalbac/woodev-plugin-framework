@@ -164,7 +164,7 @@
 	top: 100%;
 	left: 0;
 	right: 0;
-	margin: 2px 0 0;
+	margin: 0;
 	padding: 4px 0;
 	max-height: 280px;
 	overflow-x: hidden;
@@ -173,8 +173,36 @@
 	list-style: none;
 	background: #fff;
 	border: 1px solid #dcdcde;
+
+	/*
+	 * THE GAP BELOW THE INPUT IS A BORDER, NOT A MARGIN — and that is the whole point.
+	 *
+	 * A 3px breathing space between the field and the panel is ordinary combobox styling; a
+	 * `margin-top: 3px` would have produced exactly the same picture. It would also have put
+	 * that strip OUTSIDE this element's box, and the strip is directly on the path a mouse
+	 * travels from the input to the first suggestion. This module closes the listbox on a
+	 * `mousedown` that lands outside it (`handleDocumentMousedown`), so a customer who presses
+	 * a fraction early — while the pointer is still crossing the gap — would have the panel
+	 * shut under the cursor and hit whatever the wrapper does instead. A transparent top
+	 * BORDER keeps the same 3px of air while leaving it part of the listbox, where a
+	 * `mousedown` is caught by `handleListboxMousedown` (which stops propagation, and selects
+	 * nothing because the target resolves to the `<ul>` itself, not an option).
+	 *
+	 * Hovering across the gap was never at risk — this widget has no `mouseleave`/`mouseout`
+	 * handler at all, so pointer movement alone cannot close anything. That is worth stating
+	 * because it is the failure this shape is usually blamed for (operator, s70), and the
+	 * reason it cannot happen here is structural rather than a property of these rules.
+	 *
+	 * `background-clip: padding-box` is what keeps the border area actually transparent: a
+	 * background paints under the border box by default, which would fill the gap with white
+	 * and erase it visually while keeping it clickable. The `inset` shadow then redraws the
+	 * hairline the (now transparent) top border no longer paints, at the panel's real visual
+	 * top edge, so the box still reads as fully outlined.
+	 */
+	border-top: 3px solid transparent;
+	background-clip: padding-box;
 	border-radius: 4px;
-	box-shadow: 0 1px 2px rgba( 0, 0, 0, 0.04 ), 0 4px 8px rgba( 0, 0, 0, 0.06 );
+	box-shadow: inset 0 1px 0 #dcdcde, 0 1px 2px rgba( 0, 0, 0, 0.04 ), 0 4px 8px rgba( 0, 0, 0, 0.06 );
 	box-sizing: border-box;
 
 	/*
@@ -281,6 +309,73 @@
 .woodev-location-option[aria-selected='true']:hover {
 	background: rgba( 6, 174, 221, 0.08 );
 	background: color-mix( in srgb, #06aedd 8%, transparent );
+}
+
+/* -------------------------------------------------------------------------
+ * BUSY INDICATOR — the `<span class="woodev-location-spinner">` `location-typeahead.js` inserts as a
+ * second sibling of the input, hidden at rest and shown from the moment an eligible query schedules
+ * its debounce until the search settles (see that file's BUSY STATE section). It sits INSIDE the
+ * input's right edge, which is where every combobox on the web puts one — and, unlike the listbox,
+ * it must never take a click: `pointer-events: none` keeps the last ~30px of the field clickable
+ * exactly as before this element existed.
+ *
+ * Positioned against the SAME `.woocommerce-input-wrapper` context the listbox already relies on
+ * (`top: 0; bottom: 0` rather than `height: 100%` — a definite height from the containing block
+ * without depending on the wrapper's own display type resolving a percentage).
+ *
+ * NO `!important` here, deliberately, and the rule is the one this file already states: `!important`
+ * is spent only where losing the property takes the CONTROL away from the customer (the listbox's
+ * own `display`). A spinner a theme manages to hide costs feedback, not function — the search still
+ * runs and the suggestions still arrive — so it loses gracefully rather than escalating.
+ * ---------------------------------------------------------------------- */
+
+.woodev-location-spinner {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	right: 10px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 16px;
+	pointer-events: none;
+}
+
+.woodev-location-spinner[hidden] {
+	display: none;
+}
+
+.woodev-location-spinner::before {
+	content: '';
+	display: block;
+	width: 14px;
+	height: 14px;
+	border: 2px solid #dcdcde;
+	border-top-color: #06aedd;
+	border-radius: 50%;
+	box-sizing: border-box;
+	animation: woodev-location-spin 0.7s linear infinite;
+}
+
+@keyframes woodev-location-spin {
+
+	to {
+		transform: rotate( 360deg );
+	}
+}
+
+/*
+ * Reduced motion (WCAG 2.3.3 / a vestibular-disorder accommodation) — the INDICATOR stays, only its
+ * rotation stops: the customer still needs to know a search is running, and a static ring in the
+ * accent colour says so without moving. Removing the element under this query would trade one
+ * accessibility need for another.
+ */
+@media ( prefers-reduced-motion: reduce ) {
+
+	.woodev-location-spinner::before {
+		animation: none;
+		border-color: #06aedd;
+	}
 }
 
 /* -------------------------------------------------------------------------
