@@ -195,8 +195,46 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 			add_action( 'wp_enqueue_scripts', [ $this, 'enqueue_assets' ] );
 			add_action( 'rest_api_init', [ $this, 'register_rest' ] );
 			add_action( 'init', [ $this, 'maybe_suppress_wc_address_providers' ], 21 );
+			add_filter( 'woocommerce_checkout_get_value', [ $this, 'handle_checkout_get_value' ], 10, 2 );
 
 			$this->guard_native_field_conflicts();
+		}
+
+		/**
+		 * Blanks WooCommerce's `*` "no state" sentinel for fields this layer manages.
+		 *
+		 * `woocommerce_default_country` is stored as `COUNTRY:STATE`, and a merchant who
+		 * picked a country without naming a state gets `RU:*`. WooCommerce parses that into
+		 * the customer's default state, so `WC_Checkout::get_value( 'shipping_state' )`
+		 * returns the literal `*`.
+		 *
+		 * Natively this is invisible: WC renders a state field as a `<select>`, and `*` simply
+		 * matches no option. A field this layer manages is a text `<input>`, so the sentinel
+		 * becomes a visible value — the customer opens checkout and finds `*` sitting in
+		 * «Регион», and it would be submitted and persisted as if they had typed it.
+		 *
+		 * Scoped deliberately narrowly: only fields this handler manages, and only the exact
+		 * one-character sentinel. A legitimate value is never `*` — it is WooCommerce's own
+		 * wildcard, not a place name.
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string|null $value the value WooCommerce resolved
+		 * @param string      $input the field id being resolved
+		 *
+		 * @return string|null
+		 */
+		public function handle_checkout_get_value( $value, $input ) {
+
+			if ( '*' !== $value ) {
+				return $value;
+			}
+
+			$fields = $this->fields->get_fields();
+
+			return isset( $fields[ $input ] ) ? '' : $value;
 		}
 
 

@@ -74,7 +74,7 @@ class CheckoutHandlerRegisterTest extends TestCase {
 	 */
 	public function test_register_hooks_init_for_wc_address_provider_suppression(): void {
 
-		Functions\expect( 'add_filter' )->twice()->withAnyArgs();
+		Functions\expect( 'add_filter' )->times( 3 )->withAnyArgs();
 		Functions\expect( 'add_action' )
 			->atLeast()->once()
 			->with( 'init', \Mockery::type( 'array' ), 21 );
@@ -87,7 +87,7 @@ class CheckoutHandlerRegisterTest extends TestCase {
 	 */
 	public function test_register_hooks_checkout_process(): void {
 
-		Functions\expect( 'add_filter' )->twice()->withAnyArgs();
+		Functions\expect( 'add_filter' )->times( 3 )->withAnyArgs();
 		Functions\expect( 'add_action' )
 			->atLeast()->once()
 			->with( 'woocommerce_checkout_process', \Mockery::type( 'array' ) );
@@ -100,7 +100,7 @@ class CheckoutHandlerRegisterTest extends TestCase {
 	 */
 	public function test_register_hooks_checkout_order_processed(): void {
 
-		Functions\expect( 'add_filter' )->twice()->withAnyArgs();
+		Functions\expect( 'add_filter' )->times( 3 )->withAnyArgs();
 		Functions\expect( 'add_action' )
 			->atLeast()->once()
 			->with( 'woocommerce_checkout_order_processed', \Mockery::type( 'array' ), 10, 3 );
@@ -113,7 +113,7 @@ class CheckoutHandlerRegisterTest extends TestCase {
 	 */
 	public function test_register_hooks_wp_enqueue_scripts(): void {
 
-		Functions\expect( 'add_filter' )->twice()->withAnyArgs();
+		Functions\expect( 'add_filter' )->times( 3 )->withAnyArgs();
 		Functions\expect( 'add_action' )
 			->atLeast()->once()
 			->with( 'wp_enqueue_scripts', \Mockery::type( 'array' ) );
@@ -126,7 +126,7 @@ class CheckoutHandlerRegisterTest extends TestCase {
 	 */
 	public function test_register_hooks_rest_api_init(): void {
 
-		Functions\expect( 'add_filter' )->twice()->withAnyArgs();
+		Functions\expect( 'add_filter' )->times( 3 )->withAnyArgs();
 		Functions\expect( 'add_action' )
 			->atLeast()->once()
 			->with( 'rest_api_init', \Mockery::type( 'array' ) );
@@ -217,7 +217,7 @@ class CheckoutHandlerRegisterTest extends TestCase {
 	 */
 	public function test_guard_fires_doing_it_wrong_on_native_field_conflict(): void {
 
-		Functions\expect( 'add_filter' )->times( 4 )->withAnyArgs();
+		Functions\expect( 'add_filter' )->times( 6 )->withAnyArgs();
 		Functions\expect( 'add_action' )->times( 10 )->withAnyArgs();
 		Functions\expect( '_doing_it_wrong' )
 			->once()
@@ -240,7 +240,7 @@ class CheckoutHandlerRegisterTest extends TestCase {
 	 */
 	public function test_guard_does_not_fire_for_same_plugin_id(): void {
 
-		Functions\expect( 'add_filter' )->times( 4 )->withAnyArgs();
+		Functions\expect( 'add_filter' )->times( 6 )->withAnyArgs();
 		Functions\expect( 'add_action' )->times( 10 )->withAnyArgs();
 		Functions\expect( '_doing_it_wrong' )->never();
 
@@ -258,7 +258,7 @@ class CheckoutHandlerRegisterTest extends TestCase {
 	 */
 	public function test_guard_ignores_non_native_fields(): void {
 
-		Functions\expect( 'add_filter' )->times( 4 )->withAnyArgs();
+		Functions\expect( 'add_filter' )->times( 6 )->withAnyArgs();
 		Functions\expect( 'add_action' )->times( 10 )->withAnyArgs();
 		Functions\expect( '_doing_it_wrong' )->never();
 

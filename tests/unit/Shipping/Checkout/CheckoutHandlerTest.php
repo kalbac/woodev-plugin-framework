@@ -21,6 +21,7 @@ namespace Woodev\Tests\Unit\Shipping\Checkout;
 use Brain\Monkey\Functions;
 use Woodev\Framework\Shipping\Checkout\Checkout_Fields;
 use Woodev\Framework\Shipping\Checkout\Checkout_Handler;
+use Woodev\Framework\Shipping\Checkout\Field;
 use Woodev\Framework\Shipping\Location\Location_Service;
 use Woodev\Tests\Unit\TestCase;
 
@@ -105,6 +106,41 @@ class Checkout_Handler_Selling_Countries_Probe extends Checkout_Handler {
  * @covers \Woodev\Framework\Shipping\Checkout\Checkout_Handler::wc_selling_country_codes
  */
 class CheckoutHandlerTest extends TestCase {
+
+	// -------------------------------------------------------------------------
+	// WooCommerce's `*` "no state" sentinel must never surface in a managed field
+	// -------------------------------------------------------------------------
+
+	/**
+	 * `woocommerce_default_country` is stored as `COUNTRY:STATE`, and a merchant who picked a
+	 * country without naming a state gets `RU:*` — so WooCommerce resolves the customer's
+	 * default state to the literal `*`. Natively that is invisible (a state field is a
+	 * `<select>`, and `*` matches no option); a field this layer manages is a text input, so
+	 * the sentinel would be shown to the customer and submitted as if they had typed it.
+	 */
+	public function test_the_wc_no_state_sentinel_is_blanked_for_a_managed_field(): void {
+		$fields  = Checkout_Fields::from_array( [ Field::create( 'shipping_state' )->to_array() ] );
+		$handler = new Checkout_Handler( $fields, 'carrier' );
+
+		$this->assertSame( '', $handler->handle_checkout_get_value( '*', 'shipping_state' ) );
+	}
+
+	public function test_the_sentinel_is_left_alone_for_a_field_this_layer_does_not_manage(): void {
+		$fields  = Checkout_Fields::from_array( [ Field::create( 'shipping_state' )->to_array() ] );
+		$handler = new Checkout_Handler( $fields, 'carrier' );
+
+		// Not ours -> not our business; WC's own `<select>` handles it.
+		$this->assertSame( '*', $handler->handle_checkout_get_value( '*', 'billing_state' ) );
+	}
+
+	public function test_a_real_value_is_never_touched(): void {
+		$fields  = Checkout_Fields::from_array( [ Field::create( 'shipping_state' )->to_array() ] );
+		$handler = new Checkout_Handler( $fields, 'carrier' );
+
+		$this->assertSame( 'Москва', $handler->handle_checkout_get_value( 'Москва', 'shipping_state' ) );
+		$this->assertSame( '', $handler->handle_checkout_get_value( '', 'shipping_state' ) );
+		$this->assertNull( $handler->handle_checkout_get_value( null, 'shipping_state' ) );
+	}
 
 	private function handler( bool $active, array $supported, array $selling ): Checkout_Handler {
 		return new Checkout_Handler_Selling_Countries_Probe(
