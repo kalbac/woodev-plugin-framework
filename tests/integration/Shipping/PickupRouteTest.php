@@ -20,7 +20,9 @@
 
 namespace Woodev\Tests\Integration\Shipping;
 
+use ReflectionProperty;
 use Woodev\Framework\Shipping\Pickup\Point_Query;
+use Woodev\Framework\Shipping\Pickup\Point_Source;
 use Woodev\Framework\Shipping\Rest_Api\Pickup_Controller;
 use Woodev\Tests\Integration\TestCase;
 use WP_REST_Request;
@@ -37,7 +39,42 @@ class PickupRouteTest extends TestCase {
 	private const VIEWPORT_BBOX = '55.70,37.60,55.85,37.70';
 
 	/**
-	 * Set up — resolve the fixture plugin and assert it's loaded.
+	 * The ambient fixture plugin's `Pickup_Handler::$source` as found at the
+	 * start of THIS test, captured in {@see self::setUp()} and restored in
+	 * {@see self::tearDown()}.
+	 *
+	 * @var Point_Source
+	 */
+	private $original_ambient_point_source;
+
+	/**
+	 * Set up — resolve the fixture plugin, assert it's loaded, and pin the
+	 * ambient `/woodev/v1/shipping/pickup/woodev-test-shipping-method/points`
+	 * route onto a known, network-free `Point_Source`.
+	 *
+	 * The rig's `WOODEV_TEST_PICKUP_LIVE_YANDEX` / `WOODEV_TEST_PICKUP_LIVE_POCHTA` /
+	 * `WOODEV_TEST_PICKUP_STRATEGY` wp-config constants (precedence: LIVE_YANDEX >
+	 * LIVE_POCHTA > STRATEGY — see woodev-test-shipping-method.php's own
+	 * point-source-selection block) pick the fixture's `Point_Source` ONCE, at the
+	 * plugin's construction (bootstrap time, long before any test runs) — they are
+	 * plain PHP constants and cannot be flipped per test. Every test below that
+	 * talks to the ambient route (`test_a_guest_can_read_points()`,
+	 * `test_a_foreign_locality_returns_no_points()`,
+	 * `test_each_returned_point_carries_a_selectable_verdict()`,
+	 * `test_point_details_route_returns_a_known_point_and_404s_for_an_unknown_one()`)
+	 * assumes the STOCK bulk-fixture data (locality "Москва", point id
+	 * "FIX-BULK-1", …) — an assumption that silently depends on which constants
+	 * happen to be defined this run, and breaks (live-API 502s, or a live provider
+	 * that has simply never heard of "FIX-BULK-1") the moment the rig is pointed at
+	 * a live source. A test must never depend on a live third-party API, so this
+	 * establishes its own precondition instead: swap the handler's private
+	 * `$source` property (no public setter exists — production code has no reason
+	 * to swap it at runtime) to a fresh `Woodev_Test_Bulk_Point_Source`, then
+	 * rebuild the REST server so `Pickup_Handler::register_rest()` (hooked on
+	 * `rest_api_init`) re-registers `Pickup_Controller` bound to it — the exact
+	 * "null $wp_rest_server, then rest_get_server()" idiom
+	 * `LocationRouteTest::activate_and_boot_rest()` already uses to force a fresh
+	 * `rest_api_init` pass.
 	 *
 	 * @return void
 	 */
@@ -48,17 +85,59 @@ class PickupRouteTest extends TestCase {
 			function_exists( 'woodev_test_shipping_method_plugin' ),
 			'woodev_test_shipping_method_plugin() must exist — the shipping fixture plugin must be active in wp-env.'
 		);
+
+		$this->original_ambient_point_source = $this->ambient_point_source();
+		$this->force_ambient_point_source( new \Woodev_Test_Bulk_Point_Source() );
 	}
 
 	/**
 	 * Removes any $_POST leftovers from a payment-method test so it cannot leak
-	 * into a later test in the same process.
+	 * into a later test in the same process, and restores the ambient fixture
+	 * plugin's original `Point_Source` (see {@see self::setUp()}).
 	 *
 	 * @return void
 	 */
 	protected function tearDown(): void {
 		unset( $_POST['payment_method'] );
+
+		$this->force_ambient_point_source( $this->original_ambient_point_source );
+
 		parent::tearDown();
+	}
+
+	/**
+	 * Reads the ambient fixture plugin's current `Pickup_Handler::$source` via
+	 * reflection — see {@see self::setUp()} for why no public accessor exists.
+	 *
+	 * @return Point_Source
+	 */
+	private function ambient_point_source(): Point_Source {
+		$handler  = woodev_test_shipping_method_plugin()->get_pickup_handler();
+		$property = new ReflectionProperty( $handler, 'source' );
+		$property->setAccessible( true );
+
+		return $property->getValue( $handler );
+	}
+
+	/**
+	 * Swaps the ambient fixture plugin's `Pickup_Handler::$source` and rebuilds
+	 * the REST server so the swap takes effect — see {@see self::setUp()} for the
+	 * full reasoning.
+	 *
+	 * @param Point_Source $source the source the ambient route should serve.
+	 *
+	 * @return void
+	 */
+	private function force_ambient_point_source( Point_Source $source ): void {
+		$handler  = woodev_test_shipping_method_plugin()->get_pickup_handler();
+		$property = new ReflectionProperty( $handler, 'source' );
+		$property->setAccessible( true );
+		$property->setValue( $handler, $source );
+
+		do_action( 'rest_api_init' );
+
+		$GLOBALS['wp_rest_server'] = null;
+		rest_get_server();
 	}
 
 	// -------------------------------------------------------------------------
