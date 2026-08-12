@@ -197,14 +197,24 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 
 		/**
 		 * Resets all state. Test-only — mirrors
-		 * {@see \Woodev\Framework\Settings\Settings_Page_Registry::reset_for_tests()}.
+		 * {@see \Woodev\Framework\Settings\Settings_Page_Registry::reset_for_tests()},
+		 * including its `remove_action()` half (added once a fixture plugin loaded
+		 * unconditionally by the integration bootstrap — `woodev-test-shipping-method`,
+		 * location-provider layer rig pull-forward — started declaring need at
+		 * `plugins_loaded` time, exactly like a real shipping plugin would; before that,
+		 * `declare_needed()` was only ever called from WITHIN a test, after THAT test's
+		 * own reset, so the stale-hook problem below could not surface).
 		 *
-		 * Unlike that registry, this one has nothing to `remove_action()` beyond
-		 * what a fresh singleton already starts without: {@see self::$hooked} being
-		 * reset to `false` means the NEXT {@see self::declare_needed()} call
-		 * re-hooks `init` from scratch, and PHP does not mind `add_action()` being
-		 * called twice with the same callback+priority in two different test runs
-		 * (each runs against a fresh Brain Monkey mock, not real WordPress state).
+		 * `self::$instance = null` alone discards the PHP-level singleton reference but
+		 * leaves any `add_action()` calls the OLD instance made intact in WordPress's own
+		 * hook table — `add_action()`/`remove_action()` match by object identity, not by
+		 * class, so a lingering registration keeps firing against the discarded instance
+		 * on every `do_action( 'init' | 'rest_api_init' )` a LATER test issues, silently
+		 * reopening state this method is supposed to erase. Removing the two `add_hooks()`
+		 * registrations this class can name a stable callback for closes that gap; the
+		 * `wp_login` registration in {@see self::add_hooks()} is NOT removable the same
+		 * way — it binds a `new Customer_Location_Store()` instance never stored anywhere,
+		 * a pre-existing limitation this method does not attempt to fix.
 		 *
 		 * @internal
 		 *
@@ -213,6 +223,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		 * @return void
 		 */
 		public function reset_for_tests(): void {
+			if ( null !== self::$instance && self::$instance->hooked ) {
+				remove_action( 'init', [ self::$instance, 'collect' ], 20 );
+				remove_action( 'rest_api_init', [ self::$instance, 'register_rest' ] );
+			}
+
 			self::$instance = null;
 		}
 

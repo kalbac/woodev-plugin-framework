@@ -44,10 +44,10 @@ class CheckoutHandlerRegisterTest extends TestCase {
 
 	/**
 	 * register() must wire all hooks: 2 filters (woocommerce_checkout_fields +
-	 * woocommerce_states) + 4 actions (checkout_process, order_processed,
-	 * wp_enqueue_scripts, rest_api_init).
+	 * woocommerce_states) + 5 actions (checkout_process, order_processed,
+	 * wp_enqueue_scripts, rest_api_init, and the Task 12 `init` suppression check).
 	 */
-	public function test_register_wires_all_five_hooks(): void {
+	public function test_register_wires_all_six_hooks(): void {
 
 		Functions\expect( 'add_filter' )
 			->once()
@@ -58,12 +58,28 @@ class CheckoutHandlerRegisterTest extends TestCase {
 			->with( 'woocommerce_states', \Mockery::type( 'array' ) );
 
 		Functions\expect( 'add_action' )
-			->times( 4 )
+			->times( 5 )
 			->withAnyArgs();
 
 		$fields  = Checkout_Fields::from_array( [] );
 		$handler = new Checkout_Handler( $fields, 'carrier' );
 		$handler->register();
+	}
+
+	/**
+	 * register() wires the Task 12 WC-address-provider suppression check onto
+	 * `init` at priority 21 — strictly after the Location Provider Registry's
+	 * own `init:20` collection ({@see \Woodev\Framework\Shipping\Location\Location_Provider_Registry::collect()}),
+	 * so the provider list/countries are already populated when it runs.
+	 */
+	public function test_register_hooks_init_for_wc_address_provider_suppression(): void {
+
+		Functions\expect( 'add_filter' )->twice()->withAnyArgs();
+		Functions\expect( 'add_action' )
+			->atLeast()->once()
+			->with( 'init', \Mockery::type( 'array' ), 21 );
+
+		( new Checkout_Handler( Checkout_Fields::from_array( [] ), 'carrier' ) )->register();
 	}
 
 	/**
@@ -202,7 +218,7 @@ class CheckoutHandlerRegisterTest extends TestCase {
 	public function test_guard_fires_doing_it_wrong_on_native_field_conflict(): void {
 
 		Functions\expect( 'add_filter' )->times( 4 )->withAnyArgs();
-		Functions\expect( 'add_action' )->times( 8 )->withAnyArgs();
+		Functions\expect( 'add_action' )->times( 10 )->withAnyArgs();
 		Functions\expect( '_doing_it_wrong' )
 			->once()
 			->with(
@@ -225,7 +241,7 @@ class CheckoutHandlerRegisterTest extends TestCase {
 	public function test_guard_does_not_fire_for_same_plugin_id(): void {
 
 		Functions\expect( 'add_filter' )->times( 4 )->withAnyArgs();
-		Functions\expect( 'add_action' )->times( 8 )->withAnyArgs();
+		Functions\expect( 'add_action' )->times( 10 )->withAnyArgs();
 		Functions\expect( '_doing_it_wrong' )->never();
 
 		$field   = Field::create( 'billing_city' )->set_type( 'text' )->set_section( 'billing' )->to_array();
@@ -243,7 +259,7 @@ class CheckoutHandlerRegisterTest extends TestCase {
 	public function test_guard_ignores_non_native_fields(): void {
 
 		Functions\expect( 'add_filter' )->times( 4 )->withAnyArgs();
-		Functions\expect( 'add_action' )->times( 8 )->withAnyArgs();
+		Functions\expect( 'add_action' )->times( 10 )->withAnyArgs();
 		Functions\expect( '_doing_it_wrong' )->never();
 
 		$field = Field::create( 'carrier_pvz' )->set_type( 'hidden' )->set_section( 'order' )->to_array();

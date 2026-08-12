@@ -93,6 +93,22 @@ class Checkout_Handler_Location_Assets_Built_Probe extends Checkout_Handler {
 }
 
 /**
+ * Probe forcing every location asset to report as NOT built on disk —
+ * the counterpart to {@see Checkout_Handler_Location_Assets_Built_Probe}.
+ *
+ * Task 12 shipped the real `location-typeahead.js`/`location-cascade.js`
+ * files, so the "not yet built" scenario this test class exists to cover
+ * can no longer rely on ambient filesystem state (the files ARE there now);
+ * it must force-simulate the absence instead, exactly like the sibling probe
+ * force-simulates presence.
+ */
+class Checkout_Handler_Location_Assets_Not_Built_Probe extends Checkout_Handler {
+	protected static function asset_exists( string $path ): bool {
+		return false;
+	}
+}
+
+/**
  * @covers \Woodev\Framework\Shipping\Checkout\Checkout_Handler::enqueue_assets
  */
 class CheckoutHandlerEnqueueTest extends TestCase {
@@ -178,10 +194,14 @@ class CheckoutHandlerEnqueueTest extends TestCase {
 		$localized  = [];
 		$this->wire_spies( $scripts, $localized );
 
-		$handler = new Checkout_Handler( $fields, 'carrier', new Checkout_Handler_Fake_Location_Service( true ) );
+		$handler = new Checkout_Handler_Location_Assets_Not_Built_Probe(
+			$fields,
+			'carrier',
+			new Checkout_Handler_Fake_Location_Service( true )
+		);
 		$handler->enqueue_assets();
 
-		// Real files do not exist yet in this PR block — must never be enqueued.
+		// Files forced to report as not-yet-built — must never be enqueued.
 		$this->assertArrayNotHasKey( 'woodev-location-typeahead', $scripts );
 		$this->assertArrayNotHasKey( 'woodev-location-cascade', $scripts );
 
