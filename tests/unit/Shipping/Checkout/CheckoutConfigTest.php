@@ -83,7 +83,10 @@ final class Checkout_Config_Fake_Location_Service extends Location_Service {
 	 * @param bool                                                             $active           is_active() return value.
 	 * @param array<string, bool>                                              $supported_levels level => whether SOME configured provider serves it.
 	 * @param array{record: Location_Record, implicit: bool, saved_at: int}|null $customer        get_customer_record() return value.
-	 * @param string[]                                                          $countries        countries is_country_supported() reports true for.
+	 * @param string[]                                                          $countries        the layer's own supported-country set — what
+	 *                                                                                             get_supported_countries() (D15 gate fix, block
+	 *                                                                                             PR-B: the UNION across the chain, no longer a
+	 *                                                                                             single active-provider list) reports.
 	 */
 	public function __construct( bool $active, array $supported_levels, ?array $customer, array $countries ) {
 		$this->active           = $active;
@@ -100,8 +103,12 @@ final class Checkout_Config_Fake_Location_Service extends Location_Service {
 		return $this->customer;
 	}
 
-	public function is_country_supported( string $country ): bool {
+	public function is_country_supported( string $country, ?string $level = null ): bool {
 		return in_array( $country, $this->countries, true );
+	}
+
+	public function get_supported_countries(): array {
+		return $this->countries;
 	}
 
 	public function provider_for_level( string $level ): ?Location_Provider {
@@ -244,6 +251,99 @@ class CheckoutConfigTest extends TestCase {
 		// 'BY' is provider-supported but not a WC selling country here, so it must
 		// not appear; 'FR' is a WC country the provider does not cover.
 		$this->assertSame( [ 'RU' ], $config['location']['countries'] );
+	}
+
+	/**
+	 * D15 gate fix (block PR-B), exercised end-to-end through the REAL
+	 * {@see Location_Service} + provider registry (not the simplified fake
+	 * above, which cannot model two DIFFERENTLY-countried providers along the
+	 * chain): the chosen provider serves region/settlement only, in `RU`; the
+	 * bundled DaData fallback serves every level (including "address"), with
+	 * its own country list widened to `RU`+`BY`. The `countries` block must
+	 * be the UNION across the whole chain — `BY`, covered only by the
+	 * fallback at "address", must still surface — never just the active
+	 * provider's own list, and no provider id may leak into the config
+	 * either way.
+	 */
+	public function test_location_countries_is_the_union_across_the_d15_chain_not_just_the_active_provider(): void {
+		Location_Provider_Registry::instance()->reset_for_tests();
+		Settings_Page_Registry::instance()->reset_for_tests();
+
+		$chosen = new class() extends Abstract_Location_Provider {
+			public function get_id(): string {
+				return 'city-dict';
+			}
+
+			public function get_name(): string {
+				return 'City Dict';
+			}
+
+			public function get_countries(): array {
+				return [ 'RU' ];
+			}
+
+			protected function declare_suggest_levels(): array {
+				return [ Location_Record::LEVEL_REGION, Location_Record::LEVEL_SETTLEMENT ];
+			}
+
+			public function suggest( string $query, Location_Scope $scope ): array {
+				return [];
+			}
+		};
+
+		Functions\when( 'add_action' )->justReturn( true );
+		Functions\when( '__' )->returnArg( 1 );
+		Functions\when( 'wp_parse_args' )->alias(
+			static function ( $args, $defaults = [] ) {
+				return array_merge( (array) $defaults, (array) $args );
+			}
+		);
+		Functions\when( 'is_user_logged_in' )->justReturn( false );
+		Functions\when( 'apply_filters' )->alias(
+			static function ( string $tag, $default = null ) use ( $chosen ) {
+				if ( Location_Provider_Registry::FILTER_PROVIDERS === $tag ) {
+					return [ $chosen ];
+				}
+				if ( Dadata_Provider::FILTER_COUNTRIES === $tag ) {
+					return [ 'RU', 'BY' ]; // the fallback widens its own coverage.
+				}
+
+				return $default;
+			}
+		);
+		Functions\when( 'get_option' )->alias(
+			static function ( $name, $default = null ) {
+				if ( 'woodev_location_active_provider' === $name ) {
+					return 'city-dict';
+				}
+				if ( 'woodev_location_token' === $name ) {
+					return 'tok'; // configures the bundled fallback.
+				}
+
+				return $default;
+			}
+		);
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$service = new Location_Service( $registry );
+		$this->assertTrue( $service->is_active() );
+
+		$config = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU', 'BY', 'FR' ], $service ) )
+			->build( Checkout_Fields::from_array( [] ) );
+
+		// RU: the chosen provider covers it directly. BY: only the fallback
+		// (resolved at "address") covers it — must still surface. FR: nobody
+		// in the chain covers it.
+		$countries = $config['location']['countries'];
+		sort( $countries );
+		$this->assertSame( [ 'BY', 'RU' ], $countries );
+
+		$serialized = (string) json_encode( $config );
+		$this->assertStringNotContainsString( 'city-dict', $serialized, 'the chosen provider id must never leak' );
+		$this->assertStringNotContainsString( 'dadata', $serialized, 'the fallback provider id must never leak' );
 	}
 
 	// -------------------------------------------------------------------------

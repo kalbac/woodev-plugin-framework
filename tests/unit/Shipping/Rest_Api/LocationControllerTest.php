@@ -101,27 +101,61 @@ final class Location_Controller_Fake_Service extends Location_Service {
 	private bool $persist_result;
 	private bool $country_supported;
 
+	/**
+	 * Optional level => provider map (D15 gate fix, block PR-B test seam).
+	 * When set, {@see self::provider_for_level()} resolves THROUGH this map
+	 * instead of always returning the single {@see self::$provider} — lets a
+	 * test simulate the D15 chain resolving a DIFFERENT provider (with its
+	 * own, independently-configured `get_countries()`) per level, exactly
+	 * the shape the real {@see Location_Service::provider_for_level()} chain
+	 * produces. `null` (the default) preserves the original single-provider
+	 * behaviour every pre-existing test in this file relies on.
+	 *
+	 * @var array<string, Location_Provider>|null
+	 */
+	private ?array $providers_by_level;
+
+	/**
+	 * Simulates {@see Location_Service::is_country_supported()}'s LEVEL-BLIND
+	 * (`$level === null`) branch when {@see self::$providers_by_level} is set
+	 * — i.e. what the ACTIVE provider alone would answer, the exact call
+	 * shape the pre-fix controller used. Only meaningful together with
+	 * {@see self::$providers_by_level}: it is what a regression test asserts
+	 * the controller must NO LONGER fall back to.
+	 *
+	 * @var Location_Provider|null
+	 */
+	private ?Location_Provider $active_provider_for_level_blind_check;
+
 	/** @var array<int, array{0: Location_Record, 1: bool}> */
 	public array $set_calls = [];
 
 	/** @var array<int, string> */
 	public array $provider_for_level_calls = [];
 
-	/** @var array<int, string> */
+	/** @var array<int, array{0: string, 1: string|null}> */
 	public array $is_country_supported_calls = [];
 
+	/**
+	 * @param array<string, Location_Provider>|null $providers_by_level                    Optional level => provider map — see {@see self::$providers_by_level}.
+	 * @param Location_Provider|null                 $active_provider_for_level_blind_check See {@see self::$active_provider_for_level_blind_check}.
+	 */
 	public function __construct(
 		bool $active = true,
 		?Location_Provider $provider = null,
 		?array $customer_record = null,
 		bool $persist_result = true,
-		bool $country_supported = true
+		bool $country_supported = true,
+		?array $providers_by_level = null,
+		?Location_Provider $active_provider_for_level_blind_check = null
 	) {
-		$this->active            = $active;
-		$this->provider          = $provider;
-		$this->customer_record   = $customer_record;
-		$this->persist_result    = $persist_result;
-		$this->country_supported = $country_supported;
+		$this->active                                = $active;
+		$this->provider                               = $provider;
+		$this->customer_record                        = $customer_record;
+		$this->persist_result                         = $persist_result;
+		$this->country_supported                      = $country_supported;
+		$this->providers_by_level                     = $providers_by_level;
+		$this->active_provider_for_level_blind_check = $active_provider_for_level_blind_check;
 	}
 
 	public function is_active(): bool {
@@ -130,6 +164,10 @@ final class Location_Controller_Fake_Service extends Location_Service {
 
 	public function provider_for_level( string $level ): ?Location_Provider {
 		$this->provider_for_level_calls[] = $level;
+
+		if ( null !== $this->providers_by_level ) {
+			return $this->providers_by_level[ $level ] ?? null;
+		}
 
 		return $this->provider;
 	}
@@ -144,28 +182,64 @@ final class Location_Controller_Fake_Service extends Location_Service {
 		return $this->persist_result;
 	}
 
-	public function is_country_supported( string $country ): bool {
-		$this->is_country_supported_calls[] = $country;
+	/**
+	 * Without a {@see self::$providers_by_level} map, mirrors the original
+	 * fixed-answer fake exactly (level-blind — the pre-existing behaviour
+	 * every unchanged test in this file relies on). WITH the map, resolves
+	 * the SAME level-specific provider {@see self::provider_for_level()}
+	 * itself would return (or, for a `null` `$level`,
+	 * {@see self::$active_provider_for_level_blind_check}) and checks the
+	 * (normalized) country against THAT provider's OWN `get_countries()` —
+	 * i.e. it genuinely exercises the D15 gate fix rather than returning a
+	 * canned boolean, so a test using the map is proving the controller
+	 * passes `$level` through correctly (and that doing so changes the
+	 * answer versus the old level-blind call), not merely that this fake was
+	 * told to say "true".
+	 */
+	public function is_country_supported( string $country, ?string $level = null ): bool {
+		$this->is_country_supported_calls[] = [ $country, $level ];
 
-		return $this->country_supported;
+		if ( null === $this->providers_by_level ) {
+			return $this->country_supported;
+		}
+
+		$provider = null !== $level
+			? ( $this->providers_by_level[ $level ] ?? null )
+			: $this->active_provider_for_level_blind_check;
+
+		if ( null === $provider ) {
+			return false;
+		}
+
+		return in_array( strtoupper( trim( $country ) ), $provider->get_countries(), true );
 	}
 }
 
 /**
  * Configurable fake provider: a closure decides what `suggest()` returns (or
  * throws), and every call is spied so tests can assert the exact query/scope
- * the controller built.
+ * the controller built. `$countries` (D15 gate fix, block PR-B) lets a test
+ * give a "chosen" and a "fallback" fake DIFFERENT country coverage — the
+ * default `[ 'RU' ]` preserves every pre-existing call site unchanged.
  */
 final class Location_Controller_Fake_Provider extends Abstract_Location_Provider {
 
 	/** @var callable */
 	private $suggest_callback;
 
+	/** @var string[] */
+	private array $countries;
+
 	/** @var array<int, array{0: string, 1: Location_Scope}> */
 	public array $suggest_calls = [];
 
-	public function __construct( callable $suggest_callback ) {
+	/**
+	 * @param callable $suggest_callback Decides suggest()'s return value (or throws).
+	 * @param string[] $countries        ISO-3166 alpha-2 codes this fake covers.
+	 */
+	public function __construct( callable $suggest_callback, array $countries = [ 'RU' ] ) {
 		$this->suggest_callback = $suggest_callback;
+		$this->countries        = $countries;
 	}
 
 	public function get_id(): string {
@@ -177,7 +251,7 @@ final class Location_Controller_Fake_Provider extends Abstract_Location_Provider
 	}
 
 	public function get_countries(): array {
-		return [ 'RU' ];
+		return $this->countries;
 	}
 
 	protected function declare_suggest_levels(): array {
@@ -440,6 +514,90 @@ final class LocationControllerTest extends TestCase {
 		$this->assertInstanceOf( \WP_Error::class, $result );
 		$this->assertSame( 400, $result->get_error_data()['status'] );
 		$this->assertCount( 0, $provider->suggest_calls );
+	}
+
+	// -------------------------------------------------------------------
+	// /suggest — D15 gate fix (block PR-B): the country check must be gated
+	// by the provider that ACTUALLY serves the requested level (chosen, or
+	// the D15 fallback), never by the active provider unconditionally — both
+	// wrong directions, pinned with independently-countried fake providers.
+	// -------------------------------------------------------------------
+
+	/**
+	 * False-suppression direction: the chosen provider does not cover "address"
+	 * at all (only the fallback resolves for that level), and the fallback
+	 * covers a country ("BY") the chosen provider does not. The request must
+	 * still reach the fallback and return its suggestions — gating against the
+	 * ACTIVE provider's own country list would have wrongly suppressed this.
+	 */
+	public function test_suggest_reaches_the_fallback_for_a_country_only_the_fallback_covers(): void {
+		$suggested = Location_Record::from_array(
+			[
+				'key'         => 'fallback:by-1',
+				'provider_id' => 'fallback',
+				'level'       => Location_Record::LEVEL_ADDRESS,
+				'country'     => 'BY',
+				'label'       => 'Минск',
+			]
+		);
+		$fallback = new Location_Controller_Fake_Provider( static fn() => [ $suggested ], [ 'RU', 'BY' ] );
+
+		$service = new Location_Controller_Fake_Service(
+			true,
+			null,
+			null,
+			true,
+			true,
+			[ Location_Record::LEVEL_ADDRESS => $fallback ]
+		);
+		$ctrl = new Location_Controller_Probe( $service );
+
+		$request = new WP_REST_Request( [ 'q' => 'Мин', 'level' => Location_Record::LEVEL_ADDRESS, 'country' => 'BY' ] );
+		$result  = $ctrl->handle_suggest_request( $request );
+
+		$this->assertNotInstanceOf( \WP_Error::class, $result );
+		$this->assertCount( 1, $result['suggestions'], 'a country the resolved fallback covers must not be suppressed' );
+		$this->assertCount( 1, $fallback->suggest_calls, 'the provider that actually serves this level must be called' );
+		$this->assertSame(
+			[ [ 'BY', Location_Record::LEVEL_ADDRESS ] ],
+			$service->is_country_supported_calls,
+			'the country check must be made WITH the requested level, not level-blind'
+		);
+	}
+
+	/**
+	 * False-admission direction: the level's resolved provider (the fallback)
+	 * does NOT cover the requested country, even though the ACTIVE (chosen)
+	 * provider elsewhere in the chain DOES — `$chosen` stands in for what the
+	 * pre-fix controller's level-blind `is_country_supported( $country )` call
+	 * would have consulted, and it would have wrongly admitted this request.
+	 * The request must degrade to empty WITHOUT ever reaching the resolved
+	 * provider — gating against a provider that happens to cover the country,
+	 * rather than the one that actually resolved for this level, would have
+	 * wasted upstream quota on a lookup that cannot succeed.
+	 */
+	public function test_suggest_never_reaches_a_provider_for_a_country_it_does_not_cover_even_when_resolved_for_the_level(): void {
+		$chosen   = new Location_Controller_Fake_Provider( static fn() => [], [ 'RU', 'KZ' ] );
+		$fallback = new Location_Controller_Fake_Provider( static fn() => [ /* would-be suggestions */ ], [ 'RU' ] );
+
+		$service = new Location_Controller_Fake_Service(
+			true,
+			null,
+			null,
+			true,
+			true,
+			[ Location_Record::LEVEL_ADDRESS => $fallback ],
+			$chosen
+		);
+		$ctrl = new Location_Controller_Probe( $service );
+
+		$request = new WP_REST_Request( [ 'q' => 'Мос', 'level' => Location_Record::LEVEL_ADDRESS, 'country' => 'KZ' ] );
+		$result  = $ctrl->handle_suggest_request( $request );
+
+		$this->assertNotInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( [ 'suggestions' => [] ], $result );
+		$this->assertCount( 0, $fallback->suggest_calls, 'a country the resolved provider does not cover must never reach it' );
+		$this->assertCount( 0, $chosen->suggest_calls, 'the active provider is never the one dispatched to for this level' );
 	}
 
 	public function test_suggest_never_fatals_for_an_unsupported_level(): void {

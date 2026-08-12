@@ -298,8 +298,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 		 *
 		 * Degradation (spec §4.7, D15): "the whole layer is inactive", "no
 		 * configured provider serves THIS level", and "the request's country is
-		 * well-formed but not one the active provider covers" ({@see
-		 * Location_Service::is_country_supported()}) are DELIBERATELY collapsed
+		 * well-formed but not one the LEVEL'S RESOLVED provider covers" ({@see
+		 * Location_Service::is_country_supported()}, called WITH `$level` —
+		 * block PR-B) are DELIBERATELY collapsed
 		 * into the SAME outcome — `{ suggestions: [] }`, HTTP 200 — because
 		 * {@see Location_Service::provider_for_level()} itself already answers
 		 * `null` for the first two (its `get_active_provider()` returns `null`
@@ -377,15 +378,24 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 			}
 
 			/*
-			 * A well-formed but UNSUPPORTED country (the store's active provider
-			 * simply does not cover it — spec D2, Location_Service::is_country_supported())
-			 * degrades exactly like "no provider for this level" above: 200 + empty,
-			 * BEFORE the provider is ever called. Placed AFTER build_scope()'s own
-			 * format validation deliberately — a MALFORMED country keeps its own 400
-			 * above; is_country_supported() would otherwise mask that same malformed
-			 * input as an unsupported-country 200 (it degrades to false for both).
+			 * A well-formed but UNSUPPORTED country (the provider that will
+			 * actually serve THIS LEVEL — see $provider above — simply does not
+			 * cover it — spec D2/D15, Location_Service::is_country_supported())
+			 * degrades exactly like "no provider for this level" above: 200 +
+			 * empty, BEFORE the provider is ever called. Placed AFTER
+			 * build_scope()'s own format validation deliberately — a MALFORMED
+			 * country keeps its own 400 above; is_country_supported() would
+			 * otherwise mask that same malformed input as an unsupported-country
+			 * 200 (it degrades to false for both).
+			 *
+			 * The `$level` argument is load-bearing (D15 gate fix, block PR-B):
+			 * omitting it would gate against the ACTIVE provider's own country
+			 * list regardless of which provider the D15 chain actually resolved
+			 * for this level above — wrongly suppressing a country only the
+			 * FALLBACK covers, or wrongly admitting one the fallback does NOT
+			 * cover when the active provider merely happens to list it.
 			 */
-			if ( ! $this->service->is_country_supported( $country ) ) {
+			if ( ! $this->service->is_country_supported( $country, $level ) ) {
 				return rest_ensure_response( [ 'suggestions' => [] ] );
 			}
 

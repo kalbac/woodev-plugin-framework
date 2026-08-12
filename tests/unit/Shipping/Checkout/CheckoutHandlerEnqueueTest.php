@@ -73,7 +73,7 @@ final class Checkout_Handler_Fake_Location_Service extends Location_Service {
 		return null;
 	}
 
-	public function is_country_supported( string $country ): bool {
+	public function is_country_supported( string $country, ?string $level = null ): bool {
 		return false;
 	}
 

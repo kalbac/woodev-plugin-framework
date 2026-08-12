@@ -233,9 +233,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 		 *   verifies — minting a second, differently-named nonce for the same action
 		 *   would just be two names for one value.
 		 * - `countries` — the intersection of the injected WC selling-country list
-		 *   ({@see $countries}) and {@see \Woodev\Framework\Shipping\Location\Location_Service::is_country_supported()}:
-		 *   a country the store does not even sell to is not useful information for
-		 *   the client-side D2 arbitration this list feeds.
+		 *   ({@see $countries}) and {@see \Woodev\Framework\Shipping\Location\Location_Service::get_supported_countries()}:
+		 *   the UNION across the whole D15 chain (D15 gate fix, block PR-B) — a
+		 *   country only the FALLBACK covers at some level must still surface here,
+		 *   not just what the ACTIVE provider alone lists. A country the store does
+		 *   not even sell to is not useful information for the client-side D2
+		 *   arbitration this list feeds, hence the intersection with the WC list.
 		 * - `mode` — the store's field-presentation setting (spec D7). Nothing
 		 *   declares that setting yet (Tasks 13/14), so the only HONEST value today
 		 *   is the one mode D7 says is unconditionally available regardless of
@@ -280,9 +283,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 				$levels[ $level ] = null !== $service->provider_for_level( $level );
 			}
 
+			$supported_countries = $service->get_supported_countries();
+
 			$countries = [];
 			foreach ( $this->countries as $code ) {
-				if ( $service->is_country_supported( $code ) ) {
+				if ( in_array( $code, $supported_countries, true ) ) {
 					$countries[] = $code;
 				}
 			}

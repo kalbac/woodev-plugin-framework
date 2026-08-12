@@ -579,6 +579,159 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 		}
 
 		// -------------------------------------------------------------------
+		// is_country_supported( $country, $level ): D15 gate fix (block PR-B).
+		// The country check must consult whichever provider ACTUALLY serves
+		// the requested level, not the active provider unconditionally — a
+		// mismatch is reachable the moment any provider's country list differs
+		// from another's (Dadata_Provider::FILTER_COUNTRIES, or a plugin
+		// registering a multi-country provider).
+		// -------------------------------------------------------------------
+
+		/**
+		 * Stubs `apply_filters` so `Location_Provider_Registry::FILTER_PROVIDERS`
+		 * returns exactly `$providers` AND `Dadata_Provider::FILTER_COUNTRIES`
+		 * returns `$countries` (widening the bundled fallback's own country
+		 * list beyond its `[ 'RU' ]` default) — every other tag passes its
+		 * default through untouched.
+		 *
+		 * @param \Woodev\Framework\Shipping\Location\Location_Provider[] $providers Providers the FILTER_PROVIDERS tag should return.
+		 * @param string[]                                                $countries Countries the FILTER_COUNTRIES tag should return.
+		 *
+		 * @return void
+		 */
+		private function stub_providers_and_widened_fallback_countries( array $providers, array $countries ): void {
+			Functions\when( 'apply_filters' )->alias(
+				static function ( string $tag, $default = null ) use ( $providers, $countries ) {
+					if ( Location_Provider_Registry::FILTER_PROVIDERS === $tag ) {
+						return $providers;
+					}
+					if ( Dadata_Provider::FILTER_COUNTRIES === $tag ) {
+						return $countries;
+					}
+
+					return $default;
+				}
+			);
+		}
+
+		/**
+		 * False-suppression direction: the chosen provider serves region and
+		 * settlement only, in `[ 'RU' ]`; the bundled fallback (configured, and
+		 * the D15 universal tail — it serves every level) has its own country
+		 * list widened to `[ 'RU', 'BY' ]`. A `BY` "address" request must be
+		 * gated against the FALLBACK — the provider that will actually serve
+		 * it — and therefore reported supported, even though the ACTIVE
+		 * (chosen) provider alone does not cover `BY` at all.
+		 */
+		public function test_is_country_supported_for_a_level_consults_the_fallback_when_the_fallback_actually_serves_that_level(): void {
+			$chosen = new Location_Service_Fake_Provider(
+				'city-dict',
+				[ Location_Record::LEVEL_REGION, Location_Record::LEVEL_SETTLEMENT ],
+				true,
+				[ 'RU' ]
+			);
+
+			Functions\when( 'add_action' )->justReturn( true );
+			$this->stub_providers_and_widened_fallback_countries( [ $chosen ], [ 'RU', 'BY' ] );
+			$this->stub_dadata_token( 'tok' ); // the real bundled fallback must be configured.
+
+			$registry = Location_Provider_Registry::instance();
+			$registry->declare_needed();
+			$registry->collect();
+
+			$service = new Location_Service( $registry );
+
+			// Sanity: "address" is indeed resolved to the fallback, not $chosen.
+			$this->assertInstanceOf( Dadata_Provider::class, $service->provider_for_level( Location_Record::LEVEL_ADDRESS ) );
+
+			$this->assertTrue(
+				$service->is_country_supported( 'BY', Location_Record::LEVEL_ADDRESS ),
+				'BY must be reported supported for "address" — the fallback that actually serves that level covers BY'
+			);
+			$this->assertFalse(
+				$service->is_country_supported( 'BY' ),
+				'sanity: the ACTIVE (chosen) provider alone does not cover BY — proves the level-aware answer legitimately differs from the level-blind one'
+			);
+		}
+
+		/**
+		 * False-admission direction: the chosen provider serves region only,
+		 * in `[ 'RU', 'KZ' ]`; the bundled fallback is configured but its own
+		 * country list is left at the unwidened `[ 'RU' ]` default. A `KZ`
+		 * "address" request must be gated against the FALLBACK — the provider
+		 * that will actually serve it — and therefore reported UNSUPPORTED,
+		 * even though the ACTIVE (chosen) provider alone does cover `KZ`.
+		 */
+		public function test_is_country_supported_for_a_level_reports_unsupported_when_the_fallback_does_not_cover_it_even_if_the_active_provider_does(): void {
+			$chosen = new Location_Service_Fake_Provider(
+				'city-dict',
+				[ Location_Record::LEVEL_REGION ],
+				true,
+				[ 'RU', 'KZ' ]
+			);
+
+			Functions\when( 'add_action' )->justReturn( true );
+			$this->stub_providers_filter( [ $chosen ] );
+			$this->stub_dadata_token( 'tok' ); // configured fallback, countries left at the RU-only default.
+
+			$registry = Location_Provider_Registry::instance();
+			$registry->declare_needed();
+			$registry->collect();
+
+			$service = new Location_Service( $registry );
+
+			// Sanity: "address" is indeed resolved to the fallback, not $chosen
+			// (which only declares "region").
+			$this->assertInstanceOf( Dadata_Provider::class, $service->provider_for_level( Location_Record::LEVEL_ADDRESS ) );
+
+			$this->assertFalse(
+				$service->is_country_supported( 'KZ', Location_Record::LEVEL_ADDRESS ),
+				'KZ must be reported UNSUPPORTED for "address" — the fallback that actually serves that level does not cover KZ'
+			);
+			$this->assertTrue(
+				$service->is_country_supported( 'KZ' ),
+				'sanity: the ACTIVE (chosen) provider alone DOES cover KZ — proves the level-blind answer would have wrongly admitted it'
+			);
+		}
+
+		// -------------------------------------------------------------------
+		// get_supported_countries(): the union across the whole D15 chain
+		// (D15 gate fix, block PR-B) — feeds Checkout_Config's `countries` block.
+		// -------------------------------------------------------------------
+
+		public function test_get_supported_countries_unions_every_level_s_resolved_provider(): void {
+			$chosen = new Location_Service_Fake_Provider(
+				'city-dict',
+				[ Location_Record::LEVEL_REGION, Location_Record::LEVEL_SETTLEMENT ],
+				true,
+				[ 'RU' ]
+			);
+
+			Functions\when( 'add_action' )->justReturn( true );
+			$this->stub_providers_and_widened_fallback_countries( [ $chosen ], [ 'RU', 'BY' ] );
+			$this->stub_dadata_token( 'tok' );
+
+			$registry = Location_Provider_Registry::instance();
+			$registry->declare_needed();
+			$registry->collect();
+
+			$service = new Location_Service( $registry );
+
+			// region/settlement -> $chosen ([ 'RU' ]); address -> the fallback
+			// ([ 'RU', 'BY' ]) — the union must be exactly { RU, BY }, deduplicated.
+			$countries = $service->get_supported_countries();
+			sort( $countries );
+
+			$this->assertSame( [ 'BY', 'RU' ], $countries );
+		}
+
+		public function test_get_supported_countries_empty_when_the_chain_resolves_no_provider_for_any_level(): void {
+			$service = new Location_Service( Location_Provider_Registry::instance() );
+
+			$this->assertSame( [], $service->get_supported_countries() );
+		}
+
+		// -------------------------------------------------------------------
 		// provider_for_level(): the D15 chain, exhaustively
 		// -------------------------------------------------------------------
 
