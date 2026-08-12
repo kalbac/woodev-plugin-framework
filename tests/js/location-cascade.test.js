@@ -173,7 +173,10 @@ function buildConfig( opts ) {
 			nonce: 'test-nonce',
 			countries: o.countries || [ 'RU' ],
 			mode: 'typeahead',
-			levels: o.levels || { region: true, settlement: true, address: true },
+			// Keyed BY COUNTRY, mirroring Checkout_Config::build_location_block(): DaData's
+			// coverage is per country (street data for RU/BY/KZ/UZ, city-only elsewhere), so
+			// a flat per-level map cannot describe it without lying.
+			levels: o.levels || { RU: { region: true, settlement: true, address: true } },
 			current: o.current !== undefined ? o.current : null,
 			implicit: false,
 		},
@@ -763,6 +766,48 @@ describe( 'country switch', () => {
 		expect( document.getElementById( 'billing_city' ).value ).toBe( 'Москва' ); // state kept
 	} );
 
+	it( 'detaches a level the NEW country does not serve, even though the country itself is served', () => {
+		// The nasty case, and the one no test caught before: RU and AM are BOTH in `countries`,
+		// so the country gate stays satisfied across the switch — but DaData has street data
+		// only for RU/BY/KZ/UZ, so the address widget must come off. A gate that lives only on
+		// the attach path can never detach, which is why isNodeActive() owns the level check.
+		boot( {
+			region: true, settlement: true, address: true,
+			countries: [ 'RU', 'AM' ],
+			levels: {
+				RU: { region: true, settlement: true, address: true },
+				AM: { region: true, settlement: true, address: false },
+			},
+		} );
+
+		// The shared fixture's country <select> only carries RU and US; assigning an absent
+		// value to a <select> silently yields '', which would look exactly like "country not
+		// supported" and detach everything — so the option has to exist before we can switch.
+		const countrySelect = document.getElementById( 'billing_country' );
+		const am = document.createElement( 'option' );
+		am.value = 'AM';
+		am.textContent = 'Армения';
+		countrySelect.appendChild( am );
+
+		const addressAttach = attachCalls.find( ( c ) => c.el.id === 'billing_address_1' );
+		const settlementAttach = attachCalls.find( ( c ) => c.el.id === 'billing_city' );
+
+		expect( addressAttach ).toBeDefined();
+
+		// Deltas around the switch, not absolute counts: a widget may legitimately be
+		// re-attached during boot (the typeahead auto-detaches a previous instance on
+		// re-attach), and an absolute assertion would be measuring that instead.
+		const addressDetachesBefore = addressAttach.detach.mock.calls.length;
+		const settlementDetachesBefore = settlementAttach.detach.mock.calls.length;
+
+		document.getElementById( 'billing_country' ).value = 'AM';
+		document.getElementById( 'billing_country' ).dispatchEvent( new Event( 'change', { bubbles: true } ) );
+
+		expect( addressAttach.detach.mock.calls.length ).toBeGreaterThan( addressDetachesBefore );
+		// …and the levels AM DOES serve stay attached — this must not degrade into "detach all".
+		expect( settlementAttach.detach.mock.calls.length ).toBe( settlementDetachesBefore );
+	} );
+
 	it( 're-attaches with state intact when switching back to a supported country', () => {
 		boot( { region: true, settlement: true, address: true, countries: [ 'RU' ] } );
 
@@ -906,7 +951,7 @@ describe( 'D15 — a level no configured provider serves stays native', () => {
 	it( 'never attaches a widget to the unsupported-level field, but it still participates in clearing', () => {
 		boot( {
 			region: true, settlement: true, address: true,
-			levels: { region: true, settlement: true, address: false },
+			levels: { RU: { region: true, settlement: true, address: false } },
 		} );
 
 		expect( attachCalls.map( ( c ) => c.el.id ).sort() ).toEqual( [ 'billing_city', 'billing_state' ].sort() );

@@ -267,7 +267,15 @@
 			return false;
 		}
 
-		return isCountrySupported( entry, countryFor( node ) );
+		var country = countryFor( node );
+
+		// The D15 level gate belongs HERE, not only inside attachOne(): the reconcile in
+		// applyCountryArbitration() decides detach-vs-attach purely from this predicate, so a
+		// gate that lives only on the attach path can never DETACH. Concretely — a customer
+		// on RU with an attached address widget who switches to AM (a country we serve, but
+		// with city-only data) would keep a widget that can never return anything, because
+		// the country itself is still supported and the section is still visible.
+		return isCountrySupported( entry, country ) && isLevelServed( entry, country, node.level );
 	}
 
 	/**
@@ -688,18 +696,43 @@
 	}
 
 	/**
-	 * Attaches a typeahead widget to one chain node, UNLESS its level is unsupported per
-	 * `config.location.levels` (D15) — an unsupported level stays a plain native input; it
-	 * still fully participates in the clearing gate below, just with no widget of its own.
-	 * Callers are responsible for the country/section gate ({@see isNodeActive}) — this
-	 * function only knows about D15, not about which country or section `node` belongs to.
+	 * Whether a level is served for a given country.
+	 *
+	 * `config.location.levels` is keyed BY COUNTRY (`{ RU: { region: true, … }, AM: { … } }`),
+	 * not by level, because DaData's coverage is genuinely per country: it serves street data
+	 * for RU/BY/KZ/UZ and city-only data everywhere else. A flat per-level map would have to
+	 * lie in one direction or the other, and the lie is expensive — an address field that
+	 * looks alive and always answers nothing.
+	 *
+	 * @param {Object} entry
+	 * @param {string} country ISO-3166 alpha-2.
+	 * @param {string} level
+	 * @returns {boolean}
+	 */
+	function isLevelServed( entry, country, level ) {
+		var byCountry = entry.location.levels;
+
+		if ( ! byCountry || ! country || ! byCountry[ country ] ) {
+			return false;
+		}
+
+		return !! byCountry[ country ][ level ];
+	}
+
+	/**
+	 * Attaches a typeahead widget to one chain node, UNLESS its level is unsupported for that
+	 * node's own country per `config.location.levels` (D15) — an unsupported level stays a
+	 * plain native input; it still fully participates in the clearing gate below, just with no
+	 * widget of its own. Callers are responsible for the country/section gate
+	 * ({@see isNodeActive}); this function additionally applies the per-country D15 gate,
+	 * which is why it resolves the node's country itself rather than trusting the caller.
 	 *
 	 * @param {Object} entry
 	 * @param {{level: string, fieldId: string, section?: string}} node
 	 * @returns {void}
 	 */
 	function attachOne( entry, node ) {
-		if ( ! entry.location.levels || ! entry.location.levels[ node.level ] ) {
+		if ( ! isLevelServed( entry, countryFor( node ), node.level ) ) {
 			return;
 		}
 
