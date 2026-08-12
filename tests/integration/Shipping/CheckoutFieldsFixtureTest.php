@@ -319,8 +319,15 @@ class CheckoutFieldsFixtureTest extends TestCase {
 	// -------------------------------------------------------------------------
 
 	/**
-	 * The billing_state takeover_condition must return true for CIS countries
-	 * (RU, BY, KZ, UZ) and false for others (DE, FR, US).
+	 * The billing_state takeover_condition must return true for BY, KZ and UZ,
+	 * and false for everything else — INCLUDING RU.
+	 *
+	 * RU is excluded on purpose (issue #294): `woocommerce_states` is keyed by COUNTRY,
+	 * not by field, so a takeover covering RU registers this fixture's three hardcoded
+	 * regions as RU's states and WooCommerce then renders EVERY `*_state` field for RU as
+	 * a `<select>` — including `shipping_state`, which the location-provider layer declares
+	 * as a text typeahead. Keeping RU here made the layer's entire region level
+	 * unobservable on the rig.
 	 *
 	 * @return void
 	 */
@@ -330,12 +337,17 @@ class CheckoutFieldsFixtureTest extends TestCase {
 
 		$this->assertIsCallable( $predicate, 'takeover_condition must be callable.' );
 
-		foreach ( [ 'RU', 'BY', 'KZ', 'UZ' ] as $cis_code ) {
+		foreach ( [ 'BY', 'KZ', 'UZ' ] as $cis_code ) {
 			$this->assertTrue(
 				$predicate( [ 'country' => $cis_code ] ),
 				"takeover_condition should be true for CIS country '{$cis_code}'."
 			);
 		}
+
+		$this->assertFalse(
+			$predicate( [ 'country' => 'RU' ] ),
+			'RU must stay OUT of the state takeover so the location layer owns its region field (#294).'
+		);
 
 		foreach ( [ 'DE', 'FR', 'US' ] as $non_cis ) {
 			$this->assertFalse(
@@ -350,21 +362,30 @@ class CheckoutFieldsFixtureTest extends TestCase {
 	// -------------------------------------------------------------------------
 
 	/**
-	 * The fixture's regions must reach the checkout as WooCommerce NATIVE states for RU.
+	 * RU must receive NO injected states — the property the location-provider layer's
+	 * region level depends on.
 	 *
-	 * This is the region path since the takeover redesign: `inject_states()` feeds the
-	 * `woocommerce_states` filter, WooCommerce renders the `<select>` itself and persists
-	 * the choice in its own session, so the value survives `update_checkout` without any
-	 * client-side DOM surgery.
+	 * `inject_states()` feeds `woocommerce_states`, which is keyed by COUNTRY: any entry
+	 * under `RU` makes WooCommerce render every `*_state` field for RU as a `<select>`,
+	 * `shipping_state` included, and the location typeahead can then neither attach nor be
+	 * backwards-filled. Measured on the rig (s70): WooCommerce ships no RU states of its
+	 * own, so whatever appears here is exclusively this fixture's doing.
+	 *
+	 * The takeover mechanism itself is still exercised — by BY/KZ/UZ in
+	 * {@see self::test_billing_state_takeover_condition()} — and this fixture's source
+	 * callable only ever returns options for RU, so the state half of the §8 demo is
+	 * dormant until #294 settles how the two subsystems share the `state` field.
 	 *
 	 * @return void
 	 */
-	public function test_inject_states_publishes_fixture_regions_for_ru(): void {
+	public function test_inject_states_leaves_ru_to_the_location_layer(): void {
 		$states = $this->plugin->get_checkout_handler()->inject_states( [] );
 
-		$this->assertArrayHasKey( 'RU', $states, 'RU must receive the fixture regions as WC states.' );
-		$this->assertArrayHasKey( '77', $states['RU'], 'Regions must contain key 77 (Москва).' );
-		$this->assertSame( 'Москва', $states['RU']['77'] );
+		$this->assertArrayNotHasKey(
+			'RU',
+			$states,
+			'RU must keep NO states, or WooCommerce turns shipping_state into a select (#294).'
+		);
 	}
 
 	/**
