@@ -1,6 +1,15 @@
 # Gotchas — Woodev Plugin Framework
-> **129 atomic gotchas, 22 namespaces (28 index sections)** — update when adding/removing.
-> Last updated: 2026-08-12 (session 68, location-provider PR-A/PR-B: **+1 file, existing namespace
+> **130 atomic gotchas, 22 namespaces (28 index sections)** — update when adding/removing.
+> Last updated: 2026-08-12 (session 69, location-provider Task 12: **+1 file, existing namespace
+> `[woocommerce/*]`** — `wc-address-autocomplete-registry-wrap-is-not-a-documented-contract`
+> (the client-side half of D2's per-country arbitration replaces registry ENTRIES of
+> `window.wc.addressAutocomplete.providers` — an undocumented global namespace, re-verify its
+> shape on every WC major. Two implementation traps recorded alongside it: shadowing a property
+> that is non-writable on a frozen prototype MUST use `Object.defineProperty()`, plain assignment
+> throws in strict mode; and a jest fixture that `return`s the SAME container object the code
+> under test mutates in place cannot prove non-mutation — capture the specific nested reference
+> into its own variable BEFORE the mutating call, not the container).
+> Prior: 2026-08-12 (session 68, location-provider PR-A/PR-B: **+1 file, existing namespace
 > `[testing/*]`** — `a-no-leak-test-needs-a-low-entropy-placeholder` (a test proving a credential does
 > not reach the client is strongest when it greps the serialized payload for a distinctive literal —
 > and a realistic-looking literal trips gitleaks' `generic-api-key` entropy rule, so the no-leak test
@@ -262,6 +271,7 @@
 - [framework/contracts] `''` returned by a domain seam is the seam FAILING TO ANSWER, not a key — a point whose locality the plugin cannot map, a `current_locality()` asked before WooCommerce can answer, the framework's own already-documented "chosen method not known yet" sentinel. Accepting it collapses every unnameable locality into ONE shared bucket, and a later read whose `current_locality()` also cannot answer then recalls a point from a locality the customer never chose — silent on both sides. Refuse on the write AND the read: refusing only the write still lets a map written by an earlier version, or by hand, be recalled, and that is the test that matters (seed a `''` bucket directly, assert it is never recalled). This is not the framework interpreting a domain value — it never compares or normalizes the key, it only declines to treat "no answer" as an answer → [gotchas/an-empty-domain-key-is-not-a-key.md](gotchas/an-empty-domain-key-is-not-a-key.md) (s65)
 
 - [woocommerce/address-autocomplete] WC's Address Autocomplete Provider API (9.9+) is an address_1-only, string-only facade: search attaches ONLY to `address_1`, `select()` flattens to strings (identity destroyed by contract), omitted fields are CLEARED, search context is `country` only — never a base for a locality cascade. Reusable: the double server gate (`woocommerce_address_autocomplete_enabled` + `woocommerce_address_providers`; `[]` late = documented kill) and per-country client arbitration whose frozen providers sit in replaceable registry slots → [gotchas/wc-address-autocomplete-hosts-only-address1-and-flattens-identity.md](gotchas/wc-address-autocomplete-hosts-only-address1-and-flattens-identity.md) (s67)
+- [woocommerce/address-autocomplete] Replacing a `window.wc.addressAutocomplete.providers` ENTRY (the mixed-country client-side suppression lever) touches an undocumented global namespace, not a versioned contract — re-verify the shape on every WC major. Two implementation traps: shadowing a property that is non-writable on a FROZEN prototype (`Object.create(frozenProvider)` then `clone.canSearch = ...`) throws in strict mode — use `Object.defineProperty()` instead; and a jest fixture that returns the SAME container object the suppression code mutates in place cannot prove non-mutation — capture the specific nested provider reference into its own variable before the call, not the container it lives in → [gotchas/wc-address-autocomplete-registry-wrap-is-not-a-documented-contract.md](gotchas/wc-address-autocomplete-registry-wrap-is-not-a-documented-contract.md) (s69)
 
 ### [rig/*] — Local verification rig
 - [rig/browser] `:8973/checkout/` is the BLOCK checkout — no `form.checkout`, no `carrier_pickup_point`, no trigger, because the block adapter is SP-11 and unbuilt. Probing it returns a plausible "the feature is not there" and reads as a broken build rather than the wrong URL. The picker lives on **`/classic-checkout/`** (page id 13; `classic-cart` is 14). Product id 12 fills the cart via `?add-to-cart=12`. `billing_city` is a dependent suggest whose options are empty on load, so it renders blank after a reload even when the customer chose one → [gotchas/rig-checkout-url-is-the-block-checkout.md](gotchas/rig-checkout-url-is-the-block-checkout.md) (s65)

@@ -246,6 +246,7 @@ beforeEach( () => {
 	delete global.jQuery;
 	delete global.$;
 	delete global.fetch;
+	delete window.wc;
 	document.body.innerHTML = '';
 } );
 
@@ -702,5 +703,134 @@ describe( 'store sharing', () => {
 		// The cascade's own prefill() must have read/written through the SAME store instance
 		// getStoreForField() resolves — not a second, diverging one.
 		expect( window.WoodevCheckoutFieldStore.getStoreForField( 'billing_city' ) ).toBe( existingStore );
+	} );
+} );
+
+// -----------------------------------------------------------------------
+// WC Address Autocomplete suppression — client half (Task 12, spec D2)
+// -----------------------------------------------------------------------
+
+/**
+ * Installs a fake `window.wc.addressAutocomplete` registry mirroring the real shape measured
+ * from WooCommerce's own `address-autocomplete-common.js` (gotcha
+ * `wc-address-autocomplete-hosts-only-address1-and-flattens-identity`): `providers` (an object
+ * keyed by provider id, each entry FROZEN via `Object.freeze()` at registration time),
+ * `serverProviders` (the server-preference-ordered list `[{ id, name, branding_html }, ...]`
+ * WC's own arbitration loop walks), and `activeProvider` (per address-type, unrelated to this
+ * module). `canSearch` is stubbed to always return `true` so a suppressed vs. delegated result
+ * is unambiguous in assertions.
+ *
+ * @param {string[]} ids
+ * @returns {Object.<string, Object>} the ORIGINAL (frozen) provider objects, keyed by id — for
+ *          asserting they were never mutated.
+ */
+function installWcAddressAutocomplete( ids ) {
+	const providers = {};
+
+	ids.forEach( ( id ) => {
+		providers[ id ] = Object.freeze( {
+			id,
+			name: id,
+			canSearch: jest.fn( () => true ),
+			search: jest.fn(),
+			select: jest.fn(),
+		} );
+	} );
+
+	window.wc = {
+		addressAutocomplete: {
+			providers,
+			serverProviders: ids.map( ( id ) => ( { id, name: id } ) ),
+			activeProvider: { billing: null, shipping: null },
+		},
+	};
+
+	return providers;
+}
+
+describe( 'WC Address Autocomplete suppression (Task 12, spec D2)', () => {
+	it( 'is a no-op when window.wc.addressAutocomplete is absent (feature off / older WC)', () => {
+		expect( () => boot( { settlement: true, countries: [ 'RU' ] } ) ).not.toThrow();
+		expect( window.wc ).toBeUndefined();
+	} );
+
+	it( 'replaces the registry ENTRY with a delegating clone: our country returns false, another delegates', () => {
+		const providers = installWcAddressAutocomplete( [ 'google' ] );
+		// Snapshot the ORIGINAL provider object BEFORE boot() — `providers` is the very
+		// container `window.wc.addressAutocomplete.providers` also points at, so reading
+		// `providers.google` AFTER boot() would read whatever is CURRENTLY in that slot
+		// (the clone, once wrapped), not the pre-wrap object.
+		const originalGoogle = providers.google;
+
+		boot( { settlement: true, countries: [ 'RU' ] } );
+
+		const wrapped = window.wc.addressAutocomplete.providers.google;
+
+		expect( wrapped ).not.toBe( originalGoogle ); // the registry SLOT was replaced
+		expect( wrapped.canSearch( 'RU' ) ).toBe( false ); // our own country — suppressed
+		expect( wrapped.canSearch( 'US' ) ).toBe( true ); // not ours — delegates to the original
+		expect( originalGoogle.canSearch ).toHaveBeenCalledWith( 'US' );
+	} );
+
+	it( 'never mutates the original frozen provider object', () => {
+		const providers = installWcAddressAutocomplete( [ 'google' ] );
+		const originalGoogle = providers.google; // snapshot BEFORE the registry slot is replaced
+
+		boot( { settlement: true, countries: [ 'RU' ] } );
+
+		expect( Object.isFrozen( originalGoogle ) ).toBe( true );
+		expect( originalGoogle.canSearch( 'RU' ) ).toBe( true ); // unaffected by our wrap
+	} );
+
+	it( 'wraps EVERY registered provider, not just one', () => {
+		installWcAddressAutocomplete( [ 'google', 'algolia' ] );
+
+		boot( { settlement: true, countries: [ 'RU' ] } );
+
+		expect( window.wc.addressAutocomplete.providers.google.canSearch( 'RU' ) ).toBe( false );
+		expect( window.wc.addressAutocomplete.providers.algolia.canSearch( 'RU' ) ).toBe( false );
+	} );
+
+	it( 'suppresses every one of our own countries when the config carries more than one', () => {
+		installWcAddressAutocomplete( [ 'google' ] );
+
+		boot( { settlement: true, countries: [ 'RU', 'KZ' ] } );
+
+		const wrapped = window.wc.addressAutocomplete.providers.google;
+
+		expect( wrapped.canSearch( 'RU' ) ).toBe( false );
+		expect( wrapped.canSearch( 'KZ' ) ).toBe( false );
+		expect( wrapped.canSearch( 'US' ) ).toBe( true );
+	} );
+
+	it( 'leaves the registry completely untouched when our own config carries no countries', () => {
+		const providers = installWcAddressAutocomplete( [ 'google' ] );
+		const originalGoogle = providers.google;
+
+		boot( { settlement: true, countries: [] } );
+
+		expect( window.wc.addressAutocomplete.providers.google ).toBe( originalGoogle );
+	} );
+
+	it( 'still applies the wrap on the next country change when WC installs its namespace AFTER boot (script-order tolerance)', () => {
+		// WC's arbitration re-reads `providers[id]` live on every country change (the same
+		// property that makes replacing the registry slot timing-safe in the first place) — this
+		// module leans on the SAME property defensively: our own wrap is retried on country
+		// change too, so a page where WC's deferred script happens to execute after ours still
+		// gets suppressed the first time the customer actually touches the country field.
+		boot( { region: true, settlement: true, countries: [ 'RU' ] } );
+
+		expect( window.wc ).toBeUndefined();
+
+		const providers = installWcAddressAutocomplete( [ 'google' ] );
+		const originalGoogle = providers.google; // snapshot BEFORE the country-change wraps it
+
+		document.getElementById( 'billing_country' ).value = 'US';
+		document.getElementById( 'billing_country' ).dispatchEvent( new Event( 'change', { bubbles: true } ) );
+
+		const wrapped = window.wc.addressAutocomplete.providers.google;
+
+		expect( wrapped ).not.toBe( originalGoogle );
+		expect( wrapped.canSearch( 'RU' ) ).toBe( false );
 	} );
 } );

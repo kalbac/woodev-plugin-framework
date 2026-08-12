@@ -171,7 +171,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * `rest_api_init`. Not gated on `is_checkout()` so the REST route is available
 		 * on API requests. Call once during plugin bootstrap.
 		 *
+		 * Location-provider layer (Task 12, spec D2): also hooks the WC Address
+		 * Autocomplete suppression check onto `init` at priority 21 — strictly
+		 * AFTER {@see \Woodev\Framework\Shipping\Location\Location_Provider_Registry::collect()}
+		 * (hooked at `init:20`), so the provider chain and its countries are
+		 * already resolved when {@see self::maybe_suppress_wc_address_providers()}
+		 * runs. `init` (not `wp_enqueue_scripts`) is deliberate: WooCommerce reads
+		 * the `woocommerce_address_providers` filter from ITS OWN `wp_enqueue_scripts`
+		 * callback, so racing registration order on the very same hook would be
+		 * fragile; `init` always finishes before `wp_enqueue_scripts` fires.
+		 *
 		 * @since 1.5.0
+		 * @since 2.0.2 Added the `init:21` WC Address Autocomplete suppression hook
+		 *              (location-provider layer Task 12).
 		 *
 		 * @return void
 		 */
@@ -182,8 +194,67 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 			add_action( 'woocommerce_checkout_order_processed', [ $this, 'handle_checkout_order_processed' ], 10, 3 );
 			add_action( 'wp_enqueue_scripts', [ $this, 'enqueue_assets' ] );
 			add_action( 'rest_api_init', [ $this, 'register_rest' ] );
+			add_action( 'init', [ $this, 'maybe_suppress_wc_address_providers' ], 21 );
 
 			$this->guard_native_field_conflicts();
+		}
+
+
+		/**
+		 * WC Address Autocomplete arbitration — the server-side half (location-provider
+		 * layer Task 12, spec D2).
+		 *
+		 * WooCommerce's own Address Autocomplete feature (option
+		 * `woocommerce_address_autocomplete_enabled` + providers via the
+		 * `woocommerce_address_providers` filter, since WC 9.9.0) arbitrates
+		 * per-country client-side; see gotcha
+		 * `wc-address-autocomplete-hosts-only-address1-and-flattens-identity` for the
+		 * full measurement this rests on. When our own layer already covers EVERY
+		 * country the store sells to, there is nothing left for WC's autocomplete to
+		 * usefully do, and the two would otherwise fight over the same address
+		 * fields — so this applies the documented full kill: filters
+		 * `woocommerce_address_providers` down to an empty array at `PHP_INT_MAX`,
+		 * which is WC's own suggested lever for turning the feature off entirely
+		 * (their script enqueue check short-circuits on an empty provider list, so
+		 * this covers classic AND block checkouts alike — both read the SAME
+		 * `AddressProviderController`).
+		 *
+		 * A MIXED-country store — one selling to at least one country our provider
+		 * chain does not cover — must NOT get the full kill: that would silently take
+		 * away WC's autocomplete for the countries we do not serve. In that case (and
+		 * whenever the layer is inactive, or the selling-country set cannot be
+		 * determined at all) this method does nothing — the filter is left completely
+		 * untouched, not merely made to return its input unchanged. The client-side
+		 * half of this same arbitration (a per-country wrap of WC's OWN provider
+		 * registry, for exactly this mixed-country case) lives in
+		 * `location-cascade.js`.
+		 *
+		 * @internal Hooked to `init` (priority 21) by {@see self::register()}.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		public function maybe_suppress_wc_address_providers(): void {
+			if ( ! $this->location_service()->is_active() ) {
+				return;
+			}
+
+			$selling_countries = $this->wc_selling_country_codes();
+
+			if ( [] === $selling_countries ) {
+				return;
+			}
+
+			$supported_countries = $this->location_service()->get_supported_countries();
+
+			foreach ( $selling_countries as $country ) {
+				if ( ! in_array( $country, $supported_countries, true ) ) {
+					return;
+				}
+			}
+
+			add_filter( 'woocommerce_address_providers', '__return_empty_array', PHP_INT_MAX );
 		}
 
 		/**
@@ -843,6 +914,35 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 			}
 
 			return array_map( 'strval', array_keys( (array) WC()->countries->get_countries() ) );
+		}
+
+
+		/**
+		 * Returns the WooCommerce store's SELLING country codes — i.e. what the
+		 * merchant's "Selling location(s)" setting (`woocommerce_allowed_countries`
+		 * and its `all_except`/`specific` companions) actually admits, via
+		 * {@see \WC_Countries::get_allowed_countries()}. Deliberately NOT
+		 * {@see self::wc_country_codes()} (every country WC knows about, ~250 of
+		 * them, used for the `<select>` option list) — Task 12's arbitration needs
+		 * to know what the store actually SELLS to, so a store that only sells to
+		 * `RU` never gets penalized for the other 249 codes WC merely knows how to
+		 * spell.
+		 *
+		 * Extracted (like {@see self::wc_country_codes()}) so tests can supply a
+		 * selling-country list without bootstrapping WooCommerce; returns an empty
+		 * array when WC is unavailable — a caller must treat that as "unknown",
+		 * never as "sells nowhere" (see {@see self::maybe_suppress_wc_address_providers()}).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string[]
+		 */
+		protected function wc_selling_country_codes(): array {
+			if ( ! function_exists( 'WC' ) || ! WC()->countries ) {
+				return [];
+			}
+
+			return array_map( 'strval', array_keys( (array) WC()->countries->get_allowed_countries() ) );
 		}
 
 		/**

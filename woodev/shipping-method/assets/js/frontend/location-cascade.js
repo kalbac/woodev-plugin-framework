@@ -1,11 +1,13 @@
 /**
  * Woodev Location Cascade — field-graph wiring for the location provider layer
- * (spec §4.4, plan Task 11).
+ * (spec §4.4/D2, plan Tasks 11-12).
  *
  * Builds ON TOP OF the §8 checkout-field store (`checkout-field-store.js`, Task 10 of the
  * 2026-07-06 plan) rather than a parallel state world: the store already owns canonical
  * field values, this module adds LOCATION semantics on top — record objects, scoping,
- * persistence, backwards fill, per-country attach/detach.
+ * persistence, backwards fill, per-country attach/detach, and (Task 12) a client-side wrap of
+ * WC's OWN Address Autocomplete provider registry for mixed-country stores (see the
+ * "WC Address Autocomplete suppression" section below).
  *
  * STORE SHARING (discovered from `class-checkout-handler.php::enqueue_assets()`, not spelled
  * out in the plan — contradiction noted in the Task 11 report): this file is enqueued with a
@@ -598,6 +600,127 @@
 	}
 
 	// -------------------------------------------------------------------------
+	// WC Address Autocomplete suppression — client half (Task 12, spec D2)
+	// -------------------------------------------------------------------------
+	//
+	// WooCommerce's own Address Autocomplete (`window.wc.addressAutocomplete`, since WC 9.9.0)
+	// is a PUBLIC namespace, but NOT a documented contract — there is no `@wordpress/...`
+	// package, no versioned API, just a global object a script happens to leave behind. This
+	// section touches it anyway, on the measured shape recorded in gotcha
+	// `wc-address-autocomplete-hosts-only-address1-and-flattens-identity` (`providers` — an
+	// object keyed by provider id, each entry FROZEN via `Object.freeze()` at registration —
+	// `serverProviders`, and a live-reading arbitration loop). RE-VERIFY THIS SHAPE ON EVERY WC
+	// MAJOR BUMP; nothing here is guaranteed to survive one.
+	//
+	// Full-country stores never reach this code at all: when EVERY WC selling country is inside
+	// our own provider chain, `Checkout_Handler::maybe_suppress_wc_address_providers()` (PHP)
+	// filters `woocommerce_address_providers` to `[]` server-side, so WC never even enqueues its
+	// autocomplete scripts and `window.wc.addressAutocomplete` never exists. This client-side
+	// half exists for the MIXED-country case the server-side full kill must not touch: our own
+	// countries must stand down from WC's autocomplete, everyone else's must keep using it.
+	//
+	// TIMING: a registered provider object is frozen, so its OWN `canSearch` cannot be
+	// overwritten — but WC's arbitration loop (`address-autocomplete.js`'s `setActiveProvider()`)
+	// reads `window.wc.addressAutocomplete.providers[ id ]` FRESH on every country change, never
+	// a value captured once. Replacing the REGISTRY SLOT with a delegating clone is therefore
+	// timing-safe: the very next country change picks up the replacement with no event or
+	// re-registration needed on our side.
+
+	/** @type {boolean} whether the wrap has already been applied this page load. */
+	var wcSuppressionApplied = false;
+
+	/**
+	 * The union, across every entry, of the countries OUR layer covers — the set WC's own
+	 * autocomplete must stand down for.
+	 *
+	 * @returns {string[]}
+	 */
+	function ourCountries() {
+		var seen = {};
+
+		entries.forEach( function( entry ) {
+			var countries = Array.isArray( entry.location.countries ) ? entry.location.countries : [];
+
+			countries.forEach( function( country ) {
+				seen[ country ] = true;
+			} );
+		} );
+
+		return Object.keys( seen );
+	}
+
+	/**
+	 * Builds a delegating clone of `provider`: `Object.create( provider )` puts the (frozen)
+	 * original on the clone's prototype chain, so every property/method NOT overridden here
+	 * (`search`, `select`, `id`, `name`, `branding_html`, ...) still resolves straight through to
+	 * it. Only `canSearch` is shadowed as an OWN property of the clone, defined via
+	 * `Object.defineProperty()` rather than plain assignment: in strict mode (this file is
+	 * `'use strict'`), `clone.canSearch = ...` would THROW — `provider.canSearch` is a
+	 * non-writable inherited property (frozen), and the `[[Set]]` semantics for an inherited
+	 * non-writable data property reject the assignment even though the OWN object being written
+	 * to is not itself frozen. `defineProperty()` bypasses `[[Set]]` entirely and installs a
+	 * fresh, independent own property on the clone — legal regardless of what the prototype says.
+	 *
+	 * @param {Object}   provider
+	 * @param {string[]} suppressed Country codes to answer `false` for, unconditionally.
+	 * @returns {Object}
+	 */
+	function wrapProvider( provider, suppressed ) {
+		var clone = Object.create( provider );
+
+		Object.defineProperty( clone, 'canSearch', {
+			value: function( country ) {
+				if ( suppressed.indexOf( country ) !== -1 ) {
+					return false;
+				}
+
+				return provider.canSearch( country );
+			},
+			writable: true,
+			enumerable: true,
+			configurable: true,
+		} );
+
+		return clone;
+	}
+
+	/**
+	 * Applies the suppression wrap once. Fenced: does nothing (and nothing throws) when
+	 * `window.wc.addressAutocomplete` is absent — the feature is off, or an older WC — leaving
+	 * `wcSuppressionApplied` false so a later call (see {@see handleCountryChanged}) can retry.
+	 * Also does nothing, but marks itself done, when our own config carries no countries at all
+	 * (nothing to suppress).
+	 *
+	 * @returns {void}
+	 */
+	function suppressWcAddressAutocomplete() {
+		if ( wcSuppressionApplied ) {
+			return;
+		}
+
+		var wc = window.wc;
+
+		if ( ! wc || ! wc.addressAutocomplete || ! wc.addressAutocomplete.providers ) {
+			return;
+		}
+
+		var suppressed = ourCountries();
+
+		if ( ! suppressed.length ) {
+			wcSuppressionApplied = true;
+			return;
+		}
+
+		var registry = wc.addressAutocomplete.providers;
+
+		Object.keys( registry ).forEach( function( id ) {
+			registry[ id ] = wrapProvider( registry[ id ], suppressed );
+		} );
+
+		wcSuppressionApplied = true;
+	}
+
+	// -------------------------------------------------------------------------
 	// Dependent clearing (downward only, remembered-parent gate)
 	// -------------------------------------------------------------------------
 
@@ -698,6 +821,11 @@
 
 	function handleCountryChanged() {
 		var key = cascadeKey( currentCountry() );
+
+		// Opportunistic retry (see the suppression section's own docblock): a page whose WC
+		// autocomplete script happens to execute after this one still gets suppressed the first
+		// time the customer touches the country field — no-op once already applied.
+		suppressWcAddressAutocomplete();
 
 		if ( resolvedCountry === key ) {
 			return;
@@ -867,6 +995,7 @@
 			}
 		} );
 
+		suppressWcAddressAutocomplete();
 		bindChangeWatchers();
 		bindCheckoutUpdatedWatcher();
 	}
