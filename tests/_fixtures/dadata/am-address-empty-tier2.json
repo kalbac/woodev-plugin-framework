@@ -1,0 +1,25 @@
+{
+  "_capture": {
+    "note": "VERBATIM live DaData response. Do NOT hand-edit — recapture instead.",
+    "captured": "2026-08-12",
+    "endpoint": "suggestions/api/4_1/rs/suggest/address",
+    "request": {
+      "query": "Ереван Абовяна",
+      "count": 10,
+      "locations": [
+        {
+          "country_iso_code": "AM"
+        }
+      ],
+      "from_bound": {
+        "value": "street"
+      },
+      "to_bound": {
+        "value": "house"
+      }
+    }
+  },
+  "response": {
+    "suggestions": []
+  }
+}
