@@ -81,11 +81,24 @@
  * ({@see renderItems}) — never `innerHTML` — so a label containing markup
  * renders as inert text.
  *
- * EMPTY RESULTS SHOW NO CHROME: a `[]` (or non-array) result HIDES the
- * listbox — no "no results" placeholder — the operator's recorded
- * preference: a control with nothing to offer is simply not shown, never
- * explained (see gotcha `feedback_blocked_control_needs_no_explanation`
- * in spirit; same rule this codebase already applies to disabled controls).
+ * EMPTY RESULTS SAY SO. A completed search that returned nothing renders a
+ * single non-selectable row carrying `options.emptyText`, rather than hiding
+ * the listbox. This REVERSES the module's original behaviour, and the reason
+ * the original was wrong is worth recording: it cited the operator's rule that
+ * a blocked control is never explained — but that rule is about DISABLED
+ * CONTROLS ("заблокирована и всё"), and an empty result set is not one. To the
+ * customer, a panel that never opens is indistinguishable from a slow network
+ * or a field that is simply broken; the one thing they cannot tell is the one
+ * thing they need to know, which is that the search ran and found nothing
+ * (operator, s70).
+ *
+ * The row is deliberately NOT an option: `role="presentation"`, its own class,
+ * and — crucially — `items` stays `[]`, so ArrowDown/Enter cannot land on it
+ * and a click on it selects nothing. It is a message inside the popup, not a
+ * suggestion that happens to read like one.
+ *
+ * With no `emptyText` supplied the old behaviour stands (listbox hidden, no
+ * chrome), so a caller that wants silence still gets it.
  *
  * UMD-ish dual export (matches pickup-datasource.js): the module IS the
  * factory function.
@@ -195,10 +208,14 @@
 	 *                                             raw selected suggestion object.
 	 * @param {number}           [options.minChars] Minimum input length before a search fires.
 	 *                                               Defaults to {@see DEFAULT_MIN_CHARS}.
+	 * @param {string}           [options.emptyText] Message shown in the listbox when a completed
+	 *                                                search returned nothing. Omitted/blank keeps
+	 *                                                the listbox hidden instead.
 	 * @returns {{detach: function(): void}}
 	 */
 	function attachTypeahead( input, options ) {
 		var opts = options || {};
+		var emptyText = 'string' === typeof opts.emptyText ? opts.emptyText : '';
 		var fetchFn = 'function' === typeof opts.fetch ? opts.fetch : function() {
 			return Promise.resolve( [] );
 		};
@@ -348,9 +365,27 @@
 			}
 
 			if ( 0 === items.length ) {
-				listbox.hidden = true;
-				input.setAttribute( 'aria-expanded', 'false' );
 				input.removeAttribute( 'aria-activedescendant' );
+
+				if ( '' === emptyText ) {
+					listbox.hidden = true;
+					input.setAttribute( 'aria-expanded', 'false' );
+
+					return;
+				}
+
+				var empty = document.createElement( 'li' );
+
+				// NOT `role="option"`, and `items` stays empty — see the file docblock: this
+				// is a message inside the popup, and nothing about it may become selectable.
+				empty.setAttribute( 'role', 'presentation' );
+				empty.setAttribute( 'aria-live', 'polite' );
+				empty.className = 'woodev-location-empty';
+				empty.textContent = emptyText;
+
+				listbox.appendChild( empty );
+				listbox.hidden = false;
+				input.setAttribute( 'aria-expanded', 'true' );
 
 				return;
 			}

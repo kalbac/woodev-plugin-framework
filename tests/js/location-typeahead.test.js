@@ -735,3 +735,119 @@ test( 'a STALE response does not clear the busy state a newer search owns', asyn
 	expect( spinnerOf().hidden ).toBe( true );
 	expect( listboxOf().children[ 0 ].textContent ).toBe( 'fresh' );
 } );
+
+// -----------------------------------------------------------------------
+// Empty results — a message, not silence (operator, s70)
+// -----------------------------------------------------------------------
+
+async function searchReturning( results, options ) {
+	const fetchMock = jest.fn( () => Promise.resolve( results ) );
+
+	attachTypeahead( input, Object.assign( { fetch: fetchMock, onSelect: jest.fn() }, options || {} ) );
+
+	input.value = 'ba';
+	input.dispatchEvent( new Event( 'input', { bubbles: true } ) );
+	jest.advanceTimersByTime( 250 );
+	await flushMicrotasks();
+}
+
+function emptyRowOf() {
+	return document.querySelector( '.woodev-location-empty' );
+}
+
+test( 'an empty result set shows the emptyText message inside an OPEN listbox', async () => {
+	jest.useFakeTimers();
+
+	await searchReturning( [], { emptyText: 'Поиск не дал результатов. Попробуйте изменить запрос.' } );
+
+	expect( listboxOf().hidden ).toBe( false );
+	expect( emptyRowOf() ).not.toBeNull();
+	expect( emptyRowOf().textContent ).toBe( 'Поиск не дал результатов. Попробуйте изменить запрос.' );
+	expect( input.getAttribute( 'aria-expanded' ) ).toBe( 'true' );
+} );
+
+test( 'the empty message is NOT an option — no role=option, and Enter selects nothing', async () => {
+	jest.useFakeTimers();
+	const onSelect = jest.fn();
+	const fetchMock = jest.fn( () => Promise.resolve( [] ) );
+
+	attachTypeahead( input, { fetch: fetchMock, onSelect, emptyText: 'ничего' } );
+
+	input.value = 'ba';
+	input.dispatchEvent( new Event( 'input', { bubbles: true } ) );
+	jest.advanceTimersByTime( 250 );
+	await flushMicrotasks();
+
+	expect( emptyRowOf().getAttribute( 'role' ) ).toBe( 'presentation' );
+
+	input.dispatchEvent( new KeyboardEvent( 'keydown', { key: 'ArrowDown', bubbles: true } ) );
+	input.dispatchEvent( new KeyboardEvent( 'keydown', { key: 'Enter', bubbles: true } ) );
+
+	expect( onSelect ).not.toHaveBeenCalled();
+	expect( input.value ).toBe( 'ba' ); // the message never becomes the field's value
+	expect( input.hasAttribute( 'aria-activedescendant' ) ).toBe( false );
+} );
+
+test( 'clicking the empty message selects nothing', async () => {
+	jest.useFakeTimers();
+	const onSelect = jest.fn();
+	const fetchMock = jest.fn( () => Promise.resolve( [] ) );
+
+	attachTypeahead( input, { fetch: fetchMock, onSelect, emptyText: 'ничего' } );
+
+	input.value = 'ba';
+	input.dispatchEvent( new Event( 'input', { bubbles: true } ) );
+	jest.advanceTimersByTime( 250 );
+	await flushMicrotasks();
+
+	emptyRowOf().dispatchEvent( new MouseEvent( 'mousedown', { bubbles: true } ) );
+
+	expect( onSelect ).not.toHaveBeenCalled();
+	expect( input.value ).toBe( 'ba' );
+} );
+
+test( 'the empty message is replaced by real suggestions on the next search', async () => {
+	jest.useFakeTimers();
+	const fetchMock = jest.fn()
+		.mockImplementationOnce( () => Promise.resolve( [] ) )
+		.mockImplementationOnce( () => Promise.resolve( [ { label: 'г Москва' } ] ) );
+
+	attachTypeahead( input, { fetch: fetchMock, onSelect: jest.fn(), emptyText: 'ничего' } );
+
+	input.value = 'ba';
+	input.dispatchEvent( new Event( 'input', { bubbles: true } ) );
+	jest.advanceTimersByTime( 250 );
+	await flushMicrotasks();
+
+	expect( emptyRowOf() ).not.toBeNull();
+
+	input.value = 'bar';
+	input.dispatchEvent( new Event( 'input', { bubbles: true } ) );
+	jest.advanceTimersByTime( 250 );
+	await flushMicrotasks();
+
+	expect( emptyRowOf() ).toBeNull();
+	expect( listboxOf().children.length ).toBe( 1 );
+	expect( listboxOf().children[ 0 ].getAttribute( 'role' ) ).toBe( 'option' );
+} );
+
+test( 'closing the listbox clears the empty message too', async () => {
+	jest.useFakeTimers();
+
+	await searchReturning( [], { emptyText: 'ничего' } );
+
+	input.dispatchEvent( new KeyboardEvent( 'keydown', { key: 'Escape', bubbles: true } ) );
+
+	expect( listboxOf().hidden ).toBe( true );
+	expect( emptyRowOf() ).toBeNull();
+} );
+
+test( 'without emptyText the listbox still hides silently — the old contract is the default', async () => {
+	jest.useFakeTimers();
+
+	await searchReturning( [] );
+
+	expect( listboxOf().hidden ).toBe( true );
+	expect( emptyRowOf() ).toBeNull();
+	expect( input.getAttribute( 'aria-expanded' ) ).toBe( 'false' );
+} );

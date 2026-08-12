@@ -813,9 +813,15 @@
 			return;
 		}
 
+		var i18n = entry.location.i18n || {};
+
 		var api = window.WoodevLocationTypeahead( el, {
 			fetch: fetchFor( entry, node ),
 			onSelect: onSelectFor( entry, node ),
+			// Server-supplied (translated, filterable via `woodev_location_i18n`) — never a
+			// literal here: this string reaches the customer, so it follows the same route
+			// every other user-facing string in this layer takes.
+			emptyText: 'string' === typeof i18n.noResults ? i18n.noResults : '',
 		} );
 
 		entry.widgets[ node.fieldId ] = { el: el, api: api };

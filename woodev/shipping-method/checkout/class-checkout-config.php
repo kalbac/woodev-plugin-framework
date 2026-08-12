@@ -317,6 +317,32 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 				$implicit = (bool) $customer['implicit'];
 			}
 
+			/**
+			 * Filters the location typeahead's user-facing strings.
+			 *
+			 * Mirrors `woodev_pickup_map_i18n` (see
+			 * {@see \Woodev\Framework\Shipping\Pickup\Pickup_Handler::get_js_config()}) — the
+			 * same reason applies here: these strings reach the customer, so a plugin whose
+			 * carrier calls a locality something else must be able to say so without
+			 * translating the framework.
+			 *
+			 * @since 2.1.0
+			 *
+			 * @param array<string, string> $strings The framework's default strings.
+			 */
+			$strings = apply_filters(
+				'woodev_location_i18n',
+				[
+					// Shown INSIDE the open listbox when a completed search returned nothing.
+					// A silent empty panel and a slow network are indistinguishable to the
+					// customer, so this one case is worth a sentence (operator, s70).
+					'noResults' => __(
+						'Поиск не дал результатов. Попробуйте изменить запрос.',
+						'woodev-plugin-framework'
+					),
+				]
+			);
+
 			return [
 				'endpoints' => [
 					'suggest' => $this->rest_base . '/location/suggest',
@@ -328,6 +354,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 				'levels'    => $levels,
 				'current'   => $current,
 				'implicit'  => $implicit,
+				'i18n'      => array_map( 'strval', (array) $strings ),
 			];
 		}
 	}

@@ -591,4 +591,45 @@ class CheckoutConfigTest extends TestCase {
 		$this->assertArrayNotHasKey( 'billing_address_1', $config['fields'] );
 		$this->assertSame( 'settlement', $config['fields']['billing_city']['location_level'] );
 	}
+
+	// -------------------------------------------------------------------------
+	// i18n — the empty-result message the typeahead shows (operator, s70)
+	// -------------------------------------------------------------------------
+
+	public function test_location_block_carries_the_no_results_message(): void {
+		$service = new Checkout_Config_Fake_Location_Service( true, [ 'settlement' => true ], null, [ 'RU' ] );
+		$config  = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ], $service ) )
+			->build( Checkout_Fields::from_array( [] ) );
+
+		// The client must never carry this literal itself — a customer-facing string
+		// belongs to the translated, filterable server side like every other one.
+		$this->assertArrayHasKey( 'i18n', $config['location'] );
+		$this->assertIsString( $config['location']['i18n']['noResults'] );
+		$this->assertNotSame( '', $config['location']['i18n']['noResults'] );
+	}
+
+	public function test_the_no_results_message_is_filterable(): void {
+		Functions\when( 'apply_filters' )->alias(
+			static function ( $hook, $value ) {
+				return 'woodev_location_i18n' === $hook ? [ 'noResults' => 'Ничего нет' ] : $value;
+			}
+		);
+
+		$service = new Checkout_Config_Fake_Location_Service( true, [ 'settlement' => true ], null, [ 'RU' ] );
+		$config  = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ], $service ) )
+			->build( Checkout_Fields::from_array( [] ) );
+
+		$this->assertSame( 'Ничего нет', $config['location']['i18n']['noResults'] );
+	}
+
+	public function test_no_token_or_secret_leaks_into_the_i18n_block(): void {
+		$service = new Checkout_Config_Fake_Location_Service( true, [ 'settlement' => true ], null, [ 'RU' ] );
+		$config  = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ], $service ) )
+			->build( Checkout_Fields::from_array( [] ) );
+
+		$serialized = (string) json_encode( $config['location']['i18n'] );
+
+		$this->assertStringNotContainsStringIgnoringCase( 'token', $serialized );
+		$this->assertStringNotContainsStringIgnoringCase( 'secret', $serialized );
+	}
 }

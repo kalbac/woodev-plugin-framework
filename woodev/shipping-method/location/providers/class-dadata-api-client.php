@@ -198,7 +198,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 		 */
 		public function suggest_address( string $query, array $args = [] ): array {
 			$request = $this->get_new_request( 'suggestions' );
-			$request->suggest_address( array_merge( [ 'query' => $query ], $args ) );
+			$request->suggest_address( $this->with_language( array_merge( [ 'query' => $query ], $args ) ) );
 
 			/** @var Dadata_Api_Response $response */
 			$response = $this->perform_request( $request );
@@ -221,12 +221,115 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 		 */
 		public function iplocate_address( string $ip ): ?array {
 			$request = $this->get_new_request( 'suggestions' );
-			$request->iplocate_address( [ 'ip' => $ip ] );
+			$request->iplocate_address( $this->with_language( [ 'ip' => $ip ] ) );
 
 			/** @var Dadata_Api_Response $response */
 			$response = $this->perform_request( $request );
 
 			return $response->get_location();
+		}
+
+		/**
+		 * Adds DaData's `language` body field to a suggestions-API request, unless the
+		 * caller already set one.
+		 *
+		 * DaData answers in Russian by default and transliterates the whole payload when
+		 * asked for English — MEASURED against the live API (s70), not assumed:
+		 *
+		 * | field     | `ru` (and no param)   | `en`                  |
+		 * |-----------|-----------------------|-----------------------|
+		 * | `value`   | `г Казань`            | `Russia, gorod Kazan` |
+		 * | `city`    | `Казань`              | `Kazan`               |
+		 * | `region`  | `Татарстан`           | `Tatarstan`           |
+		 * | `fias_id` | `93b3df57-…`          | `93b3df57-…` (SAME)   |
+		 *
+		 * That last row is what makes this safe to switch at any time: identity is carried
+		 * by `fias_id`, which does not move, so a locality stored while the customer was
+		 * reading Russian still resolves after the site is switched to English — only the
+		 * text a human reads changes. Without this, an English-locale checkout renders
+		 * Cyrillic suggestions in an otherwise English form.
+		 *
+		 * Only `ru` and `en` exist; anything else is coerced to `en`, because DaData
+		 * rejects unknown values and a failed suggest reads to the customer as a broken
+		 * field. The locale itself is passed to the filter so a plugin can decide
+		 * differently for a locale this two-way split gets wrong.
+		 *
+		 * When no locale can be resolved at all — neither `get_user_locale()` nor
+		 * `get_locale()` exists, i.e. outside a WordPress runtime — the field is OMITTED
+		 * rather than guessed. DaData then applies its own default, which the table above
+		 * measured to be identical to `ru`; expressing no opinion is honest, and inventing
+		 * one would silently pick a language for a customer nobody has identified.
+		 *
+		 * Applies to the three SUGGESTIONS endpoints only. The Clean API is a different
+		 * host with its own contract and is deliberately left alone here.
+		 *
+		 * @since 2.1.0
+		 *
+		 * @param array<string, mixed> $body Request body built by the caller.
+		 *
+		 * @return array<string, mixed>
+		 */
+		private function with_language( array $body ): array {
+			if ( isset( $body['language'] ) ) {
+				return $body;
+			}
+
+			$locale = $this->current_locale();
+
+			if ( '' === $locale ) {
+				return $body;
+			}
+
+			/**
+			 * Filters the language DaData is asked to answer in.
+			 *
+			 * @since 2.1.0
+			 *
+			 * @param string $language Either `ru` or `en`.
+			 * @param string $locale   The WordPress locale the default was derived from.
+			 */
+			$language = (string) apply_filters(
+				'woodev_location_dadata_language',
+				0 === strpos( strtolower( $locale ), 'ru' ) ? 'ru' : 'en',
+				$locale
+			);
+
+			$body['language'] = in_array( $language, [ 'ru', 'en' ], true ) ? $language : 'en';
+
+			return $body;
+		}
+
+		/**
+		 * The locale to derive DaData's response language from — a SEAM, not a direct
+		 * `get_user_locale()` call at the use site.
+		 *
+		 * Overridable rather than mocked on purpose. Stubbing a WordPress function with
+		 * Brain Monkey DEFINES it process-wide, so it stays defined for every test class
+		 * that runs afterwards and silently changes the behaviour of code that branches on
+		 * `function_exists()` — this repo has already paid for that once (gotcha
+		 * `brain-monkey-wc-mock-defines-the-function-globally`, whose remedy is exactly
+		 * this shape: a seam like `Checkout_Handler::wc_country_codes()`). Measured here
+		 * too: stubbing `get_user_locale()` in this class's own tests turned 25 unrelated
+		 * `Dadata_Provider` tests red as soon as the whole directory ran in one process,
+		 * while every file passed alone.
+		 *
+		 * Returns `''` when neither locale function exists (outside a WordPress runtime),
+		 * which {@see self::with_language()} reads as "express no opinion".
+		 *
+		 * @since 2.1.0
+		 *
+		 * @return string
+		 */
+		protected function current_locale(): string {
+			if ( function_exists( 'get_user_locale' ) ) {
+				return (string) get_user_locale();
+			}
+
+			if ( function_exists( 'get_locale' ) ) {
+				return (string) get_locale();
+			}
+
+			return '';
 		}
 
 		/**
@@ -244,7 +347,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 		 */
 		public function find_by_id_address( string $fias_id ): ?array {
 			$request = $this->get_new_request( 'suggestions' );
-			$request->find_by_id_address( [ 'query' => $fias_id ] );
+			$request->find_by_id_address( $this->with_language( [ 'query' => $fias_id ] ) );
 
 			/** @var Dadata_Api_Response $response */
 			$response = $this->perform_request( $request );

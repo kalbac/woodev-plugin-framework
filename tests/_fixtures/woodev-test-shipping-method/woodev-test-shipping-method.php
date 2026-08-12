@@ -987,9 +987,32 @@ function woodev_test_shipping_method_plugin_init(): void {
 								},
 								'options'
 							)
+							/*
+							 * RU is deliberately EXCLUDED (issue #294, operator decision s70).
+							 *
+							 * `inject_states()` hooks `woocommerce_states`, which is keyed by
+							 * COUNTRY and not by field — so this §8 demo taking over RU registered
+							 * its three hardcoded regions as RU's states, and WooCommerce then
+							 * rendered EVERY `*_state` field for RU as a `<select>` of those three,
+							 * including `shipping_state` below, which the location-provider layer
+							 * declares as a `text` typeahead. The layer's whole region level was
+							 * therefore unobservable on the rig, and backwards fill had nowhere to
+							 * write.
+							 *
+							 * Measured: `WC()->countries->get_states()['RU']` returned exactly
+							 * those three entries, i.e. WooCommerce ships NO states of its own for
+							 * RU — the entire list came from this fixture.
+							 *
+							 * Note what this costs: the source callable below only ever returns
+							 * options for RU, so dropping RU here leaves the STATE-takeover half of
+							 * the §8 demo dormant on the rig (the `billing_city` Dependent_Select
+							 * half is untouched and still demonstrates §8). That is the intended
+							 * trade until #294 decides how the region level and WooCommerce's own
+							 * states concept are meant to coexist.
+							 */
 							->set_takeover_condition(
 								static function ( array $context ): bool {
-									return in_array( $context['country'] ?? '', [ 'RU', 'BY', 'KZ', 'UZ' ], true );
+									return in_array( $context['country'] ?? '', [ 'BY', 'KZ', 'UZ' ], true );
 								}
 							),
 

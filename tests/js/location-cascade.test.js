@@ -179,6 +179,7 @@ function buildConfig( opts ) {
 			levels: o.levels || { RU: { region: true, settlement: true, address: true } },
 			current: o.current !== undefined ? o.current : null,
 			implicit: false,
+			i18n: o.i18n !== undefined ? o.i18n : { noResults: 'Поиск не дал результатов. Попробуйте изменить запрос.' },
 		},
 	};
 }
@@ -194,7 +195,7 @@ function fakeTypeahead() {
 	attachCalls = [];
 	window.WoodevLocationTypeahead = jest.fn( ( el, opts ) => {
 		const detach = jest.fn();
-		const call = { el, fetch: opts.fetch, onSelect: opts.onSelect, detach };
+		const call = { el, fetch: opts.fetch, onSelect: opts.onSelect, emptyText: opts.emptyText, detach };
 
 		attachCalls.push( call );
 
@@ -1294,5 +1295,26 @@ describe( 'WC Address Autocomplete suppression (Task 12, spec D2)', () => {
 
 		expect( wrapped ).not.toBe( originalGoogle );
 		expect( wrapped.canSearch( 'RU' ) ).toBe( false );
+	} );
+} );
+
+// -----------------------------------------------------------------------
+// Empty-result message — server-supplied, never a literal in the client
+// -----------------------------------------------------------------------
+
+describe( 'empty-result message', () => {
+	it( 'hands the widget the translated noResults string from the config', () => {
+		boot( { region: true, settlement: true, address: true } );
+
+		expect( callFor( 'billing_city' ).emptyText ).toBe( 'Поиск не дал результатов. Попробуйте изменить запрос.' );
+		expect( callFor( 'billing_state' ).emptyText ).toBe( 'Поиск не дал результатов. Попробуйте изменить запрос.' );
+	} );
+
+	it( 'passes an empty string when the config carries no i18n block at all', () => {
+		// An older server (or a filter that emptied the map) must degrade to the widget's
+		// silent default, never to a hardcoded Russian literal baked into the script.
+		boot( { region: true, settlement: true, address: true, i18n: null } );
+
+		expect( callFor( 'billing_city' ).emptyText ).toBe( '' );
 	} );
 } );
