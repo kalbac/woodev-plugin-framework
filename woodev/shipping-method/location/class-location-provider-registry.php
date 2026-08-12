@@ -197,14 +197,36 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 
 		/**
 		 * Resets all state. Test-only — mirrors
-		 * {@see \Woodev\Framework\Settings\Settings_Page_Registry::reset_for_tests()}.
+		 * {@see \Woodev\Framework\Settings\Settings_Page_Registry::reset_for_tests()},
+		 * including its `remove_action()` half (added once a fixture plugin loaded
+		 * unconditionally by the integration bootstrap — `woodev-test-shipping-method`,
+		 * location-provider layer rig pull-forward — started declaring need at
+		 * `plugins_loaded` time, exactly like a real shipping plugin would; before that,
+		 * `declare_needed()` was only ever called from WITHIN a test, after THAT test's
+		 * own reset, so the stale-hook problem below could not surface).
 		 *
-		 * Unlike that registry, this one has nothing to `remove_action()` beyond
-		 * what a fresh singleton already starts without: {@see self::$hooked} being
-		 * reset to `false` means the NEXT {@see self::declare_needed()} call
-		 * re-hooks `init` from scratch, and PHP does not mind `add_action()` being
-		 * called twice with the same callback+priority in two different test runs
-		 * (each runs against a fresh Brain Monkey mock, not real WordPress state).
+		 * `self::$instance = null` alone discards the PHP-level singleton reference but
+		 * leaves any `add_action()` calls the OLD instance made intact in WordPress's own
+		 * hook table — `add_action()`/`remove_action()` match by object identity, not by
+		 * class, so a lingering registration keeps firing against the discarded instance
+		 * on every `do_action( 'init' | 'rest_api_init' )` a LATER test issues, silently
+		 * reopening state this method is supposed to erase.
+		 *
+		 * Removal therefore matches by CLASS + METHOD across the whole hook table rather
+		 * than by the instance this reset happens to hold, because in the integration suite
+		 * it holds the wrong one by construction: `WP_UnitTestCase` snapshots `$wp_filter`
+		 * once, at the first test of the run, and RESTORES that snapshot after every single
+		 * test. The fixture plugin's `plugins_loaded`-time registration is part of that
+		 * snapshot, so it is re-instated after each teardown — while `self::$instance`,
+		 * nulled by that same teardown, is a brand-new unhooked object by the time the next
+		 * `setUp()` calls this method. Measured, not reasoned: the hook surviving the reset
+		 * belonged to a registry instance the reset could not name, and the "routes are
+		 * absent when nobody declared need" test consequently saw both routes registered.
+		 *
+		 * The `wp_login` registration in {@see self::add_hooks()} is removed the same way.
+		 * It binds a `new Customer_Location_Store()` instance never stored anywhere, so it
+		 * is unreachable by identity too — the class+method match is what makes it
+		 * removable at all.
 		 *
 		 * @internal
 		 *
@@ -213,7 +235,55 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		 * @return void
 		 */
 		public function reset_for_tests(): void {
+			self::remove_hooked_instances( 'init', self::class, 'collect' );
+			self::remove_hooked_instances( 'rest_api_init', self::class, 'register_rest' );
+			self::remove_hooked_instances( 'wp_login', Customer_Location_Store::class, 'handle_wp_login' );
+
 			self::$instance = null;
+		}
+
+		/**
+		 * Removes every `$class::$method` callback registered on `$hook`, whichever
+		 * instance registered it.
+		 *
+		 * Iterating `WP_Hook::$callbacks` by value is safe against the `remove_action()`
+		 * calls made inside the loop: `foreach` walks a copy, so the mutation lands on the
+		 * live table without disturbing the iteration.
+		 *
+		 * A no-op outside a full WordPress runtime (unit tests run on Brain Monkey, where
+		 * `$wp_filter` does not exist) — there is no hook table to scrub there, and the
+		 * `self::$instance = null` half of the reset is the whole job.
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $hook   Hook name to scrub.
+		 * @param string $class  Fully-qualified class whose callbacks should be removed.
+		 * @param string $method Method name to match.
+		 *
+		 * @return void
+		 */
+		private static function remove_hooked_instances( string $hook, string $class, string $method ): void {
+			$hooks = $GLOBALS['wp_filter'] ?? [];
+
+			if ( ! isset( $hooks[ $hook ] ) || ! is_object( $hooks[ $hook ] ) || ! isset( $hooks[ $hook ]->callbacks ) ) {
+				return;
+			}
+
+			foreach ( $hooks[ $hook ]->callbacks as $priority => $callbacks ) {
+				foreach ( $callbacks as $callback ) {
+					$function = $callback['function'] ?? null;
+
+					if ( ! is_array( $function ) || 2 !== count( $function ) ) {
+						continue;
+					}
+
+					if ( $function[0] instanceof $class && $method === $function[1] ) {
+						remove_action( $hook, $function, $priority );
+					}
+				}
+			}
 		}
 
 		/**

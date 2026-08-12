@@ -273,13 +273,29 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Abstract_Location
 		 * entirely is a fatal "abstract method not implemented" error, not a silently
 		 * empty/undeclared level set).
 		 *
+		 * `$country` (optional) additionally NARROWS the validated set through
+		 * {@see self::narrow_suggest_levels_for_country()} — the same
+		 * intersect-only-narrows shape {@see self::get_capabilities()} already
+		 * uses for the three optional capabilities, applied here to levels
+		 * instead. Omitted (the default `null`): returns the UNNARROWED set
+		 * unchanged — every pre-existing country-blind call site (e.g.
+		 * {@see Location_Service::get_supported_countries()}) keeps its original
+		 * meaning ("every level this provider can EVER answer, for ANY country")
+		 * without modification. A provider that never overrides
+		 * {@see self::narrow_suggest_levels_for_country()} behaves identically
+		 * whether or not a caller passes `$country` — the per-country nuance is
+		 * opt-in per provider, not a new obligation on every implementation.
+		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Added the optional `$country` parameter (per-country
+		 *              suggest-level narrowing — DaData genuinely serves
+		 *              `address` in RU/BY/KZ/UZ but not in AM/AZ/KG/TJ/TM).
 		 *
 		 * @throws \UnexpectedValueException When {@see self::declare_suggest_levels()}
 		 *                                    returns a value that is not one of
 		 *                                    {@see Location_Record::LEVELS}.
 		 */
-		final public function get_suggest_levels(): array {
+		final public function get_suggest_levels( ?string $country = null ): array {
 			$levels = $this->declare_suggest_levels();
 
 			foreach ( $levels as $level ) {
@@ -295,6 +311,51 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Abstract_Location
 				}
 			}
 
+			if ( null === $country ) {
+				return $levels;
+			}
+
+			$narrowed = $this->narrow_suggest_levels_for_country( $levels, $country );
+
+			// Same discipline as get_capabilities(): intersecting against the
+			// VALIDATED set (not $narrowed) means an attempted WIDEN (a level
+			// narrow_suggest_levels_for_country() invents that was not already
+			// declared) is silently dropped, never honored.
+			return array_values( array_intersect( $levels, $narrowed ) );
+		}
+
+		/**
+		 * Narrowing hook (per-country suggest levels): a subclass overrides this
+		 * to REMOVE a level it declares in {@see self::declare_suggest_levels()}
+		 * when `$country` specifically does not support it — e.g. Task 7's
+		 * DaData provider serves `address` in RU/BY/KZ/UZ (ФИАС/ГАР, OpenStreetMap)
+		 * but NOT in AM/AZ/KG/TJ/TM (GeoNames — city granularity only, measured
+		 * empty for a street-bounded query).
+		 *
+		 * This can only ever narrow: whatever this returns is intersected against
+		 * the validated set by {@see self::get_suggest_levels()}, so returning a
+		 * level this provider does not otherwise declare has no effect — the same
+		 * "can subtract, can never add" discipline {@see self::narrow_capabilities()}
+		 * already applies to the three optional capabilities.
+		 *
+		 * Default: no narrowing (identity) — a provider that has not been taught
+		 * the per-country nuance behaves exactly as before: level support is
+		 * uniform across every country it covers.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string[] $levels  The validated declared level set.
+		 * @param string   $country ISO-3166 alpha-2 country code, as passed to
+		 *                          {@see self::get_suggest_levels()} (not yet
+		 *                          normalized — a provider needing normalization
+		 *                          does its own, mirroring
+		 *                          {@see Location_Record::from_array()}'s own
+		 *                          trim + upper-case discipline).
+		 *
+		 * @return string[] The levels to keep — a subset of `$levels` (anything
+		 *                  outside that subset is ignored).
+		 */
+		protected function narrow_suggest_levels_for_country( array $levels, string $country ): array {
 			return $levels;
 		}
 

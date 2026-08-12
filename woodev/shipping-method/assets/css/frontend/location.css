@@ -1,0 +1,420 @@
+/**
+ * Woodev Location Typeahead — checkout suggestion listbox styles (location-provider layer, spec D6).
+ *
+ * Styles ONLY what `location-typeahead.js` renders: the `<ul class="woodev-location-listbox">`
+ * it inserts as a sibling right after the enhanced `<input>`, and the `<li class="woodev-location-
+ * option">` rows inside it — see that file's own docblock for the exact DOM shape and lifecycle
+ * (attach/detach, `hidden` toggling, `aria-selected` for the active row). Nothing else. Before this
+ * file existed, NO CSS shipped for this widget at all, so a theme's own generic `ul`/`li` rules
+ * rendered the suggestion list as a plain bulleted, link-coloured list instead of a dropdown panel —
+ * this file is that gap closed.
+ *
+ * THE INPUT ITSELF IS NEVER STYLED HERE. `attachTypeahead()` enhances WooCommerce's own native
+ * checkout `<input>` in place (role/aria attributes only — see that file's PROGRESSIVE ENHANCEMENT
+ * note); it must keep looking like every other checkout field. Only the listbox this module OWNS is
+ * ours to style — this is a customer-facing checkout, and matching the platform's own visual
+ * language (WooCommerce's own Address Autocomplete dropdown, the neutral chrome palette already
+ * established by `pickup.css`/`woodev-modal.css` for this same plugin) is the goal, not a bespoke
+ * design.
+ *
+ * THIS IS STOREFRONT CSS, NOT ADMIN CSS — same discipline as `pickup.css`'s own file docblock: it
+ * loads inside a merchant's theme, which may be anything, so every property that matters for LAYOUT
+ * states its own value outright rather than inheriting one a theme might have overridden globally,
+ * and specificity stays flat (single-class selectors, `:where()` for the isolation reset below) so a
+ * theme CAN still restyle decoration (font, colour, border) without a specificity war.
+ *
+ * PLAIN CSS, NO BUILD STEP — `Checkout_Handler::enqueue_assets()` enqueues this file directly (and
+ * only when it exists on disk, via the same `enqueue_style_if_built()` guard the location scripts
+ * already use), versioned by the file's own `filemtime()` — see gotcha
+ * `wp-scripts-css-enqueue-version-by-mtime` and `Woodev_Plugin::frontend_enqueue_scripts()`'s
+ * identical treatment of `woodev-modal.css`. A CSS-only edit therefore busts the browser cache on
+ * its own, without a framework version bump.
+ *
+ * COLOUR PALETTE — the same hardcoded neutral chrome `pickup.css`/`woodev-modal.css` already use for
+ * this plugin's own dialog/panel surfaces (`#fff` / `#1e1e1e` / `#646970` / `#dcdcde`), plus this
+ * framework's own default accent `#06aedd` (`pickup.css`'s `--woodev-pickup-accent` fallback,
+ * `Pickup_Handler::DEFAULT_ACCENT_COLOR`) for the one identity mark below (the active-option
+ * indicator). No accent CSS custom property is threaded through from PHP/JS for this widget — unlike
+ * the pickup map, nothing here is merchant-configurable — so a literal is correct, not a shortcut;
+ * introducing a third, unrelated colour for one small control would be the actual inconsistency.
+ *
+ * @since 2.1.0
+ */
+
+/* -------------------------------------------------------------------------
+ * POSITIONING CONTEXT — the listbox is inserted as a plain DOM SIBLING right after the input
+ * (`location-typeahead.js`'s `attachTypeahead()`: `input.parentNode.insertBefore( listbox,
+ * input.nextSibling )`), never a wrapper this file controls. For `position: absolute; top: 100%`
+ * below to resolve against the INPUT's own box rather than drift to the page's initial containing
+ * block (some arbitrary corner of the viewport, unrelated to where the input actually sits), the
+ * shared parent needs `position: relative`.
+ *
+ * That parent is WooCommerce's own classic-checkout field wrapper, `.woocommerce-input-wrapper` —
+ * the `<span>` every `woocommerce_form_field()` text/select input renders inside, stable across WC
+ * versions and a documented template class, not a versioned internal one (the kind of coupling
+ * `pickup.css`'s own docblock refuses for ymaps' internal DOM). This module attaches ONLY on the
+ * classic checkout (its sibling script is literally named `checkout-field-classic.js` — see
+ * `Checkout_Handler::enqueue_assets()`), where that wrapper is guaranteed present.
+ *
+ * `:has( > .woodev-location-listbox )` is a second, redundant net for any other parent shape a
+ * future caller might attach this module to — `:has()` already has precedent in this exact plugin
+ * (`pickup.css`'s `:not( :has( … ) )` rows), so relying on it here is not a new browser-support bet.
+ * Positioning context is genuine LAYOUT, not decoration (`pickup.css`'s own line for what state its
+ * own value outright): losing it does not just look wrong, it moves the WHOLE dropdown away from the
+ * field the customer is looking at, so it is intentionally NOT left to inheritance either way.
+ *
+ * `!important` is deliberately NOT used here, unlike this file's own `display` rules below. The
+ * hostile-theme precedent this framework has actually MEASURED (`hostile-theme-button-display-none-
+ * needs-important.md`) is a theme forcing `!important` on `display` for interactive controls
+ * (buttons), a documented page-builder/reset practice; a theme forcing `!important` on `position` for
+ * WooCommerce's OWN field wrapper — a class WC's native checkout never itself positions anything
+ * against — has no equivalent evidence. Flagged here explicitly as the one property in this file a
+ * hostile-theme rig pass should specifically try (`.woocommerce-input-wrapper { position: static
+ * !important }`) rather than assumed safe from a desk read.
+ * ---------------------------------------------------------------------- */
+
+.woocommerce-input-wrapper {
+	position: relative;
+}
+
+/* The redundant net described above — matches ANY parent (bare `:has()`, like a bare `:hover`,
+   implicitly means `*:has(…)`), so a caller attaching this module outside the classic-checkout
+   wrapper still gets a correctly positioned dropdown.
+
+   `!important` here was NOT speculative: it was measured on the rig (s69). Injecting
+   `.woocommerce-input-wrapper { position: static !important }` left the panel rendering at full
+   height with all six options — and `elementFromPoint()` at an option's own centre returned
+   NOTHING, because an absolutely-positioned box whose containing block has moved up the tree lands
+   somewhere else entirely. The suggestions are then on screen but not where the customer is
+   looking, which is the same class of broken as invisible.
+
+   This is the positioning CONTEXT, not decoration: `top: 100%` is meaningless without it. A theme
+   is welcome to restyle this wrapper's spacing, borders and colour — it just cannot be allowed to
+   take away the anchor the dropdown is positioned against. */
+:has( > .woodev-location-listbox ) {
+	position: relative !important;
+}
+
+/* The compound form, and why BOTH are needed. `:has( > .woodev-location-listbox )` inherits the
+   specificity of its most specific argument, i.e. (0,1,0) — an exact TIE with a theme's own
+   `.woocommerce-input-wrapper { position: static !important }`, which source order then decides.
+   Measured: with only the bare `:has()` rule the injected theme rule still won (the panel rendered
+   at full height, and `elementFromPoint()` at an option's centre returned nothing), because the
+   injected stylesheet came later. Two classes (0,2,0) settle it independently of load order, which
+   matters precisely because we do not control whether a theme's CSS is enqueued after ours. */
+.woocommerce-input-wrapper:has( > .woodev-location-listbox ) {
+	position: relative !important;
+}
+
+/* -------------------------------------------------------------------------
+ * STYLE ISOLATION — same `:where()` specificity contract `pickup.css`/`woodev-modal.css` already
+ * document in full (see either file's own "STYLE ISOLATION" block for the complete rationale); the
+ * short version: `:where()` carries ZERO specificity, so `.woodev-location-listbox :where( li, mark
+ * )` ties EXACTLY with the real `.woodev-location-option { … }` component rule later in this file
+ * (both (0,1,0), the class contributed by `.woodev-location-listbox`), so source order lets the real
+ * rule win, while still outranking a theme's bare `li {}`/`mark {}` (0,0,1) outright on class count
+ * alone. `li` is this module's actual, only child element (`renderItems()`); `mark` is NOT rendered
+ * today — every suggestion label reaches the DOM through `textContent`, never `innerHTML`, so there
+ * is no matched-substring highlighting yet — but is reset here anyway as a deliberate extension seam:
+ * WooCommerce's own Address Autocomplete suggestions highlight the typed substring this way, and a
+ * future addition here must not have to touch this isolation block to get a clean slate.
+ *
+ * The listbox's OWN box (margin/padding/list-style as a `<ul>`) does NOT need the same `:where()`
+ * treatment: `.woodev-location-listbox` is not a generic bare element a theme could match more
+ * specifically by accident the way an unclassed `<div>` could — it is already the real, single-class
+ * component rule, declared directly below.
+ * ---------------------------------------------------------------------- */
+
+.woodev-location-listbox :where( li, mark ) {
+	margin: 0;
+	padding: 0;
+	border: 0;
+	background: none;
+	color: inherit;
+	font-family: inherit;
+	font-size: 14px;
+	font-weight: 400;
+	font-style: normal;
+	line-height: 1.4;
+	letter-spacing: normal;
+	text-align: left;
+	text-transform: none;
+	list-style: none;
+	box-shadow: none;
+}
+
+/* -------------------------------------------------------------------------
+ * The listbox itself — an absolutely-positioned dropdown panel under the input: white surface,
+ * subtle border/shadow, a comfortable scrollable cap, no bullets. Anchored `left: 0; right: 0` (not
+ * a fixed pixel width) so it always matches the input's OWN outer width, whatever that is on this
+ * particular theme/checkout layout — the same "state values a theme might override, don't inherit
+ * them" discipline `pickup.css`'s file docblock already commits to.
+ *
+ * `z-index: 100` — this widget lives directly in the checkout page's normal flow (not inside a
+ * `WoodevModal`, which is where every OTHER z-index in this plugin's CSS lives, scoped to that
+ * dialog's own stacking context at 99900+/5-7). It only needs to clear ordinary SIBLING checkout
+ * content — later form rows, the order-review table, a sticky sidebar a theme might add — none of
+ * which this plugin has ever observed running above double digits. 100 is comfortably above that
+ * while leaving three orders of magnitude of headroom below the modal's own 99900, so the two can
+ * never fight even on a page where a pickup-point modal is also in play.
+ * ---------------------------------------------------------------------- */
+
+.woodev-location-listbox {
+	position: absolute;
+	top: 100%;
+	left: 0;
+	right: 0;
+	margin: 0;
+	padding: 4px 0;
+	max-height: 280px;
+	overflow-x: hidden;
+	overflow-y: auto;
+	z-index: 100;
+	list-style: none;
+	background: #fff;
+	border: 1px solid #dcdcde;
+
+	/*
+	 * THE GAP BELOW THE INPUT IS A BORDER, NOT A MARGIN — and that is the whole point.
+	 *
+	 * A 3px breathing space between the field and the panel is ordinary combobox styling; a
+	 * `margin-top: 3px` would have produced exactly the same picture. It would also have put
+	 * that strip OUTSIDE this element's box, and the strip is directly on the path a mouse
+	 * travels from the input to the first suggestion. This module closes the listbox on a
+	 * `mousedown` that lands outside it (`handleDocumentMousedown`), so a customer who presses
+	 * a fraction early — while the pointer is still crossing the gap — would have the panel
+	 * shut under the cursor and hit whatever the wrapper does instead. A transparent top
+	 * BORDER keeps the same 3px of air while leaving it part of the listbox, where a
+	 * `mousedown` is caught by `handleListboxMousedown` (which stops propagation, and selects
+	 * nothing because the target resolves to the `<ul>` itself, not an option).
+	 *
+	 * Hovering across the gap was never at risk — this widget has no `mouseleave`/`mouseout`
+	 * handler at all, so pointer movement alone cannot close anything. That is worth stating
+	 * because it is the failure this shape is usually blamed for (operator, s70), and the
+	 * reason it cannot happen here is structural rather than a property of these rules.
+	 *
+	 * `background-clip: padding-box` is what keeps the border area actually transparent: a
+	 * background paints under the border box by default, which would fill the gap with white
+	 * and erase it visually while keeping it clickable. The `inset` shadow then redraws the
+	 * hairline the (now transparent) top border no longer paints, at the panel's real visual
+	 * top edge, so the box still reads as fully outlined.
+	 */
+	border-top: 3px solid transparent;
+	background-clip: padding-box;
+	border-radius: 4px;
+	box-shadow: inset 0 1px 0 #dcdcde, 0 1px 2px rgba( 0, 0, 0, 0.04 ), 0 4px 8px rgba( 0, 0, 0, 0.06 );
+	box-sizing: border-box;
+
+	/*
+	 * `!important` — the same exception, same reasoning, `pickup.css`'s own `:where( button )` rule
+	 * and `woodev-modal.css`'s own `:where( button )` rule already document (see gotcha
+	 * `hostile-theme-button-display-none-needs-important.md`): this listbox IS the whole combobox
+	 * popup, so a theme's own `ul { display: none !important }` (aggressive list resets are a real,
+	 * if less common than button resets, page-builder/utility-CSS practice) would otherwise beat a
+	 * plain `display: block` regardless of specificity and take away the customer's only way to see
+	 * or pick a suggestion — a broken feature, not lost decoration. `!important` only ever loses to
+	 * another `!important`, so this is the one property in this file worth the exception.
+	 */
+	display: block !important;
+}
+
+/*
+ * `[hidden]` MUST be repeated at the SAME `!important` strength as the resting rule above — the s51
+ * addendum to the same gotcha (`hostile-theme-button-display-none-needs-important.md`): once a
+ * property is defended with `!important` for one purpose (surviving a hostile theme), every LATER
+ * rule touching that SAME property on the SAME element — even this module's own `[hidden]` toggle —
+ * must carry it too, or it silently loses to the reset above. `location-typeahead.js` toggles
+ * visibility purely via the DOM `hidden` property (`listbox.hidden = true/false` in `closeListbox()`/
+ * `renderItems()`), never a class, so this attribute selector is the ONLY thing that ever hides this
+ * element — without it (or without matching `!important`), the listbox would render open permanently
+ * regardless of what the JS state actually is; see also gotcha
+ * `css-hidden-attribute-needs-explicit-override.md` for why a plain `[hidden] { display: none }`
+ * would ALSO have been necessary here even without the `!important` reset above.
+ */
+.woodev-location-listbox[hidden] {
+	display: none !important;
+}
+
+/* -------------------------------------------------------------------------
+ * Options — comfortable hit target (14px text in ~18px of vertical padding lands close to a 40px
+ * row), full label text wraps rather than truncates (an address is exactly the content the customer
+ * needs to read in full to tell two suggestions apart — unlike `pickup.css`'s own sidebar rows,
+ * which truncate because that panel's width is fixed and narrow; this one matches the input's own,
+ * usually much wider, checkout-field width).
+ * ---------------------------------------------------------------------- */
+
+.woodev-location-listbox .woodev-location-option {
+	/* MEASURED on the rig (s69), not assumed. A theme rule with ordinary specificity and NO
+	 * `!important` — `.woocommerce form .form-row ul li { display: none }` (0,3,2) — beat the
+	 * flat single-class rule this used to be (0,1,0) and hid EVERY suggestion while the panel
+	 * itself stayed open: the listbox measured 10px tall with six children at computed
+	 * `display: none`, and `elementFromPoint()` over an option returned the page's `<main>`.
+	 *
+	 * This is the third hazard class, distinct from the two the sibling gotcha documents: not a
+	 * theme's `!important`, just a longer selector winning the cascade honestly. Flat `:where()`
+	 * isolation cannot defend against it by construction — it is zero-specificity by design. So
+	 * the property whose loss removes the control from the screen gets BOTH the ancestor (real
+	 * specificity, for the ordinary case) and `!important` (for a theme that also shouts).
+	 * Everything else on this rule stays plain and can lose to a theme gracefully. */
+	display: block !important;
+	padding: 9px 12px;
+	color: #1e1e1e;
+	font-size: 14px;
+	line-height: 1.4;
+	white-space: normal;
+	word-break: break-word;
+	cursor: pointer;
+	box-sizing: border-box;
+}
+
+/*
+ * Hover — plain neutral tint, the SAME `#f6f7f7` `pickup.css`'s own list rows/zoom buttons already
+ * use for hover, so this widget's chrome does not invent a second "hovered" language for the same
+ * plugin. Deliberately quieter than the keyboard-active style below (accent-tinted background PLUS a
+ * left bar), matching the same "hover must not compete with keyboard-active" discipline `pickup.css`
+ * uses for its own selected-row vs. hover pairing.
+ */
+.woodev-location-option:hover {
+	background: #f6f7f7;
+}
+
+/*
+ * Keyboard-active option (`aria-selected="true"`, set by `location-typeahead.js`'s `setActiveIndex()`
+ * as ArrowUp/ArrowDown move the highlight) — an ATTRIBUTE selector, not a class: this module never
+ * adds a class for the active row, only the ARIA state, so there is no `.woodev-location-option--
+ * active` to style. Visually distinct from `:hover` by TWO signals, not one — an accent-tinted
+ * background AND a left accent bar (`box-shadow: inset 3px 0 0 …`, the identical shape and reasoning
+ * `pickup.css`'s own `.woodev-pickup-list__item.is-selected` uses) — so keyboard users relying on
+ * something other than colour perception (WCAG 1.4.1) can still tell the active row from a merely
+ * hovered one, and a colour-blind customer distinguishes it by the bar alone if the tint reads flat.
+ * `color-mix()` with a literal `rgba()` fallback declared first, same two-declaration pattern
+ * `pickup.css`'s own selected-row rule uses, for a browser without `color-mix()` support; the literal
+ * equals `#06aedd` (this framework's own default accent, `pickup.css`'s
+ * `--woodev-pickup-accent` fallback / `Pickup_Handler::DEFAULT_ACCENT_COLOR`) at 8% opacity — a
+ * touch stronger than the pickup list's own 6%, because THIS row also needs to read as active while
+ * competing with `:hover`'s own grey rather than sitting in an otherwise-white list.
+ */
+.woodev-location-option[aria-selected='true'] {
+	background: rgba( 6, 174, 221, 0.08 );
+	background: color-mix( in srgb, #06aedd 8%, transparent );
+	box-shadow: inset 3px 0 0 #06aedd;
+}
+
+/* Precedence for the (rare but possible) moment a customer's mouse hovers the SAME row the keyboard
+   already made active: the active styling must not visually reset to plain hover grey. This selector
+   (class + attribute + pseudo-class, (0,3,0)) already outranks both single rules above — the plain
+   `:hover` rule (0,2,0) and the plain `[aria-selected]` rule (0,2,0) — on specificity alone, so which
+   one is written last does not matter here; repeated explicitly anyway for readability, so a reader
+   never has to do this arithmetic to confirm the active state survives a simultaneous hover. */
+.woodev-location-option[aria-selected='true']:hover {
+	background: rgba( 6, 174, 221, 0.08 );
+	background: color-mix( in srgb, #06aedd 8%, transparent );
+}
+
+/*
+ * The "nothing found" row — a MESSAGE inside the popup, not a suggestion. Styled deliberately
+ * unlike an option so it never invites a click: muted colour, italic, `default` cursor, and none of
+ * `.woodev-location-option`'s hover/active treatment (it does not carry that class at all, so those
+ * rules cannot reach it). `display: block !important` for the same reason the option rule carries it
+ * — a theme's `.woocommerce form .form-row ul li { display: none }` matches this `<li>` just as
+ * happily, and a message nobody can read is the same as no message.
+ */
+.woodev-location-listbox .woodev-location-empty {
+	display: block !important;
+	padding: 9px 12px;
+	color: #646970;
+	font-size: 13px;
+	font-style: italic;
+	line-height: 1.4;
+	white-space: normal;
+	word-break: break-word;
+	cursor: default;
+	box-sizing: border-box;
+}
+
+/* -------------------------------------------------------------------------
+ * BUSY INDICATOR — the `<span class="woodev-location-spinner">` `location-typeahead.js` inserts as a
+ * second sibling of the input, hidden at rest and shown from the moment an eligible query schedules
+ * its debounce until the search settles (see that file's BUSY STATE section). It sits INSIDE the
+ * input's right edge, which is where every combobox on the web puts one — and, unlike the listbox,
+ * it must never take a click: `pointer-events: none` keeps the last ~30px of the field clickable
+ * exactly as before this element existed.
+ *
+ * Positioned against the SAME `.woocommerce-input-wrapper` context the listbox already relies on
+ * (`top: 0; bottom: 0` rather than `height: 100%` — a definite height from the containing block
+ * without depending on the wrapper's own display type resolving a percentage).
+ *
+ * NO `!important` here, deliberately, and the rule is the one this file already states: `!important`
+ * is spent only where losing the property takes the CONTROL away from the customer (the listbox's
+ * own `display`). A spinner a theme manages to hide costs feedback, not function — the search still
+ * runs and the suggestions still arrive — so it loses gracefully rather than escalating.
+ * ---------------------------------------------------------------------- */
+
+.woodev-location-spinner {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	right: 10px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 16px;
+	pointer-events: none;
+}
+
+.woodev-location-spinner[hidden] {
+	display: none;
+}
+
+.woodev-location-spinner::before {
+	content: '';
+	display: block;
+	width: 14px;
+	height: 14px;
+	border: 2px solid #dcdcde;
+	border-top-color: #06aedd;
+	border-radius: 50%;
+	box-sizing: border-box;
+	animation: woodev-location-spin 0.7s linear infinite;
+}
+
+@keyframes woodev-location-spin {
+
+	to {
+		transform: rotate( 360deg );
+	}
+}
+
+/*
+ * Reduced motion (WCAG 2.3.3 / a vestibular-disorder accommodation) — the INDICATOR stays, only its
+ * rotation stops: the customer still needs to know a search is running, and a static ring in the
+ * accent colour says so without moving. Removing the element under this query would trade one
+ * accessibility need for another.
+ */
+@media ( prefers-reduced-motion: reduce ) {
+
+	.woodev-location-spinner::before {
+		animation: none;
+		border-color: #06aedd;
+	}
+}
+
+/* -------------------------------------------------------------------------
+ * Mobile — 782px, the same WordPress/WooCommerce breakpoint `pickup.css`/`woodev-modal.css` already
+ * use, so this feature has one breakpoint across the whole plugin, not a second invented one. A
+ * shorter cap leaves more of a small viewport's own keyboard-shrunk visible area free; nothing else
+ * about the layout changes; `top`/`left`/`right` already resolve against the input's own width at
+ * every size, so no other rule needs a mobile override.
+ *
+ * No RTL-specific rule: this file follows `pickup.css`'s own precedent (that file has none either),
+ * and every offset here (`left: 0; right: 0`) is already symmetric — there is no fixed one-sided
+ * value that would need mirroring under `[dir="rtl"]` the way `pickup.css`'s own `right: 16px`
+ * absolute offsets would.
+ * ---------------------------------------------------------------------- */
+
+@media screen and ( max-width: 782px ) {
+
+	.woodev-location-listbox {
+		max-height: 200px;
+	}
+}

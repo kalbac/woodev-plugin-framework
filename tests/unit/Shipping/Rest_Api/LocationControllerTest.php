@@ -162,7 +162,7 @@ final class Location_Controller_Fake_Service extends Location_Service {
 		return $this->active;
 	}
 
-	public function provider_for_level( string $level ): ?Location_Provider {
+	public function provider_for_level( string $level, ?string $country = null ): ?Location_Provider {
 		$this->provider_for_level_calls[] = $level;
 
 		if ( null !== $this->providers_by_level ) {

@@ -302,6 +302,14 @@ function woodev_test_shipping_method_plugin_init(): void {
 	// same reasoning as the requires just above.
 	require_once __DIR__ . '/class-test-selection-scope.php';
 
+	// Location Provider layer, block PR-C rig-visibility pull-forward: this fixture's
+	// Location_Adapter (mandatory obligation for any plugin opting into the layer) and
+	// the rig-only DaData credential bridge. Required unconditionally, same reasoning as
+	// the requires just above — declaring these classes is free, only using them below
+	// does anything.
+	require_once __DIR__ . '/class-test-location-adapter.php';
+	require_once __DIR__ . '/class-test-credential-seeder.php';
+
 	if ( ! class_exists( 'Woodev_Test_Viewport_Point_Source' ) ) {
 
 		/**
@@ -701,6 +709,12 @@ function woodev_test_shipping_method_plugin_init(): void {
 				// adapter scripts (they are pure domain knowledge, see the #251 spec §5).
 				add_action( 'wp_enqueue_scripts', [ $this, 'maybe_enqueue_pochta_embed_adapter' ] );
 				$this->pickup_handler->register();
+
+				// Location Provider layer, block PR-C rig-visibility pull-forward: bridge the
+				// rig's own DaData credential constants into the store option BEFORE anything
+				// reads it this request — see maybe_seed_dadata_credentials_from_rig_constants()'s
+				// own docblock.
+				$this->maybe_seed_dadata_credentials_from_rig_constants();
 			}
 
 			/**
@@ -858,6 +872,56 @@ function woodev_test_shipping_method_plugin_init(): void {
 			}
 
 			// -----------------------------------------------------------------
+			// Location Provider layer — block PR-C rig-visibility pull-forward.
+			// -----------------------------------------------------------------
+
+			/**
+			 * Opts this fixture into the Location Provider layer (spec §4.1) so the
+			 * layer's activation gate opens on the rig — without at least one plugin
+			 * returning `true` here, {@see \Woodev\Framework\Shipping\Location\Location_Provider_Registry::is_needed()}
+			 * stays `false` for the whole fleet, the "Локация" settings page is never
+			 * registered, and PR-C's rig checklist (paste a DaData token, see location
+			 * fields on checkout) is unperformable.
+			 *
+			 * @since 2.0.2
+			 *
+			 * @inheritDoc
+			 */
+			public function needs_location_provider(): bool {
+				return true;
+			}
+
+			/**
+			 * Returns this fixture's {@see \Woodev\Framework\Shipping\Location\Location_Adapter}
+			 * — a mandatory obligation once {@see self::needs_location_provider()} is `true`
+			 * (spec §4.3), never optional. See `class-test-location-adapter.php` for the
+			 * fixture's own honest-and-trivial implementation.
+			 *
+			 * @since 2.0.2
+			 *
+			 * @inheritDoc
+			 */
+			public function get_location_adapter(): ?\Woodev\Framework\Shipping\Location\Location_Adapter {
+				return new \Woodev_Test_Location_Adapter();
+			}
+
+			/**
+			 * Bridges the rig's own `WOODEV_TEST_DADATA_TOKEN`/`WOODEV_TEST_DADATA_SECRET`
+			 * wp-config constants into the DaData provider's store-level settings options
+			 * (`woodev_location_token`/`woodev_location_clean_secret`) via
+			 * {@see \Woodev_Test_Credential_Seeder::maybe_seed()} — see that class's own
+			 * docblock for the full rationale and the idempotent/non-destructive rule.
+			 *
+			 * @since 2.0.2
+			 *
+			 * @return void
+			 */
+			private function maybe_seed_dadata_credentials_from_rig_constants(): void {
+				\Woodev_Test_Credential_Seeder::maybe_seed( 'woodev_location_token', 'WOODEV_TEST_DADATA_TOKEN' );
+				\Woodev_Test_Credential_Seeder::maybe_seed( 'woodev_location_clean_secret', 'WOODEV_TEST_DADATA_SECRET' );
+			}
+
+			// -----------------------------------------------------------------
 			// Checkout handler seam — demo fields for Task 12 fixture wiring.
 			// -----------------------------------------------------------------
 
@@ -873,11 +937,21 @@ function woodev_test_shipping_method_plugin_init(): void {
 			/**
 			 * Returns a Checkout_Handler configured with a small demo field set.
 			 *
-			 * Three fields are wired to exercise every major branch of the layer:
+			 * Fields are wired to exercise every major branch of the layer:
 			 *  1. `billing_state`        — root select with static regions, RU/BY/KZ/UZ takeover.
 			 *  2. `billing_city`         — dependent suggest filtered by region + query string.
 			 *  3. `carrier_pickup_point` — hidden pickup-slot required when the fixture
 			 *                              shipping method is chosen.
+			 *  4-6. `shipping_state`/`shipping_city`/`shipping_address_1` — Location Provider
+			 *       layer, block PR-C rig-visibility pull-forward (spec §4.4): region/settlement/
+			 *       address declared via {@see \Woodev\Framework\Shipping\Checkout\Field::source_location()}.
+			 *       Deliberately the SHIPPING section, not billing — `billing_state`/`billing_city`
+			 *       above already exercise the pre-existing static demo (source/takeover_condition)
+			 *       that `CheckoutFieldsFixtureTest` asserts on byte-for-byte; the location fields
+			 *       get their own, never-before-used native WC field ids so neither demo disturbs
+			 *       the other. The three ids follow WooCommerce's own `_state`/`_city`/`_address_1`
+			 *       naming convention on purpose — `location-cascade.js` derives the postcode
+			 *       field id from it (see that file's own docblock).
 			 *
 			 * Domain data (regions, cities, method ids) lives here in the fixture;
 			 * the framework stays generic.
@@ -913,9 +987,32 @@ function woodev_test_shipping_method_plugin_init(): void {
 								},
 								'options'
 							)
+							/*
+							 * RU is deliberately EXCLUDED (issue #294, operator decision s70).
+							 *
+							 * `inject_states()` hooks `woocommerce_states`, which is keyed by
+							 * COUNTRY and not by field — so this §8 demo taking over RU registered
+							 * its three hardcoded regions as RU's states, and WooCommerce then
+							 * rendered EVERY `*_state` field for RU as a `<select>` of those three,
+							 * including `shipping_state` below, which the location-provider layer
+							 * declares as a `text` typeahead. The layer's whole region level was
+							 * therefore unobservable on the rig, and backwards fill had nowhere to
+							 * write.
+							 *
+							 * Measured: `WC()->countries->get_states()['RU']` returned exactly
+							 * those three entries, i.e. WooCommerce ships NO states of its own for
+							 * RU — the entire list came from this fixture.
+							 *
+							 * Note what this costs: the source callable below only ever returns
+							 * options for RU, so dropping RU here leaves the STATE-takeover half of
+							 * the §8 demo dormant on the rig (the `billing_city` Dependent_Select
+							 * half is untouched and still demonstrates §8). That is the intended
+							 * trade until #294 decides how the region level and WooCommerce's own
+							 * states concept are meant to coexist.
+							 */
 							->set_takeover_condition(
 								static function ( array $context ): bool {
-									return in_array( $context['country'] ?? '', [ 'RU', 'BY', 'KZ', 'UZ' ], true );
+									return in_array( $context['country'] ?? '', [ 'BY', 'KZ', 'UZ' ], true );
 								}
 							),
 
@@ -969,6 +1066,33 @@ function woodev_test_shipping_method_plugin_init(): void {
 							'carrier_pickup_point',
 							[ 'woodev_test_shipping' ]
 						),
+
+						// 4-6. Location Provider layer fields (block PR-C rig-visibility
+						// pull-forward) — shipping-section region/settlement/address, each
+						// backed by the store-level Location Provider layer rather than a
+						// plugin-supplied source callable. Type stays 'text': spec D7 says
+						// text+typeahead is the one mode available regardless of provider
+						// capability, and `Checkout_Handler::inject()` would otherwise force
+						// an empty-placeholder-only <select> for a 'select'-type field with
+						// no static options (this field's options come from the client-side
+						// cascade + REST suggest endpoint, never a static list).
+						\Woodev\Framework\Shipping\Checkout\Field::create( 'shipping_state' )
+							->set_type( 'text' )
+							->set_label( 'Регион (Location Provider)' )
+							->set_section( 'shipping' )
+							->source_location( 'region' ),
+
+						\Woodev\Framework\Shipping\Checkout\Field::create( 'shipping_city' )
+							->set_type( 'text' )
+							->set_label( 'Город (Location Provider)' )
+							->set_section( 'shipping' )
+							->source_location( 'settlement' ),
+
+						\Woodev\Framework\Shipping\Checkout\Field::create( 'shipping_address_1' )
+							->set_type( 'text' )
+							->set_label( 'Адрес (Location Provider)' )
+							->set_section( 'shipping' )
+							->source_location( 'address' ),
 					]
 				);
 

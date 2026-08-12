@@ -47,7 +47,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 	 *     'nonce'     => string, // same wp_rest nonce as the top-level 'nonce' above
 	 *     'countries' => string[],
 	 *     'mode'      => string,
-	 *     'levels'    => [ 'region' => bool, 'settlement' => bool, 'address' => bool ],
+	 *     'levels'    => [ country_code => [ 'region' => bool, 'settlement' => bool, 'address' => bool ] ],
 	 *     'current'   => [ 'key' => string, 'level' => string ]|null,
 	 *     'implicit'  => bool,
 	 *   ],
@@ -169,7 +169,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 		 *         nonce: string,
 		 *         countries: string[],
 		 *         mode: string,
-		 *         levels: array{region: bool, settlement: bool, address: bool},
+		 *         levels: array<string, array{region: bool, settlement: bool, address: bool}>,
 		 *         current: array{key: string, level: string}|null,
 		 *         implicit: bool
 		 *     }
@@ -245,13 +245,24 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 		 *   provider capability: free-text typeahead. This constant is the one
 		 *   TODO-shaped line in this method — Task 13/14 replaces it with a real
 		 *   read from the settings surface.
-		 * - `levels` — per-level `bool`, one flag per {@see Location_Record::LEVELS}:
-		 *   whether the D15 provider-fallback chain
-		 *   ({@see \Woodev\Framework\Shipping\Location\Location_Service::provider_for_level()})
-		 *   resolves ANY provider for that level. The client learns only this —
-		 *   NEVER which provider serves a level (spec D15) — because this method
-		 *   never reads {@see \Woodev\Framework\Shipping\Location\Location_Provider::get_id()}
-		 *   at all.
+		 * - `levels` — a MAP, `{ [country]: { region, settlement, address } }`, one
+		 *   entry per country in `countries` above (D15 amendment follow-up:
+		 *   per-country suggest levels — DaData genuinely serves `address` in
+		 *   RU/BY/KZ/UZ but not in AM/AZ/KG/TJ/TM, so a single flat per-level
+		 *   answer is no longer honest across every country the layer covers).
+		 *   Shipped as a full map rather than the current country's answer alone
+		 *   because this config is emitted ONCE per page render (`wp_localize_script`,
+		 *   no round-trip on a plain country-field change) — the client's D2/D15
+		 *   country-switch handling (Task 11) needs to re-evaluate per-level
+		 *   support the instant the customer picks a different country, and a
+		 *   single-country answer would go stale at that exact moment with no way
+		 *   to refresh it. Each per-country entry answers whether the D15
+		 *   provider-fallback chain
+		 *   ({@see \Woodev\Framework\Shipping\Location\Location_Service::get_levels_for_country()})
+		 *   resolves ANY provider for that level IN that country. The client
+		 *   learns only this — NEVER which provider serves a level (spec D15) —
+		 *   because neither this method nor `get_levels_for_country()` ever reads
+		 *   {@see \Woodev\Framework\Shipping\Location\Location_Provider::get_id()}.
 		 * - `current`/`implicit` — from
 		 *   {@see \Woodev\Framework\Shipping\Location\Location_Service::get_customer_record()}.
 		 *   `current`'s shape (`{ key, level }`) is deliberately byte-for-byte the
@@ -263,6 +274,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 		 *   meaningful attached to an actual record.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 `levels` changed from a single flat per-level map to a
+		 *              per-country map (D15 amendment follow-up).
 		 *
 		 * @param \Woodev\Framework\Shipping\Location\Location_Service $service The active, already-confirmed façade.
 		 *
@@ -271,17 +284,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 		 *     nonce: string,
 		 *     countries: string[],
 		 *     mode: string,
-		 *     levels: array{region: bool, settlement: bool, address: bool},
+		 *     levels: array<string, array{region: bool, settlement: bool, address: bool}>,
 		 *     current: array{key: string, level: string}|null,
 		 *     implicit: bool
 		 * }
 		 */
 		private function build_location_block( \Woodev\Framework\Shipping\Location\Location_Service $service ): array {
-
-			$levels = [];
-			foreach ( \Woodev\Framework\Shipping\Location\Location_Record::LEVELS as $level ) {
-				$levels[ $level ] = null !== $service->provider_for_level( $level );
-			}
 
 			$supported_countries = $service->get_supported_countries();
 
@@ -290,6 +298,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 				if ( in_array( $code, $supported_countries, true ) ) {
 					$countries[] = $code;
 				}
+			}
+
+			$levels = [];
+			foreach ( $countries as $code ) {
+				$levels[ $code ] = $service->get_levels_for_country( $code );
 			}
 
 			$customer = $service->get_customer_record();
@@ -304,6 +317,43 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 				$implicit = (bool) $customer['implicit'];
 			}
 
+			/**
+			 * Filters the location typeahead's user-facing strings.
+			 *
+			 * Mirrors `woodev_pickup_map_i18n` (see
+			 * {@see \Woodev\Framework\Shipping\Pickup\Pickup_Handler::get_js_config()}) — the
+			 * same reason applies here: these strings reach the customer, so a plugin whose
+			 * carrier calls a locality something else must be able to say so without
+			 * translating the framework.
+			 *
+			 * @since 2.1.0
+			 *
+			 * @param array<string, string> $strings The framework's default strings.
+			 */
+			$strings = apply_filters(
+				'woodev_location_i18n',
+				[
+					// Shown INSIDE the open listbox when a completed search returned nothing.
+					// A silent empty panel and a slow network are indistinguishable to the
+					// customer, so this one case is worth a sentence (operator, s70).
+					'noResults'        => __(
+						'Поиск не дал результатов. Попробуйте изменить запрос.',
+						'woodev-plugin-framework'
+					),
+
+					// The ADDRESS level gets its own wording (operator, s70). "Nothing found"
+					// under a street field reads as "you cannot be delivered to" — and a
+					// street genuinely absent from the provider's registry is the ordinary
+					// case there, not an error. This says the field still works, which is
+					// true: a location field is a plain text input with the typeahead layered
+					// on top, so a hand-typed address was always accepted.
+					'noResultsAddress' => __(
+						'Адрес не найден — введите вручную.',
+						'woodev-plugin-framework'
+					),
+				]
+			);
+
 			return [
 				'endpoints' => [
 					'suggest' => $this->rest_base . '/location/suggest',
@@ -315,6 +365,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 				'levels'    => $levels,
 				'current'   => $current,
 				'implicit'  => $implicit,
+				'i18n'      => array_map( 'strval', (array) $strings ),
 			];
 		}
 	}

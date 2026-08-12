@@ -171,7 +171,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * `rest_api_init`. Not gated on `is_checkout()` so the REST route is available
 		 * on API requests. Call once during plugin bootstrap.
 		 *
+		 * Location-provider layer (Task 12, spec D2): also hooks the WC Address
+		 * Autocomplete suppression check onto `init` at priority 21 — strictly
+		 * AFTER {@see \Woodev\Framework\Shipping\Location\Location_Provider_Registry::collect()}
+		 * (hooked at `init:20`), so the provider chain and its countries are
+		 * already resolved when {@see self::maybe_suppress_wc_address_providers()}
+		 * runs. `init` (not `wp_enqueue_scripts`) is deliberate: WooCommerce reads
+		 * the `woocommerce_address_providers` filter from ITS OWN `wp_enqueue_scripts`
+		 * callback, so racing registration order on the very same hook would be
+		 * fragile; `init` always finishes before `wp_enqueue_scripts` fires.
+		 *
 		 * @since 1.5.0
+		 * @since 2.0.2 Added the `init:21` WC Address Autocomplete suppression hook
+		 *              (location-provider layer Task 12).
 		 *
 		 * @return void
 		 */
@@ -182,8 +194,147 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 			add_action( 'woocommerce_checkout_order_processed', [ $this, 'handle_checkout_order_processed' ], 10, 3 );
 			add_action( 'wp_enqueue_scripts', [ $this, 'enqueue_assets' ] );
 			add_action( 'rest_api_init', [ $this, 'register_rest' ] );
+			add_action( 'init', [ $this, 'maybe_suppress_wc_address_providers' ], 21 );
+			add_filter( 'woocommerce_checkout_get_value', [ $this, 'handle_checkout_get_value' ], 10, 2 );
 
 			$this->guard_native_field_conflicts();
+		}
+
+		/**
+		 * Blanks WooCommerce's `*` "no state" sentinel for fields this layer manages.
+		 *
+		 * `woocommerce_default_country` is stored as `COUNTRY:STATE`, and a merchant who
+		 * picked a country without naming a state gets `RU:*`. WooCommerce parses that into
+		 * the customer's default state, so `WC_Checkout::get_value( 'shipping_state' )`
+		 * returns the literal `*`.
+		 *
+		 * Natively this is invisible: WC renders a state field as a `<select>`, and `*` simply
+		 * matches no option. A field this layer manages is a text `<input>`, so the sentinel
+		 * becomes a visible value — the customer opens checkout and finds `*` sitting in
+		 * «Регион», and it would be submitted and persisted as if they had typed it.
+		 *
+		 * Scoped deliberately narrowly: only fields this handler manages, and only the exact
+		 * one-character sentinel. A legitimate value is never `*` — it is WooCommerce's own
+		 * wildcard, not a place name.
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string|null $value the value WooCommerce resolved
+		 * @param string      $input the field id being resolved
+		 *
+		 * @return string|null
+		 */
+		public function handle_checkout_get_value( $value, $input ) {
+
+			// `woocommerce_checkout_get_value` is a SHORT-CIRCUIT filter, not a post-filter:
+			// WC_Checkout::get_value() applies it with `null` BEFORE resolving anything, and
+			// uses the callback's answer only when it is not null. So a callback that waits to
+			// be handed the resolved value is never handed anything — it must resolve the value
+			// itself, and return null to mean "carry on, WC".
+			if ( null !== $value ) {
+				return $value;
+			}
+
+			$fields = $this->fields->get_fields();
+
+			if ( ! isset( $fields[ $input ] ) ) {
+				return $value;
+			}
+
+			$customer = $this->wc_customer();
+			$getter   = 'get_' . $input;
+
+			if ( ! is_object( $customer ) || ! is_callable( [ $customer, $getter ] ) ) {
+				return $value;
+			}
+
+			// Short-circuit ONLY for the sentinel; every other value is left to WC's own
+			// resolution, so this filter cannot drift away from WC's behaviour over time.
+			return '*' === $customer->{$getter}() ? '' : $value;
+		}
+
+		/**
+		 * The WooCommerce customer object, or null when WooCommerce is unavailable.
+		 *
+		 * A seam, deliberately, rather than a bare `WC()` call: mocking the `WC` function with
+		 * Brain Monkey DEFINES it globally and PHP cannot un-define it, so it leaks into every
+		 * later test in the process and breaks the ones that assert WooCommerce is ABSENT
+		 * (gotcha `brain-monkey-function-pollution`). Overriding a method costs a subclass and
+		 * pollutes nothing — the same reason {@see self::wc_country_codes()} exists.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return object|null
+		 */
+		protected function wc_customer() {
+
+			if ( ! function_exists( 'WC' ) ) {
+				return null;
+			}
+
+			$wc = WC();
+
+			return is_object( $wc ) && isset( $wc->customer ) ? $wc->customer : null;
+		}
+
+
+		/**
+		 * WC Address Autocomplete arbitration — the server-side half (location-provider
+		 * layer Task 12, spec D2).
+		 *
+		 * WooCommerce's own Address Autocomplete feature (option
+		 * `woocommerce_address_autocomplete_enabled` + providers via the
+		 * `woocommerce_address_providers` filter, since WC 9.9.0) arbitrates
+		 * per-country client-side; see gotcha
+		 * `wc-address-autocomplete-hosts-only-address1-and-flattens-identity` for the
+		 * full measurement this rests on. When our own layer already covers EVERY
+		 * country the store sells to, there is nothing left for WC's autocomplete to
+		 * usefully do, and the two would otherwise fight over the same address
+		 * fields — so this applies the documented full kill: filters
+		 * `woocommerce_address_providers` down to an empty array at `PHP_INT_MAX`,
+		 * which is WC's own suggested lever for turning the feature off entirely
+		 * (their script enqueue check short-circuits on an empty provider list, so
+		 * this covers classic AND block checkouts alike — both read the SAME
+		 * `AddressProviderController`).
+		 *
+		 * A MIXED-country store — one selling to at least one country our provider
+		 * chain does not cover — must NOT get the full kill: that would silently take
+		 * away WC's autocomplete for the countries we do not serve. In that case (and
+		 * whenever the layer is inactive, or the selling-country set cannot be
+		 * determined at all) this method does nothing — the filter is left completely
+		 * untouched, not merely made to return its input unchanged. The client-side
+		 * half of this same arbitration (a per-country wrap of WC's OWN provider
+		 * registry, for exactly this mixed-country case) lives in
+		 * `location-cascade.js`.
+		 *
+		 * @internal Hooked to `init` (priority 21) by {@see self::register()}.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		public function maybe_suppress_wc_address_providers(): void {
+			if ( ! $this->location_service()->is_active() ) {
+				return;
+			}
+
+			$selling_countries = $this->wc_selling_country_codes();
+
+			if ( [] === $selling_countries ) {
+				return;
+			}
+
+			$supported_countries = $this->location_service()->get_supported_countries();
+
+			foreach ( $selling_countries as $country ) {
+				if ( ! in_array( $country, $supported_countries, true ) ) {
+					return;
+				}
+			}
+
+			add_filter( 'woocommerce_address_providers', '__return_empty_array', PHP_INT_MAX );
 		}
 
 		/**
@@ -340,15 +491,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * `location` block (via the {@see Checkout_Config} constructor's
 		 * `$location_service` collaborator) — one config object, one enqueue path.
 		 * When that block is present, ALSO enqueues the Task 10/11 client scripts
-		 * (`location-typeahead.js`, `location-cascade.js`) — but ONLY when their
-		 * files actually exist on disk ({@see self::enqueue_script_if_built()}):
-		 * those files ship in a later PR block (PR-C), so this handler is wired now
-		 * with a guard that can never 404, and needs zero further code changes once
-		 * the files land.
+		 * (`location-typeahead.js`, `location-cascade.js`) and the typeahead's own
+		 * suggestion-listbox stylesheet (`location.css`) — but ONLY when their files
+		 * actually exist on disk ({@see self::enqueue_script_if_built()} /
+		 * {@see self::enqueue_style_if_built()}): those files ship in a later PR
+		 * block (PR-C), so this handler is wired now with a guard that can never
+		 * 404, and needs zero further code changes once the files land.
 		 *
 		 * @since 2.0.2
 		 * @since 2.0.2 Enqueues the location-provider client scripts, guarded on
 		 *              their files existing on disk (location-provider layer Task 9).
+		 * @since 2.1.0 Also enqueues `location.css`, the typeahead listbox's own
+		 *              theme-resistant styles, under the same guard.
 		 *
 		 * @return void
 		 */
@@ -410,6 +564,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 						)
 					)
 				);
+
+				// The typeahead's own suggestion-listbox stylesheet — same guard, same PR-C
+				// "wired now, lands with zero code changes once the file exists" discipline as
+				// the two scripts above (see `enqueue_script_if_built()`'s own docblock).
+				$this->enqueue_style_if_built( 'woodev-location-styles', 'css/frontend/location.css', [] );
 			}
 
 			wp_localize_script(
@@ -448,6 +607,34 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 			}
 
 			wp_enqueue_script( $handle, self::asset_url( $relative ), $deps, self::asset_version( $path ), true );
+
+			return true;
+		}
+
+		/**
+		 * Enqueues one stylesheet handle, but only when its file actually exists on disk.
+		 *
+		 * The CSS counterpart of {@see self::enqueue_script_if_built()} — same "never register a
+		 * `href` that would 404" discipline, same {@see self::asset_exists()} seam, applied to
+		 * `location.css` (the typeahead's own suggestion-listbox styles). Mirrors
+		 * {@see \Woodev\Framework\Shipping\Pickup\Pickup_Handler::enqueue_style_if_built()}.
+		 *
+		 * @since 2.1.0
+		 *
+		 * @param string   $handle   the style handle to register.
+		 * @param string   $relative path relative to the assets directory.
+		 * @param string[] $deps     style dependencies.
+		 *
+		 * @return bool true when the style was enqueued; false when its file is missing.
+		 */
+		private function enqueue_style_if_built( string $handle, string $relative, array $deps ): bool {
+			$path = self::asset_path( $relative );
+
+			if ( ! static::asset_exists( $path ) ) {
+				return false;
+			}
+
+			wp_enqueue_style( $handle, self::asset_url( $relative ), $deps, self::asset_version( $path ) );
 
 			return true;
 		}
@@ -843,6 +1030,35 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 			}
 
 			return array_map( 'strval', array_keys( (array) WC()->countries->get_countries() ) );
+		}
+
+
+		/**
+		 * Returns the WooCommerce store's SELLING country codes — i.e. what the
+		 * merchant's "Selling location(s)" setting (`woocommerce_allowed_countries`
+		 * and its `all_except`/`specific` companions) actually admits, via
+		 * {@see \WC_Countries::get_allowed_countries()}. Deliberately NOT
+		 * {@see self::wc_country_codes()} (every country WC knows about, ~250 of
+		 * them, used for the `<select>` option list) — Task 12's arbitration needs
+		 * to know what the store actually SELLS to, so a store that only sells to
+		 * `RU` never gets penalized for the other 249 codes WC merely knows how to
+		 * spell.
+		 *
+		 * Extracted (like {@see self::wc_country_codes()}) so tests can supply a
+		 * selling-country list without bootstrapping WooCommerce; returns an empty
+		 * array when WC is unavailable — a caller must treat that as "unknown",
+		 * never as "sells nowhere" (see {@see self::maybe_suppress_wc_address_providers()}).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string[]
+		 */
+		protected function wc_selling_country_codes(): array {
+			if ( ! function_exists( 'WC' ) || ! WC()->countries ) {
+				return [];
+			}
+
+			return array_map( 'strval', array_keys( (array) WC()->countries->get_allowed_countries() ) );
 		}
 
 		/**

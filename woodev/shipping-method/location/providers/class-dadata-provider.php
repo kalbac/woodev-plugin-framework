@@ -37,7 +37,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 	 * payloads are pinned VERBATIM in `tests/unit/Shipping/Location/DadataProviderTest.php`),
 	 * cross-checked against field-level behavior confirmed in the operator's own
 	 * production plugins under `plugins-reference/` — specifically the
-	 * planning-structure noise filter ({@see self::PLANNING_STRUCTURE_FIAS_LEVEL})
+	 * settlement-granularity filter ({@see self::should_reject_settlement_row()})
 	 * and the level→bounds vocabulary (`region`/`area`/`city`/`settlement`/`street`/`house`),
 	 * both confirmed independently in `woocommerce-edostavka/assets/js/frontend/fields-autocomplete.js`
 	 * AND the more modern `woocommerce-yandex-delivery/woodev/assets/js/frontend/woodev-dadata-suggestions.js`.
@@ -91,29 +91,81 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 		public const FILTER_COUNTRIES = 'woodev_location_provider_countries';
 
 		/**
-		 * DaData's own "planning structure" ФИАС level — suggestion rows at this
-		 * level are administrative-boundary noise, not real localities a customer
-		 * would pick. Confirmed VERBATIM (string `'65'`, compared with `!==`, NOT
-		 * a level-4-or-greater numeric heuristic) in
-		 * `plugins-reference/woocommerce-edostavka/assets/js/frontend/fields-autocomplete.js:123-128`
-		 * (`onSuggestionsFetch`) and independently in
-		 * `plugins-reference/woocommerce-yandex-delivery/woodev/assets/js/frontend/woodev-dadata-suggestions.js`'s
-		 * `filterSuggestions()` — two independent production plugins agree on this
-		 * exact criterion, so it is applied here at the SETTLEMENT level only
-		 * (matching the reference's own `bounds: 'city-settlement'` call site).
+		 * The nine countries served by default (before {@see self::FILTER_COUNTRIES}
+		 * runs) — the store operator's market-scope decision, not a limit of the
+		 * DaData API; see {@see self::get_countries()}'s own docblock for the
+		 * full rationale and the three measured data tiers.
 		 *
-		 * The reference plugins ALSO apply a second, address-level filter
-		 * (`fias_level >= 4 OR city_fias_id in [Moscow, SPb]`) that a fresh read
-		 * of `fields-autocomplete.js:228-231` shows contains a pre-existing bug
+		 * @since 2.0.2
+		 * @var string[]
+		 */
+		private const DEFAULT_COUNTRIES = [ 'RU', 'BY', 'KZ', 'UZ', 'AM', 'AZ', 'KG', 'TJ', 'TM' ];
+
+		/**
+		 * Countries resolved by DaData's GeoNames tier — city granularity only,
+		 * measured EMPTY for a street/house-bounded (`address`-level) query
+		 * (see {@see self::narrow_suggest_levels_for_country()}). RU (ФИАС/ГАР)
+		 * and the OpenStreetMap tier (BY, KZ, UZ) both resolve to house
+		 * granularity and are deliberately NOT in this list.
+		 *
+		 * @since 2.0.2
+		 * @var string[]
+		 */
+		private const GEONAMES_TIER_COUNTRIES = [ 'AM', 'AZ', 'KG', 'TJ', 'TM' ];
+
+		/**
+		 * RU (ФИАС) fias_level values ACCEPTED at a settlement-bound query:
+		 * `4` (city) and `6` (settlement) — the ordinary, unambiguous cases.
+		 * `1` (region) is accepted too, but ONLY conditionally — see
+		 * {@see self::should_reject_settlement_row()}'s federal-city carve-out —
+		 * so it is deliberately NOT in this flat accept-list.
+		 *
+		 * Supersedes the earlier `fias_level !== '65'`-only filter (the DaData
+		 * "planning structure" noise level — confirmed VERBATIM in two
+		 * independent reference plugins,
+		 * `plugins-reference/woocommerce-edostavka/assets/js/frontend/fields-autocomplete.js:123-128`
+		 * and `plugins-reference/woocommerce-yandex-delivery/woodev/assets/js/frontend/woodev-dadata-suggestions.js`'s
+		 * `filterSuggestions()`): `65` is simply absent from this accept-list
+		 * (and not `1`/`4`/`6` either), so it is rejected by the SAME rule below
+		 * rather than by a second, overlapping check — the reference plugins'
+		 * OWN second, address-level filter (`fias_level >= 4 OR city_fias_id in
+		 * [Moscow, SPb]`) is still deliberately NOT ported: a fresh read of
+		 * `fields-autocomplete.js:228-231` shows it contains a pre-existing bug
 		 * (`$.inArray(...) === 0` evaluated INSIDE the array argument, which can
-		 * never be true) — that second filter is deliberately NOT ported: porting
-		 * a criterion independent research flagged as broken would encode the bug
-		 * into the framework's neutral contract, not "replicate the reference".
+		 * never be true), and hardcoding Moscow/SPb GUIDs the way that filter
+		 * does is exactly what {@see self::should_reject_settlement_row()}'s
+		 * `region_fias_id === city_fias_id` federal-city detection replaces.
+		 *
+		 * @since 2.0.2
+		 * @var string[]
+		 */
+		private const RU_SETTLEMENT_ACCEPTED_FIAS_LEVELS = [ '4', '6' ];
+
+		/**
+		 * The RU (ФИАС) fias_level value denoting a region-level row (`1`).
+		 * Accepted at a settlement-bound query ONLY when the row is a FEDERAL
+		 * CITY — {@see self::should_reject_settlement_row()} detects that as
+		 * `region_fias_id === city_fias_id` (the docs' own definition), never by
+		 * hardcoding Moscow/Saint-Petersburg GUIDs the way the reference plugins
+		 * do.
 		 *
 		 * @since 2.0.2
 		 * @var string
 		 */
-		private const PLANNING_STRUCTURE_FIAS_LEVEL = '65';
+		private const RU_FIAS_LEVEL_REGION = '1';
+
+		/**
+		 * The RU (ФИАС) fias_level value meaning "foreign or empty" per DaData's
+		 * own docs — every row outside RU (OpenStreetMap and GeoNames tiers
+		 * alike) carries this value; it is meaningless as a granularity signal
+		 * there, so {@see self::should_reject_settlement_row()} skips the whole
+		 * RU-specific branch when it sees this value and falls back to the
+		 * country-agnostic rule alone.
+		 *
+		 * @since 2.0.2
+		 * @var string
+		 */
+		private const FIAS_LEVEL_FOREIGN_OR_EMPTY = '-1';
 
 		/**
 		 * Max suggestions requested per DaData call. DaData's own default/cap for
@@ -165,21 +217,52 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 		/**
 		 * {@inheritDoc}
 		 *
-		 * DaData's suggestion registry is RU-centric (spec Task 7). Filterable so
-		 * a store that has verified wider coverage (DaData does answer some CIS
-		 * queries) can opt in without a framework change.
+		 * The nine countries below are the STORE OPERATOR's market-scope
+		 * decision, NOT a limit of the DaData API itself — DaData's Suggestions
+		 * API genuinely serves more countries than this (measured session
+		 * s67/s68, `docs-internal/specs/2026-08-12-location-provider-design.md`
+		 * §"country coverage"): a three-tier data model —
+		 * ФИАС/ГАР for RU (to apartment), OpenStreetMap for BY/KZ/UZ (to house),
+		 * GeoNames for everywhere else, including AM/AZ/KG/TJ/TM (city only —
+		 * a street-bounded query is measured EMPTY for those five, pinned by
+		 * `tests/_fixtures/dadata/am-address-empty-tier2.json`).
+		 *
+		 * A country not in this list was EXCLUDED by an explicit operator
+		 * decision (business scope: the delivery region the store's plugins
+		 * actually serve), not because DaData cannot answer for it — that
+		 * decision is revisitable, and widening is done through
+		 * {@see self::FILTER_COUNTRIES} below, never by editing this literal
+		 * list.
+		 *
+		 * Transnistria (PMR) has no ISO 3166-1 alpha-2 code of its own and is
+		 * served by DaData under `MD` (Moldova) — measured, session s67/s68 —
+		 * so it cannot be selected independently of Moldova through this
+		 * country-code-keyed contract; Moldova itself is not in the list above
+		 * (out of the operator's current market scope), so neither is reachable
+		 * today without widening via the filter.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Default widened from `[ 'RU' ]` to the nine served
+		 *              countries above (measured tier coverage, D15 amendment
+		 *              follow-up).
 		 */
 		public function get_countries(): array {
 			/**
 			 * Filters the countries the bundled DaData provider reports covering.
 			 *
+			 * This is the operator's own market-scope override point — widen (a
+			 * verified-working country DaData serves but the default list
+			 * excludes, e.g. Moldova for Transnistria) or narrow (a store that
+			 * only ever sells within a subset of the nine) without a framework
+			 * change.
+			 *
 			 * @since 2.0.2
 			 *
-			 * @param string[] $countries ISO-3166 alpha-2 codes. Default `[ 'RU' ]`.
+			 * @param string[] $countries ISO-3166 alpha-2 codes. Default the
+			 *                             nine served countries (RU, BY, KZ, UZ,
+			 *                             AM, AZ, KG, TJ, TM).
 			 */
-			return (array) apply_filters( self::FILTER_COUNTRIES, [ 'RU' ] );
+			return (array) apply_filters( self::FILTER_COUNTRIES, self::DEFAULT_COUNTRIES );
 		}
 
 		/**
@@ -195,6 +278,37 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 		 */
 		protected function declare_suggest_levels(): array {
 			return Location_Record::LEVELS;
+		}
+
+		/**
+		 * {@inheritDoc}
+		 *
+		 * The measured tier boundary (D15 amendment, session s68): the GeoNames
+		 * tier ({@see self::GEONAMES_TIER_COUNTRIES}) resolves to CITY
+		 * granularity only — a street/house-bounded (`address`-level) query is
+		 * measured EMPTY for it (`tests/_fixtures/dadata/am-address-empty-tier2.json`
+		 * pins AM directly; the same query returning zero rows for AZ/KG/TJ/TM
+		 * is the design brief's own stated measurement — see
+		 * `docs-internal/specs/2026-08-12-location-provider-design.md`). RU
+		 * (ФИАС/ГАР) and the OpenStreetMap tier (BY, KZ, UZ) both resolve to
+		 * house granularity, so neither is narrowed here. A country outside
+		 * {@see self::get_countries()} narrows to nothing — this provider makes
+		 * no promise about a country it does not cover at all.
+		 *
+		 * @since 2.0.2
+		 */
+		protected function narrow_suggest_levels_for_country( array $levels, string $country ): array {
+			$normalized = strtoupper( trim( $country ) );
+
+			if ( ! in_array( $normalized, $this->get_countries(), true ) ) {
+				return [];
+			}
+
+			if ( in_array( $normalized, self::GEONAMES_TIER_COUNTRIES, true ) ) {
+				return array_values( array_diff( $levels, [ Location_Record::LEVEL_ADDRESS ] ) );
+			}
+
+			return $levels;
 		}
 
 		/**
@@ -283,11 +397,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 			$records = [];
 
 			foreach ( $raw_suggestions as $raw ) {
-				if ( $this->is_planning_structure_noise( $raw, $scope ) ) {
+				$data = (array) ( $raw['data'] ?? [] );
+
+				if ( Location_Record::LEVEL_SETTLEMENT === $scope->level() && $this->should_reject_settlement_row( $data ) ) {
 					continue;
 				}
 
-				$record = $this->record_from_dadata_fields( (array) ( $raw['data'] ?? [] ), $scope->level(), (string) ( $raw['value'] ?? '' ), $scope->country() );
+				$record = $this->record_from_dadata_fields( $data, $scope->level(), (string) ( $raw['value'] ?? '' ), $scope->country() );
 
 				if ( null !== $record ) {
 					$records[] = $record;
@@ -471,7 +587,33 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 				return [ [ 'country_iso_code' => $scope->country() ] ];
 			}
 
-			$parent = $scope->parent_record();
+			/*
+			 * The COUNTRY rides in every parent constraint too, not only the parentless one.
+			 *
+			 * MEASURED against the live API (13.08.2026), one query, four constraint shapes,
+			 * scoping a street search to Tashkent (`city_fias_id` = `relation:2216724`, the id
+			 * DaData itself returned for that city):
+			 *
+			 *   [ region_fias_id, city_fias_id ]                  → 0 suggestions
+			 *   [ country_iso_code, city_fias_id ]                → 3
+			 *   [ country_iso_code, city ]                        → 3
+			 *   [ country_iso_code ]                              → 3
+			 *
+			 * The first row is what this method used to send. Outside Russia DaData's
+			 * "fias" ids are not FIAS at all — they are OpenStreetMap-derived
+			 * (`relation:`/`way:`) or GeoNames numbers — and the `locations` filter cannot
+			 * interpret one without knowing which country's registry it belongs to. So a
+			 * customer who picked a foreign settlement got an EMPTY address list for every
+			 * query, while the same query with no settlement chosen worked fine — reported
+			 * from the rig exactly that way (operator, s70: Tashkent chosen → nothing;
+			 * Tashkent cleared → "Yunusabad 19" found immediately, and selecting it
+			 * backfilled Tashkent).
+			 *
+			 * Adding the country is a no-op for Russia — same measurement, Moscow's real
+			 * FIAS UUID: 3 suggestions with and without it, identical values.
+			 */
+			$country = [ 'country_iso_code' => $scope->country() ];
+			$parent  = $scope->parent_record();
 
 			if ( null !== $parent && self::PROVIDER_ID === $parent->provider_id() && is_array( $parent->raw() ) ) {
 				$location = [];
@@ -483,7 +625,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 				}
 
 				if ( [] !== $location ) {
-					return [ $location ];
+					return [ array_merge( $country, $location ) ];
 				}
 			}
 
@@ -503,28 +645,86 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 				$location['city'] = $components['settlement']['name'];
 			}
 
-			return [] !== $location ? [ $location ] : [];
+			return [] !== $location ? [ array_merge( $country, $location ) ] : [];
 		}
 
 		/**
-		 * Whether a raw suggestion is DaData "planning structure" noise, at the
-		 * `settlement` level only — see {@see self::PLANNING_STRUCTURE_FIAS_LEVEL}.
+		 * Whether a raw settlement-bound suggestion is FINER than a settlement
+		 * (a district, a street, an administrative-planning row) and must be
+		 * rejected — by GRANULARITY, not by deduplication (measured defect:
+		 * `tests/_fixtures/dadata/ru-settlement-moscow-duplicate.json` shows
+		 * DaData returning "г Москва" AND "г Москва, р-н Москворечье-Сабурово"
+		 * both at `fias_level '1'` with the SAME `city_fias_id` — deduplicating
+		 * by `city_fias_id` would collapse them into one locality carrying
+		 * whichever record happened to win, silently discarding the other's
+		 * postcode/coordinates; rejecting the finer one by granularity keeps
+		 * the better-quality federal-city row and never needs to compare the
+		 * two against each other at all).
+		 *
+		 * Two rules, applied in order:
+		 *
+		 * 1. **Country-agnostic** (applies everywhere, including where
+		 *    `fias_level` is {@see self::FIAS_LEVEL_FOREIGN_OR_EMPTY} — the
+		 *    OpenStreetMap and GeoNames tiers, where `fias_level` carries no
+		 *    RU-specific meaning at all per DaData's own docs): a settlement
+		 *    suggestion is usable only when `city` or `settlement` is filled
+		 *    AND `street`/`house` are NOT — a row carrying street/house data at
+		 *    a settlement-bound query is finer than what was asked for.
+		 * 2. **RU-specific** (only when `fias_level !== `{@see self::FIAS_LEVEL_FOREIGN_OR_EMPTY}`,
+		 *    i.e. a real ФИАС row): a non-empty `city_district` is always finer
+		 *    than a settlement and is rejected outright; otherwise accept
+		 *    {@see self::RU_SETTLEMENT_ACCEPTED_FIAS_LEVELS} (`4` city, `6`
+		 *    settlement) unconditionally, accept {@see self::RU_FIAS_LEVEL_REGION}
+		 *    (`1`) ONLY when the row is a federal city
+		 *    (`region_fias_id === city_fias_id`, the docs' own definition —
+		 *    detected structurally, never by hardcoding Moscow/Saint-Petersburg
+		 *    GUIDs the way the reference plugins do), and reject every other
+		 *    `fias_level` (`0, 3, 5, 7, 8, 9, 65`, and anything unrecognized).
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Generalized from the earlier `fias_level !== '65'`-only
+		 *              filter to the full granularity rule above (measured
+		 *              defect: the Moscow federal-city/city-district
+		 *              duplicate).
 		 *
-		 * @param array<string, mixed> $raw   One raw suggestion (`{ value, data }`).
-		 * @param Location_Scope       $scope Lookup scope.
+		 * @param array<string, mixed> $data DaData field set for one raw
+		 *                                    suggestion's `data` object.
 		 *
-		 * @return bool
+		 * @return bool `true` when this row must be rejected.
 		 */
-		private function is_planning_structure_noise( array $raw, Location_Scope $scope ): bool {
-			if ( Location_Record::LEVEL_SETTLEMENT !== $scope->level() ) {
+		private function should_reject_settlement_row( array $data ): bool {
+			$has_locality = '' !== trim( (string) ( $data['city'] ?? '' ) ) || '' !== trim( (string) ( $data['settlement'] ?? '' ) );
+			$has_finer    = '' !== trim( (string) ( $data['street'] ?? '' ) ) || '' !== trim( (string) ( $data['house'] ?? '' ) );
+
+			if ( ! $has_locality || $has_finer ) {
+				return true;
+			}
+
+			$fias_level = (string) ( $data['fias_level'] ?? '' );
+
+			if ( self::FIAS_LEVEL_FOREIGN_OR_EMPTY === $fias_level ) {
+				// OpenStreetMap/GeoNames tiers: fias_level is meaningless here —
+				// the country-agnostic rule above is the only gate.
 				return false;
 			}
 
-			$data = (array) ( $raw['data'] ?? [] );
+			if ( '' !== trim( (string) ( $data['city_district'] ?? '' ) ) ) {
+				return true; // a city district is finer than a settlement.
+			}
 
-			return self::PLANNING_STRUCTURE_FIAS_LEVEL === (string) ( $data['fias_level'] ?? '' );
+			if ( in_array( $fias_level, self::RU_SETTLEMENT_ACCEPTED_FIAS_LEVELS, true ) ) {
+				return false;
+			}
+
+			if ( self::RU_FIAS_LEVEL_REGION === $fias_level ) {
+				$region_fias_id = (string) ( $data['region_fias_id'] ?? '' );
+				$city_fias_id   = (string) ( $data['city_fias_id'] ?? '' );
+
+				// Federal city: the docs' own definition, detected structurally.
+				return ! ( '' !== $region_fias_id && $region_fias_id === $city_fias_id );
+			}
+
+			return true;
 		}
 
 		/**

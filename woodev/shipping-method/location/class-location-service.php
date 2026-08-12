@@ -198,17 +198,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 *
 		 * `$level` decides WHICH provider is consulted (D15 gate fix, block
 		 * PR-B). Omitted (or `null`): asks about the ACTIVE provider alone —
-		 * the original, still-supported contract. Given a level: asks about
-		 * whichever provider {@see self::provider_for_level()} resolves for
-		 * THAT level (chosen, then the bundled fallback) — the exact provider
-		 * that would go on to actually serve a `suggest()` call for it. A
-		 * caller gating a per-level request (the REST `/suggest` handler)
-		 * MUST pass `$level`: consulting only the active provider's list
-		 * there can both wrongly SUPPRESS a country the resolved fallback
-		 * covers (the active provider does not list it, the fallback does),
-		 * and wrongly ADMIT one the active provider covers but the resolved
-		 * fallback does not (spending upstream quota on a lookup that was
-		 * always going to fail).
+		 * the original, still-supported contract. Given a level: delegates to
+		 * {@see self::provider_for_level()}'s own joint country+level check
+		 * (D15 amendment follow-up: per-country suggest levels) — a country a
+		 * provider statically lists but does not actually serve `$level` FOR
+		 * (e.g. DaData + `address` in a GeoNames-tier country) is correctly
+		 * reported unsupported, not just "no provider resolves the level at
+		 * all" as before that check existed.
 		 *
 		 * Degrades to `false` — never throws — for every unanswerable case: no
 		 * provider resolves for the given (or active) selector, or a
@@ -225,6 +221,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 *              block PR-B): the country check must consult whichever
 		 *              provider actually serves the requested level, not the
 		 *              active provider unconditionally.
+		 * @since 2.0.2 The `$level`-given branch now also consults the
+		 *              resolved provider's PER-COUNTRY suggest levels (D15
+		 *              amendment follow-up), not merely its static country
+		 *              list.
 		 *
 		 * @param string      $country Country code, any case/whitespace.
 		 * @param string|null $level   One of {@see Location_Record::LEVELS},
@@ -238,7 +238,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 *                                    — see {@see self::provider_for_level()}.
 		 */
 		public function is_country_supported( string $country, ?string $level = null ): bool {
-			$provider = null !== $level ? $this->provider_for_level( $level ) : $this->registry->get_active_provider();
+			if ( null !== $level ) {
+				return null !== $this->provider_for_level( $level, $country );
+			}
+
+			$provider = $this->registry->get_active_provider();
 
 			if ( null === $provider ) {
 				return false;
@@ -299,6 +303,44 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		}
 
 		/**
+		 * Which suggest LEVELS the D15 chain resolves for ONE specific country
+		 * — `region`/`settlement`/`address` => whether SOME configured
+		 * provider serves that level FOR THIS COUNTRY (D15 amendment
+		 * follow-up: per-country suggest levels).
+		 *
+		 * This is the per-country twin of the country-blind question a single
+		 * flat `levels` map could once answer: DaData genuinely serves
+		 * `address` in RU/BY/KZ/UZ but not in AM/AZ/KG/TJ/TM, so "does some
+		 * provider serve `address`" no longer has one true/false answer across
+		 * every country the layer covers — it depends on which country the
+		 * customer is currently addressing. {@see Checkout_Config} calls this
+		 * once per country in its own `countries` list to build a per-country
+		 * `levels` map, rather than the framework guessing which single
+		 * country's answer the client will need next — the client cannot
+		 * refresh the config on a plain country-field change (no round-trip in
+		 * that path today), so the config ships the WHOLE map up front.
+		 *
+		 * Never reveals WHICH provider serves a level (spec D15) — this reads
+		 * only {@see self::provider_for_level()}'s null/non-null answer, never
+		 * the resolved instance's own id.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $country ISO-3166 alpha-2 country code, any case/whitespace.
+		 *
+		 * @return array{region: bool, settlement: bool, address: bool}
+		 */
+		public function get_levels_for_country( string $country ): array {
+			$levels = [];
+
+			foreach ( Location_Record::LEVELS as $level ) {
+				$levels[ $level ] = null !== $this->provider_for_level( $level, $country );
+			}
+
+			return $levels;
+		}
+
+		/**
 		 * Walks the D15 provider chain for one suggest LEVEL: the active
 		 * provider first, when it is configured and declares the level in
 		 * {@see Location_Provider::get_suggest_levels()}; otherwise the
@@ -316,16 +358,31 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 * them, so the chain must actually behave as a short-circuiting
 		 * priority order, not merely report one.
 		 *
-		 * @since 2.0.2
+		 * `$country` (optional, D15 amendment follow-up: per-country suggest
+		 * levels, e.g. DaData genuinely serves `address` in RU/BY/KZ/UZ but
+		 * not in AM/AZ/KG/TJ/TM): when given, a candidate is eligible ONLY when
+		 * it ALSO covers `$country` ({@see Location_Provider::get_countries()})
+		 * AND its {@see Location_Provider::get_suggest_levels()} answer FOR
+		 * THAT COUNTRY includes `$level`. Omitted (`null`, the default):
+		 * behaves EXACTLY as before this parameter was added — no country
+		 * check at all, and each candidate's country-blind (unnarrowed)
+		 * level set decides eligibility — so every pre-existing call site
+		 * (including this method's own 1-argument form) keeps its original
+		 * meaning unchanged.
 		 *
-		 * @param string $level One of {@see Location_Record::LEVELS}.
+		 * @since 2.0.2
+		 * @since 2.0.2 Added the optional `$country` parameter.
+		 *
+		 * @param string      $level   One of {@see Location_Record::LEVELS}.
+		 * @param string|null $country ISO-3166 alpha-2 country code, or `null`
+		 *                              for the country-blind chain walk.
 		 *
 		 * @return Location_Provider|null
 		 *
 		 * @throws \InvalidArgumentException When `$level` is not one of
 		 *                                    {@see Location_Record::LEVELS}.
 		 */
-		public function provider_for_level( string $level ): ?Location_Provider {
+		public function provider_for_level( string $level, ?string $country = null ): ?Location_Provider {
 			if ( ! in_array( $level, Location_Record::LEVELS, true ) ) {
 				throw new \InvalidArgumentException(
 					sprintf(
@@ -336,19 +393,23 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 				);
 			}
 
-			$resolved = $this->resolve_provider_for_level( $level );
+			$resolved = $this->resolve_provider_for_level( $level, $country );
 
 			/**
 			 * Filters the D15 chain's resolved provider for one suggest level.
 			 *
 			 * @since 2.0.2
+			 * @since 2.0.2 Added the `$country` argument.
 			 *
 			 * @param Location_Provider|null $resolved The chain's own answer
 			 *                                          (chosen → bundled
 			 *                                          fallback → null).
 			 * @param string                 $level    The level being resolved.
+			 * @param string|null             $country  The country the chain was
+			 *                                          walked for, or `null` for
+			 *                                          the country-blind walk.
 			 */
-			return apply_filters( self::FILTER_PROVIDER_FOR_LEVEL, $resolved, $level );
+			return apply_filters( self::FILTER_PROVIDER_FOR_LEVEL, $resolved, $level, $country );
 		}
 
 		/**
@@ -356,25 +417,61 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 * runs — see {@see self::provider_for_level()} for the full contract.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Added the optional `$country` parameter.
 		 *
-		 * @param string $level Already-validated level.
+		 * @param string      $level   Already-validated level.
+		 * @param string|null $country ISO-3166 alpha-2 country code, or `null`.
 		 *
 		 * @return Location_Provider|null
 		 */
-		private function resolve_provider_for_level( string $level ): ?Location_Provider {
+		private function resolve_provider_for_level( string $level, ?string $country ): ?Location_Provider {
 			$chosen = $this->registry->get_active_provider();
 
-			if ( null !== $chosen && $chosen->is_configured() && in_array( $level, $chosen->get_suggest_levels(), true ) ) {
+			if ( null !== $chosen && $chosen->is_configured() && $this->provider_serves_level( $chosen, $level, $country ) ) {
 				return $chosen;
 			}
 
 			$fallback = $this->registry->get_providers()[ Location_Provider_Registry::DEFAULT_PROVIDER_ID ] ?? null;
 
-			if ( null !== $fallback && $fallback->is_configured() && in_array( $level, $fallback->get_suggest_levels(), true ) ) {
+			if ( null !== $fallback && $fallback->is_configured() && $this->provider_serves_level( $fallback, $level, $country ) ) {
 				return $fallback;
 			}
 
 			return null;
+		}
+
+		/**
+		 * Whether `$provider` is an eligible chain candidate for `$level`,
+		 * optionally narrowed by `$country` — the joint check both
+		 * {@see self::resolve_provider_for_level()} candidates run.
+		 *
+		 * `$country` given: `$provider` must ALSO cover it
+		 * ({@see Location_Provider::get_countries()}) AND its per-country
+		 * {@see Location_Provider::get_suggest_levels()} answer must include
+		 * `$level`. `$country` omitted: no country check at all, and the
+		 * country-blind (unnarrowed) level set decides — identical to this
+		 * class's behavior before the `$country` parameter existed.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param Location_Provider $provider Candidate provider.
+		 * @param string            $level    One of {@see Location_Record::LEVELS}.
+		 * @param string|null       $country  ISO-3166 alpha-2 country code, or `null`.
+		 *
+		 * @return bool
+		 */
+		private function provider_serves_level( Location_Provider $provider, string $level, ?string $country ): bool {
+			if ( null === $country ) {
+				return in_array( $level, $provider->get_suggest_levels(), true );
+			}
+
+			$normalized = strtoupper( trim( $country ) );
+
+			if ( ! in_array( $normalized, $provider->get_countries(), true ) ) {
+				return false;
+			}
+
+			return in_array( $level, $provider->get_suggest_levels( $normalized ), true );
 		}
 	}
 

@@ -259,4 +259,137 @@ final class DadataApiClientTest extends TestCase {
 		$this->expectException( \Woodev_API_Exception::class );
 		( new Dadata_Api_Client( 'tok' ) )->suggest_address( 'q' );
 	}
+
+	// -------------------------------------------------------------------------
+	// Response language (operator, s70) — DaData answers in Russian by default and
+	// transliterates the WHOLE payload for `en`, while `fias_id` stays put, so the
+	// locale may switch at any time without stranding a stored locality.
+	// -------------------------------------------------------------------------
+
+	public function test_suggest_asks_for_russian_under_a_russian_locale(): void {
+		$this->stub_http_response( 200, '{"suggestions":[]}' );
+
+		self::client_in_locale( 'ru_RU' )->suggest_address( 'Моск' );
+
+		$body = json_decode( (string) $this->last_request['args']['body'], true );
+		$this->assertSame( 'ru', $body['language'] );
+	}
+
+	public function test_suggest_asks_for_english_under_a_non_russian_locale(): void {
+		$this->stub_http_response( 200, '{"suggestions":[]}' );
+
+		self::client_in_locale( 'en_US' )->suggest_address( 'Kazan' );
+
+		$body = json_decode( (string) $this->last_request['args']['body'], true );
+		$this->assertSame( 'en', $body['language'] );
+	}
+
+	public function test_a_regional_russian_locale_still_asks_for_russian(): void {
+		$this->stub_http_response( 200, '{"suggestions":[]}' );
+
+		self::client_in_locale( 'ru' )->suggest_address( 'Моск' );
+
+		$body = json_decode( (string) $this->last_request['args']['body'], true );
+		$this->assertSame( 'ru', $body['language'] );
+	}
+
+	public function test_find_by_id_carries_the_language_too(): void {
+		$this->stub_http_response( 200, '{"suggestions":[{"value":"x","data":{}}]}' );
+
+		self::client_in_locale( 'en_GB' )->find_by_id_address( 'fias-1' );
+
+		$body = json_decode( (string) $this->last_request['args']['body'], true );
+		$this->assertSame( 'en', $body['language'] );
+	}
+
+	public function test_iplocate_carries_the_language_in_its_query_string(): void {
+		$this->stub_http_response( 200, '{"location":{"value":"x","data":{}}}' );
+
+		self::client_in_locale( 'en_US' )->iplocate_address( '1.2.3.4' );
+
+		$this->assertStringContainsString( 'language=en', (string) $this->last_request['url'] );
+	}
+
+	public function test_the_filter_overrides_the_derived_language_and_receives_the_locale(): void {
+		$seen_locale = null;
+
+		Functions\when( 'apply_filters' )->alias(
+			static function ( $hook, $value, $locale = null ) use ( &$seen_locale ) {
+				if ( 'woodev_location_dadata_language' === $hook ) {
+					$seen_locale = $locale;
+
+					return 'ru';
+				}
+
+				return $value;
+			}
+		);
+
+		$this->stub_http_response( 200, '{"suggestions":[]}' );
+
+		self::client_in_locale( 'en_US' )->suggest_address( 'Моск' );
+
+		$body = json_decode( (string) $this->last_request['args']['body'], true );
+		$this->assertSame( 'ru', $body['language'] );
+		$this->assertSame( 'en_US', $seen_locale );
+	}
+
+	public function test_a_language_dadata_does_not_know_is_coerced_rather_than_sent(): void {
+		Functions\when( 'apply_filters' )->alias(
+			static function ( $hook, $value ) {
+				return 'woodev_location_dadata_language' === $hook ? 'de' : $value;
+			}
+		);
+
+		$this->stub_http_response( 200, '{"suggestions":[]}' );
+
+		self::client_in_locale( 'de_DE' )->suggest_address( 'Berlin' );
+
+		$body = json_decode( (string) $this->last_request['args']['body'], true );
+
+		// DaData rejects an unknown value outright, and a failed suggest reads to the
+		// customer as a broken field — so an unusable filter result degrades, never ships.
+		$this->assertSame( 'en', $body['language'] );
+	}
+
+	public function test_an_explicitly_passed_language_is_not_overwritten(): void {
+		$this->stub_http_response( 200, '{"suggestions":[]}' );
+
+		self::client_in_locale( 'en_US' )->suggest_address( 'Моск', [ 'language' => 'ru' ] );
+
+		$body = json_decode( (string) $this->last_request['args']['body'], true );
+		$this->assertSame( 'ru', $body['language'] );
+	}
+
+	/**
+	 * A client pinned to `$locale` through the {@see Dadata_Api_Client::current_locale()}
+	 * SEAM.
+	 *
+	 * Deliberately not `Functions\when( 'get_user_locale' )`: a Brain Monkey stub DEFINES
+	 * the function for the whole process, so it survives into every later test class and
+	 * flips any `function_exists()` branch there. Measured — stubbing it here turned 25
+	 * unrelated `Dadata_Provider` tests red the moment the directory ran in one process,
+	 * while each file still passed alone (gotcha
+	 * `brain-monkey-wc-mock-defines-the-function-globally`).
+	 *
+	 * @param string $locale
+	 *
+	 * @return Dadata_Api_Client
+	 */
+	private static function client_in_locale( string $locale ): Dadata_Api_Client {
+		return new class( $locale ) extends Dadata_Api_Client {
+
+			private string $test_locale;
+
+			public function __construct( string $locale ) {
+				parent::__construct( 'tok' );
+
+				$this->test_locale = $locale;
+			}
+
+			protected function current_locale(): string {
+				return $this->test_locale;
+			}
+		};
+	}
 }

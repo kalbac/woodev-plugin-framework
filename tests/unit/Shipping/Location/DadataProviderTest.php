@@ -192,6 +192,63 @@ final class DadataProviderTest extends TestCase {
 	}
 
 	/**
+	 * A federal-city settlement row (fias_level '1', region_fias_id ===
+	 * city_fias_id) — the shape `ru-settlement-moscow-duplicate.json` (a real
+	 * committed live capture, see {@see self::load_dadata_fixture()}) actually
+	 * returns for "г Москва". Built from the SAME field vocabulary as that
+	 * fixture's first row (region/city both "Москва", same fias_id on both),
+	 * kept as a synthetic single-row fixture here so the mutation tests below
+	 * (a flipped `city_fias_id`, an injected `city_district`) can isolate ONE
+	 * field at a time without hand-editing the real capture (forbidden — see
+	 * the file docblock's fixture-provenance rule).
+	 *
+	 * @return array<string, mixed>
+	 */
+	private static function settlement_suggestion_at_level_1_federal_city(): array {
+		return [
+			'suggestions' => [
+				[
+					'value'              => 'г Москва',
+					'unrestricted_value' => '101000, г Москва',
+					'data'               => [
+						'postal_code'    => '101000',
+						'country'        => 'Россия',
+						'country_iso_code' => 'RU',
+						'region_fias_id' => '0c5b2444-70a0-4932-980c-b4dc0d3f02b5',
+						'region_with_type' => 'г Москва',
+						'region_type'    => 'г',
+						'region'         => 'Москва',
+						'city_fias_id'   => '0c5b2444-70a0-4932-980c-b4dc0d3f02b5',
+						'city_with_type' => 'г Москва',
+						'city_type'      => 'г',
+						'city'           => 'Москва',
+						'city_district'  => null,
+						'fias_id'        => '0c5b2444-70a0-4932-980c-b4dc0d3f02b5',
+						'fias_level'     => '1',
+						'geo_lat'        => '55.75396',
+						'geo_lon'        => '37.620393',
+					],
+				],
+			],
+		];
+	}
+
+	/**
+	 * Loads a VERBATIM live DaData capture from `tests/_fixtures/dadata/` —
+	 * these files carry their own `_capture` provenance block and must never be
+	 * hand-edited (gotcha `an-invented-fixture-tests-your-assumptions-not-the-carrier`).
+	 *
+	 * @param string $filename Basename inside `tests/_fixtures/dadata/`.
+	 *
+	 * @return array{_capture: array<string, mixed>, response: array<string, mixed>}
+	 */
+	private static function load_dadata_fixture( string $filename ): array {
+		$path = dirname( __DIR__, 4 ) . '/tests/_fixtures/dadata/' . $filename;
+
+		return json_decode( (string) file_get_contents( $path ), true );
+	}
+
+	/**
 	 * VERBATIM from dadata.ru/api/detect_address_by_ip/ (fetched 12.08.2026,
 	 * page fetch truncated after `city` — the docblock there explicitly notes
 	 * further fields were not shown).
@@ -384,8 +441,17 @@ final class DadataProviderTest extends TestCase {
 		$this->assertTrue( ( new Dadata_Provider() )->is_configured() );
 	}
 
-	public function test_get_countries_defaults_to_ru_only(): void {
-		$this->assertSame( [ 'RU' ], ( new Dadata_Provider() )->get_countries() );
+	/**
+	 * The nine served countries are the STORE OPERATOR'S market-scope decision
+	 * (measured session s67/s68: ФИАС/ГАР for RU, OpenStreetMap for BY/KZ/UZ,
+	 * GeoNames for AM/AZ/KG/TJ/TM), not a limit of the DaData API itself — see
+	 * {@see Dadata_Provider::get_countries()}'s own docblock.
+	 */
+	public function test_get_countries_defaults_to_the_nine_served_countries(): void {
+		$this->assertSame(
+			[ 'RU', 'BY', 'KZ', 'UZ', 'AM', 'AZ', 'KG', 'TJ', 'TM' ],
+			( new Dadata_Provider() )->get_countries()
+		);
 	}
 
 	public function test_get_countries_is_widenable_via_filter(): void {
@@ -404,6 +470,75 @@ final class DadataProviderTest extends TestCase {
 
 	public function test_dadata_serves_all_three_suggest_levels(): void {
 		$this->assertSame( Location_Record::LEVELS, ( new Dadata_Provider() )->get_suggest_levels() );
+	}
+
+	// -------------------------------------------------------------------------
+	// get_suggest_levels( $country ): per-country narrowing (measured tiers).
+	// -------------------------------------------------------------------------
+
+	/**
+	 * ФИАС/ГАР (RU) and OpenStreetMap (BY, KZ, UZ) both resolve to house level —
+	 * region/settlement/address all measured working (fixtures:
+	 * ru-region-moscow, ru-settlement-moscow-duplicate, ru-address-tverskaya,
+	 * by-settlement-minsk, by-address-nezavisimosti; KZ/UZ settlement measured
+	 * directly, KZ/UZ address asserted by the design brief's own tier table —
+	 * no committed fixture captures a KZ/UZ address-level response).
+	 */
+	public function test_get_suggest_levels_is_unnarrowed_for_ru_and_osm_tier_countries(): void {
+		$provider = new Dadata_Provider();
+
+		foreach ( [ 'RU', 'BY', 'KZ', 'UZ' ] as $country ) {
+			$this->assertSame( Location_Record::LEVELS, $provider->get_suggest_levels( $country ), "country: $country" );
+		}
+	}
+
+	/**
+	 * GeoNames tier (AM, AZ, KG, TJ, TM) resolves to city only — "address"
+	 * (street/house bound) is measured EMPTY (fixture: am-address-empty-tier2.json;
+	 * the same street/house-bound query returning zero rows for AZ/KG/TJ/TM is
+	 * the design brief's own stated measurement, not independently re-derived
+	 * here per fixture per country).
+	 */
+	public function test_get_suggest_levels_excludes_address_for_geonames_tier_countries(): void {
+		$provider = new Dadata_Provider();
+
+		foreach ( [ 'AM', 'AZ', 'KG', 'TJ', 'TM' ] as $country ) {
+			$this->assertSame(
+				[ Location_Record::LEVEL_REGION, Location_Record::LEVEL_SETTLEMENT ],
+				$provider->get_suggest_levels( $country ),
+				"country: $country"
+			);
+		}
+	}
+
+	public function test_get_suggest_levels_narrowing_is_case_insensitive_and_trims_whitespace(): void {
+		$provider = new Dadata_Provider();
+
+		$this->assertSame(
+			[ Location_Record::LEVEL_REGION, Location_Record::LEVEL_SETTLEMENT ],
+			$provider->get_suggest_levels( ' am ' )
+		);
+	}
+
+	/**
+	 * The no-country call (used by every pre-existing country-blind call site,
+	 * e.g. Location_Service::get_supported_countries()) must remain the
+	 * unnarrowed union across every level this provider can EVER answer for ANY
+	 * country — narrowing is an ADDITIVE, opt-in refinement, not a replacement
+	 * of the existing contract.
+	 */
+	public function test_get_suggest_levels_without_a_country_stays_unnarrowed(): void {
+		$this->assertSame( Location_Record::LEVELS, ( new Dadata_Provider() )->get_suggest_levels() );
+	}
+
+	/**
+	 * A country outside the nine served ones narrows to nothing — DaData's own
+	 * `get_countries()` gate is the caller's job (Location_Service), but the
+	 * levels answer itself must not pretend to serve a country it does not
+	 * cover at all.
+	 */
+	public function test_get_suggest_levels_is_empty_for_an_uncovered_country(): void {
+		$this->assertSame( [], ( new Dadata_Provider() )->get_suggest_levels( 'US' ) );
 	}
 
 	// -------------------------------------------------------------------------
@@ -519,6 +654,92 @@ final class DadataProviderTest extends TestCase {
 		$this->assertSame( 'dadata:7dfa745e-aa19-4688-b121-b655c11e482f', $records[0]->key() );
 	}
 
+	// -------------------------------------------------------------------------
+	// Settlement-level granularity rule (measured defect: ru-settlement-moscow-
+	// duplicate.json — г Москва and г Москва, р-н Москворечье-Сабурово both come
+	// back at fias_level=1 with the SAME city_fias_id, so a city_fias_id-keyed
+	// dedup would collapse them into one locality carrying whichever record
+	// happened to win, silently dropping the other's quality (the first has a
+	// postcode/coordinates, the second — a finer city-district row — has
+	// neither). Fixed by GRANULARITY (reject the finer row), not deduplication.
+	// -------------------------------------------------------------------------
+
+	public function test_suggest_settlement_level_federal_city_row_is_kept_via_region_equals_city_fias_id(): void {
+		$this->set_token( 'tok' );
+		$this->stub_http_response( 200, (string) json_encode( self::settlement_suggestion_at_level_1_federal_city() ) );
+
+		$records = ( new Dadata_Provider() )->suggest( 'Моск', Location_Scope::for_country( 'RU', Location_Record::LEVEL_SETTLEMENT ) );
+
+		$this->assertCount( 1, $records, 'a federal-city row (region_fias_id === city_fias_id) at fias_level=1 must survive' );
+		$this->assertSame( 'г Москва', $records[0]->label() );
+	}
+
+	public function test_suggest_settlement_level_non_federal_city_fias_level_1_row_is_rejected(): void {
+		$this->set_token( 'tok' );
+		$row                        = self::settlement_suggestion_at_level_1_federal_city();
+		$row['suggestions'][0]['data']['city_fias_id'] = 'a-different-fias-id-than-region';
+		$this->stub_http_response( 200, (string) json_encode( $row ) );
+
+		$records = ( new Dadata_Provider() )->suggest( 'Моск', Location_Scope::for_country( 'RU', Location_Record::LEVEL_SETTLEMENT ) );
+
+		$this->assertCount( 0, $records, 'fias_level=1 with region_fias_id !== city_fias_id is finer than settlement (e.g. a district) and must be rejected' );
+	}
+
+	public function test_suggest_settlement_level_rejects_a_row_carrying_a_non_empty_city_district(): void {
+		$this->set_token( 'tok' );
+		$row = self::settlement_suggestion_at_level_1_federal_city();
+		$row['suggestions'][0]['data']['city_district'] = 'Москворечье-Сабурово';
+		$this->stub_http_response( 200, (string) json_encode( $row ) );
+
+		$records = ( new Dadata_Provider() )->suggest( 'Моск', Location_Scope::for_country( 'RU', Location_Record::LEVEL_SETTLEMENT ) );
+
+		$this->assertCount( 0, $records, 'a city_district is finer than a settlement, even on an otherwise-federal-city row' );
+	}
+
+	/**
+	 * Country-agnostic rule (applies everywhere, including where fias_level is
+	 * '-1'): a settlement-level row is usable only when city/settlement is
+	 * filled AND street/house are NOT — a row carrying street/house data at a
+	 * settlement-bound query is finer than what was asked for.
+	 */
+	public function test_suggest_settlement_level_rejects_a_row_carrying_street_data_even_at_fias_level_minus_1(): void {
+		$this->set_token( 'tok' );
+		$row                                     = self::settlement_suggestion_at_level_1_federal_city();
+		$row['suggestions'][0]['data']['fias_level'] = '-1';
+		$row['suggestions'][0]['data']['street']      = 'Тверская';
+
+		$this->stub_http_response( 200, (string) json_encode( $row ) );
+
+		$records = ( new Dadata_Provider() )->suggest( 'Моск', Location_Scope::for_country( 'RU', Location_Record::LEVEL_SETTLEMENT ) );
+
+		$this->assertCount( 0, $records );
+	}
+
+	/**
+	 * Pins the measured defect end-to-end against the VERBATIM live capture:
+	 * `ru-settlement-moscow-duplicate.json` (`tests/_fixtures/dadata/`) holds 10
+	 * raw suggestion rows for query "Москв" at the settlement bound; exactly one
+	 * (the "р-н Москворечье-Сабурово" city-district row) must be rejected, the
+	 * federal city "г Москва" must survive, and no two surviving records may
+	 * share a locality key.
+	 */
+	public function test_suggest_settlement_level_moscow_duplicate_fixture_yields_no_shared_keys_and_keeps_the_federal_city(): void {
+		$this->set_token( 'tok' );
+		$fixture = self::load_dadata_fixture( 'ru-settlement-moscow-duplicate.json' );
+		$this->stub_http_response( 200, (string) json_encode( [ 'suggestions' => $fixture['response']['suggestions'] ] ) );
+
+		$records = ( new Dadata_Provider() )->suggest( 'Москв', Location_Scope::for_country( 'RU', Location_Record::LEVEL_SETTLEMENT ) );
+
+		$this->assertCount( 9, $records, '10 raw rows minus the 1 city-district row' );
+
+		$keys = array_map( static fn( Location_Record $record ) => $record->key(), $records );
+		$this->assertSame( $keys, array_unique( $keys ), 'no two surviving settlement suggestions may share a locality key' );
+
+		$labels = array_map( static fn( Location_Record $record ) => $record->label(), $records );
+		$this->assertContains( 'г Москва', $labels, 'the federal city must not be thrown out with the duplicate' );
+		$this->assertNotContains( 'г Москва, р-н Москворечье-Сабурово', $labels, 'the finer city-district row must be rejected' );
+	}
+
 	public function test_suggest_settlement_record_carries_postcode_lat_lon_and_full_raw(): void {
 		$this->set_token( 'tok' );
 		$fixture = [ 'suggestions' => [ self::settlement_suggestion( '4' ) ] ];
@@ -575,7 +796,19 @@ final class DadataProviderTest extends TestCase {
 
 		$body = $this->last_request_body();
 		$this->assertTrue( $body['restrict_value'] );
-		$this->assertSame( [ [ 'region_fias_id' => '0c5b2444-70a0-4932-980c-b4dc0d3f02b5' ] ], $body['locations'] );
+		// The COUNTRY rides along with the parent id. Measured 13.08.2026: outside Russia the
+		// "fias" ids are OpenStreetMap-derived, and DaData's `locations` filter returns ZERO
+		// suggestions for one unless it is told which country's registry to read it in — see
+		// `build_locations_constraint()`'s own table. Harmless for RU, load-bearing elsewhere.
+		$this->assertSame(
+			[
+				[
+					'country_iso_code' => 'RU',
+					'region_fias_id'   => '0c5b2444-70a0-4932-980c-b4dc0d3f02b5',
+				],
+			],
+			$body['locations']
+		);
 	}
 
 	/**
@@ -627,6 +860,96 @@ final class DadataProviderTest extends TestCase {
 
 		$this->assertSame( [], $records );
 		$this->assertTrue( $this->failure_was_logged( 'suggest' ) );
+	}
+
+	// -------------------------------------------------------------------------
+	// Key derivation across tiers — every fixture's key must come from the
+	// provider's own `fias_id` (a real GUID for RU/ФИАС, a bare number for
+	// GeoNames, `relation:`/`way:`/`node:` for OpenStreetMap), never fall
+	// through to Locality_Key::derive()'s hash. Pinned against the VERBATIM
+	// committed live captures, not invented payloads.
+	// -------------------------------------------------------------------------
+
+	/**
+	 * @return array<string, array{0: string, 1: string, 2: string}> filename => [ country, level, expected native id ]
+	 */
+	public function dadata_fixture_key_provider(): array {
+		return [
+			'ru-region-moscow'              => [ 'RU', Location_Record::LEVEL_REGION, '0c5b2444-70a0-4932-980c-b4dc0d3f02b5' ],
+			'ru-address-tverskaya'          => [ 'RU', Location_Record::LEVEL_ADDRESS, '0ecde158-a58f-43af-9707-aa6dd3484b56' ],
+			'by-settlement-minsk'           => [ 'BY', Location_Record::LEVEL_SETTLEMENT, 'relation:59195' ],
+			'by-address-nezavisimosti'      => [ 'BY', Location_Record::LEVEL_ADDRESS, 'way:1247091839' ],
+			'kz-settlement-almaty'          => [ 'KZ', Location_Record::LEVEL_SETTLEMENT, 'relation:2465058' ],
+			'uz-settlement-samarkand'       => [ 'UZ', Location_Record::LEVEL_SETTLEMENT, 'relation:15589846' ],
+			'am-settlement-gyumri'          => [ 'AM', Location_Record::LEVEL_SETTLEMENT, '616635' ],
+			'az-settlement-ganja'           => [ 'AZ', Location_Record::LEVEL_SETTLEMENT, '586523' ],
+			'kg-settlement-osh'             => [ 'KG', Location_Record::LEVEL_SETTLEMENT, '1527534' ],
+			'tj-settlement-khujand'         => [ 'TJ', Location_Record::LEVEL_SETTLEMENT, '1514879' ],
+			'tm-settlement-mary'            => [ 'TM', Location_Record::LEVEL_SETTLEMENT, '1218667' ],
+		];
+	}
+
+	/**
+	 * @dataProvider dadata_fixture_key_provider
+	 */
+	public function test_the_first_suggestion_of_each_tier_fixture_keys_by_its_real_fias_id( string $country, string $level, string $expected_native_id ): void {
+		$this->set_token( 'tok' );
+
+		// (country, level) unambiguously identifies one fixture file among the
+		// 13 committed captures.
+		$filenames = [
+			'RU:region'     => 'ru-region-moscow.json',
+			'RU:address'    => 'ru-address-tverskaya.json',
+			'BY:settlement' => 'by-settlement-minsk.json',
+			'BY:address'    => 'by-address-nezavisimosti.json',
+			'KZ:settlement' => 'kz-settlement-almaty.json',
+			'UZ:settlement' => 'uz-settlement-samarkand.json',
+			'AM:settlement' => 'am-settlement-gyumri.json',
+			'AZ:settlement' => 'az-settlement-ganja.json',
+			'KG:settlement' => 'kg-settlement-osh.json',
+			'TJ:settlement' => 'tj-settlement-khujand.json',
+			'TM:settlement' => 'tm-settlement-mary.json',
+		];
+
+		$fixture = self::load_dadata_fixture( $filenames[ $country . ':' . $level ] );
+		$this->stub_http_response( 200, (string) json_encode( [ 'suggestions' => $fixture['response']['suggestions'] ] ) );
+
+		$records = ( new Dadata_Provider() )->suggest( 'q', Location_Scope::for_country( $country, $level ) );
+
+		$this->assertNotEmpty( $records );
+		$this->assertSame(
+			'dadata:' . $expected_native_id,
+			$records[0]->key(),
+			'the key must be composed from the real provider fias_id, never Locality_Key::derive()\'s hash'
+		);
+	}
+
+	/**
+	 * am-address-empty-tier2.json pins the OTHER half of the D15 measurement:
+	 * a street-bounded (address-level) query for a GeoNames-tier country
+	 * measured genuinely EMPTY — not a provider bug, DaData itself returns zero
+	 * rows. The provider must pass this through as an empty result, not an
+	 * error.
+	 */
+	public function test_am_address_level_fixture_is_measured_empty_not_a_provider_bug(): void {
+		$this->set_token( 'tok' );
+		$fixture = self::load_dadata_fixture( 'am-address-empty-tier2.json' );
+		$this->stub_http_response( 200, (string) json_encode( [ 'suggestions' => $fixture['response']['suggestions'] ] ) );
+
+		$records = ( new Dadata_Provider() )->suggest( 'Ереван Абовяна', Location_Scope::for_country( 'AM', Location_Record::LEVEL_ADDRESS ) );
+
+		$this->assertSame( [], $records );
+	}
+
+	/**
+	 * `Locality_Key::parse()` splits on the FIRST colon only (spec §3) — a
+	 * native id that itself contains a colon (every OSM-tier id: `relation:X`,
+	 * `way:X`, `node:X`) must still parse back to exactly two parts. Verified
+	 * directly against the shared helper, not assumed.
+	 */
+	public function test_an_osm_tier_key_parses_correctly_on_the_first_colon_only(): void {
+		$this->assertSame( [ 'dadata', 'relation:59195' ], Locality_Key::parse( 'dadata:relation:59195' ) );
+		$this->assertSame( [ 'dadata', 'way:1247091839' ], Locality_Key::parse( 'dadata:way:1247091839' ) );
 	}
 
 	// -------------------------------------------------------------------------
@@ -740,5 +1063,66 @@ final class DadataProviderTest extends TestCase {
 		$this->assertInstanceOf( Dadata_Provider::class, $registry->get_providers()['dadata'] );
 		// No store setting saved yet -> falls back to the DEFAULT_PROVIDER_ID, dadata.
 		$this->assertInstanceOf( Dadata_Provider::class, $registry->get_active_provider() );
+	}
+
+	public function test_a_foreign_parent_id_is_sent_WITH_its_country_or_dadata_matches_nothing(): void {
+		$this->set_token( 'tok' );
+
+		// A real Tashkent record as DaData itself returns it: the "fias" ids are
+		// OpenStreetMap-derived, not FIAS (measured 13.08.2026).
+		$tashkent = Location_Record::from_array(
+			[
+				'key'         => 'dadata:relation:2216724',
+				'provider_id' => 'dadata',
+				'level'       => Location_Record::LEVEL_SETTLEMENT,
+				'country'     => 'UZ',
+				'settlement'  => [ 'name' => 'Ташкент', 'type' => 'г' ],
+				'label'       => 'Узбекистан, г Ташкент',
+				'raw'         => [
+					'country_iso_code'   => 'UZ',
+					'fias_id'            => 'relation:2216724',
+					'city_fias_id'       => 'relation:2216724',
+					'region_fias_id'     => 'relation:2216724',
+					'city'               => 'Ташкент',
+				],
+			]
+		);
+
+		$this->stub_http_response( 200, '{"suggestions":[]}' );
+		( new Dadata_Provider() )->suggest( 'Юнус', Location_Scope::within( $tashkent, Location_Record::LEVEL_ADDRESS ) );
+
+		$locations = $this->last_request_body()['locations'];
+
+		// Without the country this exact constraint returns ZERO suggestions from the live
+		// API while the same query unscoped returns street after street — the defect the
+		// operator hit on the rig (s70): pick Tashkent, and the address field goes dead.
+		$this->assertSame( 'UZ', $locations[0]['country_iso_code'] );
+		$this->assertSame( 'relation:2216724', $locations[0]['city_fias_id'] );
+	}
+
+	public function test_a_components_only_parent_also_carries_its_country(): void {
+		$this->set_token( 'tok' );
+
+		// The D15 fallback path: a parent record from ANOTHER provider, so there is no
+		// DaData id to read and only names remain. It needs the country for the same reason.
+		$foreign = Location_Record::from_array(
+			[
+				'key'         => 'cdek:44',
+				'provider_id' => 'cdek',
+				'level'       => Location_Record::LEVEL_SETTLEMENT,
+				'country'     => 'KZ',
+				'region'      => [ 'name' => 'Алматинская', 'type' => 'обл' ],
+				'settlement'  => [ 'name' => 'Алматы', 'type' => 'г' ],
+				'label'       => 'Алматы',
+			]
+		);
+
+		$this->stub_http_response( 200, '{"suggestions":[]}' );
+		( new Dadata_Provider() )->suggest( 'Абая', Location_Scope::within( $foreign, Location_Record::LEVEL_ADDRESS ) );
+
+		$locations = $this->last_request_body()['locations'];
+
+		$this->assertSame( 'KZ', $locations[0]['country_iso_code'] );
+		$this->assertSame( 'Алматы', $locations[0]['city'] );
 	}
 }
