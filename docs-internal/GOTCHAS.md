@@ -1,6 +1,14 @@
 # Gotchas — Woodev Plugin Framework
-> **131 atomic gotchas, 22 namespaces (28 index sections)** — update when adding/removing.
-> Last updated: 2026-08-12 (session 69, rig hostile-theme pass: **+1 file, existing namespace
+> **132 atomic gotchas, 22 namespaces (28 index sections)** — update when adding/removing.
+> Last updated: 2026-08-12 (session 70, PR #291 red integration legs: **+1 file, existing namespace
+> `[testing/*]`** — `hook-snapshot-restore-defeats-an-identity-based-reset`: `WP_UnitTestCase`
+> restores its one `$wp_filter` snapshot after every test, so a `plugins_loaded`-time registration
+> returns after each teardown, and a `reset_for_tests()` that removes hooks by singleton identity
+> removes nothing — the registering object and the object `instance()` hands back are different.
+> Measured by dumping the hook table: two distinct objects of the same class. Armed itself when a
+> FIXTURE plugin started declaring need like a real plugin; green when the file ran alone, red in
+> the full suite.)
+> Prior: 2026-08-12 (session 69, rig hostile-theme pass: **+1 file, existing namespace
 > `[admin-ui/*]`** — `flat-where-isolation-loses-to-a-longer-theme-selector`, the THIRD member of
 > the hostile-theme family and the one neither existing rule covered: a theme selector that is
 > merely LONGER (`.woocommerce form .form-row ul li`, (0,3,2), no `!important`) beats flat
@@ -307,6 +315,7 @@
 - [testing/integration] (index-only note, no detail file) An integration test that `require`s framework files with the WRONG `dirname(__DIR__, N)` depth aborts the ENTIRE Integration suite before a single test runs (PHPUnit fails at suite-build time, not per-file) — so "the integration tests are red" can mean one bad path, not a real regression. From `tests/integration/<Group>/` the repo root is `dirname(__DIR__, 3)`; from `tests/unit/<A>/<B>/` it is `dirname(__DIR__, 4)`. Integration tests written "for CI" must still be run locally once (`MSYS_NO_PATHCONV=1 npx wp-env run tests-cli …`) (s44)
 - [testing/integration] A fixture class that `implements`/`extends` a `Woodev\Framework\*` symbol must be declared INSIDE the plugin's init callback, not at file top level — top-level code runs when WordPress `require`s the file, before the bootstrap has selected a framework version and registered the runtime autoloader, so the interface is unresolvable and the boot fatals with a misleading "Interface … not found". `implements`/`extends` resolve at class-DECLARATION time, so deferring the `new` does not help — only moving the `class` keyword does → [gotchas/fixture-classes-must-live-inside-plugin-init.md](gotchas/fixture-classes-must-live-inside-plugin-init.md) (s46)
 - [testing/integration] Integration tests: never `do_action('admin_menu')` (or other broad global admin hooks) — it fires WooCommerce's callbacks, which PRINT a PHP deprecation on some WC versions → PHPUnit "unexpected output" → red on part of the matrix only. Also `$menu`/`$submenu` globals accumulate across `WP_UnitTestCase` tests (stale entries leak). Call the specific method directly + `unset()` the global key before asserting → [gotchas/integration-test-global-admin-hooks-output-and-submenu-accumulation.md](gotchas/integration-test-global-admin-hooks-output-and-submenu-accumulation.md) (s34)
+- [testing/integration] `WP_UnitTestCase` snapshots `$wp_filter` ONCE (first test of the run) and RESTORES that snapshot after EVERY test — so anything a plugin hooked at `plugins_loaded` comes back after each teardown. A singleton's `reset_for_tests()` that calls `remove_action()` on `self::$instance` therefore removes nothing: hooks match by object IDENTITY, and the instance that registered the survivor is not the fresh one `instance()` hands back. Match by class + method across the hook table instead (that also removes callbacks bound to objects never stored anywhere). Armed itself when a FIXTURE plugin started declaring need at `plugins_loaded` like a real one; passed when the file ran alone, failed in the full suite → [gotchas/hook-snapshot-restore-defeats-an-identity-based-reset.md](gotchas/hook-snapshot-restore-defeats-an-identity-based-reset.md) (s70)
 
 - [testing/unit] A mutation sweep over **branch conditions only** reads as complete and is not — "14/14 killed" was reported three times on one branch and three times a reviewer then killed survivors by mutating **values and content**: swapped `sprintf` args telling the customer a 15 kg order exceeds a 20.5 kg limit, a dropped unit conversion, i18n keys the JS read that PHP never emitted (invisible because the JS carried byte-identical Russian defaults). Also: a mutant killed by an *unrelated* guard is not covered, and boundary-**acceptance** needs pinning as much as rejection → [gotchas/mutation-sweep-branch-only-false-confidence.md](gotchas/mutation-sweep-branch-only-false-confidence.md) (s45)
 
