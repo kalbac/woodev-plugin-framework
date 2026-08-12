@@ -228,13 +228,55 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 */
 		public function handle_checkout_get_value( $value, $input ) {
 
-			if ( '*' !== $value ) {
+			// `woocommerce_checkout_get_value` is a SHORT-CIRCUIT filter, not a post-filter:
+			// WC_Checkout::get_value() applies it with `null` BEFORE resolving anything, and
+			// uses the callback's answer only when it is not null. So a callback that waits to
+			// be handed the resolved value is never handed anything — it must resolve the value
+			// itself, and return null to mean "carry on, WC".
+			if ( null !== $value ) {
 				return $value;
 			}
 
 			$fields = $this->fields->get_fields();
 
-			return isset( $fields[ $input ] ) ? '' : $value;
+			if ( ! isset( $fields[ $input ] ) ) {
+				return $value;
+			}
+
+			$customer = $this->wc_customer();
+			$getter   = 'get_' . $input;
+
+			if ( ! is_object( $customer ) || ! is_callable( [ $customer, $getter ] ) ) {
+				return $value;
+			}
+
+			// Short-circuit ONLY for the sentinel; every other value is left to WC's own
+			// resolution, so this filter cannot drift away from WC's behaviour over time.
+			return '*' === $customer->{$getter}() ? '' : $value;
+		}
+
+		/**
+		 * The WooCommerce customer object, or null when WooCommerce is unavailable.
+		 *
+		 * A seam, deliberately, rather than a bare `WC()` call: mocking the `WC` function with
+		 * Brain Monkey DEFINES it globally and PHP cannot un-define it, so it leaks into every
+		 * later test in the process and breaks the ones that assert WooCommerce is ABSENT
+		 * (gotcha `brain-monkey-function-pollution`). Overriding a method costs a subclass and
+		 * pollutes nothing — the same reason {@see self::wc_country_codes()} exists.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return object|null
+		 */
+		protected function wc_customer() {
+
+			if ( ! function_exists( 'WC' ) ) {
+				return null;
+			}
+
+			$wc = WC();
+
+			return is_object( $wc ) && isset( $wc->customer ) ? $wc->customer : null;
 		}
 
 

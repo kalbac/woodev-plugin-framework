@@ -105,6 +105,33 @@ class Checkout_Handler_Selling_Countries_Probe extends Checkout_Handler {
  * @covers \Woodev\Framework\Shipping\Checkout\Checkout_Handler::maybe_suppress_wc_address_providers
  * @covers \Woodev\Framework\Shipping\Checkout\Checkout_Handler::wc_selling_country_codes
  */
+/**
+ * A {@see Checkout_Handler} whose customer seam returns a fixed shipping state.
+ */
+final class Checkout_Handler_Customer_Probe extends Checkout_Handler {
+
+	/** @var object */
+	private $customer;
+
+	public function __construct( Checkout_Fields $fields, string $plugin_id, string $state ) {
+		parent::__construct( $fields, $plugin_id );
+
+		$this->customer = new class( $state ) {
+			private string $state;
+			public function __construct( string $state ) {
+				$this->state = $state;
+			}
+			public function get_shipping_state(): string {
+				return $this->state;
+			}
+		};
+	}
+
+	protected function wc_customer() {
+		return $this->customer;
+	}
+}
+
 class CheckoutHandlerTest extends TestCase {
 
 	// -------------------------------------------------------------------------
@@ -118,28 +145,46 @@ class CheckoutHandlerTest extends TestCase {
 	 * `<select>`, and `*` matches no option); a field this layer manages is a text input, so
 	 * the sentinel would be shown to the customer and submitted as if they had typed it.
 	 */
+	/**
+	 * `woocommerce_checkout_get_value` is a SHORT-CIRCUIT filter: WC applies it with `null`
+	 * before resolving anything and honours a non-null answer. So the callback must resolve
+	 * the value itself; a callback written to receive `'*'` is never called with it.
+	 */
+	private function handler_with_customer_state( string $state ): Checkout_Handler {
+		// A probe subclass, NOT `Functions\when( 'WC' )`: mocking WC with Brain Monkey defines
+		// the function globally and PHP cannot un-define it, so it leaks into every later test
+		// in the process (gotcha `brain-monkey-function-pollution`) — it broke six unrelated
+		// PickupHandlerTest cases that assert WooCommerce is ABSENT.
+		return new Checkout_Handler_Customer_Probe(
+			Checkout_Fields::from_array( [ Field::create( 'shipping_state' )->to_array() ] ),
+			'carrier',
+			$state
+		);
+	}
+
 	public function test_the_wc_no_state_sentinel_is_blanked_for_a_managed_field(): void {
-		$fields  = Checkout_Fields::from_array( [ Field::create( 'shipping_state' )->to_array() ] );
-		$handler = new Checkout_Handler( $fields, 'carrier' );
+		$handler = $this->handler_with_customer_state( '*' );
 
-		$this->assertSame( '', $handler->handle_checkout_get_value( '*', 'shipping_state' ) );
+		$this->assertSame( '', $handler->handle_checkout_get_value( null, 'shipping_state' ) );
 	}
 
-	public function test_the_sentinel_is_left_alone_for_a_field_this_layer_does_not_manage(): void {
-		$fields  = Checkout_Fields::from_array( [ Field::create( 'shipping_state' )->to_array() ] );
-		$handler = new Checkout_Handler( $fields, 'carrier' );
+	public function test_a_real_customer_state_is_left_to_wc_to_resolve(): void {
+		$handler = $this->handler_with_customer_state( 'Москва' );
 
-		// Not ours -> not our business; WC's own `<select>` handles it.
-		$this->assertSame( '*', $handler->handle_checkout_get_value( '*', 'billing_state' ) );
-	}
-
-	public function test_a_real_value_is_never_touched(): void {
-		$fields  = Checkout_Fields::from_array( [ Field::create( 'shipping_state' )->to_array() ] );
-		$handler = new Checkout_Handler( $fields, 'carrier' );
-
-		$this->assertSame( 'Москва', $handler->handle_checkout_get_value( 'Москва', 'shipping_state' ) );
-		$this->assertSame( '', $handler->handle_checkout_get_value( '', 'shipping_state' ) );
+		// null == "carry on, WC" — we only ever short-circuit the sentinel.
 		$this->assertNull( $handler->handle_checkout_get_value( null, 'shipping_state' ) );
+	}
+
+	public function test_a_field_this_layer_does_not_manage_is_never_touched(): void {
+		$handler = $this->handler_with_customer_state( '*' );
+
+		$this->assertNull( $handler->handle_checkout_get_value( null, 'billing_state' ) );
+	}
+
+	public function test_an_earlier_filter_answer_is_respected(): void {
+		$handler = $this->handler_with_customer_state( '*' );
+
+		$this->assertSame( 'уже решено', $handler->handle_checkout_get_value( 'уже решено', 'shipping_state' ) );
 	}
 
 	private function handler( bool $active, array $supported, array $selling ): Checkout_Handler {
