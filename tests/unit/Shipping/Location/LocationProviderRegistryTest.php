@@ -318,6 +318,17 @@ final class LocationProviderRegistryTest extends TestCase {
 	 */
 	public function test_bundled_provider_seam_names_the_future_dadata_provider_fqcn(): void {
 		$method = new \ReflectionMethod( Location_Provider_Registry::class, 'bundled_provider_classes' );
+		// Version-guarded on purpose, in both directions (gotcha
+		// `reflection-setaccessible-version-guard`). Reflection became
+		// accessible-by-default in 8.1, so WITHOUT this call the test passes on a
+		// modern local PHP and fails the 7.4/8.0 CI matrix; and setAccessible() is
+		// deprecated as of 8.5, so calling it UNCONDITIONALLY raises a deprecation
+		// that `failOnRisky="true"` turns into a local failure. The repo's supported
+		// span (7.4 … current) contains both hazards, so the guard is the only form
+		// that is green everywhere.
+		if ( PHP_VERSION_ID < 80100 ) {
+			$method->setAccessible( true );
+		}
 
 		$this->assertContains(
 			'\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata_Provider',
