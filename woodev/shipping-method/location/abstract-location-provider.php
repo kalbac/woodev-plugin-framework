@@ -132,6 +132,21 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Abstract_Location
 		}
 
 		/**
+		 * {@inheritDoc}
+		 *
+		 * Default: no store-level settings fields. Unlike the three optional
+		 * capabilities above, this is a PLAIN overridable default, not reflected /
+		 * capability-gated — a provider needing no credential (matching
+		 * {@see \Woodev\Framework\Shipping\Map\Embedded_Map_Provider}) simply never
+		 * overrides this method.
+		 *
+		 * @since 2.0.2
+		 */
+		public function get_settings_fields(): array {
+			return [];
+		}
+
+		/**
 		 * Computes the reflection-derived capability set: an optional method is
 		 * "implemented" when its declaring class is not this abstract class itself.
 		 * See the class docblock for why comparing against `self::class` (not

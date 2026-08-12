@@ -151,6 +151,20 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			require_once $path . '/map/interface-map-provider.php';
 			require_once $path . '/map/class-map-provider-registry.php';
 
+			// location provider layer (Tasks 1-3): neutral record/key/scope, provider
+			// contract, and the registry with its activation gate + store setting. The
+			// registry itself stays completely inert until a plugin declares need
+			// (see add_hooks() below) — loading these files unconditionally costs
+			// nothing, the same way map/interface-map-provider.php above is always
+			// loaded even though no default map provider ships.
+			require_once $path . '/location/class-locality-key.php';
+			require_once $path . '/location/class-location-record.php';
+			require_once $path . '/location/class-location-scope.php';
+			require_once $path . '/location/interface-location-provider.php';
+			require_once $path . '/location/abstract-location-provider.php';
+			require_once $path . '/location/class-location-settings.php';
+			require_once $path . '/location/class-location-provider-registry.php';
+
 			// pickup models and warehouse persistence
 			require_once $path . '/pickup/class-pickup-point.php';
 			require_once $path . '/pickup/class-warehouse.php';
@@ -193,6 +207,21 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 
 			// add shipping method information to the system status report
 			add_action( 'woocommerce_system_status_report', [ $this, 'add_system_status_information' ] );
+
+			// Location Provider layer (Task 3): declare need with the shared registry
+			// singleton so its activation gate opens and its store setting appears.
+			// Declared HERE, synchronously during add_hooks() — which the constructor
+			// calls directly, not via another hook — rather than through the lazy
+			// accessor pattern used for get_map_provider_registry()/get_checkout_handler()
+			// below: this is a one-way DECLARATION into a registry shared across every
+			// plugin in the fleet, not a per-plugin instance this class itself owns and
+			// builds on demand. It must run before the registry's own `init`-time
+			// collection hook fires (Location_Provider_Registry::collect(), hooked at
+			// priority 20) — true for every plugin, since plugin construction happens at
+			// `plugins_loaded`, always before `init`.
+			if ( $this->needs_location_provider() ) {
+				Location\Location_Provider_Registry::instance()->declare_needed();
+			}
 
 			// wire the host-supplied subsystems; each accessor returns null in the base,
 			// so a plugin that does not supply a subsystem leaves it inert (null-guarded).
@@ -768,6 +797,30 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 
 
 		// ---- Subsystem accessors ----
+
+		/**
+		 * Declares whether this plugin needs the framework's Location Provider layer
+		 * (Task 3; spec §4.1).
+		 *
+		 * Default `false` — the layer stays completely inert for a plugin that never
+		 * overrides this. A plugin that consumes checkout locality/address data
+		 * (region/settlement/address suggestions) overrides this to `true`, which
+		 * opens {@see Location\Location_Provider_Registry}'s activation gate for the
+		 * WHOLE fleet (see {@see self::add_hooks()}, where this is consulted) — the
+		 * same "one plugin's declaration turns on a shared service" shape as
+		 * {@see \Woodev_Plugin::init_settings_page()} registering with
+		 * `Settings_Page_Registry`. A plugin that returns `true` here MUST also
+		 * override {@see self::get_location_adapter()} (Task 5) once that seam
+		 * exists — the adapter is a mandatory obligation, not optional, per spec
+		 * §4.3.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool
+		 */
+		public function needs_location_provider(): bool {
+			return false;
+		}
 
 		/**
 		 * Gets the map-provider registry, building it on first use.

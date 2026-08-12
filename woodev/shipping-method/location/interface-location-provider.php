@@ -150,6 +150,34 @@ if ( ! interface_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Prov
 		public function get_capabilities(): array;
 
 		/**
+		 * Gets the provider-specific store-level settings fields (Task 3; spec §4.1:
+		 * "Store-level provider settings ... declared by the provider, rendered on the
+		 * shared settings surface, stored server-side").
+		 *
+		 * Returned in the Woodev settings-API `register_setting()` args shape (`name`,
+		 * `type`, `default`, `description`, `required`, `sensitive`, `options`, …) —
+		 * see `woodev/settings-api/abstract-class-settings.php` — mirroring
+		 * {@see \Woodev\Framework\Shipping\Map\Map_Provider::get_settings_fields()}
+		 * exactly, so callers never learn a second settings-description vocabulary.
+		 * Unlike the {@see self::CAPABILITIES} trio this is REQUIRED of every
+		 * provider (not gated behind {@see self::get_capabilities()}) but is not
+		 * abstract in {@see Abstract_Location_Provider} either — it defaults to an
+		 * empty array there, exactly like {@see \Woodev\Framework\Shipping\Map\Embedded_Map_Provider}
+		 * returns `[]` for a provider that needs no credential. Unlike Map_Provider's
+		 * seam — where the OWNING PLUGIN is responsible for merging the result into
+		 * its own settings registration — the framework itself merges the ACTIVE
+		 * provider's fields into the shared `Location_Provider_Registry` store-level
+		 * settings surface (D4: tokens are store settings held server-side); a
+		 * provider that is registered but not currently ACTIVE never has its fields
+		 * rendered.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array<string, array<string, mixed>> Settings field definitions keyed by field id.
+		 */
+		public function get_settings_fields(): array;
+
+		/**
 		 * Query-driven suggestion lookup — REQUIRED of every provider.
 		 *
 		 * `$scope` names the country, the level being searched, and an optional
