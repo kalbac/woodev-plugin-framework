@@ -164,6 +164,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			require_once $path . '/location/abstract-location-provider.php';
 			require_once $path . '/location/class-location-settings.php';
 			require_once $path . '/location/class-location-provider-registry.php';
+			require_once $path . '/location/class-customer-location-store.php';
 
 			// pickup models and warehouse persistence
 			require_once $path . '/pickup/class-pickup-point.php';
