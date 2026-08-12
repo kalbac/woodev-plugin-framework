@@ -49,6 +49,24 @@ deprecation side; only the 7.4/8.0 CI jobs catch the required side.
 - Inspection-only reflection (`getMethods`, `getParameters`, `getName`, `getDeclaringClass`,
   `newInstanceWithoutConstructor`) does **not** need `setAccessible`.
 
+## Addendum — s68 (2026-08-12): recurrence, and where the rule actually has to live
+
+Hit again in PR-A of the location-provider layer: `LocationProviderRegistryTest` reflected a private
+static (`bundled_provider_classes()`) with no guard — green on local PHP 8.5, `ReflectionException`
+on the 7.4/8.0 CI jobs, 1798 other tests passing around it. Same shape as 2026-06-08, same fix.
+
+Two things worth keeping from the recurrence:
+
+- **The rule was written down and still did not travel.** The work was subagent-driven; the
+  implementer never read `GOTCHAS.md` because nothing in its brief pointed here. A gotcha only
+  prevents anything if it reaches whoever writes the line — for delegated work that means the
+  brief, not the index. Practical lever: any brief that will produce test code touching private
+  members must carry this rule inline.
+- **Prefer not to reflect at all.** The assertion pinned a private *literal* — an implementation
+  detail. Registering a fake class under the expected FQCN and asserting the registry picks it up
+  proves the same seam through observable behaviour and is immune to both ends of the hazard.
+  Reflection is the right tool only when the behaviour has no observable surface yet.
+
 ## Related
 
 - [[brain-monkey-function-pollution]], [[ci-failing-gate-skips-dependent-jobs]] — the other masked Unit failures
