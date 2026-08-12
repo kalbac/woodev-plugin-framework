@@ -233,9 +233,18 @@ if ( ! class_exists( 'Woodev_Helper' ) ) :
 		 * Helper method to check if the multibyte extension is loaded, which
 		 * indicates it's safe to use the mb_*() string methods
 		 *
+		 * `public` (widened from `protected`, internal API — free to change per the
+		 * v2 clean-break policy): this is the framework's ONE predicate for "is it
+		 * safe to call mb_*() here", and every OTHER guarded mb_*() call site
+		 * outside this class (e.g. {@see \Woodev\Framework\Shipping\Location\Locality_Key::derive()})
+		 * needs to defer to it too, for consistency, rather than each re-implementing
+		 * its own `extension_loaded( 'mbstring' )` check.
+		 *
+		 * @since 2.2.0
+		 *
 		 * @return bool
 		 */
-		protected static function multibyte_loaded(): bool {
+		public static function multibyte_loaded(): bool {
 			return extension_loaded( 'mbstring' );
 		}
 

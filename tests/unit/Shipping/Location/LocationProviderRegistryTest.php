@@ -15,6 +15,7 @@ namespace Woodev\Tests\Unit\Shipping\Location;
 use Brain\Monkey\Functions;
 use Woodev\Framework\Settings\Settings_Page_Registry;
 use Woodev\Framework\Shipping\Location\Abstract_Location_Provider;
+use Woodev\Framework\Shipping\Location\Customer_Location_Store;
 use Woodev\Framework\Shipping\Location\Location_Provider_Registry;
 use Woodev\Framework\Shipping\Location\Location_Record;
 use Woodev\Framework\Shipping\Location\Location_Scope;
@@ -33,6 +34,7 @@ require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-loc
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/interface-location-provider.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/abstract-location-provider.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-location-settings.php';
+require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-customer-location-store.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-location-provider-registry.php';
 
 /**
@@ -207,6 +209,62 @@ final class LocationProviderRegistryTest extends TestCase {
 		$registry->declare_needed();
 
 		$this->assertSame( 1, $hook_calls, 'a second/third declaration must not re-hook init' );
+	}
+
+	// -------------------------------------------------------------------------
+	// P1 finding: Customer_Location_Store::handle_wp_login() is documented as
+	// the intended wp_login callback but nothing ever called add_action() for
+	// it (gotcha built-on-both-sides-with-no-caller-in-the-middle). Wired here,
+	// reusing this registry's own add_hooks() $hooked guard, so it registers
+	// exactly ONCE regardless of how many shipping plugins are active (each
+	// constructing its own objects and independently calling declare_needed()).
+	// -------------------------------------------------------------------------
+
+	public function test_declare_needed_hooks_the_login_migration_on_wp_login(): void {
+		$captured = [];
+		Functions\when( 'add_action' )->alias(
+			static function ( $hook, $callback, $priority = 10, $args = 1 ) use ( &$captured ) {
+				$captured[] = [ $hook, $callback, $priority, $args ];
+
+				return true;
+			}
+		);
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+
+		$login_hooks = array_values( array_filter( $captured, static fn( $entry ) => 'wp_login' === $entry[0] ) );
+
+		$this->assertCount( 1, $login_hooks, 'exactly one wp_login registration for a single declaring plugin' );
+		$this->assertIsArray( $login_hooks[0][1], 'the callback must be an [ object, method ] pair' );
+		$this->assertInstanceOf( Customer_Location_Store::class, $login_hooks[0][1][0] );
+		$this->assertSame( 'handle_wp_login', $login_hooks[0][1][1] );
+		$this->assertSame( 10, $login_hooks[0][2], 'priority must match the 2-arg wp_login signature' );
+		$this->assertSame( 2, $login_hooks[0][3], 'wp_login passes ( $user_login, $user ) — both must be requested' );
+	}
+
+	public function test_declare_needed_hooks_wp_login_exactly_once_for_two_plugins(): void {
+		// Simulates two shipping plugins active simultaneously, each constructing
+		// its own objects and independently calling declare_needed() — WordPress
+		// dedups add_action() by object hash + method, so two DISTINCT
+		// Customer_Location_Store instances would NOT dedupe on their own; the
+		// dedup must come from this registry's own $hooked guard instead.
+		$login_hook_calls = 0;
+		Functions\when( 'add_action' )->alias(
+			static function ( $hook ) use ( &$login_hook_calls ) {
+				if ( 'wp_login' === $hook ) {
+					++$login_hook_calls;
+				}
+
+				return true;
+			}
+		);
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed(); // plugin A
+		$registry->declare_needed(); // plugin B
+
+		$this->assertSame( 1, $login_hook_calls, 'two declaring plugins must still register the login migration only once' );
 	}
 
 	public function test_gate_open_collects_the_bundled_and_filter_registered_providers(): void {

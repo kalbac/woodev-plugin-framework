@@ -85,6 +85,47 @@ final class LocationRecordTest extends TestCase {
 		);
 	}
 
+	// ---- P2 finding: a whitespace-only native-id part must be refused, not
+	// silently accepted as a "valid" but non-unique key (the empty-key
+	// discipline broken through the back door — Locality_Key::parse() previously
+	// only rejected a fully-empty part, not a whitespace-only one). ----
+
+	public function test_from_array_refuses_a_key_with_a_whitespace_only_native_id(): void {
+		$this->expectException( \InvalidArgumentException::class );
+		Location_Record::from_array(
+			[ 'key' => 'dadata:   ', 'provider_id' => 'dadata', 'level' => 'settlement', 'country' => 'RU' ]
+		);
+	}
+
+	// ---- key/provider_id: from_array() and parse() must not disagree about
+	// what a valid key is, and a key accepted by from_array() must round-trip
+	// through parse() unchanged. ----
+
+	public function test_a_key_accepted_by_from_array_round_trips_through_parse(): void {
+		$record = Location_Record::from_array(
+			[ 'key' => 'dadata:fias-1', 'provider_id' => 'dadata', 'level' => 'settlement', 'country' => 'RU' ]
+		);
+
+		[ $provider_id, $native_id ] = \Woodev\Framework\Shipping\Location\Locality_Key::parse( $record->key() );
+
+		$this->assertSame( 'dadata', $provider_id );
+		$this->assertSame( 'fias-1', $native_id );
+	}
+
+	public function test_from_array_stores_key_and_provider_id_trimmed_not_verbatim(): void {
+		// require_non_empty_string() previously checked `'' === trim( $value )`
+		// but RETURNED the untrimmed value — accepted only because it trims to
+		// something non-empty, yet stored with the surrounding whitespace intact.
+		// That is the same "trims for the check, stores untrimmed" hole as the
+		// P2 finding, one call site over.
+		$record = Location_Record::from_array(
+			[ 'key' => '  dadata:fias-1  ', 'provider_id' => '  dadata  ', 'level' => 'settlement', 'country' => 'RU' ]
+		);
+
+		$this->assertSame( 'dadata:fias-1', $record->key() );
+		$this->assertSame( 'dadata', $record->provider_id() );
+	}
+
 	// ---- country ----
 
 	public function test_country_is_uppercased(): void {

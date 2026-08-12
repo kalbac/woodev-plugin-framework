@@ -166,7 +166,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Record' 
 		}
 
 		/**
-		 * Requires `$data[ $field ]` to be a non-empty (after trim), string.
+		 * Requires `$data[ $field ]` to be a non-empty (after trim), string, and returns
+		 * it TRIMMED.
+		 *
+		 * Trimming the return value (not just the value used for the check) closes a P2
+		 * hole: a value accepted only because it trims to something non-empty must not
+		 * then be stored WITH the surrounding whitespace still attached — that would let
+		 * e.g. `' dadata '` and `'dadata'` persist as two different `provider_id`/`key`
+		 * strings for what is really the same identifier, the same "empty-key discipline
+		 * broken through the back door" shape as the P2 finding this sits next to. This
+		 * mirrors what `country` already does explicitly two lines below in
+		 * {@see self::from_array()} (`strtoupper( trim( $country ) )`) — this method now
+		 * gives `key`, `provider_id`, and `level` the same treatment.
 		 *
 		 * @since 2.0.2
 		 *
@@ -186,7 +197,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Record' 
 				);
 			}
 
-			return $value;
+			return trim( $value );
 		}
 
 		/**

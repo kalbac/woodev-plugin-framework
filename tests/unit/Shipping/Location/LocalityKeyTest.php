@@ -11,7 +11,21 @@ namespace Woodev\Tests\Unit\Shipping\Location;
 use Woodev\Framework\Shipping\Location\Locality_Key;
 use Woodev\Tests\Unit\TestCase;
 
+require_once dirname( __DIR__, 4 ) . '/woodev/class-helper.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-locality-key.php';
+
+/**
+ * Test double simulating mbstring being unavailable — overrides the protected
+ * static test seam {@see Locality_Key::multibyte_loaded()} rather than needing
+ * to fake `extension_loaded()`/`\Woodev_Helper::multibyte_loaded()` itself (same
+ * "protected method as test seam" shape as
+ * {@see \Woodev\Framework\Shipping\Location\Customer_Location_Store::session()}).
+ */
+class Locality_Key_No_Mbstring extends Locality_Key {
+	protected static function multibyte_loaded(): bool {
+		return false;
+	}
+}
 
 /**
  * @covers \Woodev\Framework\Shipping\Location\Locality_Key
@@ -76,6 +90,22 @@ final class LocalityKeyTest extends TestCase {
 		Locality_Key::parse( 'dadata:' );
 	}
 
+	// ---- P2 finding: parse() must be symmetric with compose(), which already
+	// refuses a whitespace-only part rather than only a fully-empty one — a
+	// blank-but-not-empty native/provider id is exactly the "empty domain key"
+	// discipline (gotcha an-empty-domain-key-is-not-a-key) broken through the
+	// back door. ----
+
+	public function test_parse_refuses_a_key_with_a_whitespace_only_native_id_part(): void {
+		$this->expectException( \InvalidArgumentException::class );
+		Locality_Key::parse( 'dadata:   ' );
+	}
+
+	public function test_parse_refuses_a_key_with_a_whitespace_only_provider_part(): void {
+		$this->expectException( \InvalidArgumentException::class );
+		Locality_Key::parse( '   :abc-123' );
+	}
+
 	public function test_derive_is_deterministic_and_prefixed(): void {
 		$components = [ 'country' => 'RU', 'region' => 'Тюменская', 'settlement' => 'Октябрьский', 'type' => 'пгт' ];
 		$a          = Locality_Key::derive( 'noid', $components );
@@ -137,5 +167,29 @@ final class LocalityKeyTest extends TestCase {
 		[ , $native_id ] = Locality_Key::parse( $key );
 
 		$this->assertSame( 20, strlen( $native_id ) );
+	}
+
+	// ---- P2 finding: derive() must refuse to run without mbstring rather than
+	// silently falling back to strtolower() — this key is PERSISTED (dual
+	// customer store, session resolution cache, pickup [location][type] map), so
+	// a fallback would make the SAME locality derive a DIFFERENT key depending on
+	// the host's extension set, silently stranding stored records after a server
+	// change or host migration (spec D5: a MISS is the safe outcome for a stale
+	// key, a silent mis-key is not). ----
+
+	public function test_derive_throws_when_mbstring_is_unavailable(): void {
+		$this->expectException( \RuntimeException::class );
+		$this->expectExceptionMessageMatches( '/mbstring/i' );
+
+		Locality_Key_No_Mbstring::derive( 'noid', [ 'settlement' => 'Тюмень' ] );
+	}
+
+	public function test_derive_still_works_when_mbstring_is_available(): void {
+		// Sanity: the guard does not break the happy path — real mbstring is
+		// available in the test process (every other derive() test above relies
+		// on it too), this just pins that the new guard does not itself regress it.
+		$key = Locality_Key::derive( 'noid', [ 'settlement' => 'Тюмень' ] );
+
+		$this->assertStringStartsWith( 'noid:', $key );
 	}
 }

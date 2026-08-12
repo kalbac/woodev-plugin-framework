@@ -496,6 +496,54 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$this->assertArrayNotHasKey( 7, $meta_store );
 		}
 
+		/**
+		 * A hook this important (P1 finding) should not depend SOLELY on
+		 * {@see \Woodev\Framework\Shipping\Location\Location_Provider_Registry}'s
+		 * own once-per-fleet guard against double-registration — handle_wp_login()
+		 * itself must be safe to run twice (e.g. `wp_login` somehow firing more than
+		 * once for the same login). The second run sees exactly what the first run
+		 * left behind (both stores already resynced to the winner), so it must
+		 * reconfirm the SAME winner rather than flip it or duplicate anything.
+		 */
+		public function test_login_migration_run_twice_is_idempotent(): void {
+			$meta_store = $this->fake_user_meta_store();
+			$this->stub_user_meta( $meta_store );
+
+			$meta_store[7][ self::META_KEY ] = [
+				'record'   => $this->record( 'dadata:account-choice' )->to_array(),
+				'implicit' => false,
+				'saved_at' => 50,
+			];
+
+			$session = new Customer_Location_Store_Fake_Session();
+			$store   = new Customer_Location_Store_Probe( $session );
+
+			$session->set(
+				self::SESSION_KEY,
+				[
+					'record'   => $this->record( 'dadata:guest-guess' )->to_array(),
+					'implicit' => true,
+					'saved_at' => 200,
+				]
+			);
+
+			$store->handle_wp_login( 'jdoe', $this->wp_user( 7 ) );
+
+			$first_meta    = $meta_store[7][ self::META_KEY ];
+			$first_session = $session->raw( self::SESSION_KEY );
+
+			// Simulate wp_login firing a second time for the same login.
+			$store->handle_wp_login( 'jdoe', $this->wp_user( 7 ) );
+
+			$this->assertSame( $first_meta, $meta_store[7][ self::META_KEY ], 'a second migration run must not change the winner' );
+			$this->assertSame( $first_session, $session->raw( self::SESSION_KEY ), 'a second migration run must not change the resynced session' );
+			$this->assertSame(
+				'dadata:account-choice',
+				$meta_store[7][ self::META_KEY ]['record']['key'],
+				'the account explicit choice must still have won after a second run'
+			);
+		}
+
 		// -------------------------------------------------------------------
 		// Empty-key discipline
 		// -------------------------------------------------------------------

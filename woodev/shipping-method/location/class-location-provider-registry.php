@@ -21,6 +21,12 @@
  * from exactly those requests (the same lesson spec §8 already learned once for
  * the checkout-field layer).
  *
+ * **Login migration wiring.** {@see self::add_hooks()} also wires
+ * {@see Customer_Location_Store::handle_wp_login()} onto `wp_login`, exactly
+ * once per request regardless of how many plugins declare need — this registry's
+ * own once-per-fleet gate is what a hook needing that exact guarantee reuses,
+ * rather than each plugin (or the store) inventing its own dedup mechanism.
+ *
  * @since 2.0.2
  */
 
@@ -223,19 +229,42 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		}
 
 		/**
-		 * Hooks provider collection on `init`, exactly once.
+		 * Hooks provider collection on `init`, and the guest-to-account login
+		 * migration on `wp_login`, exactly once.
 		 *
 		 * Only ever called from {@see self::declare_needed()} — if NO plugin ever
-		 * declares need, this method never runs and `init` is never hooked at all,
-		 * which is the strongest form of "inert": not merely a no-op callback, but
-		 * no hook registration in the first place.
+		 * declares need, this method never runs and NEITHER hook is registered at
+		 * all, which is the strongest form of "inert": not merely a no-op callback,
+		 * but no hook registration in the first place.
 		 *
-		 * Priority 20: comfortably after `plugins_loaded`-time plugin construction
-		 * (where {@see self::declare_needed()} itself is called, see
+		 * Priority 20 for `init`: comfortably after `plugins_loaded`-time plugin
+		 * construction (where {@see self::declare_needed()} itself is called, see
 		 * {@see \Woodev\Framework\Shipping\Shipping_Plugin::add_hooks()}) and after
 		 * WooCommerce's own `init`-time setup, so every plugin's declaration and
 		 * every filter callback a plugin wants to attach to
 		 * {@see self::FILTER_PROVIDERS} on `init` is guaranteed to have already run.
+		 *
+		 * `wp_login` (P1 finding): {@see \Woodev\Framework\Shipping\Location\Customer_Location_Store::handle_wp_login()}
+		 * migrates a guest's session-held record onto the account just logged into,
+		 * and its own docblock spells out the exact `add_action( 'wp_login', [
+		 * $store, 'handle_wp_login' ], 10, 2 )` call needed to wire it — but nothing
+		 * ever made that call anywhere in the codebase (gotcha
+		 * `built-on-both-sides-with-no-caller-in-the-middle`: fully implemented,
+		 * fully tested, zero production callers). It is wired HERE, alongside
+		 * `init`, rather than directly inside `Shipping_Plugin::add_hooks()` where
+		 * {@see self::declare_needed()} is called, because THIS method is already
+		 * the fleet-wide once-only gate every declaring plugin funnels through via
+		 * the {@see self::$hooked} guard below: several shipping plugins can be
+		 * active simultaneously, each constructing its own objects, so a naive
+		 * `add_action()` call in a per-plugin path would register N callbacks bound
+		 * to N distinct `Customer_Location_Store` instances — WordPress dedups
+		 * `add_action()` by object hash + method, so distinct instances do NOT
+		 * dedupe — and the migration would run N times per login. Registered
+		 * synchronously here (not deferred to `init` like `collect()` is) because
+		 * `add_hooks()` itself only runs from `declare_needed()`, called from
+		 * `Shipping_Plugin::add_hooks()` at `plugins_loaded` — a stage that DOES run
+		 * on `wp-login.php` (plugins load there like on any other request), always
+		 * before `wp_login` fires on that same request.
 		 *
 		 * @since 2.0.2
 		 *
@@ -248,6 +277,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 			$this->hooked = true;
 
 			add_action( 'init', [ $this, 'collect' ], 20 );
+			add_action( 'wp_login', [ new Customer_Location_Store(), 'handle_wp_login' ], 10, 2 );
 		}
 
 		/**
