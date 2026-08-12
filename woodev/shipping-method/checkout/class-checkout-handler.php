@@ -491,15 +491,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * `location` block (via the {@see Checkout_Config} constructor's
 		 * `$location_service` collaborator) — one config object, one enqueue path.
 		 * When that block is present, ALSO enqueues the Task 10/11 client scripts
-		 * (`location-typeahead.js`, `location-cascade.js`) — but ONLY when their
-		 * files actually exist on disk ({@see self::enqueue_script_if_built()}):
-		 * those files ship in a later PR block (PR-C), so this handler is wired now
-		 * with a guard that can never 404, and needs zero further code changes once
-		 * the files land.
+		 * (`location-typeahead.js`, `location-cascade.js`) and the typeahead's own
+		 * suggestion-listbox stylesheet (`location.css`) — but ONLY when their files
+		 * actually exist on disk ({@see self::enqueue_script_if_built()} /
+		 * {@see self::enqueue_style_if_built()}): those files ship in a later PR
+		 * block (PR-C), so this handler is wired now with a guard that can never
+		 * 404, and needs zero further code changes once the files land.
 		 *
 		 * @since 2.0.2
 		 * @since 2.0.2 Enqueues the location-provider client scripts, guarded on
 		 *              their files existing on disk (location-provider layer Task 9).
+		 * @since 2.1.0 Also enqueues `location.css`, the typeahead listbox's own
+		 *              theme-resistant styles, under the same guard.
 		 *
 		 * @return void
 		 */
@@ -561,6 +564,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 						)
 					)
 				);
+
+				// The typeahead's own suggestion-listbox stylesheet — same guard, same PR-C
+				// "wired now, lands with zero code changes once the file exists" discipline as
+				// the two scripts above (see `enqueue_script_if_built()`'s own docblock).
+				$this->enqueue_style_if_built( 'woodev-location-styles', 'css/frontend/location.css', [] );
 			}
 
 			wp_localize_script(
@@ -599,6 +607,34 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 			}
 
 			wp_enqueue_script( $handle, self::asset_url( $relative ), $deps, self::asset_version( $path ), true );
+
+			return true;
+		}
+
+		/**
+		 * Enqueues one stylesheet handle, but only when its file actually exists on disk.
+		 *
+		 * The CSS counterpart of {@see self::enqueue_script_if_built()} — same "never register a
+		 * `href` that would 404" discipline, same {@see self::asset_exists()} seam, applied to
+		 * `location.css` (the typeahead's own suggestion-listbox styles). Mirrors
+		 * {@see \Woodev\Framework\Shipping\Pickup\Pickup_Handler::enqueue_style_if_built()}.
+		 *
+		 * @since 2.1.0
+		 *
+		 * @param string   $handle   the style handle to register.
+		 * @param string   $relative path relative to the assets directory.
+		 * @param string[] $deps     style dependencies.
+		 *
+		 * @return bool true when the style was enqueued; false when its file is missing.
+		 */
+		private function enqueue_style_if_built( string $handle, string $relative, array $deps ): bool {
+			$path = self::asset_path( $relative );
+
+			if ( ! static::asset_exists( $path ) ) {
+				return false;
+			}
+
+			wp_enqueue_style( $handle, self::asset_url( $relative ), $deps, self::asset_version( $path ) );
 
 			return true;
 		}

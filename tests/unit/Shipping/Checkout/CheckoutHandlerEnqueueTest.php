@@ -12,12 +12,13 @@
  * `built-on-both-sides-with-no-caller-in-the-middle`).
  *
  * Covers:
- *   - no location scripts, no `location` config key, when the layer is inactive
- *   - no location scripts (but the config DOES carry `location`) when the layer
- *     is active but the Task 10/11 files are not yet on disk (the real state today)
- *   - location scripts enqueued with the right handles/paths/deps once the
- *     files exist (probed via an `asset_exists()` override, mirroring
- *     Pickup_Handler's own test-probe pattern)
+ *   - no location scripts/styles, no `location` config key, when the layer is inactive
+ *   - no location scripts/styles (but the config DOES carry `location`) when the layer
+ *     is active but the Task 10/11/theme-resistant-CSS files are not yet on disk (the
+ *     real state today)
+ *   - location scripts AND the typeahead's own `location.css` enqueued with the right
+ *     handles/paths/deps once the files exist (probed via an `asset_exists()` override,
+ *     mirroring Pickup_Handler's own test-probe pattern)
  *   - the location block still rides inside the SAME single wp_localize_script()
  *     call — one config object, one enqueue path
  *
@@ -136,10 +137,24 @@ class CheckoutHandlerEnqueueTest extends TestCase {
 		return [ $fields, [], [] ];
 	}
 
-	private function wire_spies( array &$scripts, array &$localized ): void {
+	/**
+	 * Wires spies for wp_enqueue_script()/wp_enqueue_style()/wp_localize_script(). `$styles` is
+	 * optional (defaults to a throwaway array) so the register-side tests that never touch CSS
+	 * do not need to pass it — mirrors the same "not every caller cares" shape as `$scripts`.
+	 *
+	 * @param array<string, array{src: string, deps: string[]}> $scripts
+	 * @param array<int, array{0: string, 1: string, 2: array<string, mixed>}> $localized
+	 * @param array<string, array{src: string, deps: string[]}> $styles
+	 */
+	private function wire_spies( array &$scripts, array &$localized, array &$styles = [] ): void {
 		Functions\when( 'wp_enqueue_script' )->alias(
 			static function ( $handle, $src, $deps, $ver, $footer ) use ( &$scripts ) {
 				$scripts[ $handle ] = [ 'src' => $src, 'deps' => $deps ];
+			}
+		);
+		Functions\when( 'wp_enqueue_style' )->alias(
+			static function ( $handle, $src, $deps, $ver ) use ( &$styles ) {
+				$styles[ $handle ] = [ 'src' => $src, 'deps' => $deps ];
 			}
 		);
 		Functions\when( 'wp_localize_script' )->alias(
@@ -157,13 +172,15 @@ class CheckoutHandlerEnqueueTest extends TestCase {
 		[ $fields ] = $this->fixture();
 		$scripts    = [];
 		$localized  = [];
-		$this->wire_spies( $scripts, $localized );
+		$styles     = [];
+		$this->wire_spies( $scripts, $localized, $styles );
 
 		$handler = new Checkout_Handler( $fields, 'carrier', new Checkout_Handler_Fake_Location_Service( false ) );
 		$handler->enqueue_assets();
 
 		$this->assertArrayNotHasKey( 'woodev-location-typeahead', $scripts );
 		$this->assertArrayNotHasKey( 'woodev-location-cascade', $scripts );
+		$this->assertArrayNotHasKey( 'woodev-location-styles', $styles );
 
 		$this->assertCount( 1, $localized );
 		$this->assertArrayNotHasKey( 'location', $localized[0][2] );
@@ -173,7 +190,8 @@ class CheckoutHandlerEnqueueTest extends TestCase {
 		[ $fields ] = $this->fixture();
 		$scripts    = [];
 		$localized  = [];
-		$this->wire_spies( $scripts, $localized );
+		$styles     = [];
+		$this->wire_spies( $scripts, $localized, $styles );
 
 		// 2-arg construction — pre-Task-9 call sites keep working unchanged.
 		$handler = new Checkout_Handler( $fields, 'carrier' );
@@ -181,6 +199,7 @@ class CheckoutHandlerEnqueueTest extends TestCase {
 
 		$this->assertArrayNotHasKey( 'woodev-location-typeahead', $scripts );
 		$this->assertArrayNotHasKey( 'woodev-location-cascade', $scripts );
+		$this->assertArrayNotHasKey( 'woodev-location-styles', $styles );
 		$this->assertArrayNotHasKey( 'location', $localized[0][2] );
 	}
 
@@ -192,7 +211,8 @@ class CheckoutHandlerEnqueueTest extends TestCase {
 		[ $fields ] = $this->fixture();
 		$scripts    = [];
 		$localized  = [];
-		$this->wire_spies( $scripts, $localized );
+		$styles     = [];
+		$this->wire_spies( $scripts, $localized, $styles );
 
 		$handler = new Checkout_Handler_Location_Assets_Not_Built_Probe(
 			$fields,
@@ -204,6 +224,7 @@ class CheckoutHandlerEnqueueTest extends TestCase {
 		// Files forced to report as not-yet-built — must never be enqueued.
 		$this->assertArrayNotHasKey( 'woodev-location-typeahead', $scripts );
 		$this->assertArrayNotHasKey( 'woodev-location-cascade', $scripts );
+		$this->assertArrayNotHasKey( 'woodev-location-styles', $styles );
 
 		// But the location block itself DOES ride inside the existing config —
 		// one config object, one enqueue path, unaffected by whether the
@@ -220,7 +241,8 @@ class CheckoutHandlerEnqueueTest extends TestCase {
 		[ $fields ] = $this->fixture();
 		$scripts    = [];
 		$localized  = [];
-		$this->wire_spies( $scripts, $localized );
+		$styles     = [];
+		$this->wire_spies( $scripts, $localized, $styles );
 
 		$handler = new Checkout_Handler_Location_Assets_Built_Probe(
 			$fields,
@@ -237,7 +259,27 @@ class CheckoutHandlerEnqueueTest extends TestCase {
 		$this->assertContains( 'woodev-location-typeahead', $scripts['woodev-location-cascade']['deps'] );
 		$this->assertContains( 'woodev-checkout-field-store', $scripts['woodev-location-cascade']['deps'] );
 
+		// The typeahead's own suggestion-listbox stylesheet — same "built" probe, same guard.
+		$this->assertArrayHasKey( 'woodev-location-styles', $styles );
+		$this->assertStringContainsString( 'location.css', $styles['woodev-location-styles']['src'] );
+
 		$this->assertCount( 1, $localized );
 		$this->assertArrayHasKey( 'location', $localized[0][2] );
 	}
+
+	// -------------------------------------------------------------------------
+	// CSS content itself
+	// -------------------------------------------------------------------------
+
+	/*
+	 * `location.css` styles (the isolation reset, the `!important` guard on `display`, the
+	 * hostile-theme-resistant positioning) are NOT unit-testable here: no test in this suite
+	 * renders CSS cascade resolution — PHPUnit/Brain Monkey exercises the enqueue WIRING only
+	 * (handle registered, correct src/deps/version, guarded on the file existing on disk), never
+	 * what a browser actually computes from the stylesheet's rules. That is exactly why the
+	 * hostile-theme injection check on this widget belongs to a live-browser rig pass, the same
+	 * way `docs-internal/gotchas/hostile-theme-button-display-none-needs-important.md` documents
+	 * for `pickup.css`/`woodev-modal.css` — no unit test in this repo asserts a computed `display`
+	 * value either, for the identical reason.
+	 */
 }
