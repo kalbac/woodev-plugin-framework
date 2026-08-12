@@ -41,3 +41,36 @@ $registry->register_page();
 
 - [[settings-api-control-save-path-pitfalls]] — the SP-1 settings handler save path this page reuses.
 - [[phpstan-windows-parallel-worker-segfault]] — the other "CI is the real gate, not local" case.
+
+## Addendum — s68 (2026-08-12): `init` belongs on the same list, and the replacement is a BETTER test
+
+Hit again in PR-B of the location-provider layer, with `do_action( 'init' )` — six integration tests
+failed identically on all three WP/WC matrix legs:
+
+```
+Unexpected incorrect usage notice for Automattic\WooCommerce\Blocks\Integrations\IntegrationRegistry::register.
+"cheque" is already registered.
+Unexpected incorrect usage notice for WP_Block_Type_Registry::register.
+Block type "woocommerce/active-filters" is already registered.
+```
+
+`init` has already fired during the integration bootstrap, so firing it again re-runs WooCommerce's
+own callbacks: the `cheque` gateway and every `woocommerce/*` block type re-register, each raising
+`_doing_it_wrong`, which `WP_UnitTestCase` converts into a failure. So the rule is not about *admin*
+hooks — it is about **any broad global hook WordPress or WooCommerce has already fired**. `init`,
+`admin_menu`, `wp_loaded` and friends all qualify. A narrow, framework-owned hook (`rest_api_init`
+in that test) is fine.
+
+The important part is what to do instead. The original test fired `init` to get its own callback to
+run; the replacement asserts the wiring and then calls the callback:
+
+```php
+$this->assertNotFalse( has_action( 'init', [ $registry, 'collect' ] ) );
+$registry->collect();
+```
+
+This is **stronger**, not a workaround. That test file exists to prove the registration is not
+hidden behind an `is_checkout()` guard — and a missing registration now fails the assertion
+outright, instead of merely producing no routes and leaving the reader to infer why. The negative
+case gets the same treatment: assert `has_action()` is `false`, proving the layer is inert by never
+registering rather than by registering and returning early.

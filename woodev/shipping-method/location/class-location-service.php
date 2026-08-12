@@ -192,28 +192,53 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		}
 
 		/**
-		 * Whether the ACTIVE provider covers `$country` (spec D2: a STATIC,
+		 * Whether a provider covers `$country` (spec D2: a STATIC,
 		 * PHP-answerable list — see {@see Location_Provider::get_countries()}
 		 * — so this needs no network call and can arbitrate server-side).
 		 *
+		 * `$level` decides WHICH provider is consulted (D15 gate fix, block
+		 * PR-B). Omitted (or `null`): asks about the ACTIVE provider alone —
+		 * the original, still-supported contract. Given a level: asks about
+		 * whichever provider {@see self::provider_for_level()} resolves for
+		 * THAT level (chosen, then the bundled fallback) — the exact provider
+		 * that would go on to actually serve a `suggest()` call for it. A
+		 * caller gating a per-level request (the REST `/suggest` handler)
+		 * MUST pass `$level`: consulting only the active provider's list
+		 * there can both wrongly SUPPRESS a country the resolved fallback
+		 * covers (the active provider does not list it, the fallback does),
+		 * and wrongly ADMIT one the active provider covers but the resolved
+		 * fallback does not (spending upstream quota on a lookup that was
+		 * always going to fail).
+		 *
 		 * Degrades to `false` — never throws — for every unanswerable case: no
-		 * active provider, or a `$country` that is not a well-formed
-		 * ISO-3166 alpha-2 code once normalized the SAME way
-		 * {@see Location_Record::from_array()} and {@see Location_Scope}
-		 * themselves normalize a country (trim + upper-case; see their own
-		 * `/^[A-Z]{2}$/` validation). Unlike those two constructors, this is a
-		 * read-side predicate a caller (REST, the checkout config block) may
-		 * hand raw, possibly-malformed request input to, so it answers safely
-		 * rather than rejecting like they do.
+		 * provider resolves for the given (or active) selector, or a
+		 * `$country` that is not a well-formed ISO-3166 alpha-2 code once
+		 * normalized the SAME way {@see Location_Record::from_array()} and
+		 * {@see Location_Scope} themselves normalize a country (trim +
+		 * upper-case; see their own `/^[A-Z]{2}$/` validation). Unlike those
+		 * two constructors, this is a read-side predicate a caller (REST, the
+		 * checkout config block) may hand raw, possibly-malformed request
+		 * input to, so it answers safely rather than rejecting like they do.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Added the optional `$level` parameter (D15 gate fix,
+		 *              block PR-B): the country check must consult whichever
+		 *              provider actually serves the requested level, not the
+		 *              active provider unconditionally.
 		 *
-		 * @param string $country Country code, any case/whitespace.
+		 * @param string      $country Country code, any case/whitespace.
+		 * @param string|null $level   One of {@see Location_Record::LEVELS},
+		 *                             or `null` to ask about the active
+		 *                             provider alone.
 		 *
 		 * @return bool
+		 *
+		 * @throws \InvalidArgumentException When `$level` is given and is not
+		 *                                    one of {@see Location_Record::LEVELS}
+		 *                                    — see {@see self::provider_for_level()}.
 		 */
-		public function is_country_supported( string $country ): bool {
-			$provider = $this->registry->get_active_provider();
+		public function is_country_supported( string $country, ?string $level = null ): bool {
+			$provider = null !== $level ? $this->provider_for_level( $level ) : $this->registry->get_active_provider();
 
 			if ( null === $provider ) {
 				return false;
@@ -226,6 +251,51 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 			}
 
 			return in_array( $normalized, $provider->get_countries(), true );
+		}
+
+		/**
+		 * The union, across the WHOLE D15 provider chain, of every country ANY
+		 * resolved provider covers at ANY level (D15 gate fix, block PR-B).
+		 *
+		 * Walks {@see Location_Record::LEVELS}, resolving each level's
+		 * provider via {@see self::provider_for_level()} and collecting
+		 * {@see Location_Provider::get_countries()} — deduplicated by provider
+		 * id, so a provider serving more than one level (the common case: the
+		 * bundled DaData fallback serves all three) is only ever asked once.
+		 * This is the set the checkout config's `location.countries` block
+		 * needs: "can the layer do something for this country AT ALL", not
+		 * "does the active provider alone cover it" — a country only a
+		 * FALLBACK serves at one level must still surface here.
+		 *
+		 * Normalized the same way {@see self::is_country_supported()}
+		 * normalizes a single country (trim + upper-case), so a caller
+		 * intersecting this against its own list never has to renormalize
+		 * either side.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string[] Normalized (upper-case) ISO-3166 alpha-2 codes,
+		 *                  deduplicated, in no particular order.
+		 */
+		public function get_supported_countries(): array {
+			$seen_provider_ids = [];
+			$countries         = [];
+
+			foreach ( Location_Record::LEVELS as $level ) {
+				$provider = $this->provider_for_level( $level );
+
+				if ( null === $provider || isset( $seen_provider_ids[ $provider->get_id() ] ) ) {
+					continue;
+				}
+
+				$seen_provider_ids[ $provider->get_id() ] = true;
+
+				foreach ( $provider->get_countries() as $code ) {
+					$countries[ strtoupper( trim( (string) $code ) ) ] = true;
+				}
+			}
+
+			return array_keys( $countries );
 		}
 
 		/**

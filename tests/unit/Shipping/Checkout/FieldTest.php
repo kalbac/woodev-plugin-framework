@@ -41,4 +41,38 @@ class FieldTest extends TestCase {
 		$array = Field::create( 'pvz' )->set_required( $spec )->to_array();
 		$this->assertSame( $spec, $array['required'] );
 	}
+
+	// -------------------------------------------------------------------------
+	// source_location() — Task 9 (Location Provider layer)
+	// -------------------------------------------------------------------------
+
+	public function test_source_location_sets_source_kind_and_level(): void {
+		$array = Field::create( 'billing_city' )->source_location( 'settlement' )->to_array();
+		$this->assertSame( 'location', $array['source_kind'] );
+		$this->assertSame( 'settlement', $array['location_level'] );
+	}
+
+	/**
+	 * @dataProvider provide_levels
+	 */
+	public function test_source_location_carries_each_cascade_level( string $level ): void {
+		$array = Field::create( 'x' )->source_location( $level )->to_array();
+		$this->assertSame( $level, $array['location_level'] );
+	}
+
+	/**
+	 * @return array<string, array{0: string}>
+	 */
+	public function provide_levels(): array {
+		return [
+			'region'     => [ 'region' ],
+			'settlement' => [ 'settlement' ],
+			'address'    => [ 'address' ],
+		];
+	}
+
+	public function test_source_location_does_not_set_a_source_callable(): void {
+		$array = Field::create( 'billing_city' )->source_location( 'settlement' )->to_array();
+		$this->assertArrayNotHasKey( 'source', $array );
+	}
 }

@@ -27,6 +27,28 @@
  * own once-per-fleet gate is what a hook needing that exact guarantee reuses,
  * rather than each plugin (or the store) inventing its own dedup mechanism.
  *
+ * **REST wiring (Task 8).** {@see self::add_hooks()} also wires
+ * {@see self::register_rest()} onto `rest_api_init`, registering
+ * {@see \Woodev\Framework\Shipping\Rest_Api\Location_Controller}'s
+ * `woodev/v1/location/(suggest|select)` routes. This registry — not
+ * {@see \Woodev\Framework\Shipping\Rest_Api\Shipping_REST_API} — is the correct
+ * owner: that bootstrap is constructed PER PLUGIN and namespaces its routes
+ * under that plugin's own dasherized id, but there is exactly one active
+ * location provider per STORE (spec §4.1), so the route carries no
+ * `plugin_id` segment at all. The two per-plugin `woodev/v1` controllers this
+ * codebase already ships ({@see \Woodev\Framework\Shipping\Rest_Api\Field_Source_Controller},
+ * {@see \Woodev\Framework\Shipping\Rest_Api\Pickup_Controller}) do not go
+ * through `Shipping_REST_API::get_rest_controllers()` either — each
+ * self-registers via its own owning handler's
+ * `add_action( 'rest_api_init', … )` — and Location has no per-plugin handler
+ * to be that owner, so this registry, already the fleet-wide owner of the
+ * `init`/`wp_login` hooks above, takes the role instead. `rest_api_init`
+ * always fires after `init` in a real request, so {@see self::collect()} (hooked
+ * on `init` at priority 20) has always already run by the time
+ * {@see self::register_rest()} builds the controller — the controller sees a
+ * fully collected registry, never gated by `is_checkout()` (a REST request must
+ * see it — the same reasoning as the collection timing above).
+ *
  * @since 2.0.2
  */
 
@@ -278,6 +300,29 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 
 			add_action( 'init', [ $this, 'collect' ], 20 );
 			add_action( 'wp_login', [ new Customer_Location_Store(), 'handle_wp_login' ], 10, 2 );
+			add_action( 'rest_api_init', [ $this, 'register_rest' ] );
+		}
+
+		/**
+		 * Registers the location REST routes.
+		 *
+		 * Builds and registers a fresh {@see \Woodev\Framework\Shipping\Rest_Api\Location_Controller}
+		 * (which in turn builds its own default {@see Location_Service}, itself
+		 * defaulting to this SAME registry singleton — see
+		 * {@see Location_Service::__construct()}). No gate check here beyond what
+		 * {@see self::add_hooks()} already enforces: this method is only ever
+		 * hooked from `declare_needed()`, i.e. only after the activation gate is
+		 * already open — see the class docblock's "REST wiring" section for why
+		 * this registry, not `Shipping_REST_API`, is the correct owner.
+		 *
+		 * @internal Hooked to `rest_api_init`; not part of the public consumption surface.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		public function register_rest(): void {
+			( new \Woodev\Framework\Shipping\Rest_Api\Location_Controller() )->register_routes();
 		}
 
 		/**

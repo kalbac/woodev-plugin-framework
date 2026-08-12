@@ -174,6 +174,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			require_once $path . '/location/class-location-resolution-cache.php';
 			require_once $path . '/location/class-location-service.php';
 
+			// Task 7: the bundled DaData provider — the registry's own
+			// bundled_provider_classes() class_exists()-guards its FQCN, so this
+			// require can sit anywhere before init/collect() (as long as it is
+			// loaded at all); kept adjacent to the rest of the location block.
+			require_once $path . '/location/providers/class-dadata-api-request.php';
+			require_once $path . '/location/providers/class-dadata-api-response.php';
+			require_once $path . '/location/providers/class-dadata-api-client.php';
+			require_once $path . '/location/providers/class-dadata-provider.php';
+
 			// pickup models and warehouse persistence
 			require_once $path . '/pickup/class-pickup-point.php';
 			require_once $path . '/pickup/class-warehouse.php';

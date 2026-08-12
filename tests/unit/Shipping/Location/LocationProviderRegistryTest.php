@@ -132,6 +132,26 @@ final class LocationProviderRegistryTest extends TestCase {
 		);
 	}
 
+	/**
+	 * Stubs `get_option` so the stored `active_provider` value is `$id` and
+	 * every other option name falls through to its own caller-supplied default
+	 * (matching real `get_option()` semantics) — used where a test needs a
+	 * specific NON-default provider id to become active (Task 7 made the
+	 * DEFAULT_PROVIDER_ID id, `'dadata'`, belong to the real bundled provider,
+	 * so fixtures needing a different active id can no longer rely on the
+	 * default-id fallback alone).
+	 *
+	 * @param string $id Provider id the `active_provider` setting should resolve to.
+	 * @return void
+	 */
+	private function stub_active_provider_option( string $id ): void {
+		Functions\when( 'get_option' )->alias(
+			static function ( $name, $default = false ) use ( $id ) {
+				return 'woodev_location_active_provider' === $name ? $id : $default;
+			}
+		);
+	}
+
 	// -------------------------------------------------------------------------
 	// Activation gate — closed
 	// -------------------------------------------------------------------------
@@ -336,7 +356,7 @@ final class LocationProviderRegistryTest extends TestCase {
 		);
 	}
 
-	public function test_a_nonexistent_bundled_class_registers_nothing_without_erroring(): void {
+	public function test_the_bundled_dadata_provider_registers_once_the_class_exists(): void {
 		Functions\when( 'add_action' )->justReturn( true );
 		$this->stub_providers_filter( [] );
 
@@ -344,9 +364,14 @@ final class LocationProviderRegistryTest extends TestCase {
 		$registry->declare_needed();
 		$registry->collect();
 
-		// Dadata_Provider does not exist yet (Task 7) — collection must simply
-		// skip it, not error, and the registry ends up with zero providers.
-		$this->assertSame( [], $registry->get_providers() );
+		// Task 7 shipped the class this seam names — collection now registers
+		// it automatically (superseding the earlier "does not exist yet, skip
+		// without erroring" assertion this test pinned during Task 3; the
+		// class_exists() skip path itself is still exercised by
+		// bundled_provider_classes() being safe to carry a not-yet-existing
+		// FQCN, which is no longer constructible now that the class is real).
+		$this->assertTrue( $registry->has_provider( 'dadata' ) );
+		$this->assertCount( 1, $registry->get_providers() );
 	}
 
 	// -------------------------------------------------------------------------
@@ -369,7 +394,10 @@ final class LocationProviderRegistryTest extends TestCase {
 		$registry->collect();
 
 		$this->assertSame( $first, $registry->get_providers()['acme'] );
-		$this->assertCount( 1, $registry->get_providers() );
+		// The bundled DaData provider also registers (Task 7) alongside 'acme' —
+		// the duplicate-id assertion under test concerns 'acme' specifically.
+		$this->assertCount( 2, $registry->get_providers() );
+		$this->assertTrue( $registry->has_provider( 'dadata' ) );
 	}
 
 	// -------------------------------------------------------------------------
@@ -393,7 +421,9 @@ final class LocationProviderRegistryTest extends TestCase {
 
 		$this->assertTrue( $registry->has_provider( 'a' ) );
 		$this->assertTrue( $registry->has_provider( 'b' ) );
-		$this->assertCount( 2, $registry->get_providers() );
+		// Plus the bundled DaData provider (Task 7).
+		$this->assertTrue( $registry->has_provider( 'dadata' ) );
+		$this->assertCount( 3, $registry->get_providers() );
 	}
 
 	// -------------------------------------------------------------------------
@@ -416,43 +446,9 @@ final class LocationProviderRegistryTest extends TestCase {
 	}
 
 	public function test_unset_active_setting_falls_back_to_the_default_provider_id(): void {
-		$dadata = new Fake_Location_Provider( Location_Provider_Registry::DEFAULT_PROVIDER_ID, 'Bundled default look-alike' );
-		$acme   = new Fake_Location_Provider( 'acme', 'ACME' );
-
-		Functions\when( 'add_action' )->justReturn( true );
-		$this->stub_providers_filter( [ $dadata, $acme ] );
-		Functions\when( 'get_option' )->justReturn( null );
-
-		$registry = Location_Provider_Registry::instance();
-		$registry->declare_needed();
-		$registry->collect();
-
-		$this->assertSame( $dadata, $registry->get_active_provider() );
-	}
-
-	public function test_unknown_active_id_falls_back_to_the_default_provider_when_it_is_registered(): void {
-		$dadata = new Fake_Location_Provider( Location_Provider_Registry::DEFAULT_PROVIDER_ID, 'Bundled default look-alike' );
-		$acme   = new Fake_Location_Provider( 'acme', 'ACME' );
-
-		Functions\when( 'add_action' )->justReturn( true );
-		$this->stub_providers_filter( [ $dadata, $acme ] );
-		// Stored value names a provider nothing is (or was ever) registered under.
-		Functions\when( 'get_option' )->justReturn( 'ghost-id' );
-
-		$registry = Location_Provider_Registry::instance();
-		$registry->declare_needed();
-		$registry->collect();
-
-		$this->assertSame( $dadata, $registry->get_active_provider() );
-	}
-
-	/**
-	 * Documented decision: when even the DEFAULT id has nothing registered under
-	 * it (Task 7 not shipped, or the default was never configured), resolution
-	 * lands on `null` rather than inventing a provider — degrading to native
-	 * fields per spec §4.7, exactly like "no provider active" today.
-	 */
-	public function test_unknown_active_id_resolves_to_null_when_the_default_provider_is_also_unregistered(): void {
+		// The bundled DaData provider IS DEFAULT_PROVIDER_ID now (Task 7) — no
+		// fake stand-in needed/possible any more: a fake sharing its id would
+		// collide with the real bundled one (first-wins silently drops the fake).
 		$acme = new Fake_Location_Provider( 'acme', 'ACME' );
 
 		Functions\when( 'add_action' )->justReturn( true );
@@ -463,7 +459,50 @@ final class LocationProviderRegistryTest extends TestCase {
 		$registry->declare_needed();
 		$registry->collect();
 
-		$this->assertNull( $registry->get_active_provider() );
+		$this->assertSame( 'dadata', $registry->get_active_provider()->get_id() );
+	}
+
+	public function test_unknown_active_id_falls_back_to_the_default_provider_when_it_is_registered(): void {
+		$acme = new Fake_Location_Provider( 'acme', 'ACME' );
+
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [ $acme ] );
+		// Stored value names a provider nothing is (or was ever) registered under.
+		Functions\when( 'get_option' )->justReturn( 'ghost-id' );
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$this->assertSame( 'dadata', $registry->get_active_provider()->get_id() );
+	}
+
+	/**
+	 * Originally pinned "resolution lands on null when even the default id has
+	 * nothing registered" (Task 3, written before Task 7 shipped the bundled
+	 * class this registry's own `bundled_provider_classes()` names). That exact
+	 * scenario is no longer constructible through the public `collect()` path:
+	 * the bundled DaData provider now ALWAYS registers under
+	 * `DEFAULT_PROVIDER_ID` whenever the gate is open, since
+	 * `Shipping_Plugin::includes()` unconditionally `require_once`'s its class
+	 * file. This test now pins the opposite, now-true outcome instead of the
+	 * no-longer-reachable one — the `null` branch inside
+	 * `get_active_provider()` remains real code (reachable in principle, e.g. if
+	 * the bundled require were ever removed) but has no fixture left able to
+	 * exercise it.
+	 */
+	public function test_unknown_active_id_falls_back_to_the_real_bundled_provider(): void {
+		$acme = new Fake_Location_Provider( 'acme', 'ACME' );
+
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [ $acme ] );
+		Functions\when( 'get_option' )->justReturn( null );
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$this->assertSame( 'dadata', $registry->get_active_provider()->get_id() );
 	}
 
 	public function test_active_provider_filter_can_swap_the_resolved_instance(): void {
@@ -507,8 +546,11 @@ final class LocationProviderRegistryTest extends TestCase {
 	// -------------------------------------------------------------------------
 
 	public function test_active_providers_declared_settings_are_rendered_on_the_surface(): void {
+		// A distinct id (not DEFAULT_PROVIDER_ID — that belongs to the now-real
+		// bundled Dadata_Provider, Task 7) made active via an explicit stored
+		// setting value rather than the default-id fallback.
 		$active = new Fake_Location_Provider(
-			Location_Provider_Registry::DEFAULT_PROVIDER_ID,
+			'active-fixture',
 			'Active',
 			[
 				'token' => [
@@ -533,9 +575,7 @@ final class LocationProviderRegistryTest extends TestCase {
 
 		Functions\when( 'add_action' )->justReturn( true );
 		$this->stub_providers_filter( [ $active, $inactive ] );
-		// No stored value -> the setting's own default (DEFAULT_PROVIDER_ID) applies,
-		// which is $active's id.
-		Functions\when( 'get_option' )->justReturn( null );
+		$this->stub_active_provider_option( 'active-fixture' );
 
 		$registry = Location_Provider_Registry::instance();
 		$registry->declare_needed();
@@ -549,7 +589,7 @@ final class LocationProviderRegistryTest extends TestCase {
 
 	public function test_provider_field_marked_sensitive_gets_a_password_control(): void {
 		$active = new Fake_Location_Provider(
-			Location_Provider_Registry::DEFAULT_PROVIDER_ID,
+			'active-fixture',
 			'Active',
 			[
 				'token' => [
@@ -563,7 +603,7 @@ final class LocationProviderRegistryTest extends TestCase {
 
 		Functions\when( 'add_action' )->justReturn( true );
 		$this->stub_providers_filter( [ $active ] );
-		Functions\when( 'get_option' )->justReturn( null );
+		$this->stub_active_provider_option( 'active-fixture' );
 
 		$registry = Location_Provider_Registry::instance();
 		$registry->declare_needed();
@@ -589,7 +629,9 @@ final class LocationProviderRegistryTest extends TestCase {
 
 		$setting = $registry->get_settings_handler()->get_setting( Location_Provider_Registry::SETTING_ACTIVE_PROVIDER );
 
-		$this->assertSame( [ 'a' => 'Alpha', 'b' => 'Beta' ], $setting->get_options() );
+		// The bundled DaData provider (Task 7) is registered FIRST (before the
+		// filter-supplied candidates), so it leads the options list.
+		$this->assertSame( [ 'dadata' => 'DaData', 'a' => 'Alpha', 'b' => 'Beta' ], $setting->get_options() );
 		$this->assertSame( \Woodev_Control::TYPE_SELECT, $setting->get_control()->get_type() );
 	}
 
@@ -603,7 +645,7 @@ final class LocationProviderRegistryTest extends TestCase {
 	 */
 	public function test_a_sensitive_provider_field_is_flagged_sensitive_not_silently_plain(): void {
 		$active = new Fake_Location_Provider(
-			Location_Provider_Registry::DEFAULT_PROVIDER_ID,
+			'active-fixture',
 			'Active',
 			[
 				'secret' => [
@@ -617,7 +659,7 @@ final class LocationProviderRegistryTest extends TestCase {
 
 		Functions\when( 'add_action' )->justReturn( true );
 		$this->stub_providers_filter( [ $active ] );
-		Functions\when( 'get_option' )->justReturn( null );
+		$this->stub_active_provider_option( 'active-fixture' );
 
 		$registry = Location_Provider_Registry::instance();
 		$registry->declare_needed();

@@ -23,6 +23,7 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 	use Woodev\Framework\Shipping\Location\Location_Resolution_Cache;
 	use Woodev\Framework\Shipping\Location\Location_Scope;
 	use Woodev\Framework\Shipping\Location\Location_Service;
+	use Woodev\Framework\Shipping\Location\Providers\Dadata_Provider;
 	use Woodev\Framework\Settings\Settings_Page_Registry;
 	use Woodev\Framework\Shipping\Shipping_Plugin;
 	use Woodev\Tests\Unit\TestCase;
@@ -48,6 +49,15 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/interface-location-adapter.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-location-resolution-cache.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-location-service.php';
+	// Task 7: the bundled DaData provider now ALWAYS registers under
+	// Location_Provider_Registry::DEFAULT_PROVIDER_ID whenever the gate is
+	// open — required here (not left to load-order luck from another test
+	// file) so this file's own assertions are correct whether it runs alone
+	// or as part of the full suite.
+	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/providers/class-dadata-api-request.php';
+	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/providers/class-dadata-api-response.php';
+	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/providers/class-dadata-api-client.php';
+	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/providers/class-dadata-provider.php';
 
 	/**
 	 * Minimal `\WC_Session` stand-in shared by the customer-store probe and the
@@ -356,19 +366,36 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 		}
 
 		public function test_is_active_false_when_the_active_provider_is_unconfigured(): void {
-			$provider = new Location_Service_Fake_Provider( Location_Provider_Registry::DEFAULT_PROVIDER_ID, [ Location_Record::LEVEL_REGION ], false );
-			$this->activate_with_providers( [ $provider ] );
+			// A distinct id — DEFAULT_PROVIDER_ID ('dadata') now belongs to the
+			// real bundled Dadata_Provider (Task 7), which ALSO always registers;
+			// made active explicitly rather than via the default-id fallback.
+			$provider = new Location_Service_Fake_Provider( 'svc-fixture', [ Location_Record::LEVEL_REGION ], false );
 
-			$service = new Location_Service( Location_Provider_Registry::instance() );
+			Functions\when( 'add_action' )->justReturn( true );
+			$this->stub_providers_filter( [ $provider ] );
+			Functions\when( 'get_option' )->justReturn( 'svc-fixture' );
+
+			$registry = Location_Provider_Registry::instance();
+			$registry->declare_needed();
+			$registry->collect();
+
+			$service = new Location_Service( $registry );
 
 			$this->assertFalse( $service->is_active() );
 		}
 
 		public function test_is_active_true_when_gate_open_provider_active_and_configured(): void {
-			$provider = new Location_Service_Fake_Provider( Location_Provider_Registry::DEFAULT_PROVIDER_ID, [ Location_Record::LEVEL_REGION ], true );
-			$this->activate_with_providers( [ $provider ] );
+			$provider = new Location_Service_Fake_Provider( 'svc-fixture', [ Location_Record::LEVEL_REGION ], true );
 
-			$service = new Location_Service( Location_Provider_Registry::instance() );
+			Functions\when( 'add_action' )->justReturn( true );
+			$this->stub_providers_filter( [ $provider ] );
+			Functions\when( 'get_option' )->justReturn( 'svc-fixture' );
+
+			$registry = Location_Provider_Registry::instance();
+			$registry->declare_needed();
+			$registry->collect();
+
+			$service = new Location_Service( $registry );
 
 			$this->assertTrue( $service->is_active() );
 		}
@@ -495,9 +522,27 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$this->assertFalse( $service->is_country_supported( 'RU' ) );
 		}
 
+		/**
+		 * Registers a fake provider under a distinct id (not `DEFAULT_PROVIDER_ID`,
+		 * which now belongs to the real bundled Dadata_Provider — Task 7) and
+		 * makes it explicitly active.
+		 *
+		 * @param Location_Service_Fake_Provider $provider Provider to register and activate.
+		 * @return void
+		 */
+		private function activate_as_active_provider( Location_Service_Fake_Provider $provider ): void {
+			Functions\when( 'add_action' )->justReturn( true );
+			$this->stub_providers_filter( [ $provider ] );
+			Functions\when( 'get_option' )->justReturn( $provider->get_id() );
+
+			$registry = Location_Provider_Registry::instance();
+			$registry->declare_needed();
+			$registry->collect();
+		}
+
 		public function test_is_country_supported_true_for_a_covered_country(): void {
-			$provider = new Location_Service_Fake_Provider( Location_Provider_Registry::DEFAULT_PROVIDER_ID, [ Location_Record::LEVEL_REGION ], true, [ 'RU' ] );
-			$this->activate_with_providers( [ $provider ] );
+			$provider = new Location_Service_Fake_Provider( 'svc-fixture', [ Location_Record::LEVEL_REGION ], true, [ 'RU' ] );
+			$this->activate_as_active_provider( $provider );
 
 			$service = new Location_Service( Location_Provider_Registry::instance() );
 
@@ -505,8 +550,8 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 		}
 
 		public function test_is_country_supported_is_case_insensitive(): void {
-			$provider = new Location_Service_Fake_Provider( Location_Provider_Registry::DEFAULT_PROVIDER_ID, [ Location_Record::LEVEL_REGION ], true, [ 'RU' ] );
-			$this->activate_with_providers( [ $provider ] );
+			$provider = new Location_Service_Fake_Provider( 'svc-fixture', [ Location_Record::LEVEL_REGION ], true, [ 'RU' ] );
+			$this->activate_as_active_provider( $provider );
 
 			$service = new Location_Service( Location_Provider_Registry::instance() );
 
@@ -515,8 +560,8 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 		}
 
 		public function test_is_country_supported_false_for_an_uncovered_country(): void {
-			$provider = new Location_Service_Fake_Provider( Location_Provider_Registry::DEFAULT_PROVIDER_ID, [ Location_Record::LEVEL_REGION ], true, [ 'RU' ] );
-			$this->activate_with_providers( [ $provider ] );
+			$provider = new Location_Service_Fake_Provider( 'svc-fixture', [ Location_Record::LEVEL_REGION ], true, [ 'RU' ] );
+			$this->activate_as_active_provider( $provider );
 
 			$service = new Location_Service( Location_Provider_Registry::instance() );
 
@@ -524,13 +569,166 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 		}
 
 		public function test_is_country_supported_false_for_a_malformed_country_code(): void {
-			$provider = new Location_Service_Fake_Provider( Location_Provider_Registry::DEFAULT_PROVIDER_ID, [ Location_Record::LEVEL_REGION ], true, [ 'RU' ] );
-			$this->activate_with_providers( [ $provider ] );
+			$provider = new Location_Service_Fake_Provider( 'svc-fixture', [ Location_Record::LEVEL_REGION ], true, [ 'RU' ] );
+			$this->activate_as_active_provider( $provider );
 
 			$service = new Location_Service( Location_Provider_Registry::instance() );
 
 			$this->assertFalse( $service->is_country_supported( 'RUS' ) );
 			$this->assertFalse( $service->is_country_supported( '' ) );
+		}
+
+		// -------------------------------------------------------------------
+		// is_country_supported( $country, $level ): D15 gate fix (block PR-B).
+		// The country check must consult whichever provider ACTUALLY serves
+		// the requested level, not the active provider unconditionally — a
+		// mismatch is reachable the moment any provider's country list differs
+		// from another's (Dadata_Provider::FILTER_COUNTRIES, or a plugin
+		// registering a multi-country provider).
+		// -------------------------------------------------------------------
+
+		/**
+		 * Stubs `apply_filters` so `Location_Provider_Registry::FILTER_PROVIDERS`
+		 * returns exactly `$providers` AND `Dadata_Provider::FILTER_COUNTRIES`
+		 * returns `$countries` (widening the bundled fallback's own country
+		 * list beyond its `[ 'RU' ]` default) — every other tag passes its
+		 * default through untouched.
+		 *
+		 * @param \Woodev\Framework\Shipping\Location\Location_Provider[] $providers Providers the FILTER_PROVIDERS tag should return.
+		 * @param string[]                                                $countries Countries the FILTER_COUNTRIES tag should return.
+		 *
+		 * @return void
+		 */
+		private function stub_providers_and_widened_fallback_countries( array $providers, array $countries ): void {
+			Functions\when( 'apply_filters' )->alias(
+				static function ( string $tag, $default = null ) use ( $providers, $countries ) {
+					if ( Location_Provider_Registry::FILTER_PROVIDERS === $tag ) {
+						return $providers;
+					}
+					if ( Dadata_Provider::FILTER_COUNTRIES === $tag ) {
+						return $countries;
+					}
+
+					return $default;
+				}
+			);
+		}
+
+		/**
+		 * False-suppression direction: the chosen provider serves region and
+		 * settlement only, in `[ 'RU' ]`; the bundled fallback (configured, and
+		 * the D15 universal tail — it serves every level) has its own country
+		 * list widened to `[ 'RU', 'BY' ]`. A `BY` "address" request must be
+		 * gated against the FALLBACK — the provider that will actually serve
+		 * it — and therefore reported supported, even though the ACTIVE
+		 * (chosen) provider alone does not cover `BY` at all.
+		 */
+		public function test_is_country_supported_for_a_level_consults_the_fallback_when_the_fallback_actually_serves_that_level(): void {
+			$chosen = new Location_Service_Fake_Provider(
+				'city-dict',
+				[ Location_Record::LEVEL_REGION, Location_Record::LEVEL_SETTLEMENT ],
+				true,
+				[ 'RU' ]
+			);
+
+			Functions\when( 'add_action' )->justReturn( true );
+			$this->stub_providers_and_widened_fallback_countries( [ $chosen ], [ 'RU', 'BY' ] );
+			$this->stub_dadata_token( 'tok' ); // the real bundled fallback must be configured.
+
+			$registry = Location_Provider_Registry::instance();
+			$registry->declare_needed();
+			$registry->collect();
+
+			$service = new Location_Service( $registry );
+
+			// Sanity: "address" is indeed resolved to the fallback, not $chosen.
+			$this->assertInstanceOf( Dadata_Provider::class, $service->provider_for_level( Location_Record::LEVEL_ADDRESS ) );
+
+			$this->assertTrue(
+				$service->is_country_supported( 'BY', Location_Record::LEVEL_ADDRESS ),
+				'BY must be reported supported for "address" — the fallback that actually serves that level covers BY'
+			);
+			$this->assertFalse(
+				$service->is_country_supported( 'BY' ),
+				'sanity: the ACTIVE (chosen) provider alone does not cover BY — proves the level-aware answer legitimately differs from the level-blind one'
+			);
+		}
+
+		/**
+		 * False-admission direction: the chosen provider serves region only,
+		 * in `[ 'RU', 'KZ' ]`; the bundled fallback is configured but its own
+		 * country list is left at the unwidened `[ 'RU' ]` default. A `KZ`
+		 * "address" request must be gated against the FALLBACK — the provider
+		 * that will actually serve it — and therefore reported UNSUPPORTED,
+		 * even though the ACTIVE (chosen) provider alone does cover `KZ`.
+		 */
+		public function test_is_country_supported_for_a_level_reports_unsupported_when_the_fallback_does_not_cover_it_even_if_the_active_provider_does(): void {
+			$chosen = new Location_Service_Fake_Provider(
+				'city-dict',
+				[ Location_Record::LEVEL_REGION ],
+				true,
+				[ 'RU', 'KZ' ]
+			);
+
+			Functions\when( 'add_action' )->justReturn( true );
+			$this->stub_providers_filter( [ $chosen ] );
+			$this->stub_dadata_token( 'tok' ); // configured fallback, countries left at the RU-only default.
+
+			$registry = Location_Provider_Registry::instance();
+			$registry->declare_needed();
+			$registry->collect();
+
+			$service = new Location_Service( $registry );
+
+			// Sanity: "address" is indeed resolved to the fallback, not $chosen
+			// (which only declares "region").
+			$this->assertInstanceOf( Dadata_Provider::class, $service->provider_for_level( Location_Record::LEVEL_ADDRESS ) );
+
+			$this->assertFalse(
+				$service->is_country_supported( 'KZ', Location_Record::LEVEL_ADDRESS ),
+				'KZ must be reported UNSUPPORTED for "address" — the fallback that actually serves that level does not cover KZ'
+			);
+			$this->assertTrue(
+				$service->is_country_supported( 'KZ' ),
+				'sanity: the ACTIVE (chosen) provider alone DOES cover KZ — proves the level-blind answer would have wrongly admitted it'
+			);
+		}
+
+		// -------------------------------------------------------------------
+		// get_supported_countries(): the union across the whole D15 chain
+		// (D15 gate fix, block PR-B) — feeds Checkout_Config's `countries` block.
+		// -------------------------------------------------------------------
+
+		public function test_get_supported_countries_unions_every_level_s_resolved_provider(): void {
+			$chosen = new Location_Service_Fake_Provider(
+				'city-dict',
+				[ Location_Record::LEVEL_REGION, Location_Record::LEVEL_SETTLEMENT ],
+				true,
+				[ 'RU' ]
+			);
+
+			Functions\when( 'add_action' )->justReturn( true );
+			$this->stub_providers_and_widened_fallback_countries( [ $chosen ], [ 'RU', 'BY' ] );
+			$this->stub_dadata_token( 'tok' );
+
+			$registry = Location_Provider_Registry::instance();
+			$registry->declare_needed();
+			$registry->collect();
+
+			$service = new Location_Service( $registry );
+
+			// region/settlement -> $chosen ([ 'RU' ]); address -> the fallback
+			// ([ 'RU', 'BY' ]) — the union must be exactly { RU, BY }, deduplicated.
+			$countries = $service->get_supported_countries();
+			sort( $countries );
+
+			$this->assertSame( [ 'BY', 'RU' ], $countries );
+		}
+
+		public function test_get_supported_countries_empty_when_the_chain_resolves_no_provider_for_any_level(): void {
+			$service = new Location_Service( Location_Provider_Registry::instance() );
+
+			$this->assertSame( [], $service->get_supported_countries() );
 		}
 
 		// -------------------------------------------------------------------
@@ -544,13 +742,40 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$service->provider_for_level( 'city' );
 		}
 
+		/**
+		 * D15 chain-fallback tests below (Task 6, extended by Task 7): the
+		 * fallback slot ({@see Location_Provider_Registry::DEFAULT_PROVIDER_ID},
+		 * `'dadata'`) is now ALWAYS occupied by the real bundled
+		 * {@see Dadata_Provider} — `Shipping_Plugin::includes()`
+		 * unconditionally requires its class file, and the registry's own
+		 * first-wins duplicate-id rule means no fake fixture can be substituted
+		 * into that slot any more (it would collide and be rejected). Every
+		 * test below stubs `get_option( 'woodev_location_token' )` explicitly
+		 * where the scenario needs the real fallback CONFIGURED, and relies on
+		 * the class-wide `get_option -> null` default (set in `setUp()`) where
+		 * the scenario needs it left unconfigured.
+		 */
+		private function stub_dadata_token( string $token ): void {
+			Functions\when( 'get_option' )->alias(
+				static function ( $name, $default = null ) use ( $token ) {
+					if ( 'woodev_location_active_provider' === $name ) {
+						return 'city-dict';
+					}
+					if ( 'woodev_location_token' === $name ) {
+						return $token;
+					}
+
+					return $default;
+				}
+			);
+		}
+
 		public function test_chain_city_only_chosen_with_configured_fallback_address_served_by_fallback(): void {
-			$chosen   = new Location_Service_Fake_Provider( 'city-dict', [ Location_Record::LEVEL_REGION, Location_Record::LEVEL_SETTLEMENT ], true );
-			$fallback = new Location_Service_Fake_Provider( Location_Provider_Registry::DEFAULT_PROVIDER_ID, Location_Record::LEVELS, true );
+			$chosen = new Location_Service_Fake_Provider( 'city-dict', [ Location_Record::LEVEL_REGION, Location_Record::LEVEL_SETTLEMENT ], true );
 
 			Functions\when( 'add_action' )->justReturn( true );
-			$this->stub_providers_filter( [ $chosen, $fallback ] );
-			Functions\when( 'get_option' )->justReturn( 'city-dict' ); // active_provider = the city-only one.
+			$this->stub_providers_filter( [ $chosen ] );
+			$this->stub_dadata_token( 'tok' ); // the real bundled fallback must be configured to serve as fallback.
 
 			$registry = Location_Provider_Registry::instance();
 			$registry->declare_needed();
@@ -558,15 +783,15 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 
 			$service = new Location_Service( $registry );
 
-			$this->assertSame( $fallback, $service->provider_for_level( Location_Record::LEVEL_ADDRESS ) );
+			$this->assertInstanceOf( Dadata_Provider::class, $registry->get_providers()['dadata'] );
+			$this->assertSame( $registry->get_providers()['dadata'], $service->provider_for_level( Location_Record::LEVEL_ADDRESS ) );
 		}
 
 		public function test_chain_city_only_chosen_settlement_and_region_served_by_the_chosen_provider(): void {
-			$chosen   = new Location_Service_Fake_Provider( 'city-dict', [ Location_Record::LEVEL_REGION, Location_Record::LEVEL_SETTLEMENT ], true );
-			$fallback = new Location_Service_Fake_Provider( Location_Provider_Registry::DEFAULT_PROVIDER_ID, Location_Record::LEVELS, true );
+			$chosen = new Location_Service_Fake_Provider( 'city-dict', [ Location_Record::LEVEL_REGION, Location_Record::LEVEL_SETTLEMENT ], true );
 
 			Functions\when( 'add_action' )->justReturn( true );
-			$this->stub_providers_filter( [ $chosen, $fallback ] );
+			$this->stub_providers_filter( [ $chosen ] );
 			Functions\when( 'get_option' )->justReturn( 'city-dict' );
 
 			$registry = Location_Provider_Registry::instance();
@@ -580,28 +805,13 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 		}
 
 		public function test_chain_fallback_unconfigured_address_returns_null(): void {
-			$chosen   = new Location_Service_Fake_Provider( 'city-dict', [ Location_Record::LEVEL_REGION, Location_Record::LEVEL_SETTLEMENT ], true );
-			$fallback = new Location_Service_Fake_Provider( Location_Provider_Registry::DEFAULT_PROVIDER_ID, Location_Record::LEVELS, false ); // unconfigured
-
-			Functions\when( 'add_action' )->justReturn( true );
-			$this->stub_providers_filter( [ $chosen, $fallback ] );
-			Functions\when( 'get_option' )->justReturn( 'city-dict' );
-
-			$registry = Location_Provider_Registry::instance();
-			$registry->declare_needed();
-			$registry->collect();
-
-			$service = new Location_Service( $registry );
-
-			$this->assertNull( $service->provider_for_level( Location_Record::LEVEL_ADDRESS ) );
-		}
-
-		public function test_chain_no_fallback_registered_at_all_returns_null(): void {
 			$chosen = new Location_Service_Fake_Provider( 'city-dict', [ Location_Record::LEVEL_REGION, Location_Record::LEVEL_SETTLEMENT ], true );
 
 			Functions\when( 'add_action' )->justReturn( true );
 			$this->stub_providers_filter( [ $chosen ] );
-			Functions\when( 'get_option' )->justReturn( 'city-dict' );
+			// active_provider = 'city-dict', but no token -> the real bundled
+			// fallback (Task 7) is left unconfigured.
+			$this->stub_dadata_token( '' );
 
 			$registry = Location_Provider_Registry::instance();
 			$registry->declare_needed();
@@ -613,16 +823,11 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 		}
 
 		public function test_chain_chosen_serves_every_level_the_fallback_is_never_consulted(): void {
-			$chosen   = new Location_Service_Fake_Provider( Location_Provider_Registry::DEFAULT_PROVIDER_ID, Location_Record::LEVELS, true );
-			$fallback = new Location_Service_Fake_Provider( 'never-touched', Location_Record::LEVELS, true );
+			$chosen = new Location_Service_Fake_Provider( 'svc-fixture', Location_Record::LEVELS, true );
 
 			Functions\when( 'add_action' )->justReturn( true );
-			// $chosen IS registered under the DEFAULT_PROVIDER_ID here, so the
-			// "fallback" slot in the registry is $chosen itself; register a
-			// SEPARATE provider under a different id as the thing that must
-			// never be touched, and make it the active one directly.
-			$this->stub_providers_filter( [ $chosen, $fallback ] );
-			Functions\when( 'get_option' )->justReturn( Location_Provider_Registry::DEFAULT_PROVIDER_ID );
+			$this->stub_providers_filter( [ $chosen ] );
+			Functions\when( 'get_option' )->justReturn( 'svc-fixture' );
 
 			$registry = Location_Provider_Registry::instance();
 			$registry->declare_needed();
@@ -630,20 +835,25 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 
 			$service = new Location_Service( $registry );
 
+			// The real bundled DaData provider (Task 7) always occupies the
+			// fallback slot too, but $chosen already answers every level, so
+			// the fallback must never even be consulted — proven by identity:
+			// the result is $chosen itself for every level, never the
+			// registry's own 'dadata' entry (which, left unconfigured by the
+			// class-wide default, would resolve to null if it WERE consulted —
+			// so a wrong short-circuit would surface as a null result too,
+			// not just a wrong-instance one).
 			foreach ( Location_Record::LEVELS as $level ) {
-				$service->provider_for_level( $level );
+				$this->assertSame( $chosen, $service->provider_for_level( $level ) );
 			}
-
-			$this->assertSame( 0, $fallback->is_configured_calls, 'the fallback must never even be asked whether it is configured' );
-			$this->assertSame( 0, $fallback->get_suggest_levels_calls, 'the fallback must never even be asked which levels it serves' );
 		}
 
 		public function test_provider_for_level_filter_can_override_the_resolved_provider(): void {
-			$chosen  = new Location_Service_Fake_Provider( Location_Provider_Registry::DEFAULT_PROVIDER_ID, [ Location_Record::LEVEL_REGION ], true );
+			$chosen  = new Location_Service_Fake_Provider( 'svc-fixture', [ Location_Record::LEVEL_REGION ], true );
 			$swapped = new Location_Service_Fake_Provider( 'swapped', [ Location_Record::LEVEL_REGION ], true );
 
 			Functions\when( 'add_action' )->justReturn( true );
-			Functions\when( 'get_option' )->justReturn( null );
+			Functions\when( 'get_option' )->justReturn( 'svc-fixture' );
 			Functions\when( 'apply_filters' )->alias(
 				static function ( string $tag, $default = null ) use ( $chosen, $swapped ) {
 					if ( Location_Provider_Registry::FILTER_PROVIDERS === $tag ) {
