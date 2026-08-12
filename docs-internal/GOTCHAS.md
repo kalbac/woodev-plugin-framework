@@ -1,6 +1,17 @@
 # Gotchas — Woodev Plugin Framework
-> **128 atomic gotchas, 22 namespaces (28 index sections)** — update when adding/removing.
-> Last updated: 2026-08-12 (session 67, locality brainstorm → spec+plan: **+1 file, existing
+> **129 atomic gotchas, 22 namespaces (28 index sections)** — update when adding/removing.
+> Last updated: 2026-08-12 (session 68, location-provider PR-A/PR-B: **+1 file, existing namespace
+> `[testing/*]`** — `a-no-leak-test-needs-a-low-entropy-placeholder` (a test proving a credential does
+> not reach the client is strongest when it greps the serialized payload for a distinctive literal —
+> and a realistic-looking literal trips gitleaks' `generic-api-key` entropy rule, so the no-leak test
+> fails the Secret scan job for leaking a secret; uniqueness is what the assertion needs, entropy is
+> not, so spend one and not the other — and never allowlist the path instead). Plus TWO addenda:
+> `integration-test-global-admin-hooks-output-and-submenu-accumulation` gains `init` (re-firing it
+> re-registers WC's `cheque` gateway and block types → `_doing_it_wrong` → 6 failures on every matrix
+> leg; the replacement — assert `has_action()`, then call the callback — is a STRONGER test), and
+> `reflection-setaccessible-version-guard` records its second occurrence plus why a written-down rule
+> did not travel into delegated work.)
+> Prior: 2026-08-12 (session 67, locality brainstorm → spec+plan: **+1 file, existing
 > namespace `[woocommerce/*]`** — `wc-address-autocomplete-hosts-only-address1-and-flattens-identity`
 > (WC's Address Autocomplete Provider API (9.9+) sounds like a base for a locality cascade and is
 > not: the search UI attaches ONLY to `address_1`, `select()` must return flat strings so any
@@ -265,6 +276,7 @@
 - [testing/integration] Integration fixtures need the framework mapped at the bootstrap's load path (`woodev-framework/tests/_fixtures/*/woodev` in `.wp-env.json`), not just the `wp-content/plugins/*` mount — the v2 resolver requires each fixture's bundled `woodev/class-plugin.php` → [gotchas/wpenv-resolver-fixture-mapping.md](gotchas/wpenv-resolver-fixture-mapping.md) (2026-06-08)
 - [testing/unit] Brain Monkey `expect`/`when` DEFINES a function and PHP can't un-define it, so it leaks (`function_exists` true) into later tests in the same process — order-dependent "passes locally / fails on CI"; isolate "function-absent" tests with `@runInSeparateProcess` → [gotchas/brain-monkey-function-pollution.md](gotchas/brain-monkey-function-pollution.md) (2026-06-08)
 - [testing/unit] Reflection `setAccessible()` is REQUIRED on PHP < 8.1 and DEPRECATED on 8.5 — guard private getValue/invoke with `if ( PHP_VERSION_ID < 80100 )` to satisfy both ends of the supported range → [gotchas/reflection-setaccessible-version-guard.md](gotchas/reflection-setaccessible-version-guard.md) (2026-06-08)
+- [testing/unit] A test proving a credential does NOT leak fails the **Secret scan** job when its placeholder looks real — gitleaks' `generic-api-key` rule fires on ENTROPY (`SECRET-9b2d4f6a-…` = 4.004), while the assertion only needs UNIQUENESS; use a low-entropy distinctive literal, never a `.gitleaks.toml` allowlist (that blinds the scanner to a real credential later) → [gotchas/a-no-leak-test-needs-a-low-entropy-placeholder.md](gotchas/a-no-leak-test-needs-a-low-entropy-placeholder.md) (s68)
 - [testing/integration] `rest_cookie_check_errors()` only checks the nonce when global `$wp_rest_auth_cookie === true`; nonce comes from superglobals, not the request object; missing nonce demotes to anonymous (later 401 via `rest_authorization_required_code()`), only an invalid nonce errors directly → [gotchas/rest-cookie-nonce-auth-semantics.md](gotchas/rest-cookie-nonce-auth-semantics.md) (s8)
 - [testing/unit] PHPUnit silently runs ONLY the first file argument when given several — "both files green" can mean file B never executed; run per-file or use --testsuite/--filter → [gotchas/phpunit-multiple-file-args.md](gotchas/phpunit-multiple-file-args.md) (s9)
 - [testing/integration] wp-env on Windows Git-Bash: MSYS mangles absolute container paths (`/var/www/…` → `C:/Program Files/Git/…`) — run from PowerShell or wrap in `bash -c "cd …"`; integration bootstrap also needs `TEST_SUITE=integration` → [gotchas/wpenv-windows-gitbash-path-mangling.md](gotchas/wpenv-windows-gitbash-path-mangling.md) (s9)

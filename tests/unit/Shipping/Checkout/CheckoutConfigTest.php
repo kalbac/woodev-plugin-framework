@@ -338,8 +338,14 @@ class CheckoutConfigTest extends TestCase {
 		Location_Provider_Registry::instance()->reset_for_tests();
 		Settings_Page_Registry::instance()->reset_for_tests();
 
-		$token  = 'TOKEN-3f7c9a1e-DISTINCTIVE';
-		$secret = 'SECRET-9b2d4f6a-DISTINCTIVE';
+		// Deliberately LOW-entropy placeholders. The first version of this test used
+		// realistic hex-bearing values, and gitleaks' `generic-api-key` rule flagged
+		// the secret (entropy 4.0) — a test proving a credential does not leak was
+		// itself failing the credential scanner. Uniqueness is what this assertion
+		// needs (the values are grepped for in the serialized config); entropy is
+		// not, so it is spent nowhere.
+		$token  = 'token-value-that-must-never-reach-the-client';
+		$secret = 'secret-value-that-must-never-reach-the-client';
 
 		Functions\when( 'add_action' )->justReturn( true );
 		Functions\when( '__' )->returnArg( 1 );

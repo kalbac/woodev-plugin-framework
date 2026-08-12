@@ -38,17 +38,38 @@ class LocationRouteTest extends TestCase {
 	}
 
 	/**
-	 * Opens the gate and fires the exact hook sequence a real request fires —
-	 * `init` (where {@see Location_Provider_Registry::collect()} is hooked at
-	 * priority 20) then `rest_api_init` (where the REST routes are hooked) —
-	 * then rebuilds the REST server so the freshly-registered routes are seen.
+	 * Opens the gate and drives the same path a real request drives: provider
+	 * collection (hooked on `init` at priority 20) then REST route registration
+	 * (hooked on `rest_api_init`), then rebuilds the REST server so the freshly
+	 * registered routes are seen.
+	 *
+	 * `init` is asserted-then-invoked rather than fired globally. Firing
+	 * `do_action( 'init' )` inside an integration test re-runs WooCommerce's own
+	 * `init` callbacks, which re-register the `cheque` gateway and the
+	 * `woocommerce/*` block types — each raising `_doing_it_wrong`, which
+	 * `WP_UnitTestCase` turns into "Unexpected incorrect usage notice" and fails
+	 * the test. Same family as the recorded trap for `do_action( 'admin_menu' )`
+	 * (gotcha `integration-test-global-admin-hooks-output-and-submenu-accumulation`).
+	 *
+	 * Asserting `has_action()` and then calling the callback is not a weaker test
+	 * than firing the hook — it is a stronger one: an `is_checkout()`-gated or
+	 * otherwise missing registration, which is exactly what this file exists to
+	 * catch, fails the assertion outright instead of merely producing no routes.
 	 *
 	 * @return void
 	 */
 	private function activate_and_boot_rest(): void {
-		Location_Provider_Registry::instance()->declare_needed();
+		$registry = Location_Provider_Registry::instance();
 
-		do_action( 'init' );
+		$registry->declare_needed();
+
+		$this->assertNotFalse(
+			has_action( 'init', [ $registry, 'collect' ] ),
+			'provider collection must be hooked on init, never behind an is_checkout() guard'
+		);
+
+		$registry->collect();
+
 		do_action( 'rest_api_init' );
 
 		$GLOBALS['wp_rest_server'] = null;
@@ -72,8 +93,15 @@ class LocationRouteTest extends TestCase {
 	}
 
 	public function test_routes_are_absent_when_no_plugin_declared_need(): void {
-		// Gate never opened — only `init` fires, no declare_needed() call.
-		do_action( 'init' );
+		// Gate never opened — no declare_needed() call, so the registry hooked
+		// nothing at all. Asserting that directly is the whole point: the layer is
+		// inert by never registering, not by registering and then returning early.
+		// (`init` is deliberately NOT fired — see activate_and_boot_rest().)
+		$this->assertFalse(
+			has_action( 'init', [ Location_Provider_Registry::instance(), 'collect' ] ),
+			'a registry nobody declared need to must not hook anything'
+		);
+
 		do_action( 'rest_api_init' );
 
 		$GLOBALS['wp_rest_server'] = null;
