@@ -1245,6 +1245,17 @@
 	 * layer at all — this fallback is not a workaround, it is the contract: a plugin outside
 	 * the layer never sees `config.location` and must keep working exactly as before.
 	 *
+	 * AN EMPTY KEY IS NEVER SENT AS THE ADDRESSING LOCALITY (review finding F1, second half,
+	 * rig-verified): `''` is the layer's own "refusing to answer" sentinel (gotcha
+	 * `an-empty-domain-key-is-not-a-key`, restated on `Pickup_Handler::location_config_block()`'s
+	 * own docblock) — the customer either has no current record yet, or (before this task's
+	 * F1 server-side fix) a wired-but-unconfigured provider used to leak the block through
+	 * anyway. Either way, `''` is not a locality any {@see Point_Query} can usefully address,
+	 * so this function degrades to the SAME DOM read a plugin outside the layer gets, on
+	 * EVERY call, not just the first — never caching a confident "no locality" answer that a
+	 * later DOM edit (or a cascade clear — see `location-cascade.js`'s own `fireLocationApplied()`
+	 * calls with no record, review finding F2) could no longer correct.
+	 *
 	 * @param {Object} config the full mount config (`window.woodev_pickup_config_*`).
 	 * @returns {string}
 	 */
@@ -1259,7 +1270,9 @@
 			resolvedLocalityKey[ config.fieldId ] = current && 'string' === typeof current.key ? current.key : '';
 		}
 
-		return resolvedLocalityKey[ config.fieldId ];
+		var key = resolvedLocalityKey[ config.fieldId ];
+
+		return key ? key : resolveLocality( config );
 	}
 
 	/**

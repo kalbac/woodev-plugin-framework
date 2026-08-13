@@ -1672,4 +1672,74 @@ final class PickupControllerTest extends TestCase {
 		$this->assertNotNull( $captured );
 		$this->assertNull( $captured->get_record() );
 	}
+
+	// -------------------------------------------------------------------
+	// Review finding F7 (issue #159 PR #312): attach_location_context()'s own defensive
+	// branch — `! is_array( $context ) || ! ( $context['record'] ?? null ) instanceof
+	// Location_Record` — had no test. This is a PUBLIC, guest-facing route; a plugin's own
+	// `$location_context` callable misbehaving (a bug in the plugin's own code, not this
+	// framework's) must degrade the query to bare, never fatal on a bad shape.
+	// -------------------------------------------------------------------
+
+	public function test_a_non_array_location_context_leaves_the_query_bare(): void {
+		$captured = null;
+
+		$source = new Pickup_Controller_Test_Source(
+			Point_Source::STRATEGY_BULK,
+			static function ( Point_Query $query ) use ( &$captured ) {
+				$captured = $query;
+				return [];
+			},
+			static fn( string $id ) => null
+		);
+
+		$controller = new Pickup_Controller(
+			'test-plugin',
+			$source,
+			static fn() => 0,
+			static fn() => 'bacs',
+			static fn() => 'carrier_pickup',
+			// A misbehaving plugin callable answering a scalar, not the documented
+			// array{record, resolved_identity} shape.
+			static fn() => 'not-an-array'
+		);
+
+		$controller->get_points_data( [ 'locality' => 'Москва' ] );
+
+		$this->assertNotNull( $captured );
+		$this->assertNull( $captured->get_record() );
+		$this->assertNull( $captured->get_resolved_identity() );
+	}
+
+	public function test_a_location_context_with_a_non_record_leaves_the_query_bare(): void {
+		$captured = null;
+
+		$source = new Pickup_Controller_Test_Source(
+			Point_Source::STRATEGY_BULK,
+			static function ( Point_Query $query ) use ( &$captured ) {
+				$captured = $query;
+				return [];
+			},
+			static fn( string $id ) => null
+		);
+
+		$controller = new Pickup_Controller(
+			'test-plugin',
+			$source,
+			static fn() => 0,
+			static fn() => 'bacs',
+			static fn() => 'carrier_pickup',
+			// The right shape ('record' key present) but the wrong type — never a
+			// Location_Record. A mutant that drops the `instanceof` half of the guard
+			// would let this through to Point_Query::with_location(), which types its
+			// own parameter as Location_Record and would fatal.
+			static fn() => [ 'record' => 'dadata:fias-1', 'resolved_identity' => null ]
+		);
+
+		$controller->get_points_data( [ 'locality' => 'Москва' ] );
+
+		$this->assertNotNull( $captured );
+		$this->assertNull( $captured->get_record() );
+		$this->assertNull( $captured->get_resolved_identity() );
+	}
 }

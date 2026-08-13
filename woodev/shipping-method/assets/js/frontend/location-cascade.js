@@ -274,6 +274,40 @@
 	}
 
 	/**
+	 * Which section is CURRENTLY the customer's actual delivery address (review finding F3) —
+	 * `'shipping'` when the toggle is checked, `'billing'` otherwise, INCLUDING when no toggle
+	 * exists at all. Deliberately the OPPOSITE default from {@see shipToDifferentAddressChecked}
+	 * for an absent checkbox: that function answers "should a shipping-section WIDGET stay
+	 * attached", and permissively says yes so a gate-less shipping field keeps working: this
+	 * function answers "whose address key is the record", and a checkout with no toggle at all
+	 * has only ever had one address — billing — same convention `pickup-mount.js`'s own
+	 * `resolveAddressTarget()` already uses for exactly this decision (this module deliberately
+	 * mirrors it rather than reusing `shipToDifferentAddressChecked()`, whose "permissive"
+	 * default answers the wrong question here).
+	 *
+	 * @returns {string} `'shipping'` or `'billing'`.
+	 */
+	function activeAddressSection() {
+		var checkbox = document.querySelector( '[name="ship_to_different_address"]' );
+
+		return checkbox && checkbox.checked ? 'shipping' : 'billing';
+	}
+
+	/**
+	 * Whether `section` is the one currently determining the customer's delivery locality
+	 * (review finding F3) — see {@see activeAddressSection}. `'shipping'` matches only the
+	 * active shipping section; every other value (`'billing'`, the §8 `'order'` default, or
+	 * `undefined`) is normalized to `'billing'`, mirroring {@see countryFieldIdFor}'s own
+	 * fallback for the same set of section values.
+	 *
+	 * @param {string} [section]
+	 * @returns {boolean}
+	 */
+	function isActiveAddressSection( section ) {
+		return activeAddressSection() === ( 'shipping' === section ? 'shipping' : 'billing' );
+	}
+
+	/**
 	 * Whether `node` should currently have a typeahead widget attached: its own country must
 	 * be one the entry covers, AND — for a shipping-section node specifically — the customer
 	 * must have opted into "ship to a different address" at all (a shipping-section field
@@ -837,6 +871,19 @@
 	 * `update_checkout` fires for (never a superseded intermediate one), so a listener
 	 * never sees a STALE key overwrite a newer one either.
 	 *
+	 * ALSO FIRES `woodev_location_applied` WITH AN EMPTY KEY on `notPersisted` (review
+	 * finding F2, rig-verified: this branch used to fire nothing at all). The DOM field
+	 * already shows the customer's NEW choice — the widget writes it before `onSelect` ever
+	 * runs, same as every other `/select` outcome — but the server never persisted it, so
+	 * whatever key `pickup-mount.js`'s `resolveLocalityKey()` was caching is now unknown, not
+	 * merely unrefreshed: continuing to address the points query by the OLD key would silently
+	 * offer points for a locality the customer no longer sees reflected anywhere in the UI.
+	 * `fireLocationApplied( null )` — see that function's own docblock for why a missing
+	 * record already degrades to `key: ''` — is the same "the seam is refusing to answer"
+	 * sentinel {@see Pickup_Handler::location_config_block()} uses server-side, and F1's own
+	 * fix makes an empty key fall back to the DOM read, which is exactly the honest answer
+	 * here (whatever the customer typed, not a locality the server has no record of).
+	 *
 	 * @param {Object}  entry
 	 * @param {boolean} shouldTrigger Whether THIS response, if final, should fire the trigger
 	 *                                (a successful persist with `persisted !== false`).
@@ -870,6 +917,7 @@
 
 		if ( notPersisted ) {
 			showNotPersistedNotice( entry );
+			fireLocationApplied( null );
 		}
 	}
 
@@ -965,8 +1013,22 @@
 	/**
 	 * Builds the `onSelect(item)` callback handed to the Task 10 widget for one chain node.
 	 *
+	 * ONLY POSTS `/select` FOR THE CURRENTLY ACTIVE SECTION (review finding F3): the Location
+	 * Provider layer stores exactly ONE customer record server-side —
+	 * {@see \Woodev\Framework\Shipping\Location\Location_Service} has no notion of "billing's
+	 * locality" vs "shipping's locality", only "the customer's current locality" — so a pick
+	 * made in the section that is NOT presently the delivery address (e.g. a billing
+	 * correction made while "ship to a different address" is checked, so shipping is the
+	 * live delivery target) must never overwrite it: doing so is exactly what let a bulk
+	 * points query and the map's own live DOM-read centering ({@see resolveLocality} in
+	 * `pickup-mount.js`) end up describing two different cities. The LOCAL state (the field's
+	 * own record, backwards fill) is still updated regardless of section — an inactive
+	 * section's address is still worth remembering client-side for if it becomes active
+	 * later — only the SERVER round trip (and, with it, the `woodev_location_applied` event
+	 * and `update_checkout` trigger) is gated on {@see isActiveAddressSection}.
+	 *
 	 * @param {Object} entry
-	 * @param {{level: string, fieldId: string}} node
+	 * @param {{level: string, fieldId: string, section?: string}} node
 	 * @returns {function(Object): void}
 	 */
 	function onSelectFor( entry, node ) {
@@ -984,7 +1046,10 @@
 			entry.lastSelectedFieldId = node.fieldId;
 
 			backwardsFill( entry, node.level, record );
-			enqueueSelect( entry, record );
+
+			if ( isActiveAddressSection( node.section ) ) {
+				enqueueSelect( entry, record );
+			}
 		};
 	}
 
@@ -1383,15 +1448,32 @@
 	 * of the OLD country. Observed by the operator on the rig (s70): switching RU → UZ left
 	 * every field filled with the Moscow values.
 	 *
+	 * ALSO INVALIDATES THE LOCATION PROVIDER KEY (review finding F2, rig-verified) when the
+	 * cleared section is the one currently determining the customer's delivery address (see
+	 * {@see isActiveAddressSection}): a real country transition abandons whatever locality the
+	 * layer's shared customer record still names, but this function POSTS NOTHING to `/select`
+	 * (see the file docblock's own note on that), so nothing else would ever tell
+	 * `pickup-mount.js`'s `resolveLocalityKey()` the cached key no longer matches what the DOM
+	 * shows. Firing `woodev_location_applied` with no record (`key: ''`) is that signal — F1's
+	 * own fix makes an empty key fall back to the DOM read, which after this clear is exactly
+	 * the honest, empty answer. A clear in the INACTIVE section is a no-op for this purpose:
+	 * that section was never feeding the shared record to begin with (see
+	 * {@see isActiveAddressSection}'s own docblock).
+	 *
 	 * @param {Object} entry
 	 * @param {string} countryFieldId
 	 * @returns {void}
 	 */
 	function clearCountryScope( entry, countryFieldId ) {
+		var section = countryFieldId === COUNTRY_FIELD_ID.shipping ? 'shipping' : 'billing';
+		var cleared = false;
+
 		entry.allNodes.forEach( function( node ) {
 			if ( countryFieldIdFor( node ) !== countryFieldId ) {
 				return;
 			}
+
+			cleared = true;
 
 			if ( node.level ) {
 				entry.records[ node.level ] = null;
@@ -1406,6 +1488,10 @@
 				el.value = '';
 			}
 		} );
+
+		if ( cleared && isActiveAddressSection( section ) ) {
+			fireLocationApplied( null );
+		}
 	}
 
 	/**
@@ -1422,6 +1508,28 @@
 	 * (gotcha `a-programmatic-parent-change-must-not-run-a-destructive-cascade`); without
 	 * the gate this would wipe a restored address on every single page load, which is the
 	 * exact failure #272 already cost this project once.
+	 *
+	 * A CHAIN-LEVEL TEXT EDIT WITHOUT A PICK ALSO INVALIDATES THE LOCATION PROVIDER KEY
+	 * (review finding F2, rig-verified) when it happens in the active address section (see
+	 * {@see isActiveAddressSection}): the customer typed a new value into a level field and
+	 * moved on WITHOUT choosing a suggestion (`onSelectFor()`'s pick path never ran), so the
+	 * field's own confirmed record just went `null` a few lines above — the server's last
+	 * persisted record no longer matches what the DOM shows, and nothing else here posts
+	 * `/select` to correct it. Same `woodev_location_applied` / `fireLocationApplied( null )`
+	 * signal {@see clearCountryScope} uses, for the same reason — see that function's own
+	 * docblock. Never fired for a postcode-only edit (`info.level` is `null` there; postcode
+	 * is not a locality).
+	 *
+	 * DEFERRED ONE MICROTASK, AND RE-CHECKED, so a GENUINE pick through the widget never
+	 * trips this: {@see selectViaFake} in this file's own tests (mirroring
+	 * `location-typeahead.js`'s real `selectItem()`) writes the field value and dispatches
+	 * this SAME native `change` BEFORE calling `onSelect()` — so THIS handler always runs
+	 * first, sees the field's value already changed, and would otherwise read every pick as
+	 * a "typed but not picked" edit. `onSelectFor()`'s own callback runs synchronously right
+	 * after this handler returns and sets `entry.records[level]` back to the real record —
+	 * by the time a queued microtask runs, that has already happened for a genuine pick
+	 * (record non-null again) but never for an actually-abandoned edit (record still
+	 * `null`), which is exactly the distinction this needs and the DOM alone cannot make.
 	 *
 	 * @param {Event|Object} event Native `Event` or a jQuery Event — both expose `.target`.
 	 * @returns {void}
@@ -1474,6 +1582,15 @@
 
 			if ( info.level ) {
 				entry.records[ info.level ] = null; // the field's own record no longer matches its text.
+
+				var level = info.level;
+				var section = entry.allNodes[ info.index ].section;
+
+				Promise.resolve().then( function() {
+					if ( null === entry.records[ level ] && isActiveAddressSection( section ) ) {
+						fireLocationApplied( null );
+					}
+				} );
 			}
 
 			clearDescendants( entry, info.index );

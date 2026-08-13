@@ -2341,19 +2341,34 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 * being the same one the cascade's `/select` route writes to).
 		 *
 		 * `null` — the whole block is OMITTED from the JS config — when {@see self::$plugin}
-		 * was not wired: the browser's `resolveLocalityKey()` then falls back to its
-		 * pre-existing DOM read, exactly as before this task, for a plugin that has not opted
-		 * into the layer. When `$plugin` IS wired, the block is ALWAYS present, `key: ''`
-		 * included — an empty key is the layer genuinely having no current record yet, a
-		 * real answer the browser must not paper over with a DOM guess (gotcha
-		 * `an-empty-domain-key-is-not-a-key`).
+		 * was not wired, OR when it was wired but the layer is not USABLE right now
+		 * ({@see \Woodev\Framework\Shipping\Location\Location_Service::is_active()} false: no
+		 * active provider, or one that is not configured). The browser's own
+		 * `resolveLocalityKey()` then falls back to its pre-existing DOM read, exactly as
+		 * before this task — the SAME gate {@see \Woodev\Framework\Shipping\Checkout\Checkout_Config::build()}
+		 * already applies to its own sibling `location` block (review finding F1: this method
+		 * used to gate on `$plugin` alone, which meant a wired-but-never-configured provider
+		 * still emitted `key: ''` and permanently disabled the DOM fallback — `pickup-mount.js`'s
+		 * `resolveLocalityKey()` then sent that empty key to the server as the addressing
+		 * locality itself, breaking the picker for every fresh checkout under the framework's
+		 * default `off` locality policy). When `$plugin` IS wired AND the layer
+		 * IS active, the block is ALWAYS present, `key: ''` included — an empty key is the
+		 * layer genuinely having no current record yet, a real answer the browser must not
+		 * paper over with a DOM guess (gotcha `an-empty-domain-key-is-not-a-key`) — but see
+		 * `pickup-mount.js`'s own `resolveLocalityKey()` docblock (review finding F1, second
+		 * half): an empty key is now never used to ADDRESS the points query either, it too
+		 * falls back to the DOM read, same as an absent block.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Also gates on {@see \Woodev\Framework\Shipping\Location\Location_Service::is_active()},
+		 *              not just on {@see self::$plugin} being non-null (review finding F1,
+		 *              rig-verified: a registered-but-unconfigured provider left the pickup
+		 *              picker permanently disabled in every populated city).
 		 *
 		 * @return array{current: array{key: string}}|null
 		 */
 		protected function location_config_block(): ?array {
-			if ( null === $this->plugin ) {
+			if ( null === $this->plugin || ! $this->plugin->get_location_service()->is_active() ) {
 				return null;
 			}
 

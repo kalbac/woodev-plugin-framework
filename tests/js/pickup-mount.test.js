@@ -1415,10 +1415,16 @@ describe( 'resolveLocalityKey() — Task 15 (issue #159)', () => {
 		expect( queries[ 0 ].locality ).toBe( 'dadata:fias-1' );
 	} );
 
-	test( 'an empty config.location.current.key is sent as-is, never falling back to the DOM', async () => {
-		// The empty-key discipline: '' means the layer genuinely has no current record yet
-		// (Pickup_Handler::location_config_block()'s own docblock) — a real answer, not a
-		// missing one, so it must not be papered over with a DOM guess.
+	test( 'an empty config.location.current.key falls back to the DOM read (review finding F1)', async () => {
+		// Review finding F1, second half, rig-verified: an empty key is the layer genuinely
+		// having no current record yet (Pickup_Handler::location_config_block()'s own
+		// docblock) — but it is NOT usable as a server addressing key: sending '' as
+		// `locality` used to break the picker on every fresh checkout (Point_Query's own
+		// `from_request()` refuses an empty locality with no bbox either — the picker showed
+		// "no points in this locality" for a city that DOES have points). This function must
+		// degrade to the SAME DOM read a plugin outside the Location Provider layer gets —
+		// see the "WITHOUT config.location" test above — rather than confidently addressing
+		// the query by an answer that means "no answer".
 		//
 		// A DEDICATED field id (not the shared FIELD_ID every other test in this file
 		// mounts): resolveLocalityKey() seeds its module-scope map on FIRST READ per field
@@ -1450,7 +1456,79 @@ describe( 'resolveLocalityKey() — Task 15 (issue #159)', () => {
 		clickTrigger();
 		await flushAsync();
 
+		expect( queries[ 0 ].locality ).toBe( 'Москва' );
+	} );
+
+	test( 'an empty key with no DOM value either degrades to an empty locality, never fatally', async () => {
+		// Same fallback as above, but the DOM read has nothing to offer either (e.g. a
+		// pickup-only field with no §8 takeover at all) — resolveLocalityKey() must still
+		// return a plain string, not throw or return undefined.
+		const fieldId = 'pickup_locality_empty_key_no_dom_test';
+
+		document.body.insertAdjacentHTML(
+			'beforeend',
+			'<div data-woodev-pickup-slot="' + fieldId + '"></div>' +
+			'<input id="' + fieldId + '" type="hidden" value="" />'
+		);
+
+		const queries = [];
+		window.WoodevPickupDataSource = fakeDataSourceFactory( ( query ) => {
+			queries.push( query );
+			return Promise.resolve( [] );
+		} );
+
+		setConfig( makeConfig( {
+			fieldId,
+			strategy: 'bulk',
+			location: { current: { key: '' } },
+		} ) );
+		mountAll();
+
+		clickTrigger();
+		await flushAsync();
+
 		expect( queries[ 0 ].locality ).toBe( '' );
+	} );
+
+	test( 'a key that later goes empty via woodev_location_applied also falls back to the DOM, not the stale key', async () => {
+		// Review finding F2 combined with F1: once location-cascade.js invalidates the key
+		// (an empty-key event — see location-cascade.test.js), resolveLocalityKey() must
+		// degrade EVERY subsequent call, not just the first one after the seed — this is
+		// what makes F2's invalidation actually observable here rather than only cached once.
+		const fieldId = 'pickup_locality_invalidated_key_test';
+
+		document.body.insertAdjacentHTML(
+			'beforeend',
+			'<div data-woodev-pickup-slot="' + fieldId + '"></div>' +
+			'<input id="' + fieldId + '" type="hidden" value="" />'
+		);
+
+		const queries = [];
+		window.WoodevPickupDataSource = fakeDataSourceFactory( ( query ) => {
+			queries.push( query );
+			return Promise.resolve( [] );
+		} );
+
+		setConfig( makeConfig( {
+			fieldId,
+			strategy: 'bulk',
+			location: { current: { key: 'dadata:fias-1' } },
+		} ) );
+		mountAll();
+
+		clickTrigger();
+		await flushAsync();
+		expect( queries[ 0 ].locality ).toBe( 'dadata:fias-1' );
+
+		// The customer abandons that locality (a country switch, a cleared field) — the
+		// cascade fires the event with no record, which fireLocationApplied() degrades to
+		// `key: ''` (see that function's own docblock).
+		setCitySelectValue( 'billing_city', 'Казань' );
+		fireLocationApplied( '' );
+
+		await getSession( fieldId ).refresh();
+
+		expect( queries[ 1 ].locality ).toBe( 'Казань' );
 	} );
 
 	test( 'woodev_location_applied refreshes the key live, without any DOM change', async () => {

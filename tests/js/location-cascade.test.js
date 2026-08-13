@@ -578,7 +578,14 @@ describe( 'woodev_location_applied (Task 15; issue #159)', () => {
 		consoleSpy.mockRestore();
 	} );
 
-	it( 'does NOT fire when /select resolves with persisted: false', async () => {
+	it( 'fires WITH AN EMPTY KEY (never the stale one) when /select resolves with persisted: false (review finding F2)', async () => {
+		// Review finding F2, rig-verified: this branch used to fire NOTHING at all, leaving
+		// pickup-mount.js's own resolveLocalityKey() cache pointing at whatever locality was
+		// current BEFORE this failed attempt — even though the DOM already shows the
+		// customer's new (unsaved) choice. An empty-key event is the honest "unknown" signal
+		// (the SAME sentinel Pickup_Handler::location_config_block() uses server-side); F1's
+		// own fix makes an empty key fall back to the DOM read on the picker side, which is
+		// the right degradation here.
 		boot( { settlement: true } );
 
 		const seen = captureLocationApplied();
@@ -592,7 +599,7 @@ describe( 'woodev_location_applied (Task 15; issue #159)', () => {
 		fetchCalls[ fetchCalls.length - 1 ].resolve( { current: { key: item.record.key, level: 'settlement' }, persisted: false } );
 		await flushMicrotasks();
 
-		expect( seen ).toEqual( [] );
+		expect( seen ).toEqual( [ { key: '', level: '' } ] );
 	} );
 
 	it( 'fires only ONCE, for the FINAL response, when a superseded selection is queued behind it', async () => {
@@ -1800,5 +1807,220 @@ describe( 'empty-result message', () => {
 		boot( { region: true, settlement: true, address: true, i18n: null } );
 
 		expect( callFor( 'billing_city' ).emptyText ).toBe( '' );
+	} );
+} );
+
+// -----------------------------------------------------------------------
+// Review finding F2 (issue #159 PR #312, rig-verified): a client-side clear/edit that
+// abandons the current locality must invalidate the Location Provider key
+// (`woodev_location_applied` with an empty key/level), not leave it stale for
+// pickup-mount.js's own resolveLocalityKey() to keep addressing points by.
+// -----------------------------------------------------------------------
+
+describe( 'Location Provider key invalidation on a local-only clear (review finding F2)', () => {
+	function captureLocationApplied() {
+		const seen = [];
+		document.body.addEventListener( 'woodev_location_applied', ( event ) => seen.push( event.detail ) );
+		return seen;
+	}
+
+	it( 'a real country transition fires an empty-key event (clearCountryScope posts nothing to /select)', () => {
+		boot( { region: true, settlement: true, address: true, countries: [ 'RU', 'US' ] } );
+
+		document.getElementById( 'billing_city' ).value = 'Москва';
+
+		const seen = captureLocationApplied();
+
+		document.getElementById( 'billing_country' ).value = 'US';
+		document.getElementById( 'billing_country' ).dispatchEvent( new Event( 'change', { bubbles: true } ) );
+
+		expect( seen ).toEqual( [ { key: '', level: '' } ] );
+		// Sanity: this really is a pure client-side clear, never a network call.
+		expect( fetchCalls.length ).toBe( 0 );
+	} );
+
+	it( 'a programmatic country change carrying the SAME value (no real transition) fires nothing', () => {
+		boot( { region: true, settlement: true, address: true, countries: [ 'RU' ] } );
+
+		const seen = captureLocationApplied();
+
+		document.getElementById( 'billing_country' ).dispatchEvent( new Event( 'change', { bubbles: true } ) );
+
+		expect( seen ).toEqual( [] );
+	} );
+
+	it( 'a chain-level field edited WITHOUT picking a suggestion fires an empty-key event', () => {
+		// The "typed but not picked" path: handleFieldChanged()'s general branch, never
+		// onSelectFor()'s pick path.
+		boot( { settlement: true, countries: [ 'RU' ] } );
+
+		const seen = captureLocationApplied();
+		const field = document.getElementById( 'billing_city' );
+
+		field.value = 'Моск';
+		field.dispatchEvent( new Event( 'input', { bubbles: true } ) );
+		field.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+
+		expect( seen ).toEqual( [ { key: '', level: '' } ] );
+	} );
+
+	it( 'a real pick through the widget does NOT fire the empty-key event before /select resolves', () => {
+		// onSelectFor()'s own pick path writes call.el.value itself before invoking onSelect —
+		// this must not be misread as a "typed but not picked" edit by handleFieldChanged()'s
+		// own change listener (both are bound to the SAME native `change` event).
+		boot( { settlement: true, countries: [ 'RU' ] } );
+
+		const seen = captureLocationApplied();
+		const settlementCall = callFor( 'billing_city' );
+
+		selectViaFake( settlementCall, {
+			key: 'dadata:city1', label: 'г Москва', level: 'settlement',
+			record: { key: 'dadata:city1', provider_id: 'dadata', level: 'settlement', country: 'RU', label: 'г Москва' },
+		} );
+
+		// No empty-key invalidation fired yet — only the real, persisted key, once /select
+		// resolves (see the "woodev_location_applied" describe block above for that half).
+		expect( seen ).toEqual( [] );
+	} );
+
+	it( 'editing the postcode-only field never fires the invalidation event (postcode is not a locality)', () => {
+		boot( { settlement: true, countries: [ 'RU' ] } );
+
+		const seen = captureLocationApplied();
+		const field = document.getElementById( 'billing_postcode' );
+
+		field.value = '101000';
+		field.dispatchEvent( new Event( 'input', { bubbles: true } ) );
+		field.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+
+		expect( seen ).toEqual( [] );
+	} );
+} );
+
+// -----------------------------------------------------------------------
+// Review finding F3 (issue #159 PR #312): the Location Provider layer stores exactly ONE
+// customer record — a pick made in the section that is NOT currently the customer's
+// delivery address must never overwrite it, or the bulk points query (addressed by that
+// record) and the map's own live DOM-read centering (pickup-mount.js's resolveLocality())
+// end up describing two different cities.
+// -----------------------------------------------------------------------
+
+describe( 'section-aware addressing (review finding F3)', () => {
+	/**
+	 * Boots TWO separate cascade entries sharing one DOM: a billing-section settlement
+	 * field and a shipping-section settlement field — `buildConfig()`/`installMarkup()`
+	 * cannot express this directly (both apply ONE section to the whole config/markup), so
+	 * this test builds the markup and the two `window.woodev_checkout_field_config_*`
+	 * globals by hand, matching `Checkout_Config::build()`'s own shape.
+	 *
+	 * @param {boolean} shipToDifferentAddress Initial checkbox state.
+	 * @returns {void}
+	 */
+	function bootBillingAndShippingEntries( shipToDifferentAddress ) {
+		document.body.innerHTML = `
+			<form class="checkout woocommerce-checkout">
+				<select id="billing_country" name="billing_country">
+					<option value="RU">Россия</option>
+				</select>
+				<select id="shipping_country" name="shipping_country">
+					<option value="RU">Россия</option>
+				</select>
+				<input type="checkbox" id="ship-to-different-address-checkbox"
+					name="ship_to_different_address" ${ shipToDifferentAddress ? 'checked' : '' } />
+				<input type="text" id="billing_city" name="billing_city" value="" />
+				<input type="text" id="shipping_city" name="shipping_city" value="" />
+			</form>
+		`;
+		document.getElementById( 'billing_country' ).value = 'RU';
+		document.getElementById( 'shipping_country' ).value = 'RU';
+
+		global.jQuery = require( 'jquery' );
+		global.$ = global.jQuery;
+		window.jQuery = global.jQuery;
+
+		window.WoodevCheckoutFieldStore = require(
+			'../../woodev/shipping-method/assets/js/frontend/checkout-field-store.js'
+		);
+
+		fakeTypeahead();
+		mockFetch();
+
+		const sharedLocation = {
+			endpoints: { suggest: SUGGEST_URL, select: SELECT_URL, list: LIST_URL },
+			nonce: 'test-nonce',
+			countries: [ 'RU' ],
+			mode: 'typeahead',
+			levels: { RU: { region: true, settlement: true, address: true } },
+			current: null,
+			implicit: false,
+			i18n: {},
+		};
+
+		window[ CONFIG_GLOBAL + '_billing' ] = {
+			fields: { billing_city: locationField( 'settlement', 'billing' ) },
+			endpoint: 'https://example.test/wp-json/woodev/v1/carrier/field-source',
+			nonce: 'test-nonce',
+			takeover: {},
+			location: sharedLocation,
+		};
+		window[ CONFIG_GLOBAL + '_shipping' ] = {
+			fields: { shipping_city: locationField( 'settlement', 'shipping' ) },
+			endpoint: 'https://example.test/wp-json/woodev/v1/carrier/field-source',
+			nonce: 'test-nonce',
+			takeover: {},
+			location: sharedLocation,
+		};
+
+		require( '../../woodev/shipping-method/assets/js/frontend/location-cascade.js' );
+	}
+
+	afterEach( () => {
+		delete window[ CONFIG_GLOBAL + '_billing' ];
+		delete window[ CONFIG_GLOBAL + '_shipping' ];
+	} );
+
+	it( 'a pick in the ACTIVE section (shipping, checkbox checked) POSTs /select', () => {
+		bootBillingAndShippingEntries( true );
+
+		selectViaFake( callFor( 'shipping_city' ), {
+			key: 'dadata:kazan', label: 'г Казань', level: 'settlement',
+			record: { key: 'dadata:kazan', provider_id: 'dadata', level: 'settlement', country: 'RU', label: 'г Казань' },
+		} );
+
+		expect( fetchCalls.filter( ( c ) => c.url === SELECT_URL ) ).toHaveLength( 1 );
+	} );
+
+	it( 'a pick in the INACTIVE section (billing, while shipping is the checked ship-to target) does NOT POST /select', () => {
+		bootBillingAndShippingEntries( true );
+
+		selectViaFake( callFor( 'billing_city' ), {
+			key: 'dadata:msk', label: 'г Москва', level: 'settlement',
+			record: { key: 'dadata:msk', provider_id: 'dadata', level: 'settlement', country: 'RU', label: 'г Москва' },
+		} );
+
+		expect( fetchCalls.filter( ( c ) => c.url === SELECT_URL ) ).toHaveLength( 0 );
+		// The LOCAL field value is still written — only the server round trip is gated. Written
+		// by selectViaFake() itself (mirroring the real typeahead widget), not by this module.
+		expect( document.getElementById( 'billing_city' ).value ).toBe( 'г Москва' );
+	} );
+
+	it( 'when "ship to a different address" is UNCHECKED, billing is active and shipping is not', () => {
+		bootBillingAndShippingEntries( false );
+
+		selectViaFake( callFor( 'billing_city' ), {
+			key: 'dadata:msk', label: 'г Москва', level: 'settlement',
+			record: { key: 'dadata:msk', provider_id: 'dadata', level: 'settlement', country: 'RU', label: 'г Москва' },
+		} );
+
+		expect( fetchCalls.filter( ( c ) => c.url === SELECT_URL ) ).toHaveLength( 1 );
+	} );
+
+	it( 'a shipping pick is never POSTed while "ship to a different address" is unchecked (the widget is not even attached)', () => {
+		bootBillingAndShippingEntries( false );
+
+		// isNodeActive() already detaches a shipping-section widget when the checkbox is
+		// unchecked (pre-existing behaviour) — sanity-checked here so this describe block's
+		// OWN two-entry harness is proven equivalent to the rest of the file's boot() path.
+		expect( callFor( 'shipping_city' ) ).toBeUndefined();
 	} );
 } );

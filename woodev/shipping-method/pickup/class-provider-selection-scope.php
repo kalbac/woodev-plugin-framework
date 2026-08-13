@@ -54,6 +54,30 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Provider_Selection_
 	 * customer's CURRENT record on every call, never caching a key across a provider
 	 * switch.
 	 *
+	 * ============================================================================
+	 * IMPLEMENTOR OBLIGATION — {@see self::locality_for_point()} MUST SPEAK THE SAME
+	 * VOCABULARY AS {@see self::current_locality()} (review finding F4). This is the
+	 * ONE thing a subclass MUST get right and the framework CANNOT check for it:
+	 * `current_locality()` is `final` and always answers a Location Provider layer key
+	 * (`provider_id:native_id`, e.g. `dadata:0c5b2444-...`) — but `locality_for_point()`
+	 * stays abstract, plugin-owned domain knowledge, exactly like it is on
+	 * {@see Selection_Scope} directly. If a subclass derives `locality_for_point()`
+	 * from the carrier's OWN city vocabulary (a `city_id`, a `geo_id` — what
+	 * {@see Selection_Scope}'s own docblock explicitly invites for a plugin that does
+	 * NOT extend this class) instead of from this SAME layer, `remember()` and
+	 * `recall()` key off two vocabularies that never match: a point is ALWAYS written
+	 * under the carrier's key and ALWAYS read back under the Location Provider key
+	 * (or vice versa), so nothing is EVER restored — silently, with no error, no
+	 * warning, just a map that always looks like the customer never picked anything
+	 * before. The safe pattern is to derive `locality_for_point()` from THIS SAME
+	 * service too — e.g. `return $this->current_locality();` when the point being
+	 * confirmed necessarily belongs to the customer's current locality (true for any
+	 * `Point_Source` addressed by the SAME record via {@see Point_Query::with_location()}),
+	 * or, when the point carries its own resolved identity, from
+	 * {@see Location_Record::key()} built the same way {@see self::current_locality()}
+	 * builds it. Never mix the two vocabularies within one subclass.
+	 * ============================================================================
+	 *
 	 * @since 2.0.2
 	 */
 	abstract class Provider_Selection_Scope implements Selection_Scope {

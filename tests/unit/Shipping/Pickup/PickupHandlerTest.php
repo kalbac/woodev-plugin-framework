@@ -158,6 +158,30 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 	}
 
 	/**
+	 * A {@see Location_Service} whose {@see Location_Service::is_active()} answers a FIXED
+	 * value the test controls directly (review finding F1, rig-verified) — bypassing the
+	 * registry/active-provider/`is_configured()` machinery `LocationServiceTest.php`
+	 * exercises for real. This file only needs `is_active()`'s two observable OUTCOMES (the
+	 * `location` block present vs omitted), never how the layer arrives at either one; a
+	 * PLUGIN WIRED BUT NEVER CONFIGURED (`is_active() === false`) is exactly the
+	 * review-finding scenario — {@see Pickup_Handler::location_config_block()} used to gate
+	 * on `$plugin` alone and leaked the block through anyway.
+	 */
+	final class Pickup_Handler_Location_Service_Active_Probe extends Location_Service {
+
+		private bool $active;
+
+		public function __construct( Location_Provider_Registry $registry, Customer_Location_Store $store, bool $active ) {
+			parent::__construct( $registry, $store );
+			$this->active = $active;
+		}
+
+		public function is_active(): bool {
+			return $this->active;
+		}
+	}
+
+	/**
 	 * Bare fixture Shipping_Plugin (Task 15; issue #159) — built via
 	 * `newInstanceWithoutConstructor()`, same discipline as `LocationServiceTest`'s own
 	 * `Location_Service_Fixture_Plugin`. Overrides `get_location_service()` to return an
@@ -1065,12 +1089,21 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 		 * return a {@see Location_Service} backed by a session probe seeded with `$record`
 		 * (or nothing, when `$record` is `null`).
 		 *
-		 * @param Location_Record|null $record  The customer's current record, or `null`.
+		 * @param Location_Record|null  $record  The customer's current record, or `null`.
 		 * @param Location_Adapter|null $adapter The adapter `resolve_for()` calls; `null`
 		 *                                       (the default) mirrors a plugin that has not
 		 *                                       wired one.
+		 * @param bool                  $active  What {@see Location_Service::is_active()}
+		 *                                       answers (review finding F1) — defaults to
+		 *                                       `true` (a configured, usable layer), the
+		 *                                       assumption every EXISTING caller of this
+		 *                                       helper already made implicitly before
+		 *                                       `is_active()` gated anything here. Pass
+		 *                                       `false` to build the "wired but never
+		 *                                       configured" plugin the finding itself
+		 *                                       describes.
 		 */
-		private function location_plugin( ?Location_Record $record, ?Location_Adapter $adapter = null ): Pickup_Handler_Location_Fixture_Plugin {
+		private function location_plugin( ?Location_Record $record, ?Location_Adapter $adapter = null, bool $active = true ): Pickup_Handler_Location_Fixture_Plugin {
 			$instance = ( new \ReflectionClass( Pickup_Handler_Location_Fixture_Plugin::class ) )->newInstanceWithoutConstructor();
 
 			$store = new Pickup_Handler_Customer_Location_Store_Probe( new Pickup_Handler_Location_Fake_Session() );
@@ -1080,7 +1113,11 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			}
 
 			$instance->fake_adapter         = $adapter;
-			$instance->fake_location_service = new Location_Service( Location_Provider_Registry::instance(), $store );
+			$instance->fake_location_service = new Pickup_Handler_Location_Service_Active_Probe(
+				Location_Provider_Registry::instance(),
+				$store,
+				$active
+			);
 
 			return $instance;
 		}
@@ -1217,18 +1254,20 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			$this->assertArrayNotHasKey( 'location', $config );
 		}
 
-		public function test_config_carries_an_empty_key_when_a_plugin_is_wired_but_has_no_record_yet(): void {
+		public function test_config_carries_an_empty_key_when_a_plugin_is_wired_active_but_has_no_record_yet(): void {
 			Functions\when( 'apply_filters' )->returnArg( 2 );
 			Functions\when( 'rest_url' )->justReturn( 'https://example.test/wp-json/woodev/v1' );
 			Functions\when( 'wp_create_nonce' )->justReturn( 'NONCE' );
 			Functions\when( 'wc_ship_to_billing_address_only' )->justReturn( false );
 
-			$config = $this->make_handler( [ 'plugin' => $this->location_plugin( null ) ] )->get_js_config();
+			$config = $this->make_handler( [ 'plugin' => $this->location_plugin( null, null, true ) ] )->get_js_config();
 
 			// PRESENT with an empty key, never OMITTED — an empty answer is the layer
 			// genuinely refusing to name a locality yet (gotcha
 			// `an-empty-domain-key-is-not-a-key`), which the browser must not paper over
-			// with a DOM guess once it knows to look here at all.
+			// with a DOM guess once it knows to look here at all. This is the ACTIVE-layer
+			// case — see the two `..._is_not_active` tests just below for the DIFFERENT
+			// (review finding F1) case where the block must be OMITTED instead.
 			$this->assertArrayHasKey( 'location', $config );
 			$this->assertSame( '', $config['location']['current']['key'] );
 		}
@@ -1239,10 +1278,52 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			Functions\when( 'wp_create_nonce' )->justReturn( 'NONCE' );
 			Functions\when( 'wc_ship_to_billing_address_only' )->justReturn( false );
 
-			$plugin = $this->location_plugin( $this->location_record( 'dadata:fias-1' ) );
+			$plugin = $this->location_plugin( $this->location_record( 'dadata:fias-1' ), null, true );
 			$config = $this->make_handler( [ 'plugin' => $plugin ] )->get_js_config();
 
 			$this->assertSame( 'dadata:fias-1', $config['location']['current']['key'] );
+		}
+
+		/**
+		 * Review finding F1, rig-verified: a plugin wired with `$plugin` but whose
+		 * {@see Location_Service::is_active()} answers `false` (a registered provider that
+		 * is not, or not yet, configured) used to still emit `location.current.key: ''` —
+		 * gating only on `$plugin` being non-null. That empty key then permanently disabled
+		 * `pickup-mount.js`'s own DOM fallback and was sent to the server as the addressing
+		 * locality itself, breaking the picker on every fresh checkout. The block must now
+		 * be OMITTED entirely in this case, same as when no plugin was wired at all — see
+		 * `Checkout_Config::build()`'s own sibling `location` block, which this method now
+		 * gates identically.
+		 */
+		public function test_config_carries_no_location_block_when_the_plugin_is_wired_but_the_layer_is_not_active(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			Functions\when( 'rest_url' )->justReturn( 'https://example.test/wp-json/woodev/v1' );
+			Functions\when( 'wp_create_nonce' )->justReturn( 'NONCE' );
+			Functions\when( 'wc_ship_to_billing_address_only' )->justReturn( false );
+
+			$plugin = $this->location_plugin( null, null, false );
+			$config = $this->make_handler( [ 'plugin' => $plugin ] )->get_js_config();
+
+			$this->assertArrayNotHasKey( 'location', $config );
+		}
+
+		/**
+		 * Same review finding F1, with an existing customer record still on file (e.g. the
+		 * provider was configured when the record was written, then unconfigured later) —
+		 * the block must be OMITTED regardless of whether a record happens to exist, because
+		 * `is_active()` false means no `/select` round trip can ever complete right now
+		 * either way; a present-but-stale key would be just as misleading as an empty one.
+		 */
+		public function test_config_carries_no_location_block_when_the_layer_is_not_active_even_with_an_existing_record(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			Functions\when( 'rest_url' )->justReturn( 'https://example.test/wp-json/woodev/v1' );
+			Functions\when( 'wp_create_nonce' )->justReturn( 'NONCE' );
+			Functions\when( 'wc_ship_to_billing_address_only' )->justReturn( false );
+
+			$plugin = $this->location_plugin( $this->location_record( 'dadata:fias-1' ), null, false );
+			$config = $this->make_handler( [ 'plugin' => $plugin ] )->get_js_config();
+
+			$this->assertArrayNotHasKey( 'location', $config );
 		}
 
 		// -------------------------------------------------------------------------
