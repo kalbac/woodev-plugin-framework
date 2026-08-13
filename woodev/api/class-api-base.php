@@ -315,9 +315,16 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 
 			$secret_names = array_map( 'strtolower', $this->get_secret_request_header_names() );
 
+			/*
+			 * Membership is decided by header NAME alone, never by the value being
+			 * truthy: `empty()` is true for the string `'0'`, so a credential whose
+			 * value happens to be `0` would have reached the logger in clear text.
+			 * Masking a genuinely empty value costs nothing — the mask is as long as
+			 * the value, so an empty header still logs as empty.
+			 */
 			foreach ( $headers as $name => $value ) {
-				if ( ! empty( $value ) && in_array( strtolower( (string) $name ), $secret_names, true ) ) {
-					$headers[ $name ] = str_repeat( '*', strlen( $value ) );
+				if ( in_array( strtolower( (string) $name ), $secret_names, true ) ) {
+					$headers[ $name ] = str_repeat( '*', strlen( (string) $value ) );
 				}
 			}
 
