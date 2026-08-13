@@ -599,22 +599,40 @@
 	// ---------------------------------------------------------------------
 
 	/**
-	 * Гарантирует наличие стабильного якоря `data-woodev-pickup-slot` рядом с
-	 * методами доставки и показывает/прячет его по требуемости поля.
+	 * Резолвит DOM-якорь для одного места размещения ПВЗ-триггера (#274 п.3).
 	 *
-	 * §8 не рендерит сюда карту/кнопку — SP-5 монтируется в этот якорь.
-	 * Паттерн размещения повторяет `placeControl` из checkout.js.
+	 * `'review'` — после списка методов доставки. Это ЕДИНСТВЕННОЕ место, что было в
+	 * фреймворке ДО #274, и замер разметки классического чекаута показал: оно уже
+	 * совпадает с тем, где WooCommerce рендерит собственный хук
+	 * `woocommerce_review_order_after_shipping` (список `#shipping_method` лежит
+	 * ВНУТРИ `tr.shipping td`, а этот якорь вставляется СРАЗУ ПОСЛЕ списка — то есть
+	 * внутри той же ячейки, ниже списка).
 	 *
-	 * @param {Object} entry   Запись { store, config }.
-	 * @param {string} fieldId Id pickup-поля (is_pickup_slot).
-	 * @returns {void}
+	 * `'rate'` — внутри `<li>` ВЫБРАННОГО тарифа, под его подписью — аналог хука
+	 * `woocommerce_after_shipping_rate`, которого фреймворку не хватало. Ищет `<li>`
+	 * отмеченного радио `input[name^="shipping_method"]`; если методов доставки на
+	 * странице всего один, WooCommerce иногда рендерит его единственным радио без
+	 * явного `checked` — тот же fallback, что уже применяет `selectedShippingMethod()`
+	 * этого файла.
+	 *
+	 * Возвращает пустой jQuery-набор, а не бросает исключение, когда якорь ещё не в
+	 * DOM — `placeSlot()` уже трактует пустой набор как «место размещения
+	 * отсутствует, пропускаем без ошибки» для 'review'; то же самое правило теперь
+	 * действует и для 'rate'.
+	 *
+	 * @param {string} placement `'review'` или `'rate'`.
+	 * @returns {jQuery}
 	 */
-	function placeSlot( entry, fieldId ) {
-		var id     = 'woodev-pickup-slot-' + fieldId
-		var $slot  = $( '#' + id )
+	function resolvePlacementAnchor( placement ) {
+		if( placement === 'rate' ) {
+			var $radios = $( 'input[name^="shipping_method"]' )
+			var $target = $radios.filter( ':checked' )
 
-		if( ! $slot.length ) {
-			$slot = $( '<div id="' + id + '" data-woodev-pickup-slot="' + escapeHtml( fieldId ) + '" style="display:none;"></div>' )
+			if( ! $target.length && $radios.length === 1 ) {
+				$target = $radios
+			}
+
+			return $target.length ? $target.closest( 'li' ) : $()
 		}
 
 		var $anchor = $( '#shipping_method' ).first()
@@ -623,11 +641,46 @@
 			$anchor = $( '.woocommerce-shipping-methods' ).first()
 		}
 
-		if( $anchor.length ) {
-			$anchor.after( $slot )
-		} else {
+		return $anchor
+	}
+
+	/**
+	 * Гарантирует наличие стабильного якоря `data-woodev-pickup-slot` для ОДНОГО места
+	 * размещения (#274 п.3: поле может занимать несколько мест одновременно — см.
+	 * {@see resolvePlacementAnchor}) и показывает/прячет его по требуемости поля.
+	 *
+	 * §8 не рендерит сюда карту/кнопку — SP-5 монтируется в этот якорь, по одному
+	 * триггеру на каждый смонтированный слот (`pickup-mount.js`'s `mountOne()`).
+	 * Паттерн размещения повторяет `placeControl` из checkout.js.
+	 *
+	 * @param {Object} entry     Запись { store, config }.
+	 * @param {string} fieldId   Id pickup-поля (is_pickup_slot).
+	 * @param {string} placement `'review'` или `'rate'` — см. {@see resolvePlacementAnchor}.
+	 * @returns {void}
+	 */
+	function placeSlot( entry, fieldId, placement ) {
+		var id    = 'woodev-pickup-slot-' + fieldId + '-' + placement
+		var $slot = $( '#' + id )
+
+		if( ! $slot.length ) {
+			$slot = $(
+				'<div id="' + id + '" data-woodev-pickup-slot="' + escapeHtml( fieldId ) + '"' +
+				' data-woodev-pickup-placement="' + escapeHtml( placement ) + '" style="display:none;"></div>'
+			)
+		}
+
+		var $anchor = resolvePlacementAnchor( placement )
+
+		if( ! $anchor.length ) {
 			// Цель размещения отсутствует — пропускаем без ошибки.
 			return
+		}
+
+		if( placement === 'rate' ) {
+			// Внутрь <li>, под подписью тарифа — не после него, там уже нет сиблингов.
+			$anchor.append( $slot )
+		} else {
+			$anchor.after( $slot )
 		}
 
 		// Показываем якорь, только когда pickup-метод выбран (best-effort).
@@ -639,7 +692,25 @@
 	}
 
 	/**
-	 * Переразмещает якоря всех pickup-полей стора.
+	 * Переразмещает якоря всех pickup-полей стора — по одному вызову
+	 * {@see placeSlot} на КАЖДОЕ место из `field.pickup_slot_placements`
+	 * (#274 п.3). Отсутствующий/не-массив список (`null`/`undefined` — PHP-сторона
+	 * различает их с #308 п.2: {@see Checkout_Config::resolve_pickup_slot_placements()})
+	 * деградирует к `[ 'review' ]` — поведению фреймворка ДО #274 — а не к пустому
+	 * списку: разнородный флот, где это поле пришло от плагина на СТАРОЙ версии
+	 * фреймворка (без ключа `pickup_slot_placements` в конфиге вовсе), не должен
+	 * молча остаться совсем без триггера.
+	 *
+	 * ЯВНЫЙ пустой массив (`[]`) — это НЕ то же самое, что «список отсутствует»
+	 * (#308 п.2, adversarial review для #274 п.3): плагин, чей фильтр
+	 * `woodev_pickup_slot_placements` намеренно вернул `[]`, рисует свой собственный
+	 * триггер и просит фреймворк не монтировать ни один якорь вообще. До фикса оба
+	 * случая — «список отсутствует» и «список явно пуст» — схлопывались в один и тот
+	 * же `[ 'review' ]`, так что такой плагин молча получал лишнюю кнопку фреймворка
+	 * рядом со своей собственной. `Array.isArray()` — единственная проверка ниже,
+	 * БЕЗ `.length`: PHP теперь гарантирует, что немассив (`null`) и явный пустой
+	 * массив (`[]`) — разные значения на границе, так что здесь достаточно различать
+	 * «массив» от «не массив», не заглядывая внутрь.
 	 *
 	 * @param {Object} entry Запись { store, config }.
 	 * @returns {void}
@@ -648,9 +719,19 @@
 		var fields = entry.store.allFields()
 
 		Object.keys( fields ).forEach( function( fieldId ) {
-			if( fields[ fieldId ] && fields[ fieldId ].is_pickup_slot ) {
-				placeSlot( entry, fieldId )
+			var field = fields[ fieldId ]
+
+			if( ! field || ! field.is_pickup_slot ) {
+				return
 			}
+
+			var placements = Array.isArray( field.pickup_slot_placements )
+				? field.pickup_slot_placements
+				: [ 'review' ]
+
+			placements.forEach( function( placement ) {
+				placeSlot( entry, fieldId, placement )
+			} )
 		} )
 	}
 

@@ -1095,6 +1095,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 *     nonce: string,
 		 *     nonceNodeId: string,
 		 *     i18n: array<string, string>,
+		 *     chosenAddress: string,
 		 *     defaultLocation: array{center: array{0: float|int, 1: float|int}, zoom: int},
 		 *     pointIcons: array<string, array{default: string, active: string}>,
 		 *     pointGlyphs: array<string, array{glyph: string|null, markup: string|null}>,
@@ -1196,6 +1197,21 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 				// The checkout trigger's second state (Task 20) — a customer who has
 				// already chosen a point sees this instead of `trigger`.
 				'triggerChange'    => __( 'Выбрать другой пункт выдачи', 'woodev-plugin-framework' ),
+				// The chosen-address block's label (issue #274 item 2) — consumed by the mount
+				// script, not by the modal shell or the map provider, exactly like `trigger`/
+				// `triggerChange` above. Mirrors the reference plugins' own wording (Yandex:
+				// «Выбранный ПВЗ:»; this framework is carrier-agnostic, so it says "point").
+				'chosenPointAddress' => __( 'Выбранный пункт выдачи:', 'woodev-plugin-framework' ),
+				// Issue #308 item 4 (adversarial review of #274 item 3): with a field mounting
+				// a trigger into BOTH placements at once, the two buttons share the exact same
+				// visible text — a screen-reader user tabbing between them hears two identical
+				// button names with nothing telling them apart. Neither string is ever shown to
+				// a sighted customer (see `pickup-mount.js`'s own `syncTriggerLabel()` /
+				// `placementAriaContext()` — these feed `aria-label` only, appended to the
+				// visible text, never replacing it), so nothing here changes what a sighted
+				// customer reads.
+				'triggerReviewContext' => __( 'в сводке заказа', 'woodev-plugin-framework' ),
+				'triggerRateContext'   => __( 'у выбранного способа доставки', 'woodev-plugin-framework' ),
 				// Task 14 (spec V-13): the zoom control's two `aria-label`s. Distinct from
 				// `zoomIn` above, which labels the unrelated "zoom in to see points" bbox
 				// message — reusing it here would have mislabelled the button with a full
@@ -1324,6 +1340,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 				'nonceNodeId' => $this->nonce_node_id(),
 
 				'i18n'     => $strings,
+
+				// The chosen point's address, for the checkout trigger to show alongside its
+				// label (issue #274 item 2) — resolved through the SAME session-backed map
+				// {@see self::restore_selection()} reads the point id from; see
+				// {@see self::resolve_chosen_address()}. `''` when nothing is remembered, no
+				// selection scope is wired, or the stored entry predates this feature — the
+				// mount script degrades to the label alone in every one of those cases.
+				'chosenAddress' => $this->resolve_chosen_address(),
 
 				'defaultLocation' => $this->default_location,
 				'pointIcons'      => $this->normalized_point_icons(),
@@ -2206,7 +2230,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 
 		/**
 		 * Handles `woodev_shipping_pickup_point_selected` — remembers a confirmed,
-		 * allowed pickup-point selection (issue #176).
+		 * allowed pickup-point selection (issue #176), address included (issue #274
+		 * item 2).
 		 *
 		 * Fired by {@see \Woodev\Framework\Shipping\Rest_Api\Pickup_Controller::handle_select_request()}
 		 * only once the FINAL, post-domain-filter verdict is `allowed === true`; a
@@ -2223,9 +2248,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 * fires from a plain REST route, which WooCommerce does not initialize a
 		 * cart/session for on its own.
 		 *
+		 * The address stored alongside the id is `$point`'s own `short_address` —
+		 * already derived, once, at {@see Pickup_Point::from_array()}'s own boundary
+		 * (issue #263) — never re-derived here with a second fallback expression. No
+		 * extra carrier request: the full {@see Pickup_Point} is already sitting right
+		 * here, exactly where the confirmed selection is remembered.
+		 *
 		 * @internal
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Also remembers the point's address (issue #274 item 2).
 		 *
 		 * @param Pickup_Point         $point   The confirmed point.
 		 * @param array<string, mixed> $context Same shape documented on the
@@ -2250,13 +2282,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 				$this->load_wc_cart();
 			}
 
-			$type = $point->to_array()['type']['code'] ?? '';
+			$point_data = $point->to_array();
+			$type       = $point_data['type']['code'] ?? '';
 
 			if ( ! is_string( $type ) || '' === $type ) {
 				return;
 			}
 
-			$selection->remember( $scope->locality_for_point( $point ), $type, $point->get_id() );
+			$address = $point_data['short_address'] ?? '';
+			$address = is_string( $address ) ? $address : '';
+
+			$selection->remember( $scope->locality_for_point( $point ), $type, $point->get_id(), $address );
 		}
 
 		/**
@@ -2269,23 +2305,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 * filter, so a failed checkout submit still re-renders what the customer
 		 * posted, never a stale session value (spec §5's closing note).
 		 *
-		 * Implements spec §5's gate, in order:
-		 *
-		 * 1. {@see Selection_Scope::type_for_method()} IS the gate — no separate check
-		 *    of which methods "require pickup" exists here, deliberately: that list is
-		 *    already declared twice elsewhere by the plugin (`Pickup_Field::create()`,
-		 *    `Checkout_Handler::set_requires_pickup_methods()`), and a third copy here
-		 *    would only drift from them.
-		 * 2. a type code → the exact `(locality, type)` entry.
-		 * 3. {@see Selection_Scope::TYPE_ANY} → the most recently written entry for the
-		 *    locality.
-		 * 4. `null` → nothing is restored; `$value` is returned exactly as received.
-		 *
-		 * The chosen shipping method is read and normalized the same way
-		 * {@see self::rest_shipping_method()} does — `WC()->session`'s own record,
-		 * `:instance_id` suffix stripped — replicated rather than shared, since that
-		 * method's own docblock documents it as consumed only by
-		 * {@see \Woodev\Framework\Shipping\Rest_Api\Pickup_Controller}'s domain seam.
+		 * The (locality, type) resolution itself — spec §5's gate — lives in
+		 * {@see self::current_selection_pair()}, shared with {@see self::get_js_config()}'s
+		 * own {@see self::resolve_chosen_address()} (issue #274 item 2). Sharing the gate alone
+		 * is NOT what keeps the id and the address in agreement, though (issue #308 item 3):
+		 * this method never sees `$_POST` — WooCommerce already resolved it above, before this
+		 * filter ever ran — while {@see self::resolve_chosen_address()} is called from
+		 * {@see self::get_js_config()} on every page load, `$_POST` included, and has to check
+		 * it itself. That method's own docblock is where the actual agreement is proven.
 		 *
 		 * @internal
 		 *
@@ -2301,11 +2328,58 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 				return $value;
 			}
 
-			$scope     = $this->selection_scope;
 			$selection = $this->selection();
 
-			if ( null === $scope || null === $selection ) {
+			if ( null === $selection ) {
 				return $value;
+			}
+
+			$pair = $this->current_selection_pair();
+
+			if ( null === $pair ) {
+				return $value;
+			}
+
+			$point_id = Selection_Scope::TYPE_ANY === $pair['type']
+				? $selection->recall_latest( $pair['locality'] )
+				: $selection->recall( $pair['locality'], $pair['type'] );
+
+			return null !== $point_id ? $point_id : $value;
+		}
+
+		/**
+		 * Resolves the (locality, type) pair for the CURRENTLY chosen shipping method —
+		 * spec §5's gate, factored out so {@see self::restore_selection()} (which
+		 * recalls the point id) and {@see self::resolve_chosen_address()} (issue #274
+		 * item 2, which recalls the address) read it identically. Implements, in order:
+		 *
+		 * 1. {@see Selection_Scope::type_for_method()} IS the gate — no separate check
+		 *    of which methods "require pickup" exists here, deliberately: that list is
+		 *    already declared twice elsewhere by the plugin (`Pickup_Field::create()`,
+		 *    `Checkout_Handler::set_requires_pickup_methods()`), and a third copy here
+		 *    would only drift from them.
+		 * 2. `null` → nothing is currently chosen; returns `null`.
+		 * 3. otherwise → `[ 'locality' => …, 'type' => … ]`, `type` possibly
+		 *    {@see Selection_Scope::TYPE_ANY}.
+		 *
+		 * The chosen shipping method is read and normalized the same way
+		 * {@see self::rest_shipping_method()} does — `WC()->session`'s own record,
+		 * `:instance_id` suffix stripped — replicated rather than shared, since that
+		 * method's own docblock documents it as consumed only by
+		 * {@see \Woodev\Framework\Shipping\Rest_Api\Pickup_Controller}'s domain seam.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array{locality: string, type: string}|null `null` when no scope is
+		 *                                                     wired, or the chosen
+		 *                                                     shipping method carries
+		 *                                                     no pickup type.
+		 */
+		protected function current_selection_pair(): ?array {
+			$scope = $this->selection_scope;
+
+			if ( null === $scope ) {
+				return null;
 			}
 
 			$chosen = $this->wc_session_chosen_shipping_methods();
@@ -2316,16 +2390,85 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 			$type = $scope->type_for_method( $method );
 
 			if ( null === $type ) {
-				return $value;
+				return null;
 			}
 
-			$locality = $scope->current_locality();
+			return [
+				'locality' => $scope->current_locality(),
+				'type'     => $type,
+			];
+		}
 
-			$point_id = Selection_Scope::TYPE_ANY === $type
-				? $selection->recall_latest( $locality )
-				: $selection->recall( $locality, $type );
+		/**
+		 * Resolves the address to show alongside the checkout trigger for the
+		 * CURRENTLY remembered pickup-point selection (issue #274 item 2) — the address
+		 * counterpart to {@see self::restore_selection()}'s point id, read through the
+		 * SAME {@see self::current_selection_pair()} gate so the two never disagree on
+		 * which (locality, type) "current" means.
+		 *
+		 * That gate alone is not enough to keep the address describing the same POINT the id
+		 * path shows, though (issue #308 item 3 — adversarial review of #274). WooCommerce
+		 * checks `$_POST` for the field's value BEFORE ever calling
+		 * {@see self::restore_selection()}'s `woocommerce_checkout_get_value` filter (see that
+		 * method's own docblock and gotcha `custom-checkout-field-is-empty-on-reload-by-
+		 * construction`): after a failed checkout submit, the id the browser actually shows is
+		 * the POSTED one, not whatever this handler's session happens to hold for the pair — the
+		 * session can be stale (a second tab completed a different order and called
+		 * {@see self::handle_checkout_order_processed()}'s `forget_all()` since this tab last
+		 * posted) or simply describe a different point. This method therefore mirrors that same
+		 * `$_POST` precedence: when the field was actually posted (WooCommerce's own `!empty()`
+		 * check — an explicitly empty post is treated as "nothing posted", matching
+		 * {@see self::posted_field_value()}), the remembered address is only used when it belongs
+		 * to the SAME id the browser is about to show; otherwise nothing is known about the
+		 * posted point's address, and `''` is returned rather than a stale or unrelated one.
+		 *
+		 * Reads from the SAME session-backed map {@see Pickup_Selection::remember()}
+		 * writes at confirmation time. A selection remembered before this feature
+		 * shipped (id only, no address — a mixed-fleet site running an older framework
+		 * version until every plugin upgrades) degrades to `''` here, exactly like "no
+		 * scope wired" and "nothing remembered yet" — the browser then shows the
+		 * trigger label alone, never a blank address block.
+		 *
+		 * @since 2.0.2
+		 * @since 2.0.2 Considers `$_POST` so the address can never describe a different point
+		 *              than the id WooCommerce is about to show (issue #308 item 3).
+		 *
+		 * @return string The remembered address, or `''` when nothing is remembered (or the
+		 *                remembered address does not belong to the posted id, or selection
+		 *                persistence is not wired for this handler).
+		 */
+		protected function resolve_chosen_address(): string {
+			$selection = $this->selection();
 
-			return null !== $point_id ? $point_id : $value;
+			if ( null === $selection ) {
+				return '';
+			}
+
+			$pair = $this->current_selection_pair();
+
+			if ( null === $pair ) {
+				return '';
+			}
+
+			$remembered_id = Selection_Scope::TYPE_ANY === $pair['type']
+				? $selection->recall_latest( $pair['locality'] )
+				: $selection->recall( $pair['locality'], $pair['type'] );
+
+			$address = Selection_Scope::TYPE_ANY === $pair['type']
+				? $selection->recall_latest_address( $pair['locality'] )
+				: $selection->recall_address( $pair['locality'], $pair['type'] );
+
+			$posted_id = $this->posted_field_value();
+
+			// `$_POST` wins over the session for which id WooCommerce is about to show — see this
+			// method's own docblock. The remembered address only ever describes `$remembered_id`,
+			// so it is used ONLY when the posted id agrees with it; a posted id this handler has
+			// no address for renders no address at all, never a mismatched one.
+			if ( '' !== $posted_id ) {
+				return $posted_id === $remembered_id && null !== $address ? $address : '';
+			}
+
+			return null !== $address ? $address : '';
 		}
 
 		/**

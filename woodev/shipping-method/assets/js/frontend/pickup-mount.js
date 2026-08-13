@@ -300,6 +300,34 @@
 	/** @type {string} marker class on the one trigger button mounted per slot. */
 	var TRIGGER_CLASS = 'woodev-pickup-trigger';
 
+	/**
+	 * Marker class on the chosen-point address block mounted alongside a trigger (issue
+	 * #274 item 2).
+	 *
+	 * ONE per FIELD, not one per slot, since issue #308 item 4 (adversarial review of
+	 * #274 item 3): with a field mounting a trigger into every one of its `[data-woodev-
+	 * pickup-slot]` anchors at once, an address block in EVERY slot showed the customer
+	 * the exact same «Выбранный пункт выдачи: …» paragraph twice, a few pixels apart —
+	 * the operator approved two buttons, never a doubled address line. See {@see
+	 * ADDRESS_PLACEMENT}/{@see resolveAddressSlot} for which slot gets it.
+	 *
+	 * @type {string}
+	 */
+	var ADDRESS_CLASS = 'woodev-pickup-chosen-address';
+
+	/**
+	 * Which `data-woodev-pickup-placement` value carries the chosen-address block when a
+	 * field mounts into more than one slot at once (issue #274 item 3 / #308 item 4's
+	 * fix) — the framework's chosen default is the `'review'` anchor (after the
+	 * shipping-methods list), never `'rate'`. A single, explicit constant, read only by
+	 * {@see resolveAddressSlot}, is what makes flipping this default later — should the
+	 * operator ever want the address next to the rate instead — a one-line change rather
+	 * than a hunt through {@see mountOne}/{@see mountSlot}.
+	 *
+	 * @type {string}
+	 */
+	var ADDRESS_PLACEMENT = 'review';
+
 	/** @type {number} defer, in ms, after `updated_checkout` before re-mounting — see the file docblock. */
 	var MOUNT_DEFER_MS = 60;
 
@@ -470,6 +498,72 @@
 	 * @type {Object.<string, string>}
 	 */
 	var appliedLocality = {};
+
+	/**
+	 * The chosen point's address to show next to the trigger, keyed by field id (issue #274
+	 * item 2).
+	 *
+	 * Seeded ONCE per field id — guarded by {@see Object.prototype.hasOwnProperty}, the same
+	 * "first sighting: adopt as baseline" discipline {@see appliedLocality} already uses —
+	 * from `config.chosenAddress`, the PHP side's own resolution of whatever
+	 * {@see \Woodev\Framework\Shipping\Pickup\Pickup_Selection} has remembered for the
+	 * checkout's current (locality, type) pair (`Pickup_Handler::resolve_chosen_address()`).
+	 * Guarded rather than reseeded on every {@see mountAll} pass for the identical reason
+	 * `appliedLocality` is: `mountAll()` runs again after this module's OWN
+	 * {@see refreshCheckout} self-triggered `updated_checkout`, and reseeding unconditionally
+	 * would clobber a live, in-session selection's address back to the page-load value on
+	 * every confirmation.
+	 *
+	 * {@see applySelection} overwrites the entry directly from the point just confirmed — the
+	 * point's `short_address`, ALREADY the derived view {@see Pickup_Point::from_array()}
+	 * computes once at the server boundary (issue #263) and the select route's
+	 * `to_browser_array()` always sends non-blank whenever `address` is non-blank. No second,
+	 * JS-side fallback is layered on top of it here.
+	 *
+	 * A field whose stored selection predates this feature (id only, no address —
+	 * {@see \Woodev\Framework\Shipping\Pickup\Pickup_Selection::recall_address}'s own
+	 * degrade) seeds `''` here, same as a field with nothing remembered at all; either way
+	 * {@see syncTriggerLabel} shows no address block, never a blank one — see that function's
+	 * own `hasValue` gate.
+	 *
+	 * @type {Object.<string, string>}
+	 */
+	var chosenAddress = {};
+
+	/**
+	 * Scratch element {@see decodeEscapedAddress} round-trips an already-escaped string through —
+	 * module-scope singleton, same shape as `pickup-panels.js`'s own `titleDecodeEl`. Never
+	 * attached to `document`, so its `innerHTML` writes touch nothing a customer could see.
+	 *
+	 * @type {HTMLElement|null}
+	 */
+	var addressDecodeEl = ( 'undefined' !== typeof document ) ? document.createElement( 'div' ) : null;
+
+	/**
+	 * Decodes HTML entities in an already-escaped point field for use in a PLAIN-TEXT sink
+	 * (`strongEl.textContent` in {@see syncTriggerLabel}) — the `chosenAddress` counterpart of
+	 * `pickup-panels.js`'s own `decodeForTitle()` (issue #274 item 1 follow-up; see that
+	 * function's docblock for the underlying round-trip and why `textContent` needs it:
+	 * `textContent` never re-parses its argument as markup, so an escaped `&quot;` would
+	 * otherwise show the customer a literal `&quot;` instead of `"`).
+	 *
+	 * This file keeps its own copy rather than importing `pickup-panels.js`'s — that helper is
+	 * module-private there (never part of the `WoodevPickupPanels` export), and this file has no
+	 * build step to share a module through; `decodeForTitle()`'s own docblock already accepts the
+	 * identical duplication for `pickup-geo.js`.
+	 *
+	 * @param {string} value Already HTML-escaped text (e.g. a REST-sourced `short_address`).
+	 * @returns {string}
+	 */
+	function decodeEscapedAddress( value ) {
+		if ( '' === value || ! addressDecodeEl ) {
+			return value;
+		}
+
+		addressDecodeEl.innerHTML = value; // eslint-disable-line -- server-escaped; read back via textContent below.
+
+		return addressDecodeEl.textContent;
+	}
 
 	/**
 	 * Field ids whose selection is being applied RIGHT NOW — {@see applySelection} only.
@@ -738,26 +832,129 @@
 	}
 
 	/**
-	 * Syncs the trigger button's label to whether `config.fieldId` currently holds a value —
+	 * Seeds {@see chosenAddress} for one field id from the PHP-resolved
+	 * `config.chosenAddress` (`Pickup_Handler::resolve_chosen_address()`, issue #274 item 2)
+	 * — guarded to run only once per field id; see that map's own docblock for why.
+	 *
+	 * @param {Object} config
+	 * @returns {void}
+	 */
+	function seedChosenAddress( config ) {
+		if ( Object.prototype.hasOwnProperty.call( chosenAddress, config.fieldId ) ) {
+			return;
+		}
+
+		chosenAddress[ config.fieldId ] = 'string' === typeof config.chosenAddress ? config.chosenAddress : '';
+	}
+
+	/**
+	 * The `aria-label` context {@see syncTriggerLabel} appends to a trigger button's visible
+	 * text, keyed by the slot's own `data-woodev-pickup-placement` (issue #308 item 4 —
+	 * adversarial review of #274 item 3: two identically-labelled buttons for the same
+	 * field). `null` for anything else — a placement value this file does not recognise, or
+	 * no attribute at all (a single-slot field has nothing to disambiguate FROM, so its
+	 * button keeps its plain visible text as its own accessible name).
+	 *
+	 * @param {Object} config
+	 * @param {?string} placement `slot.getAttribute( 'data-woodev-pickup-placement' )`.
+	 * @returns {?string}
+	 */
+	function placementAriaContext( config, placement ) {
+		if ( 'review' === placement ) {
+			return text( config, 'triggerReviewContext' );
+		}
+
+		if ( 'rate' === placement ) {
+			return text( config, 'triggerRateContext' );
+		}
+
+		return null;
+	}
+
+	/**
+	 * Syncs EVERY mounted trigger button's label, and its chosen-point address block (issue
+	 * #274 item 2), to whether `config.fieldId` currently holds a value —
 	 * `i18n.triggerChange` ("Выбрать другой пункт выдачи") once a point is already selected,
 	 * `i18n.trigger` otherwise. Called at mount time (a checkout reload after an earlier
 	 * selection) and again right after a NEW selection is applied — see
 	 * {@see Pickup_Handler::get_js_config()}'s own docblock note on `triggerChange` being
-	 * this file's responsibility. A no-op when no trigger is currently mounted for this field
-	 * (defensive — §8 can discard/recreate the anchor between calls, see the file docblock).
+	 * this file's responsibility.
+	 *
+	 * Runs across EVERY slot currently mounted for this field id (`querySelectorAll`, not
+	 * the first match) — issue #274 item 3 lets one field mount a trigger into more than one
+	 * anchor at once (`woocommerce_review_order_after_shipping`-equivalent AND
+	 * `woocommerce_after_shipping_rate`-equivalent), and a second trigger left out of sync
+	 * with the first (stale label, stale/missing address, stale disabled state) is worse than
+	 * not mounting it at all. A slot with no trigger currently mounted in it is skipped
+	 * (defensive — §8 can discard/recreate an anchor between calls, see the file docblock).
+	 *
+	 * The address block shows ONLY alongside a non-empty field value: gating display on
+	 * `hasValue` — not merely on whether {@see chosenAddress} happens to still hold an entry
+	 * — is what keeps a stale address from surviving past {@see handleLocalityChanged}
+	 * clearing the field without this module ever needing to remember to clear the map entry
+	 * too. `chosenAddress[fieldId]` itself may legitimately be `''` (nothing remembered, or a
+	 * pre-#274 id-only entry — {@see \Woodev\Framework\Shipping\Pickup\Pickup_Selection::recall_address()}'s
+	 * own degrade); either way the block simply stays hidden, never rendered blank.
+	 *
+	 * Also refreshes every button's `aria-label` (issue #308 item 4 — adversarial review of
+	 * #274 item 3): with two triggers mounted for the same field, both show the IDENTICAL
+	 * visible text, so a screen-reader user tabbing between them hears two indistinguishable
+	 * button names. `aria-label` is set to the same visible text PLUS the placement's own
+	 * i18n context ({@see placementAriaContext}) — never a replacement, so this changes
+	 * nothing a SIGHTED customer reads — and refreshed here, on every sync, so it never goes
+	 * stale after `button.textContent` flips between `trigger`/`triggerChange` below.
 	 *
 	 * @param {Object} config
 	 * @returns {void}
 	 */
 	function syncTriggerLabel( config ) {
-		var slot = document.querySelector( '[data-woodev-pickup-slot="' + config.fieldId + '"]' );
-		var button = slot && slot.querySelector( '.' + TRIGGER_CLASS );
+		seedChosenAddress( config );
 
-		if ( ! button ) {
-			return;
-		}
+		var slots = document.querySelectorAll( '[data-woodev-pickup-slot="' + config.fieldId + '"]' );
+		var hasValue = !! fieldValue( config.fieldId );
+		var addressText = hasValue ? ( chosenAddress[ config.fieldId ] || '' ) : '';
 
-		button.textContent = text( config, fieldValue( config.fieldId ) ? 'triggerChange' : 'trigger' );
+		Array.prototype.forEach.call( slots, function( slot ) {
+			var button = slot.querySelector( '.' + TRIGGER_CLASS );
+
+			if ( ! button ) {
+				return;
+			}
+
+			var label = text( config, hasValue ? 'triggerChange' : 'trigger' );
+
+			button.textContent = label;
+
+			var ariaContext = placementAriaContext( config, slot.getAttribute( 'data-woodev-pickup-placement' ) );
+
+			if ( ariaContext ) {
+				button.setAttribute( 'aria-label', label + ', ' + ariaContext );
+			} else {
+				button.removeAttribute( 'aria-label' );
+			}
+
+			var addressEl = slot.querySelector( '.' + ADDRESS_CLASS );
+
+			if ( ! addressEl ) {
+				return;
+			}
+
+			var strongEl = addressEl.querySelector( 'strong' );
+
+			if ( addressText ) {
+				if ( strongEl ) {
+					strongEl.textContent = addressText;
+				}
+
+				addressEl.style.display = '';
+			} else {
+				if ( strongEl ) {
+					strongEl.textContent = '';
+				}
+
+				addressEl.style.display = 'none';
+			}
+		} );
 	}
 
 	/**
@@ -1088,13 +1285,22 @@
 
 	/**
 	 * Applies a selected point: writes its id into the §8 field, then — when
-	 * enabled — the address replacement.
+	 * enabled — the address replacement, and records the point's address for the
+	 * trigger's own chosen-address block (issue #274 item 2).
 	 *
-	 * @param {Object} config
-	 * @param {Object} point
+	 * @param {Object}  config
+	 * @param {Object}  point
+	 * @param {boolean} addressEscaped Whether `point.short_address` is already HTML-escaped
+	 *                                 (REST-sourced — {@see Pickup_Point::to_browser_array()})
+	 *                                 and must be decoded before it reaches `chosenAddress`
+	 *                                 (issue #274 item 1 follow-up), or is raw (an `ownsChrome`
+	 *                                 embedded-widget point straight from
+	 *                                 `map-provider-embedded.js`'s own `normalizePoint()`) and
+	 *                                 must be stored untouched — see {@see finishSelection}'s own
+	 *                                 call site for how the caller knows which it is.
 	 * @returns {void}
 	 */
-	function applySelection( config, point ) {
+	function applySelection( config, point, addressEscaped ) {
 		var pointId = point && undefined !== point.id && null !== point.id ? String( point.id ) : '';
 
 		// Guarded, not reordered: `applyAddressReplacement()` fires a real `change` on the
@@ -1113,6 +1319,20 @@
 		// Read AFTER the replacement, so this records the locality the field's value now
 		// genuinely belongs to — which, with `replaceAddress` on, is the point's own.
 		appliedLocality[ config.fieldId ] = resolveLocality( config );
+
+		// `point.short_address` is ALREADY the derived view — `Pickup_Point::from_array()`
+		// (issue #263) guarantees it non-blank whenever `address` is, so this is a straight
+		// read, never a second `short_address || address` fallback layered on top of the one
+		// the server already applied at its own boundary. {@see syncTriggerLabel}, called by
+		// every caller of this function immediately after, is what actually renders it — into
+		// `strongEl.textContent`, a plain-text sink, so an escaped source is decoded HERE, once,
+		// rather than left for the render site to guess at (issue #274 item 1 follow-up: the
+		// reload path's `config.chosenAddress` seeds this same map already-raw — see
+		// {@see seedChosenAddress} — so `chosenAddress` itself is the single point both sources
+		// are normalized to agree on: raw plain text, never escaped markup).
+		var shortAddress = point && 'string' === typeof point.short_address ? point.short_address : '';
+
+		chosenAddress[ config.fieldId ] = addressEscaped ? decodeEscapedAddress( shortAddress ) : shortAddress;
 	}
 
 	/**
@@ -2747,10 +2967,23 @@
 			// `result.point` is a CORRECTED point, not a flag — the domain learned something
 			// during confirmation that the listing did not know (a refined address, a fixed
 			// postcode). Absent means "keep the point you already have", never "clear it".
-			var accepted = result.point && 'object' === typeof result.point ? result.point : point;
+			var resultPoint = result.point && 'object' === typeof result.point ? result.point : null;
+			var accepted = resultPoint || point;
 			var defaults = config.selection || {};
 
-			applySelection( config, accepted );
+			// `accepted.short_address`'s escaping depends on where it actually came from, not on
+			// which mode is active (issue #274 item 1 follow-up — the adversarial review's
+			// "intra-mode" case). A corrected `result.point` is ALWAYS REST-escaped —
+			// `Pickup_Controller::to_response_point()` builds it through `to_browser_array()`
+			// unconditionally, `ownsChrome` or not. Absent a correction, `accepted` is the
+			// original `point` this session started with, and THAT one's escaping tracks how it
+			// reached `handleSelection()`: through `panels.on( 'select', … )` (panels render
+			// REST-fetched, therefore escaped, listing data) when panels exist, or through
+			// `provider.on( 'select', … )` — under `ownsChrome`, the ONLY source, straight from
+			// `map-provider-embedded.js`'s own `normalizePoint()`, which is raw.
+			var addressEscaped = !! resultPoint || !! panels;
+
+			applySelection( config, accepted, addressEscaped );
 			syncTriggerLabel( config );
 
 			if ( panels ) {
@@ -3634,25 +3867,31 @@
 	}
 
 	/**
-	 * Mounts one trigger button into one config's §8 anchor, wiring its click
-	 * handler. Idempotent — a slot that already holds a `TRIGGER_CLASS` button
-	 * is left untouched, so this is safe to call on every `mountAll()` pass
-	 * without ever attaching a second click listener to the same button (which
-	 * would open two concurrent sessions from a single click).
+	 * Mounts a trigger button into ONE §8 anchor, wiring the button's click handler.
+	 * Idempotent — an anchor that already holds a `TRIGGER_CLASS` button is left
+	 * untouched, so this is safe to call on every `mountAll()` pass without ever
+	 * attaching a second click listener to the same button (which would open two
+	 * concurrent sessions from a single click).
 	 *
-	 * At most one session is ever open per field id: a click ALWAYS tears down
-	 * whatever session {@see sessions} currently tracks for this field (a no-op
-	 * the first time, and a harmless no-op too when that session was already
-	 * closed by the user via Escape/backdrop, or orphaned by §8 recreating the
-	 * anchor — see the file docblock) before opening a fresh one.
+	 * At most one session is ever open per field id, regardless of which of its slots the
+	 * click came from (issue #274 item 3: a field may now mount into more than one anchor
+	 * at once) — a click ALWAYS tears down whatever session {@see sessions} currently
+	 * tracks for this field (a no-op the first time, and a harmless no-op too when that
+	 * session was already closed by the user via Escape/backdrop, or orphaned by §8
+	 * recreating an anchor — see the file docblock) before opening a fresh one. The clicked
+	 * BUTTON — not always the first one mounted — is what focus returns to on close, since
+	 * `openSession()` is handed THIS slot's own button, captured in its own closure.
 	 *
-	 * @param {Object} config
+	 * The chosen-address block (issue #274 item 2) is NOT built here — see {@see
+	 * ensureAddressBlock}, called by {@see mountOne} for only ONE of this field's slots
+	 * (issue #308 item 4).
+	 *
+	 * @param {Object}      config
+	 * @param {HTMLElement} slot One `[data-woodev-pickup-slot]` anchor for this field id.
 	 * @returns {void}
 	 */
-	function mountOne( config ) {
-		var slot = document.querySelector( '[data-woodev-pickup-slot="' + config.fieldId + '"]' );
-
-		if ( ! slot || slot.querySelector( '.' + TRIGGER_CLASS ) ) {
+	function mountSlot( config, slot ) {
+		if ( slot.querySelector( '.' + TRIGGER_CLASS ) ) {
 			return;
 		}
 
@@ -3668,10 +3907,91 @@
 		} );
 
 		slot.appendChild( button );
+	}
+
+	/**
+	 * Picks which of a field's currently mounted slots carries the chosen-address block
+	 * (issue #274 item 2 / #308 item 4 — the operator approved two buttons, never a
+	 * doubled address line a few pixels apart). {@see ADDRESS_PLACEMENT} wins when a slot
+	 * with that `data-woodev-pickup-placement` exists; otherwise the FIRST mounted slot,
+	 * in DOM order, takes over — a site that suppressed the `'review'` placement entirely
+	 * (`woodev_pickup_slot_placements`) still needs the address to show up SOMEWHERE,
+	 * never nowhere just because its preferred anchor was never mounted. A field with only
+	 * one slot always resolves to that slot, whatever its placement.
+	 *
+	 * @param {NodeList|HTMLElement[]} slots This field's currently mounted
+	 *                                       `[data-woodev-pickup-slot]` anchors.
+	 * @returns {?HTMLElement}
+	 */
+	function resolveAddressSlot( slots ) {
+		var list = Array.prototype.slice.call( slots );
+
+		for ( var i = 0; i < list.length; i++ ) {
+			if ( ADDRESS_PLACEMENT === list[ i ].getAttribute( 'data-woodev-pickup-placement' ) ) {
+				return list[ i ];
+			}
+		}
+
+		return list.length ? list[ 0 ] : null;
+	}
+
+	/**
+	 * Builds the chosen-point address block (issue #274 item 2) inside `slot`, when it is
+	 * not already there. Idempotent, same discipline as {@see mountSlot}'s own
+	 * `TRIGGER_CLASS` guard — a re-mount pass (a checkout reload after an earlier
+	 * selection, or §8 recreating THIS field's `resolveAddressSlot()` anchor) must not
+	 * rebuild a live block and lose whatever {@see syncTriggerLabel} already wrote into
+	 * its `<strong>` child.
+	 *
+	 * @param {Object}      config
+	 * @param {HTMLElement} slot The slot {@see resolveAddressSlot} picked for this field.
+	 * @returns {void}
+	 */
+	function ensureAddressBlock( config, slot ) {
+		if ( slot.querySelector( '.' + ADDRESS_CLASS ) ) {
+			return;
+		}
+
+		// Hidden until {@see syncTriggerLabel} decides there is something to show. Built
+		// with a stable `<strong>` child that function only ever re-fills the text of —
+		// never rebuilt per sync, so a repeated sync pass touches no more of the DOM than
+		// the text it actually changed.
+		var address = document.createElement( 'p' );
+
+		address.className = ADDRESS_CLASS;
+		address.style.display = 'none';
+		address.appendChild( document.createTextNode( text( config, 'chosenPointAddress' ) + ' ' ) );
+		address.appendChild( document.createElement( 'strong' ) );
+
+		slot.appendChild( address );
+	}
+
+	/**
+	 * Mounts a trigger into EVERY §8 anchor currently rendered for one config's field id
+	 * (issue #274 item 3 — a field may occupy more than one placement at once), the
+	 * chosen-address block into exactly ONE of them (issue #308 item 4 — see {@see
+	 * resolveAddressSlot}), then syncs every mounted trigger to the field's current value.
+	 *
+	 * @param {Object} config
+	 * @returns {void}
+	 */
+	function mountOne( config ) {
+		var slots = document.querySelectorAll( '[data-woodev-pickup-slot="' + config.fieldId + '"]' );
+
+		Array.prototype.forEach.call( slots, function( slot ) {
+			mountSlot( config, slot );
+		} );
+
+		var addressSlot = resolveAddressSlot( slots );
+
+		if ( addressSlot ) {
+			ensureAddressBlock( config, addressSlot );
+		}
 
 		// A re-mount after an earlier selection (a full checkout reload, or §8 recreating
-		// the anchor mid-session) must read `i18n.triggerChange`, not always `i18n.trigger` —
-		// see {@see syncTriggerLabel}.
+		// an anchor mid-session) must read `i18n.triggerChange`, not always `i18n.trigger` —
+		// see {@see syncTriggerLabel}. Called once for ALL of this field's slots, not once
+		// per slot above — {@see syncTriggerLabel} already iterates every one of them itself.
 		syncTriggerLabel( config );
 	}
 

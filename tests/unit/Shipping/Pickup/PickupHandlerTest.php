@@ -1429,6 +1429,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 					'nonce',
 					'nonceNodeId',
 					'i18n',
+					'chosenAddress',
 					'defaultLocation',
 					'pointIcons',
 					'pointGlyphs',
@@ -2438,6 +2439,13 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				'emptyLocality'    => 'В выбранном населённом пункте нет пунктов выдачи',
 				// The Task 8B trigger-state key.
 				'triggerChange'    => 'Выбрать другой пункт выдачи',
+				// The chosen-address block's label (issue #274 item 2).
+				'chosenPointAddress' => 'Выбранный пункт выдачи:',
+				// The two triggers' distinguishing aria-label context (issue #308 item 4) --
+				// never shown to a sighted customer, see pickup-mount.js's own
+				// `placementAriaContext()`.
+				'triggerReviewContext' => 'в сводке заказа',
+				'triggerRateContext'   => 'у выбранного способа доставки',
 				// The Task 14 (spec V-13) zoom control keys.
 				'zoomInLabel'      => 'Приблизить карту',
 				'zoomOutLabel'     => 'Отдалить карту',
@@ -4532,6 +4540,80 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			$this->assertSame( 'P1', $selection->recall( 'msk', 'pvz' ), 'the write must land once the session becomes available' );
 		}
 
+		// --- remember_selection() also remembers the address — issue #274 item 2 ---
+
+		/**
+		 * The whole point of #274 item 2: `remember_selection()` must remember the confirmed
+		 * point's `short_address` alongside its id, using the SAME field the browser eventually
+		 * reads through `to_browser_array()` — no separate carrier request, no second derivation.
+		 */
+		public function test_remember_selection_also_writes_the_points_short_address(): void {
+			$scope = new Pickup_Handler_Selection_Test_Scope(
+				'key',
+				static fn( Pickup_Point $point ) => 'msk',
+				static fn() => '',
+				static fn( string $method_id ) => null
+			);
+			$selection = new Pickup_Handler_Selection_Probe( $scope, new Pickup_Handler_Fake_Session() );
+
+			$handler = new Pickup_Handler_With_Selection_Probe(
+				'p',
+				'pickup_point',
+				$this->source_returning( null ),
+				$this->yandex_provider(),
+				$this->default_location(),
+				$scope,
+				$selection
+			);
+
+			$handler->remember_selection( $this->selection_point( 'P1', 'pvz' ), [ 'field_id' => 'pickup_point' ] );
+
+			$this->assertSame( 'Тверская, 1', $selection->recall_address( 'msk', 'pvz' ) );
+		}
+
+		/**
+		 * `Pickup_Point::from_array()` derives `short_address` from `address` when the payload
+		 * carries no separate short form (issue #263) — `remember_selection()` must read that
+		 * ALREADY-derived value, never fall back to the raw `address` a second time itself. A
+		 * point built with an explicit `short_address` proves the field actually consulted is
+		 * `short_address`, not `address` — the two differ here on purpose.
+		 */
+		public function test_remember_selection_stores_the_derived_short_address_not_the_raw_address(): void {
+			$scope = new Pickup_Handler_Selection_Test_Scope(
+				'key',
+				static fn( Pickup_Point $point ) => 'msk',
+				static fn() => '',
+				static fn( string $method_id ) => null
+			);
+			$selection = new Pickup_Handler_Selection_Probe( $scope, new Pickup_Handler_Fake_Session() );
+
+			$handler = new Pickup_Handler_With_Selection_Probe(
+				'p',
+				'pickup_point',
+				$this->source_returning( null ),
+				$this->yandex_provider(),
+				$this->default_location(),
+				$scope,
+				$selection
+			);
+
+			$point = Pickup_Point::from_array(
+				[
+					'id'            => 'P1',
+					'name'          => 'Точка',
+					'lat'           => 55.75,
+					'lng'           => 37.61,
+					'address'       => 'г. Москва, ул. Тверская, д. 1',
+					'short_address' => 'Тверская, 1',
+					'type'          => [ 'code' => 'pvz', 'label' => 'ПВЗ' ],
+				]
+			);
+
+			$handler->remember_selection( $point, [ 'field_id' => 'pickup_point' ] );
+
+			$this->assertSame( 'Тверская, 1', $selection->recall_address( 'msk', 'pvz' ) );
+		}
+
 		// --- restore_selection() — the woocommerce_checkout_get_value read side ---
 
 		/**
@@ -4807,6 +4889,320 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			);
 
 			$this->assertSame( 'whatever-wc-had', $handler->restore_selection( 'whatever-wc-had', 'pickup_point' ) );
+		}
+
+		// --- get_js_config()'s chosenAddress — issue #274 item 2 ---
+
+		public function test_get_js_config_emits_chosen_address_when_something_is_remembered(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			Functions\when( 'rest_url' )->justReturn( 'https://example.test/wp-json/woodev/v1' );
+			Functions\when( 'wp_create_nonce' )->justReturn( 'NONCE' );
+			Functions\when( 'wc_ship_to_billing_address_only' )->justReturn( false );
+
+			$scope = new Pickup_Handler_Selection_Test_Scope(
+				'key',
+				static fn( Pickup_Point $point ) => 'msk',
+				static fn() => 'msk',
+				static fn( string $method_id ) => 'pvz'
+			);
+			$selection = new Pickup_Handler_Selection_Probe( $scope, new Pickup_Handler_Fake_Session() );
+			$selection->remember( 'msk', 'pvz', 'P1', 'Тверская, 1' );
+
+			$handler = new Pickup_Handler_With_Selection_Probe(
+				'p',
+				'pickup_point',
+				$this->source_returning( null ),
+				$this->yandex_provider(),
+				$this->default_location(),
+				$scope,
+				$selection,
+				[ 'carrier_pickup' ]
+			);
+
+			$this->assertSame( 'Тверская, 1', $handler->get_js_config()['chosenAddress'] );
+		}
+
+		public function test_get_js_config_chosen_address_is_empty_when_nothing_is_remembered(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			Functions\when( 'rest_url' )->justReturn( 'https://example.test/wp-json/woodev/v1' );
+			Functions\when( 'wp_create_nonce' )->justReturn( 'NONCE' );
+			Functions\when( 'wc_ship_to_billing_address_only' )->justReturn( false );
+
+			$scope = new Pickup_Handler_Selection_Test_Scope(
+				'key',
+				static fn( Pickup_Point $point ) => 'msk',
+				static fn() => 'msk',
+				static fn( string $method_id ) => 'pvz'
+			);
+			$selection = new Pickup_Handler_Selection_Probe( $scope, new Pickup_Handler_Fake_Session() );
+			// Nothing remembered for (msk, pvz).
+
+			$handler = new Pickup_Handler_With_Selection_Probe(
+				'p',
+				'pickup_point',
+				$this->source_returning( null ),
+				$this->yandex_provider(),
+				$this->default_location(),
+				$scope,
+				$selection,
+				[ 'carrier_pickup' ]
+			);
+
+			$this->assertSame( '', $handler->get_js_config()['chosenAddress'] );
+		}
+
+		/**
+		 * The legacy degrade this feature must not fatal on: a session written before #274
+		 * shipped has an id but no `address` key at all — the same shape
+		 * {@see PickupSelectionTest::test_recall_address_returns_null_for_a_legacy_id_only_entry()}
+		 * pins at the `Pickup_Selection` layer, exercised here through the whole
+		 * `get_js_config()` seam. The id restore path is asserted alongside it, proving the
+		 * degrade is scoped to the address alone — the id keeps restoring exactly as #176 already
+		 * guarantees.
+		 */
+		public function test_get_js_config_chosen_address_degrades_to_empty_for_a_legacy_id_only_entry(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			Functions\when( 'rest_url' )->justReturn( 'https://example.test/wp-json/woodev/v1' );
+			Functions\when( 'wp_create_nonce' )->justReturn( 'NONCE' );
+			Functions\when( 'wc_ship_to_billing_address_only' )->justReturn( false );
+
+			$scope = new Pickup_Handler_Selection_Test_Scope(
+				'key',
+				static fn( Pickup_Point $point ) => 'msk',
+				static fn() => 'msk',
+				static fn( string $method_id ) => 'pvz'
+			);
+			$session = new Pickup_Handler_Fake_Session();
+			$session->set( 'key', [ 'msk' => [ 'pvz' => [ 'id' => 'P1', 'seq' => 1 ] ] ] );
+			$selection = new Pickup_Handler_Selection_Probe( $scope, $session );
+
+			$handler = new Pickup_Handler_With_Selection_Probe(
+				'p',
+				'pickup_point',
+				$this->source_returning( null ),
+				$this->yandex_provider(),
+				$this->default_location(),
+				$scope,
+				$selection,
+				[ 'carrier_pickup' ]
+			);
+
+			$this->assertSame( 'P1', $handler->restore_selection( '', 'pickup_point' ), 'the id restore path must be unaffected' );
+			$this->assertSame(
+				'',
+				$handler->get_js_config()['chosenAddress'],
+				'a legacy id-only entry must degrade to no address, never fatal'
+			);
+		}
+
+		public function test_get_js_config_chosen_address_is_empty_without_a_scope(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			Functions\when( 'rest_url' )->justReturn( 'https://example.test/wp-json/woodev/v1' );
+			Functions\when( 'wp_create_nonce' )->justReturn( 'NONCE' );
+			Functions\when( 'wc_ship_to_billing_address_only' )->justReturn( false );
+
+			$handler = new Pickup_Handler_With_Selection_Probe(
+				'p',
+				'pickup_point',
+				$this->source_returning( null ),
+				$this->yandex_provider(),
+				$this->default_location(),
+				null,
+				null
+			);
+
+			$this->assertSame( '', $handler->get_js_config()['chosenAddress'] );
+		}
+
+		/**
+		 * {@see Selection_Scope::TYPE_ANY} resolves the address of the most recently written
+		 * entry, mirroring {@see self::test_restore_selection_type_any_restores_the_most_recently_written_entry()}'s
+		 * own id-side proof.
+		 */
+		public function test_get_js_config_chosen_address_type_any_uses_the_most_recently_written_entry(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			Functions\when( 'rest_url' )->justReturn( 'https://example.test/wp-json/woodev/v1' );
+			Functions\when( 'wp_create_nonce' )->justReturn( 'NONCE' );
+			Functions\when( 'wc_ship_to_billing_address_only' )->justReturn( false );
+
+			$scope = new Pickup_Handler_Selection_Test_Scope(
+				'key',
+				static fn( Pickup_Point $point ) => 'msk',
+				static fn() => 'msk',
+				static fn( string $method_id ) => Selection_Scope::TYPE_ANY
+			);
+			$selection = new Pickup_Handler_Selection_Probe( $scope, new Pickup_Handler_Fake_Session() );
+			$selection->remember( 'msk', 'pvz', 'P-PVZ', 'Тверская, 1' );
+			$selection->remember( 'msk', 'postamat', 'P-POSTAMAT', 'Ленина, 1' );
+
+			$handler = new Pickup_Handler_With_Selection_Probe(
+				'p',
+				'pickup_point',
+				$this->source_returning( null ),
+				$this->yandex_provider(),
+				$this->default_location(),
+				$scope,
+				$selection,
+				[ 'carrier_pickup' ]
+			);
+
+			$this->assertSame( 'Ленина, 1', $handler->get_js_config()['chosenAddress'] );
+		}
+
+		// --- resolve_chosen_address() vs $_POST (issue #308 item 3) ---
+
+		/**
+		 * The ordinary case: nothing posted for the field (a fresh page load, GET request) —
+		 * `resolve_chosen_address()` falls straight through to the session, exactly as before
+		 * this fix. Proves the fix is additive, not a behaviour change for the common path.
+		 */
+		public function test_get_js_config_chosen_address_uses_the_session_when_nothing_is_posted(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			Functions\when( 'rest_url' )->justReturn( 'https://example.test/wp-json/woodev/v1' );
+			Functions\when( 'wp_create_nonce' )->justReturn( 'NONCE' );
+			Functions\when( 'wc_ship_to_billing_address_only' )->justReturn( false );
+
+			$scope = new Pickup_Handler_Selection_Test_Scope(
+				'key',
+				static fn( Pickup_Point $point ) => 'msk',
+				static fn() => 'msk',
+				static fn( string $method_id ) => 'pvz'
+			);
+			$selection = new Pickup_Handler_Selection_Probe( $scope, new Pickup_Handler_Fake_Session() );
+			$selection->remember( 'msk', 'pvz', 'P1', 'Тверская, 1' );
+
+			$handler = new Pickup_Handler_With_Selection_Probe(
+				'p',
+				'pickup_point',
+				$this->source_returning( null ),
+				$this->yandex_provider(),
+				$this->default_location(),
+				$scope,
+				$selection,
+				[ 'carrier_pickup' ]
+			);
+
+			$this->assertSame( 'Тверская, 1', $handler->get_js_config()['chosenAddress'] );
+		}
+
+		/**
+		 * The fix's core proof: `$_POST` names the SAME id the session remembers an address
+		 * for — WooCommerce's own precedence (`$_POST` before `woocommerce_checkout_get_value`)
+		 * shows this id, and the remembered address genuinely belongs to it, so it is used.
+		 */
+		public function test_get_js_config_chosen_address_is_used_when_the_posted_id_matches_the_remembered_one(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			Functions\when( 'rest_url' )->justReturn( 'https://example.test/wp-json/woodev/v1' );
+			Functions\when( 'wp_create_nonce' )->justReturn( 'NONCE' );
+			Functions\when( 'wc_ship_to_billing_address_only' )->justReturn( false );
+
+			$scope = new Pickup_Handler_Selection_Test_Scope(
+				'key',
+				static fn( Pickup_Point $point ) => 'msk',
+				static fn() => 'msk',
+				static fn( string $method_id ) => 'pvz'
+			);
+			$selection = new Pickup_Handler_Selection_Probe( $scope, new Pickup_Handler_Fake_Session() );
+			$selection->remember( 'msk', 'pvz', 'P1', 'Тверская, 1' );
+
+			$_POST = [ 'pickup_point' => 'P1' ];
+
+			$handler = new Pickup_Handler_With_Selection_Probe(
+				'p',
+				'pickup_point',
+				$this->source_returning( null ),
+				$this->yandex_provider(),
+				$this->default_location(),
+				$scope,
+				$selection,
+				[ 'carrier_pickup' ]
+			);
+
+			$this->assertSame( 'Тверская, 1', $handler->get_js_config()['chosenAddress'] );
+		}
+
+		/**
+		 * The bug this fix closes: a POSTED id that DISAGREES with the session's remembered
+		 * id for the pair (a stale/second-tab session, or simply a different point) must never
+		 * surface the wrong point's address next to the id WooCommerce is about to show — the
+		 * id path (via `$_POST`, before `restore_selection()` ever runs) and this method must
+		 * describe the SAME point, or neither.
+		 */
+		public function test_get_js_config_chosen_address_is_empty_when_the_posted_id_disagrees_with_the_remembered_one(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			Functions\when( 'rest_url' )->justReturn( 'https://example.test/wp-json/woodev/v1' );
+			Functions\when( 'wp_create_nonce' )->justReturn( 'NONCE' );
+			Functions\when( 'wc_ship_to_billing_address_only' )->justReturn( false );
+
+			$scope = new Pickup_Handler_Selection_Test_Scope(
+				'key',
+				static fn( Pickup_Point $point ) => 'msk',
+				static fn() => 'msk',
+				static fn( string $method_id ) => 'pvz'
+			);
+			$selection = new Pickup_Handler_Selection_Probe( $scope, new Pickup_Handler_Fake_Session() );
+			$selection->remember( 'msk', 'pvz', 'P1', 'Тверская, 1' );
+
+			// A second tab completed an order (forget_all()) and remembered a NEW point since,
+			// or simply posted a stale value — either way, this id is NOT what the session
+			// has an address on file for.
+			$_POST = [ 'pickup_point' => 'P-OTHER' ];
+
+			$handler = new Pickup_Handler_With_Selection_Probe(
+				'p',
+				'pickup_point',
+				$this->source_returning( null ),
+				$this->yandex_provider(),
+				$this->default_location(),
+				$scope,
+				$selection,
+				[ 'carrier_pickup' ]
+			);
+
+			$this->assertSame(
+				'',
+				$handler->get_js_config()['chosenAddress'],
+				'a posted id this handler has no address for must render no address, never P1\'s'
+			);
+		}
+
+		/**
+		 * WooCommerce's OWN precedence check is `! empty( $_POST[ $input ] )` (`class-wc-
+		 * checkout.php`, see gotcha `custom-checkout-field-is-empty-on-reload-by-construction`)
+		 * — an explicitly empty posted value is treated as "nothing posted", not as "post an
+		 * empty id". `resolve_chosen_address()` must apply the identical `''` !== check, or it
+		 * would refuse the session address here even though WooCommerce itself falls through
+		 * to the session for the id too.
+		 */
+		public function test_get_js_config_chosen_address_treats_an_explicitly_empty_post_as_nothing_posted(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			Functions\when( 'rest_url' )->justReturn( 'https://example.test/wp-json/woodev/v1' );
+			Functions\when( 'wp_create_nonce' )->justReturn( 'NONCE' );
+			Functions\when( 'wc_ship_to_billing_address_only' )->justReturn( false );
+
+			$scope = new Pickup_Handler_Selection_Test_Scope(
+				'key',
+				static fn( Pickup_Point $point ) => 'msk',
+				static fn() => 'msk',
+				static fn( string $method_id ) => 'pvz'
+			);
+			$selection = new Pickup_Handler_Selection_Probe( $scope, new Pickup_Handler_Fake_Session() );
+			$selection->remember( 'msk', 'pvz', 'P1', 'Тверская, 1' );
+
+			$_POST = [ 'pickup_point' => '' ];
+
+			$handler = new Pickup_Handler_With_Selection_Probe(
+				'p',
+				'pickup_point',
+				$this->source_returning( null ),
+				$this->yandex_provider(),
+				$this->default_location(),
+				$scope,
+				$selection,
+				[ 'carrier_pickup' ]
+			);
+
+			$this->assertSame( 'Тверская, 1', $handler->get_js_config()['chosenAddress'] );
 		}
 
 		// --- handle_checkout_order_processed() — clearing on order creation ---
