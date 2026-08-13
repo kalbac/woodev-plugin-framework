@@ -23,6 +23,26 @@ use WP_REST_Request;
 
 class LocationRouteTest extends TestCase {
 
+	/**
+	 * The DaData provider's own store-level token option — the ONLY thing
+	 * {@see \Woodev\Framework\Shipping\Location\Providers\Dadata_Provider::is_configured()}
+	 * (and therefore {@see \Woodev\Framework\Shipping\Location\Location_Service::is_active()})
+	 * checks once the registry gate is open (this file always opens it via
+	 * {@see self::activate_and_boot_rest()}).
+	 *
+	 * @var string
+	 */
+	private const OPTION_DADATA_TOKEN = 'woodev_location_token';
+
+	/**
+	 * The option's value as found at the start of THIS test, captured in
+	 * {@see self::setUp()} and restored in {@see self::tearDown()}. `false`
+	 * means the option did not exist at all.
+	 *
+	 * @var string|false
+	 */
+	private $original_dadata_token;
+
 	protected function setUp(): void {
 		parent::setUp();
 
@@ -30,11 +50,49 @@ class LocationRouteTest extends TestCase {
 		// and a prior test (or another declaring plugin loaded in wp-env) may
 		// already have opened it; reset so this test controls the gate itself.
 		Location_Provider_Registry::instance()->reset_for_tests();
+
+		// The rig environment may carry `woodev_location_token` already seeded
+		// by `Woodev_Test_Credential_Seeder` (tests/_fixtures/woodev-test-shipping-method/
+		// class-test-credential-seeder.php) from the rig's own WOODEV_TEST_DADATA_TOKEN
+		// wp-config constant — that seeding happens once, at fixture-plugin bootstrap,
+		// long before this test runs, and is idempotent (never re-seeds over a
+		// non-empty option), so it is never "reset" between tests by the environment
+		// itself. A test asserting INACTIVE-layer behaviour that merely relies on the
+		// CI container happening to have no token defined is fragile in ANY
+		// environment, CI included — the option is DB state, not something an env
+		// constant check can stand in for. Every test in this file therefore starts
+		// from a known, explicitly-neutralised baseline; a test that needs the ACTIVE
+		// path opts back in via self::make_location_layer_active().
+		$this->original_dadata_token = get_option( self::OPTION_DADATA_TOKEN, false );
+		delete_option( self::OPTION_DADATA_TOKEN );
 	}
 
 	protected function tearDown(): void {
+		if ( false === $this->original_dadata_token ) {
+			delete_option( self::OPTION_DADATA_TOKEN );
+		} else {
+			update_option( self::OPTION_DADATA_TOKEN, $this->original_dadata_token );
+		}
+
 		Location_Provider_Registry::instance()->reset_for_tests();
 		parent::tearDown();
+	}
+
+	/**
+	 * Opts a test back into the ACTIVE path: seeds a fake (never network-reaching)
+	 * token into the same option `Dadata_Provider::is_configured()` reads, making
+	 * `Location_Service::is_active()` true for the rest of this test. Safe on any
+	 * environment — nothing this file exercises with the layer active ever calls
+	 * the provider's own HTTP client, see
+	 * {@see self::test_select_with_a_valid_nonce_and_active_layer_persists_and_returns_200()}'s
+	 * own docblock for why `/select` in particular never does.
+	 *
+	 * @param string $token the fake token to seed.
+	 *
+	 * @return void
+	 */
+	private function make_location_layer_active( string $token = 'test-integration-token' ): void {
+		update_option( self::OPTION_DADATA_TOKEN, $token );
 	}
 
 	/**
@@ -114,8 +172,9 @@ class LocationRouteTest extends TestCase {
 	}
 
 	// -------------------------------------------------------------------------
-	// 2. Guest access to /suggest (public read) — layer inactive (no provider
-	//    configured in this test env) degrades to 200 + empty, never a fatal.
+	// 2. Guest access to /suggest (public read) — layer inactive (own
+	//    precondition: setUp() neutralises OPTION_DADATA_TOKEN regardless of
+	//    what the environment seeded) degrades to 200 + empty, never a fatal.
 	// -------------------------------------------------------------------------
 
 	public function test_a_guest_can_call_suggest_and_it_never_fatals_with_no_provider_configured(): void {
@@ -148,8 +207,10 @@ class LocationRouteTest extends TestCase {
 	}
 
 	// -------------------------------------------------------------------------
-	// 3. /select without a valid nonce is refused; the layer being inactive in
-	//    this test env means a well-nonced request still 404s rather than 500s.
+	// 3. /select without a valid nonce is refused; the layer being inactive
+	//    (own precondition, see setUp()) means a well-nonced request still
+	//    404s rather than 500s. The next section (4) proves the OTHER half —
+	//    a well-nonced request against an ACTIVE layer persists and 200s.
 	// -------------------------------------------------------------------------
 
 	public function test_select_without_a_nonce_is_refused(): void {
@@ -192,9 +253,59 @@ class LocationRouteTest extends TestCase {
 
 		$response = rest_get_server()->dispatch( $request );
 
-		// No DaData token is configured in this test environment, so
-		// Location_Service::is_active() is false — the write correctly 404s
-		// rather than persisting against an inactive layer or fataling.
+		// setUp() neutralised OPTION_DADATA_TOKEN, so Location_Service::is_active()
+		// is false regardless of what the environment seeded — the write correctly
+		// 404s rather than persisting against an inactive layer or fataling.
 		$this->assertSame( 404, $response->get_status() );
+	}
+
+	// -------------------------------------------------------------------------
+	// 4. /select with a valid nonce AND an active layer actually persists —
+	//    the ACTIVE-path counterpart to section 3, own precondition via
+	//    make_location_layer_active(), never dependent on what the rig/CI
+	//    environment happens to seed.
+	// -------------------------------------------------------------------------
+
+	/**
+	 * `handle_select_request()` never calls the provider's own HTTP client —
+	 * {@see \Woodev\Framework\Shipping\Location\Location_Service::set_customer_record()}
+	 * is a thin pass-through to
+	 * {@see \Woodev\Framework\Shipping\Location\Customer_Location_Store::set()}, a
+	 * local WC session/customer-meta write — so seeding a FAKE token via
+	 * make_location_layer_active() is enough to prove the active path end to
+	 * end without ever reaching a third-party API (unlike `/suggest`, which
+	 * calls `$provider->suggest()` and is therefore intentionally NOT exercised
+	 * here in the active state).
+	 *
+	 * @return void
+	 */
+	public function test_select_with_a_valid_nonce_and_active_layer_persists_and_returns_200(): void {
+		$this->activate_and_boot_rest();
+		$this->make_location_layer_active();
+
+		wp_set_current_user( 0 );
+
+		$request = new WP_REST_Request( 'POST', '/woodev/v1/location/select' );
+		$request->set_param(
+			'record',
+			[
+				'key'         => 'dadata:fias-1',
+				'provider_id' => 'dadata',
+				'level'       => 'settlement',
+				'country'     => 'RU',
+			]
+		);
+		$request->add_header( 'X-WP-Nonce', wp_create_nonce( 'wp_rest' ) );
+
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame(
+			[
+				'key'   => 'dadata:fias-1',
+				'level' => 'settlement',
+			],
+			$response->get_data()['current']
+		);
 	}
 }
