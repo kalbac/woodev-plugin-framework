@@ -25,8 +25,6 @@ return [
 	'Woodev\\Framework\\Setup\\Step' => 'woodev/setup/class-step.php',
 	'Woodev\\Framework\\Setup\\Woocommerce_Setup_Wizard' => 'woodev/setup/class-woocommerce-setup-wizard.php',
 	'Woodev\\Framework\\Shipping\\Abstract_Shipping_API' => 'woodev/shipping-method/api/class-abstract-shipping-api.php',
-	'Woodev\\Framework\\Shipping\\Address\\Address_Normalizer' => 'woodev/shipping-method/address/interface-address-normalizer.php',
-	'Woodev\\Framework\\Shipping\\Address\\Null_Address_Normalizer' => 'woodev/shipping-method/address/class-null-address-normalizer.php',
 	'Woodev\\Framework\\Shipping\\Admin\\Shipping_Admin' => 'woodev/shipping-method/admin/class-shipping-admin.php',
 	'Woodev\\Framework\\Shipping\\Admin\\Shipping_Admin_Order' => 'woodev/shipping-method/admin/class-shipping-admin-order.php',
 	'Woodev\\Framework\\Shipping\\Admin\\Warehouse_Admin' => 'woodev/shipping-method/admin/class-warehouse-admin.php',

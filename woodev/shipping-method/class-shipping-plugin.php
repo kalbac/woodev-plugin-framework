@@ -37,9 +37,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		/** @var Map\Map_Provider_Registry|null lazily-built map-provider registry */
 		private ?Map\Map_Provider_Registry $map_provider_registry = null;
 
-		/** @var Address\Address_Normalizer|null lazily-built address normalizer */
-		private ?Address\Address_Normalizer $address_normalizer = null;
-
 		/** @var Location\Location_Service|null lazily-built location service façade */
 		private ?Location\Location_Service $location_service = null;
 
@@ -145,10 +142,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 
 			// settings
 			require_once $path . '/settings/class-shipping-integration.php';
-
-			// address normalizer (framework default: null object)
-			require_once $path . '/address/interface-address-normalizer.php';
-			require_once $path . '/address/class-null-address-normalizer.php';
 
 			// pickup-point map provider interface + registry (no default provider ships)
 			require_once $path . '/map/interface-map-provider.php';
@@ -925,26 +918,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			}
 
 			return $this->map_provider_registry;
-		}
-
-		/**
-		 * Gets the address normalizer, building the no-op default on first use.
-		 *
-		 * Returns the framework's {@see Address\Null_Address_Normalizer} so the shipping
-		 * module can always depend on a normalizer being present. A host plugin overrides
-		 * this to supply a carrier-backed normalizer.
-		 *
-		 * @since 1.5.0
-		 *
-		 * @return Address\Address_Normalizer
-		 */
-		public function get_address_normalizer(): Address\Address_Normalizer {
-
-			if ( ! $this->address_normalizer instanceof Address\Address_Normalizer ) {
-				$this->address_normalizer = new Address\Null_Address_Normalizer();
-			}
-
-			return $this->address_normalizer;
 		}
 
 		/**
