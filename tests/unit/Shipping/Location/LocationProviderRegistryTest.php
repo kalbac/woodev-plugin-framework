@@ -82,6 +82,84 @@ class Fake_Location_Provider extends Abstract_Location_Provider {
 }
 
 /**
+ * A `list`-capable fake provider (Task 13) — {@see Fake_Location_Provider} never
+ * overrides {@see \Woodev\Framework\Shipping\Location\Abstract_Location_Provider::list_localities()},
+ * so its reflection-derived capability set never contains `list`; this fixture
+ * exists specifically to exercise the `related-list`/`ajax-select2` mode gate and
+ * {@see \Woodev\Framework\Shipping\Location\Location_Provider_Registry::inject_related_list_states()},
+ * neither of which the DaData-shaped fake above can ever reach.
+ */
+class Fake_List_Location_Provider extends Abstract_Location_Provider {
+
+	private string $id;
+	private string $name;
+
+	/** @var string[] */
+	private array $countries;
+
+	/** @var array<string, \Woodev\Framework\Shipping\Location\Location_Record[]> country => region-level records. */
+	private array $region_records_by_country;
+
+	private bool $configured;
+
+	/** @var int Spy: how many times list_localities() was actually called. */
+	public int $list_localities_calls = 0;
+
+	/**
+	 * @param array<string, \Woodev\Framework\Shipping\Location\Location_Record[]> $region_records_by_country country => region-level records
+	 *                                                                                                          {@see self::list_localities()} returns
+	 *                                                                                                          for a region-level scope.
+	 */
+	public function __construct(
+		string $id,
+		string $name,
+		array $countries,
+		array $region_records_by_country = [],
+		bool $configured = true
+	) {
+		$this->id                       = $id;
+		$this->name                     = $name;
+		$this->countries                = $countries;
+		$this->region_records_by_country = $region_records_by_country;
+		$this->configured                = $configured;
+	}
+
+	public function get_id(): string {
+		return $this->id;
+	}
+
+	public function get_name(): string {
+		return $this->name;
+	}
+
+	public function get_countries(): array {
+		return $this->countries;
+	}
+
+	public function is_configured(): bool {
+		return $this->configured;
+	}
+
+	protected function declare_suggest_levels(): array {
+		return [ Location_Record::LEVEL_REGION ];
+	}
+
+	public function suggest( string $query, Location_Scope $scope ): array {
+		return [];
+	}
+
+	public function list_localities( Location_Scope $scope ): array {
+		++$this->list_localities_calls;
+
+		if ( Location_Record::LEVEL_REGION !== $scope->level() ) {
+			return [];
+		}
+
+		return $this->region_records_by_country[ $scope->country() ] ?? [];
+	}
+}
+
+/**
  * @covers \Woodev\Framework\Shipping\Location\Location_Provider_Registry
  * @covers \Woodev\Framework\Shipping\Location\Location_Settings
  */
@@ -686,5 +764,539 @@ final class LocationProviderRegistryTest extends TestCase {
 		$fresh = Location_Provider_Registry::instance();
 		$this->assertFalse( $fresh->is_needed() );
 		$this->assertSame( [], $fresh->get_providers() );
+	}
+
+	// -------------------------------------------------------------------------
+	// Task 13 (spec D7) — offered field modes = f(active provider capabilities)
+	// -------------------------------------------------------------------------
+
+	public function test_offered_field_modes_typeahead_only_for_the_real_dadata_provider(): void {
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [] ); // active provider falls back to the bundled DaData default.
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$this->assertSame( [ Location_Provider_Registry::MODE_TYPEAHEAD ], $registry->get_offered_field_modes() );
+	}
+
+	public function test_offered_field_modes_include_related_list_and_ajax_select2_for_a_list_capable_active_provider(): void {
+		$list_provider = new Fake_List_Location_Provider( 'list-fixture', 'List Fixture', [ 'RU' ] );
+
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [ $list_provider ] );
+		$this->stub_active_provider_option( 'list-fixture' );
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$this->assertSame(
+			[ Location_Provider_Registry::MODE_TYPEAHEAD, Location_Provider_Registry::MODE_RELATED_LIST, Location_Provider_Registry::MODE_AJAX_SELECT2 ],
+			$registry->get_offered_field_modes()
+		);
+	}
+
+	public function test_offered_field_modes_typeahead_only_when_no_active_provider_resolves(): void {
+		// Gate open, but nothing collected yet — get_active_provider() is null.
+		Functions\when( 'add_action' )->justReturn( true );
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+
+		$this->assertSame( [ Location_Provider_Registry::MODE_TYPEAHEAD ], $registry->get_offered_field_modes() );
+	}
+
+	/**
+	 * The settings surface's own `field_mode` select must offer EXACTLY the
+	 * same options {@see Location_Provider_Registry::get_offered_field_modes()}
+	 * computes — proving the registration-time computation (which cannot call
+	 * `get_active_provider()` — the settings handler does not exist yet, see
+	 * that private helper's own docblock) agrees with the read-time one.
+	 */
+	public function test_field_mode_setting_options_match_the_list_capable_active_providers_offered_modes(): void {
+		$list_provider = new Fake_List_Location_Provider( 'list-fixture', 'List Fixture', [ 'RU' ] );
+
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [ $list_provider ] );
+		$this->stub_active_provider_option( 'list-fixture' );
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$setting = $registry->get_settings_handler()->get_setting( Location_Provider_Registry::SETTING_FIELD_MODE );
+
+		$this->assertSame(
+			array_keys( $setting->get_options() ),
+			$registry->get_offered_field_modes()
+		);
+		$this->assertSame( \Woodev_Control::TYPE_SELECT, $setting->get_control()->get_type() );
+	}
+
+	/**
+	 * PR #304 review finding 6: `register_settings()` used to resolve the
+	 * active provider by looking `$this->providers[ $id ]` up DIRECTLY,
+	 * entirely skipping {@see Location_Provider_Registry::FILTER_ACTIVE_PROVIDER}
+	 * — the same filter {@see Location_Provider_Registry::get_active_provider()}
+	 * (and therefore the runtime's {@see Location_Provider_Registry::get_offered_field_modes()})
+	 * always applies. The stored id here names `acme`, which has no `list`
+	 * capability; the filter swaps the RESOLVED provider to a list-capable one
+	 * regardless. Before the fix, the settings page — built once, at
+	 * collection time, straight from the unfiltered id — would offer ONLY
+	 * `typeahead`, while the runtime (which DOES apply the filter) would
+	 * accept `related-list`/`ajax-select2` too: an admin could never even see
+	 * the option the runtime would actually honour. The mutant this pins:
+	 * reverting `register_settings()` to a direct `$this->providers[ $id ]`
+	 * lookup makes this assertion fail (the settings page would offer only
+	 * `[ 'typeahead' ]`, diverging from `get_offered_field_modes()`).
+	 */
+	public function test_settings_page_field_mode_options_reflect_the_active_provider_filter_not_the_raw_stored_id(): void {
+		$acme          = new Fake_Location_Provider( 'acme', 'ACME' ); // no `list` capability.
+		$list_provider = new Fake_List_Location_Provider( 'list-fixture', 'List Fixture', [ 'RU' ] );
+
+		Functions\when( 'add_action' )->justReturn( true );
+		Functions\when( 'apply_filters' )->alias(
+			static function ( string $tag, $default = null ) use ( $acme, $list_provider ) {
+				if ( Location_Provider_Registry::FILTER_PROVIDERS === $tag ) {
+					return [ $acme, $list_provider ];
+				}
+				if ( Location_Provider_Registry::FILTER_ACTIVE_PROVIDER === $tag ) {
+					return $list_provider; // swaps the resolved provider regardless of the stored id.
+				}
+
+				return $default;
+			}
+		);
+		Functions\when( 'get_option' )->justReturn( 'acme' );
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$setting = $registry->get_settings_handler()->get_setting( Location_Provider_Registry::SETTING_FIELD_MODE );
+
+		$this->assertSame(
+			$registry->get_offered_field_modes(),
+			array_keys( $setting->get_options() ),
+			'the settings page must offer exactly what the runtime would accept — both go through the SAME resolution now'
+		);
+		$this->assertContains(
+			Location_Provider_Registry::MODE_RELATED_LIST,
+			array_keys( $setting->get_options() ),
+			'the filter-swapped list-capable provider must be reflected on the settings page, not the raw stored id alone'
+		);
+	}
+
+	// -------------------------------------------------------------------------
+	// Task 13 — get_field_mode(): default + clamp against the offered set
+	// -------------------------------------------------------------------------
+
+	public function test_field_mode_defaults_to_typeahead(): void {
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [] );
+		Functions\when( 'get_option' )->justReturn( null );
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$this->assertSame( Location_Provider_Registry::MODE_TYPEAHEAD, $registry->get_field_mode() );
+	}
+
+	public function test_field_mode_returns_the_stored_value_when_it_is_offered(): void {
+		$list_provider = new Fake_List_Location_Provider( 'list-fixture', 'List Fixture', [ 'RU' ] );
+
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [ $list_provider ] );
+		Functions\when( 'get_option' )->alias(
+			static function ( $name, $default = null ) {
+				if ( 'woodev_location_active_provider' === $name ) {
+					return 'list-fixture';
+				}
+				if ( 'woodev_location_field_mode' === $name ) {
+					return Location_Provider_Registry::MODE_RELATED_LIST;
+				}
+
+				return $default;
+			}
+		);
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$this->assertSame( Location_Provider_Registry::MODE_RELATED_LIST, $registry->get_field_mode() );
+	}
+
+	/**
+	 * A stored `related-list` value from BEFORE a provider switch to a
+	 * non-`list` provider (e.g. back to DaData) must never be served as-is —
+	 * clamps to typeahead, the one mode every provider can always back.
+	 */
+	public function test_field_mode_clamps_a_stored_value_the_current_active_provider_no_longer_supports(): void {
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [] ); // active provider falls back to DaData (no `list`).
+		Functions\when( 'get_option' )->alias(
+			static function ( $name, $default = null ) {
+				return 'woodev_location_field_mode' === $name ? Location_Provider_Registry::MODE_RELATED_LIST : $default;
+			}
+		);
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$this->assertSame( Location_Provider_Registry::MODE_TYPEAHEAD, $registry->get_field_mode() );
+	}
+
+	public function test_field_mode_is_typeahead_while_the_gate_is_closed(): void {
+		$registry = Location_Provider_Registry::instance();
+
+		$this->assertSame( Location_Provider_Registry::MODE_TYPEAHEAD, $registry->get_field_mode() );
+	}
+
+	// -------------------------------------------------------------------------
+	// Task 13 — inject_related_list_states(): the related-list region renderer
+	// -------------------------------------------------------------------------
+
+	private function region_record( string $provider_id, string $native_id, string $country, string $name ): Location_Record {
+		return Location_Record::from_array(
+			[
+				'key'         => $provider_id . ':' . $native_id,
+				'provider_id' => $provider_id,
+				'level'       => Location_Record::LEVEL_REGION,
+				'country'     => $country,
+				'region'      => [ 'name' => $name, 'type' => 'область' ],
+				'label'       => $name,
+			]
+		);
+	}
+
+	/**
+	 * Activates a `list`-capable fixture provider as ACTIVE, with `field_mode`
+	 * stored as `related-list`, and collects the registry — the common setup
+	 * every `inject_related_list_states()` test below needs.
+	 */
+	private function activate_related_list_mode( Fake_List_Location_Provider $provider ): Location_Provider_Registry {
+		Functions\when( 'add_action' )->justReturn( true );
+		// Real WC() is never loaded in unit tests — mirrors the real
+		// `wc_strtoupper()` (`mb_strtoupper()` when available, Cyrillic-aware,
+		// see `wc-formatting-functions.php`) so the label -> key transform
+		// `inject_related_list_states()` now applies (PR #304 review finding 2)
+		// exercises the same semantics the real function would.
+		Functions\when( 'wc_strtoupper' )->alias(
+			static function ( $string ) {
+				return mb_strtoupper( (string) $string );
+			}
+		);
+		$this->stub_providers_filter( [ $provider ] );
+		Functions\when( 'get_option' )->alias(
+			static function ( $name, $default = null ) use ( $provider ) {
+				if ( 'woodev_location_active_provider' === $name ) {
+					return $provider->get_id();
+				}
+				if ( 'woodev_location_field_mode' === $name ) {
+					return Location_Provider_Registry::MODE_RELATED_LIST;
+				}
+
+				return $default;
+			}
+		);
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		return $registry;
+	}
+
+	/**
+	 * s71 correction: the injected VALUE is the record's human-readable LABEL,
+	 * never its `provider_id:native_id` key — a `billing_state`/`shipping_state`
+	 * value is permanent order data, and a provider-namespaced key renders as
+	 * raw garbage in the customer's formatted address the instant this injector
+	 * is not present (rig measurement, see the method's own docblock).
+	 *
+	 * PR #304 review finding 2: the KEY is `wc_strtoupper( $label )`, never the
+	 * bare (possibly mixed-case) label — `WC_Checkout::validate_posted_data()`
+	 * uppercases whatever the customer posted before matching it against the
+	 * registered keys, so a mixed-case key used bare would never match its own
+	 * uppercased submission again on the next render.
+	 */
+	public function test_inject_injects_regions_keyed_by_their_own_uppercased_label(): void {
+		$provider = new Fake_List_Location_Provider(
+			'list-fixture',
+			'List Fixture',
+			[ 'RU' ],
+			[ 'RU' => [ $this->region_record( 'list-fixture', 'mo', 'RU', 'Московская область' ) ] ]
+		);
+		$registry = $this->activate_related_list_mode( $provider );
+
+		$states = $registry->inject_related_list_states( [] );
+
+		$this->assertSame( [ 'МОСКОВСКАЯ ОБЛАСТЬ' => 'Московская область' ], $states['RU'] );
+	}
+
+	/**
+	 * Two records legitimately colliding on the same label within one country is
+	 * a real ambiguity — WooCommerce's state array is keyed by value, so only
+	 * ONE option could ever be selected under that text. The first (provider's
+	 * own enumeration order) wins; the collision is reported exactly once, never
+	 * silently dropped and never disambiguated with a synthetic suffix that
+	 * would itself leak into `billing_state`.
+	 */
+	public function test_inject_keeps_the_first_of_a_duplicate_label_and_warns_once(): void {
+		Functions\expect( '_doing_it_wrong' )->once();
+
+		$provider = new Fake_List_Location_Provider(
+			'list-fixture',
+			'List Fixture',
+			[ 'RU' ],
+			[
+				'RU' => [
+					$this->region_record( 'list-fixture', 'mo-1', 'RU', 'Московская область' ),
+					$this->region_record( 'list-fixture', 'mo-2', 'RU', 'Московская область' ),
+				],
+			]
+		);
+		$registry = $this->activate_related_list_mode( $provider );
+
+		$states = $registry->inject_related_list_states( [] );
+
+		$this->assertSame( [ 'МОСКОВСКАЯ ОБЛАСТЬ' => 'Московская область' ], $states['RU'], 'the first record wins; the duplicate is dropped, not merged or suffixed' );
+	}
+
+	/**
+	 * PR #304 review finding 2: two labels differing only in case now collide
+	 * too, since duplicate detection moved onto the uppercased key.
+	 */
+	public function test_inject_treats_labels_differing_only_in_case_as_a_duplicate(): void {
+		Functions\expect( '_doing_it_wrong' )->once();
+
+		$provider = new Fake_List_Location_Provider(
+			'list-fixture',
+			'List Fixture',
+			[ 'RU' ],
+			[
+				'RU' => [
+					$this->region_record( 'list-fixture', 'mo-1', 'RU', 'Московская область' ),
+					$this->region_record( 'list-fixture', 'mo-2', 'RU', 'МОСКОВСКАЯ ОБЛАСТЬ' ),
+				],
+			]
+		);
+		$registry = $this->activate_related_list_mode( $provider );
+
+		$states = $registry->inject_related_list_states( [] );
+
+		$this->assertSame( [ 'МОСКОВСКАЯ ОБЛАСТЬ' => 'Московская область' ], $states['RU'], 'the first record wins, case-insensitively' );
+	}
+
+	public function test_inject_records_ownership_for_every_country_it_wrote(): void {
+		$provider = new Fake_List_Location_Provider(
+			'list-fixture',
+			'List Fixture',
+			[ 'RU' ],
+			[ 'RU' => [ $this->region_record( 'list-fixture', 'mo', 'RU', 'Московская область' ) ] ]
+		);
+		$registry = $this->activate_related_list_mode( $provider );
+
+		$states = $registry->inject_related_list_states( [] );
+
+		$this->assertTrue( $registry->owns_region_states( 'RU', $states['RU'] ) );
+		$this->assertFalse( $registry->owns_region_states( 'BY', [] ), 'a country never injected into must not be reported owned' );
+	}
+
+	/**
+	 * PR #304 review finding 3: ownership must be re-confirmed against the
+	 * FINAL registered states, not merely trusted from the recorded flag — a
+	 * later filter callback (e.g. a §8 carrier takeover hooked after this
+	 * injector, both at the default `woocommerce_states` priority) can
+	 * overwrite what this injector wrote. The mutant this pins: reverting
+	 * `owns_region_states()` to trust the recorded flag alone (ignoring
+	 * `$final_states`) makes this assert `true` for a country this injector no
+	 * longer actually owns.
+	 */
+	public function test_owns_region_states_is_false_once_a_later_filter_overwrites_the_injection(): void {
+		$provider = new Fake_List_Location_Provider(
+			'list-fixture',
+			'List Fixture',
+			[ 'RU' ],
+			[ 'RU' => [ $this->region_record( 'list-fixture', 'mo', 'RU', 'Московская область' ) ] ]
+		);
+		$registry = $this->activate_related_list_mode( $provider );
+
+		$registry->inject_related_list_states( [] );
+
+		// Simulates a §8 carrier takeover (Checkout_Handler::inject_states())
+		// running AFTER this injector on the same `woocommerce_states` filter
+		// and unconditionally overwriting the country's states.
+		$overwritten_by_someone_else = [ 'MOW' => 'Москва (перехвачено §8)' ];
+
+		$this->assertFalse( $registry->owns_region_states( 'RU', $overwritten_by_someone_else ) );
+	}
+
+	/**
+	 * PR #304 review finding 4: a record whose label is `''` (documented as
+	 * possible, {@see Location_Record::label()}) must never become a
+	 * selectable option — WooCommerce would render it indistinguishably from
+	 * its own "select an option…" placeholder. The mutant this pins: dropping
+	 * the empty-label guard makes `$options['']` register, so `RU` would carry
+	 * a blank entry and this assertion would fail.
+	 */
+	public function test_inject_skips_a_record_with_an_empty_or_whitespace_only_label(): void {
+		$provider = new Fake_List_Location_Provider(
+			'list-fixture',
+			'List Fixture',
+			[ 'RU' ],
+			[
+				'RU' => [
+					$this->region_record( 'list-fixture', 'blank', 'RU', '' ),
+					$this->region_record( 'list-fixture', 'whitespace', 'RU', '   ' ),
+					$this->region_record( 'list-fixture', 'mo', 'RU', 'Московская область' ),
+				],
+			]
+		);
+		$registry = $this->activate_related_list_mode( $provider );
+
+		$states = $registry->inject_related_list_states( [] );
+
+		$this->assertSame( [ 'МОСКОВСКАЯ ОБЛАСТЬ' => 'Московская область' ], $states['RU'], 'the empty/whitespace-only labels must never become options' );
+	}
+
+	/**
+	 * PR #304 review finding 4: labels are untrimmed by the provider, so
+	 * `'Москва'` and `'Москва '` would otherwise register as two visually
+	 * identical options — trimming BEFORE using the label as key or value
+	 * collapses them into one, same as the real duplicate-label path.
+	 */
+	public function test_inject_trims_labels_before_using_them_as_key_or_value(): void {
+		Functions\expect( '_doing_it_wrong' )->once();
+
+		$provider = new Fake_List_Location_Provider(
+			'list-fixture',
+			'List Fixture',
+			[ 'RU' ],
+			[
+				'RU' => [
+					$this->region_record( 'list-fixture', 'mo-1', 'RU', 'Москва' ),
+					$this->region_record( 'list-fixture', 'mo-2', 'RU', 'Москва ' ),
+				],
+			]
+		);
+		$registry = $this->activate_related_list_mode( $provider );
+
+		$states = $registry->inject_related_list_states( [] );
+
+		$this->assertSame( [ 'МОСКВА' => 'Москва' ], $states['RU'], 'a trailing-whitespace label is the same option as its trimmed form' );
+	}
+
+	/**
+	 * The gotcha `checkout-field-takeover-woocommerce-states` discipline:
+	 * writing an empty array for a country tells WooCommerce it has NO states
+	 * at all and HIDES the field — a country the provider claims to cover but
+	 * has nothing to enumerate for must be left untouched instead.
+	 */
+	public function test_inject_never_writes_an_empty_array_for_a_country_with_nothing_to_enumerate(): void {
+		$provider = new Fake_List_Location_Provider( 'list-fixture', 'List Fixture', [ 'RU' ], [] ); // no region data at all.
+		$registry = $this->activate_related_list_mode( $provider );
+
+		$states = $registry->inject_related_list_states( [ 'RU' => [ 'MOW' => 'Москва (native)' ] ] );
+
+		// Untouched — WC's own pre-existing entry survives.
+		$this->assertSame( [ 'MOW' => 'Москва (native)' ], $states['RU'] );
+		$this->assertFalse( $registry->owns_region_states( 'RU', $states['RU'] ), 'nothing was actually injected — must not be reported owned' );
+	}
+
+	/**
+	 * First-wins: a country ALREADY carrying non-empty states (from an earlier
+	 * `woocommerce_states` callback — WC native, or a plugin's §8 carrier
+	 * takeover) is never clobbered by this injector.
+	 */
+	public function test_inject_never_overwrites_an_already_non_empty_country(): void {
+		$provider = new Fake_List_Location_Provider(
+			'list-fixture',
+			'List Fixture',
+			[ 'RU' ],
+			[ 'RU' => [ $this->region_record( 'list-fixture', 'mo', 'RU', 'Московская область' ) ] ]
+		);
+		$registry = $this->activate_related_list_mode( $provider );
+
+		$states = $registry->inject_related_list_states( [ 'RU' => [ '77' => 'Москва (карьер)' ] ] );
+
+		$this->assertSame( [ '77' => 'Москва (карьер)' ], $states['RU'], 'first-wins — the pre-existing entry is kept' );
+		$this->assertFalse( $registry->owns_region_states( 'RU', $states['RU'] ), 'a country this injector skipped is never reported owned' );
+	}
+
+	public function test_inject_is_a_no_op_outside_related_list_mode(): void {
+		$provider = new Fake_List_Location_Provider(
+			'list-fixture',
+			'List Fixture',
+			[ 'RU' ],
+			[ 'RU' => [ $this->region_record( 'list-fixture', 'mo', 'RU', 'Московская область' ) ] ]
+		);
+
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [ $provider ] );
+		// active_provider = list-fixture, but field_mode left at its default (typeahead).
+		$this->stub_active_provider_option( 'list-fixture' );
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$states = $registry->inject_related_list_states( [] );
+
+		$this->assertArrayNotHasKey( 'RU', $states );
+		$this->assertSame( 0, $provider->list_localities_calls, 'the provider must never even be asked outside related-list mode' );
+	}
+
+	public function test_inject_is_a_no_op_when_the_active_provider_lacks_the_list_capability(): void {
+		// The real bundled DaData provider is active (no fixture override) — it
+		// has no `list` capability at all, so even if field_mode somehow held
+		// 'related-list' (a value get_field_mode() itself would clamp away —
+		// this test calls the injector directly to prove the injector's OWN
+		// gate is independently defensive, not merely relying on that clamp).
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [] );
+		Functions\when( 'get_option' )->alias(
+			static function ( $name, $default = null ) {
+				return 'woodev_location_field_mode' === $name ? Location_Provider_Registry::MODE_RELATED_LIST : $default;
+			}
+		);
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$states = $registry->inject_related_list_states( [] );
+
+		$this->assertSame( [], $states );
+	}
+
+	public function test_inject_is_a_no_op_when_the_active_provider_is_not_configured(): void {
+		$provider = new Fake_List_Location_Provider(
+			'list-fixture',
+			'List Fixture',
+			[ 'RU' ],
+			[ 'RU' => [ $this->region_record( 'list-fixture', 'mo', 'RU', 'Московская область' ) ] ],
+			false // not configured.
+		);
+		$registry = $this->activate_related_list_mode( $provider );
+
+		$states = $registry->inject_related_list_states( [] );
+
+		$this->assertArrayNotHasKey( 'RU', $states );
+		$this->assertSame( 0, $provider->list_localities_calls );
+	}
+
+	public function test_inject_tolerates_a_non_array_input(): void {
+		$provider = new Fake_List_Location_Provider( 'list-fixture', 'List Fixture', [ 'RU' ], [] );
+		$registry = $this->activate_related_list_mode( $provider );
+
+		$states = $registry->inject_related_list_states( 'not-an-array' );
+
+		$this->assertIsArray( $states );
 	}
 }

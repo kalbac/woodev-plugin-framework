@@ -473,6 +473,133 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 
 			return in_array( $level, $provider->get_suggest_levels( $normalized ), true );
 		}
+
+		/**
+		 * Walks the D15 chain (chosen → bundled fallback → null) for the
+		 * {@see Location_Provider::CAPABILITY_LIST} capability (Task 13) — the
+		 * `GET woodev/v1/location/list` route's own provider resolution, mirroring
+		 * {@see self::provider_for_level()}'s shape exactly but gating on the
+		 * `list` capability instead of a suggest level. `list_localities()` is
+		 * NOT itself a per-level D15 fallback concept the way `suggest()` is
+		 * (spec D15 is specifically about per-LEVEL suggest support); this chain
+		 * exists so `/location/list` degrades the same forgiving way `/suggest`
+		 * does when the CHOSEN provider cannot enumerate but the bundled fallback
+		 * theoretically could (today: never — DaData has no `list` capability at
+		 * all — but the chain costs nothing to keep consistent with every other
+		 * D15-shaped resolution in this façade, and a future `list`-capable
+		 * bundled provider would be served correctly with zero caller changes).
+		 *
+		 * `$country` (optional): when given, a candidate is eligible only when it
+		 * ALSO covers it ({@see Location_Provider::get_countries()}) — mirrors
+		 * {@see self::provider_serves_level()}'s own country check. Omitted: no
+		 * country check, only the capability itself decides (used by
+		 * {@see Location_Provider_Registry::get_offered_field_modes()}'s own
+		 * gate, which is intentionally country-blind — mode OFFERING is a
+		 * store-wide decision, not a per-country one).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string|null $country ISO-3166 alpha-2 country code, or `null`
+		 *                             for the country-blind chain walk.
+		 *
+		 * @return Location_Provider|null
+		 */
+		public function provider_for_list( ?string $country = null ): ?Location_Provider {
+			$chosen = $this->registry->get_active_provider();
+
+			if ( null !== $chosen && $chosen->is_configured() && $this->provider_serves_list( $chosen, $country ) ) {
+				return $chosen;
+			}
+
+			$fallback = $this->registry->get_providers()[ Location_Provider_Registry::DEFAULT_PROVIDER_ID ] ?? null;
+
+			if ( null !== $fallback && $fallback->is_configured() && $this->provider_serves_list( $fallback, $country ) ) {
+				return $fallback;
+			}
+
+			return null;
+		}
+
+		/**
+		 * Whether `$provider` is an eligible {@see self::provider_for_list()}
+		 * candidate: declares {@see Location_Provider::CAPABILITY_LIST} and,
+		 * when `$country` is given, also covers it.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param Location_Provider $provider Candidate provider.
+		 * @param string|null       $country  ISO-3166 alpha-2 country code, or `null`.
+		 *
+		 * @return bool
+		 */
+		private function provider_serves_list( Location_Provider $provider, ?string $country ): bool {
+			if ( ! in_array( Location_Provider::CAPABILITY_LIST, $provider->get_capabilities(), true ) ) {
+				return false;
+			}
+
+			if ( null === $country ) {
+				return true;
+			}
+
+			return in_array( strtoupper( trim( $country ) ), $provider->get_countries(), true );
+		}
+
+		/**
+		 * Gets the field-presentation modes the store setting is currently
+		 * allowed to offer (Task 13; spec D7) — thin pass-through to
+		 * {@see Location_Provider_Registry::get_offered_field_modes()}.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string[]
+		 */
+		public function get_offered_field_modes(): array {
+			return $this->registry->get_offered_field_modes();
+		}
+
+		/**
+		 * Gets the store's field-presentation mode (Task 13; spec D7) — thin
+		 * pass-through to {@see Location_Provider_Registry::get_field_mode()},
+		 * clamped against {@see self::get_offered_field_modes()} so a stale
+		 * saved value can never name a mode the current active provider does
+		 * not back.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string
+		 */
+		public function get_field_mode(): string {
+			return $this->registry->get_field_mode();
+		}
+
+		/**
+		 * Whether the `related-list` mode's own region injector
+		 * ({@see Location_Provider_Registry::inject_related_list_states()})
+		 * itself wrote `$country`'s `woocommerce_states` options THIS request AND
+		 * those options are still what WooCommerce is serving right now — thin
+		 * pass-through to {@see Location_Provider_Registry::owns_region_states()}.
+		 *
+		 * This is the precision {@see \Woodev\Framework\Shipping\Checkout\Checkout_Config::build_location_block()}
+		 * needs for the issue #294 arbitration: a non-empty state list for a
+		 * country can come from WooCommerce's own native list, a plugin's §8
+		 * carrier takeover, OR this layer's own related-list injection — only
+		 * the last one is NOT a conflict, and only when nothing ran AFTER this
+		 * layer's injector to clobber it (PR #304 review finding 3).
+		 *
+		 * @since 2.0.2
+		 * @since 2.0.2 Takes the caller's own FINAL `woocommerce_states` read
+		 *              (PR #304 review finding 3) — see
+		 *              {@see Location_Provider_Registry::owns_region_states()}'s
+		 *              own docblock for why.
+		 *
+		 * @param string                $country      ISO-3166 alpha-2 country code, any case/whitespace.
+		 * @param array<string, string> $final_states The country's FINAL registered WC states.
+		 *
+		 * @return bool
+		 */
+		public function owns_region_states( string $country, array $final_states ): bool {
+			return $this->registry->owns_region_states( $country, $final_states );
+		}
 	}
 
 endif;

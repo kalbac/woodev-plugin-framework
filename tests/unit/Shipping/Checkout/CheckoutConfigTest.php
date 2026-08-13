@@ -79,23 +79,43 @@ final class Checkout_Config_Fake_Location_Service extends Location_Service {
 	/** @var string[] */
 	private array $countries;
 
+	/** @var string Task 13: get_field_mode() return value. */
+	private string $mode;
+
+	/** @var string[] Task 13/issue #294: countries owns_region_states() reports true for. */
+	private array $owned_region_countries;
+
 	/**
-	 * @param bool                                                             $active           is_active() return value.
-	 * @param array<string, bool>                                              $supported_levels level => whether SOME configured provider serves it,
-	 *                                                                                             for EVERY country in $countries (this fake does not
-	 *                                                                                             model per-country level variance — LocationServiceTest
-	 *                                                                                             covers that against the real Dadata_Provider).
-	 * @param array{record: Location_Record, implicit: bool, saved_at: int}|null $customer        get_customer_record() return value.
-	 * @param string[]                                                          $countries        the layer's own supported-country set — what
-	 *                                                                                             get_supported_countries() (D15 gate fix, block
-	 *                                                                                             PR-B: the UNION across the chain, no longer a
-	 *                                                                                             single active-provider list) reports.
+	 * @param bool                                                             $active                 is_active() return value.
+	 * @param array<string, bool>                                              $supported_levels       level => whether SOME configured provider serves it,
+	 *                                                                                                   for EVERY country in $countries (this fake does not
+	 *                                                                                                   model per-country level variance — LocationServiceTest
+	 *                                                                                                   covers that against the real Dadata_Provider).
+	 * @param array{record: Location_Record, implicit: bool, saved_at: int}|null $customer              get_customer_record() return value.
+	 * @param string[]                                                          $countries              the layer's own supported-country set — what
+	 *                                                                                                   get_supported_countries() (D15 gate fix, block
+	 *                                                                                                   PR-B: the UNION across the chain, no longer a
+	 *                                                                                                   single active-provider list) reports.
+	 * @param string                                                            $mode                   Task 13: get_field_mode() return value; defaults to
+	 *                                                                                                   the pre-Task-13 hardcoded constant so every existing
+	 *                                                                                                   call site is unaffected.
+	 * @param string[]                                                          $owned_region_countries Task 13/issue #294: countries owns_region_states()
+	 *                                                                                                   reports `true` for.
 	 */
-	public function __construct( bool $active, array $supported_levels, ?array $customer, array $countries ) {
-		$this->active           = $active;
-		$this->supported_levels = $supported_levels;
-		$this->customer         = $customer;
-		$this->countries        = $countries;
+	public function __construct(
+		bool $active,
+		array $supported_levels,
+		?array $customer,
+		array $countries,
+		string $mode = Location_Provider_Registry::MODE_TYPEAHEAD,
+		array $owned_region_countries = []
+	) {
+		$this->active                 = $active;
+		$this->supported_levels       = $supported_levels;
+		$this->customer                = $customer;
+		$this->countries               = $countries;
+		$this->mode                    = $mode;
+		$this->owned_region_countries = $owned_region_countries;
 	}
 
 	public function is_active(): bool {
@@ -112,6 +132,14 @@ final class Checkout_Config_Fake_Location_Service extends Location_Service {
 
 	public function get_supported_countries(): array {
 		return $this->countries;
+	}
+
+	public function get_field_mode(): string {
+		return $this->mode;
+	}
+
+	public function owns_region_states( string $country, array $final_states ): bool {
+		return in_array( $country, $this->owned_region_countries, true );
 	}
 
 	public function get_levels_for_country( string $country ): array {
@@ -631,5 +659,249 @@ class CheckoutConfigTest extends TestCase {
 
 		$this->assertStringNotContainsStringIgnoringCase( 'token', $serialized );
 		$this->assertStringNotContainsStringIgnoringCase( 'secret', $serialized );
+	}
+
+	// -------------------------------------------------------------------------
+	// Task 13 — the `list` REST endpoint always rides along
+	// -------------------------------------------------------------------------
+
+	public function test_location_block_exposes_the_list_endpoint(): void {
+		$service = new Checkout_Config_Fake_Location_Service( true, [ 'settlement' => true ], null, [ 'RU' ] );
+		$config  = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ], $service ) )
+			->build( Checkout_Fields::from_array( [] ) );
+
+		$this->assertSame( 'https://x/wp-json/woodev/v1/location/list', $config['location']['endpoints']['list'] );
+	}
+
+	// -------------------------------------------------------------------------
+	// Task 13 — `mode` reads the real store setting (via Location_Service),
+	// no longer the hardcoded 'typeahead' constant
+	// -------------------------------------------------------------------------
+
+	public function test_mode_reads_from_the_location_service(): void {
+		$service = new Checkout_Config_Fake_Location_Service(
+			true,
+			[ 'region' => true ],
+			null,
+			[ 'RU' ],
+			Location_Provider_Registry::MODE_RELATED_LIST
+		);
+		$config = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ], $service ) )
+			->build( Checkout_Fields::from_array( [] ) );
+
+		$this->assertSame( Location_Provider_Registry::MODE_RELATED_LIST, $config['location']['mode'] );
+	}
+
+	public function test_mode_defaults_to_typeahead(): void {
+		$service = new Checkout_Config_Fake_Location_Service( true, [ 'region' => true ], null, [ 'RU' ] );
+		$config  = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ], $service ) )
+			->build( Checkout_Fields::from_array( [] ) );
+
+		$this->assertSame( Location_Provider_Registry::MODE_TYPEAHEAD, $config['location']['mode'] );
+	}
+
+	// -------------------------------------------------------------------------
+	// Task 13 / issue #294 — the region arbitration: WC()->countries->get_states()
+	// is the FINAL authority, read here, after every woocommerce_states filter.
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Builds a {@see Checkout_Config} whose overridable `wc_states()` seam
+	 * (see that method's own docblock) answers from a fixed `country => states`
+	 * map, WITHOUT ever touching Brain Monkey's global `WC()` function table.
+	 *
+	 * Deliberately NOT `Functions\when( 'WC' )->justReturn( ... )`: Brain
+	 * Monkey/Patchwork instruments a mocked function for the REST OF THE PHP
+	 * PROCESS once any test stubs it — measured directly, a first version of
+	 * this fixture broke 21 unrelated tests elsewhere in the suite the moment
+	 * `composer test:unit` ran the full run in one process (every other test
+	 * relying on `function_exists( 'WC' ) === false` started seeing it
+	 * defined-but-unmocked). The protected-method-override seam
+	 * `Checkout_Config::wc_states()` exists specifically so this fixture never
+	 * needs to touch that global table at all.
+	 *
+	 * @param array<string, array<string, string>> $states_by_country Country code => WC states array.
+	 *
+	 * @return Checkout_Config
+	 */
+	private function config_with_states(
+		string $plugin_id,
+		string $rest_base,
+		string $nonce,
+		array $countries,
+		?Location_Service $service,
+		array $states_by_country
+	): Checkout_Config {
+		return new class( $plugin_id, $rest_base, $nonce, $countries, $service, $states_by_country ) extends Checkout_Config {
+			private array $states_by_country;
+
+			public function __construct(
+				string $plugin_id,
+				string $rest_base,
+				string $nonce,
+				array $countries,
+				?Location_Service $service,
+				array $states_by_country
+			) {
+				parent::__construct( $plugin_id, $rest_base, $nonce, $countries, $service );
+				$this->states_by_country = $states_by_country;
+			}
+
+			protected function wc_states( string $country ): array {
+				return $this->states_by_country[ $country ] ?? [];
+			}
+		};
+	}
+
+	/**
+	 * The honest baseline: a country with NO registered WC states at all keeps
+	 * `region` exactly as the D15 chain answered (true) — this is what every
+	 * one of the nine location-layer countries measures as, on the rig, today
+	 * (issue #294 decision comment's own measurement).
+	 */
+	public function test_region_stays_ours_when_wc_has_no_states_for_the_country(): void {
+		$service = new Checkout_Config_Fake_Location_Service( true, [ 'region' => true, 'settlement' => true, 'address' => true ], null, [ 'RU' ] );
+		$config  = $this->config_with_states( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ], $service, [] )
+			->build( Checkout_Fields::from_array( [] ) );
+
+		$this->assertTrue( $config['location']['levels']['RU']['region'] );
+	}
+
+	/**
+	 * The #294 rule's load-bearing case: a NON-EMPTY WC state list for a
+	 * country the D15 chain wanted "region" for, that this layer did NOT
+	 * inject itself (owns_region_states() false) — `region` must be reported
+	 * as NOT ours, and the conflict must be reported via `_doing_it_wrong()`
+	 * exactly once.
+	 */
+	public function test_region_reported_not_ours_when_wc_has_foreign_states_and_doing_it_wrong_fires_once(): void {
+		Functions\expect( '_doing_it_wrong' )->once();
+
+		$service = new Checkout_Config_Fake_Location_Service( true, [ 'region' => true, 'settlement' => true, 'address' => true ], null, [ 'BY' ] );
+		$config  = $this->config_with_states( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'BY' ], $service, [ 'BY' => [ 'MIN' => 'Минск' ] ] )
+			->build( Checkout_Fields::from_array( [] ) );
+
+		$this->assertFalse( $config['location']['levels']['BY']['region'], 'a country WC already has native/foreign states for is never ours' );
+	}
+
+	/**
+	 * The layer's OWN related-list injection is never treated as a conflict
+	 * with itself: `owns_region_states()` true means the SAME non-empty state
+	 * list this method reads is the layer's own doing, so `_doing_it_wrong()`
+	 * must NOT fire, even though the raw states-present check alone would
+	 * look identical to the foreign-conflict case above.
+	 */
+	public function test_doing_it_wrong_does_not_fire_for_the_layers_own_related_list_injection(): void {
+		Functions\expect( '_doing_it_wrong' )->never();
+
+		$service = new Checkout_Config_Fake_Location_Service(
+			true,
+			[ 'region' => true, 'settlement' => true, 'address' => true ],
+			null,
+			[ 'RU' ],
+			Location_Provider_Registry::MODE_RELATED_LIST,
+			[ 'RU' ] // owns_region_states( 'RU' ) === true.
+		);
+		$config = $this->config_with_states( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ], $service, [ 'RU' => [ 'test-list:mo' => 'Московская область' ] ] )
+			->build( Checkout_Fields::from_array( [] ) );
+
+		// The state list is non-empty (our own injection), so the client must
+		// still be told "region" is not a typeahead target here — WC already
+		// renders a native <select> — but WITHOUT the conflict warning.
+		$this->assertFalse( $config['location']['levels']['RU']['region'] );
+	}
+
+	/**
+	 * A country the D15 chain does NOT want "region" for at all must never
+	 * trigger the conflict warning, regardless of what WC's states look like —
+	 * there is nothing for this layer to have wanted here.
+	 */
+	public function test_doing_it_wrong_does_not_fire_when_the_chain_never_wanted_region(): void {
+		Functions\expect( '_doing_it_wrong' )->never();
+
+		$service = new Checkout_Config_Fake_Location_Service( true, [ 'region' => false, 'settlement' => true ], null, [ 'US' ] );
+		$config  = $this->config_with_states( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'US' ], $service, [ 'US' => [ 'CA' => 'California' ] ] )
+			->build( Checkout_Fields::from_array( [] ) );
+
+		$this->assertFalse( $config['location']['levels']['US']['region'] );
+	}
+
+	/**
+	 * Degradation: when WC() is unavailable at all (a caller/test with no
+	 * WooCommerce loaded), the region arbitration must never fatal — it
+	 * degrades to "no states known", trusting the D15 chain's own answer
+	 * unchanged (the exact pre-Task-13 behavior every other test in this file
+	 * without a WC() stub already relies on).
+	 */
+	public function test_region_arbitration_never_fatals_when_wc_is_unavailable(): void {
+		$service = new Checkout_Config_Fake_Location_Service( true, [ 'region' => true ], null, [ 'RU' ] );
+		$config  = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ], $service ) )
+			->build( Checkout_Fields::from_array( [] ) );
+
+		$this->assertTrue( $config['location']['levels']['RU']['region'] );
+	}
+
+	/**
+	 * PR #304 review finding 1 (CRITICAL): `WC_Countries::get_states( $cc )`
+	 * returns `false` — not `[]` — when the country key is absent
+	 * (`includes/class-wc-countries.php`), and `(array) false === [ 0 => false ]`,
+	 * which is NON-empty. Every other test in this file exercises `wc_states()`
+	 * either through the `config_with_states()` Probe subclass's OVERRIDE
+	 * (never running the real method body at all) or through the
+	 * `function_exists( 'WC' ) === false` degradation branch above (never
+	 * reaching the `WC()->countries->get_states()` call either) — neither one
+	 * runs the real cast/filter logic this test pins.
+	 *
+	 * Isolated in its own process (`@runInSeparateProcess`, same idiom as
+	 * `FrameworkResolverTest`/`BootstrapRegistrationTest` elsewhere in this
+	 * suite): Brain Monkey must actually DECLARE a global `WC()` function to
+	 * stub it, and PHP cannot un-declare a function once declared — stubbing
+	 * `WC()` here would otherwise permanently poison every other test in the
+	 * suite relying on `function_exists( 'WC' ) === false` (measured directly,
+	 * see `wc_states()`'s own docblock: a first version of that method calling
+	 * `WC()` inline broke 21 unrelated tests the moment `composer test:unit`
+	 * ran the whole suite in one process).
+	 *
+	 * The mutant this pins: reverting `wc_states()`'s
+	 * `array_filter( (array) WC()->countries->get_states( $country ) )` back to
+	 * the bare `(array) WC()->countries->get_states( $country )` cast turns
+	 * `false` into `[ 0 => false ]` — non-empty — so `states_present` would be
+	 * `true` and this assertion would flip to `false`.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_wc_states_degrades_a_false_get_states_result_to_states_present_false(): void {
+		$countries = new class() {
+			/**
+			 * @param string $country ISO-3166 alpha-2 country code.
+			 *
+			 * @return false Mirrors `WC_Countries::get_states()`'s own contract
+			 *               for a country nothing is registered under.
+			 */
+			public function get_states( string $country ) {
+				return false;
+			}
+		};
+		$wc = new class( $countries ) {
+			public $countries;
+
+			public function __construct( $countries ) {
+				$this->countries = $countries;
+			}
+		};
+
+		Functions\when( 'WC' )->justReturn( $wc );
+
+		$service = new Checkout_Config_Fake_Location_Service( true, [ 'region' => true, 'settlement' => true, 'address' => true ], null, [ 'RU' ] );
+		// The REAL Checkout_Config — not the config_with_states() Probe — so
+		// wc_states()'s real body (the array_filter/(array) cast) actually runs.
+		$config = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ], $service ) )
+			->build( Checkout_Fields::from_array( [] ) );
+
+		$this->assertTrue(
+			$config['location']['levels']['RU']['region'],
+			'a WC states read of `false` must degrade to states_present=false, not a false-positive conflict'
+		);
 	}
 }

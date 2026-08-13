@@ -245,6 +245,56 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 	}
 
 	/**
+	 * A `list`-capable fake provider (Task 13) — {@see Location_Service_Fake_Provider}
+	 * never overrides `list_localities()`, so it can never resolve through
+	 * {@see Location_Service::provider_for_list()}; this fixture exists
+	 * specifically to exercise that chain.
+	 */
+	class Location_Service_Fake_List_Provider extends Abstract_Location_Provider {
+
+		private string $id;
+
+		/** @var string[] */
+		private array $countries;
+
+		private bool $configured;
+
+		public function __construct( string $id, array $countries = [ 'RU' ], bool $configured = true ) {
+			$this->id        = $id;
+			$this->countries = $countries;
+			$this->configured = $configured;
+		}
+
+		public function get_id(): string {
+			return $this->id;
+		}
+
+		public function get_name(): string {
+			return $this->id;
+		}
+
+		public function get_countries(): array {
+			return $this->countries;
+		}
+
+		public function is_configured(): bool {
+			return $this->configured;
+		}
+
+		protected function declare_suggest_levels(): array {
+			return [ Location_Record::LEVEL_REGION ];
+		}
+
+		public function suggest( string $query, Location_Scope $scope ): array {
+			return [];
+		}
+
+		public function list_localities( Location_Scope $scope ): array {
+			return [];
+		}
+	}
+
+	/**
 	 * @covers \Woodev\Framework\Shipping\Location\Location_Service
 	 */
 	final class LocationServiceTest extends TestCase {
@@ -1001,6 +1051,127 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$this->assertFalse( $service->is_country_supported( 'RU' ) );
 			$this->assertNull( $service->provider_for_level( Location_Record::LEVEL_REGION ) );
 			$this->assertNull( $service->resolve_for( $plugin ) );
+			$this->assertNull( $service->provider_for_list() );
+			$this->assertSame( [ Location_Provider_Registry::MODE_TYPEAHEAD ], $service->get_offered_field_modes() );
+			$this->assertSame( Location_Provider_Registry::MODE_TYPEAHEAD, $service->get_field_mode() );
+			$this->assertFalse( $service->owns_region_states( 'RU', [] ) );
+		}
+
+		// -------------------------------------------------------------------
+		// provider_for_list(): Task 13's own D15-adjacent chain — chosen
+		// provider (if it declares `list`) -> bundled fallback (never, DaData
+		// has no `list` capability) -> null.
+		// -------------------------------------------------------------------
+
+		public function test_provider_for_list_resolves_the_active_provider_when_it_declares_list(): void {
+			$provider = new Location_Service_Fake_List_Provider( 'list-fixture', [ 'RU' ] );
+
+			Functions\when( 'add_action' )->justReturn( true );
+			$this->stub_providers_filter( [ $provider ] );
+			Functions\when( 'get_option' )->justReturn( 'list-fixture' );
+
+			$registry = Location_Provider_Registry::instance();
+			$registry->declare_needed();
+			$registry->collect();
+
+			$service = new Location_Service( $registry );
+
+			$this->assertSame( $provider, $service->provider_for_list() );
+		}
+
+		public function test_provider_for_list_null_when_the_active_provider_does_not_cover_the_country(): void {
+			$provider = new Location_Service_Fake_List_Provider( 'list-fixture', [ 'RU' ] );
+
+			Functions\when( 'add_action' )->justReturn( true );
+			$this->stub_providers_filter( [ $provider ] );
+			Functions\when( 'get_option' )->justReturn( 'list-fixture' );
+
+			$registry = Location_Provider_Registry::instance();
+			$registry->declare_needed();
+			$registry->collect();
+
+			$service = new Location_Service( $registry );
+
+			$this->assertNull( $service->provider_for_list( 'US' ) );
+		}
+
+		/**
+		 * The real bundled DaData provider has NO `list` capability at all — the
+		 * fallback slot is always occupied by it (Task 7), so this proves the
+		 * chain correctly resolves `null` rather than wrongly falling back to a
+		 * provider that cannot answer.
+		 */
+		public function test_provider_for_list_null_when_neither_chosen_nor_fallback_declares_list(): void {
+			$chosen = new Location_Service_Fake_Provider( 'city-dict', [ Location_Record::LEVEL_REGION ], true );
+
+			Functions\when( 'add_action' )->justReturn( true );
+			$this->stub_providers_filter( [ $chosen ] );
+			$this->stub_dadata_token( 'tok' ); // configured fallback — but still no `list` capability.
+
+			$registry = Location_Provider_Registry::instance();
+			$registry->declare_needed();
+			$registry->collect();
+
+			$service = new Location_Service( $registry );
+
+			$this->assertNull( $service->provider_for_list() );
+		}
+
+		public function test_provider_for_list_null_when_the_list_capable_provider_is_not_configured(): void {
+			$provider = new Location_Service_Fake_List_Provider( 'list-fixture', [ 'RU' ], false );
+
+			Functions\when( 'add_action' )->justReturn( true );
+			$this->stub_providers_filter( [ $provider ] );
+			Functions\when( 'get_option' )->justReturn( 'list-fixture' );
+
+			$registry = Location_Provider_Registry::instance();
+			$registry->declare_needed();
+			$registry->collect();
+
+			$service = new Location_Service( $registry );
+
+			$this->assertNull( $service->provider_for_list() );
+		}
+
+		// -------------------------------------------------------------------
+		// get_offered_field_modes() / get_field_mode() / owns_region_states():
+		// thin pass-throughs to the registry — LocationProviderRegistryTest
+		// covers the actual gating logic exhaustively; these spot-check that
+		// the façade genuinely delegates rather than reimplementing anything.
+		// -------------------------------------------------------------------
+
+		public function test_get_offered_field_modes_delegates_to_the_registry(): void {
+			$provider = new Location_Service_Fake_List_Provider( 'list-fixture', [ 'RU' ] );
+
+			Functions\when( 'add_action' )->justReturn( true );
+			$this->stub_providers_filter( [ $provider ] );
+			Functions\when( 'get_option' )->justReturn( 'list-fixture' );
+
+			$registry = Location_Provider_Registry::instance();
+			$registry->declare_needed();
+			$registry->collect();
+
+			$service = new Location_Service( $registry );
+
+			$this->assertSame( $registry->get_offered_field_modes(), $service->get_offered_field_modes() );
+			$this->assertContains( Location_Provider_Registry::MODE_RELATED_LIST, $service->get_offered_field_modes() );
+		}
+
+		public function test_get_field_mode_delegates_to_the_registry(): void {
+			$this->activate_with_providers( [] );
+			$registry = Location_Provider_Registry::instance();
+			$service  = new Location_Service( $registry );
+
+			$this->assertSame( $registry->get_field_mode(), $service->get_field_mode() );
+		}
+
+		public function test_owns_region_states_delegates_to_the_registry(): void {
+			$this->activate_with_providers( [] );
+			$registry = Location_Provider_Registry::instance();
+			$service  = new Location_Service( $registry );
+
+			$this->assertSame( $registry->owns_region_states( 'RU', [] ), $service->owns_region_states( 'RU', [] ) );
+			$this->assertFalse( $service->owns_region_states( 'RU', [] ) );
 		}
 	}
 }

@@ -3,8 +3,10 @@
  * Woodev Location REST Controller
  *
  * Serves the store-level Location Provider layer's client seam (Task 8; spec D1,
- * D4, D8, D15): `GET woodev/v1/location/suggest` (query-driven suggestions) and
- * `POST woodev/v1/location/select` (persist a chosen record). Unlike the sibling
+ * D4, D8, D15): `GET woodev/v1/location/suggest` (query-driven suggestions),
+ * `POST woodev/v1/location/select` (persist a chosen record), and
+ * `GET woodev/v1/location/list` (full enumeration within a scope — Task 13,
+ * feeding the `related-list`/`ajax-select2` field modes, spec D7). Unlike the sibling
  * shipping controllers ({@see Field_Source_Controller}, {@see Pickup_Controller}),
  * this one is FLEET-WIDE, not per-plugin: there is exactly one active location
  * provider per store (spec §4.1), so the route carries no `plugin_id` path
@@ -24,7 +26,7 @@
  *
  * SECURITY (D4: tokens are store settings, held server-side; the client talks
  * only to this REST seam):
- * - `/suggest` is a PUBLIC guest-checkout read, mirroring
+ * - `/suggest` and `/list` are both PUBLIC guest-checkout reads, mirroring
  *   {@see Field_Source_Controller} and {@see Pickup_Controller} exactly: every
  *   param is normalized/capped before use, every response field is either the
  *   provider's OWN {@see Location_Record} shape (never provider settings/
@@ -32,7 +34,9 @@
  *   {@see Location_Provider::get_settings_fields()}/`is_configured()`'s
  *   underlying option reads) or explicitly escaped (`label`), and a best-effort
  *   per-IP rate limit ({@see Rest_Rate_Limit_Trait}) raises the bar against
- *   abuse.
+ *   abuse. `/list` degrades to 404 rather than `/suggest`'s 200+empty when
+ *   nothing can answer it — see {@see self::handle_list_request()}'s own
+ *   docblock for why that asymmetry is intentional.
  * - `/select` is NOT public-read: it is the customer's write into the
  *   server-side customer-location store, so it is nonce-gated exactly like
  *   {@see Pickup_Controller::check_select_permission()} — a capability check is
@@ -120,6 +124,48 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 		 * @var int
 		 */
 		protected const SELECT_RATE_LIMIT_MAX = 30;
+
+		/**
+		 * Rate-limit budget for `/list` (Task 13) — a discrete lookup fired on a
+		 * parent-region change under `related-list`/`ajax-select2` modes, not a
+		 * per-keystroke stream the way `/suggest` is; sits at the same budget as
+		 * `/suggest` regardless, since a related-list select2's own remote-data
+		 * mode (spec D7) can re-query as the customer scrolls/searches within it.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var int
+		 */
+		protected const LIST_RATE_LIMIT_MAX = 60;
+
+		/**
+		 * Hard cap on the number of localities `/list` ever returns in one
+		 * response, and the default when no (or an out-of-range) `limit` request
+		 * arg is given (PR #304 review finding 5).
+		 *
+		 * The provider contract itself is unbounded (`list_localities()`: "every
+		 * locality within scope") and `within` cannot narrow it for a GUEST
+		 * customer either (it only resolves against an already-persisted
+		 * customer record, see {@see self::build_scope()}), so a country-wide
+		 * `settlement`/`address` enumeration can legitimately be a dictionary
+		 * provider's ENTIRE city table — with every record's full `raw` payload —
+		 * per request. 500 is chosen deliberately: comfortably above the largest
+		 * real `region` list (Russia: 85 federal subjects, the top of what this
+		 * layer's own supported countries ever enumerate at that level), while
+		 * still bounding a `settlement`/`address` dictionary dump — which can run
+		 * into the tens of thousands of rows — to a JSON payload and DOM size a
+		 * single request/render can comfortably handle.
+		 *
+		 * The response is honest about a cap actually having been hit
+		 * ({@see self::handle_list_request()}'s own `truncated` field) rather
+		 * than silently returning a partial list that reads as "this is all
+		 * there is".
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var int
+		 */
+		protected const LIST_HARD_CAP = 500;
 
 		/**
 		 * The façade this controller dispatches through. Defaults to a fresh
@@ -246,6 +292,55 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 								'type'     => 'object',
 								'required' => true,
 							],
+						],
+					],
+				]
+			);
+
+			register_rest_route(
+				'woodev/v1',
+				'/location/list',
+				[
+					[
+						'methods'  => 'GET',
+						'callback' => [ $this, 'handle_list_request' ],
+
+						// Intentionally public read — same reasoning as `/suggest` above
+						// (see the class docblock's SECURITY paragraph): every returned
+						// field is a neutral Location_Record component or the
+						// explicitly-escaped `label`, never a provider credential.
+						'permission_callback' => '__return_true',
+						'args'                => [
+							'level'   => [
+								'type'              => 'string',
+								'required'          => true,
+								'validate_callback' => 'rest_validate_request_arg',
+							],
+							'country' => [
+								'type'              => 'string',
+								'required'          => true,
+								'validate_callback' => 'rest_validate_request_arg',
+							],
+							'within'  => [
+								'type'              => 'string',
+								'validate_callback' => 'rest_validate_request_arg',
+							],
+							'limit'   => [
+								'type'              => 'integer',
+								'validate_callback' => 'rest_validate_request_arg',
+
+								// Clamped server-side to [1, LIST_HARD_CAP] by the
+								// callback — see handle_list_request()'s own docblock
+								// (PR #304 review finding 5). A client value <= 0,
+								// missing, or malformed simply falls back to the hard
+								// cap; there is no error path for this arg.
+							],
+
+							// Deliberately no `q` (this is enumeration, not a query-driven
+							// search — spec D7/Location_Provider::list_localities()) and no
+							// `provider` (same reasoning as `/suggest`'s own args block: the
+							// D15-adjacent chain — Location_Service::provider_for_list() —
+							// resolves it server-side, never the client).
 						],
 					],
 				]
@@ -407,7 +502,117 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 				return $this->upstream_error();
 			}
 
-			return rest_ensure_response( [ 'suggestions' => $this->to_response_suggestions( $records ) ] );
+			return rest_ensure_response( [ 'suggestions' => $this->to_response_records( $records ) ] );
+		}
+
+		/**
+		 * Handles a list (enumeration) request (Task 13; spec D7).
+		 *
+		 * Degradation deliberately differs from `/suggest` above (see that
+		 * method's own docblock for why the read/write distinction there does
+		 * NOT apply the same way here): a well-formed country the resolved
+		 * `list`-capable provider does not cover, or no provider anywhere in the
+		 * D15-adjacent chain ({@see Location_Service::provider_for_list()})
+		 * declaring `list` at all, is a 404 — mirroring `/select`'s
+		 * inactive-layer 404 ({@see self::handle_select_request()}), not
+		 * `/suggest`'s 200+empty. This is deliberate: `related-list`/
+		 * `ajax-select2` modes are only ever OFFERED to the store setting when
+		 * the active provider already declares `list`
+		 * ({@see \Woodev\Framework\Shipping\Location\Location_Provider_Registry::get_offered_field_modes()}),
+		 * so a client legitimately reaching this route at all already believes
+		 * the capability exists — a 404 here is a genuine "this stopped being
+		 * true" signal, not the routine "nothing typed yet" a `/suggest` empty
+		 * read represents.
+		 *
+		 * The response is capped at {@see self::LIST_HARD_CAP} records (PR #304
+		 * review finding 5): the provider contract itself promises "every
+		 * locality within scope" with no size bound, and a guest customer has no
+		 * way to narrow an unscoped `settlement`/`address` enumeration via
+		 * `within` either (it only resolves against an already-persisted
+		 * customer record, {@see self::build_scope()}), so an unbounded request
+		 * could ask a dictionary provider for its entire city table, full `raw`
+		 * payloads included, in one response. The optional `limit` request arg
+		 * narrows the cap further (clamped to `[1, LIST_HARD_CAP]`; a missing or
+		 * out-of-range value falls back to the hard cap outright, never an
+		 * error). The response is honest about truncation — a `truncated: true`
+		 * flag when the provider returned more than what was actually sent, so
+		 * a client can tell "this is everything" from "there is more, refine
+		 * `within`" instead of a silently-cut list reading as the former.
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.2
+		 * @since 2.0.2 Capped at {@see self::LIST_HARD_CAP} records, with an
+		 *              optional clamped `limit` arg and a `truncated` response
+		 *              flag (PR #304 review finding 5).
+		 *
+		 * @param \WP_REST_Request $request request object.
+		 *
+		 * @return \WP_REST_Response|\WP_Error|array{localities: array<int, array<string, mixed>>, truncated: bool}
+		 */
+		public function handle_list_request( $request ) {
+
+			if ( $this->is_rate_limited( 'woodev_location_list_rl_', self::LIST_RATE_LIMIT_MAX ) ) {
+				return $this->rate_limited_error();
+			}
+
+			$level = $this->normalize_param( $request->get_param( 'level' ) );
+
+			if ( ! in_array( $level, Location_Record::LEVELS, true ) ) {
+				return new \WP_Error(
+					'woodev_location_invalid_level',
+					__( 'Некорректный уровень поиска.', 'woodev-plugin-framework' ),
+					[ 'status' => 400 ]
+				);
+			}
+
+			$country = $this->normalize_param( $request->get_param( 'country' ) );
+			$within  = $this->cap_length( $this->normalize_param( $request->get_param( 'within' ) ), self::MAX_PARAM_LENGTH );
+
+			$raw_limit = $request->get_param( 'limit' );
+			$limit     = null === $raw_limit ? self::LIST_HARD_CAP : (int) $raw_limit;
+			$limit     = $limit > 0 ? min( $limit, self::LIST_HARD_CAP ) : self::LIST_HARD_CAP;
+
+			try {
+				$scope = $this->build_scope( $country, $level, $within );
+			} catch ( \InvalidArgumentException $exception ) {
+				return new \WP_Error(
+					'woodev_location_invalid_country',
+					__( 'Некорректный код страны.', 'woodev-plugin-framework' ),
+					[ 'status' => 400 ]
+				);
+			}
+
+			// Deliberately never reads `$request->get_param( 'provider' )` — same
+			// reasoning as `/suggest` above (see the class docblock and
+			// register_routes()'s own comment on this route).
+			$provider = $this->service->provider_for_list( $country );
+
+			if ( null === $provider ) {
+				return new \WP_Error(
+					'woodev_location_list_unavailable',
+					__( 'Список населённых пунктов сейчас недоступен.', 'woodev-plugin-framework' ),
+					[ 'status' => 404 ]
+				);
+			}
+
+			try {
+				$records = $provider->list_localities( $scope );
+			} catch ( \Throwable $exception ) {
+				$this->log_failure( 'list', $exception );
+
+				return $this->upstream_error();
+			}
+
+			$truncated = count( $records ) > $limit;
+			$records   = array_slice( $records, 0, $limit );
+
+			return rest_ensure_response(
+				[
+					'localities' => $this->to_response_records( $records ),
+					'truncated'  => $truncated,
+				]
+			);
 		}
 
 		/**
@@ -540,20 +745,24 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 		}
 
 		/**
-		 * Maps raw provider records into the wire shape (spec Task 8):
-		 * `{ key, label, level, record }`. `label` is explicitly escaped for
-		 * direct display; `record` is the record's OWN `to_array()`, UNTOUCHED,
-		 * so the client can round-trip it back to `/select` verbatim (D12/D5).
+		 * Maps raw provider records into the wire shape (spec Task 8): shared by
+		 * `/suggest` (its own `suggestions` array) and `/list` (its own
+		 * `localities` array, Task 13) — same shape either way, `{ key, label,
+		 * level, record }`. `label` is explicitly escaped for direct display;
+		 * `record` is the record's OWN `to_array()`, UNTOUCHED, so the client can
+		 * round-trip it back to `/select` verbatim (D12/D5).
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Renamed from `to_response_suggestions()` — shared by
+		 *              `/list` too now (Task 13).
 		 *
-		 * @param Location_Record[] $records Provider suggestions.
+		 * @param Location_Record[] $records Provider records (suggest matches or a full enumeration).
 		 *
 		 * @return array<int, array{key: string, label: string, level: string, record: array<string, mixed>}>
 		 */
-		private function to_response_suggestions( array $records ): array {
+		private function to_response_records( array $records ): array {
 
-			$suggestions = [];
+			$mapped = [];
 
 			foreach ( $records as $record ) {
 
@@ -561,7 +770,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 					continue; // Defensive: a misbehaving provider must not break the field.
 				}
 
-				$suggestions[] = [
+				$mapped[] = [
 					'key'    => $record->key(),
 					'label'  => esc_html( $record->label() ),
 					'level'  => $record->level(),
@@ -569,7 +778,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 				];
 			}
 
-			return array_values( $suggestions );
+			return array_values( $mapped );
 		}
 
 		/**
@@ -643,7 +852,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 		 *
 		 * @since 2.0.2
 		 *
-		 * @param string     $operation One of `suggest`.
+		 * @param string     $operation One of `suggest`, `list`.
 		 * @param \Throwable $exception The caught failure.
 		 *
 		 * @return void

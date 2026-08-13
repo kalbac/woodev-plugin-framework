@@ -4,11 +4,17 @@
  *
  * The store-level settings handler for the Location Provider layer (Task 3;
  * spec D4: "provider tokens/keys are store settings, held server-side"). Owns
- * exactly two kinds of fields:
+ * exactly three kinds of fields:
  *
  * 1. `active_provider` — a select whose options are every registered provider's
  *    id => name, defaulting to {@see \Woodev\Framework\Shipping\Location\Location_Provider_Registry::DEFAULT_PROVIDER_ID}.
- * 2. Whatever the currently ACTIVE provider declares via
+ * 2. `field_mode` (Task 13; spec D7) — a select whose OPTIONS are gated by the
+ *    active provider's capabilities (typeahead always; related-list/ajax-select2
+ *    only when it declares `list`) — computed by
+ *    {@see \Woodev\Framework\Shipping\Location\Location_Provider_Registry}, this
+ *    handler only ever renders whatever option set it was handed, exactly like
+ *    `active_provider`'s own options.
+ * 3. Whatever the currently ACTIVE provider declares via
  *    {@see \Woodev\Framework\Shipping\Location\Location_Provider::get_settings_fields()} —
  *    merged in verbatim, keyed by the provider's own field ids. A registered but
  *    NOT-active provider's fields are never merged in (spec §4.1: rendered on the
@@ -47,6 +53,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 		private array $provider_options;
 
 		/**
+		 * Offered `field_mode` select options, `id => label` (Task 13; spec D7),
+		 * already gated by the active provider's capabilities — resolved by the
+		 * caller ({@see Location_Provider_Registry::offered_field_mode_options()}),
+		 * exactly like {@see self::$provider_options} is.
+		 *
+		 * @since 2.0.2
+		 * @var array<string, string>
+		 */
+		private array $field_mode_options;
+
+		/**
 		 * The active provider's declared settings fields (Location_Provider::get_settings_fields()
 		 * shape), or `[]` when no provider is active. Set BEFORE the parent
 		 * constructor runs, since `register_settings()` (called from it) reads it.
@@ -60,32 +77,41 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 		 * Constructor.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Added the `$field_mode_options` parameter (Task 13; spec D7).
 		 *
-		 * @param string                              $id               settings id (the option-name namespace).
-		 * @param array<string, string>               $provider_options registered provider `id => name` pairs.
-		 * @param array<string, array<string, mixed>> $provider_fields  the active provider's declared
-		 *                                                               settings fields, already resolved
-		 *                                                               by the caller.
+		 * @param string                              $id                  settings id (the option-name namespace).
+		 * @param array<string, string>               $provider_options    registered provider `id => name` pairs.
+		 * @param array<string, array<string, mixed>> $provider_fields     the active provider's declared
+		 *                                                                  settings fields, already resolved
+		 *                                                                  by the caller.
+		 * @param array<string, string>               $field_mode_options  offered `field_mode` select options
+		 *                                                                  (`id => label`), already gated by the
+		 *                                                                  active provider's capabilities.
 		 */
-		public function __construct( string $id, array $provider_options, array $provider_fields = [] ) {
-			$this->provider_options = $provider_options;
-			$this->provider_fields  = $provider_fields;
+		public function __construct( string $id, array $provider_options, array $provider_fields = [], array $field_mode_options = [] ) {
+			$this->provider_options   = $provider_options;
+			$this->provider_fields    = $provider_fields;
+			$this->field_mode_options = $field_mode_options;
 
 			parent::__construct( $id );
 		}
 
 		/**
 		 * Gets the settings ids this handler owns, in registration order — the
-		 * active-provider select first, then the active provider's own fields.
-		 * Used by {@see Location_Provider_Registry} to build the `Settings_Section`
-		 * without duplicating this handler's own field list.
+		 * active-provider select first, then the field-mode select, then the
+		 * active provider's own fields. Used by {@see Location_Provider_Registry}
+		 * to build the `Settings_Section` without duplicating this handler's own
+		 * field list.
 		 *
 		 * @since 2.0.2
 		 *
 		 * @return string[]
 		 */
 		public function get_owned_setting_ids(): array {
-			return array_merge( [ Location_Provider_Registry::SETTING_ACTIVE_PROVIDER ], array_keys( $this->provider_fields ) );
+			return array_merge(
+				[ Location_Provider_Registry::SETTING_ACTIVE_PROVIDER, Location_Provider_Registry::SETTING_FIELD_MODE ],
+				array_keys( $this->provider_fields )
+			);
 		}
 
 		/**
@@ -105,6 +131,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 				]
 			);
 			$this->register_control( Location_Provider_Registry::SETTING_ACTIVE_PROVIDER, \Woodev_Control::TYPE_SELECT );
+
+			$this->register_setting(
+				Location_Provider_Registry::SETTING_FIELD_MODE,
+				\Woodev_Setting::TYPE_STRING,
+				[
+					'name'    => __( 'Режим отображения полей локации', 'woodev-plugin-framework' ),
+					'options' => $this->field_mode_options,
+					'default' => Location_Provider_Registry::MODE_TYPEAHEAD,
+				]
+			);
+			$this->register_control( Location_Provider_Registry::SETTING_FIELD_MODE, \Woodev_Control::TYPE_SELECT );
 
 			foreach ( $this->provider_fields as $field_id => $field ) {
 				$this->register_provider_field( (string) $field_id, (array) $field );

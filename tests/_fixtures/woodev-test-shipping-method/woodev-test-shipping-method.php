@@ -310,6 +310,28 @@ function woodev_test_shipping_method_plugin_init(): void {
 	require_once __DIR__ . '/class-test-location-adapter.php';
 	require_once __DIR__ . '/class-test-credential-seeder.php';
 
+	// Task 13: the `list`-capable fixture provider — the bundled DaData provider has no
+	// `list` capability at all, so tests and the rig need a fake that DOES enumerate to
+	// exercise `related-list`/`ajax-select2` field modes. Required unconditionally, same
+	// reasoning as the two requires just above.
+	require_once __DIR__ . '/class-test-list-location-provider.php';
+
+	// Registers the fixture provider alongside the bundled DaData one — NOT made active
+	// by default (the store's `active_provider` setting still defaults to `dadata`), an
+	// operator opts in explicitly on the "Локация" settings page to see `related-list`/
+	// `ajax-select2` on the rig. Safe to register the closure here regardless of the
+	// bootstrap's own loading stage (see the `woodev_shipping_pickup_point_selection`
+	// filter registration further down in this file for the identical reasoning:
+	// registering a callback does not INVOKE it).
+	add_filter(
+		\Woodev\Framework\Shipping\Location\Location_Provider_Registry::FILTER_PROVIDERS,
+		static function ( array $providers ): array {
+			$providers[] = new Woodev_Test_List_Location_Provider();
+
+			return $providers;
+		}
+	);
+
 	if ( ! class_exists( 'Woodev_Test_Viewport_Point_Source' ) ) {
 
 		/**
