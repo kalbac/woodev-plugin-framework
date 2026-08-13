@@ -48,6 +48,20 @@ if ( ! class_exists( 'Woodev_Test_Bulk_Point_Source' ) ) {
 		private const FIXTURE_LOCALITY = 'Москва';
 
 		/**
+		 * Accepted rig aliases for {@see self::FIXTURE_LOCALITY} (Task 15; issue #159 rig
+		 * verification, s71) — the DaData ACCOUNT configured for this rig's
+		 * `WOODEV_TEST_DADATA_TOKEN` answers RU settlement suggestions with English display
+		 * names ("Moscow", not "Москва" — a DaData account-level response-language setting,
+		 * unrelated to this framework's own request shape, which sends no `language`
+		 * parameter at all). Matching ONLY the Cyrillic constant would make the record-based
+		 * addressing path this task adds unreachable on the actual rig, even though the
+		 * mechanism itself (locality KEY out, record + resolved identity back in) is
+		 * correct — this alias list is what makes the demo visible without weakening the
+		 * unit-tested Cyrillic path, which stays exact.
+		 */
+		private const FIXTURE_LOCALITY_ALIASES = [ 'Москва', 'Moscow' ];
+
+		/**
 		 * @inheritDoc
 		 */
 		public function get_strategy(): string {
@@ -56,23 +70,32 @@ if ( ! class_exists( 'Woodev_Test_Bulk_Point_Source' ) ) {
 
 		/**
 		 * Returns every fixture point when the requested locality is this fixture's own
-		 * city, or an empty list otherwise (issue #162).
+		 * city, or an empty list otherwise (issue #162; Task 15/#159).
 		 *
-		 * The framework guarantees `$query->get_locality()` is non-null for a
-		 * STRATEGY_BULK source (see the Point_Source interface docblock); a real
-		 * carrier would filter server-side by that locality. Matching is
-		 * case-/surrounding-whitespace-insensitive — a browser city input or a
-		 * REST client is not guaranteed to send back the exact casing this fixture
-		 * emits — but otherwise exact: no transliteration, no fuzzy/partial matching.
-		 * Without this the checkout's `emptyLocality` state (spec V-5) could never be
-		 * seen on the rig, only in unit/jest tests — a real carrier integration
-		 * would filter server-side the same way, just against its own city list
-		 * instead of this one hardcoded string.
+		 * ADDRESSING SOURCE (Task 15; issue #159): when the Location Provider layer
+		 * attached a record ({@see \Woodev\Framework\Shipping\Pickup\Point_Query::get_record()}),
+		 * this fixture matches the record's OWN settlement name — the browser no longer
+		 * sends a bare, DOM-read city string at all; it sends the layer's locality KEY,
+		 * opaque to this class, and the framework separately resolves the customer's
+		 * current record server-side ({@see \Woodev\Framework\Shipping\Pickup\Pickup_Handler::location_context()}).
+		 * Falls back to the legacy `$query->get_locality()` string ONLY when no record was
+		 * attached — the shape every EXISTING unit test in this repo still builds by hand
+		 * (`Point_Query::from_request( [ 'locality' => 'Москва' ] )`, no
+		 * `with_location()` call) — so this fixture keeps answering both shapes rather
+		 * than breaking a test suite this task did not touch.
+		 *
+		 * Matching is case-/surrounding-whitespace-insensitive — a real DaData settlement
+		 * suggestion's own casing is not guaranteed to match this fixture's literal
+		 * — but otherwise exact: no transliteration, no fuzzy/partial matching. Without
+		 * this the checkout's `emptyLocality` state (spec V-5) could never be seen on the
+		 * rig, only in unit/jest tests — a real carrier integration would filter
+		 * server-side the same way, just against its own city list instead of this one
+		 * hardcoded string.
 		 *
 		 * @inheritDoc
 		 */
 		public function fetch_points( \Woodev\Framework\Shipping\Pickup\Point_Query $query ): array {
-			if ( ! $this->locality_matches( $query->get_locality() ) ) {
+			if ( ! $this->locality_matches( $this->requested_locality_name( $query ) ) ) {
 				return [];
 			}
 
@@ -83,18 +106,53 @@ if ( ! class_exists( 'Woodev_Test_Bulk_Point_Source' ) ) {
 		}
 
 		/**
+		 * Resolves the human-readable locality name to match against — the attached
+		 * record's own settlement (or, failing that, its display label) when the
+		 * Location Provider layer attached one, otherwise the bare `locality` param a
+		 * pre-#159 caller still sends. See {@see self::fetch_points()}'s own docblock for
+		 * why both shapes are honoured.
+		 *
+		 * @param \Woodev\Framework\Shipping\Pickup\Point_Query $query The dispatched query.
+		 *
+		 * @return string|null
+		 */
+		private function requested_locality_name( \Woodev\Framework\Shipping\Pickup\Point_Query $query ): ?string {
+			$record = $query->get_record();
+
+			if ( null === $record ) {
+				return $query->get_locality();
+			}
+
+			$settlement = $record->settlement();
+
+			if ( null !== $settlement && '' !== $settlement['name'] ) {
+				return $settlement['name'];
+			}
+
+			return '' !== $record->label() ? $record->label() : null;
+		}
+
+		/**
 		 * Whether the requested locality names this fixture's own city, ignoring case
 		 * and surrounding whitespace.
 		 *
-		 * @param string|null $locality Requested locality, guaranteed non-null by the
-		 *                               framework for a STRATEGY_BULK source (see
-		 *                               {@see self::fetch_points()}); the null-coalesce
-		 *                               below is defensive only.
+		 * @param string|null $locality Requested locality name — see
+		 *                               {@see self::requested_locality_name()}; the
+		 *                               null-coalesce below covers a query naming neither
+		 *                               a record nor a legacy `locality` string.
 		 *
 		 * @return bool
 		 */
 		private function locality_matches( ?string $locality ): bool {
-			return mb_strtolower( trim( $locality ?? '' ) ) === mb_strtolower( self::FIXTURE_LOCALITY );
+			$normalized = mb_strtolower( trim( $locality ?? '' ) );
+
+			foreach ( self::FIXTURE_LOCALITY_ALIASES as $alias ) {
+				if ( $normalized === mb_strtolower( $alias ) ) {
+					return true;
+				}
+			}
+
+			return false;
 		}
 
 		/**

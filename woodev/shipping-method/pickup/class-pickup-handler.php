@@ -75,9 +75,12 @@
 
 namespace Woodev\Framework\Shipping\Pickup;
 
+use Woodev\Framework\Shipping\Location\Location_Record;
+use Woodev\Framework\Shipping\Location\Location_Service;
 use Woodev\Framework\Shipping\Map\Map_Provider;
 use Woodev\Framework\Shipping\Order\Shipping_Order_Handler;
 use Woodev\Framework\Shipping\Rest_Api\Pickup_Controller;
+use Woodev\Framework\Shipping\Shipping_Plugin;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -379,6 +382,23 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		private ?Selection_Scope $selection_scope;
 
 		/**
+		 * The owning plugin, or null when the plugin has not wired the Location Provider
+		 * layer (Task 15; issue #159). "No plugin → no location context" — the same
+		 * discipline {@see self::$selection_scope} already applies: the framework never
+		 * builds one of its own, only reads whatever `$plugin->get_location_service()`
+		 * already resolves. Used to enrich the REST layer's {@see Point_Query} with the
+		 * customer's current {@see Location_Record}/resolved carrier identity (see
+		 * {@see self::location_context()}) and to expose the current locality KEY on the
+		 * browser config (see {@see self::location_config_block()}) — independent of
+		 * whatever {@see self::$selection_scope} implementation the plugin uses for
+		 * point-selection persistence.
+		 *
+		 * @since 2.0.2
+		 * @var Shipping_Plugin|null
+		 */
+		private ?Shipping_Plugin $plugin;
+
+		/**
 		 * Constructor.
 		 *
 		 * `$order_handler` and `$point_field_logical` are optional and go together: when
@@ -466,6 +486,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 *                                                          here would break every existing
 		 *                                                          caller. Omit to skip selection
 		 *                                                          persistence entirely.
+		 * @param Shipping_Plugin|null        $plugin               the owning plugin (Task 15;
+		 *                                                          issue #159); see
+		 *                                                          {@see self::$plugin}. Appended
+		 *                                                          LAST, after `$selection_scope`,
+		 *                                                          for the identical reason. Omit to
+		 *                                                          skip Location Provider layer
+		 *                                                          context entirely — every
+		 *                                                          {@see Point_Query} then carries
+		 *                                                          no record, and the browser config
+		 *                                                          carries no `location` block,
+		 *                                                          exactly as before this parameter
+		 *                                                          existed.
 		 *
 		 * @throws \InvalidArgumentException when `$default_location` does not have a valid
 		 *                                    `center` (two floats/ints, lat within ±90, lng
@@ -487,7 +519,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 			bool $search_enabled = true,
 			bool $close_on_select = false,
 			bool $refresh_checkout = false,
-			?Selection_Scope $selection_scope = null
+			?Selection_Scope $selection_scope = null,
+			?Shipping_Plugin $plugin = null
 		) {
 			self::validate_default_location( $default_location );
 
@@ -506,6 +539,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 			$this->close_on_select      = $close_on_select;
 			$this->refresh_checkout     = $refresh_checkout;
 			$this->selection_scope      = $selection_scope;
+			$this->plugin               = $plugin;
 		}
 
 		/**
@@ -1106,7 +1140,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 *     accentFillColor: string,
 		 *     accentContrastColor: string,
 		 *     modal: array{width: int, bodyHeight: string},
-		 *     search: bool
+		 *     search: bool,
+		 *     location?: array{current: array{key: string}}
 		 * }
 		 */
 		public function get_js_config(): array {
@@ -1325,7 +1360,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 			// would read as "keep nothing", silently reinstating the same defect.
 			$max_accumulated = max( 0, $max_accumulated );
 
-			return [
+			$config = [
 				'fieldId'              => $this->field_id,
 				'strategy'             => $this->source->get_strategy(),
 				'maxAccumulatedPoints' => $max_accumulated,
@@ -1415,6 +1450,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 				// docblock for why this is a handler property, not a Map_Provider method.
 				'search' => $search_enabled,
 			];
+
+			// Task 15 (issue #159): omitted entirely when {@see self::$plugin} was never
+			// wired — see {@see self::location_config_block()}'s own docblock for why an
+			// ABSENT block (not merely an empty `key`) is what tells the browser to keep
+			// falling back to its pre-existing DOM read.
+			$location = $this->location_config_block();
+
+			if ( null !== $location ) {
+				$config['location'] = $location;
+			}
+
+			return $config;
 		}
 
 		/**
@@ -1827,7 +1874,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 				$this->source,
 				[ $this, 'current_cart_weight_grams' ],
 				[ $this, 'rest_payment_method' ],
-				[ $this, 'rest_shipping_method' ]
+				[ $this, 'rest_shipping_method' ],
+				// Task 15 (issue #159): `null` when `$this->plugin` was never wired, which
+				// keeps every Point_Query location-context-free — Pickup_Controller's own
+				// default — exactly as before this parameter existed.
+				null !== $this->plugin ? [ $this, 'location_context' ] : null
 			) )->register_routes();
 		}
 
@@ -2204,6 +2255,130 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 */
 		protected function load_wc_cart(): void {
 			wc_load_cart();
+		}
+
+		/**
+		 * Gets the customer's current Location Provider layer record (Task 15; issue
+		 * #159), or `null` when {@see self::$plugin} was not wired, or the layer has no
+		 * current record yet.
+		 *
+		 * `protected` — same test-seam reasoning as every other accessor on this class
+		 * (see {@see self::selection()}): a probe substitutes a
+		 * {@see \Woodev\Framework\Shipping\Location\Location_Service} without `WC()`
+		 * needing to be a real function in the unit-test process.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return Location_Record|null
+		 */
+		protected function current_location_record(): ?Location_Record {
+			if ( null === $this->plugin ) {
+				return null;
+			}
+
+			$current = $this->plugin->get_location_service()->get_customer_record();
+
+			return null !== $current ? $current['record'] : null;
+		}
+
+		/**
+		 * Builds this handler's `location` REST/browser context (Task 15; issue #159): the
+		 * customer's current {@see Location_Record} plus {@see self::$plugin}'s own resolved
+		 * carrier identity for it — the enrichment {@see self::register_rest()} hands
+		 * {@see \Woodev\Framework\Shipping\Rest_Api\Pickup_Controller} so every built
+		 * {@see Point_Query} carries both (see {@see Point_Query::with_location()}).
+		 *
+		 * Returns `null` — never throws, and this is a PUBLIC, guest-facing route — for every
+		 * case there is nothing to attach: no plugin wired, no current record yet, or the
+		 * plugin's own adapter (reached via
+		 * {@see \Woodev\Framework\Shipping\Location\Location_Service::resolve_for()}) THREW,
+		 * a transient failure the adapter contract reserves for retryable conditions (see
+		 * that method's own docblock) — the points fetch simply proceeds without location
+		 * context rather than 500ing a route customers hit while merely panning a map. A
+		 * carrier that genuinely does not serve the current locality is a DIFFERENT, legitimate
+		 * outcome (`resolve_for()` answers `null`, not a throw) and is passed through as-is —
+		 * {@see Point_Query::get_resolved_identity()} then correctly reports "this carrier does
+		 * not serve this locality" to the {@see Point_Source}.
+		 *
+		 * `public`, unlike most of this class' own test seams — {@see self::register_rest()}
+		 * hands `[ $this, 'location_context' ]` to {@see Pickup_Controller} as a callable
+		 * INVOKED from that OTHER object, and PHP's callable-array visibility check is scoped
+		 * to where the call happens, not where the array was built; a `protected` method here
+		 * would fatal the very first time the controller called it.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array{record: Location_Record, resolved_identity: mixed}|null
+		 */
+		public function location_context(): ?array {
+			if ( null === $this->plugin ) {
+				return null;
+			}
+
+			$record = $this->current_location_record();
+
+			if ( null === $record ) {
+				return null;
+			}
+
+			try {
+				$resolved_identity = $this->plugin->get_location_service()->resolve_for( $this->plugin );
+			} catch ( \Throwable $exception ) {
+				return null;
+			}
+
+			return [
+				'record'            => $record,
+				'resolved_identity' => $resolved_identity,
+			];
+		}
+
+		/**
+		 * Builds the `location` block for {@see self::get_js_config()} (Task 15; issue #159):
+		 * the current locality KEY, refreshed client-side by listening for the location
+		 * cascade's own persisted-selection event
+		 * ({@see \Woodev\Framework\Shipping\Location\Location_Service}'s customer-record store
+		 * being the same one the cascade's `/select` route writes to).
+		 *
+		 * `null` — the whole block is OMITTED from the JS config — when {@see self::$plugin}
+		 * was not wired, OR when it was wired but the layer is not USABLE right now
+		 * ({@see \Woodev\Framework\Shipping\Location\Location_Service::is_active()} false: no
+		 * active provider, or one that is not configured). The browser's own
+		 * `resolveLocalityKey()` then falls back to its pre-existing DOM read, exactly as
+		 * before this task — the SAME gate {@see \Woodev\Framework\Shipping\Checkout\Checkout_Config::build()}
+		 * already applies to its own sibling `location` block (review finding F1: this method
+		 * used to gate on `$plugin` alone, which meant a wired-but-never-configured provider
+		 * still emitted `key: ''` and permanently disabled the DOM fallback — `pickup-mount.js`'s
+		 * `resolveLocalityKey()` then sent that empty key to the server as the addressing
+		 * locality itself, breaking the picker for every fresh checkout under the framework's
+		 * default `off` locality policy). When `$plugin` IS wired AND the layer
+		 * IS active, the block is ALWAYS present, `key: ''` included — an empty key is the
+		 * layer genuinely having no current record yet, a real answer the browser must not
+		 * paper over with a DOM guess (gotcha `an-empty-domain-key-is-not-a-key`) — but see
+		 * `pickup-mount.js`'s own `resolveLocalityKey()` docblock (review finding F1, second
+		 * half): an empty key is now never used to ADDRESS the points query either, it too
+		 * falls back to the DOM read, same as an absent block.
+		 *
+		 * @since 2.0.2
+		 * @since 2.0.2 Also gates on {@see \Woodev\Framework\Shipping\Location\Location_Service::is_active()},
+		 *              not just on {@see self::$plugin} being non-null (review finding F1,
+		 *              rig-verified: a registered-but-unconfigured provider left the pickup
+		 *              picker permanently disabled in every populated city).
+		 *
+		 * @return array{current: array{key: string}}|null
+		 */
+		protected function location_config_block(): ?array {
+			if ( null === $this->plugin || ! $this->plugin->get_location_service()->is_active() ) {
+				return null;
+			}
+
+			$record = $this->current_location_record();
+
+			return [
+				'current' => [
+					'key' => null !== $record ? $record->key() : '',
+				],
+			];
 		}
 
 		/**

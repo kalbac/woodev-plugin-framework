@@ -297,10 +297,13 @@ function woodev_test_shipping_method_plugin_init(): void {
 	// is truthy) does anything.
 	require_once __DIR__ . '/class-test-embedded-confirm-point-source.php';
 
-	// Issue #176: the pickup-selection-persistence fixture scope, passed as the
-	// Pickup_Handler constructor's own 15th argument below. Required unconditionally,
-	// same reasoning as the requires just above.
-	require_once __DIR__ . '/class-test-selection-scope.php';
+	// Issue #176 / review finding F4 (issue #159 PR #312): the pickup-selection-persistence
+	// fixture scope, passed as the Pickup_Handler constructor's own 15th argument below.
+	// Required unconditionally, same reasoning as the requires just above. Extends
+	// Provider_Selection_Scope (Task 15) rather than implementing Selection_Scope directly —
+	// see that fixture class' own docblock for why: Provider_Selection_Scope had no caller
+	// anywhere outside its own unit test until this wiring gave it one.
+	require_once __DIR__ . '/class-test-provider-selection-scope.php';
 
 	// Location Provider layer, block PR-C rig-visibility pull-forward: this fixture's
 	// Location_Adapter (mandatory obligation for any plugin opting into the layer) and
@@ -702,10 +705,25 @@ function woodev_test_shipping_method_plugin_init(): void {
 				// #170 tracks. Arguments 13-14 (`close_on_select`/`refresh_checkout`) come from
 				// the WOODEV_TEST_PICKUP_SELECTION_* constants (issue #251) rather than literals,
 				// so the rig can reach the "modal stays open after a selection" path without a
-				// code edit — see those constants' own docblock. Argument 15 (issue #176) is the
-				// pickup-selection-persistence scope — see Woodev_Test_Selection_Scope's own
-				// docblock for why it deliberately speaks a different locality vocabulary than
-				// this fixture's own points.
+				// code edit — see those constants' own docblock. Argument 15 (issue #176; review
+				// finding F4 on issue #159 PR #312) is the pickup-selection-persistence scope —
+				// see Woodev_Test_Provider_Selection_Scope's own docblock for why it now EXTENDS
+				// Provider_Selection_Scope (built in this same PR but never wired to a real
+				// caller until now) rather than keeping the former, independent
+				// Woodev_Test_Selection_Scope's `billing_state` vocabulary. Constructed with
+				// THIS SAME Location_Service instance `get_location_service()` lazily builds and
+				// caches (see that method's own docblock) — the SAME instance
+				// Pickup_Handler::location_context() below reaches through `$this`, so both
+				// sides read the identical customer record. Argument 16 (Task 15; issue #159)
+				// is `$this` — this
+				// fixture already participates in the Location Provider layer
+				// (needs_location_provider() below), so wiring it here is what makes the rig
+				// demonstrate #159's actual fix: the pickup REST query is now enriched with the
+				// customer's live Location Provider record/resolved identity
+				// (Pickup_Handler::location_context()), and the browser config carries
+				// `location.current.key` instead of the picker having to read it off the DOM
+				// itself. Point-selection PERSISTENCE (argument 15) now shares that SAME layer
+				// too, rather than staying independent of it — see argument 15's own note above.
 				$this->pickup_handler = new \Woodev\Framework\Shipping\Pickup\Pickup_Handler(
 					self::PLUGIN_ID,
 					'carrier_pickup_point',
@@ -721,7 +739,8 @@ function woodev_test_shipping_method_plugin_init(): void {
 					true,
 					WOODEV_TEST_PICKUP_SELECTION_CLOSE,
 					WOODEV_TEST_PICKUP_SELECTION_REFRESH_CHECKOUT,
-					new \Woodev_Test_Selection_Scope()
+					new \Woodev_Test_Provider_Selection_Scope( $this->get_location_service() ),
+					$this
 				);
 
 				// Issue #251: the fixture-owned Почта adapter script — see

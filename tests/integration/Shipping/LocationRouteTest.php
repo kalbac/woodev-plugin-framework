@@ -35,6 +35,20 @@ class LocationRouteTest extends TestCase {
 	private const OPTION_DADATA_TOKEN = 'woodev_location_token';
 
 	/**
+	 * The literal session key
+	 * {@see \Woodev\Framework\Shipping\Location\Customer_Location_Store} persists a
+	 * guest's current location record under — mirrors that class' own PRIVATE
+	 * `STORAGE_KEY` constant. Session key names are an installed-site DATA
+	 * contract this repo's rules treat as release-blocking-stable, so hardcoding
+	 * the literal here carries the same reasoning as
+	 * {@see self::OPTION_DADATA_TOKEN} above, which already does the same for a
+	 * different store's option name.
+	 *
+	 * @var string
+	 */
+	private const CUSTOMER_LOCATION_SESSION_KEY = 'woodev_customer_location';
+
+	/**
 	 * The option's value as found at the start of THIS test, captured in
 	 * {@see self::setUp()} and restored in {@see self::tearDown()}. `false`
 	 * means the option did not exist at all.
@@ -75,7 +89,40 @@ class LocationRouteTest extends TestCase {
 		}
 
 		Location_Provider_Registry::instance()->reset_for_tests();
+		$this->forget_persisted_guest_location();
+
 		parent::tearDown();
+	}
+
+	/**
+	 * Clears any guest location record
+	 * {@see self::test_select_with_a_valid_nonce_and_active_layer_persists_and_returns_200()}
+	 * persisted into `WC()->session` — that object is a process-wide singleton
+	 * PHPUnit never tears down between test CLASSES (only the DB rolls back per
+	 * test), so a record this file explicitly writes for a GUEST otherwise
+	 * survives into every later integration test that runs in the SAME PHP
+	 * process. Confirmed root cause of a CI-only PickupRouteTest failure
+	 * (issue #159 follow-up): the stale record — posted here with no settlement
+	 * name at all — leaked into `PickupRouteTest`, whose bulk fixture's
+	 * record-vs-legacy locality matching (Task 15) correctly returned zero
+	 * points for a nameless record, failing two assertions with NO change to
+	 * that file, purely because this file happened to run first (its default,
+	 * declaration-order position) and never cleaned up its own write.
+	 *
+	 * `WC()->session->set( $key, null )` is enough — {@see \WC_Session::get()}
+	 * uses `isset()` against its internal store, which is `false` for a `null`
+	 * entry, so the very next read behaves exactly like "no record was ever
+	 * written", the same shape {@see \Woodev\Framework\Shipping\Location\Customer_Location_Store::get()}
+	 * already treats as absent.
+	 *
+	 * @return void
+	 */
+	private function forget_persisted_guest_location(): void {
+		if ( ! function_exists( 'WC' ) || ! WC()->session ) {
+			return;
+		}
+
+		WC()->session->set( self::CUSTOMER_LOCATION_SESSION_KEY, null );
 	}
 
 	/**
@@ -306,6 +353,74 @@ class LocationRouteTest extends TestCase {
 				'level' => 'settlement',
 			],
 			$response->get_data()['current']
+		);
+	}
+
+	// -------------------------------------------------------------------------
+	// 5. Regression guard — a persisted guest record must not leak into the
+	//    next test (root cause of a CI-only PickupRouteTest failure).
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Root-cause regression guard: `WC()->session` is a process-wide singleton
+	 * PHPUnit never resets between test CLASSES (only the DB rolls back per
+	 * test), so the record
+	 * {@see self::test_select_with_a_valid_nonce_and_active_layer_persists_and_returns_200()}
+	 * persists for a GUEST customer survives into whichever integration test
+	 * runs next in the same PHP process unless something clears it. That is
+	 * exactly what broke `PickupRouteTest::test_a_guest_can_read_points()` and
+	 * `PickupRouteTest::test_each_returned_point_carries_a_selectable_verdict()`
+	 * on CI: no `.phpunit.result.cache` there to coincidentally reorder
+	 * `PickupRouteTest` ahead of this file, so the leaked, nameless record made
+	 * `Woodev_Test_Bulk_Point_Source`'s record-vs-legacy locality matching
+	 * (Task 15) correctly — but unexpectedly, from that file's own point of
+	 * view — return zero points. Every local run happened to carry a STALE
+	 * `.phpunit.result.cache` (gitignored, absent on a fresh CI checkout) that
+	 * reordered the previously-failing `PickupRouteTest` first, masking the
+	 * pollution — every "integration green" claim made against this branch
+	 * before this fix was therefore false.
+	 *
+	 * Invokes {@see self::forget_persisted_guest_location()} directly via
+	 * reflection — the same test-seam idiom `PickupRouteTest` already uses for
+	 * a private property this class has no reason to expose publicly — so this
+	 * test proves the CLEANUP HELPER itself works, independent of which other
+	 * test class PHPUnit happens to run next.
+	 *
+	 * @return void
+	 */
+	public function test_persisted_guest_location_record_is_cleared_by_the_teardown_helper(): void {
+		$this->activate_and_boot_rest();
+		$this->make_location_layer_active();
+
+		wp_set_current_user( 0 );
+
+		$request = new WP_REST_Request( 'POST', '/woodev/v1/location/select' );
+		$request->set_param(
+			'record',
+			[
+				'key'         => 'dadata:fias-1',
+				'provider_id' => 'dadata',
+				'level'       => 'settlement',
+				'country'     => 'RU',
+			]
+		);
+		$request->add_header( 'X-WP-Nonce', wp_create_nonce( 'wp_rest' ) );
+
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status(), 'setup precondition: the write must actually persist.' );
+		$this->assertNotNull(
+			WC()->session->get( self::CUSTOMER_LOCATION_SESSION_KEY ),
+			'setup precondition: the session must actually hold the record before it is cleared.'
+		);
+
+		$method = new \ReflectionMethod( self::class, 'forget_persisted_guest_location' );
+		$method->setAccessible( true );
+		$method->invoke( $this );
+
+		$this->assertNull(
+			WC()->session->get( self::CUSTOMER_LOCATION_SESSION_KEY ),
+			'the session must no longer hold a location record once the teardown helper runs.'
 		);
 	}
 }

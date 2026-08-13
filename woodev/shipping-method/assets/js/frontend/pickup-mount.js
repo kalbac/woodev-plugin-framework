@@ -1195,11 +1195,14 @@
 	 * or blank — a provider reads that as "no known locality" and degrades, rather than having
 	 * to guard against a missing key.
 	 *
-	 * Both the provider config AND the bulk points query read through here, and that is the
-	 * point: the bulk strategy addresses its query by locality, so the two answers must come
-	 * from one place. They did not once — the bulk fetch omitted the locality entirely and the
-	 * server, given a query naming neither a locality nor a bbox, correctly returned nothing.
-	 * The customer saw an empty map in a city full of points, with no error anywhere.
+	 * ONLY {@see buildProviderConfig}'s map-centering/address-search `locality` reads through
+	 * here now (Task 15; issue #159) — the map provider (`map-provider-yandex.js`) needs a
+	 * GEOCODABLE PLACE NAME (it feeds this straight into `ymaps.geocode()`; see
+	 * `buildProviderConfig`'s own "GEOCODABILITY CONSTRAINT" section), which a Location
+	 * Provider layer KEY (`provider_id:native_id`) is not. The BULK POINTS QUERY moved to
+	 * {@see resolveLocalityKey} instead — see that function's own docblock for why a DOM read
+	 * was #159 itself: the server addresses points by the layer's own record/key, never by a
+	 * city name the browser happened to have lying around in a `<select>`.
 	 *
 	 * @param {Object} config the full mount config (`window.woodev_pickup_config_*`).
 	 * @returns {string}
@@ -1208,6 +1211,93 @@
 		var cityField = document.getElementById( resolveAddressTarget( config ) + '_city' );
 
 		return cityField && 'string' === typeof cityField.value ? cityField.value : '';
+	}
+
+	/**
+	 * The Location Provider layer's current locality KEY for each provider-backed field,
+	 * keyed by field id (Task 15; issue #159) — refreshed live by
+	 * {@see handleLocationApplied} listening for `location-cascade.js`'s own
+	 * `woodev_location_applied` event, seeded once from `config.location.current.key`
+	 * (`Pickup_Handler::get_js_config()`'s own page-load resolution) by
+	 * {@see resolveLocalityKey} on first read — same "first sighting: adopt as baseline"
+	 * discipline {@see appliedLocality}/{@see chosenAddress} already use.
+	 *
+	 * @type {Object.<string, string>}
+	 */
+	var resolvedLocalityKey = {};
+
+	/**
+	 * Resolves the CURRENT Location Provider layer locality key the bulk points query
+	 * addresses by (Task 15; issue #159) — the actual fix for #159's own title: a DOM-read
+	 * city string (what {@see resolveLocality} still is, for a DIFFERENT purpose — see that
+	 * function's own docblock) is never trustworthy as a SERVER addressing key, because the
+	 * customer's city `<select>`/typeahead value is whatever a plugin's own §8 field wiring
+	 * happens to store there (a name, a FIAS code, a region id — see `resolveLocality`'s own
+	 * "GEOCODABILITY CONSTRAINT" note on `buildProviderConfig`), never guaranteed to be the
+	 * SAME namespaced key {@see \Woodev\Framework\Shipping\Pickup\Provider_Selection_Scope}
+	 * and {@see \Woodev\Framework\Shipping\Pickup\Point_Query} agree on server-side.
+	 *
+	 * `config.location` is PRESENT only for a plugin whose {@see Pickup_Handler} was wired
+	 * with a `$plugin` (Task 15) — see that class' own `location_config_block()` docblock for
+	 * why the block is OMITTED, not merely empty, for a plugin that has not opted in. Falls
+	 * back to {@see resolveLocality}'s DOM read in that case, preserving this file's
+	 * PRE-#159 behaviour byte for byte for a plugin that has not wired the Location Provider
+	 * layer at all — this fallback is not a workaround, it is the contract: a plugin outside
+	 * the layer never sees `config.location` and must keep working exactly as before.
+	 *
+	 * AN EMPTY KEY IS NEVER SENT AS THE ADDRESSING LOCALITY (review finding F1, second half,
+	 * rig-verified): `''` is the layer's own "refusing to answer" sentinel (gotcha
+	 * `an-empty-domain-key-is-not-a-key`, restated on `Pickup_Handler::location_config_block()`'s
+	 * own docblock) — the customer either has no current record yet, or (before this task's
+	 * F1 server-side fix) a wired-but-unconfigured provider used to leak the block through
+	 * anyway. Either way, `''` is not a locality any {@see Point_Query} can usefully address,
+	 * so this function degrades to the SAME DOM read a plugin outside the layer gets, on
+	 * EVERY call, not just the first — never caching a confident "no locality" answer that a
+	 * later DOM edit (or a cascade clear — see `location-cascade.js`'s own `fireLocationApplied()`
+	 * calls with no record, review finding F2) could no longer correct.
+	 *
+	 * @param {Object} config the full mount config (`window.woodev_pickup_config_*`).
+	 * @returns {string}
+	 */
+	function resolveLocalityKey( config ) {
+		if ( ! config || ! config.location ) {
+			return resolveLocality( config );
+		}
+
+		if ( ! Object.prototype.hasOwnProperty.call( resolvedLocalityKey, config.fieldId ) ) {
+			var current = config.location.current;
+
+			resolvedLocalityKey[ config.fieldId ] = current && 'string' === typeof current.key ? current.key : '';
+		}
+
+		var key = resolvedLocalityKey[ config.fieldId ];
+
+		return key ? key : resolveLocality( config );
+	}
+
+	/**
+	 * Handles `woodev_location_applied` (Task 15; issue #159; `location-cascade.js`'s own
+	 * event, fired once the customer's `/select` round-trip actually persisted) — updates
+	 * {@see resolvedLocalityKey} for EVERY currently-registered, Location-Provider-backed
+	 * pickup config, so {@see resolveLocalityKey} tracks the customer's real current locality
+	 * without re-reading `config.location.current.key` (a PAGE-LOAD snapshot, never refreshed
+	 * on its own).
+	 *
+	 * A field WITHOUT `config.location` (a plugin that has not wired the layer) is skipped —
+	 * its own `resolveLocalityKey()` falls back to the DOM read regardless, so writing an
+	 * entry here for it would only be dead state.
+	 *
+	 * @param {CustomEvent} event `detail: { key, level }` — only `key` is read here.
+	 * @returns {void}
+	 */
+	function handleLocationApplied( event ) {
+		var key = event && event.detail && 'string' === typeof event.detail.key ? event.detail.key : '';
+
+		collectConfigs().forEach( function( config ) {
+			if ( config.location ) {
+				resolvedLocalityKey[ config.fieldId ] = key;
+			}
+		} );
 	}
 
 	/**
@@ -2040,10 +2130,15 @@
 		 * because the customer can change things while the map is open) re-reads a city they
 		 * edited since.
 		 *
+		 * `locality` is {@see resolveLocalityKey}'s answer (Task 15; issue #159), NOT
+		 * {@see resolveLocality}'s DOM read — see that function's own docblock for why: the
+		 * server addresses points by the Location Provider layer's own record/key when a
+		 * plugin has wired it, falling back to the pre-#159 DOM read otherwise.
+		 *
 		 * @returns {Object}
 		 */
 		function bulkQuery() {
-			return { locality: resolveLocality( config ), types: currentTypeFilter };
+			return { locality: resolveLocalityKey( config ), types: currentTypeFilter };
 		}
 
 		/**
@@ -4185,6 +4280,11 @@
 	// than folded into the one above: the two run on unrelated schedules (a flat 60ms defer vs
 	// a restarting debounce) and over unrelated state (§8 anchors vs `sessions`).
 	onCheckoutUpdated( handleCartChanged );
+
+	// Task 15 (issue #159): `location-cascade.js`'s own event, a NATIVE CustomEvent (see
+	// {@see handleLocationApplied}'s own docblock for why no jQuery world applies here) —
+	// bound once, module scope, exactly like the `woodev_modal_closed` listener below.
+	document.body.addEventListener( 'woodev_location_applied', handleLocationApplied );
 
 	// Initial mount: on a real checkout page this script runs in the footer,
 	// after §8's own ready handler has already placed every anchor, but the

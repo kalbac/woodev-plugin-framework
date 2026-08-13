@@ -47,6 +47,11 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 
 	use Brain\Monkey\Filters;
 	use Brain\Monkey\Functions;
+	use Woodev\Framework\Shipping\Location\Customer_Location_Store;
+	use Woodev\Framework\Shipping\Location\Location_Adapter;
+	use Woodev\Framework\Shipping\Location\Location_Provider_Registry;
+	use Woodev\Framework\Shipping\Location\Location_Record;
+	use Woodev\Framework\Shipping\Location\Location_Service;
 	use Woodev\Framework\Shipping\Map\Map_Provider;
 	use Woodev\Framework\Shipping\Order\Shipping_Order_Handler;
 	use Woodev\Framework\Shipping\Pickup\Pickup_Handler;
@@ -55,6 +60,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 	use Woodev\Framework\Shipping\Pickup\Point_Query;
 	use Woodev\Framework\Shipping\Pickup\Point_Source;
 	use Woodev\Framework\Shipping\Pickup\Selection_Scope;
+	use Woodev\Framework\Shipping\Shipping_Plugin;
 	use Woodev\Tests\Unit\TestCase;
 
 	require_once dirname( __DIR__, 4 ) . '/woodev/class-plugin-exception.php';
@@ -71,6 +77,30 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 	require_once dirname( __DIR__, 4 ) . '/woodev/compatibility/class-plugin-compatibility.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/compatibility/class-order-compatibility.php';
 
+	// Task 15 (issue #159): Location Provider layer chain, same requires
+	// LocationServiceTest.php needs to build a bare Shipping_Plugin fixture and inject a
+	// fake-session-backed Location_Service.
+	require_once dirname( __DIR__, 4 ) . '/woodev/class-plugin.php';
+	require_once dirname( __DIR__, 4 ) . '/woodev/class-woocommerce-plugin.php';
+	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/class-shipping-plugin.php';
+	require_once dirname( __DIR__, 4 ) . '/woodev/settings-api/class-control.php';
+	require_once dirname( __DIR__, 4 ) . '/woodev/settings-api/class-setting.php';
+	require_once dirname( __DIR__, 4 ) . '/woodev/settings-api/abstract-class-settings.php';
+	require_once dirname( __DIR__, 4 ) . '/woodev/settings-page/class-settings-section.php';
+	require_once dirname( __DIR__, 4 ) . '/woodev/settings-page/class-settings-provider.php';
+	require_once dirname( __DIR__, 4 ) . '/woodev/settings-page/class-settings-page-registry.php';
+	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-locality-key.php';
+	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-location-record.php';
+	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-location-scope.php';
+	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/interface-location-provider.php';
+	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/abstract-location-provider.php';
+	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-location-settings.php';
+	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-location-provider-registry.php';
+	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-customer-location-store.php';
+	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/interface-location-adapter.php';
+	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-location-resolution-cache.php';
+	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-location-service.php';
+
 	if ( ! class_exists( '\\WP_REST_Controller' ) ) {
 		require_once dirname( __DIR__, 4 ) . '/tests/unit/Shipping/Rest_Api/wp-rest-controller-stub.php';
 	}
@@ -78,6 +108,130 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/rest-api/trait-rest-rate-limit.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/rest-api/class-pickup-controller.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/pickup/class-pickup-handler.php';
+
+	/**
+	 * Minimal `\WC_Session` stand-in — same shape as every other Location Provider layer
+	 * test's own fake session (e.g. `Customer_Location_Store_Fake_Session`).
+	 */
+	final class Pickup_Handler_Location_Fake_Session {
+
+		/** @var array<string, mixed> */
+		private array $store = [];
+
+		/**
+		 * @param string $key     Session key.
+		 * @param mixed  $default Fallback when the key is absent.
+		 *
+		 * @return mixed
+		 */
+		public function get( $key, $default = null ) {
+			return $this->store[ $key ] ?? $default;
+		}
+
+		/**
+		 * @param string $key   Session key.
+		 * @param mixed  $value Value to store.
+		 *
+		 * @return void
+		 */
+		public function set( $key, $value ): void {
+			$this->store[ $key ] = $value;
+		}
+	}
+
+	/**
+	 * Probe substituting a {@see Pickup_Handler_Location_Fake_Session} (or `null`) for the
+	 * real `WC()->session` global — mirrors `Customer_Location_Store_Probe` in
+	 * `CustomerLocationStoreTest.php`.
+	 */
+	final class Pickup_Handler_Customer_Location_Store_Probe extends Customer_Location_Store {
+
+		private ?Pickup_Handler_Location_Fake_Session $fake_session;
+
+		public function __construct( ?Pickup_Handler_Location_Fake_Session $fake_session ) {
+			$this->fake_session = $fake_session;
+		}
+
+		protected function session() {
+			return $this->fake_session;
+		}
+	}
+
+	/**
+	 * A {@see Location_Service} whose {@see Location_Service::is_active()} answers a FIXED
+	 * value the test controls directly (review finding F1, rig-verified) — bypassing the
+	 * registry/active-provider/`is_configured()` machinery `LocationServiceTest.php`
+	 * exercises for real. This file only needs `is_active()`'s two observable OUTCOMES (the
+	 * `location` block present vs omitted), never how the layer arrives at either one; a
+	 * PLUGIN WIRED BUT NEVER CONFIGURED (`is_active() === false`) is exactly the
+	 * review-finding scenario — {@see Pickup_Handler::location_config_block()} used to gate
+	 * on `$plugin` alone and leaked the block through anyway.
+	 */
+	final class Pickup_Handler_Location_Service_Active_Probe extends Location_Service {
+
+		private bool $active;
+
+		public function __construct( Location_Provider_Registry $registry, Customer_Location_Store $store, bool $active ) {
+			parent::__construct( $registry, $store );
+			$this->active = $active;
+		}
+
+		public function is_active(): bool {
+			return $this->active;
+		}
+	}
+
+	/**
+	 * Bare fixture Shipping_Plugin (Task 15; issue #159) — built via
+	 * `newInstanceWithoutConstructor()`, same discipline as `LocationServiceTest`'s own
+	 * `Location_Service_Fixture_Plugin`. Overrides `get_location_service()` to return an
+	 * INJECTED instance rather than the base class' lazily-built `new Location_Service()`
+	 * — the base's default reads the real `WC()->session` global (absent in this unit
+	 * process), so every test needing a controllable customer record must substitute its
+	 * own, exactly like `Provider_Selection_Scope_Test_Scope` does one directory over.
+	 */
+	class Pickup_Handler_Location_Fixture_Plugin extends Shipping_Plugin {
+
+		public string $fake_id = 'test_plugin';
+		public ?Location_Adapter $fake_adapter = null;
+		public ?Location_Service $fake_location_service = null;
+
+		protected function get_shipping_method_classes(): array {
+			return [];
+		}
+
+		public function get_api(): ?\Woodev\Framework\Shipping\Shipping_API {
+			return null;
+		}
+
+		protected function get_file() {
+			return __FILE__;
+		}
+
+		public function get_plugin_name() {
+			return 'Stub';
+		}
+
+		public function get_download_id() {
+			return 0;
+		}
+
+		public function get_id() {
+			return $this->fake_id;
+		}
+
+		public function needs_location_provider(): bool {
+			return true;
+		}
+
+		public function get_location_adapter(): ?Location_Adapter {
+			return $this->fake_adapter;
+		}
+
+		public function get_location_service(): Location_Service {
+			return $this->fake_location_service ?? parent::get_location_service();
+		}
+	}
 
 	/**
 	 * Configurable {@see Point_Source} test double: fixed strategy, plus an injectable
@@ -792,6 +946,16 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			// this stubbed, not just the accent-colour-focused ones — global, like the two
 			// stubs above, rather than repeated in ~40 call sites.
 			$this->stub_sanitize_hex_color();
+
+			// Task 15 (issue #159): Customer_Location_Store::get()/set() (reached only by
+			// the tests that actually wire a $plugin) call is_user_logged_in() — global,
+			// same reasoning as the two stubs above, rather than repeated per test.
+			Functions\when( 'is_user_logged_in' )->justReturn( false );
+
+			// A fresh gate every test — Location_Provider_Registry::instance() is a
+			// process-wide singleton (LocationServiceTest's own setUp documents the same
+			// discipline).
+			Location_Provider_Registry::instance()->reset_for_tests();
 		}
 
 		protected function tearDown(): void {
@@ -908,7 +1072,65 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				$overrides['setting_accent'] ?? '',
 				$overrides['search_enabled'] ?? true,
 				$overrides['close_on_select'] ?? false,
-				$overrides['refresh_checkout'] ?? false
+				$overrides['refresh_checkout'] ?? false,
+				$overrides['selection_scope'] ?? null,
+				$overrides['plugin'] ?? null
+			);
+		}
+
+		// -------------------------------------------------------------------
+		// Task 15 (issue #159): Location Provider layer wiring.
+		// -------------------------------------------------------------------
+
+		/**
+		 * Builds a {@see Pickup_Handler_Location_Fixture_Plugin} via
+		 * `newInstanceWithoutConstructor()` (same discipline as
+		 * `LocationServiceTest::plugin()`), with `get_location_service()` overridden to
+		 * return a {@see Location_Service} backed by a session probe seeded with `$record`
+		 * (or nothing, when `$record` is `null`).
+		 *
+		 * @param Location_Record|null  $record  The customer's current record, or `null`.
+		 * @param Location_Adapter|null $adapter The adapter `resolve_for()` calls; `null`
+		 *                                       (the default) mirrors a plugin that has not
+		 *                                       wired one.
+		 * @param bool                  $active  What {@see Location_Service::is_active()}
+		 *                                       answers (review finding F1) — defaults to
+		 *                                       `true` (a configured, usable layer), the
+		 *                                       assumption every EXISTING caller of this
+		 *                                       helper already made implicitly before
+		 *                                       `is_active()` gated anything here. Pass
+		 *                                       `false` to build the "wired but never
+		 *                                       configured" plugin the finding itself
+		 *                                       describes.
+		 */
+		private function location_plugin( ?Location_Record $record, ?Location_Adapter $adapter = null, bool $active = true ): Pickup_Handler_Location_Fixture_Plugin {
+			$instance = ( new \ReflectionClass( Pickup_Handler_Location_Fixture_Plugin::class ) )->newInstanceWithoutConstructor();
+
+			$store = new Pickup_Handler_Customer_Location_Store_Probe( new Pickup_Handler_Location_Fake_Session() );
+
+			if ( null !== $record ) {
+				$store->set( $record );
+			}
+
+			$instance->fake_adapter         = $adapter;
+			$instance->fake_location_service = new Pickup_Handler_Location_Service_Active_Probe(
+				Location_Provider_Registry::instance(),
+				$store,
+				$active
+			);
+
+			return $instance;
+		}
+
+		private function location_record( string $key = 'dadata:fias-1' ): Location_Record {
+			return Location_Record::from_array(
+				[
+					'key'         => $key,
+					'provider_id' => explode( ':', $key )[0],
+					'level'       => Location_Record::LEVEL_SETTLEMENT,
+					'country'     => 'RU',
+					'settlement'  => [ 'name' => 'Москва', 'type' => 'г' ],
+				]
 			);
 		}
 
@@ -1012,6 +1234,163 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			) )->get_js_config();
 
 			$this->assertSame( 'bulk', $config['strategy'] );
+		}
+
+		// -------------------------------------------------------------------------
+		// get_js_config() — the `location` block (Task 15; issue #159)
+		// -------------------------------------------------------------------------
+
+		public function test_config_carries_no_location_block_when_no_plugin_was_wired(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			Functions\when( 'rest_url' )->justReturn( 'https://example.test/wp-json/woodev/v1' );
+			Functions\when( 'wp_create_nonce' )->justReturn( 'NONCE' );
+			Functions\when( 'wc_ship_to_billing_address_only' )->justReturn( false );
+
+			// Every pre-existing constructor call in this file (no $plugin argument) must
+			// keep behaving exactly as before this task — the browser then falls back to
+			// its own pre-existing DOM read, never a bare `''` masquerading as "resolved".
+			$config = $this->make_handler()->get_js_config();
+
+			$this->assertArrayNotHasKey( 'location', $config );
+		}
+
+		public function test_config_carries_an_empty_key_when_a_plugin_is_wired_active_but_has_no_record_yet(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			Functions\when( 'rest_url' )->justReturn( 'https://example.test/wp-json/woodev/v1' );
+			Functions\when( 'wp_create_nonce' )->justReturn( 'NONCE' );
+			Functions\when( 'wc_ship_to_billing_address_only' )->justReturn( false );
+
+			$config = $this->make_handler( [ 'plugin' => $this->location_plugin( null, null, true ) ] )->get_js_config();
+
+			// PRESENT with an empty key, never OMITTED — an empty answer is the layer
+			// genuinely refusing to name a locality yet (gotcha
+			// `an-empty-domain-key-is-not-a-key`), which the browser must not paper over
+			// with a DOM guess once it knows to look here at all. This is the ACTIVE-layer
+			// case — see the two `..._is_not_active` tests just below for the DIFFERENT
+			// (review finding F1) case where the block must be OMITTED instead.
+			$this->assertArrayHasKey( 'location', $config );
+			$this->assertSame( '', $config['location']['current']['key'] );
+		}
+
+		public function test_config_carries_the_customer_current_record_key(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			Functions\when( 'rest_url' )->justReturn( 'https://example.test/wp-json/woodev/v1' );
+			Functions\when( 'wp_create_nonce' )->justReturn( 'NONCE' );
+			Functions\when( 'wc_ship_to_billing_address_only' )->justReturn( false );
+
+			$plugin = $this->location_plugin( $this->location_record( 'dadata:fias-1' ), null, true );
+			$config = $this->make_handler( [ 'plugin' => $plugin ] )->get_js_config();
+
+			$this->assertSame( 'dadata:fias-1', $config['location']['current']['key'] );
+		}
+
+		/**
+		 * Review finding F1, rig-verified: a plugin wired with `$plugin` but whose
+		 * {@see Location_Service::is_active()} answers `false` (a registered provider that
+		 * is not, or not yet, configured) used to still emit `location.current.key: ''` —
+		 * gating only on `$plugin` being non-null. That empty key then permanently disabled
+		 * `pickup-mount.js`'s own DOM fallback and was sent to the server as the addressing
+		 * locality itself, breaking the picker on every fresh checkout. The block must now
+		 * be OMITTED entirely in this case, same as when no plugin was wired at all — see
+		 * `Checkout_Config::build()`'s own sibling `location` block, which this method now
+		 * gates identically.
+		 */
+		public function test_config_carries_no_location_block_when_the_plugin_is_wired_but_the_layer_is_not_active(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			Functions\when( 'rest_url' )->justReturn( 'https://example.test/wp-json/woodev/v1' );
+			Functions\when( 'wp_create_nonce' )->justReturn( 'NONCE' );
+			Functions\when( 'wc_ship_to_billing_address_only' )->justReturn( false );
+
+			$plugin = $this->location_plugin( null, null, false );
+			$config = $this->make_handler( [ 'plugin' => $plugin ] )->get_js_config();
+
+			$this->assertArrayNotHasKey( 'location', $config );
+		}
+
+		/**
+		 * Same review finding F1, with an existing customer record still on file (e.g. the
+		 * provider was configured when the record was written, then unconfigured later) —
+		 * the block must be OMITTED regardless of whether a record happens to exist, because
+		 * `is_active()` false means no `/select` round trip can ever complete right now
+		 * either way; a present-but-stale key would be just as misleading as an empty one.
+		 */
+		public function test_config_carries_no_location_block_when_the_layer_is_not_active_even_with_an_existing_record(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			Functions\when( 'rest_url' )->justReturn( 'https://example.test/wp-json/woodev/v1' );
+			Functions\when( 'wp_create_nonce' )->justReturn( 'NONCE' );
+			Functions\when( 'wc_ship_to_billing_address_only' )->justReturn( false );
+
+			$plugin = $this->location_plugin( $this->location_record( 'dadata:fias-1' ), null, false );
+			$config = $this->make_handler( [ 'plugin' => $plugin ] )->get_js_config();
+
+			$this->assertArrayNotHasKey( 'location', $config );
+		}
+
+		// -------------------------------------------------------------------------
+		// location_context() (Task 15; issue #159) — the Point_Query enrichment seam
+		// register_rest() hands Pickup_Controller.
+		// -------------------------------------------------------------------------
+
+		public function test_location_context_is_null_when_no_plugin_was_wired(): void {
+			$this->assertNull( $this->make_handler()->location_context() );
+		}
+
+		public function test_location_context_is_null_when_the_plugin_has_no_current_record(): void {
+			$handler = $this->make_handler( [ 'plugin' => $this->location_plugin( null ) ] );
+
+			$this->assertNull( $handler->location_context() );
+		}
+
+		public function test_location_context_carries_the_record_and_resolved_identity(): void {
+			$record  = $this->location_record( 'dadata:fias-1' );
+			$adapter = new class implements Location_Adapter {
+				public function resolve( Location_Record $record ) {
+					return 'carrier-city-77';
+				}
+			};
+
+			$handler = $this->make_handler( [ 'plugin' => $this->location_plugin( $record, $adapter ) ] );
+			$context = $handler->location_context();
+
+			$this->assertNotNull( $context );
+			$this->assertSame( $record->key(), $context['record']->key() );
+			$this->assertSame( 'carrier-city-77', $context['resolved_identity'] );
+		}
+
+		public function test_location_context_carries_a_null_resolved_identity_when_the_carrier_does_not_serve_the_locality(): void {
+			// A legitimate, first-class answer (Location_Adapter::resolve()'s own
+			// docblock) — must round-trip as null, not be confused with "no context at all"
+			// (which this method ALSO answers with null — Point_Query::get_record() is what
+			// tells the two apart, per that class' own docblock).
+			$record  = $this->location_record();
+			$adapter = new class implements Location_Adapter {
+				public function resolve( Location_Record $record ) {
+					return null;
+				}
+			};
+
+			$handler = $this->make_handler( [ 'plugin' => $this->location_plugin( $record, $adapter ) ] );
+			$context = $handler->location_context();
+
+			$this->assertNotNull( $context );
+			$this->assertSame( $record->key(), $context['record']->key() );
+			$this->assertNull( $context['resolved_identity'] );
+		}
+
+		public function test_location_context_is_null_when_the_adapter_throws(): void {
+			// A transient failure (Location_Adapter::resolve()'s own contract) must not
+			// fatal a public, guest-facing points request — the fetch simply proceeds
+			// without location context.
+			$record  = $this->location_record();
+			$adapter = new class implements Location_Adapter {
+				public function resolve( Location_Record $record ) {
+					throw new \RuntimeException( 'carrier API timeout' );
+				}
+			};
+
+			$handler = $this->make_handler( [ 'plugin' => $this->location_plugin( $record, $adapter ) ] );
+
+			$this->assertNull( $handler->location_context() );
 		}
 
 		/**
@@ -3984,6 +4363,62 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 
 			$this->assertContains( '/shipping/pickup/carrier/points', $registered );
 			$this->assertContains( '/shipping/pickup/carrier/points/(?P<id>[^/]+)', $registered );
+		}
+
+		/**
+		 * The other half of the Task 15 (issue #159) server<->client join: proves
+		 * register_rest() actually HANDS Pickup_Controller a `location_context` callable
+		 * bound to THIS handler when a plugin was wired — reflection, since the
+		 * controller instance itself is otherwise anonymous
+		 * ( `( new Pickup_Controller(...) )->register_routes()` never exposes it).
+		 */
+		public function test_register_rest_wires_the_location_context_callable_when_a_plugin_is_present(): void {
+			$captured_args = null;
+			Functions\when( 'register_rest_route' )->alias(
+				static function ( $namespace, $route, $args ) use ( &$captured_args ) {
+					// Grab the FIRST route registration's args only — both routes are
+					// constructed from the SAME controller instance.
+					$captured_args = $captured_args ?? $args;
+				}
+			);
+
+			$plugin  = $this->location_plugin( $this->location_record() );
+			$handler = $this->make_handler( [ 'plugin' => $plugin ] );
+			$handler->register_rest();
+
+			$this->assertNotNull( $captured_args );
+			$controller = $captured_args[0]['callback'][0];
+
+			$property = new \ReflectionProperty( $controller, 'location_context' );
+			if ( PHP_VERSION_ID < 80100 ) {
+				$property->setAccessible( true );
+			}
+			$bound_callable = $property->getValue( $controller );
+
+			$this->assertIsCallable( $bound_callable );
+			$this->assertSame( $handler, $bound_callable[0] );
+			$this->assertSame( 'location_context', $bound_callable[1] );
+		}
+
+		public function test_register_rest_wires_no_location_context_callable_without_a_plugin(): void {
+			$captured_args = null;
+			Functions\when( 'register_rest_route' )->alias(
+				static function ( $namespace, $route, $args ) use ( &$captured_args ) {
+					$captured_args = $captured_args ?? $args;
+				}
+			);
+
+			$handler = $this->make_handler();
+			$handler->register_rest();
+
+			$controller = $captured_args[0]['callback'][0];
+
+			$property = new \ReflectionProperty( $controller, 'location_context' );
+			if ( PHP_VERSION_ID < 80100 ) {
+				$property->setAccessible( true );
+			}
+
+			$this->assertNull( $property->getValue( $controller ) );
 		}
 
 		// -------------------------------------------------------------------------

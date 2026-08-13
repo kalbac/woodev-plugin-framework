@@ -66,6 +66,7 @@ return [
 	'Woodev\\Framework\\Shipping\\Pickup\\Pickup_Selection' => 'woodev/shipping-method/pickup/class-pickup-selection.php',
 	'Woodev\\Framework\\Shipping\\Pickup\\Point_Query' => 'woodev/shipping-method/pickup/class-point-query.php',
 	'Woodev\\Framework\\Shipping\\Pickup\\Point_Source' => 'woodev/shipping-method/pickup/interface-point-source.php',
+	'Woodev\\Framework\\Shipping\\Pickup\\Provider_Selection_Scope' => 'woodev/shipping-method/pickup/class-provider-selection-scope.php',
 	'Woodev\\Framework\\Shipping\\Pickup\\Selection_Result' => 'woodev/shipping-method/pickup/class-selection-result.php',
 	'Woodev\\Framework\\Shipping\\Pickup\\Selection_Scope' => 'woodev/shipping-method/pickup/interface-selection-scope.php',
 	'Woodev\\Framework\\Shipping\\Pickup\\Warehouse' => 'woodev/shipping-method/pickup/class-warehouse.php',
