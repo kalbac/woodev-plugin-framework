@@ -610,6 +610,9 @@ function phpI18n( overrides ) {
 			continueCheckout: 'Продолжить оформление заказа',
 			confirming: 'Проверяем…',
 			selectFailed: 'Не удалось подтвердить выбор. Попробуйте ещё раз.',
+			// #297: the `ownsChrome` counterpart of `selectFailed` above — never promises a
+			// repeat of the carrier's own (possibly now-disabled) confirm press.
+			selectFailedEmbedded: 'Не удалось подтвердить выбор. Выберите пункт ещё раз.',
 		},
 		overrides
 	);
@@ -5921,7 +5924,10 @@ describe( 'refusal is announced under ownsChrome (#265)', () => {
 
 		await rejectSelect( { status: 0, code: 'transport', message: 'нет сети' } );
 
-		expect( noticeText() ).toContain( phpI18n().selectFailed );
+		// #297: under `ownsChrome` this is `selectFailedEmbedded`, NOT the framework-panels
+		// `selectFailed` — see the dedicated describe block below for the full audit.
+		expect( noticeText() ).toContain( phpI18n().selectFailedEmbedded );
+		expect( noticeText() ).not.toContain( phpI18n().selectFailed );
 	} );
 
 	it( 'announces a domain refusal in the domain’s own words when it supplied any', async () => {
@@ -5979,6 +5985,7 @@ describe( 'refusal is announced under ownsChrome (#265)', () => {
 		// different instruction to the customer than "try again".
 		expect( noticeText() ).toContain( phpI18n().stalePage );
 		expect( noticeText() ).not.toContain( phpI18n().selectFailed );
+		expect( noticeText() ).not.toContain( phpI18n().selectFailedEmbedded );
 	} );
 
 	it( 'does NOT double-report when panels exist — that path is unchanged', async () => {
@@ -5990,5 +5997,46 @@ describe( 'refusal is announced under ownsChrome (#265)', () => {
 
 		expect( panels.setPointVerdict ).toHaveBeenCalled();
 		expect( notice() ).toBeNull();
+	} );
+} );
+
+/**
+ * #297 — under `ownsChrome`, `selectFailed`'s "Попробуйте ещё раз" invited the customer to
+ * repeat a press the carrier's own widget had already made impossible: Почта's confirm control
+ * (measured on the rig, s70) disables itself the instant it is pressed and never re-enables, so
+ * the customer who read the message and pressed again got nothing — same shape of promise as
+ * #260/#265, one layer further in.
+ *
+ * The fix is `selectionErrorKey()` reading `ownsChrome` (never controlling the carrier's own
+ * button, per D-3 — see that function's own docblock): `selectFailedEmbedded` under `ownsChrome`,
+ * the unchanged `selectFailed` everywhere else. Both directions are asserted here — a fix that
+ * only checked the `ownsChrome` branch could pass against a gate reading the flag backwards.
+ */
+describe( 'transport-failure copy never promises a retry the carrier controls (#297)', () => {
+	function noticeText() {
+		const el = document.querySelector( '.woodev-modal__notice' );
+
+		return el ? el.textContent : '';
+	}
+
+	it( 'shows the no-retry copy under ownsChrome, where the confirm control is the carrier’s own', async () => {
+		const { emitSelect, rejectSelect } = openPicker( { ownsChrome: true } );
+		await flushAsync();
+
+		emitSelect( { id: 'P1' } );
+		await rejectSelect( { status: 500, code: 'woodev_pickup_upstream_error', message: 'boom' } );
+
+		expect( noticeText() ).toContain( phpI18n().selectFailedEmbedded );
+		expect( noticeText() ).not.toContain( phpI18n().selectFailed );
+	} );
+
+	it( 'keeps the original retry copy under the framework’s own panels, where the CTA is ours', async () => {
+		const { emitSelect, rejectSelect, panels } = openPicker();
+		await flushAsync();
+
+		emitSelect( { id: 'P1' } );
+		await rejectSelect( { status: 500, code: 'woodev_pickup_upstream_error', message: 'boom' } );
+
+		expect( panels.showSelectionError ).toHaveBeenCalledWith( phpI18n().selectFailed );
 	} );
 } );
