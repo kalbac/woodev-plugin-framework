@@ -1089,27 +1089,33 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 		 * return a {@see Location_Service} backed by a session probe seeded with `$record`
 		 * (or nothing, when `$record` is `null`).
 		 *
-		 * @param Location_Record|null  $record  The customer's current record, or `null`.
-		 * @param Location_Adapter|null $adapter The adapter `resolve_for()` calls; `null`
-		 *                                       (the default) mirrors a plugin that has not
-		 *                                       wired one.
-		 * @param bool                  $active  What {@see Location_Service::is_active()}
-		 *                                       answers (review finding F1) — defaults to
-		 *                                       `true` (a configured, usable layer), the
-		 *                                       assumption every EXISTING caller of this
-		 *                                       helper already made implicitly before
-		 *                                       `is_active()` gated anything here. Pass
-		 *                                       `false` to build the "wired but never
-		 *                                       configured" plugin the finding itself
-		 *                                       describes.
+		 * @param Location_Record|null  $record   The customer's current record, or `null`.
+		 * @param Location_Adapter|null $adapter  The adapter `resolve_for()` calls; `null`
+		 *                                        (the default) mirrors a plugin that has not
+		 *                                        wired one.
+		 * @param bool                  $active   What {@see Location_Service::is_active()}
+		 *                                        answers (review finding F1) — defaults to
+		 *                                        `true` (a configured, usable layer), the
+		 *                                        assumption every EXISTING caller of this
+		 *                                        helper already made implicitly before
+		 *                                        `is_active()` gated anything here. Pass
+		 *                                        `false` to build the "wired but never
+		 *                                        configured" plugin the finding itself
+		 *                                        describes.
+		 * @param bool                  $implicit Whether `$record` was written as a default
+		 *                                        guess rather than a real customer choice
+		 *                                        (issue #309; spec D11/§4.6) — ignored when
+		 *                                        `$record` is `null`. Defaults to `false`
+		 *                                        (a real choice), the assumption every
+		 *                                        EXISTING caller of this helper already made.
 		 */
-		private function location_plugin( ?Location_Record $record, ?Location_Adapter $adapter = null, bool $active = true ): Pickup_Handler_Location_Fixture_Plugin {
+		private function location_plugin( ?Location_Record $record, ?Location_Adapter $adapter = null, bool $active = true, bool $implicit = false ): Pickup_Handler_Location_Fixture_Plugin {
 			$instance = ( new \ReflectionClass( Pickup_Handler_Location_Fixture_Plugin::class ) )->newInstanceWithoutConstructor();
 
 			$store = new Pickup_Handler_Customer_Location_Store_Probe( new Pickup_Handler_Location_Fake_Session() );
 
 			if ( null !== $record ) {
-				$store->set( $record );
+				$store->set( $record, $implicit );
 			}
 
 			$instance->fake_adapter         = $adapter;
@@ -1270,6 +1276,10 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			// (review finding F1) case where the block must be OMITTED instead.
 			$this->assertArrayHasKey( 'location', $config );
 			$this->assertSame( '', $config['location']['current']['key'] );
+			// No record at all — an implicit flag is only meaningful attached to an actual
+			// record (issue #309; same convention Checkout_Config::build_location_block()
+			// already uses for its own sibling `implicit` key).
+			$this->assertFalse( $config['location']['implicit'] );
 		}
 
 		public function test_config_carries_the_customer_current_record_key(): void {
@@ -1282,6 +1292,44 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			$config = $this->make_handler( [ 'plugin' => $plugin ] )->get_js_config();
 
 			$this->assertSame( 'dadata:fias-1', $config['location']['current']['key'] );
+		}
+
+		/**
+		 * Issue #309 (spec D11/§4.6): {@see Pickup_Handler::location_config_block()} used to
+		 * discard {@see Location_Service::get_customer_record()}'s own `implicit` flag —
+		 * {@see Pickup_Handler::current_location_record()} calls that method and narrows the
+		 * result to the bare {@see Location_Record} on the very next line, throwing the flag
+		 * away before `location_config_block()` ever saw it. A plugin/theme reading this
+		 * config needs the flag too, per that method's own docblock ("e.g. to decide whether
+		 * to still show a 'please choose your locality' prompt").
+		 */
+		public function test_config_carries_implicit_false_for_a_real_customer_choice(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			Functions\when( 'rest_url' )->justReturn( 'https://example.test/wp-json/woodev/v1' );
+			Functions\when( 'wp_create_nonce' )->justReturn( 'NONCE' );
+			Functions\when( 'wc_ship_to_billing_address_only' )->justReturn( false );
+
+			$plugin = $this->location_plugin( $this->location_record( 'dadata:fias-1' ), null, true, false );
+			$config = $this->make_handler( [ 'plugin' => $plugin ] )->get_js_config();
+
+			$this->assertSame( 'dadata:fias-1', $config['location']['current']['key'] );
+			$this->assertFalse( $config['location']['implicit'] );
+		}
+
+		/**
+		 * Same seam, the other value — issue #309.
+		 */
+		public function test_config_carries_implicit_true_for_a_default_guess(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			Functions\when( 'rest_url' )->justReturn( 'https://example.test/wp-json/woodev/v1' );
+			Functions\when( 'wp_create_nonce' )->justReturn( 'NONCE' );
+			Functions\when( 'wc_ship_to_billing_address_only' )->justReturn( false );
+
+			$plugin = $this->location_plugin( $this->location_record( 'dadata:fias-1' ), null, true, true );
+			$config = $this->make_handler( [ 'plugin' => $plugin ] )->get_js_config();
+
+			$this->assertSame( 'dadata:fias-1', $config['location']['current']['key'] );
+			$this->assertTrue( $config['location']['implicit'] );
 		}
 
 		/**

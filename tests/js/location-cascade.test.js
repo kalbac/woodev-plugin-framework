@@ -534,7 +534,9 @@ describe( 'woodev_location_applied (Task 15; issue #159)', () => {
 		selectReq.resolve( { current: { key: item.record.key, level: 'settlement' }, persisted: true } );
 		await flushMicrotasks();
 
-		expect( seen ).toEqual( [ { key: 'dadata:city1', level: 'settlement' } ] );
+		// A persisted /select is ALWAYS an explicit choice (issue #309; spec D11) —
+		// `implicit` is `false` regardless of the config's own boot-time value.
+		expect( seen ).toEqual( [ { key: 'dadata:city1', level: 'settlement', implicit: false } ] );
 	} );
 
 	it( 'is a NATIVE event, seen by a plain addEventListener with no jQuery involved', async () => {
@@ -556,7 +558,7 @@ describe( 'woodev_location_applied (Task 15; issue #159)', () => {
 		fetchCalls[ fetchCalls.length - 1 ].resolve( { current: { key: item.record.key, level: 'settlement' }, persisted: true } );
 		await flushMicrotasks();
 
-		expect( seen ).toEqual( [ { key: 'cdek:city-77', level: 'settlement' } ] );
+		expect( seen ).toEqual( [ { key: 'cdek:city-77', level: 'settlement', implicit: false } ] );
 	} );
 
 	it( 'does NOT fire when /select fails', async () => {
@@ -599,7 +601,7 @@ describe( 'woodev_location_applied (Task 15; issue #159)', () => {
 		fetchCalls[ fetchCalls.length - 1 ].resolve( { current: { key: item.record.key, level: 'settlement' }, persisted: false } );
 		await flushMicrotasks();
 
-		expect( seen ).toEqual( [ { key: '', level: '' } ] );
+		expect( seen ).toEqual( [ { key: '', level: '', implicit: false } ] );
 	} );
 
 	it( 'fires only ONCE, for the FINAL response, when a superseded selection is queued behind it', async () => {
@@ -632,7 +634,7 @@ describe( 'woodev_location_applied (Task 15; issue #159)', () => {
 		selectRequests()[ 1 ].resolve( { current: { key: second.record.key, level: 'settlement' }, persisted: true } );
 		await flushMicrotasks();
 
-		expect( seen ).toEqual( [ { key: 'dadata:second', level: 'settlement' } ] );
+		expect( seen ).toEqual( [ { key: 'dadata:second', level: 'settlement', implicit: false } ] );
 	} );
 } );
 
@@ -1579,55 +1581,90 @@ describe( 'restoring config.location.current on load', () => {
 } );
 
 // -----------------------------------------------------------------------
-// data-woodev-location-implicit DOM marker (issue #309; spec D11/§4.6) —
-// config.location.implicit had ZERO consumers before this: an implicit default must never
-// look like a real customer choice, while staying fully usable for scoping/addressing.
+// woodev_location_applied's `implicit` detail (issue #309; spec D11/§4.6) — replaces an
+// earlier `data-woodev-location-implicit` DOM-attribute attempt (reverted after an adversarial
+// review reproduced five ways it could not work: destroyed at boot by attachAll()'s
+// DOM-replacing renderers, lost on a checkout re-render, permanently stale across two entries
+// sharing one customer record, never cleared on a country change, and impossible to signal for
+// a record whose level has no field in the chain). The event carries the SAME information with
+// none of those failure modes, because it depends on no DOM node existing or surviving.
 // -----------------------------------------------------------------------
 
-describe( 'implicit-locality DOM marker (issue #309)', () => {
-	it( 'marks the CURRENT level\'s field implicit on boot when config.location.implicit is true', () => {
+describe( 'woodev_location_applied\'s implicit detail (issue #309)', () => {
+	function captureLocationApplied() {
+		const seen = [];
+		document.body.addEventListener( 'woodev_location_applied', ( event ) => seen.push( event.detail ) );
+		return seen;
+	}
+
+	it( 'fires implicit:true on boot when config.location.implicit is true (defect: the old DOM marker could never signal at all for the ajax-select2/related-list modes — see the test below)', () => {
+		const seen = captureLocationApplied();
+
 		boot( {
 			settlement: true,
 			current: { key: 'dadata:city1', level: 'settlement' },
 			implicit: true,
 		} );
 
-		expect(
-			document.getElementById( 'billing_city' ).getAttribute( 'data-woodev-location-implicit' )
-		).toBe( 'true' );
+		expect( seen ).toEqual( [ { key: 'dadata:city1', level: 'settlement', implicit: true } ] );
 	} );
 
-	it( 'does NOT mark the field when config.location.implicit is false (a real customer choice)', () => {
+	it( 'fires implicit:false on boot for a real customer choice (config.location.implicit is false)', () => {
+		const seen = captureLocationApplied();
+
 		boot( {
 			settlement: true,
 			current: { key: 'dadata:city1', level: 'settlement' },
 			implicit: false,
 		} );
 
-		expect(
-			document.getElementById( 'billing_city' ).hasAttribute( 'data-woodev-location-implicit' )
-		).toBe( false );
+		expect( seen ).toEqual( [ { key: 'dadata:city1', level: 'settlement', implicit: false } ] );
 	} );
 
-	it( 'marks nothing when there is no current record at all', () => {
+	it( 'fires nothing at boot when there is no current record at all', () => {
+		const seen = captureLocationApplied();
+
 		boot( { settlement: true, current: null, implicit: true } );
 
-		expect(
-			document.getElementById( 'billing_city' ).hasAttribute( 'data-woodev-location-implicit' )
-		).toBe( false );
+		expect( seen ).toEqual( [] );
 	} );
 
-	it( 'clears the marker the instant an explicit /select persists (spec D11: a real choice drops the flag)', async () => {
+	it( 'never writes any DOM attribute for the signal — the mechanism this replaces is gone entirely', () => {
 		boot( {
 			settlement: true,
 			current: { key: 'dadata:city1', level: 'settlement' },
 			implicit: true,
 		} );
 
-		expect(
-			document.getElementById( 'billing_city' ).getAttribute( 'data-woodev-location-implicit' )
-		).toBe( 'true' );
+		const el = document.getElementById( 'billing_city' );
 
+		expect( el.getAttributeNames().some( ( name ) => name.indexOf( 'implicit' ) !== -1 ) ).toBe( false );
+	} );
+
+	it( 'still fires implicit:true at boot even when the record\'s level has no field in this entry\'s chain (defect #5 — spec §4.4 explicitly permits this shape)', () => {
+		// The chain here only ever carries 'settlement'; the record names 'address', a level
+		// this entry has no field for at all. chainNodeForLevel() would have returned null for
+		// the OLD DOM mechanism — nothing to mark, no signal, ever. The event needs no field to
+		// exist.
+		const seen = captureLocationApplied();
+
+		boot( {
+			settlement: true,
+			current: { key: 'dadata:addr1', level: 'address' },
+			implicit: true,
+		} );
+
+		expect( seen ).toEqual( [ { key: 'dadata:addr1', level: 'address', implicit: true } ] );
+	} );
+
+	it( 'an explicit pick always fires implicit:false, overriding a previously-implicit boot state (spec D11: a real choice drops the flag)', async () => {
+		boot( {
+			settlement: true,
+			current: { key: 'dadata:city1', level: 'settlement' },
+			implicit: true,
+		} );
+
+		const seen = captureLocationApplied(); // attached AFTER boot — only the pick's own fire matters here.
 		const settlementCall = callFor( 'billing_city' );
 		const item = {
 			key: 'dadata:city2', label: 'г Тверь', level: 'settlement',
@@ -1640,46 +1677,70 @@ describe( 'implicit-locality DOM marker (issue #309)', () => {
 		fetchCalls[ fetchCalls.length - 1 ].resolve( { current: { key: item.record.key, level: 'settlement' }, persisted: true } );
 		await flushMicrotasks();
 
-		expect(
-			document.getElementById( 'billing_city' ).hasAttribute( 'data-woodev-location-implicit' )
-		).toBe( false );
+		expect( seen ).toEqual( [ { key: 'dadata:city2', level: 'settlement', implicit: false } ] );
 	} );
 
-	it( 'clears a PREVIOUSLY marked level when the customer explicitly picks a DIFFERENT one', async () => {
+	it( 'the initial implicit:true fire is not destroyed by a DOM-replacing renderer running right after it (defect #1 — the fatal one: attachAll() runs AFTER prefill() in boot())', () => {
+		// Reproduces the OLD mechanism's exact failure timing: a renderer that swaps the
+		// original <input> for a fresh element (mirrors what location-select-modes.js's
+		// buildSelectField() does for real under ajax-select2/related-list — Task 13, spec D7)
+		// runs during attachAll(), which boot() calls right after prefill() already fired the
+		// event. A DOM-attribute mechanism set on the OLD node before this swap would already
+		// be gone; the event has no such dependency.
+		window.WoodevLocationRenderers = {
+			'custom-mode:settlement': ( el ) => {
+				const replacement = document.createElement( 'select' );
+				replacement.id = el.id;
+				el.parentNode.replaceChild( replacement, el );
+
+				return { detach: jest.fn(), el: replacement };
+			},
+		};
+
+		const seen = captureLocationApplied();
+
 		boot( {
-			settlement: true, address: true,
+			settlement: true,
+			current: { key: 'dadata:city1', level: 'settlement' },
+			implicit: true,
+			mode: 'custom-mode',
+		} );
+
+		// Sanity: this really does exercise the DOM-destroying renderer path.
+		expect( document.getElementById( 'billing_city' ).tagName ).toBe( 'SELECT' );
+		expect( seen ).toEqual( [ { key: 'dadata:city1', level: 'settlement', implicit: true } ] );
+	} );
+
+	it( 'a later checkout re-render (updated_checkout) neither loses nor duplicates the boot-time signal (defect #2)', () => {
+		// The old DOM attribute never survived WooCommerce replacing the field fragment,
+		// because nothing re-applied it after reconcileAfterCheckoutUpdate() ran (prefill() is
+		// only ever called once, from boot()). The event already fired once, independent of
+		// any DOM node — a later re-render has nothing to lose and reconcileAfterCheckoutUpdate()
+		// does not need to (and does not) re-fire it.
+		const seen = captureLocationApplied();
+
+		boot( {
+			settlement: true,
 			current: { key: 'dadata:city1', level: 'settlement' },
 			implicit: true,
 		} );
 
-		expect(
-			document.getElementById( 'billing_city' ).getAttribute( 'data-woodev-location-implicit' )
-		).toBe( 'true' );
+		expect( seen ).toEqual( [ { key: 'dadata:city1', level: 'settlement', implicit: true } ] );
 
-		const addressCall = callFor( 'billing_address_1' );
-		const item = {
-			key: 'dadata:addr1', label: 'ул Тверская, 1', level: 'address',
-			record: {
-				key: 'dadata:addr1', provider_id: 'dadata', level: 'address', country: 'RU',
-				street: { name: 'Тверская', type: 'ул' }, house: '1', label: 'г Москва, ул Тверская, д 1',
-			},
-		};
+		const fresh = document.createElement( 'input' );
+		fresh.type = 'text';
+		fresh.id = 'billing_city';
+		fresh.name = 'billing_city';
+		document.getElementById( 'billing_city' ).replaceWith( fresh );
 
-		selectViaFake( addressCall, item );
-		fetchCalls[ fetchCalls.length - 1 ].resolve( { current: { key: item.record.key, level: 'address' }, persisted: true } );
-		await flushMicrotasks();
+		window.jQuery( document.body ).trigger( 'updated_checkout' );
 
-		expect(
-			document.getElementById( 'billing_city' ).hasAttribute( 'data-woodev-location-implicit' )
-		).toBe( false );
-		expect(
-			document.getElementById( 'billing_address_1' ).hasAttribute( 'data-woodev-location-implicit' )
-		).toBe( false );
+		expect( seen ).toEqual( [ { key: 'dadata:city1', level: 'settlement', implicit: true } ] );
 	} );
 
 	it( 'never gates scoping/addressing on the implicit flag — the restored key still scopes the child fetch', () => {
 		// Sibling assertion to "restoring config.location.current on load" above: the SAME
-		// implicit default marked here must stay fully usable for scoping — spec D11's other
+		// implicit default fired here must stay fully usable for scoping — spec D11's other
 		// half ("implicit records participate in rate calculation").
 		boot( {
 			region: true, settlement: true,
@@ -1687,15 +1748,117 @@ describe( 'implicit-locality DOM marker (issue #309)', () => {
 			implicit: true,
 		} );
 
-		expect(
-			document.getElementById( 'billing_state' ).getAttribute( 'data-woodev-location-implicit' )
-		).toBe( 'true' );
-
 		const settlementCall = callFor( 'billing_city' );
 		settlementCall.fetch( 'Мос' );
 
 		const req = fetchCalls[ fetchCalls.length - 1 ];
 		expect( req.url ).toContain( 'within=' + encodeURIComponent( 'dadata:region9' ) );
+	} );
+
+	/**
+	 * Defect #3 (second-entry regression, per the review): two entries sharing ONE customer
+	 * record — e.g. a billing-section entry and a shipping-section entry both wired to the
+	 * SAME Location_Service — used to each get their OWN `data-woodev-location-implicit` DOM
+	 * marker, and an explicit pick in ONE entry's active section only ever cleared THAT
+	 * entry's own marker, leaving the other permanently stale. The event has no per-entry
+	 * state to diverge: each entry fires its own, identically-valued boot event, and a real
+	 * pick's `implicit: false` is a single global fact a listener applies regardless of which
+	 * entry produced it — mirrors `bootBillingAndShippingEntries()` in the "section-aware
+	 * addressing" describe block below (same shape, `buildConfig()`/`installMarkup()` cannot
+	 * express two sections at once).
+	 */
+	function bootSharedLocationEntries( current, implicit ) {
+		document.body.innerHTML = `
+			<form class="checkout woocommerce-checkout">
+				<select id="billing_country" name="billing_country">
+					<option value="RU">Россия</option>
+				</select>
+				<select id="shipping_country" name="shipping_country">
+					<option value="RU">Россия</option>
+				</select>
+				<input type="checkbox" id="ship-to-different-address-checkbox"
+					name="ship_to_different_address" checked />
+				<input type="text" id="billing_city" name="billing_city" value="" />
+				<input type="text" id="shipping_city" name="shipping_city" value="" />
+			</form>
+		`;
+		document.getElementById( 'billing_country' ).value = 'RU';
+		document.getElementById( 'shipping_country' ).value = 'RU';
+
+		global.jQuery = require( 'jquery' );
+		global.$ = global.jQuery;
+		window.jQuery = global.jQuery;
+
+		window.WoodevCheckoutFieldStore = require(
+			'../../woodev/shipping-method/assets/js/frontend/checkout-field-store.js'
+		);
+
+		fakeTypeahead();
+		mockFetch();
+
+		const sharedLocation = {
+			endpoints: { suggest: SUGGEST_URL, select: SELECT_URL, list: LIST_URL },
+			nonce: 'test-nonce',
+			countries: [ 'RU' ],
+			mode: 'typeahead',
+			levels: { RU: { region: true, settlement: true, address: true } },
+			current,
+			implicit,
+			i18n: {},
+		};
+
+		window[ CONFIG_GLOBAL + '_billing_shared' ] = {
+			fields: { billing_city: locationField( 'settlement', 'billing' ) },
+			endpoint: 'https://example.test/wp-json/woodev/v1/carrier/field-source',
+			nonce: 'test-nonce',
+			takeover: {},
+			location: sharedLocation,
+		};
+		window[ CONFIG_GLOBAL + '_shipping_shared' ] = {
+			fields: { shipping_city: locationField( 'settlement', 'shipping' ) },
+			endpoint: 'https://example.test/wp-json/woodev/v1/carrier/field-source',
+			nonce: 'test-nonce',
+			takeover: {},
+			location: sharedLocation,
+		};
+
+		require( '../../woodev/shipping-method/assets/js/frontend/location-cascade.js' );
+	}
+
+	afterEach( () => {
+		delete window[ CONFIG_GLOBAL + '_billing_shared' ];
+		delete window[ CONFIG_GLOBAL + '_shipping_shared' ];
+	} );
+
+	it( 'two entries sharing one implicit customer record each fire their own identical boot event — no per-entry state to diverge', () => {
+		const seen = captureLocationApplied();
+
+		bootSharedLocationEntries( { key: 'dadata:city1', level: 'settlement' }, true );
+
+		expect( seen ).toEqual( [
+			{ key: 'dadata:city1', level: 'settlement', implicit: true },
+			{ key: 'dadata:city1', level: 'settlement', implicit: true },
+		] );
+	} );
+
+	it( 'an explicit pick in the ACTIVE section fires implicit:false — a listener applies it globally, no OTHER entry is left permanently stale', async () => {
+		bootSharedLocationEntries( { key: 'dadata:city1', level: 'settlement' }, true );
+
+		const seen = captureLocationApplied(); // attached AFTER boot — only the pick's own fire matters here.
+
+		// "ship to a different address" is checked (bootSharedLocationEntries' own markup) —
+		// shipping is the active section; only ITS pick reaches /select (review finding F3,
+		// same gate the "section-aware addressing" describe block exercises directly).
+		selectViaFake( callFor( 'shipping_city' ), {
+			key: 'dadata:kazan', label: 'г Казань', level: 'settlement',
+			record: { key: 'dadata:kazan', provider_id: 'dadata', level: 'settlement', country: 'RU', label: 'г Казань' },
+		} );
+		fetchCalls[ fetchCalls.length - 1 ].resolve( { current: { key: 'dadata:kazan', level: 'settlement' }, persisted: true } );
+		await flushMicrotasks();
+
+		// ONE event, implicit:false — not two, not still true, and not scoped to "only the
+		// shipping entry knows this now" the way the old per-entry DOM marker was.
+		expect( seen ).toEqual( [ { key: 'dadata:kazan', level: 'settlement', implicit: false } ] );
 	} );
 } );
 
@@ -1955,7 +2118,7 @@ describe( 'Location Provider key invalidation on a local-only clear (review find
 		document.getElementById( 'billing_country' ).value = 'US';
 		document.getElementById( 'billing_country' ).dispatchEvent( new Event( 'change', { bubbles: true } ) );
 
-		expect( seen ).toEqual( [ { key: '', level: '' } ] );
+		expect( seen ).toEqual( [ { key: '', level: '', implicit: false } ] );
 		// Sanity: this really is a pure client-side clear, never a network call.
 		expect( fetchCalls.length ).toBe( 0 );
 	} );
@@ -1986,7 +2149,7 @@ describe( 'Location Provider key invalidation on a local-only clear (review find
 
 		await flushMicrotasks();
 
-		expect( seen ).toEqual( [ { key: '', level: '' } ] );
+		expect( seen ).toEqual( [ { key: '', level: '', implicit: false } ] );
 	} );
 
 	it( 'a real pick through the widget does NOT fire the empty-key event before /select resolves', () => {
