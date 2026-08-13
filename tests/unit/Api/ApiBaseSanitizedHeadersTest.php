@@ -1,22 +1,30 @@
 <?php
 /**
  * Unit tests for Woodev_API_Base::get_sanitized_request_headers() /
- * get_secret_request_header_names() — issue #288.
+ * get_sanitized_response_headers() / get_secret_header_names() — issues #288, #300.
  *
- * Woodev_API_Base::broadcast_request() hands the sanitized request headers to the
- * documented `woodev_{api_id}_api_request_performed` action, i.e. to any attached
- * request logger. Before this fix, the sanitizer masked ONLY the `Authorization`
- * header by exact key match; any other credential header (e.g. a vendor-specific
- * `X-Secret`) rode the broadcast in plaintext. This file pins:
+ * Woodev_API_Base::broadcast_request() hands the sanitized request AND response
+ * headers to the documented `woodev_{api_id}_api_request_performed` action, i.e. to
+ * any attached request logger. #288 fixed the outgoing half: before it, the
+ * sanitizer masked ONLY the `Authorization` request header by exact key match, so
+ * any other credential header (e.g. a vendor-specific `X-Secret`) rode the
+ * broadcast in plaintext. #300 is the symmetric fix for the incoming half: response
+ * headers were broadcast completely raw — no sanitizer ran on them at all, so a
+ * `Set-Cookie` (session token) or a token-refresh header (`X-Auth-Token` etc.)
+ * returned by the carrier leaked into the log unmasked. This file pins:
  *
- * - `Authorization` stays masked (regression guard — the payment-gateway tree
- *   shares this base class);
- * - every other header name in the default {@see \Woodev_API_Base::get_secret_request_header_names()}
- *   list is masked too;
+ * - `Authorization` stays masked on the request side (regression guard — the
+ *   payment-gateway tree shares this base class);
+ * - every other header name in the default {@see \Woodev_API_Base::get_secret_header_names()}
+ *   list is masked too, on BOTH the request and the response side;
+ * - `Set-Cookie` is masked on the response side;
  * - the match is case-insensitive, while the returned array preserves the
- *   ORIGINAL key casing the request actually sent;
- * - a subclass can extend the list with its own header name;
- * - a non-secret header passes through untouched.
+ *   ORIGINAL key casing the request/response actually carried;
+ * - a subclass can extend the list with its own header name, and the extension
+ *   covers both directions through the single shared seam;
+ * - a non-secret header passes through untouched, on both sides;
+ * - response headers that are `null` (no response received yet) pass through
+ *   unchanged rather than being coerced into an array.
  *
  * @package Woodev\Tests\Unit\Api
  */
@@ -45,12 +53,31 @@ class Testable_Api_Base extends \Woodev_API_Base {
 	}
 
 	/**
-	 * Exposes the protected sanitizer under test.
+	 * Seeds the response headers under test, bypassing the HTTP transport.
+	 *
+	 * @param array<string, string> $headers Header name/value pairs, casing as received.
+	 * @return void
+	 */
+	public function set_response_headers_for_test( array $headers ): void {
+		$this->response_headers = $headers;
+	}
+
+	/**
+	 * Exposes the protected request-header sanitizer under test.
 	 *
 	 * @return array<string, string>
 	 */
 	public function get_sanitized_headers_for_test(): array {
 		return $this->get_sanitized_request_headers();
+	}
+
+	/**
+	 * Exposes the protected response-header sanitizer under test.
+	 *
+	 * @return array<string, string>|null
+	 */
+	public function get_sanitized_response_headers_for_test() {
+		return $this->get_sanitized_response_headers();
 	}
 
 	/**
@@ -74,7 +101,8 @@ class Testable_Api_Base extends \Woodev_API_Base {
 
 /**
  * A subclass extending the default credential-header list with a header the
- * base class does not know about — proves the extension seam works.
+ * base class does not know about — proves the extension seam works, for both
+ * the request and the response sanitizer, since both read the same list.
  */
 class Testable_Api_Base_With_Custom_Secret extends Testable_Api_Base {
 
@@ -83,8 +111,8 @@ class Testable_Api_Base_With_Custom_Secret extends Testable_Api_Base {
 	 *
 	 * @return array<int, string>
 	 */
-	protected function get_secret_request_header_names(): array {
-		return array_merge( parent::get_secret_request_header_names(), [ 'X-Custom-Secret' ] );
+	protected function get_secret_header_names(): array {
+		return array_merge( parent::get_secret_header_names(), [ 'X-Custom-Secret' ] );
 	}
 }
 
@@ -146,7 +174,7 @@ final class ApiBaseSanitizedHeadersTest extends TestCase {
 	}
 
 	/**
-	 * A subclass extending get_secret_request_header_names() gets its custom
+	 * A subclass extending get_secret_header_names() gets its custom
 	 * header masked through the same shared logic — no divergent sanitizer needed.
 	 *
 	 * @return void
@@ -211,5 +239,110 @@ final class ApiBaseSanitizedHeadersTest extends TestCase {
 		$headers = $api->get_sanitized_headers_for_test();
 
 		$this->assertSame( 'application/json', $headers['Content-Type'] );
+	}
+
+	// -------------------------------------------------------------------------
+	// #300 — response-header sanitization. Before this fix, get_response_data_for_broadcast()
+	// handed get_response_headers() straight to the broadcast, with no sanitizer
+	// at all: not even the single hardcoded name the request side had before #288.
+	// -------------------------------------------------------------------------
+
+	/**
+	 * `Set-Cookie` is the response-side header the card calls out explicitly: a
+	 * carrier may hand back a session cookie that must never reach the log.
+	 *
+	 * @return void
+	 */
+	public function test_set_cookie_response_header_is_masked(): void {
+		$cookie = 'sessionid=deadbeefcafefeed; Path=/; HttpOnly';
+
+		$api = new Testable_Api_Base();
+		$api->set_response_headers_for_test( [ 'Set-Cookie' => $cookie ] );
+
+		$headers = $api->get_sanitized_response_headers_for_test();
+
+		$this->assertSame( str_repeat( '*', strlen( $cookie ) ), $headers['Set-Cookie'] );
+		$this->assertStringNotContainsString( $cookie, print_r( $headers, true ), 'the cookie leaked into the sanitized response headers' );
+	}
+
+	/**
+	 * A token-refresh response header from the shared default list (the same list
+	 * the request side uses) is masked symmetrically on the response side too.
+	 *
+	 * @return void
+	 */
+	public function test_default_list_masks_a_credential_header_on_the_response_side(): void {
+		$refreshed_token = 'refreshed-token-value-that-must-never-reach-the-log';
+
+		$api = new Testable_Api_Base();
+		$api->set_response_headers_for_test( [ 'X-Auth-Token' => $refreshed_token ] );
+
+		$headers = $api->get_sanitized_response_headers_for_test();
+
+		$this->assertSame( str_repeat( '*', strlen( $refreshed_token ) ), $headers['X-Auth-Token'] );
+	}
+
+	/**
+	 * The response-side match is case-insensitive and preserves original key casing,
+	 * mirroring the request-side guarantee.
+	 *
+	 * @return void
+	 */
+	public function test_response_match_is_case_insensitive_but_preserves_original_key_casing(): void {
+		$cookie = 'sessionid=deadbeefcafefeed';
+
+		$api = new Testable_Api_Base();
+		$api->set_response_headers_for_test( [ 'set-cookie' => $cookie ] );
+
+		$headers = $api->get_sanitized_response_headers_for_test();
+
+		$this->assertArrayHasKey( 'set-cookie', $headers );
+		$this->assertArrayNotHasKey( 'Set-Cookie', $headers );
+		$this->assertSame( str_repeat( '*', strlen( $cookie ) ), $headers['set-cookie'] );
+	}
+
+	/**
+	 * A subclass extending get_secret_header_names() gets its custom header
+	 * masked on the response side too — one seam, both directions.
+	 *
+	 * @return void
+	 */
+	public function test_subclass_extension_covers_the_response_side_too(): void {
+		$secret = 'secret-value-that-must-never-reach-the-log';
+
+		$api = new Testable_Api_Base_With_Custom_Secret();
+		$api->set_response_headers_for_test( [ 'X-Custom-Secret' => $secret ] );
+
+		$headers = $api->get_sanitized_response_headers_for_test();
+
+		$this->assertSame( str_repeat( '*', strlen( $secret ) ), $headers['X-Custom-Secret'] );
+	}
+
+	/**
+	 * A response header that carries no credential passes through unmasked.
+	 *
+	 * @return void
+	 */
+	public function test_non_secret_response_header_passes_through_untouched(): void {
+		$api = new Testable_Api_Base();
+		$api->set_response_headers_for_test( [ 'Content-Type' => 'application/json' ] );
+
+		$headers = $api->get_sanitized_response_headers_for_test();
+
+		$this->assertSame( 'application/json', $headers['Content-Type'] );
+	}
+
+	/**
+	 * Before any response is received (e.g. the transport itself failed),
+	 * get_response_headers() is `null`. The sanitizer must pass that through
+	 * unchanged rather than coercing it into an array, so the broadcast payload
+	 * shape for a failed request is unaffected by this fix.
+	 *
+	 * @return void
+	 */
+	public function test_null_response_headers_pass_through_unchanged(): void {
+		$api = new Testable_Api_Base();
+
+		$this->assertNull( $api->get_sanitized_response_headers_for_test() );
 	}
 }
