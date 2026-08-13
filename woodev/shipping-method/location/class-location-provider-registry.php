@@ -1439,6 +1439,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 				$default_locality_policy_options
 			);
 
+			$this->apply_default_locality_status_note();
+
 			\Woodev\Framework\Settings\Settings_Page_Registry::instance()->register_service(
 				\Woodev\Framework\Settings\Settings_Provider::create(
 					self::SETTINGS_SERVICE_ID,
@@ -1453,6 +1455,76 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 					]
 				)
 			);
+		}
+
+		/**
+		 * Surfaces the `fixed` default-locality policy's "nothing usable is
+		 * actually configured" state on the settings page (review finding F4),
+		 * rather than leaving it silent: no picker UI ships in this task (a
+		 * separate, later card), so a merchant who selects `fixed` and never
+		 * picks a record — or whose picked record no longer matches the
+		 * currently ACTIVE provider — would otherwise see nothing telling them
+		 * the policy is not actually doing anything for a customer right now.
+		 *
+		 * Appends to the `default_locality_policy` select's own description
+		 * (read by {@see \Woodev\Framework\Settings\Field_Schema::from_handler()}
+		 * exactly like any other setting's description) rather than exposing
+		 * {@see self::SETTING_DEFAULT_LOCALITY_RECORD} /
+		 * {@see self::SETTING_DEFAULT_LOCALITY_NEEDS_REPICK} as editable
+		 * controls — see {@see Location_Settings::register_settings()}'s own
+		 * docblock for why those two stay machine-owned, never merchant-typed.
+		 *
+		 * Computed LIVE against {@see self::get_active_provider()} rather than
+		 * read from the (still-registered, but no longer written by
+		 * {@see Location_Service}) `needs_repick` flag: review finding F2
+		 * forbids the customer-facing getter that used to keep that flag
+		 * honest from writing store settings at all, so nothing updates a
+		 * stored flag any more — a LIVE check can never go stale the way a
+		 * stored one, now orphaned, would. This deliberately compares against
+		 * the ACTIVE provider alone rather than replicating
+		 * {@see Location_Service::provider_for_level()}'s full D15
+		 * chosen-then-bundled-fallback walk: duplicating that chain here would
+		 * only drift from it, and for an informational admin note (not a
+		 * runtime gate) "did the store switch away from the provider this was
+		 * picked under" is the common case this exists to catch.
+		 *
+		 * Called from {@see self::register_settings()} once `$this->settings_handler`
+		 * exists — {@see self::get_default_locality_policy()} /
+		 * {@see self::get_default_locality_record()} / {@see self::get_active_provider()}
+		 * all read through it.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		private function apply_default_locality_status_note(): void {
+			if ( self::DEFAULT_LOCALITY_POLICY_FIXED !== $this->get_default_locality_policy() ) {
+				return;
+			}
+
+			$setting = $this->settings_handler->get_setting( self::SETTING_DEFAULT_LOCALITY_POLICY );
+
+			if ( null === $setting ) {
+				return; // Defensive: register_settings() above always registers this id.
+			}
+
+			$record = $this->get_default_locality_record();
+
+			if ( null === $record ) {
+				$setting->set_description(
+					__( 'Локация по умолчанию не настроена: пока не будет сохранена корректная запись, эта политика ничего не применит.', 'woodev-plugin-framework' )
+				);
+
+				return;
+			}
+
+			$active = $this->get_active_provider();
+
+			if ( null === $active || $active->get_id() !== $record->provider_id() ) {
+				$setting->set_description(
+					__( 'Зафиксированная локация была выбрана через другого провайдера и может не подойти текущему — рекомендуется выбрать её заново.', 'woodev-plugin-framework' )
+				);
+			}
 		}
 
 		/**

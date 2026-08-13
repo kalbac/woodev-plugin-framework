@@ -192,9 +192,24 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 			);
 			$this->register_control( Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_POLICY, \Woodev_Control::TYPE_SELECT );
 
-			// Serialized Location_Record JSON (Task 14), written through
-			// Location_Provider_Registry::set_default_locality_record() — the
-			// admin picker's own selection, not free text the merchant types here.
+			/*
+			 * Serialized Location_Record JSON (Task 14), written through
+			 * Location_Provider_Registry::set_default_locality_record() — the
+			 * FUTURE admin picker's own selection (its own, later card; no picker
+			 * UI ships in this task), never free text the merchant types here.
+			 *
+			 * Deliberately registered WITHOUT a control (review finding F4): no
+			 * picker exists yet in this PR, so the only UI a control would offer
+			 * today is a bare textarea holding raw JSON — directly contradicting
+			 * this field's own "never typed free-hand" contract above. Keeping
+			 * the setting itself registered (just uncontrolled) preserves the
+			 * write path this class's own docblock documents for the picker to
+			 * use once built (a plain settings-API field written through
+			 * Woodev_Abstract_Settings::update_value(), the same as every other
+			 * store-level Location setting) — only the generic settings-page
+			 * React surface's editable rendering is what this withholds, by
+			 * never giving Field_Schema::from_handler() a controlType for it.
+			 */
 			$this->register_setting(
 				Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_RECORD,
 				\Woodev_Setting::TYPE_STRING,
@@ -203,9 +218,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 					'default' => '',
 				]
 			);
-			$this->register_control( Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_RECORD, \Woodev_Control::TYPE_TEXTAREA );
 
-			// Informational flag — see Location_Provider_Registry::get_default_locality_needs_repick().
+			/*
+			 * Informational flag — see Location_Provider_Registry::get_default_locality_needs_repick().
+			 * Also registered WITHOUT a control (review finding F4): this flag is
+			 * CODE-OWNED bookkeeping, never a merchant decision — an editable
+			 * toggle let a merchant silently switch it off and mask a genuinely
+			 * stranded default. The settings page instead surfaces the live
+			 * equivalent of this flag through the `default_locality_policy`
+			 * field's own description — see
+			 * Location_Provider_Registry::apply_default_locality_status_note().
+			 */
 			$this->register_setting(
 				Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_NEEDS_REPICK,
 				\Woodev_Setting::TYPE_BOOLEAN,
@@ -214,7 +237,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 					'default' => false,
 				]
 			);
-			$this->register_control( Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_NEEDS_REPICK, \Woodev_Control::TYPE_TOGGLE );
 
 			foreach ( $this->provider_fields as $field_id => $field ) {
 				$this->register_provider_field( (string) $field_id, (array) $field );

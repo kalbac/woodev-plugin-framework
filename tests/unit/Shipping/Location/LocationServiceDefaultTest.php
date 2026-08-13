@@ -417,29 +417,47 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$this->assertCount( 1, $active_provider->suggest_calls, 'the new provider must be queried exactly once' );
 			$this->assertCount( 0, $stale_provider->suggest_calls, 'the OLD provider is never re-consulted — it is no longer in the chain' );
 
-			// The re-resolution must be scoped correctly: RU/settlement, with the
-			// stale record's own region as the parent constraint.
+			// The re-resolution must be scoped correctly: RU/settlement, WITH a
+			// parent constraint (the stale record's own region) — never a bare
+			// country-wide scope (review finding F3's own mutant: reverting
+			// scope_for_reresolution() to Location_Scope::for_country() alone
+			// would still pass a country()/level() assertion, which is why this
+			// also pins has_parent()/parent_components() explicitly).
 			[ $query, $scope ] = $captured;
 			$this->assertSame( 'Москва', $query, 'the query text is the stale record\'s own label' );
 			$this->assertSame( 'RU', $scope->country() );
 			$this->assertSame( Location_Record::LEVEL_SETTLEMENT, $scope->level() );
+			$this->assertTrue( $scope->has_parent(), 'the re-resolution scope must carry a parent constraint, never a bare country-wide search' );
+			$this->assertSame(
+				[ 'region' => [ 'name' => 'Московская область', 'type' => 'обл' ] ],
+				$scope->parent_components(),
+				'the parent constraint must be the stale record\'s OWN region'
+			);
 
-			$this->assertFalse( $registry->get_default_locality_needs_repick(), 'a successful re-resolution must clear the flag' );
-
-			// The re-resolved record REPLACES the stale one in the merchant setting —
-			// "on first use" (spec §4.6): only the FIRST customer pays this cost.
-			$replaced = $registry->get_default_locality_record();
-			$this->assertNotNull( $replaced );
-			$this->assertSame( 'prov-b:new-city', $replaced->key() );
+			// Review finding F2(a): a customer-facing getter must never mutate
+			// store settings — the merchant's stored record and the informational
+			// flag are BOTH left exactly as they were, regardless of how many
+			// anonymous requests just resolved a value for themselves.
+			$still_stale = $registry->get_default_locality_record();
+			$this->assertNotNull( $still_stale );
+			$this->assertSame( 'prov-a:old-city', $still_stale->key(), 'a customer-facing getter must never REPLACE the merchant\'s stored default' );
+			$this->assertFalse( $registry->get_default_locality_needs_repick(), 'a customer-facing getter must never WRITE the needs-repick flag either' );
 		}
 
 		/**
-		 * Proves "on first use" literally: a SECOND customer (a brand-new
-		 * session — nothing customer-specific carries over) hitting a FRESH
-		 * registry rebuilt from the (now updated) persisted option must get the
-		 * fast path — the provider is never re-queried a second time.
+		 * Review finding F2(a)'s direct regression test, replacing the OLD
+		 * "only the first customer pays" behavior this PR's earlier revision
+		 * relied on: that optimization persisted the re-resolved record onto
+		 * the MERCHANT's own setting from inside a getter the public,
+		 * unauthenticated `/location/suggest` route reaches for every
+		 * anonymous guest — i.e. the vulnerability itself. Two SEPARATE
+		 * customers (fresh sessions, a fresh registry rebuilt from the SAME
+		 * unchanged option each time, mirroring an entirely new PHP process
+		 * per guest request) must EACH independently pay the re-resolution
+		 * cost, and the merchant's stored option must stay byte-for-byte the
+		 * stale value throughout — nothing a guest does ever advances it.
 		 */
-		public function test_fixed_default_only_the_first_customer_pays_the_re_resolution_cost(): void {
+		public function test_fixed_default_re_resolution_is_never_persisted_to_settings_and_repeats_per_customer(): void {
 			$options = [];
 
 			Functions\when( 'get_option' )->alias(
@@ -457,43 +475,54 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 
 			$active_provider = new Default_Test_Fake_Provider(
 				'prov-b',
-				fn() => [ $this->record( 'prov-b:new-city' ) ]
+				fn() => [ $this->record( 'prov-b:new-city', Location_Record::LEVEL_SETTLEMENT ) ]
 			);
 
-			$stale = $this->record( 'prov-a:old-city' );
+			$stale = $this->record( 'prov-a:old-city', Location_Record::LEVEL_SETTLEMENT, [ 'region' => [ 'name' => 'Московская область', 'type' => 'обл' ] ] );
 
 			$options['woodev_location_active_provider']         = 'prov-b';
 			$options['woodev_location_default_locality_policy'] = Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_FIXED;
 			$options['woodev_location_default_locality_record'] = wp_json_encode( $stale->to_array() );
 
-			// Request 1: a fresh registry, a fresh (empty) customer.
+			// Customer 1: a fresh registry, a fresh (empty) session.
 			$registry_1 = $this->activate( [ $active_provider ] );
 			$customer_1 = $this->service( $registry_1 );
 			$result_1   = $customer_1->get_customer_record();
 
 			$this->assertSame( 'prov-b:new-city', $result_1['record']->key() );
 			$this->assertCount( 1, $active_provider->suggest_calls );
+			$this->assertSame(
+				wp_json_encode( $stale->to_array() ),
+				$options['woodev_location_default_locality_record'],
+				'the merchant option must be UNCHANGED after the first customer\'s resolution'
+			);
 
-			// Request 2: simulate an entirely new PHP process — reset the
-			// singleton (activate() alone is a no-op the second time around:
-			// collect() guards on "already collected this request") and rebuild
-			// it, reading get_option() from scratch. The fake options table
-			// above now holds request 1's WRITE.
+			// Customer 2: a genuinely SEPARATE guest — a new registry rebuilt
+			// from the (still unchanged) option, and a new session. Mirrors an
+			// entirely new PHP process the way the old "first customer pays"
+			// test did — the difference under this fix is what it now proves:
+			// the provider IS queried again, because nothing was persisted for
+			// customer 2 to find.
 			Location_Provider_Registry::instance()->reset_for_tests();
 			Settings_Page_Registry::instance()->reset_for_tests();
 			$registry_2 = $this->activate( [ $active_provider ] );
-			$customer_2 = $this->service( $registry_2 ); // brand-new session — a different customer.
+			$customer_2 = $this->service( $registry_2 );
 			$result_2   = $customer_2->get_customer_record();
 
-			$this->assertSame( 'prov-b:new-city', $result_2['record']->key(), 'the second customer must see the ALREADY re-resolved record' );
-			$this->assertCount( 1, $active_provider->suggest_calls, 'the provider must NOT be queried a second time' );
+			$this->assertSame( 'prov-b:new-city', $result_2['record']->key() );
+			$this->assertCount( 2, $active_provider->suggest_calls, 'a second, separate customer must pay its OWN re-resolution cost — mutant: persisting the re-resolved record to the merchant option' );
+			$this->assertSame(
+				wp_json_encode( $stale->to_array() ),
+				$options['woodev_location_default_locality_record'],
+				'the merchant option must STILL be unchanged — an anonymous customer never re-points it'
+			);
 		}
 
-		public function test_fixed_default_re_resolution_failure_treats_default_as_unset_and_flags_repick(): void {
+		public function test_fixed_default_re_resolution_failure_treats_default_as_unset(): void {
 			$stale_provider  = new Default_Test_Fake_Provider( 'prov-a', static fn() => [] );
 			$active_provider = new Default_Test_Fake_Provider( 'prov-b', static fn() => [] ); // no match at all
 
-			$stale = $this->record( 'prov-a:old-city' );
+			$stale = $this->record( 'prov-a:old-city', Location_Record::LEVEL_SETTLEMENT, [ 'region' => [ 'name' => 'Московская область', 'type' => 'обл' ] ] );
 
 			$this->stub_default_locality_options(
 				'prov-b',
@@ -506,10 +535,14 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$result  = $service->get_customer_record();
 
 			$this->assertNull( $result, 'a failed re-resolution must treat the default as unset' );
-			$this->assertTrue( $registry->get_default_locality_needs_repick(), 'the settings surface must be flagged as needing re-picking' );
 
 			// The stale record itself must be left UNTOUCHED — a later manual fix
-			// (or the provider coming back with a match) is not foreclosed.
+			// (or the provider coming back with a match) is not foreclosed. No
+			// needs-repick assertion here any more (review finding F2(a)): the
+			// flag is no longer written from this customer-facing path at all —
+			// see test_fixed_default_status_note_reflects_a_stranded_record_live()
+			// in LocationProviderRegistryTest for the LIVE equivalent this
+			// class's settings page now surfaces instead.
 			$still_stale = $registry->get_default_locality_record();
 			$this->assertSame( 'prov-a:old-city', $still_stale->key() );
 		}
@@ -523,7 +556,7 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$stale_provider  = new Default_Test_Fake_Provider( 'prov-a', static fn() => [] );
 			$active_provider = new Default_Test_Fake_Provider( 'prov-b', static fn() => [] );
 
-			$stale = $this->record( 'prov-a:old-city' );
+			$stale = $this->record( 'prov-a:old-city', Location_Record::LEVEL_SETTLEMENT, [ 'region' => [ 'name' => 'Московская область', 'type' => 'обл' ] ] );
 
 			$this->stub_default_locality_options(
 				'prov-b',
@@ -538,6 +571,184 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$this->assertNull( $service->get_customer_record() );
 
 			$this->assertCount( 2, $active_provider->suggest_calls, 'nothing was persisted after a failure, so every read retries' );
+		}
+
+		// -------------------------------------------------------------------
+		// policy `fixed` — F2(b)/F3: never accept an ambiguous `$records[0]`
+		// -------------------------------------------------------------------
+
+		/**
+		 * The motivating F2 scenario itself: two DIFFERENT places share the
+		 * exact same display label at the exact same level (e.g. "Мирный" in
+		 * Архангельская область AND in Якутия) — blindly taking `$records[0]`
+		 * would silently re-point the merchant to whichever one the provider
+		 * happens to list first. Mutant this pins: reverting
+		 * self::unambiguous_match()'s call site back to `$records[0] ?? null`.
+		 */
+		public function test_fixed_default_an_ambiguous_match_is_refused_not_guessed(): void {
+			$wrong_place  = $this->record( 'prov-b:mirny-arkhangelsk', Location_Record::LEVEL_SETTLEMENT, [ 'label' => 'Мирный' ] );
+			$also_matches = $this->record( 'prov-b:mirny-yakutia', Location_Record::LEVEL_SETTLEMENT, [ 'label' => 'Мирный' ] );
+
+			$active_provider = new Default_Test_Fake_Provider( 'prov-b', static fn() => [ $wrong_place, $also_matches ] );
+
+			$stale = $this->record(
+				'prov-a:mirny',
+				Location_Record::LEVEL_SETTLEMENT,
+				[ 'label' => 'Мирный', 'region' => [ 'name' => 'Архангельская область', 'type' => 'обл' ] ]
+			);
+
+			$this->stub_default_locality_options(
+				'prov-b',
+				Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_FIXED,
+				wp_json_encode( $stale->to_array() )
+			);
+			$registry = $this->activate( [ $active_provider ] );
+
+			$service = $this->service( $registry );
+			$result  = $service->get_customer_record();
+
+			$this->assertNull( $result, 'two equally-labeled candidates must refuse, never pick either one' );
+			$this->assertCount( 1, $active_provider->suggest_calls );
+
+			$still_stale = $registry->get_default_locality_record();
+			$this->assertSame( 'prov-a:mirny', $still_stale->key(), 'the ambiguous match must never replace the stale record' );
+		}
+
+		/**
+		 * Position-independence: the FIRST returned candidate does not match
+		 * the stale record at all, and the SECOND one does. A blind
+		 * `$records[0] ?? null` would return the wrong candidate; the correct
+		 * behavior finds the one genuine match regardless of its position.
+		 */
+		public function test_fixed_default_a_unique_match_is_found_even_when_not_first(): void {
+			$unrelated    = $this->record( 'prov-b:unrelated', Location_Record::LEVEL_SETTLEMENT, [ 'label' => 'Совершенно другой город' ] );
+			$exact_match  = $this->record( 'prov-b:new-city', Location_Record::LEVEL_SETTLEMENT, [ 'label' => 'Мирный' ] );
+
+			$active_provider = new Default_Test_Fake_Provider( 'prov-b', static fn() => [ $unrelated, $exact_match ] );
+
+			$stale = $this->record(
+				'prov-a:mirny',
+				Location_Record::LEVEL_SETTLEMENT,
+				[ 'label' => 'Мирный', 'region' => [ 'name' => 'Архангельская область', 'type' => 'обл' ] ]
+			);
+
+			$this->stub_default_locality_options(
+				'prov-b',
+				Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_FIXED,
+				wp_json_encode( $stale->to_array() )
+			);
+			$registry = $this->activate( [ $active_provider ] );
+
+			$service = $this->service( $registry );
+			$result  = $service->get_customer_record();
+
+			$this->assertNotNull( $result );
+			$this->assertSame( 'prov-b:new-city', $result['record']->key(), 'the ONE candidate that actually matches must be found regardless of its position in the array' );
+		}
+
+		// -------------------------------------------------------------------
+		// policy `fixed` — F2: an empty parent-component set must refuse
+		// rather than silently degrade to a country-wide search
+		// -------------------------------------------------------------------
+
+		public function test_fixed_default_refuses_to_re_resolve_a_settlement_with_no_parent_component(): void {
+			// No 'region'/'district' — parent_components_above() returns [].
+			$stale = $this->record( 'prov-a:old-city', Location_Record::LEVEL_SETTLEMENT );
+
+			$active_provider = new Default_Test_Fake_Provider(
+				'prov-b',
+				fn() => [ $this->record( 'prov-b:new-city', Location_Record::LEVEL_SETTLEMENT ) ]
+			);
+
+			$this->stub_default_locality_options(
+				'prov-b',
+				Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_FIXED,
+				wp_json_encode( $stale->to_array() )
+			);
+			$registry = $this->activate( [ $active_provider ] );
+
+			$service = $this->service( $registry );
+			$result  = $service->get_customer_record();
+
+			$this->assertNull( $result, 'no parent component to narrow by must refuse, never silently search the whole country' );
+			$this->assertCount( 0, $active_provider->suggest_calls, 'the provider must never even be queried — mutant: dropping the empty-parent-components guard' );
+		}
+
+		// -------------------------------------------------------------------
+		// policy `fixed` — F3 test gap: the '' === $query refusal already
+		// existed in code but nothing pinned it
+		// -------------------------------------------------------------------
+
+		public function test_fixed_default_refuses_to_re_resolve_with_an_empty_query(): void {
+			// No label AND no settlement component to fall back to —
+			// query_text_for() returns ''.
+			$stale = Location_Record::from_array(
+				[
+					'key'         => 'prov-a:old-city',
+					'provider_id' => 'prov-a',
+					'level'       => Location_Record::LEVEL_SETTLEMENT,
+					'country'     => 'RU',
+				]
+			);
+
+			$active_provider = new Default_Test_Fake_Provider( 'prov-b', static fn() => [ $this->record( 'prov-b:new-city' ) ] );
+
+			$this->stub_default_locality_options(
+				'prov-b',
+				Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_FIXED,
+				wp_json_encode( $stale->to_array() )
+			);
+			$registry = $this->activate( [ $active_provider ] );
+
+			$service = $this->service( $registry );
+			$result  = $service->get_customer_record();
+
+			$this->assertNull( $result, 'an empty derived query must refuse — a blank string is never a legitimate search key' );
+			$this->assertCount( 0, $active_provider->suggest_calls, 'mutant: deleting the \'\' === $query refusal would let this call the provider' );
+		}
+
+		// -------------------------------------------------------------------
+		// F1: a persist failure (no session — the guest REST scenario) must
+		// still serve the resolved value, and must not re-trigger resolution
+		// within the same request
+		// -------------------------------------------------------------------
+
+		/**
+		 * Mirrors the public `/location/suggest` REST path's own worst case
+		 * (review finding F1): `Customer_Location_Store::set()` degrades to
+		 * `false` when no session exists yet (gotcha
+		 * `guest-session-write-needs-the-cart-cookie`) — a `null` fake session,
+		 * unlike every other test in this class. Mutant this pins: a store
+		 * whose `set()` fails re-triggering resolve_default() (an extra
+		 * `locate()` call) on a second read within the SAME request.
+		 */
+		public function test_a_persist_failure_still_serves_the_resolved_value_and_is_not_re_triggered(): void {
+			$located  = $this->record( 'geo:by-ip' );
+			$provider = new Default_Test_Fake_Locate_Provider( 'geo', static fn() => $located );
+
+			$this->stub_default_locality_options( 'geo', Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_GEOIP );
+			$registry = $this->activate( [ $provider ] );
+
+			\WC_Geolocation::$address = '203.0.113.5';
+
+			// No session at all — Customer_Location_Store::set() degrades to
+			// false, exactly the REST guest scenario F1 describes.
+			$store   = new Default_Test_Customer_Store_Probe( null );
+			$service = new Location_Service( $registry, $store );
+
+			$first  = $service->get_customer_record();
+			$second = $service->get_customer_record();
+
+			$this->assertNotNull( $first, 'a failed persist must still serve the resolved value for THIS call' );
+			$this->assertSame( 'geo:by-ip', $first['record']->key() );
+			$this->assertTrue( $first['implicit'] );
+
+			$this->assertNotNull( $second, 'the memoized value must still be served on a second call within the same request' );
+			$this->assertSame( 'geo:by-ip', $second['record']->key() );
+
+			$this->assertCount( 1, $provider->locate_calls, 'a persist failure must never re-trigger resolution within the same request' );
+
+			\WC_Geolocation::$address = null;
 		}
 
 		// -------------------------------------------------------------------

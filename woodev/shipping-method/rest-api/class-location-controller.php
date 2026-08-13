@@ -482,6 +482,58 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 		}
 
 		/**
+		 * Bridges the WooCommerce cart/session on a plain REST request — the
+		 * SAME `wc_load_cart()` bridge
+		 * {@see \Woodev\Framework\Shipping\Pickup\Pickup_Handler::current_cart_weight_grams()}
+		 * already uses, and for the identical reason (see that method's own
+		 * docblock): WooCommerce does not initialize `WC()->session` for a
+		 * plain custom REST route the way it does for `wc_load_cart()`'s own
+		 * callers (only the core Store API calls it). Without this bridge, a
+		 * guest's session is never started on the public `/suggest`/`/list`
+		 * reads, so {@see Location_Service::get_customer_record()}'s lazy
+		 * default-locality trigger (Task 14) can never actually PERSIST what it
+		 * resolves — every request re-resolves from scratch (a fresh provider
+		 * call on every debounced keystroke, for `geoip`), exactly gotcha
+		 * `guest-session-write-needs-the-cart-cookie` describes (review finding
+		 * F1). {@see Location_Service}'s own per-request memoization
+		 * ({@see Location_Service}'s `$unpersisted_default`) already stops a
+		 * failed persist from re-triggering resolution WITHIN one request; this
+		 * bridge is what lets the persist actually succeed so the NEXT request
+		 * from the same guest gets it for free too.
+		 *
+		 * Called from every customer-facing handler that can reach
+		 * {@see Location_Service::get_customer_record()}
+		 * ({@see self::perform_suggest()}, {@see self::handle_list_request()}) —
+		 * never from the two admin-only `/default-locality/*` routes, which run
+		 * for a logged-in admin whose {@see \Woodev\Framework\Shipping\Location\Customer_Location_Store}
+		 * reads/writes already go through user meta regardless of session state.
+		 *
+		 * A no-op when a session is already loaded, or when `wc_load_cart()`
+		 * itself does not exist (WooCommerce < 3.6, or WooCommerce absent, e.g.
+		 * in a unit test).
+		 *
+		 * `protected`, not `private`: the same WC-global test seam every other
+		 * class in this codebase uses this visibility for (mirrors
+		 * {@see \Woodev\Framework\Shipping\Pickup\Pickup_Handler::wc_cart()} /
+		 * `wc_load_cart_available()`) — a probe overrides this to a spy without
+		 * `WC()`/`wc_load_cart()` needing to be real functions in the unit-test
+		 * process.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		protected function bridge_wc_session(): void {
+			if ( function_exists( 'WC' ) && null !== WC()->session ) {
+				return;
+			}
+
+			if ( function_exists( 'wc_load_cart' ) ) {
+				wc_load_cart();
+			}
+		}
+
+		/**
 		 * Guards the two admin-only `/default-locality/*` routes (Task 14) with
 		 * the WooCommerce shop-manager capability — mirrors
 		 * {@see \Woodev\Framework\Shipping\Rest_Api\Abstract_Warehouses_Controller::check_permissions()}'s
@@ -598,6 +650,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 			if ( $this->is_rate_limited( $rate_limit_key, self::SUGGEST_RATE_LIMIT_MAX ) ) {
 				return $this->rate_limited_error();
 			}
+
+			// See self::bridge_wc_session()'s own docblock (review finding F1):
+			// without this, build_scope() below's get_customer_record() call can
+			// never persist a resolved default-locality guess on a guest REST
+			// request.
+			$this->bridge_wc_session();
 
 			$query        = $this->normalize_param( $request->get_param( 'q' ) );
 			$query_length = $this->mb_length( $query );
@@ -724,6 +782,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 			if ( $this->is_rate_limited( 'woodev_location_list_rl_', self::LIST_RATE_LIMIT_MAX ) ) {
 				return $this->rate_limited_error();
 			}
+
+			// See self::bridge_wc_session()'s own docblock (review finding F1) —
+			// same reasoning as perform_suggest()'s own call: build_scope() below
+			// may also reach get_customer_record().
+			$this->bridge_wc_session();
 
 			$level = $this->normalize_param( $request->get_param( 'level' ) );
 

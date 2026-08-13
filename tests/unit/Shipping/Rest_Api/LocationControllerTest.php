@@ -395,6 +395,26 @@ final class Location_Controller_Probe extends Location_Controller {
 }
 
 /**
+ * Review finding F1(b): spies on {@see Location_Controller::bridge_wc_session()}
+ * without needing `WC()`/`wc_load_cart()` to be real functions in the
+ * unit-test process — mirrors {@see Location_Controller_Probe}'s own
+ * rate-limit bypass, plus this one extra seam.
+ */
+final class Location_Controller_Session_Bridge_Probe extends Location_Controller {
+
+	/** @var int */
+	public int $bridge_calls = 0;
+
+	protected function is_rate_limited( string $key_prefix, int $max, int $window = 60 ): bool {
+		return false;
+	}
+
+	protected function bridge_wc_session(): void {
+		++$this->bridge_calls;
+	}
+}
+
+/**
  * @covers \Woodev\Framework\Shipping\Rest_Api\Location_Controller
  */
 final class LocationControllerTest extends TestCase {
@@ -1473,4 +1493,60 @@ final class LocationControllerTest extends TestCase {
 		$this->assertSame( 400, $result->get_error_data()['status'] );
 		$this->assertCount( 0, $service->locate_calls );
 	}
+
+	// -------------------------------------------------------------------
+	// Review finding F1(b): the WooCommerce cart/session must be BRIDGED
+	// (mirrors Pickup_Controller/Pickup_Handler's own wc_load_cart() bridge)
+	// on every customer-facing route that can reach
+	// Location_Service::get_customer_record() — without it, a guest's
+	// session never starts on a plain REST request and the lazy
+	// default-locality trigger can never persist what it resolves.
+	// -------------------------------------------------------------------
+
+	public function test_suggest_bridges_the_wc_session(): void {
+		$provider = new Location_Controller_Fake_Provider( static fn() => [] );
+		$service  = new Location_Controller_Fake_Service( true, $provider );
+		$ctrl     = new Location_Controller_Session_Bridge_Probe( $service );
+
+		$request = new WP_REST_Request( [ 'q' => 'Мос', 'level' => Location_Record::LEVEL_REGION, 'country' => 'RU' ] );
+		$ctrl->handle_suggest_request( $request );
+
+		$this->assertSame( 1, $ctrl->bridge_calls, 'mutant: dropping the bridge_wc_session() call from perform_suggest()' );
+	}
+
+	public function test_admin_suggest_also_bridges_the_wc_session(): void {
+		$provider = new Location_Controller_Fake_Provider( static fn() => [] );
+		$service  = new Location_Controller_Fake_Service( true, $provider );
+		$ctrl     = new Location_Controller_Session_Bridge_Probe( $service );
+
+		$request = new WP_REST_Request( [ 'q' => 'Мос', 'level' => Location_Record::LEVEL_REGION, 'country' => 'RU' ] );
+		$ctrl->handle_admin_suggest_request( $request );
+
+		$this->assertSame( 1, $ctrl->bridge_calls, 'the admin picker shares perform_suggest() with the public route, so it bridges too' );
+	}
+
+	public function test_list_bridges_the_wc_session(): void {
+		$provider = new Location_Controller_Fake_List_Provider( static fn() => [] );
+		$service  = new Location_Controller_Fake_Service( true, null, null, true, true, null, null, $provider );
+		$ctrl     = new Location_Controller_Session_Bridge_Probe( $service );
+
+		$request = new WP_REST_Request( [ 'level' => Location_Record::LEVEL_SETTLEMENT, 'country' => 'RU' ] );
+		$ctrl->handle_list_request( $request );
+
+		$this->assertSame( 1, $ctrl->bridge_calls, 'mutant: dropping the bridge_wc_session() call from handle_list_request()' );
+	}
+
+	// {@see Location_Controller::bridge_wc_session()}'s own internal
+	// `WC()`/`wc_load_cart()` branch mirrors
+	// {@see \Woodev\Framework\Shipping\Pickup\Pickup_Handler::current_cart_weight_grams()}'s
+	// already-proven bridge verbatim (same "already loaded? no-op; function
+	// missing? no-op; otherwise call it" shape) — not re-tested here via a
+	// real `WC()` stub, deliberately: Brain Monkey's Patchwork-based
+	// `Functions\when( 'WC' )` redefinition leaks `function_exists( 'WC' )`
+	// as permanently `true` for the REST of that PHPUnit process (the same
+	// reason Customer_Location_Store::session()'s own docblock gives for why
+	// ITS test seam is a protected accessor instead). The tests above already
+	// prove every customer-facing handler that can reach
+	// Location_Service::get_customer_record() calls the bridge — that is the
+	// part specific to this controller.
 }
