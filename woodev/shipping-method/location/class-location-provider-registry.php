@@ -161,6 +161,86 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		public const FIELD_MODES = [ self::MODE_TYPEAHEAD, self::MODE_RELATED_LIST, self::MODE_AJAX_SELECT2 ];
 
 		/**
+		 * The store setting id holding the default-locality policy (Task 14; spec
+		 * D11): `off` | `fixed` | `geoip`. See {@see self::get_offered_default_locality_policies()}
+		 * for how `geoip` is gated by the active provider's `locate` capability, and
+		 * {@see self::get_default_locality_policy()} for the read-side clamp.
+		 *
+		 * @since 2.0.2
+		 * @var string
+		 */
+		public const SETTING_DEFAULT_LOCALITY_POLICY = 'default_locality_policy';
+
+		/**
+		 * The store setting id holding the merchant-picked FIXED default locality
+		 * (Task 14; spec D11), serialized as JSON ({@see Location_Record::to_array()}).
+		 * Only meaningful when {@see self::SETTING_DEFAULT_LOCALITY_POLICY} is
+		 * {@see self::DEFAULT_LOCALITY_POLICY_FIXED}; picked through the admin-only
+		 * suggest context on {@see \Woodev\Framework\Shipping\Rest_Api\Location_Controller}.
+		 *
+		 * @since 2.0.2
+		 * @var string
+		 */
+		public const SETTING_DEFAULT_LOCALITY_RECORD = 'default_locality_record';
+
+		/**
+		 * The store setting id holding the "needs re-picking" flag (spec §4.6/D15
+		 * amendment): set when the FIXED default's provider namespace is stranded by
+		 * a provider switch and re-resolution through the new provider fails — see
+		 * {@see Location_Service::resolve_default()}. Purely informational for the
+		 * settings surface; never gates resolution itself.
+		 *
+		 * @since 2.0.2
+		 * @var string
+		 */
+		public const SETTING_DEFAULT_LOCALITY_NEEDS_REPICK = 'default_locality_needs_repick';
+
+		/**
+		 * Default-locality policy: no default is ever resolved
+		 * ({@see Location_Service::resolve_default()} returns `null`).
+		 *
+		 * @since 2.0.2
+		 * @var string
+		 */
+		public const DEFAULT_LOCALITY_POLICY_OFF = 'off';
+
+		/**
+		 * Default-locality policy: the merchant-picked
+		 * {@see self::SETTING_DEFAULT_LOCALITY_RECORD} is served (re-resolved through
+		 * the current provider first, when its namespace was stranded by a provider
+		 * switch — spec §4.6/D15 amendment).
+		 *
+		 * @since 2.0.2
+		 * @var string
+		 */
+		public const DEFAULT_LOCALITY_POLICY_FIXED = 'fixed';
+
+		/**
+		 * Default-locality policy: the active provider's `locate( $ip )` capability
+		 * resolves a default from the customer's IP address. Only OFFERED when the
+		 * active provider declares {@see Location_Provider::CAPABILITY_LOCATE} — see
+		 * {@see self::get_offered_default_locality_policies()}.
+		 *
+		 * @since 2.0.2
+		 * @var string
+		 */
+		public const DEFAULT_LOCALITY_POLICY_GEOIP = 'geoip';
+
+		/**
+		 * Every default-locality policy this layer knows about, in the fixed
+		 * offering order {@see self::get_offered_default_locality_policies()} always
+		 * returns them in.
+		 *
+		 * @since 2.0.2
+		 * @var string[]
+		 */
+		public const DEFAULT_LOCALITY_POLICIES = [
+			self::DEFAULT_LOCALITY_POLICY_OFF,
+			self::DEFAULT_LOCALITY_POLICY_FIXED,
+			self::DEFAULT_LOCALITY_POLICY_GEOIP,
+		];
+
+		/**
 		 * Filter tag: lets a plugin register its own {@see Location_Provider}
 		 * instances alongside the bundled ones. Receives (and must return) a plain
 		 * list — any entry not implementing {@see Location_Provider} is rejected
@@ -849,6 +929,216 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 			return in_array( $stored, $offered, true ) ? $stored : self::MODE_TYPEAHEAD;
 		}
 
+		// -----------------------------------------------------------------
+		// Default-locality policy (Task 14; spec D11) — same offered/clamp
+		// shape as get_offered_field_modes()/get_field_mode() above, gated
+		// by the CAPABILITY_LOCATE capability instead of CAPABILITY_LIST.
+		// -----------------------------------------------------------------
+
+		/**
+		 * The actual gate {@see self::get_offered_default_locality_policies()}
+		 * answers from — factored out as a static, provider-in/policies-out pure
+		 * function so {@see self::register_settings()} can compute the SAME answer
+		 * at construction time, mirroring {@see self::offered_field_modes_for()}
+		 * exactly.
+		 *
+		 * `off` and `fixed` are unconditional — picking a fixed locality needs no
+		 * provider capability beyond `suggest()`, which every provider implements.
+		 * `geoip` is offered only when `$provider` declares
+		 * {@see Location_Provider::CAPABILITY_LOCATE}.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param Location_Provider|null $provider The provider to gate against, or
+		 *                                          `null` (no provider active).
+		 *
+		 * @return string[] Subset of {@see self::DEFAULT_LOCALITY_POLICIES}, always
+		 *                  containing {@see self::DEFAULT_LOCALITY_POLICY_OFF} and
+		 *                  {@see self::DEFAULT_LOCALITY_POLICY_FIXED}.
+		 */
+		private static function offered_default_locality_policies_for( ?Location_Provider $provider ): array {
+			$policies = [ self::DEFAULT_LOCALITY_POLICY_OFF, self::DEFAULT_LOCALITY_POLICY_FIXED ];
+
+			if ( null !== $provider && in_array( Location_Provider::CAPABILITY_LOCATE, $provider->get_capabilities(), true ) ) {
+				$policies[] = self::DEFAULT_LOCALITY_POLICY_GEOIP;
+			}
+
+			return $policies;
+		}
+
+		/**
+		 * Gets the default-locality policies the STORE SETTING is allowed to offer
+		 * right now (Task 14; spec D11), gated by the ACTIVE provider's OWN
+		 * `locate` capability.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string[] Subset of {@see self::DEFAULT_LOCALITY_POLICIES}.
+		 */
+		public function get_offered_default_locality_policies(): array {
+			return self::offered_default_locality_policies_for( $this->get_active_provider() );
+		}
+
+		/**
+		 * User-facing labels for every policy in {@see self::DEFAULT_LOCALITY_POLICIES}
+		 * — mirrors {@see self::field_mode_labels()}'s own single-source-of-Russian-copy
+		 * shape.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array<string, string> policy => label.
+		 */
+		private static function default_locality_policy_labels(): array {
+			return [
+				self::DEFAULT_LOCALITY_POLICY_OFF   => __( 'Отключено', 'woodev-plugin-framework' ),
+				self::DEFAULT_LOCALITY_POLICY_FIXED => __( 'Фиксированная локация', 'woodev-plugin-framework' ),
+				self::DEFAULT_LOCALITY_POLICY_GEOIP => __( 'По IP-адресу покупателя', 'woodev-plugin-framework' ),
+			];
+		}
+
+		/**
+		 * Builds the `default_locality_policy` select's `id => label` options map,
+		 * gated against `$provider` via {@see self::offered_default_locality_policies_for()}
+		 * — mirrors {@see self::offered_field_mode_options()}.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param Location_Provider|null $provider The provider to gate against.
+		 *
+		 * @return array<string, string>
+		 */
+		private static function offered_default_locality_policy_options_for( ?Location_Provider $provider ): array {
+			$labels  = self::default_locality_policy_labels();
+			$options = [];
+
+			foreach ( self::offered_default_locality_policies_for( $provider ) as $policy ) {
+				$options[ $policy ] = $labels[ $policy ];
+			}
+
+			return $options;
+		}
+
+		/**
+		 * Gets the store's default-locality policy (Task 14; spec D11), clamped
+		 * against {@see self::get_offered_default_locality_policies()} so a
+		 * previously-saved `geoip` value the CURRENT active provider no longer
+		 * backs (e.g. the store switched away from a `locate`-capable provider)
+		 * never silently keeps resolving through a capability that is no longer
+		 * there — falls back to {@see self::DEFAULT_LOCALITY_POLICY_OFF}, exactly
+		 * like {@see self::get_field_mode()} falls back to {@see self::MODE_TYPEAHEAD}.
+		 *
+		 * Returns {@see self::DEFAULT_LOCALITY_POLICY_OFF} outright while the gate
+		 * is closed — mirrors {@see self::get_field_mode()}'s own early return.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string
+		 */
+		public function get_default_locality_policy(): string {
+			if ( null === $this->settings_handler ) {
+				return self::DEFAULT_LOCALITY_POLICY_OFF;
+			}
+
+			$stored  = (string) $this->settings_handler->get_value( self::SETTING_DEFAULT_LOCALITY_POLICY );
+			$offered = $this->get_offered_default_locality_policies();
+
+			return in_array( $stored, $offered, true ) ? $stored : self::DEFAULT_LOCALITY_POLICY_OFF;
+		}
+
+		/**
+		 * Gets the merchant-picked FIXED default locality record, or `null` when
+		 * unset, the gate is closed, or the stored value is not valid JSON /
+		 * does not build a valid {@see Location_Record} — never throws (same
+		 * degrade-to-null discipline {@see Customer_Location_Store::parse_stored()}
+		 * applies to a corrupt stored blob).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return Location_Record|null
+		 */
+		public function get_default_locality_record(): ?Location_Record {
+			if ( null === $this->settings_handler ) {
+				return null;
+			}
+
+			$raw = $this->settings_handler->get_value( self::SETTING_DEFAULT_LOCALITY_RECORD, false );
+
+			if ( ! is_string( $raw ) || '' === $raw ) {
+				return null;
+			}
+
+			$decoded = json_decode( $raw, true );
+
+			if ( ! is_array( $decoded ) ) {
+				return null;
+			}
+
+			try {
+				return Location_Record::from_array( $decoded );
+			} catch ( \InvalidArgumentException $exception ) {
+				return null;
+			}
+		}
+
+		/**
+		 * Writes the merchant-picked FIXED default locality record, serialized as
+		 * JSON — through the settings handler's own {@see \Woodev_Abstract_Settings::update_value()}
+		 * (gotcha `woodev-setting-get-value-is-cached-not-a-live-option-read`:
+		 * writing the option directly would leave this SAME request's cached
+		 * {@see \Woodev_Setting::$value} stale). A no-op while the gate is closed
+		 * — there is no settings handler to write through.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param Location_Record $record The record to store.
+		 *
+		 * @return void
+		 */
+		public function set_default_locality_record( Location_Record $record ): void {
+			if ( null === $this->settings_handler ) {
+				return;
+			}
+
+			$this->settings_handler->update_value( self::SETTING_DEFAULT_LOCALITY_RECORD, wp_json_encode( $record->to_array() ) );
+		}
+
+		/**
+		 * Gets whether the FIXED default needs re-picking (spec §4.6/D15
+		 * amendment): the merchant's stored record's provider namespace was
+		 * stranded by a provider switch and {@see Location_Service::resolve_default()}'s
+		 * own re-resolution attempt through the new provider failed. Purely
+		 * informational — never gates resolution itself.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool
+		 */
+		public function get_default_locality_needs_repick(): bool {
+			if ( null === $this->settings_handler ) {
+				return false;
+			}
+
+			return (bool) $this->settings_handler->get_value( self::SETTING_DEFAULT_LOCALITY_NEEDS_REPICK );
+		}
+
+		/**
+		 * Writes the "needs re-picking" flag — see {@see self::get_default_locality_needs_repick()}.
+		 * A no-op while the gate is closed.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param bool $needs_repick Whether the FIXED default currently needs re-picking.
+		 *
+		 * @return void
+		 */
+		public function set_default_locality_needs_repick( bool $needs_repick ): void {
+			if ( null === $this->settings_handler ) {
+				return;
+			}
+
+			$this->settings_handler->update_value( self::SETTING_DEFAULT_LOCALITY_NEEDS_REPICK, $needs_repick );
+		}
+
 		/**
 		 * Whether {@see self::inject_related_list_states()} itself successfully
 		 * injected `$country`'s `woocommerce_states` options THIS request AND
@@ -1122,6 +1412,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		 *              {@see self::resolve_active_provider_for_id()} instead of a
 		 *              direct `$this->providers[ $id ]` lookup (PR #304 review
 		 *              finding 6).
+		 * @since 2.0.2 Also builds the `default_locality_policy` select's OFFERED
+		 *              options (Task 14; spec D11), gated exactly like
+		 *              `field_mode` is above.
 		 *
 		 * @return void
 		 */
@@ -1135,9 +1428,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 				$provider_options[ $id ] = $provider->get_name();
 			}
 
-			$field_mode_options = self::offered_field_mode_options( $active_provider );
+			$field_mode_options              = self::offered_field_mode_options( $active_provider );
+			$default_locality_policy_options = self::offered_default_locality_policy_options_for( $active_provider );
 
-			$this->settings_handler = new Location_Settings( self::SETTINGS_SERVICE_ID, $provider_options, $provider_fields, $field_mode_options );
+			$this->settings_handler = new Location_Settings(
+				self::SETTINGS_SERVICE_ID,
+				$provider_options,
+				$provider_fields,
+				$field_mode_options,
+				$default_locality_policy_options
+			);
+
+			$this->apply_default_locality_status_note();
 
 			\Woodev\Framework\Settings\Settings_Page_Registry::instance()->register_service(
 				\Woodev\Framework\Settings\Settings_Provider::create(
@@ -1153,6 +1455,76 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 					]
 				)
 			);
+		}
+
+		/**
+		 * Surfaces the `fixed` default-locality policy's "nothing usable is
+		 * actually configured" state on the settings page (review finding F4),
+		 * rather than leaving it silent: no picker UI ships in this task (a
+		 * separate, later card), so a merchant who selects `fixed` and never
+		 * picks a record — or whose picked record no longer matches the
+		 * currently ACTIVE provider — would otherwise see nothing telling them
+		 * the policy is not actually doing anything for a customer right now.
+		 *
+		 * Appends to the `default_locality_policy` select's own description
+		 * (read by {@see \Woodev\Framework\Settings\Field_Schema::from_handler()}
+		 * exactly like any other setting's description) rather than exposing
+		 * {@see self::SETTING_DEFAULT_LOCALITY_RECORD} /
+		 * {@see self::SETTING_DEFAULT_LOCALITY_NEEDS_REPICK} as editable
+		 * controls — see {@see Location_Settings::register_settings()}'s own
+		 * docblock for why those two stay machine-owned, never merchant-typed.
+		 *
+		 * Computed LIVE against {@see self::get_active_provider()} rather than
+		 * read from the (still-registered, but no longer written by
+		 * {@see Location_Service}) `needs_repick` flag: review finding F2
+		 * forbids the customer-facing getter that used to keep that flag
+		 * honest from writing store settings at all, so nothing updates a
+		 * stored flag any more — a LIVE check can never go stale the way a
+		 * stored one, now orphaned, would. This deliberately compares against
+		 * the ACTIVE provider alone rather than replicating
+		 * {@see Location_Service::provider_for_level()}'s full D15
+		 * chosen-then-bundled-fallback walk: duplicating that chain here would
+		 * only drift from it, and for an informational admin note (not a
+		 * runtime gate) "did the store switch away from the provider this was
+		 * picked under" is the common case this exists to catch.
+		 *
+		 * Called from {@see self::register_settings()} once `$this->settings_handler`
+		 * exists — {@see self::get_default_locality_policy()} /
+		 * {@see self::get_default_locality_record()} / {@see self::get_active_provider()}
+		 * all read through it.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		private function apply_default_locality_status_note(): void {
+			if ( self::DEFAULT_LOCALITY_POLICY_FIXED !== $this->get_default_locality_policy() ) {
+				return;
+			}
+
+			$setting = $this->settings_handler->get_setting( self::SETTING_DEFAULT_LOCALITY_POLICY );
+
+			if ( null === $setting ) {
+				return; // Defensive: register_settings() above always registers this id.
+			}
+
+			$record = $this->get_default_locality_record();
+
+			if ( null === $record ) {
+				$setting->set_description(
+					__( 'Локация по умолчанию не настроена: пока не будет сохранена корректная запись, эта политика ничего не применит.', 'woodev-plugin-framework' )
+				);
+
+				return;
+			}
+
+			$active = $this->get_active_provider();
+
+			if ( null === $active || $active->get_id() !== $record->provider_id() ) {
+				$setting->set_description(
+					__( 'Зафиксированная локация была выбрана через другого провайдера и может не подойти текущему — рекомендуется выбрать её заново.', 'woodev-plugin-framework' )
+				);
+			}
 		}
 
 		/**

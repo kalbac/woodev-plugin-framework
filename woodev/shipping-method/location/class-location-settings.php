@@ -14,7 +14,13 @@
  *    {@see \Woodev\Framework\Shipping\Location\Location_Provider_Registry}, this
  *    handler only ever renders whatever option set it was handed, exactly like
  *    `active_provider`'s own options.
- * 3. Whatever the currently ACTIVE provider declares via
+ * 3. `default_locality_policy` / `default_locality_record` / `default_locality_needs_repick`
+ *    (Task 14; spec D11) — the store-level default-locality policy (`off` |
+ *    `fixed` | `geoip`, `geoip` OPTIONS-gated by the active provider's `locate`
+ *    capability the same way `field_mode` is gated by `list`), the merchant-picked
+ *    FIXED record (JSON, written by {@see Location_Provider_Registry::set_default_locality_record()},
+ *    never typed free-hand), and the informational "needs re-picking" flag.
+ * 4. Whatever the currently ACTIVE provider declares via
  *    {@see \Woodev\Framework\Shipping\Location\Location_Provider::get_settings_fields()} —
  *    merged in verbatim, keyed by the provider's own field ids. A registered but
  *    NOT-active provider's fields are never merged in (spec §4.1: rendered on the
@@ -74,42 +80,74 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 		private array $provider_fields;
 
 		/**
+		 * Offered `default_locality_policy` select options, `id => label` (Task 14;
+		 * spec D11), already gated by the active provider's `locate` capability —
+		 * resolved by the caller
+		 * ({@see Location_Provider_Registry::offered_default_locality_policy_options_for()}),
+		 * exactly like {@see self::$field_mode_options} is.
+		 *
+		 * @since 2.0.2
+		 * @var array<string, string>
+		 */
+		private array $default_locality_policy_options;
+
+		/**
 		 * Constructor.
 		 *
 		 * @since 2.0.2
 		 * @since 2.0.2 Added the `$field_mode_options` parameter (Task 13; spec D7).
+		 * @since 2.0.2 Added the `$default_locality_policy_options` parameter
+		 *              (Task 14; spec D11).
 		 *
-		 * @param string                              $id                  settings id (the option-name namespace).
-		 * @param array<string, string>               $provider_options    registered provider `id => name` pairs.
-		 * @param array<string, array<string, mixed>> $provider_fields     the active provider's declared
-		 *                                                                  settings fields, already resolved
-		 *                                                                  by the caller.
-		 * @param array<string, string>               $field_mode_options  offered `field_mode` select options
-		 *                                                                  (`id => label`), already gated by the
-		 *                                                                  active provider's capabilities.
+		 * @param string                              $id                              settings id (the option-name namespace).
+		 * @param array<string, string>               $provider_options                registered provider `id => name` pairs.
+		 * @param array<string, array<string, mixed>> $provider_fields                 the active provider's declared
+		 *                                                                               settings fields, already resolved
+		 *                                                                               by the caller.
+		 * @param array<string, string>               $field_mode_options              offered `field_mode` select options
+		 *                                                                               (`id => label`), already gated by the
+		 *                                                                               active provider's capabilities.
+		 * @param array<string, string>               $default_locality_policy_options offered `default_locality_policy`
+		 *                                                                               select options (`id => label`),
+		 *                                                                               already gated by the active
+		 *                                                                               provider's `locate` capability.
 		 */
-		public function __construct( string $id, array $provider_options, array $provider_fields = [], array $field_mode_options = [] ) {
-			$this->provider_options   = $provider_options;
-			$this->provider_fields    = $provider_fields;
-			$this->field_mode_options = $field_mode_options;
+		public function __construct(
+			string $id,
+			array $provider_options,
+			array $provider_fields = [],
+			array $field_mode_options = [],
+			array $default_locality_policy_options = []
+		) {
+			$this->provider_options                = $provider_options;
+			$this->provider_fields                 = $provider_fields;
+			$this->field_mode_options               = $field_mode_options;
+			$this->default_locality_policy_options = $default_locality_policy_options;
 
 			parent::__construct( $id );
 		}
 
 		/**
 		 * Gets the settings ids this handler owns, in registration order — the
-		 * active-provider select first, then the field-mode select, then the
-		 * active provider's own fields. Used by {@see Location_Provider_Registry}
-		 * to build the `Settings_Section` without duplicating this handler's own
-		 * field list.
+		 * active-provider select, the field-mode select, the three default-locality
+		 * settings (Task 14), then the active provider's own fields. Used by
+		 * {@see Location_Provider_Registry} to build the `Settings_Section` without
+		 * duplicating this handler's own field list.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Added the three `default_locality_*` settings (Task 14; spec D11).
 		 *
 		 * @return string[]
 		 */
 		public function get_owned_setting_ids(): array {
 			return array_merge(
-				[ Location_Provider_Registry::SETTING_ACTIVE_PROVIDER, Location_Provider_Registry::SETTING_FIELD_MODE ],
+				[
+					Location_Provider_Registry::SETTING_ACTIVE_PROVIDER,
+					Location_Provider_Registry::SETTING_FIELD_MODE,
+					Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_POLICY,
+					Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_RECORD,
+					Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_NEEDS_REPICK,
+				],
 				array_keys( $this->provider_fields )
 			);
 		}
@@ -142,6 +180,63 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 				]
 			);
 			$this->register_control( Location_Provider_Registry::SETTING_FIELD_MODE, \Woodev_Control::TYPE_SELECT );
+
+			$this->register_setting(
+				Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_POLICY,
+				\Woodev_Setting::TYPE_STRING,
+				[
+					'name'    => __( 'Локация по умолчанию', 'woodev-plugin-framework' ),
+					'options' => $this->default_locality_policy_options,
+					'default' => Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_OFF,
+				]
+			);
+			$this->register_control( Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_POLICY, \Woodev_Control::TYPE_SELECT );
+
+			/*
+			 * Serialized Location_Record JSON (Task 14), written through
+			 * Location_Provider_Registry::set_default_locality_record() — the
+			 * FUTURE admin picker's own selection (its own, later card; no picker
+			 * UI ships in this task), never free text the merchant types here.
+			 *
+			 * Deliberately registered WITHOUT a control (review finding F4): no
+			 * picker exists yet in this PR, so the only UI a control would offer
+			 * today is a bare textarea holding raw JSON — directly contradicting
+			 * this field's own "never typed free-hand" contract above. Keeping
+			 * the setting itself registered (just uncontrolled) preserves the
+			 * write path this class's own docblock documents for the picker to
+			 * use once built (a plain settings-API field written through
+			 * Woodev_Abstract_Settings::update_value(), the same as every other
+			 * store-level Location setting) — only the generic settings-page
+			 * React surface's editable rendering is what this withholds, by
+			 * never giving Field_Schema::from_handler() a controlType for it.
+			 */
+			$this->register_setting(
+				Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_RECORD,
+				\Woodev_Setting::TYPE_STRING,
+				[
+					'name'    => __( 'Зафиксированная локация', 'woodev-plugin-framework' ),
+					'default' => '',
+				]
+			);
+
+			/*
+			 * Informational flag — see Location_Provider_Registry::get_default_locality_needs_repick().
+			 * Also registered WITHOUT a control (review finding F4): this flag is
+			 * CODE-OWNED bookkeeping, never a merchant decision — an editable
+			 * toggle let a merchant silently switch it off and mask a genuinely
+			 * stranded default. The settings page instead surfaces the live
+			 * equivalent of this flag through the `default_locality_policy`
+			 * field's own description — see
+			 * Location_Provider_Registry::apply_default_locality_status_note().
+			 */
+			$this->register_setting(
+				Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_NEEDS_REPICK,
+				\Woodev_Setting::TYPE_BOOLEAN,
+				[
+					'name'    => __( 'Зафиксированная локация требует повторного выбора', 'woodev-plugin-framework' ),
+					'default' => false,
+				]
+			);
 
 			foreach ( $this->provider_fields as $field_id => $field ) {
 				$this->register_provider_field( (string) $field_id, (array) $field );

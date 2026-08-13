@@ -160,6 +160,47 @@ class Fake_List_Location_Provider extends Abstract_Location_Provider {
 }
 
 /**
+ * A `locate`-capable fake provider (Task 14) — {@see Fake_Location_Provider}
+ * never overrides `locate()`, so its reflection-derived capability set never
+ * contains `locate`; this fixture exists specifically to exercise the
+ * `geoip` default-locality policy's OFFERED-options gate.
+ */
+class Fake_Locate_Location_Provider extends Abstract_Location_Provider {
+
+	private string $id;
+	private string $name;
+
+	public function __construct( string $id, string $name ) {
+		$this->id   = $id;
+		$this->name = $name;
+	}
+
+	public function get_id(): string {
+		return $this->id;
+	}
+
+	public function get_name(): string {
+		return $this->name;
+	}
+
+	public function get_countries(): array {
+		return [ 'RU' ];
+	}
+
+	protected function declare_suggest_levels(): array {
+		return [ Location_Record::LEVEL_REGION ];
+	}
+
+	public function suggest( string $query, Location_Scope $scope ): array {
+		return [];
+	}
+
+	public function locate( string $ip ): ?Location_Record {
+		return null;
+	}
+}
+
+/**
  * @covers \Woodev\Framework\Shipping\Location\Location_Provider_Registry
  * @covers \Woodev\Framework\Shipping\Location\Location_Settings
  */
@@ -1298,5 +1339,423 @@ final class LocationProviderRegistryTest extends TestCase {
 		$states = $registry->inject_related_list_states( 'not-an-array' );
 
 		$this->assertIsArray( $states );
+	}
+
+	// -------------------------------------------------------------------------
+	// Task 14 — get_offered_default_locality_policies() / get_default_locality_policy():
+	// default + clamp against the offered set, mirroring the field_mode block above.
+	// -------------------------------------------------------------------------
+
+	public function test_default_locality_policy_offered_options_default_to_off_and_fixed_only(): void {
+		// A provider that does NOT declare `locate` — deliberately explicit
+		// (not "providers=[], falls back to the bundled DaData") because the
+		// REAL bundled Dadata_Provider (Task 7) genuinely DOES declare `locate`
+		// (its `iplocate/address` endpoint) whenever its class happens to be
+		// autoloaded elsewhere in the same test run — unlike `list`, which it
+		// genuinely lacks (see the field_mode clamp test's own precedent,
+		// which that asymmetry is why it does NOT apply here unmodified).
+		$provider = new Fake_Location_Provider( 'acme', 'ACME' );
+
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [ $provider ] );
+		$this->stub_active_provider_option( 'acme' );
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$this->assertSame(
+			[ Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_OFF, Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_FIXED ],
+			$registry->get_offered_default_locality_policies()
+		);
+	}
+
+	public function test_default_locality_policy_geoip_offered_when_the_active_provider_has_locate(): void {
+		$provider = new Fake_Locate_Location_Provider( 'geo-fixture', 'Geo Fixture' );
+
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [ $provider ] );
+		$this->stub_active_provider_option( 'geo-fixture' );
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$this->assertSame(
+			[
+				Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_OFF,
+				Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_FIXED,
+				Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_GEOIP,
+			],
+			$registry->get_offered_default_locality_policies()
+		);
+	}
+
+	public function test_default_locality_policy_defaults_to_off(): void {
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [] );
+		Functions\when( 'get_option' )->justReturn( null );
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$this->assertSame( Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_OFF, $registry->get_default_locality_policy() );
+	}
+
+	public function test_default_locality_policy_returns_the_stored_value_when_it_is_offered(): void {
+		$provider = new Fake_Locate_Location_Provider( 'geo-fixture', 'Geo Fixture' );
+
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [ $provider ] );
+		Functions\when( 'get_option' )->alias(
+			static function ( $name, $default = null ) {
+				if ( 'woodev_location_active_provider' === $name ) {
+					return 'geo-fixture';
+				}
+				if ( 'woodev_location_default_locality_policy' === $name ) {
+					return Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_GEOIP;
+				}
+
+				return $default;
+			}
+		);
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$this->assertSame( Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_GEOIP, $registry->get_default_locality_policy() );
+	}
+
+	/**
+	 * A stored `geoip` value from BEFORE a provider switch to a non-`locate`
+	 * provider must never be served as-is — clamps to `off`, mirroring
+	 * {@see LocationProviderRegistryTest::test_field_mode_clamps_a_stored_value_the_current_active_provider_no_longer_supports()}.
+	 */
+	public function test_default_locality_policy_clamps_a_stored_geoip_value_the_current_provider_no_longer_supports(): void {
+		// A stored 'geoip' value from BEFORE a switch AWAY from a `locate`-capable
+		// provider — the NOW-active provider explicitly does not declare `locate`.
+		// See test_default_locality_policy_offered_options_default_to_off_and_fixed_only()'s
+		// own comment for why "providers=[], falls back to DaData" is NOT used here.
+		$provider = new Fake_Location_Provider( 'acme', 'ACME' );
+
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [ $provider ] );
+		Functions\when( 'get_option' )->alias(
+			static function ( $name, $default = null ) {
+				if ( 'woodev_location_active_provider' === $name ) {
+					return 'acme';
+				}
+				if ( 'woodev_location_default_locality_policy' === $name ) {
+					return Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_GEOIP;
+				}
+
+				return $default;
+			}
+		);
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$this->assertSame( Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_OFF, $registry->get_default_locality_policy() );
+	}
+
+	public function test_default_locality_policy_is_off_while_the_gate_is_closed(): void {
+		$registry = Location_Provider_Registry::instance();
+
+		$this->assertSame( Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_OFF, $registry->get_default_locality_policy() );
+	}
+
+	// -------------------------------------------------------------------------
+	// Task 14 — get_default_locality_record() / set_default_locality_record():
+	// the merchant-picked FIXED record, serialized as JSON.
+	// -------------------------------------------------------------------------
+
+	public function test_default_locality_record_is_null_when_unset(): void {
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [] );
+		Functions\when( 'get_option' )->justReturn( null );
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$this->assertNull( $registry->get_default_locality_record() );
+	}
+
+	public function test_default_locality_record_round_trips_through_set_and_get(): void {
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [] );
+		Functions\when( 'get_option' )->justReturn( null );
+		Functions\when( 'update_option' )->justReturn( true );
+		Functions\when( 'wp_json_encode' )->alias( static fn( $data ) => json_encode( $data ) );
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$record = Location_Record::from_array(
+			[
+				'key'         => 'dadata:fias-1',
+				'provider_id' => 'dadata',
+				'level'       => Location_Record::LEVEL_SETTLEMENT,
+				'country'     => 'RU',
+				'label'       => 'Москва',
+			]
+		);
+
+		$registry->set_default_locality_record( $record );
+
+		$fetched = $registry->get_default_locality_record();
+
+		$this->assertNotNull( $fetched );
+		$this->assertSame( 'dadata:fias-1', $fetched->key() );
+	}
+
+	public function test_default_locality_record_is_null_for_invalid_json(): void {
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [] );
+		Functions\when( 'get_option' )->alias(
+			static function ( $name, $default = null ) {
+				return 'woodev_location_default_locality_record' === $name ? 'not-json{{{' : $default;
+			}
+		);
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$this->assertNull( $registry->get_default_locality_record() );
+	}
+
+	public function test_default_locality_record_is_null_while_the_gate_is_closed(): void {
+		$registry = Location_Provider_Registry::instance();
+
+		$this->assertNull( $registry->get_default_locality_record() );
+	}
+
+	public function test_set_default_locality_record_is_a_no_op_while_the_gate_is_closed(): void {
+		$registry = Location_Provider_Registry::instance();
+
+		$record = Location_Record::from_array(
+			[
+				'key'         => 'dadata:fias-1',
+				'provider_id' => 'dadata',
+				'level'       => Location_Record::LEVEL_SETTLEMENT,
+				'country'     => 'RU',
+			]
+		);
+
+		// Must not throw/fatal — there is no settings handler to write through.
+		$registry->set_default_locality_record( $record );
+
+		$this->assertNull( $registry->get_default_locality_record() );
+	}
+
+	// -------------------------------------------------------------------------
+	// Task 14 — get_default_locality_needs_repick() / set_default_locality_needs_repick():
+	// the informational "stale foreign-namespace default" flag.
+	// -------------------------------------------------------------------------
+
+	public function test_default_locality_needs_repick_defaults_to_false(): void {
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [] );
+		Functions\when( 'get_option' )->justReturn( null );
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$this->assertFalse( $registry->get_default_locality_needs_repick() );
+	}
+
+	public function test_default_locality_needs_repick_round_trips(): void {
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [] );
+		Functions\when( 'get_option' )->justReturn( null );
+		Functions\when( 'update_option' )->justReturn( true );
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$registry->set_default_locality_needs_repick( true );
+		$this->assertTrue( $registry->get_default_locality_needs_repick() );
+
+		$registry->set_default_locality_needs_repick( false );
+		$this->assertFalse( $registry->get_default_locality_needs_repick() );
+	}
+
+	public function test_default_locality_needs_repick_is_false_while_the_gate_is_closed(): void {
+		$registry = Location_Provider_Registry::instance();
+
+		// Must not throw/fatal — there is no settings handler to write through.
+		$registry->set_default_locality_needs_repick( true );
+
+		$this->assertFalse( $registry->get_default_locality_needs_repick() );
+	}
+
+	// -------------------------------------------------------------------------
+	// Review finding F4: `default_locality_record` / `default_locality_needs_repick`
+	// stay registered (the internal read/write machinery still works) but are
+	// registered WITHOUT a control — never an editable widget on the settings
+	// page.
+	// -------------------------------------------------------------------------
+
+	public function test_default_locality_record_and_needs_repick_have_no_control(): void {
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [] );
+		Functions\when( 'get_option' )->justReturn( null );
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$handler = $registry->get_settings_handler();
+		$this->assertNotNull( $handler );
+
+		$record_setting = $handler->get_setting( Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_RECORD );
+		$this->assertNotNull( $record_setting, 'the setting itself must stay registered — internal read/write still needs it' );
+		$this->assertNull( $record_setting->get_control(), 'mutant: registering a control here re-exposes the raw-JSON textarea on the settings page' );
+
+		$repick_setting = $handler->get_setting( Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_NEEDS_REPICK );
+		$this->assertNotNull( $repick_setting );
+		$this->assertNull( $repick_setting->get_control(), 'mutant: registering a control here re-exposes the editable toggle a merchant could use to mask a stranded default' );
+	}
+
+	// -------------------------------------------------------------------------
+	// Review finding F4: apply_default_locality_status_note() — the settings
+	// page must say so when the `fixed` policy is not actually configured,
+	// computed LIVE (never from the orphaned needs_repick flag, which
+	// Location_Service no longer writes per review finding F2(a)).
+	// -------------------------------------------------------------------------
+
+	public function test_status_note_is_empty_when_the_policy_is_not_fixed(): void {
+		$provider = new Fake_Location_Provider( 'acme', 'ACME' );
+
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [ $provider ] );
+		Functions\when( 'get_option' )->alias(
+			static function ( $name, $default = null ) {
+				if ( 'woodev_location_active_provider' === $name ) {
+					return 'acme';
+				}
+
+				return $default; // default_locality_policy unset -> 'off'.
+			}
+		);
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$setting = $registry->get_settings_handler()->get_setting( Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_POLICY );
+		$this->assertSame( '', $setting->get_description() );
+	}
+
+	public function test_status_note_warns_when_fixed_has_no_valid_record(): void {
+		$provider = new Fake_Location_Provider( 'acme', 'ACME' );
+
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [ $provider ] );
+		Functions\when( 'get_option' )->alias(
+			static function ( $name, $default = null ) {
+				if ( 'woodev_location_active_provider' === $name ) {
+					return 'acme';
+				}
+				if ( 'woodev_location_default_locality_policy' === $name ) {
+					return Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_FIXED;
+				}
+
+				return $default; // default_locality_record left unset.
+			}
+		);
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$setting = $registry->get_settings_handler()->get_setting( Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_POLICY );
+		$this->assertNotSame( '', $setting->get_description(), 'an unconfigured fixed policy must not stay silent — mutant: removing this branch' );
+	}
+
+	public function test_status_note_warns_when_the_stored_record_no_longer_matches_the_active_provider(): void {
+		$provider = new Fake_Location_Provider( 'acme', 'ACME' );
+
+		$record = Location_Record::from_array(
+			[
+				'key'         => 'other-provider:city-1',
+				'provider_id' => 'other-provider',
+				'level'       => Location_Record::LEVEL_SETTLEMENT,
+				'country'     => 'RU',
+				'label'       => 'Москва',
+			]
+		);
+
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [ $provider ] );
+		Functions\when( 'get_option' )->alias(
+			static function ( $name, $default = null ) use ( $record ) {
+				if ( 'woodev_location_active_provider' === $name ) {
+					return 'acme';
+				}
+				if ( 'woodev_location_default_locality_policy' === $name ) {
+					return Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_FIXED;
+				}
+				if ( 'woodev_location_default_locality_record' === $name ) {
+					return json_encode( $record->to_array() );
+				}
+
+				return $default;
+			}
+		);
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$setting = $registry->get_settings_handler()->get_setting( Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_POLICY );
+		$this->assertNotSame( '', $setting->get_description(), 'a record picked under a DIFFERENT provider than the one now active must surface live, without relying on a stored flag' );
+	}
+
+	public function test_status_note_is_empty_when_fixed_has_a_valid_matching_record(): void {
+		$provider = new Fake_Location_Provider( 'acme', 'ACME' );
+
+		$record = Location_Record::from_array(
+			[
+				'key'         => 'acme:city-1',
+				'provider_id' => 'acme',
+				'level'       => Location_Record::LEVEL_SETTLEMENT,
+				'country'     => 'RU',
+				'label'       => 'Москва',
+			]
+		);
+
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [ $provider ] );
+		Functions\when( 'get_option' )->alias(
+			static function ( $name, $default = null ) use ( $record ) {
+				if ( 'woodev_location_active_provider' === $name ) {
+					return 'acme';
+				}
+				if ( 'woodev_location_default_locality_policy' === $name ) {
+					return Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_FIXED;
+				}
+				if ( 'woodev_location_default_locality_record' === $name ) {
+					return json_encode( $record->to_array() );
+				}
+
+				return $default;
+			}
+		);
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$setting = $registry->get_settings_handler()->get_setting( Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_POLICY );
+		$this->assertSame( '', $setting->get_description(), 'a correctly-namespaced record under the active provider has nothing to warn about' );
 	}
 }
