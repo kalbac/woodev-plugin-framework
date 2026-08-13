@@ -129,11 +129,42 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 * choose your locality" prompt, spec §4.6 — an implicit default must
 		 * never look like a real customer answer).
 		 *
+		 * This is the LAZY TRIGGER for the store-level default-locality policy
+		 * (Task 14; spec D11, §4.6): when the customer has NO record at all
+		 * yet, {@see self::resolve_default()} is consulted and, when it
+		 * answers a record, written back through {@see Customer_Location_Store::set()}
+		 * flagged `implicit` — so every caller of this method (cart shipping
+		 * calculation, checkout render) gets the default with zero extra
+		 * wiring, and a policy that resolves nothing (`off`, or a `geoip`/
+		 * `fixed` miss) costs nothing beyond the one resolution attempt. Once
+		 * a record exists — real or implicit — this method never resolves a
+		 * default again for it: the early return above short-circuits before
+		 * {@see self::resolve_default()} is ever reached, which is also what
+		 * keeps this NOT running on every request (a second call within the
+		 * same request, or a later request once the write above landed, finds
+		 * `$current` non-null and returns immediately).
+		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Added the lazy default-locality resolution trigger
+		 *              (Task 14; spec D11).
 		 *
 		 * @return array{record: Location_Record, implicit: bool, saved_at: int}|null
 		 */
 		public function get_customer_record(): ?array {
+			$current = $this->customer_store->get();
+
+			if ( null !== $current ) {
+				return $current;
+			}
+
+			$default = $this->resolve_default();
+
+			if ( null === $default ) {
+				return null;
+			}
+
+			$this->customer_store->set( $default, true );
+
 			return $this->customer_store->get();
 		}
 
@@ -155,6 +186,297 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 */
 		public function set_customer_record( Location_Record $record, bool $implicit = false ): bool {
 			return $this->customer_store->set( $record, $implicit );
+		}
+
+		/**
+		 * Resolves the store-level default locality (Task 14; spec D11, §4.6):
+		 * `off` -> `null`; `fixed` -> the merchant-picked record (re-resolved
+		 * through the current provider first when a provider switch stranded
+		 * its namespace — see {@see self::resolve_fixed_default()});
+		 * `geoip` -> the active provider's `locate( $ip )` answer for the
+		 * customer's IP (via `WC_Geolocation::get_ip_address()`).
+		 *
+		 * Called ONLY from {@see self::get_customer_record()}'s lazy trigger
+		 * when the customer has no record at all yet — never proactively, and
+		 * never on a request that already has one. Nothing here is stored;
+		 * the caller decides whether/how to persist the result.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return Location_Record|null
+		 */
+		public function resolve_default(): ?Location_Record {
+			$policy = $this->registry->get_default_locality_policy();
+
+			if ( Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_FIXED === $policy ) {
+				return $this->resolve_fixed_default();
+			}
+
+			if ( Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_GEOIP === $policy ) {
+				return $this->resolve_geoip_default();
+			}
+
+			return null;
+		}
+
+		/**
+		 * Resolves the `fixed` default-locality policy (spec §4.6/D15
+		 * amendment): the merchant's stored record is served AS-IS when the
+		 * D15 chain still resolves the SAME provider for its level — meaning
+		 * its `provider_id` namespace is still valid — otherwise it is
+		 * STRANDED (the store switched providers since it was picked) and
+		 * gets re-resolved by components through whichever provider the chain
+		 * now resolves for that level ({@see self::reresolve_fixed_default()}).
+		 * A successful re-resolution REPLACES the stored record (so only the
+		 * FIRST customer to hit this after a provider switch pays the
+		 * re-resolution cost — every later call already finds a
+		 * correctly-namespaced record and takes the fast path above). A
+		 * failed re-resolution (nothing to re-resolve THROUGH, or the new
+		 * provider's `suggest()` finds no match) treats the default as unset
+		 * for this call AND flags the settings surface — a stale
+		 * foreign-namespace record is never served either way.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return Location_Record|null
+		 */
+		private function resolve_fixed_default(): ?Location_Record {
+			$stored = $this->registry->get_default_locality_record();
+
+			if ( null === $stored ) {
+				return null;
+			}
+
+			$current_provider = $this->provider_for_level( $stored->level() );
+
+			if ( null !== $current_provider && $current_provider->get_id() === $stored->provider_id() ) {
+				$this->registry->set_default_locality_needs_repick( false );
+
+				return $stored;
+			}
+
+			$resolved = null !== $current_provider ? $this->reresolve_fixed_default( $current_provider, $stored ) : null;
+
+			if ( null === $resolved ) {
+				$this->registry->set_default_locality_needs_repick( true );
+
+				return null;
+			}
+
+			$this->registry->set_default_locality_record( $resolved );
+			$this->registry->set_default_locality_needs_repick( false );
+
+			return $resolved;
+		}
+
+		/**
+		 * Re-resolves a stranded `fixed` default THROUGH `$provider` — the D15
+		 * chain's current answer for `$stored`'s own level, which is by
+		 * construction NOT the provider `$stored->provider_id()` names
+		 * (that is exactly what makes it stranded, see
+		 * {@see self::resolve_fixed_default()}). Queries `$provider->suggest()`
+		 * with `$stored`'s own label (or, failing that, its own level's
+		 * component name) scoped to `$stored`'s parent components, and takes
+		 * the first match — the same "first result is the best result"
+		 * convention the client cascade itself relies on. Never throws: a
+		 * provider failure, or no match at all, both resolve to `null`.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param Location_Provider $provider The provider to re-resolve through.
+		 * @param Location_Record   $stored   The stranded stored record.
+		 *
+		 * @return Location_Record|null
+		 */
+		private function reresolve_fixed_default( Location_Provider $provider, Location_Record $stored ): ?Location_Record {
+			$query = self::query_text_for( $stored );
+
+			if ( '' === $query ) {
+				return null;
+			}
+
+			try {
+				$records = $provider->suggest( $query, self::scope_for_reresolution( $stored ) );
+			} catch ( \Throwable $exception ) {
+				return null;
+			}
+
+			return $records[0] ?? null;
+		}
+
+		/**
+		 * Builds the lookup scope {@see self::reresolve_fixed_default()} queries
+		 * `$stored`'s replacement through — the country/level pair plus,
+		 * for a settlement/address-level record, the components ABOVE its own
+		 * level (`Location_Scope::within_components()`, built specifically for
+		 * this "have components, no record from THIS provider yet" case — see
+		 * that method's own docblock). A region-level record has no parent to
+		 * constrain by, so it scopes by country alone.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param Location_Record $stored The stranded stored record.
+		 *
+		 * @return Location_Scope
+		 */
+		private static function scope_for_reresolution( Location_Record $stored ): Location_Scope {
+			if ( Location_Record::LEVEL_REGION === $stored->level() ) {
+				return Location_Scope::for_country( $stored->country(), $stored->level() );
+			}
+
+			return Location_Scope::within_components( $stored->country(), $stored->level(), self::parent_components_above( $stored ) );
+		}
+
+		/**
+		 * Extracts the component groups ABOVE `$record`'s own level — region
+		 * (+district) for a settlement-level record, region/district/settlement
+		 * for an address-level one — in the shape
+		 * {@see Location_Scope::within_components()} expects. A region-level
+		 * record has nothing above it, so this returns `[]` for one (never
+		 * called for that level anyway — see {@see self::scope_for_reresolution()}).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param Location_Record $record The record to extract parent components from.
+		 *
+		 * @return array<string, mixed>
+		 */
+		private static function parent_components_above( Location_Record $record ): array {
+			$components = [];
+
+			if ( Location_Record::LEVEL_REGION === $record->level() ) {
+				return $components;
+			}
+
+			if ( null !== $record->region() ) {
+				$components['region'] = $record->region();
+			}
+
+			if ( null !== $record->district() ) {
+				$components['district'] = $record->district();
+			}
+
+			if ( Location_Record::LEVEL_ADDRESS === $record->level() && null !== $record->settlement() ) {
+				$components['settlement'] = $record->settlement();
+			}
+
+			return $components;
+		}
+
+		/**
+		 * The free-text query {@see self::reresolve_fixed_default()} searches
+		 * the new provider with: `$record`'s own display label when it has
+		 * one, otherwise the name of its own level's component group
+		 * (region/settlement/street), otherwise `''` — an empty query is the
+		 * caller's signal to give up rather than issue a call no provider
+		 * could usefully answer.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param Location_Record $record The record to derive a query from.
+		 *
+		 * @return string
+		 */
+		private static function query_text_for( Location_Record $record ): string {
+			if ( '' !== $record->label() ) {
+				return $record->label();
+			}
+
+			switch ( $record->level() ) {
+				case Location_Record::LEVEL_REGION:
+					$component = $record->region();
+					break;
+
+				case Location_Record::LEVEL_SETTLEMENT:
+					$component = $record->settlement();
+					break;
+
+				default:
+					$component = $record->street();
+					break;
+			}
+
+			return null !== $component ? (string) $component['name'] : '';
+		}
+
+		/**
+		 * Resolves the `geoip` default-locality policy (spec D11): the
+		 * customer's own IP (`WC_Geolocation::get_ip_address()`, mirroring the
+		 * trusted-IP discipline {@see \Woodev\Framework\Shipping\Rest_Api\Location_Controller}'s
+		 * own rate-limit trait already uses) run through {@see self::locate()}.
+		 * An unresolvable IP resolves to `null` the same way every other
+		 * `locate()` miss does — see that method's own docblock.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return Location_Record|null
+		 */
+		private function resolve_geoip_default(): ?Location_Record {
+			if ( ! class_exists( '\\WC_Geolocation' ) ) {
+				return null;
+			}
+
+			$ip = (string) \WC_Geolocation::get_ip_address();
+
+			if ( '' === $ip ) {
+				return null;
+			}
+
+			return $this->locate( $ip );
+		}
+
+		/**
+		 * Resolves a geo-IP lookup through the active provider's `locate()`
+		 * capability, when it declares one. Shared by {@see self::resolve_geoip_default()}
+		 * (the `geoip` default-locality policy) and the admin-only
+		 * default-locality picker's own "locate" action
+		 * ({@see \Woodev\Framework\Shipping\Rest_Api\Location_Controller::handle_admin_locate_request()}) —
+		 * both need the exact same "does the active provider even support
+		 * this, and if so what does it say for this IP" answer.
+		 *
+		 * No `locate` capability ({@see self::supports_locate()}), a
+		 * `locate()` miss (`null`), or a thrown failure all resolve to `null`
+		 * alike — geo-IP is a legitimate, non-exceptional "no answer" outcome
+		 * (see {@see Location_Provider::locate()}'s own docblock), never
+		 * cached as a failure by this method (a caller that wants
+		 * retry-avoidance implements its own, as {@see self::resolve_geoip_default()}'s
+		 * own docblock notes none is needed for that call site).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $ip IPv4 or IPv6 address.
+		 *
+		 * @return Location_Record|null
+		 */
+		public function locate( string $ip ): ?Location_Record {
+			if ( ! $this->supports_locate() ) {
+				return null;
+			}
+
+			try {
+				return $this->registry->get_active_provider()->locate( $ip );
+			} catch ( \Throwable $exception ) {
+				return null;
+			}
+		}
+
+		/**
+		 * Whether the active provider currently declares the `locate`
+		 * capability — the same "is there anything to even ask" check
+		 * {@see self::locate()} makes internally, exposed separately so a
+		 * caller (the admin-only `/default-locality/locate` route) can tell
+		 * "this capability does not exist right now" (a 404-worthy, "this
+		 * stopped being true" condition) apart from "it exists but this
+		 * particular IP resolved to nothing" (a legitimate 200 + null).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool
+		 */
+		public function supports_locate(): bool {
+			$provider = $this->registry->get_active_provider();
+
+			return null !== $provider && in_array( Location_Provider::CAPABILITY_LOCATE, $provider->get_capabilities(), true );
 		}
 
 		/**

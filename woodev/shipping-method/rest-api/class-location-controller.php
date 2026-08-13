@@ -139,6 +139,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 		protected const LIST_RATE_LIMIT_MAX = 60;
 
 		/**
+		 * Rate-limit budget for the admin-only `/default-locality/locate` route
+		 * (Task 14) — a discrete manual preview action from the settings page,
+		 * not a stream; sized well under {@see self::SELECT_RATE_LIMIT_MAX} since
+		 * only admins can even reach it.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var int
+		 */
+		protected const ADMIN_LOCATE_RATE_LIMIT_MAX = 20;
+
+		/**
 		 * Hard cap on the number of localities `/list` ever returns in one
 		 * response, and the default when no (or an out-of-range) `limit` request
 		 * arg is given (PR #304 review finding 5).
@@ -345,6 +357,87 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 					],
 				]
 			);
+
+			/*
+			 * Admin-only routes (Task 14; spec D11/§4.6) backing the "fixed"
+			 * default-locality policy's picker: the merchant searches for a
+			 * locality (and, when the active provider supports it, previews a
+			 * geo-IP lookup) from the settings page. Persisting the CHOSEN
+			 * record is NOT a route here — it goes through the generic settings
+			 * save path (`Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_RECORD`,
+			 * a plain settings-API field the admin React surface already knows
+			 * how to write via Woodev_Abstract_Settings::update_value()), the
+			 * same as every other store-level Location setting. Both routes are
+			 * gated by check_admin_permission() — NOT `__return_true` like
+			 * `/suggest`/`/list` above: a bare capability check is fine here
+			 * because, unlike the customer-facing routes, a guest never needs
+			 * to reach it.
+			 */
+
+			register_rest_route(
+				'woodev/v1',
+				'/location/default-locality/suggest',
+				[
+					[
+						'methods'             => 'GET',
+						'callback'            => [ $this, 'handle_admin_suggest_request' ],
+						'permission_callback' => [ $this, 'check_admin_permission' ],
+						'args'                => [
+							'q'       => [
+								'type'              => 'string',
+								'required'          => true,
+								'validate_callback' => 'rest_validate_request_arg',
+							],
+							'level'   => [
+								'type'              => 'string',
+								'required'          => true,
+								'validate_callback' => 'rest_validate_request_arg',
+							],
+							'country' => [
+								'type'              => 'string',
+								'required'          => true,
+								'validate_callback' => 'rest_validate_request_arg',
+							],
+							'within'  => [
+								'type'              => 'string',
+								'validate_callback' => 'rest_validate_request_arg',
+							],
+
+							// No `provider` arg either — same reasoning as `/suggest`'s own
+							// args block above: Location_Service::provider_for_level() (the
+							// SAME D15 resolution the runtime uses) decides server-side, so a
+							// record the merchant picks here is guaranteed to be resolvable
+							// the same way at runtime.
+						],
+					],
+				]
+			);
+
+			register_rest_route(
+				'woodev/v1',
+				'/location/default-locality/locate',
+				[
+					[
+						'methods'             => 'GET',
+						'callback'            => [ $this, 'handle_admin_locate_request' ],
+						'permission_callback' => [ $this, 'check_admin_permission' ],
+						'args'                => [
+							'ip' => [
+								'type'              => 'string',
+								'validate_callback' => 'rest_validate_request_arg',
+
+								// Optional: omitted, this previews what the `geoip` policy
+								// would resolve for the ADMIN's OWN current request IP
+								// (WC_Geolocation::get_ip_address()) — see
+								// handle_admin_locate_request()'s own docblock. Given
+								// explicitly, it lets the merchant preview a DIFFERENT
+								// address (e.g. a known store/warehouse IP) before turning
+								// the policy on store-wide.
+							],
+						],
+					],
+				]
+			);
 		}
 
 		/**
@@ -389,6 +482,42 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 		}
 
 		/**
+		 * Guards the two admin-only `/default-locality/*` routes (Task 14) with
+		 * the WooCommerce shop-manager capability — mirrors
+		 * {@see \Woodev\Framework\Shipping\Rest_Api\Abstract_Warehouses_Controller::check_permissions()}'s
+		 * own `wc_rest_check_manager_permissions()`-first, `manage_woocommerce`
+		 * fallback precedent exactly. UNLIKE `/suggest`/`/select`/`/list` above —
+		 * a capability check is the right tool here specifically because these
+		 * two routes have no legitimate guest caller at all (only the settings
+		 * page's own admin picker reaches them), whereas `/select`'s nonce-only
+		 * gate exists precisely BECAUSE a guest customer legitimately needs it.
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WP_REST_Request $request request object.
+		 *
+		 * @return true|\WP_Error
+		 */
+		public function check_admin_permission( $request ) {
+
+			$allowed = function_exists( 'wc_rest_check_manager_permissions' )
+				? wc_rest_check_manager_permissions( 'settings', 'read' )
+				: current_user_can( 'manage_woocommerce' );
+
+			if ( ! $allowed ) {
+				return new \WP_Error(
+					'woodev_location_admin_forbidden',
+					__( 'У вас нет прав для выполнения этого действия.', 'woodev-plugin-framework' ),
+					[ 'status' => rest_authorization_required_code() ]
+				);
+			}
+
+			return true;
+		}
+
+		/**
 		 * Handles a suggest request.
 		 *
 		 * Degradation (spec §4.7, D15): "the whole layer is inactive", "no
@@ -425,12 +554,52 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 		 * @return \WP_REST_Response|\WP_Error|array{suggestions: array<int, array<string, mixed>>}
 		 */
 		public function handle_suggest_request( $request ) {
+			return $this->perform_suggest( $request, 'woodev_location_sug_rl_' );
+		}
 
-			if ( $this->is_rate_limited( 'woodev_location_sug_rl_', self::SUGGEST_RATE_LIMIT_MAX ) ) {
+		/**
+		 * Handles an ADMIN suggest request for the `fixed` default-locality
+		 * policy's picker (Task 14; spec D11/§4.6) — otherwise identical to
+		 * {@see self::handle_suggest_request()} (same hardening, same D15
+		 * provider resolution via {@see Location_Service::provider_for_level()},
+		 * so a record the merchant picks here is guaranteed resolvable the same
+		 * way at runtime), gated by {@see self::check_admin_permission()}
+		 * instead of the public routes' `__return_true`, and rate-limited under
+		 * its OWN counter so an admin session browsing the picker can never
+		 * exhaust the public customer-facing budget (or vice versa).
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WP_REST_Request $request request object.
+		 *
+		 * @return \WP_REST_Response|\WP_Error|array{suggestions: array<int, array<string, mixed>>}
+		 */
+		public function handle_admin_suggest_request( $request ) {
+			return $this->perform_suggest( $request, 'woodev_location_admin_sug_rl_' );
+		}
+
+		/**
+		 * Shared implementation behind {@see self::handle_suggest_request()} and
+		 * {@see self::handle_admin_suggest_request()} — see the former's own
+		 * docblock for the degradation rules; both routes must degrade
+		 * identically, so this is the ONE place that logic lives.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WP_REST_Request $request        request object.
+		 * @param string           $rate_limit_key Per-route rate-limit bucket prefix.
+		 *
+		 * @return \WP_REST_Response|\WP_Error|array{suggestions: array<int, array<string, mixed>>}
+		 */
+		private function perform_suggest( $request, string $rate_limit_key ) {
+
+			if ( $this->is_rate_limited( $rate_limit_key, self::SUGGEST_RATE_LIMIT_MAX ) ) {
 				return $this->rate_limited_error();
 			}
 
-			$query      = $this->normalize_param( $request->get_param( 'q' ) );
+			$query        = $this->normalize_param( $request->get_param( 'q' ) );
 			$query_length = $this->mb_length( $query );
 
 			if ( $query_length < self::MIN_QUERY_LENGTH || $query_length > self::MAX_PARAM_LENGTH ) {
@@ -692,6 +861,82 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 					'persisted' => $persisted,
 				]
 			);
+		}
+
+		/**
+		 * Handles an admin-only geo-IP preview request (Task 14; spec D11) — lets
+		 * the merchant, from the settings page, see what the `geoip`
+		 * default-locality policy would ACTUALLY resolve for an IP before
+		 * turning the policy on store-wide (or simply as a quick way to fill the
+		 * `fixed` picker from the store's own known address). Delegates entirely
+		 * to {@see Location_Service::locate()} — the SAME method the `geoip`
+		 * policy itself calls, so this preview can never disagree with runtime
+		 * behavior.
+		 *
+		 * The `ip` param defaults to `WC_Geolocation::get_ip_address()` — the
+		 * EXACT SAME source {@see Location_Service::resolve_default()}'s own
+		 * `geoip` branch reads — deliberately NOT
+		 * {@see Rest_Rate_Limit_Trait::get_client_ip()}: that helper is built
+		 * for rate-limit BUCKETING and therefore never returns an unusable
+		 * value (it falls back to the literal string `'unknown'`), which would
+		 * silently hand a non-IP string to a provider's `locate()`. A missing
+		 * `X-Forwarded-For`/`REMOTE_ADDR` here is a genuine "cannot preview"
+		 * 400, not a bucket identity.
+		 *
+		 * Degrades to 404 (mirroring {@see self::handle_list_request()}'s own
+		 * "this stopped being true" semantics, not `/suggest`'s 200+empty) when
+		 * {@see Location_Service::supports_locate()} is false — a client
+		 * reaching this route at all already believes the capability exists
+		 * (the settings page only ever offers the `geoip` policy, and therefore
+		 * this preview action, when it does). Once past that gate,
+		 * `locate()` itself never throws (it swallows a provider failure into
+		 * `null`, matching its own docblock), so a `null` result here is
+		 * always the legitimate "this IP did not resolve" answer, returned as
+		 * `200 { location: null }`.
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WP_REST_Request $request request object.
+		 *
+		 * @return \WP_REST_Response|\WP_Error|array{location: array{key: string, label: string, level: string, record: array<string, mixed>}|null}
+		 */
+		public function handle_admin_locate_request( $request ) {
+
+			if ( $this->is_rate_limited( 'woodev_location_admin_loc_rl_', self::ADMIN_LOCATE_RATE_LIMIT_MAX ) ) {
+				return $this->rate_limited_error();
+			}
+
+			if ( ! $this->service->supports_locate() ) {
+				return new \WP_Error(
+					'woodev_location_locate_unavailable',
+					__( 'Определение локации по IP-адресу сейчас недоступно.', 'woodev-plugin-framework' ),
+					[ 'status' => 404 ]
+				);
+			}
+
+			$ip = $this->normalize_param( $request->get_param( 'ip' ) );
+
+			if ( '' === $ip && class_exists( '\\WC_Geolocation' ) ) {
+				$ip = (string) \WC_Geolocation::get_ip_address();
+			}
+
+			if ( '' === $ip ) {
+				return new \WP_Error(
+					'woodev_location_locate_no_ip',
+					__( 'Не удалось определить IP-адрес.', 'woodev-plugin-framework' ),
+					[ 'status' => 400 ]
+				);
+			}
+
+			$record = $this->service->locate( $ip );
+
+			if ( null === $record ) {
+				return rest_ensure_response( [ 'location' => null ] );
+			}
+
+			return rest_ensure_response( [ 'location' => $this->to_response_records( [ $record ] )[0] ] );
 		}
 
 		/**

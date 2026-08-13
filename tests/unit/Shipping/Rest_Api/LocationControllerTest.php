@@ -37,6 +37,13 @@ if ( ! class_exists( '\\WP_REST_Controller' ) ) {
 	require_once __DIR__ . '/wp-rest-controller-stub.php';
 }
 
+// Task 14: handle_admin_locate_request()'s own `WC_Geolocation::get_ip_address()`
+// fallback needs this double — same stub RestRateLimitTraitTest already uses (see
+// that file's own require for the full rationale).
+if ( ! class_exists( '\\WC_Geolocation' ) ) {
+	require_once __DIR__ . '/wc-geolocation-stub.php';
+}
+
 /**
  * Minimal \WP_REST_Request stand-in — identical shape/rationale to
  * PickupControllerTest's own namespace-scoped double (see that file's
@@ -152,9 +159,28 @@ final class Location_Controller_Fake_Service extends Location_Service {
 	public array $is_country_supported_calls = [];
 
 	/**
+	 * Task 14: {@see self::supports_locate()}'s own return value, and
+	 * {@see self::locate()}'s own return value/spy — a SEPARATE pair from the
+	 * `/suggest`/`/select`/`/list` fakes above, since the admin-only
+	 * `/default-locality/locate` route resolves through these two
+	 * {@see Location_Service} methods directly, not through `$provider`.
+	 *
+	 * @var bool
+	 */
+	private bool $supports_locate;
+
+	/** @var Location_Record|null */
+	private ?Location_Record $locate_result;
+
+	/** @var array<int, string> */
+	public array $locate_calls = [];
+
+	/**
 	 * @param array<string, Location_Provider>|null $providers_by_level                    Optional level => provider map — see {@see self::$providers_by_level}.
 	 * @param Location_Provider|null                 $active_provider_for_level_blind_check See {@see self::$active_provider_for_level_blind_check}.
 	 * @param Location_Provider|null                 $list_provider                         Task 13: {@see self::provider_for_list()}'s return value.
+	 * @param bool                                    $supports_locate                       Task 14: {@see self::supports_locate()}'s own return value.
+	 * @param Location_Record|null                   $locate_result                         Task 14: {@see self::locate()}'s own return value.
 	 */
 	public function __construct(
 		bool $active = true,
@@ -164,7 +190,9 @@ final class Location_Controller_Fake_Service extends Location_Service {
 		bool $country_supported = true,
 		?array $providers_by_level = null,
 		?Location_Provider $active_provider_for_level_blind_check = null,
-		?Location_Provider $list_provider = null
+		?Location_Provider $list_provider = null,
+		bool $supports_locate = false,
+		?Location_Record $locate_result = null
 	) {
 		$this->active                                = $active;
 		$this->provider                               = $provider;
@@ -174,6 +202,18 @@ final class Location_Controller_Fake_Service extends Location_Service {
 		$this->providers_by_level                     = $providers_by_level;
 		$this->active_provider_for_level_blind_check = $active_provider_for_level_blind_check;
 		$this->list_provider                          = $list_provider;
+		$this->supports_locate                        = $supports_locate;
+		$this->locate_result                          = $locate_result;
+	}
+
+	public function supports_locate(): bool {
+		return $this->supports_locate;
+	}
+
+	public function locate( string $ip ): ?Location_Record {
+		$this->locate_calls[] = $ip;
+
+		return $this->locate_result;
 	}
 
 	public function provider_for_list( ?string $country = null ): ?Location_Provider {
@@ -376,6 +416,9 @@ final class LocationControllerTest extends TestCase {
 			}
 		);
 		Functions\when( 'rest_ensure_response' )->returnArg();
+		// Task 14: check_admin_permission()'s own denial status, and
+		// handle_admin_locate_request()'s WC_Geolocation fallback path.
+		Functions\when( 'rest_authorization_required_code' )->justReturn( 401 );
 	}
 
 	private function record( string $key = 'dadata:fias-1', string $level = Location_Record::LEVEL_SETTLEMENT ): Location_Record {
@@ -1267,5 +1310,167 @@ final class LocationControllerTest extends TestCase {
 		$this->assertNotNull( $captured );
 		$this->assertTrue( $captured->has_parent() );
 		$this->assertSame( $parent, $captured->parent_record() );
+	}
+
+	// -------------------------------------------------------------------
+	// check_admin_permission() (Task 14) — capability gate for the two
+	// admin-only /default-locality/* routes.
+	// -------------------------------------------------------------------
+
+	public function test_check_admin_permission_rejects_without_the_capability(): void {
+		Functions\when( 'current_user_can' )->justReturn( false );
+
+		$ctrl = new Location_Controller_Probe( new Location_Controller_Fake_Service() );
+
+		$result = $ctrl->check_admin_permission( new WP_REST_Request() );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 401, $result->get_error_data()['status'] );
+	}
+
+	public function test_check_admin_permission_accepts_with_the_capability(): void {
+		Functions\when( 'current_user_can' )->justReturn( true );
+
+		$ctrl = new Location_Controller_Probe( new Location_Controller_Fake_Service() );
+
+		$result = $ctrl->check_admin_permission( new WP_REST_Request() );
+
+		$this->assertTrue( $result );
+	}
+
+	// -------------------------------------------------------------------
+	// /default-locality/suggest (Task 14) — the admin picker's own search;
+	// shares perform_suggest() with the public /suggest route, so this only
+	// spot-checks the shared behaviour still holds through the admin entry
+	// point rather than re-proving every case LocationControllerTest already
+	// covers for handle_suggest_request() above.
+	// -------------------------------------------------------------------
+
+	public function test_admin_suggest_rejects_an_unknown_level(): void {
+		$service = new Location_Controller_Fake_Service( true, null );
+		$ctrl    = new Location_Controller_Probe( $service );
+
+		$request = new WP_REST_Request( [ 'q' => 'Мос', 'level' => 'galaxy', 'country' => 'RU' ] );
+		$result  = $ctrl->handle_admin_suggest_request( $request );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 400, $result->get_error_data()['status'] );
+	}
+
+	public function test_admin_suggest_happy_path_returns_shaped_suggestions(): void {
+		$record   = Location_Record::from_array(
+			[
+				'key'         => 'dadata:fias-1',
+				'provider_id' => 'dadata',
+				'level'       => Location_Record::LEVEL_SETTLEMENT,
+				'country'     => 'RU',
+				'label'       => 'Москва',
+			]
+		);
+		$provider = new Location_Controller_Fake_Provider( static fn() => [ $record ] );
+		$service  = new Location_Controller_Fake_Service( true, $provider );
+		$ctrl     = new Location_Controller_Probe( $service );
+
+		$request = new WP_REST_Request( [ 'q' => 'Мос', 'level' => Location_Record::LEVEL_SETTLEMENT, 'country' => 'RU' ] );
+		$result  = $ctrl->handle_admin_suggest_request( $request );
+
+		$this->assertNotInstanceOf( \WP_Error::class, $result );
+		$this->assertCount( 1, $result['suggestions'] );
+		$this->assertSame( 'dadata:fias-1', $result['suggestions'][0]['key'] );
+	}
+
+	public function test_admin_suggest_no_provider_for_level_returns_empty_200(): void {
+		$service = new Location_Controller_Fake_Service( true, null );
+		$ctrl    = new Location_Controller_Probe( $service );
+
+		$request = new WP_REST_Request( [ 'q' => 'Мос', 'level' => Location_Record::LEVEL_ADDRESS, 'country' => 'RU' ] );
+		$result  = $ctrl->handle_admin_suggest_request( $request );
+
+		$this->assertNotInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( [ 'suggestions' => [] ], $result );
+	}
+
+	// -------------------------------------------------------------------
+	// /default-locality/locate (Task 14) — the admin picker's geo-IP preview.
+	// -------------------------------------------------------------------
+
+	public function test_admin_locate_returns_404_when_the_active_provider_has_no_locate_capability(): void {
+		$service = new Location_Controller_Fake_Service( true, null, null, true, true, null, null, null, false );
+		$ctrl    = new Location_Controller_Probe( $service );
+
+		$request = new WP_REST_Request( [ 'ip' => '203.0.113.9' ] );
+		$result  = $ctrl->handle_admin_locate_request( $request );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 404, $result->get_error_data()['status'] );
+		$this->assertCount( 0, $service->locate_calls, 'locate() must never even be called once the capability check fails' );
+	}
+
+	public function test_admin_locate_happy_path_returns_shaped_location(): void {
+		$record  = Location_Record::from_array(
+			[
+				'key'         => 'dadata:fias-1',
+				'provider_id' => 'dadata',
+				'level'       => Location_Record::LEVEL_SETTLEMENT,
+				'country'     => 'RU',
+				'label'       => 'Москва',
+			]
+		);
+		$service = new Location_Controller_Fake_Service( true, null, null, true, true, null, null, null, true, $record );
+		$ctrl    = new Location_Controller_Probe( $service );
+
+		$request = new WP_REST_Request( [ 'ip' => '203.0.113.9' ] );
+		$result  = $ctrl->handle_admin_locate_request( $request );
+
+		$this->assertNotInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( [ '203.0.113.9' ], $service->locate_calls, 'the EXPLICIT ip param must be used verbatim, not overridden by the request IP' );
+		$this->assertSame( 'dadata:fias-1', $result['location']['key'] );
+	}
+
+	public function test_admin_locate_returns_null_location_as_200_not_an_error(): void {
+		$service = new Location_Controller_Fake_Service( true, null, null, true, true, null, null, null, true, null );
+		$ctrl    = new Location_Controller_Probe( $service );
+
+		$request = new WP_REST_Request( [ 'ip' => '203.0.113.9' ] );
+		$result  = $ctrl->handle_admin_locate_request( $request );
+
+		$this->assertNotInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( [ 'location' => null ], $result );
+	}
+
+	public function test_admin_locate_falls_back_to_the_request_ip_when_no_ip_param_is_given(): void {
+		$record  = $this->record();
+		$service = new Location_Controller_Fake_Service( true, null, null, true, true, null, null, null, true, $record );
+		$ctrl    = new Location_Controller_Probe( $service );
+
+		$_SERVER['REMOTE_ADDR'] = '198.51.100.7';
+
+		$request = new WP_REST_Request( [] );
+		$result  = $ctrl->handle_admin_locate_request( $request );
+
+		unset( $_SERVER['REMOTE_ADDR'] );
+
+		$this->assertNotInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( [ '198.51.100.7' ], $service->locate_calls );
+	}
+
+	/**
+	 * `get_client_ip()` (the rate-limit trait's own helper) deliberately falls
+	 * back to the literal string `'unknown'` rather than `''` — this route
+	 * must NOT reuse it for this reason: handing `'unknown'` to a provider's
+	 * `locate()` as though it were a real IP would be worse than refusing.
+	 */
+	public function test_admin_locate_returns_400_when_no_ip_can_be_determined_at_all(): void {
+		$service = new Location_Controller_Fake_Service( true, null, null, true, true, null, null, null, true, $this->record() );
+		$ctrl    = new Location_Controller_Probe( $service );
+
+		unset( $_SERVER['REMOTE_ADDR'] ); // WC_Geolocation stub falls back to this.
+
+		$request = new WP_REST_Request( [] );
+		$result  = $ctrl->handle_admin_locate_request( $request );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 400, $result->get_error_data()['status'] );
+		$this->assertCount( 0, $service->locate_calls );
 	}
 }
