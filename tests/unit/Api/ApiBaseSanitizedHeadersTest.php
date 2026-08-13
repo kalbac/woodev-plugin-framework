@@ -163,6 +163,43 @@ final class ApiBaseSanitizedHeadersTest extends TestCase {
 	}
 
 	/**
+	 * Membership is decided by header NAME, never by the value being truthy.
+	 *
+	 * The first version of this fix guarded the mask with `! empty( $value )`, and
+	 * `empty()` is true for the string `'0'` — so a credential whose value happens
+	 * to be `0` (a perfectly valid opaque token) was handed to the request logger
+	 * in clear text. Found by the Codex critic pass on #288.
+	 *
+	 * @return void
+	 */
+	public function test_a_falsey_but_valid_credential_value_is_still_masked(): void {
+		$api = new Testable_Api_Base();
+		$api->set_headers_for_test( [ 'X-Secret' => '0' ] );
+
+		$headers = $api->get_sanitized_headers_for_test();
+
+		$this->assertSame( '*', $headers['X-Secret'], "a credential of '0' must be masked, not passed through" );
+	}
+
+	/**
+	 * Masking a genuinely empty value is harmless: the mask is as long as the
+	 * value, so the header still logs as empty rather than as a row of stars.
+	 *
+	 * Pinned so a future "optimisation" that skips empty values cannot quietly
+	 * reintroduce the `'0'` hole above.
+	 *
+	 * @return void
+	 */
+	public function test_an_empty_credential_value_stays_empty(): void {
+		$api = new Testable_Api_Base();
+		$api->set_headers_for_test( [ 'Authorization' => '' ] );
+
+		$headers = $api->get_sanitized_headers_for_test();
+
+		$this->assertSame( '', $headers['Authorization'] );
+	}
+
+	/**
 	 * A header that carries no credential passes through unmasked.
 	 *
 	 * @return void
