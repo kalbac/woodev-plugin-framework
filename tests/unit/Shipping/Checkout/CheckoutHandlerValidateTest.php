@@ -255,7 +255,7 @@ class CheckoutHandlerValidateTest extends TestCase {
 	public function test_exact_match_dedupes_required_and_backstop_into_one_notice(): void {
 		\Brain\Monkey\Functions\expect( 'wc_add_notice' )
 			->once()
-			->with( 'Заполните поле «Пункт выдачи».', 'error' );
+			->with( 'Укажите значение поля «Пункт выдачи».', 'error' );
 
 		$fields  = Checkout_Fields::from_array( [
 			\Woodev\Framework\Shipping\Checkout\Presets\Pickup_Field::create( 'carrier_pickup_point', [ 'carrier_pickup' ] )->to_array(),
@@ -270,26 +270,39 @@ class CheckoutHandlerValidateTest extends TestCase {
 
 	/**
 	 * The backstop must still fire ALONE — and checkout must still block — when the
-	 * per-field loop does NOT catch the same field: `Checkout_Condition`'s `in`
-	 * operator does a strict string match against `chosen_shipping_method` and does
-	 * not tolerate WooCommerce's `method_id:instance_id` shape for a multi-instance
-	 * method, unlike `chosen_method_matches()` (which the backstop uses). This is a
-	 * genuinely reachable divergence, not a hypothetical — proves the dedup guard
-	 * above does not cost this failure mode.
+	 * per-field loop does NOT catch the same field because the descriptor's own
+	 * condition-spec method-id list diverges from the list passed to
+	 * `set_requires_pickup_methods()`. `Checkout_Condition`'s `in` operator does a
+	 * strict string match against `chosen_shipping_method`, so a method id present in
+	 * `requires_pickup_methods` but absent from the condition-spec's `value` list
+	 * never trips the per-field loop's `required` gate.
+	 *
+	 * This IS genuinely reachable: both lists are supplied independently by the host
+	 * plugin (`Pickup_Field::create()`'s second argument vs. `set_requires_pickup_methods()`)
+	 * and nothing enforces they stay in sync. By contrast, a `method_id:instance_id`
+	 * suffix divergence is NOT reachable here — every real entry point normalizes the
+	 * posted method id to its bare form before calling `validate()` (see
+	 * `chosen_shipping_method()` and `process()`, both via `normalize_method_id()`), so
+	 * that shape only ever reaches `validate()` when a test calls it directly.
 	 */
-	public function test_backstop_fires_alone_when_condition_spec_diverges_on_instance_suffix(): void {
+	public function test_backstop_fires_alone_when_requires_pickup_methods_diverges_from_condition_spec(): void {
 		\Brain\Monkey\Functions\expect( 'wc_add_notice' )
 			->once()
 			->with( 'Для доставки в пункт выдачи выберите значение поля «Пункт выдачи».', 'error' );
 
 		$fields  = Checkout_Fields::from_array( [
+			// Condition-spec only lists 'carrier_pickup' — the per-field loop's strict
+			// `in` comparison will not match 'carrier_pickup_express'.
 			\Woodev\Framework\Shipping\Checkout\Presets\Pickup_Field::create( 'carrier_pickup_point', [ 'carrier_pickup' ] )->to_array(),
 		] );
 		$handler = new Checkout_Handler( $fields, 'carrier' );
-		$handler->set_requires_pickup_methods( [ 'carrier_pickup' ] );
+		// set_requires_pickup_methods() lists a broader set than the condition-spec —
+		// a mismatch a host plugin can genuinely introduce by not keeping both lists
+		// in sync.
+		$handler->set_requires_pickup_methods( [ 'carrier_pickup', 'carrier_pickup_express' ] );
 
 		$this->assertFalse(
-			$handler->validate( [ 'carrier_pickup_point' => '' ], [ 'chosen_shipping_method' => 'carrier_pickup:3' ] )
+			$handler->validate( [ 'carrier_pickup_point' => '' ], [ 'chosen_shipping_method' => 'carrier_pickup_express' ] )
 		);
 	}
 
@@ -301,7 +314,7 @@ class CheckoutHandlerValidateTest extends TestCase {
 	public function test_required_message_prefers_error_label_over_label_and_id(): void {
 		\Brain\Monkey\Functions\expect( 'wc_add_notice' )
 			->once()
-			->with( 'Заполните поле «Пункт выдачи».', 'error' );
+			->with( 'Укажите значение поля «Пункт выдачи».', 'error' );
 
 		$fields = Checkout_Fields::from_array( [
 			Field::create( 'carrier_pickup_point' )->set_required( true )->set_error_label( 'Пункт выдачи' )->to_array(),
@@ -317,7 +330,7 @@ class CheckoutHandlerValidateTest extends TestCase {
 	public function test_required_message_falls_back_to_id_without_error_label_or_label(): void {
 		\Brain\Monkey\Functions\expect( 'wc_add_notice' )
 			->once()
-			->with( 'Заполните поле «carrier_pickup_point».', 'error' );
+			->with( 'Укажите значение поля «carrier_pickup_point».', 'error' );
 
 		$fields = Checkout_Fields::from_array( [
 			Field::create( 'carrier_pickup_point' )->set_required( true )->to_array(),

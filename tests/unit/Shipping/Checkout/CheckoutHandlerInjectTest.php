@@ -160,28 +160,30 @@ class CheckoutHandlerInjectTest extends TestCase {
 	}
 
 	// -------------------------------------------------------------------------
-	// WC-array label falls back to error_label (#299, #134): WooCommerce's own
-	// required-field message reads THIS array key, so a blank visual `label`
-	// (legitimate for a hidden pickup-style field) must not leave WC's own
-	// message empty-or-id when a human error_label is available.
+	// WC-array `label` is the visual `label` verbatim, never `error_label`
+	// (#316 review finding 1): woocommerce_form_field() renders a <label> for
+	// ANY non-empty `label`, even on a `hidden` field — it only skips the
+	// `for` attribute — so handing WC our `error_label` would render a stray,
+	// orphaned caption for a field whose real control lives elsewhere (e.g. a
+	// "Choose pickup point" button).
 	// -------------------------------------------------------------------------
 
-	public function test_inject_wc_label_falls_back_to_error_label_when_label_blank(): void {
+	public function test_inject_wc_label_never_falls_back_to_error_label(): void {
 		$fields = Checkout_Fields::from_array( [
 			Field::create( 'carrier_pickup_point' )->set_type( 'hidden' )->set_error_label( 'Пункт выдачи' )->set_section( 'order' )->to_array(),
 		] );
 		$out = ( new Checkout_Handler( $fields, 'carrier' ) )->inject( [ 'order' => [] ] );
 
-		$this->assertSame( 'Пункт выдачи', $out['order']['carrier_pickup_point']['label'] );
+		$this->assertSame( '', $out['order']['carrier_pickup_point']['label'] );
 	}
 
-	public function test_inject_wc_label_keeps_explicit_label_over_error_label(): void {
+	public function test_inject_wc_label_uses_the_explicit_label_verbatim(): void {
 		$fields = Checkout_Fields::from_array( [
 			Field::create( 'carrier_pvz' )->set_type( 'text' )->set_label( 'ПВЗ' )->set_error_label( 'Пункт выдачи' )->set_section( 'order' )->to_array(),
 		] );
 		$out = ( new Checkout_Handler( $fields, 'carrier' ) )->inject( [ 'order' => [] ] );
 
-		$this->assertSame( 'ПВЗ', $out['order']['carrier_pvz']['label'], 'An explicitly-set visual label must win over error_label.' );
+		$this->assertSame( 'ПВЗ', $out['order']['carrier_pvz']['label'], 'error_label must never influence the WC-facing label when a visual label is set.' );
 	}
 
 	public function test_inject_wc_label_stays_empty_when_neither_label_nor_error_label_set(): void {
@@ -190,8 +192,6 @@ class CheckoutHandlerInjectTest extends TestCase {
 		] );
 		$out = ( new Checkout_Handler( $fields, 'carrier' ) )->inject( [ 'order' => [] ] );
 
-		// Never falls to the raw id here — an empty WC label is safer than leaking the
-		// id into a rendered <label> or a WC-authored notice (see inject() docblock).
 		$this->assertSame( '', $out['order']['carrier_pvz']['label'] );
 	}
 

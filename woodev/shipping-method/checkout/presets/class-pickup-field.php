@@ -55,12 +55,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Presets\\Pickup_F
 		 * control is the pickup-point button/modal, not a native input, so a
 		 * checkout-form label would be redundant. A sensible default
 		 * `error_label` («Пункт выдачи») is set instead, so the framework's own
-		 * required-field messages and WooCommerce's own native message (which
-		 * reads the same array key we hand it) both stay human even though
-		 * `label` is blank (#299, #134). Call {@see Field::set_error_label()}
-		 * again on the returned builder to override the default text.
+		 * required-field messages stay human even though `label` is blank
+		 * (#299, #134). Call {@see Field::set_error_label()} again on the
+		 * returned builder to override the default text.
 		 *
-		 * @since 2.0.2
 		 * @since 2.0.2 Set a default `error_label` («Пункт выдачи») (#299, #134).
 		 *
 		 * @param string   $id                Field identifier supplied by the host plugin.

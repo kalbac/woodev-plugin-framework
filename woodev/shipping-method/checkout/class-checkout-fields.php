@@ -241,11 +241,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Fields' 
 		 *
 		 * @since 1.5.0
 		 * @since 2.0.2 Added `section`, `depends_on`, `source`, `source_kind`,
-		 *              `takeover_condition`; `required` array preserved verbatim;
-		 *              `is_pickup_slot` bool (default false).
-		 * @since 2.0.2 Added `location_level` (location-provider layer Task 9).
-		 * @since 2.0.2 Added `error_label` (default `''`) — a messages-only label
-		 *              independent of `label` (#299, #134).
+		 *              `takeover_condition`, `location_level`, `error_label`;
+		 *              `required` array preserved verbatim; `is_pickup_slot` bool
+		 *              (default false).
 		 *
 		 * @param array<string, mixed> $definition raw field definition
 		 *

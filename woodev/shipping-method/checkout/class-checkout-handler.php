@@ -890,15 +890,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * The fully-merged result is passed through the forward `..._checkout_fields`
 		 * filter so the host plugin can refine field args further.
 		 *
-		 * When the descriptor's visual `label` is empty (legitimate for a field whose
-		 * control isn't its own native input, e.g. a hidden pickup-point field), the WC
-		 * array's `label` falls back to the descriptor's `error_label` when set — WC's OWN
-		 * required-field validation substitutes this same array key into its message, so
-		 * this is what keeps THAT message human too, not just ours (#299, #134). Never
-		 * falls further to the raw field `id`: unlike our own generated messages, an empty
-		 * WC label is a safer default than leaking the id into a rendered `<label>` or a
-		 * WC-authored notice.
-		 *
 		 * @since 1.5.0
 		 * @since 2.0.2 Fields are grouped by their own `section`; existing WC args
 		 *              are preserved (conservative merge); options-kind root fields
@@ -939,10 +930,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 				// - an explicit bool `true` → WC `required`;
 				// - a default/`false` required → leave WC's own required flag UNTOUCHED (e.g.
 				// turning `billing_city` into a select must not un-require it).
-				$label         = (string) $field['label'];
 				$our_overrides = [
 					'type'  => (string) $field['type'],
-					'label' => '' !== $label ? $label : (string) ( $field['error_label'] ?? '' ),
+					'label' => (string) $field['label'],
 				];
 
 				if ( is_array( $field['required'] ) ) {
@@ -1148,6 +1138,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * method (unlike {@see chosen_method_matches()}, which the backstop itself uses), or the
 		 * descriptor's `required` spec is missing/malformed — that divergence is the backstop's actual
 		 * reason to exist, so this guard never suppresses it as a class, only the field-id-exact repeat.
+		 *
+		 * This guard only dedupes OUR OWN two notices (the per-field loop and the backstop). A field
+		 * declared with a plain-bool `required` (no condition-spec, no pickup backstop involved) still
+		 * gets both WC's own native "is a required field" notice — via {@see inject()}'s WC `required`
+		 * flag — AND this method's own {@see required_message()} notice; that duplication class is not
+		 * addressed here.
 		 *
 		 * @since 1.5.0
 		 * @since 2.0.2 Added `$state` parameter for conditional-required (A2) evaluation.
@@ -1437,8 +1433,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		/**
 		 * Builds the default "required field" error message for a descriptor.
 		 *
+		 * Uses "Укажите" ("specify"/"provide") rather than "Заполните" ("fill in"): the
+		 * latter only reads naturally for a typed input, but this same template also
+		 * covers a hidden pickup-point field whose control is a "Choose pickup point"
+		 * button, so the wording needs to fit both without a second, field-type-specific
+		 * message (#299).
+		 *
 		 * @since 1.5.0
 		 * @since 2.0.2 Label resolution delegated to {@see message_label()} (adds `error_label`).
+		 * @since 2.0.2 Wording changed from "Заполните" to "Укажите" so the shared template
+		 *              also fits button-driven fields, not just typed inputs (#299).
 		 *
 		 * @param array<string, mixed> $field normalized field descriptor
 		 *
@@ -1446,7 +1450,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 */
 		private static function required_message( array $field ): string {
 			/* translators: %s: checkout field label */
-			return sprintf( __( 'Заполните поле «%s».', 'woodev-plugin-framework' ), self::message_label( $field ) );
+			return sprintf( __( 'Укажите значение поля «%s».', 'woodev-plugin-framework' ), self::message_label( $field ) );
 		}
 
 		/**
