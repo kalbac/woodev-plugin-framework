@@ -948,7 +948,14 @@ final class LocationProviderRegistryTest extends TestCase {
 		return $registry;
 	}
 
-	public function test_inject_injects_regions_keyed_by_the_records_own_locality_key(): void {
+	/**
+	 * s71 correction: the injected VALUE is the record's human-readable LABEL,
+	 * never its `provider_id:native_id` key — a `billing_state`/`shipping_state`
+	 * value is permanent order data, and a provider-namespaced key renders as
+	 * raw garbage in the customer's formatted address the instant this injector
+	 * is not present (rig measurement, see the method's own docblock).
+	 */
+	public function test_inject_injects_regions_keyed_by_their_own_label(): void {
 		$provider = new Fake_List_Location_Provider(
 			'list-fixture',
 			'List Fixture',
@@ -959,7 +966,36 @@ final class LocationProviderRegistryTest extends TestCase {
 
 		$states = $registry->inject_related_list_states( [] );
 
-		$this->assertSame( [ 'list-fixture:mo' => 'Московская область' ], $states['RU'] );
+		$this->assertSame( [ 'Московская область' => 'Московская область' ], $states['RU'] );
+	}
+
+	/**
+	 * Two records legitimately colliding on the same label within one country is
+	 * a real ambiguity — WooCommerce's state array is keyed by value, so only
+	 * ONE option could ever be selected under that text. The first (provider's
+	 * own enumeration order) wins; the collision is reported exactly once, never
+	 * silently dropped and never disambiguated with a synthetic suffix that
+	 * would itself leak into `billing_state`.
+	 */
+	public function test_inject_keeps_the_first_of_a_duplicate_label_and_warns_once(): void {
+		Functions\expect( '_doing_it_wrong' )->once();
+
+		$provider = new Fake_List_Location_Provider(
+			'list-fixture',
+			'List Fixture',
+			[ 'RU' ],
+			[
+				'RU' => [
+					$this->region_record( 'list-fixture', 'mo-1', 'RU', 'Московская область' ),
+					$this->region_record( 'list-fixture', 'mo-2', 'RU', 'Московская область' ),
+				],
+			]
+		);
+		$registry = $this->activate_related_list_mode( $provider );
+
+		$states = $registry->inject_related_list_states( [] );
+
+		$this->assertSame( [ 'Московская область' => 'Московская область' ], $states['RU'], 'the first record wins; the duplicate is dropped, not merged or suffixed' );
 	}
 
 	public function test_inject_records_ownership_for_every_country_it_wrote(): void {

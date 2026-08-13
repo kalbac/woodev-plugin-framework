@@ -321,18 +321,46 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 		 *   meaningful attached to an actual record.
 		 *
 		 * **`related-list` region seam (Task 13; client-facing contract for the
-		 * next agent):** when `mode === 'related-list'`, the region `<select>`
-		 * WooCommerce renders is populated by
+		 * next agent — CORRECTED after the s71 rig measurement, see below):**
+		 * when `mode === 'related-list'`, the region `<select>` WooCommerce
+		 * renders is populated by
 		 * {@see \Woodev\Framework\Shipping\Location\Location_Provider_Registry::inject_related_list_states()}
-		 * with `value => label` pairs where **the WC state VALUE is the record's
-		 * own {@see \Woodev\Framework\Shipping\Location\Location_Record::key()}**
-		 * (the full `provider_id:native_id` locality key), never an arbitrary
-		 * carrier code. A client-side related-list handler therefore reconstructs
-		 * a minimal, valid `Location_Record` straight from the selected
-		 * `<option>`'s `value` (the key) and `text` (the label) — no second
-		 * lookup, matching the backwards-fill discipline Task 11 already
-		 * established elsewhere in this layer — before POSTing it to the SAME
-		 * `/location/select` endpoint every other level already uses.
+		 * with `label => label` pairs — **the WC state VALUE is the record's own
+		 * {@see \Woodev\Framework\Shipping\Location\Location_Record::label()}**
+		 * (a human-readable region name), NEVER the record's `key()`
+		 * (`provider_id:native_id`). That value is what the customer's browser
+		 * submits as `billing_state`/`shipping_state` and it persists PERMANENTLY
+		 * into order data (a release-blocking installed-site data contract, per
+		 * this project's backward-compatibility policy); a provider-namespaced
+		 * key stored there renders as raw, meaningless text the instant this
+		 * injector stops running — after a provider switch (the key's namespace
+		 * changes), after the store mode is set back to `typeahead`, or after the
+		 * plugin is deactivated. Measured on the rig (s71): WITHOUT the injector
+		 * attached, a stored `dadata:0c089b04-…` key rendered verbatim inside
+		 * `WC_Countries::get_formatted_address()`'s output instead of the region
+		 * name.
+		 *
+		 * A client-side related-list handler does NOT reconstruct a
+		 * `Location_Record` from the selected `<option>` alone — a label is not a
+		 * full record. Instead it takes the option's selected TEXT (identical to
+		 * its `value`, since both are the label) and looks it up in the SAME
+		 * country's response from the `list` endpoint above (`GET
+		 * .../location/list?level=region&country={code}`, already fetched or
+		 * fetchable via this block's `endpoints.list`): each entry there carries
+		 * `{ key, label, level, record }` where `record` is the UNTOUCHED
+		 * {@see \Woodev\Framework\Shipping\Location\Location_Record::to_array()}
+		 * payload — match the selected label against that entry's `record.label`
+		 * (the raw, exact label, not the top-level `label` field, which is
+		 * `esc_html()`-escaped for direct display and must not be used for
+		 * equality matching), then POST the matched entry's `record` verbatim to
+		 * the SAME `/location/select` endpoint every other level already uses —
+		 * no second lookup beyond that one `/location/list` call, matching the
+		 * backwards-fill discipline Task 11 already established elsewhere in this
+		 * layer. Two records that legitimately share one label within a country
+		 * are pre-resolved server-side: `inject_related_list_states()` keeps only
+		 * the first and reports the rest via `_doing_it_wrong()`, so the label
+		 * the client sees is already unique — `record.label` uniquely identifies
+		 * one entry in that same country's `/location/list` response.
 		 *
 		 * @since 2.0.2
 		 * @since 2.0.2 `levels` changed from a single flat per-level map to a
@@ -341,6 +369,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 		 *              constant, `levels[country]['region']` is additionally
 		 *              gated against WooCommerce's own registered states, and
 		 *              `endpoints` gained `list` (Task 13; issue #294).
+		 * @since 2.0.2 `related-list` region seam corrected: the injected WC
+		 *              state VALUE is the record's `label()`, not its `key()` —
+		 *              a `billing_state`/`shipping_state` value is permanent
+		 *              order data (rig measurement, s71).
 		 *
 		 * @param \Woodev\Framework\Shipping\Location\Location_Service $service The active, already-confirmed façade.
 		 *

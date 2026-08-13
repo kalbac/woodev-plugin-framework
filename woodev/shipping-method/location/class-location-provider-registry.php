@@ -901,16 +901,47 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		 *   (mirrors {@see \Woodev\Framework\Shipping\Rest_Api\Location_Controller::handle_suggest_request()}'s
 		 *   own catch-and-degrade discipline for the equivalent REST path).
 		 *
-		 * The WC state array's VALUE keys are the record's own {@see Location_Record::key()}
-		 * (the full `provider_id:native_id` locality key), not an arbitrary
-		 * carrier code — see `Checkout_Config`'s own class docblock for why this
-		 * is the exact seam the client-side related-list renderer (a later
-		 * agent's task) reconstructs a full record from without a second lookup.
+		 * The WC state array's VALUE is the record's own {@see Location_Record::label()}
+		 * — a human-readable region name, THE SAME STRING used as the key — never
+		 * the record's {@see Location_Record::key()} (`provider_id:native_id`).
+		 * That value is what the customer's browser submits as `billing_state` /
+		 * `shipping_state`, and it persists PERMANENTLY into order data — a
+		 * provider-namespaced key stored there renders as raw, meaningless text in
+		 * {@see \WC_Countries::get_formatted_address()} the instant this injector
+		 * is not present to translate it back (a provider switch renamespaces the
+		 * keys, a mode switch back to `typeahead` stops injecting entirely, and a
+		 * deactivated plugin obviously never runs at all) — order history must
+		 * stay meaningful without this plugin (measured on the rig, s71: an
+		 * uninjected `dadata:0c089b04-…` key rendered verbatim in a formatted
+		 * address). Identity already lives where it belongs — in our own customer
+		 * location record, persisted through `/location/select` — so a second copy
+		 * of identity inside a WooCommerce field this layer does not own would be
+		 * both redundant and permanent. See `Checkout_Config`'s own class docblock
+		 * for how the client-side related-list renderer (a later agent's task)
+		 * maps the selected label back to a full record via `/location/list`
+		 * instead.
+		 *
+		 * Two records legitimately colliding on the same label within one country
+		 * ARE possible (a provider's own data, not a coding mistake) and are a
+		 * real ambiguity: WooCommerce's state array is keyed by value, so only one
+		 * of them could ever be selected. The first one (provider's own
+		 * enumeration order) wins; every later collision is dropped and reported
+		 * via `_doing_it_wrong()` — the label-identity discipline this layer
+		 * enforces makes a synthetic disambiguating suffix (e.g. appending the
+		 * key) the wrong fix, since that suffix would itself leak into
+		 * `billing_state` and recreate the exact opaque-value problem this method
+		 * exists to remove.
 		 *
 		 * @internal Hooked to `woocommerce_states`; not part of the public
 		 *           consumption surface.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 The injected VALUE changed from the record's `key()` to its
+		 *              `label()` — a `billing_state`/`shipping_state` value is
+		 *              permanent order data, and a provider-namespaced key has no
+		 *              meaning once this injector stops running (rig measurement,
+		 *              s71). Duplicate labels within one country are now detected
+		 *              and reported instead of silently colliding.
 		 *
 		 * @param mixed $states WC states keyed by country code, as received from
 		 *                      whichever `woocommerce_states` callback ran before
@@ -952,7 +983,24 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 						continue;
 					}
 
-					$options[ $record->key() ] = $record->label();
+					$label = $record->label();
+
+					if ( isset( $options[ $label ] ) ) {
+						_doing_it_wrong(
+							__METHOD__,
+							sprintf(
+								"provider '%s' returned two regions labeled '%s' for country '%s'; only the first is offered in the related-list select, since the label is the value the customer submits and a second option under the same text would be indistinguishable to them",
+								$provider->get_id(),
+								$label,
+								$country
+							),
+							'2.0.2'
+						);
+
+						continue;
+					}
+
+					$options[ $label ] = $label;
 				}
 
 				if ( [] === $options ) {
