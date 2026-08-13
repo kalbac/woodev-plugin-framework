@@ -623,12 +623,28 @@
 	 * string, which is written for a failed points FETCH ("не удалось загрузить пункты") and
 	 * would be actively misleading under a button the customer just pressed to confirm one.
 	 *
+	 * `ownsChrome` picks between `selectFailed` ("Попробуйте ещё раз") and its embedded
+	 * counterpart `selectFailedEmbedded` (#297) — NOT between two spellings of the same idea.
+	 * Under the framework's own panels the confirm CTA is the framework's OWN button, alive
+	 * again the moment {@see releaseSelectionBusy} runs, so "try again" describes a real,
+	 * available action. Under `ownsChrome` the confirm control belongs to the carrier's own
+	 * widget — measured on Почта's, s70: it disables itself the instant it is pressed and
+	 * never re-enables — so the SAME words would invite the customer to repeat a press they no
+	 * longer have. `stalePage` is exempt from this split on purpose: reloading the page is
+	 * available in both modes alike, so it never needed a second spelling.
+	 *
 	 * @param {Object}      config
-	 * @param {Object|null} reason `{ status, code, message }`.
+	 * @param {Object|null} reason     `{ status, code, message }`.
+	 * @param {boolean}     ownsChrome whether the framework draws no chrome of its own for
+	 *                                 this session (see {@see openSession}'s own `ownsChrome`).
 	 * @returns {string}
 	 */
-	function selectionErrorKey( config, reason ) {
-		return 'stalePage' === errorMessageKey( config, reason ) ? 'stalePage' : 'selectFailed';
+	function selectionErrorKey( config, reason, ownsChrome ) {
+		if ( 'stalePage' === errorMessageKey( config, reason ) ) {
+			return 'stalePage';
+		}
+
+		return ownsChrome ? 'selectFailedEmbedded' : 'selectFailed';
 	}
 
 	/**
@@ -2691,12 +2707,17 @@
 				// Transport failure: nothing about the point was refused, so nothing is
 				// remembered and the CTA stays alive (spec D-6/D-7).
 				if ( panels ) {
-					panels.showSelectionError( text( config, selectionErrorKey( config, reason ) ) );
+					panels.showSelectionError( text( config, selectionErrorKey( config, reason, false ) ) );
 				} else {
 					// #265: with no panels (`ownsChrome`) this branch used to be entirely
 					// silent — the customer pressed «Забрать здесь», waited out the round
 					// trip, watched #260's overlay clear, and got nothing at all.
-					announceWithoutPanels( text( config, selectionErrorKey( config, reason ) ) );
+					//
+					// `ownsChrome: true` here (#297) is what picks `selectFailedEmbedded` over
+					// `selectFailed` — see {@see selectionErrorKey}'s own docblock for why the
+					// same "Попробуйте ещё раз" wording is wrong under a carrier widget whose
+					// confirm control does not come back.
+					announceWithoutPanels( text( config, selectionErrorKey( config, reason, true ) ) );
 				}
 
 				return;

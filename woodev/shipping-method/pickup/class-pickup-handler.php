@@ -1219,6 +1219,21 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 					'Не удалось подтвердить выбор. Попробуйте ещё раз.',
 					'woodev-plugin-framework'
 				),
+				// #297: the `ownsChrome` counterpart of `selectFailed` above. Under an embedded
+				// provider the confirm control belongs to the carrier's own widget — Почта's, the
+				// case that surfaced this, disables it the instant it is pressed and never
+				// re-enables it — so "Попробуйте ещё раз" invites the customer to repeat an action
+				// they no longer have. The RULE this encodes is general, not a Почта workaround:
+				// under `ownsChrome` the framework must never promise a repeat of an action it does
+				// not control. This string points at what stays available instead — the carrier's
+				// list/map is still live, only that one confirm press failed — never at retrying
+				// the confirm itself. `finishSelection()`'s no-panels branch is the only caller
+				// (see {@see selectionErrorKey()} on the JS side, which picks this key over
+				// `selectFailed` precisely when `panels` is null).
+				'selectFailedEmbedded' => __(
+					'Не удалось подтвердить выбор. Выберите пункт ещё раз.',
+					'woodev-plugin-framework'
+				),
 				// A 403 on the select route is not the customer's fault and not retryable in
 				// place — the page's nonce has outlived the session it was minted for.
 				'stalePage'        => __(

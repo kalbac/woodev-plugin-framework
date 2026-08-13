@@ -1319,18 +1319,18 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 		}
 
 		/**
-		 * The three confirmation strings (Task 4) the CTA's busy/failure states read by name.
-		 * A missing key here renders BLANK under a button the customer just pressed, so
-		 * presence AND non-emptiness are both asserted — the same contract the panel keys
-		 * carry.
+		 * The confirmation strings (Task 4, plus #297's `selectFailedEmbedded`) the CTA's
+		 * busy/failure states read by name. A missing key here renders BLANK under a button
+		 * the customer just pressed, so presence AND non-emptiness are both asserted — the
+		 * same contract the panel keys carry.
 		 */
-		public function test_config_i18n_carries_the_three_confirmation_strings(): void {
+		public function test_config_i18n_carries_the_confirmation_strings(): void {
 			Functions\when( 'apply_filters' )->returnArg( 2 );
 			$this->stub_config_dependencies_except_filters();
 
 			$i18n = $this->make_handler()->get_js_config()['i18n'];
 
-			foreach ( [ 'confirming', 'selectFailed', 'stalePage' ] as $key ) {
+			foreach ( [ 'confirming', 'selectFailed', 'selectFailedEmbedded', 'stalePage' ] as $key ) {
 				$this->assertArrayHasKey( $key, $i18n, "i18n is missing the \"{$key}\" confirmation key" );
 				$this->assertNotSame( '', $i18n[ $key ], "i18n[\"{$key}\"] must not be empty" );
 			}
@@ -1338,6 +1338,16 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			// `selectFailed` is deliberately NOT the generic `error` string: that one is
 			// written for a failed points FETCH and would be misleading under a confirm button.
 			$this->assertNotSame( $i18n['error'], $i18n['selectFailed'] );
+
+			// #297: `selectFailedEmbedded` is the `ownsChrome` counterpart of `selectFailed` and
+			// must actually say something different -- the whole point is that it stops
+			// promising a repeat of the carrier's own confirm press.
+			$this->assertNotSame( $i18n['selectFailed'], $i18n['selectFailedEmbedded'] );
+			$this->assertStringNotContainsString(
+				'Попробуйте ещё раз',
+				$i18n['selectFailedEmbedded'],
+				'selectFailedEmbedded must not promise a retry the ownsChrome customer cannot make'
+			);
 		}
 
 		public function test_config_rest_root_uses_the_sanitized_plugin_segment(): void {
@@ -2442,6 +2452,9 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				// questions, two independently released locks -- see `setVerdictPending()`.
 				'checkingAvailability' => 'Проверяем доступность…',
 				'selectFailed'     => 'Не удалось подтвердить выбор. Попробуйте ещё раз.',
+				// #297: the `ownsChrome` counterpart — never promises a repeat of an action the
+				// carrier's own widget (not the framework) controls. See class-pickup-handler.php.
+				'selectFailedEmbedded' => 'Не удалось подтвердить выбор. Выберите пункт ещё раз.',
 				'stalePage'        => 'Страница устарела. Обновите её и выберите пункт выдачи заново.',
 			];
 
