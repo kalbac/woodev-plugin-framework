@@ -65,9 +65,9 @@ class Testable_Api_Base extends \Woodev_API_Base {
 	/**
 	 * Exposes the protected request-header sanitizer under test.
 	 *
-	 * @return array<string, string>
+	 * @return array<string, string>|null
 	 */
-	public function get_sanitized_headers_for_test(): array {
+	public function get_sanitized_headers_for_test(): ?array {
 		return $this->get_sanitized_request_headers();
 	}
 
@@ -78,6 +78,17 @@ class Testable_Api_Base extends \Woodev_API_Base {
 	 */
 	public function get_sanitized_response_headers_for_test() {
 		return $this->get_sanitized_response_headers();
+	}
+
+	/**
+	 * Exposes the protected response broadcast payload under test, end to end —
+	 * i.e. through {@see \Woodev_API_Base::get_response_data_for_broadcast()}
+	 * itself, not just the sanitizer it is supposed to call.
+	 *
+	 * @return array<string, mixed>
+	 */
+	public function get_response_data_for_broadcast_for_test(): array {
+		return $this->get_response_data_for_broadcast();
 	}
 
 	/**
@@ -113,6 +124,26 @@ class Testable_Api_Base_With_Custom_Secret extends Testable_Api_Base {
 	 */
 	protected function get_secret_header_names(): array {
 		return array_merge( parent::get_secret_header_names(), [ 'X-Custom-Secret' ] );
+	}
+}
+
+/**
+ * A subclass overriding get_request_headers() to return `null` instead of an
+ * array. `get_request_headers()` carries no return type, so this is a legal
+ * override in the wild -- and the request-side sanitizer must survive it the
+ * same way the response side already survives a `null`
+ * get_response_headers() (no response received yet), rather than fataling
+ * inside the logging path with a TypeError.
+ */
+class Testable_Api_Base_With_Null_Request_Headers extends Testable_Api_Base {
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * @return null
+	 */
+	protected function get_request_headers() {
+		return null;
 	}
 }
 
@@ -344,5 +375,145 @@ final class ApiBaseSanitizedHeadersTest extends TestCase {
 		$api = new Testable_Api_Base();
 
 		$this->assertNull( $api->get_sanitized_response_headers_for_test() );
+	}
+
+	// -------------------------------------------------------------------------
+	// Adversarial-review follow-up (PR #315) — closes the gaps a critic pass
+	// found in the #300 fix itself: no end-to-end coverage of the actual call
+	// site, array-valued headers, missing Cookie/vendor-token names, and a
+	// TypeError hazard on a non-array get_request_headers() override.
+	// -------------------------------------------------------------------------
+
+	/**
+	 * #300's actual fix line is `get_response_data_for_broadcast()` calling the
+	 * sanitizer instead of the raw getter. Every other test in this file drives
+	 * `get_sanitized_response_headers()` directly, so none of them would fail
+	 * if the call site quietly reverted to
+	 * `'headers' => $this->get_response_headers()` — this is the test that
+	 * would (mutation-tested: reverting class-api-base.php's
+	 * `get_response_data_for_broadcast()` to the raw getter turns this test
+	 * red while the rest of this file stays green).
+	 *
+	 * @return void
+	 */
+	public function test_get_response_data_for_broadcast_masks_headers(): void {
+		$cookie = 'sessionid=deadbeefcafefeed';
+
+		$api = new Testable_Api_Base();
+		$api->set_response_headers_for_test( [ 'Set-Cookie' => $cookie ] );
+
+		$broadcast = $api->get_response_data_for_broadcast_for_test();
+
+		$this->assertArrayHasKey( 'headers', $broadcast );
+		$this->assertSame( str_repeat( '*', strlen( $cookie ) ), $broadcast['headers']['Set-Cookie'] );
+		$this->assertStringNotContainsString(
+			$cookie,
+			print_r( $broadcast, true ),
+			'the cookie leaked into the response broadcast payload'
+		);
+	}
+
+	/**
+	 * WordPress folds a duplicated response header — e.g. two `Set-Cookie`
+	 * lines, the normal shape of a session-establishing response — into an
+	 * ARRAY of values, not a string (see
+	 * wp-includes/class-wp-http-requests-response.php). The sanitizer must
+	 * mask each element and keep the array shape: casting the whole array
+	 * with `(string)` emits an `Array to string conversion` warning and
+	 * collapses the header to the literal string `"Array"`.
+	 *
+	 * @return void
+	 */
+	public function test_array_valued_response_header_is_masked_element_wise(): void {
+		$cookie_a = 'sessionid=deadbeefcafefeed';
+		$cookie_b = 'csrftoken=00112233445566778899';
+
+		$api = new Testable_Api_Base();
+		$api->set_response_headers_for_test( [ 'Set-Cookie' => [ $cookie_a, $cookie_b ] ] );
+
+		$headers = $api->get_sanitized_response_headers_for_test();
+
+		$this->assertIsArray( $headers['Set-Cookie'], 'the array shape of a duplicated header must survive masking' );
+		$this->assertSame(
+			[ str_repeat( '*', strlen( $cookie_a ) ), str_repeat( '*', strlen( $cookie_b ) ) ],
+			$headers['Set-Cookie']
+		);
+
+		$serialized = print_r( $headers, true );
+		$this->assertStringNotContainsString( $cookie_a, $serialized );
+		$this->assertStringNotContainsString( $cookie_b, $serialized );
+	}
+
+	/**
+	 * `Set-Cookie` (response) already had a masked twin; `Cookie` — the
+	 * REQUEST-side header carrying the same session token back to the server
+	 * on every subsequent call — did not. Locks in the request-side twin.
+	 *
+	 * @return void
+	 */
+	public function test_cookie_request_header_is_masked(): void {
+		$cookie = 'sessionid=deadbeefcafefeed';
+
+		$api = new Testable_Api_Base();
+		$api->set_headers_for_test( [ 'Cookie' => $cookie ] );
+
+		$headers = $api->get_sanitized_headers_for_test();
+
+		$this->assertSame( str_repeat( '*', strlen( $cookie ) ), $headers['Cookie'] );
+	}
+
+	/**
+	 * Credential-bearing header names an adversarial review found passing
+	 * through the pre-fix default list in plaintext: `X-Subject-Token`
+	 * (OpenStack Identity), `Refresh-Token`/`X-Refresh-Token`,
+	 * `X-Amz-Security-Token`, `Authentication-Info`, `Set-Cookie2`,
+	 * `X-CSRF-Token`.
+	 *
+	 * @dataProvider provider_newly_added_secret_header_names
+	 *
+	 * @param string $header_name Header name expected to be in the default list.
+	 * @return void
+	 */
+	public function test_newly_added_default_list_entries_are_masked( string $header_name ): void {
+		$secret = 'secret-value-that-must-never-reach-the-log';
+
+		$api = new Testable_Api_Base();
+		$api->set_response_headers_for_test( [ $header_name => $secret ] );
+
+		$headers = $api->get_sanitized_response_headers_for_test();
+
+		$this->assertSame( str_repeat( '*', strlen( $secret ) ), $headers[ $header_name ] );
+	}
+
+	/**
+	 * @return array<string, array{0: string}>
+	 */
+	public function provider_newly_added_secret_header_names(): array {
+		return [
+			'X-Subject-Token'      => [ 'X-Subject-Token' ],
+			'Refresh-Token'        => [ 'Refresh-Token' ],
+			'X-Refresh-Token'      => [ 'X-Refresh-Token' ],
+			'X-Amz-Security-Token' => [ 'X-Amz-Security-Token' ],
+			'Authentication-Info'  => [ 'Authentication-Info' ],
+			'Set-Cookie2'          => [ 'Set-Cookie2' ],
+			'X-CSRF-Token'         => [ 'X-CSRF-Token' ],
+		];
+	}
+
+	/**
+	 * A subclass overriding `get_request_headers()` to return something other
+	 * than an array (e.g. `null`) must not fatal the logging path. Before
+	 * #300 extracted a strictly `array`-typed `mask_secret_headers()`, a
+	 * non-array value here only ever produced a PHP warning from
+	 * `foreach ( null as ... )`. This base class is vendored into out-of-repo
+	 * plugins, so a TypeError here is reachable in the wild — a logging call
+	 * must never kill a checkout.
+	 *
+	 * @return void
+	 */
+	public function test_non_array_request_headers_override_does_not_throw(): void {
+		$api = new Testable_Api_Base_With_Null_Request_Headers();
+
+		$this->assertNull( $api->get_sanitized_headers_for_test() );
 	}
 }
