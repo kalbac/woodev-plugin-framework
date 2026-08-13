@@ -43,6 +43,7 @@
 
 namespace Woodev\Framework\Shipping\Rest_Api;
 
+use Woodev\Framework\Shipping\Location\Location_Record;
 use Woodev\Framework\Shipping\Pickup\Constraint_Checker;
 use Woodev\Framework\Shipping\Pickup\Pickup_Point;
 use Woodev\Framework\Shipping\Pickup\Point_Query;
@@ -213,22 +214,41 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 		private Constraint_Checker $checker;
 
 		/**
+		 * Resolves the customer's current Location Provider layer context for THIS plugin
+		 * (Task 15; issue #159), or `null` when the plugin has not wired the layer.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var callable|null `fn(): ?array{record: Location_Record, resolved_identity: mixed}`.
+		 */
+		private $location_context;
+
+		/**
 		 * Constructor.
 		 *
 		 * @since 2.0.2
 		 *
-		 * @param string       $plugin_id       the plugin id this controller routes for.
-		 * @param Point_Source $source          the carrier's pickup-point source.
-		 * @param callable     $cart_weight     `fn(): int` current cart weight in GRAMS; see
-		 *                                      {@see self::$cart_weight} for why `0` is a
-		 *                                      legitimate, permissive answer.
-		 * @param callable     $payment_method  `fn(): string` the chosen gateway id.
-		 * @param callable     $shipping_method `fn(): string` the chosen shipping method id;
-		 *                                      see {@see self::$shipping_method}. Required,
-		 *                                      not optional: the domain seam behind the
-		 *                                      `.../select` route cannot answer correctly
-		 *                                      without it, and a value an author can forget
-		 *                                      to wire fails silently rather than loudly.
+		 * @param string        $plugin_id        the plugin id this controller routes for.
+		 * @param Point_Source  $source           the carrier's pickup-point source.
+		 * @param callable      $cart_weight      `fn(): int` current cart weight in GRAMS; see
+		 *                                        {@see self::$cart_weight} for why `0` is a
+		 *                                        legitimate, permissive answer.
+		 * @param callable      $payment_method   `fn(): string` the chosen gateway id.
+		 * @param callable      $shipping_method  `fn(): string` the chosen shipping method id;
+		 *                                        see {@see self::$shipping_method}. Required,
+		 *                                        not optional: the domain seam behind the
+		 *                                        `.../select` route cannot answer correctly
+		 *                                        without it, and a value an author can forget
+		 *                                        to wire fails silently rather than loudly.
+		 * @param callable|null $location_context (Task 15) `fn(): ?array{record: Location_Record,
+		 *                                        resolved_identity: mixed}` — the customer's
+		 *                                        current Location Provider layer record and
+		 *                                        this plugin's own resolved carrier identity for
+		 *                                        it, attached to every built {@see Point_Query}
+		 *                                        via {@see Point_Query::with_location()}. `null`
+		 *                                        (the default) when the owning plugin has not
+		 *                                        wired the layer — every query then carries no
+		 *                                        record, exactly as before this parameter existed.
 		 *
 		 * SMELL, recorded rather than acted on: `$cart_weight`, `$payment_method` and
 		 * `$shipping_method` are three consecutive `callable`s, so nothing at the type level
@@ -237,21 +257,30 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 		 * Not worth refactoring at three: doing so would ripple through every construction
 		 * site for no present benefit. TRIGGER: if a FOURTH request-context callable is ever
 		 * needed, bundle all of them into a request-context object (named accessors, one
-		 * argument) instead of extending this list again.
+		 * argument) instead of extending this list again. `$location_context` IS that fourth
+		 * callable (Task 15) — appended LAST and OPTIONAL rather than triggering the bundle
+		 * refactor here: it answers a genuinely different question (Location Provider layer
+		 * context for {@see Point_Query} enrichment, never read by the verdict or the `/select`
+		 * domain seam) from the three it sits next to, so grouping it WITH them would not
+		 * remove the transposition risk the note above warns about — it would only extend it
+		 * to a fourth, unrelated slot. A real bundle refactor remains future work if a FIFTH
+		 * request-context callable is ever needed.
 		 */
 		public function __construct(
 			string $plugin_id,
 			Point_Source $source,
 			callable $cart_weight,
 			callable $payment_method,
-			callable $shipping_method
+			callable $shipping_method,
+			?callable $location_context = null
 		) {
-			$this->plugin_id       = $plugin_id;
-			$this->source          = $source;
-			$this->cart_weight     = $cart_weight;
-			$this->payment_method  = $payment_method;
-			$this->shipping_method = $shipping_method;
-			$this->checker         = new Constraint_Checker();
+			$this->plugin_id         = $plugin_id;
+			$this->source            = $source;
+			$this->cart_weight       = $cart_weight;
+			$this->payment_method    = $payment_method;
+			$this->shipping_method   = $shipping_method;
+			$this->location_context  = $location_context;
+			$this->checker           = new Constraint_Checker();
 		}
 
 		/**
@@ -842,6 +871,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 				return [ 'points' => [] ];
 			}
 
+			$query = $this->attach_location_context( $query );
+
 			$cart_weight    = ( $this->cart_weight )();
 			$payment_method = ( $this->payment_method )();
 
@@ -859,6 +890,39 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 			// array_values(): a dropped/sparse-keyed entry above must not leave gaps — a
 			// keyed array serializes as a JSON object, not an array, and breaks the map JS.
 			return [ 'points' => array_values( $points ) ];
+		}
+
+		/**
+		 * Attaches the Location Provider layer's current record/resolved-identity to
+		 * `$query` (Task 15; issue #159), via {@see self::$location_context} when the
+		 * owning plugin wired one.
+		 *
+		 * A no-op — returns `$query` unchanged — when: no `$location_context` callable was
+		 * given at all (the plugin has not wired the layer); it answers `null` (no current
+		 * record yet); or it answers a malformed shape (defensive — a plugin's own callable
+		 * misbehaving must not fatal a public, guest-facing route). {@see Point_Query} is
+		 * immutable, so this always returns either the SAME instance (no-op) or a fresh one
+		 * from {@see Point_Query::with_location()}, never mutates `$query` in place.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param Point_Query $query The built, strategy-validated query.
+		 *
+		 * @return Point_Query
+		 */
+		private function attach_location_context( Point_Query $query ): Point_Query {
+
+			if ( null === $this->location_context ) {
+				return $query;
+			}
+
+			$context = ( $this->location_context )();
+
+			if ( ! is_array( $context ) || ! ( $context['record'] ?? null ) instanceof Location_Record ) {
+				return $query;
+			}
+
+			return $query->with_location( $context['record'], $context['resolved_identity'] ?? null );
 		}
 
 		/**

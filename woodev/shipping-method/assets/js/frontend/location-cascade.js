@@ -82,6 +82,16 @@
  * async ready queue, since — unlike that file — this one must keep working even in a jQuery-
  * less test harness for its own non-jQuery-producer paths).
  *
+ * `woodev_location_applied` (Task 15; issue #159): a native, bubbling `CustomEvent` on
+ * `document.body`, `detail: { key, level }`, fired from {@see settleSelect} on the SAME
+ * "this response is final and persisted" condition as the `update_checkout` trigger above —
+ * see that function's own docblock. This is a NATIVE event, never a jQuery `.trigger()`
+ * (unlike `update_checkout`, which WooCommerce itself only ever fires through jQuery): this
+ * module is the event's own producer, so there is no third-party dispatch mechanism to
+ * accommodate the way `pickup-mount.js`'s dual-world `updated_checkout` binding has to.
+ * `pickup-mount.js`'s own `resolveLocalityKey()` is the intended consumer — it tracks the
+ * customer's current Location Provider layer key without ever reading a checkout DOM field.
+ *
  * @file
  * @since 2.1.0
  */
@@ -789,7 +799,7 @@
 				// has not initialized yet, gotcha `guest-session-write-needs-the-cart-cookie`).
 				var persisted = !! ( body && false !== body.persisted );
 
-				settleSelect( entry, persisted, ! persisted );
+				settleSelect( entry, persisted, ! persisted, record );
 			},
 			function( error ) {
 				logError( error );
@@ -799,7 +809,7 @@
 				// `persisted` flag going unread, not about inventing a new one for transport
 				// errors). Stays silent to the customer, same as before this task; the visible
 				// field value still survives (the widget already wrote it before onSelect ran).
-				settleSelect( entry, false, false );
+				settleSelect( entry, false, false, record );
 			}
 		);
 	}
@@ -816,6 +826,17 @@
 	 * PRIOR selection may have left behind ({@see clearNotPersistedNotice}), so a stale
 	 * warning never survives past the outcome it described.
 	 *
+	 * FIRES `woodev_location_applied` (Task 15; issue #159) on the SAME "this response is
+	 * final AND persisted" condition as `update_checkout` above — a NATIVE, bubbling
+	 * `CustomEvent` on `document.body` (never a jQuery `.trigger()`, unlike
+	 * `update_checkout`: this is OUR OWN event, so there is no third-party producer to
+	 * accommodate — see {@see fireLocationApplied}), carrying `{ key, level }` off the
+	 * JUST-PERSISTED record. This is what lets `pickup-mount.js`'s own
+	 * `resolveLocalityKey()` track the customer's CURRENT locality key without reading
+	 * a checkout DOM field at all — the whole point of #159. Fired for the SAME response
+	 * `update_checkout` fires for (never a superseded intermediate one), so a listener
+	 * never sees a STALE key overwrite a newer one either.
+	 *
 	 * @param {Object}  entry
 	 * @param {boolean} shouldTrigger Whether THIS response, if final, should fire the trigger
 	 *                                (a successful persist with `persisted !== false`).
@@ -823,9 +844,12 @@
 	 *                                not-saved notice (a successful response carrying an
 	 *                                explicit `persisted: false` — never true together with
 	 *                                `shouldTrigger`).
+	 * @param {Object}  record        The record THIS response answered for — see
+	 *                                {@see sendNextSelect}, which is this function's only
+	 *                                caller.
 	 * @returns {void}
 	 */
-	function settleSelect( entry, shouldTrigger, notPersisted ) {
+	function settleSelect( entry, shouldTrigger, notPersisted, record ) {
 		entry.selectInFlight = false;
 
 		if ( entry.pendingRecord ) {
@@ -835,6 +859,7 @@
 
 		if ( shouldTrigger ) {
 			clearNotPersistedNotice( entry );
+			fireLocationApplied( record );
 
 			if ( window.jQuery ) {
 				window.jQuery( document.body ).trigger( 'update_checkout' );
@@ -846,6 +871,30 @@
 		if ( notPersisted ) {
 			showNotPersistedNotice( entry );
 		}
+	}
+
+	/**
+	 * Fires `woodev_location_applied` (Task 15; issue #159) — see {@see settleSelect}'s own
+	 * docblock for when and why. A native, bubbling `CustomEvent` on `document.body`,
+	 * mirroring `pickup-mount.js`'s own `fireDocumentEvent()` exactly (that file's docblock
+	 * explains why a native event, never a jQuery `.trigger()`, is what a plain
+	 * `addEventListener` can see).
+	 *
+	 * `record.key`/`record.level` absent or non-string degrade to `''` — the same
+	 * "the seam is refusing to answer, not naming a locality" sentinel the whole layer
+	 * already uses (gotcha `an-empty-domain-key-is-not-a-key`); a listener must never
+	 * treat an event with an empty `key` as a real locality.
+	 *
+	 * @param {Object} record The just-persisted record (D8's own full, round-tripped shape).
+	 * @returns {void}
+	 */
+	function fireLocationApplied( record ) {
+		var key = record && 'string' === typeof record.key ? record.key : '';
+		var level = record && 'string' === typeof record.level ? record.level : '';
+
+		document.body.dispatchEvent(
+			new CustomEvent( 'woodev_location_applied', { detail: { key: key, level: level }, bubbles: true } )
+		);
 	}
 
 	/**

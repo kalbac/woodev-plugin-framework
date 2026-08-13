@@ -18,6 +18,7 @@ namespace Woodev\Tests\Unit\Shipping\Rest_Api;
 use Brain\Monkey\Actions;
 use Brain\Monkey\Filters;
 use Brain\Monkey\Functions;
+use Woodev\Framework\Shipping\Location\Location_Record;
 use Woodev\Framework\Shipping\Pickup\Pickup_Point;
 use Woodev\Framework\Shipping\Pickup\Point_Query;
 use Woodev\Framework\Shipping\Pickup\Point_Source;
@@ -26,6 +27,8 @@ use Woodev\Tests\Unit\TestCase;
 
 require_once dirname( __DIR__, 4 ) . '/woodev/class-plugin-exception.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/api/class-api-exception.php';
+require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-locality-key.php';
+require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-location-record.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/pickup/class-pickup-point.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/pickup/class-point-query.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/pickup/interface-point-source.php';
@@ -1519,5 +1522,154 @@ final class PickupControllerTest extends TestCase {
 		$this->assertInstanceOf( Pickup_Point::class, $captured_point );
 		$this->assertSame( 'P1', $captured_point->get_id() );
 		$this->assertSame( 'Москва', $captured_point->to_array()['locality'] );
+	}
+
+	// -------------------------------------------------------------------
+	// Task 15 (issue #159): location context enrichment — the seam between the
+	// framework's own Location Provider layer and a plugin's Point_Source. This is the
+	// SERVER-SIDE half of the server<->client join: the client sends the locality KEY as
+	// `locality` (opaque to Point_Query, unchanged shape), and the controller separately
+	// attaches the SAME customer's full record + this plugin's resolved identity, exactly
+	// as a real Pickup_Handler::location_context() callable would (see
+	// PickupHandlerTest::test_get_js_config_emits_the_current_locality_key_when_a_plugin_is_wired()
+	// for the CLIENT-facing half of the same join — the shape `location.current.key` on the
+	// JS config and the shape this controller reads off `$location_context()` are the SAME
+	// {@see Location_Record}, proven by sharing the fixture builder between both test files'
+	// equivalent).
+	// -------------------------------------------------------------------
+
+	private function location_record( string $key = 'dadata:fias-1' ): Location_Record {
+		return Location_Record::from_array(
+			[
+				'key'         => $key,
+				'provider_id' => explode( ':', $key )[0],
+				'level'       => Location_Record::LEVEL_SETTLEMENT,
+				'country'     => 'RU',
+				'settlement'  => [ 'name' => 'Москва', 'type' => 'г' ],
+			]
+		);
+	}
+
+	public function test_a_bulk_source_receives_the_record_and_resolved_identity_through_the_query(): void {
+		$record  = $this->location_record();
+		$queries = [];
+
+		$source = new Pickup_Controller_Test_Source(
+			Point_Source::STRATEGY_BULK,
+			static function ( Point_Query $query ) use ( &$queries ) {
+				$queries[] = $query;
+				return [];
+			},
+			static fn( string $id ) => null
+		);
+
+		$controller = new Pickup_Controller(
+			'test-plugin',
+			$source,
+			static fn() => 0,
+			static fn() => 'bacs',
+			static fn() => 'carrier_pickup',
+			static fn() => [ 'record' => $record, 'resolved_identity' => 'carrier-city-77' ]
+		);
+
+		$controller->get_points_data( [ 'locality' => 'dadata:fias-1' ] );
+
+		$this->assertCount( 1, $queries );
+		$this->assertSame( $record, $queries[0]->get_record() );
+		$this->assertSame( 'carrier-city-77', $queries[0]->get_resolved_identity() );
+	}
+
+	public function test_a_viewport_source_also_receives_the_location_context(): void {
+		// Task 15's own scope: the record/resolved-identity enrichment is attached for
+		// EITHER strategy, not only bulk — the viewport (bbox) addressing path itself is
+		// what must stay untouched, not the enrichment.
+		$record  = $this->location_record();
+		$queries = [];
+
+		$source = new Pickup_Controller_Test_Source(
+			Point_Source::STRATEGY_VIEWPORT,
+			static function ( Point_Query $query ) use ( &$queries ) {
+				$queries[] = $query;
+				return [];
+			},
+			static fn( string $id ) => null
+		);
+
+		$controller = new Pickup_Controller(
+			'test-plugin',
+			$source,
+			static fn() => 0,
+			static fn() => 'bacs',
+			static fn() => 'carrier_pickup',
+			static fn() => [ 'record' => $record, 'resolved_identity' => null ]
+		);
+
+		$controller->get_points_data( [ 'bbox' => '55.70,37.50,55.80,37.70' ] );
+
+		$this->assertCount( 1, $queries );
+		$this->assertSame( [ 55.70, 37.50, 55.80, 37.70 ], $queries[0]->get_bounds() );
+		$this->assertSame( $record, $queries[0]->get_record() );
+		$this->assertNull( $queries[0]->get_resolved_identity() );
+	}
+
+	public function test_no_location_context_callable_leaves_the_query_bare_exactly_as_before(): void {
+		// Backward compatibility: a plugin that has NOT wired the Location Provider layer
+		// (the 5-argument constructor form, unchanged) must see the query completely
+		// untouched — this is what every EXISTING test in this file above already proves
+		// implicitly, made explicit here as the one dedicated regression guard.
+		$captured = null;
+
+		$source = new Pickup_Controller_Test_Source(
+			Point_Source::STRATEGY_BULK,
+			static function ( Point_Query $query ) use ( &$captured ) {
+				$captured = $query;
+				return [];
+			},
+			static fn( string $id ) => null
+		);
+
+		$controller = new Pickup_Controller(
+			'test-plugin',
+			$source,
+			static fn() => 0,
+			static fn() => 'bacs',
+			static fn() => 'carrier_pickup'
+		);
+
+		$controller->get_points_data( [ 'locality' => 'Москва' ] );
+
+		$this->assertNotNull( $captured );
+		$this->assertNull( $captured->get_record() );
+		$this->assertNull( $captured->get_resolved_identity() );
+	}
+
+	public function test_a_location_context_answering_null_leaves_the_query_bare(): void {
+		// A legitimate "no current record yet" answer (Pickup_Handler::location_context()'s
+		// own docblock) — must degrade the same as no callable at all, never fatal or
+		// attach a garbage record.
+		$captured = null;
+
+		$source = new Pickup_Controller_Test_Source(
+			Point_Source::STRATEGY_BULK,
+			static function ( Point_Query $query ) use ( &$captured ) {
+				$captured = $query;
+				return [];
+			},
+			static fn( string $id ) => null
+		);
+
+		$controller = new Pickup_Controller(
+			'test-plugin',
+			$source,
+			static fn() => 0,
+			static fn() => 'bacs',
+			static fn() => 'carrier_pickup',
+			static fn() => null
+		);
+
+		$controller->get_points_data( [ 'locality' => 'Москва' ] );
+
+		$this->assertNotNull( $captured );
+		$this->assertNull( $captured->get_record() );
 	}
 }

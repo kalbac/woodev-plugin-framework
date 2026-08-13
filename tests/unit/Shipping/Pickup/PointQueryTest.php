@@ -9,9 +9,12 @@
 
 namespace Woodev\Tests\Unit\Shipping\Pickup;
 
+use Woodev\Framework\Shipping\Location\Location_Record;
 use Woodev\Framework\Shipping\Pickup\Point_Query;
 use Woodev\Tests\Unit\TestCase;
 
+require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-locality-key.php';
+require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-location-record.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/pickup/class-point-query.php';
 
 /**
@@ -308,5 +311,81 @@ final class PointQueryTest extends TestCase {
 		$this->assertNotNull( $query );
 		$this->assertSame( [ 55.70, 37.50, 55.80, 37.70 ], $query->get_bounds() );
 		$this->assertSame( [ 'pvz', 'postamat' ], $query->get_types() );
+	}
+
+	// -------------------------------------------------------------------------
+	// Task 15 (issue #159): locality addressing by record/key.
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Builds a well-formed Location_Record for the tests below — the exact shape does
+	 * not matter, only that it round-trips through {@see Point_Query::with_location()}
+	 * unchanged.
+	 */
+	private function make_record( string $key = 'dadata:fias-1' ): Location_Record {
+		return Location_Record::from_array(
+			[
+				'key'         => $key,
+				'provider_id' => explode( ':', $key )[0],
+				'level'       => Location_Record::LEVEL_SETTLEMENT,
+				'country'     => 'RU',
+				'settlement'  => [ 'name' => 'Москва', 'type' => 'г' ],
+				'label'       => 'Москва',
+			]
+		);
+	}
+
+	public function test_a_freshly_built_query_carries_no_location_context(): void {
+		$query = Point_Query::from_request( [ 'locality' => 'dadata:fias-1' ] );
+
+		$this->assertNotNull( $query );
+		$this->assertNull( $query->get_record() );
+		$this->assertNull( $query->get_resolved_identity() );
+	}
+
+	public function test_with_location_attaches_record_and_resolved_identity(): void {
+		$original = Point_Query::from_request( [ 'locality' => 'dadata:fias-1' ] );
+		$this->assertNotNull( $original );
+
+		$record   = $this->make_record();
+		$enriched = $original->with_location( $record, 'carrier-city-77' );
+
+		$this->assertSame( $record, $enriched->get_record() );
+		$this->assertSame( 'carrier-city-77', $enriched->get_resolved_identity() );
+
+		// Immutable: the ORIGINAL instance is untouched by with_location().
+		$this->assertNull( $original->get_record() );
+		$this->assertNull( $original->get_resolved_identity() );
+	}
+
+	public function test_with_location_accepts_a_null_resolved_identity(): void {
+		// A legitimate, first-class answer (Location_Adapter::resolve()'s own docblock):
+		// "this carrier does not serve this locality" — must not be confused with "no
+		// record was ever attached at all", which is exactly why get_record() is what a
+		// Point_Source checks FIRST (interface-point-source.php's own docblock).
+		$query = Point_Query::from_request( [ 'locality' => 'dadata:fias-1' ] );
+		$this->assertNotNull( $query );
+
+		$record   = $this->make_record();
+		$enriched = $query->with_location( $record, null );
+
+		$this->assertSame( $record, $enriched->get_record() );
+		$this->assertNull( $enriched->get_resolved_identity() );
+	}
+
+	public function test_a_bbox_only_query_still_works_untouched(): void {
+		// The viewport path must not regress: a bbox-only query still builds, still
+		// carries no locality, and still accepts with_location() the same as any other
+		// query (a viewport source MAY read the record too, per the interface docblock).
+		$query = Point_Query::from_request( [ 'bbox' => '55.70,37.50,55.80,37.70' ] );
+
+		$this->assertNotNull( $query );
+		$this->assertNull( $query->get_locality() );
+		$this->assertSame( [ 55.70, 37.50, 55.80, 37.70 ], $query->get_bounds() );
+		$this->assertNull( $query->get_record() );
+
+		$enriched = $query->with_location( $this->make_record(), 'x' );
+		$this->assertSame( [ 55.70, 37.50, 55.80, 37.70 ], $enriched->get_bounds() );
+		$this->assertNotNull( $enriched->get_record() );
 	}
 }

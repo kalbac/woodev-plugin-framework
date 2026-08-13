@@ -10,6 +10,8 @@
 
 namespace Woodev\Framework\Shipping\Pickup;
 
+use Woodev\Framework\Shipping\Location\Location_Record;
+
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 } // Exit if accessed directly
@@ -23,6 +25,25 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Point_Query' ) ) :
 	 * the carrier returns every point for a locality in one call) or a `bbox` (viewport
 	 * strategy: the carrier is queried per visible bounding box as the customer pans).
 	 * Both may be present together; a request naming neither is unusable and is refused.
+	 *
+	 * LOCALITY ADDRESSING BY RECORD (Task 15; issue #159; spec §4.5.4): `locality`
+	 * itself stays an opaque string, exactly as before this task — the framework never
+	 * interpreted it beyond "present or not" ({@see self::from_request()}, this class'
+	 * own {@see MAX_BBOX_SPAN} sibling for `bbox`). What changed is what a client now
+	 * puts there: the Location Provider layer's namespaced locality KEY
+	 * ({@see \Woodev\Framework\Shipping\Location\Locality_Key}, `provider_id:native_id`)
+	 * rather than a raw, DOM-read place name. {@see self::get_record()} and
+	 * {@see self::get_resolved_identity()} carry the richer data a real
+	 * {@see Point_Source} needs to act on that key — the customer's full, neutral
+	 * {@see \Woodev\Framework\Shipping\Location\Location_Record} and this plugin's own
+	 * adapter-resolved carrier identity (via
+	 * {@see \Woodev\Framework\Shipping\Location\Location_Service::resolve_for()}) — set
+	 * via {@see self::with_location()}, NEVER by {@see self::from_request()} itself:
+	 * both come from server-side state a raw HTTP request cannot be trusted to carry,
+	 * so only the REST dispatcher that already holds a
+	 * {@see \Woodev\Framework\Shipping\Location\Location_Service} may attach them.
+	 * Both are `null` on a query the bbox-only (viewport) path builds — that path is
+	 * untouched by this task and keeps working exactly as it did.
 	 *
 	 * @since 2.0.2
 	 */
@@ -83,6 +104,32 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Point_Query' ) ) :
 		private array $types;
 
 		/**
+		 * The customer's current, neutral location record (Task 15), or `null` when
+		 * none was attached via {@see self::with_location()} — every query
+		 * {@see self::from_request()} builds starts `null` here; never populated from
+		 * raw request params, see the class docblock.
+		 *
+		 * @since 2.0.2
+		 * @var Location_Record|null
+		 */
+		private ?Location_Record $record;
+
+		/**
+		 * This plugin's own carrier identity resolved for {@see self::$record} (Task
+		 * 15) — the {@see \Woodev\Framework\Shipping\Location\Location_Service::resolve_for()}
+		 * result, opaque to this class exactly like it is to the framework everywhere
+		 * else. `null` both when no record is attached and when the record IS attached
+		 * but the plugin's own adapter answered "does not serve this locality" — a
+		 * {@see Point_Source} distinguishes the two the same way it always
+		 * distinguishes "no locality known" from "carrier refuses this one": by
+		 * checking {@see self::get_record()} first.
+		 *
+		 * @since 2.0.2
+		 * @var mixed
+		 */
+		private $resolved_identity;
+
+		/**
 		 * Constructor. Use {@see from_request()} — it validates.
 		 *
 		 * @since 2.0.2
@@ -94,10 +141,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Point_Query' ) ) :
 		 *                                                                     array meaning "all types".
 		 */
 		private function __construct( ?string $locality, ?array $bounds, string $search, array $types ) {
-			$this->locality = $locality;
-			$this->bounds   = $bounds;
-			$this->search   = $search;
-			$this->types    = $types;
+			$this->locality          = $locality;
+			$this->bounds            = $bounds;
+			$this->search            = $search;
+			$this->types             = $types;
+			$this->record            = null;
+			$this->resolved_identity = null;
 		}
 
 		/**
@@ -310,6 +359,57 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Point_Query' ) ) :
 		 */
 		public function get_types(): array {
 			return $this->types;
+		}
+
+		/**
+		 * Returns a COPY of this query carrying `$record`/`$resolved_identity` (Task 15) —
+		 * this class stays immutable, so the original instance is never mutated.
+		 *
+		 * Callable any number of times; only ever called by a REST dispatcher that already
+		 * holds a {@see \Woodev\Framework\Shipping\Location\Location_Service} (see the class
+		 * docblock for why {@see self::from_request()} never sets these itself).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param Location_Record $record            The customer's current location record.
+		 * @param mixed           $resolved_identity  This plugin's own carrier identity for
+		 *                                             `$record` (opaque), or `null` when the
+		 *                                             carrier does not serve it.
+		 *
+		 * @return self
+		 */
+		public function with_location( Location_Record $record, $resolved_identity ): self {
+			$clone                    = clone $this;
+			$clone->record            = $record;
+			$clone->resolved_identity = $resolved_identity;
+
+			return $clone;
+		}
+
+		/**
+		 * Gets the customer's current location record (Task 15), or `null` when none was
+		 * attached via {@see self::with_location()}.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return Location_Record|null
+		 */
+		public function get_record(): ?Location_Record {
+			return $this->record;
+		}
+
+		/**
+		 * Gets this plugin's own carrier identity resolved for {@see self::get_record()}
+		 * (Task 15) — opaque to this class; see {@see self::$resolved_identity} for the two
+		 * distinct `null` cases a {@see Point_Source} must tell apart via
+		 * {@see self::get_record()} first.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return mixed
+		 */
+		public function get_resolved_identity() {
+			return $this->resolved_identity;
 		}
 	}
 

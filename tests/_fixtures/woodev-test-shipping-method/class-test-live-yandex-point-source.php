@@ -191,6 +191,15 @@ if ( ! class_exists( 'Woodev_Test_Live_Yandex_Point_Source' ) ) {
 		 */
 		private const FIXTURE_LOCALITY = 'Москва';
 
+		/**
+		 * Accepted rig aliases for {@see self::FIXTURE_LOCALITY} — mirrors
+		 * `Woodev_Test_Bulk_Point_Source::FIXTURE_LOCALITY_ALIASES` (Task 15; issue #159 rig
+		 * verification, s71): the DaData account configured for this rig's
+		 * `WOODEV_TEST_DADATA_TOKEN` answers RU settlement suggestions with the English
+		 * display name "Moscow", not "Москва".
+		 */
+		private const FIXTURE_LOCALITY_ALIASES = [ 'Москва', 'Moscow' ];
+
 		/** Bounded so a hung sandbox degrades to an error, not an indefinite wait. */
 		private const REQUEST_TIMEOUT = 8;
 
@@ -266,7 +275,7 @@ if ( ! class_exists( 'Woodev_Test_Live_Yandex_Point_Source' ) ) {
 		 *                                 failure — see the file docblock's FAIL SOFT section.
 		 */
 		public function fetch_points( \Woodev\Framework\Shipping\Pickup\Point_Query $query ): array {
-			if ( ! $this->locality_matches( $query->get_locality() ) ) {
+			if ( ! $this->locality_matches( $this->requested_locality_name( $query ) ) ) {
 				return [];
 			}
 
@@ -274,6 +283,33 @@ if ( ! class_exists( 'Woodev_Test_Live_Yandex_Point_Source' ) ) {
 				[ $this, 'map_point' ],
 				$this->fetch_all_points_cached()
 			) ) );
+		}
+
+		/**
+		 * Resolves the human-readable locality name to match against (Task 15; issue #159) —
+		 * identical rule to `Woodev_Test_Bulk_Point_Source::requested_locality_name()`: the
+		 * Location Provider layer's attached record's own settlement (or, failing that, its
+		 * display label) when one was attached, otherwise the bare `locality` param a
+		 * pre-#159 caller still sends.
+		 *
+		 * @param \Woodev\Framework\Shipping\Pickup\Point_Query $query The dispatched query.
+		 *
+		 * @return string|null
+		 */
+		private function requested_locality_name( \Woodev\Framework\Shipping\Pickup\Point_Query $query ): ?string {
+			$record = $query->get_record();
+
+			if ( null === $record ) {
+				return $query->get_locality();
+			}
+
+			$settlement = $record->settlement();
+
+			if ( null !== $settlement && '' !== $settlement['name'] ) {
+				return $settlement['name'];
+			}
+
+			return '' !== $record->label() ? $record->label() : null;
 		}
 
 		/**
@@ -303,7 +339,15 @@ if ( ! class_exists( 'Woodev_Test_Live_Yandex_Point_Source' ) ) {
 		 * @return bool
 		 */
 		private function locality_matches( ?string $locality ): bool {
-			return mb_strtolower( trim( $locality ?? '' ) ) === mb_strtolower( self::FIXTURE_LOCALITY );
+			$normalized = mb_strtolower( trim( $locality ?? '' ) );
+
+			foreach ( self::FIXTURE_LOCALITY_ALIASES as $alias ) {
+				if ( $normalized === mb_strtolower( $alias ) ) {
+					return true;
+				}
+			}
+
+			return false;
 		}
 
 		/**

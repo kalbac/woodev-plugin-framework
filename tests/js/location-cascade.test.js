@@ -497,6 +497,139 @@ describe( 'persist then trigger (D8)', () => {
 } );
 
 // -----------------------------------------------------------------------
+// Task 15 (issue #159): `woodev_location_applied` — the event pickup-mount.js's own
+// resolveLocalityKey() listens for, fired on the SAME "final and persisted" condition as
+// update_checkout above.
+// -----------------------------------------------------------------------
+
+describe( 'woodev_location_applied (Task 15; issue #159)', () => {
+	/**
+	 * Captures every `woodev_location_applied` NATIVE event seen on document.body — a plain
+	 * addEventListener is enough (this is our own event, never a jQuery one; see the file
+	 * docblock's own note contrasting it with `update_checkout`).
+	 *
+	 * @returns {Array<Object>} each entry's `detail`.
+	 */
+	function captureLocationApplied() {
+		const seen = [];
+		document.body.addEventListener( 'woodev_location_applied', ( event ) => seen.push( event.detail ) );
+		return seen;
+	}
+
+	it( 'fires with the persisted record\'s key/level once the /select round-trip resolves', async () => {
+		boot( { settlement: true } );
+
+		const seen = captureLocationApplied();
+		const settlementCall = callFor( 'billing_city' );
+		const item = {
+			key: 'dadata:city1', label: 'г Москва', level: 'settlement',
+			record: { key: 'dadata:city1', provider_id: 'dadata', level: 'settlement', country: 'RU', settlement: { name: 'Москва', type: 'г' }, label: 'г Москва' },
+		};
+
+		selectViaFake( settlementCall, item );
+
+		expect( seen ).toEqual( [] ); // not yet — the persist call has not resolved.
+
+		const selectReq = fetchCalls[ fetchCalls.length - 1 ];
+		selectReq.resolve( { current: { key: item.record.key, level: 'settlement' }, persisted: true } );
+		await flushMicrotasks();
+
+		expect( seen ).toEqual( [ { key: 'dadata:city1', level: 'settlement' } ] );
+	} );
+
+	it( 'is a NATIVE event, seen by a plain addEventListener with no jQuery involved', async () => {
+		// The whole point of NOT using jQuery.trigger() here (unlike update_checkout, which
+		// WooCommerce itself only ever fires through jQuery) — this module IS the producer,
+		// so a native dispatchEvent() is enough and a listener needs no jQuery world at all.
+		boot( { settlement: true } );
+
+		const seen = [];
+		document.body.addEventListener( 'woodev_location_applied', ( event ) => seen.push( event.detail ) );
+
+		const settlementCall = callFor( 'billing_city' );
+		const item = {
+			key: 'cdek:city-77', label: 'г Москва', level: 'settlement',
+			record: { key: 'cdek:city-77', provider_id: 'cdek', level: 'settlement', country: 'RU', label: 'г Москва' },
+		};
+
+		selectViaFake( settlementCall, item );
+		fetchCalls[ fetchCalls.length - 1 ].resolve( { current: { key: item.record.key, level: 'settlement' }, persisted: true } );
+		await flushMicrotasks();
+
+		expect( seen ).toEqual( [ { key: 'cdek:city-77', level: 'settlement' } ] );
+	} );
+
+	it( 'does NOT fire when /select fails', async () => {
+		const consoleSpy = jest.spyOn( console, 'error' ).mockImplementation( () => {} );
+		boot( { settlement: true } );
+
+		const seen = captureLocationApplied();
+		const settlementCall = callFor( 'billing_city' );
+		const item = {
+			key: 'dadata:city1', label: 'г Москва', level: 'settlement',
+			record: { key: 'dadata:city1', provider_id: 'dadata', level: 'settlement', country: 'RU', label: 'г Москва' },
+		};
+
+		selectViaFake( settlementCall, item );
+		fetchCalls[ fetchCalls.length - 1 ].reject( new Error( 'network down' ) );
+		await flushMicrotasks();
+
+		expect( seen ).toEqual( [] );
+		consoleSpy.mockRestore();
+	} );
+
+	it( 'does NOT fire when /select resolves with persisted: false', async () => {
+		boot( { settlement: true } );
+
+		const seen = captureLocationApplied();
+		const settlementCall = callFor( 'billing_city' );
+		const item = {
+			key: 'dadata:city1', label: 'г Москва', level: 'settlement',
+			record: { key: 'dadata:city1', provider_id: 'dadata', level: 'settlement', country: 'RU', label: 'г Москва' },
+		};
+
+		selectViaFake( settlementCall, item );
+		fetchCalls[ fetchCalls.length - 1 ].resolve( { current: { key: item.record.key, level: 'settlement' }, persisted: false } );
+		await flushMicrotasks();
+
+		expect( seen ).toEqual( [] );
+	} );
+
+	it( 'fires only ONCE, for the FINAL response, when a superseded selection is queued behind it', async () => {
+		boot( { settlement: true } );
+
+		function selectRequests() {
+			return fetchCalls.filter( ( c ) => c.url === SELECT_URL );
+		}
+
+		const seen = captureLocationApplied();
+		const settlementCall = callFor( 'billing_city' );
+		const first = {
+			key: 'dadata:first', label: 'г Тверь', level: 'settlement',
+			record: { key: 'dadata:first', provider_id: 'dadata', level: 'settlement', country: 'RU', label: 'г Тверь' },
+		};
+		const second = {
+			key: 'dadata:second', label: 'г Москва', level: 'settlement',
+			record: { key: 'dadata:second', provider_id: 'dadata', level: 'settlement', country: 'RU', label: 'г Москва' },
+		};
+
+		selectViaFake( settlementCall, first );
+		selectViaFake( settlementCall, second ); // queued — the first request is still in flight.
+		expect( selectRequests().length ).toBe( 1 );
+
+		selectRequests()[ 0 ].resolve( { current: { key: first.record.key, level: 'settlement' }, persisted: true } );
+		await flushMicrotasks();
+
+		// The queued (second) selection is dispatched automatically once the first settles.
+		expect( selectRequests().length ).toBe( 2 );
+		selectRequests()[ 1 ].resolve( { current: { key: second.record.key, level: 'settlement' }, persisted: true } );
+		await flushMicrotasks();
+
+		expect( seen ).toEqual( [ { key: 'dadata:second', level: 'settlement' } ] );
+	} );
+} );
+
+// -----------------------------------------------------------------------
 // #295 finding 1 — the client now CONSUMES `persisted: false`, not just skips the trigger
 // -----------------------------------------------------------------------
 

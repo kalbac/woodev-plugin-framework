@@ -51,6 +51,19 @@ if ( ! interface_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Point_Source' )
 		 * always handed a query with non-null {@see Point_Query::get_bounds()}. A source
 		 * need not defend against the other addressing mode arriving instead.
 		 *
+		 * LOCALITY BY RECORD, NOT NAME (Task 15; issue #159): {@see Point_Query::get_locality()}
+		 * is an opaque Location Provider layer key ({@see \Woodev\Framework\Shipping\Location\Locality_Key}),
+		 * never a human place name — a source needing to actually address a carrier by
+		 * locality reads {@see Point_Query::get_record()} (the customer's full, neutral
+		 * {@see \Woodev\Framework\Shipping\Location\Location_Record}) and
+		 * {@see Point_Query::get_resolved_identity()} (this plugin's OWN carrier identity for
+		 * that record, already resolved via
+		 * {@see \Woodev\Framework\Shipping\Location\Location_Service::resolve_for()}) instead.
+		 * Both are `null` when the owning plugin has not wired the Location Provider layer, or
+		 * when the layer has no current record yet — a source must degrade the same way it
+		 * degrades to no locality known at all in that case, never treat a `null` record as a
+		 * request for every locality.
+		 *
 		 * TYPE FILTER (D-10): a `STRATEGY_VIEWPORT` source MUST honour
 		 * {@see Point_Query::get_types()} and return only points whose type matches one of
 		 * the given codes; an empty array means "all types". This is not optional — the
