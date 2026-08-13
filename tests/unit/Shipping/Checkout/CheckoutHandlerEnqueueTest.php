@@ -81,6 +81,14 @@ final class Checkout_Handler_Fake_Location_Service extends Location_Service {
 	public function provider_for_level( string $level, ?string $country = null ): ?Location_Provider {
 		return null;
 	}
+
+	public function get_field_mode(): string {
+		return \Woodev\Framework\Shipping\Location\Location_Provider_Registry::MODE_TYPEAHEAD;
+	}
+
+	public function owns_region_states( string $country ): bool {
+		return false;
+	}
 }
 
 /**

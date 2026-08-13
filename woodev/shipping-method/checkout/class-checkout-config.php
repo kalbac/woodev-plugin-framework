@@ -43,16 +43,28 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 	 *   'takeover' => [ field_id => [ country_code => bool ] ],
 	 *   // Present only when a Location_Service was injected AND is_active() (Task 9):
 	 *   'location' => [
-	 *     'endpoints' => [ 'suggest' => string, 'select' => string ],
+	 *     'endpoints' => [ 'suggest' => string, 'select' => string, 'list' => string ], // 'list' added Task 13
 	 *     'nonce'     => string, // same wp_rest nonce as the top-level 'nonce' above
 	 *     'countries' => string[],
-	 *     'mode'      => string,
+	 *     'mode'      => string, // 'typeahead' | 'related-list' | 'ajax-select2' (Task 13; spec D7)
 	 *     'levels'    => [ country_code => [ 'region' => bool, 'settlement' => bool, 'address' => bool ] ],
 	 *     'current'   => [ 'key' => string, 'level' => string ]|null,
 	 *     'implicit'  => bool,
 	 *   ],
 	 * ]
 	 * ```
+	 *
+	 * Task 13 (issue #294) note on `location.levels[country].region`: `true` means
+	 * this layer wants AND is free to serve that country's region field with a
+	 * typeahead — free because WooCommerce has no registered `woocommerce_states`
+	 * entry for it. `false` covers two different reasons the client must NOT try to
+	 * tell apart from this flag alone (it does not need to): either no configured
+	 * provider supports the level there, OR WooCommerce already renders a native
+	 * `<select>` for it (its own list, a plugin's §8 carrier takeover, or THIS
+	 * layer's own `related-list` mode injection) — in every `false` case the client
+	 * must leave the field exactly as WooCommerce rendered it and never attach a
+	 * typeahead. See {@see self::build_location_block()}'s own docblock for the full
+	 * arbitration rule and the `related-list` region seam's exact value shape.
 	 *
 	 * @since 2.0.2
 	 */
@@ -239,12 +251,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 		 *   not just what the ACTIVE provider alone lists. A country the store does
 		 *   not even sell to is not useful information for the client-side D2
 		 *   arbitration this list feeds, hence the intersection with the WC list.
-		 * - `mode` — the store's field-presentation setting (spec D7). Nothing
-		 *   declares that setting yet (Tasks 13/14), so the only HONEST value today
-		 *   is the one mode D7 says is unconditionally available regardless of
-		 *   provider capability: free-text typeahead. This constant is the one
-		 *   TODO-shaped line in this method — Task 13/14 replaces it with a real
-		 *   read from the settings surface.
+		 * - `mode` — the store's field-presentation setting (spec D7; Task 13),
+		 *   read from {@see \Woodev\Framework\Shipping\Location\Location_Service::get_field_mode()}
+		 *   — one of `typeahead` / `related-list` / `ajax-select2`, already
+		 *   clamped against the active provider's own capabilities (a mode the
+		 *   provider cannot serve is never returned, regardless of what the
+		 *   store option literally holds).
 		 * - `levels` — a MAP, `{ [country]: { region, settlement, address } }`, one
 		 *   entry per country in `countries` above (D15 amendment follow-up:
 		 *   per-country suggest levels — DaData genuinely serves `address` in
@@ -263,6 +275,41 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 		 *   learns only this — NEVER which provider serves a level (spec D15) —
 		 *   because neither this method nor `get_levels_for_country()` ever reads
 		 *   {@see \Woodev\Framework\Shipping\Location\Location_Provider::get_id()}.
+		 *
+		 *   **`levels[country]['region']` — issue #294 arbitration (Task 13).**
+		 *   The D15 chain's own opinion ("some provider could suggest a region")
+		 *   is NOT the final answer for `region` the way it is for `settlement`/
+		 *   `address`: WooCommerce owns the region concept as soon as ANY
+		 *   `woocommerce_states` entry exists for that country. This method reads
+		 *   `WC()->countries->get_states( $code )` (through {@see self::wc_states()},
+		 *   a thin overridable seam — see that method's own docblock for why it
+		 *   is not an inline `WC()` call) — deliberately HERE, AFTER every
+		 *   `woocommerce_states` filter has already run (WooCommerce's own
+		 *   native list, a plugin's §8 carrier takeover via
+		 *   {@see \Woodev\Framework\Shipping\Checkout\Checkout_Handler::inject_states()},
+		 *   and this layer's OWN `related-list` mode injector,
+		 *   {@see \Woodev\Framework\Shipping\Location\Location_Provider_Registry::inject_related_list_states()}
+		 *   — one place, one source of truth, per the decided rule) — and reports
+		 *   `region` as OURS (`true`) only when the chain wants it AND the country
+		 *   has NO registered states at all. A non-empty state list means
+		 *   WooCommerce renders a native `<select>` there regardless of what this
+		 *   layer wants, so pretending a typeahead still belongs on that field is
+		 *   exactly the drift the card that decided this found (never write an
+		 *   empty array into `woocommerce_states` either — gotcha
+		 *   `checkout-field-takeover-woocommerce-states` — this method only READS
+		 *   the filter's result, it never writes to it).
+		 *
+		 *   A non-empty state list the D15 chain wanted `region` for, that this
+		 *   layer did NOT inject itself
+		 *   ({@see \Woodev\Framework\Shipping\Location\Location_Service::owns_region_states()}
+		 *   false), is a genuine conflict — some OTHER source (native WC, or a
+		 *   plugin's own §8 takeover) already owns that country's regions. This
+		 *   is reported via `_doing_it_wrong()`, ONCE per config build (not once
+		 *   per conflicting country), mirroring `inject_states()`'s own
+		 *   conflict-observability mechanism. A `related-list`-mode injection is
+		 *   never a conflict with itself: `owns_region_states()` distinguishes
+		 *   "we put these states there" from "someone else did", so the warning
+		 *   never fires for the layer's own intended rendering.
 		 * - `current`/`implicit` — from
 		 *   {@see \Woodev\Framework\Shipping\Location\Location_Service::get_customer_record()}.
 		 *   `current`'s shape (`{ key, level }`) is deliberately byte-for-byte the
@@ -273,14 +320,32 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 		 *   `false` when there is no record at all — an implicit flag is only
 		 *   meaningful attached to an actual record.
 		 *
+		 * **`related-list` region seam (Task 13; client-facing contract for the
+		 * next agent):** when `mode === 'related-list'`, the region `<select>`
+		 * WooCommerce renders is populated by
+		 * {@see \Woodev\Framework\Shipping\Location\Location_Provider_Registry::inject_related_list_states()}
+		 * with `value => label` pairs where **the WC state VALUE is the record's
+		 * own {@see \Woodev\Framework\Shipping\Location\Location_Record::key()}**
+		 * (the full `provider_id:native_id` locality key), never an arbitrary
+		 * carrier code. A client-side related-list handler therefore reconstructs
+		 * a minimal, valid `Location_Record` straight from the selected
+		 * `<option>`'s `value` (the key) and `text` (the label) — no second
+		 * lookup, matching the backwards-fill discipline Task 11 already
+		 * established elsewhere in this layer — before POSTing it to the SAME
+		 * `/location/select` endpoint every other level already uses.
+		 *
 		 * @since 2.0.2
 		 * @since 2.0.2 `levels` changed from a single flat per-level map to a
 		 *              per-country map (D15 amendment follow-up).
+		 * @since 2.0.2 `mode` reads the real store setting instead of a hardcoded
+		 *              constant, `levels[country]['region']` is additionally
+		 *              gated against WooCommerce's own registered states, and
+		 *              `endpoints` gained `list` (Task 13; issue #294).
 		 *
 		 * @param \Woodev\Framework\Shipping\Location\Location_Service $service The active, already-confirmed façade.
 		 *
 		 * @return array{
-		 *     endpoints: array{suggest: string, select: string},
+		 *     endpoints: array{suggest: string, select: string, list: string},
 		 *     nonce: string,
 		 *     countries: string[],
 		 *     mode: string,
@@ -300,9 +365,38 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 				}
 			}
 
-			$levels = [];
+			$levels                    = [];
+			$region_conflict_countries = [];
+
 			foreach ( $countries as $code ) {
-				$levels[ $code ] = $service->get_levels_for_country( $code );
+				$country_levels = $service->get_levels_for_country( $code );
+
+				// #294 arbitration: the authority is the FINAL woocommerce_states
+				// result, read AFTER every filter (native WC, §8 carrier takeover,
+				// this layer's own related-list injector) has already run — see this
+				// method's own docblock for the full rule, and {@see self::wc_states()}
+				// for why that read goes through an overridable seam rather than a bare
+				// WC() call inline here.
+				$states_present = [] !== $this->wc_states( $code );
+
+				if ( $country_levels['region'] && $states_present && ! $service->owns_region_states( $code ) ) {
+					$region_conflict_countries[] = $code;
+				}
+
+				$country_levels['region'] = $country_levels['region'] && ! $states_present;
+
+				$levels[ $code ] = $country_levels;
+			}
+
+			if ( [] !== $region_conflict_countries ) {
+				_doing_it_wrong(
+					__METHOD__,
+					sprintf(
+						'the location layer wanted to serve the "region" level via typeahead for %s, but WooCommerce already has native/injected states registered for those countries (see the woocommerce_states filter — issue #294); the layer stands down and reports "region" as not its own for them.',
+						implode( ', ', $region_conflict_countries )
+					),
+					'2.0.2'
+				);
 			}
 
 			$customer = $service->get_customer_record();
@@ -358,15 +452,59 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 				'endpoints' => [
 					'suggest' => $this->rest_base . '/location/suggest',
 					'select'  => $this->rest_base . '/location/select',
+					'list'    => $this->rest_base . '/location/list',
 				],
 				'nonce'     => $this->nonce,
 				'countries' => array_values( $countries ),
-				'mode'      => 'typeahead',
+				'mode'      => $service->get_field_mode(),
 				'levels'    => $levels,
 				'current'   => $current,
 				'implicit'  => $implicit,
 				'i18n'      => array_map( 'strval', (array) $strings ),
 			];
+		}
+
+		/**
+		 * Reads WooCommerce's FINAL registered states for one country — the
+		 * issue #294 arbitration's own single source of truth (see
+		 * {@see self::build_location_block()}'s own docblock for the full rule).
+		 *
+		 * A `protected`, overridable seam rather than an inline `WC()` call for
+		 * a specific, measured reason: Brain Monkey (`Functions\when( 'WC' )`)
+		 * instruments the global `WC()` function for the REST OF THE PHP
+		 * PROCESS once any single test stubs it — every OTHER unit test in the
+		 * suite that relies on `function_exists( 'WC' ) === false` (the
+		 * established "no WooCommerce loaded in unit tests" idiom this
+		 * codebase's other classes already use, e.g.
+		 * {@see \Woodev\Framework\Shipping\Checkout\Checkout_Handler::wc_country_codes()})
+		 * would start seeing `WC()` DEFINED-BUT-UNMOCKED and fail with Brain
+		 * Monkey's own `MissingFunctionExpectations` — measured directly: a
+		 * first version of this method called `WC()` inline and a single
+		 * stubbing test in `CheckoutConfigTest` broke 21 unrelated tests
+		 * elsewhere in the full suite the moment `composer test:unit` ran all
+		 * files in one process. A protected method a TEST SUBCLASS overrides
+		 * (the same "Probe subclass" discipline `Checkout_Handler::current_country()`
+		 * already establishes for this exact class of problem) sidesteps Brain
+		 * Monkey's global function table entirely.
+		 *
+		 * Degrades to `[]` (never fatals) when `WC()`/`WC()->countries` is
+		 * unavailable — the same "no states known, trust the D15 chain's own
+		 * answer unchanged" degradation the pre-Task-13 code implicitly had.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $country ISO-3166 alpha-2 country code.
+		 *
+		 * @return array<string, string> WC state code => label, or `[]` when
+		 *                                WooCommerce has none registered (or is
+		 *                                unavailable).
+		 */
+		protected function wc_states( string $country ): array {
+			if ( ! function_exists( 'WC' ) || ! WC() || ! isset( WC()->countries ) ) {
+				return [];
+			}
+
+			return (array) WC()->countries->get_states( $country );
 		}
 	}
 

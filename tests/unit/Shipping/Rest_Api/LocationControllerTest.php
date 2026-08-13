@@ -102,6 +102,21 @@ final class Location_Controller_Fake_Service extends Location_Service {
 	private bool $country_supported;
 
 	/**
+	 * Task 13: {@see self::provider_for_list()}'s own return value — a
+	 * SEPARATE fake from {@see self::$provider} (the `/suggest`/`/select`
+	 * seam's own resolution), since `/list` resolves through
+	 * {@see Location_Service::provider_for_list()}, a genuinely different
+	 * D15-adjacent chain. Defaults to `null` — every pre-existing test in this
+	 * file never touches `/list` and is unaffected.
+	 *
+	 * @var Location_Provider|null
+	 */
+	private ?Location_Provider $list_provider;
+
+	/** @var array<int, string|null> */
+	public array $provider_for_list_calls = [];
+
+	/**
 	 * Optional level => provider map (D15 gate fix, block PR-B test seam).
 	 * When set, {@see self::provider_for_level()} resolves THROUGH this map
 	 * instead of always returning the single {@see self::$provider} — lets a
@@ -139,6 +154,7 @@ final class Location_Controller_Fake_Service extends Location_Service {
 	/**
 	 * @param array<string, Location_Provider>|null $providers_by_level                    Optional level => provider map — see {@see self::$providers_by_level}.
 	 * @param Location_Provider|null                 $active_provider_for_level_blind_check See {@see self::$active_provider_for_level_blind_check}.
+	 * @param Location_Provider|null                 $list_provider                         Task 13: {@see self::provider_for_list()}'s return value.
 	 */
 	public function __construct(
 		bool $active = true,
@@ -147,7 +163,8 @@ final class Location_Controller_Fake_Service extends Location_Service {
 		bool $persist_result = true,
 		bool $country_supported = true,
 		?array $providers_by_level = null,
-		?Location_Provider $active_provider_for_level_blind_check = null
+		?Location_Provider $active_provider_for_level_blind_check = null,
+		?Location_Provider $list_provider = null
 	) {
 		$this->active                                = $active;
 		$this->provider                               = $provider;
@@ -156,6 +173,13 @@ final class Location_Controller_Fake_Service extends Location_Service {
 		$this->country_supported                      = $country_supported;
 		$this->providers_by_level                     = $providers_by_level;
 		$this->active_provider_for_level_blind_check = $active_provider_for_level_blind_check;
+		$this->list_provider                          = $list_provider;
+	}
+
+	public function provider_for_list( ?string $country = null ): ?Location_Provider {
+		$this->provider_for_list_calls[] = $country;
+
+		return $this->list_provider;
 	}
 
 	public function is_active(): bool {
@@ -262,6 +286,59 @@ final class Location_Controller_Fake_Provider extends Abstract_Location_Provider
 		$this->suggest_calls[] = [ $query, $scope ];
 
 		return ( $this->suggest_callback )( $query, $scope );
+	}
+}
+
+/**
+ * Task 13: a {@see Location_Controller_Fake_Provider} sibling that DOES
+ * override `list_localities()` — kept as a SEPARATE class rather than a
+ * conditional branch inside the one above, so reflection-derived capability
+ * discovery ({@see Abstract_Location_Provider::get_capabilities()}) correctly
+ * reports `list` present only for instances that genuinely need it; a
+ * conditionally-no-op override on the shared class would report the
+ * capability for every pre-existing test too, which is not what any of them
+ * intend to exercise.
+ */
+final class Location_Controller_Fake_List_Provider extends Abstract_Location_Provider {
+
+	/** @var callable */
+	private $list_callback;
+
+	/** @var string[] */
+	private array $countries;
+
+	/** @var array<int, Location_Scope> */
+	public array $list_calls = [];
+
+	public function __construct( callable $list_callback, array $countries = [ 'RU' ] ) {
+		$this->list_callback = $list_callback;
+		$this->countries     = $countries;
+	}
+
+	public function get_id(): string {
+		return 'fake-list';
+	}
+
+	public function get_name(): string {
+		return 'Fake List';
+	}
+
+	public function get_countries(): array {
+		return $this->countries;
+	}
+
+	protected function declare_suggest_levels(): array {
+		return Location_Record::LEVELS;
+	}
+
+	public function suggest( string $query, Location_Scope $scope ): array {
+		return [];
+	}
+
+	public function list_localities( Location_Scope $scope ): array {
+		$this->list_calls[] = $scope;
+
+		return ( $this->list_callback )( $scope );
 	}
 }
 
@@ -912,5 +989,135 @@ final class LocationControllerTest extends TestCase {
 		$result  = $ctrl->check_select_permission( $request );
 
 		$this->assertTrue( $result );
+	}
+
+	// -------------------------------------------------------------------
+	// /list (Task 13; spec D7) — level enum, malformed country 400, no
+	// provider -> 404 (NOT /suggest's 200+empty), happy path, provider
+	// exception -> 502, `provider` param never read.
+	// -------------------------------------------------------------------
+
+	public function test_list_rejects_an_unknown_level(): void {
+		$service = new Location_Controller_Fake_Service( true, null, null, true, true, null, null, null );
+		$ctrl    = new Location_Controller_Probe( $service );
+
+		$request = new WP_REST_Request( [ 'level' => 'galaxy', 'country' => 'RU' ] );
+		$result  = $ctrl->handle_list_request( $request );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 400, $result->get_error_data()['status'] );
+	}
+
+	public function test_list_a_malformed_country_returns_400(): void {
+		$service = new Location_Controller_Fake_Service( true, null, null, true, true, null, null, null );
+		$ctrl    = new Location_Controller_Probe( $service );
+
+		$request = new WP_REST_Request( [ 'level' => Location_Record::LEVEL_SETTLEMENT, 'country' => 'not-a-code' ] );
+		$result  = $ctrl->handle_list_request( $request );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 400, $result->get_error_data()['status'] );
+		$this->assertCount( 0, $service->provider_for_list_calls, 'a malformed country must never even reach provider_for_list()' );
+	}
+
+	/**
+	 * The deliberate asymmetry with `/suggest`: no provider anywhere in the
+	 * D15-adjacent `list` chain resolves for this (well-formed) country ->
+	 * 404, never `/suggest`'s 200+empty (see handle_list_request()'s own
+	 * docblock for why).
+	 */
+	public function test_list_no_provider_resolves_returns_404_not_200_empty(): void {
+		$service = new Location_Controller_Fake_Service( true, null, null, true, true, null, null, null ); // list_provider = null
+		$ctrl    = new Location_Controller_Probe( $service );
+
+		$request = new WP_REST_Request( [ 'level' => Location_Record::LEVEL_SETTLEMENT, 'country' => 'RU' ] );
+		$result  = $ctrl->handle_list_request( $request );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 404, $result->get_error_data()['status'] );
+	}
+
+	public function test_list_happy_path_returns_shaped_localities(): void {
+		$record = Location_Record::from_array(
+			[
+				'key'         => 'fake-list:mo',
+				'provider_id' => 'fake-list',
+				'level'       => Location_Record::LEVEL_SETTLEMENT,
+				'country'     => 'RU',
+				'label'       => '<b>Москва</b>',
+			]
+		);
+		$provider = new Location_Controller_Fake_List_Provider( static fn() => [ $record ] );
+		$service  = new Location_Controller_Fake_Service( true, null, null, true, true, null, null, $provider );
+		$ctrl     = new Location_Controller_Probe( $service );
+
+		$request = new WP_REST_Request( [ 'level' => Location_Record::LEVEL_SETTLEMENT, 'country' => 'RU' ] );
+		$result  = $ctrl->handle_list_request( $request );
+
+		$this->assertNotInstanceOf( \WP_Error::class, $result );
+		$this->assertCount( 1, $result['localities'] );
+
+		$locality = $result['localities'][0];
+		$this->assertSame( 'fake-list:mo', $locality['key'] );
+		$this->assertSame( Location_Record::LEVEL_SETTLEMENT, $locality['level'] );
+		$this->assertStringContainsString( '&lt;b&gt;', $locality['label'], 'label must be escaped, same as /suggest' );
+
+		// The record must round-trip UNTOUCHED, same D12/D5 contract as /suggest.
+		$round_tripped = Location_Record::from_array( $locality['record'] );
+		$this->assertSame( $record->key(), $round_tripped->key() );
+
+		$this->assertCount( 1, $provider->list_calls );
+	}
+
+	public function test_list_never_reads_a_client_supplied_provider_param(): void {
+		$provider = new Location_Controller_Fake_List_Provider( static fn() => [] );
+		$service  = new Location_Controller_Fake_Service( true, null, null, true, true, null, null, $provider );
+		$ctrl     = new Location_Controller_Probe( $service );
+
+		$request = new WP_REST_Request(
+			[ 'level' => Location_Record::LEVEL_SETTLEMENT, 'country' => 'RU', 'provider' => 'cdek' ]
+		);
+		$ctrl->handle_list_request( $request );
+
+		$this->assertCount( 1, $service->provider_for_list_calls );
+	}
+
+	public function test_list_provider_exception_returns_502(): void {
+		$provider = new Location_Controller_Fake_List_Provider(
+			static function () {
+				throw new \RuntimeException( 'upstream boom' );
+			}
+		);
+		$service = new Location_Controller_Fake_Service( true, null, null, true, true, null, null, $provider );
+		$ctrl    = new Location_Controller_Probe( $service );
+
+		$request = new WP_REST_Request( [ 'level' => Location_Record::LEVEL_SETTLEMENT, 'country' => 'RU' ] );
+		$result  = $ctrl->handle_list_request( $request );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 502, $result->get_error_data()['status'] );
+	}
+
+	public function test_list_within_matching_current_record_narrows_the_scope(): void {
+		$parent   = $this->region_record( 'dadata:region-1' );
+		$captured = null;
+		$provider = new Location_Controller_Fake_List_Provider(
+			static function ( Location_Scope $scope ) use ( &$captured ) {
+				$captured = $scope;
+
+				return [];
+			}
+		);
+		$service = new Location_Controller_Fake_Service( true, null, [ 'record' => $parent, 'implicit' => false, 'saved_at' => 0 ], true, true, null, null, $provider );
+		$ctrl    = new Location_Controller_Probe( $service );
+
+		$request = new WP_REST_Request(
+			[ 'level' => Location_Record::LEVEL_SETTLEMENT, 'country' => 'RU', 'within' => 'dadata:region-1' ]
+		);
+		$ctrl->handle_list_request( $request );
+
+		$this->assertNotNull( $captured );
+		$this->assertTrue( $captured->has_parent() );
+		$this->assertSame( $parent, $captured->parent_record() );
 	}
 }
