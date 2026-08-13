@@ -92,6 +92,15 @@
  * `pickup-mount.js`'s own `resolveLocalityKey()` is the intended consumer — it tracks the
  * customer's current Location Provider layer key without ever reading a checkout DOM field.
  *
+ * `data-woodev-location-implicit` (issue #309; spec D11/§4.6): `config.location.implicit`
+ * had ZERO consumers anywhere in this codebase until this attribute — set by
+ * {@see applyImplicitState} from {@see prefill} on boot and cleared the instant a real
+ * `/select` persists (see {@see settleSelect}). It never gates scoping, addressing, or rate
+ * calculation (those stay implicit-agnostic by design, spec D11's other half) — it exists
+ * purely so a plugin/theme can tell an implicit default apart from the customer's own choice
+ * for ITS OWN "please choose your locality" wording, without the framework inventing that
+ * wording itself.
+ *
  * @file
  * @since 2.1.0
  */
@@ -598,6 +607,11 @@
 			// showNotPersistedNotice()/clearNotPersistedNotice().
 			lastSelectedFieldId: null,
 			notPersistedNotice: null,
+			// Issue #309 (spec §4.6/D11): the level CURRENTLY carrying the
+			// `data-woodev-location-implicit` DOM marker, or `null` when none does — see
+			// applyImplicitState(). At most one level is ever marked per entry, since the
+			// customer-location store holds one whole record, never a per-level partial.
+			implicitLevel: null,
 		};
 	}
 
@@ -633,6 +647,57 @@
 		}
 
 		return null;
+	}
+
+	/**
+	 * Reflects whether the customer's CURRENT Location Provider layer record is an implicit
+	 * default (issue #309; spec D11/§4.6: "implicit records participate in rate calculation
+	 * but never suppress 'please choose your locality' prompts") on the DOM field for
+	 * `level`, via a `data-woodev-location-implicit` attribute — the ONE signal this module
+	 * owns. The customer-facing wording/gate itself stays plugin/theme domain (this project's
+	 * "framework = mechanism, plugin = domain" convention, spec §6): a plugin or theme reads
+	 * this attribute (present ONLY while the current record is a default guess, absent the
+	 * instant it becomes the customer's own choice) to decide whether it still owes the
+	 * customer a nudge — never the other way around, and never gated on mere PRESENCE of a
+	 * value the way rate calculation and the pickup points query correctly are (both keep
+	 * reading `config.location.current`/`resolveLocalityKey()` unchanged — an implicit
+	 * default stays fully usable there, spec D11's other half).
+	 *
+	 * Clears any PREVIOUSLY marked level first: {@see Customer_Location_Store::set()} always
+	 * replaces the customer's WHOLE record (never a per-level partial write — a real
+	 * selection "drops the flag" for the record as a whole, spec D11), so at most one level
+	 * is ever marked implicit per entry — {@see buildEntry()}'s own `implicitLevel`.
+	 *
+	 * A level absent from THIS entry's chain (`chainNodeForLevel()` returns `null`) or whose
+	 * field is not currently in the document is a silent no-op — nothing to mark.
+	 *
+	 * @param {Object}  entry
+	 * @param {string}  level
+	 * @param {boolean} implicit
+	 * @returns {void}
+	 */
+	function applyImplicitState( entry, level, implicit ) {
+		if ( entry.implicitLevel && entry.implicitLevel !== level ) {
+			var previousNode = chainNodeForLevel( entry, entry.implicitLevel );
+			var previousEl = previousNode && document.getElementById( previousNode.fieldId );
+
+			if ( previousEl ) {
+				previousEl.removeAttribute( 'data-woodev-location-implicit' );
+			}
+		}
+
+		var node = chainNodeForLevel( entry, level );
+		var el = node && document.getElementById( node.fieldId );
+
+		if ( el ) {
+			if ( implicit ) {
+				el.setAttribute( 'data-woodev-location-implicit', 'true' );
+			} else {
+				el.removeAttribute( 'data-woodev-location-implicit' );
+			}
+		}
+
+		entry.implicitLevel = implicit ? level : null;
 	}
 
 	/**
@@ -907,6 +972,12 @@
 		if ( shouldTrigger ) {
 			clearNotPersistedNotice( entry );
 			fireLocationApplied( record );
+
+			// Issue #309: a persisted `/select` is ALWAYS an explicit customer choice
+			// (`Location_Controller::handle_select_request()` never writes implicit —
+			// spec D11), so whichever level was marked implicit stops being one now,
+			// regardless of which level record.level itself names.
+			applyImplicitState( entry, record && record.level, false );
 
 			if ( window.jQuery ) {
 				window.jQuery( document.body ).trigger( 'update_checkout' );
@@ -1757,6 +1828,11 @@
 
 		if ( current && current.key && current.level ) {
 			entry.records[ current.level ] = { key: current.key };
+
+			// Issue #309: give `entry.location.implicit` its first real consumer — see
+			// applyImplicitState()'s own docblock for why this reads only as a DOM signal,
+			// never as a reason to withhold `current.key` from scoping/addressing above.
+			applyImplicitState( entry, current.level, !!entry.location.implicit );
 		}
 	}
 

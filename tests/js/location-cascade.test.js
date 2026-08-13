@@ -146,7 +146,7 @@ function locationField( level, section = 'billing' ) {
  * (`Checkout_Config::build_location_block()`).
  *
  * @param {{region?: boolean, settlement?: boolean, address?: boolean, section?: string,
- *          levels?: Object, countries?: string[], current?: Object|null}} opts
+ *          levels?: Object, countries?: string[], current?: Object|null, implicit?: boolean}} opts
  * @returns {Object}
  */
 function buildConfig( opts ) {
@@ -180,7 +180,7 @@ function buildConfig( opts ) {
 			// a flat per-level map cannot describe it without lying.
 			levels: o.levels || { RU: { region: true, settlement: true, address: true } },
 			current: o.current !== undefined ? o.current : null,
-			implicit: false,
+			implicit: o.implicit !== undefined ? o.implicit : false,
 			i18n: o.i18n !== undefined ? o.i18n : {
 				noResults: 'Поиск не дал результатов. Попробуйте изменить запрос.',
 				noResultsAddress: 'Адрес не найден — введите вручную.',
@@ -1569,6 +1569,127 @@ describe( 'restoring config.location.current on load', () => {
 			region: true, settlement: true,
 			current: { key: 'dadata:region9', level: 'region' },
 		} );
+
+		const settlementCall = callFor( 'billing_city' );
+		settlementCall.fetch( 'Мос' );
+
+		const req = fetchCalls[ fetchCalls.length - 1 ];
+		expect( req.url ).toContain( 'within=' + encodeURIComponent( 'dadata:region9' ) );
+	} );
+} );
+
+// -----------------------------------------------------------------------
+// data-woodev-location-implicit DOM marker (issue #309; spec D11/§4.6) —
+// config.location.implicit had ZERO consumers before this: an implicit default must never
+// look like a real customer choice, while staying fully usable for scoping/addressing.
+// -----------------------------------------------------------------------
+
+describe( 'implicit-locality DOM marker (issue #309)', () => {
+	it( 'marks the CURRENT level\'s field implicit on boot when config.location.implicit is true', () => {
+		boot( {
+			settlement: true,
+			current: { key: 'dadata:city1', level: 'settlement' },
+			implicit: true,
+		} );
+
+		expect(
+			document.getElementById( 'billing_city' ).getAttribute( 'data-woodev-location-implicit' )
+		).toBe( 'true' );
+	} );
+
+	it( 'does NOT mark the field when config.location.implicit is false (a real customer choice)', () => {
+		boot( {
+			settlement: true,
+			current: { key: 'dadata:city1', level: 'settlement' },
+			implicit: false,
+		} );
+
+		expect(
+			document.getElementById( 'billing_city' ).hasAttribute( 'data-woodev-location-implicit' )
+		).toBe( false );
+	} );
+
+	it( 'marks nothing when there is no current record at all', () => {
+		boot( { settlement: true, current: null, implicit: true } );
+
+		expect(
+			document.getElementById( 'billing_city' ).hasAttribute( 'data-woodev-location-implicit' )
+		).toBe( false );
+	} );
+
+	it( 'clears the marker the instant an explicit /select persists (spec D11: a real choice drops the flag)', async () => {
+		boot( {
+			settlement: true,
+			current: { key: 'dadata:city1', level: 'settlement' },
+			implicit: true,
+		} );
+
+		expect(
+			document.getElementById( 'billing_city' ).getAttribute( 'data-woodev-location-implicit' )
+		).toBe( 'true' );
+
+		const settlementCall = callFor( 'billing_city' );
+		const item = {
+			key: 'dadata:city2', label: 'г Тверь', level: 'settlement',
+			record: {
+				key: 'dadata:city2', provider_id: 'dadata', level: 'settlement', country: 'RU', label: 'г Тверь',
+			},
+		};
+
+		selectViaFake( settlementCall, item );
+		fetchCalls[ fetchCalls.length - 1 ].resolve( { current: { key: item.record.key, level: 'settlement' }, persisted: true } );
+		await flushMicrotasks();
+
+		expect(
+			document.getElementById( 'billing_city' ).hasAttribute( 'data-woodev-location-implicit' )
+		).toBe( false );
+	} );
+
+	it( 'clears a PREVIOUSLY marked level when the customer explicitly picks a DIFFERENT one', async () => {
+		boot( {
+			settlement: true, address: true,
+			current: { key: 'dadata:city1', level: 'settlement' },
+			implicit: true,
+		} );
+
+		expect(
+			document.getElementById( 'billing_city' ).getAttribute( 'data-woodev-location-implicit' )
+		).toBe( 'true' );
+
+		const addressCall = callFor( 'billing_address_1' );
+		const item = {
+			key: 'dadata:addr1', label: 'ул Тверская, 1', level: 'address',
+			record: {
+				key: 'dadata:addr1', provider_id: 'dadata', level: 'address', country: 'RU',
+				street: { name: 'Тверская', type: 'ул' }, house: '1', label: 'г Москва, ул Тверская, д 1',
+			},
+		};
+
+		selectViaFake( addressCall, item );
+		fetchCalls[ fetchCalls.length - 1 ].resolve( { current: { key: item.record.key, level: 'address' }, persisted: true } );
+		await flushMicrotasks();
+
+		expect(
+			document.getElementById( 'billing_city' ).hasAttribute( 'data-woodev-location-implicit' )
+		).toBe( false );
+		expect(
+			document.getElementById( 'billing_address_1' ).hasAttribute( 'data-woodev-location-implicit' )
+		).toBe( false );
+	} );
+
+	it( 'never gates scoping/addressing on the implicit flag — the restored key still scopes the child fetch', () => {
+		// Sibling assertion to "restoring config.location.current on load" above: the SAME
+		// implicit default marked here must stay fully usable for scoping — spec D11's other
+		// half ("implicit records participate in rate calculation").
+		boot( {
+			region: true, settlement: true,
+			current: { key: 'dadata:region9', level: 'region' },
+			implicit: true,
+		} );
+
+		expect(
+			document.getElementById( 'billing_state' ).getAttribute( 'data-woodev-location-implicit' )
+		).toBe( 'true' );
 
 		const settlementCall = callFor( 'billing_city' );
 		settlementCall.fetch( 'Мос' );
