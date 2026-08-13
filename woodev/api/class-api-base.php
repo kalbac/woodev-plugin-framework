@@ -299,21 +299,69 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 *
 		 * Masks the VALUE of every header whose name (matched case-insensitively —
 		 * HTTP header names are case-insensitive) appears in
-		 * {@see self::get_secret_request_header_names()}, using the same convention
+		 * {@see self::get_secret_header_names()}, using the same convention
 		 * as before (`*` repeated to the value's original length). The original key
 		 * casing sent on the wire is preserved in the returned array; only the
 		 * comparison is case-insensitive.
 		 *
-		 * @since 2.0.2 masks every header from {@see self::get_secret_request_header_names()},
-		 *              not only `Authorization`.
+		 * {@see self::get_request_headers()} is not return-typed, so a subclass
+		 * override is free to return something other than an array (e.g. `null`);
+		 * that is passed through unchanged rather than handed to
+		 * {@see self::mask_secret_headers()}, mirroring the guard
+		 * {@see self::get_sanitized_response_headers()} already applies for the same
+		 * reason — a logging call must never fatal a request.
 		 *
-		 * @return array<string, string>
+		 * @since 2.0.2 masks every header from {@see self::get_secret_header_names()},
+		 *              not only `Authorization`; guards against a non-array
+		 *              {@see self::get_request_headers()} override instead of letting
+		 *              {@see self::mask_secret_headers()}'s `array` type hint fatal.
+		 *
+		 * @return array<string, string>|null
 		 */
 		protected function get_sanitized_request_headers() {
 
 			$headers = $this->get_request_headers();
 
-			$secret_names = array_map( 'strtolower', $this->get_secret_request_header_names() );
+			return is_array( $headers )
+				? self::mask_secret_headers( $headers, $this->get_secret_header_names() )
+				: $headers;
+		}
+
+		/**
+		 * Masks the VALUE of every header whose name (matched case-insensitively —
+		 * HTTP header names are case-insensitive) appears in $secret_names, using
+		 * the convention `*` repeated to the value's original length. The original
+		 * key casing is preserved in the returned array; only the comparison is
+		 * case-insensitive.
+		 *
+		 * A header value can itself be an array: WordPress's HTTP transport
+		 * (`WP_HTTP_Requests_Response::get_headers()`) folds a duplicated response
+		 * header — e.g. multiple `Set-Cookie` lines, the normal shape of a
+		 * session-establishing response — into an array of values rather than a
+		 * string. Each element is masked individually so the array shape survives;
+		 * casting the whole array with `(string)` would emit an
+		 * `Array to string conversion` warning and collapse it into the literal
+		 * string `"Array"`.
+		 *
+		 * Shared by {@see self::get_sanitized_request_headers()} and
+		 * {@see self::get_sanitized_response_headers()} so both directions of the
+		 * `woodev_{api_id}_api_request_performed` broadcast mask header names
+		 * identically — one masking routine, never two that can drift apart. Marked
+		 * `protected` rather than `private` so a subclass overriding either
+		 * sanitizer can reuse it instead of re-implementing the masking convention.
+		 *
+		 * @since 2.0.2
+		 * @since 2.0.2 masks array-valued headers element-wise instead of casting the
+		 *              whole array to a string.
+		 *
+		 * @param array<string, mixed> $headers Header name/value pairs (value: string, or array<int, string>
+		 *                              for a duplicated header), casing as sent/received.
+		 * @param array<int, string>   $secret_names Header names to mask, matched case-insensitively.
+		 * @return array<string, mixed>
+		 */
+		protected static function mask_secret_headers( array $headers, array $secret_names ): array {
+
+			$secret_names = array_map( 'strtolower', $secret_names );
 
 			/*
 			 * Membership is decided by header NAME alone, never by the value being
@@ -323,38 +371,59 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 			 * the value, so an empty header still logs as empty.
 			 */
 			foreach ( $headers as $name => $value ) {
-				if ( in_array( strtolower( (string) $name ), $secret_names, true ) ) {
-					$headers[ $name ] = str_repeat( '*', strlen( (string) $value ) );
+
+				if ( ! in_array( strtolower( (string) $name ), $secret_names, true ) ) {
+					continue;
 				}
+
+				$headers[ $name ] = is_array( $value )
+					? array_map( static fn( $item ) => str_repeat( '*', strlen( (string) $item ) ), $value )
+					: str_repeat( '*', strlen( (string) $value ) );
 			}
 
 			return $headers;
 		}
 
 		/**
-		 * Names of the request headers whose values carry a credential and must be
-		 * masked before {@see self::get_sanitized_request_headers()} hands the
-		 * request off to `woodev_{api_id}_api_request_performed` — the documented
-		 * action any attached request logger listens on.
+		 * Names of the request or response headers whose values carry a credential
+		 * and must be masked before {@see self::get_sanitized_request_headers()} or
+		 * {@see self::get_sanitized_response_headers()} hand the request/response off
+		 * to `woodev_{api_id}_api_request_performed` — the documented action any
+		 * attached request logger listens on.
 		 *
 		 * This is the extension point for an API client that authenticates with a
-		 * header other than `Authorization` (e.g. a vendor-specific API-secret
-		 * header): override this method in the subclass and return
-		 * `array_merge( parent::get_secret_request_header_names(), [ 'X-My-Header' ] )`
-		 * rather than overriding {@see self::get_sanitized_request_headers()} itself —
-		 * one extra name here is masked exactly like every other credential header,
-		 * with no risk of drifting from the shared masking logic.
+		 * header other than `Authorization`, or whose responses carry a credential
+		 * under a vendor-specific name (e.g. a refreshed-token header): override this
+		 * method in the subclass and return
+		 * `array_merge( parent::get_secret_header_names(), [ 'X-My-Header' ] )`
+		 * rather than overriding the sanitizers themselves — one extra name here is
+		 * masked exactly like every other credential header, in both directions, with
+		 * no risk of drifting from the shared masking logic.
 		 *
 		 * The default list covers `Authorization` (never regress this — the
 		 * payment-gateway tree shares this base class and its production request
 		 * logs depend on it staying masked) plus the header names real third-party
-		 * APIs are commonly seen using for a second credential.
+		 * APIs are commonly seen using for a second credential; `Cookie` and
+		 * `Set-Cookie`/`Set-Cookie2` (the request and response sides of the same
+		 * session token); a handful of vendor token-bearing names seen in the wild
+		 * (`X-Subject-Token` — OpenStack Identity, `Refresh-Token`/`X-Refresh-Token`,
+		 * `X-Amz-Security-Token`, `Authentication-Info`, `X-CSRF-Token`).
 		 *
-		 * @since 2.0.2
+		 * `Location` is deliberately NOT in this list: it only carries a credential
+		 * under an OAuth2 implicit-grant redirect, a flow this framework does not
+		 * implement, and masking it on every gateway/shipping redirect would destroy
+		 * ordinary debugging of where a request was sent.
+		 *
+		 * @since 2.0.2 renamed from `get_secret_request_header_names()` and now also
+		 *              consulted by {@see self::get_sanitized_response_headers()};
+		 *              added `Set-Cookie` to the default list.
+		 * @since 2.0.2 added `Cookie`, `Set-Cookie2`, `X-Subject-Token`,
+		 *              `Refresh-Token`, `X-Refresh-Token`, `X-Amz-Security-Token`,
+		 *              `Authentication-Info`, `X-CSRF-Token`.
 		 *
 		 * @return array<int, string>
 		 */
-		protected function get_secret_request_header_names(): array {
+		protected function get_secret_header_names(): array {
 			return [
 				'Authorization',
 				'Proxy-Authorization',
@@ -364,6 +433,15 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 				'X-Auth-Token',
 				'X-Access-Token',
 				'X-Secret',
+				'Cookie',
+				'Set-Cookie',
+				'Set-Cookie2',
+				'X-Subject-Token',
+				'Refresh-Token',
+				'X-Refresh-Token',
+				'X-Amz-Security-Token',
+				'Authentication-Info',
+				'X-CSRF-Token',
 			];
 		}
 
@@ -418,6 +496,37 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 			return $this->response_headers;
 		}
 
+		/**
+		 * Gets the sanitized response headers, for logging.
+		 *
+		 * Masks the VALUE of every header whose name (matched case-insensitively)
+		 * appears in {@see self::get_secret_header_names()} — the same list, and the
+		 * same masking convention, used for the outgoing request headers by
+		 * {@see self::get_sanitized_request_headers()}. Response headers are the
+		 * other half of the same log broadcast and can carry a credential the
+		 * request never had, e.g. `Set-Cookie` or a refreshed-token header a carrier
+		 * returns on a token-refresh call.
+		 *
+		 * {@see self::get_response_headers()} returns `null` before a response has
+		 * been received (e.g. when the transport itself failed); that is passed
+		 * through unchanged rather than coerced to an array, so the broadcast payload
+		 * shape is unaffected by this method's addition.
+		 *
+		 * @since 2.0.2
+		 * @since 2.0.2 declared `?array` — expressible on the platform's PHP 7.4
+		 *              floor and matches the documented `array<string, string>|null`.
+		 *
+		 * @return array<string, string>|null
+		 */
+		protected function get_sanitized_response_headers(): ?array {
+
+			$headers = $this->get_response_headers();
+
+			return is_array( $headers )
+				? self::mask_secret_headers( $headers, $this->get_secret_header_names() )
+				: $headers;
+		}
+
 		protected function get_raw_response_body() {
 			return $this->raw_response_body;
 		}
@@ -430,13 +539,17 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 * Gets the response data for broadcasting the request.
 		 * Overriding this method allows child classes to customize the response data when broadcasting the request.
 		 *
+		 * @since 2.0.2 `headers` is now {@see self::get_sanitized_response_headers()}
+		 *              instead of the raw {@see self::get_response_headers()} — see #300.
+		 *              The `body` policy is unchanged.
+		 *
 		 * @return array
 		 */
 		protected function get_response_data_for_broadcast() {
 			return array(
 				'code'    => $this->get_response_code(),
 				'message' => $this->get_response_message(),
-				'headers' => $this->get_response_headers(),
+				'headers' => $this->get_sanitized_response_headers(),
 				'body'    => $this->get_sanitized_response_body() ? $this->get_sanitized_response_body() : $this->get_raw_response_body(),
 			);
 		}

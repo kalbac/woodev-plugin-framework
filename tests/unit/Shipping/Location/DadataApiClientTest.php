@@ -96,7 +96,7 @@ final class DadataApiClientTest extends TestCase {
 	// Broadcast — the woodev_location_dadata_api_request_performed action must
 	// never carry the Clean secret in plaintext. Masking is now the base class's
 	// job (issue #288: Woodev_API_Base::get_sanitized_request_headers() masks
-	// every header named in get_secret_request_header_names(), which already
+	// every header named in get_secret_header_names(), which already
 	// includes X-Secret by default) — this client no longer needs its own
 	// override; these tests pin that the shared default still covers it.
 	// -------------------------------------------------------------------------
