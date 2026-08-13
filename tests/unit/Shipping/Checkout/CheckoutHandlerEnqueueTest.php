@@ -89,6 +89,16 @@ final class Checkout_Handler_Fake_Location_Service extends Location_Service {
 	public function owns_region_states( string $country, array $final_states ): bool {
 		return false;
 	}
+
+	/**
+	 * Issue #296: never touches `get_option()` — this fake, like every other
+	 * method above, stays entirely clear of real WordPress option state
+	 * (mirrors `Checkout_Config_Fake_Location_Service`'s own override in
+	 * `CheckoutConfigTest`, for the identical reason).
+	 */
+	public function resolve_default_country(): string {
+		return 'RU';
+	}
 }
 
 /**

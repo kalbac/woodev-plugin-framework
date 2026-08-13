@@ -86,6 +86,9 @@ final class Checkout_Config_Fake_Location_Service extends Location_Service {
 	/** @var string[] Task 13/issue #294: countries owns_region_states() reports true for. */
 	private array $owned_region_countries;
 
+	/** @var string Issue #296: resolve_default_country() return value. */
+	private string $default_country;
+
 	/**
 	 * @param bool                                                             $active                 is_active() return value.
 	 * @param array<string, bool>                                              $supported_levels       level => whether SOME configured provider serves it,
@@ -102,6 +105,12 @@ final class Checkout_Config_Fake_Location_Service extends Location_Service {
 	 *                                                                                                   call site is unaffected.
 	 * @param string[]                                                          $owned_region_countries Task 13/issue #294: countries owns_region_states()
 	 *                                                                                                   reports `true` for.
+	 * @param string                                                            $default_country        Issue #296: resolve_default_country() return
+	 *                                                                                                   value; defaults to 'RU' so every existing call
+	 *                                                                                                   site is unaffected. Fixed here rather than left
+	 *                                                                                                   to the REAL method (which reads get_option()) —
+	 *                                                                                                   this fake never touches WordPress option state at
+	 *                                                                                                   all, mirroring every other method on this class.
 	 */
 	public function __construct(
 		bool $active,
@@ -109,7 +118,8 @@ final class Checkout_Config_Fake_Location_Service extends Location_Service {
 		?array $customer,
 		array $countries,
 		string $mode = Location_Provider_Registry::MODE_TYPEAHEAD,
-		array $owned_region_countries = []
+		array $owned_region_countries = [],
+		string $default_country = 'RU'
 	) {
 		$this->active                 = $active;
 		$this->supported_levels       = $supported_levels;
@@ -117,10 +127,15 @@ final class Checkout_Config_Fake_Location_Service extends Location_Service {
 		$this->countries               = $countries;
 		$this->mode                    = $mode;
 		$this->owned_region_countries = $owned_region_countries;
+		$this->default_country         = $default_country;
 	}
 
 	public function is_active(): bool {
 		return $this->active;
+	}
+
+	public function resolve_default_country(): string {
+		return $this->default_country;
 	}
 
 	public function get_customer_record(): ?array {
@@ -1018,5 +1033,67 @@ class CheckoutConfigTest extends TestCase {
 			$config['location']['levels']['RU']['region'],
 			'a WC states read of `false` must degrade to states_present=false, not a false-positive conflict'
 		);
+	}
+
+	// -------------------------------------------------------------------------
+	// defaultCountry — issue #296: steps 2+3 of the checkout-field -> WC-store-
+	// setting -> RU chain, exposed to the client next to countries/levels.
+	// -------------------------------------------------------------------------
+
+	public function test_location_block_carries_the_default_country(): void {
+		$service = new Checkout_Config_Fake_Location_Service(
+			true, [ 'settlement' => true ], null, [ 'RU' ], Location_Provider_Registry::MODE_TYPEAHEAD, [], 'KZ'
+		);
+		$config = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ], $service ) )
+			->build( Checkout_Fields::from_array( [] ) );
+
+		$this->assertSame( 'KZ', $config['location']['defaultCountry'] );
+	}
+
+	/**
+	 * End-to-end through the REAL {@see Location_Service} (not the fixture
+	 * fake above) — the "real body" pairing this task's own seam rule
+	 * requires: {@see Location_Service::resolve_default_country()} genuinely
+	 * reads `get_option( 'woocommerce_default_country' )` and splits the
+	 * `COUNTRY:STATE` shape, mirroring the exact option format a merchant who
+	 * picked a country without naming a state leaves behind.
+	 */
+	public function test_location_block_default_country_reads_the_real_wc_option_through_the_real_service(): void {
+		Location_Provider_Registry::instance()->reset_for_tests();
+		Settings_Page_Registry::instance()->reset_for_tests();
+
+		Functions\when( 'add_action' )->justReturn( true );
+		Functions\when( '__' )->returnArg( 1 );
+		Functions\when( 'wp_parse_args' )->alias(
+			static function ( $args, $defaults = [] ) {
+				return array_merge( (array) $defaults, (array) $args );
+			}
+		);
+		Functions\when( 'is_user_logged_in' )->justReturn( false );
+		Functions\when( 'apply_filters' )->returnArg( 2 );
+		Functions\when( 'get_option' )->alias(
+			static function ( $name, $default = null ) {
+				if ( 'woodev_location_token' === $name ) {
+					return 'tok';
+				}
+				if ( 'woocommerce_default_country' === $name ) {
+					return 'KZ:north';
+				}
+
+				return $default;
+			}
+		);
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$service = new Location_Service( $registry );
+		$this->assertTrue( $service->is_active(), 'the bundled DaData provider must be active+configured for this test to be meaningful' );
+
+		$config = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ], $service ) )
+			->build( Checkout_Fields::from_array( [] ) );
+
+		$this->assertSame( 'KZ', $config['location']['defaultCountry'] );
 	}
 }

@@ -657,6 +657,78 @@ final class LocationControllerTest extends TestCase {
 	}
 
 	// -------------------------------------------------------------------
+	// /suggest — issue #296: an empty `country` param (a checkout with no
+	// country field at all sends exactly this — see location-cascade.js's own
+	// countryFor()) falls back through Location_Service::resolve_default_country()
+	// instead of hitting build_scope()'s 400. Location_Controller_Fake_Service
+	// does NOT override resolve_default_country(), so every test below runs
+	// the REAL method body (get_option()/apply_filters(), stubbed per test) —
+	// never a canned fixture value.
+	// -------------------------------------------------------------------
+
+	public function test_suggest_with_no_country_param_falls_back_to_the_wc_store_setting(): void {
+		Functions\when( 'get_option' )->alias(
+			static function ( $name, $default = null ) {
+				return 'woocommerce_default_country' === $name ? 'KZ:north' : $default;
+			}
+		);
+		Functions\when( 'apply_filters' )->returnArg( 2 );
+
+		$provider = new Location_Controller_Fake_Provider( static fn() => [], [ 'KZ' ] );
+		$service  = new Location_Controller_Fake_Service( true, $provider, null, true, true );
+		$ctrl     = new Location_Controller_Probe( $service );
+
+		$request = new WP_REST_Request( [ 'q' => 'Ал', 'level' => Location_Record::LEVEL_REGION, 'country' => '' ] );
+		$result  = $ctrl->handle_suggest_request( $request );
+
+		$this->assertNotInstanceOf( \WP_Error::class, $result, 'an empty country must resolve through the fallback chain, never 400' );
+		$this->assertCount( 1, $provider->suggest_calls );
+		$this->assertSame(
+			'KZ',
+			$provider->suggest_calls[0][1]->country(),
+			'must scope by the WooCommerce base country, splitting the "COUNTRY:STATE" option on the first ":"'
+		);
+		$this->assertSame(
+			[ 'KZ', Location_Record::LEVEL_REGION ],
+			$service->is_country_supported_calls[0],
+			'the RESOLVED country must be what is checked for support, not the empty request param'
+		);
+	}
+
+	public function test_suggest_with_no_country_param_and_no_store_setting_falls_back_to_ru(): void {
+		Functions\when( 'get_option' )->justReturn( '' );
+		Functions\when( 'apply_filters' )->returnArg( 2 );
+
+		$provider = new Location_Controller_Fake_Provider( static fn() => [], [ 'RU' ] );
+		$service  = new Location_Controller_Fake_Service( true, $provider, null, true, true );
+		$ctrl     = new Location_Controller_Probe( $service );
+
+		$request = new WP_REST_Request( [ 'q' => 'Мос', 'level' => Location_Record::LEVEL_REGION, 'country' => '' ] );
+		$result  = $ctrl->handle_suggest_request( $request );
+
+		$this->assertNotInstanceOf( \WP_Error::class, $result );
+		$this->assertCount( 1, $provider->suggest_calls );
+		$this->assertSame( 'RU', $provider->suggest_calls[0][1]->country() );
+	}
+
+	public function test_suggest_a_present_country_param_is_never_overridden_by_the_fallback(): void {
+		// Would answer 'KZ' if the fallback were wrongly consulted for a NON-empty
+		// country — the request's own value must always win when present.
+		Functions\when( 'get_option' )->justReturn( 'KZ' );
+		Functions\when( 'apply_filters' )->returnArg( 2 );
+
+		$provider = new Location_Controller_Fake_Provider( static fn() => [], [ 'RU' ] );
+		$service  = new Location_Controller_Fake_Service( true, $provider, null, true, true );
+		$ctrl     = new Location_Controller_Probe( $service );
+
+		$request = new WP_REST_Request( [ 'q' => 'Мос', 'level' => Location_Record::LEVEL_REGION, 'country' => 'RU' ] );
+		$ctrl->handle_suggest_request( $request );
+
+		$this->assertCount( 1, $provider->suggest_calls );
+		$this->assertSame( 'RU', $provider->suggest_calls[0][1]->country() );
+	}
+
+	// -------------------------------------------------------------------
 	// /suggest — D15 gate fix (block PR-B): the country check must be gated
 	// by the provider that ACTUALLY serves the requested level (chosen, or
 	// the D15 fallback), never by the active provider unconditionally — both

@@ -1173,5 +1173,126 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$this->assertSame( $registry->owns_region_states( 'RU', [] ), $service->owns_region_states( 'RU', [] ) );
 			$this->assertFalse( $service->owns_region_states( 'RU', [] ) );
 		}
+
+		// -------------------------------------------------------------------
+		// resolve_default_country() — issue #296: checkout field -> WooCommerce
+		// store setting -> RU (filterable). No registry/provider state is
+		// touched at all, so every test here uses a bare Location_Service — the
+		// REAL method body runs in every one of them (never a fixture double),
+		// satisfying this task's own "a seam must have at least one real-body
+		// test" rule by construction.
+		// -------------------------------------------------------------------
+
+		private function stub_default_country_option( ?string $raw ): void {
+			Functions\when( 'get_option' )->alias(
+				static function ( $name, $default = null ) use ( $raw ) {
+					if ( 'woocommerce_default_country' === $name ) {
+						return $raw;
+					}
+
+					return $default;
+				}
+			);
+		}
+
+		public function test_resolve_default_country_splits_the_country_from_a_country_state_option(): void {
+			// The exact shape a merchant who picked a country without naming a
+			// state gets (gotcha this project already paid for once on the
+			// STATE half of this same option — see Checkout_Handler's own
+			// handle_checkout_get_value() docblock).
+			$this->stub_default_country_option( 'RU:*' );
+
+			$service = new Location_Service( Location_Provider_Registry::instance() );
+
+			$this->assertSame( 'RU', $service->resolve_default_country() );
+		}
+
+		public function test_resolve_default_country_accepts_a_bare_country_with_no_state_component(): void {
+			$this->stub_default_country_option( 'KZ' );
+
+			$service = new Location_Service( Location_Provider_Registry::instance() );
+
+			$this->assertSame( 'KZ', $service->resolve_default_country() );
+		}
+
+		public function test_resolve_default_country_trims_and_upper_cases(): void {
+			$this->stub_default_country_option( ' kz : some-state ' );
+
+			$service = new Location_Service( Location_Provider_Registry::instance() );
+
+			$this->assertSame( 'KZ', $service->resolve_default_country() );
+		}
+
+		public function test_resolve_default_country_falls_back_to_ru_when_the_option_is_empty(): void {
+			$this->stub_default_country_option( '' );
+
+			$service = new Location_Service( Location_Provider_Registry::instance() );
+
+			$this->assertSame( 'RU', $service->resolve_default_country() );
+		}
+
+		public function test_resolve_default_country_falls_back_to_ru_when_the_option_is_unset(): void {
+			$this->stub_default_country_option( null );
+
+			$service = new Location_Service( Location_Provider_Registry::instance() );
+
+			$this->assertSame( 'RU', $service->resolve_default_country() );
+		}
+
+		/**
+		 * The defensive case the card explicitly calls out: the option holding
+		 * ONLY WooCommerce's `*` "no state" sentinel, with no country and no
+		 * colon at all. A naive un-split read would pass `'*'` straight through
+		 * as if it were a country code; this must be recognised as malformed
+		 * and fall through to the RU default instead of ever leaking `*` into
+		 * a REST response or the checkout config block.
+		 */
+		public function test_resolve_default_country_never_leaks_the_wildcard_sentinel(): void {
+			$this->stub_default_country_option( '*' );
+
+			$service = new Location_Service( Location_Provider_Registry::instance() );
+
+			$this->assertSame( 'RU', $service->resolve_default_country() );
+		}
+
+		public function test_resolve_default_country_honors_the_filter_when_the_option_has_nothing_usable(): void {
+			$this->stub_default_country_option( '' );
+			Functions\when( 'apply_filters' )->alias(
+				static function ( string $tag, $default = null ) {
+					return Location_Service::FILTER_DEFAULT_COUNTRY === $tag ? 'KZ' : $default;
+				}
+			);
+
+			$service = new Location_Service( Location_Provider_Registry::instance() );
+
+			$this->assertSame( 'KZ', $service->resolve_default_country(), 'a Kazakhstan store must be able to override the RU default' );
+		}
+
+		public function test_resolve_default_country_never_consults_the_filter_when_the_option_already_answers(): void {
+			$this->stub_default_country_option( 'RU:*' );
+			Functions\when( 'apply_filters' )->alias(
+				static function ( string $tag, $default = null ) {
+					// Would answer 'KZ' if wrongly consulted — the store's own setting must win.
+					return Location_Service::FILTER_DEFAULT_COUNTRY === $tag ? 'KZ' : $default;
+				}
+			);
+
+			$service = new Location_Service( Location_Provider_Registry::instance() );
+
+			$this->assertSame( 'RU', $service->resolve_default_country() );
+		}
+
+		public function test_resolve_default_country_never_returns_a_malformed_filtered_value(): void {
+			$this->stub_default_country_option( '' );
+			Functions\when( 'apply_filters' )->alias(
+				static function ( string $tag, $default = null ) {
+					return Location_Service::FILTER_DEFAULT_COUNTRY === $tag ? 'Kazakhstan' : $default;
+				}
+			);
+
+			$service = new Location_Service( Location_Provider_Registry::instance() );
+
+			$this->assertSame( 'RU', $service->resolve_default_country(), 'a misbehaving filter must never brick the fallback' );
+		}
 	}
 }

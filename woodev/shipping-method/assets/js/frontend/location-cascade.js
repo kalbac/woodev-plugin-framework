@@ -268,16 +268,39 @@
 	}
 
 	/**
-	 * The country currently in play for `node` — reads `#shipping_country` for a
-	 * shipping-section node, `#billing_country` for everything else (spec §4.4 amendment,
-	 * Finding 1). Read LIVE at call time, same convention as the rest of this module's own
-	 * live-scope reads (see {@see scopeKeyFor}).
+	 * The country currently in play for `node` (issue #296's own fallback chain — the operator's
+	 * own wording: "поле чекаута → настройка WooCommerce → RU", the last step through a filter,
+	 * no separate option) — reads `#shipping_country` for a shipping-section node,
+	 * `#billing_country` for everything else (spec §4.4 amendment, Finding 1), read LIVE at call
+	 * time, same convention as the rest of this module's own live-scope reads (see
+	 * {@see scopeKeyFor}).
 	 *
-	 * @param {{section?: string}} node
+	 * STEP 1 (the live checkout field) is everything {@see countryValue} answers: a genuinely
+	 * present, non-empty value. STEPS 2+3 (the WooCommerce store's own base country, else a
+	 * PHP-filterable `RU`) are NOT resolved here at all — a shop with no country field on
+	 * checkout, or one whose country `<select>` is present but still unselected, used to make
+	 * {@see isCountrySupported} reject an empty string outright, so NO widget ever attached and
+	 * the whole location layer went silently dead with no signal why. Both remaining steps are
+	 * already merged into ONE value server-side by
+	 * `Location_Service::resolve_default_country()` and handed down as `entry.location.defaultCountry`
+	 * next to `countries`/`levels` (`class-checkout-config.php::build_location_block()`) — the
+	 * SAME method the `/suggest` REST route falls back to for an empty `country` request param,
+	 * so both sides of the client/server boundary answer identically by construction. This
+	 * function therefore has exactly ONE fallback of its own to make, never a second guess at
+	 * what WooCommerce's setting or the RU default might be.
+	 *
+	 * @param {Object}              entry
+	 * @param {{section?: string}}  node
 	 * @returns {string}
 	 */
-	function countryFor( node ) {
-		return countryValue( countryFieldIdFor( node ) );
+	function countryFor( entry, node ) {
+		var live = countryValue( countryFieldIdFor( node ) );
+
+		if ( live ) {
+			return live;
+		}
+
+		return ( entry.location && entry.location.defaultCountry ) || '';
 	}
 
 	/**
@@ -346,7 +369,7 @@
 			return false;
 		}
 
-		var country = countryFor( node );
+		var country = countryFor( entry, node );
 
 		if ( ! isCountrySupported( entry, country ) ) {
 			return false;
@@ -711,7 +734,7 @@
 			var url = buildUrl( entry.location.endpoints.suggest, {
 				q: query,
 				level: node.level,
-				country: countryFor( node ),
+				country: countryFor( entry, node ),
 				within: scopeKeyFor( entry, node.level ),
 			} );
 
@@ -1187,7 +1210,7 @@
 			node: node,
 			location: entry.location,
 			country: function() {
-				return countryFor( node );
+				return countryFor( entry, node );
 			},
 			parentKey: function() {
 				return scopeKeyFor( entry, node.level );
@@ -1224,7 +1247,7 @@
 
 		// Baseline: text+typeahead, gated by the D15 per-country/level chain (spec D7: "text+
 		// typeahead always" is the FLOOR, never conditional on a special renderer existing).
-		if ( ! isLevelServed( entry, countryFor( node ), node.level ) || 'function' !== typeof window.WoodevLocationTypeahead ) {
+		if ( ! isLevelServed( entry, countryFor( entry, node ), node.level ) || 'function' !== typeof window.WoodevLocationTypeahead ) {
 			return;
 		}
 

@@ -50,6 +50,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 	 *     'levels'    => [ country_code => [ 'region' => bool, 'settlement' => bool, 'address' => bool ] ],
 	 *     'current'   => [ 'key' => string, 'level' => string ]|null,
 	 *     'implicit'  => bool,
+	 *     'defaultCountry' => string, // issue #296: checkout field -> WC store setting -> RU
 	 *   ],
 	 * ]
 	 * ```
@@ -484,7 +485,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 		 * @since 2.0.2 `i18n` gained `notPersisted` — the client-side consumer for an honest
 		 *              `persisted: false` `/select` response (Task 13; issue #295 finding 1).
 		 *
-		 * @param \Woodev\Framework\Shipping\Location\Location_Service $service The active, already-confirmed façade.
+		 * @since 2.0.2 Gained `defaultCountry` -- steps 2+3 of the "checkout field -> WC store
+		 *              setting -> RU" fallback chain (issue #296), via
+		 *              {@see \Woodev\Framework\Shipping\Location\Location_Service::resolve_default_country()}.
+		 *
+		 * @param \Woodev\Framework\Shipping\Location\Location_Service $service The active, already-confirmed facade.
 		 *
 		 * @return array{
 		 *     endpoints: array{suggest: string, select: string, list: string},
@@ -493,7 +498,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 		 *     mode: string,
 		 *     levels: array<string, array{region: bool, settlement: bool, address: bool}>,
 		 *     current: array{key: string, level: string}|null,
-		 *     implicit: bool
+		 *     implicit: bool,
+		 *     defaultCountry: string
 		 * }
 		 */
 		private function build_location_block( \Woodev\Framework\Shipping\Location\Location_Service $service ): array {
@@ -604,18 +610,27 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 			);
 
 			return [
-				'endpoints' => [
+				'endpoints'      => [
 					'suggest' => $this->rest_base . '/location/suggest',
 					'select'  => $this->rest_base . '/location/select',
 					'list'    => $this->rest_base . '/location/list',
 				],
-				'nonce'     => $this->nonce,
-				'countries' => array_values( $countries ),
-				'mode'      => $service->get_field_mode(),
-				'levels'    => $levels,
-				'current'   => $current,
-				'implicit'  => $implicit,
-				'i18n'      => array_map( 'strval', (array) $strings ),
+				'nonce'          => $this->nonce,
+				'countries'      => array_values( $countries ),
+				'mode'           => $service->get_field_mode(),
+				'levels'         => $levels,
+				'current'        => $current,
+				'implicit'       => $implicit,
+				// Issue #296: steps 2+3 of the country fallback chain `checkout field ->
+				// WooCommerce store setting -> RU`, already merged into ONE value by
+				// {@see \Woodev\Framework\Shipping\Location\Location_Service::resolve_default_country()}
+				// — the client's own `location-cascade.js::countryFor()` reads step 1 (the live
+				// DOM field) itself and falls back to THIS value only when that field is absent
+				// or empty (a single-country store that dropped the country field entirely used
+				// to leave the whole location layer silently dead — no widget ever attached,
+				// because the client had no country to arbitrate by).
+				'defaultCountry' => $service->resolve_default_country(),
+				'i18n'           => array_map( 'strval', (array) $strings ),
 			];
 		}
 

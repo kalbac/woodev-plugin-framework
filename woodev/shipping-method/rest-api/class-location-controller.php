@@ -639,6 +639,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 		 * identically, so this is the ONE place that logic lives.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 An empty `country` param now falls back through
+		 *              {@see \Woodev\Framework\Shipping\Location\Location_Service::resolve_default_country()}
+		 *              instead of reaching `build_scope()`'s own 400 (issue #296).
 		 *
 		 * @param \WP_REST_Request $request        request object.
 		 * @param string           $rate_limit_key Per-route rate-limit bucket prefix.
@@ -687,7 +690,22 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 			}
 
 			$country = $this->normalize_param( $request->get_param( 'country' ) );
-			$within  = $this->cap_length( $this->normalize_param( $request->get_param( 'within' ) ), self::MAX_PARAM_LENGTH );
+
+			// Issue #296: a checkout with no country field at all (common for a single-country
+			// store) sends `''` here — location-cascade.js's own `countryFor()` degrades to `''`
+			// once its own client-side fallback (the live field, then
+			// `config.location.defaultCountry`) has nothing left to try. Mirroring the SAME
+			// fallback server-side (through the ONE shared
+			// {@see \Woodev\Framework\Shipping\Location\Location_Service::resolve_default_country()}
+			// {@see Checkout_Config::build_location_block()} already feeds `defaultCountry` from)
+			// keeps this a genuine `/suggest` read for the store's own base country instead of the
+			// 400 an un-split `''` would otherwise hit in build_scope() below. A request that DOES
+			// carry a country — even an unsupported one — is never second-guessed here.
+			if ( '' === $country ) {
+				$country = $this->service->resolve_default_country();
+			}
+
+			$within = $this->cap_length( $this->normalize_param( $request->get_param( 'within' ) ), self::MAX_PARAM_LENGTH );
 
 			try {
 				$scope = $this->build_scope( $country, $level, $within );
