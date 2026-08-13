@@ -117,6 +117,34 @@ Two things this occurrence adds to the rule:
    both ways: a docblock can claim a caller that does not exist, and a CARD can claim absence where
    code exists. Check the code before planning either way — the s52 lesson, in the other direction.
 
+## s72 addendum — the caller EXISTS, and nothing pins it there
+
+Fifth occurrence (2026-08-14, adversarial review of PR #315), and the first with a *live* caller.
+The whole point of #300 was one line — `get_response_data_for_broadcast()` calling the sanitizer
+instead of the raw getter. Six new tests were written, every one of them calling
+`get_sanitized_response_headers()` **directly**. Nothing asserted that the broadcast used it.
+
+The critic reverted that single line to the raw getter and ran the suite:
+
+```
+Tests: 2143, Assertions: 5384, Skipped: 71.   OK
+```
+
+Green. The security hole fully restored, CI 100% clean, and the file's own header comment still
+claiming the issue was fixed.
+
+So the family now has two shapes, and the second is harder to see:
+
+| Shape | Tell |
+|---|---|
+| No caller at all (s56/s59/s66/s68) | `grep` for call sites returns only the definition |
+| Caller present, **untested** (s72) | the suite passes with the call site reverted |
+
+The first is found by grepping. The second is found only by **mutating the call site itself**, not
+the function it calls. Mutation-testing the helper proves the helper is tested — which is exactly
+what everyone already believed. When a fix is "route X through Y", the test that matters asserts on
+X's output, never on Y's.
+
 ## Related
 
 - [[dispatcher-files-unwired-in-includes]] — the PHP shape of the same thing: a class that exists,

@@ -1,5 +1,10 @@
 # gotcha: codex exec shell-sandbox broken on this Windows box — run critics with an inline bundle
 
+> **✅ ROOT CAUSE FOUND (s72, 2026-08-14).** After two months of treating this as an opaque
+> "the sandbox is broken", the mechanism is now known and there is a real fix. **Read the s72
+> section at the bottom first** — it supersedes the workarounds above as the primary advice,
+> though the inline-bundle recipe stays valid as a fallback.
+
 > **⚠️ UPDATE (s36, 2026-06-27):** the Codex **companion auth/runtime** works
 > (`codex-companion.mjs setup --json` → `loggedIn: true`, `sessionRuntime.mode: "direct"`),
 > BUT the built-in reviewer (`codex-companion.mjs review --json`) STILL hits this exact
@@ -115,6 +120,82 @@ which is safe. Argument interpolation is what breaks.
 
 Pick a line carrying quotes/backslashes. If the echo comes back stripped, the findings are
 worthless — fix the transport and re-run. This costs one line and catches a whole wasted review.
+
+## s72 root cause — the sandbox runs commands as ANOTHER local user, and Store-installed PowerShell is unreachable for it
+
+Diagnosed s72 (2026-08-14) after the operator asked why this had been broken for several sessions
+when it used to work. The full error text, which earlier sessions only ever saw truncated, names
+the culprit:
+
+```
+windows sandbox: runner failed during SpawnChild: CreateProcessAsUserW failed: 5 (Отказано в доступе)
+| cwd=D:\Projects\woodev_framework
+| cmd="C:\Program Files\WindowsApps\Microsoft.PowerShell_7.6.4.0_x64__8wekyb3d8bbwe\pwsh.exe" -NoProfile -Command "…"
+```
+
+Three facts, each verified on this box:
+
+1. **Codex does not run commands as you.** It creates dedicated local accounts and spawns every
+   command as one of them via `CreateProcessAsUserW`. `Get-LocalUser` shows them:
+   `CodexSandboxOffline`, `CodexSandboxOnline`. The sandbox log
+   (`~/.codex/.sandbox/sandbox.<date>.log`) shows the machinery: a copied helper
+   `codex-command-runner-<version>.exe`, and lines like *"granting read ACE to … for sandbox users"*.
+2. **Every command is wrapped in `pwsh -NoProfile -Command`**, and on this machine `pwsh` is the
+   **Microsoft Store (MSIX) build** under `C:\Program Files\WindowsApps\`. There is no MSI install:
+   `Test-Path 'C:\Program Files\PowerShell\7\pwsh.exe'` → `False`.
+3. **An MSIX package is registered per-user and its directory is ACL-locked.** The sandbox account
+   has no such registration and cannot traverse `WindowsApps`, so the spawn dies with error 5 —
+   on *every* command, which is exactly the observed symptom.
+
+This also explains "it used to work": nothing about the repo changed. Either PowerShell arrived
+from the Store (or updated), or Codex moved to the sandbox-user execution model — both are outside
+the project.
+
+### What does NOT fix it — measured, not assumed
+
+| Attempt | Result |
+|---|---|
+| `[windows] sandbox = "unelevated"` in `~/.codex/config.toml` (the documented fallback to `"elevated"`) | identical error |
+| Removing `WindowsApps` from `PATH` before launching | identical error — codex resolves the absolute path, not via `PATH` |
+| Operator approving a permission prompt in the interactive Codex app | identical error; the app's grant does not reach the CLI path |
+| `--dangerously-bypass-approvals-and-sandbox` | denied by the Claude Code classifier, and the plugin hardcodes `sandbox: "read-only"` in `codex-companion.mjs`, so a CLI flag never reaches the runtime anyway |
+
+### The fix (needs an elevated terminal — operator action)
+
+```powershell
+winget install --id Microsoft.PowerShell --source winget
+```
+
+That installs PowerShell 7 as an ordinary MSI at `C:\Program Files\PowerShell\7\pwsh.exe`, a path
+every local account can execute. Verify with `(Get-Command pwsh).Source` — it must NOT point into
+`WindowsApps`. If it still does, remove the Store build or put the machine path ahead of the user
+path. **Not yet verified as of s72** — it requires admin rights the agent does not have.
+
+### Sub-lesson: a config change is not tested until the shared runtime is restarted
+
+`codex-companion.mjs` keeps a long-lived runtime on a named pipe (`status --json` →
+`sessionRuntime.mode: "shared"`), and it reads `config.toml` **at startup**. The first
+`unelevated` test above measured the *old* config, because the runtime from a previous command
+was still alive. Kill the npm-installed `codex` / `codex-code-mode-host` processes (the ones under
+`AppData\Roaming\npm\node_modules\@openai\codex`, *not* the desktop app under
+`AppData\Local\OpenAI\Codex`) before believing any config experiment.
+
+### Meanwhile: Codex is still usable as a critic — through GitHub, not the shell
+
+The shell being dead does **not** make Codex useless. It has working GitHub access and will read a
+pushed branch or PR directly. A control question — *"how many PHP files are directly inside
+`woodev/api/`?"* — came back `9`, which is correct, with every shell command in that same run
+failing. So the practical critic recipe on this box is now:
+
+1. Push the branch and open the PR.
+2. `codex-companion.mjs task --background --fresh "<review prompt naming the PR number and repo>"`,
+   opening with *"Your local shell CANNOT execute commands — do not try; read through GitHub."*
+3. Poll `status --all --json`; fetch with `result <job-id>`.
+
+**Put a timeout on it.** In s72 two such review jobs were still `running` after 40+ and 55+ minutes
+with no output, on diffs a human reads in five minutes, and the session fell back to independent
+Claude critic subagents to avoid blocking merges. `result <job-id>` answering *"No job found"*
+means the job has not finished — it is not an error.
 
 ## Related
 
