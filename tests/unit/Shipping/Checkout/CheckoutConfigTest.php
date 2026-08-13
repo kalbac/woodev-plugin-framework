@@ -650,6 +650,18 @@ class CheckoutConfigTest extends TestCase {
 		$this->assertSame( 'Ничего нет', $config['location']['i18n']['noResults'] );
 	}
 
+	public function test_location_block_carries_the_not_persisted_message(): void {
+		// #295 finding 1 (Task 13): the client-side consumer for an honest
+		// `persisted: false` /select response reads this string — see
+		// `location-cascade.js`'s own `showNotPersistedNotice()`.
+		$service = new Checkout_Config_Fake_Location_Service( true, [ 'settlement' => true ], null, [ 'RU' ] );
+		$config  = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ], $service ) )
+			->build( Checkout_Fields::from_array( [] ) );
+
+		$this->assertIsString( $config['location']['i18n']['notPersisted'] );
+		$this->assertNotSame( '', $config['location']['i18n']['notPersisted'] );
+	}
+
 	public function test_no_token_or_secret_leaks_into_the_i18n_block(): void {
 		$service = new Checkout_Config_Fake_Location_Service( true, [ 'settlement' => true ], null, [ 'RU' ] );
 		$config  = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ], $service ) )

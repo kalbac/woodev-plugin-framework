@@ -390,6 +390,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 		 *              `wc_states()`'s cast no longer turns a `false`
 		 *              `get_states()` result into a non-empty array (PR #304
 		 *              review findings 1-4).
+		 * @since 2.0.2 `i18n` gained `notPersisted` — the client-side consumer for an honest
+		 *              `persisted: false` `/select` response (Task 13; issue #295 finding 1).
 		 *
 		 * @param \Woodev\Framework\Shipping\Location\Location_Service $service The active, already-confirmed façade.
 		 *
@@ -493,6 +495,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 					// on top, so a hand-typed address was always accepted.
 					'noResultsAddress' => __(
 						'Адрес не найден — введите вручную.',
+						'woodev-plugin-framework'
+					),
+
+					// #295 finding 1 (Task 13): `POST /location/select` answers
+					// `{persisted: false}` when the write failed server-side (typically a guest
+					// whose WooCommerce session/cart cookie has not initialized yet — gotcha
+					// `guest-session-write-needs-the-cart-cookie`) — an honest signal the client
+					// used to read for exactly one thing (not firing `update_checkout`) and
+					// otherwise discard. `location-cascade.js`'s `showNotPersistedNotice()` is
+					// the consumer this string exists for.
+					'notPersisted'     => __(
+						'Не удалось сохранить выбор — попробуйте ещё раз.',
 						'woodev-plugin-framework'
 					),
 				]

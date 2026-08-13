@@ -30,6 +30,7 @@
 const CONFIG_GLOBAL = 'woodev_checkout_field_config_location_cascade_test';
 const SUGGEST_URL = 'https://example.test/wp-json/woodev/v1/location/suggest';
 const SELECT_URL = 'https://example.test/wp-json/woodev/v1/location/select';
+const LIST_URL = 'https://example.test/wp-json/woodev/v1/location/list';
 
 let attachCalls;
 let fetchCalls;
@@ -169,17 +170,22 @@ function buildConfig( opts ) {
 		nonce: 'test-nonce',
 		takeover: {},
 		location: {
-			endpoints: { suggest: SUGGEST_URL, select: SELECT_URL },
+			endpoints: { suggest: SUGGEST_URL, select: SELECT_URL, list: LIST_URL },
 			nonce: 'test-nonce',
 			countries: o.countries || [ 'RU' ],
-			mode: 'typeahead',
+			// Task 13 (spec D7): 'typeahead' | 'related-list' | 'ajax-select2'.
+			mode: o.mode || 'typeahead',
 			// Keyed BY COUNTRY, mirroring Checkout_Config::build_location_block(): DaData's
 			// coverage is per country (street data for RU/BY/KZ/UZ, city-only elsewhere), so
 			// a flat per-level map cannot describe it without lying.
 			levels: o.levels || { RU: { region: true, settlement: true, address: true } },
 			current: o.current !== undefined ? o.current : null,
 			implicit: false,
-			i18n: o.i18n !== undefined ? o.i18n : { noResults: 'Поиск не дал результатов. Попробуйте изменить запрос.', noResultsAddress: 'Адрес не найден — введите вручную.' },
+			i18n: o.i18n !== undefined ? o.i18n : {
+				noResults: 'Поиск не дал результатов. Попробуйте изменить запрос.',
+				noResultsAddress: 'Адрес не найден — введите вручную.',
+				notPersisted: 'Не удалось сохранить выбор — попробуйте ещё раз.',
+			},
 		},
 	};
 }
@@ -297,6 +303,7 @@ beforeEach( () => {
 	delete window[ CONFIG_GLOBAL ];
 	delete window.WoodevCheckoutFieldStore;
 	delete window.WoodevLocationTypeahead;
+	delete window.WoodevLocationRenderers;
 	delete window.jQuery;
 	delete global.jQuery;
 	delete global.$;
@@ -486,6 +493,101 @@ describe( 'persist then trigger (D8)', () => {
 		expect( document.getElementById( 'billing_city' ).value ).toBe( 'г Москва' );
 
 		triggerSpy.mockRestore();
+	} );
+} );
+
+// -----------------------------------------------------------------------
+// #295 finding 1 — the client now CONSUMES `persisted: false`, not just skips the trigger
+// -----------------------------------------------------------------------
+
+describe( '#295 finding 1 — the "not saved" notice consumes persisted: false', () => {
+	function notice() {
+		return document.querySelector( '.woodev-location-notice' );
+	}
+
+	it( 'shows the server-supplied notPersisted string right after the field, anchored past it in the DOM', async () => {
+		boot( { settlement: true } );
+
+		const settlementCall = callFor( 'billing_city' );
+		const item = {
+			key: 'dadata:city1', label: 'г Москва', level: 'settlement',
+			record: { key: 'dadata:city1', provider_id: 'dadata', level: 'settlement', country: 'RU', label: 'г Москва' },
+		};
+
+		selectViaFake( settlementCall, item );
+
+		const selectReq = fetchCalls[ fetchCalls.length - 1 ];
+		selectReq.resolve( { current: { key: item.record.key, level: 'settlement' }, persisted: false } );
+		await flushMicrotasks();
+
+		expect( notice() ).not.toBeNull();
+		expect( notice().textContent ).toBe( 'Не удалось сохранить выбор — попробуйте ещё раз.' );
+		expect( notice().getAttribute( 'role' ) ).toBe( 'alert' );
+		expect( document.getElementById( 'billing_city' ).nextElementSibling ).toBe( notice() );
+	} );
+
+	it( 'does NOT show a notice for a network/transport failure — only an honest persisted: false is consumed', async () => {
+		const consoleSpy = jest.spyOn( console, 'error' ).mockImplementation( () => {} );
+
+		boot( { settlement: true } );
+
+		const settlementCall = callFor( 'billing_city' );
+		const item = {
+			key: 'dadata:city1', label: 'г Москва', level: 'settlement',
+			record: { key: 'dadata:city1', provider_id: 'dadata', level: 'settlement', country: 'RU', label: 'г Москва' },
+		};
+
+		selectViaFake( settlementCall, item );
+
+		fetchCalls[ fetchCalls.length - 1 ].reject( new Error( 'network down' ) );
+		await flushMicrotasks();
+
+		expect( notice() ).toBeNull();
+
+		consoleSpy.mockRestore();
+	} );
+
+	it( 'clears a previously-shown notice once a LATER selection persists successfully', async () => {
+		boot( { settlement: true } );
+
+		const settlementCall = callFor( 'billing_city' );
+		const first = {
+			key: 'dadata:city1', label: 'г Москва', level: 'settlement',
+			record: { key: 'dadata:city1', provider_id: 'dadata', level: 'settlement', country: 'RU', label: 'г Москва' },
+		};
+
+		selectViaFake( settlementCall, first );
+		fetchCalls[ fetchCalls.length - 1 ].resolve( { current: { key: first.record.key, level: 'settlement' }, persisted: false } );
+		await flushMicrotasks();
+
+		expect( notice() ).not.toBeNull();
+
+		const second = {
+			key: 'dadata:city2', label: 'г Казань', level: 'settlement',
+			record: { key: 'dadata:city2', provider_id: 'dadata', level: 'settlement', country: 'RU', label: 'г Казань' },
+		};
+
+		selectViaFake( settlementCall, second );
+		fetchCalls[ fetchCalls.length - 1 ].resolve( { current: { key: second.record.key, level: 'settlement' }, persisted: true } );
+		await flushMicrotasks();
+
+		expect( notice() ).toBeNull();
+	} );
+
+	it( 'degrades to silence when the server config carries no notPersisted string (older config)', async () => {
+		boot( { settlement: true, i18n: { noResults: 'x' } } );
+
+		const settlementCall = callFor( 'billing_city' );
+		const item = {
+			key: 'dadata:city1', label: 'г Москва', level: 'settlement',
+			record: { key: 'dadata:city1', provider_id: 'dadata', level: 'settlement', country: 'RU', label: 'г Москва' },
+		};
+
+		selectViaFake( settlementCall, item );
+		fetchCalls[ fetchCalls.length - 1 ].resolve( { current: { key: item.record.key, level: 'settlement' }, persisted: false } );
+		await flushMicrotasks();
+
+		expect( notice() ).toBeNull();
 	} );
 } );
 
@@ -1153,6 +1255,167 @@ describe( 'D15 — a level no configured provider serves stays native', () => {
 		document.getElementById( 'billing_address_1' ).dispatchEvent( new Event( 'change', { bubbles: true } ) );
 
 		expect( document.getElementById( 'billing_postcode' ).value ).toBe( '' );
+	} );
+} );
+
+// -----------------------------------------------------------------------
+// Task 13 renderer seam (spec D7) — the cascade must not know WHICH renderer a field uses,
+// only how to ask `window.WoodevLocationRenderers` for one, and it must fall back to the
+// baseline typeahead whenever nothing claims the node.
+// -----------------------------------------------------------------------
+
+describe( 'Task 13 renderer seam (spec D7)', () => {
+	it( 'falls back to the baseline typeahead when nothing is registered for the resolved mode', () => {
+		// `window.WoodevLocationRenderers` is left entirely undefined (as if
+		// location-select-modes.js never loaded) — the D7 floor ("text+typeahead always")
+		// must still hold.
+		boot( { settlement: true, mode: 'related-list' } );
+
+		expect( callFor( 'billing_city' ) ).not.toBeUndefined();
+	} );
+
+	it( 'attaches the {mode}:{level}-specific renderer INSTEAD of the baseline typeahead, and hands it the shared onSelect', async () => {
+		const specialCalls = [];
+		window.WoodevLocationRenderers = {
+			'custom-mode:settlement': ( el, options ) => {
+				specialCalls.push( { el, options } );
+
+				return { detach: jest.fn() };
+			},
+		};
+
+		boot( { settlement: true, mode: 'custom-mode' } );
+
+		expect( callFor( 'billing_city' ) ).toBeUndefined(); // the baseline typeahead was never asked.
+		expect( specialCalls ).toHaveLength( 1 );
+		expect( specialCalls[ 0 ].el.id ).toBe( 'billing_city' );
+
+		// The SAME persist route every other level uses (D8) — not a duplicated one.
+		const record = { key: 'dadata:city1', provider_id: 'dadata', level: 'settlement', country: 'RU', label: 'г Москва' };
+		specialCalls[ 0 ].options.onSelect( { record } );
+
+		const selectReq = fetchCalls[ fetchCalls.length - 1 ];
+		expect( selectReq.url ).toBe( SELECT_URL );
+		expect( JSON.parse( selectReq.init.body ) ).toEqual( { record } );
+
+		const triggerSpy = jest.spyOn( window.jQuery.fn, 'trigger' );
+		selectReq.resolve( { current: { key: record.key, level: 'settlement' }, persisted: true } );
+		await flushMicrotasks();
+
+		expect( triggerSpy.mock.calls.some( ( args ) => args[ 0 ] === 'update_checkout' ) ).toBe( true );
+		triggerSpy.mockRestore();
+	} );
+
+	it( 'prefers the {mode}:{level} key over the bare {mode} key when both are registered', () => {
+		const levelSpecific = jest.fn( () => ( { detach: jest.fn() } ) );
+		const bareMode = jest.fn( () => ( { detach: jest.fn() } ) );
+
+		window.WoodevLocationRenderers = {
+			'custom-mode:settlement': levelSpecific,
+			'custom-mode': bareMode,
+		};
+
+		boot( { settlement: true, mode: 'custom-mode' } );
+
+		expect( levelSpecific ).toHaveBeenCalledTimes( 1 );
+		expect( bareMode ).not.toHaveBeenCalled();
+	} );
+
+	it( 'the bare {mode} key serves every level uniformly when no level-specific one is registered', () => {
+		const bareMode = jest.fn( () => ( { detach: jest.fn() } ) );
+
+		window.WoodevLocationRenderers = { 'custom-mode': bareMode };
+
+		boot( { region: true, settlement: true, address: true, mode: 'custom-mode' } );
+
+		expect( bareMode ).toHaveBeenCalledTimes( 3 );
+	} );
+
+	it( 'a renderer that DECLINES (returns a falsy value) falls back to the baseline typeahead', () => {
+		window.WoodevLocationRenderers = { 'custom-mode:settlement': () => null };
+
+		boot( { settlement: true, mode: 'custom-mode' } );
+
+		expect( callFor( 'billing_city' ) ).not.toBeUndefined();
+	} );
+
+	it( 'a DOM-replacing renderer\'s reported `api.el` is what gets stored as the node\'s live element', () => {
+		// Guards against reconcileAfterCheckoutUpdate() misreading a select2-style DOM swap
+		// (input replaced by a <select>) as a checkout re-render every single pass.
+		const replacement = document.createElement( 'select' );
+		replacement.id = 'billing_city';
+
+		window.WoodevLocationRenderers = {
+			'custom-mode:settlement': ( el ) => {
+				el.parentNode.replaceChild( replacement, el );
+
+				return { detach: jest.fn(), el: replacement };
+			},
+		};
+
+		boot( { settlement: true, mode: 'custom-mode' } );
+
+		// Trigger updated_checkout — if the WRONG element were stored, this would misfire a
+		// spurious detach/reattach; nothing here asserts on that directly, but a second pass
+		// re-deriving country arbitration must not throw or double-attach.
+		window.jQuery( document.body ).trigger( 'updated_checkout' );
+
+		expect( document.getElementById( 'billing_city' ) ).toBe( replacement );
+	} );
+
+	// -------------------------------------------------------------------
+	// isNodeActive()'s ONE necessary D15 exception — related-list region only
+	// -------------------------------------------------------------------
+
+	describe( 'the related-list region exception to the D15 level gate (issue #294)', () => {
+		it( 'attempts the related-list:region renderer even when levels[country].region is false', () => {
+			const regionRenderer = jest.fn( () => ( { detach: jest.fn() } ) );
+
+			window.WoodevLocationRenderers = { 'related-list:region': regionRenderer };
+
+			boot( {
+				region: true, mode: 'related-list',
+				// Mirrors class-checkout-config.php's own #294 arbitration: `region` reads
+				// `false` here REGARDLESS of whether this layer's own related-list injector
+				// populated the states or a genuine conflict did — see isRelatedListRegionNode()'s
+				// own docblock.
+				levels: { RU: { region: false, settlement: true, address: true } },
+			} );
+
+			expect( regionRenderer ).toHaveBeenCalledTimes( 1 );
+		} );
+
+		it( 'does NOT bypass the D15 gate for any OTHER mode — a plain typeahead mode still stays native', () => {
+			const regionRenderer = jest.fn( () => ( { detach: jest.fn() } ) );
+
+			// Registered under a DIFFERENT mode key — must never be consulted while
+			// `entry.location.mode` is `'typeahead'`.
+			window.WoodevLocationRenderers = { 'typeahead:region': regionRenderer };
+
+			boot( {
+				region: true, mode: 'typeahead',
+				levels: { RU: { region: false, settlement: true, address: true } },
+			} );
+
+			expect( regionRenderer ).not.toHaveBeenCalled();
+			expect( callFor( 'billing_state' ) ).toBeUndefined(); // D15: unsupported level stays fully native.
+		} );
+
+		it( 'does NOT bypass the D15 gate for a non-region level under related-list mode', () => {
+			const settlementRenderer = jest.fn( () => ( { detach: jest.fn() } ) );
+
+			window.WoodevLocationRenderers = { 'related-list:settlement': settlementRenderer };
+
+			boot( {
+				settlement: true, mode: 'related-list',
+				levels: { RU: { region: true, settlement: false, address: true } },
+			} );
+
+			// isNodeActive() is false for this node (settlement is D15-unsupported and this is
+			// NOT the region exception), so attachOne() — and therefore the registered
+			// renderer — is never even reached.
+			expect( settlementRenderer ).not.toHaveBeenCalled();
+		} );
 	} );
 } );
 
