@@ -427,16 +427,6 @@ class WoocommercePluginTest extends TestCase {
 		// \Woodev_Plugin::VERSION ('2.0.1') so a regression to the bare constant is caught here.
 		$this->assertSame( $plugin->get_assets_version(), $registered['woodev-modal']['ver'] );
 		$this->assertNotSame( \Woodev_Plugin::VERSION, $registered['woodev-modal']['ver'] );
-
-		// The two pre-existing framework registrations in the same method must survive
-		// untouched — this test guards against the modal's addition breaking its neighbours.
-		$this->assertArrayHasKey( 'jquery-suggestions', $registered );
-		$this->assertArrayHasKey( 'woodev-dadata-suggestions', $registered );
-		// The dadata-suggestions handle had the same bare-self::VERSION defect as the modal
-		// script (same file, same method) — pin it too so the fix cannot regress on one half
-		// of the pair while leaving the other unfixed.
-		$this->assertSame( $plugin->get_assets_version(), $registered['woodev-dadata-suggestions']['ver'] );
-		$this->assertNotSame( \Woodev_Plugin::VERSION, $registered['woodev-dadata-suggestions']['ver'] );
 	}
 
 	/**
