@@ -1849,9 +1849,11 @@ describe( 'Location Provider key invalidation on a local-only clear (review find
 		expect( seen ).toEqual( [] );
 	} );
 
-	it( 'a chain-level field edited WITHOUT picking a suggestion fires an empty-key event', () => {
+	it( 'a chain-level field edited WITHOUT picking a suggestion fires an empty-key event', async () => {
 		// The "typed but not picked" path: handleFieldChanged()'s general branch, never
-		// onSelectFor()'s pick path.
+		// onSelectFor()'s pick path. The invalidation itself is deferred one microtask (see
+		// handleFieldChanged()'s own docblock), so this assertion needs a flush — a bare
+		// synchronous check right after dispatch would see nothing yet, not a real failure.
 		boot( { settlement: true, countries: [ 'RU' ] } );
 
 		const seen = captureLocationApplied();
@@ -1860,6 +1862,8 @@ describe( 'Location Provider key invalidation on a local-only clear (review find
 		field.value = 'Моск';
 		field.dispatchEvent( new Event( 'input', { bubbles: true } ) );
 		field.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+
+		await flushMicrotasks();
 
 		expect( seen ).toEqual( [ { key: '', level: '' } ] );
 	} );
