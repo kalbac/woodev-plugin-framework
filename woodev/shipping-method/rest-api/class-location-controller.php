@@ -139,6 +139,35 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 		protected const LIST_RATE_LIMIT_MAX = 60;
 
 		/**
+		 * Hard cap on the number of localities `/list` ever returns in one
+		 * response, and the default when no (or an out-of-range) `limit` request
+		 * arg is given (PR #304 review finding 5).
+		 *
+		 * The provider contract itself is unbounded (`list_localities()`: "every
+		 * locality within scope") and `within` cannot narrow it for a GUEST
+		 * customer either (it only resolves against an already-persisted
+		 * customer record, see {@see self::build_scope()}), so a country-wide
+		 * `settlement`/`address` enumeration can legitimately be a dictionary
+		 * provider's ENTIRE city table — with every record's full `raw` payload —
+		 * per request. 500 is chosen deliberately: comfortably above the largest
+		 * real `region` list (Russia: 85 federal subjects, the top of what this
+		 * layer's own supported countries ever enumerate at that level), while
+		 * still bounding a `settlement`/`address` dictionary dump — which can run
+		 * into the tens of thousands of rows — to a JSON payload and DOM size a
+		 * single request/render can comfortably handle.
+		 *
+		 * The response is honest about a cap actually having been hit
+		 * ({@see self::handle_list_request()}'s own `truncated` field) rather
+		 * than silently returning a partial list that reads as "this is all
+		 * there is".
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var int
+		 */
+		protected const LIST_HARD_CAP = 500;
+
+		/**
 		 * The façade this controller dispatches through. Defaults to a fresh
 		 * {@see Location_Service} (which itself defaults to the shared
 		 * {@see \Woodev\Framework\Shipping\Location\Location_Provider_Registry}
@@ -295,6 +324,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 							'within'  => [
 								'type'              => 'string',
 								'validate_callback' => 'rest_validate_request_arg',
+							],
+							'limit'   => [
+								'type'              => 'integer',
+								'validate_callback' => 'rest_validate_request_arg',
+
+								// Clamped server-side to [1, LIST_HARD_CAP] by the
+								// callback — see handle_list_request()'s own docblock
+								// (PR #304 review finding 5). A client value <= 0,
+								// missing, or malformed simply falls back to the hard
+								// cap; there is no error path for this arg.
 							],
 
 							// Deliberately no `q` (this is enumeration, not a query-driven
@@ -485,13 +524,31 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 		 * true" signal, not the routine "nothing typed yet" a `/suggest` empty
 		 * read represents.
 		 *
+		 * The response is capped at {@see self::LIST_HARD_CAP} records (PR #304
+		 * review finding 5): the provider contract itself promises "every
+		 * locality within scope" with no size bound, and a guest customer has no
+		 * way to narrow an unscoped `settlement`/`address` enumeration via
+		 * `within` either (it only resolves against an already-persisted
+		 * customer record, {@see self::build_scope()}), so an unbounded request
+		 * could ask a dictionary provider for its entire city table, full `raw`
+		 * payloads included, in one response. The optional `limit` request arg
+		 * narrows the cap further (clamped to `[1, LIST_HARD_CAP]`; a missing or
+		 * out-of-range value falls back to the hard cap outright, never an
+		 * error). The response is honest about truncation — a `truncated: true`
+		 * flag when the provider returned more than what was actually sent, so
+		 * a client can tell "this is everything" from "there is more, refine
+		 * `within`" instead of a silently-cut list reading as the former.
+		 *
 		 * @internal
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Capped at {@see self::LIST_HARD_CAP} records, with an
+		 *              optional clamped `limit` arg and a `truncated` response
+		 *              flag (PR #304 review finding 5).
 		 *
 		 * @param \WP_REST_Request $request request object.
 		 *
-		 * @return \WP_REST_Response|\WP_Error|array{localities: array<int, array<string, mixed>>}
+		 * @return \WP_REST_Response|\WP_Error|array{localities: array<int, array<string, mixed>>, truncated: bool}
 		 */
 		public function handle_list_request( $request ) {
 
@@ -511,6 +568,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 
 			$country = $this->normalize_param( $request->get_param( 'country' ) );
 			$within  = $this->cap_length( $this->normalize_param( $request->get_param( 'within' ) ), self::MAX_PARAM_LENGTH );
+
+			$raw_limit = $request->get_param( 'limit' );
+			$limit     = null === $raw_limit ? self::LIST_HARD_CAP : (int) $raw_limit;
+			$limit     = $limit > 0 ? min( $limit, self::LIST_HARD_CAP ) : self::LIST_HARD_CAP;
 
 			try {
 				$scope = $this->build_scope( $country, $level, $within );
@@ -543,7 +604,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 				return $this->upstream_error();
 			}
 
-			return rest_ensure_response( [ 'localities' => $this->to_response_records( $records ) ] );
+			$truncated = count( $records ) > $limit;
+			$records   = array_slice( $records, 0, $limit );
+
+			return rest_ensure_response(
+				[
+					'localities' => $this->to_response_records( $records ),
+					'truncated'  => $truncated,
+				]
+			);
 		}
 
 		/**

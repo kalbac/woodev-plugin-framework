@@ -835,6 +835,60 @@ final class LocationProviderRegistryTest extends TestCase {
 		$this->assertSame( \Woodev_Control::TYPE_SELECT, $setting->get_control()->get_type() );
 	}
 
+	/**
+	 * PR #304 review finding 6: `register_settings()` used to resolve the
+	 * active provider by looking `$this->providers[ $id ]` up DIRECTLY,
+	 * entirely skipping {@see Location_Provider_Registry::FILTER_ACTIVE_PROVIDER}
+	 * — the same filter {@see Location_Provider_Registry::get_active_provider()}
+	 * (and therefore the runtime's {@see Location_Provider_Registry::get_offered_field_modes()})
+	 * always applies. The stored id here names `acme`, which has no `list`
+	 * capability; the filter swaps the RESOLVED provider to a list-capable one
+	 * regardless. Before the fix, the settings page — built once, at
+	 * collection time, straight from the unfiltered id — would offer ONLY
+	 * `typeahead`, while the runtime (which DOES apply the filter) would
+	 * accept `related-list`/`ajax-select2` too: an admin could never even see
+	 * the option the runtime would actually honour. The mutant this pins:
+	 * reverting `register_settings()` to a direct `$this->providers[ $id ]`
+	 * lookup makes this assertion fail (the settings page would offer only
+	 * `[ 'typeahead' ]`, diverging from `get_offered_field_modes()`).
+	 */
+	public function test_settings_page_field_mode_options_reflect_the_active_provider_filter_not_the_raw_stored_id(): void {
+		$acme          = new Fake_Location_Provider( 'acme', 'ACME' ); // no `list` capability.
+		$list_provider = new Fake_List_Location_Provider( 'list-fixture', 'List Fixture', [ 'RU' ] );
+
+		Functions\when( 'add_action' )->justReturn( true );
+		Functions\when( 'apply_filters' )->alias(
+			static function ( string $tag, $default = null ) use ( $acme, $list_provider ) {
+				if ( Location_Provider_Registry::FILTER_PROVIDERS === $tag ) {
+					return [ $acme, $list_provider ];
+				}
+				if ( Location_Provider_Registry::FILTER_ACTIVE_PROVIDER === $tag ) {
+					return $list_provider; // swaps the resolved provider regardless of the stored id.
+				}
+
+				return $default;
+			}
+		);
+		Functions\when( 'get_option' )->justReturn( 'acme' );
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$setting = $registry->get_settings_handler()->get_setting( Location_Provider_Registry::SETTING_FIELD_MODE );
+
+		$this->assertSame(
+			$registry->get_offered_field_modes(),
+			array_keys( $setting->get_options() ),
+			'the settings page must offer exactly what the runtime would accept — both go through the SAME resolution now'
+		);
+		$this->assertContains(
+			Location_Provider_Registry::MODE_RELATED_LIST,
+			array_keys( $setting->get_options() ),
+			'the filter-swapped list-capable provider must be reflected on the settings page, not the raw stored id alone'
+		);
+	}
+
 	// -------------------------------------------------------------------------
 	// Task 13 — get_field_mode(): default + clamp against the offered set
 	// -------------------------------------------------------------------------
@@ -927,6 +981,16 @@ final class LocationProviderRegistryTest extends TestCase {
 	 */
 	private function activate_related_list_mode( Fake_List_Location_Provider $provider ): Location_Provider_Registry {
 		Functions\when( 'add_action' )->justReturn( true );
+		// Real WC() is never loaded in unit tests — mirrors the real
+		// `wc_strtoupper()` (`mb_strtoupper()` when available, Cyrillic-aware,
+		// see `wc-formatting-functions.php`) so the label -> key transform
+		// `inject_related_list_states()` now applies (PR #304 review finding 2)
+		// exercises the same semantics the real function would.
+		Functions\when( 'wc_strtoupper' )->alias(
+			static function ( $string ) {
+				return mb_strtoupper( (string) $string );
+			}
+		);
 		$this->stub_providers_filter( [ $provider ] );
 		Functions\when( 'get_option' )->alias(
 			static function ( $name, $default = null ) use ( $provider ) {
@@ -954,8 +1018,14 @@ final class LocationProviderRegistryTest extends TestCase {
 	 * value is permanent order data, and a provider-namespaced key renders as
 	 * raw garbage in the customer's formatted address the instant this injector
 	 * is not present (rig measurement, see the method's own docblock).
+	 *
+	 * PR #304 review finding 2: the KEY is `wc_strtoupper( $label )`, never the
+	 * bare (possibly mixed-case) label — `WC_Checkout::validate_posted_data()`
+	 * uppercases whatever the customer posted before matching it against the
+	 * registered keys, so a mixed-case key used bare would never match its own
+	 * uppercased submission again on the next render.
 	 */
-	public function test_inject_injects_regions_keyed_by_their_own_label(): void {
+	public function test_inject_injects_regions_keyed_by_their_own_uppercased_label(): void {
 		$provider = new Fake_List_Location_Provider(
 			'list-fixture',
 			'List Fixture',
@@ -966,7 +1036,7 @@ final class LocationProviderRegistryTest extends TestCase {
 
 		$states = $registry->inject_related_list_states( [] );
 
-		$this->assertSame( [ 'Московская область' => 'Московская область' ], $states['RU'] );
+		$this->assertSame( [ 'МОСКОВСКАЯ ОБЛАСТЬ' => 'Московская область' ], $states['RU'] );
 	}
 
 	/**
@@ -995,7 +1065,32 @@ final class LocationProviderRegistryTest extends TestCase {
 
 		$states = $registry->inject_related_list_states( [] );
 
-		$this->assertSame( [ 'Московская область' => 'Московская область' ], $states['RU'], 'the first record wins; the duplicate is dropped, not merged or suffixed' );
+		$this->assertSame( [ 'МОСКОВСКАЯ ОБЛАСТЬ' => 'Московская область' ], $states['RU'], 'the first record wins; the duplicate is dropped, not merged or suffixed' );
+	}
+
+	/**
+	 * PR #304 review finding 2: two labels differing only in case now collide
+	 * too, since duplicate detection moved onto the uppercased key.
+	 */
+	public function test_inject_treats_labels_differing_only_in_case_as_a_duplicate(): void {
+		Functions\expect( '_doing_it_wrong' )->once();
+
+		$provider = new Fake_List_Location_Provider(
+			'list-fixture',
+			'List Fixture',
+			[ 'RU' ],
+			[
+				'RU' => [
+					$this->region_record( 'list-fixture', 'mo-1', 'RU', 'Московская область' ),
+					$this->region_record( 'list-fixture', 'mo-2', 'RU', 'МОСКОВСКАЯ ОБЛАСТЬ' ),
+				],
+			]
+		);
+		$registry = $this->activate_related_list_mode( $provider );
+
+		$states = $registry->inject_related_list_states( [] );
+
+		$this->assertSame( [ 'МОСКОВСКАЯ ОБЛАСТЬ' => 'Московская область' ], $states['RU'], 'the first record wins, case-insensitively' );
 	}
 
 	public function test_inject_records_ownership_for_every_country_it_wrote(): void {
@@ -1007,10 +1102,94 @@ final class LocationProviderRegistryTest extends TestCase {
 		);
 		$registry = $this->activate_related_list_mode( $provider );
 
+		$states = $registry->inject_related_list_states( [] );
+
+		$this->assertTrue( $registry->owns_region_states( 'RU', $states['RU'] ) );
+		$this->assertFalse( $registry->owns_region_states( 'BY', [] ), 'a country never injected into must not be reported owned' );
+	}
+
+	/**
+	 * PR #304 review finding 3: ownership must be re-confirmed against the
+	 * FINAL registered states, not merely trusted from the recorded flag — a
+	 * later filter callback (e.g. a §8 carrier takeover hooked after this
+	 * injector, both at the default `woocommerce_states` priority) can
+	 * overwrite what this injector wrote. The mutant this pins: reverting
+	 * `owns_region_states()` to trust the recorded flag alone (ignoring
+	 * `$final_states`) makes this assert `true` for a country this injector no
+	 * longer actually owns.
+	 */
+	public function test_owns_region_states_is_false_once_a_later_filter_overwrites_the_injection(): void {
+		$provider = new Fake_List_Location_Provider(
+			'list-fixture',
+			'List Fixture',
+			[ 'RU' ],
+			[ 'RU' => [ $this->region_record( 'list-fixture', 'mo', 'RU', 'Московская область' ) ] ]
+		);
+		$registry = $this->activate_related_list_mode( $provider );
+
 		$registry->inject_related_list_states( [] );
 
-		$this->assertTrue( $registry->owns_region_states( 'RU' ) );
-		$this->assertFalse( $registry->owns_region_states( 'BY' ), 'a country never injected into must not be reported owned' );
+		// Simulates a §8 carrier takeover (Checkout_Handler::inject_states())
+		// running AFTER this injector on the same `woocommerce_states` filter
+		// and unconditionally overwriting the country's states.
+		$overwritten_by_someone_else = [ 'MOW' => 'Москва (перехвачено §8)' ];
+
+		$this->assertFalse( $registry->owns_region_states( 'RU', $overwritten_by_someone_else ) );
+	}
+
+	/**
+	 * PR #304 review finding 4: a record whose label is `''` (documented as
+	 * possible, {@see Location_Record::label()}) must never become a
+	 * selectable option — WooCommerce would render it indistinguishably from
+	 * its own "select an option…" placeholder. The mutant this pins: dropping
+	 * the empty-label guard makes `$options['']` register, so `RU` would carry
+	 * a blank entry and this assertion would fail.
+	 */
+	public function test_inject_skips_a_record_with_an_empty_or_whitespace_only_label(): void {
+		$provider = new Fake_List_Location_Provider(
+			'list-fixture',
+			'List Fixture',
+			[ 'RU' ],
+			[
+				'RU' => [
+					$this->region_record( 'list-fixture', 'blank', 'RU', '' ),
+					$this->region_record( 'list-fixture', 'whitespace', 'RU', '   ' ),
+					$this->region_record( 'list-fixture', 'mo', 'RU', 'Московская область' ),
+				],
+			]
+		);
+		$registry = $this->activate_related_list_mode( $provider );
+
+		$states = $registry->inject_related_list_states( [] );
+
+		$this->assertSame( [ 'МОСКОВСКАЯ ОБЛАСТЬ' => 'Московская область' ], $states['RU'], 'the empty/whitespace-only labels must never become options' );
+	}
+
+	/**
+	 * PR #304 review finding 4: labels are untrimmed by the provider, so
+	 * `'Москва'` and `'Москва '` would otherwise register as two visually
+	 * identical options — trimming BEFORE using the label as key or value
+	 * collapses them into one, same as the real duplicate-label path.
+	 */
+	public function test_inject_trims_labels_before_using_them_as_key_or_value(): void {
+		Functions\expect( '_doing_it_wrong' )->once();
+
+		$provider = new Fake_List_Location_Provider(
+			'list-fixture',
+			'List Fixture',
+			[ 'RU' ],
+			[
+				'RU' => [
+					$this->region_record( 'list-fixture', 'mo-1', 'RU', 'Москва' ),
+					$this->region_record( 'list-fixture', 'mo-2', 'RU', 'Москва ' ),
+				],
+			]
+		);
+		$registry = $this->activate_related_list_mode( $provider );
+
+		$states = $registry->inject_related_list_states( [] );
+
+		$this->assertSame( [ 'МОСКВА' => 'Москва' ], $states['RU'], 'a trailing-whitespace label is the same option as its trimmed form' );
 	}
 
 	/**
@@ -1027,7 +1206,7 @@ final class LocationProviderRegistryTest extends TestCase {
 
 		// Untouched — WC's own pre-existing entry survives.
 		$this->assertSame( [ 'MOW' => 'Москва (native)' ], $states['RU'] );
-		$this->assertFalse( $registry->owns_region_states( 'RU' ), 'nothing was actually injected — must not be reported owned' );
+		$this->assertFalse( $registry->owns_region_states( 'RU', $states['RU'] ), 'nothing was actually injected — must not be reported owned' );
 	}
 
 	/**
@@ -1047,7 +1226,7 @@ final class LocationProviderRegistryTest extends TestCase {
 		$states = $registry->inject_related_list_states( [ 'RU' => [ '77' => 'Москва (карьер)' ] ] );
 
 		$this->assertSame( [ '77' => 'Москва (карьер)' ], $states['RU'], 'first-wins — the pre-existing entry is kept' );
-		$this->assertFalse( $registry->owns_region_states( 'RU' ), 'a country this injector skipped is never reported owned' );
+		$this->assertFalse( $registry->owns_region_states( 'RU', $states['RU'] ), 'a country this injector skipped is never reported owned' );
 	}
 
 	public function test_inject_is_a_no_op_outside_related_list_mode(): void {

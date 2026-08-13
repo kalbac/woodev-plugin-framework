@@ -1054,7 +1054,7 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$this->assertNull( $service->provider_for_list() );
 			$this->assertSame( [ Location_Provider_Registry::MODE_TYPEAHEAD ], $service->get_offered_field_modes() );
 			$this->assertSame( Location_Provider_Registry::MODE_TYPEAHEAD, $service->get_field_mode() );
-			$this->assertFalse( $service->owns_region_states( 'RU' ) );
+			$this->assertFalse( $service->owns_region_states( 'RU', [] ) );
 		}
 
 		// -------------------------------------------------------------------
@@ -1170,8 +1170,8 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$registry = Location_Provider_Registry::instance();
 			$service  = new Location_Service( $registry );
 
-			$this->assertSame( $registry->owns_region_states( 'RU' ), $service->owns_region_states( 'RU' ) );
-			$this->assertFalse( $service->owns_region_states( 'RU' ) );
+			$this->assertSame( $registry->owns_region_states( 'RU', [] ), $service->owns_region_states( 'RU', [] ) );
+			$this->assertFalse( $service->owns_region_states( 'RU', [] ) );
 		}
 	}
 }

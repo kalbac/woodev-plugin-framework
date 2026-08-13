@@ -233,9 +233,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		private ?Location_Settings $settings_handler = null;
 
 		/**
-		 * Countries {@see self::inject_related_list_states()} itself successfully
-		 * wrote non-empty `woocommerce_states` options for, THIS request — the
-		 * ownership record {@see self::owns_region_states()} answers from.
+		 * The exact `woocommerce_states` OPTIONS {@see self::inject_related_list_states()}
+		 * itself successfully wrote for a country, THIS request — the ownership
+		 * record {@see self::owns_region_states()} compares against the FINAL
+		 * registered states to answer from.
 		 *
 		 * Recorded rather than inferred from the field-mode setting alone
 		 * (`mode === 'related-list'`) because that alone cannot distinguish "we
@@ -247,8 +248,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		 * `_doing_it_wrong()` (issue #294) must fire in the second case, not the
 		 * first.
 		 *
+		 * Storing the OPTIONS themselves (not merely a `true` flag) is what lets
+		 * {@see self::owns_region_states()} detect a LATER filter callback
+		 * (e.g. a §8 carrier takeover hooked after this injector) clobbering this
+		 * country's states after this method already ran — see that method's own
+		 * docblock, PR #304 review finding 3.
+		 *
 		 * @since 2.0.2
-		 * @var array<string, true>
+		 * @since 2.0.2 Stores the injected OPTIONS rather than a bare `true` flag
+		 *              (PR #304 review finding 3).
+		 * @var array<string, array<string, string>>
 		 */
 		private array $related_list_states_countries = [];
 
@@ -683,7 +692,21 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		 * Returns `null` outright while the gate is closed — no settings handler
 		 * exists to read a value from, and there is nothing to be "active" about.
 		 *
+		 * Delegates the id -> instance resolution (+ {@see self::FILTER_ACTIVE_PROVIDER})
+		 * to {@see self::resolve_active_provider_for_id()} — the SAME resolution
+		 * {@see self::register_settings()} now goes through, so the settings page
+		 * (built once, at collection time) and every runtime caller of this method
+		 * can never disagree about which provider is active (PR #304 review
+		 * finding 6: `register_settings()` used to look the id up directly against
+		 * `$this->providers`, skipping the filter entirely, so a plugin using
+		 * {@see self::FILTER_ACTIVE_PROVIDER} to swap the resolved provider could
+		 * make the admin settings page offer a narrower set of field modes than
+		 * the runtime would actually accept).
+		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Delegates to {@see self::resolve_active_provider_for_id()},
+		 *              shared with {@see self::register_settings()} (PR #304
+		 *              review finding 6).
 		 *
 		 * @return Location_Provider|null
 		 */
@@ -693,24 +716,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 			}
 
 			$active_id = (string) $this->settings_handler->get_value( self::SETTING_ACTIVE_PROVIDER );
-			$provider  = $this->providers[ $active_id ] ?? $this->providers[ self::DEFAULT_PROVIDER_ID ] ?? null;
 
-			/**
-			 * Filters the resolved active location provider instance.
-			 *
-			 * Left in place even though nothing in this codebase consumes it yet
-			 * (project preference: extension hooks are not gated on a consumer).
-			 *
-			 * @since 2.0.2
-			 *
-			 * @param Location_Provider|null $provider  The resolved provider, or null
-			 *                                           when the (possibly-fallen-back-to)
-			 *                                           id has nothing registered.
-			 * @param string                 $active_id The store setting's raw value
-			 *                                           (before the default-id fallback
-			 *                                           above was applied).
-			 */
-			return apply_filters( self::FILTER_ACTIVE_PROVIDER, $provider, $active_id );
+			return $this->resolve_active_provider_for_id( $active_id );
 		}
 
 		/**
@@ -844,20 +851,49 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 
 		/**
 		 * Whether {@see self::inject_related_list_states()} itself successfully
-		 * injected `$country`'s `woocommerce_states` options THIS request — the
+		 * injected `$country`'s `woocommerce_states` options THIS request AND
+		 * those options are still what WooCommerce is serving right now — the
 		 * precise "is this non-empty state list ours" answer
 		 * {@see \Woodev\Framework\Shipping\Checkout\Checkout_Config::build_location_block()}
 		 * needs for the issue #294 arbitration (see {@see self::inject_related_list_states()}'s
 		 * own docblock for why the field-mode setting alone cannot answer this).
 		 *
-		 * @since 2.0.2
+		 * `$final_states` is the country's FINAL `woocommerce_states` read —
+		 * after every filter callback that ran this request, including any §8
+		 * carrier takeover ({@see \Woodev\Framework\Shipping\Checkout\Checkout_Handler::inject_states()})
+		 * that runs AFTER this injector (both are hooked at the default
+		 * priority; this injector merely runs first) and clobbers its result
+		 * unconditionally. Recording "we wrote it" alone (the pre-PR-304
+		 * behaviour) answered a question that had already gone stale by the
+		 * time it mattered: a later §8 takeover silently overwrote this
+		 * layer's own injection while the recorded flag stayed `true`, so the
+		 * #294 conflict this rule exists to surface never fired for the exact
+		 * collision it was written for (PR #304 review finding 3) — the client
+		 * was then offered carrier option TEXTS that appear in no `/location/list`
+		 * response, so the label -> record lookup found nothing and nothing
+		 * ever reached `/location/select`. Comparing against the FINAL read
+		 * closes that gap, and covers any third party filtering
+		 * `woocommerce_states` directly the same way.
 		 *
-		 * @param string $country ISO-3166 alpha-2 country code, any case/whitespace.
+		 * @since 2.0.2
+		 * @since 2.0.2 Takes the caller's own FINAL `woocommerce_states` read
+		 *              and compares it against what was actually injected,
+		 *              rather than trusting the recorded flag alone (PR #304
+		 *              review finding 3).
+		 *
+		 * @param string                $country      ISO-3166 alpha-2 country code, any case/whitespace.
+		 * @param array<string, string> $final_states The country's FINAL registered WC states
+		 *                                             (e.g. {@see \Woodev\Framework\Shipping\Checkout\Checkout_Config::wc_states()}'s
+		 *                                             own read), compared against what this
+		 *                                             injector itself wrote.
 		 *
 		 * @return bool
 		 */
-		public function owns_region_states( string $country ): bool {
-			return isset( $this->related_list_states_countries[ strtoupper( trim( $country ) ) ] );
+		public function owns_region_states( string $country, array $final_states ): bool {
+			$country = strtoupper( trim( $country ) );
+
+			return isset( $this->related_list_states_countries[ $country ] )
+				&& $this->related_list_states_countries[ $country ] === $final_states;
 		}
 
 		/**
@@ -902,35 +938,56 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		 *   own catch-and-degrade discipline for the equivalent REST path).
 		 *
 		 * The WC state array's VALUE is the record's own {@see Location_Record::label()}
-		 * — a human-readable region name, THE SAME STRING used as the key — never
-		 * the record's {@see Location_Record::key()} (`provider_id:native_id`).
-		 * That value is what the customer's browser submits as `billing_state` /
-		 * `shipping_state`, and it persists PERMANENTLY into order data — a
-		 * provider-namespaced key stored there renders as raw, meaningless text in
-		 * {@see \WC_Countries::get_formatted_address()} the instant this injector
-		 * is not present to translate it back (a provider switch renamespaces the
-		 * keys, a mode switch back to `typeahead` stops injecting entirely, and a
-		 * deactivated plugin obviously never runs at all) — order history must
-		 * stay meaningful without this plugin (measured on the rig, s71: an
-		 * uninjected `dadata:0c089b04-…` key rendered verbatim in a formatted
-		 * address). Identity already lives where it belongs — in our own customer
-		 * location record, persisted through `/location/select` — so a second copy
-		 * of identity inside a WooCommerce field this layer does not own would be
-		 * both redundant and permanent. See `Checkout_Config`'s own class docblock
-		 * for how the client-side related-list renderer (a later agent's task)
-		 * maps the selected label back to a full record via `/location/list`
-		 * instead.
+		 * (trimmed) — a human-readable region name — never the record's
+		 * {@see Location_Record::key()} (`provider_id:native_id`). That value is
+		 * what {@see \WC_Countries::get_formatted_address()} resolves through the
+		 * KEY to render on the order, and it persists PERMANENTLY into order
+		 * data — a provider-namespaced key stored there renders as raw,
+		 * meaningless text the instant this injector is not present to translate
+		 * it back (a provider switch renamespaces the keys, a mode switch back to
+		 * `typeahead` stops injecting entirely, and a deactivated plugin obviously
+		 * never runs at all) — order history must stay meaningful without this
+		 * plugin (measured on the rig, s71: an uninjected `dadata:0c089b04-…` key
+		 * rendered verbatim in a formatted address). Identity already lives where
+		 * it belongs — in our own customer location record, persisted through
+		 * `/location/select` — so a second copy of identity inside a WooCommerce
+		 * field this layer does not own would be both redundant and permanent.
+		 * See `Checkout_Config`'s own class docblock for how the client-side
+		 * related-list renderer maps the selected label back to a full record via
+		 * `/location/list` instead.
 		 *
-		 * Two records legitimately colliding on the same label within one country
-		 * ARE possible (a provider's own data, not a coding mistake) and are a
-		 * real ambiguity: WooCommerce's state array is keyed by value, so only one
-		 * of them could ever be selected. The first one (provider's own
-		 * enumeration order) wins; every later collision is dropped and reported
-		 * via `_doing_it_wrong()` — the label-identity discipline this layer
-		 * enforces makes a synthetic disambiguating suffix (e.g. appending the
-		 * key) the wrong fix, since that suffix would itself leak into
-		 * `billing_state` and recreate the exact opaque-value problem this method
-		 * exists to remove.
+		 * The KEY is the label UPPERCASED via WooCommerce's own `wc_strtoupper()`
+		 * — never the bare (possibly mixed-case) label — because
+		 * `WC_Checkout::validate_posted_data()` uppercases whatever the customer
+		 * posted before matching it against the registered state keys
+		 * (`includes/class-wc-checkout.php`); for WC's own native states this is a
+		 * no-op (their keys are already uppercase codes), but a mixed-case human
+		 * label used bare AS the key gets shouted into an UPPERCASE value that no
+		 * longer equals the option's own key, so the next render's `selected()`
+		 * check never matches and the field silently reverts to the placeholder
+		 * (PR #304 review finding 2, measured on the rig: posting `Московская
+		 * область` stored `МОСКОВСКАЯ ОБЛАСТЬ`, which the mixed-case key could
+		 * never match again). Pre-uppercasing the key makes the round trip a
+		 * no-op: the posted value already equals the key, WC's own uppercase
+		 * normalization maps it straight back to itself, and
+		 * `get_formatted_address()` still resolves the pretty (human-case) LABEL
+		 * through that key.
+		 *
+		 * A record whose (trimmed) label is empty is skipped outright — an empty
+		 * string is indistinguishable from WooCommerce's own "select an option…"
+		 * placeholder and must never become a selectable option (PR #304 review
+		 * finding 4).
+		 *
+		 * Two records legitimately colliding on the same UPPERCASED label within
+		 * one country ARE possible (a provider's own data, not a coding mistake,
+		 * and now also two labels differing only in case) and are a real
+		 * ambiguity: WooCommerce's state array is keyed by value, so only one of
+		 * them could ever be selected. The first one (provider's own enumeration
+		 * order) wins; every later collision is dropped and reported via
+		 * `_doing_it_wrong()` — the label-identity discipline this layer enforces
+		 * makes a synthetic disambiguating suffix (e.g. appending the key) the
+		 * wrong fix, since that suffix would itself leak into `billing_state` and
+		 * recreate the exact opaque-value problem this method exists to remove.
 		 *
 		 * @internal Hooked to `woocommerce_states`; not part of the public
 		 *           consumption surface.
@@ -942,6 +999,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		 *              meaning once this injector stops running (rig measurement,
 		 *              s71). Duplicate labels within one country are now detected
 		 *              and reported instead of silently colliding.
+		 * @since 2.0.2 The KEY is now `wc_strtoupper( trim( $label ) )` rather than
+		 *              the bare label, and an empty/whitespace-only label is
+		 *              skipped rather than registered — PR #304 review findings 2
+		 *              and 4.
 		 *
 		 * @param mixed $states WC states keyed by country code, as received from
 		 *                      whichever `woocommerce_states` callback ran before
@@ -952,6 +1013,20 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		public function inject_related_list_states( $states ): array {
 			$states = is_array( $states ) ? $states : [];
 
+			// KNOWN LATENT CONSTRAINT (PR #304 review finding 7, not fixed — see
+			// that review's own "not in scope" note): this method is hooked at
+			// `plugins_loaded` ({@see self::add_hooks()}), but {@see self::get_field_mode()}
+			// answers `self::MODE_TYPEAHEAD` until `$this->settings_handler` exists,
+			// which {@see self::register_settings()} only builds at `init` priority
+			// 20 ({@see self::collect()}). So ANY `woocommerce_states` read that
+			// happens between `plugins_loaded` and `init:20` — even with the store
+			// option genuinely set to `related-list` — sees this gate closed and
+			// gets the un-injected list; because WordPress does not "replay" a
+			// filter for a caller that already consumed its result, that caller's
+			// copy of the list stays un-injected for the rest of the request. No
+			// WooCommerce-core caller was found running that early (WC's own
+			// checkout/order code all runs well after `init`), so this is latent,
+			// not observed — left as a comment rather than restructured.
 			if ( self::MODE_RELATED_LIST !== $this->get_field_mode() ) {
 				return $states;
 			}
@@ -983,9 +1058,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 						continue;
 					}
 
-					$label = $record->label();
+					$label = trim( $record->label() );
 
-					if ( isset( $options[ $label ] ) ) {
+					if ( '' === $label ) {
+						continue; // Finding 4: never a selectable-but-blank option.
+					}
+
+					$key = wc_strtoupper( $label );
+
+					if ( isset( $options[ $key ] ) ) {
 						_doing_it_wrong(
 							__METHOD__,
 							sprintf(
@@ -1000,7 +1081,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 						continue;
 					}
 
-					$options[ $label ] = $label;
+					$options[ $key ] = $label;
 				}
 
 				if ( [] === $options ) {
@@ -1009,7 +1090,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 
 				$states[ $country ] = $options;
 
-				$this->related_list_states_countries[ $country ] = true;
+				$this->related_list_states_countries[ $country ] = $options;
 			}
 
 			return $states;
@@ -1024,15 +1105,29 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		 * through the handler this method is about to build — the handler does not
 		 * exist yet at this point (constructing it is literally what this method
 		 * does), so there is nothing to read the value from otherwise. Both paths
-		 * read the exact same option name, so they can never disagree.
+		 * read the exact same option name, so they can never disagree on WHICH ID
+		 * is stored.
+		 *
+		 * The id -> instance resolution itself now goes through
+		 * {@see self::resolve_active_provider_for_id()} — the SAME resolution
+		 * {@see self::get_active_provider()} uses, {@see self::FILTER_ACTIVE_PROVIDER}
+		 * included. Previously this method looked the id up directly against
+		 * `$this->providers`, entirely skipping that filter — so a site using it to
+		 * swap the resolved provider could make this settings page offer a
+		 * NARROWER set of field modes than the runtime would actually accept for
+		 * the very same store setting (PR #304 review finding 6).
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Resolves the active provider through
+		 *              {@see self::resolve_active_provider_for_id()} instead of a
+		 *              direct `$this->providers[ $id ]` lookup (PR #304 review
+		 *              finding 6).
 		 *
 		 * @return void
 		 */
 		private function register_settings(): void {
 			$active_id       = $this->resolve_stored_active_provider_id();
-			$active_provider = $this->providers[ $active_id ] ?? null;
+			$active_provider = $this->resolve_active_provider_for_id( $active_id );
 			$provider_fields = null !== $active_provider ? $active_provider->get_settings_fields() : [];
 
 			$provider_options = [];
@@ -1082,6 +1177,45 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 			}
 
 			return self::DEFAULT_PROVIDER_ID;
+		}
+
+
+		/**
+		 * Resolves a provider id to its registered instance, falling back to
+		 * {@see self::DEFAULT_PROVIDER_ID} and applying {@see self::FILTER_ACTIVE_PROVIDER}
+		 * — the single resolution both {@see self::get_active_provider()} and
+		 * {@see self::register_settings()} now go through (PR #304 review finding
+		 * 6), so the admin settings surface and the runtime can never disagree
+		 * about which provider is active.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $active_id A provider id — typically the store setting's
+		 *                          raw value, already resolved to a KNOWN id by
+		 *                          the caller where possible (not required: an
+		 *                          unknown id here still falls back safely).
+		 *
+		 * @return Location_Provider|null
+		 */
+		private function resolve_active_provider_for_id( string $active_id ): ?Location_Provider {
+			$provider = $this->providers[ $active_id ] ?? $this->providers[ self::DEFAULT_PROVIDER_ID ] ?? null;
+
+			/**
+			 * Filters the resolved active location provider instance.
+			 *
+			 * Left in place even though nothing in this codebase consumes it yet
+			 * (project preference: extension hooks are not gated on a consumer).
+			 *
+			 * @since 2.0.2
+			 *
+			 * @param Location_Provider|null $provider  The resolved provider, or null
+			 *                                           when the (possibly-fallen-back-to)
+			 *                                           id has nothing registered.
+			 * @param string                 $active_id The id being resolved (before
+			 *                                           the default-id fallback above
+			 *                                           was applied).
+			 */
+			return apply_filters( self::FILTER_ACTIVE_PROVIDER, $provider, $active_id );
 		}
 	}
 

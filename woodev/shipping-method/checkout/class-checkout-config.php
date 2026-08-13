@@ -321,30 +321,39 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 		 *   meaningful attached to an actual record.
 		 *
 		 * **`related-list` region seam (Task 13; client-facing contract for the
-		 * next agent — CORRECTED after the s71 rig measurement, see below):**
-		 * when `mode === 'related-list'`, the region `<select>` WooCommerce
-		 * renders is populated by
+		 * next agent — CORRECTED after the s71 rig measurement AND the PR #304
+		 * review, see below):** when `mode === 'related-list'`, the region
+		 * `<select>` WooCommerce renders is populated by
 		 * {@see \Woodev\Framework\Shipping\Location\Location_Provider_Registry::inject_related_list_states()}
-		 * with `label => label` pairs — **the WC state VALUE is the record's own
-		 * {@see \Woodev\Framework\Shipping\Location\Location_Record::label()}**
-		 * (a human-readable region name), NEVER the record's `key()`
-		 * (`provider_id:native_id`). That value is what the customer's browser
-		 * submits as `billing_state`/`shipping_state` and it persists PERMANENTLY
-		 * into order data (a release-blocking installed-site data contract, per
-		 * this project's backward-compatibility policy); a provider-namespaced
-		 * key stored there renders as raw, meaningless text the instant this
-		 * injector stops running — after a provider switch (the key's namespace
-		 * changes), after the store mode is set back to `typeahead`, or after the
-		 * plugin is deactivated. Measured on the rig (s71): WITHOUT the injector
-		 * attached, a stored `dadata:0c089b04-…` key rendered verbatim inside
+		 * with `wc_strtoupper( label ) => label` pairs — the `<option>` VALUE is
+		 * the record's own {@see \Woodev\Framework\Shipping\Location\Location_Record::label()}
+		 * UPPERCASED (via WooCommerce's own `wc_strtoupper()`, Cyrillic-aware),
+		 * the `<option>` TEXT is the human-readable label unchanged, and NEITHER
+		 * is ever the record's `key()` (`provider_id:native_id`). The VALUE is
+		 * what the customer's browser submits as `billing_state`/`shipping_state`
+		 * and it persists PERMANENTLY into order data (a release-blocking
+		 * installed-site data contract, per this project's backward-compatibility
+		 * policy); a provider-namespaced key stored there renders as raw,
+		 * meaningless text the instant this injector stops running — after a
+		 * provider switch (the key's namespace changes), after the store mode is
+		 * set back to `typeahead`, or after the plugin is deactivated. Measured
+		 * on the rig (s71): WITHOUT the injector attached, a stored
+		 * `dadata:0c089b04-…` key rendered verbatim inside
 		 * `WC_Countries::get_formatted_address()`'s output instead of the region
-		 * name.
+		 * name. The VALUE is uppercased — not the bare label — because
+		 * `WC_Checkout::validate_posted_data()` uppercases whatever the customer
+		 * posted before matching it against the registered keys; a mixed-case
+		 * key used bare would get shouted into an uppercase STORED value that no
+		 * longer equals its own option's key, so the field would silently revert
+		 * to the placeholder on the next render (PR #304 review finding 2,
+		 * measured on the rig: posting `Московская область` stored `МОСКОВСКАЯ
+		 * ОБЛАСТЬ`, which the mixed-case key could never match again).
 		 *
 		 * A client-side related-list handler does NOT reconstruct a
 		 * `Location_Record` from the selected `<option>` alone — a label is not a
-		 * full record. Instead it takes the option's selected TEXT (identical to
-		 * its `value`, since both are the label) and looks it up in the SAME
-		 * country's response from the `list` endpoint above (`GET
+		 * full record. Instead it takes the option's selected TEXT (the human
+		 * label — NOT its `value`, which is uppercased) and looks it up in the
+		 * SAME country's response from the `list` endpoint above (`GET
 		 * .../location/list?level=region&country={code}`, already fetched or
 		 * fetchable via this block's `endpoints.list`): each entry there carries
 		 * `{ key, label, level, record }` where `record` is the UNTOUCHED
@@ -373,6 +382,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 		 *              state VALUE is the record's `label()`, not its `key()` —
 		 *              a `billing_state`/`shipping_state` value is permanent
 		 *              order data (rig measurement, s71).
+		 * @since 2.0.2 `related-list` region seam corrected again: the injected
+		 *              WC state KEY is now `wc_strtoupper( trim( label ) )`
+		 *              rather than the bare label, the ownership check
+		 *              ({@see \Woodev\Framework\Shipping\Location\Location_Service::owns_region_states()})
+		 *              now re-confirms against the FINAL registered states, and
+		 *              `wc_states()`'s cast no longer turns a `false`
+		 *              `get_states()` result into a non-empty array (PR #304
+		 *              review findings 1-4).
 		 *
 		 * @param \Woodev\Framework\Shipping\Location\Location_Service $service The active, already-confirmed façade.
 		 *
@@ -409,9 +426,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 				// method's own docblock for the full rule, and {@see self::wc_states()}
 				// for why that read goes through an overridable seam rather than a bare
 				// WC() call inline here.
-				$states_present = [] !== $this->wc_states( $code );
+				$final_states   = $this->wc_states( $code );
+				$states_present = [] !== $final_states;
 
-				if ( $country_levels['region'] && $states_present && ! $service->owns_region_states( $code ) ) {
+				if ( $country_levels['region'] && $states_present && ! $service->owns_region_states( $code, $final_states ) ) {
 					$region_conflict_countries[] = $code;
 				}
 
@@ -521,9 +539,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 		 *
 		 * Degrades to `[]` (never fatals) when `WC()`/`WC()->countries` is
 		 * unavailable — the same "no states known, trust the D15 chain's own
-		 * answer unchanged" degradation the pre-Task-13 code implicitly had.
+		 * answer unchanged" degradation the pre-Task-13 code implicitly had. Also
+		 * degrades to `[]` (via `array_filter()`) when `get_states()` itself
+		 * answers `false` for an absent country key — see this method's own body
+		 * comment (PR #304 review finding 1).
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Wrapped the cast in `array_filter()` — a bare `(array) false`
+		 *              is `[ 0 => false ]`, non-empty (PR #304 review finding 1).
 		 *
 		 * @param string $country ISO-3166 alpha-2 country code.
 		 *
@@ -536,7 +559,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 				return [];
 			}
 
-			return (array) WC()->countries->get_states( $country );
+			// `WC_Countries::get_states()` returns `false` — not `[]` — when the
+			// country key is absent (`includes/class-wc-countries.php`), and
+			// `(array) false === [ 0 => false ]`, which is NON-empty: a bare cast
+			// here made `$states_present` true for every country with no states at
+			// all, which in the DEFAULT configuration (typeahead mode, no §8
+			// takeover) meant the region typeahead never attached anywhere and
+			// `_doing_it_wrong()` fired on every checkout render (PR #304 review
+			// finding 1, measured on the rig: `get_states( 'RU' )` -> `false`,
+			// `(array) false` -> `[ 0 => false ]`). `array_filter()` drops that
+			// falsy entry, mirroring WooCommerce's own precedent for this exact
+			// trap: `StoreApi\Utilities\ValidationUtils::format_state()` reads
+			// `array_filter( (array) wc()->countries->get_states( $country ) )`.
+			return array_filter( (array) WC()->countries->get_states( $country ) );
 		}
 	}
 

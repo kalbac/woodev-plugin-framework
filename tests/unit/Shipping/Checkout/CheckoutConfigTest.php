@@ -138,7 +138,7 @@ final class Checkout_Config_Fake_Location_Service extends Location_Service {
 		return $this->mode;
 	}
 
-	public function owns_region_states( string $country ): bool {
+	public function owns_region_states( string $country, array $final_states ): bool {
 		return in_array( $country, $this->owned_region_countries, true );
 	}
 
@@ -839,5 +839,69 @@ class CheckoutConfigTest extends TestCase {
 			->build( Checkout_Fields::from_array( [] ) );
 
 		$this->assertTrue( $config['location']['levels']['RU']['region'] );
+	}
+
+	/**
+	 * PR #304 review finding 1 (CRITICAL): `WC_Countries::get_states( $cc )`
+	 * returns `false` — not `[]` — when the country key is absent
+	 * (`includes/class-wc-countries.php`), and `(array) false === [ 0 => false ]`,
+	 * which is NON-empty. Every other test in this file exercises `wc_states()`
+	 * either through the `config_with_states()` Probe subclass's OVERRIDE
+	 * (never running the real method body at all) or through the
+	 * `function_exists( 'WC' ) === false` degradation branch above (never
+	 * reaching the `WC()->countries->get_states()` call either) — neither one
+	 * runs the real cast/filter logic this test pins.
+	 *
+	 * Isolated in its own process (`@runInSeparateProcess`, same idiom as
+	 * `FrameworkResolverTest`/`BootstrapRegistrationTest` elsewhere in this
+	 * suite): Brain Monkey must actually DECLARE a global `WC()` function to
+	 * stub it, and PHP cannot un-declare a function once declared — stubbing
+	 * `WC()` here would otherwise permanently poison every other test in the
+	 * suite relying on `function_exists( 'WC' ) === false` (measured directly,
+	 * see `wc_states()`'s own docblock: a first version of that method calling
+	 * `WC()` inline broke 21 unrelated tests the moment `composer test:unit`
+	 * ran the whole suite in one process).
+	 *
+	 * The mutant this pins: reverting `wc_states()`'s
+	 * `array_filter( (array) WC()->countries->get_states( $country ) )` back to
+	 * the bare `(array) WC()->countries->get_states( $country )` cast turns
+	 * `false` into `[ 0 => false ]` — non-empty — so `states_present` would be
+	 * `true` and this assertion would flip to `false`.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_wc_states_degrades_a_false_get_states_result_to_states_present_false(): void {
+		$countries = new class() {
+			/**
+			 * @param string $country ISO-3166 alpha-2 country code.
+			 *
+			 * @return false Mirrors `WC_Countries::get_states()`'s own contract
+			 *               for a country nothing is registered under.
+			 */
+			public function get_states( string $country ) {
+				return false;
+			}
+		};
+		$wc = new class( $countries ) {
+			public $countries;
+
+			public function __construct( $countries ) {
+				$this->countries = $countries;
+			}
+		};
+
+		Functions\when( 'WC' )->justReturn( $wc );
+
+		$service = new Checkout_Config_Fake_Location_Service( true, [ 'region' => true, 'settlement' => true, 'address' => true ], null, [ 'RU' ] );
+		// The REAL Checkout_Config — not the config_with_states() Probe — so
+		// wc_states()'s real body (the array_filter/(array) cast) actually runs.
+		$config = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ], $service ) )
+			->build( Checkout_Fields::from_array( [] ) );
+
+		$this->assertTrue(
+			$config['location']['levels']['RU']['region'],
+			'a WC states read of `false` must degrade to states_present=false, not a false-positive conflict'
+		);
 	}
 }

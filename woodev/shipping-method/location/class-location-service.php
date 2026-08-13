@@ -575,23 +575,30 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		/**
 		 * Whether the `related-list` mode's own region injector
 		 * ({@see Location_Provider_Registry::inject_related_list_states()})
-		 * itself wrote `$country`'s `woocommerce_states` options THIS request —
-		 * thin pass-through to {@see Location_Provider_Registry::owns_region_states()}.
+		 * itself wrote `$country`'s `woocommerce_states` options THIS request AND
+		 * those options are still what WooCommerce is serving right now — thin
+		 * pass-through to {@see Location_Provider_Registry::owns_region_states()}.
 		 *
 		 * This is the precision {@see \Woodev\Framework\Shipping\Checkout\Checkout_Config::build_location_block()}
 		 * needs for the issue #294 arbitration: a non-empty state list for a
 		 * country can come from WooCommerce's own native list, a plugin's §8
 		 * carrier takeover, OR this layer's own related-list injection — only
-		 * the last one is NOT a conflict.
+		 * the last one is NOT a conflict, and only when nothing ran AFTER this
+		 * layer's injector to clobber it (PR #304 review finding 3).
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Takes the caller's own FINAL `woocommerce_states` read
+		 *              (PR #304 review finding 3) — see
+		 *              {@see Location_Provider_Registry::owns_region_states()}'s
+		 *              own docblock for why.
 		 *
-		 * @param string $country ISO-3166 alpha-2 country code, any case/whitespace.
+		 * @param string                $country      ISO-3166 alpha-2 country code, any case/whitespace.
+		 * @param array<string, string> $final_states The country's FINAL registered WC states.
 		 *
 		 * @return bool
 		 */
-		public function owns_region_states( string $country ): bool {
-			return $this->registry->owns_region_states( $country );
+		public function owns_region_states( string $country, array $final_states ): bool {
+			return $this->registry->owns_region_states( $country, $final_states );
 		}
 	}
 
