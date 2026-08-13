@@ -503,6 +503,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 *              their files existing on disk (location-provider layer Task 9).
 		 * @since 2.1.0 Also enqueues `location.css`, the typeahead listbox's own
 		 *              theme-resistant styles, under the same guard.
+		 * @since 2.1.0 Also enqueues `location-select-modes.js` (Task 13; spec D7), the
+		 *              `related-list`/`ajax-select2` renderer registry — same guard, declared
+		 *              as a dependency of `woodev-location-cascade` so it always registers
+		 *              before the cascade's own boot pass reads it.
 		 *
 		 * @return void
 		 */
@@ -554,6 +558,21 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 			if ( isset( $config['location'] ) ) {
 				$typeahead_built = $this->enqueue_script_if_built( 'woodev-location-typeahead', 'js/frontend/location-typeahead.js', [] );
 
+				// Task 13's `related-list`/`ajax-select2` renderers (spec D7) — depends on
+				// `selectWoo`, the SAME WC-bundled select2 handle `woodev-checkout-field-classic`
+				// already requires, because select2 can only enhance a real `<select>` (see the
+				// file's own SELECT2 IS OPTIONAL AT RUNTIME section). Declared as a dependency of
+				// `woodev-location-cascade` below (never the reverse) so its own registration onto
+				// `window.WoodevLocationRenderers` has always already run by the time the cascade's
+				// `boot()` calls `attachAll()` — the cascade never imports this file directly (spec
+				// D7: "mode is presentation... the cascade must not know which renderer a field
+				// uses"), it only reads the registry that file populates.
+				$select_modes_built = $this->enqueue_script_if_built(
+					'woodev-location-select-modes',
+					'js/frontend/location-select-modes.js',
+					[ 'jquery', 'selectWoo' ]
+				);
+
 				$this->enqueue_script_if_built(
 					'woodev-location-cascade',
 					'js/frontend/location-cascade.js',
@@ -564,6 +583,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 								'woodev-checkout-field-store',
 								'woodev-checkout-field-classic',
 								$typeahead_built ? 'woodev-location-typeahead' : null,
+								$select_modes_built ? 'woodev-location-select-modes' : null,
 							]
 						)
 					)

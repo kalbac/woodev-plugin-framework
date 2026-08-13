@@ -1,6 +1,6 @@
 /**
  * Woodev Location Cascade — field-graph wiring for the location provider layer
- * (spec §4.4/D2, plan Tasks 11-12).
+ * (spec §4.4/D2/D7, plan Tasks 11-13).
  *
  * Builds ON TOP OF the §8 checkout-field store (`checkout-field-store.js`, Task 10 of the
  * 2026-07-06 plan) rather than a parallel state world: the store already owns canonical
@@ -8,6 +8,18 @@
  * persistence, backwards fill, per-country attach/detach, and (Task 12) a client-side wrap of
  * WC's OWN Address Autocomplete provider registry for mixed-country stores (see the
  * "WC Address Autocomplete suppression" section below).
+ *
+ * RENDERER SEAM (Task 13, spec D7 — "mode is presentation, provider is data"): this module
+ * owns exactly ONE renderer itself — the baseline typeahead ({@see attachOne}'s fallback path,
+ * gated by the D15 `isLevelServed()` chain) — and otherwise only knows how to ASK for one:
+ * {@see resolveModeRenderer} looks up `window.WoodevLocationRenderers[mode(+':'+level)]`,
+ * a registry `location-select-modes.js` populates with the `related-list` and `ajax-select2`
+ * renderers. This file never imports that module, never branches on its presence, and never
+ * inspects what a resolved renderer actually does with the `fetch`/`onSelect`/scoping
+ * primitives {@see attachOne} hands it — the cascade stays entirely ignorant of WHICH
+ * presentation a field gets, only of the fixed chain and persistence contract every
+ * presentation must honour identically (D8's persist-then-trigger route via the SAME
+ * `onSelectFor()`, never a duplicated one).
  *
  * STORE SHARING (discovered from `class-checkout-handler.php::enqueue_assets()`, not spelled
  * out in the plan — contradiction noted in the Task 11 report): this file is enqueued with a
@@ -269,13 +281,80 @@
 
 		var country = countryFor( node );
 
+		if ( ! isCountrySupported( entry, country ) ) {
+			return false;
+		}
+
+		// Task 13 / spec D7's ONE necessary exception to the D15 level gate below — see
+		// isRelatedListRegionNode()'s own docblock for why `isLevelServed()` cannot answer
+		// this case at all (by the SERVER's own design, not an oversight here).
+		if ( isRelatedListRegionNode( entry, node ) ) {
+			return true;
+		}
+
 		// The D15 level gate belongs HERE, not only inside attachOne(): the reconcile in
 		// applyCountryArbitration() decides detach-vs-attach purely from this predicate, so a
 		// gate that lives only on the attach path can never DETACH. Concretely — a customer
 		// on RU with an attached address widget who switches to AM (a country we serve, but
 		// with city-only data) would keep a widget that can never return anything, because
 		// the country itself is still supported and the section is still visible.
-		return isCountrySupported( entry, country ) && isLevelServed( entry, country, node.level );
+		return isLevelServed( entry, country, node.level );
+	}
+
+	/**
+	 * Whether `node` is the region level of an entry in `related-list` mode (spec D7; Task 13;
+	 * issue #294 arbitration) — the ONE case where {@see isLevelServed}'s "region" answer is
+	 * structurally unable to describe reality and must not be consulted at all.
+	 *
+	 * Per `class-checkout-config.php::build_location_block()`'s own docblock: `levels[country]
+	 * .region` reads `false` for EVERY country whose region `<select>` already has WooCommerce
+	 * states registered — REGARDLESS of whether those states came from a genuine conflict
+	 * (some other source already owns the field) or from THIS layer's OWN `related-list` mode
+	 * injecting them on purpose (`Location_Provider_Registry::inject_related_list_states()`).
+	 * The server's own docblock says the client "must NOT try to tell the two apart... it does
+	 * not need to" — and it does not, because the real gate for the region node under
+	 * `related-list` mode is not "does the D15 suggest chain want this level" at all, it is
+	 * "did WooCommerce actually render a `<select>` here", which {@see attachOne}'s own
+	 * `related-list:region` renderer checks directly against the live DOM (`el.tagName`) —
+	 * this predicate only decides whether that renderer gets a chance to run.
+	 *
+	 * @param {Object} entry
+	 * @param {{level: string}} node
+	 * @returns {boolean}
+	 */
+	function isRelatedListRegionNode( entry, node ) {
+		return 'related-list' === ( entry.location && entry.location.mode ) && 'region' === node.level;
+	}
+
+	/**
+	 * Resolves the mode-specific renderer for `node`, if Task 13's `location-select-modes.js`
+	 * registered one — spec D7's "mode is presentation, provider is data": this cascade must
+	 * not know WHICH renderer a field uses, only how to ask the registry for one. Lookup order:
+	 * `{mode}:{level}` (a renderer specific to one field kind under one mode — e.g.
+	 * `related-list`'s region native-`<select>` watcher, which shares nothing with its own
+	 * settlement renderer) first, then the bare `{mode}` (a renderer that serves every level
+	 * uniformly — `ajax-select2`'s select2 widget is the same shape for region, settlement, or
+	 * address). Returns `null` when nothing is registered for either key, or when
+	 * `location-select-modes.js` never loaded at all — {@see attachOne}'s baseline typeahead
+	 * path is the fallback either way, never a special case of this function.
+	 *
+	 * @param {Object} entry
+	 * @param {{level: string}} node
+	 * @returns {function(Element, Object): ({detach: Function}|null)|null}
+	 */
+	function resolveModeRenderer( entry, node ) {
+		var mode = ( entry.location && entry.location.mode ) || 'typeahead';
+		var registry = window.WoodevLocationRenderers || {};
+
+		if ( 'function' === typeof registry[ mode + ':' + node.level ] ) {
+			return registry[ mode + ':' + node.level ];
+		}
+
+		if ( 'function' === typeof registry[ mode ] ) {
+			return registry[ mode ];
+		}
+
+		return null;
 	}
 
 	/**
@@ -463,11 +542,18 @@
 			resolved: {},
 			// Per-LEVEL confirmed record (only chain levels; postcode never has one of its own).
 			records: {},
-			// fieldId -> { el, api } for every CURRENTLY attached typeahead widget.
+			// fieldId -> { el, api } for every CURRENTLY attached widget (typeahead OR one of
+			// Task 13's mode-specific renderers — see attachOne()/resolveModeRenderer()).
 			widgets: {},
 			// Single-flight /select queue state (Finding 2) — see enqueueSelect()/sendNextSelect().
 			pendingRecord: null,
 			selectInFlight: false,
+			// Task 13 / #295 finding 1: the fieldId the MOST RECENT selection came from (any
+			// level — the /select queue is per ENTRY, not per node) and the currently-shown
+			// "your choice was not saved" notice element, if any — see
+			// showNotPersistedNotice()/clearNotPersistedNotice().
+			lastSelectedFieldId: null,
+			notPersistedNotice: null,
 		};
 	}
 
@@ -696,11 +782,24 @@
 
 		fetchJson( url, { method: 'POST', headers: headers, body: JSON.stringify( { record: record } ) } ).then(
 			function( body ) {
-				settleSelect( entry, !! ( body && false !== body.persisted ) );
+				// `persisted` is always present on a successful response (Location_Controller::
+				// handle_select_request()'s own return type — never ambiguous), so `!shouldTrigger`
+				// here means exactly one thing: the server answered, honestly, that it could not
+				// write the record (#295 finding 1 — typically a guest whose session/cart cookie
+				// has not initialized yet, gotcha `guest-session-write-needs-the-cart-cookie`).
+				var persisted = !! ( body && false !== body.persisted );
+
+				settleSelect( entry, persisted, ! persisted );
 			},
 			function( error ) {
 				logError( error );
-				settleSelect( entry, false );
+				// A network/parse failure is a DIFFERENT failure mode from an honest
+				// `persisted: false` — the server never got to answer at all, so there is no
+				// signal to "consume" here (#295 finding 1 is specifically about the EXISTING
+				// `persisted` flag going unread, not about inventing a new one for transport
+				// errors). Stays silent to the customer, same as before this task; the visible
+				// field value still survives (the widget already wrote it before onSelect ran).
+				settleSelect( entry, false, false );
 			}
 		);
 	}
@@ -708,15 +807,25 @@
 	/**
 	 * Frees the single-flight slot for `entry` and either forwards to the next queued
 	 * selection (a newer one arrived while this request was in flight — this response is
-	 * stale by construction, so it never fires the trigger) or, when nothing newer is queued,
-	 * treats this response as FINAL: fires `update_checkout` iff `shouldTrigger`.
+	 * stale by construction, so it never fires the trigger NOR shows a notice for it) or,
+	 * when nothing newer is queued, treats this response as FINAL: fires `update_checkout`
+	 * iff `shouldTrigger`, or — Task 13 / #295 finding 1 — shows the "your choice was not
+	 * saved" notice iff `notPersisted` (an honest `persisted: false` from the server, as
+	 * opposed to a network failure, which stays silent — see {@see sendNextSelect}'s own
+	 * comment on that distinction). A successful FINAL persist always clears any notice a
+	 * PRIOR selection may have left behind ({@see clearNotPersistedNotice}), so a stale
+	 * warning never survives past the outcome it described.
 	 *
 	 * @param {Object}  entry
 	 * @param {boolean} shouldTrigger Whether THIS response, if final, should fire the trigger
 	 *                                (a successful persist with `persisted !== false`).
+	 * @param {boolean} notPersisted  Whether THIS response, if final, should surface the
+	 *                                not-saved notice (a successful response carrying an
+	 *                                explicit `persisted: false` — never true together with
+	 *                                `shouldTrigger`).
 	 * @returns {void}
 	 */
-	function settleSelect( entry, shouldTrigger ) {
+	function settleSelect( entry, shouldTrigger, notPersisted ) {
 		entry.selectInFlight = false;
 
 		if ( entry.pendingRecord ) {
@@ -724,9 +833,84 @@
 			return;
 		}
 
-		if ( shouldTrigger && window.jQuery ) {
-			window.jQuery( document.body ).trigger( 'update_checkout' );
+		if ( shouldTrigger ) {
+			clearNotPersistedNotice( entry );
+
+			if ( window.jQuery ) {
+				window.jQuery( document.body ).trigger( 'update_checkout' );
+			}
+
+			return;
 		}
+
+		if ( notPersisted ) {
+			showNotPersistedNotice( entry );
+		}
+	}
+
+	/**
+	 * Shows the "your choice was not saved" notice for `entry` — Task 13 / #295 finding 1: the
+	 * server has always answered `persisted: false` honestly, but until now nothing on the
+	 * client read it beyond skipping `update_checkout` (see this file's own D8 section above).
+	 * Anchored right after the field the customer's MOST RECENT selection came from
+	 * ({@see entry.lastSelectedFieldId}) — persistence is an ENTRY-level outcome (the
+	 * single-flight `/select` queue in {@see enqueueSelect} is per entry, not per node), so
+	 * there is no field this is MORE specifically about than "whichever one the customer just
+	 * used". A missing anchor (the field no longer in the document — a country switch tore
+	 * the section down between the select and this response landing) is a silent no-op: there
+	 * is nowhere left to put the message, and the field itself is gone anyway.
+	 *
+	 * Text comes from `entry.location.i18n.notPersisted` — server-supplied, translated,
+	 * filterable via `woodev_location_i18n` (`class-checkout-config.php::build_location_block()`),
+	 * same convention as `noResults`/`noResultsAddress`: this string reaches the customer, so
+	 * it is never a literal here. An older config without the key (or a filter that cleared
+	 * it) degrades to silence rather than inventing a string client-side.
+	 *
+	 * @param {Object} entry
+	 * @returns {void}
+	 */
+	function showNotPersistedNotice( entry ) {
+		clearNotPersistedNotice( entry );
+
+		var anchor = entry.lastSelectedFieldId && document.getElementById( entry.lastSelectedFieldId );
+
+		if ( ! anchor || ! anchor.parentNode ) {
+			return;
+		}
+
+		var i18n = entry.location.i18n || {};
+		var text = 'string' === typeof i18n.notPersisted ? i18n.notPersisted : '';
+
+		if ( '' === text ) {
+			return;
+		}
+
+		var notice = document.createElement( 'p' );
+
+		notice.className = 'woodev-location-notice';
+		notice.setAttribute( 'role', 'alert' );
+		notice.textContent = text;
+
+		anchor.parentNode.insertBefore( notice, anchor.nextSibling );
+
+		entry.notPersistedNotice = notice;
+	}
+
+	/**
+	 * Removes the notice {@see showNotPersistedNotice} inserted for `entry`, if any — a safe
+	 * no-op otherwise (nothing shown, or it was already removed).
+	 *
+	 * @param {Object} entry
+	 * @returns {void}
+	 */
+	function clearNotPersistedNotice( entry ) {
+		var notice = entry.notPersistedNotice;
+
+		if ( notice && notice.parentNode ) {
+			notice.parentNode.removeChild( notice );
+		}
+
+		entry.notPersistedNotice = null;
 	}
 
 	/**
@@ -745,6 +929,10 @@
 			}
 
 			entry.records[ node.level ] = record;
+			// Task 13 / #295 finding 1: remembers WHICH field to anchor a future "not saved"
+			// notice to — see showNotPersistedNotice()'s own docblock for why this is an
+			// entry-level, not node-level, concept.
+			entry.lastSelectedFieldId = node.fieldId;
 
 			backwardsFill( entry, node.level, record );
 			enqueueSelect( entry, record );
@@ -803,13 +991,9 @@
 	 * @returns {void}
 	 */
 	function attachOne( entry, node ) {
-		if ( ! isLevelServed( entry, countryFor( node ), node.level ) ) {
-			return;
-		}
-
 		var el = document.getElementById( node.fieldId );
 
-		if ( ! el || 'function' !== typeof window.WoodevLocationTypeahead ) {
+		if ( ! el ) {
 			return;
 		}
 
@@ -823,16 +1007,66 @@
 			? i18n.noResultsAddress
 			: i18n.noResults;
 
-		var api = window.WoodevLocationTypeahead( el, {
+		// Handed to WHICHEVER renderer attaches — a Task 13 mode-specific one or the baseline
+		// typeahead below get the EXACT SAME `fetch`/`onSelect` (spec: "assert the shared code
+		// path, not a copy" — a related-list/ajax-select2 pick persists through the identical
+		// `onSelectFor()` → backwardsFill()/enqueueSelect() route every other level already
+		// uses), plus this module's own generic request/scoping primitives, so a renderer never
+		// reimplements suggest/list URL building, JSON fetching, or live country/parent scoping
+		// — it only decides HOW to present them. Still fully mode-ignorant on THIS side: none of
+		// these primitives know or care which renderer, if any, ends up using them.
+		var options = {
 			fetch: fetchFor( entry, node ),
 			onSelect: onSelectFor( entry, node ),
 			// Server-supplied (translated, filterable via `woodev_location_i18n`) — never a
 			// literal here: this string reaches the customer, so it follows the same route
 			// every other user-facing string in this layer takes.
 			emptyText: 'string' === typeof emptyKey ? emptyKey : '',
-		} );
+			node: node,
+			location: entry.location,
+			country: function() {
+				return countryFor( node );
+			},
+			parentKey: function() {
+				return scopeKeyFor( entry, node.level );
+			},
+			buildUrl: buildUrl,
+			fetchJson: fetchJson,
+			nonceHeader: function() {
+				return nonceHeader( entry );
+			},
+		};
 
-		entry.widgets[ node.fieldId ] = { el: el, api: api };
+		var renderer = resolveModeRenderer( entry, node );
+
+		if ( renderer ) {
+			var api = renderer( el, options );
+
+			if ( api ) {
+				// A DOM-replacing renderer (Task 13's select2-backed ones swap the plain
+				// `<input>` for a real `<select>` — select2 cannot enhance anything else)
+				// reports the LIVE element back via `api.el`; a renderer that never touches
+				// the DOM shape (the related-list region watcher) simply omits it and `el`
+				// (captured above, before the renderer ran) is still correct. Storing the
+				// wrong one here would make reconcileAfterCheckoutUpdate()'s own "was this
+				// node replaced by a checkout re-render" check misfire on every single pass.
+				entry.widgets[ node.fieldId ] = { el: api.el || el, api: api };
+
+				return;
+			}
+			// A renderer declining (returns a falsy value — e.g. `related-list`'s region
+			// watcher finding this country's field is a plain `<input>`, not the `<select>`
+			// its own mode should have produced) falls through to the baseline below, exactly
+			// like a mode with nothing registered for this node at all.
+		}
+
+		// Baseline: text+typeahead, gated by the D15 per-country/level chain (spec D7: "text+
+		// typeahead always" is the FLOOR, never conditional on a special renderer existing).
+		if ( ! isLevelServed( entry, countryFor( node ), node.level ) || 'function' !== typeof window.WoodevLocationTypeahead ) {
+			return;
+		}
+
+		entry.widgets[ node.fieldId ] = { el: el, api: window.WoodevLocationTypeahead( el, options ) };
 	}
 
 	/**

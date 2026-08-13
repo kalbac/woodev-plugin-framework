@@ -187,6 +187,7 @@ class CheckoutHandlerEnqueueTest extends TestCase {
 		$handler->enqueue_assets();
 
 		$this->assertArrayNotHasKey( 'woodev-location-typeahead', $scripts );
+		$this->assertArrayNotHasKey( 'woodev-location-select-modes', $scripts );
 		$this->assertArrayNotHasKey( 'woodev-location-cascade', $scripts );
 		$this->assertArrayNotHasKey( 'woodev-location-styles', $styles );
 
@@ -206,6 +207,7 @@ class CheckoutHandlerEnqueueTest extends TestCase {
 		$handler->enqueue_assets();
 
 		$this->assertArrayNotHasKey( 'woodev-location-typeahead', $scripts );
+		$this->assertArrayNotHasKey( 'woodev-location-select-modes', $scripts );
 		$this->assertArrayNotHasKey( 'woodev-location-cascade', $scripts );
 		$this->assertArrayNotHasKey( 'woodev-location-styles', $styles );
 		$this->assertArrayNotHasKey( 'location', $localized[0][2] );
@@ -231,6 +233,7 @@ class CheckoutHandlerEnqueueTest extends TestCase {
 
 		// Files forced to report as not-yet-built — must never be enqueued.
 		$this->assertArrayNotHasKey( 'woodev-location-typeahead', $scripts );
+		$this->assertArrayNotHasKey( 'woodev-location-select-modes', $scripts );
 		$this->assertArrayNotHasKey( 'woodev-location-cascade', $scripts );
 		$this->assertArrayNotHasKey( 'woodev-location-styles', $styles );
 
@@ -266,6 +269,15 @@ class CheckoutHandlerEnqueueTest extends TestCase {
 		$this->assertStringContainsString( 'location-cascade.js', $scripts['woodev-location-cascade']['src'] );
 		$this->assertContains( 'woodev-location-typeahead', $scripts['woodev-location-cascade']['deps'] );
 		$this->assertContains( 'woodev-checkout-field-store', $scripts['woodev-location-cascade']['deps'] );
+
+		// Task 13's renderer registry (spec D7) — enqueued with the SAME "selectWoo" dependency
+		// `woodev-checkout-field-classic` already requires (select2 can only enhance a real
+		// `<select>`), and declared as a dependency of the cascade itself so its own renderer
+		// registration has always already run by the time the cascade reads it.
+		$this->assertArrayHasKey( 'woodev-location-select-modes', $scripts );
+		$this->assertStringContainsString( 'location-select-modes.js', $scripts['woodev-location-select-modes']['src'] );
+		$this->assertContains( 'selectWoo', $scripts['woodev-location-select-modes']['deps'] );
+		$this->assertContains( 'woodev-location-select-modes', $scripts['woodev-location-cascade']['deps'] );
 
 		// The typeahead's own suggestion-listbox stylesheet — same "built" probe, same guard.
 		$this->assertArrayHasKey( 'woodev-location-styles', $styles );
