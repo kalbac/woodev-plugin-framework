@@ -18,6 +18,7 @@
 
 namespace Woodev\Tests\Unit\Shipping\Checkout;
 
+use Brain\Monkey\Filters;
 use Brain\Monkey\Functions;
 use Woodev\Framework\Shipping\Checkout\Checkout_Config;
 use Woodev\Framework\Shipping\Checkout\Checkout_Fields;
@@ -233,6 +234,82 @@ class CheckoutConfigTest extends TestCase {
 		$config = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ] ) )->build( $fields );
 
 		$this->assertNull( $config['fields']['carrier_pvz']['location_level'] );
+	}
+
+	// -------------------------------------------------------------------------
+	// pickup_slot_placements — issue #274 item 3
+	// -------------------------------------------------------------------------
+
+	public function test_pickup_slot_placements_default_to_both_review_and_rate(): void {
+		Functions\when( 'apply_filters' )->returnArg( 2 );
+
+		$fields = Checkout_Fields::from_array(
+			[ Field::create( 'carrier_pvz' )->set_type( 'hidden' )->mark_pickup_slot()->to_array() ]
+		);
+		$config = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ] ) )->build( $fields );
+
+		$this->assertSame( [ 'review', 'rate' ], $config['fields']['carrier_pvz']['pickup_slot_placements'] );
+	}
+
+	public function test_pickup_slot_placements_is_empty_for_a_non_pickup_field(): void {
+		$fields = Checkout_Fields::from_array( [ Field::create( 'billing_city' )->set_type( 'select' )->to_array() ] );
+		$config = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ] ) )->build( $fields );
+
+		$this->assertSame( [], $config['fields']['billing_city']['pickup_slot_placements'] );
+	}
+
+	/**
+	 * The extension hook (framework rule: leave a filter even with no consumer yet) — a
+	 * site or plugin can suppress either placement.
+	 */
+	public function test_pickup_slot_placements_filter_can_suppress_a_placement(): void {
+		Filters\expectApplied( 'woodev_pickup_slot_placements' )
+			->once()
+			->with( [ 'review', 'rate' ], 'carrier_pvz', 'carrier' )
+			->andReturn( [ 'rate' ] );
+
+		$fields = Checkout_Fields::from_array(
+			[ Field::create( 'carrier_pvz' )->set_type( 'hidden' )->mark_pickup_slot()->to_array() ]
+		);
+		$config = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ] ) )->build( $fields );
+
+		$this->assertSame( [ 'rate' ], $config['fields']['carrier_pvz']['pickup_slot_placements'] );
+	}
+
+	public function test_pickup_slot_placements_filter_is_never_invoked_for_a_non_pickup_field(): void {
+		Filters\expectApplied( 'woodev_pickup_slot_placements' )->never();
+
+		$fields = Checkout_Fields::from_array( [ Field::create( 'billing_city' )->set_type( 'select' )->to_array() ] );
+		( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ] ) )->build( $fields );
+
+		$this->assertTrue( true );
+	}
+
+	/**
+	 * A malformed filter return (an unrecognised string mixed in) must not reach the browser
+	 * verbatim — only `'review'`/`'rate'` ever pass through, and always in that fixed order
+	 * regardless of the order the filter itself returned them in.
+	 */
+	public function test_pickup_slot_placements_filter_return_is_guarded_against_unknown_values(): void {
+		Filters\expectApplied( 'woodev_pickup_slot_placements' )->once()->andReturn( [ 'rate', 'bogus', 'review' ] );
+
+		$fields = Checkout_Fields::from_array(
+			[ Field::create( 'carrier_pvz' )->set_type( 'hidden' )->mark_pickup_slot()->to_array() ]
+		);
+		$config = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ] ) )->build( $fields );
+
+		$this->assertSame( [ 'review', 'rate' ], $config['fields']['carrier_pvz']['pickup_slot_placements'] );
+	}
+
+	public function test_pickup_slot_placements_filter_non_array_return_yields_no_placements(): void {
+		Filters\expectApplied( 'woodev_pickup_slot_placements' )->once()->andReturn( 'not-an-array' );
+
+		$fields = Checkout_Fields::from_array(
+			[ Field::create( 'carrier_pvz' )->set_type( 'hidden' )->mark_pickup_slot()->to_array() ]
+		);
+		$config = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ] ) )->build( $fields );
+
+		$this->assertSame( [], $config['fields']['carrier_pvz']['pickup_slot_placements'] );
 	}
 
 	// -------------------------------------------------------------------------

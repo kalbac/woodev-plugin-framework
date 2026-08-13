@@ -162,6 +162,123 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 		}
 
 		// -------------------------------------------------------------------------
+		// remember()/recall_address() — issue #274 item 2: the address stored
+		// alongside the id, and the legacy (pre-#274) id-only degrade.
+		// -------------------------------------------------------------------------
+
+		public function test_remember_and_recall_address_round_trips(): void {
+			$session   = new Pickup_Selection_Fake_Session();
+			$selection = $this->probe( $session );
+
+			$selection->remember( 'msk', 'pvz', 'P1', 'Тверская, 1' );
+
+			$this->assertSame( 'P1', $selection->recall( 'msk', 'pvz' ), 'the id round trip must be unaffected' );
+			$this->assertSame( 'Тверская, 1', $selection->recall_address( 'msk', 'pvz' ) );
+		}
+
+		/**
+		 * A session written by a PRE-#274 framework version (or by a caller still using the
+		 * 3-argument `remember()` shape) stores an entry with no `address` key at all — the raw
+		 * stored shape, not `remember()` with an explicit `''`, since the default parameter value
+		 * itself already covers that case identically. `recall_address()` must degrade to `null`,
+		 * never fatal on the missing key.
+		 */
+		public function test_recall_address_returns_null_for_a_legacy_id_only_entry(): void {
+			$session = new Pickup_Selection_Fake_Session();
+
+			$session->set( 'woodev_test_selection_map', [ 'msk' => [ 'pvz' => [ 'id' => 'P1', 'seq' => 1 ] ] ] );
+
+			$selection = $this->probe( $session );
+
+			$this->assertSame( 'P1', $selection->recall( 'msk', 'pvz' ), 'the id must still restore' );
+			$this->assertNull( $selection->recall_address( 'msk', 'pvz' ) );
+		}
+
+		public function test_recall_address_returns_null_when_remembered_with_an_explicitly_empty_address(): void {
+			$selection = $this->probe( new Pickup_Selection_Fake_Session() );
+
+			$selection->remember( 'msk', 'pvz', 'P1', '' );
+
+			$this->assertNull( $selection->recall_address( 'msk', 'pvz' ) );
+		}
+
+		public function test_recall_address_returns_null_for_an_absent_pair(): void {
+			$selection = $this->probe( new Pickup_Selection_Fake_Session() );
+
+			$this->assertNull( $selection->recall_address( 'nowhere', 'pvz' ) );
+		}
+
+		public function test_remember_overwriting_a_pair_also_overwrites_its_address(): void {
+			$selection = $this->probe( new Pickup_Selection_Fake_Session() );
+
+			$selection->remember( 'msk', 'pvz', 'P1', 'Тверская, 1' );
+			$selection->remember( 'msk', 'pvz', 'P2', 'Ленина, 1' );
+
+			$this->assertSame( 'P2', $selection->recall( 'msk', 'pvz' ) );
+			$this->assertSame( 'Ленина, 1', $selection->recall_address( 'msk', 'pvz' ) );
+		}
+
+		/**
+		 * Pins the session KEY byte-for-byte across the address change — the value SHAPE inside
+		 * the session map is free to change (internal, clean-break), but the KEY it lives under
+		 * is an installed-site data contract (gotcha `session-key-vs-order-meta-prefix`) and must
+		 * not move.
+		 */
+		public function test_remember_with_an_address_still_writes_under_the_scopes_own_session_key(): void {
+			$session   = new Pickup_Selection_Fake_Session();
+			$selection = $this->probe( $session );
+			$scope     = $this->scope();
+
+			$selection->remember( 'msk', 'pvz', 'P1', 'Тверская, 1' );
+
+			$this->assertNotNull( $session->raw( $scope->session_key() ) );
+			$this->assertSame(
+				'Тверская, 1',
+				$session->raw( $scope->session_key() )['msk']['pvz']['address'] ?? null
+			);
+		}
+
+		public function test_recall_address_without_a_session_returns_null(): void {
+			$selection = $this->probe( null );
+
+			$this->assertNull( $selection->recall_address( 'msk', 'pvz' ) );
+		}
+
+		// -------------------------------------------------------------------------
+		// recall_latest_address() — the TYPE_ANY counterpart, mirroring recall_latest()
+		// -------------------------------------------------------------------------
+
+		public function test_recall_latest_address_returns_the_most_recently_written_types_address(): void {
+			$selection = $this->probe( new Pickup_Selection_Fake_Session() );
+
+			$selection->remember( 'msk', 'pvz', 'P1', 'Тверская, 1' );
+			$selection->remember( 'msk', 'postamat', 'P2', 'Ленина, 1' );
+
+			$this->assertSame( 'P2', $selection->recall_latest( 'msk' ), 'sanity: postamat is latest' );
+			$this->assertSame( 'Ленина, 1', $selection->recall_latest_address( 'msk' ) );
+		}
+
+		public function test_recall_latest_address_returns_null_for_an_empty_locality(): void {
+			$selection = $this->probe( new Pickup_Selection_Fake_Session() );
+
+			$this->assertNull( $selection->recall_latest_address( 'msk' ) );
+		}
+
+		public function test_recall_latest_address_degrades_to_null_for_a_legacy_id_only_latest_entry(): void {
+			$session = new Pickup_Selection_Fake_Session();
+
+			$session->set(
+				'woodev_test_selection_map',
+				[ 'msk' => [ 'pvz' => [ 'id' => 'P1', 'seq' => 1 ] ] ]
+			);
+
+			$selection = $this->probe( $session );
+
+			$this->assertSame( 'P1', $selection->recall_latest( 'msk' ) );
+			$this->assertNull( $selection->recall_latest_address( 'msk' ) );
+		}
+
+		// -------------------------------------------------------------------------
 		// An empty key is the scope FAILING to name one, not a key. A scope returns
 		// '' for a point whose locality it cannot map, and current_locality() returns
 		// '' when WooCommerce cannot answer yet — if both were treated as ordinary

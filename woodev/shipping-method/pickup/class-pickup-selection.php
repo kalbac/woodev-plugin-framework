@@ -81,6 +81,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Selection' )
 		 * Remembers a point for a (locality, type) pair, overwriting whatever was
 		 * remembered there before.
 		 *
+		 * `$address` is stored alongside the id (issue #274 item 2) — the checkout
+		 * trigger shows it next to the button after a page reload, when the client has
+		 * no other trace of the chosen point beyond its id. Both reference plugins
+		 * (Yandex, Почта) solve the same problem the same way: they keep the point's
+		 * DATA, not just its id. `''` is a legitimate value (a caller that has no
+		 * address to offer, or a plugin still running the pre-#274 call shape) and is
+		 * stored as-is; {@see self::recall_address()}/{@see self::recall_latest_address()}
+		 * already treat an empty string the same as an absent key.
+		 *
 		 * A missing session (no WooCommerce, or no session started yet) is a silent
 		 * no-op — the same "no scope, no persistence" discipline
 		 * {@see \Woodev\Framework\Shipping\Pickup\Pickup_Handler::handle_checkout_order_processed()}
@@ -88,14 +97,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Selection' )
 		 * WooCommerce is absent.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Added `$address` (issue #274 item 2).
 		 *
 		 * @param string $locality Opaque locality key from {@see Selection_Scope}.
 		 * @param string $type     Opaque type code from {@see Selection_Scope}.
 		 * @param string $point_id The carrier point id to remember.
+		 * @param string $address  The point's address to remember alongside the id —
+		 *                         typically {@see Pickup_Point}'s own `short_address`,
+		 *                         already derived at the boundary; `''` when unknown.
 		 *
 		 * @return void
 		 */
-		public function remember( string $locality, string $type, string $point_id ): void {
+		public function remember( string $locality, string $type, string $point_id, string $address = '' ): void {
 			if ( ! self::is_usable_key( $locality ) || ! self::is_usable_key( $type ) || '' === $point_id ) {
 				return;
 			}
@@ -109,8 +122,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Selection' )
 			$map = $this->read_map( $session );
 
 			$map[ $locality ][ $type ] = [
-				'id'  => $point_id,
-				'seq' => $this->next_sequence( $map ),
+				'id'      => $point_id,
+				'seq'     => $this->next_sequence( $map ),
+				'address' => $address,
 			];
 
 			$map = $this->evict_over_cap( $map, $locality, $type );
@@ -130,15 +144,32 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Selection' )
 		 *                      WooCommerce/the session is unavailable).
 		 */
 		public function recall( string $locality, string $type ): ?string {
-			if ( ! self::is_usable_key( $locality ) || ! self::is_usable_key( $type ) ) {
-				return null;
-			}
-
-			$map = $this->read_map( $this->session() );
-
-			$id = $map[ $locality ][ $type ]['id'] ?? null;
+			$id = $this->entry_for( $locality, $type )['id'] ?? null;
 
 			return is_string( $id ) ? $id : null;
+		}
+
+		/**
+		 * Recalls the address remembered alongside the point id for an exact
+		 * (locality, type) pair (issue #274 item 2) — the counterpart to
+		 * {@see self::recall()}.
+		 *
+		 * `null` covers two shapes deliberately treated alike: nothing remembered for
+		 * the pair at all, and an entry remembered BEFORE this feature shipped (id
+		 * only, no `address` key) or with an explicitly empty address. Either way the
+		 * caller degrades to "no address to show" — never a blank address block.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $locality Opaque locality key from {@see Selection_Scope}.
+		 * @param string $type     Opaque type code from {@see Selection_Scope}.
+		 *
+		 * @return string|null
+		 */
+		public function recall_address( string $locality, string $type ): ?string {
+			$address = $this->entry_for( $locality, $type )['address'] ?? null;
+
+			return is_string( $address ) && '' !== $address ? $address : null;
 		}
 
 		/**
@@ -156,32 +187,31 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Selection' )
 		 *                      WooCommerce/the session is unavailable).
 		 */
 		public function recall_latest( string $locality ): ?string {
-			if ( ! self::is_usable_key( $locality ) ) {
-				return null;
-			}
+			$id = $this->latest_entry( $locality )['id'] ?? null;
 
-			$map     = $this->read_map( $this->session() );
-			$entries = $map[ $locality ] ?? [];
+			return is_string( $id ) ? $id : null;
+		}
 
-			if ( ! is_array( $entries ) || empty( $entries ) ) {
-				return null;
-			}
+		/**
+		 * Recalls the address remembered alongside the MOST RECENTLY written point
+		 * across every type stored for one locality (issue #274 item 2) — the
+		 * {@see Selection_Scope::TYPE_ANY} counterpart to {@see self::recall_address()},
+		 * mirroring how {@see self::recall_latest()} is `TYPE_ANY`'s counterpart to
+		 * {@see self::recall()}.
+		 *
+		 * Same "absent or blank both mean no address" degrade as
+		 * {@see self::recall_address()} — see that method's own docblock.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $locality Opaque locality key from {@see Selection_Scope}.
+		 *
+		 * @return string|null
+		 */
+		public function recall_latest_address( string $locality ): ?string {
+			$address = $this->latest_entry( $locality )['address'] ?? null;
 
-			$latest_id  = null;
-			$latest_seq = -1;
-
-			foreach ( $entries as $entry ) {
-				if ( ! is_array( $entry ) || ! isset( $entry['id'], $entry['seq'] ) ) {
-					continue;
-				}
-
-				if ( (int) $entry['seq'] > $latest_seq ) {
-					$latest_seq = (int) $entry['seq'];
-					$latest_id  = is_string( $entry['id'] ) ? $entry['id'] : null;
-				}
-			}
-
-			return $latest_id;
+			return is_string( $address ) && '' !== $address ? $address : null;
 		}
 
 		/**
@@ -243,6 +273,70 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Selection' )
 			$map = $session->get( $this->scope->session_key() );
 
 			return is_array( $map ) ? $map : [];
+		}
+
+		/**
+		 * Reads the stored entry for an exact (locality, type) pair — shared by
+		 * {@see self::recall()} and {@see self::recall_address()} so the two can never
+		 * diverge on what "the entry for this pair" means.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $locality Opaque locality key from {@see Selection_Scope}.
+		 * @param string $type     Opaque type code from {@see Selection_Scope}.
+		 *
+		 * @return array{id?: string, seq?: int, address?: string}|null
+		 */
+		private function entry_for( string $locality, string $type ): ?array {
+			if ( ! self::is_usable_key( $locality ) || ! self::is_usable_key( $type ) ) {
+				return null;
+			}
+
+			$map   = $this->read_map( $this->session() );
+			$entry = $map[ $locality ][ $type ] ?? null;
+
+			return is_array( $entry ) ? $entry : null;
+		}
+
+		/**
+		 * Reads the entry with the highest `seq` across every type stored for one
+		 * locality — shared by {@see self::recall_latest()} and
+		 * {@see self::recall_latest_address()} so the two can never diverge on which
+		 * entry "most recently written" means.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $locality Opaque locality key from {@see Selection_Scope}.
+		 *
+		 * @return array{id?: string, seq?: int, address?: string}|null
+		 */
+		private function latest_entry( string $locality ): ?array {
+			if ( ! self::is_usable_key( $locality ) ) {
+				return null;
+			}
+
+			$map     = $this->read_map( $this->session() );
+			$entries = $map[ $locality ] ?? [];
+
+			if ( ! is_array( $entries ) || empty( $entries ) ) {
+				return null;
+			}
+
+			$latest     = null;
+			$latest_seq = -1;
+
+			foreach ( $entries as $entry ) {
+				if ( ! is_array( $entry ) || ! isset( $entry['id'], $entry['seq'] ) ) {
+					continue;
+				}
+
+				if ( (int) $entry['seq'] > $latest_seq ) {
+					$latest_seq = (int) $entry['seq'];
+					$latest     = $entry;
+				}
+			}
+
+			return $latest;
 		}
 
 		/**

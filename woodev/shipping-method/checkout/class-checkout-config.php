@@ -158,7 +158,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 		 * it against every country in {@see $countries} and stores the boolean
 		 * result map under `$config['takeover'][$field_id]`.
 		 *
+		 * `pickup_slot_placements` (issue #274 item 3) is resolved only for a field
+		 * with `is_pickup_slot === true` — every other field gets `[]` unconditionally,
+		 * without ever invoking the `woodev_pickup_slot_placements` filter, mirroring
+		 * how the `takeover` map above only ever gets an entry for a field whose
+		 * `takeover_condition` is actually callable.
+		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Added `pickup_slot_placements` (issue #274 item 3).
 		 *
 		 * @param Checkout_Fields $fields Normalized field definitions to emit.
 		 *
@@ -171,7 +178,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 		 *         location_level: string|null,
 		 *         depends_on: string|null,
 		 *         required: bool|array<string, mixed>,
-		 *         is_pickup_slot: bool
+		 *         is_pickup_slot: bool,
+		 *         pickup_slot_placements: string[]
 		 *     }>,
 		 *     endpoint: string,
 		 *     nonce: string,
@@ -193,14 +201,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 
 			foreach ( $fields->get_fields() as $id => $def ) {
 				$out_fields[ $id ] = [
-					'id'             => $def['id'],
-					'type'           => $def['type'],
-					'section'        => $def['section'],
-					'source_kind'    => $def['source_kind'],
-					'location_level' => $def['location_level'] ?? null,
-					'depends_on'     => $def['depends_on'],
-					'required'       => $def['required'],
-					'is_pickup_slot' => $def['is_pickup_slot'],
+					'id'                     => $def['id'],
+					'type'                   => $def['type'],
+					'section'                => $def['section'],
+					'source_kind'            => $def['source_kind'],
+					'location_level'         => $def['location_level'] ?? null,
+					'depends_on'             => $def['depends_on'],
+					'required'               => $def['required'],
+					'is_pickup_slot'         => $def['is_pickup_slot'],
+					'pickup_slot_placements' => $def['is_pickup_slot']
+						? $this->resolve_pickup_slot_placements( $id )
+						: [],
 				];
 
 				$condition = $def['takeover_condition'] ?? null;
@@ -225,6 +236,58 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 			}
 
 			return $config;
+		}
+
+		/**
+		 * Resolves which DOM anchors a pickup-slot field's checkout trigger mounts
+		 * into (issue #274 item 3).
+		 *
+		 * The framework's default is BOTH placements at once — operator decision (в)
+		 * on the issue #274 card: `'review'` (after the shipping-methods list; the
+		 * ORIGINAL, and until now only, placement — measured to already sit exactly
+		 * where WooCommerce's own `woocommerce_review_order_after_shipping` action
+		 * would render in the classic checkout template) and `'rate'` (inside the
+		 * SELECTED rate's own `<li>`, under its label — mirroring
+		 * `woocommerce_after_shipping_rate`, which the card's own premise had wrongly
+		 * assumed was unavailable). Matches how the Yandex reference plugin renders its
+		 * own pickup trigger under both hooks, accepting that the two buttons land a
+		 * few pixels apart on the classic (non-block) checkout theme.
+		 *
+		 * `woodev_pickup_slot_placements` lets a site or plugin suppress either
+		 * placement — an extension hook left in place even with no consumer yet, per
+		 * this framework's own rule for filters/actions (a hook is never withheld for
+		 * lack of a caller today). A non-array or otherwise malformed return is
+		 * treated as "nothing recognised" rather than trusted verbatim: only `'review'`
+		 * and `'rate'` ever reach the browser, in that order, each at most once.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $field_id the pickup-slot field id.
+		 *
+		 * @return string[] Zero, one, or both of `'review'`, `'rate'`.
+		 */
+		private function resolve_pickup_slot_placements( string $field_id ): array {
+			/**
+			 * Filters which anchors a pickup-slot field's checkout trigger mounts into.
+			 *
+			 * @since 2.0.2
+			 *
+			 * @param string[] $placements the framework's default — both `'review'` and `'rate'`.
+			 * @param string   $field_id   the pickup-slot field id.
+			 * @param string   $plugin_id  the owning plugin id.
+			 */
+			$placements = apply_filters(
+				'woodev_pickup_slot_placements',
+				[ 'review', 'rate' ],
+				$field_id,
+				$this->plugin_id
+			);
+
+			if ( ! is_array( $placements ) ) {
+				return [];
+			}
+
+			return array_values( array_intersect( [ 'review', 'rate' ], $placements ) );
 		}
 
 		/**

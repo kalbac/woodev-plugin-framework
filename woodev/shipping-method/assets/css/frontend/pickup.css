@@ -217,6 +217,18 @@
 }
 
 /* -------------------------------------------------------------------------
+ * Chosen-point address block (issue #274 item 2) — mounted alongside the trigger, one per
+ * anchor (item 3 lets a field mount into more than one). Hidden by pickup-mount.js itself
+ * (`element.style.display`) whenever there is nothing to show; this rule only styles the
+ * visible state.
+ * ---------------------------------------------------------------------- */
+
+.woodev-pickup-chosen-address {
+	margin: 0.35em 0 0;
+	font-size: 0.9em;
+}
+
+/* -------------------------------------------------------------------------
  * Stage — the positioning context for EVERYTHING this feature draws (spec V-3, Task 5). The
  * list/card/toggle used to be `position: fixed`, which resolves against `.woodev-modal__content`
  * because that element carries a centring `transform` — so the sidebar covered the modal header
