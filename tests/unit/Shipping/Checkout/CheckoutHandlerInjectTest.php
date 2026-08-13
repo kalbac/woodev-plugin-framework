@@ -159,6 +159,42 @@ class CheckoutHandlerInjectTest extends TestCase {
 		$this->assertTrue( $out['order']['carrier_pvz']['required'] );
 	}
 
+	// -------------------------------------------------------------------------
+	// WC-array label falls back to error_label (#299, #134): WooCommerce's own
+	// required-field message reads THIS array key, so a blank visual `label`
+	// (legitimate for a hidden pickup-style field) must not leave WC's own
+	// message empty-or-id when a human error_label is available.
+	// -------------------------------------------------------------------------
+
+	public function test_inject_wc_label_falls_back_to_error_label_when_label_blank(): void {
+		$fields = Checkout_Fields::from_array( [
+			Field::create( 'carrier_pickup_point' )->set_type( 'hidden' )->set_error_label( 'Пункт выдачи' )->set_section( 'order' )->to_array(),
+		] );
+		$out = ( new Checkout_Handler( $fields, 'carrier' ) )->inject( [ 'order' => [] ] );
+
+		$this->assertSame( 'Пункт выдачи', $out['order']['carrier_pickup_point']['label'] );
+	}
+
+	public function test_inject_wc_label_keeps_explicit_label_over_error_label(): void {
+		$fields = Checkout_Fields::from_array( [
+			Field::create( 'carrier_pvz' )->set_type( 'text' )->set_label( 'ПВЗ' )->set_error_label( 'Пункт выдачи' )->set_section( 'order' )->to_array(),
+		] );
+		$out = ( new Checkout_Handler( $fields, 'carrier' ) )->inject( [ 'order' => [] ] );
+
+		$this->assertSame( 'ПВЗ', $out['order']['carrier_pvz']['label'], 'An explicitly-set visual label must win over error_label.' );
+	}
+
+	public function test_inject_wc_label_stays_empty_when_neither_label_nor_error_label_set(): void {
+		$fields = Checkout_Fields::from_array( [
+			Field::create( 'carrier_pvz' )->set_type( 'hidden' )->set_section( 'order' )->to_array(),
+		] );
+		$out = ( new Checkout_Handler( $fields, 'carrier' ) )->inject( [ 'order' => [] ] );
+
+		// Never falls to the raw id here — an empty WC label is safer than leaking the
+		// id into a rendered <label> or a WC-authored notice (see inject() docblock).
+		$this->assertSame( '', $out['order']['carrier_pvz']['label'] );
+	}
+
 	/**
 	 * A condition-spec `required` (array) must NOT become WC's static `required => true`
 	 * — otherwise WooCommerce's own validation blocks a blank conditional field regardless

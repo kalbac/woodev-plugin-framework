@@ -1103,10 +1103,15 @@ function woodev_test_shipping_method_plugin_init(): void {
 						// get_checkout_handler() runs on every request (incl. REST) via the
 						// plugin's register(), before WC lazily loads the shipping-method class, so
 						// referencing that class constant here would fatal "class not found".
+						// A `label` is set explicitly (issue #134: the fixture used to leave it
+						// unset entirely) so the rig demo shows the field's contract correctly —
+						// e.g. wherever a management UI lists field descriptors by `label`. The
+						// checkout form itself stays unaffected: `type` is `hidden`, so no `<label>`
+						// is ever rendered regardless of this value.
 						\Woodev\Framework\Shipping\Checkout\Presets\Pickup_Field::create(
 							'carrier_pickup_point',
 							[ 'woodev_test_shipping' ]
-						),
+						)->set_label( 'Пункт выдачи' ),
 
 						// 4-6. Location Provider layer fields (block PR-C rig-visibility
 						// pull-forward) — shipping-section region/settlement/address, each

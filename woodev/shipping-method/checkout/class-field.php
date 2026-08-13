@@ -107,6 +107,29 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Field' ) ) :
 		}
 
 		/**
+		 * Sets a dedicated label for generated error messages, independent of
+		 * {@see set_label()}'s visual label.
+		 *
+		 * Use this when the field's visible control is not its own native input
+		 * (e.g. a hidden pickup-point field driven by a "Choose pickup point"
+		 * button): {@see set_label()} is then legitimately left blank, but error
+		 * messages still need a human name instead of falling back to the raw
+		 * field `id` (#299, #134). See
+		 * {@see \Woodev\Framework\Shipping\Checkout\Checkout_Handler::message_label()}
+		 * for the full fallback order (`error_label` → `label` → `id`).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $label messages-only label.
+		 *
+		 * @return self
+		 */
+		public function set_error_label( string $label ): self {
+			$this->def['error_label'] = $label;
+			return $this;
+		}
+
+		/**
 		 * Sets the checkout section this field belongs to.
 		 *
 		 * Accepted values: `'order'` (default after normalization), `'billing'`,

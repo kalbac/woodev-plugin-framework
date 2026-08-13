@@ -75,4 +75,21 @@ class FieldTest extends TestCase {
 		$array = Field::create( 'billing_city' )->source_location( 'settlement' )->to_array();
 		$this->assertArrayNotHasKey( 'source', $array );
 	}
+
+	// -------------------------------------------------------------------------
+	// set_error_label() — messages-only label (#299, #134)
+	// -------------------------------------------------------------------------
+
+	public function test_set_error_label_is_recorded_independently_of_label(): void {
+		$array = Field::create( 'carrier_pickup_point' )
+			->set_error_label( 'Пункт выдачи' )
+			->to_array();
+		$this->assertSame( 'Пункт выдачи', $array['error_label'] );
+		$this->assertArrayNotHasKey( 'label', $array, 'set_error_label() must not touch the visual label key.' );
+	}
+
+	public function test_set_error_label_returns_self_for_chaining(): void {
+		$field = Field::create( 'x' );
+		$this->assertSame( $field, $field->set_error_label( 'y' ) );
+	}
 }

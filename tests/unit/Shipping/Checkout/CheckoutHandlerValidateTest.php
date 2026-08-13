@@ -239,6 +239,113 @@ class CheckoutHandlerValidateTest extends TestCase {
 	}
 
 	// -----------------------------------------------------------------------
+	// Part C — measured duplication fix + error_label fallback (#299, #134)
+	// -----------------------------------------------------------------------
+
+	/**
+	 * Measured duplication: when a `Pickup_Field` preset's condition-spec matches
+	 * EXACTLY the same method id list passed to `set_requires_pickup_methods()`
+	 * (the mainline, non-degenerate usage), both the per-field conditional-required
+	 * loop AND the independent backstop previously fired for the identical blank
+	 * field on the identical submit — two `wc_add_notice()` calls, one condition.
+	 * The per-field loop runs first, so the ONE surviving notice must be the
+	 * `required_message()` text (using the preset's default `error_label`), and the
+	 * backstop's own "Для доставки..." text must NOT appear a second time.
+	 */
+	public function test_exact_match_dedupes_required_and_backstop_into_one_notice(): void {
+		\Brain\Monkey\Functions\expect( 'wc_add_notice' )
+			->once()
+			->with( 'Заполните поле «Пункт выдачи».', 'error' );
+
+		$fields  = Checkout_Fields::from_array( [
+			\Woodev\Framework\Shipping\Checkout\Presets\Pickup_Field::create( 'carrier_pickup_point', [ 'carrier_pickup' ] )->to_array(),
+		] );
+		$handler = new Checkout_Handler( $fields, 'carrier' );
+		$handler->set_requires_pickup_methods( [ 'carrier_pickup' ] );
+
+		$this->assertFalse(
+			$handler->validate( [ 'carrier_pickup_point' => '' ], [ 'chosen_shipping_method' => 'carrier_pickup' ] )
+		);
+	}
+
+	/**
+	 * The backstop must still fire ALONE — and checkout must still block — when the
+	 * per-field loop does NOT catch the same field: `Checkout_Condition`'s `in`
+	 * operator does a strict string match against `chosen_shipping_method` and does
+	 * not tolerate WooCommerce's `method_id:instance_id` shape for a multi-instance
+	 * method, unlike `chosen_method_matches()` (which the backstop uses). This is a
+	 * genuinely reachable divergence, not a hypothetical — proves the dedup guard
+	 * above does not cost this failure mode.
+	 */
+	public function test_backstop_fires_alone_when_condition_spec_diverges_on_instance_suffix(): void {
+		\Brain\Monkey\Functions\expect( 'wc_add_notice' )
+			->once()
+			->with( 'Для доставки в пункт выдачи выберите значение поля «Пункт выдачи».', 'error' );
+
+		$fields  = Checkout_Fields::from_array( [
+			\Woodev\Framework\Shipping\Checkout\Presets\Pickup_Field::create( 'carrier_pickup_point', [ 'carrier_pickup' ] )->to_array(),
+		] );
+		$handler = new Checkout_Handler( $fields, 'carrier' );
+		$handler->set_requires_pickup_methods( [ 'carrier_pickup' ] );
+
+		$this->assertFalse(
+			$handler->validate( [ 'carrier_pickup_point' => '' ], [ 'chosen_shipping_method' => 'carrier_pickup:3' ] )
+		);
+	}
+
+	/**
+	 * required_message() must prefer `error_label` over `label` over `id` (#299,
+	 * #134): a field with an empty `label` no longer leaks its raw id into the
+	 * buyer-facing message when an `error_label` is set.
+	 */
+	public function test_required_message_prefers_error_label_over_label_and_id(): void {
+		\Brain\Monkey\Functions\expect( 'wc_add_notice' )
+			->once()
+			->with( 'Заполните поле «Пункт выдачи».', 'error' );
+
+		$fields = Checkout_Fields::from_array( [
+			Field::create( 'carrier_pickup_point' )->set_required( true )->set_error_label( 'Пункт выдачи' )->to_array(),
+		] );
+
+		$this->assertFalse( ( new Checkout_Handler( $fields, 'carrier' ) )->validate( [ 'carrier_pickup_point' => '' ], [] ) );
+	}
+
+	/**
+	 * Without an `error_label`, required_message() still falls back to the raw id
+	 * (regression guard — pre-existing safety net for a field nobody labelled at all).
+	 */
+	public function test_required_message_falls_back_to_id_without_error_label_or_label(): void {
+		\Brain\Monkey\Functions\expect( 'wc_add_notice' )
+			->once()
+			->with( 'Заполните поле «carrier_pickup_point».', 'error' );
+
+		$fields = Checkout_Fields::from_array( [
+			Field::create( 'carrier_pickup_point' )->set_required( true )->to_array(),
+		] );
+
+		$this->assertFalse( ( new Checkout_Handler( $fields, 'carrier' ) )->validate( [ 'carrier_pickup_point' => '' ], [] ) );
+	}
+
+	/**
+	 * invalid_message() must also prefer `error_label` over `label` over `id`,
+	 * matching required_message()'s fallback order.
+	 */
+	public function test_invalid_message_prefers_error_label(): void {
+		\Brain\Monkey\Functions\expect( 'wc_add_notice' )
+			->once()
+			->with( 'Поле «Пункт выдачи» заполнено некорректно.', 'error' );
+
+		$fields = Checkout_Fields::from_array( [
+			Field::create( 'carrier_pickup_point' )
+				->set_error_label( 'Пункт выдачи' )
+				->set_validate_callback( static fn() => false )
+				->to_array(),
+		] );
+
+		$this->assertFalse( ( new Checkout_Handler( $fields, 'carrier' ) )->validate( [ 'carrier_pickup_point' => 'x' ], [] ) );
+	}
+
+	// -----------------------------------------------------------------------
 	// Part D — entry-point parity for the chosen shipping method
 	// -----------------------------------------------------------------------
 
