@@ -301,8 +301,34 @@ class CheckoutConfigTest extends TestCase {
 		$this->assertSame( [ 'review', 'rate' ], $config['fields']['carrier_pvz']['pickup_slot_placements'] );
 	}
 
-	public function test_pickup_slot_placements_filter_non_array_return_yields_no_placements(): void {
+	/**
+	 * A non-array filter return is MALFORMED, never a deliberate "suppress both" —
+	 * {@see self::test_pickup_slot_placements_filter_can_explicitly_return_empty} is the
+	 * legitimate empty case, and the two must not collapse to the same value (issue #308
+	 * item 2 — adversarial review of #274 item 3). `null` is what tells
+	 * `checkout-field-classic.js` to apply its OWN mixed-fleet default (`['review']`)
+	 * rather than trust a filter that returned nonsense.
+	 */
+	public function test_pickup_slot_placements_filter_non_array_return_yields_null(): void {
 		Filters\expectApplied( 'woodev_pickup_slot_placements' )->once()->andReturn( 'not-an-array' );
+
+		$fields = Checkout_Fields::from_array(
+			[ Field::create( 'carrier_pvz' )->set_type( 'hidden' )->mark_pickup_slot()->to_array() ]
+		);
+		$config = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ] ) )->build( $fields );
+
+		$this->assertNull( $config['fields']['carrier_pvz']['pickup_slot_placements'] );
+	}
+
+	/**
+	 * The other half of the #308 item 2 fix: a WELL-FORMED empty return — a plugin
+	 * deliberately telling the framework it renders its own trigger and wants neither
+	 * placement — must reach the browser as a real `[]`, not be upgraded to `null` (which
+	 * would make the browser apply the mixed-fleet default and mount a `'review'` trigger
+	 * nobody asked for).
+	 */
+	public function test_pickup_slot_placements_filter_can_explicitly_return_empty(): void {
+		Filters\expectApplied( 'woodev_pickup_slot_placements' )->once()->andReturn( [] );
 
 		$fields = Checkout_Fields::from_array(
 			[ Field::create( 'carrier_pvz' )->set_type( 'hidden' )->mark_pickup_slot()->to_array() ]

@@ -1202,6 +1202,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 				// `triggerChange` above. Mirrors the reference plugins' own wording (Yandex:
 				// «Выбранный ПВЗ:»; this framework is carrier-agnostic, so it says "point").
 				'chosenPointAddress' => __( 'Выбранный пункт выдачи:', 'woodev-plugin-framework' ),
+				// Issue #308 item 4 (adversarial review of #274 item 3): with a field mounting
+				// a trigger into BOTH placements at once, the two buttons share the exact same
+				// visible text — a screen-reader user tabbing between them hears two identical
+				// button names with nothing telling them apart. Neither string is ever shown to
+				// a sighted customer (see `pickup-mount.js`'s own `syncTriggerLabel()` /
+				// `placementAriaContext()` — these feed `aria-label` only, appended to the
+				// visible text, never replacing it), so nothing here changes what a sighted
+				// customer reads.
+				'triggerReviewContext' => __( 'в сводке заказа', 'woodev-plugin-framework' ),
+				'triggerRateContext'   => __( 'у выбранного способа доставки', 'woodev-plugin-framework' ),
 				// Task 14 (spec V-13): the zoom control's two `aria-label`s. Distinct from
 				// `zoomIn` above, which labels the unrelated "zoom in to see points" bbox
 				// message — reusing it here would have mislabelled the button with a full
@@ -2297,8 +2307,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 *
 		 * The (locality, type) resolution itself — spec §5's gate — lives in
 		 * {@see self::current_selection_pair()}, shared with {@see self::get_js_config()}'s
-		 * own {@see self::resolve_chosen_address()} (issue #274 item 2), so the two can
-		 * never disagree on what "the currently chosen selection" means.
+		 * own {@see self::resolve_chosen_address()} (issue #274 item 2). Sharing the gate alone
+		 * is NOT what keeps the id and the address in agreement, though (issue #308 item 3):
+		 * this method never sees `$_POST` — WooCommerce already resolved it above, before this
+		 * filter ever ran — while {@see self::resolve_chosen_address()} is called from
+		 * {@see self::get_js_config()} on every page load, `$_POST` included, and has to check
+		 * it itself. That method's own docblock is where the actual agreement is proven.
 		 *
 		 * @internal
 		 *
@@ -2390,7 +2404,23 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 * CURRENTLY remembered pickup-point selection (issue #274 item 2) — the address
 		 * counterpart to {@see self::restore_selection()}'s point id, read through the
 		 * SAME {@see self::current_selection_pair()} gate so the two never disagree on
-		 * which selection "current" means.
+		 * which (locality, type) "current" means.
+		 *
+		 * That gate alone is not enough to keep the address describing the same POINT the id
+		 * path shows, though (issue #308 item 3 — adversarial review of #274). WooCommerce
+		 * checks `$_POST` for the field's value BEFORE ever calling
+		 * {@see self::restore_selection()}'s `woocommerce_checkout_get_value` filter (see that
+		 * method's own docblock and gotcha `custom-checkout-field-is-empty-on-reload-by-
+		 * construction`): after a failed checkout submit, the id the browser actually shows is
+		 * the POSTED one, not whatever this handler's session happens to hold for the pair — the
+		 * session can be stale (a second tab completed a different order and called
+		 * {@see self::handle_checkout_order_processed()}'s `forget_all()` since this tab last
+		 * posted) or simply describe a different point. This method therefore mirrors that same
+		 * `$_POST` precedence: when the field was actually posted (WooCommerce's own `!empty()`
+		 * check — an explicitly empty post is treated as "nothing posted", matching
+		 * {@see self::posted_field_value()}), the remembered address is only used when it belongs
+		 * to the SAME id the browser is about to show; otherwise nothing is known about the
+		 * posted point's address, and `''` is returned rather than a stale or unrelated one.
 		 *
 		 * Reads from the SAME session-backed map {@see Pickup_Selection::remember()}
 		 * writes at confirmation time. A selection remembered before this feature
@@ -2400,9 +2430,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 * trigger label alone, never a blank address block.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Considers `$_POST` so the address can never describe a different point
+		 *              than the id WooCommerce is about to show (issue #308 item 3).
 		 *
-		 * @return string The remembered address, or `''` when nothing is remembered (or
-		 *                selection persistence is not wired for this handler).
+		 * @return string The remembered address, or `''` when nothing is remembered (or the
+		 *                remembered address does not belong to the posted id, or selection
+		 *                persistence is not wired for this handler).
 		 */
 		protected function resolve_chosen_address(): string {
 			$selection = $this->selection();
@@ -2417,9 +2450,23 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 				return '';
 			}
 
+			$remembered_id = Selection_Scope::TYPE_ANY === $pair['type']
+				? $selection->recall_latest( $pair['locality'] )
+				: $selection->recall( $pair['locality'], $pair['type'] );
+
 			$address = Selection_Scope::TYPE_ANY === $pair['type']
 				? $selection->recall_latest_address( $pair['locality'] )
 				: $selection->recall_address( $pair['locality'], $pair['type'] );
+
+			$posted_id = $this->posted_field_value();
+
+			// `$_POST` wins over the session for which id WooCommerce is about to show — see this
+			// method's own docblock. The remembered address only ever describes `$remembered_id`,
+			// so it is used ONLY when the posted id agrees with it; a posted id this handler has
+			// no address for renders no address at all, never a mismatched one.
+			if ( '' !== $posted_id ) {
+				return $posted_id === $remembered_id && null !== $address ? $address : '';
+			}
 
 			return null !== $address ? $address : '';
 		}

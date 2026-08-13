@@ -598,6 +598,11 @@ function phpI18n( overrides ) {
 			triggerChange: 'Выбрать другой пункт выдачи',
 			// The chosen-address block's label (issue #274 item 2).
 			chosenPointAddress: 'Выбранный пункт выдачи:',
+			// The two triggers' distinguishing `aria-label` context (issue #308 item 4) —
+			// never shown to a sighted customer, see `placementAriaContext()` in
+			// pickup-mount.js.
+			triggerReviewContext: 'в сводке заказа',
+			triggerRateContext: 'у выбранного способа доставки',
 			retry: 'Повторить',
 			upstreamError: 'Сервис пунктов выдачи временно недоступен. Попробуйте ещё раз позже.',
 			rateLimited: 'Слишком много запросов. Подождите немного и попробуйте снова.',
@@ -6085,10 +6090,24 @@ describe( 'chosen address + dual placements (issue #274)', () => {
 	/**
 	 * @param {string} fieldId
 	 * @returns {HTMLElement[]} every mounted chosen-address block for this field id, DOM order.
+	 *                          Exactly one after issue #308 item 4's fix, whenever at least
+	 *                          one slot is mounted — see the tests below.
 	 */
 	function addressBlocksFor( fieldId ) {
 		return Array.prototype.slice.call(
 			document.querySelectorAll( '[data-woodev-pickup-slot="' + fieldId + '"] .woodev-pickup-chosen-address' )
+		);
+	}
+
+	/**
+	 * @param {string} fieldId
+	 * @param {string} placement `'review'` or `'rate'`.
+	 * @returns {?HTMLElement} the mounted trigger button in that specific slot, or `null`.
+	 */
+	function triggerAt( fieldId, placement ) {
+		return document.querySelector(
+			'[data-woodev-pickup-slot="' + fieldId + '"][data-woodev-pickup-placement="' + placement + '"] '
+			+ '.woodev-pickup-trigger'
 		);
 	}
 
@@ -6148,11 +6167,18 @@ describe( 'chosen address + dual placements (issue #274)', () => {
 		expect( triggers ).toHaveLength( 2 );
 		triggers.forEach( ( trigger ) => expect( trigger.textContent ).toBe( phpI18n().triggerChange ) );
 
-		expect( addresses ).toHaveLength( 2 );
-		addresses.forEach( ( block ) => {
-			expect( block.style.display ).not.toBe( 'none' );
-			expect( block.querySelector( 'strong' ).textContent ).toBe( 'Ленина, 5' );
-		} );
+		// Issue #308 item 4: ONE address block, not two — the operator approved two
+		// buttons, never a doubled address line a few pixels apart.
+		expect( addresses ).toHaveLength( 1 );
+		expect( addresses[ 0 ].style.display ).not.toBe( 'none' );
+		expect( addresses[ 0 ].querySelector( 'strong' ).textContent ).toBe( 'Ленина, 5' );
+
+		// It lives in the 'review' slot specifically (the framework's default) — the
+		// 'rate' slot's own trigger has no address block of its own.
+		expect( triggerAt( fieldId, 'review' ).parentElement.querySelector( '.woodev-pickup-chosen-address' ) )
+			.not.toBeNull();
+		expect( triggerAt( fieldId, 'rate' ).parentElement.querySelector( '.woodev-pickup-chosen-address' ) )
+			.toBeNull();
 
 		// No §8-managed store owns `dual_pickup_selection` in this fixture — the mount degrades
 		// to a DOM-only write and logs it (see writeField()'s own docblock); expected here.
@@ -6163,8 +6189,8 @@ describe( 'chosen address + dual placements (issue #274)', () => {
 	// Item 2: the chosen-address block itself
 	// -------------------------------------------------------------------------
 
-	it( 'shows config.chosenAddress next to BOTH triggers on initial mount, before any '
-		+ 'session is ever opened — the reload restore path', () => {
+	it( 'shows config.chosenAddress next to the "review" trigger ONLY on initial mount, '
+		+ 'before any session is ever opened — the reload restore path (issue #308 item 4)', () => {
 		const fieldId = 'dual_pickup_restore';
 
 		installTwoSlots( fieldId );
@@ -6174,16 +6200,42 @@ describe( 'chosen address + dual placements (issue #274)', () => {
 		mountAll();
 
 		const triggers = triggersFor( fieldId );
-		const addresses = addressBlocksFor( fieldId );
 
 		triggers.forEach( ( trigger ) => expect( trigger.textContent ).toBe( phpI18n().triggerChange ) );
-		addresses.forEach( ( block ) => {
-			expect( block.style.display ).not.toBe( 'none' );
-			expect( block.querySelector( 'strong' ).textContent ).toBe( 'Тверская, 1' );
-		} );
+
+		expect( addressBlocksFor( fieldId ) ).toHaveLength( 1 );
+
+		const reviewAddress = triggerAt( fieldId, 'review' ).parentElement
+			.querySelector( '.woodev-pickup-chosen-address' );
+
+		expect( reviewAddress ).not.toBeNull();
+		expect( reviewAddress.style.display ).not.toBe( 'none' );
+		expect( reviewAddress.querySelector( 'strong' ).textContent ).toBe( 'Тверская, 1' );
+
+		expect(
+			triggerAt( fieldId, 'rate' ).parentElement.querySelector( '.woodev-pickup-chosen-address' )
+		).toBeNull();
 
 		// The address came ENTIRELY from config — no picker was ever opened for it.
 		expect( StubProvider.instances ).toHaveLength( 0 );
+	} );
+
+	it( 'falls back to the "rate" slot for the address block when "review" was never '
+		+ 'mounted at all (a site suppressed it via woodev_pickup_slot_placements)', () => {
+		const fieldId = 'dual_pickup_rate_only';
+
+		document.body.insertAdjacentHTML(
+			'beforeend',
+			'<div data-woodev-pickup-slot="' + fieldId + '" data-woodev-pickup-placement="rate"></div>' +
+			'<input id="' + fieldId + '" type="hidden" value="PVZ-RESTORED" />'
+		);
+
+		setConfig( makeConfig( { fieldId, chosenAddress: 'Тверская, 1' } ) );
+		mountAll();
+
+		expect( addressBlocksFor( fieldId ) ).toHaveLength( 1 );
+		expect( triggerAt( fieldId, 'rate' ).parentElement.querySelector( '.woodev-pickup-chosen-address' ) )
+			.not.toBeNull();
 	} );
 
 	it( 'degrades to the label alone — no blank address block — for a legacy id-only '
@@ -6205,10 +6257,9 @@ describe( 'chosen address + dual placements (issue #274)', () => {
 		// The id restore path (#176) is unaffected: the label still reads "change".
 		triggers.forEach( ( trigger ) => expect( trigger.textContent ).toBe( phpI18n().triggerChange ) );
 
-		addresses.forEach( ( block ) => {
-			expect( block.style.display ).toBe( 'none' );
-			expect( block.querySelector( 'strong' ).textContent ).toBe( '' );
-		} );
+		expect( addresses ).toHaveLength( 1 );
+		expect( addresses[ 0 ].style.display ).toBe( 'none' );
+		expect( addresses[ 0 ].querySelector( 'strong' ).textContent ).toBe( '' );
 	} );
 
 	it( 'shows no address block at all when the field has no value yet', () => {
@@ -6218,7 +6269,10 @@ describe( 'chosen address + dual placements (issue #274)', () => {
 		setConfig( makeConfig( { fieldId, chosenAddress: 'Тверская, 1' } ) );
 		mountAll();
 
-		addressBlocksFor( fieldId ).forEach( ( block ) => expect( block.style.display ).toBe( 'none' ) );
+		const addresses = addressBlocksFor( fieldId );
+
+		expect( addresses ).toHaveLength( 1 );
+		expect( addresses[ 0 ].style.display ).toBe( 'none' );
 	} );
 
 	it( 'hides the address block again once a locality change drops the applied selection '
@@ -6255,5 +6309,171 @@ describe( 'chosen address + dual placements (issue #274)', () => {
 		expect( address.style.display ).toBe( 'none' );
 
 		expect( console ).toHaveWarned();
+	} );
+
+	// -------------------------------------------------------------------------
+	// Accessible names for the two identically-worded triggers (issue #308 item 4)
+	// -------------------------------------------------------------------------
+
+	it( 'gives the two triggers distinguishable accessible names without changing what a '
+		+ 'sighted customer reads', () => {
+		const fieldId = 'dual_pickup_aria';
+
+		installTwoSlots( fieldId );
+		setConfig( makeConfig( { fieldId } ) );
+		mountAll();
+
+		const review = triggerAt( fieldId, 'review' );
+		const rate = triggerAt( fieldId, 'rate' );
+
+		// The VISIBLE text — what a sighted customer reads — is untouched: still the exact
+		// same string on both buttons.
+		expect( review.textContent ).toBe( phpI18n().trigger );
+		expect( rate.textContent ).toBe( phpI18n().trigger );
+		expect( review.textContent ).toBe( rate.textContent );
+
+		// The ACCESSIBLE name (`aria-label`, screen-reader only) differs between the two,
+		// and each still starts with the same visible text a sighted customer sees.
+		expect( review.getAttribute( 'aria-label' ) ).toBe( phpI18n().trigger + ', ' + phpI18n().triggerReviewContext );
+		expect( rate.getAttribute( 'aria-label' ) ).toBe( phpI18n().trigger + ', ' + phpI18n().triggerRateContext );
+		expect( review.getAttribute( 'aria-label' ) ).not.toBe( rate.getAttribute( 'aria-label' ) );
+	} );
+
+	it( 'keeps the distinguishing aria-label in sync when the label flips to '
+		+ '"triggerChange" after a selection', async () => {
+		const fieldId = 'dual_pickup_aria_sync';
+
+		installTwoSlots( fieldId );
+		setConfig( makeConfig( { fieldId, replaceAddress: { enabled: false, billingOnly: true } } ) );
+		mountAll();
+
+		triggersFor( fieldId )[ 0 ].dispatchEvent( new MouseEvent( 'click', { bubbles: true } ) );
+		await flushAsync();
+
+		const provider = StubProvider.instances[ StubProvider.instances.length - 1 ];
+
+		await selectAndConfirm( provider, point( { short_address: 'Ленина, 5' } ) );
+
+		const review = triggerAt( fieldId, 'review' );
+		const rate = triggerAt( fieldId, 'rate' );
+
+		expect( review.getAttribute( 'aria-label' ) )
+			.toBe( phpI18n().triggerChange + ', ' + phpI18n().triggerReviewContext );
+		expect( rate.getAttribute( 'aria-label' ) )
+			.toBe( phpI18n().triggerChange + ', ' + phpI18n().triggerRateContext );
+
+		expect( console ).toHaveWarned();
+	} );
+
+	it( 'sets no aria-label at all for a single, unambiguous slot — nothing to '
+		+ 'disambiguate from', () => {
+		const fieldId = 'dual_pickup_single_slot';
+
+		document.body.insertAdjacentHTML(
+			'beforeend',
+			'<div data-woodev-pickup-slot="' + fieldId + '"></div>' +
+			'<input id="' + fieldId + '" type="hidden" value="" />'
+		);
+
+		setConfig( makeConfig( { fieldId } ) );
+		mountAll();
+
+		expect( document.querySelector( '.woodev-pickup-trigger' ).hasAttribute( 'aria-label' ) ).toBe( false );
+	} );
+} );
+
+/**
+ * Issue #308 item 1 (adversarial review of #274 item 2): the chosen address rendered next to
+ * the trigger button reached `strongEl.textContent` — a PLAIN-TEXT sink — from two sources with
+ * DIFFERENT escaping. `config.chosenAddress` (the reload path — `Pickup_Handler::
+ * resolve_chosen_address()`, decoded server-side and again by `wp_localize_script`) is raw.
+ * `point.short_address` on a FRESH selection is REST-sourced — `Pickup_Point::to_browser_array()`
+ * — and therefore HTML-escaped. Writing the escaped one straight into `textContent` showed a
+ * literal `&quot;` instead of `"`; the reload path already worked, which is exactly why every
+ * prior #274 test in this file used addresses with no special characters (`'Ленина, 5'`,
+ * `'Тверская, 1'`) and never caught it — this file's other suites (`pickup-panels.test.js`,
+ * `pickup-geo.test.js`) already use an escaped `ПВЗ &quot;Ромашка&quot;` fixture for exactly
+ * this reason.
+ *
+ * Both fixtures below describe the SAME real-world address — `ТЦ &quot;Мега&quot;, Ленина 5
+ * &amp; 7` is what the REST route actually sends for it; `ТЦ "Мега", Ленина 5 & 7` is what the
+ * session/`config.chosenAddress` path actually sends for the identical point. Every test in this
+ * block asserts the RENDERED text against the same `REALISTIC_ADDRESS` constant, proving the two
+ * paths — and, under `ownsChrome`, the two intra-mode sources — agree.
+ */
+describe( 'chosen-address decoding agrees across sources (issue #308 item 1)', () => {
+	const REALISTIC_ADDRESS = 'ТЦ "Мега", Ленина 5 & 7';
+	const ESCAPED_ADDRESS = 'ТЦ &quot;Мега&quot;, Ленина 5 &amp; 7';
+
+	/**
+	 * @returns {?HTMLElement}
+	 */
+	function chosenAddressStrong() {
+		return document.querySelector( '.woodev-pickup-chosen-address strong' );
+	}
+
+	it( 'decodes an escaped short_address from a fresh REST-sourced selection (panels present, '
+		+ 'the framework\'s own picker UI) before it reaches the plain-text address block', async () => {
+		const { emitSelect, resolveSelect } = openPicker();
+
+		emitSelect( { short_address: ESCAPED_ADDRESS } );
+		await resolveSelect( { allowed: true, reason: null, close: null, refresh_checkout: null } );
+
+		expect( chosenAddressStrong().textContent ).toBe( REALISTIC_ADDRESS );
+		expect( chosenAddressStrong().textContent ).not.toContain( '&quot;' );
+		expect( chosenAddressStrong().innerHTML ).not.toContain( '&amp;quot;' );
+	} );
+
+	it( 'renders config.chosenAddress (already raw — the reload path) verbatim, matching the '
+		+ 'fresh-selection path\'s decoded result for the identical address', () => {
+		const fieldId = 'reload_raw_address_308';
+
+		document.body.insertAdjacentHTML(
+			'beforeend',
+			'<div data-woodev-pickup-slot="' + fieldId + '"></div>' +
+			'<input id="' + fieldId + '" type="hidden" value="PVZ-RESTORED" />'
+		);
+
+		setConfig( makeConfig( { fieldId, chosenAddress: REALISTIC_ADDRESS } ) );
+		mountAll();
+
+		expect( chosenAddressStrong().textContent ).toBe( REALISTIC_ADDRESS );
+	} );
+
+	/**
+	 * Under `ownsChrome` (no panels — the carrier's own embedded widget owns the whole picker
+	 * UI), `point` reaches `handleSelection()` straight from `map-provider-embedded.js`'s own
+	 * `normalizePoint()` — RAW, never REST-escaped. This is the "intra-mode" half of the finding:
+	 * BOTH cases below run under the SAME `ownsChrome: true` config, and must render the SAME
+	 * text regardless of whether the domain volunteered a corrected point.
+	 */
+	describe( 'ownsChrome intra-mode consistency', () => {
+		it( 'renders a raw, uncorrected embedded-widget point\'s address as-is (no entities to '
+			+ 'decode in the first place)', async () => {
+			const { emitSelect, resolveSelect } = openPicker( { ownsChrome: true } );
+
+			emitSelect( { short_address: REALISTIC_ADDRESS } );
+			await resolveSelect( { allowed: true, reason: null, close: null, refresh_checkout: null } );
+
+			expect( chosenAddressStrong().textContent ).toBe( REALISTIC_ADDRESS );
+		} );
+
+		it( 'decodes a domain-CORRECTED point\'s address (REST-escaped, like every select-route '
+			+ 'response) to the SAME text the uncorrected case rendered', async () => {
+			const { emitSelect, resolveSelect } = openPicker( { ownsChrome: true } );
+
+			// The originally-offered point's own address is irrelevant here — `result.point`
+			// is what `finishSelection()` actually applies once the domain volunteers one.
+			emitSelect( { short_address: 'irrelevant, overwritten by the correction below' } );
+			await resolveSelect( {
+				allowed: true,
+				reason: null,
+				close: null,
+				refresh_checkout: null,
+				point: point( { short_address: ESCAPED_ADDRESS } ),
+			} );
+
+			expect( chosenAddressStrong().textContent ).toBe( REALISTIC_ADDRESS );
+		} );
 	} );
 } );

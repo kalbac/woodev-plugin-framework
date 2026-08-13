@@ -469,6 +469,22 @@ describe( 'pickup slot placements (#274 item 3)', () => {
 		expect( placements ).toEqual( [ 'review' ] );
 	} );
 
+	/**
+	 * Issue #308 item 2 (adversarial review of #274 item 3): a plugin whose own
+	 * `woodev_pickup_slot_placements` filter deliberately returns `[]` — it renders its OWN
+	 * trigger and wants neither of the framework's anchors — must end up with NO mounted
+	 * slot at all, not the same `[ 'review' ]` fallback an ABSENT/malformed list gets (the
+	 * test right above this one). `Checkout_Config::resolve_pickup_slot_placements()` now
+	 * emits a real `[]` for this case (never `null`, which is reserved for a malformed
+	 * filter return) — `buildPickupConfig( [] )` here reproduces exactly that wire shape.
+	 */
+	it( 'mounts NO slot at all when pickup_slot_placements is explicitly empty — a plugin '
+		+ 'owning its own trigger, not the mixed-fleet default', () => {
+		bootPickup( [] );
+
+		expect( slots() ).toEqual( [] );
+	} );
+
 	it( 'shows both slots when the pickup method is chosen and hides both when it is not', () => {
 		bootPickup( [ 'review', 'rate' ] );
 
