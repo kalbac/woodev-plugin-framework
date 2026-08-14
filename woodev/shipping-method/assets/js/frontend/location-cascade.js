@@ -920,6 +920,15 @@
 				// has not initialized yet, gotcha `guest-session-write-needs-the-cart-cookie`).
 				var persisted = !! ( body && false !== body.persisted );
 
+				// Issue #330 (spec §7): the response carries the server's own rebuilt `chain`
+				// alongside `current`/`persisted` — adopting it here (whether or not THIS
+				// request itself persisted) means a server-side chain repair can never be
+				// stranded behind a client still scoping suggest calls by a stale parent key.
+				// Runs before settleSelect() so nothing downstream of it (a stale-response
+				// forward to the next queued send, or this response's own final trigger/event)
+				// can run against records this adoption was about to overwrite anyway.
+				adoptChain( entry, body && body.chain );
+
 				settleSelect( entry, persisted, ! persisted, record );
 			},
 			function( error ) {
@@ -1846,6 +1855,64 @@
 	// -------------------------------------------------------------------------
 
 	/**
+	 * Adopts a chain object (`{ level: { key, level } }`, spec §7) into `entry.records`,
+	 * overwriting whichever LEVELS the chain names — shared by {@see prefill} (the boot-time
+	 * seed, issue #330) and {@see sendNextSelect} (a `/select` response's own rebuilt chain), so
+	 * a server-side chain repair can never leave the client scoping a suggest call by a parent
+	 * key that no longer exists server-side.
+	 *
+	 * Absent or malformed `chain` (an older server that has not shipped the field yet, or simply
+	 * `undefined`/`null`) is a silent no-op — never throws, and leaves whatever `entry.records`
+	 * already held untouched, which is what lets both callers degrade to their own pre-chain
+	 * behaviour. A per-level entry with no usable string `key` is skipped INDIVIDUALLY rather
+	 * than aborting the whole chain or being stored as a broken `{}` record — {@see scopeKeyFor}
+	 * already treats a record with no `.key` as absent, but leaving one sitting in
+	 * `entry.records[level]` would still make that level LOOK confirmed to a future caller that
+	 * only checks presence, not shape.
+	 *
+	 * @param {Object} entry
+	 * @param {*}      chain `{ [level]: { key, level } }` per spec §7, or anything else.
+	 * @returns {void}
+	 */
+	function adoptChain( entry, chain ) {
+		if ( ! chain || 'object' !== typeof chain ) {
+			return;
+		}
+
+		var adopted = {};
+
+		Object.keys( chain ).forEach( function( level ) {
+			var node = chain[ level ];
+
+			// Only the cascade's OWN levels, so a rogue/extra key cannot plant a record
+			// under a level nothing here will ever read back.
+			if ( LEVELS.indexOf( level ) !== -1 && node && 'string' === typeof node.key && node.key ) {
+				adopted[ level ] = { key: node.key };
+			}
+		} );
+
+		// NOTHING usable in it — absent field, `[]` from a server that has no chain to
+		// report (a guest whose session never initialized, `persisted: false`), or every
+		// entry malformed. Leave `entry.records` ALONE: the client's own in-session
+		// memory of what the customer picked is the best state anyone has here, and
+		// wiping it would break exactly the guest flow issue #324 was about.
+		if ( 0 === Object.keys( adopted ).length ) {
+			return;
+		}
+
+		// A NON-EMPTY chain is AUTHORITATIVE (adversarial review): the server proved it
+		// holds state, so a level it does NOT name is a level it dropped — an
+		// ancestor-compatibility repair, or a deeper level superseded by a shallower
+		// pick. Adopting additively would leave that stale record here and the client
+		// would keep sending a `within` the server refuses to resolve, silently falling
+		// back to a country-wide search — the very seam this whole change exists to
+		// close.
+		LEVELS.forEach( function( level ) {
+			entry.records[ level ] = adopted[ level ] || null;
+		} );
+	}
+
+	/**
 	 * Seeds `resolved[]` from each node's rendered DOM value (so WooCommerce's own init-time
 	 * programmatic `change` — carrying the value already there — is a no-op, not a destructive
 	 * clear) and, when `config.location.current` names an existing customer record, seeds a
@@ -1906,8 +1973,18 @@
 		var current = entry.location.current;
 
 		if ( current && current.key && current.level ) {
+			// Issue #330 (spec §7): seed EVERY level the customer has actually picked, not only
+			// `current`'s own — this is the fix. `entry.records[ current.level ]` is set
+			// UNCONDITIONALLY straight after, never gated on whether the chain covered it, so an
+			// absent/malformed `chain` (older server, or none at all — {@see adoptChain} is then
+			// a silent no-op) degrades to EXACTLY today's single-level seed, and `current` always
+			// wins over its own chain entry for its own level regardless.
+			adoptChain( entry, entry.location.chain );
 			entry.records[ current.level ] = { key: current.key };
 
+			// The event still fires for `current` ONLY, unchanged — the chain is restoration
+			// plumbing for scoping (see scopeKeyFor()), never a second source of "the customer's
+			// current locality" for a listener like pickup-mount.js's own resolveLocalityKey().
 			fireLocationApplied( { key: current.key, level: current.level }, !! entry.location.implicit );
 		}
 	}

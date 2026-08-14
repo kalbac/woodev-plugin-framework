@@ -328,4 +328,214 @@ final class LocationRecordTest extends TestCase {
 			]
 		);
 	}
+
+	// -------------------------------------------------------------------------
+	// ancestors() / is_within() — the location-chain mechanism (spec
+	// docs-internal/specs/2026-08-15-location-chain-design.md §1: a flat SET of
+	// provider-published ancestor keys, not a level => key map).
+	// -------------------------------------------------------------------------
+
+	public function test_ancestors_absent_defaults_to_empty_array(): void {
+		$record = Location_Record::from_array(
+			[ 'key' => 'dadata:1', 'provider_id' => 'dadata', 'level' => 'settlement', 'country' => 'RU' ]
+		);
+		$this->assertSame( [], $record->ancestors() );
+	}
+
+	public function test_ancestors_explicit_null_defaults_to_empty_array(): void {
+		$record = Location_Record::from_array(
+			[ 'key' => 'dadata:1', 'provider_id' => 'dadata', 'level' => 'settlement', 'country' => 'RU', 'ancestors' => null ]
+		);
+		$this->assertSame( [], $record->ancestors() );
+	}
+
+	public function test_ancestors_explicit_empty_array_stays_empty(): void {
+		$record = Location_Record::from_array(
+			[ 'key' => 'dadata:1', 'provider_id' => 'dadata', 'level' => 'settlement', 'country' => 'RU', 'ancestors' => [] ]
+		);
+		$this->assertSame( [], $record->ancestors() );
+	}
+
+	public function test_ancestors_accepts_a_valid_list(): void {
+		$record = Location_Record::from_array(
+			[
+				'key'         => 'dadata:addr-1',
+				'provider_id' => 'dadata',
+				'level'       => 'address',
+				'country'     => 'RU',
+				'ancestors'   => [ 'dadata:region-1', 'dadata:city-1' ],
+			]
+		);
+		$this->assertSame( [ 'dadata:region-1', 'dadata:city-1' ], $record->ancestors() );
+	}
+
+	public function test_ancestors_trims_entries(): void {
+		$record = Location_Record::from_array(
+			[
+				'key'         => 'dadata:addr-1',
+				'provider_id' => 'dadata',
+				'level'       => 'address',
+				'country'     => 'RU',
+				'ancestors'   => [ '  dadata:region-1  ' ],
+			]
+		);
+		$this->assertSame( [ 'dadata:region-1' ], $record->ancestors() );
+	}
+
+	public function test_ancestors_a_non_array_value_throws(): void {
+		$this->expectException( \InvalidArgumentException::class );
+		Location_Record::from_array(
+			[ 'key' => 'dadata:1', 'provider_id' => 'dadata', 'level' => 'settlement', 'country' => 'RU', 'ancestors' => 'dadata:region-1' ]
+		);
+	}
+
+	public function test_ancestors_a_non_list_associative_array_throws(): void {
+		$this->expectException( \InvalidArgumentException::class );
+		Location_Record::from_array(
+			[
+				'key'         => 'dadata:1',
+				'provider_id' => 'dadata',
+				'level'       => 'settlement',
+				'country'     => 'RU',
+				'ancestors'   => [ 'region' => 'dadata:region-1' ],
+			]
+		);
+	}
+
+	public function test_ancestors_a_non_string_entry_throws(): void {
+		$this->expectException( \InvalidArgumentException::class );
+		Location_Record::from_array(
+			[ 'key' => 'dadata:1', 'provider_id' => 'dadata', 'level' => 'settlement', 'country' => 'RU', 'ancestors' => [ 123 ] ]
+		);
+	}
+
+	public function test_ancestors_an_empty_string_entry_throws(): void {
+		$this->expectException( \InvalidArgumentException::class );
+		Location_Record::from_array(
+			[ 'key' => 'dadata:1', 'provider_id' => 'dadata', 'level' => 'settlement', 'country' => 'RU', 'ancestors' => [ '   ' ] ]
+		);
+	}
+
+	public function test_ancestors_a_malformed_entry_with_no_namespace_throws(): void {
+		$this->expectException( \InvalidArgumentException::class );
+		Location_Record::from_array(
+			[ 'key' => 'dadata:1', 'provider_id' => 'dadata', 'level' => 'settlement', 'country' => 'RU', 'ancestors' => [ 'region-1' ] ]
+		);
+	}
+
+	public function test_ancestors_a_foreign_prefix_entry_throws(): void {
+		// Same "stale foreign-namespace key" hazard the key/provider_id check
+		// above guards against (spec D5) — an ancestor from another provider's
+		// namespace must not be let through, not even silently dropped.
+		$this->expectException( \InvalidArgumentException::class );
+		Location_Record::from_array(
+			[
+				'key'         => 'dadata:1',
+				'provider_id' => 'dadata',
+				'level'       => 'settlement',
+				'country'     => 'RU',
+				'ancestors'   => [ 'cdek:region-1' ],
+			]
+		);
+	}
+
+	public function test_ancestors_drops_duplicates(): void {
+		$record = Location_Record::from_array(
+			[
+				'key'         => 'dadata:addr-1',
+				'provider_id' => 'dadata',
+				'level'       => 'address',
+				'country'     => 'RU',
+				'ancestors'   => [ 'dadata:region-1', 'dadata:city-1', 'dadata:region-1' ],
+			]
+		);
+		$this->assertSame( [ 'dadata:region-1', 'dadata:city-1' ], $record->ancestors() );
+	}
+
+	public function test_ancestors_drops_the_records_own_key(): void {
+		$record = Location_Record::from_array(
+			[
+				'key'         => 'dadata:addr-1',
+				'provider_id' => 'dadata',
+				'level'       => 'address',
+				'country'     => 'RU',
+				'ancestors'   => [ 'dadata:region-1', 'dadata:addr-1', 'dadata:city-1' ],
+			]
+		);
+		$this->assertSame( [ 'dadata:region-1', 'dadata:city-1' ], $record->ancestors() );
+	}
+
+	public function test_is_within_is_true_for_the_records_own_key(): void {
+		$record = Location_Record::from_array(
+			[ 'key' => 'dadata:1', 'provider_id' => 'dadata', 'level' => 'settlement', 'country' => 'RU' ]
+		);
+		$this->assertTrue( $record->is_within( 'dadata:1' ) );
+	}
+
+	public function test_is_within_is_true_for_an_ancestor(): void {
+		$record = Location_Record::from_array(
+			[
+				'key'         => 'dadata:addr-1',
+				'provider_id' => 'dadata',
+				'level'       => 'address',
+				'country'     => 'RU',
+				'ancestors'   => [ 'dadata:city-1' ],
+			]
+		);
+		$this->assertTrue( $record->is_within( 'dadata:city-1' ) );
+	}
+
+	public function test_is_within_trims_the_candidate_key(): void {
+		$record = Location_Record::from_array(
+			[ 'key' => 'dadata:1', 'provider_id' => 'dadata', 'level' => 'settlement', 'country' => 'RU' ]
+		);
+		$this->assertTrue( $record->is_within( '  dadata:1  ' ) );
+	}
+
+	public function test_is_within_is_false_for_an_unknown_key(): void {
+		$record = Location_Record::from_array(
+			[
+				'key'         => 'dadata:addr-1',
+				'provider_id' => 'dadata',
+				'level'       => 'address',
+				'country'     => 'RU',
+				'ancestors'   => [ 'dadata:city-1' ],
+			]
+		);
+		$this->assertFalse( $record->is_within( 'dadata:other-999' ) );
+	}
+
+	public function test_is_within_is_false_for_an_empty_string(): void {
+		// Gotcha `an-empty-domain-key-is-not-a-key`: '' is the seam refusing to
+		// answer, never a value that matches something — even trivially against
+		// itself.
+		$record = Location_Record::from_array(
+			[ 'key' => 'dadata:1', 'provider_id' => 'dadata', 'level' => 'settlement', 'country' => 'RU' ]
+		);
+		$this->assertFalse( $record->is_within( '' ) );
+	}
+
+	public function test_is_within_is_false_for_a_whitespace_only_string(): void {
+		$record = Location_Record::from_array(
+			[ 'key' => 'dadata:1', 'provider_id' => 'dadata', 'level' => 'settlement', 'country' => 'RU' ]
+		);
+		$this->assertFalse( $record->is_within( '   ' ) );
+	}
+
+	public function test_ancestors_round_trips_through_to_array_and_from_array(): void {
+		$data = [
+			'key'         => 'dadata:addr-1',
+			'provider_id' => 'dadata',
+			'level'       => 'address',
+			'country'     => 'RU',
+			'ancestors'   => [ 'dadata:region-1', 'dadata:city-1' ],
+		];
+
+		$record  = Location_Record::from_array( $data );
+		$round_2 = Location_Record::from_array( $record->to_array() );
+
+		$this->assertSame( [ 'dadata:region-1', 'dadata:city-1' ], $record->to_array()['ancestors'] );
+		$this->assertSame( $record->ancestors(), $round_2->ancestors() );
+		$this->assertSame( $record->to_array(), $round_2->to_array(), 'a second round trip must be idempotent' );
+	}
 }

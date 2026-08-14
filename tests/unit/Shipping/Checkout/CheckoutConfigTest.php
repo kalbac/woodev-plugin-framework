@@ -77,6 +77,19 @@ final class Checkout_Config_Fake_Location_Service extends Location_Service {
 	/** @var array{record: Location_Record, implicit: bool, saved_at: int}|null */
 	private ?array $customer;
 
+	/**
+	 * Issue #330 (location-chain design §8): the FULL chain
+	 * {@see self::get_customer_chain()} answers — a map `level =>
+	 * Location_Record`. Defaults to `null`, in which case
+	 * {@see self::get_customer_chain()} derives a ONE-ENTRY chain from
+	 * {@see self::$customer} (the pre-existing, single-record fake behaviour
+	 * every test predating #330 relies on) — so only a test that actually
+	 * needs a MULTI-level chain passes this explicitly.
+	 *
+	 * @var array<string, Location_Record>|null
+	 */
+	private ?array $chain_records;
+
 	/** @var string[] */
 	private array $countries;
 
@@ -111,6 +124,7 @@ final class Checkout_Config_Fake_Location_Service extends Location_Service {
 	 *                                                                                                   to the REAL method (which reads get_option()) —
 	 *                                                                                                   this fake never touches WordPress option state at
 	 *                                                                                                   all, mirroring every other method on this class.
+	 * @param array<string, Location_Record>|null                              $chain_records           Issue #330: see {@see self::$chain_records}.
 	 */
 	public function __construct(
 		bool $active,
@@ -119,7 +133,8 @@ final class Checkout_Config_Fake_Location_Service extends Location_Service {
 		array $countries,
 		string $mode = Location_Provider_Registry::MODE_TYPEAHEAD,
 		array $owned_region_countries = [],
-		string $default_country = 'RU'
+		string $default_country = 'RU',
+		?array $chain_records = null
 	) {
 		$this->active                 = $active;
 		$this->supported_levels       = $supported_levels;
@@ -128,6 +143,7 @@ final class Checkout_Config_Fake_Location_Service extends Location_Service {
 		$this->mode                    = $mode;
 		$this->owned_region_countries = $owned_region_countries;
 		$this->default_country         = $default_country;
+		$this->chain_records            = $chain_records;
 	}
 
 	public function is_active(): bool {
@@ -140,6 +156,38 @@ final class Checkout_Config_Fake_Location_Service extends Location_Service {
 
 	public function get_customer_record(): ?array {
 		return $this->customer;
+	}
+
+	/**
+	 * Issue #330: mirrors the real {@see Location_Service::get_customer_chain()}
+	 * contract — WITHOUT this override, calling `get_customer_chain()` on this
+	 * fake would run the REAL method body, which reaches
+	 * `$this->customer_store->get_chain()`; `$this->customer_store` is never
+	 * set (this fake's constructor never calls the parent's), so that would be
+	 * a fatal "call on null" for every test using this fake.
+	 *
+	 * @return array{records: array<string, Location_Record>, current: string, implicit: bool, saved_at: int}|null
+	 */
+	public function get_customer_chain(): ?array {
+		if ( null !== $this->chain_records ) {
+			return [
+				'records'  => $this->chain_records,
+				'current'  => null !== $this->customer ? $this->customer['record']->level() : '',
+				'implicit' => null !== $this->customer ? $this->customer['implicit'] : false,
+				'saved_at' => null !== $this->customer ? $this->customer['saved_at'] : 0,
+			];
+		}
+
+		if ( null === $this->customer ) {
+			return null;
+		}
+
+		return [
+			'records'  => [ $this->customer['record']->level() => $this->customer['record'] ],
+			'current'  => $this->customer['record']->level(),
+			'implicit' => $this->customer['implicit'],
+			'saved_at' => $this->customer['saved_at'],
+		];
 	}
 
 	public function is_country_supported( string $country, ?string $level = null ): bool {
@@ -662,6 +710,86 @@ class CheckoutConfigTest extends TestCase {
 		$config = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ], $service ) )->build( Checkout_Fields::from_array( [] ) );
 
 		$this->assertTrue( $config['location']['implicit'] );
+	}
+
+	// -------------------------------------------------------------------------
+	// chain — issue #330: every level in the customer's saved chain, keyed by
+	// level, in the same { key, level } shape as `current`.
+	// -------------------------------------------------------------------------
+
+	public function test_chain_is_empty_array_when_the_customer_has_no_record(): void {
+		$service = new Checkout_Config_Fake_Location_Service( true, [ 'region' => true, 'settlement' => true, 'address' => true ], null, [ 'RU' ] );
+		$config  = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ], $service ) )->build( Checkout_Fields::from_array( [] ) );
+
+		$this->assertSame( [], $config['location']['chain'] );
+		// A PHP [] must serialize to a JSON array, never an object — the client's
+		// own `'object' !== typeof chain` guard treats that as "nothing to seed".
+		$this->assertSame( '[]', json_encode( $config['location']['chain'] ) );
+	}
+
+	public function test_chain_contains_one_entry_derived_from_current_when_only_current_is_known(): void {
+		$service = new Checkout_Config_Fake_Location_Service(
+			true,
+			[ 'region' => true, 'settlement' => true, 'address' => true ],
+			$this->customer_record( false ),
+			[ 'RU' ]
+		);
+		$config = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ], $service ) )->build( Checkout_Fields::from_array( [] ) );
+
+		$this->assertSame(
+			[ 'settlement' => [ 'key' => 'dadata:fias-1', 'level' => 'settlement' ] ],
+			$config['location']['chain']
+		);
+	}
+
+	/**
+	 * The multi-level case (location-chain design §8): a customer whose chain
+	 * has a settlement AND an address must see BOTH levels in `chain`, keyed
+	 * by level — even though `current` (above) only ever reports the ONE
+	 * current record.
+	 */
+	public function test_chain_contains_every_level_for_a_multi_level_customer_chain(): void {
+		$settlement = Location_Record::from_array(
+			[
+				'key'         => 'dadata:settlement-1',
+				'provider_id' => 'dadata',
+				'level'       => Location_Record::LEVEL_SETTLEMENT,
+				'country'     => 'RU',
+			]
+		);
+		$address = Location_Record::from_array(
+			[
+				'key'         => 'dadata:address-1',
+				'provider_id' => 'dadata',
+				'level'       => Location_Record::LEVEL_ADDRESS,
+				'country'     => 'RU',
+			]
+		);
+
+		$service = new Checkout_Config_Fake_Location_Service(
+			true,
+			[ 'region' => true, 'settlement' => true, 'address' => true ],
+			[ 'record' => $address, 'implicit' => false, 'saved_at' => 0 ], // "current" is the ADDRESS.
+			[ 'RU' ],
+			Location_Provider_Registry::MODE_TYPEAHEAD,
+			[],
+			'RU',
+			[
+				Location_Record::LEVEL_SETTLEMENT => $settlement,
+				Location_Record::LEVEL_ADDRESS     => $address,
+			]
+		);
+		$config = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ], $service ) )->build( Checkout_Fields::from_array( [] ) );
+
+		$this->assertSame(
+			[
+				'settlement' => [ 'key' => 'dadata:settlement-1', 'level' => 'settlement' ],
+				'address'    => [ 'key' => 'dadata:address-1', 'level' => 'address' ],
+			],
+			$config['location']['chain']
+		);
+		// `current` stays byte-for-byte the ONE current record — unaffected by chain.
+		$this->assertSame( [ 'key' => 'dadata:address-1', 'level' => 'address' ], $config['location']['current'] );
 	}
 
 	// -------------------------------------------------------------------------

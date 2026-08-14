@@ -500,7 +500,11 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 
 			$store->handle_wp_login( 'jdoe', $this->wp_user( 7 ) );
 
-			$this->assertSame( 'dadata:guest-choice', $meta_store[7][ self::META_KEY ]['record']['key'] ?? null );
+			$this->assertSame(
+				'dadata:guest-choice',
+				$meta_store[7][ self::META_KEY ]['records'][ Location_Record::LEVEL_SETTLEMENT ]['key'] ?? null
+			);
+			$this->assertSame( Location_Record::LEVEL_SETTLEMENT, $meta_store[7][ self::META_KEY ]['current'] ?? null );
 		}
 
 		public function test_login_migration_implicit_guest_guess_does_not_overwrite_an_explicit_account_record(): void {
@@ -529,13 +533,16 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 
 			$this->assertSame(
 				'dadata:account-choice',
-				$meta_store[7][ self::META_KEY ]['record']['key'],
+				$meta_store[7][ self::META_KEY ]['records'][ Location_Record::LEVEL_SETTLEMENT ]['key'],
 				'the account explicit choice must survive an implicit guest guess'
 			);
 			// The session (now the logged-in user's fast path) must be resynced to
 			// the winning (meta) record too — otherwise a subsequent session-preferred
 			// read would still surface the losing guest guess.
-			$this->assertSame( 'dadata:account-choice', $session->raw( self::SESSION_KEY )['record']['key'] );
+			$this->assertSame(
+				'dadata:account-choice',
+				$session->raw( self::SESSION_KEY )['records'][ Location_Record::LEVEL_SETTLEMENT ]['key']
+			);
 		}
 
 		public function test_login_migration_explicit_guest_choice_overwrites_an_existing_explicit_account_record(): void {
@@ -564,7 +571,7 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 
 			$this->assertSame(
 				'dadata:fresh-guest-choice',
-				$meta_store[7][ self::META_KEY ]['record']['key'],
+				$meta_store[7][ self::META_KEY ]['records'][ Location_Record::LEVEL_SETTLEMENT ]['key'],
 				'a fresh explicit choice made while logged out is the customer\'s real answer and must win'
 			);
 		}
@@ -593,7 +600,7 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 
 			$store->handle_wp_login( 'jdoe', $this->wp_user( 7 ) );
 
-			$this->assertSame( 'dadata:fresh-guess', $meta_store[7][ self::META_KEY ]['record']['key'] );
+			$this->assertSame( 'dadata:fresh-guess', $meta_store[7][ self::META_KEY ]['records'][ Location_Record::LEVEL_SETTLEMENT ]['key'] );
 		}
 
 		public function test_login_migration_is_a_noop_when_the_session_has_no_record(): void {
@@ -669,7 +676,7 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$this->assertSame( $first_session, $session->raw( self::SESSION_KEY ), 'a second migration run must not change the resynced session' );
 			$this->assertSame(
 				'dadata:account-choice',
-				$meta_store[7][ self::META_KEY ]['record']['key'],
+				$meta_store[7][ self::META_KEY ]['records'][ Location_Record::LEVEL_SETTLEMENT ]['key'],
 				'the account explicit choice must still have won after a second run'
 			);
 		}
@@ -861,7 +868,10 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$store = new Customer_Location_Store_Probe( null );
 
 			$this->assertTrue( $store->set( $this->record( 'dadata:meta-only-write' ) ) );
-			$this->assertSame( 'dadata:meta-only-write', $meta_store[42][ self::META_KEY ]['record']['key'] );
+			$this->assertSame(
+				'dadata:meta-only-write',
+				$meta_store[42][ self::META_KEY ]['records'][ Location_Record::LEVEL_SETTLEMENT ]['key']
+			);
 		}
 
 		// -------------------------------------------------------------------
@@ -905,6 +915,348 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 		 */
 		private function wp_user( int $id ): object {
 			return (object) [ 'ID' => $id ];
+		}
+
+		// -------------------------------------------------------------------
+		// Location-chain design (§3, docs-internal/specs/2026-08-15-location-
+		// chain-design.md): the chain shape, get_chain(), and set()'s rebuild
+		// rule (drop deeper, keep ancestor-compatible shallower, keep unfiltered
+		// when the new record publishes no ancestors at all).
+		// -------------------------------------------------------------------
+
+		/**
+		 * Builds a record at a given level with an explicit `ancestors` set —
+		 * `record()` above always builds a bare settlement with no ancestors, so
+		 * this is the one used for every ancestor-compatibility test below.
+		 *
+		 * @param string   $key       The record's own key.
+		 * @param string   $level     One of {@see Location_Record::LEVELS}.
+		 * @param string[] $ancestors The `ancestors` set to publish.
+		 *
+		 * @return Location_Record
+		 */
+		private function record_with_ancestors( string $key, string $level, array $ancestors ): Location_Record {
+			return Location_Record::from_array(
+				[
+					'key'         => $key,
+					'provider_id' => explode( ':', $key )[0],
+					'level'       => $level,
+					'country'     => 'RU',
+					'ancestors'   => $ancestors,
+				]
+			);
+		}
+
+		public function test_a_legacy_single_record_blob_parses_as_a_one_entry_chain(): void {
+			$this->stub_guest();
+
+			$session = new Customer_Location_Store_Fake_Session();
+			$session->set(
+				self::SESSION_KEY,
+				[
+					'record'   => $this->record( 'dadata:legacy', Location_Record::LEVEL_SETTLEMENT )->to_array(),
+					'implicit' => false,
+					'saved_at' => 555,
+				]
+			);
+
+			$store = new Customer_Location_Store_Probe( $session );
+
+			$chain = $store->get_chain();
+
+			$this->assertNotNull( $chain );
+			$this->assertSame( [ Location_Record::LEVEL_SETTLEMENT ], array_keys( $chain['records'] ) );
+			$this->assertSame( Location_Record::LEVEL_SETTLEMENT, $chain['current'] );
+			$this->assertSame( 'dadata:legacy', $chain['records'][ Location_Record::LEVEL_SETTLEMENT ]->key() );
+			$this->assertFalse( $chain['implicit'] );
+			$this->assertSame( 555, $chain['saved_at'] );
+		}
+
+		public function test_get_still_answers_the_current_record_for_a_legacy_blob(): void {
+			$this->stub_guest();
+
+			$session = new Customer_Location_Store_Fake_Session();
+			$session->set(
+				self::SESSION_KEY,
+				[
+					'record'   => $this->record( 'dadata:legacy' )->to_array(),
+					'implicit' => false,
+					'saved_at' => 1,
+				]
+			);
+
+			$store = new Customer_Location_Store_Probe( $session );
+
+			$read = $store->get();
+
+			$this->assertNotNull( $read );
+			$this->assertSame( 'dadata:legacy', $read['record']->key() );
+		}
+
+		public function test_get_still_answers_the_current_record_for_a_new_shape_chain(): void {
+			$this->stub_guest();
+
+			$store = new Customer_Location_Store_Probe( new Customer_Location_Store_Fake_Session() );
+
+			$settlement = $this->record( 'dadata:settlement-1', Location_Record::LEVEL_SETTLEMENT );
+			$address    = $this->record_with_ancestors( 'dadata:address-1', Location_Record::LEVEL_ADDRESS, [ 'dadata:settlement-1' ] );
+
+			$store->set( $settlement );
+			$store->set( $address );
+
+			$read = $store->get();
+
+			$this->assertSame( 'dadata:address-1', $read['record']->key(), 'get() must answer the CURRENT record, not the whole chain' );
+		}
+
+		public function test_a_settlement_write_then_an_ancestor_compatible_address_write_keeps_both(): void {
+			$this->stub_guest();
+
+			$store = new Customer_Location_Store_Probe( new Customer_Location_Store_Fake_Session() );
+
+			$settlement = $this->record( 'dadata:settlement-1', Location_Record::LEVEL_SETTLEMENT );
+			$address    = $this->record_with_ancestors( 'dadata:address-1', Location_Record::LEVEL_ADDRESS, [ 'dadata:settlement-1' ] );
+
+			$store->set( $settlement );
+			$store->set( $address );
+
+			$chain = $store->get_chain();
+
+			$this->assertSame(
+				[ Location_Record::LEVEL_SETTLEMENT, Location_Record::LEVEL_ADDRESS ],
+				array_keys( $chain['records'] )
+			);
+			$this->assertSame( 'dadata:settlement-1', $chain['records'][ Location_Record::LEVEL_SETTLEMENT ]->key() );
+			$this->assertSame( 'dadata:address-1', $chain['records'][ Location_Record::LEVEL_ADDRESS ]->key() );
+			$this->assertSame( Location_Record::LEVEL_ADDRESS, $chain['current'] );
+		}
+
+		public function test_an_address_write_that_is_not_within_the_stored_settlement_drops_it(): void {
+			$this->stub_guest();
+
+			$store = new Customer_Location_Store_Probe( new Customer_Location_Store_Fake_Session() );
+
+			$settlement = $this->record( 'dadata:settlement-1', Location_Record::LEVEL_SETTLEMENT );
+			// Publishes ancestors, but none of them is the stored settlement's key —
+			// is_within() must refuse it.
+			$address = $this->record_with_ancestors( 'dadata:address-1', Location_Record::LEVEL_ADDRESS, [ 'dadata:some-other-settlement' ] );
+
+			$store->set( $settlement );
+			$store->set( $address );
+
+			$chain = $store->get_chain();
+
+			$this->assertSame(
+				[ Location_Record::LEVEL_ADDRESS ],
+				array_keys( $chain['records'] ),
+				'the ancestor-incompatible settlement must have been dropped'
+			);
+		}
+
+		public function test_an_address_write_with_no_ancestors_at_all_drops_the_stored_settlement(): void {
+			// An earlier draft KEPT it here, reasoning that a provider which has not
+			// implemented ancestors publishes "no information", not negative information.
+			// Adversarial review killed that: a Moscow settlement survived a
+			// Saint-Petersburg address in the same country, and what survives is exactly
+			// what current_locality() answers — so the customer's pickup point would be
+			// filed under a city they had left, silently. Unprovable ancestry is dropped;
+			// the layer answers '' rather than a plausible wrong key.
+			$this->stub_guest();
+
+			$store = new Customer_Location_Store_Probe( new Customer_Location_Store_Fake_Session() );
+
+			$settlement = $this->record( 'dadata:settlement-1', Location_Record::LEVEL_SETTLEMENT );
+			// A provider that has not implemented ancestors: [] === ancestors().
+			$address = $this->record( 'dadata:address-1', Location_Record::LEVEL_ADDRESS );
+
+			$store->set( $settlement );
+			$store->set( $address );
+
+			$chain = $store->get_chain();
+
+			$this->assertSame(
+				[ Location_Record::LEVEL_ADDRESS ],
+				array_keys( $chain['records'] ),
+				'a shallower record whose ancestry cannot be proven is dropped, not kept on the benefit of the doubt'
+			);
+		}
+
+		/**
+		 * Same helper as {@see self::record()}, with the country as a parameter — the
+		 * cross-country rule is the ONE thing the ancestor bypass must not survive.
+		 *
+		 * @param string $key     Locality key.
+		 * @param string $level   One of {@see Location_Record::LEVELS}.
+		 * @param string $country ISO-3166 alpha-2.
+		 *
+		 * @return Location_Record
+		 */
+		private function record_in_country( string $key, string $level, string $country ): Location_Record {
+			return Location_Record::from_array(
+				[
+					'key'         => $key,
+					'provider_id' => explode( ':', $key )[0],
+					'level'       => $level,
+					'country'     => $country,
+				]
+			);
+		}
+
+		public function test_a_write_in_another_country_drops_the_stored_chain_even_with_no_ancestors(): void {
+			// Adversarial review: the "no ancestors published is not negative information"
+			// bypass must NOT keep a RUSSIAN settlement under an UZBEK address. What
+			// survives here is what current_locality() would answer (a pickup point keyed
+			// to a city on another continent) and what build_scope() would resolve a
+			// `within` against — and Location_Scope::within() takes the scope's COUNTRY
+			// FROM THE PARENT, so the customer's next search would silently move country.
+			$this->stub_guest();
+
+			$store = new Customer_Location_Store_Probe( new Customer_Location_Store_Fake_Session() );
+
+			$store->set( $this->record_in_country( 'dadata:moscow', Location_Record::LEVEL_SETTLEMENT, 'RU' ) );
+			$store->set( $this->record_in_country( 'dadata:tashkent-addr', Location_Record::LEVEL_ADDRESS, 'UZ' ) );
+
+			$chain = $store->get_chain();
+
+			$this->assertSame(
+				[ Location_Record::LEVEL_ADDRESS ],
+				array_keys( $chain['records'] ),
+				'a shallower record from another country is dropped unconditionally, ancestors or not'
+			);
+		}
+
+		public function test_a_stored_blob_with_two_records_at_one_level_is_refused_whole(): void {
+			// Adversarial review: re-indexing by the record's own level is what stops a
+			// corrupted outer key smuggling a record in under the wrong one — but a
+			// DUPLICATE would then be decided by serialization order, so merely
+			// reordering the blob would change which settlement the customer's pickup
+			// point is restored under. Unreadable-unambiguously means refused whole.
+			$this->stub_guest();
+
+			$session = new Customer_Location_Store_Fake_Session();
+			$session->set(
+				self::SESSION_KEY,
+				[
+					'records'  => [
+						'first'  => $this->record( 'dadata:settlement-a', Location_Record::LEVEL_SETTLEMENT )->to_array(),
+						'second' => $this->record( 'dadata:settlement-b', Location_Record::LEVEL_SETTLEMENT )->to_array(),
+					],
+					'current'  => Location_Record::LEVEL_SETTLEMENT,
+					'implicit' => false,
+					'saved_at' => 123,
+				]
+			);
+
+			$store = new Customer_Location_Store_Probe( $session );
+
+			$this->assertNull( $store->get_chain(), 'an ambiguous chain is not silently resolved by entry order' );
+			$this->assertNull( $store->get(), 'and the same refusal reaches the single-record accessor' );
+		}
+
+		public function test_writing_a_settlement_after_an_address_drops_the_address_being_a_deeper_level(): void {
+			$this->stub_guest();
+
+			$store = new Customer_Location_Store_Probe( new Customer_Location_Store_Fake_Session() );
+
+			$settlement = $this->record( 'dadata:settlement-1', Location_Record::LEVEL_SETTLEMENT );
+			$address    = $this->record_with_ancestors( 'dadata:address-1', Location_Record::LEVEL_ADDRESS, [ 'dadata:settlement-1' ] );
+
+			$store->set( $settlement );
+			$store->set( $address );
+
+			// Now write a NEW settlement — the previously-current address is deeper
+			// than "settlement" and must be dropped, regardless of ancestry.
+			$new_settlement = $this->record( 'dadata:settlement-2', Location_Record::LEVEL_SETTLEMENT );
+			$store->set( $new_settlement );
+
+			$chain = $store->get_chain();
+
+			$this->assertSame( [ Location_Record::LEVEL_SETTLEMENT ], array_keys( $chain['records'] ) );
+			$this->assertSame( 'dadata:settlement-2', $chain['records'][ Location_Record::LEVEL_SETTLEMENT ]->key() );
+			$this->assertSame( Location_Record::LEVEL_SETTLEMENT, $chain['current'] );
+		}
+
+		public function test_implicit_over_explicit_is_still_refused_and_leaves_the_chain_untouched(): void {
+			$this->stub_guest();
+
+			$store = new Customer_Location_Store_Probe( new Customer_Location_Store_Fake_Session() );
+
+			$settlement = $this->record( 'dadata:settlement-1', Location_Record::LEVEL_SETTLEMENT );
+			$address    = $this->record_with_ancestors( 'dadata:address-1', Location_Record::LEVEL_ADDRESS, [ 'dadata:settlement-1' ] );
+
+			$store->set( $settlement, false );
+			$store->set( $address, false );
+
+			$before = $store->get_chain();
+
+			$implicit_guess = $this->record( 'dadata:guess', Location_Record::LEVEL_REGION );
+			$result         = $store->set( $implicit_guess, true );
+
+			$this->assertFalse( $result );
+
+			$after = $store->get_chain();
+
+			$this->assertSame( array_keys( $before['records'] ), array_keys( $after['records'] ) );
+			$this->assertSame( 'dadata:settlement-1', $after['records'][ Location_Record::LEVEL_SETTLEMENT ]->key() );
+			$this->assertSame( 'dadata:address-1', $after['records'][ Location_Record::LEVEL_ADDRESS ]->key() );
+			$this->assertSame( Location_Record::LEVEL_ADDRESS, $after['current'] );
+		}
+
+		public function test_the_guest_and_logged_in_paths_both_round_trip_the_chain(): void {
+			$meta_store = $this->fake_user_meta_store();
+			$this->stub_user_meta( $meta_store );
+			$this->stub_logged_in( 42 );
+
+			$session = new Customer_Location_Store_Fake_Session();
+			$store   = new Customer_Location_Store_Probe( $session );
+
+			$settlement = $this->record( 'dadata:settlement-1', Location_Record::LEVEL_SETTLEMENT );
+			$address    = $this->record_with_ancestors( 'dadata:address-1', Location_Record::LEVEL_ADDRESS, [ 'dadata:settlement-1' ] );
+
+			$store->set( $settlement );
+			$store->set( $address );
+
+			$chain = $store->get_chain();
+
+			$this->assertSame(
+				[ Location_Record::LEVEL_SETTLEMENT, Location_Record::LEVEL_ADDRESS ],
+				array_keys( $chain['records'] )
+			);
+			$this->assertSame(
+				'dadata:settlement-1',
+				$meta_store[42][ self::META_KEY ]['records'][ Location_Record::LEVEL_SETTLEMENT ]['key'] ?? null,
+				'the meta store must persist the whole chain, keyed by level'
+			);
+		}
+
+		public function test_handle_wp_login_migrates_the_whole_chain(): void {
+			$meta_store = $this->fake_user_meta_store();
+			$this->stub_user_meta( $meta_store );
+
+			$session = new Customer_Location_Store_Fake_Session();
+			$store   = new Customer_Location_Store_Probe( $session );
+
+			$settlement = $this->record( 'dadata:settlement-1', Location_Record::LEVEL_SETTLEMENT );
+			$address    = $this->record_with_ancestors( 'dadata:address-1', Location_Record::LEVEL_ADDRESS, [ 'dadata:settlement-1' ] );
+
+			// Build the session chain the guest would have via set() — but set()
+			// reads is_user_logged_in() itself, so build it while still a guest.
+			$this->stub_guest();
+			$store->set( $settlement );
+			$store->set( $address );
+
+			$store->handle_wp_login( 'jdoe', $this->wp_user( 7 ) );
+
+			$meta_records = $meta_store[7][ self::META_KEY ]['records'] ?? [];
+
+			$this->assertSame(
+				[ Location_Record::LEVEL_SETTLEMENT, Location_Record::LEVEL_ADDRESS ],
+				array_keys( $meta_records ),
+				'handle_wp_login() must migrate every level in the guest chain, not only current'
+			);
+			$this->assertSame( 'dadata:settlement-1', $meta_records[ Location_Record::LEVEL_SETTLEMENT ]['key'] );
+			$this->assertSame( 'dadata:address-1', $meta_records[ Location_Record::LEVEL_ADDRESS ]['key'] );
+			$this->assertSame( Location_Record::LEVEL_ADDRESS, $meta_store[7][ self::META_KEY ]['current'] );
 		}
 	}
 }

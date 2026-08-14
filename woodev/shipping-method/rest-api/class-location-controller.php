@@ -650,11 +650,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 		 * @since 2.0.2 An empty `country` param now falls back through
 		 *              {@see \Woodev\Framework\Shipping\Location\Location_Service::resolve_default_country()}
 		 *              instead of reaching `build_scope()`'s own 400 (issue #296).
+		 * @since 2.0.2 Response gained `within_applied` (issue #330's third
+		 *              point): a `within` that failed to resolve used to be
+		 *              indistinguishable from a genuine country-wide search — see
+		 *              the `within_applied` line below for the exact semantics,
+		 *              including the no-`within`-requested case.
 		 *
 		 * @param \WP_REST_Request $request        request object.
 		 * @param string           $rate_limit_key Per-route rate-limit bucket prefix.
 		 *
-		 * @return \WP_REST_Response|\WP_Error|array{suggestions: array<int, array<string, mixed>>}
+		 * @return \WP_REST_Response|\WP_Error|array{suggestions: array<int, array<string, mixed>>, within_applied: bool}
 		 */
 		private function perform_suggest( $request, string $rate_limit_key ) {
 
@@ -694,7 +699,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 			$provider = $this->service->provider_for_level( $level );
 
 			if ( null === $provider ) {
-				return rest_ensure_response( [ 'suggestions' => [] ] );
+				// No scope is ever built on this branch — nothing was looked up,
+				// so no parent constraint could have been applied.
+				return rest_ensure_response(
+					[
+						'suggestions'    => [],
+						'within_applied' => false,
+					]
+				);
 			}
 
 			$country = $this->normalize_param( $request->get_param( 'country' ) );
@@ -715,6 +727,26 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 
 			$within = $this->cap_length( $this->normalize_param( $request->get_param( 'within' ) ), self::MAX_PARAM_LENGTH );
 
+			/*
+			 * `within_applied` (issue #330's third point) is read from the SCOPE
+			 * OBJECT itself ({@see Location_Scope::has_parent()}) at every return
+			 * point below that has one, never re-guessed from `$within` — the
+			 * whole point is to report what build_scope() actually DID, not what
+			 * the request merely ASKED for. Semantics:
+			 * - a `within` that resolved into a real parent constraint -> `true`;
+			 * - a non-empty `within` that did NOT resolve (unknown/stale key, a
+			 *   level-ordering mismatch, or no customer chain at all) -> `false`,
+			 *   now VISIBLE to an HTTP probe instead of being indistinguishable
+			 *   from a genuine country-wide search — the silence issue #330 named
+			 *   as half of why the underlying bug survived;
+			 * - no `within` requested at all -> also `false`, DELIBERATELY the
+			 *   same value as the failed-resolution case above: this field
+			 *   answers "is this response's scope constrained to a parent", not
+			 *   "did the client's within request get honored" — a client already
+			 *   knows whether it sent one, so the two `false` causes never need
+			 *   telling apart from this field alone, and `has_parent()` is
+			 *   definitionally `false` in both.
+			 */
 			try {
 				$scope = $this->build_scope( $country, $level, $within );
 			} catch ( \InvalidArgumentException $exception ) {
@@ -744,7 +776,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 			 * cover when the active provider merely happens to list it.
 			 */
 			if ( ! $this->service->is_country_supported( $country, $level ) ) {
-				return rest_ensure_response( [ 'suggestions' => [] ] );
+				return rest_ensure_response(
+					[
+						'suggestions'    => [],
+						'within_applied' => $scope->has_parent(),
+					]
+				);
 			}
 
 			try {
@@ -755,7 +792,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 				return $this->upstream_error();
 			}
 
-			return rest_ensure_response( [ 'suggestions' => $this->to_response_records( $records ) ] );
+			return rest_ensure_response(
+				[
+					'suggestions'    => $this->to_response_records( $records ),
+					'within_applied' => $scope->has_parent(),
+				]
+			);
 		}
 
 		/**
@@ -879,10 +921,20 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 		 * @internal
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Response gained `chain` (location-chain design §8;
+		 *              `docs-internal/specs/2026-08-15-location-chain-design.md`):
+		 *              every level in the customer's chain AFTER this write, in
+		 *              the SAME `{ key, level }` shape as `current` for each
+		 *              entry, keyed by level — read straight from
+		 *              {@see Location_Service::get_customer_chain()} rather than
+		 *              re-derived from `$record` alone, so the client can adopt
+		 *              the server's own rebuilt chain wholesale and can never end
+		 *              up scoping a later `within` by a key the server itself
+		 *              would refuse to resolve.
 		 *
 		 * @param \WP_REST_Request $request request object.
 		 *
-		 * @return \WP_REST_Response|\WP_Error|array{current: array{key: string, level: string}, persisted: bool}
+		 * @return \WP_REST_Response|\WP_Error|array{current: array{key: string, level: string}, persisted: bool, chain: array<string, array{key: string, level: string}>}
 		 */
 		public function handle_select_request( $request ) {
 
@@ -961,7 +1013,29 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 			 * away). The full record is NOT echoed back: the client already holds
 			 * the exact same shape it just posted (round-tripped from `/suggest`),
 			 * so resending it would be pure duplication.
+			 *
+			 * `chain` is read AFTER the write, straight from
+			 * {@see Location_Service::get_customer_chain()} — the server's own
+			 * rebuilt chain, not a client-side guess reconstructed from `$record`
+			 * alone (a client cannot know which shallower levels
+			 * {@see \Woodev\Framework\Shipping\Location\Customer_Location_Store::set()}
+			 * kept or dropped). When the write failed (`persisted: false`) this is
+			 * simply whatever chain the store already held — still the honest,
+			 * current server-side answer.
 			 */
+			$chain = [];
+
+			$customer_chain = $this->service->get_customer_chain();
+
+			if ( null !== $customer_chain ) {
+				foreach ( $customer_chain['records'] as $chain_level => $chain_record ) {
+					$chain[ $chain_level ] = [
+						'key'   => $chain_record->key(),
+						'level' => $chain_record->level(),
+					];
+				}
+			}
+
 			return rest_ensure_response(
 				[
 					'current'   => [
@@ -969,6 +1043,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 						'level' => $record->level(),
 					],
 					'persisted' => $persisted,
+					'chain'     => $chain,
 				]
 			);
 		}
@@ -1054,19 +1129,33 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 		 * `within` parent constraint.
 		 *
 		 * `within` is a locality KEY (not a components blob) the client believes
-		 * names its current parent. Since this controller has no "look up a
-		 * record by bare key" mechanism, it is resolved by checking it against
-		 * {@see Location_Service::get_customer_record()} — the record the SAME
-		 * client itself persisted moments earlier via `/select` (D8: every
-		 * cascade step persists before the next step's suggest call runs). A key
-		 * that does not match (unknown, stale, no customer record at all) is
+		 * names one of its own already-picked levels. Since this controller has
+		 * no "look up a record by bare key" mechanism, it is resolved by
+		 * checking it against {@see Location_Service::get_customer_chain()} —
+		 * EVERY level the SAME client itself persisted moments earlier via
+		 * `/select` (D8: every cascade step persists before the next step's
+		 * suggest call runs), not merely the CURRENT one (issue #330: a
+		 * settlement `within` sent alongside an address-level search — the
+		 * ordinary shape of an address lookup — used to resolve against the
+		 * current record alone, so it was silently ignored the moment `current`
+		 * moved past settlement, and the search fell through to a country-wide
+		 * scope with nothing anywhere saying why). A key that matches NO record
+		 * in the chain at all (unknown, stale, no customer record yet) is
 		 * treated exactly like an ABSENT `within` — never an error (spec Task 8:
 		 * "stale client state must never brick the field") — and a key that DOES
 		 * match but sits at the wrong level for this search (e.g. a region key
 		 * "within" a region-level search) is refused by
 		 * {@see Location_Scope::within()} itself and swallowed the same way.
+		 * The matched record is a REAL, previously-persisted
+		 * {@see Location_Record} with its own `raw`, so {@see Location_Scope::within()}
+		 * and a provider's own constraint-building (e.g.
+		 * {@see \Woodev\Framework\Shipping\Location\Providers\Dadata_Provider::build_locations_constraint()})
+		 * need no change at all and still get exact native ids.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Resolves `within` against the customer's WHOLE chain
+		 *              ({@see Location_Service::get_customer_chain()}), not only
+		 *              the current record (issue #330).
 		 *
 		 * @param string $country    Normalized ISO-3166 alpha-2 country code.
 		 * @param string $level      One of {@see Location_Record::LEVELS} — already validated by the caller.
@@ -1081,19 +1170,49 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 		private function build_scope( string $country, string $level, string $within_key ): Location_Scope {
 
 			if ( '' !== $within_key ) {
-				$current = $this->service->get_customer_record();
+				$chain   = $this->service->get_customer_chain();
+				$records = null !== $chain ? $chain['records'] : [];
 
-				if ( null !== $current && $current['record']->key() === $within_key ) {
+				foreach ( $records as $chain_record ) {
+					if ( $chain_record->key() !== $within_key ) {
+						continue;
+					}
+
+					/*
+					 * A parent from ANOTHER COUNTRY is refused, not merely unhelpful
+					 * (adversarial review): Location_Scope::within() takes the scope's
+					 * country FROM THE PARENT RECORD — there is deliberately no
+					 * $country argument there, so the two cannot disagree — which means
+					 * honouring a stale cross-country `within` would silently move the
+					 * whole search to the parent's country while the customer is typing
+					 * an address in the one they actually selected. Treated exactly like
+					 * an unknown key: silent fall-through to the country-wide scope.
+					 *
+					 * `$country` is normalized HERE rather than trusted: it arrives from
+					 * `normalize_param()`, which cleans but does NOT upper-case, while a
+					 * record's own `country()` is always upper-cased by
+					 * {@see Location_Record::from_array()}. Comparing them raw would drop
+					 * a perfectly good parent for any client that sent `ru` instead of
+					 * `RU` — a silent narrowing introduced by a guard meant to prevent
+					 * one.
+					 */
+					if ( $chain_record->country() !== strtoupper( trim( $country ) ) ) {
+						break;
+					}
+
 					try {
-						return Location_Scope::within( $current['record'], $level );
+						return Location_Scope::within( $chain_record, $level );
 					} catch ( \InvalidArgumentException $exception ) {
 						// Level-ordering mismatch — treated exactly like an unknown key:
 						// fall through to the country-wide scope below.
 					}
+
+					break;
 				}
 
-				// No match at all (unknown/stale key, or no customer record yet) —
-				// deliberately silent, as if `within` had never been sent.
+				// No match at all (unknown/stale key, no customer record yet, or a
+				// level-ordering mismatch caught above) — deliberately silent, as if
+				// `within` had never been sent.
 			}
 
 			return Location_Scope::for_country( $country, $level );

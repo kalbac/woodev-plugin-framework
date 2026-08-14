@@ -733,6 +733,21 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 		 * field-name family) into a contract-shaped {@see Location_Record}
 		 * (spec D12).
 		 *
+		 * Also publishes {@see Location_Record::ancestors()} — the non-empty of
+		 * `region_fias_id`, `area_fias_id`, `city_fias_id`, `settlement_fias_id`,
+		 * `street_fias_id`, composed the same way `key` is, minus the row's own
+		 * `fias_id` (see {@see self::ancestor_keys_from_dadata_fields()}).
+		 *
+		 * Measured facts (rig, live DaData, 15.08.2026) this rests on — see
+		 * `docs-internal/specs/2026-08-15-location-chain-design.md` "Measurement":
+		 * - a settlement-level row's own `fias_id` equals the DEEPEST filled of
+		 *   (`settlement_fias_id`, `city_fias_id`) — five rows measured, including
+		 *   the both-filled case («Нижегородская обл, г Бор, деревня Жуковка» →
+		 *   `fias_id` = `settlement_fias_id`);
+		 * - abroad these ids are OSM-derived (`relation:2216724` for Ташкент) and
+		 *   an address row in that city carries the SAME string in `city_fias_id`,
+		 *   so ancestor composition works outside RU too, not only under ФИАС.
+		 *
 		 * @since 2.0.2
 		 *
 		 * @param array<string, mixed> $fields  DaData field set.
@@ -786,6 +801,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 				'lon'         => $fields['geo_lon'] ?? null,
 				'label'       => $label,
 				'raw'         => $fields,
+				'ancestors'   => $this->ancestor_keys_from_dadata_fields( $fields, $fias_id ),
 			];
 
 			try {
@@ -795,6 +811,55 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 
 				return null;
 			}
+		}
+
+		/**
+		 * Composes the {@see Location_Record::ancestors()} set from a flat DaData
+		 * field set: the non-empty of `region_fias_id`, `area_fias_id`,
+		 * `city_fias_id`, `settlement_fias_id`, `street_fias_id`, each composed
+		 * into a locality key the same way `key` itself is, minus the row's own
+		 * `fias_id` (that identity is answered by {@see Location_Record::is_within()}
+		 * separately, never carried twice over) — see
+		 * {@see self::record_from_dadata_fields()}'s own docblock for the
+		 * measurement this rests on.
+		 *
+		 * A malformed upstream id (one {@see Locality_Key::compose()} itself
+		 * refuses) is SKIPPED, not fatal — this method already runs inside the
+		 * same defensive posture as the rest of this class (`log_failure()`'s own
+		 * callers): one bad ancestor field must not take down the whole record.
+		 * The result is de-duplicated and kept in the field-check order above.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<string, mixed> $fields  DaData field set.
+		 * @param string               $fias_id The row's own `fias_id` (already
+		 *                                       extracted by the caller), skipped
+		 *                                       here if it recurs under another field.
+		 *
+		 * @return string[]
+		 */
+		private function ancestor_keys_from_dadata_fields( array $fields, string $fias_id ): array {
+			$ancestors = [];
+
+			foreach ( [ 'region_fias_id', 'area_fias_id', 'city_fias_id', 'settlement_fias_id', 'street_fias_id' ] as $id_field ) {
+				$native_id = trim( (string) ( $fields[ $id_field ] ?? '' ) );
+
+				if ( '' === $native_id || $native_id === $fias_id ) {
+					continue;
+				}
+
+				try {
+					$ancestor_key = Locality_Key::compose( self::PROVIDER_ID, $native_id );
+				} catch ( \Throwable $exception ) {
+					continue;
+				}
+
+				if ( ! in_array( $ancestor_key, $ancestors, true ) ) {
+					$ancestors[] = $ancestor_key;
+				}
+			}
+
+			return $ancestors;
 		}
 
 		/**

@@ -225,6 +225,107 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 		}
 
 		// -------------------------------------------------------------------
+		// current_locality() answers the SETTLEMENT level, never the current one
+		// (issue #334; location-chain design §5)
+		// -------------------------------------------------------------------
+
+		/**
+		 * An ADDRESS-level record inside `$settlement_key`, shaped the way the
+		 * DaData provider publishes one: its own key is the house/street id, and
+		 * the settlement it sits in is published in the ancestor SET.
+		 *
+		 * @param string $settlement_key The settlement this address belongs to.
+		 * @param string $key            The address record's own key.
+		 *
+		 * @return Location_Record
+		 */
+		private function address_record( string $settlement_key, string $key = 'dadata:fias-addr-1' ): Location_Record {
+			return Location_Record::from_array(
+				[
+					'key'         => $key,
+					'provider_id' => explode( ':', $key )[0],
+					'level'       => Location_Record::LEVEL_ADDRESS,
+					'country'     => 'RU',
+					'settlement'  => [ 'name' => 'Москва', 'type' => 'г' ],
+					'street'      => [ 'name' => 'Цветной', 'type' => 'б-р' ],
+					'house'       => '1',
+					'ancestors'   => [ $settlement_key ],
+				]
+			);
+		}
+
+		public function test_current_locality_stays_on_the_settlement_after_the_customer_picks_an_address(): void {
+			// Issue #334: `/location/select` is posted for EVERY level including address, so the
+			// CURRENT record becomes address-level the moment the customer refines their address.
+			// The pickup selection was written under the settlement key and read back under the
+			// address key — the chosen point became unreachable, silently.
+			$store = new Provider_Selection_Scope_Customer_Store_Probe( new Provider_Selection_Scope_Fake_Session() );
+			$store->set( $this->record( 'dadata:fias-1' ) );
+			$store->set( $this->address_record( 'dadata:fias-1' ) );
+
+			$service = new Location_Service( Location_Provider_Registry::instance(), $store );
+			$scope   = new Provider_Selection_Scope_Test_Scope( $service );
+
+			$this->assertSame(
+				'dadata:fias-1',
+				$scope->current_locality(),
+				'refining the address inside a settlement must not move the pickup locality'
+			);
+		}
+
+		public function test_current_locality_refuses_rather_than_falling_back_to_an_address_key(): void {
+			// The customer typed an address without ever picking a settlement, so the chain holds
+			// no settlement at all. `''` — the layer's own "refusing to answer" sentinel, which
+			// Pickup_Selection refuses on both the write and the read side — is the only safe
+			// answer here: falling back to the address record's own key is EXACTLY the #334 bug,
+			// and deriving a settlement from the address is the ambiguity gotcha
+			// `a-derived-ancestor-is-not-the-one-the-customer-picked` measures.
+			$store = new Provider_Selection_Scope_Customer_Store_Probe( new Provider_Selection_Scope_Fake_Session() );
+			$store->set( $this->address_record( 'dadata:fias-1' ) );
+
+			$service = new Location_Service( Location_Provider_Registry::instance(), $store );
+			$scope   = new Provider_Selection_Scope_Test_Scope( $service );
+
+			$this->assertSame( '', $scope->current_locality() );
+		}
+
+		public function test_current_locality_is_empty_for_a_region_only_record(): void {
+			// A region is SHALLOWER than a settlement — there is no settlement to key by, and a
+			// region key would collect points from every city in it under one bucket.
+			$store = new Provider_Selection_Scope_Customer_Store_Probe( new Provider_Selection_Scope_Fake_Session() );
+			$store->set(
+				Location_Record::from_array(
+					[
+						'key'         => 'dadata:fias-region-1',
+						'provider_id' => 'dadata',
+						'level'       => Location_Record::LEVEL_REGION,
+						'country'     => 'RU',
+						'region'      => [ 'name' => 'Московская', 'type' => 'обл' ],
+					]
+				)
+			);
+
+			$service = new Location_Service( Location_Provider_Registry::instance(), $store );
+			$scope   = new Provider_Selection_Scope_Test_Scope( $service );
+
+			$this->assertSame( '', $scope->current_locality() );
+		}
+
+		public function test_current_locality_follows_the_customer_to_a_new_settlement(): void {
+			// The mirror of the fix: an address pick must NOT move the locality, but a settlement
+			// pick still must — otherwise the point of one city would be recalled in another.
+			$store = new Provider_Selection_Scope_Customer_Store_Probe( new Provider_Selection_Scope_Fake_Session() );
+			$store->set( $this->record( 'dadata:fias-1' ) );
+			$store->set( $this->address_record( 'dadata:fias-1' ) );
+			$store->set( $this->record( 'dadata:fias-2' ) );
+
+			$service = new Location_Service( Location_Provider_Registry::instance(), $store );
+			$scope   = new Provider_Selection_Scope_Test_Scope( $service );
+
+			$this->assertSame( 'dadata:fias-2', $scope->current_locality() );
+		}
+
+		// -------------------------------------------------------------------
 		// Provider-switch MISS (spec D5) — Provider_Selection_Scope + Pickup_Selection
 		// -------------------------------------------------------------------
 

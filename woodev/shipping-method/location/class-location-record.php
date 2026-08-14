@@ -161,6 +161,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Record' 
 					// never inspects this field, so there is nothing "null" would tell
 					// it that "absent" does not.
 					'raw'         => array_key_exists( 'raw', $data ) ? $data['raw'] : null,
+					'ancestors'   => self::parse_ancestors( $data, $key, $provider_id ),
 				]
 			);
 		}
@@ -198,6 +199,106 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Record' 
 			}
 
 			return trim( $value );
+		}
+
+		/**
+		 * Parses the optional `ancestors` list: a flat, provider-published SET of
+		 * locality keys that are ancestors of this record (spec
+		 * `docs-internal/specs/2026-08-15-location-chain-design.md` §1).
+		 *
+		 * A flat SET, not a `level => key` map, deliberately: measured against a
+		 * live capture (rig, DaData, 15.08.2026), an address row routinely carries
+		 * BOTH `city_fias_id` and `settlement_fias_id` filled at once — scoping an
+		 * address search to a city returned 9 of 10 rows with a NESTED settlement,
+		 * all still under that same city. Only the CUSTOMER's own pick disambiguates
+		 * which of the two is "their" settlement; a derived `level => key` map
+		 * cannot answer that ambiguity for either side, so this layer stores
+		 * neither preference and instead answers only the one question the
+		 * framework actually needs answered: "is this stored key still an ancestor
+		 * of the new record?" ({@see self::is_within()}).
+		 *
+		 * Absent, explicit `null`, or `[]` all mean "no ancestors published" and
+		 * return `[]` — NOT an error: a provider that has not implemented ancestors
+		 * yet must degrade to "no information", never be forced to guess a level
+		 * mapping it cannot disambiguate.
+		 *
+		 * Each entry is validated exactly like `key` above (parses as a
+		 * {@see Locality_Key}, provider prefix equals `$provider_id`) — a
+		 * foreign-namespace ancestor is exactly the same "stale foreign key" hazard
+		 * spec D5 exists to catch, so a violating entry throws here rather than
+		 * being silently dropped. Entries are trimmed the same way `key` is;
+		 * duplicates and the record's OWN key are dropped (its own identity is
+		 * answered by {@see self::is_within()} separately, never carried twice
+		 * over) and the result is re-indexed into a list.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<string, mixed> $data        Raw payload.
+		 * @param string               $key         This record's own (already-trimmed) key.
+		 * @param string               $provider_id This record's own provider id.
+		 *
+		 * @return string[]
+		 *
+		 * @throws \InvalidArgumentException When `ancestors` is present but not a list
+		 *                                    array, or an entry is not a non-empty
+		 *                                    string, not a valid locality key, or its
+		 *                                    provider prefix does not match `$provider_id`.
+		 */
+		private static function parse_ancestors( array $data, string $key, string $provider_id ): array {
+			if ( ! array_key_exists( 'ancestors', $data ) || null === $data['ancestors'] ) {
+				return [];
+			}
+
+			$value = $data['ancestors'];
+
+			if ( ! is_array( $value ) || array_values( $value ) !== $value ) {
+				throw new \InvalidArgumentException(
+					'Location_Record::from_array(): "ancestors" must be a list array of locality-key strings.'
+				);
+			}
+
+			$ancestors = [];
+
+			foreach ( $value as $entry ) {
+				if ( ! is_string( $entry ) || '' === trim( $entry ) ) {
+					throw new \InvalidArgumentException(
+						'Location_Record::from_array(): each "ancestors" entry must be a non-empty string.'
+					);
+				}
+
+				$entry = trim( $entry );
+
+				try {
+					[ $entry_provider_id ] = Locality_Key::parse( $entry );
+				} catch ( \InvalidArgumentException $exception ) {
+					throw new \InvalidArgumentException(
+						sprintf(
+							'Location_Record::from_array(): "ancestors" entry "%s" is not a valid locality key: %s',
+							$entry,
+							$exception->getMessage()
+						)
+					);
+				}
+
+				if ( $entry_provider_id !== $provider_id ) {
+					throw new \InvalidArgumentException(
+						sprintf(
+							'Location_Record::from_array(): "ancestors" entry "%s" provider prefix ("%s") does not match "provider_id" ("%s").',
+							$entry,
+							$entry_provider_id,
+							$provider_id
+						)
+					);
+				}
+
+				if ( $entry === $key ) {
+					continue; // The record's own key is answered by is_within() separately.
+				}
+
+				$ancestors[ $entry ] = true; // Dedupe by key.
+			}
+
+			return array_keys( $ancestors );
 		}
 
 		/**
@@ -479,6 +580,49 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Record' 
 		 */
 		public function raw() {
 			return $this->data['raw'];
+		}
+
+		/**
+		 * Gets the provider-published ancestor key SET. This record's own
+		 * {@see self::key()} is never included here — that identity is answered by
+		 * {@see self::is_within()} instead of being carried twice over. See
+		 * {@see self::parse_ancestors()} for why this is a flat set, not a
+		 * `level => key` map.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string[]
+		 */
+		public function ancestors(): array {
+			return $this->data['ancestors'];
+		}
+
+		/**
+		 * Whether `$key` identifies this record itself, or one of its published
+		 * ancestors.
+		 *
+		 * `$key` is trimmed before comparing — the same normalisation
+		 * {@see self::require_non_empty_string()} already applies to this record's
+		 * own `key` on the way in. An empty (post-trim) `$key` ALWAYS answers
+		 * `false`: an empty domain key is not a key (gotcha
+		 * `an-empty-domain-key-is-not-a-key`) — it is the layer's own documented
+		 * "refusing to answer" sentinel, never a value that could legitimately
+		 * match anything, including an ancestor set that happens to be empty too.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $key Candidate locality key.
+		 *
+		 * @return bool
+		 */
+		public function is_within( string $key ): bool {
+			$key = trim( $key );
+
+			if ( '' === $key ) {
+				return false;
+			}
+
+			return $key === $this->data['key'] || in_array( $key, $this->data['ancestors'], true );
 		}
 
 		/**

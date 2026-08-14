@@ -495,6 +495,146 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 		}
 
 		// -------------------------------------------------------------------
+		// get_customer_chain() / get_customer_record_at(): location-chain design
+		// §4 (docs-internal/specs/2026-08-15-location-chain-design.md) — both
+		// routed through get_customer_record() first (lazy default trigger stays
+		// in one place), and the self::$unpersisted_default (review finding F1)
+		// gap between the two accessors.
+		// -------------------------------------------------------------------
+
+		private function record_with_ancestors( string $key, string $level, array $ancestors ): Location_Record {
+			return Location_Record::from_array(
+				[
+					'key'         => $key,
+					'provider_id' => explode( ':', $key )[0],
+					'level'       => $level,
+					'country'     => 'RU',
+					'ancestors'   => $ancestors,
+				]
+			);
+		}
+
+		public function test_get_customer_chain_returns_null_when_nothing_is_stored_and_no_default_resolves(): void {
+			$store   = new Location_Service_Customer_Store_Probe( new Location_Service_Fake_Session() );
+			$service = new Location_Service( Location_Provider_Registry::instance(), $store );
+
+			$this->assertNull( $service->get_customer_chain() );
+		}
+
+		public function test_get_customer_chain_reflects_every_level_the_customer_picked(): void {
+			$store   = new Location_Service_Customer_Store_Probe( new Location_Service_Fake_Session() );
+			$service = new Location_Service( Location_Provider_Registry::instance(), $store );
+
+			$settlement = $this->record( 'dadata:settlement-1' );
+			$address    = $this->record_with_ancestors( 'dadata:address-1', Location_Record::LEVEL_ADDRESS, [ 'dadata:settlement-1' ] );
+
+			$service->set_customer_record( $settlement );
+			$service->set_customer_record( $address );
+
+			$chain = $service->get_customer_chain();
+
+			$this->assertNotNull( $chain );
+			$this->assertSame(
+				[ Location_Record::LEVEL_SETTLEMENT, Location_Record::LEVEL_ADDRESS ],
+				array_keys( $chain['records'] )
+			);
+			$this->assertSame( Location_Record::LEVEL_ADDRESS, $chain['current'] );
+		}
+
+		public function test_get_customer_record_at_returns_the_record_for_a_present_level(): void {
+			$store   = new Location_Service_Customer_Store_Probe( new Location_Service_Fake_Session() );
+			$service = new Location_Service( Location_Provider_Registry::instance(), $store );
+
+			$settlement = $this->record( 'dadata:settlement-1' );
+			$address    = $this->record_with_ancestors( 'dadata:address-1', Location_Record::LEVEL_ADDRESS, [ 'dadata:settlement-1' ] );
+
+			$service->set_customer_record( $settlement );
+			$service->set_customer_record( $address );
+
+			$at_settlement = $service->get_customer_record_at( Location_Record::LEVEL_SETTLEMENT );
+			$at_address    = $service->get_customer_record_at( Location_Record::LEVEL_ADDRESS );
+
+			$this->assertNotNull( $at_settlement );
+			$this->assertSame( 'dadata:settlement-1', $at_settlement->key() );
+			$this->assertNotNull( $at_address );
+			$this->assertSame( 'dadata:address-1', $at_address->key() );
+		}
+
+		public function test_get_customer_record_at_returns_null_for_an_absent_level(): void {
+			$store   = new Location_Service_Customer_Store_Probe( new Location_Service_Fake_Session() );
+			$service = new Location_Service( Location_Provider_Registry::instance(), $store );
+
+			// Only "settlement" is ever written — "address" and "region" were
+			// never picked.
+			$service->set_customer_record( $this->record( 'dadata:settlement-1' ) );
+
+			$this->assertNull( $service->get_customer_record_at( Location_Record::LEVEL_ADDRESS ) );
+			$this->assertNull( $service->get_customer_record_at( Location_Record::LEVEL_REGION ) );
+		}
+
+		public function test_get_customer_record_at_returns_null_for_an_unknown_level_string(): void {
+			$store   = new Location_Service_Customer_Store_Probe( new Location_Service_Fake_Session() );
+			$service = new Location_Service( Location_Provider_Registry::instance(), $store );
+
+			$service->set_customer_record( $this->record( 'dadata:settlement-1' ) );
+
+			$this->assertNull( $service->get_customer_record_at( 'planet' ) );
+		}
+
+		public function test_get_customer_record_at_returns_null_when_nothing_is_stored_at_all(): void {
+			$store   = new Location_Service_Customer_Store_Probe( new Location_Service_Fake_Session() );
+			$service = new Location_Service( Location_Provider_Registry::instance(), $store );
+
+			$this->assertNull( $service->get_customer_record_at( Location_Record::LEVEL_SETTLEMENT ) );
+		}
+
+		/**
+		 * Review finding F1's chain-visibility gap: a guest REST request with no
+		 * session yet resolves a default through get_customer_record() (which
+		 * memoizes it in self::$unpersisted_default because
+		 * Customer_Location_Store::set() cannot write). get_customer_chain() and
+		 * get_customer_record_at() must see that SAME unpersisted default, not
+		 * silently answer null/empty for a customer get_customer_record() just
+		 * served an answer for.
+		 */
+		public function test_get_customer_chain_sees_the_unpersisted_default_when_the_session_write_failed(): void {
+			$store = new Location_Service_Customer_Store_Probe( null ); // No session at all -> set() always fails.
+
+			// Rather than wiring the real default-locality policy plumbing
+			// (`off`/`fixed`/`geoip`, already exhaustively covered by
+			// LocationServiceDefaultTest), override resolve_default() directly —
+			// get_customer_record()'s lazy trigger calls it unconditionally the
+			// same way regardless of which policy produced the answer.
+			$service = new class( Location_Provider_Registry::instance(), $store ) extends Location_Service {
+				public function resolve_default(): ?Location_Record {
+					return Location_Record::from_array(
+						[
+							'key'         => 'dadata:geo-default',
+							'provider_id' => 'dadata',
+							'level'       => Location_Record::LEVEL_SETTLEMENT,
+							'country'     => 'RU',
+						]
+					);
+				}
+			};
+
+			$first = $service->get_customer_record();
+
+			$this->assertNotNull( $first, 'sanity: the default resolved for get_customer_record()' );
+			$this->assertSame( 'dadata:geo-default', $first['record']->key() );
+
+			$chain = $service->get_customer_chain();
+
+			$this->assertNotNull( $chain, 'get_customer_chain() must see the same unpersisted default get_customer_record() just resolved' );
+			$this->assertSame( 'dadata:geo-default', $chain['records'][ Location_Record::LEVEL_SETTLEMENT ]->key() );
+			$this->assertSame( Location_Record::LEVEL_SETTLEMENT, $chain['current'] );
+
+			$at_level = $service->get_customer_record_at( Location_Record::LEVEL_SETTLEMENT );
+			$this->assertNotNull( $at_level );
+			$this->assertSame( 'dadata:geo-default', $at_level->key() );
+		}
+
+		// -------------------------------------------------------------------
 		// resolve_for(): current record -> resolution cache -> adapter; null
 		// when there is no record at all, and the cache is never even touched
 		// -------------------------------------------------------------------
