@@ -348,22 +348,53 @@ describe( 'pickup slot placements (#274 item 3)', () => {
 	 * rate a `<li>` holding a radio + label. One rate, pre-checked, matching the
 	 * `chosen_shipping_method` value the `required` condition-spec below tests against.
 	 *
+	 * `withRateListItem: false` drops the `<li>` wrapper and leaves the radio a direct
+	 * child of the `<ul>` — a theme that overrode `templates/cart/cart-shipping.php`.
+	 * Stock WooCommerce always renders the `<li>` (with a single method it only swaps the
+	 * input type, `radio` → `hidden`), so this models a THEME, never WooCommerce itself.
+	 * It is the case that leaves the `'rate'` anchor unresolvable while `'review'` is
+	 * still perfectly available — issue #323's mandatory fallback.
+	 *
+	 * `preChecked: false` renders a SECOND rate and checks neither. `resolvePlacementAnchor()`
+	 * only falls back to "the sole radio" when there is exactly one, so with two unchecked
+	 * rates the `'rate'` anchor is unresolvable — and becomes resolvable the moment the
+	 * customer picks a method. That is the sequence that turns #323's fallback into #323's own
+	 * symptom if `placeSlots()` can only ever ADD slots.
+	 *
+	 * `packages: 2` renders the `<ul id="shipping_method">` block TWICE, each with its own
+	 * checked rate — a multi-package cart. That is stock WooCommerce, not a theme:
+	 * `templates/cart/cart-shipping.php` hardcodes `id="shipping_method"` and is included once
+	 * per package, so a real checkout genuinely carries duplicate ids and one checked radio per
+	 * package (`shipping_method[0]`, `shipping_method[1]`).
+	 *
+	 * @param {{withRateListItem?: boolean, preChecked?: boolean, packages?: number}} [options]
 	 * @returns {void}
 	 */
-	function installPickupMarkup() {
+	function installPickupMarkup( options ) {
+		const opts         = options || {};
+		const withListItem = false !== opts.withRateListItem;
+		const preChecked   = false !== opts.preChecked;
+		const packages     = opts.packages || 1;
+		const rate         = ( index, value, label, checked ) => `
+			<input type="radio" name="shipping_method[${ index }]" value="${ value }"
+				id="shipping_method_${ index }_${ value }" ${ checked ? 'checked="checked"' : '' } />
+			<label for="shipping_method_${ index }_${ value }">${ label }</label>
+		`;
+		const wrap         = ( html ) => ( withListItem ? `<li>${ html }</li>` : html );
+		const list         = ( index ) => `
+			<tr class="woocommerce-shipping-totals shipping">
+				<td>
+					<ul id="shipping_method" class="woocommerce-shipping-methods">
+						${ wrap( rate( index, 'carrier_pickup', 'ПВЗ СДЭК', preChecked ) ) }
+						${ preChecked ? '' : wrap( rate( index, 'flat_rate', 'Курьер', false ) ) }
+					</ul>
+				</td>
+			</tr>
+		`;
+
 		document.body.innerHTML = `
 			<table class="shop_table woocommerce-checkout-review-order-table">
-				<tr class="woocommerce-shipping-totals shipping">
-					<td>
-						<ul id="shipping_method" class="woocommerce-shipping-methods">
-							<li>
-								<input type="radio" name="shipping_method[0]" value="carrier_pickup"
-									id="shipping_method_0_carrier_pickup" checked="checked" />
-								<label for="shipping_method_0_carrier_pickup">ПВЗ СДЭК</label>
-							</li>
-						</ul>
-					</td>
-				</tr>
+				${ Array.from( { length: packages }, ( unused, index ) => list( index ) ).join( '' ) }
 			</table>
 			<button type="submit" id="place_order"></button>
 		`;
@@ -396,11 +427,12 @@ describe( 'pickup slot placements (#274 item 3)', () => {
 	}
 
 	/**
-	 * @param {string[]|undefined} placements See {@see buildPickupConfig}.
+	 * @param {string[]|undefined}           placements See {@see buildPickupConfig}.
+	 * @param {{withRateListItem?: boolean}} [markup]   See {@see installPickupMarkup}.
 	 * @returns {void}
 	 */
-	function bootPickup( placements ) {
-		installPickupMarkup();
+	function bootPickup( placements, markup ) {
+		installPickupMarkup( markup );
 
 		global.jQuery = require( 'jquery' );
 		global.$      = global.jQuery;
@@ -430,7 +462,209 @@ describe( 'pickup slot placements (#274 item 3)', () => {
 		);
 	}
 
-	it( 'mounts BOTH placements by default — after the list AND inside the selected rate\'s <li>', () => {
+	it( 'mounts the framework default — ONE slot, inside the selected rate\'s <li>', () => {
+		bootPickup( [ 'rate' ] );
+
+		const mounted = slots();
+
+		expect( mounted ).toHaveLength( 1 );
+		expect( mounted[ 0 ].getAttribute( 'data-woodev-pickup-placement' ) ).toBe( 'rate' );
+		expect( mounted[ 0 ].closest( 'li' ) ).not.toBeNull();
+	} );
+
+	/**
+	 * Issue #323's mandatory fallback: a theme that overrode
+	 * `templates/cart/cart-shipping.php` and dropped the `<li>` leaves the `'rate'` anchor
+	 * unresolvable, and before this fix `placeSlot()` returned silently — carrying away the
+	 * customer's ONLY way to pick a point, with no error anywhere. `'review'` is still
+	 * available on such a page, so the trigger lands there instead of nowhere.
+	 */
+	it( 'falls back to the "review" anchor when the requested one is not in the DOM', () => {
+		bootPickup( [ 'rate' ], { withRateListItem: false } );
+
+		const mounted = slots();
+
+		expect( mounted ).toHaveLength( 1 );
+		expect( mounted[ 0 ].getAttribute( 'data-woodev-pickup-placement' ) ).toBe( 'review' );
+		expect( mounted[ 0 ].previousElementSibling.id ).toBe( 'shipping_method' );
+	} );
+
+	/**
+	 * The fallback must not fire when the requested anchor DID mount — otherwise #323's own
+	 * symptom (two identical buttons) comes back through the fix meant to prevent losing the
+	 * button. Pins the negative case the test above cannot: same list, anchor present.
+	 */
+	it( 'adds no fallback slot when the requested placement mounted normally', () => {
+		bootPickup( [ 'rate' ] );
+
+		expect( document.querySelector( '[data-woodev-pickup-placement="review"]' ) ).toBeNull();
+	} );
+
+	/**
+	 * The explicitly-empty list (issue #308 item 2 — a plugin that renders its own trigger)
+	 * is the ONE case that gets no fallback either: it is a decision, not a failure to
+	 * resolve an anchor, and #323's fallback must not undo it. Same missing-`<li>` page as
+	 * the fallback test above, so the only difference is the list itself.
+	 */
+	it( 'never falls back for an explicitly empty placement list', () => {
+		bootPickup( [], { withRateListItem: false } );
+
+		expect( slots() ).toEqual( [] );
+	} );
+
+	/**
+	 * The fallback must not be able to reintroduce #323's own symptom. `placeSlots()` runs
+	 * again on every shipping-method change, so a page that needed the fallback once and can
+	 * resolve the real anchor later would end up with BOTH slots mounted — two identical
+	 * buttons, which is the exact defect this card is about — unless a slot outside the
+	 * intended set is removed rather than merely left alone.
+	 *
+	 * Reproduced through a real WooCommerce shape: two rates, neither pre-checked, so
+	 * `resolvePlacementAnchor( 'rate' )` has nothing to resolve until the customer picks one.
+	 */
+	it( 'removes the fallback slot once the requested anchor becomes resolvable', () => {
+		bootPickup( [ 'rate' ], { preChecked: false } );
+
+		expect( slots().map( ( el ) => el.getAttribute( 'data-woodev-pickup-placement' ) ) )
+			.toEqual( [ 'review' ] );
+
+		// The customer picks the pickup method — now the rate's <li> is a resolvable anchor.
+		const radio = document.getElementById( 'shipping_method_0_carrier_pickup' );
+
+		radio.checked = true;
+		global.jQuery( radio ).trigger( 'change' );
+
+		const mounted = slots();
+
+		expect( mounted ).toHaveLength( 1 );
+		expect( mounted[ 0 ].getAttribute( 'data-woodev-pickup-placement' ) ).toBe( 'rate' );
+	} );
+
+	/**
+	 * A multi-package cart renders `templates/cart/cart-shipping.php` once per package, so
+	 * there are several `<ul id="shipping_method">` blocks and one checked radio PER PACKAGE.
+	 * `$( 'input[name^="shipping_method"]' ).filter( ':checked' ).closest( 'li' )` therefore
+	 * resolves to MORE than one anchor, and `$anchor.append( $slot )` makes jQuery clone the
+	 * slot into every target but the last — two anchors, two identical triggers, and two DOM
+	 * nodes sharing one id. That is #323's own symptom in a stock WooCommerce configuration,
+	 * and `pruneSlots()` cannot see it: both copies carry the placement that is in `keep`.
+	 *
+	 * The `'review'` branch of `resolvePlacementAnchor()` already guards this with `.first()`;
+	 * the `'rate'` branch, added by #274, did not. First-checked-radio is also exactly what
+	 * `selectedShippingMethod()` reads, so the slot lands beside the rate the framework itself
+	 * considers chosen.
+	 */
+	it( 'mounts ONE slot on a multi-package cart, not one per package', () => {
+		bootPickup( [ 'rate' ], { packages: 2 } );
+
+		const mounted = slots();
+
+		expect( mounted ).toHaveLength( 1 );
+		expect( mounted[ 0 ].closest( 'li' ) ).not.toBeNull();
+	} );
+
+	/**
+	 * `pruneSlots()` must only ever remove anchors the FRAMEWORK created. An explicitly empty
+	 * placement list means "I render my own trigger" (issue #308 item 2), and the documented
+	 * way such a plugin uses the picker is its own server-rendered `[data-woodev-pickup-slot]`
+	 * anchor — so a prune that swept every matching node would turn a contract that used to
+	 * mean "the framework adds nothing" into "the framework deletes yours, on every pass".
+	 */
+	it( 'never removes a pickup anchor the framework did not create', () => {
+		installPickupMarkup();
+		document.body.insertAdjacentHTML(
+			'beforeend',
+			'<div id="a-plugins-own-anchor" data-woodev-pickup-slot="' + PICKUP_FIELD + '"></div>'
+		);
+
+		global.jQuery = require( 'jquery' );
+		global.$      = global.jQuery;
+		window.jQuery = global.jQuery;
+
+		window.WoodevCheckoutFieldStore = require(
+			'../../woodev/shipping-method/assets/js/frontend/checkout-field-store.js'
+		);
+		window[ CONFIG_GLOBAL ] = buildPickupConfig( [] );
+
+		ajaxCalls = stubAjax();
+
+		require( '../../woodev/shipping-method/assets/js/frontend/checkout-field-classic.js' );
+
+		jest.runAllTimers();
+
+		expect( document.getElementById( 'a-plugins-own-anchor' ) ).not.toBeNull();
+	} );
+
+	/**
+	 * A slot is not an empty box by the time a placement can change: `pickup-mount.js` has put
+	 * the trigger button — and, for a customer who already chose a point, the address block —
+	 * inside it. `pickup-mount.js` re-mounts only on `updated_checkout`, and `placeSlots()`
+	 * also runs on a plain `shipping_method` change, so a prune that DESTROYED the old slot
+	 * would leave the customer with no button until (and unless) WooCommerce's ajax lands.
+	 */
+	it( 'carries a mounted trigger across a placement swap instead of destroying it', () => {
+		bootPickup( [ 'rate' ], { preChecked: false } );
+
+		// What pickup-mount.js's mountSlot() puts into whichever slot §8 placed.
+		slots()[ 0 ].insertAdjacentHTML(
+			'beforeend',
+			'<button type="button" class="woodev-pickup-trigger">Выбрать пункт выдачи</button>'
+		);
+
+		const radio = document.getElementById( 'shipping_method_0_carrier_pickup' );
+
+		radio.checked = true;
+		global.jQuery( radio ).trigger( 'change' );
+
+		const trigger = document.querySelectorAll( '.woodev-pickup-trigger' );
+
+		expect( trigger ).toHaveLength( 1 );
+		expect( trigger[ 0 ].closest( '[data-woodev-pickup-slot]' )
+			.getAttribute( 'data-woodev-pickup-placement' ) ).toBe( 'rate' );
+	} );
+
+	/**
+	 * The other half of the transfer rule, and the one the single-placement tests cannot reach:
+	 * when the SURVIVING slot already holds a trigger, the stale slot's must not be carried
+	 * into it. `pickup-mount.js`'s `mountSlot()` mounts a trigger into EVERY slot, so under the
+	 * both-at-once configuration (`woodev_pickup_slot_placements` returning `[ 'review',
+	 * 'rate' ]`) both are populated; losing the `'rate'` anchor afterwards would then stack two
+	 * identical «Выбрать пункт выдачи» buttons inside the review slot — #323's own symptom,
+	 * reintroduced by the repair for #323's other symptom.
+	 *
+	 * The survivor is not freshly created here, which is what makes the case reachable at all:
+	 * `.after()` MOVES an existing `'review'` node, children and all.
+	 */
+	it( 'does not stack a second trigger into a survivor that already has one', () => {
+		bootPickup( [ 'review', 'rate' ] );
+
+		// What pickup-mount.js does: one trigger per mounted slot.
+		slots().forEach( ( slot ) => slot.insertAdjacentHTML(
+			'beforeend',
+			'<button type="button" class="woodev-pickup-trigger">Выбрать пункт выдачи</button>'
+		) );
+
+		expect( document.querySelectorAll( '.woodev-pickup-trigger' ) ).toHaveLength( 2 );
+
+		// A re-quote leaves two rates with none checked — the 'rate' anchor is gone, the
+		// 'review' one is untouched.
+		const radio = document.getElementById( 'shipping_method_0_carrier_pickup' );
+		const other = document.createElement( 'input' );
+
+		radio.checked = false;
+		other.type    = 'radio';
+		other.name    = 'shipping_method[0]';
+		other.value   = 'flat_rate';
+		radio.closest( 'li' ).appendChild( other );
+
+		global.jQuery( other ).trigger( 'change' );
+
+		expect( slots().map( ( el ) => el.getAttribute( 'data-woodev-pickup-placement' ) ) )
+			.toEqual( [ 'review' ] );
+		expect( document.querySelectorAll( '.woodev-pickup-trigger' ) ).toHaveLength( 1 );
+	} );
+
+	it( 'mounts BOTH placements when the filter asks for both — after the list AND inside the selected rate\'s <li>', () => {
 		bootPickup( [ 'review', 'rate' ] );
 
 		const placements = slots().map( ( el ) => el.getAttribute( 'data-woodev-pickup-placement' ) ).sort();

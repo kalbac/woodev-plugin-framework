@@ -318,11 +318,17 @@
 	/**
 	 * Which `data-woodev-pickup-placement` value carries the chosen-address block when a
 	 * field mounts into more than one slot at once (issue #274 item 3 / #308 item 4's
-	 * fix) — the framework's chosen default is the `'review'` anchor (after the
-	 * shipping-methods list), never `'rate'`. A single, explicit constant, read only by
-	 * {@see resolveAddressSlot}, is what makes flipping this default later — should the
-	 * operator ever want the address next to the rate instead — a one-line change rather
-	 * than a hunt through {@see mountOne}/{@see mountSlot}.
+	 * fix) — `'review'` (after the shipping-methods list), never `'rate'`.
+	 *
+	 * This constant only ever DECIDES anything in the multi-slot configuration, which
+	 * since issue #323 is no longer the framework's default: `Checkout_Config` now sends
+	 * `['rate']` alone, so an ordinary checkout mounts ONE slot and
+	 * {@see resolveAddressSlot} resolves it through its "take the only mounted slot"
+	 * branch, whatever this constant says. Left pointing at `'review'` because the
+	 * multi-slot case is reachable through `woodev_pickup_slot_placements` and its
+	 * behaviour there is unchanged and covered by tests. A single, explicit constant,
+	 * read only by {@see resolveAddressSlot}, is what makes flipping it a one-line change
+	 * rather than a hunt through {@see mountOne}/{@see mountSlot}.
 	 *
 	 * @type {string}
 	 */
@@ -4009,10 +4015,13 @@
 	 * (issue #274 item 2 / #308 item 4 — the operator approved two buttons, never a
 	 * doubled address line a few pixels apart). {@see ADDRESS_PLACEMENT} wins when a slot
 	 * with that `data-woodev-pickup-placement` exists; otherwise the FIRST mounted slot,
-	 * in DOM order, takes over — a site that suppressed the `'review'` placement entirely
-	 * (`woodev_pickup_slot_placements`) still needs the address to show up SOMEWHERE,
-	 * never nowhere just because its preferred anchor was never mounted. A field with only
-	 * one slot always resolves to that slot, whatever its placement.
+	 * in DOM order, takes over — the address must show up SOMEWHERE, never nowhere just
+	 * because the preferred anchor was never mounted. A field with only one slot always
+	 * resolves to that slot, whatever its placement.
+	 *
+	 * Since issue #323 that second branch is the ORDINARY path, not the edge case it was
+	 * written as: the framework default is now `['rate']` alone, so a normal checkout has
+	 * exactly one slot and it is not the `ADDRESS_PLACEMENT` one.
 	 *
 	 * @param {NodeList|HTMLElement[]} slots This field's currently mounted
 	 *                                       `[data-woodev-pickup-slot]` anchors.

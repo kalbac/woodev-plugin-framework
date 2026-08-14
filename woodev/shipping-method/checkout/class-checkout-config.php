@@ -253,23 +253,36 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 
 		/**
 		 * Resolves which DOM anchors a pickup-slot field's checkout trigger mounts
-		 * into (issue #274 item 3).
+		 * into (issue #274 item 3; default narrowed to ONE place by issue #323).
 		 *
-		 * The framework's default is BOTH placements at once — operator decision (в)
-		 * on the issue #274 card: `'review'` (after the shipping-methods list; the
-		 * ORIGINAL, and until now only, placement — measured to already sit exactly
-		 * where WooCommerce's own `woocommerce_review_order_after_shipping` action
-		 * would render in the classic checkout template) and `'rate'` (inside the
-		 * SELECTED rate's own `<li>`, under its label — mirroring
-		 * `woocommerce_after_shipping_rate`, which the card's own premise had wrongly
-		 * assumed was unavailable). Matches how the Yandex reference plugin renders its
-		 * own pickup trigger under both hooks, accepting that the two buttons land a
-		 * few pixels apart on the classic (non-block) checkout theme.
+		 * The framework's default is `'rate'` alone — the slot goes INSIDE the
+		 * SELECTED rate's own `<li>`, under its label, mirroring
+		 * `woocommerce_after_shipping_rate`. The other placement, `'review'` (after
+		 * the shipping-methods list — the ORIGINAL placement, measured to already sit
+		 * exactly where WooCommerce's own `woocommerce_review_order_after_shipping`
+		 * action would render in the classic checkout template), stays reachable
+		 * through the filter below but is no longer a default.
 		 *
-		 * `woodev_pickup_slot_placements` lets a site or plugin suppress either
-		 * placement — an extension hook left in place even with no consumer yet, per
-		 * this framework's own rule for filters/actions (a hook is never withheld for
-		 * lack of a caller today). Only `'review'` and `'rate'` ever reach the browser,
+		 * #274 item 3 had defaulted to BOTH at once, reading the Yandex reference's
+		 * two `add_action` calls as "the button is drawn in two places". Measuring that
+		 * reference says otherwise: it has ONE position out of two, picked by a store
+		 * SETTING (`widget_position`, default `under_methods`), and each hook returns
+		 * immediately when the setting does not name it. Почта РФ has the same shape
+		 * under `map_button_place`. Rendering both at once put two identical buttons a
+		 * few pixels apart in front of the customer (issue #323).
+		 *
+		 * WHERE the trigger is drawn is a FRAMEWORK decision, not a carrier's: a store
+		 * running both СДЭК and Почта must not get their buttons in different places.
+		 * What the carrier plugin owns is the button's TEXT, through the existing
+		 * `woodev_pickup_map_i18n` filter's `trigger` key.
+		 *
+		 * Precedence: this default → a future framework-level store setting (part of
+		 * the carrier-settings screen the operator is designing separately, deliberately
+		 * not built here) → the `woodev_pickup_slot_placements` filter last. The filter
+		 * is kept, per this framework's own rule for extension hooks (a hook is never
+		 * withheld for lack of a caller today), and it is also what keeps "both places
+		 * at once" available to a store that genuinely wants it without spending a
+		 * third option in a UI. Only `'review'` and `'rate'` ever reach the browser,
 		 * in that order, each at most once — an array containing unrecognised values
 		 * (a typo, a stale constant) is filtered down to whichever of the two it
 		 * actually names, same as ever.
@@ -283,12 +296,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 		 * neither placement, and must reach the browser as a genuine empty array, not
 		 * silently folded into the same value a malformed return produces — the two
 		 * mean opposite things at the browser: `null` falls back to the framework's own
-		 * mixed-fleet default, `[]` suppresses both triggers outright.
+		 * mixed-fleet default, `[]` suppresses both triggers outright — and is the one
+		 * case that gets no fallback anchor either (`placeSlots()` in
+		 * `checkout-field-classic.js`).
 		 *
 		 * @since 2.0.2
 		 * @since 2.0.2 Returns `null`, not `[]`, for a non-array filter return, so the
 		 *              browser can tell "malformed" from "deliberately empty" apart
 		 *              (issue #308 item 2).
+		 * @since 2.0.2 Defaults to `[ 'rate' ]` alone, never both placements at once
+		 *              (issue #323).
 		 *
 		 * @param string $field_id the pickup-slot field id.
 		 *
@@ -301,13 +318,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 			 *
 			 * @since 2.0.2
 			 *
-			 * @param string[] $placements the framework's default — both `'review'` and `'rate'`.
+			 * @param string[] $placements the framework's default — `'rate'` alone since issue #323.
 			 * @param string   $field_id   the pickup-slot field id.
 			 * @param string   $plugin_id  the owning plugin id.
 			 */
 			$placements = apply_filters(
 				'woodev_pickup_slot_placements',
-				[ 'review', 'rate' ],
+				[ 'rate' ],
 				$field_id,
 				$this->plugin_id
 			);

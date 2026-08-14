@@ -6292,8 +6292,11 @@ describe( 'transport-failure copy never promises a retry the carrier controls (#
 describe( 'chosen address + dual placements (issue #274)', () => {
 	/**
 	 * Installs TWO `[data-woodev-pickup-slot]` anchors for one field id — the DOM shape §8's
-	 * `placeSlots()` produces under the framework's default `pickup_slot_placements: ['review',
-	 * 'rate']` (item 3) — plus the hidden field input itself.
+	 * `placeSlots()` produces for `pickup_slot_placements: ['review', 'rate']` (item 3) — plus
+	 * the hidden field input itself. That list was the framework DEFAULT until issue #323
+	 * narrowed the default to `['rate']` alone; it stays reachable through the
+	 * `woodev_pickup_slot_placements` filter, which is why these tests still describe a real
+	 * configuration rather than a dead one.
 	 *
 	 * @param {string} fieldId
 	 * @returns {void}
@@ -6450,8 +6453,15 @@ describe( 'chosen address + dual placements (issue #274)', () => {
 		expect( StubProvider.instances ).toHaveLength( 0 );
 	} );
 
-	it( 'falls back to the "rate" slot for the address block when "review" was never '
-		+ 'mounted at all (a site suppressed it via woodev_pickup_slot_placements)', () => {
+	/**
+	 * Since issue #323 this is the DEFAULT shape, not an edge case: the framework mounts the
+	 * `'rate'` slot alone, so `resolveAddressSlot()`'s "no `ADDRESS_PLACEMENT` slot — take the
+	 * first mounted one" branch is the path every ordinary checkout takes. The test predates
+	 * #323 and was written for a site that had suppressed `'review'` via
+	 * `woodev_pickup_slot_placements`; only its NAME needed correcting.
+	 */
+	it( 'puts the address block in the "rate" slot when it is the only one mounted — '
+		+ 'the framework default since #323', () => {
 		const fieldId = 'dual_pickup_rate_only';
 
 		document.body.insertAdjacentHTML(

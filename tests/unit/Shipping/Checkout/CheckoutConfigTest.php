@@ -252,11 +252,52 @@ class CheckoutConfigTest extends TestCase {
 	}
 
 	// -------------------------------------------------------------------------
-	// pickup_slot_placements — issue #274 item 3
+	// pickup_slot_placements — issue #274 item 3, default narrowed by issue #323
 	// -------------------------------------------------------------------------
 
-	public function test_pickup_slot_placements_default_to_both_review_and_rate(): void {
+	/**
+	 * Issue #323: the default is ONE placement, `'rate'` — never both at once, which put
+	 * two identical «Выбрать пункт выдачи» buttons a few pixels apart in front of the
+	 * customer. Both reference plugins ship a single position chosen by a store SETTING
+	 * (Yandex `widget_position`, Почта РФ `map_button_place`); neither ever renders twice.
+	 */
+	public function test_pickup_slot_placements_default_to_the_rate_placement_alone(): void {
 		Functions\when( 'apply_filters' )->returnArg( 2 );
+
+		$fields = Checkout_Fields::from_array(
+			[ Field::create( 'carrier_pvz' )->set_type( 'hidden' )->mark_pickup_slot()->to_array() ]
+		);
+		$config = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ] ) )->build( $fields );
+
+		$this->assertSame( [ 'rate' ], $config['fields']['carrier_pvz']['pickup_slot_placements'] );
+	}
+
+	/**
+	 * The filter still receives the framework's own default as its first argument — a
+	 * consumer that wants to ADD the second placement back has to be able to see what it
+	 * is starting from. Pins the default at the seam, not only at the output (issue #323).
+	 */
+	public function test_pickup_slot_placements_filter_receives_the_single_rate_default(): void {
+		Filters\expectApplied( 'woodev_pickup_slot_placements' )
+			->once()
+			->with( [ 'rate' ], 'carrier_pvz', 'carrier' )
+			->andReturn( [ 'rate' ] );
+
+		$fields = Checkout_Fields::from_array(
+			[ Field::create( 'carrier_pvz' )->set_type( 'hidden' )->mark_pickup_slot()->to_array() ]
+		);
+		( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ] ) )->build( $fields );
+
+		$this->assertTrue( true );
+	}
+
+	/**
+	 * Both placements at once stay REACHABLE — the filter is the seam that keeps them
+	 * available for a store that genuinely wants them, which is why #323 narrowed the
+	 * default rather than deleting the `'review'` placement (issue #323).
+	 */
+	public function test_pickup_slot_placements_filter_can_still_ask_for_both(): void {
+		Filters\expectApplied( 'woodev_pickup_slot_placements' )->once()->andReturn( [ 'rate', 'review' ] );
 
 		$fields = Checkout_Fields::from_array(
 			[ Field::create( 'carrier_pvz' )->set_type( 'hidden' )->mark_pickup_slot()->to_array() ]
@@ -275,20 +316,22 @@ class CheckoutConfigTest extends TestCase {
 
 	/**
 	 * The extension hook (framework rule: leave a filter even with no consumer yet) — a
-	 * site or plugin can suppress either placement.
+	 * site or plugin can REPLACE the framework's default placement with the other one.
+	 * Since #323 that is the shape a store wanting the pre-#323 «under the whole list»
+	 * position uses, until the carrier-settings screen the operator is designing offers it.
 	 */
-	public function test_pickup_slot_placements_filter_can_suppress_a_placement(): void {
+	public function test_pickup_slot_placements_filter_can_replace_the_default_placement(): void {
 		Filters\expectApplied( 'woodev_pickup_slot_placements' )
 			->once()
-			->with( [ 'review', 'rate' ], 'carrier_pvz', 'carrier' )
-			->andReturn( [ 'rate' ] );
+			->with( [ 'rate' ], 'carrier_pvz', 'carrier' )
+			->andReturn( [ 'review' ] );
 
 		$fields = Checkout_Fields::from_array(
 			[ Field::create( 'carrier_pvz' )->set_type( 'hidden' )->mark_pickup_slot()->to_array() ]
 		);
 		$config = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ] ) )->build( $fields );
 
-		$this->assertSame( [ 'rate' ], $config['fields']['carrier_pvz']['pickup_slot_placements'] );
+		$this->assertSame( [ 'review' ], $config['fields']['carrier_pvz']['pickup_slot_placements'] );
 	}
 
 	public function test_pickup_slot_placements_filter_is_never_invoked_for_a_non_pickup_field(): void {
