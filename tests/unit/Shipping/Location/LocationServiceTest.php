@@ -1173,5 +1173,235 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$this->assertSame( $registry->owns_region_states( 'RU', [] ), $service->owns_region_states( 'RU', [] ) );
 			$this->assertFalse( $service->owns_region_states( 'RU', [] ) );
 		}
+
+		// -------------------------------------------------------------------
+		// resolve_default_country() — issue #296: checkout field -> WooCommerce
+		// store setting (read via wc_get_base_location(), PR #320 review finding
+		// 3 — never a raw get_option() read) -> RU, filterable on the FINAL
+		// resolved value (PR #320 review finding 2). No registry/provider state
+		// is touched at all, so every test here uses a bare Location_Service —
+		// the REAL method body runs in every one of them (never a fixture
+		// double), satisfying this task's own "a seam must have at least one
+		// real-body test" rule by construction.
+		// -------------------------------------------------------------------
+
+		/**
+		 * Stubs `wc_get_base_location()` the same way WooCommerce's own
+		 * `wc_format_country_state_string()` would split it from the
+		 * `woocommerce_default_country` option — `$raw` is the raw
+		 * `COUNTRY:STATE` (or bare `COUNTRY`, or malformed) value the option
+		 * would otherwise carry; `null` models the option answering nothing at
+		 * all (WC's own default is `'US:CA'` in that case, but this façade must
+		 * never depend on that literal).
+		 *
+		 * ALSO stubs `get_option( 'woocommerce_default_country' )` with the SAME
+		 * raw value (PR #320 review, finding 3's own mutation coverage): a test
+		 * that only stubbed `wc_get_base_location()` would pass unchanged code
+		 * that still reads the OLD, un-filtered `get_option()` straight
+		 * through — because that call would simply hit Brain Monkey's default
+		 * `null` and coincidentally so, not because the fix is actually
+		 * exercised. Stubbing both means the two code paths are fed identical
+		 * data, so a test only diverges when the PRODUCTION CODE actually
+		 * changed which one it reads (or how it treats the result).
+		 *
+		 * @param string|null $raw
+		 */
+		private function stub_base_location( ?string $raw ): void {
+			$raw   = $raw ?? '';
+			$parts = explode( ':', $raw, 2 );
+
+			Functions\when( 'wc_get_base_location' )->justReturn(
+				[
+					'country' => $parts[0],
+					'state'   => $parts[1] ?? '',
+				]
+			);
+			Functions\when( 'get_option' )->alias(
+				static function ( $name, $default = null ) use ( $raw ) {
+					return 'woocommerce_default_country' === $name ? $raw : $default;
+				}
+			);
+		}
+
+		public function test_resolve_default_country_splits_the_country_from_a_country_state_option(): void {
+			// The exact shape a merchant who picked a country without naming a
+			// state gets (gotcha this project already paid for once on the
+			// STATE half of this same option — see Checkout_Handler's own
+			// handle_checkout_get_value() docblock).
+			$this->stub_base_location( 'RU:*' );
+
+			$service = new Location_Service( Location_Provider_Registry::instance() );
+
+			$this->assertSame( 'RU', $service->resolve_default_country() );
+		}
+
+		public function test_resolve_default_country_accepts_a_bare_country_with_no_state_component(): void {
+			$this->stub_base_location( 'KZ' );
+
+			$service = new Location_Service( Location_Provider_Registry::instance() );
+
+			$this->assertSame( 'KZ', $service->resolve_default_country() );
+		}
+
+		/**
+		 * PR #320 review, finding 3: `wc_get_base_location()` runs the store's
+		 * base location through `apply_filters( 'woocommerce_get_base_location',
+		 * ... )` before returning it — a multi-store/multi-vendor/geo plugin can
+		 * make that answer diverge from the RAW `woocommerce_default_country`
+		 * option. This must be honoured, never bypassed by reading the option
+		 * directly: the two are stubbed to DISAGREE here on purpose, and the
+		 * `wc_get_base_location()` answer must win.
+		 */
+		public function test_resolve_default_country_honors_wc_get_base_location_over_the_raw_option(): void {
+			Functions\when( 'get_option' )->alias(
+				static function ( $name, $default = null ) {
+					// Would answer 'US' if the raw option were wrongly consulted directly.
+					return 'woocommerce_default_country' === $name ? 'US:CA' : $default;
+				}
+			);
+			Functions\when( 'wc_get_base_location' )->justReturn( [ 'country' => 'KZ', 'state' => '' ] );
+
+			$service = new Location_Service( Location_Provider_Registry::instance() );
+
+			$this->assertSame(
+				'KZ',
+				$service->resolve_default_country(),
+				'wc_get_base_location() — which a multi-vendor/geo plugin may filter — must win over a raw option read'
+			);
+		}
+
+		public function test_resolve_default_country_trims_and_upper_cases(): void {
+			$this->stub_base_location( ' kz : some-state ' );
+
+			$service = new Location_Service( Location_Provider_Registry::instance() );
+
+			$this->assertSame( 'KZ', $service->resolve_default_country() );
+		}
+
+		public function test_resolve_default_country_falls_back_to_ru_when_the_base_location_is_empty(): void {
+			$this->stub_base_location( '' );
+
+			$service = new Location_Service( Location_Provider_Registry::instance() );
+
+			$this->assertSame( 'RU', $service->resolve_default_country() );
+		}
+
+		public function test_resolve_default_country_falls_back_to_ru_when_wc_get_base_location_answers_nothing_usable(): void {
+			Functions\when( 'wc_get_base_location' )->justReturn( [] );
+
+			$service = new Location_Service( Location_Provider_Registry::instance() );
+
+			$this->assertSame( 'RU', $service->resolve_default_country() );
+		}
+
+		/**
+		 * The defensive case the card explicitly calls out: the option holding
+		 * ONLY WooCommerce's `*` "no state" sentinel, with no country and no
+		 * colon at all. A naive un-split read would pass `'*'` straight through
+		 * as if it were a country code; this must be recognised as malformed
+		 * and fall through to the RU default instead of ever leaking `*` into
+		 * a REST response or the checkout config block.
+		 */
+		public function test_resolve_default_country_never_leaks_the_wildcard_sentinel(): void {
+			$this->stub_base_location( '*' );
+
+			$service = new Location_Service( Location_Provider_Registry::instance() );
+
+			$this->assertSame( 'RU', $service->resolve_default_country() );
+		}
+
+		public function test_resolve_default_country_honors_the_filter_when_the_base_location_has_nothing_usable(): void {
+			$this->stub_base_location( '' );
+			Functions\when( 'apply_filters' )->alias(
+				static function ( string $tag, $default = null ) {
+					return Location_Service::FILTER_DEFAULT_COUNTRY === $tag ? 'KZ' : $default;
+				}
+			);
+
+			$service = new Location_Service( Location_Provider_Registry::instance() );
+
+			$this->assertSame( 'KZ', $service->resolve_default_country(), 'a Kazakhstan store must be able to override the RU default' );
+		}
+
+		/**
+		 * PR #320 review, finding 2: the filter runs on the FINAL resolved
+		 * value, so it must be consulted — and able to WIN — even when the
+		 * store's own base location already answers something usable. This is
+		 * the behaviour the pre-fix code got backwards (it stubbed
+		 * `apply_filters()` to prove the filter was NEVER consulted here); on a
+		 * real WooCommerce install `woocommerce_default_country` is ALWAYS set
+		 * (`WC_Install::create_options()`), so a filter gated the old way could
+		 * never fire on a real store at all.
+		 */
+		public function test_resolve_default_country_the_filter_can_override_the_stores_own_base_location(): void {
+			$this->stub_base_location( 'RU:*' );
+			Functions\when( 'apply_filters' )->alias(
+				static function ( string $tag, $default = null ) {
+					return Location_Service::FILTER_DEFAULT_COUNTRY === $tag ? 'KZ' : $default;
+				}
+			);
+
+			$service = new Location_Service( Location_Provider_Registry::instance() );
+
+			$this->assertSame(
+				'KZ',
+				$service->resolve_default_country(),
+				'the filter must be able to override the store\'s own base location, not only stand in for a missing one'
+			);
+		}
+
+		public function test_resolve_default_country_never_returns_a_malformed_filtered_value(): void {
+			$this->stub_base_location( '' );
+			Functions\when( 'apply_filters' )->alias(
+				static function ( string $tag, $default = null ) {
+					return Location_Service::FILTER_DEFAULT_COUNTRY === $tag ? 'Kazakhstan' : $default;
+				}
+			);
+
+			$service = new Location_Service( Location_Provider_Registry::instance() );
+
+			$this->assertSame( 'RU', $service->resolve_default_country(), 'a misbehaving filter must never brick the fallback' );
+		}
+
+		/**
+		 * The same malformed-filter guard, but with a store base location that
+		 * ALREADY resolved to something valid: a garbage filter return must
+		 * leave the store's own already-resolved answer alone, never force it
+		 * down to the hard `RU` default the empty-base-location case falls
+		 * back to.
+		 */
+		public function test_resolve_default_country_a_malformed_filtered_value_keeps_the_stores_own_resolved_country(): void {
+			$this->stub_base_location( 'KZ' );
+			Functions\when( 'apply_filters' )->alias(
+				static function ( string $tag, $default = null ) {
+					return Location_Service::FILTER_DEFAULT_COUNTRY === $tag ? 'Kazakhstan' : $default;
+				}
+			);
+
+			$service = new Location_Service( Location_Provider_Registry::instance() );
+
+			$this->assertSame( 'KZ', $service->resolve_default_country() );
+		}
+
+		/**
+		 * PR #320 review, finding 5: a filter returning a non-string (an
+		 * object, in the measured reproduction) must never reach a `(string)`
+		 * cast — that throws `Error: Object of class stdClass could not be
+		 * converted to string`, uncaught, which would take down the checkout
+		 * render entirely rather than "degrade to the hard RU default" as the
+		 * old docblock promised.
+		 */
+		public function test_resolve_default_country_never_fatals_when_the_filter_returns_a_non_string_value(): void {
+			$this->stub_base_location( '' );
+			Functions\when( 'apply_filters' )->alias(
+				static function ( string $tag, $default = null ) {
+					return Location_Service::FILTER_DEFAULT_COUNTRY === $tag ? new \stdClass() : $default;
+				}
+			);
+
+			$service = new Location_Service( Location_Provider_Registry::instance() );
+
+			$this->assertSame( 'RU', $service->resolve_default_country() );
+		}
 	}
 }

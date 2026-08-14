@@ -268,16 +268,80 @@
 	}
 
 	/**
-	 * The country currently in play for `node` — reads `#shipping_country` for a
-	 * shipping-section node, `#billing_country` for everything else (spec §4.4 amendment,
-	 * Finding 1). Read LIVE at call time, same convention as the rest of this module's own
-	 * live-scope reads (see {@see scopeKeyFor}).
+	 * The section a country-field id itself governs — `'shipping'` for `#shipping_country`,
+	 * `'billing'` for everything else, including `#billing_country` and any id this module was
+	 * never told about. The inverse of {@see countryFieldIdFor} (fieldId -> section rather than
+	 * node -> fieldId), needed wherever a caller only has the field id a `change` event fired on
+	 * (see {@see handleFieldChanged}) and must resolve `entry`'s EFFECTIVE country for it via
+	 * {@see countryFor}, which itself takes a `{section}`-shaped node.
 	 *
-	 * @param {{section?: string}} node
+	 * PR #320 review, finding 6: deliberately does NOT consult the OTHER country field (a
+	 * shipping-section id never falls back to `#billing_country`'s value, or vice-versa) — a
+	 * shipping-section field present but unselected falls straight through to `entry.location.
+	 * defaultCountry`, the SAME store-wide fallback billing itself uses when its own field is
+	 * unselected, never billing's CURRENT selection. Two reasons this is the right call, not an
+	 * oversight: (1) it is what WooCommerce's own checkout markup already does — both country
+	 * `<select>` elements independently default their selected `<option>` to the store's base
+	 * country (`WC_Countries::get_country_dropdown_options()`), neither one is ever rendered
+	 * pre-filled FROM the other; (2) {@see countryFieldIdFor}'s own docblock (Finding 1 of the
+	 * PR-C review this file already carries) establishes section isolation as a first-class rule
+	 * specifically so a shipping-section field is never arbitrated against `#billing_country` —
+	 * a billing-first shipping fallback would reintroduce exactly the cross-section coupling
+	 * that finding removed, and asymmetrically (billing would still never consult shipping).
+	 *
+	 * @param {string} countryFieldId
 	 * @returns {string}
 	 */
-	function countryFor( node ) {
-		return countryValue( countryFieldIdFor( node ) );
+	function sectionForCountryFieldId( countryFieldId ) {
+		return COUNTRY_FIELD_ID.shipping === countryFieldId ? 'shipping' : 'billing';
+	}
+
+	/**
+	 * The country currently in play for `node` (issue #296's own fallback chain — the operator's
+	 * own wording: "поле чекаута → настройка WooCommerce → RU", the last step through a filter,
+	 * no separate option) — reads `#shipping_country` for a shipping-section node,
+	 * `#billing_country` for everything else (spec §4.4 amendment, Finding 1), read LIVE at call
+	 * time, same convention as the rest of this module's own live-scope reads (see
+	 * {@see scopeKeyFor}).
+	 *
+	 * STEP 1 (the live checkout field) is everything {@see countryValue} answers: a genuinely
+	 * present, non-empty value. STEPS 2+3 (the WooCommerce store's own base country, else a
+	 * PHP-filterable `RU`) are NOT resolved here at all — a shop with no country field on
+	 * checkout, or one whose country `<select>` is present but still unselected, used to make
+	 * {@see isCountrySupported} reject an empty string outright, so NO widget ever attached and
+	 * the whole location layer went silently dead with no signal why. Both remaining steps are
+	 * already merged into ONE value server-side by
+	 * `Location_Service::resolve_default_country()` and handed down as `entry.location.defaultCountry`
+	 * next to `countries`/`levels` (`class-checkout-config.php::build_location_block()`) — the
+	 * SAME method the `/suggest` REST route falls back to for an empty `country` request param,
+	 * so both sides of the client/server boundary answer identically by construction. This
+	 * function therefore has exactly ONE fallback of its own to make, never a second guess at
+	 * what WooCommerce's setting or the RU default might be.
+	 *
+	 * THE SAME EFFECTIVE VALUE FEEDS THE DESTRUCTIVE-CLEAR GATE (PR #320 review, finding 1):
+	 * {@see prefill} seeds `entry.resolved[countryFieldId]` through this function, and
+	 * {@see handleFieldChanged} re-derives the SAME thing to compare against on every country
+	 * `change` — never the raw `el.value` either side used to read. A country `<select>` that
+	 * starts unselected (`el.value === ''`, WooCommerce's own "Select a country / region…"
+	 * placeholder under "No location by default") makes the widget attach on the `RU`/store
+	 * fallback exactly like this function already resolves; comparing the RAW DOM value instead
+	 * would seed `''` and then read the customer's very first explicit pick of THAT SAME country
+	 * (`'' -> 'RU'`) as a real transition, wiping the address the fallback had already scoped
+	 * every suggestion by. Routing both sides through this one function keeps the seed and the
+	 * comparison — and the widget's own attach/scope reads — answering the identical question.
+	 *
+	 * @param {Object}              entry
+	 * @param {{section?: string}}  node
+	 * @returns {string}
+	 */
+	function countryFor( entry, node ) {
+		var live = countryValue( countryFieldIdFor( node ) );
+
+		if ( live ) {
+			return live;
+		}
+
+		return ( entry.location && entry.location.defaultCountry ) || '';
 	}
 
 	/**
@@ -346,7 +410,7 @@
 			return false;
 		}
 
-		var country = countryFor( node );
+		var country = countryFor( entry, node );
 
 		if ( ! isCountrySupported( entry, country ) ) {
 			return false;
@@ -711,7 +775,7 @@
 			var url = buildUrl( entry.location.endpoints.suggest, {
 				q: query,
 				level: node.level,
-				country: countryFor( node ),
+				country: countryFor( entry, node ),
 				within: scopeKeyFor( entry, node.level ),
 			} );
 
@@ -1187,7 +1251,7 @@
 			node: node,
 			location: entry.location,
 			country: function() {
-				return countryFor( node );
+				return countryFor( entry, node );
 			},
 			parentKey: function() {
 				return scopeKeyFor( entry, node.level );
@@ -1224,7 +1288,7 @@
 
 		// Baseline: text+typeahead, gated by the D15 per-country/level chain (spec D7: "text+
 		// typeahead always" is the FLOOR, never conditional on a special renderer existing).
-		if ( ! isLevelServed( entry, countryFor( node ), node.level ) || 'function' !== typeof window.WoodevLocationTypeahead ) {
+		if ( ! isLevelServed( entry, countryFor( entry, node ), node.level ) || 'function' !== typeof window.WoodevLocationTypeahead ) {
 			return;
 		}
 
@@ -1513,7 +1577,7 @@
 	 * @returns {void}
 	 */
 	function clearCountryScope( entry, countryFieldId ) {
-		var section = countryFieldId === COUNTRY_FIELD_ID.shipping ? 'shipping' : 'billing';
+		var section = sectionForCountryFieldId( countryFieldId );
 		var cleared = false;
 
 		entry.allNodes.forEach( function( node ) {
@@ -1590,11 +1654,21 @@
 		var name = target && target.name ? target.name : '';
 
 		if ( COUNTRY_FIELD_IDS.indexOf( id ) !== -1 ) {
-			var country = cascadeKey( target.value );
+			var section = sectionForCountryFieldId( id );
 
+			// PR #320 review, finding 1: the EFFECTIVE country per entry (live field, else
+			// `entry.location.defaultCountry` — see {@see countryFor}'s own docblock), never the
+			// raw `target.value` — computed per ENTRY (not once, up front) since two entries can
+			// carry different `defaultCountry` values. `target.value` IS already this field's
+			// live DOM value by the time a `change` handler runs, so {@see countryFor} reading
+			// the DOM here answers the SAME thing `target.value` would for a present, non-empty
+			// selection — it only additionally covers the field-absent/unselected case the raw
+			// read got wrong.
 			entries.forEach( function( entry ) {
+				var country = cascadeKey( countryFor( entry, { section: section } ) );
+
 				if ( entry.resolved[ id ] === country ) {
-					return; // programmatic churn or a re-selection of the same country.
+					return; // programmatic churn or a re-selection of the same effective country.
 				}
 
 				entry.resolved[ id ] = country;
@@ -1810,11 +1884,22 @@
 		// `undefined`, reads as a real transition, and empties a restored address on every
 		// page load ({@see handleFieldChanged}, gotcha
 		// `a-programmatic-parent-change-must-not-run-a-destructive-cascade`).
+		//
+		// SEEDED FROM THE EFFECTIVE COUNTRY, NOT THE RAW DOM VALUE (PR #320 review, finding 1):
+		// {@see countryFor} — the SAME resolution the widget itself attached under — not
+		// `el.value` directly. A field present but unselected (`el.value === ''`) must seed the
+		// fallback it is ALREADY effectively scoped by (`RU` or `entry.location.defaultCountry`),
+		// not `''` — seeding the raw empty value made the customer's first explicit pick of that
+		// very same country read as a transition and destructively clear the address the
+		// fallback had already been scoping every suggestion by (see {@see countryFor}'s own
+		// docblock for the full reproduction).
 		COUNTRY_FIELD_IDS.forEach( function( countryFieldId ) {
 			var el = document.getElementById( countryFieldId );
 
 			if ( el ) {
-				entry.resolved[ countryFieldId ] = cascadeKey( el.value );
+				entry.resolved[ countryFieldId ] = cascadeKey(
+					countryFor( entry, { section: sectionForCountryFieldId( countryFieldId ) } )
+				);
 			}
 		} );
 

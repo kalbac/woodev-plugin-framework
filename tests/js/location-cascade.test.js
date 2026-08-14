@@ -59,16 +59,18 @@ function fieldIdFor( level, section ) {
 
 /**
  * Builds the classic-checkout markup for whichever location fields + postcode the test
- * needs. `billing_country` (and its postcode counterpart) is always present (a native WC
- * field, never declared in `config.fields`). `#shipping_country` and the WC
- * `ship_to_different_address` checkbox are rendered whenever `which.section === 'shipping'`
- * (or `which.withShippingCountry` is set for a test that wants both present) — mirrors WC's
- * OWN classic-checkout template, which always renders both country selects and the toggle
- * checkbox together.
+ * needs. `billing_country` (and its postcode counterpart) is present by default (a native WC
+ * field, never declared in `config.fields`) — `which.omitBillingCountry` drops it entirely
+ * (issue #296: a single-country store commonly removes the field from checkout). `#shipping_country`
+ * and the WC `ship_to_different_address` checkbox are rendered whenever `which.section ===
+ * 'shipping'` (or `which.withShippingCountry` is set for a test that wants both present) —
+ * mirrors WC's OWN classic-checkout template, which always renders both country selects and
+ * the toggle checkbox together; `which.omitShippingCountry` drops the shipping one the same way.
  *
  * @param {{region?: boolean, settlement?: boolean, address?: boolean, section?: string,
  *          shippingCountry?: string, shipToDifferentAddress?: boolean,
- *          withShippingCountry?: boolean}} which
+ *          withShippingCountry?: boolean, omitBillingCountry?: boolean,
+ *          omitShippingCountry?: boolean}} which
  * @param {string} country
  * @returns {void}
  */
@@ -88,7 +90,7 @@ function installMarkup( which, country = 'RU' ) {
 	}
 
 	const postcodeId = 'shipping' === section ? 'shipping_postcode' : 'billing_postcode';
-	const needsShippingCountry = 'shipping' === section || w.withShippingCountry;
+	const needsShippingCountry = ( 'shipping' === section || w.withShippingCountry ) && ! w.omitShippingCountry;
 	const checked = false !== w.shipToDifferentAddress; // defaults to checked (true)
 
 	const shippingMarkup = needsShippingCountry ? `
@@ -99,19 +101,26 @@ function installMarkup( which, country = 'RU' ) {
 		<input type="checkbox" id="ship-to-different-address-checkbox" name="ship_to_different_address" ${ checked ? 'checked' : '' } />
 	` : '';
 
+	const billingCountryMarkup = w.omitBillingCountry ? '' : `
+		<select id="billing_country" name="billing_country">
+			<option value="RU">Россия</option>
+			<option value="US">США</option>
+		</select>
+	`;
+
 	document.body.innerHTML = `
 		<form class="checkout woocommerce-checkout">
-			<select id="billing_country" name="billing_country">
-				<option value="RU">Россия</option>
-				<option value="US">США</option>
-			</select>
+			${ billingCountryMarkup }
 			${ shippingMarkup }
 			${ inputs }
 			<input type="text" id="${ postcodeId }" name="${ postcodeId }" value="" />
 		</form>
 	`;
 
-	document.getElementById( 'billing_country' ).value = country;
+	const billingCountryEl = document.getElementById( 'billing_country' );
+	if ( billingCountryEl ) {
+		billingCountryEl.value = country;
+	}
 
 	const shippingCountryEl = document.getElementById( 'shipping_country' );
 	if ( shippingCountryEl ) {
@@ -146,7 +155,8 @@ function locationField( level, section = 'billing' ) {
  * (`Checkout_Config::build_location_block()`).
  *
  * @param {{region?: boolean, settlement?: boolean, address?: boolean, section?: string,
- *          levels?: Object, countries?: string[], current?: Object|null, implicit?: boolean}} opts
+ *          levels?: Object, countries?: string[], current?: Object|null, implicit?: boolean,
+ *          defaultCountry?: string}} opts
  * @returns {Object}
  */
 function buildConfig( opts ) {
@@ -181,6 +191,9 @@ function buildConfig( opts ) {
 			levels: o.levels || { RU: { region: true, settlement: true, address: true } },
 			current: o.current !== undefined ? o.current : null,
 			implicit: o.implicit !== undefined ? o.implicit : false,
+			// Issue #296: steps 2+3 of the checkout-field -> WC-store-setting -> RU chain,
+			// already merged into ONE value server-side by Location_Service::resolve_default_country().
+			defaultCountry: o.defaultCountry !== undefined ? o.defaultCountry : 'RU',
 			i18n: o.i18n !== undefined ? o.i18n : {
 				noResults: 'Поиск не дал результатов. Попробуйте изменить запрос.',
 				noResultsAddress: 'Адрес не найден — введите вручную.',
@@ -1247,6 +1260,155 @@ describe( 'country switch', () => {
 
 		expect( window.WoodevLocationTypeahead.mock.calls.length ).toBeGreaterThan( attachCountAfterDetach );
 		expect( document.getElementById( 'billing_city' ).value ).toBe( '' );
+	} );
+} );
+
+// -----------------------------------------------------------------------
+// Country fallback chain (issue #296): `checkout field -> WooCommerce store setting -> RU`.
+// Steps 2+3 are already merged server-side into ONE `entry.location.defaultCountry` value
+// (`Location_Service::resolve_default_country()`, fed through `Checkout_Config::build_location_block()`)
+// — `countryFor()` only ever has ONE fallback of its own to make: the live field, else that
+// value. Before this task, a checkout with no country field at all made `countryFor()` return
+// `''`, which `isCountrySupported()` always rejects — no widget ever attached, and the whole
+// location layer went silently dead with no signal why (the operator's own bug report).
+// -----------------------------------------------------------------------
+
+describe( 'country fallback chain (issue #296)', () => {
+	it( 'step 1: uses the live checkout field value when present and non-empty', () => {
+		boot( {
+			settlement: true, country: 'US', defaultCountry: 'RU',
+			countries: [ 'RU', 'US' ],
+			levels: { RU: { region: true, settlement: true, address: true }, US: { region: false, settlement: true, address: false } },
+		} );
+
+		callFor( 'billing_city' ).fetch( 'Sea' );
+
+		const req = fetchCalls[ fetchCalls.length - 1 ];
+		expect( req.url ).toContain( 'country=US' );
+	} );
+
+	it( 'steps 2/3: falls back to the server-resolved defaultCountry when the field is present but empty', () => {
+		boot( { settlement: true, country: '', defaultCountry: 'RU', countries: [ 'RU' ] } );
+
+		// The bug this closes: isCountrySupported( entry, '' ) was always false, so no widget
+		// ever attached for a country <select> a customer had not chosen from yet.
+		expect( attachCalls.map( ( c ) => c.el.id ) ).toContain( 'billing_city' );
+
+		callFor( 'billing_city' ).fetch( 'Мос' );
+
+		const req = fetchCalls[ fetchCalls.length - 1 ];
+		expect( req.url ).toContain( 'country=RU' );
+	} );
+
+	it( 'steps 2/3: falls back to the server-resolved defaultCountry, and still attaches, when the checkout has no country field at all', () => {
+		boot( { settlement: true, omitBillingCountry: true, defaultCountry: 'RU', countries: [ 'RU' ] } );
+
+		expect( document.getElementById( 'billing_country' ) ).toBeNull();
+		expect( attachCalls.map( ( c ) => c.el.id ) ).toContain( 'billing_city' );
+
+		callFor( 'billing_city' ).fetch( 'Мос' );
+
+		const req = fetchCalls[ fetchCalls.length - 1 ];
+		expect( req.url ).toContain( 'country=RU' );
+	} );
+
+	it( 'never throws, and never attaches a listener to a non-existent country field, when the checkout has no country field at all', () => {
+		// bindChangeWatchers() delegates on document.body (see the file's own docblock on the
+		// two event worlds) — there is nothing to bind TO a node that was never rendered, so
+		// booting with the field entirely absent must not throw.
+		expect( () => boot( { settlement: true, omitBillingCountry: true, defaultCountry: 'RU', countries: [ 'RU' ] } ) ).not.toThrow();
+	} );
+
+	it( 'does not detach the widget across a layout-relevant re-arbitration while the country field stays absent', () => {
+		boot( {
+			settlement: true, omitBillingCountry: true, withShippingCountry: true,
+			defaultCountry: 'RU', countries: [ 'RU' ],
+		} );
+
+		const settlementAttach = callFor( 'billing_city' );
+		const detachesBefore = settlementAttach.detach.mock.calls.length;
+
+		// #shipping_country IS present here — changing it re-runs applyCountryArbitration() for
+		// EVERY entry (handleLayoutRelevantChange()), including this billing-section one, whose
+		// own country is still unavailable from the DOM and must keep resolving to the SAME
+		// server default on every pass — never flap the already-attached widget.
+		document.getElementById( 'shipping_country' ).value = 'US';
+		document.getElementById( 'shipping_country' ).dispatchEvent( new Event( 'change', { bubbles: true } ) );
+
+		expect( settlementAttach.detach.mock.calls.length ).toBe( detachesBefore );
+	} );
+
+	it( 'a country the fallback names but the layer does not cover still degrades to no widget, never a forced attach', () => {
+		// entry.location.countries never includes the fallback's own answer here — the D15
+		// degradation idiom must still win; a server-side misconfiguration must never force a
+		// widget onto a country this layer genuinely does not serve.
+		boot( { settlement: true, omitBillingCountry: true, defaultCountry: 'RU', countries: [ 'KZ' ] } );
+
+		expect( attachCalls.map( ( c ) => c.el.id ) ).not.toContain( 'billing_city' );
+	} );
+} );
+
+// -----------------------------------------------------------------------
+// PR #320 review, finding 1: the destructive-clear gate must compare the SAME effective
+// country countryFor() (and the widget's own attach/scope) already resolves — never the raw
+// DOM value. Before this fix, prefill() seeded entry.resolved['billing_country'] from
+// `el.value` ('' for an unselected select), so the customer's first EXPLICIT pick of the very
+// country the fallback was already using read as a real transition and destructively cleared
+// an address that was never stale to begin with.
+// -----------------------------------------------------------------------
+
+describe( 'selecting the fallback\'s own country must not destructively clear (finding 1, PR #320 review)', () => {
+	it( 'reproduction: attaches on the RU fallback, customer fills the address, then explicitly picks "Россия" — nothing is cleared', () => {
+		// "No location by default": #billing_country is present but genuinely unselected
+		// (`value === ''`, WooCommerce's own placeholder option) — the widget attaches on the
+		// server-resolved defaultCountry fallback, exactly like the "steps 2/3" tests above.
+		boot( {
+			settlement: true, address: true, country: '', defaultCountry: 'RU', countries: [ 'RU' ],
+		} );
+
+		// The widget attached under the fallback at all — precondition for the bug to even be
+		// reachable.
+		expect( attachCalls.map( ( c ) => c.el.id ) ).toContain( 'billing_city' );
+
+		// Customer picks a settlement through the widget (a real record, so the field's own
+		// confirmed record is non-null — see the "country switch" describe block above for why
+		// a genuine selection, not a raw `.value` write, is required here).
+		selectViaFake( callFor( 'billing_city' ), {
+			key: 'dadata:msk', label: 'г Москва', value: 'Москва', level: 'settlement',
+			record: {
+				key: 'dadata:msk', provider_id: 'dadata', level: 'settlement', country: 'RU',
+				settlement: { name: 'Москва', type: 'г' }, label: 'г Москва',
+			},
+		} );
+
+		// ...types a street and a postcode by hand, without picking an address suggestion.
+		document.getElementById( 'billing_address_1' ).value = 'ул Тверская, 1';
+		document.getElementById( 'billing_postcode' ).value = '101000';
+
+		// THEN explicitly selects the SAME country every suggestion was already scoped by.
+		document.getElementById( 'billing_country' ).value = 'RU';
+		document.getElementById( 'billing_country' ).dispatchEvent( new Event( 'change', { bubbles: true } ) );
+
+		expect( document.getElementById( 'billing_city' ).value ).toBe( 'Москва' );
+		expect( document.getElementById( 'billing_address_1' ).value ).toBe( 'ул Тверская, 1' );
+		expect( document.getElementById( 'billing_postcode' ).value ).toBe( '101000' );
+	} );
+
+	it( 'the SAME reproduction with no country field at all (prefill has nothing to seed, but there is also no field to fire a change on)', () => {
+		// A checkout that dropped the country field entirely never sees a `change` event for it
+		// at all, so the bug this finding describes cannot fire — this pins that the fix does
+		// not depend on a country field existing.
+		boot( { settlement: true, address: true, omitBillingCountry: true, defaultCountry: 'RU', countries: [ 'RU' ] } );
+
+		selectViaFake( callFor( 'billing_city' ), {
+			key: 'dadata:msk', label: 'г Москва', value: 'Москва', level: 'settlement',
+			record: {
+				key: 'dadata:msk', provider_id: 'dadata', level: 'settlement', country: 'RU',
+				settlement: { name: 'Москва', type: 'г' }, label: 'г Москва',
+			},
+		} );
+
+		expect( document.getElementById( 'billing_city' ).value ).toBe( 'Москва' );
 	} );
 } );
 

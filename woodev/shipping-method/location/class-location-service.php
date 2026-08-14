@@ -44,6 +44,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		public const FILTER_PROVIDER_FOR_LEVEL = 'woodev_location_provider_for_level';
 
 		/**
+		 * Filters the FINAL resolved country for the checkout-field -> WooCommerce-store-setting
+		 * -> `RU` fallback chain (issue #296) — see {@see self::resolve_default_country()} for the
+		 * full chain and why this filter runs on every resolution, not only when the store's own
+		 * base location is unusable (PR #320 review, finding 2). Left in place even though nothing
+		 * in this codebase consumes it yet (project preference: extension hooks are not gated on
+		 * having a consumer).
+		 *
+		 * @since 2.0.2
+		 * @var string
+		 */
+		public const FILTER_DEFAULT_COUNTRY = 'woodev_location_default_country';
+
+		/**
 		 * @since 2.0.2
 		 * @var Location_Provider_Registry
 		 */
@@ -643,6 +656,134 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 			}
 
 			return $this->resolution_cache->resolve_for( $plugin, $current['record'] );
+		}
+
+		/**
+		 * Resolves the store-wide fallback country for a checkout that has NO country field at
+		 * all (issue #296) — steps 2+3 of the chain `checkout field -> WooCommerce store setting
+		 * -> RU`; step 1 (the live checkout field itself) is read by each CALLER, never here:
+		 * {@see \Woodev\Framework\Shipping\Rest_Api\Location_Controller::perform_suggest()} reads
+		 * the request's own `country` param first and only reaches this method when that is
+		 * empty, and `location-cascade.js`'s own `countryFor()` reads the live DOM field first
+		 * and only falls back to the `defaultCountry` this method feeds into
+		 * {@see \Woodev\Framework\Shipping\Checkout\Checkout_Config::build_location_block()}.
+		 * BOTH call sites resolve through this ONE method for the ONE reason this project has
+		 * already paid for once: a seam where each side of a client/server boundary shipped its
+		 * own, independently-green implementation that quietly disagreed.
+		 *
+		 * Step 2 reads {@see wc_get_base_location()} — WooCommerce's OWN accessor for "the
+		 * store's base country/state", NOT a raw `get_option( 'woocommerce_default_country' )`
+		 * read (PR #320 review, finding 3): `wc_get_base_location()` runs the store's location
+		 * through `apply_filters( 'woocommerce_get_base_location', ... )` first, which a
+		 * multi-store, multi-vendor, or geo plugin may hook to answer something other than the
+		 * literal option value — bypassing it made this façade's idea of "the store's base
+		 * country" quietly diverge from WooCommerce's own. This is a PLAIN function, not the
+		 * `WC()` singleton accessor: the earlier justification for reading `get_option()` directly
+		 * ("a `WC()`-mediated call would poison Brain Monkey's function table", see
+		 * `Checkout_Config::wc_states()`'s own docblock for that measured cost) conflated the two
+		 * — `wc_get_base_location()` is exactly as stubbable per-test as `get_option()` itself
+		 * (`Brain\Monkey\Functions\when( 'wc_get_base_location' )`, the same convention already
+		 * used elsewhere in this codebase, e.g.
+		 * {@see \Woodev\Framework\Shipping\Shipping_Plugin::add_countries_admin_notices()}'s own
+		 * `wc_get_base_location()['country'] ?? ''` read), and calling it poisons nothing.
+		 * `wc_get_base_location()` already splits WooCommerce's `COUNTRY:STATE` option format
+		 * (e.g. `RU:*` for a merchant who picked a country without naming a state) into
+		 * `['country' => ..., 'state' => ...]` — a raw, un-split read would treat the literal
+		 * string `'RU:*'` as the country code, which is not a well-formed ISO-3166 alpha-2 code
+		 * and is exactly the class of mistake that once leaked WooCommerce's `*` "no state"
+		 * sentinel to a customer's «Регион» field (gotcha this project has already paid for on the
+		 * STATE half of this same option) — {@see self::parse_country_component()} validates the
+		 * country component regardless.
+		 *
+		 * Step 3 (the filter) now runs on the FINAL resolved value on EVERY call, not only when
+		 * step 2 yields nothing usable (PR #320 review, finding 2 — the WordPress convention, and
+		 * the only reading under which the filter is an actual escape hatch): on a real
+		 * WooCommerce install `woocommerce_default_country` is never unset or malformed —
+		 * `WC_Install::create_options()` `add_option()`s the General-settings default (`'US:CA'`)
+		 * on activation, and the settings page's own country dropdown cannot emit anything else —
+		 * so a filter gated on "step 2 answered nothing" could NEVER fire on a real store, and this
+		 * project's own worked example ("a Kazakhstan store hooks this to return `KZ`") was
+		 * unreachable: a Kazakhstan store's `woocommerce_default_country` already resolves to `KZ`
+		 * via step 2, leaving the filter nothing to add. Running it on the final value instead lets
+		 * a plugin override the STORE'S OWN base country too, not merely stand in for a missing
+		 * one — the only way this filter is ever consulted on a real install. Its own result is
+		 * re-validated exactly like step 2's; a non-string return degrades silently rather than
+		 * ever being cast (PR #320 review, finding 5 — `(string) $object` on a misbehaving filter's
+		 * return would fatal the checkout render, not "degrade to the hard RU default" as promised),
+		 * and a string that fails validation (or an unset filter, the default) leaves the
+		 * already-resolved value untouched.
+		 *
+		 * @since 2.0.2
+		 * @since 2.0.2 Reads {@see wc_get_base_location()} instead of a raw `get_option()` call,
+		 *              and applies {@see self::FILTER_DEFAULT_COUNTRY} to the FINAL resolved value
+		 *              on every call rather than only when the store setting is unusable (PR #320
+		 *              review, findings 2 and 3).
+		 *
+		 * @return string Upper-cased ISO-3166 alpha-2 country code — never empty, never malformed.
+		 */
+		public function resolve_default_country(): string {
+			$resolved = self::parse_country_component( self::base_location_country() );
+
+			if ( '' === $resolved ) {
+				$resolved = 'RU';
+			}
+
+			/**
+			 * Filters the FINAL resolved fallback country for the checkout-field ->
+			 * WooCommerce-store-setting -> `RU` chain (issue #296) — see this method's own
+			 * docblock (PR #320 review, finding 2) for why this runs on EVERY resolution, not
+			 * only when the store's own base location is unusable.
+			 *
+			 * @since 2.0.2
+			 *
+			 * @param string $resolved The chain's own answer before this filter runs — the
+			 *                         store's base-location country, or `'RU'` when that is
+			 *                         unusable.
+			 */
+			$filtered = apply_filters( self::FILTER_DEFAULT_COUNTRY, $resolved );
+
+			if ( is_string( $filtered ) ) {
+				$parsed = self::parse_country_component( $filtered );
+
+				if ( '' !== $parsed ) {
+					return $parsed;
+				}
+			}
+
+			return $resolved;
+		}
+
+		/**
+		 * The store's own base-location country, straight from
+		 * {@see wc_get_base_location()} — see {@see self::resolve_default_country()}'s own
+		 * docblock for why this reads WooCommerce's accessor rather than the raw option.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string Raw country component, possibly empty or malformed — validated by the
+		 *                 caller via {@see self::parse_country_component()}.
+		 */
+		private static function base_location_country(): string {
+			$location = wc_get_base_location();
+
+			return is_array( $location ) ? (string) ( $location['country'] ?? '' ) : '';
+		}
+
+		/**
+		 * Splits WooCommerce's `COUNTRY:STATE` option format (e.g. `'RU:*'`) and validates the
+		 * country component alone — see {@see self::resolve_default_country()}'s own docblock for
+		 * why a bare, un-split read is exactly the mistake this method exists to prevent.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $raw Raw option/filter value, possibly `COUNTRY:STATE`, possibly malformed.
+		 *
+		 * @return string Upper-cased 2-letter country code, or `''` when malformed/absent.
+		 */
+		private static function parse_country_component( string $raw ): string {
+			$country = strtoupper( trim( explode( ':', $raw, 2 )[0] ) );
+
+			return 1 === preg_match( '/^[A-Z]{2}$/', $country ) ? $country : '';
 		}
 
 		/**
