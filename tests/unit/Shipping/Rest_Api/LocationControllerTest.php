@@ -662,16 +662,13 @@ final class LocationControllerTest extends TestCase {
 	// countryFor()) falls back through Location_Service::resolve_default_country()
 	// instead of hitting build_scope()'s 400. Location_Controller_Fake_Service
 	// does NOT override resolve_default_country(), so every test below runs
-	// the REAL method body (get_option()/apply_filters(), stubbed per test) —
-	// never a canned fixture value.
+	// the REAL method body (wc_get_base_location()/apply_filters(), stubbed
+	// per test — PR #320 review, finding 3: wc_get_base_location(), never a
+	// raw get_option() read) — never a canned fixture value.
 	// -------------------------------------------------------------------
 
 	public function test_suggest_with_no_country_param_falls_back_to_the_wc_store_setting(): void {
-		Functions\when( 'get_option' )->alias(
-			static function ( $name, $default = null ) {
-				return 'woocommerce_default_country' === $name ? 'KZ:north' : $default;
-			}
-		);
+		Functions\when( 'wc_get_base_location' )->justReturn( [ 'country' => 'KZ', 'state' => 'north' ] );
 		Functions\when( 'apply_filters' )->returnArg( 2 );
 
 		$provider = new Location_Controller_Fake_Provider( static fn() => [], [ 'KZ' ] );
@@ -696,7 +693,7 @@ final class LocationControllerTest extends TestCase {
 	}
 
 	public function test_suggest_with_no_country_param_and_no_store_setting_falls_back_to_ru(): void {
-		Functions\when( 'get_option' )->justReturn( '' );
+		Functions\when( 'wc_get_base_location' )->justReturn( [ 'country' => '', 'state' => '' ] );
 		Functions\when( 'apply_filters' )->returnArg( 2 );
 
 		$provider = new Location_Controller_Fake_Provider( static fn() => [], [ 'RU' ] );

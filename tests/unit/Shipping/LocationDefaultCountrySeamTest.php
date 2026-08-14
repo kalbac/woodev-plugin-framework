@@ -204,11 +204,12 @@ namespace Woodev\Tests\Unit\Shipping {
 			);
 			Functions\when( 'rest_ensure_response' )->returnArg();
 			Functions\when( 'apply_filters' )->returnArg( 2 );
-			Functions\when( 'get_option' )->alias(
-				static function ( $name, $default = null ) {
-					return 'woocommerce_default_country' === $name ? 'KZ:north' : $default;
-				}
-			);
+			// Location_Service::resolve_default_country() reads wc_get_base_location() (PR #320
+			// review, finding 3 — never a raw get_option() read); stubbed explicitly here rather
+			// than relying on some OTHER test file having already defined it earlier in the same
+			// process (this file's own tests always run against a fresh, single-test PHPUnit
+			// invocation too — see composer test:unit's own filter usage).
+			Functions\when( 'wc_get_base_location' )->justReturn( [ 'country' => 'KZ', 'state' => 'north' ] );
 
 			$provider = new Seam_Fake_Provider( [ 'KZ' ] );
 			$service  = new Seam_Fake_Location_Service( $provider );
@@ -217,11 +218,17 @@ namespace Woodev\Tests\Unit\Shipping {
 			$config = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'KZ' ], $service ) )
 				->build( Checkout_Fields::from_array( [] ) );
 
-			// Side 2: the /suggest route, given NO country param at all — exactly
-			// what a checkout with no country field sends (location-cascade.js's
-			// own countryFor(), issue #296).
+			// Side 2: the /suggest route, given an EMPTY `country` param — exactly what a
+			// checkout with no country field sends (location-cascade.js's own countryFor(),
+			// issue #296) and, crucially, the ONLY shape a REAL request can carry: the route
+			// registers `country` as `'required' => true` (class-location-controller.php's own
+			// register_routes()), so WP_REST_Server::dispatch() rejects a request that omits the
+			// key entirely with `rest_missing_callback_param` BEFORE handle_suggest_request() is
+			// ever reached — a request built with no `country` key at all (as this test used to)
+			// pins a shape production could never produce (PR #320 review, finding 4). Mirrors
+			// LocationControllerTest's own `'country' => ''` convention for this exact case.
 			$ctrl    = new Seam_Location_Controller_Probe( $service );
-			$request = new WP_REST_Request( [ 'q' => 'Ал', 'level' => Location_Record::LEVEL_REGION ] );
+			$request = new WP_REST_Request( [ 'q' => 'Ал', 'level' => Location_Record::LEVEL_REGION, 'country' => '' ] );
 			$ctrl->handle_suggest_request( $request );
 
 			$this->assertSame( 'KZ', $config['location']['defaultCountry'] );

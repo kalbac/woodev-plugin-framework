@@ -437,6 +437,10 @@ class CheckoutConfigTest extends TestCase {
 				return 'woodev_location_token' === $name ? 'tok' : $default;
 			}
 		);
+		// resolve_default_country() reads wc_get_base_location() (PR #320 review, finding 3) —
+		// this test asserts on `levels`/`countries`, never `defaultCountry`, so any well-formed
+		// stub is fine here.
+		Functions\when( 'wc_get_base_location' )->justReturn( [ 'country' => 'RU', 'state' => '' ] );
 
 		$registry = Location_Provider_Registry::instance();
 		$registry->declare_needed();
@@ -534,6 +538,10 @@ class CheckoutConfigTest extends TestCase {
 				return $default;
 			}
 		);
+		// resolve_default_country() reads wc_get_base_location() (PR #320 review, finding 3) —
+		// this test asserts on `countries`, never `defaultCountry`, so any well-formed stub is
+		// fine here.
+		Functions\when( 'wc_get_base_location' )->justReturn( [ 'country' => 'RU', 'state' => '' ] );
 
 		$registry = Location_Provider_Registry::instance();
 		$registry->declare_needed();
@@ -679,6 +687,10 @@ class CheckoutConfigTest extends TestCase {
 				return $default;
 			}
 		);
+		// resolve_default_country() reads wc_get_base_location() (PR #320 review, finding 3) —
+		// this test asserts on the SERIALIZED config never leaking a secret, never on
+		// `defaultCountry`, so any well-formed stub is fine here.
+		Functions\when( 'wc_get_base_location' )->justReturn( [ 'country' => 'RU', 'state' => '' ] );
 
 		$registry = Location_Provider_Registry::instance();
 		$registry->declare_needed();
@@ -1054,7 +1066,8 @@ class CheckoutConfigTest extends TestCase {
 	 * End-to-end through the REAL {@see Location_Service} (not the fixture
 	 * fake above) — the "real body" pairing this task's own seam rule
 	 * requires: {@see Location_Service::resolve_default_country()} genuinely
-	 * reads `get_option( 'woocommerce_default_country' )` and splits the
+	 * reads `wc_get_base_location()` (PR #320 review, finding 3 — never a raw
+	 * `get_option( 'woocommerce_default_country' )` read) and splits the
 	 * `COUNTRY:STATE` shape, mirroring the exact option format a merchant who
 	 * picked a country without naming a state leaves behind.
 	 */
@@ -1073,16 +1086,10 @@ class CheckoutConfigTest extends TestCase {
 		Functions\when( 'apply_filters' )->returnArg( 2 );
 		Functions\when( 'get_option' )->alias(
 			static function ( $name, $default = null ) {
-				if ( 'woodev_location_token' === $name ) {
-					return 'tok';
-				}
-				if ( 'woocommerce_default_country' === $name ) {
-					return 'KZ:north';
-				}
-
-				return $default;
+				return 'woodev_location_token' === $name ? 'tok' : $default;
 			}
 		);
+		Functions\when( 'wc_get_base_location' )->justReturn( [ 'country' => 'KZ', 'state' => 'north' ] );
 
 		$registry = Location_Provider_Registry::instance();
 		$registry->declare_needed();

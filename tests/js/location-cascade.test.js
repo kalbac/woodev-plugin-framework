@@ -1349,6 +1349,70 @@ describe( 'country fallback chain (issue #296)', () => {
 } );
 
 // -----------------------------------------------------------------------
+// PR #320 review, finding 1: the destructive-clear gate must compare the SAME effective
+// country countryFor() (and the widget's own attach/scope) already resolves — never the raw
+// DOM value. Before this fix, prefill() seeded entry.resolved['billing_country'] from
+// `el.value` ('' for an unselected select), so the customer's first EXPLICIT pick of the very
+// country the fallback was already using read as a real transition and destructively cleared
+// an address that was never stale to begin with.
+// -----------------------------------------------------------------------
+
+describe( 'selecting the fallback\'s own country must not destructively clear (finding 1, PR #320 review)', () => {
+	it( 'reproduction: attaches on the RU fallback, customer fills the address, then explicitly picks "Россия" — nothing is cleared', () => {
+		// "No location by default": #billing_country is present but genuinely unselected
+		// (`value === ''`, WooCommerce's own placeholder option) — the widget attaches on the
+		// server-resolved defaultCountry fallback, exactly like the "steps 2/3" tests above.
+		boot( {
+			settlement: true, address: true, country: '', defaultCountry: 'RU', countries: [ 'RU' ],
+		} );
+
+		// The widget attached under the fallback at all — precondition for the bug to even be
+		// reachable.
+		expect( attachCalls.map( ( c ) => c.el.id ) ).toContain( 'billing_city' );
+
+		// Customer picks a settlement through the widget (a real record, so the field's own
+		// confirmed record is non-null — see the "country switch" describe block above for why
+		// a genuine selection, not a raw `.value` write, is required here).
+		selectViaFake( callFor( 'billing_city' ), {
+			key: 'dadata:msk', label: 'г Москва', value: 'Москва', level: 'settlement',
+			record: {
+				key: 'dadata:msk', provider_id: 'dadata', level: 'settlement', country: 'RU',
+				settlement: { name: 'Москва', type: 'г' }, label: 'г Москва',
+			},
+		} );
+
+		// ...types a street and a postcode by hand, without picking an address suggestion.
+		document.getElementById( 'billing_address_1' ).value = 'ул Тверская, 1';
+		document.getElementById( 'billing_postcode' ).value = '101000';
+
+		// THEN explicitly selects the SAME country every suggestion was already scoped by.
+		document.getElementById( 'billing_country' ).value = 'RU';
+		document.getElementById( 'billing_country' ).dispatchEvent( new Event( 'change', { bubbles: true } ) );
+
+		expect( document.getElementById( 'billing_city' ).value ).toBe( 'Москва' );
+		expect( document.getElementById( 'billing_address_1' ).value ).toBe( 'ул Тверская, 1' );
+		expect( document.getElementById( 'billing_postcode' ).value ).toBe( '101000' );
+	} );
+
+	it( 'the SAME reproduction with no country field at all (prefill has nothing to seed, but there is also no field to fire a change on)', () => {
+		// A checkout that dropped the country field entirely never sees a `change` event for it
+		// at all, so the bug this finding describes cannot fire — this pins that the fix does
+		// not depend on a country field existing.
+		boot( { settlement: true, address: true, omitBillingCountry: true, defaultCountry: 'RU', countries: [ 'RU' ] } );
+
+		selectViaFake( callFor( 'billing_city' ), {
+			key: 'dadata:msk', label: 'г Москва', value: 'Москва', level: 'settlement',
+			record: {
+				key: 'dadata:msk', provider_id: 'dadata', level: 'settlement', country: 'RU',
+				settlement: { name: 'Москва', type: 'г' }, label: 'г Москва',
+			},
+		} );
+
+		expect( document.getElementById( 'billing_city' ).value ).toBe( 'Москва' );
+	} );
+} );
+
+// -----------------------------------------------------------------------
 // Per-section country resolution (Finding 1, PR-C review): a field declared in the
 // `shipping` §8 section (`field.section === 'shipping'`, the SAME convention
 // `class-checkout-fields.php::normalize()` / `Field::set_section()` already establish and
