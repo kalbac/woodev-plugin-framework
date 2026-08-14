@@ -276,6 +276,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Fields' 
 				'type'               => (string) ( $definition['type'] ?? 'text' ),
 				'label'              => (string) ( $definition['label'] ?? '' ),
 				'error_label'        => (string) ( $definition['error_label'] ?? '' ),
+				'required_message'   => (string) ( $definition['required_message'] ?? '' ),
 				'section'            => (string) ( $definition['section'] ?? 'order' ),
 				'required'           => is_array( $required ) ? $required : (bool) $required,
 				'depends_on'         => isset( $definition['depends_on'] ) && '' !== (string) $definition['depends_on']

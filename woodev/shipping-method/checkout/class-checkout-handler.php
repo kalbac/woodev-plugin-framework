@@ -1212,12 +1212,24 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 							// Already reported by the per-field loop above — do not repeat the same
 							// failure as a second notice (measured duplication, see method docblock).
 							if ( ! isset( $blank_required_ids[ $pickup_field['id'] ] ) ) {
+								$supplied = self::supplied_required_message( $pickup_field );
+
+								/*
+								 * Its OWN wording, deliberately not the per-field message (#327):
+								 * this branch fires precisely when the field's own condition-spec
+								 * did NOT match the chosen method, so it is the one that can say
+								 * why a point is needed at all. Both dropped «значение поля» —
+								 * the control here is a button, and there is no field to fill in.
+								 * A plugin-supplied message still wins, because it is a statement
+								 * about the field rather than about this code path.
+								 */
 								$this->add_error(
-									sprintf(
-										/* translators: %s: pickup field label */
-										__( 'Для доставки в пункт выдачи выберите значение поля «%s».', 'woodev-plugin-framework' ),
-										self::message_label( $pickup_field )
-									)
+									'' !== $supplied
+										? $supplied
+										: __(
+											'Для этого способа доставки нужно выбрать пункт выдачи заказов.',
+											'woodev-plugin-framework'
+										)
 								);
 							}
 						}
@@ -1433,26 +1445,67 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		}
 
 		/**
-		 * Builds the default "required field" error message for a descriptor.
+		 * Builds the "you must supply this" error message for a descriptor.
 		 *
-		 * Uses "Укажите" ("specify"/"provide") rather than "Заполните" ("fill in"): the
-		 * latter only reads naturally for a typed input, but this same template also
-		 * covers a hidden pickup-point field whose control is a "Choose pickup point"
-		 * button, so the wording needs to fit both without a second, field-type-specific
-		 * message (#299).
+		 * Three cases, in order:
+		 *
+		 * 1. The plugin supplied the whole sentence ({@see Field::set_required_message()})
+		 *    — used verbatim. The framework's own nouns are carrier-neutral by default
+		 *    and a carrier's may not be (Почта РФ has отделения, not пункты выдачи).
+		 * 2. The field's visible control is a BUTTON, not its own input
+		 *    (`is_pickup_slot`) — «Вы не выбрали пункт выдачи заказов.». Such a field
+		 *    has no value to specify and, since #274/#323, not even a visible caption:
+		 *    a message telling the buyer to fill in a field sends them looking for an
+		 *    input that is not on the page (#327, found on the rig).
+		 * 3. Anything else — the generic «Укажите значение поля «%s».», which is
+		 *    accurate for a field the customer really does type into.
+		 *
+		 * #299 had tried to serve cases 2 and 3 with ONE template, widening the verb
+		 * from "Заполните" to "Укажите". That was not enough: the rest of the sentence
+		 * («значение поля») still describes an input, which is what #327 reported.
 		 *
 		 * @since 1.5.0
 		 * @since 2.0.2 Label resolution delegated to {@see message_label()} (adds `error_label`).
 		 * @since 2.0.2 Wording changed from "Заполните" to "Укажите" so the shared template
 		 *              also fits button-driven fields, not just typed inputs (#299).
+		 * @since 2.0.2 Button-driven fields get their own message instead of the shared
+		 *              template, and a plugin can replace it wholesale (#327).
 		 *
 		 * @param array<string, mixed> $field normalized field descriptor
 		 *
 		 * @return string
 		 */
 		private static function required_message( array $field ): string {
+			$supplied = self::supplied_required_message( $field );
+
+			if ( '' !== $supplied ) {
+				return $supplied;
+			}
+
+			if ( ! empty( $field['is_pickup_slot'] ) ) {
+				return __( 'Вы не выбрали пункт выдачи заказов.', 'woodev-plugin-framework' );
+			}
+
 			/* translators: %s: checkout field label */
 			return sprintf( __( 'Укажите значение поля «%s».', 'woodev-plugin-framework' ), self::message_label( $field ) );
+		}
+
+		/**
+		 * The plugin-supplied whole-message override for a descriptor, or `''`.
+		 *
+		 * Read by both paths that can report a missing pickup point — the per-field
+		 * required loop (through {@see required_message()}) and the independent
+		 * backstop in {@see validate()} — because the override is a statement about the
+		 * FIELD, not about whichever code path happened to catch it (#327).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<string, mixed> $field normalized field descriptor
+		 *
+		 * @return string
+		 */
+		private static function supplied_required_message( array $field ): string {
+			return (string) ( $field['required_message'] ?? '' );
 		}
 
 		/**

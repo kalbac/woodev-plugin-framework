@@ -130,6 +130,37 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Field' ) ) :
 		}
 
 		/**
+		 * Replaces the WHOLE "you must supply this" checkout error message for this
+		 * field, rather than only the label substituted into the framework's own
+		 * template.
+		 *
+		 * Exists because a template cannot be made carrier-neutral in the one case
+		 * that needs it (#327). A field whose visible control is a BUTTON has no
+		 * value to specify, so the framework says «Вы не выбрали пункт выдачи
+		 * заказов.» instead of «Укажите значение поля «…».» — but «пункт выдачи» is
+		 * OUR vocabulary, and Почта РФ has отделения. Same ownership split #323
+		 * settled for the trigger button itself: the framework owns where and when a
+		 * message appears, the plugin owns the words. {@see set_error_label()} is not
+		 * enough here — substituting «Отделение» into a sentence built around the word
+		 * «поле» still describes an input.
+		 *
+		 * Honoured by both paths that can report a missing pickup point: the
+		 * per-field required loop and the independent backstop
+		 * ({@see \Woodev\Framework\Shipping\Checkout\Checkout_Handler::validate()}) —
+		 * the override is a statement about the FIELD, not about a code path.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $message the complete message shown to the customer.
+		 *
+		 * @return self
+		 */
+		public function set_required_message( string $message ): self {
+			$this->def['required_message'] = $message;
+			return $this;
+		}
+
+		/**
 		 * Sets the checkout section this field belongs to.
 		 *
 		 * Accepted values: `'order'` (default after normalization), `'billing'`,

@@ -138,6 +138,30 @@ The same filter carries `emptyLocality`, `chosenPointAddress`, the error strings
 `aria-label` context strings — one string system, not two. A plugin overrides only the keys it
 disagrees with.
 
+### …and what the checkout says when nothing was chosen
+
+That filter covers the browser. The **server-side** validation message is a separate string,
+because it is produced by `Checkout_Handler` from the §8 field descriptor, not by the picker:
+
+| Case | Message |
+|---|---|
+| ordinary typed field, blank | «Укажите значение поля «%s».» |
+| `is_pickup_slot` field, blank | «Вы не выбрали пункт выдачи заказов.» |
+| the shipping method requires a point but the field's own condition did not match | «Для этого способа доставки нужно выбрать пункт выдачи заказов.» |
+
+The pickup wording is separate because a button-driven field has no value to specify — telling
+the customer to fill in a field sends them looking for an input that is not on the page (#327,
+found on the rig). A plugin replaces the whole sentence, both paths at once:
+
+```php
+Field::create( 'russian_post_office' )
+    ->mark_pickup_slot()
+    ->set_required_message( __( 'Вы не выбрали отделение Почты России.', 'woodev-russian-post' ) );
+```
+
+`set_error_label()` is not enough for this: substituting «Отделение» into a sentence built around
+the word «поле» still describes an input.
+
 ## Why placement is not the plugin's call
 
 A store may run СДЭК and Почта РФ side by side. If each plugin picked its own placement, the
