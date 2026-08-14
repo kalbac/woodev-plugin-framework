@@ -2359,25 +2359,44 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 * half): an empty key is now never used to ADDRESS the points query either, it too
 		 * falls back to the DOM read, same as an absent block.
 		 *
+		 * `implicit` (issue #309; spec D11/§4.6) is the flag
+		 * {@see \Woodev\Framework\Shipping\Location\Location_Service::get_customer_record()}'s
+		 * own docblock names this exact use case for — "a caller needs the flag too, e.g. to
+		 * decide whether to still show a 'please choose your locality' prompt" —
+		 * {@see self::current_location_record()} discards it on the very next line after
+		 * reading it (it only ever needed the bare record, for {@see self::location_context()}),
+		 * so this method reads {@see Location_Service::get_customer_record()} directly instead
+		 * of going through that helper, to keep the flag. `false` whenever there is no record
+		 * at all — an implicit flag is only meaningful attached to an actual record, same
+		 * convention {@see \Woodev\Framework\Shipping\Checkout\Checkout_Config::build_location_block()}
+		 * already uses for its own sibling `implicit` key.
+		 *
 		 * @since 2.0.2
 		 * @since 2.0.2 Also gates on {@see \Woodev\Framework\Shipping\Location\Location_Service::is_active()},
 		 *              not just on {@see self::$plugin} being non-null (review finding F1,
 		 *              rig-verified: a registered-but-unconfigured provider left the pickup
 		 *              picker permanently disabled in every populated city).
+		 * @since 2.0.2 Added `implicit` (issue #309; spec D11/§4.6) — a client-side consumer
+		 *              seam for the flag {@see Location_Service::get_customer_record()} already
+		 *              returns. It replaces an earlier attempt that marked the chain field with
+		 *              a DOM attribute from `location-cascade.js`, which could not survive a
+		 *              checkout re-render, a select2-rendering presentation mode, or two entries
+		 *              sharing one location block.
 		 *
-		 * @return array{current: array{key: string}}|null
+		 * @return array{current: array{key: string}, implicit: bool}|null
 		 */
 		protected function location_config_block(): ?array {
 			if ( null === $this->plugin || ! $this->plugin->get_location_service()->is_active() ) {
 				return null;
 			}
 
-			$record = $this->current_location_record();
+			$customer = $this->plugin->get_location_service()->get_customer_record();
 
 			return [
-				'current' => [
-					'key' => null !== $record ? $record->key() : '',
+				'current'  => [
+					'key' => null !== $customer ? $customer['record']->key() : '',
 				],
+				'implicit' => null !== $customer && (bool) $customer['implicit'],
 			];
 		}
 
