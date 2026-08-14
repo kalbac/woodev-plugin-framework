@@ -33,6 +33,26 @@ class CheckoutFieldsTest extends TestCase {
 		$this->assertFalse( $field['required'] );
 	}
 
+	// -------------------------------------------------------------------------
+	// error_label — messages-only label (#299, #134)
+	// -------------------------------------------------------------------------
+
+	public function test_normalize_error_label_defaults_to_empty_string(): void {
+		$field = Checkout_Fields::normalize( [ 'id' => 'x' ] );
+		$this->assertSame( '', $field['error_label'] );
+	}
+
+	public function test_normalize_carries_error_label_through(): void {
+		$field = Checkout_Fields::normalize( [ 'id' => 'carrier_pickup_point', 'error_label' => 'Пункт выдачи' ] );
+		$this->assertSame( 'Пункт выдачи', $field['error_label'] );
+	}
+
+	public function test_normalize_error_label_is_independent_of_label(): void {
+		$field = Checkout_Fields::normalize( [ 'id' => 'x', 'label' => '', 'error_label' => 'Пункт выдачи' ] );
+		$this->assertSame( '', $field['label'] );
+		$this->assertSame( 'Пункт выдачи', $field['error_label'] );
+	}
+
 	public function test_normalize_keeps_condition_spec_required_as_array(): void {
 		$spec = [ 'state' => 'chosen_shipping_method', 'operator' => 'in', 'value' => [ 'carrier_pickup' ] ];
 		$this->assertSame( $spec, Checkout_Fields::normalize( [ 'id' => 'pvz', 'required' => $spec ] )['required'] );

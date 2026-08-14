@@ -65,4 +65,26 @@ class PresetsTest extends TestCase {
 		$field = Pickup_Field::create( 'carrier_pvz', [ 'carrier_pickup' ] );
 		$this->assertInstanceOf( \Woodev\Framework\Shipping\Checkout\Field::class, $field );
 	}
+
+	// -------------------------------------------------------------------------
+	// error_label default — #299/#134: a hidden pickup field legitimately has
+	// no visual label, so the preset seeds a sensible messages-only default.
+	// -------------------------------------------------------------------------
+
+	public function test_pickup_field_sets_a_default_error_label(): void {
+		$a = Pickup_Field::create( 'carrier_pickup_point', [ 'carrier_pickup' ] )->to_array();
+		$this->assertSame( 'Пункт выдачи', $a['error_label'] );
+	}
+
+	public function test_pickup_field_leaves_the_visual_label_unset(): void {
+		$a = Pickup_Field::create( 'carrier_pickup_point', [ 'carrier_pickup' ] )->to_array();
+		$this->assertArrayNotHasKey( 'label', $a );
+	}
+
+	public function test_pickup_field_default_error_label_is_overridable(): void {
+		$a = Pickup_Field::create( 'carrier_pickup_point', [ 'carrier_pickup' ] )
+			->set_error_label( 'Пункт самовывоза' )
+			->to_array();
+		$this->assertSame( 'Пункт самовывоза', $a['error_label'] );
+	}
 }

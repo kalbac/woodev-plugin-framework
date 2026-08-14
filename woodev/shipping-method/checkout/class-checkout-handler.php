@@ -1128,9 +1128,30 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * the declared pickup methods AND the `is_pickup_slot` field value is blank, checkout is
 		 * blocked regardless of that field's condition-spec.
 		 *
+		 * The backstop skips its OWN notice when the per-field loop already added a
+		 * required-field error for that exact pickup field id (measured duplication, #299/#134:
+		 * a `Pickup_Field` preset's condition-spec and `set_requires_pickup_methods()` are normally
+		 * driven by the same method-id list, so both mechanisms catch the same blank field on the
+		 * same submit). It still fires alone whenever the per-field loop did NOT catch the field —
+		 * e.g. `set_requires_pickup_methods()`'s id list and the descriptor's own condition-spec
+		 * `value` list are two independently host-supplied lists that nothing keeps in sync: a
+		 * method id can be present in `requires_pickup_methods` while absent from the condition-spec,
+		 * so the per-field loop's strict `in` comparison never trips that field's `required` gate even
+		 * though this backstop's own {@see chosen_method_matches()} check matches — that divergence is
+		 * the backstop's actual reason to exist, so this guard never suppresses it as a class, only the
+		 * field-id-exact repeat.
+		 *
+		 * This guard only dedupes OUR OWN two notices (the per-field loop and the backstop). A field
+		 * declared with a plain-bool `required` (no condition-spec, no pickup backstop involved) still
+		 * gets both WC's own native "is a required field" notice — via {@see inject()}'s WC `required`
+		 * flag — AND this method's own {@see required_message()} notice; that duplication class is not
+		 * addressed here.
+		 *
 		 * @since 1.5.0
 		 * @since 2.0.2 Added `$state` parameter for conditional-required (A2) evaluation.
 		 * @since 2.0.2 Added independent pickup backstop guard.
+		 * @since 2.0.2 Backstop notice suppressed when the per-field loop already reported the
+		 *              same field id blank-and-required (#299, #134).
 		 *
 		 * @param array<string, mixed> $values clean values keyed by field id
 		 * @param array<string, mixed> $state  flat checkout-state map, e.g.
@@ -1139,7 +1160,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * @return bool true when every field is valid; false when any field blocks checkout
 		 */
 		public function validate( array $values, array $state = [] ): bool {
-			$valid = true;
+			$valid              = true;
+			$blank_required_ids = [];
 
 			foreach ( $this->fields->get_fields() as $id => $field ) {
 				$value    = $values[ $id ] ?? '';
@@ -1147,7 +1169,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 
 				if ( $required && self::is_blank( $value ) ) {
 					$this->add_error( self::required_message( $field ) );
-					$valid = false;
+					$blank_required_ids[ $id ] = true;
+					$valid                     = false;
 					continue;
 				}
 
@@ -1184,14 +1207,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 						$pickup_value = $values[ $pickup_field['id'] ] ?? '';
 
 						if ( self::is_blank( $pickup_value ) ) {
-							$this->add_error(
-								sprintf(
-									/* translators: %s: pickup field label */
-									__( 'Для доставки в пункт выдачи выберите значение поля «%s».', 'woodev-plugin-framework' ),
-									'' !== (string) $pickup_field['label'] ? (string) $pickup_field['label'] : (string) $pickup_field['id']
-								)
-							);
 							$valid = false;
+
+							// Already reported by the per-field loop above — do not repeat the same
+							// failure as a second notice (measured duplication, see method docblock).
+							if ( ! isset( $blank_required_ids[ $pickup_field['id'] ] ) ) {
+								$this->add_error(
+									sprintf(
+										/* translators: %s: pickup field label */
+										__( 'Для доставки в пункт выдачи выберите значение поля «%s».', 'woodev-plugin-framework' ),
+										self::message_label( $pickup_field )
+									)
+								);
+							}
 						}
 					}
 				}
@@ -1377,35 +1405,69 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		}
 
 		/**
+		 * Resolves the label to use in a generated checkout error message for a descriptor.
+		 *
+		 * Falls back from the dedicated `error_label` — a messages-only label independent
+		 * of the visual `label`, see {@see Field::set_error_label()} — to the visual
+		 * `label`, and only as a last resort to the raw field `id`. A field whose visible
+		 * control is not its own native input (e.g. a hidden pickup-point field driven by
+		 * a "Choose pickup point" button) legitimately has an empty visual `label`; falling
+		 * straight to `id` there is what showed the buyer a raw field key (#299, #134).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<string, mixed> $field normalized field descriptor
+		 *
+		 * @return string
+		 */
+		private static function message_label( array $field ): string {
+			$error_label = (string) ( $field['error_label'] ?? '' );
+
+			if ( '' !== $error_label ) {
+				return $error_label;
+			}
+
+			$label = (string) ( $field['label'] ?? '' );
+
+			return '' !== $label ? $label : (string) $field['id'];
+		}
+
+		/**
 		 * Builds the default "required field" error message for a descriptor.
 		 *
+		 * Uses "Укажите" ("specify"/"provide") rather than "Заполните" ("fill in"): the
+		 * latter only reads naturally for a typed input, but this same template also
+		 * covers a hidden pickup-point field whose control is a "Choose pickup point"
+		 * button, so the wording needs to fit both without a second, field-type-specific
+		 * message (#299).
+		 *
 		 * @since 1.5.0
+		 * @since 2.0.2 Label resolution delegated to {@see message_label()} (adds `error_label`).
+		 * @since 2.0.2 Wording changed from "Заполните" to "Укажите" so the shared template
+		 *              also fits button-driven fields, not just typed inputs (#299).
 		 *
 		 * @param array<string, mixed> $field normalized field descriptor
 		 *
 		 * @return string
 		 */
 		private static function required_message( array $field ): string {
-			$label = '' !== (string) $field['label'] ? (string) $field['label'] : (string) $field['id'];
-
 			/* translators: %s: checkout field label */
-			return sprintf( __( 'Заполните поле «%s».', 'woodev-plugin-framework' ), $label );
+			return sprintf( __( 'Укажите значение поля «%s».', 'woodev-plugin-framework' ), self::message_label( $field ) );
 		}
 
 		/**
 		 * Builds the default "invalid value" error message for a descriptor.
 		 *
 		 * @since 1.5.0
+		 * @since 2.0.2 Label resolution delegated to {@see message_label()} (adds `error_label`).
 		 *
 		 * @param array<string, mixed> $field normalized field descriptor
 		 *
 		 * @return string
 		 */
 		private static function invalid_message( array $field ): string {
-			$label = '' !== (string) $field['label'] ? (string) $field['label'] : (string) $field['id'];
-
 			/* translators: %s: checkout field label */
-			return sprintf( __( 'Поле «%s» заполнено некорректно.', 'woodev-plugin-framework' ), $label );
+			return sprintf( __( 'Поле «%s» заполнено некорректно.', 'woodev-plugin-framework' ), self::message_label( $field ) );
 		}
 
 		/**

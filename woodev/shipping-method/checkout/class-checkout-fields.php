@@ -38,7 +38,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Fields' 
 	 * Core schema keys (all present after {@see normalize()}):
 	 *  - `id`                 — field identifier supplied by the host plugin.
 	 *  - `type`               — input type, e.g. `'text'`, `'hidden'`.
-	 *  - `label`              — human-readable label.
+	 *  - `label`              — human-readable label shown in the checkout form.
+	 *  - `error_label`        — human-readable label used in generated error messages ONLY,
+	 *                           independent of `label`. Falls back to `label`, then to `id`,
+	 *                           when empty — see {@see \Woodev\Framework\Shipping\Checkout\
+	 *                           Checkout_Handler::message_label()}. Exists because a field's
+	 *                           visible control is sometimes not its own native input (e.g. a
+	 *                           hidden pickup-point field driven by a button), so `label` is
+	 *                           legitimately blank while messages still need a human name (#299, #134).
 	 *  - `section`            — checkout section: `'order'` (default), `'billing'`, `'shipping'`.
 	 *  - `required`           — `bool` (coerced) OR an array condition-spec when the host plugin
 	 *                           passes a structured condition array; preserved verbatim so the
@@ -234,9 +241,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Fields' 
 		 *
 		 * @since 1.5.0
 		 * @since 2.0.2 Added `section`, `depends_on`, `source`, `source_kind`,
-		 *              `takeover_condition`; `required` array preserved verbatim;
-		 *              `is_pickup_slot` bool (default false).
-		 * @since 2.0.2 Added `location_level` (location-provider layer Task 9).
+		 *              `takeover_condition`, `location_level`, `error_label`;
+		 *              `required` array preserved verbatim; `is_pickup_slot` bool
+		 *              (default false).
 		 *
 		 * @param array<string, mixed> $definition raw field definition
 		 *
@@ -244,6 +251,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Fields' 
 		 *     id: string,
 		 *     type: string,
 		 *     label: string,
+		 *     error_label: string,
 		 *     section: string,
 		 *     required: bool|array<string, mixed>,
 		 *     depends_on: string|null,
@@ -267,6 +275,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Fields' 
 				'id'                 => (string) ( $definition['id'] ?? '' ),
 				'type'               => (string) ( $definition['type'] ?? 'text' ),
 				'label'              => (string) ( $definition['label'] ?? '' ),
+				'error_label'        => (string) ( $definition['error_label'] ?? '' ),
 				'section'            => (string) ( $definition['section'] ?? 'order' ),
 				'required'           => is_array( $required ) ? $required : (bool) $required,
 				'depends_on'         => isset( $definition['depends_on'] ) && '' !== (string) $definition['depends_on']

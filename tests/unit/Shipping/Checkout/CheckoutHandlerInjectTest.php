@@ -159,6 +159,42 @@ class CheckoutHandlerInjectTest extends TestCase {
 		$this->assertTrue( $out['order']['carrier_pvz']['required'] );
 	}
 
+	// -------------------------------------------------------------------------
+	// WC-array `label` is the visual `label` verbatim, never `error_label`
+	// (#316 review finding 1): woocommerce_form_field() renders a <label> for
+	// ANY non-empty `label`, even on a `hidden` field — it only skips the
+	// `for` attribute — so handing WC our `error_label` would render a stray,
+	// orphaned caption for a field whose real control lives elsewhere (e.g. a
+	// "Choose pickup point" button).
+	// -------------------------------------------------------------------------
+
+	public function test_inject_wc_label_never_falls_back_to_error_label(): void {
+		$fields = Checkout_Fields::from_array( [
+			Field::create( 'carrier_pickup_point' )->set_type( 'hidden' )->set_error_label( 'Пункт выдачи' )->set_section( 'order' )->to_array(),
+		] );
+		$out = ( new Checkout_Handler( $fields, 'carrier' ) )->inject( [ 'order' => [] ] );
+
+		$this->assertSame( '', $out['order']['carrier_pickup_point']['label'] );
+	}
+
+	public function test_inject_wc_label_uses_the_explicit_label_verbatim(): void {
+		$fields = Checkout_Fields::from_array( [
+			Field::create( 'carrier_pvz' )->set_type( 'text' )->set_label( 'ПВЗ' )->set_error_label( 'Пункт выдачи' )->set_section( 'order' )->to_array(),
+		] );
+		$out = ( new Checkout_Handler( $fields, 'carrier' ) )->inject( [ 'order' => [] ] );
+
+		$this->assertSame( 'ПВЗ', $out['order']['carrier_pvz']['label'], 'error_label must never influence the WC-facing label when a visual label is set.' );
+	}
+
+	public function test_inject_wc_label_stays_empty_when_neither_label_nor_error_label_set(): void {
+		$fields = Checkout_Fields::from_array( [
+			Field::create( 'carrier_pvz' )->set_type( 'hidden' )->set_section( 'order' )->to_array(),
+		] );
+		$out = ( new Checkout_Handler( $fields, 'carrier' ) )->inject( [ 'order' => [] ] );
+
+		$this->assertSame( '', $out['order']['carrier_pvz']['label'] );
+	}
+
 	/**
 	 * A condition-spec `required` (array) must NOT become WC's static `required => true`
 	 * — otherwise WooCommerce's own validation blocks a blank conditional field regardless

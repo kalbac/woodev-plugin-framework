@@ -1103,6 +1103,13 @@ function woodev_test_shipping_method_plugin_init(): void {
 						// get_checkout_handler() runs on every request (incl. REST) via the
 						// plugin's register(), before WC lazily loads the shipping-method class, so
 						// referencing that class constant here would fatal "class not found".
+						// No explicit `label` here (issue #134): the field's visible control is the
+						// pickup-point button/modal, not a native input, so a checkout-form label
+						// would render as a stray, unlabelled `<p class="form-row">` (WooCommerce
+						// renders a `<label>` for any non-empty `label` even on a hidden field — see
+						// `woocommerce_form_field()`'s `case 'hidden':`). The fixture's contract is
+						// shown correctly via `Pickup_Field::create()`'s default `error_label`
+						// («Пункт выдачи»), which drives the buyer-facing checkout messages.
 						\Woodev\Framework\Shipping\Checkout\Presets\Pickup_Field::create(
 							'carrier_pickup_point',
 							[ 'woodev_test_shipping' ]
