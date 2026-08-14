@@ -277,10 +277,106 @@ class CheckoutHandlerValidateTest extends TestCase {
 		);
 
 		$this->assertSame(
-			[ [ 'Укажите значение поля «Пункт выдачи».', 'error' ] ],
+			[ [ 'Вы не выбрали пункт выдачи заказов.', 'error' ] ],
 			$captured,
 			'exactly one notice — the backstop must not repeat the per-field loop\'s notice'
 		);
+	}
+
+	// -----------------------------------------------------------------------
+	// Part C2 — a button-driven field does not have a "value" to specify (#327)
+	// -----------------------------------------------------------------------
+
+	/**
+	 * Issue #327, found by the operator on the rig. The generic template says «Укажите
+	 * значение поля «X».», which describes an INPUT — and a pickup field's visible
+	 * control is a button, so the buyer goes looking for a field that is not on the page.
+	 * #299 had deliberately widened the verb («Заполните» → «Укажите») to make ONE
+	 * template cover both shapes; that compromise is what this replaces — the rest of the
+	 * sentence still describes a typed input.
+	 */
+	public function test_required_message_for_a_pickup_slot_field_names_the_choice_not_a_field(): void {
+		\Brain\Monkey\Functions\expect( 'wc_add_notice' )
+			->once()
+			->with( 'Вы не выбрали пункт выдачи заказов.', 'error' );
+
+		$fields = Checkout_Fields::from_array( [
+			Field::create( 'carrier_pickup_point' )
+				->set_required( true )
+				->set_error_label( 'Пункт выдачи' )
+				->mark_pickup_slot()
+				->to_array(),
+		] );
+
+		$this->assertFalse( ( new Checkout_Handler( $fields, 'carrier' ) )->validate( [ 'carrier_pickup_point' => '' ], [] ) );
+	}
+
+	/**
+	 * The generic template is correct for a field the customer really does type into, so
+	 * #327 must not touch it. Pins the branch, not just the new message.
+	 */
+	public function test_required_message_for_an_ordinary_field_keeps_the_field_template(): void {
+		\Brain\Monkey\Functions\expect( 'wc_add_notice' )
+			->once()
+			->with( 'Укажите значение поля «Город».', 'error' );
+
+		$fields = Checkout_Fields::from_array( [
+			Field::create( 'carrier_city' )->set_required( true )->set_error_label( 'Город' )->to_array(),
+		] );
+
+		$this->assertFalse( ( new Checkout_Handler( $fields, 'carrier' ) )->validate( [ 'carrier_city' => '' ], [] ) );
+	}
+
+	/**
+	 * The framework's default names OUR vocabulary («пункт выдачи»), and a carrier's may
+	 * differ — Почта РФ has отделения, not пункты выдачи. Same ownership split #323
+	 * settled for the trigger button: the framework owns the mechanism, the plugin owns
+	 * the words. `set_required_message()` replaces the whole sentence, because there is
+	 * no template a carrier-neutral framework can supply that fits every carrier's noun.
+	 */
+	public function test_required_message_can_be_replaced_wholesale_by_the_plugin(): void {
+		\Brain\Monkey\Functions\expect( 'wc_add_notice' )
+			->once()
+			->with( 'Вы не выбрали отделение Почты России.', 'error' );
+
+		$fields = Checkout_Fields::from_array( [
+			Field::create( 'carrier_pickup_point' )
+				->set_required( true )
+				->mark_pickup_slot()
+				->set_required_message( 'Вы не выбрали отделение Почты России.' )
+				->to_array(),
+		] );
+
+		$this->assertFalse( ( new Checkout_Handler( $fields, 'carrier' ) )->validate( [ 'carrier_pickup_point' => '' ], [] ) );
+	}
+
+	/**
+	 * The override is about the FIELD, not about one code path, so the independent
+	 * backstop honours it too — otherwise a plugin that renamed the message would still
+	 * see the framework's own noun whenever the two method-id lists diverge.
+	 */
+	public function test_backstop_honours_the_plugins_required_message(): void {
+		$captured = [];
+		\Brain\Monkey\Functions\when( 'wc_add_notice' )->alias(
+			static function ( $message, $type ) use ( &$captured ) {
+				$captured[] = [ $message, $type ];
+			}
+		);
+
+		$fields  = Checkout_Fields::from_array( [
+			Field::create( 'carrier_pickup_point' )
+				->mark_pickup_slot()
+				->set_required_message( 'Вы не выбрали отделение Почты России.' )
+				->to_array(),
+		] );
+		$handler = new Checkout_Handler( $fields, 'carrier' );
+		$handler->set_requires_pickup_methods( [ 'carrier_pickup' ] );
+
+		$this->assertFalse(
+			$handler->validate( [ 'carrier_pickup_point' => '' ], [ 'chosen_shipping_method' => 'carrier_pickup' ] )
+		);
+
+		$this->assertSame( [ [ 'Вы не выбрали отделение Почты России.', 'error' ] ], $captured );
 	}
 
 	/**
@@ -326,8 +422,11 @@ class CheckoutHandlerValidateTest extends TestCase {
 			$handler->validate( [ 'carrier_pickup_point' => '' ], [ 'chosen_shipping_method' => 'carrier_pickup_express' ] )
 		);
 
+		// #327: the backstop keeps its OWN wording, distinct from the per-field message —
+		// it fires precisely when the field's own condition did not match, so it is the
+		// one that can explain WHY a point is needed. Both dropped «значение поля».
 		$this->assertSame(
-			[ [ 'Для доставки в пункт выдачи выберите значение поля «Пункт выдачи».', 'error' ] ],
+			[ [ 'Для этого способа доставки нужно выбрать пункт выдачи заказов.', 'error' ] ],
 			$captured,
 			'the backstop must fire ALONE — no additional notice from the per-field loop'
 		);

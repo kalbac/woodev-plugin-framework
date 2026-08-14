@@ -415,6 +415,35 @@ final class Location_Controller_Session_Bridge_Probe extends Location_Controller
 }
 
 /**
+ * Issue #324: records WHEN the session bridge ran relative to the write, not merely
+ * that it ran. Holds its own reference to the fake service because
+ * {@see Location_Controller::$service} is private — the probe is the only thing that
+ * can see both sides of the ordering.
+ */
+final class Location_Controller_Select_Order_Probe extends Location_Controller {
+
+	/** @var string[] */
+	public array $order = [];
+
+	/** @var Location_Controller_Fake_Service */
+	private Location_Controller_Fake_Service $spy;
+
+	public function __construct( Location_Controller_Fake_Service $service ) {
+		parent::__construct( $service );
+
+		$this->spy = $service;
+	}
+
+	protected function is_rate_limited( string $key_prefix, int $max, int $window = 60 ): bool {
+		return false;
+	}
+
+	protected function bridge_wc_session(): void {
+		$this->order[] = 'bridge@' . count( $this->spy->set_calls ) . '-writes';
+	}
+}
+
+/**
  * @covers \Woodev\Framework\Shipping\Rest_Api\Location_Controller
  */
 final class LocationControllerTest extends TestCase {
@@ -1592,6 +1621,65 @@ final class LocationControllerTest extends TestCase {
 		$ctrl->handle_admin_suggest_request( $request );
 
 		$this->assertSame( 1, $ctrl->bridge_calls, 'the admin picker shares perform_suggest() with the public route, so it bridges too' );
+	}
+
+	/**
+	 * Issue #324, found by the operator on the rig as a GUEST. The bridge above was
+	 * wired to every route that READS a customer record and to none that WRITES one —
+	 * and `/select` is the only write. A guest's `Customer_Location_Store::set()` has
+	 * nowhere to put the record but `WC()->session`, which WooCommerce does not start
+	 * on a plain REST request (`class-woocommerce.php:315` excludes REST from
+	 * session/cart init unless it is a Store API route), so the write returned `false`,
+	 * `/select` honestly answered `persisted: false`, and `build_scope()` then silently
+	 * ignored `within` — the customer chose «Жуковский» and got address suggestions
+	 * from the whole country.
+	 *
+	 * The logged-in path hid it completely: `set()` writes user meta and returns `true`
+	 * without touching the session at all, and every rig pass on this layer had been
+	 * made as a logged-in admin.
+	 */
+	public function test_select_bridges_the_wc_session(): void {
+		$service = new Location_Controller_Fake_Service( true );
+		$ctrl    = new Location_Controller_Session_Bridge_Probe( $service );
+
+		$request = new WP_REST_Request(
+			[
+				'record' => [
+					'key'         => 'dadata:fias-1',
+					'provider_id' => 'dadata',
+					'level'       => Location_Record::LEVEL_SETTLEMENT,
+					'country'     => 'RU',
+				],
+			]
+		);
+		$ctrl->handle_select_request( $request );
+
+		$this->assertSame( 1, $ctrl->bridge_calls, 'mutant: dropping the bridge_wc_session() call from handle_select_request()' );
+	}
+
+	/**
+	 * ORDER is the whole point, not the call: bridging AFTER the write would leave the
+	 * write itself with no session to land in, which is exactly the state #324 reported.
+	 * The probe records how many writes had already happened when it ran.
+	 */
+	public function test_select_bridges_the_session_BEFORE_it_writes(): void {
+		$service = new Location_Controller_Fake_Service( true );
+		$ctrl    = new Location_Controller_Select_Order_Probe( $service );
+
+		$request = new WP_REST_Request(
+			[
+				'record' => [
+					'key'         => 'dadata:fias-1',
+					'provider_id' => 'dadata',
+					'level'       => Location_Record::LEVEL_SETTLEMENT,
+					'country'     => 'RU',
+				],
+			]
+		);
+		$ctrl->handle_select_request( $request );
+
+		$this->assertSame( [ 'bridge@0-writes' ], $ctrl->order );
+		$this->assertCount( 1, $service->set_calls, 'the write must still happen' );
 	}
 
 	public function test_list_bridges_the_wc_session(): void {

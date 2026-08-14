@@ -145,6 +145,37 @@ the function it calls. Mutation-testing the helper proves the helper is tested �
 what everyone already believed. When a fix is "route X through Y", the test that matters asserts on
 X's output, never on Y's.
 
+## s73 addendum — wired at every call site but one, and the docblock lists the ones it has
+
+Sixth occurrence (2026-08-14, issue #324), and the one that defeats both tells above.
+`Location_Controller::bridge_wc_session()` exists, is documented, is called, and has three
+dedicated tests asserting it is called — covering `/suggest`, `/admin-suggest` and `/list` across
+two call sites (`perform_suggest()` serves the first two). It was never called from the third
+call site it needed, `handle_select_request()` — the one route in the layer that **writes**, and therefore the only
+route where a missing guest session loses data rather than merely widening a search.
+
+Grepping finds callers. Mutating the call sites finds the call sites that exist. Neither asks the
+question that mattered.
+
+The tell is in the docblock, and it reads as thoroughness:
+
+> Called from every customer-facing handler that can reach `Location_Service::get_customer_record()`
+> (`perform_suggest()`, `handle_list_request()`)
+
+That sentence is **true** and complete against its own rule — and the rule is READ-shaped
+(`get_customer_record()`), so the write path was never a candidate. The enumeration in the
+parentheses then hardens the omission: a later reader checks the list against the code, finds
+them consistent, and moves on.
+
+**A seam described by the callers it happens to have cannot reveal the caller it lacks.**
+Describe it by the CONDITION it serves — here "wherever a guest's session must exist" — and the
+write path fails the test immediately. Same discipline as the s58 `cardOpened` case: enumerate
+every route into the state, then check each one.
+
+Cost: a guest's chosen locality was never persisted, so address suggestions silently searched the
+whole country instead of the chosen settlement, with `persisted: false` travelling all the way to
+the browser as an honest, unheeded signal.
+
 ## Related
 
 - [[dispatcher-files-unwired-in-includes]] — the PHP shape of the same thing: a class that exists,

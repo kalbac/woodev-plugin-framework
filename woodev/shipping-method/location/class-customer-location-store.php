@@ -170,7 +170,43 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Customer_Location
 
 			$this->persist( null, $record, $implicit, time() );
 
-			return true;
+			return self::session_will_survive( $session );
+		}
+
+		/**
+		 * Whether a write into `$session` will actually outlive this request.
+		 *
+		 * `WC_Session_Handler::save_data()` writes nothing unless
+		 * `$this->_dirty && $this->has_session()`, and for a GUEST `has_session()`
+		 * is the cart cookie's presence (`class-wc-session-handler.php:380`, `:555`)
+		 * — so a session OBJECT existing is not the same fact as a write surviving.
+		 *
+		 * The distinction only became reachable with issue #324: before it,
+		 * `/location/select` reached a guest with no session at all and honestly
+		 * answered `persisted: false`; once the route bridges the session, the
+		 * object always exists, and reporting on its mere existence would make
+		 * `persisted` a constant `true` — turning an honest signal into a lie and
+		 * making `location-cascade.js`'s «не удалось сохранить» notice unreachable
+		 * for the one case it was built for.
+		 *
+		 * Unknown is NOT false: the abstract `\WC_Session` declares no
+		 * `has_session()`, and a custom handler installed through
+		 * `woocommerce_session_handler` need not either. A store running such a
+		 * handler must not show every customer a failure notice for a write that
+		 * probably succeeded.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param object $session the session handler to inspect.
+		 *
+		 * @return bool
+		 */
+		private static function session_will_survive( $session ): bool {
+			if ( ! method_exists( $session, 'has_session' ) ) {
+				return true;
+			}
+
+			return (bool) $session->has_session();
 		}
 
 		/**

@@ -356,6 +356,60 @@ class LocationRouteTest extends TestCase {
 		);
 	}
 
+	/**
+	 * Issue #324. The ONE integration assertion that could have caught it, and the
+	 * reason none did: this suite always has a `WC()->session`, guest included.
+	 * WooCommerce loads session+cart from a single gate — `class-woocommerce.php:891`,
+	 * `if ( $this->is_request( 'frontend' ) ) { wc_load_cart(); }` — and
+	 * `is_request( 'frontend' )` excludes every REST request via
+	 * `is_rest_api_request()`, which reads `$_SERVER['REQUEST_URI']`. Under PHPUnit
+	 * that is not a REST URI, so WooCommerce boots as a frontend request and the
+	 * session exists no matter what the route does. The test right above this one
+	 * proves it, and asserting `persisted` alone proves nothing here: it is `true`
+	 * either way.
+	 *
+	 * So the missing CONTEXT has to be reproduced, not the missing code. Dropping
+	 * `WC()->session` immediately before the dispatch puts the route in exactly the
+	 * state a real guest REST request starts from; the route must then raise its own
+	 * session (as the Store API does with its own `wc_load_cart()` call) and the
+	 * write must land.
+	 *
+	 * Reverting `handle_select_request()`'s `bridge_wc_session()` call reddens this
+	 * test — gotcha `the-integration-suite-has-a-wc-session-a-rest-request-does-not`.
+	 *
+	 * @return void
+	 */
+	public function test_select_raises_its_own_session_when_the_request_has_none(): void {
+		$this->activate_and_boot_rest();
+		$this->make_location_layer_active();
+
+		wp_set_current_user( 0 );
+
+		$request = new WP_REST_Request( 'POST', '/woodev/v1/location/select' );
+		$request->set_param(
+			'record',
+			[
+				'key'         => 'dadata:fias-2',
+				'provider_id' => 'dadata',
+				'level'       => 'settlement',
+				'country'     => 'RU',
+			]
+		);
+		$request->add_header( 'X-WP-Nonce', wp_create_nonce( 'wp_rest' ) );
+
+		// The state a real guest REST request begins in.
+		WC()->session = null;
+
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertNotNull( WC()->session, 'the route must raise a session of its own' );
+		$this->assertNotNull(
+			WC()->session->get( self::CUSTOMER_LOCATION_SESSION_KEY ),
+			'and the record must actually land in it'
+		);
+	}
+
 	// -------------------------------------------------------------------------
 	// 5. Regression guard — a persisted guest record must not leak into the
 	//    next test (root cause of a CI-only PickupRouteTest failure).
