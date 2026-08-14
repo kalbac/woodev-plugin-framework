@@ -134,7 +134,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Field' ) ) :
 		 * field, rather than only the label substituted into the framework's own
 		 * template.
 		 *
-		 * Exists because a template cannot be made carrier-neutral in the one case
+		 * Applies to ANY field carrying it — the framework keeps one seam rather than
+		 * a second, pickup-only one — but the case it exists for is the button-driven
+		 * field. An ordinary typed input is usually better served by
+		 * {@see set_error_label()}, which keeps the framework's template and so stays
+		 * consistent with every other field on the checkout.
+		 *
+		 * It exists because a template cannot be made carrier-neutral in the one case
 		 * that needs it (#327). A field whose visible control is a BUTTON has no
 		 * value to specify, so the framework says «Вы не выбрали пункт выдачи
 		 * заказов.» instead of «Укажите значение поля «…».» — but «пункт выдачи» is

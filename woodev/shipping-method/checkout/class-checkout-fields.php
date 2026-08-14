@@ -46,6 +46,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Fields' 
 	 *                           visible control is sometimes not its own native input (e.g. a
 	 *                           hidden pickup-point field driven by a button), so `label` is
 	 *                           legitimately blank while messages still need a human name (#299, #134).
+	 *  - `required_message`   — the COMPLETE "you must supply this" error message, replacing the
+	 *                           framework's own template rather than only the label substituted
+	 *                           into it. `''` (the default) means "use the framework's". Exists
+	 *                           because a button-driven field's message cannot be built from a
+	 *                           carrier-neutral template — «пункт выдачи» is the framework's
+	 *                           vocabulary and Почта РФ has отделения (#327). Honoured by both
+	 *                           paths that can report a missing pickup point, see
+	 *                           {@see \Woodev\Framework\Shipping\Checkout\Checkout_Handler::validate()}.
 	 *  - `section`            — checkout section: `'order'` (default), `'billing'`, `'shipping'`.
 	 *  - `required`           — `bool` (coerced) OR an array condition-spec when the host plugin
 	 *                           passes a structured condition array; preserved verbatim so the
@@ -241,9 +249,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Fields' 
 		 *
 		 * @since 1.5.0
 		 * @since 2.0.2 Added `section`, `depends_on`, `source`, `source_kind`,
-		 *              `takeover_condition`, `location_level`, `error_label`;
-		 *              `required` array preserved verbatim; `is_pickup_slot` bool
-		 *              (default false).
+		 *              `takeover_condition`, `location_level`, `error_label`,
+		 *              `required_message`; `required` array preserved verbatim;
+		 *              `is_pickup_slot` bool (default false).
 		 *
 		 * @param array<string, mixed> $definition raw field definition
 		 *
@@ -252,6 +260,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Fields' 
 		 *     type: string,
 		 *     label: string,
 		 *     error_label: string,
+		 *     required_message: string,
 		 *     section: string,
 		 *     required: bool|array<string, mixed>,
 		 *     depends_on: string|null,

@@ -71,6 +71,84 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 	}
 
 	/**
+	 * A session that also answers `has_session()`, the way the real
+	 * `WC_Session_Handler` does — i.e. whether anything written to it will actually
+	 * survive the request (issue #324 review finding H1).
+	 *
+	 * The plain fake above deliberately does NOT declare the method: a custom handler
+	 * installed through `woocommerce_session_handler` need not either, and the store
+	 * must not report a failure it cannot actually observe.
+	 */
+	final class Customer_Location_Store_Fake_Durable_Session {
+
+		/** @var array<string, mixed> */
+		private array $store = [];
+
+		/** @var bool */
+		private bool $durable;
+
+		public function __construct( bool $durable ) {
+			$this->durable = $durable;
+		}
+
+		/**
+		 * @param string $key     Session key.
+		 * @param mixed  $default Fallback when the key is absent.
+		 *
+		 * @return mixed
+		 */
+		public function get( $key, $default = null ) {
+			return $this->store[ $key ] ?? $default;
+		}
+
+		/**
+		 * @param string $key   Session key.
+		 * @param mixed  $value Value to store.
+		 *
+		 * @return void
+		 */
+		public function set( $key, $value ): void {
+			$this->store[ $key ] = $value;
+		}
+
+		/**
+		 * Mirrors `WC_Session_Handler::has_session()` — for a guest this is the cart
+		 * cookie's presence, and `save_data()` writes nothing without it.
+		 *
+		 * @return bool
+		 */
+		public function has_session(): bool {
+			return $this->durable;
+		}
+
+		/**
+		 * @param string $key Session key.
+		 *
+		 * @return mixed
+		 */
+		public function raw( string $key ) {
+			return $this->store[ $key ] ?? null;
+		}
+	}
+
+	/**
+	 * {@see Customer_Location_Store_Probe}'s counterpart for the durable-session fake.
+	 */
+	final class Customer_Location_Store_Durable_Probe extends Customer_Location_Store {
+
+		/** @var Customer_Location_Store_Fake_Durable_Session */
+		private Customer_Location_Store_Fake_Durable_Session $fake_session;
+
+		public function __construct( Customer_Location_Store_Fake_Durable_Session $fake_session ) {
+			$this->fake_session = $fake_session;
+		}
+
+		protected function session() {
+			return $this->fake_session;
+		}
+	}
+
+	/**
 	 * Probe substituting a {@see Customer_Location_Store_Fake_Session} (or `null`,
 	 * simulating WooCommerce/the session being unavailable) for the real
 	 * `WC()->session` global — mirrors `Pickup_Selection_Probe`'s "override the
@@ -188,6 +266,58 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 
 			$this->assertFalse( $result );
 			$this->assertNull( $store->get() );
+		}
+
+		/**
+		 * Issue #324 review finding H1. `set()`'s boolean is not "did I put it in the
+		 * session object" — it is what `/location/select` reports to the browser as
+		 * `persisted`, and what `location-cascade.js` shows the customer a «не удалось
+		 * сохранить» notice for. `WC_Session_Handler::save_data()` writes nothing
+		 * unless `has_session()`, which for a GUEST means the cart cookie exists
+		 * (`class-wc-session-handler.php:380,555`). A session object that will discard
+		 * the write at shutdown must therefore report `false`, not `true`.
+		 *
+		 * This became reachable the moment #324 started bridging the session on
+		 * `/select`: before, a guest with no session got `null` here and honestly
+		 * reported `false`; after, the object always exists, so without this check the
+		 * flag would be a constant `true` and the whole notice feature dead code.
+		 */
+		public function test_guest_write_into_a_session_that_will_not_survive_reports_false(): void {
+			$this->stub_guest();
+
+			$session = new Customer_Location_Store_Fake_Durable_Session( false );
+			$store   = new Customer_Location_Store_Durable_Probe( $session );
+
+			$this->assertFalse( $store->set( $this->record() ) );
+
+			// Still WRITTEN: the cookie may yet be set later in the same request, and a
+			// write that costs nothing must not be withheld — only the REPORT is honest.
+			$this->assertNotNull( $session->raw( self::SESSION_KEY ) );
+		}
+
+		public function test_guest_write_into_a_durable_session_reports_true(): void {
+			$this->stub_guest();
+
+			$session = new Customer_Location_Store_Fake_Durable_Session( true );
+			$store   = new Customer_Location_Store_Durable_Probe( $session );
+
+			$this->assertTrue( $store->set( $this->record() ) );
+		}
+
+		/**
+		 * A session handler that does not declare `has_session()` at all — the abstract
+		 * `WC_Session` does not, and a custom handler installed through
+		 * `woocommerce_session_handler` need not — must not be reported as a failure.
+		 * Unknown is not false; crying wolf here would put a «не удалось сохранить»
+		 * notice in front of customers on every such store.
+		 */
+		public function test_guest_write_reports_true_when_durability_is_unknowable(): void {
+			$this->stub_guest();
+
+			$session = new Customer_Location_Store_Fake_Session();
+			$store   = new Customer_Location_Store_Probe( $session );
+
+			$this->assertTrue( $store->set( $this->record() ) );
 		}
 
 		// -------------------------------------------------------------------

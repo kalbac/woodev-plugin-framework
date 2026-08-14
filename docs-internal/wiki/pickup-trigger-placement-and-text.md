@@ -154,13 +154,22 @@ the customer to fill in a field sends them looking for an input that is not on t
 found on the rig). A plugin replaces the whole sentence, both paths at once:
 
 ```php
-Field::create( 'russian_post_office' )
-    ->mark_pickup_slot()
+// Pickup_Field::create() is the production shape: it marks the pickup slot AND supplies the
+// condition-spec `required` (the method-id list), which is what makes the field required only
+// when a pickup method is chosen. A bare `Field::create()->set_required( true )` would be
+// required unconditionally — and, with the blank label a button-driven field has, WooCommerce
+// would add its own «<strong></strong> — обязательное поле» on top.
+Pickup_Field::create( 'russian_post_office', [ 'russian_post_pickup' ] )
     ->set_required_message( __( 'Вы не выбрали отделение Почты России.', 'woodev-russian-post' ) );
 ```
 
 `set_error_label()` is not enough for this: substituting «Отделение» into a sentence built around
 the word «поле» still describes an input.
+
+The override is not gated on `is_pickup_slot` — it replaces the message for **any** field whose
+descriptor carries it. That is deliberate (one seam, not two), but the case it exists for is the
+button-driven one; an ordinary input is usually better served by `set_error_label()`, which keeps
+the framework's template and stays consistent with every other field on the checkout.
 
 ## Why placement is not the plugin's call
 

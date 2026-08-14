@@ -145,12 +145,13 @@ the function it calls. Mutation-testing the helper proves the helper is tested �
 what everyone already believed. When a fix is "route X through Y", the test that matters asserts on
 X's output, never on Y's.
 
-## s73 addendum — wired to N−1 of N call sites, and the docblock lists the N−1
+## s73 addendum — wired at every call site but one, and the docblock lists the ones it has
 
 Sixth occurrence (2026-08-14, issue #324), and the one that defeats both tells above.
 `Location_Controller::bridge_wc_session()` exists, is documented, is called, and has three
-dedicated tests asserting it is called — from `/suggest`, `/admin-suggest` and `/list`. It was
-never called from `/select`, the one route in the layer that **writes**, and therefore the only
+dedicated tests asserting it is called — covering `/suggest`, `/admin-suggest` and `/list` across
+two call sites (`perform_suggest()` serves the first two). It was never called from the third
+call site it needed, `handle_select_request()` — the one route in the layer that **writes**, and therefore the only
 route where a missing guest session loses data rather than merely widening a search.
 
 Grepping finds callers. Mutating the call sites finds the call sites that exist. Neither asks the
