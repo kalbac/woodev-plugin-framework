@@ -1133,11 +1133,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * a `Pickup_Field` preset's condition-spec and `set_requires_pickup_methods()` are normally
 		 * driven by the same method-id list, so both mechanisms catch the same blank field on the
 		 * same submit). It still fires alone whenever the per-field loop did NOT catch the field —
-		 * e.g. a condition-spec `in` comparison is a strict string match against `chosen_shipping_method`
-		 * and does not tolerate the `method_id:instance_id` shape WooCommerce sends for a multi-instance
-		 * method (unlike {@see chosen_method_matches()}, which the backstop itself uses), or the
-		 * descriptor's `required` spec is missing/malformed — that divergence is the backstop's actual
-		 * reason to exist, so this guard never suppresses it as a class, only the field-id-exact repeat.
+		 * e.g. `set_requires_pickup_methods()`'s id list and the descriptor's own condition-spec
+		 * `value` list are two independently host-supplied lists that nothing keeps in sync: a
+		 * method id can be present in `requires_pickup_methods` while absent from the condition-spec,
+		 * so the per-field loop's strict `in` comparison never trips that field's `required` gate even
+		 * though this backstop's own {@see chosen_method_matches()} check matches — that divergence is
+		 * the backstop's actual reason to exist, so this guard never suppresses it as a class, only the
+		 * field-id-exact repeat.
 		 *
 		 * This guard only dedupes OUR OWN two notices (the per-field loop and the backstop). A field
 		 * declared with a plain-bool `required` (no condition-spec, no pickup backstop involved) still

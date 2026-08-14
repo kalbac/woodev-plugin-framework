@@ -253,9 +253,18 @@ class CheckoutHandlerValidateTest extends TestCase {
 	 * backstop's own "Для доставки..." text must NOT appear a second time.
 	 */
 	public function test_exact_match_dedupes_required_and_backstop_into_one_notice(): void {
-		\Brain\Monkey\Functions\expect( 'wc_add_notice' )
-			->once()
-			->with( 'Укажите значение поля «Пункт выдачи».', 'error' );
+		// A plain `->once()->with()` expectation only asserts that ONE call matched
+		// those exact arguments — it does NOT reject an ADDITIONAL call with different
+		// arguments (e.g. the backstop's own notice firing on top of the per-field
+		// loop's). Capture every call instead so the dedup guard is actually exercised:
+		// mutating away the `blank_required_ids` skip must redden this test with a
+		// second, different notice.
+		$captured = [];
+		\Brain\Monkey\Functions\when( 'wc_add_notice' )->alias(
+			static function ( $message, $type ) use ( &$captured ) {
+				$captured[] = [ $message, $type ];
+			}
+		);
 
 		$fields  = Checkout_Fields::from_array( [
 			\Woodev\Framework\Shipping\Checkout\Presets\Pickup_Field::create( 'carrier_pickup_point', [ 'carrier_pickup' ] )->to_array(),
@@ -265,6 +274,12 @@ class CheckoutHandlerValidateTest extends TestCase {
 
 		$this->assertFalse(
 			$handler->validate( [ 'carrier_pickup_point' => '' ], [ 'chosen_shipping_method' => 'carrier_pickup' ] )
+		);
+
+		$this->assertSame(
+			[ [ 'Укажите значение поля «Пункт выдачи».', 'error' ] ],
+			$captured,
+			'exactly one notice — the backstop must not repeat the per-field loop\'s notice'
 		);
 	}
 
@@ -286,9 +301,15 @@ class CheckoutHandlerValidateTest extends TestCase {
 	 * that shape only ever reaches `validate()` when a test calls it directly.
 	 */
 	public function test_backstop_fires_alone_when_requires_pickup_methods_diverges_from_condition_spec(): void {
-		\Brain\Monkey\Functions\expect( 'wc_add_notice' )
-			->once()
-			->with( 'Для доставки в пункт выдачи выберите значение поля «Пункт выдачи».', 'error' );
+		// Same weakness as the dedup test above: `->once()->with()` cannot detect an
+		// EXTRA call with different arguments, so "fires ALONE" needs every call
+		// captured and the full list asserted, not just one matching call confirmed.
+		$captured = [];
+		\Brain\Monkey\Functions\when( 'wc_add_notice' )->alias(
+			static function ( $message, $type ) use ( &$captured ) {
+				$captured[] = [ $message, $type ];
+			}
+		);
 
 		$fields  = Checkout_Fields::from_array( [
 			// Condition-spec only lists 'carrier_pickup' — the per-field loop's strict
@@ -303,6 +324,12 @@ class CheckoutHandlerValidateTest extends TestCase {
 
 		$this->assertFalse(
 			$handler->validate( [ 'carrier_pickup_point' => '' ], [ 'chosen_shipping_method' => 'carrier_pickup_express' ] )
+		);
+
+		$this->assertSame(
+			[ [ 'Для доставки в пункт выдачи выберите значение поля «Пункт выдачи».', 'error' ] ],
+			$captured,
+			'the backstop must fire ALONE — no additional notice from the per-field loop'
 		);
 	}
 
