@@ -1,6 +1,17 @@
 # Gotchas — Woodev Plugin Framework
-> **145 atomic gotchas, 25 namespaces (31 index sections)** — update when adding/removing.
-> Last updated: 2026-08-14 (session 73, issue #323: **+1 file, existing namespace
+> **146 atomic gotchas, 25 namespaces (31 index sections)** — update when adding/removing.
+> Last updated: 2026-08-14 (session 73, issue #324: **+1 file, existing namespace
+> `[testing/integration]`, +1 addendum** — `the-integration-suite-has-a-wc-session-a-rest-request-does-not`:
+> WooCommerce skips session/cart init for REST (`class-woocommerce.php:315`), and it decides by
+> reading `$_SERVER['REQUEST_URI']` — which under PHPUnit is not a REST URI, so the integration
+> suite ALWAYS has a `WC()->session`, guest included. A guest-session route therefore passes its
+> integration test whether or not it works in production; `LocationRouteTest`'s own `/select` test
+> had been green as a guest since the day it was written while the real request answered
+> `persisted: false`. Also: `built-on-both-sides-with-no-caller-in-the-middle` gains its **sixth
+> occurrence and third shape** — the seam was wired to three of the four routes that need it, and
+> its docblock ENUMERATED the three, so the list read as complete; the rule it stated was
+> READ-shaped, so the WRITE route was never a candidate.)
+> Prior: 2026-08-14 (session 73, issue #323: **+1 file, existing namespace
 > `[shipping/pickup]`** — `two-hook-registrations-can-mean-two-options-not-two-outputs`: the
 > Yandex reference registers its pickup button on TWO actions, and #274 item 3 read that as
 > "the button belongs in two places". Each handler is GUARDED on the store's `widget_position`
@@ -384,6 +395,7 @@
 
 ### [testing/*] — Testing patterns
 - [testing/unit] **`Functions\expect( 'f' )->once()->with( X )` does NOT reject a second call with different arguments.** `->with()` is a filter, not a census: a further call matching a different expectation set fails nothing. PR #316's `test_exact_match_dedupes_required_and_backstop_into_one_notice` stayed green with the dedup guard mutated to `if ( true )` — the feature removed, the whole file green — while the PR's mutation report listed a different mutation (the message wording) that reddened the same test for an unrelated reason and read as coverage. **The tell: a test whose NAME carries a count or an exclusivity claim ("into one notice", "fires alone", "only", "exactly") cannot be implemented with `->with()` alone** — when the assertion is about what did NOT happen, `->with()` is the wrong tool by construction. Capture the calls with `Functions\when( … )->alias( … )` and assert the whole list, or add a bare unfiltered `->once()` alongside → [gotchas/brain-monkey-expect-with-does-not-reject-extra-calls.md](gotchas/brain-monkey-expect-with-does-not-reject-extra-calls.md) (s72)
+- [testing/integration] **The integration suite always has a `WC()->session`; a real REST request does not.** WooCommerce skips session/cart init for REST (`class-woocommerce.php:315`) and decides via `$_SERVER['REQUEST_URI']` — under PHPUnit that is not a REST URI, so WooCommerce boots normally and a GUEST has a session too. A route that writes to `WC()->session` therefore passes its integration test whether or not it works in production: `LocationRouteTest`'s `/select` test sets `wp_set_current_user(0)` and has been green since it was written, while the same request from a browser answered `persisted: false` (#324). The proof the suite really has a session is in that same file — section 5 exists solely to clean up the guest record that write leaves for the next test class. Unit tests never have `WC()` at all, and a rig pass made as a logged-in admin exercises a different branch (`set()` writes user meta and returns `true` without touching the session), so all three gates were blind at once. Pin such behaviour at a unit seam where the condition is reproducible, and check it end to end **as the role that has the bug** → [gotchas/the-integration-suite-has-a-wc-session-a-rest-request-does-not.md](gotchas/the-integration-suite-has-a-wc-session-a-rest-request-does-not.md) (s73)
 - [testing/integration] Integration fixtures need the framework mapped at the bootstrap's load path (`woodev-framework/tests/_fixtures/*/woodev` in `.wp-env.json`), not just the `wp-content/plugins/*` mount — the v2 resolver requires each fixture's bundled `woodev/class-plugin.php` → [gotchas/wpenv-resolver-fixture-mapping.md](gotchas/wpenv-resolver-fixture-mapping.md) (2026-06-08)
 - [testing/unit] Brain Monkey `expect`/`when` DEFINES a function and PHP can't un-define it, so it leaks (`function_exists` true) into later tests in the same process — order-dependent "passes locally / fails on CI"; isolate "function-absent" tests with `@runInSeparateProcess` → [gotchas/brain-monkey-function-pollution.md](gotchas/brain-monkey-function-pollution.md) (2026-06-08)
 - [testing/unit] Reflection `setAccessible()` is REQUIRED on PHP < 8.1 and DEPRECATED on 8.5 — guard private getValue/invoke with `if ( PHP_VERSION_ID < 80100 )` to satisfy both ends of the supported range → [gotchas/reflection-setaccessible-version-guard.md](gotchas/reflection-setaccessible-version-guard.md) (2026-06-08)

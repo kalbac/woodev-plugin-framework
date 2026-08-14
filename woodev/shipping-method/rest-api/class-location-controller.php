@@ -501,12 +501,20 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 		 * bridge is what lets the persist actually succeed so the NEXT request
 		 * from the same guest gets it for free too.
 		 *
-		 * Called from every customer-facing handler that can reach
-		 * {@see Location_Service::get_customer_record()}
-		 * ({@see self::perform_suggest()}, {@see self::handle_list_request()}) —
-		 * never from the two admin-only `/default-locality/*` routes, which run
-		 * for a logged-in admin whose {@see \Woodev\Framework\Shipping\Location\Customer_Location_Store}
+		 * Called from every customer-facing handler that touches the customer
+		 * record — the two that READ it ({@see self::perform_suggest()},
+		 * {@see self::handle_list_request()}) and the one that WRITES it
+		 * ({@see self::handle_select_request()}). Never from the two admin-only
+		 * `/default-locality/*` routes, which run for a logged-in admin whose
+		 * {@see \Woodev\Framework\Shipping\Location\Customer_Location_Store}
 		 * reads/writes already go through user meta regardless of session state.
+		 *
+		 * The write was originally left out (issue #324), because this list was
+		 * first written as "handlers that can reach `get_customer_record()`" — a
+		 * READ-shaped rule. It cost a guest their locality scope entirely. When a
+		 * seam is described by the callers it happens to have, the caller it does
+		 * not have yet is invisible: describe it by the CONDITION instead — this
+		 * one is needed wherever a guest's session must exist.
 		 *
 		 * A no-op when a session is already loaded, or when `wc_load_cart()`
 		 * itself does not exist (WooCommerce < 3.6, or WooCommerce absent, e.g.
@@ -889,6 +897,27 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 					[ 'status' => 404 ]
 				);
 			}
+
+			/*
+			 * Issue #324. Before the write, never after — the write itself is what
+			 * needs the session to exist.
+			 *
+			 * This route is the only WRITE in the layer, and it was the one route the
+			 * bridge was not wired to: see bridge_wc_session()'s own docblock, whose
+			 * list enumerates the handlers that READ a customer record. For a GUEST
+			 * that omission is total, not partial — Customer_Location_Store::set()
+			 * has nowhere to put the record but `WC()->session`, WooCommerce does not
+			 * start one on a plain REST request, so the write returned `false`, this
+			 * route honestly answered `persisted: false`, and build_scope() then
+			 * silently fell back to a country-wide scope on every later `/suggest`.
+			 * The customer picked a settlement and got address suggestions from the
+			 * whole country, with nothing anywhere saying why.
+			 *
+			 * Invisible to a logged-in tester by construction: for a logged-in user
+			 * `set()` writes user meta and returns `true` without consulting the
+			 * session at all.
+			 */
+			$this->bridge_wc_session();
 
 			$raw = $request->get_param( 'record' );
 
