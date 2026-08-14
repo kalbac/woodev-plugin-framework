@@ -160,16 +160,36 @@ the project.
 | Operator approving a permission prompt in the interactive Codex app | identical error; the app's grant does not reach the CLI path |
 | `--dangerously-bypass-approvals-and-sandbox` | denied by the Claude Code classifier, and the plugin hardcodes `sandbox: "read-only"` in `codex-companion.mjs`, so a CLI flag never reaches the runtime anyway |
 
-### The fix (needs an elevated terminal — operator action)
+### ⚠️ Do NOT try to "fix" this by installing PowerShell — the working mode needs no shell
 
-```powershell
-winget install --id Microsoft.PowerShell --source winget
-```
+The obvious repair — give the sandbox accounts a reachable `pwsh` by installing PowerShell 7 as an
+ordinary MSI — was attempted in s72 and is a **dead end that costs the operator's time**:
 
-That installs PowerShell 7 as an ordinary MSI at `C:\Program Files\PowerShell\7\pwsh.exe`, a path
-every local account can execute. Verify with `(Get-Command pwsh).Source` — it must NOT point into
-`WindowsApps`. If it still does, remove the Store build or put the machine path ahead of the user
-path. **Not yet verified as of s72** — it requires admin rights the agent does not have.
+- `winget install --id Microsoft.PowerShell` → *"Found an existing package already installed… No
+  available upgrade found."* `winget list` reports the package with source **winget**, yet
+  `C:\Program Files\PowerShell\7\pwsh.exe` does not exist and `Get-AppxPackage` shows the installed
+  artifact is the MSIX (`Microsoft.PowerShell_7.6.4.0_x64__8wekyb3d8bbwe`). The winget manifest
+  itself ships the MSIX.
+- `winget install --id Microsoft.PowerShell --installer-type msi --force` → **"No applicable
+  installer found"**. There is no MSI in that manifest version.
+- A standalone MSI does exist on GitHub (`PowerShell-7.6.4-win-x64.msi`), but installing it was
+  never necessary — see below.
+
+**The operator was right to push back on this whole line of repair.** This gotcha is dated
+**s10 (2026-06-12)**: the shell has never worked on this box. Nothing regressed. Every session that
+reported Codex "working flawlessly" was feeding it an INLINE BUNDLE with an explicit *"do not run
+any shell command"* — the recipe at the top of this file. The s72 rabbit hole happened because the
+agent started driving Codex in a mode that requires tool use, then read a two-month-old breakage as
+a new one.
+
+**So: change nothing on the machine. Use the two modes that work.**
+
+1. **Inline bundle** (steps 1–3 at the top of this file) — the historical path, unchanged.
+2. **GitHub-backed review** (below) — new in s72, needs neither a shell nor a bundle.
+
+Sandbox mode is NOT the discriminator, measured across four combinations: `read-only` (no `--write`),
+`workspace-write` (`--write`, the skill's own default), `[windows] sandbox = "elevated"` and
+`"unelevated"` all fail identically with `CreateProcessAsUserW failed: 5`.
 
 ### Sub-lesson: a config change is not tested until the shared runtime is restarted
 
