@@ -2193,18 +2193,48 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 * @return int
 		 */
 		public function current_cart_weight_grams(): int {
-			$cart = $this->wc_cart();
+			$this->bridge_wc_context();
 
-			if ( ! $cart && $this->wc_load_cart_available() ) {
-				$this->load_wc_cart();
-				$cart = $this->wc_cart();
-			}
+			$cart = $this->wc_cart();
 
 			if ( ! $cart ) {
 				return 0;
 			}
 
 			return Constraint_Checker::to_grams( $cart->get_cart_contents_weight() );
+		}
+
+		/**
+		 * Raises WooCommerce's session and cart when this request has neither — the same
+		 * `wc_load_cart()` bridge WooCommerce's own Store API makes
+		 * ({@see \Automattic\WooCommerce\StoreApi\Utilities\CartController}), for the same
+		 * reason: `WooCommerce::init()` loads them only for a FRONT-END request
+		 * (`class-woocommerce.php:891`, gated on `is_request( 'frontend' )`, which excludes
+		 * every REST request at `:604`), so a route serving the picker starts with neither.
+		 *
+		 * Extracted from {@see self::current_cart_weight_grams()} in issue #324 because a
+		 * SECOND caller needs it and needs it EARLIER: {@see self::current_location_record()}
+		 * reads a guest's record out of `WC()->session`, and
+		 * {@see \Woodev\Framework\Shipping\Rest_Api\Pickup_Controller::get_points_data()}
+		 * asks for the location context two lines BEFORE it asks for the cart weight. The
+		 * weight call was raising the session for the record path by accident, and too late
+		 * to help it.
+		 *
+		 * Guarding on the CART rather than the session is deliberate and safe: `wc_load_cart()`
+		 * raises both together, so a cart present means the bridge has already run, and a cart
+		 * absent in a REST request means no session either. Idempotent, and a no-op on a
+		 * front-end request where WooCommerce already did this at `init`.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		protected function bridge_wc_context(): void {
+			if ( $this->wc_cart() || ! $this->wc_load_cart_available() ) {
+				return;
+			}
+
+			$this->load_wc_cart();
 		}
 
 		/**
@@ -2275,6 +2305,21 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 			if ( null === $this->plugin ) {
 				return null;
 			}
+
+			/*
+			 * Issue #324. A GUEST's record lives only in `WC()->session`, and the points
+			 * route runs as a plain REST request, where WooCommerce starts no session — so
+			 * without this the read finds nothing, the record is never attached to the
+			 * Point_Query, and the source falls back to matching the raw locality key the
+			 * browser sends, which matches nothing. Every guest saw «в выбранном населённом
+			 * пункте нет пунктов выдачи» over a live, non-empty carrier response.
+			 *
+			 * It belongs HERE, at the read that needs a session, rather than at whichever
+			 * routes happen to reach it today — that is the mistake #324 itself was: the
+			 * sibling bridge on Location_Controller was documented by its callers, and the
+			 * one caller it lacked stayed invisible.
+			 */
+			$this->bridge_wc_context();
 
 			$current = $this->plugin->get_location_service()->get_customer_record();
 

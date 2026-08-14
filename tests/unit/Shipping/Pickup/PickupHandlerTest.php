@@ -158,6 +158,41 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 	}
 
 	/**
+	 * A store whose session only becomes readable once something RAISES it — exactly what a
+	 * guest's `WC()->session` does on a REST request, where WooCommerce starts no session of
+	 * its own (`class-woocommerce.php:891` gates session+cart on `is_request( 'frontend' )`,
+	 * which excludes every REST request).
+	 *
+	 * The record is already in the store; the request simply has not attached to it yet. That
+	 * is the state issue #324's rig pass exposed on the points route.
+	 */
+	final class Pickup_Handler_Deferred_Session_Store extends Customer_Location_Store {
+
+		private Pickup_Handler_Location_Fake_Session $pending;
+
+		/** @var Pickup_Handler_Location_Fake_Session|null */
+		private ?Pickup_Handler_Location_Fake_Session $raised = null;
+
+		public function __construct( Pickup_Handler_Location_Fake_Session $pending ) {
+			$this->pending = $pending;
+		}
+
+		/** Makes the session readable, as `wc_load_cart()` does. */
+		public function raise(): void {
+			$this->raised = $this->pending;
+		}
+
+		/** Puts the store back to "this request has no session", the REST starting state. */
+		public function hide(): void {
+			$this->raised = null;
+		}
+
+		protected function session() {
+			return $this->raised;
+		}
+	}
+
+	/**
 	 * A {@see Location_Service} whose {@see Location_Service::is_active()} answers a FIXED
 	 * value the test controls directly (review finding F1, rig-verified) — bypassing the
 	 * registry/active-provider/`is_configured()` machinery `LocationServiceTest.php`
@@ -417,6 +452,46 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 	 * directory. The base {@see Pickup_Handler} (no override) is used for the opposite
 	 * case, since the real assets genuinely do not exist on disk yet.
 	 */
+	/**
+	 * Issue #324's rig fallout: a handler whose WooCommerce context is absent until
+	 * `load_wc_cart()` runs, wired to a {@see Pickup_Handler_Deferred_Session_Store} that
+	 * only answers once the same call has happened. Reproduces the points route's own
+	 * starting state — a guest REST request with no session — so a test can observe whether
+	 * the handler raises it BEFORE reading the customer's location record.
+	 */
+	final class Pickup_Handler_Location_Bridge_Probe extends Pickup_Handler {
+
+		/** @var int */
+		public int $load_wc_cart_calls = 0;
+
+		/** @var object|null */
+		private $cart = null;
+
+		/** @var Pickup_Handler_Deferred_Session_Store */
+		private Pickup_Handler_Deferred_Session_Store $store;
+
+		public function bind_store( Pickup_Handler_Deferred_Session_Store $store ): void {
+			$this->store = $store;
+		}
+
+		protected function wc_cart() {
+			return $this->cart;
+		}
+
+		protected function wc_load_cart_available(): bool {
+			return true;
+		}
+
+		protected function load_wc_cart(): void {
+			++$this->load_wc_cart_calls;
+
+			// wc_load_cart() raises BOTH, and that is the point: the session is what the
+			// location record needs, the cart is merely what this class already asked for.
+			$this->cart = new \stdClass();
+			$this->store->raise();
+		}
+	}
+
 	final class Pickup_Handler_Assets_Built_Probe extends Pickup_Handler {
 
 		protected static function asset_exists( string $path ): bool {
@@ -1387,6 +1462,78 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			$handler = $this->make_handler( [ 'plugin' => $this->location_plugin( null ) ] );
 
 			$this->assertNull( $handler->location_context() );
+		}
+
+		/**
+		 * Issue #324's rig fallout, and the defect this handler shares with the route that
+		 * caused it: `Pickup_Controller::get_points_data()` reads the customer's location
+		 * record (`attach_location_context()`) BEFORE anything raises a WooCommerce session,
+		 * and the only `wc_load_cart()` on that path — {@see Pickup_Handler::current_cart_weight_grams()}
+		 * — runs two lines LATER. For a guest, whose record lives only in `WC()->session`,
+		 * the record was therefore never attached and the live source fell back to matching
+		 * the raw locality KEY the browser sends, which matches nothing: every guest saw
+		 * «В выбранном населённом пункте нет пунктов выдачи» over 812 live points.
+		 *
+		 * It only became visible once #324 gave a guest a persisted record at all — before
+		 * that, `location_config_block()` emitted an empty key and the browser fell back to
+		 * reading the city from the DOM, which the source did match. The hole predates the
+		 * fix; the fix stopped hiding it.
+		 *
+		 * Measured on the rig as a real guest, same session cookie on both requests:
+		 * `?locality=dadata:0c5b2444-…` → 0 points, `?locality=Moscow` → 812.
+		 */
+		public function test_location_context_raises_the_wc_session_before_reading_the_record(): void {
+			$record  = $this->location_record( 'dadata:fias-1' );
+			$session = new Pickup_Handler_Location_Fake_Session();
+			$store   = new Pickup_Handler_Deferred_Session_Store( $session );
+
+			// The record is already stored — a previous front-end request put it there.
+			$store->raise();
+			$store->set( $record );
+			// …and this request starts the way a guest REST request does: not attached to it.
+			$store->hide();
+
+			$plugin = ( new \ReflectionClass( Pickup_Handler_Location_Fixture_Plugin::class ) )->newInstanceWithoutConstructor();
+
+			// An adapter is required, not decoration: with none wired, `resolve_for()` throws
+			// and `location_context()` legitimately answers null — which would make this test
+			// pass for the wrong reason before the fix and fail for the wrong reason after.
+			$plugin->fake_adapter          = new class implements Location_Adapter {
+				public function resolve( Location_Record $record ) {
+					return 'carrier-city-77';
+				}
+			};
+			$plugin->fake_location_service = new Pickup_Handler_Location_Service_Active_Probe(
+				Location_Provider_Registry::instance(),
+				$store,
+				true
+			);
+
+			$handler = new Pickup_Handler_Location_Bridge_Probe(
+				'p',
+				'carrier_pickup_point',
+				$this->source_returning( null ),
+				$this->yandex_provider(),
+				$this->default_location(),
+				null,
+				null,
+				true,
+				[],
+				'#06aedd',
+				'',
+				true,
+				false,
+				false,
+				null,
+				$plugin
+			);
+			$handler->bind_store( $store );
+
+			$context = $handler->location_context();
+
+			$this->assertSame( 1, $handler->load_wc_cart_calls, 'the session must be raised, exactly once' );
+			$this->assertNotNull( $context, 'the record is in the store; it must be readable' );
+			$this->assertSame( 'dadata:fias-1', $context['record']->key() );
 		}
 
 		public function test_location_context_carries_the_record_and_resolved_identity(): void {
