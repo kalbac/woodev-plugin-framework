@@ -632,7 +632,18 @@
 				$target = $radios
 			}
 
-			return $target.length ? $target.closest( 'li' ) : $()
+			// `.first()` обязателен, а не косметика (#323). При мультипакетной
+			// корзине WooCommerce включает `templates/cart/cart-shipping.php` ОДИН
+			// РАЗ НА ПАКЕТ, то есть `<ul id="shipping_method">` на странице
+			// несколько и отмеченный радио — в каждом. Без `.first()` набор якорей
+			// больше одного, а `$anchor.append( $slot )` в jQuery КЛОНИРУЕТ узел на
+			// каждую цель кроме последней: покупатель получает две одинаковые
+			// кнопки и два узла с одним id, и {@see pruneSlots} их не различит —
+			// у обоих место из `keep`. Ветка `'review'` ниже сторожится `.first()`
+			// с самого начала. Первый отмеченный — ровно тот, что читает
+			// {@see selectedShippingMethod}, так что слот встаёт у того тарифа,
+			// который фреймворк и считает выбранным.
+			return $target.length ? $target.first().closest( 'li' ) : $()
 		}
 
 		var $anchor = $( '#shipping_method' ).first()
@@ -653,13 +664,18 @@
 	 * триггеру на каждый смонтированный слот (`pickup-mount.js`'s `mountOne()`).
 	 * Паттерн размещения повторяет `placeControl` из checkout.js.
 	 *
+	 * Возвращает `false`, когда якоря нет в DOM, — это НЕ ошибка, но вызывающий
+	 * ({@see placeSlots}) обязан знать, чтобы поле не осталось совсем без триггера
+	 * (#323): фолбэк на `'review'` живёт там, а не здесь, потому что решение
+	 * принимается по ИТОГУ всего списка мест, а не по одному месту из него.
+	 *
 	 * @param {Object} entry     Запись { store, config }.
 	 * @param {string} fieldId   Id pickup-поля (is_pickup_slot).
 	 * @param {string} placement `'review'` или `'rate'` — см. {@see resolvePlacementAnchor}.
-	 * @returns {void}
+	 * @returns {boolean} Смонтирован ли якорь.
 	 */
 	function placeSlot( entry, fieldId, placement ) {
-		var id    = 'woodev-pickup-slot-' + fieldId + '-' + placement
+		var id    = slotId( fieldId, placement )
 		var $slot = $( '#' + id )
 
 		if( ! $slot.length ) {
@@ -672,8 +688,9 @@
 		var $anchor = resolvePlacementAnchor( placement )
 
 		if( ! $anchor.length ) {
-			// Цель размещения отсутствует — пропускаем без ошибки.
-			return
+			// Цель размещения отсутствует — пропускаем без ошибки, но докладываем
+			// вызывающему (#323).
+			return false
 		}
 
 		if( placement === 'rate' ) {
@@ -689,6 +706,89 @@
 		} else {
 			$slot.hide()
 		}
+
+		return true
+	}
+
+	/**
+	 * Id слота, создаваемого фреймворком. Вынесен, потому что по нему же
+	 * {@see pruneSlots} отличает СВОЙ узел от чужого.
+	 *
+	 * @param {string} fieldId   Id pickup-поля.
+	 * @param {string} placement `'review'` или `'rate'`.
+	 * @returns {string}
+	 */
+	function slotId( fieldId, placement ) {
+		return 'woodev-pickup-slot-' + fieldId + '-' + placement
+	}
+
+	/**
+	 * Снимает якоря поля, которых нет в НАМЕРЕННОМ наборе мест (#323).
+	 *
+	 * {@see placeSlots} до #323 умела только ДОБАВЛЯТЬ, и этого хватало, пока набор
+	 * мест не мог меняться от прохода к проходу. С обязательным фолбэком он может:
+	 * страница с двумя тарифами, где ни один ещё не выбран, не даёт разрезолвить
+	 * якорь `'rate'` — фолбэк ставит `'review'`, — а как только покупатель выбирает
+	 * метод, `'rate'` резолвится, и БЕЗ этой уборки на чекауте оказываются оба
+	 * слота сразу. То есть ровно та двойная кнопка, ради которой заведён #323,
+	 * вернулась бы через его же фикс.
+	 *
+	 * Снимаются ТОЛЬКО узлы, созданные самим фреймворком, — те, чей id собран
+	 * {@see slotId}. Плагин, чей фильтр `woodev_pickup_slot_placements` вернул
+	 * явный `[]` (#308 п.2), рисует триггер сам и штатно кладёт на страницу
+	 * СОБСТВЕННЫЙ `[data-woodev-pickup-slot]`; уборка «всё, что подходит по
+	 * атрибуту» превратила бы контракт «фреймворк ничего не добавляет» в
+	 * «фреймворк сносит твой якорь на каждом проходе».
+	 *
+	 * Содержимое переезжает, а не гибнет. К моменту смены места в слоте уже лежит
+	 * триггер, а у покупателя с выбранным пунктом — ещё и блок адреса
+	 * (`pickup-mount.js`), а сам `pickup-mount.js` перемонтируется только по
+	 * `updated_checkout`, тогда как {@see placeSlots} бегает ещё и по смене метода
+	 * доставки. Простое удаление оставило бы покупателя без кнопки до ответа
+	 * ajax'а WooCommerce — а если ответ не придёт, то и совсем.
+	 *
+	 * Селектор по `fieldId` не собирается строкой намеренно: id поля приходит из
+	 * конфига и в CSS-селекторе его пришлось бы экранировать по другим правилам,
+	 * чем в HTML-атрибуте ({@see escapeHtml} для селектора не годится). Сравнение
+	 * идёт по значению атрибута.
+	 *
+	 * @param {string}   fieldId Id pickup-поля.
+	 * @param {string[]} keep    Места, которые сейчас смонтированы и должны остаться.
+	 * @returns {void}
+	 */
+	function pruneSlots( fieldId, keep ) {
+		var $survivor = null
+		var stale     = []
+
+		$( '[data-woodev-pickup-slot]' ).each( function() {
+			var $node     = $( this )
+			var placement = $node.attr( 'data-woodev-pickup-placement' )
+
+			if( $node.attr( 'data-woodev-pickup-slot' ) !== fieldId ) {
+				return
+			}
+
+			// Чужой узел — не наше дело.
+			if( $node.attr( 'id' ) !== slotId( fieldId, placement ) ) {
+				return
+			}
+
+			if( keep.indexOf( placement ) === -1 ) {
+				stale.push( $node )
+			} else if( ! $survivor ) {
+				$survivor = $node
+			}
+		} )
+
+		stale.forEach( function( $node ) {
+			// Только в ПУСТОЙ слот: если в уцелевшем уже что-то смонтировано,
+			// перенос удвоил бы триггер.
+			if( $survivor && ! $survivor.children().length ) {
+				$survivor.append( $node.children() )
+			}
+
+			$node.remove()
+		} )
 	}
 
 	/**
@@ -700,6 +800,18 @@
 	 * списку: разнородный флот, где это поле пришло от плагина на СТАРОЙ версии
 	 * фреймворка (без ключа `pickup_slot_placements` в конфиге вовсе), не должен
 	 * молча остаться совсем без триггера.
+	 *
+	 * ОБЯЗАТЕЛЬНЫЙ ФОЛБЭК (#323). Если непустой список не дал НИ ОДНОГО
+	 * смонтированного якоря, поле получает `'review'` — «под общим списком»:
+	 * тема, переопределившая `templates/cart/cart-shipping.php` и убравшая `<li>`,
+	 * иначе бесследно уносила бы единственный способ выбрать пункт, потому что
+	 * {@see placeSlot} на отсутствующем якоре молча выходит. В стоковом
+	 * WooCommerce `<li>` есть всегда (при единственном методе меняется лишь тип
+	 * инпута внутри, `radio` → `hidden`), так что это защита от ТЕМЫ, а не от
+	 * WooCommerce. Отдельной проверки «а не был ли `'review'` уже в списке» тут
+	 * нет намеренно: если он там был и провалился, повторный вызов
+	 * {@see placeSlot} на том же отсутствующем якоре выйдет так же — гвардия
+	 * защищала бы от недостижимого исхода.
 	 *
 	 * ЯВНЫЙ пустой массив (`[]`) — это НЕ то же самое, что «список отсутствует»
 	 * (#308 п.2, adversarial review для #274 п.3): плагин, чей фильтр
@@ -728,10 +840,21 @@
 			var placements = Array.isArray( field.pickup_slot_placements )
 				? field.pickup_slot_placements
 				: [ 'review' ]
+			var mounted    = []
 
 			placements.forEach( function( placement ) {
-				placeSlot( entry, fieldId, placement )
+				if( placeSlot( entry, fieldId, placement ) ) {
+					mounted.push( placement )
+				}
 			} )
+
+			// Явно пустой список — решение плагина, а не неудача резолва: он рисует
+			// свой триггер сам, и фолбэк его отменил бы (#308 п.2).
+			if( placements.length && ! mounted.length && placeSlot( entry, fieldId, 'review' ) ) {
+				mounted.push( 'review' )
+			}
+
+			pruneSlots( fieldId, mounted )
 		} )
 	}
 
