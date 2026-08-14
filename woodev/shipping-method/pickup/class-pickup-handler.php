@@ -2378,9 +2378,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 *              picker permanently disabled in every populated city).
 		 * @since 2.0.2 Added `implicit` (issue #309; spec D11/§4.6) — a client-side consumer
 		 *              seam for the flag {@see Location_Service::get_customer_record()} already
-		 *              returns, replacing an earlier DOM-attribute mechanism
-		 *              ({@see \Woodev\Framework\Shipping\Location\Customer_Location_Store})
-		 *              that could not reliably survive a checkout re-render.
+		 *              returns. It replaces an earlier attempt that marked the chain field with
+		 *              a DOM attribute from `location-cascade.js`, which could not survive a
+		 *              checkout re-render, a select2-rendering presentation mode, or two entries
+		 *              sharing one location block.
 		 *
 		 * @return array{current: array{key: string}, implicit: bool}|null
 		 */

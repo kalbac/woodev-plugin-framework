@@ -970,6 +970,14 @@
 	 * caller genuinely means `true`, e.g. {@see prefill}'s own boot fire). See the file
 	 * docblock's own section on `detail.implicit` for which callers pass which value and why.
 	 *
+	 * **`implicit` is meaningful only together with a non-empty `key`.** The clearing paths
+	 * ({@see clearCountryScope}, an edit without a pick) report `implicit: false` while the
+	 * SERVER record — which those paths deliberately never clear, because they POST nothing to
+	 * `/select` — may still hold the implicit default that rates are computed from. That is
+	 * safe only because those same events carry `key: ''`, so the sentinel rule above already
+	 * tells a listener to ignore them. A consumer that reads `implicit` ALONE, without
+	 * checking `key`, will conclude the customer made a choice they never made.
+	 *
 	 * @param {Object}  record   The just-persisted record (D8's own full, round-tripped
 	 *                           shape), or `null` when the current locality is now unknown.
 	 * @param {boolean} implicit Whether the record this event describes is a default guess
