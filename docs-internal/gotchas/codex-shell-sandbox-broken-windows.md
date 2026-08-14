@@ -175,12 +175,22 @@ ordinary MSI — was attempted in s72 and is a **dead end that costs the operato
 - A standalone MSI does exist on GitHub (`PowerShell-7.6.4-win-x64.msi`), but installing it was
   never necessary — see below.
 
-**The operator was right to push back on this whole line of repair.** This gotcha is dated
-**s10 (2026-06-12)**: the shell has never worked on this box. Nothing regressed. Every session that
-reported Codex "working flawlessly" was feeding it an INLINE BUNDLE with an explicit *"do not run
-any shell command"* — the recipe at the top of this file. The s72 rabbit hole happened because the
-agent started driving Codex in a mode that requires tool use, then read a two-month-old breakage as
-a new one.
+**⚠️ Provenance warning, added s72 on the operator's own correction.** He states plainly that this
+gotcha was never agreed with him — some earlier agent concluded "Codex does not work on Windows" and
+wrote it up — and that in his memory the shell *did* work before. So separate the two layers:
+
+- **Measured first-hand in s72, and trustworthy:** every command fails with
+  `CreateProcessAsUserW failed: 5`; the sandbox accounts exist; all four sandbox modes fail
+  identically; **plain `codex exec` with no flags and no companion wrapper fails the same way**, so
+  the wrapper is not the cause; the failure even breaks Codex's own internal reads
+  (`codex-runtime-home\home\memories`).
+- **Asserted by this file and NOT verified:** that the shell "never" worked here, and that the
+  inline bundle is the only path that ever worked. Treat the file's history as one agent's
+  inference, not as record.
+
+The s72 rabbit hole still happened for a real reason: the agent started driving Codex in a mode that
+requires tool use, hit a documented failure, and then trusted this file's framing instead of
+measuring. Do neither — measure, and ask the operator.
 
 **So: change nothing on the machine. Use the two modes that work.**
 
