@@ -54,6 +54,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Fields' 
 	 *                           vocabulary and Почта РФ has отделения (#327). Honoured by both
 	 *                           paths that can report a missing pickup point, see
 	 *                           {@see \Woodev\Framework\Shipping\Checkout\Checkout_Handler::validate()}.
+	 *  - `invalid_message`    — the COMPLETE "this value is wrong" error message, the same seam
+	 *                           `required_message` is for the OTHER outcome (#328). `''` (the
+	 *                           default) means "use the framework's template". Reachable only
+	 *                           through a plugin's own {@see Field::set_validate_callback()}
+	 *                           returning a bare `false`; a callback returning a `WP_Error`
+	 *                           already carries its own words and is never overridden here.
+	 *                           Exists for the same reason its sibling does: for a field whose
+	 *                           visible control is a BUTTON, «Поле «Пункт выдачи» заполнено
+	 *                           некорректно.» sends the customer looking for an input that is
+	 *                           not on the page. The framework does NOT coin a button-specific
+	 *                           default for it, because "filled in incorrectly" for a chosen
+	 *                           point most likely means "that point is unavailable" — a
+	 *                           different statement only the domain can make.
 	 *  - `section`            — checkout section: `'order'` (default), `'billing'`, `'shipping'`.
 	 *  - `required`           — `bool` (coerced) OR an array condition-spec when the host plugin
 	 *                           passes a structured condition array; preserved verbatim so the
@@ -261,6 +274,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Fields' 
 		 *     label: string,
 		 *     error_label: string,
 		 *     required_message: string,
+		 *     invalid_message: string,
 		 *     section: string,
 		 *     required: bool|array<string, mixed>,
 		 *     depends_on: string|null,
@@ -286,6 +300,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Fields' 
 				'label'              => (string) ( $definition['label'] ?? '' ),
 				'error_label'        => (string) ( $definition['error_label'] ?? '' ),
 				'required_message'   => (string) ( $definition['required_message'] ?? '' ),
+				'invalid_message'    => (string) ( $definition['invalid_message'] ?? '' ),
 				'section'            => (string) ( $definition['section'] ?? 'order' ),
 				'required'           => is_array( $required ) ? $required : (bool) $required,
 				'depends_on'         => isset( $definition['depends_on'] ) && '' !== (string) $definition['depends_on']

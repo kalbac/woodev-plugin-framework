@@ -167,6 +167,38 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Field' ) ) :
 		}
 
 		/**
+		 * Replaces the WHOLE "this value is wrong" checkout error message for this field —
+		 * the sibling seam to {@see self::set_required_message()}, for the OTHER outcome
+		 * (#328).
+		 *
+		 * Reached only when this field's own {@see self::set_validate_callback()} returns a
+		 * bare `false`. A callback returning a `WP_Error` already carries its own words and
+		 * is never overridden; a callback returning `true` never reaches a message at all.
+		 * So this is a seam for plugins that validate with a boolean and want the failure
+		 * described in their own vocabulary.
+		 *
+		 * WHY THE FRAMEWORK SHIPS NO BUTTON-SPECIFIC DEFAULT HERE, unlike its sibling: for a
+		 * field whose visible control is a BUTTON, «Поле «Пункт выдачи» заполнено
+		 * некорректно.» sends the customer looking for an input that is not on the page —
+		 * the same defect #327 fixed for the "you must supply this" message. But the honest
+		 * replacement is not a rewording: for an already-CHOSEN point, "filled in
+		 * incorrectly" most likely means "that point is unavailable", which is a different
+		 * statement, and only the domain knows whether it is the true one. So the framework
+		 * offers the seam and lets the plugin say it (#328's own recommendation), rather
+		 * than coining a sentence it cannot know is accurate.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $message the complete message shown to the customer.
+		 *
+		 * @return self
+		 */
+		public function set_invalid_message( string $message ): self {
+			$this->def['invalid_message'] = $message;
+			return $this;
+		}
+
+		/**
 		 * Sets the checkout section this field belongs to.
 		 *
 		 * Accepted values: `'order'` (default after normalization), `'billing'`,

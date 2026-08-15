@@ -380,6 +380,74 @@ class CheckoutHandlerValidateTest extends TestCase {
 	}
 
 	/**
+	 * #328 — the SIBLING outcome had the same defect and no seam. «Поле «Пункт выдачи»
+	 * заполнено некорректно.» sends the customer looking for an input that is not on the
+	 * page, exactly as #327's message did. The framework deliberately ships no
+	 * button-specific DEFAULT for it (for an already-chosen point "filled in incorrectly"
+	 * most likely means "that point is unavailable" — a different statement only the domain
+	 * can vouch for), so what it offers instead is the override.
+	 */
+	public function test_invalid_message_can_be_replaced_wholesale_by_the_plugin(): void {
+		\Brain\Monkey\Functions\expect( 'wc_add_notice' )
+			->once()
+			->with( 'Выбранное отделение сейчас недоступно.', 'error' );
+
+		$fields = Checkout_Fields::from_array( [
+			Field::create( 'carrier_pickup_point' )
+				->mark_pickup_slot()
+				->set_invalid_message( 'Выбранное отделение сейчас недоступно.' )
+				->set_validate_callback( static fn( $value ) => false )
+				->to_array(),
+		] );
+
+		$this->assertFalse( ( new Checkout_Handler( $fields, 'carrier' ) )->validate( [ 'carrier_pickup_point' => 'PVZ-1' ], [] ) );
+	}
+
+	/**
+	 * Without an override the framework's own template still applies — the seam adds a
+	 * choice, it does not change the default for every field that never asked.
+	 */
+	public function test_invalid_message_keeps_the_framework_template_when_no_override_was_supplied(): void {
+		\Brain\Monkey\Functions\expect( 'wc_add_notice' )
+			->once()
+			->with( 'Поле «Город» заполнено некорректно.', 'error' );
+
+		$fields = Checkout_Fields::from_array( [
+			Field::create( 'carrier_city' )
+				->set_label( 'Город' )
+				->set_validate_callback( static fn( $value ) => false )
+				->to_array(),
+		] );
+
+		$this->assertFalse( ( new Checkout_Handler( $fields, 'carrier' ) )->validate( [ 'carrier_city' => 'X' ], [] ) );
+	}
+
+	/**
+	 * A `WP_Error` from the callback carries its OWN words, and they win over the
+	 * override — the plugin said something more specific about THIS value than its own
+	 * generic sentence for the field.
+	 */
+	public function test_a_wp_error_from_the_callback_still_beats_the_supplied_invalid_message(): void {
+		\Brain\Monkey\Functions\expect( 'wc_add_notice' )
+			->once()
+			->with( 'Этот пункт закрыт на ремонт до 20 августа.', 'error' );
+
+		$fields = Checkout_Fields::from_array( [
+			Field::create( 'carrier_pickup_point' )
+				->mark_pickup_slot()
+				->set_invalid_message( 'Выбранное отделение сейчас недоступно.' )
+				->set_validate_callback(
+					static function ( $value ) {
+						return new \WP_Error( 'closed', 'Этот пункт закрыт на ремонт до 20 августа.' );
+					}
+				)
+				->to_array(),
+		] );
+
+		$this->assertFalse( ( new Checkout_Handler( $fields, 'carrier' ) )->validate( [ 'carrier_pickup_point' => 'PVZ-1' ], [] ) );
+	}
+
+	/**
 	 * The backstop must still fire ALONE — and checkout must still block — when the
 	 * per-field loop does NOT catch the same field because the descriptor's own
 	 * condition-spec method-id list diverges from the list passed to
