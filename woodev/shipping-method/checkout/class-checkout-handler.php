@@ -1509,16 +1509,40 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		}
 
 		/**
-		 * Builds the default "invalid value" error message for a descriptor.
+		 * Builds the "invalid value" error message for a descriptor: the plugin's own whole
+		 * sentence ({@see Field::set_invalid_message()}) when it supplied one, the
+		 * framework's template otherwise.
+		 *
+		 * The override exists because this message has the SAME defect its sibling had
+		 * (#327, fixed there; #328 for this one): for a field whose visible control is a
+		 * BUTTON, «Поле «Пункт выдачи» заполнено некорректно.» sends the customer looking
+		 * for an input that is not on the page. The framework deliberately ships NO
+		 * button-specific default of its own here, and that asymmetry with
+		 * {@see self::required_message()} is the decision, not an omission: "you did not
+		 * choose a point" is a fact the framework knows, while for an already-chosen point
+		 * "filled in incorrectly" most likely means "that point is unavailable" — a
+		 * different statement only the domain can vouch for. So the framework owns when the
+		 * message appears and the plugin owns the words (#328's own recommendation).
+		 *
+		 * Only reachable through a plugin's {@see Field::set_validate_callback()} returning
+		 * a bare `false`: a callback returning a `WP_Error` supplies its own message, which
+		 * {@see self::validate()} uses instead of ever calling this.
 		 *
 		 * @since 1.5.0
 		 * @since 2.0.2 Label resolution delegated to {@see message_label()} (adds `error_label`).
+		 * @since 2.0.2 A plugin can replace the whole sentence (#328).
 		 *
 		 * @param array<string, mixed> $field normalized field descriptor
 		 *
 		 * @return string
 		 */
 		private static function invalid_message( array $field ): string {
+			$supplied = (string) ( $field['invalid_message'] ?? '' );
+
+			if ( '' !== $supplied ) {
+				return $supplied;
+			}
+
 			/* translators: %s: checkout field label */
 			return sprintf( __( 'Поле «%s» заполнено некорректно.', 'woodev-plugin-framework' ), self::message_label( $field ) );
 		}
