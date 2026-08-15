@@ -227,6 +227,32 @@ with no output, on diffs a human reads in five minutes, and the session fell bac
 Claude critic subagents to avoid blocking merges. `result <job-id>` answering *"No job found"*
 means the job has not finished — it is not an error.
 
+### s74 addendum — it does not TELL you it could not read. It invents.
+
+Measured 15.08.2026, first-hand, on this box. Two probes, back to back:
+
+1. `printf 'Reply with exactly: CODEX-OK-<sha>' | codex exec -` → answered `CODEX-OK-63e8e68`,
+   the real HEAD sha, verbatim. **The model and the transport are fine** — that is also the
+   quote-bearing echo check this file's s61 addendum prescribes, and it passed.
+2. *"Read the file `docs-internal/specs/2026-08-15-location-chain-design.md` and reply with ONLY
+   the exact text of its first markdown heading line."* → every read failed with the
+   `CreateProcessAsUserW failed: 5` above, and Codex answered anyway:
+   `# Location Chain Design`. The real first heading is
+   `# Location chain — design for #334 + #330`.
+
+So the failure mode is not "Codex reports it cannot read". It is a **confident, plausible
+fabrication of file contents**, which is the worst possible shape for a critic: every finding it
+then reports is about a file that does not exist as it imagines it. The s72 "usable through
+GitHub" note is still true, but it only holds for code that is actually PUSHED — for a local
+branch it will silently review fiction.
+
+**The rule this leaves:** hand Codex an INLINE bundle (spec + full `git diff` + any reference
+source it needs), open with "everything you need is in this prompt, you have no shell, do not
+claim to have read any file", require a **canary** — a token it can only reproduce by reading the
+bundle — as the literal first line of its answer, and instruct it to answer `NOT IN BUNDLE: <what>`
+rather than fill a gap. A run whose first line is not the canary is discarded whole, not
+partially: nothing in it is evidence.
+
 ## Related
 
 - [[autodev-critic-ratelimit-false-positive]] — the other codex-critic transport gotcha

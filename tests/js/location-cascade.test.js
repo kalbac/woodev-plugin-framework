@@ -155,8 +155,8 @@ function locationField( level, section = 'billing' ) {
  * (`Checkout_Config::build_location_block()`).
  *
  * @param {{region?: boolean, settlement?: boolean, address?: boolean, section?: string,
- *          levels?: Object, countries?: string[], current?: Object|null, implicit?: boolean,
- *          defaultCountry?: string}} opts
+ *          levels?: Object, countries?: string[], current?: Object|null, chain?: Object,
+ *          implicit?: boolean, defaultCountry?: string}} opts
  * @returns {Object}
  */
 function buildConfig( opts ) {
@@ -190,6 +190,10 @@ function buildConfig( opts ) {
 			// a flat per-level map cannot describe it without lying.
 			levels: o.levels || { RU: { region: true, settlement: true, address: true } },
 			current: o.current !== undefined ? o.current : null,
+			// Issue #330 (spec §7): `{ level: { key, level } }`, alongside `current` — omitted
+			// entirely (not merely `undefined`) unless a test opts in, so "no `chain` key at
+			// all" (an older server) is exercised as its own real case, not a stand-in for it.
+			...( o.chain !== undefined ? { chain: o.chain } : {} ),
 			implicit: o.implicit !== undefined ? o.implicit : false,
 			// Issue #296: steps 2+3 of the checkout-field -> WC-store-setting -> RU chain,
 			// already merged into ONE value server-side by Location_Service::resolve_default_country().
@@ -1739,6 +1743,209 @@ describe( 'restoring config.location.current on load', () => {
 
 		const req = fetchCalls[ fetchCalls.length - 1 ];
 		expect( req.url ).toContain( 'within=' + encodeURIComponent( 'dadata:region9' ) );
+	} );
+} );
+
+// -----------------------------------------------------------------------
+// Location chain (issue #330, spec §7) — the client half of the bug: a stored current record
+// only ever seeded ONE level, so once the customer's current record was address-level, a page
+// reload left `entry.records['settlement']` empty and the next address suggest went
+// country-wide instead of `within=<settlement key>`. The server now also publishes
+// `config.location.chain` (`{ level: { key, level } }`) and `/select`'s own response gains a
+// `chain` field of the same shape — this restores/adopts it into `entry.records` for EVERY
+// level it names, not only `current`'s own.
+// -----------------------------------------------------------------------
+
+describe( 'location chain restore (issue #330, spec §7)', () => {
+	it( 'restores every level named by config.location.chain, so a restored address-level current STILL scopes the next address suggest by within=<settlement key> (the actual bug)', () => {
+		boot( {
+			settlement: true, address: true,
+			current: { key: 'dadata:addr1', level: 'address' },
+			chain: {
+				settlement: { key: 'dadata:city1', level: 'settlement' },
+				address: { key: 'dadata:addr1', level: 'address' },
+			},
+		} );
+
+		const addressCall = callFor( 'billing_address_1' );
+		addressCall.fetch( 'Твер' );
+
+		const req = fetchCalls[ fetchCalls.length - 1 ];
+		expect( req.url ).toContain( 'within=' + encodeURIComponent( 'dadata:city1' ) );
+	} );
+
+	it( 'degrades to today\'s single-level seed when config.location.chain is absent (older server) — no throw, no within on the address suggest', () => {
+		expect( () => boot( {
+			settlement: true, address: true,
+			current: { key: 'dadata:addr1', level: 'address' },
+			// `chain` deliberately omitted — see buildConfig()'s own comment.
+		} ) ).not.toThrow();
+
+		const addressCall = callFor( 'billing_address_1' );
+		addressCall.fetch( 'Твер' );
+
+		const req = fetchCalls[ fetchCalls.length - 1 ];
+		expect( req.url ).not.toContain( 'within=' );
+	} );
+
+	it( 'skips a malformed chain entry (a non-string key) rather than storing a broken record for it', () => {
+		// A NUMBER key, not a missing one: scopeKeyFor()'s own `record.key ? ... : null` guard
+		// would already hide a MISSING key regardless of whether adoptChain() stored `{}` or
+		// skipped it outright — that shape can't tell "skipped" and "stored broken" apart. A
+		// truthy but non-string key is the one shape only adoptChain()'s own `'string' ===
+		// typeof node.key` check catches: skipped here means no `within` at all; a broken
+		// `{ key: 12345 }` slipping through would show up as `within=12345`.
+		boot( {
+			settlement: true, address: true,
+			current: { key: 'dadata:addr1', level: 'address' },
+			chain: {
+				settlement: { key: 12345, level: 'settlement' }, // malformed — must be skipped
+				address: { key: 'dadata:addr1', level: 'address' },
+			},
+		} );
+
+		const addressCall = callFor( 'billing_address_1' );
+		addressCall.fetch( 'Твер' );
+
+		const req = fetchCalls[ fetchCalls.length - 1 ];
+		expect( req.url ).not.toContain( 'within=' );
+	} );
+
+	it( 'still fires woodev_location_applied exactly ONCE, with the current payload only — the chain is scoping plumbing, not a second event source', () => {
+		const seen = [];
+		document.body.addEventListener( 'woodev_location_applied', ( event ) => seen.push( event.detail ) );
+
+		boot( {
+			settlement: true, address: true,
+			current: { key: 'dadata:addr1', level: 'address' },
+			chain: {
+				settlement: { key: 'dadata:city1', level: 'settlement' },
+				address: { key: 'dadata:addr1', level: 'address' },
+			},
+		} );
+
+		expect( seen ).toEqual( [ { key: 'dadata:addr1', level: 'address', implicit: false } ] );
+	} );
+
+	it( 'adopts a /select response\'s own rebuilt chain, so the very next suggest in the SAME page load is scoped by the settlement it names', async () => {
+		boot( { settlement: true, address: true } );
+
+		// Selecting the address directly (no settlement ever picked on this page load) is
+		// exactly the shape that used to leave entry.records['settlement'] empty — backwardsFill()
+		// only ever writes FIELD VALUES, never records (see the file's own docblock).
+		const addressCall = callFor( 'billing_address_1' );
+		const item = {
+			key: 'dadata:addr1', label: 'ул Тверская, 1', level: 'address',
+			record: {
+				key: 'dadata:addr1', provider_id: 'dadata', level: 'address', country: 'RU',
+				label: 'ул Тверская, 1',
+			},
+		};
+
+		selectViaFake( addressCall, item );
+
+		const selectReq = fetchCalls[ fetchCalls.length - 1 ];
+		selectReq.resolve( {
+			current: { key: item.record.key, level: 'address' },
+			persisted: true,
+			chain: {
+				settlement: { key: 'dadata:city1', level: 'settlement' },
+				address: { key: item.record.key, level: 'address' },
+			},
+		} );
+		await flushMicrotasks();
+
+		addressCall.fetch( 'Твер' );
+
+		const req = fetchCalls[ fetchCalls.length - 1 ];
+		expect( req.url ).toContain( 'within=' + encodeURIComponent( 'dadata:city1' ) );
+	} );
+
+	/**
+	 * Selects a settlement through the widget and settles its /select round trip, so
+	 * `entry.records.settlement` holds a real record before the address step.
+	 */
+	const pickSettlement = async ( key = 'dadata:city1' ) => {
+		const settlementCall = callFor( 'billing_city' );
+
+		selectViaFake( settlementCall, {
+			key, label: 'Москва', level: 'settlement',
+			record: { key, provider_id: 'dadata', level: 'settlement', country: 'RU', label: 'Москва' },
+		} );
+
+		fetchCalls[ fetchCalls.length - 1 ].resolve( {
+			current: { key, level: 'settlement' },
+			persisted: true,
+			chain: { settlement: { key, level: 'settlement' } },
+		} );
+
+		await flushMicrotasks();
+	};
+
+	it( 'DROPS a stale record the server\'s rebuilt chain no longer names — a non-empty chain is authoritative, not merely additive', async () => {
+		// Adversarial review: adopting additively could never REMOVE anything, so a
+		// server-side repair (the new record proved not to be within the stored
+		// settlement, so the chain dropped it) left the settlement sitting here and the
+		// client kept sending a `within` the server now refuses — silently falling back
+		// to a country-wide search, the exact seam this change exists to close.
+		boot( { settlement: true, address: true } );
+
+		await pickSettlement();
+
+		const addressCall = callFor( 'billing_address_1' );
+
+		selectViaFake( addressCall, {
+			key: 'dadata:addr-elsewhere', label: 'ул Другая, 1', level: 'address',
+			record: {
+				key: 'dadata:addr-elsewhere', provider_id: 'dadata', level: 'address', country: 'RU',
+				label: 'ул Другая, 1',
+			},
+		} );
+
+		fetchCalls[ fetchCalls.length - 1 ].resolve( {
+			current: { key: 'dadata:addr-elsewhere', level: 'address' },
+			persisted: true,
+			// The server kept ONLY the address: the settlement was not an ancestor of it.
+			chain: { address: { key: 'dadata:addr-elsewhere', level: 'address' } },
+		} );
+		await flushMicrotasks();
+
+		addressCall.fetch( 'Твер' );
+
+		expect( fetchCalls[ fetchCalls.length - 1 ].url ).not.toContain( 'within=' );
+	} );
+
+	it( 'KEEPS its own records when the server reports no chain at all — a guest whose write did not persist still scopes by what they picked', async () => {
+		// The mirror of the rule above, and the reason it is gated on "non-empty": a
+		// server with nothing to report (`persisted: false`, `chain: []` — a guest whose
+		// WooCommerce session never initialized, gotcha
+		// `guest-session-write-needs-the-cart-cookie`) has not repaired anything. Wiping
+		// the client's own in-session memory there would break the very flow issue #324
+		// was about, for no gain.
+		boot( { settlement: true, address: true } );
+
+		await pickSettlement();
+
+		const addressCall = callFor( 'billing_address_1' );
+
+		selectViaFake( addressCall, {
+			key: 'dadata:addr1', label: 'ул Тверская, 1', level: 'address',
+			record: {
+				key: 'dadata:addr1', provider_id: 'dadata', level: 'address', country: 'RU',
+				label: 'ул Тверская, 1',
+			},
+		} );
+
+		fetchCalls[ fetchCalls.length - 1 ].resolve( {
+			current: { key: 'dadata:addr1', level: 'address' },
+			persisted: false,
+			chain: [], // PHP's empty array — what the server sends when it has no chain.
+		} );
+		await flushMicrotasks();
+
+		addressCall.fetch( 'Твер' );
+
+		expect( fetchCalls[ fetchCalls.length - 1 ].url ).toContain( 'within=' + encodeURIComponent( 'dadata:city1' ) );
 	} );
 } );
 

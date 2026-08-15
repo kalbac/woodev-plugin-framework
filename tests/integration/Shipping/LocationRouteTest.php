@@ -237,7 +237,36 @@ class LocationRouteTest extends TestCase {
 		$response = rest_get_server()->dispatch( $request );
 
 		$this->assertSame( 200, $response->get_status() );
-		$this->assertSame( [ 'suggestions' => [] ], $response->get_data() );
+		$this->assertSame( [ 'suggestions' => [], 'within_applied' => false ], $response->get_data() );
+	}
+
+	/**
+	 * Issue #330's third point: `within_applied` rides along even on the
+	 * degenerate "layer inactive" 200+empty branch — it must never be a key
+	 * a client only sees once the layer becomes active. This is unit-covered
+	 * exhaustively (`LocationControllerTest`) against a fake service; this one
+	 * assertion instead proves the key survives the REAL REST dispatch path
+	 * (route registration, param handling, `rest_ensure_response()`) with the
+	 * PRODUCTION `Location_Service`+`Location_Controller` wiring — gotcha
+	 * `the-integration-suite-has-a-wc-session-a-rest-request-does-not` does not
+	 * apply here: this assertion is not session-shaped, `within` is never even
+	 * sent, so there is nothing a stray always-present session could mask.
+	 */
+	public function test_a_guest_suggest_response_carries_within_applied_false_when_the_layer_is_inactive(): void {
+		$this->activate_and_boot_rest();
+
+		wp_set_current_user( 0 );
+
+		$request = new WP_REST_Request( 'GET', '/woodev/v1/location/suggest' );
+		$request->set_param( 'q', 'Мос' );
+		$request->set_param( 'level', 'region' );
+		$request->set_param( 'country', 'RU' );
+
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertArrayHasKey( 'within_applied', $response->get_data() );
+		$this->assertFalse( $response->get_data()['within_applied'] );
 	}
 
 	public function test_suggest_400s_on_a_too_short_query(): void {
@@ -354,6 +383,76 @@ class LocationRouteTest extends TestCase {
 			],
 			$response->get_data()['current']
 		);
+		// Issue #330: the response's `chain` must already carry this single write —
+		// the multi-level accumulation is proven end-to-end by
+		// self::test_select_response_chain_accumulates_across_the_cascade() below.
+		$this->assertSame(
+			[
+				'key'   => 'dadata:fias-1',
+				'level' => 'settlement',
+			],
+			$response->get_data()['chain']['settlement']
+		);
+	}
+
+	/**
+	 * Issue #330 (location-chain design §8), end to end through the REAL
+	 * `Location_Service` -> `Customer_Location_Store` -> WC session, exactly
+	 * the sequence `location-cascade.js`'s own cascade drives: a settlement
+	 * pick persists, THEN an address pick persists — the SECOND `/select`
+	 * response's `chain` must still carry the FIRST write's settlement
+	 * alongside the new address, proving the store's chain-rebuild (design §3)
+	 * and this controller's read-after-write (`handle_select_request()`) are
+	 * wired together correctly, not merely each unit-tested in isolation
+	 * against a fake.
+	 */
+	public function test_select_response_chain_accumulates_across_the_cascade(): void {
+		$this->activate_and_boot_rest();
+		$this->make_location_layer_active();
+
+		wp_set_current_user( 0 );
+
+		$settlement_request = new WP_REST_Request( 'POST', '/woodev/v1/location/select' );
+		$settlement_request->set_param(
+			'record',
+			[
+				'key'         => 'dadata:settlement-1',
+				'provider_id' => 'dadata',
+				'level'       => 'settlement',
+				'country'     => 'RU',
+			]
+		);
+		$settlement_request->add_header( 'X-WP-Nonce', wp_create_nonce( 'wp_rest' ) );
+
+		$settlement_response = rest_get_server()->dispatch( $settlement_request );
+		$this->assertSame( 200, $settlement_response->get_status() );
+
+		$address_request = new WP_REST_Request( 'POST', '/woodev/v1/location/select' );
+		$address_request->set_param(
+			'record',
+			[
+				'key'         => 'dadata:address-1',
+				'provider_id' => 'dadata',
+				'level'       => 'address',
+				'country'     => 'RU',
+				// The address must PROVE the settlement is still its ancestor — an
+				// unprovable one is dropped by the store's chain rebuild (design §3,
+				// tightened after the adversarial review found a Moscow settlement
+				// surviving a Saint-Petersburg address). This is the shape the bundled
+				// DaData provider publishes for every row.
+				'ancestors'   => [ 'dadata:settlement-1' ],
+			]
+		);
+		$address_request->add_header( 'X-WP-Nonce', wp_create_nonce( 'wp_rest' ) );
+
+		$address_response = rest_get_server()->dispatch( $address_request );
+
+		$this->assertSame( 200, $address_response->get_status() );
+
+		$chain = $address_response->get_data()['chain'];
+
+		$this->assertSame( [ 'key' => 'dadata:settlement-1', 'level' => 'settlement' ], $chain['settlement'] );
+		$this->assertSame( [ 'key' => 'dadata:address-1', 'level' => 'address' ], $chain['address'] );
 	}
 
 	/**

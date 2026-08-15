@@ -15,6 +15,7 @@
 
 namespace Woodev\Framework\Shipping\Pickup;
 
+use Woodev\Framework\Shipping\Location\Location_Record;
 use Woodev\Framework\Shipping\Location\Location_Service;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -25,7 +26,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Provider_Selection_
 
 	/**
 	 * A {@see Selection_Scope} whose {@see self::current_locality()} is backed by
-	 * {@see Location_Service::get_customer_record()} instead of a plugin's own,
+	 * {@see Location_Service::get_customer_record_at()} instead of a plugin's own,
 	 * hand-rolled read of `WC()->customer`/`WC()->session`.
 	 *
 	 * NOT a drop-in replacement for a plugin's existing scope — a plugin that already
@@ -37,9 +38,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Provider_Selection_
 	 * the layer already tracks, without re-deriving it.
 	 *
 	 * THE EMPTY-KEY DISCIPLINE COMES FOR FREE (gotcha `an-empty-domain-key-is-not-a-key`):
-	 * {@see Location_Service::get_customer_record()} returns `null` whenever the
-	 * customer has no record yet (no default policy configured, or a `geoip`/`fixed`
-	 * miss), and this class turns exactly that into `''` — the same "the seam is
+	 * {@see Location_Service::get_customer_record_at()} returns `null` whenever the
+	 * customer has no SETTLEMENT-level record — no record at all yet (no default policy
+	 * configured, or a `geoip`/`fixed` miss), a region-only pick, or an address typed
+	 * without ever picking a settlement — and this class turns exactly that into `''`
+	 * rather than reaching for a shallower or deeper key (see
+	 * {@see self::current_locality()} for why both of those are wrong) — the same "the seam is
 	 * refusing to answer, not naming a locality" sentinel {@see Pickup_Selection}
 	 * already refuses on both the write and the read side. Nothing extra is needed
 	 * here for that guarantee to hold.
@@ -129,11 +133,40 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Provider_Selection_
 		/**
 		 * {@inheritDoc}
 		 *
-		 * Returns the customer's CURRENT locality key
-		 * ({@see \Woodev\Framework\Shipping\Location\Location_Record::key()}) when
-		 * {@see Location_Service::get_customer_record()} answers one, `''` otherwise —
-		 * `''` meaning exactly what it means everywhere else in this seam: the layer
-		 * is refusing to answer, never a locality named `''`.
+		 * Returns the key of the customer's SETTLEMENT-level record
+		 * ({@see \Woodev\Framework\Shipping\Location\Location_Record::key()}), `''`
+		 * when they have not picked one — `''` meaning exactly what it means
+		 * everywhere else in this seam: the layer is refusing to answer, never a
+		 * locality named `''`.
+		 *
+		 * THE SETTLEMENT, NOT THE CURRENT RECORD (issue #334; location-chain design
+		 * §5). `/location/select` is posted for EVERY level of the cascade, address
+		 * included, so the customer's CURRENT record becomes address-level the moment
+		 * they refine their address inside the settlement they already chose. Keying
+		 * a pickup selection off that current key wrote the point under the
+		 * settlement key and read it back under the address key: the chosen point did
+		 * not move, it became UNREACHABLE — the customer saw «Выберите ПВЗ» over a
+		 * point they had already picked, and picking again just accumulated entries
+		 * under further keys. Operator's rule, recorded in #334: the pickup level
+		 * always stays at settlement/city, and refining the address inside a
+		 * settlement must not affect the chosen point.
+		 *
+		 * THE TWO NON-ANSWERS ARE DELIBERATE, and both must stay `''`:
+		 * - a REGION-only record — a region is shallower than a settlement, and its
+		 *   key would collect the points of every city in it into one bucket;
+		 * - an ADDRESS the customer typed without ever picking a settlement (the
+		 *   cascade's backwards fill writes the settlement FIELD's text but creates
+		 *   no settlement RECORD, so the chain genuinely holds none).
+		 *
+		 * Falling back to the current record's own key in either case is precisely
+		 * the bug above, and DERIVING a settlement key from the address record is
+		 * not available either: measured against live DaData, an address row carries
+		 * both a `city_fias_id` and a nested `settlement_fias_id`, and which one is
+		 * "the customer's settlement" is only knowable from what the customer picked
+		 * (gotcha `a-derived-ancestor-is-not-the-one-the-customer-picked`). Refusing
+		 * is the honest answer, and {@see Pickup_Selection} already refuses `''` on
+		 * both the write and the read side (gotcha `an-empty-domain-key-is-not-a-key`),
+		 * so nothing is ever mis-filed under it.
 		 *
 		 * `final`: this is the one behaviour this class exists to fix in place. A
 		 * plugin wanting a DIFFERENT `current_locality()` should implement
@@ -141,13 +174,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Provider_Selection_
 		 * other three methods alone.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Answers the SETTLEMENT level rather than whatever level the
+		 *              customer's current record happens to sit at (issue #334).
 		 *
 		 * @return string
 		 */
 		final public function current_locality(): string {
-			$current = $this->location_service->get_customer_record();
+			$settlement = $this->location_service->get_customer_record_at( Location_Record::LEVEL_SETTLEMENT );
 
-			return null !== $current ? $current['record']->key() : '';
+			return null !== $settlement ? $settlement->key() : '';
 		}
 	}
 

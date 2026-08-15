@@ -307,4 +307,107 @@ class ProviderSelectionScopeAgreementTest extends TestCase {
 			'the confirmed point must be restored — proves locality_for_point() and current_locality() agree on the same vocabulary.'
 		);
 	}
+
+	/**
+	 * Issue #334, end to end through the same real production paths: refining the
+	 * ADDRESS inside a settlement the customer already picked must not move the
+	 * pickup locality.
+	 *
+	 * The step that used to break it is step 4 — `/location/select` is posted for
+	 * EVERY level of the cascade, address included (`location-cascade.js`'s own
+	 * `onSelectFor`), so the customer's CURRENT record becomes address-level as
+	 * soon as they pick an address from the suggestions. While
+	 * `current_locality()` answered the CURRENT record's key, the point confirmed
+	 * at step 3 was written under the settlement key and read back under the
+	 * address key: `recall_latest()` missed, the filter fell back to its incoming
+	 * `null`, and the customer saw «Выберите ПВЗ» over a point they had already
+	 * chosen. Nothing was lost — it became unreachable, silently, which is why no
+	 * test and no HTTP probe caught it; the operator found it by clicking.
+	 *
+	 * The address record carries its settlement in the ancestor set, exactly as
+	 * the DaData provider publishes one, so this also exercises the chain's own
+	 * ancestor-compatibility check rather than only its "keep when the provider
+	 * published nothing" bypass.
+	 *
+	 * @return void
+	 */
+	public function test_refining_the_address_does_not_move_the_pickup_locality(): void {
+		$this->open_location_gate_and_boot_routes();
+
+		wp_set_current_user( 0 );
+
+		update_option( self::OPTION_DADATA_TOKEN, 'test-integration-token' );
+
+		$select_settlement = new WP_REST_Request( 'POST', '/woodev/v1/location/select' );
+		$select_settlement->set_param(
+			'record',
+			[
+				'key'         => 'dadata:fias-1',
+				'provider_id' => 'dadata',
+				'level'       => 'settlement',
+				'country'     => 'RU',
+			]
+		);
+		$select_settlement->add_header( 'X-WP-Nonce', wp_create_nonce( 'wp_rest' ) );
+
+		$this->assertSame(
+			200,
+			rest_get_server()->dispatch( $select_settlement )->get_status(),
+			'setup precondition: the settlement write must persist first.'
+		);
+
+		WC()->session->set( 'chosen_shipping_methods', [ self::METHOD_ID ] );
+
+		$select_point = new WP_REST_Request(
+			'POST',
+			'/woodev/v1/shipping/pickup/' . self::PLUGIN_SLUG . '/select'
+		);
+		$select_point->set_param( 'field_id', self::FIELD_ID );
+		$select_point->set_param( 'point_id', 'FIX-BULK-1' );
+		$select_point->add_header( 'X-WP-Nonce', wp_create_nonce( 'wp_rest' ) );
+
+		$select_data = rest_get_server()->dispatch( $select_point )->get_data();
+
+		$this->assertTrue(
+			$select_data['allowed'],
+			'setup precondition: FIX-BULK-1 must be confirmed allowed before the address step.'
+		);
+
+		// THE STEP THAT USED TO BREAK IT — an address INSIDE dadata:fias-1.
+		$select_address = new WP_REST_Request( 'POST', '/woodev/v1/location/select' );
+		$select_address->set_param(
+			'record',
+			[
+				'key'         => 'dadata:fias-addr-1',
+				'provider_id' => 'dadata',
+				'level'       => 'address',
+				'country'     => 'RU',
+				'street'      => [ 'name' => 'Цветной', 'type' => 'б-р' ],
+				'house'       => '1',
+				'ancestors'   => [ 'dadata:fias-1' ],
+			]
+		);
+		$select_address->add_header( 'X-WP-Nonce', wp_create_nonce( 'wp_rest' ) );
+
+		$address_response = rest_get_server()->dispatch( $select_address );
+
+		$this->assertSame(
+			200,
+			$address_response->get_status(),
+			'setup precondition: the address write must be accepted — the bug is what happens AFTER it.'
+		);
+		$this->assertSame(
+			'address',
+			$address_response->get_data()['current']['level'],
+			'setup precondition: the customer\'s CURRENT record must really be address-level now, or this test proves nothing.'
+		);
+
+		$restored = apply_filters( 'woocommerce_checkout_get_value', null, self::FIELD_ID );
+
+		$this->assertSame(
+			'FIX-BULK-1',
+			$restored,
+			'the point chosen before the address pick must still be restored after it (issue #334).'
+		);
+	}
 }

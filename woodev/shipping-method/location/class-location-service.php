@@ -243,6 +243,91 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		}
 
 		/**
+		 * Gets the customer's whole location CHAIN (location-chain design §3:
+		 * `docs-internal/specs/2026-08-15-location-chain-design.md`) — every
+		 * level the customer has picked that {@see Customer_Location_Store::set()}
+		 * has not since dropped, plus which level is `current`.
+		 *
+		 * Routed through {@see self::get_customer_record()} FIRST, same as
+		 * {@see self::get_customer_record_at()} — never
+		 * {@see Customer_Location_Store::get_chain()} directly — so the lazy
+		 * default-locality trigger (spec D11, §4.6) stays in that ONE place: a
+		 * caller reaching for the chain before any record exists yet still gets
+		 * the store seeded exactly as a caller reaching for
+		 * {@see self::get_customer_record()} would.
+		 *
+		 * Also covers the {@see self::$unpersisted_default} gap (review finding
+		 * F1): when {@see self::get_customer_record()} just resolved a default
+		 * that {@see Customer_Location_Store::set()} could not (yet) persist — a
+		 * guest REST request whose session bridge has not run yet — the STORE's
+		 * own {@see Customer_Location_Store::get_chain()} legitimately still
+		 * answers `null` (nothing landed there), even though
+		 * {@see self::get_customer_record()} just answered a record. Without
+		 * this, a caller of THIS method would see nothing for the exact same
+		 * customer a sibling call to {@see self::get_customer_record()} just
+		 * served an answer to — two accessors of the same in-request state
+		 * disagreeing. Handled by building a synthetic one-entry chain (the
+		 * resolved default at its own level) directly from what
+		 * {@see self::get_customer_record()} already returned, rather than
+		 * re-deriving it.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array{records: array<string, Location_Record>, current: string, implicit: bool, saved_at: int}|null
+		 */
+		public function get_customer_chain(): ?array {
+			$current = $this->get_customer_record();
+
+			if ( null === $current ) {
+				return null;
+			}
+
+			$chain = $this->customer_store->get_chain();
+
+			if ( null !== $chain ) {
+				return $chain;
+			}
+
+			// self::$unpersisted_default (review finding F1, see docblock above):
+			// the store has nothing persisted yet, but get_customer_record() just
+			// resolved (and could not write) a default. Build the one-entry chain
+			// that write WOULD have produced, so this accessor agrees with it.
+			return [
+				'records'  => [ $current['record']->level() => $current['record'] ],
+				'current'  => $current['record']->level(),
+				'implicit' => $current['implicit'],
+				'saved_at' => $current['saved_at'],
+			];
+		}
+
+		/**
+		 * Gets the customer's record AT a specific chain level — e.g. the
+		 * settlement the customer actually picked, even when an address is
+		 * `current` (#334: `Provider_Selection_Scope::current_locality()` is
+		 * built on top of exactly this, spec §5).
+		 *
+		 * Routed through {@see self::get_customer_record()} first (via
+		 * {@see self::get_customer_chain()}) for the same lazy-default-trigger
+		 * reason documented there.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $level One of {@see Location_Record::LEVELS}.
+		 *
+		 * @return Location_Record|null `null` for an unknown level string, or a
+		 *                               level the customer has not (yet) picked.
+		 */
+		public function get_customer_record_at( string $level ): ?Location_Record {
+			$chain = $this->get_customer_chain();
+
+			if ( null === $chain || ! isset( $chain['records'][ $level ] ) ) {
+				return null;
+			}
+
+			return $chain['records'][ $level ];
+		}
+
+		/**
 		 * Writes the customer's location record. Thin pass-through to
 		 * {@see Customer_Location_Store::set()} — see that method for the
 		 * implicit/explicit precedence rule (spec D11) and the guest-session

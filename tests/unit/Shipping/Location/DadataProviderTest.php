@@ -1125,4 +1125,233 @@ final class DadataProviderTest extends TestCase {
 		$this->assertSame( 'KZ', $locations[0]['country_iso_code'] );
 		$this->assertSame( 'Алматы', $locations[0]['city'] );
 	}
+
+	// -------------------------------------------------------------------------
+	// ancestors — record_from_dadata_fields() publishing Location_Record::ancestors()
+	// (spec docs-internal/specs/2026-08-15-location-chain-design.md §2).
+	// -------------------------------------------------------------------------
+
+	/**
+	 * A realistic RU address row with BOTH `city_fias_id` and `settlement_fias_id`
+	 * filled at once — the exact shape the design doc's "Measurement" section
+	 * pins («г Пушкино, рп Черкизово»-style nesting): a settlement nested inside
+	 * a city, both present on the same address row, own `fias_id` (the house-level
+	 * id) distinct from every ancestor field.
+	 *
+	 * @return array<string, mixed>
+	 */
+	private static function address_suggestion_with_nested_settlement(): array {
+		return [
+			'suggestions' => [
+				[
+					'value'              => 'г Пушкино, рп Черкизово, ул Ленина, д 1',
+					'unrestricted_value' => 'Московская обл, г Пушкино, рп Черкизово, ул Ленина, д 1',
+					'data'               => [
+						'postal_code'          => '141221',
+						'country'              => 'Россия',
+						'country_iso_code'     => 'RU',
+						'region_fias_id'       => 'region-guid-mo',
+						'region_with_type'     => 'Московская обл',
+						'region_type'          => 'обл',
+						'region'               => 'Московская',
+						'area_fias_id'         => 'area-guid-pushkinsky',
+						'area_with_type'       => 'Пушкинский р-н',
+						'area_type'            => 'р-н',
+						'area'                 => 'Пушкинский',
+						'city_fias_id'         => 'city-guid-pushkino',
+						'city_with_type'       => 'г Пушкино',
+						'city_type'            => 'г',
+						'city'                 => 'Пушкино',
+						'settlement_fias_id'   => 'settlement-guid-cherkizovo',
+						'settlement_with_type' => 'рп Черкизово',
+						'settlement_type'      => 'рп',
+						'settlement'           => 'Черкизово',
+						'street_fias_id'       => 'street-guid-lenina',
+						'street_with_type'     => 'ул Ленина',
+						'street_type'          => 'ул',
+						'street'               => 'Ленина',
+						'house'                => '1',
+						'fias_id'              => 'house-guid-1',
+						'fias_level'           => '8',
+						'geo_lat'              => '56.010',
+						'geo_lon'              => '37.850',
+					],
+				],
+			],
+		];
+	}
+
+	public function test_suggest_at_address_level_composes_ancestors_from_a_realistic_ru_address_field_set(): void {
+		$this->set_token( 'tok' );
+		$this->stub_http_response( 200, (string) json_encode( self::address_suggestion_with_nested_settlement() ) );
+
+		$records = ( new Dadata_Provider() )->suggest( 'Ленина', Location_Scope::for_country( 'RU', Location_Record::LEVEL_ADDRESS ) );
+
+		$this->assertCount( 1, $records );
+		$this->assertSame(
+			[
+				'dadata:region-guid-mo',
+				'dadata:area-guid-pushkinsky',
+				'dadata:city-guid-pushkino',
+				'dadata:settlement-guid-cherkizovo',
+				'dadata:street-guid-lenina',
+			],
+			$records[0]->ancestors()
+		);
+	}
+
+	/**
+	 * A foreign, OSM-derived row (Tashkent address): `region_fias_id` and
+	 * `city_fias_id` carry the SAME `relation:` id (measured: an address row in
+	 * that city repeats the settlement's own OSM id under `city_fias_id`), the
+	 * row's own `fias_id` is a separate `way:` id, and `street_fias_id` is a
+	 * third, distinct `way:` id.
+	 *
+	 * @return array<string, mixed>
+	 */
+	private static function address_suggestion_foreign_osm_ids(): array {
+		return [
+			'suggestions' => [
+				[
+					'value'              => 'Узбекистан, г Ташкент, ул Юнусабад, д 19',
+					'unrestricted_value' => 'Узбекистан, г Ташкент, ул Юнусабад, д 19',
+					'data'               => [
+						'country'          => 'Узбекистан',
+						'country_iso_code' => 'UZ',
+						'region_fias_id'   => 'relation:2216724',
+						'region'           => 'Ташкент',
+						'city_fias_id'     => 'relation:2216724',
+						'city'             => 'Ташкент',
+						'street_fias_id'   => 'way:555111222',
+						'street'           => 'Юнусабад',
+						'house'            => '19',
+						'fias_id'          => 'way:987654321',
+						'fias_level'       => '-1',
+					],
+				],
+			],
+		];
+	}
+
+	public function test_suggest_composes_ancestors_for_a_foreign_osm_row_and_dedupes_a_repeated_id(): void {
+		$this->set_token( 'tok' );
+		$this->stub_http_response( 200, (string) json_encode( self::address_suggestion_foreign_osm_ids() ) );
+
+		$records = ( new Dadata_Provider() )->suggest( 'Юнус', Location_Scope::for_country( 'UZ', Location_Record::LEVEL_ADDRESS ) );
+
+		$this->assertCount( 1, $records );
+		// region_fias_id and city_fias_id carry the SAME 'relation:2216724' value
+		// (measured, s70/13.08.2026) and must collapse to ONE ancestor entry.
+		$this->assertSame(
+			[ 'dadata:relation:2216724', 'dadata:way:555111222' ],
+			$records[0]->ancestors()
+		);
+	}
+
+	/**
+	 * A settlement-level RU row whose own `fias_id` equals its `city_fias_id` —
+	 * the ordinary case the design doc's "Measurement" §1 pins (own `fias_id` =
+	 * the deepest filled of `settlement_fias_id`/`city_fias_id`). `city_fias_id`
+	 * must NOT appear in `ancestors()` here — it is this record's own identity,
+	 * not an ancestor of it.
+	 *
+	 * @return array<string, mixed>
+	 */
+	private static function settlement_suggestion_with_own_id_repeated(): array {
+		return [
+			'suggestions' => [
+				[
+					'value'              => 'г Краснодар',
+					'unrestricted_value' => '350000, Краснодарский край, г Краснодар',
+					'data'               => [
+						'postal_code'      => '350000',
+						'country'          => 'Россия',
+						'country_iso_code' => 'RU',
+						'region_fias_id'   => 'region-guid-kuban',
+						'region'           => 'Краснодарский',
+						'city_fias_id'     => 'own-guid-krasnodar',
+						'city'             => 'Краснодар',
+						'city_type'        => 'г',
+						'fias_id'          => 'own-guid-krasnodar',
+						'fias_level'       => '4',
+					],
+				],
+			],
+		];
+	}
+
+	public function test_suggest_at_settlement_level_skips_the_rows_own_fias_id_from_ancestors(): void {
+		$this->set_token( 'tok' );
+		$this->stub_http_response( 200, (string) json_encode( self::settlement_suggestion_with_own_id_repeated() ) );
+
+		$records = ( new Dadata_Provider() )->suggest( 'Красн', Location_Scope::for_country( 'RU', Location_Record::LEVEL_SETTLEMENT ) );
+
+		$this->assertCount( 1, $records );
+		$this->assertSame( 'dadata:own-guid-krasnodar', $records[0]->key(), 'sanity: this row keys by city_fias_id' );
+		$this->assertSame(
+			[ 'dadata:region-guid-kuban' ],
+			$records[0]->ancestors(),
+			'city_fias_id equals the record\'s own fias_id and must not be published as its own ancestor'
+		);
+	}
+
+	/**
+	 * A row with NO `fias_id` of its own — the GeoNames tier, where DaData
+	 * publishes ancestor ids but nothing for the row itself, so
+	 * {@see \Woodev\Framework\Shipping\Location\Locality_Key::derive()} builds the
+	 * key from the components instead of composing it.
+	 *
+	 * The branch matters: `record_from_dadata_fields()` skips an ancestor field
+	 * equal to the row's own `fias_id`, and here that own id is `''`. The skip must
+	 * not degenerate into "skip everything" (an empty-string comparison matching a
+	 * trimmed-empty field is the same test), and the DERIVED key must never leak
+	 * into the record's own ancestor set.
+	 *
+	 * @return array<string, mixed>
+	 */
+	private static function suggestion_without_its_own_fias_id(): array {
+		return [
+			'suggestions' => [
+				[
+					'value'              => 'Армения, г Гюмри',
+					'unrestricted_value' => 'Армения, Ширакская обл, г Гюмри',
+					'data'               => [
+						'country'          => 'Армения',
+						'country_iso_code' => 'AM',
+						'region_fias_id'   => 'relation:364693',
+						'region'           => 'Ширакская',
+						'city_fias_id'     => 'relation:1746396',
+						'city'             => 'Гюмри',
+						'city_type'        => 'г',
+						'fias_id'          => '',
+						'fias_level'       => '-1',
+					],
+				],
+			],
+		];
+	}
+
+	public function test_suggest_publishes_ancestors_for_a_row_whose_own_key_had_to_be_derived(): void {
+		$this->set_token( 'tok' );
+		$this->stub_http_response( 200, (string) json_encode( self::suggestion_without_its_own_fias_id() ) );
+
+		$records = ( new Dadata_Provider() )->suggest( 'Гюмр', Location_Scope::for_country( 'AM', Location_Record::LEVEL_SETTLEMENT ) );
+
+		$this->assertCount( 1, $records );
+		$this->assertNotSame( '', $records[0]->key(), 'sanity: a row with no fias_id still gets a derived key' );
+		$this->assertSame(
+			[ 'dadata:relation:364693', 'dadata:relation:1746396' ],
+			$records[0]->ancestors(),
+			'an empty own fias_id must not suppress the ancestors it does publish'
+		);
+		$this->assertNotContains(
+			$records[0]->key(),
+			$records[0]->ancestors(),
+			'the derived key is this record\'s own identity, never one of its ancestors'
+		);
+		$this->assertTrue(
+			$records[0]->is_within( 'dadata:relation:1746396' ),
+			'the city id is answerable as an ancestor even though the row keys by a derived id'
+		);
+	}
 }

@@ -49,6 +49,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 	 *     'mode'      => string, // 'typeahead' | 'related-list' | 'ajax-select2' (Task 13; spec D7)
 	 *     'levels'    => [ country_code => [ 'region' => bool, 'settlement' => bool, 'address' => bool ] ],
 	 *     'current'   => [ 'key' => string, 'level' => string ]|null,
+	 *     'chain'     => [ level => [ 'key' => string, 'level' => string ] ], // issue #330: every level in the customer's saved chain; [] when there is no customer record at all
 	 *     'implicit'  => bool,
 	 *     'defaultCountry' => string, // issue #296: checkout field -> WC store setting -> RU
 	 *   ],
@@ -204,6 +205,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 		 *         mode: string,
 		 *         levels: array<string, array{region: bool, settlement: bool, address: bool}>,
 		 *         current: array{key: string, level: string}|null,
+		 *         chain: array<string, array{key: string, level: string}>,
 		 *         implicit: bool
 		 *     }
 		 * }
@@ -428,6 +430,21 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 		 *   from either response without the two ever disagreeing. `implicit` is
 		 *   `false` when there is no record at all — an implicit flag is only
 		 *   meaningful attached to an actual record.
+		 * - `chain` (location-chain design §8; issue #330;
+		 *   `docs-internal/specs/2026-08-15-location-chain-design.md`) — every
+		 *   level in the customer's saved chain, from
+		 *   {@see \Woodev\Framework\Shipping\Location\Location_Service::get_customer_chain()},
+		 *   in the SAME per-entry `{ key, level }` shape as `current`, keyed by
+		 *   level — byte-for-byte the same shape
+		 *   {@see \Woodev\Framework\Shipping\Rest_Api\Location_Controller::handle_select_request()}
+		 *   returns under its own `chain` key, so `location-cascade.js`'s
+		 *   `prefill()` can seed `entry.records[ level ]` for every level from
+		 *   either response without the two ever disagreeing. A PHP `[]` (never
+		 *   `null`, never omitted) when there is no customer record at all — an
+		 *   empty array serializes to a JSON `[]`, which the client's own
+		 *   `'object' !== typeof chain` guard already treats as "nothing to
+		 *   seed" and skips, so the harmless PHP/JS array-vs-object mismatch at
+		 *   the empty case costs nothing.
 		 *
 		 * **`related-list` region seam (Task 13; client-facing contract for the
 		 * next agent — CORRECTED after the s71 rig measurement AND the PR #304
@@ -505,6 +522,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 		 * @since 2.0.2 Gained `defaultCountry` -- steps 2+3 of the "checkout field -> WC store
 		 *              setting -> RU" fallback chain (issue #296), via
 		 *              {@see \Woodev\Framework\Shipping\Location\Location_Service::resolve_default_country()}.
+		 * @since 2.0.2 Gained `chain` — every level in the customer's saved chain
+		 *              (location-chain design §8; issue #330), via
+		 *              {@see \Woodev\Framework\Shipping\Location\Location_Service::get_customer_chain()}.
 		 *
 		 * @param \Woodev\Framework\Shipping\Location\Location_Service $service The active, already-confirmed facade.
 		 *
@@ -515,6 +535,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 		 *     mode: string,
 		 *     levels: array<string, array{region: bool, settlement: bool, address: bool}>,
 		 *     current: array{key: string, level: string}|null,
+		 *     chain: array<string, array{key: string, level: string}>,
 		 *     implicit: bool,
 		 *     defaultCountry: string
 		 * }
@@ -577,6 +598,23 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 				$implicit = (bool) $customer['implicit'];
 			}
 
+			// Issue #330 (location-chain design §8): every level in the customer's
+			// saved chain, same `{ key, level }` shape as `current` above, keyed by
+			// level. `[]` (never `null`) when there is no customer record at all —
+			// see this method's own docblock for why an empty array is the chosen,
+			// harmless shape on the JS side.
+			$chain          = [];
+			$customer_chain = $service->get_customer_chain();
+
+			if ( null !== $customer_chain ) {
+				foreach ( $customer_chain['records'] as $chain_level => $chain_record ) {
+					$chain[ $chain_level ] = [
+						'key'   => $chain_record->key(),
+						'level' => $chain_record->level(),
+					];
+				}
+			}
+
 			/**
 			 * Filters the location typeahead's user-facing strings.
 			 *
@@ -637,6 +675,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 				'mode'           => $service->get_field_mode(),
 				'levels'         => $levels,
 				'current'        => $current,
+				'chain'          => $chain,
 				'implicit'       => $implicit,
 				// Issue #296: steps 2+3 of the country fallback chain `checkout field ->
 				// WooCommerce store setting -> RU`, already merged into ONE value by
