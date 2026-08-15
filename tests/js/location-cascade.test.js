@@ -454,7 +454,7 @@ describe( 'persist then trigger (D8)', () => {
 		// Not yet — the persist call has not resolved.
 		expect( triggerSpy.mock.calls.some( ( args ) => args[ 0 ] === 'update_checkout' ) ).toBe( false );
 
-		selectReq.resolve( { current: { key: item.record.key, level: 'settlement' }, persisted: true } );
+		selectReq.resolve( { current: { key: item.record.key, level: 'settlement' }, persisted: true, chain: { settlement: { key: item.record.key, level: 'settlement' } } } );
 		await flushMicrotasks();
 
 		expect( triggerSpy.mock.calls.some( ( args ) => args[ 0 ] === 'update_checkout' ) ).toBe( true );
@@ -548,12 +548,14 @@ describe( 'woodev_location_applied (Task 15; issue #159)', () => {
 		expect( seen ).toEqual( [] ); // not yet — the persist call has not resolved.
 
 		const selectReq = fetchCalls[ fetchCalls.length - 1 ];
-		selectReq.resolve( { current: { key: item.record.key, level: 'settlement' }, persisted: true } );
+		selectReq.resolve( { current: { key: item.record.key, level: 'settlement' }, persisted: true, chain: { settlement: { key: item.record.key, level: 'settlement' } } } );
 		await flushMicrotasks();
 
 		// A persisted /select is ALWAYS an explicit choice (issue #309; spec D11) —
 		// `implicit` is `false` regardless of the config's own boot-time value.
-		expect( seen ).toEqual( [ { key: 'dadata:city1', level: 'settlement', implicit: false } ] );
+		// settlementKey (issue #336) matches key here: a direct settlement pick sets
+		// entry.records.settlement to the SAME record.
+		expect( seen ).toEqual( [ { key: 'dadata:city1', level: 'settlement', settlementKey: 'dadata:city1', implicit: false } ] );
 	} );
 
 	it( 'is a NATIVE event, seen by a plain addEventListener with no jQuery involved', async () => {
@@ -572,10 +574,10 @@ describe( 'woodev_location_applied (Task 15; issue #159)', () => {
 		};
 
 		selectViaFake( settlementCall, item );
-		fetchCalls[ fetchCalls.length - 1 ].resolve( { current: { key: item.record.key, level: 'settlement' }, persisted: true } );
+		fetchCalls[ fetchCalls.length - 1 ].resolve( { current: { key: item.record.key, level: 'settlement' }, persisted: true, chain: { settlement: { key: item.record.key, level: 'settlement' } } } );
 		await flushMicrotasks();
 
-		expect( seen ).toEqual( [ { key: 'cdek:city-77', level: 'settlement', implicit: false } ] );
+		expect( seen ).toEqual( [ { key: 'cdek:city-77', level: 'settlement', settlementKey: 'cdek:city-77', implicit: false } ] );
 	} );
 
 	it( 'does NOT fire when /select fails', async () => {
@@ -618,7 +620,13 @@ describe( 'woodev_location_applied (Task 15; issue #159)', () => {
 		fetchCalls[ fetchCalls.length - 1 ].resolve( { current: { key: item.record.key, level: 'settlement' }, persisted: false } );
 		await flushMicrotasks();
 
-		expect( seen ).toEqual( [ { key: '', level: '', implicit: false } ] );
+		// settlementKey (issue #336) is EMPTY here too, and that is the whole point of this
+		// branch: `onSelectFor()` wrote entry.records.settlement OPTIMISTICALLY, before the
+		// persist outcome was known, and the server ended up holding nothing. Publishing that
+		// optimistic key would hand pickup-mount.js a confident locality exactly where F1/F2
+		// decided the honest answer is "unknown" — bypassing the DOM fallback those findings
+		// added. The unknown sentinel applies to the WHOLE detail.
+		expect( seen ).toEqual( [ { key: '', level: '', settlementKey: '', implicit: false } ] );
 	} );
 
 	it( 'fires only ONCE, for the FINAL response, when a superseded selection is queued behind it', async () => {
@@ -643,15 +651,15 @@ describe( 'woodev_location_applied (Task 15; issue #159)', () => {
 		selectViaFake( settlementCall, second ); // queued — the first request is still in flight.
 		expect( selectRequests().length ).toBe( 1 );
 
-		selectRequests()[ 0 ].resolve( { current: { key: first.record.key, level: 'settlement' }, persisted: true } );
+		selectRequests()[ 0 ].resolve( { current: { key: first.record.key, level: 'settlement' }, persisted: true, chain: { settlement: { key: first.record.key, level: 'settlement' } } } );
 		await flushMicrotasks();
 
 		// The queued (second) selection is dispatched automatically once the first settles.
 		expect( selectRequests().length ).toBe( 2 );
-		selectRequests()[ 1 ].resolve( { current: { key: second.record.key, level: 'settlement' }, persisted: true } );
+		selectRequests()[ 1 ].resolve( { current: { key: second.record.key, level: 'settlement' }, persisted: true, chain: { settlement: { key: second.record.key, level: 'settlement' } } } );
 		await flushMicrotasks();
 
-		expect( seen ).toEqual( [ { key: 'dadata:second', level: 'settlement', implicit: false } ] );
+		expect( seen ).toEqual( [ { key: 'dadata:second', level: 'settlement', settlementKey: 'dadata:second', implicit: false } ] );
 	} );
 } );
 
@@ -727,7 +735,7 @@ describe( '#295 finding 1 — the "not saved" notice consumes persisted: false',
 		};
 
 		selectViaFake( settlementCall, second );
-		fetchCalls[ fetchCalls.length - 1 ].resolve( { current: { key: second.record.key, level: 'settlement' }, persisted: true } );
+		fetchCalls[ fetchCalls.length - 1 ].resolve( { current: { key: second.record.key, level: 'settlement' }, persisted: true, chain: { settlement: { key: second.record.key, level: 'settlement' } } } );
 		await flushMicrotasks();
 
 		expect( notice() ).toBeNull();
@@ -799,7 +807,7 @@ describe( 'single-flight /select queue (Finding 2)', () => {
 		selectViaFake( settlementCall, b );
 		expect( selectRequests().length ).toBe( 1 );
 
-		selectRequests()[ 0 ].resolve( { current: { key: a.record.key, level: 'settlement' }, persisted: true } );
+		selectRequests()[ 0 ].resolve( { current: { key: a.record.key, level: 'settlement' }, persisted: true, chain: { settlement: { key: a.record.key, level: 'settlement' } } } );
 		await flushMicrotasks();
 
 		// A's resolution must NOT have triggered update_checkout — B was already queued when
@@ -810,7 +818,7 @@ describe( 'single-flight /select queue (Finding 2)', () => {
 		expect( selectRequests().length ).toBe( 2 );
 		expect( JSON.parse( selectRequests()[ 1 ].init.body ) ).toEqual( { record: b.record } );
 
-		selectRequests()[ 1 ].resolve( { current: { key: b.record.key, level: 'settlement' }, persisted: true } );
+		selectRequests()[ 1 ].resolve( { current: { key: b.record.key, level: 'settlement' }, persisted: true, chain: { settlement: { key: b.record.key, level: 'settlement' } } } );
 		await flushMicrotasks();
 
 		// Exactly ONE trigger overall, firing for the FINAL (B) selection.
@@ -833,7 +841,7 @@ describe( 'single-flight /select queue (Finding 2)', () => {
 
 		expect( selectRequests().length ).toBe( 1 );
 
-		selectRequests()[ 0 ].resolve( { current: { key: a.record.key, level: 'settlement' }, persisted: true } );
+		selectRequests()[ 0 ].resolve( { current: { key: a.record.key, level: 'settlement' }, persisted: true, chain: { settlement: { key: a.record.key, level: 'settlement' } } } );
 		await flushMicrotasks();
 
 		expect( selectRequests().length ).toBe( 2 );
@@ -893,7 +901,7 @@ describe( 'single-flight /select queue (Finding 2)', () => {
 		selectViaFake( settlementCall, a );
 		expect( selectRequests().length ).toBe( 1 );
 
-		selectRequests()[ 0 ].resolve( { current: { key: a.record.key, level: 'settlement' }, persisted: true } );
+		selectRequests()[ 0 ].resolve( { current: { key: a.record.key, level: 'settlement' }, persisted: true, chain: { settlement: { key: a.record.key, level: 'settlement' } } } );
 		await flushMicrotasks();
 
 		expect( triggerSpy.mock.calls.filter( ( args ) => args[ 0 ] === 'update_checkout' ).length ).toBe( 1 );
@@ -1607,7 +1615,7 @@ describe( 'Task 13 renderer seam (spec D7)', () => {
 		expect( JSON.parse( selectReq.init.body ) ).toEqual( { record } );
 
 		const triggerSpy = jest.spyOn( window.jQuery.fn, 'trigger' );
-		selectReq.resolve( { current: { key: record.key, level: 'settlement' }, persisted: true } );
+		selectReq.resolve( { current: { key: record.key, level: 'settlement' }, persisted: true, chain: { settlement: { key: record.key, level: 'settlement' } } } );
 		await flushMicrotasks();
 
 		expect( triggerSpy.mock.calls.some( ( args ) => args[ 0 ] === 'update_checkout' ) ).toBe( true );
@@ -1824,7 +1832,9 @@ describe( 'location chain restore (issue #330, spec §7)', () => {
 			},
 		} );
 
-		expect( seen ).toEqual( [ { key: 'dadata:addr1', level: 'address', implicit: false } ] );
+		// settlementKey (issue #336) comes from the boot-time chain's own settlement entry,
+		// adopted by adoptChain() BEFORE this boot fire — see prefill()'s own docblock.
+		expect( seen ).toEqual( [ { key: 'dadata:addr1', level: 'address', settlementKey: 'dadata:city1', implicit: false } ] );
 	} );
 
 	it( 'adopts a /select response\'s own rebuilt chain, so the very next suggest in the SAME page load is scoped by the settlement it names', async () => {
@@ -1881,6 +1891,70 @@ describe( 'location chain restore (issue #330, spec §7)', () => {
 
 		await flushMicrotasks();
 	};
+
+	// -------------------------------------------------------------------
+	// detail.settlementKey (issue #336) — always entry.records.settlement's OWN key,
+	// regardless of which level the event's own record (`key`/`level`) is for.
+	// -------------------------------------------------------------------
+
+	it( 'settlementKey names the settlement actually picked, not the deeper address just picked (issue #336)', async () => {
+		boot( { settlement: true, address: true } );
+
+		const seen = [];
+		document.body.addEventListener( 'woodev_location_applied', ( event ) => seen.push( event.detail ) );
+
+		await pickSettlement( 'dadata:settlement-pushkino' );
+
+		const addressCall = callFor( 'billing_address_1' );
+
+		// A DIFFERENT settlement's own address (issue #336's own rig measurement: an
+		// address's `city_fias_id` routinely nests a DEEPER settlement than the one the
+		// customer picked) — the server does not repair the chain this time (no `chain`
+		// field), so entry.records.settlement keeps the customer's OWN earlier pick.
+		selectViaFake( addressCall, {
+			key: 'dadata:address-cherkizovo', label: 'дер Черкизово, ул Ленина, 1', level: 'address',
+			record: {
+				key: 'dadata:address-cherkizovo', provider_id: 'dadata', level: 'address', country: 'RU',
+				label: 'дер Черкизово, ул Ленина, 1',
+			},
+		} );
+
+		fetchCalls[ fetchCalls.length - 1 ].resolve( {
+			current: { key: 'dadata:address-cherkizovo', level: 'address' },
+			persisted: true,
+		} );
+		await flushMicrotasks();
+
+		const last = seen[ seen.length - 1 ];
+
+		expect( last.key ).toBe( 'dadata:address-cherkizovo' );
+		expect( last.settlementKey ).toBe( 'dadata:settlement-pushkino' );
+	} );
+
+	it( 'settlementKey is empty when no settlement has ever been picked on this page load (issue #336)', async () => {
+		boot( { settlement: true, address: true } );
+
+		const seen = [];
+		document.body.addEventListener( 'woodev_location_applied', ( event ) => seen.push( event.detail ) );
+
+		const addressCall = callFor( 'billing_address_1' );
+
+		selectViaFake( addressCall, {
+			key: 'dadata:address-typed-only', label: 'ул Тверская, 1', level: 'address',
+			record: {
+				key: 'dadata:address-typed-only', provider_id: 'dadata', level: 'address', country: 'RU',
+				label: 'ул Тверская, 1',
+			},
+		} );
+
+		fetchCalls[ fetchCalls.length - 1 ].resolve( {
+			current: { key: 'dadata:address-typed-only', level: 'address' },
+			persisted: true,
+		} );
+		await flushMicrotasks();
+
+		expect( seen ).toEqual( [ { key: 'dadata:address-typed-only', level: 'address', settlementKey: '', implicit: false } ] );
+	} );
 
 	it( 'DROPS a stale record the server\'s rebuilt chain no longer names — a non-empty chain is authoritative, not merely additive', async () => {
 		// Adversarial review: adopting additively could never REMOVE anything, so a
@@ -1975,7 +2049,7 @@ describe( 'woodev_location_applied\'s implicit detail (issue #309)', () => {
 			implicit: true,
 		} );
 
-		expect( seen ).toEqual( [ { key: 'dadata:city1', level: 'settlement', implicit: true } ] );
+		expect( seen ).toEqual( [ { key: 'dadata:city1', level: 'settlement', settlementKey: 'dadata:city1', implicit: true } ] );
 	} );
 
 	it( 'fires implicit:false on boot for a real customer choice (config.location.implicit is false)', () => {
@@ -1987,7 +2061,7 @@ describe( 'woodev_location_applied\'s implicit detail (issue #309)', () => {
 			implicit: false,
 		} );
 
-		expect( seen ).toEqual( [ { key: 'dadata:city1', level: 'settlement', implicit: false } ] );
+		expect( seen ).toEqual( [ { key: 'dadata:city1', level: 'settlement', settlementKey: 'dadata:city1', implicit: false } ] );
 	} );
 
 	it( 'fires nothing at boot when there is no current record at all', () => {
@@ -2023,7 +2097,9 @@ describe( 'woodev_location_applied\'s implicit detail (issue #309)', () => {
 			implicit: true,
 		} );
 
-		expect( seen ).toEqual( [ { key: 'dadata:addr1', level: 'address', implicit: true } ] );
+		// settlementKey (issue #336) is '' — this entry's chain never carried a settlement
+		// entry, so entry.records.settlement was never seeded.
+		expect( seen ).toEqual( [ { key: 'dadata:addr1', level: 'address', settlementKey: '', implicit: true } ] );
 	} );
 
 	it( 'an explicit pick always fires implicit:false, overriding a previously-implicit boot state (spec D11: a real choice drops the flag)', async () => {
@@ -2043,10 +2119,10 @@ describe( 'woodev_location_applied\'s implicit detail (issue #309)', () => {
 		};
 
 		selectViaFake( settlementCall, item );
-		fetchCalls[ fetchCalls.length - 1 ].resolve( { current: { key: item.record.key, level: 'settlement' }, persisted: true } );
+		fetchCalls[ fetchCalls.length - 1 ].resolve( { current: { key: item.record.key, level: 'settlement' }, persisted: true, chain: { settlement: { key: item.record.key, level: 'settlement' } } } );
 		await flushMicrotasks();
 
-		expect( seen ).toEqual( [ { key: 'dadata:city2', level: 'settlement', implicit: false } ] );
+		expect( seen ).toEqual( [ { key: 'dadata:city2', level: 'settlement', settlementKey: 'dadata:city2', implicit: false } ] );
 	} );
 
 	it( 'the initial implicit:true fire is not destroyed by a DOM-replacing renderer running right after it (defect #1 — the fatal one: attachAll() runs AFTER prefill() in boot())', () => {
@@ -2077,7 +2153,7 @@ describe( 'woodev_location_applied\'s implicit detail (issue #309)', () => {
 
 		// Sanity: this really does exercise the DOM-destroying renderer path.
 		expect( document.getElementById( 'billing_city' ).tagName ).toBe( 'SELECT' );
-		expect( seen ).toEqual( [ { key: 'dadata:city1', level: 'settlement', implicit: true } ] );
+		expect( seen ).toEqual( [ { key: 'dadata:city1', level: 'settlement', settlementKey: 'dadata:city1', implicit: true } ] );
 	} );
 
 	it( 'a later checkout re-render (updated_checkout) neither loses nor duplicates the boot-time signal (defect #2)', () => {
@@ -2094,7 +2170,7 @@ describe( 'woodev_location_applied\'s implicit detail (issue #309)', () => {
 			implicit: true,
 		} );
 
-		expect( seen ).toEqual( [ { key: 'dadata:city1', level: 'settlement', implicit: true } ] );
+		expect( seen ).toEqual( [ { key: 'dadata:city1', level: 'settlement', settlementKey: 'dadata:city1', implicit: true } ] );
 
 		const fresh = document.createElement( 'input' );
 		fresh.type = 'text';
@@ -2104,7 +2180,7 @@ describe( 'woodev_location_applied\'s implicit detail (issue #309)', () => {
 
 		window.jQuery( document.body ).trigger( 'updated_checkout' );
 
-		expect( seen ).toEqual( [ { key: 'dadata:city1', level: 'settlement', implicit: true } ] );
+		expect( seen ).toEqual( [ { key: 'dadata:city1', level: 'settlement', settlementKey: 'dadata:city1', implicit: true } ] );
 	} );
 
 	it( 'never gates scoping/addressing on the implicit flag — the restored key still scopes the child fetch', () => {
@@ -2205,8 +2281,8 @@ describe( 'woodev_location_applied\'s implicit detail (issue #309)', () => {
 		bootSharedLocationEntries( { key: 'dadata:city1', level: 'settlement' }, true );
 
 		expect( seen ).toEqual( [
-			{ key: 'dadata:city1', level: 'settlement', implicit: true },
-			{ key: 'dadata:city1', level: 'settlement', implicit: true },
+			{ key: 'dadata:city1', level: 'settlement', settlementKey: 'dadata:city1', implicit: true },
+			{ key: 'dadata:city1', level: 'settlement', settlementKey: 'dadata:city1', implicit: true },
 		] );
 	} );
 
@@ -2222,12 +2298,12 @@ describe( 'woodev_location_applied\'s implicit detail (issue #309)', () => {
 			key: 'dadata:kazan', label: 'г Казань', level: 'settlement',
 			record: { key: 'dadata:kazan', provider_id: 'dadata', level: 'settlement', country: 'RU', label: 'г Казань' },
 		} );
-		fetchCalls[ fetchCalls.length - 1 ].resolve( { current: { key: 'dadata:kazan', level: 'settlement' }, persisted: true } );
+		fetchCalls[ fetchCalls.length - 1 ].resolve( { current: { key: 'dadata:kazan', level: 'settlement' }, persisted: true, chain: { settlement: { key: 'dadata:kazan', level: 'settlement' } } } );
 		await flushMicrotasks();
 
 		// ONE event, implicit:false — not two, not still true, and not scoped to "only the
 		// shipping entry knows this now" the way the old per-entry DOM marker was.
-		expect( seen ).toEqual( [ { key: 'dadata:kazan', level: 'settlement', implicit: false } ] );
+		expect( seen ).toEqual( [ { key: 'dadata:kazan', level: 'settlement', settlementKey: 'dadata:kazan', implicit: false } ] );
 	} );
 } );
 
@@ -2487,7 +2563,7 @@ describe( 'Location Provider key invalidation on a local-only clear (review find
 		document.getElementById( 'billing_country' ).value = 'US';
 		document.getElementById( 'billing_country' ).dispatchEvent( new Event( 'change', { bubbles: true } ) );
 
-		expect( seen ).toEqual( [ { key: '', level: '', implicit: false } ] );
+		expect( seen ).toEqual( [ { key: '', level: '', settlementKey: '', implicit: false } ] );
 		// Sanity: this really is a pure client-side clear, never a network call.
 		expect( fetchCalls.length ).toBe( 0 );
 	} );
@@ -2518,7 +2594,7 @@ describe( 'Location Provider key invalidation on a local-only clear (review find
 
 		await flushMicrotasks();
 
-		expect( seen ).toEqual( [ { key: '', level: '', implicit: false } ] );
+		expect( seen ).toEqual( [ { key: '', level: '', settlementKey: '', implicit: false } ] );
 	} );
 
 	it( 'a real pick through the widget does NOT fire the empty-key event before /select resolves', () => {

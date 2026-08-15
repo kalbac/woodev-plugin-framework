@@ -1369,9 +1369,24 @@ test( 'refresh() re-reads the city, so a locality changed while the map is open 
 // -----------------------------------------------------------------------
 
 describe( 'resolveLocalityKey() — Task 15 (issue #159)', () => {
-	function fireLocationApplied( key, level = 'settlement' ) {
+	/**
+	 * @param {string}      key           `detail.key`.
+	 * @param {string}      [level]       `detail.level`, defaults to 'settlement'.
+	 * @param {string|null} [settlementKey] `detail.settlementKey` (issue #336) — omitted
+	 *                                      entirely (never even set on `detail`) when not
+	 *                                      passed, so every PRE-#336 call site here keeps
+	 *                                      exercising `handleLocationApplied()`'s fallback
+	 *                                      to `key` exactly as before this parameter existed.
+	 */
+	function fireLocationApplied( key, level = 'settlement', settlementKey = null ) {
+		const detail = { key, level };
+
+		if ( null !== settlementKey ) {
+			detail.settlementKey = settlementKey;
+		}
+
 		document.body.dispatchEvent(
-			new CustomEvent( 'woodev_location_applied', { detail: { key, level }, bubbles: true } )
+			new CustomEvent( 'woodev_location_applied', { detail, bubbles: true } )
 		);
 	}
 
@@ -1413,6 +1428,71 @@ describe( 'resolveLocalityKey() — Task 15 (issue #159)', () => {
 		await flushAsync();
 
 		expect( queries[ 0 ].locality ).toBe( 'dadata:fias-1' );
+	} );
+
+	test( 'PREFERS config.location.settlementKey over current.key at page load (issue #336)', async () => {
+		// The page-load config and the live `woodev_location_applied` event must speak ONE
+		// vocabulary, or the map addresses itself differently before and after the customer's
+		// first pick. `current.key` here is an ADDRESS-level record (what the customer's
+		// current record becomes as soon as they refine their address); the map must address
+		// by the SETTLEMENT they actually picked.
+		const queries = [];
+		const fieldId = 'settlement_key_pref_field';
+
+		document.body.insertAdjacentHTML(
+			'beforeend',
+			'<div data-woodev-pickup-slot="' + fieldId + '"></div>' +
+			'<input id="' + fieldId + '" type="hidden" value="" />'
+		);
+
+		window.WoodevPickupDataSource = fakeDataSourceFactory( ( query ) => {
+			queries.push( query );
+			return Promise.resolve( [] );
+		} );
+
+		setConfig( makeConfig( {
+			fieldId,
+			strategy: 'bulk',
+			location: { current: { key: 'dadata:address-cherkizovo' }, settlementKey: 'dadata:settlement-pushkino' },
+		} ) );
+		mountAll();
+
+		clickTrigger();
+		await flushAsync();
+
+		expect( queries[ 0 ].locality ).toBe( 'dadata:settlement-pushkino' );
+	} );
+
+	test( 'falls back to current.key when config.location.settlementKey is empty (issue #336 — the half #334\'s rule must not be copied onto)', async () => {
+		// A customer who typed an address without ever picking a settlement has no settlement
+		// record at all. Refusing here — the storage key's correct behaviour — would turn a
+		// working map into «в этом населённом пункте нет пунктов выдачи», a regression rather
+		// than a fix.
+		const queries = [];
+		const fieldId = 'settlement_key_fallback_field';
+
+		document.body.insertAdjacentHTML(
+			'beforeend',
+			'<div data-woodev-pickup-slot="' + fieldId + '"></div>' +
+			'<input id="' + fieldId + '" type="hidden" value="" />'
+		);
+
+		window.WoodevPickupDataSource = fakeDataSourceFactory( ( query ) => {
+			queries.push( query );
+			return Promise.resolve( [] );
+		} );
+
+		setConfig( makeConfig( {
+			fieldId,
+			strategy: 'bulk',
+			location: { current: { key: 'dadata:address-typed-only' }, settlementKey: '' },
+		} ) );
+		mountAll();
+
+		clickTrigger();
+		await flushAsync();
+
+		expect( queries[ 0 ].locality ).toBe( 'dadata:address-typed-only' );
 	} );
 
 	test( 'an empty config.location.current.key falls back to the DOM read (review finding F1)', async () => {
@@ -1590,6 +1670,114 @@ describe( 'resolveLocalityKey() — Task 15 (issue #159)', () => {
 		await flushAsync();
 
 		expect( queries[ 0 ].locality ).toBe( 'Москва' );
+	} );
+
+	// -------------------------------------------------------------------
+	// detail.settlementKey (issue #336) — the map PREFERS it over detail.key,
+	// falling back to detail.key only when settlementKey is absent/empty. This is the
+	// OPPOSITE asymmetry from #334's storage-key rule — see handleLocationApplied()'s
+	// own docblock for why a fallback here is a needed recovery, not a mis-file.
+	// -------------------------------------------------------------------
+
+	test( 'prefers detail.settlementKey over detail.key when both are present (issue #336)', async () => {
+		const fieldId = 'pickup_locality_settlement_key_preferred_test';
+
+		document.body.insertAdjacentHTML(
+			'beforeend',
+			'<div data-woodev-pickup-slot="' + fieldId + '"></div>' +
+			'<input id="' + fieldId + '" type="hidden" value="" />'
+		);
+
+		const queries = [];
+		window.WoodevPickupDataSource = fakeDataSourceFactory( ( query ) => {
+			queries.push( query );
+			return Promise.resolve( [] );
+		} );
+
+		setConfig( makeConfig( {
+			fieldId,
+			strategy: 'bulk',
+			location: { current: { key: 'dadata:fias-1' } },
+		} ) );
+		mountAll();
+
+		// An address pick: `key` is the deeper address record's own key, but
+		// `settlementKey` names the settlement the customer actually picked — the map
+		// must address itself by settlementKey, not the address key. Fired BEFORE the
+		// first resolveLocalityKey() read, so handleLocationApplied() writes it directly
+		// (see that function's own docblock — it never needs a prior "seeded" read).
+		fireLocationApplied( 'dadata:address-cherkizovo', 'address', 'dadata:settlement-pushkino' );
+
+		clickTrigger();
+		await flushAsync();
+
+		expect( queries[ 0 ].locality ).toBe( 'dadata:settlement-pushkino' );
+	} );
+
+	test( 'falls back to detail.key when detail.settlementKey is absent (older cascade build)', async () => {
+		const fieldId = 'pickup_locality_settlement_key_absent_test';
+
+		document.body.insertAdjacentHTML(
+			'beforeend',
+			'<div data-woodev-pickup-slot="' + fieldId + '"></div>' +
+			'<input id="' + fieldId + '" type="hidden" value="" />'
+		);
+
+		const queries = [];
+		window.WoodevPickupDataSource = fakeDataSourceFactory( ( query ) => {
+			queries.push( query );
+			return Promise.resolve( [] );
+		} );
+
+		setConfig( makeConfig( {
+			fieldId,
+			strategy: 'bulk',
+			location: { current: { key: 'dadata:fias-1' } },
+		} ) );
+		mountAll();
+
+		// No settlementKey at all on this event — mirrors an older cascade build that has
+		// not shipped the field yet.
+		fireLocationApplied( 'dadata:city-77' );
+
+		clickTrigger();
+		await flushAsync();
+
+		expect( queries[ 0 ].locality ).toBe( 'dadata:city-77' );
+	} );
+
+	test( 'falls back to detail.key when detail.settlementKey is an empty string (a chain with no settlement — issue #336)', async () => {
+		const fieldId = 'pickup_locality_settlement_key_empty_test';
+
+		document.body.insertAdjacentHTML(
+			'beforeend',
+			'<div data-woodev-pickup-slot="' + fieldId + '"></div>' +
+			'<input id="' + fieldId + '" type="hidden" value="" />'
+		);
+
+		const queries = [];
+		window.WoodevPickupDataSource = fakeDataSourceFactory( ( query ) => {
+			queries.push( query );
+			return Promise.resolve( [] );
+		} );
+
+		setConfig( makeConfig( {
+			fieldId,
+			strategy: 'bulk',
+			location: { current: { key: 'dadata:fias-1' } },
+		} ) );
+		mountAll();
+
+		// An address typed without ever picking a settlement — location-cascade.js's own
+		// fireLocationApplied() degrades settlementKey to '' in exactly this case (spec
+		// §4.4: backwardsFill() writes DOM text only, never a settlement record). A working
+		// map must still address by the address's own key, never refuse.
+		fireLocationApplied( 'dadata:address-typed-only', 'address', '' );
+
+		clickTrigger();
+		await flushAsync();
+
+		expect( queries[ 0 ].locality ).toBe( 'dadata:address-typed-only' );
 	} );
 } );
 

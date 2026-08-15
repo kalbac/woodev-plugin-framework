@@ -125,14 +125,19 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 	}
 
 	/**
-	 * A spy {@see Location_Resolution_Cache}: counts resolve_for() calls and
-	 * returns a configured value, WITHOUT touching any session — used to prove
-	 * `resolve_for()` never even reaches the cache when there is no customer
-	 * record at all.
+	 * A spy {@see Location_Resolution_Cache}: counts resolve_for() calls,
+	 * captures the LAST record it was called with (issue #336 — proves
+	 * {@see Location_Service::resolve_for()}'s optional `$record` argument
+	 * reaches the cache unchanged, rather than being silently re-derived from
+	 * the customer's current record), and returns a configured value, WITHOUT
+	 * touching any session — also used to prove `resolve_for()` never even
+	 * reaches the cache when there is no customer record at all.
 	 */
 	final class Location_Service_Spy_Resolution_Cache extends Location_Resolution_Cache {
 
 		public int $calls = 0;
+
+		public ?Location_Record $last_record = null;
 
 		/** @var mixed */
 		private $return_value;
@@ -143,6 +148,7 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 
 		public function resolve_for( Shipping_Plugin $plugin, Location_Record $record ) {
 			++$this->calls;
+			$this->last_record = $record;
 
 			return $this->return_value;
 		}
@@ -663,6 +669,56 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 
 			$this->assertSame( 'city-code-42', $result );
 			$this->assertSame( 1, $spy_cache->calls );
+		}
+
+		/**
+		 * Issue #336: the pickup map addresses itself by the settlement-preferred
+		 * record {@see \Woodev\Framework\Shipping\Pickup\Pickup_Handler::current_location_record()}
+		 * resolves, which need not be the customer's CURRENT record (e.g. current is
+		 * address-level, settlement is an ancestor). `resolve_for()`'s explicit `$record`
+		 * argument must reach the cache AS GIVEN, not be silently overridden by the
+		 * customer's current record — the cache never even reads the current record when
+		 * an explicit one is passed.
+		 */
+		public function test_resolve_for_resolves_the_explicit_record_when_one_is_passed(): void {
+			$store     = new Location_Service_Customer_Store_Probe( new Location_Service_Fake_Session() );
+			$spy_cache = new Location_Service_Spy_Resolution_Cache( 'city-code-settlement' );
+			$service   = new Location_Service( Location_Provider_Registry::instance(), $store, $spy_cache );
+			$plugin    = $this->plugin();
+
+			// The CURRENT record is address-level, a DIFFERENT key from the explicit
+			// settlement record passed to resolve_for() below.
+			$service->set_customer_record( $this->record( 'dadata:address-current' ) );
+
+			$explicit_record = $this->record( 'dadata:settlement-explicit' );
+
+			$result = $service->resolve_for( $plugin, $explicit_record );
+
+			$this->assertSame( 'city-code-settlement', $result );
+			$this->assertSame( 1, $spy_cache->calls );
+			$this->assertNotNull( $spy_cache->last_record );
+			$this->assertSame( 'dadata:settlement-explicit', $spy_cache->last_record->key(), 'the explicit record must reach the cache, not the current one' );
+		}
+
+		/**
+		 * Issue #336: the default (`null`) must stay exactly today's behaviour — resolve
+		 * for the customer's CURRENT record. This is a regression guard for the parameter's
+		 * own default value, distinct from `test_resolve_for_delegates_to_the_resolution_cache_with_the_current_record`
+		 * above (which never even names the parameter).
+		 */
+		public function test_resolve_for_defaults_to_the_current_record_when_no_record_is_passed(): void {
+			$store     = new Location_Service_Customer_Store_Probe( new Location_Service_Fake_Session() );
+			$spy_cache = new Location_Service_Spy_Resolution_Cache( 'city-code-42' );
+			$service   = new Location_Service( Location_Provider_Registry::instance(), $store, $spy_cache );
+			$plugin    = $this->plugin();
+
+			$service->set_customer_record( $this->record( 'dadata:fias-1' ) );
+
+			$result = $service->resolve_for( $plugin, null );
+
+			$this->assertSame( 'city-code-42', $result );
+			$this->assertNotNull( $spy_cache->last_record );
+			$this->assertSame( 'dadata:fias-1', $spy_cache->last_record->key() );
 		}
 
 		public function test_resolve_for_uses_the_real_resolution_cache_end_to_end(): void {

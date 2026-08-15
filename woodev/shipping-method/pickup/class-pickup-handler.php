@@ -2288,9 +2288,22 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		}
 
 		/**
-		 * Gets the customer's current Location Provider layer record (Task 15; issue
-		 * #159), or `null` when {@see self::$plugin} was not wired, or the layer has no
-		 * current record yet.
+		 * Gets the record the pickup MAP addresses itself by (Task 15; issue #159), or
+		 * `null` when {@see self::$plugin} was not wired, or the layer has no record at
+		 * all yet.
+		 *
+		 * PREFERS the settlement-level record
+		 * ({@see \Woodev\Framework\Shipping\Location\Location_Service::get_customer_record_at()})
+		 * and FALLS BACK to the current record — deliberately the OPPOSITE asymmetry from
+		 * `Provider_Selection_Scope::current_locality()` (#334), which refuses (`''`)
+		 * rather than fall back. The two callers have opposite failure modes: a fallback
+		 * STORAGE KEY silently mis-files the customer's chosen pickup point, so #334
+		 * refuses instead. A REFUSED map, on the other hand, is a REGRESSION — a customer
+		 * who typed an address without ever picking a settlement (the cascade's backwards
+		 * fill writes the settlement FIELD's text but creates no settlement RECORD) would
+		 * see «в этом населённом пункте нет пунктов выдачи» on a map that works today.
+		 * See `docs-internal/specs/2026-08-15-location-chain-design.md` → "Deliberately
+		 * OUT of scope" for the full reasoning (issue #336).
 		 *
 		 * `protected` — same test-seam reasoning as every other accessor on this class
 		 * (see {@see self::selection()}): a probe substitutes a
@@ -2298,6 +2311,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 * needing to be a real function in the unit-test process.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Prefers the settlement-level record over the current one, falling
+		 *              back to the current record only when the chain holds no settlement
+		 *              (issue #336) — previously this always returned the current record,
+		 *              which after an address pick is the DEEPEST settlement component of
+		 *              the address row, not the one the customer chose (issue #336's rig
+		 *              measurement: 9 of 10 addresses under «г Пушкино» nested a different
+		 *              settlement).
 		 *
 		 * @return Location_Record|null
 		 */
@@ -2321,7 +2341,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 			 */
 			$this->bridge_wc_context();
 
-			$current = $this->plugin->get_location_service()->get_customer_record();
+			$service = $this->plugin->get_location_service();
+
+			$settlement = $service->get_customer_record_at( Location_Record::LEVEL_SETTLEMENT );
+
+			if ( null !== $settlement ) {
+				return $settlement;
+			}
+
+			$current = $service->get_customer_record();
 
 			return null !== $current ? $current['record'] : null;
 		}
@@ -2352,6 +2380,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 * would fatal the very first time the controller called it.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Passes {@see self::current_location_record()}'s record explicitly to
+		 *              {@see \Woodev\Framework\Shipping\Location\Location_Service::resolve_for()}
+		 *              (issue #336) — that record now prefers the settlement level, and the
+		 *              adapter must resolve the carrier city for the SAME record this method
+		 *              returns, not re-derive the plain current record on its own.
 		 *
 		 * @return array{record: Location_Record, resolved_identity: mixed}|null
 		 */
@@ -2367,7 +2400,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 			}
 
 			try {
-				$resolved_identity = $this->plugin->get_location_service()->resolve_for( $this->plugin );
+				$resolved_identity = $this->plugin->get_location_service()->resolve_for( $this->plugin, $record );
 			} catch ( \Throwable $exception ) {
 				return null;
 			}
@@ -2416,6 +2449,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 * convention {@see \Woodev\Framework\Shipping\Checkout\Checkout_Config::build_location_block()}
 		 * already uses for its own sibling `implicit` key.
 		 *
+		 * `current.key` follows the SAME settlement-preferred, current-record-fallback rule as
+		 * {@see self::current_location_record()} (issue #336) — it is what
+		 * `location-cascade.js` restores `entry.records['settlement']` from at boot, and what
+		 * `pickup-mount.js` falls back to when a `woodev_location_applied` event carries no
+		 * `settlementKey`. `implicit` stays tied to the CURRENT record, not the settlement one:
+		 * it answers "was the customer's own current pick a real choice", a question about the
+		 * current record regardless of which record addresses the map.
+		 *
 		 * @since 2.0.2
 		 * @since 2.0.2 Also gates on {@see \Woodev\Framework\Shipping\Location\Location_Service::is_active()},
 		 *              not just on {@see self::$plugin} being non-null (review finding F1,
@@ -2427,21 +2468,44 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 *              a DOM attribute from `location-cascade.js`, which could not survive a
 		 *              checkout re-render, a select2-rendering presentation mode, or two entries
 		 *              sharing one location block.
+		 * @since 2.0.2 Publishes `settlementKey` — the map's own addressing locality, the
+		 *              settlement-level record's key or `''` (issue #336). `current`/`implicit`
+		 *              keep their exact prior meaning: an earlier draft wrote the settlement
+		 *              into `current.key` itself, which left the block naming one record in
+		 *              `current` while `implicit` described another. The browser prefers
+		 *              `settlementKey` and falls back to `current.key` — deliberately the
+		 *              OPPOSITE of #334's storage-key rule, which must refuse rather than fall
+		 *              back (see {@see self::current_location_record()}).
 		 *
-		 * @return array{current: array{key: string}, implicit: bool}|null
+		 * @return array{current: array{key: string}, settlementKey: string, implicit: bool}|null
 		 */
 		protected function location_config_block(): ?array {
 			if ( null === $this->plugin || ! $this->plugin->get_location_service()->is_active() ) {
 				return null;
 			}
 
-			$customer = $this->plugin->get_location_service()->get_customer_record();
+			$service  = $this->plugin->get_location_service();
+			$customer = $service->get_customer_record();
+
+			$settlement = $service->get_customer_record_at( Location_Record::LEVEL_SETTLEMENT );
 
 			return [
-				'current'  => [
+				// `current` still means EXACTLY what its name says — the customer's CURRENT
+				// record — and `implicit` describes that same record. An earlier draft of
+				// #336 wrote the settlement key in here instead, which made the block
+				// self-contradictory (`current.key` naming one record while `implicit`
+				// described another) and broke the field's contract for every other reader.
+				'current'       => [
 					'key' => null !== $customer ? $customer['record']->key() : '',
 				],
-				'implicit' => null !== $customer && (bool) $customer['implicit'],
+				// The map's addressing locality rides in its OWN field, mirroring the
+				// `settlementKey` detail on `location-cascade.js`'s `woodev_location_applied`
+				// event exactly, so browser and page-load config speak one vocabulary.
+				// `''` when the chain holds no settlement — `pickup-mount.js` then falls back
+				// to `current.key`, which is the fallback #336 exists to preserve (a customer
+				// who typed an address without picking a settlement must still see points).
+				'settlementKey' => null !== $settlement ? $settlement->key() : '',
+				'implicit'      => null !== $customer && (bool) $customer['implicit'],
 			];
 		}
 
