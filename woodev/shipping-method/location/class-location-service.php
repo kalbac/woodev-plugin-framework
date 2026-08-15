@@ -710,21 +710,39 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		}
 
 		/**
-		 * Resolves `$plugin`'s carrier identity for the customer's CURRENT
-		 * location record — cached (Task 5, spec D9).
+		 * Resolves `$plugin`'s carrier identity for a location record — cached
+		 * (Task 5, spec D9).
+		 *
+		 * `$record` defaults to `null`, which resolves for the customer's
+		 * CURRENT record, exactly as before this parameter existed — every
+		 * pre-existing caller is unaffected. Pass an explicit `$record` to
+		 * resolve for a DIFFERENT record the caller has already chosen to
+		 * address by (issue #336: {@see \Woodev\Framework\Shipping\Pickup\Pickup_Handler::location_context()}
+		 * passes the settlement-preferred record
+		 * {@see \Woodev\Framework\Shipping\Pickup\Pickup_Handler::current_location_record()}
+		 * resolved, so the adapter resolves the carrier city for the SAME
+		 * record the pickup map is addressed by, not a re-derived current one).
 		 *
 		 * Returns `null` in two situations a caller cannot tell apart from the
-		 * return value alone: the customer has no location record at all yet
-		 * (this method never even reaches the cache/adapter in that case — see
+		 * return value alone: `$record` is `null` (explicit or defaulted) and
+		 * the customer has no CURRENT record at all yet (this method never even
+		 * reaches the cache/adapter in that case — see
 		 * {@see self::get_customer_record()} first if the distinction
-		 * matters), or the carrier genuinely does not serve the customer's
+		 * matters), or the carrier genuinely does not serve the given
 		 * locality (a legitimate, cached answer from
 		 * {@see Location_Resolution_Cache::resolve_for()} itself).
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Added the optional `$record` parameter (issue #336). The
+		 *              default (`null`) is unchanged — do NOT flip it; this
+		 *              method has other callers that must keep resolving
+		 *              against the customer's current record.
 		 *
 		 * @param \Woodev\Framework\Shipping\Shipping_Plugin $plugin The plugin
-		 *        whose adapter should resolve the customer's current locality.
+		 *        whose adapter should resolve the given locality.
+		 * @param Location_Record|null                       $record The record
+		 *        to resolve for. `null` (default) resolves for the customer's
+		 *        current record.
 		 *
 		 * @return mixed|null The plugin's carrier identity (opaque to the
 		 *                     framework), or `null` (no record yet, or the
@@ -733,14 +751,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 * @throws \Throwable Re-thrown, after logging, when the adapter itself
 		 *                     threw — see {@see Location_Resolution_Cache::resolve_for()}.
 		 */
-		public function resolve_for( \Woodev\Framework\Shipping\Shipping_Plugin $plugin ) {
-			$current = $this->get_customer_record();
+		public function resolve_for( \Woodev\Framework\Shipping\Shipping_Plugin $plugin, ?Location_Record $record = null ) {
+			if ( null === $record ) {
+				$current = $this->get_customer_record();
 
-			if ( null === $current ) {
-				return null;
+				if ( null === $current ) {
+					return null;
+				}
+
+				$record = $current['record'];
 			}
 
-			return $this->resolution_cache->resolve_for( $plugin, $current['record'] );
+			return $this->resolution_cache->resolve_for( $plugin, $record );
 		}
 
 		/**

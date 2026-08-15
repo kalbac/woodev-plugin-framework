@@ -82,17 +82,28 @@
  * async ready queue, since — unlike that file — this one must keep working even in a jQuery-
  * less test harness for its own non-jQuery-producer paths).
  *
- * `woodev_location_applied` (Task 15; issue #159; `implicit` added issue #309, spec D11/§4.6):
- * a native, bubbling `CustomEvent` on `document.body`, `detail: { key, level, implicit }`,
- * fired from {@see settleSelect} on the SAME "this response is final and persisted" condition
- * as the `update_checkout` trigger above — see that function's own docblock — AND from
- * {@see prefill} on boot, when `config.location.current` already names a record (see below).
- * This is a NATIVE event, never a jQuery `.trigger()` (unlike `update_checkout`, which
- * WooCommerce itself only ever fires through jQuery): this module is the event's own
- * producer, so there is no third-party dispatch mechanism to accommodate the way
- * `pickup-mount.js`'s dual-world `updated_checkout` binding has to. `pickup-mount.js`'s own
+ * `woodev_location_applied` (Task 15; issue #159; `implicit` added issue #309, spec D11/§4.6;
+ * `settlementKey` added issue #336):
+ * a native, bubbling `CustomEvent` on `document.body`, `detail: { key, level, settlementKey,
+ * implicit }`, fired from {@see settleSelect} on the SAME "this response is final and
+ * persisted" condition as the `update_checkout` trigger above — see that function's own
+ * docblock — AND from {@see prefill} on boot, when `config.location.current` already names a
+ * record (see below). This is a NATIVE event, never a jQuery `.trigger()` (unlike
+ * `update_checkout`, which WooCommerce itself only ever fires through jQuery): this module is
+ * the event's own producer, so there is no third-party dispatch mechanism to accommodate the
+ * way `pickup-mount.js`'s dual-world `updated_checkout` binding has to. `pickup-mount.js`'s own
  * `resolveLocalityKey()` is the intended consumer of `key`/`level` — it tracks the customer's
  * current Location Provider layer key without ever reading a checkout DOM field.
+ *
+ * `detail.settlementKey` (issue #336) is a SEPARATE field, never a replacement for `key`:
+ * issue #309's `implicit` flag and other consumers ride on `key` meaning "the record THIS
+ * event describes", which must stay the current/just-persisted record at whatever level it
+ * sits at. `settlementKey` instead always names the settlement the customer has actually
+ * picked, if any — see {@see fireLocationApplied}'s own docblock for exactly how it is
+ * derived and why. `pickup-mount.js`'s pickup map prefers it over `key`, falling back to
+ * `key` only when `settlementKey` is absent/empty, mirroring
+ * {@see \Woodev\Framework\Shipping\Pickup\Pickup_Handler::current_location_record()}'s own
+ * settlement-preferred, current-record-fallback rule server-side.
  *
  * `detail.implicit` (issue #309; spec D11/§4.6) is this event's SECOND consumer surface:
  * `config.location.implicit` had ZERO consumers anywhere in this codebase before this — a
@@ -1007,7 +1018,7 @@
 			// (`Location_Controller::handle_select_request()` never writes implicit — spec
 			// D11) — `implicit` is unconditionally `false` here, regardless of what the
 			// PREVIOUS state (boot's own fire, see {@see prefill}) said.
-			fireLocationApplied( record, false );
+			fireLocationApplied( entry, record, false );
 
 			if ( window.jQuery ) {
 				window.jQuery( document.body ).trigger( 'update_checkout' );
@@ -1020,7 +1031,7 @@
 			showNotPersistedNotice( entry );
 			// Nothing was persisted, so there is no record to flag as a default guess —
 			// `false`, same as every other "the record is now unknown" fire below.
-			fireLocationApplied( null, false );
+			fireLocationApplied( entry, null, false );
 		}
 	}
 
@@ -1051,18 +1062,57 @@
 	 * tells a listener to ignore them. A consumer that reads `implicit` ALONE, without
 	 * checking `key`, will conclude the customer made a choice they never made.
 	 *
+	 * `detail.settlementKey` (issue #336) is ALWAYS `entry.records['settlement']`'s own key when
+	 * one exists, REGARDLESS of `record`/`level` — it is not "the settlement component of THIS
+	 * event's record", it is "whichever settlement the customer has actually picked so far",
+	 * exactly what {@see \Woodev\Framework\Shipping\Pickup\Pickup_Handler::current_location_record()}
+	 * now prefers server-side. `entry.records.settlement` is kept current by {@see adoptChain}
+	 * (boot restore AND every `/select` response) and by {@see onSelectFor} on a direct settlement
+	 * pick — never by {@see backwardsFill}, which only ever writes DOM text, never a record (spec
+	 * §4.4) — so an address typed without ever picking a settlement correctly yields `''` here,
+	 * same sentinel as `key`. `pickup-mount.js` prefers this field and falls back to `key` when it
+	 * is absent/empty — see that file's own `handleLocationApplied()` docblock for why the map's
+	 * rule is the OPPOSITE of the storage key's (#334): a fallback there is a needed recovery, not
+	 * a mis-file.
+	 *
+	 * @param {Object}  entry
 	 * @param {Object}  record   The just-persisted record (D8's own full, round-tripped
 	 *                           shape), or `null` when the current locality is now unknown.
 	 * @param {boolean} implicit Whether the record this event describes is a default guess
 	 *                           rather than the customer's own choice.
 	 * @returns {void}
 	 */
-	function fireLocationApplied( record, implicit ) {
+	function fireLocationApplied( entry, record, implicit ) {
 		var key = record && 'string' === typeof record.key ? record.key : '';
 		var level = record && 'string' === typeof record.level ? record.level : '';
+		var settlementRecord = entry && entry.records ? entry.records.settlement : null;
+
+		// PUBLISHED ONLY WHEN THE SERVER HAS VOUCHED FOR IT, on two independent counts:
+		//
+		// 1. `key` must be non-empty. An empty `key` is this event's own "the customer's
+		//    locality is UNKNOWN right now" sentinel (review findings F1/F2), and it exists
+		//    so `pickup-mount.js` degrades to its DOM read instead of acting on state the
+		//    layer cannot vouch for. Publishing a settlement beside it would hand the picker
+		//    a confident answer precisely where the honest one is "I do not know", silently
+		//    bypassing the fallback F1 added.
+		// 2. The settlement record must be `confirmed` — i.e. adopted from the SERVER's own
+		//    chain ({@see adoptChain}), not the optimistic write {@see onSelectFor} makes
+		//    before the round trip resolves. Adversarial review's case: the customer picks a
+		//    settlement, then an address in a DIFFERENT locality, and `/select` answers
+		//    `persisted: true` but carries no usable chain — the optimistic settlement then
+		//    survives and the map would query the locality the customer just left.
+		//
+		// Both reduce to the same rule: this event never names a locality the layer cannot
+		// stand behind, and `pickup-mount.js`'s DOM fallback is the designed degradation.
+		var settlementKey = '' !== key && settlementRecord && true === settlementRecord.confirmed && 'string' === typeof settlementRecord.key
+			? settlementRecord.key
+			: '';
 
 		document.body.dispatchEvent(
-			new CustomEvent( 'woodev_location_applied', { detail: { key: key, level: level, implicit: !! implicit }, bubbles: true } )
+			new CustomEvent( 'woodev_location_applied', {
+				detail: { key: key, level: level, settlementKey: settlementKey, implicit: !! implicit },
+				bubbles: true,
+			} )
 		);
 	}
 
@@ -1613,7 +1663,7 @@
 		if ( cleared && isActiveAddressSection( section ) ) {
 			// Nothing is known to be implicit about a cleared record — false, same reasoning
 			// as {@see settleSelect}'s own `notPersisted` branch.
-			fireLocationApplied( null, false );
+			fireLocationApplied( entry, null, false );
 		}
 	}
 
@@ -1723,7 +1773,7 @@
 					if ( null === entry.records[ level ] && isActiveAddressSection( section ) ) {
 						// Same "nothing known to be implicit about an unknown record" reasoning
 						// as {@see clearCountryScope}.
-						fireLocationApplied( null, false );
+						fireLocationApplied( entry, null, false );
 					}
 				} );
 			}
@@ -1887,7 +1937,13 @@
 			// Only the cascade's OWN levels, so a rogue/extra key cannot plant a record
 			// under a level nothing here will ever read back.
 			if ( LEVELS.indexOf( level ) !== -1 && node && 'string' === typeof node.key && node.key ) {
-				adopted[ level ] = { key: node.key };
+				// `confirmed` marks PROVENANCE, not validity: this record came from the
+				// SERVER's own chain, so it is one the server actually holds — unlike the
+				// optimistic write `onSelectFor()` makes before any round trip resolves.
+				// {@see fireLocationApplied} publishes a settlement key only for a confirmed
+				// record, so an optimistic one can never be handed to `pickup-mount.js` as
+				// the map's addressing locality (adversarial review).
+				adopted[ level ] = { key: node.key, confirmed: true };
 			}
 		} );
 
@@ -1980,12 +2036,20 @@
 			// a silent no-op) degrades to EXACTLY today's single-level seed, and `current` always
 			// wins over its own chain entry for its own level regardless.
 			adoptChain( entry, entry.location.chain );
-			entry.records[ current.level ] = { key: current.key };
+
+			// `confirmed` for the same reason every chain entry above carries it: this seed
+			// is the SERVER's own rendered config block, not an optimistic client write —
+			// {@see fireLocationApplied} may publish it as the map's addressing locality.
+			// Without it this line would DOWNGRADE the record adoptChain() just confirmed
+			// for this very level.
+			entry.records[ current.level ] = { key: current.key, confirmed: true };
 
 			// The event still fires for `current` ONLY, unchanged — the chain is restoration
 			// plumbing for scoping (see scopeKeyFor()), never a second source of "the customer's
 			// current locality" for a listener like pickup-mount.js's own resolveLocalityKey().
-			fireLocationApplied( { key: current.key, level: current.level }, !! entry.location.implicit );
+			// `entry.records.settlement` is already seeded by adoptChain() above, so
+			// fireLocationApplied() picks up settlementKey from it correctly even on this boot fire.
+			fireLocationApplied( entry, { key: current.key, level: current.level }, !! entry.location.implicit );
 		}
 	}
 

@@ -1216,6 +1216,57 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 		}
 
 		/**
+		 * Builds an ADDRESS-level record with an explicit `ancestors` set — issue #336's
+		 * settlement-preferred/current-fallback tests need to control whether the chain
+		 * {@see Customer_Location_Store::set()} rebuilds keeps a shallower settlement record
+		 * or drops it, and only an address record naming that settlement's key in its own
+		 * `ancestors` proves ancestry (mirrors `CustomerLocationStoreTest::record_with_ancestors()`).
+		 *
+		 * @param string   $key       The record's own key.
+		 * @param string[] $ancestors The `ancestors` set to publish.
+		 */
+		private function address_record( string $key, array $ancestors ): Location_Record {
+			return Location_Record::from_array(
+				[
+					'key'         => $key,
+					'provider_id' => explode( ':', $key )[0],
+					'level'       => Location_Record::LEVEL_ADDRESS,
+					'country'     => 'RU',
+					'ancestors'   => $ancestors,
+				]
+			);
+		}
+
+		/**
+		 * Builds a {@see Pickup_Handler_Location_Fixture_Plugin} whose customer store holds a
+		 * TWO-LEVEL chain (issue #336) — `$settlement` written first, then `$address` (which
+		 * must name `$settlement`'s key in its own `ancestors` for {@see Customer_Location_Store::set()}
+		 * to keep the settlement level rather than drop it — see {@see self::address_record()}).
+		 * `current` ends up at the address level, exactly what an address pick inside an
+		 * already-chosen settlement looks like on the rig (issue #336's own measurement).
+		 *
+		 * @param Location_Record      $settlement The settlement-level record picked first.
+		 * @param Location_Record      $address    The address-level record picked second.
+		 * @param Location_Adapter|null $adapter   Optional adapter for {@see Pickup_Handler::location_context()}.
+		 */
+		private function location_plugin_with_chain( Location_Record $settlement, Location_Record $address, ?Location_Adapter $adapter = null ): Pickup_Handler_Location_Fixture_Plugin {
+			$instance = ( new \ReflectionClass( Pickup_Handler_Location_Fixture_Plugin::class ) )->newInstanceWithoutConstructor();
+
+			$store = new Pickup_Handler_Customer_Location_Store_Probe( new Pickup_Handler_Location_Fake_Session() );
+			$store->set( $settlement );
+			$store->set( $address );
+
+			$instance->fake_adapter          = $adapter;
+			$instance->fake_location_service = new Pickup_Handler_Location_Service_Active_Probe(
+				Location_Provider_Registry::instance(),
+				$store,
+				true
+			);
+
+			return $instance;
+		}
+
+		/**
 		 * Installs a faithful-enough Brain Monkey stand-in for `sanitize_hex_color()` —
 		 * NOT currently stubbed anywhere else in this codebase. Verified against real
 		 * WordPress core (`wp-includes/formatting.php`): returns the input UNCHANGED (no
@@ -1367,6 +1418,67 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			$config = $this->make_handler( [ 'plugin' => $plugin ] )->get_js_config();
 
 			$this->assertSame( 'dadata:fias-1', $config['location']['current']['key'] );
+		}
+
+		/**
+		 * `location_config_block()`'s `current.key` follows the SAME settlement-preferred
+		 * rule as `current_location_record()` (issue #336) — see that method's own tests
+		 * under "current_location_record() settlement-preferred / current-fallback rule"
+		 * for the full reasoning; this proves the SAME preference reaches the browser
+		 * config, not just `location_context()`'s server-side enrichment.
+		 */
+		public function test_config_carries_the_settlement_record_key_when_the_chain_has_one(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			Functions\when( 'rest_url' )->justReturn( 'https://example.test/wp-json/woodev/v1' );
+			Functions\when( 'wp_create_nonce' )->justReturn( 'NONCE' );
+			Functions\when( 'wc_ship_to_billing_address_only' )->justReturn( false );
+
+			$settlement = $this->location_record( 'dadata:settlement-pushkino' );
+			$address    = $this->address_record( 'dadata:address-cherkizovo', [ 'dadata:settlement-pushkino' ] );
+
+			$plugin = $this->location_plugin_with_chain( $settlement, $address );
+			$config = $this->make_handler( [ 'plugin' => $plugin ] )->get_js_config();
+
+			// The settlement rides in its OWN field. `current` keeps meaning the CURRENT
+			// record — an earlier draft wrote the settlement into `current.key` itself, which
+			// left the block naming one record in `current` while `implicit` described another
+			// (adversarial review).
+			$this->assertSame( 'dadata:settlement-pushkino', $config['location']['settlementKey'] );
+			$this->assertSame(
+				'dadata:address-cherkizovo',
+				$config['location']['current']['key'],
+				'current must still identify the CURRENT record, not the map\'s addressing locality'
+			);
+		}
+
+		/**
+		 * The fallback half of the same rule — an address typed without ever picking a
+		 * settlement must still publish a usable key (its own), never `''`, which would
+		 * needlessly disable the browser's own DOM fallback (gotcha
+		 * `an-empty-domain-key-is-not-a-key` — `''` must stay reserved for "no record at
+		 * all").
+		 */
+		public function test_config_carries_the_current_record_key_when_the_chain_has_no_settlement(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			Functions\when( 'rest_url' )->justReturn( 'https://example.test/wp-json/woodev/v1' );
+			Functions\when( 'wp_create_nonce' )->justReturn( 'NONCE' );
+			Functions\when( 'wc_ship_to_billing_address_only' )->justReturn( false );
+
+			$address = $this->address_record( 'dadata:address-typed-only', [] );
+
+			$plugin = $this->location_plugin( $address, null, true );
+			$config = $this->make_handler( [ 'plugin' => $plugin ] )->get_js_config();
+
+			$this->assertSame(
+				'',
+				$config['location']['settlementKey'],
+				'no settlement in the chain — the field says so honestly rather than naming the address'
+			);
+			$this->assertSame(
+				'dadata:address-typed-only',
+				$config['location']['current']['key'],
+				'and the browser falls back to THIS, so the map keeps working (the half #334\'s rule must not be copied onto)'
+			);
 		}
 
 		/**
@@ -1586,6 +1698,92 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			$handler = $this->make_handler( [ 'plugin' => $this->location_plugin( $record, $adapter ) ] );
 
 			$this->assertNull( $handler->location_context() );
+		}
+
+		// -------------------------------------------------------------------------
+		// current_location_record() settlement-preferred / current-fallback rule
+		// (issue #336), exercised through location_context() — current_location_record()
+		// is `protected` and has exactly one caller.
+		// -------------------------------------------------------------------------
+
+		/**
+		 * Issue #336's own rig measurement: after picking a settlement then an address
+		 * inside it, `current` sits at the address level, whose OWN settlement component
+		 * can be a DIFFERENT, deeper locality than the one the customer chose (9 of 10
+		 * addresses under «г Пушкино» nested a different settlement). The map must
+		 * address itself by the settlement the customer actually picked, not the
+		 * current record.
+		 */
+		public function test_location_context_addresses_by_the_settlement_record_when_the_chain_has_one(): void {
+			$settlement = $this->location_record( 'dadata:settlement-pushkino' );
+			$address    = $this->address_record( 'dadata:address-cherkizovo', [ 'dadata:settlement-pushkino' ] );
+			$adapter    = new class implements Location_Adapter {
+				public function resolve( Location_Record $record ) {
+					return 'carrier-city';
+				}
+			};
+
+			$plugin  = $this->location_plugin_with_chain( $settlement, $address, $adapter );
+			$handler = $this->make_handler( [ 'plugin' => $plugin ] );
+
+			$context = $handler->location_context();
+
+			$this->assertNotNull( $context );
+			$this->assertSame( 'dadata:settlement-pushkino', $context['record']->key(), 'the map must address by the settlement the customer picked, not the deeper address record' );
+		}
+
+		/**
+		 * Deliberately the OPPOSITE of #334's storage-key rule (spec: "Deliberately OUT of
+		 * scope" section) — a customer who typed an address WITHOUT ever picking a
+		 * settlement (`backwardsFill()` writes the settlement FIELD's text but creates no
+		 * settlement RECORD) must still see pickup points: the map falls back to the
+		 * current (address) record rather than refusing.
+		 */
+		public function test_location_context_falls_back_to_the_current_record_when_the_chain_has_no_settlement(): void {
+			// No settlement ever picked — an address record with NO ancestors at all, the
+			// one-entry chain #336's own "known, accepted degradation" section describes.
+			$address = $this->address_record( 'dadata:address-typed-only', [] );
+			$adapter = new class implements Location_Adapter {
+				public function resolve( Location_Record $record ) {
+					return 'carrier-city';
+				}
+			};
+
+			$plugin  = $this->location_plugin( $address, $adapter );
+			$handler = $this->make_handler( [ 'plugin' => $plugin ] );
+
+			$context = $handler->location_context();
+
+			$this->assertNotNull( $context, 'a working map must not regress into refusing here' );
+			$this->assertSame( 'dadata:address-typed-only', $context['record']->key() );
+		}
+
+		/**
+		 * `location_context()` must resolve the adapter for the SAME record it returns
+		 * (issue #336) — the settlement-preferred one, not a re-derived current record —
+		 * so the carrier's own city resolution agrees with what the map is addressed by.
+		 */
+		public function test_location_context_resolves_the_adapter_against_the_settlement_record_not_the_current_one(): void {
+			$settlement = $this->location_record( 'dadata:settlement-pushkino' );
+			$address    = $this->address_record( 'dadata:address-cherkizovo', [ 'dadata:settlement-pushkino' ] );
+
+			$adapter = new class implements Location_Adapter {
+				/** @var string[] */
+				public array $received_keys = [];
+
+				public function resolve( Location_Record $record ) {
+					$this->received_keys[] = $record->key();
+
+					return 'carrier-city';
+				}
+			};
+
+			$plugin  = $this->location_plugin_with_chain( $settlement, $address, $adapter );
+			$handler = $this->make_handler( [ 'plugin' => $plugin ] );
+
+			$handler->location_context();
+
+			$this->assertSame( [ 'dadata:settlement-pushkino' ], $adapter->received_keys, 'the adapter must resolve for the settlement record, never the deeper current one' );
 		}
 
 		/**

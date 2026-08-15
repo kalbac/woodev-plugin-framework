@@ -1272,8 +1272,18 @@
 
 		if ( ! Object.prototype.hasOwnProperty.call( resolvedLocalityKey, config.fieldId ) ) {
 			var current = config.location.current;
+			var settlementKey = config.location.settlementKey;
 
-			resolvedLocalityKey[ config.fieldId ] = current && 'string' === typeof current.key ? current.key : '';
+			// PREFERS `settlementKey` (issue #336), exactly as {@see handleLocationApplied}
+			// prefers the event detail of the same name — the page-load config and the live
+			// event have to speak ONE vocabulary or the map would address itself differently
+			// before and after the customer's first pick. Falls back to `current.key` when the
+			// chain holds no settlement (an address typed with no settlement ever picked): the
+			// map must keep working there, which is the half of #336 that is deliberately NOT
+			// the storage key's refuse-rather-than-fall-back rule.
+			resolvedLocalityKey[ config.fieldId ] = 'string' === typeof settlementKey && settlementKey
+				? settlementKey
+				: ( current && 'string' === typeof current.key ? current.key : '' );
 		}
 
 		var key = resolvedLocalityKey[ config.fieldId ];
@@ -1285,19 +1295,34 @@
 	 * Handles `woodev_location_applied` (Task 15; issue #159; `location-cascade.js`'s own
 	 * event, fired once the customer's `/select` round-trip actually persisted) — updates
 	 * {@see resolvedLocalityKey} for EVERY currently-registered, Location-Provider-backed
-	 * pickup config, so {@see resolveLocalityKey} tracks the customer's real current locality
+	 * pickup config, so {@see resolveLocalityKey} tracks the map's addressing locality
 	 * without re-reading `config.location.current.key` (a PAGE-LOAD snapshot, never refreshed
 	 * on its own).
+	 *
+	 * PREFERS `detail.settlementKey` (issue #336) over `detail.key`, falling back to `key` only
+	 * when `settlementKey` is absent/empty (an older cascade build, or a chain with no
+	 * settlement — e.g. an address typed without ever picking one, spec §4.4's
+	 * `backwardsFill()`). This is DELIBERATELY THE OPPOSITE asymmetry from #334's storage-key
+	 * rule (`Provider_Selection_Scope::current_locality()`, which REFUSES rather than falls
+	 * back): a fallback KEY there would silently mis-file the customer's chosen pickup point,
+	 * but a REFUSED map here would regress a picker that works today — see
+	 * {@see \Woodev\Framework\Shipping\Pickup\Pickup_Handler::current_location_record()}'s own
+	 * docblock for the full reasoning, which this function mirrors client-side. `key` itself
+	 * keeps its exact prior meaning — issue #309's `implicit` flag and other consumers ride on
+	 * it — only the field THIS function adopts for `resolvedLocalityKey` changes.
 	 *
 	 * A field WITHOUT `config.location` (a plugin that has not wired the layer) is skipped —
 	 * its own `resolveLocalityKey()` falls back to the DOM read regardless, so writing an
 	 * entry here for it would only be dead state.
 	 *
-	 * @param {CustomEvent} event `detail: { key, level }` — only `key` is read here.
+	 * @param {CustomEvent} event `detail: { key, level, settlementKey, implicit }` — `key` and
+	 *                            `settlementKey` are read here.
 	 * @returns {void}
 	 */
 	function handleLocationApplied( event ) {
-		var key = event && event.detail && 'string' === typeof event.detail.key ? event.detail.key : '';
+		var detail = event && event.detail ? event.detail : {};
+		var settlementKey = 'string' === typeof detail.settlementKey ? detail.settlementKey : '';
+		var key = settlementKey ? settlementKey : ( 'string' === typeof detail.key ? detail.key : '' );
 
 		collectConfigs().forEach( function( config ) {
 			if ( config.location ) {
