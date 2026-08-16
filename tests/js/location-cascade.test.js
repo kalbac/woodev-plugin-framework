@@ -2903,3 +2903,160 @@ describe( 'a pickup point address replacement must not read as a manual edit (#3
 		} ).not.toThrow();
 	} );
 } );
+
+// -----------------------------------------------------------------------
+// Address lock (#337)
+// -----------------------------------------------------------------------
+
+describe( 'the address field is locked until a settlement is picked (#337)', () => {
+	const SETTLEMENT_ITEM = {
+		key: 'dadata:0c5b2444', label: 'Москва', level: 'settlement',
+		record: {
+			key: 'dadata:0c5b2444', provider_id: 'dadata', level: 'settlement',
+			country: 'RU', settlement: { name: 'Москва', type: 'г' }, label: 'г Москва',
+		},
+	};
+
+	function addressField() {
+		return document.getElementById( 'billing_address_1' );
+	}
+
+	it( 'locks it on boot when settlement and address are linked and the provider serves address', () => {
+		boot( { region: true, settlement: true, address: true } );
+
+		expect( addressField().disabled ).toBe( true );
+	} );
+
+	it( 'leaves it an ORDINARY input when the chain carries no settlement field', () => {
+		// Nothing to wait for: with no settlement field, the address level is scoped
+		// country-wide by construction (scopeKeyFor()), so a lock would never lift.
+		boot( { region: true, address: true } );
+
+		expect( addressField().disabled ).toBe( false );
+	} );
+
+	it( 'leaves it an ORDINARY input when the provider does not serve the address level', () => {
+		// The operator's second condition, read PER LEVEL: no address suggestions means the
+		// customer free-types a street, and needs no settlement to do it.
+		boot( {
+			region: true, settlement: true, address: true,
+			levels: { RU: { region: true, settlement: true, address: false } },
+		} );
+
+		expect( addressField().disabled ).toBe( false );
+	} );
+
+	it( 'unlocks on the settlement pick ITSELF, before /select has answered', () => {
+		boot( { region: true, settlement: true, address: true } );
+
+		selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
+
+		// The /select round trip is still in flight — the customer must be able to type now.
+		expect( fetchCalls[ fetchCalls.length - 1 ].url ).toContain( SELECT_URL );
+		expect( addressField().disabled ).toBe( false );
+	} );
+
+	it( 're-locks when the settlement text is edited without picking a suggestion', () => {
+		boot( { region: true, settlement: true, address: true } );
+
+		selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
+		expect( addressField().disabled ).toBe( false );
+
+		const city = document.getElementById( 'billing_city' );
+
+		city.value = 'Тверь';
+		city.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+
+		// The record no longer matches the text, so the address is unscoped again.
+		expect( addressField().disabled ).toBe( true );
+	} );
+
+	it( 'is ALREADY unlocked on boot when the server restored a settlement record', () => {
+		// "Active immediately after a reload, not after some first event nudges it."
+		boot( {
+			region: true, settlement: true, address: true,
+			current: { key: 'dadata:0c5b2444', level: 'settlement' },
+		} );
+
+		expect( addressField().disabled ).toBe( false );
+	} );
+
+	it( 'stays locked when the restored record is an ADDRESS with no settlement behind it', () => {
+		// The pre-#337 state itself: an address picked while no settlement ever was. The chain
+		// the server restores names no settlement, so there is still nothing keying the pickup
+		// selection — the lock is exactly what stops this state being created again.
+		boot( {
+			region: true, settlement: true, address: true,
+			current: { key: 'dadata:c0e3b087', level: 'address' },
+			chain: { address: { key: 'dadata:c0e3b087', level: 'address' } },
+		} );
+
+		expect( addressField().disabled ).toBe( true );
+	} );
+
+	it( 'becomes an ORDINARY input when the country changes to one with no address coverage', () => {
+		boot( {
+			region: true, settlement: true, address: true,
+			countries: [ 'RU', 'AM' ],
+			levels: {
+				RU: { region: true, settlement: true, address: true },
+				AM: { region: true, settlement: true, address: false },
+			},
+		} );
+
+		expect( addressField().disabled ).toBe( true );
+
+		const country = document.getElementById( 'billing_country' );
+
+		country.innerHTML += '<option value="AM">Армения</option>';
+		country.value = 'AM';
+		country.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+
+		expect( addressField().disabled ).toBe( false );
+	} );
+
+	it( 're-locks after a country change wipes a settlement that HAD been picked', () => {
+		boot( { region: true, settlement: true, address: true, countries: [ 'RU', 'US' ], levels: {
+			RU: { region: true, settlement: true, address: true },
+			US: { region: true, settlement: true, address: true },
+		} } );
+
+		selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
+		expect( addressField().disabled ).toBe( false );
+
+		const country = document.getElementById( 'billing_country' );
+
+		country.value = 'US';
+		country.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+
+		expect( addressField().disabled ).toBe( true );
+	} );
+
+	it( 're-applies the lock to the FRESH node after a checkout re-render', () => {
+		boot( { region: true, settlement: true, address: true } );
+
+		// WooCommerce replaces the address fragment: a fresh node carrying the server's markup
+		// and none of the lock this module put on the one it replaced.
+		const fresh = document.createElement( 'input' );
+		fresh.type = 'text';
+		fresh.id = 'billing_address_1';
+		fresh.name = 'billing_address_1';
+		addressField().replaceWith( fresh );
+
+		expect( fresh.disabled ).toBe( false );
+
+		window.jQuery( document.body ).trigger( 'updated_checkout' );
+
+		expect( fresh.disabled ).toBe( true );
+	} );
+
+	it( 'does not lock a shipping-section field while "ship to a different address" is unchecked', () => {
+		// A field hidden behind the toggle is not in play at all — isNodeActive()'s own rule.
+		boot( {
+			region: true, settlement: true, address: true,
+			section: 'shipping', shipToDifferentAddress: false,
+		} );
+
+		expect( document.getElementById( 'shipping_address_1' ).disabled ).toBe( false );
+	} );
+} );

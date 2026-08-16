@@ -69,6 +69,14 @@
  * new value against `resolved[fieldId]` — genuinely unchanged is always a no-op, by
  * construction, regardless of how many times or through which world the event arrives.
  *
+ * ADDRESS LOCK (issue #337): when — and ONLY when — this entry's chain carries BOTH a
+ * settlement and an address field AND the provider serves the `address` level for that field's
+ * own country, the address input is `disabled` until a settlement record is actually confirmed.
+ * It is a UX gate, client-side only, with nothing explaining it; the full reasoning, including
+ * why the settlement is not simply derived out of the address record instead, lives on
+ * {@see isAddressLocked} and {@see refreshAddressLock}. Every state transition that can change
+ * the answer re-applies it — see those two functions' own call sites.
+ *
  * BOTH EVENT WORLDS (gotcha `jquery-trigger-change-fires-no-native-event`): a jQuery
  * `.trigger('change')` (how select2/selectWoo and much of WooCommerce's own churn report a
  * change) dispatches NO native DOM event, so a delegated `addEventListener('change')` alone
@@ -999,6 +1007,11 @@
 				// can run against records this adoption was about to overwrite anyway.
 				adoptChain( entry, body && body.chain );
 
+				// Issue #337: the server's own chain is authoritative ({@see adoptChain}), so a
+				// repair that DROPPED the settlement level must re-lock the address field the
+				// optimistic pick above already unlocked.
+				refreshAddressLock( entry );
+
 				settleSelect( entry, persisted, ! persisted, record );
 			},
 			function( error ) {
@@ -1277,6 +1290,12 @@
 
 			backwardsFill( entry, node.level, record );
 
+			// Issue #337: a settlement pick unlocks the address field on the SPOT, off the
+			// optimistic record above — never only once `/select` comes back. Waiting for the
+			// round trip would leave the customer looking at a field that stays blocked for as
+			// long as the network takes, right after doing the one thing that unblocks it.
+			refreshAddressLock( entry );
+
 			if ( isActiveAddressSection( node.section ) ) {
 				enqueueSelect( entry, record );
 			}
@@ -1485,6 +1504,116 @@
 			} else if ( ! attached && active ) {
 				attachOne( entry, node );
 			}
+		} );
+	}
+
+	// -------------------------------------------------------------------------
+	// Address lock (issue #337)
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Whether the address field must currently be LOCKED — the customer cannot type into it
+	 * until they have actually PICKED a settlement (issue #337, operator decision 16.08.2026).
+	 *
+	 * WHY A LOCK, AND NOT A DERIVED SETTLEMENT: the pickup layer keys the customer's chosen
+	 * point off the SETTLEMENT record ({@see \Woodev\Framework\Shipping\Pickup\
+	 * Provider_Selection_Scope::current_locality()}), so an address picked with no settlement
+	 * ever chosen produces a chain with no settlement record at all — the pickup choice is then
+	 * never written and does not survive a reload (measured on the rig, issue #337). Deriving
+	 * the settlement back out of the address record was considered and REJECTED: an address row
+	 * carries TWO candidate ancestors (`city_fias_id` / `settlement_fias_id`) and only the
+	 * customer knows which one is theirs (gotcha
+	 * `a-derived-ancestor-is-not-the-one-the-customer-picked`; #339 measured the same thing from
+	 * the other end). The lock removes the state BY CONSTRUCTION instead of guessing a way out
+	 * of it afterwards.
+	 *
+	 * BOTH CONDITIONS MUST HOLD — in every other case the address field stays an ORDINARY input
+	 * and is never locked (the operator's own narrowing of the rule):
+	 *
+	 * 1. SETTLEMENT AND ADDRESS ARE LINKED — both levels are present in THIS entry's own chain.
+	 *    This is the level-driven equivalent of a §8 `depends_on`: a location-kind field carries
+	 *    no `depends_on` at all (see the file docblock's CHAIN ASSEMBLY section), and the chain
+	 *    is exactly what {@see scopeKeyFor} already reads to decide whether the address level is
+	 *    scoped BY the settlement one — so "linked" and "scoped by" are one and the same fact
+	 *    here. An entry with no settlement field has nothing to wait for, and locking it would
+	 *    be a dead end rather than a gate.
+	 * 2. THE PROVIDER SERVES `address` FOR THIS NODE'S OWN COUNTRY — read PER LEVEL out of
+	 *    `config.location.levels[country]` (D15), never from the fact that a provider is active
+	 *    at all: a provider with no address suggestions leaves the customer free-typing a
+	 *    street, and no settlement is needed for that. {@see isNodeActive} is consulted rather
+	 *    than {@see isLevelServed} directly, because it carries that per-level check TOGETHER
+	 *    with the country/section gates the very same field is attached under — so the lock and
+	 *    the widget can never disagree about which country's coverage applies, or lock a
+	 *    shipping-section field the customer has not even opted into.
+	 *
+	 * The lock is then ON exactly while no settlement record is confirmed — {@see scopeKeyFor},
+	 * the SAME answer that decides whether an address `/suggest` may carry a `within`. A field
+	 * locked here is precisely a field whose suggestions would otherwise search country-wide.
+	 *
+	 * @param {Object} entry
+	 * @param {{level: string, fieldId: string, section?: string}} node The address chain node.
+	 * @returns {boolean}
+	 */
+	function isAddressLocked( entry, node ) {
+		if ( ! chainNodeForLevel( entry, 'settlement' ) || ! isNodeActive( entry, node ) ) {
+			return false;
+		}
+
+		return null === scopeKeyFor( entry, 'address' );
+	}
+
+	/**
+	 * Applies {@see isAddressLocked} to whichever element currently carries the address field —
+	 * read from the live document every time, never a captured node, since WooCommerce replaces
+	 * the address fragment wholesale on `updated_checkout` ({@see reconcileAfterCheckoutUpdate}).
+	 *
+	 * NOTHING EXPLAINS THE LOCK. No `title`, no `aria-*` description, no message beside the
+	 * field — the same standing operator rule that removed the inline "fill this in" text from
+	 * the A2 gate in `checkout-field-classic.js` (#274): a blocked control is blocked, and that
+	 * is all it says. `disabled` is therefore the WHOLE mechanism: the browser greys the input
+	 * itself in any theme, so `location.css` keeps its own stated rule of never styling the
+	 * checkout input, and nothing has to be threaded through PHP for the presentation.
+	 *
+	 * CLIENT-SIDE ONLY, LIKE EVERY OTHER GATE IN THIS LAYER (`refreshGate()`'s own rule in
+	 * `checkout-field-classic.js`): the server stays the authority. Rendering the attribute
+	 * server-side would additionally make a JS failure permanent — an address field nothing
+	 * could ever unlock.
+	 *
+	 * A disabled input is not serialized into WooCommerce's `update_checkout` POST or the order
+	 * submission. That takes nothing away in-session: every path that drops the settlement
+	 * record also clears the address VALUE ({@see clearDescendants}, {@see clearCountryScope}),
+	 * so a locked field is an empty field. The one state where it is not is a session created
+	 * BEFORE this rule existed (an address picked while no settlement ever was — exactly what
+	 * #337 is about): there the restored value is greyed out and left behind on submit, and the
+	 * recovery is the one the rule asks for anyway — picking the settlement, which clears the
+	 * descendants and unlocks the field for a fresh pick. The announced pickup-address write
+	 * ({@see handlePickupAddressReplacing}) is not a counter-example either: it only ever
+	 * follows a pickup SELECTION, which the pickup layer refuses to persist without a settlement
+	 * key at all (gotcha `an-empty-domain-key-is-not-a-key`) — i.e. only ever while unlocked.
+	 *
+	 * @param {Object} entry
+	 * @returns {void}
+	 */
+	function refreshAddressLock( entry ) {
+		var node = chainNodeForLevel( entry, 'address' );
+		var el = node ? document.getElementById( node.fieldId ) : null;
+
+		if ( ! el ) {
+			return;
+		}
+
+		el.disabled = isAddressLocked( entry, node );
+	}
+
+	/**
+	 * {@see refreshAddressLock} for every entry — the shape the global (entry-agnostic) event
+	 * handlers use.
+	 *
+	 * @returns {void}
+	 */
+	function refreshAddressLocks() {
+		entries.forEach( function( entry ) {
+			refreshAddressLock( entry );
 		} );
 	}
 
@@ -1839,6 +1968,12 @@
 
 			clearDescendants( entry, info.index );
 		} );
+
+		// Issue #337. Fired for EVERY entry, not only those that matched a node above: a
+		// settlement record can be dropped by this handler (a text edit without a pick) and the
+		// address field must go back to locked in the same pass, while a field this entry does
+		// not own leaves {@see refreshAddressLock} a no-op anyway.
+		refreshAddressLocks();
 	}
 
 	/**
@@ -1859,6 +1994,11 @@
 		entries.forEach( function( entry ) {
 			applyCountryArbitration( entry );
 		} );
+
+		// Issue #337: the address level's own coverage is per COUNTRY (D15) and the section
+		// gate moves with the "ship to a different address" toggle, so both of this function's
+		// triggers can flip the lock's own preconditions, not just which widgets are attached.
+		refreshAddressLocks();
 	}
 
 	/** @type {{native: boolean, jquery: boolean}} which event worlds are currently bound. */
@@ -1933,6 +2073,10 @@
 				live.value = stored;
 			}
 		} );
+
+		// Issue #337: a re-render hands back a FRESH element, carrying the server's markup and
+		// none of the lock this module applied to the node it replaced.
+		refreshAddressLock( entry );
 	}
 
 	function handleCheckoutUpdated() {
@@ -2116,6 +2260,10 @@
 		entries.forEach( function( entry ) {
 			prefill( entry );
 			attachAll( entry ); // per-node gated internally via isNodeActive()
+			// Issue #337: the lock's state is decided HERE, on the records {@see prefill} just
+			// restored — a customer who already picked a settlement must find the address field
+			// live immediately after a reload, never only after some first event nudges it.
+			refreshAddressLock( entry );
 		} );
 
 		suppressWcAddressAutocomplete();
