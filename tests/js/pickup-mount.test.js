@@ -6905,3 +6905,60 @@ describe( 'chosen-address decoding agrees across sources (issue #308 item 1)', (
 		} );
 	} );
 } );
+
+// -------------------------------------------------------------------------
+// #339 — the address replacement announces itself BEFORE it writes, so
+// location-cascade.js can tell it apart from a manual edit
+// -------------------------------------------------------------------------
+
+test( 'the address replacement fires woodev_pickup_address_replacing carrying every field it is about to write', async () => {
+	setConfig( makeConfig( { replaceAddress: { enabled: true, billingOnly: true } } ) );
+	mountAll();
+	clickTrigger();
+
+	const seen = [];
+	document.body.addEventListener( 'woodev_pickup_address_replacing', ( e ) => seen.push( e.detail ) );
+
+	await selectAndConfirm( StubProvider.instances[ 0 ], point() );
+
+	expect( seen ).toHaveLength( 1 );
+	expect( seen[ 0 ].fields ).toEqual( {
+		billing_address_1: 'ул. Ленина, 1',
+		billing_city: 'Москва',
+		billing_postcode: '101000',
+	} );
+	expect( console ).toHaveWarned();
+} );
+
+test( 'the announcement arrives BEFORE the write — a listener still sees the OLD field values', async () => {
+	// The ordering is the whole point (#339): location-cascade.js re-seeds `resolved` from
+	// this event, and that must happen before the `change` events the write fires reach its
+	// own handler. dispatchEvent() runs listeners inline, so "before" is observable here.
+	setConfig( makeConfig( { replaceAddress: { enabled: true, billingOnly: true } } ) );
+	mountAll();
+	clickTrigger();
+
+	const order = [];
+
+	document.body.addEventListener( 'woodev_pickup_address_replacing', () => order.push( 'announced' ) );
+	document.getElementById( 'billing_city' ).addEventListener( 'change', () => order.push( 'city-changed' ) );
+
+	await selectAndConfirm( StubProvider.instances[ 0 ], point() );
+
+	expect( order ).toEqual( [ 'announced', 'city-changed' ] );
+	expect( document.getElementById( 'billing_city' ).value ).toBe( 'Москва' );
+	expect( console ).toHaveWarned();
+} );
+
+test( 'no announcement when replaceAddress is disabled — nothing is written, so nothing to announce', async () => {
+	setConfig( makeConfig( { replaceAddress: { enabled: false, billingOnly: true } } ) );
+	mountAll();
+	clickTrigger();
+
+	const seen = [];
+	document.body.addEventListener( 'woodev_pickup_address_replacing', ( e ) => seen.push( e.detail ) );
+
+	await selectAndConfirm( StubProvider.instances[ 0 ], point() );
+
+	expect( seen ).toEqual( [] );
+} );
