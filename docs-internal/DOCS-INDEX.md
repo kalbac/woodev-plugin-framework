@@ -17,7 +17,7 @@
 ## Session End
 
 1. Update `CURRENT-STATE.md` (lean — phase status, bugs, next actions).
-2. Append to `SESSION-LOG.md` (newest on top; 10–20 line summary — this is where detail lives).
+2. Write `sessions/sNN.md` (this is where detail lives), then add one index line to `SESSION-LOG.md` (newest on top).
 3. Compilation step — scan the new entry for gotchas → add to `GOTCHAS.md` + create `gotchas/{slug}.md`.
 4. See `DOCS-SCHEMA.md` for the full compilation protocol and format rules.
 
@@ -29,7 +29,8 @@
 |------|---------|
 | `next-session-prompt.md` | Prepared entry prompt for the next session — read first |
 | `CURRENT-STATE.md` | Live status: phase/track state, open bugs, next actions — read every session start |
-| `SESSION-LOG.md` | Chronological session history — newest at top (full detail) |
+| `SESSION-LOG.md` | Index of sessions — one line each, newest at top |
+| `sessions/sNN.md` | Per-session detail — the full write-up |
 | `GOTCHAS.md` | Topic-indexed cross-session gotchas (count → see `GOTCHAS.md` header) → `gotchas/{slug}.md` |
 | `AGENT-RULES.md` | Workflow + architecture rules (Rule 0 = clean-break policy / ADR-005) |
 | `DOCS-SCHEMA.md` | Doc format rules, lint checklist, compilation protocol |
@@ -88,7 +89,8 @@ Passed-gate audits, the completed platform-v2 program docs (plans/specs/prompts)
 
 ## Related
 
-- `CLAUDE.md` — project overview, commands, architecture, coding conventions (Claude Code)
+- `CLAUDE.md` — Claude Code entry point: Serena/Context7 tooling + lookup table (Claude Code)
+- `wiki/architecture.md` — subsystems, base classes, seams (opened on demand, not at session start)
 - `AGENTS.md` — shared project rules (session start/end, coding principles)
 - `QWEN.md` — Qwen-specific agent instructions
 - `.ai/QUICK-REFERENCE.md` — shared project rules and conventions for all AI agents

@@ -15,7 +15,8 @@
     "start:setup": "wp-scripts start ./src/setup-wizard/index.js --output-path=woodev/assets/build/setup-wizard",
     "start:settings": "wp-scripts start ./src/settings-page/index.js --output-path=woodev/assets/build/settings-page",
     "start:gallery": "wp-scripts start ./src/ui-kit-gallery/index.js --output-path=woodev/assets/build/ui-kit-gallery",
-    "test:js": "wp-scripts test-unit-js"
+    "test:js": "wp-scripts test-unit-js",
+    "lint:docs": "node scripts/lint-docs.mjs"
   },
   "devDependencies": {
     "@wordpress/scripts": "32.4.0",

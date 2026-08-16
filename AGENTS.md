@@ -1,6 +1,7 @@
 # AGENTS.md — Woodev Plugin Framework
-> For ALL AI agents (Claude, Gemini, Cursor, GPT, etc.). Keep updated. Last updated: 2026-08-09 (s60 docs audit).
-> **Claude Code agents:** read `CLAUDE.md` instead — it extends this file with Serena MCP, Context7, and a detailed architecture reference.
+> For ALL AI agents (Claude, Gemini, Cursor, GPT, etc.). Keep updated. Last updated: 2026-08-16 (docs cleanup: SESSION-LOG split into sessions/, GOTCHAS index compressed, architecture moved to wiki/).
+> **Claude Code agents:** read `CLAUDE.md` too — it adds the Claude-specific MCP tooling (Serena, Context7). It does not replace this file, and it restates nothing from it.
+> **Architecture reference** (subsystems, base classes, seams): `docs-internal/wiki/architecture.md` — not loaded at session start, open it when the task needs it.
 
 ---
 
@@ -8,7 +9,7 @@
 
 1. **Read `docs-internal/next-session-prompt.md`** — the per-session handoff: what the last session left for you, plus known traps (~1 min)
 2. **Read `docs-internal/CURRENT-STATE.md`** — phase status, known bugs, next actions (~1 min)
-3. **Scan `docs-internal/GOTCHAS.md`** — index of atomic gotcha files; scan `[topic/*]` tags relevant to your task (~1 min). Click through to detail files when needed.
+3. **Scan `docs-internal/GOTCHAS.md`** — one line per gotcha; scan `[topic/*]` tags relevant to your task (~1 min). Open `gotchas/{slug}.md` for the ones that apply.
 4. **Area-specific docs as needed** — relevant `docs-internal/adr/` and `docs-internal/wiki/` files (navigation hub: `docs-internal/DOCS-INDEX.md`)
 
 ---
@@ -16,7 +17,7 @@
 ## ✅ Session End (mandatory — CANONICAL list)
 
 1. Update `docs-internal/CURRENT-STATE.md` — phase table, bugs, next actions
-2. Append 10–20 line summary to `docs-internal/SESSION-LOG.md` — what was done, key decisions
+2. Write `docs-internal/sessions/sNN.md` — the session's own file: what was done, key decisions, test counts, commit hash. Then add ONE line for it to `docs-internal/SESSION-LOG.md`, which is only an index
 3. **⚙️ Compilation step** — for each new gotcha discovered this session:
    - Create `docs-internal/gotchas/{slug}.md` (root cause + ❌ wrong / ✅ correct code + Related links)
    - Add index line to `docs-internal/GOTCHAS.md` under the correct `[topic/*]` section
@@ -79,7 +80,8 @@ This project has **two documentation directories** with different audiences, pub
 
 **What goes here:**
 - `CURRENT-STATE.md` — phase status, known bugs, next actions
-- `SESSION-LOG.md` — chronological session history (newest at top)
+- `SESSION-LOG.md` — index of sessions, one line each (newest at top)
+- `sessions/sNN.md` — the per-session detail
 - `GOTCHAS.md` — gotcha index → `gotchas/{slug}.md` atomic detail files
 - `AGENT-RULES.md` — workflow + architecture rules for AI agents
 - `DOCS-INDEX.md` — navigation hub for all internal docs
@@ -111,7 +113,8 @@ woodev_framework/
 │   └── overrides/home.html, assets/stylesheets/extra.css
 ├── docs-internal/                   # Internal docs → AI agents only
 │   ├── next-session-prompt.md       # Per-session handoff — every session starts here
-│   ├── CURRENT-STATE.md, SESSION-LOG.md, GOTCHAS.md
+│   ├── CURRENT-STATE.md, SESSION-LOG.md (index), GOTCHAS.md (index)
+│   ├── sessions/                     # Per-session detail files
 │   ├── AGENT-RULES.md, DOCS-INDEX.md, DOCS-SCHEMA.md, FUTURE-BACKLOG.md (frozen)
 │   ├── gotchas/                     # Atomic gotcha detail files
 │   ├── adr/                         # Architecture Decision Records
@@ -228,7 +231,7 @@ A task is DONE only when:
 3. Jest is green: `npm run test:js -- --roots "<rootDir>/tests/js"` (never `npx jest`)
 4. New/modified behavior is covered by tests
 5. `docs-internal/CURRENT-STATE.md` is updated
-6. A summary entry is appended to `docs-internal/SESSION-LOG.md`
+6. `docs-internal/sessions/sNN.md` is written and indexed in `SESSION-LOG.md`
 7. The board card is moved to `Готово` (see Backlog rule)
 8. `git commit` is made with Conventional Commits format
 
@@ -243,7 +246,7 @@ Full details + code examples in `docs-internal/gotchas/`. Scan `docs-internal/GO
 **Backward compatibility — clean-break policy (v2 line, D-2 2026-06-03; the `refactor/platform-v2-clean-break` branch merged to `main` 2026-06-04):**
 - **Internal code is FREE TO BREAK** on the v2 line (`main`) — class/method names, registration shape, namespacing. Do NOT add `@deprecated`/`class_alias`/`_deprecated_function` shims for moved internal APIs; delete existing ones.
 - **Installed-site data contracts are RELEASE-BLOCKING** — option keys, license/instance IDs, gateway/shipping method IDs, hook names, cron, REST namespaces, AJAX actions, admin slugs, meta keys. Preserve byte-for-byte (enforced per-plugin at rewrite time).
-- Full policy: `CLAUDE.md` → Backward Compatibility; operating rules: `docs-internal/platform-v2-execution-protocol.md`.
+- Full policy: `docs-internal/adr/005-platform-v2-clean-break-policy.md`; operating rules: `docs-internal/platform-v2-execution-protocol.md`.
 - Legacy namespace: `Woodev_*` classes; new code: `Woodev\Framework\*` PSR-4 (include-based, not Composer autoload at runtime).
 
 **Serena MCP (PHP navigation):**

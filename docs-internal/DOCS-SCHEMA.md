@@ -1,6 +1,6 @@
 # Docs Schema — Woodev Plugin Framework
 > Format and lint rules for all agent-facing documentation. Read before writing or updating any doc.
-> Applies to ALL agents. Last updated: 2026-08-09 (s60 docs audit).
+> Applies to ALL agents. Last updated: 2026-08-16 (docs cleanup: sessions/ split, index rules, `npm run lint:docs` gate).
 
 ---
 
@@ -31,7 +31,8 @@ All expected files in `docs-internal/`:
 | `DOCS-SCHEMA.md` | This file — format rules and lint checklist | Maintained manually |
 | `AGENT-RULES.md` | Workflow + architecture rules for AI agents | Maintained manually |
 | `CURRENT-STATE.md` | Phase status, bugs, next actions | Agent at session end |
-| `SESSION-LOG.md` | Chronological work history | Agent at session end |
+| `SESSION-LOG.md` | Index of sessions — one line each | Agent at session end |
+| `sessions/sNN.md` | The session's own write-up | Agent at session end |
 | `GOTCHAS.md` | Topic-indexed gotcha index | Agent (compilation step) |
 | `next-session-prompt.md` | Per-session handoff — REPLACED at every session end | Agent writes |
 | `FUTURE-BACKLOG.md` | Deferred features and future work | FROZEN 2026-07-23 — do not append; backlog lives on GitHub board №6 (AGENTS.md → Backlog rule) |
@@ -96,26 +97,36 @@ Rules:
 
 ---
 
-## SESSION-LOG.md Format
+## SESSION-LOG.md + `sessions/sNN.md` Format
 
-Chronological, **newest at top**. Each entry:
+**The session's write-up is its own file; `SESSION-LOG.md` is only an index.** One line per
+session, newest at top:
 
 ```markdown
-## s{N} — YYYY-MM-DD — {summary}
+- **[s{N}](sessions/s{N}.md)** — YYYY-MM-DD — {summary}
+```
 
-- bullet: what was done (fact, not "I tried to...")
-- bullet: key decision with brief reason
-- **Bug fixed** — root cause → fix (1 line each)
-- PHPStan: ✅/❌ result + commit hash
+The detail goes in `sessions/s{N}.md`:
+
+```markdown
+# s{N} — YYYY-MM-DD — {summary}
+
+**Итог:** merged PRs, test counts, phpcs/phpstan result, commit hash.
+
+- what was done (fact, not "I tried to...")
+- key decision with brief reason
+- **Bug fixed** — root cause → fix
 ```
 
 Rules:
-- 10–90 lines per session (guideline, not a hard cap — match the session's actual weight)
-- Header form: `## s{N} — YYYY-MM-DD — {summary}` (older entries use other shapes — acceptable historically, do not rewrite them)
-- Date in ISO format: `YYYY-MM-DD`
-- New entries at the **top** of the file
-- Include PHPStan result + commit hash
+- 10–90 lines per session file (guideline — match the session's actual weight)
+- Index row and file H1 carry the same summary; the row never grows past one line
+- Date in ISO format: `YYYY-MM-DD`; new rows at the **top** of the index
+- Include PHPStan result + commit hash in the session file
 - No "attempted", "tried to" language — only actual outcomes
+- Entries from before session numbering live in
+  `sessions/platform-v2-daily-2026-05-28--06-08.md`; s6 and s20 never existed (the numbering
+  skipped them) — do not go looking for them
 
 ---
 
@@ -126,7 +137,10 @@ Fixed sections, always in this order:
 2. `## Known Bugs (open)` — icons: `[⚠️]` open, `[✅]` fixed (remove after 2 sessions)
 3. `## Next Actions (priority order)` — numbered list, top = highest priority
 
-**Hard rule:** Maximum 3 lines of "last session" context. All session details → `SESSION-LOG.md`.
+**Hard rule:** this file describes the CURRENT state and nothing else. No `Prior:` chain, no
+"lessons from session N" section, no history. A lesson is a gotcha (`gotchas/{slug}.md`) when it
+is about code or a mechanism, and part of `sessions/sNN.md` otherwise — never a third copy here.
+**Enforced by `npm run lint:docs`.**
 
 Optional: `## Infrastructure Reference` section with operational data (build commands, test commands, plugin fixture list).
 
@@ -180,12 +194,12 @@ Required:
 
 ## Compilation Protocol
 
-Run at session end, **after** writing SESSION-LOG, **before** committing:
+Run at session end, **after** writing the session file, **before** committing:
 
-1. **Scan new SESSION-LOG entry** for unrecorded gotchas
+1. **Scan the new `sessions/sNN.md`** for unrecorded gotchas
 2. **For each unrecorded gotcha** — classify → dedup against `GOTCHAS.md` → create `gotchas/{slug}.md` → add index line
 3. **Wiki update** — if a pattern was clarified, update the relevant `wiki/{topic}.md`
-4. **Update `Last updated:`** date in `GOTCHAS.md` header
+4. **Keep the gotcha count in the `GOTCHAS.md` header accurate** — the header is 8 lines and holds no changelog; what changed when belongs in `sessions/sNN.md`
 
 ---
 
@@ -209,8 +223,9 @@ Before every commit touching docs:
 - [ ] Every gotcha detail file has a `## Related` section
 - [ ] `GOTCHAS.md` `Last updated:` date is today
 - [ ] All new/edited `docs-internal/*.md` files are in English (no Russian text)
-- [ ] `SESSION-LOG.md` new entry is at the **top** of the file
-- [ ] `SESSION-LOG.md` entry includes PHPStan result + commit hash
+- [ ] `SESSION-LOG.md` new index row is at the **top**, and links an existing `sessions/sNN.md`
+- [ ] `sessions/sNN.md` includes PHPStan result + commit hash
+- [ ] `npm run lint:docs` passes (session-start budget, index integrity, no history in CURRENT-STATE)
 - [ ] `CURRENT-STATE.md` `Last updated:` date is today
 - [ ] No `[✅]` bugs older than 2 sessions (remove them)
 - [ ] New wiki articles have a `## Related` section

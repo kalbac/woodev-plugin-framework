@@ -4,11 +4,17 @@ on:
   pull_request:
     paths:
       - '**.md'
+      - 'scripts/lint-docs.mjs'
+      - 'docs-internal/gotchas/**'
+      - 'docs-internal/sessions/**'
   push:
     branches:
       - main
     paths:
       - '**.md'
+      - 'scripts/lint-docs.mjs'
+      - 'docs-internal/gotchas/**'
+      - 'docs-internal/sessions/**'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -31,6 +37,14 @@ jobs:
 
       - name: Install markdownlint-cli2
         run: npm install -g markdownlint-cli2
+
+      - name: Lint docs-internal structure
+        # markdownlint deliberately skips docs-internal/ (formatting there is not the point).
+        # What DOES matter is structure: the session-start reading budget, one line per gotcha
+        # index entry, one file per gotcha, and no session history in CURRENT-STATE.md. Those
+        # rules lived in DOCS-SCHEMA.md as prose and were violated for fourteen sessions —
+        # so they are a failing job now. Rules and limits: scripts/lint-docs.mjs.
+        run: npm run lint:docs
 
       - name: Lint markdown files
         # Gate the PUBLISHED docs/ tree (GH Pages) + root markdown. Excludes: vendored/AI-tool

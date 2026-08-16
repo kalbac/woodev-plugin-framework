@@ -21,8 +21,8 @@
 > Canonical list: `AGENTS.md` → "Session End". This checklist mirrors it — do not let them diverge.
 
 1. Update `CURRENT-STATE.md` — phase status, bugs, next actions
-2. Append to `SESSION-LOG.md` — 10–20 line summary, PHPStan result + commit hash
-3. Compilation step — scan SESSION-LOG for new gotchas → `GOTCHAS.md` + `gotchas/{slug}.md`
+2. Write `sessions/sNN.md` — the session write-up, PHPStan result + commit hash; add one index line to `SESSION-LOG.md`
+3. Compilation step — scan the new session file for gotchas → `gotchas/{slug}.md` + one index line in `GOTCHAS.md`
 4. Audit the board — move the session's cards (`В работе` → `Готово`), file cards for anything unformalized (see `AGENTS.md` → "Backlog rule")
 5. Replace `next-session-prompt.md` with the handoff for the next session
 6. See `DOCS-SCHEMA.md` for full compilation protocol
@@ -97,7 +97,7 @@ ci: add php 8.3 to test matrix
 ## Architecture Rules
 
 ### Rule 0 — Backward Compatibility: clean-break policy (CRITICAL)
-> Policy set 2026-06-03 (direction audit D-2, ADR-005). **Supersedes the prior "deprecation cycle for everything" rule.** Two different rules apply depending on what you change. Full policy: `CLAUDE.md` → "Backward Compatibility — clean-break policy"; ADR: `adr/005-platform-v2-clean-break-policy.md`.
+> Policy set 2026-06-03 (direction audit D-2, ADR-005). **Supersedes the prior "deprecation cycle for everything" rule.** Two different rules apply depending on what you change. Full policy: `adr/005-platform-v2-clean-break-policy.md`.
 
 - **Internal code — FREE TO BREAK on the v2 line:** class names, method signatures, the plugin entry/registration shape, namespacing, file layout. Do **NOT** add `@deprecated` shims, `class_alias` files, or `_deprecated_function()` wrappers for moved/renamed internal APIs — delete existing ones (clean-break Phase 3 already removed them).
 - **Installed-site data contracts — RELEASE-BLOCKING, never break:** option keys & settings arrays, license key option names + activation state + instance IDs, updater identity, WC payment-gateway IDs, WC shipping-method IDs + instance setting keys, public action/filter hook names, scheduled cron hooks + recurrence + payload shape, custom DB tables/schemas, REST route namespaces, AJAX action names, admin page slugs, log source names, background-job IDs, order/session meta keys. Preserve these byte-for-byte.
@@ -234,6 +234,7 @@ composer check   # phpcs + phpstan + unit tests
 
 ## Related
 
-- `CLAUDE.md` — project overview, commands, architecture, coding conventions
+- `CLAUDE.md` — Claude Code entry point: Serena/Context7 tooling and a lookup table (no project reference material)
+- `wiki/architecture.md` — subsystems, base classes, seams
 - `DOCS-INDEX.md` — navigation hub, session start/end protocol
 - `DOCS-SCHEMA.md` — doc format rules, lint checklist, compilation protocol

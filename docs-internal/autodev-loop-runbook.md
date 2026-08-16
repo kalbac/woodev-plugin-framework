@@ -346,5 +346,5 @@ autonomy is ever switched on.
 - `docs-internal/archive/platform-v2-cleanbreak-plan.md` — Phase 3 deletions are the first
   real workload for this loop.
 - `docs-internal/platform-v2-execution-protocol.md` — operating rules.
-- `CLAUDE.md` → "Backward Compatibility — clean-break policy" — source of the
+- `adr/005-platform-v2-clean-break-policy.md` — source of the
   contract-zone / internal-code split that INVARIANTS.md encodes.

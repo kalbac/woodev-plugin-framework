@@ -17,6 +17,10 @@ polluting write hasn't happened yet when they run. The suite goes green. A devel
 locally to double-check a red CI leg gets a *different, more favourable* execution order than CI
 ever used, and the cache never entangles with git status — it looks like nothing changed.
 
+Measured on the SAME commit: `104 tests / 405 assertions OK` locally against
+`104 tests / 249 assertions, 2 failures` on CI. The assertion count is the tell — a suite that
+reports *fewer* assertions than a green run did is not the same suite, it stopped early.
+
 This is not the WP/WC/PHP version matrix. All three CI legs (WP 6.4/WC 8.5.1/PHP 8.1 through WP
 latest/WC latest/PHP 8.2) were reproduced to PASS locally once the exact same versions were
 provisioned — the versions were never the variable. Deleting `.phpunit.result.cache` before the
