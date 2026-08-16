@@ -2757,3 +2757,149 @@ describe( 'section-aware addressing (review finding F3)', () => {
 		expect( callFor( 'shipping_city' ) ).toBeUndefined();
 	} );
 } );
+
+describe( 'a pickup point address replacement must not read as a manual edit (#339)', () => {
+	function captureLocationApplied() {
+		const seen = [];
+		document.body.addEventListener( 'woodev_location_applied', ( event ) => seen.push( event.detail ) );
+		return seen;
+	}
+
+	/**
+	 * What `pickup-mount.js`'s `applyAddressReplacement()` does to the shared WooCommerce
+	 * address fields: writes the POINT's own address/locality/postcode and fires a real
+	 * `change` on each. Modelled here rather than imported so this file keeps testing only
+	 * what location-cascade.js owns — the seam, not the other module's internals.
+	 *
+	 * @param {Object}  fields    `{ fieldId: value }` — the write pickup-mount is about to make.
+	 * @param {boolean} announced Whether pickup-mount announces the write first (the seam).
+	 */
+	function replaceAddressLikePickupMount( fields, announced ) {
+		if ( announced ) {
+			document.body.dispatchEvent(
+				new CustomEvent( 'woodev_pickup_address_replacing', {
+					detail: { fields: fields },
+					bubbles: true,
+				} )
+			);
+		}
+
+		Object.keys( fields ).forEach( ( fieldId ) => {
+			const el = document.getElementById( fieldId );
+
+			el.value = fields[ fieldId ];
+			el.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+		} );
+	}
+
+	function bootWithPickedSettlement() {
+		boot( { region: true, settlement: true, address: true, countries: [ 'RU' ] } );
+
+		selectViaFake( callFor( 'billing_city' ), {
+			key: 'dadata:0c5b2444', label: 'Moscow', level: 'settlement',
+			record: {
+				key: 'dadata:0c5b2444', provider_id: 'dadata', level: 'settlement',
+				country: 'RU', label: 'Moscow',
+			},
+		} );
+	}
+
+	it( 'reproduction: an UNANNOUNCED write of a different settlement spelling invalidates the record', async () => {
+		// #339 as found in the browser: the customer picked «Moscow» (the account locale
+		// transliterates), the carrier hands back «Москва» in Cyrillic, and the cascade —
+		// correctly, by its own rule — reads the differing text as the customer having edited
+		// the field by hand, so the settlement record goes away and the next address search
+		// leaves without `within`.
+		bootWithPickedSettlement();
+
+		const seen = captureLocationApplied();
+
+		replaceAddressLikePickupMount( {
+			billing_city: 'Москва',
+			billing_address_1: 'ул Новокосинская, д 17 к 6',
+		}, false );
+
+		await flushMicrotasks();
+
+		expect( seen ).toContainEqual( { key: '', level: '', settlementKey: '', implicit: false } );
+	} );
+
+	it( 'the seam: an ANNOUNCED write keeps the record — the cascade re-seeds instead of clearing', async () => {
+		bootWithPickedSettlement();
+
+		const seen = captureLocationApplied();
+
+		replaceAddressLikePickupMount( {
+			billing_city: 'Москва',
+			billing_address_1: 'ул Новокосинская, д 17 к 6',
+		}, true );
+
+		await flushMicrotasks();
+
+		expect( seen ).toEqual( [] );
+	} );
+
+	it( 'the announced write still lands in the fields and the store — silent, not skipped', () => {
+		bootWithPickedSettlement();
+
+		replaceAddressLikePickupMount( {
+			billing_city: 'Москва',
+			billing_address_1: 'ул Новокосинская, д 17 к 6',
+			billing_postcode: '111672',
+		}, true );
+
+		expect( document.getElementById( 'billing_city' ).value ).toBe( 'Москва' );
+		expect( document.getElementById( 'billing_address_1' ).value ).toBe( 'ул Новокосинская, д 17 к 6' );
+		expect( document.getElementById( 'billing_postcode' ).value ).toBe( '111672' );
+
+		const store = window.WoodevCheckoutFieldStore.getStoreForField( 'billing_city' );
+
+		expect( store.getValue( 'billing_city' ) ).toBe( 'Москва' );
+	} );
+
+	it( 'announcing does NOT disarm the next genuine manual edit', async () => {
+		// The seam must cover exactly the announced write and nothing after it: a customer who
+		// edits the city by hand a moment later still invalidates the record. Without this the
+		// fix would trade #339 for a permanently deaf cascade.
+		bootWithPickedSettlement();
+
+		replaceAddressLikePickupMount( { billing_city: 'Москва' }, true );
+
+		const seen = captureLocationApplied();
+		const field = document.getElementById( 'billing_city' );
+
+		field.value = 'Тверь';
+		field.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+
+		// The invalidation is deferred one microtask (see handleFieldChanged()'s docblock).
+		await flushMicrotasks();
+
+		expect( seen ).toContainEqual( { key: '', level: '', settlementKey: '', implicit: false } );
+	} );
+
+	it( 'an announcement naming a field this entry does not own is ignored', () => {
+		bootWithPickedSettlement();
+
+		expect( () => {
+			document.body.dispatchEvent(
+				new CustomEvent( 'woodev_pickup_address_replacing', {
+					detail: { fields: { shipping_city: 'Москва', not_a_field_at_all: 'x' } },
+					bubbles: true,
+				} )
+			);
+		} ).not.toThrow();
+
+		expect( document.getElementById( 'billing_city' ).value ).toBe( 'Moscow' );
+	} );
+
+	it( 'a malformed announcement is survivable', () => {
+		bootWithPickedSettlement();
+
+		expect( () => {
+			document.body.dispatchEvent( new CustomEvent( 'woodev_pickup_address_replacing', { bubbles: true } ) );
+			document.body.dispatchEvent(
+				new CustomEvent( 'woodev_pickup_address_replacing', { detail: {}, bubbles: true } )
+			);
+		} ).not.toThrow();
+	} );
+} );

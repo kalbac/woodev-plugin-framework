@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 153 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 154 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -89,6 +89,7 @@
 - [rig/browser] **Playwright MCP does not fire WooCommerce's checkout submit; chrome-devtools MCP does.** → [playwright-mcp-does-not-fire-wc-checkout-ajax](gotchas/playwright-mcp-does-not-fire-wc-checkout-ajax.md) (s44)
 
 ### [framework/wiring] — Responsibilities that moved
+- [framework/wiring] **A module writing into another module's field must ANNOUNCE the write — otherwise the owner reads it as the user's.** → [a-module-that-writes-into-another-modules-field-must-announce-it](gotchas/a-module-that-writes-into-another-modules-field-must-announce-it.md) (s75)
 - [framework/wiring] **An action fired beside a filter must carry the filter's RESULT, not its input.** → [an-action-beside-a-filter-must-carry-the-filters-result](gotchas/an-action-beside-a-filter-must-carry-the-filters-result.md) (s65)
 - [framework/wiring] **A feature built on both sides, with nothing calling it in the middle.** → [built-on-both-sides-with-no-caller-in-the-middle](gotchas/built-on-both-sides-with-no-caller-in-the-middle.md) (s56, extended s59)
 

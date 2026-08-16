@@ -161,7 +161,7 @@
  * it (D-3: the whole point of `ownsChrome` is that the framework renders
  * nothing of its own around a provider that already owns the full picker UI).
  *
- * THE SIX `woodev_pickup_*` EVENTS are native, bubbling `CustomEvent`s fired
+ * THE SEVEN `woodev_pickup_*` EVENTS are native, bubbling `CustomEvent`s fired
  * on `document.body` — exactly like `woodev-modal.js`'s own `woodev_modal_*`
  * events (see that file's docblock for why `jQuery.trigger()` would be
  * invisible to a plain `addEventListener`, and this file's own docblock above
@@ -180,7 +180,12 @@
  * `error` (map script failed to load, embed failed to load) — the kind that
  * breaks the whole map, not a transient dataSource fetch failure the existing
  * degrade-to-notice machinery already recovers from without needing to alarm
- * an external error reporter.
+ * an external error reporter, and `woodev_pickup_address_replacing`
+ * (`{ fields: { fieldId: value }, fieldId }`) fired IMMEDIATELY BEFORE this file writes a
+ * selected point's own address into the shared WooCommerce address fields — the seam
+ * `location-cascade.js` needs to tell that write apart from a human edit (issue #339; see
+ * {@see applyAddressReplacement}). Unlike the other six it is not a notification an
+ * integrator observes after the fact: a listener runs INLINE, before the write lands.
  *
  * `refresh()`, EXPOSED PER SESSION VIA {@see getSession}: re-runs whatever
  * fetch the CURRENT strategy/viewport/type-filter state describes — the hook a
@@ -619,7 +624,7 @@
 	// -------------------------------------------------------------------------
 
 	/**
-	 * Fires one of the four `woodev_pickup_*` events (see the file docblock) — a native,
+	 * Fires one of the `woodev_pickup_*` events (see the file docblock) — a native,
 	 * bubbling `CustomEvent` on `document.body`, exactly matching `woodev-modal.js`'s own
 	 * `emit()`. Seen by both `addEventListener` and jQuery `.on()`; NEVER a jQuery
 	 * `.trigger()`, which would be invisible to a plain `addEventListener` (see the file
@@ -1398,6 +1403,23 @@
 		var address = point && 'string' === typeof point.address ? point.address : '';
 		var locality = point && 'string' === typeof point.locality ? point.locality : '';
 		var postalCode = point && 'string' === typeof point.postal_code ? point.postal_code : '';
+
+		var fields = {};
+
+		fields[ target + '_address_1' ] = address;
+		fields[ target + '_city' ] = locality;
+		fields[ target + '_postcode' ] = postalCode;
+
+		// Issue #339, BEFORE the writes and never after them. These fields are shared with
+		// `location-cascade.js`, which treats a value that no longer matches its confirmed
+		// record as the customer having edited the field by hand — and drops the settlement
+		// record, so the next address search leaves without `within`. It only takes a
+		// different SPELLING of the same locality: the carrier answers «Москва» where the
+		// provider said «Moscow» under an English account locale. The announcement lets the
+		// cascade re-seed first; `dispatchEvent()` runs its listeners inline, so the re-seed
+		// is complete before the `change` events below are fired. A page with no cascade on
+		// it has no listener and this is an inert no-op.
+		fireDocumentEvent( 'woodev_pickup_address_replacing', { fields: fields, fieldId: config.fieldId } );
 
 		writeAndFireChange( target + '_address_1', address );
 		writeAndFireChange( target + '_city', locality, locality );

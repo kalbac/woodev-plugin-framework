@@ -863,6 +863,65 @@
 	}
 
 	/**
+	 * Handles `woodev_pickup_address_replacing` (issue #339) — `pickup-mount.js` announces,
+	 * one synchronous event BEFORE it happens, that it is about to write a selected pickup
+	 * point's OWN address into the shared WooCommerce address fields (SP-5's
+	 * `applyAddressReplacement()`).
+	 *
+	 * WHY AN ANNOUNCEMENT AND NOT SOMETHING THIS MODULE COULD RECOGNISE ALONE: by the time
+	 * the write arrives it is indistinguishable from a human edit. It carries a different
+	 * SPELLING of the same locality — the carrier answers «Москва» while the provider said
+	 * «Moscow» under an English account locale (gotcha
+	 * `a-locality-display-name-is-not-an-identifier`) — so {@see handleFieldChanged} reads
+	 * "the field's own record no longer matches its text", drops the settlement record, and
+	 * the next address search leaves without `within`, country-wide (#339). That rule is
+	 * right and stays; what was missing is that THIS write is not the customer's.
+	 *
+	 * RE-SEEDING, NOT SUPPRESSING, IS THE WHOLE FIX. The point's address is exactly what must
+	 * reach the order — a point may legitimately stand in a NEIGHBOURING settlement (ordinary
+	 * for New Moscow), so writing the customer's own locality there instead would fix the
+	 * search scope by corrupting the delivery address. The values land; only the CONFIRMED
+	 * RECORD survives untouched, because the customer's own pick is what scopes the next
+	 * search.
+	 *
+	 * Deliberately NOT done by running the point's address through
+	 * `Location_Provider::normalize()` first: measured on the rig 16.08.2026 (see #339), that
+	 * returns the key of the DEEPEST resolved object — a house or a street, never the
+	 * settlement — costs a paid, uncached Clean API call per selection, is an OPTIONAL
+	 * provider capability whose absence THROWS rather than returning null, and on a
+	 * carrier-shaped string can silently answer a different address entirely
+	 * (`Москва Внуково Центральная 6` → `г Москва, ул Центральная, д 6`, `qc = 3`).
+	 *
+	 * Scoped to the announced write and nothing after it: {@see writeSilently} re-seeds
+	 * `entry.resolved` for these exact values only, so the very next genuine manual edit
+	 * invalidates normally.
+	 *
+	 * @internal
+	 *
+	 * @param {CustomEvent} event `detail: { fields: { fieldId: value } }`.
+	 * @returns {void}
+	 */
+	function handlePickupAddressReplacing( event ) {
+		var fields = event && event.detail ? event.detail.fields : null;
+
+		if ( ! fields || 'object' !== typeof fields ) {
+			return;
+		}
+
+		entries.forEach( function( entry ) {
+			Object.keys( fields ).forEach( function( fieldId ) {
+				// Another entry's section, or not a cascade field at all (the announcement
+				// names WooCommerce field ids, which only PARTLY overlap this entry's chain).
+				if ( ! nodeInfo( entry, fieldId ) ) {
+					return;
+				}
+
+				writeSilently( entry, fieldId, String( fields[ fieldId ] ) );
+			} );
+		} );
+	}
+
+	/**
 	 * D8 + single-flight ordering (PR-C review, Finding 2): POSTs `record` to `/select`. Only
 	 * ever ONE `/select` request is in flight per ENTRY at a time — the server holds exactly
 	 * ONE current-location slot per entry's own `Location_Service`
@@ -2062,6 +2121,11 @@
 		suppressWcAddressAutocomplete();
 		bindChangeWatchers();
 		bindCheckoutUpdatedWatcher();
+
+		// Issue #339. A native CustomEvent, like `woodev_location_applied` going the other
+		// way — `dispatchEvent()` runs every listener INLINE, so the re-seed is already done
+		// by the time pickup-mount.js's own write fires its `change`.
+		document.body.addEventListener( 'woodev_pickup_address_replacing', handlePickupAddressReplacing );
 	}
 
 	if ( 'loading' === document.readyState ) {
