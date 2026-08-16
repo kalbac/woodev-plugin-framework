@@ -1125,8 +1125,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 *
 		 * After the per-field loop an independent pickup backstop runs when
 		 * {@see set_requires_pickup_methods()} has been called: if the chosen method is one of
-		 * the declared pickup methods AND the `is_pickup_slot` field value is blank, checkout is
-		 * blocked regardless of that field's condition-spec.
+		 * the declared pickup methods AND a pickup-slot field's value is blank, checkout is
+		 * blocked regardless of that field's condition-spec. EVERY declared slot is checked,
+		 * not just the first one found ({@see self::pickup_slot_fields()}, issue #325) — see
+		 * that method for what in this layer is still single-package on purpose, and where a
+		 * package dimension would go.
 		 *
 		 * The backstop skips its OWN notice when the per-field loop already added a
 		 * required-field error for that exact pickup field id (measured duplication, #299/#134:
@@ -1152,6 +1155,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * @since 2.0.2 Added independent pickup backstop guard.
 		 * @since 2.0.2 Backstop notice suppressed when the per-field loop already reported the
 		 *              same field id blank-and-required (#299, #134).
+		 * @since 2.0.2 Backstop enforces EVERY declared pickup slot instead of only the first
+		 *              one found (#325).
 		 *
 		 * @param array<string, mixed> $values clean values keyed by field id
 		 * @param array<string, mixed> $state  flat checkout-state map, e.g.
@@ -1194,50 +1199,117 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 				$chosen = (string) ( $state['chosen_shipping_method'] ?? '' );
 
 				if ( self::chosen_method_matches( $chosen, $this->requires_pickup_methods ) ) {
-					$pickup_field = null;
-
-					foreach ( $this->fields->get_fields() as $field ) {
-						if ( ! empty( $field['is_pickup_slot'] ) ) {
-							$pickup_field = $field;
-							break;
-						}
-					}
-
-					if ( null !== $pickup_field ) {
+					foreach ( $this->pickup_slot_fields() as $pickup_field ) {
 						$pickup_value = $values[ $pickup_field['id'] ] ?? '';
 
-						if ( self::is_blank( $pickup_value ) ) {
-							$valid = false;
+						if ( ! self::is_blank( $pickup_value ) ) {
+							continue;
+						}
 
-							// Already reported by the per-field loop above — do not repeat the same
-							// failure as a second notice (measured duplication, see method docblock).
-							if ( ! isset( $blank_required_ids[ $pickup_field['id'] ] ) ) {
-								$supplied = self::supplied_required_message( $pickup_field );
+						$valid = false;
 
-								/*
-								 * Its OWN wording, deliberately not the per-field message (#327):
-								 * this branch fires precisely when the field's own condition-spec
-								 * did NOT match the chosen method, so it is the one that can say
-								 * why a point is needed at all. Both dropped «значение поля» —
-								 * the control here is a button, and there is no field to fill in.
-								 * A plugin-supplied message still wins, because it is a statement
-								 * about the field rather than about this code path.
-								 */
-								$this->add_error(
-									'' !== $supplied
-										? $supplied
-										: __(
-											'Для этого способа доставки нужно выбрать пункт выдачи заказов.',
-											'woodev-plugin-framework'
-										)
-								);
-							}
+						// Already reported by the per-field loop above — do not repeat the same
+						// failure as a second notice (measured duplication, see method docblock).
+						if ( ! isset( $blank_required_ids[ $pickup_field['id'] ] ) ) {
+							$supplied = self::supplied_required_message( $pickup_field );
+
+							/*
+							 * Its OWN wording, deliberately not the per-field message (#327):
+							 * this branch fires precisely when the field's own condition-spec
+							 * did NOT match the chosen method, so it is the one that can say
+							 * why a point is needed at all. Both dropped «значение поля» —
+							 * the control here is a button, and there is no field to fill in.
+							 * A plugin-supplied message still wins, because it is a statement
+							 * about the field rather than about this code path.
+							 */
+							$this->add_error(
+								'' !== $supplied
+									? $supplied
+									: __(
+										'Для этого способа доставки нужно выбрать пункт выдачи заказов.',
+										'woodev-plugin-framework'
+									)
+							);
 						}
 					}
 				}
 			}
 
 			return $valid;
+		}
+
+		/**
+		 * Every field declared as a pickup slot ({@see Field::pickup_slot()}), in declaration
+		 * order.
+		 *
+		 * ONE SLOT IS A CONFIGURATION OUTCOME HERE, NOT AN ASSUMPTION (issue #325). Every
+		 * plugin in production today declares exactly one, so this list has exactly one entry
+		 * — but nothing in this method, in {@see validate()}'s backstop above, or in
+		 * `checkout-field-classic.js`'s own `placeSlots()` (which has always mounted a trigger
+		 * per declared slot) depends on that. Until #325 the backstop took the FIRST slot and
+		 * stopped: a second declared slot was mounted client-side and then silently never
+		 * validated, which is the exact shape of a hidden "one" the issue asks to remove.
+		 *
+		 * WHAT IS STILL SINGLE, DELIBERATELY, AND WHERE IT WOULD BE EXTENDED. A multi-package
+		 * cart is NOT built (operator decision, 16.08.2026 — YAGNI, no consumer), and two
+		 * places genuinely still carry one package's worth of state. Both are named here so
+		 * the next reader recognises an accepted limit rather than an oversight to "fix":
+		 *
+		 * - {@see \Woodev\Framework\Shipping\Pickup\Pickup_Handler} persists ONE point to the
+		 *   order, through the single logical field id the plugin wired. A package dimension
+		 *   would be an addition to that key map, not a change to this layer.
+		 * - {@see \Woodev\Framework\Shipping\Pickup\Pickup_Selection}'s session map is keyed
+		 *   `[locality][type]`, which is already parameterised and already holds many entries
+		 *   at once; a package would be a third key there, and the eviction cap it already
+		 *   applies would carry over unchanged.
+		 *
+		 * The filter below is the boundary seam the issue asks for — a domain can add, remove
+		 * or reorder the slots this backstop enforces without touching the field declarations
+		 * themselves. Left in place with no consumer on purpose: an extension point is not
+		 * gated on someone already using it.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array<int, array<string, mixed>> Normalized descriptors, list-indexed.
+		 */
+		private function pickup_slot_fields(): array {
+			$slots = [];
+
+			foreach ( $this->fields->get_fields() as $field ) {
+				if ( ! empty( $field['is_pickup_slot'] ) ) {
+					$slots[] = $field;
+				}
+			}
+
+			/**
+			 * Filters the pickup-slot fields the checkout backstop enforces.
+			 *
+			 * @since 2.0.2
+			 *
+			 * @param array<int, array<string, mixed>> $slots  Normalized field descriptors, in
+			 *                                                 declaration order.
+			 * @param array<string, array<string, mixed>> $fields Every normalized field descriptor,
+			 *                                                    keyed by id.
+			 */
+			$filtered = apply_filters( 'woodev_checkout_pickup_slot_fields', $slots, $this->fields->get_fields() );
+
+			// A filter that returns something unusable leaves the framework's own answer
+			// standing — the backstop exists to BLOCK a checkout, and a malformed filter
+			// return must never be the reason it silently stops doing that. Entries are
+			// checked for the ONE key this backstop actually dereferences, so a half-built
+			// descriptor is dropped rather than warned about mid-validation.
+			if ( ! is_array( $filtered ) ) {
+				return $slots;
+			}
+
+			return array_values(
+				array_filter(
+					$filtered,
+					static function ( $slot ): bool {
+						return is_array( $slot ) && isset( $slot['id'] ) && '' !== (string) $slot['id'];
+					}
+				)
+			);
 		}
 
 		/**

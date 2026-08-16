@@ -155,6 +155,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 * the full point under, or null when the plugin has not wired full-point
 		 * persistence.
 		 *
+		 * ONE LOGICAL FIELD MEANS ONE POINT PER ORDER, AND THAT IS AN ACCEPTED LIMIT (issue
+		 * #325, operator decision 16.08.2026): a multi-package cart is not built while
+		 * nothing consumes it. This is the narrowest place where that shows, and the place
+		 * a package dimension would be added — as a further entry in the plugin's own
+		 * logical→real key map on {@see Shipping_Order_Handler}, which is already the only
+		 * sanctioned destination for an installed-site order-meta key. Nothing else in the
+		 * layer would have to move: the selection map is keyed (locality, type) and already
+		 * holds many entries ({@see Pickup_Selection}), and the checkout backstop already
+		 * enforces every declared slot rather than the first
+		 * ({@see \Woodev\Framework\Shipping\Checkout\Checkout_Handler::pickup_slot_fields()}).
+		 * Read this as a decision, not as an unfinished case.
+		 *
 		 * @since 2.0.2
 		 * @var string|null
 		 */
