@@ -7,10 +7,10 @@
 > Program history snapshot → `platform-v2-program-tracker.md`; active program map →
 > `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-08-16 (s76).** `main` = `c618e91` · **one open PR: #345 (#337), CI green + CLEAN,
-held for the operator's visual check** · rig tree on `fix/337-address-lock`.
-Tests: **2285 unit / 5660 assertions / 1139 jest / 110 integration**; phpcs and phpstan clean.
-Gotchas: **158**. Docs gate: `npm run lint:docs` (session-start reading budget 120 KB).
+**As of 2026-08-17 (s77).** `main` = `0a28e94` · no open PRs · working tree clean, rig on `main`
+with the **CDEK provider active** (`test-cdek`).
+Tests: **2292 unit / 5672 assertions / 1145 jest / 110 integration**; phpcs and phpstan clean.
+Gotchas: **159**. Docs gate: `npm run lint:docs` (session-start reading budget 120 KB).
 
 ## Program status (high level)
 
@@ -88,7 +88,8 @@ Deferred (всё остальное — board №6): UK-CFR (settings extensibil
 ## Local rig
 
 - **The picker lives on `/classic-checkout/`, NOT `/checkout/`** — the latter is the BLOCK checkout (the adapter is SP-11, unbuilt), where there is no `form.checkout`, no `carrier_pickup_point` and no trigger, which reads as a broken build rather than the wrong URL. Product id `12` fills the cart via `?add-to-cart=12`. Gotcha: `rig-checkout-url-is-the-block-checkout`.
-- **The rig serves the WORKING TREE.** Name the branch out loud whenever you ask anyone to look, and switch the tree BEFORE asking — handing the operator a checklist while the tree holds another branch has already cost a wasted pass (gotcha `rig-serves-the-working-tree-branch-switch-reverts-fixes`). Current state: tree on `fix/337-address-lock` (rebased on `main`, so it also carries #343's CDEK provider and #325).
+- **The rig serves the WORKING TREE.** Name the branch out loud whenever you ask anyone to look, and switch the tree BEFORE asking — handing the operator a checklist while the tree holds another branch has already cost a wasted pass (gotcha `rig-serves-the-working-tree-branch-switch-reverts-fixes`). Current state: tree on `main`.
+- **The active location provider on the rig is `test-cdek`** (switched in s77 at the operator's request). Back to DaData: `wp option update woodev_location_active_provider dadata`.
 - **Ports: dev `:8973` / tests `:8974`** (chrome-devtools MCP driver). Ports live in the gitignored `.wp-env.override.json`.
 - **Two live location providers on the rig now (s76).** DaData is active by default; the CDEK test
   contour is registered as `test-cdek` (fixture

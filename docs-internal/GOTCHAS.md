@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 158 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 159 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -189,6 +189,7 @@
 - [shipping/checkout] **A second store instance silently diverges — the checkout store needs an instance registry.** → [js-store-instance-registry-cross-module](gotchas/js-store-instance-registry-cross-module.md) (s45)
 
 ### [shipping/pickup] — Pickup point picker / ymaps
+- [shipping/pickup] **A restore tied to a server confirmation looks like a render artefact — settle "who did this" with a timestamped ledger AND a control, never by watching.** → [a-restore-tied-to-a-server-confirmation-looks-like-a-render-artefact](gotchas/a-restore-tied-to-a-server-confirmation-looks-like-a-render-artefact.md) (s77)
 - [shipping/pickup] **Two hook registrations in a reference can mean two OPTIONS, not two outputs.** → [two-hook-registrations-can-mean-two-options-not-two-outputs](gotchas/two-hook-registrations-can-mean-two-options-not-two-outputs.md) (s73)
 - [shipping/pickup] **A capability flag that removes a whole UI layer silences every branch that REPORTED through it.** → [a-capability-flag-that-removes-a-ui-layer-silences-every-branch-that-reported-through-it](gotchas/a-capability-flag-that-removes-a-ui-layer-silences-every-branch-that-reported-through-it.md) (s66)
 - [shipping/pickup] **ymaps camera moves are asynchronous — losing the `setBounds()` promise breaks two different things.** → [ymaps-camera-moves-are-async](gotchas/ymaps-camera-moves-are-async.md) (s46, extended s47)
