@@ -2202,6 +2202,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 					'nonceNodeId',
 					'i18n',
 					'chosenAddress',
+					'selections',
 					'defaultLocation',
 					'pointIcons',
 					'pointGlyphs',

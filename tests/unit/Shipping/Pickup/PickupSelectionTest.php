@@ -724,6 +724,97 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 		 *
 		 * @return int
 		 */
+		// -------------------------------------------------------------------------
+		// recall_all() — the bulk read the browser restores from (#349)
+		// -------------------------------------------------------------------------
+
+		public function test_recall_all_returns_every_locality_remembered_for_that_type(): void {
+			$selection = $this->probe( new Pickup_Selection_Fake_Session() );
+
+			$selection->remember( 'msk', 'pvz', 'P1', 'Тверская, 1' );
+			$selection->remember( 'tver', 'pvz', 'P2', 'Советская, 2' );
+
+			$this->assertSame(
+				[
+					'msk'  => [ 'id' => 'P1', 'address' => 'Тверская, 1' ],
+					'tver' => [ 'id' => 'P2', 'address' => 'Советская, 2' ],
+				],
+				$selection->recall_all( 'pvz' )
+			);
+		}
+
+		/**
+		 * The bulk read must answer with the SAME id the single lookup answers with — a locality
+		 * that has an entry for another type only is absent here, exactly as `recall()` returns
+		 * null for it. A bulk view that quietly widened the type would restore a point the
+		 * checkout itself would not.
+		 */
+		public function test_recall_all_omits_a_locality_that_has_nothing_for_that_type(): void {
+			$selection = $this->probe( new Pickup_Selection_Fake_Session() );
+
+			$selection->remember( 'msk', 'pvz', 'P1' );
+			$selection->remember( 'tver', 'postamat', 'P2' );
+
+			$this->assertSame( [ 'msk' => [ 'id' => 'P1', 'address' => '' ] ], $selection->recall_all( 'pvz' ) );
+			$this->assertNull( $selection->recall( 'tver', 'pvz' ), 'the single lookup agrees' );
+		}
+
+		/**
+		 * `TYPE_ANY` resolves per locality exactly like {@see Pickup_Selection::recall_latest()}:
+		 * the most recently WRITTEN entry, by `seq` — never array order.
+		 */
+		public function test_recall_all_for_type_any_takes_the_latest_entry_per_locality(): void {
+			$selection = $this->probe( new Pickup_Selection_Fake_Session() );
+
+			$selection->remember( 'msk', 'pvz', 'P1', 'первый' );
+			$selection->remember( 'msk', 'postamat', 'P2', 'второй' );
+			$selection->remember( 'tver', 'pvz', 'P3', 'третий' );
+
+			$this->assertSame(
+				[
+					'msk'  => [ 'id' => 'P2', 'address' => 'второй' ],
+					'tver' => [ 'id' => 'P3', 'address' => 'третий' ],
+				],
+				$selection->recall_all( Selection_Scope::TYPE_ANY )
+			);
+		}
+
+		/**
+		 * A legacy (pre-#274) id-only entry restores its id with an empty address rather than
+		 * being dropped — the id is what actually re-applies the selection; the address only
+		 * labels it.
+		 */
+		public function test_recall_all_keeps_a_legacy_id_only_entry_with_an_empty_address(): void {
+			$session = new Pickup_Selection_Fake_Session();
+
+			$session->set( 'woodev_test_selection_map', [ 'msk' => [ 'pvz' => [ 'id' => 'P1', 'seq' => 1 ] ] ] );
+
+			$this->assertSame(
+				[ 'msk' => [ 'id' => 'P1', 'address' => '' ] ],
+				$this->probe( $session )->recall_all( 'pvz' )
+			);
+		}
+
+		public function test_recall_all_is_empty_when_nothing_is_remembered(): void {
+			$this->assertSame( [], $this->probe( new Pickup_Selection_Fake_Session() )->recall_all( 'pvz' ) );
+		}
+
+		/**
+		 * No session (no WooCommerce, or none started yet) degrades to an empty map, never a
+		 * fatal — the same rule every other read in this class follows.
+		 */
+		public function test_recall_all_degrades_to_empty_without_a_session(): void {
+			$this->assertSame( [], $this->probe( null )->recall_all( 'pvz' ) );
+		}
+
+		public function test_recall_all_rejects_an_unusable_type(): void {
+			$selection = $this->probe( new Pickup_Selection_Fake_Session() );
+
+			$selection->remember( 'msk', 'pvz', 'P1' );
+
+			$this->assertSame( [], $selection->recall_all( '' ) );
+		}
+
 		private function count_entries( Pickup_Selection_Fake_Session $session, string $key ): int {
 			$map = $session->raw( $key );
 

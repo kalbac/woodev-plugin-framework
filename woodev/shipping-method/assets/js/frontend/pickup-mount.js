@@ -859,6 +859,138 @@
 	}
 
 	/**
+	 * The remembered pickup selection per LOCALITY KEY, per field id (issue #349) —
+	 * `{ fieldId: { localityKey: { id, address } } }`.
+	 *
+	 * Seeded from `config.selections` (`Pickup_Handler::resolve_remembered_selections()`, the
+	 * same session-backed `[locality][type]` map `chosenAddress` and the restored field value
+	 * come out of) and kept current by {@see rememberSelectionLocally} on every confirmed pick.
+	 * Both halves are needed and neither is redundant: the seed covers localities chosen BEFORE
+	 * this page loaded, the local mirror covers the ones chosen since.
+	 *
+	 * @type {Object.<string, Object.<string, {id: string, address: string}>>}
+	 */
+	var rememberedSelections = {};
+
+	/**
+	 * Seeds {@see rememberedSelections} for one field id from `config.selections` — guarded to
+	 * run once per field id, exactly like {@see seedChosenAddress}, so a later mount pass never
+	 * discards what this page has since remembered locally.
+	 *
+	 * Shape-guarded entry by entry rather than trusted wholesale: this is server-rendered JSON,
+	 * but an entry with no usable id would later be "restored" as an empty selection, which is
+	 * indistinguishable from clearing one — the failure would look like the very bug this fixes.
+	 *
+	 * @param {Object} config
+	 * @returns {void}
+	 */
+	function seedRememberedSelections( config ) {
+		if ( Object.prototype.hasOwnProperty.call( rememberedSelections, config.fieldId ) ) {
+			return;
+		}
+
+		var seeded = {};
+		var source = config && config.selections;
+
+		if ( source && 'object' === typeof source ) {
+			Object.keys( source ).forEach( function( localityKey ) {
+				var entry = source[ localityKey ];
+
+				if ( ! localityKey || ! entry || 'string' !== typeof entry.id || ! entry.id ) {
+					return;
+				}
+
+				seeded[ localityKey ] = {
+					id: entry.id,
+					address: 'string' === typeof entry.address ? entry.address : '',
+				};
+			} );
+		}
+
+		rememberedSelections[ config.fieldId ] = seeded;
+	}
+
+	/**
+	 * Mirrors a just-confirmed selection into {@see rememberedSelections} under the locality key
+	 * it was filed against — see {@see applySelection}'s own call site.
+	 *
+	 * Keyed on {@see resolveLocalityKey}, which is what the server's own
+	 * `Provider_Selection_Scope::current_locality()` files under for a plugin inside the
+	 * Location Provider layer. A plugin OUTSIDE that layer gets `resolveLocality()`'s DOM read
+	 * here, which its own `Selection_Scope` may or may not agree with — a mismatch simply means
+	 * nothing is ever found to restore, i.e. exactly today's behaviour, never a wrong point.
+	 *
+	 * @param {Object} config
+	 * @param {string} pointId
+	 * @param {string} address
+	 * @returns {void}
+	 */
+	function rememberSelectionLocally( config, pointId, address ) {
+		if ( ! pointId ) {
+			return;
+		}
+
+		var localityKey = resolveLocalityKey( config );
+
+		if ( ! localityKey ) {
+			return;
+		}
+
+		// Seeded HERE and in {@see restoreRememberedSelection} rather than at mount time, on
+		// purpose: `woodev_location_applied` can reach this module before `mountAll()` has run
+		// for a given config (script order is not ours to assume), and a restore that ran
+		// against an unseeded map would silently find nothing. The guard inside makes it
+		// idempotent, so calling it from both entry points costs nothing.
+		seedRememberedSelections( config );
+
+		if ( ! rememberedSelections[ config.fieldId ] ) {
+			rememberedSelections[ config.fieldId ] = {};
+		}
+
+		rememberedSelections[ config.fieldId ][ localityKey ] = {
+			id: pointId,
+			address: 'string' === typeof address ? address : '',
+		};
+	}
+
+	/**
+	 * Restores the point remembered for `localityKey`, if any — #176's own agreed behaviour,
+	 * stated on {@see handleLocalityChanged} ("returning to the previous locality restores the
+	 * point chosen there") and, until issue #349, implemented only by a full page render.
+	 *
+	 * A no-op when nothing is remembered for that locality: the clearing
+	 * {@see handleLocalityChanged} already did is then the correct final state, and this must
+	 * NOT re-apply a point belonging to the locality the customer just left.
+	 *
+	 * Also a no-op when the field already holds that exact id — the ordinary case on the very
+	 * first `woodev_location_applied` after a reload, where the server already restored both the
+	 * value and the label. Re-writing it would fire a redundant `change` (and with it an
+	 * `update_checkout`) on every single page load.
+	 *
+	 * @param {Object} config
+	 * @param {string} localityKey
+	 * @returns {void}
+	 */
+	function restoreRememberedSelection( config, localityKey ) {
+		if ( ! localityKey || applyingSelection[ config.fieldId ] ) {
+			return;
+		}
+
+		seedRememberedSelections( config );
+
+		var remembered = ( rememberedSelections[ config.fieldId ] || {} )[ localityKey ];
+
+		if ( ! remembered || ! remembered.id || fieldValue( config.fieldId ) === remembered.id ) {
+			return;
+		}
+
+		chosenAddress[ config.fieldId ] = remembered.address;
+
+		writeAndFireChange( config.fieldId, remembered.id );
+		syncTriggerLabel( config );
+	}
+
+	/**
 	 * The `aria-label` context {@see syncTriggerLabel} appends to a trigger button's visible
 	 * text, keyed by the slot's own `data-woodev-pickup-placement` (issue #308 item 4 —
 	 * adversarial review of #274 item 3: two identically-labelled buttons for the same
@@ -1332,6 +1464,15 @@
 		collectConfigs().forEach( function( config ) {
 			if ( config.location ) {
 				resolvedLocalityKey[ config.fieldId ] = key;
+
+				// Issue #349. THIS is where a selection can be restored, and the only place it
+				// can: {@see handleLocalityChanged} runs off a `change` on the city field, which
+				// fires BEFORE the cascade's `/select` round trip — so at that moment the new
+				// locality's KEY is still the old one, and a lookup there would either miss or,
+				// worse, restore the point belonging to the locality just left. This event is
+				// fired precisely once the new record is persisted, i.e. once the identity of
+				// the locality now on screen is settled and agreed with the server.
+				restoreRememberedSelection( config, key );
 			}
 		} );
 	}
@@ -1476,6 +1617,14 @@
 		var shortAddress = point && 'string' === typeof point.short_address ? point.short_address : '';
 
 		chosenAddress[ config.fieldId ] = addressEscaped ? decodeEscapedAddress( shortAddress ) : shortAddress;
+
+		// Issue #349: keep this page's own copy of the remembered map in step with the server's.
+		// The server filed this point under the customer's CURRENT locality a moment ago (the
+		// `/select` endpoint's own `Pickup_Selection::remember()`), and without mirroring it here
+		// the restore below would only ever know about selections made before this page loaded —
+		// so "pick a point, switch locality, switch back" would still come up empty until a
+		// reload, which is the exact half of #176 that was missing.
+		rememberSelectionLocally( config, pointId, chosenAddress[ config.fieldId ] );
 	}
 
 	/**
