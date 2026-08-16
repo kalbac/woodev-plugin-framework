@@ -319,17 +319,26 @@ function woodev_test_shipping_method_plugin_init(): void {
 	// reasoning as the two requires just above.
 	require_once __DIR__ . '/class-test-list-location-provider.php';
 
-	// Registers the fixture provider alongside the bundled DaData one — NOT made active
-	// by default (the store's `active_provider` setting still defaults to `dadata`), an
-	// operator opts in explicitly on the "Локация" settings page to see `related-list`/
-	// `ajax-select2` on the rig. Safe to register the closure here regardless of the
-	// bootstrap's own loading stage (see the `woodev_shipping_pickup_point_selection`
-	// filter registration further down in this file for the identical reasoning:
-	// registering a callback does not INVOKE it).
+	// Issue #343: the rig's SECOND LIVE provider — CDEK's test contour. Where the fixture
+	// above is static data shaped like a carrier dictionary, this one IS a carrier
+	// dictionary: real regions, real settlements, and — measured against CDEK's own API —
+	// no address level at all, which is what makes scenario A of #343 (and with it the
+	// #337 lock rule) observable on a live provider instead of on our own assumptions.
+	// Required unconditionally, same reasoning as the requires just above.
+	require_once __DIR__ . '/class-test-cdek-location-provider.php';
+
+	// Registers the fixture providers alongside the bundled DaData one — NEITHER made
+	// active by default (the store's `active_provider` setting still defaults to
+	// `dadata`), an operator opts in explicitly on the "Локация" settings page to see
+	// `related-list`/`ajax-select2`, or the CDEK dictionary, on the rig. Safe to register
+	// the closure here regardless of the bootstrap's own loading stage (see the
+	// `woodev_shipping_pickup_point_selection` filter registration further down in this
+	// file for the identical reasoning: registering a callback does not INVOKE it).
 	add_filter(
 		\Woodev\Framework\Shipping\Location\Location_Provider_Registry::FILTER_PROVIDERS,
 		static function ( array $providers ): array {
 			$providers[] = new Woodev_Test_List_Location_Provider();
+			$providers[] = new Woodev_Test_Cdek_Location_Provider();
 
 			return $providers;
 		}
@@ -753,9 +762,9 @@ function woodev_test_shipping_method_plugin_init(): void {
 
 				// Location Provider layer, block PR-C rig-visibility pull-forward: bridge the
 				// rig's own DaData credential constants into the store option BEFORE anything
-				// reads it this request — see maybe_seed_dadata_credentials_from_rig_constants()'s
+				// reads it this request — see maybe_seed_location_credentials_from_rig_constants()'s
 				// own docblock.
-				$this->maybe_seed_dadata_credentials_from_rig_constants();
+				$this->maybe_seed_location_credentials_from_rig_constants();
 			}
 
 			/**
@@ -947,19 +956,38 @@ function woodev_test_shipping_method_plugin_init(): void {
 			}
 
 			/**
-			 * Bridges the rig's own `WOODEV_TEST_DADATA_TOKEN`/`WOODEV_TEST_DADATA_SECRET`
-			 * wp-config constants into the DaData provider's store-level settings options
-			 * (`woodev_location_token`/`woodev_location_clean_secret`) via
+			 * Bridges the rig's own wp-config credential constants into the location
+			 * providers' store-level settings options via
 			 * {@see \Woodev_Test_Credential_Seeder::maybe_seed()} — see that class's own
-			 * docblock for the full rationale and the idempotent/non-destructive rule.
+			 * docblock for the full rationale and the idempotent/non-destructive rule:
+			 * `WOODEV_TEST_DADATA_TOKEN`/`WOODEV_TEST_DADATA_SECRET` for the bundled DaData
+			 * provider, and (issue #343) `WOODEV_TEST_CDEK_CLIENT_ID`/
+			 * `WOODEV_TEST_CDEK_CLIENT_SECRET` for the CDEK test-contour fixture provider.
 			 *
 			 * @since 2.0.2
+			 * @since 2.0.2 Also seeds the CDEK credentials (issue #343); renamed from
+			 *              `maybe_seed_dadata_credentials_from_rig_constants()`, which no
+			 *              longer described what it does.
 			 *
 			 * @return void
 			 */
-			private function maybe_seed_dadata_credentials_from_rig_constants(): void {
+			private function maybe_seed_location_credentials_from_rig_constants(): void {
 				\Woodev_Test_Credential_Seeder::maybe_seed( 'woodev_location_token', 'WOODEV_TEST_DADATA_TOKEN' );
 				\Woodev_Test_Credential_Seeder::maybe_seed( 'woodev_location_clean_secret', 'WOODEV_TEST_DADATA_SECRET' );
+
+				// Issue #343: the same bridge for the CDEK test-contour credentials. CDEK
+				// publishes shared test keys, but a credential that is public elsewhere is
+				// still not ours to commit here (gotcha
+				// `public-repo-third-party-credentials`) — so they live in the rig's own
+				// wp-config exactly like the DaData token does, and never in this repo.
+				\Woodev_Test_Credential_Seeder::maybe_seed(
+					'woodev_location_' . \Woodev_Test_Cdek_Location_Provider::FIELD_CLIENT_ID,
+					'WOODEV_TEST_CDEK_CLIENT_ID'
+				);
+				\Woodev_Test_Credential_Seeder::maybe_seed(
+					'woodev_location_' . \Woodev_Test_Cdek_Location_Provider::FIELD_CLIENT_SECRET,
+					'WOODEV_TEST_CDEK_CLIENT_SECRET'
+				);
 			}
 
 			// -----------------------------------------------------------------
