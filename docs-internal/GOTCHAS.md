@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 154 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 158 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -67,6 +67,7 @@
 
 ### [framework/contracts] — What the framework guarantees to its consumers
 - [framework/contracts] **A field that is a VIEW of another must be derived at the boundary, never at the display sites.** → [derive-a-view-field-at-the-boundary-not-at-display-sites](gotchas/derive-a-view-field-at-the-boundary-not-at-display-sites.md) (s64)
+- [framework/contracts] **A cross-provider `within` is handed over as COMPONENTS, never as a key — no key translation layer is needed or wanted.** → [a-cross-provider-within-is-handed-over-as-components](gotchas/a-cross-provider-within-is-handed-over-as-components.md) (s76)
 
 ### [woocommerce/*] — WooCommerce-specific (session)
 - [woocommerce/address-save] **WooCommerce saves no address until every required TEXT field in the block is filled — the gate is in the JS.** → [wc-does-not-save-the-address-until-every-required-text-field-is-filled](gotchas/wc-does-not-save-the-address-until-every-required-text-field-is-filled.md) (s65)
@@ -78,6 +79,7 @@
 - [woocommerce/address-autocomplete] **Wrapping `window.wc.addressAutocomplete.providers` touches a namespace, not a contract — and two implementation traps along the way.** → [wc-address-autocomplete-registry-wrap-is-not-a-documented-contract](gotchas/wc-address-autocomplete-registry-wrap-is-not-a-documented-contract.md) (s69)
 
 ### [shipping/location] — Location provider layer
+- [shipping/location] **A served level can come from the FALLBACK provider, not the active one — "the active provider lacks X" and "X is unserved" are different statements.** → [a-level-served-can-come-from-the-fallback-not-the-active-provider](gotchas/a-level-served-can-come-from-the-fallback-not-the-active-provider.md) (s76)
 - [shipping/location] **One identity, two roles: one must refuse, the other must fall back.** → [one-identity-two-roles-one-must-refuse-the-other-must-fall-back](gotchas/one-identity-two-roles-one-must-refuse-the-other-must-fall-back.md) (s74)
 - [shipping/location] **A derived ancestor is not the one the customer picked.** → [a-derived-ancestor-is-not-the-one-the-customer-picked](gotchas/a-derived-ancestor-is-not-the-one-the-customer-picked.md) (s74)
 - [shipping/location] **A DOM attribute is the wrong seam on a WooCommerce checkout — the node is not yours.** → [a-dom-attribute-is-the-wrong-seam-on-a-woocommerce-checkout](gotchas/a-dom-attribute-is-the-wrong-seam-on-a-woocommerce-checkout.md) (s72)
@@ -166,6 +168,7 @@
 
 ### [admin-ui/modal] — Framework modal shell
 - [admin-ui/css] **Flat `:where()` isolation loses to an ordinary longer theme selector — no `!important` required.** → [flat-where-isolation-loses-to-a-longer-theme-selector](gotchas/flat-where-isolation-loses-to-a-longer-theme-selector.md) (s69)
+- [admin-ui/css] **`disabled` alone is not a visual signal: a theme's own `input` rule erases the browser's greying, and the field reads as broken rather than blocked.** → [disabled-alone-is-not-a-visual-signal](gotchas/disabled-alone-is-not-a-visual-signal.md) (s76)
 - [admin-ui/modal] **a backdrop's `opacity` dims the dialog too when the dialog is its child.** → [modal-backdrop-opacity-dims-the-whole-dialog](gotchas/modal-backdrop-opacity-dims-the-whole-dialog.md) (s48)
 
 ### [admin-ui/react-state] — React component state
@@ -250,6 +253,7 @@
 
 ### [tooling/*] — Dev tooling, codex critic
 - [tooling/codex-shell-sandbox-broken-windows] **codex exec shell-sandbox broken on this Windows box — run critics with an inline bundle.** → [codex-shell-sandbox-broken-windows](gotchas/codex-shell-sandbox-broken-windows.md) (s10, extended s61, root-caused s72)
+- [tooling/windows] **Git Bash mangles Cyrillic in curl arguments — the API answers 400/500 and it reads as the API's fault.** → [git-bash-mangles-cyrillic-in-curl-arguments](gotchas/git-bash-mangles-cyrillic-in-curl-arguments.md) (s76)
 - [tooling/serena-eol-flip] **Serena `replace_content`/`replace_symbol_body` rewrites the whole file as CRLF on Windows.** → [serena-replace-content-eol-flip](gotchas/serena-replace-content-eol-flip.md) (s25)
 - [tooling/phpstan-windows-segfault] **PHPStan crashes with exit `-1073741819` on Windows — environmental, not a code error.** → [phpstan-windows-parallel-worker-segfault](gotchas/phpstan-windows-parallel-worker-segfault.md) (s28)
 - [tooling/phpcs] **`composer phpcs` does not enforce the 120-char limit, and never sees `tests/`.** → [phpcs-does-not-enforce-line-length](gotchas/phpcs-does-not-enforce-line-length.md) (s45; fix tracked as #139)

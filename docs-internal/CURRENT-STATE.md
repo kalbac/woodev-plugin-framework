@@ -7,9 +7,10 @@
 > Program history snapshot → `platform-v2-program-tracker.md`; active program map →
 > `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-08-16 (s75).** `main` = `d4cd0d1` · no open PRs · working tree clean, rig on `main`.
-Tests: **2272 unit / 5632 assertions / 1126 jest / 110 integration**; phpcs and phpstan clean.
-Gotchas: **154**. Docs gate: `npm run lint:docs` (session-start reading 86 KB of a 120 KB budget).
+**As of 2026-08-16 (s76).** `main` = `c618e91` · **one open PR: #345 (#337), CI green + CLEAN,
+held for the operator's visual check** · rig tree on `fix/337-address-lock`.
+Tests: **2277 unit / 5642 assertions / 1139 jest / 110 integration**; phpcs and phpstan clean.
+Gotchas: **158**. Docs gate: `npm run lint:docs` (session-start reading budget 120 KB).
 
 ## Program status (high level)
 
@@ -61,12 +62,17 @@ Gotchas: **154**. Docs gate: `npm run lint:docs` (session-start reading 86 KB of
 
 ## Next Actions
 
-0. **🎯 Доска — свободных «взять и делать» карточек две** (#337, #325), плюс операторская постановка #343 в Инбоксе.
-   - ~~**#339**~~ — **ЗАКРЫТ** (PR #344). Предложение оператора прогонять адрес ПВЗ через `normalize()` замерено на риге и отклонено: ключ приходит от самого глубокого объекта (дом/улица), для Москвы и СПб компоненты НП нет вовсе, на строке карьера возможна тихая подмена адреса (`qc=3`), вызов платный и без кэша, capability опциональна и при отсутствии бросает исключение. Сделан вариант (2): `pickup-mount.js` объявляет запись событием `woodev_pickup_address_replacing`, каскад пересеивает `resolved`. Риг-проверено с контролем в том же прогоне.
-   - **#337** — адрес без выбора НП. Замерено 16.08.2026: сценарий **достижим**, догадка оператора о недостижимости не подтвердилась (автозаполнение НП/Региона — это значения полей, а не запись). Остаётся вопрос веса, не факта: обходной путь очевиден, значит деградация, не блокер.
-   - **#325** — мультипакетная корзина. Архитектурное: слой §8 односоставен по построению (одно ПВЗ-поле, один «выбранный метод», один слот). Согласовать объём с оператором до начала.
-1. **Постановки оператора, обсуждены и записаны:** #331 (подсказки в КОРЗИНЕ, кнопку ПВЗ там сознательно не рисуем), #332 (подсказки в ЛК), #333 (протухание записи покупателя при смене провайдера).
-2. **Постановка оператора, ждёт его решения:** #343 (фикстура провайдера СДЭК: сценарий «провайдер без адресных подсказок» + второй провайдер с suggest только на поле «Адрес»; <https://apidoc.cdek.ru/>). Смежна с #333.
+0. **🎯 Ждёт оператора: PR #345 (#337)** — блокировка поля адреса. CI зелёная, состояние CLEAN,
+   дерево рига стоит на `fix/337-address-lock`. Нужна визуальная проверка: сила сигнала блокировки
+   (сейчас приглушение `opacity: .55` + `cursor: not-allowed`, без единого пояснения). Скажет
+   «заметнее» — добавить фон.
+1. **Свободных «взять и делать» карточек на доске нет.** Все три из хэндовера s75 закрыты: #343 и
+   #325 смерджены (PR #347, #348), #337 ждёт только глаз оператора.
+2. **Постановки оператора, обсуждены и записаны:** #331 (подсказки в КОРЗИНЕ, кнопку ПВЗ там
+   сознательно не рисуем), #332 (подсказки в ЛК), #333 (протухание записи покупателя при смене
+   провайдера). **#346** (заведена в s76) — смена страны чистит поля, но не гасит серверную запись
+   покупателя; то же семейство, что #333, и теперь на риге есть второй живой провайдер, на котором
+   обе проверяются.
 3. **Отложено оператором до релиза:** #285, #247. **Старое:** #289, #270, #310, #318, #321, #322.
 4. **Тулинг:** Codex чинится одной командой из-под администратора — `winget install --id Microsoft.PowerShell`. Готча `codex-shell-sandbox-broken-windows`.
 
@@ -82,8 +88,17 @@ Deferred (всё остальное — board №6): UK-CFR (settings extensibil
 ## Local rig
 
 - **The picker lives on `/classic-checkout/`, NOT `/checkout/`** — the latter is the BLOCK checkout (the adapter is SP-11, unbuilt), where there is no `form.checkout`, no `carrier_pickup_point` and no trigger, which reads as a broken build rather than the wrong URL. Product id `12` fills the cart via `?add-to-cart=12`. Gotcha: `rig-checkout-url-is-the-block-checkout`.
-- **The rig serves the WORKING TREE.** Name the branch out loud whenever you ask anyone to look, and switch the tree BEFORE asking — handing the operator a checklist while the tree holds another branch has already cost a wasted pass (gotcha `rig-serves-the-working-tree-branch-switch-reverts-fixes`). Current state: tree on `main`.
+- **The rig serves the WORKING TREE.** Name the branch out loud whenever you ask anyone to look, and switch the tree BEFORE asking — handing the operator a checklist while the tree holds another branch has already cost a wasted pass (gotcha `rig-serves-the-working-tree-branch-switch-reverts-fixes`). Current state: tree on `fix/337-address-lock` (rebased on `main`, so it also carries #343's CDEK provider and #325).
 - **Ports: dev `:8973` / tests `:8974`** (chrome-devtools MCP driver). Ports live in the gitignored `.wp-env.override.json`.
+- **Two live location providers on the rig now (s76).** DaData is active by default; the CDEK test
+  contour is registered as `test-cdek` (fixture
+  `tests/_fixtures/woodev-test-shipping-method/class-test-cdek-location-provider.php`) and its
+  credentials sit in the container's wp-config as `WOODEV_TEST_CDEK_CLIENT_ID` /
+  `WOODEV_TEST_CDEK_CLIENT_SECRET`. Flip with
+  `wp option update woodev_location_active_provider test-cdek` (back: `dadata`). CDEK serves
+  region+settlement only, so with DaData also configured the address level falls back to DaData —
+  that is the layer answering honestly, not a bug (gotcha
+  `a-level-served-can-come-from-the-fallback-not-the-active-provider`).
 - **dev `:8973` — LIVE YANDEX bulk ON.** `WOODEV_TEST_PICKUP_LIVE_YANDEX=1` wins over `WOODEV_TEST_PICKUP_LIVE_POCHTA=false` and `WOODEV_TEST_PICKUP_STRATEGY=viewport`; the rig serves 812 live Yandex points (Moscow). The DaData token and `clean_secret` are both configured. Fixture is active only when both live flags are false. `WOODEV_TEST_POCHTA_ACCOUNT_ID` / `WOODEV_TEST_POCHTA_ACCOUNT_TYPE` (operator-supplied Отправка credentials — never committed) let `WOODEV_TEST_PICKUP_EMBEDDED=1` drive the live Почта widget; that switch is currently OFF.
 - **tests `:8974` carries NO `WOODEV_TEST_*` constants** — deleted with `wp config delete` so the integration suite is deterministic locally. The authority is `wp config set` **inside the container**, not `.wp-env.override.json`, which is only a mirror (measured).
 - **Issuer `:8090` — KEPT, do NOT touch.** Effectively a copy of prod (woodev_theme = local woodev.ru + EDD SL + deactivator, with test data); the operator uses it independently. Container `c8ec47a5...-wordpress-1`. Authority pubkey `QSisoK0CDOmIOqGHvilMe+4mB/LMRFHf9hi6BxatfMk=`.
