@@ -1396,6 +1396,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 				// mount script degrades to the label alone in every one of those cases.
 				'chosenAddress' => $this->resolve_chosen_address(),
 
+				// Every locality this customer has a remembered point for, keyed by the SAME
+				// locality key {@see Provider_Selection_Scope::current_locality()} files them
+				// under (issue #349). `chosenAddress` above answers "what is applied right now";
+				// this answers "what would be applied if the customer went back to locality X",
+				// which is the question the browser could not previously ask at all — it dropped
+				// the applied selection on a locality change and had no way to restore it
+				// without a full page render, even though #176's agreed behaviour (stated on
+				// `pickup-mount.js`'s own `handleLocalityChanged()`) is that returning restores.
+				// Empty when no scope is wired or nothing is remembered.
+				'selections' => $this->resolve_remembered_selections(),
+
 				'defaultLocation' => $this->default_location,
 				'pointIcons'      => $this->normalized_point_icons(),
 
@@ -2752,6 +2763,46 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 *                remembered address does not belong to the posted id, or selection
 		 *                persistence is not wired for this handler).
 		 */
+		/**
+		 * The whole remembered-selection map for the CURRENTLY chosen shipping method, as
+		 * `locality => [ 'id' => …, 'address' => … ]` (issue #349).
+		 *
+		 * Resolved through the same {@see self::current_selection_pair()} gate
+		 * {@see self::restore_selection()} and {@see self::resolve_chosen_address()} use — only
+		 * its TYPE half, since the locality half is exactly what this method varies. So an entry
+		 * here answers with the same id those two would answer with, were the customer standing
+		 * in that locality; the browser can therefore restore a selection without the page
+		 * having to be rendered again for it.
+		 *
+		 * `$_POST` is deliberately NOT consulted, unlike {@see self::resolve_chosen_address()}:
+		 * that method describes what WooCommerce is about to SHOW for the current locality and
+		 * must agree with the posted id, while this one describes what is REMEMBERED for
+		 * localities the customer is not currently in — a posted id says nothing about those.
+		 *
+		 * Empty array when no selection scope is wired, or no shipping method with a pickup type
+		 * is chosen: both mean there is nothing this handler could restore, and the browser then
+		 * keeps its existing "clear on locality change" behaviour unchanged.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array<string, array{id: string, address: string}>
+		 */
+		protected function resolve_remembered_selections(): array {
+			$selection = $this->selection();
+
+			if ( null === $selection ) {
+				return [];
+			}
+
+			$pair = $this->current_selection_pair();
+
+			if ( null === $pair ) {
+				return [];
+			}
+
+			return $selection->recall_all( $pair['type'] );
+		}
+
 		protected function resolve_chosen_address(): string {
 			$selection = $this->selection();
 

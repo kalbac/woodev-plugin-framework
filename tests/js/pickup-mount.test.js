@@ -641,6 +641,10 @@ function makeConfig( overrides ) {
 		// `Pickup_Handler::resolve_chosen_address()` returns `''` in that case, never `undefined`.
 		// Tests exercising the restore path override this explicitly.
 		chosenAddress: '',
+		// The PRODUCTION default for a page with nothing remembered anywhere (issue #349) —
+		// `Pickup_Handler::resolve_remembered_selections()` returns `[]`, which arrives here as
+		// an empty object. Tests exercising the locality-restore path override it explicitly.
+		selections: {},
 		mapConfig: { center: [ 55.75, 37.61 ] },
 		replaceAddress: { enabled: true, billingOnly: false },
 		// TOP-LEVEL keys `Pickup_Handler::get_js_config()` really emits and the map provider
@@ -6961,4 +6965,167 @@ test( 'no announcement when replaceAddress is disabled — nothing is written, s
 	await selectAndConfirm( StubProvider.instances[ 0 ], point() );
 
 	expect( seen ).toEqual( [] );
+} );
+
+// -----------------------------------------------------------------------
+// Returning to a locality restores the point chosen there (#349)
+// -----------------------------------------------------------------------
+
+/**
+ * #176's agreed behaviour, stated in `handleLocalityChanged()`'s own docblock: the remembered
+ * point in the session is deliberately NOT dropped when the customer changes locality, because
+ * "returning to the previous locality restores the point chosen there". Until #349 only the
+ * CLEARING half existed client-side — the restore happened solely through a full page render,
+ * so switching city and back left the picker empty until a reload (operator, rig, 17.08.2026).
+ *
+ * The restore hangs off `woodev_location_applied`, NOT off the city field's `change`, and that
+ * is load-bearing: `handleLocalityChanged()` runs on the `change`, which fires BEFORE the
+ * cascade's `/select` round trip, so at that moment the new locality's KEY is still the old one.
+ */
+describe( 'restores the point remembered for a locality (#349)', () => {
+	function fireLocationApplied( key ) {
+		document.body.dispatchEvent(
+			new CustomEvent( 'woodev_location_applied', {
+				detail: { key, level: 'settlement', settlementKey: key },
+				bubbles: true,
+			} )
+		);
+	}
+
+	function mountField( fieldId, overrides ) {
+		document.body.insertAdjacentHTML(
+			'beforeend',
+			'<div data-woodev-pickup-slot="' + fieldId + '"></div>' +
+			'<input id="' + fieldId + '" type="hidden" value="" />'
+		);
+
+		// A §8 store that OWNS this field id: `writeAndFireChange()` warns when no store does,
+		// and the WP jest preset turns a warning into a failure. Production always has one.
+		createStore( { fields: { [ fieldId ]: { id: fieldId }, billing_city: { id: 'billing_city' } } } );
+
+		setConfig( makeConfig( Object.assign( {
+			fieldId,
+			strategy: 'bulk',
+			location: { current: { key: 'dadata:msk' } },
+		}, overrides ) ) );
+
+		mountAll();
+
+		return document.getElementById( fieldId );
+	}
+
+	it( 'restores the id and its address when the customer returns to a remembered locality', () => {
+		const field = mountField( 'restore_known_locality_349', {
+			selections: {
+				'dadata:msk': { id: 'PVZ-MSK', address: 'Москва, Новокосинская 17' },
+			},
+		} );
+
+		// Away: the cascade clears the applied value on the locality change itself.
+		field.value = '';
+		fireLocationApplied( 'dadata:tver' );
+		expect( field.value ).toBe( '' );
+
+		// …and back.
+		fireLocationApplied( 'dadata:msk' );
+
+		expect( field.value ).toBe( 'PVZ-MSK' );
+		expect( document.querySelector( '.woodev-pickup-chosen-address strong' ).textContent )
+			.toBe( 'Москва, Новокосинская 17' );
+	} );
+
+	it( 'restores nothing for a locality with no remembered point, leaving the field cleared', () => {
+		// The half that must NOT happen: re-applying the point belonging to the locality the
+		// customer just left would be worse than the bug it replaces.
+		const field = mountField( 'restore_unknown_locality_349', {
+			selections: { 'dadata:msk': { id: 'PVZ-MSK', address: 'Москва' } },
+		} );
+
+		field.value = '';
+		fireLocationApplied( 'dadata:nowhere' );
+
+		expect( field.value ).toBe( '' );
+	} );
+
+	it( 'does not re-write the field when it already holds the remembered id', () => {
+		// The ordinary first event after a reload: the server already restored both the value
+		// and the label. Re-writing would fire a redundant `change`, and with it an
+		// `update_checkout`, on every single page load.
+		const fieldId = 'restore_noop_when_same_349';
+		const field = mountField( fieldId, {
+			selections: { 'dadata:msk': { id: 'PVZ-MSK', address: 'Москва' } },
+		} );
+
+		field.value = 'PVZ-MSK';
+
+		const changes = [];
+		field.addEventListener( 'change', () => changes.push( field.value ) );
+
+		fireLocationApplied( 'dadata:msk' );
+
+		expect( field.value ).toBe( 'PVZ-MSK' );
+		expect( changes ).toEqual( [] );
+	} );
+
+	it( 'ignores a field with no config.location (a plugin outside the layer)', () => {
+		const fieldId = 'restore_no_location_block_349';
+
+		document.body.insertAdjacentHTML(
+			'beforeend',
+			'<div data-woodev-pickup-slot="' + fieldId + '"></div>' +
+			'<input id="' + fieldId + '" type="hidden" value="" />'
+		);
+
+		setConfig( makeConfig( {
+			fieldId,
+			strategy: 'bulk',
+			selections: { 'dadata:msk': { id: 'PVZ-MSK', address: 'Москва' } },
+		} ) );
+		mountAll();
+
+		fireLocationApplied( 'dadata:msk' );
+
+		expect( document.getElementById( fieldId ).value ).toBe( '' );
+	} );
+
+	it( 'drops a malformed entry instead of restoring an empty selection', () => {
+		// An entry with no usable id would "restore" as a blank value — indistinguishable from
+		// clearing one, i.e. it would look exactly like the bug this fixes.
+		const field = mountField( 'restore_malformed_entry_349', {
+			selections: { 'dadata:msk': { address: 'Москва, без id' } },
+		} );
+
+		field.value = '';
+		fireLocationApplied( 'dadata:msk' );
+
+		expect( field.value ).toBe( '' );
+	} );
+
+	it( 'restores a point chosen on THIS page, with nothing seeded from the server', async () => {
+		// The operator's own reproduction, and the half a server-rendered seed cannot cover:
+		// pick a point, switch city, switch back — all within one page load.
+		const picker = openPicker( {
+			location: { current: { key: 'dadata:msk' } },
+			selections: {},
+		} );
+
+		// PIN the locality key explicitly rather than leaning on `config.location.current`:
+		// `resolvedLocalityKey` is MODULE state this file never resets between tests, and an
+		// earlier test in this file may already have seeded it for this shared field id. Firing
+		// the event first makes the key this test's own, whatever ran before it.
+		fireLocationApplied( 'dadata:msk' );
+
+		picker.emitSelect( { id: 'PVZ-LOCAL', short_address: 'Москва, Ленина 5' } );
+		await picker.resolveSelect( { allowed: true, reason: null, close: null, refresh_checkout: null } );
+
+		expect( picker.field.value ).toBe( 'PVZ-LOCAL' );
+
+		picker.field.value = '';
+		fireLocationApplied( 'dadata:tver' );
+		expect( picker.field.value ).toBe( '' );
+
+		fireLocationApplied( 'dadata:msk' );
+
+		expect( picker.field.value ).toBe( 'PVZ-LOCAL' );
+	} );
 } );

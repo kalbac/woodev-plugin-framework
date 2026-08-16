@@ -225,6 +225,68 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Selection' )
 		}
 
 		/**
+		 * Every locality that has something remembered for `$type`, as
+		 * `locality => [ 'id' => …, 'address' => … ]` (issue #349).
+		 *
+		 * The SAME resolution {@see self::recall()}/{@see self::recall_address()} apply for an
+		 * exact type, and {@see self::recall_latest()}/{@see self::recall_latest_address()} for
+		 * {@see Selection_Scope::TYPE_ANY} — applied here to every locality at once instead of
+		 * one. Reusing those four methods rather than re-walking the map is the point: this is a
+		 * BULK read of the same answer, and a second implementation of "the entry for this pair"
+		 * is exactly how a bulk view and a single lookup drift apart.
+		 *
+		 * WHY A BULK READ EXISTS AT ALL. The browser drops the applied selection when the
+		 * customer changes locality, and #176's agreed behaviour is that returning to the
+		 * previous locality restores the point chosen there — but the browser had no way to know
+		 * what was remembered for a locality it is only now arriving at, so "restore" only ever
+		 * happened through a full page render. This hands the page the whole (small, capped)
+		 * picture up front, so the restore needs no round trip and cannot race a fast sequence of
+		 * locality changes.
+		 *
+		 * Localities whose entry carries no usable id are omitted rather than returned empty —
+		 * the caller reads presence as "there is something to restore here".
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $type Opaque type code from {@see Selection_Scope}, or
+		 *                     {@see Selection_Scope::TYPE_ANY}.
+		 *
+		 * @return array<string, array{id: string, address: string}>
+		 */
+		public function recall_all( string $type ): array {
+			$is_any = Selection_Scope::TYPE_ANY === $type;
+
+			if ( ! $is_any && ! self::is_usable_key( $type ) ) {
+				return [];
+			}
+
+			$out = [];
+
+			foreach ( array_keys( $this->read_map( $this->session() ) ) as $locality ) {
+				$locality = (string) $locality;
+
+				if ( ! self::is_usable_key( $locality ) ) {
+					continue;
+				}
+
+				$id = $is_any ? $this->recall_latest( $locality ) : $this->recall( $locality, $type );
+
+				if ( null === $id ) {
+					continue;
+				}
+
+				$address = $is_any ? $this->recall_latest_address( $locality ) : $this->recall_address( $locality, $type );
+
+				$out[ $locality ] = [
+					'id'      => $id,
+					'address' => null !== $address ? $address : '',
+				];
+			}
+
+			return $out;
+		}
+
+		/**
 		 * Clears the whole map — every locality, every type.
 		 *
 		 * Called once an order is created; see
