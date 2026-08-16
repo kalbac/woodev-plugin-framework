@@ -9,7 +9,7 @@
 
 **As of 2026-08-16 (s76).** `main` = `c618e91` · **one open PR: #345 (#337), CI green + CLEAN,
 held for the operator's visual check** · rig tree on `fix/337-address-lock`.
-Tests: **2277 unit / 5642 assertions / 1139 jest / 110 integration**; phpcs and phpstan clean.
+Tests: **2285 unit / 5660 assertions / 1139 jest / 110 integration**; phpcs and phpstan clean.
 Gotchas: **158**. Docs gate: `npm run lint:docs` (session-start reading budget 120 KB).
 
 ## Program status (high level)

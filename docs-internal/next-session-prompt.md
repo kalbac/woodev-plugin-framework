@@ -7,7 +7,7 @@
 | | |
 |---|---|
 | `main` | `c618e91` |
-| Тесты | **2277 unit / 5642 ассертов / 1139 jest / 110 интеграционных** |
+| Тесты | **2285 unit / 5660 ассертов / 1139 jest / 110 интеграционных** |
 | Готчи | **158** |
 | Открытые PR | **#345** (#337) — CI зелёная, CLEAN, ждёт визуальной проверки |
 | Риг | дерево на `fix/337-address-lock`; **два живых провайдера локаций** — DaData (активен) и СДЭК |
@@ -95,7 +95,7 @@ wp option update woodev_location_active_provider test-cdek   # вернуть: d
 # Как гонять то, что понадобится
 
 ```bash
-composer test:unit                                   # 2277
+composer test:unit                                   # 2285
 npm run test:js -- --roots "<rootDir>/tests/js"      # 1139 — ИЗ BASH, не из PowerShell
 composer phpcs && composer phpstan
 npm run lint:docs                                    # структура docs-internal
