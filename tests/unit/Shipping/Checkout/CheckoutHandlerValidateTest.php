@@ -603,6 +603,142 @@ class CheckoutHandlerValidateTest extends TestCase {
 			$handler->process( [ 'pvz' => '', 'shipping_method' => [ 'flat_rate:2' ], 'billing_country' => 'RU' ], 0 )
 		);
 	}
+
+	// -----------------------------------------------------------------------
+	// Part F — the backstop enforces EVERY declared pickup slot (#325)
+	// -----------------------------------------------------------------------
+
+	/**
+	 * Builds a two-slot field set. One slot is what every plugin declares today; two is
+	 * what the layer must not silently mis-handle, since the client has always mounted a
+	 * trigger per declared slot.
+	 *
+	 * Bare `mark_pickup_slot()` fields, NOT the `Pickup_Field` preset: the preset also
+	 * carries a condition-spec `required`, which makes the per-field loop block on its own
+	 * and would mask whatever the backstop did or did not do. These tests are about the
+	 * backstop alone, so the only thing that may block here is the backstop.
+	 *
+	 * @return Checkout_Fields
+	 */
+	private static function two_pickup_slots(): Checkout_Fields {
+		return Checkout_Fields::from_array(
+			[
+				Field::create( 'carrier_pickup_point' )->mark_pickup_slot()->to_array(),
+				Field::create( 'carrier_pickup_point_2' )->mark_pickup_slot()->to_array(),
+			]
+		);
+	}
+
+	/**
+	 * THE REGRESSION #325 IS ABOUT: with the FIRST slot filled and a second one blank, the
+	 * backstop used to take the first slot, find it filled, and pass — so a second declared
+	 * slot was mounted client-side and then never validated at all.
+	 */
+	public function test_backstop_blocks_when_a_LATER_pickup_slot_is_blank(): void {
+		\Brain\Monkey\Functions\expect( 'wc_add_notice' )->atLeast()->once();
+
+		$handler = new Checkout_Handler( self::two_pickup_slots(), 'carrier' );
+		$handler->set_requires_pickup_methods( [ 'carrier_pickup' ] );
+
+		$this->assertFalse(
+			$handler->validate(
+				[ 'carrier_pickup_point' => 'PVZ-1', 'carrier_pickup_point_2' => '' ],
+				[ 'chosen_shipping_method' => 'carrier_pickup' ]
+			)
+		);
+	}
+
+	/**
+	 * Both slots filled — the backstop stays silent, so the extra enforcement never turns
+	 * into a checkout nobody can complete.
+	 */
+	public function test_backstop_passes_when_every_pickup_slot_is_filled(): void {
+		\Brain\Monkey\Functions\expect( 'wc_add_notice' )->never();
+
+		$handler = new Checkout_Handler( self::two_pickup_slots(), 'carrier' );
+		$handler->set_requires_pickup_methods( [ 'carrier_pickup' ] );
+
+		$this->assertTrue(
+			$handler->validate(
+				[ 'carrier_pickup_point' => 'PVZ-1', 'carrier_pickup_point_2' => 'PVZ-2' ],
+				[ 'chosen_shipping_method' => 'carrier_pickup' ]
+			)
+		);
+	}
+
+	/**
+	 * The boundary seam: a domain narrowing the enforced set through
+	 * `woodev_checkout_pickup_slot_fields` is honoured — the filter exists precisely so a
+	 * plugin can decide which of several slots this checkout actually requires.
+	 */
+	public function test_filter_can_narrow_the_enforced_slot_set(): void {
+		\Brain\Monkey\Functions\expect( 'wc_add_notice' )->never();
+		\Brain\Monkey\Functions\when( 'apply_filters' )->alias(
+			static function ( string $hook, $value ) {
+				return 'woodev_checkout_pickup_slot_fields' === $hook ? [] : $value;
+			}
+		);
+
+		$handler = new Checkout_Handler( self::two_pickup_slots(), 'carrier' );
+		$handler->set_requires_pickup_methods( [ 'carrier_pickup' ] );
+
+		$this->assertTrue(
+			$handler->validate(
+				[ 'carrier_pickup_point' => '', 'carrier_pickup_point_2' => '' ],
+				[ 'chosen_shipping_method' => 'carrier_pickup' ]
+			)
+		);
+	}
+
+	/**
+	 * A filter returning something unusable must NOT be the reason a checkout stops being
+	 * blocked: the framework's own answer stands. Two shapes at once — a non-array return,
+	 * and a list whose entries carry no id to dereference.
+	 */
+	public function test_a_malformed_filter_return_leaves_the_backstop_standing(): void {
+		\Brain\Monkey\Functions\expect( 'wc_add_notice' )->atLeast()->once();
+		\Brain\Monkey\Functions\when( 'apply_filters' )->alias(
+			static function ( string $hook, $value ) {
+				return 'woodev_checkout_pickup_slot_fields' === $hook ? 'not an array at all' : $value;
+			}
+		);
+
+		$handler = new Checkout_Handler( self::two_pickup_slots(), 'carrier' );
+		$handler->set_requires_pickup_methods( [ 'carrier_pickup' ] );
+
+		$this->assertFalse(
+			$handler->validate(
+				[ 'carrier_pickup_point' => '', 'carrier_pickup_point_2' => '' ],
+				[ 'chosen_shipping_method' => 'carrier_pickup' ]
+			)
+		);
+	}
+
+	/**
+	 * Entries the backstop could not dereference are dropped rather than warned about
+	 * mid-validation — a half-built descriptor from a filter must not surface as a PHP
+	 * notice on a customer's checkout.
+	 */
+	public function test_filter_entries_without_an_id_are_dropped(): void {
+		\Brain\Monkey\Functions\expect( 'wc_add_notice' )->never();
+		\Brain\Monkey\Functions\when( 'apply_filters' )->alias(
+			static function ( string $hook, $value ) {
+				return 'woodev_checkout_pickup_slot_fields' === $hook
+					? [ [ 'label' => 'no id here' ], 'a bare string' ]
+					: $value;
+			}
+		);
+
+		$handler = new Checkout_Handler( self::two_pickup_slots(), 'carrier' );
+		$handler->set_requires_pickup_methods( [ 'carrier_pickup' ] );
+
+		$this->assertTrue(
+			$handler->validate(
+				[ 'carrier_pickup_point' => '', 'carrier_pickup_point_2' => '' ],
+				[ 'chosen_shipping_method' => 'carrier_pickup' ]
+			)
+		);
+	}
 }
 
 /**

@@ -28,6 +28,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Selection' )
 	 * [ <locality> => [ <type code> => [ 'id' => <point id>, 'seq' => <int> ] ] ]
 	 * ```
 	 *
+	 * ONE PACKAGE PER CART IS AN ACCEPTED LIMIT, NOT A FORGOTTEN CASE (issue #325, operator
+	 * decision 16.08.2026 — a multi-package cart is YAGNI while nothing consumes it). Note
+	 * what this map is NOT: it is not "the customer's chosen point", it is a map keyed by
+	 * (locality, type) that already holds many entries at once and evicts by `seq` under its
+	 * own cap. A package dimension would therefore be a THIRD key here — an addition, not a
+	 * rewrite — and everything else in this class (eviction, recency, the "opaque strings
+	 * only" discipline) carries over untouched. The parts of the layer that genuinely do
+	 * assume one package are named in
+	 * {@see \Woodev\Framework\Shipping\Checkout\Checkout_Handler::pickup_slot_fields()}.
+	 *
 	 * `seq` is a monotonic sequence number stamped on every write, INCLUDING an
 	 * overwrite of an existing `(locality, type)` entry. This is deliberate, not
 	 * incidental: a PHP array does not track insertion order across a re-assignment —
