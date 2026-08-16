@@ -9,7 +9,9 @@
  * rendered the suggestion list as a plain bulleted, link-coloured list instead of a dropdown panel —
  * this file is that gap closed.
  *
- * THE INPUT ITSELF IS NEVER STYLED HERE. `attachTypeahead()` enhances WooCommerce's own native
+ * THE INPUT ITSELF IS NEVER STYLED HERE — with ONE deliberate exception, the locked address field
+ * (issue #337) at the very bottom of this file, where the whole point is that the input must stop
+ * looking like every other one. `attachTypeahead()` enhances WooCommerce's own native
  * checkout `<input>` in place (role/aria attributes only — see that file's PROGRESSIVE ENHANCEMENT
  * note); it must keep looking like every other checkout field. Only the listbox this module OWNS is
  * ours to style — this is a customer-facing checkout, and matching the platform's own visual
@@ -417,4 +419,32 @@
 	.woodev-location-listbox {
 		max-height: 200px;
 	}
+}
+
+/* -------------------------------------------------------------------------
+ * THE LOCKED ADDRESS INPUT (issue #337) — the ONE deliberate exception to this file's own "the
+ * input itself is never styled here" rule at the top. That rule exists so the field keeps looking
+ * like every other checkout field; a locked field is precisely the state where it must NOT, or the
+ * customer is left with a field that looks ordinary and silently refuses to type. `disabled` alone
+ * does not carry that: measured on the rig, the theme's own `input` rule (its own background,
+ * border and colour) overrides the browser's default greying entirely, so the attribute was
+ * invisible.
+ *
+ * NOTHING HERE EXPLAINS THE LOCK — no generated content, no message, no tooltip (standing operator
+ * rule: a blocked control is blocked, and that is all it says). Only the two signals a disabled
+ * control conventionally carries: it is dimmed, and the pointer says it cannot be used.
+ *
+ * `opacity` rather than a colour of our own, on purpose: it composes with WHATEVER background,
+ * border and text colour the theme already gave the field — light or dark, ours or theirs — so this
+ * rule needs no palette, no custom property threaded through from PHP, and cannot clash with a
+ * theme the way a hardcoded grey would. Specificity stays flat (one class) exactly like everything
+ * else in this file, so a theme that wants a stronger treatment can still take it.
+ *
+ * `location-cascade.js` toggles the class ({@see refreshAddressLock}); it is never rendered
+ * server-side.
+ * ---------------------------------------------------------------------- */
+
+.woodev-location-locked {
+	cursor: not-allowed;
+	opacity: 0.55;
 }
