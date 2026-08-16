@@ -2927,6 +2927,29 @@ describe( 'the address field is locked until a settlement is picked (#337)', () 
 		expect( addressField().disabled ).toBe( true );
 	} );
 
+	it( 'marks the locked field for the stylesheet, and unmarks it again', () => {
+		// `disabled` alone is invisible — the theme's own `input` rule overrides the browser's
+		// greying (measured on the rig), so the class is what location.css can actually see.
+		boot( { region: true, settlement: true, address: true } );
+
+		expect( addressField().classList.contains( 'woodev-location-locked' ) ).toBe( true );
+
+		selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
+
+		expect( addressField().classList.contains( 'woodev-location-locked' ) ).toBe( false );
+	} );
+
+	it( 'says nothing about the lock — no title, no aria description', () => {
+		// Standing operator rule (#274): a blocked control is blocked, and that is all it says.
+		boot( { region: true, settlement: true, address: true } );
+
+		const el = addressField();
+
+		expect( el.getAttribute( 'title' ) ).toBeNull();
+		expect( el.getAttribute( 'aria-describedby' ) ).toBeNull();
+		expect( el.getAttribute( 'aria-disabled' ) ).toBeNull();
+	} );
+
 	it( 'leaves it an ORDINARY input when the chain carries no settlement field', () => {
 		// Nothing to wait for: with no settlement field, the address level is scoped
 		// country-wide by construction (scopeKeyFor()), so a lock would never lift.

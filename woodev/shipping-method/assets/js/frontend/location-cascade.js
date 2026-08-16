@@ -166,6 +166,9 @@
 	/** @type {Object.<string, string>} WC-convention field-id suffix per level, for postcode derivation. */
 	var LEVEL_SUFFIX = { region: 'state', settlement: 'city', address: 'address_1' };
 
+	/** @type {string} marks the address input while it is locked (issue #337) — see {@see refreshAddressLock}. */
+	var LOCKED_CLASS = 'woodev-location-locked';
+
 	var factory = window.WoodevCheckoutFieldStore;
 
 	if ( ! factory || 'function' !== typeof factory.createStore ) {
@@ -1570,9 +1573,13 @@
 	 * NOTHING EXPLAINS THE LOCK. No `title`, no `aria-*` description, no message beside the
 	 * field — the same standing operator rule that removed the inline "fill this in" text from
 	 * the A2 gate in `checkout-field-classic.js` (#274): a blocked control is blocked, and that
-	 * is all it says. `disabled` is therefore the WHOLE mechanism: the browser greys the input
-	 * itself in any theme, so `location.css` keeps its own stated rule of never styling the
-	 * checkout input, and nothing has to be threaded through PHP for the presentation.
+	 * is all it says. But blocked must still LOOK blocked: `disabled` on its own is not a visual
+	 * signal — measured on the rig, the theme's own `input` rule overrides the browser's default
+	 * greying completely, leaving a field that looks exactly like its editable neighbour and just
+	 * refuses to type, which reads as broken rather than as blocked. Hence the {@see LOCKED_CLASS}
+	 * marker and the ONE rule `location.css` carries for it — deliberately the single exception to
+	 * that file's own "never style the checkout input" discipline, because a locked field is the
+	 * one state where the input must NOT look like every other one.
 	 *
 	 * CLIENT-SIDE ONLY, LIKE EVERY OTHER GATE IN THIS LAYER (`refreshGate()`'s own rule in
 	 * `checkout-field-classic.js`): the server stays the authority. Rendering the attribute
@@ -1602,7 +1609,17 @@
 			return;
 		}
 
-		el.disabled = isAddressLocked( entry, node );
+		var locked = isAddressLocked( entry, node );
+
+		el.disabled = locked;
+		// The class is what location.css can see — `disabled` alone is NOT a visual signal:
+		// measured on the rig, the theme's own `input` rule (its own background/border/colour)
+		// overrides the browser's default greying entirely, leaving a field that looks ordinary
+		// and merely refuses to type. That reads as broken, which is a different thing from
+		// blocked. See `location.css`'s own rule for this class.
+		if ( el.classList ) {
+			el.classList.toggle( LOCKED_CLASS, locked );
+		}
 	}
 
 	/**
