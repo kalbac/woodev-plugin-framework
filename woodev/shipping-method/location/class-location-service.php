@@ -1043,6 +1043,56 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		}
 
 		/**
+		 * Which PROVIDER owns each suggest LEVEL for ONE specific country —
+		 * `region`/`settlement`/`address` => the id of the provider the D15
+		 * chain resolves for that level in that country, or `''` (never
+		 * `null`) when no provider serves it there.
+		 *
+		 * This is the D15 spec's one deliberate exception (issue #352): the
+		 * sibling {@see self::get_levels_for_country()} exists specifically so
+		 * the client never learns WHICH provider serves a level, only WHETHER
+		 * one does — but nothing NEW leaks by adding this method. The provider
+		 * id is ALREADY visible to the client on every persisted record
+		 * ({@see Location_Record::to_array()} includes `provider_id`, and
+		 * {@see Location_Record::key()} is literally `provider_id:native_id`),
+		 * so this method only republishes, ahead of a pick, information the
+		 * client already receives the moment it makes one. What genuinely
+		 * changes is that the client can now act on ownership BEFORE posting a
+		 * record — see below.
+		 *
+		 * The reason this is needed at all: a store can run a mixed provider
+		 * chain, e.g. the active provider serving `region`/`settlement` and
+		 * the bundled fallback serving `address`. {@see \Woodev\Framework\Shipping\Location\Customer_Location_Store::rebuild_chain()}
+		 * only keeps a shallower stored record when the new one can PROVE
+		 * kinship with it ({@see Location_Record::is_within()}, which requires
+		 * every ancestor to share the SAME provider — issue #334, deliberately
+		 * NOT weakened here: a Moscow settlement must not survive a
+		 * Saint-Petersburg address, and cross-provider kinship cannot be
+		 * proven in principle). Without knowing which provider owns which
+		 * level, the client cannot tell a same-provider pick (safe to enter
+		 * the chain) from a foreign one (would silently amputate every
+		 * shallower level once posted) — it would have to post first and find
+		 * out never. `location-cascade.js`'s `mayEnterChain()` is the
+		 * consumer this method exists for.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $country ISO-3166 alpha-2 country code, any case/whitespace.
+		 *
+		 * @return array{region: string, settlement: string, address: string}
+		 */
+		public function get_level_owners_for_country( string $country ): array {
+			$owners = [];
+
+			foreach ( Location_Record::LEVELS as $level ) {
+				$provider          = $this->provider_for_level( $level, $country );
+				$owners[ $level ] = null !== $provider ? $provider->get_id() : '';
+			}
+
+			return $owners;
+		}
+
+		/**
 		 * Walks the D15 provider chain for one suggest LEVEL: the active
 		 * provider first, when it is configured and declares the level in
 		 * {@see Location_Provider::get_suggest_levels()}; otherwise the

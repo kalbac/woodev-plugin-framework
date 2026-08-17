@@ -48,6 +48,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 	 *     'countries' => string[],
 	 *     'mode'      => string, // 'typeahead' | 'related-list' | 'ajax-select2' (Task 13; spec D7)
 	 *     'levels'    => [ country_code => [ 'region' => bool, 'settlement' => bool, 'address' => bool ] ],
+	 *     'owners'    => [ country_code => [ 'region' => string, 'settlement' => string, 'address' => string ] ], // issue #352: provider id or '' — see build_location_block()'s own docblock
 	 *     'current'   => [ 'key' => string, 'level' => string ]|null,
 	 *     'chain'     => [ level => [ 'key' => string, 'level' => string ] ], // issue #330: every level in the customer's saved chain; [] when there is no customer record at all
 	 *     'implicit'  => bool,
@@ -204,6 +205,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 		 *         countries: string[],
 		 *         mode: string,
 		 *         levels: array<string, array{region: bool, settlement: bool, address: bool}>,
+		 *         owners: array<string, array{region: string, settlement: string, address: string}>,
 		 *         current: array{key: string, level: string}|null,
 		 *         chain: array<string, array{key: string, level: string}>,
 		 *         implicit: bool
@@ -382,10 +384,39 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 		 *   to refresh it. Each per-country entry answers whether the D15
 		 *   provider-fallback chain
 		 *   ({@see \Woodev\Framework\Shipping\Location\Location_Service::get_levels_for_country()})
-		 *   resolves ANY provider for that level IN that country. The client
-		 *   learns only this — NEVER which provider serves a level (spec D15) —
-		 *   because neither this method nor `get_levels_for_country()` ever reads
+		 *   resolves ANY provider for that level IN that country. This is the
+		 *   ONLY thing `levels` answers — WHICH provider serves a level is
+		 *   `owners`' job, below (spec D15's original single-answer intent, kept
+		 *   for this key specifically) — because neither this method nor
+		 *   `get_levels_for_country()` ever reads
 		 *   {@see \Woodev\Framework\Shipping\Location\Location_Provider::get_id()}.
+		 * - `owners` — a MAP with the SAME shape as `levels`
+		 *   (`{ [country]: { region, settlement, address } }`), but each leaf is
+		 *   the id of the provider the D15 chain resolves for that (level,
+		 *   country) rather than a bool — `''` (never `null`) when no provider
+		 *   serves it there, from
+		 *   {@see \Woodev\Framework\Shipping\Location\Location_Service::get_level_owners_for_country()}.
+		 *   Issue #352: this is spec D15's one deliberate, documented exception —
+		 *   nothing NEW leaks by publishing it, because every persisted
+		 *   {@see \Woodev\Framework\Shipping\Location\Location_Record::to_array()}
+		 *   already carries `provider_id`, and `key()` is literally
+		 *   `provider_id:native_id`; what changes is that the CLIENT can now act
+		 *   on ownership BEFORE posting a record, not only after. A store running
+		 *   a mixed provider chain (e.g. the active provider serving
+		 *   `region`/`settlement`, the bundled fallback serving `address`) can
+		 *   never prove cross-provider kinship for
+		 *   {@see \Woodev\Framework\Shipping\Location\Customer_Location_Store::rebuild_chain()}'s
+		 *   `is_within()` check (issue #334, deliberately UNCHANGED — a Moscow
+		 *   settlement must not survive a Saint-Petersburg address, and that rule
+		 *   cannot distinguish "different provider" from "different place"); a
+		 *   client that posted a foreign-provider address anyway would silently
+		 *   amputate every shallower level of the customer's chain the instant the
+		 *   server applied that rule. `owners` lets `location-cascade.js`'s
+		 *   `mayEnterChain()` refuse to post a foreign-owned pick in the first
+		 *   place, keeping the address as local field TEXT only (Variant A). `owners[c][l] === ''`
+		 *   EXACTLY when `levels[c][l] === false`, for the same country and
+		 *   level — including the `region` #294 arbitration below, which this
+		 *   method applies to BOTH maps together so they can never disagree.
 		 *
 		 *   **`levels[country]['region']` — issue #294 arbitration (Task 13).**
 		 *   The D15 chain's own opinion ("some provider could suggest a region")
@@ -525,6 +556,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 		 * @since 2.0.2 Gained `chain` — every level in the customer's saved chain
 		 *              (location-chain design §8; issue #330), via
 		 *              {@see \Woodev\Framework\Shipping\Location\Location_Service::get_customer_chain()}.
+		 * @since 2.0.2 Gained `owners` — issue #352's mixed-provider-chain fix
+		 *              (Variant A): per-level provider ownership, so the client
+		 *              can refuse to post a foreign-provider record into the
+		 *              server-side chain, via
+		 *              {@see \Woodev\Framework\Shipping\Location\Location_Service::get_level_owners_for_country()}.
 		 *
 		 * @param \Woodev\Framework\Shipping\Location\Location_Service $service The active, already-confirmed facade.
 		 *
@@ -534,6 +570,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 		 *     countries: string[],
 		 *     mode: string,
 		 *     levels: array<string, array{region: bool, settlement: bool, address: bool}>,
+		 *     owners: array<string, array{region: string, settlement: string, address: string}>,
 		 *     current: array{key: string, level: string}|null,
 		 *     chain: array<string, array{key: string, level: string}>,
 		 *     implicit: bool,
@@ -552,10 +589,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 			}
 
 			$levels                    = [];
+			$owners                    = [];
 			$region_conflict_countries = [];
 
 			foreach ( $countries as $code ) {
 				$country_levels = $service->get_levels_for_country( $code );
+				$country_owners = $service->get_level_owners_for_country( $code );
 
 				// #294 arbitration: the authority is the FINAL woocommerce_states
 				// result, read AFTER every filter (native WC, §8 carrier takeover,
@@ -572,7 +611,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 
 				$country_levels['region'] = $country_levels['region'] && ! $states_present;
 
+				// `owners` MUST honour the SAME final answer as `levels` (issue #352):
+				// a provider that technically resolves for "region" is not the owner
+				// of a field the #294 arbitration just stood this layer down from —
+				// otherwise the client could see `levels[c].region === false` (native
+				// WC select) alongside a non-empty `owners[c].region` (a typeahead
+				// owner) for the same level, which is incoherent.
+				if ( ! $country_levels['region'] ) {
+					$country_owners['region'] = '';
+				}
+
 				$levels[ $code ] = $country_levels;
+				$owners[ $code ] = $country_owners;
 			}
 
 			if ( [] !== $region_conflict_countries ) {
@@ -674,6 +724,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 				'countries'      => array_values( $countries ),
 				'mode'           => $service->get_field_mode(),
 				'levels'         => $levels,
+				'owners'         => $owners,
 				'current'        => $current,
 				'chain'          => $chain,
 				'implicit'       => $implicit,
