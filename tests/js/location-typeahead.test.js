@@ -851,3 +851,430 @@ test( 'without emptyText the listbox still hides silently — the old contract i
 	expect( emptyRowOf() ).toBeNull();
 	expect( input.getAttribute( 'aria-expanded' ) ).toBe( 'false' );
 } );
+
+// -----------------------------------------------------------------------
+// ABANDON — adopt or report on blur (issue #350)
+// -----------------------------------------------------------------------
+//
+// A customer who types a locality and tabs away without ever clicking a suggestion used to
+// leave `location-cascade.js` with typed TEXT but no confirmed RECORD — harmless for most
+// fields, but a dead end for the settlement level (issue #337's address lock has no exit for a
+// town the provider genuinely does not carry). `options.onAbandon` is the fix: adopt the first
+// suggestion when the query actually resolved to one or more, report zero via
+// `onAbandon({ resolved: true })` when a completed search resolved to none, report
+// `onAbandon({ resolved: false })` (FIX 1, 17.08.2026) when the text never reached `minChars`
+// at all — never adopting either way — and report NOTHING at all for a blank/escaped/
+// already-committed blur. See the file's own ABANDON docblock section for the full contract.
+
+describe( 'ABANDON — adopt or report on blur (issue #350)', () => {
+	afterEach( () => {
+		jest.useRealTimers();
+	} );
+
+	test( 'blur with >= 1 completed result adopts item 0', async () => {
+		jest.useFakeTimers();
+		const onSelect = jest.fn();
+		const onAbandon = jest.fn();
+		const fetchMock = jest.fn( () => Promise.resolve( [ { label: 'Жуковский' }, { label: 'Жуков' } ] ) );
+
+		attachTypeahead( input, { fetch: fetchMock, onSelect, onAbandon } );
+
+		input.value = 'жук';
+		input.dispatchEvent( new Event( 'input', { bubbles: true } ) );
+		jest.advanceTimersByTime( 250 );
+		await flushMicrotasks();
+
+		input.dispatchEvent( new Event( 'blur', { bubbles: true } ) );
+		await flushMicrotasks();
+
+		expect( input.value ).toBe( 'Жуковский' );
+		expect( onSelect ).toHaveBeenCalledTimes( 1 );
+		expect( onSelect ).toHaveBeenCalledWith( { label: 'Жуковский' } );
+		expect( onAbandon ).not.toHaveBeenCalled();
+		expect( listboxOf().hidden ).toBe( true );
+	} );
+
+	test( 'blur with 0 results calls onAbandon, never onSelect, and leaves the typed text alone', async () => {
+		jest.useFakeTimers();
+		const onSelect = jest.fn();
+		const onAbandon = jest.fn();
+		const fetchMock = jest.fn( () => Promise.resolve( [] ) );
+
+		attachTypeahead( input, { fetch: fetchMock, onSelect, onAbandon } );
+
+		input.value = 'Тьмутаракань';
+		input.dispatchEvent( new Event( 'input', { bubbles: true } ) );
+		jest.advanceTimersByTime( 250 );
+		await flushMicrotasks();
+
+		input.dispatchEvent( new Event( 'blur', { bubbles: true } ) );
+		await flushMicrotasks();
+
+		expect( onSelect ).not.toHaveBeenCalled();
+		expect( onAbandon ).toHaveBeenCalledTimes( 1 );
+		expect( onAbandon ).toHaveBeenCalledWith( { query: 'Тьмутаракань', resolved: true } );
+		expect( input.value ).toBe( 'Тьмутаракань' ); // never overwritten — nothing to adopt.
+	} );
+
+	test( 'Escape then blur adopts nothing', async () => {
+		jest.useFakeTimers();
+		const onSelect = jest.fn();
+		const onAbandon = jest.fn();
+		const fetchMock = jest.fn( () => Promise.resolve( [ { label: 'Жуковский' } ] ) );
+
+		attachTypeahead( input, { fetch: fetchMock, onSelect, onAbandon } );
+
+		input.value = 'жук';
+		input.dispatchEvent( new Event( 'input', { bubbles: true } ) );
+		jest.advanceTimersByTime( 250 );
+		await flushMicrotasks(); // a real completed result set now exists for 'жук'.
+
+		input.dispatchEvent( new KeyboardEvent( 'keydown', { key: 'Escape', bubbles: true } ) );
+		input.dispatchEvent( new Event( 'blur', { bubbles: true } ) );
+		await flushMicrotasks();
+
+		expect( onSelect ).not.toHaveBeenCalled();
+		expect( onAbandon ).not.toHaveBeenCalled();
+		expect( input.value ).toBe( 'жук' ); // an explicit cancel, never silently overridden.
+	} );
+
+	test( 'blur immediately after a real pick adopts nothing', async () => {
+		jest.useFakeTimers();
+		const onSelect = jest.fn();
+		const onAbandon = jest.fn();
+		const fetchMock = jest.fn( () => Promise.resolve( [ { label: 'Жуковский' }, { label: 'Жуков' } ] ) );
+
+		attachTypeahead( input, { fetch: fetchMock, onSelect, onAbandon } );
+
+		input.value = 'жук';
+		input.dispatchEvent( new Event( 'input', { bubbles: true } ) );
+		jest.advanceTimersByTime( 250 );
+		await flushMicrotasks();
+
+		input.dispatchEvent( new KeyboardEvent( 'keydown', { key: 'ArrowDown', bubbles: true } ) );
+		input.dispatchEvent( new KeyboardEvent( 'keydown', { key: 'Enter', bubbles: true } ) ); // a real pick.
+
+		expect( onSelect ).toHaveBeenCalledTimes( 1 );
+
+		input.dispatchEvent( new Event( 'blur', { bubbles: true } ) );
+		await flushMicrotasks();
+
+		expect( onSelect ).toHaveBeenCalledTimes( 1 ); // still one — blur decided there was nothing left to do.
+		expect( onAbandon ).not.toHaveBeenCalled();
+		expect( input.value ).toBe( 'Жуковский' );
+	} );
+
+	test( 'blur while the debounce is still pending flushes it and then adopts', async () => {
+		jest.useFakeTimers();
+		const onSelect = jest.fn();
+		const onAbandon = jest.fn();
+		const fetchMock = jest.fn( () => Promise.resolve( [ { label: 'Жуковский' } ] ) );
+
+		attachTypeahead( input, { fetch: fetchMock, onSelect, onAbandon } );
+
+		input.value = 'жук';
+		input.dispatchEvent( new Event( 'input', { bubbles: true } ) );
+
+		// Tabs away inside the 250ms debounce window — the commonest real trigger for this bug
+		// (operator's own framing): nothing has fired yet, so a strict "already completed" check
+		// with no flush would adopt nothing and the bug would survive unfixed.
+		expect( fetchMock ).not.toHaveBeenCalled();
+
+		input.dispatchEvent( new Event( 'blur', { bubbles: true } ) );
+		await flushMicrotasks();
+
+		expect( fetchMock ).toHaveBeenCalledTimes( 1 );
+		expect( fetchMock ).toHaveBeenCalledWith( 'жук' );
+		expect( onSelect ).toHaveBeenCalledWith( { label: 'Жуковский' } );
+		expect( input.value ).toBe( 'Жуковский' );
+
+		// The debounce timer must actually have been cancelled, not merely raced — advancing
+		// past its original window fires nothing a second time.
+		jest.advanceTimersByTime( 250 );
+		await flushMicrotasks();
+		expect( fetchMock ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	test( 'blur while a fetch is already in flight (debounce already fired) chains onto it', async () => {
+		jest.useFakeTimers();
+		const onSelect = jest.fn();
+		const onAbandon = jest.fn();
+		const pending = deferred();
+		const fetchMock = jest.fn( () => pending.promise );
+
+		attachTypeahead( input, { fetch: fetchMock, onSelect, onAbandon } );
+
+		input.value = 'жук';
+		input.dispatchEvent( new Event( 'input', { bubbles: true } ) );
+		jest.advanceTimersByTime( 250 ); // the debounce fires — fetch is now in flight, unresolved.
+
+		expect( fetchMock ).toHaveBeenCalledTimes( 1 );
+
+		input.dispatchEvent( new Event( 'blur', { bubbles: true } ) );
+
+		pending.resolve( [ { label: 'Жуковский' } ] );
+		await flushMicrotasks();
+
+		// Chained onto the SAME in-flight fetch — never a redundant second call.
+		expect( fetchMock ).toHaveBeenCalledTimes( 1 );
+		expect( onSelect ).toHaveBeenCalledWith( { label: 'Жуковский' } );
+		expect( input.value ).toBe( 'Жуковский' );
+	} );
+
+	test( 'a blank input never adopts or abandons', async () => {
+		jest.useFakeTimers();
+		const onSelect = jest.fn();
+		const onAbandon = jest.fn();
+		const fetchMock = jest.fn( () => Promise.resolve( [] ) );
+
+		attachTypeahead( input, { fetch: fetchMock, onSelect, onAbandon } );
+
+		input.value = '';
+		input.dispatchEvent( new Event( 'blur', { bubbles: true } ) );
+		await flushMicrotasks();
+
+		expect( onSelect ).not.toHaveBeenCalled();
+		expect( onAbandon ).not.toHaveBeenCalled();
+	} );
+
+	test( 'text below minChars never ADOPTS, even if it exactly matches a previously completed query — but it DOES report (FIX 1)', async () => {
+		// Superseded 17.08.2026 (FIX 1): a below-minChars blur used to report nothing at all,
+		// which was itself the dead end — a customer whose real settlement name is shorter than
+		// minChars had no fetch to ever complete, so no way to ever clear #337's address lock.
+		// It still never ADOPTS (nothing was ever asked), but it now DOES report resolved: false.
+		jest.useFakeTimers();
+		const onSelect = jest.fn();
+		const onAbandon = jest.fn();
+		const fetchMock = jest.fn( () => Promise.resolve( [] ) );
+
+		// minChars defaults to 2 — a single character is never eligible for a search at all.
+		attachTypeahead( input, { fetch: fetchMock, onSelect, onAbandon, minChars: 2 } );
+
+		input.value = 'ж';
+		input.dispatchEvent( new Event( 'input', { bubbles: true } ) );
+		input.dispatchEvent( new Event( 'blur', { bubbles: true } ) );
+		await flushMicrotasks();
+
+		expect( fetchMock ).not.toHaveBeenCalled();
+		expect( onSelect ).not.toHaveBeenCalled();
+		expect( onAbandon ).toHaveBeenCalledTimes( 1 );
+		expect( onAbandon ).toHaveBeenCalledWith( { query: 'ж', resolved: false } );
+	} );
+
+	test( 'no onAbandon option supplied — behaviour is byte-identical to today: blur just closes', async () => {
+		jest.useFakeTimers();
+		const onSelect = jest.fn();
+		// Note: NO onAbandon in the options object below.
+		const fetchMock = jest.fn( () => Promise.resolve( [] ) );
+
+		attachTypeahead( input, { fetch: fetchMock, onSelect } );
+
+		input.value = 'Тьмутаракань';
+		input.dispatchEvent( new Event( 'input', { bubbles: true } ) );
+		jest.advanceTimersByTime( 250 );
+		await flushMicrotasks();
+
+		input.dispatchEvent( new Event( 'blur', { bubbles: true } ) );
+		await flushMicrotasks();
+
+		expect( listboxOf().hidden ).toBe( true );
+		expect( onSelect ).not.toHaveBeenCalled();
+		expect( input.value ).toBe( 'Тьмутаракань' ); // untouched — no auto-adopt logic ever ran.
+	} );
+
+	// -----------------------------------------------------------------------
+	// FIX 1 (P0, #350 follow-up): below-minChars is no longer a dead end
+	// -----------------------------------------------------------------------
+	//
+	// A below-minChars blur used to just closeListbox() and stop — no fetch ever ran, so
+	// onAbandon() never fired and a customer whose real settlement name is shorter than
+	// minChars had no way to ever clear #337's address lock. It must now still REPORT
+	// (resolved: false — nothing was ever asked), while still never ADOPTING (there is
+	// nothing to adopt).
+
+	test( 'a below-minChars, non-blank blur reports onAbandon with resolved: false, never onSelect', async () => {
+		const onSelect = jest.fn();
+		const onAbandon = jest.fn();
+		const fetchMock = jest.fn( () => Promise.resolve( [ { label: 'should never be called' } ] ) );
+
+		attachTypeahead( input, { fetch: fetchMock, onSelect, onAbandon, minChars: 3 } );
+
+		input.value = 'жк'; // 2 chars, below minChars: 3
+		input.dispatchEvent( new Event( 'input', { bubbles: true } ) );
+		input.dispatchEvent( new Event( 'blur', { bubbles: true } ) );
+		await flushMicrotasks();
+
+		expect( fetchMock ).not.toHaveBeenCalled();
+		expect( onSelect ).not.toHaveBeenCalled();
+		expect( onAbandon ).toHaveBeenCalledTimes( 1 );
+		expect( onAbandon ).toHaveBeenCalledWith( { query: 'жк', resolved: false } );
+		expect( input.value ).toBe( 'жк' ); // never overwritten
+		expect( listboxOf().hidden ).toBe( true );
+	} );
+
+	test( 'a blank blur still reports nothing at all, even below minChars', async () => {
+		const onSelect = jest.fn();
+		const onAbandon = jest.fn();
+		const fetchMock = jest.fn( () => Promise.resolve( [] ) );
+
+		attachTypeahead( input, { fetch: fetchMock, onSelect, onAbandon, minChars: 3 } );
+
+		input.value = '';
+		input.dispatchEvent( new Event( 'blur', { bubbles: true } ) );
+		await flushMicrotasks();
+
+		expect( onSelect ).not.toHaveBeenCalled();
+		expect( onAbandon ).not.toHaveBeenCalled();
+	} );
+
+	// -----------------------------------------------------------------------
+	// FIX 2 (P1): ensureCompletedResults() must not chain onto the WRONG in-flight fetch
+	// -----------------------------------------------------------------------
+	//
+	// `inFlight` names the most RECENTLY ISSUED fetch, which is not necessarily one for the
+	// CURRENT text — the DOM value can change with no `input` event of this module's own (a
+	// silent programmatic write). Chaining onto a stale in-flight fetch there used to make
+	// the widget go silent (no adopt, no onAbandon) for the query the customer actually blurs
+	// on. A blur must resolve the CURRENT text, never fall silent.
+
+	test( 'blur resolves the CURRENT text when an OLDER query is still in flight and no debounce is live', async () => {
+		jest.useFakeTimers();
+		const onSelect = jest.fn();
+		const onAbandon = jest.fn();
+		const older = deferred();
+		const newer = deferred();
+		const fetchMock = jest.fn()
+			.mockImplementationOnce( () => older.promise )
+			.mockImplementationOnce( () => newer.promise );
+
+		attachTypeahead( input, { fetch: fetchMock, onSelect, onAbandon } );
+
+		// The older query's debounce fires — its fetch is now in flight, unresolved.
+		input.value = 'жук';
+		input.dispatchEvent( new Event( 'input', { bubbles: true } ) );
+		jest.advanceTimersByTime( 250 );
+		expect( fetchMock ).toHaveBeenCalledTimes( 1 );
+		expect( fetchMock ).toHaveBeenNthCalledWith( 1, 'жук' );
+
+		// The DOM value now holds newer text, but WITHOUT dispatching this module's own
+		// `input` event — mirrors location-cascade.js's writeSilently() (backwards fill /
+		// the pickup-address-replacing announcement), which is exactly how this state arises
+		// for real. No debounce is live for this newer text at all.
+		input.value = 'жуковский';
+
+		input.dispatchEvent( new Event( 'blur', { bubbles: true } ) );
+		await flushMicrotasks();
+
+		// A SECOND, explicit fetch for the CURRENT text — never chained onto the stale one.
+		expect( fetchMock ).toHaveBeenCalledTimes( 2 );
+		expect( fetchMock ).toHaveBeenNthCalledWith( 2, 'жуковский' );
+
+		newer.resolve( [ { label: 'Жуковский' } ] );
+		await flushMicrotasks();
+
+		expect( onSelect ).toHaveBeenCalledWith( { label: 'Жуковский' } );
+		expect( input.value ).toBe( 'Жуковский' );
+
+		// The stale older fetch finishing afterwards changes nothing further.
+		older.resolve( [ { label: 'stale, never adopted' } ] );
+		await flushMicrotasks();
+
+		expect( onSelect ).toHaveBeenCalledTimes( 1 );
+		expect( onAbandon ).not.toHaveBeenCalled();
+	} );
+
+	// Note: the matching-in-flight-query case (`inFlight.query === query`, still chained onto
+	// rather than re-fetched) is already covered by the pre-existing 'blur while a fetch is
+	// already in flight (debounce already fired) chains onto it' test above — FIX 2 narrows
+	// that same branch's condition without changing its outcome, so no separate case is added
+	// here for it.
+
+	// -----------------------------------------------------------------------
+	// FIX 3 (P2): a guard re-runs AFTER the blur continuation's async gap
+	// -----------------------------------------------------------------------
+	//
+	// ensureCompletedResults() deliberately does not closeListbox() before chaining/flushing
+	// (that would bump generation and orphan the very fetch it wants to chain onto), so the
+	// listbox can stay visibly open through the whole await. If something else — a real pick
+	// through that still-open listbox — resolves DURING the gap, the continuation must not
+	// then double-act on top of it.
+
+	test( 'a real pick that lands before the (still-pending) blur continuation resolves is never overwritten', async () => {
+		jest.useFakeTimers();
+		const onSelect = jest.fn();
+		const onAbandon = jest.fn();
+		const pending = deferred();
+		const fetchMock = jest.fn( () => pending.promise );
+
+		attachTypeahead( input, { fetch: fetchMock, onSelect, onAbandon } );
+
+		input.value = 'жук';
+		input.dispatchEvent( new Event( 'input', { bubbles: true } ) );
+		jest.advanceTimersByTime( 250 ); // fetch in flight, unresolved — ensureCompletedResults() will chain onto it.
+
+		input.dispatchEvent( new Event( 'blur', { bubbles: true } ) );
+
+		// Resolve the in-flight fetch. This settles in TWO microtask steps: (1) runFetch()'s
+		// own success handler renders the listbox and records lastCompletedQuery/Items, which
+		// (2) then resolves ensureCompletedResults()'s own promise, only AFTER which the blur
+		// continuation's `.then()` is even scheduled. One `await` tick lands exactly between
+		// (1) and (2) — the listbox is populated, but the blur continuation has not run yet.
+		pending.resolve( [ { label: 'Жуковский' }, { label: 'Жуков' } ] );
+		await Promise.resolve();
+
+		expect( listboxOf().children.length ).toBe( 2 ); // renderItems() already ran.
+
+		// A real mouse pick on the SECOND option happens NOW — strictly before the blur
+		// continuation (still queued, not yet run) gets to auto-adopt item 0.
+		listboxOf().children[ 1 ].dispatchEvent( new MouseEvent( 'mousedown', { bubbles: true } ) );
+
+		expect( onSelect ).toHaveBeenCalledTimes( 1 );
+		expect( onSelect ).toHaveBeenCalledWith( { label: 'Жуков' } );
+		expect( input.value ).toBe( 'Жуков' );
+
+		await flushMicrotasks(); // now let the blur continuation itself run.
+
+		// The blur continuation must find `input.value !== query` ('Жуков' !== 'жук') and do
+		// nothing at all — never overwriting the real pick with its own auto-adopt of item 0.
+		expect( onSelect ).toHaveBeenCalledTimes( 1 );
+		expect( onAbandon ).not.toHaveBeenCalled();
+		expect( input.value ).toBe( 'Жуков' );
+	} );
+
+	test( 'an async adopt landing after a consumer already reacted to the abandoned text supersedes it harmlessly', async () => {
+		// Documents the ordering the file docblock relies on: a real browser fires a native
+		// `change` on blur BEFORE this module's own `blur` listener runs, so an outside consumer
+		// (location-cascade.js's handleFieldChanged()) already sees the raw, unresolved text by
+		// the time this module's async adopt decision even starts. The LATER selectItem() this
+		// module runs on adopt supersedes that first, premature read exactly like a slightly
+		// slower human click would — same write, same input/change dispatch. If this stops being
+		// true (e.g. a future change makes the adopt run BEFORE the consumer's own `change`
+		// handling), this test starts failing and should be looked at.
+		jest.useFakeTimers();
+		const onSelect = jest.fn();
+		const onAbandon = jest.fn();
+		const fetchMock = jest.fn( () => Promise.resolve( [ { label: 'Жуковский' } ] ) );
+		const seenAtChange = [];
+
+		input.addEventListener( 'change', () => seenAtChange.push( input.value ) );
+
+		attachTypeahead( input, { fetch: fetchMock, onSelect, onAbandon } );
+
+		input.value = 'жук';
+		input.dispatchEvent( new Event( 'input', { bubbles: true } ) );
+		jest.advanceTimersByTime( 250 );
+		await flushMicrotasks();
+
+		// Mirrors what a real browser (and this module's own blur handler) does: the native
+		// `change` a text edit produces fires BEFORE `blur`.
+		input.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+		input.dispatchEvent( new Event( 'blur', { bubbles: true } ) );
+		await flushMicrotasks();
+
+		// First `change` seen was the customer's own raw, unresolved text — exactly what a
+		// consumer's own "typed but not picked" handling reacts to. The second is this module's
+		// OWN synthetic dispatch from selectItem(), carrying the adopted value — the correction.
+		expect( seenAtChange ).toEqual( [ 'жук', 'Жуковский' ] );
+		expect( input.value ).toBe( 'Жуковский' );
+	} );
+} );

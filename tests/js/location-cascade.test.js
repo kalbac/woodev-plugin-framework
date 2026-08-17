@@ -225,7 +225,10 @@ function fakeTypeahead() {
 	attachCalls = [];
 	window.WoodevLocationTypeahead = jest.fn( ( el, opts ) => {
 		const detach = jest.fn();
-		const call = { el, fetch: opts.fetch, onSelect: opts.onSelect, emptyText: opts.emptyText, detach };
+		const call = {
+			el, fetch: opts.fetch, onSelect: opts.onSelect, onAbandon: opts.onAbandon,
+			emptyText: opts.emptyText, detach,
+		};
 
 		attachCalls.push( call );
 
@@ -281,6 +284,27 @@ function selectViaFake( call, item, viaJquery = false ) {
 	}
 
 	call.onSelect( item );
+}
+
+/**
+ * Simulates a customer typing `query` into the field behind `call` and abandoning it — leaving
+ * WITHOUT ever picking a suggestion, with a COMPLETED search that resolved to zero results
+ * (issue #350). Reproduces the real timing this module's own `handleFieldChanged()` docblock and
+ * `location-typeahead.js`'s own ABANDON section both rely on: a real browser fires the native
+ * `change` a text edit produces BEFORE the widget's own `blur`-driven decision runs, so the
+ * "typed but not picked" clearing this module already does for ANY unpicked edit always happens
+ * FIRST, and the widget's `onAbandon()` call (never a value write — unlike
+ * {@see selectViaFake}) always lands strictly after it.
+ *
+ * @param {Object} call
+ * @param {string} query
+ * @returns {void}
+ */
+function abandonViaFake( call, query ) {
+	call.el.value = query;
+	call.el.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+
+	call.onAbandon( { query, resolved: true } );
 }
 
 function callFor( fieldId ) {
@@ -3321,5 +3345,195 @@ describe( 'the address field is locked until a settlement is picked (#337)', () 
 		} );
 
 		expect( document.getElementById( 'shipping_address_1' ).disabled ).toBe( false );
+	} );
+
+	// -----------------------------------------------------------------------
+	// #350 amendment: a settlement the provider will never suggest stands the lock down
+	// -----------------------------------------------------------------------
+
+	it( 'is NOT locked after an abandon-with-zero-results at settlement level (#350)', () => {
+		boot( { region: true, settlement: true, address: true } );
+
+		expect( addressField().disabled ).toBe( true );
+
+		abandonViaFake( callFor( 'billing_city' ), 'Тьмутаракань' );
+
+		expect( addressField().disabled ).toBe( false );
+	} );
+
+	it( 'is NOT locked after a below-minChars abandon at settlement level — #350 follow-up (17.08.2026)', () => {
+		// A settlement name genuinely shorter than the widget's own minChars used to be a dead
+		// end: no fetch ever ran, so onAbandon() never fired and the lock had no exit at all.
+		// location-typeahead.js's handleBlur() now reports `resolved: false` for this case —
+		// this cascade must unlock on it exactly like the zero-results `resolved: true` case,
+		// since onAbandonFor() treats both identically (see that function's own docblock for why).
+		boot( { region: true, settlement: true, address: true } );
+
+		expect( addressField().disabled ).toBe( true );
+
+		const call = callFor( 'billing_city' );
+
+		call.el.value = 'Ку';
+		call.el.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+		call.onAbandon( { query: 'Ку', resolved: false } );
+
+		expect( addressField().disabled ).toBe( false );
+	} );
+
+	it( 're-locks once the abandoned settlement text is edited to something else (#350)', () => {
+		boot( { region: true, settlement: true, address: true } );
+
+		abandonViaFake( callFor( 'billing_city' ), 'Тьмутаракань' );
+		expect( addressField().disabled ).toBe( false );
+
+		const city = document.getElementById( 'billing_city' );
+
+		// Still no pick — but the text itself changed, so the #350 marker no longer describes it.
+		city.value = 'Тьмутаракань-2';
+		city.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+
+		expect( addressField().disabled ).toBe( true );
+	} );
+
+	it( 'a plain "typed but not picked" edit that never went through onAbandon still locks — #337 itself is unweakened (#350)', () => {
+		boot( { region: true, settlement: true, address: true } );
+
+		const city = document.getElementById( 'billing_city' );
+
+		// Simulates a customer still mid-search (or one whose search simply never completed) —
+		// NOT the #350 zero-results report, which only ever arrives via onAbandon().
+		city.value = 'Москва';
+		city.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+
+		expect( addressField().disabled ).toBe( true );
+	} );
+
+	it( 'never clears a field VALUE and never touches the region field on an abandon (#350, operator point 3)', () => {
+		boot( { region: true, settlement: true, address: true } );
+
+		const region = document.getElementById( 'billing_state' );
+
+		region.value = 'Московская область';
+		region.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+
+		abandonViaFake( callFor( 'billing_city' ), 'Кокошкино' );
+
+		expect( region.value ).toBe( 'Московская область' ); // a parent — never in scope for this.
+		expect( document.getElementById( 'billing_city' ).value ).toBe( 'Кокошкино' ); // the typed text survives.
+		expect( addressField().value ).toBe( '' ); // had nothing to begin with — still nothing, not "wiped".
+		expect( addressField().disabled ).toBe( false );
+	} );
+
+	// -----------------------------------------------------------------------
+	// #350 follow-up (operator decision, 17.08.2026): the customer keeps their downstream
+	// TEXT on an abandon — only the IDENTITY (the record) is dropped, because it belonged to
+	// the settlement they just abandoned. clearDescendants() itself is UNCHANGED and still
+	// unconditionally wipes on every text edit (the ORDINARY path — adopting a different
+	// settlement still has to clear the old address); a snapshot-and-restore step downstream
+	// of it (restoreClearedDescendants(), reached only via onAbandonFor()) puts the TEXT back
+	// when the edit turns out to be an abandon rather than a pick.
+	// -----------------------------------------------------------------------
+
+	const ADDRESS_ITEM = {
+		key: 'dadata:addr1', label: 'ул Тверская, 1', level: 'address',
+		record: {
+			key: 'dadata:addr1', provider_id: 'dadata', level: 'address', country: 'RU',
+			settlement: { name: 'Москва', type: 'г' },
+			street: { name: 'Тверская', type: 'ул' }, house: '1', label: 'ул Тверская, 1',
+		},
+	};
+
+	it( 'restores the address TEXT (never the record) after a zero-results settlement abandon (#350 follow-up)', () => {
+		boot( { region: true, settlement: true, address: true } );
+
+		const region = document.getElementById( 'billing_state' );
+
+		region.value = 'Московская область';
+		region.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+
+		selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
+		selectViaFake( callFor( 'billing_address_1' ), ADDRESS_ITEM );
+
+		expect( addressField().value ).toBe( 'ул Тверская, 1' );
+
+		abandonViaFake( callFor( 'billing_city' ), 'Тьмутаракань' );
+
+		// region: untouched (a parent, never in scope). settlement: the customer's own typed
+		// text. address: the TEXT is back, even though clearDescendants() already wiped it the
+		// instant the settlement field's `change` fired — but the RECORD is genuinely gone and
+		// the field is unlocked, exactly like the plain #350 zero-results case.
+		expect( region.value ).toBe( 'Московская область' );
+		expect( document.getElementById( 'billing_city' ).value ).toBe( 'Тьмутаракань' );
+		expect( addressField().value ).toBe( 'ул Тверская, 1' );
+		expect( addressField().disabled ).toBe( false );
+	} );
+
+	it( 'restores the address TEXT after a below-minChars settlement abandon too', () => {
+		boot( { region: true, settlement: true, address: true } );
+
+		selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
+		selectViaFake( callFor( 'billing_address_1' ), ADDRESS_ITEM );
+
+		const call = callFor( 'billing_city' );
+
+		call.el.value = 'Ку';
+		call.el.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+		call.onAbandon( { query: 'Ку', resolved: false } );
+
+		expect( addressField().value ).toBe( 'ул Тверская, 1' );
+		expect( addressField().disabled ).toBe( false );
+	} );
+
+	it( 'never overwrites address text the customer typed themselves while the abandon was resolving', () => {
+		boot( { region: true, settlement: true, address: true } );
+
+		selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
+		selectViaFake( callFor( 'billing_address_1' ), ADDRESS_ITEM );
+
+		const settlementCall = callFor( 'billing_city' );
+
+		// The settlement `change` fires first (clearDescendants() wipes+snapshots the address),
+		// mirroring the real timing onAbandon's own docblock relies on — but this time the
+		// customer types their OWN new address into the now-empty field BEFORE the abandon
+		// report itself arrives.
+		settlementCall.el.value = 'Тьмутаракань';
+		settlementCall.el.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+
+		expect( addressField().value ).toBe( '' ); // clearDescendants() already ran.
+
+		addressField().value = 'ул Новая, 5';
+
+		settlementCall.onAbandon( { query: 'Тьмутаракань', resolved: true } );
+
+		// Their own text wins — never clobbered by a restore of the OLD address.
+		expect( addressField().value ).toBe( 'ул Новая, 5' );
+		expect( addressField().disabled ).toBe( false );
+	} );
+
+	it( 'does NOT restore the old address after the settlement is re-typed and then a REAL suggestion is adopted', () => {
+		// The regression guard: the snapshot must never leak into the ordinary cascade path.
+		boot( { region: true, settlement: true, address: true } );
+
+		selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
+		selectViaFake( callFor( 'billing_address_1' ), ADDRESS_ITEM );
+
+		expect( addressField().value ).toBe( 'ул Тверская, 1' );
+
+		const OTHER_SETTLEMENT_ITEM = {
+			key: 'dadata:other', label: 'Тверь', level: 'settlement',
+			record: {
+				key: 'dadata:other', provider_id: 'dadata', level: 'settlement',
+				country: 'RU', settlement: { name: 'Тверь', type: 'г' }, label: 'г Тверь',
+			},
+		};
+
+		// A genuine pick at settlement — never onAbandon.
+		selectViaFake( callFor( 'billing_city' ), OTHER_SETTLEMENT_ITEM );
+
+		expect( document.getElementById( 'billing_city' ).value ).toBe( 'Тверь' );
+		// The address stays cleared — clearDescendants() wiped it, and nothing restores it for
+		// an ordinary pick; adopting a different settlement really must not keep the old street.
+		expect( addressField().value ).toBe( '' );
+		expect( addressField().disabled ).toBe( false ); // unlocked by the pick itself.
 	} );
 } );

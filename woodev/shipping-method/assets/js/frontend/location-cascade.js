@@ -77,6 +77,11 @@
  * {@see isAddressLocked} and {@see refreshAddressLock}. Every state transition that can change
  * the answer re-applies it — see those two functions' own call sites.
  *
+ * ISSUE #350 AMENDS #337 rather than replacing it: a settlement the provider will never suggest
+ * — the customer typed a real but uncarried town and a completed search proved it, never merely
+ * abandoned mid-search — stands down the lock instead of leaving it on forever with no exit. See
+ * {@see isAddressLocked}'s own amendment section and {@see onAbandonFor} for the mechanism.
+ *
  * BOTH EVENT WORLDS (gotcha `jquery-trigger-change-fires-no-native-event`): a jQuery
  * `.trigger('change')` (how select2/selectWoo and much of WooCommerce's own churn report a
  * change) dispatches NO native DOM event, so a delegated `addEventListener('change')` alone
@@ -734,6 +739,22 @@
 			resolved: {},
 			// Per-LEVEL confirmed record (only chain levels; postcode never has one of its own).
 			records: {},
+			// Per-LEVEL text a COMPLETED search already proved the provider has nothing for
+			// (issue #350) — `{ [level]: string|null }`, written by {@see onAbandonFor}, cleared
+			// by a successful pick at that level ({@see onSelectFor}) or by the field's own text
+			// changing to something else ({@see handleFieldChanged}). See {@see isAddressLocked}'s
+			// own #350 amendment, its only consumer.
+			unresolved: {},
+			// Per-LEVEL snapshot of what {@see clearDescendants} most recently wiped as a DIRECT
+			// result of editing THAT level's own field — `{ [level]: {fieldId: previousValue}|null }`
+			// (issue #350 follow-up, operator decision 17.08.2026: the customer keeps their
+			// downstream TEXT when the edit above it turns out unresolvable — only the IDENTITY,
+			// `records[level]`, is genuinely gone). Written by {@see clearDescendants} itself
+			// (never anywhere else), consumed and cleared by {@see restoreClearedDescendants}
+			// (called from {@see onAbandonFor}), and discarded early by a successful pick at that
+			// level ({@see onSelectFor}) so a stale snapshot from BEFORE the pick can never be
+			// restored against some later, unrelated abandon.
+			clearedByEdit: {},
 			// fieldId -> { el, api } for every CURRENTLY attached widget (typeahead OR one of
 			// Task 13's mode-specific renderers — see attachOne()/resolveModeRenderer()).
 			widgets: {},
@@ -1399,6 +1420,17 @@
 			// notice to — see showNotPersistedNotice()'s own docblock for why this is an
 			// entry-level, not node-level, concept.
 			entry.lastSelectedFieldId = node.fieldId;
+			// Issue #350: a real pick proves the CURRENT text is no longer "known unresolved" —
+			// see {@see onAbandonFor}'s own docblock for what this flag means and why it must not
+			// survive past the pick that disproves it.
+			entry.unresolved[ node.level ] = null;
+			// Issue #350 follow-up: the SAME native `change` that just ran ahead of this callback
+			// already had {@see clearDescendants} snapshot whatever it wiped below this level, in
+			// case an abandon needed to restore it. A real pick is not an abandon — the address
+			// staying cleared for a genuinely NEW settlement is correct, ordinary behaviour — so
+			// that snapshot is discarded here, never restored. See {@see restoreClearedDescendants}'s
+			// own docblock for why this mirrors that function's own discard on the abandon path.
+			entry.clearedByEdit[ node.level ] = null;
 
 			backwardsFill( entry, node, record );
 
@@ -1421,6 +1453,73 @@
 					triggerCheckoutUpdate();
 				}
 			}
+		};
+	}
+
+	/**
+	 * Builds the `onAbandon({ query, resolved })` callback handed to the Task 10 widget for one
+	 * chain node (issue #350) — the widget's own file docblock explains WHEN this runs: a blur
+	 * that leaves the query resolved to exactly zero suggestions (`resolved: true`), after
+	 * flushing/chaining onto whatever fetch was pending or in flight, OR a blur whose text never
+	 * reached `minChars` at all (`resolved: false`) — the widget never even ASKED the provider
+	 * about it, so there is nothing "completed" to report, but the customer is left in the exact
+	 * same dead end either way (17.08.2026 follow-up: a settlement name genuinely shorter than
+	 * `minChars` used to have no exit from #337's lock at all, because it could never produce a
+	 * completed zero-result search to begin with).
+	 *
+	 * THE BUG THIS CLOSES: `handleFieldChanged()` already drops `entry.records[level]` for a
+	 * typed-but-never-picked edit (see that function's own docblock) — for the settlement level
+	 * that alone re-locks the address field via issue #337's rule, and #337 has no exit for a
+	 * town the provider genuinely does not carry: such a town will never produce a suggestion to
+	 * click, so the lock would stay on forever and the order could never be completed (operator
+	 * decision, 17.08.2026). This callback records the ONE fact {@see isAddressLocked}'s own
+	 * amendment needs to recognise that dead end and stand down: "the provider has nothing to
+	 * offer for this EXACT text" — whether that was proven by a completed search or by the text
+	 * never being eligible for one.
+	 *
+	 * `detail.resolved` IS DELIBERATELY READ NO FURTHER THAN THIS DOCBLOCK — informational only,
+	 * on purpose, not an oversight: this callback stores the SAME marker (`entry.unresolved[level]`)
+	 * for BOTH `true` and `false`, and {@see isAddressLocked}'s own amendment reads that marker
+	 * without ever asking which one produced it. That is the right call, not a shortcut, because
+	 * the amendment's own question — "can this exact typed text ever produce a suggestion to
+	 * click?" — has the same answer, no, in both cases: `resolved: true` means the provider was
+	 * asked and had nothing; `resolved: false` means the widget never even got to ask, but a
+	 * customer cannot click a suggestion that was never requested either. Distinguishing the two
+	 * here would gate the SAME lock on HOW the dead end was discovered rather than on whether one
+	 * exists — a distinction with no customer-visible difference to make. A future caller that
+	 * genuinely needs the distinction (e.g. different messaging for "try a longer name" vs "we
+	 * don't carry this") can still read `detail.resolved` itself; nothing here prevents that.
+	 *
+	 * NEVER CLEARS A FIELD VALUE ITSELF, AND RESTORES WHAT ANOTHER FUNCTION ALREADY DID (operator's
+	 * own point 3: "a customer left without city, region and address cannot place an order",
+	 * sharpened 17.08.2026 into "keeps the TEXT, only the IDENTITY is gone"). `handleFieldChanged()`'s
+	 * `clearDescendants()` call already did whatever record/descendant-value clearing a typed edit
+	 * ever does — this function runs strictly AFTER that (blur fires after the native `change` a
+	 * text edit already triggered) and never repeats or reaches around it. What it adds is
+	 * {@see restoreClearedDescendants}, which puts back ONLY the TEXT that same clear wiped for
+	 * THIS level, never the record ({@see clearDescendants} already, correctly, nulled it, and
+	 * this never un-nulls it) — see that function's own docblock for the full contract, including
+	 * why a field the customer has since typed into themselves is never overwritten. The region
+	 * field is a PARENT of settlement and nothing in this path — old or new — ever touches it.
+	 *
+	 * @param {Object} entry
+	 * @param {{level: string, fieldId: string, section?: string}} node
+	 * @returns {function({query: string, resolved: boolean}): void}
+	 */
+	function onAbandonFor( entry, node ) {
+		return function( detail ) {
+			entry.unresolved[ node.level ] = detail && 'string' === typeof detail.query ? detail.query : '';
+
+			// Issue #350 follow-up (operator decision 17.08.2026): the customer keeps their
+			// DOWNSTREAM TEXT — only the identity clearDescendants() already dropped for this
+			// level stays dropped. See {@see restoreClearedDescendants}'s own docblock for the
+			// full contract (text-only, never a field already holding the customer's OWN newer
+			// text, snapshot consumed either way).
+			restoreClearedDescendants( entry, node.level );
+
+			// Same rule as a direct pick (issue #337): every state transition that can change
+			// the lock's own answer re-applies it on the spot, never only on some later event.
+			refreshAddressLocks();
 		};
 	}
 
@@ -1599,6 +1698,10 @@
 		var options = {
 			fetch: fetchFor( entry, node ),
 			onSelect: onSelectFor( entry, node ),
+			// Issue #350: OPTIONAL for the widget (a mode-specific Task 13 renderer is free to
+			// ignore it, same as every other primitive here) — see {@see onAbandonFor}'s own
+			// docblock.
+			onAbandon: onAbandonFor( entry, node ),
 			// Server-supplied (translated, filterable via `woodev_location_i18n`) — never a
 			// literal here: this string reaches the customer, so it follows the same route
 			// every other user-facing string in this layer takes.
@@ -1768,6 +1871,29 @@
 	 * the SAME answer that decides whether an address `/suggest` may carry a `within`. A field
 	 * locked here is precisely a field whose suggestions would otherwise search country-wide.
 	 *
+	 * ISSUE #350 AMENDMENT (operator decision, 17.08.2026) — ONE EXCEPTION, NARROWER THAN IT
+	 * LOOKS: the rule above assumes a customer who has not picked a settlement yet still CAN —
+	 * eventually typing enough of a real locality's name produces a suggestion to click. That
+	 * assumption fails for a town the active provider does not carry at all: no suggestion for it
+	 * will ever exist, so the lock this function returns would never lift and the order could
+	 * never be completed — a customer typing a real address in a real, unlisted village is not a
+	 * mistake to be blocked, it is the ordinary case the lock was never meant to catch. So: when
+	 * the settlement field's CURRENT text exactly matches `entry.unresolved.settlement` — a
+	 * COMPLETED search ({@see onAbandonFor}) already proved the provider has nothing for this
+	 * exact string — the address field stays unlocked despite no settlement record existing.
+	 * `entry.unresolved.settlement` is cleared on the two events that can PROVE it stale — a real
+	 * pick ({@see onSelectFor}), or {@see handleFieldChanged} observing the field's own text
+	 * actually change — never "the instant" the text stops matching in some more general sense: a
+	 * purely PROGRAMMATIC value change that dispatches no event of its own (e.g.
+	 * {@see writeSilently}, used for backwards fill and the pickup-address-replacing
+	 * announcement) touches neither path, and could in principle leave the marker stale. What
+	 * actually keeps that safe is the comparison itself being read off the LIVE DOM element rather
+	 * than a captured value (same reason {@see refreshAddressLock} always re-reads too): a stale
+	 * marker only ever matters if the live text still equals it, and a silent write that changes
+	 * the text without dispatching an event makes them differ on the spot —
+	 * {@see settlementTextIsKnownUnresolved} already stops matching before the marker is ever
+	 * cleared.
+	 *
 	 * @param {Object} entry
 	 * @param {{level: string, fieldId: string, section?: string}} node The address chain node.
 	 * @returns {boolean}
@@ -1777,7 +1903,28 @@
 			return false;
 		}
 
-		return null === scopeKeyFor( entry, 'address' );
+		if ( null === scopeKeyFor( entry, 'address' ) ) {
+			return ! settlementTextIsKnownUnresolved( entry );
+		}
+
+		return false;
+	}
+
+	/**
+	 * Whether the settlement field's CURRENT live text is exactly the string a completed search
+	 * already proved the provider has nothing for (issue #350) — {@see isAddressLocked}'s own
+	 * amendment, its only caller. `''` never counts, even if `entry.unresolved.settlement` were
+	 * somehow also `''` — an empty field is simply "nothing typed yet", not a proven dead end.
+	 *
+	 * @param {Object} entry
+	 * @returns {boolean}
+	 */
+	function settlementTextIsKnownUnresolved( entry ) {
+		var node = chainNodeForLevel( entry, 'settlement' );
+		var el = node ? document.getElementById( node.fieldId ) : null;
+		var text = el ? el.value : '';
+
+		return !! text && text === entry.unresolved.settlement;
 	}
 
 	/**
@@ -1998,13 +2145,42 @@
 	 * (mirrors `checkout-field-classic.js`'s own `cascadeChild()` — a destructive clear must
 	 * not itself cascade further).
 	 *
+	 * THIS ALWAYS RUNS — issue #350 follow-up (operator decision 17.08.2026) does NOT weaken this
+	 * function or its call site: it runs synchronously off the native `change` a text edit fires,
+	 * long before any provider answer exists, and it must keep unconditionally clearing on the
+	 * ORDINARY path — adopting a different settlement has to wipe the old address, or the customer
+	 * ends up with a Tverskaya street address filed under a village they just typed over it. What
+	 * changes instead is a SEPARATE snapshot-and-restore step downstream of here
+	 * ({@see restoreClearedDescendants}, called only from {@see onAbandonFor}): when `fromIndex`
+	 * names a CHAIN level (one that can itself carry a widget an abandon can fire from —
+	 * `entry.allNodes[fromIndex].level` is non-null; a postcode-only edit has no such level and no
+	 * `onAbandon` to ever ask for a restore), the pre-clear value of every node this call is about
+	 * to blank is captured into `entry.clearedByEdit[editedLevel]` FIRST, so a later abandon that
+	 * proves the edit unresolvable can put the customer's downstream TEXT back — never the record
+	 * this function correctly nulled two lines below, which stays gone regardless (the identity
+	 * belonged to the settlement the customer just abandoned, not to whatever settlement comes
+	 * next). Overwrites whatever this same level's OWN previous snapshot held — see
+	 * {@see restoreClearedDescendants}'s own docblock for why an overwrite, never an accumulation,
+	 * is the right rule here.
+	 *
 	 * @param {Object} entry
 	 * @param {number} fromIndex
 	 * @returns {void}
 	 */
 	function clearDescendants( entry, fromIndex ) {
+		var editedNode = entry.allNodes[ fromIndex ];
+		var editedLevel = editedNode ? editedNode.level : null;
+		var snapshot = editedLevel ? {} : null;
+
 		for ( var i = fromIndex + 1; i < entry.allNodes.length; i++ ) {
 			var node = entry.allNodes[ i ];
+			var el = document.getElementById( node.fieldId );
+
+			if ( snapshot ) {
+				// Captured BEFORE the clear below, off the live DOM — the text the customer
+				// actually saw, not whatever the store happens to mirror.
+				snapshot[ node.fieldId ] = el ? el.value : '';
+			}
 
 			if ( node.level ) {
 				entry.records[ node.level ] = null;
@@ -2013,12 +2189,70 @@
 			entry.store.setValue( node.fieldId, '' );
 			entry.resolved[ node.fieldId ] = '';
 
-			var el = document.getElementById( node.fieldId );
-
 			if ( el ) {
 				el.value = '';
 			}
 		}
+
+		if ( editedLevel ) {
+			entry.clearedByEdit[ editedLevel ] = snapshot;
+		}
+	}
+
+	/**
+	 * Restores whatever {@see clearDescendants} most recently wiped as a direct result of editing
+	 * `level`'s own field — issue #350 follow-up (operator decision 17.08.2026), called only from
+	 * {@see onAbandonFor} once a search for that edit's exact text (or a below-`minChars` text too
+	 * short to search at all) has proved it unresolvable. TEXT ONLY, never identity:
+	 * `entry.records[...]` for those descendant levels was already set `null` by
+	 * {@see clearDescendants} and stays that way here — the record belonged to the settlement the
+	 * customer just abandoned, and nothing about a downstream field's text coming back re-confirms
+	 * it for whatever settlement comes next.
+	 *
+	 * A FIELD ALREADY HOLDING NEW TEXT IS LEFT ALONE — read live off the DOM, never a captured
+	 * value, so a customer who typed their own address WHILE the abandon was still resolving (the
+	 * whole point of this flow is that it runs after an async round trip) is never overwritten:
+	 * their text always wins over a restore of the OLD one.
+	 *
+	 * THE SNAPSHOT IS CONSUMED, NOT REUSABLE — cleared to `null` unconditionally before this
+	 * function returns, whether or not anything existed to restore. {@see clearDescendants} is the
+	 * only writer, and it already overwrites the same key on every subsequent edit at this level,
+	 * so an explicit clear here exists only to close the one gap that overwrite cannot: a snapshot
+	 * left behind by an edit that a REAL PICK resolved (never reaching this function at all) must
+	 * not survive to be replayed against some later, unrelated abandon — {@see onSelectFor} already
+	 * discards it for that reason on its own path; this one discards it on the abandon path itself,
+	 * so neither leaves a stale snapshot for the other to trip over.
+	 *
+	 * @param {Object} entry
+	 * @param {string} level
+	 * @returns {void}
+	 */
+	function restoreClearedDescendants( entry, level ) {
+		var snapshot = entry.clearedByEdit[ level ];
+
+		entry.clearedByEdit[ level ] = null;
+
+		if ( ! snapshot ) {
+			return;
+		}
+
+		Object.keys( snapshot ).forEach( function( fieldId ) {
+			var previousValue = snapshot[ fieldId ];
+
+			if ( ! previousValue ) {
+				return; // nothing was actually wiped for this field — nothing to restore.
+			}
+
+			var el = document.getElementById( fieldId );
+
+			if ( el && el.value ) {
+				return; // the customer already typed something of their own here — theirs wins.
+			}
+
+			// Silent, like clearDescendants() itself — a restore must not look like a fresh
+			// customer edit and re-trigger this same module's own change-gate.
+			writeSilently( entry, fieldId, previousValue );
+		} );
 	}
 
 	/**
@@ -2185,6 +2419,13 @@
 
 			if ( info.level ) {
 				entry.records[ info.level ] = null; // the field's own record no longer matches its text.
+				// Issue #350: whatever the text was before, this IS a real transition (the
+				// `entry.resolved[id] === newValue` guard above already ruled out a no-op) — so
+				// the field no longer carries the exact string a completed search once proved
+				// unresolved, even if the customer typed right back to nothing in particular.
+				// {@see onAbandonFor} re-sets this for the NEW text, if and when its own search
+				// completes and again finds nothing.
+				entry.unresolved[ info.level ] = null;
 
 				var level = info.level;
 				var section = entry.allNodes[ info.index ].section;
