@@ -100,6 +100,87 @@
  * With no `emptyText` supplied the old behaviour stands (listbox hidden, no
  * chrome), so a caller that wants silence still gets it.
  *
+ * ABANDON — adopting or reporting a typed-but-never-picked query (issue #350): this module has
+ * no "commit" concept of its own — {@see handleBlur} used to be one line, `closeListbox()`, and
+ * a customer who typed a locality and tabbed away without ever clicking a suggestion left the
+ * cascade layer with typed TEXT but no confirmed RECORD. For most fields that is harmless (the
+ * next `/select` from another field still works); for the settlement level it is not — issue
+ * #337's address lock has no exit for a town the provider genuinely does not carry, because
+ * such a town will never produce a suggestion to click. The operator's fix (17.08.2026) is
+ * `options.onAbandon`, an OPTIONAL third callback alongside `fetch`/`onSelect`:
+ *
+ * - a blur that leaves the query resolved to >= 1 suggestion ADOPTS the first one — the same
+ *   `selectItem()` a click or Enter would run, never a hand-rolled write/dispatch/close/onSelect
+ *   sequence of its own (the ordering in {@see selectItem} is load-bearing — see its own
+ *   docblock);
+ * - a blur that leaves the query resolved to exactly ZERO suggestions calls
+ *   `onAbandon({ query, resolved: true })` instead, so the caller can decide what "the provider
+ *   has nothing for this text" means for ITS OWN fields (`location-cascade.js` uses this to stop
+ *   locking the address field for a settlement the provider will never suggest — see that file's
+ *   `isAddressLocked()`);
+ * - a blur whose text is shorter than `minChars` — this module never even ASKED the provider
+ *   about it, so there is no completed search to report zero results for — calls
+ *   `onAbandon({ query, resolved: false })` instead: never adopts (there is nothing to adopt),
+ *   but still reports, because a query the widget REFUSED TO ASK is, from the customer's own
+ *   side, indistinguishable from one it asked and got nothing for — both leave them with typed
+ *   text and no suggestion they could ever click. A short-but-real settlement name is the
+ *   concrete case this closes (issue #350 follow-up, operator decision): without it, a customer
+ *   whose locality name is shorter than `minChars` had no way to ever clear #337's address lock.
+ *   `resolved` carries the true/false distinction so a caller that wants to tell "asked, got
+ *   nothing" apart from "never asked" still can; see `location-cascade.js`'s own docblock for
+ *   why its current consumer treats the two identically on purpose.
+ *
+ * "Resolved" is deliberately not "whatever `items` currently holds" — {@see closeListbox} (run
+ * on every prior close: a keystroke dropping below `minChars`, a completed pick, Escape, an
+ * outside click) empties `items` unconditionally, and on a MOUSE click-away
+ * {@see handleDocumentMousedown} closes at `mousedown`, strictly BEFORE the `blur` this logic
+ * runs on. Two pieces of state survive `closeListbox()` on purpose so this decision can still be
+ * made afterwards: `lastCompletedQuery`/`lastCompletedItems`, the last fetch that actually
+ * FINISHED (written only inside {@see runFetch}'s success branch, gated on its own generation
+ * still being current — a stale/discarded response can never masquerade as a real answer here
+ * either). Blur additionally FLUSHES a still-pending debounce or CHAINS onto a still-in-flight
+ * fetch ({@see ensureCompletedResults}) before deciding — the ordinary abandon (customer types
+ * the last few characters and tabs straight out) lands inside the 250ms debounce window far more
+ * often than after it, and without this flush the widget would see no completed query for the
+ * current text and adopt nothing, i.e. the bug this whole mechanism exists to close would
+ * survive unfixed for the single most common trigger.
+ *
+ * NEVER REPORTS ANYTHING AT ALL (no adopt, no `onAbandon`) ON: a blank input (there is no typed
+ * settlement to be unresolved about), an `Escape` since the last keystroke (`escaped`, an
+ * explicit customer cancel — never silently overridden by an auto-adopt or a report), or a blur
+ * whose value is exactly what {@see selectItem} itself just wrote (`committedValue` — a blur
+ * firing right after a genuine pick must not re-decide anything). A rejected fetch, or the widget
+ * detaching while the flush/chain above is still pending, also does nothing at all — see
+ * {@see handleBlur}'s own body. A query shorter than `minChars` is DIFFERENT from all of these —
+ * see the bullet list above: it never adopts, but it does report, `resolved: false`.
+ *
+ * A GUARD RE-RUNS AFTER THE ASYNC GAP {@see ensureCompletedResults} OPENS, right before adopting
+ * or reporting: `detached`, `input.value !== query` (the text changed under us — a fresh
+ * keystroke `handleInput()` already reacted to on its own terms), and `query === committedValue`
+ * (something committed this exact value WHILE the await was pending — most concretely, the
+ * listbox staying open through the gap on purpose, see {@see ensureCompletedResults}'s own
+ * docblock, and the customer clicking one of ITS options mid-await). Any of these three means
+ * this continuation no longer owns the decision and does nothing at all — never even
+ * `closeListbox()`, which the action that already ran (a pick closes it itself) or will still run
+ * (a fresh keystroke's own debounce) already owns.
+ *
+ * A LATE ADOPT RACING `location-cascade.js`'s OWN "typed but not picked" HANDLING IS SAFE AND
+ * DELIBERATELY UNGUARDED: a real browser already fires a native `change` on blur before this
+ * module's own `blur` listener runs, so by the time an async adopt here resolves,
+ * `handleFieldChanged()` has typically already read the abandoned text, dropped the field's
+ * record, and fired a spurious empty-key `woodev_location_applied`. The later `selectItem()` this
+ * module then runs supersedes it exactly the same way a slightly slower human click would — same
+ * write, same `input`/`change` dispatch, same `onSelect()` — so nothing extra is needed to
+ * suppress or reorder it.
+ *
+ * With no `onAbandon` supplied, `handleBlur()` is EXTERNALLY EQUIVALENT to before this feature
+ * existed — `closeListbox()` and nothing else, the same DOM/ARIA/focus outcome a caller could
+ * observe either way. It is not literally unchanged internally: every piece of new state above
+ * (`committedValue`, `inFlight`, `lastCompletedQuery`/`lastCompletedItems`) is still maintained
+ * by {@see selectItem}/{@see runFetch} regardless of whether `onAbandon` was supplied (there is
+ * no branch cheap enough to justify skipping it) — a caller with no `onAbandon` simply never
+ * reads any of it.
+ *
  * UMD-ish dual export (matches pickup-datasource.js): the module IS the
  * factory function.
  *   - Browser global: window.WoodevLocationTypeahead = attachTypeahead
@@ -206,6 +287,17 @@
 	 * @param {Function}         options.fetch    `function( query: string ): Promise<Array>`.
 	 * @param {Function}         options.onSelect `function( item: Object ): void`, called with the
 	 *                                             raw selected suggestion object.
+	 * @param {Function}         [options.onAbandon] `function( { query: string, resolved: boolean } ): void`
+	 *                                                — see the file docblock's ABANDON section.
+	 *                                                Called on blur, in place of an auto-adopt,
+	 *                                                when a completed search resolved to zero
+	 *                                                suggestions (`resolved: true`) OR when the
+	 *                                                query was too short to search at all
+	 *                                                (`resolved: false`). Omitted entirely:
+	 *                                                `handleBlur()` is externally equivalent to
+	 *                                                how it behaved before this option existed —
+	 *                                                see the file docblock's own note on what
+	 *                                                that equivalence does and does not cover.
 	 * @param {number}           [options.minChars] Minimum input length before a search fires.
 	 *                                               Defaults to {@see DEFAULT_MIN_CHARS}.
 	 * @param {string}           [options.emptyText] Message shown in the listbox when a completed
@@ -220,6 +312,7 @@
 			return Promise.resolve( [] );
 		};
 		var onSelectFn = 'function' === typeof opts.onSelect ? opts.onSelect : function() {};
+		var onAbandonFn = 'function' === typeof opts.onAbandon ? opts.onAbandon : null;
 		var minChars = 'number' === typeof opts.minChars && opts.minChars >= 0 ? opts.minChars : DEFAULT_MIN_CHARS;
 
 		var existing = instances.get( input );
@@ -278,6 +371,40 @@
 
 		/** @type {boolean} true once detach() has run — guards a second detach() call. */
 		var detached = false;
+
+		/**
+		 * ABANDON state — see the file docblock's own section. Unlike `items`/`activeIndex`,
+		 * NONE of the below is touched by {@see closeListbox}: it must all still answer correctly
+		 * for a blur that runs strictly after the listbox has already closed (a mouse click-away
+		 * closes at `mousedown`, well before its own `blur`).
+		 */
+
+		/** @type {string|null} the query the last COMPLETED fetch ran for — {@see runFetch}. */
+		var lastCompletedQuery = null;
+
+		/** @type {Array} that completed fetch's own result array. */
+		var lastCompletedItems = [];
+
+		/**
+		 * @type {boolean} true from an Escape keypress until the next `input` event — an explicit
+		 * cancel that {@see handleBlur} must never second-guess with an auto-adopt.
+		 */
+		var escaped = false;
+
+		/**
+		 * @type {string|null} the value {@see selectItem} last wrote into the input — a blur
+		 * landing right after a genuine pick (`input.value === committedValue`) has nothing left
+		 * to decide.
+		 */
+		var committedValue = null;
+
+		/**
+		 * @type {{generation: number, query: string, promise: Promise}|null} the most recently
+		 * ISSUED fetch's own bookkeeping, kept until a NEWER {@see runFetch} call overwrites it —
+		 * lets {@see ensureCompletedResults} chain onto a fetch that is still in flight at blur
+		 * time instead of starting a redundant second one.
+		 */
+		var inFlight = null;
 
 		/**
 		 * Shows or hides the busy indicator — see the file docblock's BUSY STATE
@@ -453,6 +580,10 @@
 			var value = item && 'string' === typeof item.value ? item.value : label;
 
 			input.value = value;
+			// See the file docblock's ABANDON section: a blur immediately after THIS write must
+			// find nothing left to decide, whether the pick came from a click/Enter or from
+			// handleBlur()'s own auto-adopt.
+			committedValue = value;
 			input.dispatchEvent( new Event( 'input', { bubbles: true } ) );
 			input.dispatchEvent( new Event( 'change', { bubbles: true } ) );
 
@@ -466,8 +597,16 @@
 		 * the result (success or failure) only if that generation is still
 		 * current when it settles — see the file docblock.
 		 *
+		 * ALSO records `inFlight` (for {@see ensureCompletedResults} to chain onto) and, on a
+		 * generation-current success, `lastCompletedQuery`/`lastCompletedItems` (the file
+		 * docblock's ABANDON state) — both are plain bookkeeping side effects of the SAME
+		 * generation-gated success branch every caller already relies on for `renderItems()`,
+		 * never a second, differently-gated decision. Returns the settling promise so
+		 * {@see ensureCompletedResults} can await it; every other existing caller ignores the
+		 * return value, so this is not a behaviour change for them.
+		 *
 		 * @param {string} query
-		 * @returns {void}
+		 * @returns {Promise}
 		 */
 		function runFetch( query ) {
 			generation += 1;
@@ -481,10 +620,10 @@
 				// to show — and nothing still outstanding, so the search is over.
 				setBusy( false );
 
-				return;
+				return Promise.resolve();
 			}
 
-			Promise.resolve( result ).then(
+			var settled = Promise.resolve( result ).then(
 				function( results ) {
 					// A response whose generation is stale must not clear the busy state
 					// either: a NEWER search owns it now, and this one losing the race is
@@ -494,6 +633,14 @@
 					}
 
 					setBusy( false );
+
+					// See the file docblock's ABANDON section — written ONLY here, inside the
+					// same "this response is still current" guard renderItems() already relies
+					// on, so a stale/discarded response can never masquerade as a real answer
+					// for a query the customer has since moved on from.
+					lastCompletedQuery = query;
+					lastCompletedItems = Array.isArray( results ) ? results : [];
+
 					renderItems( results );
 				},
 				function() {
@@ -501,10 +648,18 @@
 						return;
 					}
 
-					// `closeListbox()` clears the busy state itself.
+					// `closeListbox()` clears the busy state itself. Deliberately does NOT touch
+					// `lastCompletedQuery`/`lastCompletedItems` — a rejection leaves whatever the
+					// PREVIOUS completed fetch left there, which is exactly what makes those two
+					// read as stale-for-this-query rather than "resolved to zero" (see
+					// {@see handleBlur}: it only trusts them when `lastCompletedQuery === query`).
 					closeListbox();
 				}
 			);
+
+			inFlight = { generation: myGeneration, query: query, promise: settled };
+
+			return settled;
 		}
 
 		/**
@@ -519,6 +674,10 @@
 		 */
 		function handleInput() {
 			var query = input.value;
+
+			// See the file docblock's ABANDON section: Escape is an explicit cancel, but only
+			// until the customer actually types again — a fresh keystroke re-arms the auto-adopt.
+			escaped = false;
 
 			if ( null !== debounceTimer ) {
 				clearTimeout( debounceTimer );
@@ -586,6 +745,9 @@
 
 			if ( 'Escape' === event.key ) {
 				event.preventDefault();
+				// See the file docblock's ABANDON section — an explicit cancel {@see handleBlur}
+				// must never override with an auto-adopt, until the customer types again.
+				escaped = true;
 				closeListbox();
 			}
 		}
@@ -640,14 +802,139 @@
 		}
 
 		/**
+		 * Ensures a completed result set exists for exactly `query` before {@see handleBlur}
+		 * decides anything — see the file docblock's own reasoning for why this flush/chain step
+		 * is required, not optional: the ordinary abandon (typing the last characters and tabbing
+		 * straight out) lands INSIDE the 250ms debounce window far more often than after it.
+		 *
+		 * A pending debounce timer is cancelled and its fetch run immediately. Otherwise, a fetch
+		 * already in flight is chained onto via `inFlight.promise` — but ONLY when it is in flight
+		 * FOR `query` ITSELF (`inFlight.query === query`); `inFlight` always names the most
+		 * RECENTLY ISSUED fetch, which is not necessarily one for the CURRENT text — the DOM value
+		 * can change with no `input` event of this module's own in between (e.g.
+		 * `location-cascade.js`'s `writeSilently()`, used for backwards fill and the pickup-
+		 * address-replacing announcement, writes `el.value` directly). Chaining onto a stale
+		 * in-flight fetch there would let its resolution decide {@see handleBlur} for text it was
+		 * never asked about — `lastCompletedQuery` would then read as the OLD query, the
+		 * `lastCompletedQuery !== query` guard in {@see handleBlur} would find no usable answer for
+		 * the CURRENT text, and the customer would get silence: no adopt, no `onAbandon`, the exact
+		 * no-exit shape this whole mechanism exists to close. A query already answered by an
+		 * EARLIER completed fetch (`lastCompletedQuery === query`, nothing pending or in flight for
+		 * it) needs no fetch of its own either — the promise resolves on the very next microtask,
+		 * and the caller finds `lastCompletedQuery` already equal to `query`. Every other case runs
+		 * a fresh fetch for `query` explicitly (the same call the debounce-flush branch above
+		 * makes) — never a duplicate of one already outstanding for that exact text, since the
+		 * matching-`inFlight` branch above already claimed that case.
+		 *
+		 * @param {string} query
+		 * @returns {Promise}
+		 */
+		function ensureCompletedResults( query ) {
+			if ( null !== debounceTimer ) {
+				clearTimeout( debounceTimer );
+				debounceTimer = null;
+
+				return runFetch( query );
+			}
+
+			if ( inFlight && inFlight.query === query ) {
+				return inFlight.promise;
+			}
+
+			if ( lastCompletedQuery === query ) {
+				return Promise.resolve();
+			}
+
+			return runFetch( query );
+		}
+
+		/**
 		 * `blur` handler: the listbox is only ever relevant while the input is
 		 * focused (e.g. Tab away without any mouse click at all, which the
 		 * document mousedown listener would never see).
 		 *
+		 * WITHOUT `options.onAbandon` this is the original one-liner — `closeListbox()` and
+		 * nothing else (externally equivalent to before this option existed — see the file
+		 * docblock's own note on that). WITH it, see the file docblock's own ABANDON section for
+		 * the full contract; in short:
+		 *
+		 * - a blank input, an Escape since the last keystroke, or a value already matching
+		 *   {@see selectItem}'s last write reports NOTHING at all — just `closeListbox()`;
+		 * - a query shorter than `minChars` reports `onAbandon( { query, resolved: false } )` —
+		 *   never adopts (nothing was ever asked), but DOES report, since a query this module
+		 *   refused to ask about is, from the customer's own side, indistinguishable from one it
+		 *   asked and got nothing for;
+		 * - otherwise, flush/chain onto a completed fetch for the current text
+		 *   ({@see ensureCompletedResults}), RE-CHECK the guards below (the await it returns is an
+		 *   async gap something else may have already acted inside), and either adopt the first
+		 *   result, report `onAbandon( { query, resolved: true } )` for zero, or — if the guards
+		 *   below now say this continuation no longer owns the decision — do nothing at all.
+		 *
 		 * @returns {void}
 		 */
 		function handleBlur() {
-			closeListbox();
+			if ( ! onAbandonFn ) {
+				closeListbox();
+
+				return;
+			}
+
+			var query = input.value;
+
+			if ( '' === query || escaped || query === committedValue ) {
+				closeListbox();
+
+				return;
+			}
+
+			if ( query.length < minChars ) {
+				// See the file docblock's ABANDON section: this module never even asked the
+				// provider about a query this short, so there is no completed search to report
+				// zero results for — but a customer whose real settlement name is shorter than
+				// `minChars` still has no suggestion to click, exactly the dead end #350 exists to
+				// close. Reported, never adopted (there is nothing to adopt).
+				closeListbox();
+				onAbandonFn( { query: query, resolved: false } );
+
+				return;
+			}
+
+			ensureCompletedResults( query ).then( function() {
+				if ( detached ) {
+					return;
+				}
+
+				// The await above is a real async gap — something else may already have acted
+				// inside it. See the file docblock's own note on this guard for both cases:
+				// `input.value !== query` (the text changed under us — a fresh keystroke
+				// `handleInput()` already reacted to on its own terms) and `query === committedValue`
+				// (a real pick landed while this was pending — most concretely a click on the
+				// listbox {@see ensureCompletedResults} deliberately leaves open through the await).
+				// Either way this continuation no longer owns the decision — not even
+				// `closeListbox()`, which whatever already ran either already called itself (a pick)
+				// or will still call on its own terms (a fresh keystroke's own debounce/close path).
+				if ( input.value !== query || query === committedValue ) {
+					return;
+				}
+
+				if ( lastCompletedQuery !== query ) {
+					// Nothing usable for THIS exact text — the fetch for it rejected, or (a
+					// defensive case the invariants above should prevent) never ran at all. See
+					// the file docblock: silence, not a false "resolved to zero" report.
+					closeListbox();
+
+					return;
+				}
+
+				if ( lastCompletedItems.length >= 1 ) {
+					selectItem( lastCompletedItems[ 0 ] ); // closes the listbox itself.
+
+					return;
+				}
+
+				closeListbox();
+				onAbandonFn( { query: query, resolved: true } );
+			} );
 		}
 
 		input.addEventListener( 'input', handleInput );
