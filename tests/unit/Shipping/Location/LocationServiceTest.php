@@ -1231,6 +1231,81 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 		}
 
 		// -------------------------------------------------------------------
+		// get_level_owners_for_country(): issue #352's mixed-provider-chain fix
+		// (Variant A) — the sibling of get_levels_for_country() above that
+		// deliberately DOES reveal which provider serves each level, so the
+		// client can refuse to post a foreign-provider record into the
+		// server-side chain (Customer_Location_Store::rebuild_chain()'s
+		// is_within() check, issue #334, cannot prove cross-provider kinship).
+		// -------------------------------------------------------------------
+
+		public function test_get_level_owners_for_country_names_dadata_for_every_level_it_serves_in_ru(): void {
+			$this->stub_dadata_token( 'tok' );
+
+			$registry = Location_Provider_Registry::instance();
+			$registry->declare_needed();
+			$registry->collect();
+
+			$service = new Location_Service( $registry );
+
+			$this->assertSame(
+				[ 'region' => 'dadata', 'settlement' => 'dadata', 'address' => 'dadata' ],
+				$service->get_level_owners_for_country( 'RU' )
+			);
+		}
+
+		public function test_get_level_owners_for_country_reports_empty_string_for_an_unserved_level(): void {
+			$this->stub_dadata_token( 'tok' );
+
+			$registry = Location_Provider_Registry::instance();
+			$registry->declare_needed();
+			$registry->collect();
+
+			$service = new Location_Service( $registry );
+
+			// AM is GeoNames-tier — DaData serves region/settlement there, never address.
+			$this->assertSame(
+				[ 'region' => 'dadata', 'settlement' => 'dadata', 'address' => '' ],
+				$service->get_level_owners_for_country( 'AM' )
+			);
+		}
+
+		public function test_get_level_owners_for_country_reports_empty_string_for_every_level_when_the_layer_has_no_active_provider(): void {
+			$service = new Location_Service( Location_Provider_Registry::instance() );
+
+			$this->assertSame(
+				[ 'region' => '', 'settlement' => '', 'address' => '' ],
+				$service->get_level_owners_for_country( 'RU' )
+			);
+		}
+
+		/**
+		 * The mixed-chain case issue #352 exists for: a chosen provider owning
+		 * region/settlement, the bundled DaData fallback owning address alone —
+		 * `get_level_owners_for_country()` must name the RIGHT provider PER
+		 * LEVEL, never collapse to one id for the whole country. Same fixture
+		 * shape as {@see self::test_chain_city_only_chosen_with_configured_fallback_address_served_by_fallback()}.
+		 */
+		public function test_get_level_owners_for_country_names_different_providers_per_level_in_a_mixed_chain(): void {
+			$chosen = new Location_Service_Fake_Provider( 'city-dict', [ Location_Record::LEVEL_REGION, Location_Record::LEVEL_SETTLEMENT ], true );
+
+			Functions\when( 'add_action' )->justReturn( true );
+			$this->stub_providers_filter( [ $chosen ] );
+			$this->stub_dadata_token( 'tok' ); // the real bundled fallback must be configured to serve as fallback.
+
+			$registry = Location_Provider_Registry::instance();
+			$registry->declare_needed();
+			$registry->collect();
+
+			$service = new Location_Service( $registry );
+
+			$this->assertSame(
+				[ 'region' => 'city-dict', 'settlement' => 'city-dict', 'address' => 'dadata' ],
+				$service->get_level_owners_for_country( 'RU' )
+			);
+		}
+
+		// -------------------------------------------------------------------
 		// Degradation: no active provider -> every read-side method answers
 		// safely, nothing fatals
 		// -------------------------------------------------------------------

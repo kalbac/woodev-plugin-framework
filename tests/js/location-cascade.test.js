@@ -155,8 +155,8 @@ function locationField( level, section = 'billing' ) {
  * (`Checkout_Config::build_location_block()`).
  *
  * @param {{region?: boolean, settlement?: boolean, address?: boolean, section?: string,
- *          levels?: Object, countries?: string[], current?: Object|null, chain?: Object,
- *          implicit?: boolean, defaultCountry?: string}} opts
+ *          levels?: Object, owners?: Object, countries?: string[], current?: Object|null,
+ *          chain?: Object, implicit?: boolean, defaultCountry?: string}} opts
  * @returns {Object}
  */
 function buildConfig( opts ) {
@@ -189,6 +189,13 @@ function buildConfig( opts ) {
 			// coverage is per country (street data for RU/BY/KZ/UZ, city-only elsewhere), so
 			// a flat per-level map cannot describe it without lying.
 			levels: o.levels || { RU: { region: true, settlement: true, address: true } },
+			// Issue #352: keyed BY COUNTRY, same shape as `levels`, but each leaf is a
+			// provider id (or `''`) rather than a bool — omitted entirely (not merely
+			// `undefined`) unless a test opts in, so "no `owners` key at all" (an older
+			// server, or a plugin that builds the location block itself) is exercised as
+			// its own real case by every OTHER test in this file, mirroring the `chain`
+			// convention just below.
+			...( o.owners !== undefined ? { owners: o.owners } : {} ),
 			current: o.current !== undefined ? o.current : null,
 			// Issue #330 (spec §7): `{ level: { key, level } }`, alongside `current` — omitted
 			// entirely (not merely `undefined`) unless a test opts in, so "no `chain` key at
@@ -1131,6 +1138,239 @@ describe( 'backwards fill', () => {
 		// Exactly one new fetch: the /select persist call — no extra GET suggest lookups.
 		expect( global.fetch.mock.calls.length ).toBe( fetchCallCountBefore + 1 );
 		expect( fetchCalls[ fetchCalls.length - 1 ].url ).toBe( SELECT_URL );
+	} );
+
+	/**
+	 * Issue #352 (Variant A) — the measured bug's field-text half: a mixed provider chain
+	 * (the active provider owning `region`/`settlement`, the bundled DaData fallback owning
+	 * `address` alone) used to let picking an address overwrite the settlement/region text a
+	 * DIFFERENT provider had already written, with that OTHER provider's own — possibly
+	 * differently-spelled — component. A level with NO known owner still fills exactly as
+	 * before this fix: nobody owns it, so nothing is being clobbered.
+	 */
+	it( 'skips a foreign-owned ancestor while still filling an unowned one', () => {
+		boot( {
+			region: true, settlement: true, address: true,
+			// region is owned by the (different) active provider; settlement has no known
+			// owner in this fixture at all.
+			owners: { RU: { region: 'test-cdek', settlement: '', address: 'dadata' } },
+		} );
+
+		// The customer's own settlement pick, in the active provider's own Cyrillic spelling —
+		// this must survive untouched.
+		document.getElementById( 'billing_state' ).value = 'Московская область';
+
+		const addressCall = callFor( 'billing_address_1' );
+		const item = {
+			key: 'dadata:addr1', label: 'Moscow, Tverskaya st, 1', level: 'address',
+			record: {
+				key: 'dadata:addr1', provider_id: 'dadata', level: 'address', country: 'RU',
+				// DaData's OWN region component, under an English-locale account — exactly the
+				// spelling that must never overwrite the field above.
+				region: { name: 'Moscow Oblast', type: '' },
+				settlement: { name: 'Moscow', type: '' },
+				postcode: '101000',
+				label: 'Moscow, Tverskaya st, 1',
+			},
+		};
+
+		selectViaFake( addressCall, item );
+
+		// region is owned by 'test-cdek' ≠ the record's own 'dadata' — left untouched.
+		expect( document.getElementById( 'billing_state' ).value ).toBe( 'Московская область' );
+		// settlement has NO known owner — still filled from the record, unchanged behaviour.
+		expect( document.getElementById( 'billing_city' ).value ).toBe( 'Moscow' );
+		// postcode is never gated by ownership — it is not a chain level.
+		expect( document.getElementById( 'billing_postcode' ).value ).toBe( '101000' );
+	} );
+
+	/**
+	 * Issue #352's LITERAL reported defect, under the REAL rig owner map (the active
+	 * `test-cdek` provider owning `region`+`settlement`, the bundled DaData fallback owning
+	 * `address` alone). The operator measured `city = "Москва"` becoming `city = "Moscow"` and
+	 * `state = "Москва"` becoming `state = "Moscow"` the moment an address suggestion was
+	 * picked: the rig account's locale is English, so DaData answers transliterated while the
+	 * carrier answers Cyrillic (gotcha `a-locality-display-name-is-not-an-identifier`).
+	 *
+	 * The test above pins the UNOWNED half (a level nobody owns still fills). This one pins the
+	 * OWNED half, which is the half that was actually broken — without it the suite passes with
+	 * `settlement` left writable by any provider.
+	 */
+	it( 'leaves a foreign-owned settlement AND region untouched — the measured «Москва» → «Moscow» defect', () => {
+		boot( {
+			region: true, settlement: true, address: true,
+			owners: { RU: { region: 'test-cdek', settlement: 'test-cdek', address: 'dadata' } },
+		} );
+
+		// What the customer picked from the CDEK-backed provider, in its own Cyrillic spelling.
+		document.getElementById( 'billing_state' ).value = 'Москва';
+		document.getElementById( 'billing_city' ).value = 'Москва';
+
+		selectViaFake( callFor( 'billing_address_1' ), {
+			key: 'dadata:addr1', label: 'Moscow, Tverskaya st, 1', level: 'address',
+			record: {
+				key: 'dadata:addr1', provider_id: 'dadata', level: 'address', country: 'RU',
+				region: { name: 'Moscow', type: '' },
+				settlement: { name: 'Moscow', type: '' },
+				postcode: '101000',
+				label: 'Moscow, Tverskaya st, 1',
+			},
+		} );
+
+		expect( document.getElementById( 'billing_state' ).value ).toBe( 'Москва' );
+		expect( document.getElementById( 'billing_city' ).value ).toBe( 'Москва' );
+		// Still filled: postcode is not a chain level and is never gated by ownership.
+		expect( document.getElementById( 'billing_postcode' ).value ).toBe( '101000' );
+	} );
+} );
+
+// -----------------------------------------------------------------------
+// Issue #352 — mixed-provider chain: a foreign-provider record never enters the
+// SERVER-SIDE chain via /select (Variant A). See `class-checkout-config.php
+// ::build_location_block()`'s own `owners` docblock and `location-cascade.js`'s own
+// `mayEnterChain()` docblock for the full reasoning.
+// -----------------------------------------------------------------------
+
+describe( 'issue #352 — refusing to post a foreign-provider record into the server chain', () => {
+	const OWNERS_MIXED_CHAIN = { RU: { region: 'test-cdek', settlement: 'test-cdek', address: 'dadata' } };
+
+	function foreignAddressItem() {
+		return {
+			key: 'dadata:addr1', label: 'ул Тверская, 1', level: 'address',
+			record: {
+				key: 'dadata:addr1', provider_id: 'dadata', level: 'address', country: 'RU',
+				label: 'ул Тверская, 1',
+			},
+		};
+	}
+
+	it( 'does not POST /select for a record DEEPER than settlement whose provider does not own the settlement level', () => {
+		boot( { region: true, settlement: true, address: true, owners: OWNERS_MIXED_CHAIN } );
+
+		const fetchCallCountBefore = global.fetch.mock.calls.length;
+
+		selectViaFake( callFor( 'billing_address_1' ), foreignAddressItem() );
+
+		// No new fetch AT ALL — the /select POST never happened.
+		expect( global.fetch.mock.calls.length ).toBe( fetchCallCountBefore );
+	} );
+
+	it( 'still POSTs /select when the SAME provider owns the settlement level (single-provider chain)', () => {
+		boot( {
+			region: true, settlement: true, address: true,
+			owners: { RU: { region: 'dadata', settlement: 'dadata', address: 'dadata' } },
+		} );
+
+		const fetchCallCountBefore = global.fetch.mock.calls.length;
+
+		selectViaFake( callFor( 'billing_address_1' ), foreignAddressItem() );
+
+		expect( global.fetch.mock.calls.length ).toBe( fetchCallCountBefore + 1 );
+		expect( fetchCalls[ fetchCalls.length - 1 ].url ).toBe( SELECT_URL );
+	} );
+
+	/**
+	 * THE RULE MUST NOT BE RE-BROADENED — this is the adversarial critic's counter-example
+	 * (Codex/GPT-5.5, s78), and it is a REGRESSION GUARD, not a nicety.
+	 *
+	 * A first draft of `mayEnterChain()` refused a record unless its provider owned every served
+	 * level from the shallowest down to its own. Under a store whose active provider serves ONLY
+	 * `region`, with the bundled DaData fallback serving `settlement` and `address`, that draft
+	 * refused the SETTLEMENT pick because `region` had a foreign owner. The settlement record
+	 * then never reached the server at all, `Provider_Selection_Scope::current_locality()` kept
+	 * answering `''`, and the customer's pickup point could never be filed or restored — strictly
+	 * WORSE than the unfixed code, which posts the settlement, lets `rebuild_chain()` drop the
+	 * unprovable region, and ends with a usable `{ settlement: … }` chain.
+	 *
+	 * The settlement level is the anchor. Nothing at or above it is ever refused.
+	 */
+	it( 'still POSTs a settlement pick even when a SHALLOWER level is foreign-owned (the anchor is never refused)', () => {
+		boot( {
+			region: true, settlement: true, address: true,
+			owners: { RU: { region: 'city-dict', settlement: 'dadata', address: 'dadata' } },
+		} );
+
+		const fetchCallCountBefore = global.fetch.mock.calls.length;
+
+		selectViaFake( callFor( 'billing_city' ), {
+			key: 'dadata:city1', label: 'г Москва', level: 'settlement',
+			record: {
+				key: 'dadata:city1', provider_id: 'dadata', level: 'settlement', country: 'RU',
+				label: 'г Москва',
+			},
+		} );
+
+		expect( global.fetch.mock.calls.length ).toBe( fetchCallCountBefore + 1 );
+		expect( fetchCalls[ fetchCalls.length - 1 ].url ).toBe( SELECT_URL );
+	} );
+
+	it( 'still POSTs /select exactly as before this fix when the config carries no `owners` map at all', () => {
+		// No `owners` key in the config at all — an older cached config, or a plugin/test
+		// harness building the location block itself. Must degrade to EXACTLY the pre-#352
+		// behaviour: every pick reaches /select, regardless of provider.
+		boot( { region: true, settlement: true, address: true } );
+
+		const fetchCallCountBefore = global.fetch.mock.calls.length;
+
+		selectViaFake( callFor( 'billing_address_1' ), foreignAddressItem() );
+
+		expect( global.fetch.mock.calls.length ).toBe( fetchCallCountBefore + 1 );
+		expect( fetchCalls[ fetchCalls.length - 1 ].url ).toBe( SELECT_URL );
+	} );
+
+	/**
+	 * The coordinator's own measurement: WooCommerce's classic checkout does not reliably fire
+	 * `update_checkout` off an address change on its own (gotcha
+	 * `wc-does-not-save-the-address-until-every-required-text-field-is-filled`), and
+	 * `backwardsFill()`'s silent writes dispatch no event of their own — so a foreign record
+	 * that skips /select must still trigger `update_checkout` itself, or the address/postcode
+	 * it just wrote into the DOM never reaches WooCommerce's own pricing at all.
+	 */
+	it( 'foreign record: no /select POST, but update_checkout still fires', () => {
+		boot( { region: true, settlement: true, address: true, owners: OWNERS_MIXED_CHAIN } );
+
+		const triggerSpy = jest.spyOn( window.jQuery.fn, 'trigger' );
+		const fetchCallCountBefore = global.fetch.mock.calls.length;
+
+		selectViaFake( callFor( 'billing_address_1' ), foreignAddressItem() );
+
+		expect( global.fetch.mock.calls.length ).toBe( fetchCallCountBefore );
+		expect( triggerSpy.mock.calls.some( ( args ) => args[ 0 ] === 'update_checkout' ) ).toBe( true );
+
+		triggerSpy.mockRestore();
+	} );
+
+	it( 'does not fire woodev_location_applied for a foreign-provider record', () => {
+		boot( { region: true, settlement: true, address: true, owners: OWNERS_MIXED_CHAIN } );
+
+		const seen = [];
+		document.body.addEventListener( 'woodev_location_applied', ( event ) => seen.push( event.detail ) );
+
+		selectViaFake( callFor( 'billing_address_1' ), foreignAddressItem() );
+
+		expect( seen ).toHaveLength( 0 );
+	} );
+
+	it( 'the LOCAL record and the address lock still update for a refused, foreign-provider pick', () => {
+		boot( { region: true, settlement: true, address: true, owners: OWNERS_MIXED_CHAIN } );
+
+		// The address field starts locked (issue #337: a settlement/address chain with the
+		// address level served and no settlement confirmed yet).
+		expect( document.getElementById( 'billing_address_1' ).disabled ).toBe( true );
+
+		// Confirm a settlement first — through the OWNING provider, so /select DOES fire and
+		// unlocks the address field, exactly like the real mixed-chain flow.
+		selectViaFake( callFor( 'billing_city' ), {
+			key: 'test-cdek:msk', label: 'г Москва', level: 'settlement',
+			record: { key: 'test-cdek:msk', provider_id: 'test-cdek', level: 'settlement', country: 'RU', label: 'г Москва' },
+		} );
+		expect( document.getElementById( 'billing_address_1' ).disabled ).toBe( false );
+
+		selectViaFake( callFor( 'billing_address_1' ), foreignAddressItem() );
+
+		// Still unlocked — refusing the /select POST does not re-lock a field the customer can
+		// already see is confirmed and editable.
+		expect( document.getElementById( 'billing_address_1' ).disabled ).toBe( false );
 	} );
 } );
 

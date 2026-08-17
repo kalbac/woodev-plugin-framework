@@ -651,9 +651,146 @@ class CheckoutConfigTest extends TestCase {
 		sort( $countries );
 		$this->assertSame( [ 'BY', 'RU' ], $countries );
 
-		$serialized = (string) json_encode( $config );
-		$this->assertStringNotContainsString( 'city-dict', $serialized, 'the chosen provider id must never leak' );
-		$this->assertStringNotContainsString( 'dadata', $serialized, 'the fallback provider id must never leak' );
+		// Issue #352 (Variant A): `owners` is spec D15's one DELIBERATE exception — it names
+		// providers on purpose, so the client can refuse a foreign-provider record before ever
+		// posting it (see `class-checkout-config.php::build_location_block()`'s own `owners`
+		// docblock). Every OTHER key must still honour the non-leak guarantee, so the check
+		// below runs against the config WITH `owners` stripped out first.
+		$without_owners = $config;
+		unset( $without_owners['location']['owners'] );
+		$serialized = (string) json_encode( $without_owners );
+		$this->assertStringNotContainsString( 'city-dict', $serialized, 'the chosen provider id must never leak outside owners' );
+		$this->assertStringNotContainsString( 'dadata', $serialized, 'the fallback provider id must never leak outside owners' );
+
+		// The other half of the same fact: `owners` DOES legitimately carry both ids for the
+		// levels each provider actually resolves — RU's region/settlement (the chosen provider)
+		// and BY's address (the fallback), proving this is a real publication, not an accident.
+		$this->assertSame( 'city-dict', $config['location']['owners']['RU']['region'] );
+		$this->assertSame( 'dadata', $config['location']['owners']['BY']['address'] );
+	}
+
+	// -------------------------------------------------------------------------
+	// owners — issue #352's mixed-provider-chain fix (Variant A): per-level provider
+	// ownership, byte-consistent with `levels` (owners[c][l] === '' EXACTLY when
+	// levels[c][l] === false, for the SAME country/level).
+	// -------------------------------------------------------------------------
+
+	public function test_owners_reports_empty_string_for_a_level_no_provider_serves(): void {
+		$service = new Checkout_Config_Fake_Location_Service(
+			true,
+			[ 'region' => true, 'settlement' => true, 'address' => false ],
+			null,
+			[ 'RU' ]
+		);
+		$config = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ], $service ) )
+			->build( Checkout_Fields::from_array( [] ) );
+
+		$this->assertFalse( $config['location']['levels']['RU']['address'] );
+		$this->assertSame( '', $config['location']['owners']['RU']['address'] );
+		// The SERVED levels carry the real (fake, here) provider id.
+		$this->assertSame( 'fake-provider-should-never-leak', $config['location']['owners']['RU']['region'] );
+		$this->assertSame( 'fake-provider-should-never-leak', $config['location']['owners']['RU']['settlement'] );
+	}
+
+	/**
+	 * The #294 arbitration must apply to BOTH maps together (this method's own docblock's
+	 * byte-consistency promise): a country whose region is stood down because WooCommerce
+	 * already renders a native `<select>` there must report `owners[c].region === ''` too,
+	 * even though the D15 chain itself DOES resolve a provider for that level — otherwise the
+	 * client could see a non-empty `owners[c].region` for a level `levels[c].region === false`
+	 * already told it is not a typeahead target, which `mayEnterChain()` client-side would then
+	 * read as "this provider owns region" for a field WooCommerce, not this layer, actually
+	 * renders.
+	 */
+	public function test_owners_region_is_forced_empty_by_the_294_arbitration_together_with_levels(): void {
+		Functions\expect( '_doing_it_wrong' )->once();
+
+		$service = new Checkout_Config_Fake_Location_Service( true, [ 'region' => true, 'settlement' => true, 'address' => true ], null, [ 'BY' ] );
+		$config  = $this->config_with_states( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'BY' ], $service, [ 'BY' => [ 'MIN' => 'Минск' ] ] )
+			->build( Checkout_Fields::from_array( [] ) );
+
+		$this->assertFalse( $config['location']['levels']['BY']['region'] );
+		$this->assertSame( '', $config['location']['owners']['BY']['region'], 'owners must agree with levels — never name an owner for a level WC already renders natively' );
+		// Only `region` is affected — settlement stays the fake provider's, untouched by the
+		// arbitration (which is region-specific).
+		$this->assertSame( 'fake-provider-should-never-leak', $config['location']['owners']['BY']['settlement'] );
+	}
+
+	/**
+	 * The mixed-chain case issue #352 exists for, end-to-end through the REAL
+	 * {@see Location_Service} + provider registry (not the simplified fake above, which
+	 * cannot model two DIFFERENTLY-countried providers along the chain — same reasoning as
+	 * {@see self::test_location_countries_is_the_union_across_the_d15_chain_not_just_the_active_provider()}):
+	 * the chosen provider owns region/settlement, the bundled DaData fallback owns address
+	 * alone, for the SAME country. `owners['RU']` must name the RIGHT provider PER LEVEL.
+	 */
+	public function test_owners_names_different_providers_per_level_in_a_mixed_chain(): void {
+		Location_Provider_Registry::instance()->reset_for_tests();
+		Settings_Page_Registry::instance()->reset_for_tests();
+
+		$chosen = new class() extends Abstract_Location_Provider {
+			public function get_id(): string {
+				return 'city-dict';
+			}
+
+			public function get_name(): string {
+				return 'City Dict';
+			}
+
+			public function get_countries(): array {
+				return [ 'RU' ];
+			}
+
+			protected function declare_suggest_levels(): array {
+				return [ Location_Record::LEVEL_REGION, Location_Record::LEVEL_SETTLEMENT ];
+			}
+
+			public function suggest( string $query, Location_Scope $scope ): array {
+				return [];
+			}
+		};
+
+		Functions\when( 'add_action' )->justReturn( true );
+		Functions\when( '__' )->returnArg( 1 );
+		Functions\when( 'wp_parse_args' )->alias(
+			static function ( $args, $defaults = [] ) {
+				return array_merge( (array) $defaults, (array) $args );
+			}
+		);
+		Functions\when( 'is_user_logged_in' )->justReturn( false );
+		Functions\when( 'apply_filters' )->alias(
+			static function ( string $tag, $default = null ) use ( $chosen ) {
+				return Location_Provider_Registry::FILTER_PROVIDERS === $tag ? [ $chosen ] : $default;
+			}
+		);
+		Functions\when( 'get_option' )->alias(
+			static function ( $name, $default = null ) {
+				if ( 'woodev_location_active_provider' === $name ) {
+					return 'city-dict';
+				}
+				if ( 'woodev_location_token' === $name ) {
+					return 'tok'; // configures the bundled fallback.
+				}
+
+				return $default;
+			}
+		);
+		Functions\when( 'wc_get_base_location' )->justReturn( [ 'country' => 'RU', 'state' => '' ] );
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$service = new Location_Service( $registry );
+		$this->assertTrue( $service->is_active() );
+
+		$config = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ], $service ) )
+			->build( Checkout_Fields::from_array( [] ) );
+
+		$this->assertSame(
+			[ 'region' => 'city-dict', 'settlement' => 'city-dict', 'address' => 'dadata' ],
+			$config['location']['owners']['RU']
+		);
 	}
 
 	// -------------------------------------------------------------------------
@@ -808,9 +945,21 @@ class CheckoutConfigTest extends TestCase {
 		// The fake provider's own id is a distinctive string chosen specifically so
 		// this assertion is meaningful, not merely "matches by accident". Only the
 		// customer record's own persisted key (which the client already round-tripped
-		// itself via /select) may legitimately carry a provider prefix.
-		$serialized = (string) json_encode( $config );
+		// itself via /select) may legitimately carry a provider prefix — and, since
+		// issue #352, `owners`, spec D15's one deliberate exception (see
+		// `class-checkout-config.php::build_location_block()`'s own `owners` docblock),
+		// so THAT key is stripped before this check runs.
+		$without_owners = $config;
+		unset( $without_owners['location']['owners'] );
+		$serialized = (string) json_encode( $without_owners );
 		$this->assertStringNotContainsString( 'fake-provider-should-never-leak', $serialized );
+
+		// The other half: `owners` DOES legitimately name it, for every level this fake
+		// reports as served.
+		$this->assertSame(
+			[ 'region' => 'fake-provider-should-never-leak', 'settlement' => 'fake-provider-should-never-leak', 'address' => 'fake-provider-should-never-leak' ],
+			$config['location']['owners']['RU']
+		);
 	}
 
 	// -------------------------------------------------------------------------
@@ -877,8 +1026,18 @@ class CheckoutConfigTest extends TestCase {
 		$serialized = (string) json_encode( $config );
 		$this->assertStringNotContainsString( $token, $serialized );
 		$this->assertStringNotContainsString( $secret, $serialized );
-		// D15: the client learns WHICH LEVELS are served, never WHICH provider.
-		$this->assertStringNotContainsString( 'dadata', $serialized );
+
+		// D15: `levels`/`countries`/`mode`/etc. still learn only WHICH LEVELS are served,
+		// never WHICH provider — `owners` is the one deliberate exception (issue #352; see
+		// `class-checkout-config.php::build_location_block()`'s own `owners` docblock), so
+		// it is stripped before this specific check runs.
+		$without_owners = $config;
+		unset( $without_owners['location']['owners'] );
+		$this->assertStringNotContainsString( 'dadata', (string) json_encode( $without_owners ) );
+
+		// The other half: with only ONE provider active (the bundled DaData fallback,
+		// nothing else configured), `owners` legitimately names it for every level RU serves.
+		$this->assertSame( 'dadata', $config['location']['owners']['RU']['region'] );
 	}
 
 	// -------------------------------------------------------------------------

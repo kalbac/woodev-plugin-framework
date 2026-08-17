@@ -366,6 +366,45 @@
 		return ( entry.location && entry.location.defaultCountry ) || '';
 	}
 
+
+	/**
+	 * The country whose owner map governs an ownership decision about `record` (issue #352
+	 * follow-up, post-review finding P1) — `record`'s OWN `country` field when it carries one,
+	 * falling back to {@see countryFor}'s live-field read only for the defensive case of a
+	 * record with none.
+	 *
+	 * WHY THE RECORD'S OWN COUNTRY, NOT THE LIVE FIELD: {@see mayEnterChain} and
+	 * {@see backwardsFill} both ask "who owns this level in the country THIS RECORD belongs
+	 * to" — resolving that via the live country `<select>` instead answers the WRONG owner map
+	 * when the country changed between the moment the suggestion was fetched and the moment it
+	 * was clicked (a real, if narrow, window: typeahead results are already in flight before a
+	 * click). Every record that reaches this module already passed through
+	 * `Location_Record::from_array()` server-side, which REQUIRES `country` and upper-cases it
+	 * (that method's own docblock: "Required: … `country` … case-normalized to upper-case on
+	 * the way in") — so the fallback below is defensive only, never observed to actually fire.
+	 * `owners` is keyed by the SAME upper-case WC country codes `class-checkout-config.php`
+	 * iterates to build it, so no case normalization is needed at the {@see levelOwner} lookup
+	 * either; verified against both sources rather than assumed.
+	 *
+	 * NOT A FIX FOR A STALE CROSS-COUNTRY RECORD: a record fetched for one country and clicked
+	 * after the customer already switched the country field to another is issue #346, and is
+	 * deliberately left alone here — this function only makes sure the OWNERSHIP CHECK itself
+	 * consults the right country while the record is still live, not whether the record itself
+	 * is still valid to apply at all.
+	 *
+	 * @param {Object} entry
+	 * @param {{section?: string}} node
+	 * @param {Object} record
+	 * @returns {string}
+	 */
+	function countryForRecord( entry, node, record ) {
+		if ( record && 'string' === typeof record.country && record.country ) {
+			return record.country;
+		}
+
+		return countryFor( entry, node );
+	}
+
 	/**
 	 * Whether the live "ship to a different address" checkbox is checked — read by its stable
 	 * `name` attribute, the SAME selector `pickup-mount.js`'s own `resolveAddressTarget()`
@@ -843,29 +882,66 @@
 	 * address-level record's OWN embedded components — no second lookup. Only levels STRICTLY
 	 * BEFORE the selected one are filled (selecting a settlement never touches address).
 	 *
+	 * SKIPS A FOREIGN-OWNED ANCESTOR (issue #352, Variant A): an ancestor level with a KNOWN
+	 * owner ({@see levelOwner}) that DIFFERS from `record.provider_id` is left untouched — this
+	 * is the measured bug's field-text half. A mixed provider chain (e.g. the active provider
+	 * serving `region`/`settlement`, the bundled DaData fallback serving `address`) used to let
+	 * the customer pick their settlement from one provider («Москва», Cyrillic) and their street
+	 * from the other, whose OWN record for that same locality carries a different spelling under
+	 * a different account locale («Moscow» — gotcha `a-locality-display-name-is-not-an-identifier`)
+	 * — this function would then overwrite the settlement field's correct text with the address
+	 * provider's own, wrong one. An ancestor level with NO known owner (`''` — unserved, or an
+	 * older config carrying no `owners` map at all) still fills exactly as before this fix:
+	 * nobody owns it, so nothing is being clobbered by writing there.
+	 *
+	 * `record.postcode` is NEVER gated by ownership — postcode is not a chain LEVEL (it has no
+	 * entry in {@see LEVELS}/`owners`), and a foreign provider's postcode for the customer's own
+	 * street is correct data the order wants regardless of which provider resolved the settlement
+	 * above it.
+	 *
+	 * OWNERSHIP IS JUDGED BY THE RECORD'S OWN COUNTRY (issue #352 follow-up, P1), via
+	 * {@see countryForRecord} — not the live country field {@see countryFor} alone would read —
+	 * so a country change between fetching the suggestion and clicking it cannot make this
+	 * function consult the wrong country's owner map. See {@see countryForRecord}'s own
+	 * docblock for the full reasoning and what this deliberately does NOT fix (issue #346).
+	 *
 	 * @param {Object} entry
-	 * @param {string} level  The level that was just selected.
+	 * @param {{level: string, section?: string}} node   The node that was just selected — its
+	 *                                                    `level` is the level just selected;
+	 *                                                    its `section` is used only as
+	 *                                                    {@see countryForRecord}'s fallback when
+	 *                                                    `record` carries no `country` of its own.
 	 * @param {Object} record The selected record.
 	 * @returns {void}
 	 */
-	function backwardsFill( entry, level, record ) {
+	function backwardsFill( entry, node, record ) {
+		var level = node.level;
 		var idx = LEVELS.indexOf( level );
+		// Issue #352 follow-up (P1): the RECORD's own country, not the live field — see
+		// {@see countryForRecord}'s own docblock for why.
+		var country = countryForRecord( entry, node, record );
 
 		LEVELS.forEach( function( ancestorLevel, i ) {
 			if ( i >= idx ) {
 				return;
 			}
 
-			var node = chainNodeForLevel( entry, ancestorLevel );
+			var ancestorNode = chainNodeForLevel( entry, ancestorLevel );
 			var component = record[ ancestorLevel ];
 
-			if ( ! node || ! component ) {
+			if ( ! ancestorNode || ! component ) {
+				return;
+			}
+
+			var owner = levelOwner( entry, country, ancestorLevel );
+
+			if ( owner && owner !== record.provider_id ) {
 				return;
 			}
 
 			// Same derivation a direct pick at that level gets ({@see fieldValueFor}) — a
 			// backwards-filled field and a directly picked one must not read differently.
-			writeSilently( entry, node.fieldId, fieldValueFor( record, ancestorLevel ) );
+			writeSilently( entry, ancestorNode.fieldId, fieldValueFor( record, ancestorLevel ) );
 		} );
 
 		if ( record.postcode && entry.postcodeFieldId ) {
@@ -1031,6 +1107,28 @@
 	}
 
 	/**
+	 * Fires WooCommerce's own `update_checkout` — the ONE place this module fires it itself,
+	 * because WooCommerce's OWN client-side gate does not reliably fire it off an address change
+	 * on its own (gotcha `wc-does-not-save-the-address-until-every-required-text-field-is-filled`
+	 * — `checkout.js`'s `maybe_update_checkout()` withholds it while ANY required TEXT field in
+	 * the same block is still empty; see the file docblock's own D8/PERSIST THEN TRIGGER
+	 * section). Two call sites share this exact trigger (issue #352): the ordinary
+	 * persisted-`/select` path ({@see settleSelect}), and the foreign-provider-record path
+	 * ({@see onSelectFor}, gated by {@see mayEnterChain}) — a record `mayEnterChain()` refuses
+	 * never reaches `/select` at all, but {@see backwardsFill}'s SILENT writes (never dispatching
+	 * an `input`/`change` event of their own — see {@see writeSilently}) may still have changed
+	 * the address WooCommerce needs to re-price, so the checkout must still refresh even though
+	 * nothing was persisted server-side for this pick.
+	 *
+	 * @returns {void}
+	 */
+	function triggerCheckoutUpdate() {
+		if ( window.jQuery ) {
+			window.jQuery( document.body ).trigger( 'update_checkout' );
+		}
+	}
+
+	/**
 	 * Frees the single-flight slot for `entry` and either forwards to the next queued
 	 * selection (a newer one arrived while this request was in flight — this response is
 	 * stale by construction, so it never fires the trigger NOR shows a notice for it) or,
@@ -1094,10 +1192,7 @@
 			// D11) — `implicit` is unconditionally `false` here, regardless of what the
 			// PREVIOUS state (boot's own fire, see {@see prefill}) said.
 			fireLocationApplied( entry, record, false );
-
-			if ( window.jQuery ) {
-				window.jQuery( document.body ).trigger( 'update_checkout' );
-			}
+			triggerCheckoutUpdate();
 
 			return;
 		}
@@ -1273,6 +1368,20 @@
 	 * later — only the SERVER round trip (and, with it, the `woodev_location_applied` event
 	 * and `update_checkout` trigger) is gated on {@see isActiveAddressSection}.
 	 *
+	 * ONLY ENTERS THE SERVER-SIDE CHAIN WHEN {@see mayEnterChain} SAYS SO (issue #352, Variant
+	 * A): a record DEEPER than `settlement` whose own provider is not the one that owns the
+	 * `settlement` level never reaches `/select` at all — posting it would let the server's
+	 * `is_within()` ancestor-kinship check (issue #334, unchanged) amputate the settlement record
+	 * a DIFFERENT provider persisted, and that record is the one thing
+	 * `Provider_Selection_Scope::current_locality()` reads. See {@see mayEnterChain}'s own
+	 * docblock for why the rule stops at `settlement` and must not be broadened to every
+	 * shallower level. The LOCAL state (`entry.records[node.level]`,
+	 * {@see backwardsFill}, {@see refreshAddressLock}) still updates regardless — only the round
+	 * trip is refused. {@see triggerCheckoutUpdate} still fires for a refused pick (see that
+	 * function's own docblock for why WooCommerce needs the nudge even with nothing persisted),
+	 * but neither `/select` nor `woodev_location_applied` do — see {@see mayEnterChain}'s own
+	 * docblock for what a refusal deliberately leaves alone.
+	 *
 	 * @param {Object} entry
 	 * @param {{level: string, fieldId: string, section?: string}} node
 	 * @returns {function(Object): void}
@@ -1291,7 +1400,7 @@
 			// entry-level, not node-level, concept.
 			entry.lastSelectedFieldId = node.fieldId;
 
-			backwardsFill( entry, node.level, record );
+			backwardsFill( entry, node, record );
 
 			// Issue #337: a settlement pick unlocks the address field on the SPOT, off the
 			// optimistic record above — never only once `/select` comes back. Waiting for the
@@ -1300,7 +1409,17 @@
 			refreshAddressLock( entry );
 
 			if ( isActiveAddressSection( node.section ) ) {
-				enqueueSelect( entry, record );
+				if ( mayEnterChain( entry, node, record ) ) {
+					enqueueSelect( entry, record );
+				} else {
+					// Issue #352: a foreign-provider record never reaches /select, so
+					// nothing downstream of it (update_checkout, the "not saved" notice)
+					// fires on ITS behalf either — but backwardsFill()'s silent writes above
+					// may still have changed the address WooCommerce needs to re-price, and
+					// nothing else will ever ask it to. See triggerCheckoutUpdate()'s own
+					// docblock.
+					triggerCheckoutUpdate();
+				}
 			}
 		};
 	}
@@ -1342,6 +1461,102 @@
 		}
 
 		return !! byCountry[ country ][ level ];
+	}
+
+	/**
+	 * The id of the provider that owns `level` for `country` (issue #352, Variant A) — `''`
+	 * (never throws, never `undefined`) when unknown/unserved OR when `entry.location.owners`
+	 * is absent entirely (an older cached config, a plugin/test harness that builds the location
+	 * block itself without this key, or a config predating this fix) — an ABSENT map degrades to
+	 * EXACTLY today's behaviour, never a hard failure: every caller below treats `''` as "nobody
+	 * to conflict with", which is precisely the single-provider-chain answer this module already
+	 * gave before `owners` existed.
+	 *
+	 * Mirrors {@see isLevelServed}'s own shape exactly (same `byCountry`/`country`/`level`
+	 * lookup), reading `entry.location.owners` — the sibling map
+	 * `class-checkout-config.php::build_location_block()` populates from
+	 * `Location_Service::get_level_owners_for_country()`, `owners[c][l] === ''` EXACTLY when
+	 * `levels[c][l] === false` for the same country/level (that method's own docblock).
+	 *
+	 * @param {Object} entry
+	 * @param {string} country ISO-3166 alpha-2.
+	 * @param {string} level
+	 * @returns {string}
+	 */
+	function levelOwner( entry, country, level ) {
+		var byCountry = entry.location && entry.location.owners;
+
+		if ( ! byCountry || ! country || ! byCountry[ country ] ) {
+			return '';
+		}
+
+		var owner = byCountry[ country ][ level ];
+
+		return 'string' === typeof owner ? owner : '';
+	}
+
+	/**
+	 * Whether `record` may enter the SERVER-SIDE location chain via `/select` (issue #352,
+	 * operator decision "Variant A") — the fix for the mixed-provider-chain bug: a store can run
+	 * an active provider (e.g. a CDEK-backed one) for `region`/`settlement` and the bundled
+	 * DaData fallback for `address` alone (the exact rig configuration the bug was found on).
+	 * `Customer_Location_Store::rebuild_chain()` keeps a shallower STORED record only when the
+	 * new one can PROVE kinship with it (`Location_Record::is_within()`, which requires every
+	 * ancestor to share the SAME provider — issue #334, deliberately kept UNCHANGED by this fix:
+	 * a Moscow settlement must not survive a Saint-Petersburg address, and that rule cannot tell
+	 * "different provider" apart from "different place"). A DaData address record posted on top
+	 * of a CDEK settlement can therefore never prove kinship — posting it anyway silently
+	 * amputates the settlement (and, with it, the pickup layer's own locality key) the instant
+	 * the server applies that rule. See `class-checkout-config.php::build_location_block()`'s own
+	 * `owners` docblock for the server-side half of this reasoning.
+	 *
+	 * THE RULE IS NARROWER THAN "owns every served level down to `node.level`" — IT ONLY LOOKS
+	 * AT `settlement` (operator decision, #352 rescope, post-review). An EARLIER version of this
+	 * function refused a record unless its provider owned every served level from the shallowest
+	 * one down to and including `node.level`. That was an over-generalization of the operator's
+	 * actual words — «чужая АДРЕСНАЯ запись в цепочку не попадает вовсе — адрес от провайдера,
+	 * который не владеет уровнем НП, живёт только как ТЕКСТ полей» — and it caused a REGRESSION
+	 * an adversarial review caught: a store whose active provider serves only `region`, with the
+	 * bundled DaData fallback serving `settlement`/`address`, refused the customer's OWN
+	 * settlement pick (foreign `region` owner) exactly as it refused a genuinely foreign one. The
+	 * settlement record then never posted, {@see \Woodev\Framework\Shipping\Pickup\Provider_Selection_Scope::current_locality()}
+	 * (`class-provider-selection-scope.php`) kept answering `''` because it reads the SETTLEMENT
+	 * record STRICTLY and refuses when there is none, and the customer's pickup point could never
+	 * be filed or restored — strictly WORSE than the unfixed #352 bug, which at least posted the
+	 * settlement and let `rebuild_chain()` drop only the unprovable region.
+	 *
+	 * `settlement` is the anchor for exactly that reason: it is the ONE level a live consumer
+	 * reads strictly and breaks without. `record` may enter the chain when EITHER (a) its own
+	 * `node.level` sits at `settlement` or shallower (`region`/`settlement` never conflict with a
+	 * shallower foreign owner — there is nothing shallower than `region` to protect, and a
+	 * `settlement` pick is itself the thing being protected), OR (b) `settlement`'s KNOWN owner
+	 * ({@see levelOwner} — `''` means unserved, or an absent `owners` map; either way, nobody to
+	 * conflict with) equals `record.provider_id`. Do NOT re-broaden this to every served level —
+	 * that is the exact change that regressed.
+	 *
+	 * WHAT THIS DOES NOT GATE (see {@see onSelectFor}'s own call site): `entry.records[node.level]`
+	 * (the LOCAL record the address widget/map read) and {@see refreshAddressLock} both still run
+	 * regardless of this predicate's answer, and {@see backwardsFill} makes its OWN,
+	 * per-ancestor-level ownership decision — only the `/select` POST into the server chain is
+	 * gated here.
+	 *
+	 * @param {Object} entry
+	 * @param {{level: string, section?: string}} node
+	 * @param {Object} record
+	 * @returns {boolean}
+	 */
+	function mayEnterChain( entry, node, record ) {
+		var idx = LEVELS.indexOf( node.level );
+		var settlementIdx = LEVELS.indexOf( 'settlement' );
+
+		if ( idx <= settlementIdx ) {
+			return true;
+		}
+
+		var country = countryForRecord( entry, node, record );
+		var owner = levelOwner( entry, country, 'settlement' );
+
+		return ! owner || owner === record.provider_id;
 	}
 
 	/**
