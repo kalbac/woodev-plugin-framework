@@ -1049,6 +1049,15 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			};
 
 			$reflection = new \ReflectionProperty( Location_Service::class, 'unpersisted_default' );
+
+			// Required on PHP < 8.1, a deprecated no-op from 8.5 — guard it, never call it
+			// unconditionally (gotcha `reflection-setaccessible-version-guard`). Without the
+			// guard this test passes on 8.1-8.3 and errors on 7.4/8.0 with
+			// "Cannot access non-public member", which is exactly how CI caught it.
+			if ( PHP_VERSION_ID < 80100 ) {
+				$reflection->setAccessible( true );
+			}
+
 			$reflection->setValue(
 				$service,
 				Location_Record::from_array(
