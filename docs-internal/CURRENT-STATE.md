@@ -7,10 +7,10 @@
 > Program history snapshot → `platform-v2-program-tracker.md`; active program map →
 > `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-08-17 (s77).** `main` = `0a28e94` · no open PRs · working tree clean, rig on `main`
+**As of 2026-08-18 (s78).** `main` = `5551d96` · no open PRs · working tree clean, rig on `main`
 with the **CDEK provider active** (`test-cdek`).
-Tests: **2292 unit / 5672 assertions / 1145 jest / 110 integration**; phpcs and phpstan clean.
-Gotchas: **159**. Docs gate: `npm run lint:docs` (session-start reading budget 120 KB).
+Tests: **2316 unit / 5732 assertions / 1177 jest / 110 integration**; phpcs and phpstan clean.
+Gotchas: **163**. Docs gate: `npm run lint:docs` (session-start reading budget 120 KB).
 
 ## Program status (high level)
 
@@ -23,7 +23,7 @@ Gotchas: **159**. Docs gate: `npm run lint:docs` (session-start reading budget 1
 | Remote-deactivation UX | ✅ DONE | command cycle proven live (push prod + pull rig); B-13/14/15 resolved |
 | Checkout field layer (§8) | ✅ DONE | PR #132 → `957c039` |
 | Shipping SP-track | 🚧 IN PROGRESS | SP-1…SP-5 done (настройки, auth+секреты, валидация, show_if, карта/ПВЗ incl. pickup selection + viewport accumulation); SP-6…SP-11 pending; map = `specs/2026-06-25-shipping-module-decisions.md` |
-| Location provider layer | ✅ DONE | 16/16 tasks; all four known record-level defects closed (#334, #330, #336, #328) |
+| Location provider layer | ✅ DONE | 16/16 tasks; record-level defects closed: #334, #330, #336, #328, and in s78 #352 (mixed-provider chain), #350 (settlement typed without picking), #346 + #333 (stale record reads as absent) |
 | S4 EDD / S5 React admin / S6 ecosystem | ⚪ deferred | post-v2.0 |
 
 ## Phase Status (subsystems)
@@ -62,17 +62,19 @@ Gotchas: **159**. Docs gate: `npm run lint:docs` (session-start reading budget 1
 
 ## Next Actions
 
-0. **#352 — смешанная цепочка (СДЭК + DaData).** Решение оператора: вариант **A** — чужая адресная
-   запись в цепочку не попадает, адрес живёт как текст полей. Самое срочное: сегодня выбор адреса
-   ТЕРЯЕТ ключ НП, а с ним скоуп и привязку выбранного ПВЗ.
-1. **#350 — покупатель печатает НП, не выбирая подсказку.** Решение: автоподставлять первую
-   подсказку, если список вернул хотя бы один результат; иначе оставлять текст. Вместе с этим —
-   согласованная правка правила #337: не блокировать адрес, когда для введённого НП подсказок нет.
-2. **#346 / #333 — протухшая запись покупателя.** Теперь проверяемы вживую: на риге два живых
-   провайдера.
-3. **Постановки оператора:** #331 (подсказки в корзине), #332 (подсказки в ЛК).
-4. **Отложено оператором до релиза:** #285, #247. **Старое:** #289, #270, #310, #318, #321, #322.
-5. **Тулинг:** Codex чинится одной командой из-под администратора — `winget install --id Microsoft.PowerShell`. Готча `codex-shell-sandbox-broken-windows`.
+0. **#362 — V2-настройки доставки (постановка оператора, в `Инбокс`).** Секции «Локация» /
+   «Настройка полей» / «Настройка карты», опции поведения полей, пресет сортировки. Оператор
+   проводит брейншторм **с Fable 5** (его прямое решение, 18.08.2026). Вводные уже собраны:
+   `specs/2026-08-18-location-and-field-settings-brainstorm-input.md` — с разметкой
+   `BUILT`/`DECIDED`/`OPEN`, чтобы не переоткрывать решённое. **Раздел про плагин СДЭК там помечен
+   АНТИ-РЕФЕРЕНСОМ** по прямой просьбе оператора.
+1. **Остатки слоя локаций, все в `Бэклог`:** #353 (провайдер без уровня НП не регистрируется —
+   правило есть у оператора в голове, в коде его нет), #356 (настоящий forget-путь: гейт не пишет,
+   протухший блоб живёт на диске), #358 (провайдерский шов не сообщает, учёл ли чужого родителя),
+   #361 (`within_status` едет на клиент, но никто его не читает).
+2. **Постановки оператора:** #331 (подсказки в корзине), #332 (подсказки в ЛК).
+3. **Отложено оператором до релиза:** #285, #247. **Старое:** #289, #270, #310, #318, #321, #322.
+4. **Тулинг:** Codex чинится одной командой из-под администратора — `winget install --id Microsoft.PowerShell`. Готча `codex-shell-sandbox-broken-windows`. **У codex-cli 0.147.0 больше нет `--prompt-file`** (и он выходит с кодом 0, молча не создавая файл вывода) — рабочий транспорт stdin.
 
 **Техдолг и улучшения карты (181, 159, 152, 148, 182, 174, 173, 151) осознанно НЕ трогаем до пилотной миграции** — пилот на живом карьере покажет, какие из этих карточек реальны, а какие мы придумали сами.
 
@@ -87,7 +89,8 @@ Deferred (всё остальное — board №6): UK-CFR (settings extensibil
 
 - **The picker lives on `/classic-checkout/`, NOT `/checkout/`** — the latter is the BLOCK checkout (the adapter is SP-11, unbuilt), where there is no `form.checkout`, no `carrier_pickup_point` and no trigger, which reads as a broken build rather than the wrong URL. Product id `12` fills the cart via `?add-to-cart=12`. Gotcha: `rig-checkout-url-is-the-block-checkout`.
 - **The rig serves the WORKING TREE.** Name the branch out loud whenever you ask anyone to look, and switch the tree BEFORE asking — handing the operator a checklist while the tree holds another branch has already cost a wasted pass (gotcha `rig-serves-the-working-tree-branch-switch-reverts-fixes`). Current state: tree on `main`.
-- **The active location provider on the rig is `test-cdek`** (switched in s77 at the operator's request). Back to DaData: `wp option update woodev_location_active_provider dadata`.
+- **The active location provider on the rig is `test-cdek`, deliberately.** Kept that way at the end of s78: the mixed pair (CDEK for region+settlement, DaData for address) is the configuration that exercises every location fix shipped so far, and it is the only way to reproduce #352/#333 at all. Back to DaData: `wp option update woodev_location_active_provider dadata`.
+- **Switching the provider now has a visible consequence** (s78, by design): a customer record from the provider that no longer owns its level reads as ABSENT, so the chain empties and the address field locks until the customer re-picks. The record is NOT deleted — restoring the provider brings it straight back (verified). If a rig session suddenly "loses" its locality, check the active provider before suspecting a bug.
 - **Ports: dev `:8973` / tests `:8974`** (chrome-devtools MCP driver). Ports live in the gitignored `.wp-env.override.json`.
 - **Two live location providers on the rig now (s76).** DaData is active by default; the CDEK test
   contour is registered as `test-cdek` (fixture
