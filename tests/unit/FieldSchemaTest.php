@@ -91,6 +91,7 @@ class FieldSchemaTest extends TestCase {
 		$control->shouldReceive( 'get_min' )->andReturn( 1.0 );
 		$control->shouldReceive( 'get_max' )->andReturn( 10.0 );
 		$control->shouldReceive( 'get_step' )->andReturn( 0.5 );
+		$control->shouldReceive( 'is_disabled' )->andReturn( false )->byDefault();
 
 		$setting = $this->make_setting( 'weight', 'integer', $control );
 
@@ -119,6 +120,7 @@ class FieldSchemaTest extends TestCase {
 		$control->shouldReceive( 'get_min' )->andReturn( null );
 		$control->shouldReceive( 'get_max' )->andReturn( null );
 		$control->shouldReceive( 'get_step' )->andReturn( null );
+		$control->shouldReceive( 'is_disabled' )->andReturn( false )->byDefault();
 
 		$setting = $this->make_setting( 'api_key', 'string', $control );
 
@@ -230,6 +232,7 @@ class FieldSchemaTest extends TestCase {
 		$control->shouldReceive( 'get_min' )->andReturn( null );
 		$control->shouldReceive( 'get_max' )->andReturn( null );
 		$control->shouldReceive( 'get_step' )->andReturn( null );
+		$control->shouldReceive( 'is_disabled' )->andReturn( false )->byDefault();
 
 		$required_setting = $this->make_setting( 'phone', 'string', $control );
 		$required_setting->shouldReceive( 'is_required' )->andReturn( true );
@@ -292,6 +295,7 @@ class FieldSchemaTest extends TestCase {
 		$control->shouldReceive( 'get_min' )->andReturn( null );
 		$control->shouldReceive( 'get_max' )->andReturn( null );
 		$control->shouldReceive( 'get_step' )->andReturn( null );
+		$control->shouldReceive( 'is_disabled' )->andReturn( false )->byDefault();
 
 		$setting = $this->make_setting( 'city', 'string', $control );
 
@@ -330,5 +334,57 @@ class FieldSchemaTest extends TestCase {
 		$this->assertTrue( $schema['token']['sensitive'], 'constant-backed field must be masked in the UI' );
 		$this->assertTrue( $schema['token']['is_set'] );
 		$this->assertArrayNotHasKey( 'constant_managed', $schema['token'], 'not read-only while the constant is undefined' );
+	}
+
+	/**
+	 * A disabled control emits `disabled` + `disabled_reason`, and the reason
+	 * doubles as the description so a client ignoring `disabled` still shows it.
+	 *
+	 * @return void
+	 */
+	public function test_disabled_control_emits_disabled_and_reason(): void {
+		$control = Mockery::mock( \Woodev_Control::class );
+		$control->shouldReceive( 'get_type' )->andReturn( 'checkbox' );
+		$control->shouldReceive( 'get_description' )->andReturn( '' );
+		$control->shouldReceive( 'get_tooltip' )->andReturn( '' );
+		$control->shouldReceive( 'get_placeholder' )->andReturn( '' );
+		$control->shouldReceive( 'get_min' )->andReturn( null );
+		$control->shouldReceive( 'get_max' )->andReturn( null );
+		$control->shouldReceive( 'get_step' )->andReturn( null );
+		$control->shouldReceive( 'is_disabled' )->andReturn( true );
+		$control->shouldReceive( 'get_disabled_reason' )->andReturn( 'Недоступно на блочном чекауте' );
+
+		$setting = $this->make_setting( 'x', 'boolean', $control );
+		$handler = Mockery::mock();
+		$handler->shouldReceive( 'get_settings' )->with( [ 'x' ] )->andReturn( [ $setting ] );
+		$handler->shouldReceive( 'get_value' )->with( 'x' )->andReturn( true );
+
+		$schema = Field_Schema::from_handler( $handler, [ 'x' ] );
+
+		$this->assertTrue( $schema['x']['disabled'] );
+		$this->assertSame( 'Недоступно на блочном чекауте', $schema['x']['disabled_reason'] );
+		// The reason doubles as the description so a client that ignores `disabled` still shows it.
+		$this->assertSame( 'Недоступно на блочном чекауте', $schema['x']['description'] );
+	}
+
+	/**
+	 * An enabled control emits neither `disabled` nor `disabled_reason`.
+	 *
+	 * @return void
+	 */
+	public function test_enabled_control_emits_no_disabled_key(): void {
+		$control = Mockery::mock( \Woodev_Control::class );
+		foreach ( [ 'get_type' => 'text', 'get_description' => 'd', 'get_tooltip' => '', 'get_placeholder' => '', 'get_min' => null, 'get_max' => null, 'get_step' => null, 'is_disabled' => false, 'get_disabled_reason' => '' ] as $m => $r ) {
+			$control->shouldReceive( $m )->andReturn( $r );
+		}
+		$setting = $this->make_setting( 'y', 'string', $control );
+		$handler = Mockery::mock();
+		$handler->shouldReceive( 'get_settings' )->andReturn( [ $setting ] );
+		$handler->shouldReceive( 'get_value' )->andReturn( '' );
+
+		$schema = Field_Schema::from_handler( $handler, [ 'y' ] );
+
+		$this->assertArrayNotHasKey( 'disabled', $schema['y'] );
+		$this->assertSame( 'd', $schema['y']['description'] );
 	}
 }

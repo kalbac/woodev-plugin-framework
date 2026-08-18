@@ -200,6 +200,10 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 					$control->set_placeholder( (string) $args['placeholder'] );
 				}
 
+				if ( ! empty( $args['disabled'] ) ) {
+					$control->set_disabled( true, (string) ( $args['disabled_reason'] ?? '' ) );
+				}
+
 				$setting->set_control( $control );
 
 				return true;
