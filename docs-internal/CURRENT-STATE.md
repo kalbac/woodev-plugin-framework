@@ -7,11 +7,11 @@
 > Program history snapshot → `platform-v2-program-tracker.md`; active program map →
 > `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-08-18 (s78).** Last CODE commit `ed7f9f8` (PR #359); everything after it on `main` is
-this session's docs. No open PRs · working tree clean, rig on `main`
+**As of 2026-08-18 (s79).** Last CODE commit `ed7f9f8` (PR #359); everything after it on `main` is
+docs (s78 handoff, s79 brainstorm output). No open PRs · working tree clean, rig on `main`
 with the **CDEK provider active** (`test-cdek`).
 Tests: **2316 unit / 5732 assertions / 1177 jest / 110 integration**; phpcs and phpstan clean.
-Gotchas: **163**. Docs gate: `npm run lint:docs` (session-start reading budget 120 KB).
+Gotchas: **164**. Docs gate: `npm run lint:docs` (session-start reading budget 120 KB).
 
 ## Program status (high level)
 
@@ -63,12 +63,12 @@ Gotchas: **163**. Docs gate: `npm run lint:docs` (session-start reading budget 1
 
 ## Next Actions
 
-0. **#362 — V2-настройки доставки (постановка оператора, в `Инбокс`).** Секции «Локация» /
-   «Настройка полей» / «Настройка карты», опции поведения полей, пресет сортировки. Оператор
-   проводит брейншторм **с Fable 5** (его прямое решение, 18.08.2026). Вводные уже собраны:
-   `specs/2026-08-18-location-and-field-settings-brainstorm-input.md` — с разметкой
-   `BUILT`/`DECIDED`/`OPEN`, чтобы не переоткрывать решённое. **Раздел про плагин СДЭК там помечен
-   АНТИ-РЕФЕРЕНСОМ** по прямой просьбе оператора.
+0. **#362 — V2-настройки доставки: ДИЗАЙН УТВЕРЖДЁН, РЕАЛИЗАЦИЯ НЕ НАЧАТА.** Брейншторм
+   проведён в s79 (Fable 5), оператор утвердил все решения. Спека:
+   `specs/2026-08-18-shipping-settings-v2-design.md` (S1–S9 + два инструмента для полей). План на
+   12 задач: `plans/2026-08-18-shipping-settings-v2-plan.md` — исполнять в **новой сессии на
+   Opus 5** (решение оператора 18.08.2026), PR-каденция 1–4 / 5–7 / 8–9 / 10–12, каждый PR через
+   Codex-критика. Карточка #362 — оператора, стоит в `Инбокс`; в `В работе` её двигает он.
 1. **Остатки слоя локаций, все в `Бэклог`:** #353 (провайдер без уровня НП не регистрируется —
    правило есть у оператора в голове, в коде его нет), #356 (настоящий forget-путь: гейт не пишет,
    протухший блоб живёт на диске), #358 (провайдерский шов не сообщает, учёл ли чужого родителя),
