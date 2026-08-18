@@ -7,7 +7,8 @@
 > Program history snapshot → `platform-v2-program-tracker.md`; active program map →
 > `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-08-18 (s78).** `main` = `49baffb` · no open PRs · working tree clean, rig on `main`
+**As of 2026-08-18 (s78).** Last CODE commit `ed7f9f8` (PR #359); everything after it on `main` is
+this session's docs. No open PRs · working tree clean, rig on `main`
 with the **CDEK provider active** (`test-cdek`).
 Tests: **2316 unit / 5732 assertions / 1177 jest / 110 integration**; phpcs and phpstan clean.
 Gotchas: **163**. Docs gate: `npm run lint:docs` (session-start reading budget 120 KB).
