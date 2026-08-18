@@ -115,6 +115,19 @@ class ProviderSelectionScopeAgreementTest extends TestCase {
 	private $original_ambient_point_source;
 
 	/**
+	 * `woocommerce_default_country` as found at the start of THIS test — same
+	 * save/restore discipline as {@see self::$original_dadata_token}, and the
+	 * same reason as {@see \Woodev\Tests\Integration\Shipping\LocationRouteTest::$original_default_country}'s
+	 * own docblock: #346/#333's staleness gate compares every stored `RU`
+	 * fixture record's country against the store's OWN default when no live
+	 * `WC()->customer` shipping field is set, and this rig's WP test site
+	 * carries WooCommerce's factory default (`US:CA`).
+	 *
+	 * @var string|false
+	 */
+	private $original_default_country;
+
+	/**
 	 * @return void
 	 */
 	protected function setUp(): void {
@@ -137,6 +150,9 @@ class ProviderSelectionScopeAgreementTest extends TestCase {
 		// depends on an explicit token must never rely on ambient DB state.
 		$this->original_dadata_token = get_option( self::OPTION_DADATA_TOKEN, false );
 		delete_option( self::OPTION_DADATA_TOKEN );
+
+		$this->original_default_country = get_option( 'woocommerce_default_country', false );
+		update_option( 'woocommerce_default_country', 'RU' );
 	}
 
 	/**
@@ -147,6 +163,12 @@ class ProviderSelectionScopeAgreementTest extends TestCase {
 			delete_option( self::OPTION_DADATA_TOKEN );
 		} else {
 			update_option( self::OPTION_DADATA_TOKEN, $this->original_dadata_token );
+		}
+
+		if ( false === $this->original_default_country ) {
+			delete_option( 'woocommerce_default_country' );
+		} else {
+			update_option( 'woocommerce_default_country', $this->original_default_country );
 		}
 
 		Location_Provider_Registry::instance()->reset_for_tests();
@@ -221,6 +243,21 @@ class ProviderSelectionScopeAgreementTest extends TestCase {
 	}
 
 	/**
+	 * Seeds `WC()->customer`'s LIVE shipping-country field (#346/#333) — see
+	 * {@see \Woodev\Tests\Integration\Shipping\LocationRouteTest::seed_customer_shipping_country()}'s
+	 * own docblock for the full reasoning (measured s79: a brand-new guest's
+	 * `WC()->customer->get_shipping_country()` resolves via WooCommerce's own
+	 * GeoIP default-location fallback to a hardcoded `US`, unrelated to
+	 * `woocommerce_default_country`). Every fixture record in this file is
+	 * `country: RU`; called AFTER `wp_set_current_user( 0 )`.
+	 *
+	 * @return void
+	 */
+	private function seed_customer_shipping_country(): void {
+		WC()->customer->set_shipping_country( 'RU' );
+	}
+
+	/**
 	 * Proves `Woodev_Test_Provider_Selection_Scope::locality_for_point()` and
 	 * `current_locality()` speak the same vocabulary end to end, through the
 	 * REAL production write/read paths — not by asserting on the scope
@@ -252,6 +289,7 @@ class ProviderSelectionScopeAgreementTest extends TestCase {
 		$this->open_location_gate_and_boot_routes();
 
 		wp_set_current_user( 0 );
+		$this->seed_customer_shipping_country();
 
 		$select_locality = new WP_REST_Request( 'POST', '/woodev/v1/location/select' );
 		$select_locality->set_param(
@@ -335,6 +373,7 @@ class ProviderSelectionScopeAgreementTest extends TestCase {
 		$this->open_location_gate_and_boot_routes();
 
 		wp_set_current_user( 0 );
+		$this->seed_customer_shipping_country();
 
 		update_option( self::OPTION_DADATA_TOKEN, 'test-integration-token' );
 

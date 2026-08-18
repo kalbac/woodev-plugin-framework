@@ -70,7 +70,7 @@ final class Checkout_Handler_Fake_Location_Service extends Location_Service {
 		return $this->active;
 	}
 
-	public function get_customer_record(): ?array {
+	public function get_customer_record( ?string $for_country = null ): ?array {
 		return null;
 	}
 

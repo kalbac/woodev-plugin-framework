@@ -180,6 +180,95 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 		protected const LIST_HARD_CAP = 500;
 
 		/**
+		 * `within_status` value: no `within` param was sent at all.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var string
+		 */
+		public const WITHIN_STATUS_NOT_REQUESTED = 'not_requested';
+
+		/**
+		 * `within_status` value: `within` named a level the customer actually
+		 * picked, in the SAME country as this search, and
+		 * {@see Location_Scope::within()} accepted it as a parent constraint —
+		 * see {@see self::build_scope()}.
+		 *
+		 * Proves ONLY that the SCOPE BUILDER accepted the parent — NOT that
+		 * the provider that actually ran the search honoured it (clarified,
+		 * s78, adversarial review finding: an earlier reading of this value
+		 * treated `applied` as proof the search was narrowed). A mixed-owner
+		 * chain can still hand a parent from one provider to another
+		 * provider's `suggest()`/`list_localities()` call; whether that
+		 * provider could actually narrow by it is invisible from this field
+		 * alone — see gotcha `within-applied-reports-the-scope-builder-not-the-provider`
+		 * (#333) and the residual cross-provider gap tracked at #353.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var string
+		 */
+		public const WITHIN_STATUS_APPLIED = 'applied';
+
+		/**
+		 * `within_status` value: `within` named a key that matches NOTHING in
+		 * the customer's own chain (unknown, stale, already superseded, or the
+		 * customer has no chain at all yet) — see {@see self::build_scope()}.
+		 * Silently degraded to a country-wide scope, same as before this field
+		 * existed (issue #330's own rule: "stale client state must never brick
+		 * the field"), but now VISIBLE.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var string
+		 */
+		public const WITHIN_STATUS_UNKNOWN_KEY = 'unknown_key';
+
+		/**
+		 * `within_status` value: `within` matched a chain record, but that
+		 * record's country differs from this search's own `country` — refused
+		 * rather than silently moving the search to the parent's country (see
+		 * {@see self::build_scope()}'s own comment on why this is an
+		 * adversarial-review finding, not merely unhelpful).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var string
+		 */
+		public const WITHIN_STATUS_CROSS_COUNTRY = 'cross_country';
+
+		/**
+		 * `within_status` value: `within` matched a chain record in the right
+		 * country, but at the WRONG level for this search (e.g. a region key
+		 * "within" a region-level search) — refused by
+		 * {@see Location_Scope::within()} itself.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var string
+		 */
+		public const WITHIN_STATUS_BAD_LEVEL = 'bad_level';
+
+		/**
+		 * `within_status` value: the client DID send a `within` param, but no
+		 * provider serves the requested `$level` at all
+		 * ({@see Location_Service::provider_for_level()} -> `null`) — there is
+		 * nothing to resolve `within` against, and `build_scope()` never even
+		 * runs on this branch (adversarial review finding, s78 — the field
+		 * used to report {@see self::WITHIN_STATUS_NOT_REQUESTED} on this
+		 * branch UNCONDITIONALLY, including when the client had in fact sent a
+		 * `within`; that lied about a param it never inspected). A request
+		 * that sent NO `within` on this same branch still reports
+		 * `not_requested` — this value exists solely to keep that constant
+		 * truthful to its own docblock ("no `within` param was sent at all").
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var string
+		 */
+		public const WITHIN_STATUS_UNSERVED_LEVEL = 'unserved_level';
+
+		/**
 		 * The façade this controller dispatches through. Defaults to a fresh
 		 * {@see Location_Service} (which itself defaults to the shared
 		 * {@see \Woodev\Framework\Shipping\Location\Location_Provider_Registry}
@@ -655,11 +744,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 		 *              indistinguishable from a genuine country-wide search — see
 		 *              the `within_applied` line below for the exact semantics,
 		 *              including the no-`within`-requested case.
+		 * @since 2.0.2 Response gained `within_status` (#333) — the ONE of
+		 *              `self::WITHIN_STATUS_*` {@see self::build_scope()}
+		 *              actually resolved, so a caller can tell "unknown key"
+		 *              from "cross-country" from "wrong level" instead of the
+		 *              single `within_applied` boolean collapsing all three
+		 *              (and "never requested") into the same `false`.
 		 *
 		 * @param \WP_REST_Request $request        request object.
 		 * @param string           $rate_limit_key Per-route rate-limit bucket prefix.
 		 *
-		 * @return \WP_REST_Response|\WP_Error|array{suggestions: array<int, array<string, mixed>>, within_applied: bool}
+		 * @return \WP_REST_Response|\WP_Error|array{suggestions: array<int, array<string, mixed>>, within_applied: bool, within_status: string}
 		 */
 		private function perform_suggest( $request, string $rate_limit_key ) {
 
@@ -701,10 +796,31 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 			if ( null === $provider ) {
 				// No scope is ever built on this branch — nothing was looked up,
 				// so no parent constraint could have been applied.
+				// `within_applied` stays `false` UNCONDITIONALLY here, mirroring
+				// its own established precedent on this exact branch: when no
+				// provider serves this level AT ALL, there is nothing to resolve
+				// `within` against regardless of the request, a bigger
+				// degradation than any single `within_status` value below names.
+				//
+				// `within_status`, unlike `within_applied`, DOES tell apart
+				// whether the client actually sent a `within` (adversarial
+				// review finding, s78 — FIX 4): reporting `not_requested`
+				// unconditionally here used to lie about a param this branch
+				// never even inspected. `self::WITHIN_STATUS_NOT_REQUESTED`'s
+				// own docblock promises "no `within` param was sent at all" —
+				// a promise this branch could not keep for a client that DID
+				// send one, since build_scope() (the only place that would
+				// have read it) never runs when there is no provider to search
+				// with.
+				$within_requested = '' !== $this->normalize_param( $request->get_param( 'within' ) );
+
 				return rest_ensure_response(
 					[
 						'suggestions'    => [],
 						'within_applied' => false,
+						'within_status'  => $within_requested
+							? self::WITHIN_STATUS_UNSERVED_LEVEL
+							: self::WITHIN_STATUS_NOT_REQUESTED,
 					]
 				);
 			}
@@ -746,9 +862,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 			 *   knows whether it sent one, so the two `false` causes never need
 			 *   telling apart from this field alone, and `has_parent()` is
 			 *   definitionally `false` in both.
+			 *
+			 * `within_status` (#333) is the field that DOES tell the two `false`
+			 * causes (and the "wrong level"/"cross country" ones) apart — see
+			 * {@see self::build_scope()} for exactly which value each cause
+			 * maps to. `within_applied` is kept AS IS (a shipped response
+			 * field) and is NOT derived from `within_status` here — both are
+			 * read from the same `$scope`/`$result` independently, so a future
+			 * change to one can never silently desync the other.
 			 */
 			try {
-				$scope = $this->build_scope( $country, $level, $within );
+				$result = $this->build_scope( $country, $level, $within );
 			} catch ( \InvalidArgumentException $exception ) {
 				return new \WP_Error(
 					'woodev_location_invalid_country',
@@ -756,6 +880,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 					[ 'status' => 400 ]
 				);
 			}
+
+			$scope         = $result['scope'];
+			$within_status = $result['within_status'];
 
 			/*
 			 * A well-formed but UNSUPPORTED country (the provider that will
@@ -780,6 +907,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 					[
 						'suggestions'    => [],
 						'within_applied' => $scope->has_parent(),
+						'within_status'  => $within_status,
 					]
 				);
 			}
@@ -796,6 +924,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 				[
 					'suggestions'    => $this->to_response_records( $records ),
 					'within_applied' => $scope->has_parent(),
+					'within_status'  => $within_status,
 				]
 			);
 		}
@@ -840,10 +969,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 		 * @since 2.0.2 Capped at {@see self::LIST_HARD_CAP} records, with an
 		 *              optional clamped `limit` arg and a `truncated` response
 		 *              flag (PR #304 review finding 5).
+		 * @since 2.0.2 Response gained `within_status` (#333) — see
+		 *              {@see self::build_scope()} for the values; unlike
+		 *              `/suggest` this route never shipped a `within_applied`
+		 *              boolean, so `within_status` is its ONLY `within`
+		 *              signal, not a supplement to one.
 		 *
 		 * @param \WP_REST_Request $request request object.
 		 *
-		 * @return \WP_REST_Response|\WP_Error|array{localities: array<int, array<string, mixed>>, truncated: bool}
+		 * @return \WP_REST_Response|\WP_Error|array{localities: array<int, array<string, mixed>>, truncated: bool, within_status: string}
 		 */
 		public function handle_list_request( $request ) {
 
@@ -874,7 +1008,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 			$limit     = $limit > 0 ? min( $limit, self::LIST_HARD_CAP ) : self::LIST_HARD_CAP;
 
 			try {
-				$scope = $this->build_scope( $country, $level, $within );
+				$result = $this->build_scope( $country, $level, $within );
 			} catch ( \InvalidArgumentException $exception ) {
 				return new \WP_Error(
 					'woodev_location_invalid_country',
@@ -882,6 +1016,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 					[ 'status' => 400 ]
 				);
 			}
+
+			$scope         = $result['scope'];
+			$within_status = $result['within_status'];
 
 			// Deliberately never reads `$request->get_param( 'provider' )` — same
 			// reasoning as `/suggest` above (see the class docblock and
@@ -909,8 +1046,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 
 			return rest_ensure_response(
 				[
-					'localities' => $this->to_response_records( $records ),
-					'truncated'  => $truncated,
+					'localities'    => $this->to_response_records( $records ),
+					'truncated'     => $truncated,
+					'within_status' => $within_status,
 				]
 			);
 		}
@@ -1126,7 +1264,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 
 		/**
 		 * Builds the lookup scope for a suggest call, resolving the optional
-		 * `within` parent constraint.
+		 * `within` parent constraint — and reports what actually happened to
+		 * that constraint via `within_status` (one of the
+		 * `self::WITHIN_STATUS_*` constants), so a caller no longer has to
+		 * infer it from `Location_Scope::has_parent()` alone (see
+		 * {@see self::perform_suggest()}'s own `within_applied` field, whose
+		 * docblock now cross-references this one).
 		 *
 		 * `within` is a locality KEY (not a components blob) the client believes
 		 * names one of its own already-picked levels. Since this controller has
@@ -1152,70 +1295,121 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 		 * {@see \Woodev\Framework\Shipping\Location\Providers\Dadata_Provider::build_locations_constraint()})
 		 * need no change at all and still get exact native ids.
 		 *
+		 * The FOREIGN-PROVIDER half of this — a `within` key resolving to a
+		 * record from a provider that no longer owns ITS OWN level — used to
+		 * be a silent hand-over to the provider (see gotcha
+		 * `within-applied-reports-the-scope-builder-not-the-provider`, #333).
+		 * {@see Location_Service::get_customer_chain()} (Part 1 of #346/#333)
+		 * now gates every record in the chain against exactly that staleness
+		 * (per-level provider ownership + country) before this method ever
+		 * sees it, so a record whose OWN level's owner no longer matches it
+		 * can no longer BE in `$records` below.
+		 *
+		 * That is NOT the same as "every parent handed to a provider now
+		 * shares that provider" (corrected, s78 — the previous docblock here
+		 * overclaimed this as structurally impossible, which is false): the
+		 * gate checks a record against the owner of ITS OWN level, never
+		 * against the level actually being searched. A legitimate MIXED-OWNER
+		 * chain — e.g. `{region: dadata, settlement: carrier}`, valid
+		 * precisely because `region` is OPTIONAL and a carrier may serve
+		 * `settlement` without serving `region` (issue #352) — still hands a
+		 * `dadata`-owned parent to a `carrier` provider when `within` matches
+		 * the region and the search level is deeper. Neither bundled provider
+		 * implementation reports whether it could actually honour a
+		 * cross-provider parent; that residual gap is tracked separately
+		 * (#353, not this fix) rather than banned here — banning cross-provider
+		 * scopes outright would also break the legitimate, WORKING case (a
+		 * DaData address search scoped by a CDEK settlement, measured on the
+		 * rig). Do not re-add a same-level provider check here for the
+		 * SINGLE-level staleness the chain read already refuses to hand
+		 * over — that part remains true.
+		 *
 		 * @since 2.0.2
 		 * @since 2.0.2 Resolves `within` against the customer's WHOLE chain
 		 *              ({@see Location_Service::get_customer_chain()}), not only
 		 *              the current record (issue #330).
+		 * @since 2.0.2 Returns `within_status` alongside the scope (#333) —
+		 *              the failure this method used to swallow silently is now
+		 *              named for the caller.
+		 * @since 2.0.2 Passes this method's own already-normalized `$country`
+		 *              into {@see Location_Service::get_customer_chain()} as
+		 *              its `$for_country` argument (#350/#352 follow-up),
+		 *              rather than letting that read fall back to the ambient
+		 *              WooCommerce customer country — a `/suggest`/`/list`
+		 *              request's own `country` param is the stronger
+		 *              authority for THIS request; the ambient customer can
+		 *              disagree with it (gotcha
+		 *              `wc-customer-default-location-geolocation-fallback`).
 		 *
 		 * @param string $country    Normalized ISO-3166 alpha-2 country code.
 		 * @param string $level      One of {@see Location_Record::LEVELS} — already validated by the caller.
 		 * @param string $within_key Normalized `within` param, possibly `''`.
 		 *
-		 * @return Location_Scope
+		 * @return array{scope: Location_Scope, within_status: string}
 		 *
 		 * @throws \InvalidArgumentException When `$country` is not a well-formed
 		 *                                    ISO-3166 alpha-2 code — the caller
 		 *                                    converts this to a 400.
 		 */
-		private function build_scope( string $country, string $level, string $within_key ): Location_Scope {
+		private function build_scope( string $country, string $level, string $within_key ): array {
 
-			if ( '' !== $within_key ) {
-				$chain   = $this->service->get_customer_chain();
-				$records = null !== $chain ? $chain['records'] : [];
-
-				foreach ( $records as $chain_record ) {
-					if ( $chain_record->key() !== $within_key ) {
-						continue;
-					}
-
-					/*
-					 * A parent from ANOTHER COUNTRY is refused, not merely unhelpful
-					 * (adversarial review): Location_Scope::within() takes the scope's
-					 * country FROM THE PARENT RECORD — there is deliberately no
-					 * $country argument there, so the two cannot disagree — which means
-					 * honouring a stale cross-country `within` would silently move the
-					 * whole search to the parent's country while the customer is typing
-					 * an address in the one they actually selected. Treated exactly like
-					 * an unknown key: silent fall-through to the country-wide scope.
-					 *
-					 * `$country` is normalized HERE rather than trusted: it arrives from
-					 * `normalize_param()`, which cleans but does NOT upper-case, while a
-					 * record's own `country()` is always upper-cased by
-					 * {@see Location_Record::from_array()}. Comparing them raw would drop
-					 * a perfectly good parent for any client that sent `ru` instead of
-					 * `RU` — a silent narrowing introduced by a guard meant to prevent
-					 * one.
-					 */
-					if ( $chain_record->country() !== strtoupper( trim( $country ) ) ) {
-						break;
-					}
-
-					try {
-						return Location_Scope::within( $chain_record, $level );
-					} catch ( \InvalidArgumentException $exception ) {
-						// Level-ordering mismatch — treated exactly like an unknown key:
-						// fall through to the country-wide scope below.
-					}
-
-					break;
-				}
-
-				// No match at all (unknown/stale key, no customer record yet, or a
-				// level-ordering mismatch caught above) — deliberately silent, as if
-				// `within` had never been sent.
+			if ( '' === $within_key ) {
+				return [
+					'scope'         => Location_Scope::for_country( $country, $level ),
+					'within_status' => self::WITHIN_STATUS_NOT_REQUESTED,
+				];
 			}
 
-			return Location_Scope::for_country( $country, $level );
+			$chain   = $this->service->get_customer_chain( $country );
+			$records = null !== $chain ? $chain['records'] : [];
+
+			foreach ( $records as $chain_record ) {
+				if ( $chain_record->key() !== $within_key ) {
+					continue;
+				}
+
+				/*
+				 * A parent from ANOTHER COUNTRY is refused, not merely unhelpful
+				 * (adversarial review): Location_Scope::within() takes the scope's
+				 * country FROM THE PARENT RECORD — there is deliberately no
+				 * $country argument there, so the two cannot disagree — which means
+				 * honouring a stale cross-country `within` would silently move the
+				 * whole search to the parent's country while the customer is typing
+				 * an address in the one they actually selected.
+				 *
+				 * `$country` is normalized HERE rather than trusted: it arrives from
+				 * `normalize_param()`, which cleans but does NOT upper-case, while a
+				 * record's own `country()` is always upper-cased by
+				 * {@see Location_Record::from_array()}. Comparing them raw would drop
+				 * a perfectly good parent for any client that sent `ru` instead of
+				 * `RU` — a silent narrowing introduced by a guard meant to prevent
+				 * one.
+				 */
+				if ( $chain_record->country() !== strtoupper( trim( $country ) ) ) {
+					return [
+						'scope'         => Location_Scope::for_country( $country, $level ),
+						'within_status' => self::WITHIN_STATUS_CROSS_COUNTRY,
+					];
+				}
+
+				try {
+					return [
+						'scope'         => Location_Scope::within( $chain_record, $level ),
+						'within_status' => self::WITHIN_STATUS_APPLIED,
+					];
+				} catch ( \InvalidArgumentException $exception ) {
+					return [
+						'scope'         => Location_Scope::for_country( $country, $level ),
+						'within_status' => self::WITHIN_STATUS_BAD_LEVEL,
+					];
+				}
+			}
+
+			// No match at all — unknown/stale key, or no customer chain yet.
+			return [
+				'scope'         => Location_Scope::for_country( $country, $level ),
+				'within_status' => self::WITHIN_STATUS_UNKNOWN_KEY,
+			];
 		}
 
 		/**

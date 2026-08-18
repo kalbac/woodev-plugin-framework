@@ -182,6 +182,44 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 * same request, or a later request once the write above landed, finds
 		 * `$current` non-null and returns immediately).
 		 *
+		 * A STORED record no longer counts as "having one" once
+		 * {@see self::gated_current_entry()} drops it as STALE (#346/#333) —
+		 * see that method and {@see self::is_customer_record_stale()} for the
+		 * two staleness rules. A stale-only store therefore behaves EXACTLY
+		 * like an empty one: the lazy default trigger below runs for it too,
+		 * on every read, since nothing is ever written back for a stale
+		 * record (the blob itself is left on disk — see
+		 * {@see self::gate_chain()}'s own docblock).
+		 *
+		 * A FRESHLY-RESOLVED default is gated too, BEFORE it is ever served or
+		 * persisted (adversarial review finding, s78 — FIX 1): every return
+		 * point of this method, including the default-resolution branches
+		 * below, now answers a GATED view or `null`, never a raw one, so this
+		 * accessor can never disagree with {@see self::get_customer_chain()}
+		 * about whether the customer has a location. Before this fix,
+		 * `resolve_default()` resolved against the store-setting/`RU` floor
+		 * ({@see self::resolve_default_country()}) while the gate's rule (b)
+		 * compares against the LIVE {@see self::customer_shipping_country()};
+		 * a customer who dropped an old `RU` record after switching to `BY`
+		 * would resolve a fresh `RU` default, the re-read gate would reject
+		 * it as stale, and the ungated fallback served it anyway — a record
+		 * `get_customer_record()` handed out while `get_customer_chain()`
+		 * answered `null` for the exact same state. The chosen fix is to gate
+		 * the default rather than to make `resolve_default()` country-aware:
+		 * a `fixed` default is a merchant-picked, specific locality whose
+		 * country cannot be bent to match an arbitrary customer without
+		 * picking a DIFFERENT locality (defeating what `fixed` means), and a
+		 * `geoip` default's country comes from the IP, not from the checkout
+		 * field — neither can honestly be re-targeted at the gate's country
+		 * authority. Gating is also simpler: it reuses the exact rule already
+		 * trusted for stored records instead of inventing a second country
+		 * chain for resolution alone. When a resolved default cannot pass
+		 * its own gate, this method answers `null` — precisely what
+		 * {@see self::get_customer_chain()} answers for the same state, per
+		 * this method's contract: "customer has no location" — rather than
+		 * silently degrading into a location the gate itself would refuse
+		 * to serve back.
+		 *
 		 * @since 2.0.2
 		 * @since 2.0.2 Added the lazy default-locality resolution trigger
 		 *              (Task 14; spec D11).
@@ -189,18 +227,34 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 *              of the request, and serves it directly rather than
 		 *              re-reading a store that failed to write it (review
 		 *              finding F1 — {@see self::$unpersisted_default}).
+		 * @since 2.0.2 Routes the stored chain through {@see self::gated_current_entry()}
+		 *              rather than reading {@see Customer_Location_Store::get()}
+		 *              directly, so a STALE record (#346/#333) is treated as
+		 *              absent and the lazy default trigger runs for it exactly
+		 *              as it does for an empty store.
+		 * @since 2.0.2 Gates a freshly-resolved (or cached-unpersisted) default
+		 *              against the SAME staleness rule a stored record must
+		 *              pass, answering `null` rather than an ungated record
+		 *              when it fails (adversarial review finding, s78 — see
+		 *              above).
+		 * @since 2.0.2 Added the optional `$for_country` parameter, threaded
+		 *              through to the gate (#350/#352 follow-up).
+		 *
+		 * @param string|null $for_country Optional ISO-3166 alpha-2 country code — see {@see self::is_customer_record_stale()}.
 		 *
 		 * @return array{record: Location_Record, implicit: bool, saved_at: int}|null
 		 */
-		public function get_customer_record(): ?array {
-			$current = $this->customer_store->get();
+		public function get_customer_record( ?string $for_country = null ): ?array {
+			$current = $this->gated_current_entry( $for_country );
 
 			if ( null !== $current ) {
 				return $current;
 			}
 
 			if ( null !== $this->unpersisted_default ) {
-				return self::implicit_entry( $this->unpersisted_default );
+				return $this->is_customer_record_stale( $this->unpersisted_default, $for_country )
+					? null
+					: self::implicit_entry( $this->unpersisted_default );
 			}
 
 			$default = $this->resolve_default();
@@ -209,15 +263,35 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 				return null;
 			}
 
+			if ( $this->is_customer_record_stale( $default, $for_country ) ) {
+				// The resolved default cannot pass the SAME gate a stored
+				// record would have to pass (#346/#333) — see this method's
+				// own docblock (FIX 1) for why serving it anyway would
+				// disagree with get_customer_chain(). Neither persisted nor
+				// cached: a later call in the same request re-resolves it
+				// exactly as if nothing had ever resolved.
+				return null;
+			}
+
 			if ( $this->customer_store->set( $default, true ) ) {
-				return $this->customer_store->get();
+				// Re-read through the SAME gate: a default that just passed
+				// the pre-check above is expected to survive it (nothing
+				// about persisting it changes its provider or country), but
+				// re-gating here rather than trusting that keeps this
+				// accessor's contract uniform — every return point answers a
+				// gated view, never a raw one. Falls back to the in-memory
+				// entry on the theoretical chance it does not (this is now
+				// truly theoretical: the pre-check above already validated
+				// it against the same rule).
+				return $this->gated_current_entry( $for_country ) ?? self::implicit_entry( $default );
 			}
 
 			// The write failed (no session yet on this guest REST request — see
 			// self::$unpersisted_default). The resolution itself still
-			// succeeded: serve it for THIS call, and remember it so a later
-			// call in the SAME request neither loses it nor re-triggers
-			// resolve_default() a second time.
+			// succeeded and already passed the gate above: serve it for THIS
+			// call, and remember it so a later call in the SAME request
+			// neither loses it nor re-triggers resolve_default() a second
+			// time.
 			$this->unpersisted_default = $default;
 
 			return self::implicit_entry( $default );
@@ -246,15 +320,30 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 * Gets the customer's whole location CHAIN (location-chain design §3:
 		 * `docs-internal/specs/2026-08-15-location-chain-design.md`) — every
 		 * level the customer has picked that {@see Customer_Location_Store::set()}
-		 * has not since dropped, plus which level is `current`.
+		 * has not since dropped AND that still passes the staleness gate
+		 * (#346/#333, {@see self::gate_chain()}), plus which level is
+		 * `current`.
 		 *
 		 * Routed through {@see self::get_customer_record()} FIRST, same as
 		 * {@see self::get_customer_record_at()} — never
 		 * {@see Customer_Location_Store::get_chain()} directly — so the lazy
 		 * default-locality trigger (spec D11, §4.6) stays in that ONE place: a
-		 * caller reaching for the chain before any record exists yet still gets
-		 * the store seeded exactly as a caller reaching for
-		 * {@see self::get_customer_record()} would.
+		 * caller reaching for the chain before any record exists yet (or
+		 * before anything SURVIVING one exists — a fully-stale chain reads
+		 * exactly like an empty one) still gets the store seeded exactly as a
+		 * caller reaching for {@see self::get_customer_record()} would.
+		 *
+		 * The chain itself is then re-read and gated a second time (rather
+		 * than reused from that first call) — not free, but not I/O either:
+		 * {@see self::gate_chain()} performs no I/O of its own, but a normal
+		 * `/suggest` call with a full 3-level chain still costs roughly seven
+		 * ownership walks ({@see self::provider_for_level()}, once per
+		 * surviving record in EACH of the two gate passes) plus provider and
+		 * customer-country resolution before any actual provider work runs —
+		 * cheap relative to a network call, not free. Re-gating here (rather
+		 * than reusing `get_customer_record()`'s bare entry) keeps this method
+		 * correct even though it cannot simply reuse that entry: THIS method
+		 * needs every surviving record, not only the one at `current`.
 		 *
 		 * Also covers the {@see self::$unpersisted_default} gap (review finding
 		 * F1): when {@see self::get_customer_record()} just resolved a default
@@ -272,20 +361,30 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 * re-deriving it.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Gates the stored chain against staleness (#346/#333,
+		 *              {@see self::gate_chain()}) rather than returning
+		 *              {@see Customer_Location_Store::get_chain()}'s raw
+		 *              answer.
+		 * @since 2.0.2 Added the optional `$for_country` parameter, threaded
+		 *              through to {@see self::get_customer_record()} and
+		 *              {@see self::gate_chain()} (#350/#352 follow-up).
+		 *
+		 * @param string|null $for_country Optional ISO-3166 alpha-2 country code — see {@see self::is_customer_record_stale()}.
 		 *
 		 * @return array{records: array<string, Location_Record>, current: string, implicit: bool, saved_at: int}|null
 		 */
-		public function get_customer_chain(): ?array {
-			$current = $this->get_customer_record();
+		public function get_customer_chain( ?string $for_country = null ): ?array {
+			$current = $this->get_customer_record( $for_country );
 
 			if ( null === $current ) {
 				return null;
 			}
 
-			$chain = $this->customer_store->get_chain();
+			$raw   = $this->customer_store->get_chain();
+			$gated = null === $raw ? null : $this->gate_chain( $raw, $for_country );
 
-			if ( null !== $chain ) {
-				return $chain;
+			if ( null !== $gated ) {
+				return $gated;
 			}
 
 			// self::$unpersisted_default (review finding F1, see docblock above):
@@ -311,20 +410,294 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 * reason documented there.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Added the optional `$for_country` parameter, threaded
+		 *              through to {@see self::get_customer_chain()} (#350/#352
+		 *              follow-up).
 		 *
-		 * @param string $level One of {@see Location_Record::LEVELS}.
+		 * @param string      $level       One of {@see Location_Record::LEVELS}.
+		 * @param string|null $for_country Optional ISO-3166 alpha-2 country code — see {@see self::is_customer_record_stale()}.
 		 *
 		 * @return Location_Record|null `null` for an unknown level string, or a
 		 *                               level the customer has not (yet) picked.
 		 */
-		public function get_customer_record_at( string $level ): ?Location_Record {
-			$chain = $this->get_customer_chain();
+		public function get_customer_record_at( string $level, ?string $for_country = null ): ?Location_Record {
+			$chain = $this->get_customer_chain( $for_country );
 
 			if ( null === $chain || ! isset( $chain['records'][ $level ] ) ) {
 				return null;
 			}
 
 			return $chain['records'][ $level ];
+		}
+
+		/**
+		 * Reads the customer's stored chain and gates it against staleness in
+		 * one step, projected down to {@see Customer_Location_Store::get()}'s
+		 * own entry shape (the record AT the gated chain's own `current`
+		 * level) — the single read path both {@see self::get_customer_record()}
+		 * and its post-write re-read share.
+		 *
+		 * @since 2.0.2
+		 * @since 2.0.2 Added the optional `$for_country` parameter, threaded
+		 *              through to {@see self::gate_chain()} (#350/#352
+		 *              follow-up).
+		 *
+		 * @param string|null $for_country Optional ISO-3166 alpha-2 country code — see {@see self::is_customer_record_stale()}.
+		 *
+		 * @return array{record: Location_Record, implicit: bool, saved_at: int}|null `null` when nothing is stored, or nothing SURVIVES the gate.
+		 */
+		private function gated_current_entry( ?string $for_country = null ): ?array {
+			$chain = $this->customer_store->get_chain();
+
+			if ( null === $chain ) {
+				return null;
+			}
+
+			$gated = $this->gate_chain( $chain, $for_country );
+
+			if ( null === $gated ) {
+				return null;
+			}
+
+			return [
+				'record'   => $gated['records'][ $gated['current'] ],
+				'implicit' => $gated['implicit'],
+				'saved_at' => $gated['saved_at'],
+			];
+		}
+
+		/**
+		 * Filters a raw stored chain down to the records that are still VALID
+		 * to serve on THIS read (#346/#333) — a record whose owning provider or
+		 * country has moved out from under it since it was written is STALE,
+		 * and a stale record is treated as ABSENT, never re-resolved (operator
+		 * decision: "считать отсутствующей"). See
+		 * {@see self::is_customer_record_stale()} for the two staleness rules
+		 * this applies per record.
+		 *
+		 * Gated in CASCADE ORDER ({@see Location_Record::LEVELS}), not
+		 * independently per level (adversarial review finding, s78): once a
+		 * level is dropped as stale, every DEEPER level is dropped too, even
+		 * one that would individually still pass. A surviving record must
+		 * have unbroken surviving ancestry — this mirrors
+		 * {@see Customer_Location_Store::rebuild_chain()}'s own invariant
+		 * (an ancestor only enters a rebuilt chain when the new record is
+		 * actually `is_within()` it), which a chain gated level-by-level
+		 * could otherwise violate: dropping a stale `settlement` while
+		 * keeping a surviving `address` would hand back `{address: …}` with
+		 * `current = address` — an address with no settlement above it,
+		 * a shape `rebuild_chain()` would never itself produce and the
+		 * cascade model `region > settlement > address` does not permit.
+		 *
+		 * The gate re-applies on EVERY read and never writes anything back —
+		 * the stored blob is left exactly as it is, staleness or not. A real
+		 * "forget" path for a permanently-stale blob (so it stops being
+		 * re-evaluated, and re-served as `implicit` history, on every future
+		 * request) is still missing; tracked separately as #356 rather than
+		 * folded into this read-side fix, which the operator scoped to
+		 * READING only ("Плюс почини сигнал" — the second half of that same
+		 * decision is Part 2 of this change, not a write).
+		 *
+		 * `current` is recomputed to the DEEPEST surviving level
+		 * ({@see Location_Record::LEVELS} cascade order) rather than trusting
+		 * the stored `current` pointer — a record dropped out from under that
+		 * pointer must not leave the gated chain pointing at a level no longer
+		 * present. This mirrors {@see Customer_Location_Store::rebuild_chain()}'s
+		 * own invariant that `current` always names the deepest record in the
+		 * chain.
+		 *
+		 * @since 2.0.2
+		 * @since 2.0.2 Gates in cascade order and drops every descendant of a
+		 *              dropped ancestor, rather than filtering each level
+		 *              independently (adversarial review finding, s78) — see
+		 *              above.
+		 * @since 2.0.2 Added the optional `$for_country` parameter, threaded
+		 *              through to {@see self::is_customer_record_stale()}
+		 *              (#350/#352 follow-up).
+		 *
+		 * @param array{records: array<string, Location_Record>, current: string, implicit: bool, saved_at: int} $chain       Raw stored chain.
+		 * @param string|null                                                                                    $for_country Optional ISO-3166 alpha-2 country code — see {@see self::is_customer_record_stale()}.
+		 *
+		 * @return array{records: array<string, Location_Record>, current: string, implicit: bool, saved_at: int}|null `null` when NOTHING survives — the caller must then treat this exactly like an empty store.
+		 */
+		private function gate_chain( array $chain, ?string $for_country = null ): ?array {
+			$records = [];
+			$broken  = false;
+
+			foreach ( Location_Record::LEVELS as $level ) {
+				if ( ! isset( $chain['records'][ $level ] ) ) {
+					continue;
+				}
+
+				if ( $broken || $this->is_customer_record_stale( $chain['records'][ $level ], $for_country ) ) {
+					// Once an ancestor is stale, every deeper level is stale
+					// too by construction — its ancestry is broken even if
+					// it would individually still pass the gate.
+					$broken = true;
+					continue;
+				}
+
+				$records[ $level ] = $chain['records'][ $level ];
+			}
+
+			if ( [] === $records ) {
+				return null;
+			}
+
+			$current = $chain['current'];
+
+			if ( ! isset( $records[ $current ] ) ) {
+				foreach ( array_reverse( Location_Record::LEVELS ) as $level ) {
+					if ( isset( $records[ $level ] ) ) {
+						$current = $level;
+						break;
+					}
+				}
+			}
+
+			return [
+				'records'  => $records,
+				'current'  => $current,
+				'implicit' => $chain['implicit'],
+				'saved_at' => $chain['saved_at'],
+			];
+		}
+
+		/**
+		 * Whether a stored customer record is STALE (#346/#333) — must be read
+		 * as ABSENT by {@see self::gate_chain()} even though it is still on
+		 * disk. Either rule below is sufficient on its own.
+		 *
+		 * (a) PROVIDER OWNERSHIP moved (#333): {@see self::provider_for_level()}
+		 * — the same D15 chain walk (active provider -> bundled fallback ->
+		 * nobody) every OTHER read of "who serves this level" already goes
+		 * through — no longer resolves to the SAME provider that produced this
+		 * record. This is deliberately NOT "the shop's active provider
+		 * changed": `provider_for_level()` itself falls back to the bundled
+		 * provider when the active one does not serve the level, so a record
+		 * the BUNDLED provider produced stays valid for as long as the bundled
+		 * provider remains the one the D15 chain actually resolves for that
+		 * level — only a change in WHICH provider is the resolved OWNER drops
+		 * it. A level nobody serves at all (`provider_for_level()` -> `null`)
+		 * is stale too — there is no owner left to vouch for it.
+		 *
+		 * (b) COUNTRY moved (#346): the record's own {@see Location_Record::country()}
+		 * no longer matches the country of authority for this read, as
+		 * `$for_country` (when given) or {@see self::customer_shipping_country()}
+		 * resolves it — switching the checkout country used to republish the
+		 * stale record with nothing catching it. There is deliberately no
+		 * "unknown country" escape here (operator correction, s79):
+		 * {@see self::customer_shipping_country()} ALWAYS answers something —
+		 * the same checkout-field -> store-setting -> `RU` floor
+		 * {@see self::resolve_default_country()} already guarantees — so an
+		 * "undeterminable" state this rule would need to special-case simply
+		 * does not exist, and a caller-supplied `$for_country` (already
+		 * normalized ISO-3166 by the caller — see `$for_country` below) is
+		 * never empty either.
+		 *
+		 * `$for_country` (optional, #350/#352 follow-up — call-site-aware
+		 * country authority): when given, rule (b) compares against IT
+		 * instead of the ambient {@see self::customer_shipping_country()}.
+		 * A REST read that already carries its own normalized `country`
+		 * request param (`/suggest`, `/list` — see
+		 * {@see \Woodev\Framework\Shipping\Rest_Api\Location_Controller::build_scope()})
+		 * is a STRONGER authority for that one request than WooCommerce's
+		 * ambient customer object, which can disagree with it (a fresh
+		 * guest's shipping country resolves through
+		 * `wc_get_customer_default_location()`'s geolocation fallback, which
+		 * lands on a hardcoded `US` for a non-routable IP — gotcha
+		 * `wc-customer-default-location-geolocation-fallback` — entirely
+		 * independent of what country the CURRENT request is actually
+		 * asking about). Omitted (`null`, the default): behaves EXACTLY as
+		 * before this parameter was added — the checkout-render and pickup
+		 * paths, where the ambient WooCommerce customer IS the right
+		 * authority, are unaffected.
+		 *
+		 * `protected` (not `private`) as a test seam, same discipline as
+		 * {@see self::customer_shipping_country()} right below it: a test file
+		 * whose fixtures are not ABOUT staleness at all (e.g. `PickupHandlerTest`,
+		 * `ProviderSelectionScopeTest`) can override this to bypass the D15
+		 * provider-ownership/country machinery entirely rather than being forced
+		 * to open the real provider registry gate for every fixture record it
+		 * builds.
+		 *
+		 * @since 2.0.2
+		 * @since 2.0.2 Added the optional `$for_country` parameter (#350/#352
+		 *              follow-up) so a call-site with its own stronger country
+		 *              authority (a REST request's own `country` param) is no
+		 *              longer forced through the ambient customer object.
+		 *
+		 * @param Location_Record $record      Stored record to check.
+		 * @param string|null     $for_country Optional ISO-3166 alpha-2 country
+		 *                                     code to check rule (b) against
+		 *                                     instead of the ambient
+		 *                                     {@see self::customer_shipping_country()}.
+		 *
+		 * @return bool
+		 */
+		protected function is_customer_record_stale( Location_Record $record, ?string $for_country = null ): bool {
+			$owner = $this->provider_for_level( $record->level(), $record->country() );
+
+			if ( null === $owner || $owner->get_id() !== $record->provider_id() ) {
+				return true;
+			}
+
+			$country = $for_country ?? $this->customer_shipping_country();
+
+			return $country !== $record->country();
+		}
+
+		/**
+		 * The customer's shipping country — the authority
+		 * {@see self::is_customer_record_stale()}'s rule (b) checks a stored
+		 * record's own country against (#346). NEVER empty (operator
+		 * correction, s79): reuses the SAME chain
+		 * {@see self::resolve_default_country()} already embodies (checkout
+		 * field -> WooCommerce store setting -> `RU`) rather than inventing a
+		 * second, subtly different one — step 1 (the LIVE shipping field) is
+		 * added HERE, on top of it, because `resolve_default_country()`'s own
+		 * docblock is explicit that step 1 is each CALLER's job, never that
+		 * method's ({@see \Woodev\Framework\Shipping\Rest_Api\Location_Controller::perform_suggest()}
+		 * reads the REQUEST's own `country` param for step 1; this gate has no
+		 * request to read, so it reads WooCommerce's own live session value
+		 * for the customer instead — {@see \WC_Customer::get_shipping_country()},
+		 * the field the checkout's own `update_checkout` AJAX call keeps
+		 * current while the customer types).
+		 *
+		 * `protected` as a test seam — same shape and reasoning as
+		 * {@see Customer_Location_Store::session()} /
+		 * {@see \Woodev\Framework\Shipping\Checkout\Checkout_Handler::current_country()}:
+		 * a probe overrides this single line rather than needing `WC()` to be a
+		 * real function in the unit-test process (Brain Monkey's
+		 * Patchwork-based `Functions\when( 'WC' )` redefinition would leak
+		 * `function_exists( 'WC' )` as permanently `true` for the rest of that
+		 * PHPUnit process). Deliberately reads the SHIPPING field, not billing
+		 * — unlike `Checkout_Handler::current_country()`, which reads billing
+		 * for ITS OWN, unrelated purpose (enhancing the country field's
+		 * initial render).
+		 *
+		 * @since 2.0.2
+		 * @since 2.0.2 Dropped the "empty means unknown, survive rule (b)"
+		 *              behaviour (operator correction, s79): that state was
+		 *              never reachable — {@see self::resolve_default_country()}'s
+		 *              own floor guarantees a non-empty answer, so treating an
+		 *              empty LIVE field as anything other than "fall through to
+		 *              that floor" was untestable dead defensiveness, not a
+		 *              real case.
+		 *
+		 * @return string ISO-3166 alpha-2 country code (upper-case), never
+		 *                empty.
+		 */
+		protected function customer_shipping_country(): string {
+			if ( function_exists( 'WC' ) && WC()->customer ) {
+				$live = strtoupper( trim( (string) WC()->customer->get_shipping_country() ) );
+
+				if ( '' !== $live ) {
+					return $live;
+				}
+			}
+
+			return $this->resolve_default_country();
 		}
 
 		/**

@@ -47,10 +47,13 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 
 	use Brain\Monkey\Filters;
 	use Brain\Monkey\Functions;
+	use Woodev\Framework\Shipping\Location\Abstract_Location_Provider;
 	use Woodev\Framework\Shipping\Location\Customer_Location_Store;
 	use Woodev\Framework\Shipping\Location\Location_Adapter;
+	use Woodev\Framework\Shipping\Location\Location_Provider;
 	use Woodev\Framework\Shipping\Location\Location_Provider_Registry;
 	use Woodev\Framework\Shipping\Location\Location_Record;
+	use Woodev\Framework\Shipping\Location\Location_Scope;
 	use Woodev\Framework\Shipping\Location\Location_Service;
 	use Woodev\Framework\Shipping\Map\Map_Provider;
 	use Woodev\Framework\Shipping\Order\Shipping_Order_Handler;
@@ -193,6 +196,43 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 	}
 
 	/**
+	 * A minimal `dadata`-id fixture provider claiming EVERY level in `RU` — the owning
+	 * provider {@see Pickup_Handler_Location_Service_Active_Probe::provider_for_level()}
+	 * always hands back, so #346/#333's staleness gate
+	 * ({@see Location_Service::is_customer_record_stale()}) never drops this file's own
+	 * `dadata:...` fixture records (see {@see PickupHandlerTest::location_record()} /
+	 * {@see PickupHandlerTest::address_record()}) — this file is about `Pickup_Handler`
+	 * downstream of a VALID record, not about the gate itself (that is
+	 * `LocationServiceTest`'s job).
+	 */
+	final class Pickup_Handler_Test_Owning_Provider extends Abstract_Location_Provider {
+
+		public function get_id(): string {
+			return 'dadata';
+		}
+
+		public function get_name(): string {
+			return 'dadata';
+		}
+
+		public function get_countries(): array {
+			return [ 'RU' ];
+		}
+
+		public function is_configured(): bool {
+			return true;
+		}
+
+		protected function declare_suggest_levels(): array {
+			return Location_Record::LEVELS;
+		}
+
+		public function suggest( string $query, Location_Scope $scope ): array {
+			return [];
+		}
+	}
+
+	/**
 	 * A {@see Location_Service} whose {@see Location_Service::is_active()} answers a FIXED
 	 * value the test controls directly (review finding F1, rig-verified) — bypassing the
 	 * registry/active-provider/`is_configured()` machinery `LocationServiceTest.php`
@@ -201,6 +241,14 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 	 * PLUGIN WIRED BUT NEVER CONFIGURED (`is_active() === false`) is exactly the
 	 * review-finding scenario — {@see Pickup_Handler::location_config_block()} used to gate
 	 * on `$plugin` alone and leaked the block through anyway.
+	 *
+	 * Also overrides {@see Location_Service::provider_for_level()} (#346/#333) — same
+	 * "bypass the registry machinery, this file needs only the outcome" reasoning as
+	 * `is_active()` above: every stored record this file builds
+	 * ({@see PickupHandlerTest::location_record()}, {@see PickupHandlerTest::address_record()})
+	 * is `dadata`-owned, so this always hands back {@see Pickup_Handler_Test_Owning_Provider}
+	 * rather than requiring every one of this file's dozens of fixtures to also open the
+	 * real provider-registry gate.
 	 */
 	final class Pickup_Handler_Location_Service_Active_Probe extends Location_Service {
 
@@ -213,6 +261,24 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 
 		public function is_active(): bool {
 			return $this->active;
+		}
+
+		public function provider_for_level( string $level, ?string $country = null ): ?Location_Provider {
+			return new Pickup_Handler_Test_Owning_Provider();
+		}
+
+		/**
+		 * #346/#333, rule (b) — the real implementation now falls through to
+		 * {@see Location_Service::resolve_default_country()}, which calls
+		 * `wc_get_base_location()`, unstubbed anywhere in this file (this file
+		 * is about `Pickup_Handler` downstream of a valid record, not the
+		 * gate's own country chain — that is `LocationServiceTest`'s job).
+		 * Fixed to `'RU'`, matching every `dadata:...` fixture this file
+		 * builds ({@see PickupHandlerTest::location_record()},
+		 * {@see PickupHandlerTest::address_record()}).
+		 */
+		protected function customer_shipping_country(): string {
+			return 'RU';
 		}
 	}
 

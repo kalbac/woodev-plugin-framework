@@ -154,7 +154,7 @@ final class Checkout_Config_Fake_Location_Service extends Location_Service {
 		return $this->default_country;
 	}
 
-	public function get_customer_record(): ?array {
+	public function get_customer_record( ?string $for_country = null ): ?array {
 		return $this->customer;
 	}
 
@@ -168,7 +168,7 @@ final class Checkout_Config_Fake_Location_Service extends Location_Service {
 	 *
 	 * @return array{records: array<string, Location_Record>, current: string, implicit: bool, saved_at: int}|null
 	 */
-	public function get_customer_chain(): ?array {
+	public function get_customer_chain( ?string $for_country = null ): ?array {
 		if ( null !== $this->chain_records ) {
 			return [
 				'records'  => $this->chain_records,
