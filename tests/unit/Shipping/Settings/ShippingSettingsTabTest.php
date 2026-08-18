@@ -26,6 +26,7 @@ require_once dirname( __DIR__, 4 ) . '/woodev/settings-page/class-settings-secti
 require_once dirname( __DIR__, 4 ) . '/woodev/settings-page/class-settings-provider.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/settings-page/class-settings-page-registry.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/settings-page/class-composite-settings-handler.php';
+require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/checkout/class-checkout-field-environment.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/checkout/class-checkout-field-settings.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/pickup/class-pickup-map-settings.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/settings/class-shipping-settings-tab.php';
@@ -39,6 +40,22 @@ class ShippingSettingsTabTest extends TestCase {
 		// is invoked directly, exactly like LocationProviderRegistryTest invokes collect()
 		// directly instead of firing a real `init` action.
 		Functions\when( 'add_action' )->justReturn( true );
+
+		// Building the «Поля» section now constructs a real Checkout_Field_Settings
+		// (Task 5), which registers settings/controls through Woodev_Abstract_Settings —
+		// stub the WP primitives that path touches, same as LocationProviderRegistryTest
+		// stubs for Location_Settings.
+		Functions\when( 'get_option' )->justReturn( null );
+		Functions\when( 'wp_parse_args' )->alias(
+			static function ( $args, $defaults = [] ) {
+				return array_merge( (array) $defaults, (array) $args );
+			}
+		);
+		Functions\when( 'apply_filters' )->alias(
+			static function ( string $tag, $default = null ) {
+				return $default;
+			}
+		);
 
 		Shipping_Settings_Tab::reset_for_tests();
 		Settings_Page_Registry::instance()->reset_for_tests();

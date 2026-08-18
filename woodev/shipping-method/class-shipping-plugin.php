@@ -147,6 +147,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			// stub handlers it composes with the location layer's handler. Required
 			// unconditionally, same reasoning as the location-provider block below —
 			// the registrar stays inert until declare_shipping_plugin() is called.
+			require_once $path . '/checkout/class-checkout-field-environment.php';
 			require_once $path . '/checkout/class-checkout-field-settings.php';
 			require_once $path . '/pickup/class-pickup-map-settings.php';
 			require_once $path . '/settings/class-shipping-settings-tab.php';
