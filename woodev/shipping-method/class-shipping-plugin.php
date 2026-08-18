@@ -143,6 +143,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			// settings
 			require_once $path . '/settings/class-shipping-integration.php';
 
+			// «Доставка» tab registrar (Task 4; issue #362): the tab + «Поля»/«Карта»
+			// stub handlers it composes with the location layer's handler. Required
+			// unconditionally, same reasoning as the location-provider block below —
+			// the registrar stays inert until declare_shipping_plugin() is called.
+			require_once $path . '/checkout/class-checkout-field-settings.php';
+			require_once $path . '/pickup/class-pickup-map-settings.php';
+			require_once $path . '/settings/class-shipping-settings-tab.php';
+
 			// pickup-point map provider interface + registry (no default provider ships)
 			require_once $path . '/map/interface-map-provider.php';
 			require_once $path . '/map/class-map-provider-registry.php';
@@ -218,6 +226,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 
 			// add shipping method information to the system status report
 			add_action( 'woocommerce_system_status_report', [ $this, 'add_system_status_information' ] );
+
+			// «Доставка» tab (Task 4; issue #362): every shipping plugin needs it, so
+			// declare it unconditionally — same synchronous-during-add_hooks() reasoning
+			// as the Location Provider declaration immediately below (it must run before
+			// Shipping_Settings_Tab's own `init` priority 25 registration hook fires).
+			Settings\Shipping_Settings_Tab::instance()->declare_shipping_plugin();
 
 			// Location Provider layer (Task 3): declare need with the shared registry
 			// singleton so its activation gate opens and its store setting appears.
