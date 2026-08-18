@@ -37,9 +37,10 @@ import WizardRichText from './richtext';
  * @param {string}   props.value    current value.
  * @param {Function} props.onChange change handler.
  * @param {boolean}  props.isSet    whether a secret is already stored.
+ * @param {boolean}  [props.disabled] whether the control is disabled (D11).
  * @return {Object} React element.
  */
-function PasswordControl( { value, onChange, isSet } ) {
+function PasswordControl( { value, onChange, isSet, disabled } ) {
 	const [ show, setShow ] = useState( false );
 	const hasValue = '' !== ( value ?? '' );
 
@@ -52,6 +53,7 @@ function PasswordControl( { value, onChange, isSet } ) {
 			type: show && hasValue ? 'text' : 'password',
 			value: value ?? '',
 			placeholder: isSet && ! hasValue ? '•••••• сохранено — введите новое для замены' : '',
+			disabled,
 			onChange,
 		} ),
 		hasValue &&
@@ -283,6 +285,9 @@ export default function ControlField( { schema, value, onChange, showErrors, has
 
 	const control = resolveControl( schema );
 	const suffix = schema.suffix || schema.unit || '';
+	// D11: a disabled control is rendered read-only (native `disabled`), never hidden or
+	// silently ignoring input — its reason already reached us as `schema.description`.
+	const disabled = !! schema.disabled;
 
 	switch ( control ) {
 		case 'toggle':
@@ -301,6 +306,7 @@ export default function ControlField( { schema, value, onChange, showErrors, has
 				createElement( ToggleControl, {
 					__nextHasNoMarginBottom: true,
 					checked: !! value,
+					disabled,
 					onChange,
 				} )
 			);
@@ -312,6 +318,7 @@ export default function ControlField( { schema, value, onChange, showErrors, has
 				createElement( SelectField, {
 					value: value ?? schema.value ?? '',
 					options: normalizeOptions( schema.options ),
+					disabled,
 					onChange: ( next ) => { setTouched( true ); onChange( next ?? '' ); },
 				} ),
 				error
@@ -327,6 +334,7 @@ export default function ControlField( { schema, value, onChange, showErrors, has
 					createElement( RadioControl, {
 						selected: value ?? schema.value ?? '',
 						options: normalizeOptions( schema.options ),
+						disabled,
 						onChange: ( next ) => { setTouched( true ); onChange( next ); },
 					} )
 				),
@@ -346,6 +354,7 @@ export default function ControlField( { schema, value, onChange, showErrors, has
 						min: schema.min ?? 0,
 						max: schema.max ?? 100,
 						step: schema.step ?? 1,
+						disabled,
 						onChange,
 					} ),
 					suffix &&
@@ -361,6 +370,7 @@ export default function ControlField( { schema, value, onChange, showErrors, has
 					__next40pxDefaultSize: true,
 					value: value ?? '',
 					placeholder: schema.placeholder || '',
+					disabled,
 					onChange,
 					onBlur,
 				} ),
@@ -372,6 +382,7 @@ export default function ControlField( { schema, value, onChange, showErrors, has
 				schema,
 				createElement( WizardRichText, {
 					value: value ?? '',
+					disabled,
 					onChange,
 				} ),
 				error
@@ -388,6 +399,7 @@ export default function ControlField( { schema, value, onChange, showErrors, has
 					value: current,
 					options: normalizeOptions( schema.options ),
 					multi: true,
+					disabled,
 					onChange: ( next ) => { setTouched( true ); onChange( next ); },
 				} ),
 				error
@@ -402,6 +414,7 @@ export default function ControlField( { schema, value, onChange, showErrors, has
 					__next40pxDefaultSize: true,
 					type: 'color',
 					value: value ?? schema.value ?? '',
+					disabled,
 					onChange,
 				} ),
 				error
@@ -410,7 +423,7 @@ export default function ControlField( { schema, value, onChange, showErrors, has
 		case 'password':
 			return withAnatomy(
 				schema,
-				createElement( PasswordControl, { value, onChange } ),
+				createElement( PasswordControl, { value, disabled, onChange } ),
 				error
 			);
 
@@ -428,6 +441,7 @@ export default function ControlField( { schema, value, onChange, showErrors, has
 				type,
 				value: value ?? '',
 				placeholder: schema.placeholder || '',
+				disabled,
 				onChange,
 				onBlur,
 				'aria-invalid': !! error,

@@ -40,12 +40,14 @@ function isSafeUrl( url ) {
 /**
  * Minimal contentEditable rich-text control.
  *
- * @param {Object}   props          component props.
- * @param {string}   props.value    current HTML value.
- * @param {Function} props.onChange change handler invoked with the new HTML.
+ * @param {Object}   props            component props.
+ * @param {string}   props.value      current HTML value.
+ * @param {Function} props.onChange   change handler invoked with the new HTML.
+ * @param {boolean}  [props.disabled] whether the control is disabled (D11) — the editor
+ *                                    becomes non-editable and the toolbar buttons disable.
  * @return {Object} React element.
  */
-export default function WizardRichText( { value = '', onChange } ) {
+export default function WizardRichText( { value = '', onChange, disabled = false } ) {
 	const editorRef = useRef( null );
 
 	// Seed the editable node from `value` ONCE on mount. We never feed `value`
@@ -99,6 +101,7 @@ export default function WizardRichText( { value = '', onChange } ) {
 				className: cls || undefined,
 				title,
 				'aria-label': title,
+				disabled,
 				// Keep focus/selection in the editor when clicking the toolbar.
 				onMouseDown: ( e ) => e.preventDefault(),
 				onClick: onAction,
@@ -144,10 +147,11 @@ export default function WizardRichText( { value = '', onChange } ) {
 		createElement( 'div', {
 			ref: editorRef,
 			className: 'woodev-field__richtext-editor',
-			contentEditable: true,
+			contentEditable: ! disabled,
 			suppressContentEditableWarning: true,
 			role: 'textbox',
 			'aria-multiline': 'true',
+			'aria-disabled': disabled,
 			onInput: emit,
 			// Content is seeded imperatively once on mount (see useEffect above) and
 			// never re-applied from props — re-applying resets the caret on typing.

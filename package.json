@@ -19,6 +19,12 @@
     "lint:docs": "node scripts/lint-docs.mjs"
   },
   "devDependencies": {
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@wordpress/api-fetch": "^7.40.1",
+    "@wordpress/components": "^32.2.1",
+    "@wordpress/notices": "^5.40.1",
     "@wordpress/scripts": "32.4.0",
     "jquery": "^4.0.0"
   }

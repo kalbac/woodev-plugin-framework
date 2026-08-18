@@ -18,6 +18,50 @@ import { validateFields, isFieldVisible } from '../components/validate';
 import TabsNav from '../components/tabs-nav';
 import SectionView from './section-view';
 
+/**
+ * Builds the REST save payload from staged edits, dropping any field whose current
+ * schema says `disabled: true` — a disabled field is rendered read-only (D11) and
+ * must never leave the browser on save, even if it is still staged as an edit from
+ * before it became disabled (e.g. a store setting changed underneath it).
+ *
+ * @since 2.0.2
+ * @param {Object} fields the tab's merged field schema map (settingId => schema slice).
+ * @param {Object} edits  staged edits for this tab (settingId => value).
+ * @return {Object} `edits` with any disabled-field keys removed.
+ */
+export function buildSavePayload( fields, edits ) {
+	const payload = {};
+	Object.keys( edits ).forEach( ( id ) => {
+		if ( fields[ id ] && fields[ id ].disabled ) {
+			return;
+		}
+		payload[ id ] = edits[ id ];
+	} );
+	return payload;
+}
+
+/**
+ * Fields eligible for client-side validation: visible AND not disabled. A disabled
+ * field is excluded from the save payload (see `buildSavePayload`), so a stale or
+ * now-invalid value stored under it (e.g. `country_field: 'hide'` after the store
+ * started shipping to several countries) must never block Save for the rest of the
+ * tab (D11).
+ *
+ * @since 2.0.2
+ * @param {Object} fields the tab's merged field schema map (settingId => schema slice).
+ * @param {Object} values current effective values (settingId => value).
+ * @return {Object} the subset of `fields` eligible for validation.
+ */
+export function validatableFields( fields, values ) {
+	const out = {};
+	Object.keys( fields ).forEach( ( id ) => {
+		if ( isFieldVisible( fields[ id ], values ) && ! fields[ id ].disabled ) {
+			out[ id ] = fields[ id ];
+		}
+	} );
+	return out;
+}
+
 export default function App() {
 	const [ tabs, setTabs ] = useState( null );
 	const [ loadError, setLoadError ] = useState( '' );
@@ -127,12 +171,7 @@ export default function App() {
 			merged[ id ] = providerEdits[ id ] ?? allFields[ id ].value;
 		} );
 
-		const visibleFields = {};
-		Object.keys( allFields ).forEach( ( id ) => {
-			if ( isFieldVisible( allFields[ id ], merged ) ) {
-				visibleFields[ id ] = allFields[ id ];
-			}
-		} );
+		const visibleFields = validatableFields( allFields, merged );
 
 		const clientErrors = validateFields( visibleFields, merged );
 		if ( Object.keys( clientErrors ).length > 0 ) {
@@ -151,7 +190,7 @@ export default function App() {
 		setSaved( '' );
 		setFieldErrors( ( p ) => ( { ...p, [ providerId ]: {} } ) );
 
-		saveTab( providerId, providerEdits )
+		saveTab( providerId, buildSavePayload( allFields, providerEdits ) )
 			.then( () => {
 				setSaving( '' );
 				setSaved( providerId );
