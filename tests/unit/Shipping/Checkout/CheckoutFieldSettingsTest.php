@@ -11,6 +11,7 @@ namespace Woodev\Tests\Unit\Shipping\Checkout;
 
 use Brain\Monkey\Functions;
 use Woodev\Framework\Shipping\Checkout\Checkout_Field_Environment;
+use Woodev\Framework\Shipping\Checkout\Checkout_Field_Policy;
 use Woodev\Framework\Shipping\Checkout\Checkout_Field_Settings;
 use Woodev\Tests\Unit\TestCase;
 
@@ -20,6 +21,7 @@ require_once dirname( __DIR__, 4 ) . '/woodev/settings-api/class-setting.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/settings-api/abstract-class-settings.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/checkout/class-checkout-field-environment.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/checkout/class-checkout-field-settings.php';
+require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/checkout/class-checkout-field-policy.php';
 
 /**
  * @covers \Woodev\Framework\Shipping\Checkout\Checkout_Field_Settings
@@ -160,5 +162,29 @@ final class CheckoutFieldSettingsTest extends TestCase {
 
 		$s = new Checkout_Field_Settings( new Checkout_Field_Environment( false, 1 ) );
 		$s->effective( 'not_a_real_setting' );
+	}
+
+	// -------------------------------------------------------------------------
+	// get_section_note() — the settlement-restoration report (S8)
+	// -------------------------------------------------------------------------
+
+	public function test_section_note_is_empty_when_nothing_was_overridden(): void {
+		$s = new Checkout_Field_Settings( new Checkout_Field_Environment( false, 1 ) );
+
+		$this->assertSame( '', $s->get_section_note() );
+	}
+
+	public function test_section_note_reports_a_restored_settlement_field(): void {
+		Functions\when( 'get_option' )->alias(
+			static function ( $name, $default = null ) {
+				return false !== strpos( (string) $name, Checkout_Field_Policy::OPTION_LAST_OVERRIDES )
+					? [ [ 'field' => 'city', 'section' => 'billing', 'what' => 'restored' ] ]
+					: $default;
+			}
+		);
+
+		$s = new Checkout_Field_Settings( new Checkout_Field_Environment( false, 1 ) );
+
+		$this->assertStringContainsString( 'Город', $s->get_section_note() );
 	}
 }

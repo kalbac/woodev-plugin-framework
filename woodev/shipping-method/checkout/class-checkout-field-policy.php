@@ -64,6 +64,22 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Field_Po
 		const LATE = PHP_INT_MAX - 10;
 
 		/**
+		 * Option name persisting the last non-empty settlement-invariant override
+		 * report (S8) across requests: {@see self::restore_invariants()} observes it
+		 * on a FRONTEND checkout render, but {@see \Woodev\Framework\Shipping\Checkout\Checkout_Field_Settings::get_section_note()}
+		 * reads it from a completely different (wp-admin) request — so it must be
+		 * persisted somewhere. A plain option, not a transient: {@see self::persist_overrides()}
+		 * actively `delete_option()`s it the moment a checkout render finds nothing
+		 * left to restore, which clears a stale note on the VERY NEXT observation
+		 * rather than waiting out a transient's expiry — a stale note accusing a
+		 * plugin that has since been deactivated is worse than no note at all.
+		 *
+		 * @since 2.0.2
+		 * @var string
+		 */
+		const OPTION_LAST_OVERRIDES = 'woodev_checkout_fields_last_overrides';
+
+		/**
 		 * @var self|null
 		 */
 		private static $instance = null;
@@ -91,6 +107,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Field_Po
 		 * @var bool
 		 */
 		private $hooked = false;
+
+		/**
+		 * The settlement-invariant overrides {@see self::restore_invariants()} recorded
+		 * on its most recent call — reset at the START of every call, never
+		 * accumulated across repeat filter applications within the same request.
+		 *
+		 * @since 2.0.2
+		 * @var array<int, array{field: string, section: string, what: string}>
+		 */
+		private $overrides = [];
 
 		/**
 		 * Returns the singleton instance.
@@ -216,18 +242,45 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Field_Po
 
 		/**
 		 * `woocommerce_checkout_fields` callback (Instrument B) — classic checkout only,
-		 * by construction (the block checkout never reads this filter).
+		 * by construction (the block checkout never reads this filter). Also runs
+		 * Task 7's settlement-invariant RESTORATION (S8) AFTER this policy's own
+		 * contribution, so it sees the final `city`/`billing_city`/`shipping_city`
+		 * state a third-party field-manager plugin left behind and restores exactly
+		 * what that plugin removed or relaxed — see {@see self::restore_invariants()}.
 		 *
 		 * @internal bound at {@see self::LATE} by {@see self::register()}.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Restores the settlement-field invariants and persists the
+		 *              override report (Task 7, issue #362, design S8).
 		 *
 		 * @param mixed $fields the checkout fields array WooCommerce/third-party plugins built so far.
 		 *
 		 * @return array<string, array<string, array<string, mixed>>>
 		 */
 		public function filter_checkout_fields( $fields ): array {
-			return self::checkout_fields_contribution( $this->effective(), (array) $fields );
+			$fields = self::checkout_fields_contribution( $this->effective(), (array) $fields );
+
+			/**
+			 * Filters whether {@see self::restore_invariants()} should run on this
+			 * request. A legitimate escape hatch for a carrier plugin whose own field
+			 * manager deliberately needs `city` non-required for a specific flow (e.g.
+			 * a cash/self-pickup order) — the framework's own default is always to
+			 * restore. Never a new SETTING (design's standing rule): a filter only a
+			 * developer can reach, not a merchant-facing control.
+			 *
+			 * @since 2.0.2
+			 *
+			 * @param bool                                                 $restore whether to restore the settlement invariants.
+			 * @param array<string, array<string, array<string, mixed>>> $fields  the checkout fields array so far (after this policy's own contribution).
+			 */
+			if ( apply_filters( 'woodev_checkout_field_policy_restore_invariants', true, $fields ) ) {
+				$fields = $this->restore_invariants( $fields, $this->default_address_fields() );
+
+				$this->persist_overrides();
+			}
+
+			return $fields;
 		}
 
 		/**
@@ -385,6 +438,146 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Field_Po
 			}
 
 			return $fields;
+		}
+
+		/**
+		 * Restores the settlement-field invariants a third-party field-manager plugin
+		 * broke (S8, design §4.4): `*_city` must EXIST in both the `billing` and
+		 * `shipping` sections of the final checkout fields array, and must be
+		 * `required`. Runs after {@see self::checkout_fields_contribution()} — and,
+		 * by virtue of {@see self::LATE}, after WooCommerce's own defaults and any
+		 * third-party field manager — so it restores exactly what got removed or
+		 * relaxed. Everything else about `city` (label, class, priority, …) and every
+		 * OTHER field is left untouched — that is the field manager's business, not
+		 * this framework's (S8's own words: the framework overrides only the values
+		 * that are not WC defaults, nothing more).
+		 *
+		 * Every restoration is recorded into {@see self::$overrides} (never applied
+		 * silently) so {@see self::persist_overrides()} can turn it into a report the
+		 * admin «Доставка» tab surfaces via
+		 * {@see \Woodev\Framework\Shipping\Checkout\Checkout_Field_Settings::get_section_note()}.
+		 * {@see self::$overrides} is reset at the START of every call — this method
+		 * describes the outcome of THIS pass over `$fields` only.
+		 *
+		 * Deliberately an INSTANCE method, not one of this class's other `_contribution()`
+		 * statics: unlike those, it has an observable side effect ({@see self::$overrides})
+		 * that is itself part of the contract (design §4.4 names
+		 * `Checkout_Field_Policy::get_overrides()` as the read side of it) — Task 7's
+		 * unit tests construct a plain `new self()` and call this method directly,
+		 * exactly like the existing pure statics are called directly, without needing
+		 * a WordPress runtime.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<string, array<string, array<string, mixed>>> $fields                 the checkout fields array to restore invariants onto — normally
+		 *                                                                                     the result of {@see self::checkout_fields_contribution()}.
+		 * @param array<string, array<string, mixed>>                $default_address_fields WC's default address-field template
+		 *                                                                                    ({@see \WC_Countries::get_default_address_fields()}), UNPREFIXED
+		 *                                                                                    keys (`city`, not `billing_city`) — the source for re-inserting
+		 *                                                                                    a `city` field a plugin removed entirely.
+		 *
+		 * @return array<string, array<string, array<string, mixed>>>
+		 */
+		public function restore_invariants( array $fields, array $default_address_fields ): array {
+			$this->overrides = [];
+
+			$default_city = $default_address_fields['city'] ?? [];
+
+			foreach ( [ 'billing', 'shipping' ] as $section ) {
+				if ( ! isset( $fields[ $section ] ) || ! is_array( $fields[ $section ] ) ) {
+					continue;
+				}
+
+				$key = $section . '_city';
+
+				if ( ! isset( $fields[ $section ][ $key ] ) || ! is_array( $fields[ $section ][ $key ] ) ) {
+					$fields[ $section ][ $key ] = $default_city;
+
+					$this->overrides[] = [
+						'field' => 'city',
+						'section' => $section,
+						'what' => 'restored',
+					];
+
+					continue;
+				}
+
+				if ( empty( $fields[ $section ][ $key ]['required'] ) ) {
+					$fields[ $section ][ $key ]['required'] = true;
+
+					$this->overrides[] = [
+						'field' => 'city',
+						'section' => $section,
+						'what' => 'required',
+					];
+				}
+			}
+
+			return $fields;
+		}
+
+		/**
+		 * The overrides {@see self::restore_invariants()} recorded on its most recent
+		 * call — part of this class's public contract (design §4.4).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array<int, array{field: string, section: string, what: string}>
+		 */
+		public function get_overrides(): array {
+			return $this->overrides;
+		}
+
+		/**
+		 * WC's default address-field template ({@see \WC_Countries::get_default_address_fields()}),
+		 * the source {@see self::restore_invariants()} re-inserts a removed `city`
+		 * field from. Guarded for the unit suite (no `WC()` there), same shape as
+		 * {@see self::shipping_countries()}: returns `[]`, which degrades
+		 * `restore_invariants()`'s re-insertion to an empty stub rather than failing —
+		 * harmless outside a real WooCommerce runtime.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array<string, array<string, mixed>>
+		 */
+		private function default_address_fields(): array {
+			if ( ! function_exists( 'WC' ) || ! WC()->countries ) {
+				return [];
+			}
+
+			return WC()->countries->get_default_address_fields();
+		}
+
+		/**
+		 * Persists {@see self::$overrides} to {@see self::OPTION_LAST_OVERRIDES} for
+		 * {@see \Woodev\Framework\Shipping\Checkout\Checkout_Field_Settings::get_section_note()}
+		 * to read from a later (wp-admin) request — a write on a frontend checkout
+		 * READ path, so guarded hard: only writes when the report is non-empty AND
+		 * differs from what is already stored.
+		 *
+		 * The control case (S8): once a checkout render finds NOTHING to restore, any
+		 * previously stored report is actively deleted — the note disappears on the
+		 * very next observation once the offending plugin stops interfering, rather
+		 * than lingering and accusing a plugin that may no longer even be active.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		private function persist_overrides(): void {
+			$stored = (array) get_option( self::OPTION_LAST_OVERRIDES, [] );
+
+			if ( empty( $this->overrides ) ) {
+				if ( ! empty( $stored ) ) {
+					delete_option( self::OPTION_LAST_OVERRIDES );
+				}
+
+				return;
+			}
+
+			if ( $this->overrides !== $stored ) {
+				update_option( self::OPTION_LAST_OVERRIDES, $this->overrides, false );
+			}
 		}
 	}
 

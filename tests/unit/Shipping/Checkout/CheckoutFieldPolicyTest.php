@@ -129,6 +129,58 @@ final class CheckoutFieldPolicyTest extends TestCase {
 	}
 
 	// -------------------------------------------------------------------------
+	// restore_invariants() — settlement-field invariant restoration (S8), instance
+	// -------------------------------------------------------------------------
+
+	public function test_settlement_removed_by_a_third_party_is_restored_and_recorded(): void {
+		$fields = [ 'billing' => [ 'billing_address_1' => [] ], 'shipping' => [ 'shipping_address_1' => [] ] ];
+		$policy = new Checkout_Field_Policy();
+		$out    = $policy->restore_invariants( $fields, [ 'city' => [ 'label' => 'Город', 'required' => true, 'class' => [ 'form-row-wide' ], 'priority' => 70 ] ] );
+
+		$this->assertTrue( $out['billing']['billing_city']['required'] );
+		$this->assertTrue( $out['shipping']['shipping_city']['required'] );
+		$this->assertSame(
+			[ [ 'field' => 'city', 'what' => 'restored' ], [ 'field' => 'city', 'what' => 'restored' ] ],
+			array_map( static fn( $o ) => [ 'field' => $o['field'], 'what' => $o['what'] ], $policy->get_overrides() )
+		);
+	}
+
+	public function test_settlement_made_optional_is_made_required_again(): void {
+		$fields = [ 'billing' => [ 'billing_city' => [ 'required' => false ] ], 'shipping' => [ 'shipping_city' => [ 'required' => false ] ] ];
+		$policy = new Checkout_Field_Policy();
+		$out    = $policy->restore_invariants( $fields, [ 'city' => [ 'required' => true ] ] );
+
+		$this->assertTrue( $out['shipping']['shipping_city']['required'] );
+		$this->assertSame( 'required', $policy->get_overrides()[0]['what'] );
+	}
+
+	public function test_other_fields_are_left_to_the_field_manager(): void {
+		$fields = [ 'billing' => [ 'billing_city' => [ 'required' => true ], 'billing_phone' => [ 'required' => false ] ], 'shipping' => [ 'shipping_city' => [ 'required' => true ] ] ];
+		$policy = new Checkout_Field_Policy();
+		$out    = $policy->restore_invariants( $fields, [ 'city' => [ 'required' => true ] ] );
+
+		$this->assertFalse( $out['billing']['billing_phone']['required'] );
+		$this->assertSame( [], $policy->get_overrides() );
+	}
+
+	/**
+	 * A second call describes only the outcome of THAT pass — overrides never
+	 * accumulate across repeat filter applications within the same request.
+	 */
+	public function test_restore_invariants_resets_overrides_on_each_call(): void {
+		$policy = new Checkout_Field_Policy();
+
+		$policy->restore_invariants( [ 'billing' => [], 'shipping' => [] ], [ 'city' => [ 'required' => true ] ] );
+		$this->assertNotSame( [], $policy->get_overrides() );
+
+		$policy->restore_invariants(
+			[ 'billing' => [ 'billing_city' => [ 'required' => true ] ], 'shipping' => [ 'shipping_city' => [ 'required' => true ] ] ],
+			[ 'city' => [ 'required' => true ] ]
+		);
+		$this->assertSame( [], $policy->get_overrides(), 'a second call must not accumulate overrides from the first' );
+	}
+
+	// -------------------------------------------------------------------------
 	// register() / filter callbacks — real Checkout_Field_Settings
 	// -------------------------------------------------------------------------
 
@@ -154,6 +206,8 @@ final class CheckoutFieldPolicyTest extends TestCase {
 				return $default;
 			}
 		);
+		Functions\when( 'update_option' )->justReturn( true );
+		Functions\when( 'delete_option' )->justReturn( true );
 
 		return new Checkout_Field_Settings( new Checkout_Field_Environment( false, 1 ) );
 	}
@@ -245,5 +299,89 @@ final class CheckoutFieldPolicyTest extends TestCase {
 
 		$this->assertArrayNotHasKey( 'billing_postcode', $out['billing'] );
 		$this->assertArrayNotHasKey( 'shipping_postcode', $out['shipping'] );
+	}
+
+	// -------------------------------------------------------------------------
+	// filter_checkout_fields() end-to-end — restoration is persisted (S8)
+	// -------------------------------------------------------------------------
+
+	/**
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_filter_checkout_fields_restores_and_persists_the_override_report(): void {
+		Functions\when( 'add_filter' )->justReturn( true );
+		Functions\when( 'WC' )->justReturn(
+			(object) [
+				'countries' => new class() {
+					public function get_default_address_fields(): array {
+						return [ 'city' => [ 'label' => 'Город', 'required' => true, 'priority' => 70 ] ];
+					}
+				},
+			]
+		);
+
+		$policy = Checkout_Field_Policy::instance();
+		$policy->register( $this->settings_handler() );
+
+		$written = null;
+		Functions\when( 'update_option' )->alias(
+			static function ( $name, $value ) use ( &$written ) {
+				$written = [ $name, $value ];
+
+				return true;
+			}
+		);
+		Functions\when( 'delete_option' )->justReturn( true );
+
+		$out = $policy->filter_checkout_fields(
+			[
+				'billing'  => [ 'billing_address_1' => [] ],
+				'shipping' => [ 'shipping_address_1' => [] ],
+			]
+		);
+
+		$this->assertTrue( $out['billing']['billing_city']['required'] );
+		$this->assertSame( Checkout_Field_Policy::OPTION_LAST_OVERRIDES, $written[0] );
+		$this->assertNotEmpty( $written[1] );
+	}
+
+	/**
+	 * The control case (design S8): once the offending plugin stops interfering —
+	 * the very next observation finds nothing to restore — the stale report must be
+	 * cleared, not left behind accusing a plugin that is no longer active.
+	 */
+	public function test_filter_checkout_fields_clears_a_stale_report_once_nothing_is_overridden(): void {
+		Functions\when( 'add_filter' )->justReturn( true );
+
+		$policy = Checkout_Field_Policy::instance();
+		$policy->register( $this->settings_handler() );
+
+		Functions\when( 'get_option' )->alias(
+			static function ( $name, $default = null ) {
+				return false !== strpos( (string) $name, Checkout_Field_Policy::OPTION_LAST_OVERRIDES )
+					? [ [ 'field' => 'city', 'section' => 'billing', 'what' => 'restored' ] ]
+					: $default;
+			}
+		);
+
+		$deleted = false;
+		Functions\when( 'delete_option' )->alias(
+			static function ( $name ) use ( &$deleted ) {
+				$deleted = ( Checkout_Field_Policy::OPTION_LAST_OVERRIDES === $name );
+
+				return true;
+			}
+		);
+		Functions\when( 'update_option' )->justReturn( true );
+
+		$policy->filter_checkout_fields(
+			[
+				'billing'  => [ 'billing_city' => [ 'required' => true ] ],
+				'shipping' => [ 'shipping_city' => [ 'required' => true ] ],
+			]
+		);
+
+		$this->assertTrue( $deleted, 'once nothing needs restoring, the stale report must be cleared' );
 	}
 }

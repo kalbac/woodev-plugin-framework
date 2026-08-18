@@ -93,15 +93,35 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Field_Se
 		}
 
 		/**
-		 * Optional note shown under the «Поля» section heading. Empty until Task 7
-		 * fills it in with the override report (design S8).
+		 * Note shown under the «Поля» section heading, reporting Task 7's
+		 * settlement-invariant restoration (design S8): when a third-party
+		 * checkout-field-manager plugin removed the settlement (`*_city`) field or
+		 * made it non-required, {@see \Woodev\Framework\Shipping\Checkout\Checkout_Field_Policy}
+		 * restores it and this note explains why — silently fixing someone else's
+		 * plugin and saying nothing is exactly the failure this codebase avoids.
+		 * Empty when nothing was overridden.
+		 *
+		 * Reads the RAW option ({@see \Woodev\Framework\Shipping\Checkout\Checkout_Field_Policy::OPTION_LAST_OVERRIDES})
+		 * with a plain `get_option()`, deliberately NOT through this class's own
+		 * settings API: {@see \Woodev_Setting::get_value()} returns a cached property
+		 * loaded once at construction, not a live option read (gotcha
+		 * `woodev-setting-get-value-is-cached-not-a-live-option-read`) — the override
+		 * report is written by a DIFFERENT (frontend checkout) request than the one
+		 * that renders this note (wp-admin), so a cached value would never see it.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Reports Task 7's settlement-invariant override (issue #362, design S8).
 		 *
 		 * @return string
 		 */
 		public function get_section_note(): string {
-			return '';
+			$overrides = get_option( Checkout_Field_Policy::OPTION_LAST_OVERRIDES, [] );
+
+			if ( empty( $overrides ) ) {
+				return '';
+			}
+
+			return __( 'Поле «Город» было изменено сторонним кодом (снята обязательность / удалено); фреймворк восстановил его — оформление заказа зависит от этого поля.', 'woodev-plugin-framework' );
 		}
 
 		/**
