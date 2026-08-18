@@ -13,6 +13,11 @@
  * report ONLY which levels a configured provider serves, never which
  * provider) and D4 (no token/secret may ever reach the serialized config).
  *
+ * Task 8 (issue #362, design S7) extends `pickup_slot_placements` with a middle
+ * precedence step: the framework's `'rate'`-alone default is now itself derived from
+ * the store's own `pickup_button_placement` setting ({@see Pickup_Map_Settings}) before
+ * the `woodev_pickup_slot_placements` filter gets a chance to override it.
+ *
  * @package Woodev\Tests\Unit\Shipping\Checkout
  */
 
@@ -20,6 +25,7 @@ namespace Woodev\Tests\Unit\Shipping\Checkout;
 
 use Brain\Monkey\Filters;
 use Brain\Monkey\Functions;
+use Mockery;
 use Woodev\Framework\Shipping\Checkout\Checkout_Config;
 use Woodev\Framework\Shipping\Checkout\Checkout_Field_Environment;
 use Woodev\Framework\Shipping\Checkout\Checkout_Field_Settings;
@@ -32,6 +38,8 @@ use Woodev\Framework\Shipping\Location\Location_Record;
 use Woodev\Framework\Shipping\Location\Location_Scope;
 use Woodev\Framework\Shipping\Location\Location_Service;
 use Woodev\Framework\Shipping\Location\Providers\Dadata_Provider;
+use Woodev\Framework\Shipping\Pickup\Pickup_Map_Settings;
+use Woodev\Framework\Shipping\Settings\Shipping_Settings_Tab;
 use Woodev\Framework\Settings\Settings_Page_Registry;
 use Woodev\Tests\Unit\TestCase;
 
@@ -43,6 +51,9 @@ require_once dirname( __DIR__, 4 ) . '/woodev/settings-api/abstract-class-settin
 require_once dirname( __DIR__, 4 ) . '/woodev/settings-page/class-settings-section.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/settings-page/class-settings-provider.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/settings-page/class-settings-page-registry.php';
+require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/checkout/class-checkout-field-policy.php';
+require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/pickup/class-pickup-map-settings.php';
+require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/settings/class-shipping-settings-tab.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-locality-key.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-location-record.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-location-scope.php';
@@ -254,7 +265,26 @@ final class Checkout_Config_Fake_Location_Service extends Location_Service {
  */
 class CheckoutConfigTest extends TestCase {
 
+	protected function setUp(): void {
+		parent::setUp();
+
+		// resolve_pickup_slot_placements() (Task 8, issue #362) now reaches
+		// Pickup_Map_Settings::current() for every pickup-slot field, which lazily
+		// constructs a real Pickup_Map_Settings through Woodev_Abstract_Settings — stub
+		// the WP primitives that path touches, same as CheckoutFieldSettingsTest /
+		// CheckoutHandlerEnqueueTest / ShippingSettingsTabTest.
+		Functions\when( 'get_option' )->justReturn( null );
+		Functions\when( 'wp_parse_args' )->alias(
+			static function ( $args, $defaults = [] ) {
+				return array_merge( (array) $defaults, (array) $args );
+			}
+		);
+
+		Shipping_Settings_Tab::reset_for_tests();
+	}
+
 	protected function tearDown(): void {
+		Shipping_Settings_Tab::reset_for_tests();
 		Location_Provider_Registry::instance()->reset_for_tests();
 		Settings_Page_Registry::instance()->reset_for_tests();
 		parent::tearDown();
@@ -446,6 +476,69 @@ class CheckoutConfigTest extends TestCase {
 		$config = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ] ) )->build( $fields );
 
 		$this->assertSame( [], $config['fields']['carrier_pvz']['pickup_slot_placements'] );
+	}
+
+	// -------------------------------------------------------------------------
+	// pickup_slot_placements — the store's own setting as the middle precedence
+	// step (Task 8, issue #362, design S7)
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Resolves `pickup_slot_placements` for a single pickup-slot field, exactly like
+	 * every test above. Resets {@see Shipping_Settings_Tab} before EVERY call — not
+	 * only once in {@see self::setUp()} — because {@see Pickup_Map_Settings::current()}
+	 * reaches the tab singleton, and `Woodev_Setting::get_value()` is a value CACHED at
+	 * construction time, never a live option read (gotcha
+	 * `woodev-setting-get-value-is-cached-not-a-live-option-read`): a test that changes
+	 * the `get_option` stub between two calls needs a fresh `Pickup_Map_Settings`
+	 * instance to actually see the new value, and resetting here — inside the helper
+	 * itself — is cheaper than repeating the reset at every call site.
+	 *
+	 * @return string[]|null
+	 */
+	private function resolve_placements(): ?array {
+		Shipping_Settings_Tab::reset_for_tests();
+
+		$fields = Checkout_Fields::from_array(
+			[ Field::create( 'carrier_pvz' )->set_type( 'hidden' )->mark_pickup_slot()->to_array() ]
+		);
+		$config = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ] ) )->build( $fields );
+
+		return $config['fields']['carrier_pvz']['pickup_slot_placements'];
+	}
+
+	/**
+	 * The full three-step precedence chain in one test: the framework's `'rate'`-alone
+	 * default, then the store's own `pickup_button_placement` setting overriding it,
+	 * then the `woodev_pickup_slot_placements` filter overriding THAT — each step is
+	 * meaningless without proving the one before it actually feeds into it, which is
+	 * why this is a single sequential test rather than three independent ones.
+	 */
+	public function test_placement_precedence_default_then_store_setting_then_filter(): void {
+		// default
+		$this->assertSame( [ 'rate' ], $this->resolve_placements() );
+
+		// store setting
+		Functions\when( 'get_option' )->alias( fn( $k, $d = false ) => 'woodev_pickup_map_pickup_button_placement' === $k ? 'review' : $d );
+		$this->assertSame( [ 'review' ], $this->resolve_placements() );
+
+		// filter wins last
+		Filters\expectApplied( 'woodev_pickup_slot_placements' )->once()->with( [ 'review' ], Mockery::any(), Mockery::any() )->andReturn( [ 'rate', 'review' ] );
+		$this->assertSame( [ 'review', 'rate' ], $this->resolve_placements() );
+	}
+
+	/**
+	 * A stored value that is neither `'rate'` nor `'review'` (a stale constant, a typo
+	 * written directly to the option, a future settings version this code does not know
+	 * about yet) clamps to the framework's own `'rate'` default on READ — design §7,
+	 * same discipline as {@see \Woodev\Framework\Shipping\Checkout\Checkout_Field_Settings::effective()}.
+	 * The stored option itself is never rewritten; only what THIS request resolves to
+	 * falls back.
+	 */
+	public function test_placement_default_clamps_an_unrecognised_stored_value_to_rate(): void {
+		Functions\when( 'get_option' )->alias( fn( $k, $d = false ) => 'woodev_pickup_map_pickup_button_placement' === $k ? 'bogus' : $d );
+
+		$this->assertSame( [ 'rate' ], $this->resolve_placements() );
 	}
 
 	// -------------------------------------------------------------------------

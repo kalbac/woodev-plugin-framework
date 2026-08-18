@@ -25,6 +25,8 @@
 
 namespace Woodev\Framework\Shipping\Checkout;
 
+use Woodev\Framework\Shipping\Pickup\Pickup_Map_Settings;
+
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 } // Exit if accessed directly
@@ -384,16 +386,22 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 		 * What the carrier plugin owns is the button's TEXT, through the existing
 		 * `woodev_pickup_map_i18n` filter's `trigger` key.
 		 *
-		 * Precedence: this default → a future framework-level store setting (part of
-		 * the carrier-settings screen the operator is designing separately, deliberately
-		 * not built here) → the `woodev_pickup_slot_placements` filter last. The filter
-		 * is kept, per this framework's own rule for extension hooks (a hook is never
-		 * withheld for lack of a caller today), and it is also what keeps "both places
-		 * at once" available to a store that genuinely wants it without spending a
-		 * third option in a UI. Only `'review'` and `'rate'` ever reach the browser,
-		 * in that order, each at most once — an array containing unrecognised values
-		 * (a typo, a stale constant) is filtered down to whichever of the two it
-		 * actually names, same as ever.
+		 * Precedence: the framework's `'rate'`-alone default → the store's own
+		 * `pickup_button_placement` setting (Task 8, issue #362, design S7 — one of the
+		 * three map behaviours a customer sees across every carrier at once, so it is a
+		 * STORE decision, never a carrier's) → the `woodev_pickup_slot_placements`
+		 * filter LAST. {@see Pickup_Map_Settings::current()}'s stored value is clamped
+		 * to `'rate'`/`'review'` on READ (design §7 — never rewrite the stored option);
+		 * an unrecognised value (a stale constant, a value from a future settings
+		 * version this code does not know about yet) falls back to the framework's own
+		 * `'rate'` default rather than reaching the filter as-is. The filter is kept,
+		 * per this framework's own rule for extension hooks (a hook is never withheld
+		 * for lack of a caller today), and it is also what keeps "both places at once"
+		 * available to a store that genuinely wants it without spending a third option
+		 * in a UI. Only `'review'` and `'rate'` ever reach the browser, in that order,
+		 * each at most once — an array containing unrecognised values (a typo, a stale
+		 * constant) is filtered down to whichever of the two it actually names, same as
+		 * ever.
 		 *
 		 * A non-array return is a DIFFERENT failure than a well-formed, empty one
 		 * (issue #308 item 2 — adversarial review of #274 item 3): it means the filter
@@ -414,6 +422,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 		 *              (issue #308 item 2).
 		 * @since 2.0.2 Defaults to `[ 'rate' ]` alone, never both placements at once
 		 *              (issue #323).
+		 * @since 2.0.2 The filter's default now runs through the store's own
+		 *              `pickup_button_placement` setting before reaching the filter
+		 *              (Task 8, issue #362, design S7).
 		 *
 		 * @param string $field_id the pickup-slot field id.
 		 *
@@ -421,18 +432,24 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 		 *                       filter itself returned something other than an array.
 		 */
 		private function resolve_pickup_slot_placements( string $field_id ): ?array {
+			$stored_placement = (string) Pickup_Map_Settings::current()->get_value( 'pickup_button_placement' );
+			$default          = in_array( $stored_placement, [ 'rate', 'review' ], true ) ? [ $stored_placement ] : [ 'rate' ];
+
 			/**
 			 * Filters which anchors a pickup-slot field's checkout trigger mounts into.
 			 *
 			 * @since 2.0.2
 			 *
-			 * @param string[] $placements the framework's default — `'rate'` alone since issue #323.
+			 * @param string[] $placements the framework's default, after the store's own
+			 *                             `pickup_button_placement` setting (Task 8) has
+			 *                             already been applied — `'rate'` alone unless the
+			 *                             store chose `'review'`.
 			 * @param string   $field_id   the pickup-slot field id.
 			 * @param string   $plugin_id  the owning plugin id.
 			 */
 			$placements = apply_filters(
 				'woodev_pickup_slot_placements',
-				[ 'rate' ],
+				$default,
 				$field_id,
 				$this->plugin_id
 			);
