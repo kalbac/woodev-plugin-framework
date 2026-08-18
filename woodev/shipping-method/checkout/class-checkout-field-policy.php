@@ -507,7 +507,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Field_Po
 				$key = $section . '_city';
 
 				if ( ! isset( $fields[ $section ][ $key ] ) || ! is_array( $fields[ $section ][ $key ] ) ) {
-					$fields[ $section ][ $key ] = $default_city;
+					/*
+					 * BOTH halves of the invariant are asserted here, not just presence.
+					 * `$default_address_fields` comes from `WC_Countries::get_default_address_fields()`,
+					 * which is itself filterable through `woocommerce_default_address_fields` — the very
+					 * hook a third-party field manager would use to relax `city`. Re-inserting that
+					 * template verbatim could therefore restore an OPTIONAL settlement field while
+					 * reporting a successful restoration. The same hole opens when the template is
+					 * unavailable at all (no WooCommerce runtime), where `$default_city` is `[]`.
+					 */
+					$fields[ $section ][ $key ]               = $default_city;
+					$fields[ $section ][ $key ]['required']   = true;
 
 					$this->overrides[] = [
 						'field' => 'city',

@@ -149,6 +149,40 @@ final class CheckoutFieldPolicyTest extends TestCase {
 		);
 	}
 
+	/**
+	 * The invariant is «the settlement field EXISTS and is REQUIRED» — both halves, always.
+	 * `WC_Countries::get_default_address_fields()` is itself filterable
+	 * (`woocommerce_default_address_fields`), which is exactly where a third-party field
+	 * manager would relax `city`. Re-inserting that template verbatim would then restore an
+	 * OPTIONAL settlement field while reporting success — the invariant silently half-kept.
+	 */
+	public function test_a_restored_settlement_field_is_required_even_when_the_template_is_not(): void {
+		$fields = [ 'billing' => [ 'billing_address_1' => [] ], 'shipping' => [ 'shipping_address_1' => [] ] ];
+		$policy = new Checkout_Field_Policy();
+
+		$out = $policy->restore_invariants( $fields, [ 'city' => [ 'label' => 'Город', 'required' => false, 'priority' => 70 ] ] );
+
+		$this->assertTrue( $out['billing']['billing_city']['required'] );
+		$this->assertTrue( $out['shipping']['shipping_city']['required'] );
+		// Everything else in the template survives — only the invariant is asserted over it.
+		$this->assertSame( 'Город', $out['billing']['billing_city']['label'] );
+		$this->assertSame( 70, $out['billing']['billing_city']['priority'] );
+	}
+
+	/**
+	 * Degenerate case: no WooCommerce runtime, so the template is empty. The field must still
+	 * come back required rather than as a bare `[]` that renders as an optional text input.
+	 */
+	public function test_a_restored_settlement_field_is_required_when_no_template_exists(): void {
+		$fields = [ 'billing' => [], 'shipping' => [] ];
+		$policy = new Checkout_Field_Policy();
+
+		$out = $policy->restore_invariants( $fields, [] );
+
+		$this->assertTrue( $out['billing']['billing_city']['required'] );
+		$this->assertTrue( $out['shipping']['shipping_city']['required'] );
+	}
+
 	public function test_settlement_made_optional_is_made_required_again(): void {
 		$fields = [ 'billing' => [ 'billing_city' => [ 'required' => false ] ], 'shipping' => [ 'shipping_city' => [ 'required' => false ] ] ];
 		$policy = new Checkout_Field_Policy();
