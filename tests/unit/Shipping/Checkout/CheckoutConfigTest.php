@@ -21,6 +21,8 @@ namespace Woodev\Tests\Unit\Shipping\Checkout;
 use Brain\Monkey\Filters;
 use Brain\Monkey\Functions;
 use Woodev\Framework\Shipping\Checkout\Checkout_Config;
+use Woodev\Framework\Shipping\Checkout\Checkout_Field_Environment;
+use Woodev\Framework\Shipping\Checkout\Checkout_Field_Settings;
 use Woodev\Framework\Shipping\Checkout\Checkout_Fields;
 use Woodev\Framework\Shipping\Checkout\Field;
 use Woodev\Framework\Shipping\Location\Abstract_Location_Provider;
@@ -56,6 +58,8 @@ require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/providers
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/providers/class-dadata-api-response.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/providers/class-dadata-api-client.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/providers/class-dadata-provider.php';
+require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/checkout/class-checkout-field-environment.php';
+require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/checkout/class-checkout-field-settings.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/checkout/class-checkout-config.php';
 
 /**
@@ -442,6 +446,59 @@ class CheckoutConfigTest extends TestCase {
 		$config = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ] ) )->build( $fields );
 
 		$this->assertSame( [], $config['fields']['carrier_pvz']['pickup_slot_placements'] );
+	}
+
+	// -------------------------------------------------------------------------
+	// field_policy / pickup_method_ids — Task 6, issue #362, spec §4.3
+	// -------------------------------------------------------------------------
+
+	public function test_field_policy_defaults_to_all_show_when_no_settings_injected(): void {
+		$config = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ] ) )->build( Checkout_Fields::from_array( [] ) );
+
+		$this->assertSame(
+			[ 'address' => 'show', 'postcode' => 'show', 'country' => 'show' ],
+			$config['field_policy']
+		);
+	}
+
+	/**
+	 * The `field_policy` block reads through the SAME `Checkout_Field_Settings::effective()`
+	 * clamp-on-read contract Task 5 already pins — this test proves Checkout_Config
+	 * genuinely calls it (through the injected collaborator) rather than reading the
+	 * raw stored option itself.
+	 */
+	public function test_field_policy_reads_effective_values_from_the_injected_settings_handler(): void {
+		Functions\when( 'get_option' )->alias(
+			static function ( $name ) {
+				return false !== strpos( (string) $name, 'postcode_field' ) ? 'hide_for_pickup' : null;
+			}
+		);
+		Functions\when( 'wp_parse_args' )->alias(
+			static function ( $args, $defaults = [] ) {
+				return array_merge( (array) $defaults, (array) $args );
+			}
+		);
+		Functions\when( 'apply_filters' )->alias(
+			static function ( string $tag, $default = null ) {
+				return $default;
+			}
+		);
+
+		// Off the block checkout ($block_checkout = false), so hide_for_pickup is offered.
+		$settings = new Checkout_Field_Settings( new Checkout_Field_Environment( false, 1 ) );
+
+		$config = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ], null, $settings ) )
+			->build( Checkout_Fields::from_array( [] ) );
+
+		$this->assertSame( 'hide_for_pickup', $config['field_policy']['postcode'] );
+		$this->assertSame( 'show', $config['field_policy']['address'] );
+		$this->assertSame( 'show', $config['field_policy']['country'] );
+	}
+
+	public function test_pickup_method_ids_is_empty_when_wc_is_unavailable(): void {
+		$config = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ] ) )->build( Checkout_Fields::from_array( [] ) );
+
+		$this->assertSame( [], $config['pickup_method_ids'] );
 	}
 
 	// -------------------------------------------------------------------------

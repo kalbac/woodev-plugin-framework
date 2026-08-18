@@ -147,7 +147,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			// stub handlers it composes with the location layer's handler. Required
 			// unconditionally, same reasoning as the location-provider block below —
 			// the registrar stays inert until declare_shipping_plugin() is called.
+			require_once $path . '/checkout/class-checkout-field-environment.php';
 			require_once $path . '/checkout/class-checkout-field-settings.php';
+			// Checkout field policy (Task 6; issue #362): applies the «Поля» settings to
+			// the real checkout via woocommerce_get_country_locale + woocommerce_checkout_fields.
+			// Required unconditionally, same reasoning as the tab registrar above — it stays
+			// inert until Shipping_Settings_Tab::register() boots it.
+			require_once $path . '/checkout/class-checkout-field-policy.php';
 			require_once $path . '/pickup/class-pickup-map-settings.php';
 			require_once $path . '/settings/class-shipping-settings-tab.php';
 

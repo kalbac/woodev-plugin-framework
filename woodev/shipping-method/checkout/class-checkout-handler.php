@@ -544,7 +544,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 				rtrim( rest_url( 'woodev/v1' ), '/' ),
 				wp_create_nonce( 'wp_rest' ),
 				$this->wc_country_codes(),
-				$this->location_service()
+				$this->location_service(),
+				// Checkout field policy (Task 6, issue #362): store-level, reached through
+				// the tab singleton rather than constructed here — its availability rules
+				// must not be computed twice with a different answer than the «Поля»
+				// section itself uses.
+				\Woodev\Framework\Shipping\Settings\Shipping_Settings_Tab::instance()->get_field_settings()
 			) )->build( $this->fields );
 			// No `required` string here any more (#274): the client no longer renders an
 			// inline «Заполните обязательное поле.» under the field or under the pickup

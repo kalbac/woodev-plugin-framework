@@ -141,6 +141,25 @@ class CheckoutHandlerEnqueueTest extends TestCase {
 		Functions\when( 'plugins_url' )->alias(
 			static fn( $path, $file ) => 'https://example.test/wp-content/plugins/x/' . basename( $path )
 		);
+
+		// enqueue_assets() now reaches Shipping_Settings_Tab::instance()->get_field_settings()
+		// for the `field_policy` config block (Task 6, issue #362) — that lazily constructs a
+		// real Checkout_Field_Settings, which registers settings/controls through
+		// Woodev_Abstract_Settings; stub the WP primitives that path touches, same as
+		// CheckoutFieldSettingsTest/ShippingSettingsTabTest.
+		Functions\when( 'get_option' )->justReturn( null );
+		Functions\when( 'wp_parse_args' )->alias(
+			static function ( $args, $defaults = [] ) {
+				return array_merge( (array) $defaults, (array) $args );
+			}
+		);
+
+		\Woodev\Framework\Shipping\Settings\Shipping_Settings_Tab::reset_for_tests();
+	}
+
+	protected function tearDown(): void {
+		\Woodev\Framework\Shipping\Settings\Shipping_Settings_Tab::reset_for_tests();
+		parent::tearDown();
 	}
 
 	/**
