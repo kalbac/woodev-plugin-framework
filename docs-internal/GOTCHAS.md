@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 159 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 163 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -79,6 +79,7 @@
 - [woocommerce/address-autocomplete] **Wrapping `window.wc.addressAutocomplete.providers` touches a namespace, not a contract — and two implementation traps along the way.** → [wc-address-autocomplete-registry-wrap-is-not-a-documented-contract](gotchas/wc-address-autocomplete-registry-wrap-is-not-a-documented-contract.md) (s69)
 
 ### [shipping/location] — Location provider layer
+- [shipping/location] **`within_applied` reports what the scope BUILDER decided, not what the provider honoured — the one field that could detect a dropped scope cannot.** → [within-applied-reports-the-scope-builder-not-the-provider](gotchas/within-applied-reports-the-scope-builder-not-the-provider.md) (s78)
 - [shipping/location] **A served level can come from the FALLBACK provider, not the active one — "the active provider lacks X" and "X is unserved" are different statements.** → [a-level-served-can-come-from-the-fallback-not-the-active-provider](gotchas/a-level-served-can-come-from-the-fallback-not-the-active-provider.md) (s76)
 - [shipping/location] **One identity, two roles: one must refuse, the other must fall back.** → [one-identity-two-roles-one-must-refuse-the-other-must-fall-back](gotchas/one-identity-two-roles-one-must-refuse-the-other-must-fall-back.md) (s74)
 - [shipping/location] **A derived ancestor is not the one the customer picked.** → [a-derived-ancestor-is-not-the-one-the-customer-picked](gotchas/a-derived-ancestor-is-not-the-one-the-customer-picked.md) (s74)
@@ -96,6 +97,8 @@
 - [framework/wiring] **A feature built on both sides, with nothing calling it in the middle.** → [built-on-both-sides-with-no-caller-in-the-middle](gotchas/built-on-both-sides-with-no-caller-in-the-middle.md) (s56, extended s59)
 
 ### [testing/*] — Testing patterns
+- [testing/*] **Measure a gate only where the gate can actually fire — an AND-ed precondition you did not control answers for you.** → [measure-a-gate-where-the-gate-can-actually-fire](gotchas/measure-a-gate-where-the-gate-can-actually-fire.md) (s78)
+- [testing/*] **A `perl -0pi` mutation with `\n` silently misses every CRLF file, and the green run reads as proof.** → [perl-multiline-mutation-silently-misses-crlf-files](gotchas/perl-multiline-mutation-silently-misses-crlf-files.md) (s78)
 - [testing/*] **A probe that uses the production accessor creates the state it measures.** → [a-probe-that-uses-the-production-accessor-creates-the-state-it-measures](gotchas/a-probe-that-uses-the-production-accessor-creates-the-state-it-measures.md) (s74)
 - [testing/*] **A mutation you did not confirm APPLIED proves nothing — a silently-missed edit reads as "the test survives it".** → [a-mutation-you-did-not-confirm-applied-proves-nothing](gotchas/a-mutation-you-did-not-confirm-applied-proves-nothing.md) (s73)
 - [testing/unit] **`Functions\expect( 'f' )->once()->with( X )` does NOT reject a second call with different arguments.** → [brain-monkey-expect-with-does-not-reject-extra-calls](gotchas/brain-monkey-expect-with-does-not-reject-extra-calls.md) (s72)
@@ -116,6 +119,7 @@
 - [testing/integration] **A fixture class that implements a framework interface must be declared inside the plugin's init callback.** → [fixture-classes-must-live-inside-plugin-init](gotchas/fixture-classes-must-live-inside-plugin-init.md) (s46)
 - [testing/integration] **integration tests — don't fire global admin hooks; `$menu`/`$submenu` accumulate across tests.** → [integration-test-global-admin-hooks-output-and-submenu-accumulation](gotchas/integration-test-global-admin-hooks-output-and-submenu-accumulation.md) (s34)
 - [testing/integration] **A stale `.phpunit.result.cache` hides cross-test state leaks CI cannot avoid.** → [phpunit-defects-cache-hides-cross-test-session-leaks](gotchas/phpunit-defects-cache-hides-cross-test-session-leaks.md) (s71)
+- [testing/integration] **A fresh guest's shipping country resolves through geolocation (hardcoded `US` fallback), not the store default.** → [wc-customer-default-location-geolocation-fallback](gotchas/wc-customer-default-location-geolocation-fallback.md) (s78)
 - [testing/integration] **`WP_UnitTestCase` restores the hook table after every test — an identity-based `reset_for_tests()` cannot remove what comes back.** → [hook-snapshot-restore-defeats-an-identity-based-reset](gotchas/hook-snapshot-restore-defeats-an-identity-based-reset.md) (s70)
 
 - [testing/unit] **A mutation sweep over branch conditions reads as complete and is not.** → [mutation-sweep-branch-only-false-confidence](gotchas/mutation-sweep-branch-only-false-confidence.md) (s45)

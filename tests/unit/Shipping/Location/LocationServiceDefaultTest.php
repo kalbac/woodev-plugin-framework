@@ -212,6 +212,12 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			);
 			Functions\when( 'apply_filters' )->returnArg( 2 );
 			Functions\when( 'is_user_logged_in' )->justReturn( false );
+			// Location_Service::is_customer_record_stale()'s rule (b) (#346) now
+			// calls customer_shipping_country() -> resolve_default_country() ->
+			// wc_get_base_location() on every stored-record read (including a
+			// record resolve_default() itself just wrote) — 'RU' matches every
+			// fixture in this file.
+			Functions\when( 'wc_get_base_location' )->justReturn( [ 'country' => 'RU', 'state' => '' ] );
 
 			Location_Provider_Registry::instance()->reset_for_tests();
 			Settings_Page_Registry::instance()->reset_for_tests();

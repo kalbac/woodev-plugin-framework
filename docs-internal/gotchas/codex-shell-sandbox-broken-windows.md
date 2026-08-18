@@ -109,8 +109,14 @@ Note this does NOT contradict step 3 above — that recipe pipes via **stdin** (
 which is safe. Argument interpolation is what breaks.
 
 **Fix — use a transport that cannot reinterpret quoting, in this order:**
-1. `--prompt-file <path>` (verified working s61, invoked from **Bash**, not PowerShell)
-2. stdin pipe from Bash (`cat bundle.md | codex exec … -`) — the step-3 recipe
+1. ~~`--prompt-file <path>`~~ — **GONE as of codex-cli 0.147.0** (s78). The flag no longer
+   exists; the CLI answers `error: unexpected argument '--prompt-file' found / tip: a similar
+   argument exists: '--profile'` and **exits 0**, so a background run looks like it succeeded
+   and simply writes no output file. If your critic produced no `-o` file, check for this
+   before assuming the model failed.
+2. **stdin pipe from Bash** (`cat bundle.md | codex exec … -`) — the step-3 recipe. **This is now
+   the primary transport** (verified working s78 on 0.147.0, two clean critic runs with the
+   canary echoed back quote-for-quote).
 3. a Bash heredoc
 
 **Always verify the round trip before accepting any finding.** Prepend to the bundle:

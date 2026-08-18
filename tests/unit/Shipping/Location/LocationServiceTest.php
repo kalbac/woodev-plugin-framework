@@ -323,6 +323,15 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			// Customer_Location_Store::get()/set() checks this on every call —
 			// every fixture here is a guest unless a test says otherwise.
 			Functions\when( 'is_user_logged_in' )->justReturn( false );
+			// Location_Service::is_customer_record_stale()'s rule (b) (#346) now
+			// calls customer_shipping_country() -> resolve_default_country() ->
+			// wc_get_base_location() on EVERY stored-record read, not only the
+			// resolve_default_country()-specific tests below (which re-stub this
+			// per scenario, overriding this default) — 'RU' matches this file's
+			// own fixture convention (record()'s default country), so it is the
+			// one value that keeps every OTHER test in this file from having to
+			// know about a WooCommerce function it is not about.
+			Functions\when( 'wc_get_base_location' )->justReturn( [ 'country' => 'RU', 'state' => '' ] );
 
 			Location_Provider_Registry::instance()->reset_for_tests();
 			Settings_Page_Registry::instance()->reset_for_tests();
@@ -370,6 +379,39 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$registry = Location_Provider_Registry::instance();
 			$registry->declare_needed();
 			$registry->collect();
+		}
+
+		/**
+		 * Registers `$provider` and makes it the shop's ACTIVE provider (D15
+		 * chain, chosen slot) — #346/#333: {@see Location_Service::get_customer_record()}
+		 * / {@see Location_Service::get_customer_chain()} now run every stored
+		 * record through {@see Location_Service::provider_for_level()} (the
+		 * staleness gate), so a fixture record built via {@see self::record()}
+		 * needs a REAL registered owning provider or the gate drops it as
+		 * stale — this is the one place that boilerplate lives for every test
+		 * below that stores a record and reads it back.
+		 *
+		 * `Location_Provider_Registry::DEFAULT_PROVIDER_ID` ('dadata') is
+		 * NOT reusable here as a fixture id: {@see Location_Provider_Registry::collect()}
+		 * unconditionally registers the REAL bundled `Dadata_Provider` under
+		 * that id first, and a duplicate id registration is rejected —
+		 * `$provider` must use its OWN, different id (this file's established
+		 * `'svc-fixture'` convention, e.g. {@see self::test_is_active_true_when_gate_open_provider_active_and_configured()}).
+		 *
+		 * @param Location_Service_Fake_Provider $provider Provider to activate.
+		 *
+		 * @return Location_Provider_Registry
+		 */
+		private function activate_owning_provider( Location_Service_Fake_Provider $provider ): Location_Provider_Registry {
+			Functions\when( 'add_action' )->justReturn( true );
+			$this->stub_providers_filter( [ $provider ] );
+			Functions\when( 'get_option' )->justReturn( $provider->get_id() );
+
+			$registry = Location_Provider_Registry::instance();
+			$registry->declare_needed();
+			$registry->collect();
+
+			return $registry;
 		}
 
 		private function record( string $key = 'dadata:fias-1' ): Location_Record {
@@ -469,10 +511,11 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 		}
 
 		public function test_set_then_get_round_trips_through_the_store_including_the_implicit_flag(): void {
-			$store   = new Location_Service_Customer_Store_Probe( new Location_Service_Fake_Session() );
-			$service = new Location_Service( Location_Provider_Registry::instance(), $store );
+			$store    = new Location_Service_Customer_Store_Probe( new Location_Service_Fake_Session() );
+			$registry = $this->activate_owning_provider( new Location_Service_Fake_Provider( 'svc-fixture', Location_Record::LEVELS, true, [ 'RU' ] ) );
+			$service  = new Location_Service( $registry, $store );
 
-			$record = $this->record();
+			$record = $this->record( 'svc-fixture:fias-1' );
 			$ok     = $service->set_customer_record( $record, true );
 
 			$this->assertTrue( $ok );
@@ -485,10 +528,11 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 		}
 
 		public function test_an_explicit_set_reports_implicit_false_on_read(): void {
-			$store   = new Location_Service_Customer_Store_Probe( new Location_Service_Fake_Session() );
-			$service = new Location_Service( Location_Provider_Registry::instance(), $store );
+			$store    = new Location_Service_Customer_Store_Probe( new Location_Service_Fake_Session() );
+			$registry = $this->activate_owning_provider( new Location_Service_Fake_Provider( 'svc-fixture', Location_Record::LEVELS, true, [ 'RU' ] ) );
+			$service  = new Location_Service( $registry, $store );
 
-			$service->set_customer_record( $this->record(), false );
+			$service->set_customer_record( $this->record( 'svc-fixture:fias-1' ), false );
 
 			$this->assertFalse( $service->get_customer_record()['implicit'] );
 		}
@@ -528,11 +572,12 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 		}
 
 		public function test_get_customer_chain_reflects_every_level_the_customer_picked(): void {
-			$store   = new Location_Service_Customer_Store_Probe( new Location_Service_Fake_Session() );
-			$service = new Location_Service( Location_Provider_Registry::instance(), $store );
+			$store    = new Location_Service_Customer_Store_Probe( new Location_Service_Fake_Session() );
+			$registry = $this->activate_owning_provider( new Location_Service_Fake_Provider( 'svc-fixture', Location_Record::LEVELS, true, [ 'RU' ] ) );
+			$service  = new Location_Service( $registry, $store );
 
-			$settlement = $this->record( 'dadata:settlement-1' );
-			$address    = $this->record_with_ancestors( 'dadata:address-1', Location_Record::LEVEL_ADDRESS, [ 'dadata:settlement-1' ] );
+			$settlement = $this->record( 'svc-fixture:settlement-1' );
+			$address    = $this->record_with_ancestors( 'svc-fixture:address-1', Location_Record::LEVEL_ADDRESS, [ 'svc-fixture:settlement-1' ] );
 
 			$service->set_customer_record( $settlement );
 			$service->set_customer_record( $address );
@@ -548,11 +593,12 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 		}
 
 		public function test_get_customer_record_at_returns_the_record_for_a_present_level(): void {
-			$store   = new Location_Service_Customer_Store_Probe( new Location_Service_Fake_Session() );
-			$service = new Location_Service( Location_Provider_Registry::instance(), $store );
+			$store    = new Location_Service_Customer_Store_Probe( new Location_Service_Fake_Session() );
+			$registry = $this->activate_owning_provider( new Location_Service_Fake_Provider( 'svc-fixture', Location_Record::LEVELS, true, [ 'RU' ] ) );
+			$service  = new Location_Service( $registry, $store );
 
-			$settlement = $this->record( 'dadata:settlement-1' );
-			$address    = $this->record_with_ancestors( 'dadata:address-1', Location_Record::LEVEL_ADDRESS, [ 'dadata:settlement-1' ] );
+			$settlement = $this->record( 'svc-fixture:settlement-1' );
+			$address    = $this->record_with_ancestors( 'svc-fixture:address-1', Location_Record::LEVEL_ADDRESS, [ 'svc-fixture:settlement-1' ] );
 
 			$service->set_customer_record( $settlement );
 			$service->set_customer_record( $address );
@@ -561,9 +607,9 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$at_address    = $service->get_customer_record_at( Location_Record::LEVEL_ADDRESS );
 
 			$this->assertNotNull( $at_settlement );
-			$this->assertSame( 'dadata:settlement-1', $at_settlement->key() );
+			$this->assertSame( 'svc-fixture:settlement-1', $at_settlement->key() );
 			$this->assertNotNull( $at_address );
-			$this->assertSame( 'dadata:address-1', $at_address->key() );
+			$this->assertSame( 'svc-fixture:address-1', $at_address->key() );
 		}
 
 		public function test_get_customer_record_at_returns_null_for_an_absent_level(): void {
@@ -622,6 +668,18 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 						]
 					);
 				}
+
+				// This test is not ABOUT staleness (FIX 1's own gate on the
+				// resolved default) — it is about the get_customer_record()
+				// <-> get_customer_chain() handoff for an unpersisted default
+				// (review finding F1). The registry above is deliberately
+				// left unactivated, so a REAL gate would reject this fixture
+				// for having no owning provider at all; bypass it via the
+				// same test seam is_customer_record_stale()'s own docblock
+				// documents for exactly this situation.
+				protected function is_customer_record_stale( Location_Record $record, ?string $for_country = null ): bool {
+					return false;
+				}
 			};
 
 			$first = $service->get_customer_record();
@@ -638,6 +696,414 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$at_level = $service->get_customer_record_at( Location_Record::LEVEL_SETTLEMENT );
 			$this->assertNotNull( $at_level );
 			$this->assertSame( 'dadata:geo-default', $at_level->key() );
+		}
+
+		// -------------------------------------------------------------------
+		// #346/#333 — the staleness gate: a stored record whose owning provider
+		// or country has moved out from under it is read as ABSENT, never
+		// re-resolved. See Location_Service::gate_chain() /
+		// Location_Service::is_customer_record_stale() for the two rules this
+		// exercises.
+		// -------------------------------------------------------------------
+
+		public function test_gate_drops_a_record_whose_provider_no_longer_owns_its_level(): void {
+			// Gate never opened at all (registry not activated) — nobody
+			// resolves for "settlement", so the 'svc-fixture'-owned record this
+			// test wrote earlier is no longer owned by anyone.
+			$store = new Location_Service_Customer_Store_Probe( new Location_Service_Fake_Session() );
+			$store->set( $this->record( 'svc-fixture:fias-1' ) );
+
+			$service = new Location_Service( Location_Provider_Registry::instance(), $store );
+
+			$this->assertNull( $service->get_customer_record(), 'a record whose owning provider no longer resolves for its level must read as absent' );
+		}
+
+		public function test_gate_keeps_a_record_from_the_bundled_fallback_provider_still_resolved_as_owner(): void {
+			// Regression guard against OVER-dropping: the chosen provider serves
+			// REGION only, so the D15 chain falls through to the BUNDLED
+			// Dadata_Provider for "settlement" — and that fallback is STILL the
+			// resolved owner, so a 'dadata'-provider record must survive even
+			// though the shop's ACTIVE provider is a different one entirely.
+			$store  = new Location_Service_Customer_Store_Probe( new Location_Service_Fake_Session() );
+			$chosen = new Location_Service_Fake_Provider( 'city-dict', [ Location_Record::LEVEL_REGION ], true );
+
+			Functions\when( 'add_action' )->justReturn( true );
+			$this->stub_providers_filter( [ $chosen ] );
+			$this->stub_dadata_token( 'tok' );
+
+			$registry = Location_Provider_Registry::instance();
+			$registry->declare_needed();
+			$registry->collect();
+
+			$store->set( $this->record( 'dadata:settlement-1' ) );
+
+			$service = new Location_Service( $registry, $store );
+
+			// Sanity: the D15 chain really did fall through to the bundled
+			// provider for this level, not the (region-only) chosen one.
+			$this->assertInstanceOf( Dadata_Provider::class, $service->provider_for_level( Location_Record::LEVEL_SETTLEMENT ) );
+
+			$fetched = $service->get_customer_record();
+
+			$this->assertNotNull( $fetched, 'a record from the BUNDLED fallback provider must survive when that provider is still the resolved owner' );
+			$this->assertSame( 'dadata:settlement-1', $fetched['record']->key() );
+		}
+
+		public function test_gate_drops_a_record_when_provider_for_level_resolves_to_null(): void {
+			// The gate IS open, but nobody resolves for "settlement": the chosen
+			// provider only serves region, and the bundled fallback is left
+			// unconfigured (no token) — distinct from the "gate never opened"
+			// case above, same null outcome.
+			$store  = new Location_Service_Customer_Store_Probe( new Location_Service_Fake_Session() );
+			$chosen = new Location_Service_Fake_Provider( 'city-dict', [ Location_Record::LEVEL_REGION ], true );
+
+			Functions\when( 'add_action' )->justReturn( true );
+			$this->stub_providers_filter( [ $chosen ] );
+			$this->stub_dadata_token( '' );
+
+			$registry = Location_Provider_Registry::instance();
+			$registry->declare_needed();
+			$registry->collect();
+
+			$store->set( $this->record( 'dadata:settlement-1' ) );
+
+			$service = new Location_Service( $registry, $store );
+
+			$this->assertNull( $service->provider_for_level( Location_Record::LEVEL_SETTLEMENT, 'RU' ), 'sanity: nobody resolves for this level' );
+			$this->assertNull( $service->get_customer_record(), 'provider_for_level() answering null must drop the record as stale' );
+		}
+
+		public function test_gate_drops_a_record_whose_country_differs_from_the_customer_shipping_country(): void {
+			$store    = new Location_Service_Customer_Store_Probe( new Location_Service_Fake_Session() );
+			$registry = $this->activate_owning_provider( new Location_Service_Fake_Provider( 'svc-fixture', Location_Record::LEVELS, true, [ 'RU' ] ) );
+
+			$store->set( $this->record( 'svc-fixture:fias-1' ) ); // country RU
+
+			// The customer switched the checkout country (#346's own rig
+			// measurement) — the record's provider ownership is fine, only the
+			// country moved.
+			$service = new class( $registry, $store ) extends Location_Service {
+				protected function customer_shipping_country(): string {
+					return 'BY';
+				}
+			};
+
+			$this->assertNull( $service->get_customer_record(), 'a record whose country no longer matches the customer LIVE shipping country must read as absent' );
+		}
+
+		public function test_gate_compares_against_ru_when_no_live_field_and_no_store_country_are_set(): void {
+			// Operator correction (s79): "unknown country" is not a reachable
+			// state — customer_shipping_country() always resolves through the
+			// SAME checkout-field -> store-setting -> RU chain
+			// resolve_default_country() embodies. This pins that floor
+			// specifically: no live WC()->customer stub at all (so step 1
+			// answers nothing), and the store's OWN base location is also
+			// empty (so step 2 answers nothing either) — the gate must still
+			// land on 'RU' and match an 'RU' fixture record.
+			$store    = new Location_Service_Customer_Store_Probe( new Location_Service_Fake_Session() );
+			$registry = $this->activate_owning_provider( new Location_Service_Fake_Provider( 'svc-fixture', Location_Record::LEVELS, true, [ 'RU' ] ) );
+
+			Functions\when( 'wc_get_base_location' )->justReturn( [] ); // step 2 answers nothing either.
+
+			$store->set( $this->record( 'svc-fixture:fias-1' ) ); // country RU
+
+			$service = new Location_Service( $registry, $store );
+
+			$this->assertNotNull(
+				$service->get_customer_record(),
+				'with no live field and no store country, the gate must fall back to the RU floor and match an RU fixture'
+			);
+		}
+
+		public function test_gate_drops_a_record_when_the_ru_floor_does_not_match_it(): void {
+			// The mirror of the test above: the SAME empty-field/empty-store
+			// state, but the stored record is NOT 'RU' — the RU floor must
+			// still apply and drop it, proving this is a real comparison, not
+			// an accidental always-match.
+			$store    = new Location_Service_Customer_Store_Probe( new Location_Service_Fake_Session() );
+			$registry = $this->activate_owning_provider( new Location_Service_Fake_Provider( 'svc-fixture', Location_Record::LEVELS, true, [ 'BY' ] ) );
+
+			Functions\when( 'wc_get_base_location' )->justReturn( [] );
+
+			$store->set(
+				Location_Record::from_array(
+					[
+						'key'         => 'svc-fixture:fias-by',
+						'provider_id' => 'svc-fixture',
+						'level'       => Location_Record::LEVEL_SETTLEMENT,
+						'country'     => 'BY',
+					]
+				)
+			);
+
+			$service = new Location_Service( $registry, $store );
+
+			$this->assertNull( $service->get_customer_record(), 'the RU floor must drop a record from a different country, not silently match everything' );
+		}
+
+		public function test_gate_partial_chain_keeps_the_surviving_region_and_recomputes_current(): void {
+			// 'svc-fixture' serves REGION only, so a settlement stored under the
+			// SAME provider id is stale (nobody resolves it) while the region
+			// survives — the chain must report ONLY the survivor, with `current`
+			// recomputed to it rather than left pointing at the dropped level.
+			$store    = new Location_Service_Customer_Store_Probe( new Location_Service_Fake_Session() );
+			$registry = $this->activate_owning_provider( new Location_Service_Fake_Provider( 'svc-fixture', [ Location_Record::LEVEL_REGION ], true, [ 'RU' ] ) );
+
+			$region     = Location_Record::from_array(
+				[
+					'key'         => 'svc-fixture:region-1',
+					'provider_id' => 'svc-fixture',
+					'level'       => Location_Record::LEVEL_REGION,
+					'country'     => 'RU',
+				]
+			);
+			$settlement = $this->record_with_ancestors( 'svc-fixture:settlement-1', Location_Record::LEVEL_SETTLEMENT, [ 'svc-fixture:region-1' ] );
+
+			$store->set( $region );
+			$store->set( $settlement );
+
+			$service = new Location_Service( $registry, $store );
+
+			$chain = $service->get_customer_chain();
+
+			$this->assertNotNull( $chain );
+			$this->assertSame(
+				[ Location_Record::LEVEL_REGION ],
+				array_keys( $chain['records'] ),
+				'the stale settlement must be dropped, the surviving region kept'
+			);
+			$this->assertSame( Location_Record::LEVEL_REGION, $chain['current'], 'current must be recomputed to the deepest SURVIVING level' );
+		}
+
+		public function test_gate_nothing_survives_triggers_the_lazy_default_exactly_like_an_empty_store(): void {
+			$store = new Location_Service_Customer_Store_Probe( new Location_Service_Fake_Session() );
+			$store->set( $this->record( 'unregistered-provider:fias-1' ) ); // nobody owns this — fully stale.
+
+			$service = new class( Location_Provider_Registry::instance(), $store ) extends Location_Service {
+				public function resolve_default(): ?Location_Record {
+					return Location_Record::from_array(
+						[
+							'key'         => 'dadata:geo-default',
+							'provider_id' => 'dadata',
+							'level'       => Location_Record::LEVEL_SETTLEMENT,
+							'country'     => 'RU',
+						]
+					);
+				}
+
+				// This test needs the STORED fixture to stay genuinely stale
+				// (that is the whole scenario under test — a fully-stale
+				// chain must let the lazy trigger run), while the FRESHLY
+				// RESOLVED default above must pass FIX 1's own pre-check —
+				// so, unlike the sibling test above, this seam discriminates
+				// by key rather than bypassing the gate unconditionally.
+				protected function is_customer_record_stale( Location_Record $record, ?string $for_country = null ): bool {
+					return 'dadata:geo-default' !== $record->key();
+				}
+			};
+
+			$fetched = $service->get_customer_record();
+
+			$this->assertNotNull( $fetched, 'a fully-stale chain must let the lazy default trigger run, exactly as an empty store does' );
+			$this->assertSame( 'dadata:geo-default', $fetched['record']->key() );
+		}
+
+		public function test_gate_never_writes_back_to_the_store(): void {
+			$store = new Location_Service_Customer_Store_Probe( new Location_Service_Fake_Session() );
+			$store->set( $this->record( 'unregistered-provider:fias-1' ) );
+
+			// Gate closed (registry never activated) -> get_default_locality_policy()
+			// answers 'off' -> resolve_default() answers null with no further
+			// calls, so there is nothing to fall back to either.
+			$service = new Location_Service( Location_Provider_Registry::instance(), $store );
+
+			$this->assertNull( $service->get_customer_record() );
+
+			$raw = $store->get_chain();
+			$this->assertNotNull( $raw, 'the stale blob must still be on disk — the gate re-applies per read, it never forgets' );
+			$this->assertSame(
+				'unregistered-provider:fias-1',
+				$raw['records'][ Location_Record::LEVEL_SETTLEMENT ]->key(),
+				'the gate must never write anything back to the store'
+			);
+		}
+
+		public function test_gate_drops_every_descendant_of_a_dropped_ancestor_even_when_individually_valid(): void {
+			// Adversarial review finding, s78 (FIX 2): gate_chain() used to
+			// filter each level INDEPENDENTLY — a stale settlement dropped
+			// while a deeper address (individually still valid) survived,
+			// producing {address: ...} with current = address: an address
+			// with no settlement above it, a shape
+			// Customer_Location_Store::rebuild_chain() would never itself
+			// build and the region > settlement > address cascade does not
+			// permit. Gating must instead propagate in CASCADE ORDER: once an
+			// ancestor is dropped, every deeper level goes with it.
+			$store  = new Location_Service_Customer_Store_Probe( new Location_Service_Fake_Session() );
+			$chosen = new Location_Service_Fake_Provider( 'city-dict', [ Location_Record::LEVEL_ADDRESS ], true );
+
+			Functions\when( 'add_action' )->justReturn( true );
+			$this->stub_providers_filter( [ $chosen ] );
+			$this->stub_dadata_token( '' ); // bundled fallback stays unconfigured -> nobody owns SETTLEMENT.
+
+			$registry = Location_Provider_Registry::instance();
+			$registry->declare_needed();
+			$registry->collect();
+
+			$settlement = Location_Record::from_array(
+				[
+					'key'         => 'city-dict:settlement-1',
+					'provider_id' => 'city-dict',
+					'level'       => Location_Record::LEVEL_SETTLEMENT,
+					'country'     => 'RU',
+				]
+			);
+			$address = Location_Record::from_array(
+				[
+					'key'         => 'city-dict:address-1',
+					'provider_id' => 'city-dict',
+					'level'       => Location_Record::LEVEL_ADDRESS,
+					'country'     => 'RU',
+					'ancestors'   => [ 'city-dict:settlement-1' ],
+				]
+			);
+
+			$store->set( $settlement );
+			$store->set( $address );
+
+			$service = new Location_Service( $registry, $store );
+
+			// Sanity: settlement has no owner at all (stale, rule a), while
+			// address's OWN level is still owned by 'city-dict' — proving
+			// this test would have kept address under the OLD, per-level
+			// independent gate.
+			$this->assertNull( $service->provider_for_level( Location_Record::LEVEL_SETTLEMENT, 'RU' ), 'sanity: nobody owns SETTLEMENT' );
+			$address_owner = $service->provider_for_level( Location_Record::LEVEL_ADDRESS, 'RU' );
+			$this->assertNotNull( $address_owner, 'sanity: city-dict still owns ADDRESS individually' );
+			$this->assertSame( 'city-dict', $address_owner->get_id() );
+
+			$this->assertNull(
+				$service->get_customer_chain(),
+				'a deeper record must be dropped along with a stale ancestor, even when it would individually still pass the gate'
+			);
+		}
+
+		// -------------------------------------------------------------------
+		// #346/#333 FIX 1 (adversarial review, s78): the LAZY DEFAULT must
+		// pass the SAME gate a stored record has to pass. resolve_default()
+		// resolves against the store-setting/RU floor, while the gate's rule
+		// (b) compares against the LIVE customer_shipping_country() — a
+		// freshly-resolved default that fails that comparison must never be
+		// served ungated, and get_customer_record()/get_customer_chain() must
+		// never disagree about whether the customer has a location.
+		// -------------------------------------------------------------------
+
+		public function test_get_customer_record_and_chain_agree_when_the_lazy_default_fails_its_own_gate(): void {
+			$store    = new Location_Service_Customer_Store_Probe( new Location_Service_Fake_Session() );
+			$registry = $this->activate_owning_provider( new Location_Service_Fake_Provider( 'svc-fixture', Location_Record::LEVELS, true, [ 'RU' ] ) );
+
+			// resolve_default() answers an RU default (e.g. what a `fixed`/
+			// `geoip` policy resolved against the store-setting/RU floor),
+			// but the customer's LIVE shipping country is BY — the same
+			// mismatch #346/#333 already gate STORED records against.
+			// Before FIX 1, get_customer_record() served this default
+			// UNGATED while get_customer_chain() answered null for the exact
+			// same state.
+			$service = new class( $registry, $store ) extends Location_Service {
+				public function resolve_default(): ?Location_Record {
+					return Location_Record::from_array(
+						[
+							'key'         => 'svc-fixture:ru-default',
+							'provider_id' => 'svc-fixture',
+							'level'       => Location_Record::LEVEL_SETTLEMENT,
+							'country'     => 'RU',
+						]
+					);
+				}
+
+				protected function customer_shipping_country(): string {
+					return 'BY';
+				}
+			};
+
+			$record = $service->get_customer_record();
+			$chain  = $service->get_customer_chain();
+
+			$this->assertNull( $record, 'a default that cannot pass its own gate must answer null, not an ungated record' );
+			$this->assertNull( $chain, 'get_customer_record() and get_customer_chain() must agree — both empty for the same state' );
+		}
+
+		public function test_cached_unpersisted_default_is_re_gated_not_served_blindly(): void {
+			// The critic's own follow-up on FIX 1: "$this->unpersisted_default
+			// branch a few lines above returns ungated too — check it." Seeds
+			// the cache directly (bypassing resolve_default()) with a value
+			// that fails the SAME gate a stored record must pass, pinning
+			// that the early-return branch re-checks it rather than trusting
+			// whatever got cached there.
+			$store    = new Location_Service_Customer_Store_Probe( new Location_Service_Fake_Session() );
+			$registry = $this->activate_owning_provider( new Location_Service_Fake_Provider( 'svc-fixture', Location_Record::LEVELS, true, [ 'RU' ] ) );
+
+			$service = new class( $registry, $store ) extends Location_Service {
+				protected function customer_shipping_country(): string {
+					return 'BY';
+				}
+			};
+
+			$reflection = new \ReflectionProperty( Location_Service::class, 'unpersisted_default' );
+
+			// Required on PHP < 8.1, a deprecated no-op from 8.5 — guard it, never call it
+			// unconditionally (gotcha `reflection-setaccessible-version-guard`). Without the
+			// guard this test passes on 8.1-8.3 and errors on 7.4/8.0 with
+			// "Cannot access non-public member", which is exactly how CI caught it.
+			if ( PHP_VERSION_ID < 80100 ) {
+				$reflection->setAccessible( true );
+			}
+
+			$reflection->setValue(
+				$service,
+				Location_Record::from_array(
+					[
+						'key'         => 'svc-fixture:cached-ru',
+						'provider_id' => 'svc-fixture',
+						'level'       => Location_Record::LEVEL_SETTLEMENT,
+						'country'     => 'RU',
+					]
+				)
+			);
+
+			$this->assertNull( $service->get_customer_record(), 'a cached unpersisted default that fails the gate must not be served ungated' );
+		}
+
+		// -------------------------------------------------------------------
+		// #350/#352 follow-up (FIX 3): the optional $for_country parameter —
+		// when given, rule (b) compares against IT instead of the ambient
+		// customer_shipping_country(), so a REST read that already carries
+		// its own normalized `country` param is no longer forced through the
+		// ambient WooCommerce customer (which can disagree with it — gotcha
+		// wc-customer-default-location-geolocation-fallback).
+		// -------------------------------------------------------------------
+
+		public function test_get_customer_chain_uses_for_country_instead_of_the_ambient_customer_country_when_given(): void {
+			$store    = new Location_Service_Customer_Store_Probe( new Location_Service_Fake_Session() );
+			$registry = $this->activate_owning_provider( new Location_Service_Fake_Provider( 'svc-fixture', Location_Record::LEVELS, true, [ 'RU' ] ) );
+
+			$store->set( $this->record( 'svc-fixture:fias-1' ) ); // country RU
+
+			// Ambient customer disagrees — e.g. a REST request whose own
+			// normalized `country` param is RU, while WooCommerce's ambient
+			// customer object answers something else for the SAME request
+			// (measured, s79: a fresh guest's shipping country resolves
+			// through geolocation, independent of the request at hand).
+			$service = new class( $registry, $store ) extends Location_Service {
+				protected function customer_shipping_country(): string {
+					return 'BY';
+				}
+			};
+
+			$this->assertNull( $service->get_customer_chain(), 'sanity: without $for_country, the ambient mismatch drops the record' );
+			$this->assertNotNull(
+				$service->get_customer_chain( 'RU' ),
+				'$for_country, when given, must be used INSTEAD of the ambient customer country'
+			);
 		}
 
 		// -------------------------------------------------------------------
@@ -660,10 +1126,11 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 		public function test_resolve_for_delegates_to_the_resolution_cache_with_the_current_record(): void {
 			$store        = new Location_Service_Customer_Store_Probe( new Location_Service_Fake_Session() );
 			$spy_cache    = new Location_Service_Spy_Resolution_Cache( 'city-code-42' );
-			$service      = new Location_Service( Location_Provider_Registry::instance(), $store, $spy_cache );
+			$registry     = $this->activate_owning_provider( new Location_Service_Fake_Provider( 'svc-fixture', Location_Record::LEVELS, true, [ 'RU' ] ) );
+			$service      = new Location_Service( $registry, $store, $spy_cache );
 			$plugin       = $this->plugin();
 
-			$service->set_customer_record( $this->record() );
+			$service->set_customer_record( $this->record( 'svc-fixture:fias-1' ) );
 
 			$result = $service->resolve_for( $plugin );
 
@@ -709,22 +1176,24 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 		public function test_resolve_for_defaults_to_the_current_record_when_no_record_is_passed(): void {
 			$store     = new Location_Service_Customer_Store_Probe( new Location_Service_Fake_Session() );
 			$spy_cache = new Location_Service_Spy_Resolution_Cache( 'city-code-42' );
-			$service   = new Location_Service( Location_Provider_Registry::instance(), $store, $spy_cache );
+			$registry  = $this->activate_owning_provider( new Location_Service_Fake_Provider( 'svc-fixture', Location_Record::LEVELS, true, [ 'RU' ] ) );
+			$service   = new Location_Service( $registry, $store, $spy_cache );
 			$plugin    = $this->plugin();
 
-			$service->set_customer_record( $this->record( 'dadata:fias-1' ) );
+			$service->set_customer_record( $this->record( 'svc-fixture:fias-1' ) );
 
 			$result = $service->resolve_for( $plugin, null );
 
 			$this->assertSame( 'city-code-42', $result );
 			$this->assertNotNull( $spy_cache->last_record );
-			$this->assertSame( 'dadata:fias-1', $spy_cache->last_record->key() );
+			$this->assertSame( 'svc-fixture:fias-1', $spy_cache->last_record->key() );
 		}
 
 		public function test_resolve_for_uses_the_real_resolution_cache_end_to_end(): void {
-			$store   = new Location_Service_Customer_Store_Probe( new Location_Service_Fake_Session() );
-			$cache   = new Location_Service_Resolution_Cache_Probe( new Location_Service_Fake_Session() );
-			$service = new Location_Service( Location_Provider_Registry::instance(), $store, $cache );
+			$store    = new Location_Service_Customer_Store_Probe( new Location_Service_Fake_Session() );
+			$cache    = new Location_Service_Resolution_Cache_Probe( new Location_Service_Fake_Session() );
+			$registry = $this->activate_owning_provider( new Location_Service_Fake_Provider( 'svc-fixture', Location_Record::LEVELS, true, [ 'RU' ] ) );
+			$service  = new Location_Service( $registry, $store, $cache );
 
 			$adapter = new class implements Location_Adapter {
 				public int $calls = 0;
@@ -748,13 +1217,13 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 				}
 			};
 
-			$service->set_customer_record( $this->record( 'dadata:fias-9' ) );
+			$service->set_customer_record( $this->record( 'svc-fixture:fias-9' ) );
 
 			$first  = $service->resolve_for( $plugin );
 			$second = $service->resolve_for( $plugin );
 
-			$this->assertSame( 'resolved-dadata:fias-9', $first );
-			$this->assertSame( 'resolved-dadata:fias-9', $second );
+			$this->assertSame( 'resolved-svc-fixture:fias-9', $first );
+			$this->assertSame( 'resolved-svc-fixture:fias-9', $second );
 			$this->assertSame( 1, $adapter->calls, 'the adapter must be cached across two resolve_for() calls through the façade' );
 		}
 

@@ -101,7 +101,7 @@ namespace Woodev\Tests\Unit\Shipping {
 			return true;
 		}
 
-		public function get_customer_record(): ?array {
+		public function get_customer_record( ?string $for_country = null ): ?array {
 			return null;
 		}
 

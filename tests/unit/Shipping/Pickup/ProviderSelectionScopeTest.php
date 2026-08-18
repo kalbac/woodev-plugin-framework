@@ -116,6 +116,25 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 	}
 
 	/**
+	 * A {@see Location_Service} that never treats a stored record as STALE
+	 * (#346/#333) — this file's own fixtures deliberately switch a record's
+	 * `provider_id` mid-test (`dadata:X` -> `cdek:Y`, spec D5's provider-switch
+	 * MISS) to prove `current_locality()` tracks whichever record is CURRENTLY
+	 * stored; none of that is about whether a record's OWNING provider still
+	 * resolves to it, which is `LocationServiceTest`'s own job. Overriding
+	 * {@see Location_Service::is_customer_record_stale()} (a `protected` test
+	 * seam for exactly this) is simpler here than registering a real owning
+	 * provider per record, because a single record's `provider_id` in this
+	 * file is not fixed the way it is in `PickupHandlerTest`'s own fixtures.
+	 */
+	final class Provider_Selection_Scope_Location_Service_Probe extends Location_Service {
+
+		protected function is_customer_record_stale( Location_Record $record, ?string $for_country = null ): bool {
+			return false;
+		}
+	}
+
+	/**
 	 * A minimal, concrete {@see Provider_Selection_Scope} — `current_locality()` is
 	 * inherited (`final`, cannot be overridden); the other three methods are the plugin's
 	 * own domain knowledge, exactly as {@see Provider_Selection_Scope}'s own docblock
@@ -191,7 +210,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 
 		public function test_current_locality_is_empty_when_the_customer_has_no_record_yet(): void {
 			$store = new Provider_Selection_Scope_Customer_Store_Probe( new Provider_Selection_Scope_Fake_Session() );
-			$service = new Location_Service( Location_Provider_Registry::instance(), $store );
+			$service = new Provider_Selection_Scope_Location_Service_Probe( Location_Provider_Registry::instance(), $store );
 			$scope   = new Provider_Selection_Scope_Test_Scope( $service );
 
 			$this->assertSame( '', $scope->current_locality() );
@@ -201,7 +220,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			$store = new Provider_Selection_Scope_Customer_Store_Probe( new Provider_Selection_Scope_Fake_Session() );
 			$store->set( $this->record( 'dadata:fias-1' ) );
 
-			$service = new Location_Service( Location_Provider_Registry::instance(), $store );
+			$service = new Provider_Selection_Scope_Location_Service_Probe( Location_Provider_Registry::instance(), $store );
 			$scope   = new Provider_Selection_Scope_Test_Scope( $service );
 
 			$this->assertSame( 'dadata:fias-1', $scope->current_locality() );
@@ -212,7 +231,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			// never a value cached at construction time — a provider switch (or simply the
 			// customer choosing a new locality) must be visible on the very next call.
 			$store   = new Provider_Selection_Scope_Customer_Store_Probe( new Provider_Selection_Scope_Fake_Session() );
-			$service = new Location_Service( Location_Provider_Registry::instance(), $store );
+			$service = new Provider_Selection_Scope_Location_Service_Probe( Location_Provider_Registry::instance(), $store );
 			$scope   = new Provider_Selection_Scope_Test_Scope( $service );
 
 			$this->assertSame( '', $scope->current_locality() );
@@ -263,7 +282,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			$store->set( $this->record( 'dadata:fias-1' ) );
 			$store->set( $this->address_record( 'dadata:fias-1' ) );
 
-			$service = new Location_Service( Location_Provider_Registry::instance(), $store );
+			$service = new Provider_Selection_Scope_Location_Service_Probe( Location_Provider_Registry::instance(), $store );
 			$scope   = new Provider_Selection_Scope_Test_Scope( $service );
 
 			$this->assertSame(
@@ -283,7 +302,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			$store = new Provider_Selection_Scope_Customer_Store_Probe( new Provider_Selection_Scope_Fake_Session() );
 			$store->set( $this->address_record( 'dadata:fias-1' ) );
 
-			$service = new Location_Service( Location_Provider_Registry::instance(), $store );
+			$service = new Provider_Selection_Scope_Location_Service_Probe( Location_Provider_Registry::instance(), $store );
 			$scope   = new Provider_Selection_Scope_Test_Scope( $service );
 
 			$this->assertSame( '', $scope->current_locality() );
@@ -305,7 +324,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				)
 			);
 
-			$service = new Location_Service( Location_Provider_Registry::instance(), $store );
+			$service = new Provider_Selection_Scope_Location_Service_Probe( Location_Provider_Registry::instance(), $store );
 			$scope   = new Provider_Selection_Scope_Test_Scope( $service );
 
 			$this->assertSame( '', $scope->current_locality() );
@@ -319,7 +338,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			$store->set( $this->address_record( 'dadata:fias-1' ) );
 			$store->set( $this->record( 'dadata:fias-2' ) );
 
-			$service = new Location_Service( Location_Provider_Registry::instance(), $store );
+			$service = new Provider_Selection_Scope_Location_Service_Probe( Location_Provider_Registry::instance(), $store );
 			$scope   = new Provider_Selection_Scope_Test_Scope( $service );
 
 			$this->assertSame( 'dadata:fias-2', $scope->current_locality() );
@@ -332,7 +351,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 		public function test_a_point_remembered_under_one_provider_key_is_not_offered_under_a_different_one(): void {
 			$customer_session = new Provider_Selection_Scope_Fake_Session();
 			$store            = new Provider_Selection_Scope_Customer_Store_Probe( $customer_session );
-			$service          = new Location_Service( Location_Provider_Registry::instance(), $store );
+			$service          = new Provider_Selection_Scope_Location_Service_Probe( Location_Provider_Registry::instance(), $store );
 			$scope            = new Provider_Selection_Scope_Test_Scope( $service );
 
 			$pickup_session = new Provider_Selection_Scope_Fake_Session();

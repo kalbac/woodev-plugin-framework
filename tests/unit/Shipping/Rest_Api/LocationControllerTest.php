@@ -224,9 +224,28 @@ final class Location_Controller_Fake_Service extends Location_Service {
 	}
 
 	/**
+	 * `$for_country` (#350/#352 follow-up, FIX 3): this fake never gates
+	 * anything by country at all — it exists purely as a recording spy so a
+	 * controller-level test can assert `build_scope()` actually PASSES its
+	 * own already-normalized `$country` through here, rather than letting
+	 * the read fall back to the ambient customer country. The deeper
+	 * behavioural proof (that `Location_Service::get_customer_chain()`
+	 * itself USES `$for_country` instead of the ambient
+	 * `customer_shipping_country()`) lives in `LocationServiceTest` against
+	 * the REAL method, not this fake.
+	 *
+	 * @var array<int, string|null>
+	 */
+	public array $get_customer_chain_calls = [];
+
+	/**
+	 * @param string|null $for_country See {@see self::$get_customer_chain_calls}.
+	 *
 	 * @return array{records: array<string, Location_Record>, current: string, implicit: bool, saved_at: int}|null
 	 */
-	public function get_customer_chain(): ?array {
+	public function get_customer_chain( ?string $for_country = null ): ?array {
+		$this->get_customer_chain_calls[] = $for_country;
+
 		if ( null !== $this->chain_records ) {
 			return [
 				'records'  => $this->chain_records,
@@ -278,7 +297,7 @@ final class Location_Controller_Fake_Service extends Location_Service {
 		return $this->provider;
 	}
 
-	public function get_customer_record(): ?array {
+	public function get_customer_record( ?string $for_country = null ): ?array {
 		return $this->customer_record;
 	}
 
@@ -574,7 +593,7 @@ final class LocationControllerTest extends TestCase {
 		$result  = $ctrl->handle_suggest_request( $request );
 
 		$this->assertNotInstanceOf( \WP_Error::class, $result );
-		$this->assertSame( [ 'suggestions' => [], 'within_applied' => false ], $result );
+		$this->assertSame( [ 'suggestions' => [], 'within_applied' => false, 'within_status' => 'not_requested' ], $result );
 	}
 
 	public function test_suggest_accepts_a_query_exactly_at_the_maximum(): void {
@@ -682,7 +701,7 @@ final class LocationControllerTest extends TestCase {
 		$result  = $ctrl->handle_suggest_request( $request );
 
 		$this->assertNotInstanceOf( \WP_Error::class, $result );
-		$this->assertSame( [ 'suggestions' => [], 'within_applied' => false ], $result );
+		$this->assertSame( [ 'suggestions' => [], 'within_applied' => false, 'within_status' => 'not_requested' ], $result );
 	}
 
 	public function test_suggest_inactive_layer_returns_empty_200_not_404(): void {
@@ -696,7 +715,7 @@ final class LocationControllerTest extends TestCase {
 		$result  = $ctrl->handle_suggest_request( $request );
 
 		$this->assertNotInstanceOf( \WP_Error::class, $result );
-		$this->assertSame( [ 'suggestions' => [], 'within_applied' => false ], $result );
+		$this->assertSame( [ 'suggestions' => [], 'within_applied' => false, 'within_status' => 'not_requested' ], $result );
 	}
 
 	/**
@@ -716,7 +735,7 @@ final class LocationControllerTest extends TestCase {
 		$result  = $ctrl->handle_suggest_request( $request );
 
 		$this->assertNotInstanceOf( \WP_Error::class, $result );
-		$this->assertSame( [ 'suggestions' => [], 'within_applied' => false ], $result );
+		$this->assertSame( [ 'suggestions' => [], 'within_applied' => false, 'within_status' => 'not_requested' ], $result );
 		$this->assertCount( 0, $provider->suggest_calls, 'an unsupported country must never reach the provider' );
 	}
 
@@ -895,7 +914,7 @@ final class LocationControllerTest extends TestCase {
 		$result  = $ctrl->handle_suggest_request( $request );
 
 		$this->assertNotInstanceOf( \WP_Error::class, $result );
-		$this->assertSame( [ 'suggestions' => [], 'within_applied' => false ], $result );
+		$this->assertSame( [ 'suggestions' => [], 'within_applied' => false, 'within_status' => 'not_requested' ], $result );
 		$this->assertCount( 0, $fallback->suggest_calls, 'a country the resolved provider does not cover must never reach it' );
 		$this->assertCount( 0, $chosen->suggest_calls, 'the active provider is never the one dispatched to for this level' );
 	}
@@ -1010,6 +1029,7 @@ final class LocationControllerTest extends TestCase {
 
 		$this->assertNotInstanceOf( \WP_Error::class, $result );
 		$this->assertFalse( $captured->has_parent() );
+		$this->assertSame( 'bad_level', $result['within_status'], '#333: a level-ordering mismatch reports bad_level, not just a swallowed within_applied' );
 	}
 
 	// -------------------------------------------------------------------
@@ -1065,6 +1085,41 @@ final class LocationControllerTest extends TestCase {
 		$this->assertSame( $settlement, $captured->parent_record() );
 	}
 
+	/**
+	 * #350/#352 follow-up (FIX 3): `build_scope()` must pass ITS OWN
+	 * already-normalized `$country` through to
+	 * `Location_Service::get_customer_chain()` as `$for_country`, rather
+	 * than letting that read fall back to whatever the ambient WooCommerce
+	 * customer answers — a `/suggest` request's own `country` param is the
+	 * stronger authority for THIS request (see gotcha
+	 * `wc-customer-default-location-geolocation-fallback` for why the
+	 * ambient customer can disagree with it even on a freshly-booted guest).
+	 * `LocationServiceTest` proves the deeper mechanism (that
+	 * `get_customer_chain( $for_country )` actually USES it instead of the
+	 * ambient country); this test proves the CONTROLLER wiring — that
+	 * `build_scope()` actually passes it.
+	 */
+	public function test_suggest_passes_its_own_normalized_country_into_get_customer_chain(): void {
+		$provider = new Location_Controller_Fake_Provider( static fn() => [] );
+		$service  = new Location_Controller_Fake_Service( true, $provider );
+		$ctrl     = new Location_Controller_Probe( $service );
+
+		// get_customer_chain() is only reached when build_scope() has a
+		// `within` key to resolve at all (see build_scope()'s own early
+		// return for '' === $within_key) — a real, non-empty value is
+		// load-bearing here, not incidental.
+		$request = new WP_REST_Request(
+			[ 'q' => 'Мос', 'level' => Location_Record::LEVEL_SETTLEMENT, 'country' => 'RU', 'within' => 'dadata:region-1' ]
+		);
+		$ctrl->handle_suggest_request( $request );
+
+		$this->assertSame(
+			[ 'RU' ],
+			$service->get_customer_chain_calls,
+			'build_scope() must thread its own normalized country into get_customer_chain() as $for_country'
+		);
+	}
+
 	public function test_suggest_within_naming_a_chain_record_from_another_country_is_refused(): void {
 		// Adversarial review: Location_Scope::within() takes the scope's COUNTRY FROM
 		// THE PARENT — there is deliberately no $country argument there — so honouring a
@@ -1116,6 +1171,7 @@ final class LocationControllerTest extends TestCase {
 		$this->assertFalse( $captured->has_parent(), 'a parent from another country must not constrain the search' );
 		$this->assertSame( 'UZ', $captured->country(), 'and the search must stay in the country the customer asked for' );
 		$this->assertFalse( $result['within_applied'] );
+		$this->assertSame( 'cross_country', $result['within_status'], '#333: a cross-country parent is named explicitly, not merely swallowed' );
 	}
 
 	public function test_suggest_within_still_resolves_when_the_requested_country_is_lower_case(): void {
@@ -1173,6 +1229,7 @@ final class LocationControllerTest extends TestCase {
 		$result = $ctrl->handle_suggest_request( $request );
 
 		$this->assertTrue( $result['within_applied'] );
+		$this->assertSame( 'applied', $result['within_status'] );
 	}
 
 	public function test_suggest_within_applied_is_false_when_an_unknown_within_falls_through(): void {
@@ -1186,6 +1243,7 @@ final class LocationControllerTest extends TestCase {
 		$result = $ctrl->handle_suggest_request( $request );
 
 		$this->assertFalse( $result['within_applied'] );
+		$this->assertSame( 'unknown_key', $result['within_status'] );
 	}
 
 	/**
@@ -1203,6 +1261,7 @@ final class LocationControllerTest extends TestCase {
 		$result  = $ctrl->handle_suggest_request( $request );
 
 		$this->assertFalse( $result['within_applied'] );
+		$this->assertSame( 'not_requested', $result['within_status'] );
 	}
 
 	public function test_suggest_within_applied_is_false_when_no_provider_serves_the_level(): void {
@@ -1213,6 +1272,32 @@ final class LocationControllerTest extends TestCase {
 		$result  = $ctrl->handle_suggest_request( $request );
 
 		$this->assertFalse( $result['within_applied'] );
+		// The client DID send a `within` here, and this branch never builds a
+		// scope at all (see perform_suggest()'s own comment on this exact
+		// branch) — but `within_status` must NOT claim `not_requested`
+		// (adversarial review finding, s78 — FIX 4): that constant's own
+		// docblock promises "no `within` param was sent at all", which is
+		// false here. `unserved_level` is the honest answer: a `within` was
+		// sent, but there was nothing to resolve it against.
+		$this->assertSame( 'unserved_level', $result['within_status'] );
+	}
+
+	/**
+	 * The mirror of the test above (adversarial review finding, s78 — FIX 4):
+	 * the SAME no-provider branch, but the client sent NO `within` at all —
+	 * `within_status` must still answer `not_requested` here, exactly as
+	 * before this fix, since that value's own promise ("no `within` param
+	 * was sent at all") is actually true on THIS branch.
+	 */
+	public function test_suggest_within_status_is_not_requested_when_no_provider_serves_the_level_and_no_within_was_sent(): void {
+		$service = new Location_Controller_Fake_Service( true, null ); // no provider for this level
+		$ctrl    = new Location_Controller_Probe( $service );
+
+		$request = new WP_REST_Request( [ 'q' => 'Мос', 'level' => Location_Record::LEVEL_ADDRESS, 'country' => 'RU' ] );
+		$result  = $ctrl->handle_suggest_request( $request );
+
+		$this->assertFalse( $result['within_applied'] );
+		$this->assertSame( 'not_requested', $result['within_status'] );
 	}
 
 	public function test_suggest_within_applied_reflects_the_scope_in_the_unsupported_country_branch(): void {
@@ -1240,6 +1325,7 @@ final class LocationControllerTest extends TestCase {
 
 		$this->assertSame( [], $result['suggestions'] );
 		$this->assertTrue( $result['within_applied'], 'the scope was still built (and had a parent) before the unsupported-country check ran' );
+		$this->assertSame( 'applied', $result['within_status'] );
 	}
 
 	// -------------------------------------------------------------------
@@ -1575,6 +1661,7 @@ final class LocationControllerTest extends TestCase {
 		$this->assertNotInstanceOf( \WP_Error::class, $result );
 		$this->assertCount( 1, $result['localities'] );
 		$this->assertFalse( $result['truncated'] );
+		$this->assertSame( 'not_requested', $result['within_status'], '#333: /list carries within_status too, not only /suggest' );
 
 		$locality = $result['localities'][0];
 		$this->assertSame( 'fake-list:mo', $locality['key'] );
@@ -1780,11 +1867,41 @@ final class LocationControllerTest extends TestCase {
 		$request = new WP_REST_Request(
 			[ 'level' => Location_Record::LEVEL_SETTLEMENT, 'country' => 'RU', 'within' => 'dadata:region-1' ]
 		);
-		$ctrl->handle_list_request( $request );
+		$result = $ctrl->handle_list_request( $request );
 
 		$this->assertNotNull( $captured );
 		$this->assertTrue( $captured->has_parent() );
 		$this->assertSame( $parent, $captured->parent_record() );
+		$this->assertSame( 'applied', $result['within_status'] );
+	}
+
+	public function test_list_within_status_is_unknown_key_when_within_matches_nothing(): void {
+		$provider = new Location_Controller_Fake_List_Provider( static fn() => [] );
+		$service  = new Location_Controller_Fake_Service( true, null, null, true, true, null, null, $provider );
+		$ctrl     = new Location_Controller_Probe( $service );
+
+		$request = new WP_REST_Request(
+			[ 'level' => Location_Record::LEVEL_SETTLEMENT, 'country' => 'RU', 'within' => 'dadata:some-stale-key' ]
+		);
+		$result = $ctrl->handle_list_request( $request );
+
+		$this->assertNotInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'unknown_key', $result['within_status'] );
+	}
+
+	public function test_list_within_status_is_cross_country_when_the_parent_is_in_another_country(): void {
+		$region_ru = $this->region_record( 'dadata:region-1' );
+		$provider  = new Location_Controller_Fake_List_Provider( static fn() => [] );
+		$service   = new Location_Controller_Fake_Service( true, null, [ 'record' => $region_ru, 'implicit' => false, 'saved_at' => 0 ], true, true, null, null, $provider );
+		$ctrl      = new Location_Controller_Probe( $service );
+
+		$request = new WP_REST_Request(
+			[ 'level' => Location_Record::LEVEL_SETTLEMENT, 'country' => 'UZ', 'within' => 'dadata:region-1' ]
+		);
+		$result = $ctrl->handle_list_request( $request );
+
+		$this->assertNotInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'cross_country', $result['within_status'] );
 	}
 
 	// -------------------------------------------------------------------
@@ -1862,7 +1979,7 @@ final class LocationControllerTest extends TestCase {
 		$result  = $ctrl->handle_admin_suggest_request( $request );
 
 		$this->assertNotInstanceOf( \WP_Error::class, $result );
-		$this->assertSame( [ 'suggestions' => [], 'within_applied' => false ], $result );
+		$this->assertSame( [ 'suggestions' => [], 'within_applied' => false, 'within_status' => 'not_requested' ], $result );
 	}
 
 	// -------------------------------------------------------------------

@@ -57,6 +57,17 @@ class LocationRouteTest extends TestCase {
 	 */
 	private $original_dadata_token;
 
+	/**
+	 * `woocommerce_default_country` as found at the start of THIS test — same
+	 * save/restore discipline as {@see self::$original_dadata_token}. Restored
+	 * mainly for hygiene; see {@see self::setUp()}'s own comment for why the
+	 * ACTUAL fix for #346/#333 in this file is the direct
+	 * `WC()->customer->set_shipping_country()` seed below, not this option.
+	 *
+	 * @var string|false
+	 */
+	private $original_default_country;
+
 	protected function setUp(): void {
 		parent::setUp();
 
@@ -64,6 +75,9 @@ class LocationRouteTest extends TestCase {
 		// and a prior test (or another declaring plugin loaded in wp-env) may
 		// already have opened it; reset so this test controls the gate itself.
 		Location_Provider_Registry::instance()->reset_for_tests();
+
+		$this->original_default_country = get_option( 'woocommerce_default_country', false );
+		update_option( 'woocommerce_default_country', 'RU' );
 
 		// The rig environment may carry `woodev_location_token` already seeded
 		// by `Woodev_Test_Credential_Seeder` (tests/_fixtures/woodev-test-shipping-method/
@@ -86,6 +100,12 @@ class LocationRouteTest extends TestCase {
 			delete_option( self::OPTION_DADATA_TOKEN );
 		} else {
 			update_option( self::OPTION_DADATA_TOKEN, $this->original_dadata_token );
+		}
+
+		if ( false === $this->original_default_country ) {
+			delete_option( 'woocommerce_default_country' );
+		} else {
+			update_option( 'woocommerce_default_country', $this->original_default_country );
 		}
 
 		Location_Provider_Registry::instance()->reset_for_tests();
@@ -123,6 +143,32 @@ class LocationRouteTest extends TestCase {
 		}
 
 		WC()->session->set( self::CUSTOMER_LOCATION_SESSION_KEY, null );
+	}
+
+	/**
+	 * Seeds `WC()->customer`'s LIVE shipping-country field (#346/#333) — the
+	 * seam {@see \Woodev\Framework\Shipping\Location\Location_Service::customer_shipping_country()}
+	 * reads FIRST, before falling through to
+	 * {@see \Woodev\Framework\Shipping\Location\Location_Service::resolve_default_country()}'s
+	 * store-setting floor. On a brand-new `WP_UnitTestCase` guest,
+	 * `WC()->customer->get_shipping_country()` answers from
+	 * `wc_get_customer_default_location()` (`woocommerce_default_customer_address`
+	 * defaults to `geolocation`), which resolves to a hardcoded `US` fallback
+	 * for the container's own non-routable IP — measured (s79), and NOT
+	 * something `update_option( 'woocommerce_default_country', ... )` alone
+	 * reaches, since the geolocation branch never consults that option at
+	 * all. Every fixture record in this file is `country: RU`; called AFTER
+	 * `wp_set_current_user( 0 )` in each test that needs it, since switching
+	 * the current user can reload `WC()->customer`. Mirrors what a real
+	 * checkout's own `update_checkout` AJAX would already have done by the
+	 * time a customer reaches the location picker.
+	 *
+	 * @param string $country ISO-3166 alpha-2 country code.
+	 *
+	 * @return void
+	 */
+	private function seed_customer_shipping_country( string $country = 'RU' ): void {
+		WC()->customer->set_shipping_country( $country );
 	}
 
 	/**
@@ -237,7 +283,7 @@ class LocationRouteTest extends TestCase {
 		$response = rest_get_server()->dispatch( $request );
 
 		$this->assertSame( 200, $response->get_status() );
-		$this->assertSame( [ 'suggestions' => [], 'within_applied' => false ], $response->get_data() );
+		$this->assertSame( [ 'suggestions' => [], 'within_applied' => false, 'within_status' => 'not_requested' ], $response->get_data() );
 	}
 
 	/**
@@ -360,6 +406,7 @@ class LocationRouteTest extends TestCase {
 		$this->make_location_layer_active();
 
 		wp_set_current_user( 0 );
+		$this->seed_customer_shipping_country();
 
 		$request = new WP_REST_Request( 'POST', '/woodev/v1/location/select' );
 		$request->set_param(
@@ -411,6 +458,7 @@ class LocationRouteTest extends TestCase {
 		$this->make_location_layer_active();
 
 		wp_set_current_user( 0 );
+		$this->seed_customer_shipping_country();
 
 		$settlement_request = new WP_REST_Request( 'POST', '/woodev/v1/location/select' );
 		$settlement_request->set_param(
