@@ -90,6 +90,12 @@ if ( ! class_exists( 'Woodev_Control' ) ) :
 		/** @var string the placeholder text for the control */
 		protected $placeholder = '';
 
+		/** @var bool whether the control is rendered disabled (D11: blocked controls are explained). */
+		protected $disabled = false;
+
+		/** @var string the human-readable reason a disabled control cannot be used right now. */
+		protected $disabled_reason = '';
+
 		/**
 		 * The setting ID to which this control belongs.
 		 *
@@ -340,6 +346,42 @@ if ( ! class_exists( 'Woodev_Control' ) ) :
 		 */
 		public function set_placeholder( string $value ): void {
 			$this->placeholder = $value;
+		}
+
+		/**
+		 * Whether the control is disabled.
+		 *
+		 * @since 2.0.2
+		 * @return bool
+		 */
+		public function is_disabled(): bool {
+			return $this->disabled;
+		}
+
+		/**
+		 * Disables (or re-enables) the control, with the reason shown to the merchant.
+		 *
+		 * A disabled control is rendered read-only and its stored value is left untouched on
+		 * save; the reason travels to the browser as the field description (design S3/D11).
+		 *
+		 * @since 2.0.2
+		 * @param bool   $disabled whether the control is disabled.
+		 * @param string $reason   why — required when disabling, ignored otherwise.
+		 * @return void
+		 */
+		public function set_disabled( bool $disabled, string $reason = '' ): void {
+			$this->disabled        = $disabled;
+			$this->disabled_reason = $disabled ? $reason : '';
+		}
+
+		/**
+		 * The reason a disabled control cannot be used; `''` when enabled.
+		 *
+		 * @since 2.0.2
+		 * @return string
+		 */
+		public function get_disabled_reason(): string {
+			return $this->disabled_reason;
 		}
 	}
 

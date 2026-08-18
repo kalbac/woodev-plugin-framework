@@ -462,6 +462,17 @@
 			border-color: wd.$accent;
 			box-shadow: 0 0 0 1px wd.$accent;
 		}
+
+		// D11: a disabled control is rendered read-only, never hidden.
+		&:disabled,
+		&.is-disabled {
+			opacity: 0.6;
+			cursor: default;
+
+			&:hover {
+				border-color: wd.$line;
+			}
+		}
 	}
 
 	&__value {

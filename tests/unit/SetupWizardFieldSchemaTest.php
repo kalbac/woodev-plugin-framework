@@ -85,6 +85,7 @@ class SetupWizardFieldSchemaTest extends TestCase {
 		$control->shouldReceive( 'get_min' )->andReturn( 0.0 );
 		$control->shouldReceive( 'get_max' )->andReturn( 100.0 );
 		$control->shouldReceive( 'get_step' )->andReturn( 1.0 );
+		$control->shouldReceive( 'is_disabled' )->andReturn( false )->byDefault();
 
 		// Build the setting mock.
 		$setting = Mockery::mock( 'Woodev_Setting' );
@@ -149,6 +150,7 @@ class SetupWizardFieldSchemaTest extends TestCase {
 		$control->shouldReceive( 'get_min' )->andReturn( null );
 		$control->shouldReceive( 'get_max' )->andReturn( null );
 		$control->shouldReceive( 'get_step' )->andReturn( null );
+		$control->shouldReceive( 'is_disabled' )->andReturn( false )->byDefault();
 
 		$setting = Mockery::mock( 'Woodev_Setting' );
 		$setting->shouldReceive( 'get_id' )->andReturn( 'api_key' );

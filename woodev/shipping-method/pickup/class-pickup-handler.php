@@ -80,6 +80,7 @@ use Woodev\Framework\Shipping\Location\Location_Service;
 use Woodev\Framework\Shipping\Map\Map_Provider;
 use Woodev\Framework\Shipping\Order\Shipping_Order_Handler;
 use Woodev\Framework\Shipping\Rest_Api\Pickup_Controller;
+use Woodev\Framework\Shipping\Settings\Shipping_Settings_Tab;
 use Woodev\Framework\Shipping\Shipping_Plugin;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -552,6 +553,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 			$this->refresh_checkout     = $refresh_checkout;
 			$this->selection_scope      = $selection_scope;
 			$this->plugin               = $plugin;
+
+			// «Доставка» tab (Task 4; issue #362): a constructed Pickup_Handler is the
+			// signal the «Карта» section exists. See Shipping_Settings_Tab::declare_map_needed()'s
+			// own docblock for why a Pickup_Handler built lazily, after `init` priority 25
+			// already fired, is too late for the section to appear.
+			Shipping_Settings_Tab::instance()->declare_map_needed();
 		}
 
 		/**

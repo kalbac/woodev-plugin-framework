@@ -19,6 +19,7 @@ use Woodev\Framework\Shipping\Location\Customer_Location_Store;
 use Woodev\Framework\Shipping\Location\Location_Provider_Registry;
 use Woodev\Framework\Shipping\Location\Location_Record;
 use Woodev\Framework\Shipping\Location\Location_Scope;
+use Woodev\Framework\Shipping\Settings\Shipping_Settings_Tab;
 use Woodev\Tests\Unit\TestCase;
 
 require_once dirname( __DIR__, 4 ) . '/woodev/class-plugin-exception.php';
@@ -28,6 +29,10 @@ require_once dirname( __DIR__, 4 ) . '/woodev/settings-api/abstract-class-settin
 require_once dirname( __DIR__, 4 ) . '/woodev/settings-page/class-settings-section.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/settings-page/class-settings-provider.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/settings-page/class-settings-page-registry.php';
+require_once dirname( __DIR__, 4 ) . '/woodev/settings-page/class-composite-settings-handler.php';
+require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/checkout/class-checkout-field-settings.php';
+require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/pickup/class-pickup-map-settings.php';
+require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/settings/class-shipping-settings-tab.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-locality-key.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-location-record.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-location-scope.php';
@@ -223,11 +228,13 @@ final class LocationProviderRegistryTest extends TestCase {
 
 		Location_Provider_Registry::instance()->reset_for_tests();
 		Settings_Page_Registry::instance()->reset_for_tests();
+		Shipping_Settings_Tab::reset_for_tests();
 	}
 
 	protected function tearDown(): void {
 		Location_Provider_Registry::instance()->reset_for_tests();
 		Settings_Page_Registry::instance()->reset_for_tests();
+		Shipping_Settings_Tab::reset_for_tests();
 		parent::tearDown();
 	}
 
@@ -327,7 +334,20 @@ final class LocationProviderRegistryTest extends TestCase {
 		$registry->collect();
 
 		$this->assertTrue( $registry->is_needed() );
-		$this->assertTrue( Settings_Page_Registry::instance()->has_providers(), 'settings must register once the gate opens, even with zero providers' );
+
+		// Settings registration now lives at Shipping_Settings_Tab (design S9) — the
+		// location layer hands its handler over instead of registering a tab of its
+		// own (see register_settings()). Prove the handoff happened: once a shipping
+		// plugin declares itself, the «Локация» section appears, backed by the exact
+		// handler collect() just built, even with zero providers.
+		Shipping_Settings_Tab::instance()->declare_shipping_plugin();
+		$section_ids = array_map(
+			static function ( $section ) {
+				return $section->get_id();
+			},
+			Shipping_Settings_Tab::instance()->build_sections()
+		);
+		$this->assertContains( 'location', $section_ids, 'the location handler must be handed to Shipping_Settings_Tab once the gate opens, even with zero providers' );
 	}
 
 	public function test_declare_needed_is_idempotent_across_multiple_plugins(): void {

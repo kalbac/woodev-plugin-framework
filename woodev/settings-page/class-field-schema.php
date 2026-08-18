@@ -91,6 +91,14 @@ final class Field_Schema {
 				$entry['show_if'] = $show_if;
 			}
 
+			if ( $control && $control->is_disabled() ) {
+				$entry['disabled']        = true;
+				$entry['disabled_reason'] = $control->get_disabled_reason();
+				if ( '' !== $entry['disabled_reason'] ) {
+					$entry['description'] = $entry['disabled_reason'];
+				}
+			}
+
 			$schema[ $setting->get_id() ] = $entry;
 		}
 

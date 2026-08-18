@@ -1441,19 +1441,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 
 			$this->apply_default_locality_status_note();
 
-			\Woodev\Framework\Settings\Settings_Page_Registry::instance()->register_service(
-				\Woodev\Framework\Settings\Settings_Provider::create(
-					self::SETTINGS_SERVICE_ID,
-					__( 'Локация', 'woodev-plugin-framework' ),
-					$this->settings_handler,
-					[
-						\Woodev\Framework\Settings\Settings_Section::create(
-							'general',
-							__( 'Провайдер', 'woodev-plugin-framework' ),
-							$this->settings_handler->get_owned_setting_ids()
-						),
-					]
-				)
+			// Hand the handler over to Shipping_Settings_Tab (issue #362; design S1/S9)
+			// instead of registering a tab of its own — «Локация» is now that tab's first
+			// section. That class hooks its own registration on `init` priority 25, AFTER
+			// this method's own `init` priority 20 (see collect()), so the handler handed
+			// over here is already set by the time it builds the composite handler and
+			// section list. The tab id changes from `location` to `shipping` (design S1);
+			// this handler's own id — self::SETTINGS_SERVICE_ID, still 'location' — is an
+			// installed-site option-name namespace (ADR-005) and stays exactly as-is.
+			\Woodev\Framework\Shipping\Settings\Shipping_Settings_Tab::instance()->set_location_section(
+				$this->settings_handler,
+				$this->settings_handler->get_owned_setting_ids()
 			);
 		}
 

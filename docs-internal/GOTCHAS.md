@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 164 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 165 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -32,6 +32,7 @@
 - [settings-api/validation] **Format validators must guard non-string input (is_email/strpos on null → PHP 8.1 deprecation).** → [format-validator-null-strlen-deprecation](gotchas/format-validator-null-strlen-deprecation.md) (s39)
 - [settings-api/secrets] **Settings sensitive secret: the "don't overwrite with empty" guard is CLIENT-side, not server.** → [settings-sensitive-secret-empty-skip-is-client-side](gotchas/settings-sensitive-secret-empty-skip-is-client-side.md) (s41)
 - [settings-api/caching] **`Woodev_Setting::get_value()` returns a cached property, so `update_option()` mid-request is invisible to it.** → [woodev-setting-get-value-is-cached-not-a-live-option-read](gotchas/woodev-setting-get-value-is-cached-not-a-live-option-read.md) (s71)
+- [settings-api/section-empty-ids] **A settings section declaring NO setting ids renders the WHOLE handler, because `get_settings( [] )` means "all".** → [section-empty-setting-ids-renders-all-fields](gotchas/section-empty-setting-ids-renders-all-fields.md) (s79)
 
 ### [deprecation/*] — Deprecation cycle
 - [deprecation/deprecated-which-function] **wc_deprecated_function vs _deprecated_function.** → [deprecated-which-function](gotchas/deprecated-which-function.md) (s2)

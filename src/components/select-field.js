@@ -24,9 +24,12 @@ import { ChevronIcon, CheckFilledIcon } from './icons';
  * @param {boolean}   [props.multi]     allow multiple selection.
  * @param {Function}  props.onChange    change handler (string for single, array for multi).
  * @param {string}    [props.placeholder] trigger placeholder when nothing is selected.
+ * @param {boolean}   [props.disabled]  whether the control is disabled (D11) — the trigger
+ *                                      becomes a disabled native `<button>`, so it can neither
+ *                                      be focused nor opened; the popover never mounts.
  * @return {JSX.Element} the select.
  */
-export default function SelectField( { value, options = [], multi = false, onChange, placeholder } ) {
+export default function SelectField( { value, options = [], multi = false, onChange, placeholder, disabled = false } ) {
 	const [ search, setSearch ] = useState( '' );
 	const triggerRef = useRef( null );
 	const ph = placeholder || __( 'Выберите…', 'woodev-plugin-framework' );
@@ -76,8 +79,9 @@ export default function SelectField( { value, options = [], multi = false, onCha
 				<button
 					type="button"
 					ref={ triggerRef }
-					className={ 'woodev-select__trigger' + ( isOpen ? ' is-open' : '' ) }
+					className={ 'woodev-select__trigger' + ( isOpen ? ' is-open' : '' ) + ( disabled ? ' is-disabled' : '' ) }
 					onClick={ onToggle }
+					disabled={ disabled }
 					aria-expanded={ isOpen }
 					aria-haspopup="listbox"
 				>
