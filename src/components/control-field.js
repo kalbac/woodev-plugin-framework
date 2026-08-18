@@ -280,7 +280,7 @@ export default function ControlField( { schema, value, onChange, showErrors, has
 
 	// Blur-first: show error only after touch or when parent forces reveal on Save.
 	// serverError (set by parent after REST rejection) always takes precedence.
-	const error = schema.serverError || ( ( touched || showErrors ) ? validateField( schema, value ) : null );
+	const error = schema.serverError || ( ( touched || showErrors ) ? validateField( schema, value, hasEdit ) : null );
 	const onBlur = () => setTouched( true );
 
 	const control = resolveControl( schema );

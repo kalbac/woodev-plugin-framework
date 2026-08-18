@@ -165,7 +165,7 @@ export default function App() {
 				}
 			} );
 
-			const clientErrors = validateFields( visibleFields, stepValues );
+			const clientErrors = validateFields( visibleFields, stepValues, values[ step.id ] || {} );
 			if ( Object.keys( clientErrors ).length > 0 ) {
 				setShowErrors( true );
 				setFieldErrors( {} ); // clear stale server errors before revealing fresh client errors
