@@ -52,5 +52,8 @@ older side) confirms local main is stale, not ahead.
 ## Related
 
 - [[autodev-loop-gate-fence-pitfalls]] — same s33 session (autodev-loop tooling).
+- [[stacked-pr-github-mechanics]] — same squash-breaks-ancestry root cause, s80: a **three-dot**
+  `git diff main...branch` after an upstream squash-merge shows already-merged files as new again;
+  use the two-dot form for a true tree comparison.
 - Merge protocol: verify each CI job green + state CLEAN before `--squash --delete-branch`, never `--auto`
   (AGENT-RULES / global feedback patterns).

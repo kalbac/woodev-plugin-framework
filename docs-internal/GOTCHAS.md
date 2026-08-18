@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 165 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 166 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -266,6 +266,7 @@
 - [tooling/phpcs] **`composer phpcs` does not enforce the 120-char limit, and never sees `tests/`.** → [phpcs-does-not-enforce-line-length](gotchas/phpcs-does-not-enforce-line-length.md) (s45; fix tracked as #139)
 - [tooling/git-checkout] **`git checkout <file>` reverts a deliberate-regression mutation by deleting the uncommitted implementation with it.** → [git-checkout-destroys-uncommitted-mutation-revert](gotchas/git-checkout-destroys-uncommitted-mutation-revert.md) (s52)
 - [tooling/git-merge] **GitHub squash-merge onto a stale origin/main leaves local main "diverged but content-complete".** → [git-squash-onto-stale-origin-main-diverge](gotchas/git-squash-onto-stale-origin-main-diverge.md) (s33)
+- [tooling/git-merge] **Stacked PRs: GitHub CLOSES (never retargets) a downstream PR when its base branch is deleted; `ci.yml` never runs on a PR whose base isn't `main`.** → [stacked-pr-github-mechanics](gotchas/stacked-pr-github-mechanics.md) (s80)
 
 ## Archive (resolved gotchas)
 <!-- Resolved gotchas move here; keep for 2 sessions then remove -->
