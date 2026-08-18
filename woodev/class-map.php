@@ -17,6 +17,7 @@ return [
 	'Woodev\\Framework\\Framework_Resolver' => 'woodev/class-framework-resolver.php',
 	'Woodev\\Framework\\Handlers\\Cron_Handler' => 'woodev/handlers/class-cron-handler.php',
 	'Woodev\\Framework\\Handlers\\Translation_Handler' => 'woodev/handlers/class-translation-handler.php',
+	'Woodev\\Framework\\Settings\\Composite_Settings_Handler' => 'woodev/settings-page/class-composite-settings-handler.php',
 	'Woodev\\Framework\\Settings\\Field_Schema' => 'woodev/settings-page/class-field-schema.php',
 	'Woodev\\Framework\\Settings\\Settings_Page_Registry' => 'woodev/settings-page/class-settings-page-registry.php',
 	'Woodev\\Framework\\Settings\\Settings_Provider' => 'woodev/settings-page/class-settings-provider.php',
