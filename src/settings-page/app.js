@@ -173,7 +173,7 @@ export default function App() {
 
 		const visibleFields = validatableFields( allFields, merged );
 
-		const clientErrors = validateFields( visibleFields, merged );
+		const clientErrors = validateFields( visibleFields, merged, providerEdits );
 		if ( Object.keys( clientErrors ).length > 0 ) {
 			setShowErrors( ( p ) => ( { ...p, [ providerId ]: true } ) );
 			setFieldErrors( ( p ) => ( { ...p, [ providerId ]: {} } ) ); // clear stale server errors before revealing fresh client errors

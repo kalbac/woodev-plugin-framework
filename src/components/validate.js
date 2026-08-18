@@ -106,14 +106,31 @@ function resolveKind( schema ) {
 /**
  * Returns a validation error message for a field value, or null when valid.
  *
- * @param {Object} schema field schema slice (controlType, required, min, max…).
- * @param {*}      value  current value.
+ * A SENSITIVE field's `value` is always masked to `''` by the server (`Field_Schema` never
+ * emits a stored secret) — regardless of whether one is actually configured (`is_set`). An
+ * UNTOUCHED sensitive+required field therefore reads as "empty" here even when it is not,
+ * and blocking Save over it is wrong on top of being pointless: `onSave()` never sends an
+ * untouched field at all (the payload is built from `edits`, not from this merged value —
+ * see `settings-sensitive-secret-empty-skip-is-client-side.md`), so the server would simply
+ * keep the value it already has. `isTouched` — whether THIS field has a staged edit this
+ * session — is what tells the required check the field is genuinely, not just visually, empty.
+ *
+ * @param {Object}  schema     field schema slice (controlType, required, min, max, sensitive, is_set…).
+ * @param {*}       value      current value.
+ * @param {boolean} [isTouched] whether the field has a staged edit this session. Omit for the
+ *                              old strict behaviour's callers that have no such concept — that
+ *                              default ('not touched') is the SAFE one: it can only make an
+ *                              already-configured secret's required check MORE permissive,
+ *                              never less.
  * @return {string|null} error message (Russian) or null.
  */
-export function validateField( schema, value ) {
+export function validateField( schema, value, isTouched ) {
 	const kind = resolveKind( schema );
 
 	if ( schema.required && isRequirable( kind ) && isEmpty( kind, value ) ) {
+		if ( schema.sensitive && schema.is_set && ! isTouched ) {
+			return null;
+		}
 		return 'Обязательное поле.';
 	}
 
@@ -172,16 +189,22 @@ export function validateField( schema, value ) {
 /**
  * Validates a whole section's fields against the current values.
  *
- * @param {Object} fields section.fields (settingId => schema).
- * @param {Object} values current edited values (settingId => value).
+ * @param {Object} fields     section.fields (settingId => schema).
+ * @param {Object} values     current edited values (settingId => value).
+ * @param {Object} [touchedIds] staged-edit map (settingId => value) — presence of a key, not
+ *                               its value, is what {@see validateField} reads as "touched".
+ *                               `edits[providerId]` (App.js) / `values[step.id]` (the wizard)
+ *                               are already exactly this shape. Omit for the old behaviour.
  * @return {Object} settingId => error message (only invalid fields).
  */
-export function validateFields( fields, values ) {
+export function validateFields( fields, values, touchedIds ) {
 	const errors = {};
+	const touched = touchedIds || {};
 	Object.keys( fields || {} ).forEach( ( id ) => {
 		const schema = fields[ id ];
 		const value = values[ id ] ?? schema.value;
-		const error = validateField( schema, value );
+		const isTouched = Object.prototype.hasOwnProperty.call( touched, id );
+		const error = validateField( schema, value, isTouched );
 		if ( error ) {
 			errors[ id ] = error;
 		}

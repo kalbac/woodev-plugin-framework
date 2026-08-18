@@ -147,10 +147,13 @@ resolved ~441–447, provider constructed ~481–487):
   committed**; they live in the container's wp-config via `wp config set`, exactly like the
   Yandex token. The fixture reads them with a `defined()` guard and degrades to an empty
   string.
-- `WOODEV_TEST_PICKUP_SELECTION_CLOSE` / `WOODEV_TEST_PICKUP_SELECTION_REFRESH_CHECKOUT` —
-  the card asks for this: the stock config is `selection: { close: true, refreshCheckout:
-  false }`, which makes the "modal stays open after a selection" path unreachable from a
-  fixture (in s62 it had to be patched live in the browser).
+- `WOODEV_TEST_PICKUP_SELECTION_REFRESH_CHECKOUT` — the card asks for this: the stock config
+  is `selection: { close: false, refreshCheckout: false }`, which makes the "checkout
+  refreshes after a selection" path unreachable from a fixture (in s62 it had to be patched
+  live in the browser). `close` was `WOODEV_TEST_PICKUP_SELECTION_CLOSE` until Task 8
+  (issue #362, design S7) turned it into the store setting
+  `woodev_pickup_map_pickup_close_on_select` — a merchant edits it once, every carrier
+  obeys it, so a carrier-plugin constant no longer applies.
 
 A fixture-owned adapter script implements the Почта translation — this is DOMAIN knowledge and
 must not leak into the framework:

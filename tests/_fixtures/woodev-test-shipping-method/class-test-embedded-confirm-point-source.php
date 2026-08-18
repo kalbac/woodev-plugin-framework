@@ -19,9 +19,9 @@
  * (`Woodev_Test_Bulk_Point_Source`, `Woodev_Test_Viewport_Point_Source`, the two LIVE
  * sources) has ever heard of, so `fetch_details()` returned `null` and the REST endpoint
  * answered `404 woodev_pickup_point_not_found` for EVERY real selection. That made the
- * `WOODEV_TEST_PICKUP_SELECTION_CLOSE`/`WOODEV_TEST_PICKUP_SELECTION_REFRESH_CHECKOUT`
- * constants (also issue #251) unreachable — nothing downstream of a successful
- * confirmation could ever run.
+ * post-confirmation behaviour — close-on-select (now a store setting, Task 8/#362) and
+ * `WOODEV_TEST_PICKUP_SELECTION_REFRESH_CHECKOUT` (also issue #251) — unreachable —
+ * nothing downstream of a successful confirmation could ever run.
  *
  * THE PRIOR DOCBLOCK CLAIM WAS WRONG. `woodev-test-shipping-method.php`'s own comment on
  * `WOODEV_TEST_PICKUP_EMBEDDED` used to say the resolved `$point_source` is "a dead-looking

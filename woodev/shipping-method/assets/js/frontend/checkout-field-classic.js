@@ -16,6 +16,11 @@
  * `woodev_checkout_field_config_<prefix>`) сосуществуют независимо; A2-гейт
  * учитывает поля из ВСЕХ сторов.
  *
+ * Кроме стора: `field_policy` (Task 9, issue #362 §4.3) — hide_for_pickup для
+ * адреса/индекса и hide для страны, единственные классический-only/JS-driven
+ * инструменты чекаут-политики. Значение сторовое (один `Checkout_Field_Policy` на
+ * весь магазин), поэтому берётся из ПЕРВОГО конфига, где ключ есть.
+ *
  * @file
  * @since 2.0.2
  */
@@ -903,6 +908,146 @@
 	}
 
 	// ---------------------------------------------------------------------
+	// Field policy (#362 §4.3): классический чекаут-only, JS-driven —
+	// hide_for_pickup для адреса/индекса, hide для страны. Блочный чекаут игнорирует
+	// `woocommerce_checkout_fields`, а «страна живая» модель событий есть только у
+	// классического чекаута (`updated_checkout`), поэтому этот инструмент здесь и
+	// нигде на PHP-стороне не действует (та лишь публикует значения — Task 6).
+	// ---------------------------------------------------------------------
+
+	var FIELD_POLICY_PREFIXES       = [ 'billing_', 'shipping_' ]
+	var FIELD_POLICY_SUFFIXES       = { address: 'address_1', postcode: 'postcode', country: 'country' }
+	var HIDDEN_FOR_PICKUP_CLASS     = 'woodev-field--hidden-for-pickup'
+	var HIDDEN_CLASS                = 'woodev-field--hidden'
+	var REQUIRED_BACKUP_ATTR        = 'data-woodev-required'
+
+	/**
+	 * Находит конфиг, из которого читаем `field_policy`/`pickup_method_ids`.
+	 *
+	 * `Checkout_Field_Policy` (Task 6) — сторовый синглтон: КАЖДЫЙ вызов
+	 * `Checkout_Config::build()` (по одному на shipping-плагин) публикует ОДНИ И ТЕ ЖЕ
+	 * значения `field_policy`/`pickup_method_ids` — метод не сужает выборку по
+	 * конкретному плагину (`WC()->shipping()->get_shipping_methods()` глобален).
+	 * Поэтому достаточно ПЕРВОГО конфига, где ключ реально присутствует: конфиг
+	 * плагина, чья PHP-сторона старше Task 6 (ключа `field_policy` нет вовсе),
+	 * просто пропускается — а не трактуется как «на странице политики нет».
+	 *
+	 * @returns {Object|null}
+	 */
+	function findFieldPolicyConfig() {
+		for( var i = 0; i < stores.length; i++ ) {
+			if( stores[ i ].config && stores[ i ].config.field_policy ) {
+				return stores[ i ].config
+			}
+		}
+
+		return null
+	}
+
+	var fieldPolicyConfig = findFieldPolicyConfig()
+	// Отсутствующий `field_policy` (ни один конфиг на странице не публикует его) —
+	// легитимное состояние (флот со старым PHP), а не ошибка: applyFieldPolicy()
+	// ниже трактует `null` как «политики нет» и не действует ни на одно поле.
+	var fieldPolicy       = fieldPolicyConfig ? fieldPolicyConfig.field_policy : null
+	var pickupMethodIds   = fieldPolicyConfig && Array.isArray( fieldPolicyConfig.pickup_method_ids )
+		? fieldPolicyConfig.pickup_method_ids
+		: []
+
+	/**
+	 * Проверяет, соответствует ли выбранный метод доставки одному из pickup-id.
+	 *
+	 * Тот же алгоритм, что серверный
+	 * {@see \Woodev\Framework\Shipping\Checkout\Checkout_Handler::chosen_method_matches()}
+	 * (issue #362): точное совпадение либо префикс `id + ':'` (id метода + зона-инстанс,
+	 * например `test_pickup:1`). `ids` — «голые» id методов, без суффикса зоны.
+	 *
+	 * @param {string}   chosen Значение выбранного `shipping_method`.
+	 * @param {string[]} ids    Id pickup-методов.
+	 * @returns {boolean}
+	 */
+	function chosenIsPickup( chosen, ids ) {
+		for( var i = 0; i < ids.length; i++ ) {
+			var id = ids[ i ]
+
+			if( chosen === id || 0 === String( chosen ).indexOf( id + ':' ) ) {
+				return true
+			}
+		}
+
+		return false
+	}
+
+	/**
+	 * Применяет `field_policy` к ОДНОЙ строке чекаута (`billing_*` либо `shipping_*`).
+	 *
+	 * DOM-проверка присутствия — отсутствующая строка/поле (в т.ч. `postcode: 'remove'`,
+	 * которое PHP снимает из `woocommerce_checkout_fields` ещё до рендера, так что
+	 * `#..._field`/`#...` тут заведомо нет) — это no-op, а не исключение (T6). Обе
+	 * стороны резолвятся заново на каждый вызов через `$( '#' + … )` — ссылки протухают
+	 * после `updated_checkout`, кэшировать узел между вызовами нельзя.
+	 *
+	 * @param {string} prefix `'billing_'` | `'shipping_'`.
+	 * @param {string} key    `'address'` | `'postcode'` | `'country'`.
+	 * @param {string} suffix Суффикс id поля (`address_1`/`postcode`/`country`).
+	 * @returns {void}
+	 */
+	function applyFieldPolicyToRow( prefix, key, suffix ) {
+		var fieldId = prefix + suffix
+		var $row    = $( '#' + fieldId + '_field' )
+		var $field  = $( '#' + fieldId )
+
+		if( ! $row.length || ! $field.length ) {
+			return
+		}
+
+		if( key === 'country' ) {
+			// Прячем только строку — значение НЕ трогаем, оно всё равно должно уйти на
+			// сервер (T1: даже поле с единственной страной должно попасть в заказ).
+			$row.toggleClass( HIDDEN_CLASS, fieldPolicy.country === 'hide' )
+			return
+		}
+
+		if( fieldPolicy[ key ] !== 'hide_for_pickup' ) {
+			return
+		}
+
+		var pickup = chosenIsPickup( selectedShippingMethod(), pickupMethodIds )
+
+		if( pickup && ! $row.hasClass( HIDDEN_FOR_PICKUP_CLASS ) ) {
+			// Запоминаем исходный `required` перед тем, как его снять, — поле могло не
+			// быть обязательным вовсе, и «включить required безусловно» на возврате
+			// было бы неверно для такого поля.
+			$field.attr( REQUIRED_BACKUP_ATTR, $field.prop( 'required' ) ? '1' : '0' )
+			$field.prop( 'required', false )
+			$row.addClass( HIDDEN_FOR_PICKUP_CLASS )
+		} else if( ! pickup && $row.hasClass( HIDDEN_FOR_PICKUP_CLASS ) ) {
+			$field.prop( 'required', $field.attr( REQUIRED_BACKUP_ATTR ) === '1' )
+			$field.removeAttr( REQUIRED_BACKUP_ATTR )
+			$row.removeClass( HIDDEN_FOR_PICKUP_CLASS )
+		}
+	}
+
+	/**
+	 * Прогоняет `field_policy` по всем парам `billing_*`/`shipping_*` — зеркалит то, что
+	 * PHP (Task 6/7) делает в `woocommerce_checkout_fields` по обеим секциям сразу:
+	 * переключатель WooCommerce «доставить по другому адресу» может сделать актуальной
+	 * любую из них, а не только `shipping_*`.
+	 *
+	 * @returns {void}
+	 */
+	function applyFieldPolicy() {
+		if( ! fieldPolicy ) {
+			return
+		}
+
+		FIELD_POLICY_PREFIXES.forEach( function( prefix ) {
+			Object.keys( FIELD_POLICY_SUFFIXES ).forEach( function( key ) {
+				applyFieldPolicyToRow( prefix, key, FIELD_POLICY_SUFFIXES[ key ] )
+			} )
+		} )
+	}
+
+	// ---------------------------------------------------------------------
 	// Boot / prefill + делегированная привязка.
 	// ---------------------------------------------------------------------
 
@@ -995,6 +1140,7 @@
 			} )
 		} )
 
+		applyFieldPolicy()
 		refreshGate()
 
 		// Re-assert takeover for the current country AFTER WooCommerce's country-select.js
@@ -1048,6 +1194,7 @@
 					placeSlots( entry )
 				} )
 
+				applyFieldPolicy()
 				refreshGate()
 			}
 		)
@@ -1101,6 +1248,7 @@
 				placeSlots( entry )
 			} )
 
+			applyFieldPolicy()
 			refreshGate()
 		} )
 	} )

@@ -356,11 +356,15 @@ $long_address_point = [
 // `woodev_shipping_pickup_point_selection` filter (see the plugin init callback in
 // woodev-test-shipping-method.php) — DEMO-PVZ-REFUSE always refuses on confirmation
 // (the rig's remembered-refusal path), DEMO-PVZ-STAY refuses to CLOSE against a
-// config that says close (the fixture now passes `close_on_select = true`, so every
-// ordinary point closes on confirmation and this one deliberately does not), and
-// DEMO-PVZ-REFRESH asks for a checkout refresh. Coordinates are distinct from every
-// point above at well past 4 decimal places so all three are individually clickable
-// on the rig map.
+// config that says close, and DEMO-PVZ-REFRESH asks for a checkout refresh.
+// Coordinates are distinct from every point above at well past 4 decimal places so
+// all three are individually clickable on the rig map.
+//
+// Since Task 8 (issue #362, design S7) `close_on_select` is the STORE setting
+// `woodev_pickup_map_pickup_close_on_select` (default `false`), not a literal this
+// fixture hardcodes — DEMO-PVZ-STAY only diverges from an ordinary point on the rig
+// once that setting is turned ON (see the filter callback's own note in
+// woodev-test-shipping-method.php).
 // DEMO-PVZ-STAY replaced the earlier DEMO-PVZ-FAST, which did the opposite (config
 // `false`, point answering `true`). That direction demonstrated the override without
 // TESTING it: the browser reads `resolveFlag( result.close, defaults.close )`, whose

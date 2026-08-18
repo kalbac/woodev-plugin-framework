@@ -8,10 +8,16 @@
  * per-request fetch memoization, REST controller registration, and full-point
  * persistence delegated to `Shipping_Order_Handler::store_pickup_point()` (never a
  * framework-coined meta key). Also covers Task 16 (`get_settings_fields()` as a pure,
- * unmodified pass-through to the active `Map_Provider`) and Task 17 (the
- * `$replace_address` constructor toggle — default on, `billingOnly` unaffected by it,
- * `target` never emitted) and the nine map-provider i18n keys `get_js_config()` now
- * carries.
+ * unmodified pass-through to the active `Map_Provider`) and Task 17's `replaceAddress`
+ * shape (`billingOnly` mirrors `wc_ship_to_billing_address_only()`, `target` never
+ * emitted) and the nine map-provider i18n keys `get_js_config()` now carries.
+ *
+ * Task 8 (issue #362, design S7) removed the `$replace_address`/`$close_on_select`
+ * constructor arguments (clean-break v2 line, ADR-005): `replaceAddress.enabled` and
+ * `selection.close` now read a STORE setting via `Pickup_Map_Settings::current()`
+ * instead — a customer sees both across every carrier at once, so the store decides
+ * them, never a per-carrier constructor argument. `selection.refreshCheckout` stays a
+ * constructor argument (a carrier's own price-behaviour fact).
  *
  * @package Woodev\Tests\Unit\Shipping\Pickup
  */
@@ -58,11 +64,13 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 	use Woodev\Framework\Shipping\Map\Map_Provider;
 	use Woodev\Framework\Shipping\Order\Shipping_Order_Handler;
 	use Woodev\Framework\Shipping\Pickup\Pickup_Handler;
+	use Woodev\Framework\Shipping\Pickup\Pickup_Map_Settings;
 	use Woodev\Framework\Shipping\Pickup\Pickup_Point;
 	use Woodev\Framework\Shipping\Pickup\Pickup_Selection;
 	use Woodev\Framework\Shipping\Pickup\Point_Query;
 	use Woodev\Framework\Shipping\Pickup\Point_Source;
 	use Woodev\Framework\Shipping\Pickup\Selection_Scope;
+	use Woodev\Framework\Shipping\Settings\Shipping_Settings_Tab;
 	use Woodev\Framework\Shipping\Shipping_Plugin;
 	use Woodev\Tests\Unit\TestCase;
 
@@ -103,6 +111,14 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/interface-location-adapter.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-location-resolution-cache.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-location-service.php';
+
+	// «Доставка» tab (Task 8, issue #362, design S7): get_js_config() now reads
+	// replaceAddress.enabled / selection.close through Pickup_Map_Settings::current(),
+	// which reaches Shipping_Settings_Tab::instance()->get_map_settings() — the same
+	// require chain ShippingSettingsTabTest/CheckoutHandlerEnqueueTest already load.
+	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/checkout/class-checkout-field-policy.php';
+	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/pickup/class-pickup-map-settings.php';
+	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/settings/class-shipping-settings-tab.php';
 
 	if ( ! class_exists( '\\WP_REST_Controller' ) ) {
 		require_once dirname( __DIR__, 4 ) . '/tests/unit/Shipping/Rest_Api/wp-rest-controller-stub.php';
@@ -944,12 +960,10 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				$default_location,
 				null,
 				null,
-				true,
 				[],
 				'#000000',
 				'',
 				true,
-				false,
 				false,
 				$selection_scope
 			);
@@ -1036,12 +1050,10 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				$default_location,
 				null,
 				null,
-				true,
 				[],
 				'#000000',
 				'',
 				true,
-				false,
 				false,
 				$selection_scope
 			);
@@ -1097,10 +1109,32 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			// process-wide singleton (LocationServiceTest's own setUp documents the same
 			// discipline).
 			Location_Provider_Registry::instance()->reset_for_tests();
+
+			// Task 8 (issue #362, design S7): get_js_config() now reaches
+			// Pickup_Map_Settings::current(), which lazily constructs a real
+			// Pickup_Map_Settings through Woodev_Abstract_Settings — stub the WP
+			// primitives that path touches, same as CheckoutFieldSettingsTest /
+			// CheckoutHandlerEnqueueTest / ShippingSettingsTabTest. No test in this file
+			// stubbed `get_option`/`wp_parse_args` before this task, so a global default
+			// here is safe.
+			Functions\when( 'get_option' )->justReturn( null );
+			Functions\when( 'wp_parse_args' )->alias(
+				static function ( $args, $defaults = [] ) {
+					return array_merge( (array) $defaults, (array) $args );
+				}
+			);
+
+			// Shipping_Settings_Tab is a process-wide singleton (same discipline as
+			// Location_Provider_Registry above) — reset it so a get_option alias a test
+			// sets AFTER this point always builds a FRESH Pickup_Map_Settings, never one
+			// cached from an earlier test's option values (gotcha
+			// `woodev-setting-get-value-is-cached-not-a-live-option-read`).
+			Shipping_Settings_Tab::reset_for_tests();
 		}
 
 		protected function tearDown(): void {
 			$_POST = [];
+			Shipping_Settings_Tab::reset_for_tests();
 			parent::tearDown();
 		}
 
@@ -1207,12 +1241,10 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				$overrides['default_location'] ?? $this->default_location(),
 				$overrides['order_handler'] ?? null,
 				$overrides['point_field_logical'] ?? null,
-				$overrides['replace_address'] ?? true,
 				$overrides['point_icons'] ?? [],
 				$overrides['accent_color'] ?? '#06aedd',
 				$overrides['setting_accent'] ?? '',
 				$overrides['search_enabled'] ?? true,
-				$overrides['close_on_select'] ?? false,
 				$overrides['refresh_checkout'] ?? false,
 				$overrides['selection_scope'] ?? null,
 				$overrides['plugin'] ?? null
@@ -1695,12 +1727,10 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				$this->default_location(),
 				null,
 				null,
-				true,
 				[],
 				'#06aedd',
 				'',
 				true,
-				false,
 				false,
 				null,
 				$plugin
@@ -2108,10 +2138,12 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 
 		/**
 		 * Both flags are `false` by default, and that is a decision, not an accident —
-		 * see {@see Pickup_Handler::$close_on_select} / {@see Pickup_Handler::$refresh_checkout}
-		 * for why. Pinned here so a "harmless" default flip (which would silently close the
-		 * modal on every carrier, or bill every carrier for a checkout refresh) cannot land
-		 * with the suite green.
+		 * `close` reads {@see Pickup_Map_Settings}'s own `pickup_close_on_select` default
+		 * (Task 8, issue #362, design S7); `refreshCheckout` is
+		 * {@see Pickup_Handler::$refresh_checkout}'s own default. Pinned here so a
+		 * "harmless" default flip (which would silently close the modal on every
+		 * carrier, or bill every carrier for a checkout refresh) cannot land with the
+		 * suite green.
 		 */
 		public function test_config_selection_flags_both_default_to_false(): void {
 			Functions\when( 'apply_filters' )->returnArg( 2 );
@@ -2125,13 +2157,22 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			);
 		}
 
-		public function test_config_selection_flags_come_from_the_constructor(): void {
+		/**
+		 * `close` now comes from the STORE setting (Task 8, issue #362, design S7) — no
+		 * longer a constructor argument, since a customer must see the same close-on-select
+		 * behaviour across every carrier at once. `refreshCheckout` stays a per-carrier
+		 * constructor argument, since a refresh is a fact about how THAT carrier's price
+		 * behaves.
+		 */
+		public function test_config_selection_close_comes_from_the_store_refresh_from_the_constructor(): void {
 			Functions\when( 'apply_filters' )->returnArg( 2 );
 			$this->stub_config_dependencies_except_filters();
+			Functions\when( 'get_option' )->alias(
+				fn( $k, $d = false ) => 'woodev_pickup_map_pickup_close_on_select' === $k ? 'yes' : $d
+			);
+			Shipping_Settings_Tab::reset_for_tests();
 
-			$config = $this->make_handler(
-				[ 'close_on_select' => true, 'refresh_checkout' => true ]
-			)->get_js_config();
+			$config = $this->make_handler( [ 'refresh_checkout' => true ] )->get_js_config();
 
 			$this->assertSame(
 				[ 'close' => true, 'refreshCheckout' => true ],
@@ -2141,19 +2182,54 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 
 		/**
 		 * The two flags are independent switches, not one setting under two names — a
-		 * carrier that wants the modal to close on select does not thereby want a checkout
-		 * refresh, and vice versa. A mutant assigning one property from the other argument
-		 * survives both tests above; it does not survive this one.
+		 * store that wants the modal to close on select does not thereby bill every
+		 * carrier for a checkout refresh, and a carrier opting into a refresh does not
+		 * thereby close the modal for every OTHER carrier too. A mutant conflating the
+		 * store setting with the constructor argument survives the test above; it does
+		 * not survive this one.
 		 */
 		public function test_config_selection_flags_are_independent(): void {
 			Functions\when( 'apply_filters' )->returnArg( 2 );
 			$this->stub_config_dependencies_except_filters();
 
-			$close_only = $this->make_handler( [ 'close_on_select' => true ] )->get_js_config();
-			$refresh    = $this->make_handler( [ 'refresh_checkout' => true ] )->get_js_config();
+			Functions\when( 'get_option' )->alias(
+				fn( $k, $d = false ) => 'woodev_pickup_map_pickup_close_on_select' === $k ? 'yes' : $d
+			);
+			Shipping_Settings_Tab::reset_for_tests();
+			$close_only = $this->make_handler()->get_js_config();
+
+			Functions\when( 'get_option' )->justReturn( null );
+			Shipping_Settings_Tab::reset_for_tests();
+			$refresh = $this->make_handler( [ 'refresh_checkout' => true ] )->get_js_config();
 
 			$this->assertSame( [ 'close' => true, 'refreshCheckout' => false ], $close_only['selection'] );
 			$this->assertSame( [ 'close' => false, 'refreshCheckout' => true ], $refresh['selection'] );
+		}
+
+		/**
+		 * Both store settings at once, in the shape they actually reach the browser
+		 * together — `replaceAddress.enabled` and `selection.close` both read the store
+		 * ({@see Pickup_Map_Settings}), `selection.refreshCheckout` stays the constructor
+		 * argument. Proves the two store reads do not accidentally share a cached value
+		 * (a mutant reading `pickup_replace_address` for both would report `false` twice
+		 * or `true` twice, never the mixed pair this test pins).
+		 */
+		public function test_js_config_reads_replace_address_and_close_from_the_store(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			$this->stub_config_dependencies_except_filters();
+			Functions\when( 'get_option' )->alias(
+				fn( $k, $d = false ) => [
+					'woodev_pickup_map_pickup_replace_address' => false,
+					'woodev_pickup_map_pickup_close_on_select' => true,
+				][ $k ] ?? $d
+			);
+			Shipping_Settings_Tab::reset_for_tests();
+
+			$config = $this->make_handler()->get_js_config();
+
+			$this->assertFalse( $config['replaceAddress']['enabled'] );
+			$this->assertTrue( $config['selection']['close'] );
+			$this->assertFalse( $config['selection']['refreshCheckout'] ); // still the ctor arg
 		}
 
 		/**
@@ -3470,13 +3546,16 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 		}
 
 		// -------------------------------------------------------------------------
-		// replaceAddress toggle (SP-5 Task 17) — the `$replace_address` constructor arg
+		// replaceAddress toggle (Task 8, issue #362, design S7) — a STORE setting
+		// (`Pickup_Map_Settings::current()->get_value( 'pickup_replace_address' )`), no
+		// longer a constructor argument (removed, clean-break v2 line, ADR-005)
 		// -------------------------------------------------------------------------
 
 		/**
-		 * Default-on proof: a caller that never mentions `$replace_address` at all — every
-		 * existing caller in this suite, and every caller wired before Task 17 shipped —
-		 * must keep getting `enabled: true`. The flag is purely additive.
+		 * Default-on proof: a store that never touched the «Карта» → «Заполнять адрес…»
+		 * setting — every existing installation, since the option row does not exist yet —
+		 * must keep getting `enabled: true`. {@see Pickup_Map_Settings}'s own
+		 * `pickup_replace_address` default is `true`.
 		 */
 		public function test_replace_address_defaults_to_enabled(): void {
 			Functions\when( 'apply_filters' )->returnArg( 2 );
@@ -3496,52 +3575,56 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 		}
 
 		/**
-		 * `$replace_address` is appended AFTER the `$order_handler` / `$point_field_logical`
-		 * pair (see the constructor's own docblock for why), so disabling it here means
-		 * passing `null, null` first — exactly what the omitted-persistence case already
-		 * defaults to.
+		 * The store's `pickup_replace_address` setting is read at `get_js_config()` time via
+		 * {@see Pickup_Map_Settings::current()} — `Shipping_Settings_Tab::reset_for_tests()`
+		 * runs AFTER aliasing `get_option`, so the lazily-cached `Pickup_Map_Settings`
+		 * instance is rebuilt against the new option value (gotcha
+		 * `woodev-setting-get-value-is-cached-not-a-live-option-read`), not the one `setUp()`
+		 * already built against the default `get_option` stub.
 		 */
-		public function test_replace_address_false_disables_it(): void {
+		public function test_replace_address_disabled_by_the_store_setting(): void {
 			Functions\when( 'apply_filters' )->returnArg( 2 );
 			Functions\when( 'rest_url' )->justReturn( 'https://example.test/wp-json/woodev/v1' );
 			Functions\when( 'wp_create_nonce' )->justReturn( 'NONCE' );
 			Functions\when( 'wc_ship_to_billing_address_only' )->justReturn( false );
+			Functions\when( 'get_option' )->alias(
+				fn( $k, $d = false ) => 'woodev_pickup_map_pickup_replace_address' === $k ? 'no' : $d
+			);
+			Shipping_Settings_Tab::reset_for_tests();
 
 			$handler = new Pickup_Handler(
 				'p',
 				'carrier_pickup_point',
 				$this->source_returning( null ),
 				$this->yandex_provider(),
-				$this->default_location(),
-				null,
-				null,
-				false
+				$this->default_location()
 			);
 
 			$this->assertFalse( $handler->get_js_config()['replaceAddress']['enabled'] );
 		}
 
 		/**
-		 * `billingOnly` must keep mirroring the store setting regardless of whether
-		 * replacement itself is on or off, and `target` must never appear — a mutant that
-		 * ties the two flags together, or that resurrects a resolved `target` key once the
-		 * toggle exists, must fail this.
+		 * `billingOnly` must keep mirroring the store's `wc_ship_to_billing_address_only()`
+		 * setting regardless of whether replacement itself is on or off, and `target` must
+		 * never appear — a mutant that ties the two flags together, or that resurrects a
+		 * resolved `target` key, must fail this.
 		 */
 		public function test_replace_address_billing_only_still_mirrors_the_store_setting_when_disabled(): void {
 			Functions\when( 'apply_filters' )->returnArg( 2 );
 			Functions\when( 'rest_url' )->justReturn( 'https://example.test/wp-json/woodev/v1' );
 			Functions\when( 'wp_create_nonce' )->justReturn( 'NONCE' );
 			Functions\when( 'wc_ship_to_billing_address_only' )->justReturn( true );
+			Functions\when( 'get_option' )->alias(
+				fn( $k, $d = false ) => 'woodev_pickup_map_pickup_replace_address' === $k ? 'no' : $d
+			);
+			Shipping_Settings_Tab::reset_for_tests();
 
 			$handler = new Pickup_Handler(
 				'p',
 				'carrier_pickup_point',
 				$this->source_returning( null ),
 				$this->yandex_provider(),
-				$this->default_location(),
-				null,
-				null,
-				false
+				$this->default_location()
 			);
 
 			$config = $handler->get_js_config();
@@ -3553,8 +3636,8 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 		/**
 		 * Existing callers wiring full-point persistence (`$order_handler` +
 		 * `$point_field_logical`) must keep getting the default `enabled: true` — proves
-		 * the new trailing parameter did not silently shift meaning for the pair that
-		 * already occupied that constructor slot.
+		 * `pickup_replace_address` being a store setting now did not silently couple it to
+		 * whether full-point persistence happens to be wired.
 		 */
 		public function test_replace_address_still_defaults_to_enabled_when_persistence_is_wired(): void {
 			Functions\when( 'apply_filters' )->returnArg( 2 );

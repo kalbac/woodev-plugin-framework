@@ -36,8 +36,10 @@
  *    {@see \Woodev\Framework\Shipping\Pickup\Address_Target::resolve()}'s rule against the
  *    live checkbox at write time.
  *
- * `replaceAddress.enabled` follows the `$replace_address` constructor argument (SP-5 Task 17,
- * default `true`) — the merchant-configurable on/off toggle. `mapConfig` comes straight from the
+ * `replaceAddress.enabled` follows the store's own `pickup_replace_address` setting
+ * (Task 8, issue #362, design S7 — one of three pickup map behaviours a customer sees
+ * across every carrier at once, so the STORE decides it, never a carrier plugin; see
+ * {@see \Woodev\Framework\Shipping\Pickup\Pickup_Map_Settings}). `mapConfig` comes straight from the
  * active {@see \Woodev\Framework\Shipping\Map\Map_Provider}'s own
  * {@see \Woodev\Framework\Shipping\Map\Map_Provider::get_js_config()} (SP-5 Task 9) — this
  * handler owns none of that shape itself, only passes through a request-scoped `$context`.
@@ -174,35 +176,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		private ?string $point_field_logical;
 
 		/**
-		 * Whether the picker replaces the delivery address fields with the selected
-		 * point's address (SP-5 Task 17). Only the STABLE half of the rule — this flag,
-		 * plus `wc_ship_to_billing_address_only()` — travels to the browser via
-		 * {@see self::get_js_config()}; see the class docblock's second deviation for why
-		 * a resolved `billing`/`shipping` target never does.
-		 *
-		 * @since 2.0.2
-		 * @var bool
-		 */
-		private bool $replace_address;
-
-		/**
-		 * Whether a confirmed selection closes the picker outright.
-		 *
-		 * Default `false`, and that is the framework's OWN behaviour rather than an absent
-		 * setting: a confirmed point leaves the customer in the map with the CTA relabelled
-		 * «Продолжить оформление» (the `continueCheckout` string), so the choice can still be
-		 * inspected and changed before committing. Closing on select throws that second step
-		 * away, which is a carrier's decision to make, not a default to inherit.
-		 *
-		 * Travels to the browser as `selection.close`; see {@see self::get_js_config()} for
-		 * the `??` reading rule that makes an explicit `false` from the domain win over this.
-		 *
-		 * @since 2.0.2
-		 * @var bool
-		 */
-		private bool $close_on_select;
-
-		/**
 		 * Whether a confirmed selection triggers a WooCommerce checkout refresh.
 		 *
 		 * Default `false`. A refresh nobody asked for is a full `update_order_review` round
@@ -211,8 +184,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 * locality's, not the point's) must never pay it; a carrier whose price DOES move
 		 * with the point type (Yandex) opts in explicitly.
 		 *
-		 * Travels to the browser as `selection.refreshCheckout`; same `??` reading rule as
-		 * {@see self::$close_on_select}.
+		 * Unlike `replaceAddress.enabled`/`selection.close` (Task 8, issue #362, design S7 —
+		 * both now read from {@see Pickup_Map_Settings::current()}, a STORE setting, because
+		 * a customer sees them across every carrier at once), whether a selection refreshes
+		 * the checkout stays a CARRIER decision and keeps its own constructor argument: a
+		 * refresh is a fact about how that carrier's price behaves, not a store preference.
+		 *
+		 * Travels to the browser as `selection.refreshCheckout`; same `??` reading rule
+		 * {@see self::get_js_config()} documents for `selection.close`.
 		 *
 		 * @since 2.0.2
 		 * @var bool
@@ -420,6 +399,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 * {@see self::handle_checkout_order_processed()}.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Removed `$replace_address` and `$close_on_select` (Task 8, issue #362,
+		 *              design S7, clean-break v2 line, ADR-005) — both are now STORE settings
+		 *              read from {@see Pickup_Map_Settings::current()} at
+		 *              {@see self::get_js_config()} time, never a per-carrier constructor
+		 *              argument. A caller passing either positionally now passes the wrong
+		 *              value into whichever later parameter shifted into its place.
 		 *
 		 * @param string                      $plugin_id           plugin identifier (REST route +
 		 *                                                          JS config global name).
@@ -450,18 +435,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 *                                                          {@see Shipping_Order_Handler::store_pickup_point()}.
 		 *                                                          Omit to skip full-point
 		 *                                                          persistence.
-		 * @param bool                        $replace_address     whether the picker replaces the
-		 *                                                          delivery address fields with the
-		 *                                                          selected point's address (SP-5
-		 *                                                          Task 17). Appended last, after the
-		 *                                                          `$order_handler` /
-		 *                                                          `$point_field_logical` pair, so
-		 *                                                          the overwhelming majority of
-		 *                                                          callers — who want the default
-		 *                                                          `true` — never have to pass
-		 *                                                          anything for it, including every
-		 *                                                          caller that DOES wire full-point
-		 *                                                          persistence.
 		 * @param array                       $point_icons         plugin-supplied icon URLs per
 		 *                                                          point type (spec D-5); see
 		 *                                                          {@see self::$point_icons}. Optional
@@ -481,14 +454,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 *                                                          search (Task 18, spec V-6); see
 		 *                                                          {@see self::$search_enabled}.
 		 *                                                          Optional, default `true`.
-		 * @param bool                        $close_on_select      whether a confirmed selection
-		 *                                                          closes the picker; see
-		 *                                                          {@see self::$close_on_select} for
-		 *                                                          why the default is `false`.
 		 * @param bool                        $refresh_checkout     whether a confirmed selection
 		 *                                                          refreshes the checkout; see
 		 *                                                          {@see self::$refresh_checkout} for
-		 *                                                          why the default is `false`.
+		 *                                                          why the default is `false`, and
+		 *                                                          for why this argument — unlike
+		 *                                                          `$replace_address`/`$close_on_select`
+		 *                                                          above — was NOT converted to a
+		 *                                                          store setting.
 		 * @param Selection_Scope|null        $selection_scope      the plugin's pickup-selection
 		 *                                                          scope (issue #176); see
 		 *                                                          {@see self::$selection_scope}.
@@ -525,12 +498,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 			array $default_location,
 			?Shipping_Order_Handler $order_handler = null,
 			?string $point_field_logical = null,
-			bool $replace_address = true,
 			array $point_icons = [],
 			string $accent_color = self::DEFAULT_ACCENT_COLOR,
 			string $setting_accent_color = '',
 			bool $search_enabled = true,
-			bool $close_on_select = false,
 			bool $refresh_checkout = false,
 			?Selection_Scope $selection_scope = null,
 			?Shipping_Plugin $plugin = null
@@ -544,12 +515,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 			$this->default_location     = $default_location;
 			$this->order_handler        = $order_handler;
 			$this->point_field_logical  = $point_field_logical;
-			$this->replace_address      = $replace_address;
 			$this->point_icons          = $point_icons;
 			$this->accent_color         = $accent_color;
 			$this->setting_accent_color = $setting_accent_color;
 			$this->search_enabled       = $search_enabled;
-			$this->close_on_select      = $close_on_select;
 			$this->refresh_checkout     = $refresh_checkout;
 			$this->selection_scope      = $selection_scope;
 			$this->plugin               = $plugin;
@@ -1425,8 +1394,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 
 				'mapConfig'      => $this->map_provider->get_js_config( [ 'plugin_id' => $this->plugin_id ] ),
 
+				// `enabled` reads the store's own `pickup_replace_address` setting (Task 8,
+				// issue #362, design S7) — no longer a constructor argument; see
+				// {@see Pickup_Map_Settings} for why this is a STORE decision, never a
+				// per-carrier one.
 				'replaceAddress' => [
-					'enabled'     => $this->replace_address,
+					'enabled'     => (bool) Pickup_Map_Settings::current()->get_value( 'pickup_replace_address' ),
 					'billingOnly' => (bool) wc_ship_to_billing_address_only(),
 				],
 
@@ -1438,11 +1411,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 				// and `||` would silently discard it. A flag the domain says nothing about
 				// falls back to these values.
 				//
-				// See self::$close_on_select / self::$refresh_checkout for why both defaults
-				// are `false` — neither is an unset setting, both are the framework's own
-				// deliberate behaviour.
+				// `close` reads the store's own `pickup_close_on_select` setting (Task 8,
+				// issue #362, design S7) — no longer a constructor argument, for the same
+				// reason `replaceAddress.enabled` above changed. `refreshCheckout` stays
+				// `self::$refresh_checkout`, a carrier decision — see that property's own
+				// docblock for why the two were NOT converted together.
 				'selection' => [
-					'close'           => (bool) $this->close_on_select,
+					'close'           => (bool) Pickup_Map_Settings::current()->get_value( 'pickup_close_on_select' ),
 					'refreshCheckout' => (bool) $this->refresh_checkout,
 				],
 

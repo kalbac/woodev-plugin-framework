@@ -96,19 +96,16 @@ if ( ! defined( 'WOODEV_TEST_PICKUP_EMBEDDED' ) ) {
 }
 
 /**
- * Issue #251: the two-level close/refresh contract the rig has exercised only ONE
- * side of until now — the stock config below is `close_on_select = true`,
- * `refresh_checkout = false`, which makes the "modal stays open after a confirmed
- * selection" path (see `pickup-mount.js`) unreachable from this fixture without a
- * live in-browser patch (done by hand in s62). These two constants make both sides
- * configurable without a code edit, same idiom as the constants above — flip
- * `WOODEV_TEST_PICKUP_SELECTION_CLOSE` to `false` to reach that path. Defaults
- * preserve today's stock rig behaviour exactly.
+ * Issue #251: the config half of the close/refresh contract. `WOODEV_TEST_PICKUP_SELECTION_CLOSE`
+ * used to sit alongside this one, but Task 8 (issue #362, design S7) turned close-on-select
+ * into a STORE setting (`woodev_pickup_map_pickup_close_on_select`, default `false`) — it is
+ * one of the three pickup map behaviours a customer sees across every carrier at once, so the
+ * store decides it, never a single carrier plugin's constructor argument. To reach the "modal
+ * stays open after a confirmed selection" path on the rig now, set the option directly:
+ * `wp option update woodev_pickup_map_pickup_close_on_select 1`. `refresh_checkout` stays a
+ * per-carrier decision (a fact about whether THIS carrier's price can move with the point), so
+ * it keeps its own constructor argument and this constant.
  */
-if ( ! defined( 'WOODEV_TEST_PICKUP_SELECTION_CLOSE' ) ) {
-	define( 'WOODEV_TEST_PICKUP_SELECTION_CLOSE', true );
-}
-
 if ( ! defined( 'WOODEV_TEST_PICKUP_SELECTION_REFRESH_CHECKOUT' ) ) {
 	define( 'WOODEV_TEST_PICKUP_SELECTION_REFRESH_CHECKOUT', false );
 }
@@ -690,40 +687,32 @@ function woodev_test_shipping_method_plugin_init(): void {
 					],
 				];
 
-				// `close_on_select` (13th argument) is the CONFIG half of the two-level close
-				// contract, and until now the rig only ever exercised the other half. The
-				// framework's own default is `false` — a confirmed point leaves the customer in
-				// the map with the CTA relabelled «Продолжить оформление заказа» — so the config
-				// path had no live coverage at all: everything on the rig went through a domain
-				// filter answering `close => true` per point.
+				// Task 8 (issue #362, design S7): `$replace_address` and `$close_on_select` are
+				// GONE from this constructor (clean-break v2 line, ADR-005) — both are now
+				// STORE settings (`woodev_pickup_map_pickup_replace_address`,
+				// `woodev_pickup_map_pickup_close_on_select`) a merchant edits once on the
+				// «Доставка» → «Карта» screen and every carrier obeys, instead of a value each
+				// carrier plugin hardcoded into this call. `refresh_checkout` (below) is the
+				// one flag of the old trio that stayed a CARRIER decision — see that argument's
+				// own note.
 				//
-				// Turning it on here is not only "what the rig should demo". It is what makes the
-				// override direction TESTABLE. The browser reads
-				// `resolveFlag( result.close, defaults.close )`, whose contract is `??` and
-				// explicitly NEVER `||`: an explicit `false` from the domain is a DECISION ("do
-				// not close THIS one") and must beat a `true` config. With the config at `false`
-				// and a point answering `true`, `??` and `||` return the SAME value — so the
-				// fixture could not have caught that regression. With the config at `true`, a
-				// point answering `false` separates them: `??` keeps the picker open, `||` closes
-				// it. See DEMO-PVZ-STAY in fixture-points.php, which is that point.
-				//
-				// Arguments 10-12 are the framework's own defaults, restated only because the
+				// Arguments 9-11 are the framework's own defaults, restated only because the
 				// constructor is positional and PHP 7.4 (which CI checks) has no named arguments.
 				// The accent colour is duplicated as a literal because `DEFAULT_ACCENT_COLOR` is
 				// a `private const` the fixture cannot reference — exactly the friction issue
-				// #170 tracks. Arguments 13-14 (`close_on_select`/`refresh_checkout`) come from
-				// the WOODEV_TEST_PICKUP_SELECTION_* constants (issue #251) rather than literals,
-				// so the rig can reach the "modal stays open after a selection" path without a
-				// code edit — see those constants' own docblock. Argument 15 (issue #176; review
-				// finding F4 on issue #159 PR #312) is the pickup-selection-persistence scope —
-				// see Woodev_Test_Provider_Selection_Scope's own docblock for why it now EXTENDS
-				// Provider_Selection_Scope (built in this same PR but never wired to a real
-				// caller until now) rather than keeping the former, independent
-				// Woodev_Test_Selection_Scope's `billing_state` vocabulary. Constructed with
-				// THIS SAME Location_Service instance `get_location_service()` lazily builds and
-				// caches (see that method's own docblock) — the SAME instance
+				// #170 tracks. Argument 12 (`refresh_checkout`) comes from the
+				// WOODEV_TEST_PICKUP_SELECTION_REFRESH_CHECKOUT constant (issue #251) rather
+				// than a literal, so the rig can reach the "checkout refreshes after a
+				// selection" path without a code edit — see that constant's own docblock.
+				// Argument 13 (issue #176; review finding F4 on issue #159 PR #312) is the
+				// pickup-selection-persistence scope — see Woodev_Test_Provider_Selection_Scope's
+				// own docblock for why it now EXTENDS Provider_Selection_Scope (built in this
+				// same PR but never wired to a real caller until now) rather than keeping the
+				// former, independent Woodev_Test_Selection_Scope's `billing_state` vocabulary.
+				// Constructed with THIS SAME Location_Service instance `get_location_service()`
+				// lazily builds and caches (see that method's own docblock) — the SAME instance
 				// Pickup_Handler::location_context() below reaches through `$this`, so both
-				// sides read the identical customer record. Argument 16 (Task 15; issue #159)
+				// sides read the identical customer record. Argument 14 (Task 15; issue #159)
 				// is `$this` — this
 				// fixture already participates in the Location Provider layer
 				// (needs_location_provider() below), so wiring it here is what makes the rig
@@ -731,8 +720,8 @@ function woodev_test_shipping_method_plugin_init(): void {
 				// customer's live Location Provider record/resolved identity
 				// (Pickup_Handler::location_context()), and the browser config carries
 				// `location.current.key` instead of the picker having to read it off the DOM
-				// itself. Point-selection PERSISTENCE (argument 15) now shares that SAME layer
-				// too, rather than staying independent of it — see argument 15's own note above.
+				// itself. Point-selection PERSISTENCE (argument 13) now shares that SAME layer
+				// too, rather than staying independent of it — see argument 13's own note above.
 				$this->pickup_handler = new \Woodev\Framework\Shipping\Pickup\Pickup_Handler(
 					self::PLUGIN_ID,
 					'carrier_pickup_point',
@@ -741,12 +730,10 @@ function woodev_test_shipping_method_plugin_init(): void {
 					$default_location,
 					null,
 					null,
-					true,
 					$point_icons,
 					'#06aedd',
 					'',
 					true,
-					WOODEV_TEST_PICKUP_SELECTION_CLOSE,
 					WOODEV_TEST_PICKUP_SELECTION_REFRESH_CHECKOUT,
 					new \Woodev_Test_Provider_Selection_Scope( $this->get_location_service() ),
 					$this
@@ -1221,17 +1208,22 @@ function woodev_test_shipping_method_plugin_init(): void {
 				return $result;
 			}
 
-			// A point that REFUSES to close, against a config that says close (the handler is
-			// constructed above with `close_on_select = true`). This is the direction that
-			// actually proves something.
+			// A point that REFUSES to close, against a config that says close. Proves
+			// something only when the config actually says `true` — since Task 8 (issue
+			// #362, design S7) `close_on_select` is the STORE setting
+			// `woodev_pickup_map_pickup_close_on_select`, defaulting to `false`, no longer
+			// a literal this constructor call hardcodes — so seeing this point diverge from
+			// an ordinary one on the rig now requires turning that setting ON first
+			// (`wp option update woodev_pickup_map_pickup_close_on_select 1`, or the
+			// «Доставка» → «Карта» screen).
 			//
 			// The browser resolves the flag as `resolveFlag( result.close, defaults.close )`,
 			// whose contract is `??` and explicitly never `||`, because an explicit `false`
 			// from the domain is a DECISION — "do not close THIS one" — and has to beat a
-			// `true` config. Under the previous arrangement (config `false`, point answering
-			// `true`) both operators return the same value, so the rig could not tell a correct
-			// implementation from a regressed one. Here they diverge: `??` keeps the picker
-			// open, `||` closes it.
+			// `true` config. With the config at `false` (point answering `true`) both
+			// operators return the same value, so the rig could not tell a correct
+			// implementation from a regressed one. With the config at `true`, they diverge:
+			// `??` keeps the picker open, `||` closes it.
 			//
 			// A real carrier reaches this branch whenever confirmation returns something the
 			// customer still has to see — a point that needs a code collected at the counter,
