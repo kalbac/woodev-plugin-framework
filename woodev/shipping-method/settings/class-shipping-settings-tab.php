@@ -25,6 +25,7 @@ use Woodev\Framework\Settings\Composite_Settings_Handler;
 use Woodev\Framework\Settings\Settings_Page_Registry;
 use Woodev\Framework\Settings\Settings_Provider;
 use Woodev\Framework\Settings\Settings_Section;
+use Woodev\Framework\Shipping\Checkout\Checkout_Field_Policy;
 use Woodev\Framework\Shipping\Checkout\Checkout_Field_Settings;
 use Woodev\Framework\Shipping\Pickup\Pickup_Map_Settings;
 
@@ -116,6 +117,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Shipping_Settings
 			self::remove_hooked_instances( 'init', self::class, 'register' );
 
 			self::$instance = null;
+
+			// Checkout_Field_Policy (Task 6, issue #362) is booted from register() above,
+			// but is its OWN singleton with its own hooked filters — reset it here too so
+			// a test that calls register() more than once never leaks a stale filter
+			// registration into a later test in the same process.
+			Checkout_Field_Policy::reset_for_tests();
 		}
 
 		/**
@@ -309,11 +316,20 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Shipping_Settings
 
 		/**
 		 * Builds the composite handler and registers the «Доставка» tab on the SP-1
-		 * surface.
+		 * surface. Also boots {@see Checkout_Field_Policy} (Task 6, issue #362) against
+		 * the same «Поля» handler this tab's own section is built from — never a fresh
+		 * instance, so its availability rules are computed exactly once.
+		 *
+		 * Runs on EVERY request this hook fires on (`init` priority 25, including admin
+		 * and REST) — harmless: {@see Checkout_Field_Policy::register()} is itself
+		 * idempotent (guards its own `add_filter()` calls behind a `$hooked` flag), so a
+		 * repeat call here only refreshes its settings reference, never double-adds a
+		 * filter.
 		 *
 		 * @internal bound to `init` priority 25 by {@see self::hook_once()}.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Boots {@see Checkout_Field_Policy} (Task 6, issue #362).
 		 *
 		 * @return void
 		 */
@@ -325,6 +341,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Shipping_Settings
 					$this->map_needed ? $this->get_map_settings() : null,
 				]
 			);
+
+			Checkout_Field_Policy::instance()->register( $this->get_field_settings() );
 
 			Settings_Page_Registry::instance()->register_service(
 				Settings_Provider::create(

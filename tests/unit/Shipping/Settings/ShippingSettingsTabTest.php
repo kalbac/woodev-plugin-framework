@@ -28,6 +28,7 @@ require_once dirname( __DIR__, 4 ) . '/woodev/settings-page/class-settings-page-
 require_once dirname( __DIR__, 4 ) . '/woodev/settings-page/class-composite-settings-handler.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/checkout/class-checkout-field-environment.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/checkout/class-checkout-field-settings.php';
+require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/checkout/class-checkout-field-policy.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/pickup/class-pickup-map-settings.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/settings/class-shipping-settings-tab.php';
 
@@ -40,6 +41,11 @@ class ShippingSettingsTabTest extends TestCase {
 		// is invoked directly, exactly like LocationProviderRegistryTest invokes collect()
 		// directly instead of firing a real `init` action.
 		Functions\when( 'add_action' )->justReturn( true );
+
+		// register() now also boots Checkout_Field_Policy (Task 6, issue #362), which
+		// hooks two real filters — stub add_filter so that call never touches the real
+		// WP function.
+		Functions\when( 'add_filter' )->justReturn( true );
 
 		// Building the «Поля» section now constructs a real Checkout_Field_Settings
 		// (Task 5), which registers settings/controls through Woodev_Abstract_Settings —

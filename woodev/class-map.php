@@ -32,6 +32,7 @@ return [
 	'Woodev\\Framework\\Shipping\\Checkout\\Checkout_Condition' => 'woodev/shipping-method/checkout/class-checkout-condition.php',
 	'Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' => 'woodev/shipping-method/checkout/class-checkout-config.php',
 	'Woodev\\Framework\\Shipping\\Checkout\\Checkout_Field_Environment' => 'woodev/shipping-method/checkout/class-checkout-field-environment.php',
+	'Woodev\\Framework\\Shipping\\Checkout\\Checkout_Field_Policy' => 'woodev/shipping-method/checkout/class-checkout-field-policy.php',
 	'Woodev\\Framework\\Shipping\\Checkout\\Checkout_Field_Settings' => 'woodev/shipping-method/checkout/class-checkout-field-settings.php',
 	'Woodev\\Framework\\Shipping\\Checkout\\Checkout_Fields' => 'woodev/shipping-method/checkout/class-checkout-fields.php',
 	'Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler' => 'woodev/shipping-method/checkout/class-checkout-handler.php',

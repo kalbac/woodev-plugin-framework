@@ -37,10 +37,20 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 	 * Shape of the returned array:
 	 * ```
 	 * [
-	 *   'fields'   => [ field_id => [ id, type, section, source_kind, location_level, depends_on, required, is_pickup_slot ] ],
-	 *   'endpoint' => '{rest_base}/shipping/checkout/{plugin_id}/field-source',
-	 *   'nonce'    => string,
-	 *   'takeover' => [ field_id => [ country_code => bool ] ],
+	 *   'fields'            => [ field_id => [ id, type, section, source_kind, location_level, depends_on, required, is_pickup_slot ] ],
+	 *   'endpoint'          => '{rest_base}/shipping/checkout/{plugin_id}/field-source',
+	 *   'nonce'             => string,
+	 *   'takeover'          => [ field_id => [ country_code => bool ] ],
+	 *   // Checkout field policy (Task 6, issue #362, spec §4.3): effective values of the
+	 *   // three classic-only/JS-driven settings — this config only PUBLISHES them,
+	 *   // Checkout_Field_Policy (not this class) applies region/postcode/preset via
+	 *   // woocommerce_get_country_locale + woocommerce_checkout_fields.
+	 *   'field_policy'      => [
+	 *     'address'  => string, // 'show' | 'hide_for_pickup'
+	 *     'postcode' => string, // 'show' | 'hide_for_pickup' | 'remove'
+	 *     'country'  => string, // 'show' | 'hide'
+	 *   ],
+	 *   'pickup_method_ids' => string[], // WC_Shipping_Method::$id of every pickup-shipping method.
 	 *   // Present only when a Location_Service was injected AND is_active() (Task 9):
 	 *   'location' => [
 	 *     'endpoints' => [ 'suggest' => string, 'select' => string, 'list' => string ], // 'list' added Task 13
@@ -120,6 +130,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 		private ?\Woodev\Framework\Shipping\Location\Location_Service $location_service;
 
 		/**
+		 * Task 6's «Поля» store-level settings handler (issue #362, spec §4.3), or `null`
+		 * when this config was built without checkout-field-policy awareness (an older
+		 * caller, or a unit test that does not care about it). `null` clamps every
+		 * `field_policy` value to `'show'`; `pickup_method_ids()` never depends on this
+		 * collaborator at all — see {@see self::build()}.
+		 *
+		 * @since 2.0.2
+		 * @var Checkout_Field_Settings|null
+		 */
+		private ?Checkout_Field_Settings $field_settings;
+
+		/**
 		 * Constructor.
 		 *
 		 * Country codes are injected for testability; the real caller should
@@ -129,6 +151,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 		 * @since 2.0.2
 		 * @since 2.0.2 Added the optional `$location_service` collaborator
 		 *              (location-provider layer Task 9).
+		 * @since 2.0.2 Added the optional `$field_settings` collaborator (checkout
+		 *              field policy Task 6, issue #362).
 		 *
 		 * @param string                                                    $plugin_id        Plugin identifier (used in REST endpoint path).
 		 * @param string                                                    $rest_base        REST API base URL without a trailing slash.
@@ -136,19 +160,27 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 		 * @param string[]                                                  $countries        Country codes to evaluate takeover predicates against.
 		 * @param \Woodev\Framework\Shipping\Location\Location_Service|null $location_service Location Provider layer façade; `null` omits the
 		 *                                                                                        `location` block entirely.
+		 * @param Checkout_Field_Settings|null                              $field_settings   The store-level «Поля» settings handler — always
+		 *                                                                                        {@see \Woodev\Framework\Shipping\Settings\Shipping_Settings_Tab::get_field_settings()}
+		 *                                                                                        at the real call site, never a fresh instance
+		 *                                                                                        (its availability rules must not be computed
+		 *                                                                                        twice with different answers); `null` clamps
+		 *                                                                                        `field_policy` to all-`'show'`.
 		 */
 		public function __construct(
 			string $plugin_id,
 			string $rest_base,
 			string $nonce,
 			array $countries,
-			?\Woodev\Framework\Shipping\Location\Location_Service $location_service = null
+			?\Woodev\Framework\Shipping\Location\Location_Service $location_service = null,
+			?Checkout_Field_Settings $field_settings = null
 		) {
 			$this->plugin_id        = $plugin_id;
 			$this->rest_base        = rtrim( $rest_base, '/' );
 			$this->nonce            = $nonce;
 			$this->countries        = $countries;
 			$this->location_service = $location_service;
+			$this->field_settings   = $field_settings;
 		}
 
 		/**
@@ -181,6 +213,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 		 * @since 2.0.2 `pickup_slot_placements` is now `string[]|null` for a pickup-slot
 		 *              field, so a malformed filter return and a deliberate `[]` no longer
 		 *              collapse to the same value (issue #308 item 2).
+		 * @since 2.0.2 Added `field_policy` and `pickup_method_ids` (checkout field policy
+		 *              Task 6, issue #362).
 		 *
 		 * @param Checkout_Fields $fields Normalized field definitions to emit.
 		 *
@@ -199,6 +233,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 		 *     endpoint: string,
 		 *     nonce: string,
 		 *     takeover: array<string, array<string, bool>>,
+		 *     field_policy: array{address: string, postcode: string, country: string},
+		 *     pickup_method_ids: string[],
 		 *     location?: array{
 		 *         endpoints: array{suggest: string, select: string},
 		 *         nonce: string,
@@ -242,10 +278,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 			}
 
 			$config = [
-				'fields'   => $out_fields,
-				'endpoint' => $this->rest_base . '/shipping/checkout/' . $this->plugin_id . '/field-source',
-				'nonce'    => $this->nonce,
-				'takeover' => $takeover,
+				'fields'            => $out_fields,
+				'endpoint'          => $this->rest_base . '/shipping/checkout/' . $this->plugin_id . '/field-source',
+				'nonce'             => $this->nonce,
+				'takeover'          => $takeover,
+				'field_policy'      => $this->build_field_policy(),
+				'pickup_method_ids' => $this->pickup_method_ids(),
 			];
 
 			if ( null !== $this->location_service && $this->location_service->is_active() ) {
@@ -253,6 +291,72 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 			}
 
 			return $config;
+		}
+
+		/**
+		 * Builds the `field_policy` block (Task 6, issue #362, spec §4.3): the effective
+		 * values of the three settings that stay classic-only/JS-driven
+		 * (`address_field`, `postcode_field`, `country_field` — Task 9 acts on them in
+		 * `checkout-field-classic.js`). This method only PUBLISHES the values; it never
+		 * acts on them in PHP (T2 — that stays this method's whole job, the actual
+		 * hiding/removal instruments live in {@see Checkout_Field_Policy}).
+		 *
+		 * `null` {@see self::$field_settings} (no policy handler was injected) clamps
+		 * every value to `'show'` — the same fallback {@see Checkout_Field_Settings::effective()}
+		 * itself uses for a stored value that names an option not currently offered.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array{address: string, postcode: string, country: string}
+		 */
+		private function build_field_policy(): array {
+			if ( null === $this->field_settings ) {
+				return [
+					'address'  => 'show',
+					'postcode' => 'show',
+					'country'  => 'show',
+				];
+			}
+
+			return [
+				'address'  => $this->field_settings->effective( 'address_field' ),
+				'postcode' => $this->field_settings->effective( 'postcode_field' ),
+				'country'  => $this->field_settings->effective( 'country_field' ),
+			];
+		}
+
+		/**
+		 * The WooCommerce shipping method ids (issue #362, spec §4.3) whose
+		 * {@see \Woodev\Framework\Shipping\Shipping_Method::is_pickup_shipping()} is
+		 * `true` — published so `checkout-field-classic.js` can match the customer's
+		 * CHOSEN method against them the exact same way
+		 * {@see \Woodev\Framework\Shipping\Checkout\Checkout_Handler::chosen_method_matches()}
+		 * already does server-side: `$chosen === $id || 0 === strpos( $chosen, $id . ':' )`.
+		 * That is why this returns the plain method id — `WC_Shipping_Method::$id`, no
+		 * zone-instance suffix — never a per-zone rate id like `pickup:3`.
+		 *
+		 * Guarded for the unit suite (no `WC()` there): returns `[]` when WooCommerce's
+		 * shipping subsystem is unavailable, exactly like {@see self::wc_states()}
+		 * degrades for the same reason.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string[]
+		 */
+		private function pickup_method_ids(): array {
+			if ( ! function_exists( 'WC' ) || ! method_exists( WC(), 'shipping' ) || ! WC()->shipping() ) {
+				return [];
+			}
+
+			$ids = [];
+
+			foreach ( WC()->shipping()->get_shipping_methods() as $method ) {
+				if ( $method instanceof \Woodev\Framework\Shipping\Shipping_Method && $method->is_pickup_shipping() ) {
+					$ids[] = $method->get_id();
+				}
+			}
+
+			return array_values( array_unique( $ids ) );
 		}
 
 		/**
