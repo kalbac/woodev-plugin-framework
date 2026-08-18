@@ -739,3 +739,263 @@ describe( 'pickup slot placements (#274 item 3)', () => {
 		slots().forEach( ( slot ) => expect( slot.style.display ).toBe( 'none' ) );
 	} );
 } );
+
+/**
+ * `field_policy` — hide-for-pickup + country-hide (Task 9, issue #362 §4.3).
+ *
+ * A separate describe block again, for the same reason as the pickup-slot block above: its own
+ * markup and config, no field id shared with `billing_state`/`billing_city`/`carrier_pvz`, so a
+ * stale delegated listener from an earlier test has nothing of this block's to act on.
+ *
+ * `field_policy`/`pickup_method_ids` are STORE-level (`Checkout_Field_Policy` is a single
+ * store-wide singleton — see `Checkout_Config::build()`), so every config global on a real page
+ * carries the SAME values; `buildFieldPolicyConfig()` below models that by putting both keys on
+ * the one config these tests mount, and one test below models the OTHER config global a
+ * multi-plugin page can carry — one whose PHP predates Task 6 and has no `field_policy` key at
+ * all — to pin that the adapter does not choke on it.
+ */
+describe( 'field policy — hide-for-pickup / country-hide (#362 §4.3)', () => {
+
+	/**
+	 * Classic-checkout markup for the three field-policy targets, all under `shipping_*` — the
+	 * `_field` wrapper id is WooCommerce's own convention (`<p class="form-row" id="{field}_field">`
+	 * from `woocommerce_form_field()`), which is exactly what `applyFieldPolicyToRow()` looks up.
+	 *
+	 * `withPostcode: false` drops the postcode row/field entirely — modelling `postcode: 'remove'`,
+	 * which PHP unsets from `woocommerce_checkout_fields` server-side BEFORE this script ever runs,
+	 * so the element is never in the DOM to begin with (correction 4: no special-case code for it).
+	 *
+	 * @param {string} chosen `shipping_method` radio value.
+	 * @param {{withPostcode?: boolean}} [options]
+	 * @returns {void}
+	 */
+	function installFieldPolicyMarkup( chosen, options ) {
+		const opts         = options || {};
+		const withPostcode = false !== opts.withPostcode;
+
+		document.body.innerHTML = `
+			<form class="checkout woocommerce-checkout">
+				<p class="form-row" id="shipping_country_field">
+					<select id="shipping_country" name="shipping_country">
+						<option value="RU" selected>Россия</option>
+					</select>
+				</p>
+				<p class="form-row" id="shipping_address_1_field">
+					<input type="text" id="shipping_address_1" name="shipping_address_1" required />
+				</p>
+				${ withPostcode ? `
+				<p class="form-row" id="shipping_postcode_field">
+					<input type="text" id="shipping_postcode" name="shipping_postcode" required />
+				</p>` : '' }
+				<ul id="shipping_method">
+					<li><input type="radio" name="shipping_method[0]" value="${ chosen }" checked="checked" /></li>
+				</ul>
+				<button type="submit" id="place_order"></button>
+			</form>
+		`;
+	}
+
+	/**
+	 * @param {{address: string, postcode: string, country: string}} policy
+	 * @returns {Object}
+	 */
+	function buildFieldPolicyConfig( policy ) {
+		return {
+			endpoint:          ENDPOINT,
+			nonce:             'test-nonce',
+			i18n:              { placeholder: 'Выберите…' },
+			fields:            {},
+			takeover:          {},
+			field_policy:      policy,
+			pickup_method_ids: [ 'test_pickup' ],
+		};
+	}
+
+	/**
+	 * @param {{address: string, postcode: string, country: string}} policy
+	 * @param {string} chosen `shipping_method` radio value.
+	 * @param {{withPostcode?: boolean}} [markup]
+	 * @returns {void}
+	 */
+	function bootFieldPolicy( policy, chosen, markup ) {
+		installFieldPolicyMarkup( chosen, markup );
+
+		global.jQuery = require( 'jquery' );
+		global.$      = global.jQuery;
+		window.jQuery = global.jQuery;
+
+		window.WoodevCheckoutFieldStore = require(
+			'../../woodev/shipping-method/assets/js/frontend/checkout-field-store.js'
+		);
+		window[ CONFIG_GLOBAL ] = buildFieldPolicyConfig( policy );
+
+		ajaxCalls = stubAjax();
+
+		require( '../../woodev/shipping-method/assets/js/frontend/checkout-field-classic.js' );
+
+		jest.runAllTimers();
+	}
+
+	it( 'hides the address + postcode rows and drops required while a pickup method is chosen', () => {
+		bootFieldPolicy(
+			{ address: 'hide_for_pickup', postcode: 'hide_for_pickup', country: 'show' },
+			'test_pickup:1'
+		);
+
+		expect( document.getElementById( 'shipping_address_1_field' ).classList
+			.contains( 'woodev-field--hidden-for-pickup' ) ).toBe( true );
+		expect( document.getElementById( 'shipping_address_1' ).required ).toBe( false );
+		expect( document.getElementById( 'shipping_postcode_field' ).classList
+			.contains( 'woodev-field--hidden-for-pickup' ) ).toBe( true );
+		expect( document.getElementById( 'shipping_postcode' ).required ).toBe( false );
+	} );
+
+	it( 'leaves a row alone when its own policy value is "show", even while a pickup method is chosen', () => {
+		bootFieldPolicy(
+			{ address: 'hide_for_pickup', postcode: 'show', country: 'show' },
+			'test_pickup:1'
+		);
+
+		expect( document.getElementById( 'shipping_postcode_field' ).classList
+			.contains( 'woodev-field--hidden-for-pickup' ) ).toBe( false );
+		expect( document.getElementById( 'shipping_postcode' ).required ).toBe( true );
+	} );
+
+	it( 'switching to a courier method restores the row and required on updated_checkout', () => {
+		bootFieldPolicy(
+			{ address: 'hide_for_pickup', postcode: 'show', country: 'show' },
+			'test_pickup:1'
+		);
+
+		expect( document.getElementById( 'shipping_address_1_field' ).classList
+			.contains( 'woodev-field--hidden-for-pickup' ) ).toBe( true );
+
+		// WooCommerce re-renders the shipping-method list on `updated_checkout`; the radio's
+		// VALUE is what changes (the same node stays checked), same as a real re-render would
+		// leave it once the new rate list settles.
+		const radio = document.querySelector( 'input[name^="shipping_method"]' );
+		radio.value = 'test_courier:1';
+		global.jQuery( document.body ).trigger( 'updated_checkout' );
+
+		expect( document.getElementById( 'shipping_address_1_field' ).classList
+			.contains( 'woodev-field--hidden-for-pickup' ) ).toBe( false );
+		expect( document.getElementById( 'shipping_address_1' ).required ).toBe( true );
+	} );
+
+	it( 'restores the row on a plain shipping_method change too, not only on updated_checkout', () => {
+		bootFieldPolicy(
+			{ address: 'hide_for_pickup', postcode: 'show', country: 'show' },
+			'test_pickup:1'
+		);
+
+		const radio = document.querySelector( 'input[name^="shipping_method"]' );
+		radio.value = 'test_courier:1';
+		global.jQuery( radio ).trigger( 'change' );
+
+		expect( document.getElementById( 'shipping_address_1_field' ).classList
+			.contains( 'woodev-field--hidden-for-pickup' ) ).toBe( false );
+		expect( document.getElementById( 'shipping_address_1' ).required ).toBe( true );
+	} );
+
+	it( 'hides the country row and keeps the value in the DOM, untouched', () => {
+		bootFieldPolicy(
+			{ address: 'show', postcode: 'show', country: 'hide' },
+			'test_courier:1'
+		);
+
+		expect( document.getElementById( 'shipping_country_field' ).classList
+			.contains( 'woodev-field--hidden' ) ).toBe( true );
+		expect( document.getElementById( 'shipping_country' ).value ).toBe( 'RU' );
+	} );
+
+	it( 'an absent field is a no-op, not an exception — postcode: "remove" leaves the row out of '
+		+ 'the DOM server-side, before this script ever runs', () => {
+		expect( () => bootFieldPolicy(
+			{ address: 'hide_for_pickup', postcode: 'remove', country: 'hide' },
+			'test_pickup:1',
+			{ withPostcode: false }
+		) ).not.toThrow();
+
+		// The absent postcode row does not abort the loop — address and country still apply.
+		expect( document.getElementById( 'shipping_address_1_field' ).classList
+			.contains( 'woodev-field--hidden-for-pickup' ) ).toBe( true );
+		expect( document.getElementById( 'shipping_country_field' ).classList
+			.contains( 'woodev-field--hidden' ) ).toBe( true );
+	} );
+
+	it( 'acts on billing_* fields the same way as shipping_* — WC can make either section the '
+		+ 'one that actually reaches the order', () => {
+		document.body.innerHTML = `
+			<form class="checkout woocommerce-checkout">
+				<p class="form-row" id="billing_address_1_field">
+					<input type="text" id="billing_address_1" name="billing_address_1" required />
+				</p>
+				<ul id="shipping_method">
+					<li><input type="radio" name="shipping_method[0]" value="test_pickup:1" checked="checked" /></li>
+				</ul>
+				<button type="submit" id="place_order"></button>
+			</form>
+		`;
+
+		global.jQuery = require( 'jquery' );
+		global.$      = global.jQuery;
+		window.jQuery = global.jQuery;
+
+		window.WoodevCheckoutFieldStore = require(
+			'../../woodev/shipping-method/assets/js/frontend/checkout-field-store.js'
+		);
+		window[ CONFIG_GLOBAL ] = buildFieldPolicyConfig(
+			{ address: 'hide_for_pickup', postcode: 'show', country: 'show' }
+		);
+
+		ajaxCalls = stubAjax();
+
+		require( '../../woodev/shipping-method/assets/js/frontend/checkout-field-classic.js' );
+		jest.runAllTimers();
+
+		expect( document.getElementById( 'billing_address_1_field' ).classList
+			.contains( 'woodev-field--hidden-for-pickup' ) ).toBe( true );
+		expect( document.getElementById( 'billing_address_1' ).required ).toBe( false );
+	} );
+
+	/**
+	 * A real multi-plugin page: this config carries `field_policy`, a second one (an older
+	 * plugin whose PHP predates Task 6) does not. `findFieldPolicyConfig()` must land on the
+	 * config that HAS the key without throwing on the one that lacks it — the store-level
+	 * singleton means their values would be identical anyway if both had it (correction 3).
+	 */
+	it( 'is unaffected by a second config global on the page that carries no field_policy at all', () => {
+		installFieldPolicyMarkup( 'test_pickup:1' );
+
+		global.jQuery = require( 'jquery' );
+		global.$      = global.jQuery;
+		window.jQuery = global.jQuery;
+
+		window.WoodevCheckoutFieldStore = require(
+			'../../woodev/shipping-method/assets/js/frontend/checkout-field-store.js'
+		);
+
+		window.woodev_checkout_field_config_legacy = {
+			endpoint: ENDPOINT,
+			nonce:    'legacy-nonce',
+			i18n:     { placeholder: 'Выберите…' },
+			fields:   {},
+			takeover: {},
+		};
+		window[ CONFIG_GLOBAL ] = buildFieldPolicyConfig(
+			{ address: 'hide_for_pickup', postcode: 'show', country: 'show' }
+		);
+
+		ajaxCalls = stubAjax();
+
+		expect( () => require(
+			'../../woodev/shipping-method/assets/js/frontend/checkout-field-classic.js'
+		) ).not.toThrow();
+		jest.runAllTimers();
+
+		expect( document.getElementById( 'shipping_address_1_field' ).classList
+			.contains( 'woodev-field--hidden-for-pickup' ) ).toBe( true );
+
+		delete window.woodev_checkout_field_config_legacy;
+	} );
+} );

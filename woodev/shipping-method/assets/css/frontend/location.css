@@ -448,3 +448,30 @@
 	cursor: not-allowed;
 	opacity: 0.55;
 }
+
+/* -------------------------------------------------------------------------
+ * FIELD POLICY (Task 9, issue #362 §4.3) — a SECOND deliberate exception alongside the locked-
+ * address rule above, and for the same reason: `checkout-field-classic.js` toggles these two
+ * classes; neither is ever rendered server-side. `hide_for_pickup`/`hide` are the classic-only,
+ * JS-driven instruments of the field policy PHP publishes but never applies itself for these two
+ * settings — the block checkout ignores `woocommerce_checkout_fields` and has no live-reacting DOM
+ * event model to react to a method change, so a plain `display:none` here IS the whole mechanism,
+ * not a stopgap for something PHP could do instead.
+ *
+ * `.woodev-field--hidden-for-pickup` — the address/postcode ROW while the customer's chosen
+ * shipping method is a pickup one. The field's VALUE stays in the DOM and is still submitted
+ * (`required` is cleared by the same JS pass, restored the moment a non-pickup method is chosen
+ * again) — this is the entire reason `hide` is a distinct instrument from `remove` (T1/T2): a
+ * pickup point's address, written into the field by `pickup_replace_address`, must still reach the
+ * order even while the row itself is out of sight.
+ *
+ * `.woodev-field--hidden` — the country row for a store whose field policy hides it from the
+ * customer. The class touches ONLY visibility; the value is never cleared or altered by it and
+ * still posts with the form (T1: even a single-country store needs the value on the order, just not
+ * shown to the customer).
+ * ---------------------------------------------------------------------- */
+
+.woodev-field--hidden-for-pickup,
+.woodev-field--hidden {
+	display: none;
+}
