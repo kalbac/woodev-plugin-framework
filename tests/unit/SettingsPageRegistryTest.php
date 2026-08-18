@@ -175,6 +175,51 @@ class SettingsPageRegistryTest extends TestCase {
 		$this->assertTrue( $sections[0]['supports_test'] );
 	}
 
+	/**
+	 * A section that declares NO setting ids (a deliberate empty stub, or a
+	 * connection-only block) must render no fields at all. get_settings( [] )
+	 * means "all settings" for a caller that wants the whole handler — but a
+	 * section's own declared id list is never that caller; an empty
+	 * declaration means zero fields, not every field of the handler.
+	 */
+	public function test_build_sections_empty_declared_ids_yields_no_fields(): void {
+		$handler  = $this->make_connection_handler();
+		$provider = Settings_Provider::create(
+			'carrier',
+			'Перевозчик',
+			$handler,
+			[ Settings_Section::create( 'widget', 'Виджет ЛК', [], '', true, 'Подключить' ) ]
+		);
+
+		$registry = Settings_Page_Registry::instance();
+		$sections = $this->call_private( $registry, 'build_sections', [ $provider ] );
+
+		$this->assertSame( [], $sections[0]['fields'], 'a section declaring no setting ids must render no fields' );
+	}
+
+	/**
+	 * A section that declares a subset of the handler's setting ids must
+	 * render exactly that subset — no more, no less.
+	 */
+	public function test_build_sections_declared_subset_yields_exact_subset(): void {
+		$handler = Mockery::mock( '\Woodev_Settings_Connection_Test' );
+		$handler->shouldReceive( 'get_id' )->andReturn( 'carrier' );
+		$handler->shouldReceive( 'get_settings' )->with( [ 'token' ] )->andReturn( [ 'token' => $this->token_setting() ] );
+		$handler->shouldReceive( 'get_value' )->andReturn( '' );
+
+		$provider = Settings_Provider::create(
+			'carrier',
+			'Перевозчик',
+			$handler,
+			[ Settings_Section::create( 'api', 'Подключение', [ 'token' ], '', true, 'Проверить' ) ]
+		);
+
+		$registry = Settings_Page_Registry::instance();
+		$sections = $this->call_private( $registry, 'build_sections', [ $provider ] );
+
+		$this->assertSame( [ 'token' ], array_keys( $sections[0]['fields'] ), 'a section declaring a subset must render exactly that subset' );
+	}
+
 	public function test_build_sections_includes_status_when_handler_provides_one(): void {
 		$handler  = $this->make_connection_handler_with_status();
 		$provider = Settings_Provider::create(

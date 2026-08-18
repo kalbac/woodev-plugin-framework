@@ -172,11 +172,18 @@ final class Settings_Page_Registry {
 		$sections = [];
 
 		foreach ( $provider->get_sections() as $section ) {
-			$entry = [
+			// A section's setting ids are a DECLARATION, not a filter: an empty
+			// list means the section declares zero fields (a deliberate stub, or
+			// a connection-only block). This differs from the handler-level
+			// convention where get_settings( [] ) means "all settings" — that
+			// convention is for callers with no declared subset at all (e.g. the
+			// setup wizard's whole-tab schema), never for a section's own list.
+			$setting_ids = $section->get_setting_ids();
+			$entry       = [
 				'id'          => $section->get_id(),
 				'label'       => $section->get_label(),
 				'description' => $section->get_description(),
-				'fields'      => Field_Schema::from_handler( $handler, $section->get_setting_ids() ),
+				'fields'      => empty( $setting_ids ) ? [] : Field_Schema::from_handler( $handler, $setting_ids ),
 			];
 
 			if ( $section->is_connection() ) {
