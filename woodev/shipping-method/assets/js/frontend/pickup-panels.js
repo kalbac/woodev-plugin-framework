@@ -187,7 +187,11 @@
  * a `title` hint was built and then removed again after two independent reviews found it
  * unreachable by keyboard, assistive tech, or touch (a `disabled` element is out of the tab order,
  * and `title` has no touch equivalent), and the operator's own call, verbatim, was «не нужно
- * ничего показывать. Заблокирована и всё» — show nothing at all, blocked is blocked. Do NOT
+ * ничего показывать. Заблокирована и всё» — show nothing at all, blocked is blocked. That remark
+ * is CASE-SPECIFIC and must not be generalised into a project rule (the operator said so in as
+ * many words, 18.08.2026: «я бы вообще назвал это исключением. Там где подсказки нужны, мы их
+ * показываем»); it holds HERE because the customer just unticked the control that disabled this
+ * one and sees the causality, and because of the accessibility finding above. Do NOT
  * reintroduce a `title`/`aria-label`/tooltip here without a fresh operator decision to that effect
  * — `disabled` alone is the whole signal, native and already accessible via the platform's own
  * disabled-control semantics, and adding text back would silently reopen the exact half-solved

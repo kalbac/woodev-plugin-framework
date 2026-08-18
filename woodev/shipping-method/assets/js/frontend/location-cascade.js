@@ -1932,10 +1932,22 @@
 	 * read from the live document every time, never a captured node, since WooCommerce replaces
 	 * the address fragment wholesale on `updated_checkout` ({@see reconcileAfterCheckoutUpdate}).
 	 *
-	 * NOTHING EXPLAINS THE LOCK. No `title`, no `aria-*` description, no message beside the
-	 * field — the same standing operator rule that removed the inline "fill this in" text from
-	 * the A2 gate in `checkout-field-classic.js` (#274): a blocked control is blocked, and that
-	 * is all it says. But blocked must still LOOK blocked: `disabled` on its own is not a visual
+	 * NOTHING EXPLAINS THIS PARTICULAR LOCK. No `title`, no `aria-*` description, no message
+	 * beside the field.
+	 *
+	 * THIS IS AN EXCEPTION, NOT A PROJECT RULE — do not cite it as one (operator, 18.08.2026:
+	 * «это не строгое правило проекта. Частный случай для конкретного кейса… Я бы вообще назвал
+	 * это исключением. Там где подсказки нужны, мы их показываем»). The default is to EXPLAIN a
+	 * blocked control. Silence is right here for one specific reason: the customer sees the
+	 * causality with their own eyes — the field unlocks the instant they pick a settlement, so
+	 * the trigger and its effect are one visible action apart, exactly like the pickup-type
+	 * filter checkboxes that produced the original remark (#243). Where that causality is NOT
+	 * visible the same operator has demanded text and rejected silence: an empty suggestion list
+	 * got «Поиск не дал результатов…» precisely because a spinner followed by nothing is
+	 * indistinguishable from a breakage. An earlier version of this docblock generalised the
+	 * remark into a standing rule and that reading was wrong twice over.
+	 *
+	 * But blocked must still LOOK blocked: `disabled` on its own is not a visual
 	 * signal — measured on the rig, the theme's own `input` rule overrides the browser's default
 	 * greying completely, leaving a field that looks exactly like its editable neighbour and just
 	 * refuses to type, which reads as broken rather than as blocked. Hence the {@see LOCKED_CLASS}
