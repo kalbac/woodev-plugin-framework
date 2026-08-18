@@ -375,12 +375,28 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Field_Po
 				}
 
 				if ( $preset ) {
-					$locale[ $country ]['country']['priority']   = 10;
-					$locale[ $country ]['state']['priority']     = 20;
-					$locale[ $country ]['city']['priority']      = 30;
-					$locale[ $country ]['address_1']['priority'] = 40;
-					$locale[ $country ]['address_2']['priority'] = 50;
-					$locale[ $country ]['postcode']['priority']  = 60;
+					/*
+					 * The preset reorders the ADDRESS BLOCK only, and stays inside the band
+					 * WooCommerce already reserves for it (measured on WC 11.0.1 via
+					 * `WC_Countries::get_default_address_fields()`): first_name 10, last_name 20,
+					 * company 30, country 40, address_1 50, address_2 60, city 70, state 80,
+					 * postcode 90, phone 100, email 110.
+					 *
+					 * The design document proposed 10/20/30/40/50/60 for this block. Those numbers
+					 * COLLIDE with the name block and were measured on the rig producing
+					 * «Имя · Страна · Фамилия · Регион · Город …» — the customer's name split in
+					 * half by address fields. Keeping the same relative order the design asks for
+					 * (Страна > Регион > Город > Адрес > Кв. > Индекс) inside WC's own 40–90 band
+					 * fixes that without touching any field the preset has no opinion about, and
+					 * leaves a third-party field slotted at e.g. 45 sitting inside the address
+					 * block rather than jumping ahead of the name.
+					 */
+					$locale[ $country ]['country']['priority']   = 40;
+					$locale[ $country ]['state']['priority']     = 50;
+					$locale[ $country ]['city']['priority']      = 60;
+					$locale[ $country ]['address_1']['priority'] = 70;
+					$locale[ $country ]['address_2']['priority'] = 80;
+					$locale[ $country ]['postcode']['priority']  = 90;
 				}
 
 				if ( $region_removed ) {

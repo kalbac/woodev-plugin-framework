@@ -56,13 +56,17 @@ final class CheckoutFieldPolicyTest extends TestCase {
 
 	public function test_locale_contribution_for_preset_only(): void {
 		$out = Checkout_Field_Policy::locale_contribution( [ 'field_order_preset' => true, 'region_field' => 'show', 'postcode_field' => 'show' ], [ 'RU' => [] ], [ 'RU', 'KZ' ] );
-		$this->assertSame( 10, $out['RU']['country']['priority'] );
-		$this->assertSame( 20, $out['RU']['state']['priority'] );
-		$this->assertSame( 30, $out['RU']['city']['priority'] );
-		$this->assertSame( 40, $out['RU']['address_1']['priority'] );
-		$this->assertSame( 50, $out['RU']['address_2']['priority'] );
-		$this->assertSame( 60, $out['RU']['postcode']['priority'] );
-		$this->assertSame( 20, $out['KZ']['state']['priority'] );        // every shipping country (S5)
+		// The address block keeps WooCommerce's own 40-90 band (first_name 10 / last_name 20 /
+		// company 30 sit below it, phone 100 / email 110 above), reordered to
+		// Страна > Регион > Город > Адрес > Кв. > Индекс. Measured on the rig: the design's
+		// original 10-60 collided with the name block and split the customer's name in half.
+		$this->assertSame( 40, $out['RU']['country']['priority'] );
+		$this->assertSame( 50, $out['RU']['state']['priority'] );
+		$this->assertSame( 60, $out['RU']['city']['priority'] );
+		$this->assertSame( 70, $out['RU']['address_1']['priority'] );
+		$this->assertSame( 80, $out['RU']['address_2']['priority'] );
+		$this->assertSame( 90, $out['RU']['postcode']['priority'] );
+		$this->assertSame( 50, $out['KZ']['state']['priority'] );        // every shipping country (S5)
 		$this->assertTrue( $out['RU']['city']['required'] );            // settlement invariant, always
 		$this->assertArrayNotHasKey( 'hidden', $out['RU']['state'] );
 	}
