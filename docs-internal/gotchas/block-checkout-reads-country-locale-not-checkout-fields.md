@@ -65,3 +65,7 @@ not reach the block checkout until the SP-11 adapter exists — those admin opti
 - [rig-checkout-url-is-the-block-checkout](rig-checkout-url-is-the-block-checkout.md) — the rig's `/checkout/` IS the block checkout; measure there
 - [wc-renders-a-label-for-hidden-fields](wc-renders-a-label-for-hidden-fields.md) — what `hidden` does on the CLASSIC form (a label still renders)
 - `docs-internal/specs/2026-08-18-shipping-settings-v2-design.md` §5.3–5.4 — the measurement this gotcha records
+- `docs-internal/wiki/architecture.md` → «Доставка» tab, "The two-instrument rule" — where this
+  measurement ended up as a design rule: the locale is Instrument A (reaches both checkouts), the
+  late `woocommerce_checkout_fields` filter is Instrument B (classic only), and which one a setting
+  uses is what decides its reach
