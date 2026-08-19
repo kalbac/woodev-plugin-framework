@@ -13,6 +13,16 @@
 > - §3.2 lists availability rules per setting and therefore has no rule for `region_field=remove`
 >   combined with `field_mode=related-list`, which contradict each other (card **#369**).
 >
+> **S2 is SUPERSEDED (20.08.2026, card #380).** S2 argued that field type must stay ONE setting
+> because "two settings steering one axis would be a defect". Seeing the tab live, the operator
+> found a case one setting cannot express — settlement as `ajax-select2` while the region is a plain
+> text field, or the region as a preset list while the settlement is plain. There are two axes, not
+> one. `field_mode` therefore splits into «Тип поля НП» and «Тип поля Регион», both of which move
+> from «Локация» to «Поля» along with «Подсказки для адреса». The "region gates settlement"
+> behaviour survives as a DERIVED state (the preset-list region turns it on), which is what S2 said
+> it was. Note the option-name contract (ADR-005): moving a field between SECTIONS must not move it
+> between option namespaces.
+>
 > Input document (BUILT / DECIDED / OPEN markup, measurements, traps):
 > `docs-internal/specs/2026-08-18-location-and-field-settings-brainstorm-input.md`. Everything marked
 > DECIDED there (D1–D11) stays in force and is not restated unless this design depends on it.
