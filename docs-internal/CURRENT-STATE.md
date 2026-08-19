@@ -7,11 +7,13 @@
 > Program history snapshot → `platform-v2-program-tracker.md`; active program map →
 > `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-08-18 (s79).** Last CODE commit `ed7f9f8` (PR #359); everything after it on `main` is
-docs (s78 handoff, s79 brainstorm output). No open PRs · working tree clean, rig on `main`
-with the **CDEK provider active** (`test-cdek`).
-Tests: **2316 unit / 5732 assertions / 1177 jest / 110 integration**; phpcs and phpstan clean.
-Gotchas: **164**. Docs gate: `npm run lint:docs` (session-start reading budget 120 KB).
+**As of 2026-08-19 (s80).** Last CODE commit `fe4ed49` (PR #368). #362 tasks 1–9 shipped in three
+merged PRs — #363 (tasks 1–4), #367 (tasks 5–7, replaces the auto-closed #365), #368 (tasks 8–9,
+replaces the auto-closed #366) — see the gotcha `stacked-pr-github-mechanics` for why two of the
+three had to be recreated. No open PRs · working tree clean, rig on `main` with the **CDEK
+provider active** (`test-cdek`).
+Tests: **2372 unit / 5867 assertions / 1204 jest / 110 integration**; phpcs and phpstan clean.
+Gotchas: **166**. Docs gate: `npm run lint:docs` (session-start reading budget 120 KB).
 
 ## Program status (high level)
 
@@ -63,12 +65,17 @@ Gotchas: **164**. Docs gate: `npm run lint:docs` (session-start reading budget 1
 
 ## Next Actions
 
-0. **#362 — V2-настройки доставки: ДИЗАЙН УТВЕРЖДЁН, РЕАЛИЗАЦИЯ НЕ НАЧАТА.** Брейншторм
-   проведён в s79 (Fable 5), оператор утвердил все решения. Спека:
-   `specs/2026-08-18-shipping-settings-v2-design.md` (S1–S9 + два инструмента для полей). План на
-   12 задач: `plans/2026-08-18-shipping-settings-v2-plan.md` — исполнять в **новой сессии на
-   Opus 5** (решение оператора 18.08.2026), PR-каденция 1–4 / 5–7 / 8–9 / 10–12, каждый PR через
-   Codex-критика. Карточка #362 — оператора, стоит в `Инбокс`; в `В работе` её двигает он.
+0. **#362 — V2-настройки доставки: задачи 1–9 из 12 СМЕРЖЕНЫ (s80, Opus 5).** Вкладка «Доставка»
+   с тремя секциями («Локация» / «Поля» / «Карта») живёт на `main`, обе политика полей (два шва
+   WC) и поведение карты подключены к реальному чекауту. Осталось: **задачи 10–12**
+   (подсказки адреса, доки, полная риг-матрица из плана) — план:
+   `plans/2026-08-18-shipping-settings-v2-plan.md`, спека: `specs/2026-08-18-shipping-settings-v2-design.md`.
+   Последний PR цепочки закрывает #362 (`Closes #362`); промежуточные PR (#363/#367/#368) ссылались
+   `Refs #362`. Карточка #362 — оператора, стоит в `Инбокс`; в `В работе` её двигает он.
+   Два риговых фикса, не входивших в план: полоса приоритетов пресета сдвинута с `10–60` на
+   `40–90` (исходные числа резали имя покупателя пополам) и общий баг настроек, где клиентская
+   валидация блокировала Save любой секции, если у активного провайдера локации есть обязательный
+   секретный параметр (обычный случай) — оба задокументированы в коммитах и PR.
 1. **Остатки слоя локаций, все в `Бэклог`:** #353 (провайдер без уровня НП не регистрируется —
    правило есть у оператора в голове, в коде его нет), #356 (настоящий forget-путь: гейт не пишет,
    протухший блоб живёт на диске), #358 (провайдерский шов не сообщает, учёл ли чужого родителя),
