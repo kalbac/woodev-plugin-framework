@@ -469,9 +469,26 @@
  * customer. The class touches ONLY visibility; the value is never cleared or altered by it and
  * still posts with the form (T1: even a single-country store needs the value on the order, just not
  * shown to the customer).
+ *
+ * `!important` IS LOAD-BEARING HERE — the adversary is WooCommerce itself, not a hostile theme.
+ * `assets/js/frontend/address-i18n.js` runs on every `country_to_state_changed` (page load, any
+ * country change, every `update_checkout`) and does, for each locale field:
+ *
+ *     if ( true === fieldLocale.hidden ) { field.hide().find( ':input' ).val( '' ); }
+ *     else if ( 'state' !== key )        { field.show(); }
+ *
+ * jQuery's `.show()` writes an INLINE `display: block`, which beats any class-based rule that is
+ * not `!important`. Measured on the rig 2026-08-19: with a pickup method chosen, all four rows
+ * carried their class AND an inline `display: block`, computed `display: block`, height 115px —
+ * the policy silently did nothing. Adding `!important` (verified live on the same page) took all
+ * four to `display: none`, height 0.
+ *
+ * Note the `else` branch above is also why the value-preserving half of this design cannot be done
+ * through the locale instead: WooCommerce CLEARS a locale-hidden field's value, and both classes
+ * here exist precisely to hide a row WITHOUT touching what it posts.
  * ---------------------------------------------------------------------- */
 
 .woodev-field--hidden-for-pickup,
 .woodev-field--hidden {
-	display: none;
+	display: none !important;
 }
