@@ -89,7 +89,7 @@
 
 ### [rig/*] — Local verification rig
 - [rig/browser] **The rig's `/checkout/` is the BLOCK checkout — the picker lives on `/classic-checkout/`.** → [rig-checkout-url-is-the-block-checkout](gotchas/rig-checkout-url-is-the-block-checkout.md) (s65)
-- [rig/browser] **The rig serves the working tree, so switching branches silently un-fixes things.** → [rig-serves-the-working-tree-branch-switch-reverts-fixes](gotchas/rig-serves-the-working-tree-branch-switch-reverts-fixes.md) (s56)
+- [rig/browser] **The rig serves the working tree — a branch switch silently un-fixes things, and a concurrent agent's half-written edit fatals every request.** → [rig-serves-the-working-tree-branch-switch-reverts-fixes](gotchas/rig-serves-the-working-tree-branch-switch-reverts-fixes.md) (s56, s81)
 - [rig/browser] **Playwright MCP does not fire WooCommerce's checkout submit; chrome-devtools MCP does.** → [playwright-mcp-does-not-fire-wc-checkout-ajax](gotchas/playwright-mcp-does-not-fire-wc-checkout-ajax.md) (s44)
 
 ### [framework/wiring] — Responsibilities that moved

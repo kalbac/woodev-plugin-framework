@@ -33,6 +33,40 @@ The two failure directions are opposites, so no single instinct catches both:
 
 And the second is the dangerous one — it produces false confidence, quietly.
 
+## The same root cause, a second way: a concurrent uncommitted edit takes the whole rig down (s81)
+
+Branch switching is not the only way the working tree moves under the rig. **An agent editing the
+tree right now is also changing what the rig serves, statement by statement.** There is no build
+step, so there is no such thing as a half-applied edit being invisible: a subagent's intermediate
+state *is* the rig's state.
+
+Hit on 2026-08-19 while two subagents ran in parallel — one implementing task 10 of #362, one
+setting up a pickup method on the rig. The implementer, working TDD, had added
+`is_address_suggestions_available()` to `Location_Provider_Registry` (which runs on `init`) calling
+`Location_Service::is_level_servable()` — a method it had not written yet. Every single request to
+the rig then died before anything else ran:
+
+```
+PHP Fatal error: Uncaught Error: Call to undefined method
+Woodev\Framework\Shipping\Location\Location_Service::is_level_servable()
+in .../location/class-location-provider-registry.php:1059
+#2 ...->register_settings()  #3 class-wp-hook.php(341): ->collect('')  #6 wp-settings.php(742): do_action('init')
+```
+
+Not just the checkout — plain `wp eval-file` and `wp wc shipping_zone_method list` too, since they
+all boot WordPress and fire `init`. The verifying agent correctly reported the rig as broken and
+correctly identified that it was not its own doing, but the verification pass was wasted.
+
+**The rule: never run a rig verification concurrently with an agent editing the tree the rig
+serves.** Serialise — implement, commit, *then* verify. Parallelism across agents is fine when
+they touch different FILES; it is not fine when one of them is the rig's live source and the other
+is reading the rig. If the overlap is genuinely worth it, give the verifier its own worktree with
+its own wp-env instance rather than the shared one.
+
+**And the diagnostic:** when the rig suddenly fatals on `init` inside a file nobody asked you
+about, run `git status --short` before you debug the rig. A fatal naming a method that "should
+exist" is the signature of a tree caught mid-edit, not of a defect.
+
 ## The rule
 
 **Before asking anyone to look at the rig, state what the rig is currently serving**: the branch,
