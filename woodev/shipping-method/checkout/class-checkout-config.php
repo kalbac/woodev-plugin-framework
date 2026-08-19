@@ -285,7 +285,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 				'nonce'             => $this->nonce,
 				'takeover'          => $takeover,
 				'field_policy'      => $this->build_field_policy(),
-				'pickup_method_ids' => $this->pickup_method_ids(),
+				'pickup_method_ids' => self::pickup_method_ids(),
 			];
 
 			if ( null !== $this->location_service && $this->location_service->is_active() ) {
@@ -341,11 +341,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 		 * shipping subsystem is unavailable, exactly like {@see self::wc_states()}
 		 * degrades for the same reason.
 		 *
+		 * `public static` (2.0.2, issue #362 pickup-required-relaxation fix): touches no
+		 * `$this` — pure indirection over `WC()` — so
+		 * {@see \Woodev\Framework\Shipping\Checkout\Checkout_Field_Policy::pickup_method_chosen()}
+		 * reuses this SAME list server-side rather than re-deriving it, keeping exactly one
+		 * place that decides which WooCommerce method ids count as pickup.
+		 *
 		 * @since 2.0.2
 		 *
 		 * @return string[]
 		 */
-		private function pickup_method_ids(): array {
+		public static function pickup_method_ids(): array {
 			if ( ! function_exists( 'WC' ) || ! method_exists( WC(), 'shipping' ) || ! WC()->shipping() ) {
 				return [];
 			}
