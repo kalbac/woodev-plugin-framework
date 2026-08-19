@@ -92,6 +92,24 @@ verified locally (`composer test:unit`, `npm run test:js`, `composer phpcs`, `co
 integration suite via the docker container) as a substitute — and re-created against `main` (Symptom
 1) once the PR ahead of them actually merges, at which point their OWN full CI matrix finally runs.
 
+## Cleaning up afterwards: `git cherry` also lies, for the same reason
+
+After the whole stack has merged, the local feature branches are still there and `git branch -d`
+refuses them ("not fully merged"). The instinct is to reach for `git cherry main <branch>` to check
+whether anything is unmerged — it reports every commit as unmerged (`+`), because squash rewrote the
+SHAs. `git diff --stat main..<branch>` is just as misleading: it shows the branch's now-stale copies
+of files that later PRs changed as "insertions".
+
+**The authority is the PR's own state, not git:**
+
+```bash
+gh pr list --head <branch> --state all --json number,state,mergedAt
+```
+
+`MERGED` with a `mergedAt` means the content is in `main`; `git branch -D` is then safe and correct.
+Do not hand this to the operator as a judgement call — it is a mechanical check with a definitive
+answer (s81, and he had said so once before).
+
 ## Related
 
 - [[git-squash-onto-stale-origin-main-diverge]] — the same squash-merge-breaks-ancestry root cause,
