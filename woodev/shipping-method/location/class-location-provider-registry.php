@@ -114,6 +114,27 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		public const SETTING_FIELD_MODE = 'field_mode';
 
 		/**
+		 * The store setting id holding the `address_suggestions` switch (Task 10;
+		 * issue #362; design S3/§3.1/§3.2/§4.2/§7): whether the location layer
+		 * serves the `address` suggest level AT ALL. Registered right after
+		 * {@see self::SETTING_FIELD_MODE} — design S3 puts it directly under the
+		 * provider block on the settings surface.
+		 *
+		 * See {@see \Woodev\Framework\Shipping\Location\Location_Service::provider_for_level()}
+		 * for the gate this setting drives, {@see self::get_address_suggestions_raw()}
+		 * for why that gate reads the RAW stored value rather than the
+		 * merchant-facing {@see self::is_address_suggestions_enabled()}, and
+		 * {@see self::is_address_suggestions_available()} for the read-side clamp
+		 * that keeps a stored `true` honest once nobody can serve `address` any
+		 * more — the same "OFFERED / read-side clamp" discipline
+		 * {@see self::get_field_mode()} already applies to its own setting.
+		 *
+		 * @since 2.0.2
+		 * @var string
+		 */
+		public const SETTING_ADDRESS_SUGGESTIONS = 'address_suggestions';
+
+		/**
 		 * Field mode: always-available free-text typeahead (spec D7 baseline —
 		 * every provider can serve this, `suggest()` is REQUIRED of all of them).
 		 *
@@ -929,6 +950,143 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 			return in_array( $stored, $offered, true ) ? $stored : self::MODE_TYPEAHEAD;
 		}
 
+
+		/**
+		 * The RAW stored value of the `address_suggestions` switch (Task 10;
+		 * issue #362; design S3/§4.2/§7) — before availability is even
+		 * considered. Deliberately NOT the merchant-facing answer (that is
+		 * {@see self::is_address_suggestions_enabled()}); this exists
+		 * specifically as {@see \Woodev\Framework\Shipping\Location\Location_Service::provider_for_level()}'s
+		 * GATE INPUT.
+		 *
+		 * Reading through the EFFECTIVE (clamped) value there would be
+		 * circular: the effective value is `stored && available`, and
+		 * `available` ({@see self::is_address_suggestions_available()}) is
+		 * itself computed by walking the very D15 chain `provider_for_level()`
+		 * is in the middle of resolving. Consulting the raw stored flag here
+		 * breaks that circle — the gate only ever needs to know "did the
+		 * merchant turn this off", never "is it currently possible", which is
+		 * exactly what `provider_for_level()`'s own chain walk is about to
+		 * determine on its own.
+		 *
+		 * Mirrors {@see self::get_field_mode()}'s "no settings handler yet"
+		 * shape: returns `true` (this setting's own default) rather than
+		 * `false` when `$this->settings_handler` is still null, so a caller
+		 * reached before `init` priority 20 has collected sees the SAME
+		 * "nothing is gated off yet" answer `get_field_mode()` gives for its
+		 * own setting — an ungated `address` level, exactly like an unclamped
+		 * `typeahead` field mode, is the safe default while there is
+		 * genuinely nothing to read from.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool
+		 */
+		public function get_address_suggestions_raw(): bool {
+			if ( null === $this->settings_handler ) {
+				return true;
+			}
+
+			return (bool) $this->settings_handler->get_value( self::SETTING_ADDRESS_SUGGESTIONS );
+		}
+
+		/**
+		 * Whether the D15 chain could serve the `address` suggest level for AT
+		 * LEAST ONE country ANY registered provider declares (Task 10; issue
+		 * #362; design S3/§3.2) — the availability half of "active provider
+		 * serves `address`, OR the bundled DaData is configured".
+		 *
+		 * Deliberately bypasses the `address_suggestions` store gate — via
+		 * {@see \Woodev\Framework\Shipping\Location\Location_Service::is_level_servable()},
+		 * never {@see \Woodev\Framework\Shipping\Location\Location_Service::provider_for_level()} —
+		 * because this method answers "could the chain serve `address` if the
+		 * switch were on", exactly what {@see self::register_settings()} needs
+		 * to decide whether the control is disabled, and what
+		 * {@see self::is_address_suggestions_enabled()} needs as the other half
+		 * of its clamp. Also bypasses {@see \Woodev\Framework\Shipping\Location\Location_Service::FILTER_PROVIDER_FOR_LEVEL}
+		 * for the same reason: a plugin swapping the resolved provider for one
+		 * already-open request must not make the settings page lie about what
+		 * is fundamentally possible.
+		 *
+		 * Candidate countries are gathered directly from every REGISTERED
+		 * provider's own {@see Location_Provider::get_countries()} — NOT from
+		 * {@see \Woodev\Framework\Shipping\Location\Location_Service::get_supported_countries()},
+		 * even though {@see \Woodev\Framework\Shipping\Checkout\Checkout_Config::build_location_block()}
+		 * reads its own `countries` block that way. `get_supported_countries()`
+		 * resolves each level through the PUBLIC, GATED
+		 * {@see \Woodev\Framework\Shipping\Location\Location_Service::provider_for_level()}
+		 * (no `$country` argument) — for the `address` level specifically, that
+		 * is the exact gate this method exists to answer independently of, so
+		 * using it here would reintroduce the same circularity
+		 * {@see self::get_address_suggestions_raw()}'s docblock explains: a
+		 * provider that served ONLY `address` would silently vanish from the
+		 * union the instant the switch went off, making "is it available"
+		 * falsely depend on "is it currently on". Reading the registered
+		 * providers' declared countries directly has no such dependency.
+		 *
+		 * Builds its OWN {@see \Woodev\Framework\Shipping\Location\Location_Service}
+		 * passing `$this` explicitly rather than relying on that façade's
+		 * default {@see self::instance()} lookup — this registry instance may
+		 * not (yet) BE the singleton in a test, and even in production this
+		 * keeps the dependency explicit rather than a settings-computation
+		 * method reaching for global state.
+		 *
+		 * An empty candidate list (the gate is closed, so nothing has been
+		 * registered at all) answers `false`: there is nothing to be
+		 * available for, so this returns `false` rather than iterating zero
+		 * candidates and landing on `false` by accident of an empty loop.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool
+		 */
+		public function is_address_suggestions_available(): bool {
+			$candidate_countries = [];
+
+			foreach ( $this->providers as $provider ) {
+				foreach ( $provider->get_countries() as $code ) {
+					$candidate_countries[ strtoupper( trim( (string) $code ) ) ] = true;
+				}
+			}
+
+			if ( [] === $candidate_countries ) {
+				return false;
+			}
+
+			$service = new Location_Service( $this );
+
+			foreach ( array_keys( $candidate_countries ) as $country ) {
+				if ( $service->is_level_servable( Location_Record::LEVEL_ADDRESS, $country ) ) {
+					return true;
+				}
+			}
+
+			return false;
+		}
+
+		/**
+		 * The EFFECTIVE `address_suggestions` value (Task 10; issue #362;
+		 * design S3/§4.2/§7): `stored && available`, clamped on read exactly
+		 * like {@see self::get_field_mode()} clamps a stored mode the active
+		 * provider no longer backs. A merchant's saved `true` never overrides
+		 * reality: once nobody can serve `address` any more, this answers
+		 * `false` regardless of what is literally stored — WITHOUT ever
+		 * rewriting the stored value itself (spec §7), so switching providers
+		 * back restores the merchant's earlier preference automatically.
+		 *
+		 * This is the honest, merchant-facing answer; it is deliberately NOT
+		 * what {@see \Woodev\Framework\Shipping\Location\Location_Service::provider_for_level()}'s
+		 * gate calls — see {@see self::get_address_suggestions_raw()}'s own
+		 * docblock for why that gate needs the RAW value instead.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool
+		 */
+		public function is_address_suggestions_enabled(): bool {
+			return $this->get_address_suggestions_raw() && $this->is_address_suggestions_available();
+		}
+
 		// -----------------------------------------------------------------
 		// Default-locality policy (Task 14; spec D11) — same offered/clamp
 		// shape as get_offered_field_modes()/get_field_mode() above, gated
@@ -1440,6 +1598,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 			);
 
 			$this->apply_default_locality_status_note();
+			$this->apply_address_suggestions_availability_gate();
 
 			// Hand the handler over to Shipping_Settings_Tab (issue #362; design S1/S9)
 			// instead of registering a tab of its own — «Локация» is now that tab's first
@@ -1523,6 +1682,43 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 					__( 'Зафиксированная локация была выбрана через другого провайдера и может не подойти текущему — рекомендуется выбрать её заново.', 'woodev-plugin-framework' )
 				);
 			}
+		}
+
+
+		/**
+		 * Disables the `address_suggestions` control when
+		 * {@see self::is_address_suggestions_available()} is false (Task 10;
+		 * issue #362; design S3/§3.2) — reached from {@see self::register_settings()},
+		 * following the {@see self::apply_default_locality_status_note()}
+		 * precedent right above it: a small, private `apply_*` method that
+		 * reaches through the setting's own {@see \Woodev_Control} once the
+		 * handler exists.
+		 *
+		 * `Field_Schema::from_handler()` already promotes a control's
+		 * `disabled_reason` into the field's `description` for the React admin
+		 * surface (design S3/§3.3), so this method does NOT also set the
+		 * setting's own description — doing both would either duplicate the
+		 * same sentence or silently clobber whichever call ran last.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		private function apply_address_suggestions_availability_gate(): void {
+			if ( $this->is_address_suggestions_available() ) {
+				return;
+			}
+
+			$setting = $this->settings_handler->get_setting( self::SETTING_ADDRESS_SUGGESTIONS );
+
+			if ( null === $setting ) {
+				return; // Defensive: register_settings() above always registers this id.
+			}
+
+			$setting->get_control()->set_disabled(
+				true,
+				__( 'Выбранный провайдер не отдаёт адреса, а учётные данные DaData не заполнены.', 'woodev-plugin-framework' )
+			);
 		}
 
 		/**

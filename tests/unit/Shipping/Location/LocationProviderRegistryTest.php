@@ -1778,4 +1778,159 @@ final class LocationProviderRegistryTest extends TestCase {
 		$setting = $registry->get_settings_handler()->get_setting( Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_POLICY );
 		$this->assertSame( '', $setting->get_description(), 'a correctly-namespaced record under the active provider has nothing to warn about' );
 	}
+
+	// -------------------------------------------------------------------------
+	// Task 10 (issue #362; design S3/§3.1/§3.2/§4.2/§7) — `address_suggestions`
+	// store switch: setting registration, ordering, the relabelled `field_mode`
+	// name, the availability-driven disabled-control gate, and the clamp-on-read
+	// effective value.
+	// -------------------------------------------------------------------------
+
+	public function test_address_suggestions_setting_is_a_boolean_checkbox_defaulting_to_true(): void {
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [] );
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$setting = $registry->get_settings_handler()->get_setting( Location_Provider_Registry::SETTING_ADDRESS_SUGGESTIONS );
+
+		$this->assertNotNull( $setting );
+		$this->assertSame( \Woodev_Setting::TYPE_BOOLEAN, $setting->get_type() );
+		$this->assertTrue( $setting->get_default() );
+		$this->assertSame( \Woodev_Control::TYPE_CHECKBOX, $setting->get_control()->get_type() );
+	}
+
+	public function test_owned_setting_ids_order_places_address_suggestions_after_field_mode(): void {
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [] );
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$ids = $registry->get_settings_handler()->get_owned_setting_ids();
+
+		// The bundled DaData provider (Task 7) is the resolved active
+		// provider here (empty candidate filter), so its own declared
+		// fields ('token', 'clean_secret') trail the fixed prefix below —
+		// only the FIXED, ordered prefix is under test.
+		$this->assertSame(
+			[
+				Location_Provider_Registry::SETTING_ACTIVE_PROVIDER,
+				Location_Provider_Registry::SETTING_FIELD_MODE,
+				Location_Provider_Registry::SETTING_ADDRESS_SUGGESTIONS,
+				Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_POLICY,
+				Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_RECORD,
+				Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_NEEDS_REPICK,
+			],
+			array_slice( $ids, 0, 6 )
+		);
+	}
+
+	public function test_field_mode_setting_is_relabelled_to_field_type(): void {
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [] );
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$setting = $registry->get_settings_handler()->get_setting( Location_Provider_Registry::SETTING_FIELD_MODE );
+
+		$this->assertSame( 'Тип поля НП/Регион', $setting->get_name() );
+	}
+
+	public function test_address_suggestions_control_is_disabled_when_nobody_serves_address(): void {
+		// 'acme' only declares `region` (Fake_Location_Provider's fixed
+		// declare_suggest_levels()); DaData stays unconfigured (no token
+		// stubbed) -> nobody in the chain can ever serve `address`.
+		$active = new Fake_Location_Provider( 'acme', 'ACME' );
+
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [ $active ] );
+		$this->stub_active_provider_option( 'acme' );
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$control = $registry->get_settings_handler()->get_setting( Location_Provider_Registry::SETTING_ADDRESS_SUGGESTIONS )->get_control();
+
+		$this->assertTrue( $control->is_disabled() );
+		$this->assertSame(
+			'Выбранный провайдер не отдаёт адреса, а учётные данные DaData не заполнены.',
+			$control->get_disabled_reason()
+		);
+		$this->assertFalse( $registry->is_address_suggestions_available() );
+		// The stored value defaults to `true`, but the effective (clamped) value
+		// must still answer `false` — the merchant's stored preference is never
+		// honest when nobody can serve `address` at all.
+		$this->assertFalse( $registry->is_address_suggestions_enabled() );
+	}
+
+	public function test_address_suggestions_control_enabled_via_the_bundled_dadata_fallback_while_the_active_provider_does_not_serve_address(): void {
+		// The live rig configuration (spec §4.2): the active provider only
+		// covers region/settlement, and the bundled DaData fallback alone
+		// serves `address` — a mixed chain, not a single-provider one.
+		$active = new Fake_Location_Provider( 'acme', 'ACME' );
+
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [ $active ] );
+		Functions\when( 'get_option' )->alias(
+			static function ( $name, $default = null ) {
+				if ( 'woodev_location_active_provider' === $name ) {
+					return 'acme';
+				}
+				if ( 'woodev_location_token' === $name ) {
+					return 'tok';
+				}
+
+				return $default;
+			}
+		);
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$control = $registry->get_settings_handler()->get_setting( Location_Provider_Registry::SETTING_ADDRESS_SUGGESTIONS )->get_control();
+
+		$this->assertFalse( $control->is_disabled() );
+		$this->assertTrue( $registry->is_address_suggestions_available() );
+		$this->assertTrue( $registry->is_address_suggestions_enabled() );
+	}
+
+	public function test_address_suggestions_read_never_writes_the_stored_option(): void {
+		Functions\expect( 'update_option' )->never();
+
+		$active = new Fake_Location_Provider( 'acme', 'ACME' );
+
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [ $active ] );
+		$this->stub_active_provider_option( 'acme' );
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$registry->is_address_suggestions_available();
+		$registry->is_address_suggestions_enabled();
+		$registry->get_address_suggestions_raw();
+		$registry->get_settings_handler()->get_setting( Location_Provider_Registry::SETTING_ADDRESS_SUGGESTIONS )->get_control()->is_disabled();
+	}
+
+	public function test_address_suggestions_raw_is_true_while_the_gate_is_closed(): void {
+		$registry = Location_Provider_Registry::instance();
+
+		$this->assertTrue( $registry->get_address_suggestions_raw() );
+	}
+
+	public function test_address_suggestions_available_and_enabled_are_false_while_the_gate_is_closed(): void {
+		$registry = Location_Provider_Registry::instance();
+
+		$this->assertFalse( $registry->is_address_suggestions_available() );
+		$this->assertFalse( $registry->is_address_suggestions_enabled() );
+	}
 }
