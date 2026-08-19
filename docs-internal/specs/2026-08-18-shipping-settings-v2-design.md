@@ -20,8 +20,12 @@
 > one. `field_mode` therefore splits into «Тип поля НП» and «Тип поля Регион», both of which move
 > from «Локация» to «Поля» along with «Подсказки для адреса». The "region gates settlement"
 > behaviour survives as a DERIVED state (the preset-list region turns it on), which is what S2 said
-> it was. Note the option-name contract (ADR-005): moving a field between SECTIONS must not move it
-> between option namespaces.
+> it was — the settlement keeps its own chosen type and merely gains the "wait for a region, then
+> scope to it" behaviour, which today's `related-list` welds to a list-shaped settlement it also
+> forces. Note the option-name contract (ADR-005): moving a field between SECTIONS must not move it
+> between option namespaces. No new capability is involved — «обычное текстовое поле» means the
+> existing `typeahead` (a text input WITH suggestions), so the settlement-level record every other
+> part of the layer depends on is still produced.
 >
 > Input document (BUILT / DECIDED / OPEN markup, measurements, traps):
 > `docs-internal/specs/2026-08-18-location-and-field-settings-brainstorm-input.md`. Everything marked
