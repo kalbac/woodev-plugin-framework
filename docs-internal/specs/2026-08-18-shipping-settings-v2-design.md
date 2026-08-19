@@ -1,8 +1,17 @@
 # Shipping settings V2 — the «Доставка» tab: Location / Fields / Map — design
 
-> **Status: DESIGN APPROVED by the operator in the s79 brainstorm (18.08.2026), not implemented.**
-> Implementation is a separate session (planned on Opus 5). Plan:
+> **Status: IMPLEMENTED (19.08.2026).** Approved by the operator in the s79 brainstorm (18.08.2026)
+> and delivered across four PRs: **#363** (tasks 1–4), **#367** (tasks 5–7), **#368** (tasks 8–9),
+> **#371** (task 10 + the audit findings + the full verification pass, closes **#362**). Plan:
 > `docs-internal/plans/2026-08-18-shipping-settings-v2-plan.md`. Board card: **#362**.
+>
+> Two things this design did NOT anticipate, both found by verifying the shipped result rather than
+> by re-reading the design — see `sessions/s81.md`:
+> - §4.3's "classic-only, JS-driven" options needed a SERVER-side companion after all: a field the
+>   browser hides is still `required` to `WC_Checkout`, so the order failed on an invisible field
+>   (gotcha `js-hidden-checkout-field-is-still-required-server-side`).
+> - §3.2 lists availability rules per setting and therefore has no rule for `region_field=remove`
+>   combined with `field_mode=related-list`, which contradict each other (card **#369**).
 >
 > Input document (BUILT / DECIDED / OPEN markup, measurements, traps):
 > `docs-internal/specs/2026-08-18-location-and-field-settings-brainstorm-input.md`. Everything marked
