@@ -2,7 +2,7 @@
 
 > **Status: IMPLEMENTED (19.08.2026).** Approved by the operator in the s79 brainstorm (18.08.2026)
 > and delivered across four PRs: **#363** (tasks 1–4), **#367** (tasks 5–7), **#368** (tasks 8–9),
-> **#371** (task 10 + the audit findings + the full verification pass, closes **#362**). Plan:
+> **#372** (task 10 + the audit findings + the full verification pass, closes **#362**). Plan:
 > `docs-internal/plans/2026-08-18-shipping-settings-v2-plan.md`. Board card: **#362**.
 >
 > Two things this design did NOT anticipate, both found by verifying the shipped result rather than

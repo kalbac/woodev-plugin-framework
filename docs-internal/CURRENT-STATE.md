@@ -8,7 +8,7 @@
 > `specs/2026-06-25-shipping-module-decisions.md`.
 
 **As of 2026-08-19 (s81).** Last CODE commit — see PR closing **#362**. **#362 is COMPLETE**: all
-twelve tasks shipped across four PRs — #363 (1–4), #367 (5–7), #368 (8–9) and the s81 PR (task 10,
+twelve tasks shipped across four PRs — #363 (1–4), #367 (5–7), #368 (8–9) and #372 (task 10,
 the docs, the full rig matrix, plus everything the audit of s80 turned up). Rig on the s81 branch.
 Tests: **2405 unit / 5930 assertions / 1209 jest / 110 integration**; phpcs and phpstan clean.
 Gotchas: **168**. Docs gate: `npm run lint:docs` (session-start reading budget 120 KB).
