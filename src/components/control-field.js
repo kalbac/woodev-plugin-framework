@@ -108,13 +108,16 @@ function PasswordControl( { value, onChange, isSet, disabled } ) {
  * @param {boolean}  props.isSet      whether a secret is already stored.
  * @param {boolean}  props.hasEdit    whether an explicit edit is staged for this field.
  * @param {Function} [props.onRevert] drops the staged edit (enables the clear affordance).
+ * @param {boolean}  [props.disabled] whether the control is disabled (D11).
  * @return {Object} React element.
  */
-function SecretControl( { value, onChange, isSet, hasEdit, onRevert } ) {
+function SecretControl( { value, onChange, isSet, hasEdit, onRevert, disabled } ) {
 	const hasValue = '' !== ( value ?? '' );
 	const canClear = isSet && 'function' === typeof onRevert;
 
-	// Pending clear: an explicit empty edit staged against a stored secret.
+	// Pending clear: an explicit empty edit staged against a stored secret. Even
+	// here D11 holds — a disabled field must not offer a one-click destructive
+	// action, so «Отменить» is rendered but inert while disabled.
 	if ( canClear && hasEdit && ! hasValue ) {
 		return createElement(
 			'div',
@@ -129,6 +132,7 @@ function SecretControl( { value, onChange, isSet, hasEdit, onRevert } ) {
 				{
 					type: 'button',
 					className: 'woodev-field__secret-cancel',
+					disabled,
 					onClick: onRevert,
 				},
 				'Отменить'
@@ -139,13 +143,14 @@ function SecretControl( { value, onChange, isSet, hasEdit, onRevert } ) {
 	return createElement(
 		Fragment,
 		null,
-		createElement( PasswordControl, { value, onChange, isSet } ),
+		createElement( PasswordControl, { value, onChange, isSet, disabled } ),
 		canClear && ! hasValue &&
 			createElement(
 				'button',
 				{
 					type: 'button',
 					className: 'woodev-field__secret-clear-link',
+					disabled,
 					onClick: () => onChange( '' ),
 				},
 				'Очистить сохранённое'
@@ -262,6 +267,11 @@ export default function ControlField( { schema, value, onChange, showErrors, has
 		);
 	}
 
+	// D11: a disabled control is rendered read-only (native `disabled`), never hidden or
+	// silently ignoring input — its reason already reached us as `schema.description`.
+	// Computed before the sensitive branch below so SecretControl gets it too.
+	const disabled = !! schema.disabled;
+
 	// A sensitive value is masked: empty input + "saved" placeholder; typing a new
 	// value replaces it on save (an untouched empty field is never sent). A stored
 	// secret can also be explicitly wiped via SecretControl's clear affordance.
@@ -274,6 +284,7 @@ export default function ControlField( { schema, value, onChange, showErrors, has
 				hasEdit,
 				onRevert,
 				onChange,
+				disabled,
 			} )
 		);
 	}
@@ -285,9 +296,6 @@ export default function ControlField( { schema, value, onChange, showErrors, has
 
 	const control = resolveControl( schema );
 	const suffix = schema.suffix || schema.unit || '';
-	// D11: a disabled control is rendered read-only (native `disabled`), never hidden or
-	// silently ignoring input — its reason already reached us as `schema.description`.
-	const disabled = !! schema.disabled;
 
 	switch ( control ) {
 		case 'toggle':

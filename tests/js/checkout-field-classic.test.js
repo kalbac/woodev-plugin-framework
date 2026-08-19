@@ -765,13 +765,19 @@ describe( 'field policy — hide-for-pickup / country-hide (#362 §4.3)', () => 
 	 * which PHP unsets from `woocommerce_checkout_fields` server-side BEFORE this script ever runs,
 	 * so the element is never in the DOM to begin with (correction 4: no special-case code for it).
 	 *
+	 * `addressRequired: false` renders `shipping_address_1` WITHOUT the `required` attribute —
+	 * every other fixture in this block renders both `shipping_address_1` and `shipping_postcode`
+	 * required, so the "field that was never required" branch of `applyFieldPolicyToRow()`'s
+	 * stash/restore has no fixture to exercise without this.
+	 *
 	 * @param {string} chosen `shipping_method` radio value.
-	 * @param {{withPostcode?: boolean}} [options]
+	 * @param {{withPostcode?: boolean, addressRequired?: boolean}} [options]
 	 * @returns {void}
 	 */
 	function installFieldPolicyMarkup( chosen, options ) {
-		const opts         = options || {};
-		const withPostcode = false !== opts.withPostcode;
+		const opts            = options || {};
+		const withPostcode    = false !== opts.withPostcode;
+		const addressRequired = false !== opts.addressRequired;
 
 		document.body.innerHTML = `
 			<form class="checkout woocommerce-checkout">
@@ -781,7 +787,7 @@ describe( 'field policy — hide-for-pickup / country-hide (#362 §4.3)', () => 
 					</select>
 				</p>
 				<p class="form-row" id="shipping_address_1_field">
-					<input type="text" id="shipping_address_1" name="shipping_address_1" required />
+					<input type="text" id="shipping_address_1" name="shipping_address_1" ${ addressRequired ? 'required' : '' } />
 				</p>
 				${ withPostcode ? `
 				<p class="form-row" id="shipping_postcode_field">
@@ -797,9 +803,12 @@ describe( 'field policy — hide-for-pickup / country-hide (#362 §4.3)', () => 
 
 	/**
 	 * @param {{address: string, postcode: string, country: string}} policy
+	 * @param {string[]} [pickupIds] `pickup_method_ids` — defaults to the single-pickup fixture
+	 *   every other test in this block uses; the rig-config edge case (no pickup method
+	 *   configured at all) passes `[]` explicitly.
 	 * @returns {Object}
 	 */
-	function buildFieldPolicyConfig( policy ) {
+	function buildFieldPolicyConfig( policy, pickupIds ) {
 		return {
 			endpoint:          ENDPOINT,
 			nonce:             'test-nonce',
@@ -807,14 +816,14 @@ describe( 'field policy — hide-for-pickup / country-hide (#362 §4.3)', () => 
 			fields:            {},
 			takeover:          {},
 			field_policy:      policy,
-			pickup_method_ids: [ 'test_pickup' ],
+			pickup_method_ids: pickupIds || [ 'test_pickup' ],
 		};
 	}
 
 	/**
 	 * @param {{address: string, postcode: string, country: string}} policy
 	 * @param {string} chosen `shipping_method` radio value.
-	 * @param {{withPostcode?: boolean}} [markup]
+	 * @param {{withPostcode?: boolean, pickupIds?: string[]}} [markup]
 	 * @returns {void}
 	 */
 	function bootFieldPolicy( policy, chosen, markup ) {
@@ -827,7 +836,7 @@ describe( 'field policy — hide-for-pickup / country-hide (#362 §4.3)', () => 
 		window.WoodevCheckoutFieldStore = require(
 			'../../woodev/shipping-method/assets/js/frontend/checkout-field-store.js'
 		);
-		window[ CONFIG_GLOBAL ] = buildFieldPolicyConfig( policy );
+		window[ CONFIG_GLOBAL ] = buildFieldPolicyConfig( policy, markup && markup.pickupIds );
 
 		ajaxCalls = stubAjax();
 
@@ -895,6 +904,97 @@ describe( 'field policy — hide-for-pickup / country-hide (#362 §4.3)', () => 
 		expect( document.getElementById( 'shipping_address_1_field' ).classList
 			.contains( 'woodev-field--hidden-for-pickup' ) ).toBe( false );
 		expect( document.getElementById( 'shipping_address_1' ).required ).toBe( true );
+	} );
+
+	/**
+	 * `applyFieldPolicyToRow()` stashes the pre-hide `required` on `data-woodev-required`
+	 * (`'1'`/`'0'`) and restores it verbatim on the way back — but every test above this one
+	 * exercises exactly one pickup→courier transition. Repeated toggling is the branch a
+	 * critic already caught once in this feature: pin that the stash/restore stays correct
+	 * across FOUR transitions in a row, and that the backup attribute never survives a
+	 * courier leg (it must be written fresh on every hide, not left stale from a prior one).
+	 */
+	it( 'keeps the required stash/restore correct across repeated pickup/courier toggling', () => {
+		bootFieldPolicy(
+			{ address: 'hide_for_pickup', postcode: 'hide_for_pickup', country: 'show' },
+			'test_pickup:1'
+		);
+
+		const radio        = document.querySelector( 'input[name^="shipping_method"]' );
+		const $addressRow  = document.getElementById( 'shipping_address_1_field' );
+		const $address     = document.getElementById( 'shipping_address_1' );
+		const $postcodeRow = document.getElementById( 'shipping_postcode_field' );
+		const $postcode    = document.getElementById( 'shipping_postcode' );
+
+		function expectHidden() {
+			expect( $addressRow.classList.contains( 'woodev-field--hidden-for-pickup' ) ).toBe( true );
+			expect( $address.required ).toBe( false );
+			expect( $postcodeRow.classList.contains( 'woodev-field--hidden-for-pickup' ) ).toBe( true );
+			expect( $postcode.required ).toBe( false );
+		}
+
+		function expectRestored() {
+			expect( $addressRow.classList.contains( 'woodev-field--hidden-for-pickup' ) ).toBe( false );
+			expect( $address.required ).toBe( true );
+			expect( $address.hasAttribute( 'data-woodev-required' ) ).toBe( false );
+			expect( $postcodeRow.classList.contains( 'woodev-field--hidden-for-pickup' ) ).toBe( false );
+			expect( $postcode.required ).toBe( true );
+			expect( $postcode.hasAttribute( 'data-woodev-required' ) ).toBe( false );
+		}
+
+		// Pickup at boot — already hidden.
+		expectHidden();
+
+		// 1) pickup -> courier
+		radio.value = 'test_courier:1';
+		global.jQuery( radio ).trigger( 'change' );
+		expectRestored();
+
+		// 2) courier -> pickup (a different pickup zone-instance — still `id + ':'`)
+		radio.value = 'test_pickup:2';
+		global.jQuery( radio ).trigger( 'change' );
+		expectHidden();
+
+		// 3) pickup -> courier
+		radio.value = 'test_courier:2';
+		global.jQuery( radio ).trigger( 'change' );
+		expectRestored();
+
+		// 4) courier -> pickup, once more, to prove the cycle keeps working, not just the first one
+		radio.value = 'test_pickup:1';
+		global.jQuery( radio ).trigger( 'change' );
+		expectHidden();
+	} );
+
+	/**
+	 * Every fixture above renders BOTH `shipping_address_1` and `shipping_postcode` with the
+	 * `required` attribute, so the "field that was never required" branch of the stash/restore
+	 * has no coverage — `data-woodev-required` would always read back `'1'`. Build a fixture
+	 * without it and prove a pickup->courier cycle does not ADD `required` where none existed.
+	 */
+	it( 'does not make a field required that was never required, after a pickup->courier cycle', () => {
+		bootFieldPolicy(
+			{ address: 'hide_for_pickup', postcode: 'show', country: 'show' },
+			'test_pickup:1',
+			{ addressRequired: false }
+		);
+
+		const $address = document.getElementById( 'shipping_address_1' );
+
+		// Hidden at boot, and it was never required to begin with.
+		expect( document.getElementById( 'shipping_address_1_field' ).classList
+			.contains( 'woodev-field--hidden-for-pickup' ) ).toBe( true );
+		expect( $address.required ).toBe( false );
+		expect( $address.getAttribute( 'data-woodev-required' ) ).toBe( '0' );
+
+		const radio = document.querySelector( 'input[name^="shipping_method"]' );
+		radio.value = 'test_courier:1';
+		global.jQuery( radio ).trigger( 'change' );
+
+		expect( document.getElementById( 'shipping_address_1_field' ).classList
+			.contains( 'woodev-field--hidden-for-pickup' ) ).toBe( false );
+		expect( $address.required ).toBe( false );
+		expect( $address.hasAttribute( 'data-woodev-required' ) ).toBe( false );
 	} );
 
 	it( 'hides the country row and keeps the value in the DOM, untouched', () => {
@@ -997,5 +1097,45 @@ describe( 'field policy — hide-for-pickup / country-hide (#362 §4.3)', () => 
 			.contains( 'woodev-field--hidden-for-pickup' ) ).toBe( true );
 
 		delete window.woodev_checkout_field_config_legacy;
+	} );
+
+	/**
+	 * `pickup_method_ids: []` is the LIVE rig configuration — the rig's only active shipping
+	 * method is a courier, so no pickup method is ever registered and the browser really does
+	 * receive an empty array. `chosenIsPickup()`'s loop over zero ids can never return `true`,
+	 * so `hide_for_pickup` must never fire — no row hidden, no `required` altered — no matter
+	 * what `shipping_method` value is selected (even one that LOOKS like a pickup id).
+	 */
+	it( 'never hides a row or touches required when pickup_method_ids is empty, whatever '
+		+ 'shipping_method is selected', () => {
+		bootFieldPolicy(
+			{ address: 'hide_for_pickup', postcode: 'hide_for_pickup', country: 'show' },
+			'test_pickup:1',
+			{ pickupIds: [] }
+		);
+
+		expect( document.getElementById( 'shipping_address_1_field' ).classList
+			.contains( 'woodev-field--hidden-for-pickup' ) ).toBe( false );
+		expect( document.getElementById( 'shipping_address_1' ).required ).toBe( true );
+		expect( document.getElementById( 'shipping_address_1' )
+			.hasAttribute( 'data-woodev-required' ) ).toBe( false );
+		expect( document.getElementById( 'shipping_postcode_field' ).classList
+			.contains( 'woodev-field--hidden-for-pickup' ) ).toBe( false );
+		expect( document.getElementById( 'shipping_postcode' ).required ).toBe( true );
+		expect( document.getElementById( 'shipping_postcode' )
+			.hasAttribute( 'data-woodev-required' ) ).toBe( false );
+
+		// Switching to an ordinary courier method changes nothing either — there was never
+		// anything hidden to restore.
+		const radio = document.querySelector( 'input[name^="shipping_method"]' );
+		radio.value = 'test_courier:1';
+		global.jQuery( radio ).trigger( 'change' );
+
+		expect( document.getElementById( 'shipping_address_1_field' ).classList
+			.contains( 'woodev-field--hidden-for-pickup' ) ).toBe( false );
+		expect( document.getElementById( 'shipping_address_1' ).required ).toBe( true );
+		expect( document.getElementById( 'shipping_postcode_field' ).classList
+			.contains( 'woodev-field--hidden-for-pickup' ) ).toBe( false );
+		expect( document.getElementById( 'shipping_postcode' ).required ).toBe( true );
 	} );
 } );
