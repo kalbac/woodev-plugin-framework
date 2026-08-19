@@ -405,7 +405,19 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 		private function activate_owning_provider( Location_Service_Fake_Provider $provider ): Location_Provider_Registry {
 			Functions\when( 'add_action' )->justReturn( true );
 			$this->stub_providers_filter( [ $provider ] );
-			Functions\when( 'get_option' )->justReturn( $provider->get_id() );
+			// Deliberately narrower than a blanket justReturn( $provider->get_id() )
+			// (Task 10 fallout): a blanket stub also answers `$provider->get_id()`
+			// for `woodev_location_address_suggestions` (a TYPE_BOOLEAN setting),
+			// which Woodev_Abstract_Settings::string_to_bool() coerces a random
+			// non-"yes"/"1"/"true" id string DOWN to `false` — silently gating
+			// every `address`-level fixture record in every test using this
+			// helper. Every other option name keeps the untouched pass-through
+			// (`$default`) it always had.
+			Functions\when( 'get_option' )->alias(
+				static function ( $name, $default = null ) use ( $provider ) {
+					return 'woodev_location_active_provider' === $name ? $provider->get_id() : $default;
+				}
+			);
 
 			$registry = Location_Provider_Registry::instance();
 			$registry->declare_needed();
@@ -1447,6 +1459,47 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$this->assertSame( [], $service->get_supported_countries() );
 		}
 
+		/**
+		 * Coordinator review finding: get_supported_countries() calls the
+		 * PUBLIC, GATED provider_for_level() (country-blind) for every level,
+		 * deduplicated by provider id — for a provider that serves `address`
+		 * TOGETHER with region/settlement in the SAME country (DaData's own
+		 * shape in every OSM-tier country: RU/BY/KZ/UZ), turning the
+		 * address_suggestions switch off cannot shrink the union, because that
+		 * provider is already picked up via the region/settlement iterations,
+		 * which the gate never touches. This is the realistic case pinned here.
+		 *
+		 * NOT covered by this test (documented as a known, narrow gap in the
+		 * task's final report rather than silently fixed): a HYPOTHETICAL
+		 * provider that served ONLY `address` and nothing else would vanish
+		 * from this union entirely while the switch is off, since the address
+		 * iteration is the ONLY one that would ever see it. No provider bundled
+		 * with this codebase has that shape today.
+		 */
+		public function test_get_supported_countries_unaffected_by_address_suggestions_off_when_the_serving_provider_also_covers_other_levels(): void {
+			Functions\when( 'add_action' )->justReturn( true );
+			Functions\when( 'get_option' )->alias(
+				static function ( $name, $default = null ) {
+					if ( 'woodev_location_token' === $name ) {
+						return 'tok';
+					}
+					if ( 'woodev_location_address_suggestions' === $name ) {
+						return false;
+					}
+
+					return $default;
+				}
+			);
+
+			$registry = Location_Provider_Registry::instance();
+			$registry->declare_needed();
+			$registry->collect();
+
+			$service = new Location_Service( $registry );
+
+			$this->assertContains( 'RU', $service->get_supported_countries() );
+		}
+
 		// -------------------------------------------------------------------
 		// provider_for_level(): the D15 chain, exhaustively
 		// -------------------------------------------------------------------
@@ -1543,7 +1596,16 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 
 			Functions\when( 'add_action' )->justReturn( true );
 			$this->stub_providers_filter( [ $chosen ] );
-			Functions\when( 'get_option' )->justReturn( 'svc-fixture' );
+			// Narrower than a blanket justReturn( 'svc-fixture' ) (Task 10
+			// fallout) — see activate_owning_provider()'s own comment: a
+			// blanket stub also answers 'svc-fixture' for the new
+			// `address_suggestions` boolean setting, which string_to_bool()
+			// coerces to `false`, gating `address` off for every level below.
+			Functions\when( 'get_option' )->alias(
+				static function ( $name, $default = null ) {
+					return 'woodev_location_active_provider' === $name ? 'svc-fixture' : $default;
+				}
+			);
 
 			$registry = Location_Provider_Registry::instance();
 			$registry->declare_needed();
@@ -1697,6 +1759,242 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 				[ 'region' => false, 'settlement' => false, 'address' => false ],
 				$service->get_levels_for_country( 'RU' )
 			);
+		}
+
+		// -------------------------------------------------------------------
+		// provider_for_level( 'address', $country ): the address_suggestions
+		// store gate (Task 10, issue #362; design S3/§4.2/§7). The gate reads
+		// Location_Provider_Registry::get_address_suggestions_raw() — the RAW
+		// stored flag, never the clamped is_address_suggestions_enabled() (that
+		// would be circular, see the registry's own docblock) — and it must
+		// apply ONLY to the `address` level, BEFORE the chain walk, so every
+		// caller (get_levels_for_country(), get_level_owners_for_country(),
+		// the REST suggest path) agrees automatically.
+		// -------------------------------------------------------------------
+
+		public function test_address_level_is_unserved_while_address_suggestions_are_off(): void {
+			// A single provider (the real bundled DaData) configured to serve
+			// every level in RU (osm tier) — proves the gate suppresses ONLY
+			// `address`, not the whole provider.
+			Functions\when( 'add_action' )->justReturn( true );
+			Functions\when( 'get_option' )->alias(
+				static function ( $name, $default = null ) {
+					if ( 'woodev_location_token' === $name ) {
+						return 'tok';
+					}
+					if ( 'woodev_location_address_suggestions' === $name ) {
+						return false;
+					}
+
+					return $default;
+				}
+			);
+
+			$registry = Location_Provider_Registry::instance();
+			$registry->declare_needed();
+			$registry->collect();
+
+			$service = new Location_Service( $registry );
+
+			$this->assertNull( $service->provider_for_level( Location_Record::LEVEL_ADDRESS, 'RU' ) );
+			$this->assertNotNull( $service->provider_for_level( Location_Record::LEVEL_SETTLEMENT, 'RU' ) );
+			$this->assertSame(
+				[ 'region' => true, 'settlement' => true, 'address' => false ],
+				$service->get_levels_for_country( 'RU' )
+			);
+		}
+
+		public function test_address_level_is_served_when_address_suggestions_are_explicitly_on(): void {
+			Functions\when( 'add_action' )->justReturn( true );
+			Functions\when( 'get_option' )->alias(
+				static function ( $name, $default = null ) {
+					if ( 'woodev_location_token' === $name ) {
+						return 'tok';
+					}
+					if ( 'woodev_location_address_suggestions' === $name ) {
+						return true;
+					}
+
+					return $default;
+				}
+			);
+
+			$registry = Location_Provider_Registry::instance();
+			$registry->declare_needed();
+			$registry->collect();
+
+			$service = new Location_Service( $registry );
+
+			$this->assertInstanceOf( Dadata_Provider::class, $service->provider_for_level( Location_Record::LEVEL_ADDRESS, 'RU' ) );
+			$this->assertSame(
+				[ 'region' => true, 'settlement' => true, 'address' => true ],
+				$service->get_levels_for_country( 'RU' )
+			);
+		}
+
+		public function test_provider_for_level_filter_still_fires_for_address_while_the_gate_is_closed(): void {
+			// The seam must stay alive even while the gate suppresses the
+			// chain walk (framework rule: never remove an extension seam) —
+			// proven here by having the filter itself SWAP the gate's null
+			// answer for a concrete provider.
+			$swapped = new Location_Service_Fake_Provider( 'swapped', [ Location_Record::LEVEL_ADDRESS ], true );
+
+			Functions\when( 'add_action' )->justReturn( true );
+			Functions\when( 'get_option' )->alias(
+				static function ( $name, $default = null ) {
+					if ( 'woodev_location_token' === $name ) {
+						return 'tok';
+					}
+					if ( 'woodev_location_address_suggestions' === $name ) {
+						return false;
+					}
+
+					return $default;
+				}
+			);
+			Functions\when( 'apply_filters' )->alias(
+				function ( string $tag, $default = null, $level = null, $country = null ) use ( $swapped ) {
+					if ( Location_Service::FILTER_PROVIDER_FOR_LEVEL === $tag ) {
+						$this->assertNull( $default, 'the filter must still receive the gate-suppressed null as its own "resolved" argument' );
+						$this->assertSame( Location_Record::LEVEL_ADDRESS, $level );
+
+						return $swapped;
+					}
+
+					return $default;
+				}
+			);
+
+			$registry = Location_Provider_Registry::instance();
+			$registry->declare_needed();
+			$registry->collect();
+
+			$service = new Location_Service( $registry );
+
+			$this->assertSame( $swapped, $service->provider_for_level( Location_Record::LEVEL_ADDRESS, 'RU' ) );
+		}
+
+		/**
+		 * Coordinator review finding: gating `address` inside provider_for_level()
+		 * must NOT cascade upward through gate_chain() (#346/#333's own cascade-
+		 * order rule — a stale ANCESTOR drops every DESCENDANT too) and drop the
+		 * settlement above it. This holds structurally because `address` is the
+		 * DEEPEST level in Location_Record::LEVELS — it has no descendants of its
+		 * own to drop — but is pinned here explicitly rather than left to that
+		 * structural argument alone.
+		 */
+		public function test_gate_partial_chain_keeps_the_surviving_settlement_when_address_suggestions_are_off(): void {
+			$store = new Location_Service_Customer_Store_Probe( new Location_Service_Fake_Session() );
+
+			Functions\when( 'add_action' )->justReturn( true );
+			Functions\when( 'get_option' )->alias(
+				static function ( $name, $default = null ) {
+					if ( 'woodev_location_token' === $name ) {
+						return 'tok';
+					}
+					if ( 'woodev_location_address_suggestions' === $name ) {
+						return false;
+					}
+
+					return $default;
+				}
+			);
+
+			$registry = Location_Provider_Registry::instance();
+			$registry->declare_needed();
+			$registry->collect();
+
+			$settlement = Location_Record::from_array(
+				[
+					'key'         => 'dadata:settlement-1',
+					'provider_id' => 'dadata',
+					'level'       => Location_Record::LEVEL_SETTLEMENT,
+					'country'     => 'RU',
+				]
+			);
+			$address = $this->record_with_ancestors( 'dadata:address-1', Location_Record::LEVEL_ADDRESS, [ 'dadata:settlement-1' ] );
+
+			$store->set( $settlement );
+			$store->set( $address );
+
+			$service = new Location_Service( $registry, $store );
+
+			$chain = $service->get_customer_chain();
+
+			$this->assertNotNull( $chain );
+			$this->assertSame(
+				[ Location_Record::LEVEL_SETTLEMENT ],
+				array_keys( $chain['records'] ),
+				'the stale address must be dropped while the switch is off, the surviving settlement kept — the gate must not cascade upward'
+			);
+			$this->assertSame( Location_Record::LEVEL_SETTLEMENT, $chain['current'] );
+		}
+
+		// -------------------------------------------------------------------
+		// is_level_servable(): bypasses BOTH the address_suggestions store
+		// gate AND FILTER_PROVIDER_FOR_LEVEL — the capability query the
+		// admin surface needs ("could the chain serve this if the store
+		// allowed it"), never the runtime answer.
+		// -------------------------------------------------------------------
+
+		public function test_is_level_servable_ignores_the_address_suggestions_gate(): void {
+			Functions\when( 'add_action' )->justReturn( true );
+			Functions\when( 'get_option' )->alias(
+				static function ( $name, $default = null ) {
+					if ( 'woodev_location_token' === $name ) {
+						return 'tok';
+					}
+					if ( 'woodev_location_address_suggestions' === $name ) {
+						return false;
+					}
+
+					return $default;
+				}
+			);
+
+			$registry = Location_Provider_Registry::instance();
+			$registry->declare_needed();
+			$registry->collect();
+
+			$service = new Location_Service( $registry );
+
+			// The gate suppresses the runtime answer...
+			$this->assertNull( $service->provider_for_level( Location_Record::LEVEL_ADDRESS, 'RU' ) );
+			// ...but the capability query still reports the chain COULD serve it.
+			$this->assertTrue( $service->is_level_servable( Location_Record::LEVEL_ADDRESS, 'RU' ) );
+		}
+
+		public function test_is_level_servable_ignores_the_provider_for_level_filter(): void {
+			$swapped = new Location_Service_Fake_Provider( 'swapped', [ Location_Record::LEVEL_REGION ], true );
+
+			Functions\when( 'add_action' )->justReturn( true );
+			Functions\when( 'get_option' )->justReturn( null ); // no active provider registered -> nobody serves region.
+			Functions\when( 'apply_filters' )->alias(
+				static function ( string $tag, $default = null ) use ( $swapped ) {
+					if ( Location_Service::FILTER_PROVIDER_FOR_LEVEL === $tag ) {
+						return $swapped; // only provider_for_level() must ever see this.
+					}
+
+					return $default;
+				}
+			);
+
+			$registry = Location_Provider_Registry::instance();
+			$registry->declare_needed();
+			$registry->collect();
+
+			$service = new Location_Service( $registry );
+
+			$this->assertSame( $swapped, $service->provider_for_level( Location_Record::LEVEL_REGION, 'RU' ) );
+			$this->assertFalse( $service->is_level_servable( Location_Record::LEVEL_REGION, 'RU' ) );
+		}
+
+		public function test_is_level_servable_throws_on_an_unknown_level(): void {
+			$service = new Location_Service( Location_Provider_Registry::instance() );
+
+			$this->expectException( \InvalidArgumentException::class );
+
+			$service->is_level_servable( 'not-a-level' );
 		}
 
 		// -------------------------------------------------------------------

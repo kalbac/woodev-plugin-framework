@@ -1324,6 +1324,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * is configured) or `method_id:instance_id` (when multiple instances exist). This helper
 		 * matches both shapes so plugins only need to register the base method id.
 		 *
+		 * `public` (2.0.2, issue #362 pickup-required-relaxation fix):
+		 * {@see \Woodev\Framework\Shipping\Checkout\Checkout_Field_Policy::pickup_method_chosen()}
+		 * reuses this SAME matcher server-side, against
+		 * {@see \Woodev\Framework\Shipping\Checkout\Checkout_Config::pickup_method_ids()}, so a
+		 * `hide_for_pickup` field is relaxed under the exact same "chosen method names a pickup
+		 * id" rule this class already uses for pickup-slot requiredness — single-sourced rather
+		 * than re-implemented.
+		 *
 		 * @since 2.0.2
 		 *
 		 * @param string   $chosen The `chosen_shipping_method` value from checkout state.
@@ -1331,7 +1339,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 *
 		 * @return bool True when `$chosen` is or starts with one of the given ids.
 		 */
-		private static function chosen_method_matches( string $chosen, array $ids ): bool {
+		public static function chosen_method_matches( string $chosen, array $ids ): bool {
 			foreach ( $ids as $id ) {
 				if ( $chosen === $id || 0 === strpos( $chosen, $id . ':' ) ) {
 					return true;

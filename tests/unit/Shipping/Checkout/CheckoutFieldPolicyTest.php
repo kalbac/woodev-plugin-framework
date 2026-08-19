@@ -32,6 +32,11 @@ require_once dirname( __DIR__, 4 ) . '/woodev/settings-api/class-setting.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/settings-api/abstract-class-settings.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/checkout/class-checkout-field-environment.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/checkout/class-checkout-field-settings.php';
+require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/checkout/class-field.php';
+require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/checkout/class-checkout-fields.php';
+require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/checkout/class-checkout-condition.php';
+require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/checkout/class-checkout-handler.php';
+require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/checkout/class-checkout-config.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/checkout/class-checkout-field-policy.php';
 
 /**
@@ -99,7 +104,7 @@ final class CheckoutFieldPolicyTest extends TestCase {
 
 	public function test_checkout_fields_late_unset_removes_from_both_sections(): void {
 		$fields = [ 'billing' => [ 'billing_state' => [], 'billing_postcode' => [], 'billing_city' => [ 'required' => true ] ], 'shipping' => [ 'shipping_state' => [], 'shipping_postcode' => [], 'shipping_city' => [ 'required' => true ] ] ];
-		$out    = Checkout_Field_Policy::checkout_fields_contribution( [ 'region_field' => 'remove', 'postcode_field' => 'show' ], $fields );
+		$out    = Checkout_Field_Policy::checkout_fields_contribution( [ 'region_field' => 'remove', 'postcode_field' => 'show' ], $fields, false );
 		$this->assertArrayNotHasKey( 'billing_state', $out['billing'] );
 		$this->assertArrayNotHasKey( 'shipping_state', $out['shipping'] );
 		$this->assertArrayHasKey( 'shipping_postcode', $out['shipping'] );
@@ -112,7 +117,7 @@ final class CheckoutFieldPolicyTest extends TestCase {
 	 */
 	public function test_checkout_fields_removes_postcode_independently_of_region(): void {
 		$fields = [ 'billing' => [ 'billing_state' => [], 'billing_postcode' => [] ], 'shipping' => [ 'shipping_state' => [], 'shipping_postcode' => [] ] ];
-		$out    = Checkout_Field_Policy::checkout_fields_contribution( [ 'region_field' => 'show', 'postcode_field' => 'remove' ], $fields );
+		$out    = Checkout_Field_Policy::checkout_fields_contribution( [ 'region_field' => 'show', 'postcode_field' => 'remove' ], $fields, false );
 
 		$this->assertArrayHasKey( 'billing_state', $out['billing'] );
 		$this->assertArrayNotHasKey( 'billing_postcode', $out['billing'] );
@@ -122,14 +127,246 @@ final class CheckoutFieldPolicyTest extends TestCase {
 	/**
 	 * A `hide_for_pickup` postcode value is a JS-driven, classic-only VALUE (T2) — this
 	 * PHP instrument must never unset for anything other than the literal `'remove'`
-	 * string.
+	 * string, regardless of whether a pickup method is chosen.
 	 */
 	public function test_checkout_fields_does_not_touch_hide_for_pickup(): void {
 		$fields = [ 'billing' => [ 'billing_postcode' => [] ], 'shipping' => [ 'shipping_postcode' => [] ] ];
-		$out    = Checkout_Field_Policy::checkout_fields_contribution( [ 'region_field' => 'show', 'postcode_field' => 'hide_for_pickup' ], $fields );
+		$out    = Checkout_Field_Policy::checkout_fields_contribution( [ 'region_field' => 'show', 'postcode_field' => 'hide_for_pickup' ], $fields, true );
 
 		$this->assertArrayHasKey( 'billing_postcode', $out['billing'] );
 		$this->assertArrayHasKey( 'shipping_postcode', $out['shipping'] );
+	}
+
+	// -------------------------------------------------------------------------
+	// checkout_fields_contribution() — required-relaxation for hide_for_pickup
+	// (issue #362 pickup-required-relaxation fix; gotcha
+	// js-hidden-checkout-field-is-still-required-server-side)
+	// -------------------------------------------------------------------------
+
+	/**
+	 * The core fix, measured on the rig (gotcha
+	 * js-hidden-checkout-field-is-still-required-server-side): `address_field` and
+	 * `postcode_field` both set to `hide_for_pickup`, a pickup method chosen — every
+	 * one of the four fields the browser hid must come back `required === false` in
+	 * BOTH sections, and must still be PRESENT (never unset — the value must still be
+	 * able to post so `pickup-mount.js`'s address-replacement can fill it).
+	 */
+	public function test_checkout_fields_relaxes_required_for_hide_for_pickup_when_pickup_is_chosen(): void {
+		$fields = [
+			'billing'  => [ 'billing_address_1' => [ 'required' => true ], 'billing_postcode' => [ 'required' => true ] ],
+			'shipping' => [ 'shipping_address_1' => [ 'required' => true ], 'shipping_postcode' => [ 'required' => true ] ],
+		];
+		$out    = Checkout_Field_Policy::checkout_fields_contribution(
+			[ 'address_field' => 'hide_for_pickup', 'postcode_field' => 'hide_for_pickup' ],
+			$fields,
+			true
+		);
+
+		$this->assertFalse( $out['billing']['billing_address_1']['required'] );
+		$this->assertFalse( $out['shipping']['shipping_address_1']['required'] );
+		$this->assertFalse( $out['billing']['billing_postcode']['required'] );
+		$this->assertFalse( $out['shipping']['shipping_postcode']['required'] );
+		$this->assertArrayHasKey( 'billing_address_1', $out['billing'] );
+		$this->assertArrayHasKey( 'shipping_postcode', $out['shipping'] );
+	}
+
+	/**
+	 * Control run: WITHOUT this test, a green result above proves nothing — it would
+	 * pass even if `required` were relaxed unconditionally. `hide_for_pickup` set, but
+	 * no pickup method chosen (e.g. a courier method), must leave `required` exactly
+	 * as the caller passed it in.
+	 */
+	public function test_checkout_fields_leaves_required_alone_when_no_pickup_is_chosen(): void {
+		$fields = [
+			'billing'  => [ 'billing_address_1' => [ 'required' => true ], 'billing_postcode' => [ 'required' => true ] ],
+			'shipping' => [ 'shipping_address_1' => [ 'required' => true ], 'shipping_postcode' => [ 'required' => true ] ],
+		];
+		$out    = Checkout_Field_Policy::checkout_fields_contribution(
+			[ 'address_field' => 'hide_for_pickup', 'postcode_field' => 'hide_for_pickup' ],
+			$fields,
+			false
+		);
+
+		$this->assertTrue( $out['billing']['billing_address_1']['required'] );
+		$this->assertTrue( $out['shipping']['shipping_address_1']['required'] );
+		$this->assertTrue( $out['billing']['billing_postcode']['required'] );
+		$this->assertTrue( $out['shipping']['shipping_postcode']['required'] );
+	}
+
+	/**
+	 * A pickup method chosen is a NECESSARY but not SUFFICIENT condition: when the
+	 * merchant's policy is plain `show` (the default), a pickup choice must not relax
+	 * anything at all.
+	 */
+	public function test_checkout_fields_leaves_required_alone_when_policy_is_show_even_if_pickup_chosen(): void {
+		$fields = [
+			'billing'  => [ 'billing_address_1' => [ 'required' => true ], 'billing_postcode' => [ 'required' => true ] ],
+			'shipping' => [ 'shipping_address_1' => [ 'required' => true ], 'shipping_postcode' => [ 'required' => true ] ],
+		];
+		$out    = Checkout_Field_Policy::checkout_fields_contribution(
+			[ 'address_field' => 'show', 'postcode_field' => 'show' ],
+			$fields,
+			true
+		);
+
+		$this->assertTrue( $out['billing']['billing_address_1']['required'] );
+		$this->assertTrue( $out['shipping']['shipping_postcode']['required'] );
+	}
+
+	/**
+	 * `postcode_field=remove` wins over the pickup relaxation: the field is UNSET (T1),
+	 * not merely relaxed, and the relaxation branch must not fatal trying to write
+	 * `['required']` onto a field that is no longer there.
+	 */
+	public function test_checkout_fields_postcode_remove_is_unset_not_relaxed_when_pickup_chosen(): void {
+		$fields = [
+			'billing'  => [ 'billing_postcode' => [ 'required' => true ] ],
+			'shipping' => [ 'shipping_postcode' => [ 'required' => true ] ],
+		];
+		$out    = Checkout_Field_Policy::checkout_fields_contribution(
+			[ 'postcode_field' => 'remove' ],
+			$fields,
+			true
+		);
+
+		$this->assertArrayNotHasKey( 'billing_postcode', $out['billing'] );
+		$this->assertArrayNotHasKey( 'shipping_postcode', $out['shipping'] );
+	}
+
+	/**
+	 * A section missing entirely from `$fields`, and a field missing from a section
+	 * that IS present, must not raise a notice or fatal — both are ordinary shapes a
+	 * third-party field manager (or an already-removed field) can produce.
+	 */
+	public function test_checkout_fields_relaxation_tolerates_missing_section_and_missing_field(): void {
+		$fields = [ 'billing' => [ 'billing_address_1' => [ 'required' => true ] ] ]; // no 'shipping' key; no 'billing_postcode' key.
+		$out    = Checkout_Field_Policy::checkout_fields_contribution(
+			[ 'address_field' => 'hide_for_pickup', 'postcode_field' => 'hide_for_pickup' ],
+			$fields,
+			true
+		);
+
+		$this->assertFalse( $out['billing']['billing_address_1']['required'] );
+		$this->assertArrayNotHasKey( 'shipping', $out );
+		$this->assertArrayNotHasKey( 'billing_postcode', $out['billing'] );
+	}
+
+	// -------------------------------------------------------------------------
+	// any_pickup_method_chosen() — pure, mirrors Checkout_Handler::chosen_method_matches()
+	// -------------------------------------------------------------------------
+
+	public function test_any_pickup_method_chosen_matches_a_bare_method_id(): void {
+		$this->assertTrue( Checkout_Field_Policy::any_pickup_method_chosen( [ 'pickup' ], [ 'pickup' ] ) );
+	}
+
+	/**
+	 * WooCommerce posts `method_id:instance_id` whenever the zone has an instance id —
+	 * the usual case. Must match the same way {@see Checkout_Handler::chosen_method_matches()}
+	 * already does for pickup-slot requiredness.
+	 */
+	public function test_any_pickup_method_chosen_matches_method_id_with_instance_suffix(): void {
+		$this->assertTrue( Checkout_Field_Policy::any_pickup_method_chosen( [ 'pickup:5' ], [ 'pickup' ] ) );
+	}
+
+	public function test_any_pickup_method_chosen_is_false_for_an_unrelated_method(): void {
+		$this->assertFalse( Checkout_Field_Policy::any_pickup_method_chosen( [ 'flat_rate:3' ], [ 'pickup' ] ) );
+	}
+
+	/**
+	 * `chosen_shipping_methods` carries one entry per shipping PACKAGE. The rule is
+	 * "ANY package is pickup" — a split shipment with one courier package and one
+	 * pickup package must still relax the fields: relaxing can never block an order
+	 * the browser already allowed, only being stricter than the UI can.
+	 */
+	public function test_any_pickup_method_chosen_is_true_when_any_package_is_pickup(): void {
+		$this->assertTrue(
+			Checkout_Field_Policy::any_pickup_method_chosen( [ 'flat_rate:3', 'pickup:9' ], [ 'pickup' ] )
+		);
+	}
+
+	public function test_any_pickup_method_chosen_is_false_when_no_pickup_ids_are_configured(): void {
+		$this->assertFalse( Checkout_Field_Policy::any_pickup_method_chosen( [ 'pickup:5' ], [] ) );
+	}
+
+	public function test_any_pickup_method_chosen_is_false_for_an_empty_chosen_list(): void {
+		$this->assertFalse( Checkout_Field_Policy::any_pickup_method_chosen( [], [ 'pickup' ] ) );
+	}
+
+	// -------------------------------------------------------------------------
+	// merge_chosen_shipping_methods() — pure; POST must win over the session
+	// (Codex P0 follow-up, issue #362): our late `woocommerce_checkout_fields` filter
+	// fires from WC_Checkout::get_posted_data() — BEFORE WC_Checkout::update_session()
+	// writes this submit's posted `shipping_method[]` into the session — so the session
+	// alone can still be one submit stale. See merge_chosen_shipping_methods()'s own
+	// docblock for the verified WC_Checkout line numbers.
+	// -------------------------------------------------------------------------
+
+	/**
+	 * The direction that reintroduces the ORIGINAL bug if missed: the session still
+	 * names a courier (e.g. from a previous `update_order_review` AJAX call), but THIS
+	 * submit posts a pickup method. The posted value must win, or the customer is
+	 * rejected on invisible fields again.
+	 */
+	public function test_merge_chosen_shipping_methods_posted_pickup_overrides_session_courier(): void {
+		$out = Checkout_Field_Policy::merge_chosen_shipping_methods( [ 'flat_rate:3' ], [ 'pickup:9' ] );
+
+		$this->assertSame( [ 'pickup:9' ], $out );
+	}
+
+	/**
+	 * The worse, silent-acceptance direction: the session names a pickup method, but
+	 * THIS submit posts a courier — a real order with genuinely empty, VISIBLE address
+	 * fields must NOT be waved through because the session was stale in our favour.
+	 */
+	public function test_merge_chosen_shipping_methods_posted_courier_overrides_session_pickup(): void {
+		$out = Checkout_Field_Policy::merge_chosen_shipping_methods( [ 'pickup:9' ], [ 'flat_rate:3' ] );
+
+		$this->assertSame( [ 'flat_rate:3' ], $out );
+	}
+
+	/**
+	 * A plain page render (no checkout submit at all) has no `shipping_method` POST
+	 * key — WC_Checkout::get_posted_data() itself defaults it to `''` in that case
+	 * (not an array). The session alone must still decide.
+	 */
+	public function test_merge_chosen_shipping_methods_no_post_leaves_session_untouched(): void {
+		$this->assertSame( [ 'pickup:9' ], Checkout_Field_Policy::merge_chosen_shipping_methods( [ 'pickup:9' ], '' ) );
+	}
+
+	/**
+	 * A posted `shipping_method` that is not an array (WC_Checkout::get_posted_data()'s
+	 * own `''` default, or a malformed submit) must be ignored wholesale, not partially
+	 * applied or fataled on.
+	 */
+	public function test_merge_chosen_shipping_methods_non_array_post_is_ignored(): void {
+		$this->assertSame( [ 'flat_rate:3' ], Checkout_Field_Policy::merge_chosen_shipping_methods( [ 'flat_rate:3' ], 'not-an-array' ) );
+	}
+
+	/**
+	 * WC_Checkout::update_session() itself only merges STRING values
+	 * (`if ( ! is_string( $value ) ) { continue; }`) — replicated verbatim. A malformed
+	 * non-string entry at one index must not clobber that index's session value, and
+	 * must not fatal.
+	 */
+	public function test_merge_chosen_shipping_methods_skips_a_non_string_entry(): void {
+		$out = Checkout_Field_Policy::merge_chosen_shipping_methods( [ 'flat_rate:3' ], [ [ 'not', 'a', 'string' ] ] );
+
+		$this->assertSame( [ 'flat_rate:3' ], $out );
+	}
+
+	/**
+	 * `chosen_shipping_methods` is keyed PER PACKAGE INDEX (multi-package carts). The
+	 * merge must override only the index actually present in the POST, leaving every
+	 * other package's session value alone — exactly WC_Checkout::update_session()'s own
+	 * per-index `foreach`.
+	 */
+	public function test_merge_chosen_shipping_methods_overrides_only_the_posted_index(): void {
+		$out = Checkout_Field_Policy::merge_chosen_shipping_methods(
+			[ 'flat_rate:1', 'flat_rate:2' ],
+			[ 1 => 'pickup:9' ]
+		);
+
+		$this->assertSame( [ 'flat_rate:1', 'pickup:9' ], $out );
 	}
 
 	// -------------------------------------------------------------------------

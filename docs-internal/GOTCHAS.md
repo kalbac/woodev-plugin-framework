@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 166 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 168 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -89,7 +89,7 @@
 
 ### [rig/*] — Local verification rig
 - [rig/browser] **The rig's `/checkout/` is the BLOCK checkout — the picker lives on `/classic-checkout/`.** → [rig-checkout-url-is-the-block-checkout](gotchas/rig-checkout-url-is-the-block-checkout.md) (s65)
-- [rig/browser] **The rig serves the working tree, so switching branches silently un-fixes things.** → [rig-serves-the-working-tree-branch-switch-reverts-fixes](gotchas/rig-serves-the-working-tree-branch-switch-reverts-fixes.md) (s56)
+- [rig/browser] **The rig serves the working tree — a branch switch silently un-fixes things, and a concurrent agent's half-written edit fatals every request.** → [rig-serves-the-working-tree-branch-switch-reverts-fixes](gotchas/rig-serves-the-working-tree-branch-switch-reverts-fixes.md) (s56, s81)
 - [rig/browser] **Playwright MCP does not fire WooCommerce's checkout submit; chrome-devtools MCP does.** → [playwright-mcp-does-not-fire-wc-checkout-ajax](gotchas/playwright-mcp-does-not-fire-wc-checkout-ajax.md) (s44)
 
 ### [framework/wiring] — Responsibilities that moved
@@ -184,6 +184,8 @@
 - [box-packer/virtual-box-null-best-inf-overflow] **`$best=null;.** → [virtual-box-null-best-inf-overflow](gotchas/virtual-box-null-best-inf-overflow.md)
 
 ### [shipping/checkout] — Checkout field layer (§8)
+- [shipping/checkout] **WooCommerce re-shows every locale field with an INLINE `display:block`, so a class-based hide must be `!important`.** → [wc-address-i18n-reshows-fields-with-an-inline-display-block](gotchas/wc-address-i18n-reshows-fields-with-an-inline-display-block.md) (s81)
+- [shipping/checkout] **Hiding a field in JS does not stop WooCommerce requiring it — the order fails on a field the customer cannot see.** → [js-hidden-checkout-field-is-still-required-server-side](gotchas/js-hidden-checkout-field-is-still-required-server-side.md) (s81)
 - [shipping/checkout] **The block checkout never sees `woocommerce_checkout_fields`, but it DOES honour the country locale (order, hidden, required).** → [block-checkout-reads-country-locale-not-checkout-fields](gotchas/block-checkout-reads-country-locale-not-checkout-fields.md) (s79)
 - [shipping/checkout] **WooCommerce renders a `<label>` for hidden fields — only `checkbox` is excluded.** → [wc-renders-a-label-for-hidden-fields](gotchas/wc-renders-a-label-for-hidden-fields.md) (s72)
 - [shipping/checkout] **A dependent-select cascade is DESTRUCTIVE, and WooCommerce fires PROGRAMMATIC `change` events on address fields while initialising the checkout — carr….** → [a-programmatic-parent-change-must-not-run-a-destructive-cascade](gotchas/a-programmatic-parent-change-must-not-run-a-destructive-cascade.md) (s66)

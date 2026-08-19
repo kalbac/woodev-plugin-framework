@@ -7,13 +7,18 @@
 > Program history snapshot → `platform-v2-program-tracker.md`; active program map →
 > `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-08-19 (s80).** Last CODE commit `fe4ed49` (PR #368). #362 tasks 1–9 shipped in three
-merged PRs — #363 (tasks 1–4), #367 (tasks 5–7, replaces the auto-closed #365), #368 (tasks 8–9,
-replaces the auto-closed #366) — see the gotcha `stacked-pr-github-mechanics` for why two of the
-three had to be recreated. No open PRs · working tree clean, rig on `main` with the **CDEK
-provider active** (`test-cdek`).
-Tests: **2372 unit / 5867 assertions / 1204 jest / 110 integration**; phpcs and phpstan clean.
-Gotchas: **166**. Docs gate: `npm run lint:docs` (session-start reading budget 120 KB).
+**As of 2026-08-19 (s81).** Last CODE commit — see PR closing **#362**. **#362 is COMPLETE**: all
+twelve tasks shipped across four PRs — #363 (1–4), #367 (5–7), #368 (8–9) and #372 (task 10,
+the docs, the full rig matrix, plus everything the audit of s80 turned up). Rig on the s81 branch.
+Tests: **2405 unit / 5930 assertions / 1209 jest / 110 integration**; phpcs and phpstan clean.
+Gotchas: **168**. Docs gate: `npm run lint:docs` (session-start reading budget 120 KB).
+
+s81 re-audited every one of s80's nine tasks with four independent reviewers, and then found two
+defects that only a finished rig pass could find — both in the shipped `hide_for_pickup` /
+`country=hide` policy, both now fixed: the server still required a field the browser had hidden
+(gotcha `js-hidden-checkout-field-is-still-required-server-side`), and WooCommerce's own
+`address-i18n.js` re-showed the hidden row with an inline `display:block` that beat our class
+(gotcha `wc-address-i18n-reshows-fields-with-an-inline-display-block`). Detail: `sessions/s81.md`.
 
 ## Program status (high level)
 
@@ -65,17 +70,17 @@ Gotchas: **166**. Docs gate: `npm run lint:docs` (session-start reading budget 1
 
 ## Next Actions
 
-0. **#362 — V2-настройки доставки: задачи 1–9 из 12 СМЕРЖЕНЫ (s80, Opus 5).** Вкладка «Доставка»
-   с тремя секциями («Локация» / «Поля» / «Карта») живёт на `main`, обе политика полей (два шва
-   WC) и поведение карты подключены к реальному чекауту. Осталось: **задачи 10–12**
-   (подсказки адреса, доки, полная риг-матрица из плана) — план:
-   `plans/2026-08-18-shipping-settings-v2-plan.md`, спека: `specs/2026-08-18-shipping-settings-v2-design.md`.
-   Последний PR цепочки закрывает #362 (`Closes #362`); промежуточные PR (#363/#367/#368) ссылались
-   `Refs #362`. Карточка #362 — оператора, стоит в `Инбокс`; в `В работе` её двигает он.
-   Два риговых фикса, не входивших в план: полоса приоритетов пресета сдвинута с `10–60` на
-   `40–90` (исходные числа резали имя покупателя пополам) и общий баг настроек, где клиентская
-   валидация блокировала Save любой секции, если у активного провайдера локации есть обязательный
-   секретный параметр (обычный случай) — оба задокументированы в коммитах и PR.
+0. **#362 — ЗАКРЫТ (s81).** Вкладка «Доставка» с тремя секциями живёт на `main` целиком: политика
+   полей через два шва WC, поведение карты, «Подсказки для адреса». Спека переведена в IMPLEMENTED.
+   **Что стоит посмотреть глазами оператора** (я проверял сам в браузере, но это UI): вкладка
+   `Woodev → Настройки → Доставка`, все три секции.
+   Новые карточки, все в `Бэклог`, все — развилки для оператора, а не баги к немедленной починке:
+   **#369** (`region_field=remove` вместе с `field_mode=related-list` молча ломает выбор НП —
+   блокировки между настройками спека не предусматривала), **#370** (машинные поля
+   «Зафиксированная локация» / «…требует повторного выбора» редактируются вручную: `Field_Schema`
+   не исключает бесконтрольную настройку, а кладёт `controlType: null`, и React выбирает контрол
+   по типу значения — приехало с задачи 14 слоя локаций), **#371** (мультипакетная доставка: JS
+   смотрит на первый пакет, PHP — на любой).
 1. **Остатки слоя локаций, все в `Бэклог`:** #353 (провайдер без уровня НП не регистрируется —
    правило есть у оператора в голове, в коде его нет), #356 (настоящий forget-путь: гейт не пишет,
    протухший блоб живёт на диске), #358 (провайдерский шов не сообщает, учёл ли чужого родителя),
@@ -97,6 +102,7 @@ Deferred (всё остальное — board №6): UK-CFR (settings extensibil
 
 - **The picker lives on `/classic-checkout/`, NOT `/checkout/`** — the latter is the BLOCK checkout (the adapter is SP-11, unbuilt), where there is no `form.checkout`, no `carrier_pickup_point` and no trigger, which reads as a broken build rather than the wrong URL. Product id `12` fills the cart via `?add-to-cart=12`. Gotcha: `rig-checkout-url-is-the-block-checkout`.
 - **The rig serves the WORKING TREE.** Name the branch out loud whenever you ask anyone to look, and switch the tree BEFORE asking — handing the operator a checklist while the tree holds another branch has already cost a wasted pass (gotcha `rig-serves-the-working-tree-branch-switch-reverts-fixes`). Current state: tree on `main`.
+- **There IS a pickup-type shipping method on the rig now (s81), and it lives OUTSIDE the repo.** Until s81 the only active method was `Woodev Test Shipping`, whose `delivery_type` is `courier` — so `Checkout_Config::pickup_method_ids()` resolved to `[]` and the entire `hide_for_pickup` branch of the checkout-field policy was physically unreachable on the rig. Fixed with a container-only mu-plugin, `wp-content/mu-plugins/zz-rig-test-pickup-shipping.php` (that directory is NOT bind-mounted from the repo — `zz-rig-yandex-key.php` was already there as precedent), registering `woodev_test_pickup_shipping` (`Woodev Test Pickup`) whose `get_delivery_type()` is `pickup`. It is enabled in zone 1 «Russia» as instance 4, alongside `free_shipping` and `woodev_test_shipping`, so a checkout session can switch between a pickup rate and a courier rate. **Keep it** — it is what made the s80 gap verifiable, and it is the only way to exercise that branch live. To remove: delete the mu-plugin file and `wp wc shipping_zone_method delete 1 4 --user=1`.
 - **The active location provider on the rig is `test-cdek`, deliberately.** Kept that way at the end of s78: the mixed pair (CDEK for region+settlement, DaData for address) is the configuration that exercises every location fix shipped so far, and it is the only way to reproduce #352/#333 at all. Back to DaData: `wp option update woodev_location_active_provider dadata`.
 - **Switching the provider now has a visible consequence** (s78, by design): a customer record from the provider that no longer owns its level reads as ABSENT, so the chain empties and the address field locks until the customer re-picks. The record is NOT deleted — restoring the provider brings it straight back (verified). If a rig session suddenly "loses" its locality, check the active provider before suspecting a bug.
 - **Ports: dev `:8973` / tests `:8974`** (chrome-devtools MCP driver). Ports live in the gitignored `.wp-env.override.json`.

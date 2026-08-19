@@ -129,13 +129,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 
 		/**
 		 * Gets the settings ids this handler owns, in registration order — the
-		 * active-provider select, the field-mode select, the three default-locality
-		 * settings (Task 14), then the active provider's own fields. Used by
-		 * {@see Location_Provider_Registry} to build the `Settings_Section` without
-		 * duplicating this handler's own field list.
+		 * active-provider select, the field-mode select, the address-suggestions
+		 * checkbox (Task 10), the three default-locality settings (Task 14), then
+		 * the active provider's own fields. Used by {@see Location_Provider_Registry}
+		 * to build the `Settings_Section` without duplicating this handler's own
+		 * field list.
 		 *
 		 * @since 2.0.2
 		 * @since 2.0.2 Added the three `default_locality_*` settings (Task 14; spec D11).
+		 * @since 2.0.2 Added `address_suggestions`, right after `field_mode`
+		 *              (Task 10; issue #362; design S3/§3.1).
 		 *
 		 * @return string[]
 		 */
@@ -144,6 +147,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 				[
 					Location_Provider_Registry::SETTING_ACTIVE_PROVIDER,
 					Location_Provider_Registry::SETTING_FIELD_MODE,
+					Location_Provider_Registry::SETTING_ADDRESS_SUGGESTIONS,
 					Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_POLICY,
 					Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_RECORD,
 					Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_NEEDS_REPICK,
@@ -174,12 +178,41 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 				Location_Provider_Registry::SETTING_FIELD_MODE,
 				\Woodev_Setting::TYPE_STRING,
 				[
-					'name'    => __( 'Режим отображения полей локации', 'woodev-plugin-framework' ),
+					// Relabelled from «Режим отображения полей локации» (design S2 —
+					// s79 brainstorm): «field_mode» is the SAME setting the CDEK
+					// plugin's own "Выпадающий список городов" vocabulary maps onto
+					// (spec §4.1), so the shared surface names it after what it
+					// actually controls (the НП/Регион field's INPUT TYPE), not the
+					// old, vaguer "display mode" wording.
+					'name'    => __( 'Тип поля НП/Регион', 'woodev-plugin-framework' ),
 					'options' => $this->field_mode_options,
 					'default' => Location_Provider_Registry::MODE_TYPEAHEAD,
 				]
 			);
 			$this->register_control( Location_Provider_Registry::SETTING_FIELD_MODE, \Woodev_Control::TYPE_SELECT );
+
+			/*
+			 * `address_suggestions` (Task 10; issue #362; design S3/§3.1/§3.2):
+			 * whether the location layer serves the `address` suggest level at
+			 * all. Registered right after `field_mode` — design S3 puts it
+			 * directly under the provider block. No OPTIONS-gating like
+			 * `field_mode`/`default_locality_policy` above: this is a plain
+			 * boolean, and its AVAILABILITY (rather than its offered values) is
+			 * what varies — that is expressed as a DISABLED control, applied by
+			 * Location_Provider_Registry::register_settings() once this handler
+			 * exists (the same "resolved by the caller, this handler only
+			 * renders it" discipline this class's own docblock already
+			 * describes for `provider_options`/`field_mode_options`).
+			 */
+			$this->register_setting(
+				Location_Provider_Registry::SETTING_ADDRESS_SUGGESTIONS,
+				\Woodev_Setting::TYPE_BOOLEAN,
+				[
+					'name'    => __( 'Подсказки для адреса', 'woodev-plugin-framework' ),
+					'default' => true,
+				]
+			);
+			$this->register_control( Location_Provider_Registry::SETTING_ADDRESS_SUGGESTIONS, \Woodev_Control::TYPE_CHECKBOX );
 
 			$this->register_setting(
 				Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_POLICY,

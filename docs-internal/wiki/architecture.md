@@ -88,6 +88,63 @@ automatically via the `woodev_{plugin_id}_api_request_performed` action.
 Note: `Woodev_Setting::get_value()` returns a **cached** property — an `update_option()` mid-request
 is invisible to it (gotcha `woodev-setting-get-value-is-cached-not-a-live-option-read`).
 
+## Shipping settings — the «Доставка» tab (`woodev/shipping-method/settings/`)
+
+One tab on `Woodev → Настройки`, registered by `Shipping\Settings\Shipping_Settings_Tab`, holding
+three sections — **«Локация» / «Поля» / «Карта»**. Each section keeps its own
+`Woodev_Abstract_Settings` handler (`Location_Settings`, `Checkout_Field_Settings`,
+`Pickup_Map_Settings`); `Composite_Settings_Handler` presents the three to the settings page as one.
+
+**Section visibility is derived, never declared** — there is no `supported_features` key for it: the
+tab exists when any active `Shipping_Plugin` does, «Локация» when some plugin needs a location
+provider, «Поля» always while the tab exists, «Карта» when some plugin supplies a `Pickup_Handler`.
+
+**Option namespaces are per-handler and never encode the tab id** — `woodev_location_*`,
+`woodev_checkout_fields_*`, `woodev_pickup_map_*`. The tab's own id moved from `location` to
+`shipping` without renaming a single stored key: option names are an installed-site data contract
+(`adr/005-platform-v2-clean-break-policy.md`).
+
+Two rules govern every option on this tab:
+
+- **An unavailable option is disabled with a reason, never hidden.** `Woodev_Control::set_disabled()`
+  → `Field_Schema` → the React field. Where only one VALUE is unavailable, the option list is
+  narrowed instead and the reason appended to the description.
+- **A stored value that is no longer allowed clamps on READ, and is never rewritten**
+  (`Checkout_Field_Settings::effective()`, `Location_Provider_Registry::get_field_mode()`), so the
+  merchant's original choice comes back the moment it becomes valid again.
+
+### The two-instrument rule
+
+`Checkout_Field_Policy` reaches the real checkout through exactly two seams, and which one a
+setting uses decides which checkout it can reach:
+
+| | Instrument A — `woocommerce_get_country_locale` | Instrument B — late `woocommerce_checkout_fields` |
+|---|---|---|
+| Controls | `priority` (order), `hidden`, `required` | presence (`unset`) |
+| Reaches | classic **and** block checkout | classic only |
+| Used by | field-order preset, `region_field=remove`, `postcode_field=remove` | the same two `remove` values, structurally |
+
+Anything that must reach the block checkout has to travel through A — the block checkout never sees
+`woocommerce_checkout_fields` at all (gotcha
+`block-checkout-reads-country-locale-not-checkout-fields`). `address_field=hide_for_pickup`,
+`postcode_field=hide_for_pickup` and `country_field=hide` are therefore **classic-only and
+JS-driven**: PHP only publishes their effective values (and the pickup method ids) into the checkout
+config, and `checkout-field-classic.js` acts on them.
+
+**Third-party field managers:** the late filter runs after everyone else has had their say, so the
+framework can see the FINAL assembled fields, re-assert the settlement field it owns (present +
+required), leave every other field alone, and record a note the tab shows.
+
+### The `address_suggestions` gate
+
+The «Подсказки для адреса» switch is enforced in ONE place — `Location_Service::provider_for_level()`
+forces `null` for the `address` level while the switch is off, before the chain is walked. Every
+derived question (`get_levels_for_country()`, `get_level_owners_for_country()`,
+`is_country_supported()`, the REST `/suggest` route) therefore agrees without re-checking it.
+Whether the control should be OFFERED at all is a different question — the capability, not the
+runtime answer — and is asked through `Location_Service::is_level_servable()`, which deliberately
+bypasses both that gate and the resolution filter.
+
 ## Licensing (`woodev/licensing/`)
 
 License validation has its own API layer (`woodev/licensing/api/`) for talking to the Woodev store.

@@ -1495,8 +1495,29 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 * (including this method's own 1-argument form) keeps its original
 		 * meaning unchanged.
 		 *
+		 * `address_suggestions` STORE GATE (Task 10; issue #362; design
+		 * S3/§4.2/§7): for `$level === LEVEL_ADDRESS`, the chain walk is
+		 * skipped entirely — `$resolved` is forced to `null` — when
+		 * {@see Location_Provider_Registry::get_address_suggestions_raw()}
+		 * answers `false`. Placed BEFORE the chain walk (never after) so
+		 * every OTHER method built on top of this one —
+		 * {@see self::get_levels_for_country()}, {@see self::get_level_owners_for_country()},
+		 * {@see self::is_country_supported()}, the REST `/suggest` route
+		 * ({@see \Woodev\Framework\Shipping\Rest_Api\Location_Controller::perform_suggest()})
+		 * — agrees automatically, without each having to re-check the switch
+		 * itself. The gate reads the RAW stored flag, never the clamped
+		 * {@see Location_Provider_Registry::is_address_suggestions_enabled()}
+		 * — see that raw reader's own docblock for why consulting the
+		 * clamped value here would be circular. The FILTER below still runs
+		 * even while the gate is closed (framework rule: never remove an
+		 * extension seam) — a plugin hooking {@see self::FILTER_PROVIDER_FOR_LEVEL}
+		 * can still swap in a provider of its own for `address`; the store
+		 * switch only decides what THIS chain resolves on its own.
+		 *
 		 * @since 2.0.2
 		 * @since 2.0.2 Added the optional `$country` parameter.
+		 * @since 2.0.2 Added the `address_suggestions` store gate for
+		 *              `LEVEL_ADDRESS` (Task 10; issue #362).
 		 *
 		 * @param string      $level   One of {@see Location_Record::LEVELS}.
 		 * @param string|null $country ISO-3166 alpha-2 country code, or `null`
@@ -1518,7 +1539,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 				);
 			}
 
-			$resolved = $this->resolve_provider_for_level( $level, $country );
+			if ( Location_Record::LEVEL_ADDRESS === $level && ! $this->registry->get_address_suggestions_raw() ) {
+				$resolved = null;
+			} else {
+				$resolved = $this->resolve_provider_for_level( $level, $country );
+			}
 
 			/**
 			 * Filters the D15 chain's resolved provider for one suggest level.
@@ -1528,13 +1553,69 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 			 *
 			 * @param Location_Provider|null $resolved The chain's own answer
 			 *                                          (chosen → bundled
-			 *                                          fallback → null).
+			 *                                          fallback → null; forced
+			 *                                          `null` for `address`
+			 *                                          while the store switch
+			 *                                          is off, without ever
+			 *                                          walking the chain).
 			 * @param string                 $level    The level being resolved.
 			 * @param string|null             $country  The country the chain was
 			 *                                          walked for, or `null` for
 			 *                                          the country-blind walk.
 			 */
 			return apply_filters( self::FILTER_PROVIDER_FOR_LEVEL, $resolved, $level, $country );
+		}
+
+
+		/**
+		 * Whether the D15 chain COULD serve one suggest LEVEL — bypassing
+		 * BOTH the `address_suggestions` store gate {@see self::provider_for_level()}
+		 * applies for `LEVEL_ADDRESS` AND {@see self::FILTER_PROVIDER_FOR_LEVEL}
+		 * (Task 10; issue #362; design S3).
+		 *
+		 * Answers "could the chain serve this level if the store allowed it",
+		 * deliberately NOT "does it right now" — {@see self::provider_for_level()}
+		 * already answers that. This exists specifically for the admin
+		 * settings surface ({@see \Woodev\Framework\Shipping\Location\Location_Provider_Registry::is_address_suggestions_available()}):
+		 * deciding whether the `address_suggestions` control should be
+		 * disabled needs the underlying CAPABILITY, not the runtime answer —
+		 * a store where the switch is currently off must still see the
+		 * control ENABLED (merely unchecked) whenever turning it back on
+		 * would actually do something. Reading through
+		 * {@see self::provider_for_level()} for that purpose would be
+		 * self-defeating (it would always answer `null` for `address` while
+		 * the switch is off, regardless of what the chain could otherwise
+		 * resolve), and reading through the filter would let one plugin's
+		 * request-scoped swap decide whether every OTHER merchant sees the
+		 * control as available at all.
+		 *
+		 * Delegates straight to {@see self::resolve_provider_for_level()} —
+		 * the same private chain walk {@see self::provider_for_level()}
+		 * itself uses, minus that method's own gate and filter.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string      $level   One of {@see Location_Record::LEVELS}.
+		 * @param string|null $country ISO-3166 alpha-2 country code, or `null`
+		 *                              for the country-blind chain walk.
+		 *
+		 * @return bool
+		 *
+		 * @throws \InvalidArgumentException When `$level` is not one of
+		 *                                    {@see Location_Record::LEVELS}.
+		 */
+		public function is_level_servable( string $level, ?string $country = null ): bool {
+			if ( ! in_array( $level, Location_Record::LEVELS, true ) ) {
+				throw new \InvalidArgumentException(
+					sprintf(
+						'Location_Service::is_level_servable(): "level" must be one of %s, got "%s".',
+						implode( ', ', Location_Record::LEVELS ),
+						$level
+					)
+				);
+			}
+
+			return null !== $this->resolve_provider_for_level( $level, $country );
 		}
 
 		/**

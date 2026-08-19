@@ -104,6 +104,66 @@ test( 'a disabled select renders a disabled trigger that does not open its popov
 	expect( screen.queryByRole( 'listbox' ) ).not.toBeInTheDocument();
 } );
 
+/**
+ * The `sensitive` branch in `ControlField` returns before the shared `disabled` computation
+ * used to be reached — a disabled secret field rendered fully interactive (typeable input,
+ * live «Очистить сохранённое» link). Regression coverage for that fix: `disabled` must now
+ * reach `SecretControl`'s `PasswordControl` AND both clear affordances.
+ */
+test( 'a disabled sensitive field renders its password input disabled and its clear link inert', () => {
+	const { container } = render(
+		createElement( ControlField, {
+			schema: {
+				type: 'string',
+				controlType: 'password',
+				sensitive: true,
+				is_set: true,
+				name: 'API-ключ',
+				disabled: true,
+				description: 'Недоступно в этом режиме',
+			},
+			value: '',
+			onChange: () => {},
+			onRevert: () => {},
+			showErrors: false,
+		} )
+	);
+
+	expect( container.querySelector( '.woodev-field__password input' ) ).toBeDisabled();
+	expect( container.querySelector( '.woodev-field__secret-clear-link' ) ).toBeDisabled();
+} );
+
+/**
+ * A disabled field must not offer a one-click destructive action either: in the pending-clear
+ * state (an explicit empty edit already staged against a stored secret) «Отменить» is still
+ * shown — the notice stays honest about what will happen on Save — but rendered inert.
+ */
+test( 'a disabled sensitive field in the pending-clear state renders an inert «Отменить»', () => {
+	render(
+		createElement( ControlField, {
+			schema: {
+				type: 'string',
+				controlType: 'password',
+				sensitive: true,
+				is_set: true,
+				name: 'API-ключ',
+				disabled: true,
+				description: 'Недоступно в этом режиме',
+			},
+			value: '',
+			onChange: () => {},
+			onRevert: () => {},
+			hasEdit: true,
+			showErrors: false,
+		} )
+	);
+
+	expect(
+		screen.getByText( 'Сохранённый секрет будет удалён при сохранении.' )
+	).toBeInTheDocument();
+	expect( screen.getByText( 'Отменить' ) ).toBeDisabled();
+} );
+
 test( 'an enabled select stays a plain (non-disabled) trigger', () => {
 	const { container } = render(
 		createElement( ControlField, {

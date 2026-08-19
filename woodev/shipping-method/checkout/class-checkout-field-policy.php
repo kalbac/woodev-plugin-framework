@@ -28,8 +28,28 @@
  *
  * `address_field=hide_for_pickup`, `postcode_field=hide_for_pickup` and
  * `country_field=hide` are classic-only, JS-driven (Task 9's `checkout-field-classic.js`)
- * — this class never acts on them; {@see \Woodev\Framework\Shipping\Checkout\Checkout_Config}
- * only PUBLISHES their effective values to the browser.
+ * for VISIBILITY — {@see \Woodev\Framework\Shipping\Checkout\Checkout_Config} publishes
+ * their effective values to the browser, and the browser alone decides whether the row
+ * renders. This class does not touch that.
+ *
+ * `required` is a different story (2.0.2, issue #362 pickup-required-relaxation fix,
+ * gotcha `js-hidden-checkout-field-is-still-required-server-side`): a CSS-hidden row
+ * still posts its (empty) value, and `WC_Checkout::validate_posted_data()` validates
+ * PRESENCE, not visibility — it never consults the DOM. Left alone, a customer whose
+ * `hide_for_pickup` row the browser hid gets rejected on a field they cannot see and
+ * cannot fill. So {@see self::checkout_fields_contribution()} ALSO relaxes
+ * `address_field`/`postcode_field`'s `required` flag — never `unset()` (T1/T2: the value
+ * must keep posting so `pickup-mount.js`'s address-replacement can still fill it) — the
+ * exact same instant the browser would have hidden the row: a pickup shipping method
+ * currently chosen. That "currently chosen" state is resolved server-side by
+ * {@see self::pickup_method_chosen()} — `WC()->session`'s `chosen_shipping_methods`,
+ * with THIS submit's posted `shipping_method` merged over it (POST wins). The session
+ * alone is NOT enough: `WC_Checkout::process_checkout()` calls `get_posted_data()` —
+ * which is where our LATE `woocommerce_checkout_fields` filter actually fires, on its
+ * first-and-only application this request — BEFORE `update_session()` writes this
+ * submit's choice into the session, so the session can still be one submit stale (Codex
+ * P0 follow-up; full evidence in {@see self::merge_chosen_shipping_methods()}'s own
+ * docblock).
  *
  * @since 2.0.2
  * @package Woodev\Framework\Shipping\Checkout
@@ -259,7 +279,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Field_Po
 		 * @return array<string, array<string, array<string, mixed>>>
 		 */
 		public function filter_checkout_fields( $fields ): array {
-			$fields = self::checkout_fields_contribution( $this->effective(), (array) $fields );
+			$fields = self::checkout_fields_contribution( $this->effective(), (array) $fields, $this->pickup_method_chosen() );
 
 			/**
 			 * Filters whether {@see self::restore_invariants()} should run on this
@@ -325,6 +345,62 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Field_Po
 			}
 
 			return array_keys( WC()->countries->get_shipping_countries() );
+		}
+
+		/**
+		 * Whether ANY currently-chosen shipping package names a pickup method — the
+		 * server-side reading of the same state `checkout-field-classic.js` reacts to in
+		 * the browser (2.0.2, issue #362 pickup-required-relaxation fix).
+		 *
+		 * Reads `WC()->session`'s `chosen_shipping_methods` AND the posted
+		 * `shipping_method`, merged via {@see self::merge_chosen_shipping_methods()} with
+		 * POST WINNING — never the session alone (Codex P0 follow-up: see that method's
+		 * own docblock for the verified `WC_Checkout::process_checkout()` call order this
+		 * is built on). The session still has to be read, and still has to be the sole
+		 * answer on a plain page render — WooCommerce writes it on every
+		 * `update_order_review` AJAX call, and there is no POST at all outside a checkout
+		 * submit.
+		 *
+		 * `WC()->session` is read via `??` rather than the codebase's usual
+		 * `! WC()->session` guard: on the REAL `WooCommerce` object `session` is a declared
+		 * property (always safe either way), but this method must also tolerate a partial
+		 * test double that does not declare it at all, without emitting a warning
+		 * `failOnWarning` would turn into a test failure.
+		 *
+		 * Guarded for the unit suite / no session, mirroring {@see self::shipping_countries()}
+		 * and {@see Checkout_Config::pickup_method_ids()}: returns `false` whenever WooCommerce,
+		 * its session, or a pickup method list isn't available — the safe direction, since this
+		 * value only ever RELAXES `required` (see {@see self::checkout_fields_contribution()}).
+		 *
+		 * @since 2.0.2
+		 * @since 2.0.2 Merges the posted `shipping_method` over the session instead of
+		 *              trusting the session alone (Codex P0 follow-up, issue #362).
+		 *
+		 * @return bool
+		 */
+		private function pickup_method_chosen(): bool {
+			if ( ! function_exists( 'WC' ) ) {
+				return false;
+			}
+
+			$session = WC()->session ?? null;
+
+			if ( ! $session ) {
+				return false;
+			}
+
+			$session_chosen_shipping_methods = (array) $session->get( 'chosen_shipping_methods' );
+
+			// phpcs:ignore WordPress.Security.NonceVerification.Missing -- WooCommerce verifies the checkout nonce before its checkout hooks fire (WC_Checkout::process_checkout()); the value is cleaned via wc_clean()/wp_unslash() below, mirroring WC_Checkout::get_posted_data()'s own read of this exact key.
+			$posted_shipping_method = isset( $_POST['shipping_method'] ) ? wc_clean( wp_unslash( $_POST['shipping_method'] ) ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotValidated
+
+			$chosen_shipping_methods = self::merge_chosen_shipping_methods( $session_chosen_shipping_methods, $posted_shipping_method );
+
+			if ( empty( $chosen_shipping_methods ) ) {
+				return false;
+			}
+
+			return self::any_pickup_method_chosen( $chosen_shipping_methods, Checkout_Config::pickup_method_ids() );
 		}
 
 		/**
@@ -419,25 +495,50 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Field_Po
 		}
 
 		/**
-		 * Instrument B's pure contribution — a field the merchant set to `remove` is
+		 * Instrument B's pure contribution. A field the merchant set to `remove` is
 		 * `unset()` from BOTH the `billing` and `shipping` sections, so it leaves the DOM
 		 * entirely (T1/T2: removal is never done in JS, hiding is never done by
 		 * unsetting). Classic checkout only, by construction — the block checkout never
 		 * reads `woocommerce_checkout_fields`.
 		 *
+		 * `$pickup_chosen` (2.0.2, issue #362 pickup-required-relaxation fix, gotcha
+		 * `js-hidden-checkout-field-is-still-required-server-side`): when TRUE and a field's
+		 * effective value is `hide_for_pickup`, this method sets `required => false` for that
+		 * field in BOTH sections — never `unset()`. The browser hides the row for the exact
+		 * same condition (a pickup method chosen); `WC_Checkout::validate_posted_data()`
+		 * checks presence, not visibility, so without this the customer is rejected on a row
+		 * they cannot see. Relaxing (not removing) keeps the field posting so
+		 * `pickup-mount.js`'s address-replacement can still fill it when
+		 * `pickup_replace_address` is on, and leaves it harmlessly empty-and-optional when
+		 * that option is off or the chosen point carries no matching value.
+		 *
+		 * Every write is `isset()`-guarded: a third-party field-manager plugin — or this
+		 * SAME method's own `postcode_field=remove` branch, in the very call that is
+		 * relaxing it — may already have removed the field. `hide_for_pickup` and `remove`
+		 * are mutually exclusive VALUES of one setting, but the guard is not optional: it is
+		 * what stops this method from resurrecting a field a plugin legitimately removed.
+		 *
 		 * Pure — touches no WordPress function, so unit tests call it directly.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Added `$pickup_chosen` and `address_field`/`postcode_field`
+		 *              `hide_for_pickup` required-relaxation (issue #362 pickup-required-
+		 *              relaxation fix).
 		 *
-		 * @param array<string, bool|string>                         $settings `effective()` values, keyed by setting id
-		 *                                                                      (only `region_field`/`postcode_field` are read).
-		 * @param array<string, array<string, array<string, mixed>>> $fields   the checkout fields array to contribute onto.
+		 * @param array<string, bool|string>                         $settings       `effective()` values, keyed by setting id
+		 *                                                                            (`region_field`/`address_field`/`postcode_field` are read).
+		 * @param array<string, array<string, array<string, mixed>>> $fields         the checkout fields array to contribute onto.
+		 * @param bool                                               $pickup_chosen whether a pickup shipping method is currently chosen
+		 *                                                                           — see {@see self::pickup_method_chosen()}.
 		 *
 		 * @return array<string, array<string, array<string, mixed>>>
 		 */
-		public static function checkout_fields_contribution( array $settings, array $fields ): array {
+		public static function checkout_fields_contribution( array $settings, array $fields, bool $pickup_chosen ): array {
 			$region_removed   = 'remove' === ( $settings['region_field'] ?? 'show' );
 			$postcode_removed = 'remove' === ( $settings['postcode_field'] ?? 'show' );
+
+			$address_hidden_for_pickup  = $pickup_chosen && 'hide_for_pickup' === ( $settings['address_field'] ?? 'show' );
+			$postcode_hidden_for_pickup = $pickup_chosen && 'hide_for_pickup' === ( $settings['postcode_field'] ?? 'show' );
 
 			foreach ( [ 'billing', 'shipping' ] as $section ) {
 				if ( ! isset( $fields[ $section ] ) || ! is_array( $fields[ $section ] ) ) {
@@ -451,9 +552,131 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Field_Po
 				if ( $postcode_removed ) {
 					unset( $fields[ $section ][ $section . '_postcode' ] );
 				}
+
+				if ( $address_hidden_for_pickup && isset( $fields[ $section ][ $section . '_address_1' ] ) ) {
+					$fields[ $section ][ $section . '_address_1' ]['required'] = false;
+				}
+
+				if ( $postcode_hidden_for_pickup && isset( $fields[ $section ][ $section . '_postcode' ] ) ) {
+					$fields[ $section ][ $section . '_postcode' ]['required'] = false;
+				}
 			}
 
 			return $fields;
+		}
+
+		/**
+		 * Whether ANY entry in a `chosen_shipping_methods`-shaped array names one of the
+		 * given pickup method ids (2.0.2, issue #362 pickup-required-relaxation fix).
+		 *
+		 * `chosen_shipping_methods` carries one entry PER SHIPPING PACKAGE — WooCommerce
+		 * supports split shipments (multiple packages), each with its own chosen method.
+		 * "ANY package is pickup" is deliberately the rule, not "every package" or "only
+		 * the first": relaxing `required` can never make an order MORE likely to be
+		 * rejected than the browser already allowed — the JS hides the row store-wide off
+		 * a single boolean, not per package — so treating one pickup package among several
+		 * as pickup-chosen is the safe direction. Being stricter than the UI here is
+		 * exactly how the bug this method fixes was created in the first place.
+		 *
+		 * Matching reuses {@see \Woodev\Framework\Shipping\Checkout\Checkout_Handler::chosen_method_matches()}
+		 * verbatim — the same `$chosen === $id || 0 === strpos( $chosen, $id . ':' )` rule
+		 * `Checkout_Handler::validate()` already applies to pickup-slot requiredness — so a
+		 * chosen value posted as `method_id:instance_id` matches the bare id exactly like it
+		 * does everywhere else in this codebase.
+		 *
+		 * Pure — touches no WordPress function, so unit tests call it directly with plain
+		 * arrays; no `WC()->session` mocking required.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<int|string, mixed> $chosen_shipping_methods `WC()->session`'s `chosen_shipping_methods`
+		 *                                                            value, one raw method value per package.
+		 * @param string[]                 $pickup_method_ids        Pickup method ids — see
+		 *                                                            {@see \Woodev\Framework\Shipping\Checkout\Checkout_Config::pickup_method_ids()}.
+		 *
+		 * @return bool
+		 */
+		public static function any_pickup_method_chosen( array $chosen_shipping_methods, array $pickup_method_ids ): bool {
+			if ( empty( $pickup_method_ids ) ) {
+				return false;
+			}
+
+			foreach ( $chosen_shipping_methods as $chosen ) {
+				if ( is_string( $chosen ) && Checkout_Handler::chosen_method_matches( $chosen, $pickup_method_ids ) ) {
+					return true;
+				}
+			}
+
+			return false;
+		}
+
+		/**
+		 * Pure merge of WooCommerce's own two representations of "the chosen shipping
+		 * methods" — POSTED wins over SESSION, per package index (Codex P0 follow-up,
+		 * issue #362 pickup-required-relaxation fix).
+		 *
+		 * Why the session alone is not enough — verified in the vendored
+		 * `woocommerce.latest-stable/includes/class-wc-checkout.php` (WC 10.x):
+		 * `WC_Checkout::process_checkout()` calls, IN THIS ORDER —
+		 *
+		 *  1. `$posted_data = $this->get_posted_data();` (process_checkout() line 1381).
+		 *     `get_posted_data()` (line 790) walks `$this->get_checkout_fields()`
+		 *     (line 332), which — on its FIRST call this request — runs
+		 *     `initialize_checkout_fields()` (line 242) and applies
+		 *     `woocommerce_checkout_fields` right there (line 310), THEN caches the
+		 *     result in `$this->fields`. This is where OUR late filter (and therefore
+		 *     {@see self::pickup_method_chosen()}) actually runs.
+		 *  2. `$this->update_session( $posted_data );` (line 1385) — only AFTER step 1 —
+		 *     is what writes this submit's posted `shipping_method[]` into
+		 *     `WC()->session`'s `chosen_shipping_methods`.
+		 *  3. `$this->validate_checkout( $posted_data, $errors );` (line 1396) reuses the
+		 *     fields `$this->fields` ALREADY cached in step 1 — `validate_posted_data()`
+		 *     never re-applies the filter.
+		 *
+		 * So at the moment this policy decides, `WC()->session` can still hold whatever
+		 * the LAST `update_order_review` AJAX call (or a previous request) left there —
+		 * one submit stale relative to what the customer just clicked "Place order" with.
+		 * Both stale directions are real and asymmetric in cost: session-courier +
+		 * posted-pickup would reject a valid order on invisible fields (the ORIGINAL bug,
+		 * back); session-pickup + posted-courier would silently accept an order with
+		 * genuinely empty, VISIBLE address fields (worse — no error at all). The next
+		 * person WILL be tempted to "simplify" this back to a plain session read; this
+		 * docblock is the reason not to.
+		 *
+		 * The merge itself replicates `WC_Checkout::update_session()` (line 1095)
+		 * verbatim: start from the session's array, overwrite ONLY the package indices
+		 * present in the posted value, and skip any entry that isn't a string — WC's own
+		 * `if ( ! is_string( $value ) ) { continue; }`. Not a redesign — the exact same
+		 * shape, so a value posted as `method_id:instance_id` still reaches
+		 * {@see self::any_pickup_method_chosen()} in the form it already knows how to
+		 * match.
+		 *
+		 * Pure — touches no WordPress function, so unit tests call it directly with
+		 * plain arrays; no `WC()->session`/`$_POST` mocking required.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<int|string, mixed> $session_chosen_shipping_methods `WC()->session`'s `chosen_shipping_methods` value.
+		 * @param mixed                    $posted_shipping_method          the raw posted `shipping_method` value — an
+		 *                                                                   array when submitted, or WooCommerce's own `''`
+		 *                                                                   default when the key is absent (a plain render).
+		 *
+		 * @return array<int|string, mixed>
+		 */
+		public static function merge_chosen_shipping_methods( array $session_chosen_shipping_methods, $posted_shipping_method ): array {
+			if ( ! is_array( $posted_shipping_method ) ) {
+				return $session_chosen_shipping_methods;
+			}
+
+			foreach ( $posted_shipping_method as $i => $value ) {
+				if ( ! is_string( $value ) ) {
+					continue;
+				}
+
+				$session_chosen_shipping_methods[ $i ] = $value;
+			}
+
+			return $session_chosen_shipping_methods;
 		}
 
 		/**
