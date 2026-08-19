@@ -1685,25 +1685,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		}
 
 
-		/**
-		 * Disables the `address_suggestions` control when
-		 * {@see self::is_address_suggestions_available()} is false (Task 10;
-		 * issue #362; design S3/§3.2) — reached from {@see self::register_settings()},
-		 * following the {@see self::apply_default_locality_status_note()}
-		 * precedent right above it: a small, private `apply_*` method that
-		 * reaches through the setting's own {@see \Woodev_Control} once the
-		 * handler exists.
-		 *
-		 * `Field_Schema::from_handler()` already promotes a control's
-		 * `disabled_reason` into the field's `description` for the React admin
-		 * surface (design S3/§3.3), so this method does NOT also set the
-		 * setting's own description — doing both would either duplicate the
-		 * same sentence or silently clobber whichever call ran last.
-		 *
-		 * @since 2.0.2
-		 *
-		 * @return void
-		 */
 		private function apply_address_suggestions_availability_gate(): void {
 			if ( $this->is_address_suggestions_available() ) {
 				return;
@@ -1715,7 +1696,27 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 				return; // Defensive: register_settings() above always registers this id.
 			}
 
-			$setting->get_control()->set_disabled(
+			$control = $setting->get_control();
+
+			/*
+			 * A registered setting does NOT imply a registered control in this
+			 * framework — {@see Location_Settings::register_settings()} deliberately
+			 * registers two of its own settings (`default_locality_record`,
+			 * `default_locality_needs_repick`) with no control at all, and
+			 * {@see \Woodev_Setting::$control} is simply uninitialised until
+			 * {@see \Woodev_Setting::set_control()} runs. `address_suggestions` does
+			 * get a control today, so this guard never fires now; it exists because
+			 * the failure mode if that ever changes is a FATAL
+			 * ("call to a member function set_disabled() on null") on every admin
+			 * request, and {@see \Woodev\Framework\Settings\Field_Schema::from_handler()}
+			 * already null-checks the same accessor for the same reason (issue #362
+			 * task 10, Codex critic finding P1).
+			 */
+			if ( null === $control ) {
+				return;
+			}
+
+			$control->set_disabled(
 				true,
 				__( 'Выбранный провайдер не отдаёт адреса, а учётные данные DaData не заполнены.', 'woodev-plugin-framework' )
 			);
