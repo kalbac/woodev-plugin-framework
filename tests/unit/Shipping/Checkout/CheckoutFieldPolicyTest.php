@@ -293,6 +293,83 @@ final class CheckoutFieldPolicyTest extends TestCase {
 	}
 
 	// -------------------------------------------------------------------------
+	// merge_chosen_shipping_methods() — pure; POST must win over the session
+	// (Codex P0 follow-up, issue #362): our late `woocommerce_checkout_fields` filter
+	// fires from WC_Checkout::get_posted_data() — BEFORE WC_Checkout::update_session()
+	// writes this submit's posted `shipping_method[]` into the session — so the session
+	// alone can still be one submit stale. See merge_chosen_shipping_methods()'s own
+	// docblock for the verified WC_Checkout line numbers.
+	// -------------------------------------------------------------------------
+
+	/**
+	 * The direction that reintroduces the ORIGINAL bug if missed: the session still
+	 * names a courier (e.g. from a previous `update_order_review` AJAX call), but THIS
+	 * submit posts a pickup method. The posted value must win, or the customer is
+	 * rejected on invisible fields again.
+	 */
+	public function test_merge_chosen_shipping_methods_posted_pickup_overrides_session_courier(): void {
+		$out = Checkout_Field_Policy::merge_chosen_shipping_methods( [ 'flat_rate:3' ], [ 'pickup:9' ] );
+
+		$this->assertSame( [ 'pickup:9' ], $out );
+	}
+
+	/**
+	 * The worse, silent-acceptance direction: the session names a pickup method, but
+	 * THIS submit posts a courier — a real order with genuinely empty, VISIBLE address
+	 * fields must NOT be waved through because the session was stale in our favour.
+	 */
+	public function test_merge_chosen_shipping_methods_posted_courier_overrides_session_pickup(): void {
+		$out = Checkout_Field_Policy::merge_chosen_shipping_methods( [ 'pickup:9' ], [ 'flat_rate:3' ] );
+
+		$this->assertSame( [ 'flat_rate:3' ], $out );
+	}
+
+	/**
+	 * A plain page render (no checkout submit at all) has no `shipping_method` POST
+	 * key — WC_Checkout::get_posted_data() itself defaults it to `''` in that case
+	 * (not an array). The session alone must still decide.
+	 */
+	public function test_merge_chosen_shipping_methods_no_post_leaves_session_untouched(): void {
+		$this->assertSame( [ 'pickup:9' ], Checkout_Field_Policy::merge_chosen_shipping_methods( [ 'pickup:9' ], '' ) );
+	}
+
+	/**
+	 * A posted `shipping_method` that is not an array (WC_Checkout::get_posted_data()'s
+	 * own `''` default, or a malformed submit) must be ignored wholesale, not partially
+	 * applied or fataled on.
+	 */
+	public function test_merge_chosen_shipping_methods_non_array_post_is_ignored(): void {
+		$this->assertSame( [ 'flat_rate:3' ], Checkout_Field_Policy::merge_chosen_shipping_methods( [ 'flat_rate:3' ], 'not-an-array' ) );
+	}
+
+	/**
+	 * WC_Checkout::update_session() itself only merges STRING values
+	 * (`if ( ! is_string( $value ) ) { continue; }`) — replicated verbatim. A malformed
+	 * non-string entry at one index must not clobber that index's session value, and
+	 * must not fatal.
+	 */
+	public function test_merge_chosen_shipping_methods_skips_a_non_string_entry(): void {
+		$out = Checkout_Field_Policy::merge_chosen_shipping_methods( [ 'flat_rate:3' ], [ [ 'not', 'a', 'string' ] ] );
+
+		$this->assertSame( [ 'flat_rate:3' ], $out );
+	}
+
+	/**
+	 * `chosen_shipping_methods` is keyed PER PACKAGE INDEX (multi-package carts). The
+	 * merge must override only the index actually present in the POST, leaving every
+	 * other package's session value alone — exactly WC_Checkout::update_session()'s own
+	 * per-index `foreach`.
+	 */
+	public function test_merge_chosen_shipping_methods_overrides_only_the_posted_index(): void {
+		$out = Checkout_Field_Policy::merge_chosen_shipping_methods(
+			[ 'flat_rate:1', 'flat_rate:2' ],
+			[ 1 => 'pickup:9' ]
+		);
+
+		$this->assertSame( [ 'flat_rate:1', 'pickup:9' ], $out );
+	}
+
+	// -------------------------------------------------------------------------
 	// restore_invariants() — settlement-field invariant restoration (S8), instance
 	// -------------------------------------------------------------------------
 

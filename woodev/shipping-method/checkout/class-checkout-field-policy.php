@@ -42,8 +42,14 @@
  * must keep posting so `pickup-mount.js`'s address-replacement can still fill it) — the
  * exact same instant the browser would have hidden the row: a pickup shipping method
  * currently chosen. That "currently chosen" state is resolved server-side by
- * {@see self::pickup_method_chosen()}, from `WC()->session`, the same authority
- * `WC_Checkout` itself reads by the time this LATE filter runs.
+ * {@see self::pickup_method_chosen()} — `WC()->session`'s `chosen_shipping_methods`,
+ * with THIS submit's posted `shipping_method` merged over it (POST wins). The session
+ * alone is NOT enough: `WC_Checkout::process_checkout()` calls `get_posted_data()` —
+ * which is where our LATE `woocommerce_checkout_fields` filter actually fires, on its
+ * first-and-only application this request — BEFORE `update_session()` writes this
+ * submit's choice into the session, so the session can still be one submit stale (Codex
+ * P0 follow-up; full evidence in {@see self::merge_chosen_shipping_methods()}'s own
+ * docblock).
  *
  * @since 2.0.2
  * @package Woodev\Framework\Shipping\Checkout
@@ -346,19 +352,20 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Field_Po
 		 * server-side reading of the same state `checkout-field-classic.js` reacts to in
 		 * the browser (2.0.2, issue #362 pickup-required-relaxation fix).
 		 *
-		 * Reads `WC()->session`'s `chosen_shipping_methods`, not `$_POST['shipping_method']`:
-		 * verified against WC 10.x's own `WC_Checkout::process_checkout()` — `update_session()`
-		 * writes the posted `shipping_method[]` into this exact session key BEFORE
-		 * `validate_checkout()` → `validate_posted_data()` runs, so by the time this LATE
-		 * `woocommerce_checkout_fields` filter fires the session already carries the customer's
-		 * current choice. One session read stays the single source of truth instead of a second,
-		 * possibly-divergent `$_POST` parse.
+		 * Reads `WC()->session`'s `chosen_shipping_methods` AND the posted
+		 * `shipping_method`, merged via {@see self::merge_chosen_shipping_methods()} with
+		 * POST WINNING — never the session alone (Codex P0 follow-up: see that method's
+		 * own docblock for the verified `WC_Checkout::process_checkout()` call order this
+		 * is built on). The session still has to be read, and still has to be the sole
+		 * answer on a plain page render — WooCommerce writes it on every
+		 * `update_order_review` AJAX call, and there is no POST at all outside a checkout
+		 * submit.
 		 *
 		 * `WC()->session` is read via `??` rather than the codebase's usual
 		 * `! WC()->session` guard: on the REAL `WooCommerce` object `session` is a declared
-		 * property (always safe either way), but this method must also tolerate a partial test
-		 * double that does not declare it at all, without emitting a warning `failOnWarning`
-		 * would turn into a test failure.
+		 * property (always safe either way), but this method must also tolerate a partial
+		 * test double that does not declare it at all, without emitting a warning
+		 * `failOnWarning` would turn into a test failure.
 		 *
 		 * Guarded for the unit suite / no session, mirroring {@see self::shipping_countries()}
 		 * and {@see Checkout_Config::pickup_method_ids()}: returns `false` whenever WooCommerce,
@@ -366,6 +373,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Field_Po
 		 * value only ever RELAXES `required` (see {@see self::checkout_fields_contribution()}).
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Merges the posted `shipping_method` over the session instead of
+		 *              trusting the session alone (Codex P0 follow-up, issue #362).
 		 *
 		 * @return bool
 		 */
@@ -380,7 +389,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Field_Po
 				return false;
 			}
 
-			$chosen_shipping_methods = (array) $session->get( 'chosen_shipping_methods' );
+			$session_chosen_shipping_methods = (array) $session->get( 'chosen_shipping_methods' );
+
+			// phpcs:ignore WordPress.Security.NonceVerification.Missing -- WooCommerce verifies the checkout nonce before its checkout hooks fire (WC_Checkout::process_checkout()); the value is cleaned via wc_clean()/wp_unslash() below, mirroring WC_Checkout::get_posted_data()'s own read of this exact key.
+			$posted_shipping_method = isset( $_POST['shipping_method'] ) ? wc_clean( wp_unslash( $_POST['shipping_method'] ) ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotValidated
+
+			$chosen_shipping_methods = self::merge_chosen_shipping_methods( $session_chosen_shipping_methods, $posted_shipping_method );
 
 			if ( empty( $chosen_shipping_methods ) ) {
 				return false;
@@ -594,6 +608,75 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Field_Po
 			}
 
 			return false;
+		}
+
+		/**
+		 * Pure merge of WooCommerce's own two representations of "the chosen shipping
+		 * methods" — POSTED wins over SESSION, per package index (Codex P0 follow-up,
+		 * issue #362 pickup-required-relaxation fix).
+		 *
+		 * Why the session alone is not enough — verified in the vendored
+		 * `woocommerce.latest-stable/includes/class-wc-checkout.php` (WC 10.x):
+		 * `WC_Checkout::process_checkout()` calls, IN THIS ORDER —
+		 *
+		 *  1. `$posted_data = $this->get_posted_data();` (process_checkout() line 1381).
+		 *     `get_posted_data()` (line 790) walks `$this->get_checkout_fields()`
+		 *     (line 332), which — on its FIRST call this request — runs
+		 *     `initialize_checkout_fields()` (line 242) and applies
+		 *     `woocommerce_checkout_fields` right there (line 310), THEN caches the
+		 *     result in `$this->fields`. This is where OUR late filter (and therefore
+		 *     {@see self::pickup_method_chosen()}) actually runs.
+		 *  2. `$this->update_session( $posted_data );` (line 1385) — only AFTER step 1 —
+		 *     is what writes this submit's posted `shipping_method[]` into
+		 *     `WC()->session`'s `chosen_shipping_methods`.
+		 *  3. `$this->validate_checkout( $posted_data, $errors );` (line 1396) reuses the
+		 *     fields `$this->fields` ALREADY cached in step 1 — `validate_posted_data()`
+		 *     never re-applies the filter.
+		 *
+		 * So at the moment this policy decides, `WC()->session` can still hold whatever
+		 * the LAST `update_order_review` AJAX call (or a previous request) left there —
+		 * one submit stale relative to what the customer just clicked "Place order" with.
+		 * Both stale directions are real and asymmetric in cost: session-courier +
+		 * posted-pickup would reject a valid order on invisible fields (the ORIGINAL bug,
+		 * back); session-pickup + posted-courier would silently accept an order with
+		 * genuinely empty, VISIBLE address fields (worse — no error at all). The next
+		 * person WILL be tempted to "simplify" this back to a plain session read; this
+		 * docblock is the reason not to.
+		 *
+		 * The merge itself replicates `WC_Checkout::update_session()` (line 1095)
+		 * verbatim: start from the session's array, overwrite ONLY the package indices
+		 * present in the posted value, and skip any entry that isn't a string — WC's own
+		 * `if ( ! is_string( $value ) ) { continue; }`. Not a redesign — the exact same
+		 * shape, so a value posted as `method_id:instance_id` still reaches
+		 * {@see self::any_pickup_method_chosen()} in the form it already knows how to
+		 * match.
+		 *
+		 * Pure — touches no WordPress function, so unit tests call it directly with
+		 * plain arrays; no `WC()->session`/`$_POST` mocking required.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<int|string, mixed> $session_chosen_shipping_methods `WC()->session`'s `chosen_shipping_methods` value.
+		 * @param mixed                    $posted_shipping_method          the raw posted `shipping_method` value — an
+		 *                                                                   array when submitted, or WooCommerce's own `''`
+		 *                                                                   default when the key is absent (a plain render).
+		 *
+		 * @return array<int|string, mixed>
+		 */
+		public static function merge_chosen_shipping_methods( array $session_chosen_shipping_methods, $posted_shipping_method ): array {
+			if ( ! is_array( $posted_shipping_method ) ) {
+				return $session_chosen_shipping_methods;
+			}
+
+			foreach ( $posted_shipping_method as $i => $value ) {
+				if ( ! is_string( $value ) ) {
+					continue;
+				}
+
+				$session_chosen_shipping_methods[ $i ] = $value;
+			}
+
+			return $session_chosen_shipping_methods;
 		}
 
 		/**
