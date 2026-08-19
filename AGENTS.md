@@ -204,6 +204,10 @@ mkdocs serve                # preview public docs locally
 npx markdownlint-cli2 "docs/**/*.md"  # lint public docs
 ```
 
+- **Enable the commit-msg gate once per clone: `git config core.hooksPath .githooks`.** It refuses a
+  GitHub closing keyword (`closes`/`fixes`/`resolves #N`) anywhere except alone on its own line —
+  GitHub executes those literally even inside a quote, and s81 closed three cards that way while
+  merely describing plans. A deliberate `Closes #123` on its own line still works.
 - Never run `npx jest` directly — it loses the wp-scripts jsdom environment and scans agent worktrees inside the repo (gotchas `npx-jest-bypasses-wp-scripts-jsdom`, `jest-scans-agent-worktrees-inside-the-repo`)
 - Integration tests require `WP_TESTS_DIR` env var or `npx wp-env start`
 - **Merge gate:** every CI job green individually (incl. `test-js` and `assets`), each with state CLEAN — not just "`composer check` passes". `main` has no required-check gate, so verify each job yourself before merging.

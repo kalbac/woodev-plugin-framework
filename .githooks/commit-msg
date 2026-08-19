@@ -1,0 +1,39 @@
+#!/usr/bin/env sh
+#
+# Blocks GitHub's issue-closing keywords in a commit message unless the closure is
+# deliberate. Written after the same mistake three times in one session (s81): a commit
+# body DESCRIBED a plan — "a picker … which also closes #370", "It also resolves #369
+# structurally" — and GitHub executed the keyword, closing cards that were not done.
+# Reopening is easy; noticing is not, which is why this is a gate and not a note.
+#
+# To close an issue on purpose, put the keyword on its OWN line at the end of the message:
+#   Closes #123
+# Anything else — a keyword mid-sentence, in a quote, or in a parenthetical — is refused.
+#
+# Enable once per clone:  git config core.hooksPath .githooks
+set -e
+
+msg_file="$1"
+[ -f "$msg_file" ] || exit 0
+
+# Strip comment lines git adds to the template.
+body=$(grep -v '^#' "$msg_file" || true)
+
+# A deliberate closure: the keyword starts a line and the line holds nothing else.
+deliberate=$(printf '%s\n' "$body" | grep -Eic '^[[:space:]]*(close[sd]?|fix(e[sd])?|resolve[sd]?)[[:space:]]+#[0-9]+[[:space:]]*$' || true)
+
+# Any occurrence at all.
+total=$(printf '%s\n' "$body" | grep -Eoi '(close[sd]?|fix(e[sd])?|resolve[sd]?)[[:space:]]+#[0-9]+' | wc -l | tr -d ' ')
+
+if [ "$total" -gt "$deliberate" ]; then
+	printf '\n✗ commit-msg: a GitHub closing keyword appears mid-sentence.\n\n' >&2
+	printf '  GitHub executes these literally, even inside a quote or a parenthetical.\n' >&2
+	printf '  Offending line(s):\n\n' >&2
+	printf '%s\n' "$body" | grep -Eni '(close[sd]?|fix(e[sd])?|resolve[sd]?)[[:space:]]+#[0-9]+' \
+		| grep -Eiv '^[0-9]+:[[:space:]]*(close[sd]?|fix(e[sd])?|resolve[sd]?)[[:space:]]+#[0-9]+[[:space:]]*$' >&2
+	printf '\n  To close on purpose: put "Closes #N" alone on its own line.\n' >&2
+	printf '  To only MENTION a card: write "закрывается реализацией #N" — the number without a verb.\n\n' >&2
+	exit 1
+fi
+
+exit 0
