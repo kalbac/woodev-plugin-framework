@@ -12,9 +12,11 @@
  *    two independent axes by issue #380 — typeahead always offered on both;
  *    related-list/ajax-select2 offered on a provider-capability gate BOTH axes
  *    share, with the settlement axis additionally requiring the region axis to
- *    itself be `related-list` before offering it too (issue #404 — a bulk list
- *    of every settlement in a country does not exist, only a per-region one),
- *    computed by
+ *    itself be `related-list` before offering it too (issue #404 — an unscoped
+ *    country-wide settlement list DOES work, issue #407, but is not a
+ *    guaranteed-COMPLETE one: `/location/list` caps every response, and
+ *    `related-list`'s "load once, search locally" promise only reliably holds
+ *    scoped to a region), computed by
  *    {@see \Woodev\Framework\Shipping\Location\Location_Provider_Registry}; this
  *    handler only ever renders whatever option set it was handed, exactly like
  *    `active_provider`'s own options) — and `address_suggestions` (Task 10;
@@ -249,7 +251,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 			// `$this->field_mode_settlement_options` are two SEPARATE maps, the
 			// caller has already narrowed the settlement one to drop
 			// `related-list` when the region axis is not itself `related-list`
-			// (a bulk list of every settlement in a country does not exist).
+			// (an unscoped country-wide list DOES work, issue #407, but is not
+			// guaranteed COMPLETE — `related-list`'s "load once, search
+			// locally" promise only reliably holds scoped to a region).
 			//
 			// `field_mode_region` alone carries a `show_if` on `region_field`
 			// (owned by the sibling `Checkout_Field_Settings` handler — resolved
@@ -306,12 +310,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 				\Woodev_Control::TYPE_SELECT,
 				[
 					// Issue #404: «Предустановленный список» is offered here only when
-					// the region axis is ALSO «Предустановленный список» — a bulk list
-					// of every settlement in a country does not exist, only a
-					// per-region one. Issue #407: no BLOCKING mechanism exists or is
-					// planned — the field stays usable throughout, it just narrows to
-					// the chosen region once one is picked.
-					'tooltip' => __( 'Как покупатель выбирает населённый пункт — те же три варианта, что и у поля «Регион» (см. подсказку там). «Предустановленный список» доступен здесь, только если для «Региона» тоже выбран «Предустановленный список» — единого списка населённых пунктов по всей стране не существует, только по региону. Пока регион не выбран, список показывает пункты по всей стране; после выбора региона сужается до него — поле при этом остаётся доступным, блокировки нет.', 'woodev-plugin-framework' ),
+					// the region axis is ALSO «Предустановленный список» — an unscoped
+					// country-wide list DOES work (issue #407), but `/location/list`
+					// caps every response, so it is not guaranteed COMPLETE the way a
+					// region-scoped one is. Issue #407: no BLOCKING mechanism exists
+					// or is planned — the field stays usable throughout, it just
+					// narrows to the chosen region once one is picked.
+					'tooltip' => __( 'Как покупатель выбирает населённый пункт — те же три варианта, что и у поля «Регион» (см. подсказку там). «Предустановленный список» доступен здесь, только если для «Региона» тоже выбран «Предустановленный список»: этот режим обещает список, загруженный целиком, — а по всей стране такой список слишком велик, чтобы гарантированно загрузиться полностью, тогда как по одному региону это, как правило, так. Пока регион не выбран, список показывает пункты по всей стране, но не обязательно все; после выбора региона сужается до него и становится полным — поле при этом остаётся доступным, блокировки нет.', 'woodev-plugin-framework' ),
 				]
 			);
 

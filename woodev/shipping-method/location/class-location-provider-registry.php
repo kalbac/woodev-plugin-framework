@@ -944,11 +944,21 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		/**
 		 * Shared `related-list` gate for both axes (provider capability),
 		 * with an ADDITIONAL cross-axis condition the settlement axis alone
-		 * opts into (issue #404): a bulk list of every settlement in a
-		 * country does not exist — `related-list` only makes sense there
-		 * when it is scoped to a region that is ITSELF a preset list, so
-		 * the caller for the settlement axis passes `$requires_region_list =
-		 * true` and the region axis's own current effective mode.
+		 * opts into (issue #404): an unscoped, country-wide settlement
+		 * request DOES work — {@see \Woodev\Framework\Shipping\Rest_Api\Location_Controller}'s
+		 * `/location/list` serves one with no `within` param (issue #407) —
+		 * but it is not a guaranteed-COMPLETE one, since that route caps
+		 * every response at `Location_Controller::LIST_HARD_CAP` records
+		 * and flags `truncated: true` past that, a flag this axis's own
+		 * client currently drops. `related-list` ("Предустановленный
+		 * список") promises a list loaded ONCE and searched locally
+		 * end-to-end; a possibly-truncated country-wide list can silently
+		 * break that promise, while a region-scoped one is far more likely
+		 * to genuinely be the whole set. So `related-list` only reliably
+		 * keeps its promise for the settlement axis when it is scoped to a
+		 * region that is ITSELF a preset list, so the caller for the
+		 * settlement axis passes `$requires_region_list = true` and the
+		 * region axis's own current effective mode.
 		 *
 		 * @since 2.0.2
 		 * @since 2.0.2 Added `$requires_region_list`/`$region_mode` (issue #404).
@@ -1088,10 +1098,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		 *
 		 * ALSO clamps `related-list` away once the REGION axis is itself not
 		 * `related-list` (issue #404 — the operator's own correction to the
-		 * #380 brainstorm): a bulk list of every settlement in a country does
-		 * not exist, only a per-region one, so this value only ever made
-		 * sense scoped to a region that is ITSELF a preset list. A stored
-		 * value is NOT rewritten when the condition stops holding — it comes
+		 * #380 brainstorm): an unscoped, country-wide settlement list DOES
+		 * work (issue #407 — {@see \Woodev\Framework\Shipping\Rest_Api\Location_Controller}'s
+		 * `/location/list` serves one with no `within`), but not a
+		 * guaranteed-COMPLETE one — that route caps every response at
+		 * `Location_Controller::LIST_HARD_CAP` records, silently truncated
+		 * from this axis's own client. `related-list`'s "load once, search
+		 * locally" promise only reliably holds scoped to a region, so this
+		 * value only ever made sense scoped to a region that is ITSELF a
+		 * preset list. A stored value is NOT rewritten when the condition
+		 * stops holding — it comes
 		 * back the moment the region axis returns to `related-list` (design
 		 * §7's "clamp on read" pattern, the same discipline
 		 * {@see self::get_field_mode_region()} already applies for
