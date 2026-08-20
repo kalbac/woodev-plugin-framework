@@ -19,6 +19,7 @@ import apiFetch from '@wordpress/api-fetch';
 import LocationPickerField, {
 	parseStoredRecord,
 	namespaceRoot,
+	getProviderMismatchError,
 } from '../../src/components/location-picker-field';
 import ControlField from '../../src/components/control-field';
 
@@ -74,6 +75,37 @@ describe( 'parseStoredRecord', () => {
 				JSON.stringify( { key: 'dadata:city-1', label: 'Москва', provider_id: 'dadata' } )
 			)
 		).toEqual( { state: 'ok', label: 'Москва', key: 'dadata:city-1', providerId: 'dadata' } );
+	} );
+} );
+
+describe( 'getProviderMismatchError (issue #406)', () => {
+	const record = ( providerId ) =>
+		JSON.stringify( { key: `${ providerId }:city-1`, label: 'Москва', provider_id: providerId } );
+
+	test( 'blocks a record whose provider differs from the effective active provider', () => {
+		expect( getProviderMismatchError( record( 'prov-b' ), 'prov-a' ) ).toEqual( expect.any( String ) );
+	} );
+
+	test( 'does not block once the provider matches again', () => {
+		expect( getProviderMismatchError( record( 'prov-a' ), 'prov-a' ) ).toBeNull();
+	} );
+
+	test( 'does not block an empty/unset record', () => {
+		expect( getProviderMismatchError( '', 'prov-a' ) ).toBeNull();
+	} );
+
+	test( 'does not block a broken/unparseable record — nothing well-formed to compare', () => {
+		expect( getProviderMismatchError( 'not-json{{{', 'prov-a' ) ).toBeNull();
+	} );
+
+	test( 'does not block when no provider is given to compare against (no sibling field wired it through)', () => {
+		expect( getProviderMismatchError( record( 'prov-b' ), '' ) ).toBeNull();
+	} );
+
+	test( 'does not block a record with no known provider_id (pre-#380 stored shape)', () => {
+		expect(
+			getProviderMismatchError( JSON.stringify( { key: 'dadata:city-1', label: 'Москва' } ), 'prov-a' )
+		).toBeNull();
 	} );
 } );
 
@@ -432,5 +464,81 @@ describe( 'ControlField dispatch (#376)', () => {
 		await waitFor( () => expect( apiFetch ).toHaveBeenCalledTimes( 1 ) );
 		const params = new URL( apiFetch.mock.calls[ 0 ][ 0 ].url ).searchParams;
 		expect( params.has( 'provider' ) ).toBe( false );
+	} );
+
+	test( 'issue #406: blocks with a validation error once revealed (showErrors), when the stored record is from a different provider than conditionValues.active_provider', () => {
+		render(
+			createElement( ControlField, {
+				schema: {
+					type: 'string',
+					controlType: 'location-picker',
+					name: 'Зафиксированная локация',
+					country: 'RU',
+				},
+				value: JSON.stringify( { key: 'prov-b:city-1', label: 'Москва', provider_id: 'prov-b' } ),
+				onChange: () => {},
+				showErrors: true,
+				conditionValues: { active_provider: 'prov-a' },
+			} )
+		);
+
+		expect(
+			screen.getByText(
+				'Зафиксированная локация выбрана для другого провайдера — выберите её заново или верните прежнего провайдера.'
+			)
+		).toBeInTheDocument();
+	} );
+
+	test( 'issue #406: no blocking error before reveal (blur-first) — the picker\'s own always-visible mismatch banner is the only warning shown', () => {
+		render(
+			createElement( ControlField, {
+				schema: {
+					type: 'string',
+					controlType: 'location-picker',
+					name: 'Зафиксированная локация',
+					country: 'RU',
+				},
+				value: JSON.stringify( { key: 'prov-b:city-1', label: 'Москва', provider_id: 'prov-b' } ),
+				onChange: () => {},
+				showErrors: false,
+				conditionValues: { active_provider: 'prov-a' },
+			} )
+		);
+
+		expect(
+			screen.queryByText(
+				'Зафиксированная локация выбрана для другого провайдера — выберите её заново или верните прежнего провайдера.'
+			)
+		).not.toBeInTheDocument();
+
+		// The picker's own separate, always-visible live warning still renders.
+		expect(
+			screen.getByText(
+				'Зафиксированная локация была выбрана через другого провайдера и может не подойти текущему — рекомендуется выбрать её заново.'
+			)
+		).toBeInTheDocument();
+	} );
+
+	test( 'issue #406: no blocking error once the provider matches again', () => {
+		render(
+			createElement( ControlField, {
+				schema: {
+					type: 'string',
+					controlType: 'location-picker',
+					name: 'Зафиксированная локация',
+					country: 'RU',
+				},
+				value: JSON.stringify( { key: 'prov-a:city-1', label: 'Москва', provider_id: 'prov-a' } ),
+				onChange: () => {},
+				showErrors: true,
+				conditionValues: { active_provider: 'prov-a' },
+			} )
+		);
+
+		expect(
+			screen.queryByText(
+				'Зафиксированная локация выбрана для другого провайдера — выберите её заново или верните прежнего провайдера.'
+			)
+		).not.toBeInTheDocument();
 	} );
 } );

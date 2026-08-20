@@ -414,18 +414,24 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 			);
 
 			/*
-			 * Informational flag — see Location_Provider_Registry::get_default_locality_needs_repick().
-			 * Registered WITHOUT a control (review finding F4): this flag is
-			 * CODE-OWNED bookkeeping, never a merchant decision — an editable
-			 * toggle let a merchant silently switch it off and mask a genuinely
-			 * stranded default. Issue #376/#370 (variant 2) additionally drops
-			 * it from {@see self::get_owned_setting_ids()} entirely — it stays
-			 * registered and writable (the picker's own write path uses it
-			 * indirectly through the registry), it simply never renders, at any
-			 * policy. The settings page instead surfaces the live equivalent of
-			 * this flag through the `default_locality_policy` field's own
-			 * description — see
-			 * Location_Provider_Registry::apply_default_locality_status_note().
+			 * Informational flag slot — CODE-OWNED bookkeeping, never a
+			 * merchant decision, hence registered WITHOUT a control (review
+			 * finding F4): an editable toggle would let a merchant silently
+			 * switch it off and mask a genuinely stranded default. Issue
+			 * #376/#370 (variant 2) additionally drops it from
+			 * {@see self::get_owned_setting_ids()} entirely — it stays
+			 * registered and writable through the generic
+			 * {@see \Woodev_Abstract_Settings} accessors, it simply never
+			 * renders, at any policy. The settings page instead surfaces the
+			 * live equivalent of this flag through the
+			 * `default_locality_policy` field's own description — see
+			 * {@see Location_Provider_Registry::apply_default_locality_status_note()}.
+			 * Issue #406 removed the typed `Location_Provider_Registry`
+			 * getter/setter pair this slot used to have (dead: their one
+			 * historical write site was deliberately excised by review
+			 * finding F2, and the live status note above already covers the
+			 * same condition unconditionally) — the WP option itself is left
+			 * in place rather than migrated away.
 			 *
 			 * No control means no tooltip either (issue #373's own rule: a
 			 * tooltip can only live on a control) — nothing to fill in here.
@@ -442,6 +448,89 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 			foreach ( $this->provider_fields as $field_id => $field ) {
 				$this->register_provider_field( (string) $field_id, (array) $field );
 			}
+		}
+
+		/**
+		 * Adds one cross-field check on top of {@see \Woodev_Abstract_Settings::validate_values()}'s
+		 * own per-field pass (issue #406): the FIXED default-locality record's
+		 * own baked-in `provider_id` (set at pick time by the admin picker,
+		 * never merchant-typed) must match the ACTIVE provider this SAME
+		 * submission resolves to — otherwise saving would silently keep a
+		 * record {@see Location_Service::resolve_default()} can never
+		 * resolve through the new provider, and the `fixed` policy would
+		 * stop working with no signal at all. The operator explicitly
+		 * REJECTED both "clear the field on select change" and "clear
+		 * server-side + set needs_repick on save" as data loss on a
+		 * reversible action; blocking the save instead achieves the same
+		 * result — a broken record can never be persisted — without
+		 * destroying anything.
+		 *
+		 * `$values` is this handler's OWN chunk of the tab-wide submission —
+		 * both `active_provider` and `default_locality_record` are
+		 * registered on THIS handler ({@see self::register_settings()}), so
+		 * a provider switch staged in the SAME save is visible in the SAME
+		 * map this check reads, never a stale one:
+		 *
+		 * - switch the provider back to the one the record was picked under
+		 *   -> the two ids match again -> no error -> save unblocked;
+		 * - switch `default_locality_policy` to `off` in the same save ->
+		 *   `default_locality_record` is hidden by its own `show_if` ->
+		 *   {@see \Woodev_Abstract_Settings::filter_visible_values()} (run by
+		 *   every caller BEFORE `validate_values()`) already strips it from
+		 *   `$values` -> the key is simply absent here -> nothing to block.
+		 *
+		 * Both cases need no special-casing in this method — the rule lifts
+		 * itself as a consequence of reading the SAME live map the ordinary
+		 * per-field pass already does, not a snapshot taken at page load.
+		 *
+		 * A malformed/undecodable record degrades to "nothing to check"
+		 * rather than a NEW validation error — the same never-throws-on-a-
+		 * corrupt-blob discipline {@see Location_Provider_Registry::get_default_locality_record()}
+		 * already applies; an empty record likewise has nothing to compare.
+		 *
+		 * @since 2.0.3
+		 *
+		 * @param array<string,mixed> $values submitted setting_id => value (this handler's own chunk).
+		 *
+		 * @return array<string,string> setting_id => error message.
+		 */
+		public function validate_values( array $values ): array {
+
+			$errors    = parent::validate_values( $values );
+			$record_id = Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_RECORD;
+
+			if ( ! array_key_exists( $record_id, $values ) || isset( $errors[ $record_id ] ) ) {
+				return $errors;
+			}
+
+			$raw = $values[ $record_id ];
+
+			if ( ! is_string( $raw ) || '' === $raw ) {
+				return $errors;
+			}
+
+			$decoded = json_decode( $raw, true );
+
+			if ( ! is_array( $decoded ) ) {
+				return $errors;
+			}
+
+			try {
+				$record = Location_Record::from_array( $decoded );
+			} catch ( \InvalidArgumentException $exception ) {
+				return $errors;
+			}
+
+			$provider_setting_id = Location_Provider_Registry::SETTING_ACTIVE_PROVIDER;
+			$active_provider_id  = array_key_exists( $provider_setting_id, $values )
+				? (string) $values[ $provider_setting_id ]
+				: (string) $this->get_value( $provider_setting_id );
+
+			if ( $record->provider_id() !== $active_provider_id ) {
+				$errors[ $record_id ] = __( 'Зафиксированная локация выбрана для другого провайдера — выберите её заново или верните прежнего провайдера.', 'woodev-plugin-framework' );
+			}
+
+			return $errors;
 		}
 
 		private function register_provider_field( string $field_id, array $field ): void {

@@ -441,13 +441,15 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			);
 
 			// Review finding F2(a): a customer-facing getter must never mutate
-			// store settings — the merchant's stored record and the informational
-			// flag are BOTH left exactly as they were, regardless of how many
-			// anonymous requests just resolved a value for themselves.
+			// store settings — the merchant's stored record is left exactly as
+			// it was, regardless of how many anonymous requests just resolved
+			// a value for themselves. (The informational needs-repick flag
+			// this assertion used to also pin was removed entirely by issue
+			// #406 — see class-location-provider-registry.php's own removal
+			// note — so there is nothing left to assert here.)
 			$still_stale = $registry->get_default_locality_record();
 			$this->assertNotNull( $still_stale );
 			$this->assertSame( 'prov-a:old-city', $still_stale->key(), 'a customer-facing getter must never REPLACE the merchant\'s stored default' );
-			$this->assertFalse( $registry->get_default_locality_needs_repick(), 'a customer-facing getter must never WRITE the needs-repick flag either' );
 		}
 
 		/**

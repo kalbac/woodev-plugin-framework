@@ -148,6 +148,30 @@ export function parseStoredRecord( raw ) {
 }
 
 /**
+ * Client-side PREVIEW of the server's authoritative save-blocking check
+ * ({@see Location_Settings::validate_values()}, issue #406) — same message,
+ * same comparison (`parseStoredRecord().providerId` vs the effective
+ * `active_provider` value for this save), reused by `ControlField` (live,
+ * blur-gated inline error) and `app.js` (blocks the Save click, mirroring
+ * how every other field's client-caught error already blocks it). The
+ * server remains the actual gate; this only saves the merchant a round trip
+ * for a mismatch the client can already see.
+ *
+ * @param {*}      raw        the record field's raw stored/edited value.
+ * @param {string} providerId the effective `active_provider` value for this same save.
+ * @return {string|null} error message, or null when there is nothing to block.
+ */
+export function getProviderMismatchError( raw, providerId ) {
+	const stored = parseStoredRecord( raw );
+
+	if ( 'ok' !== stored.state || ! stored.providerId || ! providerId || stored.providerId === providerId ) {
+		return null;
+	}
+
+	return __( 'Зафиксированная локация выбрана для другого провайдера — выберите её заново или верните прежнего провайдера.', 'woodev-plugin-framework' );
+}
+
+/**
  * @param {Object}   props            component props.
  * @param {string}   [props.value]    current stored value — `''` or a `Location_Record` JSON string.
  * @param {string}   [props.country]  ISO-3166 alpha-2 country to scope suggest requests to (`schema.country`).

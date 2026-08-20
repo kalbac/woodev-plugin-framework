@@ -23,7 +23,7 @@ import {
 import FieldRow from './field-row';
 import FieldTip from './field-tip';
 import SelectField from './select-field';
-import LocationPickerField from './location-picker-field';
+import LocationPickerField, { getProviderMismatchError } from './location-picker-field';
 import WizardRichText from './richtext';
 
 /**
@@ -31,11 +31,13 @@ import WizardRichText from './richtext';
  * `Location_Provider_Registry::SETTING_ACTIVE_PROVIDER` (PHP) exactly. The
  * `location-picker` control reads this key out of `conditionValues` (issue
  * #380) to send the CURRENTLY SELECTED provider with its suggest requests,
- * rather than whatever the store has persisted.
+ * rather than whatever the store has persisted. Exported so `app.js` can
+ * apply the SAME cross-field mismatch check (issue #406) at Save time,
+ * without a second, potentially-drifting copy of this id.
  *
  * @type {string}
  */
-const ACTIVE_PROVIDER_SETTING_ID = 'active_provider';
+export const ACTIVE_PROVIDER_SETTING_ID = 'active_provider';
 
 /**
  * Password input with a show/hide eye toggle.
@@ -313,12 +315,25 @@ export default function ControlField( { schema, value, onChange, showErrors, has
 		);
 	}
 
+	const control = resolveControl( schema );
+
 	// Blur-first: show error only after touch or when parent forces reveal on Save.
 	// serverError (set by parent after REST rejection) always takes precedence.
-	const error = schema.serverError || ( ( touched || showErrors ) ? validateField( schema, value, hasEdit ) : null );
+	//
+	// The `location-picker` mismatch check (issue #406) is layered onto the
+	// SAME blur-first gate as validateField() itself — it is a save-blocking
+	// error, not the picker's own ALWAYS-VISIBLE internal "STALE-RECORD
+	// WARNING" (`location-picker-field.js`'s own `providerMismatch`, already
+	// shown regardless of touch — showing this error unconditionally too
+	// would just duplicate that banner).
+	const error = schema.serverError || ( ( touched || showErrors )
+		? ( validateField( schema, value, hasEdit )
+			|| ( 'location-picker' === control
+				? getProviderMismatchError( value ?? schema.value ?? '', ( conditionValues && conditionValues[ ACTIVE_PROVIDER_SETTING_ID ] ) || '' )
+				: null ) )
+		: null );
 	const onBlur = () => setTouched( true );
 
-	const control = resolveControl( schema );
 	const suffix = schema.suffix || schema.unit || '';
 
 	switch ( control ) {

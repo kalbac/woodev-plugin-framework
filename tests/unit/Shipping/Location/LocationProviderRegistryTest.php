@@ -2465,55 +2465,182 @@ final class LocationProviderRegistryTest extends TestCase {
 	}
 
 	// -------------------------------------------------------------------------
-	// Task 14 — get_default_locality_needs_repick() / set_default_locality_needs_repick():
-	// the informational "stale foreign-namespace default" flag.
+	// Issue #406 — Location_Settings::validate_values(): a FIXED
+	// default-locality record from a provider OTHER than the one this SAME
+	// submission resolves to must block Save, and the block must LIFT ITSELF
+	// once the configuration stops being contradictory — the operator's own
+	// two required cases (provider switched back; policy switched off).
 	// -------------------------------------------------------------------------
 
-	public function test_default_locality_needs_repick_defaults_to_false(): void {
+	/**
+	 * Builds a well-formed, JSON-encoded Location_Record for `$provider_id`,
+	 * the same wire shape `Location_Record::to_array()` round-trips and
+	 * `LocationPickerField` writes on the client.
+	 *
+	 * @param string $provider_id Provider namespace the record's own `key`
+	 *                             and `provider_id` both carry.
+	 * @return string JSON-encoded record.
+	 */
+	private function encode_record_for( string $provider_id ): string {
+		$record = Location_Record::from_array(
+			[
+				'key'         => $provider_id . ':city-1',
+				'provider_id' => $provider_id,
+				'level'       => Location_Record::LEVEL_SETTLEMENT,
+				'country'     => 'RU',
+				'label'       => 'Тестовый город',
+			]
+		);
+
+		return (string) json_encode( $record->to_array() );
+	}
+
+	public function test_validate_values_blocks_a_foreign_provider_record(): void {
 		Functions\when( 'add_action' )->justReturn( true );
-		$this->stub_providers_filter( [] );
-		Functions\when( 'get_option' )->justReturn( null );
+		$this->stub_providers_filter(
+			[
+				new Fake_Location_Provider( 'prov-a', 'Provider A' ),
+				new Fake_Location_Provider( 'prov-b', 'Provider B' ),
+			]
+		);
+		$this->stub_active_provider_option( 'prov-a' );
 
 		$registry = Location_Provider_Registry::instance();
 		$registry->declare_needed();
 		$registry->collect();
 
-		$this->assertFalse( $registry->get_default_locality_needs_repick() );
+		$handler = $registry->get_settings_handler();
+		$this->assertNotNull( $handler );
+
+		$errors = $handler->validate_values(
+			[
+				Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_POLICY => Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_FIXED,
+				Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_RECORD => $this->encode_record_for( 'prov-b' ),
+			]
+		);
+
+		$this->assertArrayHasKey( Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_RECORD, $errors );
 	}
 
-	public function test_default_locality_needs_repick_round_trips(): void {
+	public function test_validate_values_unblocks_once_the_provider_switches_back_in_the_same_save(): void {
 		Functions\when( 'add_action' )->justReturn( true );
-		$this->stub_providers_filter( [] );
-		Functions\when( 'get_option' )->justReturn( null );
-		Functions\when( 'update_option' )->justReturn( true );
+		$this->stub_providers_filter(
+			[
+				new Fake_Location_Provider( 'prov-a', 'Provider A' ),
+				new Fake_Location_Provider( 'prov-b', 'Provider B' ),
+			]
+		);
+		// The STORE currently has prov-b active — a record picked under
+		// prov-a would be foreign to it...
+		$this->stub_active_provider_option( 'prov-b' );
 
 		$registry = Location_Provider_Registry::instance();
 		$registry->declare_needed();
 		$registry->collect();
 
-		$registry->set_default_locality_needs_repick( true );
-		$this->assertTrue( $registry->get_default_locality_needs_repick() );
+		$handler = $registry->get_settings_handler();
+		$this->assertNotNull( $handler );
 
-		$registry->set_default_locality_needs_repick( false );
-		$this->assertFalse( $registry->get_default_locality_needs_repick() );
+		// ...but THIS submission ALSO switches active_provider back to
+		// prov-a in the SAME save — the two ids agree again and nothing
+		// blocks. This is the operator's own "switched to look, switched
+		// back" case: the block must lift without anything being cleared.
+		$errors = $handler->validate_values(
+			[
+				Location_Provider_Registry::SETTING_ACTIVE_PROVIDER          => 'prov-a',
+				Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_POLICY  => Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_FIXED,
+				Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_RECORD  => $this->encode_record_for( 'prov-a' ),
+			]
+		);
+
+		$this->assertArrayNotHasKey( Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_RECORD, $errors );
 	}
 
-	public function test_default_locality_needs_repick_is_false_while_the_gate_is_closed(): void {
+	public function test_validate_values_falls_back_to_the_stored_active_provider_when_it_is_not_resubmitted(): void {
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [ new Fake_Location_Provider( 'prov-a', 'Provider A' ) ] );
+		$this->stub_active_provider_option( 'prov-a' );
+
 		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
 
-		// Must not throw/fatal — there is no settings handler to write through.
-		$registry->set_default_locality_needs_repick( true );
+		$handler = $registry->get_settings_handler();
+		$this->assertNotNull( $handler );
 
-		$this->assertFalse( $registry->get_default_locality_needs_repick() );
+		// active_provider is NOT part of this submission (an ordinary save
+		// that never touched the select) — the effective id must fall back
+		// to the STORED value, never treat an absent controller as an empty
+		// (and therefore mismatched) id.
+		$errors = $handler->validate_values(
+			[
+				Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_POLICY => Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_FIXED,
+				Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_RECORD => $this->encode_record_for( 'prov-a' ),
+			]
+		);
+
+		$this->assertArrayNotHasKey( Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_RECORD, $errors );
 	}
+
+	public function test_validate_values_does_not_block_when_the_policy_switches_off_in_the_same_save(): void {
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter(
+			[
+				new Fake_Location_Provider( 'prov-a', 'Provider A' ),
+				new Fake_Location_Provider( 'prov-b', 'Provider B' ),
+			]
+		);
+		$this->stub_active_provider_option( 'prov-a' );
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$handler = $registry->get_settings_handler();
+		$this->assertNotNull( $handler );
+
+		// A foreign-provider record is STILL present in the submitted map
+		// (the merchant never touched the picker) but the policy switches to
+		// `off` in this SAME save. Runs through filter_visible_values()
+		// FIRST, exactly like every real caller (class-rest-api-settings-page.php)
+		// does before ever calling validate_values() — this is the operator's
+		// own second self-healing case, and the point of this test: proving
+		// the mechanism, not just asserting it.
+		$submitted = [
+			Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_POLICY => Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_OFF,
+			Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_RECORD => $this->encode_record_for( 'prov-b' ),
+		];
+
+		$visible = $handler->filter_visible_values( $submitted );
+		$this->assertArrayNotHasKey(
+			Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_RECORD,
+			$visible,
+			'sanity: the record must actually be hidden by show_if once the policy switches off — otherwise this test would pass for the wrong reason'
+		);
+
+		$errors = $handler->validate_values( $visible );
+
+		$this->assertArrayNotHasKey( Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_RECORD, $errors );
+	}
+
+	// -------------------------------------------------------------------------
+	// Issue #406: Task 14's get_default_locality_needs_repick() / set_default_locality_needs_repick()
+	// typed wrapper pair is REMOVED — dead code (zero production callers; its
+	// one historical write site was deliberately excised by review finding
+	// F2, never rebuilt) that even wired up would have been inert, since
+	// apply_default_locality_status_note() already surfaces the same
+	// "stranded" condition live, unconditionally. See
+	// class-location-provider-registry.php's own removal note at the deleted
+	// methods' former location for the full rationale.
+	// -------------------------------------------------------------------------
 
 	// -------------------------------------------------------------------------
 	// Issue #376 (closing #370, review finding F4): `default_locality_record`
 	// now gets a REAL `location-picker` control, gated `show_if` on the sibling
 	// `default_locality_policy` field being `fixed`; `default_locality_needs_repick`
-	// stays registered (the internal read/write machinery still works) but is
-	// registered WITHOUT a control — never an editable widget on the settings
-	// page, at any policy.
+	// stays registered (still writable through the generic settings-handler
+	// accessors) but is registered WITHOUT a control — never an editable
+	// widget on the settings page, at any policy.
 	// -------------------------------------------------------------------------
 
 	public function test_default_locality_record_gets_a_location_picker_control_gated_on_the_fixed_policy(): void {

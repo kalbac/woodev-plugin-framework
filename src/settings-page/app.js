@@ -15,6 +15,8 @@ import { store as noticesStore } from '@wordpress/notices';
 import { Button, Notice, Spinner, Card, CardBody, SnackbarList } from '@wordpress/components';
 import { fetchSchema, saveTab } from './rest';
 import { validateFields, isFieldVisible } from '../components/validate';
+import { getProviderMismatchError } from '../components/location-picker-field';
+import { ACTIVE_PROVIDER_SETTING_ID } from '../components/control-field';
 import TabsNav from '../components/tabs-nav';
 import SectionView from './section-view';
 
@@ -174,6 +176,24 @@ export default function App() {
 		const visibleFields = validatableFields( allFields, merged );
 
 		const clientErrors = validateFields( visibleFields, merged, providerEdits );
+
+		// Issue #406: a FIXED default-locality record from a different provider
+		// than the one THIS save resolves to must block Save — same message,
+		// same comparison the server's authoritative gate (Location_Settings::
+		// validate_values()) runs, previewed here purely to save the merchant a
+		// round trip; `visibleFields` already excludes a `default_locality_record`
+		// hidden by `show_if` (policy switched to `off` in this same save), so
+		// the rule lifts itself the same way it does server-side.
+		Object.keys( visibleFields ).forEach( ( id ) => {
+			if ( 'location-picker' !== visibleFields[ id ].controlType ) {
+				return;
+			}
+			const mismatch = getProviderMismatchError( merged[ id ], merged[ ACTIVE_PROVIDER_SETTING_ID ] || '' );
+			if ( mismatch ) {
+				clientErrors[ id ] = mismatch;
+			}
+		} );
+
 		if ( Object.keys( clientErrors ).length > 0 ) {
 			setShowErrors( ( p ) => ( { ...p, [ providerId ]: true } ) );
 			setFieldErrors( ( p ) => ( { ...p, [ providerId ]: {} } ) ); // clear stale server errors before revealing fresh client errors

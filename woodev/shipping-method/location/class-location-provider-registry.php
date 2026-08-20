@@ -1492,42 +1492,31 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 			$this->settings_handler->update_value( self::SETTING_DEFAULT_LOCALITY_RECORD, wp_json_encode( $record->to_array() ) );
 		}
 
-		/**
-		 * Gets whether the FIXED default needs re-picking (spec §4.6/D15
-		 * amendment): the merchant's stored record's provider namespace was
-		 * stranded by a provider switch and {@see Location_Service::resolve_default()}'s
-		 * own re-resolution attempt through the new provider failed. Purely
-		 * informational — never gates resolution itself.
-		 *
-		 * @since 2.0.2
-		 *
-		 * @return bool
+		/*
+		 * REMOVED (issue #406): get_default_locality_needs_repick() / set_default_locality_needs_repick()
+		 * — spec §4.6/D15's "stranded record" flag, added by Task 14 for a
+		 * form-external provider switch (wp option update, plugin
+		 * deactivation) to signal. Deleted rather than wired up: its ONE
+		 * historical write site was inside the customer-facing
+		 * {@see Location_Service::resolve_fixed_default()}, and review
+		 * finding F2 deliberately removed that call — a getter reachable by
+		 * anonymous checkout traffic must never mutate a merchant setting —
+		 * with nothing replacing it since (Task 14's own commit history: zero
+		 * production callers, only round-trip tests). Wiring the setter alone
+		 * would still be inert: {@see self::apply_default_locality_status_note()}
+		 * already surfaces the SAME "stranded" condition, computed LIVE
+		 * against {@see self::get_active_provider()} on every settings-page
+		 * load — independent of any stored flag, so it already covers a
+		 * form-external switch too, the merchant just sees it on next page
+		 * load rather than immediately. A genuine form-external-change ALERT
+		 * (a dashboard/system-status notice firing before the merchant
+		 * thinks to open Location settings) is a real, separate feature —
+		 * filed as issue #410 rather than half-built here as a flag nothing
+		 * reads. The setting id itself, {@see self::SETTING_DEFAULT_LOCALITY_NEEDS_REPICK},
+		 * stays registered (still writable through the generic
+		 * {@see \Woodev_Abstract_Settings} accessors, never rendered) — only
+		 * these two dead typed wrappers are gone.
 		 */
-		public function get_default_locality_needs_repick(): bool {
-			if ( null === $this->settings_handler ) {
-				return false;
-			}
-
-			return (bool) $this->settings_handler->get_value( self::SETTING_DEFAULT_LOCALITY_NEEDS_REPICK );
-		}
-
-		/**
-		 * Writes the "needs re-picking" flag — see {@see self::get_default_locality_needs_repick()}.
-		 * A no-op while the gate is closed.
-		 *
-		 * @since 2.0.2
-		 *
-		 * @param bool $needs_repick Whether the FIXED default currently needs re-picking.
-		 *
-		 * @return void
-		 */
-		public function set_default_locality_needs_repick( bool $needs_repick ): void {
-			if ( null === $this->settings_handler ) {
-				return;
-			}
-
-			$this->settings_handler->update_value( self::SETTING_DEFAULT_LOCALITY_NEEDS_REPICK, $needs_repick );
-		}
 
 		/**
 		 * Whether {@see self::inject_related_list_states()} itself successfully
