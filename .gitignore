@@ -34,7 +34,7 @@ opencode.json
 # path-scoped (phpcs -> ./woodev, phpstan -> woodev, phpunit -> ./tests), so
 # nothing else needs excluding — but keep running jest with
 # --roots "<rootDir>/tests/js", never bare npx jest.
-/orca/worktrees/
+/.orca/
 
 # Autodev loop — ephemeral scratch only (blackboard + queue + escalations stay tracked)
 /.autodev/runtime/

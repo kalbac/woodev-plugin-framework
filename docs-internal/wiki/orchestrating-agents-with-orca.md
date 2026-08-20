@@ -100,16 +100,17 @@ brief must carry **the worker's own worktree path** plus an instruction to verif
 
 ## Worktree layout — configured, not accidental
 
-Agent worktrees live at **`orca/worktrees/`, inside the project** (operator preference, s83), on the
-same volume as the repo. Set per-repo, because there is no settings CLI:
+Agent worktrees live at **`.orca/worktrees/`, inside the project** (operator decision, s83), on the
+same volume as the repo. He set it **globally and relatively** in Settings → General → Worktree
+directory as `.orca/worktrees`, so every repo gets the same layout inside itself. The per-repo
+override is set to the same relative value so the two cannot drift:
 
 ```bash
 orca project setup-update --setup <repoId> \
   --worktree-base-path D:/Projects/woodev_framework/orca/worktrees --json
 ```
 
-The global default (`workspaceDir`, Settings → General) still points at `C:/Users/maksi/orca/workspaces`
-and applies only to repos without their own base path.
+Passing an empty string does NOT clear a per-repo override — set it to the value you want instead.
 
 **Why same-volume matters:** shared directories are materialised as symlinks on Windows, and
 directory symlinks across volumes need Developer Mode or elevation.
@@ -117,7 +118,7 @@ directory symlinks across volumes need Developer Mode or elevation.
 **Why inside the repo is safe here — measured, not assumed.** Every gate is path-scoped, so none of
 them sees a worktree: phpcs reads `./woodev`, phpstan `paths: woodev`, phpunit `./tests/unit`. With
 a worktree in place the main tree still reports phpcs clean, phpstan clean and 2475 unit tests —
-not one test double-counted. `/orca/worktrees/` is gitignored, and Serena honours that through
+not one test double-counted. `/.orca/` is gitignored, and Serena honours that through
 `ignore_all_files_in_gitignore: true`, so it does not index them either. The one real cost:
 `.wp-env.json` maps the whole repo root (`"woodev-framework": "."`), so worktrees do land inside the
 rig container. WordPress will not load them as plugins — those come from explicit mappings — but
