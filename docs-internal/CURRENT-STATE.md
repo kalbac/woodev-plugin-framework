@@ -11,11 +11,17 @@
 merged**: this is UI/UX work and stops at the operator's own review. All six «Доставка» polish cards
 are done (#375, #377, #380 closing #369, #376 closing #370, #373, #378), plus four defects of the
 settings surface nobody had filed and one found by the rig pass. Tests: **2448 unit / 6067
-assertions / 1232 jest / 112 integration**; phpcs, phpstan and `lint:docs` clean. Gotchas: **169**.
+assertions / 1232 jest / 112 integration**; phpcs, phpstan and `lint:docs` clean. Gotchas: **170**.
 
 **Codex works on this machine.** Measured in s82: in an Orca terminal it has a real shell and reads
 files byte-exact; only `codex exec -s read-only` from Bash hits the broken sandbox. The gotcha that
 claimed otherwise for two months is rewritten. The inline bundle and canary are obsolete.
+
+**PR #403 открыт, CI зелёный (19 pass), НЕ смержен** — ждёт осмотра оператором. Он уже посмотрел
+админку и принял выравнивание иконок и смену провайдера налету; по итогам заведены **#404** (значение
+«Предустановленный список» предлагается шире, чем работает), **#405** (неверные ключи неотличимы от
+«города нет»), **#406** (не давать сохранить запись от чужого провайдера) и **#407** (проза обещает
+блокировку поля НП, код её не делает). Все в `Бэклог`, чинить в следующей сессии.
 
 **A local 27B review was verified** in a dedicated worktree: 20 confirmed findings filed as
 #383–#402, including a **critical IDOR** (a Subscriber can read and delete any user's saved payment
