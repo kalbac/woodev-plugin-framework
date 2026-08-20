@@ -42,6 +42,14 @@ transcript into the orchestrator's window. This shape does not do that.
 `launch.requested` / `launch.effective`. **Read the receipt** — that is the proof the model you
 asked for is the model that started, and it costs nothing.
 
+**Then verify the worker actually began.** The receipt's `stage: input_accepted` only means Orca
+handed the text to the terminal. Three of five agents in s83 sat with the prompt queued and
+unsubmitted while `worker-show` reported `ready` and `dispatched` — indistinguishable from a
+worker thinking hard, and it burned two full wait windows. Read the buffer once, early, and look
+for real activity; if the prompt is sitting there as `[Pasted Content N chars]`, submit it with
+`orca terminal send --terminal <handle> --text "" --enter --json` (gotcha
+`input-accepted-is-not-proof-a-worker-started`).
+
 Verify provenance before calling anything orchestrated:
 
 ```bash
