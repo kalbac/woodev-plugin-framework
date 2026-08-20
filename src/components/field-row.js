@@ -14,14 +14,27 @@
  * @package woodev-plugin-framework
  */
 
+import { RawHTML } from '@wordpress/element';
 import FieldTip from './field-tip';
 
 /**
+ * `description` renders through `RawHTML` (issue #373 — the operator's own rule is
+ * `desc_tip` for plain text, `description` specifically for a clickable link, e.g.
+ * `'<a href="…">личном кабинете</a>'`) rather than as a plain text child: React
+ * escapes markup in a text child, so an `<a>` tag would previously show up as
+ * literal `&lt;a href…&gt;` text instead of a link (verified against this file
+ * before the fix). `description` is always a hardcoded, developer-authored
+ * translatable string built with `__()` at a settings-field registration call
+ * site — never runtime or user-submitted data — matching the same "trusted,
+ * plugin-authored HTML" justification `step-view.js` already uses for its own
+ * `dangerouslySetInnerHTML` of `step.content`.
+ *
  * @param {Object}    props                  component props.
  * @param {string}    [props.label]          field label.
  * @param {boolean}   [props.required]       show the required marker.
  * @param {string}    [props.tooltip]        tooltip text.
- * @param {string}    [props.description]    help text under the control (what the option does).
+ * @param {string}    [props.description]    help text under the control (what the option does),
+ *                                            may contain a trusted `<a>` link.
  * @param {string}    [props.disabledReason] why the control is currently disabled — rendered
  *                                            as a separate, visually distinguishable note from
  *                                            `description` (a state note, not documentation).
@@ -46,7 +59,7 @@ export default function FieldRow( { label, required, tooltip, description, disab
 			<div className="woodev-field__control">
 				{ children }
 				{ description && (
-					<div className="woodev-field__desc">{ description }</div>
+					<div className="woodev-field__desc"><RawHTML>{ description }</RawHTML></div>
 				) }
 				{ disabledReason && (
 					<div className="woodev-field__disabled-reason">{ disabledReason }</div>

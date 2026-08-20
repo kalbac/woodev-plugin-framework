@@ -11,7 +11,7 @@
  * @package woodev-plugin-framework
  */
 
-import { createElement, useState, Fragment } from '@wordpress/element';
+import { createElement, useState, Fragment, RawHTML } from '@wordpress/element';
 import { validateField, isRequirable } from './validate';
 import {
 	TextControl,
@@ -323,8 +323,17 @@ export default function ControlField( { schema, value, onChange, showErrors, has
 						schema.name,
 						createElement( FieldTip, { text: schema.tooltip } )
 					),
+					// RawHTML, matching FieldRow's own `description` rendering (issue #373) —
+					// `schema.description` is always a hardcoded, developer-authored `__()`
+					// string, never user data; see field-row.js's docblock for the full
+					// justification. Without this, an `<a>` link in a boolean field's
+					// description would render as escaped literal text.
 					schema.description &&
-						createElement( 'div', { className: 'woodev-field__toggle-desc' }, schema.description ),
+						createElement(
+							'div',
+							{ className: 'woodev-field__toggle-desc' },
+							createElement( RawHTML, null, schema.description )
+						),
 					disabled && schema.disabled_reason &&
 						createElement( 'div', { className: 'woodev-field__disabled-reason' }, schema.disabled_reason )
 				),

@@ -2680,4 +2680,45 @@ final class LocationProviderRegistryTest extends TestCase {
 		$this->assertFalse( $registry->is_address_suggestions_available() );
 		$this->assertFalse( $registry->is_address_suggestions_enabled() );
 	}
+
+	// -------------------------------------------------------------------------
+	// Copy coverage (issue #373) — every field `Location_Settings` itself
+	// registers (as opposed to a provider's own declared fields, covered by
+	// DadataProviderTest) and that actually renders somewhere across the
+	// «Локация»/«Поля» sections must carry a tooltip, so the next field added
+	// here never ships bare.
+	// -------------------------------------------------------------------------
+
+	public function test_every_location_owned_field_has_a_non_empty_tooltip(): void {
+		$this->stub_providers_filter( [] );
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$handler = $registry->get_settings_handler();
+
+		// `get_owned_setting_ids()` deliberately excludes the two field-mode axes
+		// and `address_suggestions` (issue #380: they DISPLAY on «Поля», not
+		// «Локация», but are still registered by this same handler) — added back
+		// here since `Shipping_Settings_Tab::build_sections()` does render them.
+		// `default_locality_needs_repick` stays excluded on both sides: it has no
+		// control at all (by design), and issue #373's own rule is that a
+		// tooltip can only live on a control.
+		$rendered_ids = array_merge(
+			$handler->get_owned_setting_ids(),
+			[
+				Location_Provider_Registry::SETTING_FIELD_MODE_REGION,
+				Location_Provider_Registry::SETTING_FIELD_MODE_SETTLEMENT,
+				Location_Provider_Registry::SETTING_ADDRESS_SUGGESTIONS,
+			]
+		);
+
+		foreach ( $rendered_ids as $id ) {
+			$control = $handler->get_setting( $id )->get_control();
+
+			$this->assertNotNull( $control, "Setting \"{$id}\" has no control at all — a tooltip needs one." );
+			$this->assertNotSame( '', $control->get_tooltip(), "Setting \"{$id}\" has an empty tooltip." );
+		}
+	}
 }

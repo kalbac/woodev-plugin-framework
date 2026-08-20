@@ -192,28 +192,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 			);
 		}
 
-		/**
-		 * {@inheritDoc}
-		 *
-		 * @since 2.0.2
-		 * @since 2.0.2 The single `field_mode` select became two — issue #380 —
-		 *              `field_mode_region`/`field_mode_settlement`, both fed
-		 *              by the SAME `$this->field_mode_options` (the offering
-		 *              gate is identical for both axes). `field_mode_region`
-		 *              additionally carries a `show_if` on the SIBLING
-		 *              `Checkout_Field_Settings`-owned `region_field` setting
-		 *              — cross-handler conditions are supported by
-		 *              `Composite_Settings_Handler` (this hides the control
-		 *              only; the actual issue #369 clamp is a READ-side
-		 *              concern, see `Location_Provider_Registry::get_field_mode_region()`).
-		 * @since 2.0.2 `default_locality_record` now carries a real
-		 *              `TYPE_LOCATION_PICKER` control (`show_if` on the
-		 *              SIBLING `default_locality_policy` field, same handler
-		 *              so it is fully server-enforced) instead of being left
-		 *              uncontrolled; `default_locality_needs_repick` moved out
-		 *              of {@see self::get_owned_setting_ids()} entirely
-		 *              (issue #376, closing #370 variant 2).
-		 */
 		protected function register_settings() {
 
 			$this->register_setting(
@@ -225,7 +203,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 					'default' => Location_Provider_Registry::DEFAULT_PROVIDER_ID,
 				]
 			);
-			$this->register_control( Location_Provider_Registry::SETTING_ACTIVE_PROVIDER, \Woodev_Control::TYPE_SELECT );
+			$this->register_control(
+				Location_Provider_Registry::SETTING_ACTIVE_PROVIDER,
+				\Woodev_Control::TYPE_SELECT,
+				[
+					'tooltip' => __( 'От выбранного провайдера зависит, откуда на чекауте берутся подсказки городов и адресов, и какие типы полей ниже вообще доступны — не каждый провайдер умеет отдавать готовый список для локального выбора.', 'woodev-plugin-framework' ),
+				]
+			);
 
 			// Issue #380: the single `field_mode` setting became two axes — the
 			// НП/Регион field's INPUT TYPE is independent per level (the operator
@@ -257,7 +241,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 					],
 				]
 			);
-			$this->register_control( Location_Provider_Registry::SETTING_FIELD_MODE_REGION, \Woodev_Control::TYPE_SELECT );
+			$this->register_control(
+				Location_Provider_Registry::SETTING_FIELD_MODE_REGION,
+				\Woodev_Control::TYPE_SELECT,
+				[
+					// Issue #373: a select's tooltip must explain the DIFFERENCE between
+					// values, not restate the label — "предустановленный список" and
+					// "список с поиском" look similar but one never talks to the server
+					// after the initial load and the other queries it on every keystroke.
+					'tooltip' => __( 'Как покупатель выбирает регион. «Текст с подсказками» — обычное поле, варианты появляются по мере ввода. «Предустановленный список» — весь список регионов загружается один раз, дальнейший поиск идёт в браузере без обращений к серверу. «Список с поиском» — раскрывающийся список, который запрашивает варианты у провайдера на каждый введённый символ.', 'woodev-plugin-framework' ),
+				]
+			);
 
 			$this->register_setting(
 				Location_Provider_Registry::SETTING_FIELD_MODE_SETTLEMENT,
@@ -268,7 +262,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 					'default' => Location_Provider_Registry::MODE_TYPEAHEAD,
 				]
 			);
-			$this->register_control( Location_Provider_Registry::SETTING_FIELD_MODE_SETTLEMENT, \Woodev_Control::TYPE_SELECT );
+			$this->register_control(
+				Location_Provider_Registry::SETTING_FIELD_MODE_SETTLEMENT,
+				\Woodev_Control::TYPE_SELECT,
+				[
+					'tooltip' => __( 'Как покупатель выбирает населённый пункт — те же три варианта, что и у поля «Регион» (см. подсказку там). Если для региона выбран «Предустановленный список», это поле дополнительно блокируется, пока покупатель не выберет регион, и дальше предлагает пункты только внутри него.', 'woodev-plugin-framework' ),
+				]
+			);
 
 			/*
 			 * `address_suggestions` (Task 10; issue #362; design S3/§3.1/§3.2):
@@ -289,8 +289,27 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 					'default' => true,
 				]
 			);
-			$this->register_control( Location_Provider_Registry::SETTING_ADDRESS_SUGGESTIONS, \Woodev_Control::TYPE_CHECKBOX );
+			$this->register_control(
+				Location_Provider_Registry::SETTING_ADDRESS_SUGGESTIONS,
+				\Woodev_Control::TYPE_CHECKBOX,
+				[
+					'tooltip' => __( 'Показывать подсказки при вводе улицы и дома на чекауте. Работает только пока подключённый провайдер умеет отдавать адреса — если нет, поле становится недоступным, и причина написана под ним.', 'woodev-plugin-framework' ),
+				]
+			);
 
+			/*
+			 * `default_locality_policy`'s own `description` is left EMPTY here on
+			 * purpose (issue #373 does not add one) — {@see Location_Provider_Registry::apply_default_locality_status_note()}
+			 * writes a LIVE status note directly into this same `Woodev_Setting`'s
+			 * description AFTER `register_settings()` finishes, and that write only
+			 * has any visible effect while the CONTROL's own snapshot of the
+			 * description (taken by `register_control()` below, at THIS point in
+			 * time) is itself empty — {@see \Woodev\Framework\Settings\Field_Schema::from_handler()}
+			 * prefers a non-empty `$control->get_description()` over the setting's,
+			 * so a static description registered here would permanently shadow the
+			 * dynamic status note. The value-difference copy therefore lives in the
+			 * TOOLTIP instead, which nothing overwrites later.
+			 */
 			$this->register_setting(
 				Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_POLICY,
 				\Woodev_Setting::TYPE_STRING,
@@ -300,7 +319,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 					'default' => Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_OFF,
 				]
 			);
-			$this->register_control( Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_POLICY, \Woodev_Control::TYPE_SELECT );
+			$this->register_control(
+				Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_POLICY,
+				\Woodev_Control::TYPE_SELECT,
+				[
+					'tooltip' => __( 'Что подставляется в поля региона и города до того, как покупатель начал сам вводить адрес. «Отключено» — ничего не подставляется. «Фиксированная локация» — всегда один и тот же город, выбранный вами ниже. «По IP-адресу покупателя» — город определяется по IP каждого покупателя; доступно только пока провайдер умеет геолоцировать.', 'woodev-plugin-framework' ),
+				]
+			);
 
 			/*
 			 * Serialized Location_Record JSON (Task 14), written through
@@ -339,6 +364,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 				\Woodev_Control::TYPE_LOCATION_PICKER,
 				[
 					'country' => ( new Location_Service() )->resolve_default_country(),
+					'tooltip' => __( 'Город, который подставляется покупателю по умолчанию при политике «Фиксированная локация». Выбирается через поиск и сохраняется как готовая запись — вписывать его вручную не нужно.', 'woodev-plugin-framework' ),
 				]
 			);
 
@@ -355,6 +381,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 			 * this flag through the `default_locality_policy` field's own
 			 * description — see
 			 * Location_Provider_Registry::apply_default_locality_status_note().
+			 *
+			 * No control means no tooltip either (issue #373's own rule: a
+			 * tooltip can only live on a control) — nothing to fill in here.
 			 */
 			$this->register_setting(
 				Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_NEEDS_REPICK,
@@ -370,32 +399,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 			}
 		}
 
-		/**
-		 * Registers one field declared by the active provider's
-		 * {@see Location_Provider::get_settings_fields()}.
-		 *
-		 * `type` is consumed positionally by {@see Woodev_Abstract_Settings::register_setting()},
-		 * so it is extracted from the field array rather than passed through inside
-		 * `$args` (matching how {@see \Woodev\Framework\Shipping\Map\Map_Provider::get_settings_fields()}
-		 * is itself consumed). The provider's shape says nothing about which admin
-		 * CONTROL to render — that vocabulary belongs to
-		 * {@see Woodev_Abstract_Settings::register_control()}, one layer up from
-		 * what a provider (which never touches the settings-PAGE surface, only the
-		 * settings-API shape) can declare — so the control type is inferred here
-		 * from what the field itself already says: `options` present -> a select;
-		 * `sensitive` -> a password field (matching the `secret`/`conn_password`
-		 * precedent in the test fixture's own settings); otherwise plain text.
-		 *
-		 * @since 2.0.2
-		 *
-		 * @param string               $field_id field id.
-		 * @param array<string, mixed> $field    field descriptor (settings-API `register_setting()` args shape + `type`).
-		 *
-		 * @return void
-		 */
 		private function register_provider_field( string $field_id, array $field ): void {
 			$type = $field['type'] ?? \Woodev_Setting::TYPE_STRING;
 			unset( $field['type'] );
+
+			// Issue #373: a provider declares its OWN field copy (name/description/
+			// tooltip) right alongside the field itself — that is where a plugin
+			// author would naturally put it. `tooltip` is pulled out here because it
+			// is a CONTROL arg (`register_control()`), not a setting arg
+			// (`register_setting()` below has no use for it and would silently
+			// ignore it if left in `$field`).
+			$tooltip = (string) ( $field['tooltip'] ?? '' );
+			unset( $field['tooltip'] );
 
 			$this->register_setting( $field_id, $type, $field );
 
@@ -407,7 +422,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 				$control_type = \Woodev_Control::TYPE_TEXT;
 			}
 
-			$this->register_control( $field_id, $control_type );
+			$control_args = [];
+			if ( '' !== $tooltip ) {
+				$control_args['tooltip'] = $tooltip;
+			}
+
+			$this->register_control( $field_id, $control_type, $control_args );
 		}
 	}
 

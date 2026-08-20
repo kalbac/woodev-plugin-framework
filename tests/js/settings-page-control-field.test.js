@@ -250,6 +250,61 @@ test( 'a disabled sensitive field in the pending-clear state renders an inert «
 	expect( screen.getByText( 'Отменить' ) ).toBeDisabled();
 } );
 
+/**
+ * Issue #373 — the operator's rule is `description` carries a clickable link
+ * (e.g. "получить в личном кабинете"). Before this fix, `FieldRow` rendered
+ * `description` as a plain text child, so React escaped any `<a>` tag into
+ * literal `&lt;a href…` text instead of a real link. Regression coverage for
+ * switching that render path to `RawHTML` (`src/components/field-row.js`).
+ */
+test( 'a description containing a link renders an actual anchor, not escaped markup', () => {
+	const { container } = render(
+		createElement( ControlField, {
+			schema: {
+				type: 'string',
+				controlType: 'text',
+				name: 'Токен API DaData',
+				description: 'Получить токен можно в <a href="https://dadata.ru/profile/#info">личном кабинете DaData</a>.',
+			},
+			value: '',
+			onChange: () => {},
+			showErrors: false,
+		} )
+	);
+
+	const link = container.querySelector( '.woodev-field__desc a[href="https://dadata.ru/profile/#info"]' );
+
+	expect( link ).not.toBeNull();
+	expect( link ).toHaveTextContent( 'личном кабинете DaData' );
+	expect( container.querySelector( '.woodev-field__desc' ).innerHTML ).not.toContain( '&lt;a' );
+} );
+
+/**
+ * Same fix, the checkbox/toggle branch (`ControlField`'s own markup, not
+ * `FieldRow`) — issue #373 lists boolean fields too (though the fields this
+ * task actually ships all use plain-text tooltips; this pins the mechanism
+ * generically so a future boolean field CAN carry a link if it ever needs one).
+ */
+test( 'a boolean field description containing a link renders an actual anchor', () => {
+	const { container } = render(
+		createElement( ControlField, {
+			schema: {
+				type: 'boolean',
+				controlType: 'checkbox',
+				name: 'Пример',
+				description: 'Подробнее — <a href="https://example.com/docs">в документации</a>.',
+			},
+			value: false,
+			onChange: () => {},
+			showErrors: false,
+		} )
+	);
+
+	const link = container.querySelector( '.woodev-field__toggle-desc a[href="https://example.com/docs"]' );
+
+	expect( link ).not.toBeNull();
+} );
+
 test( 'an enabled select stays a plain (non-disabled) trigger', () => {
 	const { container } = render(
 		createElement( ControlField, {

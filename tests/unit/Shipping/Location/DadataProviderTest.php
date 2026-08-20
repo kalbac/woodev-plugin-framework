@@ -432,6 +432,25 @@ final class DadataProviderTest extends TestCase {
 	}
 
 	/**
+	 * Copy coverage (issue #373) — the operator's own rule: `tooltip` is the
+	 * default explainer, `description` is reserved for a clickable link (e.g.
+	 * "получить в личном кабинете"). Both fields this provider declares must
+	 * carry a non-empty `tooltip`, and `description` must actually contain an
+	 * `<a href="…">` — an empty or link-less `description` here would be dead
+	 * weight, since `tooltip` alone already carries the explanation.
+	 */
+	public function test_every_declared_field_has_a_tooltip_and_a_link_bearing_description(): void {
+		foreach ( ( new Dadata_Provider() )->get_settings_fields() as $id => $field ) {
+			$this->assertNotSame( '', $field['tooltip'] ?? '', "Field \"{$id}\" has an empty tooltip." );
+			$this->assertStringContainsString(
+				'<a href=',
+				$field['description'] ?? '',
+				"Field \"{$id}\"'s description should carry the clickable DaData account link."
+			);
+		}
+	}
+
+	/**
 	 * Pins that this provider reads its credentials from the exact option
 	 * names {@see \Woodev\Framework\Shipping\Location\Location_Provider_Registry::SETTINGS_SERVICE_ID}
 	 * ('location') implies — `woodev_location_token` /

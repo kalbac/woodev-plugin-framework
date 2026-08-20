@@ -192,4 +192,48 @@ class ShippingSettingsTabTest extends TestCase {
 
 		$this->assertSame( 1, $hook_calls );
 	}
+
+	/**
+	 * Copy coverage (issue #378) — every section built here must carry a
+	 * non-empty description, so the next section added never ships bare.
+	 * Covers all three sections at once («Локация», «Поля», «Карта»).
+	 */
+	public function test_every_section_has_a_non_empty_description(): void {
+		$tab = Shipping_Settings_Tab::instance();
+
+		$tab->declare_shipping_plugin();
+		$tab->set_location_section( $this->location_handler_stub(), [ 'active_provider', 'field_mode' ] );
+		$tab->declare_map_needed();
+
+		$sections = $tab->build_sections();
+
+		$this->assertSame( [ 'location', 'fields', 'map' ], array_map( static fn( $s ) => $s->get_id(), $sections ) );
+
+		foreach ( $sections as $section ) {
+			$this->assertNotSame(
+				'',
+				$section->get_description(),
+				"Section \"{$section->get_id()}\" has an empty description."
+			);
+		}
+	}
+
+	/**
+	 * «Поля»'s description is the STATIC issue #378 copy, PREPENDED to
+	 * `get_section_note()`'s own runtime note rather than replacing it — both
+	 * notes are legitimate at once (Task 7's settlement-invariant report).
+	 */
+	public function test_fields_section_description_combines_static_copy_with_the_runtime_note(): void {
+		$tab = Shipping_Settings_Tab::instance();
+		$tab->declare_shipping_plugin();
+
+		// No override recorded → get_section_note() is '' → the static copy
+		// stands alone, with no dangling separator.
+		$fields_section = current(
+			array_filter( $tab->build_sections(), static fn( $s ) => 'fields' === $s->get_id() )
+		);
+
+		$this->assertStringContainsString( 'конструктор полей', $fields_section->get_description() );
+		$this->assertStringEndsNotWith( ' ', $fields_section->get_description() );
+	}
 }

@@ -88,22 +88,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Map_Settings
 			];
 		}
 
-		/**
-		 * {@inheritDoc}
-		 *
-		 * Three settings the store owns rather than the carrier (design S7, issue #362):
-		 * where the pickup trigger sits, whether the chosen point's address replaces the
-		 * delivery address fields, and whether a confirmed selection closes the picker.
-		 * The operator's rule: «карьер главный по умолчанию, магазин — только там, где
-		 * правило обязано быть общим» — all three are behaviours a customer sees across
-		 * EVERY carrier on the same checkout at once, so a per-carrier answer would put
-		 * buttons in different places, or replace the address for one carrier and not
-		 * another, on the SAME page. `Pickup_Handler`'s own `$replace_address`/
-		 * `$close_on_select` constructor arguments are removed accordingly (clean-break v2
-		 * line, ADR-005) — see that class's own docblock.
-		 *
-		 * @since 2.0.2
-		 */
 		protected function register_settings() {
 
 			$this->register_setting(
@@ -118,7 +102,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Map_Settings
 					'default' => 'rate',
 				]
 			);
-			$this->register_control( 'pickup_button_placement', \Woodev_Control::TYPE_SELECT );
+			$this->register_control(
+				'pickup_button_placement',
+				\Woodev_Control::TYPE_SELECT,
+				[
+					'tooltip' => __( '«В строке выбранного метода» — кнопка стоит прямо рядом с названием способа доставки в списке. «После списка методов» — одна общая кнопка выносится под весь список способов доставки.', 'woodev-plugin-framework' ),
+				]
+			);
 
 			$this->register_setting(
 				'pickup_replace_address',
@@ -128,7 +118,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Map_Settings
 					'default' => true,
 				]
 			);
-			$this->register_control( 'pickup_replace_address', \Woodev_Control::TYPE_CHECKBOX );
+			$this->register_control(
+				'pickup_replace_address',
+				\Woodev_Control::TYPE_CHECKBOX,
+				[
+					'tooltip' => __( 'Когда включено, после выбора пункта выдачи его адрес подставляется в поля доставки на чекауте вместо адреса, который до этого ввёл покупатель.', 'woodev-plugin-framework' ),
+				]
+			);
 
 			$this->register_setting(
 				'pickup_close_on_select',
@@ -138,7 +134,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Map_Settings
 					'default' => false,
 				]
 			);
-			$this->register_control( 'pickup_close_on_select', \Woodev_Control::TYPE_CHECKBOX );
+			$this->register_control(
+				'pickup_close_on_select',
+				\Woodev_Control::TYPE_CHECKBOX,
+				[
+					'tooltip' => __( 'Когда включено, карта пунктов выдачи закрывается сама сразу после выбора точки. Выключено — покупатель закрывает карту вручную.', 'woodev-plugin-framework' ),
+				]
+			);
 		}
 	}
 

@@ -254,25 +254,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Shipping_Settings
 			return $this->map_settings;
 		}
 
-		/**
-		 * Builds the section list from the declarations made so far. Pure — touches no
-		 * WordPress function, so unit tests can call it directly.
-		 *
-		 * @since 2.0.2
-		 * @since 2.0.2 «Поля»'s id list is now HAND-INTERLEAVED (issue #380):
-		 *              «Тип поля Регион»/«Тип поля НП» and «Подсказки для
-		 *              адреса» moved here from «Локация», OWNED by
-		 *              `Location_Provider_Registry`/`Location_Settings`
-		 *              still (option names stay `woodev_location_*`,
-		 *              ADR-005 — only the SECTION they display in moved).
-		 *              Those three ids are spliced in only when a location
-		 *              handler actually exists — the same guard «Локация»'s
-		 *              own section uses — so «Поля» never lists an id no
-		 *              child handler registered when the location layer is
-		 *              inactive.
-		 *
-		 * @return Settings_Section[]
-		 */
 		public function build_sections(): array {
 			if ( ! $this->shipping_plugin_declared ) {
 				return [];
@@ -284,7 +265,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Shipping_Settings
 				$sections[] = Settings_Section::create(
 					'location',
 					__( 'Локация', 'woodev-plugin-framework' ),
-					$this->location_setting_ids
+					$this->location_setting_ids,
+					// Issue #378: names the section's actual job — a merchant reading
+					// just "Локация" could reasonably assume this is where a store
+					// ADDRESS lives; it is actually the SOURCE of the city/address
+					// suggestions the checkout shows.
+					__( 'Управляет тем, откуда на чекауте берутся подсказки городов, регионов и адресов, и что подставляется покупателю по умолчанию, пока он ничего не ввёл.', 'woodev-plugin-framework' )
 				);
 			}
 
@@ -308,18 +294,30 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Shipping_Settings
 
 			$field_ids[] = 'postcode_field';
 
+			// Issue #378: the static description is PREPENDED to
+			// `get_section_note()`'s own runtime note (Task 7's settlement-invariant
+			// report, empty on most stores) rather than replacing it — both are
+			// legitimate at once, same "don't clobber a sibling note" discipline the
+			// disabled_reason/description split already follows elsewhere in this
+			// codebase.
+			$fields_description = trim(
+				__( 'Определяет, какие поля адреса показываются на чекауте, в каком порядке и как вводится регион с населённым пунктом — это не конструктор полей, а набор правил присутствия и типа для уже существующих полей.', 'woodev-plugin-framework' )
+				. ' ' . $this->get_field_settings()->get_section_note()
+			);
+
 			$sections[] = Settings_Section::create(
 				'fields',
 				__( 'Поля', 'woodev-plugin-framework' ),
 				$field_ids,
-				$this->get_field_settings()->get_section_note()
+				$fields_description
 			);
 
 			if ( $this->map_needed ) {
 				$sections[] = Settings_Section::create(
 					'map',
 					__( 'Карта', 'woodev-plugin-framework' ),
-					$this->get_map_settings()->get_owned_setting_ids()
+					$this->get_map_settings()->get_owned_setting_ids(),
+					__( 'Общие для всех способов доставки с пунктами выдачи настройки карты: где показывается кнопка выбора точки и что происходит с адресом и картой после того, как покупатель выбрал пункт.', 'woodev-plugin-framework' )
 				);
 			}
 
