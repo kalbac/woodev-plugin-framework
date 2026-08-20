@@ -7,7 +7,15 @@ article records **what we adopted and why**, not how the CLI works.
 
 ## The authority rule — never recall a flag
 
-The `orca` binary serves its own version-matched guide. Read it, do not remember it:
+**The `orchestration`, `orca-cli` and `computer-use` skills are installed globally** (s83, via
+`orca skills install --skill <name> --agent claude-code`), so they surface in every session on
+their own and are the native way in. Invoke the skill; do not recall a flag.
+
+Before that install only `orca-cli` was present, which is why s83 had to fetch the orchestration
+guide by hand and why a fresh session would not have known orchestration existed at all. If a
+future session cannot see them, re-run that install rather than working around it.
+
+The same guides are also printable, which is useful inside a worker or a script:
 
 ```bash
 orca skills get orca-cli        # worktrees, terminals, handoffs, built-in browser, artifacts

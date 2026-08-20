@@ -53,19 +53,27 @@ Package: `@upstash/context7-mcp`.
 
 Sessions run inside the Orca app, so Orca owns worktrees, agent terminals and multi-agent
 coordination. **Substantial work goes through Orca orchestration: worker = Sonnet 5, critic =
-Codex, nobody accepts their own work.** Recipe, placement rules and traps:
-`docs-internal/wiki/orchestrating-agents-with-orca.md`.
+Codex, nobody accepts their own work.**
 
-Never recall an `orca` flag from memory — the binary serves its own version-matched guide:
+The `orchestration` and `orca-cli` skills are installed globally, so they surface on their own —
+invoke them rather than recalling a flag. Their guides are version-matched to the binary; a flag
+remembered from a previous release is a guess. Recipe, placement rules and the traps that cost s83
+real time: `docs-internal/wiki/orchestrating-agents-with-orca.md`.
 
-```bash
-orca status --json
-orca skills get orca-cli        # worktrees, terminals, handoffs, built-in browser
-orca skills get orchestration   # runs, tasks, dispatch, worker_done, ask/reply
-```
+Three project facts no skill knows, because they are ours:
 
-Codex is launched as an Orca terminal (`orca terminal create --worktree active --command codex`),
-never through `codex exec` — gotcha `codex-shell-sandbox-broken-windows`.
+1. **A fresh worktree needs NO install step.** `orca.yaml` shares `node_modules`,
+   `.worktreeinclude` copies `vendor` and the local config. Never put "run composer install and
+   npm ci" in a brief — it is stale and wastes a worker's lap.
+2. **Every subagent brief carries the WORKER's own worktree path** for Serena `activate_project`,
+   never this repo's root, and requires the worker to verify the activation took. Copying the path
+   from this file is how s83 split two workers' edits into the wrong tree, silently.
+3. **`input_accepted` is not proof a worker started.** Read its buffer once, early; if the prompt
+   sits there unsubmitted, send `orca terminal send --terminal <handle> --text "" --enter`. Every
+   Codex launch in s83 needed it.
+
+Codex is launched through orchestration (`worker-start --agent codex`) or an Orca terminal, never
+through `codex exec` — gotcha `codex-shell-sandbox-broken-windows`.
 
 ## Where to look things up
 
